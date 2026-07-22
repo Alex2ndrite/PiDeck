@@ -56,6 +56,7 @@ export interface SessionRuntimeBindingGateway {
 	bindRuntime(input: {
 		projectId: string;
 		agent: AgentTab;
+		existingSessionId?: string;
 	}): Promise<{ sessionId: string; runtimeGeneration: number }>;
 }
 
@@ -157,17 +158,32 @@ export class FeishuBridge {
 		return undefined;
 	}
 
+	private hasFeishuBindingForKey(key: string): boolean {
+		return Array.from(this.chatBindings.values()).some((candidate) => (
+			candidate.source === "feishu" &&
+			(candidate.sessionId === key || candidate.agentId === key)
+		));
+	}
+
+	private removeBindingIndexKey(key: string, chatId: string): void {
+		if (this.sessionToChat.get(key) === chatId) this.sessionToChat.delete(key);
+		if (!this.hasFeishuBindingForKey(key)) this.feishuSessions.delete(key);
+	}
+
+	private setBindingIndexKey(key: string, chatId: string): void {
+		const currentChatId = this.sessionToChat.get(key);
+		if (!currentChatId || currentChatId === chatId) this.sessionToChat.set(key, chatId);
+	}
+
 	private indexBinding(binding: FeishuChatBinding, previousAgentId?: string, previousSessionId?: string): void {
 		if (previousSessionId && previousSessionId !== binding.sessionId) {
-			this.sessionToChat.delete(previousSessionId);
-			this.feishuSessions.delete(previousSessionId);
+			this.removeBindingIndexKey(previousSessionId, binding.chatId);
 		}
 		if (previousAgentId && previousAgentId !== binding.agentId) {
-			this.sessionToChat.delete(previousAgentId);
-			this.feishuSessions.delete(previousAgentId);
+			this.removeBindingIndexKey(previousAgentId, binding.chatId);
 		}
-		this.sessionToChat.set(binding.sessionId, binding.chatId);
-		if (binding.agentId) this.sessionToChat.set(binding.agentId, binding.chatId);
+		this.setBindingIndexKey(binding.sessionId, binding.chatId);
+		if (binding.agentId) this.setBindingIndexKey(binding.agentId, binding.chatId);
 		if (binding.source === "feishu") {
 			this.feishuSessions.add(binding.sessionId);
 			if (binding.agentId) this.feishuSessions.add(binding.agentId);
@@ -175,10 +191,9 @@ export class FeishuBridge {
 	}
 
 	private unindexBinding(binding: FeishuChatBinding): void {
-		this.sessionToChat.delete(binding.sessionId);
-		if (binding.agentId) this.sessionToChat.delete(binding.agentId);
-		this.feishuSessions.delete(binding.sessionId);
-		if (binding.agentId) this.feishuSessions.delete(binding.agentId);
+		this.chatBindings.delete(binding.chatId);
+		this.removeBindingIndexKey(binding.sessionId, binding.chatId);
+		if (binding.agentId) this.removeBindingIndexKey(binding.agentId, binding.chatId);
 	}
 
 	/** Return an active AgentManager handle, never the catalog session ID. */
@@ -988,7 +1003,11 @@ export class FeishuBridge {
 					});
 					let runtimeBinding: { sessionId: string; runtimeGeneration: number };
 					try {
-						runtimeBinding = await this.runtimeBindings.bindRuntime({ projectId, agent: tab });
+						runtimeBinding = await this.runtimeBindings.bindRuntime({
+							projectId,
+							agent: tab,
+							existingSessionId: binding.sessionId,
+						});
 					} catch (error) {
 						await this.agentManager.stop(tab.id).catch(() => undefined);
 						throw error;
@@ -1017,7 +1036,11 @@ export class FeishuBridge {
 			const tab = await this.agentManager.create({ projectId, title: binding.groupName || `飞书会话` });
 			let runtimeBinding: { sessionId: string; runtimeGeneration: number };
 			try {
-				runtimeBinding = await this.runtimeBindings.bindRuntime({ projectId, agent: tab });
+				runtimeBinding = await this.runtimeBindings.bindRuntime({
+					projectId,
+					agent: tab,
+					existingSessionId: binding.sessionId,
+				});
 			} catch (error) {
 				await this.agentManager.stop(tab.id).catch(() => undefined);
 				throw error;
@@ -1046,24 +1069,31 @@ export class FeishuBridge {
 		const pending = this.sessionMirrorPending.get(agentId);
 		if (pending) return pending;
 		const task = this.ensureSessionMirrorForRuntime(agentId, sessionTitle, sessionPath).finally(() => {
-			this.sessionMirrorPending.delete(agentId);
+			if (this.sessionMirrorPending.get(agentId) === task) this.sessionMirrorPending.delete(agentId);
 		});
 		this.sessionMirrorPending.set(agentId, task);
 		return task;
 	}
 
 	private async ensureSessionMirrorForRuntime(agentId: string, sessionTitle?: string, sessionPath?: string): Promise<string | undefined> {
-		const mappedChatId = this.sessionToChat.get(agentId);
-		const mappedBinding = mappedChatId ? this.chatBindings.get(mappedChatId) : undefined;
-		let stableSessionId = mappedBinding?.sessionId;
-		let runtimeAgentId = mappedBinding?.agentId === agentId ? agentId : undefined;
+		const existingRuntimeBinding = Array.from(this.chatBindings.values()).find((binding) => binding.agentId === agentId);
+		let stableSessionId = existingRuntimeBinding?.sessionId;
+		let runtimeAgentId = existingRuntimeBinding?.agentId === agentId ? agentId : undefined;
 		const tab = this.agentManager.list().find((candidate) => candidate.id === agentId);
 		if (tab && (!stableSessionId || !runtimeAgentId)) {
 			const runtimeBinding = await this.runtimeBindings.bindRuntime({ projectId: tab.projectId, agent: tab });
 			stableSessionId = runtimeBinding.sessionId;
 			runtimeAgentId = tab.id;
 		}
-		return this.ensureSessionMirrorInner(stableSessionId ?? agentId, runtimeAgentId, sessionTitle, sessionPath);
+
+		const sessionId = stableSessionId ?? agentId;
+		const pending = this.sessionMirrorPending.get(sessionId);
+		if (sessionId !== agentId && pending) return pending;
+		const task = this.ensureSessionMirrorInner(sessionId, runtimeAgentId, sessionTitle, sessionPath).finally(() => {
+			if (this.sessionMirrorPending.get(sessionId) === task) this.sessionMirrorPending.delete(sessionId);
+		});
+		this.sessionMirrorPending.set(sessionId, task);
+		return task;
 	}
 
 	private async ensureSessionMirrorInner(sessionId: string, agentId: string | undefined, sessionTitle?: string, sessionPath?: string): Promise<string | undefined> {
@@ -1074,21 +1104,15 @@ export class FeishuBridge {
 
 		const groupName = `Pi Agent - ${(sessionTitle || `新会话 ${sessionId.slice(0, 8)}`).slice(0, 50)}`;
 
-		// 1. 按 stable sessionId 找已有 session-mirror 绑定。
-		let existingChatId = this.sessionToChat.get(sessionId);
-		if (existingChatId) {
-			const existingBinding = this.chatBindings.get(existingChatId);
-			if (!existingBinding || existingBinding.source !== "session-mirror") {
-				existingChatId = undefined;
-			}
-		}
+		// 1. stable session 或 runtime 已有任一飞书绑定时直接复用，不创建第二个 mirror。
+		let existingChatId = Array.from(this.chatBindings.entries()).find(([, binding]) => (
+			binding.sessionId === sessionId || (agentId !== undefined && binding.agentId === agentId)
+		))?.[0];
 
-		// 2. 仅对唯一的 legacy mirror 绑定按 path 迁移；同 path 的不同 source/identity 不得串线。
+		// 2. 仅对全局唯一的 legacy mirror 绑定按 path 迁移；不同 source 共享 path 时不得猜测。
 		if (!existingChatId && sessionPath) {
-			const pathMatches = Array.from(this.chatBindings.entries()).filter(([, binding]) => (
-				binding.source === "session-mirror" && binding.sessionPath === sessionPath
-			));
-			if (pathMatches.length === 1) {
+			const pathMatches = Array.from(this.chatBindings.entries()).filter(([, binding]) => binding.sessionPath === sessionPath);
+			if (pathMatches.length === 1 && pathMatches[0][1].source === "session-mirror") {
 				const [cid, binding] = pathMatches[0];
 				existingChatId = cid;
 				log(`[飞书 Session Mirror] 按唯一 sessionPath 迁移旧群: ${cid} (path: ${sessionPath})`);
@@ -1101,8 +1125,7 @@ export class FeishuBridge {
 			}
 		}
 
-		// 3. 已有绑定：检查是否需要修复空群，确保 sessionId 映射正确。
-		// 不再按“孤立群”猜测复用，避免不同会话被错误关联到旧群；精准复用只依赖 sessionId/sessionPath。
+		// 3. 已有绑定：更新 runtime 索引。Feishu-origin 不支持 mirror card，明确复用其转发 chat。
 		if (existingChatId) {
 			const effectiveUserOpenId = this.botConfig.defaultUserOpenId || this.userOpenId;
 			const binding = this.chatBindings.get(existingChatId);
@@ -1126,6 +1149,11 @@ export class FeishuBridge {
 		if (!persistedChatId && sessionPath) persistedChatId = getPersistentChatId(sessionPath);
 		if (!persistedChatId && agentId) persistedChatId = getPersistentChatId(`agent:${agentId}`);
 		if (persistedChatId) {
+			const activePersistedBinding = this.chatBindings.get(persistedChatId);
+			if (activePersistedBinding) {
+				log(`[飞书 Session Mirror] 持久化群 ${persistedChatId} 已绑定其他会话，跳过自动 mirror`);
+				return undefined;
+			}
 			log(`[飞书 Session Mirror] 按持久化映射复用群: ${persistedChatId} (session: ${sessionId.slice(0, 8)})`);
 				const agentTab = agentId ? this.agentManager.list().find((t) => t.id === agentId) : undefined;
 				const binding: FeishuChatBinding = {
@@ -1617,30 +1645,50 @@ export class FeishuBridge {
 
 	private async loadPersistedBindings(): Promise<void> {
 		const bindings = loadBindings(this.botConfig.id);
+		const tabs = this.agentManager.list();
+		const normalizePath = (value: string): string => {
+			const normalized = value.replace(/\\/g, "/").replace(/\/+$/, "");
+			return /^[A-Za-z]:\//.test(normalized) ? normalized.toLowerCase() : normalized;
+		};
+		const persistedPathCounts = new Map<string, number>();
+		for (const binding of bindings) {
+			if (!binding.sessionPath) continue;
+			const pathKey = normalizePath(binding.sessionPath);
+			persistedPathCounts.set(pathKey, (persistedPathCounts.get(pathKey) ?? 0) + 1);
+		}
+
 		let migrated = false;
 		for (const b of bindings) {
-			const tabs = this.agentManager.list();
 			let tab = b.agentId ? tabs.find((candidate) => candidate.id === b.agentId) : undefined;
 			if (!tab) tab = tabs.find((candidate) => candidate.id === b.sessionId); // legacy format
 			if (!tab && b.sessionPath) {
-				const samePath = tabs.filter((candidate) => candidate.sessionPath === b.sessionPath);
-				if (samePath.length === 1) tab = samePath[0];
+				const pathKey = normalizePath(b.sessionPath);
+				const samePath = tabs.filter((candidate) => (
+					candidate.sessionPath && normalizePath(candidate.sessionPath) === pathKey
+				));
+				if (persistedPathCounts.get(pathKey) === 1 && samePath.length === 1) tab = samePath[0];
 			}
 
 			let stableSessionId = b.sessionId;
 			if (tab) {
 				try {
-					const runtimeBinding = await this.runtimeBindings.bindRuntime({ projectId: tab.projectId, agent: tab });
+					const runtimeBinding = await this.runtimeBindings.bindRuntime({
+						projectId: tab.projectId,
+						agent: tab,
+						existingSessionId: b.sessionId,
+					});
 					stableSessionId = runtimeBinding.sessionId;
 					migrated ||= stableSessionId !== b.sessionId || b.agentId !== tab.id;
 				} catch (error) {
 					warn(`[飞书 Bridge] 持久绑定 identity 迁移失败，保留原 stable ID: ${error instanceof Error ? error.message : String(error)}`);
 				}
+			} else if (b.agentId) {
+				migrated = true;
 			}
 
 			const binding: FeishuChatBinding = {
 				chatId: b.chatId, botId: b.botId, userId: b.userId,
-				sessionId: stableSessionId, agentId: tab?.id ?? b.agentId,
+				sessionId: stableSessionId, agentId: tab?.id,
 				sessionPath: tab?.sessionPath ?? b.sessionPath,
 				workspaceId: b.workspaceId, channelId: b.channelId, modelId: b.modelId,
 				source: b.source as "feishu" | "session-mirror", chatType: b.chatType as "p2p" | "group",

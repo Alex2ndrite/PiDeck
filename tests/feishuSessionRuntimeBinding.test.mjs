@@ -22,13 +22,15 @@ test("every Agent creation branch binds through the gateway after creation", () 
 
 test("main injects the catalog-backed gateway into every Feishu bridge", () => {
 	assert.match(mainSource, /const feishuSessionRuntimeBindings/);
+	assert.match(mainSource, /input\.existingSessionId && sessionCatalog\.get\(input\.existingSessionId\)/);
+	assert.match(mainSource, /if \(!sessionId && input\.agent\.sessionPath\)/);
 	const constructors = [...mainSource.matchAll(/new FeishuBridge\(/g)].length;
 	const injections = [...mainSource.matchAll(/feishuSessionRuntimeBindings/g)].length - 1;
 	assert.ok(constructors >= 4);
 	assert.ok(injections >= constructors);
 });
 
-function compileBridge(loadBindings = []) {
+function compileBridge(loadBindings = [], options = {}) {
 	const output = ts.transpileModule(bridgeSource, {
 		compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
 	}).outputText;
@@ -47,8 +49,9 @@ function compileBridge(loadBindings = []) {
 		"./FeishuConfig": {
 			listBots: () => [], addBot: () => undefined, removeBot: () => false, updateBot: () => undefined,
 			getDecryptedBotAppSecret: () => "", loadBindings: () => loadBindings, saveBindings: () => undefined,
-			getPersistentChatId: () => undefined, setPersistentChatId: () => undefined,
+			getPersistentChatId: options.getPersistentChatId ?? (() => undefined), setPersistentChatId: () => undefined,
 		},
+		"node:fs": { existsSync: options.existsSync ?? (() => false) },
 		"./rich-text": richText,
 		"./CardStream": { CardStream: { open: async () => ({}) } },
 		"./docActions": { buildFeishuTextChildren: () => [], stripFeishuActionMarkers: (text) => text, wantsFeishuDoc: () => undefined },
@@ -112,10 +115,14 @@ test("create stores stable catalog sessionId and separate runtime agentId", asyn
 	assert.equal(bridge.getSessionChatId("A"), "chat");
 });
 
-test("restore updates runtime handle while keeping gateway stable session ID", async () => {
+test("pathless runtime recreation passes and preserves the existing stable session ID", async () => {
 	const oldTab = makeAgent("A", "p", "");
 	const calls = { abort: [], setModel: [], models: [] };
-	const gateway = { bindRuntime: async () => ({ sessionId: "S", runtimeGeneration: 2 }) };
+	const bindInputs = [];
+	const gateway = { bindRuntime: async (input) => {
+		bindInputs.push({ agentId: input.agent.id, existingSessionId: input.existingSessionId });
+		return { sessionId: "S", runtimeGeneration: 2 };
+	} };
 	const { bridge } = makeBridge([oldTab], gateway, calls);
 	await bridge.createNewSession({ chatId: "chat", senderOpenId: "user", chatType: "p2p", groupName: "", messageId: "m" });
 	const nextTab = makeAgent("B", "p", "");
@@ -124,6 +131,10 @@ test("restore updates runtime handle while keeping gateway stable session ID", a
 	const restored = await bridge.resumeOrCreateAgent(binding);
 	assert.equal(restored.sessionId, "S");
 	assert.equal(restored.agentId, "B");
+	assert.deepEqual(bindInputs, [
+		{ agentId: "A", existingSessionId: undefined },
+		{ agentId: "B", existingSessionId: "S" },
+	]);
 	assert.equal(bridge.getSessionChatId("A"), undefined);
 	assert.equal(bridge.getSessionChatId("B"), "chat");
 	await bridge.doSetModel("chat", "provider/model");
@@ -132,25 +143,99 @@ test("restore updates runtime handle while keeping gateway stable session ID", a
 	assert.deepEqual(calls.abort, ["B"]);
 });
 
-test("legacy persisted binding migrates through gateway and does not cross-match ambiguous paths", async () => {
+test("existing Feishu binding is reused by ensureSessionMirror without creating or overwriting a mirror", async () => {
+	const persisted = [{ chatId: "feishu-chat", botId: "bot", userId: "u", sessionId: "S", agentId: "A", sessionPath: "/sessions/A.json", workspaceId: "", source: "feishu", chatType: "p2p", createdAt: 1 }];
+	const { FeishuBridge } = compileBridge(persisted);
+	const tab = makeAgent("A");
+	let tabs = [tab];
+	const bridge = new FeishuBridge({ id: "bot", name: "bot", enabled: true, appId: "app", appSecret: "secret" }, {
+		list: () => tabs,
+	}, () => null, () => [], { bindRuntime: async () => ({ sessionId: "S", runtimeGeneration: 1 }) });
+	await bridge.loadPersistedBindings();
+	let createCount = 0;
+	bridge.client = { im: { chat: { create: async () => { createCount += 1; return { data: { chat_id: "mirror-chat" } }; } } } };
+	bridge.status = { status: "connected", activeBindings: 1 };
+	assert.equal(await bridge.ensureSessionMirror("A", "Local prompt", tab.sessionPath), "feishu-chat");
+	const replacementTab = makeAgent("B");
+	tabs = [replacementTab];
+	assert.equal(await bridge.ensureSessionMirror("B", "Local prompt", replacementTab.sessionPath), "feishu-chat");
+	assert.equal(createCount, 0);
+	assert.equal(JSON.stringify(bridge.listBindings().map(({ chatId, source, sessionId, agentId }) => ({ chatId, source, sessionId, agentId }))), JSON.stringify([
+		{ chatId: "feishu-chat", source: "feishu", sessionId: "S", agentId: "B" },
+	]));
+	assert.equal(bridge.getSessionChatId("S"), "feishu-chat");
+	assert.equal(bridge.getSessionChatId("A"), undefined);
+	assert.equal(bridge.getSessionChatId("B"), "feishu-chat");
+});
+
+test("removing a stale binding does not remove another binding's current indexes", async () => {
+	const persisted = [
+		{ chatId: "current", botId: "bot", userId: "u", sessionId: "S", workspaceId: "", source: "feishu", chatType: "p2p", createdAt: 1 },
+		{ chatId: "stale", botId: "bot", userId: "u", sessionId: "S", workspaceId: "", source: "feishu", chatType: "p2p", createdAt: 2 },
+	];
+	const { FeishuBridge } = compileBridge(persisted);
+	const bridge = new FeishuBridge({ id: "bot", name: "bot", enabled: true, appId: "app", appSecret: "secret" }, { list: () => [] }, () => null, () => [], { bindRuntime: async () => ({ sessionId: "S", runtimeGeneration: 1 }) });
+	await bridge.loadPersistedBindings();
+	assert.equal(bridge.getSessionChatId("S"), "current");
+	assert.equal(bridge.removeBinding("stale"), true);
+	assert.equal(bridge.getSessionChatId("S"), "current");
+	assert.equal(bridge.feishuSessions.has("S"), true);
+});
+
+test("legacy ID absent from catalog may migrate to a new stable ID during resume", async () => {
+	const persisted = [{ chatId: "chat", botId: "bot", userId: "u", sessionId: "legacy", workspaceId: "", source: "feishu", chatType: "p2p", createdAt: 1 }];
+	const { FeishuBridge } = compileBridge(persisted);
+	const tab = makeAgent("B", "p", "");
+	const bindInputs = [];
+	const manager = {
+		list: () => [],
+		create: async () => tab,
+		stop: async () => undefined,
+	};
+	const bridge = new FeishuBridge({ id: "bot", name: "bot", enabled: true, appId: "app", appSecret: "secret" }, manager, () => null, () => [{ id: "p", name: "project", path: "." }], { bindRuntime: async (input) => {
+		bindInputs.push(input.existingSessionId);
+		return { sessionId: "S2", runtimeGeneration: 1 };
+	} });
+	await bridge.loadPersistedBindings();
+	const resumed = await bridge.resumeOrCreateAgent(bridge.listBindings()[0]);
+	assert.equal(resumed.sessionId, "S2");
+	assert.deepEqual(bindInputs, ["legacy"]);
+});
+
+test("one persisted row and one runtime path candidate migrate through the gateway", async () => {
 	const legacy = [{ chatId: "chat", botId: "bot", userId: "u", sessionId: "A", sessionPath: "/same", workspaceId: "", source: "feishu", chatType: "p2p", createdAt: 1 }];
 	const tab = makeAgent("B", "p", "/same");
 	const { bridge } = makeBridge([tab], { bindRuntime: async () => ({ sessionId: "S", runtimeGeneration: 3 }) });
 	const { FeishuBridge } = compileBridge(legacy);
 	const manager = bridge.agentManager;
-	const loaded = new FeishuBridge({ id: "bot", name: "bot", enabled: true, appId: "app", appSecret: "secret" }, manager, () => null, () => [], { bindRuntime: async () => ({ sessionId: "S", runtimeGeneration: 3 }) });
+	const bindInputs = [];
+	const loaded = new FeishuBridge({ id: "bot", name: "bot", enabled: true, appId: "app", appSecret: "secret" }, manager, () => null, () => [], { bindRuntime: async (input) => {
+		bindInputs.push(input.existingSessionId);
+		return { sessionId: "S", runtimeGeneration: 3 };
+	} });
 	await loaded.loadPersistedBindings();
 	assert.equal(JSON.stringify(loaded.listBindings().map(({ sessionId, agentId }) => ({ sessionId, agentId }))), JSON.stringify([{ sessionId: "S", agentId: "B" }]));
+	assert.deepEqual(bindInputs, ["A"]);
+});
 
+test("two persisted rows sharing a path stay unowned even with one runtime candidate", async () => {
+	const legacy = { botId: "bot", userId: "u", sessionPath: "/same", workspaceId: "", chatType: "p2p", createdAt: 1 };
 	const ambiguous = [
-		{ ...legacy[0], chatId: "one", sessionId: "old-one" },
-		{ ...legacy[0], chatId: "two", sessionId: "old-two", source: "session-mirror" },
+		{ ...legacy, chatId: "one", sessionId: "old-one", source: "feishu" },
+		{ ...legacy, chatId: "two", sessionId: "old-two", source: "session-mirror" },
 	];
-	const { FeishuBridge: BridgeWithAmbiguousData } = compileBridge(ambiguous);
-	const ambiguousBridge = new BridgeWithAmbiguousData({ id: "bot", name: "bot", enabled: true, appId: "app", appSecret: "secret" }, {
-		...manager,
-		list: () => [makeAgent("B1", "p", "/same"), makeAgent("B2", "p", "/same")],
-	}, () => null, () => [], { bindRuntime: async ({ agent }) => ({ sessionId: `stable-${agent.id}`, runtimeGeneration: 1 }) });
-	await ambiguousBridge.loadPersistedBindings();
-	assert.equal(JSON.stringify(ambiguousBridge.listBindings().map(({ agentId }) => agentId)), JSON.stringify([undefined, undefined]));
+	const { FeishuBridge } = compileBridge(ambiguous);
+	const bindInputs = [];
+	const bridge = new FeishuBridge({ id: "bot", name: "bot", enabled: true, appId: "app", appSecret: "secret" }, {
+		list: () => [makeAgent("B", "p", "/same")],
+	}, () => null, () => [], { bindRuntime: async (input) => {
+		bindInputs.push(input);
+		return { sessionId: "unexpected", runtimeGeneration: 1 };
+	} });
+	await bridge.loadPersistedBindings();
+	assert.equal(JSON.stringify(bridge.listBindings().map(({ sessionId, agentId }) => ({ sessionId, agentId }))), JSON.stringify([
+		{ sessionId: "old-one" },
+		{ sessionId: "old-two" },
+	]));
+	assert.equal(bindInputs.length, 0);
 });

@@ -343,8 +343,10 @@ const feishuSessionRuntimeBindings: SessionRuntimeBindingGateway = {
 			settingsStore.get().wslEnabled ? "wsl" : "native"
 		);
 		const source = input.agent.sessionSource ?? "pi";
-		let sessionId: string | undefined;
-		if (input.agent.sessionPath) {
+		let sessionId = input.existingSessionId && sessionCatalog.get(input.existingSessionId)
+			? input.existingSessionId
+			: undefined;
+		if (!sessionId && input.agent.sessionPath) {
 			const targetOrigin = buildSessionOriginKey({
 				source,
 				environment,
