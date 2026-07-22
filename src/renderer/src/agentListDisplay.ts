@@ -67,6 +67,15 @@ function getSummaryKey(session: SessionSummary) {
 	return getSessionKey(session.filePath, getSessionEnvironment(session));
 }
 
+/**
+ * Session rows are owned by the catalog record, never by a transient runtime.
+ * Keep this helper at the display boundary so every Sidebar tree uses the
+ * durable SessionRecord/SessionSummary identity for its React key.
+ */
+export function getSessionRowKey(session: Pick<SessionSummary, "id">) {
+	return `session:${session.id}`;
+}
+
 function findSessionKeyForAgent(
 	sessionPath: string | undefined,
 	sessionByKey: Map<string, SessionSummary>,
@@ -239,7 +248,7 @@ export function getProjectAgentSessionDisplay({
 				}
 				return {
 					type: "session",
-					key: `session:${linkedSession.id}`,
+					key: getSessionRowKey(linkedSession),
 					session: linkedSession,
 					agent,
 					sortAt: getAgentSortAt(agent, sessionByKey),
@@ -261,7 +270,7 @@ export function getProjectAgentSessionDisplay({
 			.filter(([sessionKey]) => !agentBySessionKey.has(sessionKey))
 			.map<ProjectChildItem>(([sessionKey, session]) => ({
 				type: "session",
-				key: `session:${session.id}`,
+				key: getSessionRowKey(session),
 				session,
 				sortAt: session.updatedAt,
 				codexSubagents: codexSubagentsByParent.get(getCodexParentKey(session)) ?? [],
@@ -272,7 +281,7 @@ export function getProjectAgentSessionDisplay({
 			})),
 		...unkeyedSessions.map<ProjectChildItem>((session) => ({
 			type: "session",
-			key: `session:${session.id}`,
+			key: getSessionRowKey(session),
 			session,
 			sortAt: session.updatedAt,
 			codexSubagents: codexSubagentsByParent.get(getCodexParentKey(session)) ?? [],
@@ -314,7 +323,7 @@ export function getProjectAgentSessionDisplay({
 				if (nestedSubagentPaths.has(orphanKey) || visibleParentKeys.has(orphanKey)) continue;
 				children.push({
 					type: "session",
-					key: `session:${orphan.id}`,
+					key: getSessionRowKey(orphan),
 					session: orphan,
 					sortAt: orphan.updatedAt,
 					codexSubagents: [],

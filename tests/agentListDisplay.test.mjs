@@ -58,7 +58,7 @@ test("matches native Session paths only for runtime/catalog deduplication", () =
 
 
 test("keeps a stable Session row and key when a runtime is attached", () => {
-	const { getProjectAgentSessionDisplay } = loadModule();
+	const { getProjectAgentSessionDisplay, getSessionRowKey } = loadModule();
 	const record = session({
 		id: "desktop-session-1",
 		filePath: "C:/sessions/stable.jsonl",
@@ -84,6 +84,7 @@ test("keeps a stable Session row and key when a runtime is attached", () => {
 	assert.equal(before.children[0].key, "session:desktop-session-1");
 	assert.equal(after.children[0].key, before.children[0].key);
 	assert.equal(after.children[0].agent.id, "runtime-1");
+	assert.equal(getSessionRowKey(record), "session:desktop-session-1");
 });
 
 test("preserves WSL path case while deduplicating native paths", () => {
