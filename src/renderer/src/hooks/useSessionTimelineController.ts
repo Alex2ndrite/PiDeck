@@ -9,11 +9,15 @@ import {
 } from "react";
 import { useAtomValue } from "jotai";
 import { selectAtom } from "jotai/utils";
-import type { ChatMessage } from "../../../shared/types";
+import type { AgentRuntimeState, ChatMessage } from "../../../shared/types";
 import { sessionMessagesCacheAtom } from "../atoms";
 import { useMessagePagination } from "./useMessagePagination";
 
 const BOTTOM_THRESHOLD = 100;
+const LEGACY_OWNER_KEY = "legacy";
+
+type Tagged<T> = { ownerKey: string; value: T };
+type TimelineAnchor = { height: number; top: number };
 
 export function isTimelineAtBottom(
   scrollTop: number,
@@ -27,7 +31,35 @@ export function restoreTimelineAnchor(previousTop: number, heightDelta: number):
   return previousTop + heightDelta;
 }
 
-type TimelineAnchor = { height: number; top: number };
+export function matchesTimelineOwner(
+  taggedOwnerKey: string,
+  currentOwnerKey: string,
+): boolean {
+  return taggedOwnerKey === currentOwnerKey;
+}
+
+export function selectSessionModeValue<T>(
+  sessionMode: boolean,
+  sessionValue: T,
+  legacyValue: T,
+): T {
+  return sessionMode ? sessionValue : legacyValue;
+}
+
+export function isSessionRuntimeBusy(
+  status: string | undefined,
+  state: AgentRuntimeState | undefined,
+): boolean {
+  return Boolean(status === "running" || state?.isStreaming || state?.isExecutingTool);
+}
+
+export function isLatestTimelineRunBusy(
+  isAgentBusy: boolean,
+  index: number,
+  runCount: number,
+): boolean {
+  return isAgentBusy && index === runCount - 1;
+}
 
 export type SessionTimelineController = {
   timelineRef: RefObject<HTMLElement | null>;
@@ -48,7 +80,10 @@ export function useSessionTimelineController(options: {
   initialPageSize?: number;
   pageSize?: number;
 }): SessionTimelineController {
+  const ownerKey = options.sessionId ?? LEGACY_OWNER_KEY;
   const timelineRef = useRef<HTMLElement | null>(null);
+  const ownerKeyRef = useRef(ownerKey);
+  ownerKeyRef.current = ownerKey;
   const cacheSliceAtom = useMemo(
     () => selectAtom(
       sessionMessagesCacheAtom,
@@ -57,12 +92,12 @@ export function useSessionTimelineController(options: {
     ),
     [options.sessionId],
   );
-  // selectAtom keeps unrelated Session runtime events from invalidating this timeline.
   const cachedMessages = useAtomValue(cacheSliceAtom);
   const messages = options.messages ?? cachedMessages ?? [];
   const controllerEnabled = options.sessionId !== undefined && options.messages === undefined;
   const pagination = useMessagePagination({
     messages,
+    ownerKey,
     initialPageSize: options.initialPageSize ?? 100,
     pageSize: options.pageSize ?? 100,
     enabled: controllerEnabled && messages.length > 100,
@@ -71,61 +106,94 @@ export function useSessionTimelineController(options: {
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const autoScrollRef = useRef(true);
   const programmaticScrollRef = useRef(false);
-  const loadMoreAnchorRef = useRef<TimelineAnchor | undefined>(undefined);
-  const pendingJumpIdRef = useRef<string | undefined>(undefined);
+  const loadMoreAnchorRef = useRef<Tagged<TimelineAnchor> | undefined>(undefined);
+  const pendingJumpRef = useRef<Tagged<string> | undefined>(undefined);
+  const highlightTimersRef = useRef(new Map<number, number>());
+
+  const clearHighlightTimers = useCallback(() => {
+    for (const timer of highlightTimersRef.current.values()) {
+      window.clearTimeout(timer);
+    }
+    highlightTimersRef.current.clear();
+  }, []);
+
+  const highlightMessage = useCallback((element: HTMLElement, expectedOwnerKey: string) => {
+    if (ownerKeyRef.current !== expectedOwnerKey) return;
+    element.classList.remove("message-jump-highlight");
+    void element.offsetWidth;
+    element.classList.add("message-jump-highlight");
+    const timer = window.setTimeout(() => {
+      highlightTimersRef.current.delete(timer);
+      if (ownerKeyRef.current === expectedOwnerKey) {
+        element.classList.remove("message-jump-highlight");
+      }
+    }, 2000);
+    highlightTimersRef.current.set(timer, timer);
+  }, []);
 
   const scrollToBottom = useCallback(() => {
+    const requestOwnerKey = ownerKey;
     const timeline = timelineRef.current;
-    if (!timeline) return;
+    if (!timeline || ownerKeyRef.current !== requestOwnerKey) return;
     programmaticScrollRef.current = true;
     timeline.scrollTo({ top: timeline.scrollHeight, behavior: "smooth" });
     autoScrollRef.current = true;
     setAutoScroll(true);
     setShowScrollToBottom(false);
-  }, []);
+  }, [ownerKey]);
 
   const loadMoreMessages = useCallback(() => {
+    const requestOwnerKey = ownerKey;
     const timeline = timelineRef.current;
-    if (timeline) {
+    if (timeline && ownerKeyRef.current === requestOwnerKey) {
       loadMoreAnchorRef.current = {
-        height: timeline.scrollHeight,
-        top: timeline.scrollTop,
+        ownerKey: requestOwnerKey,
+        value: { height: timeline.scrollHeight, top: timeline.scrollTop },
       };
     }
     pagination.loadMore();
-  }, [pagination]);
+  }, [ownerKey, pagination]);
 
   const jumpToMessage = useCallback((messageId: string) => {
-    const existing = document.querySelector(
+    const requestOwnerKey = ownerKey;
+    const timeline = timelineRef.current;
+    if (!timeline || ownerKeyRef.current !== requestOwnerKey) return;
+    const existing = timeline.querySelector(
       `[data-message-id="${CSS.escape(messageId)}"]`,
     ) as HTMLElement | null;
     if (existing) {
       existing.scrollIntoView({ behavior: "smooth", block: "start" });
-      existing.classList.remove("message-jump-highlight");
-      void existing.offsetWidth;
-      existing.classList.add("message-jump-highlight");
-      window.setTimeout(() => existing.classList.remove("message-jump-highlight"), 2000);
+      highlightMessage(existing, requestOwnerKey);
       return;
     }
     const index = messages.findIndex((message) => message.id === messageId);
     if (index < 0) return;
-    pendingJumpIdRef.current = messageId;
+    pendingJumpRef.current = { ownerKey: requestOwnerKey, value: messageId };
     pagination.loadUntilIncluded(index);
-  }, [messages, pagination]);
+  }, [highlightMessage, messages, ownerKey, pagination]);
+
+  useEffect(() => {
+    loadMoreAnchorRef.current = undefined;
+    pendingJumpRef.current = undefined;
+    programmaticScrollRef.current = false;
+    clearHighlightTimers();
+    return clearHighlightTimers;
+  }, [clearHighlightTimers, ownerKey]);
 
   useEffect(() => {
     if (!controllerEnabled) return;
     autoScrollRef.current = true;
     setAutoScroll(true);
     setShowScrollToBottom(false);
+    const requestOwnerKey = ownerKey;
     const frame = requestAnimationFrame(() => {
       const timeline = timelineRef.current;
-      if (!timeline) return;
+      if (!timeline || ownerKeyRef.current !== requestOwnerKey) return;
       programmaticScrollRef.current = true;
       timeline.scrollTo({ top: timeline.scrollHeight, behavior: "instant" });
     });
     return () => cancelAnimationFrame(frame);
-  }, [controllerEnabled, options.sessionId]);
+  }, [controllerEnabled, ownerKey]);
 
   useEffect(() => {
     if (!controllerEnabled) return;
@@ -153,15 +221,16 @@ export function useSessionTimelineController(options: {
     timeline.addEventListener("scroll", onScroll);
     onScroll();
     return () => timeline.removeEventListener("scroll", onScroll);
-  }, [controllerEnabled, options.sessionId]);
+  }, [controllerEnabled, ownerKey]);
 
   useEffect(() => {
     if (!controllerEnabled) return;
     const timeline = timelineRef.current;
     const list = timeline?.querySelector(".message-list");
     if (!timeline || !list) return;
+    const requestOwnerKey = ownerKey;
     const stickToBottom = () => {
-      if (!autoScrollRef.current) return;
+      if (!autoScrollRef.current || ownerKeyRef.current !== requestOwnerKey) return;
       programmaticScrollRef.current = true;
       timeline.scrollTo({ top: timeline.scrollHeight, behavior: "instant" });
     };
@@ -174,35 +243,33 @@ export function useSessionTimelineController(options: {
       resizeObserver.disconnect();
       mutationObserver.disconnect();
     };
-  }, [autoScroll, controllerEnabled, options.sessionId, pagination.visibleMessages.length]);
+  }, [autoScroll, controllerEnabled, ownerKey, pagination.visibleMessages.length]);
 
   useLayoutEffect(() => {
     if (!controllerEnabled) return;
     const anchor = loadMoreAnchorRef.current;
     const timeline = timelineRef.current;
-    if (!anchor || !timeline) return;
+    if (!anchor || !timeline || !matchesTimelineOwner(anchor.ownerKey, ownerKey)) return;
     timeline.scrollTop = restoreTimelineAnchor(
-      anchor.top,
-      timeline.scrollHeight - anchor.height,
+      anchor.value.top,
+      timeline.scrollHeight - anchor.value.height,
     );
     loadMoreAnchorRef.current = undefined;
-  }, [controllerEnabled, pagination.visibleMessages.length]);
+  }, [controllerEnabled, ownerKey, pagination.visibleMessages.length]);
 
   useEffect(() => {
     if (!controllerEnabled) return;
-    const messageId = pendingJumpIdRef.current;
-    if (!messageId) return;
-    const element = document.querySelector(
-      `[data-message-id="${CSS.escape(messageId)}"]`,
+    const pendingJump = pendingJumpRef.current;
+    const timeline = timelineRef.current;
+    if (!pendingJump || !timeline || !matchesTimelineOwner(pendingJump.ownerKey, ownerKey)) return;
+    const element = timeline.querySelector(
+      `[data-message-id="${CSS.escape(pendingJump.value)}"]`,
     ) as HTMLElement | null;
     if (!element) return;
-    pendingJumpIdRef.current = undefined;
+    pendingJumpRef.current = undefined;
     element.scrollIntoView({ behavior: "smooth", block: "start" });
-    element.classList.remove("message-jump-highlight");
-    void element.offsetWidth;
-    element.classList.add("message-jump-highlight");
-    window.setTimeout(() => element.classList.remove("message-jump-highlight"), 2000);
-  }, [controllerEnabled, pagination.visibleMessages.length]);
+    highlightMessage(element, ownerKey);
+  }, [controllerEnabled, highlightMessage, ownerKey, pagination.visibleMessages.length]);
 
   return {
     timelineRef,

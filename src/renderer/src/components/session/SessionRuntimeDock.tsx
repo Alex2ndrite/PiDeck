@@ -4,6 +4,38 @@ import { TerminalDock } from "../terminal/TerminalDock";
 
 export const SESSION_RUNTIME_DOCK_MOTION_MS = 180;
 
+export type SessionRuntimeDockMotionState = Readonly<{
+  mounted: boolean;
+  closing: boolean;
+  agentId?: string;
+}>;
+
+export const CLOSED_SESSION_RUNTIME_DOCK: SessionRuntimeDockMotionState = {
+  mounted: false,
+  closing: false,
+};
+
+export function transitionSessionRuntimeDock(
+  current: SessionRuntimeDockMotionState,
+  input: { agentId?: string; open: boolean },
+): SessionRuntimeDockMotionState {
+  if (input.open && input.agentId) {
+    return { mounted: true, closing: false, agentId: input.agentId };
+  }
+  if (!current.mounted) return CLOSED_SESSION_RUNTIME_DOCK;
+  return { mounted: true, closing: true, agentId: current.agentId };
+}
+
+export function finishSessionRuntimeDockClose(
+  current: SessionRuntimeDockMotionState,
+): SessionRuntimeDockMotionState {
+  return current.closing ? CLOSED_SESSION_RUNTIME_DOCK : current;
+}
+
+export function disposeSessionRuntimeDock(): SessionRuntimeDockMotionState {
+  return CLOSED_SESSION_RUNTIME_DOCK;
+}
+
 export type SessionRuntimeDockProps = {
   agentId?: string;
   open: boolean;
@@ -13,50 +45,62 @@ export type SessionRuntimeDockProps = {
   onOpenChange: (open: boolean) => void;
   onCollapsedChange: (collapsed: boolean) => void;
   onHeightChange: (height: number) => void;
+  /** Read-only layout signal. The dock remains the sole owner of close animation state. */
+  onMotionStateChange?: (state: SessionRuntimeDockMotionState) => void;
 };
 
 // The dock tracks a runtime, not the Session view. Losing or replacing a runtime only closes this leaf.
 export function SessionRuntimeDock(props: SessionRuntimeDockProps) {
-  const [mounted, setMounted] = useState(false);
-  const [closing, setClosing] = useState(false);
-  const [mountedAgentId, setMountedAgentId] = useState<string>();
+  const [motion, setMotion] = useState<SessionRuntimeDockMotionState>(
+    CLOSED_SESSION_RUNTIME_DOCK,
+  );
+  const motionRef = useRef(motion);
   const closeTimerRef = useRef<number | undefined>(undefined);
-  const shouldBeOpen = Boolean(props.agentId && props.open);
+  const onMotionStateChangeRef = useRef(props.onMotionStateChange);
+  onMotionStateChangeRef.current = props.onMotionStateChange;
+
+  function publish(next: SessionRuntimeDockMotionState) {
+    motionRef.current = next;
+    setMotion(next);
+    onMotionStateChangeRef.current?.(next);
+  }
+
+  function clearCloseTimer() {
+    if (closeTimerRef.current != null) window.clearTimeout(closeTimerRef.current);
+    closeTimerRef.current = undefined;
+  }
 
   useEffect(() => {
-    if (closeTimerRef.current != null) {
-      window.clearTimeout(closeTimerRef.current);
-      closeTimerRef.current = undefined;
-    }
-    if (shouldBeOpen && props.agentId) {
-      setMountedAgentId(props.agentId);
-      setClosing(false);
-      setMounted(true);
-      return;
-    }
-    if (!mounted) return;
-    setClosing(true);
+    clearCloseTimer();
+    const next = transitionSessionRuntimeDock(motionRef.current, {
+      agentId: props.agentId,
+      open: props.open,
+    });
+    publish(next);
+    if (!next.closing) return clearCloseTimer;
     closeTimerRef.current = window.setTimeout(() => {
-      setMounted(false);
-      setClosing(false);
-      setMountedAgentId(undefined);
       closeTimerRef.current = undefined;
+      publish(finishSessionRuntimeDockClose(motionRef.current));
     }, SESSION_RUNTIME_DOCK_MOTION_MS);
-    return () => {
-      if (closeTimerRef.current != null) {
-        window.clearTimeout(closeTimerRef.current);
-        closeTimerRef.current = undefined;
-      }
-    };
-  }, [mounted, props.agentId, shouldBeOpen]);
+    return clearCloseTimer;
+  // Motion is intentionally held in a ref so props changes do not create a second close timer owner.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.agentId, props.open]);
 
-  if (!mounted || !mountedAgentId) return null;
+  useEffect(() => () => {
+    clearCloseTimer();
+    publish(disposeSessionRuntimeDock());
+  // publish only reads stable refs and setState.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  if (!motion.mounted || !motion.agentId) return null;
   return (
     <TerminalDock
-      key={mountedAgentId}
-      agentId={mountedAgentId}
-      open={mounted}
-      closing={closing}
+      key={motion.agentId}
+      agentId={motion.agentId}
+      open={motion.mounted}
+      closing={motion.closing}
       collapsed={props.collapsed}
       height={props.height}
       terminal={props.terminal}

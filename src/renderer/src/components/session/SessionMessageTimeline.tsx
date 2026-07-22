@@ -23,11 +23,13 @@ import {
   groupToolMessages,
 } from "../app/AppUtils";
 import {
-  currentSessionIdAtom,
   sessionRecordByIdAtomFamily,
   sessionRuntimeBySessionIdAtomFamily,
 } from "../../atoms";
 import {
+  isLatestTimelineRunBusy,
+  isSessionRuntimeBusy,
+  selectSessionModeValue,
   useSessionTimelineController,
   type SessionTimelineController,
 } from "../../hooks/useSessionTimelineController";
@@ -42,27 +44,10 @@ type UiResponse = {
 type TurnRowProps = ComponentProps<typeof TurnRow>;
 type UserBubbleProps = ComponentProps<typeof UserBubble>;
 
-export type SessionMessageTimelineProps = {
-  /** A8 passes sessionId and lets this component select only that Session's data. */
-  sessionId?: string;
-  controller?: SessionTimelineController;
-  timelineRef?: RefObject<HTMLElement | null>;
-  activeMessages?: ChatMessage[];
-  paginatedMessages?: ChatMessage[];
-  hasMoreMessages?: boolean;
-  isLoadingMoreMessages?: boolean;
-  canLoadMoreMessages?: boolean;
-  onLoadMoreMessages?: () => void;
-  hasActiveConversation?: boolean;
+type TimelineInteractionProps = {
   hasProject: boolean;
-  isConversationLoading?: boolean;
   onCreateSession: () => void;
   showThinking: boolean;
-  activeThinking?: string;
-  activeRuntimeState?: AgentRuntimeState;
-  activeConversationStatus?: string;
-  isAgentBusy?: boolean;
-  cancellingUi?: boolean;
   validCommandNames: Set<string>;
   validFilePaths: Set<string>;
   onPreviewImage: (image: ImageContent) => void;
@@ -76,31 +61,98 @@ export type SessionMessageTimelineProps = {
   onToast: (message: string) => void;
 };
 
+type LegacyTimelineProps = TimelineInteractionProps & {
+  mode?: "legacy";
+  sessionId?: never;
+  controller?: never;
+  timelineRef: RefObject<HTMLElement | null>;
+  activeMessages: ChatMessage[];
+  paginatedMessages: ChatMessage[];
+  hasMoreMessages: boolean;
+  isLoadingMoreMessages: boolean;
+  canLoadMoreMessages: boolean;
+  onLoadMoreMessages: () => void;
+  hasActiveConversation: boolean;
+  isConversationLoading: boolean;
+  activeThinking?: string;
+  activeRuntimeState?: AgentRuntimeState;
+  activeConversationStatus?: string;
+  isAgentBusy: boolean;
+  cancellingUi: boolean;
+};
+
+type SessionTimelineProps = TimelineInteractionProps & {
+  mode: "session";
+  sessionId: string;
+  controller?: SessionTimelineController;
+  timelineRef?: RefObject<HTMLElement | null>;
+  activeMessages?: never;
+  paginatedMessages?: never;
+  hasMoreMessages?: never;
+  isLoadingMoreMessages?: never;
+  canLoadMoreMessages?: never;
+  onLoadMoreMessages?: never;
+  hasActiveConversation?: never;
+  isConversationLoading?: never;
+  activeThinking?: never;
+  activeRuntimeState?: never;
+  activeConversationStatus?: never;
+  isAgentBusy?: never;
+  cancellingUi?: never;
+};
+
+export type SessionMessageTimelineProps = LegacyTimelineProps | SessionTimelineProps;
+
 export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
-  const currentSessionId = useAtomValue(currentSessionIdAtom);
-  const sessionId = props.sessionId ?? currentSessionId;
-  const session = useAtomValue(sessionRecordByIdAtomFamily(sessionId ?? ""));
-  const runtime = useAtomValue(sessionRuntimeBySessionIdAtomFamily(sessionId ?? ""));
+  const sessionMode = props.mode === "session";
+  const sessionId = sessionMode ? props.sessionId : "";
+  const legacyProps = props as LegacyTimelineProps;
+  const session = useAtomValue(sessionRecordByIdAtomFamily(sessionId));
+  const runtime = useAtomValue(sessionRuntimeBySessionIdAtomFamily(sessionId));
   const internalController = useSessionTimelineController({
-    sessionId,
-    // An injected controller owns the scroll effects; keep this compatibility hook inert.
-    messages: props.controller ? [] : props.activeMessages,
+    sessionId: sessionMode ? sessionId : undefined,
+    // An injected controller owns the scroll effects; legacy ownership remains entirely external.
+    messages: sessionMode ? (props.controller ? [] : undefined) : legacyProps.activeMessages,
   });
-  const controller = props.controller ?? internalController;
-  const timelineRef = props.timelineRef ?? controller.timelineRef;
-  const activeMessages = props.activeMessages ?? controller.messages;
-  const paginatedMessages = props.paginatedMessages ?? controller.visibleMessages;
-  const hasMoreMessages = props.hasMoreMessages ?? controller.hasMoreMessages;
-  const isLoadingMoreMessages = props.isLoadingMoreMessages ?? controller.isLoadingMoreMessages;
-  const canLoadMoreMessages = props.canLoadMoreMessages ?? true;
-  const hasActiveConversation = props.hasActiveConversation ?? Boolean(session);
-  const isConversationLoading = props.isConversationLoading ?? false;
-  const activeRuntimeState = props.activeRuntimeState ?? runtime?.state;
-  const activeConversationStatus = props.activeConversationStatus ?? runtime?.status;
-  const activeThinking = props.activeThinking ?? runtime?.thinking;
-  const isAgentBusy = props.isAgentBusy ?? activeConversationStatus === "running";
-  const cancellingUi = props.cancellingUi ?? false;
-  const loadMoreMessages = props.onLoadMoreMessages ?? controller.loadMoreMessages;
+  const controller = sessionMode ? (props.controller ?? internalController) : internalController;
+  const timelineRef = sessionMode
+    ? (props.timelineRef ?? controller.timelineRef)
+    : legacyProps.timelineRef;
+  const activeMessages = selectSessionModeValue(
+    sessionMode,
+    controller.messages,
+    legacyProps.activeMessages,
+  );
+  const paginatedMessages = selectSessionModeValue(
+    sessionMode,
+    controller.visibleMessages,
+    legacyProps.paginatedMessages,
+  );
+  const hasMoreMessages = sessionMode ? controller.hasMoreMessages : legacyProps.hasMoreMessages;
+  const isLoadingMoreMessages = sessionMode
+    ? controller.isLoadingMoreMessages
+    : legacyProps.isLoadingMoreMessages;
+  const canLoadMoreMessages = sessionMode ? runtime?.status !== "starting" : legacyProps.canLoadMoreMessages;
+  const hasActiveConversation = sessionMode ? Boolean(session) : legacyProps.hasActiveConversation;
+  const isConversationLoading = sessionMode ? false : legacyProps.isConversationLoading;
+  const activeRuntimeState = selectSessionModeValue(
+    sessionMode,
+    runtime?.state,
+    legacyProps.activeRuntimeState,
+  );
+  const activeConversationStatus = selectSessionModeValue(
+    sessionMode,
+    runtime?.status,
+    legacyProps.activeConversationStatus,
+  );
+  const activeThinking = sessionMode ? runtime?.thinking : legacyProps.activeThinking;
+  const isAgentBusy = sessionMode
+    ? isSessionRuntimeBusy(activeConversationStatus, activeRuntimeState)
+    : legacyProps.isAgentBusy;
+  const cancellingUi = sessionMode ? false : legacyProps.cancellingUi;
+  const loadMoreMessages = sessionMode
+    ? controller.loadMoreMessages
+    : legacyProps.onLoadMoreMessages;
   const [multiSelectOpen, setMultiSelectOpen] = useState(false);
   const renderedRuns = useMemo(
     () => groupToolMessages(paginatedMessages),
@@ -148,7 +200,9 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
     if (kind === "image") {
       try {
         const { toBlob } = await import("html-to-image");
-        const source = document.querySelector(".message-list") as HTMLElement | null;
+        const source = timelineRef.current?.querySelector(
+          ".message-list",
+        ) as HTMLElement | null;
         if (!source) return;
 
         const captureIds = getMultiSelectImageCaptureIds(renderedRuns, selectedIds);
@@ -317,9 +371,11 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
                     onPreviewImage={props.onPreviewImage}
                     showThinking={props.showThinking}
                     isStreaming={isRunStreaming}
-                    agentRunning={
-                      props.isAgentBusy && index === renderedRuns.length - 1
-                    }
+                    agentRunning={isLatestTimelineRunBusy(
+                      isAgentBusy,
+                      index,
+                      renderedRuns.length,
+                    )}
                     onOpenExternal={props.onOpenExternal}
                     onOpenFile={props.onOpenFile}
                     onDiffFile={props.onDiffFile}
@@ -341,7 +397,7 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
                     onResendUserMessage={props.onResendUserMessage}
                     onEditMessage={props.onEditMessage}
                     onDeleteMessage={props.onDeleteMessage}
-                    agentRunning={props.isAgentBusy}
+                    agentRunning={isAgentBusy}
                     isLastUserMessage={message.id === lastUserMessageId}
                     validCommandNames={props.validCommandNames}
                     validFilePaths={props.validFilePaths}

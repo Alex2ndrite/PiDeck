@@ -3,25 +3,18 @@ import { useAtomValue } from "jotai";
 import type { RefObject } from "react";
 import type { AgentRuntimeState } from "../../../../shared/types";
 import {
-  currentSessionIdAtom,
   sessionRecordByIdAtomFamily,
   sessionRuntimeBySessionIdAtomFamily,
 } from "../../atoms";
 import { t } from "../../i18n";
 import { SessionStatus } from "../app/AppParts";
 
-export type SessionHeaderProps = {
-  /** A8 passes this explicitly; currentSessionId is the compatibility fallback. */
-  sessionId?: string;
+type HeaderActions = {
   headerRef: RefObject<HTMLElement | null>;
   comboRef: RefObject<HTMLDivElement | null>;
-  title?: string;
   compactionCount?: number;
-  runtimeState?: AgentRuntimeState;
   duration?: number;
-  isStarting: boolean;
   hasProject: boolean;
-  hasSession: boolean;
   menuOpen: boolean;
   notice?: string;
   canStop: boolean;
@@ -34,15 +27,36 @@ export type SessionHeaderProps = {
   onRestart: () => void;
 };
 
+type LegacySessionHeaderProps = HeaderActions & {
+  mode?: "legacy";
+  sessionId?: never;
+  title: string;
+  runtimeState?: AgentRuntimeState;
+  isStarting: boolean;
+  hasSession: boolean;
+};
+
+type ModernSessionHeaderProps = HeaderActions & {
+  mode: "session";
+  sessionId: string;
+  title?: never;
+  runtimeState?: never;
+  isStarting?: never;
+  hasSession?: never;
+};
+
+export type SessionHeaderProps = LegacySessionHeaderProps | ModernSessionHeaderProps;
+
 export function SessionHeader(props: SessionHeaderProps) {
-  const currentSessionId = useAtomValue(currentSessionIdAtom);
-  const sessionId = props.sessionId ?? currentSessionId;
-  const session = useAtomValue(sessionRecordByIdAtomFamily(sessionId ?? ""));
-  const runtime = useAtomValue(sessionRuntimeBySessionIdAtomFamily(sessionId ?? ""));
-  const title = props.title ?? session?.title ?? "PiDeck";
-  const runtimeState = props.runtimeState ?? runtime?.state;
-  const isStarting = props.isStarting || runtime?.status === "starting";
-  const hasSession = props.hasSession || Boolean(sessionId);
+  const sessionMode = props.mode === "session";
+  const sessionId = sessionMode ? props.sessionId : "";
+  const legacyProps = props as LegacySessionHeaderProps;
+  const session = useAtomValue(sessionRecordByIdAtomFamily(sessionId));
+  const runtime = useAtomValue(sessionRuntimeBySessionIdAtomFamily(sessionId));
+  const title = sessionMode ? (session?.title ?? "PiDeck") : legacyProps.title;
+  const runtimeState = sessionMode ? runtime?.state : legacyProps.runtimeState;
+  const isStarting = sessionMode ? runtime?.status === "starting" : legacyProps.isStarting;
+  const hasSession = sessionMode ? Boolean(session) : legacyProps.hasSession;
 
   return (
     <header ref={props.headerRef} className="chat-header">
