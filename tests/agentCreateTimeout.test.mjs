@@ -9,8 +9,9 @@ test("new conversation creates a metadata-only Session draft", () => {
     /async function createSessionDraft\([\s\S]*?\n  function applyAgentRuntimeState/,
   )?.[0] ?? "";
   assert.match(createDraftSource, /api\.sessions\.createDraft\(\{/);
+  assert.match(createDraftSource, /setActiveProjectId\(projectId\)/);
   assert.match(createDraftSource, /setCurrentSessionId\(session\.id\)/);
-  assert.match(createDraftSource, /setActiveAgentId\(undefined\)/);
+  assert.doesNotMatch(createDraftSource, /setActiveAgentId/);
   assert.doesNotMatch(createDraftSource, /api\.agents\.create/);
 });
 

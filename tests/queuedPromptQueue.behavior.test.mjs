@@ -249,14 +249,18 @@ test("parallel tools complete only after the final toolCallId ends", () => {
 
 test("immediate unknown snapshots stay visible and acknowledgement-only", () => {
   const appSource = readFileSync("src/renderer/src/App.tsx", "utf8");
+  const composerPanelsSource = readFileSync(
+    "src/renderer/src/components/session/ComposerPanels.tsx",
+    "utf8",
+  );
   assert.match(
     appSource,
     /if \(accepted === "unknown"\) \{\s*appendUnknownQueuedPrompt\(targetAgentId, queuedPromptSnapshot\);\s*return;/,
   );
   // Unknown rows stay in the compact panel; discard may clear them, but retract-to-input stays disabled.
-  assert.match(appSource, /status === "unknown"/);
-  assert.match(appSource, /canRetractQueuedPromptToInput/);
-  assert.match(appSource, /canDiscardQueuedPrompt/);
+  assert.match(composerPanelsSource, /status === "unknown"/);
+  assert.match(composerPanelsSource, /canRetractQueuedPromptToInput\(status\)/);
+  assert.match(composerPanelsSource, /canDiscardQueuedPrompt\(status\)/);
   assert.match(appSource, /discardQueuedPrompt/);
   assert.equal(canRetractQueuedPromptToInput("pending"), true);
   assert.equal(canRetractQueuedPromptToInput("failed"), true);

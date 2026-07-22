@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
 
-const source = readFileSync("src/renderer/src/App.tsx", "utf8");
+const timelineSource = readFileSync(
+  "src/renderer/src/components/session/SessionMessageTimeline.tsx",
+  "utf8",
+);
 const turnRowSource = readFileSync(
   "src/renderer/src/components/app/AppParts.tsx",
   "utf8",
@@ -16,13 +19,13 @@ test("renders the execution process before the final assistant answer", () => {
 });
 
 test("only the latest agent run receives the global running state", () => {
-  const timelineRender = source.slice(
-    source.indexOf("{renderedRuns.map"),
-    source.indexOf("// 独立消息条目"),
+  const timelineRender = timelineSource.slice(
+    timelineSource.indexOf("{renderedRuns.map"),
+    timelineSource.indexOf('if (item.kind !== "message")'),
   );
   assert.match(
     timelineRender,
-    /agentRunning=\{isAgentBusy && index === renderedRuns\.length - 1\}/,
+    /agentRunning=\{\s*props\.isAgentBusy && index === renderedRuns\.length - 1\s*\}/,
   );
-  assert.doesNotMatch(timelineRender, /agentRunning=\{isAgentBusy\}/);
+  assert.doesNotMatch(timelineRender, /agentRunning=\{props\.isAgentBusy\}/);
 });

@@ -6,6 +6,10 @@ import { setI18nLocale, t } from "../src/renderer/src/i18n.ts";
 import { mergeAgentRuntimeState } from "../src/renderer/src/utils/agentRuntimeState.ts";
 
 const appSource = readFileSync("src/renderer/src/App.tsx", "utf8");
+const composerPanelsSource = readFileSync(
+  "src/renderer/src/components/session/ComposerPanels.tsx",
+  "utf8",
+);
 const stylesSource = readFileSync("src/renderer/src/styles.css", "utf8");
 const runtimeStateSource = readFileSync(
   "src/renderer/src/utils/agentRuntimeState.ts",
@@ -28,18 +32,19 @@ const sharedTypesSource = readFileSync("src/shared/types.ts", "utf8");
 
 test("pending prompts render inside the composer before composer-box", () => {
   const footerIndex = appSource.indexOf('<footer ref={composerRef} className="composer">');
-  const queueIndex = appSource.indexOf('className="queued-track"');
+  const queuePanelIndex = appSource.indexOf("<QueuedPromptPanel");
   const composerBoxIndex = appSource.indexOf("ref={composerBoxRef}");
 
   assert.ok(footerIndex >= 0, "composer footer should exist");
-  assert.ok(queueIndex > footerIndex, "pending prompts should stay inside the composer footer");
-  assert.ok(queueIndex < composerBoxIndex, "pending prompts should render immediately above composer-box");
+  assert.ok(queuePanelIndex > footerIndex, "pending prompts should stay inside the composer footer");
+  assert.ok(queuePanelIndex < composerBoxIndex, "pending prompts should render immediately above composer-box");
+  assert.match(composerPanelsSource, /className="queued-track"/);
 });
 
 test("pending prompts share the native content width constraint without hiding composer", () => {
   assert.match(
     stylesSource,
-    /\.chat-pane\[style\*="--content-max-width"\][\s\S]*?\.queued-track,[\s\S]*?width: min\(100%, var\(--content-max-width\)\)/,
+    /\.chat-pane\[style\*="--content-max-width"\] \.queued-track\s*\{[\s\S]*?width: min\(100%, var\(--content-max-width\)\)/,
   );
   // Outer track is a full-width anchor; the compact panel sits on the right with proportional width.
   assert.match(stylesSource, /\.queued-track \{[\s\S]*?justify-content: flex-end;/);
@@ -50,49 +55,51 @@ test("pending prompts share the native content width constraint without hiding c
 });
 
 test("compact queue panel exposes retract-to-input and discard only", () => {
-  assert.match(appSource, /app\.retractToInput/);
-  assert.match(appSource, /app\.retractDiscard/);
-  assert.match(appSource, /discardQueuedPrompt/);
-  assert.match(appSource, /canRetractQueuedPromptToInput/);
-  assert.match(appSource, /canDiscardQueuedPrompt/);
+  assert.match(composerPanelsSource, /app\.retractToInput/);
+  assert.match(composerPanelsSource, /app\.retractDiscard/);
+  assert.match(appSource, /onDiscard=\{discardQueuedPrompt\}/);
+  assert.match(composerPanelsSource, /canRetractQueuedPromptToInput\(status\)/);
+  assert.match(composerPanelsSource, /canDiscardQueuedPrompt\(status\)/);
   assert.match(appSource, /const visibleQueuedPrompts = activeQueuedPrompts/);
-  assert.match(appSource, /queued-behavior-\$\{queuedPrompt\.behavior\}/);
+  assert.match(composerPanelsSource, /queued-behavior-\$\{prompt\.behavior\}/);
   assert.match(stylesSource, /\.queued-list \{[\s\S]*?max-height: 102px;[\s\S]*?overflow-y: auto;/);
   assert.match(stylesSource, /\.queued-row\.queued-behavior-steer \{/);
   assert.match(stylesSource, /\.queued-row\.queued-behavior-followUp \{/);
   assert.match(appSource, /QUEUED_PROMPT_LIMIT/);
   assert.match(appSource, /app\.queuedFull/);
-  assert.doesNotMatch(appSource, /app\.queuedRetry/);
-  assert.doesNotMatch(appSource, /app\.queuedAcknowledge/);
+  assert.doesNotMatch(composerPanelsSource, /app\.queuedRetry/);
+  assert.doesNotMatch(composerPanelsSource, /app\.queuedAcknowledge/);
   assert.doesNotMatch(appSource, /retryQueuedPrompt/);
   assert.match(queueStateSource, /export const QUEUED_PROMPT_LIMIT = 10/);
   assert.match(queueStateSource, /export const QUEUED_PROMPT_VISIBLE = 3/);
 });
 
 test("busy composer keeps stop and queued-send controls separate", () => {
-  assert.match(appSource, /className="btn-circle stop"/);
-  assert.match(appSource, /className="send-behavior-toggle"/);
-  assert.match(appSource, /className="send-behavior-primary"/);
-  assert.match(appSource, /className="send-behavior-chevron"/);
+  assert.match(composerPanelsSource, /className="btn-circle stop"/);
+  assert.match(composerPanelsSource, /className="send-behavior-toggle"/);
+  assert.match(composerPanelsSource, /className="send-behavior-primary"/);
+  assert.match(composerPanelsSource, /className="send-behavior-chevron"/);
   assert.match(appSource, /const \[busyDraftByAgent, setBusyDraftByAgent\] = useState<Record<string, boolean>>/);
   assert.match(appSource, /const showBusySendControls = isAgentBusy \|\| keepBusyDraftControls/);
-  assert.match(appSource, /\{showBusySendControls && hasComposerContent && \(/);
-  assert.match(appSource, /\) : !keepBusyDraftControls \? \(/);
+  assert.match(composerPanelsSource, /\{props\.showBusySendControls && props\.hasComposerContent && \(/);
+  assert.match(composerPanelsSource, /\) : !props\.keepBusyDraftControls \? \(/);
   assert.match(appSource, /if \(!isAgentBusy \|\| current\[activeAgentId\]\) return current;/);
+  assert.match(appSource, /showBusySendControls=\{showBusySendControls\}/);
   assert.match(stylesSource, /\.send-behavior-menu-wrap \{[\s\S]*?gap: 8px;/);
   assert.match(stylesSource, /\.composer-footer \.send-behavior-toggle \{[\s\S]*?height: 36px;[\s\S]*?background: var\(--color-accent\);[\s\S]*?border-radius: var\(--radius-pill\)/);
   assert.match(stylesSource, /\.send-behavior-chevron \{[\s\S]*?border-left:/);
-  assert.match(appSource, /className="send-behavior-primary"[\s\S]*?onClick=\{\(\) => void sendPrompt\(\)\}/);
-  assert.match(appSource, /className="send-behavior-chevron"[\s\S]*?onMouseEnter=\{keepSendBehaviorMenuOpen\}[\s\S]*?setSendBehaviorMenuOpen/);
-  assert.match(appSource, /className="send-behavior-option steer"/);
-  assert.match(appSource, /className="send-behavior-option follow-up"/);
+  assert.match(composerPanelsSource, /className="send-behavior-primary"[\s\S]*?onClick=\{props\.onSend\}/);
+  assert.match(composerPanelsSource, /className="send-behavior-chevron"[\s\S]*?onMouseEnter=\{props\.onKeepBehaviorMenuOpen\}[\s\S]*?onClick=\{props\.onToggleBehaviorMenu\}/);
+  assert.match(appSource, /onSend=\{\(\) => void sendPrompt\(\)\}/);
+  assert.match(composerPanelsSource, /className="send-behavior-option steer"/);
+  assert.match(composerPanelsSource, /className="send-behavior-option follow-up"/);
   assert.match(appSource, /setTimeout\(\(\) => \{[\s\S]*?setSendBehaviorMenuOpen\(false\)[\s\S]*?\}, 160\)/);
-  assert.doesNotMatch(appSource, /<span>\{t\("app\.sendSteerDesc"\)\}<\/span>/);
+  assert.doesNotMatch(composerPanelsSource, /<span>\{t\("app\.sendSteerDesc"\)\}<\/span>/);
   assert.match(stylesSource, /\.send-behavior-menu \{[\s\S]*?width: 156px;[\s\S]*?padding: 4px;/);
   assert.match(stylesSource, /\.send-behavior-option-dot \{[\s\S]*?width: 7px;[\s\S]*?height: 7px;/);
 });
 
-test("App keeps native typing responsive with a live draft ref and transition", () => {
+test("composer keeps native typing responsive with a live draft ref and transition", () => {
   assert.match(appSource, /const livePromptByAgentRef = useRef<Record<string, string>>\(\{\}\)/);
   assert.match(appSource, /const \[, startPromptTransition\] = useTransition\(\)/);
   assert.match(appSource, /function setPromptFromNativeInput\(agentId: string, value: string\)/);
@@ -103,10 +110,10 @@ test("App keeps native typing responsive with a live draft ref and transition", 
   assert.match(appSource, /const currentDraft =[\s\S]*?livePromptByAgentRef\.current\[agentId\] \?\? promptByAgent\[agentId\]/);
   assert.match(appSource, /setPromptForAgent\(request\.agentId, text\)/);
   assert.match(appSource, /livePromptByAgentRef\.current = migrateAgentRecord/);
-  assert.match(appSource, /sendBehaviorMenuOpen && showBusySendControls && hasComposerContent/);
+  assert.match(composerPanelsSource, /props\.sendBehaviorMenuOpen &&\s*props\.showBusySendControls &&\s*props\.hasComposerContent/);
   assert.match(appSource, /clearTimeout\(sendBehaviorMenuCloseTimerRef\.current\)/);
-  assert.match(appSource, /className="send-behavior-option steer" type="button"/);
-  assert.match(appSource, /className="send-behavior-option follow-up" type="button"/);
+  assert.match(composerPanelsSource, /className="send-behavior-option steer"\s*type="button"/);
+  assert.match(composerPanelsSource, /className="send-behavior-option follow-up"\s*type="button"/);
 });
 
 test("queue drain is serialized and waits for an ordered raw tool-end event", () => {
