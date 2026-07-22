@@ -30,6 +30,14 @@ const webServiceSource = readFileSync(
 );
 const sharedTypesSource = readFileSync("src/shared/types.ts", "utf8");
 
+function componentInvocation(source, componentName) {
+  const start = source.indexOf(`<${componentName}`);
+  const end = source.indexOf("/>", start);
+  assert.notEqual(start, -1, `${componentName} invocation must exist`);
+  assert.notEqual(end, -1, `${componentName} invocation must be self-closing`);
+  return source.slice(start, end + 2);
+}
+
 test("pending prompts render inside the composer before composer-box", () => {
   const footerIndex = appSource.indexOf('<footer ref={composerRef} className="composer">');
   const queuePanelIndex = appSource.indexOf("<QueuedPromptPanel");
@@ -55,6 +63,9 @@ test("pending prompts share the native content width constraint without hiding c
 });
 
 test("compact queue panel exposes retract-to-input and discard only", () => {
+  const queuedPromptPanel = componentInvocation(appSource, "QueuedPromptPanel");
+
+  assert.match(queuedPromptPanel, /onRetract=\{retractQueuedPromptForEdit\}/);
   assert.match(composerPanelsSource, /app\.retractToInput/);
   assert.match(composerPanelsSource, /app\.retractDiscard/);
   assert.match(appSource, /onDiscard=\{discardQueuedPrompt\}/);
@@ -75,6 +86,9 @@ test("compact queue panel exposes retract-to-input and discard only", () => {
 });
 
 test("busy composer keeps stop and queued-send controls separate", () => {
+  const sendControls = componentInvocation(appSource, "ComposerSendControls");
+
+  assert.match(sendControls, /onSendFollowUp=\{sendPromptAsFollowUp\}/);
   assert.match(composerPanelsSource, /className="btn-circle stop"/);
   assert.match(composerPanelsSource, /className="send-behavior-toggle"/);
   assert.match(composerPanelsSource, /className="send-behavior-primary"/);
