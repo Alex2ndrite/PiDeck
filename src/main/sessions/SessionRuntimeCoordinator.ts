@@ -59,6 +59,10 @@ type RuntimeReplacement = SessionRuntimeBinding & {
 	replacementId: number;
 };
 
+type DispatchLease = SessionRuntimeBinding & {
+	leaseId: number;
+};
+
 const DELIVERY_CACHE_TTL_MS = 10 * 60_000;
 const DELIVERY_CACHE_MAX_ENTRIES = 500;
 const AGENT_READY_TIMEOUT_MS = 60_000;
@@ -88,7 +92,10 @@ export class SessionRuntimeCoordinator {
 	private readonly pendingUiRequests = new Map<string, PendingUiRequest>();
 	private readonly replacementByAgent = new Map<string, RuntimeReplacement>();
 	private readonly replacementBySession = new Map<string, RuntimeReplacement>();
+	private readonly dispatchLeasesByAgent = new Map<string, Set<DispatchLease>>();
+	private readonly dispatchLeasesBySession = new Map<string, Set<DispatchLease>>();
 	private replacementSequence = 0;
+	private dispatchLeaseSequence = 0;
 
 	constructor(
 		private readonly catalog: SessionCatalogGateway,
@@ -152,10 +159,16 @@ export class SessionRuntimeCoordinator {
 			runtimeGeneration: number;
 		}> = [];
 		const availableAgents = this.agents.list().filter((tab) => (
-			!isTerminalAgent(tab) && !this.replacementByAgent.has(tab.id)
+			!isTerminalAgent(tab) &&
+			!this.replacementByAgent.has(tab.id) &&
+			!this.hasDispatchLease(undefined, tab.id)
 		));
 		for (const record of records) {
-			if (!record.filePath || this.replacementBySession.has(record.id)) continue;
+			if (
+				!record.filePath ||
+				this.replacementBySession.has(record.id) ||
+				this.hasDispatchLease(record.id)
+			) continue;
 			const target = buildSessionOriginKey({
 				source: record.source,
 				environment: record.environment,
@@ -301,6 +314,11 @@ export class SessionRuntimeCoordinator {
 	}
 
 	unbindAgent(agentId: string): void {
+		this.assertNoDispatchLease(undefined, agentId);
+		this.unbindAgentUnchecked(agentId);
+	}
+
+	private unbindAgentUnchecked(agentId: string): void {
 		const replacement = this.replacementByAgent.get(agentId);
 		if (replacement) this.releaseRuntimeReplacement(replacement);
 		const sessionId = this.sessionIdByAgent.get(agentId);
@@ -319,31 +337,41 @@ export class SessionRuntimeCoordinator {
 			throw new Error("Session runtime changed before restart");
 		}
 
-		let tab = await this.agents.restart(agentId);
-		if (tab.status === "starting") tab = await this.waitUntilReady(tab);
-		if (isTerminalAgent(tab)) {
-			this.unbindAgent(agentId);
-			throw new Error(`Failed to restart session runtime (${tab.status})`);
-		}
+		const reservation = this.reserveBoundRuntime(sessionId, agentId);
 		try {
-			await this.applyPreferences(entry, tab.id);
-		} catch (error) {
-			await this.agents.stop(tab.id).catch(() => undefined);
-			this.unbindAgent(agentId);
-			throw new Error(`Failed to apply session preferences: ${errorMessage(error)}`);
-		}
+			let tab = await this.agents.restart(agentId);
+			if (tab.status === "starting") tab = await this.waitUntilReady(tab);
+			if (isTerminalAgent(tab)) {
+				this.unbindAgentUnchecked(agentId);
+				throw new Error(`Failed to restart session runtime (${tab.status})`);
+			}
+			try {
+				await this.applyPreferences(entry, tab.id);
+			} catch (error) {
+				await this.agents.stop(tab.id).catch(() => undefined);
+				this.unbindAgentUnchecked(agentId);
+				throw new Error(`Failed to apply session preferences: ${errorMessage(error)}`);
+			}
 
-		const runtimeGeneration = this.bind(sessionId, tab.id);
-		tab.runtimeGeneration = runtimeGeneration;
-		if (tab.sessionPath) {
-			await this.catalog.attachRuntime({
-				sessionId,
-				filePath: tab.sessionPath,
-				piSessionId: tab.sessionId,
-				title: tab.title,
-			});
+			this.requireCurrentReservation(reservation);
+			this.releaseRuntimeReplacement(reservation);
+			this.unbindAgentUnchecked(agentId);
+			const runtimeGeneration = this.bind(sessionId, tab.id);
+			tab.runtimeGeneration = runtimeGeneration;
+			if (tab.sessionPath) {
+				await this.catalog.attachRuntime({
+					sessionId,
+					filePath: tab.sessionPath,
+					piSessionId: tab.sessionId,
+					title: tab.title,
+				});
+			}
+			return tab;
+		} finally {
+			if (this.replacementByAgent.get(agentId) === reservation) {
+				this.releaseRuntimeReplacement(reservation);
+			}
 		}
-		return tab;
 	}
 
 	private async sendOnce(input: SendSessionPromptInput): Promise<SendSessionPromptResult> {
@@ -354,41 +382,67 @@ export class SessionRuntimeCoordinator {
 			return this.rejected(input, errorMessage(error));
 		}
 
-		let result: SendPromptResult;
+		let lease: DispatchLease;
 		try {
-			result = await this.sendAgentPrompt({
-				agentId: tab.id,
-				message: input.message,
-				images: input.images,
-				streamingBehavior: input.streamingBehavior,
-				agentMessage: input.agentMessage,
-				description: input.description,
-			});
+			lease = this.acquireDispatchLease(input.sessionId, tab.id);
 		} catch (error) {
-			result = {
-				accepted: false,
-				error: errorMessage(error),
-				delivery: "unknown",
-			};
+			return this.rejected(input, errorMessage(error));
 		}
 
-		const currentTab = this.agents.list().find((candidate) => candidate.id === tab.id) ?? tab;
-		if (currentTab.sessionPath) {
-			await this.catalog.attachRuntime({
+		try {
+			if (!this.isCurrentDispatchLease(lease)) {
+				return this.unknownDelivery(input, "Session runtime binding changed before prompt dispatch");
+			}
+
+			let result: SendPromptResult;
+			try {
+				result = await this.sendAgentPrompt({
+					agentId: lease.agentId,
+					message: input.message,
+					images: input.images,
+					streamingBehavior: input.streamingBehavior,
+					agentMessage: input.agentMessage,
+					description: input.description,
+				});
+			} catch (error) {
+				result = {
+					accepted: false,
+					error: errorMessage(error),
+					delivery: "unknown",
+				};
+			}
+
+			if (!this.isCurrentDispatchLease(lease)) {
+				return this.unknownDelivery(input, "Session runtime binding changed during prompt dispatch");
+			}
+			const currentTab = this.agents.list().find((candidate) => (
+				candidate.id === lease.agentId && !isTerminalAgent(candidate)
+			));
+			if (!currentTab) {
+				return this.unknownDelivery(input, "Session runtime stopped during prompt dispatch");
+			}
+			if (currentTab.sessionPath) {
+				await this.catalog.attachRuntime({
+					sessionId: input.sessionId,
+					filePath: currentTab.sessionPath,
+					piSessionId: currentTab.sessionId,
+					title: currentTab.title,
+				}).catch(() => undefined);
+			}
+			if (!this.isCurrentDispatchLease(lease)) {
+				return this.unknownDelivery(input, "Session runtime binding changed after prompt dispatch");
+			}
+			return {
+				...result,
 				sessionId: input.sessionId,
-				filePath: currentTab.sessionPath,
-				piSessionId: currentTab.sessionId,
-				title: currentTab.title,
-			}).catch(() => undefined);
+				requestId: input.requestId,
+				agentId: lease.agentId,
+				sessionPath: currentTab.sessionPath,
+				runtimeGeneration: lease.runtimeGeneration,
+			};
+		} finally {
+			this.releaseDispatchLease(lease);
 		}
-		return {
-			...result,
-			sessionId: input.sessionId,
-			requestId: input.requestId,
-			agentId: tab.id,
-			sessionPath: currentTab.sessionPath,
-			runtimeGeneration: currentTab.runtimeGeneration,
-		};
 	}
 
 	private ensureRuntime(sessionId: string): Promise<AgentTab> {
@@ -404,6 +458,9 @@ export class SessionRuntimeCoordinator {
 	private async activate(sessionId: string): Promise<AgentTab> {
 		const entry = this.catalog.get(sessionId);
 		if (!entry) throw new Error(`Session not found: ${sessionId}`);
+		if (this.replacementBySession.has(sessionId)) {
+			throw new Error(`Session runtime replacement reservation conflict: ${sessionId}`);
+		}
 
 		const mappedAgentId = this.getAgentId(sessionId);
 		if (mappedAgentId) {
@@ -512,6 +569,7 @@ export class SessionRuntimeCoordinator {
 	}
 
 	private bind(sessionId: string, agentId: string): number {
+		this.assertNoDispatchLease(sessionId, agentId);
 		if (this.replacementByAgent.has(agentId)) {
 			throw new Error(`Session runtime replacement already in progress: ${agentId}`);
 		}
@@ -547,6 +605,7 @@ export class SessionRuntimeCoordinator {
 	private beginRuntimeReplacement(agentId: string): RuntimeReplacement | undefined {
 		const binding = this.getRuntimeBinding(agentId);
 		if (!binding) return undefined;
+		this.assertNoDispatchLease(binding.sessionId, agentId);
 		if (this.replacementByAgent.has(agentId)) {
 			throw new Error(`Session runtime replacement already in progress: ${agentId}`);
 		}
@@ -634,6 +693,116 @@ export class SessionRuntimeCoordinator {
 		}
 	}
 
+	private reserveBoundRuntime(sessionId: string, agentId: string): RuntimeReplacement {
+		const binding = this.getRuntimeBinding(agentId);
+		if (
+			!binding ||
+			binding.sessionId !== sessionId ||
+			this.agentIdBySession.get(sessionId) !== agentId
+		) {
+			throw new Error("Session runtime changed before reservation");
+		}
+		this.assertNoDispatchLease(sessionId, agentId);
+		if (this.replacementByAgent.has(agentId)) {
+			throw new Error(`Session runtime replacement already in progress: ${agentId}`);
+		}
+		if (this.replacementBySession.has(sessionId)) {
+			throw new Error(`Session runtime replacement reservation conflict: ${sessionId}`);
+		}
+		const reservation: RuntimeReplacement = {
+			...binding,
+			agentId,
+			replacementId: ++this.replacementSequence,
+		};
+		this.replacementByAgent.set(agentId, reservation);
+		this.replacementBySession.set(sessionId, reservation);
+		return reservation;
+	}
+
+	private requireCurrentReservation(reservation: RuntimeReplacement): void {
+		if (
+			this.replacementByAgent.get(reservation.agentId) !== reservation ||
+			this.replacementBySession.get(reservation.sessionId) !== reservation
+		) {
+			throw new Error("Session runtime reservation changed");
+		}
+		const binding = this.getRuntimeBinding(reservation.agentId);
+		if (
+			!binding ||
+			binding.sessionId !== reservation.sessionId ||
+			binding.runtimeGeneration !== reservation.runtimeGeneration
+		) {
+			throw new Error("Session runtime binding changed during reservation");
+		}
+	}
+
+	private acquireDispatchLease(sessionId: string, agentId: string): DispatchLease {
+		if (this.replacementBySession.has(sessionId) || this.replacementByAgent.has(agentId)) {
+			throw new Error("Session runtime replacement is in progress");
+		}
+		const binding = this.getRuntimeBinding(agentId);
+		if (!binding || binding.sessionId !== sessionId) {
+			throw new Error("Session runtime binding changed before prompt dispatch");
+		}
+		const lease: DispatchLease = {
+			...binding,
+			agentId,
+			leaseId: ++this.dispatchLeaseSequence,
+		};
+		this.addDispatchLease(this.dispatchLeasesBySession, sessionId, lease);
+		this.addDispatchLease(this.dispatchLeasesByAgent, agentId, lease);
+		return lease;
+	}
+
+	private addDispatchLease(
+		leases: Map<string, Set<DispatchLease>>,
+		key: string,
+		lease: DispatchLease,
+	): void {
+		const current = leases.get(key) ?? new Set<DispatchLease>();
+		current.add(lease);
+		leases.set(key, current);
+	}
+
+	private releaseDispatchLease(lease: DispatchLease): void {
+		for (const [leases, key] of [
+			[this.dispatchLeasesBySession, lease.sessionId],
+			[this.dispatchLeasesByAgent, lease.agentId],
+		] as const) {
+			const current = leases.get(key);
+			if (!current) continue;
+			current.delete(lease);
+			if (current.size === 0) leases.delete(key);
+		}
+	}
+
+	private isCurrentDispatchLease(lease: DispatchLease): boolean {
+		if (
+			!this.dispatchLeasesBySession.get(lease.sessionId)?.has(lease) ||
+			!this.dispatchLeasesByAgent.get(lease.agentId)?.has(lease)
+		) return false;
+		const binding = this.getRuntimeBinding(lease.agentId);
+		return Boolean(
+			binding &&
+			binding.sessionId === lease.sessionId &&
+			binding.runtimeGeneration === lease.runtimeGeneration &&
+			this.agentIdBySession.get(lease.sessionId) === lease.agentId
+		);
+	}
+
+	private hasDispatchLease(sessionId?: string, agentId?: string): boolean {
+		return Boolean(
+			(sessionId && this.dispatchLeasesBySession.get(sessionId)?.size) ||
+			(agentId && this.dispatchLeasesByAgent.get(agentId)?.size)
+		);
+	}
+
+	private assertNoDispatchLease(sessionId?: string, agentId?: string): void {
+		if (this.hasDispatchLease(sessionId, agentId)) {
+			throw new Error("Session runtime prompt dispatch is in progress");
+		}
+	}
+
 	private uiRequestKey(sessionId: string, requestId: string): string {
 		return `${sessionId}\u0000${requestId}`;
 	}
@@ -668,6 +837,19 @@ export class SessionRuntimeCoordinator {
 		return {
 			accepted: false,
 			delivery: "rejected",
+			error,
+			sessionId: input.sessionId,
+			requestId: input.requestId,
+		};
+	}
+
+	private unknownDelivery(
+		input: Pick<SendSessionPromptInput, "sessionId" | "requestId">,
+		error: string,
+	): SendSessionPromptResult {
+		return {
+			accepted: false,
+			delivery: "unknown",
 			error,
 			sessionId: input.sessionId,
 			requestId: input.requestId,

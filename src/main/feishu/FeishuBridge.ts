@@ -196,17 +196,12 @@ export class FeishuBridge {
 		if (binding.agentId) this.removeBindingIndexKey(binding.agentId, binding.chatId);
 	}
 
-	/** Return an active AgentManager handle, never the catalog session ID. */
+	/** Return only the persisted AgentManager handle when it is still active. */
 	private resolveRuntimeAgentId(binding: FeishuChatBinding): string | undefined {
-		const tabs = this.agentManager.list();
-		if (binding.agentId && tabs.some((tab) => tab.id === binding.agentId)) return binding.agentId;
-		const legacyTab = tabs.find((tab) => tab.id === binding.sessionId);
-		if (legacyTab) return legacyTab.id;
-		if (binding.sessionPath) {
-			const samePath = tabs.filter((tab) => tab.sessionPath === binding.sessionPath);
-			if (samePath.length === 1) return samePath[0].id;
-		}
-		return undefined;
+		if (!binding.agentId) return undefined;
+		return this.agentManager.list().some((tab) => tab.id === binding.agentId)
+			? binding.agentId
+			: undefined;
 	}
 
 	private async ensureRuntimeBinding(binding: FeishuChatBinding): Promise<string | undefined> {
@@ -1076,10 +1071,12 @@ export class FeishuBridge {
 	}
 
 	private async ensureSessionMirrorForRuntime(agentId: string, sessionTitle?: string, sessionPath?: string): Promise<string | undefined> {
-		const existingRuntimeBinding = Array.from(this.chatBindings.values()).find((binding) => binding.agentId === agentId);
-		let stableSessionId = existingRuntimeBinding?.sessionId;
-		let runtimeAgentId = existingRuntimeBinding?.agentId === agentId ? agentId : undefined;
 		const tab = this.agentManager.list().find((candidate) => candidate.id === agentId);
+		const existingRuntimeBinding = tab
+			? Array.from(this.chatBindings.values()).find((binding) => binding.agentId === tab.id)
+			: undefined;
+		let stableSessionId = existingRuntimeBinding?.sessionId;
+		let runtimeAgentId = existingRuntimeBinding ? tab?.id : undefined;
 		if (tab && (!stableSessionId || !runtimeAgentId)) {
 			const runtimeBinding = await this.runtimeBindings.bindRuntime({ projectId: tab.projectId, agent: tab });
 			stableSessionId = runtimeBinding.sessionId;
@@ -1659,44 +1656,45 @@ export class FeishuBridge {
 
 		let migrated = false;
 		for (const b of bindings) {
-			let tab = b.agentId ? tabs.find((candidate) => candidate.id === b.agentId) : undefined;
-			if (!tab) tab = tabs.find((candidate) => candidate.id === b.sessionId); // legacy format
-			if (!tab && b.sessionPath) {
+			let candidateTab = b.agentId ? tabs.find((candidate) => candidate.id === b.agentId) : undefined;
+			if (!candidateTab) candidateTab = tabs.find((candidate) => candidate.id === b.sessionId); // legacy candidate
+			if (!candidateTab && b.sessionPath) {
 				const pathKey = normalizePath(b.sessionPath);
 				const samePath = tabs.filter((candidate) => (
 					candidate.sessionPath && normalizePath(candidate.sessionPath) === pathKey
 				));
-				if (persistedPathCounts.get(pathKey) === 1 && samePath.length === 1) tab = samePath[0];
+				if (persistedPathCounts.get(pathKey) === 1 && samePath.length === 1) candidateTab = samePath[0];
 			}
 
 			let stableSessionId = b.sessionId;
-			if (tab) {
+			let authorizedTab: AgentTab | undefined;
+			if (candidateTab) {
 				try {
 					const runtimeBinding = await this.runtimeBindings.bindRuntime({
-						projectId: tab.projectId,
-						agent: tab,
+						projectId: candidateTab.projectId,
+						agent: candidateTab,
 						existingSessionId: b.sessionId,
 					});
 					stableSessionId = runtimeBinding.sessionId;
-					migrated ||= stableSessionId !== b.sessionId || b.agentId !== tab.id;
+					authorizedTab = candidateTab;
+					migrated ||= stableSessionId !== b.sessionId || b.agentId !== candidateTab.id;
 				} catch (error) {
 					warn(`[飞书 Bridge] 持久绑定 identity 迁移失败，保留原 stable ID: ${error instanceof Error ? error.message : String(error)}`);
 				}
-			} else if (b.agentId) {
-				migrated = true;
 			}
+			if (!authorizedTab && b.agentId) migrated = true;
 
 			const binding: FeishuChatBinding = {
 				chatId: b.chatId, botId: b.botId, userId: b.userId,
-				sessionId: stableSessionId, agentId: tab?.id,
-				sessionPath: tab?.sessionPath ?? b.sessionPath,
+				sessionId: stableSessionId, agentId: authorizedTab?.id,
+				sessionPath: authorizedTab?.sessionPath ?? b.sessionPath,
 				workspaceId: b.workspaceId, channelId: b.channelId, modelId: b.modelId,
 				source: b.source as "feishu" | "session-mirror", chatType: b.chatType as "p2p" | "group",
 				groupName: b.groupName, createdAt: b.createdAt,
 			};
 			this.chatBindings.set(b.chatId, binding);
 			this.indexBinding(binding);
-			if (!tab) {
+			if (!authorizedTab) {
 				log(`[飞书 Bridge] 保留无主绑定（等后续恢复）: ${b.groupName ?? b.chatId}，sessionPath=${b.sessionPath ?? "(无)"}`);
 			}
 			if (binding.sessionPath) setPersistentChatId(binding.sessionPath, b.chatId);

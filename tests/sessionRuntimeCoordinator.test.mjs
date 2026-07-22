@@ -36,6 +36,14 @@ function loadCoordinator() {
   });
 }
 
+function deferred() {
+  let resolve;
+  const promise = new Promise((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
+
 function catalogEntry(overrides = {}) {
   return {
     id: "session-1",
@@ -125,8 +133,9 @@ function createHarness(options = {}) {
       calls.uiResponse += 1;
     },
   };
-  const sender = async () => {
+  const sender = async (input) => {
     calls.send += 1;
+    if (options.sender) return options.sender(input);
     return options.sendResult ?? { accepted: true };
   };
   return { entry, calls, tabs, catalog, agents, sender };
@@ -200,6 +209,123 @@ test("serializes activation but delivers distinct requests once each", async () 
   assert.equal(harness.calls.setModel, 1);
   assert.equal(harness.calls.setThinking, 1);
   assert.equal(harness.calls.send, 2);
+});
+
+test("dispatch lease blocks restart, direct bind, and catalog scan until send settles", async () => {
+  const { SessionRuntimeCoordinator } = loadCoordinator();
+  const started = deferred();
+  const release = deferred();
+  const harness = createHarness({
+    entry: { status: "active", filePath: "C:/sessions/session-1.jsonl" },
+    tabs: [{
+      id: "agent-1",
+      projectId: "project-1",
+      cwd: "C:/project",
+      title: "Session 1",
+      status: "idle",
+      sessionPath: "C:/sessions/session-1.jsonl",
+      sessionEnvironment: "native",
+      sessionSource: "pi",
+      createdAt: 1,
+    }, {
+      id: "agent-2",
+      projectId: "project-1",
+      cwd: "C:/project",
+      title: "Session 1 duplicate",
+      status: "idle",
+      sessionPath: "C:/sessions/session-1.jsonl",
+      sessionEnvironment: "native",
+      sessionSource: "pi",
+      createdAt: 2,
+    }],
+    sender: async () => {
+      started.resolve();
+      await release.promise;
+      return { accepted: true };
+    },
+  });
+  const coordinator = new SessionRuntimeCoordinator(harness.catalog, harness.agents, harness.sender);
+  coordinator.bindExistingAgent("session-1", "agent-1");
+
+  const sending = coordinator.send(prompt());
+  await started.promise;
+  assert.throws(
+    () => coordinator.bindExistingAgent("session-1", "agent-2"),
+    /prompt dispatch is in progress/,
+  );
+  await assert.rejects(
+    coordinator.restartSession("session-1", "agent-1"),
+    /prompt dispatch is in progress/,
+  );
+  assert.equal(coordinator.attachCatalogRuntimes([{
+    ...catalogEntry({ status: "active", filePath: "C:/sessions/session-1.jsonl" }),
+    preview: "",
+    messageCount: 0,
+  }]).length, 0);
+  assert.equal(harness.calls.restart, 0);
+
+  release.resolve();
+  const result = await sending;
+  assert.equal(result.accepted, true);
+  const restarted = await coordinator.restartSession("session-1", "agent-1");
+  assert.equal(restarted.id, "agent-restarted");
+  assert.equal(harness.calls.restart, 1);
+});
+
+test("dispatch lease is released when sender throws", async () => {
+  const { SessionRuntimeCoordinator } = loadCoordinator();
+  const started = deferred();
+  const release = deferred();
+  const harness = createHarness({
+    sender: async () => {
+      started.resolve();
+      await release.promise;
+      throw new Error("transport uncertain");
+    },
+  });
+  const coordinator = new SessionRuntimeCoordinator(harness.catalog, harness.agents, harness.sender);
+  const sending = coordinator.send(prompt());
+  await started.promise;
+  assert.throws(
+    () => coordinator.bindExistingAgent("session-1", "agent-1"),
+    /prompt dispatch is in progress/,
+  );
+  release.resolve();
+  const result = await sending;
+  assert.equal(result.accepted, false);
+  assert.equal(result.delivery, "unknown");
+  assert.equal(result.agentId, "agent-1");
+  assert.doesNotThrow(() => coordinator.bindExistingAgent("session-1", "agent-1"));
+});
+
+test("stale send result fails closed without exposing a runtime handle", async () => {
+  const { SessionRuntimeCoordinator } = loadCoordinator();
+  const started = deferred();
+  const release = deferred();
+  const harness = createHarness({
+    sender: async () => {
+      started.resolve();
+      await release.promise;
+      return { accepted: true };
+    },
+  });
+  const coordinator = new SessionRuntimeCoordinator(harness.catalog, harness.agents, harness.sender);
+  const sending = coordinator.send(prompt());
+  await started.promise;
+
+  coordinator.agentIdBySession.set("session-1", "agent-stale");
+  coordinator.sessionIdByAgent.delete("agent-1");
+  coordinator.generationBySession.set("session-1", 2);
+  release.resolve();
+
+  const result = await sending;
+  assert.equal(result.accepted, false);
+  assert.equal(result.delivery, "unknown");
+  assert.equal(result.agentId, undefined);
+  assert.equal(result.runtimeGeneration, undefined);
+  assert.equal(result.sessionPath, undefined);
+  coordinator.agentIdBySession.delete("session-1");
+  assert.doesNotThrow(() => coordinator.bindExistingAgent("session-1", "agent-1"));
 });
 
 test("reuses an already-running historical session by canonical path", async () => {

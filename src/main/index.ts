@@ -343,9 +343,16 @@ const feishuSessionRuntimeBindings: SessionRuntimeBindingGateway = {
 			settingsStore.get().wslEnabled ? "wsl" : "native"
 		);
 		const source = input.agent.sessionSource ?? "pi";
-		let sessionId = input.existingSessionId && sessionCatalog.get(input.existingSessionId)
-			? input.existingSessionId
-			: undefined;
+		let sessionId: string | undefined;
+		if (input.existingSessionId) {
+			const existing = sessionCatalog.get(input.existingSessionId);
+			if (existing) {
+				if (!canAttachRuntimeMetadata(existing, input.agent)) {
+					throw new Error(`Existing Session origin does not match runtime: ${existing.id}`);
+				}
+				sessionId = existing.id;
+			}
+		}
 		if (!sessionId && input.agent.sessionPath) {
 			const targetOrigin = buildSessionOriginKey({
 				source,

@@ -32,6 +32,14 @@ function loadCoordinator() {
   });
 }
 
+function deferred() {
+  let resolve;
+  const promise = new Promise((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
+
 function makeHarness() {
   const records = new Set(["old-session", "clone-session", "fork-session", "switch-session"]);
   const tabs = [{
@@ -377,6 +385,52 @@ test("scan and bindExisting cannot cross an active replacement reservation", asy
   release();
   await replacement;
   assert.equal(coordinator.getSessionId("agent-1"), "old-session");
+});
+
+test("replacement cannot cross an active prompt dispatch lease", async () => {
+  const { SessionRuntimeCoordinator } = loadCoordinator();
+  const harness = makeHarness();
+  const started = deferred();
+  const release = deferred();
+  const coordinator = new SessionRuntimeCoordinator(harness.catalog, harness.agents, async () => {
+    started.resolve();
+    await release.promise;
+    return { accepted: true };
+  });
+  coordinator.bindExistingAgent("old-session", "agent-1");
+
+  const sending = coordinator.send({
+    sessionId: "old-session",
+    requestId: "request-1",
+    message: "hold dispatch",
+  });
+  await started.promise;
+  await assert.rejects(
+    coordinator.replaceBoundRuntime({
+      agentId: "agent-1",
+      replace: async () => ({ text: "must not run" }),
+      resolveTargetSessionId: async () => "clone-session",
+      canRestoreOrigin: () => false,
+      onDetached: () => assert.fail("must remain attached while dispatch is active"),
+      onAttached: () => assert.fail("must not attach while dispatch is active"),
+      onRestored: () => assert.fail("must not restore while dispatch is active"),
+    }),
+    /prompt dispatch is in progress/,
+  );
+  assert.equal(coordinator.getSessionId("agent-1"), "old-session");
+
+  release.resolve();
+  assert.equal((await sending).accepted, true);
+  const result = await coordinator.replaceBoundRuntime({
+    agentId: "agent-1",
+    replace: async () => ({ text: "after dispatch" }),
+    resolveTargetSessionId: async () => "clone-session",
+    canRestoreOrigin: () => false,
+    onDetached: () => undefined,
+    onAttached: () => undefined,
+    onRestored: () => assert.fail("successful replacement must not restore"),
+  });
+  assert.equal(result.targetSessionId, "clone-session");
 });
 
 test("cancelled replacement restores the old binding and preserves cancellation fields", async () => {
