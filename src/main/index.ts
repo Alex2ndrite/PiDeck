@@ -339,6 +339,9 @@ function cancelUnboundUiRequest(payload: unknown): void {
 
 const feishuSessionRuntimeBindings: SessionRuntimeBindingGateway = {
 	async bindRuntime(input) {
+		if (input.agent.status === "error" || input.agent.status === "closed") {
+			throw new Error(`Cannot bind terminal Feishu runtime: ${input.agent.id}`);
+		}
 		const environment = input.agent.sessionEnvironment ?? (
 			settingsStore.get().wslEnabled ? "wsl" : "native"
 		);
@@ -347,7 +350,11 @@ const feishuSessionRuntimeBindings: SessionRuntimeBindingGateway = {
 		if (input.existingSessionId) {
 			const existing = sessionCatalog.get(input.existingSessionId);
 			if (existing) {
-				if (!canAttachRuntimeMetadata(existing, input.agent)) {
+				const currentBinding = sessionRuntimeCoordinator.getRuntimeBinding(input.agent.id);
+				if (currentBinding && currentBinding.sessionId !== existing.id) {
+					throw new Error(`Runtime is already bound to a different Session: ${currentBinding.sessionId}`);
+				}
+				if (input.agent.sessionPath && !canAttachRuntimeMetadata(existing, input.agent)) {
 					throw new Error(`Existing Session origin does not match runtime: ${existing.id}`);
 				}
 				sessionId = existing.id;
@@ -383,9 +390,13 @@ const feishuSessionRuntimeBindings: SessionRuntimeBindingGateway = {
 			});
 			sessionId = draft.id;
 		}
-		await sessionCatalog.attachRuntime({
+		await sessionCatalog.attachRuntime(input.agent.sessionPath ? {
 			sessionId,
 			filePath: input.agent.sessionPath,
+			piSessionId: input.agent.sessionId,
+			title: input.agent.title,
+		} : {
+			sessionId,
 			piSessionId: input.agent.sessionId,
 			title: input.agent.title,
 		});

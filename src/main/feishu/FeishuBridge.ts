@@ -196,25 +196,43 @@ export class FeishuBridge {
 		if (binding.agentId) this.removeBindingIndexKey(binding.agentId, binding.chatId);
 	}
 
-	/** Return only the persisted AgentManager handle when it is still active. */
-	private resolveRuntimeAgentId(binding: FeishuChatBinding): string | undefined {
+	private clearRuntimeAgentId(binding: FeishuChatBinding): void {
+		const previousAgentId = binding.agentId;
+		if (!previousAgentId) return;
+		binding.agentId = undefined;
+		this.indexBinding(binding, previousAgentId);
+		this.persistBindings();
+		this.pushBindings();
+	}
+
+	/** Reuse requires both a live handle and gateway authorization for the same stable Session. */
+	private async authorizeRuntimeAgent(binding: FeishuChatBinding): Promise<string | undefined> {
 		if (!binding.agentId) return undefined;
-		return this.agentManager.list().some((tab) => tab.id === binding.agentId)
-			? binding.agentId
-			: undefined;
+		const tab = this.agentManager.list().find((candidate) => candidate.id === binding.agentId);
+		if (!tab || tab.status === "error" || tab.status === "closed") {
+			this.clearRuntimeAgentId(binding);
+			return undefined;
+		}
+		try {
+			const runtimeBinding = await this.runtimeBindings.bindRuntime({
+				projectId: tab.projectId,
+				agent: tab,
+				existingSessionId: binding.sessionId,
+			});
+			if (runtimeBinding.sessionId !== binding.sessionId) {
+				throw new Error(`Runtime gateway returned a different Session: ${runtimeBinding.sessionId}`);
+			}
+			return tab.id;
+		} catch (error) {
+			warn(`[飞书 Bridge] runtime handle 校验失败，清理旧绑定: ${error instanceof Error ? error.message : String(error)}`);
+			this.clearRuntimeAgentId(binding);
+			return undefined;
+		}
 	}
 
 	private async ensureRuntimeBinding(binding: FeishuChatBinding): Promise<string | undefined> {
-		const activeAgentId = this.resolveRuntimeAgentId(binding);
-		if (activeAgentId) {
-			if (binding.agentId !== activeAgentId) {
-				const previousAgentId = binding.agentId;
-				binding.agentId = activeAgentId;
-				this.indexBinding(binding, previousAgentId);
-				this.persistBindings();
-			}
-			return activeAgentId;
-		}
+		const activeAgentId = await this.authorizeRuntimeAgent(binding);
+		if (activeAgentId) return activeAgentId;
 		const resumed = await this.resumeOrCreateAgent(binding);
 		return resumed?.agentId;
 	}
@@ -1075,8 +1093,11 @@ export class FeishuBridge {
 		const existingRuntimeBinding = tab
 			? Array.from(this.chatBindings.values()).find((binding) => binding.agentId === tab.id)
 			: undefined;
-		let stableSessionId = existingRuntimeBinding?.sessionId;
-		let runtimeAgentId = existingRuntimeBinding ? tab?.id : undefined;
+		const authorizedAgentId = existingRuntimeBinding
+			? await this.authorizeRuntimeAgent(existingRuntimeBinding)
+			: undefined;
+		let stableSessionId = authorizedAgentId ? existingRuntimeBinding?.sessionId : undefined;
+		let runtimeAgentId = authorizedAgentId;
 		if (tab && (!stableSessionId || !runtimeAgentId)) {
 			const runtimeBinding = await this.runtimeBindings.bindRuntime({ projectId: tab.projectId, agent: tab });
 			stableSessionId = runtimeBinding.sessionId;
@@ -1666,7 +1687,9 @@ export class FeishuBridge {
 				if (persistedPathCounts.get(pathKey) === 1 && samePath.length === 1) candidateTab = samePath[0];
 			}
 
-			let stableSessionId = b.sessionId;
+			if (candidateTab?.status === "error" || candidateTab?.status === "closed") candidateTab = undefined;
+
+			const stableSessionId = b.sessionId;
 			let authorizedTab: AgentTab | undefined;
 			if (candidateTab) {
 				try {
@@ -1675,9 +1698,11 @@ export class FeishuBridge {
 						agent: candidateTab,
 						existingSessionId: b.sessionId,
 					});
-					stableSessionId = runtimeBinding.sessionId;
+					if (runtimeBinding.sessionId !== b.sessionId) {
+						throw new Error(`Runtime gateway returned a different Session: ${runtimeBinding.sessionId}`);
+					}
 					authorizedTab = candidateTab;
-					migrated ||= stableSessionId !== b.sessionId || b.agentId !== candidateTab.id;
+					migrated ||= b.agentId !== candidateTab.id;
 				} catch (error) {
 					warn(`[飞书 Bridge] 持久绑定 identity 迁移失败，保留原 stable ID: ${error instanceof Error ? error.message : String(error)}`);
 				}
