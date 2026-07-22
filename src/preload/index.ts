@@ -5,6 +5,7 @@ import type {
 	YaoPromptDetailResult,
 	AgentRuntimeState,
 	AgentTab,
+	AgentUiResponse,
 	AppInfo,
 	AppLogEntry,
 	AppLogLevel,
@@ -77,6 +78,7 @@ import type {
 	SendSessionPromptInput,
 	SendSessionPromptResult,
 	SessionRuntimeEvent,
+	SessionUiResponseInput,
 	SessionSummary,
 	TerminalDataEvent,
 	TerminalExitEvent,
@@ -204,6 +206,8 @@ const api = {
 			>,
 		sendPrompt: (input: SendSessionPromptInput) =>
 			ipcRenderer.invoke(ipcChannels.sessionsSendPrompt, input) as Promise<SendSessionPromptResult>,
+		sendUiResponse: (input: SessionUiResponseInput) =>
+			ipcRenderer.invoke(ipcChannels.sessionsUiResponse, input) as Promise<void>,
 		onRuntimeEvent: (callback: (event: SessionRuntimeEvent) => void) =>
 			subscribe(ipcChannels.sessionsRuntimeEvent, callback),
 		rename: (filePath: string, newName: string) =>
@@ -867,7 +871,7 @@ const api = {
 			}) => void,
 		) => subscribe(ipcChannels.agentsRuntimeState, callback),
 		/** 向 Agent 发送扩展 UI 响应（用户回答了 select/confirm/input/editor 对话框） */
-		sendUiResponse: (agentId: string, requestId: string, response: { value?: string | boolean; cancelled?: boolean; confirmed?: boolean }) =>
+		sendUiResponse: (agentId: string, requestId: string, response: AgentUiResponse) =>
 			ipcRenderer.invoke(ipcChannels.agentsUiResponse, agentId, requestId, response) as Promise<void>,
 		/** 监听 Agent 扩展 UI 请求（模型通过扩展调用了 ctx.ui.select/confirm/input/editor） */
 		onUiRequest: (callback: (request: { agentId: string; requestId: string; method: string; title: string; options?: string[]; placeholder?: string; prefill?: string; allowOther?: boolean; completed?: boolean; value?: string; cancelled?: boolean; message?: string; notifyType?: "info" | "warning" | "error"; text?: string; widgetKey?: string; widgetLines?: string[]; widgetPlacement?: "aboveEditor" | "belowEditor" }) => void) =>

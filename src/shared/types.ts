@@ -1142,6 +1142,41 @@ export type SessionRuntimeEvent = {
 	payload: unknown;
 };
 
+export type AgentUiResponse = {
+	value?: string | boolean;
+	cancelled?: boolean;
+	confirmed?: boolean;
+};
+
+export type AgentUiRequest = {
+	agentId: string;
+	requestId: string;
+	method: string;
+	title: string;
+	options?: string[];
+	placeholder?: string;
+	prefill?: string;
+	allowOther?: boolean;
+	completed?: boolean;
+	value?: string | boolean;
+	confirmed?: boolean;
+	cancelled?: boolean;
+	message?: string;
+	notifyType?: "info" | "warning" | "error";
+	text?: string;
+	widgetKey?: string;
+	widgetLines?: string[];
+	widgetPlacement?: "aboveEditor" | "belowEditor";
+};
+
+export type SessionUiResponseInput = {
+	sessionId: string;
+	requestId: string;
+	agentId: string;
+	runtimeGeneration: number;
+	response: AgentUiResponse;
+};
+
 /** 实时思考内容更新，用于流式展示模型推理过程 */
 export type ThinkingUpdate = {
 	agentId: string;

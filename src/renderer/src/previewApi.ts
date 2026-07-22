@@ -341,7 +341,9 @@ export function createPreviewApi(): PiDesktopApi {
 				requestId: input.requestId,
 				agentId: "preview-agent",
 				sessionPath: "C:/Users/preview/.pi/session.jsonl",
+				runtimeGeneration: 1,
 			}),
+			sendUiResponse: async () => undefined,
 			onRuntimeEvent: noop,
 			rename: async () => undefined,
 			copy: async (_projectId, filePath) => ({

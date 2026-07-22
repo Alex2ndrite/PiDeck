@@ -39,6 +39,7 @@ export const ipcChannels = {
 	sessionsCatalogReadMessages: "sessions:catalog-read-messages",
 	sessionsSendPrompt: "sessions:send-prompt",
 	sessionsRuntimeEvent: "sessions:runtime-event",
+	sessionsUiResponse: "sessions:ui-response",
 	sessionsRename: "sessions:rename",
 	sessionsCopy: "sessions:copy",
 	sessionsExportHtml: "sessions:export-html",

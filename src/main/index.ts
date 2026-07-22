@@ -51,8 +51,13 @@ process.on("unhandledRejection", (reason) => {
 	console.error("Unhandled rejection:", reason);
 });
 import { ipcChannels } from "../shared/ipc";
-import { canonicalizeSessionPath } from "../shared/sessionIdentity";
+import {
+	buildSessionOriginKey,
+	canonicalizeSessionPath,
+} from "../shared/sessionIdentity";
 import type {
+	AgentTab,
+	AgentUiRequest,
 	AppSettings,
 	AppUpdateAsset,
 	AppUpdateDownloadProgress,
@@ -74,6 +79,7 @@ import type {
 	SendPromptResult,
 	SendSessionPromptInput,
 	SessionRuntimeEvent,
+	SessionUiResponseInput,
 	CreatePiPromptTemplateInput,
 	CreatePiSkillInput,
 	CreateProjectSkillInput,
@@ -119,7 +125,10 @@ import {
 	openProjectInEditor,
 	validateExternalEditorCommand,
 } from "./editors/EditorDetector";
-import { FeishuBridge } from "./feishu/FeishuBridge";
+import {
+	FeishuBridge,
+	type SessionRuntimeBindingGateway,
+} from "./feishu/FeishuBridge";
 import { wantsFeishuDoc } from "./feishu/docActions";
 import { resolveFeishuFileSendIntent } from "./feishu/fileIntent";
 import {
@@ -163,6 +172,122 @@ let petSystem: PetSystem | null = null;
 let appLogger: AppLogger;
 let rpcLogger: RpcLogger;
 let feishuBridge: FeishuBridge | null = null;
+
+const LEGACY_EXTERNAL_RUNTIME = "legacy-external-runtime";
+
+function emitSessionRuntimeEvent(
+	agentId: string,
+	sourceChannel: string,
+	payload: unknown,
+): boolean {
+	const runtimeBinding = sessionRuntimeCoordinator.getRuntimeBinding(agentId);
+	if (!runtimeBinding) return false;
+	const event: SessionRuntimeEvent = {
+		sessionId: runtimeBinding.sessionId,
+		agentId,
+		runtimeGeneration: runtimeBinding.runtimeGeneration,
+		sourceChannel,
+		payload,
+	};
+	sessionRuntimeCoordinator.observeRuntimeEvent(event);
+	if (payload && typeof payload === "object" && !Array.isArray(payload)) {
+		const tab = payload as Partial<AgentTab>;
+		if (typeof tab.sessionPath === "string" && tab.sessionPath) {
+			const entry = sessionCatalog.get(runtimeBinding.sessionId);
+			const samePath = Boolean(
+				entry?.filePath &&
+				canonicalizeSessionPath(entry.filePath, entry.environment) ===
+					canonicalizeSessionPath(tab.sessionPath, entry.environment),
+			);
+			if (!samePath || entry?.piSessionId !== tab.sessionId || entry?.title !== tab.title) {
+				void sessionCatalog.attachRuntime({
+					sessionId: runtimeBinding.sessionId,
+					filePath: tab.sessionPath,
+					piSessionId: tab.sessionId,
+					title: tab.title,
+				}).catch(() => undefined);
+			}
+		}
+	}
+	const window = mainWindow;
+	if (window && !window.isDestroyed()) {
+		window.webContents.send(ipcChannels.sessionsRuntimeEvent, event);
+	}
+	return true;
+}
+
+function cancelUnboundUiRequest(payload: unknown): void {
+	if (!payload || typeof payload !== "object" || Array.isArray(payload)) return;
+	const request = payload as Partial<AgentUiRequest>;
+	if (
+		typeof request.agentId !== "string" ||
+		typeof request.requestId !== "string" ||
+		request.completed === true ||
+		!(["select", "confirm", "input", "editor"] as const).some(
+			(method) => method === request.method,
+		)
+	) {
+		return;
+	}
+	void appLogger.warn("session", "Cancelled unbound runtime UI request", {
+		agentId: request.agentId,
+		requestId: request.requestId,
+		method: request.method,
+	});
+	void agentManager.sendUIResponse(request.agentId, request.requestId, { cancelled: true });
+}
+
+const feishuSessionRuntimeBindings: SessionRuntimeBindingGateway = {
+	async bindRuntime(input) {
+		const environment = input.agent.sessionEnvironment ?? (
+			settingsStore.get().wslEnabled ? "wsl" : "native"
+		);
+		const source = input.agent.sessionSource ?? "pi";
+		let sessionId: string | undefined;
+		if (input.agent.sessionPath) {
+			const targetOrigin = buildSessionOriginKey({
+				source,
+				environment,
+				filePath: input.agent.sessionPath,
+				wslDistro: input.agent.wslDistro,
+				wslUser: input.agent.wslUser,
+				importedSourceId: input.agent.importedSourceId,
+			});
+			sessionId = sessionCatalog.listEntries().find((candidate) => (
+				candidate.filePath &&
+				buildSessionOriginKey({
+					source: candidate.source,
+					environment: candidate.environment,
+					filePath: candidate.filePath,
+					wslDistro: candidate.wslDistro,
+					wslUser: candidate.wslUser,
+					importedSourceId: candidate.importedSourceId,
+				}) === targetOrigin
+			))?.id;
+		}
+		if (!sessionId) {
+			const draft = await sessionCatalog.createDraft({
+				projectId: input.projectId,
+				title: input.agent.title || "Feishu session",
+				environment,
+				source,
+			});
+			sessionId = draft.id;
+		}
+		await sessionCatalog.attachRuntime({
+			sessionId,
+			filePath: input.agent.sessionPath,
+			piSessionId: input.agent.sessionId,
+			title: input.agent.title,
+		});
+		const runtimeGeneration = sessionRuntimeCoordinator.bindExistingAgent(
+			sessionId,
+			input.agent.id,
+		);
+		emitSessionRuntimeEvent(input.agent.id, ipcChannels.agentsState, input.agent);
+		return { sessionId, runtimeGeneration };
+	},
+};
 
 /**
  * 解析 pi --list-models 表格输出为 AvailableModel[]。
@@ -873,7 +998,14 @@ function registerFeishuIpc() {
 				appSecret,
 				defaultUserOpenId: input.defaultUserOpenId,
 			};
-			feishuBridge = new FeishuBridge(botConfig, agentManager, () => mainWindow, () => projectStore.list(), appSecret);
+			feishuBridge = new FeishuBridge(
+				botConfig,
+				agentManager,
+				() => mainWindow,
+				() => projectStore.list(),
+				feishuSessionRuntimeBindings,
+				appSecret,
+			);
 			await feishuBridge.start();
 			const status = feishuBridge.getStatus();
 			console.log("[Feishu] 临时连接成功，状态:", JSON.stringify(status));
@@ -905,7 +1037,13 @@ function registerFeishuIpc() {
 				defaultUserOpenId: input.defaultUserOpenId,
 			});
 
-			feishuBridge = new FeishuBridge(botConfig, agentManager, () => mainWindow, () => projectStore.list());
+			feishuBridge = new FeishuBridge(
+				botConfig,
+				agentManager,
+				() => mainWindow,
+				() => projectStore.list(),
+				feishuSessionRuntimeBindings,
+			);
 			await feishuBridge.start();
 			console.log("[Feishu] 连接成功，状态:", JSON.stringify(feishuBridge.getStatus()));
 			void appLogger.info("feishu", "Feishu connected", { botId: botConfig.id, name: botConfig.name });
@@ -1014,6 +1152,7 @@ function registerFeishuIpc() {
 			agentManager,
 			() => mainWindow,
 			() => projectStore.list(),
+			feishuSessionRuntimeBindings,
 		);
 		return testBridge.testConnection(appId, appSecret);
 	});
@@ -1060,7 +1199,13 @@ function registerFeishuIpc() {
 			if (!botConfig) {
 				return { success: false, message: "Bot 配置不存在" };
 			}
-			feishuBridge = new FeishuBridge(botConfig, agentManager, () => mainWindow, () => projectStore.list());
+			feishuBridge = new FeishuBridge(
+				botConfig,
+				agentManager,
+				() => mainWindow,
+				() => projectStore.list(),
+				feishuSessionRuntimeBindings,
+			);
 			await feishuBridge.start();
 			void appLogger.info("feishu", "Feishu connected by saved bot", { botId, name: botConfig.name });
 			return { success: true, message: "连接成功" };
@@ -1587,7 +1732,17 @@ function registerIpc() {
 		ipcChannels.sessionsCatalogList,
 		async (_event, projectId: string) => {
 			const summaries = await scanProjectSessions(projectId);
-			return sessionCatalog.mergeScanned(projectId, summaries, catalogIdentityContext());
+			const records = await sessionCatalog.mergeScanned(
+				projectId,
+				summaries,
+				catalogIdentityContext(),
+			);
+			const bindings = sessionRuntimeCoordinator.attachCatalogRuntimes(records);
+			for (const binding of bindings) {
+				const tab = agentManager.list().find((candidate) => candidate.id === binding.agentId);
+				if (tab) emitSessionRuntimeEvent(tab.id, ipcChannels.agentsState, tab);
+			}
+			return records;
 		},
 	);
 	ipcMain.handle(
@@ -1668,6 +1823,10 @@ function registerIpc() {
 			});
 			try {
 				const result = await sessionRuntimeCoordinator.send(input);
+				if (result.agentId) {
+					const tab = agentManager.list().find((candidate) => candidate.id === result.agentId);
+					if (tab) emitSessionRuntimeEvent(tab.id, ipcChannels.agentsState, tab);
+				}
 				void appLogger.info("session", "Session prompt IPC completed", {
 					sessionId: input.sessionId,
 					requestId: input.requestId,
@@ -1685,6 +1844,10 @@ function registerIpc() {
 				throw error;
 			}
 		},
+	);
+	ipcMain.handle(
+		ipcChannels.sessionsUiResponse,
+		(_event, input: SessionUiResponseInput) => sessionRuntimeCoordinator.respondToUi(input),
 	);
 	ipcMain.handle(
 		ipcChannels.sessionsRename,
@@ -3077,6 +3240,7 @@ function registerIpc() {
 			projectId: input.projectId,
 			sessionPath: input.sessionPath,
 			title: input.title,
+			runtimeClass: LEGACY_EXTERNAL_RUNTIME,
 		});
 		const tab = await agentManager.create(input);
 		void appLogger.info("agent", "Agent create IPC completed", {
@@ -3108,17 +3272,11 @@ function registerIpc() {
 		terminalManager.closeAgent(agentId);
 		await agentManager.stop(agentId);
 		if (runtimeBinding && stoppedTab) {
-			const window = mainWindow;
-			if (window && !window.isDestroyed()) {
-				const event: SessionRuntimeEvent = {
-					sessionId: runtimeBinding.sessionId,
-					agentId,
-					runtimeGeneration: runtimeBinding.runtimeGeneration,
-					sourceChannel: ipcChannels.agentsState,
-					payload: { ...stoppedTab, status: "closed" },
-				};
-				window.webContents.send(ipcChannels.sessionsRuntimeEvent, event);
-			}
+			emitSessionRuntimeEvent(
+				agentId,
+				ipcChannels.agentsState,
+				{ ...stoppedTab, status: "closed" },
+			);
 		}
 		sessionRuntimeCoordinator.unbindAgent(agentId);
 		void appLogger.info("agent", "Agent stopped", { agentId });
@@ -3179,6 +3337,14 @@ function registerIpc() {
 		const result = sessionId
 			? await sessionRuntimeCoordinator.restartSession(sessionId, agentId)
 			: await agentManager.restart(agentId);
+		if (sessionId) {
+			emitSessionRuntimeEvent(result.id, ipcChannels.agentsState, result);
+		} else {
+			void appLogger.info("agent", "Restarted unbound external runtime", {
+				agentId,
+				runtimeClass: LEGACY_EXTERNAL_RUNTIME,
+			});
+		}
 		void appLogger.info("agent", "Agent restarted", { agentId, nextAgentId: result.id, sessionId });
 		return result;
 	});
@@ -3454,7 +3620,13 @@ app.whenReady().then(async () => {
 			return sessionScanner.list(project?.path);
 		},
 		getMessages: (agentId) => agentManager.getMessages(agentId),
-		createAgent: (input) => agentManager.create(input),
+		createAgent: (input) => {
+			void appLogger.info("web", "Creating unbound external runtime", {
+				projectId: input.projectId,
+				runtimeClass: LEGACY_EXTERNAL_RUNTIME,
+			});
+			return agentManager.create(input);
+		},
 		sendPrompt: (input) => agentManager.sendPrompt(input),
 		stopAgent: (agentId) => agentManager.stop(agentId),
 		runtimeState: (agentId) => agentManager.getRuntimeState(agentId),
@@ -3485,31 +3657,21 @@ app.whenReady().then(async () => {
 		sendAgentPromptWithIntegrations,
 	);
 	agentManager.onOutput((sourceChannel, payload) => {
-		const sendSessionEvent = (agentId: string, eventPayload: unknown) => {
-			const runtimeBinding = sessionRuntimeCoordinator.getRuntimeBinding(agentId);
-			if (!runtimeBinding) return;
-			const event: SessionRuntimeEvent = {
-				sessionId: runtimeBinding.sessionId,
-				agentId,
-				runtimeGeneration: runtimeBinding.runtimeGeneration,
-				sourceChannel,
-				payload: eventPayload,
-			};
-			const window = mainWindow;
-			if (!window || window.isDestroyed()) return;
-			window.webContents.send(ipcChannels.sessionsRuntimeEvent, event);
-		};
 		if (sourceChannel === ipcChannels.agentsState && Array.isArray(payload)) {
 			for (const tab of payload) {
 				if (tab && typeof tab === "object" && typeof tab.id === "string") {
-					sendSessionEvent(tab.id, tab);
+					emitSessionRuntimeEvent(tab.id, sourceChannel, tab);
 				}
 			}
 			return;
 		}
 		if (payload && typeof payload === "object" && "agentId" in payload) {
 			const agentId = (payload as { agentId?: unknown }).agentId;
-			if (typeof agentId === "string") sendSessionEvent(agentId, payload);
+			if (typeof agentId !== "string") return;
+			const forwarded = emitSessionRuntimeEvent(agentId, sourceChannel, payload);
+			if (!forwarded && sourceChannel === ipcChannels.agentsUiRequest) {
+				cancelUnboundUiRequest(payload);
+			}
 		}
 	});
 

@@ -19,6 +19,7 @@ import type {
 	FeishuTestResult,
 	ImageContent,
 	AvailableModel,
+	AgentTab,
 } from "../../shared/types";
 import type {
 	FeishuGroupInfo,
@@ -51,6 +52,13 @@ import { renderRunCard } from "./CardRenderer";
 import { buildModelPickerCard, parseModelActionValue } from "./ModelPickerCard";
 import type { AgentManager } from "../pi/AgentManager";
 
+export interface SessionRuntimeBindingGateway {
+	bindRuntime(input: {
+		projectId: string;
+		agent: AgentTab;
+	}): Promise<{ sessionId: string; runtimeGeneration: number }>;
+}
+
 // ===== 常量 =====
 const DEDUP_MAX = 200;
 const GROUP_CACHE_TTL = 3600_000;
@@ -69,6 +77,7 @@ export class FeishuBridge {
 	private botConfig: FeishuBotConfig;
 	private readonly plainAppSecret?: string;
 	private agentManager: AgentManager;
+	private runtimeBindings: SessionRuntimeBindingGateway;
 	private getWindow: () => BrowserWindow | null;
 	private getProjects: () => Array<{ id: string; name: string; path: string }>;
 
@@ -119,12 +128,14 @@ export class FeishuBridge {
 		agentManager: AgentManager,
 		getWindow: () => BrowserWindow | null,
 		getProjects: () => Array<{ id: string; name: string; path: string }>,
+		runtimeBindings: SessionRuntimeBindingGateway,
 		plainAppSecret?: string,
 	) {
 		this.botConfig = botConfig;
 		// 临时连接不会落盘，无法通过 bot id 解密 secret；这里保留一次性明文供 start() 使用。
 		this.plainAppSecret = plainAppSecret;
 		this.agentManager = agentManager;
+		this.runtimeBindings = runtimeBindings;
 		this.getWindow = getWindow;
 		this.getProjects = getProjects;
 	}
@@ -867,6 +878,12 @@ export class FeishuBridge {
 
 		try {
 			const tab = await this.agentManager.create({ projectId });
+			try {
+				await this.runtimeBindings.bindRuntime({ projectId, agent: tab });
+			} catch (error) {
+				await this.agentManager.stop(tab.id).catch(() => undefined);
+				throw error;
+			}
 			const binding: FeishuChatBinding = {
 				chatId, botId: this.botConfig.id, userId: ctx.senderOpenId, sessionId: tab.id,
 				sessionPath: tab.sessionPath, workspaceId: this.botConfig.defaultWorkspaceId ?? "", source: "feishu", chatType: ctx.chatType,
@@ -915,6 +932,12 @@ export class FeishuBridge {
 						sessionPath: binding.sessionPath,
 						title: binding.groupName || `飞书会话`,
 					});
+					try {
+						await this.runtimeBindings.bindRuntime({ projectId, agent: tab });
+					} catch (error) {
+						await this.agentManager.stop(tab.id).catch(() => undefined);
+						throw error;
+					}
 					log(`[飞书 Bridge] 会话恢复成功: ${tab.id} (从 ${binding.sessionPath})`);
 					binding.sessionId = tab.id;
 					binding.sessionPath = tab.sessionPath;
@@ -935,6 +958,12 @@ export class FeishuBridge {
 		// 2. sessionPath 不可用 → 创建新 agent，复用已有 chatId 绑定（不新建群）
 		try {
 			const tab = await this.agentManager.create({ projectId, title: binding.groupName || `飞书会话` });
+			try {
+				await this.runtimeBindings.bindRuntime({ projectId, agent: tab });
+			} catch (error) {
+				await this.agentManager.stop(tab.id).catch(() => undefined);
+				throw error;
+			}
 			log(`[飞书 Bridge] 已为新 agent ${tab.id} 复用绑定 ${binding.chatId}`);
 			binding.sessionId = tab.id;
 			binding.sessionPath = tab.sessionPath;

@@ -60,6 +60,7 @@ function createHarness(options = {}) {
     setThinking: 0,
     attach: 0,
     send: 0,
+    uiResponse: 0,
   };
   const tabs = options.tabs ? [...options.tabs] : [];
   const catalog = {
@@ -119,6 +120,9 @@ function createHarness(options = {}) {
     },
     setThinking: async () => {
       calls.setThinking += 1;
+    },
+    sendUIResponse: async () => {
+      calls.uiResponse += 1;
     },
   };
   const sender = async () => {
@@ -336,4 +340,100 @@ test("does not send or bind a new runtime when model setup fails", async () => {
   assert.equal(harness.calls.attach, 0);
   assert.equal(harness.calls.send, 0);
   assert.equal(harness.calls.stop, 1);
+});
+
+test("attaches catalog runtimes by full origin identity", () => {
+  const { SessionRuntimeCoordinator } = loadCoordinator();
+  const harness = createHarness({
+    tabs: [{
+      id: "agent-existing",
+      projectId: "project-1",
+      cwd: "/workspace",
+      title: "Existing",
+      status: "idle",
+      sessionPath: "/home/dev/session.jsonl",
+      sessionEnvironment: "wsl",
+      sessionSource: "pi",
+      wslDistro: "Ubuntu",
+      wslUser: "dev",
+      createdAt: 1,
+    }],
+  });
+  const coordinator = new SessionRuntimeCoordinator(
+    harness.catalog,
+    harness.agents,
+    harness.sender,
+  );
+  const bindings = coordinator.attachCatalogRuntimes([{
+    ...catalogEntry({
+      environment: "wsl",
+      filePath: "/home/dev/session.jsonl",
+      wslDistro: "Ubuntu",
+      wslUser: "dev",
+      status: "active",
+    }),
+    preview: "",
+    messageCount: 0,
+  }]);
+
+  assert.equal(bindings.length, 1);
+  assert.equal(bindings[0].agentId, "agent-existing");
+  assert.deepEqual(
+    { ...coordinator.getRuntimeBinding("agent-existing") },
+    { sessionId: "session-1", runtimeGeneration: 1 },
+  );
+});
+
+test("Session UI response requires the current binding, generation, and pending request", async () => {
+  const { SessionRuntimeCoordinator } = loadCoordinator();
+  const harness = createHarness({
+    tabs: [{ id: "agent-a", status: "idle", createdAt: 1 }],
+  });
+  const coordinator = new SessionRuntimeCoordinator(
+    harness.catalog,
+    harness.agents,
+    harness.sender,
+  );
+  const generation = coordinator.bindExistingAgent("session-1", "agent-a");
+  coordinator.observeRuntimeEvent({
+    sessionId: "session-1",
+    agentId: "agent-a",
+    runtimeGeneration: generation,
+    sourceChannel: "agents:ui-request",
+    payload: {
+      agentId: "agent-a",
+      requestId: "request-ui",
+      method: "confirm",
+      title: "Continue?",
+    },
+  });
+
+  await assert.rejects(
+    coordinator.respondToUi({
+      sessionId: "session-1",
+      requestId: "request-ui",
+      agentId: "agent-a",
+      runtimeGeneration: generation - 1,
+      response: { confirmed: true },
+    }),
+    /runtime binding changed/i,
+  );
+  await coordinator.respondToUi({
+    sessionId: "session-1",
+    requestId: "request-ui",
+    agentId: "agent-a",
+    runtimeGeneration: generation,
+    response: { confirmed: true },
+  });
+  await assert.rejects(
+    coordinator.respondToUi({
+      sessionId: "session-1",
+      requestId: "request-ui",
+      agentId: "agent-a",
+      runtimeGeneration: generation,
+      response: { confirmed: true },
+    }),
+    /not pending/i,
+  );
+  assert.equal(harness.calls.uiResponse, 1);
 });

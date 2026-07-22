@@ -5,6 +5,9 @@ import type {
 	SendPromptResult,
 	SendSessionPromptInput,
 	SendSessionPromptResult,
+	SessionRecord,
+	SessionRuntimeEvent,
+	SessionUiResponseInput,
 } from "../../shared/types";
 import { buildSessionOriginKey } from "../../shared/sessionIdentity";
 import type { SessionCatalogEntry } from "./SessionCatalog";
@@ -26,12 +29,24 @@ export interface SessionAgentGateway {
 	stop(agentId: string): Promise<void>;
 	setModel(agentId: string, provider: string, modelId: string): Promise<unknown>;
 	setThinking(agentId: string, level: string): Promise<unknown>;
+	sendUIResponse(
+		agentId: string,
+		requestId: string,
+		response: SessionUiResponseInput["response"],
+	): Promise<unknown> | unknown;
 }
 
 type DeliveryCacheEntry = {
 	createdAt: number;
 	settled: boolean;
 	promise: Promise<SendSessionPromptResult>;
+};
+
+type PendingUiRequest = {
+	sessionId: string;
+	agentId: string;
+	runtimeGeneration: number;
+	requestId: string;
 };
 
 const DELIVERY_CACHE_TTL_MS = 10 * 60_000;
@@ -46,12 +61,21 @@ function isTerminalAgent(tab: AgentTab): boolean {
 	return tab.status === "error" || tab.status === "closed";
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isInteractiveUiMethod(method: unknown): boolean {
+	return method === "select" || method === "confirm" || method === "input" || method === "editor";
+}
+
 export class SessionRuntimeCoordinator {
 	private readonly activationBySession = new Map<string, Promise<AgentTab>>();
 	private readonly deliveryByRequest = new Map<string, DeliveryCacheEntry>();
 	private readonly agentIdBySession = new Map<string, string>();
 	private readonly sessionIdByAgent = new Map<string, string>();
 	private readonly generationBySession = new Map<string, number>();
+	private readonly pendingUiRequests = new Map<string, PendingUiRequest>();
 
 	constructor(
 		private readonly catalog: SessionCatalogGateway,
@@ -100,7 +124,108 @@ export class SessionRuntimeCoordinator {
 	}
 
 	bindExistingAgent(sessionId: string, agentId: string): number {
+		if (!this.catalog.get(sessionId)) throw new Error(`Session not found: ${sessionId}`);
 		return this.bind(sessionId, agentId);
+	}
+
+	attachCatalogRuntimes(records: SessionRecord[]): Array<{
+		sessionId: string;
+		agentId: string;
+		runtimeGeneration: number;
+	}> {
+		const bindings: Array<{
+			sessionId: string;
+			agentId: string;
+			runtimeGeneration: number;
+		}> = [];
+		const availableAgents = this.agents.list().filter((tab) => !isTerminalAgent(tab));
+		for (const record of records) {
+			if (!record.filePath) continue;
+			const target = buildSessionOriginKey({
+				source: record.source,
+				environment: record.environment,
+				filePath: record.filePath,
+				wslDistro: record.wslDistro,
+				wslUser: record.wslUser,
+				importedSourceId: record.importedSourceId,
+			});
+			const tab = availableAgents.find((candidate) => (
+				candidate.projectId === record.projectId &&
+				candidate.sessionPath &&
+				buildSessionOriginKey({
+					source: candidate.sessionSource ?? "pi",
+					environment: candidate.sessionEnvironment ?? "native",
+					filePath: candidate.sessionPath,
+					wslDistro: candidate.wslDistro,
+					wslUser: candidate.wslUser,
+					importedSourceId: candidate.importedSourceId,
+				}) === target
+			));
+			if (!tab) continue;
+			bindings.push({
+				sessionId: record.id,
+				agentId: tab.id,
+				runtimeGeneration: this.bind(record.id, tab.id),
+			});
+		}
+		return bindings;
+	}
+
+	observeRuntimeEvent(event: SessionRuntimeEvent): void {
+		const binding = this.getRuntimeBinding(event.agentId);
+		if (
+			!binding ||
+			binding.sessionId !== event.sessionId ||
+			binding.runtimeGeneration !== event.runtimeGeneration ||
+			event.sourceChannel !== "agents:ui-request" ||
+			!isRecord(event.payload)
+		) {
+			return;
+		}
+		const requestId = typeof event.payload.requestId === "string"
+			? event.payload.requestId.trim()
+			: "";
+		if (!requestId) return;
+		const key = this.uiRequestKey(event.sessionId, requestId);
+		if (event.payload.completed === true) {
+			this.pendingUiRequests.delete(key);
+			return;
+		}
+		if (!isInteractiveUiMethod(event.payload.method)) return;
+		this.pendingUiRequests.set(key, {
+			sessionId: event.sessionId,
+			agentId: event.agentId,
+			runtimeGeneration: event.runtimeGeneration,
+			requestId,
+		});
+	}
+
+	async respondToUi(input: SessionUiResponseInput): Promise<void> {
+		const binding = this.getRuntimeBinding(input.agentId);
+		if (
+			!binding ||
+			binding.sessionId !== input.sessionId ||
+			binding.runtimeGeneration !== input.runtimeGeneration ||
+			this.agentIdBySession.get(input.sessionId) !== input.agentId
+		) {
+			throw new Error("Session runtime binding changed before UI response");
+		}
+		const key = this.uiRequestKey(input.sessionId, input.requestId);
+		const pending = this.pendingUiRequests.get(key);
+		if (
+			!pending ||
+			pending.agentId !== input.agentId ||
+			pending.runtimeGeneration !== input.runtimeGeneration
+		) {
+			throw new Error("Session UI request is not pending");
+		}
+		this.pendingUiRequests.delete(key);
+		try {
+			await this.agents.sendUIResponse(input.agentId, input.requestId, input.response);
+		} catch (error) {
+			this.pendingUiRequests.set(key, pending);
+			throw error;
+		}
 	}
 
 	getRuntimeBinding(agentId: string): {
@@ -117,7 +242,10 @@ export class SessionRuntimeCoordinator {
 
 	unbindAgent(agentId: string): void {
 		const sessionId = this.sessionIdByAgent.get(agentId);
-		if (sessionId) this.agentIdBySession.delete(sessionId);
+		if (sessionId) {
+			this.agentIdBySession.delete(sessionId);
+			this.clearPendingUiRequests(sessionId, agentId);
+		}
 		this.sessionIdByAgent.delete(agentId);
 	}
 
@@ -330,11 +458,14 @@ export class SessionRuntimeCoordinator {
 		}
 		if (previousAgentId && previousAgentId !== agentId) {
 			this.sessionIdByAgent.delete(previousAgentId);
+			this.clearPendingUiRequests(sessionId, previousAgentId);
 		}
 		const previousSessionId = this.sessionIdByAgent.get(agentId);
 		if (previousSessionId && previousSessionId !== sessionId) {
 			this.agentIdBySession.delete(previousSessionId);
+			this.clearPendingUiRequests(previousSessionId, agentId);
 		}
+		this.clearPendingUiRequests(sessionId);
 		const runtimeGeneration = (this.generationBySession.get(sessionId) ?? 0) + 1;
 		this.generationBySession.set(sessionId, runtimeGeneration);
 		this.agentIdBySession.set(sessionId, agentId);
@@ -342,6 +473,18 @@ export class SessionRuntimeCoordinator {
 		const tab = this.agents.list().find((candidate) => candidate.id === agentId);
 		if (tab) tab.runtimeGeneration = runtimeGeneration;
 		return runtimeGeneration;
+	}
+
+	private uiRequestKey(sessionId: string, requestId: string): string {
+		return `${sessionId}\u0000${requestId}`;
+	}
+
+	private clearPendingUiRequests(sessionId: string, agentId?: string): void {
+		for (const [key, pending] of this.pendingUiRequests) {
+			if (pending.sessionId === sessionId && (!agentId || pending.agentId === agentId)) {
+				this.pendingUiRequests.delete(key);
+			}
+		}
 	}
 
 	private pruneDeliveryCache(): void {
