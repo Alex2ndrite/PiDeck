@@ -30,6 +30,7 @@ import {
   sessionSendStateByIdAtom,
 } from "../../atoms";
 import {
+  canLoadSessionTimelineMore,
   deriveSessionSurfaceRuntime,
   isLatestTimelineRunBusy,
   selectSessionModeValue,
@@ -153,7 +154,6 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
   const isLoadingMoreMessages = sessionMode
     ? controller.isLoadingMoreMessages
     : legacyProps.isLoadingMoreMessages;
-  const canLoadMoreMessages = sessionMode ? runtime?.status !== "starting" : legacyProps.canLoadMoreMessages;
   const hasActiveConversation = sessionMode ? Boolean(session) : legacyProps.hasActiveConversation;
   const modernSurfaceState = deriveSessionSurfaceRuntime(
     activeMessages.length,
@@ -165,6 +165,9 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
   const isConversationLoading = sessionMode
     ? modernSurfaceState.isLoading
     : legacyProps.isConversationLoading;
+  const canLoadMoreMessages = sessionMode
+    ? canLoadSessionTimelineMore(modernSurfaceState.isStarting)
+    : legacyProps.canLoadMoreMessages;
   const activeRuntimeState = selectSessionModeValue(
     sessionMode,
     runtime?.state,

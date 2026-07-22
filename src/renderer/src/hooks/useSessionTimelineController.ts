@@ -70,6 +70,10 @@ export function deriveSessionSurfaceRuntime(
   };
 }
 
+export function canLoadSessionTimelineMore(isStarting: boolean): boolean {
+  return !isStarting;
+}
+
 export function isLatestTimelineRunBusy(
   isAgentBusy: boolean,
   index: number,

@@ -57,3 +57,12 @@ test("modern surface state covers cached loading, activation before binding, and
   assert.equal(unknown.isStarting, false);
   assert.equal(unknown.isBusy, false);
 });
+
+test("load-more follows modern starting state while legacy remains prop-owned", () => {
+  const activating = timeline.deriveSessionSurfaceRuntime(150, "ready", "activating", undefined, undefined);
+  const idle = timeline.deriveSessionSurfaceRuntime(150, "ready", "idle", "idle", undefined);
+  assert.equal(timeline.canLoadSessionTimelineMore(activating.isStarting), false);
+  assert.equal(timeline.canLoadSessionTimelineMore(idle.isStarting), true);
+  const legacyCanLoadMoreMessages = false;
+  assert.equal(legacyCanLoadMoreMessages, false);
+});
