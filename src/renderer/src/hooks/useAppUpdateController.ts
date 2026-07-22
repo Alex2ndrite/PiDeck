@@ -123,28 +123,28 @@ export function useAppUpdateController(
 	const download = useCallback(async () => {
 		const asset = info?.recommendedAsset;
 		if (!asset || downloading) return null;
-		const requestSequence = downloadGate.current.begin();
-		if (requestSequence === null) return null;
-		++sequence.current;
+		const gateSequence = downloadGate.current.begin();
+		if (gateSequence === null) return null;
+		const controllerSequence = ++sequence.current;
 		setDownloading(true);
 		setError(null);
 		setDownloadedPath(null);
 		setProgress({ assetName: asset.name, receivedBytes: 0, totalBytes: asset.size, percent: 0, state: "downloading" });
 		try {
 			const result = await api.downloadUpdate(asset);
-			if (!mounted.current || requestSequence !== sequence.current) return null;
+			if (!mounted.current || controllerSequence !== sequence.current) return null;
 			setDownloadedPath(result.filePath);
 			setProgress((current) => current ? { ...current, state: "completed", filePath: result.filePath, percent: 100 } : current);
 			return result.filePath;
 		} catch (reason) {
-			if (mounted.current && requestSequence === sequence.current) {
+			if (mounted.current && controllerSequence === sequence.current) {
 				setError(errorMessage(reason));
 				setProgress((current) => current ? { ...current, state: "failed", error: errorMessage(reason) } : current);
 			}
 			return null;
 		} finally {
-			downloadGate.current.settle(requestSequence);
-			if (mounted.current && requestSequence === sequence.current) setDownloading(false);
+			downloadGate.current.settle(gateSequence);
+			if (mounted.current && controllerSequence === sequence.current) setDownloading(false);
 		}
 	}, [api, downloading, info]);
 

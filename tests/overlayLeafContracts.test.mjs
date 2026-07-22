@@ -191,6 +191,96 @@ test("update gate blocks B after A clear and rejects A progress until A settles"
   assert.equal(gate.isInFlight(), false);
 });
 
+function createUpdateHookHarness() {
+  const refs = [];
+  const states = [];
+  let cursor = 0;
+  let effects = [];
+  const react = {
+    useRef(initial) {
+      const index = cursor++;
+      refs[index] ??= { current: initial };
+      return refs[index];
+    },
+    useState(initial) {
+      const index = cursor++;
+      states[index] ??= typeof initial === "function" ? initial() : initial;
+      return [states[index], (next) => { states[index] = typeof next === "function" ? next(states[index]) : next; }];
+    },
+    useCallback(fn) { cursor++; return fn; },
+    useEffect(fn) { cursor++; effects.push(fn); },
+  };
+  const hooks = compile("hooks/useAppUpdateController.ts", { react });
+  return {
+    render(api) {
+      cursor = 0;
+      effects = [];
+      const result = hooks.useAppUpdateController(api, false);
+      return { result, effects };
+    },
+  };
+}
+
+test("update check and download resolve into completed progress and a downloaded path", async () => {
+  let onProgress;
+  let resolveDownload;
+  const updateInfo = {
+    currentVersion: "1.0.0",
+    latestVersion: "1.1.0",
+    hasUpdate: true,
+    releaseName: "1.1.0",
+    releaseNotes: "notes",
+    releaseUrl: "https://example.test/release",
+    assets: [{ name: "PiDeck.exe", url: "https://example.test/PiDeck.exe", size: 10 }],
+    recommendedAsset: { name: "PiDeck.exe", url: "https://example.test/PiDeck.exe", size: 10 },
+  };
+  const api = {
+    checkUpdate: async () => updateInfo,
+    downloadUpdate: async () => new Promise((resolve) => { resolveDownload = resolve; }),
+    installUpdate: async () => undefined,
+    onUpdateProgress: (callback) => { onProgress = callback; return () => { onProgress = undefined; }; },
+  };
+  const harness = createUpdateHookHarness();
+  const initial = harness.render(api);
+  initial.effects.map((setup) => setup()).filter(Boolean);
+  assert.equal(await initial.result.check("manual"), updateInfo);
+  const afterCheck = harness.render(api).result;
+  assert.equal(afterCheck.info.recommendedAsset.name, "PiDeck.exe");
+
+  const downloadPromise = afterCheck.download();
+  onProgress({ assetName: "PiDeck.exe", receivedBytes: 5, totalBytes: 10, percent: 50, state: "downloading" });
+  assert.equal(harness.render(api).result.progress.percent, 50);
+  resolveDownload({ filePath: "C:/tmp/PiDeck.exe", assetName: "PiDeck.exe" });
+  assert.equal(await downloadPromise, "C:/tmp/PiDeck.exe");
+
+  const completed = harness.render(api).result;
+  assert.equal(completed.downloadedPath, "C:/tmp/PiDeck.exe");
+  assert.equal(completed.progress.state, "completed");
+  assert.equal(completed.progress.percent, 100);
+  assert.equal(completed.progress.filePath, "C:/tmp/PiDeck.exe");
+  assert.equal(completed.downloading, false);
+});
+
+test("Import error renders as a fixed high-z-index alert and disappears when cleared", () => {
+  const jsx = (type, props) => ({ type, props: props ?? {} });
+  const { renderImportError } = compile("components/overlays/ImportOverlayHost.tsx", {
+    "react/jsx-runtime": { jsx, jsxs: jsx, Fragment: "fragment" },
+    "../app/ImportModals": {},
+  });
+  const rendered = renderImportError("Import failed");
+  assert.equal(rendered.type, "div");
+  assert.equal(rendered.props.role, "alert");
+  assert.equal(rendered.props["aria-live"], "assertive");
+  assert.equal(rendered.props.className, "import-overlay-error-surface");
+  assert.equal(rendered.props.style.position, "fixed");
+  assert.ok(rendered.props.style.zIndex > 100);
+  assert.equal(rendered.props.style.padding, "10px 16px");
+  assert.equal(rendered.props.style.background, "var(--color-danger-soft)");
+  assert.equal(rendered.props.style.pointerEvents, "auto");
+  assert.equal(rendered.props.children.props.children, "Import failed");
+  assert.equal(renderImportError(null), null);
+});
+
 test("overlay roots keep controller/import/runtime error visible", () => {
   const update = read("components/overlays/AppUpdateOverlay.tsx");
   const imports = read("components/overlays/ImportOverlayHost.tsx");

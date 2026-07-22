@@ -32,8 +32,32 @@ export type ImportOverlayHostProps =
 	| { kind: "claude"; project: Project; controller: ImportControllerView<ClaudeSessionSummary, ClaudeImportReport>; onClose: () => void }
 	| { kind: "opencode"; project: Project; controller: ImportControllerView<OpenCodeSessionSummary, OpenCodeImportReport>; onClose: () => void };
 
-function renderImportError(error: string | null): ReactNode {
-	return error ? <div className="codex-import-report error" role="alert"><strong>{error}</strong></div> : null;
+export function renderImportError(error: string | null): ReactNode {
+	if (!error) return null;
+	return (
+		<div
+			className="import-overlay-error-surface"
+			role="alert"
+			aria-live="assertive"
+			style={{
+				position: "fixed",
+				top: "calc(var(--window-drag-height, 0px) + 16px)",
+				left: "50%",
+				transform: "translateX(-50%)",
+				zIndex: 1100,
+				maxWidth: "min(560px, calc(100vw - 32px))",
+				padding: "10px 16px",
+				border: "1px solid var(--color-danger)",
+				borderRadius: "var(--radius-md)",
+				background: "var(--color-danger-soft)",
+				color: "var(--color-danger)",
+				boxShadow: "var(--shadow-xl)",
+				pointerEvents: "auto",
+			}}
+		>
+			<strong>{error}</strong>
+		</div>
+	);
 }
 
 /** A provider switch lives here so Sidebar only chooses a provider/project. */
