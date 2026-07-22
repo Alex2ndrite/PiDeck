@@ -35,6 +35,30 @@ export type WorkspaceGitDiffSnapshot = GitWorkspaceFileDiff & {
   label: string;
 };
 
+export type GitDiffLifecycleState = {
+  request: number;
+  snapshot: WorkspaceGitDiffSnapshot | null;
+  displayMode: "modal" | "drawer";
+};
+
+/** Closing or leaving Git invalidates both the snapshot and every in-flight response. */
+export function invalidateGitDiffState(state: GitDiffLifecycleState): GitDiffLifecycleState {
+  return {
+    request: state.request + 1,
+    snapshot: null,
+    displayMode: "drawer",
+  };
+}
+
+export function isCurrentGitDiffResponse(input: {
+  request: number;
+  currentRequest: number;
+  responseProjectId: string;
+  activeProjectId: string | null;
+}) {
+  return input.request === input.currentRequest && input.responseProjectId === input.activeProjectId;
+}
+
 /** The adapter deliberately mirrors GitPanel's resource boundary, without exposing renderer state. */
 export type WorkspaceGitResourceAdapter = {
   commitLog: (
@@ -179,6 +203,20 @@ export function useWorkspacePanels(options: WorkspacePanelOptions = {}) {
     budget: options.editorTextBudget ?? EDITOR_TAB_TEXT_BUDGET,
   };
 
+  const [gitDiff, setGitDiff] = useState<WorkspaceGitDiffSnapshot | null>(null);
+  const [gitDiffDisplayMode, setGitDiffDisplayMode] = useState<"modal" | "drawer">("drawer");
+  const gitRequestRef = useRef(0);
+  const invalidateGitDiff = useCallback(() => {
+    const next = invalidateGitDiffState({
+      request: gitRequestRef.current,
+      snapshot: null,
+      displayMode: "drawer",
+    });
+    gitRequestRef.current = next.request;
+    setGitDiff(next.snapshot);
+    setGitDiffDisplayMode(next.displayMode);
+  }, []);
+
   const [drawer, setDrawer] = useState<WorkspaceDrawerPanel | null>(null);
   const [drawerCollapsed, setDrawerCollapsed] = useState(false);
   const [drawerPinnedByProject, setDrawerPinnedByProject] = useState<Record<string, WorkspaceDrawerPanel>>({});
@@ -217,16 +255,18 @@ export function useWorkspacePanels(options: WorkspacePanelOptions = {}) {
     const pinnedPanel = projectIdRef.current ? drawerPinnedByProjectRef.current[projectIdRef.current] : undefined;
     if (pinnedPanel && pinnedPanel !== panel) return;
     const next = drawerRef.current === panel && !drawerPinnedRef.current ? null : panel;
+    if (next !== "git") invalidateGitDiff();
     if (projectIdRef.current) saveDrawerState(projectIdRef.current, next, Boolean(pinnedPanel && next === pinnedPanel));
     setDrawer(next);
     setDrawerCollapsed(false);
-  }, [saveDrawerState]);
+  }, [invalidateGitDiff, saveDrawerState]);
 
   const closeDrawer = useCallback(() => {
     if (drawerPinnedRef.current) return;
+    invalidateGitDiff();
     if (projectIdRef.current) saveDrawerState(projectIdRef.current, null, false);
     setDrawer(null);
-  }, [saveDrawerState]);
+  }, [invalidateGitDiff, saveDrawerState]);
 
   const collapseDrawer = useCallback(() => {
     if (!drawerPinnedRef.current) setDrawerCollapsed(true);
@@ -328,21 +368,20 @@ export function useWorkspacePanels(options: WorkspacePanelOptions = {}) {
     return write ? write(path, content) : Promise.reject(new Error("File write service is unavailable"));
   }, []);
 
-  const [gitDiff, setGitDiff] = useState<WorkspaceGitDiffSnapshot | null>(null);
-  const [gitDiffDisplayMode, setGitDiffDisplayMode] = useState<"modal" | "drawer">("drawer");
-  const gitRequestRef = useRef(0);
-
   const closeGitDiff = useCallback(() => {
-    gitRequestRef.current += 1;
-    setGitDiff(null);
-    setGitDiffDisplayMode("drawer");
-  }, []);
+    invalidateGitDiff();
+  }, [invalidateGitDiff]);
 
   const openWorkspaceFileDiff = useCallback(async (group: GitResourceGroupType, path: string) => {
     const id = projectIdRef.current;
     const request = ++gitRequestRef.current;
     const diff = id ? await gitRef.current?.workspaceFileDiff(id, group, path) : null;
-    if (!id || request !== gitRequestRef.current || projectIdRef.current !== id) return null;
+    if (!id || !isCurrentGitDiffResponse({
+      request,
+      currentRequest: gitRequestRef.current,
+      responseProjectId: id,
+      activeProjectId: projectIdRef.current,
+    })) return null;
     if (!diff) return null;
     setDrawer("git");
     setDrawerCollapsed(false);
@@ -355,7 +394,12 @@ export function useWorkspacePanels(options: WorkspacePanelOptions = {}) {
     const id = projectIdRef.current;
     const request = ++gitRequestRef.current;
     const diff = id ? await gitRef.current?.commitFileDiff(id, commit.hash, file.path, file.originalPath) : null;
-    if (!id || request !== gitRequestRef.current || projectIdRef.current !== id) return null;
+    if (!id || !isCurrentGitDiffResponse({
+      request,
+      currentRequest: gitRequestRef.current,
+      responseProjectId: id,
+      activeProjectId: projectIdRef.current,
+    })) return null;
     if (!diff) return null;
     setDrawer("git");
     setDrawerCollapsed(false);
@@ -388,9 +432,10 @@ export function useWorkspacePanels(options: WorkspacePanelOptions = {}) {
 
   const [browserFullscreen, setBrowserFullscreen] = useState(false);
   const openBrowser = useCallback(() => {
+    invalidateGitDiff();
     setDrawer("browser");
     setDrawerCollapsed(false);
-  }, []);
+  }, [invalidateGitDiff]);
   const enterBrowserFullscreen = useCallback(() => setBrowserFullscreen(true), []);
   const closeBrowser = useCallback(() => setBrowserFullscreen(false), []);
   const minimizeBrowser = useCallback(() => {
@@ -438,14 +483,13 @@ export function useWorkspacePanels(options: WorkspacePanelOptions = {}) {
   }, []);
 
   useEffect(() => {
-    gitRequestRef.current += 1;
+    invalidateGitDiff();
     editorRequestRef.current += 1;
-    setGitDiff(null);
     setBrowserFullscreen(false);
     setExternalEditorsOpen(false);
     setExternalEditorsAnchor(null);
     setExternalEditorsTargetPath(null);
-  }, [projectId]);
+  }, [invalidateGitDiff, projectId]);
 
   return {
     drawer,

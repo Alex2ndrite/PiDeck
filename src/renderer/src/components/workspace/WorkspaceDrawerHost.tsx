@@ -7,6 +7,14 @@ import {
   type WorkspaceDrawerPanel,
 } from "../../hooks/useWorkspacePanels";
 
+export function getVisibleDrawerPanel<T>(
+  open: boolean,
+  panel: T | null,
+  renderedDrawer: T | null,
+) {
+  return open ? panel : renderedDrawer;
+}
+
 export type WorkspaceDrawerHostProps = {
   panel: WorkspaceDrawerPanel | null;
   collapsed: boolean;
@@ -56,17 +64,20 @@ export function WorkspaceDrawerHost(props: WorkspaceDrawerHostProps) {
   }, []);
 
   const open = Boolean(props.panel && !props.collapsed);
-  const rendered = renderedDrawer ? props.renderPanel(renderedDrawer) : null;
+  // A newly opened or switched panel must render synchronously; only a closing
+  // compositor uses the previous rendered panel as its delayed fallback.
+  const visiblePanel = getVisibleDrawerPanel(open, props.panel, renderedDrawer);
+  const rendered = visiblePanel ? props.renderPanel(visiblePanel) : null;
   return (
     <>
       <aside
         className={props.className ?? "detail-drawer"}
         data-open={open}
-        data-rendered={Boolean(renderedDrawer)}
+        data-rendered={Boolean(visiblePanel)}
         data-pinned={Boolean(props.pinned)}
         style={props.style}
       >
-        {renderedDrawer && <div className="drawer-content-frame">{rendered}</div>}
+        {visiblePanel && <div className="drawer-content-frame">{rendered}</div>}
       </aside>
       {props.panel && props.collapsed && props.onRestore && (
         <button
