@@ -10,7 +10,7 @@ import {
 } from "../app/AppParts";
 import { sessionRecordToSummary } from "../../atoms";
 import { t } from "../../i18n";
-import type { SidebarController, SidebarRpcLog } from "../../hooks/useSidebarController";
+import { getBoundSidebarRuntimeAgent, type SidebarController, type SidebarRpcLog } from "../../hooks/useSidebarController";
 import { ProjectTree } from "./ProjectTree";
 
 export type SidebarActions = {
@@ -87,8 +87,8 @@ export function SidebarContent(props: SidebarContentProps) {
     ? controller.catalog.sessionsByProject[menu.projectId]?.find((session) => session.id === menu.sessionId)
     : undefined;
   const menuSession = menuSessionRecord ? sessionRecordToSummary(menuSessionRecord) : undefined;
-  const menuSessionRuntimeAgentId = menuSessionRecord
-    ? controller.catalog.runtimeBySessionId[menuSessionRecord.id]?.agentId
+  const menuSessionRuntimeAgent = menuSessionRecord
+    ? getBoundSidebarRuntimeAgent(controller.catalog, menuSessionRecord.id)
     : undefined;
   const managerProject = controller.sessionManagerProjectId
     ? controller.catalog.projects.find((project) => project.id === controller.sessionManagerProjectId)
@@ -178,7 +178,7 @@ export function SidebarContent(props: SidebarContentProps) {
           onCopySessionFilePath={() => { void actions.sessions.copyPath(menuSession); controller.closeMenu(); }}
           onOpenSessionFile={() => { void actions.sessions.openFile(menuSession); controller.closeMenu(); }}
           onShowLogs={() => {
-            if (menuSessionRuntimeAgentId) void controller.openRpcLogs(menuSessionRuntimeAgentId, actions.rpc.listLogs);
+            if (menuSessionRuntimeAgent) void controller.openRpcLogs(menuSessionRuntimeAgent.id, actions.rpc.listLogs);
           }}
           onDeleteSession={() => { void actions.sessions.delete(menu.projectId, menuSession); controller.closeMenu(); }}
         />

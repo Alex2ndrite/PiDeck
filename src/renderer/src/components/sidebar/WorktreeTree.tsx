@@ -45,7 +45,21 @@ export function WorktreeTree(props: {
           const directory = entry.path.split(/[/\\]/).filter(Boolean).pop() || entry.path;
           const expanded = props.controller.expandedWorktreePaths.has(entry.path);
           return <div key={entry.path}>
-            <button className="conversation worktree-row" title={entry.path} onClick={() => childProject && props.actions.projects.select(childProject.id)}>
+            <button
+              className="conversation worktree-row"
+              title={entry.path}
+              onClick={() => childProject && props.actions.projects.select(childProject.id)}
+              onContextMenu={(event) => {
+                if (!childProject) return;
+                event.preventDefault();
+                void props.controller.openMenu({
+                  kind: "project",
+                  projectId: childProject.id,
+                  x: event.clientX,
+                  y: event.clientY,
+                });
+              }}
+            >
               <span className="worktree-branch-icon"><GitBranch size={12} /></span><span className="worktree-branch-name">{displayBranch}</span>
               {directory !== displayBranch && <span className="worktree-dir-meta">{directory}</span>}
               {childProject && <span className="project-action worktree-new-agent" title={t("app.projectNewAgent")} onClick={(event) => { event.stopPropagation(); void props.actions.sessions.createDraft(childProject.id); }}><Plus size={12} /></span>}

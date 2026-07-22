@@ -4,7 +4,7 @@ import test from "node:test";
 
 const sessionTreeSource = readFileSync("src/renderer/src/components/sidebar/SessionTree.tsx", "utf8");
 
-test("empty expanded projects do not render a session-card container", () => {
-  assert.match(sessionTreeSource, /const hasRows = draftSessions\.length > 0 \|\| display\.visibleChildren\.length > 0 \|\| display\.hiddenChildCount > 0;/);
+test("empty non-loading projects do not render a session-card container", () => {
+  assert.match(sessionTreeSource, /const hasRows = catalogLoading \|\| draftSessions\.length > 0 \|\| display\.visibleChildren\.length > 0 \|\| display\.hiddenChildCount > 0;/);
   assert.match(sessionTreeSource, /if \(!hasRows\) return null;/);
 });

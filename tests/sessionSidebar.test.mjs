@@ -60,6 +60,57 @@ test("Session tree keys use catalog SessionRecord identity, including child rows
   assert.doesNotMatch(source, /key=\{child\.session\.filePath\}/);
 });
 
+test("runtime context authorization uses the record binding instead of a same-path agent", () => {
+  const { getBoundSidebarRuntimeAgent } = loadControllerModule();
+  const catalog = {
+    runtimeBySessionId: {
+      "session-a": { agentId: "stale", status: "running" },
+      "session-b": { agentId: "detached", status: "detached" },
+      "session-c": { agentId: "live", status: "running" },
+    },
+    agents: [
+      { id: "stale", status: "closed", sessionPath: "C:/same.jsonl" },
+      { id: "same-path-but-unbound", status: "running", sessionPath: "C:/same.jsonl" },
+      { id: "detached", status: "running", sessionPath: "C:/other.jsonl" },
+      { id: "live", status: "running", sessionPath: "C:/live.jsonl" },
+    ],
+  };
+  assert.equal(getBoundSidebarRuntimeAgent(catalog, "session-a"), undefined);
+  assert.equal(getBoundSidebarRuntimeAgent(catalog, "session-b"), undefined);
+  assert.equal(getBoundSidebarRuntimeAgent(catalog, "session-c").id, "live");
+  const source = readFileSync("src/renderer/src/components/sidebar/SessionTree.tsx", "utf8");
+  assert.match(source, /getBoundSidebarRuntimeAgent\(props\.controller\.catalog, session\.id\)/);
+  assert.doesNotMatch(source, /getAgentForSessionPath/);
+});
+
+test("request gate rejects stale menu and RPC results after a newer request or close", () => {
+  const { createSidebarRequestGate } = loadControllerModule();
+  const gate = createSidebarRequestGate();
+  const menuA = gate.beginMenu();
+  const menuB = gate.beginMenu();
+  assert.equal(gate.isCurrentMenu(menuA), false);
+  assert.equal(gate.isCurrentMenu(menuB), true);
+  gate.cancelMenu();
+  assert.equal(gate.isCurrentMenu(menuB), false);
+  const rpcA = gate.beginRpcLogs();
+  const rpcB = gate.beginRpcLogs();
+  assert.equal(gate.isCurrentRpcLogs(rpcA), false);
+  assert.equal(gate.isCurrentRpcLogs(rpcB), true);
+  gate.cancelRpcLogs();
+  assert.equal(gate.isCurrentRpcLogs(rpcB), false);
+});
+
+test("worktree rows expose their child project context menu and loading projects keep a surface", () => {
+  const worktree = readFileSync("src/renderer/src/components/sidebar/WorktreeTree.tsx", "utf8");
+  const sessionTree = readFileSync("src/renderer/src/components/sidebar/SessionTree.tsx", "utf8");
+  const controller = readFileSync("src/renderer/src/hooks/useSidebarController.ts", "utf8");
+  assert.match(worktree, /kind: "project",\s*projectId: childProject\.id/);
+  assert.match(controller, /useAtomValue\(sessionCatalogLoadStateAtom\)/);
+  assert.match(sessionTree, /catalogLoadStateByProject\[props\.project\.id\]\?\.status === "loading"/);
+  assert.match(sessionTree, /catalogLoading \|\| draftSessions\.length/);
+  assert.match(sessionTree, /project-session-loading/);
+});
+
 test("Sidebar leaf remains independent from App and keeps RPC logging query local", () => {
   const controller = readFileSync("src/renderer/src/hooks/useSidebarController.ts", "utf8");
   const content = readFileSync("src/renderer/src/components/sidebar/SidebarContent.tsx", "utf8");

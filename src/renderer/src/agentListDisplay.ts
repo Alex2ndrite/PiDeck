@@ -121,6 +121,46 @@ export function getAgentForSessionPath(
 	return matched;
 }
 
+/**
+ * A source filter applies to the Session origin, not the runtime process. If an
+ * Agent has a catalog Session, resolve that relationship with the same canonical
+ * environment/path rules as display deduplication. Only unlinked Agents use
+ * their own source decoration as the filter fallback.
+ */
+export function filterAgentsForSidebarDisplay({
+	agents,
+	allSessions,
+	visibleSessions,
+	sources,
+}: {
+	agents: AgentTab[];
+	allSessions: SessionSummary[];
+	visibleSessions: SessionSummary[];
+	sources: ReadonlySet<NonNullable<SessionSummary["source"]>> | null;
+}): AgentTab[] {
+	if (sources === null) return agents;
+	const allSessionsByKey = new Map<string, SessionSummary>();
+	for (const session of allSessions) {
+		const key = getSummaryKey(session);
+		if (key) allSessionsByKey.set(key, session);
+	}
+	const visibleSessionKeys = new Set(
+		visibleSessions.map(getSummaryKey).filter((key): key is string => Boolean(key)),
+	);
+	return agents.filter((agent) => {
+		const environment = agent.sessionEnvironment;
+		const explicitSessionKey = environment
+			? getSessionKey(agent.sessionPath, environment)
+			: undefined;
+		const linkedSessionKey = explicitSessionKey && allSessionsByKey.has(explicitSessionKey)
+			? explicitSessionKey
+			: findSessionKeyForAgent(agent.sessionPath, allSessionsByKey);
+		return linkedSessionKey
+			? visibleSessionKeys.has(linkedSessionKey)
+			: sources.has(agent.sessionSource ?? "pi");
+	});
+}
+
 export function getProjectAgentSessionDisplay({
 	agents,
 	sessions,

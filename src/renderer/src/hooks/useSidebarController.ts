@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAtomValue } from "jotai";
 import type { AgentTab, Project, SessionRecord, SessionSource } from "../../../shared/types";
 import {
   agentInventoryAtom,
   projectInventoryAtom,
+  sessionCatalogLoadStateAtom,
   sessionIdsByProjectAtom,
   sessionRecordsAtom,
   sessionRuntimeByIdAtom,
@@ -33,6 +34,7 @@ export type SidebarCatalog = {
   agents: readonly AgentTab[];
   sessionsByProject: Readonly<Record<string, readonly SessionRecord[]>>;
   runtimeBySessionId: Readonly<Record<string, { agentId?: string; status: string } | undefined>>;
+  catalogLoadStateByProject: Readonly<Record<string, { status: string } | undefined>>;
 };
 
 export type SidebarController = {
@@ -77,6 +79,31 @@ export type SidebarController = {
 
 type StorageLike = Pick<Storage, "getItem" | "setItem">;
 const SOURCE_FILTER_STORAGE_KEY = "pideck-session-source-filter";
+
+export function getBoundSidebarRuntimeAgent(
+  catalog: Pick<SidebarCatalog, "agents" | "runtimeBySessionId">,
+  sessionId: string,
+): AgentTab | undefined {
+  const runtime = catalog.runtimeBySessionId[sessionId];
+  if (!runtime?.agentId || runtime.status === "detached" || runtime.status === "closed" || runtime.status === "error") {
+    return undefined;
+  }
+  const agent = catalog.agents.find((candidate) => candidate.id === runtime.agentId);
+  return agent && agent.status !== "closed" && agent.status !== "error" ? agent : undefined;
+}
+
+export function createSidebarRequestGate() {
+  let menuRequest = 0;
+  let rpcLogRequest = 0;
+  return {
+    beginMenu: () => ++menuRequest,
+    isCurrentMenu: (request: number) => request === menuRequest,
+    cancelMenu: () => { menuRequest += 1; },
+    beginRpcLogs: () => ++rpcLogRequest,
+    isCurrentRpcLogs: (request: number) => request === rpcLogRequest,
+    cancelRpcLogs: () => { rpcLogRequest += 1; },
+  };
+}
 
 export function readSidebarSourceFilters(storage?: StorageLike): SidebarSourceFilters {
   if (!storage) return {};
@@ -125,6 +152,7 @@ export function useSidebarController(options: {
   const sessionRecords = useAtomValue(sessionRecordsAtom);
   const sessionIdsByProject = useAtomValue(sessionIdsByProjectAtom);
   const sessionRuntimeById = useAtomValue(sessionRuntimeByIdAtom);
+  const sessionCatalogLoadStateByProject = useAtomValue(sessionCatalogLoadStateAtom);
   const pageSize = options.pageSize ?? SIDEBAR_PROJECT_CHILD_PAGE_SIZE;
   const [search, setSearch] = useState("");
   const [collapsedProjectIds, setCollapsedProjectIds] = useState<Set<string>>(() => new Set());
@@ -142,6 +170,7 @@ export function useSidebarController(options: {
   const [worktreeCreateProjectId, setWorktreeCreateProjectId] = useState<string>();
   const [rpcLogAgentId, setRpcLogAgentId] = useState<string>();
   const [rpcLogs, setRpcLogs] = useState<SidebarRpcLog[]>([]);
+  const requestGateRef = useRef(createSidebarRequestGate());
 
   useEffect(() => {
     const storage = options.storage ?? (typeof window === "undefined" ? undefined : window.localStorage);
@@ -164,7 +193,8 @@ export function useSidebarController(options: {
     agents,
     sessionsByProject,
     runtimeBySessionId: sessionRuntimeById,
-  }), [agents, projects, sessionRuntimeById, sessionsByProject]);
+    catalogLoadStateByProject: sessionCatalogLoadStateByProject,
+  }), [agents, projects, sessionCatalogLoadStateByProject, sessionRuntimeById, sessionsByProject]);
 
   const toggleProject = useCallback((projectId: string) => {
     setCollapsedProjectIds((current) => {
@@ -204,17 +234,21 @@ export function useSidebarController(options: {
     setExpandedWorktreePaths((current) => new Set(current).add(path));
   }, []);
   const openMenu = useCallback(async (target: SidebarMenuTarget) => {
+    const request = requestGateRef.current.beginMenu();
     if (target.kind === "agent" && options.getRpcLogging) {
       const logging = await options.getRpcLogging(target.agentId);
+      if (!requestGateRef.current.isCurrentMenu(request)) return;
       setAgentRpcLoggingById((current) => new Map(current).set(target.agentId, logging));
     }
-    setMenu(target);
+    if (requestGateRef.current.isCurrentMenu(request)) setMenu(target);
   }, [options.getRpcLogging]);
   const openRpcLogs = useCallback(async (
     agentId: string,
     load: (agentId: string) => Promise<SidebarRpcLog[]>,
   ) => {
+    const request = requestGateRef.current.beginRpcLogs();
     const logs = await load(agentId);
+    if (!requestGateRef.current.isCurrentRpcLogs(request)) return;
     setRpcLogs(logs);
     setRpcLogAgentId(agentId);
   }, []);
@@ -244,7 +278,10 @@ export function useSidebarController(options: {
     finishProjectDrag: () => setDrag({}),
     menu,
     openMenu,
-    closeMenu: () => setMenu(null),
+    closeMenu: () => {
+      requestGateRef.current.cancelMenu();
+      setMenu(null);
+    },
     isAgentRpcLogging: (agentId) => agentRpcLogging.get(agentId) ?? false,
     setAgentRpcLogging: (agentId, enabled) => setAgentRpcLoggingById((current) => new Map(current).set(agentId, enabled)),
     sessionManagerProjectId,
@@ -257,6 +294,7 @@ export function useSidebarController(options: {
     rpcLogs,
     openRpcLogs,
     closeRpcLogs: () => {
+      requestGateRef.current.cancelRpcLogs();
       setRpcLogAgentId(undefined);
       setRpcLogs([]);
     },

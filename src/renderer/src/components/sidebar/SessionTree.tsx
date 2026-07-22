@@ -1,10 +1,10 @@
 import { Fragment, type ReactNode } from "react";
 import { ChevronDown, Trash2 } from "lucide-react";
 import type { AgentTab, Project, SessionRecord, SessionSummary } from "../../../../shared/types";
-import { getAgentForSessionPath, getProjectAgentSessionDisplay, getSessionRowKey } from "../../agentListDisplay";
+import { filterAgentsForSidebarDisplay, getProjectAgentSessionDisplay, getSessionRowKey } from "../../agentListDisplay";
 import { sessionRecordToSummary } from "../../atoms";
 import { t } from "../../i18n";
-import { filterSidebarSessions, type SidebarController } from "../../hooks/useSidebarController";
+import { filterSidebarSessions, getBoundSidebarRuntimeAgent, type SidebarController } from "../../hooks/useSidebarController";
 import type { SidebarActions } from "./SidebarContent";
 
 function matchesSearch(value: string, search: string) {
@@ -38,33 +38,42 @@ export function SessionTree(props: {
     .filter((session) => matchesSearch(session.title, search))
     .filter((session) => filter === null || filter.has(session.source))
     .sort((left, right) => right.updatedAt - left.updatedAt);
-  const summaries = filterSidebarSessions(
-    props.sessions.flatMap((session) => sessionRecordToSummary(session) ? [sessionRecordToSummary(session)!] : []),
-    filter,
-  ).filter((session) => matchesSearch(`${session.name ?? ""}${session.preview}${session.filePath}`, search));
+  const allSummaries = props.sessions.flatMap((session) => {
+    const summary = sessionRecordToSummary(session);
+    return summary ? [summary] : [];
+  });
+  const summaries = filterSidebarSessions(allSummaries, filter)
+    .filter((session) => matchesSearch(`${session.name ?? ""}${session.preview}${session.filePath}`, search));
   const projectAgents = props.agents.filter((agent) => agent.projectId === props.project.id);
-  const display = getProjectAgentSessionDisplay({
+  const displayAgents = filterAgentsForSidebarDisplay({
     agents: projectAgents,
+    allSessions: allSummaries,
+    visibleSessions: summaries,
+    sources: filter,
+  });
+  const display = getProjectAgentSessionDisplay({
+    agents: displayAgents,
     sessions: summaries,
     visibleChildCount: props.visibleChildCount ?? (props.nested ? Number.MAX_SAFE_INTEGER : props.controller.visibleChildCountFor(props.project.id)),
   });
-  const hasRows = draftSessions.length > 0 || display.visibleChildren.length > 0 || display.hiddenChildCount > 0;
+  const catalogLoading = props.controller.catalog.catalogLoadStateByProject[props.project.id]?.status === "loading";
+  const hasRows = catalogLoading || draftSessions.length > 0 || display.visibleChildren.length > 0 || display.hiddenChildCount > 0;
   if (!hasRows) return null;
 
-  const openContext = (event: React.MouseEvent, session: SessionSummary, runtime?: AgentTab) => {
+  const openContext = (event: React.MouseEvent, session: SessionSummary) => {
     event.preventDefault();
+    const runtime = getBoundSidebarRuntimeAgent(props.controller.catalog, session.id);
     void props.controller.openMenu(runtime
       ? { kind: "agent", agentId: runtime.id, x: event.clientX, y: event.clientY }
       : { kind: "session", projectId: props.project.id, sessionId: session.id, x: event.clientX, y: event.clientY });
   };
   const renderSubagent = (session: SessionSummary, label: ReactNode) => {
-    const runtime = getAgentForSessionPath(projectAgents, session.filePath, session.wsl ? "wsl" : "native");
     return (
       <button
         key={getSessionRowKey(session)}
         className={`conversation agent-row session-row codex-subagent-sidebar-row${session.id === props.currentSessionId ? " active" : ""}`}
         title={session.filePath}
-        onContextMenu={(event) => openContext(event, session, runtime)}
+        onContextMenu={(event) => openContext(event, session)}
         onClick={() => void props.actions.sessions.open(props.project.id, session.id)}
       >
         <div className="conversation-body"><div className="conversation-title">{label}</div></div>
@@ -114,6 +123,7 @@ export function SessionTree(props: {
           </button>
         );
       })}
+      {catalogLoading && <div className="project-session-loading"><div className="loader" /><span>{t("app.projectSessionsLoading")}</span></div>}
       {display.visibleChildren.map((child) => {
         const groupKey = `${props.project.id}:${child.key}`;
         const childCount = child.codexSubagents.length + child.piSubagents.length;
@@ -131,12 +141,12 @@ export function SessionTree(props: {
             {renderSubagents(groupKey, child.codexSubagents, child.piSubagents)}
           </Fragment>;
         }
-        const runtime = child.agent;
+        const runtime = getBoundSidebarRuntimeAgent(props.controller.catalog, child.session.id);
         return <Fragment key={getSessionRowKey(child.session)}>
           <button
             className={`conversation agent-row session-row${child.session.id === props.currentSessionId ? " active" : ""}`}
             title={child.session.filePath}
-            onContextMenu={(event) => openContext(event, child.session, runtime)}
+            onContextMenu={(event) => openContext(event, child.session)}
             onClick={() => void props.actions.sessions.open(props.project.id, child.session.id)}
           >
             <span className="session-node-marker" aria-hidden="true" /><div className="conversation-body"><div className="conversation-title">
