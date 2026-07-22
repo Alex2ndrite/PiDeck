@@ -245,6 +245,18 @@ function applySessionRuntimeUiEvent(
         revision: 0,
       }
     : current;
+  if (
+    event.sourceChannel === "agents:state" &&
+    (payload.status === "error" || payload.status === "closed")
+  ) {
+    return {
+      agentId: event.agentId,
+      runtimeGeneration: event.runtimeGeneration,
+      requests: {},
+      widgets: {},
+      revision: base.revision + 1,
+    };
+  }
   if (event.sourceChannel !== "agents:ui-request") return bindingChanged ? base : current;
   const request = toAgentUiRequest(payload, event.agentId);
   if (!request) return base;
@@ -382,7 +394,9 @@ export const applySessionRuntimeEventAtom = atom(
       }
     }
 
-    const nextUi = payload
+    const terminalEnvelope = !bindingChanged &&
+      (currentRuntime.status === "error" || currentRuntime.status === "closed");
+    const nextUi = payload && !(terminalEnvelope && event.sourceChannel === "agents:ui-request")
       ? applySessionRuntimeUiEvent(
           get(sessionRuntimeUiByIdAtom)[event.sessionId],
           event,
@@ -410,6 +424,7 @@ export const claimSessionRuntimeUiResponseAtom = atom(
     requestId: string;
     agentId: string;
     runtimeGeneration: number;
+    request?: AgentUiRequest;
   }) => {
     const current = get(sessionRuntimeUiByIdAtom)[input.sessionId];
     const request = current?.requests[input.requestId];
@@ -417,7 +432,8 @@ export const claimSessionRuntimeUiResponseAtom = atom(
       !current ||
       current.agentId !== input.agentId ||
       current.runtimeGeneration !== input.runtimeGeneration ||
-      request?.status !== "pending"
+      request?.status !== "pending" ||
+      (input.request !== undefined && request.request !== input.request)
     ) {
       return false;
     }
@@ -428,6 +444,40 @@ export const claimSessionRuntimeUiResponseAtom = atom(
         requests: {
           ...current.requests,
           [input.requestId]: { ...request, status: "responding" },
+        },
+      },
+    });
+    return true;
+  },
+);
+
+export const rollbackSessionRuntimeUiResponseAtom = atom(
+  null,
+  (get, set, input: {
+    sessionId: string;
+    requestId: string;
+    agentId: string;
+    runtimeGeneration: number;
+    request?: AgentUiRequest;
+  }) => {
+    const current = get(sessionRuntimeUiByIdAtom)[input.sessionId];
+    const request = current?.requests[input.requestId];
+    if (
+      !current ||
+      current.agentId !== input.agentId ||
+      current.runtimeGeneration !== input.runtimeGeneration ||
+      request?.status !== "responding" ||
+      (input.request !== undefined && request.request !== input.request)
+    ) {
+      return false;
+    }
+    set(sessionRuntimeUiByIdAtom, {
+      ...get(sessionRuntimeUiByIdAtom),
+      [input.sessionId]: {
+        ...current,
+        requests: {
+          ...current.requests,
+          [input.requestId]: { ...request, status: "pending" },
         },
       },
     });

@@ -79,6 +79,7 @@ import {
   replaceAgentInventoryAtom,
   replaceProjectInventoryAtom,
   replaceProjectSessionsAtom,
+  rollbackSessionRuntimeUiResponseAtom,
   sessionRecordByIdAtomFamily,
   sessionRecordsByProjectIdAtomFamily,
   sessionRecordToSummary,
@@ -479,6 +480,7 @@ export function App() {
   const upsertAgent = useSetAtom(upsertAgentInventoryAtom);
   const applyRuntimeCapability = useSetAtom(applyRuntimeCapabilityAtom);
   const claimSessionUiResponse = useSetAtom(claimSessionRuntimeUiResponseAtom);
+  const rollbackSessionUiResponse = useSetAtom(rollbackSessionRuntimeUiResponseAtom);
   const upsertSession = useSetAtom(upsertSessionAtom);
   const setSessionDraft = useSetAtom(setSessionDraftAtom);
   const setSessionAttachments = useSetAtom(setSessionAttachmentsAtom);
@@ -1704,8 +1706,10 @@ export function App() {
       agentId: currentSessionRuntime.agentId ?? "",
       runtimeGeneration: currentSessionRuntime.runtimeGeneration,
     };
-    if (!input.agentId || !claimSessionUiResponse(input)) return;
+    const request = currentSessionRuntimeUi?.requests[requestId]?.request;
+    if (!input.agentId || !request || !claimSessionUiResponse({ ...input, request })) return;
     void api.sessions.sendUiResponse({ ...input, response }).catch((error) => {
+      rollbackSessionUiResponse({ ...input, request });
       showToast(error instanceof Error ? error.message : String(error), 4000);
     });
   }
