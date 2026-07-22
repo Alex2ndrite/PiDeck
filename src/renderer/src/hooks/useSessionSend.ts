@@ -1,4 +1,4 @@
-import { useAtomValue, useSetAtom } from "jotai";
+import { useAtomValue, useSetAtom, useStore } from "jotai";
 import { useRef } from "react";
 import type { MutableRefObject } from "react";
 import type {
@@ -40,9 +40,11 @@ export type UseSessionSendOptions = {
   /** Stable public identity. A8 can remove the fallback after App mounts the leaf. */
   sessionId?: string;
   sendPrompt: SessionPromptApi;
+  /** @deprecated Atom state is authoritative; this callback is intentionally ignored. */
   getComposerText?: () => string;
   templates: PromptTemplate[];
   prepareMessage?: (message: string) => Promise<string>;
+  onDraftMutation?: (sessionId: string) => void;
   compact: (agentId: string, prompt?: string) => Promise<void>;
   resetComposerUi?: () => void;
   recordPromptHistory?: (sessionId: string, message: string) => void;
@@ -112,11 +114,7 @@ export function createSessionSendLock() {
 
 export function useSessionSend(options: UseSessionSendOptions) {
   const selectedSessionId = useAtomValue(currentSessionIdAtom);
-  const drafts = useAtomValue(sessionDraftByIdAtom);
-  const attachmentsBySession = useAtomValue(sessionAttachmentsByIdAtom);
-  const modes = useAtomValue(sessionComposerModeByIdAtom);
-  const runtimes = useAtomValue(sessionRuntimeByIdAtom);
-  const records = useAtomValue(sessionRecordsAtom);
+  const store = useStore();
   const setDraft = useSetAtom(setSessionDraftAtom);
   const setAttachments = useSetAtom(setSessionAttachmentsAtom);
   const setSendState = useSetAtom(setSessionSendStateAtom);
@@ -128,6 +126,7 @@ export function useSessionSend(options: UseSessionSendOptions) {
     if (options.liveDraftsRef) {
       delete options.liveDraftsRef.current[targetSessionId];
     }
+    options.onDraftMutation?.(targetSessionId);
     setDraft({ sessionId: targetSessionId, value: "" });
     setAttachments({ sessionId: targetSessionId, value: [] });
   }
@@ -144,6 +143,7 @@ export function useSessionSend(options: UseSessionSendOptions) {
         currentLiveDraft,
       );
     }
+    options.onDraftMutation?.(targetSessionId);
     setDraft({
       sessionId: targetSessionId,
       value: (current) => [message, current]
@@ -164,14 +164,14 @@ export function useSessionSend(options: UseSessionSendOptions) {
     const sessionId = options.sessionId ?? selectedSessionId;
     if (!sessionId || sendingSessionIdsRef.current.has(sessionId)) return;
 
-    const atomDraft = drafts[sessionId] ?? "";
-    const domText = normalizeComposerDomText(options.getComposerText?.() ?? "");
-    const message = options.getComposerText ? domText : atomDraft;
-    const attachmentSnapshot = attachmentsBySession[sessionId] ?? [];
-    const imageSnapshot = attachmentSnapshot.length ? attachmentSnapshot : undefined;
+    const message = store.get(sessionDraftByIdAtom)[sessionId] ?? "";
+    const attachmentSnapshot = store.get(sessionAttachmentsByIdAtom)[sessionId] ?? [];
+    const imageSnapshot = attachmentSnapshot.length
+      ? [...attachmentSnapshot]
+      : undefined;
     if (!hasComposerSubmission(message, imageSnapshot)) return;
 
-    const runtimeAgentId = runtimes[sessionId]?.agentId;
+    const runtimeAgentId = store.get(sessionRuntimeByIdAtom)[sessionId]?.agentId;
     const trimmedMessage = message.trim();
     if (/^\/compact(?:\s|$)/.test(trimmedMessage)) {
       if (!runtimeAgentId) {
@@ -220,7 +220,7 @@ export function useSessionSend(options: UseSessionSendOptions) {
     );
     const submission = buildComposerPromptSubmission(
       expandedMessage,
-      modes[sessionId] ?? "normal",
+      store.get(sessionComposerModeByIdAtom)[sessionId] ?? "normal",
     );
 
     try {
@@ -242,7 +242,7 @@ export function useSessionSend(options: UseSessionSendOptions) {
         });
       }
 
-      const record = records[sessionId];
+      const record = store.get(sessionRecordsAtom)[sessionId];
       if (record && result.sessionPath) {
         upsertSession({
           ...record,

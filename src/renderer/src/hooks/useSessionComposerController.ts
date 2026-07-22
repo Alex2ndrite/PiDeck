@@ -1,4 +1,4 @@
-import { useAtomValue, useSetAtom } from "jotai";
+import { useAtomValue, useSetAtom, useStore } from "jotai";
 import {
   useCallback,
   useEffect,
@@ -63,6 +63,102 @@ export type UseSessionComposerControllerOptions = {
   onOpenFile?: (path: string) => void;
 };
 
+export type ComposerDraftGuard = {
+  sessionId: string;
+  agentId?: string;
+  runtimeGeneration: number;
+  baselineDraft: string;
+  version: number;
+  pristine: boolean;
+};
+
+export function createComposerDraftGuard(input: {
+  sessionId: string;
+  agentId?: string;
+  runtimeGeneration?: number;
+  draft: string;
+}): ComposerDraftGuard {
+  return {
+    sessionId: input.sessionId,
+    agentId: input.agentId,
+    runtimeGeneration: input.runtimeGeneration ?? 0,
+    baselineDraft: input.draft,
+    version: 0,
+    pristine: input.draft.length === 0,
+  };
+}
+
+export function markComposerDraftMutation(
+  guard: ComposerDraftGuard,
+): ComposerDraftGuard {
+  return { ...guard, version: guard.version + 1, pristine: false };
+}
+
+export function canApplyRuntimeEditorText(
+  guard: ComposerDraftGuard,
+  input: {
+    sessionId: string;
+    agentId: string;
+    runtimeGeneration: number;
+    currentDraft: string;
+  },
+): boolean {
+  return guard.sessionId === input.sessionId &&
+    guard.agentId === input.agentId &&
+    guard.runtimeGeneration === input.runtimeGeneration &&
+    guard.pristine &&
+    guard.baselineDraft === input.currentDraft;
+}
+
+export type LatestRequestToken = { key: string; sequence: number };
+
+export function createLatestRequestGate() {
+  let current = { key: "", sequence: 0 };
+  return {
+    begin(key: string): LatestRequestToken {
+      current = { key, sequence: current.sequence + 1 };
+      return current;
+    },
+    invalidate(key: string) {
+      current = { key, sequence: current.sequence + 1 };
+    },
+    isCurrent(token: LatestRequestToken) {
+      return token.key === current.key && token.sequence === current.sequence;
+    },
+  };
+}
+
+type SessionReferenceMessage = {
+  role: string;
+  content: string;
+  timestamp: number;
+};
+
+export type SessionReferenceSelection = {
+  selectedIndices: number[];
+  entries: Array<{ index: number; message: SessionReferenceMessage }>;
+};
+
+export function createSessionReferenceSelection(
+  selectedIndices: number[],
+  selectedMessages: SessionReferenceMessage[],
+): SessionReferenceSelection {
+  const entries = selectedIndices
+    .map((index, position) => ({ index, message: selectedMessages[position] }))
+    .filter((entry): entry is { index: number; message: SessionReferenceMessage } =>
+      Boolean(entry.message),
+    );
+  return { selectedIndices: entries.map((entry) => entry.index), entries };
+}
+
+export function selectedSessionReferenceMessages(
+  selection: SessionReferenceSelection,
+): SessionReferenceMessage[] {
+  return [...selection.entries]
+    .sort((left, right) => left.index - right.index)
+    .map((entry) => entry.message);
+}
+
 function getBangMode(text: string): "none" | "bang" | "bang-bang" {
   if (text.startsWith("!!")) return "bang-bang";
   if (text.startsWith("!")) return "bang";
@@ -81,6 +177,7 @@ export function useSessionComposerController(
   options: UseSessionComposerControllerOptions,
 ) {
   const { sessionId } = options;
+  const store = useStore();
   const record = useAtomValue(sessionRecordByIdAtomFamily(sessionId));
   const runtime = useAtomValue(sessionRuntimeBySessionIdAtomFamily(sessionId));
   const runtimeUi = useAtomValue(sessionRuntimeUiBySessionIdAtomFamily(sessionId));
@@ -102,6 +199,13 @@ export function useSessionComposerController(
   const editorRef = useRef<HTMLDivElement | null>(null);
   const caretRef = useRef<number | null>(null);
   const liveDomDraftRef = useRef({ sessionId, value: draft });
+  const draftGuardRef = useRef(createComposerDraftGuard({
+    sessionId,
+    agentId: runtime?.agentId,
+    runtimeGeneration: runtime?.runtimeGeneration,
+    draft,
+  }));
+  const templateRequestGateRef = useRef(createLatestRequestGate());
   const promptHistoryRef = useRef<Record<string, string[]>>({});
   const sendBehaviorCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastEditorTextEnvelopeRef = useRef("");
@@ -116,22 +220,29 @@ export function useSessionComposerController(
   const [picker, setPicker] = useState<ComposerPickerKind | null>(null);
   const [commands, setCommands] = useState<PiCommand[]>([]);
   const [files, setFiles] = useState<FileTreeNode[]>([]);
-  const [templates, setTemplates] = useState<PromptTemplateInfo[]>([]);
+  const templateKey = `${sessionId}:${record?.projectPath ?? ""}`;
+  const [templateState, setTemplateState] = useState<{
+    key: string;
+    items: PromptTemplateInfo[];
+  }>({ key: templateKey, items: [] });
+  const templates = templateState.key === templateKey ? templateState.items : [];
   const [sendShortcut, setSendShortcut] = useState<
     "enter-send" | "ctrl-enter-send" | "shift-enter-send"
   >("enter-send");
   const [sessionReference, setSessionReference] = useState<SessionSummary | null>(null);
-  const [sessionReferenceSelections, setSessionReferenceSelections] = useState<Record<
-    string,
-    {
-      messages: Array<{ role: string; content: string; timestamp: number }>;
-      selectedIndices: number[];
-    }
-  >>({});
+  const [sessionReferenceSelections, setSessionReferenceSelections] = useState<
+    Record<string, SessionReferenceSelection>
+  >({});
+
+  const markDraftMutation = useCallback((targetSessionId = sessionId) => {
+    if (targetSessionId !== sessionId) return;
+    draftGuardRef.current = markComposerDraftMutation(draftGuardRef.current);
+  }, [sessionId]);
 
   const setDraft = useCallback((value: string | ((current: string) => string)) => {
+    markDraftMutation();
     setDraftAtom({ sessionId, value });
-  }, [sessionId, setDraftAtom]);
+  }, [markDraftMutation, sessionId, setDraftAtom]);
 
   const setAttachments = useCallback((
     value: ImageContent[] | ((current: ImageContent[]) => ImageContent[]),
@@ -144,6 +255,7 @@ export function useSessionComposerController(
   }, [sessionId, setModeAtom]);
 
   const loadTemplates = useCallback(async () => {
+    const token = templateRequestGateRef.current.begin(templateKey);
     const next: PromptTemplateInfo[] = [];
     try {
       const globalResult = await desktopApi.prompts.list();
@@ -166,9 +278,11 @@ export function useSessionComposerController(
         // A project does not have to provide .pi/prompts.
       }
     }
-    setTemplates(next);
+    if (templateRequestGateRef.current.isCurrent(token)) {
+      setTemplateState({ key: templateKey, items: next });
+    }
     return next;
-  }, [record?.projectPath]);
+  }, [record?.projectPath, sessionId, templateKey]);
 
   useEffect(() => {
     liveDomDraftRef.current = { sessionId, value: draft };
@@ -180,7 +294,25 @@ export function useSessionComposerController(
     setBusyDraftLocked(false);
     setSendBehaviorMenuOpen(false);
     caretRef.current = draft.length;
+    draftGuardRef.current = createComposerDraftGuard({
+      sessionId,
+      agentId: runtime?.agentId,
+      runtimeGeneration: runtime?.runtimeGeneration,
+      draft,
+    });
+    lastEditorTextEnvelopeRef.current = "";
   }, [sessionId]);
+
+  useEffect(() => {
+    const currentDraft = store.get(sessionDraftByIdAtom)[sessionId] ?? "";
+    draftGuardRef.current = createComposerDraftGuard({
+      sessionId,
+      agentId: runtime?.agentId,
+      runtimeGeneration: runtime?.runtimeGeneration,
+      draft: currentDraft,
+    });
+    lastEditorTextEnvelopeRef.current = "";
+  }, [runtime?.agentId, runtime?.runtimeGeneration, sessionId, store]);
 
   useEffect(() => {
     if (
@@ -204,11 +336,20 @@ export function useSessionComposerController(
     const envelope = `${sessionId}:${runtime.runtimeGeneration}:${editorText.revision}`;
     if (lastEditorTextEnvelopeRef.current === envelope) return;
     lastEditorTextEnvelopeRef.current = envelope;
+    const currentDraft = store.get(sessionDraftByIdAtom)[sessionId] ?? "";
+    if (!canApplyRuntimeEditorText(draftGuardRef.current, {
+      sessionId,
+      agentId: runtime.agentId,
+      runtimeGeneration: runtime.runtimeGeneration,
+      currentDraft,
+    })) {
+      return;
+    }
     liveDomDraftRef.current = { sessionId, value: editorText.text };
     setDraft(editorText.text);
     setCursor(editorText.text.length);
     caretRef.current = editorText.text.length;
-  }, [runtime, runtimeUi, sessionId, setDraft]);
+  }, [runtime, runtimeUi, sessionId, setDraft, store]);
 
   useEffect(() => {
     void desktopApi.settings.get().then((settings) => {
@@ -250,8 +391,10 @@ export function useSessionComposerController(
   }, [runtime?.agentId, runtime?.runtimeGeneration]);
 
   useEffect(() => {
+    templateRequestGateRef.current.invalidate(templateKey);
+    setTemplateState({ key: templateKey, items: [] });
     void loadTemplates();
-  }, [loadTemplates]);
+  }, [loadTemplates, templateKey]);
 
   useEffect(() => () => {
     if (sendBehaviorCloseTimerRef.current) {
@@ -332,9 +475,9 @@ export function useSessionComposerController(
       const escaped = raw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       const pattern = new RegExp(escaped, "gi");
       const saved = sessionReferenceSelections[raw];
-      const selectedMessages = saved?.messages ?? await desktopApi.sessions.readMessages(
-        referencedSession.filePath,
-      );
+      const selectedMessages = saved
+        ? selectedSessionReferenceMessages(saved)
+        : await desktopApi.sessions.readMessages(referencedSession.filePath);
       const context = selectedMessages
         .map((item) => `[${item.role === "user" ? "User" : "Assistant"}]: ${item.content}`)
         .join("\n");
@@ -351,9 +494,9 @@ export function useSessionComposerController(
   const send = useSessionSend({
     sessionId,
     sendPrompt: (input) => desktopApi.sessions.sendPrompt(input),
-    getComposerText: () => editorRef.current?.textContent ?? liveDomDraftRef.current.value,
     templates,
     prepareMessage: resolveSessionReferences,
+    onDraftMutation: markDraftMutation,
     compact: async (agentId, prompt) => {
       await desktopApi.agents.compact(agentId, prompt);
     },
@@ -682,7 +825,10 @@ export function useSessionComposerController(
       ) => {
         setSessionReferenceSelections((current) => ({
           ...current,
-          [`&${sessionName}`]: { messages, selectedIndices },
+          [`&${sessionName}`]: createSessionReferenceSelection(
+            selectedIndices,
+            messages,
+          ),
         }));
         setSessionReference(null);
       },

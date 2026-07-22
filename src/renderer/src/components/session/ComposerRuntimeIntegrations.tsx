@@ -23,6 +23,13 @@ export function sameRuntimeHandle(
     left?.runtimeGeneration === right?.runtimeGeneration;
 }
 
+export function widgetDismissalScope(
+  sessionId: string,
+  runtimeGeneration: number | undefined,
+): string {
+  return `${sessionId}:${runtimeGeneration ?? "detached"}`;
+}
+
 export function isCoherentComposerRuntimeUi(
   runtime: RuntimeHandle | undefined,
   runtimeUi: { agentId: string; runtimeGeneration: number } | undefined,
@@ -113,16 +120,20 @@ export function ComposerRuntimeIntegrations(props: {
   const coherentRuntimeUi = isCoherentComposerRuntimeUi(runtimeHandle, runtimeUi)
     ? runtimeUi
     : undefined;
-  const dismissed = dismissedBySession[props.sessionId] ?? [];
+  const dismissalScope = widgetDismissalScope(
+    props.sessionId,
+    runtimeHandle?.runtimeGeneration,
+  );
+  const dismissed = dismissedBySession[dismissalScope] ?? [];
   const widgets = coherentRuntimeUi?.widgets ?? {};
 
   function dismissWidget(widgetKey: string) {
     setDismissedBySession((current) => {
-      const existing = current[props.sessionId] ?? [];
+      const existing = current[dismissalScope] ?? [];
       if (existing.includes(widgetKey)) return current;
       const next = {
         ...current,
-        [props.sessionId]: [...existing, widgetKey],
+        [dismissalScope]: [...existing, widgetKey],
       };
       persistDismissedWidgets(next);
       return next;
