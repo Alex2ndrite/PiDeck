@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const app = readFileSync("src/renderer/src/App.tsx", "utf8");
+const sessionAtoms = readFileSync("src/renderer/src/atoms/session-atoms.ts", "utf8");
 const header = readFileSync(
   "src/renderer/src/components/session/SessionHeader.tsx",
   "utf8",
@@ -14,7 +15,9 @@ function cssRule(selector) {
 }
 
 test("通知锚定在新会话控件下方而不是全局 toast", () => {
-  assert.match(app, /showNotice\(notifyRequest\.message/);
+  assert.match(sessionAtoms, /request\.method === "notify"/);
+  assert.match(sessionAtoms, /notification:\s*\{/);
+  assert.match(app, /showNotice\(\s*notification\.message/);
   assert.match(app, /notice=\{appNotice\?\.message\}/);
 
   const comboIndex = header.indexOf('className="session-combo"');

@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const appSource = readFileSync("src/renderer/src/App.tsx", "utf8");
+const desktopApiSource = readFileSync("src/renderer/src/desktopApi.ts", "utf8");
 const mainSource = readFileSync("src/main/index.ts", "utf8");
 const petWindowSource = readFileSync("src/main/pet/PetWindow.ts", "utf8");
 const preloadPathSource = readFileSync("src/main/preloadPath.ts", "utf8");
@@ -10,17 +11,18 @@ const preloadSource = readFileSync("src/preload/index.ts", "utf8");
 const ipcSource = readFileSync("src/shared/ipc.ts", "utf8");
 
 test("Electron renderer does not fall back to preview browser API when preload is missing", () => {
-	assert.match(appSource, /isElectronRuntime/);
+	assert.match(desktopApiSource, /isElectronRuntime/);
+	assert.match(desktopApiSource, /missingElectronPreload/);
+	assert.match(desktopApiSource, /app\.preloadMissing/);
+	assert.match(desktopApiSource, /function createUnavailableDesktopApi\(/);
+	assert.match(desktopApiSource, /missingElectronPreload\s*\?\s*createUnavailableDesktopApi\(\)/);
 	assert.match(appSource, /missingElectronPreload/);
-	assert.match(appSource, /app\.preloadMissing/);
-	assert.match(appSource, /function createUnavailableDesktopApi\(/);
-	assert.match(appSource, /missingElectronPreload\s*\?\s*createUnavailableDesktopApi\(\)/);
 	assert.doesNotMatch(
-		appSource,
+		desktopApiSource,
 		/window\.piDesktop\s*\?\?\s*\(isLanWeb\s*\?\s*createBrowserApi\(\)\s*:\s*createPreviewApi\(\)\)/,
 	);
 	assert.doesNotMatch(
-		appSource,
+		desktopApiSource,
 		/missingElectronPreload\s*\|\|\s*!isLanWeb\s*\?\s*createPreviewApi\(\)/,
 	);
 });

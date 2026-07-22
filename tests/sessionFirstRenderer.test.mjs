@@ -29,8 +29,7 @@ test("opening a sidebar history selects a SessionRecord without creating an Agen
   const body = functionBody("openSidebarSession");
   assert.match(body, /api\.sessions\.listCatalog\(projectId\)/);
   assert.match(body, /setCurrentSessionId\(record\.id\)/);
-  assert.match(body, /bindSessionRuntime/);
-  assert.doesNotMatch(body, /createAgent\(/);
+  assert.doesNotMatch(body, /bindSessionRuntime|createAgent\(/);
 });
 
 test("the history drawer uses the lazy Session open path", () => {

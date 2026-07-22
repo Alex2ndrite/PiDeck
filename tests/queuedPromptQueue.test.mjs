@@ -6,6 +6,10 @@ import { setI18nLocale, t } from "../src/renderer/src/i18n.ts";
 import { mergeAgentRuntimeState } from "../src/renderer/src/utils/agentRuntimeState.ts";
 
 const appSource = readFileSync("src/renderer/src/App.tsx", "utf8");
+const globalListenersSource = readFileSync(
+  "src/renderer/src/hooks/useGlobalAgentListeners.ts",
+  "utf8",
+);
 const composerPanelsSource = readFileSync(
   "src/renderer/src/components/session/ComposerPanels.tsx",
   "utf8",
@@ -122,7 +126,7 @@ test("composer keeps native typing responsive with a live draft ref and transiti
   assert.match(appSource, /if \(suggestionsOpen\) setComposerCursor\(cursor\)/);
   assert.match(appSource, /queuedPrompt\.behavior === "direct" \? undefined : queuedPrompt\.behavior/);
   assert.match(appSource, /const currentDraft =[\s\S]*?livePromptByAgentRef\.current\[agentId\] \?\? promptByAgent\[agentId\]/);
-  assert.match(appSource, /setPromptForAgent\(request\.agentId, text\)/);
+  assert.match(appSource, /setPromptForAgent\(currentSessionId, editorText\.text\)/);
   assert.match(appSource, /livePromptByAgentRef\.current = migrateAgentRecord/);
   assert.match(composerPanelsSource, /props\.sendBehaviorMenuOpen &&\s*props\.showBusySendControls &&\s*props\.hasComposerContent/);
   assert.match(appSource, /clearTimeout\(sendBehaviorMenuCloseTimerRef\.current\)/);
@@ -130,11 +134,12 @@ test("composer keeps native typing responsive with a live draft ref and transiti
   assert.match(composerPanelsSource, /className="send-behavior-option follow-up"\s*type="button"/);
 });
 
-test("queue drain is serialized and waits for an ordered raw tool-end event", () => {
+test("queue drain is serialized and waits for an ordered global capability event", () => {
   assert.match(appSource, /queueFlushByAgentRef = useRef<Set<string>>/);
+  assert.match(globalListenersSource, /agents\.onRuntimeState\(/);
   assert.match(
     appSource,
-    /previous\?\.isExecutingTool\s*&&\s*!nextState\.isExecutingTool[\s\S]*?flushQueuedSteerPrompts\(payload\.agentId\)/,
+    /previous\?\.isExecutingTool\s*&&\s*!current\.isExecutingTool[\s\S]*?flushQueuedSteerPrompts\(agentId\)/,
   );
   assert.match(runtimeStateSource, /incoming\.toolStateSequence < current\.toolStateSequence/);
   assert.match(agentManagerSource, /updateActiveToolCalls/);

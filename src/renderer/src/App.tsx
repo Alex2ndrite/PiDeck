@@ -13,7 +13,7 @@ import {
   type CSSProperties,
   type ReactNode,
 } from "react";
-import { useAtomValue, useSetAtom } from "jotai";
+import { useAtomValue, useSetAtom, useStore } from "jotai";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
@@ -46,34 +46,48 @@ import {
   X,
 } from "lucide-react";
 import { subscribeToNotice, showNotice } from "./utils/notice";
-import { createPreviewApi } from "./previewApi";
-import { createBrowserApi } from "./browserApi";
+import {
+  desktopApi as api,
+  isLanWeb,
+  missingElectronPreload,
+} from "./desktopApi";
 const ConfigModal = lazy(() => import("./ConfigModal").then((m) => ({ default: m.ConfigModal })));
 import { TrustConfirmModal } from "./components/app/TrustConfirmModal";
 import { TerminalDock } from "./components/terminal/TerminalDock";
 import { FeishuLinkIndicator } from "./components/feishu/FeishuLinkIndicator";
 import { useFeishuBridge } from "./hooks/useFeishuBridge";
+import { useGlobalAgentListeners } from "./hooks/useGlobalAgentListeners";
+import { useProjectRuntimeCapabilities } from "./hooks/useRuntimeCapabilities";
 import { useSessionRuntimeBridge } from "./hooks/useSessionRuntimeBridge";
 import { useSessionMessages } from "./hooks/useSessionMessages";
 import { useSessionSend } from "./hooks/useSessionSend";
 import {
-  bindSessionRuntimeAtom,
+  agentInventoryAtom,
+  applyRuntimeCapabilityAtom,
+  claimSessionRuntimeUiResponseAtom,
   currentSessionAttachmentsAtom,
   currentSessionAtom,
   currentSessionComposerModeAtom,
   currentSessionDraftAtom,
   currentSessionIdAtom,
   currentSessionRuntimeAtom,
+  currentSessionRuntimeUiAtom,
   currentSessionSendStateAtom,
+  projectInventoryAtom,
   removeSessionComposerStateAtom,
   removeSessionStateAtom,
+  replaceAgentInventoryAtom,
+  replaceProjectInventoryAtom,
   replaceProjectSessionsAtom,
-  sessionIdsByProjectAtom,
-  sessionRecordsAtom,
-  sessionRuntimeByIdAtom,
+  sessionRecordByIdAtomFamily,
+  sessionRecordsByProjectIdAtomFamily,
+  sessionRecordToSummary,
+  sessionRuntimeBySessionIdAtomFamily,
+  sessionSummariesByProjectIdAtomFamily,
   setSessionAttachmentsAtom,
   setSessionComposerModeAtom,
   setSessionDraftAtom,
+  upsertAgentInventoryAtom,
   upsertSessionAtom,
 } from "./atoms";
 import { CloseIconButton } from "./components/ui/IconButton";
@@ -188,6 +202,8 @@ import { createDefaultExternalEditorSettings } from "../../shared/types";
 import type {
   AgentRuntimeState,
   AgentTab,
+  AgentUiRequest,
+  AgentUiResponse,
   AppInfo,
   AppSettings,
   AppUpdateDownloadProgress,
@@ -220,53 +236,7 @@ import type {
   SessionRecord,
   SessionSummary,
   ComposerAgentMode,
-  ThinkingUpdate,
 } from "../../shared/types";
-
-const isLanWeb =
-  !window.piDesktop && window.location.protocol.startsWith("http");
-const isElectronRuntime = navigator.userAgent.includes("Electron/");
-const missingElectronPreload = isElectronRuntime && !window.piDesktop;
-function createUnavailableDesktopApi(): typeof window.piDesktop {
-  const fail = () => {
-    throw new Error(t("app.preloadMissing"));
-  };
-  return new Proxy(
-    {},
-    {
-      get: fail,
-      set: fail,
-    },
-  ) as typeof window.piDesktop;
-}
-const api =
-  window.piDesktop ??
-  (missingElectronPreload
-    ? createUnavailableDesktopApi()
-    : isLanWeb
-      ? createBrowserApi()
-      : createPreviewApi());
-
-function sessionRecordToSummary(session: SessionRecord): SessionSummary | undefined {
-  if (!session.filePath) return undefined;
-  return {
-    id: session.id,
-    filePath: session.filePath,
-    projectPath: session.projectPath,
-    name: session.title,
-    parentSessionPath: session.parentSessionPath,
-    preview: session.preview,
-    updatedAt: session.updatedAt,
-    messageCount: session.messageCount,
-    source: session.source,
-    wsl: session.environment === "wsl" || session.wsl || undefined,
-    codexSessionId: session.codexSessionId,
-    codexThreadSource: session.codexThreadSource,
-    codexParentThreadId: session.codexParentThreadId,
-    codexAgentRole: session.codexAgentRole,
-    codexAgentNickname: session.codexAgentNickname,
-  };
-}
 
 // 输入框默认高度增加,提供更好的输入体验,适合多行输入和代码片段
 const COMPOSER_MIN_HEIGHT = 175;
@@ -453,27 +423,6 @@ function getEditorLogoUrl(editorId: string) {
   return EDITOR_LOGO_URLS[editorId];
 }
 
-/** 扩展 UI 请求，适配 onUiRequest 回调中的 request 对象 */
-interface UiRequest {
-	agentId: string;
-	requestId: string;
-	method: string;
-	title: string;
-	options?: string[];
-	placeholder?: string;
-	prefill?: string;
-	allowOther?: boolean;
-	completed?: boolean;
-	value?: string;
-	cancelled?: boolean;
-	message?: string;
-	notifyType?: "info" | "warning" | "error";
-	text?: string;
-	widgetKey?: string;
-	widgetLines?: string[];
-	widgetPlacement?: "aboveEditor" | "belowEditor";
-}
-
 function migrateAgentRecord<T>(
   current: Record<string, T>,
   replacementById: Map<string, string>,
@@ -511,24 +460,29 @@ export function App() {
   }
 
   useSessionRuntimeBridge();
+  const store = useStore();
   const [, startPromptTransition] = useTransition();
   const currentSessionId = useAtomValue(currentSessionIdAtom);
   const currentSession = useAtomValue(currentSessionAtom);
   const currentSessionRuntime = useAtomValue(currentSessionRuntimeAtom);
+  const currentSessionRuntimeUi = useAtomValue(currentSessionRuntimeUiAtom);
   const currentSessionDraft = useAtomValue(currentSessionDraftAtom);
   const currentSessionAttachments = useAtomValue(currentSessionAttachmentsAtom);
   const currentSessionComposerMode = useAtomValue(currentSessionComposerModeAtom);
   const currentSessionSendState = useAtomValue(currentSessionSendStateAtom);
-  const sessionRecords = useAtomValue(sessionRecordsAtom);
-  const sessionRecordIdsByProject = useAtomValue(sessionIdsByProjectAtom);
-  const sessionRuntimeById = useAtomValue(sessionRuntimeByIdAtom);
+  const projects = useAtomValue(projectInventoryAtom);
+  const agents = useAtomValue(agentInventoryAtom);
   const setCurrentSessionId = useSetAtom(currentSessionIdAtom);
   const replaceProjectSessions = useSetAtom(replaceProjectSessionsAtom);
+  const setProjects = useSetAtom(replaceProjectInventoryAtom);
+  const setAgents = useSetAtom(replaceAgentInventoryAtom);
+  const upsertAgent = useSetAtom(upsertAgentInventoryAtom);
+  const applyRuntimeCapability = useSetAtom(applyRuntimeCapabilityAtom);
+  const claimSessionUiResponse = useSetAtom(claimSessionRuntimeUiResponseAtom);
   const upsertSession = useSetAtom(upsertSessionAtom);
   const setSessionDraft = useSetAtom(setSessionDraftAtom);
   const setSessionAttachments = useSetAtom(setSessionAttachmentsAtom);
   const setSessionComposerMode = useSetAtom(setSessionComposerModeAtom);
-  const bindSessionRuntime = useSetAtom(bindSessionRuntimeAtom);
   const removeSessionState = useSetAtom(removeSessionStateAtom);
   const removeSessionComposerState = useSetAtom(removeSessionComposerStateAtom);
   const {
@@ -540,7 +494,6 @@ export function App() {
   const openSessionRequestRef = useRef(0);
   const creatingSessionDraftRef = useRef<Set<string>>(new Set());
 
-  const [projects, setProjects] = useState<Project[]>([]);
   // 项目的 git worktree 列表：{ parentId -> WorktreeEntry[] }
   const [worktreesByProject, setWorktreesByProject] = useState<
     Record<string, WorktreeEntry[]>
@@ -548,7 +501,6 @@ export function App() {
   const [branchByProject, setBranchByProject] = useState<Record<string, string | null>>({});
   const [draggingProjectId, setDraggingProjectId] = useState<string>();
   const [dragOverProjectId, setDragOverProjectId] = useState<string>();
-  const [agents, setAgents] = useState<AgentTab[]>([]);
   const [pendingAgents, setPendingAgents] = useState<PendingAgentTab[]>([]);
   const [activeProjectId, setActiveProjectId] = useState<string>();
   const activeProjectIdRef = useRef<string | undefined>(activeProjectId);
@@ -568,14 +520,7 @@ export function App() {
     new Set(),
   );
 
-  const [messagesByAgent, setMessagesByAgent] = useState<
-    Record<string, ChatMessage[]>
-  >({});
   const [files, setFiles] = useState<FileTreeNode[]>([]);
-  const [sessions, setSessions] = useState<SessionSummary[]>([]);
-  const [sessionsByProject, setSessionsByProject] = useState<
-    Record<string, SessionSummary[]>
-  >({});
   /** 会话扫描可能由项目展开、运行态结束和周期同步同时触发；按项目丢弃旧响应，避免慢请求覆盖新子会话。 */
   const sessionRequestByProjectRef = useRef<Record<string, number>>({});
   const sessionRefreshRunningRef = useRef<Set<string>>(new Set());
@@ -590,11 +535,7 @@ export function App() {
     branches: [],
   });
   const [commands, setCommands] = useState<PiCommand[]>([]);
-  const [runtimeStateByAgent, setRuntimeStateByAgent] = useState<
-    Record<string, AgentRuntimeState>
-  >({});
   const runtimeStateByAgentRef = useRef<Record<string, AgentRuntimeState>>({});
-  runtimeStateByAgentRef.current = runtimeStateByAgent;
   const [availableModels, setAvailableModels] = useState<AvailableModel[]>([]);
   const [modelPickerOpen, setModelPickerOpen] = useState(false);
   const [promptTemplatePickerOpen, setPromptTemplatePickerOpen] = useState(false);
@@ -674,12 +615,6 @@ export function App() {
       }
     });
   }, []);
-  /** 活跃的 Extension UI 请求 map（requestId → UiRequest），用于实时显示 ask_question 卡片 */
-  const [activeUiRequest, setActiveUiRequest] = useState<Record<string, UiRequest> | null>(null);
-  /** Extension 通过 RPC setWidget 推送的轻量状态块；按 agent 隔离，避免切换会话串台。 */
-  const [extensionWidgetsByAgent, setExtensionWidgetsByAgent] = useState<
-    Record<string, Record<string, string[]>>
-  >({});
   /** Extension widget 容器折叠状态（全局持久化，不按 agentId 隔离，重启后恢复） */
   const [widgetsCollapsed, setWidgetsCollapsed] = useState(() => {
     try {
@@ -748,9 +683,6 @@ export function App() {
     Record<string, { messages: Array<{ role: string; content: string }>; fullContext: boolean; selectedIndices: number[] }>
   >({});
 
-  const [streamingThinking, setStreamingThinking] = useState<
-    Record<string, string>
-  >({});
   /** 每个 agent 最后一次会话的开始时间(status 变为 running 时记录),用 ref 避免 effect 闭包陈旧 */
   const sessionStartByAgentRef = useRef<Record<string, number>>({});
   /** 每个 agent 最后一次会话的总时长(ms),仅在会话结束后更新 */
@@ -1194,6 +1126,17 @@ export function App() {
     }
   }, [editorTabs.length, drawer]);
   const [sessionsProjectId, setSessionsProjectId] = useState<string>();
+  const sessions = useAtomValue(
+    sessionSummariesByProjectIdAtomFamily(sessionsProjectId ?? ""),
+  );
+  const getProjectSessions = (projectId: string) =>
+    store.get(sessionSummariesByProjectIdAtomFamily(projectId));
+  const getProjectSessionRecords = (projectId: string) =>
+    store.get(sessionRecordsByProjectIdAtomFamily(projectId));
+  const getSessionRecord = (sessionId: string) =>
+    store.get(sessionRecordByIdAtomFamily(sessionId));
+  const getSessionRuntime = (sessionId: string) =>
+    store.get(sessionRuntimeBySessionIdAtomFamily(sessionId));
   const [sessionHistoryLoading, setSessionHistoryLoading] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<AppUpdateInfo | null>(null);
@@ -1448,6 +1391,7 @@ export function App() {
     }
   }, [feishu.bots, sessionFeishuBotId]);
 
+  const activeProjectRuntimeCapabilities = useProjectRuntimeCapabilities(activeProjectId);
   const activeProject = projects.find(
     (project) => project.id === activeProjectId,
   );
@@ -1519,7 +1463,7 @@ export function App() {
     if (nextValue) livePromptByAgentRef.current[targetAgentId] = nextValue;
     else delete livePromptByAgentRef.current[targetAgentId];
     // 程序化更新（建议选择、历史恢复、发送后清空等）需要同步更新 state。
-    if (currentSessionIdRef.current === targetAgentId || sessionRecords[targetAgentId]) {
+    if (currentSessionIdRef.current === targetAgentId || getSessionRecord(targetAgentId)) {
       setSessionDraft({ sessionId: targetAgentId, value: nextValue });
       if (currentSessionIdRef.current === targetAgentId) syncComposerFlags(nextValue);
       return;
@@ -1556,7 +1500,7 @@ export function App() {
     else delete livePromptByAgentRef.current[agentId];
 
     syncComposerFlags(value);
-    if (currentSessionIdRef.current === agentId || sessionRecords[agentId]) {
+    if (currentSessionIdRef.current === agentId || getSessionRecord(agentId)) {
       startPromptTransition(() => {
         setSessionDraft({ sessionId: agentId, value });
       });
@@ -1605,7 +1549,7 @@ export function App() {
     agentId: string,
     value: ImageContent[] | ((current: ImageContent[]) => ImageContent[]),
   ) {
-    if (currentSessionIdRef.current === agentId || sessionRecords[agentId]) {
+    if (currentSessionIdRef.current === agentId || getSessionRecord(agentId)) {
       setSessionAttachments({ sessionId: agentId, value });
       return;
     }
@@ -1675,7 +1619,7 @@ export function App() {
   const drawerPinned = Boolean(drawerPinnedPanel);
   const activeMessages = currentSessionId ? currentSessionMessages : [];
   const agentRuntimeState = activeAgentId
-    ? runtimeStateByAgent[activeAgentId]
+    ? activeProjectRuntimeCapabilities[activeAgentId]
     : undefined;
   const activeRuntimeState = currentSessionId
     ? (currentSessionRuntime?.state ?? (
@@ -1712,8 +1656,8 @@ export function App() {
       agent.projectId === activeProjectId && (
         agent.status === "starting" ||
         agent.status === "running" ||
-        runtimeStateByAgent[agent.id]?.isStreaming ||
-        runtimeStateByAgent[agent.id]?.isExecutingTool
+        activeProjectRuntimeCapabilities[agent.id]?.isStreaming ||
+        activeProjectRuntimeCapabilities[agent.id]?.isExecutingTool
       ),
     ),
   );
@@ -1722,12 +1666,12 @@ export function App() {
     return displayAgents
       .filter((agent) => agent.projectId === activeProjectId)
       .map((agent) => {
-        const runtime = runtimeStateByAgent[agent.id];
+        const runtime = activeProjectRuntimeCapabilities[agent.id];
         return `${agent.id}:${agent.status}:${runtime?.isStreaming ? 1 : 0}:${runtime?.isExecutingTool ? 1 : 0}`;
       })
       .sort()
       .join("|");
-  }, [activeProjectId, displayAgents, runtimeStateByAgent]);
+  }, [activeProjectId, activeProjectRuntimeCapabilities, displayAgents]);
 
   // 消息分页:超过 100 条消息时启用,大幅减少输入卡顿
   // 首屏 100 条,每次加载 100 条,一页一页懒加载
@@ -1745,15 +1689,26 @@ export function App() {
   });
 
 
-  // 从 activeUiRequest 提取正在进行的交互式请求（select/confirm/input/editor）
-  // 这是 ask_question 在 pi RPC 模式下的表现方式：pi 通过 extension_ui_request 将
-  // 等待用户回答的对话框发送到桌面端，包含 requestId、title、options 等完整信息。
-  const activeUiAsk = useMemo(() => {
-    if (!activeUiRequest) return undefined;
-    return Object.values(activeUiRequest).find(
-      (req) => !req.completed && ["select", "confirm", "input", "editor"].includes(req.method),
-    );
-  }, [activeUiRequest]);
+  const activeUiAsk: AgentUiRequest | undefined = useMemo(() => {
+    if (!currentSessionRuntimeUi) return undefined;
+    return Object.values(currentSessionRuntimeUi.requests).find(
+      (entry) => entry.status === "pending",
+    )?.request;
+  }, [currentSessionRuntimeUi]);
+
+  function sendSessionUiResponse(requestId: string, response: AgentUiResponse) {
+    if (!currentSessionId || !currentSessionRuntime) return;
+    const input = {
+      sessionId: currentSessionId,
+      requestId,
+      agentId: currentSessionRuntime.agentId ?? "",
+      runtimeGeneration: currentSessionRuntime.runtimeGeneration,
+    };
+    if (!input.agentId || !claimSessionUiResponse(input)) return;
+    void api.sessions.sendUiResponse({ ...input, response }).catch((error) => {
+      showToast(error instanceof Error ? error.message : String(error), 4000);
+    });
+  }
   // dialog 显示条件：仅当有活跃的交互式 UI 请求时
   const showAskDialog = activeUiAsk !== undefined;
   // 用 body class 控制内联 ask 卡片的显示
@@ -1763,12 +1718,54 @@ export function App() {
   }, [showAskDialog]);
 
 
-  /** 当前活跃 agent 的实时思考文本 */
-  const activeThinking = currentSessionId
-    ? (currentSessionRuntime?.thinking ?? "")
-    : activeAgentId
-      ? (streamingThinking[activeAgentId] ?? "")
-      : "";
+  const lastSessionUiNoticeRef = useRef("");
+  useEffect(() => {
+    const notification = currentSessionRuntimeUi?.notification;
+    if (!currentSessionId || !notification) return;
+    const key = `${currentSessionId}:${currentSessionRuntimeUi.runtimeGeneration}:${notification.revision}`;
+    if (lastSessionUiNoticeRef.current === key) return;
+    lastSessionUiNoticeRef.current = key;
+    showNotice(
+      notification.message,
+      notification.notifyType === "error" ? 5000 : 3500,
+    );
+  }, [currentSessionId, currentSessionRuntimeUi]);
+
+  const lastSessionEditorTextRef = useRef("");
+  useEffect(() => {
+    const editorText = currentSessionRuntimeUi?.editorText;
+    if (!currentSessionId || !editorText) return;
+    const key = `${currentSessionId}:${currentSessionRuntimeUi.runtimeGeneration}:${editorText.revision}`;
+    if (lastSessionEditorTextRef.current === key) return;
+    lastSessionEditorTextRef.current = key;
+    setPromptForAgent(currentSessionId, editorText.text);
+    setComposerCursor(editorText.text.length);
+    pendingComposerCaretRef.current = editorText.text.length;
+  }, [currentSessionId, currentSessionRuntimeUi]);
+
+  useEffect(() => {
+    if (!activeWidgetSessionKey || !currentSessionRuntimeUi) return;
+    const widgetKeys = Object.keys(currentSessionRuntimeUi.widgets);
+    if (widgetKeys.length === 0) return;
+    setAgentDismissedWidgets((current) => {
+      const dismissed = current[activeWidgetSessionKey];
+      if (!dismissed?.some((key) => widgetKeys.includes(key))) return current;
+      return {
+        ...current,
+        [activeWidgetSessionKey]: dismissed.filter((key) => !widgetKeys.includes(key)),
+      };
+    });
+  }, [activeWidgetSessionKey, currentSessionRuntimeUi?.revision]);
+
+  useEffect(() => {
+    if (activeUiAsk?.method !== "input" || !pendingCustomInputRef.current) return;
+    const value = pendingCustomInputRef.current;
+    pendingCustomInputRef.current = "";
+    sendSessionUiResponse(activeUiAsk.requestId, { value });
+  }, [activeUiAsk]);
+
+  /** 当前 Session 的实时思考文本只来自 generation envelope。 */
+  const activeThinking = currentSessionRuntime?.thinking ?? "";
   const activeTerminalHeight = activeAgentId
     ? (terminalHeightByAgent[activeAgentId] ?? COMPOSER_DEFAULT_TERMINAL_HEIGHT)
     : COMPOSER_DEFAULT_TERMINAL_HEIGHT;
@@ -1960,9 +1957,8 @@ export function App() {
   const flatFiles = useMemo(() => flattenFiles(files), [files]);
   // 优化:建议项计算仅在必要时触发,避免每次输入都重计算导致卡顿
   // 只有当建议框打开时才计算,关闭时返回空数组
-  const activeProjectSessions = useMemo(
-    () => (activeProjectId ? sessionsByProject[activeProjectId] ?? [] : []),
-    [activeProjectId, sessionsByProject],
+  const activeProjectSessions = useAtomValue(
+    sessionSummariesByProjectIdAtomFamily(activeProjectId ?? ""),
   );
 
   const suggestionItems = useMemo(
@@ -2039,7 +2035,7 @@ export function App() {
       projects.filter((project) => {
         // worktree 子项目不显示在主列表中，只在父项目下以子项展示
         if (project.worktreeParentId) return false;
-        const projectSessions = sessionsByProject[project.id] ?? [];
+        const projectSessions = getProjectSessions(project.id);
         return (
           matches(project.name + project.path, search) ||
           displayAgents.some(
@@ -2058,7 +2054,7 @@ export function App() {
           )
         );
       }),
-    [displayAgents, projects, search, sessionsByProject],
+    [displayAgents, projects, search],
   );
   const projectIdsKey = useMemo(
     () => projects.map((project) => project.id).join("\n"),
@@ -2066,9 +2062,134 @@ export function App() {
   );
   const canReorderProjects = search.trim().length === 0;
 
+  function handleAgentInventoryChanged(nextAgents: AgentTab[]) {
+    const previousPendingAgents = pendingAgentsRef.current;
+    const remainingPendingAgents = previousPendingAgents.filter(
+      (pending) => !nextAgents.some((agent) =>
+        isReplacementForPendingAgent(agent, pending),
+      ),
+    );
+    const pendingReplacementById = new Map(
+      previousPendingAgents
+        .map((pending) => {
+          const replacement = nextAgents.find((agent) =>
+            isReplacementForPendingAgent(agent, pending),
+          );
+          return replacement ? [pending.id, replacement.id] : undefined;
+        })
+        .filter((entry): entry is [string, string] => Boolean(entry)),
+    );
+    if (remainingPendingAgents.length !== previousPendingAgents.length) {
+      pendingAgentsRef.current = remainingPendingAgents;
+      setPendingAgents(remainingPendingAgents);
+    }
+    const activeIds = new Set(nextAgents.map((agent) => agent.id));
+    const activeProjectIds = new Set(nextAgents.map((agent) => agent.projectId));
+    const draftIds = new Set([
+      ...nextAgents.map((agent) => agent.id),
+      ...remainingPendingAgents.map((agent) => agent.id),
+    ]);
+    setTerminalDockStateByAgent((current) =>
+      pruneTerminalDockState(current, activeIds),
+    );
+    setTerminalHeightByAgent((current) => Object.fromEntries(
+      Object.entries(current).filter(([agentId]) => activeIds.has(agentId)),
+    ));
+    setDrawerPinnedByProject((current) => Object.fromEntries(
+      Object.entries(current).filter(([projectId]) => activeProjectIds.has(projectId)),
+    ));
+    setPromptByAgent((current) => {
+      const next = migrateAgentRecord(current, pendingReplacementById, draftIds);
+      livePromptByAgentRef.current = migrateAgentRecord(
+        livePromptByAgentRef.current,
+        pendingReplacementById,
+        draftIds,
+      );
+      return next;
+    });
+    setAttachedImagesByAgent((current) =>
+      migrateAgentRecord(current, pendingReplacementById, draftIds),
+    );
+    updateQueuedPrompts((current) =>
+      migrateQueuedPrompts(current, pendingReplacementById, draftIds),
+    );
+    for (const [oldAgentId] of pendingReplacementById) {
+      queueFlushByAgentRef.current.delete(oldAgentId);
+    }
+    for (const agentId of queueFlushByAgentRef.current) {
+      if (!draftIds.has(agentId)) queueFlushByAgentRef.current.delete(agentId);
+    }
+  }
+
+  useGlobalAgentListeners({
+    onProjectsChanged: (next) => {
+      if (!activeProjectId && next.length > 0) setActiveProjectId(next[0].id);
+    },
+    onAgentInventoryChanged: handleAgentInventoryChanged,
+    onRuntimeCapabilityChanged: ({ agentId, previous, current, patch }) => {
+      runtimeStateByAgentRef.current = {
+        ...runtimeStateByAgentRef.current,
+        [agentId]: current,
+      };
+      if (
+        previous?.isExecutingTool &&
+        !current.isExecutingTool &&
+        (patch.toolStateSequence == null ||
+          previous.toolStateSequence == null ||
+          patch.toolStateSequence >= previous.toolStateSequence) &&
+        isAgentCurrentlyBusy(agentId)
+      ) {
+        void flushQueuedSteerPrompts(agentId);
+      }
+    },
+    onAgentLog: (payload) => {
+      setLogs((current) => {
+        const nextLog = `[${payload.agentId.slice(0, 8)}] ${payload.text}`;
+        return current.length < 200
+          ? [...current, nextLog]
+          : [...current.slice(-199), nextLog];
+      });
+    },
+    onSettingsApplied: (next) => {
+      setSettings(next);
+      showToast(t("settings.restartNotice"));
+    },
+    onUpdateProgress: (progress) => {
+      setUpdateProgress(progress);
+      if (progress.state === "completed") {
+        setUpdateDownloading(false);
+        setDownloadedUpdatePath(progress.filePath ?? null);
+      } else if (progress.state === "failed") {
+        setUpdateDownloading(false);
+        setUpdateError(progress.error ?? t("update.downloadFailed"));
+      }
+    },
+    onOpenInBrowser: (url) => {
+      setDrawer("browser");
+      setDrawerCollapsed(false);
+      navigateTo(url);
+    },
+    onTrustRequest: setTrustRequest,
+    onFocusTarget: (target) => {
+      const agent = displayAgentsRef.current.find((item) => item.id === target.agentId);
+      if (!agent) return;
+      void (async () => {
+        setActiveProjectId(agent.projectId);
+        if (!agent.sessionPath) {
+          setCurrentSessionId(undefined);
+          return;
+        }
+        const records = await api.sessions.listCatalog(agent.projectId);
+        replaceProjectSessions({ projectId: agent.projectId, sessions: records });
+        const session = records.find((record) =>
+          isSameSessionPath(record.filePath, agent.sessionPath, record.environment),
+        );
+        setCurrentSessionId(session?.id);
+      })().catch(() => setCurrentSessionId(undefined));
+    },
+  });
+
   useEffect(() => {
-    window.setTimeout(() => void refreshProjects(), 0);
-    window.setTimeout(() => void api.agents.list().then(setAgents), 0);
     void api.editors.list().then(setExternalEditors).catch(() => undefined);
     void api.app
       .preferredSystemLanguages()
@@ -2100,236 +2221,6 @@ export function App() {
       }
     });
 
-    const offProjects = api.projects.onChanged((next) => {
-      setProjects(next);
-      if (!activeProjectId && next.length > 0) setActiveProjectId(next[0].id);
-    });
-    const offState = api.agents.onState((nextAgents) => {
-      const previousPendingAgents = pendingAgentsRef.current;
-      const remainingPendingAgents = previousPendingAgents.filter(
-        (pending) =>
-          !nextAgents.some((agent) =>
-            isReplacementForPendingAgent(agent, pending),
-          ),
-      );
-      const pendingReplacementById = new Map(
-        previousPendingAgents
-          .map((pending) => {
-            const replacement = nextAgents.find((agent) =>
-              isReplacementForPendingAgent(agent, pending),
-            );
-            return replacement ? [pending.id, replacement.id] : undefined;
-          })
-          .filter((entry): entry is [string, string] => Boolean(entry)),
-      );
-      if (remainingPendingAgents.length !== previousPendingAgents.length) {
-        pendingAgentsRef.current = remainingPendingAgents;
-        setPendingAgents(remainingPendingAgents);
-      }
-      setAgents(nextAgents);
-      const activeIds = new Set(nextAgents.map((agent) => agent.id));
-      const activeProjectIds = new Set(nextAgents.map((agent) => agent.projectId));
-      const draftIds = new Set([
-        ...nextAgents.map((agent) => agent.id),
-        ...remainingPendingAgents.map((agent) => agent.id),
-      ]);
-      setTerminalDockStateByAgent((current) =>
-        pruneTerminalDockState(current, activeIds),
-      );
-      setTerminalHeightByAgent((current) =>
-        Object.fromEntries(
-          Object.entries(current).filter(([agentId]) => activeIds.has(agentId)),
-        ),
-      );
-      setDrawerPinnedByProject((current) =>
-        Object.fromEntries(
-          Object.entries(current).filter(([projectId]) => activeProjectIds.has(projectId)),
-        ),
-      );
-      setPromptByAgent((current) => {
-        const next = migrateAgentRecord(current, pendingReplacementById, draftIds);
-        livePromptByAgentRef.current = migrateAgentRecord(
-          livePromptByAgentRef.current,
-          pendingReplacementById,
-          draftIds,
-        );
-        return next;
-      });
-      setAttachedImagesByAgent((current) =>
-        migrateAgentRecord(current, pendingReplacementById, draftIds),
-      );
-      // 发送中的条目必须保持 sending，直到对应 IPC promise 明确完成。
-      // 普通 state 推送（包括 sendPrompt 先发出的 running）不能把它重新开放为可撤回。
-      updateQueuedPrompts((current) =>
-        migrateQueuedPrompts(current, pendingReplacementById, draftIds),
-      );
-      for (const [oldAgentId] of pendingReplacementById) {
-        queueFlushByAgentRef.current.delete(oldAgentId);
-      }
-      for (const agentId of queueFlushByAgentRef.current) {
-        if (!draftIds.has(agentId)) queueFlushByAgentRef.current.delete(agentId);
-      }
-      // 裁剪已关闭 agent 的消息缓存，释放 renderer 内存；重启占位需要参与 liveIds，避免旧进程移除时聊天记录闪空。
-      setMessagesByAgent((current) =>
-        migrateAgentRecord(current, pendingReplacementById, draftIds),
-      );
-    });
-    // 优化:历史会话加载时消息更新频繁,只在消息真正变化时更新 state,避免不必要的重渲染导致输入卡顿
-    const offMessages = api.agents.onMessages((payload) =>
-      setMessagesByAgent((current) => {
-        const prevMessages = current[payload.agentId];
-        // 消息数量相同且引用相同时跳过更新,减少输入框重渲染
-        if (
-          prevMessages?.length === payload.messages.length &&
-          prevMessages === payload.messages
-        ) {
-          return current;
-        }
-        return {
-          ...current,
-          [payload.agentId]: payload.messages,
-        };
-      }),
-    );
-    const offLog = api.agents.onLog((payload) =>
-      setLogs((current) => {
-        // 优化:只在超过200条时才slice,减少不必要的数组操作
-        const newLog = `[${payload.agentId.slice(0, 8)}] ${payload.text}`;
-        if (current.length < 200) {
-          return [...current, newLog];
-        }
-        return [...current.slice(-199), newLog];
-      }),
-    );
-    const offSettings = api.settings.onApplyWindow((next) => {
-      setSettings(next);
-      showToast(t("settings.restartNotice"));
-    });
-    const offUpdateProgress = api.app.onUpdateProgress((progress) => {
-      setUpdateProgress(progress);
-      if (progress.state === "completed") {
-        setUpdateDownloading(false);
-        setDownloadedUpdatePath(progress.filePath ?? null);
-      } else if (progress.state === "failed") {
-        setUpdateDownloading(false);
-        setUpdateError(progress.error ?? t("update.downloadFailed"));
-      }
-    });
-    // 直接在原始 runtimeState 事件上识别 tool true→false，避免 React 把很快的
-    // tool_start/tool_end 批量成一次 render 后漏掉 steer 的投递窗口。
-    const offOpenInBrowser = api.app.onOpenInBrowser?.((url: string) => {
-      setDrawer("browser");
-      setDrawerCollapsed(false);
-      navigateTo(url);
-    });
-    const offRuntimeState = api.agents.onRuntimeState((payload) => {
-      const previous = runtimeStateByAgentRef.current[payload.agentId];
-      const nextState = applyAgentRuntimeState(payload.agentId, payload.state);
-      // tool start/end 会由主进程以轻量 patch 立即推送；与最近一次完整状态合并，
-      // 避免为了保证工具边沿顺序而短暂丢失模型、token 等运行信息。
-      if (
-        previous?.isExecutingTool &&
-        !nextState.isExecutingTool &&
-        (payload.state.toolStateSequence == null ||
-          previous.toolStateSequence == null ||
-          payload.state.toolStateSequence >= previous.toolStateSequence) &&
-        isAgentCurrentlyBusy(payload.agentId)
-      ) {
-        void flushQueuedSteerPrompts(payload.agentId);
-      }
-    });
-    // 监听流式思考内容更新,用于在 agent 响应前展示推理过程
-    const offThinking = api.agents.onThinking((payload: ThinkingUpdate) =>
-      setStreamingThinking((current) => ({
-        ...current,
-        [payload.agentId]: payload.thinking,
-      })),
-    );
-    // 监听 Extension UI 请求：对话类渲染为提问卡片；setWidget 类作为 composer 上方的轻量状态块展示。
-    const offUiRequest = api.agents.onUiRequest((request) => {
-      if (request.method === "notify") {
-        const notifyRequest = request as UiRequest;
-        if (notifyRequest.message) {
-          showNotice(notifyRequest.message, notifyRequest.notifyType === "error" ? 5000 : 3500);
-        }
-        return;
-      }
-
-      if (request.method === "set_editor_text") {
-        const editorRequest = request as UiRequest;
-        const text = editorRequest.text ?? "";
-        setPromptForAgent(request.agentId, text);
-        if (request.agentId === activeAgentIdRef.current) {
-          setComposerCursor(text.length);
-          pendingComposerCaretRef.current = text.length;
-        }
-        return;
-      }
-
-      if (request.method === "setWidget") {
-        const widgetRequest = request as UiRequest;
-        const widgetKey = widgetRequest.widgetKey || widgetRequest.requestId;
-        const widgetLines = Array.isArray(widgetRequest.widgetLines)
-          ? widgetRequest.widgetLines.filter((line) => typeof line === "string")
-          : [];
-        setExtensionWidgetsByAgent((current) => {
-          const agentWidgets = { ...(current[request.agentId] ?? {}) };
-          if (widgetLines.length > 0) agentWidgets[widgetKey] = widgetLines;
-          else delete agentWidgets[widgetKey];
-          return { ...current, [request.agentId]: agentWidgets };
-        });
-        // agent 推送了新的 widget 内容，清除该 widget 的关闭标记使其重新显示
-        if (widgetLines.length > 0) {
-          setAgentDismissedWidgets((prev) => {
-            const current = prev[request.agentId];
-            if (!current?.includes(widgetKey)) return prev;
-            return {
-              ...prev,
-              [request.agentId]: current.filter((k) => k !== widgetKey),
-            };
-          });
-        }
-        return;
-      }
-
-      setActiveUiRequest((current) => {
-        // 如果 requestId 已存在且带了 completed 标记，清除该请求
-        if (current?.[request.requestId] && request.completed) {
-          const next = { ...current };
-          delete next[request.requestId];
-          if (Object.keys(next).length === 0) return null;
-          return next;
-        }
-        /* 用户通过 select 弹框自定义输入框提交自定义值后，Pi 会收到 "✎ 自行输入..."
-           选项值并发送 input 弹框让用户输入。此处检测到 pending 值后自动提交 input
-           弹框，对用户表现为一次提交即完成，无需二次输入。 */
-        if (request.method === "input" && pendingCustomInputRef.current) {
-          const value = pendingCustomInputRef.current;
-          pendingCustomInputRef.current = "";
-          api.agents.sendUiResponse(activeAgentIdRef.current ?? "", request.requestId, { value });
-          return current; // 不显示 input 弹框
-        }
-        // 新增或更新 UI 请求
-        return { ...(current ?? {}), [request.requestId]: request as UiRequest };
-      });
-    });
-    // 监听项目信任确认请求：主进程在启动 pi 前对含 .pi 资源的项目发起，弹窗等待用户决策
-    const offTrustRequest = api.agents.onTrustRequest((request) => {
-      setTrustRequest(request);
-    });
-    return () => {
-      offProjects();
-      offState();
-      offMessages();
-      offLog();
-      offSettings();
-      offUpdateProgress();
-      offOpenInBrowser?.();
-      offRuntimeState();
-      offThinking();
-      offUiRequest();
-      offTrustRequest();
-    };
   }, []);
 
   // 全局快捷键：Cmd/Ctrl+Shift+S 呼出/收起草稿本；Esc 关闭
@@ -2353,47 +2244,8 @@ export function App() {
     return () => window.removeEventListener("keydown", handler);
   }, [scratchPadToggle, scratchPadClose, scratchPadIsOpen]);
 
-  // 桌面宠物点击跳转：优先恢复到 Agent 对应的稳定 Session，旧的无路径 Agent 才回退到 tab。
-  useEffect(() => {
-    const off = api.agents.onFocusTarget((target) => {
-      const agent = displayAgentsRef.current.find((a) => a.id === target.agentId);
-      if (!agent) return;
-      void (async () => {
-        setActiveProjectId(agent.projectId);
-        if (agent.sessionPath) {
-          const records = await api.sessions.listCatalog(agent.projectId);
-          replaceProjectSessions({ projectId: agent.projectId, sessions: records });
-          const session = records.find((record) =>
-            isSameSessionPath(record.filePath, agent.sessionPath, record.environment),
-          );
-          if (session) {
-            setCurrentSessionId(session.id);
-            bindSessionRuntime({
-              sessionId: session.id,
-              agentId: agent.id,
-              runtimeGeneration: agent.runtimeGeneration,
-              status: agent.status,
-            });
-            return;
-          }
-        }
-        setCurrentSessionId(undefined);
-      })().catch(() => {
-        setCurrentSessionId(undefined);
-      });
-    });
-    return off;
-  }, []);
-
   useEffect(() => {
     const projectIds = new Set(projects.map((project) => project.id));
-    setSessionsByProject((current) =>
-      Object.fromEntries(
-        Object.entries(current).filter(([projectId]) =>
-          projectIds.has(projectId),
-        ),
-      ),
-    );
     setVisibleProjectChildCountByProject((current) =>
       Object.fromEntries(
         Object.entries(current).filter(([projectId]) =>
@@ -2813,7 +2665,7 @@ export function App() {
       }
       agentStatusByAgentRef.current[agent.id] = agent.status;
     }
-  }, [displayAgents, activeAgentId, modifiedFiles, messagesByAgent]);
+  }, [activeAgentId, displayAgents, modifiedFiles]);
 
   // 已删除内置 goal 完成检测。
 
@@ -2837,14 +2689,13 @@ export function App() {
   useEffect(() => {
     if (!activeProjectId) {
       setFiles([]);
-      setSessions([]);
       setGitInfo({ current: null, branches: [] });
       return;
     }
 
     // 切换项目时,如果该项目未加载过会话,则加载
     const activeProject = projects.find((p) => p.id === activeProjectId);
-    const hasLoadedSessions = sessionsByProject[activeProjectId]?.length > 0;
+    const hasLoadedSessions = getProjectSessions(activeProjectId).length > 0;
     const isLoadingNow = sessionLoadingByProject[activeProjectId];
 
     if (activeProject && !activeProject.kind && !hasLoadedSessions && !isLoadingNow) {
@@ -3162,17 +3013,13 @@ export function App() {
   }
 
   async function refreshSessions(projectId = activeProjectId) {
-    if (!projectId) {
-      setSessions([]);
-      return [];
-    }
+    if (!projectId) return [];
     const records = await api.sessions.listCatalog(projectId);
     replaceProjectSessions({ projectId, sessions: records });
-    const next = records
+    return records
       .map(sessionRecordToSummary)
       .filter((session): session is SessionSummary => Boolean(session))
       .sort((a, b) => b.updatedAt - a.updatedAt);
-    setSessions(next);
   }
 
   async function refreshProjectSessions(projectId: string, silent = false) {
@@ -3204,10 +3051,6 @@ export function App() {
         .map(sessionRecordToSummary)
         .filter((session): session is SessionSummary => Boolean(session))
         .sort((a, b) => b.updatedAt - a.updatedAt);
-      setSessionsByProject((current) => ({
-        ...current,
-        [projectId]: sorted,
-      }));
       setVisibleProjectChildCountByProject((current) => ({
         ...current,
         [projectId]: current[projectId] ?? SIDEBAR_PROJECT_CHILD_PAGE_SIZE,
@@ -3367,7 +3210,6 @@ export function App() {
     setProjectMenu(null);
     setActiveProjectId(project.id);
     setSessionsProjectId(project.id);
-    setSessions([]);
     setDrawer("sessions");
     setDrawerCollapsed(false);
     await refreshSessionHistory(project.id);
@@ -3447,9 +3289,7 @@ export function App() {
     setAgentRenaming(true);
     try {
       const tab = await api.agents.rename(agentRenameTarget.id, name);
-      setAgents((current) =>
-        current.map((agent) => (agent.id === tab.id ? tab : agent)),
-      );
+      upsertAgent(tab);
       setAgentRenameTarget(null);
       setSessionRenameTarget(null);
       setAgentRenameValue("");
@@ -3502,12 +3342,6 @@ export function App() {
     await api.sessions.deleteRecord(session.id);
     removeSessionState(session.id);
     removeSessionComposerState(session.id);
-    if (activeProjectId === session.projectId) {
-      setSessionsByProject((current) => ({
-        ...current,
-        [session.projectId]: current[session.projectId] ?? [],
-      }));
-    }
   }
 
   async function openSidebarSession(
@@ -3516,16 +3350,16 @@ export function App() {
   ) {
     setSessionMenu(null);
     const requestSequence = ++openSessionRequestRef.current;
-    let record: SessionRecord | undefined = sessionRecords[session.id] ?? Object.values(sessionRecords).find(
-      (candidate) =>
-        candidate.projectId === projectId &&
-        candidate.filePath &&
-        isSameSessionPath(
-          candidate.filePath,
-          session.filePath,
-          candidate.environment,
-        ),
-    );
+    let record: SessionRecord | undefined = getSessionRecord(session.id) ??
+      getProjectSessionRecords(projectId).find(
+        (candidate) =>
+          candidate.filePath &&
+          isSameSessionPath(
+            candidate.filePath,
+            session.filePath,
+            candidate.environment,
+          ),
+      );
     if (!record) {
       try {
         const projectSessions = await api.sessions.listCatalog(projectId);
@@ -3548,21 +3382,8 @@ export function App() {
     }
     if (!record || requestSequence !== openSessionRequestRef.current) return;
 
-    const existingAgent = getAgentForSessionPath(
-      displayAgents.filter((agent) => agent.projectId === projectId),
-      session.filePath,
-      session.wsl ? "wsl" : "native",
-    );
     setActiveProjectId(projectId);
     setCurrentSessionId(record.id);
-    if (existingAgent) {
-      bindSessionRuntime({
-        sessionId: record.id,
-        agentId: existingAgent.id,
-        runtimeGeneration: existingAgent.runtimeGeneration,
-        status: existingAgent.status,
-      });
-    }
     setAutoScroll(true);
     autoScrollRef.current = true;
   }
@@ -3950,11 +3771,6 @@ export function App() {
     removedProjectId: string,
     next: Project[],
   ) {
-    setSessionsByProject((current) => {
-      const updated = { ...current };
-      delete updated[removedProjectId];
-      return updated;
-    });
     setVisibleProjectChildCountByProject((current) => {
       const updated = { ...current };
       delete updated[removedProjectId];
@@ -4001,7 +3817,7 @@ export function App() {
       ...runtimeStateByAgentRef.current,
       [agentId]: nextState,
     };
-    setRuntimeStateByAgent(runtimeStateByAgentRef.current);
+    applyRuntimeCapability({ agentId, state: incoming });
     return nextState;
   }
 
@@ -4226,7 +4042,6 @@ export function App() {
   async function restartActiveAgent() {
     if (!activeAgentId || !activeAgent) return;
     const restartingAgent = activeAgent;
-    const restartingSessionId = currentSessionId;
     setRestartingAgentId(restartingAgent.id);
     setSessionActionsOpen(false);
     pendingAgentsRef.current = [
@@ -4247,14 +4062,6 @@ export function App() {
         (agent) => agent.id !== restartingAgent.id,
       );
       setPendingAgents(pendingAgentsRef.current);
-      if (restartingSessionId) {
-        bindSessionRuntime({
-          sessionId: restartingSessionId,
-          agentId: tab.id,
-          runtimeGeneration: tab.runtimeGeneration,
-          status: tab.status,
-        });
-      }
       void refreshRuntimeState(tab.id);
       showToast(t("app.agentRestarted"), 2000);
     } catch (error) {
@@ -4734,7 +4541,7 @@ export function App() {
         void flushNextQueuedPrompt(agentId);
       }
     }
-  }, [agents, runtimeStateByAgent, queuedPrompts]);
+  }, [activeProjectRuntimeCapabilities, agents, queuedPrompts]);
 
   useEffect(() => {
     return () => {
@@ -5824,9 +5631,7 @@ export function App() {
               (agent) => agent.projectId === project.id,
             );
             const projectSearch = search.trim();
-            const projectCatalogSessions = (sessionRecordIdsByProject[project.id] ?? [])
-              .map((sessionId) => sessionRecords[sessionId])
-              .filter((session): session is SessionRecord => Boolean(session));
+            const projectCatalogSessions = getProjectSessionRecords(project.id);
             const projectDraftSessions = projectCatalogSessions
               .filter((session) => {
                 if (session.status !== "draft") return false;
@@ -5836,13 +5641,13 @@ export function App() {
               })
               .sort((a, b) => b.updatedAt - a.updatedAt);
             const projectSessions = ((projectSearch
-              ? (sessionsByProject[project.id] ?? []).filter((session) =>
+              ? getProjectSessions(project.id).filter((session) =>
                   matches(
                     `${session.name ?? ""}${session.preview}${session.filePath}`,
                     projectSearch,
                   ),
                 )
-              : (sessionsByProject[project.id] ?? [])).filter((session) => {
+              : getProjectSessions(project.id)).filter((session) => {
               	const filter = sessionSourceFilter[project.id] ?? null;
               	return filter === null
               		? true
@@ -5931,7 +5736,7 @@ export function App() {
 
                     // 展开项目时同步加载会话记录，loading 指示器让用户知道正在加载
                     if (wasCollapsed && !projectIsChat) {
-                      const hasLoadedSessions = sessionsByProject[project.id]?.length > 0;
+                      const hasLoadedSessions = getProjectSessions(project.id).length > 0;
                       if (!hasLoadedSessions) {
                         void refreshProjectSessions(project.id).catch(() => undefined);
                       }
@@ -6024,7 +5829,7 @@ export function App() {
                       onClick={() => {
                         setActiveProjectId(project.id);
                         setCurrentSessionId(undefined);
-                        if (!projectIsChat && !sessionsByProject[project.id]?.length) {
+                        if (!projectIsChat && getProjectSessions(project.id).length === 0) {
                           void refreshProjectSessions(project.id).catch(() => undefined);
                         }
                       }}
@@ -6051,7 +5856,7 @@ export function App() {
                     projectDisplay.hiddenChildCount > 0) && (
                   <div className="session-card">
                     {projectDraftSessions.map((session) => {
-                      const runtime = sessionRuntimeById[session.id];
+                      const runtime = getSessionRuntime(session.id);
                       return (
                         <button
                           key={session.id}
@@ -6115,7 +5920,7 @@ export function App() {
                           onContextMenu={async (event) => {
                             event.preventDefault();
                             if (subagentAgent) {
-                              const logging = await window.piDesktop.rpcLogs.getLogging(subagentAgent.id);
+                              const logging = await api.rpcLogs.getLogging(subagentAgent.id);
                               setAgentRpcLogging((prev) => {
                                 const next = new Map(prev);
                                 next.set(subagentAgent.id, logging);
@@ -6211,7 +6016,7 @@ export function App() {
                           onContextMenu={async (event) => {
                             event.preventDefault();
                             // 菜单打开时查询 RPC 日志记录状态
-                            const logging = await window.piDesktop.rpcLogs.getLogging(agent.id);
+                            const logging = await api.rpcLogs.getLogging(agent.id);
                             setAgentRpcLogging((prev) => {
                               const next = new Map(prev);
                               next.set(agent.id, logging);
@@ -6261,7 +6066,7 @@ export function App() {
                         onContextMenu={async (event) => {
                           event.preventDefault();
                           if (runtimeAgent) {
-                            const logging = await window.piDesktop.rpcLogs.getLogging(runtimeAgent.id);
+                            const logging = await api.rpcLogs.getLogging(runtimeAgent.id);
                             setAgentRpcLogging((prev) => {
                               const next = new Map(prev);
                               next.set(runtimeAgent.id, logging);
@@ -6373,11 +6178,12 @@ export function App() {
                       const childAgents = childProject
                         ? filteredAgents.filter((agent) => agent.projectId === childProject.id)
                         : [];
-                      const rawChildSessions = childProject ? (sessionsByProject[childProject.id] ?? []) : [];
+                      const rawChildSessions = childProject
+                        ? getProjectSessions(childProject.id)
+                        : [];
                       const childDraftSessions = childProject
-                        ? (sessionRecordIdsByProject[childProject.id] ?? [])
-                            .map((sessionId) => sessionRecords[sessionId])
-                            .filter((session): session is SessionRecord => session?.status === "draft")
+                        ? getProjectSessionRecords(childProject.id)
+                            .filter((session) => session.status === "draft")
                             .sort((a, b) => b.updatedAt - a.updatedAt)
                         : [];
                       // 默认只展示 3 条会话，展开后显示全部，避免子工作区会话过多时侧栏过长。
@@ -6414,7 +6220,7 @@ export function App() {
                               if (childProject) {
                                 setActiveProjectId(childProject.id);
                                 setCurrentSessionId(undefined);
-                                if (!sessionsByProject[childProject.id]?.length) {
+                                if (getProjectSessions(childProject.id).length === 0) {
                                   void refreshProjectSessions(childProject.id).catch(() => undefined);
                                 }
                               }
@@ -6465,7 +6271,7 @@ export function App() {
                             )}
                           </button>
                           {childDraftSessions.map((session) => {
-                            const runtime = sessionRuntimeById[session.id];
+                            const runtime = getSessionRuntime(session.id);
                             return (
                               <button
                                 key={session.id}
@@ -6518,7 +6324,7 @@ export function App() {
                                   className={`conversation agent-row worktree-nested-row${agentSession?.id === currentSessionId ? " active" : ""}`}
                                   onContextMenu={async (event) => {
                                     event.preventDefault();
-                                    const logging = await window.piDesktop.rpcLogs.getLogging(agent.id);
+                                    const logging = await api.rpcLogs.getLogging(agent.id);
                                     setAgentRpcLogging((prev) => { const next = new Map(prev); next.set(agent.id, logging); return next; });
                                     setAgentMenu({ x: event.clientX, y: event.clientY, agent });
                                   }}
@@ -6575,7 +6381,7 @@ export function App() {
                                   onContextMenu={async (event) => {
                                     event.preventDefault();
                                     if (runtimeAgent) {
-                                      const logging = await window.piDesktop.rpcLogs.getLogging(runtimeAgent.id);
+                                      const logging = await api.rpcLogs.getLogging(runtimeAgent.id);
                                       setAgentRpcLogging((prev) => {
                                         const next = new Map(prev);
                                         next.set(runtimeAgent.id, logging);
@@ -6805,7 +6611,7 @@ export function App() {
           onSendUiResponse={(requestId, response) => {
             if (!activeAgentId) return;
             if (response.cancelled) setCancellingUi(true);
-            api.agents.sendUiResponse(activeAgentId, requestId, response);
+            sendSessionUiResponse(requestId, response);
           }}
           onToast={(message) => showToast(message)}
         />
@@ -6855,7 +6661,7 @@ export function App() {
             onClear={clearImages}
           />
           <ExtensionWidgetPanel
-            widgets={activeAgentId ? extensionWidgetsByAgent[activeAgentId] : undefined}
+            widgets={currentSessionRuntimeUi?.widgets}
             sessionKey={activeWidgetSessionKey}
             dismissedKeys={activeWidgetSessionKey
               ? (agentDismissedWidgets[activeWidgetSessionKey] ?? [])
@@ -7521,7 +7327,7 @@ export function App() {
             setProjectMenu(null);
             // 确保会话列表已加载
             const pid = projectMenu.project.id;
-            if (!(sessionsByProject[pid]?.length)) {
+            if (getProjectSessions(pid).length === 0) {
               void refreshProjectSessions(pid);
             }
           }}
@@ -7601,7 +7407,7 @@ export function App() {
           onToggleRpcLogging={() => {
             const id = agentMenu.agent.id;
             const current = agentRpcLogging.get(id) ?? false;
-            void window.piDesktop.rpcLogs.setLogging(id, !current).then((enabled) => {
+            void api.rpcLogs.setLogging(id, !current).then((enabled) => {
               setAgentRpcLogging((prev) => {
                 const next = new Map(prev);
                 next.set(id, enabled);
@@ -7612,7 +7418,7 @@ export function App() {
           }}
           isRpcLogging={agentRpcLogging.get(agentMenu.agent.id) ?? false}
           onOpenLogFile={() => {
-            void window.piDesktop.rpcLogs.openFile(agentMenu.agent.id);
+            void api.rpcLogs.openFile(agentMenu.agent.id);
             setAgentMenu(null);
           }}
           onCopySessionFilePath={() => {
@@ -7667,7 +7473,7 @@ export function App() {
             const session = sessionMenu.session;
             setSessionMenu(null);
             // 检查是否有子会话：如有则弹出确认，否则直接删除
-            const projectSessions = sessionsByProject[sessionMenu.projectId] ?? [];
+            const projectSessions = getProjectSessions(sessionMenu.projectId);
             const childCount = projectSessions.filter(
               (s) => isSameSessionPath(
                 s.parentSessionPath,
@@ -7719,7 +7525,7 @@ export function App() {
       )}
       {sessionManagerProject && (
         <SessionManagerModal
-          sessions={sessionsByProject[sessionManagerProject.id] ?? []}
+          sessions={getProjectSessions(sessionManagerProject.id)}
           onClose={() => setSessionManagerProject(null)}
           onRename={(session) => {
             setSessionManagerProject(null);
@@ -8344,7 +8150,7 @@ export function App() {
                   showToast(t("ask.cancelHint"));
                 }
                 if (activeUiAsk.requestId && activeAgentId) {
-                  api.agents.sendUiResponse(activeAgentId, activeUiAsk.requestId, { cancelled: true });
+                  sendSessionUiResponse(activeUiAsk.requestId, { cancelled: true });
                 }
               }}
             >
@@ -8358,7 +8164,7 @@ export function App() {
                 className="ask-dialog-option"
                 onClick={() => {
                   if (activeUiAsk.requestId && activeAgentId) {
-                    api.agents.sendUiResponse(activeAgentId, activeUiAsk.requestId, { confirmed: true });
+                    sendSessionUiResponse(activeUiAsk.requestId, { confirmed: true });
                   }
                 }}
               >
@@ -8368,7 +8174,7 @@ export function App() {
                 className="ask-dialog-option"
                 onClick={() => {
                   if (activeUiAsk.requestId && activeAgentId) {
-                    api.agents.sendUiResponse(activeAgentId, activeUiAsk.requestId, { confirmed: false });
+                    sendSessionUiResponse(activeUiAsk.requestId, { confirmed: false });
                   }
                 }}
               >
@@ -8390,7 +8196,7 @@ export function App() {
                     className="ask-dialog-option"
                     onClick={() => {
                       if (activeUiAsk.requestId && activeAgentId) {
-                        api.agents.sendUiResponse(activeAgentId, activeUiAsk.requestId, { value: val });
+                        sendSessionUiResponse(activeUiAsk.requestId, { value: val });
                       }
                     }}
                   >
@@ -8412,7 +8218,7 @@ export function App() {
                       if (val && activeUiAsk.requestId && activeAgentId) {
                         /* 保存自定义值到 ref，选择 "✎ 自行输入..." 让 Pi 走 input 流 */
                         pendingCustomInputRef.current = val;
-                        api.agents.sendUiResponse(activeAgentId, activeUiAsk.requestId, { value: "✎ 自行输入..." });
+                        sendSessionUiResponse(activeUiAsk.requestId, { value: "✎ 自行输入..." });
                       }
                     }
                   }}
@@ -8426,7 +8232,7 @@ export function App() {
                     if (val && activeUiAsk.requestId && activeAgentId) {
                       /* 保存自定义值到 ref，选择 "✎ 自行输入..." 让 Pi 走 input 流 */
                       pendingCustomInputRef.current = val;
-                      api.agents.sendUiResponse(activeAgentId, activeUiAsk.requestId, { value: "✎ 自行输入..." });
+                      sendSessionUiResponse(activeUiAsk.requestId, { value: "✎ 自行输入..." });
                     }
                   }}
                 >
@@ -8444,7 +8250,7 @@ export function App() {
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && activeUiAsk.requestId && activeAgentId) {
                     const value = (e.target as HTMLInputElement).value;
-                    api.agents.sendUiResponse(activeAgentId, activeUiAsk.requestId, { value });
+                    sendSessionUiResponse(activeUiAsk.requestId, { value });
                   }
                 }}
               />
@@ -8453,7 +8259,7 @@ export function App() {
                 onClick={() => {
                   const value = (document.getElementById("ask-dialog-input") as HTMLInputElement)?.value ?? "";
                   if (activeUiAsk.requestId && activeAgentId) {
-                    api.agents.sendUiResponse(activeAgentId, activeUiAsk.requestId, { value });
+                    sendSessionUiResponse(activeUiAsk.requestId, { value });
                   }
                 }}
               >

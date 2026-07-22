@@ -2,6 +2,7 @@ import { atom } from "jotai";
 import type {
   AgentRuntimeState,
   AgentStatus,
+  AgentUiRequest,
   ChatMessage,
   SessionRecord,
   SessionRuntimeEvent,
@@ -31,10 +32,35 @@ export type SessionMessageCacheEntry = {
   updatedAt: number;
 };
 
+export type SessionRuntimeUiRequestState = {
+  request: AgentUiRequest;
+  status: "pending" | "responding" | "completed" | "cancelled";
+};
+
+export type SessionRuntimeUiState = {
+  agentId: string;
+  runtimeGeneration: number;
+  requests: Record<string, SessionRuntimeUiRequestState>;
+  widgets: Record<string, string[]>;
+  notification?: {
+    requestId: string;
+    message: string;
+    notifyType?: "info" | "warning" | "error";
+    revision: number;
+  };
+  editorText?: {
+    requestId: string;
+    text: string;
+    revision: number;
+  };
+  revision: number;
+};
+
 export const sessionRecordsAtom = atom<Record<string, SessionRecord>>({});
 export const sessionIdsByProjectAtom = atom<Record<string, string[]>>({});
 export const currentSessionIdAtom = atom<string | undefined>(undefined);
 export const sessionRuntimeByIdAtom = atom<Record<string, SessionRuntimeViewState>>({});
+export const sessionRuntimeUiByIdAtom = atom<Record<string, SessionRuntimeUiState>>({});
 export const sessionMessagesCacheAtom = atom<Record<string, SessionMessageCacheEntry>>({});
 export const sessionMessageLruAtom = atom<string[]>([]);
 export const sessionMessageLoadStateAtom = atom<Record<string, SessionLoadState>>({});
@@ -48,6 +74,11 @@ export const currentSessionAtom = atom((get) => {
 export const currentSessionRuntimeAtom = atom((get) => {
   const sessionId = get(currentSessionIdAtom);
   return sessionId ? get(sessionRuntimeByIdAtom)[sessionId] : undefined;
+});
+
+export const currentSessionRuntimeUiAtom = atom((get) => {
+  const sessionId = get(currentSessionIdAtom);
+  return sessionId ? get(sessionRuntimeUiByIdAtom)[sessionId] : undefined;
 });
 
 export const currentSessionMessagesAtom = atom((get) => {
@@ -160,6 +191,125 @@ export const touchSessionMessagesAtom = atom(null, (get, set, sessionId: string)
   ].slice(0, SESSION_MESSAGE_CACHE_LIMIT));
 });
 
+function toAgentUiRequest(
+  payload: Record<string, unknown>,
+  agentId: string,
+): AgentUiRequest | undefined {
+  const requestId = typeof payload.requestId === "string" ? payload.requestId : "";
+  if (!requestId) return undefined;
+  return {
+    agentId,
+    requestId,
+    method: typeof payload.method === "string" ? payload.method : "",
+    title: typeof payload.title === "string" ? payload.title : "",
+    options: Array.isArray(payload.options)
+      ? payload.options.filter((option): option is string => typeof option === "string")
+      : undefined,
+    placeholder: typeof payload.placeholder === "string" ? payload.placeholder : undefined,
+    prefill: typeof payload.prefill === "string" ? payload.prefill : undefined,
+    allowOther: payload.allowOther === true,
+    completed: payload.completed === true,
+    value: typeof payload.value === "string" || typeof payload.value === "boolean"
+      ? payload.value
+      : undefined,
+    confirmed: typeof payload.confirmed === "boolean" ? payload.confirmed : undefined,
+    cancelled: payload.cancelled === true,
+    message: typeof payload.message === "string" ? payload.message : undefined,
+    notifyType: payload.notifyType === "info" || payload.notifyType === "warning" || payload.notifyType === "error"
+      ? payload.notifyType
+      : undefined,
+    text: typeof payload.text === "string" ? payload.text : undefined,
+    widgetKey: typeof payload.widgetKey === "string" ? payload.widgetKey : undefined,
+    widgetLines: Array.isArray(payload.widgetLines)
+      ? payload.widgetLines.filter((line): line is string => typeof line === "string")
+      : undefined,
+    widgetPlacement: payload.widgetPlacement === "aboveEditor" || payload.widgetPlacement === "belowEditor"
+      ? payload.widgetPlacement
+      : undefined,
+  };
+}
+
+function applySessionRuntimeUiEvent(
+  current: SessionRuntimeUiState | undefined,
+  event: SessionRuntimeEvent,
+  payload: Record<string, unknown>,
+  bindingChanged: boolean,
+): SessionRuntimeUiState | undefined {
+  const base = !current || bindingChanged || current.agentId !== event.agentId ||
+    current.runtimeGeneration !== event.runtimeGeneration
+    ? {
+        agentId: event.agentId,
+        runtimeGeneration: event.runtimeGeneration,
+        requests: {},
+        widgets: {},
+        revision: 0,
+      }
+    : current;
+  if (event.sourceChannel !== "agents:ui-request") return bindingChanged ? base : current;
+  const request = toAgentUiRequest(payload, event.agentId);
+  if (!request) return base;
+  const revision = base.revision + 1;
+
+  if (request.completed) {
+    const existing = base.requests[request.requestId];
+    if (!existing) return { ...base, revision };
+    return {
+      ...base,
+      revision,
+      requests: {
+        ...base.requests,
+        [request.requestId]: {
+          request: { ...existing.request, ...request },
+          status: request.cancelled ? "cancelled" : "completed",
+        },
+      },
+    };
+  }
+  if (request.method === "notify") {
+    return request.message
+      ? {
+          ...base,
+          revision,
+          notification: {
+            requestId: request.requestId,
+            message: request.message,
+            notifyType: request.notifyType,
+            revision,
+          },
+        }
+      : { ...base, revision };
+  }
+  if (request.method === "set_editor_text") {
+    return {
+      ...base,
+      revision,
+      editorText: {
+        requestId: request.requestId,
+        text: request.text ?? "",
+        revision,
+      },
+    };
+  }
+  if (request.method === "setWidget") {
+    const widgetKey = request.widgetKey || request.requestId;
+    const widgets = { ...base.widgets };
+    if (request.widgetLines?.length) widgets[widgetKey] = request.widgetLines;
+    else delete widgets[widgetKey];
+    return { ...base, revision, widgets };
+  }
+  if (!["select", "confirm", "input", "editor"].includes(request.method)) {
+    return { ...base, revision };
+  }
+  return {
+    ...base,
+    revision,
+    requests: {
+      ...base.requests,
+      [request.requestId]: { request, status: "pending" },
+    },
+  };
+}
+
 export const applySessionRuntimeEventAtom = atom(
   null,
   (get, set, event: SessionRuntimeEvent) => {
@@ -232,10 +382,56 @@ export const applySessionRuntimeEventAtom = atom(
       }
     }
 
+    const nextUi = payload
+      ? applySessionRuntimeUiEvent(
+          get(sessionRuntimeUiByIdAtom)[event.sessionId],
+          event,
+          payload,
+          bindingChanged,
+        )
+      : undefined;
+    if (nextUi) {
+      set(sessionRuntimeUiByIdAtom, {
+        ...get(sessionRuntimeUiByIdAtom),
+        [event.sessionId]: nextUi,
+      });
+    }
     set(sessionRuntimeByIdAtom, {
       ...get(sessionRuntimeByIdAtom),
       [event.sessionId]: nextRuntime,
     });
+  },
+);
+
+export const claimSessionRuntimeUiResponseAtom = atom(
+  null,
+  (get, set, input: {
+    sessionId: string;
+    requestId: string;
+    agentId: string;
+    runtimeGeneration: number;
+  }) => {
+    const current = get(sessionRuntimeUiByIdAtom)[input.sessionId];
+    const request = current?.requests[input.requestId];
+    if (
+      !current ||
+      current.agentId !== input.agentId ||
+      current.runtimeGeneration !== input.runtimeGeneration ||
+      request?.status !== "pending"
+    ) {
+      return false;
+    }
+    set(sessionRuntimeUiByIdAtom, {
+      ...get(sessionRuntimeUiByIdAtom),
+      [input.sessionId]: {
+        ...current,
+        requests: {
+          ...current.requests,
+          [input.requestId]: { ...request, status: "responding" },
+        },
+      },
+    });
+    return true;
   },
 );
 
@@ -256,6 +452,11 @@ export const bindSessionRuntimeAtom = atom(
       return;
     }
     const bindingChanged = Boolean(current?.agentId && current.agentId !== input.agentId);
+    if (bindingChanged) {
+      const ui = { ...get(sessionRuntimeUiByIdAtom) };
+      delete ui[input.sessionId];
+      set(sessionRuntimeUiByIdAtom, ui);
+    }
     set(sessionRuntimeByIdAtom, {
       ...get(sessionRuntimeByIdAtom),
       [input.sessionId]: {
@@ -285,6 +486,9 @@ export const removeSessionStateAtom = atom(null, (get, set, sessionId: string) =
   const runtime = { ...get(sessionRuntimeByIdAtom) };
   delete runtime[sessionId];
   set(sessionRuntimeByIdAtom, runtime);
+  const runtimeUi = { ...get(sessionRuntimeUiByIdAtom) };
+  delete runtimeUi[sessionId];
+  set(sessionRuntimeUiByIdAtom, runtimeUi);
   const cache = { ...get(sessionMessagesCacheAtom) };
   delete cache[sessionId];
   set(sessionMessagesCacheAtom, cache);
