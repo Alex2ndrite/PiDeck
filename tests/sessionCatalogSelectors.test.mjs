@@ -7,6 +7,7 @@ import vm from "node:vm";
 import { createStore } from "jotai/vanilla";
 
 const nodeRequire = createRequire(import.meta.url);
+const appSource = readFileSync("src/renderer/src/App.tsx", "utf8");
 
 function compileModule(filePath, imports = {}) {
   const output = ts.transpileModule(readFileSync(filePath, "utf8"), {
@@ -115,4 +116,78 @@ test("background Session patches do not update current Timeline/runtime selector
   assert.equal(runtimeNotifications, 0);
   offMessages();
   offRuntime();
+});
+
+test("runtime agent binding selects the authoritative Session despite path identity collisions", () => {
+  const atoms = loadAtoms();
+  const store = createStore();
+  const sharedPath = "C:/sessions/shared.jsonl";
+  store.set(atoms.replaceProjectSessionsAtom, {
+    projectId: "project-a",
+    sessions: [
+      {
+        ...session("session-native", "project-a"),
+        filePath: sharedPath,
+        source: "pi",
+        environment: "native",
+      },
+      {
+        ...session("session-wsl", "project-a"),
+        filePath: sharedPath,
+        source: "codex",
+        environment: "wsl",
+        wslDistro: "Ubuntu-24.04",
+      },
+    ],
+  });
+  store.set(atoms.bindSessionRuntimeAtom, {
+    sessionId: "session-native",
+    agentId: "agent-bound",
+    runtimeGeneration: 3,
+  });
+  store.set(atoms.bindSessionRuntimeAtom, {
+    sessionId: "session-wsl",
+    agentId: "agent-bound",
+    runtimeGeneration: 4,
+  });
+
+  assert.equal(
+    store.get(atoms.sessionIdByRuntimeAgentIdAtomFamily("agent-bound")),
+    "session-wsl",
+  );
+  assert.equal(
+    store.get(atoms.sessionIdByRuntimeAgentIdAtomFamily("agent-unbound")),
+    undefined,
+  );
+});
+
+test("focus selection is synchronous so rapid targets cannot be overwritten by stale catalog work", () => {
+  const atoms = loadAtoms();
+  const store = createStore();
+  store.set(atoms.bindSessionRuntimeAtom, {
+    sessionId: "session-a",
+    agentId: "agent-a",
+    runtimeGeneration: 1,
+  });
+  store.set(atoms.bindSessionRuntimeAtom, {
+    sessionId: "session-b",
+    agentId: "agent-b",
+    runtimeGeneration: 1,
+  });
+
+  let currentSessionId;
+  const focus = (agentId) => {
+    currentSessionId = store.get(atoms.sessionIdByRuntimeAgentIdAtomFamily(agentId));
+  };
+  focus("agent-a");
+  focus("agent-b");
+  assert.equal(currentSessionId, "session-b");
+  focus("agent-external");
+  assert.equal(currentSessionId, undefined);
+
+  const focusStart = appSource.indexOf("onFocusTarget: (target) => {");
+  const focusEnd = appSource.indexOf("\n    },", focusStart);
+  const focusSource = appSource.slice(focusStart, focusEnd);
+  assert.match(focusSource, /store\.get\([\s\S]*sessionIdByRuntimeAgentIdAtomFamily/);
+  assert.doesNotMatch(focusSource, /listCatalog|isSameSessionPath|async|\.then\(/);
 });

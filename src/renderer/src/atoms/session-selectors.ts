@@ -55,6 +55,18 @@ export const sessionRuntimeBySessionIdAtomFamily = atomFamily((sessionId: string
   atom((get) => get(sessionRuntimeByIdAtom)[sessionId]),
 );
 
+// A moved runtime can leave an older Session projection behind; the newest binding wins.
+export const sessionIdByRuntimeAgentIdAtomFamily = atomFamily((agentId: string) =>
+  atom((get) => Object.entries(get(sessionRuntimeByIdAtom)).reduce<{
+    sessionId?: string;
+    updatedAt: number;
+  }>((selected, [sessionId, runtime]) => (
+    runtime.agentId === agentId && runtime.updatedAt >= selected.updatedAt
+      ? { sessionId, updatedAt: runtime.updatedAt }
+      : selected
+  ), { updatedAt: -1 }).sessionId),
+);
+
 export const sessionRuntimeUiBySessionIdAtomFamily = atomFamily((sessionId: string) =>
   atom((get) => get(sessionRuntimeUiByIdAtom)[sessionId]),
 );

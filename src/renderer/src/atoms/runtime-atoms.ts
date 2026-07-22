@@ -1,5 +1,5 @@
 import { atom } from "jotai";
-import { atomFamily } from "jotai/utils";
+import { atomFamily, selectAtom } from "jotai/utils";
 import type { AgentRuntimeState, AgentTab } from "../../../shared/types";
 import { mergeAgentRuntimeState } from "../utils/agentRuntimeState";
 
@@ -65,13 +65,29 @@ export const runtimeCapabilityByAgentIdAtomFamily = atomFamily((agentId: string)
   atom((get) => get(runtimeCapabilitiesByAgentIdAtom)[agentId]),
 );
 
-export const runtimeCapabilitiesByProjectIdAtomFamily = atomFamily((projectId: string) =>
-  atom((get) => {
-    const capabilities = get(runtimeCapabilitiesByAgentIdAtom);
-    return Object.fromEntries(
-      get(agentsByProjectIdAtomFamily(projectId))
-        .map((agent) => [agent.id, capabilities[agent.id]] as const)
-        .filter((entry): entry is readonly [string, AgentRuntimeState] => Boolean(entry[1])),
-    );
-  }),
-);
+// Preserve the project record while its agent IDs and capability object references are unchanged.
+function areRuntimeCapabilityRecordsEqual(
+  left: Record<string, AgentRuntimeState>,
+  right: Record<string, AgentRuntimeState>,
+): boolean {
+  const leftIds = Object.keys(left);
+  const rightIds = Object.keys(right);
+  return leftIds.length === rightIds.length &&
+    leftIds.every((agentId) => left[agentId] === right[agentId]);
+}
+
+export const runtimeCapabilitiesByProjectIdAtomFamily = atomFamily((projectId: string) => {
+  const projectCapabilitiesAtom = atom((get) => Object.fromEntries(
+    get(agentsByProjectIdAtomFamily(projectId))
+      .map((agent) => [
+        agent.id,
+        get(runtimeCapabilityByAgentIdAtomFamily(agent.id)),
+      ] as const)
+      .filter((entry): entry is readonly [string, AgentRuntimeState] => Boolean(entry[1])),
+  ));
+  return selectAtom(
+    projectCapabilitiesAtom,
+    (capabilities) => capabilities,
+    areRuntimeCapabilityRecordsEqual,
+  );
+});

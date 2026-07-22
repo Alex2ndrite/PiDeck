@@ -74,3 +74,44 @@ test("runtime capabilities merge by agent ID without containing Session messages
   assert.equal(capability.isExecutingTool, true);
   assert.equal("messages" in capability, false);
 });
+
+test("project runtime capability selectors isolate notifications and preserve references", () => {
+  const atoms = loadModule("src/renderer/src/atoms/runtime-atoms.ts", {
+    "../utils/agentRuntimeState": loadModule("src/renderer/src/utils/agentRuntimeState.ts"),
+  });
+  const store = createStore();
+  store.set(atoms.replaceAgentInventoryAtom, [
+    tab("agent-a", "project-a"),
+    tab("agent-b", "project-b"),
+  ]);
+  store.set(atoms.applyRuntimeCapabilityAtom, {
+    agentId: "agent-a",
+    state: { modelName: "Model A" },
+  });
+  store.set(atoms.applyRuntimeCapabilityAtom, {
+    agentId: "agent-b",
+    state: { modelName: "Model B" },
+  });
+
+  const projectAAtom = atoms.runtimeCapabilitiesByProjectIdAtomFamily("project-a");
+  const before = store.get(projectAAtom);
+  let notifications = 0;
+  const unsubscribe = store.sub(projectAAtom, () => {
+    notifications += 1;
+  });
+
+  store.set(atoms.applyRuntimeCapabilityAtom, {
+    agentId: "agent-b",
+    state: { isStreaming: true },
+  });
+  assert.equal(store.get(projectAAtom), before);
+  assert.equal(notifications, 0);
+
+  store.set(atoms.applyRuntimeCapabilityAtom, {
+    agentId: "agent-a",
+    state: { isStreaming: true },
+  });
+  assert.notEqual(store.get(projectAAtom), before);
+  assert.equal(notifications, 1);
+  unsubscribe();
+});

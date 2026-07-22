@@ -83,6 +83,7 @@ import {
   sessionRecordByIdAtomFamily,
   sessionRecordsByProjectIdAtomFamily,
   sessionRecordToSummary,
+  sessionIdByRuntimeAgentIdAtomFamily,
   sessionRuntimeBySessionIdAtomFamily,
   sessionSummariesByProjectIdAtomFamily,
   setSessionAttachmentsAtom,
@@ -2177,19 +2178,11 @@ export function App() {
     onFocusTarget: (target) => {
       const agent = displayAgentsRef.current.find((item) => item.id === target.agentId);
       if (!agent) return;
-      void (async () => {
-        setActiveProjectId(agent.projectId);
-        if (!agent.sessionPath) {
-          setCurrentSessionId(undefined);
-          return;
-        }
-        const records = await api.sessions.listCatalog(agent.projectId);
-        replaceProjectSessions({ projectId: agent.projectId, sessions: records });
-        const session = records.find((record) =>
-          isSameSessionPath(record.filePath, agent.sessionPath, record.environment),
-        );
-        setCurrentSessionId(session?.id);
-      })().catch(() => setCurrentSessionId(undefined));
+      const sessionId = store.get(
+        sessionIdByRuntimeAgentIdAtomFamily(target.agentId),
+      );
+      setActiveProjectId(agent.projectId);
+      setCurrentSessionId(sessionId);
     },
   });
 
