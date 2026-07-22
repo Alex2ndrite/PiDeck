@@ -4,16 +4,28 @@ import test from "node:test";
 import ts from "typescript";
 import vm from "node:vm";
 
-function loadModule() {
-	const source = readFileSync("src/renderer/src/agentListDisplay.ts", "utf8");
-	const { outputText } = ts.transpileModule(source, {
+function transpile(filePath) {
+	return ts.transpileModule(readFileSync(filePath, "utf8"), {
 		compilerOptions: {
 			module: ts.ModuleKind.CommonJS,
 			target: ts.ScriptTarget.ES2022,
 		},
+	}).outputText;
+}
+
+function loadModule() {
+	const identitySandbox = { exports: {} };
+	vm.runInNewContext(transpile("src/shared/sessionIdentity.ts"), identitySandbox, {
+		filename: "sessionIdentity.ts",
 	});
-	const sandbox = { exports: {} };
-	vm.runInNewContext(outputText, sandbox, {
+	const sandbox = {
+		exports: {},
+		require: (specifier) => {
+			if (specifier === "../../shared/sessionIdentity") return identitySandbox.exports;
+			throw new Error(`Unexpected import: ${specifier}`);
+		},
+	};
+	vm.runInNewContext(transpile("src/renderer/src/agentListDisplay.ts"), sandbox, {
 		filename: "agentListDisplay.ts",
 	});
 	return sandbox.exports;
@@ -31,83 +43,71 @@ function session(overrides) {
 	};
 }
 
-test("sidebar highlight follows only the session currently displayed in the conversation window", () => {
-	const { isSidebarSessionRowActive } = loadModule();
+test("matches native Session paths only for runtime/catalog deduplication", () => {
+	const { isSameSessionPath } = loadModule();
 	const parentPath = "C:\\sessions\\parent.jsonl";
 	const childPath = "C:\\sessions\\parent\\run\\session.jsonl";
 
-	assert.equal(isSidebarSessionRowActive({
-		rowSessionPath: childPath,
-		displayedSessionPath: childPath.toLowerCase().replaceAll("\\", "/"),
-		rowAgentId: "child-agent",
-		activeAgentId: "child-agent",
-	}), true);
-	assert.equal(isSidebarSessionRowActive({
-		rowSessionPath: parentPath,
-		displayedSessionPath: childPath,
-		rowAgentId: "parent-agent",
-		activeAgentId: "parent-agent",
-	}), false);
-	assert.equal(isSidebarSessionRowActive({
-		rowSessionPath: childPath,
-		displayedSessionPath: parentPath,
-		rowAgentId: "child-agent",
-		activeAgentId: "child-agent",
-	}), false);
-	assert.equal(isSidebarSessionRowActive({
-		rowAgentId: "new-agent",
-		activeAgentId: "new-agent",
-	}), true);
+	assert.equal(
+		isSameSessionPath(childPath, childPath.toLowerCase().replaceAll("\\", "/")),
+		true,
+	);
+	assert.equal(isSameSessionPath(parentPath, childPath), false);
+	assert.equal(isSameSessionPath(undefined, undefined), false);
 });
 
-test("viewer handoff only bridges the matching historical session", () => {
-	const { getSessionViewerHandoffState } = loadModule();
-	const viewerSessionPath = "C:\\Users\\Dev\\.pi\\agent\\sessions\\old.jsonl";
-	const assertState = (input, expected) => {
-		const actual = getSessionViewerHandoffState(input);
-		// transpiled module runs in a vm realm, so compare scalar fields instead of object prototypes.
-		assert.equal(actual.isViewerActive, expected.isViewerActive);
-		assert.equal(actual.canBridgeMessages, expected.canBridgeMessages);
-	};
 
-	assertState(
-		{ viewerSessionPath, activeAgentPending: false },
-		{ isViewerActive: true, canBridgeMessages: true },
+test("keeps a stable Session row and key when a runtime is attached", () => {
+	const { getProjectAgentSessionDisplay } = loadModule();
+	const record = session({
+		id: "desktop-session-1",
+		filePath: "C:/sessions/stable.jsonl",
+		source: "pi",
+	});
+	const before = getProjectAgentSessionDisplay({
+		agents: [],
+		sessions: [record],
+	});
+	const after = getProjectAgentSessionDisplay({
+		agents: [{
+			id: "runtime-1",
+			sessionPath: "c:/SESSIONS/STABLE.jsonl",
+			sessionEnvironment: "native",
+			createdAt: 2,
+			status: "idle",
+		}],
+		sessions: [record],
+	});
+
+	assert.equal(before.children[0].type, "session");
+	assert.equal(after.children[0].type, "session");
+	assert.equal(before.children[0].key, "session:desktop-session-1");
+	assert.equal(after.children[0].key, before.children[0].key);
+	assert.equal(after.children[0].agent.id, "runtime-1");
+});
+
+test("preserves WSL path case while deduplicating native paths", () => {
+	const { getProjectAgentSessionDisplay, getAgentForSessionPath } = loadModule();
+	const wslDisplay = getProjectAgentSessionDisplay({
+		agents: [],
+		sessions: [
+			session({ filePath: "/home/Dev/session.jsonl", wsl: true }),
+			session({ filePath: "/home/dev/session.jsonl", wsl: true }),
+		],
+	});
+	assert.equal(wslDisplay.children.length, 2);
+
+	const agents = [
+		{ id: "upper", sessionPath: "/home/Dev/session.jsonl", createdAt: 1 },
+		{ id: "lower", sessionPath: "/home/dev/session.jsonl", createdAt: 2 },
+	];
+	assert.equal(
+		getAgentForSessionPath(agents, "/home/Dev/session.jsonl", "wsl")?.id,
+		"upper",
 	);
-	assertState(
-		{
-			viewerSessionPath,
-			activeAgentId: "pending-new",
-			activeAgentPending: true,
-		},
-		{ isViewerActive: false, canBridgeMessages: false },
-	);
-	assertState(
-		{
-			viewerSessionPath,
-			activeAgentId: "pending-resume",
-			activeAgentSessionPath: "c:/users/dev/.pi/agent/sessions/old.jsonl",
-			activeAgentPending: true,
-		},
-		{ isViewerActive: true, canBridgeMessages: true },
-	);
-	assertState(
-		{
-			viewerSessionPath,
-			activeAgentId: "agent-new",
-			activeAgentSessionPath: "C:\\Users\\Dev\\.pi\\agent\\sessions\\new.jsonl",
-			activeAgentPending: false,
-		},
-		{ isViewerActive: false, canBridgeMessages: false },
-	);
-	assertState(
-		{
-			viewerSessionPath,
-			activeAgentId: "agent-resume",
-			activeAgentSessionPath: "C:\\Users\\Dev\\.pi\\agent\\sessions\\old.jsonl",
-			activeAgentPending: false,
-		},
-		{ isViewerActive: false, canBridgeMessages: true },
+	assert.equal(
+		getAgentForSessionPath(agents, "/home/Dev/session.jsonl", "native")?.id,
+		"lower",
 	);
 });
 

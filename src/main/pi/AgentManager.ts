@@ -19,6 +19,7 @@ import type {
 } from "../../shared/types";
 import { ipcChannels } from "../../shared/ipc";
 import { PiProcess } from "./PiProcess";
+import { buildAgentSessionKey } from "./agentSessionIdentity";
 import type { RpcResponse } from "./PiRpcClient";
 import { formatBashToolMessage } from "./bashResult";
 import { extractMessageText } from "./messageContent";
@@ -91,6 +92,8 @@ export class AgentManager {
 	private readonly localEventListeners = new Set<(agentId: string, event: unknown) => void>();
 	/** 状态变更监听器（用于 PetStateBridge 等主进程内部模块订阅 AgentTab[] 聚合状态） */
 	private readonly stateListeners = new Set<(tabs: AgentTab[]) => void>();
+	/** 主进程内部观察所有 renderer 输出，用于增量桥接 session-addressed 事件。 */
+	private readonly outputListeners = new Set<(channel: string, payload: unknown) => void>();
 	/** 开启了 RPC 日志记录的 agent id 集合 */
 	private readonly rpcLoggingAgents = new Set<string>();
 	/** 正在执行手动压缩操作的 agent，用于区分手动压缩重启和异常崩溃 */
@@ -150,11 +153,11 @@ export class AgentManager {
 
 	/**
 	 * 不启动 pi 进程，直接从 JSONL 构造与运行态相同的时间线数据。
-	 * Viewer 必须复用 AgentManager 的压缩归档与消息转换规则，避免维护第二套显示模型。
+	 * 持久化 Session 读取复用 AgentManager 的压缩归档与消息转换规则，避免维护第二套显示模型。
 	 */
 	async readSessionDisplayMessages(
 		sessionPath: string,
-		agentId = "_viewer",
+		agentId = "session-reader",
 		sessionContent?: string,
 	): Promise<ChatMessage[]> {
 		const content = sessionContent ?? await readFile(sessionPath, "utf8");
@@ -185,7 +188,7 @@ export class AgentManager {
 					timestamp: typeof entry.timestamp === "string" ? entry.timestamp : undefined,
 				});
 			} catch {
-				// 单行损坏不应阻断整个 Viewer。
+				// 单行损坏不应阻断整个持久化 Session。
 			}
 		}
 		if (entries.length === 0) return [];
@@ -398,7 +401,7 @@ export class AgentManager {
 	}
 
 	async create(input: CreateAgentInput) {
-		const sessionKey = this.normalizeSessionPathForCompare(input.sessionPath);
+		const sessionKey = this.getSessionKey(input);
 		if (!sessionKey) return this.createUnlocked(input);
 
 		const existingForSession = this.findRuntimeBySessionKey(sessionKey);
@@ -416,8 +419,13 @@ export class AgentManager {
 		return createPromise;
 	}
 
-	private normalizeSessionPathForCompare(sessionPath?: string) {
-		return sessionPath?.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+	private getSessionKey(input: CreateAgentInput): string | undefined {
+		const settings = this.settingsStore.get();
+		return buildAgentSessionKey(input, {
+			environment: settings.wslEnabled ? "wsl" : "native",
+			wslDistro: settings.wslDistro,
+			wslUser: settings.wslUser,
+		});
 	}
 
 	private getHistoryAutoLoadDecision(sessionPath?: string): { shouldLoad: boolean; sizeBytes?: number } {
@@ -624,9 +632,16 @@ export class AgentManager {
 	}
 
 	private findRuntimeBySessionKey(sessionKey: string) {
-		return [...this.agents.values()].find(
-			(runtime) =>
-				this.normalizeSessionPathForCompare(runtime.tab.sessionPath) === sessionKey,
+		return [...this.agents.values()].find((runtime) =>
+			this.getSessionKey({
+				projectId: runtime.tab.projectId,
+				sessionPath: runtime.tab.sessionPath,
+				environment: runtime.tab.sessionEnvironment,
+				source: runtime.tab.sessionSource,
+				wslDistro: runtime.tab.wslDistro,
+				wslUser: runtime.tab.wslUser,
+				importedSourceId: runtime.tab.importedSourceId,
+			}) === sessionKey,
 		);
 	}
 
@@ -643,7 +658,7 @@ export class AgentManager {
 			sessionPath: input.sessionPath,
 			title: input.title,
 		});
-		const existingForSessionKey = this.normalizeSessionPathForCompare(input.sessionPath);
+		const existingForSessionKey = this.getSessionKey(input);
 		const existingForSession = existingForSessionKey
 			? this.findRuntimeBySessionKey(existingForSessionKey)
 			: undefined;
@@ -655,6 +670,8 @@ export class AgentManager {
 			return existingForSession.tab;
 		}
 
+		const settings = this.settingsStore.get();
+		const sessionEnvironment = input.environment ?? (settings.wslEnabled ? "wsl" : "native");
 		const tab: AgentTab = {
 			id,
 			projectId: project.id,
@@ -662,6 +679,11 @@ export class AgentManager {
 			title: input.title || `${project.name} agent`,
 			status: "starting",
 			sessionPath: input.sessionPath,
+			sessionEnvironment,
+			sessionSource: input.source ?? "pi",
+			wslDistro: input.wslDistro ?? (sessionEnvironment === "wsl" ? settings.wslDistro : undefined),
+			wslUser: input.wslUser ?? (sessionEnvironment === "wsl" ? settings.wslUser : undefined),
+			importedSourceId: input.importedSourceId,
 			createdAt: Date.now(),
 		};
 
@@ -2344,7 +2366,16 @@ export class AgentManager {
 		this.emitState();
 
 		// 用相同的 session 重新创建 agent，新进程会重新加载所有配置
-		return this.create({ projectId, sessionPath, title });
+		return this.create({
+			projectId,
+			sessionPath,
+			title,
+			environment: runtime.tab.sessionEnvironment,
+			source: runtime.tab.sessionSource,
+			wslDistro: runtime.tab.wslDistro,
+			wslUser: runtime.tab.wslUser,
+			importedSourceId: runtime.tab.importedSourceId,
+		});
 	}
 
 	async exportHtml(agentId: string) {
@@ -3981,7 +4012,13 @@ export class AgentManager {
 		this.notifyStateListeners(tabs);
 	}
 
+	onOutput(listener: (channel: string, payload: unknown) => void): () => void {
+		this.outputListeners.add(listener);
+		return () => this.outputListeners.delete(listener);
+	}
+
 	private emit(channel: string, payload: unknown) {
+		for (const listener of this.outputListeners) listener(channel, payload);
 		const window = this.getWindow();
 		if (!window || window.isDestroyed()) return;
 		window.webContents.send(channel, payload);

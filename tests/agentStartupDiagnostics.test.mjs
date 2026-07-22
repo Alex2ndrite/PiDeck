@@ -22,9 +22,10 @@ test("agent startup writes diagnostics across renderer IPC and pi launch boundar
 	assert.match(mainSource, /Agent get_state request start/);
 	assert.match(mainSource, /Agent get_state request completed/);
 	assert.match(mainSource, /Agent create failed/);
-	assert.match(appSource, /api\.app\.rendererLog\("info", "renderer", "Agent create requested"/);
-	assert.match(appSource, /api\.app\.rendererLog\("info", "renderer", "Agent create completed"/);
-	assert.match(appSource, /api\.app\.rendererLog\("warn", "renderer", "Agent create failed"/);
+	assert.match(indexSource, /Session prompt IPC received/);
+	assert.match(indexSource, /Session prompt IPC completed/);
+	assert.match(indexSource, /Session prompt IPC failed/);
+	assert.doesNotMatch(appSource, /api\.agents\.create\(/);
 });
 
 test("renderer startup reports bootstrap mount and global errors", () => {

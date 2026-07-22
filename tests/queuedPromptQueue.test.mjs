@@ -82,7 +82,7 @@ test("busy composer keeps stop and queued-send controls separate", () => {
   assert.match(stylesSource, /\.send-behavior-menu-wrap \{[\s\S]*?gap: 8px;/);
   assert.match(stylesSource, /\.composer-footer \.send-behavior-toggle \{[\s\S]*?height: 36px;[\s\S]*?background: var\(--color-accent\);[\s\S]*?border-radius: var\(--radius-pill\)/);
   assert.match(stylesSource, /\.send-behavior-chevron \{[\s\S]*?border-left:/);
-  assert.match(appSource, /className="send-behavior-primary"[\s\S]*?onClick=\{sendPrompt\}/);
+  assert.match(appSource, /className="send-behavior-primary"[\s\S]*?onClick=\{\(\) => void sendPrompt\(\)\}/);
   assert.match(appSource, /className="send-behavior-chevron"[\s\S]*?onMouseEnter=\{keepSendBehaviorMenuOpen\}[\s\S]*?setSendBehaviorMenuOpen/);
   assert.match(appSource, /className="send-behavior-option steer"/);
   assert.match(appSource, /className="send-behavior-option follow-up"/);

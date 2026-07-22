@@ -4,23 +4,18 @@ import test from "node:test";
 
 const source = readFileSync("src/renderer/src/App.tsx", "utf8");
 
-test("agent creation uses a bounded timeout instead of leaving pending agents forever", () => {
-	assert.match(source, /const AGENT_CREATE_TIMEOUT_MS = 60_000;/);
-	assert.match(source, /withTimeout<AgentTab>\(/);
-	assert.match(source, /api\.agents\.create\(\{ projectId, sessionPath, title \}\)/);
-	assert.match(source, /AGENT_CREATE_TIMEOUT_MS/);
-	assert.match(source, /t\("app\.agentCreateTimeout"\)/);
-	assert.match(source, /pendingAgentsRef\.current = pendingAgentsRef\.current\.filter/);
-	assert.match(source, /showToast\(e instanceof Error \? e\.message : String\(e\), 5000\)/);
+test("new conversation creates a metadata-only Session draft", () => {
+  const createDraftSource = source.match(
+    /async function createSessionDraft\([\s\S]*?\n  function applyAgentRuntimeState/,
+  )?.[0] ?? "";
+  assert.match(createDraftSource, /api\.sessions\.createDraft\(\{/);
+  assert.match(createDraftSource, /setCurrentSessionId\(session\.id\)/);
+  assert.match(createDraftSource, /setActiveAgentId\(undefined\)/);
+  assert.doesNotMatch(createDraftSource, /api\.agents\.create/);
 });
 
-test("fresh agent creation exits an old session viewer before selecting the pending tab", () => {
-	const createAgentSource = source.match(
-		/async function createAgent\([\s\S]*?\n  \/\*\* 打开会话查看器/,
-	)?.[0] ?? "";
-	assert.match(createAgentSource, /if \(!sessionPath\) clearSessionViewerNow\(\);/);
-	assert.ok(
-		createAgentSource.indexOf("clearSessionViewerNow()") <
-			createAgentSource.indexOf("setActiveAgentId(pendingTab.id)"),
-	);
+test("renderer has no direct Agent creation path", () => {
+  assert.doesNotMatch(source, /async function createAgent\(/);
+  assert.doesNotMatch(source, /api\.agents\.create\(/);
+  assert.match(source, /void createSessionDraft\(project\.id\)/);
 });

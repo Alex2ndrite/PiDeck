@@ -2678,28 +2678,30 @@ export const TurnRow = memo(function TurnRow(props: {
 						</button>
 						{!props.isStreaming && !props.agentRunning && assistantMessages.at(-1)?.message.id && (
 							<>
-								<button
-									className="turn-row-action-btn"
-									onClick={() => {
-										setEditText(mergedText);
-										setEditing(true);
-									}}
-								title={t("common.edit")}
-								>
-									<SquarePen size={14} />
-								</button>
-								<button
-									className="turn-row-action-btn"
-									onClick={() => {
-										const targetId = assistantMessages.at(-1)?.message.id;
-										if (targetId && props.onDeleteMessage) {
-											props.onDeleteMessage(targetId);
-										}
-									}}
-									title={t("common.delete")}
-								>
-									<Trash size={14} />
-								</button>
+								{props.onEditMessage && (
+									<button
+										className="turn-row-action-btn"
+										onClick={() => {
+											setEditText(mergedText);
+											setEditing(true);
+										}}
+										title={t("common.edit")}
+									>
+										<SquarePen size={14} />
+									</button>
+								)}
+								{props.onDeleteMessage && (
+									<button
+										className="turn-row-action-btn"
+										onClick={() => {
+											const targetId = assistantMessages.at(-1)?.message.id;
+											if (targetId) props.onDeleteMessage?.(targetId);
+										}}
+										title={t("common.delete")}
+									>
+										<Trash size={14} />
+									</button>
+								)}
 							</>
 						)}
 					</div>
@@ -2869,12 +2871,14 @@ export const UserBubble = memo(function UserBubble(props: {
 						</button>
 				{!editing && !props.agentRunning && (
 					<>
-						<button className="user-turn-action-btn" onClick={() => {
-							setEditText(cleanText);
-							setEditing(true);
-						}} title={t("common.edit")}>
-							<SquarePen size={14} />
-						</button>
+						{props.onEditMessage && (
+							<button className="user-turn-action-btn" onClick={() => {
+								setEditText(cleanText);
+								setEditing(true);
+							}} title={t("common.edit")}>
+								<SquarePen size={14} />
+							</button>
+						)}
 						<button
 							className="user-turn-action-btn"
 							onClick={handleEditAndResend}
@@ -2882,14 +2886,16 @@ export const UserBubble = memo(function UserBubble(props: {
 						>
 							<UserPen size={14} />
 						</button>
-						<button
-							className="user-turn-action-btn"
-							onClick={() => props.onDeleteMessage?.(message.id)}
-							title={t("common.delete")}
-						>
-							<Trash size={14} />
-						</button>
-						{props.isLastUserMessage && (
+						{props.onDeleteMessage && (
+							<button
+								className="user-turn-action-btn"
+								onClick={() => props.onDeleteMessage?.(message.id)}
+								title={t("common.delete")}
+							>
+								<Trash size={14} />
+							</button>
+						)}
+						{props.isLastUserMessage && props.onResendUserMessage && (
 							<button
 								className="user-turn-action-btn"
 								onClick={() => props.onResendUserMessage?.(message)}

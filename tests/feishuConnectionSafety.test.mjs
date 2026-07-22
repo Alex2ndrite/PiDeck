@@ -6,6 +6,12 @@ const mainSource = () => readFileSync("src/main/index.ts", "utf8");
 const bridgeSource = () => readFileSync("src/main/feishu/FeishuBridge.ts", "utf8");
 const configSource = () => readFileSync("src/main/feishu/FeishuConfig.ts", "utf8");
 
+function promptIntegrationSource(source) {
+	return source.match(
+		/async function sendAgentPromptWithIntegrations\([\s\S]*?\n\}\n\nfunction registerIpc/,
+	)?.[0] ?? "";
+}
+
 test("FeishuBridge.start propagates startup failure to IPC callers", () => {
 	const source = bridgeSource();
 	const startIdx = source.indexOf("async start(): Promise<void>");
@@ -35,7 +41,7 @@ test("renderer bot list never receives stored app secrets", () => {
 
 test("bound Feishu sessions tell the agent to use PiDeck SEND_FILE markers instead of asking for chat_id", () => {
 	const source = mainSource();
-	const handler = source.match(/ipcMain\.handle\(ipcChannels\.agentsPrompt,[\s\S]*?\n\t\}\);/)?.[0] ?? "";
+	const handler = promptIntegrationSource(source);
 	const boundBranch = handler.match(/\} else if \(hasFeishuBinding\) \{[\s\S]*?\n\t\t\}/)?.[0] ?? "";
 	assert.match(boundBranch, /agentInstruction =/);
 	assert.match(handler, /\[SEND_FILE:本地文件路径\]/);
@@ -46,7 +52,7 @@ test("bound Feishu sessions pass the current chat_id into the agent context", ()
 	const main = mainSource();
 	const bridge = bridgeSource();
 	assert.match(bridge, /getSessionChatId\(agentId: string\): string \| undefined/);
-	const handler = main.match(/ipcMain\.handle\(ipcChannels\.agentsPrompt,[\s\S]*?\n\t\}\);/)?.[0] ?? "";
+	const handler = promptIntegrationSource(main);
 	assert.match(handler, /bridge\.getSessionChatId\(input\.agentId\)/);
 	assert.match(handler, /当前绑定的飞书 chat_id/);
 	assert.match(handler, /严禁调用 lark-cli/);
@@ -118,9 +124,9 @@ test("Feishu-origin runs do not also trigger local session mirror sync", () => {
 	assert.match(runMethod, /this\.feishuDrivenRuns\.delete\(binding\.sessionId\)/);
 });
 
-test("agentsPrompt intercepts Feishu file-send requests before sending them to the agent", () => {
+test("shared prompt integration intercepts Feishu file-send requests before sending them to the agent", () => {
 	const source = mainSource();
-	const handler = source.match(/ipcMain\.handle\(ipcChannels\.agentsPrompt,[\s\S]*?\n\t\}\);/)?.[0] ?? "";
+	const handler = promptIntegrationSource(source);
 	const sendIndex = handler.indexOf("bridge.sendFileForSession(input.agentId");
 	const promptIndex = handler.indexOf("agentManager.sendPrompt(");
 	assert.match(handler, /resolveFeishuFileSendIntent\(input\.message, agentManager\.getCwd\(input\.agentId\)\)/);

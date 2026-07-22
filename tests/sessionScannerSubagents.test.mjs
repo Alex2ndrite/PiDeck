@@ -22,6 +22,32 @@ function loadCodexMetaModule() {
 	return sandbox.exports;
 }
 
+function loadMessageContentModule() {
+	const compilerOptions = {
+		module: ts.ModuleKind.CommonJS,
+		target: ts.ScriptTarget.ES2022,
+	};
+	const docActions = { exports: {} };
+	vm.runInNewContext(
+		ts.transpileModule(readFileSync("src/main/feishu/docActions.ts", "utf8"), { compilerOptions }).outputText,
+		docActions,
+		{ filename: "docActions.ts" },
+	);
+	const messageContent = {
+		exports: {},
+		require: (id) => {
+			if (id === "../feishu/docActions") return docActions.exports;
+			throw new Error(`Unexpected messageContent import: ${id}`);
+		},
+	};
+	vm.runInNewContext(
+		ts.transpileModule(readFileSync("src/main/pi/messageContent.ts", "utf8"), { compilerOptions }).outputText,
+		messageContent,
+		{ filename: "messageContent.ts" },
+	);
+	return messageContent.exports;
+}
+
 function loadSessionScanner(homePath, fsOverrides = {}) {
 	const source = readFileSync("src/main/sessions/SessionScanner.ts", "utf8");
 	const { outputText } = ts.transpileModule(source, {
@@ -31,6 +57,7 @@ function loadSessionScanner(homePath, fsOverrides = {}) {
 		},
 	});
 	const codexMeta = loadCodexMetaModule();
+	const messageContent = loadMessageContentModule();
 	const sandbox = {
 		AbortController,
 		AbortSignal,
@@ -41,6 +68,7 @@ function loadSessionScanner(homePath, fsOverrides = {}) {
 		require: (id) => {
 			if (id === "electron") return { app: { getPath: () => homePath } };
 			if (id === "../../shared/codexSessionMeta") return codexMeta;
+			if (id === "../pi/messageContent") return messageContent;
 			if (id === "node:fs") return { ...require(id), ...fsOverrides };
 			return require(id);
 		},

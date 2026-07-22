@@ -7,11 +7,13 @@ import {
   useMemo,
   useRef,
   useState,
+  useTransition,
   useCallback,
   type PointerEvent,
   type CSSProperties,
   type ReactNode,
 } from "react";
+import { useAtomValue, useSetAtom } from "jotai";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
@@ -30,14 +32,12 @@ import {
   Play,
   Plus,
   Trash2,
-  Wrench,
   Minus,
   FolderOpen,
   FolderCog,
   Globe,
   Pin,
   Pencil,
-  ArrowUp,
   Square,
   Terminal,
   Filter,
@@ -53,6 +53,29 @@ import { TrustConfirmModal } from "./components/app/TrustConfirmModal";
 import { TerminalDock } from "./components/terminal/TerminalDock";
 import { FeishuLinkIndicator } from "./components/feishu/FeishuLinkIndicator";
 import { useFeishuBridge } from "./hooks/useFeishuBridge";
+import { useSessionRuntimeBridge } from "./hooks/useSessionRuntimeBridge";
+import { useSessionMessages } from "./hooks/useSessionMessages";
+import { useSessionSend } from "./hooks/useSessionSend";
+import {
+  bindSessionRuntimeAtom,
+  currentSessionAttachmentsAtom,
+  currentSessionAtom,
+  currentSessionComposerModeAtom,
+  currentSessionDraftAtom,
+  currentSessionIdAtom,
+  currentSessionRuntimeAtom,
+  currentSessionSendStateAtom,
+  removeSessionComposerStateAtom,
+  removeSessionStateAtom,
+  replaceProjectSessionsAtom,
+  sessionIdsByProjectAtom,
+  sessionRecordsAtom,
+  sessionRuntimeByIdAtom,
+  setSessionAttachmentsAtom,
+  setSessionComposerModeAtom,
+  setSessionDraftAtom,
+  upsertSessionAtom,
+} from "./atoms";
 import { CloseIconButton } from "./components/ui/IconButton";
 import {
   buildComposerPromptSubmission,
@@ -65,14 +88,11 @@ import {
   getAgentForSessionPath,
   getProjectAgentSessionDisplay,
   isSameSessionPath,
-  isSidebarSessionRowActive,
 } from "./agentListDisplay";
 import { resolveLocale, setI18nLocale, t } from "./i18n";
 import { mergeAgentRuntimeState } from "./utils/agentRuntimeState";
 import {
   acknowledgeUnknownPrompt,
-  canDiscardQueuedPrompt,
-  canRetractQueuedPromptToInput,
   claimIdleHead,
   claimNextSteerPrompt,
   enqueuePrompt,
@@ -94,16 +114,21 @@ import { useMessagePagination } from "./hooks/useMessagePagination";
 import { useSessionLoader } from "./hooks/useSessionLoader";
 import { useScratchPad } from "./hooks/useScratchPad";
 import { SessionReferenceModal, type SessionReferenceResult } from "./components/app/SessionReferenceModal";
+import { SessionMessageTimeline } from "./components/session/SessionMessageTimeline";
+import { SessionHeader } from "./components/session/SessionHeader";
+import {
+  ComposerAttachmentBar,
+  ComposerSendControls,
+  ExtensionWidgetPanel,
+  QueuedPromptPanel,
+} from "./components/session/ComposerPanels";
 import { ScratchPadPanel } from "./components/scratchPad/ScratchPadPanel";
 import { LazyWrapper } from "./hooks/useLazyComponent";
 import {
   AgentContextMenu,
   ComposerToolbar,
-  CompactionCard,
   ConversationOutline,
-  DiagnosticMessageCard,
   DrawerContent,
-  EmptyState,
   EnvironmentDialog,
   FileContextMenu,
   ConfirmDialog,
@@ -116,26 +141,16 @@ import {
   PromptSuggestions,
   SessionContextMenu,
   SessionManagerModal,
-  RespondingIndicator,
-  SessionStatus,
 
   ComposerModePicker,
   ThinkingPicker,
-  UserBubble,
-  TurnRow,
-  AskQuestionCard,
-  ExtensionWidgetCard,
-  MultiSelectModal,
   WorktreeCreateDialog,
-  stripMarkdown,
   type DrawerPanel,
   type SessionModifiedFile,
 } from "./components/app/AppParts";
 import { GitPanel } from "./components/app/GitPanel";
 import { BrowserPanel, navigateTo } from "./components/app/BrowserPanel";
 import {
-  groupToolMessages,
-  getMultiSelectImageCaptureIds,
   applySuggestion,
   buildOutline,
   buildSuggestionItems,
@@ -201,6 +216,8 @@ import type {
   NpmAvailabilityResult,
   PiUpdateCheckResult,
   Project,
+  SessionEnvironment,
+  SessionRecord,
   SessionSummary,
   ComposerAgentMode,
   ThinkingUpdate,
@@ -229,6 +246,28 @@ const api =
     : isLanWeb
       ? createBrowserApi()
       : createPreviewApi());
+
+function sessionRecordToSummary(session: SessionRecord): SessionSummary | undefined {
+  if (!session.filePath) return undefined;
+  return {
+    id: session.id,
+    filePath: session.filePath,
+    projectPath: session.projectPath,
+    name: session.title,
+    parentSessionPath: session.parentSessionPath,
+    preview: session.preview,
+    updatedAt: session.updatedAt,
+    messageCount: session.messageCount,
+    source: session.source,
+    wsl: session.environment === "wsl" || session.wsl || undefined,
+    codexSessionId: session.codexSessionId,
+    codexThreadSource: session.codexThreadSource,
+    codexParentThreadId: session.codexParentThreadId,
+    codexAgentRole: session.codexAgentRole,
+    codexAgentNickname: session.codexAgentNickname,
+  };
+}
+
 // 输入框默认高度增加,提供更好的输入体验,适合多行输入和代码片段
 const COMPOSER_MIN_HEIGHT = 175;
 const COMPOSER_DEFAULT_TERMINAL_HEIGHT = 220;
@@ -236,7 +275,6 @@ const COMPOSER_MIN_TIMELINE_HEIGHT = 160;
 const DRAWER_ANIMATION_MS = 120;
 const TERMINAL_DOCK_MOTION_MS = 180;
 const SIDEBAR_PROJECT_CHILD_PAGE_SIZE = 5;
-const AGENT_CREATE_TIMEOUT_MS = 60_000;
 const SESSION_REFRESH_TIMEOUT_MS = 20_000;
 
 function withTimeout<T>(
@@ -372,20 +410,25 @@ type PendingAgentTab = AgentTab & {
   pendingStartedAt?: number;
 };
 
+function inferSessionEnvironment(filePath?: string): SessionEnvironment {
+  return filePath?.startsWith("/") ? "wsl" : "native";
+}
+
 function isReplacementForPendingAgent(agent: AgentTab, pending: PendingAgentTab) {
   if (agent.projectId !== pending.projectId || agent.cwd !== pending.cwd)
     return false;
 
+  const environment = inferSessionEnvironment(pending.sessionPath);
   if (pending.pendingKind === "restart") {
     const startedAt = pending.pendingStartedAt ?? pending.createdAt;
     // 重启占位只匹配本次重启之后出现的新进程，避免误选同项目下已有的同名 Agent。
     if (agent.createdAt < startedAt - 1000) return false;
-    if (isSameSessionPath(agent.sessionPath, pending.sessionPath)) return true;
+    if (isSameSessionPath(agent.sessionPath, pending.sessionPath, environment)) return true;
     return !pending.sessionPath && agent.title === pending.title;
   }
 
   if (!pending.id.startsWith("pending-")) return false;
-  if (isSameSessionPath(agent.sessionPath, pending.sessionPath)) return true;
+  if (isSameSessionPath(agent.sessionPath, pending.sessionPath, environment)) return true;
   if (pending.sessionPath && agent.createdAt >= pending.createdAt - 1000)
     return true;
   return (
@@ -467,6 +510,36 @@ export function App() {
     );
   }
 
+  useSessionRuntimeBridge();
+  const [, startPromptTransition] = useTransition();
+  const currentSessionId = useAtomValue(currentSessionIdAtom);
+  const currentSession = useAtomValue(currentSessionAtom);
+  const currentSessionRuntime = useAtomValue(currentSessionRuntimeAtom);
+  const currentSessionDraft = useAtomValue(currentSessionDraftAtom);
+  const currentSessionAttachments = useAtomValue(currentSessionAttachmentsAtom);
+  const currentSessionComposerMode = useAtomValue(currentSessionComposerModeAtom);
+  const currentSessionSendState = useAtomValue(currentSessionSendStateAtom);
+  const sessionRecords = useAtomValue(sessionRecordsAtom);
+  const sessionRecordIdsByProject = useAtomValue(sessionIdsByProjectAtom);
+  const sessionRuntimeById = useAtomValue(sessionRuntimeByIdAtom);
+  const setCurrentSessionId = useSetAtom(currentSessionIdAtom);
+  const replaceProjectSessions = useSetAtom(replaceProjectSessionsAtom);
+  const upsertSession = useSetAtom(upsertSessionAtom);
+  const setSessionDraft = useSetAtom(setSessionDraftAtom);
+  const setSessionAttachments = useSetAtom(setSessionAttachmentsAtom);
+  const setSessionComposerMode = useSetAtom(setSessionComposerModeAtom);
+  const bindSessionRuntime = useSetAtom(bindSessionRuntimeAtom);
+  const removeSessionState = useSetAtom(removeSessionStateAtom);
+  const removeSessionComposerState = useSetAtom(removeSessionComposerStateAtom);
+  const {
+    messages: currentSessionMessages,
+    isLoading: currentSessionMessagesLoading,
+  } = useSessionMessages(currentSessionId);
+  const currentSessionIdRef = useRef<string | undefined>(currentSessionId);
+  currentSessionIdRef.current = currentSessionId;
+  const openSessionRequestRef = useRef(0);
+  const creatingSessionDraftRef = useRef<Set<string>>(new Set());
+
   const [projects, setProjects] = useState<Project[]>([]);
   // 项目的 git worktree 列表：{ parentId -> WorktreeEntry[] }
   const [worktreesByProject, setWorktreesByProject] = useState<
@@ -480,7 +553,7 @@ export function App() {
   const [activeProjectId, setActiveProjectId] = useState<string>();
   const activeProjectIdRef = useRef<string | undefined>(activeProjectId);
   activeProjectIdRef.current = activeProjectId;
-  const [activeAgentId, setActiveAgentId] = useState<string>();
+  const activeAgentId = currentSessionRuntime?.agentId;
   // 切换 agent（新会话/恢复会话）时刷新设置，使 pi agent 的 hideThinkingBlock 立即生效
   useEffect(() => {
     if (activeAgentId) {
@@ -494,9 +567,7 @@ export function App() {
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(
     new Set(),
   );
-  const [activeAgentByProject, setActiveAgentByProject] = useState<
-    Record<string, string>
-  >({});
+
   const [messagesByAgent, setMessagesByAgent] = useState<
     Record<string, ChatMessage[]>
   >({});
@@ -626,19 +697,22 @@ export function App() {
   >(() => loadDismissedExtensionWidgets());
   /** 输入框发送模式：normal 直接交给 agent，plan 通过隐藏标记触发 PiDeck Plan Mode 扩展。 */
   const [composerAgentModes, setComposerAgentModes] = useState<Record<string, ComposerAgentMode>>({});
-  /** 查看器模式的发送模式（仅在无 agent 时使用） */
-  // 侧栏选中态：当前活跃 Agent 对应的 session 路径（activeAgent 在后面定义，这里用函数式）
-  const displayedSidebarSessionPath = activeAgentId
-    ? [...agents, ...pendingAgents].find((agent) => agent.id === activeAgentId)?.sessionPath
-    : undefined;
+
   const activeAgentComposerMode = activeAgentId
     ? composerAgentModes[activeAgentId]
     : undefined;
-  const currentComposerAgentMode = activeAgentComposerMode ?? "normal";
+  const currentComposerAgentMode = currentSessionId
+    ? currentSessionComposerMode
+    : (activeAgentComposerMode ?? "normal");
   const setComposerAgentModeForAgent = (agentId: string, mode: ComposerAgentMode) => {
     setComposerAgentModes((prev) => ({ ...prev, [agentId]: mode }));
   };
   const setCurrentComposerAgentMode = (mode: ComposerAgentMode) => {
+    const sessionId = currentSessionIdRef.current;
+    if (sessionId) {
+      setSessionComposerMode({ sessionId, mode });
+      return;
+    }
     const targetAgentId = activeAgentIdRef.current;
     if (!targetAgentId) return;
     setComposerAgentModeForAgent(targetAgentId, mode);
@@ -667,7 +741,6 @@ export function App() {
   const activeQueuedPrompts = activeAgentId ? (queuedPrompts[activeAgentId] ?? []) : [];
 
   /** 当前 agent 流式思考的实时文本,agent_end 时清空 */
-  const [multiSelectOpen, setMultiSelectOpen] = useState(false);
   const [sessionRefPickerOpen, setSessionRefPickerOpen] = useState(false);
   const [sessionRefPickerTarget, setSessionRefPickerTarget] = useState<SessionSummary | null>(null);
   /** & 会话引用选择缓存：key = chip raw（如 "&My Session"），value = 选中的消息列表 */
@@ -1404,26 +1477,37 @@ export function App() {
       if (!currentIds.has(id)) delete promptHistoryRef.current[id];
     }
   }, [displayAgents]);
-  // Agent 切换时重置历史导航状态，避免跨 Agent 泄漏 historyIndex / savedPrompt
+  // Session/Agent 切换时重置历史导航状态，避免输入历史串会话。
   useEffect(() => {
     setHistoryIndex(-1);
     setHistoryNavigating(false);
     setSavedPrompt("");
-  }, [activeAgentId]);
+  }, [activeAgentId, currentSessionId]);
   // 查看器已移除：activeAgent 直接从 displayAgents / pendingAgents 取，不再有伪 Agent。
   const activeAgent = activeAgentId
     ? [...displayAgents, ...pendingAgents].find((agent) => agent.id === activeAgentId)
     : undefined;
+  const activeWidgetSessionKey = activeAgentId
+    ? getAgentSessionStorageKey(activeAgent, activeAgentId)
+    : undefined;
   // prompt 文本：优先从 live ref 读取（始终保持最新），promptByAgent 仅在 chips 变化时更新作为兜底。
   // 不建立 state 依赖——普通按键不会触发 App 重渲染，仅靠 hasComposerContent / composerBangMode
   // 等布尔状态在真正翻转时驱动 UI 刷新。建议框打开时由 composerCursor 变化驱动重渲染。
-  const promptAgentKey = activeAgentId ?? "";
-  const prompt = promptAgentKey
-    ? (livePromptByAgentRef.current[promptAgentKey] ?? promptByAgent[promptAgentKey] ?? "")
-    : "";
-  const attachedImages = activeAgentId
-    ? (attachedImagesByAgent[activeAgentId] ?? [])
-    : [];
+  const promptAgentKey = currentSessionId ?? activeAgentId ?? "";
+  const prompt = currentSessionId
+    ? (livePromptByAgentRef.current[currentSessionId] ?? currentSessionDraft)
+    : promptAgentKey
+      ? (livePromptByAgentRef.current[promptAgentKey] ?? promptByAgent[promptAgentKey] ?? "")
+      : "";
+  const attachedImages = currentSessionId
+    ? currentSessionAttachments
+    : activeAgentId
+      ? (attachedImagesByAgent[activeAgentId] ?? [])
+      : [];
+
+  useEffect(() => {
+    syncComposerFlags(prompt);
+  }, [activeAgentId, currentSessionId]);
 
   function setPromptForAgent(
     agentId: string,
@@ -1434,8 +1518,12 @@ export function App() {
     const nextValue = typeof value === "function" ? value(previous) : value;
     if (nextValue) livePromptByAgentRef.current[targetAgentId] = nextValue;
     else delete livePromptByAgentRef.current[targetAgentId];
-    // 程序化更新（建议选择、历史恢复、发送后清空等）需要同步更新 state
-    // 以触发 RichInput 的 chip 渲染和 useLayoutEffect 受控检查。
+    // 程序化更新（建议选择、历史恢复、发送后清空等）需要同步更新 state。
+    if (currentSessionIdRef.current === targetAgentId || sessionRecords[targetAgentId]) {
+      setSessionDraft({ sessionId: targetAgentId, value: nextValue });
+      if (currentSessionIdRef.current === targetAgentId) syncComposerFlags(nextValue);
+      return;
+    }
     syncComposerFlags(nextValue);
     setPromptByAgent((current) => {
       if (!nextValue) {
@@ -1463,15 +1551,19 @@ export function App() {
   }
 
   function setPromptFromNativeInput(agentId: string, value: string) {
-    // 同步更新 live ref（发送路径读取）。普通按键不触发 promptByAgent 更新——
-    // RichInput 的 contentEditable 自行管理 DOM，React state 仅用于 chip 重渲染。
+    // 同步更新 live ref（发送路径读取）。Session 草稿同时写入 atom，切换后可立即恢复。
     if (value) livePromptByAgentRef.current[agentId] = value;
     else delete livePromptByAgentRef.current[agentId];
 
-    // 仅布尔状态翻转时才触发重渲染（有/无内容、!/!! 前缀变化）
     syncComposerFlags(value);
+    if (currentSessionIdRef.current === agentId || sessionRecords[agentId]) {
+      startPromptTransition(() => {
+        setSessionDraft({ sessionId: agentId, value });
+      });
+      return;
+    }
 
-    // 仅 chips 变化时才更新 promptByAgent（触发 RichInput 的 useMemo chips 重算 + renderDom）
+    // 仅 chips 变化时才更新旧 Agent state（触发 RichInput 的 chips 重算 + renderDom）。
     const oldValue = promptByAgent[agentId] ?? "";
     const oldChipsKey = parseRichInputChips(oldValue, validCommandNames, validFilePaths, validSessionRefs)
       .map((c) => `${c.start}:${c.end}:${c.kind}`)
@@ -1480,26 +1572,43 @@ export function App() {
       .map((c) => `${c.start}:${c.end}:${c.kind}`)
       .join(",");
     if (oldChipsKey !== newChipsKey) {
-      setPromptByAgent((current) => {
-        if (!value) {
-          const next = { ...current };
-          delete next[agentId];
-          return next;
-        }
-        return { ...current, [agentId]: value };
+      startPromptTransition(() => {
+        setPromptByAgent((current) => {
+          if (!value) {
+            const next = { ...current };
+            delete next[agentId];
+            return next;
+          }
+          return { ...current, [agentId]: value };
+        });
       });
     }
   }
 
+  function getComposerTargetId() {
+    return currentSessionIdRef.current ?? activeAgentIdRef.current;
+  }
+
+  function getLiveComposerPrompt() {
+    const targetId = getComposerTargetId();
+    return targetId
+      ? (livePromptByAgentRef.current[targetId] ?? prompt)
+      : prompt;
+  }
+
   function setPrompt(value: string | ((current: string) => string)) {
-    const targetAgentId = activeAgentIdRef.current;
-    if (targetAgentId) setPromptForAgent(targetAgentId, value);
+    const targetId = getComposerTargetId();
+    if (targetId) setPromptForAgent(targetId, value);
   }
 
   function setAttachedImagesForAgent(
     agentId: string,
     value: ImageContent[] | ((current: ImageContent[]) => ImageContent[]),
   ) {
+    if (currentSessionIdRef.current === agentId || sessionRecords[agentId]) {
+      setSessionAttachments({ sessionId: agentId, value });
+      return;
+    }
     const current = attachedImagesByAgentRef.current;
     const previous = current[agentId] ?? [];
     const nextValue = typeof value === "function" ? value(previous) : value;
@@ -1513,8 +1622,8 @@ export function App() {
   function setAttachedImages(
     value: ImageContent[] | ((current: ImageContent[]) => ImageContent[]),
   ) {
-    const targetAgentId = activeAgentIdRef.current;
-    if (targetAgentId) setAttachedImagesForAgent(targetAgentId, value);
+    const targetId = getComposerTargetId();
+    if (targetId) setAttachedImagesForAgent(targetId, value);
   }
   const terminalDockState = activeAgentId
     ? terminalDockStateByAgent[activeAgentId]
@@ -1564,13 +1673,40 @@ export function App() {
     ? drawerPinnedByProject[activeProjectId]
     : undefined;
   const drawerPinned = Boolean(drawerPinnedPanel);
-  const activeMessages = activeAgentId
-    ? (messagesByAgent[activeAgentId] ?? [])
-    : [];
+  const activeMessages = currentSessionId ? currentSessionMessages : [];
   const agentRuntimeState = activeAgentId
     ? runtimeStateByAgent[activeAgentId]
     : undefined;
-  const activeRuntimeState = agentRuntimeState;
+  const activeRuntimeState = currentSessionId
+    ? (currentSessionRuntime?.state ?? (
+      currentSession?.model || currentSession?.thinkingLevel
+        ? {
+            provider: currentSession.model?.provider,
+            modelId: currentSession.model?.modelId,
+            modelName: currentSession.model?.modelId,
+            thinkingLevel: currentSession.thinkingLevel,
+          }
+        : undefined
+    ))
+    : agentRuntimeState;
+  const activeConversationStatus = currentSessionId
+    ? (currentSessionRuntime?.status ??
+      (currentSessionSendState.status === "activating" ? "starting" : "idle"))
+    : undefined;
+  const hasActiveConversation = Boolean(currentSession);
+  const isConversationLoading = Boolean(
+    currentSessionId &&
+    activeMessages.length === 0 &&
+    (currentSessionMessagesLoading || currentSessionSendState.status === "activating"),
+  );
+  const currentSessionLiveAgentId =
+    currentSessionRuntime?.agentId === activeAgentId &&
+    activeAgent &&
+    activeAgent.status !== "closed" &&
+    activeAgent.status !== "error"
+      ? activeAgent.id
+      : undefined;
+  const canMutateActiveMessages = Boolean(currentSessionLiveAgentId);
   const activeProjectHasBusyAgent = Boolean(
     activeProjectId && displayAgents.some((agent) =>
       agent.projectId === activeProjectId && (
@@ -1608,88 +1744,7 @@ export function App() {
     enabled: activeMessages.length > 100, // 超过 100 条才启用
   });
 
-  /** 最后一条用户消息的 id，用于决定重发按钮只在最新消息上显示。 */
-  /**
-   * 将分页消息按 agent run 分组，用于 TurnRow 渲染。
-   * 用户/错误/系统消息保持独立条目，assistant + tool 消息聚合为 agnet-run。
-   */
-  const renderedRuns = useMemo(
-    () => groupToolMessages(paginatedMessages),
-    [paginatedMessages],
-  );
 
-  // 多选分享：图片只克隆已勾选的可见消息，避免截到整屏会话或被滚动容器裁掉。
-  const handleMultiSelectCopy = useCallback(async (selectedIds: Set<string>, kind: "text" | "markdown" | "image") => {
-    if (kind === "image") {
-      try {
-        const { toBlob: toBlobImg } = await import("html-to-image");
-        const source = document.querySelector(".message-list") as HTMLElement | null;
-        if (!source) return;
-
-        const captureIds = getMultiSelectImageCaptureIds(renderedRuns, selectedIds);
-        const clone = source.cloneNode(true) as HTMLElement;
-        for (const item of Array.from(clone.children)) {
-          if (!(item instanceof HTMLElement)) continue;
-          const id = item.dataset.messageId;
-          if (!id || !captureIds.has(id)) item.remove();
-        }
-        clone.classList.add("multi-select-image-export");
-        clone.style.width = `${Math.max(source.clientWidth, source.scrollWidth)}px`;
-        clone.style.padding = "24px";
-        clone.style.background = getComputedStyle(document.documentElement).getPropertyValue("--color-bg-panel") || "#fff";
-        document.body.appendChild(clone);
-        let blob: Blob | null = null;
-        try {
-          blob = await toBlobImg(clone, {
-            pixelRatio: Math.min(2, window.devicePixelRatio || 1),
-            backgroundColor: getComputedStyle(document.documentElement).getPropertyValue("--color-bg-panel") || undefined,
-            filter: (node) =>
-              !(node instanceof HTMLElement) ||
-              (!node.classList.contains("turn-row-actions") &&
-                !node.classList.contains("user-turn-actions") &&
-                !node.classList.contains("copy-menu-popover")),
-          });
-        } finally {
-          clone.remove();
-        }
-        if (blob) {
-          await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
-          showToast(t("copy.asImageCopied"));
-        }
-      } catch {
-        showToast(t("copy.failed"));
-      }
-      setMultiSelectOpen(false);
-      return;
-    }
-
-    const selected = activeMessages
-      .filter((m) => selectedIds.has(m.id))
-      .sort((a, b) => a.timestamp - b.timestamp);
-    if (selected.length === 0) return;
-
-    const separator = "\n\n---\n\n";
-    const content = kind === "text"
-      ? selected.map((m) => {
-          let text = m.text;
-          text = text.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, "");
-          text = text.replace(/<thinking>[\s\S]*?<\/thinking>/g, "");
-          text = text.replace(/<skill\s+name="[^"]*"[^>]*>[\s\S]*?<\/skill>/gi, "");
-          return stripMarkdown(text);
-        }).join(separator)
-      : selected.map((m) => m.text).join(separator);
-
-    await navigator.clipboard.writeText(content);
-    showToast(kind === "text" ? t("copy.asTextCopied") : t("copy.asMarkdownCopied"));
-    setMultiSelectOpen(false);
-  }, [activeMessages, renderedRuns]);
-
-  const lastUserMessageId = useMemo(() => {
-    for (let i = activeMessages.length - 1; i >= 0; i--) {
-      if (activeMessages[i].role === "user") return activeMessages[i].id;
-    }
-    return undefined;
-  }, [activeMessages]);
   // 从 activeUiRequest 提取正在进行的交互式请求（select/confirm/input/editor）
   // 这是 ask_question 在 pi RPC 模式下的表现方式：pi 通过 extension_ui_request 将
   // 等待用户回答的对话框发送到桌面端，包含 requestId、title、options 等完整信息。
@@ -1707,31 +1762,13 @@ export function App() {
     return () => document.body.classList.remove("ask-dialog-open");
   }, [showAskDialog]);
 
-  const isAwaitingAssistant = Boolean(
-    activeAgent &&
-    !cancellingUi &&
-    (activeAgent.status === "running" || activeRuntimeState?.isStreaming) &&
-    activeMessages.at(-1)?.role !== "assistant",
-  );
-  /** 正在流式追加的最后一条 assistant 消息的 id（agent 处于运行/流式状态时才有值）。
-   *  用于让对应 AssistantText 走轻量渲染路径，避免每个 token 都对不断增长的全量正文
-   *  反复运行 KaTeX 数学解析导致渲染主线程卡死；回答结束后切回完整渲染。 */
-  const streamingMessageId = useMemo(() => {
-    if (!activeAgent || activeAgent.status !== "running") return undefined;
-    if (!(activeRuntimeState?.isStreaming)) return undefined;
-    for (let i = activeMessages.length - 1; i >= 0; i--) {
-      const m = activeMessages[i];
-      if (m.role === "user") break;
-      // 跳过纯 thinking / 工具消息，定位最后一条有实际正文的 assistant 消息
-      if (m.role === "assistant" && (m.text || "").trim()) return m.id;
-    }
-    return undefined;
-  }, [activeAgent, activeRuntimeState, activeMessages]);
 
   /** 当前活跃 agent 的实时思考文本 */
-  const activeThinking = activeAgentId
-    ? (streamingThinking[activeAgentId] ?? "")
-    : "";
+  const activeThinking = currentSessionId
+    ? (currentSessionRuntime?.thinking ?? "")
+    : activeAgentId
+      ? (streamingThinking[activeAgentId] ?? "")
+      : "";
   const activeTerminalHeight = activeAgentId
     ? (terminalHeightByAgent[activeAgentId] ?? COMPOSER_DEFAULT_TERMINAL_HEIGHT)
     : COMPOSER_DEFAULT_TERMINAL_HEIGHT;
@@ -2090,21 +2127,7 @@ export function App() {
         setPendingAgents(remainingPendingAgents);
       }
       setAgents(nextAgents);
-      setActiveAgentId((current) => {
-        if (!current) return undefined;
-        if (nextAgents.some((agent) => agent.id === current)) return current;
-        const pendingAgent = previousPendingAgents.find(
-          (agent) => agent.id === current,
-        );
-        const replacement = pendingAgent
-          ? nextAgents.find((agent) =>
-              isReplacementForPendingAgent(agent, pendingAgent),
-            )
-          : undefined;
-        if (replacement) return replacement.id;
-        return pendingAgent ? current : undefined;
-      });
-    const activeIds = new Set(nextAgents.map((agent) => agent.id));
+      const activeIds = new Set(nextAgents.map((agent) => agent.id));
       const activeProjectIds = new Set(nextAgents.map((agent) => agent.projectId));
       const draftIds = new Set([
         ...nextAgents.map((agent) => agent.id),
@@ -2330,13 +2353,34 @@ export function App() {
     return () => window.removeEventListener("keydown", handler);
   }, [scratchPadToggle, scratchPadClose, scratchPadIsOpen]);
 
-  // 桌面宠物点击跳转：主进程通知激活某 Agent，切到对应 project + agent tab
+  // 桌面宠物点击跳转：优先恢复到 Agent 对应的稳定 Session，旧的无路径 Agent 才回退到 tab。
   useEffect(() => {
     const off = api.agents.onFocusTarget((target) => {
       const agent = displayAgentsRef.current.find((a) => a.id === target.agentId);
       if (!agent) return;
-      setActiveProjectId(agent.projectId);
-      setActiveAgentId(agent.id);
+      void (async () => {
+        setActiveProjectId(agent.projectId);
+        if (agent.sessionPath) {
+          const records = await api.sessions.listCatalog(agent.projectId);
+          replaceProjectSessions({ projectId: agent.projectId, sessions: records });
+          const session = records.find((record) =>
+            isSameSessionPath(record.filePath, agent.sessionPath, record.environment),
+          );
+          if (session) {
+            setCurrentSessionId(session.id);
+            bindSessionRuntime({
+              sessionId: session.id,
+              agentId: agent.id,
+              runtimeGeneration: agent.runtimeGeneration,
+              status: agent.status,
+            });
+            return;
+          }
+        }
+        setCurrentSessionId(undefined);
+      })().catch(() => {
+        setCurrentSessionId(undefined);
+      });
     });
     return off;
   }, []);
@@ -2597,13 +2641,6 @@ export function App() {
     activeTerminalHeight,
   ]);
 
-  useEffect(() => {
-    if (activeProjectId && activeAgentId)
-      setActiveAgentByProject((current) => ({
-        ...current,
-        [activeProjectId]: activeAgentId,
-      }));
-  }, [activeProjectId, activeAgentId]);
 
   useEffect(() => {
     if (activeAgentId && !isPendingAgentId(activeAgentId))
@@ -2814,25 +2851,6 @@ export function App() {
       void refreshProjectSessions(activeProjectId).catch(() => undefined);
     }
 
-    const currentAgentBelongsToProject =
-      activeAgentId &&
-      displayAgents.some(
-        (agent) =>
-          agent.id === activeAgentId && agent.projectId === activeProjectId,
-      );
-    if (!currentAgentBelongsToProject) {
-      const rememberedAgent = activeAgentByProject[activeProjectId];
-      const fallbackAgent = displayAgents.find(
-        (agent) => agent.projectId === activeProjectId,
-      )?.id;
-      setActiveAgentId(
-        rememberedAgent &&
-          displayAgents.some((agent) => agent.id === rememberedAgent)
-          ? rememberedAgent
-          : fallbackAgent,
-      );
-    }
-
     setExpandedDirs(new Set());
     void api.files
       .list(activeProjectId)
@@ -2842,7 +2860,7 @@ export function App() {
       .branches(activeProjectId)
       .then(setGitInfo)
       .catch(() => setGitInfo({ current: null, branches: [] }));
-  }, [activeProjectId, displayAgents.length]);
+  }, [activeProjectId, currentSessionId, displayAgents.length]);
 
   useEffect(() => {
     if (!activeProjectId) return;
@@ -3144,8 +3162,17 @@ export function App() {
   }
 
   async function refreshSessions(projectId = activeProjectId) {
-    const next = await api.sessions.list(projectId);
-    setSessions([...next].sort((a, b) => b.updatedAt - a.updatedAt));
+    if (!projectId) {
+      setSessions([]);
+      return [];
+    }
+    const records = await api.sessions.listCatalog(projectId);
+    replaceProjectSessions({ projectId, sessions: records });
+    const next = records
+      .map(sessionRecordToSummary)
+      .filter((session): session is SessionSummary => Boolean(session))
+      .sort((a, b) => b.updatedAt - a.updatedAt);
+    setSessions(next);
   }
 
   async function refreshProjectSessions(projectId: string, silent = false) {
@@ -3166,13 +3193,17 @@ export function App() {
       await new Promise<void>((resolve) => setTimeout(resolve, 0));
     }
     try {
-      const next = await withTimeout(
-        api.sessions.list(projectId),
+      const records = await withTimeout(
+        api.sessions.listCatalog(projectId),
         SESSION_REFRESH_TIMEOUT_MS,
         t("app.sessionRefreshTimeout"),
       );
-      if (sessionRequestByProjectRef.current[projectId] !== request) return next;
-      const sorted = [...next].sort((a, b) => b.updatedAt - a.updatedAt);
+      if (sessionRequestByProjectRef.current[projectId] !== request) return records;
+      replaceProjectSessions({ projectId, sessions: records });
+      const sorted = records
+        .map(sessionRecordToSummary)
+        .filter((session): session is SessionSummary => Boolean(session))
+        .sort((a, b) => b.updatedAt - a.updatedAt);
       setSessionsByProject((current) => ({
         ...current,
         [projectId]: sorted,
@@ -3365,7 +3396,9 @@ export function App() {
   }
 
   async function deleteHistorySession(session: SessionSummary) {
-    await api.sessions.delete(session.filePath);
+    await api.sessions.deleteRecord(session.id);
+    removeSessionState(session.id);
+    removeSessionComposerState(session.id);
     showToast(t("app.sessionDeleted"), 2200);
     const projectId = sessionsProjectId ?? activeProjectId;
     await refreshSessions(projectId);
@@ -3445,7 +3478,7 @@ export function App() {
     }
     setAgentRenaming(true);
     try {
-      await api.sessions.rename(sessionRenameTarget.session.filePath, name);
+      await api.sessions.updateRecord(sessionRenameTarget.session.id, { title: name });
       await refreshProjectSessions(sessionRenameTarget.projectId);
       if (sessionsProjectId === sessionRenameTarget.projectId) {
         await refreshSessions(sessionRenameTarget.projectId);
@@ -3465,24 +3498,73 @@ export function App() {
     }
   }
 
+  async function deleteDraftSession(session: SessionRecord) {
+    await api.sessions.deleteRecord(session.id);
+    removeSessionState(session.id);
+    removeSessionComposerState(session.id);
+    if (activeProjectId === session.projectId) {
+      setSessionsByProject((current) => ({
+        ...current,
+        [session.projectId]: current[session.projectId] ?? [],
+      }));
+    }
+  }
+
   async function openSidebarSession(
     projectId: string,
     session: SessionSummary,
   ) {
     setSessionMenu(null);
+    const requestSequence = ++openSessionRequestRef.current;
+    let record: SessionRecord | undefined = sessionRecords[session.id] ?? Object.values(sessionRecords).find(
+      (candidate) =>
+        candidate.projectId === projectId &&
+        candidate.filePath &&
+        isSameSessionPath(
+          candidate.filePath,
+          session.filePath,
+          candidate.environment,
+        ),
+    );
+    if (!record) {
+      try {
+        const projectSessions = await api.sessions.listCatalog(projectId);
+        if (requestSequence !== openSessionRequestRef.current) return;
+        replaceProjectSessions({ projectId, sessions: projectSessions });
+        record = projectSessions.find(
+          (candidate) =>
+            candidate.filePath &&
+            isSameSessionPath(
+              candidate.filePath,
+              session.filePath,
+              candidate.environment,
+            ),
+        );
+      } catch (error) {
+        if (requestSequence !== openSessionRequestRef.current) return;
+        showToast(error instanceof Error ? error.message : String(error), 4000);
+        return;
+      }
+    }
+    if (!record || requestSequence !== openSessionRequestRef.current) return;
+
     const existingAgent = getAgentForSessionPath(
       displayAgents.filter((agent) => agent.projectId === projectId),
       session.filePath,
+      session.wsl ? "wsl" : "native",
     );
+    setActiveProjectId(projectId);
+    setCurrentSessionId(record.id);
     if (existingAgent) {
-      // 已启动的子会话仍复用父会话下的原行；点击它应直接切回 Agent，不能再退回 Viewer 后重复走启动交接。
-      setActiveProjectId(projectId);
-      setActiveAgentId(existingAgent.id);
-      setAutoScroll(true);
-      autoScrollRef.current = true;
-      return;
+      bindSessionRuntime({
+        sessionId: record.id,
+        agentId: existingAgent.id,
+        runtimeGeneration: existingAgent.runtimeGeneration,
+        status: existingAgent.status,
+      });
     }
-    return createAgent(projectId, session.filePath, session.name);
+    setAutoScroll(true);
+    autoScrollRef.current = true;
   }
 
   async function copySidebarSession(
@@ -3862,7 +3944,6 @@ export function App() {
     if (!project) return;
     await refreshProjects();
     setActiveProjectId(project.id);
-    setActiveAgentId(undefined);
   }
 
   function updateAfterProjectRemoved(
@@ -3881,7 +3962,6 @@ export function App() {
     });
     if (activeProjectId === removedProjectId) {
       setActiveProjectId(next[0]?.id);
-      setActiveAgentId(undefined);
     }
     if (sessionsProjectId === removedProjectId) {
       setSessionsProjectId(undefined);
@@ -3889,133 +3969,26 @@ export function App() {
     }
   }
 
-  async function createAgent(
-    projectId = activeProjectId,
-    sessionPath?: string,
-    title?: string,
-  ): Promise<AgentTab | undefined> {
-    if (!projectId) return;
+  async function createSessionDraft(projectId = activeProjectId) {
+    if (!projectId || creatingSessionDraftRef.current.has(projectId)) return;
     const project = projects.find((item) => item.id === projectId);
     if (!project) return;
-    const existing = sessionPath
-      ? [...displayAgents, ...pendingAgentsRef.current].find(
-          (agent) =>
-            agent.projectId === projectId &&
-            isSameSessionPath(agent.sessionPath, sessionPath),
-        )
-      : undefined;
-    if (existing) {
-      setActiveProjectId(existing.projectId);
-      setActiveAgentId(existing.id);
+    creatingSessionDraftRef.current.add(projectId);
+    try {
+      const session = await api.sessions.createDraft({
+        projectId,
+        title: `${project.name} agent`,
+      });
+      upsertSession(session);
+      setActiveProjectId(projectId);
+      setCurrentSessionId(session.id);
       setAutoScroll(true);
       autoScrollRef.current = true;
-      return existing;
-    }
-    const previousAgentId = activeAgentId;
-    const pendingTab: PendingAgentTab = {
-      id: `pending-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-      projectId,
-      cwd: project.path,
-      title: title || `${project.name} agent`,
-      status: "starting",
-      sessionPath,
-      createdAt: Date.now(),
-    };
-    pendingAgentsRef.current = [...pendingAgentsRef.current, pendingTab];
-    setPendingAgents(pendingAgentsRef.current);
-    setActiveProjectId(projectId);
-    setActiveAgentId(pendingTab.id);
-    setActiveAgentByProject((current) => ({
-      ...current,
-      [projectId]: pendingTab.id,
-    }));
-    void api.app.rendererLog("info", "renderer", "Agent create requested", {
-      projectId,
-      sessionPath,
-      title,
-      pendingAgentId: pendingTab.id,
-    });
-    // 创建 agent 时不改变抽屉状态，避免打断用户已有的文件浏览。
-    try {
-      const tab = await withTimeout<AgentTab>(
-        api.agents.create({ projectId, sessionPath, title }),
-        AGENT_CREATE_TIMEOUT_MS,
-        t("app.agentCreateTimeout"),
-      );
-      // 立即将 tab 加入 agents，避免等待 IPC agents:state 事件导致 UI 闪烁
-      setAgents((current) => {
-        if (current.some((a) => a.id === tab.id)) return current;
-        return [...current, tab];
-      });
-      pendingAgentsRef.current = pendingAgentsRef.current.filter(
-        (agent) => agent.id !== pendingTab.id,
-      );
-      setPendingAgents(pendingAgentsRef.current);
-      setActiveAgentId((current) =>
-        current === pendingTab.id ? tab.id : current,
-      );
-      setActiveAgentByProject((current) =>
-        current[projectId] === pendingTab.id
-          ? {
-              ...current,
-              [projectId]: tab.id,
-            }
-          : current,
-      );
-      setPromptByAgent((current) => {
-        const draft = livePromptByAgentRef.current[pendingTab.id] ?? current[pendingTab.id];
-        if (draft == null) return current;
-        const next = { ...current, [tab.id]: draft };
-        delete next[pendingTab.id];
-        livePromptByAgentRef.current[tab.id] = draft;
-        delete livePromptByAgentRef.current[pendingTab.id];
-        return next;
-      });
-      setAttachedImagesByAgent((current) => {
-        const draft = current[pendingTab.id];
-        if (draft == null) return current;
-        const next = { ...current, [tab.id]: draft };
-        delete next[pendingTab.id];
-        return next;
-      });
-      // 全新创建的会话需要刷新历史列表以显示新文件；从已有历史会话打开的 agent 跳过刷新，避免文件 mtime 被不必要地读/写导致排序提前
-      if (!sessionPath) {
-        void refreshProjectSessions(projectId).catch(() => undefined);
-        showToast(t("app.agentCreated"), 2000);
-      } else {
-        showToast(t("app.sessionOpened"), 2000);
-      }
-      void refreshRuntimeState(tab.id);
-      void api.app.rendererLog("info", "renderer", "Agent create completed", {
-        projectId,
-        pendingAgentId: pendingTab.id,
-        agentId: tab.id,
-        status: tab.status,
-      });
-      return tab;
-    } catch (e) {
-      pendingAgentsRef.current = pendingAgentsRef.current.filter(
-        (agent) => agent.id !== pendingTab.id,
-      );
-      setPendingAgents(pendingAgentsRef.current);
-      setActiveAgentId((current) =>
-        current === pendingTab.id ? previousAgentId : current,
-      );
-      setActiveAgentByProject((current) => {
-        if (current[projectId] !== pendingTab.id) return current;
-        const next = { ...current };
-        if (previousAgentId) next[projectId] = previousAgentId;
-        else delete next[projectId];
-        return next;
-      });
-      showToast(e instanceof Error ? e.message : String(e), 5000);
-      void api.app.rendererLog("warn", "renderer", "Agent create failed", {
-        projectId,
-        pendingAgentId: pendingTab.id,
-        error: e instanceof Error ? e.message : String(e),
-      });
-      // 创建失败或超时时回退乐观占位，避免停留在不存在的 pending agent。
-      return undefined;
+      requestAnimationFrame(() => composerTextareaRef.current?.focus());
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : String(error), 4000);
+    } finally {
+      creatingSessionDraftRef.current.delete(projectId);
     }
   }
 
@@ -4063,12 +4036,6 @@ export function App() {
   	});
   }
 
-  async function cycleModel() {
-    if (!activeAgentId || isPendingAgentId(activeAgentId)) return;
-    const state = await api.agents.cycleModel(activeAgentId);
-    applyAgentRuntimeState(activeAgentId, state);
-    showToast(t("app.modelCycled", { name: state.modelName ?? state.modelId }), 2000);
-  }
 
   /** 调整菜单位置避免溢出视口 */
   function adjustMenuPos(x: number, y: number, width = 200, height = 260) {
@@ -4084,9 +4051,10 @@ export function App() {
   const cachedModelsRef = useRef<AvailableModel[] | null>(null);
 
   async function openModelPicker() {
-    // 有 agent → 走 RPC 路径获取可用模型
-    if (activeAgentId && !isPendingAgentId(activeAgentId)) {
-      const models = await api.agents.availableModels(activeAgentId);
+    // Session 已绑定 runtime 时走 RPC；惰性历史 Session 则只读取项目模型列表。
+    const runtimeAgentId = currentSessionLiveAgentId;
+    if (runtimeAgentId && !isPendingAgentId(runtimeAgentId)) {
+      const models = await api.agents.availableModels(runtimeAgentId);
       setAvailableModels(models);
       setModelPickerOpen(true);
       return;
@@ -4151,19 +4119,32 @@ export function App() {
   }
 
   async function selectModel(model: AvailableModel) {
-    // 有 agent → RPC 立即生效
-    if (activeAgentId && !isPendingAgentId(activeAgentId)) {
-      const state = await api.agents.setModel(
-        activeAgentId,
-        model.provider,
-        model.id,
-      );
-      applyAgentRuntimeState(activeAgentId, state);
-      setModelPickerOpen(false);
+    if (currentSessionId) {
+      try {
+        if (currentSessionLiveAgentId) {
+          await api.agents.setModel(
+            currentSessionLiveAgentId,
+            model.provider,
+            model.id,
+          );
+        }
+        await api.sessions.updateRecord(currentSessionId, {
+          model: { provider: model.provider, modelId: model.id },
+        });
+        if (currentSession) {
+          upsertSession({
+            ...currentSession,
+            model: { provider: model.provider, modelId: model.id },
+            updatedAt: Date.now(),
+          });
+        }
+        setModelPickerOpen(false);
+      } catch (error) {
+        showToast(error instanceof Error ? error.message : String(error), 4000);
+      }
       return;
     }
     setModelPickerOpen(false);
-    showToast(t("app.modelSwitched", { name: model.name ?? model.id }), 2000);
   }
 
   /** 切换模型的收藏状态，收藏的模型在选模型列表中置顶显示 */
@@ -4181,37 +4162,34 @@ export function App() {
     );
   }
 
-  async function cycleThinking() {
-    if (!activeAgentId || isPendingAgentId(activeAgentId)) return;
-    const state = await api.agents.cycleThinking(activeAgentId);
-    applyAgentRuntimeState(activeAgentId, state);
-  }
 
   async function selectThinking(level: string) {
-    // 有 agent → RPC 立即生效
-    if (activeAgentId && !isPendingAgentId(activeAgentId)) {
+    if (currentSessionId) {
       try {
-        const state = await api.agents.setThinking(activeAgentId, level);
-        applyAgentRuntimeState(activeAgentId, state);
-        setThinkingPickerOpen(false);
-        if (state.thinkingLevel && state.thinkingLevel !== level) {
-          showToast(
-            t("app.thinkingUnsupported", {
-              level,
-              fallback: state.thinkingLevel,
-            }),
-          );
+        if (currentSessionLiveAgentId) {
+          await api.agents.setThinking(currentSessionLiveAgentId, level);
         }
+        await api.sessions.updateRecord(currentSessionId, {
+          thinkingLevel: level,
+        });
+        if (currentSession) {
+          upsertSession({
+            ...currentSession,
+            thinkingLevel: level,
+            updatedAt: Date.now(),
+          });
+        }
+        setThinkingPickerOpen(false);
       } catch (error) {
         showToast(
           t("app.thinkingSwitchFailed", {
-          error: error instanceof Error ? error.message : String(error),
-        }),
-      );
+            error: error instanceof Error ? error.message : String(error),
+          }),
+        );
+      }
+      return;
     }
-    } else {
-      setThinkingPickerOpen(false);
-    }
+    setThinkingPickerOpen(false);
   }
 
   async function compactAgent(compactPrompt?: string, agentId = activeAgentId) {
@@ -4243,6 +4221,55 @@ export function App() {
     await api.agents.abort(agentId);
     // 不调用 refreshRuntimeState：AgentManager.abort() 会通过 emitState 推送正确状态，
     // 避免后端 get_state 返回过时的 isStreaming: true 覆盖前端立刻设的 false。
+  }
+
+  async function restartActiveAgent() {
+    if (!activeAgentId || !activeAgent) return;
+    const restartingAgent = activeAgent;
+    const restartingSessionId = currentSessionId;
+    setRestartingAgentId(restartingAgent.id);
+    setSessionActionsOpen(false);
+    pendingAgentsRef.current = [
+      ...pendingAgentsRef.current.filter(
+        (agent) => agent.id !== restartingAgent.id,
+      ),
+      {
+        ...restartingAgent,
+        status: "starting",
+        pendingKind: "restart",
+        pendingStartedAt: Date.now(),
+      },
+    ];
+    setPendingAgents(pendingAgentsRef.current);
+    try {
+      const tab = await api.agents.restart(restartingAgent.id);
+      pendingAgentsRef.current = pendingAgentsRef.current.filter(
+        (agent) => agent.id !== restartingAgent.id,
+      );
+      setPendingAgents(pendingAgentsRef.current);
+      if (restartingSessionId) {
+        bindSessionRuntime({
+          sessionId: restartingSessionId,
+          agentId: tab.id,
+          runtimeGeneration: tab.runtimeGeneration,
+          status: tab.status,
+        });
+      }
+      void refreshRuntimeState(tab.id);
+      showToast(t("app.agentRestarted"), 2000);
+    } catch (error) {
+      pendingAgentsRef.current = pendingAgentsRef.current.map((agent) =>
+        agent.id === restartingAgent.id
+          ? { ...agent, status: "error" }
+          : agent,
+      );
+      setPendingAgents(pendingAgentsRef.current);
+      showToast(error instanceof Error ? error.message : String(error), 5000);
+    } finally {
+      setRestartingAgentId((current) =>
+        current === restartingAgent.id ? null : current,
+      );
+    }
   }
 
   /**
@@ -4509,9 +4536,7 @@ export function App() {
           // 以光标为锚替换触发符..光标这一段,并在下一帧恢复光标到插入项之后。
           const el = event.currentTarget;
           const cursor = getCaretOffsetOf(el);
-          const liveComposerPrompt = activeAgentIdRef.current
-            ? (livePromptByAgentRef.current[activeAgentIdRef.current] ?? prompt)
-            : prompt;
+          const liveComposerPrompt = getLiveComposerPrompt();
           const result = applySuggestion(liveComposerPrompt, cursor, selected.value);
           // RichInput 的受控同步会基于 value 重渲染并恢复光标,这里同步状态即可。
           setPrompt(result.text);
@@ -4528,9 +4553,7 @@ export function App() {
         event.preventDefault();
         const el = event.currentTarget;
         const cursor = getCaretOffsetOf(el);
-        const liveComposerPrompt = activeAgentIdRef.current
-          ? (livePromptByAgentRef.current[activeAgentIdRef.current] ?? prompt)
-          : prompt;
+        const liveComposerPrompt = getLiveComposerPrompt();
         const result = clearSuggestionTrigger(liveComposerPrompt, cursor);
         setPrompt(result.text);
         setComposerCursor(result.cursor);
@@ -4552,7 +4575,7 @@ export function App() {
     const isLastLine = !textAfterCursor.includes('\n');
 
     // 当前 Agent 的历史记录
-    const agentHistory = promptHistoryRef.current[activeAgentIdRef.current ?? ''] ?? [];
+    const agentHistory = promptHistoryRef.current[getComposerTargetId() ?? ""] ?? [];
 
     if (event.key === "ArrowUp" && isFirstLine && agentHistory.length > 0) {
       event.preventDefault();
@@ -4603,9 +4626,7 @@ export function App() {
     if (event.key === "Escape") {
       const el = event.currentTarget;
       const cursor = getCaretOffsetOf(el);
-      const liveComposerPrompt = activeAgentIdRef.current
-        ? (livePromptByAgentRef.current[activeAgentIdRef.current] ?? prompt)
-        : prompt;
+      const liveComposerPrompt = getLiveComposerPrompt();
       const result = clearSuggestionTrigger(liveComposerPrompt, cursor);
       setPrompt(result.text);
       setComposerCursor(result.cursor);
@@ -4628,11 +4649,14 @@ export function App() {
     }
   }
 
-  const isAgentStarting = activeAgent?.status === "starting";
-  const composerDisabled = !activeAgent || isAgentStarting;
+  const isAgentStarting =
+    activeConversationStatus === "starting" ||
+    currentSessionSendState.status === "activating";
+  const composerDisabled =
+    !hasActiveConversation || (!currentSessionId && isAgentStarting);
   const isAgentBusy = Boolean(
-    activeAgent &&
-    (activeAgent.status === "running" || activeRuntimeState?.isStreaming),
+    hasActiveConversation &&
+    (activeConversationStatus === "running" || activeRuntimeState?.isStreaming),
   );
   // hasComposerContent 合并文本状态（hasComposerText，仅在空↔非空翻转时触发重渲染）
   // 与图片附件；images 本身已是 state 变化即触发重渲染。
@@ -4739,12 +4763,50 @@ export function App() {
     }, 160);
   }
 
+  const sendCurrentSessionPrompt = useSessionSend({
+    sendPrompt: (input) => api.sessions.sendPrompt(input),
+    liveDraftsRef: livePromptByAgentRef,
+    getComposerText: () => composerTextareaRef.current?.textContent ?? "",
+    templates: promptTemplateList,
+    runtimeAgentId: currentSessionLiveAgentId,
+    compact: (agentId, compactPrompt) => compactAgent(compactPrompt, agentId),
+    resetComposerUi: () => {
+      setHistoryIndex(-1);
+      setHistoryNavigating(false);
+      setSavedPrompt("");
+      setSuggestionsOpen(false);
+      setSendBehaviorMenuOpen(false);
+      setComposerAutoHeight(COMPOSER_MIN_HEIGHT);
+      setAutoScroll(true);
+      autoScrollRef.current = true;
+    },
+    recordPromptHistory: (sessionId, message) => {
+      if (!message.trim() || message.startsWith("!")) return;
+      const previous = promptHistoryRef.current[sessionId] ?? [];
+      promptHistoryRef.current[sessionId] = [
+        message.trim(),
+        ...previous.filter((command) => command !== message.trim()),
+      ].slice(0, 50);
+    },
+    refreshProject: (projectId) => {
+      void refreshProjectSessions(projectId, true).catch(() => undefined);
+    },
+    showError: showToast,
+    showUnknown: () => showToast(t("app.queuedUnknown"), 6000),
+    showCompactUnavailable: () => {
+      showToast("会话尚未启动，请先发送一条消息再压缩", 3000);
+    },
+  });
+
   async function sendPrompt(override?: {
     agentId: string;
     message: string;
     images: ImageContent[];
     agentMode: ComposerAgentMode;
   }) {
+    if (!override && currentSessionId) {
+      return sendCurrentSessionPrompt(isAgentBusy ? "steer" : undefined);
+    }
     const targetAgentId = override?.agentId ?? activeAgentId;
     // 发送前从 DOM 直读文本，避免 contentEditable 的 IME 组合期间 handleInput 被锁导致 ref 落后于 DOM
     if (!override && targetAgentId) {
@@ -4799,7 +4861,7 @@ export function App() {
     // 不论之前是否滚动回看，发新消息都强制自动滚到底，确保能看到 agent 的回答。
     setAutoScroll(true);
     autoScrollRef.current = true;
-    // Viewer 首条是独立快照，不消费恢复期间新写入真实 Agent 的第二条草稿。
+    // 本次发送使用独立快照，不消费 runtime 激活期间新写入同一 Session 的下一条草稿。
     if (!override) {
       setPromptForAgent(targetAgentId, "");
       setAttachedImagesForAgent(targetAgentId, []);
@@ -4885,6 +4947,10 @@ export function App() {
   }
 
   async function sendPromptAsFollowUp() {
+    if (currentSessionId) {
+      await sendCurrentSessionPrompt("followUp");
+      return;
+    }
     const targetAgentId = activeAgentId;
     const livePrompt = targetAgentId
       ? (livePromptByAgentRef.current[targetAgentId] ?? prompt)
@@ -5307,9 +5373,7 @@ export function App() {
         void api.agents.list().then(setAgents).catch(() => undefined);
         void api.projects.list().then(setProjects).catch(() => undefined);
         if (activeProjectId) {
-          void api.sessions.list(activeProjectId).then((sessions) => {
-            setSessions([...sessions].sort((a, b) => b.updatedAt - a.updatedAt));
-          }).catch(() => undefined);
+          void refreshSessions(activeProjectId).catch(() => undefined);
         }
       }
       showToast(notice);
@@ -5760,6 +5824,17 @@ export function App() {
               (agent) => agent.projectId === project.id,
             );
             const projectSearch = search.trim();
+            const projectCatalogSessions = (sessionRecordIdsByProject[project.id] ?? [])
+              .map((sessionId) => sessionRecords[sessionId])
+              .filter((session): session is SessionRecord => Boolean(session));
+            const projectDraftSessions = projectCatalogSessions
+              .filter((session) => {
+                if (session.status !== "draft") return false;
+                if (projectSearch && !matches(session.title, projectSearch)) return false;
+                const filter = sessionSourceFilter[project.id] ?? null;
+                return filter === null || filter.has(session.source);
+              })
+              .sort((a, b) => b.updatedAt - a.updatedAt);
             const projectSessions = ((projectSearch
               ? (sessionsByProject[project.id] ?? []).filter((session) =>
                   matches(
@@ -5777,7 +5852,18 @@ export function App() {
               visibleProjectChildCountByProject[project.id] ??
               SIDEBAR_PROJECT_CHILD_PAGE_SIZE;
             const projectDisplay = getProjectAgentSessionDisplay({
-              agents: projectAgents,
+              agents: projectAgents.filter((agent) =>
+                Boolean(
+                  agent.sessionPath &&
+                  projectSessions.some((session) =>
+                    isSameSessionPath(
+                      session.filePath,
+                      agent.sessionPath,
+                      session.wsl ? "wsl" : "native",
+                    ),
+                  ),
+                ),
+              ),
               sessions: projectSessions,
               visibleChildCount,
             });
@@ -5785,7 +5871,10 @@ export function App() {
               sessionLoadingByProject[project.id],
             );
             const hasProjectChildren =
-              projectDisplay.children.length > 0 || projectSessionsLoading || !!project.worktreeEnabled;
+              projectDraftSessions.length > 0 ||
+              projectDisplay.children.length > 0 ||
+              projectSessionsLoading ||
+              !!project.worktreeEnabled;
             const isCollapsed = collapsedProjects.has(project.id);
             const isDraggingProject = draggingProjectId === project.id;
             const isProjectDropTarget = dragOverProjectId === project.id;
@@ -5849,7 +5938,7 @@ export function App() {
                     }
 
                     setActiveProjectId(project.id);
-                    setActiveAgentId(undefined);
+                    setCurrentSessionId(undefined);
                   }}
                 >
                   <span
@@ -5919,7 +6008,7 @@ export function App() {
                       title={t("app.projectNewAgent")}
                       onClick={(event) => {
                         event.stopPropagation();
-                        void createAgent(project.id);
+                        void createSessionDraft(project.id);
                       }}
                     >
                       <Plus size={14} />
@@ -5934,7 +6023,7 @@ export function App() {
                       // 避免与点击父项目行产生行为分歧导致用户迷惑。
                       onClick={() => {
                         setActiveProjectId(project.id);
-                        setActiveAgentId(undefined);
+                        setCurrentSessionId(undefined);
                         if (!projectIsChat && !sessionsByProject[project.id]?.length) {
                           void refreshProjectSessions(project.id).catch(() => undefined);
                         }
@@ -5956,10 +6045,55 @@ export function App() {
                   </div>
                 )}
                 {!isCollapsed &&
-                  (projectDisplay.visibleChildren.length > 0 ||
+                  (projectDraftSessions.length > 0 ||
+                    projectDisplay.visibleChildren.length > 0 ||
                     projectSessionsLoading ||
                     projectDisplay.hiddenChildCount > 0) && (
                   <div className="session-card">
+                    {projectDraftSessions.map((session) => {
+                      const runtime = sessionRuntimeById[session.id];
+                      return (
+                        <button
+                          key={session.id}
+                          className={`conversation agent-row session-row${currentSessionId === session.id ? " active" : ""}`}
+                          title={session.title}
+                          onClick={() => {
+                            setActiveProjectId(session.projectId);
+                            setCurrentSessionId(session.id);
+                          }}
+                        >
+                          <span className="session-node-marker" aria-hidden="true" />
+                          <div className="conversation-body">
+                            <div className="conversation-title">
+                              {runtime && runtime.status !== "detached" && (
+                                <span className={`agent-status-indicator status-${runtime.status}`}>
+                                  {runtime.status}
+                                </span>
+                              )}
+                              <strong title={session.title}>{session.title}</strong>
+                            </div>
+                          </div>
+                          <span
+                            className="project-action"
+                            role="button"
+                            tabIndex={0}
+                            title={t("common.delete")}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              void deleteDraftSession(session);
+                            }}
+                            onKeyDown={(event) => {
+                              if (event.key !== "Enter" && event.key !== " ") return;
+                              event.preventDefault();
+                              event.stopPropagation();
+                              void deleteDraftSession(session);
+                            }}
+                          >
+                            <Trash2 size={12} />
+                          </span>
+                        </button>
+                      );
+                    })}
                     {projectDisplay.visibleChildren.map((child) => {
                     const subagentGroupKey = `${project.id}:${child.key}`;
                     const subagentsExpanded = expandedSubagentGroups.has(subagentGroupKey);
@@ -5971,11 +6105,12 @@ export function App() {
                       const subagentAgent = getAgentForSessionPath(
                         allProjectAgents,
                         subagent.filePath,
+                        subagent.wsl ? "wsl" : "native",
                       );
                       return (
                         <button
                           key={subagent.filePath}
-                          className={`conversation agent-row session-row codex-subagent-sidebar-row${isSameSessionPath(subagent.filePath, displayedSidebarSessionPath) ? " active" : ""}`}
+                          className={`conversation agent-row session-row codex-subagent-sidebar-row${subagent.id === currentSessionId ? " active" : ""}`}
                           title={subagent.filePath}
                           onContextMenu={async (event) => {
                             event.preventDefault();
@@ -6001,11 +6136,6 @@ export function App() {
                             });
                           }}
                           onClick={() => {
-                            if (subagentAgent) {
-                              setActiveProjectId(subagentAgent.projectId);
-                              setActiveAgentId(subagentAgent.id);
-                              return;
-                            }
                             void openSidebarSession(project.id, subagent);
                           }}
                         >
@@ -6062,12 +6192,14 @@ export function App() {
                     ) : null;
                     if (child.type === "agent") {
                       const agent = child.agent;
-                      const isActiveAgent = isSidebarSessionRowActive({
-                        rowSessionPath: agent.sessionPath,
-                        displayedSessionPath: displayedSidebarSessionPath,
-                        rowAgentId: agent.id,
-                        activeAgentId,
-                      });
+                      const agentSession = projectSessions.find((session) =>
+                        isSameSessionPath(
+                          session.filePath,
+                          agent.sessionPath,
+                          session.wsl ? "wsl" : "native",
+                        ),
+                      );
+                      const isActiveAgent = agentSession?.id === currentSessionId;
                       return (
                         <Fragment key={child.key}>
                         <button
@@ -6092,8 +6224,7 @@ export function App() {
                             });
                           }}
                           onClick={() => {
-                            setActiveProjectId(project.id);
-                            setActiveAgentId(agent.id);
+                            if (agentSession) void openSidebarSession(project.id, agentSession);
                           }}
                         >
                           <span className="agent-node-marker" aria-hidden="true" />
@@ -6121,13 +6252,28 @@ export function App() {
                     }
 
                     const session = child.session;
+                    const runtimeAgent = child.agent;
                     return (
                       <Fragment key={child.key}>
                       <button
-                        className={`conversation agent-row session-row${isSameSessionPath(session.filePath, displayedSidebarSessionPath) ? " active" : ""}`}
+                        className={`conversation agent-row session-row${session.id === currentSessionId ? " active" : ""}`}
                         title={session.filePath}
-                        onContextMenu={(event) => {
+                        onContextMenu={async (event) => {
                           event.preventDefault();
+                          if (runtimeAgent) {
+                            const logging = await window.piDesktop.rpcLogs.getLogging(runtimeAgent.id);
+                            setAgentRpcLogging((prev) => {
+                              const next = new Map(prev);
+                              next.set(runtimeAgent.id, logging);
+                              return next;
+                            });
+                            setAgentMenu({
+                              x: event.clientX,
+                              y: event.clientY,
+                              agent: runtimeAgent,
+                            });
+                            return;
+                          }
                           setSessionMenu({
                             x: event.clientX,
                             y: event.clientY,
@@ -6145,6 +6291,11 @@ export function App() {
                         />
                         <div className="conversation-body">
                           <div className="conversation-title">
+                            {runtimeAgent?.status && (
+                              <span className={`agent-status-indicator status-${runtimeAgent.status}`}>
+                                {t(`app.status${runtimeAgent.status.charAt(0).toUpperCase() + runtimeAgent.status.slice(1)}` as any) || runtimeAgent.status}
+                              </span>
+                            )}
                             <strong title={session.name || t("common.untitled")}>
                               {session.name || t("common.untitled")}
                             </strong>
@@ -6223,11 +6374,28 @@ export function App() {
                         ? filteredAgents.filter((agent) => agent.projectId === childProject.id)
                         : [];
                       const rawChildSessions = childProject ? (sessionsByProject[childProject.id] ?? []) : [];
+                      const childDraftSessions = childProject
+                        ? (sessionRecordIdsByProject[childProject.id] ?? [])
+                            .map((sessionId) => sessionRecords[sessionId])
+                            .filter((session): session is SessionRecord => session?.status === "draft")
+                            .sort((a, b) => b.updatedAt - a.updatedAt)
+                        : [];
                       // 默认只展示 3 条会话，展开后显示全部，避免子工作区会话过多时侧栏过长。
                       const sessionsExpanded = expandedWorktreeSessions.has(wt.path);
                       // 使用统一分组函数，使 worktree 子会话也能嵌套显示在父条目下
                       const wtDisplay = childProject ? getProjectAgentSessionDisplay({
-                        agents: childAgents,
+                        agents: childAgents.filter((agent) =>
+                          Boolean(
+                            agent.sessionPath &&
+                            rawChildSessions.some((session) =>
+                              isSameSessionPath(
+                                session.filePath,
+                                agent.sessionPath,
+                                session.wsl ? "wsl" : "native",
+                              ),
+                            ),
+                          ),
+                        ),
                         sessions: rawChildSessions,
                         visibleChildCount: sessionsExpanded ? Number.MAX_SAFE_INTEGER : 3,
                       }) : null;
@@ -6245,7 +6413,7 @@ export function App() {
                             onClick={() => {
                               if (childProject) {
                                 setActiveProjectId(childProject.id);
-                                setActiveAgentId(undefined);
+                                setCurrentSessionId(undefined);
                                 if (!sessionsByProject[childProject.id]?.length) {
                                   void refreshProjectSessions(childProject.id).catch(() => undefined);
                                 }
@@ -6276,7 +6444,7 @@ export function App() {
                                 className="project-action worktree-new-agent"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  void createAgent(childProject.id);
+                                  void createSessionDraft(childProject.id);
                                 }}
                                 title={t("app.projectNewAgent")}
                               >
@@ -6296,27 +6464,67 @@ export function App() {
                               </span>
                             )}
                           </button>
+                          {childDraftSessions.map((session) => {
+                            const runtime = sessionRuntimeById[session.id];
+                            return (
+                              <button
+                                key={session.id}
+                                className={`conversation agent-row session-row worktree-nested-row${currentSessionId === session.id ? " active" : ""}`}
+                                title={session.title}
+                                onClick={() => {
+                                  setActiveProjectId(session.projectId);
+                                  setCurrentSessionId(session.id);
+                                }}
+                              >
+                                <span className="session-node-marker" aria-hidden="true" />
+                                <div className="conversation-body">
+                                  <div className="conversation-title">
+                                    {runtime && runtime.status !== "detached" && (
+                                      <span className={`agent-status-indicator status-${runtime.status}`}>{runtime.status}</span>
+                                    )}
+                                    <strong>{session.title}</strong>
+                                  </div>
+                                </div>
+                                <span
+                                  className="project-action"
+                                  role="button"
+                                  tabIndex={0}
+                                  title={t("common.delete")}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    void deleteDraftSession(session);
+                                  }}
+                                >
+                                  <Trash2 size={12} />
+                                </span>
+                              </button>
+                            );
+                          })}
                           {wtChildren.filter(c => c.type === "agent").map((item) => {
                             const agent = item.agent;
+                            const agentSession = rawChildSessions.find((session) =>
+                              isSameSessionPath(
+                                session.filePath,
+                                agent.sessionPath,
+                                session.wsl ? "wsl" : "native",
+                              ),
+                            );
                             const totalSubagentCount = (item.codexSubagents?.length ?? 0) + (item.piSubagents?.length ?? 0);
                             const subagentGroupKey = `wt:${childProject!.id}:${item.key}`;
                             const subagentExpanded = expandedSubagentGroups.has(subagentGroupKey);
                             return (
                               <Fragment key={item.key}>
                                 <button
-                                  className={`conversation agent-row worktree-nested-row${isSidebarSessionRowActive({
-                                    rowSessionPath: agent.sessionPath,
-                                    displayedSessionPath: displayedSidebarSessionPath,
-                                    rowAgentId: agent.id,
-                                    activeAgentId,
-                                  }) ? " active" : ""}`}
+                                  className={`conversation agent-row worktree-nested-row${agentSession?.id === currentSessionId ? " active" : ""}`}
                                   onContextMenu={async (event) => {
                                     event.preventDefault();
                                     const logging = await window.piDesktop.rpcLogs.getLogging(agent.id);
                                     setAgentRpcLogging((prev) => { const next = new Map(prev); next.set(agent.id, logging); return next; });
                                     setAgentMenu({ x: event.clientX, y: event.clientY, agent });
                                   }}
-                                  onClick={() => { setActiveProjectId(agent.projectId); setActiveAgentId(agent.id); }}
+                                  onClick={() => {
+                                    if (agentSession) void openSidebarSession(agent.projectId, agentSession);
+                                  }}
                                 >
                                   <span className="agent-node-marker" aria-hidden="true" />
                                   <div className="conversation-body">
@@ -6335,7 +6543,7 @@ export function App() {
                                 {subagentExpanded && item.codexSubagents?.length > 0 && (
                                   <div className="codex-subagent-sidebar-group">
                                     {item.codexSubagents.map((sa) => (
-                                      <button key={sa.filePath} className={`conversation agent-row session-row codex-subagent-sidebar-row${isSameSessionPath(sa.filePath, displayedSidebarSessionPath) ? " active" : ""}`} title={sa.filePath} onClick={() => void openSidebarSession(childProject!.id, sa)}>
+                                      <button key={sa.filePath} className={`conversation agent-row session-row codex-subagent-sidebar-row${sa.id === currentSessionId ? " active" : ""}`} title={sa.filePath} onClick={() => void openSidebarSession(childProject!.id, sa)}>
                                         <div className="conversation-body"><div className="conversation-title"><strong>{formatCodexSubagentName(sa)}</strong><span className="session-source-badge codex subagent">{t("app.codexSubagent")}</span></div></div>
                                       </button>
                                     ))}
@@ -6344,7 +6552,7 @@ export function App() {
                                 {subagentExpanded && item.piSubagents?.length > 0 && (
                                   <div className="codex-subagent-sidebar-group">
                                     {item.piSubagents.map((sa) => (
-                                      <button key={sa.filePath} className={`conversation agent-row session-row codex-subagent-sidebar-row${isSameSessionPath(sa.filePath, displayedSidebarSessionPath) ? " active" : ""}`} title={sa.filePath} onClick={() => void openSidebarSession(childProject!.id, sa)}>
+                                      <button key={sa.filePath} className={`conversation agent-row session-row codex-subagent-sidebar-row${sa.id === currentSessionId ? " active" : ""}`} title={sa.filePath} onClick={() => void openSidebarSession(childProject!.id, sa)}>
                                         <div className="conversation-body"><div className="conversation-title"><strong>{formatPiSubagentName(sa)}</strong></div></div>
                                       </button>
                                     ))}
@@ -6355,19 +6563,48 @@ export function App() {
                           })}
                           {wtChildren.filter(c => c.type === "session").map((item) => {
                             const session = item.session;
+                            const runtimeAgent = item.agent;
                             const totalSubagentCount = (item.codexSubagents?.length ?? 0) + (item.piSubagents?.length ?? 0);
                             const subagentGroupKey = `wt:${childProject!.id}:${item.key}`;
                             const subagentExpanded = expandedSubagentGroups.has(subagentGroupKey);
                             return (
                               <Fragment key={item.key}>
                                 <button
-                                  className={`conversation agent-row session-row worktree-nested-row${isSameSessionPath(session.filePath, displayedSidebarSessionPath) ? " active" : ""}`}
+                                  className={`conversation agent-row session-row worktree-nested-row${session.id === currentSessionId ? " active" : ""}`}
                                   title={session.filePath}
+                                  onContextMenu={async (event) => {
+                                    event.preventDefault();
+                                    if (runtimeAgent) {
+                                      const logging = await window.piDesktop.rpcLogs.getLogging(runtimeAgent.id);
+                                      setAgentRpcLogging((prev) => {
+                                        const next = new Map(prev);
+                                        next.set(runtimeAgent.id, logging);
+                                        return next;
+                                      });
+                                      setAgentMenu({
+                                        x: event.clientX,
+                                        y: event.clientY,
+                                        agent: runtimeAgent,
+                                      });
+                                      return;
+                                    }
+                                    setSessionMenu({
+                                      x: event.clientX,
+                                      y: event.clientY,
+                                      projectId: childProject!.id,
+                                      session,
+                                    });
+                                  }}
                                   onClick={() => void openSidebarSession(childProject!.id, session)}
                                 >
                                   <span className="session-node-marker" aria-hidden="true" />
                                   <div className="conversation-body">
                                     <div className="conversation-title">
+                                      {runtimeAgent?.status && (
+                                        <span className={`agent-status-indicator status-${runtimeAgent.status}`}>
+                                          {t(`app.status${runtimeAgent.status.charAt(0).toUpperCase() + runtimeAgent.status.slice(1)}` as any) || runtimeAgent.status}
+                                        </span>
+                                      )}
                                       <strong title={session.name || t("common.untitled")}>{session.name || t("common.untitled")}</strong>
                                       {totalSubagentCount > 0 && (
                                         <span className="subagent-inline-toggle" onClick={(e) => { e.stopPropagation(); setExpandedSubagentGroups(c => { const n = new Set(c); n.has(subagentGroupKey) ? n.delete(subagentGroupKey) : n.add(subagentGroupKey); return n; }); }} title={t("app.piSubagentCount", { count: totalSubagentCount })}>
@@ -6381,7 +6618,7 @@ export function App() {
                                 {subagentExpanded && item.codexSubagents?.length > 0 && (
                                   <div className="codex-subagent-sidebar-group">
                                     {item.codexSubagents.map((sa) => (
-                                      <button key={sa.filePath} className={`conversation agent-row session-row codex-subagent-sidebar-row${isSameSessionPath(sa.filePath, displayedSidebarSessionPath) ? " active" : ""}`} title={sa.filePath} onClick={() => void openSidebarSession(childProject!.id, sa)}>
+                                      <button key={sa.filePath} className={`conversation agent-row session-row codex-subagent-sidebar-row${sa.id === currentSessionId ? " active" : ""}`} title={sa.filePath} onClick={() => void openSidebarSession(childProject!.id, sa)}>
                                         <div className="conversation-body"><div className="conversation-title"><strong>{formatCodexSubagentName(sa)}</strong><span className="session-source-badge codex subagent">{t("app.codexSubagent")}</span></div></div>
                                       </button>
                                     ))}
@@ -6390,7 +6627,7 @@ export function App() {
                                 {subagentExpanded && item.piSubagents?.length > 0 && (
                                   <div className="codex-subagent-sidebar-group">
                                     {item.piSubagents.map((sa) => (
-                                      <button key={sa.filePath} className={`conversation agent-row session-row codex-subagent-sidebar-row${isSameSessionPath(sa.filePath, displayedSidebarSessionPath) ? " active" : ""}`} title={sa.filePath} onClick={() => void openSidebarSession(childProject!.id, sa)}>
+                                      <button key={sa.filePath} className={`conversation agent-row session-row codex-subagent-sidebar-row${sa.id === currentSessionId ? " active" : ""}`} title={sa.filePath} onClick={() => void openSidebarSession(childProject!.id, sa)}>
                                         <div className="conversation-body"><div className="conversation-title"><strong>{formatPiSubagentName(sa)}</strong></div></div>
                                       </button>
                                     ))}
@@ -6487,365 +6724,91 @@ export function App() {
             : undefined),
         } as React.CSSProperties}
       >
-        <header ref={chatHeaderRef} className="chat-header">
-          <div className="chat-title-block">
-            <div className="chat-title-row">
-              <strong
-                title={activeAgent?.title ?? activeProject?.name ?? "PiDeck"}
-              >
-                {activeAgent?.title ??
-                  (isChatProject(activeProject)
-                    ? t("app.chatProject")
-                    : activeProject?.name) ??
-                  "PiDeck"}
-              </strong>
-              {activeAgent?.compactionCount ? (
-                <span
-                  className="compaction-count-badge"
-                  title={t("app.compactionTooltip", { count: activeAgent.compactionCount })}
-                >
-                  {activeAgent.compactionCount}
-                </span>
-              ) : null}
-            </div>
-          </div>
-          <div
-            className={`chat-header-actions${activeAgent?.status === "starting" ? " loading" : ""}`}
-          >
-            <>
-              {/* {activeAgent?.id && (
-                <span className="chat-agent-id" title={activeAgent.id}>
-                  {activeAgent.id.slice(0, 8)}
-                </span>
-              )} */}
-              <SessionStatus
-                state={activeRuntimeState}
-                duration={
-                  activeAgentId
-                    ? sessionDurationByAgent[activeAgentId]
-                    : undefined
-                }
-              />
-              <div className="header-actions-right">
-                <div className="header-action-group session-group">
-                  <div className="session-combo" ref={sessionComboRef}>
-                    <button
-                      className="session-combo-trigger"
-                      disabled={!activeProjectId || isAgentStarting}
-                      title={t("app.newSession")}
-                      onClick={() => {
-                        if (activeAgentId) {
-                          setSessionActionsOpen((open) => !open);
-                        } else {
-                          createAgent();
-                        }
-                      }}
-                    >
-                      <Plus size={14} strokeWidth={2} aria-hidden="true" />
-                      <span className="session-combo-label">{t("app.new")}</span>
-                      {activeAgentId && (
-                        <span className={`session-combo-chevron${sessionActionsOpen ? " open" : ""}`}>
-                          <ChevronDown size={12} />
-                        </span>
-                      )}
-                    </button>
-                    {appNotice && (
-                      <div className="app-notice" role="status">
-                        {appNotice.message}
-                      </div>
-                    )}
-                  {sessionActionsOpen && activeAgentId && (
-                    <div className="session-combo-menu">
-                      <button
-                        onClick={() => {
-                          createAgent();
-                          setSessionActionsOpen(false);
-                        }}
-                      >
-                        <span>{t("app.newSession")}</span>
-                      </button>
-                      <div className="session-combo-divider" />
-                      <button
-                        disabled={activeAgent?.status !== "running"}
-                        onClick={() => {
-                          abortAgent();
-                          setSessionActionsOpen(false);
-                        }}
-                      >
-                        {t("app.stop")}
-                      </button>
-                      {!isLanWeb && (
-                        <button
-                          disabled={
-                            activeAgent?.status === "starting" ||
-                            restartingAgentId === activeAgentId ||
-                            Boolean(
-                              activeAgentId &&
-                              (queueFlushByAgentRef.current.has(activeAgentId) ||
-                                (queuedPrompts[activeAgentId] ?? []).some(
-                                  (queuedPrompt) =>
-                                    queuedPrompt.status === "sending" ||
-                                    queuedPrompt.status === "unknown",
-                                )),
-                            )
-                          }
-                          onClick={async () => {
-                            if (!activeAgentId || !activeAgent) return;
-                            const restartingAgent = activeAgent;
-                            setRestartingAgentId(restartingAgent.id);
-                            setSessionActionsOpen(false);
-                            // 重启会在主进程中短暂移除旧 Agent；这里保留原位置的 starting 占位，避免自动选中同项目下一个 Agent。
-                            pendingAgentsRef.current = [
-                              ...pendingAgentsRef.current.filter(
-                                (agent) => agent.id !== restartingAgent.id,
-                              ),
-                              {
-                                ...restartingAgent,
-                                status: "starting",
-                                pendingKind: "restart",
-                                pendingStartedAt: Date.now(),
-                              },
-                            ];
-                            setPendingAgents(pendingAgentsRef.current);
-                            try {
-                              const tab =
-                                await api.agents.restart(restartingAgent.id);
-                              pendingAgentsRef.current = pendingAgentsRef.current.filter(
-                                (agent) => agent.id !== restartingAgent.id,
-                              );
-                              setPendingAgents(pendingAgentsRef.current);
-                              setActiveAgentId((current) =>
-                                current === restartingAgent.id ? tab.id : current,
-                              );
-                              setActiveAgentByProject((current) =>
-                                current[restartingAgent.projectId] === restartingAgent.id
-                                  ? { ...current, [restartingAgent.projectId]: tab.id }
-                                  : current,
-                              );
-                              void refreshRuntimeState(tab.id);
-                              showToast(t("app.agentRestarted"), 2000);
-                            } catch (error) {
-                              // 重启失败时保留原 Agent 卡片并标记错误，避免用户当前上下文被兜底切走。
-                              pendingAgentsRef.current = pendingAgentsRef.current.map(
-                                (agent) =>
-                                  agent.id === restartingAgent.id
-                                    ? { ...agent, status: "error" }
-                                    : agent,
-                              );
-                              setPendingAgents(pendingAgentsRef.current);
-                              showToast(error instanceof Error ? error.message : String(error), 5000);
-                            } finally {
-                              setRestartingAgentId((current) =>
-                                current === restartingAgent.id ? null : current,
-                              );
-                            }
-                          }}
-                        >
-                          {restartingAgentId === activeAgentId
-                            ? t("app.restarting")
-                            : t("app.restart")}
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-              </div>
-            </>
-          </div>
-        </header>
-
-        <section className="message-timeline" ref={timelineRef}>
-          {/* 加载更多历史消息按钮 */}
-          {hasMoreMessages && activeAgent && activeAgent.status !== "starting" && (
-            <div style={{
-              display: "flex",
-              justifyContent: "center",
-              padding: "12px 0",
-              borderBottom: "1px solid var(--border-color)"
-            }}>
-              <button
-                onClick={handleLoadMoreMessages}
-                disabled={isLoadingMoreMessages}
-                style={{
-                  padding: "6px 16px",
-                  border: "1px solid var(--border-color)",
-                  borderRadius: "6px",
-                  background: "var(--bg-secondary)",
-                  color: "var(--text-primary)",
-                  fontSize: "13px",
-                  cursor: isLoadingMoreMessages ? "not-allowed" : "pointer",
-                  opacity: isLoadingMoreMessages ? 0.6 : 1,
-                  transition: "all 0.2s"
-                }}
-              >
-                {isLoadingMoreMessages
-                  ? "加载中..."
-                  : `加载更多历史消息 (${activeMessages.length - paginatedMessages.length} 条)`
-                }
-              </button>
-            </div>
+        <SessionHeader
+          headerRef={chatHeaderRef}
+          comboRef={sessionComboRef}
+          title={
+            currentSession?.title ??
+            (isChatProject(activeProject)
+              ? t("app.chatProject")
+              : activeProject?.name) ??
+            "PiDeck"
+          }
+          compactionCount={activeAgent?.compactionCount}
+          runtimeState={activeRuntimeState}
+          duration={activeAgentId ? sessionDurationByAgent[activeAgentId] : undefined}
+          isStarting={isAgentStarting}
+          hasProject={Boolean(activeProjectId)}
+          hasSession={Boolean(activeAgentId || currentSessionId)}
+          menuOpen={sessionActionsOpen}
+          notice={appNotice?.message}
+          canStop={activeAgent?.status === "running"}
+          canRestart={Boolean(
+            activeAgentId &&
+            activeAgent &&
+            activeAgent.status !== "starting" &&
+            restartingAgentId !== activeAgentId &&
+            !queueFlushByAgentRef.current.has(activeAgentId) &&
+            !(queuedPrompts[activeAgentId] ?? []).some(
+              (queuedPrompt) =>
+                queuedPrompt.status === "sending" ||
+                queuedPrompt.status === "unknown",
+            )
           )}
+          isRestarting={restartingAgentId === activeAgentId}
+          showRestart={!isLanWeb}
+          onTrigger={() => {
+            if (activeAgentId || currentSessionId) {
+              setSessionActionsOpen((open) => !open);
+            } else {
+              void createSessionDraft();
+            }
+          }}
+          onNewSession={() => {
+            void createSessionDraft();
+            setSessionActionsOpen(false);
+          }}
+          onStop={() => {
+            void abortAgent();
+            setSessionActionsOpen(false);
+          }}
+          onRestart={() => void restartActiveAgent()}
+        />
 
-          {/* Agent 启动时显示骨架屏；消息尚未到达时继续展示，避免闪空 */}
-          {(activeAgent?.status === "starting" || (Boolean(activeAgent) && activeMessages.length === 0 && !isPendingAgentId(activeAgent!.id))) ? (
-            <div className="history-loading">
-              <div className="history-loading-placeholder">
-                <div className="skeleton-bubble" />
-                <div className="skeleton-line" />
-                <div className="skeleton-line" />
-                <div className="skeleton-line" />
-              </div>
-              <div className="history-loading-placeholder">
-                <div className="skeleton-line" />
-                <div className="skeleton-line" />
-                <div className="skeleton-line" />
-              </div>
-              <div className="history-loading-placeholder">
-                <div className="skeleton-line" />
-                <div className="skeleton-line" />
-              </div>
-              <span style={{ paddingTop: "16px", alignSelf: "center", fontSize: "var(--font-size-small)" }}>{t("app.agentStarting")}</span>
-            </div>
-          ) : null}
-          {!activeAgent && (
-            <EmptyState
-              hasProject={Boolean(activeProjectId)}
-              onCreate={() => createAgent()}
-            />
-          )}
-          {(activeAgent && activeAgent.status !== "starting" && activeMessages.length > 0) ? (
-            <div className="message-list">
-              {/* 使用 groupToolMessages 渲染：user/error/system 独立条目，
-                  assistant + tool 聚合为 agnet-run（TurnRow 自带操作栏） */}
-              {renderedRuns.map((item, index) => {
-                if (item.kind === "agent-run") {
-                  // 判断该 run 是否包含正在流式的消息
-                  const isRunStreaming = Boolean(
-                    streamingMessageId &&
-                    item.items.some(
-                      (i) => i.kind === "message" && i.message.id === streamingMessageId,
-                    ),
-                  );
-                  return (
-                    <TurnRow
-                      key={item.id}
-                      run={item}
-                      onPreviewImage={setPreviewImage}
-                      showThinking={settings.showThinking}
-                      isStreaming={isRunStreaming}
-                      agentRunning={isAgentBusy && index === renderedRuns.length - 1}
-                      onOpenExternal={(url) => api.app.openExternal(url)}
-                      onOpenFile={openFilePath}
-                      onDiffFile={diffFilePath}
-                      onEditMessage={editMessage}
-                      onDeleteMessage={deleteMessage}
-                      onEnterMultiSelect={() => setMultiSelectOpen(true)}
-                    />
-                  );
-                }
-                // 独立消息条目：user / error / system
-                // 理论上顶层的 thinking-group / tool-group 不会穿透到此（
-                // 它们总是被聚合进 agent-run），但 TypeScript 需要穷举
-                if (item.kind !== "message") return null;
-                const message = item.message;
-                if (message.role === "user") {
-                  return (
-                    <UserBubble
-                      key={message.id}
-                      message={message}
-                      onPreviewImage={setPreviewImage}
-                      onOpenFile={openFilePath}
-                      onResendUserMessage={resendUserMessage}
-                      onEditMessage={editMessage}
-                      onDeleteMessage={deleteMessage}
-                      agentRunning={isAgentBusy}
-                      isLastUserMessage={message.id === lastUserMessageId}
-                      validCommandNames={validCommandNames}
-                      validFilePaths={validFilePaths}
-                      onEnterMultiSelect={() => setMultiSelectOpen(true)}
-                    />
-                  );
-                }
-                if (message.role === "error") {
-                  return (
-                    <DiagnosticMessageCard key={message.id} message={message} />
-                  );
-                }
-                if (message.role === "system") {
-                  const meta = message.meta as any;
-                  if (meta?.type === "askQuestion") {
-                    return (
-                      <AskQuestionCard key={message.id} message={message} onRespond={(response) => {
-                        const req = meta.uiRequest;
-                        if (!req || !activeAgentId) return;
-                        // cancelled 通过 sendUiResponse 正常发送：pi 的 rpc-mode 对
-                        // select/input/editor 返回 undefined（卡片显示"已取消"），
-                        // confirm 返回 false（同"否"，pi 的 ctx.ui.confirm() 不区分取消和否）
-                        if (response.cancelled) {
-                          setCancellingUi(true);
-                          api.agents.sendUiResponse(activeAgentId, req.requestId, response);
-                        } else {
-                          api.agents.sendUiResponse(activeAgentId, req.requestId, response);
-                        }
-                      }} />
-                    );
-                  }
-                  if (meta?.type === "compaction") {
-                    return (
-                      <CompactionCard key={message.id} message={message} />
-                    );
-                  }
-                  return (
-                    <DiagnosticMessageCard key={message.id} message={message} />
-                  );
-                }
-                return null;
-              })}
-              {isAwaitingAssistant && (
-                <>
-                  {settings.showThinking && activeThinking && (
-                    <section className="thinking-card">
-                      <div className="thinking-card-content">{activeThinking}</div>
-                    </section>
-                  )}
-                  {/* 工具执行中但消息尚未到达时，显示临时占位卡片，避免状态指示器亮了但页面空白。
-                      runtimeState 在工具消息到达前就已更新 isExecutingTool，存在时序间隙。 */}
-                  {activeRuntimeState?.isExecutingTool && !renderedRuns.some(r => r.kind === "agent-run" && r.items.some(i => i.kind === "tool-group")) && (
-                    <section className="tool-card tone-info" data-status="running">
-                      <div className="tool-card-header">
-                        <span className="tool-card-trigger">
-                          <span className="tool-card-icon">
-                            <Wrench size={14} />
-                          </span>
-                          <span className="tool-card-name">{t("tool.pending")}</span>
-                          <span className="tool-card-status">
-                            <span className="tool-card-spinner" aria-hidden="true" />
-                            {t("tool.statusRunning")}
-                          </span>
-                        </span>
-                      </div>
-                    </section>
-                  )}
-                </>
-              )}
-              {/* 响应指示器：agent 运行或流式期间显示三点动画 */}
-              {activeAgent && !cancellingUi &&
-                (activeAgent.status === "running" || activeRuntimeState?.isStreaming) && (
-                <RespondingIndicator
-                  thinking={activeThinking}
-                  showThinking={settings.showThinking}
-                  isExecutingTool={activeRuntimeState?.isExecutingTool}
-                  isStreaming={activeRuntimeState?.isStreaming}
-                />
-              )}
-            </div>
-          ) : null}
-
-          {/* 多选分享弹框：会话树 */}
-          {multiSelectOpen && (
-            <MultiSelectModal renderedRuns={renderedRuns} onClose={() => setMultiSelectOpen(false)} onCopy={handleMultiSelectCopy} />
-          )}
+        <SessionMessageTimeline
+          timelineRef={timelineRef}
+          activeMessages={activeMessages}
+          paginatedMessages={paginatedMessages}
+          hasMoreMessages={hasMoreMessages}
+          isLoadingMoreMessages={isLoadingMoreMessages}
+          canLoadMoreMessages={Boolean(activeAgent && activeAgent.status !== "starting")}
+          onLoadMoreMessages={handleLoadMoreMessages}
+          hasActiveConversation={hasActiveConversation}
+          hasProject={Boolean(activeProjectId)}
+          isConversationLoading={isConversationLoading}
+          onCreateSession={() => void createSessionDraft()}
+          showThinking={settings.showThinking}
+          activeThinking={activeThinking}
+          activeRuntimeState={activeRuntimeState}
+          activeConversationStatus={activeConversationStatus}
+          isAgentBusy={isAgentBusy}
+          cancellingUi={cancellingUi}
+          validCommandNames={validCommandNames}
+          validFilePaths={validFilePaths}
+          onPreviewImage={setPreviewImage}
+          onOpenExternal={(url) => api.app.openExternal(url)}
+          onOpenFile={openFilePath}
+          onDiffFile={diffFilePath}
+          onResendUserMessage={canMutateActiveMessages ? resendUserMessage : undefined}
+          onEditMessage={canMutateActiveMessages ? editMessage : undefined}
+          onDeleteMessage={canMutateActiveMessages ? deleteMessage : undefined}
+          onSendUiResponse={(requestId, response) => {
+            if (!activeAgentId) return;
+            if (response.cancelled) setCancellingUi(true);
+            api.agents.sendUiResponse(activeAgentId, requestId, response);
+          }}
+          onToast={(message) => showToast(message)}
+        />
 
           {sessionRefPickerOpen && sessionRefPickerTarget && (
             <SessionReferenceModal
@@ -6871,8 +6834,6 @@ export function App() {
             />
           )}
 
-        </section>
-
           {showScrollToBottom && (
             <button
               className="scroll-to-bottom-btn"
@@ -6885,162 +6846,43 @@ export function App() {
             </button>
           )}
 
-        {activeAgent && (
+        {hasActiveConversation && (
         <footer ref={composerRef} className="composer">
-          {/* 图片预览作为输入框上方的附件栏,避免占用 textarea 的可输入区域。 */}
-          {attachedImages.length > 0 && (
-            <div className="image-preview-area">
-              {attachedImages.map((img, index) => (
-                <div key={index} className="image-preview-item">
-                  <img
-                    src={`data:${img.mimeType};base64,${img.data}`}
-                    alt={t("app.imageAlt", { index: index + 1 })}
-                    onClick={() => setPreviewImage(img)}
-                    style={{ cursor: "pointer" }}
-                  />
-                  <button
-                    className="image-remove-btn"
-                    onClick={() => removeImage(index)}
-                    title={t("app.imageRemove")}
-                  >
-                    <X size={12} strokeWidth={2.4} />
-                  </button>
-                </div>
-              ))}
-              <button
-                className="image-clear-btn"
-                onClick={clearImages}
-                title={t("app.clearImagesTitle")}
-              >
-                {t("app.clearImages")}
-              </button>
-            </div>
-          )}
-          {activeAgentId && extensionWidgetsByAgent[activeAgentId] && Object.keys(extensionWidgetsByAgent[activeAgentId]).length > 0 && (() => {
-            const entries = Object.entries(extensionWidgetsByAgent[activeAgentId]);
-            const widgetSessionKey = getAgentSessionStorageKey(activeAgent, activeAgentId);
-            return (
-              <div className="extension-widgets-container" key="widgets-container">
-                {!widgetsCollapsed && entries.filter(([key]) =>
-                  widgetSessionKey && !(agentDismissedWidgets[widgetSessionKey]?.includes(key))
-                ).map(([widgetKey, widgetLines]) => (
-                  <ExtensionWidgetCard
-                    key={widgetKey}
-                    widgetKey={widgetKey}
-                    lines={widgetLines}
-                    sessionIdOrPath={widgetSessionKey}
-                    onClose={() => {
-                      if (!widgetSessionKey) return;
-                      setAgentDismissedWidgets((prev) => {
-                        const current = prev[widgetSessionKey] ?? [];
-                        if (current.includes(widgetKey)) return prev;
-                        const next = { ...prev, [widgetSessionKey]: [...current, widgetKey] };
-                        saveDismissedExtensionWidgets(next);
-                        return next;
-                      });
-                    }}
-                  />
-                ))}
-              </div>
-            );
-          })()}
-          {activeQueuedPrompts.length > 0 && activeAgentId && (
-            <div
-              ref={queuedTrackRef}
-              className="queued-track"
-              aria-label={t("app.queuedMessagesLabel")}
-            >
-              <div className="queued-panel">
-                <div className="queued-panel-header">
-                  <span>{t("app.queuedMessagesLabel")}</span>
-                  <span className="queued-panel-count">
-                    {activeQueuedPrompts.length}
-                  </span>
-                </div>
-                <div className="queued-list">
-                  {visibleQueuedPrompts.map((queuedPrompt, index) => {
-                    const status = queuedPrompt.status ?? "pending";
-                    const canRetractToInput = canRetractQueuedPromptToInput(status);
-                    const canDiscard = canDiscardQueuedPrompt(status);
-                    const previewText =
-                      queuedPrompt.displayText.trim() ||
-                      t("app.queuedImageMessage");
-                    const rowTitle = [
-                      previewText,
-                      queuedPrompt.error,
-                      status === "unknown" ? t("app.queuedUnknown") : "",
-                    ]
-                      .filter(Boolean)
-                      .join("\n");
-                    return (
-                      <div
-                        key={queuedPrompt.id}
-                        className={`queued-row ${status} queued-behavior-${queuedPrompt.behavior}`}
-                        title={rowTitle}
-                      >
-                        <span className="queued-index" aria-hidden="true">
-                          {index + 1}
-                        </span>
-                        <span className="queued-text">{previewText}</span>
-                        {queuedPrompt.images?.length ? (
-                          <span className="queued-meta">
-                            {t("app.queuedImageCount", {
-                              count: String(queuedPrompt.images.length),
-                            })}
-                          </span>
-                        ) : null}
-                        {status === "sending" ? (
-                          <span className="queued-meta">
-                            {t("app.queuedSending")}
-                          </span>
-                        ) : status === "failed" ? (
-                          <span className="queued-meta failed">
-                            {t("app.queuedFailed")}
-                          </span>
-                        ) : status === "unknown" ? (
-                          <span className="queued-meta unknown">
-                            {t("app.queuedUnknownShort")}
-                          </span>
-                        ) : null}
-                        <div className="queued-actions">
-                          <button
-                            type="button"
-                            className="queued-icon-btn"
-                            disabled={!canRetractToInput}
-                            title={t("app.retractToInput")}
-                            aria-label={t("app.retractToInput")}
-                            onClick={() =>
-                              retractQueuedPromptForEdit(
-                                activeAgentId,
-                                queuedPrompt,
-                              )
-                            }
-                          >
-                            <Pencil size={13} strokeWidth={2} />
-                          </button>
-                          <button
-                            type="button"
-                            className="queued-icon-btn danger"
-                            disabled={!canDiscard}
-                            title={t("app.retractDiscard")}
-                            aria-label={t("app.retractDiscard")}
-                            onClick={() =>
-                              discardQueuedPrompt(
-                                activeAgentId,
-                                queuedPrompt.id,
-                              )
-                            }
-                          >
-                            <X size={13} strokeWidth={2} />
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          )}
+          <ComposerAttachmentBar
+            images={attachedImages}
+            onPreview={setPreviewImage}
+            onRemove={removeImage}
+            onClear={clearImages}
+          />
+          <ExtensionWidgetPanel
+            widgets={activeAgentId ? extensionWidgetsByAgent[activeAgentId] : undefined}
+            sessionKey={activeWidgetSessionKey}
+            dismissedKeys={activeWidgetSessionKey
+              ? (agentDismissedWidgets[activeWidgetSessionKey] ?? [])
+              : []}
+            collapsed={widgetsCollapsed}
+            onDismiss={(widgetKey) => {
+              if (!activeWidgetSessionKey) return;
+              setAgentDismissedWidgets((prev) => {
+                const current = prev[activeWidgetSessionKey] ?? [];
+                if (current.includes(widgetKey)) return prev;
+                const next = {
+                  ...prev,
+                  [activeWidgetSessionKey]: [...current, widgetKey],
+                };
+                saveDismissedExtensionWidgets(next);
+                return next;
+              });
+            }}
+          />
+          <QueuedPromptPanel
+            trackRef={queuedTrackRef}
+            agentId={activeAgentId}
+            prompts={activeQueuedPrompts}
+            visiblePrompts={visibleQueuedPrompts}
+            onRetract={retractQueuedPromptForEdit}
+            onDiscard={discardQueuedPrompt}
+          />
           <div
             ref={composerBoxRef}
             className={`composer-box ${
@@ -7109,7 +6951,7 @@ export function App() {
               placeholder={
                 isAgentStarting
                   ? t("app.agentStartingPlaceholder")
-                  : !activeAgent
+                  : !hasActiveConversation
                     ? t("app.composerNoAgentPlaceholder")
                     : composerBangMode === "bang-bang"
                       ? t("app.composerSilentPlaceholder")
@@ -7126,10 +6968,11 @@ export function App() {
                 setSuggestionsOpen(detectTrigger(prompt, composerCursor) !== null);
               }}
               onChange={(newValue, cursor) => {
-                const targetAgentId = activeAgentIdRef.current;
-                if (targetAgentId) {
-                  setPromptFromNativeInput(targetAgentId, newValue);
+                const targetId = getComposerTargetId();
+                if (targetId) {
+                  setPromptFromNativeInput(targetId, newValue);
                 }
+                const targetAgentId = currentSessionIdRef.current ? undefined : activeAgentIdRef.current;
                 if (targetAgentId) {
                   setBusyDraftByAgent((current) => {
                     if (!newValue.trim()) {
@@ -7149,7 +6992,7 @@ export function App() {
                 }
                 // 如果正在历史导航,检测到用户手动编辑内容则退出历史模式
                 if (historyNavigating) {
-                  const agentHistory = promptHistoryRef.current[activeAgentId ?? ''] ?? [];
+                  const agentHistory = promptHistoryRef.current[getComposerTargetId() ?? ""] ?? [];
                   const currentHistoryCommand = agentHistory[historyIndex];
                   if (newValue !== currentHistoryCommand) {
                     setHistoryIndex(-1);
@@ -7186,9 +7029,7 @@ export function App() {
                 onClose={() => {
                   const el = composerTextareaRef.current;
                   const cursor = el ? getCaretOffsetOf(el) : composerCursor;
-                  const liveComposerPrompt = activeAgentIdRef.current
-                    ? (livePromptByAgentRef.current[activeAgentIdRef.current] ?? prompt)
-                    : prompt;
+                  const liveComposerPrompt = getLiveComposerPrompt();
                   const result = clearSuggestionTrigger(liveComposerPrompt, cursor);
                   setPrompt(result.text);
                   setComposerCursor(result.cursor);
@@ -7201,9 +7042,7 @@ export function App() {
                 onPick={(value) => {
                   const el = composerTextareaRef.current;
                   const cursor = el ? getCaretOffsetOf(el) : composerCursor;
-                  const liveComposerPrompt = activeAgentIdRef.current
-                    ? (livePromptByAgentRef.current[activeAgentIdRef.current] ?? prompt)
-                    : prompt;
+                  const liveComposerPrompt = getLiveComposerPrompt();
                   const result = applySuggestion(liveComposerPrompt, cursor, value);
                   setPrompt(result.text);
                   setComposerCursor(result.cursor);
@@ -7215,87 +7054,26 @@ export function App() {
                 }}
               />
             )}
-            <div className="composer-footer">
-              {composerMode && (
-                <span className="composer-mode-status">{composerStatusText}</span>
+            <ComposerSendControls
+              composerMode={composerMode}
+              statusText={composerStatusText}
+              isAgentBusy={isAgentBusy}
+              isAgentStarting={isAgentStarting}
+              keepBusyDraftControls={keepBusyDraftControls}
+              showBusySendControls={showBusySendControls}
+              hasComposerContent={hasComposerContent}
+              canSend={Boolean(
+                promptAgentKey &&
+                (prompt.trim() || attachedImages.length > 0)
               )}
-              <div className="footer-actions">
-                <div
-                  className="send-behavior-menu-wrap"
-                  onMouseLeave={scheduleSendBehaviorMenuClose}
-                >
-                  {showBusySendControls && hasComposerContent && (
-                      <div className="send-behavior-toggle">
-                        <button
-                          type="button"
-                          className="send-behavior-primary"
-                          title={t("app.sendSteerTitle")}
-                          aria-label={t("app.sendSteerTitle")}
-                          onClick={() => void sendPrompt()}
-                        >
-                          <ArrowUp size={15} strokeWidth={2.4} />
-                        </button>
-                        <button
-                          type="button"
-                          className="send-behavior-chevron"
-                          title={t("app.sendBehaviorTitle")}
-                          aria-label={t("app.sendBehaviorTitle")}
-                          aria-haspopup="menu"
-                          aria-expanded={sendBehaviorMenuOpen}
-                          onMouseEnter={keepSendBehaviorMenuOpen}
-                          onFocus={keepSendBehaviorMenuOpen}
-                          onClick={() => setSendBehaviorMenuOpen((open) => !open)}
-                        >
-                          <ChevronDown size={12} strokeWidth={2.2} />
-                        </button>
-                      </div>
-                    )}
-                  {isAgentBusy ? (
-                    <button
-                      type="button"
-                      className="btn-circle stop"
-                      onClick={() => abortAgent()}
-                      title={t("app.stop")}
-                      aria-label={t("app.stop")}
-                    >
-                      <Square size={18} strokeWidth={0} fill="currentColor" />
-                    </button>
-                  ) : !keepBusyDraftControls ? (
-                    <button
-                      type="button"
-                      disabled={
-                        isAgentStarting ||
-                        (!activeAgentId) ||
-                        (!prompt.trim() && attachedImages.length === 0)
-                      }
-                      className="btn-circle send"
-                      onClick={() => void sendPrompt()}
-                      title={t("app.send")}
-                      aria-label={t("app.send")}
-                    >
-                      <ArrowUp size={18} strokeWidth={2.5} />
-                    </button>
-                  ) : null}
-                  {sendBehaviorMenuOpen && showBusySendControls && hasComposerContent && (
-                    <div
-                      className="send-behavior-menu"
-                      role="menu"
-                      onMouseEnter={keepSendBehaviorMenuOpen}
-                      onMouseLeave={scheduleSendBehaviorMenuClose}
-                    >
-                      <button className="send-behavior-option steer" type="button" role="menuitem" onClick={() => void sendPrompt()}>
-                        <span className="send-behavior-option-dot" aria-hidden="true" />
-                        <span>{t("app.sendSteerTitle")}</span>
-                      </button>
-                      <button className="send-behavior-option follow-up" type="button" role="menuitem" onClick={sendPromptAsFollowUp}>
-                        <span className="send-behavior-option-dot" aria-hidden="true" />
-                        <span>{t("app.sendFollowUpTitle")}</span>
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
+              sendBehaviorMenuOpen={sendBehaviorMenuOpen}
+              onSend={() => void sendPrompt()}
+              onSendFollowUp={sendPromptAsFollowUp}
+              onStop={() => abortAgent()}
+              onToggleBehaviorMenu={() => setSendBehaviorMenuOpen((open) => !open)}
+              onKeepBehaviorMenuOpen={keepSendBehaviorMenuOpen}
+              onScheduleBehaviorMenuClose={scheduleSendBehaviorMenuClose}
+            />
           </div>
         </footer>
         )}
@@ -7332,7 +7110,7 @@ export function App() {
         )}
       </main>
 
-        {activeAgent && (
+        {hasActiveConversation && (
           <ConversationOutline
             items={outlineItems}
             onJump={handleOutlineJump}
@@ -7579,14 +7357,21 @@ export function App() {
                 refreshSessions(sessionsProjectId ?? activeProjectId)
               }
               onOpenSession={(session) =>
-                createAgent(
+                void openSidebarSession(
                   sessionsProjectId ?? activeProjectId ?? "",
-                  session.filePath,
-                  session.name,
+                  session,
                 )
               }
               onRenameSession={async (filePath, newName) => {
-                await api.sessions.rename(filePath, newName);
+                const session = sessions.find((candidate) =>
+                  isSameSessionPath(
+                    candidate.filePath,
+                    filePath,
+                    candidate.wsl ? "wsl" : "native",
+                  ),
+                );
+                if (!session) return;
+                await api.sessions.updateRecord(session.id, { title: newName });
                 await refreshSessions(sessionsProjectId ?? activeProjectId);
               }}
               onCopySession={(session) =>
@@ -7884,7 +7669,11 @@ export function App() {
             // 检查是否有子会话：如有则弹出确认，否则直接删除
             const projectSessions = sessionsByProject[sessionMenu.projectId] ?? [];
             const childCount = projectSessions.filter(
-              (s) => isSameSessionPath(s.parentSessionPath, session.filePath),
+              (s) => isSameSessionPath(
+                s.parentSessionPath,
+                session.filePath,
+                s.wsl ? "wsl" : "native",
+              ),
             ).length;
             if (childCount > 0) {
               setSidebarDeleteConfirm({ session, childCount });
@@ -7942,7 +7731,9 @@ export function App() {
           }}
           onDelete={async (sessions) => {
             for (const session of sessions) {
-              await api.sessions.delete(session.filePath);
+              await api.sessions.deleteRecord(session.id);
+              removeSessionState(session.id);
+              removeSessionComposerState(session.id);
             }
             showToast(t("app.sessionDeleted"), 2200);
             const projectId = sessionManagerProject.id;

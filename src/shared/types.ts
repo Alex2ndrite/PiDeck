@@ -64,6 +64,14 @@ export type AgentTab = {
 	status: AgentStatus;
 	sessionId?: string;
 	sessionPath?: string;
+	/** Identity used only for session/runtime matching; agentId remains the process handle. */
+	sessionEnvironment?: SessionEnvironment;
+	sessionSource?: SessionSource;
+	wslDistro?: string;
+	wslUser?: string;
+	importedSourceId?: string;
+	/** Monotonic binding generation assigned by SessionRuntimeCoordinator. */
+	runtimeGeneration?: number;
 	createdAt: number;
 	/** 会话累计压缩次数，由主进程解析会话文件得到，用于前端展示“已压缩 N 次”。 */
 	compactionCount?: number;
@@ -115,6 +123,9 @@ export type FileTreeNode = {
 	children?: FileTreeNode[];
 };
 
+export type SessionSource = "pi" | "codex" | "claude" | "opencode";
+export type SessionEnvironment = "native" | "wsl";
+
 export type SessionSummary = {
 	id: string;
 	filePath: string;
@@ -126,7 +137,7 @@ export type SessionSummary = {
 	updatedAt: number;
 	messageCount: number;
 	/** 会话来源：pi 原生、Codex 导入、Claude 导入、OpenCode 导入 */
-	source?: "pi" | "codex" | "claude" | "opencode";
+	source?: SessionSource;
 	/** 标记此会话文件来自 WSL，rename/delete/copy 等操作需走 wsl.exe */
 	wsl?: boolean;
 	codexSessionId?: string;
@@ -134,6 +145,48 @@ export type SessionSummary = {
 	codexParentThreadId?: string;
 	codexAgentRole?: string;
 	codexAgentNickname?: string;
+};
+
+/** PiDeck-owned session identity, independent from a running Pi process. */
+export type SessionRecord = {
+	id: string;
+	projectId: string;
+	title: string;
+	source: SessionSource;
+	environment: SessionEnvironment;
+	filePath?: string;
+	wslDistro?: string;
+	wslUser?: string;
+	importedSourceId?: string;
+	parentSessionId?: string;
+	parentSessionPath?: string;
+	projectPath?: string;
+	preview: string;
+	messageCount: number;
+	status: "draft" | "active";
+	model?: { provider: string; modelId: string };
+	thinkingLevel?: string;
+	createdAt: number;
+	updatedAt: number;
+	wsl?: boolean;
+	codexSessionId?: string;
+	codexThreadSource?: "user" | "subagent";
+	codexParentThreadId?: string;
+	codexAgentRole?: string;
+	codexAgentNickname?: string;
+};
+
+export type CreateSessionDraftInput = {
+	projectId: string;
+	title?: string;
+	model?: { provider: string; modelId: string };
+	thinkingLevel?: string;
+};
+
+export type UpdateSessionRecordInput = {
+	title?: string;
+	model?: { provider: string; modelId: string };
+	thinkingLevel?: string;
 };
 
 export type CodexImportStatus = "new" | "current" | "outdated";
@@ -1031,6 +1084,11 @@ export type CreateAgentInput = {
 	projectId: string;
 	title?: string;
 	sessionPath?: string;
+	environment?: SessionEnvironment;
+	source?: SessionSource;
+	wslDistro?: string;
+	wslUser?: string;
+	importedSourceId?: string;
 };
 
 export type ForkMessage = {
@@ -1062,6 +1120,27 @@ export type SendPromptResult =
 	| { accepted: true }
 	| { accepted: false; error: string; delivery?: "rejected" }
 	| { accepted: false; error: string; delivery: "unknown" };
+
+export type SendSessionPromptInput = Omit<SendPromptInput, "agentId"> & {
+	sessionId: string;
+	requestId: string;
+};
+
+export type SendSessionPromptResult = SendPromptResult & {
+	sessionId: string;
+	requestId: string;
+	agentId?: string;
+	sessionPath?: string;
+	runtimeGeneration?: number;
+};
+
+export type SessionRuntimeEvent = {
+	sessionId: string;
+	agentId: string;
+	runtimeGeneration: number;
+	sourceChannel: string;
+	payload: unknown;
+};
 
 /** 实时思考内容更新，用于流式展示模型推理过程 */
 export type ThinkingUpdate = {

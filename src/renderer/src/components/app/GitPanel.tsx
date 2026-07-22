@@ -1235,6 +1235,7 @@ export function GitPanel(props: GitPanelProps) {
                 </button>
               </div>
             ) : (
+              <>
             <div className="git-scm-input-wrap">
               <textarea
                 className="git-scm-input"
@@ -1279,7 +1280,9 @@ export function GitPanel(props: GitPanelProps) {
                         5000,
                         "error",
                       );
-                    setCommitGenLoading(false);
+                    } finally {
+                      setCommitGenLoading(false);
+                    }
                   }}
                 >
                   {commitGenLoading ? (
@@ -1447,6 +1450,8 @@ export function GitPanel(props: GitPanelProps) {
                 </ResourceGroup>
               )}
             </div>
+              </>
+            )}
           </div>
         )}
       </section>

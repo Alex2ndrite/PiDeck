@@ -24,6 +24,9 @@ import type {
 	ConfigFileDiagnostic,
 	DraftMeta,
 	CreateAgentInput,
+	CreateSessionDraftInput,
+	UpdateSessionRecordInput,
+	SessionRecord,
 	CreatePiSkillInput,
 	CreateProjectSkillInput,
 	ProjectResourceListResult,
@@ -71,6 +74,9 @@ import type {
 	ScratchPadData,
 	SendPromptInput,
 	SendPromptResult,
+	SendSessionPromptInput,
+	SendSessionPromptResult,
+	SessionRuntimeEvent,
 	SessionSummary,
 	TerminalDataEvent,
 	TerminalExitEvent,
@@ -178,6 +184,28 @@ const api = {
 			ipcRenderer.invoke(ipcChannels.sessionsList, projectId) as Promise<
 				SessionSummary[]
 			>,
+		listCatalog: (projectId: string) =>
+			ipcRenderer.invoke(ipcChannels.sessionsCatalogList, projectId) as Promise<
+				SessionRecord[]
+			>,
+		createDraft: (input: CreateSessionDraftInput) =>
+			ipcRenderer.invoke(ipcChannels.sessionsCatalogCreateDraft, input) as Promise<SessionRecord>,
+		updateRecord: (sessionId: string, patch: UpdateSessionRecordInput) =>
+			ipcRenderer.invoke(
+				ipcChannels.sessionsCatalogUpdate,
+				sessionId,
+				patch,
+			) as Promise<SessionRecord>,
+		deleteRecord: (sessionId: string) =>
+			ipcRenderer.invoke(ipcChannels.sessionsCatalogDelete, sessionId) as Promise<boolean>,
+		readRecordMessages: (sessionId: string) =>
+			ipcRenderer.invoke(ipcChannels.sessionsCatalogReadMessages, sessionId) as Promise<
+				import("../shared/types").ChatMessage[]
+			>,
+		sendPrompt: (input: SendSessionPromptInput) =>
+			ipcRenderer.invoke(ipcChannels.sessionsSendPrompt, input) as Promise<SendSessionPromptResult>,
+		onRuntimeEvent: (callback: (event: SessionRuntimeEvent) => void) =>
+			subscribe(ipcChannels.sessionsRuntimeEvent, callback),
 		rename: (filePath: string, newName: string) =>
 			ipcRenderer.invoke(
 				ipcChannels.sessionsRename,

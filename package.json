@@ -54,7 +54,7 @@
   "main": "out/main/index.js",
   "scripts": {
     "dev": "node scripts/dev.js",
-    "build": "tsc --noEmit && electron-vite build",
+    "build": "tsc --noEmit && node --max-old-space-size=8192 ./node_modules/electron-vite/bin/electron-vite.js build",
     "pack": "npm run build && electron-builder --dir",
     "dist": "npm run build && electron-builder",
     "dist:win": "npm run build && electron-builder --win nsis portable zip",
@@ -73,6 +73,7 @@
     "@electron-toolkit/utils": "^4.0.0",
     "@larksuiteoapi/node-sdk": "^1.67.0",
     "@radix-ui/react-dialog": "^1.1.19",
+    "jotai": "^2.20.2",
     "node-pty": "^1.1.0",
     "remove-markdown": "^0.6.4",
     "sonner": "^2.0.7"

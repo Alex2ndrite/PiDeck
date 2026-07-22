@@ -484,7 +484,7 @@ export class SessionScanner {
     return messages;
   }
 
-  /** 统一读取本地/WSL 会话原文，供 Viewer 与 AgentManager 共享转换管线。 */
+  /** 统一读取本地/WSL Session 原文，供持久化读取与 AgentManager 共享转换管线。 */
   async readSessionRawText(filePath: string): Promise<string> {
     return this.isWslPath(filePath)
       ? this.readWslFile(filePath)
@@ -569,8 +569,8 @@ export class SessionScanner {
           if (!text.trim()) continue;
           const images = this.extractImagesFromContent(msg.content);
           messages.push({
-            id: `sv-u-${seq++}`,
-            agentId: "_viewer",
+            id: `sr-u-${seq++}`,
+            agentId: "session-reader",
             role: "user",
             text,
             timestamp: ts,
@@ -581,22 +581,22 @@ export class SessionScanner {
           if (!text.trim()) continue;
           const thinking = extractThinkingRaw(msg.content);
           messages.push({
-            id: `sv-a-${seq++}`,
-            agentId: "_viewer",
+            id: `sr-a-${seq++}`,
+            agentId: "session-reader",
             role: "assistant",
             text,
             timestamp: ts,
             ...(thinking ? { thinking } : {}),
           });
         } else if (msg.role === "toolResult") {
-          const toolCallId = String(msg.toolCallId ?? `sv-tool-${seq}`);
+          const toolCallId = String(msg.toolCallId ?? `sr-tool-${seq}`);
           const historicalCall = toolCallsMap.get(toolCallId);
           const toolName = String(msg.toolName ?? historicalCall?.name ?? "tool");
           const isError = Boolean(msg.isError);
           const icon = isError ? "✗" : "✓";
           messages.push({
-            id: `sv-t-${seq++}`,
-            agentId: "_viewer",
+            id: `sr-t-${seq++}`,
+            agentId: "session-reader",
             role: "tool",
             text: `${icon} ${toolName}`,
             timestamp: ts,

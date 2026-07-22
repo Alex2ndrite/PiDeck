@@ -51,6 +51,7 @@ process.on("unhandledRejection", (reason) => {
 	console.error("Unhandled rejection:", reason);
 });
 import { ipcChannels } from "../shared/ipc";
+import { canonicalizeSessionPath } from "../shared/sessionIdentity";
 import type {
 	AppSettings,
 	AppUpdateAsset,
@@ -63,11 +64,16 @@ import type {
 	ExternalEditorSetting,
 	AppUpdateInfo,
 	CreateAgentInput,
+	CreateSessionDraftInput,
+	UpdateSessionRecordInput,
 	FeishuBotConfig,
 	FeishuBridgeStatus,
 	FeishuConnectInput,
 	FeishuTestResult,
 	SendPromptInput,
+	SendPromptResult,
+	SendSessionPromptInput,
+	SessionRuntimeEvent,
 	CreatePiPromptTemplateInput,
 	CreatePiSkillInput,
 	CreateProjectSkillInput,
@@ -85,6 +91,8 @@ import { AgentManager } from "./pi/AgentManager";
 import { PiLocator } from "./pi/PiLocator";
 import { testPiProxy } from "./pi/PiProxyTester";
 import { SessionScanner } from "./sessions/SessionScanner";
+import { SessionCatalog } from "./sessions/SessionCatalog";
+import { SessionRuntimeCoordinator } from "./sessions/SessionRuntimeCoordinator";
 import { CodexSessionImporter } from "./sessions/CodexSessionImporter";
 import { ClaudeSessionImporter } from "./sessions/ClaudeSessionImporter";
 import { OpenCodeSessionImporter } from "./sessions/OpenCodeSessionImporter";
@@ -133,6 +141,8 @@ let isQuitting = false;
 let projectStore: ProjectStore;
 let fileSystemService: FileSystemService;
 let sessionScanner: SessionScanner;
+let sessionCatalog: SessionCatalog;
+let sessionRuntimeCoordinator: SessionRuntimeCoordinator;
 let codexSessionImporter: CodexSessionImporter;
 let claudeSessionImporter: ClaudeSessionImporter;
 let openCodeSessionImporter: OpenCodeSessionImporter;
@@ -1086,6 +1096,74 @@ function registerFeishuIpc() {
 	});
 }
 
+async function sendAgentPromptWithIntegrations(
+	input: SendPromptInput,
+): Promise<SendPromptResult> {
+	const bridge = feishuBridge;
+	const bridgeConnected = bridge?.getStatus().status === "connected";
+	const hasFeishuBinding = bridgeConnected && bridge.hasSessionBinding(input.agentId);
+	const docTitle = bridgeConnected ? wantsFeishuDoc(input.message) : undefined;
+	const sessionChatId = bridgeConnected ? bridge.getSessionChatId(input.agentId) : undefined;
+	let agentInstruction: string | undefined;
+	const buildFeishuActionInstruction = (chatId?: string) => [
+		"当前会话已连接飞书聊天。严禁调用 lark-cli、飞书 IM API 或搜索群聊来发送文件；不要询问 chat_id。需要把本地文件发到当前飞书聊天时，最终回答末尾独立一行写 [SEND_FILE:本地文件路径]，PiDeck 会按当前会话绑定自动上传。",
+		chatId ? `当前绑定的飞书 chat_id: ${chatId}。这是只读上下文，用于确认当前会话绑定；发送文件仍必须用 [SEND_FILE:本地文件路径]。` : undefined,
+	].filter(Boolean).join("\n");
+
+	if (bridgeConnected && hasFeishuBinding) {
+		const filePath = resolveFeishuFileSendIntent(input.message, agentManager.getCwd(input.agentId));
+		if (filePath) {
+			const result = await bridge.sendFileForSession(input.agentId, filePath);
+			agentManager.recordHostExchange(input.agentId, input.message, result);
+			void appLogger.info("feishu", "File sent through current session binding", {
+				agentId: input.agentId,
+				filePath,
+				success: result.startsWith("✅"),
+			});
+			return { accepted: true };
+		}
+	}
+
+	if (bridgeConnected && docTitle && !hasFeishuBinding) {
+		const tab = agentManager.list().find((item) => item.id === input.agentId);
+		if (tab) {
+			await bridge.ensureSessionMirror(tab.id, tab.title, tab.sessionPath).catch((error) => {
+				console.error("[Feishu] auto-bind session mirror failed:", error);
+			});
+			bridge.trackDocRequest(tab.id, docTitle);
+			void bridge.forwardUserMessageToFeishu(tab.id, input.message).catch((error) => {
+				console.error("[Feishu] forward PiDeck message failed:", error);
+			});
+			agentInstruction = `${buildFeishuActionInstruction(bridge.getSessionChatId(tab.id))}\n创建飞书文档时，先输出完整正文，最后独立一行写 [CREATE_DOC:文档标题]。`;
+		}
+	} else if (hasFeishuBinding) {
+		agentInstruction = buildFeishuActionInstruction(sessionChatId);
+		const tab = agentManager.list().find((item) => item.id === input.agentId);
+		if (tab) {
+			void bridge.startSessionMirrorRun(tab.id, tab.title, tab.sessionPath).catch((error) => {
+				console.error("[Feishu] session mirror card init failed:", error);
+			});
+			if (input.message.trim()) {
+				void bridge.forwardUserMessageToFeishu(tab.id, input.message).catch((error) => {
+					console.error("[Feishu] forward PiDeck message failed:", error);
+				});
+			}
+		}
+	}
+	const result = await agentManager.sendPrompt(
+		agentInstruction
+			? { ...input, agentMessage: `${agentInstruction}\n\n${input.message}` }
+			: input,
+	);
+	void appLogger.info("agent", "Prompt sent", {
+		agentId: input.agentId,
+		messageLength: input.message.length,
+		imageCount: input.images?.length ?? 0,
+		streamingBehavior: input.streamingBehavior,
+	});
+	return result;
+}
+
 function registerIpc() {
 	// 获取当前环境过滤后的项目列表（WSL 模式只显示 WSL 项目，Chat 始终显示）
 	const getVisibleProjects = () => {
@@ -1095,6 +1173,24 @@ function registerIpc() {
 			return all.filter((p) => p.kind === "chat" || p.environment === "wsl");
 		}
 		return all.filter((p) => p.kind === "chat" || !p.environment || p.environment === "windows");
+	};
+
+	const scanProjectSessions = async (projectId: string) => {
+		const project = projectStore.get(projectId);
+		if (!project) throw new Error(`Project not found: ${projectId}`);
+		let projectPath = project.path;
+		const settings = settingsStore.get();
+		if (settings.wslEnabled && settings.wslDistro) {
+			projectPath = projectPath
+				.replace(/^([A-Za-z]):\\/, (_: string, drive: string) => `/mnt/${drive.toLowerCase()}/`)
+				.replace(/\\/g, "/");
+		}
+		return sessionScanner.list(projectPath);
+	};
+
+	const catalogIdentityContext = () => {
+		const { wslEnabled, wslDistro, wslUser } = settingsStore.get();
+		return wslEnabled ? { wslDistro, wslUser } : {};
 	};
 
 	ipcMain.handle(ipcChannels.projectsList, () => getVisibleProjects());
@@ -1488,6 +1584,109 @@ function registerIpc() {
 		},
 	);
 	ipcMain.handle(
+		ipcChannels.sessionsCatalogList,
+		async (_event, projectId: string) => {
+			const summaries = await scanProjectSessions(projectId);
+			return sessionCatalog.mergeScanned(projectId, summaries, catalogIdentityContext());
+		},
+	);
+	ipcMain.handle(
+		ipcChannels.sessionsCatalogCreateDraft,
+		async (_event, input: CreateSessionDraftInput) => {
+			const project = projectStore.get(input.projectId);
+			if (!project) throw new Error(`Project not found: ${input.projectId}`);
+			return sessionCatalog.createDraft({
+				projectId: input.projectId,
+				title: input.title?.trim() || "New session",
+				environment: settingsStore.get().wslEnabled ? "wsl" : "native",
+				model: input.model,
+				thinkingLevel: input.thinkingLevel,
+			});
+		},
+	);
+	ipcMain.handle(
+		ipcChannels.sessionsCatalogUpdate,
+		async (_event, sessionId: string, patch: UpdateSessionRecordInput) => {
+			const entry = sessionCatalog.get(sessionId);
+			if (!entry) throw new Error(`Session not found: ${sessionId}`);
+			const title = patch.title?.trim();
+			if (title && entry.filePath && title !== entry.title) {
+				await sessionScanner.rename(entry.filePath, title);
+			}
+			return sessionCatalog.update(sessionId, {
+				...patch,
+				title: title || undefined,
+			});
+		},
+	);
+	ipcMain.handle(
+		ipcChannels.sessionsCatalogDelete,
+		async (_event, sessionId: string) => {
+			const entry = sessionCatalog.get(sessionId);
+			if (!entry) return false;
+			if (entry.filePath) {
+				const normalizedTarget = canonicalizeSessionPath(
+					entry.filePath,
+					entry.environment,
+				);
+				const usingAgent = agentManager.list().find((agent) => (
+					agent.sessionPath &&
+					agent.sessionEnvironment === entry.environment &&
+					(entry.environment !== "wsl" || (
+						agent.wslDistro === entry.wslDistro &&
+						agent.wslUser === entry.wslUser
+					)) &&
+					canonicalizeSessionPath(agent.sessionPath, entry.environment) === normalizedTarget
+				));
+				if (usingAgent) {
+					throw new Error(`会话“${usingAgent.title}”正在使用中，请先关闭 Agent 后再删除`);
+				}
+				await sessionScanner.delete(entry.filePath);
+			}
+			await sessionCatalog.remove(sessionId);
+			void appLogger.info("session", "Catalog session deleted", { sessionId, filePath: entry.filePath });
+			return true;
+		},
+	);
+	ipcMain.handle(
+		ipcChannels.sessionsCatalogReadMessages,
+		async (_event, sessionId: string) => {
+			const entry = sessionCatalog.get(sessionId);
+			if (!entry?.filePath) return [];
+			const content = await sessionScanner.readSessionRawText(entry.filePath);
+			return agentManager.readSessionDisplayMessages(entry.filePath, sessionId, content);
+		},
+	);
+	ipcMain.handle(
+		ipcChannels.sessionsSendPrompt,
+		async (_event, input: SendSessionPromptInput) => {
+			void appLogger.info("session", "Session prompt IPC received", {
+				sessionId: input.sessionId,
+				requestId: input.requestId,
+				messageLength: input.message.length,
+				imageCount: input.images?.length ?? 0,
+			});
+			try {
+				const result = await sessionRuntimeCoordinator.send(input);
+				void appLogger.info("session", "Session prompt IPC completed", {
+					sessionId: input.sessionId,
+					requestId: input.requestId,
+					agentId: result.agentId,
+					accepted: result.accepted,
+					delivery: "delivery" in result ? result.delivery : undefined,
+				});
+				return result;
+			} catch (error) {
+				void appLogger.warn("session", "Session prompt IPC failed", {
+					sessionId: input.sessionId,
+					requestId: input.requestId,
+					error: error instanceof Error ? error.message : String(error),
+				});
+				throw error;
+			}
+		},
+	);
+	ipcMain.handle(
 		ipcChannels.sessionsRename,
 		async (_event, filePath: string, newName: string) => {
 			await sessionScanner.rename(filePath, newName);
@@ -1519,7 +1718,9 @@ function registerIpc() {
 		}
 
 		await sessionScanner.delete(filePath);
-		void appLogger.info("session", "Session deleted", { filePath });
+		const removedCatalogEntry = await sessionCatalog.removeByFilePath(filePath, "native")
+			|| await sessionCatalog.removeByFilePath(filePath, "wsl");
+		void appLogger.info("session", "Session deleted", { filePath, removedCatalogEntry });
 	});
 	ipcMain.handle(
 		ipcChannels.sessionsReadMessages,
@@ -1538,7 +1739,7 @@ function registerIpc() {
 		async (_event, filePath: string) => {
 			// SessionScanner 统一处理本地/WSL 文件读取；消息转换与压缩归档完全复用 AgentManager。
 			const content = await sessionScanner.readSessionRawText(filePath);
-			return agentManager.readSessionDisplayMessages(filePath, "_viewer", content);
+			return agentManager.readSessionDisplayMessages(filePath, "session-reader", content);
 		},
 	);
 	ipcMain.handle(
@@ -2338,6 +2539,11 @@ function registerIpc() {
 			}
 			// WSL 设置变更时同步更新会话扫描器和配置管理器
 			if ("wslEnabled" in patch || "wslDistro" in patch || "wslUser" in patch) {
+				sessionCatalog.setIdentityContext(
+					settings.wslEnabled
+						? { wslDistro: settings.wslDistro, wslUser: settings.wslUser }
+						: {},
+				);
 				if (settings.wslEnabled && settings.wslDistro && settings.wslUser) {
 					await sessionScanner.configureWsl(settings.wslDistro, settings.wslUser);
 					skillManager.configureWsl(settings.wslDistro, settings.wslUser);
@@ -2897,76 +3103,30 @@ function registerIpc() {
 		},
 	);
 	ipcMain.handle(ipcChannels.agentsStop, async (_event, agentId: string) => {
+		const runtimeBinding = sessionRuntimeCoordinator.getRuntimeBinding(agentId);
+		const stoppedTab = agentManager.list().find((tab) => tab.id === agentId);
 		terminalManager.closeAgent(agentId);
 		await agentManager.stop(agentId);
+		if (runtimeBinding && stoppedTab) {
+			const window = mainWindow;
+			if (window && !window.isDestroyed()) {
+				const event: SessionRuntimeEvent = {
+					sessionId: runtimeBinding.sessionId,
+					agentId,
+					runtimeGeneration: runtimeBinding.runtimeGeneration,
+					sourceChannel: ipcChannels.agentsState,
+					payload: { ...stoppedTab, status: "closed" },
+				};
+				window.webContents.send(ipcChannels.sessionsRuntimeEvent, event);
+			}
+		}
+		sessionRuntimeCoordinator.unbindAgent(agentId);
 		void appLogger.info("agent", "Agent stopped", { agentId });
 	});
-	ipcMain.handle(ipcChannels.agentsPrompt, async (_event, input: SendPromptInput) => {
-		const bridge = feishuBridge;
-		const bridgeConnected = bridge?.getStatus().status === "connected";
-		const hasFeishuBinding = bridgeConnected && bridge.hasSessionBinding(input.agentId);
-		const docTitle = bridgeConnected ? wantsFeishuDoc(input.message) : undefined;
-		const sessionChatId = bridgeConnected ? bridge.getSessionChatId(input.agentId) : undefined;
-		let agentInstruction: string | undefined;
-		const buildFeishuActionInstruction = (chatId?: string) => [
-			"当前会话已连接飞书聊天。严禁调用 lark-cli、飞书 IM API 或搜索群聊来发送文件；不要询问 chat_id。需要把本地文件发到当前飞书聊天时，最终回答末尾独立一行写 [SEND_FILE:本地文件路径]，PiDeck 会按当前会话绑定自动上传。",
-			chatId ? `当前绑定的飞书 chat_id: ${chatId}。这是只读上下文，用于确认当前会话绑定；发送文件仍必须用 [SEND_FILE:本地文件路径]。` : undefined,
-		].filter(Boolean).join("\n");
-
-		if (bridgeConnected && hasFeishuBinding) {
-			const filePath = resolveFeishuFileSendIntent(input.message, agentManager.getCwd(input.agentId));
-			if (filePath) {
-				const result = await bridge.sendFileForSession(input.agentId, filePath);
-				agentManager.recordHostExchange(input.agentId, input.message, result);
-				void appLogger.info("feishu", "File sent through current session binding", {
-					agentId: input.agentId,
-					filePath,
-					success: result.startsWith("✅"),
-				});
-				return;
-			}
-		}
-
-		// 用户说了要做飞书文档但当前会话未绑定 → 自动绑定并告知 Agent 可用 lark-cli
-		if (bridgeConnected && docTitle && !hasFeishuBinding) {
-			const tab = agentManager.list().find((item) => item.id === input.agentId);
-			if (tab) {
-				await bridge.ensureSessionMirror(tab.id, tab.title, tab.sessionPath).catch((e) => {
-					console.error("[Feishu] auto-bind session mirror failed:", e);
-				});
-				bridge.trackDocRequest(tab.id, docTitle);
-				void bridge.forwardUserMessageToFeishu(tab.id, input.message).catch((e) => {
-					console.error("[Feishu] forward PiDeck message failed:", e);
-				});
-				agentInstruction = `${buildFeishuActionInstruction(bridge.getSessionChatId(tab.id))}\n创建飞书文档时，先输出完整正文，最后独立一行写 [CREATE_DOC:文档标题]。`;
-			}
-		} else if (hasFeishuBinding) {
-			agentInstruction = buildFeishuActionInstruction(sessionChatId);
-			const tab = agentManager.list().find((item) => item.id === input.agentId);
-			if (tab) {
-				void bridge.startSessionMirrorRun(tab.id, tab.title, tab.sessionPath).catch((e) => {
-					console.error("[Feishu] session mirror card init failed:", e);
-				});
-				if (input.message.trim()) {
-					void bridge.forwardUserMessageToFeishu(tab.id, input.message).catch((e) => {
-						console.error("[Feishu] forward PiDeck message failed:", e);
-					});
-				}
-			}
-		}
-		const result = await agentManager.sendPrompt(
-			agentInstruction
-				? { ...input, agentMessage: `${agentInstruction}\n\n${input.message}` }
-				: input,
-		);
-		void appLogger.info("agent", "Prompt sent", {
-			agentId: input.agentId,
-			messageLength: input.message.length,
-			imageCount: input.images?.length ?? 0,
-			streamingBehavior: input.streamingBehavior,
-		});
-		return result;
-	});
+	ipcMain.handle(
+		ipcChannels.agentsPrompt,
+		(_event, input: SendPromptInput) => sendAgentPromptWithIntegrations(input),
+	);
 	ipcMain.handle(ipcChannels.agentsAbort, async (_event, agentId: string) => {
 		// Session Mirror: 停止飞书流式卡片
 		if (feishuBridge) {
@@ -3014,9 +3174,12 @@ function registerIpc() {
 		return result;
 	});
 	ipcMain.handle(ipcChannels.agentsRestart, async (_event, agentId: string) => {
+		const sessionId = sessionRuntimeCoordinator.getSessionId(agentId);
 		terminalManager.closeAgent(agentId);
-		const result = await agentManager.restart(agentId);
-		void appLogger.info("agent", "Agent restarted", { agentId });
+		const result = sessionId
+			? await sessionRuntimeCoordinator.restartSession(sessionId, agentId)
+			: await agentManager.restart(agentId);
+		void appLogger.info("agent", "Agent restarted", { agentId, nextAgentId: result.id, sessionId });
 		return result;
 	});
 	ipcMain.handle(ipcChannels.agentsCompact, async (_event, agentId: string, prompt?: string) => {
@@ -3308,6 +3471,47 @@ app.whenReady().then(async () => {
 	);
 
 	await settingsStore.load();
+	const initialSessionSettings = settingsStore.get();
+	sessionCatalog = new SessionCatalog(
+		join(app.getPath("userData"), "session-catalog.json"),
+		initialSessionSettings.wslEnabled
+			? { wslDistro: initialSessionSettings.wslDistro, wslUser: initialSessionSettings.wslUser }
+			: {},
+	);
+	await sessionCatalog.load();
+	sessionRuntimeCoordinator = new SessionRuntimeCoordinator(
+		sessionCatalog,
+		agentManager,
+		sendAgentPromptWithIntegrations,
+	);
+	agentManager.onOutput((sourceChannel, payload) => {
+		const sendSessionEvent = (agentId: string, eventPayload: unknown) => {
+			const runtimeBinding = sessionRuntimeCoordinator.getRuntimeBinding(agentId);
+			if (!runtimeBinding) return;
+			const event: SessionRuntimeEvent = {
+				sessionId: runtimeBinding.sessionId,
+				agentId,
+				runtimeGeneration: runtimeBinding.runtimeGeneration,
+				sourceChannel,
+				payload: eventPayload,
+			};
+			const window = mainWindow;
+			if (!window || window.isDestroyed()) return;
+			window.webContents.send(ipcChannels.sessionsRuntimeEvent, event);
+		};
+		if (sourceChannel === ipcChannels.agentsState && Array.isArray(payload)) {
+			for (const tab of payload) {
+				if (tab && typeof tab === "object" && typeof tab.id === "string") {
+					sendSessionEvent(tab.id, tab);
+				}
+			}
+			return;
+		}
+		if (payload && typeof payload === "object" && "agentId" in payload) {
+			const agentId = (payload as { agentId?: unknown }).agentId;
+			if (typeof agentId === "string") sendSessionEvent(agentId, payload);
+		}
+	});
 
 	// 根据已加载的 WSL 设置配置会话扫描器，使其能同时扫描 WSL 中的 pi 会话目录
 	const syncWslConfig = async () => {

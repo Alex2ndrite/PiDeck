@@ -27,7 +27,7 @@ test("bounds session list requests so a hung scan releases the single-flight loc
   assert.match(app, /const SESSION_REFRESH_TIMEOUT_MS = 20_000;/);
   assert.match(
     block,
-    /withTimeout\(\s*api\.sessions\.list\(projectId\),\s*SESSION_REFRESH_TIMEOUT_MS,\s*t\("app\.sessionRefreshTimeout"\),?\s*\)/,
+    /withTimeout\(\s*api\.sessions\.listCatalog\(projectId\),\s*SESSION_REFRESH_TIMEOUT_MS,\s*t\("app\.sessionRefreshTimeout"\),?\s*\)/,
   );
   assert.match(block, /finally \{[\s\S]*?sessionRefreshRunningRef\.current\.delete\(projectId\)/);
   assert.match(i18n, /"app\.sessionRefreshTimeout"/g);
