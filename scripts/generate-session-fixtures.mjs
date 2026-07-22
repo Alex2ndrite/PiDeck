@@ -14,7 +14,7 @@ const FIXED_SEED = "pideck-session-first-v1";
 const FIXED_TIME = "2026-01-15T08:00:00.000Z";
 const DEFAULT_LARGE_BYTES = 50 * 1024 * 1024;
 const MARKER = ".pideck-session-fixtures.json";
-const MANAGED_ENTRIES = ["sessions", "user-data", "project", "manifest.json", MARKER];
+const MANAGED_ENTRIES = ["sessions", "user-data", "project", "fixture-manifest.json", MARKER];
 
 function normalizeSlashes(value) {
 	return value.replace(/\\/g, "/").replace(/\/+$/, "");
@@ -447,14 +447,14 @@ export async function generateSessionFixtures({
 			expectedIndependentSessionCount: 2,
 		} : null,
 	};
-	const manifestPath = join(output, "manifest.json");
-	await writeFile(manifestPath, JSON.stringify(manifest, null, 2), "utf8");
+	const fixtureManifestPath = join(output, "fixture-manifest.json");
+	await writeFile(fixtureManifestPath, JSON.stringify(manifest, null, 2), "utf8");
 	await writeFile(join(output, MARKER), JSON.stringify({
 		version: FIXTURE_VERSION,
 		outputDir: output,
 		sha: normalizedSha,
 	}, null, 2), "utf8");
-	return { ...manifest, manifestPath };
+	return { ...manifest, fixtureManifestPath };
 }
 
 function helpText() {

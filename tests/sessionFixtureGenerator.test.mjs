@@ -39,7 +39,7 @@ test("fixture generation is deterministic across a bounded regeneration", async 
 			join(outputDir, "sessions", "scale", "messages-1000.jsonl"),
 			join(outputDir, "sessions", "scale", "messages-10000.jsonl"),
 			join(outputDir, "sessions", "scale", "messages-50mb.jsonl"),
-			join(outputDir, "manifest.json"),
+			join(outputDir, "fixture-manifest.json"),
 		];
 		const first = await Promise.all(paths.map(async (path) => digest(await readFile(path))));
 		await generateSessionFixtures({ outputDir, sha: SHA, largeTargetBytes: 32 * 1024, safety });
@@ -67,6 +67,7 @@ test("manifest records absolute native paths, catalogs, templates, and identity 
 			safety,
 		});
 		assert.equal(manifest.seed, "pideck-session-first-v1");
+		assert.equal(manifest.fixtureManifestPath, join(outputDir, "fixture-manifest.json"));
 		assert.equal(manifest.nativeIdentity.expectedIndependentSessionCount, 1);
 		assert.equal(new Set(manifest.nativeIdentity.expectedOriginKeys).size, 1);
 		assert.equal(manifest.importIdentity.source, "codex");

@@ -36,7 +36,7 @@ Generate native fixtures. Add the WSL flags from section 4 only after WSL prefli
 node scripts/generate-session-fixtures.mjs --output $Fixtures --sha $Sha 2>&1 | Tee-Object "$Evidence\fixture-generation.log"
 ```
 
-Copy `manifest.json` to each scenario evidence directory before a run. Treat the manifest's absolute paths, source/import identity, project cwd, expected origin keys, and expected independent Session counts as the assertions, not as suggestions.
+Copy `fixture-manifest.json` to each scenario evidence directory before a run. Treat the fixture manifest's absolute paths, source/import identity, project cwd, expected origin keys, and expected independent Session counts as the assertions, not as suggestions.
 
 ## 2. Per-scenario protocol
 
@@ -57,7 +57,7 @@ $Scenario = "A3-native-100"
 $Run = "$Evidence\runs\$Scenario"
 $UserData = "$Run\user-data"
 New-Item -ItemType Directory -Force $UserData | Out-Null
-Copy-Item "$Fixtures\manifest.json" "$Run\manifest.json"
+Copy-Item "$Fixtures\fixture-manifest.json" "$Run\fixture-manifest.json"
 Copy-Item "$Fixtures\user-data\settings.json" "$UserData\settings.json"
 Copy-Item "$Fixtures\user-data\projects.json" "$UserData\projects.json"
 Copy-Item "$Fixtures\user-data\session-catalog.json" "$UserData\session-catalog.json"
@@ -136,7 +136,7 @@ Each scenario directory must contain this minimum set, using `NOT RUN.txt` only 
 
 ```text
 runs/<scenario>/
-  manifest.json
+  fixture-manifest.json
   command.txt
   exit-code.txt
   ids.json
