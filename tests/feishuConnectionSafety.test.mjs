@@ -51,7 +51,7 @@ test("bound Feishu sessions tell the agent to use PiDeck SEND_FILE markers inste
 test("bound Feishu sessions pass the current chat_id into the agent context", () => {
 	const main = mainSource();
 	const bridge = bridgeSource();
-	assert.match(bridge, /getSessionChatId\(agentId: string\): string \| undefined/);
+	assert.match(bridge, /getSessionChatId\(sessionOrAgentId: string\): string \| undefined/);
 	const handler = promptIntegrationSource(main);
 	assert.match(handler, /bridge\.getSessionChatId\(input\.agentId\)/);
 	assert.match(handler, /当前绑定的飞书 chat_id/);
@@ -74,8 +74,9 @@ test("FeishuBridge registers and handles Feishu model picker card actions", () =
 	assert.match(source, /"card\.action\.trigger"/);
 	assert.match(source, /this\.handleCardAction/);
 	assert.match(method, /parseModelActionValue/);
-	assert.match(method, /this\.agentManager\.getAvailableModels\(binding\.sessionId\)/);
-	assert.match(method, /this\.agentManager\.setModel\(binding\.sessionId, action\.provider, action\.modelId\)/);
+	assert.match(method, /const agentId = await this\.ensureRuntimeBinding\(binding\)/);
+	assert.match(method, /this\.agentManager\.getAvailableModels\(agentId\)/);
+	assert.match(method, /this\.agentManager\.setModel\(agentId, action\.provider, action\.modelId\)/);
 });
 
 test("FeishuBridge does not keep unreachable workspace/resume command code", () => {
@@ -91,8 +92,8 @@ test("FeishuBridge does not keep unreachable workspace/resume command code", () 
 
 test("FeishuBridge prefers the current sessionToChat mapping over stale mirror bindings", () => {
 	const source = bridgeSource();
-	const method = source.match(/private getBestChatId\(agentId: string\): string \| undefined \{[\s\S]*?\n\t\}/)?.[0] ?? "";
-	const sessionIndex = method.indexOf("this.sessionToChat.get(agentId)");
+	const method = source.match(/private getBestChatId\(sessionOrAgentId: string\): string \| undefined \{[\s\S]*?\n\t\}/)?.[0] ?? "";
+	const sessionIndex = method.indexOf("this.sessionToChat.get(sessionOrAgentId)");
 	const loopIndex = method.indexOf("for (const [chatId, b] of this.chatBindings)");
 	assert.ok(sessionIndex >= 0, "should read current sessionToChat mapping");
 	assert.ok(loopIndex >= 0, "should keep fallback loop for persisted mirror bindings");
@@ -120,8 +121,8 @@ test("Feishu-origin runs do not also trigger local session mirror sync", () => {
 	const runMethod = source.match(/private async runAgent\([\s\S]*?\n\t\}/)?.[0] ?? "";
 	assert.match(source, /feishuDrivenRuns/);
 	assert.match(eventMethod, /!this\.feishuDrivenRuns\.has\(agentId\)/);
-	assert.match(runMethod, /this\.feishuDrivenRuns\.add\(binding\.sessionId\)/);
-	assert.match(runMethod, /this\.feishuDrivenRuns\.delete\(binding\.sessionId\)/);
+	assert.match(runMethod, /this\.feishuDrivenRuns\.add\(agentId\)/);
+	assert.match(runMethod, /this\.feishuDrivenRuns\.delete\(agentId\)/);
 });
 
 test("shared prompt integration intercepts Feishu file-send requests before sending them to the agent", () => {

@@ -243,6 +243,8 @@ export type FeishuChatBindingPersist = {
 	botId: string;
 	userId: string;
 	sessionId: string;
+	/** Current AgentManager runtime handle (optional for pre-agentId persisted data). */
+	agentId?: string;
 	sessionPath?: string;
 	workspaceId: string;
 	channelId?: string;

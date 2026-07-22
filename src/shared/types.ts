@@ -1216,7 +1216,10 @@ export type FeishuChatBinding = {
 	chatId: string;
 	botId: string;
 	userId: string;
+	/** Stable SessionRecord/catalog identity. Never use this as an AgentManager handle. */
 	sessionId: string;
+	/** Current AgentManager runtime handle; changes when the runtime is recreated. */
+	agentId?: string;
 	sessionPath?: string;
 	workspaceId: string;
 	channelId?: string;
