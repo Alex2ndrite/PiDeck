@@ -87,6 +87,7 @@ export class SessionRuntimeCoordinator {
 	private readonly generationBySession = new Map<string, number>();
 	private readonly pendingUiRequests = new Map<string, PendingUiRequest>();
 	private readonly replacementByAgent = new Map<string, RuntimeReplacement>();
+	private readonly replacementBySession = new Map<string, RuntimeReplacement>();
 	private replacementSequence = 0;
 
 	constructor(
@@ -154,7 +155,7 @@ export class SessionRuntimeCoordinator {
 			!isTerminalAgent(tab) && !this.replacementByAgent.has(tab.id)
 		));
 		for (const record of records) {
-			if (!record.filePath) continue;
+			if (!record.filePath || this.replacementBySession.has(record.id)) continue;
 			const target = buildSessionOriginKey({
 				source: record.source,
 				environment: record.environment,
@@ -258,6 +259,7 @@ export class SessionRuntimeCoordinator {
 		agentId: string;
 		replace: () => Promise<T>;
 		resolveTargetSessionId: (result: T) => Promise<string>;
+		canRestoreOrigin: () => boolean;
 		onDetached: (binding: SessionRuntimeBinding) => void;
 		onAttached: (binding: SessionRuntimeBinding) => void;
 		onRestored: (binding: SessionRuntimeBinding) => void;
@@ -265,7 +267,6 @@ export class SessionRuntimeCoordinator {
 		const replacement = this.beginRuntimeReplacement(input.agentId);
 		if (!replacement) return input.replace();
 
-		let committed = false;
 		try {
 			input.onDetached(replacement);
 			const result = await input.replace();
@@ -276,20 +277,32 @@ export class SessionRuntimeCoordinator {
 			}
 			const targetSessionId = await input.resolveTargetSessionId(result);
 			const attached = this.completeRuntimeReplacement(replacement, targetSessionId);
-			committed = true;
+			// The target binding is committed before observers run. Snapshot failures
+			// must not roll the agent back onto the detached origin Session.
 			input.onAttached(attached);
 			return { ...result, targetSessionId };
 		} catch (error) {
-			if (!committed && this.replacementByAgent.get(input.agentId) === replacement) {
-				const restored = this.restoreRuntimeReplacement(replacement);
-				input.onRestored(restored);
+			if (this.replacementByAgent.get(input.agentId) === replacement) {
+				let canRestoreOrigin = false;
+				try {
+					canRestoreOrigin = input.canRestoreOrigin();
+				} catch {
+					// An unprovable runtime identity is handled fail-closed.
+				}
+				if (canRestoreOrigin) {
+					const restored = this.restoreRuntimeReplacement(replacement);
+					input.onRestored(restored);
+				} else {
+					this.failClosedRuntimeReplacement(replacement);
+				}
 			}
 			throw error;
 		}
 	}
 
 	unbindAgent(agentId: string): void {
-		this.replacementByAgent.delete(agentId);
+		const replacement = this.replacementByAgent.get(agentId);
+		if (replacement) this.releaseRuntimeReplacement(replacement);
 		const sessionId = this.sessionIdByAgent.get(agentId);
 		if (sessionId) {
 			this.agentIdBySession.delete(sessionId);
@@ -455,6 +468,7 @@ export class SessionRuntimeCoordinator {
 			importedSourceId: entry.importedSourceId,
 		});
 		return this.agents.list().find((tab) => (
+			!this.replacementByAgent.has(tab.id) &&
 			tab.sessionPath &&
 			buildSessionOriginKey({
 				source: tab.sessionSource ?? "pi",
@@ -498,6 +512,12 @@ export class SessionRuntimeCoordinator {
 	}
 
 	private bind(sessionId: string, agentId: string): number {
+		if (this.replacementByAgent.has(agentId)) {
+			throw new Error(`Session runtime replacement already in progress: ${agentId}`);
+		}
+		if (this.replacementBySession.has(sessionId)) {
+			throw new Error(`Session runtime replacement reservation conflict: ${sessionId}`);
+		}
 		const previousAgentId = this.agentIdBySession.get(sessionId);
 		if (
 			previousAgentId === agentId &&
@@ -530,6 +550,9 @@ export class SessionRuntimeCoordinator {
 		if (this.replacementByAgent.has(agentId)) {
 			throw new Error(`Session runtime replacement already in progress: ${agentId}`);
 		}
+		if (this.replacementBySession.has(binding.sessionId)) {
+			throw new Error(`Session runtime replacement reservation conflict: ${binding.sessionId}`);
+		}
 		const runtimeGeneration = binding.runtimeGeneration + 1;
 		this.generationBySession.set(binding.sessionId, runtimeGeneration);
 		this.agentIdBySession.delete(binding.sessionId);
@@ -542,6 +565,7 @@ export class SessionRuntimeCoordinator {
 			replacementId: ++this.replacementSequence,
 		};
 		this.replacementByAgent.set(agentId, replacement);
+		this.replacementBySession.set(binding.sessionId, replacement);
 		return replacement;
 	}
 
@@ -553,7 +577,15 @@ export class SessionRuntimeCoordinator {
 		if (!this.catalog.get(targetSessionId)) {
 			throw new Error(`Session not found: ${targetSessionId}`);
 		}
-		this.replacementByAgent.delete(replacement.agentId);
+		const targetAgentId = this.getAgentId(targetSessionId);
+		if (targetAgentId && targetAgentId !== replacement.agentId) {
+			throw new Error(`Session runtime target already bound: ${targetSessionId}`);
+		}
+		const targetReplacement = this.replacementBySession.get(targetSessionId);
+		if (targetReplacement && targetReplacement !== replacement) {
+			throw new Error(`Session runtime replacement reservation conflict: ${targetSessionId}`);
+		}
+		this.releaseRuntimeReplacement(replacement);
 		return {
 			sessionId: targetSessionId,
 			agentId: replacement.agentId,
@@ -565,7 +597,7 @@ export class SessionRuntimeCoordinator {
 		replacement: RuntimeReplacement,
 	): SessionRuntimeBinding {
 		this.requireCurrentReplacement(replacement);
-		this.replacementByAgent.delete(replacement.agentId);
+		this.releaseRuntimeReplacement(replacement);
 		return {
 			sessionId: replacement.sessionId,
 			agentId: replacement.agentId,
@@ -573,9 +605,26 @@ export class SessionRuntimeCoordinator {
 		};
 	}
 
+	private failClosedRuntimeReplacement(replacement: RuntimeReplacement): void {
+		this.requireCurrentReplacement(replacement);
+		this.releaseRuntimeReplacement(replacement);
+	}
+
+	private releaseRuntimeReplacement(replacement: RuntimeReplacement): void {
+		if (this.replacementByAgent.get(replacement.agentId) === replacement) {
+			this.replacementByAgent.delete(replacement.agentId);
+		}
+		if (this.replacementBySession.get(replacement.sessionId) === replacement) {
+			this.replacementBySession.delete(replacement.sessionId);
+		}
+	}
+
 	private requireCurrentReplacement(replacement: RuntimeReplacement): void {
 		if (this.replacementByAgent.get(replacement.agentId) !== replacement) {
 			throw new Error("Session runtime replacement binding changed");
+		}
+		if (this.replacementBySession.get(replacement.sessionId) !== replacement) {
+			throw new Error("Session runtime replacement reservation changed");
 		}
 		if (
 			this.sessionIdByAgent.has(replacement.agentId) ||

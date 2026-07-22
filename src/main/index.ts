@@ -261,6 +261,16 @@ async function replaceAgentSession(
 	const originEntry = originBinding
 		? sessionCatalog.get(originBinding.sessionId)
 		: undefined;
+	const originKey = originEntry?.filePath
+		? buildSessionOriginKey({
+			source: originEntry.source,
+			environment: originEntry.environment,
+			filePath: originEntry.filePath,
+			wslDistro: originEntry.wslDistro,
+			wslUser: originEntry.wslUser,
+			importedSourceId: originEntry.importedSourceId,
+		})
+		: undefined;
 	return sessionRuntimeCoordinator.replaceBoundRuntime({
 		agentId,
 		replace: async () => {
@@ -287,6 +297,18 @@ async function replaceAgentSession(
 				piSessionId: tab.sessionId,
 			});
 			return target.id;
+		},
+		canRestoreOrigin: () => {
+			const tab = agentManager.list().find((candidate) => candidate.id === agentId);
+			if (!originKey || !tab?.sessionPath) return false;
+			return buildSessionOriginKey({
+				source: tab.sessionSource ?? "pi",
+				environment: tab.sessionEnvironment ?? "native",
+				filePath: tab.sessionPath,
+				wslDistro: tab.wslDistro,
+				wslUser: tab.wslUser,
+				importedSourceId: tab.importedSourceId,
+			}) === originKey;
 		},
 		onDetached: emitSessionRuntimeDetach,
 		onAttached: (binding) => emitReplacementState(binding, true),

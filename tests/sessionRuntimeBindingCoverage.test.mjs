@@ -27,3 +27,10 @@ test("legacy and external create entry points are explicitly classified", () => 
   assert.match(main, /agentsCreate[\s\S]*LEGACY_EXTERNAL_RUNTIME/);
   assert.match(main, /createAgent: \(input\)[\s\S]*LEGACY_EXTERNAL_RUNTIME/);
 });
+
+test("replacement restore is gated by full origin identity in main", () => {
+  assert.match(main, /const originKey = originEntry\?\.filePath[\s\S]*buildSessionOriginKey/);
+  assert.match(main, /canRestoreOrigin: \(\) => \{[\s\S]*buildSessionOriginKey[\s\S]*\) === originKey;/);
+  assert.match(coordinator, /failClosedRuntimeReplacement/);
+  assert.match(coordinator, /replacementBySession/);
+});
