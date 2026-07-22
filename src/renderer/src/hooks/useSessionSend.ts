@@ -8,11 +8,12 @@ import type {
 } from "../../../shared/types";
 import {
   bindSessionRuntimeAtom,
-  currentSessionAttachmentsAtom,
-  currentSessionComposerModeAtom,
-  currentSessionDraftAtom,
   currentSessionIdAtom,
+  sessionAttachmentsByIdAtom,
+  sessionComposerModeByIdAtom,
+  sessionDraftByIdAtom,
   sessionRecordsAtom,
+  sessionRuntimeByIdAtom,
   setSessionAttachmentsAtom,
   setSessionDraftAtom,
   setSessionSendStateAtom,
@@ -36,25 +37,85 @@ type SessionPromptApi = (
 ) => Promise<SendSessionPromptResult>;
 
 export type UseSessionSendOptions = {
+  /** Stable public identity. A8 can remove the fallback after App mounts the leaf. */
+  sessionId?: string;
   sendPrompt: SessionPromptApi;
-  liveDraftsRef: MutableRefObject<Record<string, string>>;
-  getComposerText: () => string;
+  getComposerText?: () => string;
   templates: PromptTemplate[];
-  runtimeAgentId?: string;
+  prepareMessage?: (message: string) => Promise<string>;
   compact: (agentId: string, prompt?: string) => Promise<void>;
-  resetComposerUi: () => void;
-  recordPromptHistory: (sessionId: string, message: string) => void;
-  refreshProject: (projectId: string) => void;
-  showError: (message: string, duration?: number) => void;
-  showUnknown: () => void;
-  showCompactUnavailable: () => void;
+  resetComposerUi?: () => void;
+  recordPromptHistory?: (sessionId: string, message: string) => void;
+  refreshProject?: (projectId: string) => void;
+  showError?: (message: string, duration?: number) => void;
+  showUnknown?: () => void;
+  showCompactUnavailable?: () => void;
+  /**
+   * Temporary A8 compatibility only. It mirrors contentEditable input but is never the
+   * persistent draft source; all send snapshots and restoration are atom-backed.
+   */
+  liveDraftsRef?: MutableRefObject<Record<string, string>>;
+  /** @deprecated Runtime identity is derived from the Session binding. */
+  runtimeAgentId?: string;
 };
 
+export function normalizeComposerDomText(value: string): string {
+  return value.replace(/\u200B/g, "");
+}
+
+export function mergeRejectedComposerDraft(
+  rejectedDraft: string,
+  currentDraft: string,
+): string {
+  return [rejectedDraft, currentDraft]
+    .filter((text) => text.trim())
+    .join("\n\n");
+}
+
+export function mergeRejectedComposerImages(
+  rejectedImages: ImageContent[] | undefined,
+  currentImages: ImageContent[],
+): ImageContent[] {
+  return rejectedImages?.length
+    ? [...rejectedImages, ...currentImages]
+    : currentImages;
+}
+
+export function hasComposerSubmission(
+  message: string,
+  images: ImageContent[] | undefined,
+): boolean {
+  return Boolean(message.trim() || images?.length);
+}
+
+export function classifySessionPromptResult(
+  result: SendSessionPromptResult,
+): "accepted" | "rejected" | "unknown" {
+  if (result.accepted) return "accepted";
+  return result.delivery === "unknown" ? "unknown" : "rejected";
+}
+
+export function createSessionSendLock() {
+  const sessionIds = new Set<string>();
+  return {
+    has: (sessionId: string) => sessionIds.has(sessionId),
+    claim: (sessionId: string) => {
+      if (sessionIds.has(sessionId)) return false;
+      sessionIds.add(sessionId);
+      return true;
+    },
+    release: (sessionId: string) => {
+      sessionIds.delete(sessionId);
+    },
+  };
+}
+
 export function useSessionSend(options: UseSessionSendOptions) {
-  const sessionId = useAtomValue(currentSessionIdAtom);
-  const draft = useAtomValue(currentSessionDraftAtom);
-  const attachments = useAtomValue(currentSessionAttachmentsAtom);
-  const composerMode = useAtomValue(currentSessionComposerModeAtom);
+  const selectedSessionId = useAtomValue(currentSessionIdAtom);
+  const drafts = useAtomValue(sessionDraftByIdAtom);
+  const attachmentsBySession = useAtomValue(sessionAttachmentsByIdAtom);
+  const modes = useAtomValue(sessionComposerModeByIdAtom);
+  const runtimes = useAtomValue(sessionRuntimeByIdAtom);
   const records = useAtomValue(sessionRecordsAtom);
   const setDraft = useSetAtom(setSessionDraftAtom);
   const setAttachments = useSetAtom(setSessionAttachmentsAtom);
@@ -64,7 +125,9 @@ export function useSessionSend(options: UseSessionSendOptions) {
   const sendingSessionIdsRef = useRef<Set<string>>(new Set());
 
   function clearSnapshot(targetSessionId: string) {
-    delete options.liveDraftsRef.current[targetSessionId];
+    if (options.liveDraftsRef) {
+      delete options.liveDraftsRef.current[targetSessionId];
+    }
     setDraft({ sessionId: targetSessionId, value: "" });
     setAttachments({ sessionId: targetSessionId, value: [] });
   }
@@ -74,10 +137,13 @@ export function useSessionSend(options: UseSessionSendOptions) {
     message: string,
     imageSnapshot?: ImageContent[],
   ) {
-    const currentLiveDraft = options.liveDraftsRef.current[targetSessionId] ?? "";
-    options.liveDraftsRef.current[targetSessionId] = [message, currentLiveDraft]
-      .filter((text) => text.trim())
-      .join("\n\n");
+    if (options.liveDraftsRef) {
+      const currentLiveDraft = options.liveDraftsRef.current[targetSessionId] ?? "";
+      options.liveDraftsRef.current[targetSessionId] = mergeRejectedComposerDraft(
+        message,
+        currentLiveDraft,
+      );
+    }
     setDraft({
       sessionId: targetSessionId,
       value: (current) => [message, current]
@@ -95,43 +161,67 @@ export function useSessionSend(options: UseSessionSendOptions) {
   return async function sendSessionPrompt(
     streamingBehavior?: "steer" | "followUp",
   ) {
+    const sessionId = options.sessionId ?? selectedSessionId;
     if (!sessionId || sendingSessionIdsRef.current.has(sessionId)) return;
 
-    const domText = options.getComposerText().replace(/\u200B/g, "");
-    if (domText) options.liveDraftsRef.current[sessionId] = domText;
-    const message = options.liveDraftsRef.current[sessionId] ?? draft;
-    const imageSnapshot = attachments.length ? attachments : undefined;
-    if (!message.trim() && !imageSnapshot?.length) return;
+    const atomDraft = drafts[sessionId] ?? "";
+    const domText = normalizeComposerDomText(options.getComposerText?.() ?? "");
+    const message = options.getComposerText ? domText : atomDraft;
+    const attachmentSnapshot = attachmentsBySession[sessionId] ?? [];
+    const imageSnapshot = attachmentSnapshot.length ? attachmentSnapshot : undefined;
+    if (!hasComposerSubmission(message, imageSnapshot)) return;
 
+    const runtimeAgentId = runtimes[sessionId]?.agentId;
     const trimmedMessage = message.trim();
     if (/^\/compact(?:\s|$)/.test(trimmedMessage)) {
-      if (!options.runtimeAgentId) {
-        options.showCompactUnavailable();
+      if (!runtimeAgentId) {
+        options.showCompactUnavailable?.();
         return;
       }
       const compactPrompt = trimmedMessage.replace(/^\/compact\s*/, "").trim();
       clearSnapshot(sessionId);
-      await options.compact(options.runtimeAgentId, compactPrompt || undefined);
+      options.resetComposerUi?.();
+      await options.compact(runtimeAgentId, compactPrompt || undefined);
       return;
     }
 
-    const requestId = crypto.randomUUID();
     sendingSessionIdsRef.current.add(sessionId);
+    const requestId = crypto.randomUUID();
     setSendState({
       sessionId,
       state: {
-        status: options.runtimeAgentId ? "sending" : "activating",
+        status: runtimeAgentId ? "sending" : "activating",
         requestId,
       },
     });
     clearSnapshot(sessionId);
-    options.resetComposerUi();
+    options.resetComposerUi?.();
+
+    let preparedMessage = message;
+    try {
+      preparedMessage = options.prepareMessage
+        ? await options.prepareMessage(message)
+        : message;
+    } catch (error) {
+      restoreRejectedSnapshot(sessionId, message, imageSnapshot);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      setSendState({
+        sessionId,
+        state: { status: "error", requestId, error: errorMessage },
+      });
+      options.showError?.(errorMessage, 4000);
+      sendingSessionIdsRef.current.delete(sessionId);
+      return;
+    }
 
     const { message: expandedMessage, description } = expandPromptTemplates(
-      message,
+      preparedMessage,
       options.templates,
     );
-    const submission = buildComposerPromptSubmission(expandedMessage, composerMode);
+    const submission = buildComposerPromptSubmission(
+      expandedMessage,
+      modes[sessionId] ?? "normal",
+    );
 
     try {
       const result = await options.sendPrompt({
@@ -162,23 +252,25 @@ export function useSessionSend(options: UseSessionSendOptions) {
         });
       }
 
-      if (result.accepted) {
-        options.recordPromptHistory(sessionId, message);
+      const outcome = classifySessionPromptResult(result);
+      const deliveryError = "error" in result ? result.error : "Prompt was not accepted";
+      if (outcome === "accepted") {
+        options.recordPromptHistory?.(sessionId, message);
         setSendState({ sessionId, state: { status: "idle" } });
-        if (record) options.refreshProject(record.projectId);
-      } else if (result.delivery === "unknown") {
+        if (record) options.refreshProject?.(record.projectId);
+      } else if (outcome === "unknown") {
         setSendState({
           sessionId,
-          state: { status: "unknown", requestId, error: result.error },
+          state: { status: "unknown", requestId, error: deliveryError },
         });
-        options.showUnknown();
+        options.showUnknown?.();
       } else {
         restoreRejectedSnapshot(sessionId, message, imageSnapshot);
         setSendState({
           sessionId,
-          state: { status: "error", requestId, error: result.error },
+          state: { status: "error", requestId, error: deliveryError },
         });
-        options.showError(result.error, 4000);
+        options.showError?.(deliveryError, 4000);
       }
     } catch (error) {
       setSendState({
@@ -189,7 +281,7 @@ export function useSessionSend(options: UseSessionSendOptions) {
           error: error instanceof Error ? error.message : String(error),
         },
       });
-      options.showUnknown();
+      options.showUnknown?.();
     } finally {
       sendingSessionIdsRef.current.delete(sessionId);
     }

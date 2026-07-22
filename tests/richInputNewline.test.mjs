@@ -3,6 +3,10 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const source = readFileSync("src/renderer/src/components/app/RichInput.tsx", "utf8");
+const controllerSource = readFileSync(
+	"src/renderer/src/hooks/useSessionComposerController.ts",
+	"utf8",
+);
 
 test("RichInput keeps native Enter handling without execCommand normalization", () => {
 	assert.match(source, /function insertPlainTextAtSelection\(root: HTMLElement, text: string\): void/);
@@ -10,6 +14,12 @@ test("RichInput keeps native Enter handling without execCommand normalization", 
 	assert.match(source, /insertPlainTextAtSelection\(root, event\.clipboardData\.getData\("text\/plain"\)\);\s*handleInput\(\);/s);
 	assert.match(source, /不 preventDefault，让浏览器原生的 contentEditable Enter 行为/);
 	assert.doesNotMatch(source, /insertPlainTextAtSelection\(root, "\\n"\)/);
+});
+
+test("the Session composer delegates newline and IME intent to the shared behavior helper", () => {
+	assert.match(controllerSource, /getComposerEnterIntent\(event, sendShortcut\)/);
+	assert.match(controllerSource, /if \(event\.nativeEvent\.isComposing \|\| event\.keyCode === 229\) return/);
+	assert.doesNotMatch(controllerSource, /insertPlainTextAtSelection/);
 });
 
 test("RichInput preserves the browser DOM while native input awaits controlled confirmation", () => {

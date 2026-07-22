@@ -33,6 +33,7 @@ export function ComposerAttachmentBar(props: {
             style={{ cursor: "pointer" }}
           />
           <button
+            type="button"
             className="image-remove-btn"
             onClick={() => props.onRemove(index)}
             title={t("app.imageRemove")}
@@ -42,6 +43,7 @@ export function ComposerAttachmentBar(props: {
         </div>
       ))}
       <button
+        type="button"
         className="image-clear-btn"
         onClick={props.onClear}
         title={t("app.clearImagesTitle")}
@@ -54,26 +56,26 @@ export function ComposerAttachmentBar(props: {
 
 export function ExtensionWidgetPanel(props: {
   widgets?: Record<string, string[]>;
+  sessionId?: string;
+  /** @deprecated A8 compatibility for the pre-leaf App call site. */
   sessionKey?: string;
   dismissedKeys: string[];
   collapsed: boolean;
   onDismiss: (widgetKey: string) => void;
 }) {
-  if (!props.widgets || !Object.keys(props.widgets).length) return null;
+  const sessionId = props.sessionId ?? props.sessionKey;
+  if (!sessionId || !props.widgets || !Object.keys(props.widgets).length) return null;
   return (
     <div className="extension-widgets-container">
       {!props.collapsed &&
         Object.entries(props.widgets)
-          .filter(
-            ([widgetKey]) =>
-              props.sessionKey && !props.dismissedKeys.includes(widgetKey),
-          )
+          .filter(([widgetKey]) => !props.dismissedKeys.includes(widgetKey))
           .map(([widgetKey, lines]) => (
             <ExtensionWidgetCard
               key={widgetKey}
               widgetKey={widgetKey}
               lines={lines}
-              sessionIdOrPath={props.sessionKey}
+              sessionIdOrPath={sessionId}
               onClose={() => props.onDismiss(widgetKey)}
             />
           ))}
