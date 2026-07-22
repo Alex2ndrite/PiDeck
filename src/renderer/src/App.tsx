@@ -3254,8 +3254,15 @@ export function App() {
       }
       showToast(t("app.currentSessionCopied"));
       await refreshRuntimeState(agentId);
-      await refreshSessions(activeProjectId);
-      if (activeProjectId) await refreshProjectSessions(activeProjectId);
+      const projectId = agents.find((agent) => agent.id === agentId)?.projectId ?? activeProjectId;
+      await refreshSessions(projectId);
+      if (projectId) await refreshProjectSessions(projectId);
+      if (result.targetSessionId && projectId) {
+        setActiveProjectId(projectId);
+        setCurrentSessionId(result.targetSessionId);
+        setAutoScroll(true);
+        autoScrollRef.current = true;
+      }
     } finally {
       setAgentActionLoading(null);
       setAgentMenu(null);

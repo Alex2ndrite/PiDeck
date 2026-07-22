@@ -293,3 +293,75 @@ test("maps scanned child parent paths to desktop session IDs and survives reload
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("runtime event attachment rejects active origin changes but accepts metadata drafts", () => {
+  const { canAttachRuntimeMetadata } = loadCatalog();
+  const active = {
+    id: "old",
+    projectId: "project-1",
+    title: "Old",
+    source: "pi",
+    environment: "native",
+    filePath: "C:/sessions/old.jsonl",
+    status: "active",
+    createdAt: 1,
+    updatedAt: 1,
+  };
+  assert.equal(canAttachRuntimeMetadata(active, {
+    sessionPath: "C:/sessions/new.jsonl",
+    sessionSource: "pi",
+    sessionEnvironment: "native",
+  }), false);
+  assert.equal(canAttachRuntimeMetadata({ ...active, filePath: undefined, status: "draft" }, {
+    sessionPath: "C:/sessions/new.jsonl",
+    sessionSource: "pi",
+    sessionEnvironment: "native",
+  }), true);
+});
+
+test("runtime replacement resolves a full-origin target without mutating the origin record", async () => {
+  const { SessionCatalog } = loadCatalog();
+  const dir = await mkdtemp(join(tmpdir(), "pideck-catalog-"));
+  try {
+    const catalog = new SessionCatalog(join(dir, "sessions.json"));
+    await catalog.load();
+    const [origin] = await catalog.mergeScanned("project-1", [summary({
+      source: "codex",
+      codexSessionId: "import-origin",
+      filePath: "/home/dev/origin.jsonl",
+      id: "/home/dev/origin.jsonl",
+      wsl: true,
+    })], { wslDistro: "Ubuntu", wslUser: "dev" });
+    const before = catalog.get(origin.id);
+
+    const target = await catalog.ensureRuntimeTarget({
+      projectId: "project-1",
+      title: "Replacement",
+      source: "codex",
+      environment: "wsl",
+      filePath: "/home/dev/replacement.jsonl",
+      wslDistro: "Ubuntu",
+      wslUser: "dev",
+      importedSourceId: "import-target",
+      piSessionId: "pi-target",
+    });
+    const repeated = await catalog.ensureRuntimeTarget({
+      projectId: "project-1",
+      title: "Replacement",
+      source: "codex",
+      environment: "wsl",
+      filePath: "/home/dev/replacement.jsonl",
+      wslDistro: "Ubuntu",
+      wslUser: "dev",
+      importedSourceId: "import-target",
+      piSessionId: "pi-target",
+    });
+
+    assert.notEqual(target.id, origin.id);
+    assert.equal(repeated.id, target.id);
+    assert.equal(catalog.listEntries().filter((entry) => entry.id === target.id).length, 1);
+    assert.deepEqual({ ...catalog.get(origin.id) }, { ...before });
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

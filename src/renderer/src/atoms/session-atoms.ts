@@ -331,6 +331,27 @@ export const applySessionRuntimeEventAtom = atom(
       thinking: "",
       updatedAt: 0,
     };
+    if (event.kind === "detach") {
+      if (
+        event.runtimeGeneration < currentRuntime.runtimeGeneration ||
+        (currentRuntime.agentId && currentRuntime.agentId !== event.agentId)
+      ) {
+        return;
+      }
+      const nextUiById = { ...get(sessionRuntimeUiByIdAtom) };
+      delete nextUiById[event.sessionId];
+      set(sessionRuntimeUiByIdAtom, nextUiById);
+      set(sessionRuntimeByIdAtom, {
+        ...get(sessionRuntimeByIdAtom),
+        [event.sessionId]: {
+          runtimeGeneration: event.runtimeGeneration,
+          status: "detached",
+          thinking: "",
+          updatedAt: Date.now(),
+        },
+      });
+      return;
+    }
     if (event.runtimeGeneration < currentRuntime.runtimeGeneration) return;
     if (
       event.runtimeGeneration === currentRuntime.runtimeGeneration &&

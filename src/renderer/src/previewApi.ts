@@ -741,9 +741,9 @@ export function createPreviewApi(): PiDesktopApi {
 			getForkMessages: async () => [
 				{ entryId: "preview-user-1", text: "Preview prompt" },
 			],
-			forkSession: async () => ({ text: "Preview prompt", cancelled: false }),
-			cloneSession: async () => ({ cancelled: false }),
-			switchSession: async () => ({ cancelled: false }),
+			forkSession: async () => ({ text: "Preview prompt", cancelled: false, targetSessionId: undefined }),
+			cloneSession: async () => ({ cancelled: false, targetSessionId: undefined }),
+			switchSession: async () => ({ cancelled: false, targetSessionId: undefined }),
 			reload: async () => undefined,
 			restart: async (agentId: string) => ({
 				id: agentId,

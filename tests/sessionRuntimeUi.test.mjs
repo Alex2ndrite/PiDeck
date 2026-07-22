@@ -278,3 +278,31 @@ test("a newer binding clears old requests and ignores late completion", () => {
     runtimeGeneration: 1,
   }), false);
 });
+
+test("detach envelope clears the agent identity and all runtime UI", () => {
+  const atoms = loadAtoms();
+  const store = createStore();
+  store.set(atoms.applySessionRuntimeEventAtom, event());
+  store.set(atoms.applySessionRuntimeEventAtom, event({
+    payload: {
+      agentId: "agent-a",
+      requestId: "widget-a",
+      method: "setWidget",
+      widgetKey: "plan",
+      widgetLines: ["Step 1"],
+    },
+  }));
+  store.set(atoms.applySessionRuntimeEventAtom, event({
+    kind: "detach",
+    runtimeGeneration: 2,
+    sourceChannel: "sessions:runtime-detach",
+    payload: null,
+  }));
+
+  const runtime = store.get(atoms.sessionRuntimeByIdAtom)["session-a"];
+  assert.equal(runtime.status, "detached");
+  assert.equal(runtime.agentId, undefined);
+  assert.equal(runtime.state, undefined);
+  assert.equal(runtime.thinking, "");
+  assert.equal(store.get(atoms.sessionRuntimeUiByIdAtom)["session-a"], undefined);
+});

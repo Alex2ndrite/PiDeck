@@ -97,8 +97,14 @@ import { AgentManager } from "./pi/AgentManager";
 import { PiLocator } from "./pi/PiLocator";
 import { testPiProxy } from "./pi/PiProxyTester";
 import { SessionScanner } from "./sessions/SessionScanner";
-import { SessionCatalog } from "./sessions/SessionCatalog";
-import { SessionRuntimeCoordinator } from "./sessions/SessionRuntimeCoordinator";
+import {
+	SessionCatalog,
+	canAttachRuntimeMetadata,
+} from "./sessions/SessionCatalog";
+import {
+	SessionRuntimeCoordinator,
+	type SessionRuntimeBinding,
+} from "./sessions/SessionRuntimeCoordinator";
 import { CodexSessionImporter } from "./sessions/CodexSessionImporter";
 import { ClaudeSessionImporter } from "./sessions/ClaudeSessionImporter";
 import { OpenCodeSessionImporter } from "./sessions/OpenCodeSessionImporter";
@@ -175,6 +181,13 @@ let feishuBridge: FeishuBridge | null = null;
 
 const LEGACY_EXTERNAL_RUNTIME = "legacy-external-runtime";
 
+function sendSessionRuntimeEnvelope(event: SessionRuntimeEvent): void {
+	const window = mainWindow;
+	if (window && !window.isDestroyed()) {
+		window.webContents.send(ipcChannels.sessionsRuntimeEvent, event);
+	}
+}
+
 function emitSessionRuntimeEvent(
 	agentId: string,
 	sourceChannel: string,
@@ -183,6 +196,7 @@ function emitSessionRuntimeEvent(
 	const runtimeBinding = sessionRuntimeCoordinator.getRuntimeBinding(agentId);
 	if (!runtimeBinding) return false;
 	const event: SessionRuntimeEvent = {
+		kind: "event",
 		sessionId: runtimeBinding.sessionId,
 		agentId,
 		runtimeGeneration: runtimeBinding.runtimeGeneration,
@@ -194,12 +208,10 @@ function emitSessionRuntimeEvent(
 		const tab = payload as Partial<AgentTab>;
 		if (typeof tab.sessionPath === "string" && tab.sessionPath) {
 			const entry = sessionCatalog.get(runtimeBinding.sessionId);
-			const samePath = Boolean(
-				entry?.filePath &&
-				canonicalizeSessionPath(entry.filePath, entry.environment) ===
-					canonicalizeSessionPath(tab.sessionPath, entry.environment),
-			);
-			if (!samePath || entry?.piSessionId !== tab.sessionId || entry?.title !== tab.title) {
+			if (
+				canAttachRuntimeMetadata(entry, tab) &&
+				(entry?.filePath !== tab.sessionPath || entry.piSessionId !== tab.sessionId || entry.title !== tab.title)
+			) {
 				void sessionCatalog.attachRuntime({
 					sessionId: runtimeBinding.sessionId,
 					filePath: tab.sessionPath,
@@ -209,11 +221,77 @@ function emitSessionRuntimeEvent(
 			}
 		}
 	}
-	const window = mainWindow;
-	if (window && !window.isDestroyed()) {
-		window.webContents.send(ipcChannels.sessionsRuntimeEvent, event);
-	}
+	sendSessionRuntimeEnvelope(event);
 	return true;
+}
+
+function emitSessionRuntimeDetach(binding: SessionRuntimeBinding): void {
+	sendSessionRuntimeEnvelope({
+		kind: "detach",
+		sessionId: binding.sessionId,
+		agentId: binding.agentId,
+		runtimeGeneration: binding.runtimeGeneration,
+		sourceChannel: "sessions:runtime-detach",
+		payload: null,
+	});
+}
+
+function emitReplacementState(binding: SessionRuntimeBinding, includeMessages: boolean): void {
+	const tab = agentManager.list().find((candidate) => candidate.id === binding.agentId);
+	if (!tab) return;
+	emitSessionRuntimeEvent(binding.agentId, ipcChannels.agentsState, tab);
+	if (includeMessages) {
+		emitSessionRuntimeEvent(binding.agentId, ipcChannels.agentsMessage, {
+			agentId: binding.agentId,
+			messages: agentManager.getMessages(binding.agentId),
+		});
+	}
+}
+
+type AgentSessionReplacementResult = {
+	cancelled?: boolean;
+	[key: string]: unknown;
+};
+
+async function replaceAgentSession(
+	agentId: string,
+	replace: () => Promise<unknown>,
+): Promise<AgentSessionReplacementResult & { targetSessionId?: string }> {
+	const originBinding = sessionRuntimeCoordinator.getRuntimeBinding(agentId);
+	const originEntry = originBinding
+		? sessionCatalog.get(originBinding.sessionId)
+		: undefined;
+	return sessionRuntimeCoordinator.replaceBoundRuntime({
+		agentId,
+		replace: async () => {
+			const result = await replace();
+			return result && typeof result === "object" && !Array.isArray(result)
+				? result as AgentSessionReplacementResult
+				: {};
+		},
+		resolveTargetSessionId: async () => {
+			const tab = agentManager.list().find((candidate) => candidate.id === agentId);
+			if (!tab?.sessionPath) {
+				throw new Error(`Replacement runtime has no session path: ${agentId}`);
+			}
+			const environment = tab.sessionEnvironment ?? originEntry?.environment ?? "native";
+			const target = await sessionCatalog.ensureRuntimeTarget({
+				projectId: tab.projectId,
+				title: tab.title,
+				source: tab.sessionSource ?? originEntry?.source ?? "pi",
+				environment,
+				filePath: tab.sessionPath,
+				wslDistro: tab.wslDistro ?? (environment === "wsl" ? originEntry?.wslDistro : undefined),
+				wslUser: tab.wslUser ?? (environment === "wsl" ? originEntry?.wslUser : undefined),
+				importedSourceId: tab.importedSourceId ?? originEntry?.importedSourceId,
+				piSessionId: tab.sessionId,
+			});
+			return target.id;
+		},
+		onDetached: emitSessionRuntimeDetach,
+		onAttached: (binding) => emitReplacementState(binding, true),
+		onRestored: (binding) => emitReplacementState(binding, false),
+	});
 }
 
 function cancelUnboundUiRequest(payload: unknown): void {
@@ -3302,19 +3380,42 @@ function registerIpc() {
 	);
 	ipcMain.handle(
 		ipcChannels.agentsForkSession,
-		(_event, agentId: string, entryId: string) =>
-			agentManager.forkSession(agentId, entryId),
+		async (_event, agentId: string, entryId: string) => {
+			const result = await replaceAgentSession(
+				agentId,
+				() => agentManager.forkSession(agentId, entryId),
+			);
+			void appLogger.info("agent", "Agent session forked", {
+				agentId,
+				entryId,
+				targetSessionId: result.targetSessionId,
+			});
+			return result;
+		},
 	);
 	ipcMain.handle(ipcChannels.agentsCloneSession, async (_event, agentId: string) => {
-		const result = await agentManager.cloneSession(agentId);
-		void appLogger.info("agent", "Agent session cloned", { agentId });
+		const result = await replaceAgentSession(
+			agentId,
+			() => agentManager.cloneSession(agentId),
+		);
+		void appLogger.info("agent", "Agent session cloned", {
+			agentId,
+			targetSessionId: result.targetSessionId,
+		});
 		return result;
 	});
 	ipcMain.handle(
 		ipcChannels.agentsSwitchSession,
 		async (_event, agentId: string, sessionPath: string) => {
-			const result = await agentManager.switchSession(agentId, sessionPath);
-			void appLogger.info("agent", "Agent switched session", { agentId, sessionPath });
+			const result = await replaceAgentSession(
+				agentId,
+				() => agentManager.switchSession(agentId, sessionPath),
+			);
+			void appLogger.info("agent", "Agent switched session", {
+				agentId,
+				sessionPath,
+				targetSessionId: result.targetSessionId,
+			});
 			return result;
 		},
 	);

@@ -1135,6 +1135,7 @@ export type SendSessionPromptResult = SendPromptResult & {
 };
 
 export type SessionRuntimeEvent = {
+	kind?: "event" | "detach";
 	sessionId: string;
 	agentId: string;
 	runtimeGeneration: number;

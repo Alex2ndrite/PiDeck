@@ -9,6 +9,7 @@ import {
 } from "node:fs/promises";
 import { dirname } from "node:path";
 import type {
+	AgentTab,
 	SessionEnvironment,
 	SessionRecord,
 	SessionSource,
@@ -72,6 +73,31 @@ function isMissingFileError(error: unknown): boolean {
 		"code" in error &&
 		(error as { code?: unknown }).code === "ENOENT",
 	);
+}
+
+export function canAttachRuntimeMetadata(
+	entry: SessionCatalogEntry | undefined,
+	tab: Partial<AgentTab>,
+): boolean {
+	if (!entry || !tab.sessionPath) return false;
+	if (entry.status === "draft" && !entry.filePath) return true;
+	if (!entry.filePath) return false;
+	const environment = tab.sessionEnvironment ?? entry.environment;
+	return buildSessionOriginKey({
+		source: entry.source,
+		environment: entry.environment,
+		filePath: entry.filePath,
+		wslDistro: entry.wslDistro,
+		wslUser: entry.wslUser,
+		importedSourceId: entry.importedSourceId,
+	}) === buildSessionOriginKey({
+		source: tab.sessionSource ?? entry.source,
+		environment,
+		filePath: tab.sessionPath,
+		wslDistro: tab.wslDistro ?? entry.wslDistro,
+		wslUser: tab.wslUser ?? entry.wslUser,
+		importedSourceId: tab.importedSourceId ?? entry.importedSourceId,
+	});
 }
 
 export class SessionCatalog {
@@ -142,6 +168,76 @@ export class SessionCatalog {
 			canonicalizeSessionPath(candidate.filePath, environment) === target
 		));
 		return entry ? cloneEntry(entry) : undefined;
+	}
+
+	async ensureRuntimeTarget(input: {
+		projectId: string;
+		title: string;
+		source: SessionSource;
+		environment: SessionEnvironment;
+		filePath: string;
+		wslDistro?: string;
+		wslUser?: string;
+		importedSourceId?: string;
+		piSessionId?: string;
+	}): Promise<SessionCatalogEntry> {
+		this.assertLoaded();
+		return this.enqueueMutation((entries) => {
+			const originKey = buildSessionOriginKey({
+				source: input.source,
+				environment: input.environment,
+				filePath: input.filePath,
+				wslDistro: input.wslDistro,
+				wslUser: input.wslUser,
+				importedSourceId: input.importedSourceId,
+			});
+			let entry = entries.find((candidate) => {
+				if (candidate.originKey === originKey) return true;
+				if (!candidate.filePath) return false;
+				return buildSessionOriginKey({
+					source: candidate.source,
+					environment: candidate.environment,
+					filePath: candidate.filePath,
+					wslDistro: candidate.wslDistro,
+					wslUser: candidate.wslUser,
+					importedSourceId: candidate.importedSourceId,
+				}) === originKey;
+			});
+			const now = Date.now();
+			if (!entry) {
+				entry = {
+					id: randomUUID(),
+					projectId: input.projectId,
+					originKey,
+					title: input.title,
+					source: input.source,
+					environment: input.environment,
+					filePath: input.filePath,
+					wslDistro: input.wslDistro,
+					wslUser: input.wslUser,
+					importedSourceId: input.importedSourceId,
+					piSessionId: input.piSessionId,
+					status: "active",
+					createdAt: now,
+					updatedAt: now,
+				};
+				entries.push(entry);
+			} else {
+				entry.projectId = input.projectId;
+				entry.originKey = originKey;
+				entry.title = input.title;
+				entry.source = input.source;
+				entry.environment = input.environment;
+				entry.filePath = input.filePath;
+				entry.wslDistro = input.wslDistro;
+				entry.wslUser = input.wslUser;
+				entry.importedSourceId = input.importedSourceId;
+				entry.piSessionId = input.piSessionId;
+				entry.status = "active";
+				entry.updatedAt = now;
+			}
+			return { value: cloneEntry(entry), changed: true };
+		});
 	}
 
 	async createDraft(input: {

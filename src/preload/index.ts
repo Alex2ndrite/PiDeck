@@ -771,17 +771,18 @@ const api = {
 				ipcChannels.agentsForkSession,
 				agentId,
 				entryId,
-			) as Promise<{ text?: string; cancelled?: boolean }>,
+			) as Promise<{ text?: string; cancelled?: boolean; targetSessionId?: string }>,
 		cloneSession: (agentId: string) =>
 			ipcRenderer.invoke(ipcChannels.agentsCloneSession, agentId) as Promise<{
 				cancelled?: boolean;
+				targetSessionId?: string;
 			}>,
 		switchSession: (agentId: string, sessionPath: string) =>
 			ipcRenderer.invoke(
 				ipcChannels.agentsSwitchSession,
 				agentId,
 				sessionPath,
-			) as Promise<{ cancelled?: boolean }>,
+			) as Promise<{ cancelled?: boolean; targetSessionId?: string }>,
 		editMessage: (agentId: string, messageId: string, text: string) =>
 			ipcRenderer.invoke(
 				ipcChannels.agentsEditMessage,
