@@ -1,5 +1,6 @@
 import { Wrench } from "lucide-react";
 import { useAtomValue } from "jotai";
+import { selectAtom } from "jotai/utils";
 import { useMemo, useState } from "react";
 import type { ComponentProps, RefObject } from "react";
 import type {
@@ -23,12 +24,14 @@ import {
   groupToolMessages,
 } from "../app/AppUtils";
 import {
+  sessionMessageLoadStateAtom,
   sessionRecordByIdAtomFamily,
   sessionRuntimeBySessionIdAtomFamily,
+  sessionSendStateByIdAtom,
 } from "../../atoms";
 import {
+  deriveSessionSurfaceRuntime,
   isLatestTimelineRunBusy,
-  isSessionRuntimeBusy,
   selectSessionModeValue,
   useSessionTimelineController,
   type SessionTimelineController,
@@ -109,6 +112,24 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
   const legacyProps = props as LegacyTimelineProps;
   const session = useAtomValue(sessionRecordByIdAtomFamily(sessionId));
   const runtime = useAtomValue(sessionRuntimeBySessionIdAtomFamily(sessionId));
+  const messageLoadStateSelector = useMemo(
+    () => selectAtom(
+      sessionMessageLoadStateAtom,
+      (states) => states[sessionId],
+      Object.is,
+    ),
+    [sessionId],
+  );
+  const sendStateSelector = useMemo(
+    () => selectAtom(
+      sessionSendStateByIdAtom,
+      (states) => states[sessionId],
+      Object.is,
+    ),
+    [sessionId],
+  );
+  const messageLoadState = useAtomValue(messageLoadStateSelector);
+  const sendState = useAtomValue(sendStateSelector);
   const internalController = useSessionTimelineController({
     sessionId: sessionMode ? sessionId : undefined,
     // An injected controller owns the scroll effects; legacy ownership remains entirely external.
@@ -134,7 +155,16 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
     : legacyProps.isLoadingMoreMessages;
   const canLoadMoreMessages = sessionMode ? runtime?.status !== "starting" : legacyProps.canLoadMoreMessages;
   const hasActiveConversation = sessionMode ? Boolean(session) : legacyProps.hasActiveConversation;
-  const isConversationLoading = sessionMode ? false : legacyProps.isConversationLoading;
+  const modernSurfaceState = deriveSessionSurfaceRuntime(
+    activeMessages.length,
+    messageLoadState?.status,
+    sendState?.status,
+    runtime?.status,
+    runtime?.state,
+  );
+  const isConversationLoading = sessionMode
+    ? modernSurfaceState.isLoading
+    : legacyProps.isConversationLoading;
   const activeRuntimeState = selectSessionModeValue(
     sessionMode,
     runtime?.state,
@@ -142,12 +172,12 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
   );
   const activeConversationStatus = selectSessionModeValue(
     sessionMode,
-    runtime?.status,
+    modernSurfaceState.status,
     legacyProps.activeConversationStatus,
   );
   const activeThinking = sessionMode ? runtime?.thinking : legacyProps.activeThinking;
   const isAgentBusy = sessionMode
-    ? isSessionRuntimeBusy(activeConversationStatus, activeRuntimeState)
+    ? modernSurfaceState.isBusy
     : legacyProps.isAgentBusy;
   const cancellingUi = sessionMode ? false : legacyProps.cancellingUi;
   const loadMoreMessages = sessionMode

@@ -53,6 +53,23 @@ export function isSessionRuntimeBusy(
   return Boolean(status === "running" || state?.isStreaming || state?.isExecutingTool);
 }
 
+export function deriveSessionSurfaceRuntime(
+  messageCount: number,
+  messageLoadStatus: string | undefined,
+  sendStatus: string | undefined,
+  runtimeStatus: string | undefined,
+  runtimeState: AgentRuntimeState | undefined,
+) {
+  const activating = sendStatus === "activating";
+  const status = activating ? "starting" : runtimeStatus;
+  return {
+    status,
+    isLoading: messageCount === 0 && (messageLoadStatus === "loading" || activating),
+    isStarting: status === "starting",
+    isBusy: activating || sendStatus === "sending" || isSessionRuntimeBusy(status, runtimeState),
+  };
+}
+
 export function isLatestTimelineRunBusy(
   isAgentBusy: boolean,
   index: number,

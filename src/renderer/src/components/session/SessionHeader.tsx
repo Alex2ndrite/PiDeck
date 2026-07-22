@@ -1,10 +1,12 @@
 import { ChevronDown, Plus } from "lucide-react";
 import { useAtomValue } from "jotai";
-import type { RefObject } from "react";
+import { selectAtom } from "jotai/utils";
+import { useMemo, type RefObject } from "react";
 import type { AgentRuntimeState } from "../../../../shared/types";
 import {
   sessionRecordByIdAtomFamily,
   sessionRuntimeBySessionIdAtomFamily,
+  sessionSendStateByIdAtom,
 } from "../../atoms";
 import { t } from "../../i18n";
 import { SessionStatus } from "../app/AppParts";
@@ -53,9 +55,20 @@ export function SessionHeader(props: SessionHeaderProps) {
   const legacyProps = props as LegacySessionHeaderProps;
   const session = useAtomValue(sessionRecordByIdAtomFamily(sessionId));
   const runtime = useAtomValue(sessionRuntimeBySessionIdAtomFamily(sessionId));
+  const sendStateSelector = useMemo(
+    () => selectAtom(
+      sessionSendStateByIdAtom,
+      (states) => states[sessionId],
+      Object.is,
+    ),
+    [sessionId],
+  );
+  const sendState = useAtomValue(sendStateSelector);
   const title = sessionMode ? (session?.title ?? "PiDeck") : legacyProps.title;
   const runtimeState = sessionMode ? runtime?.state : legacyProps.runtimeState;
-  const isStarting = sessionMode ? runtime?.status === "starting" : legacyProps.isStarting;
+  const isStarting = sessionMode
+    ? runtime?.status === "starting" || sendState?.status === "activating"
+    : legacyProps.isStarting;
   const hasSession = sessionMode ? Boolean(session) : legacyProps.hasSession;
 
   return (
