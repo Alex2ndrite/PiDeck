@@ -46,12 +46,7 @@ export function useImportController<TSummary, TReport>(
 	const [report, setReport] = useState<TReport | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const sequence = useRef(0);
-	const mounted = useRef(true);
-
-	useEffect(() => () => {
-		mounted.current = false;
-		sequence.current += 1;
-	}, []);
+	const mounted = useRef(false);
 
 	const refresh = useCallback(async () => {
 		if (!projectId) return;
@@ -71,6 +66,10 @@ export function useImportController<TSummary, TReport>(
 	}, [projectId, scan, selectInitial]);
 
 	useEffect(() => {
+		// The effect itself owns the lifecycle so StrictMode's setup -> cleanup -> setup
+		// replay restores the gate before the second scan is allowed to commit.
+		mounted.current = true;
+		sequence.current += 1;
 		setSessions([]);
 		setSelectedPaths([]);
 		setReport(null);
@@ -78,6 +77,10 @@ export function useImportController<TSummary, TReport>(
 		setLoading(false);
 		setImporting(false);
 		if (projectId) void refresh();
+		return () => {
+			mounted.current = false;
+			sequence.current += 1;
+		};
 	}, [projectId, refresh]);
 
 	const toggle = useCallback((sourcePath: string) => {

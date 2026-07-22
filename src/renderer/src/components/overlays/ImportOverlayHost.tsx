@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import {
 	ClaudeImportModal,
 	CodexImportModal,
@@ -19,6 +20,7 @@ type ImportControllerView<TSummary, TReport> = {
 	loading: boolean;
 	importing: boolean;
 	report: TReport | null;
+	error: string | null;
 	refresh: () => Promise<void>;
 	toggle: (sourcePath: string) => void;
 	toggleAll: () => void;
@@ -30,11 +32,15 @@ export type ImportOverlayHostProps =
 	| { kind: "claude"; project: Project; controller: ImportControllerView<ClaudeSessionSummary, ClaudeImportReport>; onClose: () => void }
 	| { kind: "opencode"; project: Project; controller: ImportControllerView<OpenCodeSessionSummary, OpenCodeImportReport>; onClose: () => void };
 
+function renderImportError(error: string | null): ReactNode {
+	return error ? <div className="codex-import-report error" role="alert"><strong>{error}</strong></div> : null;
+}
+
 /** A provider switch lives here so Sidebar only chooses a provider/project. */
 export function ImportOverlayHost(props: ImportOverlayHostProps) {
-	if (props.kind === "codex") return <CodexImportModal project={props.project} {...props.controller} onClose={props.onClose} onRefresh={props.controller.refresh} onToggle={props.controller.toggle} onToggleAll={props.controller.toggleAll} onImport={() => void props.controller.importSelected()} />;
-	if (props.kind === "claude") return <ClaudeImportModal project={props.project} {...props.controller} onClose={props.onClose} onRefresh={props.controller.refresh} onToggle={props.controller.toggle} onToggleAll={props.controller.toggleAll} onImport={() => void props.controller.importSelected()} />;
-	return <OpenCodeImportModal project={props.project} {...props.controller} onClose={props.onClose} onRefresh={props.controller.refresh} onToggle={props.controller.toggle} onToggleAll={props.controller.toggleAll} onImport={() => void props.controller.importSelected()} />;
+	if (props.kind === "codex") return <><CodexImportModal project={props.project} {...props.controller} onClose={props.onClose} onRefresh={props.controller.refresh} onToggle={props.controller.toggle} onToggleAll={props.controller.toggleAll} onImport={() => void props.controller.importSelected()} />{renderImportError(props.controller.error)}</>;
+	if (props.kind === "claude") return <><ClaudeImportModal project={props.project} {...props.controller} onClose={props.onClose} onRefresh={props.controller.refresh} onToggle={props.controller.toggle} onToggleAll={props.controller.toggleAll} onImport={() => void props.controller.importSelected()} />{renderImportError(props.controller.error)}</>;
+	return <><OpenCodeImportModal project={props.project} {...props.controller} onClose={props.onClose} onRefresh={props.controller.refresh} onToggle={props.controller.toggle} onToggleAll={props.controller.toggleAll} onImport={() => void props.controller.importSelected()} />{renderImportError(props.controller.error)}</>;
 }
 
 export type ImportOverlayData = {

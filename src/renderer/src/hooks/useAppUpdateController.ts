@@ -30,6 +30,46 @@ function errorMessage(reason: unknown): string {
 	return reason instanceof Error ? reason.message : String(reason);
 }
 
+/**
+ * Electron progress events do not carry a request id. Keep a local gate so a
+ * cleared overlay cannot start a replacement download until the old promise
+ * settles; otherwise an old event could be mistaken for the new overlay's work.
+ */
+export function createAppUpdateDownloadGate() {
+	let sequence = 0;
+	let activeSequence = 0;
+	let inFlightSequence = 0;
+	let inFlight = false;
+	return {
+		begin(): number | null {
+			if (inFlight) return null;
+			activeSequence = ++sequence;
+			inFlightSequence = activeSequence;
+			inFlight = true;
+			return activeSequence;
+		},
+		invalidate() {
+			sequence += 1;
+			activeSequence = 0;
+		},
+		acceptsProgress() {
+			return inFlight && activeSequence !== 0 && activeSequence === sequence;
+		},
+		settle(requestSequence: number) {
+			// The request may have been invalidated, so settle must release the gate
+			// even when its active progress sequence was already cleared.
+			if (inFlightSequence === requestSequence) {
+				activeSequence = 0;
+				inFlightSequence = 0;
+				inFlight = false;
+			}
+		},
+		isInFlight() {
+			return inFlight;
+		},
+	};
+}
+
 /** App update lifecycle with stale-result protection for a closing/reopened overlay. */
 export function useAppUpdateController(
 	api: AppUpdateControllerApi,
@@ -43,17 +83,17 @@ export function useAppUpdateController(
 	const [downloadedPath, setDownloadedPath] = useState<string | null>(null);
 	const sequence = useRef(0);
 	const mounted = useRef(true);
-	const activeDownloadSequence = useRef(0);
+	const downloadGate = useRef(createAppUpdateDownloadGate());
 
 	useEffect(() => {
 		mounted.current = true;
 		const unsubscribe = api.onUpdateProgress?.((next) => {
-			if (mounted.current && activeDownloadSequence.current !== 0) setProgress(next);
+			if (mounted.current && downloadGate.current.acceptsProgress()) setProgress(next);
 		});
 		return () => {
 			mounted.current = false;
 			sequence.current += 1;
-			activeDownloadSequence.current = 0;
+			downloadGate.current.invalidate();
 			unsubscribe?.();
 		};
 	}, [api]);
@@ -83,8 +123,9 @@ export function useAppUpdateController(
 	const download = useCallback(async () => {
 		const asset = info?.recommendedAsset;
 		if (!asset || downloading) return null;
-		const requestSequence = ++sequence.current;
-		activeDownloadSequence.current = requestSequence;
+		const requestSequence = downloadGate.current.begin();
+		if (requestSequence === null) return null;
+		++sequence.current;
 		setDownloading(true);
 		setError(null);
 		setDownloadedPath(null);
@@ -102,10 +143,8 @@ export function useAppUpdateController(
 			}
 			return null;
 		} finally {
-			if (mounted.current && requestSequence === sequence.current) {
-				activeDownloadSequence.current = 0;
-				setDownloading(false);
-			}
+			downloadGate.current.settle(requestSequence);
+			if (mounted.current && requestSequence === sequence.current) setDownloading(false);
 		}
 	}, [api, downloading, info]);
 
@@ -120,7 +159,7 @@ export function useAppUpdateController(
 
 	const clear = useCallback(() => {
 		sequence.current += 1;
-		activeDownloadSequence.current = 0;
+		downloadGate.current.invalidate();
 		setInfo(null);
 		setError(null);
 		setChecking(false);

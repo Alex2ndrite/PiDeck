@@ -35,6 +35,7 @@ function UpdateDialog(props: {
 	onDownload: () => void;
 	onInstall: () => void;
 	onBrowserDownload: () => void;
+	error?: string | null;
 	onOpenRelease: () => void;
 }) {
 	const percent = props.progress?.percent ?? 0;
@@ -56,6 +57,7 @@ function UpdateDialog(props: {
 							{props.downloadedPath && <div className="update-downloaded-path">{props.downloadedPath}</div>}
 						</div>
 					)}
+					{props.error && <div className="update-error-detail" role="alert">{t("update.errorInfo", { message: props.error })}</div>}
 					<div className="update-notes markdown-body"><ReactMarkdown remarkPlugins={[remarkGfm]}>{props.info.releaseNotes.trim() || t("update.noReleaseNotes")}</ReactMarkdown></div>
 				</div>
 				<div className="update-actions">
@@ -71,7 +73,7 @@ function UpdateDialog(props: {
 export function AppUpdateOverlay({ controller, releasesUrl, openExternal, upToDateVersion, onDismissUpToDate }: AppUpdateOverlayProps) {
 	const info = controller.info;
 	if (info) {
-		return <UpdateDialog info={info} progress={controller.progress} checking={controller.checking} downloading={controller.downloading} downloadedPath={controller.downloadedPath} onClose={controller.clear} onDownload={() => void controller.download()} onInstall={() => void controller.install()} onBrowserDownload={() => void openExternal(info.recommendedAsset?.url ?? info.releaseUrl)} onOpenRelease={() => void openExternal(info.releaseUrl)} />;
+		return <UpdateDialog info={info} progress={controller.progress} checking={controller.checking} downloading={controller.downloading} downloadedPath={controller.downloadedPath} onClose={controller.clear} onDownload={() => void controller.download()} onInstall={() => void controller.install()} error={controller.error} onBrowserDownload={() => void openExternal(info.recommendedAsset?.url ?? info.releaseUrl)} onOpenRelease={() => void openExternal(info.releaseUrl)} />;
 	}
 	if (controller.error) {
 		return (
