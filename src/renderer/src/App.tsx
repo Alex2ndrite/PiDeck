@@ -274,12 +274,6 @@ function isChatProject(project?: Project) {
   return project?.kind === "chat";
 }
 
-function getSelectableCodexImportPaths(sessions: CodexSessionSummary[]) {
-  return sessions
-    .filter((session) => session.threadSource !== "subagent")
-    .map((session) => session.sourcePath);
-}
-
 function formatCodexSubagentName(session: SessionSummary) {
   const label = [session.codexAgentNickname, session.codexAgentRole]
     .filter(Boolean)
@@ -772,40 +766,6 @@ export function App() {
   	projectId: string;
   } | null>(null);
   /** 编辑器展示模式：弹框或侧栏 */
-  const [codexImportProject, setCodexImportProject] = useState<Project | null>(
-    null,
-  );
-  const [codexImportSessions, setCodexImportSessions] = useState<
-    CodexSessionSummary[]
-  >([]);
-  const [codexImportSelected, setCodexImportSelected] = useState<string[]>([]);
-  const [codexImportLoading, setCodexImportLoading] = useState(false);
-  const [codexImportRunning, setCodexImportRunning] = useState(false);
-  const [codexImportReport, setCodexImportReport] =
-    useState<CodexImportReport | null>(null);
-  const [claudeImportProject, setClaudeImportProject] = useState<Project | null>(
-    null,
-  );
-  const [claudeImportSessions, setClaudeImportSessions] = useState<
-    ClaudeSessionSummary[]
-  >([]);
-  const [claudeImportSelected, setClaudeImportSelected] = useState<string[]>([]);
-  const [claudeImportLoading, setClaudeImportLoading] = useState(false);
-  const [claudeImportRunning, setClaudeImportRunning] = useState(false);
-  const [claudeImportReport, setClaudeImportReport] =
-    useState<ClaudeImportReport | null>(null);
-  const [openCodeImportProject, setOpenCodeImportProject] = useState<Project | null>(
-    null,
-  );
-  const [projectResourcesProject, setProjectResourcesProject] = useState<Project | null>(null);
-  const [openCodeImportSessions, setOpenCodeImportSessions] = useState<
-    OpenCodeSessionSummary[]
-  >([]);
-  const [openCodeImportSelected, setOpenCodeImportSelected] = useState<string[]>([]);
-  const [openCodeImportLoading, setOpenCodeImportLoading] = useState(false);
-  const [openCodeImportRunning, setOpenCodeImportRunning] = useState(false);
-  const [openCodeImportReport, setOpenCodeImportReport] =
-    useState<OpenCodeImportReport | null>(null);
   // showToast 使用 app-notice 统一展示，见下方函数定义
   // 历史命令：按 agent 隔离，agent 关闭即清除（不持久化）
   const promptHistoryRef = useRef<Record<string, string[]>>({});
@@ -888,6 +848,35 @@ export function App() {
   /** 打开文件编辑器前所在的抽屉面板，供返回按钮恢复 */
   const [sessionsProjectId, setSessionsProjectId] = useState<string>();
   const sessions = useAtomValue(
+  // === import flow hook ===
+  const {
+    codexImportProject,
+    setCodexImportProject,
+    claudeImportProject,
+    setClaudeImportProject,
+    openCodeImportProject,
+    setOpenCodeImportProject,
+    codexImportController,
+    claudeImportController,
+    openCodeImportController,
+    openCodexImport,
+    openClaudeImport,
+    openOpenCodeImport,
+  } = useImportFlow({
+    setProjectMenu,
+    sessionsProjectId,
+    refreshProjectSessions,
+    refreshSessions,
+    showToast,
+    scanCodexSessions: api.codexSessions.scan,
+    importCodexSessionsApi: api.codexSessions.import,
+    scanClaudeSessions: api.claudeSessions.scan,
+    importClaudeSessionsApi: api.claudeSessions.import,
+    scanOpenCodeSessions: api.openCodeSessions.scan,
+    importOpenCodeSessionsApi: api.openCodeSessions.import,
+    t,
+  });
+
     sessionSummariesByProjectIdAtomFamily(sessionsProjectId ?? ""),
   );
   const getProjectSessions = (projectId: string) =>
@@ -2871,289 +2860,6 @@ export function App() {
     }
   }
 
-  async function openCodexImport(project: Project) {
-    setProjectMenu(null);
-    setCodexImportProject(project);
-    setCodexImportReport(null);
-    setCodexImportSessions([]);
-    setCodexImportSelected([]);
-    await scanCodexSessions(project);
-  }
-
-  async function scanCodexSessions(
-    project = codexImportProject,
-    clearReport = true,
-  ) {
-    if (!project) return;
-    setCodexImportLoading(true);
-    if (clearReport) setCodexImportReport(null);
-    try {
-      const next = await api.codexSessions.scan(project.id);
-      setCodexImportSessions(next);
-      setCodexImportSelected(getSelectableCodexImportPaths(next));
-    } catch (error) {
-      showToast(
-        t("codex.scanFailed", {
-          error: error instanceof Error ? error.message : String(error),
-        }),
-        4000,
-      );
-    } finally {
-      setCodexImportLoading(false);
-    }
-  }
-
-  function toggleCodexSession(sourcePath: string) {
-    setCodexImportSelected((current) =>
-      current.includes(sourcePath)
-        ? current.filter((item) => item !== sourcePath)
-        : [...current, sourcePath],
-    );
-  }
-
-  function toggleAllCodexSessions() {
-    const allPaths = getSelectableCodexImportPaths(codexImportSessions);
-    setCodexImportSelected((current) =>
-      allPaths.length > 0 && allPaths.every((path) => current.includes(path))
-        ? []
-        : allPaths,
-    );
-  }
-
-  async function importCodexSessions() {
-    if (!codexImportProject || codexImportSelected.length === 0) return;
-    setCodexImportRunning(true);
-    setCodexImportReport(null);
-    try {
-      const report = await api.codexSessions.import(
-        codexImportProject.id,
-        codexImportSelected,
-      );
-      setCodexImportReport(report);
-      await scanCodexSessions(codexImportProject, false);
-      await refreshProjectSessions(codexImportProject.id);
-      if (sessionsProjectId === codexImportProject.id)
-        await refreshSessions(codexImportProject.id);
-      showToast(
-        t("codex.importDone", {
-          imported: report.imported,
-          failed: report.failed,
-        }),
-      );
-    } catch (error) {
-      showToast(
-        t("codex.importFailed", {
-          error: error instanceof Error ? error.message : String(error),
-        }),
-        4000,
-      );
-    } finally {
-      setCodexImportRunning(false);
-    }
-  }
-
-  async function openClaudeImport(project: Project) {
-    setProjectMenu(null);
-    setClaudeImportProject(project);
-    setClaudeImportReport(null);
-    setClaudeImportSessions([]);
-    setClaudeImportSelected([]);
-    await scanClaudeSessions(project);
-  }
-
-  async function scanClaudeSessions(
-    project = claudeImportProject,
-    clearReport = true,
-  ) {
-    if (!project) return;
-    setClaudeImportLoading(true);
-    if (clearReport) setClaudeImportReport(null);
-    try {
-      const next = await api.claudeSessions.scan(project.id);
-      setClaudeImportSessions(next);
-      setClaudeImportSelected([]);
-    } catch (error) {
-      showToast(
-        t("claude.scanFailed", {
-          error: error instanceof Error ? error.message : String(error),
-        }),
-        4000,
-      );
-    } finally {
-      setClaudeImportLoading(false);
-    }
-  }
-
-  function toggleClaudeSession(sourcePath: string) {
-    setClaudeImportSelected((current) =>
-      current.includes(sourcePath)
-        ? current.filter((item) => item !== sourcePath)
-        : [...current, sourcePath],
-    );
-  }
-
-  function toggleAllClaudeSessions() {
-    const allPaths = claudeImportSessions.map((session) => session.sourcePath);
-    setClaudeImportSelected((current) =>
-      allPaths.length > 0 && allPaths.every((path) => current.includes(path))
-        ? []
-        : allPaths,
-    );
-  }
-
-  async function importClaudeSessions() {
-    if (!claudeImportProject || claudeImportSelected.length === 0) return;
-    setClaudeImportRunning(true);
-    setClaudeImportReport(null);
-    try {
-      const report = await api.claudeSessions.import(
-        claudeImportProject.id,
-        claudeImportSelected,
-      );
-      setClaudeImportReport(report);
-      await scanClaudeSessions(claudeImportProject, false);
-      await refreshProjectSessions(claudeImportProject.id);
-      if (sessionsProjectId === claudeImportProject.id)
-        await refreshSessions(claudeImportProject.id);
-      showToast(
-        t("claude.importDone", {
-          imported: report.imported,
-          failed: report.failed,
-        }),
-      );
-    } catch (error) {
-      showToast(
-        t("claude.importFailed", {
-          error: error instanceof Error ? error.message : String(error),
-        }),
-        4000,
-      );
-    } finally {
-      setClaudeImportRunning(false);
-    }
-  }
-
-  async function openOpenCodeImport(project: Project) {
-    setProjectMenu(null);
-    setOpenCodeImportProject(project);
-    setOpenCodeImportReport(null);
-    setOpenCodeImportSessions([]);
-    setOpenCodeImportSelected([]);
-    await scanOpenCodeSessions(project);
-  }
-
-  async function scanOpenCodeSessions(
-    project = openCodeImportProject,
-    clearReport = true,
-  ) {
-    if (!project) return;
-    setOpenCodeImportLoading(true);
-    if (clearReport) setOpenCodeImportReport(null);
-    try {
-      const next = await api.openCodeSessions.scan(project.id);
-      setOpenCodeImportSessions(next);
-      // OpenCode 导入会覆盖同名目标副本，默认不勾选，避免误覆盖用户已经导入过的历史。
-      setOpenCodeImportSelected([]);
-    } catch (error) {
-      showToast(
-        t("opencode.scanFailed", {
-          error: error instanceof Error ? error.message : String(error),
-        }),
-        4000,
-      );
-    } finally {
-      setOpenCodeImportLoading(false);
-    }
-  }
-
-  function toggleOpenCodeSession(sourcePath: string) {
-    setOpenCodeImportSelected((current) =>
-      current.includes(sourcePath)
-        ? current.filter((item) => item !== sourcePath)
-        : [...current, sourcePath],
-    );
-  }
-
-  function toggleAllOpenCodeSessions() {
-    const allPaths = openCodeImportSessions.map((session) => session.sourcePath);
-    setOpenCodeImportSelected((current) =>
-      allPaths.length > 0 && allPaths.every((path) => current.includes(path))
-        ? []
-        : allPaths,
-    );
-  }
-
-  async function importOpenCodeSessions() {
-    if (!openCodeImportProject || openCodeImportSelected.length === 0) return;
-    setOpenCodeImportRunning(true);
-    setOpenCodeImportReport(null);
-    try {
-      const report = await api.openCodeSessions.import(
-        openCodeImportProject.id,
-        openCodeImportSelected,
-      );
-      setOpenCodeImportReport(report);
-      await scanOpenCodeSessions(openCodeImportProject, false);
-      await refreshProjectSessions(openCodeImportProject.id);
-      if (sessionsProjectId === openCodeImportProject.id)
-        await refreshSessions(openCodeImportProject.id);
-      showToast(
-        t("opencode.importDone", {
-          imported: report.imported,
-          failed: report.failed,
-        }),
-      );
-    } catch (error) {
-      showToast(
-        t("opencode.importFailed", {
-          error: error instanceof Error ? error.message : String(error),
-        }),
-        4000,
-      );
-    } finally {
-      setOpenCodeImportRunning(false);
-    }
-  }
-
-  const codexImportController = useMemo(() => ({
-    sessions: codexImportSessions,
-    selectedPaths: codexImportSelected,
-    loading: codexImportLoading,
-    importing: codexImportRunning,
-    report: codexImportReport,
-    error: null as string | null,
-    refresh: () => scanCodexSessions(),
-    toggle: toggleCodexSession,
-    toggleAll: toggleAllCodexSessions,
-    importSelected: async () => { await importCodexSessions(); return null; },
-  }), [codexImportSessions, codexImportSelected, codexImportLoading, codexImportRunning, codexImportReport]);
-
-  const claudeImportController = useMemo(() => ({
-    sessions: claudeImportSessions,
-    selectedPaths: claudeImportSelected,
-    loading: claudeImportLoading,
-    importing: claudeImportRunning,
-    report: claudeImportReport,
-    error: null as string | null,
-    refresh: () => scanClaudeSessions(),
-    toggle: toggleClaudeSession,
-    toggleAll: toggleAllClaudeSessions,
-    importSelected: async () => { await importClaudeSessions(); return null; },
-  }), [claudeImportSessions, claudeImportSelected, claudeImportLoading, claudeImportRunning, claudeImportReport]);
-
-  const openCodeImportController = useMemo(() => ({
-    sessions: openCodeImportSessions,
-    selectedPaths: openCodeImportSelected,
-    loading: openCodeImportLoading,
-    importing: openCodeImportRunning,
-    report: openCodeImportReport,
-    error: null as string | null,
-    refresh: () => scanOpenCodeSessions(),
-    toggle: toggleOpenCodeSession,
-    toggleAll: toggleAllOpenCodeSessions,
-    importSelected: async () => { await importOpenCodeSessions(); return null; },
-  }), [openCodeImportSessions, openCodeImportSelected, openCodeImportLoading, openCodeImportRunning, openCodeImportReport]);
-
   async function reorderProjects(
     sourceProjectId: string,
     targetProjectId: string,
@@ -4491,127 +4197,16 @@ export function App() {
    * 处理图片文件,转为 pi RPC 可识别的 ImageContent。
    * 大图会压缩到最长边 2000px,避免 base64 过大导致 RPC 传输和模型上下文成本上升。
    */
-  async function processImageFile(file: File): Promise<ImageContent | null> {
-    const maxSize = 10 * 1024 * 1024; // 原始文件 10MB 限制,避免误粘超大图片卡住渲染进程
-    if (file.size > maxSize) {
-      showToast(t("app.imageTooLarge"), 3000);
-      return null;
-    }
-
-    const validTypes = ["image/png", "image/jpeg", "image/gif", "image/webp"];
-    if (!validTypes.includes(file.type)) {
-      showToast(t("app.imageUnsupported"), 3000);
-      return null;
-    }
-
-    // GIF 可能是动图,canvas 压缩会丢失动画;保留原始数据。
-    if (file.type === "image/gif") return fileToImageContent(file);
-    return resizeImageFile(file, 2000, 0.86).catch(() =>
-      fileToImageContent(file),
-    );
-  }
-
-  function fileToImageContent(file: File): Promise<ImageContent> {
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onload = () =>
-        resolve(dataUrlToImageContent(String(reader.result), file.type));
-      reader.readAsDataURL(file);
-    });
-  }
-
-  function dataUrlToImageContent(
-    dataUrl: string,
-    fallbackMimeType: string,
-  ): ImageContent {
-    const [meta, data = ""] = dataUrl.split(",");
-    const mimeType = meta.match(/^data:(.*?);base64$/)?.[1] || fallbackMimeType;
-    return { type: "image", data, mimeType };
-  }
-
-  function resizeImageFile(
-    file: File,
-    maxEdge: number,
-    quality: number,
-  ): Promise<ImageContent> {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onerror = () => reject(reader.error);
-      reader.onload = () => {
-        const image = new Image();
-        image.onerror = reject;
-        image.onload = () => {
-          const scale = Math.min(
-            1,
-            maxEdge / Math.max(image.width, image.height),
-          );
-          const width = Math.max(1, Math.round(image.width * scale));
-          const height = Math.max(1, Math.round(image.height * scale));
-          const canvas = document.createElement("canvas");
-          canvas.width = width;
-          canvas.height = height;
-          canvas.getContext("2d")?.drawImage(image, 0, 0, width, height);
-          // JPEG 更省 token/传输体积;透明 PNG/WebP 保持 PNG,避免截图透明区域变黑。
-          const outputType =
-            file.type === "image/png" ? "image/png" : "image/jpeg";
-          resolve(
-            dataUrlToImageContent(
-              canvas.toDataURL(outputType, quality),
-              outputType,
-            ),
-          );
-        };
-        image.src = String(reader.result);
-      };
-      reader.readAsDataURL(file);
-    });
-  }
-
-  /** 处理粘贴事件:从剪贴板提取图片 */
-  async function handlePaste(event: React.ClipboardEvent) {
-    const items = Array.from(event.clipboardData.items);
-    for (const item of items) {
-      if (item.type.startsWith("image/")) {
-        event.preventDefault();
-        const file = item.getAsFile();
-        if (file) {
-          const image = await processImageFile(file);
-          if (image) {
-            setAttachedImages((prev) => [...prev, image]);
-          }
-        }
-        return;
-      }
-    }
-  }
-
-  /** 处理拖拽事件:支持拖入图片 */
-  async function handleDrop(event: React.DragEvent) {
-    event.preventDefault();
-    const files = Array.from(event.dataTransfer.files);
-    for (const file of files) {
-      if (file.type.startsWith("image/")) {
-        const image = await processImageFile(file);
-        if (image) {
-          setAttachedImages((prev) => [...prev, image]);
-        }
-      }
-    }
-  }
-
-  function handleDragOver(event: React.DragEvent) {
-    event.preventDefault();
-  }
-
-  /** 移除已附加的图片 */
-  function removeImage(index: number) {
-    setAttachedImages((prev) => prev.filter((_, i) => i !== index));
-  }
-
-  /** 清空所有附加图片 */
-  function clearImages() {
-    setAttachedImages([]);
-  }
+  // === image paste hook ===
+  const {
+    processImageFile,
+    fileToImageContent,
+    dataUrlToImageContent,
+    resizeImageFile,
+  } = useImagePaste({
+    showToast,
+    t,
+  });
 
   async function updateSettings(patch: Partial<AppSettings>) {
     const changesWebService =
