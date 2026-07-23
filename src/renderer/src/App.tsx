@@ -66,6 +66,7 @@ import { useQueuedPrompt, type QueuedPrompt } from "./hooks/useQueuedPrompt";
 import { PromptDeliveryUnknownError, createResendLock } from "./hooks/useComposerSend";
 
 import { usePiUpdate } from "./hooks/usePiUpdate";
+import { useAppUpdateController } from "./hooks/useAppUpdateController";
 import { useProjectSync } from "./hooks/useProjectSync";
 import {
   agentInventoryAtom,
@@ -774,25 +775,16 @@ export function App() {
     store.get(sessionRecordByIdAtomFamily(sessionId));
   const [sessionHistoryLoading, setSessionHistoryLoading] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [updateInfo, setUpdateInfo] = useState<AppUpdateInfo | null>(null);
-  const [updateError, setUpdateError] = useState<string | null>(null);
-  const [updateChecking, setUpdateChecking] = useState(false);
-  const [updateDownloading, setUpdateDownloading] = useState(false);
-  const [updateProgress, setUpdateProgress] = useState<AppUpdateDownloadProgress | null>(null);
-  const [downloadedUpdatePath, setDownloadedUpdatePath] = useState<string | null>(null);
+  const appUpdate = useAppUpdateController({
+    checkUpdate: api.app.checkUpdate,
+    downloadUpdate: (asset) => api.app.downloadUpdate(asset),
+    installUpdate: (filePath) => api.app.installUpdate(filePath),
+    onUpdateProgress: (cb) => api.app.onUpdateProgress(cb),
+    openExternal: (url) => api.app.openExternal(url),
+  }, false);
+
+  // upToDateVersion: hook does not expose this; used by AppUpdateOverlay for "up to date" toast.
   const [upToDateVersion, setUpToDateVersion] = useState<string | null>(null);
-  const appUpdateController = useMemo(() => ({
-    info: updateInfo,
-    error: updateError,
-    checking: updateChecking,
-    downloading: updateDownloading,
-    progress: updateProgress,
-    downloadedPath: downloadedUpdatePath,
-    download: async () => { await downloadAppUpdate(); return downloadedUpdatePath; },
-    install: async () => { if (downloadedUpdatePath) await api.app.installUpdate(downloadedUpdatePath); },
-    clear: () => { setUpdateInfo(null); setUpdateError(null); setUpdateProgress(null); setDownloadedUpdatePath(null); setUpToDateVersion(null); },
-    check: undefined as unknown as (source?: "auto" | "manual") => Promise<AppUpdateInfo | null>,
-  }), [updateInfo, updateError, updateChecking, updateDownloading, updateProgress, downloadedUpdatePath]);
   const [configOpen, setConfigOpen] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   /** 是否自动滚动到最新消息 */
@@ -1797,15 +1789,9 @@ export function App() {
       setSettings(next);
       showToast(t("settings.restartNotice"));
     },
-    onUpdateProgress: (progress) => {
-      setUpdateProgress(progress);
-      if (progress.state === "completed") {
-        setUpdateDownloading(false);
-        setDownloadedUpdatePath(progress.filePath ?? null);
-      } else if (progress.state === "failed") {
-        setUpdateDownloading(false);
-        setUpdateError(progress.error ?? t("update.downloadFailed"));
-      }
+    onUpdateProgress: (_progress) => {
+      // Hook useAppUpdateController subscribes via onUpdateProgress parameter;
+      // nothing else needed here.
     },
     onOpenInBrowser: (url) => {
       workspace.openDrawer("browser");
@@ -1885,13 +1871,13 @@ export function App() {
   }, [projectIdsKey]);
 
   useEffect(() => {
-    // 当禁用版本检测时，不启动定时和启动后的自动检测
+    // When update check is disabled, skip periodic and deferred auto-check.
     if (settings.disableUpdateCheck) return;
     const timer = window.setInterval(
-      () => void checkAppUpdate("auto"),
+      () => void appUpdate.check("auto"),
       1000 * 60 * 60 * 6,
     );
-    window.setTimeout(() => void checkAppUpdate("auto"), 5000);
+    window.setTimeout(() => void appUpdate.check("auto"), 5000);
     return () => window.clearInterval(timer);
   }, [settings.disableUpdateCheck]);
 
@@ -2273,60 +2259,9 @@ export function App() {
     showNotice(message, duration);
   }
 
-  async function downloadAppUpdate() {
-    const asset = updateInfo?.recommendedAsset;
-    if (!asset) {
-      await api.app.openExternal(updateInfo?.releaseUrl ?? appInfo.releasesUrl);
-      return;
-    }
-    setUpdateDownloading(true);
-    setDownloadedUpdatePath(null);
-    setUpdateProgress({
-      assetName: asset.name,
-      receivedBytes: 0,
-      totalBytes: asset.size,
-      percent: 0,
-      state: "downloading",
-    });
-    try {
-      const result = await api.app.downloadUpdate(asset);
-      setDownloadedUpdatePath(result.filePath);
-      showToast(t("update.downloadCompleted"));
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      setUpdateError(message);
-      showToast(t("update.downloadFailed"));
-    } finally {
-      setUpdateDownloading(false);
-    }
-  }
 
-  async function checkAppUpdate(source: "auto" | "manual" = "manual") {
-    if (updateChecking) return;
-    if (source === "auto" && settings.disableUpdateCheck) return;
-    setUpdateChecking(true);
-    try {
-      const next = await api.app.checkUpdate();
-      if (next.hasUpdate) {
-        setUpdateInfo(next);
-      } else if (source === "manual") {
-        // 手动检查且无更新时,显示模态框提示
-        setUpToDateVersion(next.currentVersion);
-        showToast(
-          t("app.latestVersionNotice", { version: next.currentVersion }),
-        );
-      }
-    } catch (error) {
-      if (source === "manual") {
-        const message = error instanceof Error ? error.message : String(error);
-        showToast(t("app.updateFailedNotice", { error: message }));
-        setUpdateError(message);
-        showToast(t("app.updateFailed"));
-      }
-    } finally {
-      setUpdateChecking(false);
-    }
-  }
+
+
 
   async function refreshSessionHistory(projectId = sessionsProjectId) {
     if (!projectId) return;
@@ -4602,7 +4537,7 @@ export function App() {
           customPiPath={piUpdate.customPiPath}
           customPathValidating={piUpdate.customPathValidating}
           customPathResult={piUpdate.customPathResult}
-          updateChecking={updateChecking}
+          updateChecking={appUpdate.checking}
           piUpdating={piUpdate.piUpdating}
           piUpdateChecking={piUpdate.piUpdateChecking}
           piUpdateCheck={piUpdate.piUpdateCheck}
@@ -4615,7 +4550,16 @@ export function App() {
           onClearCustomPath={piUpdate.clearCustomPiPath}
           onCheckPi={piUpdate.checkPiInstallInline}
           onTestPiProxy={() => piUpdate.testPiProxy()}
-          onCheckUpdate={() => checkAppUpdate("manual")}
+          onCheckUpdate={() => {
+            appUpdate.check("manual").then((info) => {
+              if (info && !info.hasUpdate) {
+                setUpToDateVersion(info.currentVersion);
+                showToast(t("app.latestVersionNotice", { version: info.currentVersion }));
+              } else if (!info && appUpdate.error) {
+                showToast(t("app.updateFailedNotice", { error: appUpdate.error }));
+              }
+            });
+          }}
           onCheckPiUpdate={piUpdate.checkPiCliUpdate}
           onUpdatePi={piUpdate.updatePiCli}
           onToggleDevTools={async () => {
@@ -4645,7 +4589,7 @@ export function App() {
         trust={trustRequest ? { open: true, requestId: trustRequest.requestId, cwd: trustRequest.cwd, projectName: trustRequest.projectName, onChoose: (choice) => { api.agents.respondTrustRequest(trustRequest.requestId, choice); setTrustRequest(null); } } : undefined}
       />
       <AppUpdateOverlay
-        controller={appUpdateController}
+        controller={appUpdate}
         releasesUrl={appInfo.releasesUrl}
         openExternal={(url) => api.app.openExternal(url)}
         upToDateVersion={upToDateVersion}
