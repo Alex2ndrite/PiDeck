@@ -1137,6 +1137,7 @@ export function App() {
     setComposerAgentModeForAgent,
     setComposerCursor,
     showToast,
+    unknownDeliveryMessage: t("app.queuedUnknown"),
     dispatchPromptSnapshot,
   });
   const activeQueuedPrompts = activeAgentId
@@ -4016,6 +4017,7 @@ export function App() {
                 if (drawer === "files" && !drawerCollapsed) {
                   workspace.closeDrawer();
                 } else {
+                  if (activeProjectId) void refreshFiles(activeProjectId, true);
                   workspace.openDrawer("files");
                 }
               },

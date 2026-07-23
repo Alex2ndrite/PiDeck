@@ -48,6 +48,8 @@ export interface UseQueuedPromptOptions {
   setComposerAgentModeForAgent: (agentId: string, mode: ComposerAgentMode) => void;
   setComposerCursor: (value: React.SetStateAction<number>) => void;
   showToast: (message: string, duration?: number) => void;
+  /** i18n-aware message shown when delivery result is unknown. */
+  unknownDeliveryMessage?: string;
 
   dispatchPromptSnapshot: (
     agentId: string,
@@ -74,6 +76,7 @@ export function useQueuedPrompt(options: UseQueuedPromptOptions) {
     setComposerAgentModeForAgent,
     setComposerCursor,
     showToast,
+    unknownDeliveryMessage = "消息可能未送达",
     dispatchPromptSnapshot,
   } = options;
 
@@ -250,7 +253,7 @@ export function useQueuedPrompt(options: UseQueuedPromptOptions) {
             }),
           );
           showToast(
-            deliveryUnknown ? "消息可能未送达" : errorMessage,
+            deliveryUnknown ? unknownDeliveryMessage : errorMessage,
             deliveryUnknown ? 6000 : 4000,
           );
           break;
@@ -298,7 +301,7 @@ export function useQueuedPrompt(options: UseQueuedPromptOptions) {
         }),
       );
       showToast(
-        deliveryUnknown ? "消息可能未送达" : errorMessage,
+        deliveryUnknown ? unknownDeliveryMessage : errorMessage,
         deliveryUnknown ? 6000 : 4000,
       );
     } finally {
