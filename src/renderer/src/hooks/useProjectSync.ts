@@ -37,6 +37,24 @@ type UseProjectSyncInput = {
   t: typeof import("../i18n").t;
 };
 
+type ProjectSessionRefreshResult = SessionSummary[] | SessionRecord[] | undefined;
+type ProjectSessionRefreshPromise = Promise<ProjectSessionRefreshResult>;
+type ProjectSessionRefreshCompletion = {
+  promise: ProjectSessionRefreshPromise;
+  resolve: (value: ProjectSessionRefreshResult | PromiseLike<ProjectSessionRefreshResult>) => void;
+  reject: (reason?: unknown) => void;
+};
+
+function createProjectSessionRefreshCompletion(): ProjectSessionRefreshCompletion {
+  let resolveCompletion!: (value: ProjectSessionRefreshResult | PromiseLike<ProjectSessionRefreshResult>) => void;
+  let rejectCompletion!: (reason?: unknown) => void;
+  const promise = new Promise<ProjectSessionRefreshResult>((resolve, reject) => {
+    resolveCompletion = resolve;
+    rejectCompletion = reject;
+  });
+  return { promise, resolve: resolveCompletion, reject: rejectCompletion };
+}
+
 export function useProjectSync(input: UseProjectSyncInput) {
   const {
     projects,
@@ -58,6 +76,7 @@ export function useProjectSync(input: UseProjectSyncInput) {
   const sessionRequestByProjectRef = useRef<Record<string, number>>({});
   const sessionRefreshRunningRef = useRef<Set<string>>(new Set());
   const sessionRefreshPendingRef = useRef<Set<string>>(new Set());
+  const sessionRefreshCompletionByProjectRef = useRef<Record<string, ProjectSessionRefreshCompletion | undefined>>({});
 
   async function refreshProjects() {
     const next = await api.projects.list();
@@ -79,53 +98,108 @@ export function useProjectSync(input: UseProjectSyncInput) {
     } catch { setWorktreesByProject((prev) => ({ ...prev, [projectId]: [] })); }
   }
 
-  async function refreshSessions(projectId = activeProjectId) {
+  async function refreshSessions(projectId = activeProjectId): Promise<SessionSummary[]> {
     if (!projectId) return [];
-    const records = await api.sessions.listCatalog(projectId);
-    replaceProjectSessions({ projectId, sessions: records });
-    return records.map(sessionRecordToSummary).filter((s): s is SessionSummary => Boolean(s)).sort((a, b) => b.updatedAt - a.updatedAt);
+    const refreshed: ProjectSessionRefreshResult = await refreshProjectSessions(projectId, true);
+    if (!refreshed) return [];
+    return refreshed
+      .map((session) => "projectId" in session ? sessionRecordToSummary(session) : session)
+      .filter((session): session is SessionSummary => Boolean(session))
+      .sort((a, b) => b.updatedAt - a.updatedAt);
   }
 
-  async function refreshProjectSessions(projectId: string, silent = false) {
-    if (sessionRefreshRunningRef.current.has(projectId)) { sessionRefreshPendingRef.current.add(projectId); return; }
+  async function runProjectSessionRefresh(
+    projectId: string,
+    silent: boolean,
+    completion: ProjectSessionRefreshCompletion,
+  ): Promise<void> {
     const request = (sessionRequestByProjectRef.current[projectId] ?? 0) + 1;
     sessionRequestByProjectRef.current[projectId] = request;
     sessionRefreshRunningRef.current.add(projectId);
-    if (!silent) {
-      setSessionLoadingByProject((c) => ({ ...c, [projectId]: true }));
-      setSessionCatalogLoadState?.({ projectId, state: { status: "loading" } });
-      await new Promise<void>((r) => setTimeout(r, 0));
-    }
+
+    let result: ProjectSessionRefreshResult = undefined;
+    let error: unknown;
+    let failed = false;
     try {
+      if (!silent) {
+        setSessionLoadingByProject((c) => ({ ...c, [projectId]: true }));
+        setSessionCatalogLoadState?.({ projectId, state: { status: "loading" } });
+        await new Promise<void>((r) => setTimeout(r, 0));
+      }
       const records = await withTimeout(
         api.sessions.listCatalog(projectId),
         SESSION_REFRESH_TIMEOUT_MS,
         t("app.sessionRefreshTimeout"),
       );
-      if (sessionRequestByProjectRef.current[projectId] !== request) return records;
-      replaceProjectSessions({ projectId, sessions: records });
-      setSessionCatalogLoadState?.({ projectId, state: { status: "ready" } });
-      const sorted = records
-        .map(sessionRecordToSummary)
-        .filter((session): session is SessionSummary => Boolean(session))
-        .sort((a, b) => b.updatedAt - a.updatedAt);
-      setVisibleProjectChildCountByProject((c) => ({ ...c, [projectId]: c[projectId] ?? SIDEBAR_PROJECT_CHILD_PAGE_SIZE }));
-      return sorted;
-    } catch (error) {
+      if (sessionRequestByProjectRef.current[projectId] !== request) {
+        result = records;
+      } else {
+        replaceProjectSessions({ projectId, sessions: records });
+        setSessionCatalogLoadState?.({ projectId, state: { status: "ready" } });
+        const sorted = records
+          .map(sessionRecordToSummary)
+          .filter((session): session is SessionSummary => Boolean(session))
+          .sort((a, b) => b.updatedAt - a.updatedAt);
+        setVisibleProjectChildCountByProject((c) => ({ ...c, [projectId]: c[projectId] ?? SIDEBAR_PROJECT_CHILD_PAGE_SIZE }));
+        result = sorted;
+      }
+    } catch (caughtError) {
+      failed = true;
+      error = caughtError;
       if (sessionRequestByProjectRef.current[projectId] === request) {
+        const message = caughtError instanceof Error ? caughtError.message : String(caughtError);
         setSessionCatalogLoadState?.({
           projectId,
-          state: { status: "error", error: error instanceof Error ? error.message : String(error) },
+          state: { status: "error", error: message },
         });
       }
-      throw error;
     } finally {
-      if (sessionRequestByProjectRef.current[projectId] === request) {
+      const isCurrentCompletion = sessionRefreshCompletionByProjectRef.current[projectId] === completion;
+      const isCurrentRequest = sessionRequestByProjectRef.current[projectId] === request;
+      if (isCurrentRequest) {
         sessionRefreshRunningRef.current.delete(projectId);
         if (!silent) setSessionLoadingByProject((c) => ({ ...c, [projectId]: false }));
-        if (sessionRefreshPendingRef.current.delete(projectId)) { void refreshProjectSessions(projectId, true).catch(() => undefined); }
       }
+      if (!isCurrentCompletion) {
+        if (failed) completion.reject(error);
+        else completion.resolve(result);
+        return;
+      }
+      if (sessionRefreshPendingRef.current.delete(projectId)) {
+        startProjectSessionRefresh(projectId, true, completion);
+        return;
+      }
+      delete sessionRefreshCompletionByProjectRef.current[projectId];
+      if (failed) completion.reject(error);
+      else completion.resolve(result);
     }
+  }
+
+  function startProjectSessionRefresh(
+    projectId: string,
+    silent: boolean,
+    completion: ProjectSessionRefreshCompletion,
+  ) {
+    void runProjectSessionRefresh(projectId, silent, completion).catch((unexpectedError) => {
+      if (sessionRefreshCompletionByProjectRef.current[projectId] === completion) {
+        sessionRefreshRunningRef.current.delete(projectId);
+        sessionRefreshPendingRef.current.delete(projectId);
+        delete sessionRefreshCompletionByProjectRef.current[projectId];
+      }
+      completion.reject(unexpectedError);
+    });
+  }
+
+  function refreshProjectSessions(projectId: string, silent = false): ProjectSessionRefreshPromise {
+    const current = sessionRefreshCompletionByProjectRef.current[projectId];
+    if (current) {
+      sessionRefreshPendingRef.current.add(projectId);
+      return current.promise;
+    }
+    const completion = createProjectSessionRefreshCompletion();
+    sessionRefreshCompletionByProjectRef.current[projectId] = completion;
+    startProjectSessionRefresh(projectId, silent, completion);
+    return completion.promise;
   }
 
   async function refreshProjectTree(project: Project) {

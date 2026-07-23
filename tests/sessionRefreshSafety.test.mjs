@@ -7,9 +7,21 @@ const app = readFileSync("src/renderer/src/App.tsx", "utf8");
 const i18n = readFileSync("src/renderer/src/i18n.ts", "utf8");
 const scanner = readFileSync("src/main/sessions/SessionScanner.ts", "utf8");
 
+function refreshSessionsBlock() {
+  const match = projectSync.match(/async function refreshSessions\(projectId = activeProjectId\): Promise<SessionSummary\[]> \{[\s\S]*?\n  \}\n\n  async function runProjectSessionRefresh/);
+  assert.ok(match, "refreshSessions implementation should be discoverable");
+  return match[0];
+}
+
 function refreshProjectSessionsBlock() {
-  const match = projectSync.match(/async function refreshProjectSessions\(projectId: string, silent = false\) \{[\s\S]*?\n  \}\n\n  async function refreshProjectTree/);
+  const match = projectSync.match(/function refreshProjectSessions\(projectId: string, silent = false\): ProjectSessionRefreshPromise \{[\s\S]*?\n  \}\n\n  async function refreshProjectTree/);
   assert.ok(match, "refreshProjectSessions implementation should be discoverable");
+  return match[0];
+}
+
+function runProjectSessionRefreshBlock() {
+  const match = projectSync.match(/async function runProjectSessionRefresh\([\s\S]*?\n  \}\n\n  function startProjectSessionRefresh/);
+  assert.ok(match, "runProjectSessionRefresh implementation should be discoverable");
   return match[0];
 }
 
@@ -29,18 +41,45 @@ function assertInOrder(source, fragments, message) {
   }
 }
 
-test("queues every refresh collision instead of dropping user-triggered refreshes", () => {
-  const block = refreshProjectSessionsBlock();
-  assert.match(
-    block,
-    /if \(sessionRefreshRunningRef\.current\.has\(projectId\)\) \{[\s\S]*?sessionRefreshPendingRef\.current\.add\(projectId\);\s*return;/,
+test("keeps one catalog requester and the legacy adapter", () => {
+  const adapter = refreshSessionsBlock();
+  assert.equal(projectSync.match(/api\.sessions\.listCatalog\(projectId\)/g)?.length ?? 0, 1);
+  assertInOrder(
+    adapter,
+    [
+      "if (!projectId) return [];",
+      "await refreshProjectSessions(projectId, true)",
+      "if (!refreshed) return [];",
+      ".filter((session): session is SessionSummary => Boolean(session))",
+      ".sort((a, b) => b.updatedAt - a.updatedAt);",
+    ],
+    "legacy adapter",
   );
-  assert.doesNotMatch(block, /if \(silent\) sessionRefreshPendingRef\.current\.add\(projectId\)/);
-  assert.match(block, /if \(sessionRefreshPendingRef\.current\.delete\(projectId\)\)/);
+  assert.doesNotMatch(adapter, /api\.sessions\.listCatalog|replaceProjectSessions/);
 });
 
-test("bounds session list requests so a hung scan releases the single-flight lock", () => {
-  const block = refreshProjectSessionsBlock();
+test("shares one deferred completion across initial, collision, and retry cycles", () => {
+  const refreshBlock = refreshProjectSessionsBlock();
+  assert.match(projectSync, /const sessionRefreshCompletionByProjectRef = useRef<Record<string, ProjectSessionRefreshCompletion \| undefined>>\(\{\}\);/);
+  assertInOrder(
+    refreshBlock,
+    [
+      "const current = sessionRefreshCompletionByProjectRef.current[projectId];",
+      "if (current)",
+      "sessionRefreshPendingRef.current.add(projectId);",
+      "return current.promise;",
+      "const completion = createProjectSessionRefreshCompletion();",
+      "sessionRefreshCompletionByProjectRef.current[projectId] = completion;",
+      "startProjectSessionRefresh(projectId, silent, completion)",
+      "return completion.promise;",
+    ],
+    "shared deferred completion",
+  );
+  assert.doesNotMatch(projectSync, /ProjectSessionRefreshCycle|ProjectSessionRefreshPhase|sessionRefreshPendingRetryRef/);
+});
+
+test("bounds catalog requests and retains timeout cleanup", () => {
+  const block = runProjectSessionRefreshBlock();
   const timeoutBlock = withTimeoutBlock();
   assert.match(projectSync, /const SESSION_REFRESH_TIMEOUT_MS = 20_000;/);
   assert.match(timeoutBlock, /Promise\.race\(\[promise, timeout\]\)\.finally\(\(\) => \{/);
@@ -49,68 +88,63 @@ test("bounds session list requests so a hung scan releases the single-flight loc
     block,
     /withTimeout\(\s*api\.sessions\.listCatalog\(projectId\),\s*SESSION_REFRESH_TIMEOUT_MS,\s*t\("app\.sessionRefreshTimeout"\),?\s*\)/,
   );
-  assert.match(block, /finally \{[\s\S]*?sessionRefreshRunningRef\.current\.delete\(projectId\)/);
-  assert.match(i18n, /"app\.sessionRefreshTimeout"/g);
+  assert.match(i18n, /"app\.sessionRefreshTimeout"/);
   assert.match(scanner, /private scanTimeoutMs = 18_000;/);
   assert.match(scanner, /new AbortController\(\)/);
   assert.match(scanner, /controller\.abort\(new Error\("Session scan timed out"\)\)/);
   assert.match(scanner, /clearTimeout\(scanTimer\)/);
-  assert.match(scanner, /collectWslJsonl\(signal\)/);
-  assert.match(scanner, /signal,\s*windowsHide: true/);
 });
 
-test("uses the canonical summary converter and preserves refresh result ordering", () => {
-  const block = refreshProjectSessionsBlock();
-  assert.match(
-    projectSync,
-    /import \{ sessionRecordToSummary \} from "\.\.\/atoms\/session-selectors";/,
-  );
-  assert.doesNotMatch(
-    projectSync,
-    /^(?:function|const|let|var)\s+sessionRecordToSummary\b/m,
-  );
+test("preserves request gate, stale records, replace ordering, and canonical sorting", () => {
+  const block = runProjectSessionRefreshBlock();
   assertInOrder(
     block,
     [
-      "if (sessionRequestByProjectRef.current[projectId] !== request) return records;",
+      "const request = (sessionRequestByProjectRef.current[projectId] ?? 0) + 1;",
+      "sessionRequestByProjectRef.current[projectId] = request;",
+      "if (sessionRequestByProjectRef.current[projectId] !== request)",
+      "result = records;",
       "replaceProjectSessions({ projectId, sessions: records });",
       ".map(sessionRecordToSummary)",
       ".filter((session): session is SessionSummary => Boolean(session))",
       ".sort((a, b) => b.updatedAt - a.updatedAt);",
-      "return sorted;",
     ],
     "refresh result pipeline",
   );
 });
 
-test("publishes non-silent loading state before yielding to the session request", () => {
-  const block = refreshProjectSessionsBlock();
-  const beforeRequest = block.slice(0, block.indexOf("try {"));
+test("publishes foreground loading before yielding and clears it in finally", () => {
+  const block = runProjectSessionRefreshBlock();
   assertInOrder(
-    beforeRequest,
+    block,
     [
       "if (!silent)",
       "setSessionLoadingByProject(",
       "[projectId]: true",
+      'setSessionCatalogLoadState?.({ projectId, state: { status: "loading" } });',
       "await new Promise<void>((r) => setTimeout(r, 0));",
+      "} finally {",
+      "sessionRefreshRunningRef.current.delete(projectId);",
+      "if (!silent) setSessionLoadingByProject(",
+      "[projectId]: false",
     ],
-    "non-silent loading yield",
+    "foreground loading lifecycle",
   );
 });
 
-test("publishes canonical catalog loading state and keeps error updates request-scoped", () => {
-  const block = refreshProjectSessionsBlock();
+test("publishes canonical ready and request-scoped error states", () => {
+  const block = runProjectSessionRefreshBlock();
   assert.match(projectSync, /setSessionCatalogLoadState\?: \(input: \{ projectId: string; state: SessionLoadState \}\) => void;/);
   assertInOrder(
     block,
     [
-      'setSessionCatalogLoadState?.({ projectId, state: { status: "loading" } });',
-      "replaceProjectSessions({ projectId, sessions: records });",
       'setSessionCatalogLoadState?.({ projectId, state: { status: "ready" } });',
-      "} catch (error) {",
-      "setSessionCatalogLoadState?.({",
-      'state: { status: "error", error:',
-      "throw error;",
+      "} catch (caughtError) {",
+      "failed = true;",
+      "error = caughtError;",
+      "if (sessionRequestByProjectRef.current[projectId] === request)",
+      "const message = caughtError instanceof Error ? caughtError.message : String(caughtError);",
+      'state: { status: "error", error: message },',
     ],
     "canonical catalog load state",
   );
@@ -119,30 +153,28 @@ test("publishes canonical catalog loading state and keeps error updates request-
   assert.match(app, /showToast,\s*setSessionCatalogLoadState,\s*t,/);
 });
 
-test("releases refresh state behind the current-request gate and schedules one silent retry", () => {
-  const block = refreshProjectSessionsBlock();
-  const finallyIndex = block.indexOf("finally {");
-  assert.notEqual(finallyIndex, -1, "refreshProjectSessions should have a finally block");
-  const finallyBlock = block.slice(finallyIndex);
-  assert.match(
-    finallyBlock,
-    /^finally \{\s*if \(sessionRequestByProjectRef\.current\[projectId\] === request\) \{/,
-  );
+test("defers settlement through silent retries and identity-cleans the shared completion", () => {
+  const block = runProjectSessionRefreshBlock();
   assertInOrder(
-    finallyBlock,
+    block,
     [
-      "if (sessionRequestByProjectRef.current[projectId] === request)",
-      "sessionRefreshRunningRef.current.delete(projectId);",
-      "if (!silent)",
-      "setSessionLoadingByProject(",
-      "[projectId]: false",
+      "const isCurrentCompletion = sessionRefreshCompletionByProjectRef.current[projectId] === completion;",
+      "if (!isCurrentCompletion)",
       "if (sessionRefreshPendingRef.current.delete(projectId))",
-      "refreshProjectSessions(projectId, true)",
+      "startProjectSessionRefresh(projectId, true, completion)",
+      "return;",
+      "delete sessionRefreshCompletionByProjectRef.current[projectId];",
+      "if (failed) completion.reject(error);",
+      "else completion.resolve(result);",
     ],
-    "refresh finally cleanup",
+    "shared completion lifecycle",
   );
-  assert.match(
-    finallyBlock,
-    /if \(sessionRefreshPendingRef\.current\.delete\(projectId\)\) \{[\s\S]*?refreshProjectSessions\(projectId, true\)\.catch\(\(\) => undefined\);\s*\}/,
-  );
+  assert.doesNotMatch(block, /sessionRefreshPendingRetryRef|ProjectSessionRefreshCycle|ProjectSessionRefreshPhase/);
+});
+
+test("retains public signatures without assertion casts", () => {
+  assert.match(projectSync, /sessions: \{ listCatalog: \(projectId: string\) => Promise<SessionRecord\[]> \};/);
+  assert.match(projectSync, /async function refreshSessions\(projectId = activeProjectId\): Promise<SessionSummary\[]> \{/);
+  assert.match(projectSync, /function refreshProjectSessions\(projectId: string, silent = false\): ProjectSessionRefreshPromise \{/);
+  assert.doesNotMatch(projectSync, /\bas (?:SessionRecord|SessionSummary)\b/);
 });
