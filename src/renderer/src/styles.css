@@ -3327,6 +3327,7 @@ body.is-terminal-resizing {
 .message-list {
   min-width: 0;
   margin: 0 auto;
+  transition: opacity 0.12s ease-out;
 }
 .multi-select-image-export {
   position: fixed;

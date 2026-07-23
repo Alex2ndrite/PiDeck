@@ -166,7 +166,7 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
     ? modernSurfaceState.isLoading
     : legacyProps.isConversationLoading;
   const canLoadMoreMessages = sessionMode
-    ? canLoadSessionTimelineMore(modernSurfaceState.isStarting)
+    ? canLoadSessionTimelineMore(modernSurfaceState.isStarting, activeMessages.length)
     : legacyProps.canLoadMoreMessages;
   const activeRuntimeState = selectSessionModeValue(
     sessionMode,

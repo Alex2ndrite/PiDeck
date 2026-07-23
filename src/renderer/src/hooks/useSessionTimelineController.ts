@@ -70,8 +70,9 @@ export function deriveSessionSurfaceRuntime(
   };
 }
 
-export function canLoadSessionTimelineMore(isStarting: boolean): boolean {
-  return !isStarting;
+export function canLoadSessionTimelineMore(isStarting: boolean, messageCount: number): boolean {
+  // 只在初始加载（无消息）时隐藏按钮；runtime 创建期间已有消息则不隐藏
+  return !(isStarting && messageCount === 0);
 }
 
 export function isLatestTimelineRunBusy(

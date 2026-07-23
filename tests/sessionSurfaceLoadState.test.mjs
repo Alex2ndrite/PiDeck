@@ -59,10 +59,13 @@ test("modern surface state covers cached loading, activation before binding, and
 });
 
 test("load-more follows modern starting state while legacy remains prop-owned", () => {
-  const activating = timeline.deriveSessionSurfaceRuntime(150, "ready", "activating", undefined, undefined);
-  const idle = timeline.deriveSessionSurfaceRuntime(150, "ready", "idle", "idle", undefined);
-  assert.equal(timeline.canLoadSessionTimelineMore(activating.isStarting), false);
-  assert.equal(timeline.canLoadSessionTimelineMore(idle.isStarting), true);
+  // 初始加载（无消息）时隐藏按钮
+  assert.equal(timeline.canLoadSessionTimelineMore(true, 0), false);
+  // runtime 创建期间已有消息则不隐藏（避免闪烁）
+  assert.equal(timeline.canLoadSessionTimelineMore(true, 150), true);
+  // idle 状态始终显示
+  assert.equal(timeline.canLoadSessionTimelineMore(false, 0), true);
+  assert.equal(timeline.canLoadSessionTimelineMore(false, 150), true);
   const legacyCanLoadMoreMessages = false;
   assert.equal(legacyCanLoadMoreMessages, false);
 });
