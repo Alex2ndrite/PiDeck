@@ -132,12 +132,14 @@ import {
   type TerminalDockStateByAgent,
 } from "./terminalDockState";
 import { useMessagePagination } from "./hooks/useMessagePagination";
+import { useSessionTimelineController } from "./hooks/useSessionTimelineController";
 import { useSessionLoader } from "./hooks/useSessionLoader";
 import { useScratchPad } from "./hooks/useScratchPad";
 import { SessionReferenceModal, type SessionReferenceResult } from "./components/app/SessionReferenceModal";
 import { SessionMessageTimeline } from "./components/session/SessionMessageTimeline";
 import { SessionHeader } from "./components/session/SessionHeader";
 import { ComposerArea } from "./components/session/ComposerArea";
+import { SessionRuntimeDock } from "./components/session/SessionRuntimeDock";
 import {
   ComposerAttachmentBar,
   ComposerSendControls,
@@ -498,6 +500,7 @@ export function App() {
     messages: currentSessionMessages,
     isLoading: currentSessionMessagesLoading,
   } = useSessionMessages(currentSessionId);
+  const sessionTimeline = useSessionTimelineController({ sessionId: currentSessionId });
   const currentSessionIdRef = useRef<string | undefined>(currentSessionId);
   currentSessionIdRef.current = currentSessionId;
   const openSessionRequestRef = useRef(0);
@@ -5869,47 +5872,38 @@ export function App() {
           onRestart={() => void restartActiveAgent()}
         />
 
-        <SessionMessageTimeline
-          timelineRef={timelineRef}
-          activeMessages={activeMessages}
-          paginatedMessages={paginatedMessages}
-          hasMoreMessages={hasMoreMessages}
-          isLoadingMoreMessages={isLoadingMoreMessages}
-          canLoadMoreMessages={Boolean(activeAgent && activeAgent.status !== "starting")}
-          onLoadMoreMessages={handleLoadMoreMessages}
-          hasActiveConversation={hasActiveConversation}
-          hasProject={Boolean(activeProjectId)}
-          isConversationLoading={isConversationLoading}
-          onCreateSession={() => void createSessionDraft()}
-          showThinking={settings.showThinking}
-          activeThinking={activeThinking}
-          activeRuntimeState={activeRuntimeState}
-          activeConversationStatus={activeConversationStatus}
-          isAgentBusy={isAgentBusy}
-          cancellingUi={cancellingUi}
-          validCommandNames={validCommandNames}
-          validFilePaths={validFilePaths}
-          onPreviewImage={setPreviewImage}
-          onOpenExternal={(url) => api.app.openExternal(url)}
-          onOpenFile={openFilePath}
-          onDiffFile={diffFilePath}
-          onResendUserMessage={canMutateActiveMessages ? resendUserMessage : undefined}
-          onEditMessage={canMutateActiveMessages ? editMessage : undefined}
-          onDeleteMessage={canMutateActiveMessages ? deleteMessage : undefined}
-          onSendUiResponse={(requestId, response) => {
-            if (!activeAgentId) return;
-            if (response.cancelled) setCancellingUi(true);
-            sendSessionUiResponse(requestId, response);
-          }}
-          onToast={(message) => showToast(message)}
-        />
+        {currentSessionId ? (
+          <SessionMessageTimeline
+            mode="session"
+            sessionId={currentSessionId}
+            controller={sessionTimeline}
+            hasProject={Boolean(activeProjectId)}
+            onCreateSession={() => void createSessionDraft()}
+            showThinking={settings.showThinking}
+            validCommandNames={validCommandNames}
+            validFilePaths={validFilePaths}
+            onPreviewImage={setPreviewImage}
+            onOpenExternal={(url) => api.app.openExternal(url)}
+            onOpenFile={openFilePath}
+            onDiffFile={diffFilePath}
+            onResendUserMessage={canMutateActiveMessages ? resendUserMessage : undefined}
+            onEditMessage={canMutateActiveMessages ? editMessage : undefined}
+            onDeleteMessage={canMutateActiveMessages ? deleteMessage : undefined}
+            onSendUiResponse={(requestId, response) => {
+              if (!activeAgentId) return;
+              if (response.cancelled) setCancellingUi(true);
+              sendSessionUiResponse(requestId, response);
+            }}
+            onToast={(message) => showToast(message)}
+          />
+        ) : null}
 
-          {showScrollToBottom && (
+          {sessionTimeline.showScrollToBottom && (
             <button
               className="scroll-to-bottom-btn"
               // 按钮脱离滚动容器后，由 composer 实际高度 + 终端高度决定 bottom，避免输入框增高或终端打开时遮挡。
               style={{ bottom: Math.max(24, terminalRowHeight + composerOffsetHeight + 18) }}
-              onClick={scrollToBottom}
+              onClick={sessionTimeline.scrollToBottom}
               title={t("app.scrollToBottom")}
             >
               <ChevronDown size={18} />
@@ -5934,19 +5928,21 @@ export function App() {
           />
         )}
 
-        {!isLanWeb && activeAgentId && !isPendingAgentId(activeAgentId) && !settingsOpen && !configOpen && !environmentDialog && terminalDockVisible && (
-          <TerminalDock
-            key={terminalDockAgentId}
+        {!isLanWeb && currentSessionId && !settingsOpen && !configOpen && !environmentDialog && terminalDockVisible && (
+          <SessionRuntimeDock
             agentId={activeAgentId}
             open={terminalDockVisible}
-            closing={terminalDockClosing}
             collapsed={terminalCollapsed}
             height={terminalRowHeight}
             terminal={api.terminal}
-            onCollapsedChange={(collapsed) =>
-              setTerminalCollapsedForAgent(activeAgentId, collapsed)
-            }
+            onOpenChange={(open) => {
+              if (activeAgentId) setTerminalOpenForAgent(activeAgentId, open);
+            }}
+            onCollapsedChange={(collapsed) => {
+              if (activeAgentId) setTerminalCollapsedForAgent(activeAgentId, collapsed);
+            }}
             onHeightChange={(height) => {
+              if (!activeAgentId) return;
               const maxHeight = Math.max(
                 120,
                 chatLayoutHeight -
@@ -5961,7 +5957,6 @@ export function App() {
                 [activeAgentId]: Math.min(height, maxHeight),
               }));
             }}
-            onClose={() => setTerminalOpenForAgent(activeAgentId, false)}
           />
         )}
       </main>
