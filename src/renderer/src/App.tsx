@@ -919,10 +919,6 @@ export function App() {
     clear: () => { setUpdateInfo(null); setUpdateError(null); setUpdateProgress(null); setDownloadedUpdatePath(null); setUpToDateVersion(null); },
     check: undefined as unknown as (source?: "auto" | "manual") => Promise<AppUpdateInfo | null>,
   }), [updateInfo, updateError, updateChecking, updateDownloading, updateProgress, downloadedUpdatePath]);
-  const [piUpdating, setPiUpdating] = useState(false);
-  const [piUpdateChecking, setPiUpdateChecking] = useState(false);
-  const [piUpdateCheck, setPiUpdateCheck] = useState<PiUpdateCheckResult | null>(null);
-  const [piUpdateResult, setPiUpdateResult] = useState<PiCliUpdateResult | null>(null);
   const [configOpen, setConfigOpen] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [windowAlwaysOnTop, setWindowAlwaysOnTop] = useState(false);
