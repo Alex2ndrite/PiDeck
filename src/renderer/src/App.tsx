@@ -64,6 +64,10 @@ import { useProjectRuntimeCapabilities } from "./hooks/useRuntimeCapabilities";
 import { useSessionRuntimeBridge } from "./hooks/useSessionRuntimeBridge";
 import { useSessionMessages } from "./hooks/useSessionMessages";
 import { useSessionSend } from "./hooks/useSessionSend";
+import { useFileEditor } from "./hooks/useFileEditor";
+import { PromptDeliveryUnknownError, createResendLock } from "./hooks/useComposerSend";
+import { type QueuedPrompt } from "./hooks/useQueuedPrompt";
+import { usePiUpdate } from "./hooks/usePiUpdate";
 import {
   agentInventoryAtom,
   applyRuntimeCapabilityAtom,
@@ -121,7 +125,6 @@ import {
   replaceAgentQueue,
   resolveClaimedPrompt,
   retractPrompt,
-  type QueuedPromptSnapshot,
 } from "./utils/queuedPromptQueue";
 import {
   pruneTerminalDockState,
@@ -430,16 +433,6 @@ function migrateAgentRecord<T>(
     if (liveIds.has(nextAgentId)) next[nextAgentId] = value;
   }
   return next;
-}
-
-/** Agent 运行时暂存在 renderer、尚未提交给 pi 的消息。 */
-type QueuedPrompt = QueuedPromptSnapshot;
-
-class PromptDeliveryUnknownError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "PromptDeliveryUnknownError";
-  }
 }
 
 export function App() {
@@ -1227,12 +1220,7 @@ export function App() {
     disableUpdateCheck: false,
   });
   /* settingsNotice 已改用 showToast (app-notice) 实现 */
-  const [piProxyNotice, setPiProxyNotice] = useState("");
-  const [piProxyNoticeTone, setPiProxyNoticeTone] = useState<
-    "info" | "success" | "error"
-  >("info");
   const [piStatus, setPiStatus] = useState<PiInstallStatus | null>(null);
-  const [piProxyChecking, setPiProxyChecking] = useState(false);
   const [webServiceChanging, setWebServiceChanging] = useState(false);
   const [appInfo, setAppInfo] = useState<AppInfo>({
     version: "-",
@@ -1243,28 +1231,21 @@ export function App() {
   const [systemLanguage, setSystemLanguage] = useState<string | null>(null);
   const resolvedLocale = resolveLocale(settings.language, systemLanguage ?? undefined);
   setI18nLocale(resolvedLocale);
-  // 手动输入 pi 路径相关状态
-  const [customPiPath, setCustomPiPath] = useState("");
-  const [customPathValidating, setCustomPathValidating] = useState(false);
-  const [customPathResult, setCustomPathResult] =
-    useState<PiInstallStatus | null>(null);
-  /** npm 可用性检测 */
-  const [npmAvailable, setNpmAvailable] = useState<boolean | null>(null);
-  const [npmVersion, setNpmVersion] = useState<string | undefined>(undefined);
-  const [npmChecking, setNpmChecking] = useState(false);
-  /** 安装命令文本（可编辑） */
-  const [installCommand, setInstallCommand] = useState(
-    "npm install -g @earendil-works/pi-coding-agent",
-  );
-  /** 是否使用国内镜像源 */
-  const [installUseMirror, setInstallUseMirror] = useState(false);
-  /** 是否正在执行安装 */
-  const [installExecuting, setInstallExecuting] = useState(false);
-  /** 安装执行结果 */
-  const [installResult, setInstallResult] = useState<PiInstallExecResult | null>(null);
-  /** 安装是否已成功完成 */
-  const [installCompleted, setInstallCompleted] = useState(false);
   const [environmentDialog, setEnvironmentDialog] = useState(false);
+
+  // ===== Pi 更新/安装/代理 hook (H1) =====
+  const piUpdate = usePiUpdate({
+    piStatus,
+    setPiStatus,
+    piChecking,
+    setPiChecking,
+    settings,
+    setSettings,
+    setEnvironmentDialog,
+    setSettingsOpen,
+    showToast,
+    api,
+  });
   const DEFAULT_LIST_WIDTH = 260;
   const [listWidth, setListWidth] = useState(DEFAULT_LIST_WIDTH);
   const [drawerWidth, setDrawerWidth] = useState(270);
@@ -2149,7 +2130,7 @@ export function App() {
       .catch(() => undefined);
     void api.settings.get().then((next) => {
       setSettings(next);
-      setCustomPiPath(next.customPiPath ?? "");
+      piUpdate.setCustomPiPath(next.customPiPath ?? "");
       if (!Object.values(next.externalEditors).some((editor) => editor.command)) {
         void api.editors
           .redetect()
@@ -2162,10 +2143,10 @@ export function App() {
       }
       if (!next.piEnvironmentChecked) {
         // 首次检测延后一帧启动,先让主界面完成绘制,避免 packaged app 打开时出现几秒白屏。
-        window.setTimeout(() => void checkPiInstall("startup"), 300);
+        window.setTimeout(() => void piUpdate.checkPiInstall("startup"), 300);
       }
       if (!next.disableUpdateCheck) {
-        window.setTimeout(() => void checkPiCliUpdateOnStartup(), 1200);
+        window.setTimeout(() => void piUpdate.checkPiCliUpdateOnStartup(), 1200);
       }
     });
 
