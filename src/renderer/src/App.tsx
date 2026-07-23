@@ -850,7 +850,13 @@ export function App() {
   }, []);
   /** 打开文件编辑器前所在的抽屉面板，供返回按钮恢复 */
   const [sessionsProjectId, setSessionsProjectId] = useState<string>();
+  const [projectResourcesProject, setProjectResourcesProject] = useState<Project | null>(null);
+  const [codexImportReport, setCodexImportReport] = useState<CodexImportReport | null>(null);
+  const [claudeImportReport, setClaudeImportReport] = useState<ClaudeImportReport | null>(null);
+  const [openCodeImportReport, setOpenCodeImportReport] = useState<OpenCodeImportReport | null>(null);
   const sessions = useAtomValue(
+    sessionSummariesByProjectIdAtomFamily(sessionsProjectId ?? ""),
+  );
   // === import flow hook ===
   const {
     codexImportProject,
@@ -880,8 +886,6 @@ export function App() {
     t,
   });
 
-    sessionSummariesByProjectIdAtomFamily(sessionsProjectId ?? ""),
-  );
   const getProjectSessions = (projectId: string) =>
     store.get(sessionSummariesByProjectIdAtomFamily(projectId));
   const getProjectSessionRecords = (projectId: string) =>
@@ -5644,9 +5648,9 @@ export function App() {
           onClose={() => setPreviewImage(null)}
         />
       )}
-      {codexImportProject && <ImportOverlayHost kind="codex" project={codexImportProject} controller={codexImportController} onClose={() => { setCodexImportProject(null); setCodexImportReport(null); }} />}
-      {claudeImportProject && <ImportOverlayHost kind="claude" project={claudeImportProject} controller={claudeImportController} onClose={() => { setClaudeImportProject(null); setClaudeImportReport(null); }} />}
-      {openCodeImportProject && <ImportOverlayHost kind="opencode" project={openCodeImportProject} controller={openCodeImportController} onClose={() => { setOpenCodeImportProject(null); setOpenCodeImportReport(null); }} />}
+      {codexImportProject && <ImportOverlayHost kind="codex" project={codexImportProject} controller={codexImportController as any} onClose={() => { setCodexImportProject(null); setCodexImportReport(null); }} />}
+      {claudeImportProject && <ImportOverlayHost kind="claude" project={claudeImportProject} controller={claudeImportController as any} onClose={() => { setClaudeImportProject(null); setClaudeImportReport(null); }} />}
+      {openCodeImportProject && <ImportOverlayHost kind="opencode" project={openCodeImportProject} controller={openCodeImportController as any} onClose={() => { setOpenCodeImportProject(null); setOpenCodeImportReport(null); }} />}
       <Suspense fallback={null}>
       <ConfigModal
         open={configOpen}
