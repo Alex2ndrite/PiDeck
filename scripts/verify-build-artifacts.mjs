@@ -96,14 +96,28 @@ export async function verifyBuildArtifacts({ repoRoot = process.cwd(), outDir } 
 		if (!(await exists(htmlPath))) continue;
 		const html = await readFile(htmlPath, "utf8");
 		for (const reference of extractHtmlResourceReferences(html)) {
-			const resourcePath = resolveRendererReference(rendererRoot, htmlPath, reference);
+			let resourcePath;
+			try {
+				resourcePath = resolveRendererReference(rendererRoot, htmlPath, reference);
+			} catch (error) {
+				errors.push(`Malformed HTML resource path: ${reference} (${htmlPath}): ${error instanceof Error ? error.message : String(error)}`);
+				continue;
+			}
 			if (!isWithin(resourcePath, rendererRoot)) {
 				errors.push(`HTML resource escapes renderer output: ${reference} (${htmlPath})`);
 				continue;
 			}
-			resourcePaths.add(resourcePath);
-			if (!(await exists(resourcePath))) errors.push(`Missing HTML resource: ${reference} (${htmlPath})`);
-			else checked.push(resourcePath);
+			try {
+				const info = await stat(resourcePath);
+				if (!info.isFile() || info.size === 0) {
+					errors.push(`Empty or invalid HTML resource: ${reference} (${htmlPath})`);
+					continue;
+				}
+				resourcePaths.add(resourcePath);
+				checked.push(resourcePath);
+			} catch {
+				errors.push(`Missing HTML resource: ${reference} (${htmlPath})`);
+			}
 		}
 	}
 

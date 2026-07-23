@@ -84,6 +84,19 @@ test("missing and escaping HTML resource references fail verification", async ()
 	});
 });
 
+test("malformed encoded references and non-regular or empty resources fail verification", async () => {
+	await withTempRepo(async (repo) => {
+		const fixture = await createBuildFixture(repo);
+		await mkdir(join(repo, "out", "renderer", "assets", "directory"), { recursive: true });
+		await put(join(repo, "out", "renderer", "assets", "empty.js"), "");
+		await put(fixture.indexHtml, '<script src="/assets/%ZZ.js"></script><script src="/assets/empty.js"></script><link href="/assets/directory">');
+		const result = await verifyBuildArtifacts({ repoRoot: repo });
+		assert.equal(result.ok, false);
+		assert.match(result.errors.join("\\n"), /Malformed HTML resource path/);
+		assert.match(result.errors.join("\\n"), /Empty or invalid HTML resource/);
+	});
+});
+
 test("artifacts older than relevant source inputs are reported as stale", async () => {
 	await withTempRepo(async (repo) => {
 		const fixture = await createBuildFixture(repo);

@@ -1,138 +1,136 @@
 # Session-first Electron validation runbook
 
-This runbook validates one immutable commit at a time. Replace `<sha>` only with the full commit under test. All native evidence and generated data for that commit stays below:
+This runbook validates one immutable commit at a time. Every command derives the commit from `git rev-parse HEAD`; do not paste a stale SHA. Native evidence stays below `F:\PiDeck-validation\<sha>\`, and WSL fixtures stay below the exact ext4 path recorded by the manifest.
 
-```text
-F:\PiDeck-validation\<sha>\
-```
+Never point PiDeck at normal Electron userData. Never copy fixtures into `%APPDATA%`, `%LOCALAPPDATA%`, or a real WSL home outside the manifest target.
 
-Never point PiDeck at the normal Electron userData directory. Never copy fixtures into a real `%APPDATA%` or `%LOCALAPPDATA%` application directory.
+## Current execution status
 
-## 1. One-time setup
+The following execution evidence is intentionally outstanding for this A11 follow-up:
 
-From the repository root, record the commit and create the evidence root:
+- GUI scenarios A3-A8: **NOT RUN**.
+- WSL preflight, fixture generation, and GUI scenario A9: **NOT RUN**.
+- Performance comparison and paired baseline: **NOT RUN**.
+
+The commands and assertions below are the runbook for a future controlled execution. A test pass for the generator or verifier does not claim that these interactive scenarios ran.
+
+## 1. Generate and validate fixtures
+
+Run from the repository root in PowerShell:
 
 ```powershell
 $Sha = (git rev-parse HEAD).Trim()
+if ($Sha -notmatch '^[0-9a-f]{40}$') { throw "HEAD is not a full commit SHA: $Sha" }
 $Evidence = "F:\PiDeck-validation\$Sha"
-$Fixtures = "$Evidence\fixtures"
-$NativeUserData = "$Evidence\user-data-native"
-$WslUserData = "$Evidence\user-data-wsl"
+$Fixtures = Join-Path $Evidence "fixtures"
 New-Item -ItemType Directory -Force $Evidence | Out-Null
-git status --short | Tee-Object "$Evidence\git-status-before.txt"
-git rev-parse HEAD | Tee-Object "$Evidence\commit.txt"
+git status --short | Tee-Object (Join-Path $Evidence "git-status-before.txt")
+git rev-parse HEAD | Tee-Object (Join-Path $Evidence "commit.txt")
+
+npm run build 2>&1 | Tee-Object (Join-Path $Evidence "build.log")
+node scripts/verify-build-artifacts.mjs --repo-root (Get-Location).Path --json 2>&1 | Tee-Object (Join-Path $Evidence "build-artifacts.json")
+node scripts/generate-session-fixtures.mjs --output $Fixtures --sha $Sha 2>&1 | Tee-Object (Join-Path $Evidence "fixture-generation.log")
+
+$ManifestPath = Join-Path $Fixtures "fixture-manifest.json"
+$Manifest = Get-Content $ManifestPath -Raw | ConvertFrom-Json
+if ($Manifest.sha -ne $Sha) { throw "Fixture SHA $($Manifest.sha) does not match current HEAD $Sha" }
+if ($Manifest.outputDir -ne (Resolve-Path $Fixtures).Path) { throw "Fixture output path mismatch" }
+if (-not $Manifest.userData.native) { throw "Native user-data template missing" }
+if ($Manifest.userData.wsl) { throw "WSL template must be generated only after WSL preflight" }
 ```
 
-Build and verify artifacts before launching Electron:
+The native template is `$Manifest.userData.native`. It contains `settings`, `projects`, and `catalog.primary`, `catalog.backup`, and `catalog.corrupt`. The scale paths are `$Manifest.scale.messages.'100'.path`, `$Manifest.scale.messages.'1000'.path`, `$Manifest.scale.messages.'10000'.path`, and `$Manifest.scale.large.path`. Treat these manifest paths, source/import identity fields, stat metadata, project cwd, expected origin keys, and expected independent Session counts as assertions.
+
+## 2. Isolated scenario protocol
+
+Use a new run directory, userData directory, and remote-debugging port for each scenario. Do not reuse an Electron process or userData directory.
+
+1. Stop only the PiDeck process started for this scenario.
+2. Create `$Run` below `$Evidence\runs\<scenario>` and copy the manifest there.
+3. Select the template through `$Manifest.scenarios.<scenario>.userDataTemplate`, then copy that template's `settings`, `projects`, and selected catalog files into `$UserData`. Preserve byte-for-byte copies under `$Run\injected-user-data`.
+4. Start with exactly `npm run dev -- -- --user-data-dir=<isolated-dir> --remote-debugging-port=<port>`, recording the expanded command and output.
+5. Record desktop Session ID, runtime agent ID, Pi session ID, source/import ID, origin key, project cwd, environment, distro/user, session path, and port in `ids.json`. Values must come from the manifest and the application output, not hand-written expectations.
+6. Capture screenshots, recording, console/RPC logs, trace, CPU profile, and heap snapshot when the scenario is actually executed.
+7. Close normally, save final catalog/userData, then delete only the current scenario directory and its isolated userData. WSL cleanup is limited to the exact manifest directory.
+
+Example template injection, using the native template selected by the manifest:
 
 ```powershell
-npm run build 2>&1 | Tee-Object "$Evidence\build.log"
-node scripts/verify-build-artifacts.mjs --repo-root (Get-Location).Path --json 2>&1 | Tee-Object "$Evidence\build-artifacts.json"
-```
-
-Generate native fixtures. Add the WSL flags from section 4 only after WSL preflight succeeds.
-
-```powershell
-node scripts/generate-session-fixtures.mjs --output $Fixtures --sha $Sha 2>&1 | Tee-Object "$Evidence\fixture-generation.log"
-```
-
-Copy `fixture-manifest.json` to each scenario evidence directory before a run. Treat the fixture manifest's absolute paths, source/import identity, project cwd, expected origin keys, and expected independent Session counts as the assertions, not as suggestions.
-
-## 2. Per-scenario protocol
-
-Use these steps for every interactive scenario A3-A9. Do not reuse a running Electron process or userData directory across scenarios.
-
-1. **Reset:** Stop only the PiDeck process started for the current scenario. Remove only that scenario's directory below `F:\PiDeck-validation\<sha>\runs\<scenario>\` and its isolated userData directory. Do not remove the commit evidence root, another scenario, a normal userData directory, or any WSL path outside the manifest's `pideck-validation-<sha>` directory.
-2. **Inject:** Create the scenario userData directory, then copy the fixture `settings.json`, `projects.json`, selected `session-catalog.json`, and its `.bak` into it. Keep a byte-for-byte copy of the injected files under the scenario evidence directory.
-3. **Start:** Use a unique remote-debugging port. The native launch command is exactly `npm run dev -- -- --user-data-dir=<isolated-dir> --remote-debugging-port=<port>`. Record the expanded command and stdout/stderr.
-4. **Identify:** Record the desktop Session ID, runtime agent ID, Pi session ID, source/import ID, origin key, project cwd, environment, distro/user where applicable, selected JSONL path, and remote-debugging port in `ids.json`.
-5. **Capture:** Save before/after screenshots, a screen recording for the full interaction, a DevTools Performance trace, a `.cpuprofile`, and a heap snapshot. Export console output and the relevant RPC/application logs.
-6. **Close:** Close the tested Session and Electron normally. Record the final catalog and userData files before cleanup.
-7. **Clean:** Delete only the current scenario's generated fixture directory and isolated userData after evidence is complete. WSL cleanup is limited to the exact manifest directory `$HOME/.pi/agent/sessions/pideck-validation-<sha>/`.
-
-A minimal userData injection for a normal scenario is:
-
-```powershell
-$Scenario = "A3-native-100"
-$Run = "$Evidence\runs\$Scenario"
-$UserData = "$Run\user-data"
-New-Item -ItemType Directory -Force $UserData | Out-Null
-Copy-Item "$Fixtures\fixture-manifest.json" "$Run\fixture-manifest.json"
-Copy-Item "$Fixtures\user-data\settings.json" "$UserData\settings.json"
-Copy-Item "$Fixtures\user-data\projects.json" "$UserData\projects.json"
-Copy-Item "$Fixtures\user-data\session-catalog.json" "$UserData\session-catalog.json"
-Copy-Item "$Fixtures\user-data\session-catalog.json.bak" "$UserData\session-catalog.json.bak"
+$Scenario = "A3"
+$Run = Join-Path $Evidence "runs\$Scenario"
+$UserData = Join-Path $Run "user-data"
+$TemplateName = $Manifest.scenarios.$Scenario.userDataTemplate
+$Template = $Manifest.userData.$TemplateName
+New-Item -ItemType Directory -Force $Run, $UserData, (Join-Path $Run "injected-user-data") | Out-Null
+Copy-Item $ManifestPath (Join-Path $Run "fixture-manifest.json")
+Copy-Item $Template.settings, $Template.projects, $Template.catalog.primary, $Template.catalog.backup -Destination $UserData
+Copy-Item $Template.settings, $Template.projects, $Template.catalog.primary, $Template.catalog.backup -Destination (Join-Path $Run "injected-user-data")
 $Port = 9333
-npm run dev -- -- --user-data-dir=$UserData --remote-debugging-port=$Port 2>&1 | Tee-Object "$Run\electron.log"
+npm run dev -- -- --user-data-dir=$UserData --remote-debugging-port=$Port 2>&1 | Tee-Object (Join-Path $Run "electron.log")
 ```
 
 ## 3. Scenario matrix
 
-| ID | Fixture/action | Required result | Additional evidence |
+| ID | Manifest-selected fixture/action | Required result | Execution state |
 | --- | --- | --- | --- |
-| A1 | Run `npm run build`, then the build verifier | main, preload, renderer `index.html`, renderer `pet.html`, all HTML resources, and freshness checks pass | `build.log`, `build-artifacts.json` |
-| A2 | Point verifier at a newly created empty `out` directory | Non-zero exit; all four entry classes are reported missing | command, exit code, verifier output |
-| A3 | Open `messages-100.jsonl` | 100 messages, stable ordering, one desktop Session | IDs and first/last message screenshots |
-| A4 | Open `messages-1000.jsonl` | 1,000 messages; selection and scroll remain correct | trace, CPU profile, heap |
-| A5 | Open `messages-10000.jsonl` | 10,000 messages; no duplicate runtime or desktop Session | trace, CPU profile, heap, recording |
-| A6 | Open `messages-50mb.jsonl` | manifest byte size matches disk; load completes or fails visibly without corrupting catalog | file hash, trace, CPU profile, heap |
-| A7 | Replace primary with `session-catalog.corrupt.json`, retain valid `.bak`, then start | backup recovery restores the expected entries and rewrites a valid primary | injected corrupt/backup and recovered primary |
-| A8 | Scan native `Case.jsonl`, `case.jsonl`, and `codex-native.jsonl` | native case paths collapse to one independent Session; Codex source/import identity remains independent | all origin keys and desktop Session IDs |
-| A9 | Scan WSL `Case.jsonl` and `case.jsonl` | two independent Sessions with exact distro/user and case-sensitive POSIX origin keys | preflight, WSL paths, origin keys, IDs |
-| A10 | Run fixture generator with `--dry-run` | no output or WSL files change; printed plan is bounded to the requested native directory and one WSL validation directory | before/after directory listing and dry-run JSON |
+| A1 | Build and `verify-build-artifacts` | Four Electron entry points, regular nonempty HTML resources, and freshness pass | Run by CI or operator |
+| A2 | New empty output outside the repository | Non-zero exit and all four entry classes reported missing | Run by CI or operator |
+| A3 | `$Manifest.scenarios.A3.sessionPath` | 100 messages, stable ordering, one desktop Session | NOT RUN |
+| A4 | `$Manifest.scenarios.A4.sessionPath` | 1,000 messages; selection and scroll remain correct | NOT RUN |
+| A5 | `$Manifest.scenarios.A5.sessionPath` | 10,000 messages; no duplicate runtime or desktop Session | NOT RUN |
+| A6 | `$Manifest.scenarios.A6.sessionPath` | Disk byte size equals `$Manifest.scale.large.bytes`; visible completion/failure and valid catalog | NOT RUN |
+| A7 | Replace native primary with `$Manifest.userData.native.catalog.corrupt`, retain `.bak` | Backup recovery restores expected entries and rewrites valid primary; use current `$Sha` manifest | NOT RUN |
+| A8 | `$Manifest.scenarios.A8.sessionPaths` | Native case paths collapse to one independent Session while Codex import remains independent | NOT RUN |
+| A9 | `$Manifest.scenarios.A9.sessionPaths` after WSL generation | Case-sensitive POSIX paths remain two independent Sessions with exact distro/user | NOT RUN |
+| A10 | Dry-run with current `$Sha` | No native/WSL writes; plan names only requested output and exact validation directory | NOT RUN |
 
-For A2, use a directory outside the repository so the real `out` is untouched:
+A2 must not touch the real build output:
 
 ```powershell
-$EmptyOut = "$Evidence\empty-out"
+$EmptyOut = Join-Path $Evidence "empty-out"
 New-Item -ItemType Directory -Force $EmptyOut | Out-Null
 node scripts/verify-build-artifacts.mjs --repo-root (Get-Location).Path --out $EmptyOut --json
 if ($LASTEXITCODE -eq 0) { throw "A2 expected verifier failure" }
 ```
 
-For A7, perform the replacement only inside that scenario's isolated userData:
+A7 must use the native template and the current manifest for this run. Do not use a copied or hardcoded SHA:
 
 ```powershell
-Copy-Item "$Fixtures\user-data\session-catalog.corrupt.json" "$UserData\session-catalog.json" -Force
-Copy-Item "$Fixtures\user-data\session-catalog.json.bak" "$UserData\session-catalog.json.bak" -Force
+$Native = $Manifest.userData.native
+Copy-Item $Native.catalog.corrupt (Join-Path $UserData "session-catalog.json") -Force
+Copy-Item $Native.catalog.backup (Join-Path $UserData "session-catalog.json.bak") -Force
+Copy-Item $ManifestPath (Join-Path $Run "fixture-manifest.json") -Force
+if ((Get-Content (Join-Path $Run "fixture-manifest.json") -Raw | ConvertFrom-Json).sha -ne $Sha) { throw "A7 manifest SHA mismatch" }
 ```
 
 ## 4. WSL preflight and generation
 
-Do not request WSL fixture generation until all three preflight commands succeed. Save their exact output under A9 evidence.
+WSL generation is **NOT RUN** in the current follow-up. When it is authorized, all preflight output must be saved before generation:
 
 ```powershell
 $Distro = "Ubuntu"
 $WslUser = "dev"
-wsl.exe --list --verbose
-wsl.exe -d $Distro -u $WslUser -- whoami
-wsl.exe -d $Distro -u $WslUser -- sh -lc 'command -v pi && pi --version && printf "HOME=%s\n" "$HOME"'
+wsl.exe --list --verbose | Tee-Object (Join-Path $Evidence "wsl-list.txt")
+wsl.exe -d $Distro -u $WslUser -- whoami | Tee-Object (Join-Path $Evidence "wsl-whoami.txt")
+wsl.exe -d $Distro -u $WslUser -- sh -lc 'command -v pi && pi --version && printf "HOME=%s\n" "$HOME"' | Tee-Object (Join-Path $Evidence "wsl-probe.txt")
 ```
 
-Set `$WslRoot` to the exact ext4 `HOME` printed above. `/mnt/*` is invalid. Generate fixtures with an isolated Windows evidence directory and the validated WSL identity:
+Set `$WslRoot` to the exact canonical `HOME` printed by the probe. It must be a realpath under an ext4 filesystem, not `/mnt/*`, and the requested user must equal `whoami`:
 
 ```powershell
-$WslRoot = "/home/dev"
-node scripts/generate-session-fixtures.mjs --output $Fixtures --sha $Sha --wsl-distro $Distro --wsl-user $WslUser --wsl-root $WslRoot 2>&1 | Tee-Object "$Evidence\wsl-fixture-generation.log"
+$WslRoot = "/home/dev" # replace only with the exact validated probe result
+node scripts/generate-session-fixtures.mjs --output $Fixtures --sha $Sha --wsl-distro $Distro --wsl-user $WslUser --wsl-root $WslRoot 2>&1 | Tee-Object (Join-Path $Evidence "wsl-fixture-generation.log")
+$Manifest = Get-Content $ManifestPath -Raw | ConvertFrom-Json
+if ($Manifest.sha -ne $Sha) { throw "WSL fixture SHA mismatch" }
+if (-not $Manifest.userData.wsl) { throw "WSL template missing after WSL generation" }
+if ($Manifest.wslIdentity.projectCwd -ne "$($Manifest.wslIdentity.directory)/project") { throw "WSL project cwd is outside validation tree" }
 ```
 
-The generator invokes `wsl.exe` with argument arrays in the form `wsl.exe -d <distro> -u <user> -- sh -lc <script>`. It may reset only the exact ext4 directory recorded by the manifest:
-
-```text
-$HOME/.pi/agent/sessions/pideck-validation-<sha>/
-```
-
-Start A9 with a dedicated Windows userData and port, using the same exact launch shape as native:
-
-```text
-npm run dev -- -- --user-data-dir=<isolated-dir> --remote-debugging-port=<port>
-```
-
-The injected settings select WSL; the Electron application itself is still launched from the Windows repository. Never simulate WSL case behavior with two files on NTFS.
+The generator invokes `wsl.exe` with argument arrays: `-d <distro> -u <user> -- sh -lc <script>`. The reset script independently canonicalizes `$HOME`, checks `findmnt` is `ext4`, checks the exact `$HOME/.pi/agent/sessions/pideck-validation-<sha>` realpath, and removes only that exact target. Never simulate WSL case behavior with two files on NTFS.
 
 ## 5. Evidence layout
 
-Each scenario directory must contain this minimum set, using `NOT RUN.txt` only where this runbook explicitly permits it:
+Each executed scenario must contain:
 
 ```text
 runs/<scenario>/
@@ -150,6 +148,8 @@ runs/<scenario>/
   logs/
   notes.md
 ```
+
+Use `NOT RUN.txt` for a capture category only when the scenario was not executed and the reason is recorded in `notes.md`. Do not create placeholder success evidence.
 
 `ids.json` must make identity comparison mechanical:
 
@@ -170,16 +170,26 @@ runs/<scenario>/
 }
 ```
 
-## 6. Performance result rule
+## 6. Performance rule
 
-A performance comparison is valid only when the baseline and candidate are collected on the same machine, from the same fixed-seed fixture, with the same Electron/Node versions, userData template, port conditions, capture settings, and scenario procedure. If that baseline does not exist, write `NOT RUN` in the performance result and retain the candidate trace/profile/heap as diagnostic evidence. Do not describe an unpaired measurement as an improvement or regression.
+Performance comparison is **NOT RUN** for this follow-up. A valid comparison requires a paired baseline and candidate from the same machine, fixed-seed manifest, Electron/Node versions, userData template, port conditions, capture settings, and scenario procedure. Do not call an unpaired trace/profile/heap an improvement or regression.
 
 ## 7. A10 dry run
 
-This command is safe to run before any fixture generation. It performs no native or WSL writes:
+A10 must use the current commit SHA and must not assume a prior fixed SHA. The manifest is parsed and checked before running it:
 
 ```powershell
-node scripts/generate-session-fixtures.mjs --output "F:\PiDeck-validation\724fe6b22020bb90e30393096f5ec2d4b42b64df\fixtures" --sha 724fe6b22020bb90e30393096f5ec2d4b42b64df --wsl-distro $Distro --wsl-user $WslUser --wsl-root $WslRoot --dry-run
+$Manifest = Get-Content $ManifestPath -Raw | ConvertFrom-Json
+$Sha = (git rev-parse HEAD).Trim()
+if ($Manifest.sha -ne $Sha) { throw "A10 manifest SHA mismatch: $($Manifest.sha) vs $Sha" }
+$WslArgs = @()
+if ($Manifest.wslIdentity) {
+  $WslArgs = @("--wsl-distro", $Manifest.wslIdentity.distro, "--wsl-user", $Manifest.wslIdentity.user, "--wsl-root", $Manifest.wslIdentity.home)
+}
+$Before = (Get-ChildItem -Force -Recurse $Fixtures | Select-Object FullName, Length, LastWriteTimeUtc | ConvertTo-Json -Depth 4)
+node scripts/generate-session-fixtures.mjs --output $Fixtures --sha $Sha @WslArgs --dry-run | Tee-Object (Join-Path $Evidence "a10-dry-run.json")
+$After = (Get-ChildItem -Force -Recurse $Fixtures | Select-Object FullName, Length, LastWriteTimeUtc | ConvertTo-Json -Depth 4)
+if ($Before -ne $After) { throw "A10 changed fixture files" }
 ```
 
-Capture directory listings before and after. They must be identical. The JSON plan may name only the requested native output and `$WslRoot/.pi/agent/sessions/pideck-validation-724fe6b22020bb90e30393096f5ec2d4b42b64df/`.
+The dry-run JSON may name only the requested native output and, when WSL arguments were supplied from the manifest, `$Manifest.wslIdentity.directory`. The current `$Sha` must appear in the planned validation directory; no other WSL path is permitted.
