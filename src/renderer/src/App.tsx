@@ -55,8 +55,13 @@ const ConfigModal = lazy(() => import("./ConfigModal").then((m) => ({ default: m
 import { TrustConfirmModal } from "./components/app/TrustConfirmModal";
 import { TerminalDock } from "./components/terminal/TerminalDock";
 import { FeishuLinkIndicator } from "./components/feishu/FeishuLinkIndicator";
+import {
+  SidebarContent,
+  type SidebarActions,
+} from "./components/sidebar/SidebarContent";
 import { useFeishuBridge } from "./hooks/useFeishuBridge";
 import { useGlobalAgentListeners } from "./hooks/useGlobalAgentListeners";
+import { useSidebarController } from "./hooks/useSidebarController";
 import { useProjectRuntimeCapabilities } from "./hooks/useRuntimeCapabilities";
 import { useSessionRuntimeBridge } from "./hooks/useSessionRuntimeBridge";
 import { useSessionMessages } from "./hooks/useSessionMessages";
@@ -496,6 +501,9 @@ export function App() {
   currentSessionIdRef.current = currentSessionId;
   const openSessionRequestRef = useRef(0);
   const creatingSessionDraftRef = useRef<Set<string>>(new Set());
+  const sidebarController = useSidebarController({
+    getRpcLogging: (agentId) => api.rpcLogs.getLogging(agentId),
+  });
 
   // 项目的 git worktree 列表：{ parentId -> WorktreeEntry[] }
   const [worktreesByProject, setWorktreesByProject] = useState<
@@ -5410,6 +5418,190 @@ export function App() {
     if (activeProjectId) saveExpandedDirs(activeProjectId, collapsedDirs);
   }
 
+  async function openSidebarSessionById(projectId: string, sessionId: string) {
+    const requestSequence = ++openSessionRequestRef.current;
+    let record: SessionRecord | undefined = getSessionRecord(sessionId);
+    if (!record || record.projectId !== projectId) {
+      try {
+        const projectSessions = await api.sessions.listCatalog(projectId);
+        if (requestSequence !== openSessionRequestRef.current) return;
+        replaceProjectSessions({ projectId, sessions: projectSessions });
+        record = projectSessions.find((candidate) => candidate.id === sessionId);
+      } catch (error) {
+        if (requestSequence !== openSessionRequestRef.current) return;
+        showToast(error instanceof Error ? error.message : String(error), 4000);
+        return;
+      }
+    }
+    if (!record || requestSequence !== openSessionRequestRef.current) return;
+    setActiveProjectId(projectId);
+    setCurrentSessionId(record.id);
+    setAutoScroll(true);
+    autoScrollRef.current = true;
+  }
+
+  async function deleteSidebarSession(projectId: string, session: SessionSummary) {
+    await api.sessions.deleteRecord(session.id);
+    removeSessionState(session.id);
+    removeSessionComposerState(session.id);
+    showToast(t("app.sessionDeleted"), 2200);
+    await refreshProjectSessions(projectId);
+    if (sessionsProjectId === projectId) await refreshSessions(projectId);
+  }
+
+  function requestDeleteSidebarSession(projectId: string, session: SessionSummary) {
+    const childCount = getProjectSessionRecords(projectId).filter((candidate) =>
+      isSameSessionPath(
+        candidate.parentSessionPath,
+        session.filePath,
+        candidate.wsl ? "wsl" : "native",
+      ),
+    ).length;
+    if (childCount === 0) {
+      void deleteSidebarSession(projectId, session);
+      return;
+    }
+    setConfirmDialog({
+      title: t("drawer.sessionDeleteTitle"),
+      message: t("drawer.sessionDeleteBodyWithChildren", {
+        name: session.name || t("common.untitled"),
+        count: childCount,
+      }),
+      danger: true,
+      confirmLabel: t("common.delete"),
+      onConfirm: () => {
+        setConfirmDialog(null);
+        void deleteSidebarSession(projectId, session);
+      },
+    });
+  }
+
+  async function toggleProjectWorktree(project: Project) {
+    try {
+      const updated = await api.projects.toggleWorktreeEnabled(project.id);
+      if (!updated) return;
+      setProjects(await api.projects.list());
+      if (updated.worktreeEnabled) void refreshWorktrees(updated.id);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.includes("NOT_A_GIT_REPO")) {
+        showToast(t("app.worktreeNotGitRepo"), 5000);
+      } else {
+        showToast(message, 5000);
+      }
+    }
+  }
+
+  async function removeSidebarProject(project: Project) {
+    try {
+      const next = await api.projects.remove(project.id);
+      setProjects(next);
+      updateAfterProjectRemoved(project.id, next);
+    } catch (error) {
+      if (String(error instanceof Error ? error.message : error).includes("PROJECT_HAS_RUNNING_AGENT")) {
+        setConfirmDialog({
+          title: t("app.projectRemoveBlockedTitle"),
+          message: t("app.projectRemoveBlockedByAgent"),
+          confirmLabel: t("app.projectRemoveBlockedAck"),
+          onConfirm: () => setConfirmDialog(null),
+        });
+      } else {
+        showToast(error instanceof Error ? error.message : String(error), 5000);
+      }
+    }
+  }
+
+  const sidebarActions: SidebarActions = {
+    projects: {
+      add: addProject,
+      select: (projectId) => {
+        setActiveProjectId(projectId);
+        setCurrentSessionId(undefined);
+        if (getProjectSessionRecords(projectId).length === 0) {
+          void refreshProjectSessions(projectId).catch(() => undefined);
+        }
+      },
+      refresh: async (projectId) => {
+        const project = projects.find((candidate) => candidate.id === projectId);
+        if (project) await refreshProjectTree(project);
+      },
+      reorder: reorderProjects,
+      reveal: (project) => api.files.showInFolder(project.path),
+      openWithEditor: (project) => {
+        setEditorsTargetPath(project.path);
+        setEditorsAnchor({ x: 80, y: 80 });
+        setEditorsOpen(true);
+      },
+      importSessions: (project, source) => {
+        if (source === "codex") return openCodexImport(project);
+        if (source === "claude") return openClaudeImport(project);
+        return openOpenCodeImport(project);
+      },
+      manageResources: (project) => setProjectResourcesProject(project),
+      toggleWorktree: toggleProjectWorktree,
+      copyPath: async (project) => {
+        await navigator.clipboard.writeText(project.path);
+        showToast(t("common.copied"));
+      },
+      remove: removeSidebarProject,
+      changeChatPath: async (project) => {
+        const picked = await api.projects.chooseChatPath();
+        if (!picked || picked === project.path) return;
+        await api.projects.setChatPath(picked);
+        await refreshProjectSessions(project.id);
+        showToast(t("app.chatProjectPathUpdated"), 1800);
+      },
+    },
+    sessions: {
+      open: openSidebarSessionById,
+      createDraft: createSessionDraft,
+      deleteDraft: deleteDraftSession,
+      rename: openSessionRename,
+      export: async (projectId, session) => {
+        const result = await api.sessions.exportHtml(projectId, session.filePath);
+        showToast(t("app.exportedPath", { path: result.path }), 3500);
+      },
+      copy: async (projectId, session) => {
+        await copySession(session.filePath, projectId);
+      },
+      copyPath: async (session) => {
+        await navigator.clipboard.writeText(session.filePath);
+        showToast(t("common.copied"));
+      },
+      openFile: (session) => api.files.open(session.filePath),
+      delete: async (projectId, session) => {
+        requestDeleteSidebarSession(projectId, session);
+      },
+    },
+    agents: {
+      rename: openAgentRename,
+      export: (agent) => exportAgentHtml(agent.id),
+      copySession: (agent) => cloneAgentSession(agent.id),
+      copyPath: async (agent) => {
+        if (!agent.sessionPath) return;
+        await navigator.clipboard.writeText(agent.sessionPath);
+        showToast(t("common.copied"));
+      },
+      openSessionFile: (agent) => agent.sessionPath ? api.files.open(agent.sessionPath) : Promise.resolve(),
+      close: (agent) => closeAgent(agent.id),
+    },
+    worktrees: {
+      create: async (projectId, branchName) => {
+        await createWorktree(projectId, branchName);
+      },
+      remove: (parentProjectId, entry, childProject) => {
+        requestRemoveWorktree(parentProjectId, entry.path, childProject);
+        return Promise.resolve();
+      },
+    },
+    rpc: {
+      getLogging: (agentId) => api.rpcLogs.getLogging(agentId),
+      setLogging: (agentId, enabled) => api.rpcLogs.setLogging(agentId, enabled),
+      openLogFile: (agentId) => api.rpcLogs.openFile(agentId),
+      listLogs: (agentId) => api.rpcLogs.get({ agentId }),
+    },
+  };
+
   function startResize(target: "list" | "drawer", event: PointerEvent) {
     const startX = event.clientX;
     const startListWidth = listCollapsed ? 68 : listWidth;
@@ -5578,947 +5770,38 @@ export function App() {
           </button>
         </div>
       )}
-      <aside
-        className="chat-list-pane v3-braun"
+      <SidebarContent
+        controller={sidebarController}
+        actions={sidebarActions}
+        currentProjectId={activeProjectId}
+        currentSessionId={currentSessionId}
+        worktreesByProject={worktreesByProject}
+        branchByProject={branchByProject}
+        creatingWorktree={worktreeCreating}
+        isLanWeb={isLanWeb}
+        chrome={<>
+          <div className="list-toolbar">
+            <div className="app-badge">
+              <LogoMark />
+              <span className="brand-wordmark" aria-label="PiDeck">PiDeck</span>
+            </div>
+          </div>
+          <button
+            className="collapse-button list-collapse"
+            title={listCollapsed ? t("app.expandList") : t("app.collapseList")}
+            onClick={toggleListCollapsed}
+          >
+            {listCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+          </button>
+        </>}
         onPointerLeave={() => {
           if (listHoverRevealSuppressed) setListHoverRevealSuppressed(false);
         }}
-      >
-        <div className="sidebar-body">
-          <div className="list-toolbar">
-          <div className="app-badge">
-            <LogoMark />
-            <span className="brand-wordmark" aria-label="PiDeck">
-              PiDeck
-            </span>
-          </div>
-        </div>
-        <button
-          className="collapse-button list-collapse"
-          title={listCollapsed ? t("app.expandList") : t("app.collapseList")}
-          onClick={toggleListCollapsed}
-        >
-          {listCollapsed ? (
-            <ChevronRight size={16} />
-          ) : (
-            <ChevronLeft size={16} />
-          )}
-        </button>
-
-        <div className="search-row">
-          <div className="search-box">
-            <span className="search-icon">
-              <Search size={14} />
-            </span>
-            <input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder={t("app.search")}
-            />
-          </div>
-          <button className="round-add" onClick={addProject} title={t("app.addProject")}>
-            <Plus size={18} />
-          </button>
-        </div>
-
-        <div className="conversation-list">
-          {filteredProjects.map((project) => {
-            const projectIsChat = isChatProject(project);
-            const projectDirectoryName = projectIsChat
-              ? t("app.chatProject")
-              : displayProjectDirectoryName(project);
-            const canDragProject = canReorderProjects && !projectIsChat;
-            const projectAgents = filteredAgents.filter(
-              (agent) => agent.projectId === project.id,
-            );
-            const allProjectAgents = displayAgents.filter(
-              (agent) => agent.projectId === project.id,
-            );
-            const projectSearch = search.trim();
-            const projectCatalogSessions = getProjectSessionRecords(project.id);
-            const projectDraftSessions = projectCatalogSessions
-              .filter((session) => {
-                if (session.status !== "draft") return false;
-                if (projectSearch && !matches(session.title, projectSearch)) return false;
-                const filter = sessionSourceFilter[project.id] ?? null;
-                return filter === null || filter.has(session.source);
-              })
-              .sort((a, b) => b.updatedAt - a.updatedAt);
-            const projectSessions = ((projectSearch
-              ? getProjectSessions(project.id).filter((session) =>
-                  matches(
-                    `${session.name ?? ""}${session.preview}${session.filePath}`,
-                    projectSearch,
-                  ),
-                )
-              : getProjectSessions(project.id)).filter((session) => {
-              	const filter = sessionSourceFilter[project.id] ?? null;
-              	return filter === null
-              		? true
-              		: filter.has(session.source ?? "pi");
-              }));
-            const visibleChildCount =
-              visibleProjectChildCountByProject[project.id] ??
-              SIDEBAR_PROJECT_CHILD_PAGE_SIZE;
-            const projectDisplay = getProjectAgentSessionDisplay({
-              agents: projectAgents.filter((agent) =>
-                Boolean(
-                  agent.sessionPath &&
-                  projectSessions.some((session) =>
-                    isSameSessionPath(
-                      session.filePath,
-                      agent.sessionPath,
-                      session.wsl ? "wsl" : "native",
-                    ),
-                  ),
-                ),
-              ),
-              sessions: projectSessions,
-              visibleChildCount,
-            });
-            const projectSessionsLoading = Boolean(
-              sessionLoadingByProject[project.id],
-            );
-            const hasProjectChildren =
-              projectDraftSessions.length > 0 ||
-              projectDisplay.children.length > 0 ||
-              projectSessionsLoading ||
-              !!project.worktreeEnabled;
-            const isCollapsed = collapsedProjects.has(project.id);
-            const isDraggingProject = draggingProjectId === project.id;
-            const isProjectDropTarget = dragOverProjectId === project.id;
-            const projectRowClass = [
-              "conversation",
-              canDragProject ? "project-draggable" : "",
-              projectIsChat ? "chat-project" : "",
-              isDraggingProject ? "dragging" : "",
-              isProjectDropTarget ? "drag-over" : "",
-              projectSessionsLoading ? "project-loading" : "",
-            ]
-              .filter(Boolean)
-              .join(" ");
-            return (
-              <div
-                key={project.id}
-                className={`project-group${projectIsChat ? " chat-project-group" : ""}${project.worktreeEnabled ? " worktree-enabled" : ""}`}
-              >
-                <button
-                  className={projectRowClass}
-                  draggable={canDragProject}
-                  onDragStart={(event) =>
-                    handleProjectDragStart(event, project.id)
-                  }
-                  onDragOver={(event) =>
-                    handleProjectDragOver(event, project.id)
-                  }
-                  onDragLeave={() => handleProjectDragLeave(project.id)}
-                  onDrop={(event) => void handleProjectDrop(event, project.id)}
-                  onDragEnd={finishProjectDrag}
-                  onContextMenu={(event) => {
-                    event.preventDefault();
-                    setProjectMenu({
-                      x: event.clientX,
-                      y: event.clientY,
-                      project,
-                    });
-                  }}
-                  onClick={(event) => {
-                    if (projectDragPreventClickRef.current) return;
-                    // 项目点击脉冲动画：给按钮临时加动画 class，提供即时视觉反馈
-                    const el = event.currentTarget;
-                    el.classList.add('click-animating');
-                    setTimeout(() => el.classList.remove('click-animating'), 400);
-
-                    // 点击项目行始终切换展开/折叠状态
-                    const wasCollapsed = collapsedProjects.has(project.id);
-                    setCollapsedProjects((prev) => {
-                      const next = new Set(prev);
-                      if (next.has(project.id)) next.delete(project.id);
-                      else next.add(project.id);
-                      return next;
-                    });
-
-                    // 展开项目时同步加载会话记录，loading 指示器让用户知道正在加载
-                    if (wasCollapsed && !projectIsChat) {
-                      const hasLoadedSessions = getProjectSessions(project.id).length > 0;
-                      if (!hasLoadedSessions) {
-                        void refreshProjectSessions(project.id).catch(() => undefined);
-                      }
-                    }
-
-                    setActiveProjectId(project.id);
-                    setCurrentSessionId(undefined);
-                  }}
-                >
-                  <span
-                    className={`project-fold${isCollapsed ? " folded" : ""}${hasProjectChildren ? " has-agents" : ""}`}
-                    title={
-                      isCollapsed
-                        ? t("app.projectExpand")
-                        : t("app.projectCollapse")
-                    }
-                  >
-                    <Play size={12} />
-                  </span>
-                  <ProjectAvatar
-                    name={projectDirectoryName}
-                    kind={projectIsChat ? "chat" : "project"}
-                  />
-                  <div className="conversation-body">
-                    <div className="conversation-title">
-                      <strong title={project.path}>
-                        {projectDirectoryName}
-                      </strong>
-                      {projectSessionsLoading && (
-                        <span className="conversation-loading" />
-                      )}
-                      {(sessionSourceFilter[project.id] ?? null) !== null && (
-                        <Filter
-                          size={12}
-                          className="filter-indicator"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSessionFilterOpen({
-                              ...adjustMenuPos(e.clientX, e.clientY, 180, 250),
-                              projectId: project.id,
-                            });
-                          }}
-                        />
-                      )}
-                    </div>
-                    {projectIsChat && (
-                      <p className="chat-project-guide">
-                        {t("app.projectChatGuide")}
-                      </p>
-                    )}
-                  </div>
-                  <span className="project-row-actions">
-                    {projectIsChat && (
-                      <span
-                        className="project-action"
-                        title={t("app.chatProjectSettings")}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          // 打开系统目录选择器（默认定位当前聊天目录），选中后保存并重新加载该目录下的会话。
-                          void (async () => {
-                            const picked = await api.projects.chooseChatPath();
-                            if (!picked || picked === project.path) return;
-                            await api.projects.setChatPath(picked);
-                            await refreshProjectSessions(project.id);
-                            showToast(t("app.chatProjectPathUpdated"), 1800);
-                          })().catch((err) => console.error("Failed to change chat directory", err));
-                        }}
-                      >
-                        <FolderCog size={14} />
-                      </span>
-                    )}
-                    <span
-                      className="project-action"
-                      title={t("app.projectNewAgent")}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        void createSessionDraft(project.id);
-                      }}
-                    >
-                      <Plus size={14} />
-                    </span>
-                  </span>
-                </button>
-                {!isCollapsed && project.worktreeEnabled && (
-                  <div className="worktree-children worktree-main-header-only">
-                    <button
-                      className="conversation worktree-workspace-header"
-                      // 点击主工作区 header 等同于选中父项目本身：激活主项目并加载其会话，
-                      // 避免与点击父项目行产生行为分歧导致用户迷惑。
-                      onClick={() => {
-                        setActiveProjectId(project.id);
-                        setCurrentSessionId(undefined);
-                        if (!projectIsChat && getProjectSessions(project.id).length === 0) {
-                          void refreshProjectSessions(project.id).catch(() => undefined);
-                        }
-                      }}
-                      title={t("app.worktreeMainWorkspace")}
-                    >
-                      <span className="worktree-main-branch-icon">
-                        <GitBranch size={12} />
-                      </span>
-                      <div className="conversation-body">
-                        <div className="conversation-title">
-                          <strong>{t("app.worktreeMainWorkspace")}</strong>
-                          <span className="worktree-main-branch">
-                            {branchByProject[project.id] ?? t("app.worktreeBranchLoading")}
-                          </span>
-                        </div>
-                      </div>
-                    </button>
-                  </div>
-                )}
-                {!isCollapsed &&
-                  (projectDraftSessions.length > 0 ||
-                    projectDisplay.visibleChildren.length > 0 ||
-                    projectSessionsLoading ||
-                    projectDisplay.hiddenChildCount > 0) && (
-                  <div className="session-card">
-                    {projectDraftSessions.map((session) => {
-                      const runtime = getSessionRuntime(session.id);
-                      return (
-                        <button
-                          key={session.id}
-                          className={`conversation agent-row session-row${currentSessionId === session.id ? " active" : ""}`}
-                          title={session.title}
-                          onClick={() => {
-                            setActiveProjectId(session.projectId);
-                            setCurrentSessionId(session.id);
-                          }}
-                        >
-                          <span className="session-node-marker" aria-hidden="true" />
-                          <div className="conversation-body">
-                            <div className="conversation-title">
-                              {runtime && runtime.status !== "detached" && (
-                                <span className={`agent-status-indicator status-${runtime.status}`}>
-                                  {runtime.status}
-                                </span>
-                              )}
-                              <strong title={session.title}>{session.title}</strong>
-                            </div>
-                          </div>
-                          <span
-                            className="project-action"
-                            role="button"
-                            tabIndex={0}
-                            title={t("common.delete")}
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              void deleteDraftSession(session);
-                            }}
-                            onKeyDown={(event) => {
-                              if (event.key !== "Enter" && event.key !== " ") return;
-                              event.preventDefault();
-                              event.stopPropagation();
-                              void deleteDraftSession(session);
-                            }}
-                          >
-                            <Trash2 size={12} />
-                          </span>
-                        </button>
-                      );
-                    })}
-                    {projectDisplay.visibleChildren.map((child) => {
-                    const subagentGroupKey = `${project.id}:${child.key}`;
-                    const subagentsExpanded = expandedSubagentGroups.has(subagentGroupKey);
-                    const totalSubagentCount = (child.codexSubagents?.length ?? 0) + (child.piSubagents?.length ?? 0);
-                    const renderSubagentRow = (
-                      subagent: SessionSummary,
-                      label: ReactNode,
-                    ) => {
-                      const subagentAgent = getAgentForSessionPath(
-                        allProjectAgents,
-                        subagent.filePath,
-                        subagent.wsl ? "wsl" : "native",
-                      );
-                      return (
-                        <button
-                          key={subagent.filePath}
-                          className={`conversation agent-row session-row codex-subagent-sidebar-row${subagent.id === currentSessionId ? " active" : ""}`}
-                          title={subagent.filePath}
-                          onContextMenu={async (event) => {
-                            event.preventDefault();
-                            if (subagentAgent) {
-                              const logging = await api.rpcLogs.getLogging(subagentAgent.id);
-                              setAgentRpcLogging((prev) => {
-                                const next = new Map(prev);
-                                next.set(subagentAgent.id, logging);
-                                return next;
-                              });
-                              setAgentMenu({
-                                x: event.clientX,
-                                y: event.clientY,
-                                agent: subagentAgent,
-                              });
-                              return;
-                            }
-                            setSessionMenu({
-                              x: event.clientX,
-                              y: event.clientY,
-                              projectId: project.id,
-                              session: subagent,
-                            });
-                          }}
-                          onClick={() => {
-                            void openSidebarSession(project.id, subagent);
-                          }}
-                        >
-                          <div className="conversation-body">
-                            <div className="conversation-title">{label}</div>
-                          </div>
-                        </button>
-                      );
-                    };
-                    const renderCodexSubagents = (subagents: SessionSummary[]) => {
-                      if (subagents.length === 0 || !subagentsExpanded) return null;
-                      return (
-                        <div className="codex-subagent-sidebar-group">
-                          {subagents.map((subagent) => renderSubagentRow(
-                            subagent,
-                            <>
-                              <strong>{formatCodexSubagentName(subagent)}</strong>
-                              <span className="session-source-badge codex subagent">
-                                {t("app.codexSubagent")}
-                              </span>
-                            </>,
-                          ))}
-                        </div>
-                      );
-                    };
-                    const renderPiSubagents = (subagents: SessionSummary[]) => {
-                      if (subagents.length === 0 || !subagentsExpanded) return null;
-                      return (
-                        <div className="codex-subagent-sidebar-group">
-                          {subagents.map((subagent) => renderSubagentRow(
-                            subagent,
-                            <strong>{formatPiSubagentName(subagent)}</strong>,
-                          ))}
-                        </div>
-                      );
-                    };
-                    const renderInlineSubagentToggle = totalSubagentCount > 0 ? (
-                      <span
-                        className="subagent-inline-toggle"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setExpandedSubagentGroups((current) => {
-                            const next = new Set(current);
-                            if (next.has(subagentGroupKey)) next.delete(subagentGroupKey);
-                            else next.add(subagentGroupKey);
-                            return next;
-                          });
-                        }}
-                        title={t("app.piSubagentCount", { count: totalSubagentCount })}
-                      >
-                        <ChevronDown size={10} className={subagentsExpanded ? "expanded" : ""} />
-                        <span className="subagent-inline-count">{totalSubagentCount}</span>
-                      </span>
-                    ) : null;
-                    if (child.type === "agent") {
-                      const agent = child.agent;
-                      const agentSession = projectSessions.find((session) =>
-                        isSameSessionPath(
-                          session.filePath,
-                          agent.sessionPath,
-                          session.wsl ? "wsl" : "native",
-                        ),
-                      );
-                      const isActiveAgent = agentSession?.id === currentSessionId;
-                      return (
-                        <Fragment key={child.key}>
-                        <button
-                          className={
-                            isActiveAgent
-                              ? "conversation agent-row active"
-                              : "conversation agent-row"
-                          }
-                          onContextMenu={async (event) => {
-                            event.preventDefault();
-                            // 菜单打开时查询 RPC 日志记录状态
-                            const logging = await api.rpcLogs.getLogging(agent.id);
-                            setAgentRpcLogging((prev) => {
-                              const next = new Map(prev);
-                              next.set(agent.id, logging);
-                              return next;
-                            });
-                            setAgentMenu({
-                              x: event.clientX,
-                              y: event.clientY,
-                              agent,
-                            });
-                          }}
-                          onClick={() => {
-                            if (agentSession) void openSidebarSession(project.id, agentSession);
-                          }}
-                        >
-                          <span className="agent-node-marker" aria-hidden="true" />
-                          <div className="conversation-body">
-                            <div className="conversation-title">
-                              {agent.status && (
-                                <span className={`agent-status-indicator status-${agent.status}`}>
-                                  {t(`app.status${agent.status.charAt(0).toUpperCase() + agent.status.slice(1)}` as any) || agent.status}
-                                </span>
-                              )}
-                              <strong>{agent.title}</strong>
-                              {child.source && child.source !== "pi" && (
-                                <span className={`session-source-badge ${child.source}`}>
-                                  {t(`sessionSource.${child.source}` as any)}
-                                </span>
-                              )}
-                              {renderInlineSubagentToggle}
-                            </div>
-                          </div>
-                        </button>
-                        {renderCodexSubagents(child.codexSubagents)}
-                        {renderPiSubagents(child.piSubagents)}
-                        </Fragment>
-                      );
-                    }
-
-                    const session = child.session;
-                    const runtimeAgent = child.agent;
-                    return (
-                      <Fragment key={child.key}>
-                      <button
-                        className={`conversation agent-row session-row${session.id === currentSessionId ? " active" : ""}`}
-                        title={session.filePath}
-                        onContextMenu={async (event) => {
-                          event.preventDefault();
-                          if (runtimeAgent) {
-                            const logging = await api.rpcLogs.getLogging(runtimeAgent.id);
-                            setAgentRpcLogging((prev) => {
-                              const next = new Map(prev);
-                              next.set(runtimeAgent.id, logging);
-                              return next;
-                            });
-                            setAgentMenu({
-                              x: event.clientX,
-                              y: event.clientY,
-                              agent: runtimeAgent,
-                            });
-                            return;
-                          }
-                          setSessionMenu({
-                            x: event.clientX,
-                            y: event.clientY,
-                            projectId: project.id,
-                            session,
-                          });
-                        }}
-                        onClick={() =>
-                          void openSidebarSession(project.id, session)
-                        }
-                      >
-                        <span
-                          className="session-node-marker"
-                          aria-hidden="true"
-                        />
-                        <div className="conversation-body">
-                          <div className="conversation-title">
-                            {runtimeAgent?.status && (
-                              <span className={`agent-status-indicator status-${runtimeAgent.status}`}>
-                                {t(`app.status${runtimeAgent.status.charAt(0).toUpperCase() + runtimeAgent.status.slice(1)}` as any) || runtimeAgent.status}
-                              </span>
-                            )}
-                            <strong title={session.name || t("common.untitled")}>
-                              {session.name || t("common.untitled")}
-                            </strong>
-                            {session.source && session.source !== "pi" && (
-                              <span className={`session-source-badge ${session.source}`}>
-                                {t(`sessionSource.${session.source}` as any)}
-                              </span>
-                            )}
-                            {renderInlineSubagentToggle}
-                          </div>
-                        </div>
-                      </button>
-                      {renderCodexSubagents(child.codexSubagents)}
-                      {renderPiSubagents(child.piSubagents)}
-                      </Fragment>
-                    );
-                  })}
-                {!isCollapsed && projectSessionsLoading && (
-                  <div className="project-session-loading">
-                    <div className="loader" />
-                    <span>{t("app.projectSessionsLoading")}</span>
-                  </div>
-                )}
-                {!isCollapsed && projectDisplay.hiddenChildCount > 0 && (
-                  <button
-                    className="session-more-row"
-                    onClick={() => {
-                      setVisibleProjectChildCountByProject((current) => ({
-                        ...current,
-                        [project.id]:
-                          (current[project.id] ?? SIDEBAR_PROJECT_CHILD_PAGE_SIZE) +
-                          SIDEBAR_PROJECT_CHILD_PAGE_SIZE,
-                      }));
-                    }}
-                  >
-                    <span className="agent-more-branch" />
-                    <span>
-                      {t("app.projectShowMoreChildren", {
-                        count: projectDisplay.hiddenChildCount,
-                      })}
-                    </span>
-                  </button>
-                )}
-                  </div>
-                )}
-                {!isCollapsed && project.worktreeEnabled && (
-                  <div className="worktree-children worktree-sandbox-list">
-                    <div className="worktree-sandbox-toolbar">
-                      <span>{t("app.worktreeOtherWorkspaces")}</span>
-                      <button
-                        className="worktree-create-btn"
-                        title={t("app.worktreeNew")}
-                        aria-label={t("app.worktreeNew")}
-                        onClick={() => {
-                          setWorktreeCreateDialog({ projectId: project.id });
-                        }}
-                      >
-                        <GitBranch size={12} />
-                        <span>{t("app.worktreeNewShort")}</span>
-                      </button>
-                    </div>
-                    {(() => {
-                      // 合并 git worktree 列表和已注册的子项目，确保外部 worktree 也能显示。
-                      const wtEntries = worktreesByProject[project.id] ?? [];
-                      const childProjects = projects.filter(p => p.worktreeParentId === project.id);
-                      const merged = [...wtEntries];
-                      for (const cp of childProjects) {
-                        if (!merged.some(e => e.path === cp.path)) {
-                          merged.push({ path: cp.path, branch: cp.name });
-                        }
-                      }
-                      return merged;
-                    })().map((wt) => {
-                      const childProject = projects.find(p => p.path === wt.path);
-                      const childAgents = childProject
-                        ? filteredAgents.filter((agent) => agent.projectId === childProject.id)
-                        : [];
-                      const rawChildSessions = childProject
-                        ? getProjectSessions(childProject.id)
-                        : [];
-                      const childDraftSessions = childProject
-                        ? getProjectSessionRecords(childProject.id)
-                            .filter((session) => session.status === "draft")
-                            .sort((a, b) => b.updatedAt - a.updatedAt)
-                        : [];
-                      // 默认只展示 3 条会话，展开后显示全部，避免子工作区会话过多时侧栏过长。
-                      const sessionsExpanded = expandedWorktreeSessions.has(wt.path);
-                      // 使用统一分组函数，使 worktree 子会话也能嵌套显示在父条目下
-                      const wtDisplay = childProject ? getProjectAgentSessionDisplay({
-                        agents: childAgents.filter((agent) =>
-                          Boolean(
-                            agent.sessionPath &&
-                            rawChildSessions.some((session) =>
-                              isSameSessionPath(
-                                session.filePath,
-                                agent.sessionPath,
-                                session.wsl ? "wsl" : "native",
-                              ),
-                            ),
-                          ),
-                        ),
-                        sessions: rawChildSessions,
-                        visibleChildCount: sessionsExpanded ? Number.MAX_SAFE_INTEGER : 3,
-                      }) : null;
-                      const wtChildren = wtDisplay?.visibleChildren ?? [];
-                      const hiddenSessionCount = (wtDisplay?.hiddenChildCount ?? 0);
-                      // 取目录名作为副信息，帮助用户区分多个 worktree。
-                      const dirName = wt.path.split(/[/\\]/).filter(Boolean).pop() || wt.path;
-                      // PiDeck 创建的 worktree 分支使用 pideck/{slug} 命名；侧栏只展示 slug，
-                      // 避免同一行同时出现 pideck/test-a 和 test-a 造成信息重复。
-                      const displayBranchName = wt.branch.replace(/^pideck\//, "");
-                      return (
-                        <Fragment key={wt.path}>
-                          <button
-                            className={`conversation worktree-row${removingWorktreePaths.has(wt.path) ? " worktree-removing" : ""}`}
-                            onClick={() => {
-                              if (childProject) {
-                                setActiveProjectId(childProject.id);
-                                setCurrentSessionId(undefined);
-                                if (getProjectSessions(childProject.id).length === 0) {
-                                  void refreshProjectSessions(childProject.id).catch(() => undefined);
-                                }
-                              }
-                            }}
-                            onContextMenu={(e) => {
-                              e.preventDefault();
-                              if (childProject) {
-                                setProjectMenu({
-                                  x: e.clientX,
-                                  y: e.clientY,
-                                  project: childProject,
-                                });
-                              }
-                            }}
-                            title={wt.path}
-                          >
-                            <span className="worktree-branch-icon">
-                              <GitBranch size={12} />
-                            </span>
-                            <span className="worktree-branch-name">{displayBranchName}</span>
-                            {dirName !== displayBranchName && (
-                              <span className="worktree-dir-meta" title={wt.path}>{dirName}</span>
-                            )}
-                            {childProject && (
-                              // 子工作区直接新建 Agent，免去先选中再从别处创建的绕路操作。
-                              <span
-                                className="project-action worktree-new-agent"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  void createSessionDraft(childProject.id);
-                                }}
-                                title={t("app.projectNewAgent")}
-                              >
-                                <Plus size={12} />
-                              </span>
-                            )}
-                            {childProject && (
-                              <span
-                                className="project-action worktree-remove"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  requestRemoveWorktree(project.id, wt.path, childProject);
-                                }}
-                                title={t("menu.removeProject")}
-                              >
-                                <Trash2 size={12} />
-                              </span>
-                            )}
-                          </button>
-                          {childDraftSessions.map((session) => {
-                            const runtime = getSessionRuntime(session.id);
-                            return (
-                              <button
-                                key={session.id}
-                                className={`conversation agent-row session-row worktree-nested-row${currentSessionId === session.id ? " active" : ""}`}
-                                title={session.title}
-                                onClick={() => {
-                                  setActiveProjectId(session.projectId);
-                                  setCurrentSessionId(session.id);
-                                }}
-                              >
-                                <span className="session-node-marker" aria-hidden="true" />
-                                <div className="conversation-body">
-                                  <div className="conversation-title">
-                                    {runtime && runtime.status !== "detached" && (
-                                      <span className={`agent-status-indicator status-${runtime.status}`}>{runtime.status}</span>
-                                    )}
-                                    <strong>{session.title}</strong>
-                                  </div>
-                                </div>
-                                <span
-                                  className="project-action"
-                                  role="button"
-                                  tabIndex={0}
-                                  title={t("common.delete")}
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    void deleteDraftSession(session);
-                                  }}
-                                >
-                                  <Trash2 size={12} />
-                                </span>
-                              </button>
-                            );
-                          })}
-                          {wtChildren.filter(c => c.type === "agent").map((item) => {
-                            const agent = item.agent;
-                            const agentSession = rawChildSessions.find((session) =>
-                              isSameSessionPath(
-                                session.filePath,
-                                agent.sessionPath,
-                                session.wsl ? "wsl" : "native",
-                              ),
-                            );
-                            const totalSubagentCount = (item.codexSubagents?.length ?? 0) + (item.piSubagents?.length ?? 0);
-                            const subagentGroupKey = `wt:${childProject!.id}:${item.key}`;
-                            const subagentExpanded = expandedSubagentGroups.has(subagentGroupKey);
-                            return (
-                              <Fragment key={item.key}>
-                                <button
-                                  className={`conversation agent-row worktree-nested-row${agentSession?.id === currentSessionId ? " active" : ""}`}
-                                  onContextMenu={async (event) => {
-                                    event.preventDefault();
-                                    const logging = await api.rpcLogs.getLogging(agent.id);
-                                    setAgentRpcLogging((prev) => { const next = new Map(prev); next.set(agent.id, logging); return next; });
-                                    setAgentMenu({ x: event.clientX, y: event.clientY, agent });
-                                  }}
-                                  onClick={() => {
-                                    if (agentSession) void openSidebarSession(agent.projectId, agentSession);
-                                  }}
-                                >
-                                  <span className="agent-node-marker" aria-hidden="true" />
-                                  <div className="conversation-body">
-                                    <div className="conversation-title">
-                                      {agent.status && (<span className={`agent-status-indicator status-${agent.status}`}>{t(`app.status${agent.status.charAt(0).toUpperCase() + agent.status.slice(1)}` as any) || agent.status}</span>)}
-                                      <strong>{agent.title}</strong>
-                                      {totalSubagentCount > 0 && (
-                                        <span className="subagent-inline-toggle" onClick={(e) => { e.stopPropagation(); setExpandedSubagentGroups(c => { const n = new Set(c); n.has(subagentGroupKey) ? n.delete(subagentGroupKey) : n.add(subagentGroupKey); return n; }); }} title={t("app.piSubagentCount", { count: totalSubagentCount })}>
-                                          <ChevronDown size={10} className={subagentExpanded ? "expanded" : ""} />
-                                          <span className="subagent-inline-count">{totalSubagentCount}</span>
-                                        </span>
-                                      )}
-                                    </div>
-                                  </div>
-                                </button>
-                                {subagentExpanded && item.codexSubagents?.length > 0 && (
-                                  <div className="codex-subagent-sidebar-group">
-                                    {item.codexSubagents.map((sa) => (
-                                      <button key={sa.filePath} className={`conversation agent-row session-row codex-subagent-sidebar-row${sa.id === currentSessionId ? " active" : ""}`} title={sa.filePath} onClick={() => void openSidebarSession(childProject!.id, sa)}>
-                                        <div className="conversation-body"><div className="conversation-title"><strong>{formatCodexSubagentName(sa)}</strong><span className="session-source-badge codex subagent">{t("app.codexSubagent")}</span></div></div>
-                                      </button>
-                                    ))}
-                                  </div>
-                                )}
-                                {subagentExpanded && item.piSubagents?.length > 0 && (
-                                  <div className="codex-subagent-sidebar-group">
-                                    {item.piSubagents.map((sa) => (
-                                      <button key={sa.filePath} className={`conversation agent-row session-row codex-subagent-sidebar-row${sa.id === currentSessionId ? " active" : ""}`} title={sa.filePath} onClick={() => void openSidebarSession(childProject!.id, sa)}>
-                                        <div className="conversation-body"><div className="conversation-title"><strong>{formatPiSubagentName(sa)}</strong></div></div>
-                                      </button>
-                                    ))}
-                                  </div>
-                                )}
-                              </Fragment>
-                            );
-                          })}
-                          {wtChildren.filter(c => c.type === "session").map((item) => {
-                            const session = item.session;
-                            const runtimeAgent = item.agent;
-                            const totalSubagentCount = (item.codexSubagents?.length ?? 0) + (item.piSubagents?.length ?? 0);
-                            const subagentGroupKey = `wt:${childProject!.id}:${item.key}`;
-                            const subagentExpanded = expandedSubagentGroups.has(subagentGroupKey);
-                            return (
-                              <Fragment key={item.key}>
-                                <button
-                                  className={`conversation agent-row session-row worktree-nested-row${session.id === currentSessionId ? " active" : ""}`}
-                                  title={session.filePath}
-                                  onContextMenu={async (event) => {
-                                    event.preventDefault();
-                                    if (runtimeAgent) {
-                                      const logging = await api.rpcLogs.getLogging(runtimeAgent.id);
-                                      setAgentRpcLogging((prev) => {
-                                        const next = new Map(prev);
-                                        next.set(runtimeAgent.id, logging);
-                                        return next;
-                                      });
-                                      setAgentMenu({
-                                        x: event.clientX,
-                                        y: event.clientY,
-                                        agent: runtimeAgent,
-                                      });
-                                      return;
-                                    }
-                                    setSessionMenu({
-                                      x: event.clientX,
-                                      y: event.clientY,
-                                      projectId: childProject!.id,
-                                      session,
-                                    });
-                                  }}
-                                  onClick={() => void openSidebarSession(childProject!.id, session)}
-                                >
-                                  <span className="session-node-marker" aria-hidden="true" />
-                                  <div className="conversation-body">
-                                    <div className="conversation-title">
-                                      {runtimeAgent?.status && (
-                                        <span className={`agent-status-indicator status-${runtimeAgent.status}`}>
-                                          {t(`app.status${runtimeAgent.status.charAt(0).toUpperCase() + runtimeAgent.status.slice(1)}` as any) || runtimeAgent.status}
-                                        </span>
-                                      )}
-                                      <strong title={session.name || t("common.untitled")}>{session.name || t("common.untitled")}</strong>
-                                      {totalSubagentCount > 0 && (
-                                        <span className="subagent-inline-toggle" onClick={(e) => { e.stopPropagation(); setExpandedSubagentGroups(c => { const n = new Set(c); n.has(subagentGroupKey) ? n.delete(subagentGroupKey) : n.add(subagentGroupKey); return n; }); }} title={t("app.piSubagentCount", { count: totalSubagentCount })}>
-                                          <ChevronDown size={10} className={subagentExpanded ? "expanded" : ""} />
-                                          <span className="subagent-inline-count">{totalSubagentCount}</span>
-                                        </span>
-                                      )}
-                                    </div>
-                                  </div>
-                                </button>
-                                {subagentExpanded && item.codexSubagents?.length > 0 && (
-                                  <div className="codex-subagent-sidebar-group">
-                                    {item.codexSubagents.map((sa) => (
-                                      <button key={sa.filePath} className={`conversation agent-row session-row codex-subagent-sidebar-row${sa.id === currentSessionId ? " active" : ""}`} title={sa.filePath} onClick={() => void openSidebarSession(childProject!.id, sa)}>
-                                        <div className="conversation-body"><div className="conversation-title"><strong>{formatCodexSubagentName(sa)}</strong><span className="session-source-badge codex subagent">{t("app.codexSubagent")}</span></div></div>
-                                      </button>
-                                    ))}
-                                  </div>
-                                )}
-                                {subagentExpanded && item.piSubagents?.length > 0 && (
-                                  <div className="codex-subagent-sidebar-group">
-                                    {item.piSubagents.map((sa) => (
-                                      <button key={sa.filePath} className={`conversation agent-row session-row codex-subagent-sidebar-row${sa.id === currentSessionId ? " active" : ""}`} title={sa.filePath} onClick={() => void openSidebarSession(childProject!.id, sa)}>
-                                        <div className="conversation-body"><div className="conversation-title"><strong>{formatPiSubagentName(sa)}</strong></div></div>
-                                      </button>
-                                    ))}
-                                  </div>
-                                )}
-                              </Fragment>
-                            );
-                          })}
-                          {hiddenSessionCount > 0 && (
-                            <button
-                              className="worktree-sessions-more"
-                              onClick={() => {
-                                setExpandedWorktreeSessions((prev) => {
-                                  const next = new Set(prev);
-                                  next.add(wt.path);
-                                  return next;
-                                });
-                              }}
-                            >
-                              {t("app.worktreeShowMoreSessions", { count: hiddenSessionCount })}
-                            </button>
-                          )}
-                        </Fragment>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-        {!isLanWeb && (
-          <div className="toolbar-actions sidebar-bottom-actions">
-            <div className="sidebar-bottom-primary-actions">
-              <button
-                className="icon-button settings-icon"
-                title={t("settings.title")}
-                onClick={() => setSettingsOpen(true)}
-              >
-                <Settings size={17} />
-              </button>
-              <button
-                className="icon-button config-icon"
-                title={t("config.title")}
-                onClick={() => setConfigOpen(true)}
-              >
-                <Sliders size={17} />
-              </button>
-              <button
-                className="icon-button feedback-icon"
-                title={t("feedback.title")}
-                onClick={() => setFeedbackOpen(true)}
-              >
-                <MessageSquare size={17} />
-              </button>
-              <button
-                className="icon-button homepage-icon"
-                title={t("app.homepage")}
-                onClick={() => api.app.openExternal("https://ayuayue.github.io/PiDeck/")}
-              >
-                <Globe size={17} />
-              </button>
-            </div>
-            <button
-              className="icon-button sidebar-collapse-logo"
-              title={
-                listCollapsed ? t("app.expandList") : t("app.collapseList")
-              }
-              onClick={toggleListCollapsed}
-            >
-              {listCollapsed ? (
-                <PanelLeftOpen size={18} strokeWidth={1.9} />
-              ) : (
-                <PanelLeftClose size={18} strokeWidth={1.9} />
-              )}
-            </button>
-          </div>
-        )}
-        </div>
-      </aside>
-
+        onOpenSettings={() => setSettingsOpen(true)}
+        onOpenConfig={() => setConfigOpen(true)}
+        onOpenFeedback={() => setFeedbackOpen(true)}
+        onOpenHomepage={() => void api.app.openExternal("https://ayuayue.github.io/PiDeck/")}
+      />
       <div
         className="splitter splitter-left"
         onPointerDown={(event) => startResize("list", event)}
@@ -7305,253 +6588,6 @@ export function App() {
           </div>
         );
       })()}
-      {projectMenu && (
-        <ProjectContextMenu
-          menu={projectMenu}
-          onClose={() => setProjectMenu(null)}
-          onRevealProject={() => {
-            void api.files.showInFolder(projectMenu.project.path);
-            setProjectMenu(null);
-          }}
-          onOpenWithEditor={() => {
-            setEditorsTargetPath(projectMenu.project.path);
-            setEditorsAnchor(adjustMenuPos(projectMenu.x, projectMenu.y, 220, 280));
-            setEditorsOpen(true);
-            setProjectMenu(null);
-          }}
-          onImportCodexSessions={() => openCodexImport(projectMenu.project)}
-          onImportClaudeSessions={() => openClaudeImport(projectMenu.project)}
-          onImportOpenCodeSessions={() => openOpenCodeImport(projectMenu.project)}
-          onManageProjectResources={() => {
-            setProjectResourcesProject(projectMenu.project);
-            setProjectMenu(null);
-          }}
-          onManageSessions={() => {
-            setSessionManagerProject(projectMenu.project);
-            setProjectMenu(null);
-            // 确保会话列表已加载
-            const pid = projectMenu.project.id;
-            if (getProjectSessions(pid).length === 0) {
-              void refreshProjectSessions(pid);
-            }
-          }}
-          onCopyProjectPath={() => {
-            void navigator.clipboard.writeText(projectMenu.project.path);
-            showToast(t("common.copied"));
-            setProjectMenu(null);
-          }}
-          onFilterSessions={() => {
-            setSessionFilterOpen({
-              ...adjustMenuPos(projectMenu.x, projectMenu.y + 20, 180, 250),
-              projectId: projectMenu.project.id,
-            });
-            setProjectMenu(null);
-          }}
-          onToggleWorktree={async () => {
-            const project = projectMenu.project;
-            setProjectMenu(null);
-            try {
-              const updated = await api.projects.toggleWorktreeEnabled(project.id);
-              if (updated) {
-                const next = await api.projects.list();
-                setProjects(next);
-                // 开启后立即扫描并注册已有 worktree
-                if (updated.worktreeEnabled) {
-                  void refreshWorktrees(updated.id);
-                }
-              }
-            } catch (e) {
-              // 后端在非 git 项目启用时抛出 NOT_A_GIT_REPO，给用户明确提示而非静默失败。
-              const message = e instanceof Error ? e.message : String(e);
-              if (message.includes("NOT_A_GIT_REPO")) {
-                showToast(t("app.worktreeNotGitRepo"), 5000);
-              } else {
-                console.error('Toggle worktree failed', e);
-              }
-            }
-          }}
-          onRefreshProject={() => {
-            void refreshProjectTree(projectMenu.project);
-            setProjectMenu(null);
-          }}
-          onRemoveProject={async () => {
-            const project = projectMenu.project;
-            setProjectMenu(null);
-            try {
-              const next = await api.projects.remove(project.id);
-              setProjects(next);
-              updateAfterProjectRemoved(project.id, next);
-            } catch (e) {
-              if (String((e as Error)?.message ?? e).includes("PROJECT_HAS_RUNNING_AGENT")) {
-                setConfirmDialog({
-                  title: t("app.projectRemoveBlockedTitle"),
-                  message: t("app.projectRemoveBlockedByAgent"),
-                  confirmLabel: t("app.projectRemoveBlockedAck"),
-                  onConfirm: () => setConfirmDialog(null),
-                });
-              }
-            }
-          }}
-        />
-      )}
-      {agentMenu && (
-        <AgentContextMenu
-          menu={agentMenu}
-          actionLoading={agentActionLoading}
-          onClose={() => {
-            if (!agentActionLoading) setAgentMenu(null);
-          }}
-          onRename={() => openAgentRename(agentMenu.agent)}
-          onExport={() => {
-            void exportAgentHtml(agentMenu.agent.id);
-          }}
-          onCopySession={() => {
-            void cloneAgentSession(agentMenu.agent.id);
-          }}
-          onToggleRpcLogging={() => {
-            const id = agentMenu.agent.id;
-            const current = agentRpcLogging.get(id) ?? false;
-            void api.rpcLogs.setLogging(id, !current).then((enabled) => {
-              setAgentRpcLogging((prev) => {
-                const next = new Map(prev);
-                next.set(id, enabled);
-                return next;
-              });
-            });
-            setAgentMenu(null);
-          }}
-          isRpcLogging={agentRpcLogging.get(agentMenu.agent.id) ?? false}
-          onOpenLogFile={() => {
-            void api.rpcLogs.openFile(agentMenu.agent.id);
-            setAgentMenu(null);
-          }}
-          onCopySessionFilePath={() => {
-            const path = agentMenu.agent.sessionPath;
-            if (path) {
-              void navigator.clipboard.writeText(path);
-              showToast(t("common.copied"));
-            }
-            setAgentMenu(null);
-          }}
-          onOpenSessionFile={() => {
-            const path = agentMenu.agent.sessionPath;
-            if (path) void api.files.open(path);
-            setAgentMenu(null);
-          }}
-          onCloseAgent={() => {
-            void closeAgent(agentMenu.agent.id);
-            setAgentMenu(null);
-          }}
-        />
-      )}
-      {sessionMenu && (
-        <SessionContextMenu
-          menu={sessionMenu}
-          actionLoading={sessionActionLoading}
-          onClose={() => {
-            if (!sessionActionLoading) setSessionMenu(null);
-          }}
-          onRename={() =>
-            openSessionRename(sessionMenu.projectId, sessionMenu.session)
-          }
-          onExport={() => {
-            void exportSidebarSession(
-              sessionMenu.projectId,
-              sessionMenu.session,
-            );
-          }}
-          onCopySession={() => {
-            void copySidebarSession(sessionMenu.projectId, sessionMenu.session);
-          }}
-          onCopySessionFilePath={() => {
-            void navigator.clipboard.writeText(sessionMenu.session.filePath);
-            showToast(t("common.copied"));
-            setSessionMenu(null);
-          }}
-          // 历史会话的 RPC 日志在 agent 启动后再通过右键菜单开启记录
-          onOpenSessionFile={() => {
-            void api.files.open(sessionMenu.session.filePath);
-            setSessionMenu(null);
-          }}
-          onDeleteSession={() => {
-            const session = sessionMenu.session;
-            setSessionMenu(null);
-            // 检查是否有子会话：如有则弹出确认，否则直接删除
-            const projectSessions = getProjectSessions(sessionMenu.projectId);
-            const childCount = projectSessions.filter(
-              (s) => isSameSessionPath(
-                s.parentSessionPath,
-                session.filePath,
-                s.wsl ? "wsl" : "native",
-              ),
-            ).length;
-            if (childCount > 0) {
-              setSidebarDeleteConfirm({ session, childCount });
-            } else {
-              void deleteHistorySession(session);
-            }
-          }}
-        />
-      )}
-      {sidebarDeleteConfirm && (
-        <div
-          className="session-delete-confirm-backdrop"
-          onClick={() => setSidebarDeleteConfirm(null)}
-        >
-          <section
-            className="session-delete-confirm"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <strong>{t("drawer.sessionDeleteTitle")}</strong>
-            <p>
-              {t("drawer.sessionDeleteBodyWithChildren", {
-                name: sidebarDeleteConfirm.session.name || t("common.untitled"),
-                count: sidebarDeleteConfirm.childCount,
-              })}
-            </p>
-            <div className="session-delete-confirm-actions">
-              <button onClick={() => setSidebarDeleteConfirm(null)}>
-                {t("common.cancel")}
-              </button>
-              <button
-                className="danger"
-                onClick={() => {
-                  const target = sidebarDeleteConfirm.session;
-                  setSidebarDeleteConfirm(null);
-                  void deleteHistorySession(target);
-                }}
-              >
-                {t("common.delete")}
-              </button>
-            </div>
-          </section>
-        </div>
-      )}
-      {sessionManagerProject && (
-        <SessionManagerModal
-          sessions={getProjectSessions(sessionManagerProject.id)}
-          onClose={() => setSessionManagerProject(null)}
-          onRename={(session) => {
-            setSessionManagerProject(null);
-            openSessionRename(sessionManagerProject.id, session);
-          }}
-          onExport={(session) => {
-            setSessionManagerProject(null);
-            void exportHistorySession(session);
-          }}
-          onDelete={async (sessions) => {
-            for (const session of sessions) {
-              await api.sessions.deleteRecord(session.id);
-              removeSessionState(session.id);
-              removeSessionComposerState(session.id);
-            }
-            showToast(t("app.sessionDeleted"), 2200);
-            const projectId = sessionManagerProject.id;
-            await refreshSessions(projectId);
-            await refreshProjectSessions(projectId);
-          }}
-        />
-      )}
       {projectResourcesProject && (
         <Suspense fallback={null}>
           <ProjectResourcesModal
@@ -7619,22 +6655,6 @@ export function App() {
       )}
 
 
-      {worktreeCreateDialog && (
-        <WorktreeCreateDialog
-          projectId={worktreeCreateDialog.projectId}
-          creating={worktreeCreating}
-          onCreate={async (branchName) => {
-            try {
-              await createWorktree(worktreeCreateDialog.projectId, branchName);
-              setWorktreeCreateDialog(null);
-            } catch {
-              // createWorktree 内部已通过 toast 反馈错误，这里只阻止关闭弹框，
-              // 便于用户修改名称后重试。
-            }
-          }}
-          onClose={() => setWorktreeCreateDialog(null)}
-        />
-      )}
       {environmentDialog && (
         <EnvironmentDialog
           status={piStatus}

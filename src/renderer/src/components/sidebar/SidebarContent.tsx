@@ -1,4 +1,5 @@
 import { Search, Plus, Settings, Sliders, MessageSquare, Globe } from "lucide-react";
+import type { ReactNode } from "react";
 import type { AgentTab, Project, SessionRecord, SessionSummary, WorktreeEntry } from "../../../../shared/types";
 import {
   AgentContextMenu,
@@ -68,6 +69,8 @@ export type SidebarContentProps = {
   branchByProject?: Readonly<Record<string, string | null | undefined>>;
   creatingWorktree?: boolean;
   isLanWeb?: boolean;
+  chrome?: ReactNode;
+  onPointerLeave?: () => void;
   onOpenSettings?: () => void;
   onOpenConfig?: () => void;
   onOpenFeedback?: () => void;
@@ -95,8 +98,13 @@ export function SidebarContent(props: SidebarContentProps) {
     : undefined;
 
   return (
-    <aside className="chat-list-pane v3-braun" aria-label={t("app.search")}>
+    <aside
+      className="chat-list-pane v3-braun"
+      aria-label={t("app.search")}
+      onPointerLeave={props.onPointerLeave}
+    >
       <div className="sidebar-body">
+        {props.chrome}
         <div className="search-row">
           <div className="search-box">
             <span className="search-icon"><Search size={14} /></span>
