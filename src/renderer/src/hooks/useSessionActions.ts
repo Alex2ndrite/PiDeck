@@ -1,4 +1,3 @@
-import { useRef, useCallback } from "react";
 import type { MutableRefObject } from "react";
 import type {
   Project,
@@ -7,7 +6,6 @@ import type {
 } from "../../../shared/types";
 import { isSameSessionPath } from "../agentListDisplay";
 import { t } from "../i18n";
-import type { desktopApi as DesktopApi } from "../desktopApi";
 
 /** Mirrors the sessionRefSelections shape from App.tsx. */
 export type SessionRefSelectionEntry = {
@@ -15,10 +13,6 @@ export type SessionRefSelectionEntry = {
   fullContext: boolean;
   selectedIndices: number[];
 };
-
-export type RefreshSessions = (
-  projectId?: string,
-) => Promise<SessionSummary[]>;
 
 export type RefreshProjectSessions = (
   projectId: string,
@@ -50,13 +44,11 @@ export interface UseSessionActionsOptions {
   getProjectSessionRecords: (projectId: string) => SessionRecord[];
 
   // Atom setters
-  replaceProjectSessions: (args: { projectId: string; sessions: SessionRecord[] }) => void;
   upsertSession: (session: SessionRecord) => void;
   removeSessionState: (sessionId: string) => void;
   removeSessionComposerState: (sessionId: string) => void;
 
-  // Refresh callbacks. Callers own menu closing and foreground loading state.
-  refreshSessions: RefreshSessions;
+  // Refresh callback. Callers own menu closing and foreground loading state.
   refreshProjectSessions: RefreshProjectSessions;
 
   // API
@@ -66,7 +58,6 @@ export interface UseSessionActionsOptions {
       exportHtml: (projectId: string, filePath: string) => Promise<{ path: string }>;
       deleteRecord: (sessionId: string) => Promise<boolean>;
       createDraft: (input: { projectId: string; title: string }) => Promise<SessionRecord>;
-      listCatalog: (projectId: string) => Promise<SessionRecord[]>;
       readMessages: (filePath: string) => Promise<Array<{ role: string; content: string }>>;
     };
   };
@@ -92,11 +83,9 @@ export function useSessionActions(options: UseSessionActionsOptions) {
     setSessionRefSelections,
     getSessionRecord,
     getProjectSessionRecords,
-    replaceProjectSessions,
     upsertSession,
     removeSessionState,
     removeSessionComposerState,
-    refreshSessions,
     refreshProjectSessions,
     api,
     showToast,
@@ -142,7 +131,6 @@ export function useSessionActions(options: UseSessionActionsOptions) {
       return;
     }
     showToast(t("app.sessionCopied"));
-    await refreshSessions(projectId);
     await refreshProjectSessions(projectId);
   }
 
@@ -159,7 +147,6 @@ export function useSessionActions(options: UseSessionActionsOptions) {
     removeSessionComposerState(session.id);
     showToast(t("app.sessionDeleted"), 2200);
     const projectId = sessionsProjectId ?? activeProjectId;
-    await refreshSessions(projectId);
     if (projectId) await refreshProjectSessions(projectId);
   }
 
@@ -185,10 +172,9 @@ export function useSessionActions(options: UseSessionActionsOptions) {
           );
     if (!record) {
       try {
-        const projectSessions = await api.sessions.listCatalog(projectId);
+        await refreshProjectSessions(projectId, true);
         if (requestSequence !== openSessionRequestRef.current) return;
-        replaceProjectSessions({ projectId, sessions: projectSessions });
-        record = projectSessions.find(
+        record = getProjectSessionRecords(projectId).find(
           (candidate) =>
             candidate.filePath &&
             isSameSessionPath(
@@ -213,10 +199,11 @@ export function useSessionActions(options: UseSessionActionsOptions) {
     let record: SessionRecord | undefined = getSessionRecord(sessionId);
     if (!record || record.projectId !== projectId) {
       try {
-        const projectSessions = await api.sessions.listCatalog(projectId);
+        await refreshProjectSessions(projectId, true);
         if (requestSequence !== openSessionRequestRef.current) return;
-        replaceProjectSessions({ projectId, sessions: projectSessions });
-        record = projectSessions.find((candidate) => candidate.id === sessionId);
+        record = getProjectSessionRecords(projectId).find(
+          (candidate) => candidate.id === sessionId,
+        );
       } catch (error) {
         if (requestSequence !== openSessionRequestRef.current) return;
         showToast(error instanceof Error ? error.message : String(error), 4000);

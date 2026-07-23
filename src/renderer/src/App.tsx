@@ -770,7 +770,6 @@ export function App() {
     setVisibleProjectChildCountByProject,
     refreshProjects,
     refreshWorktrees,
-    refreshSessions,
     refreshProjectSessions,
     refreshFiles,
     refreshProjectTree,
@@ -807,9 +806,7 @@ export function App() {
     openOpenCodeImport,
   } = useImportFlow({
     setProjectMenu,
-    sessionsProjectId,
     refreshProjectSessions,
-    refreshSessions,
     showToast,
     scanCodexSessions: api.codexSessions.scan,
     importCodexSessionsApi: api.codexSessions.import,
@@ -1667,11 +1664,9 @@ export function App() {
     setSessionRefSelections,
     getSessionRecord,
     getProjectSessionRecords,
-    replaceProjectSessions,
     upsertSession,
     removeSessionState,
     removeSessionComposerState,
-    refreshSessions,
     refreshProjectSessions,
     api,
     showToast,
@@ -2493,7 +2488,7 @@ export function App() {
     setSessionHistoryLoading(true);
     try {
       // 项目历史弹框内的刷新需要显式进入 loading 状态;否则刷新很快完成时用户会误以为按钮没有响应。
-      await refreshSessions(projectId);
+      await refreshProjectSessions(projectId, true);
     } finally {
       setSessionHistoryLoading(false);
     }
@@ -2520,7 +2515,6 @@ export function App() {
       showToast(t("app.currentSessionCopied"));
       await refreshRuntimeState(agentId);
       const projectId = agents.find((agent) => agent.id === agentId)?.projectId ?? activeProjectId;
-      await refreshSessions(projectId);
       if (projectId) await refreshProjectSessions(projectId);
       if (result.targetSessionId && projectId) {
         selectSessionCommand(projectId, result.targetSessionId, true);
@@ -2560,8 +2554,6 @@ export function App() {
       setAgentRenameValue("");
       showToast(t("app.sessionRenamed"), 2200);
       await refreshProjectSessions(tab.projectId);
-      if (sessionsProjectId === tab.projectId)
-        await refreshSessions(tab.projectId);
     } catch (error) {
       showToast(
         t("app.sessionRenameFailed", {
@@ -2585,9 +2577,6 @@ export function App() {
     try {
       await api.sessions.updateRecord(sessionRenameTarget.session.id, { title: name });
       await refreshProjectSessions(sessionRenameTarget.projectId);
-      if (sessionsProjectId === sessionRenameTarget.projectId) {
-        await refreshSessions(sessionRenameTarget.projectId);
-      }
       setSessionRenameTarget(null);
       setAgentRenameValue("");
       showToast(t("app.sessionRenamed"), 2200);
@@ -3917,7 +3906,7 @@ export function App() {
         void api.agents.list().then(setAgents).catch(() => undefined);
         void api.projects.list().then(setProjects).catch(() => undefined);
         if (activeProjectId) {
-          void refreshSessions(activeProjectId).catch(() => undefined);
+          void refreshProjectSessions(activeProjectId, true).catch(() => undefined);
         }
       }
       showToast(notice);
@@ -4056,7 +4045,7 @@ export function App() {
     if (panel !== "git") closeGitDiff();
     if (panel === "sessions" && activeProjectId) {
       setSessionsProjectId(activeProjectId);
-      void refreshSessions(activeProjectId);
+      void refreshProjectSessions(activeProjectId, true);
     }
     // 打开文件面板时触发一次静默刷新，确保目录结构是最新的，避免上次打开时文件已有变更但未刷新。
     if (panel === "files" && activeProjectId) {
@@ -4121,7 +4110,6 @@ export function App() {
     removeSessionComposerState(session.id);
     showToast(t("app.sessionDeleted"), 2200);
     await refreshProjectSessions(projectId);
-    if (sessionsProjectId === projectId) await refreshSessions(projectId);
   }
 
   function requestDeleteSidebarSession(projectId: string, session: SessionSummary) {
@@ -4818,9 +4806,10 @@ export function App() {
                 const p = projects.find((p) => p.id === activeProjectId);
                 if (p) void api.files.open(p.path);
               }}
-              onRefreshSessions={() =>
-                refreshSessions(sessionsProjectId ?? activeProjectId)
-              }
+              onRefreshSessions={() => {
+                const projectId = sessionsProjectId ?? activeProjectId;
+                if (projectId) void refreshProjectSessions(projectId, true);
+              }}
               onOpenSession={(session) =>
                 void runOpenSidebarSession(
                   sessionsProjectId ?? activeProjectId ?? "",
@@ -4837,7 +4826,8 @@ export function App() {
                 );
                 if (!session) return;
                 await api.sessions.updateRecord(session.id, { title: newName });
-                await refreshSessions(sessionsProjectId ?? activeProjectId);
+                const projectId = sessionsProjectId ?? activeProjectId;
+                if (projectId) await refreshProjectSessions(projectId, true);
               }}
               onCopySession={(session) =>
                 runCopySession(

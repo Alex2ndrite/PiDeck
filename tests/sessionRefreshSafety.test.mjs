@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import test from "node:test";
 
 const projectSync = readFileSync("src/renderer/src/hooks/useProjectSync.ts", "utf8");
 const app = readFileSync("src/renderer/src/App.tsx", "utf8");
+const sessionActions = readFileSync("src/renderer/src/hooks/useSessionActions.ts", "utf8");
+const importFlow = readFileSync("src/renderer/src/hooks/useImportFlow.ts", "utf8");
 const i18n = readFileSync("src/renderer/src/i18n.ts", "utf8");
 const scanner = readFileSync("src/main/sessions/SessionScanner.ts", "utf8");
 
@@ -41,6 +43,14 @@ function assertInOrder(source, fragments, message) {
   }
 }
 
+function rendererSourceFiles(directory) {
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const path = `${directory}/${entry.name}`;
+    if (entry.isDirectory()) return rendererSourceFiles(path);
+    return /\.tsx?$/.test(entry.name) ? [path] : [];
+  });
+}
+
 test("keeps one catalog requester and the legacy adapter", () => {
   const adapter = refreshSessionsBlock();
   assert.equal(projectSync.match(/api\.sessions\.listCatalog\(projectId\)/g)?.length ?? 0, 1);
@@ -56,6 +66,24 @@ test("keeps one catalog requester and the legacy adapter", () => {
     "legacy adapter",
   );
   assert.doesNotMatch(adapter, /api\.sessions\.listCatalog|replaceProjectSessions/);
+});
+
+test("routes production catalog callers through the canonical command", () => {
+  for (const [name, source] of [
+    ["App", app],
+    ["session actions", sessionActions],
+    ["import flow", importFlow],
+  ]) {
+    assert.doesNotMatch(source, /\brefreshSessions\b/, `${name} still calls the legacy adapter`);
+    assert.doesNotMatch(source, /api\.sessions\.listCatalog\(projectId\)/, `${name} bypasses the catalog owner`);
+  }
+  assert.doesNotMatch(sessionActions, /replaceProjectSessions/);
+  assert.doesNotMatch(importFlow, /\bsessionsProjectId\b/);
+
+  const requesters = rendererSourceFiles("src/renderer/src")
+    .filter((path) => /\.sessions\.listCatalog\(/.test(readFileSync(path, "utf8")))
+    .sort();
+  assert.deepEqual(requesters, ["src/renderer/src/hooks/useProjectSync.ts"]);
 });
 
 test("shares one deferred completion across initial, collision, and retry cycles", () => {

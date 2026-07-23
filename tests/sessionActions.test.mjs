@@ -69,7 +69,7 @@ test("accepts a cached session only when it belongs to the requested project", (
       "? cachedRecord",
       ": getProjectSessionRecords(projectId).find(",
       "if (!record)",
-      "api.sessions.listCatalog(projectId)",
+      "await refreshProjectSessions(projectId, true)",
     ],
     "project identity fallback",
   );
@@ -83,9 +83,9 @@ test("keeps request sequencing and stale-result gates around catalog fallback", 
     [
       "const requestSequence = ++openSessionRequestRef.current;",
       "const cachedRecord = getSessionRecord(session.id);",
-      "const projectSessions = await api.sessions.listCatalog(projectId);",
+      "await refreshProjectSessions(projectId, true);",
       "if (requestSequence !== openSessionRequestRef.current) return;",
-      "replaceProjectSessions({ projectId, sessions: projectSessions });",
+      "record = getProjectSessionRecords(projectId).find(",
     ],
     "catalog stale gate",
   );
@@ -96,6 +96,30 @@ test("keeps request sequencing and stale-result gates around catalog fallback", 
   assert.match(
     block,
     /if \(!record \|\| requestSequence !== openSessionRequestRef\.current\) return;\s*commitSessionSelection/,
+  );
+});
+
+test("keeps by-ID fallback project-scoped after canonical refresh", () => {
+  const block = openById();
+
+  assertInOrder(
+    block,
+    [
+      "const requestSequence = ++openSessionRequestRef.current;",
+      "let record: SessionRecord | undefined = getSessionRecord(sessionId);",
+      "if (!record || record.projectId !== projectId)",
+      "await refreshProjectSessions(projectId, true);",
+      "if (requestSequence !== openSessionRequestRef.current) return;",
+      "record = getProjectSessionRecords(projectId).find(",
+      "(candidate) => candidate.id === sessionId",
+      "if (!record || requestSequence !== openSessionRequestRef.current) return;",
+      "commitSessionSelection(projectId, record.id, true);",
+    ],
+    "by-ID catalog fallback",
+  );
+  assert.match(
+    block,
+    /catch \(error\) \{\s*if \(requestSequence !== openSessionRequestRef\.current\) return;\s*showToast/,
   );
 });
 
@@ -187,20 +211,22 @@ test("focuses the composer after publishing a new draft selection", () => {
   );
 });
 
-test("matches project sync refresh return types and silent semantics", () => {
-  assert.match(
-    source,
-    /export type RefreshSessions = \(\s*projectId\?: string,?\s*\) => Promise<SessionSummary\[\]>;/,
-  );
+test("uses only the canonical project refresh port", () => {
   assert.match(
     source,
     /export type RefreshProjectSessions = \(\s*projectId: string,\s*silent\?: boolean,?\s*\) => Promise<SessionSummary\[\] \| SessionRecord\[\] \| undefined>;/,
   );
-  assert.match(source, /refreshSessions: RefreshSessions;/);
   assert.match(source, /refreshProjectSessions: RefreshProjectSessions;/);
+  assert.doesNotMatch(source, /\bRefreshSessions\b|\brefreshSessions\b/);
+  assert.doesNotMatch(source, /sessions\.listCatalog|replaceProjectSessions/);
   assert.doesNotMatch(source, /\bnoCache\b/);
   assert.doesNotMatch(
     source,
     /\b(?:setProjectMenu|setSessionHistoryLoading|setSessionLoadingByProject)\b/,
   );
+
+  const copy = functionBlock("copySession", "exportHistorySession");
+  const remove = functionBlock("deleteHistorySession", "openSidebarSession");
+  assert.equal(copy.match(/refreshProjectSessions\(/g)?.length, 1);
+  assert.equal(remove.match(/refreshProjectSessions\(/g)?.length, 1);
 });

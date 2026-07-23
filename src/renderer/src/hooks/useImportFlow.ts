@@ -30,9 +30,7 @@ export interface ImportController<T = unknown, R = unknown> {
 
 export interface UseImportFlowInput {
   setProjectMenu: (menu: any) => void;
-  sessionsProjectId: string | undefined;
   refreshProjectSessions: (projectId: string, silent?: boolean) => Promise<any>;
-  refreshSessions: (projectId?: string) => Promise<any>;
   showToast: (message: string, duration?: number) => void;
   /** API: scan Codex sessions */
   scanCodexSessions: (projectId: string) => Promise<CodexSessionSummary[]>;
@@ -68,9 +66,7 @@ export interface UseImportFlowOutput {
 export function useImportFlow(input: UseImportFlowInput): UseImportFlowOutput {
   const {
     setProjectMenu,
-    sessionsProjectId,
     refreshProjectSessions,
-    refreshSessions,
     showToast,
     scanCodexSessions: scanCodexApi,
     importCodexSessionsApi,
@@ -146,7 +142,6 @@ export function useImportFlow(input: UseImportFlowInput): UseImportFlowOutput {
       setCodexImportReport(report);
       await scanCodexSessionsFn(codexImportProject, false);
       await refreshProjectSessions(codexImportProject.id);
-      if (sessionsProjectId === codexImportProject.id) await refreshSessions(codexImportProject.id);
       showToast(t("codex.importDone", { imported: report.imported, failed: report.failed }));
       return report;
     } catch (error) {
@@ -155,7 +150,7 @@ export function useImportFlow(input: UseImportFlowInput): UseImportFlowOutput {
     } finally {
       setCodexImportRunning(false);
     }
-  }, [codexImportProject, codexImportSelected, importCodexSessionsApi, scanCodexSessionsFn, refreshProjectSessions, sessionsProjectId, refreshSessions, showToast, t]);
+  }, [codexImportProject, codexImportSelected, importCodexSessionsApi, scanCodexSessionsFn, refreshProjectSessions, showToast, t]);
 
   const openCodexImport = useCallback(async (project: Project) => {
     setProjectMenu(null);
@@ -207,7 +202,6 @@ export function useImportFlow(input: UseImportFlowInput): UseImportFlowOutput {
       setClaudeImportReport(report);
       await scanClaudeSessionsFn(claudeImportProject, false);
       await refreshProjectSessions(claudeImportProject.id);
-      if (sessionsProjectId === claudeImportProject.id) await refreshSessions(claudeImportProject.id);
       showToast(t("claude.importDone", { imported: report.imported, failed: report.failed }));
       return report;
     } catch (error) {
@@ -216,7 +210,7 @@ export function useImportFlow(input: UseImportFlowInput): UseImportFlowOutput {
     } finally {
       setClaudeImportRunning(false);
     }
-  }, [claudeImportProject, claudeImportSelected, importClaudeSessionsApi, scanClaudeSessionsFn, refreshProjectSessions, sessionsProjectId, refreshSessions, showToast, t]);
+  }, [claudeImportProject, claudeImportSelected, importClaudeSessionsApi, scanClaudeSessionsFn, refreshProjectSessions, showToast, t]);
 
   const openClaudeImport = useCallback(async (project: Project) => {
     setProjectMenu(null);
@@ -268,7 +262,6 @@ export function useImportFlow(input: UseImportFlowInput): UseImportFlowOutput {
       setOpenCodeImportReport(report);
       await scanOpenCodeSessionsFn(openCodeImportProject, false);
       await refreshProjectSessions(openCodeImportProject.id);
-      if (sessionsProjectId === openCodeImportProject.id) await refreshSessions(openCodeImportProject.id);
       showToast(t("opencode.importDone", { imported: report.imported, failed: report.failed }));
       return report;
     } catch (error) {
@@ -277,7 +270,7 @@ export function useImportFlow(input: UseImportFlowInput): UseImportFlowOutput {
     } finally {
       setOpenCodeImportRunning(false);
     }
-  }, [openCodeImportProject, openCodeImportSelected, importOpenCodeSessionsApi, scanOpenCodeSessionsFn, refreshProjectSessions, sessionsProjectId, refreshSessions, showToast, t]);
+  }, [openCodeImportProject, openCodeImportSelected, importOpenCodeSessionsApi, scanOpenCodeSessionsFn, refreshProjectSessions, showToast, t]);
 
   const openOpenCodeImport = useCallback(async (project: Project) => {
     setProjectMenu(null);
