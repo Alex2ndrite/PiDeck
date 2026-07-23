@@ -1,2 +1,2 @@
-// Re-export Overlay-owned symbols from AppParts.
-export { EnvironmentDialog, ConfirmDialog } from "../app/AppParts";
+// Re-export Overlay-owned symbols.
+export { EnvironmentDialog, ConfirmDialog } from "./OverlayComponents";

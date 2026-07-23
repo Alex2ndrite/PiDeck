@@ -3,7 +3,7 @@ import test from "node:test";
 import { readFileSync } from "node:fs";
 
 const turnRowSource = readFileSync(
-  "src/renderer/src/components/app/AppParts.tsx",
+  "src/renderer/src/components/session/SurfaceComponents.tsx",
   "utf8",
 );
 

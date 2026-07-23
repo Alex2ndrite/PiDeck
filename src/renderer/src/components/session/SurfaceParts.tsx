@@ -1,7 +1,9 @@
-// Re-export Surface-owned symbols from AppParts.
-// These will be moved inline once AppParts dependencies are untangled.
-export { SessionStatus } from "../app/AppParts";
-export { TurnRow, UserBubble, stripMarkdown } from "../app/AppParts";
-export { ConversationOutline, EmptyState } from "../app/AppParts";
-export { AskQuestionCard, CompactionCard, DiagnosticMessageCard } from "../app/AppParts";
-export { MultiSelectModal, RespondingIndicator } from "../app/AppParts";
+// Re-export Surface-owned symbols from SurfaceComponents.
+export { SessionStatus, TurnRow, UserBubble, stripMarkdown } from "./SurfaceComponents";
+export { ConversationOutline, EmptyState } from "./SurfaceComponents";
+export { LogoMark, AgentAvatar } from "./SurfaceComponents";
+export { AskQuestionCard, CompactionCard, DiagnosticMessageCard } from "./SurfaceComponents";
+export { MultiSelectModal, RespondingIndicator, ThinkingBlock } from "./SurfaceComponents";
+export { AssistantText, ToolCard, ToolGroupCard } from "./SurfaceComponents";
+export { ImagePreviewModal, PromptSuggestions } from "./SurfaceComponents";
+export { DrawerContent, SessionFileSummary, FileContextMenu } from "./SurfaceComponents";

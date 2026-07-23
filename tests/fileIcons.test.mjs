@@ -45,7 +45,7 @@ describe("Seti file icon integration", () => {
   });
 
   test("file tree renders trusted Seti SVG and file type labels", () => {
-    const source = readFileSync("src/renderer/src/components/app/AppParts.tsx", "utf8");
+    const source = readFileSync("src/renderer/src/components/session/SurfaceComponents.tsx", "utf8");
     assert.match(source, /getFileIconSeti\(name\)/);
     assert.match(source, /dangerouslySetInnerHTML=\{\{ __html: svg \}\}/);
     assert.match(source, /aria-hidden="true"/);
@@ -55,7 +55,7 @@ describe("Seti file icon integration", () => {
   });
 
   test("Git panel and file tree share the same vendored Seti lookup and color mapping", () => {
-    const fileTree = readFileSync("src/renderer/src/components/app/AppParts.tsx", "utf8");
+    const fileTree = readFileSync("src/renderer/src/components/session/SurfaceComponents.tsx", "utf8");
     const gitPanel = readFileSync("src/renderer/src/components/app/GitPanel.tsx", "utf8");
     const sharedLookup = readFileSync("src/renderer/src/fileIcons.ts", "utf8");
 

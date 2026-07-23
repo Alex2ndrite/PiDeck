@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-const parts = readFileSync("src/renderer/src/components/app/AppParts.tsx", "utf8");
+const parts = readFileSync("src/renderer/src/components/session/SurfaceComponents.tsx", "utf8");
 const styles = readFileSync("src/renderer/src/styles.css", "utf8");
 const i18n = readFileSync("src/renderer/src/i18n.ts", "utf8");
 

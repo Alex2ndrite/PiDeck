@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { describe, test } from "node:test";
 
 const app = readFileSync("src/renderer/src/App.tsx", "utf8");
-const appParts = readFileSync("src/renderer/src/components/app/AppParts.tsx", "utf8");
+const appParts = readFileSync("src/renderer/src/components/session/SurfaceComponents.tsx", "utf8");
 const settingsModal = readFileSync("src/renderer/src/components/app/SettingsModal.tsx", "utf8");
 const settingsStore = readFileSync("src/main/settings/SettingsStore.ts", "utf8");
 const sharedTypes = readFileSync("src/shared/types.ts", "utf8");

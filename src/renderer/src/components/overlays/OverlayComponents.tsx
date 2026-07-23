@@ -1,35 +1,9 @@
-// ============================================================
-// AppParts — 产品级顶层桥接文件
-// ============================================================
-// 本文件保留：
-//   1. Overlay domain (EnvironmentDialog, ConfirmDialog)
-//   2. 全局类型定义 (SessionModifiedFile, DiffFileHandler)
-//   3. Re-exports from leaf modules (Composer, Sidebar, Surface)
-// ============================================================
-
+import { useState, useEffect, useMemo } from "react";
 import { t } from "../../i18n";
+import { CloseIconButton } from "../ui/IconButton";
 import { Modal } from "../ui/Modal";
-import type { PiInstallStatus, PiInstallExecResult } from "../../../../shared/types";
+import type { AppInfo, FeedbackEnvironment, Project, PiInstallStatus, PiInstallExecResult } from "../../../../shared/types";
 
-// Re-exports from other modules
-export type { WorkspaceDrawerPanel as DrawerPanel } from "../../hooks/useWorkspacePanels";
-
-// Re-exports from leaf modules (A12 migration in progress)
-export { WorktreeCreateDialog } from "../sidebar/SidebarComponents";
-export { ComposerToolbar, ModelPicker, PromptTemplatePicker, ThinkingPicker, ComposerModePicker, ExtensionWidgetCard } from "../session/ComposerComponents";
-
-export type SessionModifiedFile = {
-	path: string;
-	toolName: string;
-	status: string;
-	changedLines?: number;
-	/** 工具执行前的文件原始内容，用于历史会话恢复时展示差异对比。 */
-	originalContent?: string;
-	/** 工具写入/编辑后的新文件内容，优先于从磁盘实时读取（历史会话恢复时磁盘可能已变化或文件已删除）。 */
-	content?: string;
-};
-
-type DiffFileHandler = (path: string, originalContent?: string, content?: string) => void;
 
 export function EnvironmentDialog(props: {
 	status: PiInstallStatus | null;
@@ -371,7 +345,6 @@ export function EnvironmentDialog(props: {
 	);
 }
 
-
 export function ConfirmDialog(props: {
 	title: string;
 	message: string;
@@ -400,35 +373,3 @@ export function ConfirmDialog(props: {
 		</div>
 	);
 }
-
-// ============================================================
-// Re-exports from Surface domain (session rendering components)
-// 保持旧 import 路径继续工作
-// ============================================================
-export {
-  SessionStatus,
-  LogoMark,
-  AgentAvatar,
-  EmptyState,
-  ToolCard,
-  ToolGroupCard,
-  CompactionCard,
-  DiagnosticMessageCard,
-  AskQuestionCard,
-  ThinkingBlock,
-  RespondingIndicator,
-  AssistantText,
-  TurnRow,
-  UserBubble,
-  ImagePreviewModal,
-  stripMarkdown,
-  MultiSelectModal,
-  ConversationOutline,
-  DrawerContent,
-  SessionFileSummary,
-  SessionHistoryModal,
-  PromptSuggestions,
-  FileContextMenu,
-} from "../session/SurfaceComponents";
-
-
