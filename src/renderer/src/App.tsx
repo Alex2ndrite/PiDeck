@@ -17,7 +17,6 @@ import { useAtomValue, useSetAtom, useStore } from "jotai";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
-  Settings,
   Sliders,
   ChevronLeft,
   ChevronRight,
@@ -27,10 +26,7 @@ import {
   MessageSquare,
   PanelLeftClose,
   PanelLeftOpen,
-  Search,
   Play,
-  Plus,
-  Trash2,
   Minus,
   FolderOpen,
   FolderCog,
@@ -39,7 +35,6 @@ import {
   Terminal,
   Filter,
   GitBranch,
-  RefreshCw,
   X,
 } from "lucide-react";
 import { showNotice } from "./utils/notice";
