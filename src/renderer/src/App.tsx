@@ -149,6 +149,7 @@ import {
 } from "./components/session/ComposerPanels";
 import { ScratchPadOverlay } from "./components/overlays/ScratchPadOverlay";
 import { EnvironmentOverlay } from "./components/overlays/EnvironmentOverlay";
+import { SessionRuntimeUiOverlay, createSessionRuntimeUiResponder } from "./components/overlays/SessionRuntimeUiOverlay";
 import { LazyWrapper } from "./hooks/useLazyComponent";
 import {
   AgentContextMenu,
@@ -497,6 +498,11 @@ export function App() {
   const setSessionAttachments = useSetAtom(setSessionAttachmentsAtom);
   const setSessionComposerMode = useSetAtom(setSessionComposerModeAtom);
   const removeSessionState = useSetAtom(removeSessionStateAtom);
+  const sessionRuntimeUiResponder = useMemo(() => {
+    if (!currentSessionId || !currentSessionRuntime?.agentId || currentSessionRuntime.runtimeGeneration == null) return undefined;
+    const b = { sessionId: currentSessionId, agentId: currentSessionRuntime.agentId, runtimeGeneration: currentSessionRuntime.runtimeGeneration };
+    return createSessionRuntimeUiResponder({ binding: b, readBinding: () => b, claim: (i) => claimSessionUiResponse(i), rollback: (i) => rollbackSessionUiResponse(i), send: async (i) => sendSessionUiResponse(i.requestId, i.response) });
+  }, [currentSessionId, currentSessionRuntime?.agentId, currentSessionRuntime?.runtimeGeneration, claimSessionUiResponse, rollbackSessionUiResponse]);
   const removeSessionComposerState = useSetAtom(removeSessionComposerStateAtom);
   const {
     messages: currentSessionMessages,
@@ -1689,12 +1695,9 @@ export function App() {
   });
 
 
-  const activeUiAsk: AgentUiRequest | undefined = useMemo(() => {
-    if (!currentSessionRuntimeUi) return undefined;
-    return Object.values(currentSessionRuntimeUi.requests).find(
-      (entry) => entry.status === "pending",
-    )?.request;
-  }, [currentSessionRuntimeUi]);
+  // Replaced by SessionRuntimeUiOverlay; kept for compilation compatibility.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const activeUiAsk = undefined as unknown as AgentUiRequest | undefined;
 
   function sendSessionUiResponse(requestId: string, response: AgentUiResponse) {
     if (!currentSessionId || !currentSessionRuntime) return;
@@ -6377,6 +6380,7 @@ export function App() {
       )}
 
 
+      {/* old conditional wrapping — replaced by EnvironmentOverlay open prop below */}
       <EnvironmentOverlay open={environmentDialog}>
         <EnvironmentDialog
           status={piStatus}
@@ -6459,6 +6463,14 @@ export function App() {
           }}
         />
       </EnvironmentOverlay>
+      {currentSessionId && sessionRuntimeUiResponder && (
+        <SessionRuntimeUiOverlay
+          sessionId={currentSessionId}
+          runtime={currentSessionRuntime}
+          ui={currentSessionRuntimeUi}
+          responder={sessionRuntimeUiResponder}
+        />
+      )}
       {settingsOpen && (
         <Suspense fallback={null}>
         <SettingsModal
