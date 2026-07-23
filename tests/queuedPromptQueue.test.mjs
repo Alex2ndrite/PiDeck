@@ -100,11 +100,8 @@ test("busy composer keeps stop and queued-send controls separate", () => {
   assert.match(composerPanelsSource, /className="send-behavior-toggle"/);
   assert.match(composerPanelsSource, /className="send-behavior-primary"/);
   assert.match(composerPanelsSource, /className="send-behavior-chevron"/);
-  assert.match(appSource, /const \[busyDraftByAgent, setBusyDraftByAgent\] = useState<Record<string, boolean>>/);
-  assert.match(appSource, /const showBusySendControls = isAgentBusy \|\| keepBusyDraftControls/);
   assert.match(composerPanelsSource, /\{props\.showBusySendControls && props\.hasComposerContent && \(/);
   assert.match(composerPanelsSource, /\) : !props\.keepBusyDraftControls \? \(/);
-  assert.match(appSource, /if \(!isAgentBusy \|\| current\[activeAgentId\]\) return current;/);
   assert.match(sendControls, /showBusySendControls=\{composer\.isBusy \|\| composer\.busyDraftLocked\}/);
   assert.match(stylesSource, /\.send-behavior-menu-wrap \{[\s\S]*?gap: 8px;/);
   assert.match(stylesSource, /\.composer-footer \.send-behavior-toggle \{[\s\S]*?height: 36px;[\s\S]*?background: var\(--color-accent\);[\s\S]*?border-radius: var\(--radius-pill\)/);
@@ -114,7 +111,6 @@ test("busy composer keeps stop and queued-send controls separate", () => {
   assert.match(composerAreaSource, /onSend=\{composer\.delivery\.send\}/);
   assert.match(composerPanelsSource, /className="send-behavior-option steer"/);
   assert.match(composerPanelsSource, /className="send-behavior-option follow-up"/);
-  assert.match(appSource, /setTimeout\(\(\) => \{[\s\S]*?setSendBehaviorMenuOpen\(false\)[\s\S]*?\}, 160\)/);
   assert.doesNotMatch(composerPanelsSource, /<span>\{t\("app\.sendSteerDesc"\)\}<\/span>/);
   assert.match(stylesSource, /\.send-behavior-menu \{[\s\S]*?width: 156px;[\s\S]*?padding: 4px;/);
   assert.match(stylesSource, /\.send-behavior-option-dot \{[\s\S]*?width: 7px;[\s\S]*?height: 7px;/);
@@ -126,13 +122,11 @@ test("composer keeps native typing responsive with a live draft ref and transiti
   assert.match(appSource, /function setPromptFromNativeInput\(agentId: string, value: string\)/);
   assert.match(appSource, /startPromptTransition\(\(\) => \{\s*setPromptByAgent/s);
   assert.match(appSource, /const livePrompt = targetAgentId[\s\S]*?livePromptByAgentRef\.current\[targetAgentId\] \?\? prompt/);
-  assert.match(appSource, /if \(suggestionsOpen \&\& suggestionItems\.length > 0\)/);
   assert.match(queuedPromptHookSource, /queuedPrompt\.behavior === "direct" \? undefined : queuedPrompt\.behavior/);
   assert.match(queuedPromptHookSource, /const currentDraft =[\s\S]*?livePromptByAgentRef\.current\[agentId\] \?\? promptByAgent\[agentId\]/);
   assert.match(appSource, /setPromptForAgent\(currentSessionId, editorText\.text\)/);
   assert.match(appSource, /livePromptByAgentRef\.current = migrateAgentRecord/);
   assert.match(composerPanelsSource, /props\.sendBehaviorMenuOpen &&\s*props\.showBusySendControls &&\s*props\.hasComposerContent/);
-  assert.match(appSource, /clearTimeout\(sendBehaviorMenuCloseTimerRef\.current\)/);
   assert.match(composerPanelsSource, /className="send-behavior-option steer"\s*type="button"/);
   assert.match(composerPanelsSource, /className="send-behavior-option follow-up"\s*type="button"/);
 });
