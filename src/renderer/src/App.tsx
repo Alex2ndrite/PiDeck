@@ -147,6 +147,7 @@ import {
 import { ScratchPadOverlay } from "./components/overlays/ScratchPadOverlay";
 import { WorkspaceDrawerHost } from "./components/workspace/WorkspaceDrawerHost";
 import { AppHeader } from "./components/AppHeader";
+import { RenameModals } from "./components/RenameModals";
 import { SessionActionOverlays } from "./components/overlays/SessionActionOverlays";
 import { AppUpdateOverlay } from "./components/overlays/AppUpdateOverlay";
 import { ImportOverlayHost } from "./components/overlays/ImportOverlayHost";
@@ -5227,63 +5228,30 @@ export function App() {
           />
         </Suspense>
       )}
-      {(agentRenameTarget || sessionRenameTarget) && (
-        <div
-          className="modal-backdrop rename-dialog-backdrop"
-          onClick={() => {
-            if (!agentRenaming) {
-              setAgentRenameTarget(null);
-              setSessionRenameTarget(null);
-            }
-          }}
-        >
-          <form
-            className="rename-dialog"
-            onClick={(event) => event.stopPropagation()}
-            onSubmit={(event) => {
-              event.preventDefault();
-              if (agentRenameTarget) void submitAgentRename();
-              else void submitSessionRename();
-            }}
-          >
-            <div className="rename-dialog-header">
-              <strong>{t("app.renameSessionTitle")}</strong>
-              <button
-                type="button"
-                disabled={agentRenaming}
-                onClick={() => {
-                  setAgentRenameTarget(null);
-                  setSessionRenameTarget(null);
-                }}
-              >
-                <X size={15} />
-              </button>
-            </div>
-            <input
-              autoFocus
-              value={agentRenameValue}
-              onChange={(event) => setAgentRenameValue(event.target.value)}
-              placeholder={t("app.renameSessionPlaceholder")}
-              disabled={agentRenaming}
-            />
-            <div className="rename-dialog-actions">
-              <button
-                type="button"
-                disabled={agentRenaming}
-                onClick={() => {
-                  setAgentRenameTarget(null);
-                  setSessionRenameTarget(null);
-                }}
-              >
-                {t("common.cancel")}
-              </button>
-              <button type="submit" disabled={agentRenaming}>
-                {agentRenaming ? t("common.saving") : t("common.save")}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
+      <RenameModals
+        agentRename={(agentRenameTarget || sessionRenameTarget) ? {
+          isAgent: !!agentRenameTarget,
+          value: agentRenameValue,
+          saving: agentRenaming,
+          onValueChange: setAgentRenameValue,
+          onClose: () => { setAgentRenameTarget(null); setSessionRenameTarget(null); },
+          onSubmit: () => { if (agentRenameTarget) void submitAgentRename(); else void submitSessionRename(); },
+        } : undefined}
+        fileRename={renamingFile ? {
+          path: renamingFile.path,
+          name: renamingFile.name,
+          inputValue: renamingFileInput,
+          onInputChange: setRenamingFileInput,
+          onClose: () => setRenamingFile(null),
+          onConfirm: (path, newName) => {
+            void api.files.rename(path, newName).then(() => {
+              void refreshFiles();
+              setRenamingFile(null);
+              showToast(t("app.fileRenamed"), 2000);
+            }).catch((err) => console.error("[File] rename failed:", err));
+          },
+        } : undefined}
+      />
 
       {/* old conditional wrapping — replaced by EnvironmentOverlay open prop below */}
       <EnvironmentOverlay open={environmentDialog}>
@@ -5496,61 +5464,6 @@ export function App() {
       </Suspense>
 
 
-      {renamingFile && (
-        <div className="config-modal-overlay" onClick={() => setRenamingFile(null)}>
-          <div className="config-modal-dialog" onClick={(e) => e.stopPropagation()}>
-            <strong>{t("drawer.renameTitle")}</strong>
-            <div style={{ margin: "12px 0" }}>
-              <input
-                type="text"
-                value={renamingFileInput}
-                onChange={(e) => setRenamingFileInput(e.target.value)}
-                className="config-input"
-                autoFocus
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    const path = renamingFile.path;
-                    const newName = renamingFileInput.trim();
-                    if (newName && newName !== renamingFile.name) {
-                      void api.files.rename(path, newName).then(() => {
-                        void refreshFiles();
-                        setRenamingFile(null);
-                        showToast(t("app.fileRenamed"), 2000);
-                      }).catch((err) => console.error("[File] 重命名失败:", err));
-                    } else {
-                      setRenamingFile(null);
-                    }
-                  }
-                  if (e.key === "Escape") setRenamingFile(null);
-                }}
-              />
-            </div>
-            <div className="config-modal-actions">
-              <button className="config-btn" onClick={() => setRenamingFile(null)}>
-                {t("common.cancel")}
-              </button>
-              <button
-                className="config-btn primary"
-                onClick={() => {
-                  const path = renamingFile.path;
-                  const newName = renamingFileInput.trim();
-                  if (newName && newName !== renamingFile.name) {
-                    void api.files.rename(path, newName).then(() => {
-                      void refreshFiles();
-                      setRenamingFile(null);
-                      showToast(t("app.fileRenamed"), 2000);
-                    }).catch((err) => console.error("[File] 重命名失败:", err));
-                  } else {
-                    setRenamingFile(null);
-                  }
-                }}
-              >
-                {t("common.confirm")}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Scratch Pad（草稿本）：根级渲染，避免受 chat-pane grid 影响定位 */}
       <ScratchPadOverlay controller={scratchPad} />
