@@ -148,6 +148,7 @@ import {
 } from "./components/session/ComposerPanels";
 import { ScratchPadOverlay } from "./components/overlays/ScratchPadOverlay";
 import { AppUpdateOverlay } from "./components/overlays/AppUpdateOverlay";
+import { ImportOverlayHost } from "./components/overlays/ImportOverlayHost";
 import { EnvironmentOverlay } from "./components/overlays/EnvironmentOverlay";
 import { SessionRuntimeUiOverlay, createSessionRuntimeUiResponder } from "./components/overlays/SessionRuntimeUiOverlay";
 import { LazyWrapper } from "./hooks/useLazyComponent";
@@ -205,12 +206,7 @@ const FileDiffViewer = lazy(() => import("./components/app/FileDiffViewer").then
 // 懒加载模态框，减少首屏 JS 体积
 const SettingsModal = lazy(() => import("./components/app/SettingsModal").then((m) => ({ default: m.SettingsModal })));
 
-const CodexImportModal = lazy(() => import("./components/app/ImportModals").then((m) => ({ default: m.CodexImportModal })));
-const ClaudeImportModal = lazy(() => import("./components/app/ImportModals").then((m) => ({ default: m.ClaudeImportModal })));
-const OpenCodeImportModal = lazy(() => import("./components/app/ImportModals").then((m) => ({ default: m.OpenCodeImportModal })));
 const ProjectResourcesModal = lazy(() => import("./components/app/ProjectResourcesModal").then((m) => ({ default: m.ProjectResourcesModal })));
-const UpdateErrorModalLazy = lazy(() => import("./components/app/UpdateModals").then((m) => ({ default: m.UpdateErrorModal })));
-const UpToDateModalLazy = lazy(() => import("./components/app/UpdateModals").then((m) => ({ default: m.UpToDateModal })));
 import { createDefaultExternalEditorSettings } from "../../shared/types";
 import type {
   AgentRuntimeState,
@@ -3631,6 +3627,45 @@ export function App() {
     }
   }
 
+  const codexImportController = useMemo(() => ({
+    sessions: codexImportSessions,
+    selectedPaths: codexImportSelected,
+    loading: codexImportLoading,
+    importing: codexImportRunning,
+    report: codexImportReport,
+    error: null as string | null,
+    refresh: () => scanCodexSessions(),
+    toggle: toggleCodexSession,
+    toggleAll: toggleAllCodexSessions,
+    importSelected: async () => { await importCodexSessions(); return null; },
+  }), [codexImportSessions, codexImportSelected, codexImportLoading, codexImportRunning, codexImportReport]);
+
+  const claudeImportController = useMemo(() => ({
+    sessions: claudeImportSessions,
+    selectedPaths: claudeImportSelected,
+    loading: claudeImportLoading,
+    importing: claudeImportRunning,
+    report: claudeImportReport,
+    error: null as string | null,
+    refresh: () => scanClaudeSessions(),
+    toggle: toggleClaudeSession,
+    toggleAll: toggleAllClaudeSessions,
+    importSelected: async () => { await importClaudeSessions(); return null; },
+  }), [claudeImportSessions, claudeImportSelected, claudeImportLoading, claudeImportRunning, claudeImportReport]);
+
+  const openCodeImportController = useMemo(() => ({
+    sessions: openCodeImportSessions,
+    selectedPaths: openCodeImportSelected,
+    loading: openCodeImportLoading,
+    importing: openCodeImportRunning,
+    report: openCodeImportReport,
+    error: null as string | null,
+    refresh: () => scanOpenCodeSessions(),
+    toggle: toggleOpenCodeSession,
+    toggleAll: toggleAllOpenCodeSessions,
+    importSelected: async () => { await importOpenCodeSessions(); return null; },
+  }), [openCodeImportSessions, openCodeImportSelected, openCodeImportLoading, openCodeImportRunning, openCodeImportReport]);
+
   async function reorderProjects(
     sourceProjectId: string,
     targetProjectId: string,
@@ -6569,66 +6604,9 @@ export function App() {
           onClose={() => setPreviewImage(null)}
         />
       )}
-      {codexImportProject && (
-        <Suspense fallback={null}>
-        <CodexImportModal
-          project={codexImportProject}
-          sessions={codexImportSessions}
-          selectedPaths={codexImportSelected}
-          loading={codexImportLoading}
-          importing={codexImportRunning}
-          report={codexImportReport}
-          onClose={() => {
-            setCodexImportProject(null);
-            setCodexImportReport(null);
-          }}
-          onRefresh={() => scanCodexSessions()}
-          onToggle={toggleCodexSession}
-          onToggleAll={toggleAllCodexSessions}
-          onImport={importCodexSessions}
-        />
-      </Suspense>
-      )}
-      {claudeImportProject && (
-        <Suspense fallback={null}>
-        <ClaudeImportModal
-          project={claudeImportProject}
-          sessions={claudeImportSessions}
-          selectedPaths={claudeImportSelected}
-          loading={claudeImportLoading}
-          importing={claudeImportRunning}
-          report={claudeImportReport}
-          onClose={() => {
-            setClaudeImportProject(null);
-            setClaudeImportReport(null);
-          }}
-          onRefresh={() => scanClaudeSessions()}
-          onToggle={toggleClaudeSession}
-          onToggleAll={toggleAllClaudeSessions}
-          onImport={importClaudeSessions}
-        />
-      </Suspense>
-      )}
-      {openCodeImportProject && (
-        <Suspense fallback={null}>
-        <OpenCodeImportModal
-          project={openCodeImportProject}
-          sessions={openCodeImportSessions}
-          selectedPaths={openCodeImportSelected}
-          loading={openCodeImportLoading}
-          importing={openCodeImportRunning}
-          report={openCodeImportReport}
-          onClose={() => {
-            setOpenCodeImportProject(null);
-            setOpenCodeImportReport(null);
-          }}
-          onRefresh={() => scanOpenCodeSessions()}
-          onToggle={toggleOpenCodeSession}
-          onToggleAll={toggleAllOpenCodeSessions}
-          onImport={importOpenCodeSessions}
-        />
-      </Suspense>
-      )}
+      {codexImportProject && <ImportOverlayHost kind="codex" project={codexImportProject} controller={codexImportController} onClose={() => { setCodexImportProject(null); setCodexImportReport(null); }} />}
+      {claudeImportProject && <ImportOverlayHost kind="claude" project={claudeImportProject} controller={claudeImportController} onClose={() => { setClaudeImportProject(null); setClaudeImportReport(null); }} />}
+      {openCodeImportProject && <ImportOverlayHost kind="opencode" project={openCodeImportProject} controller={openCodeImportController} onClose={() => { setOpenCodeImportProject(null); setOpenCodeImportReport(null); }} />}
       <Suspense fallback={null}>
       <ConfigModal
         open={configOpen}
@@ -6999,99 +6977,4 @@ function formatUpdateBytes(bytes?: number) {
   return `${value >= 10 ? value.toFixed(1) : value.toFixed(2)} ${units[unitIndex]}`;
 }
 
-function UpdateModal(props: {
-  info: AppUpdateInfo;
-  checking: boolean;
-  downloading: boolean;
-  progress: AppUpdateDownloadProgress | null;
-  downloadedPath: string | null;
-  onClose: () => void;
-  onDownload: () => void;
-  onInstall: () => void;
-  onBrowserDownload: () => void;
-  onOpenRelease: () => void;
-}) {
-  const progressPercent = props.progress?.percent ?? 0;
-  return (
-    <div className="modal-backdrop update-backdrop">
-      <section className="update-modal">
-        <div className="modal-header">
-          <strong>
-            {t("update.availableTitle", { version: props.info.latestVersion })}
-          </strong>
-          <CloseIconButton label={t("common.close")} onClick={props.onClose} />
-        </div>
-        <div className="update-body">
-          <p className="update-version-line">
-            {t("update.currentLatest", {
-              current: props.info.currentVersion,
-              latest: props.info.latestVersion,
-            })}
-          </p>
-          {props.info.recommendedAsset && (
-            <p className="update-asset-line">
-              {t("update.recommendedAsset", {
-                name: props.info.recommendedAsset.name,
-              })}
-            </p>
-          )}
-          {props.progress && (
-            <div className="update-download-progress">
-              <div className="update-progress-header">
-                <span>{props.progress.assetName}</span>
-                <span>{progressPercent ? `${progressPercent.toFixed(1)}%` : t("update.downloading")}</span>
-              </div>
-              <div className="update-progress-track">
-                <div
-                  className="update-progress-bar"
-                  style={{ width: `${Math.max(0, Math.min(100, progressPercent))}%` }}
-                />
-              </div>
-              <div className="update-progress-meta">
-                <span>
-                  {formatUpdateBytes(props.progress.receivedBytes)} / {formatUpdateBytes(props.progress.totalBytes)}
-                </span>
-                <span>
-                  {props.progress.bytesPerSecond
-                    ? `${formatUpdateBytes(props.progress.bytesPerSecond)}/s`
-                    : ""}
-                </span>
-              </div>
-              {props.downloadedPath && (
-                <div className="update-downloaded-path">{props.downloadedPath}</div>
-              )}
-            </div>
-          )}
-          <div className="update-notes markdown-body">
-            {/* GitHub Release notes 通常是 Markdown;这里复用聊天渲染链路支持标题、列表、链接和代码块。 */}
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>
-              {props.info.releaseNotes.trim() || t("update.noReleaseNotes")}
-            </ReactMarkdown>
-          </div>
-        </div>
-        <div className="update-actions">
-          <button onClick={props.onOpenRelease}>
-            {t("update.openRelease")}
-          </button>
-          <button onClick={props.onBrowserDownload}>
-            {t("update.browserDownload")}
-          </button>
-          {props.downloadedPath ? (
-            <button className="primary" onClick={props.onInstall}>
-              {t("update.installDownloaded")}
-            </button>
-          ) : (
-            <button
-              className="primary"
-              disabled={props.checking || props.downloading || !props.info.recommendedAsset}
-              onClick={props.onDownload}
-            >
-              {props.downloading ? t("update.downloading") : t("update.downloadInApp")}
-            </button>
-          )}
-        </div>
-      </section>
-    </div>
-  );
-}
 
