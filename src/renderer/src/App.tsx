@@ -149,6 +149,7 @@ import {
 import { ScratchPadOverlay } from "./components/overlays/ScratchPadOverlay";
 import { WorkspaceDrawerHost } from "./components/workspace/WorkspaceDrawerHost";
 import { AppHeader } from "./components/AppHeader";
+import { AppShell } from "./components/app/AppShell";
 import { RenameModals } from "./components/RenameModals";
 import { SessionActionOverlays } from "./components/overlays/SessionActionOverlays";
 import { AppUpdateOverlay } from "./components/overlays/AppUpdateOverlay";
@@ -3702,6 +3703,440 @@ export function App() {
     },
   };
 
+
+  const sidebarContentNode = (
+<SidebarContent
+      controller={sidebarController}
+      actions={sidebarActions}
+      currentProjectId={activeProjectId}
+      currentSessionId={currentSessionId}
+      worktreesByProject={worktreesByProject}
+      branchByProject={branchByProject}
+      creatingWorktree={worktreeCreating}
+      isLanWeb={isLanWeb}
+      chrome={<>
+        <div className="list-toolbar">
+          <div className="app-badge">
+            <LogoMark />
+            <span className="brand-wordmark" aria-label="PiDeck">PiDeck</span>
+          </div>
+        </div>
+        <button
+          className="collapse-button list-collapse"
+          title={listCollapsed ? t("app.expandList") : t("app.collapseList")}
+          onClick={toggleListCollapsed}
+        >
+          {listCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+        </button>
+      </>}
+      onPointerLeave={() => {
+        if (listHoverRevealSuppressed) setListHoverRevealSuppressed(false);
+      }}
+      onOpenSettings={() => setSettingsOpen(true)}
+      onOpenConfig={() => setConfigOpen(true)}
+      onOpenFeedback={() => overlays.setFeedbackOpen(true)}
+      onOpenHomepage={() => void api.app.openExternal("https://ayuayue.github.io/PiDeck/")}
+    />
+  );
+
+  const chatPaneContentNode = (
+    <>
+    <SessionHeader
+      headerRef={chatHeaderRef}
+      comboRef={sessionComboRef}
+      title={
+        currentSession?.title ??
+        (isChatProject(activeProject)
+          ? t("app.chatProject")
+          : activeProject?.name) ??
+        "PiDeck"
+      }
+      compactionCount={activeAgent?.compactionCount}
+      runtimeState={activeRuntimeState}
+      duration={activeAgentId ? sessionDurationByAgent[activeAgentId] : undefined}
+      isStarting={isAgentStarting}
+      hasProject={Boolean(activeProjectId)}
+      hasSession={Boolean(activeAgentId || currentSessionId)}
+      menuOpen={sessionActionsOpen}
+      canStop={activeAgent?.status === "running"}
+      canRestart={Boolean(
+        activeAgentId &&
+        activeAgent &&
+        activeAgent.status !== "starting" &&
+        restartingAgentId !== activeAgentId &&
+        !queueFlushByAgentRef.current.has(activeAgentId) &&
+        !(queue.queuedPrompts[activeAgentId] ?? []).some(
+          (queuedPrompt) =>
+            queuedPrompt.status === "sending" ||
+            queuedPrompt.status === "unknown",
+        )
+      )}
+      isRestarting={restartingAgentId === activeAgentId}
+      showRestart={!isLanWeb}
+      onTrigger={() => {
+        if (activeAgentId || currentSessionId) {
+          setSessionActionsOpen((open) => !open);
+        } else {
+          void runCreateSessionDraft();
+        }
+      }}
+      onNewSession={() => {
+        void runCreateSessionDraft();
+        setSessionActionsOpen(false);
+      }}
+      onStop={() => {
+        void abortAgent();
+        setSessionActionsOpen(false);
+      }}
+      onRestart={() => void restartActiveAgent()}
+    />
+    <NoticeCenter />
+
+    {currentSessionId ? (
+      <SessionMessageTimeline
+        mode="session"
+        sessionId={currentSessionId}
+        controller={sessionTimeline}
+        hasProject={Boolean(activeProjectId)}
+        onCreateSession={() => void runCreateSessionDraft()}
+        showThinking={settings.showThinking}
+        validCommandNames={validCommandNames}
+        validFilePaths={validFilePaths}
+        onPreviewImage={setPreviewImage}
+        onOpenExternal={(url) => api.app.openExternal(url)}
+        onOpenFile={openFilePath}
+        onDiffFile={diffFilePath}
+        onResendUserMessage={canMutateActiveMessages ? resendUserMessage : undefined}
+        onEditMessage={canMutateActiveMessages ? editMessage : undefined}
+        onDeleteMessage={canMutateActiveMessages ? deleteMessage : undefined}
+        onSendUiResponse={(requestId, response) => {
+          if (!activeAgentId) return;
+          if (response.cancelled) setCancellingUi(true);
+          sendSessionUiResponse(requestId, response);
+        }}
+        onToast={(message) => showToast(message)}
+      />
+    ) : null}
+
+      {sessionTimeline.showScrollToBottom && (
+        <button
+          className="scroll-to-bottom-btn"
+          // 按钮脱离滚动容器后，由 composer 实际高度 + 终端高度决定 bottom，避免输入框增高或终端打开时遮挡。
+          style={{ bottom: Math.max(24, terminalRowHeight + composerOffsetHeight + 18) }}
+          onClick={sessionTimeline.scrollToBottom}
+          title={t("app.scrollToBottom")}
+        >
+          <ChevronDown size={18} />
+        </button>
+      )}
+
+    {hasActiveConversation && currentSessionId && (
+      <ComposerArea
+        ref={composerRef}
+        sessionId={currentSessionId}
+        onOpenFile={openFilePath}
+        enqueue={enqueueSessionPrompt as any}
+        queuePanel={activeAgentId ? (
+          <QueuedPromptPanel
+            trackRef={queuedTrackRef}
+            agentId={activeAgentId}
+            prompts={activeQueuedPrompts}
+            visiblePrompts={visibleQueuedPrompts}
+            onRetract={queue.retractQueuedPromptForEdit}
+            onDiscard={queue.discardQueuedPrompt}
+          />
+        ) : undefined}
+      />
+    )}
+
+    {!isLanWeb && currentSessionId && !settingsOpen && !configOpen && !environmentDialog && terminalDockVisible && (
+      <SessionRuntimeDock
+        agentId={activeAgentId}
+        open={terminalDockVisible}
+        collapsed={terminalCollapsed}
+        height={terminalRowHeight}
+        terminal={api.terminal}
+        onOpenChange={(open) => {
+          if (activeAgentId) setTerminalOpenForAgent(activeAgentId, open);
+        }}
+        onCollapsedChange={(collapsed) => {
+          if (activeAgentId) setTerminalCollapsedForAgent(activeAgentId, collapsed);
+        }}
+        onHeightChange={(height) => {
+          if (!activeAgentId) return;
+          const maxHeight = Math.max(
+            120,
+            availableTerminalHeight,
+          );
+          setTerminalHeightByAgent((current) => ({
+            ...current,
+            [activeAgentId]: Math.min(height, maxHeight),
+          }));
+        }}
+      />
+    )}
+    </>
+  );
+
+  const outlineContentNode = (
+    hasActiveConversation ? (
+<ConversationOutline
+        items={outlineItems}
+        onJump={handleOutlineJump}
+        extraAction={{
+          active: scratchPad.isOpen,
+          label: t("scratchPad.openTooltip"),
+          onClick: () => scratchPad.toggle(),
+          icon: <Pencil size={17} />,
+        }}
+        terminalAction={{
+          active: terminalOpen,
+          label: t("app.terminal"),
+          onClick: () => {
+            if (!activeAgentId) return;
+            setTerminalOpenForAgent(activeAgentId, !terminalOpen);
+          },
+          icon: <Terminal size={17} />,
+        }}
+        filesAction={{
+          active: drawer === "files",
+          label: t("app.files"),
+          onClick: () => {
+            if (drawer === "files" && !drawerCollapsed) {
+              workspace.closeDrawer();
+            } else {
+              if (activeProjectId) void refreshFiles(activeProjectId, true);
+              workspace.openDrawer("files");
+            }
+          },
+          icon: <FolderOpen size={17} />,
+        }}
+        gitAction={settings.enableGitManagement && activeProjectId && !isChatProject(activeProject) ? {
+          active: drawer === "git",
+          label: t("drawer.sourceControl"),
+          onClick: () => {
+            if (drawer === "git" && !drawerCollapsed) {
+              if (gitDrawerDiff) {
+                closeGitDiff();
+                return;
+              }
+              workspace.closeDrawer();
+            } else {
+              workspace.openDrawer("git");
+            }
+          },
+          icon: <GitBranch size={17} />,
+        } : undefined}
+        editorsAction={{
+          active: editorsOpen,
+          label: t("app.openWithEditor"),
+          onClick: (e) => {
+            const projectPath =
+              activeAgent?.cwd ||
+              (activeProject && !isChatProject(activeProject)
+                ? activeProject.path
+                : null);
+            const btn = (e?.currentTarget as HTMLElement)?.closest("button");
+            const anchor = btn
+              ? adjustMenuPos(btn.getBoundingClientRect().left - 4, btn.getBoundingClientRect().top, 220, 280)
+              : undefined;
+            workspace.openExternalEditorChooser(projectPath || "", anchor);
+          },
+          icon: <Code size={17} />,
+        }}
+        browserAction={{
+          active: drawer === "browser",
+          label: t("app.browser"),
+          onClick: () => {
+            if (drawer === "browser" && !drawerCollapsed) {
+              workspace.closeDrawer();
+            } else {
+              workspace.openDrawer("browser");
+            }
+          },
+          icon: <Globe size={17} />,
+        }}
+      />
+    ) : null
+  );
+
+  const drawerContentNode = (
+    <>
+
+    {editorMode === "drawer" && drawer === "editor" && !drawerCollapsed && activeTab ? (
+      <Suspense fallback={<div className="drawer-content-frame"><div className="file-diff-loading">Loading...</div></div>}>
+        <FileDiffViewer
+          displayMode="drawer"
+          filePath={activeTab.filePath}
+          mode={activeTab.mode}
+          onToggleMode={activeTab.preserveDrawer ? undefined : toggleEditorMode}
+          onBack={prevDrawerPanelRef.current && prevDrawerPanelRef.current !== "editor" ? () => {
+            const prev = clearEditorBack();
+            if (prev) workspace.openDrawer(prev);
+          } : undefined}
+          originalContent={activeTab.mode === "diff" ? activeTab.originalContent : undefined}
+          modifiedContent={activeTab.modifiedContent}
+          tabs={editorTabs}
+          activeTabId={activeTabId}
+          onSelectTab={selectEditorTab}
+          onCloseTab={closeEditorTab}
+          onClose={() => { closeEditor(); workspace.closeDrawer(); }}
+          readContent={readEditorFileContent}
+          readOriginalContent={readEditorOriginalContent}
+          saveContent={activeTab.allowSave ? saveEditorFileContent : undefined}
+          theme={document.documentElement.dataset.theme === "dark" ? "dark" : "light"}
+          maxFileSizeMB={settings.maxEditorFileSizeMB}
+        />
+      </Suspense>
+    ) : drawer === "browser" && !drawerCollapsed && !browserFullscreen ? (
+      <div className="drawer-content-frame">
+        <BrowserPanel
+          onClose={() => workspace.closeDrawer()}
+          onToggleFullscreen={() => workspace.enterBrowserFullscreen()}
+        />
+      </div>
+    ) : settings.enableGitManagement && drawer === "git" && !drawerCollapsed && activeProjectId ? (
+      <div className="drawer-content-frame">
+        <div className="drawer-header">
+          <strong>{t("drawer.sourceControl")}</strong>
+          <div className="drawer-header-actions">
+            <button onClick={workspace.collapseDrawer} title={t("drawer.collapsePanel")}>
+              <Minus size={15} />
+            </button>
+            <button onClick={workspace.closeDrawer} title={t("common.close")}>
+              <X size={15} />
+            </button>
+          </div>
+        </div>
+        <div className="git-drawer-stack" data-detail-open={Boolean(gitDrawerDiff && gitDiffDisplayMode === "drawer")}>
+          <div className="git-drawer-source" aria-hidden={Boolean(gitDrawerDiff && gitDiffDisplayMode === "drawer")}>
+            <GitPanel
+              projectId={activeProjectId}
+              commitLog={api.git.commitLog}
+              commitDetail={api.git.commitDetail}
+              onOpenCommitFileDiff={openCommitFileDiff}
+              onOpenWorkspaceFileDiff={openWorkspaceFileDiff}
+              branchCompare={api.git.branchCompare}
+              getStatus={api.git.status}
+              stageFiles={api.git.stage}
+              unstageFiles={api.git.unstage}
+              discardFile={api.git.discard}
+              commit={api.git.commit}
+              branches={gitInfo.branches}
+              currentBranch={gitInfo.current}
+              onSwitchBranch={switchBranch}
+              onCreateBranch={createBranch}
+              cherryPick={api.git.cherryPick}
+              revert={api.git.revert}
+              reset={api.git.reset}
+              dropCommit={api.git.dropCommit}
+              generateCommitMessage={api.git.generateCommitMessage}
+              gitInit={api.git.init}
+            />
+          </div>
+          {gitDrawerDiff && gitDrawerDiff.projectId === activeProjectId && gitDiffDisplayMode === "drawer" && (
+            <div className="git-drawer-detail">
+              <Suspense fallback={<div className="file-diff-loading">Loading...</div>}>
+                <FileDiffViewer
+                  displayMode="drawer"
+                  filePath={gitDrawerDiff.filePath}
+                  mode="diff"
+                  onToggleMode={toggleGitDiffDisplayMode}
+                  originalContent={gitDrawerDiff.originalContent}
+                  modifiedContent={gitDrawerDiff.modifiedContent}
+                  tabs={[{ id: gitDrawerDiff.filePath, filePath: gitDrawerDiff.filePath, label: gitDrawerDiff.label }]}
+                  activeTabId={gitDrawerDiff.filePath}
+                  onClose={closeGitDiff}
+                  readContent={readEditorFileContent}
+                  theme={document.documentElement.dataset.theme === "dark" ? "dark" : "light"}
+                  maxFileSizeMB={settings.maxEditorFileSizeMB}
+                />
+              </Suspense>
+            </div>
+          )}
+        </div>
+      </div>
+    ) : drawer && drawer !== "browser" && drawer !== "editor" && drawer !== "git" ? (
+      <LazyWrapper
+        className="drawer-content-frame"
+        enabled={true}
+        threshold={0}
+        rootMargin="50px"
+        placeholder={
+          <div style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            height: "100%",
+            color: "var(--text-secondary)",
+            fontSize: "14px"
+          }}>
+            加载中...
+          </div>
+        }
+      >
+        <DrawerContent
+          panel={drawer}
+          project={drawer === "sessions" ? sessionsProject : undefined}
+          files={files}
+          sessions={(sessionsProjectId && sessionSourceFilter[sessionsProjectId]) ? sessions.filter(
+            (s) => !s.parentSessionPath && (sessionSourceFilter[sessionsProjectId]!)!.has(s.source ?? "pi"),
+          ).concat(sessions.filter(s => s.parentSessionPath && (sessionSourceFilter[sessionsProjectId]!)!.has(s.source ?? "pi"))) : sessions}
+          sessionsLoading={sessionHistoryLoading}
+          expandedDirs={expandedDirs}
+          onToggleDirectory={toggleDirectory}
+          onCollapseAllDirectories={collapseAllDirectories}
+          pinned={drawerPinned}
+          onTogglePin={workspace.toggleDrawerPinned}
+          onCollapse={workspace.collapseDrawer}
+          onClose={workspace.closeDrawer}
+          onFileContextMenu={(node, x, y) => setFileMenu({ node, x, y })}
+          onRefreshFiles={() => {
+            refreshFiles(activeProjectId);
+          }}
+          onOpenFolder={() => {
+            const p = projects.find((p) => p.id === activeProjectId);
+            if (p) void api.files.open(p.path);
+          }}
+          onRefreshSessions={() => {
+            const projectId = sessionsProjectId ?? activeProjectId;
+            if (projectId) void refreshProjectSessions(projectId, true);
+          }}
+          onOpenSession={(session) =>
+            void runOpenSidebarSession(
+              sessionsProjectId ?? activeProjectId ?? "",
+              session,
+            )
+          }
+          onRenameSession={async (filePath, newName) => {
+            const session = sessions.find((candidate) =>
+              isSameSessionPath(
+                candidate.filePath,
+                filePath,
+                candidate.wsl ? "wsl" : "native",
+              ),
+            );
+            if (!session) return;
+            await api.sessions.updateRecord(session.id, { title: newName });
+            const projectId = sessionsProjectId ?? activeProjectId;
+            if (projectId) await refreshProjectSessions(projectId, true);
+          }}
+          onCopySession={(session) =>
+            runCopySession(
+              session.filePath,
+              sessionsProjectId ?? activeProjectId,
+            )
+          }
+          onExportSession={runExportHistorySession}
+          onDeleteSession={runDeleteHistorySession}
+          onViewFile={viewFilePath}
+          onOpenFile={openFilePath}
+        />
+      </LazyWrapper>
+    ) : null}
+    </>
+  );
+
   function startResize(target: "list" | "drawer", event: PointerEvent) {
     const startX = event.clientX;
     const startListWidth = listCollapsed ? 68 : listWidth;
@@ -3796,846 +4231,394 @@ export function App() {
   }
 
   return (
-    <div
-      className={[
-        "wechat-shell",
-        drawer ? "drawer-open" : "",
-        listCollapsed ? "list-collapsed" : "",
-        listHoverRevealSuppressed ? "list-hover-suppressed" : "",
-        drawerCollapsed ? "drawer-collapsed" : "",
-        settings.useNativeTitleBar ? "" : "custom-titlebar-enabled",
-      ]
-        .filter(Boolean)
-        .join(" ")}
-      onPointerMove={releaseListHoverSuppression}
-      style={
-        {
-          "--list-width": `${listCollapsed ? 0 : listWidth}px`,
-          "--list-expanded-width": `${listWidth}px`,
-          "--list-hover-width": `${Math.max(190, listWidth)}px`,
-          // Grid 列宽过渡期间保留内容；退出结束后由 WorkspaceDrawerHost 延迟卸载。
-          "--drawer-width": `${drawer && !drawerCollapsed ? drawerWidth : 0}px`,
-          "--drawer-col-w": `${drawer && !drawerCollapsed ? 260 : 0}px`,
-          "--drawer-splitter-w": `${drawer && !drawerCollapsed ? 6 : 0}px`,
-        } as React.CSSProperties
-      }
+    <AppShell
+      listCollapsed={listCollapsed}
+      listWidth={listWidth}
+      listHoverRevealSuppressed={listHoverRevealSuppressed}
+      drawer={drawer}
+      drawerCollapsed={drawerCollapsed}
+      drawerWidth={drawerWidth}
+      drawerPinned={workspace.drawerPinned}
+      useNativeTitleBar={settings.useNativeTitleBar}
+      chatPaneRef={chatPaneRef}
+      terminalRowHeight={terminalRowHeight}
+      contentMaxWidth={settings.contentMaxWidth}
+      sidebarContent={sidebarContentNode}
+      chatPaneContent={chatPaneContentNode}
+      drawerContent={drawerContentNode}
+      outlineContent={outlineContentNode}
+      onResize={startResize}
+      onToggleListCollapsed={toggleListCollapsed}
+      onReleaseListHoverSuppression={releaseListHoverSuppression}
+      onDrawerCollapse={workspace.collapseDrawer}
+      onDrawerClose={workspace.closeDrawer}
+      onDrawerRestore={() => workspace.expandDrawer()}
+      onToggleDrawerPin={workspace.toggleDrawerPinned}
+      toggleAlwaysOnTop={api.app.toggleAlwaysOnTopWindow}
+      minimizeWindow={api.app.minimizeWindow}
+      toggleMaximizeWindow={api.app.toggleMaximizeWindow}
+      closeWindow={api.app.closeWindow}
     >
-      <AppHeader useNativeTitleBar={settings.useNativeTitleBar} toggleAlwaysOnTop={api.app.toggleAlwaysOnTopWindow} minimizeWindow={api.app.minimizeWindow} toggleMaximizeWindow={api.app.toggleMaximizeWindow} closeWindow={api.app.closeWindow} />
-      <SidebarContent
-        controller={sidebarController}
-        actions={sidebarActions}
-        currentProjectId={activeProjectId}
-        currentSessionId={currentSessionId}
-        worktreesByProject={worktreesByProject}
-        branchByProject={branchByProject}
-        creatingWorktree={worktreeCreating}
-        isLanWeb={isLanWeb}
-        chrome={<>
-          <div className="list-toolbar">
-            <div className="app-badge">
-              <LogoMark />
-              <span className="brand-wordmark" aria-label="PiDeck">PiDeck</span>
-            </div>
-          </div>
-          <button
-            className="collapse-button list-collapse"
-            title={listCollapsed ? t("app.expandList") : t("app.collapseList")}
-            onClick={toggleListCollapsed}
-          >
-            {listCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
-          </button>
-        </>}
-        onPointerLeave={() => {
-          if (listHoverRevealSuppressed) setListHoverRevealSuppressed(false);
+
+    {fileMenu && (
+      <FileContextMenu
+        menu={fileMenu}
+        onClose={() => setFileMenu(null)}
+        onOpen={() => {
+          void api.files.open(fileMenu.node.path);
+          setFileMenu(null);
         }}
-        onOpenSettings={() => setSettingsOpen(true)}
-        onOpenConfig={() => setConfigOpen(true)}
-        onOpenFeedback={() => overlays.setFeedbackOpen(true)}
-        onOpenHomepage={() => void api.app.openExternal("https://ayuayue.github.io/PiDeck/")}
-      />
-      <div
-        className="splitter splitter-left"
-        onPointerDown={(event) => startResize("list", event)}
-      />
-
-      <main
-        ref={chatPaneRef}
-        className="chat-pane"
-        style={{
-          "--terminal-row-h": `${terminalRowHeight}px`,
-          ...(settings.contentMaxWidth > 0 && settings.contentMaxWidth < 1400
-            ? { "--content-max-width": `${settings.contentMaxWidth}px` }
-            : undefined),
-        } as React.CSSProperties}
-      >
-        <SessionHeader
-          headerRef={chatHeaderRef}
-          comboRef={sessionComboRef}
-          title={
-            currentSession?.title ??
-            (isChatProject(activeProject)
-              ? t("app.chatProject")
-              : activeProject?.name) ??
-            "PiDeck"
-          }
-          compactionCount={activeAgent?.compactionCount}
-          runtimeState={activeRuntimeState}
-          duration={activeAgentId ? sessionDurationByAgent[activeAgentId] : undefined}
-          isStarting={isAgentStarting}
-          hasProject={Boolean(activeProjectId)}
-          hasSession={Boolean(activeAgentId || currentSessionId)}
-          menuOpen={sessionActionsOpen}
-          canStop={activeAgent?.status === "running"}
-          canRestart={Boolean(
-            activeAgentId &&
-            activeAgent &&
-            activeAgent.status !== "starting" &&
-            restartingAgentId !== activeAgentId &&
-            !queueFlushByAgentRef.current.has(activeAgentId) &&
-            !(queue.queuedPrompts[activeAgentId] ?? []).some(
-              (queuedPrompt) =>
-                queuedPrompt.status === "sending" ||
-                queuedPrompt.status === "unknown",
-            )
-          )}
-          isRestarting={restartingAgentId === activeAgentId}
-          showRestart={!isLanWeb}
-          onTrigger={() => {
-            if (activeAgentId || currentSessionId) {
-              setSessionActionsOpen((open) => !open);
-            } else {
-              void runCreateSessionDraft();
-            }
-          }}
-          onNewSession={() => {
-            void runCreateSessionDraft();
-            setSessionActionsOpen(false);
-          }}
-          onStop={() => {
-            void abortAgent();
-            setSessionActionsOpen(false);
-          }}
-          onRestart={() => void restartActiveAgent()}
-        />
-        <NoticeCenter />
-
-        {currentSessionId ? (
-          <SessionMessageTimeline
-            mode="session"
-            sessionId={currentSessionId}
-            controller={sessionTimeline}
-            hasProject={Boolean(activeProjectId)}
-            onCreateSession={() => void runCreateSessionDraft()}
-            showThinking={settings.showThinking}
-            validCommandNames={validCommandNames}
-            validFilePaths={validFilePaths}
-            onPreviewImage={setPreviewImage}
-            onOpenExternal={(url) => api.app.openExternal(url)}
-            onOpenFile={openFilePath}
-            onDiffFile={diffFilePath}
-            onResendUserMessage={canMutateActiveMessages ? resendUserMessage : undefined}
-            onEditMessage={canMutateActiveMessages ? editMessage : undefined}
-            onDeleteMessage={canMutateActiveMessages ? deleteMessage : undefined}
-            onSendUiResponse={(requestId, response) => {
-              if (!activeAgentId) return;
-              if (response.cancelled) setCancellingUi(true);
-              sendSessionUiResponse(requestId, response);
-            }}
-            onToast={(message) => showToast(message)}
-          />
-        ) : null}
-
-          {sessionTimeline.showScrollToBottom && (
-            <button
-              className="scroll-to-bottom-btn"
-              // 按钮脱离滚动容器后，由 composer 实际高度 + 终端高度决定 bottom，避免输入框增高或终端打开时遮挡。
-              style={{ bottom: Math.max(24, terminalRowHeight + composerOffsetHeight + 18) }}
-              onClick={sessionTimeline.scrollToBottom}
-              title={t("app.scrollToBottom")}
-            >
-              <ChevronDown size={18} />
-            </button>
-          )}
-
-        {hasActiveConversation && currentSessionId && (
-          <ComposerArea
-            ref={composerRef}
-            sessionId={currentSessionId}
-            onOpenFile={openFilePath}
-            enqueue={enqueueSessionPrompt as any}
-            queuePanel={activeAgentId ? (
-              <QueuedPromptPanel
-                trackRef={queuedTrackRef}
-                agentId={activeAgentId}
-                prompts={activeQueuedPrompts}
-                visiblePrompts={visibleQueuedPrompts}
-                onRetract={queue.retractQueuedPromptForEdit}
-                onDiscard={queue.discardQueuedPrompt}
-              />
-            ) : undefined}
-          />
-        )}
-
-        {!isLanWeb && currentSessionId && !settingsOpen && !configOpen && !environmentDialog && terminalDockVisible && (
-          <SessionRuntimeDock
-            agentId={activeAgentId}
-            open={terminalDockVisible}
-            collapsed={terminalCollapsed}
-            height={terminalRowHeight}
-            terminal={api.terminal}
-            onOpenChange={(open) => {
-              if (activeAgentId) setTerminalOpenForAgent(activeAgentId, open);
-            }}
-            onCollapsedChange={(collapsed) => {
-              if (activeAgentId) setTerminalCollapsedForAgent(activeAgentId, collapsed);
-            }}
-            onHeightChange={(height) => {
-              if (!activeAgentId) return;
-              const maxHeight = Math.max(
-                120,
-                availableTerminalHeight,
-              );
-              setTerminalHeightByAgent((current) => ({
-                ...current,
-                [activeAgentId]: Math.min(height, maxHeight),
-              }));
-            }}
-          />
-        )}
-      </main>
-
-        {hasActiveConversation && (
-          <ConversationOutline
-            items={outlineItems}
-            onJump={handleOutlineJump}
-            extraAction={{
-              active: scratchPad.isOpen,
-              label: t("scratchPad.openTooltip"),
-              onClick: () => scratchPad.toggle(),
-              icon: <Pencil size={17} />,
-            }}
-            terminalAction={{
-              active: terminalOpen,
-              label: t("app.terminal"),
-              onClick: () => {
-                if (!activeAgentId) return;
-                setTerminalOpenForAgent(activeAgentId, !terminalOpen);
-              },
-              icon: <Terminal size={17} />,
-            }}
-            filesAction={{
-              active: drawer === "files",
-              label: t("app.files"),
-              onClick: () => {
-                if (drawer === "files" && !drawerCollapsed) {
-                  workspace.closeDrawer();
-                } else {
-                  if (activeProjectId) void refreshFiles(activeProjectId, true);
-                  workspace.openDrawer("files");
-                }
-              },
-              icon: <FolderOpen size={17} />,
-            }}
-            gitAction={settings.enableGitManagement && activeProjectId && !isChatProject(activeProject) ? {
-              active: drawer === "git",
-              label: t("drawer.sourceControl"),
-              onClick: () => {
-                if (drawer === "git" && !drawerCollapsed) {
-                  if (gitDrawerDiff) {
-                    closeGitDiff();
-                    return;
-                  }
-                  workspace.closeDrawer();
-                } else {
-                  workspace.openDrawer("git");
-                }
-              },
-              icon: <GitBranch size={17} />,
-            } : undefined}
-            editorsAction={{
-              active: editorsOpen,
-              label: t("app.openWithEditor"),
-              onClick: (e) => {
-                const projectPath =
-                  activeAgent?.cwd ||
-                  (activeProject && !isChatProject(activeProject)
-                    ? activeProject.path
-                    : null);
-                const btn = (e?.currentTarget as HTMLElement)?.closest("button");
-                const anchor = btn
-                  ? adjustMenuPos(btn.getBoundingClientRect().left - 4, btn.getBoundingClientRect().top, 220, 280)
-                  : undefined;
-                workspace.openExternalEditorChooser(projectPath || "", anchor);
-              },
-              icon: <Code size={17} />,
-            }}
-            browserAction={{
-              active: drawer === "browser",
-              label: t("app.browser"),
-              onClick: () => {
-                if (drawer === "browser" && !drawerCollapsed) {
-                  workspace.closeDrawer();
-                } else {
-                  workspace.openDrawer("browser");
-                }
-              },
-              icon: <Globe size={17} />,
-            }}
-          />
-        )}
-
-      {/* 右侧分隔条常驻 grid 列 4，宽度由 --drawer-splitter-w 驱动（0/6px）；
-          关闭/折叠时宽度 0 且 pointer-events:none，避免遮挡会话区。 */}
-      <div
-        className="splitter splitter-right"
-        data-active={drawer && !drawerCollapsed}
-        onPointerDown={(event) =>
-          drawer && !drawerCollapsed && startResize("drawer", event)
-        }
-      />
-      <WorkspaceDrawerHost
-        panel={drawer}
-        collapsed={drawerCollapsed}
-        pinned={workspace.drawerPinned}
-        onCollapse={workspace.collapseDrawer}
-        onClose={workspace.closeDrawer}
-        onRestore={() => workspace.expandDrawer()}
-        onTogglePin={workspace.toggleDrawerPinned}
-        renderPanel={() => (
-        <>
-        {editorMode === "drawer" && drawer === "editor" && !drawerCollapsed && activeTab ? (
-          <Suspense fallback={<div className="drawer-content-frame"><div className="file-diff-loading">Loading...</div></div>}>
-            <FileDiffViewer
-              displayMode="drawer"
-              filePath={activeTab.filePath}
-              mode={activeTab.mode}
-              onToggleMode={activeTab.preserveDrawer ? undefined : toggleEditorMode}
-              onBack={prevDrawerPanelRef.current && prevDrawerPanelRef.current !== "editor" ? () => {
-                const prev = clearEditorBack();
-                if (prev) workspace.openDrawer(prev);
-              } : undefined}
-              originalContent={activeTab.mode === "diff" ? activeTab.originalContent : undefined}
-              modifiedContent={activeTab.modifiedContent}
-              tabs={editorTabs}
-              activeTabId={activeTabId}
-              onSelectTab={selectEditorTab}
-              onCloseTab={closeEditorTab}
-              onClose={() => { closeEditor(); workspace.closeDrawer(); }}
-              readContent={readEditorFileContent}
-              readOriginalContent={readEditorOriginalContent}
-              saveContent={activeTab.allowSave ? saveEditorFileContent : undefined}
-              theme={document.documentElement.dataset.theme === "dark" ? "dark" : "light"}
-              maxFileSizeMB={settings.maxEditorFileSizeMB}
-            />
-          </Suspense>
-        ) : drawer === "browser" && !drawerCollapsed && !browserFullscreen ? (
-          <div className="drawer-content-frame">
-            <BrowserPanel
-              onClose={() => workspace.closeDrawer()}
-              onToggleFullscreen={() => workspace.enterBrowserFullscreen()}
-            />
-          </div>
-        ) : settings.enableGitManagement && drawer === "git" && !drawerCollapsed && activeProjectId ? (
-          <div className="drawer-content-frame">
-            <div className="drawer-header">
-              <strong>{t("drawer.sourceControl")}</strong>
-              <div className="drawer-header-actions">
-                <button onClick={workspace.collapseDrawer} title={t("drawer.collapsePanel")}>
-                  <Minus size={15} />
-                </button>
-                <button onClick={workspace.closeDrawer} title={t("common.close")}>
-                  <X size={15} />
-                </button>
-              </div>
-            </div>
-            <div className="git-drawer-stack" data-detail-open={Boolean(gitDrawerDiff && gitDiffDisplayMode === "drawer")}>
-              <div className="git-drawer-source" aria-hidden={Boolean(gitDrawerDiff && gitDiffDisplayMode === "drawer")}>
-                <GitPanel
-                  projectId={activeProjectId}
-                  commitLog={api.git.commitLog}
-                  commitDetail={api.git.commitDetail}
-                  onOpenCommitFileDiff={openCommitFileDiff}
-                  onOpenWorkspaceFileDiff={openWorkspaceFileDiff}
-                  branchCompare={api.git.branchCompare}
-                  getStatus={api.git.status}
-                  stageFiles={api.git.stage}
-                  unstageFiles={api.git.unstage}
-                  discardFile={api.git.discard}
-                  commit={api.git.commit}
-                  branches={gitInfo.branches}
-                  currentBranch={gitInfo.current}
-                  onSwitchBranch={switchBranch}
-                  onCreateBranch={createBranch}
-                  cherryPick={api.git.cherryPick}
-                  revert={api.git.revert}
-                  reset={api.git.reset}
-                  dropCommit={api.git.dropCommit}
-                  generateCommitMessage={api.git.generateCommitMessage}
-                  gitInit={api.git.init}
-                />
-              </div>
-              {gitDrawerDiff && gitDrawerDiff.projectId === activeProjectId && gitDiffDisplayMode === "drawer" && (
-                <div className="git-drawer-detail">
-                  <Suspense fallback={<div className="file-diff-loading">Loading...</div>}>
-                    <FileDiffViewer
-                      displayMode="drawer"
-                      filePath={gitDrawerDiff.filePath}
-                      mode="diff"
-                      onToggleMode={toggleGitDiffDisplayMode}
-                      originalContent={gitDrawerDiff.originalContent}
-                      modifiedContent={gitDrawerDiff.modifiedContent}
-                      tabs={[{ id: gitDrawerDiff.filePath, filePath: gitDrawerDiff.filePath, label: gitDrawerDiff.label }]}
-                      activeTabId={gitDrawerDiff.filePath}
-                      onClose={closeGitDiff}
-                      readContent={readEditorFileContent}
-                      theme={document.documentElement.dataset.theme === "dark" ? "dark" : "light"}
-                      maxFileSizeMB={settings.maxEditorFileSizeMB}
-                    />
-                  </Suspense>
-                </div>
-              )}
-            </div>
-          </div>
-        ) : drawer && drawer !== "browser" && drawer !== "editor" && drawer !== "git" ? (
-          <LazyWrapper
-            className="drawer-content-frame"
-            enabled={true}
-            threshold={0}
-            rootMargin="50px"
-            placeholder={
-              <div style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                height: "100%",
-                color: "var(--text-secondary)",
-                fontSize: "14px"
-              }}>
-                加载中...
-              </div>
-            }
-          >
-            <DrawerContent
-              panel={drawer}
-              project={drawer === "sessions" ? sessionsProject : undefined}
-              files={files}
-              sessions={(sessionsProjectId && sessionSourceFilter[sessionsProjectId]) ? sessions.filter(
-                (s) => !s.parentSessionPath && (sessionSourceFilter[sessionsProjectId]!)!.has(s.source ?? "pi"),
-              ).concat(sessions.filter(s => s.parentSessionPath && (sessionSourceFilter[sessionsProjectId]!)!.has(s.source ?? "pi"))) : sessions}
-              sessionsLoading={sessionHistoryLoading}
-              expandedDirs={expandedDirs}
-              onToggleDirectory={toggleDirectory}
-              onCollapseAllDirectories={collapseAllDirectories}
-              pinned={drawerPinned}
-              onTogglePin={workspace.toggleDrawerPinned}
-              onCollapse={workspace.collapseDrawer}
-              onClose={workspace.closeDrawer}
-              onFileContextMenu={(node, x, y) => setFileMenu({ node, x, y })}
-              onRefreshFiles={() => {
-                refreshFiles(activeProjectId);
-              }}
-              onOpenFolder={() => {
-                const p = projects.find((p) => p.id === activeProjectId);
-                if (p) void api.files.open(p.path);
-              }}
-              onRefreshSessions={() => {
-                const projectId = sessionsProjectId ?? activeProjectId;
-                if (projectId) void refreshProjectSessions(projectId, true);
-              }}
-              onOpenSession={(session) =>
-                void runOpenSidebarSession(
-                  sessionsProjectId ?? activeProjectId ?? "",
-                  session,
-                )
+        onReveal={() => {
+          void api.files.showInFolder(fileMenu.node.path);
+          setFileMenu(null);
+        }}
+        onAttach={() => {
+          setPrompt(
+            (current) =>
+              `${current}${current.endsWith(" ") || current.length === 0 ? "" : " "}@${fileMenu.node.relativePath} `,
+          );
+          setFileMenu(null);
+        }}
+        onCopyPath={() => {
+          void navigator.clipboard.writeText(fileMenu.node.path);
+          setFileMenu(null);
+          showToast(t("app.pathCopied"), 1200);
+        }}
+        onRename={() => {
+          const node = fileMenu.node;
+          setRenamingFile({ path: node.path, name: node.name });
+          setRenamingFileInput(node.name);
+          setFileMenu(null);
+        }}
+        onDelete={() => {
+          const node = fileMenu.node;
+          setFileMenu(null);
+          overlays.showConfirm({
+            title: node.type === "directory" ? t("drawer.deleteFolderTitle") : t("drawer.deleteFileTitle"),
+            message: node.type === "directory"
+              ? t("drawer.deleteFolderConfirm", { name: node.name })
+              : t("drawer.deleteFileConfirm", { name: node.name }),
+            danger: true,
+            confirmLabel: t("common.delete"),
+            onConfirm: async () => {
+              overlays.clearConfirm();
+              try {
+                await api.files.delete(node.path, true);
+                void refreshFiles();
+                showToast(t("app.fileDeleted"), 2000);
+              } catch (e) {
+                console.error("[File] 删除失败:", e);
               }
-              onRenameSession={async (filePath, newName) => {
-                const session = sessions.find((candidate) =>
-                  isSameSessionPath(
-                    candidate.filePath,
-                    filePath,
-                    candidate.wsl ? "wsl" : "native",
-                  ),
-                );
-                if (!session) return;
-                await api.sessions.updateRecord(session.id, { title: newName });
-                const projectId = sessionsProjectId ?? activeProjectId;
-                if (projectId) await refreshProjectSessions(projectId, true);
-              }}
-              onCopySession={(session) =>
-                runCopySession(
-                  session.filePath,
-                  sessionsProjectId ?? activeProjectId,
-                )
-              }
-              onExportSession={runExportHistorySession}
-              onDeleteSession={runDeleteHistorySession}
-              onViewFile={viewFilePath}
-              onOpenFile={openFilePath}
-            />
-          </LazyWrapper>
-        ) : null}
-        </>
-        )}
+            },
+          });
+        }}
       />
-      {fileMenu && (
-        <FileContextMenu
-          menu={fileMenu}
-          onClose={() => setFileMenu(null)}
-          onOpen={() => {
-            void api.files.open(fileMenu.node.path);
-            setFileMenu(null);
-          }}
-          onReveal={() => {
-            void api.files.showInFolder(fileMenu.node.path);
-            setFileMenu(null);
-          }}
-          onAttach={() => {
-            setPrompt(
-              (current) =>
-                `${current}${current.endsWith(" ") || current.length === 0 ? "" : " "}@${fileMenu.node.relativePath} `,
-            );
-            setFileMenu(null);
-          }}
-          onCopyPath={() => {
-            void navigator.clipboard.writeText(fileMenu.node.path);
-            setFileMenu(null);
-            showToast(t("app.pathCopied"), 1200);
-          }}
-          onRename={() => {
-            const node = fileMenu.node;
-            setRenamingFile({ path: node.path, name: node.name });
-            setRenamingFileInput(node.name);
-            setFileMenu(null);
-          }}
-          onDelete={() => {
-            const node = fileMenu.node;
-            setFileMenu(null);
-            overlays.showConfirm({
-              title: node.type === "directory" ? t("drawer.deleteFolderTitle") : t("drawer.deleteFileTitle"),
-              message: node.type === "directory"
-                ? t("drawer.deleteFolderConfirm", { name: node.name })
-                : t("drawer.deleteFileConfirm", { name: node.name }),
-              danger: true,
-              confirmLabel: t("common.delete"),
-              onConfirm: async () => {
-                overlays.clearConfirm();
-                try {
-                  await api.files.delete(node.path, true);
-                  void refreshFiles();
-                  showToast(t("app.fileDeleted"), 2000);
-                } catch (e) {
-                  console.error("[File] 删除失败:", e);
-                }
-              },
-            });
-          }}
-        />
-      )}
+    )}
 
-      {projectResourcesProject && (
-        <Suspense fallback={null}>
-          <ProjectResourcesModal
-            project={projectResourcesProject}
-            onClose={() => setProjectResourcesProject(null)}
-          />
-        </Suspense>
-      )}
-      <RenameModals
-        agentRename={rename.renameModalsProps.agentRename}
-        fileRename={renamingFile ? {
-          path: renamingFile.path,
-          name: renamingFile.name,
-          inputValue: renamingFileInput,
-          onInputChange: setRenamingFileInput,
-          onClose: () => setRenamingFile(null),
-          onConfirm: (path, newName) => {
-            void api.files.rename(path, newName).then(() => {
-              void refreshFiles();
-              setRenamingFile(null);
-              showToast(t("app.fileRenamed"), 2000);
-            }).catch((err) => console.error("[File] rename failed:", err));
-          },
-        } : undefined}
-      />
-
-      {/* old conditional wrapping — replaced by EnvironmentOverlay open prop below */}
-      <EnvironmentOverlay open={environmentDialog}>
-        <EnvironmentDialog
-          status={piStatus}
-          checking={piChecking}
-          onClose={() => {
-            setEnvironmentDialog(false);
-            piUpdate.setCustomPathResult(null);
-            // 关闭时重置安装状态
-            piUpdate.setInstallResult(null);
-            piUpdate.setInstallCompleted(false);
-            piUpdate.setNpmAvailable(null);
-          }}
-          onRecheck={() => {
-            piUpdate.setCustomPathResult(null);
-            piUpdate.setNpmAvailable(null);
-            piUpdate.setNpmVersion(undefined);
-            piUpdate.setInstallResult(null);
-            piUpdate.setInstallCompleted(false);
-            piUpdate.setInstallUseMirror(false);
-            piUpdate.checkPiInstall("manual");
-          }}
-          onOpenInstallDocs={() =>
-            api.app.openExternal(
-              "https://pi.dev/docs/latest/quickstart#install",
-            )
-          }
-          customPath={piUpdate.customPiPath}
-          customPathValidating={piUpdate.customPathValidating}
-          customPathResult={piUpdate.customPathResult}
-          onCustomPathChange={(path) => {
-            piUpdate.setCustomPiPath(path);
-            piUpdate.setCustomPathResult(null);
-          }}
-          onValidateCustomPath={() =>
-            piUpdate.validateCustomPiPath({ closeDialogOnSuccess: true })
-          }
-          npmAvailable={piUpdate.npmAvailable}
-          npmVersion={piUpdate.npmVersion}
-          npmChecking={piUpdate.npmChecking}
-          installCommand={piUpdate.installCommand}
-          installUseMirror={piUpdate.installUseMirror}
-          installExecuting={piUpdate.installExecuting}
-          installResult={piUpdate.installResult}
-          installCompleted={piUpdate.installCompleted}
-          onCheckNpm={piUpdate.checkNpm}
-          onInstallCommandChange={(cmd) => {
-            piUpdate.setInstallCommand(cmd);
-            piUpdate.setInstallResult(null);
-            piUpdate.setInstallCompleted(false);
-          }}
-          onToggleInstallMirror={() => {
-            piUpdate.setInstallUseMirror((prev) => {
-              if (prev) {
-                piUpdate.setInstallCommand((cmd) =>
-                  cmd.replace(
-                    /\s+--registry=https:\/\/registry\.npmmirror\.com/g,
-                    "",
-                  ),
-                );
-              } else {
-                piUpdate.setInstallCommand((cmd) =>
-                  cmd.includes("--registry=")
-                    ? cmd
-                    : cmd + " --registry=https://registry.npmmirror.com",
-                );
-              }
-              return !prev;
-            });
-            piUpdate.setInstallResult(null);
-            piUpdate.setInstallCompleted(false);
-          }}
-          onExecInstall={piUpdate.execInstallCommand}
-          onRestartApp={() => api.app.restart()}
-          onClearCheckFlag={async () => {
-            await api.settings.update({ piEnvironmentChecked: false });
-            showToast(t("environment.checkFlagCleared"));
-          }}
-        />
-      </EnvironmentOverlay>
-      {currentSessionId && sessionRuntimeUiResponder && (
-        <SessionRuntimeUiOverlay
-          sessionId={currentSessionId}
-          runtime={currentSessionRuntime}
-          ui={currentSessionRuntimeUi}
-          responder={sessionRuntimeUiResponder}
-        />
-      )}
-      {settingsOpen && (
-        <Suspense fallback={null}>
-        <SettingsModal
-          settings={settings}
-          piStatus={piStatus}
-          piChecking={piChecking}
-          piProxyChecking={piUpdate.piProxyChecking}
-          piProxyNotice={piUpdate.piProxyNotice}
-          piProxyNoticeTone={piUpdate.piProxyNoticeTone}
-          webServiceChanging={webServiceChanging}
-          appInfo={appInfo}
-          customPiPath={piUpdate.customPiPath}
-          customPathValidating={piUpdate.customPathValidating}
-          customPathResult={piUpdate.customPathResult}
-          updateChecking={appUpdate.checking}
-          piUpdating={piUpdate.piUpdating}
-          piUpdateChecking={piUpdate.piUpdateChecking}
-          piUpdateCheck={piUpdate.piUpdateCheck}
-          piUpdateResult={piUpdate.piUpdateResult}
-          onCustomPathChange={(path) => {
-            piUpdate.setCustomPiPath(path);
-            piUpdate.setCustomPathResult(null);
-          }}
-          onValidateCustomPath={() => piUpdate.validateCustomPiPath()}
-          onClearCustomPath={piUpdate.clearCustomPiPath}
-          onCheckPi={piUpdate.checkPiInstallInline}
-          onTestPiProxy={() => piUpdate.testPiProxy()}
-          onCheckUpdate={() => {
-            appUpdate.check("manual").then((info) => {
-              if (info && !info.hasUpdate) {
-                setUpToDateVersion(info.currentVersion);
-                showToast(t("app.latestVersionNotice", { version: info.currentVersion }));
-              } else if (!info && appUpdate.error) {
-                showToast(t("app.updateFailedNotice", { error: appUpdate.error }));
-              }
-            });
-          }}
-          onCheckPiUpdate={piUpdate.checkPiCliUpdate}
-          onUpdatePi={piUpdate.updatePiCli}
-          onToggleDevTools={async () => {
-            const opened = await api.app.toggleDevTools();
-            showToast(
-              opened ? t("app.devToolsOpened") : t("app.devToolsClosed"),
-            );
-          }}
-          onRestartApp={() => api.app.restart()}
-          onClearCheckFlag={async () => {
-            await api.settings.update({ piEnvironmentChecked: false });
-            showToast(t("environment.checkFlagCleared"));
-          }}
-          onOpenWebService={(port) =>
-            api.app.openExternal(`http://127.0.0.1:${port}`)
-          }
-          onClose={() => {
-            setSettingsOpen(false);
-          }}
-          onChange={updateSettings}
+    {projectResourcesProject && (
+      <Suspense fallback={null}>
+        <ProjectResourcesModal
+          project={projectResourcesProject}
+          onClose={() => setProjectResourcesProject(null)}
         />
       </Suspense>
-      )}
-      <SessionActionOverlays {...overlays.overlayProps} />
-      <AppUpdateOverlay
-        controller={appUpdate}
-        releasesUrl={appInfo.releasesUrl}
-        openExternal={(url) => api.app.openExternal(url)}
-        upToDateVersion={upToDateVersion}
-        onDismissUpToDate={() => setUpToDateVersion(null)}
+    )}
+    <RenameModals
+      agentRename={rename.renameModalsProps.agentRename}
+      fileRename={renamingFile ? {
+        path: renamingFile.path,
+        name: renamingFile.name,
+        inputValue: renamingFileInput,
+        onInputChange: setRenamingFileInput,
+        onClose: () => setRenamingFile(null),
+        onConfirm: (path, newName) => {
+          void api.files.rename(path, newName).then(() => {
+            void refreshFiles();
+            setRenamingFile(null);
+            showToast(t("app.fileRenamed"), 2000);
+          }).catch((err) => console.error("[File] rename failed:", err));
+        },
+      } : undefined}
+    />
+
+    {/* old conditional wrapping — replaced by EnvironmentOverlay open prop below */}
+    <EnvironmentOverlay open={environmentDialog}>
+      <EnvironmentDialog
+        status={piStatus}
+        checking={piChecking}
+        onClose={() => {
+          setEnvironmentDialog(false);
+          piUpdate.setCustomPathResult(null);
+          // 关闭时重置安装状态
+          piUpdate.setInstallResult(null);
+          piUpdate.setInstallCompleted(false);
+          piUpdate.setNpmAvailable(null);
+        }}
+        onRecheck={() => {
+          piUpdate.setCustomPathResult(null);
+          piUpdate.setNpmAvailable(null);
+          piUpdate.setNpmVersion(undefined);
+          piUpdate.setInstallResult(null);
+          piUpdate.setInstallCompleted(false);
+          piUpdate.setInstallUseMirror(false);
+          piUpdate.checkPiInstall("manual");
+        }}
+        onOpenInstallDocs={() =>
+          api.app.openExternal(
+            "https://pi.dev/docs/latest/quickstart#install",
+          )
+        }
+        customPath={piUpdate.customPiPath}
+        customPathValidating={piUpdate.customPathValidating}
+        customPathResult={piUpdate.customPathResult}
+        onCustomPathChange={(path) => {
+          piUpdate.setCustomPiPath(path);
+          piUpdate.setCustomPathResult(null);
+        }}
+        onValidateCustomPath={() =>
+          piUpdate.validateCustomPiPath({ closeDialogOnSuccess: true })
+        }
+        npmAvailable={piUpdate.npmAvailable}
+        npmVersion={piUpdate.npmVersion}
+        npmChecking={piUpdate.npmChecking}
+        installCommand={piUpdate.installCommand}
+        installUseMirror={piUpdate.installUseMirror}
+        installExecuting={piUpdate.installExecuting}
+        installResult={piUpdate.installResult}
+        installCompleted={piUpdate.installCompleted}
+        onCheckNpm={piUpdate.checkNpm}
+        onInstallCommandChange={(cmd) => {
+          piUpdate.setInstallCommand(cmd);
+          piUpdate.setInstallResult(null);
+          piUpdate.setInstallCompleted(false);
+        }}
+        onToggleInstallMirror={() => {
+          piUpdate.setInstallUseMirror((prev) => {
+            if (prev) {
+              piUpdate.setInstallCommand((cmd) =>
+                cmd.replace(
+                  /\s+--registry=https:\/\/registry\.npmmirror\.com/g,
+                  "",
+                ),
+              );
+            } else {
+              piUpdate.setInstallCommand((cmd) =>
+                cmd.includes("--registry=")
+                  ? cmd
+                  : cmd + " --registry=https://registry.npmmirror.com",
+              );
+            }
+            return !prev;
+          });
+          piUpdate.setInstallResult(null);
+          piUpdate.setInstallCompleted(false);
+        }}
+        onExecInstall={piUpdate.execInstallCommand}
+        onRestartApp={() => api.app.restart()}
+        onClearCheckFlag={async () => {
+          await api.settings.update({ piEnvironmentChecked: false });
+          showToast(t("environment.checkFlagCleared"));
+        }}
       />
-      {editorMode === "modal" && activeTab && gitDiffDisplayMode !== "modal" && (
-        <Suspense fallback={<div className="modal-backdrop"><span className="file-diff-loading">Loading...</span></div>}>
+    </EnvironmentOverlay>
+    {currentSessionId && sessionRuntimeUiResponder && (
+      <SessionRuntimeUiOverlay
+        sessionId={currentSessionId}
+        runtime={currentSessionRuntime}
+        ui={currentSessionRuntimeUi}
+        responder={sessionRuntimeUiResponder}
+      />
+    )}
+    {settingsOpen && (
+      <Suspense fallback={null}>
+      <SettingsModal
+        settings={settings}
+        piStatus={piStatus}
+        piChecking={piChecking}
+        piProxyChecking={piUpdate.piProxyChecking}
+        piProxyNotice={piUpdate.piProxyNotice}
+        piProxyNoticeTone={piUpdate.piProxyNoticeTone}
+        webServiceChanging={webServiceChanging}
+        appInfo={appInfo}
+        customPiPath={piUpdate.customPiPath}
+        customPathValidating={piUpdate.customPathValidating}
+        customPathResult={piUpdate.customPathResult}
+        updateChecking={appUpdate.checking}
+        piUpdating={piUpdate.piUpdating}
+        piUpdateChecking={piUpdate.piUpdateChecking}
+        piUpdateCheck={piUpdate.piUpdateCheck}
+        piUpdateResult={piUpdate.piUpdateResult}
+        onCustomPathChange={(path) => {
+          piUpdate.setCustomPiPath(path);
+          piUpdate.setCustomPathResult(null);
+        }}
+        onValidateCustomPath={() => piUpdate.validateCustomPiPath()}
+        onClearCustomPath={piUpdate.clearCustomPiPath}
+        onCheckPi={piUpdate.checkPiInstallInline}
+        onTestPiProxy={() => piUpdate.testPiProxy()}
+        onCheckUpdate={() => {
+          appUpdate.check("manual").then((info) => {
+            if (info && !info.hasUpdate) {
+              setUpToDateVersion(info.currentVersion);
+              showToast(t("app.latestVersionNotice", { version: info.currentVersion }));
+            } else if (!info && appUpdate.error) {
+              showToast(t("app.updateFailedNotice", { error: appUpdate.error }));
+            }
+          });
+        }}
+        onCheckPiUpdate={piUpdate.checkPiCliUpdate}
+        onUpdatePi={piUpdate.updatePiCli}
+        onToggleDevTools={async () => {
+          const opened = await api.app.toggleDevTools();
+          showToast(
+            opened ? t("app.devToolsOpened") : t("app.devToolsClosed"),
+          );
+        }}
+        onRestartApp={() => api.app.restart()}
+        onClearCheckFlag={async () => {
+          await api.settings.update({ piEnvironmentChecked: false });
+          showToast(t("environment.checkFlagCleared"));
+        }}
+        onOpenWebService={(port) =>
+          api.app.openExternal(`http://127.0.0.1:${port}`)
+        }
+        onClose={() => {
+          setSettingsOpen(false);
+        }}
+        onChange={updateSettings}
+      />
+    </Suspense>
+    )}
+    <SessionActionOverlays {...overlays.overlayProps} />
+    <AppUpdateOverlay
+      controller={appUpdate}
+      releasesUrl={appInfo.releasesUrl}
+      openExternal={(url) => api.app.openExternal(url)}
+      upToDateVersion={upToDateVersion}
+      onDismissUpToDate={() => setUpToDateVersion(null)}
+    />
+    {editorMode === "modal" && activeTab && gitDiffDisplayMode !== "modal" && (
+      <Suspense fallback={<div className="modal-backdrop"><span className="file-diff-loading">Loading...</span></div>}>
+      <FileDiffViewer
+        displayMode="modal"
+        filePath={activeTab.filePath}
+        mode={activeTab.mode}
+        onToggleMode={activeTab.preserveDrawer ? undefined : toggleEditorMode}
+        originalContent={activeTab.mode === "diff" ? activeTab.originalContent : undefined}
+        modifiedContent={activeTab.modifiedContent}
+        tabs={editorTabs}
+        activeTabId={activeTabId}
+        onSelectTab={selectEditorTab}
+        onCloseTab={closeEditorTab}
+        onClose={() => { closeEditor(); }}
+        readContent={readEditorFileContent}
+        readOriginalContent={readEditorOriginalContent}
+        saveContent={activeTab.allowSave ? saveEditorFileContent : undefined}
+        theme={document.documentElement.dataset.theme === "dark" ? "dark" : "light"}
+        maxFileSizeMB={settings.maxEditorFileSizeMB}
+      />
+    </Suspense>
+    )}
+    {gitDiffDisplayMode === "modal" && gitDrawerDiff && gitDrawerDiff.projectId === activeProjectId && (
+      <Suspense fallback={<div className="modal-backdrop"><span className="file-diff-loading">Loading...</span></div>}>
         <FileDiffViewer
           displayMode="modal"
-          filePath={activeTab.filePath}
-          mode={activeTab.mode}
-          onToggleMode={activeTab.preserveDrawer ? undefined : toggleEditorMode}
-          originalContent={activeTab.mode === "diff" ? activeTab.originalContent : undefined}
-          modifiedContent={activeTab.modifiedContent}
-          tabs={editorTabs}
-          activeTabId={activeTabId}
-          onSelectTab={selectEditorTab}
-          onCloseTab={closeEditorTab}
-          onClose={() => { closeEditor(); }}
+          filePath={gitDrawerDiff.filePath}
+          mode="diff"
+          onToggleMode={toggleGitDiffDisplayMode}
+          originalContent={gitDrawerDiff.originalContent}
+          modifiedContent={gitDrawerDiff.modifiedContent}
+          tabs={[{ id: gitDrawerDiff.filePath, filePath: gitDrawerDiff.filePath, label: gitDrawerDiff.label }]}
+          activeTabId={gitDrawerDiff.filePath}
+          onClose={closeGitDiff}
           readContent={readEditorFileContent}
-          readOriginalContent={readEditorOriginalContent}
-          saveContent={activeTab.allowSave ? saveEditorFileContent : undefined}
           theme={document.documentElement.dataset.theme === "dark" ? "dark" : "light"}
           maxFileSizeMB={settings.maxEditorFileSizeMB}
         />
       </Suspense>
-      )}
-      {gitDiffDisplayMode === "modal" && gitDrawerDiff && gitDrawerDiff.projectId === activeProjectId && (
-        <Suspense fallback={<div className="modal-backdrop"><span className="file-diff-loading">Loading...</span></div>}>
-          <FileDiffViewer
-            displayMode="modal"
-            filePath={gitDrawerDiff.filePath}
-            mode="diff"
-            onToggleMode={toggleGitDiffDisplayMode}
-            originalContent={gitDrawerDiff.originalContent}
-            modifiedContent={gitDrawerDiff.modifiedContent}
-            tabs={[{ id: gitDrawerDiff.filePath, filePath: gitDrawerDiff.filePath, label: gitDrawerDiff.label }]}
-            activeTabId={gitDrawerDiff.filePath}
-            onClose={closeGitDiff}
-            readContent={readEditorFileContent}
-            theme={document.documentElement.dataset.theme === "dark" ? "dark" : "light"}
-            maxFileSizeMB={settings.maxEditorFileSizeMB}
-          />
-        </Suspense>
-      )}
-      {previewImage && (
-        <ImagePreviewModal
-          image={previewImage}
-          onClose={() => setPreviewImage(null)}
-        />
-      )}
-      {codexImportProject && <ImportOverlayHost kind="codex" project={codexImportProject} controller={codexImportController as any} onClose={() => setCodexImportProject(null)} />}
-      {claudeImportProject && <ImportOverlayHost kind="claude" project={claudeImportProject} controller={claudeImportController as any} onClose={() => setClaudeImportProject(null)} />}
-      {openCodeImportProject && <ImportOverlayHost kind="opencode" project={openCodeImportProject} controller={openCodeImportController as any} onClose={() => setOpenCodeImportProject(null)} />}
-      <Suspense fallback={null}>
-      <ConfigModal
-        open={configOpen}
-        onClose={() => setConfigOpen(false)}
-        onSaved={() => {
-          // 配置保存后不再自动 reload,用户可通过 Restart 按钮手动重载
-        }}
+    )}
+    {previewImage && (
+      <ImagePreviewModal
+        image={previewImage}
+        onClose={() => setPreviewImage(null)}
       />
-      </Suspense>
+    )}
+    {codexImportProject && <ImportOverlayHost kind="codex" project={codexImportProject} controller={codexImportController as any} onClose={() => setCodexImportProject(null)} />}
+    {claudeImportProject && <ImportOverlayHost kind="claude" project={claudeImportProject} controller={claudeImportController as any} onClose={() => setClaudeImportProject(null)} />}
+    {openCodeImportProject && <ImportOverlayHost kind="opencode" project={openCodeImportProject} controller={openCodeImportController as any} onClose={() => setOpenCodeImportProject(null)} />}
+    <Suspense fallback={null}>
+    <ConfigModal
+      open={configOpen}
+      onClose={() => setConfigOpen(false)}
+      onSaved={() => {
+        // 配置保存后不再自动 reload,用户可通过 Restart 按钮手动重载
+      }}
+    />
+    </Suspense>
 
 
 
-      {/* Scratch Pad（草稿本）：根级渲染，避免受 chat-pane grid 影响定位 */}
-      <ScratchPadOverlay controller={scratchPad} />
+    {/* Scratch Pad（草稿本）：根级渲染，避免受 chat-pane grid 影响定位 */}
+    <ScratchPadOverlay controller={scratchPad} />
 
-      {/* 外部编辑器选择气泡 */}
-      {editorsOpen && editorsAnchor && (
-        <div
-          ref={editorsPopoverRef}
-          className="editors-popover"
-          style={{
-            position: "fixed",
-            left: editorsAnchor.x,
-            top: editorsAnchor.y,
-          }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          {externalEditors.length === 0 ? (
-            <div className="editors-popover-empty">{t("app.noExternalEditors")}</div>
-          ) : (
-            externalEditors.map((editor) => (
-              <button
-                key={editor.id}
-                className="editors-popover-item"
-                onClick={() => {
-                  void workspace.openProjectInExternalEditor(editor).catch((error) => {
-                    showToast(
-                      t("app.openEditorFailed", {
-                        error: error instanceof Error ? error.message : String(error),
-                      }),
-                      3000,
-                    );
-                  });
-                }}
-              >
-                <span className={`editor-logo ${editor.id}`}>
-                  {getEditorLogoUrl(editor.id) ? (
-                    <img src={getEditorLogoUrl(editor.id)} alt="" />
-                  ) : (
-                    editor.id.slice(0, 2).toUpperCase()
-                  )}
-                </span>
-                <span>{editor.name}</span>
-              </button>
-            ))
-          )}
+    {/* 外部编辑器选择气泡 */}
+    {editorsOpen && editorsAnchor && (
+      <div
+        ref={editorsPopoverRef}
+        className="editors-popover"
+        style={{
+          position: "fixed",
+          left: editorsAnchor.x,
+          top: editorsAnchor.y,
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {externalEditors.length === 0 ? (
+          <div className="editors-popover-empty">{t("app.noExternalEditors")}</div>
+        ) : (
+          externalEditors.map((editor) => (
+            <button
+              key={editor.id}
+              className="editors-popover-item"
+              onClick={() => {
+                void workspace.openProjectInExternalEditor(editor).catch((error) => {
+                  showToast(
+                    t("app.openEditorFailed", {
+                      error: error instanceof Error ? error.message : String(error),
+                    }),
+                    3000,
+                  );
+                });
+              }}
+            >
+              <span className={`editor-logo ${editor.id}`}>
+                {getEditorLogoUrl(editor.id) ? (
+                  <img src={getEditorLogoUrl(editor.id)} alt="" />
+                ) : (
+                  editor.id.slice(0, 2).toUpperCase()
+                )}
+              </span>
+              <span>{editor.name}</span>
+            </button>
+          ))
+        )}
+      </div>
+    )}
+
+    {/* 浏览器全屏覆盖层 */}
+    {browserFullscreen && (
+      <div className="modal-backdrop" onClick={() => workspace.closeBrowser()}>
+        <div className="browser-modal" onClick={(e) => e.stopPropagation()}>
+          <BrowserPanel
+            isFullscreen
+            onClose={() => workspace.closeBrowser()}
+            onMinimize={() => workspace.minimizeBrowser()}
+          />
         </div>
-      )}
+      </div>
+    )}
 
-      {/* 浏览器全屏覆盖层 */}
-      {browserFullscreen && (
-        <div className="modal-backdrop" onClick={() => workspace.closeBrowser()}>
-          <div className="browser-modal" onClick={(e) => e.stopPropagation()}>
-            <BrowserPanel
-              isFullscreen
-              onClose={() => workspace.closeBrowser()}
-              onMinimize={() => workspace.minimizeBrowser()}
-            />
-          </div>
-        </div>
-      )}
-
-    </div>
+    </AppShell>
   );
 }
 
