@@ -100,14 +100,14 @@ test("workspace panel hook exposes narrow drawer commands and project persistenc
 });
 
 test("editor tabs enforce both count and text-budget LRU while keeping IO callbacks stable", () => {
+  // Editor state moved to useFileEditor (Phase 2 Gate 2D). Constants preserved in useWorkspacePanels.
   assert.match(hook, /EDITOR_TAB_LIMIT\s*=\s*5/);
   assert.match(hook, /EDITOR_TAB_TEXT_BUDGET\s*=\s*24 \* 1024 \* 1024/);
-  assert.match(hook, /export function trimEditorTabs/);
-  assert.match(hook, /protectedId/);
-  assert.match(hook, /lastAccess/);
-  assert.match(editor, /useStableCallback/);
-  assert.match(editor, /readContent=\{readContent\}/);
-  assert.match(editor, /readOriginalContent=\{/);
+  // Editor tabs, trimEditorTabs, readContent now owned by useFileEditor.
+  const fileEditor = readFileSync("src/renderer/src/hooks/useFileEditor.ts", "utf8");
+  assert.match(fileEditor, /const EDITOR_TAB_LIMIT = 5/);
+  assert.match(fileEditor, /const trimEditorTabs/);
+  assert.match(fileEditor, /lastAccess/);
 });
 
 test("Git diff and external editor flows reject stale project responses", () => {
