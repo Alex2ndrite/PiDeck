@@ -130,7 +130,9 @@ import removeMarkdown from "remove-markdown";
 /** 复用 petdex 标准网格规格，在主设置面板里为宠物选择器渲染单格动画预览 */
 import { GRID_COLS, CELL_W, CELL_H, MODE_ROW, MODE_FRAMES } from "../../pet/PetSpriteSheet";
 
-export type DrawerPanel = "files" | "sessions" | "browser" | "editor" | "git";
+import type { WorkspaceDrawerPanel } from "../../hooks/useWorkspacePanels";
+
+export type { WorkspaceDrawerPanel as DrawerPanel } from "../../hooks/useWorkspacePanels";
 
 export type SessionModifiedFile = {
 	path: string;
@@ -3979,7 +3981,7 @@ function clampOutlineTop(value: number) {
 }
 
 export function DrawerContent(props: {
-	panel: DrawerPanel;
+	panel: WorkspaceDrawerPanel;
 	project?: Project;
 	files: FileTreeNode[];
 	sessions: SessionSummary[];
