@@ -5093,8 +5093,8 @@ export function App() {
         notice = next.piProxyEnabled
           ? t("app.shellProxySaved")
           : t("app.shellProxyDisabled");
-        setPiProxyNoticeTone("info");
-        setPiProxyNotice(next.piProxyEnabled ? t("app.shellProxySaved") : "");
+        piUpdate.setPiProxyNoticeTone("info");
+        piUpdate.setPiProxyNotice(next.piProxyEnabled ? t("app.shellProxySaved") : "");
       }
       if (
         "desktopProxyEnabled" in patch ||
@@ -6435,30 +6435,30 @@ export function App() {
           settings={settings}
           piStatus={piStatus}
           piChecking={piChecking}
-          piProxyChecking={piProxyChecking}
-          piProxyNotice={piProxyNotice}
-          piProxyNoticeTone={piProxyNoticeTone}
+          piProxyChecking={piUpdate.piProxyChecking}
+          piProxyNotice={piUpdate.piProxyNotice}
+          piProxyNoticeTone={piUpdate.piProxyNoticeTone}
           webServiceChanging={webServiceChanging}
           appInfo={appInfo}
-          customPiPath={customPiPath}
-          customPathValidating={customPathValidating}
-          customPathResult={customPathResult}
+          customPiPath={piUpdate.customPiPath}
+          customPathValidating={piUpdate.customPathValidating}
+          customPathResult={piUpdate.customPathResult}
           updateChecking={updateChecking}
-          piUpdating={piUpdating}
-          piUpdateChecking={piUpdateChecking}
-          piUpdateCheck={piUpdateCheck}
-          piUpdateResult={piUpdateResult}
+          piUpdating={piUpdate.piUpdating}
+          piUpdateChecking={piUpdate.piUpdateChecking}
+          piUpdateCheck={piUpdate.piUpdateCheck}
+          piUpdateResult={piUpdate.piUpdateResult}
           onCustomPathChange={(path) => {
-            setCustomPiPath(path);
-            setCustomPathResult(null);
+            piUpdate.setCustomPiPath(path);
+            piUpdate.setCustomPathResult(null);
           }}
-          onValidateCustomPath={() => validateCustomPiPath()}
-          onClearCustomPath={clearCustomPiPath}
-          onCheckPi={checkPiInstallInline}
-          onTestPiProxy={() => testPiProxy()}
+          onValidateCustomPath={() => piUpdate.validateCustomPiPath()}
+          onClearCustomPath={piUpdate.clearCustomPiPath}
+          onCheckPi={piUpdate.checkPiInstallInline}
+          onTestPiProxy={() => piUpdate.testPiProxy()}
           onCheckUpdate={() => checkAppUpdate("manual")}
-          onCheckPiUpdate={checkPiCliUpdate}
-          onUpdatePi={updatePiCli}
+          onCheckPiUpdate={piUpdate.checkPiCliUpdate}
+          onUpdatePi={piUpdate.updatePiCli}
           onToggleDevTools={async () => {
             const opened = await api.app.toggleDevTools();
             showToast(
