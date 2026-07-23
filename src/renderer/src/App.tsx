@@ -51,6 +51,7 @@ import {
 } from "./components/sidebar/SidebarContent";
 import { useFeishuBridge } from "./hooks/useFeishuBridge";
 import { useGlobalAgentListeners } from "./hooks/useGlobalAgentListeners";
+import { useRename } from "./hooks/useRename";
 import { useSidebarController } from "./hooks/useSidebarController";
 import { useProjectRuntimeCapabilities } from "./hooks/useRuntimeCapabilities";
 import { useSessionRuntimeBridge } from "./hooks/useSessionRuntimeBridge";
@@ -611,20 +612,11 @@ export function App() {
   const [agentActionLoading, setAgentActionLoading] = useState<
     "copy" | "export" | null
   >(null);
-  const [agentRenameTarget, setAgentRenameTarget] = useState<AgentTab | null>(
-    null,
-  );
-  const [sessionRenameTarget, setSessionRenameTarget] = useState<{
-    projectId: string;
-    session: SessionSummary;
-  } | null>(null);
   /** 侧边栏删除确认：父会话包含子会话时弹窗提醒 */
   const [sidebarDeleteConfirm, setSidebarDeleteConfirm] = useState<{
     session: SessionSummary;
     childCount: number;
   } | null>(null);
-  const [agentRenameValue, setAgentRenameValue] = useState("");
-  const [agentRenaming, setAgentRenaming] = useState(false);
   const [projectMenu, setProjectMenu] = useState<{
     x: number;
     y: number;
@@ -767,6 +759,15 @@ export function App() {
     t,
   });
 
+  const rename = useRename({
+    renameAgent: (id, name) => api.agents.rename(id, name),
+    renameSession: (id, name) => api.sessions.updateRecord(id, { title: name }),
+    showToast,
+    upsertAgent,
+    refreshProjectSessions,
+    closeAgentMenu: () => setAgentMenu(null),
+  });
+
   const getProjectSessions = (projectId: string) =>
     store.get(sessionSummariesByProjectIdAtomFamily(projectId));
   const getProjectSessionRecords = (projectId: string) =>
@@ -870,32 +871,25 @@ export function App() {
   }, [settings.enableGitManagement, drawer, workspace.closeDrawer]);
 
   /* settingsNotice 已改用 showToast (app-notice) 实现 */
-  const [piStatus, setPiStatus] = useState<PiInstallStatus | null>(null);
   const [webServiceChanging, setWebServiceChanging] = useState(false);
   const [appInfo, setAppInfo] = useState<AppInfo>({
     version: "-",
     releasesUrl: "https://github.com/ayuayue/pi-desktop/releases",
     platform: "win32",
   });
-  const [piChecking, setPiChecking] = useState(false);
   const [systemLanguage, setSystemLanguage] = useState<string | null>(null);
   const resolvedLocale = resolveLocale(settings.language, systemLanguage ?? undefined);
   setI18nLocale(resolvedLocale);
-  const [environmentDialog, setEnvironmentDialog] = useState(false);
 
   // ===== Pi 更新/安装/代理 hook (H1) =====
   const piUpdate = usePiUpdate({
-    piStatus,
-    setPiStatus,
-    piChecking,
-    setPiChecking,
     settings,
     setSettings,
-    setEnvironmentDialog,
     setSettingsOpen,
     showToast,
     api,
   });
+  const { piStatus, piChecking, environmentDialog, setPiStatus, setEnvironmentDialog } = piUpdate;
   const DEFAULT_LIST_WIDTH = 260;
   const [listWidth, setListWidth] = useState(DEFAULT_LIST_WIDTH);
   const [drawerWidth, setDrawerWidth] = useState(270);
@@ -2304,73 +2298,6 @@ export function App() {
     }
   }
 
-  function openAgentRename(agent: AgentTab) {
-    setAgentMenu(null);
-    setAgentRenameTarget(agent);
-    setSessionRenameTarget(null);
-    setAgentRenameValue(agent.title);
-  }
-
-  function openSessionRename(projectId: string, session: SessionSummary) {
-    setAgentRenameTarget(null);
-    setSessionRenameTarget({ projectId, session });
-    setAgentRenameValue(session.name || t("common.untitled"));
-  }
-
-  async function submitAgentRename() {
-    if (!agentRenameTarget) return;
-    const name = agentRenameValue.replace(/\s+/g, " ").trim();
-    if (!name) {
-      showToast(t("app.sessionNameRequired"), 2200);
-      return;
-    }
-    setAgentRenaming(true);
-    try {
-      const tab = await api.agents.rename(agentRenameTarget.id, name);
-      upsertAgent(tab);
-      setAgentRenameTarget(null);
-      setSessionRenameTarget(null);
-      setAgentRenameValue("");
-      showToast(t("app.sessionRenamed"), 2200);
-      await refreshProjectSessions(tab.projectId);
-    } catch (error) {
-      showToast(
-        t("app.sessionRenameFailed", {
-          error: error instanceof Error ? error.message : String(error),
-        }),
-        4000,
-      );
-    } finally {
-      setAgentRenaming(false);
-    }
-  }
-
-  async function submitSessionRename() {
-    if (!sessionRenameTarget) return;
-    const name = agentRenameValue.replace(/\s+/g, " ").trim();
-    if (!name) {
-      showToast(t("app.sessionNameRequired"), 2200);
-      return;
-    }
-    setAgentRenaming(true);
-    try {
-      await api.sessions.updateRecord(sessionRenameTarget.session.id, { title: name });
-      await refreshProjectSessions(sessionRenameTarget.projectId);
-      setSessionRenameTarget(null);
-      setAgentRenameValue("");
-      showToast(t("app.sessionRenamed"), 2200);
-    } catch (error) {
-      showToast(
-        t("app.sessionRenameFailed", {
-          error: error instanceof Error ? error.message : String(error),
-        }),
-        4000,
-      );
-    } finally {
-      setAgentRenaming(false);
-    }
-  }
-
   async function deleteDraftSession(session: SessionRecord) {
     await api.sessions.deleteRecord(session.id);
     removeSessionState(session.id);
@@ -3732,7 +3659,7 @@ export function App() {
       open: runOpenSidebarSessionById,
       createDraft: runCreateSessionDraft,
       deleteDraft: deleteDraftSession,
-      rename: openSessionRename,
+      rename: rename.openSessionRename,
       export: runExportSidebarSession,
       copy: runCopySidebarSession,
       copyPath: async (session) => {
@@ -3745,7 +3672,7 @@ export function App() {
       },
     },
     agents: {
-      rename: openAgentRename,
+      rename: rename.openAgentRename,
       export: (agent) => exportAgentHtml(agent.id),
       copySession: (agent) => cloneAgentSession(agent.id),
       copyPath: async (agent) => {
@@ -4411,14 +4338,7 @@ export function App() {
         </Suspense>
       )}
       <RenameModals
-        agentRename={(agentRenameTarget || sessionRenameTarget) ? {
-          isAgent: !!agentRenameTarget,
-          value: agentRenameValue,
-          saving: agentRenaming,
-          onValueChange: setAgentRenameValue,
-          onClose: () => { setAgentRenameTarget(null); setSessionRenameTarget(null); },
-          onSubmit: () => { if (agentRenameTarget) void submitAgentRename(); else void submitSessionRename(); },
-        } : undefined}
+        agentRename={rename.renameModalsProps.agentRename}
         fileRename={renamingFile ? {
           path: renamingFile.path,
           name: renamingFile.name,

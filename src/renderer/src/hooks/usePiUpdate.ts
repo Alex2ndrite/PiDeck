@@ -11,13 +11,8 @@ import type {
 import type { PiDesktopApi } from "../../../preload";
 
 export interface UsePiUpdateOptions {
-  piStatus: PiInstallStatus | null;
-  setPiStatus: (status: PiInstallStatus | null) => void;
-  piChecking: boolean;
-  setPiChecking: (checking: boolean) => void;
   settings: AppSettings;
   setSettings: (settings: AppSettings) => void;
-  setEnvironmentDialog: (open: boolean) => void;
   setSettingsOpen: (open: boolean) => void;
   showToast: (message: string, duration?: number) => void;
   api: PiDesktopApi;
@@ -25,15 +20,17 @@ export interface UsePiUpdateOptions {
 
 export function usePiUpdate(options: UsePiUpdateOptions) {
   const {
-    setPiStatus,
-    setPiChecking,
     settings,
     setSettings,
-    setEnvironmentDialog,
     setSettingsOpen,
     showToast,
     api,
   } = options;
+
+  // ---- Pi 环境状态（内部管理） ----
+  const [piStatus, setPiStatus] = useState<PiInstallStatus | null>(null);
+  const [piChecking, setPiChecking] = useState(false);
+  const [environmentDialog, setEnvironmentDialog] = useState(false);
 
   // ---- Pi 更新相关 state ----
   const [piUpdating, setPiUpdating] = useState(false);
@@ -285,6 +282,11 @@ export function usePiUpdate(options: UsePiUpdateOptions) {
 
   return {
     // exposed state
+    piStatus,
+    setPiStatus,
+    piChecking,
+    environmentDialog,
+    setEnvironmentDialog,
     piUpdating,
     piUpdateChecking,
     piUpdateCheck,
