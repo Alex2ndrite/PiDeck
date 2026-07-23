@@ -63,6 +63,7 @@ import { useImagePaste } from "./hooks/useImagePaste";
 import { PromptDeliveryUnknownError, createResendLock } from "./hooks/useComposerSend";
 import { type QueuedPrompt } from "./hooks/useQueuedPrompt";
 import { usePiUpdate } from "./hooks/usePiUpdate";
+import { useProjectSync } from "./hooks/useProjectSync";
 import {
   agentInventoryAtom,
   applyRuntimeCapabilityAtom,
@@ -243,7 +244,6 @@ const COMPOSER_MIN_HEIGHT = 175;
 const COMPOSER_DEFAULT_TERMINAL_HEIGHT = 220;
 const COMPOSER_MIN_TIMELINE_HEIGHT = 160;
 const TERMINAL_DOCK_MOTION_MS = 180;
-const SIDEBAR_PROJECT_CHILD_PAGE_SIZE = 5;
 function displayProjectDirectoryName(project: Project) {
   if (isChatProject(project)) return "Chat";
   const normalizedPath = project.path.replace(/\\/g, "/").replace(/\/+$/, "");
@@ -817,6 +817,41 @@ export function App() {
   const sessions = useAtomValue(
     sessionSummariesByProjectIdAtomFamily(sessionsProjectId ?? ""),
   );
+
+  // ===== 项目同步 hook (H3) =====
+  const {
+    worktreesByProject,
+    branchByProject,
+    files,
+    setFiles,
+    gitInfo,
+    setGitInfo,
+    sessionLoadingByProject,
+    setSessionLoadingByProject,
+    visibleProjectChildCountByProject,
+    setVisibleProjectChildCountByProject,
+    refreshProjects,
+    refreshWorktrees,
+    refreshSessions,
+    refreshProjectSessions,
+    refreshFiles,
+    refreshProjectTree,
+  } = useProjectSync({
+    projects,
+    activeProjectId,
+    setProjects,
+    setActiveProjectId,
+    replaceProjectSessions,
+    api: {
+      projects: { list: api.projects.list },
+      git: { worktreeList: api.git.worktreeList, branches: api.git.branches },
+      sessions: { listCatalog: api.sessions.listCatalog },
+      files: { list: api.files.list },
+    },
+    showToast,
+    t,
+  });
+
   // === import flow hook ===
   const {
     codexImportProject,
@@ -2488,7 +2523,7 @@ export function App() {
     }
   }
 
-  async function refreshProjects() {
+  async function refreshSessionHistory(projectId = sessionsProjectId) {
     if (!projectId) return;
     setSessionHistoryLoading(true);
     try {

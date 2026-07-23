@@ -14,7 +14,7 @@ function sessionRecordToSummary(record: SessionRecord): SessionSummary | undefin
       createdAt: record.createdAt ?? 0,
       source: record.source,
       environment: record.environment,
-    } as SessionSummary;
+    } as unknown as SessionSummary;
   } catch { return undefined; }
 }
 
@@ -31,7 +31,8 @@ type UseProjectSyncInput = {
     files: { list: (projectId: string) => Promise<FileTreeNode[]> };
   };
   showToast: (message: string, duration?: number) => void;
-  t: (key: string, params?: Record<string, unknown>) => string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  t: (key: any, params?: any) => string;
 };
 
 export function useProjectSync(input: UseProjectSyncInput) {
@@ -116,5 +117,5 @@ export function useProjectSync(input: UseProjectSyncInput) {
     if (!silent) showToast(t("app.filesRefreshed", {}), 1800);
   }
 
-  return { worktreesByProject, branchByProject, files, setFiles, gitInfo, setGitInfo, sessionLoadingByProject, visibleProjectChildCountByProject, refreshProjects, refreshWorktrees, refreshSessions, refreshProjectSessions, refreshFiles, refreshProjectTree };
+  return { worktreesByProject, branchByProject, files, setFiles, gitInfo, setGitInfo, sessionLoadingByProject, setSessionLoadingByProject, visibleProjectChildCountByProject, setVisibleProjectChildCountByProject, refreshProjects, refreshWorktrees, refreshSessions, refreshProjectSessions, refreshFiles, refreshProjectTree };
 }
