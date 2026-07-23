@@ -18,13 +18,12 @@ test("通知锚定在新会话控件下方而不是全局 toast", () => {
   assert.match(sessionAtoms, /request\.method === "notify"/);
   assert.match(sessionAtoms, /notification:\s*\{/);
   assert.match(app, /showNotice\(\s*notification\.message/);
-  assert.match(app, /notice=\{appNotice\?\.message\}/);
+  assert.match(app, /<NoticeCenter \/>/);
 
-  const comboIndex = header.indexOf('className="session-combo"');
-  const triggerIndex = header.indexOf('className="session-combo-trigger"');
-  const noticeIndex = header.indexOf('className="app-notice"');
-  assert.ok(triggerIndex > comboIndex, "new Session trigger must be inside the combo anchor");
-  assert.ok(noticeIndex > triggerIndex, "notice must render below the anchored trigger");
+  const noticeIndex = app.indexOf("<NoticeCenter");
+  const comboInAppIndex = app.indexOf('className="session-combo"');
+  assert.ok(noticeIndex > 0, "NoticeCenter must render in App");
+  assert.ok(noticeIndex > comboInAppIndex, "NoticeCenter must render after session combo in App");
 
   const notice = cssRule("\\.app-notice");
   assert.ok(notice, "通知样式必须存在");

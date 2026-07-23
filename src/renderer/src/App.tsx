@@ -45,7 +45,7 @@ import {
   RefreshCw,
   X,
 } from "lucide-react";
-import { subscribeToNotice, showNotice } from "./utils/notice";
+import { showNotice } from "./utils/notice";
 import {
   desktopApi as api,
   isLanWeb,
@@ -138,6 +138,7 @@ import { useScratchPad } from "./hooks/useScratchPad";
 import { SessionReferenceModal, type SessionReferenceResult } from "./components/app/SessionReferenceModal";
 import { SessionMessageTimeline } from "./components/session/SessionMessageTimeline";
 import { SessionHeader } from "./components/session/SessionHeader";
+import { NoticeCenter } from "./components/overlays/NoticeCenter";
 import { ComposerArea } from "./components/session/ComposerArea";
 import { SessionRuntimeDock } from "./components/session/SessionRuntimeDock";
 import {
@@ -567,8 +568,6 @@ export function App() {
     string | undefined
   >(undefined);
   const [sessionActionsOpen, setSessionActionsOpen] = useState(false);
-  const [appNotice, setAppNotice] = useState<{ message: string; duration: number } | null>(null);
-  const appNoticeTimeoutRef = useRef<number | null>(null);
   const [switchingBranch, setSwitchingBranch] = useState<string | null>(null);
   const [promptByAgent, setPromptByAgent] = useState<Record<string, string>>(
     {},
@@ -615,21 +614,6 @@ export function App() {
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [editorsOpen]);
-  // 订阅 app-notice 通知：替代 sonner toast
-  useEffect(() => {
-    return subscribeToNotice((data) => {
-      if (data) {
-        setAppNotice({ message: data.message, duration: data.duration });
-        if (appNoticeTimeoutRef.current) {
-          window.clearTimeout(appNoticeTimeoutRef.current);
-        }
-        appNoticeTimeoutRef.current = window.setTimeout(() => {
-          setAppNotice(null);
-          appNoticeTimeoutRef.current = null;
-        }, data.duration);
-      }
-    });
-  }, []);
   /** Extension widget 容器折叠状态（全局持久化，不按 agentId 隔离，重启后恢复） */
   const [widgetsCollapsed, setWidgetsCollapsed] = useState(() => {
     try {
@@ -5838,7 +5822,6 @@ export function App() {
           hasProject={Boolean(activeProjectId)}
           hasSession={Boolean(activeAgentId || currentSessionId)}
           menuOpen={sessionActionsOpen}
-          notice={appNotice?.message}
           canStop={activeAgent?.status === "running"}
           canRestart={Boolean(
             activeAgentId &&
@@ -5871,6 +5854,7 @@ export function App() {
           }}
           onRestart={() => void restartActiveAgent()}
         />
+        <NoticeCenter />
 
         {currentSessionId ? (
           <SessionMessageTimeline
