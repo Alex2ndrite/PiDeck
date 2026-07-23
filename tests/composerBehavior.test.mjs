@@ -36,6 +36,18 @@ test("ignores Enter while an IME composition is being confirmed", () => {
 	assert.equal(intent, "ignore");
 });
 
+test("ignores Chromium keyCode 229 even when the native composing flag is absent", () => {
+	const { getComposerEnterIntent } = loadComposerBehaviorModule();
+
+	assert.equal(getComposerEnterIntent({
+		key: "Enter",
+		ctrlKey: false,
+		metaKey: false,
+		shiftKey: false,
+		nativeEvent: { keyCode: 229 },
+	}, "enter-send"), "ignore");
+});
+
 test("sends on plain Enter when Enter-to-send is enabled", () => {
 	const { getComposerEnterIntent } = loadComposerBehaviorModule();
 
@@ -51,6 +63,18 @@ test("sends on plain Enter when Enter-to-send is enabled", () => {
 	);
 
 	assert.equal(intent, "send");
+});
+
+test("inserts newline on Shift+Enter when Enter-to-send is enabled", () => {
+	const { getComposerEnterIntent } = loadComposerBehaviorModule();
+
+	assert.equal(getComposerEnterIntent({
+		key: "Enter",
+		ctrlKey: false,
+		metaKey: false,
+		shiftKey: true,
+		nativeEvent: { isComposing: false },
+	}, "enter-send"), "newline");
 });
 
 test("inserts newline on Ctrl+Enter when Enter-to-send is enabled", () => {

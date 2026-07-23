@@ -271,6 +271,19 @@ test("immediate unknown snapshots stay visible and acknowledgement-only", () => 
   assert.equal(canDiscardQueuedPrompt("sending"), false);
 });
 
+test("the Session composer leaves the legacy agent queue behind an explicit runtime slot", () => {
+  const areaSource = readFileSync(
+    "src/renderer/src/components/session/ComposerArea.tsx",
+    "utf8",
+  );
+  const controllerSource = readFileSync(
+    "src/renderer/src/hooks/useSessionComposerController.ts",
+    "utf8",
+  );
+  assert.match(areaSource, /queuePanel\?: ReactNode/);
+  assert.doesNotMatch(controllerSource, /enqueuePrompt|claimIdleHead|claimNextSteerPrompt/);
+});
+
 test("browser prompt returns the received SendPromptResult before background state refresh", () => {
   const browserApiSource = readFileSync("src/renderer/src/browserApi.ts", "utf8");
   assert.match(
