@@ -55,6 +55,7 @@ import { useSidebarController } from "./hooks/useSidebarController";
 import { useProjectRuntimeCapabilities } from "./hooks/useRuntimeCapabilities";
 import { useSessionRuntimeBridge } from "./hooks/useSessionRuntimeBridge";
 import { useSessionMessages } from "./hooks/useSessionMessages";
+import { useSessionLayout } from "./hooks/useSessionLayout";
 import { useSessionSend } from "./hooks/useSessionSend";
 import { useFileEditor } from "./hooks/useFileEditor";
 import { useGitFlow } from "./hooks/useGitFlow";
@@ -940,7 +941,6 @@ export function App() {
   const [composerHeight, setComposerHeight] = useState(COMPOSER_MIN_HEIGHT);
   const [composerOffsetHeight, setComposerOffsetHeight] = useState(0);
   /** ResizeObserver 驱动布局预算重新计算；ref 尺寸本身变化不会触发 React render。 */
-  const [chatLayoutHeight, setChatLayoutHeight] = useState(() => window.innerHeight);
   const [composerAutoHeight, setComposerAutoHeight] =
     useState(COMPOSER_MIN_HEIGHT);
   const [terminalDockStateByAgent, setTerminalDockStateByAgent] =
@@ -960,13 +960,9 @@ export function App() {
     Record<string, DrawerPanel>
   >({});
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set());
-  const chatPaneRef = useRef<HTMLElement | null>(null);
   const sessionComboRef = useRef<HTMLDivElement | null>(null);
-  const chatHeaderRef = useRef<HTMLElement | null>(null);
-  const composerRef = useRef<HTMLElement | null>(null);
   const queuedTrackRef = useRef<HTMLDivElement | null>(null);
   const timelineRef = useRef<HTMLElement | null>(null);
-  const composerBoxRef = useRef<HTMLDivElement | null>(null);
   const composerTextareaRef = useRef<HTMLDivElement | null>(null);
   // RichInput 受控重渲染后,光标应恢复到的纯文本偏移(供建议选中/清除后恢复选区)。
   const pendingComposerCaretRef = useRef<number | null>(null);
@@ -1460,34 +1456,36 @@ export function App() {
   const activeTerminalHeight = activeAgentId
     ? (terminalHeightByAgent[activeAgentId] ?? COMPOSER_DEFAULT_TERMINAL_HEIGHT)
     : COMPOSER_DEFAULT_TERMINAL_HEIGHT;
-  const requestedTerminalRowHeight =
-    !terminalDockVisible || terminalDockClosing
-      ? 0
-      : terminalCollapsed
-        ? 34
-        : activeTerminalHeight;
-  const chatPaneHeight = chatLayoutHeight;
-  const chatHeaderHeight = chatHeaderRef.current?.offsetHeight ?? 78;
-  const fixedChatHeight =
-    chatHeaderHeight +
-    COMPOSER_MIN_TIMELINE_HEIGHT +
-    COMPOSER_MIN_HEIGHT +
-    28;
-  // Queue chrome includes the track gap, panel padding/header/border, and complete rows.
-  // Keep this in sync with .queued-list so the third row is never clipped by the composer.
-  const queuedChromeBudget =
-    activeQueuedPrompts.length > 0
-      ? 38 + Math.min(activeQueuedPrompts.length, QUEUED_PROMPT_VISIBLE) * 34
-      : 0;
-  const terminalRowHeight = terminalCollapsed
-    ? requestedTerminalRowHeight
-    : Math.min(
-        requestedTerminalRowHeight,
-        Math.max(0, chatPaneHeight - fixedChatHeight - queuedChromeBudget),
-      );
+
+  // Layout calculation delegated to useSessionLayout (refs + ResizeObserver + math).
+  const sessionLayout = useSessionLayout({
+    terminalRequestedHeight: activeTerminalHeight,
+    terminalOpen,
+    terminalClosing: terminalDockClosing,
+    terminalCollapsed,
+    queuedPromptCount: activeQueuedPrompts.length,
+  });
+  const {
+    chatPaneRef: sessionChatPaneRef,
+    headerRef: sessionHeaderRef,
+    composerRef: sessionComposerRef,
+    composerBoxRef: sessionComposerBoxRef,
+    queuedBudget: queuedChromeBudget,
+    terminalRowHeight,
+    maxComposerHeight,
+    availableTerminalHeight,
+    clampComposerHeight: sessionClampComposerHeight,
+  } = sessionLayout;
+
+  // Alias hook refs to the names App.tsx expects.
+  const chatPaneRef = sessionChatPaneRef;
+  const chatHeaderRef = sessionHeaderRef;
+  const composerRef = sessionComposerRef;
+  const composerBoxRef = sessionComposerBoxRef;
+
   const visibleQueuedPrompts = activeQueuedPrompts;
   const resolvedComposerHeight = Math.min(
-    getComposerMaxHeight(),
+    maxComposerHeight,
     Math.max(composerHeight, composerAutoHeight),
   );
   // composerMode 基于 composerBangMode（state）而非 prompt（ref），避免每键触发重渲染。
@@ -2025,45 +2023,6 @@ export function App() {
     };
   }, [activeProjectId, activeProjectHasBusyAgent, activeProjectSessionSyncKey, collapsedProjects]);
 
-  function getComposerMaxHeight() {
-    const chatPane = chatPaneRef.current;
-    const header = chatHeaderRef.current;
-    const composer = composerRef.current;
-    const box = composerBoxRef.current;
-    if (!chatPane || !header || !composer || !box) {
-      const reservedTerminalHeight = terminalRowHeight;
-      return Math.max(
-        180,
-        window.innerHeight -
-          78 -
-          COMPOSER_MIN_TIMELINE_HEIGHT -
-          52 -
-          reservedTerminalHeight,
-      );
-    }
-
-    const reservedTerminalHeight = terminalRowHeight;
-    const composerChrome = Math.max(
-      0,
-      composer.offsetHeight - box.offsetHeight,
-    );
-    // 输入框最大高度取决于聊天区域还剩多少可用空间,而不是固定视口比例;
-    // 否则窗口变窄后软换行变多,最小窗口下会比内容需要的高度更早触顶。
-    return Math.max(
-      180,
-      chatPane.clientHeight -
-        header.offsetHeight -
-        COMPOSER_MIN_TIMELINE_HEIGHT -
-        reservedTerminalHeight -
-        composerChrome,
-    );
-  }
-
-  function clampComposerHeight(height: number) {
-    const maxHeight = getComposerMaxHeight();
-    return Math.min(maxHeight, Math.max(COMPOSER_MIN_HEIGHT, height));
-  }
-
   function ensureComposerTailVisible() {
     const editor = composerTextareaRef.current;
     if (!editor || document.activeElement !== editor) return;
@@ -2086,7 +2045,7 @@ export function App() {
     // 宽度变化会改变软换行位置,编辑区的 scrollHeight 才是当前内容真实需要的高度。
     // 这里减去 chrome 高度(顶部留白/工具条/底部状态条),把问题修在布局源头而不是靠用户手动拖。
     const chromeHeight = box.offsetHeight - editor.clientHeight;
-    const nextHeight = clampComposerHeight(
+    const nextHeight = sessionClampComposerHeight(
       editor.scrollHeight + chromeHeight,
     );
     setComposerAutoHeight((current) =>
@@ -2098,7 +2057,7 @@ export function App() {
   // 待发送轨道高度变化会改变 composer 的 chrome 高度；队列增删后重新 clamp，
   // 保证大量卡片出现时输入框仍留在可视区域，撤回后也不会保留过高尺寸。
   useLayoutEffect(() => {
-    const maxHeight = getComposerMaxHeight();
+    const maxHeight = maxComposerHeight;
     setComposerHeight((current) => Math.min(current, maxHeight));
     setComposerAutoHeight((current) => Math.min(current, maxHeight));
   }, [activeAgentId, activeQueuedPrompts.length]);
@@ -2152,58 +2111,11 @@ export function App() {
     setPendingJumpId(id);
   }
 
+  // Clamp composer height when layout changes (useSessionLayout handles ResizeObserver).
   useEffect(() => {
-    let frame = 0;
-    const scheduleSync = () => {
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => {
-        setComposerHeight((current) => clampComposerHeight(current));
-        setComposerOffsetHeight(composerRef.current?.offsetHeight ?? 0);
-        setChatLayoutHeight((current) => {
-          const next = chatPaneRef.current?.clientHeight ?? window.innerHeight;
-          return current === next ? current : next;
-        });
-      });
-    };
-
-    const box = composerBoxRef.current;
-    const footer = composerRef.current;
-    const chatPane = chatPaneRef.current;
-    const observer =
-      (box || footer || chatPane) &&
-      new ResizeObserver((entries) => {
-        const entry = entries[0];
-        if (!entry) return;
-        scheduleSync();
-      });
-    if (box) observer?.observe(box);
-    if (footer) observer?.observe(footer);
-    if (chatPane) observer?.observe(chatPane);
-
-    window.addEventListener("resize", scheduleSync);
-    scheduleSync();
-    return () => {
-      cancelAnimationFrame(frame);
-      window.removeEventListener("resize", scheduleSync);
-      observer?.disconnect();
-    };
-  }, [activeAgentId]);
-
-  useEffect(() => {
-    const frame = requestAnimationFrame(() => {
-      setComposerHeight((current) => clampComposerHeight(current));
-      setComposerOffsetHeight(composerRef.current?.offsetHeight ?? 0);
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [
-    prompt,
-    activeAgentId,
-    listCollapsed,
-    drawerCollapsed,
-    drawer,
-    terminalOpen,
-    activeTerminalHeight,
-  ]);
+    setComposerHeight((current) => sessionClampComposerHeight(current));
+    setComposerOffsetHeight(composerRef.current?.offsetHeight ?? 0);
+  });
 
   useEffect(() => {
     if (activeAgentId && !isPendingAgentId(activeAgentId))
@@ -4116,7 +4028,7 @@ export function App() {
     function onMove(moveEvent: globalThis.PointerEvent) {
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
-        const maxHeight = getComposerMaxHeight();
+        const maxHeight = maxComposerHeight;
         // 拖动的是输入区顶部边线,鼠标向上意味着输入区变高;限制最大高度避免挤压会话阅读区域。
         // 实际高度由手动高度和自动内容高度共同决定;拖到最大后自动高度也会变大,
         // 因此手动缩小时必须同步覆盖 autoHeight,否则 Math.max 会继续把输入框顶在最大高度。
@@ -4359,12 +4271,7 @@ export function App() {
               if (!activeAgentId) return;
               const maxHeight = Math.max(
                 120,
-                chatLayoutHeight -
-                  (chatHeaderRef.current?.offsetHeight ?? 78) -
-                  COMPOSER_MIN_TIMELINE_HEIGHT -
-                  COMPOSER_MIN_HEIGHT -
-                  28 -
-                  queuedChromeBudget,
+                availableTerminalHeight,
               );
               setTerminalHeightByAgent((current) => ({
                 ...current,

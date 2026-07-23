@@ -298,12 +298,11 @@ test("browser prompt returns the received SendPromptResult before background sta
 
 test("layout budget uses compact queue chrome and terminal still yields first", () => {
   const appSource = readFileSync("src/renderer/src/App.tsx", "utf8");
-  assert.match(appSource, /observer\?\.observe\(chatPane\)/);
-  assert.match(appSource, /setChatLayoutHeight/);
-  assert.match(
-    appSource,
-    /terminalRowHeight = terminalCollapsed[\s\S]*?Math\.min\([\s\S]*?requestedTerminalRowHeight[\s\S]*?chatPaneHeight - fixedChatHeight/,
-  );
+  const layoutSource = readFileSync("src/renderer/src/hooks/useSessionLayout.ts", "utf8");
+  // ResizeObserver now lives in useSessionLayout.
+  assert.match(layoutSource, /observer\.observe\(/);
+  assert.match(layoutSource, /terminalRowHeight = input\.terminalCollapsed/);
+  // App still references queuedChromeBudget (aliased from hook) and QUEUED_PROMPT_VISIBLE.
   assert.match(appSource, /queuedChromeBudget/);
   assert.match(appSource, /QUEUED_PROMPT_VISIBLE/);
   assert.match(appSource, /const visibleQueuedPrompts = activeQueuedPrompts/);
