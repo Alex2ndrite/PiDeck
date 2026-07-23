@@ -292,9 +292,6 @@ function formatPiSubagentName(session: SessionSummary) {
   return session.name || t("app.piSubagent");
 }
 
-function isAbsoluteFilePath(path: string) {
-  return /^[A-Za-z]:[\\/]/.test(path) || path.startsWith("/");
-}
 
 /** 从 localStorage 恢复会话来源过滤配置 */
 function loadSessionSourceFilter(): Record<string, Set<"pi" | "codex" | "claude" | "opencode"> | null> {
@@ -327,13 +324,6 @@ function saveSessionSourceFilter(filter: Record<string, Set<"pi" | "codex" | "cl
 	} catch {
 		// 静默失败
 	}
-}
-
-function resolveFileLinkPath(path: string, basePath?: string) {
-  if (!path || isAbsoluteFilePath(path) || !basePath) return path;
-  // 浏览器端不引入 Node path;按项目根路径分隔符拼接,满足点击 AI 输出的项目相对路径。
-  const separator = basePath.includes("\\") ? "\\" : "/";
-  return `${basePath.replace(/[\\/]+$/, "")}${separator}${path.replace(/^[\\/]+/, "")}`;
 }
 
 const DISMISSED_EXTENSION_WIDGETS_STORAGE_KEY =
@@ -782,201 +772,6 @@ export function App() {
   	projectId: string;
   } | null>(null);
   /** 编辑器展示模式：弹框或侧栏 */
-  const [editorMode, setEditorMode] = useState<"modal" | "drawer">("drawer");
-  const toggleEditorMode = useCallback(() => {
-    setEditorMode((prev) => {
-      const next = prev === "modal" ? "drawer" : "modal";
-      if (next === "drawer") {
-        setDrawer("editor");
-        setDrawerCollapsed(false);
-      }
-      return next;
-    });
-  }, []);
-  /** Editor tab：文件中转查看/差异查看。条数与正文估算内存双重受限。 */
-  const EDITOR_TAB_LIMIT = 5;
-  const EDITOR_TAB_TEXT_BUDGET = 24 * 1024 * 1024;
-  interface EditorTab {
-    id: string;
-    filePath: string;
-    mode: "view" | "diff";
-    originalContent: string;
-    modifiedContent?: string;
-    /** 历史提交 Diff 必须只读，不能把旧快照误保存回当前工作区。 */
-    allowSave: boolean;
-    /** 同一文件在不同提交中可以有多个历史 Diff，使用该 key 避免互相覆盖。 */
-    tabKey?: string;
-    /** 历史 Diff 在标签中追加短 hash，便于区分同一路径的不同提交。 */
-    label?: string;
-    /** Git Diff 覆盖在 Git drawer 上，不允许切换成 Editor drawer 破坏原面板状态。 */
-    preserveDrawer?: boolean;
-    /** 仅用于内存淘汰，不改变 tab 的可见排列顺序。 */
-    lastAccess: number;
-  }
-  interface GitDrawerDiff {
-    projectId: string;
-    filePath: string;
-    originalContent: string;
-    modifiedContent: string;
-    label: string;
-  }
-  const [gitDrawerDiff, setGitDrawerDiff] = useState<GitDrawerDiff | null>(null);
-  /** Git 快照保留在独立状态中，以便弹窗最小化后仍能回到原 Git 抽屉详情。 */
-  const [gitDiffDisplayMode, setGitDiffDisplayMode] = useState<"modal" | "drawer">("drawer");
-  // 同项目内快速连续打开 A/B 文件时，只允许最后一次请求落入预览；关闭详情也会使在途请求失效。
-  const gitDiffRequestSequenceRef = useRef(0);
-  const closeGitDiff = useCallback(() => {
-    gitDiffRequestSequenceRef.current += 1;
-    setGitDrawerDiff(null);
-    setGitDiffDisplayMode("drawer");
-  }, []);
-  const toggleGitDiffDisplayMode = useCallback(() => {
-    if (gitDiffDisplayMode === "drawer") {
-      // 文件预览弹窗只有一个所有者；放大 Git Diff 前先退出普通文件弹窗模式。
-      setEditorMode("drawer");
-      setGitDiffDisplayMode("modal");
-      return;
-    }
-    // 最小化必须真正恢复 Git 抽屉，不能只移除 modal 后把用户留在其他面板。
-    setDrawer("git");
-    setDrawerCollapsed(false);
-    setGitDiffDisplayMode("drawer");
-  }, [gitDiffDisplayMode]);
-  const editorTabAccessSequenceRef = useRef(0);
-  const [editorTabs, setEditorTabs] = useState<EditorTab[]>([]);
-  const [activeTabId, setActiveTabId] = useState<string | null>(null);
-  /** 当前活跃 tab 派生数据 */
-  const activeTab = useMemo(
-    () => editorTabs.find((t) => t.id === activeTabId) ?? null,
-    [editorTabs, activeTabId],
-  );
-  useEffect(() => {
-    // Git Diff 属于项目工作区快照；项目切换后必须释放旧快照，避免右侧栏展示错误项目内容。
-    gitDiffRequestSequenceRef.current += 1;
-    setGitDrawerDiff(null);
-    setGitDiffDisplayMode("drawer");
-  }, [activeProjectId]);
-
-  // FileDiffViewer 会在读取函数变化时重载文件；这些 IO 入口必须保持引用稳定，避免 App 轮询/消息更新导致预览滚动回到顶部。
-  const readEditorFileContent = useCallback(
-    (path: string) => api.files.readContent(path),
-    [],
-  );
-  const readEditorOriginalContent = useCallback(
-    (path: string) => api.git.originalContent(path),
-    [],
-  );
-  const saveEditorFileContent = useCallback(
-    (path: string, content: string) => api.files.writeContent(path, content),
-    [],
-  );
-  const editorTabTextBytes = (tab: EditorTab) =>
-    (tab.originalContent.length + (tab.modifiedContent?.length ?? 0)) * 2;
-  const trimEditorTabs = (tabs: EditorTab[], protectedId: string) => {
-    const next = [...tabs];
-    let textBytes = next.reduce((sum, tab) => sum + editorTabTextBytes(tab), 0);
-    while (
-      next.length > 1 &&
-      (next.length > EDITOR_TAB_LIMIT || textBytes > EDITOR_TAB_TEXT_BUDGET)
-    ) {
-      const candidates = next.filter((tab) => tab.id !== protectedId);
-      if (candidates.length === 0) break;
-      const oldest = candidates.reduce((left, right) => left.lastAccess <= right.lastAccess ? left : right);
-      const index = next.findIndex((tab) => tab.id === oldest.id);
-      const [removed] = next.splice(index, 1);
-      if (removed) textBytes -= editorTabTextBytes(removed);
-    }
-    return next;
-  };
-  /** 打开或切换 tab。命中时更新访问序号；超条数/正文预算时淘汰最久未访问项。 */
-  const openEditorTab = useCallback(
-    (
-      path: string,
-      mode: "view" | "diff",
-      originalContent?: string,
-      modifiedContent?: string,
-      allowSave = true,
-      tabKey?: string,
-      label?: string,
-      preserveDrawer = false,
-    ) => {
-      setEditorTabs((prev) => {
-        const existing = prev.find((t) => t.filePath === path && t.tabKey === tabKey);
-        if (existing) {
-          const updated = {
-            ...existing,
-            mode,
-            originalContent: originalContent ?? "",
-            modifiedContent,
-            allowSave,
-            tabKey,
-            label,
-            preserveDrawer,
-            lastAccess: ++editorTabAccessSequenceRef.current,
-          };
-          setActiveTabId(existing.id);
-          return trimEditorTabs(
-            prev.map((tab) => tab.id === existing.id ? updated : tab),
-            existing.id,
-          );
-        }
-        const newTab: EditorTab = {
-          id: crypto.randomUUID(),
-          filePath: path,
-          mode,
-          originalContent: originalContent ?? "",
-          modifiedContent,
-          allowSave,
-          tabKey,
-          label,
-          preserveDrawer,
-          lastAccess: ++editorTabAccessSequenceRef.current,
-        };
-        const next = trimEditorTabs([...prev, newTab], newTab.id);
-        setActiveTabId(newTab.id);
-        return next;
-      });
-    },
-    [],
-  );
-  /** 关闭指定 tab。关闭活跃 tab 时切到相邻 tab；一个都不剩时关闭编辑器。 */
-  const closeEditorTab = useCallback(
-    (tabId: string) => {
-      setEditorTabs((prev) => {
-        const idx = prev.findIndex((t) => t.id === tabId);
-        if (idx < 0) return prev;
-        const next = prev.filter((t) => t.id !== tabId);
-        if (next.length === 0) {
-          setActiveTabId(null);
-        } else if (tabId === activeTabId) {
-          const neighborIdx = Math.min(idx, next.length - 1);
-          setActiveTabId(next[neighborIdx].id);
-        }
-        return next;
-      });
-    },
-    [activeTabId],
-  );
-  /** 切换活跃 tab。 */
-  const selectEditorTab = useCallback((tabId: string) => {
-    setEditorTabs((current) => current.map((tab) => tab.id === tabId
-      ? { ...tab, lastAccess: ++editorTabAccessSequenceRef.current }
-      : tab));
-    setActiveTabId(tabId);
-  }, []);
-  /** 稳定版文件读写回调，避免内联函数导致 FileDiffViewer 的 useEffect 每轮渲染都重新触发。 */
-  const handleReadContent = useCallback(
-    (path: string) => api.files.readContent(path),
-    [],
-  );
-  const handleReadOriginalContent = useCallback(
-    (path: string) => api.git.originalContent(path),
-    [],
-  );
-  const handleSaveContent = useCallback(
-    (path: string, content: string) => api.files.writeContent(path, content),
-    [],
-  );
   const [codexImportProject, setCodexImportProject] = useState<Project | null>(
     null,
   );
@@ -1020,14 +815,6 @@ export function App() {
   const [compacting, setCompacting] = useState(false);
   const [drawer, setDrawer] = useState<DrawerPanel | null>(null);
 
-  useEffect(() => {
-    // 详情仍在抽屉模式时，用户切换到其他面板应关闭快照，并且即使内容尚未返回也要废弃在途读取；
-    // modal 模式允许底层面板变化，最小化时会显式恢复 Git 抽屉。
-    if (drawer !== "git" && gitDiffDisplayMode === "drawer") {
-      gitDiffRequestSequenceRef.current += 1;
-      if (gitDrawerDiff) setGitDrawerDiff(null);
-    }
-  }, [drawer, gitDiffDisplayMode, gitDrawerDiff]);
 
   // ── 按项目目录持久化抽屉面板状态和展开目录（localStorage） ──
   // 文件侧边栏属于项目目录，所有在该项目下运行的 agent 共享同一套展开与面板状态。
@@ -1099,13 +886,6 @@ export function App() {
     return new Set();
   }, []);
   /** 打开文件编辑器前所在的抽屉面板，供返回按钮恢复 */
-  const prevDrawerPanelRef = useRef<DrawerPanel | null>(null);
-  // 最后一个 editor tab 被关闭时自动收起 drawer
-  useEffect(() => {
-    if (editorTabs.length === 0 && drawer === "editor") {
-      setDrawer(null);
-    }
-  }, [editorTabs.length, drawer]);
   const [sessionsProjectId, setSessionsProjectId] = useState<string>();
   const sessions = useAtomValue(
     sessionSummariesByProjectIdAtomFamily(sessionsProjectId ?? ""),
@@ -1892,6 +1672,52 @@ export function App() {
     [activeMessages.length, activeAgentId],
   );
   const flatFiles = useMemo(() => flattenFiles(files), [files]);
+  // === file editor hook ===
+  const {
+    editorMode,
+    toggleEditorMode,
+    editorTabs,
+    activeTabId,
+    activeTab,
+    editorTabAccessSequenceRef,
+    readEditorFileContent,
+    readEditorOriginalContent,
+    saveEditorFileContent,
+    openEditorTab,
+    closeEditorTab,
+    selectEditorTab,
+    openFilePath,
+    viewFilePath,
+    diffFilePath,
+    openWorkspaceFileDiff,
+    openCommitFileDiff,
+    closeGitDiff,
+    gitDiffDisplayMode,
+    gitDrawerDiff,
+    toggleGitDiffDisplayMode,
+    gitDiffRequestSequenceRef,
+    prevDrawerPanelRef,
+    clearEditorBack,
+    closeEditor,
+  } = useFileEditor({
+    activeProjectId,
+    activeProjectIdRef,
+    activeAgent: activeAgent ?? null,
+    activeProject: activeProject ?? null,
+    drawer,
+    modifiedFiles,
+    setDrawer,
+    setDrawerCollapsed,
+    showToast,
+    readFileContent: api.files.readContent,
+    readGitOriginalContent: api.git.originalContent,
+    writeFileContent: api.files.writeContent,
+    openFile: api.files.open,
+    workspaceFileDiff: api.git.workspaceFileDiff,
+    commitFileDiff: api.git.commitFileDiff,
+    t,
+  });
+
   // 优化:建议项计算仅在必要时触发,避免每次输入都重计算导致卡顿
   // 只有当建议框打开时才计算,关闭时返回空数组
   const activeProjectSessions = useAtomValue(
@@ -2646,140 +2472,6 @@ export function App() {
     };
   }, [activeProjectId]);
 
-  async function checkPiInstall(source: "startup" | "manual" = "manual") {
-    setSettingsOpen(false);
-    setPiChecking(true);
-    setEnvironmentDialog(true);
-    try {
-      const next = await api.pi.check();
-      setPiStatus(next);
-      if (next.installed && source === "startup") {
-        // 首次启动检测通过后落盘,后续启动不再阻塞/打扰;用户仍可在设置里手动重新检测。
-        const saved = await api.settings.update({ piEnvironmentChecked: true });
-        setSettings(saved);
-        window.setTimeout(() => setEnvironmentDialog(false), 3000);
-      }
-      if (next.installed && source === "manual")
-        window.setTimeout(() => setEnvironmentDialog(false), 3000);
-    } finally {
-      setPiChecking(false);
-    }
-  }
-
-  async function checkPiInstallInline() {
-    setPiChecking(true);
-    setCustomPathResult(null);
-    try {
-      const next = await api.pi.check();
-      setPiStatus(next);
-      if (next.installed) {
-        const saved = await api.settings.update({ piEnvironmentChecked: true });
-        setSettings(saved);
-        showToast(
-          t("app.piCheckPassed", {
-            value: next.command ?? next.version ?? "pi",
-          }),
-        );
-      } else {
-        /* 检测失败时弹出环境检测弹框，方便用户查看安装指引 */
-        setSettingsOpen(false);
-        setEnvironmentDialog(true);
-        setPiStatus(next);
-      }
-    } finally {
-      setPiChecking(false);
-    }
-  }
-
-  /**
-   * 校验用户手动输入的 pi 路径。
-   * 主进程执行 command --version 验证后,通过则自动保存到 settings.customPiPath,
-   * 之后新建/重启 agent 时 PiProcess 会优先使用自定义路径。
-   */
-  async function validateCustomPiPath(
-    options: { closeDialogOnSuccess?: boolean } = {},
-  ) {
-    const path = customPiPath.trim();
-    if (!path) return;
-    setCustomPathValidating(true);
-    setCustomPathResult(null);
-    try {
-      const result = await api.pi.checkCustom(path);
-      setCustomPathResult(result);
-      if (result.installed) {
-        // 主进程会保存 PiLocator 归一化后的路径;这里重新读取,确保 UI 展示的是实际使用路径。
-        const updated = await api.settings.get();
-        setSettings(updated);
-        setCustomPiPath(updated.customPiPath ?? result.command ?? path);
-        setPiStatus(result);
-        showToast(
-          t("app.piPathSaved", {
-            path: result.command ?? updated.customPiPath ?? path,
-          }),
-        );
-        if (options.closeDialogOnSuccess) {
-          // 启动检测弹窗场景下保持原有成功后自动关闭体验;设置页内校验不关闭设置窗口。
-          window.setTimeout(() => setEnvironmentDialog(false), 3000);
-        }
-      } else {
-        showToast(
-          t("app.piPathValidateFailed", {
-            error: result.error ?? t("environment.unableToRun"),
-          }),
-        );
-      }
-    } finally {
-      setCustomPathValidating(false);
-    }
-  }
-
-  async function clearCustomPiPath() {
-    const updated = await api.settings.update({ customPiPath: "" });
-    setSettings(updated);
-    setCustomPiPath("");
-    setCustomPathResult(null);
-    showToast(t("app.piPathCleared"));
-    const status = await api.pi.check();
-    setPiStatus(status);
-  }
-
-  /**
-   * 检查 npm 是否可用。
-   * 通过主进程执行 npm --version 检测系统中是否安装了 npm。
-   */
-  async function checkNpm() {
-    setNpmChecking(true);
-    try {
-      const result = await api.pi.checkNpm();
-      setNpmAvailable(result.available);
-      setNpmVersion(result.version);
-    } finally {
-      setNpmChecking(false);
-    }
-  }
-
-  /**
-   * 执行安装命令的 handler。
-   * 调用主进程执行命令，根据退出码判断成功/失败。
-   */
-  async function execInstallCommand() {
-    const cmd = installCommand.trim();
-    if (!cmd) return;
-    setInstallExecuting(true);
-    setInstallResult(null);
-    setInstallCompleted(false);
-    try {
-      const result = await api.pi.execInstall(cmd);
-      setInstallResult(result);
-      // 退出码 0 表示成功（npm install 成功时 exitCode 为 0）
-      if (result.success && result.exitCode === 0) {
-        setInstallCompleted(true);
-      }
-    } finally {
-      setInstallExecuting(false);
-    }
-  }
-
   /** 统一通知：所有非模态消息都走 app-notice 位置 */
   function showToast(message: string, duration = 3500) {
     showNotice(message, duration);
@@ -2816,49 +2508,6 @@ export function App() {
   async function installDownloadedAppUpdate() {
     if (!downloadedUpdatePath) return;
     await api.app.installUpdate(downloadedUpdatePath);
-  }
-
-  async function checkPiCliUpdateOnStartup() {
-    if (settings.disableUpdateCheck) return;
-    try {
-      const result = await api.pi.checkUpdate();
-      setPiUpdateCheck(result);
-      if (result.hasUpdate) {
-        // 启动后后台提醒即可，不阻塞主界面；低版本 pi 可能缺少新版协议/工具能力。
-        const message = t("settings.piUpdateStartupNotice");
-        showToast(message, 6500);
-      }
-    } catch {
-      // 后台检查失败不打扰用户；设置页仍可手动检查并看到详细错误。
-    }
-  }
-
-  async function checkPiCliUpdate() {
-    if (settings.disableUpdateCheck) return;
-    setPiUpdateChecking(true);
-    try {
-      const result = await api.pi.checkUpdate();
-      setPiUpdateCheck(result);
-      showToast(result.error ? t("settings.piUpdateFailed", { error: result.error }) : result.hasUpdate ? t("settings.piUpdateAvailable") : t("settings.piUpdateChecked"));
-    } finally {
-      setPiUpdateChecking(false);
-    }
-  }
-
-  async function updatePiCli() {
-    setPiUpdating(true);
-    setPiUpdateResult(null);
-    try {
-      const result = await api.pi.update();
-      setPiUpdateResult(result);
-      await checkPiInstallInline();
-      setPiUpdateCheck(await api.pi.checkUpdate());
-      showToast(result.updated ? t("settings.piUpdateDone") : t("settings.piUpdateChecked"));
-    } catch (error) {
-      showToast(t("settings.piUpdateFailed", { error: error instanceof Error ? error.message : String(error) }));
-    } finally {
-      setPiUpdating(false);
-    }
   }
 
   async function checkAppUpdate(source: "auto" | "manual" = "manual") {
@@ -2997,106 +2646,6 @@ export function App() {
     const next = await api.files.list(projectId);
     setFiles(next);
     if (!silent) showToast(t("app.filesRefreshed"), 1800);
-  }
-
-  function openFilePath(path: string) {
-    // 绝对路径直接打开;相对路径按当前 agent cwd / 项目目录解析后交给系统默认应用。
-    const resolvedPath = resolveFileLinkPath(path, activeAgent?.cwd ?? activeProject?.path);
-    void api.files.open(resolvedPath).catch((error) => {
-      showToast(t("app.openFileFailed", {
-        error: error instanceof Error ? error.message : String(error),
-      }));
-    });
-  }
-
-  function viewFilePath(path: string) {
-    openEditorTab(path, "view");
-    if (editorMode === "drawer") {
-      prevDrawerPanelRef.current = drawer;
-      setDrawer("editor");
-      setDrawerCollapsed(false);
-    }
-  }
-
-  function diffFilePath(path: string, originalContent?: string, content?: string) {
-    // 工具 diff 展示：write = 空白→全量内容，edit = oldText→newText（变动区域）
-    // originalContent 不再存储 full file，使用工具参数中的变动文本作为对比基准。
-    const modified = modifiedFiles.find((f) => f.path === path);
-    const resolvedOriginal = originalContent ?? modified?.originalContent ?? "";
-    const resolvedModified = content ?? modified?.content ?? undefined;
-    // 工具 diff 与 Git diff 共享弹窗层；打开普通 diff 时先关闭 Git 快照，避免两个 backdrop 叠加。
-    closeGitDiff();
-    setEditorMode("modal");
-    setDrawer(null);
-    openEditorTab(path, "diff", resolvedOriginal, resolvedModified);
-  }
-
-  async function openWorkspaceFileDiff(group: GitResourceGroupType, path: string) {
-    if (!activeProjectId) return;
-    const projectId = activeProjectId;
-    const request = ++gitDiffRequestSequenceRef.current;
-    try {
-      const diff = await api.git.workspaceFileDiff(projectId, group, path);
-      if (activeProjectIdRef.current !== projectId || request !== gitDiffRequestSequenceRef.current) return;
-      if (!diff) {
-        showToast(t("git.workspaceDiffUnavailable"));
-        return;
-      }
-      const groupLabel = group === "index"
-        ? t("git.stagedChanges")
-        : group === "merge"
-          ? t("git.mergeChanges")
-          : t("git.changes");
-      // Git SCM 快照先在当前 Git 抽屉内展示；用户可通过公共 FileDiffViewer 放大到弹窗，
-      // 同时保持 GitPanel 挂载，避免丢失 pane、滚动和 Graph 状态。
-      setEditorMode("drawer");
-      setGitDiffDisplayMode("drawer");
-      setGitDrawerDiff({
-        projectId,
-        filePath: diff.path,
-        originalContent: diff.originalContent,
-        modifiedContent: diff.modifiedContent,
-        label: `${diff.path.split(/[/\\]/).pop() ?? diff.path} (${groupLabel})`,
-      });
-    } catch (error) {
-      if (activeProjectIdRef.current === projectId && request === gitDiffRequestSequenceRef.current) {
-        showToast(error instanceof Error ? error.message : String(error));
-      }
-    }
-  }
-
-  async function openCommitFileDiff(commit: CommitEntry, file: GitChangedFile) {
-    if (!activeProjectId) return;
-    const projectId = activeProjectId;
-    const request = ++gitDiffRequestSequenceRef.current;
-    try {
-      const diff = await api.git.commitFileDiff(
-        projectId,
-        commit.hash,
-        file.path,
-        file.originalPath,
-      );
-      // 用户等待 Git 读取期间可能已切换项目或点击了另一个文件；旧结果不能覆盖当前预览。
-      if (activeProjectIdRef.current !== projectId || request !== gitDiffRequestSequenceRef.current) return;
-      if (!diff) {
-        showToast(t("git.fileDiffUnavailable"));
-        return;
-      }
-      // 历史快照同样先在 Git 抽屉内只读展示；放大后仍保留这份快照供最小化恢复。
-      setEditorMode("drawer");
-      setGitDiffDisplayMode("drawer");
-      setGitDrawerDiff({
-        projectId,
-        filePath: diff.path,
-        originalContent: diff.originalContent,
-        modifiedContent: diff.modifiedContent,
-        label: `${diff.path.split(/[/\\]/).pop() ?? diff.path} (${commit.shortHash})`,
-      });
-    } catch (error) {
-      if (activeProjectIdRef.current === projectId && request === gitDiffRequestSequenceRef.current) {
-        showToast(error instanceof Error ? error.message : String(error));
-      }
-    }
   }
 
   async function refreshSessionHistory(projectId = sessionsProjectId) {
@@ -5138,35 +4687,6 @@ export function App() {
     }
   }
 
-  async function testPiProxy() {
-    setPiProxyChecking(true);
-    setPiProxyNoticeTone("info");
-    setPiProxyNotice(t("app.proxyChecking"));
-    try {
-      const result = await api.settings.testPiProxy();
-      setPiProxyNoticeTone(result.success ? "success" : "error");
-      setPiProxyNotice(
-        result.success
-          ? t("app.proxyAvailable", {
-              message: result.message ?? t("app.proxyDefaultOk"),
-              elapsed: result.elapsedMs,
-            })
-          : t("app.proxyCheckFailed", {
-              error: result.error ?? t("app.proxyUnknownError"),
-            }),
-      );
-    } catch (error) {
-      setPiProxyNoticeTone("error");
-      setPiProxyNotice(
-        t("app.proxyCheckFailed", {
-          error: error instanceof Error ? error.message : String(error),
-        }),
-      );
-    } finally {
-      setPiProxyChecking(false);
-    }
-  }
-
   async function switchBranch(branch: string) {
     if (!activeProjectId || !branch || branch === gitInfo.current) return;
     setSwitchingBranch(branch);
@@ -5291,7 +4811,7 @@ export function App() {
   function openDrawer(panel: DrawerPanel) {
     if (panel === "git" && !settings.enableGitManagement) return;
     if (drawerPinned && panel !== drawerPinnedPanel) return;
-    if (panel !== "git") setGitDrawerDiff(null);
+    if (panel !== "git") closeGitDiff();
     if (panel === "sessions" && activeProjectId) {
       setSessionsProjectId(activeProjectId);
       void refreshSessions(activeProjectId);
@@ -5311,7 +4831,7 @@ export function App() {
   function closeDrawer() {
     if (drawerPinned) return;
     if (activeProjectId) saveDrawerState(activeProjectId, null, false);
-    setGitDrawerDiff(null);
+    closeGitDiff();
     setDrawer(null);
   }
 
@@ -6005,13 +5525,8 @@ export function App() {
               mode={activeTab.mode}
               onToggleMode={activeTab.preserveDrawer ? undefined : toggleEditorMode}
               onBack={prevDrawerPanelRef.current && prevDrawerPanelRef.current !== "editor" ? () => {
-                const prev = prevDrawerPanelRef.current;
-                prevDrawerPanelRef.current = null;
-                if (prev) {
-                  setActiveTabId(null);
-                  setEditorTabs([]);
-                  setDrawer(prev);
-                }
+                const prev = clearEditorBack();
+                if (prev) setDrawer(prev);
               } : undefined}
               originalContent={activeTab.mode === "diff" ? activeTab.originalContent : undefined}
               modifiedContent={activeTab.modifiedContent}
@@ -6019,7 +5534,7 @@ export function App() {
               activeTabId={activeTabId}
               onSelectTab={selectEditorTab}
               onCloseTab={closeEditorTab}
-              onClose={() => { setActiveTabId(null); setEditorTabs([]); setDrawer(null); }}
+              onClose={() => { closeEditor(); setDrawer(null); }}
               readContent={readEditorFileContent}
               readOriginalContent={readEditorOriginalContent}
               saveContent={activeTab.allowSave ? saveEditorFileContent : undefined}
@@ -6345,64 +5860,61 @@ export function App() {
           checking={piChecking}
           onClose={() => {
             setEnvironmentDialog(false);
-            setCustomPathResult(null);
+            piUpdate.setCustomPathResult(null);
             // 关闭时重置安装状态
-            setInstallResult(null);
-            setInstallCompleted(false);
-            setNpmAvailable(null);
+            piUpdate.setInstallResult(null);
+            piUpdate.setInstallCompleted(false);
+            piUpdate.setNpmAvailable(null);
           }}
           onRecheck={() => {
-            setCustomPathResult(null);
-            setNpmAvailable(null);
-            setNpmVersion(undefined);
-            setInstallResult(null);
-            setInstallCompleted(false);
-            setInstallUseMirror(false);
-            checkPiInstall("manual");
+            piUpdate.setCustomPathResult(null);
+            piUpdate.setNpmAvailable(null);
+            piUpdate.setNpmVersion(undefined);
+            piUpdate.setInstallResult(null);
+            piUpdate.setInstallCompleted(false);
+            piUpdate.setInstallUseMirror(false);
+            piUpdate.checkPiInstall("manual");
           }}
           onOpenInstallDocs={() =>
             api.app.openExternal(
               "https://pi.dev/docs/latest/quickstart#install",
             )
           }
-          customPath={customPiPath}
-          customPathValidating={customPathValidating}
-          customPathResult={customPathResult}
+          customPath={piUpdate.customPiPath}
+          customPathValidating={piUpdate.customPathValidating}
+          customPathResult={piUpdate.customPathResult}
           onCustomPathChange={(path) => {
-            setCustomPiPath(path);
-            setCustomPathResult(null);
+            piUpdate.setCustomPiPath(path);
+            piUpdate.setCustomPathResult(null);
           }}
           onValidateCustomPath={() =>
-            validateCustomPiPath({ closeDialogOnSuccess: true })
+            piUpdate.validateCustomPiPath({ closeDialogOnSuccess: true })
           }
-          npmAvailable={npmAvailable}
-          npmVersion={npmVersion}
-          npmChecking={npmChecking}
-          installCommand={installCommand}
-          installUseMirror={installUseMirror}
-          installExecuting={installExecuting}
-          installResult={installResult}
-          installCompleted={installCompleted}
-          onCheckNpm={checkNpm}
+          npmAvailable={piUpdate.npmAvailable}
+          npmVersion={piUpdate.npmVersion}
+          npmChecking={piUpdate.npmChecking}
+          installCommand={piUpdate.installCommand}
+          installUseMirror={piUpdate.installUseMirror}
+          installExecuting={piUpdate.installExecuting}
+          installResult={piUpdate.installResult}
+          installCompleted={piUpdate.installCompleted}
+          onCheckNpm={piUpdate.checkNpm}
           onInstallCommandChange={(cmd) => {
-            setInstallCommand(cmd);
-            setInstallResult(null);
-            setInstallCompleted(false);
+            piUpdate.setInstallCommand(cmd);
+            piUpdate.setInstallResult(null);
+            piUpdate.setInstallCompleted(false);
           }}
           onToggleInstallMirror={() => {
-            setInstallUseMirror((prev) => {
-              // 切换镜像，同时更新命令文本
+            piUpdate.setInstallUseMirror((prev) => {
               if (prev) {
-                // 移除镜像
-                setInstallCommand((cmd) =>
+                piUpdate.setInstallCommand((cmd) =>
                   cmd.replace(
                     /\s+--registry=https:\/\/registry\.npmmirror\.com/g,
                     "",
                   ),
                 );
               } else {
-                // 添加镜像
-                setInstallCommand((cmd) =>
+                piUpdate.setInstallCommand((cmd) =>
                   cmd.includes("--registry=")
                     ? cmd
                     : cmd + " --registry=https://registry.npmmirror.com",
@@ -6410,10 +5922,10 @@ export function App() {
               }
               return !prev;
             });
-            setInstallResult(null);
-            setInstallCompleted(false);
+            piUpdate.setInstallResult(null);
+            piUpdate.setInstallCompleted(false);
           }}
-          onExecInstall={execInstallCommand}
+          onExecInstall={piUpdate.execInstallCommand}
           onRestartApp={() => api.app.restart()}
           onClearCheckFlag={async () => {
             await api.settings.update({ piEnvironmentChecked: false });
@@ -6505,7 +6017,7 @@ export function App() {
           activeTabId={activeTabId}
           onSelectTab={selectEditorTab}
           onCloseTab={closeEditorTab}
-          onClose={() => { setActiveTabId(null); setEditorTabs([]); }}
+          onClose={() => { closeEditor(); }}
           readContent={readEditorFileContent}
           readOriginalContent={readEditorOriginalContent}
           saveContent={activeTab.allowSave ? saveEditorFileContent : undefined}
@@ -6697,3 +6209,4 @@ function formatUpdateBytes(bytes?: number) {
 }
 
 
+// test
