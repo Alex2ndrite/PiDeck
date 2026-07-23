@@ -16,6 +16,15 @@ export type SessionRefSelectionEntry = {
   selectedIndices: number[];
 };
 
+export type RefreshSessions = (
+  projectId?: string,
+) => Promise<SessionSummary[]>;
+
+export type RefreshProjectSessions = (
+  projectId: string,
+  silent?: boolean,
+) => Promise<SessionSummary[] | SessionRecord[] | undefined>;
+
 export interface UseSessionActionsOptions {
   // Refs
   openSessionRequestRef: MutableRefObject<number>;
@@ -46,16 +55,16 @@ export interface UseSessionActionsOptions {
   removeSessionState: (sessionId: string) => void;
   removeSessionComposerState: (sessionId: string) => void;
 
-  // Refresh callbacks
-  refreshSessions: (projectId?: string) => Promise<void>;
-  refreshProjectSessions: (projectId?: string, noCache?: boolean) => Promise<void>;
+  // Refresh callbacks. Callers own menu closing and foreground loading state.
+  refreshSessions: RefreshSessions;
+  refreshProjectSessions: RefreshProjectSessions;
 
   // API
   api: {
     sessions: {
       copy: (projectId: string, filePath: string) => Promise<{ cancelled?: boolean; targetSessionId?: string }>;
       exportHtml: (projectId: string, filePath: string) => Promise<{ path: string }>;
-      deleteRecord: (sessionId: string) => Promise<void>;
+      deleteRecord: (sessionId: string) => Promise<boolean>;
       createDraft: (input: { projectId: string; title: string }) => Promise<SessionRecord>;
       listCatalog: (projectId: string) => Promise<SessionRecord[]>;
       readMessages: (filePath: string) => Promise<Array<{ role: string; content: string }>>;
@@ -134,16 +143,19 @@ export function useSessionActions(options: UseSessionActionsOptions) {
     session: SessionSummary,
   ) {
     const requestSequence = ++openSessionRequestRef.current;
-    let record: SessionRecord | undefined = getSessionRecord(session.id) ??
-      getProjectSessionRecords(projectId).find(
-        (candidate) =>
-          candidate.filePath &&
-          isSameSessionPath(
-            candidate.filePath,
-            session.filePath,
-            candidate.environment,
-          ),
-      );
+    const cachedRecord = getSessionRecord(session.id);
+    let record: SessionRecord | undefined =
+      cachedRecord?.projectId === projectId
+        ? cachedRecord
+        : getProjectSessionRecords(projectId).find(
+            (candidate) =>
+              candidate.filePath &&
+              isSameSessionPath(
+                candidate.filePath,
+                session.filePath,
+                candidate.environment,
+              ),
+          );
     if (!record) {
       try {
         const projectSessions = await api.sessions.listCatalog(projectId);

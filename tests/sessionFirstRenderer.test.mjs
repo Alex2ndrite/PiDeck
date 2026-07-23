@@ -3,6 +3,10 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const appSource = readFileSync("src/renderer/src/App.tsx", "utf8");
+const sessionActionsSource = readFileSync(
+  "src/renderer/src/hooks/useSessionActions.ts",
+  "utf8",
+);
 const sessionSendSource = readFileSync(
   "src/renderer/src/hooks/useSessionSend.ts",
   "utf8",
@@ -12,25 +16,25 @@ const composerSource = readFileSync(
   "utf8",
 );
 
-function functionBody(name) {
+function functionBody(name, source = appSource) {
   const marker = `function ${name}(`;
-  const start = appSource.indexOf(marker);
+  const start = source.indexOf(marker);
   assert.notEqual(start, -1, `${name} should exist`);
-  const bodyStart = appSource.indexOf("{", start);
+  const bodyStart = source.indexOf("{", start);
   let depth = 0;
-  for (let index = bodyStart; index < appSource.length; index += 1) {
-    const char = appSource[index];
+  for (let index = bodyStart; index < source.length; index += 1) {
+    const char = source[index];
     if (char === "{") depth += 1;
     if (char === "}") {
       depth -= 1;
-      if (depth === 0) return appSource.slice(bodyStart + 1, index);
+      if (depth === 0) return source.slice(bodyStart + 1, index);
     }
   }
   throw new Error(`Could not parse ${name}`);
 }
 
 test("opening a sidebar history selects a SessionRecord without creating an Agent", () => {
-  const body = functionBody("openSidebarSession");
+  const body = functionBody("openSidebarSession", sessionActionsSource);
   assert.match(body, /api\.sessions\.listCatalog\(projectId\)/);
   assert.match(body, /setCurrentSessionId\(record\.id\)/);
   assert.doesNotMatch(body, /bindSessionRuntime|createAgent\(/);
@@ -39,7 +43,7 @@ test("opening a sidebar history selects a SessionRecord without creating an Agen
 test("the history drawer uses the lazy Session open path", () => {
   assert.match(
     appSource,
-    /onOpenSession=\{\(session\) =>\s*void openSidebarSession\(/,
+    /onOpenSession=\{\(session\) =>\s*void runOpenSidebarSession\(/,
   );
 });
 

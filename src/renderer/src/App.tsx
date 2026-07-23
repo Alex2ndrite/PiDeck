@@ -90,6 +90,7 @@ import {
   sessionRuntimeBySessionIdAtomFamily,
   sessionSummariesByProjectIdAtomFamily,
   setSessionAttachmentsAtom,
+  setSessionCatalogLoadStateAtom,
   setSessionComposerModeAtom,
   setSessionDraftAtom,
   upsertAgentInventoryAtom,
@@ -131,6 +132,7 @@ import {
 import { useMessagePagination } from "./hooks/useMessagePagination";
 import { useSessionTimelineController } from "./hooks/useSessionTimelineController";
 import { useSessionLoader } from "./hooks/useSessionLoader";
+import { useSessionActions } from "./hooks/useSessionActions";
 import { useScratchPad } from "./hooks/useScratchPad";
 import { SessionReferenceModal, type SessionReferenceResult } from "./components/app/SessionReferenceModal";
 import { SessionMessageTimeline } from "./components/session/SessionMessageTimeline";
@@ -436,6 +438,7 @@ export function App() {
   const upsertSession = useSetAtom(upsertSessionAtom);
   const setSessionDraft = useSetAtom(setSessionDraftAtom);
   const setSessionAttachments = useSetAtom(setSessionAttachmentsAtom);
+  const setSessionCatalogLoadState = useSetAtom(setSessionCatalogLoadStateAtom);
   const setSessionComposerMode = useSetAtom(setSessionComposerModeAtom);
   const removeSessionState = useSetAtom(removeSessionStateAtom);
   const sessionRuntimeUiResponder = useMemo(() => {
@@ -634,16 +637,7 @@ export function App() {
     y: number;
     agent: AgentTab;
   } | null>(null);
-  const [sessionMenu, setSessionMenu] = useState<{
-    x: number;
-    y: number;
-    projectId: string;
-    session: SessionSummary;
-  } | null>(null);
   const [agentActionLoading, setAgentActionLoading] = useState<
-    "copy" | "export" | null
-  >(null);
-  const [sessionActionLoading, setSessionActionLoading] = useState<
     "copy" | "export" | null
   >(null);
   const [agentRenameTarget, setAgentRenameTarget] = useState<AgentTab | null>(
@@ -793,6 +787,7 @@ export function App() {
       files: { list: api.files.list },
     },
     showToast,
+    setSessionCatalogLoadState,
     t,
   });
 
@@ -1645,6 +1640,41 @@ export function App() {
     sessionSummariesByProjectIdAtomFamily(activeProjectId ?? ""),
   );
 
+  const {
+    copySession: runCopySession,
+    exportHistorySession: runExportHistorySession,
+    deleteHistorySession: runDeleteHistorySession,
+    openSidebarSession: runOpenSidebarSession,
+    openSidebarSessionById: runOpenSidebarSessionById,
+    copySidebarSession: runCopySidebarSession,
+    exportSidebarSession: runExportSidebarSession,
+    createSessionDraft: runCreateSessionDraft,
+  } = useSessionActions({
+    openSessionRequestRef,
+    creatingSessionDraftRef,
+    autoScrollRef,
+    composerTextareaRef,
+    activeProjectId,
+    sessionsProjectId,
+    projects,
+    activeProjectSessions,
+    sessionRefSelections,
+    setActiveProjectId,
+    setCurrentSessionId,
+    setAutoScroll,
+    setSessionRefSelections,
+    getSessionRecord,
+    getProjectSessionRecords,
+    replaceProjectSessions,
+    upsertSession,
+    removeSessionState,
+    removeSessionComposerState,
+    refreshSessions,
+    refreshProjectSessions,
+    api,
+    showToast,
+  });
+
   const suggestionItems = useMemo(
     () =>
       suggestionsOpen
@@ -2473,37 +2503,6 @@ export function App() {
     await refreshSessionHistory(project.id);
   }
 
-  async function copySession(
-    filePath: string,
-    projectId = sessionsProjectId ?? activeProjectId,
-  ) {
-    if (!projectId) return;
-    const result = await api.sessions.copy(projectId, filePath);
-    if (result.cancelled) {
-      showToast(t("app.sessionCopyCancelled"));
-      return;
-    }
-    showToast(t("app.sessionCopied"));
-    await refreshSessions(projectId);
-    await refreshProjectSessions(projectId);
-  }
-
-  async function exportHistorySession(session: SessionSummary) {
-    const projectId = sessionsProjectId ?? activeProjectId;
-    if (!projectId) return;
-    const result = await api.sessions.exportHtml(projectId, session.filePath);
-    showToast(t("app.exportedPath", { path: result.path }), 3500);
-  }
-
-  async function deleteHistorySession(session: SessionSummary) {
-    await api.sessions.deleteRecord(session.id);
-    removeSessionState(session.id);
-    removeSessionComposerState(session.id);
-    showToast(t("app.sessionDeleted"), 2200);
-    const projectId = sessionsProjectId ?? activeProjectId;
-    await refreshSessions(projectId);
-    if (projectId) await refreshProjectSessions(projectId);
-  }
 
   async function cloneAgentSession(agentId: string) {
     setAgentActionLoading("copy");
@@ -2538,7 +2537,6 @@ export function App() {
   }
 
   function openSessionRename(projectId: string, session: SessionSummary) {
-    setSessionMenu(null);
     setAgentRenameTarget(null);
     setSessionRenameTarget({ projectId, session });
     setAgentRenameValue(session.name || t("common.untitled"));
@@ -2609,76 +2607,6 @@ export function App() {
     removeSessionComposerState(session.id);
   }
 
-  async function openSidebarSession(
-    projectId: string,
-    session: SessionSummary,
-  ) {
-    setSessionMenu(null);
-    const requestSequence = ++openSessionRequestRef.current;
-    let record: SessionRecord | undefined = getSessionRecord(session.id) ??
-      getProjectSessionRecords(projectId).find(
-        (candidate) =>
-          candidate.filePath &&
-          isSameSessionPath(
-            candidate.filePath,
-            session.filePath,
-            candidate.environment,
-          ),
-      );
-    if (!record) {
-      try {
-        const projectSessions = await api.sessions.listCatalog(projectId);
-        if (requestSequence !== openSessionRequestRef.current) return;
-        replaceProjectSessions({ projectId, sessions: projectSessions });
-        record = projectSessions.find(
-          (candidate) =>
-            candidate.filePath &&
-            isSameSessionPath(
-              candidate.filePath,
-              session.filePath,
-              candidate.environment,
-            ),
-        );
-      } catch (error) {
-        if (requestSequence !== openSessionRequestRef.current) return;
-        showToast(error instanceof Error ? error.message : String(error), 4000);
-        return;
-      }
-    }
-    if (!record || requestSequence !== openSessionRequestRef.current) return;
-
-    setActiveProjectId(projectId);
-    setCurrentSessionId(record.id);
-    setAutoScroll(true);
-    autoScrollRef.current = true;
-  }
-
-  async function copySidebarSession(
-    projectId: string,
-    session: SessionSummary,
-  ) {
-    setSessionActionLoading("copy");
-    try {
-      await copySession(session.filePath, projectId);
-    } finally {
-      setSessionActionLoading(null);
-      setSessionMenu(null);
-    }
-  }
-
-  async function exportSidebarSession(
-    projectId: string,
-    session: SessionSummary,
-  ) {
-    setSessionActionLoading("export");
-    try {
-      const result = await api.sessions.exportHtml(projectId, session.filePath);
-      showToast(t("app.exportedPath", { path: result.path }), 3500);
-    } finally {
-      setSessionActionLoading(null);
-      setSessionMenu(null);
-    }
-  }
 
   async function reorderProjects(
     sourceProjectId: string,
@@ -2754,28 +2682,6 @@ export function App() {
     }
   }
 
-  async function createSessionDraft(projectId = activeProjectId) {
-    if (!projectId || creatingSessionDraftRef.current.has(projectId)) return;
-    const project = projects.find((item) => item.id === projectId);
-    if (!project) return;
-    creatingSessionDraftRef.current.add(projectId);
-    try {
-      const session = await api.sessions.createDraft({
-        projectId,
-        title: `${project.name} agent`,
-      });
-      upsertSession(session);
-      setActiveProjectId(projectId);
-      setCurrentSessionId(session.id);
-      setAutoScroll(true);
-      autoScrollRef.current = true;
-      requestAnimationFrame(() => composerTextareaRef.current?.focus());
-    } catch (error) {
-      showToast(error instanceof Error ? error.message : String(error), 4000);
-    } finally {
-      creatingSessionDraftRef.current.delete(projectId);
-    }
-  }
 
   function applyAgentRuntimeState(agentId: string, incoming: AgentRuntimeState) {
     const nextState = mergeAgentRuntimeState(
@@ -4206,27 +4112,6 @@ export function App() {
     if (activeProjectId) saveExpandedDirs(activeProjectId, collapsedDirs);
   }
 
-  async function openSidebarSessionById(projectId: string, sessionId: string) {
-    const requestSequence = ++openSessionRequestRef.current;
-    let record: SessionRecord | undefined = getSessionRecord(sessionId);
-    if (!record || record.projectId !== projectId) {
-      try {
-        const projectSessions = await api.sessions.listCatalog(projectId);
-        if (requestSequence !== openSessionRequestRef.current) return;
-        replaceProjectSessions({ projectId, sessions: projectSessions });
-        record = projectSessions.find((candidate) => candidate.id === sessionId);
-      } catch (error) {
-        if (requestSequence !== openSessionRequestRef.current) return;
-        showToast(error instanceof Error ? error.message : String(error), 4000);
-        return;
-      }
-    }
-    if (!record || requestSequence !== openSessionRequestRef.current) return;
-    setActiveProjectId(projectId);
-    setCurrentSessionId(record.id);
-    setAutoScroll(true);
-    autoScrollRef.current = true;
-  }
 
   async function deleteSidebarSession(projectId: string, session: SessionSummary) {
     await api.sessions.deleteRecord(session.id);
@@ -4341,17 +4226,12 @@ export function App() {
       },
     },
     sessions: {
-      open: openSidebarSessionById,
-      createDraft: createSessionDraft,
+      open: runOpenSidebarSessionById,
+      createDraft: runCreateSessionDraft,
       deleteDraft: deleteDraftSession,
       rename: openSessionRename,
-      export: async (projectId, session) => {
-        const result = await api.sessions.exportHtml(projectId, session.filePath);
-        showToast(t("app.exportedPath", { path: result.path }), 3500);
-      },
-      copy: async (projectId, session) => {
-        await copySession(session.filePath, projectId);
-      },
+      export: runExportSidebarSession,
+      copy: runCopySidebarSession,
       copyPath: async (session) => {
         await navigator.clipboard.writeText(session.filePath);
         showToast(t("common.copied"));
@@ -4592,11 +4472,11 @@ export function App() {
             if (activeAgentId || currentSessionId) {
               setSessionActionsOpen((open) => !open);
             } else {
-              void createSessionDraft();
+              void runCreateSessionDraft();
             }
           }}
           onNewSession={() => {
-            void createSessionDraft();
+            void runCreateSessionDraft();
             setSessionActionsOpen(false);
           }}
           onStop={() => {
@@ -4613,7 +4493,7 @@ export function App() {
             sessionId={currentSessionId}
             controller={sessionTimeline}
             hasProject={Boolean(activeProjectId)}
-            onCreateSession={() => void createSessionDraft()}
+            onCreateSession={() => void runCreateSessionDraft()}
             showThinking={settings.showThinking}
             validCommandNames={validCommandNames}
             validFilePaths={validFilePaths}
@@ -4941,7 +4821,7 @@ export function App() {
                 refreshSessions(sessionsProjectId ?? activeProjectId)
               }
               onOpenSession={(session) =>
-                void openSidebarSession(
+                void runOpenSidebarSession(
                   sessionsProjectId ?? activeProjectId ?? "",
                   session,
                 )
@@ -4959,13 +4839,13 @@ export function App() {
                 await refreshSessions(sessionsProjectId ?? activeProjectId);
               }}
               onCopySession={(session) =>
-                copySession(
+                runCopySession(
                   session.filePath,
                   sessionsProjectId ?? activeProjectId,
                 )
               }
-              onExportSession={exportHistorySession}
-              onDeleteSession={deleteHistorySession}
+              onExportSession={runExportHistorySession}
+              onDeleteSession={runDeleteHistorySession}
               onViewFile={viewFilePath}
               onOpenFile={openFilePath}
             />

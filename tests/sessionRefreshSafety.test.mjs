@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const projectSync = readFileSync("src/renderer/src/hooks/useProjectSync.ts", "utf8");
+const app = readFileSync("src/renderer/src/App.tsx", "utf8");
 const i18n = readFileSync("src/renderer/src/i18n.ts", "utf8");
 const scanner = readFileSync("src/main/sessions/SessionScanner.ts", "utf8");
 
@@ -95,6 +96,27 @@ test("publishes non-silent loading state before yielding to the session request"
     ],
     "non-silent loading yield",
   );
+});
+
+test("publishes canonical catalog loading state and keeps error updates request-scoped", () => {
+  const block = refreshProjectSessionsBlock();
+  assert.match(projectSync, /setSessionCatalogLoadState\?: \(input: \{ projectId: string; state: SessionLoadState \}\) => void;/);
+  assertInOrder(
+    block,
+    [
+      'setSessionCatalogLoadState?.({ projectId, state: { status: "loading" } });',
+      "replaceProjectSessions({ projectId, sessions: records });",
+      'setSessionCatalogLoadState?.({ projectId, state: { status: "ready" } });',
+      "} catch (error) {",
+      "setSessionCatalogLoadState?.({",
+      'state: { status: "error", error:',
+      "throw error;",
+    ],
+    "canonical catalog load state",
+  );
+  assert.match(app, /setSessionCatalogLoadStateAtom/);
+  assert.match(app, /const setSessionCatalogLoadState = useSetAtom\(setSessionCatalogLoadStateAtom\);/);
+  assert.match(app, /showToast,\s*setSessionCatalogLoadState,\s*t,/);
 });
 
 test("releases refresh state behind the current-request gate and schedules one silent retry", () => {

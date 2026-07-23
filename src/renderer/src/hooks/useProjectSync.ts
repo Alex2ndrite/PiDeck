@@ -1,5 +1,6 @@
 import { useState, useRef } from "react";
 import type { Project, FileTreeNode, GitBranchInfo, WorktreeEntry, SessionSummary, SessionRecord } from "../../../shared/types";
+import type { SessionLoadState } from "../atoms/session-atoms";
 import { sessionRecordToSummary } from "../atoms/session-selectors";
 
 const SESSION_REFRESH_TIMEOUT_MS = 20_000;
@@ -32,11 +33,22 @@ type UseProjectSyncInput = {
     files: { list: (projectId: string) => Promise<FileTreeNode[]> };
   };
   showToast: (message: string, duration?: number) => void;
+  setSessionCatalogLoadState?: (input: { projectId: string; state: SessionLoadState }) => void;
   t: typeof import("../i18n").t;
 };
 
 export function useProjectSync(input: UseProjectSyncInput) {
-  const { projects, activeProjectId, setProjects, setActiveProjectId, replaceProjectSessions, api, showToast, t } = input;
+  const {
+    projects,
+    activeProjectId,
+    setProjects,
+    setActiveProjectId,
+    replaceProjectSessions,
+    api,
+    showToast,
+    setSessionCatalogLoadState,
+    t,
+  } = input;
   const [worktreesByProject, setWorktreesByProject] = useState<Record<string, WorktreeEntry[]>>({});
   const [branchByProject, setBranchByProject] = useState<Record<string, string | null>>({});
   const [files, setFiles] = useState<FileTreeNode[]>([]);
@@ -79,7 +91,11 @@ export function useProjectSync(input: UseProjectSyncInput) {
     const request = (sessionRequestByProjectRef.current[projectId] ?? 0) + 1;
     sessionRequestByProjectRef.current[projectId] = request;
     sessionRefreshRunningRef.current.add(projectId);
-    if (!silent) { setSessionLoadingByProject((c) => ({ ...c, [projectId]: true })); await new Promise<void>((r) => setTimeout(r, 0)); }
+    if (!silent) {
+      setSessionLoadingByProject((c) => ({ ...c, [projectId]: true }));
+      setSessionCatalogLoadState?.({ projectId, state: { status: "loading" } });
+      await new Promise<void>((r) => setTimeout(r, 0));
+    }
     try {
       const records = await withTimeout(
         api.sessions.listCatalog(projectId),
@@ -88,12 +104,21 @@ export function useProjectSync(input: UseProjectSyncInput) {
       );
       if (sessionRequestByProjectRef.current[projectId] !== request) return records;
       replaceProjectSessions({ projectId, sessions: records });
+      setSessionCatalogLoadState?.({ projectId, state: { status: "ready" } });
       const sorted = records
         .map(sessionRecordToSummary)
         .filter((session): session is SessionSummary => Boolean(session))
         .sort((a, b) => b.updatedAt - a.updatedAt);
       setVisibleProjectChildCountByProject((c) => ({ ...c, [projectId]: c[projectId] ?? SIDEBAR_PROJECT_CHILD_PAGE_SIZE }));
       return sorted;
+    } catch (error) {
+      if (sessionRequestByProjectRef.current[projectId] === request) {
+        setSessionCatalogLoadState?.({
+          projectId,
+          state: { status: "error", error: error instanceof Error ? error.message : String(error) },
+        });
+      }
+      throw error;
     } finally {
       if (sessionRequestByProjectRef.current[projectId] === request) {
         sessionRefreshRunningRef.current.delete(projectId);
