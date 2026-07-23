@@ -24,7 +24,6 @@ import {
   ChevronDown,
   Code,
   Info,
-  MessageCircle,
   MessageSquare,
   PanelLeftClose,
   PanelLeftOpen,
@@ -274,9 +273,6 @@ function withTimeout<T>(
   });
 }
 
-
-
-
 function displayProjectDirectoryName(project: Project) {
   if (isChatProject(project)) return "Chat";
   const normalizedPath = project.path.replace(/\\/g, "/").replace(/\/+$/, "");
@@ -386,7 +382,6 @@ function saveDismissedExtensionWidgets(value: Record<string, string[]>) {
 function getAgentSessionStorageKey(agent?: AgentTab, fallbackAgentId?: string) {
   return agent?.sessionPath ?? fallbackAgentId ?? "";
 }
-
 
 type PendingAgentTab = AgentTab & {
   pendingKind?: "create" | "restart";
@@ -599,7 +594,6 @@ export function App() {
   attachedImagesByAgentRef.current = attachedImagesByAgent;
   const [previewImage, setPreviewImage] = useState<ImageContent | null>(null);
   /** 存储用户在 select 弹框自定义输入框中键入的值，用于在后续 input 弹框中自动提交 */
-  const pendingCustomInputRef = useRef("");
   /** 外部编辑器列表 + 弹出气泡状态 */
   const [externalEditors, setExternalEditors] = useState<ExternalEditor[]>([]);
   const [editorsOpen, setEditorsOpen] = useState(false);
@@ -1696,11 +1690,6 @@ export function App() {
     enabled: activeMessages.length > 100, // 超过 100 条才启用
   });
 
-
-  // Replaced by SessionRuntimeUiOverlay; kept for compilation compatibility.
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const activeUiAsk = undefined as unknown as AgentUiRequest | undefined;
-
   function sendSessionUiResponse(requestId: string, response: AgentUiResponse) {
     if (!currentSessionId || !currentSessionRuntime) return;
     const input = {
@@ -1720,13 +1709,6 @@ export function App() {
     });
   }
   // dialog 显示条件：仅当有活跃的交互式 UI 请求时
-  const showAskDialog = activeUiAsk !== undefined;
-  // 用 body class 控制内联 ask 卡片的显示
-  useEffect(() => {
-    document.body.classList.toggle("ask-dialog-open", showAskDialog);
-    return () => document.body.classList.remove("ask-dialog-open");
-  }, [showAskDialog]);
-
 
   const lastSessionUiNoticeRef = useRef("");
   useEffect(() => {
@@ -1766,13 +1748,6 @@ export function App() {
       };
     });
   }, [activeWidgetSessionKey, currentSessionRuntimeUi?.revision]);
-
-  useEffect(() => {
-    if (activeUiAsk?.method !== "input" || !pendingCustomInputRef.current) return;
-    const value = pendingCustomInputRef.current;
-    pendingCustomInputRef.current = "";
-    sendSessionUiResponse(activeUiAsk.requestId, { value });
-  }, [activeUiAsk]);
 
   /** 当前 Session 的实时思考文本只来自 generation envelope。 */
   const activeThinking = currentSessionRuntime?.thinking ?? "";
@@ -2474,7 +2449,6 @@ export function App() {
     activeTerminalHeight,
   ]);
 
-
   useEffect(() => {
     if (activeAgentId && !isPendingAgentId(activeAgentId))
       void api.agents
@@ -2513,7 +2487,6 @@ export function App() {
     });
     return () => cancelAnimationFrame(frame);
   }, [activeAgentId]);
-
 
   // 监听用户滚动,判断是否需要显示"移动到最新"按钮
   useEffect(() => {
@@ -2625,7 +2598,6 @@ export function App() {
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [sessionActionsOpen]);
-
 
   useEffect(() => {
     for (const agent of displayAgents) {
@@ -2936,7 +2908,6 @@ export function App() {
       setPiUpdating(false);
     }
   }
-
 
   async function checkAppUpdate(source: "auto" | "manual" = "manual") {
     if (updateChecking) return;
@@ -3840,7 +3811,6 @@ export function App() {
   	});
   }
 
-
   /** 调整菜单位置避免溢出视口 */
   function adjustMenuPos(x: number, y: number, width = 200, height = 260) {
   	const vw = window.innerWidth;
@@ -3965,7 +3935,6 @@ export function App() {
       1500,
     );
   }
-
 
   async function selectThinking(level: string) {
     if (currentSessionId) {
@@ -4675,7 +4644,6 @@ export function App() {
     // 让输入框保持固定大小，超出部分滚动显示
     setComposerAutoHeight(COMPOSER_MIN_HEIGHT);
 
-
     // 在发送前本地展开 prompt template 命令（/name → 完整内容），
     // 避免依赖 pi 的展开导致用户附加文本丢失以及特殊符号干扰
     // 同时提取模板的 description 作为元数据发给 pi agent，让其了解本次 prompt 意图
@@ -4786,7 +4754,6 @@ export function App() {
     setSuggestionsOpen(false);
     setSendBehaviorMenuOpen(false);
     setComposerAutoHeight(COMPOSER_MIN_HEIGHT);
-
 
     const queuedPromptSnapshot: QueuedPrompt = {
       id: crypto.randomUUID(),
@@ -6384,7 +6351,6 @@ export function App() {
         </div>
       )}
 
-
       {/* old conditional wrapping — replaced by EnvironmentOverlay open prop below */}
       <EnvironmentOverlay open={environmentDialog}>
         <EnvironmentDialog
@@ -6839,151 +6805,6 @@ export function App() {
         </div>
       )}
 
-    {/* ask_question 弹出 dialog - 仅在 pi 通过 extension_ui_request 发送交互请求时显示 */}
-    {showAskDialog && activeUiAsk && (
-      <div className="modal-backdrop" onClick={undefined}>
-        <div className="ask-dialog" onClick={(e) => e.stopPropagation()}>
-          <div className="ask-dialog-header">
-            <MessageCircle size={16} />
-            <span>{t("ask.toolName")}</span>
-            {/* 关闭按钮：点击后取消当前请求，select 类型会提示模型默认选第一项 */}
-            <button
-              className="ask-dialog-close-btn"
-              title={t("common.close")}
-              onClick={() => {
-                const isSelect = activeUiAsk.method === "select" && Array.isArray(activeUiAsk.options) && activeUiAsk.options.length > 0;
-                if (isSelect) {
-                  showToast(t("ask.cancelHint"));
-                }
-                if (activeUiAsk.requestId && activeAgentId) {
-                  sendSessionUiResponse(activeUiAsk.requestId, { cancelled: true });
-                }
-              }}
-            >
-              <X size={14} />
-            </button>
-          </div>
-          <div className="ask-dialog-question">{activeUiAsk.title || t("ask.pending")}</div>
-          {activeUiAsk.method === "confirm" ? (
-            <div className="ask-dialog-options ask-dialog-options-confirm">
-              <button
-                className="ask-dialog-option"
-                onClick={() => {
-                  if (activeUiAsk.requestId && activeAgentId) {
-                    sendSessionUiResponse(activeUiAsk.requestId, { confirmed: true });
-                  }
-                }}
-              >
-                {t("common.true")}
-              </button>
-              <button
-                className="ask-dialog-option"
-                onClick={() => {
-                  if (activeUiAsk.requestId && activeAgentId) {
-                    sendSessionUiResponse(activeUiAsk.requestId, { confirmed: false });
-                  }
-                }}
-              >
-                {t("common.false")}
-              </button>
-            </div>
-          ) : activeUiAsk.options && activeUiAsk.options.length > 0 ? (
-            <div className="ask-dialog-options">
-              {/* 过滤掉 Pi 自带的 "✎ 自行输入..." 选项，用下方内联输入框替代 */}
-              {activeUiAsk.options.filter((opt) => {
-                const label = typeof opt === "string" ? opt : String((opt as any).label ?? opt);
-                return !label.startsWith("✎");
-              }).map((opt, i) => {
-                const val = typeof opt === "string" ? opt : String((opt as any).value ?? (opt as any).label ?? opt);
-                const label = typeof opt === "string" ? opt : (opt as any).label ?? val;
-                return (
-                  <button
-                    key={i}
-                    className="ask-dialog-option"
-                    onClick={() => {
-                      if (activeUiAsk.requestId && activeAgentId) {
-                        sendSessionUiResponse(activeUiAsk.requestId, { value: val });
-                      }
-                    }}
-                  >
-                    <span className="ask-dialog-option-marker">{label}</span>
-                  </button>
-                );
-              })}
-              <div className="ask-dialog-custom-input">
-                <input
-                  id="ask-dialog-custom-field"
-                  className="ask-dialog-custom-field"
-                  placeholder={t("ask.customPlaceholder")}
-                  autoFocus
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      const el = document.getElementById("ask-dialog-custom-field") as HTMLInputElement | null;
-                      const val = el?.value?.trim() ?? "";
-                      if (val && activeUiAsk.requestId && activeAgentId) {
-                        /* 保存自定义值到 ref，选择 "✎ 自行输入..." 让 Pi 走 input 流 */
-                        pendingCustomInputRef.current = val;
-                        sendSessionUiResponse(activeUiAsk.requestId, { value: "✎ 自行输入..." });
-                      }
-                    }
-                  }}
-                />
-                <button
-                  type="button"
-                  className="ask-dialog-submit-btn"
-                  onClick={() => {
-                    const el = document.getElementById("ask-dialog-custom-field") as HTMLInputElement | null;
-                    const val = el?.value?.trim() ?? "";
-                    if (val && activeUiAsk.requestId && activeAgentId) {
-                      /* 保存自定义值到 ref，选择 "✎ 自行输入..." 让 Pi 走 input 流 */
-                      pendingCustomInputRef.current = val;
-                      sendSessionUiResponse(activeUiAsk.requestId, { value: "✎ 自行输入..." });
-                    }
-                  }}
-                >
-                  {t("common.submit")}
-                </button>
-              </div>
-            </div>
-          ) : activeUiAsk.method === "input" || activeUiAsk.method === "editor" ? (
-            <div className="ask-dialog-input-area">
-              <input
-                id="ask-dialog-input"
-                className="ask-dialog-input"
-                placeholder={activeUiAsk.placeholder || ""}
-                autoFocus
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && activeUiAsk.requestId && activeAgentId) {
-                    const value = (e.target as HTMLInputElement).value;
-                    sendSessionUiResponse(activeUiAsk.requestId, { value });
-                  }
-                }}
-              />
-              <button
-                className="ask-dialog-submit-btn"
-                onClick={() => {
-                  const value = (document.getElementById("ask-dialog-input") as HTMLInputElement)?.value ?? "";
-                  if (activeUiAsk.requestId && activeAgentId) {
-                    sendSessionUiResponse(activeUiAsk.requestId, { value });
-                  }
-                }}
-              >
-                {t("common.submit")}
-              </button>
-            </div>
-
-          ) : null}
-          {/* select 类型取消提示 */}
-          {activeUiAsk.method === "select" && Array.isArray(activeUiAsk.options) && activeUiAsk.options.length > 0 && (
-            <div className="ask-dialog-cancel-hint">
-              <Info size={12} />
-              <span>{t("ask.cancelHint")}</span>
-            </div>
-          )}
-        </div>
-      </div>
-    )}
     </div>
   );
 }
@@ -7291,3 +7112,4 @@ function UpdateModal(props: {
     </div>
   );
 }
+
