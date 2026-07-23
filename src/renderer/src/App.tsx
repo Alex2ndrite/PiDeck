@@ -478,6 +478,8 @@ export function App() {
   const currentSessionId = useAtomValue(currentSessionIdAtom);
   const currentSession = useAtomValue(currentSessionAtom);
   const currentSessionRuntime = useAtomValue(currentSessionRuntimeAtom);
+  const currentSessionRuntimeRef = useRef(currentSessionRuntime);
+  currentSessionRuntimeRef.current = currentSessionRuntime;
   const currentSessionRuntimeUi = useAtomValue(currentSessionRuntimeUiAtom);
   const currentSessionDraft = useAtomValue(currentSessionDraftAtom);
   const currentSessionAttachments = useAtomValue(currentSessionAttachmentsAtom);
@@ -501,7 +503,7 @@ export function App() {
   const sessionRuntimeUiResponder = useMemo(() => {
     if (!currentSessionId || !currentSessionRuntime?.agentId || currentSessionRuntime.runtimeGeneration == null) return undefined;
     const b = { sessionId: currentSessionId, agentId: currentSessionRuntime.agentId, runtimeGeneration: currentSessionRuntime.runtimeGeneration };
-    return createSessionRuntimeUiResponder({ binding: b, readBinding: () => b, claim: (i) => claimSessionUiResponse(i), rollback: (i) => rollbackSessionUiResponse(i), send: async (i) => sendSessionUiResponse(i.requestId, i.response) });
+    return createSessionRuntimeUiResponder({ binding: b, readBinding: () => { const r = currentSessionRuntimeRef.current; return r?.agentId ? { sessionId: currentSessionId, agentId: r.agentId, runtimeGeneration: r.runtimeGeneration } : undefined; }, claim: (i) => claimSessionUiResponse(i), rollback: (i) => rollbackSessionUiResponse(i), send: async (i) => sendSessionUiResponse(i.requestId, i.response) });
   }, [currentSessionId, currentSessionRuntime?.agentId, currentSessionRuntime?.runtimeGeneration, claimSessionUiResponse, rollbackSessionUiResponse]);
   const removeSessionComposerState = useSetAtom(removeSessionComposerStateAtom);
   const {
@@ -1707,8 +1709,11 @@ export function App() {
       agentId: currentSessionRuntime.agentId ?? "",
       runtimeGeneration: currentSessionRuntime.runtimeGeneration,
     };
-    const request = currentSessionRuntimeUi?.requests[requestId]?.request;
-    if (!input.agentId || !request || !claimSessionUiResponse({ ...input, request })) return;
+    const currentReq = currentSessionRuntimeUi?.requests[requestId];
+    const request = currentReq?.request;
+    if (!input.agentId || !request) return;
+    // 若已被 overlay responder claim（status="responding"），跳过重复 claim，避免双 claim 死锁
+    if (currentReq?.status !== "responding" && !claimSessionUiResponse({ ...input, request })) return;
     void api.sessions.sendUiResponse({ ...input, response }).catch((error) => {
       rollbackSessionUiResponse({ ...input, request });
       showToast(error instanceof Error ? error.message : String(error), 4000);
