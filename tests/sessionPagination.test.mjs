@@ -1,0 +1,44 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import test from "node:test";
+import ts from "typescript";
+import vm from "node:vm";
+
+function compile(filePath, imports = {}) {
+  const output = ts.transpileModule(readFileSync(filePath, "utf8"), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  const module = { exports: {} };
+  vm.runInNewContext(output, { module, exports: module.exports, require: (id) => imports[id] ?? {} });
+  return module.exports;
+}
+
+const pagination = compile("src/renderer/src/hooks/useMessagePagination.ts", { react: {} });
+const timeline = compile("src/renderer/src/hooks/useSessionTimelineController.ts", {
+  react: {}, jotai: {}, "jotai/utils": {}, "../atoms": {}, "./useMessagePagination": {},
+});
+
+test("A to B owner switch renders B's initial page without A visibleCount or loading", () => {
+  const old = { ownerKey: "A", visibleCount: 300, isLoading: true };
+  const current = pagination.currentMessagePaginationState(old, "B", 100);
+  assert.equal(current.ownerKey, "B");
+  assert.equal(current.visibleCount, 100);
+  assert.equal(current.isLoading, false);
+});
+
+test("old load completion, anchor, and jump owner tags cannot affect B", () => {
+  const old = { ownerKey: "A", visibleCount: 100, isLoading: true };
+  assert.equal(pagination.completeMessagePaginationLoad(old, "B", 400, 100, Infinity), old);
+  assert.equal(timeline.matchesTimelineOwner("A", "B"), false);
+  assert.equal(timeline.matchesTimelineOwner("B", "B"), true);
+});
+
+test("modern runtime busy state is authoritative and only the latest run is busy", () => {
+  assert.equal(timeline.selectSessionModeValue(true, "session", "legacy"), "session");
+  assert.equal(timeline.selectSessionModeValue(false, "session", "legacy"), "legacy");
+  assert.equal(timeline.isSessionRuntimeBusy("idle", { isStreaming: true }), true);
+  assert.equal(timeline.isSessionRuntimeBusy("running", undefined), true);
+  assert.equal(timeline.isSessionRuntimeBusy("idle", undefined), false);
+  assert.equal(timeline.isLatestTimelineRunBusy(true, 1, 2), true);
+  assert.equal(timeline.isLatestTimelineRunBusy(true, 0, 2), false);
+});

@@ -1,4 +1,6 @@
 import { Wrench } from "lucide-react";
+import { useAtomValue } from "jotai";
+import { selectAtom } from "jotai/utils";
 import { useMemo, useState } from "react";
 import type { ComponentProps, RefObject } from "react";
 import type {
@@ -21,6 +23,20 @@ import {
   getMultiSelectImageCaptureIds,
   groupToolMessages,
 } from "../app/AppUtils";
+import {
+  sessionMessageLoadStateAtom,
+  sessionRecordByIdAtomFamily,
+  sessionRuntimeBySessionIdAtomFamily,
+  sessionSendStateByIdAtom,
+} from "../../atoms";
+import {
+  canLoadSessionTimelineMore,
+  deriveSessionSurfaceRuntime,
+  isLatestTimelineRunBusy,
+  selectSessionModeValue,
+  useSessionTimelineController,
+  type SessionTimelineController,
+} from "../../hooks/useSessionTimelineController";
 import { t } from "../../i18n";
 
 type UiResponse = {
@@ -32,24 +48,10 @@ type UiResponse = {
 type TurnRowProps = ComponentProps<typeof TurnRow>;
 type UserBubbleProps = ComponentProps<typeof UserBubble>;
 
-export type SessionMessageTimelineProps = {
-  timelineRef: RefObject<HTMLElement | null>;
-  activeMessages: ChatMessage[];
-  paginatedMessages: ChatMessage[];
-  hasMoreMessages: boolean;
-  isLoadingMoreMessages: boolean;
-  canLoadMoreMessages: boolean;
-  onLoadMoreMessages: () => void;
-  hasActiveConversation: boolean;
+type TimelineInteractionProps = {
   hasProject: boolean;
-  isConversationLoading: boolean;
   onCreateSession: () => void;
   showThinking: boolean;
-  activeThinking?: string;
-  activeRuntimeState?: AgentRuntimeState;
-  activeConversationStatus?: string;
-  isAgentBusy: boolean;
-  cancellingUi: boolean;
   validCommandNames: Set<string>;
   validFilePaths: Set<string>;
   onPreviewImage: (image: ImageContent) => void;
@@ -63,46 +65,165 @@ export type SessionMessageTimelineProps = {
   onToast: (message: string) => void;
 };
 
+type LegacyTimelineProps = TimelineInteractionProps & {
+  mode?: "legacy";
+  sessionId?: never;
+  controller?: never;
+  timelineRef: RefObject<HTMLElement | null>;
+  activeMessages: ChatMessage[];
+  paginatedMessages: ChatMessage[];
+  hasMoreMessages: boolean;
+  isLoadingMoreMessages: boolean;
+  canLoadMoreMessages: boolean;
+  onLoadMoreMessages: () => void;
+  hasActiveConversation: boolean;
+  isConversationLoading: boolean;
+  activeThinking?: string;
+  activeRuntimeState?: AgentRuntimeState;
+  activeConversationStatus?: string;
+  isAgentBusy: boolean;
+  cancellingUi: boolean;
+};
+
+type SessionTimelineProps = TimelineInteractionProps & {
+  mode: "session";
+  sessionId: string;
+  controller?: SessionTimelineController;
+  timelineRef?: RefObject<HTMLElement | null>;
+  activeMessages?: never;
+  paginatedMessages?: never;
+  hasMoreMessages?: never;
+  isLoadingMoreMessages?: never;
+  canLoadMoreMessages?: never;
+  onLoadMoreMessages?: never;
+  hasActiveConversation?: never;
+  isConversationLoading?: never;
+  activeThinking?: never;
+  activeRuntimeState?: never;
+  activeConversationStatus?: never;
+  isAgentBusy?: never;
+  cancellingUi?: never;
+};
+
+export type SessionMessageTimelineProps = LegacyTimelineProps | SessionTimelineProps;
+
 export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
+  const sessionMode = props.mode === "session";
+  const sessionId = sessionMode ? props.sessionId : "";
+  const legacyProps = props as LegacyTimelineProps;
+  const session = useAtomValue(sessionRecordByIdAtomFamily(sessionId));
+  const runtime = useAtomValue(sessionRuntimeBySessionIdAtomFamily(sessionId));
+  const messageLoadStateSelector = useMemo(
+    () => selectAtom(
+      sessionMessageLoadStateAtom,
+      (states) => states[sessionId],
+      Object.is,
+    ),
+    [sessionId],
+  );
+  const sendStateSelector = useMemo(
+    () => selectAtom(
+      sessionSendStateByIdAtom,
+      (states) => states[sessionId],
+      Object.is,
+    ),
+    [sessionId],
+  );
+  const messageLoadState = useAtomValue(messageLoadStateSelector);
+  const sendState = useAtomValue(sendStateSelector);
+  const internalController = useSessionTimelineController({
+    sessionId: sessionMode ? sessionId : undefined,
+    // An injected controller owns the scroll effects; legacy ownership remains entirely external.
+    messages: sessionMode ? (props.controller ? [] : undefined) : legacyProps.activeMessages,
+  });
+  const controller = sessionMode ? (props.controller ?? internalController) : internalController;
+  const timelineRef = sessionMode
+    ? (props.timelineRef ?? controller.timelineRef)
+    : legacyProps.timelineRef;
+  const activeMessages = selectSessionModeValue(
+    sessionMode,
+    controller.messages,
+    legacyProps.activeMessages,
+  );
+  const paginatedMessages = selectSessionModeValue(
+    sessionMode,
+    controller.visibleMessages,
+    legacyProps.paginatedMessages,
+  );
+  const hasMoreMessages = sessionMode ? controller.hasMoreMessages : legacyProps.hasMoreMessages;
+  const isLoadingMoreMessages = sessionMode
+    ? controller.isLoadingMoreMessages
+    : legacyProps.isLoadingMoreMessages;
+  const hasActiveConversation = sessionMode ? Boolean(session) : legacyProps.hasActiveConversation;
+  const modernSurfaceState = deriveSessionSurfaceRuntime(
+    activeMessages.length,
+    messageLoadState?.status,
+    sendState?.status,
+    runtime?.status,
+    runtime?.state,
+  );
+  const isConversationLoading = sessionMode
+    ? modernSurfaceState.isLoading
+    : legacyProps.isConversationLoading;
+  const canLoadMoreMessages = sessionMode
+    ? canLoadSessionTimelineMore(modernSurfaceState.isStarting)
+    : legacyProps.canLoadMoreMessages;
+  const activeRuntimeState = selectSessionModeValue(
+    sessionMode,
+    runtime?.state,
+    legacyProps.activeRuntimeState,
+  );
+  const activeConversationStatus = selectSessionModeValue(
+    sessionMode,
+    modernSurfaceState.status,
+    legacyProps.activeConversationStatus,
+  );
+  const activeThinking = sessionMode ? runtime?.thinking : legacyProps.activeThinking;
+  const isAgentBusy = sessionMode
+    ? modernSurfaceState.isBusy
+    : legacyProps.isAgentBusy;
+  const cancellingUi = sessionMode ? false : legacyProps.cancellingUi;
+  const loadMoreMessages = sessionMode
+    ? controller.loadMoreMessages
+    : legacyProps.onLoadMoreMessages;
   const [multiSelectOpen, setMultiSelectOpen] = useState(false);
   const renderedRuns = useMemo(
-    () => groupToolMessages(props.paginatedMessages),
-    [props.paginatedMessages],
+    () => groupToolMessages(paginatedMessages),
+    [paginatedMessages],
   );
   const lastUserMessageId = useMemo(() => {
-    for (let index = props.activeMessages.length - 1; index >= 0; index -= 1) {
-      if (props.activeMessages[index].role === "user") {
-        return props.activeMessages[index].id;
+    for (let index = activeMessages.length - 1; index >= 0; index -= 1) {
+      if (activeMessages[index].role === "user") {
+        return activeMessages[index].id;
       }
     }
     return undefined;
-  }, [props.activeMessages]);
+  }, [activeMessages]);
   const isAwaitingAssistant = Boolean(
-    props.hasActiveConversation &&
-      !props.cancellingUi &&
-      (props.activeConversationStatus === "running" ||
-        props.activeRuntimeState?.isStreaming) &&
-      props.activeMessages.at(-1)?.role !== "assistant",
+    hasActiveConversation &&
+      !cancellingUi &&
+      (activeConversationStatus === "running" || activeRuntimeState?.isStreaming) &&
+      activeMessages.at(-1)?.role !== "assistant",
   );
   const streamingMessageId = useMemo(() => {
     if (
-      !props.hasActiveConversation ||
-      props.activeConversationStatus !== "running" ||
-      !props.activeRuntimeState?.isStreaming
+      !hasActiveConversation ||
+      activeConversationStatus !== "running" ||
+      !activeRuntimeState?.isStreaming
     ) {
       return undefined;
     }
-    for (let index = props.activeMessages.length - 1; index >= 0; index -= 1) {
-      const message = props.activeMessages[index];
+    for (let index = activeMessages.length - 1; index >= 0; index -= 1) {
+      const message = activeMessages[index];
       if (message.role === "user") break;
       if (message.role === "assistant" && message.text.trim()) return message.id;
     }
     return undefined;
   }, [
-    props.activeConversationStatus,
-    props.activeMessages,
-    props.activeRuntimeState?.isStreaming,
-    props.hasActiveConversation,
+    activeConversationStatus,
+    activeMessages,
+    activeRuntimeState?.isStreaming,
+    hasActiveConversation,
   ]);
 
   async function copySelectedMessages(
@@ -112,7 +233,9 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
     if (kind === "image") {
       try {
         const { toBlob } = await import("html-to-image");
-        const source = document.querySelector(".message-list") as HTMLElement | null;
+        const source = timelineRef.current?.querySelector(
+          ".message-list",
+        ) as HTMLElement | null;
         if (!source) return;
 
         const captureIds = getMultiSelectImageCaptureIds(renderedRuns, selectedIds);
@@ -160,7 +283,7 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
       return;
     }
 
-    const selected = props.activeMessages
+    const selected = activeMessages
       .filter((message) => selectedIds.has(message.id))
       .sort((left, right) => left.timestamp - right.timestamp);
     if (!selected.length) return;
@@ -192,8 +315,8 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
   }
 
   return (
-    <section className="message-timeline" ref={props.timelineRef}>
-      {props.hasMoreMessages && props.canLoadMoreMessages && (
+    <section className="message-timeline" ref={timelineRef}>
+      {hasMoreMessages && canLoadMoreMessages && (
         <div
           style={{
             display: "flex",
@@ -203,8 +326,8 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
           }}
         >
           <button
-            onClick={props.onLoadMoreMessages}
-            disabled={props.isLoadingMoreMessages}
+            onClick={loadMoreMessages}
+            disabled={isLoadingMoreMessages}
             style={{
               padding: "6px 16px",
               border: "1px solid var(--border-color)",
@@ -212,19 +335,19 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
               background: "var(--bg-secondary)",
               color: "var(--text-primary)",
               fontSize: "13px",
-              cursor: props.isLoadingMoreMessages ? "not-allowed" : "pointer",
-              opacity: props.isLoadingMoreMessages ? 0.6 : 1,
+              cursor: isLoadingMoreMessages ? "not-allowed" : "pointer",
+              opacity: isLoadingMoreMessages ? 0.6 : 1,
               transition: "all 0.2s",
             }}
           >
-            {props.isLoadingMoreMessages
+            {isLoadingMoreMessages
               ? "加载中..."
-              : `加载更多历史消息 (${props.activeMessages.length - props.paginatedMessages.length} 条)`}
+              : `加载更多历史消息 (${activeMessages.length - paginatedMessages.length} 条)`}
           </button>
         </div>
       )}
 
-      {props.isConversationLoading && (
+      {isConversationLoading && (
         <div className="history-loading">
           <div className="history-loading-placeholder">
             <div className="skeleton-bubble" />
@@ -253,16 +376,16 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
         </div>
       )}
 
-      {!props.hasActiveConversation && (
+      {!hasActiveConversation && (
         <EmptyState
           hasProject={props.hasProject}
           onCreate={props.onCreateSession}
         />
       )}
 
-      {props.hasActiveConversation &&
-        !props.isConversationLoading &&
-        props.activeMessages.length > 0 && (
+      {hasActiveConversation &&
+        !isConversationLoading &&
+        activeMessages.length > 0 && (
           <div className="message-list">
             {renderedRuns.map((item, index) => {
               if (item.kind === "agent-run") {
@@ -281,9 +404,11 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
                     onPreviewImage={props.onPreviewImage}
                     showThinking={props.showThinking}
                     isStreaming={isRunStreaming}
-                    agentRunning={
-                      props.isAgentBusy && index === renderedRuns.length - 1
-                    }
+                    agentRunning={isLatestTimelineRunBusy(
+                      isAgentBusy,
+                      index,
+                      renderedRuns.length,
+                    )}
                     onOpenExternal={props.onOpenExternal}
                     onOpenFile={props.onOpenFile}
                     onDiffFile={props.onDiffFile}
@@ -305,7 +430,7 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
                     onResendUserMessage={props.onResendUserMessage}
                     onEditMessage={props.onEditMessage}
                     onDeleteMessage={props.onDeleteMessage}
-                    agentRunning={props.isAgentBusy}
+                    agentRunning={isAgentBusy}
                     isLastUserMessage={message.id === lastUserMessageId}
                     validCommandNames={props.validCommandNames}
                     validFilePaths={props.validFilePaths}
@@ -342,14 +467,14 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
 
             {isAwaitingAssistant && (
               <>
-                {props.showThinking && props.activeThinking && (
+                {props.showThinking && activeThinking && (
                   <section className="thinking-card">
                     <div className="thinking-card-content">
-                      {props.activeThinking}
+                      {activeThinking}
                     </div>
                   </section>
                 )}
-                {props.activeRuntimeState?.isExecutingTool &&
+                {activeRuntimeState?.isExecutingTool &&
                   !renderedRuns.some(
                     (run) =>
                       run.kind === "agent-run" &&
@@ -373,15 +498,14 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
               </>
             )}
 
-            {props.hasActiveConversation &&
-              !props.cancellingUi &&
-              (props.activeConversationStatus === "running" ||
-                props.activeRuntimeState?.isStreaming) && (
+            {hasActiveConversation &&
+              !cancellingUi &&
+              (activeConversationStatus === "running" || activeRuntimeState?.isStreaming) && (
                 <RespondingIndicator
-                  thinking={props.activeThinking}
+                  thinking={activeThinking}
                   showThinking={props.showThinking}
-                  isExecutingTool={props.activeRuntimeState?.isExecutingTool}
-                  isStreaming={props.activeRuntimeState?.isStreaming}
+                  isExecutingTool={activeRuntimeState?.isExecutingTool}
+                  isStreaming={activeRuntimeState?.isStreaming}
                 />
               )}
           </div>
