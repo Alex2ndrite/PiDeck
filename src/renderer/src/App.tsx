@@ -59,6 +59,7 @@ import { useSessionMessages } from "./hooks/useSessionMessages";
 import { useSessionLayout } from "./hooks/useSessionLayout";
 import { useSessionSend } from "./hooks/useSessionSend";
 import { useFileEditor } from "./hooks/useFileEditor";
+import { useOverlayActions } from "./hooks/useOverlayActions";
 import { useWorkspacePanels, type WorkspaceDrawerPanel } from "./hooks/useWorkspacePanels";
 import { useGitFlow } from "./hooks/useGitFlow";
 import { useImportFlow } from "./hooks/useImportFlow";
@@ -586,19 +587,6 @@ export function App() {
     y: number;
     node: FileTreeNode;
   } | null>(null);
-  const [confirmDialog, setConfirmDialog] = useState<{
-    title: string;
-    message: string;
-    onConfirm: () => void;
-    danger?: boolean;
-    confirmLabel?: string;
-  } | null>(null);
-  // 项目信任确认请求：含 .pi 资源且未记录决策的项目首次创建 Agent 时由主进程发起
-  const [trustRequest, setTrustRequest] = useState<{
-    requestId: string;
-    cwd: string;
-    projectName: string;
-  } | null>(null);
   const [renamingFile, setRenamingFile] = useState<{
     path: string;
     name: string;
@@ -787,7 +775,6 @@ export function App() {
   // upToDateVersion: hook does not expose this; used by AppUpdateOverlay for "up to date" toast.
   const [upToDateVersion, setUpToDateVersion] = useState<string | null>(null);
   const [configOpen, setConfigOpen] = useState(false);
-  const [feedbackOpen, setFeedbackOpen] = useState(false);
   /** 是否自动滚动到最新消息 */
   const [autoScroll, setAutoScroll] = useState(true);
   /** 用 ref 同步 autoScroll，供 ResizeObserver 回调读取最新值，避免响应式时序间隙导致滚动抢跑。 */
@@ -959,6 +946,7 @@ export function App() {
   const activeProject = projects.find(
     (project) => project.id === activeProjectId,
   );
+  const overlays = useOverlayActions({ activeProject, appInfo, showToast });
   const sessionsProject = projects.find(
     (project) => project.id === sessionsProjectId,
   );
@@ -1791,7 +1779,7 @@ export function App() {
       workspace.openDrawer("browser");
       navigateTo(url);
     },
-    onTrustRequest: setTrustRequest,
+    onTrustRequest: overlays.setTrustRequest,
     onFocusTarget: (target) => {
       const agent = displayAgentsRef.current.find((item) => item.id === target.agentId);
       if (!agent) return;
@@ -3304,13 +3292,13 @@ export function App() {
    */
   function deleteMessage(messageId: string) {
     if (!activeAgentId) return;
-    setConfirmDialog({
+    overlays.showConfirm({
       title: t("message.deleteTitle"),
       message: t("message.deleteReloadPrompt"),
       danger: true,
       confirmLabel: t("common.delete"),
       onConfirm: async () => {
-        setConfirmDialog(null);
+        overlays.clearConfirm();
         try {
           await api.agents.deleteMessage(activeAgentId!, messageId);
         } catch (error) {
@@ -3511,13 +3499,13 @@ export function App() {
       showToast(t("app.worktreeRemoveBlockedByAgents"), 5000);
       return;
     }
-    setConfirmDialog({
+    overlays.showConfirm({
       title: t("app.worktreeRemoveConfirmTitle"),
       message: t("app.worktreeRemoveConfirmMessage"),
       danger: true,
       confirmLabel: t("common.delete"),
       onConfirm: () => {
-        setConfirmDialog(null);
+        overlays.clearConfirm();
         // 先触发淡出动画（添加 removing 类），等动画结束后再执行真实删除。
         setRemovingWorktreePaths((prev) => new Set(prev).add(worktreePath));
         setTimeout(() => {
@@ -3567,7 +3555,7 @@ export function App() {
       void deleteSidebarSession(projectId, session);
       return;
     }
-    setConfirmDialog({
+    overlays.showConfirm({
       title: t("drawer.sessionDeleteTitle"),
       message: t("drawer.sessionDeleteBodyWithChildren", {
         name: session.name || t("common.untitled"),
@@ -3576,7 +3564,7 @@ export function App() {
       danger: true,
       confirmLabel: t("common.delete"),
       onConfirm: () => {
-        setConfirmDialog(null);
+        overlays.clearConfirm();
         void deleteSidebarSession(projectId, session);
       },
     });
@@ -3605,11 +3593,11 @@ export function App() {
       updateAfterProjectRemoved(project.id, next);
     } catch (error) {
       if (String(error instanceof Error ? error.message : error).includes("PROJECT_HAS_RUNNING_AGENT")) {
-        setConfirmDialog({
+        overlays.showConfirm({
           title: t("app.projectRemoveBlockedTitle"),
           message: t("app.projectRemoveBlockedByAgent"),
           confirmLabel: t("app.projectRemoveBlockedAck"),
-          onConfirm: () => setConfirmDialog(null),
+          onConfirm: () => overlays.clearConfirm(),
         });
       } else {
         showToast(error instanceof Error ? error.message : String(error), 5000);
@@ -3848,7 +3836,7 @@ export function App() {
         }}
         onOpenSettings={() => setSettingsOpen(true)}
         onOpenConfig={() => setConfigOpen(true)}
-        onOpenFeedback={() => setFeedbackOpen(true)}
+        onOpenFeedback={() => overlays.setFeedbackOpen(true)}
         onOpenHomepage={() => void api.app.openExternal("https://ayuayue.github.io/PiDeck/")}
       />
       <div
@@ -4307,7 +4295,7 @@ export function App() {
           onDelete={() => {
             const node = fileMenu.node;
             setFileMenu(null);
-            setConfirmDialog({
+            overlays.showConfirm({
               title: node.type === "directory" ? t("drawer.deleteFolderTitle") : t("drawer.deleteFileTitle"),
               message: node.type === "directory"
                 ? t("drawer.deleteFolderConfirm", { name: node.name })
@@ -4315,7 +4303,7 @@ export function App() {
               danger: true,
               confirmLabel: t("common.delete"),
               onConfirm: async () => {
-                setConfirmDialog(null);
+                overlays.clearConfirm();
                 try {
                   await api.files.delete(node.path, true);
                   void refreshFiles();
@@ -4503,11 +4491,7 @@ export function App() {
         />
       </Suspense>
       )}
-      <SessionActionOverlays
-        feedback={feedbackOpen ? { open: true, project: activeProject, appInfo, onClose: () => setFeedbackOpen(false), onCopy: () => showToast(t("app.feedbackCopied")), onOpenExternal: (url) => api.app.openExternal(url), loadEnvironment: api.app.feedbackEnvironment } : undefined}
-        confirm={confirmDialog ? { open: true, props: { title: confirmDialog.title, message: confirmDialog.message, onConfirm: confirmDialog.onConfirm, onCancel: () => setConfirmDialog(null), danger: confirmDialog.danger, confirmLabel: confirmDialog.confirmLabel } } : undefined}
-        trust={trustRequest ? { open: true, requestId: trustRequest.requestId, cwd: trustRequest.cwd, projectName: trustRequest.projectName, onChoose: (choice) => { api.agents.respondTrustRequest(trustRequest.requestId, choice); setTrustRequest(null); } } : undefined}
-      />
+      <SessionActionOverlays {...overlays.overlayProps} />
       <AppUpdateOverlay
         controller={appUpdate}
         releasesUrl={appInfo.releasesUrl}
