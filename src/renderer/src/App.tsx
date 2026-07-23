@@ -147,7 +147,7 @@ import {
   ExtensionWidgetPanel,
   QueuedPromptPanel,
 } from "./components/session/ComposerPanels";
-import { ScratchPadPanel } from "./components/scratchPad/ScratchPadPanel";
+import { ScratchPadOverlay } from "./components/overlays/ScratchPadOverlay";
 import { LazyWrapper } from "./hooks/useLazyComponent";
 import {
   AgentContextMenu,
@@ -2215,27 +2215,6 @@ export function App() {
     });
 
   }, []);
-
-  // 全局快捷键：Cmd/Ctrl+Shift+S 呼出/收起草稿本；Esc 关闭
-  const scratchPadToggle = scratchPad.toggle;
-  const scratchPadClose = scratchPad.close;
-  const scratchPadIsOpen = scratchPad.isOpen;
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      const isSaveShortcut = (e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === "s";
-      if (isSaveShortcut) {
-        e.preventDefault();
-        scratchPadToggle();
-        return;
-      }
-      if (e.key === "Escape" && scratchPadIsOpen) {
-        e.stopPropagation();
-        scratchPadClose();
-      }
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [scratchPadToggle, scratchPadClose, scratchPadIsOpen]);
 
   useEffect(() => {
     const projectIds = new Set(projects.map((project) => project.id));
@@ -6773,26 +6752,7 @@ export function App() {
       )}
 
       {/* Scratch Pad（草稿本）：根级渲染，避免受 chat-pane grid 影响定位 */}
-      {scratchPad.isOpen || scratchPad.isClosing ? (
-        <div className={`scratch-pad-overlay${scratchPad.isClosing ? " closing" : ""}`} onClick={() => scratchPad.close()}>
-          <ScratchPadPanel
-            drafts={scratchPad.drafts}
-            currentDraftPath={scratchPad.currentDraftPath}
-            content={scratchPad.content}
-            mode={scratchPad.mode}
-            isClosing={scratchPad.isClosing}
-            isSaving={scratchPad.isSaving}
-            hasError={scratchPad.hasError}
-            onChangeContent={scratchPad.setContent}
-            onSetMode={scratchPad.setMode}
-            onToggleCheckbox={scratchPad.toggleTaskCheckbox}
-            onExport={() => void scratchPad.exportFile()}
-            onSelectDraft={scratchPad.selectDraft}
-            onCreateDraft={scratchPad.createDraft}
-            onDeleteDraft={scratchPad.deleteDraft}
-          />
-        </div>
-      ) : null}
+      <ScratchPadOverlay controller={scratchPad} />
 
       {/* 外部编辑器选择气泡 */}
       {editorsOpen && editorsAnchor && (
