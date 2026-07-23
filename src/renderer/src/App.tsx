@@ -154,8 +154,6 @@ import { EnvironmentOverlay } from "./components/overlays/EnvironmentOverlay";
 import { SessionRuntimeUiOverlay, createSessionRuntimeUiResponder } from "./components/overlays/SessionRuntimeUiOverlay";
 import { LazyWrapper } from "./hooks/useLazyComponent";
 import {
-  AgentContextMenu,
-  ComposerToolbar,
   ConversationOutline,
   DrawerContent,
   EnvironmentDialog,
@@ -164,11 +162,6 @@ import {
   LogoMark,
   ModelPicker,
   PromptTemplatePicker,
-  ProjectAvatar,
-  ProjectContextMenu,
-  PromptSuggestions,
-  SessionContextMenu,
-  SessionManagerModal,
 
   ComposerModePicker,
   ThinkingPicker,
