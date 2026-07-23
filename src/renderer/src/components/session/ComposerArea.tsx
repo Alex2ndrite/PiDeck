@@ -3,7 +3,7 @@ import {
   ComposerToolbar,
   ImagePreviewModal,
   PromptSuggestions,
-} from "../app/AppParts";
+} from "./ComposerParts";
 import {
   RichInput,
 } from "../app/RichInput";

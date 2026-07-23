@@ -15,7 +15,7 @@ import {
   ModelPicker,
   PromptTemplatePicker,
   ThinkingPicker,
-} from "../app/AppParts";
+} from "./ComposerParts";
 import { desktopApi } from "../../desktopApi";
 import { showNotice } from "../../utils/notice";
 import type { ComposerPickerKind } from "../../hooks/useSessionComposerController";

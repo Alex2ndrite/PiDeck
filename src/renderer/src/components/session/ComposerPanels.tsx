@@ -13,7 +13,7 @@ import {
   canRetractQueuedPromptToInput,
 } from "../../utils/queuedPromptQueue";
 import { t } from "../../i18n";
-import { ExtensionWidgetCard } from "../app/AppParts";
+import { ExtensionWidgetCard } from "./ComposerParts";
 
 export function ComposerAttachmentBar(props: {
   images: ImageContent[];

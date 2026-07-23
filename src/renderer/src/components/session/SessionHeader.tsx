@@ -9,7 +9,7 @@ import {
   sessionSendStateByIdAtom,
 } from "../../atoms";
 import { t } from "../../i18n";
-import { SessionStatus } from "../app/AppParts";
+import { SessionStatus } from "./SurfaceParts";
 
 type HeaderActions = {
   headerRef: RefObject<HTMLElement | null>;

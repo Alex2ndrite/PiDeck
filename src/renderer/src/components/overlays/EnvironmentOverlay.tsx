@@ -1,5 +1,5 @@
 import type { ComponentProps } from "react";
-import { EnvironmentDialog } from "../app/AppParts";
+import { EnvironmentDialog } from "./OverlayParts";
 
 export type EnvironmentOverlayProps = {
 	open: boolean;

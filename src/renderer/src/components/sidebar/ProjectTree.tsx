@@ -1,7 +1,7 @@
 import { Filter, FolderCog, Play, Plus } from "lucide-react";
 import type { DragEvent } from "react";
 import type { Project, SessionSource, WorktreeEntry } from "../../../../shared/types";
-import { ProjectAvatar } from "../app/AppParts";
+import { ProjectAvatar } from "./SidebarParts";
 import { SIDEBAR_SESSION_SOURCES, type SidebarController } from "../../hooks/useSidebarController";
 import { t } from "../../i18n";
 import type { SidebarActions } from "./SidebarContent";

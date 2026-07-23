@@ -8,7 +8,7 @@ import {
   SessionContextMenu,
   SessionManagerModal,
   WorktreeCreateDialog,
-} from "../app/AppParts";
+} from "./SidebarParts";
 import { sessionRecordToSummary } from "../../atoms";
 import { t } from "../../i18n";
 import { getBoundSidebarRuntimeAgent, type SidebarController, type SidebarRpcLog } from "../../hooks/useSidebarController";

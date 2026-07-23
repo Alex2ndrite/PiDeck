@@ -6,7 +6,7 @@ import {
 } from "../../atoms";
 import { useFeishuBridge } from "../../hooks/useFeishuBridge";
 import { FeishuLinkIndicator } from "../feishu/FeishuLinkIndicator";
-import { ExtensionWidgetCard } from "../app/AppParts";
+import { ExtensionWidgetCard } from "./ComposerParts";
 
 const DISMISSED_WIDGETS_KEY = "pid:session-composer-dismissed-widgets";
 

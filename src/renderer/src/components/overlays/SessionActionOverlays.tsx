@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ComponentProps } from "react";
 import { SettingsModal } from "../app/SettingsModal";
-import { ConfirmDialog } from "../app/AppParts";
+import { ConfirmDialog } from "./OverlayParts";
 import { TrustConfirmModal } from "../app/TrustConfirmModal";
 import { CloseIconButton } from "../ui/IconButton";
 import { t } from "../../i18n";

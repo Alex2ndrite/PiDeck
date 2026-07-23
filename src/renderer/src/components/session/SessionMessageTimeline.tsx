@@ -18,7 +18,7 @@ import {
   TurnRow,
   UserBubble,
   stripMarkdown,
-} from "../app/AppParts";
+} from "./SurfaceParts";
 import {
   getMultiSelectImageCaptureIds,
   groupToolMessages,
