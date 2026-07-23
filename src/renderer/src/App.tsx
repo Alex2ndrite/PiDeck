@@ -153,6 +153,7 @@ import {
 } from "./components/session/ComposerPanels";
 import { ScratchPadOverlay } from "./components/overlays/ScratchPadOverlay";
 import { WorkspaceDrawerHost } from "./components/workspace/WorkspaceDrawerHost";
+import { AppHeader } from "./components/AppHeader";
 import { SessionActionOverlays } from "./components/overlays/SessionActionOverlays";
 import { AppUpdateOverlay } from "./components/overlays/AppUpdateOverlay";
 import { ImportOverlayHost } from "./components/overlays/ImportOverlayHost";
@@ -917,7 +918,6 @@ export function App() {
   }), [updateInfo, updateError, updateChecking, updateDownloading, updateProgress, downloadedUpdatePath]);
   const [configOpen, setConfigOpen] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
-  const [windowAlwaysOnTop, setWindowAlwaysOnTop] = useState(false);
   const [_debugOpen, _setDebugOpen] = useState(false);
   /** RPC 日志弹窗目标 agent */
   const [agentRpcLogging, setAgentRpcLogging] = useState<Map<string, boolean>>(new Map());
@@ -4772,56 +4772,7 @@ export function App() {
         } as React.CSSProperties
       }
     >
-      {!settings.useNativeTitleBar && (
-        <div className="window-drag-layer" aria-hidden="true" />
-      )}
-      {!settings.useNativeTitleBar && (
-        <div className="window-controls" aria-label={t("app.windowControls")}>
-          <button
-            type="button"
-            className={`window-control pin${windowAlwaysOnTop ? " active" : ""}`}
-            aria-label={
-              windowAlwaysOnTop ? t("app.windowUnpin") : t("app.windowPin")
-            }
-            title={
-              windowAlwaysOnTop ? t("app.windowUnpin") : t("app.windowPin")
-            }
-            onClick={async () => {
-              const next = await api.app.toggleAlwaysOnTopWindow();
-              setWindowAlwaysOnTop(next);
-            }}
-          >
-            <Pin size={15} strokeWidth={2.2} aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            className="window-control"
-            aria-label={t("app.windowMinimize")}
-            title={t("app.windowMinimize")}
-            onClick={() => api.app.minimizeWindow()}
-          >
-            <Minus size={15} strokeWidth={2.2} aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            className="window-control"
-            aria-label={t("app.windowToggleMaximize")}
-            title={t("app.windowToggleMaximize")}
-            onClick={() => api.app.toggleMaximizeWindow()}
-          >
-            <Square size={13} strokeWidth={2} aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            className="window-control close"
-            aria-label={t("app.windowClose")}
-            title={t("app.windowClose")}
-            onClick={() => api.app.closeWindow()}
-          >
-            <X size={16} strokeWidth={2.2} aria-hidden="true" />
-          </button>
-        </div>
-      )}
+      <AppHeader useNativeTitleBar={settings.useNativeTitleBar} toggleAlwaysOnTop={api.app.toggleAlwaysOnTopWindow} minimizeWindow={api.app.minimizeWindow} toggleMaximizeWindow={api.app.toggleMaximizeWindow} closeWindow={api.app.closeWindow} />
       <SidebarContent
         controller={sidebarController}
         actions={sidebarActions}
