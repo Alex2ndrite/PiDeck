@@ -7,6 +7,10 @@ const sessionSendSource = readFileSync(
   "src/renderer/src/hooks/useSessionSend.ts",
   "utf8",
 );
+const composerSource = readFileSync(
+  "src/renderer/src/components/session/ComposerArea.tsx",
+  "utf8",
+);
 
 function functionBody(name) {
   const marker = `function ${name}(`;
@@ -65,7 +69,12 @@ test("active Agent identity is derived from the selected Session runtime", () =>
 
 test("Session messages and composer render without an active Agent", () => {
   assert.match(appSource, /const hasActiveConversation = Boolean\(currentSession\)/);
-  assert.match(appSource, /\{hasActiveConversation && \(\s*<footer/);
+  assert.match(
+    appSource,
+    /\{hasActiveConversation && currentSessionId && \(\s*<ComposerArea[\s\S]*sessionId=\{currentSessionId\}/,
+  );
+  assert.match(composerSource, /useSessionComposerController\(/);
+  assert.match(composerSource, /sessionId=\{props\.sessionId\}/);
   assert.match(
     appSource,
     /const activeMessages = currentSessionId \? currentSessionMessages : \[\]/,

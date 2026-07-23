@@ -137,6 +137,7 @@ import { useScratchPad } from "./hooks/useScratchPad";
 import { SessionReferenceModal, type SessionReferenceResult } from "./components/app/SessionReferenceModal";
 import { SessionMessageTimeline } from "./components/session/SessionMessageTimeline";
 import { SessionHeader } from "./components/session/SessionHeader";
+import { ComposerArea } from "./components/session/ComposerArea";
 import {
   ComposerAttachmentBar,
   ComposerSendControls,
@@ -5903,30 +5904,6 @@ export function App() {
           onToast={(message) => showToast(message)}
         />
 
-          {sessionRefPickerOpen && sessionRefPickerTarget && (
-            <SessionReferenceModal
-              session={sessionRefPickerTarget}
-              initialSelected={
-                (() => {
-                  const chipRaw = `&${sessionRefPickerTarget.name ?? sessionRefPickerTarget.filePath}`;
-                  const saved = sessionRefSelections[chipRaw];
-                  return saved?.selectedIndices?.length ? new Set(saved.selectedIndices) : undefined;
-                })()
-              }
-              onClose={() => { setSessionRefPickerOpen(false); setSessionRefPickerTarget(null); }}
-              onConfirm={(result: SessionReferenceResult, selectedIndices: number[]) => {
-                const chipRaw = `&${result.sessionName}`;
-                setSessionRefSelections((prev) => ({
-                  ...prev,
-                  [chipRaw]: { messages: result.messages, fullContext: result.fullContext, selectedIndices },
-                }));
-                setSessionRefPickerOpen(false);
-                setSessionRefPickerTarget(null);
-              }}
-              loadMessages={async (fp: string) => api.sessions.readMessages(fp)}
-            />
-          )}
-
           {showScrollToBottom && (
             <button
               className="scroll-to-bottom-btn"
@@ -5939,236 +5916,22 @@ export function App() {
             </button>
           )}
 
-        {hasActiveConversation && (
-        <footer ref={composerRef} className="composer">
-          <ComposerAttachmentBar
-            images={attachedImages}
-            onPreview={setPreviewImage}
-            onRemove={removeImage}
-            onClear={clearImages}
-          />
-          <ExtensionWidgetPanel
-            widgets={currentSessionRuntimeUi?.widgets}
-            sessionKey={activeWidgetSessionKey}
-            dismissedKeys={activeWidgetSessionKey
-              ? (agentDismissedWidgets[activeWidgetSessionKey] ?? [])
-              : []}
-            collapsed={widgetsCollapsed}
-            onDismiss={(widgetKey) => {
-              if (!activeWidgetSessionKey) return;
-              setAgentDismissedWidgets((prev) => {
-                const current = prev[activeWidgetSessionKey] ?? [];
-                if (current.includes(widgetKey)) return prev;
-                const next = {
-                  ...prev,
-                  [activeWidgetSessionKey]: [...current, widgetKey],
-                };
-                saveDismissedExtensionWidgets(next);
-                return next;
-              });
-            }}
-          />
-          <QueuedPromptPanel
-            trackRef={queuedTrackRef}
-            agentId={activeAgentId}
-            prompts={activeQueuedPrompts}
-            visiblePrompts={visibleQueuedPrompts}
-            onRetract={retractQueuedPromptForEdit}
-            onDiscard={discardQueuedPrompt}
-          />
-          <div
-            ref={composerBoxRef}
-            className={`composer-box ${
-              composerBangMode === "bang-bang"
-                ? "shell-silent-mode"
-                : composerBangMode === "bang"
-                  ? "shell-mode"
-                  : currentComposerAgentMode === "plan"
-                    ? "plan-mode"
-                    : ""
-            }`}
-            style={{ height: resolvedComposerHeight }}
-          >
-            <div
-              className="composer-resize-handle"
-              title={t("app.resizeComposer")}
-              onPointerDown={startComposerResize}
-            />
-            <ComposerToolbar
-              state={activeRuntimeState}
-              compacting={compacting}
-              disabled={isAgentBusy || isAgentStarting}
-              onPickModel={openModelPicker}
-              onPickThinking={() => setThinkingPickerOpen(true)}
-              onPickPromptTemplate={openPromptTemplatePicker}
-              onCompact={() => compactAgent()}
-              composerAgentMode={currentComposerAgentMode}
-              onOpenComposerModePicker={() => setComposerModePickerOpen(true)}
-              onCancelPlan={() => setCurrentComposerAgentMode("normal")}
-              feishuIndicator={
-                feishu.bots.length > 0 ? (
-                  <FeishuLinkIndicator
-                  status={feishu.status}
-                  bots={feishu.bots}
-                  activeAgentId={activeAgentId}
-                  activeBotId={feishu.activeBotId}
-                  sessionBotId={sessionFeishuBotId}
-                  isConnected={feishu.isConnected}
-                  connecting={feishu.connecting}
-                  onConnectByBot={feishu.connectByBot}
-                  onDisconnect={feishu.disconnect}
-                  onSetSessionBot={async (agentId: string, botId: string | null) => {
-                    await feishu.setSessionBot(agentId, botId);
-                    setSessionFeishuBotId(botId ?? undefined);
-                  }}
-                  />
-                ) : undefined
-              }
-
-            />
-            <RichInput
-              ref={composerTextareaRef}
-              value={prompt}
-              className={
-                composerBangMode === "bang-bang"
-                  ? "bang-bang"
-                  : composerBangMode === "bang"
-                    ? "bang"
-                    : ""
-              }
-              disabled={composerDisabled}
-              validCommandNames={validCommandNames}
-              validFilePaths={validFilePaths}
-              validSessionRefs={validSessionRefs}
-              caretRef={pendingComposerCaretRef}
-              placeholder={
-                isAgentStarting
-                  ? t("app.agentStartingPlaceholder")
-                  : !hasActiveConversation
-                    ? t("app.composerNoAgentPlaceholder")
-                    : composerBangMode === "bang-bang"
-                      ? t("app.composerSilentPlaceholder")
-                      : composerBangMode === "bang"
-                        ? t("app.composerShellPlaceholder")
-                        : currentComposerAgentMode === "plan"
-                          ? t("app.composerPlanPlaceholder")
-                          : settings.sendShortcut === "enter-send"
-                            ? t("app.composerEnterPlaceholder")
-                            : t("app.composerShortcutPlaceholder")
-              }
-              onFocus={() => {
-                // 仅当光标处存在 @ / 触发器时才打开建议框,避免聚焦即弹空菜单。
-                setSuggestionsOpen(detectTrigger(prompt, composerCursor) !== null);
-              }}
-              onChange={(newValue, cursor) => {
-                const targetId = getComposerTargetId();
-                if (targetId) {
-                  setPromptFromNativeInput(targetId, newValue);
-                }
-                const targetAgentId = currentSessionIdRef.current ? undefined : activeAgentIdRef.current;
-                if (targetAgentId) {
-                  setBusyDraftByAgent((current) => {
-                    if (!newValue.trim()) {
-                      if (!current[targetAgentId]) return current;
-                      const next = { ...current };
-                      delete next[targetAgentId];
-                      return next;
-                    }
-                    if (!isAgentBusy || current[targetAgentId]) return current;
-                    return { ...current, [targetAgentId]: true };
-                  });
-                }
-                if (suggestionsOpen) setComposerCursor(cursor);
-                const nextSuggestionsOpen = detectTrigger(newValue, cursor) !== null;
-                if (nextSuggestionsOpen !== suggestionsOpen) {
-                  setSuggestionsOpen(nextSuggestionsOpen);
-                }
-                // 如果正在历史导航,检测到用户手动编辑内容则退出历史模式
-                if (historyNavigating) {
-                  const agentHistory = promptHistoryRef.current[getComposerTargetId() ?? ""] ?? [];
-                  const currentHistoryCommand = agentHistory[historyIndex];
-                  if (newValue !== currentHistoryCommand) {
-                    setHistoryIndex(-1);
-                    setHistoryNavigating(false);
-                    setSavedPrompt("");
-                  }
-                }
-              }}
-              onCursorChange={(cursor) => {
-                if (suggestionsOpen) setComposerCursor(cursor);
-              }}
-              onKeyDown={handleComposerKeyDown}
-              onPaste={handlePaste}
-              onDrop={handleDrop}
-              onDragOver={handleDragOver}
-              onBlur={() => {
-                setSuggestionsOpen(false);
-              }}
-              onChipClick={(chip: RichInputChip) => {
-                if (chip.kind === "file") { const path = chip.raw.slice(1); openFilePath(path); }
-                if (chip.kind === "session") {
-                  const s = activeProjectSessions.find((x) => (x.name ?? x.filePath) === chip.label);
-                  if (s) { setSessionRefPickerTarget(s); setSessionRefPickerOpen(true); }
-                }
-              }}
-            />
-            {suggestionsOpen && !composerDisabled && (
-              <PromptSuggestions
-                prompt={prompt}
-                items={suggestionItems}
-                selectedIndex={selectedSuggestionIndex}
-                anchorStyle={suggestionAnchorStyle}
-                onSelectedIndexChange={setSelectedSuggestionIndex}
-                onClose={() => {
-                  const el = composerTextareaRef.current;
-                  const cursor = el ? getCaretOffsetOf(el) : composerCursor;
-                  const liveComposerPrompt = getLiveComposerPrompt();
-                  const result = clearSuggestionTrigger(liveComposerPrompt, cursor);
-                  setPrompt(result.text);
-                  setComposerCursor(result.cursor);
-                  pendingComposerCaretRef.current = result.cursor;
-                  setSuggestionsOpen(false);
-                  requestAnimationFrame(() => {
-                    composerTextareaRef.current?.focus();
-                  });
-                }}
-                onPick={(value) => {
-                  const el = composerTextareaRef.current;
-                  const cursor = el ? getCaretOffsetOf(el) : composerCursor;
-                  const liveComposerPrompt = getLiveComposerPrompt();
-                  const result = applySuggestion(liveComposerPrompt, cursor, value);
-                  setPrompt(result.text);
-                  setComposerCursor(result.cursor);
-                  pendingComposerCaretRef.current = result.cursor;
-                  setSuggestionsOpen(false);
-                  requestAnimationFrame(() => {
-                    composerTextareaRef.current?.focus();
-                  });
-                }}
+        {hasActiveConversation && currentSessionId && (
+          <ComposerArea
+            ref={composerRef}
+            sessionId={currentSessionId}
+            onOpenFile={openFilePath}
+            queuePanel={activeAgentId ? (
+              <QueuedPromptPanel
+                trackRef={queuedTrackRef}
+                agentId={activeAgentId}
+                prompts={activeQueuedPrompts}
+                visiblePrompts={visibleQueuedPrompts}
+                onRetract={retractQueuedPromptForEdit}
+                onDiscard={discardQueuedPrompt}
               />
-            )}
-            <ComposerSendControls
-              composerMode={composerMode}
-              statusText={composerStatusText}
-              isAgentBusy={isAgentBusy}
-              isAgentStarting={isAgentStarting}
-              keepBusyDraftControls={keepBusyDraftControls}
-              showBusySendControls={showBusySendControls}
-              hasComposerContent={hasComposerContent}
-              canSend={Boolean(
-                promptAgentKey &&
-                (prompt.trim() || attachedImages.length > 0)
-              )}
-              sendBehaviorMenuOpen={sendBehaviorMenuOpen}
-              onSend={() => void sendPrompt()}
-              onSendFollowUp={sendPromptAsFollowUp}
-              onStop={() => abortAgent()}
-              onToggleBehaviorMenu={() => setSendBehaviorMenuOpen((open) => !open)}
-              onKeepBehaviorMenuOpen={keepSendBehaviorMenuOpen}
-              onScheduleBehaviorMenuClose={scheduleSendBehaviorMenuClose}
-            />
-          </div>
-        </footer>
+            ) : undefined}
+          />
         )}
 
         {!isLanWeb && activeAgentId && !isPendingAgentId(activeAgentId) && !settingsOpen && !configOpen && !environmentDialog && terminalDockVisible && (
@@ -6735,44 +6498,6 @@ export function App() {
             await api.settings.update({ piEnvironmentChecked: false });
             showToast(t("environment.checkFlagCleared"));
           }}
-        />
-      )}
-      {promptTemplatePickerOpen && (
-        <PromptTemplatePicker
-          templates={promptTemplateList}
-          onClose={() => setPromptTemplatePickerOpen(false)}
-          onPick={selectPromptTemplate}
-        />
-      )}
-      {modelPickerOpen && (
-        <ModelPicker
-          models={availableModels}
-          current={{
-            provider: activeRuntimeState?.provider,
-            modelId: activeRuntimeState?.modelId,
-            modelName: activeRuntimeState?.modelName,
-          }}
-          onClose={() => setModelPickerOpen(false)}
-          onPick={selectModel}
-          favoriteModels={settings.favoriteModels}
-          onToggleFavorite={toggleFavoriteModel}
-        />
-      )}
-      {composerModePickerOpen && (
-        <ComposerModePicker
-          currentMode={currentComposerAgentMode}
-          onClose={() => setComposerModePickerOpen(false)}
-          onPick={(mode) => {
-            setCurrentComposerAgentMode(mode);
-            setComposerModePickerOpen(false);
-          }}
-        />
-      )}
-      {thinkingPickerOpen && (
-        <ThinkingPicker
-          current={activeRuntimeState?.thinkingLevel}
-          onClose={() => setThinkingPickerOpen(false)}
-          onPick={selectThinking}
         />
       )}
       {settingsOpen && (
