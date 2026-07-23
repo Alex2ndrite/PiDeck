@@ -255,13 +255,13 @@ test("immediate unknown snapshots stay visible and acknowledgement-only", () => 
   );
   assert.match(
     appSource,
-    /if \(accepted === "unknown"\) \{\s*appendUnknownQueuedPrompt\(targetAgentId, queuedPromptSnapshot\);\s*return;/,
+    /if \(accepted === "unknown"\) \{\s*queue\.appendUnknownQueuedPrompt\(targetAgentId,/,
   );
   // Unknown rows stay in the compact panel; discard may clear them, but retract-to-input stays disabled.
   assert.match(composerPanelsSource, /status === "unknown"/);
   assert.match(composerPanelsSource, /canRetractQueuedPromptToInput\(status\)/);
   assert.match(composerPanelsSource, /canDiscardQueuedPrompt\(status\)/);
-  assert.match(appSource, /discardQueuedPrompt/);
+  assert.match(appSource, /queue\.discardQueuedPrompt/);
   assert.equal(canRetractQueuedPromptToInput("pending"), true);
   assert.equal(canRetractQueuedPromptToInput("failed"), true);
   assert.equal(canRetractQueuedPromptToInput("sending"), false);

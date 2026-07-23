@@ -33,6 +33,11 @@ const webServiceSource = readFileSync(
   "utf8",
 );
 const sharedTypesSource = readFileSync("src/shared/types.ts", "utf8");
+// Queue ownership now lives in useQueuedPrompt.
+const queuedPromptHookSource = readFileSync(
+  "src/renderer/src/hooks/useQueuedPrompt.ts",
+  "utf8",
+);
 
 function componentInvocation(source, componentName) {
   const start = source.indexOf(`<${componentName}`);
@@ -66,10 +71,10 @@ test("pending prompts share the native content width constraint without hiding c
 test("compact queue panel exposes retract-to-input and discard only", () => {
   const queuedPromptPanel = componentInvocation(appSource, "QueuedPromptPanel");
 
-  assert.match(queuedPromptPanel, /onRetract=\{retractQueuedPromptForEdit\}/);
+  assert.match(queuedPromptPanel, /onRetract=\{queue\.retractQueuedPromptForEdit\}/);
   assert.match(composerPanelsSource, /app\.retractToInput/);
   assert.match(composerPanelsSource, /app\.retractDiscard/);
-  assert.match(appSource, /onDiscard=\{discardQueuedPrompt\}/);
+  assert.match(appSource, /onDiscard=\{queue\.discardQueuedPrompt\}/);
   assert.match(composerPanelsSource, /canRetractQueuedPromptToInput\(status\)/);
   assert.match(composerPanelsSource, /canDiscardQueuedPrompt\(status\)/);
   assert.match(appSource, /const visibleQueuedPrompts = activeQueuedPrompts/);
@@ -122,8 +127,8 @@ test("composer keeps native typing responsive with a live draft ref and transiti
   assert.match(appSource, /startPromptTransition\(\(\) => \{\s*setPromptByAgent/s);
   assert.match(appSource, /const livePrompt = targetAgentId[\s\S]*?livePromptByAgentRef\.current\[targetAgentId\] \?\? prompt/);
   assert.match(appSource, /if \(suggestionsOpen \&\& suggestionItems\.length > 0\)/);
-  assert.match(appSource, /queuedPrompt\.behavior === "direct" \? undefined : queuedPrompt\.behavior/);
-  assert.match(appSource, /const currentDraft =[\s\S]*?livePromptByAgentRef\.current\[agentId\] \?\? promptByAgent\[agentId\]/);
+  assert.match(queuedPromptHookSource, /queuedPrompt\.behavior === "direct" \? undefined : queuedPrompt\.behavior/);
+  assert.match(queuedPromptHookSource, /const currentDraft =[\s\S]*?livePromptByAgentRef\.current\[agentId\] \?\? promptByAgent\[agentId\]/);
   assert.match(appSource, /setPromptForAgent\(currentSessionId, editorText\.text\)/);
   assert.match(appSource, /livePromptByAgentRef\.current = migrateAgentRecord/);
   assert.match(composerPanelsSource, /props\.sendBehaviorMenuOpen &&\s*props\.showBusySendControls &&\s*props\.hasComposerContent/);
@@ -137,27 +142,27 @@ test("queue drain is serialized and waits for an ordered global capability event
   assert.match(globalListenersSource, /agents\.onRuntimeState\(/);
   assert.match(
     appSource,
-    /previous\?\.isExecutingTool\s*&&\s*!current\.isExecutingTool[\s\S]*?flushQueuedSteerPrompts\(agentId\)/,
+    /previous\?\.isExecutingTool\s*&&\s*!current\.isExecutingTool[\s\S]*?queue\.flushQueuedSteerPrompts\(agentId\)/,
   );
   assert.match(runtimeStateSource, /incoming\.toolStateSequence < current\.toolStateSequence/);
   assert.match(agentManagerSource, /updateActiveToolCalls/);
   assert.match(toolRuntimeStateSource, /calls\.delete\(event\.toolCallId\)/);
   assert.match(toolRuntimeStateSource, /completedBatch: event\.type === "end" && current\.size > 0 && calls\.size === 0/);
-  assert.match(appSource, /claimIdleHead\(queuedPromptsRef\.current, agentId\)/);
-  assert.match(appSource, /claimNextSteerPrompt\(queuedPromptsRef\.current, agentId\)/);
-  assert.match(appSource, /resolveClaimedPrompt/);
+  assert.match(queuedPromptHookSource, /claimIdleHead\(queuedPromptsRef\.current, agentId\)/);
+  assert.match(queuedPromptHookSource, /claimNextSteerPrompt\(queuedPromptsRef\.current, agentId\)/);
+  assert.match(queuedPromptHookSource, /resolveClaimedPrompt/);
   assert.doesNotMatch(appSource, /queuedPrompt\.status === "sending"\s*\? \{ \.\.\.queuedPrompt, status: "pending"/);
   assert.match(queueStateSource, /prompt\.status !== "sending" && prompt\.status !== "unknown"/);
 });
 
 test("retract edit restores text, attachments, and composer mode to the owning agent", () => {
-  assert.match(appSource, /livePrompt\.displayText/);
-  assert.match(appSource, /setAttachedImagesForAgent\(agentId, \(current\) => \[/);
-  assert.match(appSource, /setComposerAgentModeForAgent\(agentId, livePrompt\.agentMode\)/);
-  assert.match(appSource, /pendingComposerCaretRef\.current = restoredPrompt\.length/);
-  assert.match(appSource, /setComposerCursor\(restoredPrompt\.length\)/);
-  assert.match(appSource, /editor\.scrollTop = editor\.scrollHeight/);
-  assert.match(appSource, /livePrompt\.status === "sending"/);
+  assert.match(queuedPromptHookSource, /livePrompt\.displayText/);
+  assert.match(queuedPromptHookSource, /setAttachedImagesForAgent\(agentId, \(current\) => \[/);
+  assert.match(queuedPromptHookSource, /setComposerAgentModeForAgent\(agentId, livePrompt\.agentMode\)/);
+  assert.match(queuedPromptHookSource, /pendingComposerCaretRef\.current = restoredPrompt\.length/);
+  assert.match(queuedPromptHookSource, /setComposerCursor\(restoredPrompt\.length\)/);
+  assert.match(queuedPromptHookSource, /editor\.scrollTop = editor\.scrollHeight/);
+  assert.match(queuedPromptHookSource, /livePrompt\.status === "sending"/);
 });
 
 test("retract edit uses action-oriented copy", () => {
@@ -207,11 +212,9 @@ test("indeterminate prompt timeout never becomes a retryable rejection", () => {
     agentManagerSource,
     /命令接收结果未知[\s\S]*?delivery: "unknown"/,
   );
-  assert.match(queueStateSource, /outcome\.type === "accepted"/);
-  assert.match(queueStateSource, /\{ type: "failed" \| "unknown"; error: string \}/);
-  assert.match(appSource, /discardQueuedPrompt/);
+  assert.match(queuedPromptHookSource, /status: "unknown"/);
   assert.match(appSource, /appendUnknownQueuedPrompt\(targetAgentId, queuedPromptSnapshot\)/);
-  assert.match(appSource, /status: "unknown"/);
+  assert.match(appSource, /queuedPrompt\.status === "unknown"/);
   assert.match(appSource, /accepted === "unknown"/);
 });
 

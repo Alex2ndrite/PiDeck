@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback } from "react";
 import type { MutableRefObject } from "react";
+import type { createStore } from "jotai";
 import type {
   AgentRuntimeState,
   AgentTab,
@@ -17,6 +18,15 @@ import {
   retractPrompt,
   type QueuedPromptSnapshot,
 } from "../utils/queuedPromptQueue";
+import {
+  sessionDraftByIdAtom,
+  sessionAttachmentsByIdAtom,
+  sessionComposerModeByIdAtom,
+  setSessionDraftAtom,
+  setSessionAttachmentsAtom,
+  setSessionComposerModeAtom,
+} from "../atoms/composer-atoms";
+import { sessionIdByRuntimeAgentIdAtomFamily } from "../atoms/session-selectors";
 import { PromptDeliveryUnknownError } from "./useComposerSend";
 
 export type QueuedPrompt = QueuedPromptSnapshot;
@@ -29,6 +39,9 @@ export interface UseQueuedPromptOptions {
   composerTextareaRef: MutableRefObject<HTMLDivElement | null>;
   pendingComposerCaretRef: MutableRefObject<number | null>;
   livePromptByAgentRef: MutableRefObject<Record<string, string>>;
+
+  /** Jotai store for resolving agent→Session binding in retract-to-edit. */
+  store: ReturnType<typeof createStore>;
 
   promptByAgent: Record<string, string>;
   setPromptForAgent: (agentId: string, value: string | ((current: string) => string)) => void;
@@ -56,6 +69,7 @@ export function useQueuedPrompt(options: UseQueuedPromptOptions) {
     composerTextareaRef,
     pendingComposerCaretRef,
     livePromptByAgentRef,
+    store,
     promptByAgent,
     setPromptForAgent,
     setAttachedImagesForAgent,
@@ -132,6 +146,37 @@ export function useQueuedPrompt(options: UseQueuedPromptOptions) {
       livePrompt.status === "unknown"
     ) return;
     retractQueuedPrompt(agentId, livePrompt.id);
+
+    // Resolve Session binding; if found, restore through Session atoms so the modern
+    // ComposerArea (which reads sessionDraftByIdAtom / sessionAttachmentsByIdAtom /
+    // sessionComposerModeByIdAtom) sees the restored content immediately.
+    const sessionId = store.get(sessionIdByRuntimeAgentIdAtomFamily(agentId));
+    if (sessionId) {
+      const currentDraft = store.get(sessionDraftByIdAtom)[sessionId] ?? "";
+      const restoredPrompt = [livePrompt.displayText, currentDraft]
+        .filter((text) => text.trim())
+        .join("\n\n");
+      store.set(setSessionDraftAtom, { sessionId, value: restoredPrompt });
+      if (livePrompt.images?.length) {
+        store.set(setSessionAttachmentsAtom, {
+          sessionId,
+          value: (current: ImageContent[]) => [...livePrompt.images!, ...current],
+        });
+      }
+      store.set(setSessionComposerModeAtom, { sessionId, mode: livePrompt.agentMode });
+      if (activeAgentIdRef.current === agentId) {
+        setComposerCursor(restoredPrompt.length);
+        pendingComposerCaretRef.current = restoredPrompt.length;
+        requestAnimationFrame(() => {
+          const editor = composerTextareaRef.current;
+          editor?.focus();
+          if (editor) editor.scrollTop = editor.scrollHeight;
+        });
+      }
+      return;
+    }
+
+    // Legacy fallback: restore through agent-keyed maps (pre-Session agents).
     const currentDraft =
       livePromptByAgentRef.current[agentId] ?? promptByAgent[agentId] ?? "";
     const restoredPrompt = [livePrompt.displayText, currentDraft]

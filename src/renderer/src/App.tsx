@@ -60,8 +60,9 @@ import { useFileEditor } from "./hooks/useFileEditor";
 import { useGitFlow } from "./hooks/useGitFlow";
 import { useImportFlow } from "./hooks/useImportFlow";
 import { useImagePaste } from "./hooks/useImagePaste";
+import { useQueuedPrompt, type QueuedPrompt } from "./hooks/useQueuedPrompt";
 import { PromptDeliveryUnknownError, createResendLock } from "./hooks/useComposerSend";
-import { type QueuedPrompt } from "./hooks/useQueuedPrompt";
+
 import { usePiUpdate } from "./hooks/usePiUpdate";
 import { useProjectSync } from "./hooks/useProjectSync";
 import {
@@ -112,16 +113,9 @@ import {
 import { resolveLocale, setI18nLocale, t } from "./i18n";
 import { mergeAgentRuntimeState } from "./utils/agentRuntimeState";
 import {
-  acknowledgeUnknownPrompt,
-  claimIdleHead,
-  claimNextSteerPrompt,
-  enqueuePrompt,
   migrateQueuedPrompts,
   QUEUED_PROMPT_LIMIT,
   QUEUED_PROMPT_VISIBLE,
-  replaceAgentQueue,
-  resolveClaimedPrompt,
-  retractPrompt,
 } from "./utils/queuedPromptQueue";
 import {
   pruneTerminalDockState,
@@ -585,9 +579,6 @@ export function App() {
   const prevIsAgentBusyRef = useRef(false);
   /** 客户端队列按 agent 记录 flush 锁，避免 tool-end 与 idle 并发投递。 */
   const queueFlushByAgentRef = useRef<Set<string>>(new Set());
-  const [queuedPrompts, setQueuedPrompts] = useState<Record<string, QueuedPrompt[]>>({});
-  const queuedPromptsRef = useRef<Record<string, QueuedPrompt[]>>({});
-  const activeQueuedPrompts = activeAgentId ? (queuedPrompts[activeAgentId] ?? []) : [];
 
   /** & 会话引用选择缓存：key = chip raw（如 "&My Session"），value = 选中的消息列表 */
   const [sessionRefSelections, setSessionRefSelections] = useState<
@@ -1246,6 +1237,29 @@ export function App() {
     const targetId = getComposerTargetId();
     if (targetId) setAttachedImagesForAgent(targetId, value);
   }
+
+  // Queue ownership extracted to useQueuedPrompt.
+  const queue = useQueuedPrompt({
+    runtimeStateByAgentRef,
+    displayAgentsRef,
+    activeAgentIdRef,
+    queueFlushByAgentRef,
+    composerTextareaRef,
+    pendingComposerCaretRef,
+    livePromptByAgentRef,
+    store,
+    promptByAgent,
+    setPromptForAgent,
+    setAttachedImagesForAgent,
+    setComposerAgentModeForAgent,
+    setComposerCursor,
+    showToast,
+    dispatchPromptSnapshot,
+  });
+  const activeQueuedPrompts = activeAgentId
+    ? (queue.queuedPrompts[activeAgentId] ?? [])
+    : [];
+
   const terminalDockState = activeAgentId
     ? terminalDockStateByAgent[activeAgentId]
     : undefined;
@@ -1821,7 +1835,7 @@ export function App() {
     setAttachedImagesByAgent((current) =>
       migrateAgentRecord(current, pendingReplacementById, draftIds),
     );
-    updateQueuedPrompts((current) =>
+    queue.updateQueuedPrompts((current) =>
       migrateQueuedPrompts(current, pendingReplacementById, draftIds),
     );
     for (const [oldAgentId] of pendingReplacementById) {
@@ -1848,9 +1862,9 @@ export function App() {
         (patch.toolStateSequence == null ||
           previous.toolStateSequence == null ||
           patch.toolStateSequence >= previous.toolStateSequence) &&
-        isAgentCurrentlyBusy(agentId)
+        queue.isAgentCurrentlyBusy(agentId)
       ) {
-        void flushQueuedSteerPrompts(agentId);
+        void queue.flushQueuedSteerPrompts(agentId);
       }
     },
     onAgentLog: (payload) => {
@@ -2918,217 +2932,7 @@ export function App() {
     }
   }
 
-  /**
-   * 队列 ref 是 drain 的同步数据源：React 批量 state 更新期间也能原子 claim，
-   * 避免 tool-end 与 idle 两条状态边沿把同一条消息提交两次。
-   */
-  function updateQueuedPrompts(
-    updater: (current: Record<string, QueuedPrompt[]>) => Record<string, QueuedPrompt[]>,
-  ) {
-    const next = updater(queuedPromptsRef.current);
-    queuedPromptsRef.current = next;
-    setQueuedPrompts(next);
-  }
 
-  function setAgentQueuedPrompts(
-    agentId: string,
-    updater: (current: QueuedPrompt[]) => QueuedPrompt[],
-  ) {
-    updateQueuedPrompts((current) => replaceAgentQueue(current, agentId, updater));
-  }
-
-  /** 入队；满员时返回 false，调用方应保留输入框内容并 toast。 */
-  function enqueueQueuedPrompt(agentId: string, queuedPrompt: QueuedPrompt): boolean {
-    const before = queuedPromptsRef.current[agentId]?.length ?? 0;
-    if (before >= QUEUED_PROMPT_LIMIT) return false;
-    updateQueuedPrompts((current) => enqueuePrompt(current, agentId, queuedPrompt));
-    return (queuedPromptsRef.current[agentId]?.length ?? 0) > before;
-  }
-
-  function appendUnknownQueuedPrompt(
-    agentId: string,
-    queuedPrompt: QueuedPrompt,
-    error?: string,
-  ) {
-    setAgentQueuedPrompts(agentId, (current) => {
-      if (current.length >= QUEUED_PROMPT_LIMIT) return current;
-      return [
-        ...current,
-        { ...queuedPrompt, status: "unknown", error },
-      ];
-    });
-  }
-
-  function retractQueuedPrompt(agentId: string, promptId: string) {
-    updateQueuedPrompts((current) => retractPrompt(current, agentId, promptId));
-  }
-
-  /** 丢弃：pending/failed 走 retract；unknown 仅移除提示（不重发）。sending 不可丢弃。 */
-  function discardQueuedPrompt(agentId: string, promptId: string) {
-    const live = queuedPromptsRef.current[agentId]?.find((item) => item.id === promptId);
-    if (!live || live.status === "sending") return;
-    if (live.status === "unknown") {
-      updateQueuedPrompts((current) =>
-        acknowledgeUnknownPrompt(current, agentId, promptId),
-      );
-      return;
-    }
-    retractQueuedPrompt(agentId, promptId);
-  }
-
-  function retractQueuedPromptForEdit(agentId: string, queuedPrompt: QueuedPrompt) {
-    const livePrompt = queuedPromptsRef.current[agentId]?.find(
-      (promptItem) => promptItem.id === queuedPrompt.id,
-    );
-    if (
-      !livePrompt ||
-      livePrompt.status === "sending" ||
-      livePrompt.status === "unknown"
-    ) return;
-    retractQueuedPrompt(agentId, livePrompt.id);
-    const currentDraft =
-      livePromptByAgentRef.current[agentId] ?? promptByAgent[agentId] ?? "";
-    const restoredPrompt = [livePrompt.displayText, currentDraft]
-      .filter((text) => text.trim())
-      .join("\n\n");
-    setPromptForAgent(agentId, restoredPrompt);
-    if (livePrompt.images?.length) {
-      setAttachedImagesForAgent(agentId, (current) => [
-        ...livePrompt.images!,
-        ...current,
-      ]);
-    }
-    setComposerAgentModeForAgent(agentId, livePrompt.agentMode);
-    if (activeAgentIdRef.current === agentId) {
-      setComposerCursor(restoredPrompt.length);
-      pendingComposerCaretRef.current = restoredPrompt.length;
-      requestAnimationFrame(() => {
-        const editor = composerTextareaRef.current;
-        editor?.focus();
-        if (editor) editor.scrollTop = editor.scrollHeight;
-      });
-    }
-  }
-
-  function isAgentCurrentlyBusy(agentId: string) {
-    const agent = displayAgentsRef.current.find((item) => item.id === agentId);
-    const runtimeState = runtimeStateByAgentRef.current[agentId];
-    return Boolean(
-      agent?.status === "starting" ||
-      agent?.status === "running" ||
-      runtimeState?.isStreaming ||
-      runtimeState?.isExecutingTool,
-    );
-  }
-
-  function canFlushQueuedPrompt(agentId: string) {
-    const agent = displayAgentsRef.current.find((item) => item.id === agentId);
-    return agent?.status === "idle" && !isAgentCurrentlyBusy(agentId);
-  }
-
-  async function flushQueuedSteerPrompts(agentId: string) {
-    if (queueFlushByAgentRef.current.has(agentId) || !isAgentCurrentlyBusy(agentId)) return;
-    queueFlushByAgentRef.current.add(agentId);
-    try {
-      // Keep one lock for the whole ordered batch. Releasing it between items would let a second
-      // tool-end/idle event claim the next snapshot while this loop is still advancing.
-      while (isAgentCurrentlyBusy(agentId)) {
-        const claimed = claimNextSteerPrompt(queuedPromptsRef.current, agentId);
-        if (!claimed.prompt) break;
-        const queuedPrompt = claimed.prompt;
-        queuedPromptsRef.current = claimed.queues;
-        setQueuedPrompts(claimed.queues);
-
-        try {
-          await dispatchPromptSnapshot(
-            agentId,
-            queuedPrompt.message,
-            queuedPrompt.images,
-            "steer",
-            queuedPrompt.agentMode,
-            queuedPrompt.templateDescription,
-          );
-          updateQueuedPrompts((current) =>
-            resolveClaimedPrompt(current, agentId, queuedPrompt.id, {
-              type: "accepted",
-            }),
-          );
-        } catch (error) {
-          const errorMessage = error instanceof Error ? error.message : String(error);
-          const deliveryUnknown = error instanceof PromptDeliveryUnknownError;
-          updateQueuedPrompts((current) =>
-            resolveClaimedPrompt(current, agentId, queuedPrompt.id, {
-              type: deliveryUnknown ? "unknown" : "failed",
-              error: errorMessage,
-            }),
-          );
-          showToast(
-            deliveryUnknown ? t("app.queuedUnknown") : errorMessage,
-            deliveryUnknown ? 6000 : 4000,
-          );
-          // Explicit failure and unknown delivery are ordering barriers. Later steer snapshots
-          // stay local until the user resolves this entry.
-          break;
-        }
-      }
-    } finally {
-      queueFlushByAgentRef.current.delete(agentId);
-      // agent_settled may arrive while the RPC is in flight. Once the ordered batch unlocks,
-      // continue through the normal serial idle drain rather than leaving the queue stranded.
-      if (canFlushQueuedPrompt(agentId)) {
-        void flushNextQueuedPrompt(agentId);
-      }
-    }
-  }
-
-  /** Paseo 同款串行策略：agent 每次空闲只发送队首，其余消息继续可撤回。 */
-  async function flushNextQueuedPrompt(agentId: string) {
-    if (queueFlushByAgentRef.current.has(agentId) || !canFlushQueuedPrompt(agentId)) return;
-    const claimed = claimIdleHead(queuedPromptsRef.current, agentId);
-    if (!claimed.prompt) return;
-    const queuedPrompt = claimed.prompt;
-
-    queuedPromptsRef.current = claimed.queues;
-    setQueuedPrompts(claimed.queues);
-    queueFlushByAgentRef.current.add(agentId);
-    try {
-      await dispatchPromptSnapshot(
-        agentId,
-        queuedPrompt.message,
-        queuedPrompt.images,
-        queuedPrompt.behavior === "direct" ? undefined : queuedPrompt.behavior,
-        queuedPrompt.agentMode,
-        queuedPrompt.templateDescription,
-      );
-      updateQueuedPrompts((current) =>
-        resolveClaimedPrompt(current, agentId, queuedPrompt.id, {
-          type: "accepted",
-        }),
-      );
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      const deliveryUnknown = error instanceof PromptDeliveryUnknownError;
-      updateQueuedPrompts((current) =>
-        resolveClaimedPrompt(current, agentId, queuedPrompt.id, {
-          type: deliveryUnknown ? "unknown" : "failed",
-          error: errorMessage,
-        }),
-      );
-      showToast(
-        deliveryUnknown ? t("app.queuedUnknown") : errorMessage,
-        deliveryUnknown ? 6000 : 4000,
-      );
-    } finally {
-      queueFlushByAgentRef.current.delete(agentId);
-      // 扩展命令可能预检成功后仍保持 idle；等待主进程 running/idle 推送落地后再判断，
-      // 避免 IPC 事件尚未渲染时把多条普通 prompt 一次性并发发送。
-      window.setTimeout(() => {
-        if (canFlushQueuedPrompt(agentId)) {
-          void flushNextQueuedPrompt(agentId);
-        }
-      }, 150);
-    }
-  }
 
   async function exportAgentHtml(agentId: string) {
     if (isPendingAgentId(agentId)) return;
@@ -3375,12 +3179,12 @@ export function App() {
   // 处理所有 agent 的 idle 队列：隐藏会话也不会因切换选中项而卡住。
   // tool-end 的 steer 投递直接在 onRuntimeState 原始事件上处理，避免批量 render 漏边沿。
   useEffect(() => {
-    for (const agentId of Object.keys(queuedPrompts)) {
-      if (canFlushQueuedPrompt(agentId)) {
-        void flushNextQueuedPrompt(agentId);
+    for (const agentId of Object.keys(queue.queuedPrompts)) {
+      if (queue.canFlushQueuedPrompt(agentId)) {
+        void queue.flushNextQueuedPrompt(agentId);
       }
     }
-  }, [activeProjectRuntimeCapabilities, agents, queuedPrompts]);
+  }, [activeProjectRuntimeCapabilities, agents, queue.queuedPrompts]);
 
   useEffect(() => {
     return () => {
@@ -3543,7 +3347,7 @@ export function App() {
 
     };
     if (isAgentBusy) {
-      if (!enqueueQueuedPrompt(targetAgentId, queuedPromptSnapshot)) {
+      if (!queue.enqueueQueuedPrompt(targetAgentId, queuedPromptSnapshot)) {
         setPromptForAgent(targetAgentId, (current) =>
           [message, current].filter((text) => text.trim()).join("\n\n"),
         );
@@ -3564,7 +3368,7 @@ export function App() {
       templateDescription,
     );
     if (accepted === "unknown") {
-      appendUnknownQueuedPrompt(targetAgentId, {
+      queue.appendUnknownQueuedPrompt(targetAgentId, {
         ...queuedPromptSnapshot,
         behavior: "direct",
       });
@@ -3647,7 +3451,7 @@ export function App() {
       timestamp: Date.now(),
     };
     if (isAgentBusy) {
-      if (!enqueueQueuedPrompt(targetAgentId, queuedPromptSnapshot)) {
+      if (!queue.enqueueQueuedPrompt(targetAgentId, queuedPromptSnapshot)) {
         setPromptForAgent(targetAgentId, (current) =>
           [message, current].filter((text) => text.trim()).join("\n\n"),
         );
@@ -3667,7 +3471,7 @@ export function App() {
       currentComposerAgentMode,
     );
     if (accepted === "unknown") {
-      appendUnknownQueuedPrompt(targetAgentId, queuedPromptSnapshot);
+      queue.appendUnknownQueuedPrompt(targetAgentId, queuedPromptSnapshot);
       return;
     }
     if (!accepted) {
@@ -4449,7 +4253,7 @@ export function App() {
             activeAgent.status !== "starting" &&
             restartingAgentId !== activeAgentId &&
             !queueFlushByAgentRef.current.has(activeAgentId) &&
-            !(queuedPrompts[activeAgentId] ?? []).some(
+            !(queue.queuedPrompts[activeAgentId] ?? []).some(
               (queuedPrompt) =>
                 queuedPrompt.status === "sending" ||
                 queuedPrompt.status === "unknown",
@@ -4525,8 +4329,8 @@ export function App() {
                 agentId={activeAgentId}
                 prompts={activeQueuedPrompts}
                 visiblePrompts={visibleQueuedPrompts}
-                onRetract={retractQueuedPromptForEdit}
-                onDiscard={discardQueuedPrompt}
+                onRetract={queue.retractQueuedPromptForEdit}
+                onDiscard={queue.discardQueuedPrompt}
               />
             ) : undefined}
           />
