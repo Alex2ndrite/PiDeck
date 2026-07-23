@@ -147,6 +147,7 @@ import {
   QueuedPromptPanel,
 } from "./components/session/ComposerPanels";
 import { ScratchPadOverlay } from "./components/overlays/ScratchPadOverlay";
+import { AppUpdateOverlay } from "./components/overlays/AppUpdateOverlay";
 import { EnvironmentOverlay } from "./components/overlays/EnvironmentOverlay";
 import { SessionRuntimeUiOverlay, createSessionRuntimeUiResponder } from "./components/overlays/SessionRuntimeUiOverlay";
 import { LazyWrapper } from "./hooks/useLazyComponent";
@@ -1148,6 +1149,18 @@ export function App() {
   const [updateProgress, setUpdateProgress] = useState<AppUpdateDownloadProgress | null>(null);
   const [downloadedUpdatePath, setDownloadedUpdatePath] = useState<string | null>(null);
   const [upToDateVersion, setUpToDateVersion] = useState<string | null>(null);
+  const appUpdateController = useMemo(() => ({
+    info: updateInfo,
+    error: updateError,
+    checking: updateChecking,
+    downloading: updateDownloading,
+    progress: updateProgress,
+    downloadedPath: downloadedUpdatePath,
+    download: async () => { await downloadAppUpdate(); return downloadedUpdatePath; },
+    install: async () => { if (downloadedUpdatePath) await api.app.installUpdate(downloadedUpdatePath); },
+    clear: () => { setUpdateInfo(null); setUpdateError(null); setUpdateProgress(null); setDownloadedUpdatePath(null); setUpToDateVersion(null); },
+    check: undefined as unknown as (source?: "auto" | "manual") => Promise<AppUpdateInfo | null>,
+  }), [updateInfo, updateError, updateChecking, updateDownloading, updateProgress, downloadedUpdatePath]);
   const [piUpdating, setPiUpdating] = useState(false);
   const [piUpdateChecking, setPiUpdateChecking] = useState(false);
   const [piUpdateCheck, setPiUpdateCheck] = useState<PiUpdateCheckResult | null>(null);
@@ -6503,44 +6516,13 @@ export function App() {
           loadEnvironment={api.app.feedbackEnvironment}
         />
       )}
-      {updateInfo && (
-        <UpdateModal
-          info={updateInfo}
-          checking={updateChecking}
-          downloading={updateDownloading}
-          progress={updateProgress}
-          downloadedPath={downloadedUpdatePath}
-          onClose={() => setUpdateInfo(null)}
-          onOpenRelease={() => api.app.openExternal(updateInfo.releaseUrl)}
-          onDownload={() => void downloadAppUpdate()}
-          onInstall={() => void installDownloadedAppUpdate()}
-          onBrowserDownload={() =>
-            api.app.openExternal(
-              updateInfo.recommendedAsset?.url ?? updateInfo.releaseUrl,
-            )
-          }
-        />
-      )}
-      {updateError && (
-        <Suspense fallback={null}>
-        <UpdateErrorModalLazy
-          message={updateError}
-          releasesUrl={appInfo.releasesUrl}
-          onClose={() => setUpdateError(null)}
-          onOpenRelease={() => api.app.openExternal(appInfo.releasesUrl)}
-        />
-      </Suspense>
-      )}
-      {upToDateVersion && (
-        <Suspense fallback={null}>
-        <UpToDateModalLazy
-          version={upToDateVersion}
-          releasesUrl={appInfo.releasesUrl}
-          onClose={() => setUpToDateVersion(null)}
-          onOpenRelease={() => api.app.openExternal(appInfo.releasesUrl)}
-        />
-      </Suspense>
-      )}
+      <AppUpdateOverlay
+        controller={appUpdateController}
+        releasesUrl={appInfo.releasesUrl}
+        openExternal={(url) => api.app.openExternal(url)}
+        upToDateVersion={upToDateVersion}
+        onDismissUpToDate={() => setUpToDateVersion(null)}
+      />
       {editorMode === "modal" && activeTab && gitDiffDisplayMode !== "modal" && (
         <Suspense fallback={<div className="modal-backdrop"><span className="file-diff-loading">Loading...</span></div>}>
         <FileDiffViewer
