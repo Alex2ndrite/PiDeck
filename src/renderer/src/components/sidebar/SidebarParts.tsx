@@ -1,10 +1,2 @@
-// Re-export Sidebar-owned symbols from AppParts.
-export {
-  ProjectAvatar,
-  AgentContextMenu,
-  ProjectContextMenu,
-  SessionContextMenu,
-  SessionManagerModal,
-  WorktreeCreateDialog,
-  RpcLogModal,
-} from "../app/AppParts";
+// Re-export Sidebar-owned symbols.
+export { SessionManagerModal, ProjectContextMenu, AgentContextMenu, SessionContextMenu, ProjectAvatar, WorktreeCreateDialog, RpcLogModal } from "./SidebarComponents";
