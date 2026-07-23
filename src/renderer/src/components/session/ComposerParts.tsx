@@ -1,4 +1,2 @@
-// Re-export Composer-owned symbols from AppParts.
-export { ComposerToolbar, ImagePreviewModal, PromptSuggestions } from "../app/AppParts";
-export { ModelPicker, PromptTemplatePicker, ThinkingPicker, ComposerModePicker } from "../app/AppParts";
-export { ExtensionWidgetCard } from "../app/AppParts";
+export { ComposerToolbar, ModelPicker, PromptTemplatePicker, ThinkingPicker, ComposerModePicker, ExtensionWidgetCard } from "./ComposerComponents";
+export { ImagePreviewModal, PromptSuggestions } from "../app/AppParts";
