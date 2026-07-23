@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import type { MutableRefObject } from "react";
 import type { createStore } from "jotai";
 import type {
@@ -82,13 +82,15 @@ export function useQueuedPrompt(options: UseQueuedPromptOptions) {
 
   const [queuedPrompts, setQueuedPrompts] = useState<Record<string, QueuedPrompt[]>>({});
   const queuedPromptsRef = useRef<Record<string, QueuedPrompt[]>>({});
+  const mountedRef = useRef(true);
+  useEffect(() => () => { mountedRef.current = false; }, []);
 
   function updateQueuedPrompts(
     updater: (current: Record<string, QueuedPrompt[]>) => Record<string, QueuedPrompt[]>,
   ) {
     const next = updater(queuedPromptsRef.current);
     queuedPromptsRef.current = next;
-    setQueuedPrompts(next);
+    if (mountedRef.current) setQueuedPrompts(next);
   }
 
   function setAgentQueuedPrompts(

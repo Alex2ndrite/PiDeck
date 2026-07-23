@@ -62,7 +62,7 @@ export function useOverlayActions({ activeProject, appInfo, showToast }: UseOver
         setTrustRequest(null);
       },
     } : undefined,
-  }), [feedbackOpen, activeProject, appInfo, confirmDialog, trustRequest]);
+  }), [feedbackOpen, activeProject, appInfo, confirmDialog, trustRequest, showToast]);
 
   return {
     confirmDialog,

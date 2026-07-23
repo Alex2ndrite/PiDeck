@@ -857,6 +857,18 @@ export function App() {
     if (drawer === "git") workspace.closeDrawer();
   }, [settings.enableGitManagement, drawer, workspace.closeDrawer]);
 
+  // Click-outside close for editor popover (replaces deleted editorsRef effect).
+  useEffect(() => {
+    if (!editorsOpen) return;
+    const handler = (event: MouseEvent) => {
+      if (editorsPopoverRef.current && !editorsPopoverRef.current.contains(event.target as Node)) {
+        workspace.closeExternalEditorChooser();
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [editorsOpen, workspace.closeExternalEditorChooser]);
+
   /* settingsNotice 已改用 showToast (app-notice) 实现 */
   const [webServiceChanging, setWebServiceChanging] = useState(false);
   const [appInfo, setAppInfo] = useState<AppInfo>({
@@ -899,6 +911,7 @@ export function App() {
     useState(false);
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set());
   const sessionComboRef = useRef<HTMLDivElement | null>(null);
+  const editorsPopoverRef = useRef<HTMLDivElement | null>(null);
   const queuedTrackRef = useRef<HTMLDivElement | null>(null);
   const timelineRef = useRef<HTMLElement | null>(null);
   const composerTextareaRef = useRef<HTMLDivElement | null>(null);
@@ -1987,10 +2000,10 @@ export function App() {
   }
 
   // Clamp composer height when layout changes (useSessionLayout handles ResizeObserver).
-  useEffect(() => {
+  useLayoutEffect(() => {
     setComposerHeight((current) => sessionClampComposerHeight(current));
     setComposerOffsetHeight(composerRef.current?.offsetHeight ?? 0);
-  });
+  }, [sessionClampComposerHeight, composerRef]);
 
   useEffect(() => {
     if (activeAgentId && !isPendingAgentId(activeAgentId))
@@ -4568,6 +4581,7 @@ export function App() {
       {/* 外部编辑器选择气泡 */}
       {editorsOpen && editorsAnchor && (
         <div
+          ref={editorsPopoverRef}
           className="editors-popover"
           style={{
             position: "fixed",
