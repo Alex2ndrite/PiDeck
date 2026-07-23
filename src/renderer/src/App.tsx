@@ -57,7 +57,7 @@ import { useGitFlow } from "./hooks/useGitFlow";
 import { useImportFlow } from "./hooks/useImportFlow";
 import { useImagePaste } from "./hooks/useImagePaste";
 import { useQueuedPrompt, type QueuedPrompt } from "./hooks/useQueuedPrompt";
-import { PromptDeliveryUnknownError } from "./hooks/useComposerSend";
+import { PromptDeliveryUnknownError } from "./utils/promptErrors";
 
 import { usePiUpdate } from "./hooks/usePiUpdate";
 import { useAppUpdateController } from "./hooks/useAppUpdateController";
@@ -544,9 +544,9 @@ export function App() {
   const editorsAnchor = workspace.externalEditorsAnchor;
   const editorsTargetPath = workspace.externalEditorsTargetPath;
   // Adapters for useFileEditor (expects setDrawer/setDrawerCollapsed).
-  const setDrawer = useCallback((panel: DrawerPanel | null) => {
+  const setDrawer = useCallback((panel: WorkspaceDrawerPanel | null) => {
     // Open guard for git is handled by the enableGitManagement effect below.
-    if (panel) workspace.openDrawer(panel as any);
+    if (panel) workspace.openDrawer(panel);
     else workspace.closeDrawer();
   }, [workspace.openDrawer, workspace.closeDrawer]);
   const setDrawerCollapsed = useCallback((collapsed: boolean) => {
@@ -3221,7 +3221,7 @@ export function App() {
         ref={composerRef}
         sessionId={currentSessionId}
         onOpenFile={openFilePath}
-        enqueue={enqueueSessionPrompt as any}
+        enqueue={enqueueSessionPrompt}
         queuePanel={activeAgentId ? (
           <QueuedPromptPanel
             trackRef={queuedTrackRef}
@@ -3929,9 +3929,9 @@ export function App() {
         onClose={() => setPreviewImage(null)}
       />
     )}
-    {codexImportProject && <ImportOverlayHost kind="codex" project={codexImportProject} controller={codexImportController as any} onClose={() => setCodexImportProject(null)} />}
-    {claudeImportProject && <ImportOverlayHost kind="claude" project={claudeImportProject} controller={claudeImportController as any} onClose={() => setClaudeImportProject(null)} />}
-    {openCodeImportProject && <ImportOverlayHost kind="opencode" project={openCodeImportProject} controller={openCodeImportController as any} onClose={() => setOpenCodeImportProject(null)} />}
+    {codexImportProject && <ImportOverlayHost kind="codex" project={codexImportProject} controller={codexImportController} onClose={() => setCodexImportProject(null)} />}
+    {claudeImportProject && <ImportOverlayHost kind="claude" project={claudeImportProject} controller={claudeImportController} onClose={() => setClaudeImportProject(null)} />}
+    {openCodeImportProject && <ImportOverlayHost kind="opencode" project={openCodeImportProject} controller={openCodeImportController} onClose={() => setOpenCodeImportProject(null)} />}
     <Suspense fallback={null}>
     <ConfigModal
       open={configOpen}

@@ -22,7 +22,7 @@ export interface ImportController<T = unknown, R = unknown> {
   importing: boolean;
   report: R | null;
   error: string | null;
-  refresh: () => void;
+  refresh: () => Promise<void>;
   toggle: (sourcePath: string) => void;
   toggleAll: () => void;
   importSelected: () => Promise<R | null>;

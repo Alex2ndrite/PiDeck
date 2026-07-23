@@ -24,6 +24,13 @@ import {
   expandPromptTemplates,
 } from "../composerBehavior";
 
+export type EnqueuePromptSnapshot = {
+  displayText: string;
+  message: string;
+  images?: ImageContent[];
+  agentMode: string;
+};
+
 type PromptTemplate = {
   name: string;
   path: string;
@@ -53,12 +60,7 @@ export type UseSessionSendOptions = {
   showUnknown?: () => void;
   showCompactUnavailable?: () => void;
   /** Called when streamingBehavior is "steer" before sending. Returns true if enqueued. */
-  enqueue?: (sessionId: string, snapshot: {
-    displayText: string;
-    message: string;
-    images?: ImageContent[];
-    agentMode: string;
-  }) => boolean;
+  enqueue?: (sessionId: string, snapshot: EnqueuePromptSnapshot) => boolean;
   /**
    * Temporary A8 compatibility only. It mirrors contentEditable input but is never the
    * persistent draft source; all send snapshots and restoration are atom-backed.

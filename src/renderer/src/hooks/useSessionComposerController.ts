@@ -54,7 +54,7 @@ import {
   processComposerImageFile,
 } from "../utils/composerImages";
 import { showNotice } from "../utils/notice";
-import { useSessionSend } from "./useSessionSend";
+import { useSessionSend, type EnqueuePromptSnapshot } from "./useSessionSend";
 
 export type ComposerPickerKind = "model" | "mode" | "thinking" | "template";
 
@@ -62,8 +62,7 @@ export type UseSessionComposerControllerOptions = {
   sessionId: string;
   onOpenFile?: (path: string) => void;
   /** Passed through to useSessionSend.enqueue. */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  enqueue?: (sessionId: string, snapshot: Record<string, any>) => boolean;
+  enqueue?: (sessionId: string, snapshot: EnqueuePromptSnapshot) => boolean;
 };
 
 export type ComposerDraftGuard = {

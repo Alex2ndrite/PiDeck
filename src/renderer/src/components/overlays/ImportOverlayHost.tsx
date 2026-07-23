@@ -5,32 +5,20 @@ import {
 	OpenCodeImportModal,
 } from "../app/ImportModals";
 import type {
-	ClaudeImportReport,
-	ClaudeSessionSummary,
-	CodexImportReport,
-	CodexSessionSummary,
-	OpenCodeImportReport,
-	OpenCodeSessionSummary,
-	Project,
+  CodexImportReport,
+  CodexSessionSummary,
+  ClaudeImportReport,
+  ClaudeSessionSummary,
+  OpenCodeImportReport,
+  OpenCodeSessionSummary,
+  Project,
 } from "../../../../shared/types";
-
-type ImportControllerView<TSummary, TReport> = {
-	sessions: TSummary[];
-	selectedPaths: string[];
-	loading: boolean;
-	importing: boolean;
-	report: TReport | null;
-	error: string | null;
-	refresh: () => Promise<void>;
-	toggle: (sourcePath: string) => void;
-	toggleAll: () => void;
-	importSelected: () => Promise<TReport | null>;
-};
+import type { ImportController } from "../../hooks/useImportFlow";
 
 export type ImportOverlayHostProps =
-	| { kind: "codex"; project: Project; controller: ImportControllerView<CodexSessionSummary, CodexImportReport>; onClose: () => void }
-	| { kind: "claude"; project: Project; controller: ImportControllerView<ClaudeSessionSummary, ClaudeImportReport>; onClose: () => void }
-	| { kind: "opencode"; project: Project; controller: ImportControllerView<OpenCodeSessionSummary, OpenCodeImportReport>; onClose: () => void };
+  | { kind: "codex"; project: Project; controller: ImportController<CodexSessionSummary, CodexImportReport>; onClose: () => void }
+  | { kind: "claude"; project: Project; controller: ImportController<ClaudeSessionSummary, ClaudeImportReport>; onClose: () => void }
+  | { kind: "opencode"; project: Project; controller: ImportController<OpenCodeSessionSummary, OpenCodeImportReport>; onClose: () => void };
 
 export function renderImportError(error: string | null): ReactNode {
 	if (!error) return null;

@@ -27,7 +27,7 @@ import {
 } from "../atoms/composer-atoms";
 import { sessionIdByRuntimeAgentIdAtomFamily } from "../atoms/session-selectors";
 import { runtimeCapabilityByAgentIdAtomFamily } from "../atoms/runtime-atoms";
-import { PromptDeliveryUnknownError } from "./useComposerSend";
+import { PromptDeliveryUnknownError } from "../utils/promptErrors";
 
 export type QueuedPrompt = QueuedPromptSnapshot;
 

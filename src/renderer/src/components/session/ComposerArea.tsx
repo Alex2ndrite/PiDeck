@@ -17,6 +17,7 @@ import {
 import { ComposerPickerHost } from "./ComposerPickerHost";
 import { ComposerRuntimeIntegrations } from "./ComposerRuntimeIntegrations";
 import { desktopApi } from "../../desktopApi";
+import type { EnqueuePromptSnapshot } from "../../hooks/useSessionSend";
 
 const COMPOSER_MIN_HEIGHT = 175;
 
@@ -26,8 +27,7 @@ export type ComposerAreaProps = {
   statusText?: string;
   onOpenFile?: (path: string) => void;
   onHeightChange?: (height: number) => void;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  enqueue?: (sessionId: string, snapshot: Record<string, any>) => boolean;
+  enqueue?: (sessionId: string, snapshot: EnqueuePromptSnapshot) => boolean;
 };
 
 export const ComposerArea = forwardRef<HTMLElement, ComposerAreaProps>(function ComposerArea(

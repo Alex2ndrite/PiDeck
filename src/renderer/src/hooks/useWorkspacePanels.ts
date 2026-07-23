@@ -93,11 +93,6 @@ export type WorkspaceGitResourceAdapter = {
   ) => Promise<(GitWorkspaceFileDiff & { originalPath?: string }) | null>;
 };
 
-export type WorkspaceFileAdapter = {
-  readContent: (path: string) => Promise<string>;
-  writeContent: (path: string, content: string) => Promise<void>;
-};
-
 export type WorkspaceExternalEditorAdapter = {
   list: () => Promise<ExternalEditor[]>;
   openProject: (editor: ExternalEditor, projectPath: string) => Promise<void>;
@@ -105,53 +100,11 @@ export type WorkspaceExternalEditorAdapter = {
 
 export type WorkspacePanelOptions = {
   projectId?: string | null;
-  files?: WorkspaceFileAdapter;
   git?: WorkspaceGitResourceAdapter;
   editors?: WorkspaceExternalEditorAdapter;
   storage?: Pick<Storage, "getItem" | "setItem">;
   drawerStoragePrefix?: string;
-  editorTabLimit?: number;
-  editorTextBudget?: number;
 };
-
-export type OpenEditorTabOptions = {
-  originalContent?: string;
-  modifiedContent?: string;
-  allowSave?: boolean;
-  tabKey?: string;
-  label?: string;
-  preserveDrawer?: boolean;
-};
-
-export function editorTabTextBytes(tab: Pick<WorkspaceEditorTab, "originalContent" | "modifiedContent">) {
-  return (tab.originalContent.length + (tab.modifiedContent?.length ?? 0)) * 2;
-}
-
-/** LRU eviction never removes the tab the caller just opened. */
-export function trimEditorTabs(
-  tabs: WorkspaceEditorTab[],
-  protectedId: string,
-  limit = EDITOR_TAB_LIMIT,
-  textBudget = EDITOR_TAB_TEXT_BUDGET,
-) {
-  const next = [...tabs];
-  let textBytes = next.reduce((sum, tab) => sum + editorTabTextBytes(tab), 0);
-  while (next.length > 1 && (next.length > limit || textBytes > textBudget)) {
-    const candidates = next.filter((tab) => tab.id !== protectedId);
-    if (candidates.length === 0) break;
-    const oldest = candidates.reduce((left, right) =>
-      left.lastAccess <= right.lastAccess ? left : right,
-    );
-    const index = next.findIndex((tab) => tab.id === oldest.id);
-    const removed = next.splice(index, 1)[0];
-    if (removed) textBytes -= editorTabTextBytes(removed);
-  }
-  return next;
-}
-
-function makeId() {
-  return globalThis.crypto?.randomUUID?.() ?? `workspace-tab-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-}
 
 function readDrawerState(storage: WorkspacePanelOptions["storage"], key: string) {
   if (!storage) return null;
@@ -184,24 +137,14 @@ function writeDrawerState(
 export function useWorkspacePanels(options: WorkspacePanelOptions = {}) {
   const projectId = options.projectId ?? null;
   const projectIdRef = useRef(projectId);
-  const filesRef = useRef(options.files);
   const gitRef = useRef(options.git);
   const editorsRef = useRef(options.editors);
   const storageRef = useRef(options.storage ?? (typeof window !== "undefined" ? window.localStorage : undefined));
   const drawerPrefixRef = useRef(options.drawerStoragePrefix ?? "pid:project-drawer:");
-  const limitsRef = useRef({
-    limit: options.editorTabLimit ?? EDITOR_TAB_LIMIT,
-    budget: options.editorTextBudget ?? EDITOR_TAB_TEXT_BUDGET,
-  });
   projectIdRef.current = projectId;
-  filesRef.current = options.files;
   gitRef.current = options.git;
   editorsRef.current = options.editors;
   storageRef.current = options.storage ?? (typeof window !== "undefined" ? window.localStorage : undefined);
-  limitsRef.current = {
-    limit: options.editorTabLimit ?? EDITOR_TAB_LIMIT,
-    budget: options.editorTextBudget ?? EDITOR_TAB_TEXT_BUDGET,
-  };
 
   const [gitDiff, setGitDiff] = useState<WorkspaceGitDiffSnapshot | null>(null);
   const [gitDiffDisplayMode, setGitDiffDisplayMode] = useState<"modal" | "drawer">("drawer");
@@ -287,86 +230,6 @@ export function useWorkspacePanels(options: WorkspacePanelOptions = {}) {
     });
     saveDrawerState(id, currentDrawer, willPin);
   }, [saveDrawerState]);
-
-  const [editorTabs, setEditorTabs] = useState<WorkspaceEditorTab[]>([]);
-  const [activeTabId, setActiveTabId] = useState<string | null>(null);
-  const activeTabIdRef = useRef<string | null>(null);
-  activeTabIdRef.current = activeTabId;
-  const editorSequenceRef = useRef(0);
-  const activeTab = useMemo(
-    () => editorTabs.find((tab) => tab.id === activeTabId) ?? null,
-    [activeTabId, editorTabs],
-  );
-
-  const openEditorTab = useCallback((path: string, mode: WorkspaceEditorMode, tabOptions: OpenEditorTabOptions = {}) => {
-    setEditorTabs((current) => {
-      const existing = current.find((tab) => tab.filePath === path && tab.tabKey === tabOptions.tabKey);
-      const lastAccess = ++editorSequenceRef.current;
-      if (existing) {
-        const updated = {
-          ...existing,
-          mode,
-          originalContent: tabOptions.originalContent ?? "",
-          modifiedContent: tabOptions.modifiedContent,
-          allowSave: tabOptions.allowSave ?? true,
-          tabKey: tabOptions.tabKey,
-          label: tabOptions.label,
-          preserveDrawer: tabOptions.preserveDrawer ?? false,
-          lastAccess,
-        };
-        setActiveTabId(existing.id);
-        return trimEditorTabs(current.map((tab) => tab.id === existing.id ? updated : tab), existing.id, limitsRef.current.limit, limitsRef.current.budget);
-      }
-      const nextTab: WorkspaceEditorTab = {
-        id: makeId(),
-        filePath: path,
-        mode,
-        originalContent: tabOptions.originalContent ?? "",
-        modifiedContent: tabOptions.modifiedContent,
-        allowSave: tabOptions.allowSave ?? true,
-        tabKey: tabOptions.tabKey,
-        label: tabOptions.label,
-        preserveDrawer: tabOptions.preserveDrawer ?? false,
-        lastAccess,
-      };
-      setActiveTabId(nextTab.id);
-      return trimEditorTabs([...current, nextTab], nextTab.id, limitsRef.current.limit, limitsRef.current.budget);
-    });
-  }, []);
-
-  const closeEditorTab = useCallback((tabId: string) => {
-    setEditorTabs((current) => {
-      const index = current.findIndex((tab) => tab.id === tabId);
-      if (index < 0) return current;
-      const next = current.filter((tab) => tab.id !== tabId);
-      if (activeTabIdRef.current === tabId) setActiveTabId(next[Math.min(index, next.length - 1)]?.id ?? null);
-      return next;
-    });
-  }, []);
-
-  const selectEditorTab = useCallback((tabId: string) => {
-    editorSequenceRef.current += 1;
-    setEditorTabs((current) => current.map((tab) => tab.id === tabId ? { ...tab, lastAccess: editorSequenceRef.current } : tab));
-    setActiveTabId(tabId);
-  }, []);
-
-  const clearEditorTabs = useCallback(() => {
-    setEditorTabs([]);
-    setActiveTabId(null);
-  }, []);
-
-  useEffect(() => {
-    if (!editorTabs.length && drawer === "editor") setDrawer(null);
-  }, [drawer, editorTabs.length]);
-
-  const readContent = useCallback((path: string) => {
-    const read = filesRef.current?.readContent;
-    return read ? read(path) : Promise.reject(new Error("File read service is unavailable"));
-  }, []);
-  const writeContent = useCallback((path: string, content: string) => {
-    const write = filesRef.current?.writeContent;
-    return write ? write(path, content) : Promise.reject(new Error("File write service is unavailable"));
-  }, []);
 
   const closeGitDiff = useCallback(() => {
     invalidateGitDiff();
@@ -501,14 +364,6 @@ export function useWorkspacePanels(options: WorkspacePanelOptions = {}) {
     collapseDrawer,
     expandDrawer,
     toggleDrawerPinned,
-    editorTabs,
-    activeTab,
-    activeTabId,
-    openEditorTab,
-    closeEditorTab,
-    selectEditorTab,
-    clearEditorTabs,
-    editorIo: { readContent, writeContent },
     gitDiff,
     gitDiffDisplayMode,
     closeGitDiff,
