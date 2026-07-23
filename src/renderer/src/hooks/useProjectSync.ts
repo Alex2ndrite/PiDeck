@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import type { Project, FileTreeNode, GitBranchInfo, WorktreeEntry, SessionSummary, SessionRecord } from "../../../../shared/types";
+import type { Project, FileTreeNode, GitBranchInfo, WorktreeEntry, SessionSummary, SessionRecord } from "../../../shared/types";
 
 const SESSION_REFRESH_TIMEOUT_MS = 20_000;
 const SIDEBAR_PROJECT_CHILD_PAGE_SIZE = 5;
@@ -116,5 +116,5 @@ export function useProjectSync(input: UseProjectSyncInput) {
     if (!silent) showToast(t("app.filesRefreshed", {}), 1800);
   }
 
-  return { worktreesByProject, branchByProject, files, gitInfo, setGitInfo, sessionLoadingByProject, visibleProjectChildCountByProject, refreshProjects, refreshWorktrees, refreshSessions, refreshProjectSessions, refreshFiles, refreshProjectTree };
+  return { worktreesByProject, branchByProject, files, setFiles, gitInfo, setGitInfo, sessionLoadingByProject, visibleProjectChildCountByProject, refreshProjects, refreshWorktrees, refreshSessions, refreshProjectSessions, refreshFiles, refreshProjectTree };
 }

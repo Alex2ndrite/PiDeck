@@ -35,9 +35,7 @@ import {
   FolderOpen,
   FolderCog,
   Globe,
-  Pin,
   Pencil,
-  Square,
   Terminal,
   Filter,
   GitBranch,
@@ -52,7 +50,6 @@ import {
 } from "./desktopApi";
 const ConfigModal = lazy(() => import("./ConfigModal").then((m) => ({ default: m.ConfigModal })));
 import { TerminalDock } from "./components/terminal/TerminalDock";
-import { FeishuLinkIndicator } from "./components/feishu/FeishuLinkIndicator";
 import {
   SidebarContent,
   type SidebarActions,
@@ -252,22 +249,6 @@ const COMPOSER_DEFAULT_TERMINAL_HEIGHT = 220;
 const COMPOSER_MIN_TIMELINE_HEIGHT = 160;
 const TERMINAL_DOCK_MOTION_MS = 180;
 const SIDEBAR_PROJECT_CHILD_PAGE_SIZE = 5;
-const SESSION_REFRESH_TIMEOUT_MS = 20_000;
-
-function withTimeout<T>(
-  promise: Promise<T>,
-  timeoutMs: number,
-  message: string,
-): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<never>((_resolve, reject) => {
-    timer = setTimeout(() => reject(new Error(message)), timeoutMs);
-  });
-  return Promise.race([promise, timeout]).finally(() => {
-    if (timer) clearTimeout(timer);
-  });
-}
-
 function displayProjectDirectoryName(project: Project) {
   if (isChatProject(project)) return "Chat";
   const normalizedPath = project.path.replace(/\\/g, "/").replace(/\/+$/, "");
@@ -484,10 +465,6 @@ export function App() {
   });
 
   // 项目的 git worktree 列表：{ parentId -> WorktreeEntry[] }
-  const [worktreesByProject, setWorktreesByProject] = useState<
-    Record<string, WorktreeEntry[]>
-  >({});
-  const [branchByProject, setBranchByProject] = useState<Record<string, string | null>>({});
   const [draggingProjectId, setDraggingProjectId] = useState<string>();
   const [dragOverProjectId, setDragOverProjectId] = useState<string>();
   const [pendingAgents, setPendingAgents] = useState<PendingAgentTab[]>([]);
@@ -509,20 +486,7 @@ export function App() {
     new Set(),
   );
 
-  const [files, setFiles] = useState<FileTreeNode[]>([]);
-  /** 会话扫描可能由项目展开、运行态结束和周期同步同时触发；按项目丢弃旧响应，避免慢请求覆盖新子会话。 */
-  const sessionRequestByProjectRef = useRef<Record<string, number>>({});
-  const sessionRefreshRunningRef = useRef<Set<string>>(new Set());
-  const sessionRefreshPendingRef = useRef<Set<string>>(new Set());
-  const [sessionLoadingByProject, setSessionLoadingByProject] = useState<
-    Record<string, boolean>
-  >({});
-  const [visibleProjectChildCountByProject, setVisibleProjectChildCountByProject] =
-    useState<Record<string, number>>({});
-  const [gitInfo, setGitInfo] = useState<GitBranchInfo>({
-    current: null,
-    branches: [],
-  });
+
   const [commands, setCommands] = useState<PiCommand[]>([]);
   const runtimeStateByAgentRef = useRef<Record<string, AgentRuntimeState>>({});
   const [availableModels, setAvailableModels] = useState<AvailableModel[]>([]);
@@ -2530,117 +2494,6 @@ export function App() {
   }
 
   async function refreshProjects() {
-    const next = await api.projects.list();
-    setProjects(next);
-    if (!activeProjectId && next.length > 0) setActiveProjectId(next[0].id);
-    // 启动时刷新所有 worktree 项目的分支列表
-    for (const p of next) {
-      if (p.worktreeEnabled) {
-        void refreshWorktrees(p.id);
-      }
-    }
-  }
-
-  async function refreshWorktrees(projectId: string) {
-    try {
-      const [entries, branchInfo] = await Promise.all([
-        api.git.worktreeList(projectId),
-        api.git.branches(projectId).catch(() => ({ current: null, branches: [] })),
-      ]);
-      setWorktreesByProject((prev) => ({ ...prev, [projectId]: entries }));
-      setBranchByProject((prev) => ({ ...prev, [projectId]: branchInfo.current }));
-      // 刷新项目列表（可能已有新注册的 worktree 子项目）
-      const next = await api.projects.list();
-      setProjects(next);
-    } catch {
-      setWorktreesByProject((prev) => ({ ...prev, [projectId]: [] }));
-    }
-  }
-
-  async function refreshSessions(projectId = activeProjectId) {
-    if (!projectId) return [];
-    const records = await api.sessions.listCatalog(projectId);
-    replaceProjectSessions({ projectId, sessions: records });
-    return records
-      .map(sessionRecordToSummary)
-      .filter((session): session is SessionSummary => Boolean(session))
-      .sort((a, b) => b.updatedAt - a.updatedAt);
-  }
-
-  async function refreshProjectSessions(projectId: string, silent = false) {
-    if (sessionRefreshRunningRef.current.has(projectId)) {
-      // 无论来源是周期同步还是用户操作，都必须在当前快照完成后补扫一次。
-      sessionRefreshPendingRef.current.add(projectId);
-      return;
-    }
-    const request = (sessionRequestByProjectRef.current[projectId] ?? 0) + 1;
-    sessionRequestByProjectRef.current[projectId] = request;
-    sessionRefreshRunningRef.current.add(projectId);
-    if (!silent) {
-      setSessionLoadingByProject((current) => ({
-        ...current,
-        [projectId]: true,
-      }));
-      // 让出主线程确保 React 提交 loading 状态到 DOM，避免快速 API 响应导致 loading 状态在同一批中被覆盖
-      await new Promise<void>((resolve) => setTimeout(resolve, 0));
-    }
-    try {
-      const records = await withTimeout(
-        api.sessions.listCatalog(projectId),
-        SESSION_REFRESH_TIMEOUT_MS,
-        t("app.sessionRefreshTimeout"),
-      );
-      if (sessionRequestByProjectRef.current[projectId] !== request) return records;
-      replaceProjectSessions({ projectId, sessions: records });
-      const sorted = records
-        .map(sessionRecordToSummary)
-        .filter((session): session is SessionSummary => Boolean(session))
-        .sort((a, b) => b.updatedAt - a.updatedAt);
-      setVisibleProjectChildCountByProject((current) => ({
-        ...current,
-        [projectId]: current[projectId] ?? SIDEBAR_PROJECT_CHILD_PAGE_SIZE,
-      }));
-      return sorted;
-    } finally {
-      if (sessionRequestByProjectRef.current[projectId] === request) {
-        sessionRefreshRunningRef.current.delete(projectId);
-        if (!silent) {
-          setSessionLoadingByProject((current) => ({
-            ...current,
-            [projectId]: false,
-          }));
-        }
-        if (sessionRefreshPendingRef.current.delete(projectId)) {
-          // 忙碌期间错过的 tick 只补扫一次，避免并发，同时覆盖“子会话刚好在请求快照后落盘”的边界。
-          void refreshProjectSessions(projectId, true).catch(() => undefined);
-        }
-      }
-    }
-  }
-
-  /** 刷新项目侧栏数据：根项目会话 + worktree 列表 + worktree 子项目会话。 */
-  async function refreshProjectTree(project: Project) {
-    await refreshProjectSessions(project.id);
-    if (project.worktreeEnabled) {
-      await refreshWorktrees(project.id);
-      const latestProjects = await api.projects.list();
-      setProjects(latestProjects);
-      const childProjects = latestProjects.filter((p) => p.worktreeParentId === project.id);
-      await Promise.all(
-        childProjects.map((child) => refreshProjectSessions(child.id).catch(() => undefined)),
-      );
-    }
-    showToast(t("app.projectRefreshed"), 1800);
-  }
-
-  async function refreshFiles(projectId = activeProjectId, silent = false) {
-    if (!projectId) return;
-    const next = await api.files.list(projectId);
-    setFiles(next);
-    if (!silent) showToast(t("app.filesRefreshed"), 1800);
-  }
-
-  async function refreshSessionHistory(projectId = sessionsProjectId) {
     if (!projectId) return;
     setSessionHistoryLoading(true);
     try {
@@ -5745,17 +5598,6 @@ export function App() {
 
 
 
-function formatUpdateBytes(bytes?: number) {
-  if (!bytes || bytes <= 0) return "-";
-  const units = ["B", "KB", "MB", "GB"];
-  let value = bytes;
-  let unitIndex = 0;
-  while (value >= 1024 && unitIndex < units.length - 1) {
-    value /= 1024;
-    unitIndex += 1;
-  }
-  return `${value >= 10 ? value.toFixed(1) : value.toFixed(2)} ${units[unitIndex]}`;
-}
 
 
 // test
