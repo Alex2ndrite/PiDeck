@@ -36,7 +36,7 @@ function functionBody(name, source = appSource) {
 test("opening a sidebar history selects a SessionRecord without creating an Agent", () => {
   const body = functionBody("openSidebarSession", sessionActionsSource);
   assert.match(body, /api\.sessions\.listCatalog\(projectId\)/);
-  assert.match(body, /setCurrentSessionId\(record\.id\)/);
+  assert.match(body, /commitSessionSelection\(projectId, record\.id, true\)/);
   assert.doesNotMatch(body, /bindSessionRuntime|createAgent\(/);
 });
 
@@ -45,6 +45,22 @@ test("the history drawer uses the lazy Session open path", () => {
     appSource,
     /onOpenSession=\{\(session\) =>\s*void runOpenSidebarSession\(/,
   );
+});
+
+test("App routes project and Session selection through the command owner", () => {
+  assert.match(appSource, /selectProject: selectProjectCommand/);
+  assert.match(appSource, /selectSession: selectSessionCommand/);
+  assert.match(appSource, /selectSessionCommand\(agent\.projectId, sessionId, false\)/);
+  assert.match(appSource, /selectSessionCommand\(projectId, result\.targetSessionId, true\)/);
+  assert.match(
+    appSource,
+    /if \(sessionId\) \{[\s\S]*?selectSessionCommand\(agent\.projectId, sessionId, false\);[\s\S]*?\} else \{[\s\S]*?selectProjectCommand\(agent\.projectId\);/,
+  );
+  assert.match(
+    appSource,
+    /select: \(projectId\) => \{\s*selectProjectCommand\(projectId\);\s*if \(getProjectSessionRecords\(projectId\)/,
+  );
+  assert.doesNotMatch(appSource, /setCurrentSessionId\(/);
 });
 
 test("first Session send is request-addressed and restores rejected snapshots", () => {

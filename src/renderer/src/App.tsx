@@ -1641,6 +1641,8 @@ export function App() {
   );
 
   const {
+    selectProject: selectProjectCommand,
+    selectSession: selectSessionCommand,
     copySession: runCopySession,
     exportHistorySession: runExportHistorySession,
     deleteHistorySession: runDeleteHistorySession,
@@ -1890,8 +1892,11 @@ export function App() {
       const sessionId = store.get(
         sessionIdByRuntimeAgentIdAtomFamily(target.agentId),
       );
-      setActiveProjectId(agent.projectId);
-      setCurrentSessionId(sessionId);
+      if (sessionId) {
+        selectSessionCommand(agent.projectId, sessionId, false);
+      } else {
+        selectProjectCommand(agent.projectId);
+      }
     },
   });
 
@@ -2518,10 +2523,7 @@ export function App() {
       await refreshSessions(projectId);
       if (projectId) await refreshProjectSessions(projectId);
       if (result.targetSessionId && projectId) {
-        setActiveProjectId(projectId);
-        setCurrentSessionId(result.targetSessionId);
-        setAutoScroll(true);
-        autoScrollRef.current = true;
+        selectSessionCommand(projectId, result.targetSessionId, true);
       }
     } finally {
       setAgentActionLoading(null);
@@ -4188,8 +4190,7 @@ export function App() {
     projects: {
       add: addProject,
       select: (projectId) => {
-        setActiveProjectId(projectId);
-        setCurrentSessionId(undefined);
+        selectProjectCommand(projectId);
         if (getProjectSessionRecords(projectId).length === 0) {
           void refreshProjectSessions(projectId).catch(() => undefined);
         }

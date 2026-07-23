@@ -15,6 +15,21 @@ function functionBlock(name, nextName) {
   return source.slice(start, end);
 }
 
+function syncFunctionBlock(name, nextName) {
+  const start = source.indexOf(`  function ${name}(`);
+  const syncEnd = source.indexOf(`  function ${nextName}(`, start + 1);
+  const asyncEnd = source.indexOf(`  async function ${nextName}(`, start + 1);
+  const end =
+    syncEnd === -1
+      ? asyncEnd
+      : asyncEnd === -1
+        ? syncEnd
+        : Math.min(syncEnd, asyncEnd);
+  assert.notEqual(start, -1, `${name} implementation should be discoverable`);
+  assert.notEqual(end, -1, `${nextName} boundary should be discoverable`);
+  return source.slice(start, end);
+}
+
 function assertInOrder(subject, fragments, message) {
   let previousIndex = -1;
   for (const fragment of fragments) {
@@ -25,6 +40,12 @@ function assertInOrder(subject, fragments, message) {
   }
 }
 
+const commitSelection = () =>
+  syncFunctionBlock("commitSessionSelection", "selectProject");
+const selectProject = () =>
+  syncFunctionBlock("selectProject", "selectSession");
+const selectSession = () =>
+  syncFunctionBlock("selectSession", "copySession");
 const openBySummary = () =>
   functionBlock("openSidebarSession", "openSidebarSessionById");
 const openById = () =>
@@ -74,7 +95,7 @@ test("keeps request sequencing and stale-result gates around catalog fallback", 
   );
   assert.match(
     block,
-    /if \(!record \|\| requestSequence !== openSessionRequestRef\.current\) return;\s*setActiveProjectId/,
+    /if \(!record \|\| requestSequence !== openSessionRequestRef\.current\) return;\s*commitSessionSelection/,
   );
 });
 
@@ -91,7 +112,46 @@ test("matches both project and catalog paths with each candidate environment", (
   );
 });
 
-test("writes project and session selection before enabling auto-scroll", () => {
+test("selectProject invalidates requests before replacing the active selection", () => {
+  assertInOrder(
+    selectProject(),
+    [
+      "++openSessionRequestRef.current;",
+      "commitSessionSelection(projectId, undefined, false);",
+    ],
+    "project selection command",
+  );
+  assertInOrder(
+    commitSelection(),
+    [
+      "setActiveProjectId(projectId);",
+      "setCurrentSessionId(sessionId);",
+    ],
+    "project selection commit",
+  );
+});
+
+test("selectSession invalidates requests and can preserve the current scroll setting", () => {
+  assertInOrder(
+    selectSession(),
+    [
+      "++openSessionRequestRef.current;",
+      "commitSessionSelection(projectId, sessionId, scrollToEnd);",
+    ],
+    "session selection command",
+  );
+  assert.match(
+    commitSelection(),
+    /if \(scrollToEnd\) \{[\s\S]*setAutoScroll\(true\);[\s\S]*autoScrollRef\.current = true;/,
+  );
+  assert.doesNotMatch(
+    selectSession(),
+    /setAutoScroll\(true\)|autoScrollRef\.current = true/,
+    "scrollToEnd false must not write auto-scroll state",
+  );
+});
+
+test("open paths commit after the stale gate without invalidating again", () => {
   for (const [name, block] of [
     ["openSidebarSession", openBySummary()],
     ["openSidebarSessionById", openById()],
@@ -99,12 +159,15 @@ test("writes project and session selection before enabling auto-scroll", () => {
     assertInOrder(
       block,
       [
-        "setActiveProjectId(projectId);",
-        "setCurrentSessionId(record.id);",
-        "setAutoScroll(true);",
-        "autoScrollRef.current = true;",
+        "if (!record || requestSequence !== openSessionRequestRef.current) return;",
+        "commitSessionSelection(projectId, record.id, true);",
       ],
-      `${name} selection writes`,
+      `${name} stale gate and selection`,
+    );
+    assert.equal(
+      block.match(/\+\+openSessionRequestRef\.current/g)?.length,
+      1,
+      `${name} should invalidate only when opening starts`,
     );
   }
 });
@@ -116,10 +179,7 @@ test("focuses the composer after publishing a new draft selection", () => {
     block,
     [
       "upsertSession(session);",
-      "setActiveProjectId(projectId);",
-      "setCurrentSessionId(session.id);",
-      "setAutoScroll(true);",
-      "autoScrollRef.current = true;",
+      "commitSessionSelection(projectId, session.id, true);",
       "requestAnimationFrame(() => composerTextareaRef.current?.focus());",
       "creatingSessionDraftRef.current.delete(projectId);",
     ],

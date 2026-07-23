@@ -102,6 +102,33 @@ export function useSessionActions(options: UseSessionActionsOptions) {
     showToast,
   } = options;
 
+  function commitSessionSelection(
+    projectId: string,
+    sessionId: string | undefined,
+    scrollToEnd: boolean,
+  ) {
+    setActiveProjectId(projectId);
+    setCurrentSessionId(sessionId);
+    if (scrollToEnd) {
+      setAutoScroll(true);
+      autoScrollRef.current = true;
+    }
+  }
+
+  function selectProject(projectId: string) {
+    ++openSessionRequestRef.current;
+    commitSessionSelection(projectId, undefined, false);
+  }
+
+  function selectSession(
+    projectId: string,
+    sessionId: string,
+    scrollToEnd = true,
+  ) {
+    ++openSessionRequestRef.current;
+    commitSessionSelection(projectId, sessionId, scrollToEnd);
+  }
+
   // ── Session copy/export/delete ──
 
   async function copySession(
@@ -178,10 +205,7 @@ export function useSessionActions(options: UseSessionActionsOptions) {
     }
     if (!record || requestSequence !== openSessionRequestRef.current) return;
 
-    setActiveProjectId(projectId);
-    setCurrentSessionId(record.id);
-    setAutoScroll(true);
-    autoScrollRef.current = true;
+    commitSessionSelection(projectId, record.id, true);
   }
 
   async function openSidebarSessionById(projectId: string, sessionId: string) {
@@ -200,10 +224,7 @@ export function useSessionActions(options: UseSessionActionsOptions) {
       }
     }
     if (!record || requestSequence !== openSessionRequestRef.current) return;
-    setActiveProjectId(projectId);
-    setCurrentSessionId(record.id);
-    setAutoScroll(true);
-    autoScrollRef.current = true;
+    commitSessionSelection(projectId, record.id, true);
   }
 
   async function copySidebarSession(projectId: string, session: SessionSummary) {
@@ -228,10 +249,7 @@ export function useSessionActions(options: UseSessionActionsOptions) {
         title: `${project.name} agent`,
       });
       upsertSession(session);
-      setActiveProjectId(projectId);
-      setCurrentSessionId(session.id);
-      setAutoScroll(true);
-      autoScrollRef.current = true;
+      commitSessionSelection(projectId, session.id, true);
       requestAnimationFrame(() => composerTextareaRef.current?.focus());
     } catch (error) {
       showToast(error instanceof Error ? error.message : String(error), 4000);
@@ -280,6 +298,8 @@ export function useSessionActions(options: UseSessionActionsOptions) {
   }
 
   return {
+    selectProject,
+    selectSession,
     copySession,
     exportHistorySession,
     deleteHistorySession,
