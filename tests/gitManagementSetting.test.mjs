@@ -38,7 +38,7 @@ describe("optional Git management entry", () => {
   test("removes the old header button and guards the drawer", () => {
     assert.doesNotMatch(app, /title="Git History & Compare"/);
     assert.match(app, /if \(panel === "git" && !settings\.enableGitManagement\) return/);
-    assert.match(app, /settings\.enableGitManagement && drawerContentPanel === "git"/);
+    assert.match(app, /settings\.enableGitManagement && drawer === "git"/);
     assert.match(app, /current === "git" \? null : current/);
     assert.match(app, /filter\(\(\[, panel\]\) => panel !== "git"\)/);
   });

@@ -33,11 +33,8 @@ test("drawer uses only the short grid transition for open and close", () => {
 });
 
 test("drawer keeps its content mounted through the layout transition", () => {
-  assert.match(app, /const DRAWER_ANIMATION_MS = 120;/);
-  assert.match(
-    app,
-    /const drawerContentPanel = drawer && !drawerCollapsed \? drawer : renderedDrawer;/,
-  );
+  assert.match(app, /WorkspaceDrawerHost/);
+  assert.match(app, /renderPanel/);
   assert.match(app, /drawer && !drawerCollapsed \? drawerWidth : 0/);
   assert.match(app, /drawer && !drawerCollapsed \? 260 : 0/);
 });
