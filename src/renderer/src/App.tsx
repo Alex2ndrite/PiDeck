@@ -517,29 +517,6 @@ export function App() {
   attachedImagesByAgentRef.current = attachedImagesByAgent;
   const [previewImage, setPreviewImage] = useState<ImageContent | null>(null);
   /** 存储用户在 select 弹框自定义输入框中键入的值，用于在后续 input 弹框中自动提交 */
-  /** 外部编辑器列表 + 弹出气泡状态 */
-  const [externalEditors, setExternalEditors] = useState<ExternalEditor[]>([]);
-  const [editorsOpen, setEditorsOpen] = useState(false);
-  const [editorsAnchor, setEditorsAnchor] = useState<{ x: number; y: number } | null>(null);
-  /** 右键项目也能唤起编辑器气泡，所以这里显式记录本次要打开的目录，避免依赖运行中 agent 的 cwd。 */
-  const [editorsTargetPath, setEditorsTargetPath] = useState<string | null>(null);
-  /** 浏览器全屏模式：在完整窗口覆盖层中渲染浏览器面板，不受右侧抽屉宽度限制。 */
-  const [browserFullscreen, setBrowserFullscreen] = useState(false);
-  const editorsRef = useRef<HTMLDivElement>(null);
-
-  // 点击编辑器气泡外部时关闭
-  useEffect(() => {
-    if (!editorsOpen) return;
-    const handler = (event: MouseEvent) => {
-      if (editorsRef.current && !editorsRef.current.contains(event.target as Node)) {
-        setEditorsOpen(false);
-        setEditorsAnchor(null);
-        setEditorsTargetPath(null);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [editorsOpen]);
   /** Extension widget 容器折叠状态（全局持久化，不按 agentId 隔离，重启后恢复） */
   const [widgetsCollapsed, setWidgetsCollapsed] = useState(() => {
     try {
@@ -676,6 +653,11 @@ export function App() {
   const drawerCollapsed = workspace.drawerCollapsed;
   const drawerPinned = workspace.drawerPinned;
   const drawerPinnedPanel = workspace.drawerPinnedPanel;
+  const browserFullscreen = workspace.browserFullscreen;
+  const externalEditors = workspace.externalEditors;
+  const editorsOpen = workspace.externalEditorsOpen;
+  const editorsAnchor = workspace.externalEditorsAnchor;
+  const editorsTargetPath = workspace.externalEditorsTargetPath;
   // Adapters for useFileEditor (expects setDrawer/setDrawerCollapsed).
   const setDrawer = useCallback((panel: DrawerPanel | null) => {
     // Open guard for git is handled by the enableGitManagement effect below.
@@ -1845,7 +1827,7 @@ export function App() {
   });
 
   useEffect(() => {
-    void api.editors.list().then(setExternalEditors).catch(() => undefined);
+    void workspace.loadExternalEditors().catch(() => undefined);
     void api.app
       .preferredSystemLanguages()
       .then((languages) => setSystemLanguage(languages.find((language) => typeof language === "string" && language.trim()) ?? null))
@@ -1864,7 +1846,7 @@ export function App() {
             setSettings(updated);
             return api.editors.list();
           })
-          .then(setExternalEditors)
+          .then(() => workspace.loadExternalEditors())
           .catch(() => undefined);
       }
       if (!next.piEnvironmentChecked) {
@@ -3789,9 +3771,7 @@ export function App() {
       reorder: reorderProjects,
       reveal: (project) => api.files.showInFolder(project.path),
       openWithEditor: (project) => {
-        setEditorsTargetPath(project.path);
-        setEditorsAnchor({ x: 80, y: 80 });
-        setEditorsOpen(true);
+        workspace.openExternalEditorChooser(project.path, { x: 80, y: 80 });
       },
       importSessions: (project, source) => {
         if (source === "codex") return openCodexImport(project);
@@ -4216,13 +4196,11 @@ export function App() {
                   (activeProject && !isChatProject(activeProject)
                     ? activeProject.path
                     : null);
-                setEditorsTargetPath(projectPath);
-                setEditorsOpen((open) => !open);
                 const btn = (e?.currentTarget as HTMLElement)?.closest("button");
-                if (btn) {
-                  const rect = btn.getBoundingClientRect();
-                  setEditorsAnchor(adjustMenuPos(rect.left - 4, rect.top, 220, 280));
-                }
+                const anchor = btn
+                  ? adjustMenuPos(btn.getBoundingClientRect().left - 4, btn.getBoundingClientRect().top, 220, 280)
+                  : undefined;
+                workspace.openExternalEditorChooser(projectPath || "", anchor);
               },
               icon: <Code size={17} />,
             }}
@@ -4289,7 +4267,7 @@ export function App() {
           <div className="drawer-content-frame">
             <BrowserPanel
               onClose={() => workspace.closeDrawer()}
-              onToggleFullscreen={() => setBrowserFullscreen(true)}
+              onToggleFullscreen={() => workspace.enterBrowserFullscreen()}
             />
           </div>
         ) : settings.enableGitManagement && drawer === "git" && !drawerCollapsed && activeProjectId ? (
@@ -4740,7 +4718,6 @@ export function App() {
       {/* 外部编辑器选择气泡 */}
       {editorsOpen && editorsAnchor && (
         <div
-          ref={editorsRef}
           className="editors-popover"
           style={{
             position: "fixed",
@@ -4757,20 +4734,14 @@ export function App() {
                 key={editor.id}
                 className="editors-popover-item"
                 onClick={() => {
-                  const projectPath = editorsTargetPath;
-                  if (projectPath) {
-                    void api.editors.openProject(editor, projectPath).catch((error) => {
-                      showToast(
-                        t("app.openEditorFailed", {
-                          error: error instanceof Error ? error.message : String(error),
-                        }),
-                        3000,
-                      );
-                    });
-                  }
-                  setEditorsOpen(false);
-                  setEditorsAnchor(null);
-                  setEditorsTargetPath(null);
+                  void workspace.openProjectInExternalEditor(editor).catch((error) => {
+                    showToast(
+                      t("app.openEditorFailed", {
+                        error: error instanceof Error ? error.message : String(error),
+                      }),
+                      3000,
+                    );
+                  });
                 }}
               >
                 <span className={`editor-logo ${editor.id}`}>
@@ -4789,16 +4760,12 @@ export function App() {
 
       {/* 浏览器全屏覆盖层 */}
       {browserFullscreen && (
-        <div className="modal-backdrop" onClick={() => setBrowserFullscreen(false)}>
+        <div className="modal-backdrop" onClick={() => workspace.closeBrowser()}>
           <div className="browser-modal" onClick={(e) => e.stopPropagation()}>
             <BrowserPanel
               isFullscreen
-              onClose={() => setBrowserFullscreen(false)}
-              onMinimize={() => {
-                setBrowserFullscreen(false);
-                setDrawer("browser");
-                setDrawerCollapsed(false);
-              }}
+              onClose={() => workspace.closeBrowser()}
+              onMinimize={() => workspace.minimizeBrowser()}
             />
           </div>
         </div>
