@@ -2,7 +2,6 @@ import { useState, useRef, useCallback } from "react";
 import type { MutableRefObject } from "react";
 import type { createStore } from "jotai";
 import type {
-  AgentRuntimeState,
   AgentTab,
   ComposerAgentMode,
   ImageContent,
@@ -27,12 +26,12 @@ import {
   setSessionComposerModeAtom,
 } from "../atoms/composer-atoms";
 import { sessionIdByRuntimeAgentIdAtomFamily } from "../atoms/session-selectors";
+import { runtimeCapabilityByAgentIdAtomFamily } from "../atoms/runtime-atoms";
 import { PromptDeliveryUnknownError } from "./useComposerSend";
 
 export type QueuedPrompt = QueuedPromptSnapshot;
 
 export interface UseQueuedPromptOptions {
-  runtimeStateByAgentRef: MutableRefObject<Record<string, AgentRuntimeState>>;
   displayAgentsRef: MutableRefObject<AgentTab[]>;
   activeAgentIdRef: MutableRefObject<string | undefined>;
   queueFlushByAgentRef: MutableRefObject<Set<string>>;
@@ -62,7 +61,6 @@ export interface UseQueuedPromptOptions {
 
 export function useQueuedPrompt(options: UseQueuedPromptOptions) {
   const {
-    runtimeStateByAgentRef,
     displayAgentsRef,
     activeAgentIdRef,
     queueFlushByAgentRef,
@@ -203,7 +201,7 @@ export function useQueuedPrompt(options: UseQueuedPromptOptions) {
 
   function isAgentCurrentlyBusy(agentId: string) {
     const agent = displayAgentsRef.current.find((item) => item.id === agentId);
-    const runtimeState = runtimeStateByAgentRef.current[agentId];
+    const runtimeState = store.get(runtimeCapabilityByAgentIdAtomFamily(agentId));
     return Boolean(
       agent?.status === "starting" ||
       agent?.status === "running" ||

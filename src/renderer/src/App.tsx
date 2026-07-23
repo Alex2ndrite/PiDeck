@@ -83,6 +83,7 @@ import {
   replaceAgentInventoryAtom,
   replaceProjectInventoryAtom,
   replaceProjectSessionsAtom,
+  runtimeCapabilityByAgentIdAtomFamily,
   rollbackSessionRuntimeUiResponseAtom,
   sessionRecordByIdAtomFamily,
   sessionRecordsByProjectIdAtomFamily,
@@ -476,7 +477,6 @@ export function App() {
 
 
   const [commands, setCommands] = useState<PiCommand[]>([]);
-  const runtimeStateByAgentRef = useRef<Record<string, AgentRuntimeState>>({});
   const [availableModels, setAvailableModels] = useState<AvailableModel[]>([]);
   const [modelPickerOpen, setModelPickerOpen] = useState(false);
   const [promptTemplatePickerOpen, setPromptTemplatePickerOpen] = useState(false);
@@ -1240,7 +1240,6 @@ export function App() {
 
   // Queue ownership extracted to useQueuedPrompt.
   const queue = useQueuedPrompt({
-    runtimeStateByAgentRef,
     displayAgentsRef,
     activeAgentIdRef,
     queueFlushByAgentRef,
@@ -1852,10 +1851,6 @@ export function App() {
     },
     onAgentInventoryChanged: handleAgentInventoryChanged,
     onRuntimeCapabilityChanged: ({ agentId, previous, current, patch }) => {
-      runtimeStateByAgentRef.current = {
-        ...runtimeStateByAgentRef.current,
-        [agentId]: current,
-      };
       if (
         previous?.isExecutingTool &&
         !current.isExecutingTool &&
@@ -2689,16 +2684,8 @@ export function App() {
 
 
   function applyAgentRuntimeState(agentId: string, incoming: AgentRuntimeState) {
-    const nextState = mergeAgentRuntimeState(
-      runtimeStateByAgentRef.current[agentId],
-      incoming,
-    );
-    runtimeStateByAgentRef.current = {
-      ...runtimeStateByAgentRef.current,
-      [agentId]: nextState,
-    };
-    applyRuntimeCapability({ agentId, state: incoming });
-    return nextState;
+    // applyRuntimeCapabilityAtom internally does mergeAgentRuntimeState.
+    return applyRuntimeCapability({ agentId, state: incoming });
   }
 
   async function refreshRuntimeState(agentId = activeAgentId) {
@@ -2883,7 +2870,7 @@ export function App() {
   async function abortAgent(agentId = activeAgentId) {
     if (!agentId || isPendingAgentId(agentId)) return;
     // 立即清除流式状态，让思考气泡和 loading 立刻消失，不等后端 RPC 返回
-    const previous = runtimeStateByAgentRef.current[agentId];
+    const previous = store.get(runtimeCapabilityByAgentIdAtomFamily(agentId));
     if (previous) {
       applyAgentRuntimeState(agentId, { ...previous, isStreaming: false });
     }
