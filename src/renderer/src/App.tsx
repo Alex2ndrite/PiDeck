@@ -215,11 +215,8 @@ import type {
   PiCliUpdateResult,
   ExternalEditor,
   ChatMessage,
-  CodexImportReport,
   CodexSessionSummary,
-  ClaudeImportReport,
   ClaudeSessionSummary,
-  OpenCodeImportReport,
   OpenCodeSessionSummary,
   FileTreeNode,
   GitBranchInfo,
@@ -461,8 +458,6 @@ export function App() {
   });
 
   // 项目的 git worktree 列表：{ parentId -> WorktreeEntry[] }
-  const [draggingProjectId, setDraggingProjectId] = useState<string>();
-  const [dragOverProjectId, setDragOverProjectId] = useState<string>();
   const [pendingAgents, setPendingAgents] = useState<PendingAgentTab[]>([]);
   const [activeProjectId, setActiveProjectId] = useState<string>();
   const activeProjectIdRef = useRef<string | undefined>(activeProjectId);
@@ -583,21 +578,6 @@ export function App() {
     if (!targetAgentId) return;
     setComposerAgentModeForAgent(targetAgentId, mode);
   };
-  /** Goal 状态 */
-  const [goalText, setGoalText] = useState<string>("");
-  const goalTextRef = useRef("");
-  const [goalStatus, setGoalStatus] = useState<"none" | "active" | "paused" | "complete">("none");
-  const goalStatusRef = useRef<"none" | "active" | "paused" | "complete">("none");
-  const [goalStartedAt, setGoalStartedAt] = useState(0);
-  const goalStartedAtRef = useRef(0);
-  const [goalCompletedAt, setGoalCompletedAt] = useState(0);
-  const goalIterationRef = useRef(0);
-  /** 标记是否已经在等待自动续接,防止多个异步续接冲突 */
-  const goalContinuationPendingRef = useRef(false);
-  /** 记录上次续接前已看到的 agent 响应,用于识别运行状态抖动造成的无进展空转。 */
-  const goalLastResponseSignatureRef = useRef("");
-  /** 最大自动续接次数,达到后暂停而不是伪装完成,避免目标未完成时进入死循环。 */
-  const GOAL_MAX_CONTINUATIONS = 5;
   /** 上一次 isAgentBusy 状态,用于检测 busy→idle 转换 */
   const prevIsAgentBusyRef = useRef(false);
   /** 客户端队列按 agent 记录 flush 锁，避免 tool-end 与 idle 并发投递。 */
@@ -606,9 +586,6 @@ export function App() {
   const queuedPromptsRef = useRef<Record<string, QueuedPrompt[]>>({});
   const activeQueuedPrompts = activeAgentId ? (queuedPrompts[activeAgentId] ?? []) : [];
 
-  /** 当前 agent 流式思考的实时文本,agent_end 时清空 */
-  const [sessionRefPickerOpen, setSessionRefPickerOpen] = useState(false);
-  const [sessionRefPickerTarget, setSessionRefPickerTarget] = useState<SessionSummary | null>(null);
   /** & 会话引用选择缓存：key = chip raw（如 "&My Session"），value = 选中的消息列表 */
   const [sessionRefSelections, setSessionRefSelections] = useState<
     Record<string, { messages: Array<{ role: string; content: string }>; fullContext: boolean; selectedIndices: number[] }>
@@ -623,18 +600,7 @@ export function App() {
   // 会话区不再维护独立的“修改文件摘要”卡片；diff 入口贴在 edit/write 工具调用处，
   // 避免会话输入框上方摘要与 Git 工作区状态/历史会话恢复互相干扰。
   const agentStatusByAgentRef = useRef<Record<string, AgentTab["status"]>>({});
-  /** RPC 日志,用于调试 */
-  const [rpcLogs, setRpcLogs] = useState<
-    Array<{
-      id: string;
-      agentId: string;
-      direction: string;
-      summary: string;
-      data?: unknown;
-      time: number;
-    }>
-  >([]);
-  const [_logs, setLogs] = useState<string[]>([]); // 写入式调试日志,仅用于 onLog/onError 捕获
+  const [, setLogs] = useState<string[]>([]); // 写入式调试日志,仅用于 onLog/onError 捕获
   const [search, setSearch] = useState("");
   const [suggestionsOpen, setSuggestionsOpen] = useState(false);
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(0);
@@ -699,36 +665,16 @@ export function App() {
     y: number;
     project: Project;
   } | null>(null);
-  /** 会话管理弹框 */
-  const [sessionManagerProject, setSessionManagerProject] = useState<Project | null>(null);
-  /** Worktree 创建弹窗 */
-  const [worktreeCreateDialog, setWorktreeCreateDialog] = useState<{
-    projectId: string;
-  } | null>(null);
   /** worktree 创建进行中，用于禁用弹框按钮并显示"创建中" */
   const [worktreeCreating, setWorktreeCreating] = useState(false);
-  /** 展开会话的 worktree 路径集合：默认子工作区只展示 3 条会话，展开后显示全部 */
-  const [expandedWorktreeSessions, setExpandedWorktreeSessions] = useState<
-    Set<string>
-  >(() => new Set());
   /** 正在被删除的 worktree 路径集合：触发淡出动画期间保留 DOM，动画结束后才移除。 */
   const [removingWorktreePaths, setRemovingWorktreePaths] = useState<
     Set<string>
   >(() => new Set());
   /** 历史会话来源过滤（按项目）：undefined=显示全部，Record 含项目ID对应 Set */
-  const [sessionSourceFilter, setSessionSourceFilter] = useState<
+  const [sessionSourceFilter] = useState<
   	Record<string, Set<"pi" | "codex" | "claude" | "opencode"> | null>
   >(() => loadSessionSourceFilter());
-  /** 侧栏子会话展开状态（统一管理 Codex 子代理和 pi 子会话） */
-  const [expandedSubagentGroups, setExpandedSubagentGroups] =
-    useState<Set<string>>(() => new Set());
-
-  /** 来源过滤弹窗（关联项目ID和位置） */
-  const [sessionFilterOpen, setSessionFilterOpen] = useState<{
-  	x: number;
-  	y: number;
-  	projectId: string;
-  } | null>(null);
   /** 编辑器展示模式：弹框或侧栏 */
   // showToast 使用 app-notice 统一展示，见下方函数定义
   // 历史命令：按 agent 隔离，agent 关闭即清除（不持久化）
@@ -812,9 +758,6 @@ export function App() {
   /** 打开文件编辑器前所在的抽屉面板，供返回按钮恢复 */
   const [sessionsProjectId, setSessionsProjectId] = useState<string>();
   const [projectResourcesProject, setProjectResourcesProject] = useState<Project | null>(null);
-  const [codexImportReport, setCodexImportReport] = useState<CodexImportReport | null>(null);
-  const [claudeImportReport, setClaudeImportReport] = useState<ClaudeImportReport | null>(null);
-  const [openCodeImportReport, setOpenCodeImportReport] = useState<OpenCodeImportReport | null>(null);
   const sessions = useAtomValue(
     sessionSummariesByProjectIdAtomFamily(sessionsProjectId ?? ""),
   );
@@ -888,8 +831,6 @@ export function App() {
     store.get(sessionRecordsByProjectIdAtomFamily(projectId));
   const getSessionRecord = (sessionId: string) =>
     store.get(sessionRecordByIdAtomFamily(sessionId));
-  const getSessionRuntime = (sessionId: string) =>
-    store.get(sessionRuntimeBySessionIdAtomFamily(sessionId));
   const [sessionHistoryLoading, setSessionHistoryLoading] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<AppUpdateInfo | null>(null);
@@ -913,9 +854,6 @@ export function App() {
   }), [updateInfo, updateError, updateChecking, updateDownloading, updateProgress, downloadedUpdatePath]);
   const [configOpen, setConfigOpen] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
-  const [_debugOpen, _setDebugOpen] = useState(false);
-  /** RPC 日志弹窗目标 agent */
-  const [agentRpcLogging, setAgentRpcLogging] = useState<Map<string, boolean>>(new Map());
   /** 是否自动滚动到最新消息 */
   const [autoScroll, setAutoScroll] = useState(true);
   /** 用 ref 同步 autoScroll，供 ResizeObserver 回调读取最新值，避免响应式时序间隙导致滚动抢跑。 */
@@ -1050,7 +988,6 @@ export function App() {
   // RichInput 受控重渲染后,光标应恢复到的纯文本偏移(供建议选中/清除后恢复选区)。
   const pendingComposerCaretRef = useRef<number | null>(null);
   const pendingAgentsRef = useRef<PendingAgentTab[]>([]);
-  const projectDragPreventClickRef = useRef(false);
 
   // ===== 飞书桥接 =====
 
@@ -1666,11 +1603,9 @@ export function App() {
     editorTabs,
     activeTabId,
     activeTab,
-    editorTabAccessSequenceRef,
     readEditorFileContent,
     readEditorOriginalContent,
     saveEditorFileContent,
-    openEditorTab,
     closeEditorTab,
     selectEditorTab,
     openFilePath,
@@ -1682,7 +1617,6 @@ export function App() {
     gitDiffDisplayMode,
     gitDrawerDiff,
     toggleGitDiffDisplayMode,
-    gitDiffRequestSequenceRef,
     prevDrawerPanelRef,
     clearEditorBack,
     closeEditor,
@@ -2492,11 +2426,6 @@ export function App() {
     }
   }
 
-  async function installDownloadedAppUpdate() {
-    if (!downloadedUpdatePath) return;
-    await api.app.installUpdate(downloadedUpdatePath);
-  }
-
   async function checkAppUpdate(source: "auto" | "manual" = "manual") {
     if (updateChecking) return;
     if (source === "auto" && settings.disableUpdateCheck) return;
@@ -2800,58 +2729,6 @@ export function App() {
     }
   }
 
-  function handleProjectDragStart(
-    event: React.DragEvent<HTMLButtonElement>,
-    projectId: string,
-  ) {
-    if (!canReorderProjects) {
-      event.preventDefault();
-      return;
-    }
-    setDraggingProjectId(projectId);
-    event.dataTransfer.effectAllowed = "move";
-    event.dataTransfer.setData("text/plain", projectId);
-  }
-
-  function handleProjectDragOver(
-    event: React.DragEvent<HTMLButtonElement>,
-    projectId: string,
-  ) {
-    if (!draggingProjectId || draggingProjectId === projectId) return;
-    if (isChatProject(projects.find((project) => project.id === projectId)))
-      return;
-    event.preventDefault();
-    event.dataTransfer.dropEffect = "move";
-    setDragOverProjectId(projectId);
-  }
-
-  function handleProjectDragLeave(projectId: string) {
-    setDragOverProjectId((current) =>
-      current === projectId ? undefined : current,
-    );
-  }
-
-  function finishProjectDrag() {
-    setDraggingProjectId(undefined);
-    setDragOverProjectId(undefined);
-  }
-
-  async function handleProjectDrop(
-    event: React.DragEvent<HTMLButtonElement>,
-    targetProjectId: string,
-  ) {
-    event.preventDefault();
-    const sourceProjectId =
-      event.dataTransfer.getData("text/plain") || draggingProjectId;
-    finishProjectDrag();
-    if (!sourceProjectId || sourceProjectId === targetProjectId) return;
-    projectDragPreventClickRef.current = true;
-    window.setTimeout(() => {
-      projectDragPreventClickRef.current = false;
-    }, 0);
-    await reorderProjects(sourceProjectId, targetProjectId);
-  }
-
   async function addProject() {
     const project = await api.projects.add();
     if (!project) return;
@@ -2917,31 +2794,6 @@ export function App() {
     if (!agentId || isPendingAgentId(agentId)) return;
     const state = await api.agents.runtimeState(agentId).catch(() => undefined);
     if (state) applyAgentRuntimeState(agentId, state);
-  }
-
-  function getProjectFilter(projectId: string) {
-  	return sessionSourceFilter[projectId] ?? null;
-  }
-
-  function toggleSessionSourceFilter(projectId: string, source: "pi" | "codex" | "claude" | "opencode") {
-  	setSessionSourceFilter((current) => {
-  		const prev = current[projectId] ?? null;
-  		if (prev === null) {
-  			return { ...current, [projectId]: new Set([source]) };
-  		}
-  		const next = new Set(prev);
-  		if (next.has(source)) {
-  			next.delete(source);
-  			if (next.size === 0) {
-  				const copy = { ...current };
-  				copy[projectId] = null;
-  				return copy;
-  			}
-  		} else {
-  			next.add(source);
-  		}
-  		return { ...current, [projectId]: next };
-  	});
   }
 
   /** 调整菜单位置避免溢出视口 */
@@ -5176,50 +5028,7 @@ export function App() {
           }}
         />
       )}
-      {sessionFilterOpen && (() => {
-        const currentFilter = sessionSourceFilter[sessionFilterOpen.projectId] ?? null;
-        return (
-          <div className="context-backdrop" onClick={() => setSessionFilterOpen(null)}>
-            <div
-              className="context-menu filter-menu"
-              style={{
-                left: sessionFilterOpen.x,
-                top: sessionFilterOpen.y,
-              }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="filter-menu-header">{t("menu.filterSessions")}</div>
-              <label className="filter-menu-item">
-                <input
-                  type="checkbox"
-                  checked={currentFilter === null}
-                  onChange={() =>
-                    setSessionSourceFilter((prev) => ({
-                      ...prev,
-                      [sessionFilterOpen.projectId]: null,
-                    }))
-                  }
-                />
-                {t("menu.filterSourceAll")}
-              </label>
-              {["pi", "codex", "claude", "opencode"].map((source) => (
-                <label key={source} className="filter-menu-item">
-                  <input
-                    type="checkbox"
-                    checked={currentFilter !== null && currentFilter.has(source as any)}
-                    onChange={() =>
-                      toggleSessionSourceFilter(sessionFilterOpen.projectId, source as any)
-                    }
-                  />
-                  <span className={`session-source-badge ${source}`}>
-                    {t(`sessionSource.${source}` as any)}
-                  </span>
-                </label>
-              ))}
-            </div>
-          </div>
-        );
-      })()}
+
       {projectResourcesProject && (
         <Suspense fallback={null}>
           <ProjectResourcesModal
@@ -5450,9 +5259,9 @@ export function App() {
           onClose={() => setPreviewImage(null)}
         />
       )}
-      {codexImportProject && <ImportOverlayHost kind="codex" project={codexImportProject} controller={codexImportController as any} onClose={() => { setCodexImportProject(null); setCodexImportReport(null); }} />}
-      {claudeImportProject && <ImportOverlayHost kind="claude" project={claudeImportProject} controller={claudeImportController as any} onClose={() => { setClaudeImportProject(null); setClaudeImportReport(null); }} />}
-      {openCodeImportProject && <ImportOverlayHost kind="opencode" project={openCodeImportProject} controller={openCodeImportController as any} onClose={() => { setOpenCodeImportProject(null); setOpenCodeImportReport(null); }} />}
+      {codexImportProject && <ImportOverlayHost kind="codex" project={codexImportProject} controller={codexImportController as any} onClose={() => setCodexImportProject(null)} />}
+      {claudeImportProject && <ImportOverlayHost kind="claude" project={claudeImportProject} controller={claudeImportController as any} onClose={() => setClaudeImportProject(null)} />}
+      {openCodeImportProject && <ImportOverlayHost kind="opencode" project={openCodeImportProject} controller={openCodeImportController as any} onClose={() => setOpenCodeImportProject(null)} />}
       <Suspense fallback={null}>
       <ConfigModal
         open={configOpen}
