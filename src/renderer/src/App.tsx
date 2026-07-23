@@ -148,6 +148,7 @@ import {
   QueuedPromptPanel,
 } from "./components/session/ComposerPanels";
 import { ScratchPadOverlay } from "./components/overlays/ScratchPadOverlay";
+import { EnvironmentOverlay } from "./components/overlays/EnvironmentOverlay";
 import { LazyWrapper } from "./hooks/useLazyComponent";
 import {
   AgentContextMenu,
@@ -6376,7 +6377,7 @@ export function App() {
       )}
 
 
-      {environmentDialog && (
+      <EnvironmentOverlay open={environmentDialog}>
         <EnvironmentDialog
           status={piStatus}
           checking={piChecking}
@@ -6457,7 +6458,7 @@ export function App() {
             showToast(t("environment.checkFlagCleared"));
           }}
         />
-      )}
+      </EnvironmentOverlay>
       {settingsOpen && (
         <Suspense fallback={null}>
         <SettingsModal
