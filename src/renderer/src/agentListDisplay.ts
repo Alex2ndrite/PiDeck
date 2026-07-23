@@ -67,6 +67,15 @@ function getSummaryKey(session: SessionSummary) {
 	return getSessionKey(session.filePath, getSessionEnvironment(session));
 }
 
+/**
+ * Session rows are owned by the catalog record, never by a transient runtime.
+ * Keep this helper at the display boundary so every Sidebar tree uses the
+ * durable SessionRecord/SessionSummary identity for its React key.
+ */
+export function getSessionRowKey(session: Pick<SessionSummary, "id">) {
+	return `session:${session.id}`;
+}
+
 function findSessionKeyForAgent(
 	sessionPath: string | undefined,
 	sessionByKey: Map<string, SessionSummary>,
@@ -110,6 +119,46 @@ export function getAgentForSessionPath(
 		matched = matched ? chooseAgentForSession(matched, agent) : agent;
 	}
 	return matched;
+}
+
+/**
+ * A source filter applies to the Session origin, not the runtime process. If an
+ * Agent has a catalog Session, resolve that relationship with the same canonical
+ * environment/path rules as display deduplication. Only unlinked Agents use
+ * their own source decoration as the filter fallback.
+ */
+export function filterAgentsForSidebarDisplay({
+	agents,
+	allSessions,
+	visibleSessions,
+	sources,
+}: {
+	agents: AgentTab[];
+	allSessions: SessionSummary[];
+	visibleSessions: SessionSummary[];
+	sources: ReadonlySet<NonNullable<SessionSummary["source"]>> | null;
+}): AgentTab[] {
+	if (sources === null) return agents;
+	const allSessionsByKey = new Map<string, SessionSummary>();
+	for (const session of allSessions) {
+		const key = getSummaryKey(session);
+		if (key) allSessionsByKey.set(key, session);
+	}
+	const visibleSessionKeys = new Set(
+		visibleSessions.map(getSummaryKey).filter((key): key is string => Boolean(key)),
+	);
+	return agents.filter((agent) => {
+		const environment = agent.sessionEnvironment;
+		const explicitSessionKey = environment
+			? getSessionKey(agent.sessionPath, environment)
+			: undefined;
+		const linkedSessionKey = explicitSessionKey && allSessionsByKey.has(explicitSessionKey)
+			? explicitSessionKey
+			: findSessionKeyForAgent(agent.sessionPath, allSessionsByKey);
+		return linkedSessionKey
+			? visibleSessionKeys.has(linkedSessionKey)
+			: sources.has(agent.sessionSource ?? "pi");
+	});
 }
 
 export function getProjectAgentSessionDisplay({
@@ -239,7 +288,7 @@ export function getProjectAgentSessionDisplay({
 				}
 				return {
 					type: "session",
-					key: `session:${linkedSession.id}`,
+					key: getSessionRowKey(linkedSession),
 					session: linkedSession,
 					agent,
 					sortAt: getAgentSortAt(agent, sessionByKey),
@@ -261,7 +310,7 @@ export function getProjectAgentSessionDisplay({
 			.filter(([sessionKey]) => !agentBySessionKey.has(sessionKey))
 			.map<ProjectChildItem>(([sessionKey, session]) => ({
 				type: "session",
-				key: `session:${session.id}`,
+				key: getSessionRowKey(session),
 				session,
 				sortAt: session.updatedAt,
 				codexSubagents: codexSubagentsByParent.get(getCodexParentKey(session)) ?? [],
@@ -272,7 +321,7 @@ export function getProjectAgentSessionDisplay({
 			})),
 		...unkeyedSessions.map<ProjectChildItem>((session) => ({
 			type: "session",
-			key: `session:${session.id}`,
+			key: getSessionRowKey(session),
 			session,
 			sortAt: session.updatedAt,
 			codexSubagents: codexSubagentsByParent.get(getCodexParentKey(session)) ?? [],
@@ -314,7 +363,7 @@ export function getProjectAgentSessionDisplay({
 				if (nestedSubagentPaths.has(orphanKey) || visibleParentKeys.has(orphanKey)) continue;
 				children.push({
 					type: "session",
-					key: `session:${orphan.id}`,
+					key: getSessionRowKey(orphan),
 					session: orphan,
 					sortAt: orphan.updatedAt,
 					codexSubagents: [],

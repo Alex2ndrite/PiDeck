@@ -58,7 +58,7 @@ test("matches native Session paths only for runtime/catalog deduplication", () =
 
 
 test("keeps a stable Session row and key when a runtime is attached", () => {
-	const { getProjectAgentSessionDisplay } = loadModule();
+	const { getProjectAgentSessionDisplay, getSessionRowKey } = loadModule();
 	const record = session({
 		id: "desktop-session-1",
 		filePath: "C:/sessions/stable.jsonl",
@@ -84,6 +84,26 @@ test("keeps a stable Session row and key when a runtime is attached", () => {
 	assert.equal(before.children[0].key, "session:desktop-session-1");
 	assert.equal(after.children[0].key, before.children[0].key);
 	assert.equal(after.children[0].agent.id, "runtime-1");
+	assert.equal(getSessionRowKey(record), "session:desktop-session-1");
+});
+
+test("filters runtime rows by their canonical Session origin before falling back to agent source", () => {
+	const { filterAgentsForSidebarDisplay } = loadModule();
+	const piSession = session({ id: "pi-session", filePath: "C:/sessions/pi.jsonl", source: "pi" });
+	const codexSession = session({ id: "codex-session", filePath: "C:/sessions/codex.jsonl", source: "codex" });
+	const agents = [
+		{ id: "pi-runtime", sessionPath: "c:/SESSIONS/PI.jsonl", sessionEnvironment: "native", sessionSource: "codex", createdAt: 1, status: "running" },
+		{ id: "codex-runtime", sessionPath: "c:/SESSIONS/CODEX.jsonl", sessionEnvironment: "native", sessionSource: "pi", createdAt: 2, status: "running" },
+		{ id: "unlinked-pi", sessionSource: "pi", createdAt: 3, status: "idle" },
+		{ id: "unlinked-codex", sessionSource: "codex", createdAt: 4, status: "idle" },
+	];
+	const visible = filterAgentsForSidebarDisplay({
+		agents,
+		allSessions: [piSession, codexSession],
+		visibleSessions: [piSession],
+		sources: new Set(["pi"]),
+	});
+	assert.deepEqual(visible.map((agent) => agent.id), ["pi-runtime", "unlinked-pi"]);
 });
 
 test("preserves WSL path case while deduplicating native paths", () => {
