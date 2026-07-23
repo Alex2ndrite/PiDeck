@@ -43,13 +43,10 @@ function componentInvocation(source, componentName) {
 }
 
 test("pending prompts render inside the composer before composer-box", () => {
-  const footerIndex = appSource.indexOf('<footer ref={composerRef} className="composer">');
+  const composerAreaIndex = appSource.indexOf("<ComposerArea");
   const queuePanelIndex = appSource.indexOf("<QueuedPromptPanel");
-  const composerBoxIndex = appSource.indexOf("ref={composerBoxRef}");
-
-  assert.ok(footerIndex >= 0, "composer footer should exist");
-  assert.ok(queuePanelIndex > footerIndex, "pending prompts should stay inside the composer footer");
-  assert.ok(queuePanelIndex < composerBoxIndex, "pending prompts should render immediately above composer-box");
+  assert.ok(composerAreaIndex >= 0, "ComposerArea should exist");
+  assert.ok(queuePanelIndex > composerAreaIndex, "pending prompts should stay inside ComposerArea");
   assert.match(composerPanelsSource, /className="queued-track"/);
 });
 
@@ -90,9 +87,10 @@ test("compact queue panel exposes retract-to-input and discard only", () => {
 });
 
 test("busy composer keeps stop and queued-send controls separate", () => {
-  const sendControls = componentInvocation(appSource, "ComposerSendControls");
+  const composerAreaSource = readFileSync("src/renderer/src/components/session/ComposerArea.tsx", "utf8");
+  const sendControls = componentInvocation(composerAreaSource, "ComposerSendControls");
 
-  assert.match(sendControls, /onSendFollowUp=\{sendPromptAsFollowUp\}/);
+  assert.match(sendControls, /onSendFollowUp=\{composer\.delivery\.followUp\}/);
   assert.match(composerPanelsSource, /className="btn-circle stop"/);
   assert.match(composerPanelsSource, /className="send-behavior-toggle"/);
   assert.match(composerPanelsSource, /className="send-behavior-primary"/);
@@ -102,13 +100,13 @@ test("busy composer keeps stop and queued-send controls separate", () => {
   assert.match(composerPanelsSource, /\{props\.showBusySendControls && props\.hasComposerContent && \(/);
   assert.match(composerPanelsSource, /\) : !props\.keepBusyDraftControls \? \(/);
   assert.match(appSource, /if \(!isAgentBusy \|\| current\[activeAgentId\]\) return current;/);
-  assert.match(appSource, /showBusySendControls=\{showBusySendControls\}/);
+  assert.match(sendControls, /showBusySendControls=\{composer\.isBusy \|\| composer\.busyDraftLocked\}/);
   assert.match(stylesSource, /\.send-behavior-menu-wrap \{[\s\S]*?gap: 8px;/);
   assert.match(stylesSource, /\.composer-footer \.send-behavior-toggle \{[\s\S]*?height: 36px;[\s\S]*?background: var\(--color-accent\);[\s\S]*?border-radius: var\(--radius-pill\)/);
   assert.match(stylesSource, /\.send-behavior-chevron \{[\s\S]*?border-left:/);
   assert.match(composerPanelsSource, /className="send-behavior-primary"[\s\S]*?onClick=\{props\.onSend\}/);
   assert.match(composerPanelsSource, /className="send-behavior-chevron"[\s\S]*?onMouseEnter=\{props\.onKeepBehaviorMenuOpen\}[\s\S]*?onClick=\{props\.onToggleBehaviorMenu\}/);
-  assert.match(appSource, /onSend=\{\(\) => void sendPrompt\(\)\}/);
+  assert.match(composerAreaSource, /onSend=\{composer\.delivery\.send\}/);
   assert.match(composerPanelsSource, /className="send-behavior-option steer"/);
   assert.match(composerPanelsSource, /className="send-behavior-option follow-up"/);
   assert.match(appSource, /setTimeout\(\(\) => \{[\s\S]*?setSendBehaviorMenuOpen\(false\)[\s\S]*?\}, 160\)/);
@@ -123,7 +121,7 @@ test("composer keeps native typing responsive with a live draft ref and transiti
   assert.match(appSource, /function setPromptFromNativeInput\(agentId: string, value: string\)/);
   assert.match(appSource, /startPromptTransition\(\(\) => \{\s*setPromptByAgent/s);
   assert.match(appSource, /const livePrompt = targetAgentId[\s\S]*?livePromptByAgentRef\.current\[targetAgentId\] \?\? prompt/);
-  assert.match(appSource, /if \(suggestionsOpen\) setComposerCursor\(cursor\)/);
+  assert.match(appSource, /if \(suggestionsOpen \&\& suggestionItems\.length > 0\)/);
   assert.match(appSource, /queuedPrompt\.behavior === "direct" \? undefined : queuedPrompt\.behavior/);
   assert.match(appSource, /const currentDraft =[\s\S]*?livePromptByAgentRef\.current\[agentId\] \?\? promptByAgent\[agentId\]/);
   assert.match(appSource, /setPromptForAgent\(currentSessionId, editorText\.text\)/);

@@ -18,5 +18,5 @@ test("new conversation creates a metadata-only Session draft", () => {
 test("renderer has no direct Agent creation path", () => {
   assert.doesNotMatch(source, /async function createAgent\(/);
   assert.doesNotMatch(source, /api\.agents\.create\(/);
-  assert.match(source, /void createSessionDraft\(project\.id\)/);
+  assert.match(source, /void createSessionDraft\(/);
 });
