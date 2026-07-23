@@ -1,21 +1,22 @@
 import { useState, useRef } from "react";
 import type { Project, FileTreeNode, GitBranchInfo, WorktreeEntry, SessionSummary, SessionRecord } from "../../../shared/types";
+import { sessionRecordToSummary } from "../atoms/session-selectors";
 
 const SESSION_REFRESH_TIMEOUT_MS = 20_000;
 const SIDEBAR_PROJECT_CHILD_PAGE_SIZE = 5;
 
-function sessionRecordToSummary(record: SessionRecord): SessionSummary | undefined {
-  try {
-    return {
-      id: record.id,
-      filePath: record.filePath,
-      name: record.title || "Untitled",
-      updatedAt: record.updatedAt ?? 0,
-      createdAt: record.createdAt ?? 0,
-      source: record.source,
-      environment: record.environment,
-    } as unknown as SessionSummary;
-  } catch { return undefined; }
+function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  message: string,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => reject(new Error(message)), timeoutMs);
+  });
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
 }
 
 type UseProjectSyncInput = {
@@ -31,8 +32,7 @@ type UseProjectSyncInput = {
     files: { list: (projectId: string) => Promise<FileTreeNode[]> };
   };
   showToast: (message: string, duration?: number) => void;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  t: (key: any, params?: any) => string;
+  t: typeof import("../i18n").t;
 };
 
 export function useProjectSync(input: UseProjectSyncInput) {
@@ -74,21 +74,26 @@ export function useProjectSync(input: UseProjectSyncInput) {
     return records.map(sessionRecordToSummary).filter((s): s is SessionSummary => Boolean(s)).sort((a, b) => b.updatedAt - a.updatedAt);
   }
 
-  async function refreshProjectSessions(projectId: string, silent = false): Promise<SessionRecord[] | undefined> {
+  async function refreshProjectSessions(projectId: string, silent = false) {
     if (sessionRefreshRunningRef.current.has(projectId)) { sessionRefreshPendingRef.current.add(projectId); return; }
     const request = (sessionRequestByProjectRef.current[projectId] ?? 0) + 1;
     sessionRequestByProjectRef.current[projectId] = request;
     sessionRefreshRunningRef.current.add(projectId);
     if (!silent) { setSessionLoadingByProject((c) => ({ ...c, [projectId]: true })); await new Promise<void>((r) => setTimeout(r, 0)); }
     try {
-      const records = await Promise.race([
+      const records = await withTimeout(
         api.sessions.listCatalog(projectId),
-        new Promise<never>((_, reject) => setTimeout(() => reject(new Error(t("app.sessionRefreshTimeout", {}))), SESSION_REFRESH_TIMEOUT_MS)),
-      ]);
+        SESSION_REFRESH_TIMEOUT_MS,
+        t("app.sessionRefreshTimeout"),
+      );
       if (sessionRequestByProjectRef.current[projectId] !== request) return records;
       replaceProjectSessions({ projectId, sessions: records });
+      const sorted = records
+        .map(sessionRecordToSummary)
+        .filter((session): session is SessionSummary => Boolean(session))
+        .sort((a, b) => b.updatedAt - a.updatedAt);
       setVisibleProjectChildCountByProject((c) => ({ ...c, [projectId]: c[projectId] ?? SIDEBAR_PROJECT_CHILD_PAGE_SIZE }));
-      return records;
+      return sorted;
     } finally {
       if (sessionRequestByProjectRef.current[projectId] === request) {
         sessionRefreshRunningRef.current.delete(projectId);
