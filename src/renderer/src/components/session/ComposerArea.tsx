@@ -26,6 +26,8 @@ export type ComposerAreaProps = {
   statusText?: string;
   onOpenFile?: (path: string) => void;
   onHeightChange?: (height: number) => void;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  enqueue?: (sessionId: string, snapshot: Record<string, any>) => boolean;
 };
 
 export const ComposerArea = forwardRef<HTMLElement, ComposerAreaProps>(function ComposerArea(
@@ -35,6 +37,7 @@ export const ComposerArea = forwardRef<HTMLElement, ComposerAreaProps>(function 
   const composer = useSessionComposerController({
     sessionId: props.sessionId,
     onOpenFile: props.onOpenFile,
+    enqueue: props.enqueue,
   });
   const [height, setHeight] = useState(COMPOSER_MIN_HEIGHT);
   const composerMode = composer.bangMode === "bang-bang"

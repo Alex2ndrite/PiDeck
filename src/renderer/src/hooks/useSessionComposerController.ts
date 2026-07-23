@@ -61,6 +61,9 @@ export type ComposerPickerKind = "model" | "mode" | "thinking" | "template";
 export type UseSessionComposerControllerOptions = {
   sessionId: string;
   onOpenFile?: (path: string) => void;
+  /** Passed through to useSessionSend.enqueue. */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  enqueue?: (sessionId: string, snapshot: Record<string, any>) => boolean;
 };
 
 export type ComposerDraftGuard = {
@@ -176,7 +179,7 @@ function composerImageNotice(error: unknown): string {
 export function useSessionComposerController(
   options: UseSessionComposerControllerOptions,
 ) {
-  const { sessionId } = options;
+  const { sessionId, enqueue } = options;
   const store = useStore();
   const record = useAtomValue(sessionRecordByIdAtomFamily(sessionId));
   const runtime = useAtomValue(sessionRuntimeBySessionIdAtomFamily(sessionId));
@@ -516,6 +519,7 @@ export function useSessionComposerController(
       "会话尚未启动，请先发送一条消息再压缩",
       3000,
     ),
+    enqueue,
   });
 
   const selectSuggestion = useCallback((value: string) => {

@@ -52,6 +52,13 @@ export type UseSessionSendOptions = {
   showError?: (message: string, duration?: number) => void;
   showUnknown?: () => void;
   showCompactUnavailable?: () => void;
+  /** Called when streamingBehavior is "steer" before sending. Returns true if enqueued. */
+  enqueue?: (sessionId: string, snapshot: {
+    displayText: string;
+    message: string;
+    images?: ImageContent[];
+    agentMode: string;
+  }) => boolean;
   /**
    * Temporary A8 compatibility only. It mirrors contentEditable input but is never the
    * persistent draft source; all send snapshots and restoration are atom-backed.
@@ -186,6 +193,30 @@ export function useSessionSend(options: UseSessionSendOptions) {
     }
 
     sendingSessionIdsRef.current.add(sessionId);
+
+    // Queue shortcut: when the agent is busy (streamingBehavior === "steer"), enqueue locally
+    // instead of sending through the session API. The queue panel shows the pending item and
+    // drain dispatches it through agents.prompt when the agent becomes idle.
+    if (streamingBehavior === "steer" && options.enqueue) {
+      const { message: expandedMessage } = expandPromptTemplates(
+        message,
+        options.templates,
+      );
+      const enqueued = options.enqueue(sessionId, {
+        displayText: message,
+        message: expandedMessage,
+        images: imageSnapshot,
+        agentMode: store.get(sessionComposerModeByIdAtom)[sessionId] ?? "normal",
+      });
+      if (enqueued) {
+        clearSnapshot(sessionId);
+        options.resetComposerUi?.();
+        sendingSessionIdsRef.current.delete(sessionId);
+        return;
+      }
+      // Queue full: fall through to direct steer send.
+    }
+
     const requestId = crypto.randomUUID();
     setSendState({
       sessionId,

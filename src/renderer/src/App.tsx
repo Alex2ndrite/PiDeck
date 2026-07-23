@@ -1259,6 +1259,24 @@ export function App() {
     ? (queue.queuedPrompts[activeAgentId] ?? [])
     : [];
 
+  // Adapter: resolve sessionId → agentId for queue enqueue from modern ComposerArea.
+  const enqueueSessionPrompt = useCallback((
+    sessionId: string,
+    snapshot: { displayText: string; message: string; images?: ImageContent[]; agentMode: string },
+  ) => {
+    const agentId = store.get(sessionRuntimeBySessionIdAtomFamily(sessionId))?.agentId;
+    if (!agentId) return false;
+    return queue.enqueueQueuedPrompt(agentId, {
+      id: crypto.randomUUID(),
+      message: snapshot.message,
+      displayText: snapshot.displayText,
+      images: snapshot.images,
+      behavior: "steer",
+      agentMode: snapshot.agentMode as ComposerAgentMode,
+      timestamp: Date.now(),
+    });
+  }, [store, queue.enqueueQueuedPrompt]);
+
   const terminalDockState = activeAgentId
     ? terminalDockStateByAgent[activeAgentId]
     : undefined;
@@ -4310,6 +4328,7 @@ export function App() {
             ref={composerRef}
             sessionId={currentSessionId}
             onOpenFile={openFilePath}
+            enqueue={enqueueSessionPrompt as any}
             queuePanel={activeAgentId ? (
               <QueuedPromptPanel
                 trackRef={queuedTrackRef}
