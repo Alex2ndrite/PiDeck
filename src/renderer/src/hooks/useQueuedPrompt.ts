@@ -26,7 +26,6 @@ import {
   setSessionComposerModeAtom,
 } from "../atoms/composer-atoms";
 import { sessionIdByRuntimeAgentIdAtomFamily } from "../atoms/session-selectors";
-import { setSessionComposerModeAtom } from "../atoms/composer-atoms";
 import { runtimeCapabilityByAgentIdAtomFamily } from "../atoms/runtime-atoms";
 import { PromptDeliveryUnknownError } from "../utils/promptErrors";
 
