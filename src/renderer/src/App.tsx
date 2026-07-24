@@ -1355,17 +1355,6 @@ export function App() {
     showNotice(message, duration);
   }
 
-  async function refreshSessionHistory(projectId = sessionsProjectId) {
-    if (!projectId) return;
-    setSessionHistoryLoading(true);
-    try {
-      // 项目历史弹框内的刷新需要显式进入 loading 状态;否则刷新很快完成时用户会误以为按钮没有响应。
-      await refreshProjectSessions(projectId, true);
-    } finally {
-      setSessionHistoryLoading(false);
-    }
-  }
-
   async function cloneAgentSession(agentId: string) {
     try {
       const result = await api.agents.cloneSession(agentId);
