@@ -4856,6 +4856,46 @@ body.is-terminal-resizing .terminal-resize-handle::before {
   color: var(--color-info);
 }
 
+/* ── 未确认投递：保留可见状态，只允许用户确认后清除提示 ── */
+.session-delivery-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--color-warning) 35%, var(--color-border-subtle));
+  border-radius: 6px;
+  color: var(--color-warning);
+  background: color-mix(in srgb, var(--color-warning) 8%, var(--color-bg-muted));
+  font-size: var(--font-size-body);
+}
+.session-delivery-notice-copy {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: baseline;
+  gap: 6px;
+  overflow: hidden;
+}
+.session-delivery-notice-copy span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-primary);
+}
+.session-delivery-notice small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-secondary);
+}
+.session-delivery-notice-copy small {
+  flex: 0 1 auto;
+}
+.session-delivery-notice button {
+  flex: 0 0 auto;
+}
+
 /* ── 待发送：输入框上方右侧紧凑面板（内部行同宽，整体不拉满对话框） ── */
 .queued-track {
   width: 100%;

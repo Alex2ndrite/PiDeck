@@ -1,6 +1,6 @@
-import { Suspense } from "react";
+import { lazy, Suspense } from "react";
 import { Minus, X } from "lucide-react";
-import { FileDiffViewer } from "../app/FileDiffViewer";
+const FileDiffViewer = lazy(() => import("../app/FileDiffViewer").then((module) => ({ default: module.FileDiffViewer })));
 import { BrowserSurface } from "./BrowserSurface";
 import { GitPanel } from "../app/GitPanel";
 import { DrawerContent } from "../app/AppParts";

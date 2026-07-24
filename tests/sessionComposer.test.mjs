@@ -207,15 +207,23 @@ test("the real send state machine handles pure images, double clicks, and unknow
   await Promise.all([first, second]);
 
   const unknownHarness = createSendHarness({ drafts: { "session-a": "maybe" } });
+  let unknownCalls = 0;
   const unknownSend = unknownHarness.send({
     sessionId: "session-a",
     templates: [],
     compact: async () => undefined,
-    sendPrompt: async () => ({ accepted: false, delivery: "unknown", error: "timeout" }),
+    sendPrompt: async () => {
+      unknownCalls += 1;
+      return { accepted: false, delivery: "unknown", error: "timeout" };
+    },
   });
   await unknownSend();
   assert.equal(unknownHarness.state.get(unknownHarness.atoms.sessionDraftByIdAtom)["session-a"], undefined);
-  assert.equal(unknownHarness.state.get("sendStates")["session-a"].status, "unknown");
+  const unknownState = unknownHarness.state.get("sendStates")["session-a"];
+  assert.equal(unknownState.status, "unknown");
+  assert.equal(unknownState.unknownSnapshot.message, "maybe");
+  assert.equal(unknownState.unknownSnapshot.images, undefined);
+  assert.equal(unknownCalls, 1, "unknown delivery must never auto-retry");
 });
 
 test("Composer identity is session-only and send snapshots address the captured Session", () => {
@@ -269,6 +277,7 @@ test("unknown delivery is terminal and is not folded into rejected recovery", ()
   const source = sendSource();
   const unknownBranch = source.match(/else if \(outcome === "unknown"\) \{[\s\S]*?\n      \} else \{/)?.[0] ?? "";
   assert.doesNotMatch(unknownBranch, /restoreRejectedSnapshot/);
+  assert.match(unknownBranch, /unknownSnapshot: \{[\s\S]*?message/);
 });
 
 test("ComposerArea keeps legacy runtime queue outside the Session draft leaf", () => {

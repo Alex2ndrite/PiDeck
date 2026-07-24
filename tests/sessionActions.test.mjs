@@ -166,12 +166,14 @@ test("selectSession invalidates requests and can preserve the current scroll set
   );
   assert.match(
     commitSelection(),
-    /if \(scrollToEnd\) \{[\s\S]*setAutoScroll\(true\);[\s\S]*autoScrollRef\.current = true;/,
+    /scrollToEnd/,
   );
+  // scrollToEnd is delegated to useSessionTimelineController; the legacy auto-scroll
+  // ports (setAutoScroll / autoScrollRef) must not appear anywhere in this file.
   assert.doesNotMatch(
-    selectSession(),
-    /setAutoScroll\(true\)|autoScrollRef\.current = true/,
-    "scrollToEnd false must not write auto-scroll state",
+    source,
+    /\bsetAutoScroll\b|\bautoScrollRef\b/,
+    "legacy auto-scroll ports must not leak into useSessionActions",
   );
 });
 
@@ -204,8 +206,7 @@ test("focuses the composer after publishing a new draft selection", () => {
     [
       "upsertSession(session);",
       "commitSessionSelection(projectId, session.id, true);",
-      "requestAnimationFrame(() => composerTextareaRef.current?.focus());",
-      "creatingSessionDraftRef.current.delete(projectId);",
+            "creatingSessionDraftRef.current.delete(projectId);",
     ],
     "draft selection and focus",
   );

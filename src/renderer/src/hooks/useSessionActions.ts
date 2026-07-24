@@ -23,9 +23,6 @@ export interface UseSessionActionsOptions {
   // Refs
   openSessionRequestRef: MutableRefObject<number>;
   creatingSessionDraftRef: MutableRefObject<Set<string>>;
-  autoScrollRef: MutableRefObject<boolean>;
-  composerTextareaRef: MutableRefObject<HTMLDivElement | null>;
-
   // State values
   activeProjectId: string | undefined;
   sessionsProjectId: string | undefined;
@@ -36,7 +33,6 @@ export interface UseSessionActionsOptions {
   // State setters
   setActiveProjectId: (value: React.SetStateAction<string | undefined>) => void;
   setCurrentSessionId: (value: React.SetStateAction<string | undefined>) => void;
-  setAutoScroll: (value: React.SetStateAction<boolean>) => void;
   setSessionRefSelections: (value: React.SetStateAction<Record<string, SessionRefSelectionEntry>>) => void;
 
   // Getters
@@ -70,8 +66,6 @@ export function useSessionActions(options: UseSessionActionsOptions) {
   const {
     openSessionRequestRef,
     creatingSessionDraftRef,
-    autoScrollRef,
-    composerTextareaRef,
     activeProjectId,
     sessionsProjectId,
     projects,
@@ -79,7 +73,6 @@ export function useSessionActions(options: UseSessionActionsOptions) {
     sessionRefSelections,
     setActiveProjectId,
     setCurrentSessionId,
-    setAutoScroll,
     setSessionRefSelections,
     getSessionRecord,
     getProjectSessionRecords,
@@ -98,10 +91,8 @@ export function useSessionActions(options: UseSessionActionsOptions) {
   ) {
     setActiveProjectId(projectId);
     setCurrentSessionId(sessionId);
-    if (scrollToEnd) {
-      setAutoScroll(true);
-      autoScrollRef.current = true;
-    }
+    // useSessionTimelineController owns scroll restoration when the Session identity changes.
+    void scrollToEnd;
   }
 
   function selectProject(projectId: string) {
@@ -237,7 +228,6 @@ export function useSessionActions(options: UseSessionActionsOptions) {
       });
       upsertSession(session);
       commitSessionSelection(projectId, session.id, true);
-      requestAnimationFrame(() => composerTextareaRef.current?.focus());
     } catch (error) {
       showToast(error instanceof Error ? error.message : String(error), 4000);
     } finally {

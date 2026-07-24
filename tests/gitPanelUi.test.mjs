@@ -5,7 +5,12 @@ import { describe, test } from "node:test";
 const panel = readFileSync("src/renderer/src/components/app/GitPanel.tsx", "utf8");
 const styles = readFileSync("src/renderer/src/styles.css", "utf8");
 const i18n = readFileSync("src/renderer/src/i18n.ts", "utf8");
-const app = readFileSync("src/renderer/src/hooks/useFileEditor.ts", "utf8") + "\n" + readFileSync("src/renderer/src/App.tsx", "utf8");
+const app = [
+  readFileSync("src/renderer/src/hooks/useFileEditor.ts", "utf8"),
+  readFileSync("src/renderer/src/App.tsx", "utf8"),
+  readFileSync("src/renderer/src/components/app/AppShell.tsx", "utf8"),
+  readFileSync("src/renderer/src/components/workspace/DrawerSurface.tsx", "utf8"),
+].join("\n");
 const preload = readFileSync("src/preload/index.ts", "utf8");
 const main = readFileSync("src/main/index.ts", "utf8");
 const gitService = readFileSync("src/main/git/GitService.ts", "utf8");
@@ -203,7 +208,8 @@ describe("Git panel VS Code Source Control contract", () => {
     assert.match(panel, /function GraphContinuation/);
     assert.match(panel, /getFileIconSeti\(name\)/);
     assert.doesNotMatch(panel, /title=\{`\$\{commit\.message\}/);
-    assert.match(app, /commitDetail=\{api\.git\.commitDetail\}/);
+    assert.match(app, /gitApi=\{api\.git\}/);
+    assert.match(app, /commitDetail=\{gitApi\.commitDetail\}/);
     assert.match(preload, /Promise<CommitDetail \| null>/);
     assert.match(styles, /\.git-commit-hover\s*\{/);
     assert.match(styles, /\.git-history-file-row/);

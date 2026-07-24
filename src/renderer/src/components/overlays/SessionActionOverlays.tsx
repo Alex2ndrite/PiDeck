@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState, type ComponentProps } from "react";
-import { SettingsModal } from "../app/SettingsModal";
+import { lazy, Suspense, useEffect, useMemo, useState, type ComponentProps } from "react";
+const SettingsModal = lazy(() => import("../app/SettingsModal").then((module) => ({ default: module.SettingsModal })));
 import { ConfirmDialog } from "./OverlayParts";
 import { TrustConfirmModal } from "../app/TrustConfirmModal";
 import { CloseIconButton } from "../ui/IconButton";
@@ -98,7 +98,7 @@ export type SessionActionOverlaysProps = {
 
 export function SessionActionOverlays({ settings, feedback, confirm, trust }: SessionActionOverlaysProps) {
 	return <>
-		{settings?.open && <SettingsModal {...settings.props} />}
+		{settings?.open && <Suspense fallback={null}><SettingsModal {...settings.props} /></Suspense>}
 		{feedback && <FeedbackOverlay {...feedback} />}
 		{confirm?.open && <ConfirmDialog {...confirm.props} />}
 		{trust?.open && <TrustConfirmModal cwd={trust.cwd} projectName={trust.projectName} onChoose={trust.onChoose} />}

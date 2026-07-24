@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, test } from "node:test";
 
-const app = readFileSync("src/renderer/src/App.tsx", "utf8");
+const app = [
+  readFileSync("src/renderer/src/App.tsx", "utf8"),
+  readFileSync("src/renderer/src/components/workspace/DrawerSurface.tsx", "utf8"),
+  readFileSync("src/renderer/src/hooks/useWorkspacePanels.ts", "utf8"),
+].join("\n");
 const appParts = readFileSync("src/renderer/src/components/session/SurfaceComponents.tsx", "utf8");
 const settingsModal = readFileSync("src/renderer/src/components/app/SettingsModal.tsx", "utf8");
 const settingsStore = readFileSync("src/main/settings/SettingsStore.ts", "utf8");
@@ -38,7 +42,7 @@ describe("optional Git management entry", () => {
   test("removes the old header button and guards the drawer", () => {
     assert.doesNotMatch(app, /title="Git History & Compare"/);
     assert.match(app, /if \(panel === "git" && !settings\.enableGitManagement\) return/);
-    assert.match(app, /settings\.enableGitManagement && drawer === "git"/);
+    assert.match(app, /enableGitManagement && drawer === "git"/);
     assert.match(app, /current === "git" \? null : current/);
     assert.match(app, /filter\(\(\[, panel\]\) => panel !== "git"\)/);
   });

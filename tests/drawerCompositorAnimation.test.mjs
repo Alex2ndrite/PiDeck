@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-const app = readFileSync("src/renderer/src/App.tsx", "utf8");
+const appShell = readFileSync("src/renderer/src/components/app/AppShell.tsx", "utf8");
 const styles = readFileSync("src/renderer/src/styles.css", "utf8");
 
 function cssRule(selector) {
@@ -33,10 +33,10 @@ test("drawer uses only the short grid transition for open and close", () => {
 });
 
 test("drawer keeps its content mounted through the layout transition", () => {
-  assert.match(app, /WorkspaceDrawerHost/);
-  assert.match(app, /renderPanel/);
-  assert.match(app, /drawer && !drawerCollapsed \? drawerWidth : 0/);
-  assert.match(app, /drawer && !drawerCollapsed \? 260 : 0/);
+  assert.match(appShell, /WorkspaceDrawerHost/);
+  assert.match(appShell, /renderPanel=\{\(panel\) => drawerContent\(panel\)\}/);
+  assert.match(appShell, /drawer && !drawerCollapsed \? drawerWidth : 0/);
+  assert.match(appShell, /drawer && !drawerCollapsed \? 260 : 0/);
 });
 
 test("file rows use the integer control line-height token", () => {

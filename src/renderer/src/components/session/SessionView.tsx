@@ -72,6 +72,8 @@ export type SessionViewProps = {
 
   // ── Terminal dock ──
   terminalDockVisible: boolean;
+  terminalOpen: boolean;
+  terminalDockClosing: boolean;
   terminalCollapsed: boolean;
   availableTerminalHeight: number;
   setTerminalOpenForAgent: (agentId: string, open: boolean) => void;
@@ -133,6 +135,8 @@ export function SessionView({
   openFilePath,
   queuePanel,
   terminalDockVisible,
+  terminalOpen,
+  terminalDockClosing,
   terminalCollapsed,
   availableTerminalHeight,
   setTerminalOpenForAgent,
@@ -231,7 +235,9 @@ export function SessionView({
         terminalDockVisible && (
         <SessionRuntimeDock
           agentId={activeAgentId}
-          open={terminalDockVisible}
+          mounted={terminalDockVisible}
+          open={terminalOpen}
+          closing={terminalDockClosing}
           collapsed={terminalCollapsed}
           height={terminalRowHeight}
           terminal={api.terminal}

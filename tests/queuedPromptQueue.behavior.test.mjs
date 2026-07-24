@@ -248,20 +248,20 @@ test("parallel tools complete only after the final toolCallId ends", () => {
 });
 
 test("immediate unknown snapshots stay visible and acknowledgement-only", () => {
-  const appSource = readFileSync("src/renderer/src/App.tsx", "utf8");
+  const sessionSendSource = readFileSync("src/renderer/src/hooks/useSessionSend.ts", "utf8");
   const composerPanelsSource = readFileSync(
     "src/renderer/src/components/session/ComposerPanels.tsx",
     "utf8",
   );
-  assert.match(
-    appSource,
-    /if \(accepted === "unknown"\) \{\s*queue\.appendUnknownQueuedPrompt\(targetAgentId,/,
-  );
+  assert.match(sessionSendSource, /outcome === "unknown"/);
+  assert.match(sessionSendSource, /status: "unknown"[\s\S]*?unknownSnapshot: \{[\s\S]*?message/);
+  assert.match(composerPanelsSource, /function SessionDeliveryNotice/);
+  assert.match(composerPanelsSource, /status !== "unknown"/);
+  assert.match(composerPanelsSource, /onAcknowledge/);
   // Unknown rows stay in the compact panel; discard may clear them, but retract-to-input stays disabled.
   assert.match(composerPanelsSource, /status === "unknown"/);
   assert.match(composerPanelsSource, /canRetractQueuedPromptToInput\(status\)/);
   assert.match(composerPanelsSource, /canDiscardQueuedPrompt\(status\)/);
-  assert.match(appSource, /queue\.discardQueuedPrompt/);
   assert.equal(canRetractQueuedPromptToInput("pending"), true);
   assert.equal(canRetractQueuedPromptToInput("failed"), true);
   assert.equal(canRetractQueuedPromptToInput("sending"), false);
@@ -299,12 +299,13 @@ test("browser prompt returns the received SendPromptResult before background sta
 test("layout budget uses compact queue chrome and terminal still yields first", () => {
   const appSource = readFileSync("src/renderer/src/App.tsx", "utf8");
   const layoutSource = readFileSync("src/renderer/src/hooks/useSessionLayout.ts", "utf8");
+  const queueStateSource = readFileSync("src/renderer/src/utils/queuedPromptQueue.ts", "utf8");
   // ResizeObserver now lives in useSessionLayout.
   assert.match(layoutSource, /observer\.observe\(/);
   assert.match(layoutSource, /terminalRowHeight = input\.terminalCollapsed/);
-  // App still references queuedChromeBudget (aliased from hook) and QUEUED_PROMPT_VISIBLE.
+  // The root passes the measured queue budget; queue constants stay with the queue state machine.
   assert.match(appSource, /queuedChromeBudget/);
-  assert.match(appSource, /QUEUED_PROMPT_VISIBLE/);
+  assert.match(queueStateSource, /export const QUEUED_PROMPT_VISIBLE = 3/);
   assert.match(appSource, /const visibleQueuedPrompts = activeQueuedPrompts/);
   const stylesSource = readFileSync("src/renderer/src/styles.css", "utf8");
   assert.match(stylesSource, /\.queued-list \{[\s\S]*?max-height: 102px;[\s\S]*?overflow-y: auto;/);

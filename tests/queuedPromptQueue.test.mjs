@@ -19,6 +19,7 @@ const composerPanelsSource = readFileSync(
   "utf8",
 );
 const stylesSource = readFileSync("src/renderer/src/styles.css", "utf8");
+const i18nSource = readFileSync("src/renderer/src/i18n.ts", "utf8");
 const runtimeStateSource = readFileSync(
   "src/renderer/src/utils/agentRuntimeState.ts",
   "utf8",
@@ -40,6 +41,14 @@ const sharedTypesSource = readFileSync("src/shared/types.ts", "utf8");
 // Queue ownership now lives in useQueuedPrompt.
 const queuedPromptHookSource = readFileSync(
   "src/renderer/src/hooks/useQueuedPrompt.ts",
+  "utf8",
+);
+const composerControllerSource = readFileSync(
+  "src/renderer/src/hooks/useSessionComposerController.ts",
+  "utf8",
+);
+const sessionSendSource = readFileSync(
+  "src/renderer/src/hooks/useSessionSend.ts",
   "utf8",
 );
 
@@ -86,8 +95,8 @@ test("compact queue panel exposes retract-to-input and discard only", () => {
   assert.match(stylesSource, /\.queued-list \{[\s\S]*?max-height: 102px;[\s\S]*?overflow-y: auto;/);
   assert.match(stylesSource, /\.queued-row\.queued-behavior-steer \{/);
   assert.match(stylesSource, /\.queued-row\.queued-behavior-followUp \{/);
-  assert.match(appSource, /QUEUED_PROMPT_LIMIT/);
-  assert.match(appSource, /app\.queuedFull/);
+  assert.match(queuedPromptHookSource, /QUEUED_PROMPT_LIMIT/);
+  assert.match(i18nSource, /"app\.queuedFull"/);
   assert.doesNotMatch(composerPanelsSource, /app\.queuedRetry/);
   assert.doesNotMatch(composerPanelsSource, /app\.queuedAcknowledge/);
   assert.doesNotMatch(appSource, /retryQueuedPrompt/);
@@ -120,15 +129,15 @@ test("busy composer keeps stop and queued-send controls separate", () => {
   assert.match(stylesSource, /\.send-behavior-option-dot \{[\s\S]*?width: 7px;[\s\S]*?height: 7px;/);
 });
 
-test("composer keeps native typing responsive with a live draft ref and transition", () => {
-  assert.match(appSource, /const livePromptByAgentRef = useRef<Record<string, string>>\(\{\}\)/);
-  assert.match(appSource, /const \[, startPromptTransition\] = useTransition\(\)/);
-  assert.match(appSource, /function setPromptFromNativeInput\(agentId: string, value: string\)/);
-  assert.match(appSource, /startPromptTransition\(\(\) => \{\s*setPromptByAgent/s);
-  assert.match(appSource, /const livePrompt = targetAgentId[\s\S]*?livePromptByAgentRef\.current\[targetAgentId\] \?\? prompt/);
+test("composer keeps native typing inside the Session feature root", () => {
+  assert.match(composerControllerSource, /const liveDomDraftRef = useRef\(\{ sessionId, value: draft \}\)/);
+  assert.match(composerControllerSource, /liveDomDraftRef\.current = \{ sessionId, value \}/);
+  assert.match(composerControllerSource, /setDraft\(value\)/);
+  assert.match(composerControllerSource, /canApplyRuntimeEditorText/);
+  assert.doesNotMatch(appSource, /currentSessionDraftAtom/);
+  assert.doesNotMatch(appSource, /setPromptForAgent\(currentSessionId, editorText\.text\)/);
   assert.match(queuedPromptHookSource, /queuedPrompt\.behavior === "direct" \? undefined : queuedPrompt\.behavior/);
   assert.match(queuedPromptHookSource, /const currentDraft =[\s\S]*?livePromptByAgentRef\.current\[agentId\] \?\? promptByAgent\[agentId\]/);
-  assert.match(appSource, /setPromptForAgent\(currentSessionId, editorText\.text\)/);
   assert.match(appSource, /livePromptByAgentRef\.current = migrateAgentRecord/);
   assert.match(composerPanelsSource, /props\.sendBehaviorMenuOpen &&\s*props\.showBusySendControls &&\s*props\.hasComposerContent/);
   assert.match(composerPanelsSource, /className="send-behavior-option steer"\s*type="button"/);
@@ -211,9 +220,10 @@ test("indeterminate prompt timeout never becomes a retryable rejection", () => {
     /命令接收结果未知[\s\S]*?delivery: "unknown"/,
   );
   assert.match(queuedPromptHookSource, /status: "unknown"/);
-  assert.match(appSource, /appendUnknownQueuedPrompt\(targetAgentId, queuedPromptSnapshot\)/);
+  assert.match(sessionSendSource, /outcome === "unknown"/);
+  assert.match(sessionSendSource, /status: "unknown"/);
+  assert.match(composerPanelsSource, /SessionDeliveryNotice/);
   assert.match(appSource, /queuedPrompt\.status === "unknown"/);
-  assert.match(appSource, /accepted === "unknown"/);
 });
 
 test("prompt acceptance is explicit across the main and renderer boundary", () => {

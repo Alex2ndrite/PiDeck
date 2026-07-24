@@ -6,7 +6,6 @@ import {
   useMemo,
   useRef,
   useState,
-  useTransition,
   useCallback,
 } from "react";
 import { useAtomValue, useSetAtom, useStore } from "jotai";
@@ -31,22 +30,17 @@ import {
   SidebarContent,
   type SidebarActions,
 } from "./components/sidebar/SidebarContent";
-import { useFeishuBridge } from "./hooks/useFeishuBridge";
-import { useAutoScroll } from "./hooks/useAutoScroll";
 import { useGlobalAgentListeners } from "./hooks/useGlobalAgentListeners";
 import { useRename } from "./hooks/useRename";
 import { useSidebarController } from "./hooks/useSidebarController";
 import { useProjectRuntimeCapabilities } from "./hooks/useRuntimeCapabilities";
 import { useSessionRuntimeBridge } from "./hooks/useSessionRuntimeBridge";
-import { useSessionMessages } from "./hooks/useSessionMessages";
 import { useSessionLayout } from "./hooks/useSessionLayout";
-import { useSessionSend } from "./hooks/useSessionSend";
 import { useFileEditor } from "./hooks/useFileEditor";
 import { useOverlayActions } from "./hooks/useOverlayActions";
 import { useWorkspacePanels, type WorkspaceDrawerPanel } from "./hooks/useWorkspacePanels";
 import { useTerminalDock } from "./hooks/useTerminalDock";
 import { useImportFlow } from "./hooks/useImportFlow";
-import { useImagePaste } from "./hooks/useImagePaste";
 import { useQueuedPrompt, type QueuedPrompt } from "./hooks/useQueuedPrompt";
 import { PromptDeliveryUnknownError } from "./utils/promptErrors";
 
@@ -57,10 +51,7 @@ import {
   agentInventoryAtom,
   applyRuntimeCapabilityAtom,
   claimSessionRuntimeUiResponseAtom,
-  currentSessionAttachmentsAtom,
   currentSessionAtom,
-  currentSessionComposerModeAtom,
-  currentSessionDraftAtom,
   currentSessionIdAtom,
   currentSessionRuntimeAtom,
   currentSessionRuntimeUiAtom,
@@ -80,7 +71,6 @@ import {
   sessionSummariesByProjectIdAtomFamily,
   setSessionAttachmentsAtom,
   setSessionCatalogLoadStateAtom,
-  setSessionComposerModeAtom,
   setSessionDraftAtom,
   upsertAgentInventoryAtom,
   upsertSessionAtom,
@@ -105,7 +95,6 @@ import {
 import {
   migrateQueuedPrompts,
 } from "./utils/queuedPromptQueue";
-import { useMessagePagination } from "./hooks/useMessagePagination";
 import { useResize } from "./hooks/useResize";
 import { useSessionTimelineController } from "./hooks/useSessionTimelineController";
 import { useSessionActions } from "./hooks/useSessionActions";
@@ -142,10 +131,6 @@ import {
   getToolNewContent,
   getToolChangedLineCount,
 } from "./components/app/AppUtils";
-import {
-	getCaretOffset as getCaretOffsetOf,
-	parseRichInputChips,
-} from "./components/app/RichInput";
 // 懒加载：Monaco Editor（~17.6MB Web Worker）仅在用户打开 diff 时才加载
 const FileDiffViewer = lazy(() => import("./components/app/FileDiffViewer").then((m) => ({ default: m.FileDiffViewer })));
 // 懒加载模态框，减少首屏 JS 体积
@@ -184,16 +169,13 @@ export function App() {
 
   useSessionRuntimeBridge();
   const store = useStore();
-  const [, startPromptTransition] = useTransition();
+  // Composer input state is owned by ComposerArea; the root does not subscribe to each key.
   const currentSessionId = useAtomValue(currentSessionIdAtom);
   const currentSession = useAtomValue(currentSessionAtom);
   const currentSessionRuntime = useAtomValue(currentSessionRuntimeAtom);
   const currentSessionRuntimeRef = useRef(currentSessionRuntime);
   currentSessionRuntimeRef.current = currentSessionRuntime;
   const currentSessionRuntimeUi = useAtomValue(currentSessionRuntimeUiAtom);
-  const currentSessionDraft = useAtomValue(currentSessionDraftAtom);
-  const currentSessionAttachments = useAtomValue(currentSessionAttachmentsAtom);
-  const currentSessionComposerMode = useAtomValue(currentSessionComposerModeAtom);
   const currentSessionSendState = useAtomValue(currentSessionSendStateAtom);
   const projects = useAtomValue(projectInventoryAtom);
   const agents = useAtomValue(agentInventoryAtom);
@@ -209,7 +191,6 @@ export function App() {
   const setSessionDraft = useSetAtom(setSessionDraftAtom);
   const setSessionAttachments = useSetAtom(setSessionAttachmentsAtom);
   const setSessionCatalogLoadState = useSetAtom(setSessionCatalogLoadStateAtom);
-  const setSessionComposerMode = useSetAtom(setSessionComposerModeAtom);
   const removeSessionState = useSetAtom(removeSessionStateAtom);
   const sessionRuntimeUiResponder = useMemo(() => {
     if (!currentSessionId || !currentSessionRuntime?.agentId || currentSessionRuntime.runtimeGeneration == null) return undefined;
@@ -217,10 +198,6 @@ export function App() {
     return createSessionRuntimeUiResponder({ binding: b, readBinding: () => { const r = currentSessionRuntimeRef.current; return r?.agentId ? { sessionId: currentSessionId, agentId: r.agentId, runtimeGeneration: r.runtimeGeneration } : undefined; }, claim: (i) => claimSessionUiResponse(i), rollback: (i) => rollbackSessionUiResponse(i), send: async (i) => sendSessionUiResponse(i.requestId, i.response) });
   }, [currentSessionId, currentSessionRuntime?.agentId, currentSessionRuntime?.runtimeGeneration, claimSessionUiResponse, rollbackSessionUiResponse]);
   const removeSessionComposerState = useSetAtom(removeSessionComposerStateAtom);
-  const {
-    messages: currentSessionMessages,
-    isLoading: currentSessionMessagesLoading,
-  } = useSessionMessages(currentSessionId);
   const sessionTimeline = useSessionTimelineController({ sessionId: currentSessionId });
   const currentSessionIdRef = useRef<string | undefined>(currentSessionId);
   currentSessionIdRef.current = currentSessionId;
@@ -246,17 +223,13 @@ export function App() {
   activeAgentIdRef.current = activeAgentId;
   const agentsRef = useRef<AgentTab[]>(agents);
   agentsRef.current = agents;
-  const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(
-    new Set(),
-  );
+  const collapsedProjects = sidebarController.collapsedProjectIds;
 
   const [commands, setCommands] = useState<PiCommand[]>([]);
-  const [promptTemplatePickerOpen, setPromptTemplatePickerOpen] = useState(false);
   const [promptTemplateList, setPromptTemplateList] = useState<
     Array<{ name: string; path: string; description: string; content: string; argumentHint?: string }>
   >([]);
   const [sessionActionsOpen, setSessionActionsOpen] = useState(false);
-  const [switchingBranch, setSwitchingBranch] = useState<string | null>(null);
   // TECH DEBT (Phase 3): promptByAgent is a legacy draft path for non-Session agents.
   // Session drafts go through setSessionDraft→sessionDraftByIdAtom.
   // When all agents migrate to Session model, remove promptByAgent and unify to atom path.
@@ -269,8 +242,6 @@ export function App() {
 
   /** 当前正在重启的 Agent，用于仅给对应会话显示 loading，避免切到其他 Agent 后仍被全局禁用。 */
   const [restartingAgentId, setRestartingAgentId] = useState<string | null>(null);
-  /** 用户点击 ask_question 取消/abort 后的过渡标记，立即隐藏运行指示器。 */
-  const [cancellingUi, setCancellingUi] = useState(false);
   // TECH DEBT (Phase 3): attachedImagesByAgent is a legacy draft path for non-Session agents.
   // Session attachments go through setSessionAttachments. Same dual-write pattern as promptByAgent.
   // When all agents migrate to Session model, remove attachedImagesByAgent and unify.
@@ -281,30 +252,11 @@ export function App() {
   attachedImagesByAgentRef.current = attachedImagesByAgent;
   const [previewImage, setPreviewImage] = useState<ImageContent | null>(null);
 
-  /** 输入框发送模式：normal 直接交给 agent，plan 通过隐藏标记触发 PiDeck Plan Mode 扩展。 */
+  /** Legacy agent queue mode remains local until the final non-Session path is removed. */
   const [composerAgentModes, setComposerAgentModes] = useState<Record<string, ComposerAgentMode>>({});
-
-  const activeAgentComposerMode = activeAgentId
-    ? composerAgentModes[activeAgentId]
-    : undefined;
-  const currentComposerAgentMode = currentSessionId
-    ? currentSessionComposerMode
-    : (activeAgentComposerMode ?? "normal");
   const setComposerAgentModeForAgent = (agentId: string, mode: ComposerAgentMode) => {
     setComposerAgentModes((prev) => ({ ...prev, [agentId]: mode }));
   };
-  const setCurrentComposerAgentMode = (mode: ComposerAgentMode) => {
-    const sessionId = currentSessionIdRef.current;
-    if (sessionId) {
-      setSessionComposerMode({ sessionId, mode });
-      return;
-    }
-    const targetAgentId = activeAgentIdRef.current;
-    if (!targetAgentId) return;
-    setComposerAgentModeForAgent(targetAgentId, mode);
-  };
-  /** 上一次 isAgentBusy 状态,用于检测 busy→idle 转换 */
-  const prevIsAgentBusyRef = useRef(false);
   /** 客户端队列按 agent 记录 flush 锁，避免 tool-end 与 idle 并发投递。 */
   const queueFlushByAgentRef = useRef<Set<string>>(new Set());
 
@@ -322,8 +274,7 @@ export function App() {
   // 会话区不再维护独立的“修改文件摘要”卡片；diff 入口贴在 edit/write 工具调用处，
   // 避免会话输入框上方摘要与 Git 工作区状态/历史会话恢复互相干扰。
   const agentStatusByAgentRef = useRef<Record<string, AgentTab["status"]>>({});
-  const [, setLogs] = useState<string[]>([]); // 写入式调试日志,仅用于 onLog/onError 捕获
-  const [search, setSearch] = useState("");
+  const search = sidebarController.search;
 
   // 记录 composer 光标位置,用于光标相关的 @ / 触发检测与建议项替换。
   const [composerCursor, setComposerCursor] = useState(0);
@@ -345,11 +296,6 @@ export function App() {
   const [agentActionLoading, setAgentActionLoading] = useState<
     "copy" | "export" | null
   >(null);
-  /** 侧边栏删除确认：父会话包含子会话时弹窗提醒 */
-  const [sidebarDeleteConfirm, setSidebarDeleteConfirm] = useState<{
-    session: SessionSummary;
-    childCount: number;
-  } | null>(null);
   const [projectMenu, setProjectMenu] = useState<{
     x: number;
     y: number;
@@ -370,7 +316,6 @@ export function App() {
   // 历史命令：按 agent 隔离，agent 关闭即清除（不持久化）
   const promptHistoryRef = useRef<Record<string, string[]>>({});
 
-  const [compacting, setCompacting] = useState(false);
   // Drawer state delegated to useWorkspacePanels.
   const workspace = useWorkspacePanels({ projectId: activeProjectId });
   const drawer = workspace.drawer;
@@ -518,10 +463,6 @@ export function App() {
   // upToDateVersion: hook does not expose this; used by AppUpdateOverlay for "up to date" toast.
   const [upToDateVersion, setUpToDateVersion] = useState<string | null>(null);
   const [configOpen, setConfigOpen] = useState(false);
-  /** 会话定位跳转到尚未加载的旧消息时，先扩展分页再在 effect 中滚动定位；此状态保存待跳转的消息 id。 */
-  const [pendingJumpId, setPendingJumpId] = useState<string | null>(null);
-  /** 加载更多历史消息前的滚动锚点（旧 scrollHeight + scrollTop），用于渲染后按顶部锚定恢复滚动位置。 */
-  const loadMoreAnchorRef = useRef<{ height: number; top: number } | null>(null);
 
   const PROJECT_EXPANDED_DIRS_KEY_PREFIX = "pid:project-expanded-dirs:";
 
@@ -624,25 +565,18 @@ export function App() {
     terminalRowHeight: activeTerminalHeight,
     setTerminalOpenForAgent,
     setTerminalCollapsedForAgent,
-    terminalHeightByAgent,
     setTerminalHeightByAgent,
-    terminalDockMounted,
-    terminalDockAgentId,
     prune: pruneTerminalDockState,
   } = useTerminalDock(activeAgentId);
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set());
   const sessionComboRef = useRef<HTMLDivElement | null>(null);
   const queuedTrackRef = useRef<HTMLDivElement | null>(null);
-  const timelineRef = useRef<HTMLElement | null>(null);
 
   const composerTextareaRef = useRef<HTMLDivElement | null>(null);
   // RichInput 受控重渲染后,光标应恢复到的纯文本偏移(供建议选中/清除后恢复选区)。
   const pendingComposerCaretRef = useRef<number | null>(null);
   const pendingAgentsRef = useRef<PendingAgentTab[]>([]);
 
-  // ===== 飞书桥接 =====
-
-  const feishu = useFeishuBridge();
   const scratchPad = useScratchPad();
 
   // Drawer loading handled by useWorkspacePanels; only expandedDirs logic remains.
@@ -691,28 +625,9 @@ export function App() {
     ? [...displayAgents, ...pendingAgents].find((agent) => agent.id === activeAgentId)
     : undefined;
 
-  const {
-    autoScroll,
-    autoScrollRef,
-    programmaticScrollRef,
-    showScrollToBottom,
-    scrollToBottom,
-    setAutoScroll,
-  } = useAutoScroll(timelineRef, { key: activeAgentId, statusKey: activeAgent?.status });
-  // prompt 文本：优先从 live ref 读取（始终保持最新），promptByAgent 仅在 chips 变化时更新作为兜底。
-  // 不建立 state 依赖——普通按键不会触发 App 重渲染。
-  const promptAgentKey = currentSessionId ?? activeAgentId ?? "";
-  const prompt = currentSessionId
-    ? (livePromptByAgentRef.current[currentSessionId] ?? currentSessionDraft)
-    : promptAgentKey
-      ? (livePromptByAgentRef.current[promptAgentKey] ?? promptByAgent[promptAgentKey] ?? "")
-      : "";
-  const attachedImages = currentSessionId
-    ? currentSessionAttachments
-    : activeAgentId
-      ? (attachedImagesByAgent[activeAgentId] ?? [])
-      : [];
-
+  // Timeline scroll, pagination and jump ownership lives in sessionTimeline.
+  // Modern Session drafts and attachments are subscribed by ComposerArea; the root only
+  // keeps the legacy queue adapter for agents that do not yet have a Session record.
   function setPromptForAgent(
     agentId: string,
     value: string | ((current: string) => string),
@@ -740,50 +655,11 @@ export function App() {
     });
   }
 
-  function setPromptFromNativeInput(agentId: string, value: string) {
-    // 同步更新 live ref（发送路径读取）。Session 草稿同时写入 atom，切换后可立即恢复。
-    if (value) livePromptByAgentRef.current[agentId] = value;
-    else delete livePromptByAgentRef.current[agentId];
-
-    if (currentSessionIdRef.current === agentId || getSessionRecord(agentId)) {
-      startPromptTransition(() => {
-        setSessionDraft({ sessionId: agentId, value });
-      });
-      return;
-    }
-
-    // 仅 chips 变化时才更新旧 Agent state（触发 RichInput 的 chips 重算 + renderDom）。
-    const oldValue = promptByAgent[agentId] ?? "";
-    const oldChipsKey = parseRichInputChips(oldValue, validCommandNames, validFilePaths, new Set())
-      .map((c) => `${c.start}:${c.end}:${c.kind}`)
-      .join(",");
-    const newChipsKey = parseRichInputChips(value, validCommandNames, validFilePaths, new Set())
-      .map((c) => `${c.start}:${c.end}:${c.kind}`)
-      .join(",");
-    if (oldChipsKey !== newChipsKey) {
-      startPromptTransition(() => {
-        setPromptByAgent((current) => {
-          if (!value) {
-            const next = { ...current };
-            delete next[agentId];
-            return next;
-          }
-          return { ...current, [agentId]: value };
-        });
-      });
-    }
-  }
 
   function getComposerTargetId() {
     return currentSessionIdRef.current ?? activeAgentIdRef.current;
   }
 
-  function getLiveComposerPrompt() {
-    const targetId = getComposerTargetId();
-    return targetId
-      ? (livePromptByAgentRef.current[targetId] ?? prompt)
-      : prompt;
-  }
 
   function setPrompt(value: string | ((current: string) => string)) {
     const targetId = getComposerTargetId();
@@ -808,12 +684,6 @@ export function App() {
     setAttachedImagesByAgent(next);
   }
 
-  function setAttachedImages(
-    value: ImageContent[] | ((current: ImageContent[]) => ImageContent[]),
-  ) {
-    const targetId = getComposerTargetId();
-    if (targetId) setAttachedImagesForAgent(targetId, value);
-  }
 
   // Queue ownership extracted to useQueuedPrompt.
   const queue = useQueuedPrompt({
@@ -855,7 +725,7 @@ export function App() {
     });
   }, [store, queue.enqueueQueuedPrompt]);
 
-  const activeMessages = currentSessionId ? currentSessionMessages : [];
+  const activeMessages = sessionTimeline.messages;
   const agentRuntimeState = activeAgentId
     ? activeProjectRuntimeCapabilities[activeAgentId]
     : undefined;
@@ -876,11 +746,6 @@ export function App() {
       (currentSessionSendState.status === "activating" ? "starting" : "idle"))
     : undefined;
   const hasActiveConversation = Boolean(currentSession);
-  const isConversationLoading = Boolean(
-    currentSessionId &&
-    activeMessages.length === 0 &&
-    (currentSessionMessagesLoading || currentSessionSendState.status === "activating"),
-  );
   const currentSessionLiveAgentId =
     currentSessionRuntime?.agentId === activeAgentId &&
     activeAgent &&
@@ -911,20 +776,6 @@ export function App() {
       .join("|");
   }, [activeProjectId, activeProjectRuntimeCapabilities, displayAgents]);
 
-  // 消息分页:超过 100 条消息时启用,大幅减少输入卡顿
-  // 首屏 100 条,每次加载 100 条,一页一页懒加载
-  const {
-    visibleMessages: paginatedMessages,
-    hasMore: hasMoreMessages,
-    loadMore: loadMoreMessages,
-    loadUntilIncluded: loadMessagesUntilIncluded,
-    isLoading: isLoadingMoreMessages,
-  } = useMessagePagination({
-    messages: activeMessages,
-    initialPageSize: 100, // 首屏 100 条
-    pageSize: 100,        // 每次加载 100 条
-    enabled: activeMessages.length > 100, // 超过 100 条才启用
-  });
 
   function sendSessionUiResponse(requestId: string, response: AgentUiResponse) {
     if (!currentSessionId || !currentSessionRuntime) return;
@@ -959,23 +810,7 @@ export function App() {
     );
   }, [currentSessionId, currentSessionRuntimeUi]);
 
-  const lastSessionEditorTextRef = useRef("");
-  // TECH DEBT (Phase 3): This handler writes to session draft via setPromptForAgent
-  // without checking draftGuard (unlike useSessionComposerController). If the user has
-  // modified the draft since the agent sent editorText, this may overwrite user input.
-  // Should guard with canApplyRuntimeEditorText or remove in favor of ComposerArea's handler.
-  useEffect(() => {
-    const editorText = currentSessionRuntimeUi?.editorText;
-    if (!currentSessionId || !editorText) return;
-    const key = `${currentSessionId}:${currentSessionRuntimeUi.runtimeGeneration}:${editorText.revision}`;
-    if (lastSessionEditorTextRef.current === key) return;
-    lastSessionEditorTextRef.current = key;
-    setPromptForAgent(currentSessionId, editorText.text);
-    setComposerCursor(editorText.text.length);
-    pendingComposerCaretRef.current = editorText.text.length;
-  }, [currentSessionId, currentSessionRuntimeUi]);
-  /** 当前 Session 的实时思考文本只来自 generation envelope。 */
-  const activeThinking = currentSessionRuntime?.thinking ?? "";
+  // Runtime editor text is applied by useSessionComposerController, which owns the draft guard.
 
   // Layout calculation delegated to useSessionLayout (refs + ResizeObserver + math).
   const sessionLayout = useSessionLayout({
@@ -1193,8 +1028,6 @@ export function App() {
   } = useSessionActions({
     openSessionRequestRef,
     creatingSessionDraftRef,
-    autoScrollRef,
-    composerTextareaRef,
     activeProjectId,
     sessionsProjectId,
     projects,
@@ -1202,7 +1035,6 @@ export function App() {
     sessionRefSelections,
     setActiveProjectId,
     setCurrentSessionId,
-    setAutoScroll,
     setSessionRefSelections,
     getSessionRecord,
     getProjectSessionRecords,
@@ -1342,14 +1174,7 @@ export function App() {
         void queue.flushQueuedSteerPrompts(agentId);
       }
     },
-    onAgentLog: (payload) => {
-      setLogs((current) => {
-        const nextLog = `[${payload.agentId.slice(0, 8)}] ${payload.text}`;
-        return current.length < 200
-          ? [...current, nextLog]
-          : [...current.slice(-199), nextLog];
-      });
-    },
+    onAgentLog: () => undefined,
     onSettingsApplied: (next) => {
       setSettings(next);
       showToast(t("settings.restartNotice"));
@@ -1478,37 +1303,7 @@ export function App() {
     };
   }, [activeProjectId, activeProjectHasBusyAgent, activeProjectSessionSyncKey, collapsedProjects]);
 
-  function ensureComposerTailVisible() {
-    const editor = composerTextareaRef.current;
-    if (!editor || document.activeElement !== editor) return;
-    // RichInput 用纯文本偏移表示光标;光标在末尾时同步滚动到底,行为与原 textarea 一致。
-    const len = editor.textContent?.length ?? 0;
-    const atEnd = getCaretOffsetOf(editor) >= len;
-    if (!atEnd) return;
-    requestAnimationFrame(() => {
-      const current = composerTextareaRef.current;
-      if (!current) return;
-      current.scrollTop = current.scrollHeight;
-    });
-  }
-
-  function syncComposerAutoHeight() {
-    const box = composerBoxRef.current;
-    const editor = composerTextareaRef.current;
-    if (!box || !editor) return;
-
-    // 宽度变化会改变软换行位置,编辑区的 scrollHeight 才是当前内容真实需要的高度。
-    // 这里减去 chrome 高度(顶部留白/工具条/底部状态条),把问题修在布局源头而不是靠用户手动拖。
-    const chromeHeight = box.offsetHeight - editor.clientHeight;
-    const nextHeight = sessionClampComposerHeight(
-      editor.scrollHeight + chromeHeight,
-    );
-    setComposerAutoHeight((current) =>
-      Math.abs(current - nextHeight) <= 1 ? current : nextHeight,
-    );
-    ensureComposerTailVisible();
-  }
-
+  // Composer sizing is owned by ComposerArea and useSessionLayout.
   // 待发送轨道高度变化会改变 composer 的 chrome 高度；队列增删后重新 clamp，
   // 保证大量卡片出现时输入框仍留在可视区域，撤回后也不会保留过高尺寸。
   useLayoutEffect(() => {
@@ -1517,45 +1312,7 @@ export function App() {
     setComposerAutoHeight((current) => Math.min(current, maxHeight));
   }, [activeAgentId, activeQueuedPrompts.length]);
 
-  // 给定位命中的消息元素加一个短暂的高亮动画，方便用户在长会话中快速识别跳转落点。
-  function highlightMessageElement(el: HTMLElement) {
-    el.classList.remove("message-jump-highlight");
-    // 强制 reflow 以便重复跳转同一条消息时仍能重新触发动画。
-    void el.offsetWidth;
-    el.classList.add("message-jump-highlight");
-    window.setTimeout(() => el.classList.remove("message-jump-highlight"), 2000);
-  }
-
-  // 点击“加载更多历史消息”：先记录当前滚动锚点，再触发分页加载，
-  // 渲染后的 effect 会根据新增高度补偿 scrollTop，保持视图稳定。
-  function handleLoadMoreMessages() {
-    const timeline = timelineRef.current;
-    if (timeline) {
-      loadMoreAnchorRef.current = {
-        height: timeline.scrollHeight,
-        top: timeline.scrollTop,
-      };
-    }
-    loadMoreMessages();
-  }
-
-  // 会话定位跳转：若目标消息已在当前分页内则直接滚动定位；
-  // 否则先扩展分页窗口把它包含进来，交给 pendingJumpId effect 在渲染后定位。
-  function handleOutlineJump(id: string) {
-    const el = document.querySelector(
-      `[data-message-id="${CSS.escape(id)}"]`,
-    ) as HTMLElement | null;
-    if (el) {
-      el.scrollIntoView({ behavior: "smooth", block: "start" });
-      highlightMessageElement(el);
-      return;
-    }
-    const index = activeMessages.findIndex((m) => m.id === id);
-    if (index < 0) return;
-    loadMessagesUntilIncluded(index);
-    setPendingJumpId(id);
-  }
-
+  // Outline jumps through the same timeline controller that owns pagination and scroll state.
   // Clamp composer height when layout changes (useSessionLayout handles ResizeObserver).
   useLayoutEffect(() => {
     setComposerHeight((current) => sessionClampComposerHeight(current));
@@ -1581,32 +1338,6 @@ export function App() {
     }
   }, [sessionSourceFilter]);
 
-  // 加载更多历史消息后，按顶部锁定的方式恢复滚动位置。
-  // 历史消息会插入到 .message-list 顶部，若不补偿新增高度，浏览器保持原 scrollTop 会导致视图跳动，
-  // 用户会感觉输入框/内容错位。这里把新增高度增量加回 scrollTop，让当前看到的消息留在原位。
-  // 使用 useLayoutEffect 在浏览器绘制前同步补偿，避免用户看到中间跳动的一帧。
-  useLayoutEffect(() => {
-    const anchor = loadMoreAnchorRef.current;
-    if (!anchor) return;
-    const el = timelineRef.current;
-    if (!el) return;
-    const delta = el.scrollHeight - anchor.height;
-    if (delta !== 0) el.scrollTop = anchor.top + delta;
-    loadMoreAnchorRef.current = null;
-  }, [paginatedMessages.length]);
-
-  // 会话定位跳转到尚未加载的消息时，先通过 loadMessagesUntilIncluded 扩展分页窗口；
-  // 该消息被渲染进 DOM 后，在此 effect 中真正滚动定位并短暂高亮，提示用户落点。
-  useEffect(() => {
-    if (!pendingJumpId) return;
-    const el = document.querySelector(
-      `[data-message-id="${CSS.escape(pendingJumpId)}"]`,
-    ) as HTMLElement | null;
-    if (!el) return;
-    el.scrollIntoView({ behavior: "smooth", block: "start" });
-    highlightMessageElement(el);
-    setPendingJumpId(null);
-  }, [pendingJumpId, paginatedMessages.length]);
 
   // 追踪 agent 会话开始/结束时间,计算会话时长
   // 点击外部区域自动关闭会话组合下拉
@@ -1681,7 +1412,7 @@ export function App() {
     void api.files
       .list(activeProjectId)
       .then(setFiles)
-      .catch((error) => setLogs((current) => [...current, String(error)]));
+      .catch((error) => console.error("[Files] refresh failed", error));
     void api.git
       .branches(activeProjectId)
       .then(setGitInfo)
@@ -1864,15 +1595,12 @@ export function App() {
 
   async function compactAgent(compactPrompt?: string, agentId = activeAgentId) {
     if (!agentId || isPendingAgentId(agentId)) return;
-    setCompacting(true);
     try {
       const state = await api.agents.compact(agentId, compactPrompt);
       applyAgentRuntimeState(agentId, state);
       showToast(t("app.compactDone"));
     } catch (e) {
       showToast(t("app.compactFailed"));
-    } finally {
-      setCompacting(false);
     }
   }
 
@@ -1948,51 +1676,10 @@ export function App() {
   const isAgentStarting =
     activeConversationStatus === "starting" ||
     currentSessionSendState.status === "activating";
-  const composerDisabled =
-    !hasActiveConversation || (!currentSessionId && isAgentStarting);
   const isAgentBusy = Boolean(
     hasActiveConversation &&
     (activeConversationStatus === "running" || activeRuntimeState?.isStreaming),
   );
-  /** 解析消息中的 & 会话引用，将 chip 替换为引用上下文 */
-  async function resolveSessionRefs(message: string): Promise<string> {
-    let resolved = message;
-    const sorted = [...activeProjectSessions].sort(
-      (a, b) => (b.name ?? b.filePath).length - (a.name ?? a.filePath).length,
-    );
-    for (const session of sorted) {
-      const sessionName = session.name ?? session.filePath;
-      const raw = `&${sessionName}`;
-      // 大小写不敏感查找，但保留原始大小写用于替换
-      const lowerResolved = resolved.toLowerCase();
-      const lowerRaw = raw.toLowerCase();
-      if (!lowerResolved.includes(lowerRaw)) continue;
-      // 预编译正则 pattern，避免在 if/else 分支中重复创建
-      const pattern = new RegExp(raw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
-      let msgs: Array<{ role: string; content: string }> | undefined;
-      if (sessionRefSelections[raw]) {
-        msgs = sessionRefSelections[raw].messages;
-      } else {
-        try {
-          const all = await api.sessions.readMessages(session.filePath);
-          const loaded = all.map((m) => ({ role: m.role, content: m.content }));
-          msgs = loaded;
-          setSessionRefSelections((prev) => ({ ...prev, [raw]: { messages: loaded, fullContext: true, selectedIndices: loaded.map((_, i) => i) } }));
-        } catch {
-          // 加载失败时 chip 会在下面 else 分支被移除
-        }
-      }
-
-      if (msgs && msgs.length > 0) {
-        const ctx = msgs.map((m) => `[${m.role === "user" ? "User" : "Assistant"}]: ${m.content}`).join("\n");
-        const refBlock = `<referenced_session name="${sessionName}">\n${ctx}\n</referenced_session>`;
-        resolved = resolved.replace(pattern, refBlock);
-      } else {
-        resolved = resolved.replace(pattern, "");
-      }
-    }
-    return resolved;
-  }
 
   // 处理所有 agent 的 idle 队列：隐藏会话也不会因切换选中项而卡住。
   // tool-end 的 steer 投递直接在 onRuntimeState 原始事件上处理，避免批量 render 漏边沿。
@@ -2004,35 +1691,7 @@ export function App() {
     }
   }, [activeProjectRuntimeCapabilities, agents, queue.queuedPrompts]);
 
-  const sendCurrentSessionPrompt = useSessionSend({
-    sendPrompt: (input) => api.sessions.sendPrompt(input),
-    liveDraftsRef: livePromptByAgentRef,
-    getComposerText: () => composerTextareaRef.current?.textContent ?? "",
-    templates: promptTemplateList,
-    runtimeAgentId: currentSessionLiveAgentId,
-    compact: (agentId, compactPrompt) => compactAgent(compactPrompt, agentId),
-    resetComposerUi: () => {
-      setComposerAutoHeight(COMPOSER_MIN_HEIGHT);
-      setAutoScroll(true);
-      autoScrollRef.current = true;
-    },
-    recordPromptHistory: (sessionId, message) => {
-      if (!message.trim() || message.startsWith("!")) return;
-      const previous = promptHistoryRef.current[sessionId] ?? [];
-      promptHistoryRef.current[sessionId] = [
-        message.trim(),
-        ...previous.filter((command) => command !== message.trim()),
-      ].slice(0, 50);
-    },
-    refreshProject: (projectId) => {
-      void refreshProjectSessions(projectId, true).catch(() => undefined);
-    },
-    showError: showToast,
-    showUnknown: () => showToast(t("app.queuedUnknown"), 6000),
-    showCompactUnavailable: () => {
-      showToast("会话尚未启动，请先发送一条消息再压缩", 3000);
-    },
-  });
+  // Session prompt submission is owned by useSessionComposerController.
 
   // 已删除内置 /goal 与 startNewGoal 实现。
 
@@ -2169,20 +1828,6 @@ export function App() {
     });
   }
 
-  /**
-   * 处理图片文件,转为 pi RPC 可识别的 ImageContent。
-   * 大图会压缩到最长边 2000px,避免 base64 过大导致 RPC 传输和模型上下文成本上升。
-   */
-  // === image paste hook ===
-  const {
-    processImageFile,
-    fileToImageContent,
-    dataUrlToImageContent,
-    resizeImageFile,
-  } = useImagePaste({
-    showToast,
-    t,
-  });
 
   async function updateSettings(patch: Partial<AppSettings>) {
     const changesWebService =
@@ -2256,7 +1901,6 @@ export function App() {
 
   async function switchBranch(branch: string) {
     if (!activeProjectId || !branch || branch === gitInfo.current) return;
-    setSwitchingBranch(branch);
     try {
       const next = await api.git.checkout(activeProjectId, branch);
       setGitInfo(next);
@@ -2266,19 +1910,15 @@ export function App() {
           error: error instanceof Error ? error.message : String(error),
         }),
       );
-      // 失败后主动刷新一次,覆盖 git 拒绝切换或外部同时切换导致的 UI 状态偏差。
       const refreshed = await api.git
         .branches(activeProjectId)
         .catch(() => ({ current: null, branches: [] }));
       setGitInfo(refreshed);
-    } finally {
-      setSwitchingBranch(null);
     }
   }
 
   async function createBranch(branchName: string) {
     if (!activeProjectId || !branchName.trim()) return;
-    setSwitchingBranch(branchName);
     try {
       const next = await api.git.createBranch(activeProjectId, branchName);
       setGitInfo(next);
@@ -2289,8 +1929,6 @@ export function App() {
           error: error instanceof Error ? error.message : String(error),
         }),
       );
-    } finally {
-      setSwitchingBranch(null);
     }
   }
 
@@ -2665,7 +2303,6 @@ export function App() {
       }
       onSendUiResponse={(requestId, response) => {
         if (!activeAgentId) return;
-        if (response.cancelled) setCancellingUi(true);
         sendSessionUiResponse(requestId, response);
       }}
       onToast={(message: string) => showToast(message)}
@@ -2685,6 +2322,8 @@ export function App() {
         ) : undefined
       }
       terminalDockVisible={terminalDockVisible}
+      terminalOpen={terminalOpen}
+      terminalDockClosing={terminalDockClosing}
       terminalCollapsed={terminalCollapsed}
       availableTerminalHeight={
         availableTerminalHeight ?? 120
@@ -2716,10 +2355,10 @@ export function App() {
       contentMaxWidth={settings.contentMaxWidth}
       sidebarContent={sidebarContentNode}
       chatPaneContent={chatPaneContentNode}
-      drawerContent={
+      drawerContent={(visibleDrawerPanel) => (
         <DrawerSurface
           editorMode={editorMode}
-          drawer={drawer}
+          drawer={visibleDrawerPanel}
           drawerCollapsed={drawerCollapsed}
           drawerPinned={drawerPinned}
           activeTab={activeTab}
@@ -2778,11 +2417,11 @@ export function App() {
           api={api}
           t={t}
         />
-      }
+      )}
       outlineContent={hasActiveConversation ? (
 <ConversationOutline
         items={outlineItems}
-        onJump={handleOutlineJump}
+        onJump={sessionTimeline.jumpToMessage}
         extraAction={{
           active: scratchPad.isOpen,
           label: t("scratchPad.openTooltip"),

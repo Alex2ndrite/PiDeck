@@ -294,7 +294,15 @@ export function useSessionSend(options: UseSessionSendOptions) {
       } else if (outcome === "unknown") {
         setSendState({
           sessionId,
-          state: { status: "unknown", requestId, error: deliveryError },
+          state: {
+            status: "unknown",
+            requestId,
+            error: deliveryError,
+            unknownSnapshot: {
+              message,
+              ...(imageSnapshot ? { images: imageSnapshot } : {}),
+            },
+          },
         });
         options.showUnknown?.();
       } else {
@@ -312,6 +320,10 @@ export function useSessionSend(options: UseSessionSendOptions) {
           status: "unknown",
           requestId,
           error: error instanceof Error ? error.message : String(error),
+          unknownSnapshot: {
+            message,
+            ...(imageSnapshot ? { images: imageSnapshot } : {}),
+          },
         },
       });
       options.showUnknown?.();

@@ -13,6 +13,7 @@ import { useSessionComposerController } from "../../hooks/useSessionComposerCont
 import {
   ComposerAttachmentBar,
   ComposerSendControls,
+  SessionDeliveryNotice,
 } from "./ComposerPanels";
 import { ComposerPickerHost } from "./ComposerPickerHost";
 import { ComposerRuntimeIntegrations } from "./ComposerRuntimeIntegrations";
@@ -100,6 +101,13 @@ export const ComposerArea = forwardRef<HTMLElement, ComposerAreaProps>(function 
             />
             {widgets}
             {props.queuePanel}
+            <SessionDeliveryNotice
+              status={composer.sendState.status}
+              message={composer.sendState.unknownSnapshot?.message}
+              images={composer.sendState.unknownSnapshot?.images}
+              error={composer.sendState.error}
+              onAcknowledge={composer.delivery.acknowledgeUnknown}
+            />
             <div
               className={`composer-box ${
                 composer.bangMode === "bang-bang"

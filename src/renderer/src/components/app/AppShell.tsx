@@ -19,7 +19,7 @@ export interface AppShellProps {
 
   sidebarContent: ReactNode;
   chatPaneContent: ReactNode;
-  drawerContent: ReactNode;
+  drawerContent: (panel: WorkspaceDrawerPanel) => ReactNode;
   outlineContent: ReactNode;
 
   setListCollapsed: (v: boolean) => void;
@@ -172,7 +172,7 @@ export function AppShell(props: AppShellProps) {
         onClose={onDrawerClose}
         onRestore={onDrawerRestore}
         onTogglePin={onToggleDrawerPin}
-        renderPanel={() => <>{drawerContent}</>}
+        renderPanel={(panel) => drawerContent(panel)}
       />
       {children}
     </div>

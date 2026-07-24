@@ -1,4 +1,3 @@
-import { useEffect, useRef, useState } from "react";
 import type { PiDesktopApi } from "../../../../preload";
 import { TerminalDock } from "../terminal/TerminalDock";
 
@@ -38,69 +37,27 @@ export function disposeSessionRuntimeDock(): SessionRuntimeDockMotionState {
 
 export type SessionRuntimeDockProps = {
   agentId?: string;
+  mounted: boolean;
   open: boolean;
+  closing: boolean;
   collapsed: boolean;
   height: number;
   terminal: PiDesktopApi["terminal"];
   onOpenChange: (open: boolean) => void;
   onCollapsedChange: (collapsed: boolean) => void;
   onHeightChange: (height: number) => void;
-  /** Read-only layout signal. The dock remains the sole owner of close animation state. */
-  onMotionStateChange?: (state: SessionRuntimeDockMotionState) => void;
 };
 
-// The dock tracks a runtime, not the Session view. Losing or replacing a runtime only closes this leaf.
+// Motion state is owned by useTerminalDock. This leaf only forwards the already
+// computed mounted/open/closing signals to the expensive terminal surface.
 export function SessionRuntimeDock(props: SessionRuntimeDockProps) {
-  const [motion, setMotion] = useState<SessionRuntimeDockMotionState>(
-    CLOSED_SESSION_RUNTIME_DOCK,
-  );
-  const motionRef = useRef(motion);
-  const closeTimerRef = useRef<number | undefined>(undefined);
-  const onMotionStateChangeRef = useRef(props.onMotionStateChange);
-  onMotionStateChangeRef.current = props.onMotionStateChange;
-
-  function publish(next: SessionRuntimeDockMotionState) {
-    motionRef.current = next;
-    setMotion(next);
-    onMotionStateChangeRef.current?.(next);
-  }
-
-  function clearCloseTimer() {
-    if (closeTimerRef.current != null) window.clearTimeout(closeTimerRef.current);
-    closeTimerRef.current = undefined;
-  }
-
-  useEffect(() => {
-    clearCloseTimer();
-    const next = transitionSessionRuntimeDock(motionRef.current, {
-      agentId: props.agentId,
-      open: props.open,
-    });
-    publish(next);
-    if (!next.closing) return clearCloseTimer;
-    closeTimerRef.current = window.setTimeout(() => {
-      closeTimerRef.current = undefined;
-      publish(finishSessionRuntimeDockClose(motionRef.current));
-    }, SESSION_RUNTIME_DOCK_MOTION_MS);
-    return clearCloseTimer;
-  // Motion is intentionally held in a ref so props changes do not create a second close timer owner.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [props.agentId, props.open]);
-
-  useEffect(() => () => {
-    clearCloseTimer();
-    publish(disposeSessionRuntimeDock());
-  // publish only reads stable refs and setState.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  if (!motion.mounted || !motion.agentId) return null;
+  if (!props.mounted || !props.agentId) return null;
   return (
     <TerminalDock
-      key={motion.agentId}
-      agentId={motion.agentId}
-      open={motion.mounted}
-      closing={motion.closing}
+      key={props.agentId}
+      agentId={props.agentId}
+      open={props.open}
+      closing={props.closing}
       collapsed={props.collapsed}
       height={props.height}
       terminal={props.terminal}

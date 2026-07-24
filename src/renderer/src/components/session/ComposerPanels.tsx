@@ -172,6 +172,30 @@ export function QueuedPromptPanel(props: {
   );
 }
 
+export function SessionDeliveryNotice(props: {
+  status: "unknown" | "idle" | "activating" | "sending" | "error";
+  message?: string;
+  images?: ImageContent[];
+  error?: string;
+  onAcknowledge: () => void;
+}) {
+  if (props.status !== "unknown") return null;
+  const preview = props.message?.trim() || (props.images?.length ? t("app.queuedImageMessage") : "");
+  return (
+    <div className="session-delivery-notice" role="status">
+      <div className="session-delivery-notice-copy">
+        <strong>{t("app.queuedUnknownShort")}</strong>
+        {preview ? <span title={preview}>{preview}</span> : null}
+        <small>{t("app.queuedUnknown")}</small>
+        {props.error ? <small>{props.error}</small> : null}
+      </div>
+      <button type="button" onClick={props.onAcknowledge}>
+        {t("common.confirm")}
+      </button>
+    </div>
+  );
+}
+
 export function ComposerSendControls(props: {
   composerMode?: string | null;
   statusText: string;

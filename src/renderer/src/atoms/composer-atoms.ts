@@ -8,6 +8,11 @@ export type SessionSendState = {
   status: "idle" | "activating" | "sending" | "error" | "unknown";
   requestId?: string;
   error?: string;
+  /** Snapshot kept visible when the transport result cannot prove delivery. */
+  unknownSnapshot?: {
+    message: string;
+    images?: ImageContent[];
+  };
 };
 
 export const sessionDraftByIdAtom = atom<Record<string, string>>({});

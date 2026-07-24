@@ -19,6 +19,10 @@ const composerSource = readFileSync(
   "src/renderer/src/components/session/ComposerArea.tsx",
   "utf8",
 );
+const drawerSurfaceSource = readFileSync(
+  "src/renderer/src/components/workspace/DrawerSurface.tsx",
+  "utf8",
+);
 
 function functionBody(name, source = appSource) {
   const marker = `function ${name}(`;
@@ -46,8 +50,8 @@ test("opening a sidebar history selects a SessionRecord without creating an Agen
 
 test("the history drawer uses the lazy Session open path", () => {
   assert.match(
-    appSource,
-    /onOpenSession=\{\(session\) =>\s*void runOpenSidebarSession\(/,
+    drawerSurfaceSource,
+    /onOpenSession=\{\(session(?::\s*any)?\) =>\s*void runOpenSidebarSession\(/,
   );
 });
 
@@ -101,7 +105,7 @@ test("Session messages and composer render without an active Agent", () => {
   assert.match(composerSource, /sessionId=\{props\.sessionId\}/);
   assert.match(
     appSource,
-    /const activeMessages = currentSessionId \? currentSessionMessages : \[\]/,
+    /const activeMessages = sessionTimeline\.messages/,
   );
   assert.doesNotMatch(appSource, /currentSession \|\| activeAgent/);
 });

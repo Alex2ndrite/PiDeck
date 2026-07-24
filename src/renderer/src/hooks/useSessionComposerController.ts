@@ -25,6 +25,7 @@ import {
   setSessionAttachmentsAtom,
   setSessionComposerModeAtom,
   setSessionDraftAtom,
+  setSessionSendStateAtom,
 } from "../atoms";
 import {
   getComposerEnterIntent,
@@ -193,6 +194,7 @@ export function useSessionComposerController(
   const setDraftAtom = useSetAtom(setSessionDraftAtom);
   const setAttachmentsAtom = useSetAtom(setSessionAttachmentsAtom);
   const setModeAtom = useSetAtom(setSessionComposerModeAtom);
+  const setSendStateAtom = useSetAtom(setSessionSendStateAtom);
 
   const draft = drafts[sessionId] ?? "";
   const attachments = attachmentsBySession[sessionId] ?? [];
@@ -721,6 +723,10 @@ export function useSessionComposerController(
     await desktopApi.agents.abort(agentId);
   }, [runtime?.agentId, runtime?.runtimeGeneration]);
 
+  const acknowledgeUnknownDelivery = useCallback(() => {
+    setSendStateAtom({ sessionId, state: { status: "idle" } });
+  }, [sessionId, setSendStateAtom]);
+
   const compact = useCallback(async () => {
     const agentId = runtime?.agentId;
     if (!agentId) {
@@ -806,6 +812,9 @@ export function useSessionComposerController(
       followUp: () => void send("followUp"),
       abort: () => void abort(),
       compact: () => void compact(),
+      unknown: sendState.status === "unknown",
+      unknownError: sendState.error,
+      acknowledgeUnknown: acknowledgeUnknownDelivery,
       canSend: hasContent && !isStarting,
       sendBehaviorMenuOpen,
       toggleSendBehaviorMenu: () => setSendBehaviorMenuOpen((open) => !open),
