@@ -42,6 +42,7 @@ import {
   type SidebarActions,
 } from "./components/sidebar/SidebarContent";
 import { useFeishuBridge } from "./hooks/useFeishuBridge";
+import { useAutoScroll } from "./hooks/useAutoScroll";
 import { useGlobalAgentListeners } from "./hooks/useGlobalAgentListeners";
 import { useRename } from "./hooks/useRename";
 import { useSidebarController } from "./hooks/useSidebarController";
@@ -53,6 +54,7 @@ import { useSessionSend } from "./hooks/useSessionSend";
 import { useFileEditor } from "./hooks/useFileEditor";
 import { useOverlayActions } from "./hooks/useOverlayActions";
 import { useWorkspacePanels, type WorkspaceDrawerPanel } from "./hooks/useWorkspacePanels";
+import { useTerminalDock } from "./hooks/useTerminalDock";
 import { useGitFlow } from "./hooks/useGitFlow";
 import { useImportFlow } from "./hooks/useImportFlow";
 import { useImagePaste } from "./hooks/useImagePaste";
@@ -112,12 +114,6 @@ import {
   QUEUED_PROMPT_LIMIT,
   QUEUED_PROMPT_VISIBLE,
 } from "./utils/queuedPromptQueue";
-import {
-  pruneTerminalDockState,
-  setTerminalDockCollapsed,
-  setTerminalDockOpen,
-  type TerminalDockStateByAgent,
-} from "./terminalDockState";
 import { useMessagePagination } from "./hooks/useMessagePagination";
 import { useSessionTimelineController } from "./hooks/useSessionTimelineController";
 import { useSessionLoader } from "./hooks/useSessionLoader";
@@ -215,11 +211,7 @@ import type {
   ComposerAgentMode,
 } from "../../shared/types";
 
-// 输入框默认高度增加,提供更好的输入体验,适合多行输入和代码片段
 const COMPOSER_MIN_HEIGHT = 175;
-const COMPOSER_DEFAULT_TERMINAL_HEIGHT = 220;
-const COMPOSER_MIN_TIMELINE_HEIGHT = 160;
-const TERMINAL_DOCK_MOTION_MS = 180;
 function displayProjectDirectoryName(project: Project) {
   if (isChatProject(project)) return "Chat";
   const normalizedPath = project.path.replace(/\\/g, "/").replace(/\/+$/, "");
@@ -673,16 +665,6 @@ export function App() {
   // upToDateVersion: hook does not expose this; used by AppUpdateOverlay for "up to date" toast.
   const [upToDateVersion, setUpToDateVersion] = useState<string | null>(null);
   const [configOpen, setConfigOpen] = useState(false);
-  /** 是否自动滚动到最新消息 */
-  const [autoScroll, setAutoScroll] = useState(true);
-  /** 用 ref 同步 autoScroll，供 ResizeObserver 回调读取最新值，避免响应式时序间隙导致滚动抢跑。 */
-  const autoScrollRef = useRef(true);
-  autoScrollRef.current = autoScroll;
-  /** 标记当前滚动是否由程序触发（ResizeObserver / scrollToBottom 等），
-   *  用于在 scroll 事件中区分用户手动滚动，防止竞态误关 autoScroll。 */
-  const programmaticScrollRef = useRef(false);
-  /** 是否显示"移动到最新"按钮 */
-  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   /** 会话定位跳转到尚未加载的旧消息时，先扩展分页再在 effect 中滚动定位；此状态保存待跳转的消息 id。 */
   const [pendingJumpId, setPendingJumpId] = useState<string | null>(null);
   /** 加载更多历史消息前的滚动锚点（旧 scrollHeight + scrollTop），用于渲染后按顶部锚定恢复滚动位置。 */
@@ -783,15 +765,20 @@ export function App() {
   /** ResizeObserver 驱动布局预算重新计算；ref 尺寸本身变化不会触发 React render。 */
   const [composerAutoHeight, setComposerAutoHeight] =
     useState(COMPOSER_MIN_HEIGHT);
-  const [terminalDockStateByAgent, setTerminalDockStateByAgent] =
-    useState<TerminalDockStateByAgent>({});
-  const [terminalHeightByAgent, setTerminalHeightByAgent] = useState<
-    Record<string, number>
-  >({});
-  const [terminalDockMounted, setTerminalDockMounted] = useState(false);
-  const [terminalDockClosing, setTerminalDockClosing] = useState(false);
-  const [terminalDockAgentId, setTerminalDockAgentId] = useState<string>();
-  const terminalDockCloseTimerRef = useRef<number | null>(null);
+  const {
+    terminalOpen,
+    terminalCollapsed,
+    terminalDockVisible,
+    terminalDockClosing,
+    terminalRowHeight: activeTerminalHeight,
+    setTerminalOpenForAgent,
+    setTerminalCollapsedForAgent,
+    terminalHeightByAgent,
+    setTerminalHeightByAgent,
+    terminalDockMounted,
+    terminalDockAgentId,
+    prune: pruneTerminalDockState,
+  } = useTerminalDock(activeAgentId);
   const [listCollapsed, setListCollapsed] = useState(false);
   const [listHoverRevealSuppressed, setListHoverRevealSuppressed] =
     useState(false);
@@ -799,6 +786,7 @@ export function App() {
   const sessionComboRef = useRef<HTMLDivElement | null>(null);
   const queuedTrackRef = useRef<HTMLDivElement | null>(null);
   const timelineRef = useRef<HTMLElement | null>(null);
+
   const composerTextareaRef = useRef<HTMLDivElement | null>(null);
   // RichInput 受控重渲染后,光标应恢复到的纯文本偏移(供建议选中/清除后恢复选区)。
   const pendingComposerCaretRef = useRef<number | null>(null);
@@ -855,6 +843,15 @@ export function App() {
   const activeAgent = activeAgentId
     ? [...displayAgents, ...pendingAgents].find((agent) => agent.id === activeAgentId)
     : undefined;
+
+  const {
+    autoScroll,
+    autoScrollRef,
+    programmaticScrollRef,
+    showScrollToBottom,
+    scrollToBottom,
+    setAutoScroll,
+  } = useAutoScroll(timelineRef, { key: activeAgentId, statusKey: activeAgent?.status });
   // prompt 文本：优先从 live ref 读取（始终保持最新），promptByAgent 仅在 chips 变化时更新作为兜底。
   // 不建立 state 依赖——普通按键不会触发 App 重渲染。
   const promptAgentKey = currentSessionId ?? activeAgentId ?? "";
@@ -1012,49 +1009,6 @@ export function App() {
     });
   }, [store, queue.enqueueQueuedPrompt]);
 
-  const terminalDockState = activeAgentId
-    ? terminalDockStateByAgent[activeAgentId]
-    : undefined;
-  // 终端打开/折叠状态按 agent 隔离,避免切换项目/agent 后丢失当前终端 UI 状态。
-  const terminalOpen = Boolean(terminalDockState?.open);
-  const terminalCollapsed = Boolean(terminalDockState?.collapsed);
-  const terminalDockVisible =
-    terminalDockMounted && terminalDockAgentId === activeAgentId;
-
-  // 轨道尺寸只在开关时变更一次，终端本身用 transform 完成合成动画。
-  // 关闭时保留组件至动画结束，避免同步销毁 xterm 阻塞第一帧。
-  useEffect(() => {
-    if (terminalOpen && activeAgentId) {
-      if (terminalDockCloseTimerRef.current != null) {
-        window.clearTimeout(terminalDockCloseTimerRef.current);
-        terminalDockCloseTimerRef.current = null;
-      }
-      setTerminalDockAgentId(activeAgentId);
-      setTerminalDockClosing(false);
-      setTerminalDockMounted(true);
-      return;
-    }
-    if (!terminalDockMounted) return;
-    if (terminalDockAgentId !== activeAgentId) {
-      setTerminalDockMounted(false);
-      return;
-    }
-
-    setTerminalDockClosing(true);
-    terminalDockCloseTimerRef.current = window.setTimeout(
-      () => {
-        setTerminalDockMounted(false);
-        setTerminalDockClosing(false);
-      },
-      TERMINAL_DOCK_MOTION_MS,
-    );
-    return () => {
-      if (terminalDockCloseTimerRef.current != null) {
-        window.clearTimeout(terminalDockCloseTimerRef.current);
-        terminalDockCloseTimerRef.current = null;
-      }
-    };
-  }, [activeAgentId, terminalDockAgentId, terminalDockMounted, terminalOpen]);
   const activeMessages = currentSessionId ? currentSessionMessages : [];
   const agentRuntimeState = activeAgentId
     ? activeProjectRuntimeCapabilities[activeAgentId]
@@ -1172,9 +1126,6 @@ export function App() {
   }, [currentSessionId, currentSessionRuntimeUi]);
   /** 当前 Session 的实时思考文本只来自 generation envelope。 */
   const activeThinking = currentSessionRuntime?.thinking ?? "";
-  const activeTerminalHeight = activeAgentId
-    ? (terminalHeightByAgent[activeAgentId] ?? COMPOSER_DEFAULT_TERMINAL_HEIGHT)
-    : COMPOSER_DEFAULT_TERMINAL_HEIGHT;
 
   // Layout calculation delegated to useSessionLayout (refs + ResizeObserver + math).
   const sessionLayout = useSessionLayout({
@@ -1482,12 +1433,7 @@ export function App() {
       ...nextAgents.map((agent) => agent.id),
       ...remainingPendingAgents.map((agent) => agent.id),
     ]);
-    setTerminalDockStateByAgent((current) =>
-      pruneTerminalDockState(current, activeIds),
-    );
-    setTerminalHeightByAgent((current) => Object.fromEntries(
-      Object.entries(current).filter(([agentId]) => activeIds.has(agentId)),
-    ));
+    pruneTerminalDockState(activeIds);
     // drawerPinnedByProject is managed internally by useWorkspacePanels; no-op cleanup.
     setPromptByAgent((current) => {
       const next = migrateAgentRecord(current, pendingReplacementById, draftIds);
@@ -1640,9 +1586,7 @@ export function App() {
 
   useEffect(() => {
     const activeIds = new Set(displayAgents.map((agent) => agent.id));
-    setTerminalDockStateByAgent((current) =>
-      pruneTerminalDockState(current, activeIds),
-    );
+    pruneTerminalDockState(activeIds);
   }, [displayAgents]);
 
   useEffect(() => {
@@ -1706,15 +1650,6 @@ export function App() {
     setComposerAutoHeight((current) => Math.min(current, maxHeight));
   }, [activeAgentId, activeQueuedPrompts.length]);
 
-  function scrollToBottom() {
-    const timeline = timelineRef.current;
-    if (!timeline) return;
-    programmaticScrollRef.current = true;
-    timeline.scrollTo({ top: timeline.scrollHeight, behavior: "smooth" });
-    setAutoScroll(true);
-    autoScrollRef.current = true;
-    setShowScrollToBottom(false);
-  }
 
   // 给定位命中的消息元素加一个短暂的高亮动画，方便用户在长会话中快速识别跳转落点。
   function highlightMessageElement(el: HTMLElement) {
@@ -1780,92 +1715,6 @@ export function App() {
     }
   }, [sessionSourceFilter]);
 
-  // 切换 Agent 时重置滚动状态，确保回到该 Agent 时自动滚到底部。
-  // 历史命令已由当前分支按 Agent 隔离，不恢复 dev 旧的全局 commandHistory 持久化。
-  useEffect(() => {
-    setAutoScroll(true);
-    autoScrollRef.current = true;
-    setShowScrollToBottom(false);
-    const frame = requestAnimationFrame(() => {
-      const timeline = timelineRef.current;
-      if (timeline) {
-        programmaticScrollRef.current = true;
-        timeline.scrollTo({ top: timeline.scrollHeight, behavior: "instant" });
-      }
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [activeAgentId]);
-
-  // 监听用户滚动,判断是否需要显示"移动到最新"按钮
-  useEffect(() => {
-    const timeline = timelineRef.current;
-    if (!timeline) return;
-
-    const handleScroll = () => {
-      const { scrollTop, scrollHeight, clientHeight } = timeline;
-      const isAtBottom = scrollHeight - scrollTop - clientHeight < 100;
-
-      // 程序触发的滚动（ResizeObserver / scrollToBottom 等）只允许开启 autoScroll，
-      // 不允许关闭。防止竞态：scrollTo(bottom) 后、scroll 事件触发前，scrollHeight
-      // 可能已大幅变化（思考块折叠、代码块/工具输出出现），导致误判为"用户滚离了底部"。
-      if (programmaticScrollRef.current) {
-        programmaticScrollRef.current = false;
-        if (isAtBottom) {
-          setAutoScroll(true);
-          autoScrollRef.current = true;
-          setShowScrollToBottom(false);
-        }
-        // 非底部也不关 autoScroll — 交给后续事件重新判断。
-        return;
-      }
-
-      if (isAtBottom) {
-        setAutoScroll(true);
-        autoScrollRef.current = true;
-        setShowScrollToBottom(false);
-      } else {
-        setAutoScroll(false);
-        // 同步更新 ref，确保 ResizeObserver 回调在 React 状态更新生效前读到最新值，
-        // 避免用户已滚到上方但 DOM 增长触发的 observer 因闭包旧值抢滚动到底部。
-        autoScrollRef.current = false;
-        setShowScrollToBottom(true);
-      }
-    };
-
-    // 初始化时检查一次
-    handleScroll();
-
-    timeline.addEventListener("scroll", handleScroll);
-    return () => timeline.removeEventListener("scroll", handleScroll);
-  }, [activeAgentId]);
-
-  // 用 ResizeObserver 监控消息列表内容的 DOM 高度变化，自动滚动到底部。
-  // 流式回答时最后一条 assistant 消息原地增长但 messages.length 不变，
-  // 依赖 length 的 effect 不会及时触发；通过 ResizeObserver 准确感知容器扩张。
-  // autoScroll 在依赖中确保开关变化时重建 observer（同时触发一次初始滚动）。
-  // activeAgent?.status 让 agent 从 starting→idle/errored 时重建 observer
-  // 并触发一次滚动，解决状态切换后才出现 .message-list 时不会自动滚到底部的问题。
-  useEffect(() => {
-    const timeline = timelineRef.current;
-    if (!timeline) return;
-    const messageList = timeline.querySelector(".message-list");
-    if (!messageList) return;
-
-    // 使用 ref 而非闭包值，防止 DOM 变化与 React 状态更新之间的时序间隙造成滚动抢跑：
-    // 用户已滚到上方（autoScroll=false），但状态更新尚未生效，observer 闭包中的 autoScroll 仍为 true。
-    const scrollIfNeeded = () => {
-      if (!autoScrollRef.current) return;
-      programmaticScrollRef.current = true;
-      timeline.scrollTo({ top: timeline.scrollHeight, behavior: "instant" });
-    };
-    // 重建 observer 时先主动滚一次，处理 autoScroll 从 false→true 但列表高度未变的场景。
-    scrollIfNeeded();
-
-    const resizeObserver = new ResizeObserver(scrollIfNeeded);
-    resizeObserver.observe(messageList);
-
-    return () => resizeObserver.disconnect();
-  }, [activeAgentId, autoScroll, activeAgent?.status]);
 
   // 加载更多历史消息后，按顶部锁定的方式恢复滚动位置。
   // 历史消息会插入到 .message-list 顶部，若不补偿新增高度，浏览器保持原 scrollTop 会导致视图跳动，
@@ -2238,18 +2087,6 @@ export function App() {
       setAgentActionLoading(null);
       setAgentMenu(null);
     }
-  }
-
-  function setTerminalOpenForAgent(agentId: string, open: boolean) {
-    setTerminalDockStateByAgent((current) =>
-      setTerminalDockOpen(current, agentId, open),
-    );
-  }
-
-  function setTerminalCollapsedForAgent(agentId: string, collapsed: boolean) {
-    setTerminalDockStateByAgent((current) =>
-      setTerminalDockCollapsed(current, agentId, collapsed),
-    );
   }
 
   const isAgentStarting =
