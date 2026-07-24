@@ -21,7 +21,11 @@ function cssRule(selector) {
 test("通知锚定在新会话控件下方而不是全局 toast", () => {
   assert.match(sessionAtoms, /request\.method === "notify"/);
   assert.match(sessionAtoms, /notification:\s*\{/);
-  assert.match(app, /showNotice\(\s*notification\.message/);
+  const runtimeController = readFileSync(
+    "src/renderer/src/hooks/useSessionRuntimeController.ts",
+    "utf8",
+  );
+  assert.match(runtimeController, /showNotice\(\s*notification\.message/);
   assert.match(sessionView, /<NoticeCenter \/>/);
 
   const noticeIndex = sessionView.indexOf("<NoticeCenter");

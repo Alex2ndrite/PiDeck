@@ -174,10 +174,8 @@ export function App() {
   // Composer input state is owned by ComposerArea; the root does not subscribe to each key.
   const currentSessionId = useAtomValue(currentSessionIdAtom);
   const currentSession = useAtomValue(currentSessionAtom);
-  const currentSessionRuntime = useAtomValue(currentSessionRuntimeAtom);
-  const currentSessionRuntimeRef = useRef(currentSessionRuntime);
-  currentSessionRuntimeRef.current = currentSessionRuntime;
-  const currentSessionRuntimeUi = useAtomValue(currentSessionRuntimeUiAtom);
+  // currentSessionRuntime / currentSessionRuntimeUi: sync store.get() only.
+  // Streaming subscriptions are in SessionRuntimeInjector.
   const currentSessionSendState = useAtomValue(currentSessionSendStateAtom);
   const projects = useAtomValue(projectInventoryAtom);
   const agents = useAtomValue(agentInventoryAtom);
@@ -194,11 +192,36 @@ export function App() {
   const setSessionAttachments = useSetAtom(setSessionAttachmentsAtom);
   const setSessionCatalogLoadState = useSetAtom(setSessionCatalogLoadStateAtom);
   const removeSessionState = useSetAtom(removeSessionStateAtom);
-  const sessionRuntimeUiResponder = useMemo(() => {
-    if (!currentSessionId || !currentSessionRuntime?.agentId || currentSessionRuntime.runtimeGeneration == null) return undefined;
-    const b = { sessionId: currentSessionId, agentId: currentSessionRuntime.agentId, runtimeGeneration: currentSessionRuntime.runtimeGeneration };
-    return createSessionRuntimeUiResponder({ binding: b, readBinding: () => { const r = currentSessionRuntimeRef.current; return r?.agentId ? { sessionId: currentSessionId, agentId: r.agentId, runtimeGeneration: r.runtimeGeneration } : undefined; }, claim: (i) => claimSessionUiResponse(i), rollback: (i) => rollbackSessionUiResponse(i), send: async (i) => sendSessionUiResponse(i.requestId, i.response) });
-  }, [currentSessionId, currentSessionRuntime?.agentId, currentSessionRuntime?.runtimeGeneration, claimSessionUiResponse, rollbackSessionUiResponse]);
+  // sessionRuntimeUiResponder: sync store read (overlay renders only during UI requests).
+  function getSessionRuntimeUiResponder() {
+    const sid = store.get(currentSessionIdAtom);
+    const rt = sid ? store.get(currentSessionRuntimeAtom) : undefined;
+    if (!sid || !rt?.agentId || rt.runtimeGeneration == null) return undefined;
+    const b = { sessionId: sid, agentId: rt.agentId, runtimeGeneration: rt.runtimeGeneration };
+    return createSessionRuntimeUiResponder({
+      binding: b,
+      readBinding: () => {
+        const r = store.get(currentSessionRuntimeAtom);
+        return r?.agentId ? { sessionId: sid, agentId: r.agentId, runtimeGeneration: r.runtimeGeneration } : undefined;
+      },
+      claim: (i) => claimSessionUiResponse(i),
+      rollback: (i) => rollbackSessionUiResponse(i),
+      send: async (i) => {
+        const cRt = store.get(currentSessionRuntimeAtom);
+        if (!sid || !cRt) return;
+        const input = { sessionId: sid, requestId: i.requestId, agentId: cRt.agentId ?? "", runtimeGeneration: cRt.runtimeGeneration };
+        const ui = store.get(currentSessionRuntimeUiAtom);
+        const currentReq = ui?.requests[i.requestId];
+        const request = currentReq?.request;
+        if (!input.agentId || !request) return;
+        if (currentReq?.status !== "responding" && !claimSessionUiResponse({ ...input, request })) return;
+        void api.sessions.sendUiResponse({ ...input, response: i.response }).catch((error: unknown) => {
+          rollbackSessionUiResponse({ ...input, request });
+          showToast(error instanceof Error ? error.message : String(error), 4000);
+        });
+      },
+    });
+  }
   const removeSessionComposerState = useSetAtom(removeSessionComposerStateAtom);
   const sessionTimeline = useSessionTimelineController({ sessionId: currentSessionId });
   const currentSessionIdRef = useRef<string | undefined>(currentSessionId);
@@ -745,38 +768,8 @@ export function App() {
   }, [activeProjectId, activeProjectRuntimeCapabilities, displayAgents]);
 
 
-  function sendSessionUiResponse(requestId: string, response: AgentUiResponse) {
-    if (!currentSessionId || !currentSessionRuntime) return;
-    const input = {
-      sessionId: currentSessionId,
-      requestId,
-      agentId: currentSessionRuntime.agentId ?? "",
-      runtimeGeneration: currentSessionRuntime.runtimeGeneration,
-    };
-    const currentReq = currentSessionRuntimeUi?.requests[requestId];
-    const request = currentReq?.request;
-    if (!input.agentId || !request) return;
-    // 若已被 overlay responder claim（status="responding"），跳过重复 claim，避免双 claim 死锁
-    if (currentReq?.status !== "responding" && !claimSessionUiResponse({ ...input, request })) return;
-    void api.sessions.sendUiResponse({ ...input, response }).catch((error) => {
-      rollbackSessionUiResponse({ ...input, request });
-      showToast(error instanceof Error ? error.message : String(error), 4000);
-    });
-  }
-  // dialog 显示条件：仅当有活跃的交互式 UI 请求时
-
-  const lastSessionUiNoticeRef = useRef("");
-  useEffect(() => {
-    const notification = currentSessionRuntimeUi?.notification;
-    if (!currentSessionId || !notification) return;
-    const key = `${currentSessionId}:${currentSessionRuntimeUi.runtimeGeneration}:${notification.revision}`;
-    if (lastSessionUiNoticeRef.current === key) return;
-    lastSessionUiNoticeRef.current = key;
-    showNotice(
-      notification.message,
-      notification.notifyType === "error" ? 5000 : 3500,
-    );
-  }, [currentSessionId, currentSessionRuntimeUi]);
+  // Runtime UI responder: sync store.get() (SessionRuntimeUiOverlay renders rarely).
+  // sendSessionUiResponse and notification effect: owned by useSessionRuntimeController.
 
   // Runtime editor text is applied by useSessionComposerController, which owns the draft guard.
 
@@ -2577,14 +2570,20 @@ export function App() {
         }}
       />
     </EnvironmentOverlay>
-    {currentSessionId && sessionRuntimeUiResponder && (
-      <SessionRuntimeUiOverlay
-        sessionId={currentSessionId}
-        runtime={currentSessionRuntime}
-        ui={currentSessionRuntimeUi}
-        responder={sessionRuntimeUiResponder}
-      />
-    )}
+    {currentSessionId && (() => {
+      const responder = getSessionRuntimeUiResponder();
+      if (!responder) return null;
+      const rt = store.get(currentSessionRuntimeAtom);
+      const ui = store.get(currentSessionRuntimeUiAtom);
+      return (
+        <SessionRuntimeUiOverlay
+          sessionId={currentSessionId}
+          runtime={rt}
+          ui={ui}
+          responder={responder}
+        />
+      );
+    })()}
     {settingsOpen && (
       <Suspense fallback={null}>
       <SettingsModal
