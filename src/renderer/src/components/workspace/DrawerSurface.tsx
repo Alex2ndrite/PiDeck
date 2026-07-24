@@ -7,8 +7,9 @@ import { DrawerContent } from "../app/AppParts";
 import { LazyWrapper } from "../../hooks/useLazyComponent";
 import type { WorkspaceDrawerPanel } from "../../hooks/useWorkspacePanels";
 
-export interface DrawerSurfaceProps {
-  // ---- Editor ----
+// ── port objects (typed loosely — type tightening is a follow-up task) ──
+
+export interface DrawerEditorPort {
   editorMode: string;
   activeTab: any;
   activeTabId: string | null;
@@ -22,11 +23,10 @@ export interface DrawerSurfaceProps {
   saveEditorFileContent: ((path: string, content: string) => Promise<void>) | undefined;
   prevDrawerPanelRef: React.MutableRefObject<WorkspaceDrawerPanel | null>;
   clearEditorBack: () => WorkspaceDrawerPanel | null;
+  maxEditorFileSizeMB: number;
+}
 
-  // ---- Browser ----
-  browserFullscreen: boolean;
-
-  // ---- Git ----
+export interface DrawerGitPort {
   enableGitManagement: boolean;
   activeProjectId: string | undefined;
   gitDrawerDiff: any;
@@ -39,22 +39,23 @@ export interface DrawerSurfaceProps {
   gitInfo: any;
   switchBranch: any;
   createBranch: any;
+}
 
-  // ---- Drawer ----
-  drawer: WorkspaceDrawerPanel | null;
-  drawerCollapsed: boolean;
-  drawerPinned: boolean;
-
-  // ---- Workspace actions ----
+export interface DrawerChromePort {
   onOpenDrawer: (panel: WorkspaceDrawerPanel) => void;
   onCloseDrawer: () => void;
   onCollapseDrawer: () => void;
   onToggleDrawerPin: () => void;
+}
+
+export interface DrawerBrowserPort {
+  browserFullscreen: boolean;
   onCloseBrowser: () => void;
   onMinimizeBrowser: () => void;
   onEnterBrowserFullscreen: () => void;
+}
 
-  // ---- Generic panel ----
+export interface DrawerFilesPort {
   sessionsProject: any;
   sessionsProjectId: string | undefined;
   files: any[];
@@ -77,33 +78,21 @@ export interface DrawerSurfaceProps {
   openFilePath: any;
   api: any;
   t: any;
-  maxEditorFileSizeMB: number;
+}
+
+export interface DrawerSurfaceProps {
+  drawer: WorkspaceDrawerPanel | null;
+  drawerCollapsed: boolean;
+  drawerPinned: boolean;
+  editor: DrawerEditorPort;
+  git: DrawerGitPort;
+  chrome: DrawerChromePort;
+  browser: DrawerBrowserPort;
+  files: DrawerFilesPort;
 }
 
 export function DrawerSurface(props: DrawerSurfaceProps) {
-  const {
-    editorMode, activeTab, activeTabId, editorTabs,
-    toggleEditorMode, selectEditorTab, closeEditorTab, closeEditor,
-    readEditorFileContent, readEditorOriginalContent, saveEditorFileContent,
-    prevDrawerPanelRef, clearEditorBack,
-    browserFullscreen,
-    enableGitManagement, activeProjectId,
-    gitDrawerDiff, gitDiffDisplayMode,
-    openCommitFileDiff, openWorkspaceFileDiff,
-    toggleGitDiffDisplayMode, closeGitDiff,
-    gitApi, gitInfo, switchBranch, createBranch,
-    drawer, drawerCollapsed, drawerPinned,
-    onOpenDrawer, onCloseDrawer, onCollapseDrawer, onToggleDrawerPin,
-    onCloseBrowser, onMinimizeBrowser, onEnterBrowserFullscreen,
-    sessionsProject, sessionsProjectId,
-    files, sessions, sessionSourceFilter, sessionHistoryLoading,
-    expandedDirs, onToggleDirectory, onCollapseAllDirectories,
-    setFileMenu, refreshFiles, projects, refreshProjectSessions,
-    runOpenSidebarSession, isSameSessionPath,
-    runCopySession, runExportHistorySession, runDeleteHistorySession,
-    viewFilePath, openFilePath,
-    api, t, maxEditorFileSizeMB,
-  } = props;
+  const { drawer, drawerCollapsed, drawerPinned, editor, git, chrome, browser, files } = props;
 
   const theme: "dark" | "light" =
     typeof document !== "undefined" && document.documentElement.dataset.theme === "dark"
@@ -112,93 +101,93 @@ export function DrawerSurface(props: DrawerSurfaceProps) {
 
   return (
     <>
-      {editorMode === "drawer" && drawer === "editor" && !drawerCollapsed && activeTab ? (
+      {editor.editorMode === "drawer" && drawer === "editor" && !drawerCollapsed && editor.activeTab ? (
         <Suspense fallback={<div className="drawer-content-frame"><div className="file-diff-loading">Loading...</div></div>}>
           <FileDiffViewer
             displayMode="drawer"
-            filePath={activeTab.filePath}
-            mode={activeTab.mode}
-            onToggleMode={activeTab.preserveDrawer ? undefined : toggleEditorMode}
-            onBack={prevDrawerPanelRef.current && prevDrawerPanelRef.current !== "editor" ? () => {
-              const prev = clearEditorBack();
-              if (prev) onOpenDrawer(prev);
+            filePath={editor.activeTab.filePath}
+            mode={editor.activeTab.mode}
+            onToggleMode={editor.activeTab.preserveDrawer ? undefined : editor.toggleEditorMode}
+            onBack={editor.prevDrawerPanelRef.current && editor.prevDrawerPanelRef.current !== "editor" ? () => {
+              const prev = editor.clearEditorBack();
+              if (prev) chrome.onOpenDrawer(prev);
             } : undefined}
-            originalContent={activeTab.mode === "diff" ? activeTab.originalContent : undefined}
-            modifiedContent={activeTab.modifiedContent}
-            tabs={editorTabs}
-            activeTabId={activeTabId}
-            onSelectTab={selectEditorTab}
-            onCloseTab={closeEditorTab}
-            onClose={() => { closeEditor(); onCloseDrawer(); }}
-            readContent={readEditorFileContent}
-            readOriginalContent={readEditorOriginalContent}
-            saveContent={activeTab.allowSave ? saveEditorFileContent : undefined}
+            originalContent={editor.activeTab.mode === "diff" ? editor.activeTab.originalContent : undefined}
+            modifiedContent={editor.activeTab.modifiedContent}
+            tabs={editor.editorTabs}
+            activeTabId={editor.activeTabId}
+            onSelectTab={editor.selectEditorTab}
+            onCloseTab={editor.closeEditorTab}
+            onClose={() => { editor.closeEditor(); chrome.onCloseDrawer(); }}
+            readContent={editor.readEditorFileContent}
+            readOriginalContent={editor.readEditorOriginalContent}
+            saveContent={editor.activeTab.allowSave ? editor.saveEditorFileContent : undefined}
             theme={theme}
-            maxFileSizeMB={maxEditorFileSizeMB}
+            maxFileSizeMB={editor.maxEditorFileSizeMB}
           />
         </Suspense>
       ) : drawer === "browser" && !drawerCollapsed ? (
         <BrowserSurface
-          fullscreen={browserFullscreen}
-          onClose={onCloseBrowser}
-          onMinimize={onMinimizeBrowser}
-          onEnterFullscreen={onEnterBrowserFullscreen}
+          fullscreen={browser.browserFullscreen}
+          onClose={browser.onCloseBrowser}
+          onMinimize={browser.onMinimizeBrowser}
+          onEnterFullscreen={browser.onEnterBrowserFullscreen}
         />
-      ) : enableGitManagement && drawer === "git" && !drawerCollapsed && activeProjectId ? (
+      ) : git.enableGitManagement && drawer === "git" && !drawerCollapsed && git.activeProjectId ? (
         <div className="drawer-content-frame">
           <div className="drawer-header">
-            <strong>{t("drawer.sourceControl")}</strong>
+            <strong>{files.t("drawer.sourceControl")}</strong>
             <div className="drawer-header-actions">
-              <button onClick={onCollapseDrawer} title={t("drawer.collapsePanel")}>
+              <button onClick={chrome.onCollapseDrawer} title={files.t("drawer.collapsePanel")}>
                 <Minus size={15} />
               </button>
-              <button onClick={onCloseDrawer} title={t("common.close")}>
+              <button onClick={chrome.onCloseDrawer} title={files.t("common.close")}>
                 <X size={15} />
               </button>
             </div>
           </div>
-          <div className="git-drawer-stack" data-detail-open={Boolean(gitDrawerDiff && gitDiffDisplayMode === "drawer")}>
-            <div className="git-drawer-source" aria-hidden={Boolean(gitDrawerDiff && gitDiffDisplayMode === "drawer")}>
+          <div className="git-drawer-stack" data-detail-open={Boolean(git.gitDrawerDiff && git.gitDiffDisplayMode === "drawer")}>
+            <div className="git-drawer-source" aria-hidden={Boolean(git.gitDrawerDiff && git.gitDiffDisplayMode === "drawer")}>
               <GitPanel
-                projectId={activeProjectId}
-                commitLog={gitApi.commitLog}
-                commitDetail={gitApi.commitDetail}
-                onOpenCommitFileDiff={openCommitFileDiff}
-                onOpenWorkspaceFileDiff={openWorkspaceFileDiff}
-                branchCompare={gitApi.branchCompare}
-                getStatus={gitApi.status}
-                stageFiles={gitApi.stage}
-                unstageFiles={gitApi.unstage}
-                discardFile={gitApi.discard}
-                commit={gitApi.commit}
-                branches={gitInfo.branches}
-                currentBranch={gitInfo.current}
-                onSwitchBranch={switchBranch}
-                onCreateBranch={createBranch}
-                cherryPick={gitApi.cherryPick}
-                revert={gitApi.revert}
-                reset={gitApi.reset}
-                dropCommit={gitApi.dropCommit}
-                generateCommitMessage={gitApi.generateCommitMessage}
-                gitInit={gitApi.init}
+                projectId={git.activeProjectId}
+                commitLog={git.gitApi.commitLog}
+                commitDetail={git.gitApi.commitDetail}
+                onOpenCommitFileDiff={git.openCommitFileDiff}
+                onOpenWorkspaceFileDiff={git.openWorkspaceFileDiff}
+                branchCompare={git.gitApi.branchCompare}
+                getStatus={git.gitApi.status}
+                stageFiles={git.gitApi.stage}
+                unstageFiles={git.gitApi.unstage}
+                discardFile={git.gitApi.discard}
+                commit={git.gitApi.commit}
+                branches={git.gitInfo.branches}
+                currentBranch={git.gitInfo.current}
+                onSwitchBranch={git.switchBranch}
+                onCreateBranch={git.createBranch}
+                cherryPick={git.gitApi.cherryPick}
+                revert={git.gitApi.revert}
+                reset={git.gitApi.reset}
+                dropCommit={git.gitApi.dropCommit}
+                generateCommitMessage={git.gitApi.generateCommitMessage}
+                gitInit={git.gitApi.init}
               />
             </div>
-            {gitDrawerDiff && gitDrawerDiff.projectId === activeProjectId && gitDiffDisplayMode === "drawer" && (
+            {git.gitDrawerDiff && git.gitDrawerDiff.projectId === git.activeProjectId && git.gitDiffDisplayMode === "drawer" && (
               <div className="git-drawer-detail">
                 <Suspense fallback={<div className="file-diff-loading">Loading...</div>}>
                   <FileDiffViewer
                     displayMode="drawer"
-                    filePath={gitDrawerDiff.filePath}
+                    filePath={git.gitDrawerDiff.filePath}
                     mode="diff"
-                    onToggleMode={toggleGitDiffDisplayMode}
-                    originalContent={gitDrawerDiff.originalContent}
-                    modifiedContent={gitDrawerDiff.modifiedContent}
-                    tabs={[{ id: gitDrawerDiff.filePath, filePath: gitDrawerDiff.filePath, label: gitDrawerDiff.label }]}
-                    activeTabId={gitDrawerDiff.filePath}
-                    onClose={closeGitDiff}
-                    readContent={readEditorFileContent}
+                    onToggleMode={git.toggleGitDiffDisplayMode}
+                    originalContent={git.gitDrawerDiff.originalContent}
+                    modifiedContent={git.gitDrawerDiff.modifiedContent}
+                    tabs={[{ id: git.gitDrawerDiff.filePath, filePath: git.gitDrawerDiff.filePath, label: git.gitDrawerDiff.label }]}
+                    activeTabId={git.gitDrawerDiff.filePath}
+                    onClose={git.closeGitDiff}
+                    readContent={editor.readEditorFileContent}
                     theme={theme}
-                    maxFileSizeMB={maxEditorFileSizeMB}
+                    maxFileSizeMB={editor.maxEditorFileSizeMB}
                   />
                 </Suspense>
               </div>
@@ -226,60 +215,60 @@ export function DrawerSurface(props: DrawerSurfaceProps) {
         >
           <DrawerContent
             panel={drawer}
-            project={drawer === "sessions" ? sessionsProject : undefined}
-            files={files}
-            sessions={(sessionsProjectId && sessionSourceFilter[sessionsProjectId]) ? sessions.filter(
-              (s: any) => !s.parentSessionPath && (sessionSourceFilter[sessionsProjectId]!)!.has(s.source ?? "pi"),
-            ).concat(sessions.filter((s: any) => s.parentSessionPath && (sessionSourceFilter[sessionsProjectId]!)!.has(s.source ?? "pi"))) : sessions}
-            sessionsLoading={sessionHistoryLoading}
-            expandedDirs={expandedDirs}
-            onToggleDirectory={onToggleDirectory}
-            onCollapseAllDirectories={onCollapseAllDirectories}
+            project={drawer === "sessions" ? files.sessionsProject : undefined}
+            files={files.files}
+            sessions={(files.sessionsProjectId && files.sessionSourceFilter[files.sessionsProjectId as string]) ? files.sessions.filter(
+              (s: any) => !s.parentSessionPath && (files.sessionSourceFilter[files.sessionsProjectId as string]!)!.has(s.source ?? "pi"),
+            ).concat(files.sessions.filter((s: any) => s.parentSessionPath && (files.sessionSourceFilter[files.sessionsProjectId as string]!)!.has(s.source ?? "pi"))) : files.sessions}
+            sessionsLoading={files.sessionHistoryLoading}
+            expandedDirs={files.expandedDirs}
+            onToggleDirectory={files.onToggleDirectory}
+            onCollapseAllDirectories={files.onCollapseAllDirectories}
             pinned={drawerPinned}
-            onTogglePin={onToggleDrawerPin}
-            onCollapse={onCollapseDrawer}
-            onClose={onCloseDrawer}
-            onFileContextMenu={(node: any, x: number, y: number) => setFileMenu({ node, x, y })}
+            onTogglePin={chrome.onToggleDrawerPin}
+            onCollapse={chrome.onCollapseDrawer}
+            onClose={chrome.onCloseDrawer}
+            onFileContextMenu={(node: any, x: number, y: number) => files.setFileMenu({ node, x, y })}
             onRefreshFiles={() => {
-              refreshFiles(activeProjectId);
+              files.refreshFiles(git.activeProjectId);
             }}
             onOpenFolder={() => {
-              const p = projects.find((p: any) => p.id === activeProjectId);
-              if (p) void api.files.open(p.path);
+              const p = files.projects.find((p: any) => p.id === git.activeProjectId);
+              if (p) void files.api.files.open(p.path);
             }}
             onRefreshSessions={() => {
-              const projectId = sessionsProjectId ?? activeProjectId;
-              if (projectId) void refreshProjectSessions(projectId, true);
+              const projectId = files.sessionsProjectId ?? git.activeProjectId;
+              if (projectId) void files.refreshProjectSessions(projectId, true);
             }}
             onOpenSession={(session: any) =>
-              void runOpenSidebarSession(
-                sessionsProjectId ?? activeProjectId ?? "",
+              void files.runOpenSidebarSession(
+                files.sessionsProjectId ?? git.activeProjectId ?? "",
                 session,
               )
             }
             onRenameSession={async (filePath: string, newName: string) => {
-              const session = sessions.find((candidate: any) =>
-                isSameSessionPath(
+              const session = files.sessions.find((candidate: any) =>
+                files.isSameSessionPath(
                   candidate.filePath,
                   filePath,
                   candidate.wsl ? "wsl" : "native",
                 ),
               );
               if (!session) return;
-              await api.sessions.updateRecord(session.id, { title: newName });
-              const projectId = sessionsProjectId ?? activeProjectId;
-              if (projectId) await refreshProjectSessions(projectId, true);
+              await files.api.sessions.updateRecord(session.id, { title: newName });
+              const projectId = files.sessionsProjectId ?? git.activeProjectId;
+              if (projectId) await files.refreshProjectSessions(projectId, true);
             }}
             onCopySession={(session: any) =>
-              runCopySession(
+              files.runCopySession(
                 session.filePath,
-                sessionsProjectId ?? activeProjectId,
+                files.sessionsProjectId ?? git.activeProjectId,
               )
             }
-            onExportSession={runExportHistorySession}
-            onDeleteSession={runDeleteHistorySession}
-            onViewFile={viewFilePath}
-            onOpenFile={openFilePath}
+            onExportSession={files.runExportHistorySession}
+            onDeleteSession={files.runDeleteHistorySession}
+            onViewFile={files.viewFilePath}
+            onOpenFile={files.openFilePath}
           />
         </LazyWrapper>
       ) : null}

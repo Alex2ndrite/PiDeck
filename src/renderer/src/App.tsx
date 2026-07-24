@@ -2281,14 +2281,14 @@ export function App() {
         };
         return (
         <DrawerSurface
-          {...drawerEditorPort}
           drawer={visibleDrawerPanel}
           drawerCollapsed={drawerCollapsed}
           drawerPinned={drawerPinned}
-          {...drawerGitPort}
-          {...drawerChromePort}
-          {...drawerBrowserPort}
-          {...drawerFilesPort}
+          editor={drawerEditorPort}
+          git={drawerGitPort}
+          chrome={drawerChromePort}
+          browser={drawerBrowserPort}
+          files={drawerFilesPort}
         />
         );
       }}

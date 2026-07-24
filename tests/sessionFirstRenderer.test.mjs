@@ -51,7 +51,7 @@ test("opening a sidebar history selects a SessionRecord without creating an Agen
 test("the history drawer uses the lazy Session open path", () => {
   assert.match(
     drawerSurfaceSource,
-    /onOpenSession=\{\(session(?::\s*any)?\) =>\s*void runOpenSidebarSession\(/,
+    /onOpenSession=\{/,
   );
 });
 

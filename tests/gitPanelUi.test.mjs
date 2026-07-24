@@ -209,7 +209,7 @@ describe("Git panel VS Code Source Control contract", () => {
     assert.match(panel, /getFileIconSeti\(name\)/);
     assert.doesNotMatch(panel, /title=\{`\$\{commit\.message\}/);
     assert.match(app, /gitApi:/);
-    assert.match(app, /commitDetail=\{gitApi\.commitDetail\}/);
+    assert.match(app, /commitDetail=\{git\.gitApi\.commitDetail\}/);
     assert.match(preload, /Promise<CommitDetail \| null>/);
     assert.match(styles, /\.git-commit-hover\s*\{/);
     assert.match(styles, /\.git-history-file-row/);
@@ -264,7 +264,7 @@ describe("Git panel VS Code Source Control contract", () => {
     assert.match(app, /const toggleGitDiffDisplayMode = useCallback/);
     assert.match(app, /setDrawer\("git"\);[\s\S]*?setDrawerCollapsed\(false\);[\s\S]*?setGitDiffDisplayMode\("drawer"\)/);
     assert.match(app, /editorMode === "modal" && activeTab && gitDiffDisplayMode !== "modal"/);
-    assert.match(app, /gitDiffDisplayMode === "drawer"[\s\S]*?<FileDiffViewer[\s\S]*?displayMode="drawer"[\s\S]*?onToggleMode=\{toggleGitDiffDisplayMode\}/);
+    assert.match(app, /gitDiffDisplayMode === "drawer"[\s\S]*?<FileDiffViewer[\s\S]*?displayMode="drawer"[\s\S]*?onToggleMode=\{git\.toggleGitDiffDisplayMode\}/);
     assert.match(app, /gitDiffDisplayMode === "modal"[\s\S]*?<FileDiffViewer[\s\S]*?displayMode="modal"[\s\S]*?onToggleMode=\{toggleGitDiffDisplayMode\}/);
   });
 
