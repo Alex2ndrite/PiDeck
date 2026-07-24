@@ -22,7 +22,10 @@ export interface AppShellProps {
   drawerContent: ReactNode;
   outlineContent: ReactNode;
 
-  onResize: (target: "list" | "drawer", event: PointerEvent) => void;
+  setListCollapsed: (v: boolean) => void;
+  setListWidth: (v: number) => void;
+  setDrawerCollapsed: (v: boolean) => void;
+  setDrawerWidth: (v: number) => void;
   onToggleListCollapsed: () => void;
   onReleaseListHoverSuppression: (event: PointerEvent<HTMLDivElement>) => void;
   onDrawerCollapse: () => void;
@@ -45,14 +48,51 @@ export function AppShell(props: AppShellProps) {
     useNativeTitleBar,
     chatPaneRef, terminalRowHeight, contentMaxWidth,
     sidebarContent, chatPaneContent, drawerContent, outlineContent,
-    onResize, onToggleListCollapsed, onReleaseListHoverSuppression,
+    setListCollapsed, setListWidth, setDrawerCollapsed, setDrawerWidth,
+    onToggleListCollapsed, onReleaseListHoverSuppression,
     onDrawerCollapse, onDrawerClose, onDrawerRestore, onToggleDrawerPin,
     toggleAlwaysOnTop, minimizeWindow, toggleMaximizeWindow, closeWindow,
     children,
   } = props;
 
   function startResize(target: "list" | "drawer", event: PointerEvent) {
-    onResize(target, event);
+    const startX = event.clientX;
+    const startListWidth = listCollapsed ? 68 : listWidth;
+    const startDrawerWidth = drawerCollapsed ? 0 : drawerWidth;
+    let frame = 0;
+
+    function onMove(moveEvent: globalThis.PointerEvent) {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const delta = moveEvent.clientX - startX;
+        if (target === "list") {
+          const next = Math.min(440, Math.max(100, startListWidth + delta));
+          setListCollapsed(next <= 120);
+          setListWidth(next);
+        } else {
+          const minDrawerWidth = drawerPinned ? 220 : 180;
+          const next = Math.min(
+            560,
+            Math.max(minDrawerWidth, startDrawerWidth - delta),
+          );
+          setDrawerCollapsed(!drawerPinned && next <= 190);
+          setDrawerWidth(next);
+        }
+      });
+    }
+
+    function onUp() {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      document.body.classList.remove("is-resizing");
+      document.body.classList.remove("is-list-resizing");
+    }
+
+    document.body.classList.add("is-resizing");
+    if (target === "list") document.body.classList.add("is-list-resizing");
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
   }
 
   function handleToggleListCollapsed() {

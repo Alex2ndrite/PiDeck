@@ -1,5 +1,4 @@
 import {
-  Fragment,
   lazy,
   Suspense,
   useEffect,
@@ -9,22 +8,17 @@ import {
   useState,
   useTransition,
   useCallback,
-  type PointerEvent,
-  type CSSProperties,
-  type ReactNode,
 } from "react";
 import { useAtomValue, useSetAtom, useStore } from "jotai";
 import {
   ChevronLeft,
   ChevronRight,
   Code,
-  Minus,
   FolderOpen,
   Globe,
   Pencil,
   Terminal,
   GitBranch,
-  X,
 } from "lucide-react";
 import { showNotice } from "./utils/notice";
 import {
@@ -51,7 +45,6 @@ import { useFileEditor } from "./hooks/useFileEditor";
 import { useOverlayActions } from "./hooks/useOverlayActions";
 import { useWorkspacePanels, type WorkspaceDrawerPanel } from "./hooks/useWorkspacePanels";
 import { useTerminalDock } from "./hooks/useTerminalDock";
-import { useGitFlow } from "./hooks/useGitFlow";
 import { useImportFlow } from "./hooks/useImportFlow";
 import { useImagePaste } from "./hooks/useImagePaste";
 import { useQueuedPrompt, type QueuedPrompt } from "./hooks/useQueuedPrompt";
@@ -82,7 +75,6 @@ import {
   rollbackSessionRuntimeUiResponseAtom,
   sessionRecordByIdAtomFamily,
   sessionRecordsByProjectIdAtomFamily,
-  sessionRecordToSummary,
   sessionIdByRuntimeAgentIdAtomFamily,
   sessionRuntimeBySessionIdAtomFamily,
   sessionSummariesByProjectIdAtomFamily,
@@ -93,14 +85,10 @@ import {
   upsertAgentInventoryAtom,
   upsertSessionAtom,
 } from "./atoms";
-import { CloseIconButton } from "./components/ui/IconButton";
 import {
   buildComposerPromptSubmission,
-  expandPromptTemplates,
 } from "./composerBehavior";
 import {
-  getAgentForSessionPath,
-  getProjectAgentSessionDisplay,
   isSameSessionPath,
 } from "./agentListDisplay";
 import { resolveLocale, setI18nLocale, t } from "./i18n";
@@ -108,7 +96,6 @@ import {
   isChatProject,
   loadSessionSourceFilter,
   saveSessionSourceFilter,
-  inferSessionEnvironment,
   isReplacementForPendingAgent,
   isPendingAgentId,
   migrateAgentRecord,
@@ -117,41 +104,33 @@ import {
 } from "./rendererUtils";
 import {
   migrateQueuedPrompts,
-  QUEUED_PROMPT_LIMIT,
 } from "./utils/queuedPromptQueue";
 import { useMessagePagination } from "./hooks/useMessagePagination";
 import { useResize } from "./hooks/useResize";
 import { useSessionTimelineController } from "./hooks/useSessionTimelineController";
-import { useSessionLoader } from "./hooks/useSessionLoader";
 import { useSessionActions } from "./hooks/useSessionActions";
 import { useScratchPad } from "./hooks/useScratchPad";
-import { SessionReferenceModal, type SessionReferenceResult } from "./components/app/SessionReferenceModal";
 import { SessionView } from "./components/session/SessionView";
 import {
   QueuedPromptPanel,
 } from "./components/session/ComposerPanels";
 import { ScratchPadOverlay } from "./components/overlays/ScratchPadOverlay";
 import { AppShell } from "./components/app/AppShell";
+import { DrawerSurface } from "./components/workspace/DrawerSurface";
 import { RenameModals } from "./components/RenameModals";
 import { SessionActionOverlays } from "./components/overlays/SessionActionOverlays";
 import { AppUpdateOverlay } from "./components/overlays/AppUpdateOverlay";
 import { ImportOverlayHost } from "./components/overlays/ImportOverlayHost";
 import { EnvironmentOverlay } from "./components/overlays/EnvironmentOverlay";
 import { SessionRuntimeUiOverlay, createSessionRuntimeUiResponder } from "./components/overlays/SessionRuntimeUiOverlay";
-import { LazyWrapper } from "./hooks/useLazyComponent";
 import {
   ConversationOutline,
-  DrawerContent,
   EnvironmentDialog,
   FileContextMenu,
   ImagePreviewModal,
   LogoMark,
-  WorktreeCreateDialog,
-  type DrawerPanel,
   type SessionModifiedFile,
 } from "./components/app/AppParts";
-import { GitPanel } from "./components/app/GitPanel";
-import { BrowserSurface } from "./components/workspace/BrowserSurface";
 import { ExternalEditorOverlay } from "./components/workspace/ExternalEditorOverlay";
 import { navigateTo } from "./components/app/BrowserPanel";
 import {
@@ -166,8 +145,6 @@ import {
 import {
 	getCaretOffset as getCaretOffsetOf,
 	parseRichInputChips,
-	RichInput,
-	type RichInputChip,
 } from "./components/app/RichInput";
 // 懒加载：Monaco Editor（~17.6MB Web Worker）仅在用户打开 diff 时才加载
 const FileDiffViewer = lazy(() => import("./components/app/FileDiffViewer").then((m) => ({ default: m.FileDiffViewer })));
@@ -179,33 +156,14 @@ import { createDefaultExternalEditorSettings } from "../../shared/types";
 import type {
   AgentRuntimeState,
   AgentTab,
-  AgentUiRequest,
   AgentUiResponse,
   AppInfo,
   AppSettings,
-  AppUpdateDownloadProgress,
-  AppUpdateInfo,
-  AvailableModel,
-  PiCliUpdateResult,
-  ExternalEditor,
   ChatMessage,
-  CodexSessionSummary,
-  ClaudeSessionSummary,
-  OpenCodeSessionSummary,
   FileTreeNode,
-  GitBranchInfo,
-  CommitEntry,
-  GitChangedFile,
-  GitResourceGroupType,
-  WorktreeEntry,
   ImageContent,
   PiCommand,
-  PiInstallStatus,
-  PiInstallExecResult,
-  NpmAvailabilityResult,
-  PiUpdateCheckResult,
   Project,
-  SessionEnvironment,
   SessionRecord,
   SessionSummary,
   ComposerAgentMode,
@@ -291,7 +249,6 @@ export function App() {
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(
     new Set(),
   );
-
 
   const [commands, setCommands] = useState<PiCommand[]>([]);
   const [promptTemplatePickerOpen, setPromptTemplatePickerOpen] = useState(false);
@@ -698,7 +655,6 @@ export function App() {
     setExpandedDirs(dirs);
   }, [activeProjectId, loadExpandedDirs]);
 
-
   const activeProjectRuntimeCapabilities = useProjectRuntimeCapabilities(activeProjectId);
   const activeProject = projects.find(
     (project) => project.id === activeProjectId,
@@ -788,7 +744,6 @@ export function App() {
     // 同步更新 live ref（发送路径读取）。Session 草稿同时写入 atom，切换后可立即恢复。
     if (value) livePromptByAgentRef.current[agentId] = value;
     else delete livePromptByAgentRef.current[agentId];
-
 
     if (currentSessionIdRef.current === agentId || getSessionRecord(agentId)) {
       startPromptTransition(() => {
@@ -1562,7 +1517,6 @@ export function App() {
     setComposerAutoHeight((current) => Math.min(current, maxHeight));
   }, [activeAgentId, activeQueuedPrompts.length]);
 
-
   // 给定位命中的消息元素加一个短暂的高亮动画，方便用户在长会话中快速识别跳转落点。
   function highlightMessageElement(el: HTMLElement) {
     el.classList.remove("message-jump-highlight");
@@ -1626,7 +1580,6 @@ export function App() {
       // 静默失败
     }
   }, [sessionSourceFilter]);
-
 
   // 加载更多历史消息后，按顶部锁定的方式恢复滚动位置。
   // 历史消息会插入到 .message-list 顶部，若不补偿新增高度，浏览器保持原 scrollTop 会导致视图跳动，
@@ -1768,10 +1721,6 @@ export function App() {
     showNotice(message, duration);
   }
 
-
-
-
-
   async function refreshSessionHistory(projectId = sessionsProjectId) {
     if (!projectId) return;
     setSessionHistoryLoading(true);
@@ -1790,7 +1739,6 @@ export function App() {
     workspace.openDrawer("sessions");
     await refreshSessionHistory(project.id);
   }
-
 
   async function cloneAgentSession(agentId: string) {
     setAgentActionLoading("copy");
@@ -1818,7 +1766,6 @@ export function App() {
     removeSessionState(session.id);
     removeSessionComposerState(session.id);
   }
-
 
   async function reorderProjects(
     sourceProjectId: string,
@@ -1893,7 +1840,6 @@ export function App() {
       if (drawer === "sessions") workspace.closeDrawer();
     }
   }
-
 
   function applyAgentRuntimeState(agentId: string, incoming: AgentRuntimeState) {
     // applyRuntimeCapabilityAtom internally does mergeAgentRuntimeState.
@@ -1986,8 +1932,6 @@ export function App() {
       );
     }
   }
-
-
 
   async function exportAgentHtml(agentId: string) {
     if (isPendingAgentId(agentId)) return;
@@ -2089,221 +2033,6 @@ export function App() {
       showToast("会话尚未启动，请先发送一条消息再压缩", 3000);
     },
   });
-
-  async function sendPrompt(override?: {
-    agentId: string;
-    message: string;
-    images: ImageContent[];
-    agentMode: ComposerAgentMode;
-  }) {
-    if (!override && currentSessionId) {
-      return sendCurrentSessionPrompt(isAgentBusy ? "steer" : undefined);
-    }
-    const targetAgentId = override?.agentId ?? activeAgentId;
-    // 发送前从 DOM 直读文本，避免 contentEditable 的 IME 组合期间 handleInput 被锁导致 ref 落后于 DOM
-    if (!override && targetAgentId) {
-      const domText = (composerTextareaRef.current?.textContent ?? "").replace(/\u200B/g, "");
-      if (domText) livePromptByAgentRef.current[targetAgentId] = domText;
-    }
-    const livePrompt = override?.message ?? (targetAgentId
-      ? (livePromptByAgentRef.current[targetAgentId] ?? prompt)
-      : prompt);
-    const attachedImagesSnapshot = override?.images ?? attachedImages;
-    const agentMode = override?.agentMode ?? currentComposerAgentMode;
-    if (
-      (!override && isAgentStarting) ||
-      !targetAgentId ||
-      (!livePrompt.trim() && attachedImagesSnapshot.length === 0)
-    )
-      return;
-    const message = livePrompt;
-    if (!override) delete livePromptByAgentRef.current[targetAgentId];
-    const images = attachedImagesSnapshot.length > 0 ? attachedImagesSnapshot : undefined;
-
-    const trimmedMessage = message.trim();
-
-    // 已删除内置 /goal 拦截，命令直接发给 agent。
-
-    // ── /compact 命令处理 ──
-    if (/^\/compact(?:\s|$)/.test(trimmedMessage)) {
-      const compactPrompt = trimmedMessage.replace(/^\/compact\s*/, "").trim();
-      // /compact 是桌面端内置控制命令，必须走 RPC compact 通道；否则会被当作普通消息发送给 agent。
-      setPromptForAgent(targetAgentId, "");
-      setAttachedImagesForAgent(targetAgentId, []);
-      await compactAgent(compactPrompt || undefined, targetAgentId);
-      return;
-    }
-
-    // 发送前先保留快照,再立即清空 composer;运行中发送会走官方 steer 队列,
-    // 由 pi runtime 保证在当前工具调用结束后、下一次 LLM 调用前注入。
-    // 不论之前是否滚动回看，发新消息都强制自动滚到底，确保能看到 agent 的回答。
-    setAutoScroll(true);
-    autoScrollRef.current = true;
-    // 本次发送使用独立快照，不消费 runtime 激活期间新写入同一 Session 的下一条草稿。
-    if (!override) {
-      setPromptForAgent(targetAgentId, "");
-      setAttachedImagesForAgent(targetAgentId, []);
-    }
-    // 发送后强制重置自动高度：避免粘贴多行内容后 scrollHeight 残留导致 composer 无法恢复默认高度。
-    // 下一帧 DOM 同步后再跑一次 syncComposerAutoHeight，让最终高度以清空后的 scrollHeight 为准。
-    // 发送后固定 composer 高度，不再自动适配内容高度
-    // 让输入框保持固定大小，超出部分滚动显示
-    setComposerAutoHeight(COMPOSER_MIN_HEIGHT);
-
-    // 在发送前本地展开 prompt template 命令（/name → 完整内容），
-    // 避免依赖 pi 的展开导致用户附加文本丢失以及特殊符号干扰
-    // 同时提取模板的 description 作为元数据发给 pi agent，让其了解本次 prompt 意图
-    const { message: expandedMessage, description: templateDescription } = expandPromptTemplates(message, promptTemplateList);
-
-    const queuedPromptSnapshot: QueuedPrompt = {
-      id: crypto.randomUUID(),
-      message: expandedMessage,
-      displayText: message,
-      images,
-      behavior: "steer",
-      agentMode,
-      templateDescription,
-      timestamp: Date.now(),
-
-    };
-    if (isAgentBusy) {
-      if (!queue.enqueueQueuedPrompt(targetAgentId, queuedPromptSnapshot)) {
-        setPromptForAgent(targetAgentId, (current) =>
-          [message, current].filter((text) => text.trim()).join("\n\n"),
-        );
-        if (images) {
-          setAttachedImagesForAgent(targetAgentId, (current) => [...images, ...current]);
-        }
-        showToast(t("app.queuedFull", { count: QUEUED_PROMPT_LIMIT }), 3000);
-      }
-      return;
-    }
-
-    const accepted = await submitPromptSnapshot(
-      targetAgentId,
-      expandedMessage,
-      images,
-      undefined,
-      agentMode,
-      templateDescription,
-    );
-    if (accepted === "unknown") {
-      queue.appendUnknownQueuedPrompt(targetAgentId, {
-        ...queuedPromptSnapshot,
-        behavior: "direct",
-      });
-      return;
-    }
-    if (!accepted) {
-      // 首条失败时恢复到第二条草稿之前；不要预写 live ref，否则会重复拼接。
-      setPromptForAgent(targetAgentId, (current) =>
-        [message, current].filter((text) => text.trim()).join("\n\n"),
-      );
-      if (images) {
-        setAttachedImagesForAgent(targetAgentId, (current) => [...images, ...current]);
-      }
-      return;
-    }
-    // 此时用户消息已经渲染到 DOM（状态在 await 前已提交），直接滚到底部确保用户看不到消息开头。
-    // 后续流式渲染靠 ResizeObserver（已有 useEffect）自动追踪容器高度变化持续滚动。
-    requestAnimationFrame(() => {
-      const el = timelineRef.current;
-      if (el && autoScrollRef.current) {
-        programmaticScrollRef.current = true;
-        el.scrollTo({ top: el.scrollHeight, behavior: "instant" });
-      }
-    });
-  }
-
-  async function sendPromptAsFollowUp() {
-    if (currentSessionId) {
-      await sendCurrentSessionPrompt("followUp");
-      return;
-    }
-    const targetAgentId = activeAgentId;
-    const livePrompt = targetAgentId
-      ? (livePromptByAgentRef.current[targetAgentId] ?? prompt)
-      : prompt;
-    if (
-      isAgentStarting ||
-      !targetAgentId ||
-      (!livePrompt.trim() && attachedImages.length === 0)
-    )
-      return;
-    const message = livePrompt;
-    // 在任何 await 之前清掉实时草稿，防止双击/Enter 连发读取同一份消息。
-    delete livePromptByAgentRef.current[targetAgentId];
-    const images = attachedImages.length > 0 ? attachedImages : undefined;
-    setAutoScroll(true);
-    autoScrollRef.current = true;
-    programmaticScrollRef.current = true;
-    const scrollTimeline = timelineRef.current;
-    if (scrollTimeline) scrollTimeline.scrollTo({ top: scrollTimeline.scrollHeight, behavior: "instant" });
-    setPrompt("");
-    setAttachedImages([]);
-
-    setComposerAutoHeight(COMPOSER_MIN_HEIGHT);
-
-    const queuedPromptSnapshot: QueuedPrompt = {
-      id: crypto.randomUUID(),
-      message,
-      displayText: message,
-      images,
-      behavior: "followUp",
-      agentMode: currentComposerAgentMode,
-      timestamp: Date.now(),
-    };
-    if (isAgentBusy) {
-      if (!queue.enqueueQueuedPrompt(targetAgentId, queuedPromptSnapshot)) {
-        setPromptForAgent(targetAgentId, (current) =>
-          [message, current].filter((text) => text.trim()).join("\n\n"),
-        );
-        if (images) {
-          setAttachedImagesForAgent(targetAgentId, (current) => [...images, ...current]);
-        }
-        showToast(t("app.queuedFull", { count: QUEUED_PROMPT_LIMIT }), 3000);
-      }
-      return;
-    }
-
-    const accepted = await submitPromptSnapshot(
-      targetAgentId,
-      message,
-      images,
-      "followUp",
-      currentComposerAgentMode,
-    );
-    if (accepted === "unknown") {
-      queue.appendUnknownQueuedPrompt(targetAgentId, queuedPromptSnapshot);
-      return;
-    }
-    if (!accepted) {
-      livePromptByAgentRef.current[targetAgentId] = message;
-      setPromptForAgent(targetAgentId, (current) =>
-        [message, current].filter((text) => text.trim()).join("\n\n"),
-      );
-      if (images) {
-        setAttachedImagesForAgent(targetAgentId, (current) => [...images, ...current]);
-      }
-      return;
-    }
-    // 用 MutationObserver 监听消息列表 DOM 变化
-
-    const scrollOnNewMessage = () => {
-      const timeline = timelineRef.current;
-      if (!timeline) return;
-      const list = timeline.querySelector(".message-list");
-      if (!list) return;
-      const observer = new MutationObserver(() => {
-        if (!autoScrollRef.current) return;
-        programmaticScrollRef.current = true;
-        timeline.scrollTo({ top: timeline.scrollHeight, behavior: "instant" });
-      });
-      observer.observe(list, { childList: true, subtree: false });
-      setTimeout(() => observer.disconnect(), 8000);
-    };
-    requestAnimationFrame(scrollOnNewMessage);
-  }
 
   // 已删除内置 /goal 与 startNewGoal 实现。
 
@@ -2665,7 +2394,6 @@ export function App() {
     if (activeProjectId) saveExpandedDirs(activeProjectId, collapsedDirs);
   }
 
-
   async function deleteSidebarSession(projectId: string, session: SessionSummary) {
     await api.sessions.deleteRecord(session.id);
     removeSessionState(session.id);
@@ -2818,7 +2546,6 @@ export function App() {
       listLogs: (agentId) => api.rpcLogs.get({ agentId }),
     },
   };
-
 
   const sidebarContentNode = (
 <SidebarContent
@@ -2974,8 +2701,85 @@ export function App() {
     />
   ) : null;
 
-  const outlineContentNode = (
-    hasActiveConversation ? (
+  return (
+    <AppShell
+      listCollapsed={listCollapsed}
+      listWidth={listWidth}
+      listHoverRevealSuppressed={listHoverRevealSuppressed}
+      drawer={drawer}
+      drawerCollapsed={drawerCollapsed}
+      drawerWidth={drawerWidth}
+      drawerPinned={workspace.drawerPinned}
+      useNativeTitleBar={settings.useNativeTitleBar}
+      chatPaneRef={chatPaneRef}
+      terminalRowHeight={terminalRowHeight}
+      contentMaxWidth={settings.contentMaxWidth}
+      sidebarContent={sidebarContentNode}
+      chatPaneContent={chatPaneContentNode}
+      drawerContent={
+        <DrawerSurface
+          editorMode={editorMode}
+          drawer={drawer}
+          drawerCollapsed={drawerCollapsed}
+          drawerPinned={drawerPinned}
+          activeTab={activeTab}
+          activeTabId={activeTabId}
+          editorTabs={editorTabs}
+          toggleEditorMode={toggleEditorMode}
+          selectEditorTab={selectEditorTab}
+          closeEditorTab={closeEditorTab}
+          closeEditor={closeEditor}
+          readEditorFileContent={readEditorFileContent}
+          readEditorOriginalContent={readEditorOriginalContent}
+          saveEditorFileContent={saveEditorFileContent}
+          prevDrawerPanelRef={prevDrawerPanelRef}
+          clearEditorBack={clearEditorBack}
+          maxEditorFileSizeMB={settings.maxEditorFileSizeMB}
+          browserFullscreen={browserFullscreen}
+          enableGitManagement={settings.enableGitManagement}
+          activeProjectId={activeProjectId}
+          gitDrawerDiff={gitDrawerDiff}
+          gitDiffDisplayMode={gitDiffDisplayMode}
+          openCommitFileDiff={openCommitFileDiff}
+          openWorkspaceFileDiff={openWorkspaceFileDiff}
+          toggleGitDiffDisplayMode={toggleGitDiffDisplayMode}
+          closeGitDiff={closeGitDiff}
+          gitApi={api.git}
+          gitInfo={gitInfo}
+          switchBranch={switchBranch}
+          createBranch={createBranch}
+          onOpenDrawer={workspace.openDrawer}
+          onCloseDrawer={workspace.closeDrawer}
+          onCollapseDrawer={workspace.collapseDrawer}
+          onToggleDrawerPin={workspace.toggleDrawerPinned}
+          onCloseBrowser={() => workspace.closeBrowser()}
+          onMinimizeBrowser={() => workspace.minimizeBrowser()}
+          onEnterBrowserFullscreen={() => workspace.enterBrowserFullscreen()}
+          sessionsProject={sessionsProject}
+          sessionsProjectId={sessionsProjectId}
+          files={files}
+          sessions={sessions}
+          sessionSourceFilter={sessionSourceFilter}
+          sessionHistoryLoading={sessionHistoryLoading}
+          expandedDirs={expandedDirs}
+          onToggleDirectory={toggleDirectory}
+          onCollapseAllDirectories={collapseAllDirectories}
+          setFileMenu={setFileMenu}
+          refreshFiles={refreshFiles}
+          projects={projects}
+          refreshProjectSessions={refreshProjectSessions}
+          runOpenSidebarSession={runOpenSidebarSession}
+          isSameSessionPath={isSameSessionPath}
+          runCopySession={runCopySession}
+          runExportHistorySession={runExportHistorySession}
+          runDeleteHistorySession={runDeleteHistorySession}
+          viewFilePath={viewFilePath}
+          openFilePath={openFilePath}
+          api={api}
+          t={t}
+        />
+      }
+      outlineContent={hasActiveConversation ? (
 <ConversationOutline
         items={outlineItems}
         onJump={handleOutlineJump}
@@ -3053,244 +2857,11 @@ export function App() {
           icon: <Globe size={17} />,
         }}
       />
-    ) : null
-  );
-
-  const drawerContentNode = (
-    <>
-
-    {editorMode === "drawer" && drawer === "editor" && !drawerCollapsed && activeTab ? (
-      <Suspense fallback={<div className="drawer-content-frame"><div className="file-diff-loading">Loading...</div></div>}>
-        <FileDiffViewer
-          displayMode="drawer"
-          filePath={activeTab.filePath}
-          mode={activeTab.mode}
-          onToggleMode={activeTab.preserveDrawer ? undefined : toggleEditorMode}
-          onBack={prevDrawerPanelRef.current && prevDrawerPanelRef.current !== "editor" ? () => {
-            const prev = clearEditorBack();
-            if (prev) workspace.openDrawer(prev);
-          } : undefined}
-          originalContent={activeTab.mode === "diff" ? activeTab.originalContent : undefined}
-          modifiedContent={activeTab.modifiedContent}
-          tabs={editorTabs}
-          activeTabId={activeTabId}
-          onSelectTab={selectEditorTab}
-          onCloseTab={closeEditorTab}
-          onClose={() => { closeEditor(); workspace.closeDrawer(); }}
-          readContent={readEditorFileContent}
-          readOriginalContent={readEditorOriginalContent}
-          saveContent={activeTab.allowSave ? saveEditorFileContent : undefined}
-          theme={document.documentElement.dataset.theme === "dark" ? "dark" : "light"}
-          maxFileSizeMB={settings.maxEditorFileSizeMB}
-        />
-      </Suspense>
-    ) : drawer === "browser" && !drawerCollapsed ? (
-      <BrowserSurface
-        fullscreen={browserFullscreen}
-        onClose={() => workspace.closeBrowser()}
-        onMinimize={() => workspace.minimizeBrowser()}
-        onEnterFullscreen={() => workspace.enterBrowserFullscreen()}
-      />
-    ) : settings.enableGitManagement && drawer === "git" && !drawerCollapsed && activeProjectId ? (
-      <div className="drawer-content-frame">
-        <div className="drawer-header">
-          <strong>{t("drawer.sourceControl")}</strong>
-          <div className="drawer-header-actions">
-            <button onClick={workspace.collapseDrawer} title={t("drawer.collapsePanel")}>
-              <Minus size={15} />
-            </button>
-            <button onClick={workspace.closeDrawer} title={t("common.close")}>
-              <X size={15} />
-            </button>
-          </div>
-        </div>
-        <div className="git-drawer-stack" data-detail-open={Boolean(gitDrawerDiff && gitDiffDisplayMode === "drawer")}>
-          <div className="git-drawer-source" aria-hidden={Boolean(gitDrawerDiff && gitDiffDisplayMode === "drawer")}>
-            <GitPanel
-              projectId={activeProjectId}
-              commitLog={api.git.commitLog}
-              commitDetail={api.git.commitDetail}
-              onOpenCommitFileDiff={openCommitFileDiff}
-              onOpenWorkspaceFileDiff={openWorkspaceFileDiff}
-              branchCompare={api.git.branchCompare}
-              getStatus={api.git.status}
-              stageFiles={api.git.stage}
-              unstageFiles={api.git.unstage}
-              discardFile={api.git.discard}
-              commit={api.git.commit}
-              branches={gitInfo.branches}
-              currentBranch={gitInfo.current}
-              onSwitchBranch={switchBranch}
-              onCreateBranch={createBranch}
-              cherryPick={api.git.cherryPick}
-              revert={api.git.revert}
-              reset={api.git.reset}
-              dropCommit={api.git.dropCommit}
-              generateCommitMessage={api.git.generateCommitMessage}
-              gitInit={api.git.init}
-            />
-          </div>
-          {gitDrawerDiff && gitDrawerDiff.projectId === activeProjectId && gitDiffDisplayMode === "drawer" && (
-            <div className="git-drawer-detail">
-              <Suspense fallback={<div className="file-diff-loading">Loading...</div>}>
-                <FileDiffViewer
-                  displayMode="drawer"
-                  filePath={gitDrawerDiff.filePath}
-                  mode="diff"
-                  onToggleMode={toggleGitDiffDisplayMode}
-                  originalContent={gitDrawerDiff.originalContent}
-                  modifiedContent={gitDrawerDiff.modifiedContent}
-                  tabs={[{ id: gitDrawerDiff.filePath, filePath: gitDrawerDiff.filePath, label: gitDrawerDiff.label }]}
-                  activeTabId={gitDrawerDiff.filePath}
-                  onClose={closeGitDiff}
-                  readContent={readEditorFileContent}
-                  theme={document.documentElement.dataset.theme === "dark" ? "dark" : "light"}
-                  maxFileSizeMB={settings.maxEditorFileSizeMB}
-                />
-              </Suspense>
-            </div>
-          )}
-        </div>
-      </div>
-    ) : drawer && drawer !== "browser" && drawer !== "editor" && drawer !== "git" ? (
-      <LazyWrapper
-        className="drawer-content-frame"
-        enabled={true}
-        threshold={0}
-        rootMargin="50px"
-        placeholder={
-          <div style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            height: "100%",
-            color: "var(--text-secondary)",
-            fontSize: "14px"
-          }}>
-            加载中...
-          </div>
-        }
-      >
-        <DrawerContent
-          panel={drawer}
-          project={drawer === "sessions" ? sessionsProject : undefined}
-          files={files}
-          sessions={(sessionsProjectId && sessionSourceFilter[sessionsProjectId]) ? sessions.filter(
-            (s) => !s.parentSessionPath && (sessionSourceFilter[sessionsProjectId]!)!.has(s.source ?? "pi"),
-          ).concat(sessions.filter(s => s.parentSessionPath && (sessionSourceFilter[sessionsProjectId]!)!.has(s.source ?? "pi"))) : sessions}
-          sessionsLoading={sessionHistoryLoading}
-          expandedDirs={expandedDirs}
-          onToggleDirectory={toggleDirectory}
-          onCollapseAllDirectories={collapseAllDirectories}
-          pinned={drawerPinned}
-          onTogglePin={workspace.toggleDrawerPinned}
-          onCollapse={workspace.collapseDrawer}
-          onClose={workspace.closeDrawer}
-          onFileContextMenu={(node, x, y) => setFileMenu({ node, x, y })}
-          onRefreshFiles={() => {
-            refreshFiles(activeProjectId);
-          }}
-          onOpenFolder={() => {
-            const p = projects.find((p) => p.id === activeProjectId);
-            if (p) void api.files.open(p.path);
-          }}
-          onRefreshSessions={() => {
-            const projectId = sessionsProjectId ?? activeProjectId;
-            if (projectId) void refreshProjectSessions(projectId, true);
-          }}
-          onOpenSession={(session) =>
-            void runOpenSidebarSession(
-              sessionsProjectId ?? activeProjectId ?? "",
-              session,
-            )
-          }
-          onRenameSession={async (filePath, newName) => {
-            const session = sessions.find((candidate) =>
-              isSameSessionPath(
-                candidate.filePath,
-                filePath,
-                candidate.wsl ? "wsl" : "native",
-              ),
-            );
-            if (!session) return;
-            await api.sessions.updateRecord(session.id, { title: newName });
-            const projectId = sessionsProjectId ?? activeProjectId;
-            if (projectId) await refreshProjectSessions(projectId, true);
-          }}
-          onCopySession={(session) =>
-            runCopySession(
-              session.filePath,
-              sessionsProjectId ?? activeProjectId,
-            )
-          }
-          onExportSession={runExportHistorySession}
-          onDeleteSession={runDeleteHistorySession}
-          onViewFile={viewFilePath}
-          onOpenFile={openFilePath}
-        />
-      </LazyWrapper>
     ) : null}
-    </>
-  );
-
-  function startResize(target: "list" | "drawer", event: PointerEvent) {
-    const startX = event.clientX;
-    const startListWidth = listCollapsed ? 68 : listWidth;
-    const startDrawerWidth = drawerCollapsed ? 0 : drawerWidth;
-    let frame = 0;
-
-    function onMove(moveEvent: globalThis.PointerEvent) {
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => {
-        const delta = moveEvent.clientX - startX;
-        if (target === "list") {
-          const next = Math.min(440, Math.max(100, startListWidth + delta));
-          setListCollapsed(next <= 120);
-          setListWidth(next);
-        } else {
-          const minDrawerWidth = workspace.drawerPinned ? 220 : 180;
-          const next = Math.min(
-            560,
-            Math.max(minDrawerWidth, startDrawerWidth - delta),
-          );
-          setDrawerCollapsed(!workspace.drawerPinned && next <= 190);
-          setDrawerWidth(next);
-        }
-      });
-    }
-
-    function onUp() {
-      cancelAnimationFrame(frame);
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-      document.body.classList.remove("is-resizing");
-      document.body.classList.remove("is-list-resizing");
-    }
-
-    document.body.classList.add("is-resizing");
-    if (target === "list") document.body.classList.add("is-list-resizing");
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
-  }
-
-  return (
-    <AppShell
-      listCollapsed={listCollapsed}
-      listWidth={listWidth}
-      listHoverRevealSuppressed={listHoverRevealSuppressed}
-      drawer={drawer}
-      drawerCollapsed={drawerCollapsed}
-      drawerWidth={drawerWidth}
-      drawerPinned={workspace.drawerPinned}
-      useNativeTitleBar={settings.useNativeTitleBar}
-      chatPaneRef={chatPaneRef}
-      terminalRowHeight={terminalRowHeight}
-      contentMaxWidth={settings.contentMaxWidth}
-      sidebarContent={sidebarContentNode}
-      chatPaneContent={chatPaneContentNode}
-      drawerContent={drawerContentNode}
-      outlineContent={outlineContentNode}
-      onResize={startResize}
+      setListCollapsed={setListCollapsed}
+      setListWidth={setListWidth}
+      setDrawerCollapsed={setDrawerCollapsed}
+      setDrawerWidth={setDrawerWidth}
       onToggleListCollapsed={toggleListCollapsed}
       onReleaseListHoverSuppression={releaseListHoverSuppression}
       onDrawerCollapse={workspace.collapseDrawer}
@@ -3599,8 +3170,6 @@ export function App() {
     />
     </Suspense>
 
-
-
     {/* Scratch Pad（草稿本）：根级渲染，避免受 chat-pane grid 影响定位 */}
     <ScratchPadOverlay controller={scratchPad} />
 
@@ -3615,14 +3184,8 @@ export function App() {
       onError={(error) => showToast(t("app.openEditorFailed", {error: String(error)}), 3000)}
     />
 
-
-
     </AppShell>
   );
 }
-
-
-
-
 
 // test
