@@ -230,7 +230,11 @@ test("indeterminate prompt timeout never becomes a retryable rejection", () => {
   assert.match(sessionSendSource, /outcome === "unknown"/);
   assert.match(sessionSendSource, /status: "unknown"/);
   assert.match(composerPanelsSource, /SessionDeliveryNotice/);
-  assert.match(appSource, /queuedPrompt\.status === "unknown"/);
+  const runtimeControllerSource = readFileSync(
+    "src/renderer/src/hooks/useSessionRuntimeController.ts",
+    "utf8",
+  );
+  assert.match(runtimeControllerSource, /\.status === "unknown"/);
 });
 
 test("prompt acceptance is explicit across the main and renderer boundary", () => {

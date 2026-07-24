@@ -717,31 +717,11 @@ export function App() {
   const agentRuntimeState = activeAgentId
     ? activeProjectRuntimeCapabilities[activeAgentId]
     : undefined;
-  const activeRuntimeState = currentSessionId
-    ? (currentSessionRuntime?.state ?? (
-      currentSession?.model || currentSession?.thinkingLevel
-        ? {
-            provider: currentSession.model?.provider,
-            modelId: currentSession.model?.modelId,
-            modelName: currentSession.model?.modelId,
-            thinkingLevel: currentSession.thinkingLevel,
-          }
-        : undefined
-    ))
-    : agentRuntimeState;
-  const activeConversationStatus = currentSessionId
-    ? (currentSessionRuntime?.status ??
-      (currentSessionSendState.status === "activating" ? "starting" : "idle"))
-    : undefined;
+
+  // activeConversationStatus / activeRuntimeState replaced by sync isAgentCurrentlyBusy().
   const hasActiveConversation = Boolean(currentSession);
-  const currentSessionLiveAgentId =
-    currentSessionRuntime?.agentId === activeAgentId &&
-    activeAgent &&
-    activeAgent.status !== "closed" &&
-    activeAgent.status !== "error"
-      ? activeAgent.id
-      : undefined;
-  const canMutateActiveMessages = Boolean(currentSessionLiveAgentId);
+
+  // Timeline scroll, pagination and jump ownership lives in sessionTimeline.
   const activeProjectHasBusyAgent = Boolean(
     activeProjectId && displayAgents.some((agent) =>
       agent.projectId === activeProjectId && (
@@ -1656,13 +1636,12 @@ export function App() {
     }
   }
 
-  const isAgentStarting =
-    activeConversationStatus === "starting" ||
-    currentSessionSendState.status === "activating";
-  const isAgentBusy = Boolean(
-    hasActiveConversation &&
-    (activeConversationStatus === "running" || activeRuntimeState?.isStreaming),
-  );
+  // isAgentBusy: synchronous store read (steer logic is callback-only, not render-time).
+  function isAgentCurrentlyBusy(): boolean {
+    if (!currentSessionId) return false;
+    const rt = store.get(currentSessionRuntimeAtom);
+    return rt?.status === "running" || Boolean((rt?.state as any)?.isStreaming);
+  }
 
   // 处理所有 agent 的 idle 队列：隐藏会话也不会因切换选中项而卡住。
   // tool-end 的 steer 投递直接在 onRuntimeState 原始事件上处理，避免批量 render 漏边沿。
@@ -1725,7 +1704,7 @@ export function App() {
     // 客户端队列 drain 直接调用 dispatchPromptSnapshot，并显式指定其投递语义。
     const behavior =
       streamingBehavior ??
-      (agentId === activeAgentId && isAgentBusy ? "steer" : undefined);
+      (agentId === activeAgentId && isAgentCurrentlyBusy() ? "steer" : undefined);
     try {
       await dispatchPromptSnapshot(
         agentId,
@@ -2203,32 +2182,13 @@ export function App() {
     />
   );
 
-  // Gate 4.6 — Session view extracted to SessionView wrapper component
-  // Compute derived values for SessionView props
+  // Gate 4.6 — Session view wrapped in SessionRuntimeInjector
   const sessionTitle =
     currentSession?.title ??
     (isChatProject(activeProject)
       ? t("app.chatProject")
       : activeProject?.name) ??
     "PiDeck";
-  const canStopSession = activeAgent?.status === "running";
-  const canRestartSession = Boolean(
-    activeAgentId &&
-    activeAgent &&
-    activeAgent.status !== "starting" &&
-    restartingAgentId !== activeAgentId &&
-    !queueFlushByAgentRef.current.has(activeAgentId) &&
-    !(queue.queuedPrompts[activeAgentId] ?? []).some(
-      (queuedPrompt: QueuedPrompt) =>
-        queuedPrompt.status === "sending" ||
-        queuedPrompt.status === "unknown",
-    )
-  );
-  const sessionHasProject = Boolean(activeProjectId);
-  const sessionDuration = activeAgentId
-    ? sessionDurationByAgent[activeAgentId]
-    : undefined;
-  const isRestartingThisAgent = restartingAgentId === activeAgentId;
 
   const chatPaneContentNode = currentSessionId ? (
     <SessionRuntimeInjector
