@@ -7,11 +7,20 @@ import {
   useState,
   type RefObject,
 } from "react";
-import { useAtomValue } from "jotai";
+import { useAtomValue, useSetAtom } from "jotai";
 import { selectAtom } from "jotai/utils";
 import type { AgentRuntimeState, ChatMessage } from "../../../shared/types";
-import { sessionMessagesCacheAtom } from "../atoms";
+import {
+  cacheSessionMessagesAtom,
+  sessionMessageLoadStateAtom,
+  sessionMessagesCacheAtom,
+  setSessionMessageLoadStateAtom,
+  touchSessionMessagesAtom,
+} from "../atoms";
 import { useMessagePagination } from "./useMessagePagination";
+
+let nextLoadSequence = 0;
+const latestLoadBySession = new Map<string, number>();
 
 const BOTTOM_THRESHOLD = 100;
 const LEGACY_OWNER_KEY = "legacy";
@@ -117,6 +126,53 @@ export function useSessionTimelineController(options: {
   const cachedMessages = useAtomValue(cacheSliceAtom);
   const messages = options.messages ?? cachedMessages ?? [];
   const controllerEnabled = options.sessionId !== undefined && options.messages === undefined;
+
+  // ── Load messages from disk when sessionId changes ──
+  const cacheEntry = useAtomValue(sessionMessagesCacheAtom);
+  const cacheMessages = useSetAtom(cacheSessionMessagesAtom);
+  const setLoadState = useSetAtom(setSessionMessageLoadStateAtom);
+  const touchMessages = useSetAtom(touchSessionMessagesAtom);
+  const loadStates = useAtomValue(sessionMessageLoadStateAtom);
+  const lastLoadedSessionRef = useRef<string | undefined>(undefined);
+
+  useEffect(() => {
+    const sessionId = options.sessionId;
+    if (!sessionId) return;
+    // Already loaded this session.
+    if (lastLoadedSessionRef.current === sessionId) return;
+    lastLoadedSessionRef.current = sessionId;
+
+    const entry = cacheEntry[sessionId];
+    const sequence = ++nextLoadSequence;
+    latestLoadBySession.set(sessionId, sequence);
+    const expectedRevision = entry?.revision ?? 0;
+    if (entry) touchMessages(sessionId);
+    setLoadState({ sessionId, state: { status: "loading" } });
+
+    void (window as any).piDesktop.sessions
+      .readRecordMessages(sessionId)
+      .then((diskMessages: ChatMessage[]) => {
+        if (latestLoadBySession.get(sessionId) !== sequence) return;
+        cacheMessages({
+          sessionId,
+          messages: diskMessages,
+          source: "disk",
+          expectedRevision,
+        });
+        setLoadState({ sessionId, state: { status: "ready" } });
+      })
+      .catch((error: unknown) => {
+        if (latestLoadBySession.get(sessionId) !== sequence) return;
+        setLoadState({
+          sessionId,
+          state: {
+            status: "error",
+            error: error instanceof Error ? error.message : String(error),
+          },
+        });
+      });
+  }, [options.sessionId]);
+
   const pagination = useMessagePagination({
     messages,
     ownerKey,
