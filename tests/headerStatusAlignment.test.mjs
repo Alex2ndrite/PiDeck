@@ -3,6 +3,10 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const appSource = readFileSync("src/renderer/src/App.tsx", "utf8");
+const sessionViewSource = readFileSync(
+  "src/renderer/src/components/session/SessionView.tsx",
+  "utf8",
+);
 const headerSource = readFileSync(
   "src/renderer/src/components/session/SessionHeader.tsx",
   "utf8",
@@ -25,7 +29,7 @@ test("header status cards share the right-aligned actions group", () => {
   const actionsIndex = headerSource.indexOf("chat-header-actions");
   const sessionStatusIndex = headerSource.indexOf("<SessionStatus");
   const rightActionsIndex = headerSource.indexOf('className="header-actions-right"');
-  const sessionHeader = componentInvocation(appSource, "SessionHeader");
+  const sessionHeader = componentInvocation(sessionViewSource, "SessionHeader");
 
   assert.ok(sessionStatusIndex > actionsIndex, "runtime status must be inside header actions");
   assert.ok(sessionStatusIndex < rightActionsIndex, "runtime status must precede Session actions");

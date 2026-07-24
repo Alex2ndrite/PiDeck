@@ -3,6 +3,10 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const appSource = readFileSync("src/renderer/src/App.tsx", "utf8");
+const sessionViewSource = readFileSync(
+  "src/renderer/src/components/session/SessionView.tsx",
+  "utf8",
+);
 const sessionActionsSource = readFileSync(
   "src/renderer/src/hooks/useSessionActions.ts",
   "utf8",
@@ -90,8 +94,8 @@ test("active Agent identity is derived from the selected Session runtime", () =>
 test("Session messages and composer render without an active Agent", () => {
   assert.match(appSource, /const hasActiveConversation = Boolean\(currentSession\)/);
   assert.match(
-    appSource,
-    /\{hasActiveConversation && currentSessionId && \(\s*<ComposerArea[\s\S]*sessionId=\{currentSessionId\}/,
+    sessionViewSource,
+    /\{hasActiveConversation && \(\s*<ComposerArea[\s\S]*sessionId=\{sessionId\}/,
   );
   assert.match(composerSource, /useSessionComposerController\(/);
   assert.match(composerSource, /sessionId=\{props\.sessionId\}/);

@@ -6,6 +6,10 @@ import { setI18nLocale, t } from "../src/renderer/src/i18n.ts";
 import { mergeAgentRuntimeState } from "../src/renderer/src/utils/agentRuntimeState.ts";
 
 const appSource = readFileSync("src/renderer/src/App.tsx", "utf8");
+const sessionViewSource = readFileSync(
+  "src/renderer/src/components/session/SessionView.tsx",
+  "utf8",
+);
 const globalListenersSource = readFileSync(
   "src/renderer/src/hooks/useGlobalAgentListeners.ts",
   "utf8",
@@ -48,7 +52,7 @@ function componentInvocation(source, componentName) {
 }
 
 test("pending prompts render inside the composer before composer-box", () => {
-  const composerAreaIndex = appSource.indexOf("<ComposerArea");
+  const composerAreaIndex = sessionViewSource.indexOf("<ComposerArea");
   const queuePanelIndex = appSource.indexOf("<QueuedPromptPanel");
   assert.ok(composerAreaIndex >= 0, "ComposerArea should exist");
   assert.ok(queuePanelIndex > composerAreaIndex, "pending prompts should stay inside ComposerArea");

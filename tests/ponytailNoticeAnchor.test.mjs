@@ -3,6 +3,10 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const app = readFileSync("src/renderer/src/App.tsx", "utf8");
+const sessionView = readFileSync(
+  "src/renderer/src/components/session/SessionView.tsx",
+  "utf8",
+);
 const sessionAtoms = readFileSync("src/renderer/src/atoms/session-atoms.ts", "utf8");
 const header = readFileSync(
   "src/renderer/src/components/session/SessionHeader.tsx",
@@ -18,12 +22,12 @@ test("通知锚定在新会话控件下方而不是全局 toast", () => {
   assert.match(sessionAtoms, /request\.method === "notify"/);
   assert.match(sessionAtoms, /notification:\s*\{/);
   assert.match(app, /showNotice\(\s*notification\.message/);
-  assert.match(app, /<NoticeCenter \/>/);
+  assert.match(sessionView, /<NoticeCenter \/>/);
 
-  const noticeIndex = app.indexOf("<NoticeCenter");
-  const comboInAppIndex = app.indexOf('className="session-combo"');
-  assert.ok(noticeIndex > 0, "NoticeCenter must render in App");
-  assert.ok(noticeIndex > comboInAppIndex, "NoticeCenter must render after session combo in App");
+  const noticeIndex = sessionView.indexOf("<NoticeCenter");
+  const comboInAppIndex = sessionView.indexOf('className="session-combo"');
+  assert.ok(noticeIndex > 0, "NoticeCenter must render in SessionView");
+  assert.ok(noticeIndex > comboInAppIndex, "NoticeCenter must render after session combo in SessionView");
 
   const notice = cssRule("\\.app-notice");
   assert.ok(notice, "通知样式必须存在");

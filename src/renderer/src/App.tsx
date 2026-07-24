@@ -19,7 +19,6 @@ import remarkGfm from "remark-gfm";
 import {
   ChevronLeft,
   ChevronRight,
-  ChevronDown,
   Code,
   Minus,
   FolderOpen,
@@ -120,11 +119,7 @@ import { useSessionLoader } from "./hooks/useSessionLoader";
 import { useSessionActions } from "./hooks/useSessionActions";
 import { useScratchPad } from "./hooks/useScratchPad";
 import { SessionReferenceModal, type SessionReferenceResult } from "./components/app/SessionReferenceModal";
-import { SessionMessageTimeline } from "./components/session/SessionMessageTimeline";
-import { SessionHeader } from "./components/session/SessionHeader";
-import { NoticeCenter } from "./components/overlays/NoticeCenter";
-import { ComposerArea } from "./components/session/ComposerArea";
-import { SessionRuntimeDock } from "./components/session/SessionRuntimeDock";
+import { SessionView } from "./components/session/SessionView";
 import {
   QueuedPromptPanel,
 } from "./components/session/ComposerPanels";
@@ -2943,41 +2938,57 @@ export function App() {
     />
   );
 
-  const chatPaneContentNode = (
-    <>
-    <SessionHeader
-      headerRef={chatHeaderRef}
-      comboRef={sessionComboRef}
-      title={
-        currentSession?.title ??
-        (isChatProject(activeProject)
-          ? t("app.chatProject")
-          : activeProject?.name) ??
-        "PiDeck"
-      }
-      compactionCount={activeAgent?.compactionCount}
-      runtimeState={activeRuntimeState}
-      duration={activeAgentId ? sessionDurationByAgent[activeAgentId] : undefined}
-      isStarting={isAgentStarting}
-      hasProject={Boolean(activeProjectId)}
-      hasSession={Boolean(activeAgentId || currentSessionId)}
-      menuOpen={sessionActionsOpen}
-      canStop={activeAgent?.status === "running"}
-      canRestart={Boolean(
-        activeAgentId &&
-        activeAgent &&
-        activeAgent.status !== "starting" &&
-        restartingAgentId !== activeAgentId &&
-        !queueFlushByAgentRef.current.has(activeAgentId) &&
-        !(queue.queuedPrompts[activeAgentId] ?? []).some(
-          (queuedPrompt) =>
-            queuedPrompt.status === "sending" ||
-            queuedPrompt.status === "unknown",
-        )
-      )}
-      isRestarting={restartingAgentId === activeAgentId}
+  // Gate 4.6 — Session view extracted to SessionView wrapper component
+  // Compute derived values for SessionView props
+  const sessionTitle =
+    currentSession?.title ??
+    (isChatProject(activeProject)
+      ? t("app.chatProject")
+      : activeProject?.name) ??
+    "PiDeck";
+  const canStopSession = activeAgent?.status === "running";
+  const canRestartSession = Boolean(
+    activeAgentId &&
+    activeAgent &&
+    activeAgent.status !== "starting" &&
+    restartingAgentId !== activeAgentId &&
+    !queueFlushByAgentRef.current.has(activeAgentId) &&
+    !(queue.queuedPrompts[activeAgentId] ?? []).some(
+      (queuedPrompt: QueuedPrompt) =>
+        queuedPrompt.status === "sending" ||
+        queuedPrompt.status === "unknown",
+    )
+  );
+  const sessionHasProject = Boolean(activeProjectId);
+  const sessionDuration = activeAgentId
+    ? sessionDurationByAgent[activeAgentId]
+    : undefined;
+  const isRestartingThisAgent = restartingAgentId === activeAgentId;
+
+  const chatPaneContentNode = currentSessionId ? (
+    <SessionView
+      sessionId={currentSessionId}
+      sessionTitle={sessionTitle}
+      sessionTimeline={sessionTimeline}
+      activeAgentId={activeAgentId ?? undefined}
+      activeAgent={activeAgent}
+      activeRuntimeState={activeRuntimeState}
+      hasActiveConversation={hasActiveConversation}
+      hasProject={sessionHasProject}
+      chatHeaderRef={chatHeaderRef}
+      sessionComboRef={sessionComboRef}
+      composerRef={composerRef}
+      composerOffsetHeight={composerOffsetHeight}
+      terminalRowHeight={terminalRowHeight}
+      isAgentStarting={isAgentStarting}
+      sessionActionsOpen={sessionActionsOpen}
+      canStop={canStopSession}
+      canRestart={canRestartSession}
+      restartingAgentId={restartingAgentId ?? undefined}
+      isRestarting={isRestartingThisAgent}
       showRestart={!isLanWeb}
-      onTrigger={() => {
+      sessionDuration={sessionDuration}
+      onHeaderTrigger={() => {
         if (activeAgentId || currentSessionId) {
           setSessionActionsOpen((open) => !open);
         } else {
@@ -2993,54 +3004,32 @@ export function App() {
         setSessionActionsOpen(false);
       }}
       onRestart={() => void restartActiveAgent()}
-    />
-    <NoticeCenter />
-
-    {currentSessionId ? (
-      <SessionMessageTimeline
-        mode="session"
-        sessionId={currentSessionId}
-        controller={sessionTimeline}
-        hasProject={Boolean(activeProjectId)}
-        onCreateSession={() => void runCreateSessionDraft()}
-        showThinking={settings.showThinking}
-        validCommandNames={validCommandNames}
-        validFilePaths={validFilePaths}
-        onPreviewImage={setPreviewImage}
-        onOpenExternal={(url) => api.app.openExternal(url)}
-        onOpenFile={openFilePath}
-        onDiffFile={diffFilePath}
-        onResendUserMessage={canMutateActiveMessages ? resendUserMessage : undefined}
-        onEditMessage={canMutateActiveMessages ? editMessage : undefined}
-        onDeleteMessage={canMutateActiveMessages ? deleteMessage : undefined}
-        onSendUiResponse={(requestId, response) => {
-          if (!activeAgentId) return;
-          if (response.cancelled) setCancellingUi(true);
-          sendSessionUiResponse(requestId, response);
-        }}
-        onToast={(message) => showToast(message)}
-      />
-    ) : null}
-
-      {sessionTimeline.showScrollToBottom && (
-        <button
-          className="scroll-to-bottom-btn"
-          // 按钮脱离滚动容器后，由 composer 实际高度 + 终端高度决定 bottom，避免输入框增高或终端打开时遮挡。
-          style={{ bottom: Math.max(24, terminalRowHeight + composerOffsetHeight + 18) }}
-          onClick={sessionTimeline.scrollToBottom}
-          title={t("app.scrollToBottom")}
-        >
-          <ChevronDown size={18} />
-        </button>
-      )}
-
-    {hasActiveConversation && currentSessionId && (
-      <ComposerArea
-        ref={composerRef}
-        sessionId={currentSessionId}
-        onOpenFile={openFilePath}
-        enqueue={enqueueSessionPrompt}
-        queuePanel={activeAgentId ? (
+      showThinking={settings.showThinking}
+      validCommandNames={validCommandNames}
+      validFilePaths={validFilePaths}
+      onPreviewImage={setPreviewImage}
+      onOpenFile={openFilePath}
+      onDiffFile={diffFilePath}
+      onResendUserMessage={
+        canMutateActiveMessages ? resendUserMessage : undefined
+      }
+      onEditMessage={
+        canMutateActiveMessages ? editMessage : undefined
+      }
+      onDeleteMessage={
+        canMutateActiveMessages ? deleteMessage : undefined
+      }
+      onSendUiResponse={(requestId, response) => {
+        if (!activeAgentId) return;
+        if (response.cancelled) setCancellingUi(true);
+        sendSessionUiResponse(requestId, response);
+      }}
+      onToast={(message: string) => showToast(message)}
+      canMutateActiveMessages={canMutateActiveMessages}
+      enqueueSessionPrompt={enqueueSessionPrompt}
+      openFilePath={openFilePath}
+      queuePanel={
+        activeAgentId ? (
           <QueuedPromptPanel
             trackRef={queuedTrackRef}
             agentId={activeAgentId}
@@ -3049,38 +3038,24 @@ export function App() {
             onRetract={queue.retractQueuedPromptForEdit}
             onDiscard={queue.discardQueuedPrompt}
           />
-        ) : undefined}
-      />
-    )}
-
-    {!isLanWeb && currentSessionId && !settingsOpen && !configOpen && !environmentDialog && terminalDockVisible && (
-      <SessionRuntimeDock
-        agentId={activeAgentId}
-        open={terminalDockVisible}
-        collapsed={terminalCollapsed}
-        height={terminalRowHeight}
-        terminal={api.terminal}
-        onOpenChange={(open) => {
-          if (activeAgentId) setTerminalOpenForAgent(activeAgentId, open);
-        }}
-        onCollapsedChange={(collapsed) => {
-          if (activeAgentId) setTerminalCollapsedForAgent(activeAgentId, collapsed);
-        }}
-        onHeightChange={(height) => {
-          if (!activeAgentId) return;
-          const maxHeight = Math.max(
-            120,
-            availableTerminalHeight,
-          );
-          setTerminalHeightByAgent((current) => ({
-            ...current,
-            [activeAgentId]: Math.min(height, maxHeight),
-          }));
-        }}
-      />
-    )}
-    </>
-  );
+        ) : undefined
+      }
+      terminalDockVisible={terminalDockVisible}
+      terminalCollapsed={terminalCollapsed}
+      availableTerminalHeight={
+        availableTerminalHeight ?? 120
+      }
+      setTerminalOpenForAgent={setTerminalOpenForAgent}
+      setTerminalCollapsedForAgent={setTerminalCollapsedForAgent}
+      setTerminalHeightByAgent={setTerminalHeightByAgent}
+      settingsOpen={settingsOpen}
+      configOpen={configOpen}
+      environmentDialog={Boolean(environmentDialog)}
+      runCreateSessionDraft={runCreateSessionDraft}
+      abortAgent={abortAgent}
+      restartActiveAgent={restartActiveAgent}
+    />
+  ) : null;
 
   const outlineContentNode = (
     hasActiveConversation ? (
