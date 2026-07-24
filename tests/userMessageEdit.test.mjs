@@ -12,5 +12,6 @@ test("user message edit handler does not keep the initial empty active agent", (
 	assert.match(source, /activeAgentIdRef\.current = activeAgentId;/);
 	assert.match(source, /const targetAgentId = agentId;/);
 	assert.match(source, /const previous = livePromptByAgentRef\.current\[targetAgentId\] \?\? "";/);
-	assert.match(source, /\[targetAgentId\]: nextValue/);
+	assert.match(source, /setSessionDraft\(\{ sessionId: targetAgentId, value: nextValue \}\);/);
+	assert.doesNotMatch(source, /setPromptByAgent/);
 });

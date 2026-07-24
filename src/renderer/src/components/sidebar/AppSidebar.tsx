@@ -1,10 +1,11 @@
 import React from "react";
+import { useSetAtom } from "jotai";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { SidebarContent, type SidebarActions } from "./SidebarContent";
 import type { SidebarController } from "../../hooks/useSidebarController";
 import { LogoMark } from "../app/AppParts";
 import { t } from "../../i18n";
-import type { SessionSummary, Project } from "../../../../shared/types";
+import { settingsOpenAtom } from "../../atoms";
 
 interface AppSidebarProps {
   controller: SidebarController;
@@ -19,13 +20,14 @@ interface AppSidebarProps {
   listHoverRevealSuppressed: boolean;
   onToggleListCollapsed: () => void;
   onPointerLeave: () => void;
-  onOpenSettings: () => void;
   onOpenConfig: () => void;
   onOpenFeedback: () => void;
   onOpenHomepage: () => void;
 }
 
 export function AppSidebar(props: AppSidebarProps) {
+  const setSettingsOpen = useSetAtom(settingsOpenAtom);
+
   return (
     <SidebarContent
       controller={props.controller}
@@ -52,7 +54,7 @@ export function AppSidebar(props: AppSidebarProps) {
         </button>
       </>}
       onPointerLeave={props.onPointerLeave}
-      onOpenSettings={props.onOpenSettings}
+      onOpenSettings={() => setSettingsOpen(true)}
       onOpenConfig={props.onOpenConfig}
       onOpenFeedback={props.onOpenFeedback}
       onOpenHomepage={props.onOpenHomepage}

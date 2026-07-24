@@ -1,6 +1,8 @@
 import React from "react";
+import { useAtomValue } from "jotai";
 import type { AgentTab, AgentUiResponse, ChatMessage } from "../../../../shared/types";
 import type { ImageContent } from "../../../../shared/types";
+import { settingsOpenAtom } from "../../atoms";
 import { useSessionRuntimeController } from "../../hooks/useSessionRuntimeController";
 import type { QueuedPrompt } from "../../hooks/useQueuedPrompt";
 import type { SessionTimelineController } from "../../hooks/useSessionTimelineController";
@@ -74,7 +76,6 @@ export interface SessionRuntimeInjectorProps {
   setTerminalHeightByAgent: (updater: (cur: Record<string, number>) => Record<string, number>) => void;
 
   // Overlays
-  settingsOpen: boolean;
   configOpen: boolean;
   environmentDialog: boolean;
 
@@ -142,12 +143,12 @@ export const SessionRuntimeInjector = React.memo(function SessionRuntimeInjector
     setTerminalOpenForAgent,
     setTerminalCollapsedForAgent,
     setTerminalHeightByAgent,
-    settingsOpen,
     configOpen,
     environmentDialog,
     showNotice,
     api,
   } = props;
+  const settingsOpen = useAtomValue(settingsOpenAtom);
 
   // ── internal runtime subscriptions (the reason this component exists) ──
   const runtime = useSessionRuntimeController({

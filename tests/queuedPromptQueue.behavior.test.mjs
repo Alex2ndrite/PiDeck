@@ -303,8 +303,8 @@ test("layout budget uses compact queue chrome and terminal still yields first", 
   // ResizeObserver now lives in useSessionLayout.
   assert.match(layoutSource, /observer\.observe\(/);
   assert.match(layoutSource, /terminalRowHeight = input\.terminalCollapsed/);
-  // The root passes the measured queue budget; queue constants stay with the queue state machine.
-  assert.match(appSource, /queuedChromeBudget/);
+  // The root passes queue cardinality to the layout owner; queue constants stay with the queue state machine.
+  assert.match(appSource, /queuedPromptCount: activeQueuedPrompts\.length/);
   assert.match(queueStateSource, /export const QUEUED_PROMPT_VISIBLE = 3/);
   assert.match(appSource, /const visibleQueuedPrompts = activeQueuedPrompts/);
   const stylesSource = readFileSync("src/renderer/src/styles.css", "utf8");

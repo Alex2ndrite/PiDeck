@@ -148,7 +148,8 @@ test("composer keeps native typing inside the Session feature root", () => {
   assert.doesNotMatch(appSource, /currentSessionDraftAtom/);
   assert.doesNotMatch(appSource, /setPromptForAgent\(currentSessionId, editorText\.text\)/);
   assert.match(queuedPromptHookSource, /queuedPrompt\.behavior === "direct" \? undefined : queuedPrompt\.behavior/);
-  assert.match(queuedPromptHookSource, /const currentDraft =[\s\S]*?livePromptByAgentRef\.current\[agentId\] \?\? promptByAgent\[agentId\]/);
+  assert.match(queuedPromptHookSource, /const currentDraft = store\.get\(sessionDraftByIdAtom\)\[sessionId\] \?\? ""/);
+  assert.doesNotMatch(queuedPromptHookSource, /promptByAgent/);
   assert.match(appSource, /livePromptByAgentRef\.current = migrateAgentRecord/);
   assert.match(composerPanelsSource, /props\.sendBehaviorMenuOpen &&\s*props\.showBusySendControls &&\s*props\.hasComposerContent/);
   assert.match(composerPanelsSource, /className="send-behavior-option steer"\s*type="button"/);
@@ -176,7 +177,8 @@ test("queue drain is serialized and waits for an ordered global capability event
 test("retract edit restores text, attachments, and composer mode to the owning agent", () => {
   assert.match(queuedPromptHookSource, /livePrompt\.displayText/);
   assert.match(queuedPromptHookSource, /setAttachedImagesForAgent\(agentId, \(current\) => \[/);
-  assert.match(queuedPromptHookSource, /setComposerAgentModeForAgent\(agentId, livePrompt\.agentMode\)/);
+  assert.match(queuedPromptHookSource, /store\.set\(setSessionComposerModeAtom, \{ sessionId, mode: livePrompt\.agentMode \}\)/);
+  assert.doesNotMatch(queuedPromptHookSource, /setComposerAgentModeForAgent/);
   assert.match(queuedPromptHookSource, /pendingComposerCaretRef\.current = restoredPrompt\.length/);
   assert.match(queuedPromptHookSource, /setComposerCursor\(restoredPrompt\.length\)/);
   assert.match(queuedPromptHookSource, /editor\.scrollTop = editor\.scrollHeight/);

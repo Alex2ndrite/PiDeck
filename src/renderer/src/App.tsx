@@ -27,6 +27,7 @@ const ConfigModal = lazy(() => import("./ConfigModal").then((m) => ({ default: m
 import { type SidebarActions } from "./components/sidebar/SidebarContent";
 import { AppSidebar } from "./components/sidebar/AppSidebar";
 import { AppBootstrap } from "./components/app/AppBootstrap";
+import { SettingsFeatureRoot } from "./components/app/SettingsFeatureRoot";
 import { useRename } from "./hooks/useRename";
 import { useSidebarController } from "./hooks/useSidebarController";
 import { useProjectRuntimeCapabilities } from "./hooks/useRuntimeCapabilities";
@@ -127,9 +128,6 @@ import {
 } from "./components/app/AppUtils";
 // 懒加载：Monaco Editor（~17.6MB Web Worker）仅在用户打开 diff 时才加载
 const FileDiffViewer = lazy(() => import("./components/app/FileDiffViewer").then((m) => ({ default: m.FileDiffViewer })));
-// 懒加载模态框，减少首屏 JS 体积
-const SettingsModal = lazy(() => import("./components/app/SettingsModal").then((m) => ({ default: m.SettingsModal })));
-
 const ProjectResourcesModal = lazy(() => import("./components/app/ProjectResourcesModal").then((m) => ({ default: m.ProjectResourcesModal })));
 import { createDefaultExternalEditorSettings } from "../../shared/types";
 import type {
@@ -434,7 +432,6 @@ export function App() {
   const getSessionRecord = (sessionId: string) =>
     store.get(sessionRecordByIdAtomFamily(sessionId));
   const [sessionHistoryLoading, setSessionHistoryLoading] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const appUpdate = useAppUpdateController({
     checkUpdate: api.app.checkUpdate,
     downloadUpdate: (asset) => api.app.downloadUpdate(asset),
@@ -529,7 +526,6 @@ export function App() {
   const piUpdate = usePiUpdate({
     settings,
     setSettings,
-    setSettingsOpen,
     showToast,
     api,
   });
@@ -2017,7 +2013,6 @@ export function App() {
       onPointerLeave={() => {
         if (listHoverRevealSuppressed) setListHoverRevealSuppressed(false);
       }}
-      onOpenSettings={() => setSettingsOpen(true)}
       onOpenConfig={() => setConfigOpen(true)}
       onOpenFeedback={() => overlays.setFeedbackOpen(true)}
       onOpenHomepage={() => void api.app.openExternal("https://ayuayue.github.io/PiDeck/")}
@@ -2077,7 +2072,6 @@ export function App() {
       setTerminalOpenForAgent={setTerminalOpenForAgent}
       setTerminalCollapsedForAgent={setTerminalCollapsedForAgent}
       setTerminalHeightByAgent={setTerminalHeightByAgent}
-      settingsOpen={settingsOpen}
       configOpen={configOpen}
       environmentDialog={Boolean(environmentDialog)}
       showNotice={showNotice}
@@ -2420,66 +2414,15 @@ export function App() {
         />
       );
     })()}
-    {settingsOpen && (
-      <Suspense fallback={null}>
-      <SettingsModal
-        settings={settings}
-        piStatus={piStatus}
-        piChecking={piChecking}
-        piProxyChecking={piUpdate.piProxyChecking}
-        piProxyNotice={piUpdate.piProxyNotice}
-        piProxyNoticeTone={piUpdate.piProxyNoticeTone}
-        webServiceChanging={webServiceChanging}
-        appInfo={appInfo}
-        customPiPath={piUpdate.customPiPath}
-        customPathValidating={piUpdate.customPathValidating}
-        customPathResult={piUpdate.customPathResult}
-        updateChecking={appUpdate.checking}
-        piUpdating={piUpdate.piUpdating}
-        piUpdateChecking={piUpdate.piUpdateChecking}
-        piUpdateCheck={piUpdate.piUpdateCheck}
-        piUpdateResult={piUpdate.piUpdateResult}
-        onCustomPathChange={(path) => {
-          piUpdate.setCustomPiPath(path);
-          piUpdate.setCustomPathResult(null);
-        }}
-        onValidateCustomPath={() => piUpdate.validateCustomPiPath()}
-        onClearCustomPath={piUpdate.clearCustomPiPath}
-        onCheckPi={piUpdate.checkPiInstallInline}
-        onTestPiProxy={() => piUpdate.testPiProxy()}
-        onCheckUpdate={() => {
-          appUpdate.check("manual").then((info) => {
-            if (info && !info.hasUpdate) {
-              setUpToDateVersion(info.currentVersion);
-              showToast(t("app.latestVersionNotice", { version: info.currentVersion }));
-            } else if (!info && appUpdate.error) {
-              showToast(t("app.updateFailedNotice", { error: appUpdate.error }));
-            }
-          });
-        }}
-        onCheckPiUpdate={piUpdate.checkPiCliUpdate}
-        onUpdatePi={piUpdate.updatePiCli}
-        onToggleDevTools={async () => {
-          const opened = await api.app.toggleDevTools();
-          showToast(
-            opened ? t("app.devToolsOpened") : t("app.devToolsClosed"),
-          );
-        }}
-        onRestartApp={() => api.app.restart()}
-        onClearCheckFlag={async () => {
-          await api.settings.update({ piEnvironmentChecked: false });
-          showToast(t("environment.checkFlagCleared"));
-        }}
-        onOpenWebService={(port) =>
-          api.app.openExternal(`http://127.0.0.1:${port}`)
-        }
-        onClose={() => {
-          setSettingsOpen(false);
-        }}
-        onChange={updateSettings}
-      />
-    </Suspense>
-    )}
+    <SettingsFeatureRoot
+      settings={settings}
+      piUpdate={piUpdate}
+      appUpdate={appUpdate}
+      webServiceChanging={webServiceChanging}
+      appInfo={appInfo}
+      onChange={updateSettings}
+      onCurrentVersion={setUpToDateVersion}
+    />
     <SessionActionOverlays {...overlays.overlayProps} />
     <AppUpdateOverlay
       controller={appUpdate}

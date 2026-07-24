@@ -1,5 +1,7 @@
 import { useState, useCallback } from "react";
+import { useSetAtom } from "jotai";
 import { t } from "../i18n";
+import { settingsOpenAtom } from "../atoms";
 import type {
   AppSettings,
   NpmAvailabilityResult,
@@ -13,7 +15,6 @@ import type { PiDesktopApi } from "../../../preload";
 export interface UsePiUpdateOptions {
   settings: AppSettings;
   setSettings: (settings: AppSettings) => void;
-  setSettingsOpen: (open: boolean) => void;
   showToast: (message: string, duration?: number) => void;
   api: PiDesktopApi;
 }
@@ -22,10 +23,10 @@ export function usePiUpdate(options: UsePiUpdateOptions) {
   const {
     settings,
     setSettings,
-    setSettingsOpen,
     showToast,
     api,
   } = options;
+  const setSettingsOpen = useSetAtom(settingsOpenAtom);
 
   // ---- Pi 环境状态（内部管理） ----
   const [piStatus, setPiStatus] = useState<PiInstallStatus | null>(null);
@@ -337,3 +338,5 @@ export function usePiUpdate(options: UsePiUpdateOptions) {
     testPiProxy,
   };
 }
+
+export type PiUpdateController = ReturnType<typeof usePiUpdate>;
