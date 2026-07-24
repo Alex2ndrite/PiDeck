@@ -26,6 +26,7 @@ import {
   setSessionComposerModeAtom,
 } from "../atoms/composer-atoms";
 import { sessionIdByRuntimeAgentIdAtomFamily } from "../atoms/session-selectors";
+import { setSessionComposerModeAtom } from "../atoms/composer-atoms";
 import { runtimeCapabilityByAgentIdAtomFamily } from "../atoms/runtime-atoms";
 import { PromptDeliveryUnknownError } from "../utils/promptErrors";
 
@@ -44,7 +45,6 @@ export interface UseQueuedPromptOptions {
 
   setPromptForAgent: (agentId: string, value: string | ((current: string) => string)) => void;
   setAttachedImagesForAgent: (agentId: string, value: ImageContent[] | ((current: ImageContent[]) => ImageContent[])) => void;
-  setComposerAgentModeForAgent: (agentId: string, mode: ComposerAgentMode) => void;
   setComposerCursor: (value: React.SetStateAction<number>) => void;
   showToast: (message: string, duration?: number) => void;
   /** i18n-aware message shown when delivery result is unknown. */
@@ -71,7 +71,6 @@ export function useQueuedPrompt(options: UseQueuedPromptOptions) {
     store,
     setPromptForAgent,
     setAttachedImagesForAgent,
-    setComposerAgentModeForAgent,
     setComposerCursor,
     showToast,
     unknownDeliveryMessage = "消息可能未送达",
@@ -190,7 +189,9 @@ export function useQueuedPrompt(options: UseQueuedPromptOptions) {
         ...current,
       ]);
     }
-    setComposerAgentModeForAgent(agentId, livePrompt.agentMode);
+    // Restore composer mode through Session atom (agentId → sessionId).
+    const sid = store.get(sessionIdByRuntimeAgentIdAtomFamily(agentId));
+    if (sid) store.set(setSessionComposerModeAtom, { sessionId: sid, mode: livePrompt.agentMode });
     if (activeAgentIdRef.current === agentId) {
       setComposerCursor(restoredPrompt.length);
       pendingComposerCaretRef.current = restoredPrompt.length;

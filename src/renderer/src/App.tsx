@@ -255,11 +255,7 @@ export function App() {
   const [restartingAgentId, setRestartingAgentId] = useState<string | null>(null);
   const [previewImage, setPreviewImage] = useState<ImageContent | null>(null);
 
-  /** Legacy agent queue mode remains local until the final non-Session path is removed. */
-  const [composerAgentModes, setComposerAgentModes] = useState<Record<string, ComposerAgentMode>>({});
-  const setComposerAgentModeForAgent = (agentId: string, mode: ComposerAgentMode) => {
-    setComposerAgentModes((prev) => ({ ...prev, [agentId]: mode }));
-  };
+  // composerAgentModes legacy mirror removed — mode restore uses Session atom in useQueuedPrompt.
   /** 客户端队列按 agent 记录 flush 锁，避免 tool-end 与 idle 并发投递。 */
   const queueFlushByAgentRef = useRef<Set<string>>(new Set());
 
@@ -657,7 +653,6 @@ export function App() {
     store,
     setPromptForAgent,
     setAttachedImagesForAgent,
-    setComposerAgentModeForAgent,
     setComposerCursor: (v: React.SetStateAction<number>) => { /* no-op: cursor managed by composer controller */ },
     showToast,
     unknownDeliveryMessage: t("app.queuedUnknown"),
