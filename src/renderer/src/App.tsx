@@ -26,10 +26,8 @@ import {
   missingElectronPreload,
 } from "./desktopApi";
 const ConfigModal = lazy(() => import("./ConfigModal").then((m) => ({ default: m.ConfigModal })));
-import {
-  SidebarContent,
-  type SidebarActions,
-} from "./components/sidebar/SidebarContent";
+import { type SidebarActions } from "./components/sidebar/SidebarContent";
+import { AppSidebar } from "./components/sidebar/AppSidebar";
 import { AppBootstrap } from "./components/app/AppBootstrap";
 import { useRename } from "./hooks/useRename";
 import { useSidebarController } from "./hooks/useSidebarController";
@@ -2125,7 +2123,7 @@ export function App() {
   };
 
   const sidebarContentNode = (
-<SidebarContent
+    <AppSidebar
       controller={sidebarController}
       actions={sidebarActions}
       currentProjectId={activeProjectId}
@@ -2134,21 +2132,9 @@ export function App() {
       branchByProject={branchByProject}
       creatingWorktree={worktreeCreating}
       isLanWeb={isLanWeb}
-      chrome={<>
-        <div className="list-toolbar">
-          <div className="app-badge">
-            <LogoMark />
-            <span className="brand-wordmark" aria-label="PiDeck">PiDeck</span>
-          </div>
-        </div>
-        <button
-          className="collapse-button list-collapse"
-          title={listCollapsed ? t("app.expandList") : t("app.collapseList")}
-          onClick={toggleListCollapsed}
-        >
-          {listCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
-        </button>
-      </>}
+      listCollapsed={listCollapsed}
+      listHoverRevealSuppressed={listHoverRevealSuppressed}
+      onToggleListCollapsed={toggleListCollapsed}
       onPointerLeave={() => {
         if (listHoverRevealSuppressed) setListHoverRevealSuppressed(false);
       }}
