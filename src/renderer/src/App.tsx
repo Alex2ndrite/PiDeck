@@ -14,8 +14,6 @@ import {
   type ReactNode,
 } from "react";
 import { useAtomValue, useSetAtom, useStore } from "jotai";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import {
   ChevronLeft,
   ChevronRight,
@@ -35,7 +33,6 @@ import {
   missingElectronPreload,
 } from "./desktopApi";
 const ConfigModal = lazy(() => import("./ConfigModal").then((m) => ({ default: m.ConfigModal })));
-import { TerminalDock } from "./components/terminal/TerminalDock";
 import {
   SidebarContent,
   type SidebarActions,
@@ -107,11 +104,9 @@ import {
   isSameSessionPath,
 } from "./agentListDisplay";
 import { resolveLocale, setI18nLocale, t } from "./i18n";
-import { mergeAgentRuntimeState } from "./utils/agentRuntimeState";
 import {
   migrateQueuedPrompts,
   QUEUED_PROMPT_LIMIT,
-  QUEUED_PROMPT_VISIBLE,
 } from "./utils/queuedPromptQueue";
 import { useMessagePagination } from "./hooks/useMessagePagination";
 import { useSessionTimelineController } from "./hooks/useSessionTimelineController";
@@ -124,8 +119,6 @@ import {
   QueuedPromptPanel,
 } from "./components/session/ComposerPanels";
 import { ScratchPadOverlay } from "./components/overlays/ScratchPadOverlay";
-import { WorkspaceDrawerHost } from "./components/workspace/WorkspaceDrawerHost";
-import { AppHeader } from "./components/AppHeader";
 import { AppShell } from "./components/app/AppShell";
 import { RenameModals } from "./components/RenameModals";
 import { SessionActionOverlays } from "./components/overlays/SessionActionOverlays";
@@ -1109,6 +1102,10 @@ export function App() {
   }, [currentSessionId, currentSessionRuntimeUi]);
 
   const lastSessionEditorTextRef = useRef("");
+  // TECH DEBT (Phase 3): This handler writes to session draft via setPromptForAgent
+  // without checking draftGuard (unlike useSessionComposerController). If the user has
+  // modified the draft since the agent sent editorText, this may overwrite user input.
+  // Should guard with canApplyRuntimeEditorText or remove in favor of ComposerArea's handler.
   useEffect(() => {
     const editorText = currentSessionRuntimeUi?.editorText;
     if (!currentSessionId || !editorText) return;

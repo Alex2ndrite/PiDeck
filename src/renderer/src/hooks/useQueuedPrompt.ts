@@ -288,6 +288,7 @@ export function useQueuedPrompt(options: UseQueuedPromptOptions) {
         queuedPrompt.agentMode,
         queuedPrompt.templateDescription,
       );
+      if (!mountedRef.current) return;
       updateQueuedPrompts((current) =>
         resolveClaimedPrompt(current, agentId, queuedPrompt.id, {
           type: "accepted",
