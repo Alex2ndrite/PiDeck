@@ -43,6 +43,7 @@ export function ProjectTree(props: {
     event.preventDefault();
     const source = event.dataTransfer.getData("text/plain") || props.controller.drag.sourceProjectId;
     props.controller.finishProjectDrag();
+    if (props.controller.search.trim()) return;
     if (source && source !== projectId) void props.actions.projects.reorder(source, projectId);
   };
   return <>

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useAtomValue } from "jotai";
+import { useAtom, useAtomValue } from "jotai";
 import type { AgentTab, Project, SessionRecord, SessionSource } from "../../../shared/types";
 import {
   agentInventoryAtom,
@@ -7,6 +7,7 @@ import {
   sessionCatalogLoadStateAtom,
   sessionIdsByProjectAtom,
   sessionRecordsAtom,
+  sidebarCollapsedProjectIdsAtom,
   sidebarRuntimeAtom,
 } from "../atoms";
 
@@ -155,7 +156,7 @@ export function useSidebarController(options: {
   const sessionCatalogLoadStateByProject = useAtomValue(sessionCatalogLoadStateAtom);
   const pageSize = options.pageSize ?? SIDEBAR_PROJECT_CHILD_PAGE_SIZE;
   const [search, setSearch] = useState("");
-  const [collapsedProjectIds, setCollapsedProjectIds] = useState<Set<string>>(() => new Set());
+  const [collapsedProjectIds, setCollapsedProjectIds] = useAtom(sidebarCollapsedProjectIdsAtom);
   const [sourceFilters, setSourceFilters] = useState<SidebarSourceFilters>(() =>
     readSidebarSourceFilters(options.storage ?? (typeof window === "undefined" ? undefined : window.localStorage)),
   );

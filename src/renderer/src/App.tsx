@@ -29,7 +29,6 @@ import { AppSidebar } from "./components/sidebar/AppSidebar";
 import { AppBootstrap } from "./components/app/AppBootstrap";
 import { SettingsFeatureRoot } from "./components/app/SettingsFeatureRoot";
 import { useRename } from "./hooks/useRename";
-import { useSidebarController } from "./hooks/useSidebarController";
 import { useProjectRuntimeCapabilities } from "./hooks/useRuntimeCapabilities";
 import { useSessionRuntimeBridge } from "./hooks/useSessionRuntimeBridge";
 import { useSessionLayout } from "./hooks/useSessionLayout";
@@ -66,6 +65,7 @@ import {
   sessionRecordsByProjectIdAtomFamily,
   sessionIdByRuntimeAgentIdAtomFamily,
   sessionRuntimeBySessionIdAtomFamily,
+  sidebarCollapsedProjectIdsAtom,
   sessionSummariesByProjectIdAtomFamily,
   setSessionAttachmentsAtom,
   setSessionCatalogLoadStateAtom,
@@ -120,7 +120,6 @@ import { navigateTo } from "./components/app/BrowserPanel";
 import {
   buildOutline,
   flattenFiles,
-  matches,
   mergeCommands,
   getToolFilePath,
   getToolNewContent,
@@ -216,9 +215,6 @@ export function App() {
   currentSessionIdRef.current = currentSessionId;
   const openSessionRequestRef = useRef(0);
   const creatingSessionDraftRef = useRef<Set<string>>(new Set());
-  const sidebarController = useSidebarController({
-    getRpcLogging: (agentId) => api.rpcLogs.getLogging(agentId),
-  });
 
   // 项目的 git worktree 列表：{ parentId -> WorktreeEntry[] }
   const [pendingAgents, setPendingAgents] = useState<PendingAgentTab[]>([]);
@@ -236,7 +232,7 @@ export function App() {
   activeAgentIdRef.current = activeAgentId;
   const agentsRef = useRef<AgentTab[]>(agents);
   agentsRef.current = agents;
-  const collapsedProjects = sidebarController.collapsedProjectIds;
+  const collapsedProjects = useAtomValue(sidebarCollapsedProjectIdsAtom);
 
   const [commands, setCommands] = useState<PiCommand[]>([]);
   const [promptTemplateList] = useState<
@@ -271,7 +267,6 @@ export function App() {
   // 会话区不再维护独立的“修改文件摘要”卡片；diff 入口贴在 edit/write 工具调用处，
   // 避免会话输入框上方摘要与 Git 工作区状态/历史会话恢复互相干扰。
   const agentStatusByAgentRef = useRef<Record<string, AgentTab["status"]>>({});
-  const search = sidebarController.search;
 
   // 记录 composer 光标位置,用于光标相关的 @ / 触发检测与建议项替换。
   const [fileMenu, setFileMenu] = useState<{
@@ -958,19 +953,10 @@ export function App() {
     [flatFiles],
   );
 
-  const visibleAgents = useMemo(
-    () =>
-      displayAgents.filter((agent) =>
-        matches(agent.title + agent.cwd + (agent.sessionId ?? ""), search),
-      ),
-    [displayAgents, search],
-  );
-  // filteredAgents / filteredProjects removed (dead computation)
   const projectIdsKey = useMemo(
     () => projects.map((project) => project.id).join("\n"),
     [projects],
   );
-  const canReorderProjects = search.trim().length === 0;
 
   function handleAgentInventoryChanged(nextAgents: AgentTab[]) {
     const previousPendingAgents = pendingAgentsRef.current;
@@ -1328,7 +1314,7 @@ export function App() {
     sourceProjectId: string,
     targetProjectId: string,
   ) {
-    if (!canReorderProjects || sourceProjectId === targetProjectId) return;
+    if (sourceProjectId === targetProjectId) return;
     const sourceProject = projects.find(
       (project) => project.id === sourceProjectId,
     );
@@ -1999,7 +1985,6 @@ export function App() {
 
   const sidebarContentNode = (
     <AppSidebar
-      controller={sidebarController}
       actions={sidebarActions}
       currentProjectId={activeProjectId}
       currentSessionId={currentSessionId}

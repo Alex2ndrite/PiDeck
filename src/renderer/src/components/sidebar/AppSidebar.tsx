@@ -2,13 +2,12 @@ import React from "react";
 import { useSetAtom } from "jotai";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { SidebarContent, type SidebarActions } from "./SidebarContent";
-import type { SidebarController } from "../../hooks/useSidebarController";
+import { useSidebarController } from "../../hooks/useSidebarController";
 import { LogoMark } from "../app/AppParts";
 import { t } from "../../i18n";
 import { settingsOpenAtom } from "../../atoms";
 
 interface AppSidebarProps {
-  controller: SidebarController;
   actions: SidebarActions;
   currentProjectId: string | undefined;
   currentSessionId: string | undefined;
@@ -27,10 +26,13 @@ interface AppSidebarProps {
 
 export function AppSidebar(props: AppSidebarProps) {
   const setSettingsOpen = useSetAtom(settingsOpenAtom);
+  const controller = useSidebarController({
+    getRpcLogging: props.actions.rpc.getLogging,
+  });
 
   return (
     <SidebarContent
-      controller={props.controller}
+      controller={controller}
       actions={props.actions}
       currentProjectId={props.currentProjectId}
       currentSessionId={props.currentSessionId}

@@ -122,3 +122,18 @@ test("Sidebar leaf remains independent from App and keeps RPC logging query loca
   assert.match(content, /SessionManagerModal/);
   assert.match(content, /WorktreeCreateDialog/);
 });
+
+test("AppSidebar owns the controller while App keeps business actions as ports", () => {
+  const app = readFileSync("src/renderer/src/App.tsx", "utf8");
+  const root = readFileSync("src/renderer/src/components/sidebar/AppSidebar.tsx", "utf8");
+  const controller = readFileSync("src/renderer/src/hooks/useSidebarController.ts", "utf8");
+  const projectTree = readFileSync("src/renderer/src/components/sidebar/ProjectTree.tsx", "utf8");
+  assert.doesNotMatch(app, /useSidebarController/);
+  assert.match(root, /const controller = useSidebarController\(/);
+  assert.match(root, /getRpcLogging: props\.actions\.rpc\.getLogging/);
+  assert.match(root, /controller=\{controller\}/);
+  assert.match(app, /const sidebarActions: SidebarActions/);
+  assert.match(app, /useAtomValue\(sidebarCollapsedProjectIdsAtom\)/);
+  assert.match(controller, /useAtom\(sidebarCollapsedProjectIdsAtom\)/);
+  assert.match(projectTree, /if \(props\.controller\.search\.trim\(\)\) return;/);
+});
