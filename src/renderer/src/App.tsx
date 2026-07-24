@@ -53,7 +53,6 @@ import {
   currentSessionIdAtom,
   currentSessionRuntimeAtom,
   currentSessionRuntimeUiAtom,
-  currentSessionSendStateAtom,
   projectInventoryAtom,
   removeSessionComposerStateAtom,
   removeSessionStateAtom,
