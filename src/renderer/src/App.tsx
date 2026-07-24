@@ -105,10 +105,22 @@ import {
 } from "./agentListDisplay";
 import { resolveLocale, setI18nLocale, t } from "./i18n";
 import {
+  isChatProject,
+  loadSessionSourceFilter,
+  saveSessionSourceFilter,
+  inferSessionEnvironment,
+  isReplacementForPendingAgent,
+  isPendingAgentId,
+  migrateAgentRecord,
+  COMPOSER_MIN_HEIGHT,
+  type PendingAgentTab,
+} from "./rendererUtils";
+import {
   migrateQueuedPrompts,
   QUEUED_PROMPT_LIMIT,
 } from "./utils/queuedPromptQueue";
 import { useMessagePagination } from "./hooks/useMessagePagination";
+import { useResize } from "./hooks/useResize";
 import { useSessionTimelineController } from "./hooks/useSessionTimelineController";
 import { useSessionLoader } from "./hooks/useSessionLoader";
 import { useSessionActions } from "./hooks/useSessionActions";
@@ -198,110 +210,6 @@ import type {
   SessionSummary,
   ComposerAgentMode,
 } from "../../shared/types";
-
-const COMPOSER_MIN_HEIGHT = 175;
-function displayProjectDirectoryName(project: Project) {
-  if (isChatProject(project)) return "Chat";
-  const normalizedPath = project.path.replace(/\\/g, "/").replace(/\/+$/, "");
-  return normalizedPath.split("/").pop() || project.name || project.path;
-}
-
-function isChatProject(project?: Project) {
-  return project?.kind === "chat";
-}
-
-function formatCodexSubagentName(session: SessionSummary) {
-  const label = [session.codexAgentNickname, session.codexAgentRole]
-    .filter(Boolean)
-    .join(" · ");
-  return label || session.name || t("app.codexSubagent");
-}
-
-/** pi 原生子会话名称：优先使用会话名，回退到 "子会话" */
-function formatPiSubagentName(session: SessionSummary) {
-  return session.name || t("app.piSubagent");
-}
-
-
-/** 从 localStorage 恢复会话来源过滤配置 */
-function loadSessionSourceFilter(): Record<string, Set<"pi" | "codex" | "claude" | "opencode"> | null> {
-	try {
-		const raw = localStorage.getItem("pideck-session-source-filter");
-		if (!raw) return {};
-		const parsed = JSON.parse(raw);
-		const result: Record<string, Set<"pi" | "codex" | "claude" | "opencode"> | null> = {};
-		for (const [key, val] of Object.entries(parsed)) {
-			if (val === null) {
-				result[key] = null;
-			} else if (Array.isArray(val)) {
-				result[key] = new Set(val);
-			}
-		}
-		return result;
-	} catch {
-		return {};
-	}
-}
-
-/** 将会话来源过滤持久化到 localStorage */
-function saveSessionSourceFilter(filter: Record<string, Set<"pi" | "codex" | "claude" | "opencode"> | null>) {
-	try {
-		const obj: Record<string, string[] | null> = {};
-		for (const [key, val] of Object.entries(filter)) {
-			obj[key] = val === null ? null : [...val];
-		}
-		localStorage.setItem("pideck-session-source-filter", JSON.stringify(obj));
-	} catch {
-		// 静默失败
-	}
-}
-
-type PendingAgentTab = AgentTab & {
-  pendingKind?: "create" | "restart";
-  pendingStartedAt?: number;
-};
-
-function inferSessionEnvironment(filePath?: string): SessionEnvironment {
-  return filePath?.startsWith("/") ? "wsl" : "native";
-}
-
-function isReplacementForPendingAgent(agent: AgentTab, pending: PendingAgentTab) {
-  if (agent.projectId !== pending.projectId || agent.cwd !== pending.cwd)
-    return false;
-
-  const environment = inferSessionEnvironment(pending.sessionPath);
-  if (pending.pendingKind === "restart") {
-    const startedAt = pending.pendingStartedAt ?? pending.createdAt;
-    // 重启占位只匹配本次重启之后出现的新进程，避免误选同项目下已有的同名 Agent。
-    if (agent.createdAt < startedAt - 1000) return false;
-    if (isSameSessionPath(agent.sessionPath, pending.sessionPath, environment)) return true;
-    return !pending.sessionPath && agent.title === pending.title;
-  }
-
-  if (!pending.id.startsWith("pending-")) return false;
-  if (isSameSessionPath(agent.sessionPath, pending.sessionPath, environment)) return true;
-  if (pending.sessionPath && agent.createdAt >= pending.createdAt - 1000)
-    return true;
-  return (
-    agent.title === pending.title && agent.createdAt >= pending.createdAt - 1000
-  );
-}
-
-function isPendingAgentId(agentId?: string) {
-  return Boolean(agentId?.startsWith("pending-"));
-}
-function migrateAgentRecord<T>(
-  current: Record<string, T>,
-  replacementById: Map<string, string>,
-  liveIds: Set<string>,
-) {
-  const next: Record<string, T> = {};
-  for (const [agentId, value] of Object.entries(current)) {
-    const nextAgentId = replacementById.get(agentId) ?? agentId;
-    if (liveIds.has(nextAgentId)) next[nextAgentId] = value;
-  }
-  return next;
-}
 
 export function App() {
   if (missingElectronPreload) {
@@ -745,8 +653,6 @@ export function App() {
     api,
   });
   const { piStatus, piChecking, environmentDialog, setPiStatus, setEnvironmentDialog } = piUpdate;
-  const DEFAULT_LIST_WIDTH = 260;
-  const [listWidth, setListWidth] = useState(DEFAULT_LIST_WIDTH);
   const [drawerWidth, setDrawerWidth] = useState(270);
   const [composerHeight, setComposerHeight] = useState(COMPOSER_MIN_HEIGHT);
   const [composerOffsetHeight, setComposerOffsetHeight] = useState(0);
@@ -767,9 +673,6 @@ export function App() {
     terminalDockAgentId,
     prune: pruneTerminalDockState,
   } = useTerminalDock(activeAgentId);
-  const [listCollapsed, setListCollapsed] = useState(false);
-  const [listHoverRevealSuppressed, setListHoverRevealSuppressed] =
-    useState(false);
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set());
   const sessionComboRef = useRef<HTMLDivElement | null>(null);
   const queuedTrackRef = useRef<HTMLDivElement | null>(null);
@@ -1150,6 +1053,23 @@ export function App() {
     maxComposerHeight,
     Math.max(composerHeight, composerAutoHeight),
   );
+
+  const {
+    listWidth,
+    setListWidth,
+    listCollapsed,
+    setListCollapsed,
+    listHoverRevealSuppressed,
+    setListHoverRevealSuppressed,
+    startComposerResize,
+    toggleListCollapsed,
+    releaseListHoverSuppression,
+  } = useResize({
+    resolvedComposerHeight,
+    maxComposerHeight,
+    setComposerHeight,
+    setComposerAutoHeight,
+  });
   useEffect(() => {
     if (!workspace.drawerPinnedPanel) return;
     if (workspace.drawer !== workspace.drawerPinnedPanel) workspace.openDrawer(workspace.drawerPinnedPanel);
@@ -3351,59 +3271,6 @@ export function App() {
     if (target === "list") document.body.classList.add("is-list-resizing");
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
-  }
-
-  function startComposerResize(event: PointerEvent) {
-    const startY = event.clientY;
-    const startHeight = resolvedComposerHeight;
-    let frame = 0;
-
-    function onMove(moveEvent: globalThis.PointerEvent) {
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => {
-        const maxHeight = maxComposerHeight;
-        // 拖动的是输入区顶部边线,鼠标向上意味着输入区变高;限制最大高度避免挤压会话阅读区域。
-        // 实际高度由手动高度和自动内容高度共同决定;拖到最大后自动高度也会变大,
-        // 因此手动缩小时必须同步覆盖 autoHeight,否则 Math.max 会继续把输入框顶在最大高度。
-        const next = Math.min(
-          maxHeight,
-          Math.max(
-            COMPOSER_MIN_HEIGHT,
-            startHeight + startY - moveEvent.clientY,
-          ),
-        );
-        setComposerHeight(next);
-        setComposerAutoHeight(next);
-      });
-    }
-
-    function onUp() {
-      cancelAnimationFrame(frame);
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-      document.body.classList.remove("is-composer-resizing");
-    }
-
-    document.body.classList.add("is-composer-resizing");
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
-  }
-
-  function toggleListCollapsed() {
-    const nextCollapsed = !listCollapsed;
-    if (!nextCollapsed) setListWidth(DEFAULT_LIST_WIDTH);
-    if (nextCollapsed) {
-      // 点击折叠后鼠标和焦点仍在侧栏内;先释放焦点并抑制 hover,避免刚折叠就被 CSS 展开。
-      (document.activeElement as HTMLElement | null)?.blur();
-    }
-    setListHoverRevealSuppressed(nextCollapsed);
-    setListCollapsed(nextCollapsed);
-  }
-
-  function releaseListHoverSuppression(event: PointerEvent<HTMLDivElement>) {
-    if (listCollapsed && listHoverRevealSuppressed && event.clientX > 24) {
-      setListHoverRevealSuppressed(false);
-    }
   }
 
   return (
