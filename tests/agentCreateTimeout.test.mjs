@@ -19,7 +19,8 @@ test("new conversation creates a metadata-only Session draft", () => {
 });
 
 test("renderer has no direct Agent creation path", () => {
+  const injector = readFileSync("src/renderer/src/components/session/SessionRuntimeInjector.tsx", "utf8");
   assert.doesNotMatch(app, /async function createAgent\(/);
   assert.doesNotMatch(app, /api\.agents\.create\(/);
-  assert.match(app, /void runCreateSessionDraft\(/);
+  assert.match(injector, /void runCreateSessionDraft\(/);
 });

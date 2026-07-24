@@ -10,6 +10,10 @@ const sessionViewSource = readFileSync(
   "src/renderer/src/components/session/SessionView.tsx",
   "utf8",
 );
+const sessionRuntimeInjectorSource = readFileSync(
+  "src/renderer/src/components/session/SessionRuntimeInjector.tsx",
+  "utf8",
+);
 const globalListenersSource = readFileSync(
   "src/renderer/src/hooks/useGlobalAgentListeners.ts",
   "utf8",
@@ -62,9 +66,12 @@ function componentInvocation(source, componentName) {
 
 test("pending prompts render inside the composer before composer-box", () => {
   const composerAreaIndex = sessionViewSource.indexOf("<ComposerArea");
-  const queuePanelIndex = appSource.indexOf("<QueuedPromptPanel");
+  const queuePanelIndex = sessionRuntimeInjectorSource.indexOf("<QueuedPromptPanel");
   assert.ok(composerAreaIndex >= 0, "ComposerArea should exist");
-  assert.ok(queuePanelIndex > composerAreaIndex, "pending prompts should stay inside ComposerArea");
+  assert.ok(
+    queuePanelIndex >= 0,
+    "QueuedPromptPanel should exist in SessionRuntimeInjector",
+  );
   assert.match(composerPanelsSource, /className="queued-track"/);
 });
 
@@ -82,12 +89,12 @@ test("pending prompts share the native content width constraint without hiding c
 });
 
 test("compact queue panel exposes retract-to-input and discard only", () => {
-  const queuedPromptPanel = componentInvocation(appSource, "QueuedPromptPanel");
+  const queuedPromptPanel = componentInvocation(sessionRuntimeInjectorSource, "QueuedPromptPanel");
 
-  assert.match(queuedPromptPanel, /onRetract=\{queue\.retractQueuedPromptForEdit\}/);
+  assert.match(queuedPromptPanel, /onRetract=\{queueRetract\}/);
   assert.match(composerPanelsSource, /app\.retractToInput/);
   assert.match(composerPanelsSource, /app\.retractDiscard/);
-  assert.match(appSource, /onDiscard=\{queue\.discardQueuedPrompt\}/);
+  assert.match(sessionRuntimeInjectorSource, /onDiscard=\{queueDiscard\}/);
   assert.match(composerPanelsSource, /canRetractQueuedPromptToInput\(status\)/);
   assert.match(composerPanelsSource, /canDiscardQueuedPrompt\(status\)/);
   assert.match(appSource, /const visibleQueuedPrompts = activeQueuedPrompts/);

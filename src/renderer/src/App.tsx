@@ -101,6 +101,7 @@ import { useSessionTimelineController } from "./hooks/useSessionTimelineControll
 import { useSessionActions } from "./hooks/useSessionActions";
 import { useScratchPad } from "./hooks/useScratchPad";
 import { SessionView } from "./components/session/SessionView";
+import { SessionRuntimeInjector } from "./components/session/SessionRuntimeInjector";
 import {
   QueuedPromptPanel,
 } from "./components/session/ComposerPanels";
@@ -2230,95 +2231,55 @@ export function App() {
   const isRestartingThisAgent = restartingAgentId === activeAgentId;
 
   const chatPaneContentNode = currentSessionId ? (
-    <SessionView
-      sessionId={currentSessionId}
+    <SessionRuntimeInjector
+      currentSessionId={currentSessionId}
       sessionTitle={sessionTitle}
       sessionTimeline={sessionTimeline}
-      activeAgentId={activeAgentId ?? undefined}
-      activeAgent={activeAgent}
-      activeRuntimeState={activeRuntimeState}
-      hasActiveConversation={hasActiveConversation}
-      hasProject={sessionHasProject}
+      sessionActionsOpen={sessionActionsOpen}
+      setSessionActionsOpen={setSessionActionsOpen}
+      isLanWeb={isLanWeb}
       chatHeaderRef={chatHeaderRef}
       sessionComboRef={sessionComboRef}
       composerRef={composerRef}
       composerOffsetHeight={composerOffsetHeight}
       terminalRowHeight={terminalRowHeight}
-      isAgentStarting={isAgentStarting}
-      sessionActionsOpen={sessionActionsOpen}
-      canStop={canStopSession}
-      canRestart={canRestartSession}
-      restartingAgentId={restartingAgentId ?? undefined}
-      isRestarting={isRestartingThisAgent}
-      showRestart={!isLanWeb}
-      sessionDuration={sessionDuration}
-      onHeaderTrigger={() => {
-        if (activeAgentId || currentSessionId) {
-          setSessionActionsOpen((open) => !open);
-        } else {
-          void runCreateSessionDraft();
-        }
-      }}
-      onNewSession={() => {
-        void runCreateSessionDraft();
-        setSessionActionsOpen(false);
-      }}
-      onStop={() => {
-        void abortAgent();
-        setSessionActionsOpen(false);
-      }}
-      onRestart={() => void restartActiveAgent()}
+      showToast={showToast}
+      onOpenFile={openFilePath}
+      onDiffFile={diffFilePath}
+      onPreviewImage={setPreviewImage}
+      abortAgent={abortAgent}
+      restartActiveAgent={restartActiveAgent}
+      runCreateSessionDraft={runCreateSessionDraft}
+      enqueueSessionPrompt={enqueueSessionPrompt}
+      resendUserMessage={resendUserMessage}
+      editMessage={editMessage}
+      deleteMessage={deleteMessage}
+      agents={displayAgents}
+      activeQueuedPrompts={activeQueuedPrompts}
+      visibleQueuedPrompts={visibleQueuedPrompts}
+      queueRetract={queue.retractQueuedPromptForEdit}
+      queueDiscard={queue.discardQueuedPrompt}
+      queuedTrackRef={queuedTrackRef}
+      queueFlushByAgentRef={queueFlushByAgentRef}
+      restartingAgentId={restartingAgentId}
+      sessionDurationByAgent={sessionDurationByAgent}
+      activeProjectId={activeProjectId}
       showThinking={settings.showThinking}
       validCommandNames={validCommandNames}
       validFilePaths={validFilePaths}
-      onPreviewImage={setPreviewImage}
-      onOpenFile={openFilePath}
-      onDiffFile={diffFilePath}
-      onResendUserMessage={
-        canMutateActiveMessages ? resendUserMessage : undefined
-      }
-      onEditMessage={
-        canMutateActiveMessages ? editMessage : undefined
-      }
-      onDeleteMessage={
-        canMutateActiveMessages ? deleteMessage : undefined
-      }
-      onSendUiResponse={(requestId, response) => {
-        if (!activeAgentId) return;
-        sendSessionUiResponse(requestId, response);
-      }}
-      onToast={(message: string) => showToast(message)}
-      canMutateActiveMessages={canMutateActiveMessages}
-      enqueueSessionPrompt={enqueueSessionPrompt}
-      openFilePath={openFilePath}
-      queuePanel={
-        activeAgentId ? (
-          <QueuedPromptPanel
-            trackRef={queuedTrackRef}
-            agentId={activeAgentId}
-            prompts={activeQueuedPrompts}
-            visiblePrompts={visibleQueuedPrompts}
-            onRetract={queue.retractQueuedPromptForEdit}
-            onDiscard={queue.discardQueuedPrompt}
-          />
-        ) : undefined
-      }
-      terminalDockVisible={terminalDockVisible}
       terminalOpen={terminalOpen}
       terminalDockClosing={terminalDockClosing}
+      terminalDockVisible={terminalDockVisible}
       terminalCollapsed={terminalCollapsed}
-      availableTerminalHeight={
-        availableTerminalHeight ?? 120
-      }
+      availableTerminalHeight={availableTerminalHeight ?? 120}
       setTerminalOpenForAgent={setTerminalOpenForAgent}
       setTerminalCollapsedForAgent={setTerminalCollapsedForAgent}
       setTerminalHeightByAgent={setTerminalHeightByAgent}
       settingsOpen={settingsOpen}
       configOpen={configOpen}
       environmentDialog={Boolean(environmentDialog)}
-      runCreateSessionDraft={runCreateSessionDraft}
-      abortAgent={abortAgent}
-      restartActiveAgent={restartActiveAgent}
+      showNotice={showNotice}
+      api={api}
     />
   ) : null;
 
