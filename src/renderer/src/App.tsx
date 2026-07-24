@@ -289,19 +289,6 @@ export function App() {
     name: string;
   } | null>(null);
   const [renamingFileInput, setRenamingFileInput] = useState("");
-  const [agentMenu, setAgentMenu] = useState<{
-    x: number;
-    y: number;
-    agent: AgentTab;
-  } | null>(null);
-  const [agentActionLoading, setAgentActionLoading] = useState<
-    "copy" | "export" | null
-  >(null);
-  const [projectMenu, setProjectMenu] = useState<{
-    x: number;
-    y: number;
-    project: Project;
-  } | null>(null);
   /** worktree 创建进行中，用于禁用弹框按钮并显示"创建中" */
   const [worktreeCreating, setWorktreeCreating] = useState(false);
   /** 正在被删除的 worktree 路径集合：触发淡出动画期间保留 DOM，动画结束后才移除。 */
@@ -424,7 +411,7 @@ export function App() {
     openClaudeImport,
     openOpenCodeImport,
   } = useImportFlow({
-    setProjectMenu,
+    setProjectMenu: () => undefined,
     refreshProjectSessions,
     showToast,
     scanCodexSessions: api.codexSessions.scan,
@@ -442,7 +429,7 @@ export function App() {
     showToast,
     upsertAgent,
     refreshProjectSessions,
-    closeAgentMenu: () => setAgentMenu(null),
+    closeAgentMenu: () => undefined,
   });
 
   const getProjectSessions = (projectId: string) =>
@@ -1465,7 +1452,6 @@ export function App() {
   }
 
   async function openProjectSessions(project: Project) {
-    setProjectMenu(null);
     setActiveProjectId(project.id);
     setSessionsProjectId(project.id);
     workspace.openDrawer("sessions");
@@ -1473,7 +1459,6 @@ export function App() {
   }
 
   async function cloneAgentSession(agentId: string) {
-    setAgentActionLoading("copy");
     try {
       const result = await api.agents.cloneSession(agentId);
       if (result?.cancelled) {
@@ -1487,9 +1472,8 @@ export function App() {
       if (result.targetSessionId && projectId) {
         selectSessionCommand(projectId, result.targetSessionId, true);
       }
-    } finally {
-      setAgentActionLoading(null);
-      setAgentMenu(null);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : String(err), 5000);
     }
   }
 
@@ -1664,13 +1648,11 @@ export function App() {
 
   async function exportAgentHtml(agentId: string) {
     if (isPendingAgentId(agentId)) return;
-    setAgentActionLoading("export");
     try {
       const result = await api.agents.exportHtml(agentId);
       showToast(t("app.exportedPath", { path: result.path }), 3500);
-    } finally {
-      setAgentActionLoading(null);
-      setAgentMenu(null);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : String(err), 5000);
     }
   }
 
