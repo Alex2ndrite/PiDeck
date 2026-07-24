@@ -241,7 +241,7 @@ export function App() {
   const collapsedProjects = sidebarController.collapsedProjectIds;
 
   const [commands, setCommands] = useState<PiCommand[]>([]);
-  const [promptTemplateList, setPromptTemplateList] = useState<
+  const [promptTemplateList] = useState<
     Array<{ name: string; path: string; description: string; content: string; argumentHint?: string }>
   >([]);
   const [sessionActionsOpen, setSessionActionsOpen] = useState(false);
@@ -322,7 +322,6 @@ export function App() {
   const drawer = workspace.drawer;
   const drawerCollapsed = workspace.drawerCollapsed;
   const drawerPinned = workspace.drawerPinned;
-  const drawerPinnedPanel = workspace.drawerPinnedPanel;
   const browserFullscreen = workspace.browserFullscreen;
   const externalEditors = workspace.externalEditors;
   const editorsOpen = workspace.externalEditorsOpen;
