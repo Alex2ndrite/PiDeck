@@ -42,7 +42,6 @@ export interface UseQueuedPromptOptions {
   /** Jotai store for resolving agent→Session binding in retract-to-edit. */
   store: ReturnType<typeof createStore>;
 
-  promptByAgent: Record<string, string>;
   setPromptForAgent: (agentId: string, value: string | ((current: string) => string)) => void;
   setAttachedImagesForAgent: (agentId: string, value: ImageContent[] | ((current: ImageContent[]) => ImageContent[])) => void;
   setComposerAgentModeForAgent: (agentId: string, mode: ComposerAgentMode) => void;
@@ -70,7 +69,6 @@ export function useQueuedPrompt(options: UseQueuedPromptOptions) {
     pendingComposerCaretRef,
     livePromptByAgentRef,
     store,
-    promptByAgent,
     setPromptForAgent,
     setAttachedImagesForAgent,
     setComposerAgentModeForAgent,
@@ -181,7 +179,7 @@ export function useQueuedPrompt(options: UseQueuedPromptOptions) {
 
     // Legacy fallback: restore through agent-keyed maps (pre-Session agents).
     const currentDraft =
-      livePromptByAgentRef.current[agentId] ?? promptByAgent[agentId] ?? "";
+      livePromptByAgentRef.current[agentId] ?? "";
     const restoredPrompt = [livePrompt.displayText, currentDraft]
       .filter((text) => text.trim())
       .join("\n\n");

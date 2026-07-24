@@ -245,26 +245,14 @@ export function App() {
     Array<{ name: string; path: string; description: string; content: string; argumentHint?: string }>
   >([]);
   const [sessionActionsOpen, setSessionActionsOpen] = useState(false);
-  // TECH DEBT (Phase 3): promptByAgent is a legacy draft path for non-Session agents.
-  // Session drafts go through setSessionDraft→sessionDraftByIdAtom.
-  // When all agents migrate to Session model, remove promptByAgent and unify to atom path.
-  const [promptByAgent, setPromptByAgent] = useState<Record<string, string>>(
-    {},
-  );
+  // TECH DEBT (Phase 3): promptByAgent / attachedImagesByAgent legacy mirrors removed.
+  // All drafts/attachments go through Session atoms (setSessionDraft / setSessionAttachments).
+
   // contentEditable 的实时值通过 livePromptByAgentRef 保持最新，发送路径始终从这里读取草稿。
-  // promptByAgent 仅用于驱动 RichInput 的 chip 渲染（非文本同步），只在 chips 变化时更新。
   const livePromptByAgentRef = useRef<Record<string, string>>({});
 
   /** 当前正在重启的 Agent，用于仅给对应会话显示 loading，避免切到其他 Agent 后仍被全局禁用。 */
   const [restartingAgentId, setRestartingAgentId] = useState<string | null>(null);
-  // TECH DEBT (Phase 3): attachedImagesByAgent is a legacy draft path for non-Session agents.
-  // Session attachments go through setSessionAttachments. Same dual-write pattern as promptByAgent.
-  // When all agents migrate to Session model, remove attachedImagesByAgent and unify.
-  const [attachedImagesByAgent, setAttachedImagesByAgent] = useState<
-    Record<string, ImageContent[]>
-  >({});
-  const attachedImagesByAgentRef = useRef<Record<string, ImageContent[]>>(attachedImagesByAgent);
-  attachedImagesByAgentRef.current = attachedImagesByAgent;
   const [previewImage, setPreviewImage] = useState<ImageContent | null>(null);
 
   /** Legacy agent queue mode remains local until the final non-Session path is removed. */
@@ -636,22 +624,7 @@ export function App() {
     const nextValue = typeof value === "function" ? value(previous) : value;
     if (nextValue) livePromptByAgentRef.current[targetAgentId] = nextValue;
     else delete livePromptByAgentRef.current[targetAgentId];
-    // 程序化更新（建议选择、历史恢复、发送后清空等）需要同步更新 state。
-    if (currentSessionIdRef.current === targetAgentId || getSessionRecord(targetAgentId)) {
-      setSessionDraft({ sessionId: targetAgentId, value: nextValue });
-      return;
-    }
-    setPromptByAgent((current) => {
-      if (!nextValue) {
-        const next = { ...current };
-        delete next[targetAgentId];
-        return next;
-      }
-      return {
-        ...current,
-        [targetAgentId]: nextValue,
-      };
-    });
+    setSessionDraft({ sessionId: targetAgentId, value: nextValue });
   }
 
 
@@ -669,18 +642,7 @@ export function App() {
     agentId: string,
     value: ImageContent[] | ((current: ImageContent[]) => ImageContent[]),
   ) {
-    if (currentSessionIdRef.current === agentId || getSessionRecord(agentId)) {
-      setSessionAttachments({ sessionId: agentId, value });
-      return;
-    }
-    const current = attachedImagesByAgentRef.current;
-    const previous = current[agentId] ?? [];
-    const nextValue = typeof value === "function" ? value(previous) : value;
-    const next = { ...current };
-    if (nextValue.length === 0) delete next[agentId];
-    else next[agentId] = nextValue;
-    attachedImagesByAgentRef.current = next;
-    setAttachedImagesByAgent(next);
+    setSessionAttachments({ sessionId: agentId, value });
   }
 
 
@@ -693,7 +655,6 @@ export function App() {
     pendingComposerCaretRef,
     livePromptByAgentRef,
     store,
-    promptByAgent,
     setPromptForAgent,
     setAttachedImagesForAgent,
     setComposerAgentModeForAgent,
@@ -1048,18 +1009,10 @@ export function App() {
       ...remainingPendingAgents.map((agent) => agent.id),
     ]);
     pruneTerminalDockState(activeIds);
-    // drawerPinnedByProject is managed internally by useWorkspacePanels; no-op cleanup.
-    setPromptByAgent((current) => {
-      const next = migrateAgentRecord(current, pendingReplacementById, draftIds);
-      livePromptByAgentRef.current = migrateAgentRecord(
-        livePromptByAgentRef.current,
-        pendingReplacementById,
-        draftIds,
-      );
-      return next;
-    });
-    setAttachedImagesByAgent((current) =>
-      migrateAgentRecord(current, pendingReplacementById, draftIds),
+    livePromptByAgentRef.current = migrateAgentRecord(
+      livePromptByAgentRef.current,
+      pendingReplacementById,
+      draftIds,
     );
     queue.updateQueuedPrompts((current) =>
       migrateQueuedPrompts(current, pendingReplacementById, draftIds),
