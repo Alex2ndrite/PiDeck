@@ -155,7 +155,9 @@ import {
   type SessionModifiedFile,
 } from "./components/app/AppParts";
 import { GitPanel } from "./components/app/GitPanel";
-import { BrowserPanel, navigateTo } from "./components/app/BrowserPanel";
+import { BrowserSurface } from "./components/workspace/BrowserSurface";
+import { ExternalEditorOverlay } from "./components/workspace/ExternalEditorOverlay";
+import { navigateTo } from "./components/app/BrowserPanel";
 import {
   buildOutline,
   flattenFiles,
@@ -308,20 +310,6 @@ function isReplacementForPendingAgent(agent: AgentTab, pending: PendingAgentTab)
 function isPendingAgentId(agentId?: string) {
   return Boolean(agentId?.startsWith("pending-"));
 }
-const EDITOR_LOGO_URLS: Record<string, string> = {
-  vscode: new URL("./assets/editors/vscode.png", import.meta.url).href,
-  cursor: new URL("./assets/editors/cursor.png", import.meta.url).href,
-  zed: new URL("./assets/editors/zed.png", import.meta.url).href,
-  idea: new URL("./assets/editors/idea.svg", import.meta.url).href,
-  webstorm: new URL("./assets/editors/webstorm.svg", import.meta.url).href,
-  phpstorm: new URL("./assets/editors/phpstorm.svg", import.meta.url).href,
-  pycharm: new URL("./assets/editors/pycharm.svg", import.meta.url).href,
-};
-
-function getEditorLogoUrl(editorId: string) {
-  return EDITOR_LOGO_URLS[editorId];
-}
-
 function migrateAgentRecord<T>(
   current: Record<string, T>,
   replacementById: Map<string, string>,
@@ -424,6 +412,9 @@ export function App() {
   >([]);
   const [sessionActionsOpen, setSessionActionsOpen] = useState(false);
   const [switchingBranch, setSwitchingBranch] = useState<string | null>(null);
+  // TECH DEBT (Phase 3): promptByAgent is a legacy draft path for non-Session agents.
+  // Session drafts go through setSessionDraft→sessionDraftByIdAtom.
+  // When all agents migrate to Session model, remove promptByAgent and unify to atom path.
   const [promptByAgent, setPromptByAgent] = useState<Record<string, string>>(
     {},
   );
@@ -435,6 +426,9 @@ export function App() {
   const [restartingAgentId, setRestartingAgentId] = useState<string | null>(null);
   /** 用户点击 ask_question 取消/abort 后的过渡标记，立即隐藏运行指示器。 */
   const [cancellingUi, setCancellingUi] = useState(false);
+  // TECH DEBT (Phase 3): attachedImagesByAgent is a legacy draft path for non-Session agents.
+  // Session attachments go through setSessionAttachments. Same dual-write pattern as promptByAgent.
+  // When all agents migrate to Session model, remove attachedImagesByAgent and unify.
   const [attachedImagesByAgent, setAttachedImagesByAgent] = useState<
     Record<string, ImageContent[]>
   >({});
@@ -761,18 +755,6 @@ export function App() {
     if (drawer === "git") workspace.closeDrawer();
   }, [settings.enableGitManagement, drawer, workspace.closeDrawer]);
 
-  // Click-outside close for editor popover (replaces deleted editorsRef effect).
-  useEffect(() => {
-    if (!editorsOpen) return;
-    const handler = (event: MouseEvent) => {
-      if (editorsPopoverRef.current && !editorsPopoverRef.current.contains(event.target as Node)) {
-        workspace.closeExternalEditorChooser();
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [editorsOpen, workspace.closeExternalEditorChooser]);
-
   /* settingsNotice 已改用 showToast (app-notice) 实现 */
   const [webServiceChanging, setWebServiceChanging] = useState(false);
   const [appInfo, setAppInfo] = useState<AppInfo>({
@@ -815,7 +797,6 @@ export function App() {
     useState(false);
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set());
   const sessionComboRef = useRef<HTMLDivElement | null>(null);
-  const editorsPopoverRef = useRef<HTMLDivElement | null>(null);
   const queuedTrackRef = useRef<HTMLDivElement | null>(null);
   const timelineRef = useRef<HTMLElement | null>(null);
   const composerTextareaRef = useRef<HTMLDivElement | null>(null);
@@ -3374,13 +3355,13 @@ export function App() {
           maxFileSizeMB={settings.maxEditorFileSizeMB}
         />
       </Suspense>
-    ) : drawer === "browser" && !drawerCollapsed && !browserFullscreen ? (
-      <div className="drawer-content-frame">
-        <BrowserPanel
-          onClose={() => workspace.closeDrawer()}
-          onToggleFullscreen={() => workspace.enterBrowserFullscreen()}
-        />
-      </div>
+    ) : drawer === "browser" && !drawerCollapsed ? (
+      <BrowserSurface
+        fullscreen={browserFullscreen}
+        onClose={() => workspace.closeBrowser()}
+        onMinimize={() => workspace.minimizeBrowser()}
+        onEnterFullscreen={() => workspace.enterBrowserFullscreen()}
+      />
     ) : settings.enableGitManagement && drawer === "git" && !drawerCollapsed && activeProjectId ? (
       <div className="drawer-content-frame">
         <div className="drawer-header">
@@ -3948,61 +3929,17 @@ export function App() {
     <ScratchPadOverlay controller={scratchPad} />
 
     {/* 外部编辑器选择气泡 */}
-    {editorsOpen && editorsAnchor && (
-      <div
-        ref={editorsPopoverRef}
-        className="editors-popover"
-        style={{
-          position: "fixed",
-          left: editorsAnchor.x,
-          top: editorsAnchor.y,
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {externalEditors.length === 0 ? (
-          <div className="editors-popover-empty">{t("app.noExternalEditors")}</div>
-        ) : (
-          externalEditors.map((editor) => (
-            <button
-              key={editor.id}
-              className="editors-popover-item"
-              onClick={() => {
-                void workspace.openProjectInExternalEditor(editor).catch((error) => {
-                  showToast(
-                    t("app.openEditorFailed", {
-                      error: error instanceof Error ? error.message : String(error),
-                    }),
-                    3000,
-                  );
-                });
-              }}
-            >
-              <span className={`editor-logo ${editor.id}`}>
-                {getEditorLogoUrl(editor.id) ? (
-                  <img src={getEditorLogoUrl(editor.id)} alt="" />
-                ) : (
-                  editor.id.slice(0, 2).toUpperCase()
-                )}
-              </span>
-              <span>{editor.name}</span>
-            </button>
-          ))
-        )}
-      </div>
-    )}
+    <ExternalEditorOverlay
+      open={editorsOpen}
+      editors={externalEditors}
+      anchor={editorsAnchor}
+      projectPath={editorsTargetPath}
+      onClose={() => workspace.closeExternalEditorChooser()}
+      onOpenProject={(editor, path) => workspace.openProjectInExternalEditor(editor)}
+      onError={(error) => showToast(t("app.openEditorFailed", {error: String(error)}), 3000)}
+    />
 
-    {/* 浏览器全屏覆盖层 */}
-    {browserFullscreen && (
-      <div className="modal-backdrop" onClick={() => workspace.closeBrowser()}>
-        <div className="browser-modal" onClick={(e) => e.stopPropagation()}>
-          <BrowserPanel
-            isFullscreen
-            onClose={() => workspace.closeBrowser()}
-            onMinimize={() => workspace.minimizeBrowser()}
-          />
-        </div>
-      </div>
-    )}
+
 
     </AppShell>
   );
