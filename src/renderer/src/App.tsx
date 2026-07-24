@@ -278,7 +278,6 @@ export function App() {
   const search = sidebarController.search;
 
   // 记录 composer 光标位置,用于光标相关的 @ / 触发检测与建议项替换。
-  const [composerCursor, setComposerCursor] = useState(0);
   const [fileMenu, setFileMenu] = useState<{
     x: number;
     y: number;
@@ -686,7 +685,7 @@ export function App() {
     setPromptForAgent,
     setAttachedImagesForAgent,
     setComposerAgentModeForAgent,
-    setComposerCursor,
+    setComposerCursor: (v: React.SetStateAction<number>) => { /* no-op: cursor managed by composer controller */ },
     showToast,
     unknownDeliveryMessage: t("app.queuedUnknown"),
     dispatchPromptSnapshot,
