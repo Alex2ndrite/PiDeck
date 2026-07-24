@@ -1,0 +1,175 @@
+import { useMemo } from "react";
+import type { WorkspaceDrawerPanel } from "./useWorkspacePanels";
+import type {
+  DrawerEditorPort,
+  DrawerGitPort,
+  DrawerChromePort,
+  DrawerBrowserPort,
+  DrawerFilesPort,
+} from "../components/workspace/DrawerSurface";
+
+interface UseDrawerPortsInput {
+  // Editor
+  editorMode: string;
+  activeTab: any;
+  activeTabId: string | null;
+  editorTabs: any[];
+  toggleEditorMode: () => void;
+  selectEditorTab: (id: string) => void;
+  closeEditorTab: (id: string) => void;
+  closeEditor: () => void;
+  readEditorFileContent: (path: string) => Promise<string>;
+  readEditorOriginalContent: any;
+  saveEditorFileContent: ((path: string, content: string) => Promise<void>) | undefined;
+  prevDrawerPanelRef: React.MutableRefObject<WorkspaceDrawerPanel | null>;
+  clearEditorBack: () => WorkspaceDrawerPanel | null;
+  maxEditorFileSizeMB: number;
+
+  // Git
+  enableGitManagement: boolean;
+  activeProjectId: string | undefined;
+  gitDrawerDiff: any;
+  gitDiffDisplayMode: string;
+  openCommitFileDiff: any;
+  openWorkspaceFileDiff: any;
+  toggleGitDiffDisplayMode: () => void;
+  closeGitDiff: () => void;
+  gitApi: any;
+  gitInfo: any;
+  switchBranch: any;
+  createBranch: any;
+
+  // Workspace actions
+  openDrawer: (panel: WorkspaceDrawerPanel) => void;
+  closeDrawer: () => void;
+  collapseDrawer: () => void;
+  toggleDrawerPinned: () => void;
+  closeBrowser: () => void;
+  minimizeBrowser: () => void;
+  enterBrowserFullscreen: () => void;
+
+  // Browser
+  browserFullscreen: boolean;
+
+  // Files/History
+  sessionsProject: any;
+  sessionsProjectId: string | undefined;
+  files: any[];
+  sessions: any[];
+  sessionSourceFilter: Record<string, Set<string> | null>;
+  sessionHistoryLoading: boolean;
+  expandedDirs: Set<string>;
+  onToggleDirectory: (dir: string) => void;
+  onCollapseAllDirectories: () => void;
+  setFileMenu: any;
+  refreshFiles: any;
+  projects: any[];
+  refreshProjectSessions: any;
+  runOpenSidebarSession: any;
+  isSameSessionPath: any;
+  runCopySession: any;
+  runExportHistorySession: any;
+  runDeleteHistorySession: any;
+  viewFilePath: any;
+  openFilePath: any;
+  api: any;
+  t: any;
+}
+
+export function useDrawerPorts(input: UseDrawerPortsInput) {
+  return useMemo(() => {
+    const editor: DrawerEditorPort = {
+      editorMode: input.editorMode,
+      activeTab: input.activeTab,
+      activeTabId: input.activeTabId,
+      editorTabs: input.editorTabs,
+      toggleEditorMode: input.toggleEditorMode,
+      selectEditorTab: input.selectEditorTab,
+      closeEditorTab: input.closeEditorTab,
+      closeEditor: input.closeEditor,
+      readEditorFileContent: input.readEditorFileContent,
+      readEditorOriginalContent: input.readEditorOriginalContent,
+      saveEditorFileContent: input.saveEditorFileContent,
+      prevDrawerPanelRef: input.prevDrawerPanelRef,
+      clearEditorBack: input.clearEditorBack,
+      maxEditorFileSizeMB: input.maxEditorFileSizeMB,
+    };
+
+    const git: DrawerGitPort = {
+      enableGitManagement: input.enableGitManagement,
+      activeProjectId: input.activeProjectId,
+      gitDrawerDiff: input.gitDrawerDiff,
+      gitDiffDisplayMode: input.gitDiffDisplayMode,
+      openCommitFileDiff: input.openCommitFileDiff,
+      openWorkspaceFileDiff: input.openWorkspaceFileDiff,
+      toggleGitDiffDisplayMode: input.toggleGitDiffDisplayMode,
+      closeGitDiff: input.closeGitDiff,
+      gitApi: input.gitApi,
+      gitInfo: input.gitInfo,
+      switchBranch: input.switchBranch,
+      createBranch: input.createBranch,
+    };
+
+    const chrome: DrawerChromePort = {
+      onOpenDrawer: input.openDrawer,
+      onCloseDrawer: input.closeDrawer,
+      onCollapseDrawer: input.collapseDrawer,
+      onToggleDrawerPin: input.toggleDrawerPinned,
+    };
+
+    const browser: DrawerBrowserPort = {
+      browserFullscreen: input.browserFullscreen,
+      onCloseBrowser: input.closeBrowser,
+      onMinimizeBrowser: input.minimizeBrowser,
+      onEnterBrowserFullscreen: input.enterBrowserFullscreen,
+    };
+
+    const files: DrawerFilesPort = {
+      sessionsProject: input.sessionsProject,
+      sessionsProjectId: input.sessionsProjectId,
+      files: input.files,
+      sessions: input.sessions,
+      sessionSourceFilter: input.sessionSourceFilter,
+      sessionHistoryLoading: input.sessionHistoryLoading,
+      expandedDirs: input.expandedDirs,
+      onToggleDirectory: input.onToggleDirectory,
+      onCollapseAllDirectories: input.onCollapseAllDirectories,
+      setFileMenu: input.setFileMenu,
+      refreshFiles: input.refreshFiles,
+      projects: input.projects,
+      refreshProjectSessions: input.refreshProjectSessions,
+      runOpenSidebarSession: input.runOpenSidebarSession,
+      isSameSessionPath: input.isSameSessionPath,
+      runCopySession: input.runCopySession,
+      runExportHistorySession: input.runExportHistorySession,
+      runDeleteHistorySession: input.runDeleteHistorySession,
+      viewFilePath: input.viewFilePath,
+      openFilePath: input.openFilePath,
+      api: input.api,
+      t: input.t,
+    };
+
+    return { editor, git, chrome, browser, files };
+  }, [
+    input.editorMode, input.activeTab, input.activeTabId,
+    input.editorTabs, input.toggleEditorMode, input.selectEditorTab,
+    input.closeEditorTab, input.closeEditor, input.readEditorFileContent,
+    input.readEditorOriginalContent, input.saveEditorFileContent,
+    input.prevDrawerPanelRef, input.clearEditorBack, input.maxEditorFileSizeMB,
+    input.enableGitManagement, input.activeProjectId,
+    input.gitDrawerDiff, input.gitDiffDisplayMode,
+    input.openCommitFileDiff, input.openWorkspaceFileDiff,
+    input.toggleGitDiffDisplayMode, input.closeGitDiff,
+    input.gitApi, input.gitInfo, input.switchBranch, input.createBranch,
+    input.openDrawer, input.closeDrawer, input.collapseDrawer, input.toggleDrawerPinned,
+    input.closeBrowser, input.minimizeBrowser, input.enterBrowserFullscreen,
+    input.browserFullscreen,
+    input.sessionsProject, input.sessionsProjectId,
+    input.files, input.sessions, input.sessionSourceFilter, input.sessionHistoryLoading,
+    input.expandedDirs, input.onToggleDirectory, input.onCollapseAllDirectories,
+    input.setFileMenu, input.refreshFiles, input.projects, input.refreshProjectSessions,
+    input.runOpenSidebarSession, input.isSameSessionPath,
+    input.runCopySession, input.runExportHistorySession, input.runDeleteHistorySession,
+    input.viewFilePath, input.openFilePath, input.api, input.t,
+  ]);
+}

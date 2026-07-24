@@ -39,6 +39,7 @@ import { useSessionLayout } from "./hooks/useSessionLayout";
 import { useFileEditor } from "./hooks/useFileEditor";
 import { useOverlayActions } from "./hooks/useOverlayActions";
 import { useWorkspacePanels, type WorkspaceDrawerPanel } from "./hooks/useWorkspacePanels";
+import { useDrawerPorts } from "./hooks/useDrawerPorts";
 import { useTerminalDock } from "./hooks/useTerminalDock";
 import { useImportFlow } from "./hooks/useImportFlow";
 import { useQueuedPrompt } from "./hooks/useQueuedPrompt";
@@ -2219,6 +2220,42 @@ export function App() {
     />
   ) : null;
 
+  // ── DrawerSurface port objects (stable via useMemo) ──
+  const drawerPorts = useDrawerPorts({
+    editorMode, activeTab, activeTabId, editorTabs,
+    toggleEditorMode, selectEditorTab, closeEditorTab, closeEditor,
+    readEditorFileContent, readEditorOriginalContent, saveEditorFileContent,
+    prevDrawerPanelRef, clearEditorBack,
+    maxEditorFileSizeMB: settings.maxEditorFileSizeMB,
+    enableGitManagement: settings.enableGitManagement, activeProjectId,
+    gitDrawerDiff, gitDiffDisplayMode,
+    openCommitFileDiff, openWorkspaceFileDiff,
+    toggleGitDiffDisplayMode, closeGitDiff,
+    gitApi: api.git, gitInfo,
+    switchBranch, createBranch,
+    openDrawer: workspace.openDrawer,
+    closeDrawer: workspace.closeDrawer,
+    collapseDrawer: workspace.collapseDrawer,
+    toggleDrawerPinned: workspace.toggleDrawerPinned,
+    closeBrowser: () => workspace.closeBrowser(),
+    minimizeBrowser: () => workspace.minimizeBrowser(),
+    enterBrowserFullscreen: () => workspace.enterBrowserFullscreen(),
+    browserFullscreen,
+    sessionsProject, sessionsProjectId,
+    files, sessions,
+    sessionSourceFilter, sessionHistoryLoading,
+    expandedDirs,
+    onToggleDirectory: toggleDirectory,
+    onCollapseAllDirectories: collapseAllDirectories,
+    setFileMenu, refreshFiles,
+    projects,
+    refreshProjectSessions,
+    runOpenSidebarSession, isSameSessionPath,
+    runCopySession, runExportHistorySession, runDeleteHistorySession,
+    viewFilePath, openFilePath,
+    api, t,
+  });
+
   return (
     <>
       <AppBootstrap {...bootstrapProps} />
@@ -2236,62 +2273,18 @@ export function App() {
       contentMaxWidth={settings.contentMaxWidth}
       sidebarContent={sidebarContentNode}
       chatPaneContent={chatPaneContentNode}
-      drawerContent={(visibleDrawerPanel) => {
-        const drawerEditorPort = {
-          editorMode, activeTab, activeTabId, editorTabs,
-          toggleEditorMode, selectEditorTab, closeEditorTab, closeEditor,
-          readEditorFileContent, readEditorOriginalContent, saveEditorFileContent,
-          prevDrawerPanelRef, clearEditorBack,
-          maxEditorFileSizeMB: settings.maxEditorFileSizeMB,
-        };
-        const drawerGitPort = {
-          enableGitManagement: settings.enableGitManagement, activeProjectId,
-          gitDrawerDiff, gitDiffDisplayMode,
-          openCommitFileDiff, openWorkspaceFileDiff,
-          toggleGitDiffDisplayMode, closeGitDiff,
-          gitApi: api.git, gitInfo,
-          switchBranch, createBranch,
-        };
-        const drawerChromePort = {
-          onOpenDrawer: workspace.openDrawer,
-          onCloseDrawer: workspace.closeDrawer,
-          onCollapseDrawer: workspace.collapseDrawer,
-          onToggleDrawerPin: workspace.toggleDrawerPinned,
-        };
-        const drawerBrowserPort = {
-          browserFullscreen,
-          onCloseBrowser: () => workspace.closeBrowser(),
-          onMinimizeBrowser: () => workspace.minimizeBrowser(),
-          onEnterBrowserFullscreen: () => workspace.enterBrowserFullscreen(),
-        };
-        const drawerFilesPort = {
-          sessionsProject, sessionsProjectId,
-          files, sessions,
-          sessionSourceFilter, sessionHistoryLoading,
-          expandedDirs,
-          onToggleDirectory: toggleDirectory,
-          onCollapseAllDirectories: collapseAllDirectories,
-          setFileMenu, refreshFiles,
-          projects,
-          refreshProjectSessions,
-          runOpenSidebarSession, isSameSessionPath,
-          runCopySession, runExportHistorySession, runDeleteHistorySession,
-          viewFilePath, openFilePath,
-          api, t,
-        };
-        return (
+      drawerContent={(visibleDrawerPanel) => (
         <DrawerSurface
           drawer={visibleDrawerPanel}
           drawerCollapsed={drawerCollapsed}
           drawerPinned={drawerPinned}
-          editor={drawerEditorPort}
-          git={drawerGitPort}
-          chrome={drawerChromePort}
-          browser={drawerBrowserPort}
-          files={drawerFilesPort}
+          editor={drawerPorts.editor}
+          git={drawerPorts.git}
+          chrome={drawerPorts.chrome}
+          browser={drawerPorts.browser}
+          files={drawerPorts.files}
         />
-        );
-      }}
+      )}
       outlineContent={hasActiveConversation ? (
 <ConversationOutline
         items={outlineItems}
