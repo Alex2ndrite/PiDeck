@@ -41,7 +41,7 @@ import { useOverlayActions } from "./hooks/useOverlayActions";
 import { useWorkspacePanels, type WorkspaceDrawerPanel } from "./hooks/useWorkspacePanels";
 import { useTerminalDock } from "./hooks/useTerminalDock";
 import { useImportFlow } from "./hooks/useImportFlow";
-import { useQueuedPrompt, type QueuedPrompt } from "./hooks/useQueuedPrompt";
+import { useQueuedPrompt } from "./hooks/useQueuedPrompt";
 import { activeAgentIdAtom } from "./hooks/useSessionRuntimeController";
 import { PromptDeliveryUnknownError } from "./utils/promptErrors";
 
@@ -100,11 +100,7 @@ import { useResize } from "./hooks/useResize";
 import { useSessionTimelineController } from "./hooks/useSessionTimelineController";
 import { useSessionActions } from "./hooks/useSessionActions";
 import { useScratchPad } from "./hooks/useScratchPad";
-import { SessionView } from "./components/session/SessionView";
 import { SessionRuntimeInjector } from "./components/session/SessionRuntimeInjector";
-import {
-  QueuedPromptPanel,
-} from "./components/session/ComposerPanels";
 import { ScratchPadOverlay } from "./components/overlays/ScratchPadOverlay";
 import { AppShell } from "./components/app/AppShell";
 import { DrawerSurface } from "./components/workspace/DrawerSurface";
@@ -143,7 +139,6 @@ import { createDefaultExternalEditorSettings } from "../../shared/types";
 import type {
   AgentRuntimeState,
   AgentTab,
-  AgentUiResponse,
   AppInfo,
   AppSettings,
   ChatMessage,
