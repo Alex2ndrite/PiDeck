@@ -86,7 +86,7 @@ test("first Session send is request-addressed and restores rejected snapshots", 
 test("active Agent identity is derived from the selected Session runtime", () => {
   assert.match(
     appSource,
-    /const activeAgentId = currentSessionRuntime\?\.agentId/,
+    /const activeAgentId = useAtomValue\(activeAgentIdAtom\)/,
   );
   assert.doesNotMatch(appSource, /setActiveAgentId/);
   assert.doesNotMatch(

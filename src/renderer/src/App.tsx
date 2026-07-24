@@ -42,6 +42,7 @@ import { useWorkspacePanels, type WorkspaceDrawerPanel } from "./hooks/useWorksp
 import { useTerminalDock } from "./hooks/useTerminalDock";
 import { useImportFlow } from "./hooks/useImportFlow";
 import { useQueuedPrompt, type QueuedPrompt } from "./hooks/useQueuedPrompt";
+import { activeAgentIdAtom } from "./hooks/useSessionRuntimeController";
 import { PromptDeliveryUnknownError } from "./utils/promptErrors";
 
 import { usePiUpdate } from "./hooks/usePiUpdate";
@@ -212,7 +213,7 @@ export function App() {
   const [activeProjectId, setActiveProjectId] = useState<string>();
   const activeProjectIdRef = useRef<string | undefined>(activeProjectId);
   activeProjectIdRef.current = activeProjectId;
-  const activeAgentId = currentSessionRuntime?.agentId;
+  const activeAgentId = useAtomValue(activeAgentIdAtom);
   // 切换 agent（新会话/恢复会话）时刷新设置，使 pi agent 的 hideThinkingBlock 立即生效
   useEffect(() => {
     if (activeAgentId) {
