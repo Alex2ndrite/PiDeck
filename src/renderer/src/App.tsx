@@ -10,8 +10,6 @@ import {
 } from "react";
 import { useAtomValue, useSetAtom, useStore } from "jotai";
 import {
-  ChevronLeft,
-  ChevronRight,
   Code,
   FolderOpen,
   Globe,
