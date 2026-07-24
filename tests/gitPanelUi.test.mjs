@@ -208,7 +208,7 @@ describe("Git panel VS Code Source Control contract", () => {
     assert.match(panel, /function GraphContinuation/);
     assert.match(panel, /getFileIconSeti\(name\)/);
     assert.doesNotMatch(panel, /title=\{`\$\{commit\.message\}/);
-    assert.match(app, /gitApi=\{api\.git\}/);
+    assert.match(app, /gitApi:/);
     assert.match(app, /commitDetail=\{gitApi\.commitDetail\}/);
     assert.match(preload, /Promise<CommitDetail \| null>/);
     assert.match(styles, /\.git-commit-hover\s*\{/);
