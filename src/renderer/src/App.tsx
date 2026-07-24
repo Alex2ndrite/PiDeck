@@ -166,9 +166,8 @@ export function App() {
   // Composer input state is owned by ComposerArea; the root does not subscribe to each key.
   const currentSessionId = useAtomValue(currentSessionIdAtom);
   const currentSession = useAtomValue(currentSessionAtom);
-  // currentSessionRuntime / currentSessionRuntimeUi: sync store.get() only.
+  // currentSessionRuntime / currentSessionRuntimeUi / currentSessionSendState: sync store.get() only.
   // Streaming subscriptions are in SessionRuntimeInjector.
-  const currentSessionSendState = useAtomValue(currentSessionSendStateAtom);
   const projects = useAtomValue(projectInventoryAtom);
   const agents = useAtomValue(agentInventoryAtom);
   const setCurrentSessionId = useSetAtom(currentSessionIdAtom);
@@ -387,7 +386,6 @@ export function App() {
     setGitInfo,
     sessionLoadingByProject,
     setSessionLoadingByProject,
-    visibleProjectChildCountByProject,
     setVisibleProjectChildCountByProject,
     refreshProjects,
     refreshWorktrees,
@@ -729,10 +727,6 @@ export function App() {
   }, [store, queue.enqueueQueuedPrompt]);
 
   const activeMessages = sessionTimeline.messages;
-  const agentRuntimeState = activeAgentId
-    ? activeProjectRuntimeCapabilities[activeAgentId]
-    : undefined;
-
   // activeConversationStatus / activeRuntimeState replaced by sync isAgentCurrentlyBusy().
   const hasActiveConversation = Boolean(currentSession);
 
@@ -777,8 +771,6 @@ export function App() {
     chatPaneRef: sessionChatPaneRef,
     headerRef: sessionHeaderRef,
     composerRef: sessionComposerRef,
-    composerBoxRef: sessionComposerBoxRef,
-    queuedBudget: queuedChromeBudget,
     terminalRowHeight,
     maxComposerHeight,
     availableTerminalHeight,
@@ -789,7 +781,6 @@ export function App() {
   const chatPaneRef = sessionChatPaneRef;
   const chatHeaderRef = sessionHeaderRef;
   const composerRef = sessionComposerRef;
-  const composerBoxRef = sessionComposerBoxRef;
 
   const visibleQueuedPrompts = activeQueuedPrompts;
   const resolvedComposerHeight = Math.min(
@@ -804,7 +795,6 @@ export function App() {
     setListCollapsed,
     listHoverRevealSuppressed,
     setListHoverRevealSuppressed,
-    startComposerResize,
     toggleListCollapsed,
     releaseListHoverSuppression,
   } = useResize({
