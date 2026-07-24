@@ -7,7 +7,7 @@ import {
   sessionCatalogLoadStateAtom,
   sessionIdsByProjectAtom,
   sessionRecordsAtom,
-  sessionRuntimeByIdAtom,
+  sidebarRuntimeAtom,
 } from "../atoms";
 
 export const SIDEBAR_PROJECT_CHILD_PAGE_SIZE = 5;
@@ -151,7 +151,7 @@ export function useSidebarController(options: {
   const agents = useAtomValue(agentInventoryAtom);
   const sessionRecords = useAtomValue(sessionRecordsAtom);
   const sessionIdsByProject = useAtomValue(sessionIdsByProjectAtom);
-  const sessionRuntimeById = useAtomValue(sessionRuntimeByIdAtom);
+  const sessionRuntimeById = useAtomValue(sidebarRuntimeAtom);
   const sessionCatalogLoadStateByProject = useAtomValue(sessionCatalogLoadStateAtom);
   const pageSize = options.pageSize ?? SIDEBAR_PROJECT_CHILD_PAGE_SIZE;
   const [search, setSearch] = useState("");

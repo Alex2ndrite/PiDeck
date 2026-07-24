@@ -48,7 +48,7 @@ test("Sidebar controller derives catalog data from canonical atoms without a wri
   const source = readFileSync("src/renderer/src/hooks/useSidebarController.ts", "utf8");
   assert.match(source, /useAtomValue\(sessionRecordsAtom\)/);
   assert.match(source, /useAtomValue\(sessionIdsByProjectAtom\)/);
-  assert.match(source, /useAtomValue\(sessionRuntimeByIdAtom\)/);
+  assert.match(source, /useAtomValue\(sidebarRuntimeAtom\)/);
   assert.doesNotMatch(source, /useState<[^>]*SessionSummary\[\]/);
 });
 

@@ -1,4 +1,5 @@
 import { atom } from "jotai";
+import { selectAtom } from "jotai/utils";
 import type {
   AgentRuntimeState,
   AgentStatus,
@@ -60,6 +61,16 @@ export const sessionRecordsAtom = atom<Record<string, SessionRecord>>({});
 export const sessionIdsByProjectAtom = atom<Record<string, string[]>>({});
 export const currentSessionIdAtom = atom<string | undefined>(undefined);
 export const sessionRuntimeByIdAtom = atom<Record<string, SessionRuntimeViewState>>({});
+export const sidebarRuntimeAtom = selectAtom(
+  sessionRuntimeByIdAtom,
+  (full) => {
+    const slim: Record<string, { agentId?: string; status: string }> = {};
+    for (const [id, rt] of Object.entries(full)) {
+      slim[id] = { agentId: rt.agentId, status: rt.status ?? "detached" };
+    }
+    return slim;
+  },
+);
 export const sessionRuntimeUiByIdAtom = atom<Record<string, SessionRuntimeUiState>>({});
 export const sessionMessagesCacheAtom = atom<Record<string, SessionMessageCacheEntry>>({});
 export const sessionMessageLruAtom = atom<string[]>([]);
