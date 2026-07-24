@@ -7,6 +7,10 @@ const source = readFileSync(
   "utf8",
 );
 const app = readFileSync("src/renderer/src/App.tsx", "utf8");
+const bootstrap = readFileSync(
+  "src/renderer/src/components/app/AppBootstrap.tsx",
+  "utf8",
+);
 
 test("global listener owner handles inventory, capability, project, settings, app, and trust events", () => {
   for (const listener of [
@@ -31,5 +35,5 @@ test("global listener owner explicitly excludes Session message, thinking, and U
   assert.doesNotMatch(source, /\.onThinking\(/);
   assert.doesNotMatch(source, /\.onUiRequest\(/);
   assert.doesNotMatch(app, /api\.agents\.(?:onMessages|onThinking|onUiRequest)\(/);
-  assert.match(app, /useGlobalAgentListeners\(/);
+  assert.match(bootstrap, /useGlobalAgentListeners\(/);
 });

@@ -14,6 +14,10 @@ const sessionRuntimeInjectorSource = readFileSync(
   "src/renderer/src/components/session/SessionRuntimeInjector.tsx",
   "utf8",
 );
+const bootstrapSource = readFileSync(
+  "src/renderer/src/components/app/AppBootstrap.tsx",
+  "utf8",
+);
 const globalListenersSource = readFileSync(
   "src/renderer/src/hooks/useGlobalAgentListeners.ts",
   "utf8",
@@ -155,8 +159,8 @@ test("queue drain is serialized and waits for an ordered global capability event
   assert.match(appSource, /queueFlushByAgentRef = useRef<Set<string>>/);
   assert.match(globalListenersSource, /agents\.onRuntimeState\(/);
   assert.match(
-    appSource,
-    /previous\?\.isExecutingTool\s*&&\s*!current\.isExecutingTool[\s\S]*?queue\.flushQueuedSteerPrompts\(agentId\)/,
+    bootstrapSource,
+    /previous\?\.isExecutingTool\s*&&\s*!current\.isExecutingTool[\s\S]*?queueFlushSteer\(agentId\)/,
   );
   assert.match(runtimeStateSource, /incoming\.toolStateSequence < current\.toolStateSequence/);
   assert.match(agentManagerSource, /updateActiveToolCalls/);

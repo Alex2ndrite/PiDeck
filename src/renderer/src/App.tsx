@@ -30,7 +30,7 @@ import {
   SidebarContent,
   type SidebarActions,
 } from "./components/sidebar/SidebarContent";
-import { useGlobalAgentListeners } from "./hooks/useGlobalAgentListeners";
+import { AppBootstrap } from "./components/app/AppBootstrap";
 import { useRename } from "./hooks/useRename";
 import { useSidebarController } from "./hooks/useSidebarController";
 import { useProjectRuntimeCapabilities } from "./hooks/useRuntimeCapabilities";
@@ -1113,38 +1113,21 @@ export function App() {
     }
   }
 
-  useGlobalAgentListeners({
-    onProjectsChanged: (next) => {
+  const bootstrapProps = {
+    onProjectsChanged: (next: Project[]) => {
       if (!activeProjectId && next.length > 0) setActiveProjectId(next[0].id);
     },
     onAgentInventoryChanged: handleAgentInventoryChanged,
-    onRuntimeCapabilityChanged: ({ agentId, previous, current, patch }) => {
-      if (
-        previous?.isExecutingTool &&
-        !current.isExecutingTool &&
-        (patch.toolStateSequence == null ||
-          previous.toolStateSequence == null ||
-          patch.toolStateSequence >= previous.toolStateSequence) &&
-        queue.isAgentCurrentlyBusy(agentId)
-      ) {
-        void queue.flushQueuedSteerPrompts(agentId);
-      }
-    },
-    onAgentLog: () => undefined,
-    onSettingsApplied: (next) => {
+    onSettingsApplied: (next: AppSettings) => {
       setSettings(next);
       showToast(t("settings.restartNotice"));
     },
-    onUpdateProgress: (_progress) => {
-      // Hook useAppUpdateController subscribes via onUpdateProgress parameter;
-      // nothing else needed here.
-    },
-    onOpenInBrowser: (url) => {
+    onOpenInBrowser: (url: string) => {
       workspace.openDrawer("browser");
       navigateTo(url);
     },
     onTrustRequest: overlays.setTrustRequest,
-    onFocusTarget: (target) => {
+    onFocusTarget: (target: { agentId: string }) => {
       const agent = displayAgentsRef.current.find((item) => item.id === target.agentId);
       if (!agent) return;
       const sessionId = store.get(
@@ -1156,7 +1139,12 @@ export function App() {
         selectProjectCommand(agent.projectId);
       }
     },
-  });
+    queueFlushSteer: (agentId: string) => {
+      if (queue.isAgentCurrentlyBusy(agentId)) {
+        void queue.flushQueuedSteerPrompts(agentId);
+      }
+    },
+  };
 
   useEffect(() => {
     void workspace.loadExternalEditors().catch(() => undefined);
@@ -2232,6 +2220,8 @@ export function App() {
   ) : null;
 
   return (
+    <>
+      <AppBootstrap {...bootstrapProps} />
     <AppShell
       listCollapsed={listCollapsed}
       listWidth={listWidth}
@@ -2721,6 +2711,7 @@ export function App() {
     />
 
     </AppShell>
+    </>
   );
 }
 

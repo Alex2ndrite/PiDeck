@@ -185,7 +185,7 @@ test("focus selection is synchronous so rapid targets cannot be overwritten by s
   focus("agent-external");
   assert.equal(currentSessionId, undefined);
 
-  const focusStart = appSource.indexOf("onFocusTarget: (target) => {");
+  const focusStart = appSource.indexOf("onFocusTarget: (target: { agentId: string }) => {");
   const focusEnd = appSource.indexOf("\n    },", focusStart);
   const focusSource = appSource.slice(focusStart, focusEnd);
   assert.match(focusSource, /store\.get\([\s\S]*sessionIdByRuntimeAgentIdAtomFamily/);
