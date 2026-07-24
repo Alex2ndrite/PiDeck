@@ -1014,33 +1014,7 @@ export function App() {
       ),
     [displayAgents, search],
   );
-  const filteredAgents = visibleAgents;
-  const filteredProjects = useMemo(
-    () =>
-      projects.filter((project) => {
-        // worktree 子项目不显示在主列表中，只在父项目下以子项展示
-        if (project.worktreeParentId) return false;
-        const projectSessions = getProjectSessions(project.id);
-        return (
-          matches(project.name + project.path, search) ||
-          displayAgents.some(
-            (agent) =>
-              agent.projectId === project.id &&
-              matches(
-                agent.title + agent.cwd + (agent.sessionId ?? ""),
-                search,
-              ),
-          ) ||
-          projectSessions.some((session) =>
-            matches(
-              `${session.name ?? ""}${session.preview}${session.filePath}`,
-              search,
-            ),
-          )
-        );
-      }),
-    [displayAgents, projects, search],
-  );
+  // filteredAgents / filteredProjects removed (dead computation)
   const projectIdsKey = useMemo(
     () => projects.map((project) => project.id).join("\n"),
     [projects],
@@ -1069,7 +1043,7 @@ export function App() {
       setPendingAgents(remainingPendingAgents);
     }
     const activeIds = new Set(nextAgents.map((agent) => agent.id));
-    const activeProjectIds = new Set(nextAgents.map((agent) => agent.projectId));
+        // activeProjectIds removed (dead)
     const draftIds = new Set([
       ...nextAgents.map((agent) => agent.id),
       ...remainingPendingAgents.map((agent) => agent.id),
@@ -1393,13 +1367,6 @@ export function App() {
     }
   }
 
-  async function openProjectSessions(project: Project) {
-    setActiveProjectId(project.id);
-    setSessionsProjectId(project.id);
-    workspace.openDrawer("sessions");
-    await refreshSessionHistory(project.id);
-  }
-
   async function cloneAgentSession(agentId: string) {
     try {
       const result = await api.agents.cloneSession(agentId);
@@ -1518,17 +1485,6 @@ export function App() {
   		x: x + width > vw ? Math.max(4, vw - width - 8) : x,
   		y: y + height > vh ? Math.max(4, vh - height - 8) : y,
   	};
-  }
-
-  async function compactAgent(compactPrompt?: string, agentId = activeAgentId) {
-    if (!agentId || isPendingAgentId(agentId)) return;
-    try {
-      const state = await api.agents.compact(agentId, compactPrompt);
-      applyAgentRuntimeState(agentId, state);
-      showToast(t("app.compactDone"));
-    } catch (e) {
-      showToast(t("app.compactFailed"));
-    }
   }
 
   async function closeAgent(agentId: string) {
