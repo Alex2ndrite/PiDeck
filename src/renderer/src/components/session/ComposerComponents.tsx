@@ -116,12 +116,16 @@ export function ComposerToolbar(props: {
 	pathIndicator?: ReactNode;
 	/** 文件引用按钮回调 */
 	onAttachFile?: () => void;
+	/** 会话记录中保存的模型（无运行态 agent 时的 fallback 显示） */
+	savedModel?: { provider: string; modelId: string };
+	/** 会话记录中保存的思考强度（无运行态 agent 时的 fallback 显示） */
+	savedThinkingLevel?: string;
 
 }) {
 	const ctxPercent = props.state?.contextPercent;
 	const showCompact = ctxPercent != null && ctxPercent > 30;
-	// 根据当前 thinkingLevel 查找对应的多语言标签
-	const currentThinkingLevel = props.state?.thinkingLevel;
+	// 优先用运行态，无运行态时回退到会话存档值
+	const currentThinkingLevel = props.state?.thinkingLevel ?? props.savedThinkingLevel;
 	const thinkingLevelLabel = currentThinkingLevel
 		? THINKING_LEVELS.find((level) => level.value === currentThinkingLevel)?.labelKey
 		: undefined;
@@ -155,7 +159,7 @@ export function ComposerToolbar(props: {
 				</button>
 			)}
 			<button className="model" onClick={props.onPickModel} disabled={props.disabled}>
-				{t("app.model")}: {props.state?.provider ? `${props.state.provider}/` : ""}{props.state?.modelName ?? "-"}
+				{t("app.model")}: {props.state?.provider ? `${props.state.provider}/` : props.savedModel ? `${props.savedModel.provider}/` : ""}{props.state?.modelName ?? props.savedModel?.modelId ?? "-"}
 			</button>
 			<button
 				onClick={props.onPickPromptTemplate}

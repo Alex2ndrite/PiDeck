@@ -127,6 +127,8 @@ export const ComposerArea = forwardRef<HTMLElement, ComposerAreaProps>(function 
               />
               <ComposerToolbar
                 state={composer.runtime?.state}
+                savedModel={composer.record?.model}
+                savedThinkingLevel={composer.record?.thinkingLevel}
                 compacting={Boolean(composer.runtime?.state?.isCompacting)}
                 disabled={composer.isBusy || composer.isStarting}
                 onPickModel={() => composer.pickers.open("model")}
