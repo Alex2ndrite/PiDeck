@@ -1595,6 +1595,14 @@ const zhCN = {
   "feishu.link.connectFailed": "连接飞书机器人失败",
   "feishu.link.bindFailed": "绑定当前会话到飞书失败",
   "feishu.link.noActiveSession": "请先打开一个会话再连接飞书",
+  "app.runtimeErrorToast": "运行异常",
+  "app.unhandledRejectionToast": "未处理异常",
+  "app.renderErrorRetry": "重试",
+  "app.renderErrorReload": "刷新应用",
+  "app.renderErrorUnknown": "发生未知渲染错误",
+  "app.renderErrorHelp": "可以重试当前界面，或刷新应用。若持续出现，请把控制台错误反馈给我们。",
+  "app.renderErrorTitle": "界面渲染异常",
+  "app.renderErrorToast": "界面异常",
 } as const;
 
 export type TranslationKey = keyof typeof zhCN;
@@ -3208,6 +3216,14 @@ const enUS: Record<TranslationKey, string> = {
   "feishu.link.connectFailed": "Failed to connect Feishu bot",
   "feishu.link.bindFailed": "Failed to link this session to Feishu",
   "feishu.link.noActiveSession": "Open a session before linking Feishu",
+  "app.runtimeErrorToast": "Runtime error",
+  "app.unhandledRejectionToast": "Unhandled error",
+  "app.renderErrorTitle": "UI render error",
+  "app.renderErrorToast": "UI error",
+  "app.renderErrorRetry": "Retry",
+  "app.renderErrorReload": "Reload app",
+  "app.renderErrorUnknown": "An unknown render error occurred",
+  "app.renderErrorHelp": "You can retry this view or reload the app. If it keeps happening, please share the console error.",
 };
 
 type Params = Record<string, string | number | boolean | null | undefined>;

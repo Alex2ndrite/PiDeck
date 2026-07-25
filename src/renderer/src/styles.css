@@ -16,6 +16,14 @@
   font-family: "PiDeckCommitMono";
   src: url("./assets/fonts/CommitMono-400-Regular.otf") format("opentype");
   font-style: normal;
+n/* 像素展示字体：仅用于侧栏品牌字标等少量展示位 */
+@font-face {
+  font-family: "PiDeckDepartureMono";
+  src: url("./assets/fonts/DepartureMono-Regular.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
   font-weight: 400;
   font-display: swap;
 }
