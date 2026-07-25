@@ -3,7 +3,7 @@ import { useSetAtom } from "jotai";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { SidebarContent, type SidebarActions } from "./SidebarContent";
 import { useSidebarController } from "../../hooks/useSidebarController";
-import { LogoMark } from "../app/AppParts";
+import { BrandLockup } from "../app/AppParts";
 import { t } from "../../i18n";
 import { settingsOpenAtom } from "../../atoms";
 
@@ -43,8 +43,7 @@ export function AppSidebar(props: AppSidebarProps) {
       chrome={<>
         <div className="list-toolbar">
           <div className="app-badge">
-            <LogoMark />
-            <span className="brand-wordmark" aria-label="PiDeck">PiDeck</span>
+            <BrandLockup />
           </div>
         </div>
         <button
