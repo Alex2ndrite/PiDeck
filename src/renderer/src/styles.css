@@ -19971,3 +19971,161 @@ body.is-git-pane-resizing, body.is-git-pane-resizing * { cursor: row-resize !imp
   margin: 0 0 0 8px;
   padding: 0;
 }
+
+/* ── MemSpacedCard ─────────────────────────────────── */
+.mem-spaced-card {
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-panel);
+  overflow: hidden;
+}
+.mem-spaced-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 8px;
+  height: 32px;
+}
+.mem-spaced-card-trigger {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: none;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-caption);
+  cursor: pointer;
+  padding: 0;
+}
+.mem-spaced-card-chevron { transition: transform 0.15s; }
+.mem-spaced-card-chevron.open { transform: rotate(90deg); }
+.mem-spaced-card-title { font-weight: 600; }
+.mem-spaced-card-status {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-caption);
+}
+.mem-spaced-card-close {
+  border: none;
+  background: none;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: var(--radius-sm);
+}
+.mem-spaced-card-close:hover { color: var(--color-text-primary); }
+.mem-spaced-card-content { padding: 0 8px 8px; }
+.mem-spaced-card-tabs {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+.mem-spaced-card-tab {
+  border: none;
+  background: none;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-caption);
+  padding: 4px 10px;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+}
+.mem-spaced-card-tab.active {
+  color: var(--color-text-primary);
+  border-bottom-color: var(--color-accent);
+}
+.mem-spaced-card-summary {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.mem-spaced-card-stat {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-input);
+  font-size: var(--font-size-caption);
+}
+.mem-spaced-card-stat span:first-child { color: var(--color-text-tertiary); }
+.mem-spaced-card-stat span:last-child { font-weight: 600; }
+.mem-hungry { color: var(--color-warning); }
+.mem-spaced-card-empty {
+  text-align: center;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-caption);
+  padding: 16px 0;
+}
+.mem-card-scroll { max-height: 240px; overflow-y: auto; }
+.mem-spaced-card-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 5px 6px;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-caption);
+}
+.mem-spaced-card-item:hover { background: var(--color-bg-input); }
+.mem-badge { font-size: 12px; flex-shrink: 0; margin-top: 1px; }
+.mem-item-content {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mem-item-meta {
+  color: var(--color-text-tertiary);
+  font-size: 10px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.mem-all-item .mem-item-content { white-space: normal; }
+.mem-all-body { flex: 1; min-width: 0; }
+.mem-all-bar-wrap {
+  height: 3px;
+  background: var(--color-border-subtle);
+  border-radius: 2px;
+  margin-top: 3px;
+  overflow: hidden;
+}
+.mem-all-bar {
+  height: 100%;
+  background: var(--color-accent);
+  border-radius: 2px;
+  transition: width 0.2s;
+}
+.mem-spaced-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--color-border-subtle);
+}
+.mem-footer-left { display: flex; gap: 6px; }
+.mem-org-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border: none;
+  background: var(--color-bg-input);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-caption);
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.mem-org-btn:hover { background: var(--color-accent); color: #fff; }
+.mem-refresh-btn {
+  border: none;
+  background: none;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-caption);
+  cursor: pointer;
+}
+.mem-refresh-btn:hover { color: var(--color-text-primary); }
