@@ -2797,12 +2797,16 @@ function registerIpc() {
 						: {},
 				);
 				if (settings.wslEnabled && settings.wslDistro && settings.wslUser) {
-					await sessionScanner.configureWsl(settings.wslDistro, settings.wslUser);
-					skillManager.configureWsl(settings.wslDistro, settings.wslUser);
-					promptManager.configureWsl(settings.wslDistro, settings.wslUser);
-					extensionManager.configureWsl(settings.wslDistro, settings.wslUser);
-					if (configManager) configManager.configureWsl(settings.wslDistro, settings.wslUser);
-					if (xuePromptManager) xuePromptManager.configureWsl(null);
+					const { resolveWslEnvironment: resolveWsl } = await import("./wsl/WslEnvironment");
+					const environment = await resolveWsl(settings.wslDistro, settings.wslUser, {
+						warn: (msg: string, detail: unknown) => console.warn("[PiDeck] " + String(msg), detail),
+					});
+					await sessionScanner.configureWsl(environment);
+					skillManager.configureWsl(environment);
+					promptManager.configureWsl(environment);
+					extensionManager.configureWsl(environment);
+					if (configManager) configManager.configureWsl(environment);
+					if (xuePromptManager) xuePromptManager.configureWsl(environment);
 				} else {
 					sessionScanner.clearWsl();
 					skillManager.configureWsl(null);
@@ -3751,12 +3755,16 @@ app.whenReady().then(async () => {
 	const syncWslConfig = async () => {
 		const { wslEnabled, wslDistro, wslUser } = settingsStore.get();
 		if (wslEnabled && wslDistro && wslUser) {
-			await sessionScanner.configureWsl(wslDistro, wslUser);
-			skillManager.configureWsl(wslDistro, wslUser);
-			promptManager.configureWsl(wslDistro, wslUser);
-			extensionManager.configureWsl(wslDistro, wslUser);
-				if (configManager) configManager.configureWsl(wslDistro, wslUser);
-			if (xuePromptManager) xuePromptManager.configureWsl(null);
+			const { resolveWslEnvironment: resolveWsl2 } = await import("./wsl/WslEnvironment");
+			const wslEnv = await resolveWsl2(wslDistro, wslUser, {
+				warn: (msg: string, detail: unknown) => console.warn("[PiDeck] " + String(msg), detail),
+			});
+			await sessionScanner.configureWsl(wslEnv);
+			skillManager.configureWsl(wslEnv);
+			promptManager.configureWsl(wslEnv);
+			extensionManager.configureWsl(wslEnv);
+			if (configManager) configManager.configureWsl(wslEnv);
+			if (xuePromptManager) xuePromptManager.configureWsl(wslEnv);
 		} else {
 			sessionScanner.clearWsl();
 			skillManager.configureWsl(null);

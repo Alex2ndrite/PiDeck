@@ -45,7 +45,7 @@ import {
 } from "./FeishuConfig";
 import { chooseMessageMode, buildPostMessages, buildMarkdownCards } from "./rich-text";
 import { CardStream } from "./CardStream";
-import { buildFeishuTextChildren, sanitizeFeishuUserVisibleText, stripFeishuActionMarkers, wantsFeishuDoc } from "./docActions";
+import { buildFeishuTextChildren, sanitizeFeishuUserVisibleText, stripFeishuActionMarkers, wantsFeishuDoc, wrapHostInstruction } from "./docActions";
 import { hasExplicitFeishuFileSendIntent } from "./fileIntent";
 import { createInitialState, reduceFromPiEvent, markInterrupted, markError, markDone, type RunState } from "./CardRunState";
 import { renderRunCard } from "./CardRenderer";
@@ -112,6 +112,8 @@ export class FeishuBridge {
 	private pendingCardEvents = new Map<string, unknown[]>();
 	// 记录卡片更新失败的 session（用于 runAgent 降级兜底）
 	private cardUpdateFailed = new Set<string>();
+	/** 本轮已成功完成流式卡片终态的 session；agent_end 时跳过二次纯文本同步，避免双消息。 */
+	private cardTerminalSucceeded = new Set<string>();
 
 	private unsubscribeLocalEvents: (() => void) | null = null;
 	// 哪些 session 是飞书发起的（不需要 session mirror）
@@ -855,6 +857,9 @@ export class FeishuBridge {
 					this.streamingRunStates.delete(agentId);
 					this.streamingCards.delete(agentId);
 					this.pendingCardEvents.delete(agentId);
+					if (!cardStream.lastPatchFailed) {
+						this.cardTerminalSucceeded.add(agentId);
+					}
 				}
 			} else {
 				// 卡片尚未创建 → 缓存事件（并行模式）
@@ -866,7 +871,7 @@ export class FeishuBridge {
 		}
 
 		// 只有用户显式手动连接过的 PiDeck 会话，才把 Agent 结果同步到飞书。
-		if (!this.feishuSessions.has(agentId) && !this.feishuDrivenRuns.has(agentId) && typed.type === "agent_end") {
+		if (!this.feishuSessions.has(agentId) && !this.feishuDrivenRuns.has(agentId) && !this.cardTerminalSucceeded.has(agentId) && typed.type === "agent_end") {
 			log(`[Feishu Bridge] agent_end 触发 syncPiMessageToFeishu, agentId=${agentId.slice(0,8)}`);
 			// 优先用 session-mirror 群聊，没有则回退到 sessionToChat
 			const chatId = this.getBestChatId(agentId);

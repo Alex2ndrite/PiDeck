@@ -434,7 +434,8 @@ function ConfigModalContent(props: ConfigModalProps) {
 			return;
 		}
 		if (section === "extensions") {
-			void refreshExtensions();
+			// 切到扩展页默认吃缓存；只有点刷新按钮才 forceRefresh。
+			void refreshExtensions(false);
 			return;
 		}
 		if (section === "editors") return;
@@ -476,11 +477,12 @@ function ConfigModalContent(props: ConfigModalProps) {
 				}
 			}
 
-			if (refreshed > 0 && failed === 0) {
-				showToast(t("config.modelsRefreshed", { count: refreshed }));
-			} else if (refreshed > 0) {
-				showToast(t("config.modelsRefreshedPartial", { refreshed, failed }));
-			}
+			// pi 官方尚未支持 reload_config RPC，刷新实际为 no-op，先注释提示避免误导
+			// if (refreshed > 0 && failed === 0) {
+			// 	showToast(t("config.modelsRefreshed", { count: refreshed }));
+			// } else if (refreshed > 0) {
+			// 	showToast(t("config.modelsRefreshedPartial", { refreshed, failed }));
+			// }
 		} catch {
 			// 获取 agent 列表失败时静默忽略，模型配置已保存，下次启动 agent 生效
 		}
@@ -597,6 +599,36 @@ function ConfigModalContent(props: ConfigModalProps) {
 		setExpandedProvider(newName);
 	};
 
+	/**
+	 * 检测成功且实际走通 /v1（或 /v1beta）时，把表单里的 baseUrl 自动改成带版本路径。
+	 * 原因：检测侧会兼容补路径，但 pi 会话会原样读 models.json；不改写则「测试正常、会话 404」。
+	 * 仅改内存表单，需用户点保存后才写入磁盘。
+	 * 后端仅在确实需要改写时返回 suggestedBaseUrl，前端直接应用即可。
+	 */
+	const applySuggestedBaseUrl = useCallback(
+		(providerName: string, suggestedBaseUrl?: string) => {
+			if (!suggestedBaseUrl) return false;
+			const next = suggestedBaseUrl.replace(/\/+$/, "");
+			if (!next) return false;
+			// 函数式更新，避免 async 返回时闭包拿到旧 modelsData。
+			setModelsData((prev) => {
+				const provider = prev.providers[providerName];
+				if (!provider) return prev;
+				const current = (provider.baseUrl ?? "").replace(/\/+$/, "");
+				if (current === next) return prev;
+				return {
+					...prev,
+					providers: {
+						...prev.providers,
+						[providerName]: { ...provider, baseUrl: next },
+					},
+				};
+			});
+			return true;
+		},
+		[],
+	);
+
 	// 从 provider 的 baseUrl + apiKey 拉取可用模型列表
 	const handleFetchModels = async (providerName: string) => {
 		const provider = modelsData.providers[providerName];
@@ -627,7 +659,19 @@ function ConfigModalContent(props: ConfigModalProps) {
 					...prev,
 					[providerName]: undefined,
 				}));
-				showToast(t("config.fetchedModels", { count: result.models.length }));
+				const normalized = applySuggestedBaseUrl(
+					providerName,
+					result.suggestedBaseUrl,
+				);
+				if (normalized && result.suggestedBaseUrl) {
+					showToast(
+						t("config.baseUrlAutoNormalized", {
+							url: result.suggestedBaseUrl,
+						}),
+					);
+				} else {
+					showToast(t("config.fetchedModels", { count: result.models.length }));
+				}
 			} else {
 				// 根据 API 类型提供不同的错误提示
 				const apiTypeHint = getFetchModelsHintByApi(provider.api as string | undefined, provider.baseUrl);
@@ -674,6 +718,20 @@ function ConfigModalContent(props: ConfigModalProps) {
 				getProviderHeaders(provider.headers),
 			);
 			setTestResult({ providerName, ...result });
+			// 测试成功且走通版本路径时，自动把根路径 baseUrl 改成 /v1 等，避免会话侧失败。
+			if (result.success && result.suggestedBaseUrl) {
+				const normalized = applySuggestedBaseUrl(
+					providerName,
+					result.suggestedBaseUrl,
+				);
+				if (normalized) {
+					showToast(
+						t("config.baseUrlAutoNormalized", {
+							url: result.suggestedBaseUrl,
+						}),
+					);
+				}
+			}
 		} catch (e) {
 			setTestResult({
 				providerName,
@@ -816,7 +874,8 @@ function ConfigModalContent(props: ConfigModalProps) {
 		await loadConfig("models");
 
 		// 保存后自动刷新所有运行中的 Agent，使模型配置实时生效
-		void refreshRunningAgents();
+		// pi 官方尚未支持，先注释
+		// void refreshRunningAgents();
 	};
 
 	// ── Auth 操作 ────────────────────────────────────────
@@ -937,7 +996,8 @@ function ConfigModalContent(props: ConfigModalProps) {
 		if (isModelsFile) {
 			await loadConfig("models");
 			// Raw 保存也触发模型刷新，确保运行中的 Agent 实时生效
-			void refreshRunningAgents();
+			// pi 官方尚未支持，先注释
+			// void refreshRunningAgents();
 		} else if (rawFileName === "auth.json") await loadConfig("auth");
 		else if (rawFileName === "trust.json") await loadConfig("trust");
 		else await loadConfig("settings");
@@ -1237,11 +1297,16 @@ function ConfigModalContent(props: ConfigModalProps) {
 		}
 	};
 
-	const refreshExtensions = async () => {
+	/**
+	 * 加载扩展列表。
+	 * - forceRefresh=false：优先用主进程缓存（启动预热后通常秒开）
+	 * - forceRefresh=true：手动刷新时强制重扫，并查询 npm 更新信息
+	 */
+	const refreshExtensions = async (forceRefresh = false) => {
 		setExtensionsLoading(true);
 		setError(null);
 		try {
-			const res = await api.extensions.list();
+			const res = await api.extensions.list(forceRefresh);
 			setExtensionsData(res);
 		} catch (e) {
 			setError(e instanceof Error ? e.message : String(e));
@@ -1589,7 +1654,7 @@ function ConfigModalContent(props: ConfigModalProps) {
 							data={extensionsData}
 							loading={extensionsLoading}
 							uninstallingSource={uninstallingExtensionSource}
-							onRefresh={refreshExtensions}
+							onRefresh={() => void refreshExtensions(true)}
 							onUninstall={setUninstallExtensionConfirm}
 						/>
 					)}

@@ -233,11 +233,17 @@ export class GitService {
 		return { groups, repoRoot, inputProjectRoot, projectRoot };
 	}
 
-	/** 获取 Git 工作区状态（VS Code 风格分组）。 */
+	/** 获取 Git 工作区状态（VS Code 风格分组）。
+	 * 非 Git 仓库和 Git 未安装的错误向上抛出，让渲染层展示初始化提示或安装引导。 */
 	async getStatus(cwd: string): Promise<GitResourceGroups> {
 		try {
 			return (await this.getStatusContext(cwd)).groups;
-		} catch {
+		} catch (err) {
+			const msg = err instanceof Error ? err.message : String(err);
+			// 非 Git 仓库或 Git 未安装时抛出异常，让渲染层展示对应提示
+			if (/not a git repository|fatal:|command not found|ENOENT|spawn.*git.*ENOENT/i.test(msg)) {
+				throw err;
+			}
 			return { merge: [], index: [], workingTree: [], untracked: [] };
 		}
 	}
@@ -363,7 +369,7 @@ export class GitService {
 	 * 获取当前暂存区（staged）的完整 diff 文本，用于 AI 生成提交摘要。
 	 * 优先返回暂存区的 diff，无暂存文件时返回工作区 diff。
 	 * @param cwd 仓库工作目录
-	 * @param maxBytes 最大返回字节数（默认 100KB），超出截断
+	 * @param maxBytes 最大返回字符数（默认 100KB），超出截断。maxBuffer 固定为 10MB 确保 git 完整输出。
 	 */
 	async getStagedDiff(cwd: string, maxBytes = 100 * 1024): Promise<string> {
 		try {
@@ -372,7 +378,7 @@ export class GitService {
 				cwd,
 				encoding: "utf8",
 				timeout: GIT_MUTATION_TIMEOUT_MS,
-				maxBuffer: maxBytes + 1024,
+				maxBuffer: 10 * 1024 * 1024,
 			});
 			// 无暂存内容时直接返回空，不再回退到工作区 diff；由调用方提示用户先暂存
 			if (!stdout.trim()) return "";
@@ -726,12 +732,19 @@ export class GitService {
 		await execFileAsync("git", ["rebase", "--onto", parentHash.trim(), hash], { cwd, timeout: GIT_MUTATION_TIMEOUT_MS });
 	}
 
+	/** Push：将当前分支推送到远程 */
 	async push(cwd: string): Promise<void> {
 		await execFileAsync("git", ["push"], { cwd, timeout: GIT_MUTATION_TIMEOUT_MS * 4 });
 	}
 
+	/** Pull：从远程拉取并合并到当前分支 */
 	async pull(cwd: string): Promise<void> {
 		await execFileAsync("git", ["pull"], { cwd, timeout: GIT_MUTATION_TIMEOUT_MS * 4 });
+	}
+
+	/** Fetch：从远程获取最新数据但不合并 */
+	async fetch(cwd: string): Promise<void> {
+		await execFileAsync("git", ["fetch"], { cwd, timeout: GIT_MUTATION_TIMEOUT_MS * 4 });
 	}
 }
 

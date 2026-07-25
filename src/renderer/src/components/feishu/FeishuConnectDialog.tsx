@@ -47,15 +47,13 @@ export function FeishuConnectDialog({ onClose, onConnect, onTest, connecting, on
 		}
 	}, [appId, appSecret, onTest]);
 
-		/** Feishu login/guide pages must open in system default browser */
-	const openSystemExternal = useCallback(async (url: string) => {
-		const appApi = (window as any)?.piDesktop?.app;
-		if (appApi?.openExternal) {
-			await appApi.openExternal(url, true);
+	const openExternal = useCallback(async (url: string) => {
+		if (onOpenExternal) {
+			await onOpenExternal(url);
 		} else {
 			window.open(url, "_blank", "noopener,noreferrer");
 		}
-	}, []);
+	}, [onOpenExternal]);
 
 	const handleConnect = useCallback(async () => {
 		if (!appId.trim() || !appSecret.trim()) {
@@ -203,7 +201,7 @@ export function FeishuConnectDialog({ onClose, onConnect, onTest, connecting, on
 					{showHelp && (
 						<div className="feishu-help-content">
 							<p>1. 打开{" "}
-								<button className="feishu-help-link" onClick={() => void openSystemExternal("https://open.feishu.cn/app")}>
+								<button className="feishu-help-link" onClick={() => void openExternal("https://open.feishu.cn/app")}>
 									飞书开放平台
 								</button>
 							</p>

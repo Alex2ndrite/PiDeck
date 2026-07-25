@@ -1844,7 +1844,6 @@ export function App() {
       isSameSessionPath(
         candidate.parentSessionPath,
         session.filePath,
-        candidate.wsl ? "wsl" : "native",
       ),
     ).length;
     if (childCount === 0) {

@@ -644,8 +644,8 @@ const api = {
 			ipcRenderer.invoke(ipcChannels.yaoPromptsImport, slug, category) as Promise<PiPromptTemplateSummary>,
 	},
 	extensions: {
-		list: () =>
-			ipcRenderer.invoke(ipcChannels.extensionsList) as Promise<PiExtensionListResult>,
+		list: (forceRefresh?: boolean) =>
+			ipcRenderer.invoke(ipcChannels.extensionsList, forceRefresh) as Promise<PiExtensionListResult>,
 		uninstall: (source: string, scope?: "user" | "project" | "unknown") =>
 			ipcRenderer.invoke(ipcChannels.extensionsUninstall, source, scope) as Promise<void>,
 		install: (source: string) =>
@@ -732,6 +732,7 @@ const api = {
 				success: boolean;
 				models?: Array<{ id: string; name?: string }>;
 				error?: string;
+				suggestedBaseUrl?: string;
 			}>,
 		/** 快速测试 provider 连接：发送一条最小请求验证配置是否正常 */
 		testProvider: (
@@ -753,6 +754,7 @@ const api = {
 				error?: string;
 				requestUrl?: string;
 				requestBody?: string;
+				suggestedBaseUrl?: string;
 			}>,
 	},
 	agents: {

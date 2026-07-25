@@ -1,7 +1,7 @@
 import { Fragment, type ReactNode } from "react";
 import { ChevronDown, Trash2 } from "lucide-react";
 import type { AgentTab, Project, SessionRecord, SessionSummary } from "../../../../shared/types";
-import { filterAgentsForSidebarDisplay, getProjectAgentSessionDisplay, getSessionRowKey } from "../../agentListDisplay";
+import { getProjectAgentSessionDisplay } from "../../agentListDisplay";
 import { sessionRecordToSummary } from "../../atoms";
 import { t } from "../../i18n";
 import { filterSidebarSessions, getBoundSidebarRuntimeAgent, type SidebarController } from "../../hooks/useSidebarController";
@@ -45,12 +45,7 @@ export function SessionTree(props: {
   const summaries = filterSidebarSessions(allSummaries, filter)
     .filter((session) => matchesSearch(`${session.name ?? ""}${session.preview}${session.filePath}`, search));
   const projectAgents = props.agents.filter((agent) => agent.projectId === props.project.id);
-  const displayAgents = filterAgentsForSidebarDisplay({
-    agents: projectAgents,
-    allSessions: allSummaries,
-    visibleSessions: summaries,
-    sources: filter,
-  });
+  const displayAgents = projectAgents;
   const display = getProjectAgentSessionDisplay({
     agents: displayAgents,
     sessions: summaries,
@@ -70,7 +65,7 @@ export function SessionTree(props: {
   const renderSubagent = (session: SessionSummary, label: ReactNode) => {
     return (
       <button
-        key={getSessionRowKey(session)}
+        key={session.id}
         className={`conversation agent-row session-row codex-subagent-sidebar-row${session.id === props.currentSessionId ? " active" : ""}`}
         title={session.filePath}
         onContextMenu={(event) => openContext(event, session)}
@@ -142,7 +137,7 @@ export function SessionTree(props: {
           </Fragment>;
         }
         const runtime = getBoundSidebarRuntimeAgent(props.controller.catalog, child.session.id);
-        return <Fragment key={getSessionRowKey(child.session)}>
+        return <Fragment key={child.session.id}>
           <button
             className={`conversation agent-row session-row${child.session.id === props.currentSessionId ? " active" : ""}`}
             title={child.session.filePath}

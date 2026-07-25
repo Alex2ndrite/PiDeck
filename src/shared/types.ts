@@ -70,6 +70,7 @@ export type AgentTab = {
 	wslDistro?: string;
 	wslUser?: string;
 	importedSourceId?: string;
+	noSession?: boolean;
 	/** Monotonic binding generation assigned by SessionRuntimeCoordinator. */
 	runtimeGeneration?: number;
 	createdAt: number;
@@ -1094,6 +1095,7 @@ export type CreateAgentInput = {
 	wslDistro?: string;
 	wslUser?: string;
 	importedSourceId?: string;
+	noSession?: boolean;
 };
 
 export type ForkMessage = {

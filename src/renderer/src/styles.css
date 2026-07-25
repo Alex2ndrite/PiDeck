@@ -19876,6 +19876,65 @@ body.is-git-pane-resizing, body.is-git-pane-resizing * { cursor: row-resize !imp
   .git-pane-header-actions .git-compact-filter-label { max-width: 60px; }
 }
 
+/* ── AppErrorBoundary ─────────────────────────────────── */
+.app-error-boundary {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: var(--space-6);
+  background:
+    radial-gradient(900px 420px at 50% 20%, color-mix(in srgb, var(--color-danger) 10%, transparent), transparent 65%),
+    var(--color-bg-app);
+  color: var(--color-text-primary);
+}
+.app-error-boundary-card {
+  width: min(640px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-panel);
+  box-shadow: var(--shadow-xl);
+}
+.app-error-boundary-title {
+  font-size: var(--font-size-title);
+  font-weight: 650;
+}
+.app-error-boundary-message {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
+  word-break: break-word;
+}
+.app-error-boundary-help {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-control);
+}
+.app-error-boundary-stack {
+  margin: 0;
+  max-height: 220px;
+  overflow: auto;
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--color-code-bg);
+  color: var(--color-code-text);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-caption);
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.app-error-boundary-actions {
+  display: flex;
+  gap: var(--space-2);
+  justify-content: flex-end;
+  margin-top: var(--space-1);
+}
+
 
 
 .app-notice:not(.app-notice-error):not(.app-notice-warning) {
@@ -19884,12 +19943,26 @@ body.is-git-pane-resizing, body.is-git-pane-resizing * { cursor: row-resize !imp
 /* accent 小圆点 */
 .app-notice::before {
   content: "";
---
+  display: block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  flex-shrink: 0;
+  margin-top: 7px;
+}
 .app-notice.app-notice-error::before {
   background: var(--color-danger);
 }
 .app-notice.app-notice-warning::before {
   background: var(--color-warning);
+}
+.app-notice.app-notice-error {
+  border: 1px solid color-mix(in srgb, var(--color-danger) 28%, transparent);
+}
+.app-notice.app-notice-warning {
+  border: 1px solid color-mix(in srgb, var(--color-warning) 28%, transparent);
+}
 
 .chat-list-pane.v3-braun .sidebar-body .brand-lockup {
   gap: 14px;

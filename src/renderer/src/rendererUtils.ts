@@ -82,12 +82,12 @@ export function isReplacementForPendingAgent(agent: AgentTab, pending: PendingAg
     const startedAt = pending.pendingStartedAt ?? pending.createdAt;
     // 重启占位只匹配本次重启之后出现的新进程，避免误选同项目下已有的同名 Agent。
     if (agent.createdAt < startedAt - 1000) return false;
-    if (isSameSessionPath(agent.sessionPath, pending.sessionPath, environment)) return true;
+    if (isSameSessionPath(agent.sessionPath, pending.sessionPath)) return true;
     return !pending.sessionPath && agent.title === pending.title;
   }
 
   if (!pending.id.startsWith("pending-")) return false;
-  if (isSameSessionPath(agent.sessionPath, pending.sessionPath, environment)) return true;
+  if (isSameSessionPath(agent.sessionPath, pending.sessionPath)) return true;
   if (pending.sessionPath && agent.createdAt >= pending.createdAt - 1000)
     return true;
   return (

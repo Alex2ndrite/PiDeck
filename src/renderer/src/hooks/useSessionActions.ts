@@ -158,7 +158,6 @@ export function useSessionActions(options: UseSessionActionsOptions) {
               isSameSessionPath(
                 candidate.filePath,
                 session.filePath,
-                candidate.environment,
               ),
           );
     if (!record) {
@@ -171,7 +170,6 @@ export function useSessionActions(options: UseSessionActionsOptions) {
             isSameSessionPath(
               candidate.filePath,
               session.filePath,
-              candidate.environment,
             ),
         );
       } catch (error) {
