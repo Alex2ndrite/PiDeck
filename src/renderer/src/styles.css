@@ -903,7 +903,7 @@ select:focus-visible {
   --list-width: 190px;
   --list-expanded-width: 190px;
   --list-hover-width: 250px;
-  --drawer-width: 270px;
+  --drawer-width: 320px;
   /* 抽屉列宽由 JS 按实际展开状态注入，短过渡与面板滑动同步。 */
   --drawer-col-w: 0px;
   --drawer-splitter-w: 0px;
@@ -1148,6 +1148,43 @@ body.is-resizing .wechat-shell {
 .logo-mark::before {
   content: "";
   position: absolute;
+.brand-lockup {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  height: 34px;
+  /* 整体右移，避免贴侧栏左缘 */
+  margin-left: 8px;
+  color: var(--color-text-primary);
+  min-width: 0;
+  line-height: 0;
+}
+
+.pi-logo-canvas-stage {
+  all: unset;
+  box-sizing: border-box;
+  display: block;
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  line-height: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.pi-logo-canvas-stage:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.pi-logo-canvas {
+  display: block;
+  width: 34px;
+  height: 34px;
+  margin: 0;
   inset: 5px 6px auto auto;
   width: 8px;
   height: 8px;
