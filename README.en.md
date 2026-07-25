@@ -8,7 +8,7 @@
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Electron](https://img.shields.io/badge/Electron-38-47848f)
 ![React](https://img.shields.io/badge/React-19-61dafb)
-![Version](https://img.shields.io/badge/version-0.6.5-green)
+![Version](https://img.shields.io/badge/version-0.6.6-yellow)
 
 **PiDeck** is an open-source pi desktop workbench for managing pi Agent sessions across local project folders, with import support for local Codex and Claude sessions so you can browse and restore them in one place. Built with Electron + TypeScript, it provides multi-project workspace management, AI session history, Git integration, built-in terminal, visual config management, and plugin extensions—so local AI coding assistants stay consistent, traceable, and configurable across projects.
 
@@ -20,24 +20,21 @@
 
 ## 📋 Changelog
 
-> **Latest: v0.6.5** (2026-07-13)
+> **Latest: v0.6.6** (2026-07-24)
 
-### v0.6.5 Updates
-- 🚀 **Prompt Templates System**: Full template management, built-in templates,
-  `/` picker with variable hints
-- 🚀 **Prompt/Skill Store**: Search, preview, import from prompts.chat
-  and Yao Open Prompts (121 Chinese prompts)
-- 🚀 **Git Worktree Workspace**: Branch management, session grouping by worktree
-- 🚀 **Multi-Select Messages**: Select, share, copy messages in batch
-- 🚀 **Built-in Browser Preview**: Browse in the right drawer with tabs, fullscreen, and mobile viewport presets
-- 🚀 **Session Manager**: Modal with multi-select delete, source filter
-- 🚀 **External Editor Integration**: Right-click project → "Open with" → pick editor
-- 🚀 **xhigh reasoning level** support
-- ✨ Common MonacoEditor component, unified icon buttons, unified modal sizing
-- 🐛 Windows startup crash fix (0x80000003)
-- 🐛 Pi compaction restart disconnect fix, Extension RPC lifecycle fix
-- 🐛 Interleaved thinking/tool/answer rendering, fragmented text rendering, dynamic showThinking
-- 🔧 Session open performance optimization, IPC payload reduction, cleanup
+### v0.6.6 Release Highlights
+- 🚀 **Sidebar brand lockup redesign**: Cropped pi logo + Plantin wordmark, agent start/stop animation
+- 🚀 **Multi-tab file editor**: Up to 5 concurrent tabs, modal/drawer dual mode, diff comparison
+- 🚀 **Session reference (@-mention)**: Type & to pick sessions, select messages or full context
+- 🚀 **Feishu/Lark integration**: Bi-directional chat, streaming cards, auto group creation
+- 🚀 **Git major rewrite**: VS Code-style 3-tab panel + AI commit messages + Git graph + advanced ops
+- 🚀 **XuePrompt Chinese Prompt Store**: SQLite with 4000+ prompts, categorized/search/one-click import
+- 🚀 **Composer redesign**: OpenCode-style bottom bar: mode/Prompt/attachment/model/Think
+- 🚀 **Client message queue**: Queue while agent busy, retract to edit
+- 🚀 **Git Push / Pull**: Direct push/pull from Changes pane
+- ✨ Settings redesign (global save/cancel), per-zone font config, file sidebar enhancements, diff toggle fix
+- 🐛 Numerous bug fixes (Monaco CSP, white screen crash, WSL paths, Chinese encoding, etc.)
+- 🧪 Experimental WSL support
 
 [View Full Changelog →](CHANGELOG.md)
 
