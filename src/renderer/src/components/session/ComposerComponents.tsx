@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, type ReactNode } from "react";
-import { ChevronDown, ChevronLeft, ChevronsDownUp, ChevronsUpDown, Eye, FileText, MoveDown, MoveUp, Star, Search, X } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronsDownUp, ChevronsUpDown, Eye, FileText, MoveDown, MoveUp, Paperclip, Star, Search, X } from "lucide-react";
 import { t, type TranslationKey } from "../../i18n";
 import { IconButton } from "../ui/IconButton";
 import type { AppSettings, AgentTab, Project, AgentRuntimeState, ComposerAgentMode, AvailableModel } from "../../../../shared/types";
@@ -114,6 +114,8 @@ export function ComposerToolbar(props: {
 	feishuIndicator?: ReactNode;
 	/** 会话文件路径卡片,渲染在思考按钮之后、feishuIndicator 之后 */
 	pathIndicator?: ReactNode;
+	/** 文件引用按钮回调 */
+	onAttachFile?: () => void;
 
 }) {
 	const ctxPercent = props.state?.contextPercent;
@@ -152,7 +154,7 @@ export function ComposerToolbar(props: {
 					{t("app.composerModeCancelPlan")}
 				</button>
 			)}
-			<button onClick={props.onPickModel} disabled={props.disabled}>
+			<button className="model" onClick={props.onPickModel} disabled={props.disabled}>
 				{t("app.model")}: {props.state?.provider ? `${props.state.provider}/` : ""}{props.state?.modelName ?? "-"}
 			</button>
 			<button
@@ -162,9 +164,19 @@ export function ComposerToolbar(props: {
 			>
 				{t("app.promptTemplatePickerTitle")}
 			</button>
-			<button onClick={props.onPickThinking} disabled={props.disabled}>
+			<button className="thinking" onClick={props.onPickThinking} disabled={props.disabled}>
 				{t("app.think")}: {thinkingDisplay}
 			</button>
+			{props.onAttachFile && (
+				<button
+					onClick={props.onAttachFile}
+					disabled={props.disabled}
+					title={t("menu.attachFile")}
+				>
+					<Paperclip size={14} strokeWidth={1.8} />
+					{t("menu.attachFile")}
+				</button>
+			)}
 			{props.feishuIndicator}
 			{props.pathIndicator}
 

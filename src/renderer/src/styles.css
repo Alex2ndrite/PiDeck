@@ -9669,33 +9669,57 @@ body.is-composer-resizing .composer-resize-handle::after {
 
 .composer-toolbar {
   display: flex;
-  gap: var(--space-2);
+  gap: 4px;
   align-items: center;
   padding: 10px 12px 6px 12px;
   flex-wrap: wrap;
 }
 .composer-toolbar button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   height: 26px;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: 999px;
-  background: var(--color-chat-card-bg);
-  color: var(--color-text-secondary);
-  padding: 0 12px;
+  padding: 0 8px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-tertiary);
   font-size: var(--font-size-caption);
-  font-weight: 500;
-  transition:
-    background-color 0.15s,
-    border-color 0.15s,
-    color 0.15s;
+  font-family: var(--font-family-base);
+  cursor: pointer;
+  transition: all 0.12s ease;
+  white-space: nowrap;
 }
 .composer-toolbar button:hover {
   color: var(--color-text-primary);
-  border-color: var(--color-border-strong);
   background: var(--color-bg-hover);
 }
+.composer-toolbar button:active {
+  background: var(--color-bg-active);
+}
 .composer-toolbar button:disabled {
-  opacity: 0.6;
+  opacity: 0.4;
   cursor: not-allowed;
+}
+.composer-toolbar button:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 1px;
+}
+.composer-toolbar button.composer-mode-active {
+  color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+}
+.composer-toolbar button.composer-mode-active:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-accent) 18%, transparent);
+}
+.composer-toolbar button.composer-mode-cancel {
+  color: var(--color-danger);
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.composer-toolbar button.composer-mode-cancel:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-danger) 8%, transparent);
 }
 .composer-toolbar button.compacting {
   color: var(--color-warning);
@@ -9710,34 +9734,19 @@ body.is-composer-resizing .composer-resize-handle::after {
 .composer-toolbar button:disabled.compacting {
   opacity: 0.7;
 }
-.composer-toolbar button.composer-mode-active {
-  background: var(--color-text-primary);
-  color: var(--color-bg-panel);
-  border-color: var(--color-text-primary);
-  font-weight: 600;
+/* model/thinking 按钮更小，使用业务等宽字体 */
+.composer-toolbar button.model,
+.composer-toolbar button.thinking {
+  font-size: var(--font-size-micro);
+  font-family: var(--font-family-business);
+  padding: 0 6px;
+  height: 22px;
 }
-.composer-toolbar button.composer-mode-active:hover:not(:disabled) {
-  background: var(--color-text-primary);
-  color: var(--color-bg-panel);
-  opacity: 0.9;
+.composer-toolbar button.thinking {
+  color: var(--color-accent);
 }
-.composer-toolbar button.composer-mode-cancel {
-  color: var(--color-danger);
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-}
-.composer-toolbar button.composer-mode-cancel:hover:not(:disabled) {
-  background: color-mix(
-    in srgb,
-    var(--color-danger) 12%,
-    var(--color-bg-panel)
-  );
-  border-color: color-mix(
-    in srgb,
-    var(--color-danger) 30%,
-    var(--color-border-strong)
-  );
+.composer-toolbar button.thinking:hover {
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
 }
 
 @keyframes compact-pulse {
@@ -18955,7 +18964,7 @@ html[data-theme="dark"] .scratch-pad-md mark {
   color: var(--color-text-tertiary);
   background: var(--color-bg-hover);
   padding: 1px 6px;
-  border-radius: 999px;
+  border-radius: var(--radius-md);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
@@ -19674,6 +19683,32 @@ body.is-git-pane-resizing, body.is-git-pane-resizing * { cursor: row-resize !imp
 .git-compare-files { min-height: 0; flex: 1; overflow: auto; overscroll-behavior: contain; }
 .git-spin { animation: git-spin 1s linear infinite; }
 @keyframes git-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+/* Git 未安装时的提示 */
+.git-not-installed {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-10) var(--space-4);
+  text-align: center;
+}
+.git-not-installed-icon {
+  font-size: 32px;
+  line-height: 1;
+  opacity: 0.6;
+}
+.git-not-installed-title {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-body);
+  font-weight: 600;
+}
+.git-not-installed-desc {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-body);
+  max-width: 360px;
+}
 
 /* 未初始化 Git 仓库时的提示 */
 .git-not-init {

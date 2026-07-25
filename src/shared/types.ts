@@ -360,6 +360,8 @@ export type AppSettings = {
 	piEnvironmentChecked: boolean;
 	/** 是否启用会话右侧的 Git 源代码管理入口与面板，默认开启以保持升级前行为。 */
 	enableGitManagement: boolean;
+	/** Git 提交摘要生成提示词模板，{diff} 会被替换为实际 diff 内容 */
+	gitCommitMessagePrompt: string;
 	/** 关闭窗口时隐藏到系统托盘而不是退出 */
 	closeToTray: boolean;
 	/** 会话结束时发送系统通知 */

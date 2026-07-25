@@ -32,6 +32,45 @@ type ProxyDraft = Pick<
 	"desktopProxyEnabled" | "desktopProxyUrl" | "desktopProxyBypass"
 >;
 
+function SettingTextarea(props: {
+	title: string;
+	description?: string;
+	value: string;
+	onChange: (value: string) => void;
+}) {
+	return (
+		<div className="setting-field">
+			<div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+				<strong style={{ color: "var(--color-text-primary)", fontSize: "var(--font-size-control)", fontWeight: 500 }}>
+					{props.title}
+				</strong>
+				{props.description && (
+					<small style={{ color: "var(--color-text-tertiary)", fontSize: "var(--font-size-caption)", lineHeight: 1.4 }}>
+						{props.description}
+					</small>
+				)}
+			</div>
+			<textarea
+				value={props.value}
+				rows={8}
+				onChange={(event) => props.onChange(event.target.value)}
+				style={{
+					width: "100%",
+					fontFamily: "var(--font-family-mono)",
+					fontSize: "var(--font-size-sm)",
+					padding: "var(--space-2) var(--space-3)",
+					border: "1px solid var(--color-border-subtle)",
+					borderRadius: "var(--radius-sm)",
+					background: "var(--color-bg-input)",
+					color: "var(--color-text-primary)",
+					resize: "vertical",
+					lineHeight: "var(--line-height-body)",
+				}}
+			/>
+		</div>
+	);
+}
+
 function SettingsSection(props: {
 	title: string;
 	description?: string;
@@ -448,14 +487,6 @@ export function SettingsModal(props: {
 										}
 									/>
 									<SettingSwitch
-										title={t("settings.gitManagement")}
-										description={t("settings.gitManagementDesc")}
-										checked={props.settings.enableGitManagement}
-										onChange={(checked) =>
-											addPatch({ enableGitManagement: checked })
-										}
-									/>
-									<SettingSwitch
 										title={t("settings.nativeTitleBar")}
 										checked={props.settings.useNativeTitleBar}
 										onChange={(checked) =>
@@ -704,6 +735,24 @@ export function SettingsModal(props: {
 											addPatch({ telemetryEnabled: checked })
 										}
 									/>
+								</SettingsSection>
+								<SettingsSection title={t("settings.git")}>
+									<SettingSwitch
+										title={t("settings.gitManagement")}
+										description={t("settings.gitManagementDesc")}
+										checked={props.settings.enableGitManagement}
+										onChange={(checked) =>
+											addPatch({ enableGitManagement: checked })
+										}
+									/>
+									{props.settings.enableGitManagement && (
+										<SettingTextarea
+											title={t("settings.gitCommitMessagePrompt")}
+											description={t("settings.gitCommitMessagePromptDesc")}
+											value={props.settings.gitCommitMessagePrompt}
+											onChange={(value) => addPatch({ gitCommitMessagePrompt: value })}
+										/>
+									)}
 								</SettingsSection>
 							</>
 						)}
