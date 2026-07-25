@@ -133,11 +133,11 @@ export function ImTab(_props: Props) {
 
 	const api = (window as unknown as { piDesktop?: { feishu?: FeishuApiRaw } }).piDesktop?.feishu;
 
-	/** 使用主进程能力打开外部链接；比原生 <a target="_blank"> 更可靠，避免 Electron 内嵌窗口导航被拦截。 */
-	const openExternal = useCallback(async (url: string) => {
-		const appApi = (window as unknown as { piDesktop?: { app?: { openExternal: (u: string) => Promise<void> } } }).piDesktop?.app;
+	/** 使用主进程能力打开外部链接；forceSystem=true 强制系统浏览器（如飞书登录/指南页不适合内置浏览器）。 */
+	const openExternal = useCallback(async (url: string, forceSystem?: boolean) => {
+		const appApi = (window as unknown as { piDesktop?: { app?: { openExternal: (u: string, forceSystem?: boolean) => Promise<void> } } }).piDesktop?.app;
 		if (appApi?.openExternal) {
-			await appApi.openExternal(url);
+			await appApi.openExternal(url, forceSystem);
 		} else {
 			window.open(url, "_blank", "noopener,noreferrer");
 		}
@@ -339,7 +339,7 @@ export function ImTab(_props: Props) {
 						</button>
 						<button
 							className="config-btn"
-							onClick={() => openExternal("https://xid01i1952l.feishu.cn/wiki/Yf8Gw5QW3is7xdkuG98cvRVen5d?from=from_copylink")}
+							onClick={() => openExternal("https://xid01i1952l.feishu.cn/wiki/Yf8Gw5QW3is7xdkuG98cvRVen5d?from=from_copylink", true)}
 						>
 							{t("config.im.onlineGuide")}
 						</button>
@@ -673,7 +673,7 @@ export function ImTab(_props: Props) {
 							<p><strong>{t("config.im.guideMethodA")}</strong></p>
 							<p style={{ fontSize: "var(--font-size-micro)", color: "var(--color-text-tertiary)" }}>{t("config.im.guideMethodADesc")}</p>
 							<ol>
-								<li>{t("config.im.guideMethodAStep1a")}<br /><button className="config-link-like" onClick={() => openExternal("https://open.feishu.cn/app")}>https://open.feishu.cn/app</button> → {t("config.im.guideMethodAStep1b")}</li>
+								<li>{t("config.im.guideMethodAStep1a")}<br /><button className="config-link-like" onClick={() => openExternal("https://open.feishu.cn/app", true)}>https://open.feishu.cn/app</button> → {t("config.im.guideMethodAStep1b")}</li>
 								<li>{t("config.im.guideMethodAStep2")}</li>
 								<li>{t("config.im.guideMethodAStep3")}</li>
 								<li>{t("config.im.guideMethodAStep4")}</li>
@@ -683,7 +683,7 @@ export function ImTab(_props: Props) {
 							<p style={{ marginTop: 16 }}><strong>{t("config.im.guideMethodB")}</strong></p>
 							<p style={{ fontSize: "var(--font-size-micro)", color: "var(--color-text-tertiary)" }}>{t("config.im.guideMethodBDesc")}</p>
 							<ol>
-								<li>{t("config.im.guideMethodBStep1a")}<br /><button className="config-link-like" onClick={() => openExternal("https://open.feishu.cn/app")}>https://open.feishu.cn/app</button> → {t("config.im.guideMethodBStep1b")}</li>
+								<li>{t("config.im.guideMethodBStep1a")}<br /><button className="config-link-like" onClick={() => openExternal("https://open.feishu.cn/app", true)}>https://open.feishu.cn/app</button> → {t("config.im.guideMethodBStep1b")}</li>
 								<li>{t("config.im.guideMethodBStep2")}</li>
 								<li>{t("config.im.guideMethodBStep3")}<br />
 									<ul className="config-im-guide-perms">

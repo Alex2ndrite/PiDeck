@@ -66,7 +66,15 @@ export class SkillManager {
 		const skills = (
 			await Promise.all(this.locations.map((location) => this.scanLocation(location)))
 		).flat();
-		return { locations: this.locations, skills };
+		// Deduplicate by name (case-insensitive), prefer pi-global entries
+		const seen = new Map<string, typeof skills[number]>();
+		for (const skill of skills) {
+			const key = skill.name.toLowerCase();
+			if (!seen.has(key) || (seen.get(key)!.sourceId !== "pi-global" && skill.sourceId === "pi-global")) {
+				seen.set(key, skill);
+			}
+		}
+		return { locations: this.locations, skills: Array.from(seen.values()) };
 	}
 
 	async create(input: CreatePiSkillInput): Promise<PiSkillSummary> {
