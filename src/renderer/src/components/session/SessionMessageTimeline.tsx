@@ -199,6 +199,35 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
     }
     return undefined;
   }, [activeMessages]);
+
+  // Only show resend when last user message is followed by error/abort (not normal assistant)
+  const resendableMessageIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (let i = activeMessages.length - 1; i >= 0; i--) {
+      const msg = activeMessages[i];
+      if (msg.role !== "user") continue;
+      let hasAbortOrError = false;
+      for (let j = i + 1; j < activeMessages.length; j++) {
+        const next = activeMessages[j];
+        if (next.role === "user") break;
+        if (next.role === "error") { hasAbortOrError = true; break; }
+        if (next.role === "system") {
+          const meta = next.meta as Record<string, unknown> | undefined;
+          if (meta?.i18nKey === "app.abortRequested") { hasAbortOrError = true; break; }
+        }
+        if (next.role === "assistant" && next.text?.trim()) {
+          // Only block if assistant completed normally (done marker); partial output may precede error
+          const am = next.meta as Record<string, unknown> | undefined;
+          if (am?.done === true || am?.stopReason) break;
+          continue;
+        }
+      }
+      if (hasAbortOrError) ids.add(msg.id);
+      break;
+    }
+    return ids;
+  }, [activeMessages]);
+
   const isAwaitingAssistant = Boolean(
     hasActiveConversation &&
       !cancellingUi &&
@@ -432,6 +461,7 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
                     onDeleteMessage={props.onDeleteMessage}
                     agentRunning={isAgentBusy}
                     isLastUserMessage={message.id === lastUserMessageId}
+                    showResendButton={resendableMessageIds.has(message.id)}
                     validCommandNames={props.validCommandNames}
                     validFilePaths={props.validFilePaths}
                     onEnterMultiSelect={() => setMultiSelectOpen(true)}

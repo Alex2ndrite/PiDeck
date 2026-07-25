@@ -1693,8 +1693,10 @@ export const UserBubble = memo(function UserBubble(props: {
 	onResendUserMessage?: (message: ChatMessage) => void;
 	onEditMessage?: (messageId: string, newText: string) => void;
 	onDeleteMessage?: (messageId: string) => void;
-	/** 是否为该 agent 消息列表中的最后一条用户消息，用于控制「重发」按钮的显隐 */
+	/** 是否为最后一条用户消息，用于控制重发按钮的显隐 */
 	isLastUserMessage?: boolean;
+	/** 仅当该消息后出现 error/abort 时显示重发（取代无条件 isLastUserMessage） */
+	showResendButton?: boolean;
 	validCommandNames?: Set<string>;
 	validFilePaths?: Set<string>;
 	/** Agent 正在处理请求或流式输出中时禁用编辑/删除等操作按钮 */
@@ -1851,7 +1853,7 @@ export const UserBubble = memo(function UserBubble(props: {
 								<Trash size={14} />
 							</button>
 						)}
-						{props.isLastUserMessage && props.onResendUserMessage && (
+						{((props.isLastUserMessage || props.showResendButton) && props.onResendUserMessage) && (
 							<button
 								className="user-turn-action-btn"
 								onClick={() => props.onResendUserMessage?.(message)}

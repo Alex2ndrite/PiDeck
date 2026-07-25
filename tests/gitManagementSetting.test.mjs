@@ -26,7 +26,7 @@ describe("optional Git management entry", () => {
   test("exposes a localized settings switch", () => {
     assert.match(settingsModal, /title=\{t\("settings\.gitManagement"\)\}/);
     assert.match(settingsModal, /description=\{t\("settings\.gitManagementDesc"\)\}/);
-    assert.match(settingsModal, /props\.onChange\(\{ enableGitManagement: checked \}\)/);
+    assert.match(settingsModal, /addPatch\(\{ enableGitManagement: checked \}\)/);
     assert.equal(i18n.match(/"settings\.gitManagement":/g)?.length, 2);
     assert.equal(i18n.match(/"settings\.gitManagementDesc":/g)?.length, 2);
   });

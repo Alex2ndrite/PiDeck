@@ -8,6 +8,7 @@ import type {
 } from "../../../shared/types";
 import {
   bindSessionRuntimeAtom,
+  cacheSessionMessagesAtom,
   currentSessionIdAtom,
   sessionAttachmentsByIdAtom,
   sessionComposerModeByIdAtom,
@@ -126,6 +127,7 @@ export function useSessionSend(options: UseSessionSendOptions) {
   const store = useStore();
   const setDraft = useSetAtom(setSessionDraftAtom);
   const setAttachments = useSetAtom(setSessionAttachmentsAtom);
+  const setCacheMessages = useSetAtom(cacheSessionMessagesAtom);
   const setSendState = useSetAtom(setSessionSendStateAtom);
   const bindRuntime = useSetAtom(bindSessionRuntimeAtom);
   const upsertSession = useSetAtom(upsertSessionAtom);
@@ -184,14 +186,15 @@ export function useSessionSend(options: UseSessionSendOptions) {
     const trimmedMessage = message.trim();
     if (/^\/compact(?:\s|$)/.test(trimmedMessage)) {
       if (!runtimeAgentId) {
-        options.showCompactUnavailable?.();
+        // No Agent yet — let normal send path start Agent first;
+        // pi will handle /compact command once active.
+      } else {
+        const compactPrompt = trimmedMessage.replace(/^\/compact\s*/, "").trim();
+        clearSnapshot(sessionId);
+        options.resetComposerUi?.();
+        await options.compact(runtimeAgentId, compactPrompt || undefined);
         return;
       }
-      const compactPrompt = trimmedMessage.replace(/^\/compact\s*/, "").trim();
-      clearSnapshot(sessionId);
-      options.resetComposerUi?.();
-      await options.compact(runtimeAgentId, compactPrompt || undefined);
-      return;
     }
 
     sendingSessionIdsRef.current.add(sessionId);
@@ -228,6 +231,24 @@ export function useSessionSend(options: UseSessionSendOptions) {
       },
     });
     clearSnapshot(sessionId);
+
+    // Optimistic: show user message immediately, even if Agent hasn't started yet.
+    // Agent's subsequent messages:event will replace this with the authoritative list.
+    if (!runtimeAgentId) {
+      setCacheMessages({
+        sessionId,
+        messages: [{
+          id: requestId,
+          agentId: "",
+          role: "user" as const,
+          text: message,
+          timestamp: Date.now(),
+          images: imageSnapshot,
+        }],
+        source: "runtime" as const,
+      });
+    }
+
     options.resetComposerUi?.();
 
     let preparedMessage = message;

@@ -49,13 +49,8 @@ export function ComposerPickerHost(props: ComposerPickerHostProps) {
   useEffect(() => {
     if (props.picker !== "model" || !record) return;
     const sequence = ++modelLoadSequenceRef.current;
-    const handle = runtime?.agentId
-      ? { agentId: runtime.agentId, generation: runtime.runtimeGeneration }
-      : undefined;
-    const request = handle
-      ? desktopApi.agents.availableModels(handle.agentId)
-      : desktopApi.projects.listModels(record.projectId);
-    void request.then((next) => {
+    // Always read models.json directly — same source as Agent RPC, no transition flicker
+    void desktopApi.projects.listModels(record.projectId).then((next) => {
       if (sequence === modelLoadSequenceRef.current) setModels(next);
     }).catch((error) => {
       if (sequence === modelLoadSequenceRef.current) {
@@ -63,7 +58,7 @@ export function ComposerPickerHost(props: ComposerPickerHostProps) {
         showNotice(error instanceof Error ? error.message : String(error), 4000);
       }
     });
-  }, [props.picker, record, runtime?.agentId, runtime?.runtimeGeneration]);
+  }, [props.picker, record]);
 
   function currentHandle() {
     const current = store.get(sessionRuntimeByIdAtom)[sessionId];

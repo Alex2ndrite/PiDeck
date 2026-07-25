@@ -730,7 +730,10 @@ export function useSessionComposerController(
   const compact = useCallback(async () => {
     const agentId = runtime?.agentId;
     if (!agentId) {
-      showNotice("会话尚未启动，请先发送一条消息再压缩", 3000);
+      // No Agent yet: write /compact to draft and send → starts Agent + compacts
+      setDraft("/compact");
+      caretRef.current = "/compact".length;
+      send();
       return;
     }
     try {
@@ -738,7 +741,7 @@ export function useSessionComposerController(
     } catch (error) {
       showNotice(error instanceof Error ? error.message : String(error), 4000);
     }
-  }, [runtime?.agentId, runtime?.runtimeGeneration]);
+  }, [runtime?.agentId, runtime?.runtimeGeneration, setDraft, send]);
 
   const openPicker = useCallback((kind: ComposerPickerKind) => {
     if (kind === "template") void loadTemplates();

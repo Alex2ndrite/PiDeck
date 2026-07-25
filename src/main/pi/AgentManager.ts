@@ -1,6 +1,7 @@
 import { app, type BrowserWindow, Notification } from "electron";
 import { randomUUID } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
+import { findLastUserMessageLine } from "./sessionEntryIds";
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { join, dirname, basename } from "node:path";
 import { homedir } from "node:os";
@@ -2116,6 +2117,74 @@ export class AgentManager {
 
 		console.error(`[locateJsonlEntry] ALL SCHEMES FAILED. msg.id=${msg.id}, role=${msg.role}, text=[${msg.text.slice(0, 100)}], jsonlLines=${lines.length}`);
 		throw new Error("Message not found in session file");
+	}
+	/**
+	 * 重发消息：tombstone user root + re-parent children, then reload.
+	 */
+	async prepareResendFromMessage(agentId: string, messageId: string): Promise<{ text: string }> {
+		const startTime = Date.now();
+		void this.appLogger?.info("agent", "Prepare resend requested", { agentId, messageId });
+		return await this.withSessionLock(agentId, async () => {
+			await this.ensureAgentIdle(agentId);
+			const runtime = this.requireRuntime(agentId);
+			const sessionPath = runtime.tab.sessionPath;
+			if (!sessionPath) throw new Error("Session not persisted");
+			const messages = this.messages.get(agentId);
+			if (!messages) throw new Error("No messages for agent");
+			const msg = messages.find((m) => m.id === messageId);
+			if (!msg) throw new Error("Message not found");
+			if (msg.role !== "user") throw new Error("Only user messages can be resent");
+			const raw = await readFile(sessionPath, "utf8").catch(() => "");
+			if (!raw) throw new Error("Session file is empty");
+			const lines = raw.split(/\r?\n/);
+			let lineIndex = -1;
+			let entry: Record<string, any>;
+			try {
+				const located = this.locateJsonlEntry(lines, messages, msg);
+				lineIndex = located.lineIndex;
+				entry = located.entry;
+			} catch (locateError) {
+				const fallback = findLastUserMessageLine(lines, msg.text, (c) => this.extractText(c));
+				if (!fallback) throw locateError;
+				lineIndex = fallback.lineIndex;
+				entry = fallback.entry;
+			}
+			// Second validation: only override text-match fallback, not entryId
+			if (msg.text !== "[图片]") {
+				const entryId = msg.meta?.entryId as string | undefined;
+				if (!entryId) {
+					const lastMatch = findLastUserMessageLine(lines, msg.text, (c) => this.extractText(c));
+					if (lastMatch && lastMatch.lineIndex !== lineIndex) {
+						lineIndex = lastMatch.lineIndex;
+						entry = lastMatch.entry;
+					}
+				}
+			}
+			const rootEntryId = typeof (entry as any)?.id === "string" ? String((entry as any).id) : undefined;
+			if (!rootEntryId) throw new Error("User message entryId missing");
+			const rootParentId = (entry as any)?.parentId;
+			await this.backupSessionFile(sessionPath);
+			if (rootEntryId) {
+				for (let i = 0; i < lines.length; i++) {
+					if (i === lineIndex) continue;
+					const childLine = lines[i]?.trim();
+					if (!childLine) continue;
+					try { const child = JSON.parse(childLine); if (child.parentId === rootEntryId) { child.parentId = rootParentId; lines[i] = JSON.stringify(child); } } catch { /* skip */ }
+				}
+			}
+			lines[lineIndex] = JSON.stringify({ type: "deleted", originalEntryId: rootEntryId, ts: Date.now(), reason: "resend-truncate" });
+			await writeFile(sessionPath, lines.join("\n"), "utf8");
+			try { await this.reloadSession(agentId); } catch (error) {
+				const errMsg = error instanceof Error ? error.message : String(error);
+				try {
+					const backupPath = this.findLatestBackup(sessionPath);
+					if (backupPath) { await writeFile(sessionPath, await readFile(backupPath, "utf8"), "utf8"); await this.loadMessages(agentId).catch(() => {}); }
+				} catch {}
+				throw error;
+			}
+			void this.appLogger?.info("agent", "Prepare resend completed", { agentId, messageId, removed: 1, elapsedMs: Date.now() - startTime });
+			return { text: msg.text };
+		});
 	}
 
 	/**

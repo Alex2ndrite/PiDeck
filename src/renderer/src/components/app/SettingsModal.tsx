@@ -121,6 +121,13 @@ export function SettingsModal(props: {
 			setProxyDraft(null);
 		}
 	}, [activeTab]);
+
+	// Global settings draft
+	const [settingsPatch, setSettingsPatch] = useState<Partial<AppSettings>>({});
+	const hasDirty = Object.keys(settingsPatch).length > 0;
+	const addPatch = (patch: Partial<AppSettings>) => setSettingsPatch(prev => ({...prev, ...patch}));
+	const saveAll = () => { if (hasDirty) { props.onChange(settingsPatch); setSettingsPatch({}); } };
+	const cancelAll = () => setSettingsPatch({});
 	// 检测代理草稿是否与已保存的设置不同
 	const proxyDirty = useMemo(() => {
 		if (!proxyDraft) return false;
@@ -143,7 +150,7 @@ export function SettingsModal(props: {
 		if (proxyDraft.desktopProxyEnabled !== props.settings.desktopProxyEnabled) patch.desktopProxyEnabled = proxyDraft.desktopProxyEnabled;
 		if (proxyDraft.desktopProxyUrl !== props.settings.desktopProxyUrl) patch.desktopProxyUrl = proxyDraft.desktopProxyUrl;
 		if (proxyDraft.desktopProxyBypass !== props.settings.desktopProxyBypass) patch.desktopProxyBypass = proxyDraft.desktopProxyBypass;
-		props.onChange(patch);
+		addPatch(patch);
 		setProxyDraft({ ...proxyDraft });
 	};
 	// 取消代理设置：恢复为已保存的值
@@ -173,7 +180,7 @@ export function SettingsModal(props: {
 				Math.round((props.settings.zoomFactor + delta) * 100) / 100,
 			),
 		);
-		props.onChange({ zoomFactor: next });
+		addPatch({ zoomFactor: next });
 	};
 	const fontSizeOptions = [
 		{ value: "compact", label: t("settings.fontSizeCompact") },
@@ -264,7 +271,7 @@ export function SettingsModal(props: {
 	};
 	const handleApplyWsl = () => {
 		// 原子保存三个 WSL 字段，触发主进程配置 SessionScanner 并刷新会话列表
-		props.onChange({
+		addPatch({
 			wslEnabled: wslDraft.enabled,
 			wslDistro: wslDraft.distro,
 			wslUser: wslDraft.user,
@@ -301,7 +308,7 @@ export function SettingsModal(props: {
 	const applyWebPortDraft = () => {
 		const port = Number(webPortDraft);
 		if (Number.isInteger(port) && port >= 1 && port <= 65535 && port !== props.settings.webServicePort) {
-			props.onChange({ webServicePort: port });
+			addPatch({ webServicePort: port });
 		} else {
 			setWebPortDraft(String(props.settings.webServicePort));
 		}
@@ -407,7 +414,7 @@ export function SettingsModal(props: {
 										value={props.settings.theme}
 										options={themeOptions}
 										onChange={(value) =>
-											props.onChange({
+											addPatch({
 												theme: value as AppSettings["theme"],
 											})
 										}
@@ -424,7 +431,7 @@ export function SettingsModal(props: {
 										value={props.settings.lightBackground}
 										options={lightBackgroundOptions}
 										onChange={(value) =>
-											props.onChange({
+											addPatch({
 												lightBackground: value as AppSettings["lightBackground"],
 											})
 										}
@@ -435,7 +442,7 @@ export function SettingsModal(props: {
 										value={props.settings.language}
 										options={languageOptions}
 										onChange={(value) =>
-											props.onChange({
+											addPatch({
 												language: value as AppSettings["language"],
 											})
 										}
@@ -445,21 +452,21 @@ export function SettingsModal(props: {
 										description={t("settings.gitManagementDesc")}
 										checked={props.settings.enableGitManagement}
 										onChange={(checked) =>
-											props.onChange({ enableGitManagement: checked })
+											addPatch({ enableGitManagement: checked })
 										}
 									/>
 									<SettingSwitch
 										title={t("settings.nativeTitleBar")}
 										checked={props.settings.useNativeTitleBar}
 										onChange={(checked) =>
-											props.onChange({ useNativeTitleBar: checked })
+											addPatch({ useNativeTitleBar: checked })
 										}
 									/>
 									<SettingSwitch
 										title={t("settings.nativeMenu")}
 										checked={props.settings.showNativeMenu}
 										onChange={(checked) =>
-											props.onChange({ showNativeMenu: checked })
+											addPatch({ showNativeMenu: checked })
 										}
 									/>
 									<div className="setting-field setting-zoom-field">
@@ -494,7 +501,7 @@ export function SettingsModal(props: {
 										value={props.settings.fontSize}
 										options={fontSizeOptions}
 										onChange={(value) =>
-											props.onChange({
+											addPatch({
 												fontSize: value as AppSettings["fontSize"],
 											})
 										}
@@ -506,7 +513,7 @@ export function SettingsModal(props: {
 										onChange={(checked) => {
 											setPerAreaFontSize(checked);
 											if (!checked) {
-												props.onChange({
+												addPatch({
 													uiFontSize: null,
 													chatFontSize: null,
 													inputFontSize: null,
@@ -522,7 +529,7 @@ export function SettingsModal(props: {
 												value={props.settings.uiFontSize ?? props.settings.fontSize}
 												options={fontSizeOptions}
 												onChange={(value) =>
-													props.onChange({
+													addPatch({
 														uiFontSize: value as AppSettings["uiFontSize"],
 													})
 												}
@@ -533,7 +540,7 @@ export function SettingsModal(props: {
 												value={props.settings.chatFontSize ?? props.settings.fontSize}
 												options={fontSizeOptions}
 												onChange={(value) =>
-													props.onChange({
+													addPatch({
 														chatFontSize: value as AppSettings["chatFontSize"],
 													})
 												}
@@ -544,7 +551,7 @@ export function SettingsModal(props: {
 												value={props.settings.inputFontSize ?? props.settings.fontSize}
 												options={fontSizeOptions}
 												onChange={(value) =>
-													props.onChange({
+													addPatch({
 														inputFontSize: value as AppSettings["inputFontSize"],
 													})
 												}
@@ -559,7 +566,7 @@ export function SettingsModal(props: {
 										value={props.settings.fontFamilyBase}
 										options={fontBaseOptions}
 										onChange={(value) =>
-											props.onChange({
+											addPatch({
 												fontFamilyBase: value as AppSettings["fontFamilyBase"],
 											})
 										}
@@ -571,7 +578,7 @@ export function SettingsModal(props: {
 											value={props.settings.fontFamilyBaseCustom}
 											placeholder={t("settings.fontFamilyBaseCustomPlaceholder")}
 											onChange={(value) =>
-												props.onChange({ fontFamilyBaseCustom: value })
+												addPatch({ fontFamilyBaseCustom: value })
 											}
 										/>
 									)}
@@ -583,7 +590,7 @@ export function SettingsModal(props: {
 										value={props.settings.fontFamilyMono}
 										options={fontMonoOptions}
 										onChange={(value) =>
-											props.onChange({
+											addPatch({
 												fontFamilyMono: value as AppSettings["fontFamilyMono"],
 											})
 										}
@@ -595,7 +602,7 @@ export function SettingsModal(props: {
 											value={props.settings.fontFamilyMonoCustom}
 											placeholder={t("settings.fontFamilyMonoCustomPlaceholder")}
 											onChange={(value) =>
-												props.onChange({ fontFamilyMonoCustom: value })
+												addPatch({ fontFamilyMonoCustom: value })
 											}
 										/>
 									)}
@@ -608,7 +615,7 @@ export function SettingsModal(props: {
 											max="1400"
 											step="25"
 											value={props.settings.contentMaxWidth}
-											onChange={(event) => props.onChange({ contentMaxWidth: parseInt(event.target.value) })}
+											onChange={(event) => addPatch({ contentMaxWidth: parseInt(event.target.value) })}
 											style={{ flex: 1, accentColor: "var(--color-accent)", direction: "rtl" }}
 										/>
 										<span style={{
@@ -629,14 +636,14 @@ export function SettingsModal(props: {
 										title={t("settings.closeToTray")}
 										checked={props.settings.closeToTray}
 										onChange={(checked) =>
-											props.onChange({ closeToTray: checked })
+											addPatch({ closeToTray: checked })
 										}
 									/>
 									<SettingSwitch
 										title={t("settings.enableNotifications")}
 										checked={props.settings.enableNotifications}
 										onChange={(checked) =>
-											props.onChange({ enableNotifications: checked })
+											addPatch({ enableNotifications: checked })
 										}
 									/>
 
@@ -646,7 +653,7 @@ export function SettingsModal(props: {
 										value={props.settings.sendShortcut}
 										options={sendShortcutOptions}
 										onChange={(value) =>
-											props.onChange({
+											addPatch({
 												sendShortcut:
 													value as AppSettings["sendShortcut"],
 											})
@@ -661,7 +668,7 @@ export function SettingsModal(props: {
 										onChange={(value) => {
 											// 防止用户设置过小的超时导致 RPC 调用频繁超时，最低 600 秒
 											const seconds = Math.max(600, parseInt(value) || 600);
-											props.onChange({ rpcTimeout: seconds * 1000 });
+											addPatch({ rpcTimeout: seconds * 1000 });
 										}}
 									/>
 									<SelectField
@@ -671,7 +678,7 @@ export function SettingsModal(props: {
 										value={props.settings.linkOpenMode}
 										options={linkOpenModeOptions}
 										onChange={(value) =>
-											props.onChange({
+											addPatch({
 												linkOpenMode: value as AppSettings["linkOpenMode"],
 											})
 										}
@@ -684,7 +691,7 @@ export function SettingsModal(props: {
 										value={String(props.settings.maxEditorFileSizeMB)}
 										onChange={(value) => {
 											const mb = Math.max(1, parseInt(value) || 5);
-											props.onChange({ maxEditorFileSizeMB: mb });
+											addPatch({ maxEditorFileSizeMB: mb });
 										}}
 									/>
 								</SettingsSection>
@@ -694,7 +701,7 @@ export function SettingsModal(props: {
 										description={t("settings.telemetryDesc")}
 										checked={props.settings.telemetryEnabled}
 										onChange={(checked) =>
-											props.onChange({ telemetryEnabled: checked })
+											addPatch({ telemetryEnabled: checked })
 										}
 									/>
 								</SettingsSection>
@@ -831,7 +838,7 @@ export function SettingsModal(props: {
 									checked={props.settings.webServiceEnabled}
 									disabled={props.webServiceChanging}
 									onChange={(checked) =>
-										props.onChange({ webServiceEnabled: checked })
+										addPatch({ webServiceEnabled: checked })
 									}
 								/>
 								<div className="web-endpoint-panel">
@@ -1092,7 +1099,7 @@ export function SettingsModal(props: {
 									description={t("settings.disableUpdateCheckDesc")}
 									checked={props.settings.disableUpdateCheck}
 									onChange={(checked) =>
-										props.onChange({ disableUpdateCheck: checked })
+										addPatch({ disableUpdateCheck: checked })
 									}
 								/>
 								<div className="setting-row">
@@ -1183,19 +1190,19 @@ export function SettingsModal(props: {
 										title={t("settings.pet.enable")}
 										description={t("settings.pet.enableDesc")}
 										checked={props.settings.petEnabled}
-										onChange={(value) => props.onChange({ petEnabled: value })}
+										onChange={(value) => addPatch({ petEnabled: value })}
 									/>
 									<SettingSwitch
 										title={t("settings.pet.alwaysOnTop")}
 										description={t("settings.pet.alwaysOnTopDesc")}
 										checked={props.settings.petAlwaysOnTop}
-										onChange={(value) => props.onChange({ petAlwaysOnTop: value })}
+										onChange={(value) => addPatch({ petAlwaysOnTop: value })}
 									/>
 									<SettingSwitch
 										title={t("settings.pet.patrol")}
 										description={t("settings.pet.patrolDesc")}
 										checked={props.settings.petPatrolEnabled ?? true}
-										onChange={(value) => props.onChange({ petPatrolEnabled: value })}
+										onChange={(value) => addPatch({ petPatrolEnabled: value })}
 									/>
 								</SettingsSection>
 								<SettingsSection title={t("settings.pet.patrolPause")} description={t("settings.pet.patrolPauseDesc")}>
@@ -1206,7 +1213,7 @@ export function SettingsModal(props: {
 											max="30"
 											step="1"
 											value={props.settings.petPatrolPauseMin ?? 5}
-											onChange={(event) => props.onChange({ petPatrolPauseMin: parseInt(event.target.value) })}
+											onChange={(event) => addPatch({ petPatrolPauseMin: parseInt(event.target.value) })}
 											style={{ flex: 1, accentColor: "var(--color-accent)", direction: "rtl" }}
 										/>
 										<span style={{
@@ -1228,7 +1235,7 @@ export function SettingsModal(props: {
 										options={petOptions}
 										onChange={(value) => {
 											setPetPreviewMode("__auto");
-											props.onChange({ petId: value });
+											addPatch({ petId: value });
 										}}
 									/>
 									<small className="setting-status">{t("settings.pet.petdexHint")}</small>
@@ -1259,7 +1266,7 @@ export function SettingsModal(props: {
 											max="2.0"
 											step="0.05"
 											value={props.settings.petScale ?? 1}
-											onChange={(event) => props.onChange({ petScale: parseFloat(event.target.value) })}
+											onChange={(event) => addPatch({ petScale: parseFloat(event.target.value) })}
 											style={{ flex: 1, accentColor: "var(--color-accent)", direction: "rtl" }}
 										/>
 										<span style={{
