@@ -15,6 +15,7 @@ import type { PiInstallStatus, PiInstallExecResult } from "../../../../shared/ty
 export type { WorkspaceDrawerPanel as DrawerPanel } from "../../hooks/useWorkspacePanels";
 
 // Re-exports from leaf modules (A12 migration in progress)
+import { PiLogoCanvas } from "./PiLogoCanvas";
 export { WorktreeCreateDialog } from "../sidebar/SidebarComponents";
 export { ComposerToolbar, ModelPicker, PromptTemplatePicker, ThinkingPicker, ComposerModePicker, ExtensionWidgetCard } from "../session/ComposerComponents";
 
@@ -430,5 +431,18 @@ export {
   PromptSuggestions,
   FileContextMenu,
 } from "../session/SurfaceComponents";
+
+// PiLogoCanvas — canvas-based animated pi logo (from upstream dev)
+export { PiLogoCanvas } from "./PiLogoCanvas";
+
+/** Brand lockup: PiLogoCanvas 34px + PiDeck Plantin wordmark */
+export function BrandLockup(props: { replayToken?: number } = {}) {
+	return (
+		<div className="brand-lockup" aria-label="PiDeck">
+			<PiLogoCanvas size={34} autoPlay playOnClick replayToken={props.replayToken} />
+			<span className="brand-wordmark" aria-hidden="true">PiDeck</span>
+		</div>
+	);
+}
 
 

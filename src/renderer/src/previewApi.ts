@@ -283,6 +283,7 @@ export function createPreviewApi(): PiDesktopApi {
 			open: async () => undefined,
 			showInFolder: async () => undefined,
 			readContent: async () => "",
+			create: async () => "/mock/created",
 			writeContent: async () => undefined,
 			delete: async () => undefined,
 			rename: async () => "",
@@ -743,6 +744,7 @@ export function createPreviewApi(): PiDesktopApi {
 			],
 			forkSession: async () => ({ text: "Preview prompt", cancelled: false, targetSessionId: undefined }),
 			cloneSession: async () => ({ cancelled: false, targetSessionId: undefined }),
+			prepareResend: async () => ({ text: "mock" }),
 			switchSession: async () => ({ cancelled: false, targetSessionId: undefined }),
 			reload: async () => undefined,
 			restart: async (agentId: string) => ({

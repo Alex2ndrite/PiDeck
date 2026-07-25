@@ -55,7 +55,7 @@ function genTabId(): string {
  * 这里用模块级状态保存轻量 tab 元数据，避免切换容器时丢 URL/标题/设备模式。
  * 真正的 WebContents 仍随组件挂载重建，避免同时运行两个 webview 实例。
  */
-const moduleState: { tabs: TabEntry[]; activeTabId: string | null; device: DeviceType; navigateKey: number } = {
+export const moduleState: { tabs: TabEntry[]; activeTabId: string | null; device: DeviceType; navigateKey: number } = {
 	tabs: [],
 	activeTabId: null,
 	device: "pc",
@@ -202,7 +202,7 @@ export function BrowserPanel(props: {
 				const activeTab = moduleState.tabs.find((t) => t.id === moduleState.activeTabId);
 				if (activeTab) {
 					applyDeviceUserAgent(wv, moduleState.device);
-					wv.loadURL(activeTab.url);
+					wv.loadURL(activeTab.url).catch(() => {});
 				}
 			}
 		};
@@ -305,6 +305,20 @@ export function BrowserPanel(props: {
 		setNavigateKey(moduleState.navigateKey);
 	}, [navigateKey]);
 
+	// 当 BrowserPanel 已 mounted 时，navigateTo 递增 navigateKey 触发此 effect，
+	// 直接调用 loadURL（dom-ready 只首次触发，后续导航需要手动加载）。
+	useEffect(() => {
+		if (navigateKey === 0) return;
+		const wv = webviewRef.current;
+		if (!wv || !webviewReadyRef.current) return;
+		const activeTab = moduleState.tabs.find((t) => t.id === moduleState.activeTabId);
+		if (activeTab) {
+			applyDeviceUserAgent(wv, moduleState.device);
+			wv.loadURL(activeTab.url).catch(() => {});
+		}
+		moduleState.navigateKey = 0;
+	}, [navigateKey, applyDeviceUserAgent]);
+
 	const closeTab = useCallback(
 		(tabId: string, event: React.MouseEvent) => {
 			event.stopPropagation();
@@ -379,6 +393,16 @@ export function BrowserPanel(props: {
 				<button className="browser-tab-add" onClick={addTab} title={t("browser.newTab")}>
 					<Plus size={14} />
 				</button>
+				{!props.isFullscreen && (
+					<div className="browser-tabbar-actions">
+						<button className="browser-tabbar-btn" onClick={onToggleFullscreen} title={t("browser.fullscreen")}>
+							<Maximize2 size={13} />
+						</button>
+						<button className="browser-tabbar-btn" onClick={onClose} title={t("common.close")}>
+							<X size={14} />
+						</button>
+					</div>
+				)}
 			</div>
 
 			<div className="browser-toolbar">
@@ -440,11 +464,7 @@ export function BrowserPanel(props: {
 							<X size={15} />
 						</button>
 					</>
-				) : (
-					<button className="browser-nav-btn" onClick={onToggleFullscreen} title={t("browser.fullscreen")}>
-						<Maximize2 size={14} />
-					</button>
-				)}
+				) : null}
 			</div>
 
 			{isLoading && (
@@ -454,7 +474,7 @@ export function BrowserPanel(props: {
 			)}
 
 			<div className="browser-webview-stage">
-				<webview ref={webviewRef} className="browser-webview" src={moduleState.navigateKey > 0 ? "about:blank" : initialTab.url} allowpopups />
+				<webview ref={(el) => { (webviewRef as React.MutableRefObject<any>).current = el; if (el) el.setAttribute("allowfileaccess", "true"); }} className="browser-webview" src={moduleState.navigateKey > 0 ? "about:blank" : initialTab.url} allowpopups />
 			</div>
 		</div>
 	);

@@ -67,7 +67,7 @@ export function FileDiffViewer(props: {
 	const [original, setOriginal] = useState("");
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
-	const [sideBySide, setSideBySide] = useState(true);
+	const [sideBySide, setSideBySide] = useState(props.displayMode !== "drawer");
 	const [readOnly, setReadOnly] = useState(true);
 	const [dirty, setDirty] = useState(false);
 	const [saving, setSaving] = useState(false);
@@ -264,6 +264,8 @@ export function FileDiffViewer(props: {
 		...editorOptions,
 		readOnly,
 		renderSideBySide: sideBySide,
+		// 0 = close Monaco narrow-width auto-merge; split/unified controlled by UI button only
+		renderSideBySideInlineBreakpoint: 0,
 		// 显示真实差异，包括行尾空格差异
 		ignoreTrimWhitespace: false,
 		// 大文件时折叠未变化区域，只显示有变动的代码段；最小上下文 3 行
@@ -322,7 +324,7 @@ export function FileDiffViewer(props: {
 							{preview ? <FileCode size={15} /> : <Eye size={15} />}
 						</button>
 					)}
-					{isDiffMode && !loading && !error && (
+					{isDiffMode && !loading && !error && displayMode !== "drawer" && (
 						<button
 							className="file-diff-toggle-btn"
 							title={sideBySide ? t("app.showSingle") : t("app.showSplit")}
@@ -407,6 +409,9 @@ export function FileDiffViewer(props: {
 						{isDiffMode && (
 							<div style={{ height: "100%", flexDirection: "column" }}>
 								<DiffEditor
+									key={sideBySide ? "split" : "unified"}
+									keepCurrentOriginalModel
+									keepCurrentModifiedModel
 									original={original}
 									modified={content}
 									language={language}

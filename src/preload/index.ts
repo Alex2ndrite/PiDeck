@@ -178,6 +178,8 @@ const api = {
 			ipcRenderer.invoke(ipcChannels.filesWriteContent, path, content) as Promise<void>,
 		delete: (path: string, recursive?: boolean) =>
 			ipcRenderer.invoke(ipcChannels.filesDelete, path, recursive) as Promise<void>,
+		create: (parentDir: string, name: string, type: "file" | "directory") =>
+			ipcRenderer.invoke(ipcChannels.filesCreate, parentDir, name, type) as Promise<string>,
 		rename: (path: string, newName: string) =>
 			ipcRenderer.invoke(ipcChannels.filesRename, path, newName) as Promise<string>,
 	},
@@ -528,7 +530,7 @@ const api = {
 			ipcRenderer.invoke(
 				ipcChannels.appFeedbackEnvironment,
 			) as Promise<FeedbackEnvironment>,
-		openExternal: (url: string) =>
+		openExternal: (url: string, forceSystem?: boolean) =>
 			ipcRenderer.invoke(ipcChannels.appOpenExternal, url) as Promise<void>,
 		onOpenInBrowser: (callback: (url: string) => void) =>
 			subscribe(ipcChannels.appOpenInBrowser, callback),
@@ -772,6 +774,8 @@ const api = {
 				agentId,
 				entryId,
 			) as Promise<{ text?: string; cancelled?: boolean; targetSessionId?: string }>,
+		prepareResend: (agentId: string, messageId: string) =>
+			ipcRenderer.invoke(ipcChannels.agentsPrepareResend, agentId, messageId) as Promise<{ text: string }>,
 		cloneSession: (agentId: string) =>
 			ipcRenderer.invoke(ipcChannels.agentsCloneSession, agentId) as Promise<{
 				cancelled?: boolean;
@@ -1029,7 +1033,7 @@ const api = {
 	browser: {
 		/** 在系统默认浏览器中打开外部链接。
 		 *  用于 webview 不支持或需要另开浏览器查看的场景。 */
-		openExternal: (url: string) =>
+		openExternal: (url: string, forceSystem?: boolean) =>
 			ipcRenderer.invoke(ipcChannels.browserOpenExternal, url) as Promise<void>,
 	},
 

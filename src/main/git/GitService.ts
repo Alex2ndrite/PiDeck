@@ -725,6 +725,14 @@ export class GitService {
 		const { stdout: parentHash } = await execFileAsync("git", ["rev-parse", `${hash}^`], { cwd, timeout: GIT_MUTATION_TIMEOUT_MS });
 		await execFileAsync("git", ["rebase", "--onto", parentHash.trim(), hash], { cwd, timeout: GIT_MUTATION_TIMEOUT_MS });
 	}
+
+	async push(cwd: string): Promise<void> {
+		await execFileAsync("git", ["push"], { cwd, timeout: GIT_MUTATION_TIMEOUT_MS * 4 });
+	}
+
+	async pull(cwd: string): Promise<void> {
+		await execFileAsync("git", ["pull"], { cwd, timeout: GIT_MUTATION_TIMEOUT_MS * 4 });
+	}
 }
 
 // ── 解析工具函数（复刻 VS Code git.ts）──────────────────────────────────
