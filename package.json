@@ -66,7 +66,8 @@
     "docs:preview": "vitepress preview docs-site",
     "postinstall": "node scripts/fix-pty-permissions.js",
     "typecheck": "tsc --noEmit",
-    "make-icon": "node scripts/make-icon.js"
+    "make-icon": "node scripts/make-icon.js",
+    "compile-exe": "node scripts/compile-exe.js"
   },
   "dependencies": {
     "@astron-team/skillhub": "^0.1.8",
@@ -76,7 +77,8 @@
     "jotai": "^2.20.2",
     "node-pty": "^1.1.0",
     "remove-markdown": "^0.6.4",
-    "sonner": "^2.0.7"
+    "sonner": "^2.0.7",
+    "sql.js": "^1.14.1"
   },
   "build": {
     "appId": "com.ayuayue.pi-desktop",
@@ -85,6 +87,9 @@
     "compression": "maximum",
     "afterPack": "./scripts/after-pack-cleanup.js",
     "npmRebuild": false,
+    "asarUnpack": [
+      "node_modules/sql.js/dist/*.wasm"
+    ],
     "directories": {
       "output": "release",
       "buildResources": "build"
@@ -103,8 +108,8 @@
         ]
       },
       {
-        "from": "resources/yao-prompts",
-        "to": "yao-prompts"
+        "from": "resources/xueprompts.db",
+        "to": "xueprompts.db"
       },
       {
         "from": "build/pets",

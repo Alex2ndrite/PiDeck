@@ -1,4 +1,4 @@
-import { readdir, unlink, rename as fsRename, rm } from "node:fs/promises";
+import { readdir, unlink, rename as fsRename, rm, mkdir, writeFile } from "node:fs/promises";
 import { join, relative, dirname } from "node:path";
 import type { FileTreeNode } from "../../shared/types";
 
@@ -64,4 +64,19 @@ export class FileSystemService {
     await fsRename(targetPath, newPath);
     return newPath;
   }
+
+	/** 创建文件或目录，返回完整路径 */
+	async create(parentDir: string, name: string, type: "file" | "directory"): Promise<string> {
+		const fullPath = join(parentDir, name);
+		// P0 security: prevent path traversal via ../ in name
+		if (name.includes("..") || !fullPath.startsWith(parentDir)) {
+			throw new Error(`Invalid path: "${name}" escapes parent directory`);
+		}
+		if (type === "directory") {
+			await mkdir(fullPath, { recursive: true });
+		} else {
+			await writeFile(fullPath, "", "utf8");
+		}
+		return fullPath;
+	}
 }

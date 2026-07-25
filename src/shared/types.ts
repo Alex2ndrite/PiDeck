@@ -794,6 +794,9 @@ export type YaoPromptListResult = {
 	categories: YaoPromptCategory[];
 	prompts: YaoPromptItem[];
 	repoPath: string;
+	total?: number;
+	page?: number;
+	pageSize?: number;
 };
 
 export type YaoPromptDetailResult = {

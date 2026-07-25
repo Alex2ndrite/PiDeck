@@ -45,7 +45,7 @@ import {
 } from "./FeishuConfig";
 import { chooseMessageMode, buildPostMessages, buildMarkdownCards } from "./rich-text";
 import { CardStream } from "./CardStream";
-import { buildFeishuTextChildren, stripFeishuActionMarkers, wantsFeishuDoc } from "./docActions";
+import { buildFeishuTextChildren, sanitizeFeishuUserVisibleText, stripFeishuActionMarkers, wantsFeishuDoc } from "./docActions";
 import { hasExplicitFeishuFileSendIntent } from "./fileIntent";
 import { createInitialState, reduceFromPiEvent, markInterrupted, markError, markDone, type RunState } from "./CardRunState";
 import { renderRunCard } from "./CardRenderer";
@@ -832,8 +832,7 @@ export class FeishuBridge {
 			}
 			if (cardStream) {
 				// 卡片已就绪 → 直接更新（先清掉 [SEND_FILE:] [CREATE_DOC:] 标记）
-				const cleanText = nextState.outputText
-					.replace(/\[(SEND_FILE|CREATE_DOC):[^\]]*\]/g, "").trim();
+				const cleanText = sanitizeFeishuUserVisibleText(nextState.outputText);
 				const displayState = cleanText !== nextState.outputText
 					? { ...nextState, outputText: cleanText } : nextState;
 				const chatId = this.sessionToChat.get(agentId) ?? "";
@@ -897,7 +896,7 @@ export class FeishuBridge {
 		((this as Record<string, unknown>).__feishuSyncFp as Set<string>).add(fingerprint);
 
 		// 清掉标记再发送
-		const cleanText = lastAssistant.text.replace(/\[(SEND_FILE|CREATE_DOC):[^\]]*\]/g, "").trim();
+		const cleanText = sanitizeFeishuUserVisibleText(lastAssistant.text);
 		if (cleanText) await this.sendSmartMessage(chatId, cleanText);
 
 		// 先扫 [CREATE_DOC:] 标记
@@ -1454,7 +1453,7 @@ export class FeishuBridge {
 		const resultText = lastAssistant?.text ?? "";
 		if (!resultText.trim()) return;
 		const duration = ((Date.now() - startTime) / 1000).toFixed(1);
-		const cleanText = resultText.replace(/\[SEND_FILE:[^\]]*\]/g, "").replace(/\[CREATE_DOC:[^\]]*\]/g, "").trim();
+		const cleanText = sanitizeFeishuUserVisibleText(resultText);
 		if (cleanText) await this.sendSmartMessage(chatId, `${cleanText}\n\n⏱ ${duration}s ✅ 完成`);
 	}
 

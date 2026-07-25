@@ -116,7 +116,7 @@ import { ConfigManager } from "./config/ConfigManager";
 import { TerminalSessionManager } from "./terminal/TerminalSessionManager";
 import { TelemetryService } from "./telemetry/TelemetryService";
 import { PromptManager } from "./prompts/PromptManager";
-import { YaoPromptManager } from "./prompts/YaoPromptManager";
+import { XuePromptManager } from "./prompts/XuePromptManager";
 import { SkillManager } from "./skills/SkillManager";
 import { ExtensionManager } from "./extensions/ExtensionManager";
 import { ProjectResourceManager } from "./projects/ProjectResourceManager";
@@ -168,7 +168,7 @@ let piLocator: PiLocator;
 let agentManager: AgentManager;
 let configManager: ConfigManager;
 let promptManager: PromptManager;
-let yaoPromptManager: YaoPromptManager;
+let xuePromptManager: XuePromptManager;
 let skillManager: SkillManager;
 let extensionManager: ExtensionManager;
 let projectResourceManager: ProjectResourceManager;
@@ -408,36 +408,6 @@ const feishuSessionRuntimeBindings: SessionRuntimeBindingGateway = {
 		return { sessionId, runtimeGeneration };
 	},
 };
-
-/**
- * 解析 pi --list-models 表格输出为 AvailableModel[]。
- * 表格格式：provider  model  context  max-out  thinking  images
- */
-function parsePiListModels(stdout: string): Array<{ provider: string; id: string; name?: string; thinking: boolean; supportsImages: boolean }> {
-	const lines = stdout.split(/\r?\n/).filter(Boolean);
-	if (lines.length < 2) return [];
-	// 跳过表头
-	const dataLines = lines.slice(1);
-	const models: Array<{ provider: string; id: string; name?: string; thinking: boolean; supportsImages: boolean }> = [];
-	for (const line of dataLines) {
-		// 列1: provider, 列2: model, 列6: thinking (yes/no), 列7: images (yes/no)
-		const parts = line.trim().split(/\s+/);
-		if (parts.length < 3) continue;
-		const provider = parts[0];
-		const modelId = parts[1];
-		// thinking 和 images 在倒数第二列和最后一列
-		const thinking = parts[parts.length - 2]?.toLowerCase() === "yes";
-		const images = parts[parts.length - 1]?.toLowerCase() === "yes";
-		models.push({
-			provider,
-			id: modelId,
-			name: `${provider}/${modelId}`,
-			thinking,
-			supportsImages: images,
-		});
-	}
-	return models;
-}
 
 function applyNativeThemeSource(settings: AppSettings) {
 	// 原生标题栏不受 renderer CSS 影响；跟随应用主题，避免暗色界面顶部仍是系统浅色栏。
@@ -1701,6 +1671,15 @@ function registerIpc() {
 		void appLogger.info("file", "File written", { path, bytes: Buffer.byteLength(content, "utf8") });
 	});
 
+
+	ipcMain.handle(
+		ipcChannels.filesCreate,
+		async (_event, parentDir: string, name: string, type: "file" | "directory") => {
+			const result = await fileSystemService.create(parentDir, name, type);
+			void appLogger.info("file", "File/folder created", { parentDir, name, type, result });
+			return result;
+		},
+	);
 	ipcMain.handle(ipcChannels.filesDelete, async (_event, path: string, recursive?: boolean) => {
 		await fileSystemService.delete(path, recursive);
 		void appLogger.info("file", "File deleted", { path, recursive: Boolean(recursive) });
@@ -2289,6 +2268,24 @@ function registerIpc() {
 	);
 
 	ipcMain.handle(
+		ipcChannels.gitPush,
+		async (_event, projectId: string) => {
+			const project = projectStore.get(projectId);
+			if (!project) throw new Error(`Project not found: ${projectId}`);
+			await gitService.push(project.path);
+		},
+	);
+
+	ipcMain.handle(
+		ipcChannels.gitPull,
+		async (_event, projectId: string) => {
+			const project = projectStore.get(projectId);
+			if (!project) throw new Error(`Project not found: ${projectId}`);
+			await gitService.pull(project.path);
+		},
+	);
+
+	ipcMain.handle(
 		ipcChannels.gitReset,
 		async (_event, projectId: string, hash: string, mode: "soft" | "mixed" | "hard") => {
 			const project = projectStore.get(projectId);
@@ -2378,52 +2375,24 @@ function registerIpc() {
 		});
 		return status;
 	});
-	// 从 pi --list-models 获取可用模型列表（无需启动 agent）
-	// 全局缓存：首次运行后复用，避免每次打开选择器都 fork 子进程
-	let cachedListModels: ReturnType<typeof parsePiListModels> | null = null;
-	let cachedListModelsPending: Promise<ReturnType<typeof parsePiListModels>> | null = null;
-	ipcMain.handle(ipcChannels.projectsListModels, async (_event, projectId?: string) => {
+	// 直接从 models.json 读取模型列表，无需启动 agent，无缓存（实时反映文件变化）
+	ipcMain.handle(ipcChannels.projectsListModels, async (_event, _projectId?: string) => {
 		try {
-			if (cachedListModels) return cachedListModels;
-			// 已有在途请求时复用同一个 Promise，避免并发 fork 多个 pi 进程
-			if (cachedListModelsPending) return cachedListModelsPending;
-
-			cachedListModelsPending = (async () => {
-				const settings = settingsStore.get();
-				const command = piLocator.resolveCommand(
-					settings.customPiPath,
-					settings.wslEnabled,
-					settings.wslDistro,
-					settings.wslUser,
-				);
-				const invocation = piLocator.createInvocation(command, ["--list-models"]);
-				const { execFile } = await import("node:child_process");
-				const result = await new Promise<{ stdout: string }>((resolve, reject) => {
-					execFile(invocation.command, invocation.args, {
-						env: piLocator.createProcessEnv(settings, invocation.pathPrefix, invocation.wsl),
-						shell: invocation.shell,
-						windowsHide: true,
-						timeout: 15_000,
-						encoding: "utf8",
-						windowsVerbatimArguments: invocation.windowsVerbatimArguments,
-					}, (error, stdout, stderr) => {
-						if (error) {
-							const message = (stderr || error.message).slice(0, 300);
-							reject(new Error(message));
-						} else {
-							resolve({ stdout });
-						}
+			const result = await configManager.getModelsConfig();
+			const models: { provider: string; id: string; name?: string; reasoning?: boolean }[] = [];
+			for (const [providerName, providerConfig] of Object.entries(result.parsed.providers)) {
+				for (const model of (providerConfig.models ?? [])) {
+					models.push({
+						provider: providerName,
+						id: model.id,
+						name: model.name || model.id,
+						reasoning: model.reasoning,
 					});
-				});
-				const models = parsePiListModels(result.stdout);
-				cachedListModels = models;
-				return models;
-			})();
-			const models = await cachedListModelsPending;
+				}
+			}
 			return models;
 		} catch (error) {
-			cachedListModelsPending = null;
-			void appLogger.warn("pi", "Failed to list models", {
+			void appLogger.warn("pi", "Failed to read models config", {
 				error: error instanceof Error ? error.message : String(error),
 			});
 			return [];
@@ -2833,14 +2802,14 @@ function registerIpc() {
 					promptManager.configureWsl(settings.wslDistro, settings.wslUser);
 					extensionManager.configureWsl(settings.wslDistro, settings.wslUser);
 					if (configManager) configManager.configureWsl(settings.wslDistro, settings.wslUser);
-					if (yaoPromptManager) yaoPromptManager.configureWsl(settings.wslDistro, settings.wslUser);
+					if (xuePromptManager) xuePromptManager.configureWsl(null);
 				} else {
 					sessionScanner.clearWsl();
 					skillManager.configureWsl(null);
 					promptManager.configureWsl(null);
 					extensionManager.configureWsl(null);
 					if (configManager) configManager.configureWsl(null);
-					if (yaoPromptManager) yaoPromptManager.configureWsl(null);
+					if (xuePromptManager) xuePromptManager.configureWsl(null);
 				}
 			}
 			return settings;
@@ -3170,130 +3139,81 @@ function registerIpc() {
 	});
 
 	// ── SkillHub（skill.xfyun.cn / skillhub CLI） ────────────────────
-	/** 搜索 SkillHub（通过 skillhub CLI 查询 skill.xfyun.cn 注册中心） */
-	ipcMain.handle(ipcChannels.skillHubSearch, async (_event, query: string, _page: number = 1) => {
-		try {
-			const { execSync } = await import("node:child_process");
-			const cliPath = require.resolve("@astron-team/skillhub/dist/index.js");
-			const cmd = `node "${cliPath}" search "${query.replace(/"/g, "\\\"")}" --limit 50 --json`;
-			const output = execSync(cmd, {
-				encoding: "utf8",
-				timeout: 15_000,
-				stdio: ["ignore", "pipe", "pipe"],
-			});
-			const result = JSON.parse(output);
-			if (!result.ok) throw new Error(result.message || "搜索失败");
 
-			const items = (result.items || []).map((item: Record<string, unknown>) => ({
-				slug: `${item.namespace as string}/${item.slug as string}`,
-				name: item.slug as string,
-				description: (item.summary as string) || "",
+	// ── Skills.sh（https://www.skills.sh） ─────────────────────────
+	/** 搜索 Skills.sh 注册中心 */
+	ipcMain.handle(ipcChannels.skillHubSearch, async (_event, opts: { query: string; limit?: number }) => {
+		const { query, limit = 50 } = opts;
+		try {
+			const response = await fetch(
+				`https://www.skills.sh/api/search?q=${encodeURIComponent(query)}&limit=${limit}`,
+				{ signal: AbortSignal.timeout(15_000) },
+			);
+			if (!response.ok) throw new Error(`API returned ${response.status}`);
+			const json = (await response.json()) as {
+				skills?: Array<{ id: string; skillId: string; name: string; installs: number; source: string }>;
+			};
+			const skills = json.skills ?? [];
+			const items = skills.map((item) => ({
+				slug: item.id,
+				name: item.name,
+				description: "",
 				description_zh: "",
 				iconUrl: undefined,
 				stars: 0,
-				downloads: 0,
-				installs: 0,
+				downloads: item.installs,
+				installs: item.installs,
 				category: "",
-				subCategories: undefined,
-				version: (item.latestVersion as string) || "",
-				ownerName: (item.namespace as string) || "",
-				namespace: { canonicalName: "", displayName: "", publicSlug: item.namespace as string || "" },
-				labels: undefined,
-				tags: undefined,
-				source: "skillhub-cli",
-				verified: false,
-				updatedAt: undefined,
+				version: "",
+				ownerName: item.source,
+				source: "skills.sh",
 			}));
-			return { query, total: result.total ?? items.length, items };
+			items.sort((a, b) => b.installs - a.installs);
+			return { query, total: items.length, items };
 		} catch (err) {
 			const message = err instanceof Error ? err.message : String(err);
-			throw new Error(`搜索 SkillHub 失败: ${message}`);
+			throw new Error(`Skills.sh search failed: ${message}`);
 		}
 	});
 
-	/** 获取 SkillHub skill 详情（通过 CLI JSON 输出） */
-	ipcMain.handle(ipcChannels.skillHubDetail, async (_event, slug: string) => {
-		// 从前端传入的 slug 是 "namespace/slug" 格式
-		const parts = slug.split("/");
-		const skillSlug = parts.length > 1 ? parts.slice(1).join("/") : slug;
-		const ns = parts.length > 1 ? parts[0] : "global";
-		try {
-			const { execSync } = await import("node:child_process");
-			const cliPath = require.resolve("@astron-team/skillhub/dist/index.js");
-			// 搜索该 skill 的详情（通过 search 精确匹配）
-			const cmd = `node "${cliPath}" search "${skillSlug}" --namespace "${ns}" --limit 1 --json`;
-			const output = execSync(cmd, {
-				encoding: "utf8",
-				timeout: 15_000,
-				stdio: ["ignore", "pipe", "pipe"],
-			});
-			const result = JSON.parse(output);
-			if (!result.ok || !result.items || result.items.length === 0) return null;
-			const item = result.items[0] as Record<string, unknown>;
-			return {
-				skill: {
-					slug: skillSlug as string,
-					displayName: (item.slug as string) || skillSlug,
-					summary: (item.summary as string) || "",
-					summary_zh: "",
-					iconUrl: undefined,
-					stats: { comments: 0, downloads: 0, installs: 0, stars: 0, versions: 0 },
-					category: "",
-					subCategories: undefined,
-					labels: undefined,
-					createdAt: 0,
-					updatedAt: 0,
-					source: "skillhub-cli",
-					verified: false,
-				},
-				latestVersion: {
-					version: (item.latestVersion as string) || "",
-					changelog: undefined,
-					createdAt: 0,
-				},
-				owner: { displayName: (item.namespace as string) || "", handle: (item.namespace as string) || "", image: null },
-				namespace: { canonicalName: "", displayName: "", handle: (item.namespace as string) || "", publicSlug: (item.namespace as string) || "" },
-				securityReports: undefined,
-			} as import("../shared/types").SkillHubDetail;
-		} catch (err) {
-			return null;
-		}
-	});
+	/** 获取 Skills.sh skill 详情（不展示详情页，返回 null） */
+	ipcMain.handle(ipcChannels.skillHubDetail, async () => null);
 
-	/** 安装 SkillHub skill 到 pi agent skills 目录 */
-	ipcMain.handle(ipcChannels.skillHubInstall, async (_event, slug: string, _installDir: string) => {
-		const homedir = (await import("node:os")).homedir();
-		const targetDir = join(homedir, ".pi", "agent", "skills");
-		// slug 是 "namespace/slug" 格式
-		const parts = slug.split("/");
-		const skillSlug = parts.length > 1 ? parts.slice(1).join("/") : slug;
-		const ns = parts.length > 1 ? parts[0] : "global";
+	/** 安装 Skills.sh skill：npx skills add <package> -g -s <name> -y */
+	ipcMain.handle(ipcChannels.skillHubInstall, async (_event, slug: string) => {
+		const lastSlash = slug.lastIndexOf("/");
+		const pkg = lastSlash > 0 ? slug.slice(0, lastSlash) : slug;
+		const skillName = lastSlash > 0 ? slug.slice(lastSlash + 1) : "";
+		// P0 security: whitelist shell-safe characters only
+		const SAFE_SLUG_RE = /^[a-zA-Z0-9@/\-_.]+$/;
+		if (!SAFE_SLUG_RE.test(pkg) || (skillName && !SAFE_SLUG_RE.test(skillName))) {
+			return { success: false, slug, installDir: "", error: "Invalid slug: contains unsafe characters" };
+		}
 		try {
-			const { execSync } = await import("node:child_process");
-			const cliPath = require.resolve("@astron-team/skillhub/dist/index.js");
-			const cmd = `node "${cliPath}" install "${skillSlug}" --namespace "${ns}" --dir "${targetDir}" --json`;
-			const output = execSync(cmd, {
-				encoding: "utf8",
-				timeout: 30_000,
-				stdio: ["ignore", "pipe", "pipe"],
-			});
-			const result = JSON.parse(output);
-			if (result.ok) {
-				void appLogger.info("skill-hub", "Installed skill", { slug, targetDir });
-				return { success: true, slug, installDir: targetDir };
-			}
-			throw new Error(result.message || "安装失败");
+			const { exec } = await import("node:child_process");
+			const { promisify } = await import("node:util");
+			const execAsync = promisify(exec);
+			const cmd = `npx skills add "${pkg}" -g -s "${skillName}" -y`;
+			await execAsync(cmd, { encoding: "utf8", timeout: 120_000, maxBuffer: 10 * 1024 * 1024 });
+			void appLogger.info("skill-hub", "Installed skill", { slug, pkg, skillName });
+			return { success: true, slug, installDir: "" };
 		} catch (err) {
 			const message = err instanceof Error ? err.message : String(err);
 			void appLogger.warn("skill-hub", "Install failed", { slug, error: message });
-			return { success: false, slug, installDir: targetDir, error: message };
+			return { success: false, slug, installDir: "", error: message };
 		}
 	});
 
-	// ── Yao Open Prompts（中文提示词精选） ─────────────────────────────
-	ipcMain.handle(ipcChannels.yaoPromptsList, async () => {
+
+	// ── Xue Prompts（中文提示词精选，xueprompt.com） ─────────────────────────────
+	ipcMain.handle(ipcChannels.yaoPromptsList, async (_event, opts?: {
+		category?: string;
+		search?: string;
+		page?: number;
+		pageSize?: number;
+	}) => {
 		try {
-			const result = await yaoPromptManager.list();
+			const result = await xuePromptManager.list(opts);
 			return result;
 		} catch (err) {
 			const message = err instanceof Error ? err.message : String(err);
@@ -3304,7 +3224,7 @@ function registerIpc() {
 
 	ipcMain.handle(ipcChannels.yaoPromptsDetail, async (_event, slug: string, category: string) => {
 		try {
-			const result = await yaoPromptManager.detail(slug, category);
+			const result = await xuePromptManager.detail(slug, category);
 			if (!result) throw new Error(`未找到提示词: ${slug}`);
 			return result;
 		} catch (err) {
@@ -3316,7 +3236,7 @@ function registerIpc() {
 
 	ipcMain.handle(ipcChannels.yaoPromptsImport, async (_event, slug: string, category: string) => {
 		try {
-			const result = await yaoPromptManager.importToPi(slug, category);
+			const result = await xuePromptManager.importToPi(slug, category);
 			void appLogger.info("yao-prompts", "Imported to pi templates", { slug, localName: result.name });
 			return result;
 		} catch (err) {
@@ -3446,6 +3366,15 @@ function registerIpc() {
 		});
 		return result;
 	});
+
+	ipcMain.handle(
+		ipcChannels.agentsPrepareResend,
+		async (_event, agentId: string, messageId: string) => {
+			const result = await agentManager.prepareResendFromMessage(agentId, messageId);
+			void appLogger.info("agent", "Prepare resend completed via IPC", { agentId, messageId });
+			return result;
+		},
+	);
 	ipcMain.handle(
 		ipcChannels.agentsSwitchSession,
 		async (_event, agentId: string, sessionPath: string) => {
@@ -3743,7 +3672,7 @@ app.whenReady().then(async () => {
 	piLocator = new PiLocator();
 	configManager = new ConfigManager();
 	promptManager = new PromptManager();
-	yaoPromptManager = new YaoPromptManager();
+	xuePromptManager = new XuePromptManager();
 	skillManager = new SkillManager();
 	extensionManager = new ExtensionManager(piLocator, () => settingsStore.get());
 	projectResourceManager = new ProjectResourceManager((projectId) => projectStore.get(projectId));
@@ -3827,14 +3756,14 @@ app.whenReady().then(async () => {
 			promptManager.configureWsl(wslDistro, wslUser);
 			extensionManager.configureWsl(wslDistro, wslUser);
 				if (configManager) configManager.configureWsl(wslDistro, wslUser);
-			if (yaoPromptManager) yaoPromptManager.configureWsl(wslDistro, wslUser);
+			if (xuePromptManager) xuePromptManager.configureWsl(null);
 		} else {
 			sessionScanner.clearWsl();
 			skillManager.configureWsl(null);
 			promptManager.configureWsl(null);
 			extensionManager.configureWsl(null);
 			if (configManager) configManager.configureWsl(null);
-			if (yaoPromptManager) yaoPromptManager.configureWsl(null);
+			if (xuePromptManager) xuePromptManager.configureWsl(null);
 		}
 	};
 	await syncWslConfig();
