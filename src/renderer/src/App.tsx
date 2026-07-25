@@ -1941,6 +1941,11 @@ export function App() {
     sessions: {
       open: runOpenSidebarSessionById,
       createDraft: runCreateSessionDraft,
+      createAnonymousAgent: async (projectId: string) => {
+        const project = projects.find((p) => p.id === projectId);
+        if (!project) return;
+        void api.agents.create({ projectId, title: t("app.anonymousChatTitle", { name: project.name }), noSession: true });
+      },
       deleteDraft: deleteDraftSession,
       rename: rename.openSessionRename,
       export: runExportSidebarSession,

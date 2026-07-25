@@ -843,23 +843,24 @@ export class FeishuBridge {
 				if (nextState.terminal === "running") {
 					cardStream.update(card);
 				} else {
-					// 终态：强制 flush + close，记录失败以便 runAgent 降级兜底
+					// 终态：先预占，避免 agent_end 抢先触发重复纯文本同步。
+					this.cardTerminalSucceeded.add(agentId);
+					// 强制 flush + close，记录失败以便降级补发纯文本
 					void cardStream.flush(card).then(() => {
 						// flush 成功 → 检查实际 patch 是否成功
 						if (cardStream.lastPatchFailed) {
 							this.cardUpdateFailed.add(agentId);
+							this.cardTerminalSucceeded.delete(agentId);
 							log(`[飞书 Bridge] 终态卡片 patch 失败: ${cardStream.lastPatchError}`);
 						}
 					}).then(() => cardStream.close()).catch((e) => {
 						this.cardUpdateFailed.add(agentId);
+						this.cardTerminalSucceeded.delete(agentId);
 						logErr("[飞书 Bridge] 终态卡片 flush/close 异常:", e);
 					});
 					this.streamingRunStates.delete(agentId);
 					this.streamingCards.delete(agentId);
 					this.pendingCardEvents.delete(agentId);
-					if (!cardStream.lastPatchFailed) {
-						this.cardTerminalSucceeded.add(agentId);
-					}
 				}
 			} else {
 				// 卡片尚未创建 → 缓存事件（并行模式）

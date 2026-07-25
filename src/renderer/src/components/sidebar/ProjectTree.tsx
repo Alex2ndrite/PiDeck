@@ -3,7 +3,6 @@ import type { DragEvent } from "react";
 import type { Project, SessionSource, WorktreeEntry } from "../../../../shared/types";
 import { ProjectAvatar } from "./SidebarParts";
 import { SIDEBAR_SESSION_SOURCES, type SidebarController } from "../../hooks/useSidebarController";
-import { desktopApi as api } from "../../desktopApi";
 import { t } from "../../i18n";
 import type { SidebarActions } from "./SidebarContent";
 import { SessionTree } from "./SessionTree";
@@ -79,7 +78,7 @@ export function ProjectTree(props: {
           <span className="project-row-actions">
             {chat && props.actions.projects.changeChatPath && <span className="project-action" title={t("app.chatProjectSettings")} onClick={(event) => { event.stopPropagation(); void props.actions.projects.changeChatPath!(project); }}><FolderCog size={14} /></span>}
             <span className="project-action" title={t("app.projectNewAgent")} onClick={(event) => { event.stopPropagation(); void props.actions.sessions.createDraft(project.id); }}><Plus size={14} /></span>
-            <span className="project-action" title={t("app.anonymousChat")} onClick={async (event) => { event.stopPropagation(); await api.agents.create({ projectId: project.id, title: t("app.anonymousChatTitle", { name: project.name }), noSession: true }); }}><MessageSquare size={14} /></span>
+            <span className="project-action" title={t("app.anonymousChat")} onClick={(event) => { event.stopPropagation(); void props.actions.sessions.createAnonymousAgent(project.id); }}><MessageSquare size={14} /></span>
           </span>
         </button>
         {!collapsed && props.controller.sourceFilterOpenProjectId === project.id && <div className="session-source-filter-menu">
