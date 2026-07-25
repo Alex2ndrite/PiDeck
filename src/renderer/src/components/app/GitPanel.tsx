@@ -1056,6 +1056,23 @@ export function GitPanel(props: GitPanelProps) {
   );
 
   /** 新建分支弹窗状态 */
+	const [pushing, setPushing] = useState(false);
+	const [pulling, setPulling] = useState(false);
+	const doPush = async () => {
+		if (pushing || pulling) return;
+		setPushing(true); setError(null);
+		try { await (window as any).piDesktop?.git?.push(props.projectId); await refresh(); }
+		catch (e) { setError(errorMessage(e)); }
+		finally { setPushing(false); }
+	};
+	const doPull = async () => {
+		if (pushing || pulling) return;
+		setPulling(true); setError(null);
+		try { await (window as any).piDesktop?.git?.pull(props.projectId); await refresh(); }
+		catch (e) { setError(errorMessage(e)); }
+		finally { setPulling(false); }
+	};
+
   const [commitGenLoading, setCommitGenLoading] = useState(false);
   const [branchOpen, setBranchOpen] = useState(false);
   const [branchCreating, setBranchCreating] = useState(false);

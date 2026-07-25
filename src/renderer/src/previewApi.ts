@@ -410,6 +410,8 @@ export function createPreviewApi(): PiDesktopApi {
 				dropCommit: async () => {},
 				generateCommitMessage: async () => "",
 				init: async () => {},
+			pull: async () => {},
+			push: async () => {},
 		},
 		logs: {
 			list: async () => [],
