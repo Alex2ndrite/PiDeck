@@ -3740,15 +3740,18 @@ export class AgentManager {
 					}];
 				}
 				if (typed.role === "assistant") {
-					// 工具调用回合常见「assistant 仅含 toolCall、无可见文本」：UI 跳过，
-					// 但仍必须消费 entry 槽位，否则后面用户消息会绑到更早的 entryId，
-					// 重发截断会沿错误根节点删掉大半段历史。
+					// 工具调用回合常见「assistant 仅含 toolCall、无可见文本」：
+					// 这时不能直接跳过，因为可能包含 thinking 内容。如果 thinking 也被丢掉，
+					// 渲染时多步思考会混入下一个回答块，用户在历史会话中看到的信息不完整。
+					// 提取 thinking，即使 text 为空也保留消息，由 renderer 端 groupToolMessages
+					// 的 isThinkingOnly 判断逻辑统一处理。
 					const taken = takeActiveEntryId(activeEntryIds, entryIndex);
 					entryIndex = taken.nextIndex;
 					const currentEntryId = taken.entryId;
 					const text = this.extractText(typed.content);
-					if (!text.trim()) return [];
 					const thinking = this.extractThinking(typed.content);
+					// 无文本且无 thinking 时才是真正的空消息，跳过。
+					if (!text.trim() && !thinking?.trim()) return [];
 					return [{
 						id: `${agentId}-history-${currentEntryId ?? index}`,
 						agentId,
@@ -3882,7 +3885,9 @@ export class AgentManager {
 				}
 				return [];
 			})
-			.filter((message: ChatMessage) => message.text.trim());
+			// thinking-only assistant turns intentionally carry an empty visible text field.
+			// Keep them so renderer grouping can render the reasoning between tool steps.
+			.filter((message: ChatMessage) => Boolean(message.text.trim() || message.thinking?.trim()));
 	}
 
 	private collectHistoricalToolCalls(rawMessages: unknown[]) {

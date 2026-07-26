@@ -66,7 +66,7 @@ test("App routes project and Session selection through the command owner", () =>
   );
   assert.match(
     appSource,
-    /select: \(projectId\) => \{\s*selectProjectCommand\(projectId\);\s*if \(getProjectSessionRecords\(projectId\)/,
+    /select: \(projectId\) => \{\s*selectProjectCommand\(projectId\);[\s\S]*?const loadState = store\.get\(sessionCatalogLoadStateAtom\)\[projectId\];[\s\S]*?loadState\?\.status !== "loading" && loadState\?\.status !== "ready"/,
   );
   assert.doesNotMatch(appSource, /setCurrentSessionId\(/);
 });

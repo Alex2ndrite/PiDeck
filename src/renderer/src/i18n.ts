@@ -745,6 +745,7 @@ const zhCN = {
   "config.skillDisabledToast": "Skill 已禁用，重启 agent 后生效",
   "config.skillEnabledToast": "Skill 已启用，重启 agent 后生效",
   "config.extensionUninstalledToast": "扩展已卸载，重启 agent 后生效",
+  "config.extensionUninstallFailed": "卸载失败：{error}",
   "config.count.configItems": "{count} 个配置项",
   "config.count.extensions": "{count} 个扩展",
   "config.count.auth": "{count} 个认证",
@@ -2380,6 +2381,7 @@ const enUS: Record<TranslationKey, string> = {
     "Skill enabled. Restart agents for it to take effect.",
   "config.extensionUninstalledToast":
     "Extension uninstalled. Restart agents for it to take effect.",
+  "config.extensionUninstallFailed": "Uninstall failed: {error}",
   "config.count.configItems": "{count} settings",
   "config.count.auth": "{count} auth(s)",
   "config.retry.title": "Auto Retry",

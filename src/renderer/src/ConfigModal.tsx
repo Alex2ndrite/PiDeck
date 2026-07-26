@@ -447,6 +447,15 @@ function ConfigModalContent(props: ConfigModalProps) {
 		showNotice(msg, 2500);
 	};
 
+	/** 去掉 Electron IPC 包装前缀，只保留真正业务错误，方便 toast 阅读。 */
+	const formatIpcError = (error: unknown): string => {
+		const raw = error instanceof Error ? error.message : String(error);
+		const matched = raw.match(
+			/Error invoking remote method '[^']+':\s*(?:Error:\s*)?([\s\S]+)$/i,
+		);
+		return (matched?.[1] ?? raw).trim();
+	};
+
 	/**
 	 * 模型配置保存后，通知所有运行中的 Agent 尝试刷新模型配置。
 	 *
@@ -1324,14 +1333,26 @@ function ConfigModalContent(props: ConfigModalProps) {
 			return;
 		}
 		setUninstallExtensionConfirm(null);
+		// 立刻进入卸载态以触发卡片退场动画，同时发起真实卸载；两者并行，避免"删完才闪一下"。
 		setUninstallingExtensionSource(target.source);
-		setError(null);
+		const exitAnimation = new Promise<void>((resolve) => {
+			window.setTimeout(resolve, 280);
+		});
 		try {
-			await api.extensions.uninstall(target.source, target.scope);
-			await refreshExtensions();
+			await Promise.all([
+				api.extensions.uninstall(target.source, target.scope),
+				exitAnimation,
+			]);
+			// 与禁用/手动刷新一致：强制重扫并跳过可能残留的 in-flight 缓存结果。
+			await refreshExtensions(true);
 			showToast(t("config.extensionUninstalledToast"));
 		} catch (e) {
-			setError(e instanceof Error ? e.message : String(e));
+			// 配置页顶部红字容易被滚出视口；卸载失败用 error toast，用户能立刻看到。
+			showNotice(
+				t("config.extensionUninstallFailed", { error: formatIpcError(e) }),
+				4500,
+				"error",
+			);
 		} finally {
 			setUninstallingExtensionSource(null);
 		}

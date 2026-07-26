@@ -65,7 +65,8 @@ import {
   sessionRecordsByProjectIdAtomFamily,
   sessionIdByRuntimeAgentIdAtomFamily,
   sessionRuntimeBySessionIdAtomFamily,
-  sidebarCollapsedProjectIdsAtom,
+  sidebarExpandedProjectIdsAtom,
+  sessionCatalogLoadStateAtom,
   sessionSummariesByProjectIdAtomFamily,
   setSessionAttachmentsAtom,
   setSessionCatalogLoadStateAtom,
@@ -232,7 +233,7 @@ export function App() {
   activeAgentIdRef.current = activeAgentId;
   const agentsRef = useRef<AgentTab[]>(agents);
   agentsRef.current = agents;
-  const collapsedProjects = useAtomValue(sidebarCollapsedProjectIdsAtom);
+  const expandedProjects = useAtomValue(sidebarExpandedProjectIdsAtom);
 
   const [commands, setCommands] = useState<PiCommand[]>([]);
   const [promptTemplateList] = useState<
@@ -359,7 +360,6 @@ export function App() {
     setFiles,
     gitInfo,
     setGitInfo,
-    sessionLoadingByProject,
     setSessionLoadingByProject,
     setVisibleProjectChildCountByProject,
     refreshProjects,
@@ -420,8 +420,6 @@ export function App() {
     closeAgentMenu: () => undefined,
   });
 
-  const getProjectSessions = (projectId: string) =>
-    store.get(sessionSummariesByProjectIdAtomFamily(projectId));
   const getProjectSessionRecords = (projectId: string) =>
     store.get(sessionRecordsByProjectIdAtomFamily(projectId));
   const getSessionRecord = (sessionId: string) =>
@@ -441,6 +439,9 @@ export function App() {
 
   const PROJECT_EXPANDED_DIRS_KEY_PREFIX = "pid:project-expanded-dirs:";
 
+  // localStorage 只负责首屏；展开项目的权威设置必须等首次 settings.get 返回后才参与迁移。
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
+  const [expandedProjectsReady, setExpandedProjectsReady] = useState(false);
   const [settings, setSettings] = useState<AppSettings>({
     useNativeTitleBar: true,
     showNativeMenu: false,
@@ -1048,6 +1049,7 @@ export function App() {
       .catch(() => undefined);
     void api.settings.get().then((next) => {
       setSettings(next);
+      setSettingsLoaded(true);
       piUpdate.setCustomPiPath(next.customPiPath ?? "");
       if (!Object.values(next.externalEditors).some((editor) => editor.command)) {
         void api.editors
@@ -1066,6 +1068,9 @@ export function App() {
       if (!next.disableUpdateCheck) {
         window.setTimeout(() => void piUpdate.checkPiCliUpdateOnStartup(), 1200);
       }
+    }).catch(() => {
+      // 即使 settings IPC 暂不可用，也要允许侧栏继续使用 localStorage/default 状态。
+      setSettingsLoaded(true);
     });
 
   }, []);
@@ -1086,13 +1091,19 @@ export function App() {
         ),
       ),
     );
-    // 启动时只加载 chat 项目的会话,其他项目延迟到展开时加载
-    for (const project of projects) {
-      if (project.kind === "chat") {
-        void refreshProjectSessions(project.id).catch(() => undefined);
-      }
-    }
   }, [projectIdsKey]);
+
+  useEffect(() => {
+    // settings.json 覆盖首屏 localStorage 后，按最终展开集合补加载；使用 catalog load state
+    // 而不是会话数量判定，空项目也只加载一次。
+    if (!expandedProjectsReady) return;
+    for (const project of projects) {
+      if (!expandedProjects.has(project.id)) continue;
+      const loadState = store.get(sessionCatalogLoadStateAtom)[project.id];
+      if (loadState?.status === "loading" || loadState?.status === "ready") continue;
+      void refreshProjectSessions(project.id).catch(() => undefined);
+    }
+  }, [expandedProjects, expandedProjectsReady, projectIdsKey, refreshProjectSessions, store]);
 
   useEffect(() => {
     // When update check is disabled, skip periodic and deferred auto-check.
@@ -1116,7 +1127,8 @@ export function App() {
   }, [displayAgents]);
 
   useEffect(() => {
-    if (!activeProjectId || collapsedProjects.has(activeProjectId)) return;
+    // 折叠中的项目不跑周期扫描，避免后台无意义刷会话列表
+    if (!expandedProjectsReady || !activeProjectId || !expandedProjects.has(activeProjectId)) return;
     // 进入/退出运行态时都立即扫描一次，保证最终 child session 不因最后一次写入时序而遗漏。
     let disposed = false;
     const scheduleRefresh = () => {
@@ -1135,7 +1147,7 @@ export function App() {
       disposed = true;
       window.clearInterval(timer);
     };
-  }, [activeProjectId, activeProjectHasBusyAgent, activeProjectSessionSyncKey, collapsedProjects]);
+  }, [activeProjectId, activeProjectHasBusyAgent, activeProjectSessionSyncKey, expandedProjects, expandedProjectsReady]);
 
   // Composer sizing is owned by ComposerArea and useSessionLayout.
   // 待发送轨道高度变化会改变 composer 的 chrome 高度；队列增删后重新 clamp，
@@ -1233,12 +1245,11 @@ export function App() {
       return;
     }
 
-    // 切换项目时,如果该项目未加载过会话,则加载
+    // 切换项目时按 catalog load state 判断。空项目成功返回 [] 后也会是 ready，
+    // 不能再用列表长度，否则每次选中都会重扫。
     const activeProject = projects.find((p) => p.id === activeProjectId);
-    const hasLoadedSessions = getProjectSessions(activeProjectId).length > 0;
-    const isLoadingNow = sessionLoadingByProject[activeProjectId];
-
-    if (activeProject && !activeProject.kind && !hasLoadedSessions && !isLoadingNow) {
+    const loadState = store.get(sessionCatalogLoadStateAtom)[activeProjectId];
+    if (expandedProjectsReady && activeProject && expandedProjects.has(activeProjectId) && loadState?.status !== "loading" && loadState?.status !== "ready") {
       void refreshProjectSessions(activeProjectId).catch(() => undefined);
     }
 
@@ -1905,7 +1916,9 @@ export function App() {
       add: addProject,
       select: (projectId) => {
         selectProjectCommand(projectId);
-        if (getProjectSessionRecords(projectId).length === 0) {
+        // 空项目也可能已经成功加载；用 catalog 状态区分“空结果”和“尚未扫描”。
+        const loadState = store.get(sessionCatalogLoadStateAtom)[projectId];
+        if (loadState?.status !== "loading" && loadState?.status !== "ready") {
           void refreshProjectSessions(projectId).catch(() => undefined);
         }
       },
@@ -2005,6 +2018,9 @@ export function App() {
       }}
       onOpenConfig={() => setConfigOpen(true)}
       onOpenFeedback={() => overlays.setFeedbackOpen(true)}
+      settingsExpandedProjectIds={settings.sidebarExpandedProjectIds}
+      settingsLoaded={settingsLoaded}
+      onExpandedProjectsReady={() => setExpandedProjectsReady(true)}
       onOpenHomepage={() => void api.app.openExternal("https://ayuayue.github.io/PiDeck/")}
     />
   );
@@ -2417,7 +2433,7 @@ export function App() {
     <AppUpdateOverlay
       controller={appUpdate}
       releasesUrl={appInfo.releasesUrl}
-      openExternal={(url) => api.app.openExternal(url)}
+      openExternal={(url, forceSystem) => api.app.openExternal(url, forceSystem)}
       upToDateVersion={upToDateVersion}
       onDismissUpToDate={() => setUpToDateVersion(null)}
     />

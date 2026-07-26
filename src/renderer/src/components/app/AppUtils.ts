@@ -291,7 +291,9 @@ export function groupToolMessages(messages: ChatMessage[]): RenderMessage[] {
 		currentRun.push({ kind: "message", message });
 	}
 
-	// 暂存区：已 flush 但无 assistant 消息的 run（如 ask_question 场景），等待后续消息合并
+	// 暂存区：仅用于 ask_question 续答——system 卡片后用户回复时，把卡片前的工具/思考
+	// 暂存起来，等下一条 assistant 到来后合并为同一 agent-run。
+	// 普通「上一轮只有工具/思考、用户又发新问题」场景不得使用此暂存，否则会串轮。
 	let pendingRun: (MessageItem | ToolGroupItem | ThinkingGroupItem)[] | null = null;
 
 	for (const message of messages) {
@@ -331,11 +333,17 @@ export function groupToolMessages(messages: ChatMessage[]): RenderMessage[] {
 				pendingRun = null;
 				flushRun();
 			}
-			// 用户消息：若当前 run 有工具但无 assistant 消息，暂存起来等待后续合并
+			// 用户消息到来时，当前 run 可能只有工具/思考、没有最终回答文本。
+			// 仅在「回答 ask_question」场景下暂存合并：上一条 result 是 system 消息。
+			// 普通新提问（上一轮未完成回答就发下一条）必须 flush 成独立 agent-run，
+			// 否则上一轮的工具/思考会混进下一轮回答块。
 			const hasToolsWithoutAssistant =
 				currentRun.length > 0 &&
 				currentRun.every((i) => i.kind !== "message" || i.message.role !== "assistant");
-			if (hasToolsWithoutAssistant) {
+			const lastResult = result[result.length - 1];
+			const isAnsweringAskQuestion =
+				lastResult?.kind === "message" && lastResult.message.role === "system";
+			if (hasToolsWithoutAssistant && isAnsweringAskQuestion) {
 				flushTools();
 				flushThinking();
 				pendingRun = [...currentRun];

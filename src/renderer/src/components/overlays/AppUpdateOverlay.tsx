@@ -8,7 +8,7 @@ import type { AppUpdateControllerState } from "../../hooks/useAppUpdateControlle
 export type AppUpdateOverlayProps = {
 	controller: Pick<AppUpdateControllerState, "info" | "error" | "checking" | "downloading" | "progress" | "downloadedPath" | "download" | "install" | "clear">;
 	releasesUrl: string;
-	openExternal: (url: string) => Promise<void> | void;
+	openExternal: (url: string, forceSystem?: boolean) => Promise<void> | void;
 	upToDateVersion?: string | null;
 	onDismissUpToDate?: () => void;
 };
@@ -73,7 +73,7 @@ function UpdateDialog(props: {
 export function AppUpdateOverlay({ controller, releasesUrl, openExternal, upToDateVersion, onDismissUpToDate }: AppUpdateOverlayProps) {
 	const info = controller.info;
 	if (info) {
-		return <UpdateDialog info={info} progress={controller.progress} checking={controller.checking} downloading={controller.downloading} downloadedPath={controller.downloadedPath} onClose={controller.clear} onDownload={() => void controller.download()} onInstall={() => void controller.install()} error={controller.error} onBrowserDownload={() => void openExternal(info.recommendedAsset?.url ?? info.releaseUrl)} onOpenRelease={() => void openExternal(info.releaseUrl)} />;
+		return <UpdateDialog info={info} progress={controller.progress} checking={controller.checking} downloading={controller.downloading} downloadedPath={controller.downloadedPath} onClose={controller.clear} onDownload={() => void controller.download()} onInstall={() => void controller.install()} error={controller.error} onBrowserDownload={() => void openExternal(info.recommendedAsset?.url ?? info.releaseUrl, true)} onOpenRelease={() => void openExternal(info.releaseUrl, true)} />;
 	}
 	if (controller.error) {
 		return (
@@ -81,7 +81,7 @@ export function AppUpdateOverlay({ controller, releasesUrl, openExternal, upToDa
 				<section className="update-modal update-error-modal" onClick={(event) => event.stopPropagation()}>
 					<div className="modal-header"><strong>{t("update.checkFailedTitle")}</strong><CloseIconButton label={t("common.close")} onClick={controller.clear} /></div>
 					<div className="update-body"><p className="update-version-line">{t("update.checkFailedDescription")}</p><div className="update-error-detail">{t("update.errorInfo", { message: controller.error })}</div><p className="update-asset-line">{t("update.manualReleaseHint")}<br /><span>{releasesUrl}</span></p></div>
-					<div className="update-actions"><button onClick={controller.clear}>{t("common.close")}</button><button className="primary" onClick={() => void openExternal(releasesUrl)}>{t("update.openReleasePage")}</button></div>
+					<div className="update-actions"><button onClick={controller.clear}>{t("common.close")}</button><button className="primary" onClick={() => void openExternal(releasesUrl, true)}>{t("update.openReleasePage")}</button></div>
 				</section>
 			</div>
 		);
@@ -92,7 +92,7 @@ export function AppUpdateOverlay({ controller, releasesUrl, openExternal, upToDa
 			<section className="update-modal update-uptodate-modal" onClick={(event) => event.stopPropagation()}>
 				<div className="modal-header"><strong>{t("update.upToDateTitle")}</strong><CloseIconButton label={t("common.close")} onClick={onDismissUpToDate ?? (() => undefined)} /></div>
 				<div className="update-body"><p className="update-version-line">{t("update.upToDateMessage", { version: upToDateVersion })}</p></div>
-				<div className="update-actions"><button onClick={onDismissUpToDate}>{t("common.close")}</button><button onClick={() => void openExternal(releasesUrl)}>{t("update.openReleasePage")}</button></div>
+				<div className="update-actions"><button onClick={onDismissUpToDate}>{t("common.close")}</button><button onClick={() => void openExternal(releasesUrl, true)}>{t("update.openReleasePage")}</button></div>
 			</section>
 			</div>
 		);

@@ -461,6 +461,14 @@ export type AppSettings = {
 	 *  开启后自动跳过启动和定时检测，设置页中检测按钮也禁用。 */
 	disableUpdateCheck: boolean;
 
+	// ── 侧栏 UI 状态 ──
+	/**
+	 * 左侧边栏处于展开状态的项目 id 列表（含 builtin-chat）。
+	 * 写入 settings.json，避免 dev 模式强杀进程时 localStorage 来不及落盘而丢失。
+	 * 缺省时由渲染层按「仅展开 chat」处理。
+	 */
+	sidebarExpandedProjectIds?: string[];
+
 };
 
 // ── 桌面宠物类型 ──

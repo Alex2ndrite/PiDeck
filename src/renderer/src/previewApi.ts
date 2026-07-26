@@ -288,6 +288,11 @@ export function createPreviewApi(): PiDesktopApi {
 			writeContent: async () => undefined,
 			delete: async () => undefined,
 			rename: async () => "",
+			getPathForFile: () => "",
+			getClipboardPaths: () => [],
+		},
+		dialog: {
+			pickFiles: async () => [],
 		},
 		sessions: {
 			list: async () => getSessions(),

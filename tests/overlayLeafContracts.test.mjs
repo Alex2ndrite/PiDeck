@@ -286,6 +286,10 @@ test("overlay roots keep controller/import/runtime error visible", () => {
   const imports = read("components/overlays/ImportOverlayHost.tsx");
   assert.match(update, /props\.error/);
   assert.match(update, /role="alert"/);
+  assert.match(update, /controller\.error/);
+  // 发布说明和浏览器下载必须绕过内置浏览器，避免 webview 拦截安装包跳转。
+  assert.match(update, /onBrowserDownload=\{\(\) => void openExternal\([^)]*, true\)\}/);
+  assert.match(update, /onOpenRelease=\{\(\) => void openExternal\(info\.releaseUrl, true\)\}/);
   assert.match(imports, /controller\.error/);
   assert.match(imports, /renderImportError/);
 });

@@ -6,7 +6,7 @@ import { SIDEBAR_SESSION_SOURCES, type SidebarController } from "../../hooks/use
 import { t } from "../../i18n";
 import type { SidebarActions } from "./SidebarContent";
 import { SessionTree } from "./SessionTree";
-import { WorktreeTree } from "./WorktreeTree";
+import { WorktreeTree, mainWorkspaceKey } from "./WorktreeTree";
 
 function isChatProject(project: Project) {
   return project.kind === "chat";
@@ -89,11 +89,13 @@ export function ProjectTree(props: {
           project={project}
           controller={props.controller}
           actions={props.actions}
+          currentProjectId={props.currentProjectId}
           currentSessionId={props.currentSessionId}
           entries={props.worktreesByProject[project.id] ?? []}
           branch={props.branchByProject?.[project.id]}
         />}
-        {!collapsed && <SessionTree
+        {/* worktree 模式下主会话挂在主工作区下方，随主工作区一起折叠 */}
+        {!collapsed && !(project.worktreeEnabled && props.controller.isWorkspaceCollapsed(mainWorkspaceKey(project.id))) && <SessionTree
           project={project}
           sessions={props.controller.catalog.sessionsByProject[project.id] ?? []}
           agents={props.controller.catalog.agents}

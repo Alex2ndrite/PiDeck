@@ -4,14 +4,11 @@ import test from "node:test";
 import ts from "typescript";
 import vm from "node:vm";
 
-function loadControllerModule() {
-  const output = ts.transpileModule(
-    readFileSync("src/renderer/src/hooks/useSidebarController.ts", "utf8"),
-    {
-      compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
-      fileName: "useSidebarController.ts",
-    },
-  ).outputText;
+function loadTsModule(path, fileName, requireStub) {
+  const output = ts.transpileModule(readFileSync(path, "utf8"), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+    fileName,
+  }).outputText;
   const module = { exports: {} };
   vm.runInNewContext(output, {
     module,
@@ -20,14 +17,33 @@ function loadControllerModule() {
     Object,
     Set,
     Map,
-    require: (specifier) => {
+    require: requireStub,
+  }, { filename: fileName });
+  return module.exports;
+}
+
+function loadExpandedProjectsModule() {
+  return loadTsModule(
+    "src/renderer/src/utils/sidebarExpandedProjects.ts",
+    "sidebarExpandedProjects.ts",
+    (specifier) => {
+      throw new Error(`Unexpected import: ${specifier}`);
+    },
+  );
+}
+
+function loadControllerModule() {
+  return loadTsModule(
+    "src/renderer/src/hooks/useSidebarController.ts",
+    "useSidebarController.ts",
+    (specifier) => {
       if (specifier === "react") return {};
       if (specifier === "jotai") return {};
       if (specifier === "../atoms") return {};
+      if (specifier === "../utils/sidebarExpandedProjects") return loadExpandedProjectsModule();
       throw new Error(`Unexpected import: ${specifier}`);
     },
-  }, { filename: "useSidebarController.ts" });
-  return module.exports;
+  );
 }
 
 test("source filters preserve all sources until the user narrows a project", () => {
@@ -54,8 +70,8 @@ test("Sidebar controller derives catalog data from canonical atoms without a wri
 
 test("Session tree keys use catalog SessionRecord identity, including child rows", () => {
   const source = readFileSync("src/renderer/src/components/sidebar/SessionTree.tsx", "utf8");
-  assert.match(source, /key=\{getSessionRowKey\(session\)\}/);
-  assert.match(source, /key=\{getSessionRowKey\(child\.session\)\}/);
+  assert.match(source, /key=\{session\.id\}/);
+  assert.match(source, /key=\{child\.session\.id\}/);
   assert.doesNotMatch(source, /key=\{session\.filePath\}/);
   assert.doesNotMatch(source, /key=\{child\.session\.filePath\}/);
 });
@@ -105,10 +121,18 @@ test("worktree rows expose their child project context menu and loading projects
   const sessionTree = readFileSync("src/renderer/src/components/sidebar/SessionTree.tsx", "utf8");
   const controller = readFileSync("src/renderer/src/hooks/useSidebarController.ts", "utf8");
   assert.match(worktree, /kind: "project",\s*projectId: childProject\.id/);
+  assert.match(worktree, /worktree-workspace-header\$\{props\.currentProjectId === props\.project\.id \? " active" : ""\}/);
+  assert.match(worktree, /childProject && props\.currentProjectId === childProject\.id \? " active" : ""/);
   assert.match(controller, /useAtomValue\(sessionCatalogLoadStateAtom\)/);
   assert.match(sessionTree, /catalogLoadStateByProject\[props\.project\.id\]\?\.status === "loading"/);
   assert.match(sessionTree, /catalogLoading \|\| draftSessions\.length/);
   assert.match(sessionTree, /project-session-loading/);
+});
+
+test("sidebar expansion migration waits for authoritative settings before pruning projects", () => {
+  const controller = readFileSync("src/renderer/src/hooks/useSidebarController.ts", "utf8");
+  assert.match(controller, /if \(projects\.length === 0 \|\| !options\.settingsLoaded\) return;/);
+  assert.match(controller, /commitExpandedProjectIds\(pruned\)/);
 });
 
 test("Sidebar leaf remains independent from App and keeps RPC logging query local", () => {
@@ -133,7 +157,7 @@ test("AppSidebar owns the controller while App keeps business actions as ports",
   assert.match(root, /getRpcLogging: props\.actions\.rpc\.getLogging/);
   assert.match(root, /controller=\{controller\}/);
   assert.match(app, /const sidebarActions: SidebarActions/);
-  assert.match(app, /useAtomValue\(sidebarCollapsedProjectIdsAtom\)/);
-  assert.match(controller, /useAtom\(sidebarCollapsedProjectIdsAtom\)/);
+  assert.match(app, /useAtomValue\(sidebarExpandedProjectIdsAtom\)/);
+  assert.match(controller, /useAtom\(sidebarExpandedProjectIdsAtom\)/);
   assert.match(projectTree, /if \(props\.controller\.search\.trim\(\)\) return;/);
 });

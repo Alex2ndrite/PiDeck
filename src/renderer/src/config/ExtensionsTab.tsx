@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { ToggleLeft, ToggleRight, Trash2 } from "lucide-react";
+import { Copy, Download, ToggleLeft, ToggleRight, Trash2 } from "lucide-react";
 import type { PiCliUpdateResult, PiExtensionListResult, PiExtensionSummary, PiPackageInfo } from "../../../shared/types";
 import { t } from "../i18n";
+import { showNotice } from "../utils/notice";
 
 type ExtensionsApi = {
 	list: () => Promise<PiExtensionListResult>;
@@ -87,6 +88,7 @@ export function ExtensionsTab(props: {
 		try {
 			const nextEnabled = extension.enabled !== false ? false : true;
 			await getExtensionsApi().toggle(extension.source, nextEnabled);
+			// 与安装/卸载一致：强制刷新列表，确保 enabled 与缓存同步。
 			props.onRefresh();
 		} catch (e) {
 			alert(t("config.installFailed") + ": " + (e instanceof Error ? e.message : String(e)));
@@ -201,17 +203,32 @@ export function ExtensionsTab(props: {
 								</div>
 							</div>
 							<div className="extensions-recommended-action" onClick={(e) => e.stopPropagation()}>
-								{installing ? (
-									<span className="config-btn" style={{ opacity: 0.6 }}>{t("config.installing")}</span>
-								) : (
-									<button
-										className="config-btn"
-										onClick={() => handleInstall(pkg)}
-										disabled={alreadyInstalled || installing}
-									>
-										{alreadyInstalled ? t("config.installed") : t("config.install")}
-									</button>
-								)}
+								{/* 安装中保持与图标按钮同尺寸，避免 config-btn 文本把操作区撑开错位 */}
+								<button
+									className="config-icon-btn"
+									title={installing ? t("config.installing") : alreadyInstalled ? t("config.installed") : t("config.install")}
+									onClick={() => handleInstall(pkg)}
+									disabled={alreadyInstalled || installing}
+									aria-busy={installing}
+								>
+									{installing ? (
+										<span className="skillhub-installing-dot" aria-hidden="true" />
+									) : (
+										<Download size={15} strokeWidth={1.8} aria-hidden="true" />
+									)}
+								</button>
+								<button
+									className="config-icon-btn"
+									title={t("common.copy")}
+									onClick={(e) => {
+										e.stopPropagation();
+										const cmd = `pi install ${pkg.installCmd}`;
+										navigator.clipboard.writeText(cmd);
+										showNotice(t("app.codeCopied"), 1200);
+									}}
+								>
+									<Copy size={14} strokeWidth={1.8} />
+								</button>
 							</div>
 						</div>
 					);
@@ -275,7 +292,10 @@ function ExtensionCard(props: {
 	const { extension } = props;
 	const name = extension.source.replace(/^(?:npm|file|github|git):/i, "");
 	return (
-		<article className="session-card skill-card extension-card">
+		<article
+			className={`session-card skill-card extension-card${props.uninstalling ? " extension-removing" : ""}`}
+			aria-busy={props.uninstalling}
+		>
 			<div className="session-card-display">
 				<div className="session-card-inner skill-card-main">
 					<div className="session-card-title skill-title-row">

@@ -747,8 +747,13 @@ function setupTray() {
 	tray.setContextMenu(contextMenu);
 }
 
-async function openExternalUrl(url: string) {
+async function openExternalUrl(url: string, forceSystem = false) {
 	if (!url.startsWith("http:") && !url.startsWith("https:")) return;
+	// 更新页的发行说明和安装包必须离开内置浏览器，避免下载被 webview 的导航策略拦截。
+	if (forceSystem) {
+		await shell.openExternal(url);
+		return;
+	}
 	const settings = settingsStore.get();
 	if (settings.linkOpenMode === "internal") {
 		openInternalLinkInBrowserPanel(url);
@@ -1608,6 +1613,15 @@ function registerIpc() {
 		});
 		if (result.canceled || result.filePaths.length === 0) return null;
 		return result.filePaths[0];
+	});
+
+	ipcMain.handle(ipcChannels.dialogPickFiles, async (_event, options?: { title?: string }) => {
+		const result = await dialog.showOpenDialog({
+			// 调用方传入经过 i18n 的标题；缺省时交由系统使用平台默认文案。
+			title: options?.title,
+			properties: ["openFile", "openDirectory", "multiSelections"],
+		});
+		return result.canceled ? [] : result.filePaths;
 	});
 
 	ipcMain.handle(
@@ -2713,9 +2727,9 @@ function registerIpc() {
 			pi,
 		};
 	});
-	ipcMain.handle(ipcChannels.appOpenExternal, async (_event, url: string) => {
+	ipcMain.handle(ipcChannels.appOpenExternal, async (_event, url: string, forceSystem?: boolean) => {
 		// 外部链接统一经主进程打开，避免 renderer 直接依赖 shell 权限，并遵守用户设置的打开方式。
-		await openExternalUrl(url);
+		await openExternalUrl(url, forceSystem);
 	});
 	ipcMain.handle(ipcChannels.appRestart, async () => {
 		// 标记为退出状态，避免 closeToTray 阻止重启

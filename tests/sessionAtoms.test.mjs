@@ -33,8 +33,10 @@ function compileModule(filePath, imports = {}) {
 
 function loadAtoms() {
   const runtimeState = compileModule("src/renderer/src/utils/agentRuntimeState.ts");
+  const sessionRecordIdentity = compileModule("src/renderer/src/utils/sessionRecordIdentity.ts");
   const sessions = compileModule("src/renderer/src/atoms/session-atoms.ts", {
     "../utils/agentRuntimeState": runtimeState,
+    "../utils/sessionRecordIdentity": sessionRecordIdentity,
   });
   const composer = compileModule("src/renderer/src/atoms/composer-atoms.ts", {
     "./session-atoms": sessions,
@@ -42,7 +44,7 @@ function loadAtoms() {
   return { ...sessions, ...composer };
 }
 
-function session(id, projectId = "project-1") {
+function session(id, projectId = "project-1", overrides = {}) {
   return {
     id,
     projectId,
@@ -54,6 +56,7 @@ function session(id, projectId = "project-1") {
     status: "draft",
     createdAt: 1,
     updatedAt: 1,
+    ...overrides,
   };
 }
 
@@ -67,6 +70,33 @@ test("stores catalog records and selection by stable session ID", () => {
   store.set(atoms.currentSessionIdAtom, "session-b");
   assert.equal(store.get(atoms.currentSessionAtom).id, "session-b");
   assert.equal(store.get(atoms.sessionIdsByProjectAtom)["project-1"].join(","), "session-a,session-b");
+});
+
+test("keeps catalog atom identities stable when polling returns equivalent records", () => {
+  const atoms = loadAtoms();
+  const store = createStore();
+  store.set(atoms.replaceProjectSessionsAtom, {
+    projectId: "project-1",
+    sessions: [session("session-a"), session("session-b")],
+  });
+  const recordsBefore = store.get(atoms.sessionRecordsAtom);
+  const idsBefore = store.get(atoms.sessionIdsByProjectAtom);
+
+  // Session scanners allocate fresh objects on every poll; equal values must not redraw the sidebar.
+  store.set(atoms.replaceProjectSessionsAtom, {
+    projectId: "project-1",
+    sessions: [session("session-a"), session("session-b")],
+  });
+
+  assert.equal(store.get(atoms.sessionRecordsAtom), recordsBefore);
+  assert.equal(store.get(atoms.sessionIdsByProjectAtom), idsBefore);
+
+  store.set(atoms.replaceProjectSessionsAtom, {
+    projectId: "project-1",
+    sessions: [session("session-a"), session("session-b", "project-1", { updatedAt: 2 })],
+  });
+  assert.notEqual(store.get(atoms.sessionRecordsAtom), recordsBefore);
+  assert.notEqual(store.get(atoms.sessionIdsByProjectAtom), idsBefore);
 });
 
 test("keeps only the 20 most recently written session message caches", () => {

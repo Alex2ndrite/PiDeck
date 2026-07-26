@@ -34,6 +34,9 @@ function loadAtoms() {
     "../utils/agentRuntimeState": compileModule(
       "src/renderer/src/utils/agentRuntimeState.ts",
     ),
+    "../utils/sessionRecordIdentity": compileModule(
+      "src/renderer/src/utils/sessionRecordIdentity.ts",
+    ),
   });
   const selectors = compileModule("src/renderer/src/atoms/session-selectors.ts", {
     "./session-atoms": sessions,

@@ -1827,6 +1827,10 @@ body:not(.is-list-resizing)
   padding: 4px 6px;
   color: var(--color-text-secondary);
 }
+/* 有会话可折叠时多一列放折叠箭头，避免第三个子元素被网格挤到下一行。 */
+.worktree-workspace-header.has-fold {
+  grid-template-columns: 14px 16px minmax(0, 1fr);
+}
 .worktree-workspace-header.active {
   color: var(--color-text-primary);
 }
@@ -1887,6 +1891,33 @@ body:not(.is-list-resizing)
     transform 0.25s ease;
   pointer-events: none;
 }
+/* 工作区列表是 worktree-children 的内层容器，不再叠第二层灰底卡片；
+   归属仍由 .worktree-children 的左线表达。 */
+.worktree-sandbox-list.worktree-children {
+  margin-top: 6px;
+  margin-bottom: 6px;
+  background: transparent;
+}
+
+/* 工作区折叠箭头：展开朝下，折叠朝右 */
+.worktree-fold {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: var(--color-text-tertiary);
+  transition: transform 0.15s ease;
+}
+.worktree-fold.folded {
+  transform: rotate(-90deg);
+}
+.worktree-row:hover .worktree-fold,
+.worktree-workspace-header:hover .worktree-fold {
+  color: var(--color-text-secondary);
+}
+
 .worktree-row .worktree-branch-icon {
   display: inline-flex;
   align-items: center;
@@ -16630,6 +16661,36 @@ a.config-btn {
   font-weight: 700;
   color: var(--color-text-primary);
   margin: 0;
+}
+
+/* 扩展卡片默认带过渡，卸载失败回弹时也不会瞬间跳变 */
+.extension-card {
+  transition:
+    opacity 0.28s ease,
+    transform 0.28s ease;
+}
+
+/* 卸载扩展时的退场动画：先淡出左移，再刷新列表，避免条目生硬消失 */
+.extension-card.extension-removing {
+  opacity: 0;
+  transform: translateX(-14px);
+  pointer-events: none;
+}
+
+/* 安装中的转圈指示：与图标按钮同尺寸，替代会撑开布局的文本态 */
+.skillhub-installing-dot {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--color-accent);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: skillhub-spin 0.6s linear infinite;
+}
+@keyframes skillhub-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .extensions-search-bar {

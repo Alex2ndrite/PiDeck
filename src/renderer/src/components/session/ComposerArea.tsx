@@ -134,6 +134,7 @@ export const ComposerArea = forwardRef<HTMLElement, ComposerAreaProps>(function 
                 onPickModel={() => composer.pickers.open("model")}
                 onPickThinking={() => composer.pickers.open("thinking")}
                 onPickPromptTemplate={() => composer.pickers.open("template")}
+                onAttachFile={() => void composer.editor.attachFile()}
                 onCompact={composer.delivery.compact}
                 composerAgentMode={composer.mode}
                 onOpenComposerModePicker={() => composer.pickers.open("mode")}

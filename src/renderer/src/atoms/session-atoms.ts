@@ -9,6 +9,7 @@ import type {
   SessionRuntimeEvent,
 } from "../../../shared/types";
 import { mergeAgentRuntimeState } from "../utils/agentRuntimeState";
+import { sameProjectSessionList } from "../utils/sessionRecordIdentity";
 
 export const SESSION_MESSAGE_CACHE_LIMIT = 20;
 
@@ -103,6 +104,8 @@ export const replaceProjectSessionsAtom = atom(
   null,
   (get, set, input: { projectId: string; sessions: SessionRecord[] }) => {
     const previousIds = get(sessionIdsByProjectAtom)[input.projectId] ?? [];
+    // 轮询刷新绝大多数轮次内容未变；此时保持 atom 引用稳定，避免整棵侧栏重渲染。
+    if (sameProjectSessionList(previousIds, get(sessionRecordsAtom), input.sessions)) return;
     const nextIds = input.sessions.map((session) => session.id);
     const nextIdSet = new Set(nextIds);
     const nextRecords = { ...get(sessionRecordsAtom) };

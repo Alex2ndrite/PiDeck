@@ -314,6 +314,9 @@ export const ipcChannels = {
 	/** 设置面板 → 主进程：发送测试通知（调试弹窗样式） */
 	petTestNotify: "pet:test-notify",
 
+	// ===== 系统文件选择器 =====
+	dialogPickFiles: "dialog:pick-files",
+
 	// ===== 内置浏览器 =====
 	browserOpenExternal: "browser:open-external",
 } as const;

@@ -770,13 +770,16 @@ export const RichInput = forwardRef<HTMLDivElement, RichInputProps>(
 			onCursorChange(getCaretOffset(root));
 		}, [onCursorChange]);
 
-		/** 粘贴：图片交给上层处理，其余强制纯文本。 */
+		/**
+		 * 粘贴：优先交给上层（图片附加 / 系统剪贴板文件 → @path 引用）。
+		 * 上层若已处理会调用 preventDefault；否则强制插入纯文本，避免富文本污染。
+		 * 注意：资源管理器复制文件时 ClipboardEvent 往往没有 kind=file，
+		 * 因此不能仅靠 items 判断，必须始终先给 onPaste 机会。
+		 */
 		const handlePaste = (event: React.ClipboardEvent<HTMLDivElement>) => {
 			if (onPaste) {
-				const hasImage = Array.from(event.clipboardData.items).some(
-					(i) => i.type.startsWith("image/"),
-				);
-				if (hasImage) { onPaste(event); return; }
+				onPaste(event);
+				if (event.defaultPrevented) return;
 			}
 			event.preventDefault();
 			const root = rootRef.current;

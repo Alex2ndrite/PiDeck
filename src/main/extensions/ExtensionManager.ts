@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
-import { readFile, readdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { basename, join } from "node:path";
 import { homedir } from "node:os";
 import type { AppSettings, PiCliUpdateResult, PiExtensionListResult, PiExtensionSummary, PiUpdateCheckResult } from "../../shared/types";
 import type { PiLocator } from "../pi/PiLocator";
@@ -31,6 +31,16 @@ export class ExtensionManager {
 	private listInflight: Promise<PiExtensionListResult> | null = null;
 	/** 进行中请求是否为强制刷新（含版本信息）。 */
 	private listInflightForce = false;
+	/**
+	 * 列表缓存代数：安装/卸载/开关后递增。
+	 * 用于丢弃失效前已发出的 in-flight 结果，避免旧列表写回缓存导致 UI 不刷新。
+	 */
+	private listCacheGeneration = 0;
+	/**
+	 * 每次实际扫描递增。强制刷新可绕过轻量扫描；旧的轻量结果随后返回时，
+	 * 不能覆盖已经拿到版本信息的强制刷新缓存。
+	 */
+	private listRequestSequence = 0;
 
 	constructor(
 		private readonly locator: PiLocator,
@@ -52,10 +62,17 @@ export class ExtensionManager {
 	private piVersion: string | null = null;
 	private piVersionPromise: Promise<string | null> | null = null;
 
-	/** 安装/卸载/开关后主动清缓存，下一次 list 重新获取。 */
+	/**
+	 * 安装/卸载/开关后主动清缓存。
+	 * 同时递增 generation 并断开 inflight 复用，避免旧请求完成后把已删除/已变更的列表写回。
+	 */
 	invalidateListCache() {
 		this.listCache = null;
 		this.listCacheHasVersionInfo = false;
+		this.listCacheGeneration += 1;
+		// 允许下一次 list() 立刻发起新请求，而不是复用失效前的 inflight。
+		this.listInflight = null;
+		this.listInflightForce = false;
 	}
 
 	/**
@@ -73,18 +90,33 @@ export class ExtensionManager {
 			return this.listInflight;
 		}
 
+		// 捕获当前代数：若请求返回前发生 install/uninstall/toggle，丢弃结果并改走最新 list。
+		const generation = this.listCacheGeneration;
+		const requestSequence = ++this.listRequestSequence;
 		this.listInflightForce = forceRefresh;
-		this.listInflight = this.loadList(forceRefresh)
+		const request = this.loadList(forceRefresh)
 			.then((result) => {
+				if (
+					generation !== this.listCacheGeneration ||
+					requestSequence !== this.listRequestSequence
+				) {
+					// 失效前或被更强刷新取代的调用方也必须拿到最新列表，
+					// 否则慢到的轻量扫描会覆盖已包含版本信息的强制刷新缓存。
+					return this.list(forceRefresh);
+				}
 				this.listCache = result;
 				this.listCacheHasVersionInfo = forceRefresh;
 				return result;
 			})
 			.finally(() => {
-				this.listInflight = null;
-				this.listInflightForce = false;
+				// 仅清理自己：失效后新发起的请求可能已经接管 listInflight。
+				if (this.listInflight === request) {
+					this.listInflight = null;
+					this.listInflightForce = false;
+				}
 			});
-		return this.listInflight;
+		this.listInflight = request;
+		return request;
 	}
 
 	private async loadList(includeVersionInfo: boolean): Promise<PiExtensionListResult> {
@@ -181,18 +213,64 @@ export class ExtensionManager {
 		return result;
 	}
 
+	/**
+	 * 判断是否为本地文件扩展（~/.pi/agent/extensions 下自动发现的 .ts/目录）。
+	 * pi list 的包源都带 npm:/file:/github: 等协议前缀；裸文件名只能走文件系统删除。
+	 */
+	private isLocalFileExtension(source: string): boolean {
+		return !/^(?:npm|file|github|git|https?):/i.test(source);
+	}
+
+	/**
+	 * 删除本地扩展文件/目录。
+	 * 只允许删除 extensions 目录下的单层 basename，防止路径穿越。
+	 */
+	private async removeLocalExtension(source: string): Promise<void> {
+		const extensionsDir = join(this.homeDir, ".pi", "agent", "extensions");
+		const trimmed = source.trim();
+		const name = basename(trimmed);
+		// source 必须等于 basename（如 orca-agent-status.ts），拒绝 ../ 或绝对路径穿越。
+		if (!name || name !== trimmed || name === "." || name === "..") {
+			throw new Error("非法扩展路径");
+		}
+		const targetPath = join(extensionsDir, name);
+		await rm(targetPath, { recursive: true, force: true });
+	}
+
+	/** 卸载后从 disabledExtensions 清掉对应项，避免残留无效禁用记录。 */
+	private async clearDisabledEntry(source: string): Promise<void> {
+		try {
+			const settingsPath = join(this.homeDir, ".pi", "agent", "settings.json");
+			const raw = await readFile(settingsPath, "utf8");
+			const settings = JSON.parse(raw) as { disabledExtensions?: string[] };
+			const disabled = settings.disabledExtensions ?? [];
+			if (!disabled.includes(source)) return;
+			settings.disabledExtensions = disabled.filter((item) => item !== source);
+			await writeFile(settingsPath, JSON.stringify(settings, null, 2), "utf8");
+		} catch {
+			// settings 不存在或解析失败时忽略；卸载主流程已成功
+		}
+	}
+
 	async uninstall(source: string, scope: PiExtensionSummary["scope"] = "user"): Promise<void> {
 		const normalized = source.trim();
 		if (!normalized) throw new Error("扩展来源不能为空");
 		// 阻止卸载 PiDeck 内置扩展（如 pi-deck-file-capture）
-		if (source.startsWith("pi-deck-")) {
+		if (normalized.startsWith("pi-deck-")) {
 			throw new Error("PiDeck 内置扩展不可卸载");
 		}
-		await this.runPi([
-			"remove",
-			normalized,
-			...(scope === "project" ? ["-l"] : []),
-		], 30_000);
+		// 本地 .ts/目录扩展不在 pi package 列表里，pi remove 会报 No matching package；
+		// 例如 orca-agent-status.ts 只能直接删文件。
+		if (this.isLocalFileExtension(normalized)) {
+			await this.removeLocalExtension(normalized);
+		} else {
+			await this.runPi([
+				"remove",
+				normalized,
+				...(scope === "project" ? ["-l"] : []),
+			], 30_000);
+		}
+		await this.clearDisabledEntry(normalized);
 		// 列表已变，清缓存，避免 UI 继续读到旧安装态。
 		this.invalidateListCache();
 	}
