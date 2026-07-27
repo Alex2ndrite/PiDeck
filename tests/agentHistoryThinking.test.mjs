@@ -10,7 +10,49 @@ import vm from "node:vm";
 
 const nodeRequire = createRequire(import.meta.url);
 
+function extractMessageText(content) {
+  return Array.isArray(content)
+    ? content
+      .filter((item) => item?.type === "text")
+      .map((item) => item.text ?? "")
+      .join("\n")
+    : "";
+}
+
+function loadAgentMessageProjectorModule() {
+  const output = ts.transpileModule(
+    readFileSync("src/main/pi/AgentMessageProjector.ts", "utf8"),
+    {
+      compilerOptions: {
+        module: ts.ModuleKind.CommonJS,
+        target: ts.ScriptTarget.ES2022,
+        esModuleInterop: true,
+      },
+      fileName: "AgentMessageProjector.ts",
+    },
+  ).outputText;
+  const module = { exports: {} };
+  vm.runInNewContext(output, {
+    module,
+    exports: module.exports,
+    require: (specifier) => {
+      if (specifier === "./messageContent") return { extractMessageText };
+      if (specifier === "./sessionEntryIds") {
+        return {
+          takeActiveEntryId: (ids, index) => ({ entryId: ids?.[index], nextIndex: index + 1 }),
+        };
+      }
+      return nodeRequire(specifier);
+    },
+    Date,
+    Map,
+    JSON,
+  }, { filename: "AgentMessageProjector.ts" });
+  return module.exports;
+}
+
 function loadAgentManagerModule() {
+	const messageProjectorModule = loadAgentMessageProjectorModule();
 	const historyReaderModule = { exports: {} };
 	const historyReaderOutput = ts.transpileModule(
 		readFileSync("src/main/pi/SessionHistoryReader.ts", "utf8"),
@@ -61,16 +103,7 @@ function loadAgentManagerModule() {
       if (specifier === "../../shared/ipc") return { ipcChannels: {} };
       if (specifier === "./PiProcess") return { PiProcess: class {} };
       if (specifier === "./bashResult") return { formatBashToolMessage: () => "" };
-      if (specifier === "./messageContent") {
-        return {
-          extractMessageText: (content) => Array.isArray(content)
-            ? content
-              .filter((item) => item?.type === "text")
-              .map((item) => item.text ?? "")
-              .join("\n")
-            : "",
-        };
-      }
+      if (specifier === "./AgentMessageProjector") return messageProjectorModule;
       if (specifier === "./historyMessages") return { mergeHistoryWithPreservedMessages: (messages) => messages };
       if (specifier === "./agentSessionIdentity") {
         return { buildAgentSessionKey: () => undefined };

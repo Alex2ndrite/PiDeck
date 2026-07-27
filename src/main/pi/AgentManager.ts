@@ -24,21 +24,21 @@ import { PiProcess } from "./PiProcess";
 import type { RpcResponse } from "./PiRpcClient";
 import { formatBashToolMessage } from "./bashResult";
 import type { MainProcessTranslationKey } from "../../shared/i18n/mainProcessCopy";
-import { extractMessageText } from "./messageContent";
 import { mergeHistoryWithPreservedMessages } from "./historyMessages";
 import {
 	buildAgentSessionKey,
 	type AgentSessionIdentityDefaults,
 } from "./agentSessionIdentity";
 import {
-	takeActiveEntryId,
-} from "./sessionEntryIds";
-import {
 	SessionFileEditor,
 	type SessionEntryTarget,
 	type SessionFileRef,
 } from "./SessionFileEditor";
 import { SessionHistoryReader } from "./SessionHistoryReader";
+import {
+	AgentMessageProjector,
+	buildActiveBranchEntryIds as buildActiveBranchEntryIdsForDisplay,
+} from "./AgentMessageProjector";
 import { LatestByKeyEmitter } from "./LatestByKeyEmitter";
 import {
   updateActiveToolCalls,
@@ -79,6 +79,7 @@ export class AgentManager {
 	private readonly toolExecutingByAgent = new Map<string, string | null>();
 	private readonly sessionFileEditor: SessionFileEditor;
 	private readonly sessionHistoryReader: SessionHistoryReader;
+	private readonly messageProjector: AgentMessageProjector;
 	/** 流式消息 emit 节流状态。 */
 	private readonly messageFlushTimers = new Map<string, NodeJS.Timeout>();
 	private readonly pendingMessageAgents = new Set<string>();
@@ -110,7 +111,6 @@ export class AgentManager {
 	 * 若完整存入 ChatMessage.meta 并随流式 emit 反复全量传输，会显著放大 IPC payload
 	 * 并推高渲染进程内存，是大会话白屏的重要诱因。超长结果保留首尾各一部分，中间省略。
 	 */
-	private static readonly MAX_TOOL_RESULT_CHARS = 8000;
 	/** 本地事件监听器（用于 FeishuBridge 等主进程内部订阅） */
 	private readonly localEventListeners = new Set<(agentId: string, event: unknown) => void>();
 	/** 状态变更监听器（用于 PetStateBridge 等主进程内部模块订阅 AgentTab[] 聚合状态） */
@@ -158,6 +158,10 @@ export class AgentManager {
 			params?: Record<string, string | number>,
 		) => string = () => "Agent operation failed.",
 	) {
+		this.messageProjector = new AgentMessageProjector({
+			translate: this.translate,
+			isAskAborted: (agentId) => this.abortedDuringAsk.has(agentId),
+		});
 		this.sessionFileEditor = sessionFileEditor ?? new SessionFileEditor({
 			logger: appLogger
 				? {
@@ -2829,11 +2833,11 @@ export class AgentManager {
 		const existing = list.find((message) => message.id === messageId);
 		const extractedText =
 			partialMessage && typeof partialMessage === "object"
-				? this.extractText((partialMessage as any).content)
+				? this.messageProjector.extractText((partialMessage as any).content)
 				: "";
 		const extractedThinking =
 			partialMessage && typeof partialMessage === "object"
-				? this.extractThinking((partialMessage as any).content)
+				? this.messageProjector.extractThinking((partialMessage as any).content)
 				: "";
 		const pendingThinking = this.streamingThinking.get(agentId);
 		const nextThinking = this.stripAnsi(extractedThinking || pendingThinking || "");
@@ -2902,7 +2906,7 @@ export class AgentManager {
 			event.partialResult ??
 			event.output ??
 			existing?.meta?.result;
-		const detailText = this.formatToolDetail(
+		const detailText = this.messageProjector.formatToolDetail(
 			toolName,
 			args,
 			result,
@@ -2913,7 +2917,7 @@ export class AgentManager {
 			status === "running" ? `${icon} ${toolName}` : `${icon} ${toolName}`;
 		// args 可能来自 event.args（对象）或 existing.meta.args（已序列化的 JSON 字符串）。
 		// 如果是后者（如 tool_execution_end 不带 args），直接复用已有字符串避免 double encoding。
-		const argsMeta = typeof args === "string" ? args : this.truncateForDetail(this.safeJson(args));
+		const argsMeta = typeof args === "string" ? args : this.messageProjector.truncateForDetail(this.messageProjector.safeJson(args));
 		// 提取 ask_question 详情用于渲染提问卡片；支持批量（questions 数组）和单问题两种格式。
 		// pi RPC 返回格式可能为 result.details 嵌套 或 result 顶层（无 details 包装）
 		const askDetails = (() => {
@@ -2977,7 +2981,7 @@ export class AgentManager {
 			startedAt,
 			...(durationMs !== undefined ? { durationMs } : {}),
 			args: argsMeta,
-			result: this.truncateForDetail(this.extractToolResultText(result) || this.safeJson(result)),
+			result: this.messageProjector.truncateForDetail(this.messageProjector.extractToolResultText(result) || this.messageProjector.safeJson(result)),
 			isError,
 			detailText,
 			// originalContent 不再存储到消息中（full file 会使会话元数据体积过大）。
@@ -3186,20 +3190,7 @@ export class AgentManager {
 		entries: Array<{ id: string; parentId: string | null; type?: string; message?: { role?: string } }>,
 		leafId: string,
 	): string[] {
-		const entryById = new Map<string, { id: string; parentId: string | null; type?: string; message?: { role?: string } }>();
-		for (const entry of entries) {
-			entryById.set(entry.id, entry);
-		}
-
-		// 从 leafId 回溯到 root，只保留 type=message 的条目
-		const allBranchIds: string[] = [];
-		let currentId: string | null = leafId;
-		while (currentId) {
-			allBranchIds.unshift(currentId);
-			const entry = entryById.get(currentId);
-			currentId = entry?.parentId ?? null;
-		}
-		return allBranchIds.filter((id) => entryById.get(id)?.type === "message");
+		return buildActiveBranchEntryIdsForDisplay(entries, leafId);
 	}
 
 	private convertAgentMessages(
@@ -3207,312 +3198,7 @@ export class AgentManager {
 		rawMessages: unknown[],
 		activeEntryIds?: string[],
 	): ChatMessage[] {
-		const historicalToolCalls = this.collectHistoricalToolCalls(rawMessages);
-		const historicalOriginalContentByPath = this.collectHistoricalOriginalContentByPath(
-			rawMessages,
-			historicalToolCalls,
-		);
-		// 用于生成元消息 id（compaction/branchSummary）的计数器
-		let metaSeq = 0;
-		// entryId 按 active branch 顺序与 rawMessages 一一对应。
-		// 注意：entryIndex 只在 user/assistant/toolResult 时递增，
-		// 因为 compactionSummary/branchSummary 在 get_entries 中无对应 entry，
-		// 同时 activeEntryIds 还包含 model_change/thinking_level_change/custom 等非角色条目。
-		// 因此 currentEntryId 的读取必须放在各个角色块内部，不能在所有条目前统一读取，
-		// 否则非 user/assistant/toolResult 条目会提前消费 entryIndex 槽位。
-		let entryIndex = 0;
-		return rawMessages
-			.flatMap<ChatMessage>((message, index) => {
-				if (!message || typeof message !== "object") return [];
-				const typed = message as any;
-
-				if (typed.role === "user") {
-					// 先消费 activeEntryIds 槽位，再决定是否渲染。
-					// 边界：空文本 user 不展示，但 get_entries 仍有对应 entry，
-					// 若不推进 index，后续消息 entryId 会整体前移错位。
-					const taken = takeActiveEntryId(activeEntryIds, entryIndex);
-					entryIndex = taken.nextIndex;
-					const currentEntryId = taken.entryId;
-					const images = this.extractImages(typed.content);
-					const text = this.extractText(typed.content) ||
-						(images.length > 0 ? this.translate("session.imagePlaceholder") : "");
-					if (!text.trim()) return [];
-					return [{
-						id: `${agentId}-history-${currentEntryId ?? index}`,
-						agentId,
-						role: "user" as const,
-						text,
-						timestamp: typed.timestamp ?? Date.now(),
-						meta: {
-							...(currentEntryId ? { entryId: currentEntryId } : {}),
-							// 保留 _piDeckMsgSeq 作为旧版本回退兼容
-							_piDeckMsgSeq: index,
-						},
-						...(images.length > 0 ? { images } : {}),
-					}];
-				}
-				if (typed.role === "assistant") {
-					// 工具调用回合常见「assistant 仅含 toolCall、无可见文本」：
-					// 这时不能直接跳过，因为可能包含 thinking 内容。如果 thinking 也被丢掉，
-					// 渲染时多步思考会混入下一个回答块，用户在历史会话中看到的信息不完整。
-					// 提取 thinking，即使 text 为空也保留消息，由 renderer 端 groupToolMessages
-					// 的 isThinkingOnly 判断逻辑统一处理。
-					const taken = takeActiveEntryId(activeEntryIds, entryIndex);
-					entryIndex = taken.nextIndex;
-					const currentEntryId = taken.entryId;
-					const text = this.extractText(typed.content);
-					const thinking = this.extractThinking(typed.content);
-					// 无文本且无 thinking 时才是真正的空消息，跳过。
-					if (!text.trim() && !thinking?.trim()) return [];
-					return [{
-						id: `${agentId}-history-${currentEntryId ?? index}`,
-						agentId,
-						role: "assistant" as const,
-						text,
-						timestamp: typed.timestamp ?? Date.now(),
-						meta: {
-							...(currentEntryId ? { entryId: currentEntryId } : {}),
-							_piDeckMsgSeq: index,
-						},
-						...(thinking ? { thinking } : {}),
-					}];
-				}
-				if (typed.role === "toolResult") {
-					const taken = takeActiveEntryId(activeEntryIds, entryIndex);
-					entryIndex = taken.nextIndex;
-					const currentEntryId = taken.entryId;
-					const toolCallId = String(typed.toolCallId ?? `history-tool-${index}`);
-					const historicalCall = historicalToolCalls.get(toolCallId);
-					const toolName = String(typed.toolName ?? historicalCall?.name ?? "tool");
-					const isError = Boolean(typed.isError);
-					const startedAt =
-						typeof typed.startedAt === "number" ? typed.startedAt : historicalCall?.timestamp;
-					const durationMs =
-						typeof typed.durationMs === "number"
-							? typed.durationMs
-							: typeof startedAt === "number" && typeof typed.timestamp === "number"
-								? Math.max(0, typed.timestamp - startedAt)
-								: undefined;
-					const result = {
-						content: typed.content,
-						details: typed.details,
-					};
-					const filePath = this.getToolPathFromArgs(historicalCall?.args);
-					const piDeckOriginalContent = typed.details?._piDeckOriginalContent as
-						| string
-						| undefined;
-					const originalContent =
-						piDeckOriginalContent ??
-						(filePath
-							? historicalOriginalContentByPath.get(filePath)
-							: undefined);
-					const detailText = this.formatToolDetail(
-						toolName,
-						historicalCall?.args,
-						result,
-						isError,
-					);
-					// 从历史工具结果中提取 ask_question 详情，用于渲染提问卡片（支持单问题和批量格式）。
-					const askCard = (() => {
-						if (toolName !== "ask_question" || !typed.details) return undefined;
-						// abort 时发 value:null 导致 answer 为 null，但 pi 可能已默认选了第一选项。
-						// 覆写 answer 为 null、answered 为 false，确保卡片显示"已取消"。
-						const aborted = this.abortedDuringAsk.has(agentId);
-						// 单问题格式：details.question (string), details.answer
-						if (typed.details.question) {
-							return {
-								question: typed.details.question,
-								type: typed.details.type,
-								answered: aborted ? false : typed.details.answered,
-								answer: aborted ? null : typed.details.answer,
-								answerLabel: aborted ? undefined : typed.details.answerLabel,
-								options: typed.details.options,
-							};
-						}
-						// 批量格式：details.questions / details.answers 数组，取第一组问答
-						if (Array.isArray(typed.details.answers) && typed.details.answers.length > 0) {
-							const firstQuestion = Array.isArray(typed.details.questions) ? typed.details.questions[0] : undefined;
-							const firstAnswer = typed.details.answers[0];
-							return {
-								question: firstQuestion?.question ?? String(firstAnswer.id ?? ""),
-								type: firstAnswer.type ?? firstQuestion?.type ?? "input",
-								answered: !typed.details.cancelled && firstAnswer.value !== null,
-								answer: firstAnswer.value,
-								answerLabel: firstAnswer.label,
-								options: firstQuestion?.options,
-							};
-						}
-						return undefined;
-					})();
-					// entryIndex 已在上方 takeActiveEntryId 推进
-					return [{
-						id: `${agentId}-history-${currentEntryId ?? index}`,
-						agentId,
-						role: "tool" as const,
-						text: `${isError ? "✗" : "✓"} ${toolName}`,
-						timestamp: typed.timestamp ?? Date.now(),
-						meta: {
-							...(currentEntryId ? { entryId: currentEntryId } : {}),
-							_piDeckMsgSeq: index,
-							status: isError ? "error" : "done",
-							toolName,
-							toolCallId,
-							...(startedAt !== undefined ? { startedAt } : {}),
-							...(durationMs !== undefined ? { durationMs } : {}),
-							args: this.truncateForDetail(this.safeJson(historicalCall?.args)),
-							result: this.truncateForDetail(this.extractToolResultText(result) || this.safeJson(result)),
-							isError,
-							detailText,
-							// 历史会话不保存 originalContent（full file），diff 使用工具参数
-							//（oldText/newText）展示变动区域，避免会话文件体积膨胀。
-							...(askCard ? { _askCard: askCard } : {}),
-						},
-					}];
-				}
-				// 压缩/分支摘要等元消息：显示在时间线上，不参与 _piDeckMsgSeq 计数
-				if (typed.role === "compactionSummary" || typed.role === "branchSummary") {
-					const isCompaction = typed.role === "compactionSummary";
-					metaSeq++;
-					return [{
-						id: `${agentId}-meta-${metaSeq}`,
-						agentId,
-						role: "system" as const,
-						text: typed.summary ?? (isCompaction ? "Session compacted" : "Branch summarized"),
-						timestamp: typeof typed.timestamp === "number"
-							? typed.timestamp
-							: Date.now(),
-						meta: {
-							type: isCompaction ? "compaction" : "branchSummary",
-							tokensBefore: typed.tokensBefore,
-						// 保留压缩次数（桌面端从会话文件解析得到），供前端展示“已压缩 N 次”
-						...(isCompaction && typed.meta?.compactionCount != null
-							? { compactionCount: typed.meta.compactionCount }
-							: {}),
-					// 透传归档消息（从会话文件解析的压缩前历史）
-					...(typed.meta?.archivedMessages != null
-						? { archivedMessages: typed.meta.archivedMessages }
-						: {})
-						},
-					}];
-				}
-				return [];
-			})
-			// thinking-only assistant turns intentionally carry an empty visible text field.
-			// Keep them so renderer grouping can render the reasoning between tool steps.
-			.filter((message: ChatMessage) => Boolean(message.text.trim() || message.thinking?.trim()));
-	}
-
-	private collectHistoricalToolCalls(rawMessages: unknown[]) {
-		const calls = new Map<string, { name: string; args: unknown; timestamp?: number }>();
-		for (const message of rawMessages) {
-			if (!message || typeof message !== "object") continue;
-			const typed = message as any;
-			if (typed.role !== "assistant" || !Array.isArray(typed.content)) continue;
-			for (const block of typed.content) {
-				if (!block || typeof block !== "object") continue;
-				const toolCall = block as any;
-				if (toolCall.type !== "toolCall" || !toolCall.id) continue;
-				// pi 的历史文件把工具参数保存在 assistant.content 的 toolCall 块中，
-				// toolResult 只带结果；恢复历史详情时必须先建立 toolCallId → 参数映射。
-				calls.set(String(toolCall.id), {
-					name: String(toolCall.name ?? "tool"),
-					args: toolCall.arguments,
-					// 旧会话没有 durationMs，只能用发起 toolCall 的 assistant 时间戳作为兜底起点；
-					// 同一条 assistant 内并发多个工具时精度有限，但比完全不显示耗时更接近历史行为。
-					timestamp: typeof typed.timestamp === "number" ? typed.timestamp : undefined,
-				});
-			}
-		}
-		return calls;
-	}
-
-	private collectHistoricalOriginalContentByPath(
-		rawMessages: unknown[],
-		historicalToolCalls: Map<string, { name: string; args: unknown }>,
-	) {
-		const originals = new Map<string, string>();
-		for (const message of rawMessages) {
-			if (!message || typeof message !== "object") continue;
-			const typed = message as any;
-			if (typed.role !== "toolResult") continue;
-			const toolCallId = String(typed.toolCallId ?? "");
-			const historicalCall = historicalToolCalls.get(toolCallId);
-			if (!historicalCall || historicalCall.name !== "read") continue;
-			const filePath = this.getToolPathFromArgs(historicalCall.args);
-			if (!filePath) continue;
-			// 旧历史会话没有保存 originalContent；同一轮写入前通常会先 read 目标文件，
-			// 用最近一次 read 结果作为后续 write/edit/patch 的 diff 基准。
-			const content = this.extractText(typed.content);
-			if (content) originals.set(filePath, content);
-		}
-		return originals;
-	}
-
-	private getToolPathFromArgs(args: unknown) {
-		if (!args || typeof args !== "object") return "";
-		const typed = args as any;
-		return String(
-			typed.path ??
-				typed.filePath ??
-				typed.file ??
-				typed.target_file ??
-				typed.targetFile ??
-				"",
-		);
-	}
-
-	private formatToolDetail(
-		toolName: string,
-		args: unknown,
-		result: unknown,
-		isError: boolean,
-	) {
-		const details = this.extractToolDetails(result);
-		// args/结果/details 都先序列化再截断，避免单条工具详情撑大 ChatMessage.meta。
-		// 注意：args 在 end/update 事件里可能已是序列化字符串（从 existing.meta.args 回退），
-		// 此时 safeJson(string) 会二次编码导致显示异常，先反解回对象再序列化。
-		let argsObj = args;
-		if (typeof args === "string" && args.trim()) {
-			try {
-				argsObj = JSON.parse(args) as unknown;
-			} catch {
-				// truncated/不可解析时保持原样
-			}
-		}
-		const argsText = argsObj ? this.truncateForDetail(this.safeJson(argsObj)) : "";
-		const resultText = result
-			? this.truncateForDetail(this.extractToolResultText(result) || this.safeJson(result))
-			: "";
-		const detailsText = details ? this.truncateForDetail(this.safeJson(details)) : "";
-		const status = this.translate(isError ? "mainTool.failed" : "mainTool.done");
-		const sections = [
-			this.translate("mainTool.name", { name: toolName ?? "tool" }),
-			this.translate("mainTool.status", { status }),
-			args ? this.translate("mainTool.arguments", { value: argsText }) : "",
-			result ? this.translate("mainTool.result", { value: resultText }) : "",
-			details ? this.translate("mainTool.details", { value: detailsText }) : "",
-		].filter(Boolean);
-		return sections.join("\n\n");
-	}
-
-	private extractToolDetails(result: unknown) {
-		if (!result || typeof result !== "object") return undefined;
-		return (result as any).details;
-	}
-
-	/** 对超长工具文本做首尾截断，保留头部和尾部以兼顾开头信息和错误堆栈。 */
-	private truncateForDetail(text: unknown): string {
-		// safeJson/extractToolResultText 在某些输入下可能返回 undefined（如 JSON.stringify(undefined)），
-		// 必须在此归一化为字符串，否则后续 .length 访问会抛 TypeError 导致主进程未捕获异常弹窗。
-		const str = typeof text === "string" ? text : text == null ? "" : String(text);
-		if (str.length <= AgentManager.MAX_TOOL_RESULT_CHARS) return str;
-		const keep = Math.floor(AgentManager.MAX_TOOL_RESULT_CHARS / 2);
-		const omitted = str.length - keep * 2;
-		return (
-			`${str.slice(0, keep)}\n` +
-			`${this.translate("mainTool.truncated", { omitted, total: str.length })}\n` +
-			str.slice(-keep)
-		);
+		return this.messageProjector.convert(agentId, rawMessages, activeEntryIds);
 	}
 
 	private scheduleUIRequestTimeout(agentId: string, requestId: string, timeout: unknown) {
@@ -3580,59 +3266,9 @@ export class AgentManager {
 		void this.emitRuntimeState(agentId);
 	}
 
-	private extractToolResultText(result: unknown) {
-		if (!result || typeof result !== "object") return "";
-		const content = (result as any).content;
-		if (!Array.isArray(content)) return "";
-		return content
-			.map((item) => (typeof item?.text === "string" ? item.text : ""))
-			.filter(Boolean)
-			.join("\n");
-	}
-
-	private safeJson(value: unknown) {
-		try {
-			return JSON.stringify(value, null, 2);
-		} catch {
-			return String(value);
-		}
-	}
-
-	private extractText(content: unknown): string {
-		return extractMessageText(content);
-	}
-
-	/** 从 pi 历史消息 content 中恢复图片附件，用于历史会话重新打开后的图片展示。 */
-	private extractImages(content: unknown): ImageContent[] {
-		if (!Array.isArray(content)) return [];
-		return content.flatMap<ImageContent>((item) => {
-			if (!item || typeof item !== "object") return [];
-			const typed = item as any;
-			if (typed.type !== "image") return [];
-			const data = typeof typed.data === "string" ? typed.data : "";
-			const mimeType =
-				typeof typed.mimeType === "string"
-					? typed.mimeType
-					: typeof typed.mime_type === "string"
-						? typed.mime_type
-						: "image/png";
-			return data ? [{ type: "image", data, mimeType }] : [];
-		});
-	}
-
-	/** 从历史消息 content 数组中提取 thinking 内容块的文本，清理 ANSI 转义码 */
-	private extractThinking(content: unknown): string {
-		if (!Array.isArray(content)) return "";
-		const raw = content
-			.map((item) => {
-				if (!item || typeof item !== "object") return "";
-				const typed = item as any;
-				if (typed.type !== "thinking") return "";
-				return String(typed.thinking ?? typed.text ?? "");
-			})
-			.filter(Boolean)
-			.join("\n");
-		return this.stripAnsi(raw);
+	/** Cleans terminal ANSI sequences from live reasoning updates before IPC emission. */
+	private stripAnsi(text: string): string {
+		return text.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "");
 	}
 
 	private requireRuntime(agentId: string) {
@@ -3663,11 +3299,6 @@ export class AgentManager {
 		} catch {
 			// 通知失败不影响主流程，静默处理
 		}
-	}
-
-	/** 清理 ANSI 转义码，模型思考内容中常见终端颜色序列 */
-	private stripAnsi(text: string): string {
-		return text.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "");
 	}
 
 	/**

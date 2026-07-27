@@ -111,6 +111,12 @@ function loadAgentManager() {
 			if (id === "./agentSessionIdentity") return { buildAgentSessionKey: () => undefined };
 			if (id === "./SessionFileEditor") return { SessionFileEditor };
 			if (id === "./SessionHistoryReader") return historyReaderModule.exports;
+			if (id === "./AgentMessageProjector") {
+				return {
+					AgentMessageProjector: class {},
+					buildActiveBranchEntryIds: () => [],
+				};
+			}
 			if (id === "./sessionEntryIds") return sessionEntryIds;
 			if (id === "./LatestByKeyEmitter") return { LatestByKeyEmitter };
 			if (id === "../../shared/toolRuntimeState") return { updateActiveToolCalls: () => new Map() };

@@ -42,6 +42,12 @@ function loadAgentManager() {
       if (specifier === "./agentSessionIdentity") return { buildAgentSessionKey: () => undefined };
       if (specifier === "./SessionFileEditor") return { SessionFileEditor: class {} };
       if (specifier === "./SessionHistoryReader") return { SessionHistoryReader: class {} };
+      if (specifier === "./AgentMessageProjector") {
+        return {
+          AgentMessageProjector: class {},
+          buildActiveBranchEntryIds: () => [],
+        };
+      }
       if (specifier === "./sessionEntryIds") {
         return { takeActiveEntryId: (ids, index) => ({ entryId: ids?.[index], nextIndex: index + 1 }) };
       }
