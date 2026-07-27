@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import { setI18nLocale, t } from "../src/renderer/src/i18n.ts";
 import { mergeAgentRuntimeState } from "../src/renderer/src/utils/agentRuntimeState.ts";
+import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
+
+const { setI18nLocale, t } = loadTsCommonJs("src/renderer/src/i18n.ts");
 
 const appSource = readFileSync("src/renderer/src/App.tsx", "utf8");
 const sessionViewSource = readFileSync(
@@ -27,7 +29,10 @@ const composerPanelsSource = readFileSync(
   "utf8",
 );
 const stylesSource = readFileSync("src/renderer/src/styles.css", "utf8");
-const i18nSource = readFileSync("src/renderer/src/i18n.ts", "utf8");
+const i18nSource = [
+  readFileSync("src/renderer/src/i18n/rendererCopy.zh-CN.ts", "utf8"),
+  readFileSync("src/renderer/src/i18n/rendererCopy.en-US.ts", "utf8"),
+].join("\n");
 const runtimeStateSource = readFileSync(
   "src/renderer/src/utils/agentRuntimeState.ts",
   "utf8",
@@ -57,6 +62,14 @@ const composerControllerSource = readFileSync(
 );
 const sessionSendSource = readFileSync(
   "src/renderer/src/hooks/useSessionSend.ts",
+  "utf8",
+);
+const sessionRuntimeBridgeSource = readFileSync(
+  "src/renderer/src/hooks/useSessionRuntimeBridge.ts",
+  "utf8",
+);
+const sessionRuntimeControllerSource = readFileSync(
+  "src/renderer/src/hooks/useSessionRuntimeController.ts",
   "utf8",
 );
 
@@ -156,27 +169,41 @@ test("composer keeps native typing inside the Session feature root", () => {
   assert.match(composerPanelsSource, /className="send-behavior-option follow-up"\s*type="button"/);
 });
 
-test("queue drain is serialized and waits for an ordered global capability event", () => {
-  assert.match(appSource, /queueFlushByAgentRef = useRef<Set<string>>/);
-  assert.match(globalListenersSource, /agents\.onRuntimeState\(/);
+test("queue drain is serialized and waits for an ordered canonical Session capability event", () => {
+  assert.match(appSource, /queueFlushBySessionRef = useRef<Set<string>>/);
   assert.match(
-    bootstrapSource,
-    /previous\?\.isExecutingTool\s*&&\s*!current\.isExecutingTool[\s\S]*?queueFlushSteer\(agentId\)/,
+    sessionRuntimeControllerSource,
+    /queueFlushBySessionRef\.current\.has\(currentSessionId\)/,
+  );
+  assert.match(
+    sessionRuntimeControllerSource,
+    /activeQueuedPrompts\.some\(/,
+  );
+  assert.doesNotMatch(
+    sessionRuntimeControllerSource,
+    /queuedPrompts\[activeAgentId\]/,
+  );
+  assert.doesNotMatch(globalListenersSource, /sessions\.onRuntimeEvent\(/);
+  assert.match(sessionRuntimeBridgeSource, /sessions\.onRuntimeEvent\(/);
+  assert.match(sessionRuntimeBridgeSource, /event\.sourceChannel !== "agents:runtime-state"/);
+  assert.match(
+    appSource,
+    /previous\?\.isExecutingTool\s*&&\s*!current\.isExecutingTool[\s\S]*?queue\.flushQueuedSteerPrompts\(sessionId\)/,
   );
   assert.match(runtimeStateSource, /incoming\.toolStateSequence < current\.toolStateSequence/);
   assert.match(agentManagerSource, /updateActiveToolCalls/);
   assert.match(toolRuntimeStateSource, /calls\.delete\(event\.toolCallId\)/);
   assert.match(toolRuntimeStateSource, /completedBatch: event\.type === "end" && current\.size > 0 && calls\.size === 0/);
-  assert.match(queuedPromptHookSource, /claimIdleHead\(queuedPromptsRef\.current, agentId\)/);
-  assert.match(queuedPromptHookSource, /claimNextSteerPrompt\(queuedPromptsRef\.current, agentId\)/);
+  assert.match(queuedPromptHookSource, /claimIdleHead\(queuedPromptsRef\.current, sessionId\)/);
+  assert.match(queuedPromptHookSource, /claimNextSteerPrompt\(queuedPromptsRef\.current, sessionId\)/);
   assert.match(queuedPromptHookSource, /resolveClaimedPrompt/);
   assert.doesNotMatch(appSource, /queuedPrompt\.status === "sending"\s*\? \{ \.\.\.queuedPrompt, status: "pending"/);
-  assert.match(queueStateSource, /prompt\.status !== "sending" && prompt\.status !== "unknown"/);
+  assert.doesNotMatch(queueStateSource, /migrateQueuedPrompts|replacementById/);
 });
 
-test("retract edit restores text, attachments, and composer mode to the owning agent", () => {
+test("retract edit restores text, attachments, and composer mode to the owning Session", () => {
   assert.match(queuedPromptHookSource, /livePrompt\.displayText/);
-  assert.match(queuedPromptHookSource, /setAttachedImagesForAgent\(agentId, \(current\) => \[/);
+  assert.match(queuedPromptHookSource, /store\.set\(setSessionAttachmentsAtom, \{/);
   assert.match(queuedPromptHookSource, /store\.set\(setSessionComposerModeAtom, \{ sessionId, mode: livePrompt\.agentMode \}\)/);
   assert.doesNotMatch(queuedPromptHookSource, /setComposerAgentModeForAgent/);
   assert.match(queuedPromptHookSource, /pendingComposerCaretRef\.current = restoredPrompt\.length/);
@@ -245,9 +272,15 @@ test("indeterminate prompt timeout never becomes a retryable rejection", () => {
 
 test("prompt acceptance is explicit across the main and renderer boundary", () => {
   assert.match(agentManagerSource, /Promise<SendPromptResult>/);
-  assert.match(agentManagerSource, /return \{ accepted: false, error: errorMessage \}/);
+  assert.match(
+    agentManagerSource,
+    /accepted: false,[\s\S]{0,160}?error: errorMessage,[\s\S]{0,160}?i18nKey: "diagnostic\./,
+  );
   assert.match(webServiceSource, /this\.sendJson\(response, \{ result \}\)/);
   assert.doesNotMatch(webServiceSource, /sendError\(response, 409, result\.error\)/);
   assert.match(agentManagerSource, /if \(cancelled\)[\s\S]*?命令已取消[\s\S]*?return \{ accepted: true \}/);
-  assert.match(appSource, /if \(!result\.accepted\)[\s\S]*?PromptDeliveryUnknownError[\s\S]*?throw new Error\(result\.error\)/);
+  assert.match(
+    appSource,
+    /if \(!result\.accepted\)[\s\S]*?translateI18nDescriptor\(result, result\.error\)[\s\S]*?PromptDeliveryUnknownError\(localizedError\)[\s\S]*?throw new Error\(localizedError\)/,
+  );
 });

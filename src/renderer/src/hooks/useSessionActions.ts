@@ -7,13 +7,6 @@ import type {
 import { isSameSessionPath } from "../agentListDisplay";
 import { t } from "../i18n";
 
-/** Mirrors the sessionRefSelections shape from App.tsx. */
-export type SessionRefSelectionEntry = {
-  messages: Array<{ role: string; content: string }>;
-  fullContext: boolean;
-  selectedIndices: number[];
-};
-
 export type RefreshProjectSessions = (
   projectId: string,
   silent?: boolean,
@@ -27,13 +20,10 @@ export interface UseSessionActionsOptions {
   activeProjectId: string | undefined;
   sessionsProjectId: string | undefined;
   projects: Project[];
-  activeProjectSessions: SessionSummary[];
-  sessionRefSelections: Record<string, SessionRefSelectionEntry>;
 
   // State setters
   setActiveProjectId: (value: React.SetStateAction<string | undefined>) => void;
   setCurrentSessionId: (value: React.SetStateAction<string | undefined>) => void;
-  setSessionRefSelections: (value: React.SetStateAction<Record<string, SessionRefSelectionEntry>>) => void;
 
   // Getters
   getSessionRecord: (sessionId: string) => SessionRecord | undefined;
@@ -50,11 +40,10 @@ export interface UseSessionActionsOptions {
   // API
   api: {
     sessions: {
-      copy: (projectId: string, filePath: string) => Promise<{ cancelled?: boolean; targetSessionId?: string }>;
-      exportHtml: (projectId: string, filePath: string) => Promise<{ path: string }>;
+      copyRecord: (sessionId: string) => Promise<{ cancelled?: boolean; targetSessionId?: string }>;
+      exportRecordHtml: (sessionId: string) => Promise<{ path: string }>;
       deleteRecord: (sessionId: string) => Promise<boolean>;
       createDraft: (input: { projectId: string; title: string }) => Promise<SessionRecord>;
-      readMessages: (filePath: string) => Promise<Array<{ role: string; content: string }>>;
     };
   };
 
@@ -69,11 +58,8 @@ export function useSessionActions(options: UseSessionActionsOptions) {
     activeProjectId,
     sessionsProjectId,
     projects,
-    activeProjectSessions,
-    sessionRefSelections,
     setActiveProjectId,
     setCurrentSessionId,
-    setSessionRefSelections,
     getSessionRecord,
     getProjectSessionRecords,
     upsertSession,
@@ -112,11 +98,11 @@ export function useSessionActions(options: UseSessionActionsOptions) {
   // ── Session copy/export/delete ──
 
   async function copySession(
-    filePath: string,
+    sessionId: string,
     projectId = sessionsProjectId ?? activeProjectId,
   ) {
     if (!projectId) return;
-    const result = await api.sessions.copy(projectId, filePath);
+    const result = await api.sessions.copyRecord(sessionId);
     if (result.cancelled) {
       showToast(t("app.sessionCopyCancelled"));
       return;
@@ -126,9 +112,7 @@ export function useSessionActions(options: UseSessionActionsOptions) {
   }
 
   async function exportHistorySession(session: SessionSummary) {
-    const projectId = sessionsProjectId ?? activeProjectId;
-    if (!projectId) return;
-    const result = await api.sessions.exportHtml(projectId, session.filePath);
+    const result = await api.sessions.exportRecordHtml(session.id);
     showToast(t("app.exportedPath", { path: result.path }), 3500);
   }
 
@@ -158,6 +142,7 @@ export function useSessionActions(options: UseSessionActionsOptions) {
               isSameSessionPath(
                 candidate.filePath,
                 session.filePath,
+                candidate.environment,
               ),
           );
     if (!record) {
@@ -170,6 +155,7 @@ export function useSessionActions(options: UseSessionActionsOptions) {
             isSameSessionPath(
               candidate.filePath,
               session.filePath,
+              candidate.environment,
             ),
         );
       } catch (error) {
@@ -204,11 +190,11 @@ export function useSessionActions(options: UseSessionActionsOptions) {
   }
 
   async function copySidebarSession(projectId: string, session: SessionSummary) {
-    await copySession(session.filePath, projectId);
+    await copySession(session.id, projectId);
   }
 
-  async function exportSidebarSession(projectId: string, session: SessionSummary) {
-    const result = await api.sessions.exportHtml(projectId, session.filePath);
+  async function exportSidebarSession(_projectId: string, session: SessionSummary) {
+    const result = await api.sessions.exportRecordHtml(session.id);
     showToast(t("app.exportedPath", { path: result.path }), 3500);
   }
 
@@ -233,45 +219,6 @@ export function useSessionActions(options: UseSessionActionsOptions) {
     }
   }
 
-  // ── Session references ──
-
-  async function resolveSessionRefs(message: string): Promise<string> {
-    let resolved = message;
-    const sorted = [...activeProjectSessions].sort(
-      (a, b) => (b.name ?? b.filePath).length - (a.name ?? a.filePath).length,
-    );
-    for (const session of sorted) {
-      const sessionName = session.name ?? session.filePath;
-      const raw = `&${sessionName}`;
-      const lowerResolved = resolved.toLowerCase();
-      const lowerRaw = raw.toLowerCase();
-      if (!lowerResolved.includes(lowerRaw)) continue;
-      const pattern = new RegExp(raw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
-      let msgs: Array<{ role: string; content: string }> | undefined;
-      if (sessionRefSelections[raw]) {
-        msgs = sessionRefSelections[raw].messages;
-      } else {
-        try {
-          const all = await api.sessions.readMessages(session.filePath);
-          const loaded = all.map((m) => ({ role: m.role, content: m.content }));
-          msgs = loaded;
-          setSessionRefSelections((prev) => ({ ...prev, [raw]: { messages: loaded, fullContext: true, selectedIndices: loaded.map((_, i) => i) } }));
-        } catch {
-          // 加载失败时 chip 会在下面 else 分支被移除
-        }
-      }
-
-      if (msgs && msgs.length > 0) {
-        const ctx = msgs.map((m) => `[${m.role === "user" ? "User" : "Assistant"}]: ${m.content}`).join("\n");
-        const refBlock = `<referenced_session name="${sessionName}">\n${ctx}\n</referenced_session>`;
-        resolved = resolved.replace(pattern, refBlock);
-      } else {
-        resolved = resolved.replace(pattern, "");
-      }
-    }
-    return resolved;
-  }
-
   return {
     selectProject,
     selectSession,
@@ -283,6 +230,5 @@ export function useSessionActions(options: UseSessionActionsOptions) {
     copySidebarSession,
     exportSidebarSession,
     createSessionDraft,
-    resolveSessionRefs,
   };
 }

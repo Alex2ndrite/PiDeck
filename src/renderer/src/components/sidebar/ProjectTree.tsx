@@ -1,4 +1,4 @@
-import { Filter, FolderCog, MessageSquare, Play, Plus } from "lucide-react";
+import { Filter, FolderCog, Play, Plus } from "lucide-react";
 import type { DragEvent } from "react";
 import type { Project, SessionSource, WorktreeEntry } from "../../../../shared/types";
 import { ProjectAvatar } from "./SidebarParts";
@@ -6,10 +6,16 @@ import { SIDEBAR_SESSION_SOURCES, type SidebarController } from "../../hooks/use
 import { t } from "../../i18n";
 import type { SidebarActions } from "./SidebarContent";
 import { SessionTree } from "./SessionTree";
-import { WorktreeTree, mainWorkspaceKey } from "./WorktreeTree";
+import { WorktreeTree } from "./WorktreeTree";
 
 function isChatProject(project: Project) {
   return project.kind === "chat";
+}
+
+function displayProjectDirectoryName(project: Project) {
+  if (isChatProject(project)) return "Chat";
+  const normalizedPath = project.path.replace(/\\/g, "/").replace(/\/+$/, "");
+  return normalizedPath.split("/").pop() || project.name || project.path;
 }
 
 function matchesProject(project: Project, search: string, controller: SidebarController) {
@@ -50,6 +56,9 @@ export function ProjectTree(props: {
     {rootProjects.map((project) => {
       const collapsed = props.controller.isProjectCollapsed(project.id);
       const chat = isChatProject(project);
+      const projectDirectoryName = chat
+        ? t("app.chatProject")
+        : displayProjectDirectoryName(project);
       const sourceFilter = props.controller.sourceFilterFor(project.id);
       const dragging = props.controller.drag.sourceProjectId === project.id;
       const dragOver = props.controller.drag.overProjectId === project.id;
@@ -66,9 +75,9 @@ export function ProjectTree(props: {
           onClick={() => { props.controller.toggleProject(project.id); props.actions.projects.select(project.id); }}
         >
           <span className={`project-fold${collapsed ? " folded" : ""}`} title={collapsed ? t("app.projectExpand") : t("app.projectCollapse")}><Play size={12} /></span>
-          <ProjectAvatar name={chat ? t("app.chatProject") : project.name} kind={chat ? "chat" : "project"} />
+          <ProjectAvatar name={projectDirectoryName} kind={chat ? "chat" : "project"} />
           <div className="conversation-body"><div className="conversation-title">
-            <strong title={project.path}>{chat ? t("app.chatProject") : project.name}</strong>
+            <strong title={project.path}>{projectDirectoryName}</strong>
             <span className="filter-indicator" role="button" tabIndex={0} title={t("menu.filterSessions")}
               onClick={(event) => { event.stopPropagation(); props.controller.openSourceFilter(project.id); }}
               onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); props.controller.openSourceFilter(project.id); } }}
@@ -78,7 +87,6 @@ export function ProjectTree(props: {
           <span className="project-row-actions">
             {chat && props.actions.projects.changeChatPath && <span className="project-action" title={t("app.chatProjectSettings")} onClick={(event) => { event.stopPropagation(); void props.actions.projects.changeChatPath!(project); }}><FolderCog size={14} /></span>}
             <span className="project-action" title={t("app.projectNewAgent")} onClick={(event) => { event.stopPropagation(); void props.actions.sessions.createDraft(project.id); }}><Plus size={14} /></span>
-            <span className="project-action" title={t("app.anonymousChat")} onClick={(event) => { event.stopPropagation(); void props.actions.sessions.createAnonymousAgent(project.id); }}><MessageSquare size={14} /></span>
           </span>
         </button>
         {!collapsed && props.controller.sourceFilterOpenProjectId === project.id && <div className="session-source-filter-menu">
@@ -89,13 +97,11 @@ export function ProjectTree(props: {
           project={project}
           controller={props.controller}
           actions={props.actions}
-          currentProjectId={props.currentProjectId}
           currentSessionId={props.currentSessionId}
           entries={props.worktreesByProject[project.id] ?? []}
           branch={props.branchByProject?.[project.id]}
         />}
-        {/* worktree 模式下主会话挂在主工作区下方，随主工作区一起折叠 */}
-        {!collapsed && !(project.worktreeEnabled && props.controller.isWorkspaceCollapsed(mainWorkspaceKey(project.id))) && <SessionTree
+        {!collapsed && <SessionTree
           project={project}
           sessions={props.controller.catalog.sessionsByProject[project.id] ?? []}
           agents={props.controller.catalog.agents}

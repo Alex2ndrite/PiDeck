@@ -6,6 +6,10 @@ const source = readFileSync(
   "src/renderer/src/hooks/useSessionActions.ts",
   "utf8",
 );
+const drawerSource = readFileSync(
+  "src/renderer/src/components/workspace/DrawerSurface.tsx",
+  "utf8",
+);
 
 function functionBlock(name, nextName) {
   const start = source.indexOf(`  async function ${name}(`);
@@ -50,8 +54,13 @@ const openBySummary = () =>
   functionBlock("openSidebarSession", "openSidebarSessionById");
 const openById = () =>
   functionBlock("openSidebarSessionById", "copySidebarSession");
-const createDraft = () =>
-  functionBlock("createSessionDraft", "resolveSessionRefs");
+const createDraft = () => {
+  const start = source.indexOf("  async function createSessionDraft(");
+  const end = source.indexOf("\n  return {", start + 1);
+  assert.notEqual(start, -1, "createSessionDraft implementation should be discoverable");
+  assert.notEqual(end, -1, "useSessionActions return boundary should be discoverable");
+  return source.slice(start, end);
+};
 
 test("accepts a cached session only when it belongs to the requested project", () => {
   const block = openBySummary();
@@ -230,4 +239,28 @@ test("uses only the canonical project refresh port", () => {
   const remove = functionBlock("deleteHistorySession", "openSidebarSession");
   assert.equal(copy.match(/refreshProjectSessions\(/g)?.length, 1);
   assert.equal(remove.match(/refreshProjectSessions\(/g)?.length, 1);
+});
+
+test("copy and export address the Catalog by stable Session ID", () => {
+  const copy = functionBlock("copySession", "exportHistorySession");
+  const historyExport = functionBlock("exportHistorySession", "deleteHistorySession");
+  const sidebarCopy = functionBlock("copySidebarSession", "exportSidebarSession");
+  const sidebarExport = functionBlock("exportSidebarSession", "createSessionDraft");
+  assert.match(copy, /api\.sessions\.copyRecord\(sessionId\)/);
+  assert.match(historyExport, /api\.sessions\.exportRecordHtml\(session\.id\)/);
+  assert.match(sidebarCopy, /copySession\(session\.id, projectId\)/);
+  assert.match(sidebarExport, /api\.sessions\.exportRecordHtml\(session\.id\)/);
+  assert.doesNotMatch(source, /api\.sessions\.(?:copy|exportHtml|readMessages)\(/);
+  assert.doesNotMatch(source, /resolveSessionRefs/);
+});
+
+test("history drawer copies the Catalog record by stable Session ID", () => {
+  assert.match(
+    drawerSource,
+    /runCopySession\(\s*session\.id,\s*files\.sessionsProjectId/,
+  );
+  assert.doesNotMatch(
+    drawerSource,
+    /runCopySession\(\s*session\.filePath/,
+  );
 });

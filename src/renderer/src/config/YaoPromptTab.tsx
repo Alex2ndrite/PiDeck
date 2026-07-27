@@ -1,20 +1,33 @@
 import { showNotice } from "../utils/notice";
 import { useEffect, useState } from "react";
-import { ArrowLeft, Download, Search } from "lucide-react";
-import type { YaoPromptListResult, YaoPromptItem, YaoPromptDetailResult, PiPromptTemplateSummary, YaoPromptCategory } from "../../../shared/types";
+import { ArrowLeft, Check, ChevronLeft, ChevronRight, Download, Search } from "lucide-react";
+import type { YaoPromptListResult, YaoPromptItem, YaoPromptDetailResult, PiPromptTemplateSummary, PiPromptTemplateListResult } from "../../../shared/types";
 import { t } from "../i18n";
 
-const api = (window as unknown as { piDesktop: { yaoPrompts: { list: () => Promise<YaoPromptListResult>; detail: (slug: string, category: string) => Promise<YaoPromptDetailResult>; import: (slug: string, category: string) => Promise<PiPromptTemplateSummary> } } }).piDesktop;
+const api = (window as unknown as { piDesktop: { yaoPrompts: { list: (options?: { category?: string; search?: string; page?: number; pageSize?: number }) => Promise<YaoPromptListResult>; detail: (slug: string, category: string) => Promise<YaoPromptDetailResult>; import: (slug: string, category: string) => Promise<PiPromptTemplateSummary> } } }).piDesktop;
+const PAGE_SIZE = 20;
+
+async function getInstalledPromptNames(): Promise<Set<string>> {
+	try {
+		const list: PiPromptTemplateListResult = await (window as any).piDesktop.prompts.list();
+		return new Set(list.templates.filter((template) => template.userCreated).map((template) => template.name.toLowerCase()));
+	} catch {
+		return new Set();
+	}
+}
 
 export function YaoPromptTab(props: {
 	onImported?: () => void;
 }) {
-	const [loading, setLoading] = useState(true);
+	const [initialLoading, setInitialLoading] = useState(true);
+	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	/* toast 已改用 sonner 实现 */
 	const [data, setData] = useState<YaoPromptListResult | null>(null);
 	const [activeCategory, setActiveCategory] = useState<string | null>(null);
 	const [searchQuery, setSearchQuery] = useState("");
+	const [page, setPage] = useState(1);
+	const [installedNames, setInstalledNames] = useState<Set<string>>(new Set());
 	const [previewItem, setPreviewItem] = useState<YaoPromptItem | null>(null);
 	const [previewDetail, setPreviewDetail] = useState<YaoPromptDetailResult | null>(null);
 	const [previewLoading, setPreviewLoading] = useState(false);
@@ -22,26 +35,62 @@ export function YaoPromptTab(props: {
 
 	// 首次加载
 	useEffect(() => {
-		void loadData();
+		void loadCategories();
 	}, []);
 
-	const loadData = async () => {
-		setLoading(true);
+	useEffect(() => {
+		if (!initialLoading) void loadPrompts();
+	}, [activeCategory, initialLoading, page, searchQuery]);
+
+	const loadCategories = async () => {
+		setInitialLoading(true);
 		setError(null);
 		try {
-			const result = await api.yaoPrompts.list();
+			const [result, installed] = await Promise.all([
+				api.yaoPrompts.list(),
+				getInstalledPromptNames(),
+			]);
 			setData(result);
+			setInstalledNames(installed);
 			if (result.categories.length > 0 && !activeCategory) {
 				setActiveCategory(result.categories[0].slug);
 			}
 		} catch (err) {
-			setError(err instanceof Error ? err.message : t("config.promptStoreError"));
+			console.error("[YaoPrompts] Load failed", err);
+			setError(t("config.yaoLoadError"));
+		} finally {
+			setInitialLoading(false);
+		}
+	};
+
+	const loadPrompts = async () => {
+		setLoading(true);
+		setError(null);
+		try {
+			const result = await api.yaoPrompts.list({
+				category: activeCategory ?? undefined,
+				search: searchQuery.trim() || undefined,
+				page,
+				pageSize: PAGE_SIZE,
+			});
+			setData((previous) => previous ? { ...previous, ...result, categories: previous.categories } : result);
+		} catch (err) {
+			console.error("[YaoPrompts] Search failed", err);
+			setError(t("config.yaoLoadError"));
 		} finally {
 			setLoading(false);
 		}
 	};
 
+	const handleCategoryChange = (slug: string | null) => {
+		setActiveCategory(slug);
+		setPage(1);
+	};
 
+	const handleSearchChange = (value: string) => {
+		setSearchQuery(value);
+		setPage(1);
+	};
 
 	const handlePreview = async (item: YaoPromptItem) => {
 		setPreviewItem(item);
@@ -51,7 +100,8 @@ export function YaoPromptTab(props: {
 			const detail = await api.yaoPrompts.detail(item.slug, item.category);
 			setPreviewDetail(detail);
 		} catch (err) {
-			setError(err instanceof Error ? err.message : String(err));
+			console.error("[YaoPrompts] Preview failed", err);
+			setError(t("config.yaoPreviewError"));
 		} finally {
 			setPreviewLoading(false);
 		}
@@ -62,28 +112,19 @@ export function YaoPromptTab(props: {
 		setError(null);
 		try {
 			await api.yaoPrompts.import(item.slug, item.category);
-			showNotice("已导入到本地模板", 2500);
+			showNotice(t("config.promptStoreImported"), 2500);
 			props.onImported?.();
+			setInstalledNames(await getInstalledPromptNames());
 		} catch (err) {
-			setError(err instanceof Error ? err.message : String(err));
+			console.error("[YaoPrompts] Import failed", err);
+			setError(t("config.yaoImportError"));
 		} finally {
 			setImportingSlug(null);
 		}
 	};
 
-	// 筛选当前分类 + 搜索
-	const activePrompts = data?.prompts.filter((p) => {
-		if (activeCategory && p.category !== activeCategory) return false;
-		if (searchQuery.trim()) {
-			const q = searchQuery.trim().toLowerCase();
-			return (
-				p.title.toLowerCase().includes(q) ||
-				p.tags.some((t) => t.toLowerCase().includes(q)) ||
-				p.description.toLowerCase().includes(q)
-			);
-		}
-		return true;
-	}) ?? [];
+	const totalPages = data?.total ? Math.ceil(data.total / PAGE_SIZE) : 0;
+	const activePrompts = data?.prompts ?? [];
 
 	// 预览详情视图
 	if (previewItem) {
@@ -135,28 +176,35 @@ export function YaoPromptTab(props: {
 					<Search size={15} strokeWidth={1.8} className="prompt-store-search-icon" />
 					<input
 						type="text"
-						value={searchQuery}
-						onChange={(e) => setSearchQuery(e.target.value)}
-						placeholder="搜索中文提示词…"
+					value={searchQuery}
+					onChange={(e) => handleSearchChange(e.target.value)}
+					placeholder={t("config.yaoSearchPlaceholder")}
 					/>
 				</div>
 			</div>
 
 			{error && <div className="config-error">{error}</div>}
 			{/* toast 已改用 sonner */}
-			{loading ? (
+			{initialLoading ? (
 				<div className="config-loading">{t("common.loading")}</div>
 			) : !data || data.categories.length === 0 ? (
-				<div className="config-empty">暂无提示词数据</div>
+				<div className="config-empty">{t("config.yaoNoData")}</div>
 			) : (
 				<>
 					{/* 分类导航 */}
 					<div className="yao-category-bar">
+						<button
+							className={`yao-category-chip ${!activeCategory ? "active" : ""}`}
+							onClick={() => handleCategoryChange(null)}
+						>
+							{t("config.yaoAll")}
+							<small>{data.categories.reduce((s, c) => s + c.count, 0)}</small>
+						</button>
 						{data.categories.map((cat) => (
 							<button
 								key={cat.slug}
 								className={`yao-category-chip ${activeCategory === cat.slug ? "active" : ""}`}
-								onClick={() => setActiveCategory(cat.slug)}
+								onClick={() => handleCategoryChange(cat.slug)}
 							>
 								{cat.name}
 								<small>{cat.count}</small>
@@ -165,9 +213,11 @@ export function YaoPromptTab(props: {
 					</div>
 
 					{/* 提示词列表 */}
-					<div className="prompt-store-results">
-						{activePrompts.length === 0 ? (
-							<div className="config-empty">未匹配到提示词</div>
+				<div className="prompt-store-results">
+					{loading ? (
+						<div className="config-loading">{t("common.loading")}</div>
+					) : activePrompts.length === 0 ? (
+						<div className="config-empty">{t("config.yaoNoMatches")}</div>
 						) : (
 							activePrompts.map((item) => (
 								<article
@@ -176,7 +226,14 @@ export function YaoPromptTab(props: {
 									onClick={() => void handlePreview(item)}
 								>
 									<div className="prompt-store-card-main">
-										<strong className="prompt-store-card-title">{item.title}</strong>
+										<strong className="prompt-store-card-title">
+											{item.title}
+											{installedNames.has(item.slug.toLowerCase()) && (
+												<span className="prompt-store-installed-badge">
+													<Check size={11} /> {t("config.installed")}
+												</span>
+											)}
+										</strong>
 										{item.description && (
 											<p className="prompt-store-card-desc">{item.description}</p>
 										)}
@@ -189,18 +246,43 @@ export function YaoPromptTab(props: {
 										)}
 									</div>
 									<div className="prompt-store-card-actions">
-										<button
-											className="config-btn primary small"
-											onClick={(e) => { e.stopPropagation(); void handleImport(item); }}
-											disabled={importingSlug === item.slug}
-										>
-											{importingSlug === item.slug ? t("config.promptStoreImporting") : t("config.promptStoreImport")}
-										</button>
+										{!installedNames.has(item.slug.toLowerCase()) && (
+											<button
+												className="config-btn primary small"
+												onClick={(e) => { e.stopPropagation(); void handleImport(item); }}
+												disabled={importingSlug === item.slug}
+											>
+												{importingSlug === item.slug ? t("config.promptStoreImporting") : t("config.promptStoreImport")}
+											</button>
+										)}
 									</div>
 								</article>
 							))
 						)}
 					</div>
+
+					{/* 分页控件 */}
+					{totalPages > 1 && (
+						<div className="yao-pagination">
+							<button
+								className="config-btn"
+								disabled={page <= 1}
+								onClick={() => setPage((p) => Math.max(1, p - 1))}
+							>
+								<ChevronLeft size={14} />
+							</button>
+							<span className="yao-pagination-info">
+								{page} / {totalPages}
+							</span>
+							<button
+								className="config-btn"
+								disabled={page >= totalPages}
+								onClick={() => setPage((p) => p + 1)}
+							>
+								<ChevronRight size={14} />
+							</button>
+						</div>
+					)}
 				</>
 			)}
 		</div>

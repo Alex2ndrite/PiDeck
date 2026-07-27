@@ -1,15 +1,14 @@
-import { useAtomValue, useSetAtom, useStore } from "jotai";
+import { useSetAtom, useStore } from "jotai";
 import { useRef } from "react";
-import type { MutableRefObject } from "react";
 import type {
   ImageContent,
   SendSessionPromptInput,
   SendSessionPromptResult,
+  SessionRuntimeTarget,
 } from "../../../shared/types";
 import {
   bindSessionRuntimeAtom,
   cacheSessionMessagesAtom,
-  currentSessionIdAtom,
   sessionAttachmentsByIdAtom,
   sessionComposerModeByIdAtom,
   sessionDraftByIdAtom,
@@ -24,6 +23,7 @@ import {
   buildComposerPromptSubmission,
   expandPromptTemplates,
 } from "../composerBehavior";
+import { translateI18nDescriptor } from "../i18n";
 
 export type EnqueuePromptSnapshot = {
   displayText: string;
@@ -45,30 +45,22 @@ type SessionPromptApi = (
 ) => Promise<SendSessionPromptResult>;
 
 export type UseSessionSendOptions = {
-  /** Stable public identity. A8 can remove the fallback after App mounts the leaf. */
-  sessionId?: string;
+  /** Stable public identity for every draft, request, queue entry, and runtime binding. */
+  sessionId: string;
   sendPrompt: SessionPromptApi;
-  /** @deprecated Atom state is authoritative; this callback is intentionally ignored. */
-  getComposerText?: () => string;
+  /** Promotes a renderer-only pre-send surface to a persistent Session. */
+  ensureSessionId?: (sessionId: string) => Promise<string>;
   templates: PromptTemplate[];
   prepareMessage?: (message: string) => Promise<string>;
   onDraftMutation?: (sessionId: string) => void;
-  compact: (agentId: string, prompt?: string) => Promise<void>;
+  compact: (target: SessionRuntimeTarget, prompt?: string) => Promise<void>;
   resetComposerUi?: () => void;
   recordPromptHistory?: (sessionId: string, message: string) => void;
   refreshProject?: (projectId: string) => void;
   showError?: (message: string, duration?: number) => void;
   showUnknown?: () => void;
-  showCompactUnavailable?: () => void;
   /** Called when streamingBehavior is "steer" before sending. Returns true if enqueued. */
   enqueue?: (sessionId: string, snapshot: EnqueuePromptSnapshot) => boolean;
-  /**
-   * Temporary A8 compatibility only. It mirrors contentEditable input but is never the
-   * persistent draft source; all send snapshots and restoration are atom-backed.
-   */
-  liveDraftsRef?: MutableRefObject<Record<string, string>>;
-  /** @deprecated Runtime identity is derived from the Session binding. */
-  runtimeAgentId?: string;
 };
 
 export function normalizeComposerDomText(value: string): string {
@@ -123,7 +115,6 @@ export function createSessionSendLock() {
 }
 
 export function useSessionSend(options: UseSessionSendOptions) {
-  const selectedSessionId = useAtomValue(currentSessionIdAtom);
   const store = useStore();
   const setDraft = useSetAtom(setSessionDraftAtom);
   const setAttachments = useSetAtom(setSessionAttachmentsAtom);
@@ -134,9 +125,6 @@ export function useSessionSend(options: UseSessionSendOptions) {
   const sendingSessionIdsRef = useRef<Set<string>>(new Set());
 
   function clearSnapshot(targetSessionId: string) {
-    if (options.liveDraftsRef) {
-      delete options.liveDraftsRef.current[targetSessionId];
-    }
     options.onDraftMutation?.(targetSessionId);
     setDraft({ sessionId: targetSessionId, value: "" });
     setAttachments({ sessionId: targetSessionId, value: [] });
@@ -147,13 +135,6 @@ export function useSessionSend(options: UseSessionSendOptions) {
     message: string,
     imageSnapshot?: ImageContent[],
   ) {
-    if (options.liveDraftsRef) {
-      const currentLiveDraft = options.liveDraftsRef.current[targetSessionId] ?? "";
-      options.liveDraftsRef.current[targetSessionId] = mergeRejectedComposerDraft(
-        message,
-        currentLiveDraft,
-      );
-    }
     options.onDraftMutation?.(targetSessionId);
     setDraft({
       sessionId: targetSessionId,
@@ -172,17 +153,42 @@ export function useSessionSend(options: UseSessionSendOptions) {
   return async function sendSessionPrompt(
     streamingBehavior?: "steer" | "followUp",
   ) {
-    const sessionId = options.sessionId ?? selectedSessionId;
-    if (!sessionId || sendingSessionIdsRef.current.has(sessionId)) return;
+    const sourceSessionId = options.sessionId;
+    if (sendingSessionIdsRef.current.has(sourceSessionId)) return;
 
-    const message = store.get(sessionDraftByIdAtom)[sessionId] ?? "";
-    const attachmentSnapshot = store.get(sessionAttachmentsByIdAtom)[sessionId] ?? [];
+    const message = store.get(sessionDraftByIdAtom)[sourceSessionId] ?? "";
+    const attachmentSnapshot = store.get(sessionAttachmentsByIdAtom)[sourceSessionId] ?? [];
     const imageSnapshot = attachmentSnapshot.length
       ? [...attachmentSnapshot]
       : undefined;
     if (!hasComposerSubmission(message, imageSnapshot)) return;
 
-    const runtimeAgentId = store.get(sessionRuntimeByIdAtom)[sessionId]?.agentId;
+    sendingSessionIdsRef.current.add(sourceSessionId);
+    let sessionId = sourceSessionId;
+    try {
+      sessionId = options.ensureSessionId
+        ? await options.ensureSessionId(sourceSessionId)
+        : sourceSessionId;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      setSendState({
+        sessionId: sourceSessionId,
+        state: { status: "error", error: errorMessage },
+      });
+      options.showError?.(errorMessage, 4000);
+      sendingSessionIdsRef.current.delete(sourceSessionId);
+      return;
+    }
+
+    const runtime = store.get(sessionRuntimeByIdAtom)[sessionId];
+    const runtimeTarget = runtime?.agentId
+      ? {
+          sessionId,
+          agentId: runtime.agentId,
+          runtimeGeneration: runtime.runtimeGeneration,
+        }
+      : undefined;
+    const runtimeAgentId = runtimeTarget?.agentId;
     const trimmedMessage = message.trim();
     if (/^\/compact(?:\s|$)/.test(trimmedMessage)) {
       if (!runtimeAgentId) {
@@ -192,12 +198,10 @@ export function useSessionSend(options: UseSessionSendOptions) {
         const compactPrompt = trimmedMessage.replace(/^\/compact\s*/, "").trim();
         clearSnapshot(sessionId);
         options.resetComposerUi?.();
-        await options.compact(runtimeAgentId, compactPrompt || undefined);
+        await options.compact(runtimeTarget, compactPrompt || undefined);
         return;
       }
     }
-
-    sendingSessionIdsRef.current.add(sessionId);
 
     // Queue shortcut: when the agent is busy (streamingBehavior === "steer"), enqueue locally
     // instead of sending through the session API. The queue panel shows the pending item and
@@ -216,7 +220,7 @@ export function useSessionSend(options: UseSessionSendOptions) {
       if (enqueued) {
         clearSnapshot(sessionId);
         options.resetComposerUi?.();
-        sendingSessionIdsRef.current.delete(sessionId);
+        sendingSessionIdsRef.current.delete(sourceSessionId);
         return;
       }
       // Queue full: fall through to direct steer send.
@@ -264,7 +268,7 @@ export function useSessionSend(options: UseSessionSendOptions) {
         state: { status: "error", requestId, error: errorMessage },
       });
       options.showError?.(errorMessage, 4000);
-      sendingSessionIdsRef.current.delete(sessionId);
+      sendingSessionIdsRef.current.delete(sourceSessionId);
       return;
     }
 
@@ -307,7 +311,9 @@ export function useSessionSend(options: UseSessionSendOptions) {
       }
 
       const outcome = classifySessionPromptResult(result);
-      const deliveryError = "error" in result ? result.error : "Prompt was not accepted";
+      const deliveryError = "error" in result
+        ? translateI18nDescriptor(result, result.error)
+        : "Prompt was not accepted";
       if (outcome === "accepted") {
         options.recordPromptHistory?.(sessionId, message);
         setSendState({ sessionId, state: { status: "idle" } });
@@ -349,7 +355,7 @@ export function useSessionSend(options: UseSessionSendOptions) {
       });
       options.showUnknown?.();
     } finally {
-      sendingSessionIdsRef.current.delete(sessionId);
+      sendingSessionIdsRef.current.delete(sourceSessionId);
     }
   };
 }

@@ -1,7 +1,9 @@
 import { useRef, useState, type PointerEvent } from "react";
 import { COMPOSER_MIN_HEIGHT } from "../rendererUtils";
 
-const DEFAULT_LIST_WIDTH = 260;
+// Keep the default workbench geometry aligned with the main dev branch. The
+// Session-first change only affects when a runtime begins, not sidebar width.
+const DEFAULT_LIST_WIDTH = 221;
 
 export interface UseResizeOptions {
   /** 当前 composer 的解析高度（clamped） */

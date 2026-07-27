@@ -55,6 +55,10 @@ import {
   processComposerImageFile,
 } from "../utils/composerImages";
 import { showNotice } from "../utils/notice";
+import {
+  requireSessionCommand,
+  toSessionRuntimeTarget,
+} from "../utils/sessionCommands";
 import { useSessionSend, type EnqueuePromptSnapshot } from "./useSessionSend";
 
 export type ComposerPickerKind = "model" | "mode" | "thinking" | "template";
@@ -62,6 +66,7 @@ export type ComposerPickerKind = "model" | "mode" | "thinking" | "template";
 export type UseSessionComposerControllerOptions = {
   sessionId: string;
   onOpenFile?: (path: string) => void;
+  ensureSessionId?: (sessionId: string) => Promise<string>;
   /** Passed through to useSessionSend.enqueue. */
   enqueue?: (sessionId: string, snapshot: EnqueuePromptSnapshot) => boolean;
 };
@@ -179,7 +184,7 @@ function composerImageNotice(error: unknown): string {
 export function useSessionComposerController(
   options: UseSessionComposerControllerOptions,
 ) {
-  const { sessionId, enqueue } = options;
+  const { sessionId, enqueue, ensureSessionId } = options;
   const store = useStore();
   const record = useAtomValue(sessionRecordByIdAtomFamily(sessionId));
   const runtime = useAtomValue(sessionRuntimeBySessionIdAtomFamily(sessionId));
@@ -378,21 +383,21 @@ export function useSessionComposerController(
   }, [record?.projectId]);
 
   useEffect(() => {
-    const agentId = runtime?.agentId;
-    if (!agentId) {
+    const target = toSessionRuntimeTarget(sessionId, runtime);
+    if (!target) {
       setCommands([]);
       return;
     }
     let current = true;
-    void desktopApi.agents.commands(agentId).then((next) => {
-      if (current) setCommands(next);
+    void desktopApi.sessions.listRuntimeCommands(target).then((result) => {
+      if (current) setCommands(requireSessionCommand(result).value);
     }).catch(() => {
       if (current) setCommands([]);
     });
     return () => {
       current = false;
     };
-  }, [runtime?.agentId, runtime?.runtimeGeneration]);
+  }, [runtime?.agentId, runtime?.runtimeGeneration, sessionId]);
 
   useEffect(() => {
     templateRequestGateRef.current.invalidate(templateKey);
@@ -481,7 +486,7 @@ export function useSessionComposerController(
       const saved = sessionReferenceSelections[raw];
       const selectedMessages = saved
         ? selectedSessionReferenceMessages(saved)
-        : await desktopApi.sessions.readMessages(referencedSession.filePath);
+        : await desktopApi.sessions.readReferenceMessages(referencedSession.id);
       const context = selectedMessages
         .map((item) => `[${item.role === "user" ? "User" : "Assistant"}]: ${item.content}`)
         .join("\n");
@@ -498,11 +503,12 @@ export function useSessionComposerController(
   const send = useSessionSend({
     sessionId,
     sendPrompt: (input) => desktopApi.sessions.sendPrompt(input),
+    ensureSessionId,
     templates,
     prepareMessage: resolveSessionReferences,
     onDraftMutation: markDraftMutation,
-    compact: async (agentId, prompt) => {
-      await desktopApi.agents.compact(agentId, prompt);
+    compact: async (target, prompt) => {
+      requireSessionCommand(await desktopApi.sessions.compactRuntime(target, prompt));
     },
     resetComposerUi: resetEphemeralUi,
     recordPromptHistory: (targetSessionId, message) => {
@@ -516,10 +522,6 @@ export function useSessionComposerController(
     },
     showError: (message, duration) => showNotice(message, duration),
     showUnknown: () => showNotice(t("app.queuedUnknown"), 6000),
-    showCompactUnavailable: () => showNotice(
-      "会话尚未启动，请先发送一条消息再压缩",
-      3000,
-    ),
     enqueue,
   });
 
@@ -809,18 +811,18 @@ export function useSessionComposerController(
   }, []);
 
   const abort = useCallback(async () => {
-    const agentId = runtime?.agentId;
-    if (!agentId) return;
-    await desktopApi.agents.abort(agentId);
-  }, [runtime?.agentId, runtime?.runtimeGeneration]);
+    const target = toSessionRuntimeTarget(sessionId, runtime);
+    if (!target) return;
+    requireSessionCommand(await desktopApi.sessions.abortRuntime(target));
+  }, [runtime?.agentId, runtime?.runtimeGeneration, sessionId]);
 
   const acknowledgeUnknownDelivery = useCallback(() => {
     setSendStateAtom({ sessionId, state: { status: "idle" } });
   }, [sessionId, setSendStateAtom]);
 
   const compact = useCallback(async () => {
-    const agentId = runtime?.agentId;
-    if (!agentId) {
+    const target = toSessionRuntimeTarget(sessionId, runtime);
+    if (!target) {
       // No Agent yet: write /compact to draft and send → starts Agent + compacts
       setDraft("/compact");
       caretRef.current = "/compact".length;
@@ -828,11 +830,11 @@ export function useSessionComposerController(
       return;
     }
     try {
-      await desktopApi.agents.compact(agentId);
+      requireSessionCommand(await desktopApi.sessions.compactRuntime(target));
     } catch (error) {
       showNotice(error instanceof Error ? error.message : String(error), 4000);
     }
-  }, [runtime?.agentId, runtime?.runtimeGeneration, setDraft, send]);
+  }, [runtime?.agentId, runtime?.runtimeGeneration, sessionId, setDraft, send]);
 
   const openPicker = useCallback((kind: ComposerPickerKind) => {
     if (kind === "template") void loadTemplates();

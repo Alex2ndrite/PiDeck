@@ -11,7 +11,8 @@ import { useAtomValue, useSetAtom } from "jotai";
 import { selectAtom } from "jotai/utils";
 import type { AgentRuntimeState, ChatMessage } from "../../../shared/types";
 import {
-  cacheSessionMessagesAtom,
+	cacheSessionMessagesAtom,
+	prependSessionMessagePageAtom,
   sessionMessageLoadStateAtom,
   sessionMessagesCacheAtom,
   setSessionMessageLoadStateAtom,
@@ -45,14 +46,6 @@ export function matchesTimelineOwner(
   currentOwnerKey: string,
 ): boolean {
   return taggedOwnerKey === currentOwnerKey;
-}
-
-export function selectSessionModeValue<T>(
-  sessionMode: boolean,
-  sessionValue: T,
-  legacyValue: T,
-): T {
-  return sessionMode ? sessionValue : legacyValue;
 }
 
 export function isSessionRuntimeBusy(
@@ -95,8 +88,9 @@ export function isLatestTimelineRunBusy(
 export type SessionTimelineController = {
   timelineRef: RefObject<HTMLElement | null>;
   messages: ChatMessage[];
-  visibleMessages: ChatMessage[];
-  hasMoreMessages: boolean;
+	visibleMessages: ChatMessage[];
+	totalMessageCount: number;
+	hasMoreMessages: boolean;
   isLoadingMoreMessages: boolean;
   loadMoreMessages: () => void;
   jumpToMessage: (messageId: string) => void;
@@ -128,8 +122,10 @@ export function useSessionTimelineController(options: {
   const controllerEnabled = options.sessionId !== undefined && options.messages === undefined;
 
   // ── Load messages from disk when sessionId changes ──
-  const cacheEntry = useAtomValue(sessionMessagesCacheAtom);
-  const cacheMessages = useSetAtom(cacheSessionMessagesAtom);
+	const cacheEntry = useAtomValue(sessionMessagesCacheAtom);
+	const cachedEntry = options.sessionId ? cacheEntry[options.sessionId] : undefined;
+	const cacheMessages = useSetAtom(cacheSessionMessagesAtom);
+	const prependMessagePage = useSetAtom(prependSessionMessagePageAtom);
   const setLoadState = useSetAtom(setSessionMessageLoadStateAtom);
   const touchMessages = useSetAtom(touchSessionMessagesAtom);
   const loadStates = useAtomValue(sessionMessageLoadStateAtom);
@@ -149,16 +145,17 @@ export function useSessionTimelineController(options: {
     if (entry) touchMessages(sessionId);
     setLoadState({ sessionId, state: { status: "loading" } });
 
-    void (window as any).piDesktop.sessions
-      .readRecordMessages(sessionId)
-      .then((diskMessages: ChatMessage[]) => {
-        if (latestLoadBySession.get(sessionId) !== sequence) return;
-        cacheMessages({
-          sessionId,
-          messages: diskMessages,
-          source: "disk",
-          expectedRevision,
-        });
+		void (window as any).piDesktop.sessions
+			.readRecordMessagePage(sessionId, undefined, options.initialPageSize ?? 100)
+			.then((page: { messages: ChatMessage[]; total: number; nextBefore: number | null }) => {
+				if (latestLoadBySession.get(sessionId) !== sequence) return;
+				cacheMessages({
+					sessionId,
+					messages: page.messages,
+					source: "disk",
+					expectedRevision,
+					page: { total: page.total, nextBefore: page.nextBefore },
+				});
         setLoadState({ sessionId, state: { status: "ready" } });
       })
       .catch((error: unknown) => {
@@ -173,13 +170,17 @@ export function useSessionTimelineController(options: {
       });
   }, [options.sessionId]);
 
-  const pagination = useMessagePagination({
+	const diskPage = controllerEnabled && cachedEntry?.source === "disk"
+		? cachedEntry.page
+		: undefined;
+	const pagination = useMessagePagination({
     messages,
     ownerKey,
     initialPageSize: options.initialPageSize ?? 100,
     pageSize: options.pageSize ?? 100,
-    enabled: controllerEnabled && messages.length > 100,
-  });
+		enabled: controllerEnabled && !diskPage && messages.length > 100,
+	});
+	const [isLoadingMessagePage, setIsLoadingMessagePage] = useState(false);
   const [autoScroll, setAutoScroll] = useState(true);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const autoScrollRef = useRef(true);
@@ -220,17 +221,36 @@ export function useSessionTimelineController(options: {
     setShowScrollToBottom(false);
   }, [ownerKey]);
 
-  const loadMoreMessages = useCallback(() => {
-    const requestOwnerKey = ownerKey;
-    const timeline = timelineRef.current;
+	const loadMoreMessages = useCallback(() => {
+		const requestOwnerKey = ownerKey;
+		const timeline = timelineRef.current;
     if (timeline && ownerKeyRef.current === requestOwnerKey) {
       loadMoreAnchorRef.current = {
         ownerKey: requestOwnerKey,
         value: { height: timeline.scrollHeight, top: timeline.scrollTop },
       };
     }
-    pagination.loadMore();
-  }, [ownerKey, pagination]);
+		if (diskPage) {
+			const sessionId = options.sessionId;
+			const before = diskPage.nextBefore;
+			if (!sessionId || before === null || isLoadingMessagePage) return;
+			const sequence = ++nextLoadSequence;
+			latestLoadBySession.set(sessionId, sequence);
+			const expectedRevision = cachedEntry?.revision ?? 0;
+			setIsLoadingMessagePage(true);
+			void (window as any).piDesktop.sessions
+				.readRecordMessagePage(sessionId, before, options.pageSize ?? 100)
+				.then((page: { messages: ChatMessage[]; total: number; nextBefore: number | null }) => {
+					if (latestLoadBySession.get(sessionId) !== sequence) return;
+					prependMessagePage({ sessionId, before, expectedRevision, page });
+				})
+				.finally(() => {
+					if (latestLoadBySession.get(sessionId) === sequence) setIsLoadingMessagePage(false);
+				});
+			return;
+		}
+		pagination.loadMore();
+	}, [cachedEntry?.revision, diskPage, isLoadingMessagePage, options.pageSize, options.sessionId, ownerKey, pagination, prependMessagePage]);
 
   const jumpToMessage = useCallback((messageId: string) => {
     const requestOwnerKey = ownerKey;
@@ -351,10 +371,11 @@ export function useSessionTimelineController(options: {
 
   return {
     timelineRef,
-    messages,
-    visibleMessages: pagination.visibleMessages,
-    hasMoreMessages: pagination.hasMore,
-    isLoadingMoreMessages: pagination.isLoading,
+		messages,
+		visibleMessages: diskPage ? messages : pagination.visibleMessages,
+		totalMessageCount: diskPage ? diskPage.total : messages.length,
+		hasMoreMessages: diskPage ? diskPage.nextBefore !== null : pagination.hasMore,
+		isLoadingMoreMessages: diskPage ? isLoadingMessagePage : pagination.isLoading,
     loadMoreMessages,
     jumpToMessage,
     scrollToBottom,

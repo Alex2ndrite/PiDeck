@@ -14,6 +14,17 @@ import {
 import { t } from "../../i18n";
 
 const DEFAULT_HOME = "https://ayuayue.github.io/PiDeck/";
+const BROWSER_PANEL_PARTITION = "persist:pideck-browser-panel";
+
+function isAllowedBrowserUrl(targetUrl: string): boolean {
+	if (targetUrl === "about:blank") return true;
+	try {
+		const protocol = new URL(targetUrl).protocol;
+		return protocol === "http:" || protocol === "https:";
+	} catch {
+		return false;
+	}
+}
 
 type DeviceType = "pc" | "mobile" | "tablet";
 
@@ -87,6 +98,7 @@ function getInitialActiveTab(): TabEntry {
  * 通过递增 navigateKey 触发 BrowserPanel 的 useEffect 执行导航。
  */
 export function navigateTo(url: string) {
+	if (!isAllowedBrowserUrl(url)) return;
 	ensureInitialTab();
 	if (moduleState.activeTabId) {
 		const activeTab = moduleState.tabs.find((t) => t.id === moduleState.activeTabId);
@@ -107,11 +119,9 @@ type WebviewEvent<T extends string> = T extends "did-navigate"
 		? { url: string; isMainFrame: boolean }
 		: T extends "page-title-updated"
 			? { title: string }
-			: T extends "new-window"
-				? { url: string; preventDefault: () => void }
-				: T extends "load-progress"
-					? { progress: number }
-					: Event;
+			: T extends "load-progress"
+				? { progress: number }
+				: Event;
 
 export function BrowserPanel(props: {
 	isFullscreen?: boolean;
@@ -168,6 +178,7 @@ export function BrowserPanel(props: {
 
 	const loadUrl = useCallback(
 		(targetUrl: string, nextDevice = moduleState.device) => {
+			if (!isAllowedBrowserUrl(targetUrl)) return;
 			const wv = webviewRef.current;
 			if (!wv) return;
 			applyDeviceUserAgent(wv, nextDevice);
@@ -238,13 +249,6 @@ export function BrowserPanel(props: {
 			const title = (event as unknown as WebviewEvent<"page-title-updated">).title;
 			updateActiveTab({ title: title || url || DEFAULT_HOME });
 		};
-		const onNewWindow = (event: Event) => {
-			const evt = event as unknown as WebviewEvent<"new-window">;
-			if (!evt.url.startsWith("http://") && !evt.url.startsWith("https://")) {
-				evt.preventDefault();
-				void window.piDesktop.browser.openExternal(evt.url);
-			}
-		};
 
 		wv.addEventListener("did-navigate", onDidNavigate);
 		wv.addEventListener("did-navigate-in-page", onDidNavigateInPage);
@@ -252,7 +256,6 @@ export function BrowserPanel(props: {
 		wv.addEventListener("did-stop-loading", onDidStopLoading);
 		wv.addEventListener("load-progress", onProgress);
 		wv.addEventListener("page-title-updated", onPageTitleUpdated);
-		wv.addEventListener("new-window", onNewWindow);
 
 		return () => {
 			wv.removeEventListener("dom-ready", onDomReady);
@@ -262,7 +265,6 @@ export function BrowserPanel(props: {
 			wv.removeEventListener("did-stop-loading", onDidStopLoading);
 			wv.removeEventListener("load-progress", onProgress);
 			wv.removeEventListener("page-title-updated", onPageTitleUpdated);
-			wv.removeEventListener("new-window", onNewWindow);
 			webviewReadyRef.current = false;
 		};
 	}, [applyDeviceUserAgent, updateActiveTab, url]);
@@ -474,7 +476,12 @@ export function BrowserPanel(props: {
 			)}
 
 			<div className="browser-webview-stage">
-				<webview ref={(el) => { (webviewRef as React.MutableRefObject<any>).current = el; if (el) el.setAttribute("allowfileaccess", "true"); }} className="browser-webview" src={moduleState.navigateKey > 0 ? "about:blank" : initialTab.url} allowpopups={true} />
+				<webview
+					ref={(el) => { (webviewRef as React.MutableRefObject<any>).current = el; }}
+					className="browser-webview"
+					partition={BROWSER_PANEL_PARTITION}
+					src={moduleState.navigateKey > 0 ? "about:blank" : initialTab.url}
+				/>
 			</div>
 		</div>
 	);

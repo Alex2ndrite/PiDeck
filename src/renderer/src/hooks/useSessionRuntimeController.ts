@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef } from "react";
 import { useAtomValue, useSetAtom } from "jotai";
 import { selectAtom } from "jotai/utils";
-import type { AgentTab, AgentUiResponse, SessionRecord } from "../../../shared/types";
+import type { AgentTab, AgentUiResponse, SessionRecord, SessionRuntimeTarget } from "../../../shared/types";
 import {
   claimSessionRuntimeUiResponseAtom,
   currentSessionAtom,
@@ -32,6 +32,7 @@ export interface SessionRuntimeController {
   currentSession: SessionRecord | undefined;
   activeAgentId: string | undefined;
   activeRuntimeState: RuntimeStateLike | undefined;
+  runtimeTarget: SessionRuntimeTarget | undefined;
   activeConversationStatus: "starting" | "running" | "idle" | undefined;
   hasActiveConversation: boolean;
   isAgentStarting: boolean;
@@ -48,8 +49,8 @@ export interface SessionRuntimeController {
 
 export interface UseSessionRuntimeControllerOptions {
   agents: AgentTab[];
-  queueFlushByAgentRef: React.MutableRefObject<Set<string>>;
-  queuedPrompts: Record<string, QueuedPrompt[]>;
+  queueFlushBySessionRef: React.MutableRefObject<Set<string>>;
+  activeQueuedPrompts: QueuedPrompt[];
   restartingAgentId: string | null;
   sessionDurationByAgent: Record<string, number>;
   activeProjectId: string | undefined;
@@ -73,8 +74,8 @@ export function useSessionRuntimeController(
 ): SessionRuntimeController {
   const {
     agents,
-    queueFlushByAgentRef,
-    queuedPrompts,
+    queueFlushBySessionRef,
+    activeQueuedPrompts,
     restartingAgentId,
     sessionDurationByAgent,
     activeProjectId,
@@ -89,6 +90,13 @@ export function useSessionRuntimeController(
   const currentSessionRuntimeUi = useAtomValue(currentSessionRuntimeUiAtom);
   const currentSessionSendState = useAtomValue(currentSessionSendStateAtom);
   const activeAgentId = useAtomValue(activeAgentIdAtom);
+	const runtimeTarget = currentSessionId && currentSessionRuntime?.agentId
+		? {
+			sessionId: currentSessionId,
+			agentId: currentSessionRuntime.agentId,
+			runtimeGeneration: currentSessionRuntime.runtimeGeneration,
+		}
+		: undefined;
   const claimSessionUiResponse = useSetAtom(claimSessionRuntimeUiResponseAtom);
   const rollbackSessionUiResponse = useSetAtom(rollbackSessionRuntimeUiResponseAtom);
 
@@ -99,7 +107,9 @@ export function useSessionRuntimeController(
     ? agents.find((a) => a.id === activeAgentId)
     : undefined;
 
-  const hasActiveConversation = Boolean(currentSession);
+  // The renderer-only Chat bootstrap ID has no Catalog record until first send,
+  // yet it must render the empty surface and composer without an Agent.
+  const hasActiveConversation = Boolean(currentSessionId);
 
   // ── runtime state (declared early, used by isAgentBusy) ──
 
@@ -146,12 +156,13 @@ export function useSessionRuntimeController(
   const canStopSession = activeAgent?.status === "running";
 
   const canRestartSession = Boolean(
+    currentSessionId &&
     activeAgentId &&
     activeAgent &&
     activeAgent.status !== "starting" &&
     restartingAgentId !== activeAgentId &&
-    !queueFlushByAgentRef.current.has(activeAgentId) &&
-    !(queuedPrompts[activeAgentId] ?? []).some(
+    !queueFlushBySessionRef.current.has(currentSessionId) &&
+    !activeQueuedPrompts.some(
       (qp: QueuedPrompt) => qp.status === "sending" || qp.status === "unknown",
     ),
   );
@@ -224,6 +235,7 @@ export function useSessionRuntimeController(
     currentSession,
     activeAgentId,
     activeRuntimeState,
+    runtimeTarget,
     activeConversationStatus,
     hasActiveConversation,
     isAgentStarting,

@@ -39,6 +39,7 @@ function loadSendHelpers() {
   return compile("src/renderer/src/hooks/useSessionSend.ts", {
     react: { useRef: (value) => ({ current: value }) },
     jotai: { useAtomValue: () => undefined, useSetAtom: () => () => undefined },
+    "../i18n": { translateI18nDescriptor: (_descriptor, fallback) => fallback },
   });
 }
 
@@ -65,7 +66,6 @@ function createDeferred() {
 
 function createSendHarness(initial = {}) {
   const atoms = {
-    currentSessionIdAtom: {},
     sessionDraftByIdAtom: {},
     sessionAttachmentsByIdAtom: {},
     sessionComposerModeByIdAtom: {},
@@ -78,7 +78,6 @@ function createSendHarness(initial = {}) {
     upsertSessionAtom: {},
   };
   const state = new Map([
-    [atoms.currentSessionIdAtom, initial.currentSessionId ?? "session-a"],
     [atoms.sessionDraftByIdAtom, { ...(initial.drafts ?? {}) }],
     [atoms.sessionAttachmentsByIdAtom, { ...(initial.attachments ?? {}) }],
     [atoms.sessionComposerModeByIdAtom, { ...(initial.modes ?? {}) }],
@@ -123,6 +122,7 @@ function createSendHarness(initial = {}) {
       expandPromptTemplates: (message) => ({ message }),
       buildComposerPromptSubmission: (message) => ({ message }),
     },
+    "../i18n": { translateI18nDescriptor: (_descriptor, fallback) => fallback },
   });
   return {
     state,
@@ -131,13 +131,12 @@ function createSendHarness(initial = {}) {
   };
 }
 
-test("the real send state machine snapshots multiline atom text and ignores the editor callback", async () => {
+test("the real send state machine snapshots multiline atom text", async () => {
   const harness = createSendHarness({ drafts: { "session-a": "first\nsecond" } });
   const deferred = createDeferred();
   let submitted;
   const send = harness.send({
     sessionId: "session-a",
-    getComposerText: () => { throw new Error("DOM must not be read for submission"); },
     templates: [],
     compact: async () => undefined,
     sendPrompt: async (input) => {
@@ -226,15 +225,47 @@ test("the real send state machine handles pure images, double clicks, and unknow
   assert.equal(unknownCalls, 1, "unknown delivery must never auto-retry");
 });
 
+test("a pre-send Chat surface promotes once and only sends through its real Session", async () => {
+  const bootstrapId = "renderer:chat-bootstrap";
+  const realSessionId = "catalog-session";
+  const harness = createSendHarness({ drafts: { [bootstrapId]: "start after send" } });
+  const promotion = createDeferred();
+  let promotionCalls = 0;
+  let submitted;
+  const send = harness.send({
+    sessionId: bootstrapId,
+    templates: [],
+    compact: async () => undefined,
+    ensureSessionId: async (sourceSessionId) => {
+      promotionCalls += 1;
+      assert.equal(sourceSessionId, bootstrapId);
+      return promotion.promise;
+    },
+    sendPrompt: async (input) => {
+      submitted = input;
+      return { accepted: true };
+    },
+  });
+
+  const first = send();
+  const second = send();
+  assert.equal(promotionCalls, 1, "double-clicking cannot create two Catalog Sessions");
+  promotion.resolve(realSessionId);
+  await Promise.all([first, second]);
+  assert.equal(submitted.sessionId, realSessionId);
+  assert.equal(submitted.message, "start after send");
+});
+
 test("Composer identity is session-only and send snapshots address the captured Session", () => {
   const source = sendSource();
-  assert.match(source, /sessionId\?: string/);
-  assert.match(source, /const sessionId = options\.sessionId \?\? selectedSessionId/);
+  assert.match(source, /sessionId: string/);
+  assert.match(source, /const sourceSessionId = options\.sessionId/);
   assert.match(source, /setSendState\(\{\s*sessionId/);
   assert.match(source, /sendPrompt\(\{\s*sessionId,\s*requestId/);
-  assert.match(source, /store\.get\(sessionDraftByIdAtom\)\[sessionId\]/);
-  assert.match(source, /store\.get\(sessionAttachmentsByIdAtom\)\[sessionId\]/);
-  assert.doesNotMatch(source, /options\.getComposerText\(\)/);
+  assert.match(source, /store\.get\(sessionDraftByIdAtom\)\[sourceSessionId\]/);
+  assert.match(source, /store\.get\(sessionAttachmentsByIdAtom\)\[sourceSessionId\]/);
+  assert.match(source, /options\.ensureSessionId\s*\? await options\.ensureSessionId\(sourceSessionId\)/);
+  assert.doesNotMatch(source, /currentSessionIdAtom|selectedSessionId|getComposerText|liveDraftsRef|runtimeAgentId\?:/);
   assert.doesNotMatch(source, /setActiveAgentId/);
 });
 
@@ -303,7 +334,9 @@ test("runtime widgets require the current Session binding generation", () => {
   assert.match(runtimeSource(), /runtimeUi\.agentId === runtime\.agentId/);
   assert.match(runtimeSource(), /runtimeUi\.runtimeGeneration === runtime\.runtimeGeneration/);
   assert.match(runtimeSource(), /const sequence = \+\+botRequestSequenceRef\.current/);
-  assert.match(runtimeSource(), /setSessionBotId\(undefined\);\s*if \(!runtimeHandle\) return/);
+  assert.match(runtimeSource(), /getSessionBot\(props\.sessionId\)/);
+  assert.match(runtimeSource(), /activeSessionId=\{props\.sessionId\}/);
+  assert.doesNotMatch(runtimeSource(), /getSessionBot\(expected\.agentId\)/);
 });
 
 test("a delayed same-generation editor command cannot overwrite a user edit", () => {

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Info } from "lucide-react";
+import { MessageCircle, X } from "lucide-react";
 import type {
 	AgentUiRequest,
 	AgentUiResponse,
@@ -85,18 +85,76 @@ export function SessionRuntimeUiOverlay({ sessionId, runtime, ui, responder }: S
 	};
 	const cancel = () => void answer({ cancelled: true });
 	return (
-		<div className="modal-backdrop ask-dialog-backdrop" onClick={cancel}>
-			<section className="ask-dialog" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); cancel(); } }} tabIndex={-1}>
-				<div className="ask-dialog-header"><strong>{request.title || t("ask.defaultTitle")}</strong><button className="ask-dialog-close-btn" disabled={responding} onClick={cancel}>{t("common.close")}</button></div>
-				<div className="ask-dialog-question">{request.title || t("ask.defaultTitle")}</div>
-				{request.method === "select" && request.options?.length ? <div className="ask-dialog-options">{request.options.map((option, index) => <button className="ask-dialog-option" disabled={responding} key={`${request.requestId}:${option}`} onClick={() => void answer({ value: option })}><span className="ask-dialog-option-marker">{index + 1}</span><span>{option}</span></button>)}</div> : null}
-				{request.method === "select" && request.allowOther ? <div className="ask-dialog-custom-input"><input className="ask-dialog-custom-field" autoFocus={!request.options?.length} value={value} placeholder={t("ask.customPlaceholder")} disabled={responding} onChange={(event) => setValue(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void answer({ value }); }} /><button className="ask-dialog-submit-btn" disabled={responding} onClick={() => void answer({ value })}>{t("ask.submit")}</button></div> : null}
-				{request.method === "confirm" ? <div className="ask-dialog-options ask-dialog-options-confirm"><button className="ask-dialog-option" disabled={responding} onClick={() => void answer({ confirmed: true, value: true })}>{t("common.confirm")}</button><button className="ask-dialog-option" disabled={responding} onClick={() => void answer({ confirmed: false, value: false })}>{t("common.cancel")}</button></div> : null}
-				{request.method === "input" ? <div className="ask-dialog-input-area"><input className="ask-dialog-input" autoFocus value={value} placeholder={request.placeholder || t("ask.inputPlaceholder")} disabled={responding} onChange={(event) => setValue(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void answer({ value }); }} /><button className="ask-dialog-submit-btn" disabled={responding} onClick={() => void answer({ value })}>{t("ask.submit")}</button></div> : null}
-				{request.method === "editor" ? <div className="ask-dialog-input-area"><textarea className="ask-dialog-input" autoFocus value={value} placeholder={request.placeholder || t("ask.editorPlaceholder")} disabled={responding} onChange={(event) => setValue(event.target.value)} /><button className="ask-dialog-submit-btn" disabled={responding} onClick={() => void answer({ value })}>{t("ask.submit")}</button></div> : null}
-				{request.method === "select" && <div className="ask-dialog-cancel-hint"><Info size={12} /><span>{t("ask.cancelHint")}</span></div>}
-				{responding && <div className="ask-dialog-waiting">{t("ask.waitingForAnswer")}</div>}
-			</section>
+		<div className="ask-inline-bar">
+			<div className="ask-inline-bar-header">
+				<MessageCircle size={14} />
+				<span>{t("ask.toolName")}</span>
+				{request.method === "select" && request.options?.length ? (
+					<span className="ask-inline-bar-cancel-hint">{t("ask.cancelHint")}</span>
+				) : null}
+				<button
+					className="ask-inline-bar-close"
+					title={t("common.close")}
+					aria-label={t("common.close")}
+					disabled={responding}
+					onClick={cancel}
+				>
+					<X size={14} />
+				</button>
+			</div>
+			<div className="ask-inline-bar-question">{request.title || t("ask.defaultTitle")}</div>
+			<div className="ask-inline-bar-body">
+				{request.method === "select" && request.options?.length ? (
+					<div className="ask-inline-bar-options">
+						{request.options.map((option) => (
+							<button
+								className="ask-inline-bar-option"
+								disabled={responding}
+								key={`${request.requestId}:${option}`}
+								onClick={() => void answer({ value: option })}
+							>
+								<span className="ask-inline-bar-option-marker">{option}</span>
+							</button>
+						))}
+						{request.allowOther ? (
+							<div className="ask-inline-bar-custom-input">
+								<input
+									className="ask-inline-bar-custom-field"
+									autoFocus={false}
+									value={value}
+									placeholder={t("ask.customPlaceholder")}
+									disabled={responding}
+									onChange={(event) => setValue(event.target.value)}
+									onKeyDown={(event) => {
+										if (event.key === "Enter") void answer({ value });
+									}}
+								/>
+								<button className="ask-inline-bar-submit-btn" disabled={responding} onClick={() => void answer({ value })}>
+									{t("ask.submit")}
+								</button>
+							</div>
+						) : null}
+					</div>
+				) : null}
+				{request.method === "confirm" ? (
+					<div className="ask-inline-bar-options ask-inline-bar-options-confirm">
+						<button className="ask-inline-bar-option ask-inline-bar-option-yes" disabled={responding} onClick={() => void answer({ confirmed: true, value: true })}>{t("common.confirm")}</button>
+						<button className="ask-inline-bar-option ask-inline-bar-option-no" disabled={responding} onClick={() => void answer({ confirmed: false, value: false })}>{t("common.cancel")}</button>
+					</div>
+				) : null}
+				{request.method === "input" ? (
+					<div className="ask-inline-bar-input-area">
+						<input className="ask-inline-bar-input" autoFocus value={value} placeholder={request.placeholder || t("ask.inputPlaceholder")} disabled={responding} onChange={(event) => setValue(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void answer({ value }); }} />
+						<button className="ask-inline-bar-submit-btn" disabled={responding} onClick={() => void answer({ value })}>{t("ask.submit")}</button>
+					</div>
+				) : null}
+				{request.method === "editor" ? (
+					<div className="ask-inline-bar-input-area">
+						<textarea className="ask-inline-bar-input" autoFocus value={value} placeholder={request.placeholder || t("ask.editorPlaceholder")} disabled={responding} onChange={(event) => setValue(event.target.value)} />
+						<button className="ask-inline-bar-submit-btn" disabled={responding} onClick={() => void answer({ value })}>{t("ask.submit")}</button>
+					</div>
+				) : null}
+			</div>
 		</div>
 	);
 }

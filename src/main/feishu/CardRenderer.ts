@@ -9,6 +9,7 @@
  */
 
 import type { Block, RunState, ToolEntry, TrailEntry } from "./CardRunState";
+import { feishuT, type FeishuLocale } from "./FeishuI18n";
 import { markdownToCardElements } from "./rich-text";
 
 const OUTPUT_MAX = 15_000;
@@ -17,18 +18,20 @@ const TRAIL_ENTRIES_MAX = 20;
 
 export interface RenderOptions {
 	stopHint?: string;
+	locale?: FeishuLocale;
 }
 
 export function renderRunCard(state: RunState, opts: RenderOptions = {}): object {
+	const locale = opts.locale ?? "zh-CN";
 	const elements: object[] = [];
 	const isRunning = state.terminal === "running";
 
 	// ── 1. 活动轨迹（去掉标题，紧凑展示） ──
-	elements.push(renderTrail(state.trail, isRunning));
+	elements.push(renderTrail(state.trail, isRunning, locale));
 
 	// ── 2. 思考过程 ──
 	if (state.reasoning.content) {
-		elements.push(renderThinking(state.reasoning.content, state.reasoning.active));
+		elements.push(renderThinking(state.reasoning.content, state.reasoning.active, locale));
 	}
 
 	// ── 3. 正在执行的操作 ──
@@ -37,13 +40,13 @@ export function renderRunCard(state: RunState, opts: RenderOptions = {}): object
 	);
 	for (const b of runningTools) {
 		if (b.kind === "tool") {
-			elements.push(renderRunningTool(b.tool));
+			elements.push(renderRunningTool(b.tool, locale));
 		}
 	}
 
 	// ── 4. 输出正文 ──
 	if (state.outputText.trim()) {
-		elements.push(...renderOutput(state.outputText, isRunning));
+		elements.push(...renderOutput(state.outputText, locale));
 	}
 
 	// ── 5. 已完成的工具 ──
@@ -51,18 +54,18 @@ export function renderRunCard(state: RunState, opts: RenderOptions = {}): object
 		(b) => b.kind === "tool" && b.tool.status !== "running",
 	);
 	if (doneTools.length > 0) {
-		elements.push(renderDoneTools(doneTools));
+		elements.push(renderDoneTools(doneTools, locale));
 	}
 
 	// ── 6. 终态提示 ──
 	if (state.terminal === "interrupted") {
-		elements.push({ tag: "markdown", content: "⏹ 已被中断" });
-	} else if (state.terminal === "error" && state.errorMsg) {
-		elements.push({ tag: "markdown", content: `❌ 失败: ${state.errorMsg}` });
+		elements.push({ tag: "markdown", content: feishuT(locale, "card.interrupted") });
+	} else if (state.terminal === "error") {
+		elements.push({ tag: "markdown", content: feishuT(locale, "card.failed") });
 	}
 
 	// ── 7. 底部状态 ──
-	elements.push(renderFooter(state, isRunning, opts.stopHint));
+	elements.push(renderFooter(state, isRunning, opts.stopHint, locale));
 
 	return {
 		config: { wide_screen_mode: true, update_multi: true },
@@ -73,7 +76,7 @@ export function renderRunCard(state: RunState, opts: RenderOptions = {}): object
 // ========== 区域渲染 ==========
 
 /** 活动轨迹 — 一行一条，去掉标题，仅保留时间线 */
-function renderTrail(trail: TrailEntry[], isRunning: boolean): object {
+function renderTrail(trail: TrailEntry[], isRunning: boolean, locale: FeishuLocale): object {
 	let entries = trail;
 	let hidden = 0;
 	if (entries.length > TRAIL_ENTRIES_MAX) {
@@ -83,9 +86,9 @@ function renderTrail(trail: TrailEntry[], isRunning: boolean): object {
 
 	const lines: string[] = [];
 	if (entries.length === 0) {
-		lines.push(isRunning ? "_等待 Agent 启动..._" : "_无记录_");
+		lines.push(feishuT(locale, isRunning ? "card.waiting" : "card.noActivity"));
 	} else {
-		if (hidden > 0) lines.push(`_…前面 ${hidden} 条_`);
+		if (hidden > 0) lines.push(feishuT(locale, "card.hiddenTrail", { count: hidden }));
 		for (const e of entries) {
 			const time = fmt(e.timestamp);
 			const icon = e.status === "running" ? "🔄" : e.status === "error" ? "❌" : "✅";
@@ -99,34 +102,34 @@ function renderTrail(trail: TrailEntry[], isRunning: boolean): object {
 }
 
 /** 思考过程 — notation 小字 */
-function renderThinking(content: string, active: boolean): object {
+function renderThinking(content: string, active: boolean, locale: FeishuLocale): object {
 	const display = content.length > THINKING_MAX
-		? content.slice(0, THINKING_MAX) + "\n\n…（已截断）"
+		? content.slice(0, THINKING_MAX) + `\n\n${feishuT(locale, "card.truncated")}`
 		: content;
 
-	const title = active ? "**💭 思考中**" : "**💭 思考过程**";
+	const title = feishuT(locale, active ? "card.thinkingActive" : "card.thinkingHistory");
 	return { tag: "markdown", content: `${title}\n${display}`, text_size: "notation" };
 }
 
 /** 正在运行的工具 */
-function renderRunningTool(tool: ToolEntry): object {
+function renderRunningTool(tool: ToolEntry, locale: FeishuLocale): object {
 	const preview = toolInputPreview(tool);
 	const lines: string[] = [];
-	lines.push(`**🔧 正在调用 \`${tool.name}\``);
+	lines.push(feishuT(locale, "card.runningTool", { name: tool.name }));
 	if (preview) lines.push(`\`${preview}\``);
 	return { tag: "markdown", content: lines.join("\n") };
 }
 
 /** 输出正文 */
-function renderOutput(text: string, streaming: boolean): object[] {
+function renderOutput(text: string, locale: FeishuLocale): object[] {
 	const display = text.length > OUTPUT_MAX
-		? text.slice(0, OUTPUT_MAX) + "\n\n…（已截断）"
+		? text.slice(0, OUTPUT_MAX) + `\n\n${feishuT(locale, "card.truncated")}`
 		: text;
 	return markdownToCardElements(display);
 }
 
 /** 已完成的工具列表 */
-function renderDoneTools(blocks: Block[]): object {
+function renderDoneTools(blocks: Block[], locale: FeishuLocale): object {
 	const tools = blocks
 		.filter((b) => b.kind === "tool")
 		.map((b) => (b as { kind: "tool"; tool: ToolEntry }).tool);
@@ -146,28 +149,28 @@ function renderDoneTools(blocks: Block[]): object {
 		const previewPart = preview ? ` — \`${preview}\`` : "";
 		lines.push(`${icon} **${t.name}**${previewPart}`);
 	}
-	if (hidden > 0) lines.push(`_…还有 ${hidden} 个_`);
+	if (hidden > 0) lines.push(feishuT(locale, "card.hiddenTools", { count: hidden }));
 
 	return { tag: "markdown", content: lines.join("\n") };
 }
 
 /** 底部状态 — 简洁一行 */
-function renderFooter(state: RunState, isRunning: boolean, stopHint?: string): object {
+function renderFooter(state: RunState, isRunning: boolean, stopHint: string | undefined, locale: FeishuLocale): object {
 	const parts: string[] = [];
 
 	if (isRunning) {
 		if (state.footer === "thinking") {
-			parts.push("🧠 思考中");
+			parts.push(feishuT(locale, "card.footerThinking"));
 		} else if (state.footer === "tool_running") {
 			const rt = [...state.blocks].reverse().find(
 				(b) => b.kind === "tool" && b.tool.status === "running",
 			);
-			if (rt?.kind === "tool") parts.push(`🔧 调用 \`${rt.tool.name}\``);
-			else parts.push("🔧 调用工具");
+			if (rt?.kind === "tool") parts.push(feishuT(locale, "card.footerTool", { name: rt.tool.name }));
+			else parts.push(feishuT(locale, "card.footerToolGeneric"));
 		} else if (state.footer === "streaming") {
-			parts.push("✍️ 输出中");
+			parts.push(feishuT(locale, "card.footerStreaming"));
 		} else {
-			parts.push("⏳ 处理中");
+			parts.push(feishuT(locale, "card.footerProcessing"));
 		}
 
 		if (stopHint) parts.push(stopHint);
@@ -175,7 +178,7 @@ function renderFooter(state: RunState, isRunning: boolean, stopHint?: string): o
 		if (state.meta.durationMs !== undefined) {
 			parts.push(`⏱ ${(state.meta.durationMs / 1000).toFixed(1)}s`);
 		}
-		parts.push("✅ 完成");
+		parts.push(feishuT(locale, "card.footerDone"));
 	}
 
 	return { tag: "note", elements: [{ tag: "plain_text", content: parts.join("  |  ") }] };

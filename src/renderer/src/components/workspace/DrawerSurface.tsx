@@ -6,6 +6,7 @@ import { GitPanel } from "../app/GitPanel";
 import { DrawerContent } from "../app/AppParts";
 import { LazyWrapper } from "../../hooks/useLazyComponent";
 import type { WorkspaceDrawerPanel } from "../../hooks/useWorkspacePanels";
+import { t } from "../../i18n";
 
 // ── port objects (typed loosely — type tightening is a follow-up task) ──
 
@@ -102,7 +103,7 @@ export function DrawerSurface(props: DrawerSurfaceProps) {
   return (
     <>
       {editor.editorMode === "drawer" && drawer === "editor" && !drawerCollapsed && editor.activeTab ? (
-        <Suspense fallback={<div className="drawer-content-frame"><div className="file-diff-loading">Loading...</div></div>}>
+        <Suspense fallback={<div className="drawer-content-frame"><div className="file-diff-loading">{t("drawer.lazyLoading")}</div></div>}>
           <FileDiffViewer
             displayMode="drawer"
             filePath={editor.activeTab.filePath}
@@ -150,6 +151,7 @@ export function DrawerSurface(props: DrawerSurfaceProps) {
             <div className="git-drawer-source" aria-hidden={Boolean(git.gitDrawerDiff && git.gitDiffDisplayMode === "drawer")}>
               <GitPanel
                 projectId={git.activeProjectId}
+                projectRoot={files.projects.find((project: any) => project.id === git.activeProjectId)?.path}
                 commitLog={git.gitApi.commitLog}
                 commitDetail={git.gitApi.commitDetail}
                 onOpenCommitFileDiff={git.openCommitFileDiff}
@@ -170,11 +172,13 @@ export function DrawerSurface(props: DrawerSurfaceProps) {
                 dropCommit={git.gitApi.dropCommit}
                 generateCommitMessage={git.gitApi.generateCommitMessage}
                 gitInit={git.gitApi.init}
+                push={git.gitApi.push}
+                pull={git.gitApi.pull}
               />
             </div>
             {git.gitDrawerDiff && git.gitDrawerDiff.projectId === git.activeProjectId && git.gitDiffDisplayMode === "drawer" && (
               <div className="git-drawer-detail">
-                <Suspense fallback={<div className="file-diff-loading">Loading...</div>}>
+                <Suspense fallback={<div className="file-diff-loading">{t("drawer.lazyLoading")}</div>}>
                   <FileDiffViewer
                     displayMode="drawer"
                     filePath={git.gitDrawerDiff.filePath}
@@ -209,7 +213,7 @@ export function DrawerSurface(props: DrawerSurfaceProps) {
               color: "var(--text-secondary)",
               fontSize: "14px"
             }}>
-              加载中...
+              {t("drawer.lazyLoading")}
             </div>
           }
         >
@@ -261,7 +265,7 @@ export function DrawerSurface(props: DrawerSurfaceProps) {
             }}
             onCopySession={(session: any) =>
               files.runCopySession(
-                session.filePath,
+                session.id,
                 files.sessionsProjectId ?? git.activeProjectId,
               )
             }

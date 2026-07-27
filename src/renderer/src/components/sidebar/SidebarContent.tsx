@@ -32,7 +32,6 @@ export type SidebarActions = {
   sessions: {
     open: (projectId: string, sessionId: string) => Promise<void>;
     createDraft: (projectId: string) => Promise<void>;
-    createAnonymousAgent: (projectId: string) => Promise<void>;
     deleteDraft: (session: SessionRecord) => Promise<void>;
     rename: (projectId: string, session: SessionSummary) => void;
     export: (projectId: string, session: SessionSummary) => Promise<void>;

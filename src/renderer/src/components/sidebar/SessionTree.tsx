@@ -1,7 +1,7 @@
 import { Fragment, type ReactNode } from "react";
 import { ChevronDown, Trash2 } from "lucide-react";
 import type { AgentTab, Project, SessionRecord, SessionSummary } from "../../../../shared/types";
-import { getProjectAgentSessionDisplay } from "../../agentListDisplay";
+import { filterAgentsForSidebarDisplay, getProjectAgentSessionDisplay } from "../../agentListDisplay";
 import { sessionRecordToSummary } from "../../atoms";
 import { t } from "../../i18n";
 import { filterSidebarSessions, getBoundSidebarRuntimeAgent, type SidebarController } from "../../hooks/useSidebarController";
@@ -45,7 +45,12 @@ export function SessionTree(props: {
   const summaries = filterSidebarSessions(allSummaries, filter)
     .filter((session) => matchesSearch(`${session.name ?? ""}${session.preview}${session.filePath}`, search));
   const projectAgents = props.agents.filter((agent) => agent.projectId === props.project.id);
-  const displayAgents = projectAgents;
+  const displayAgents = filterAgentsForSidebarDisplay({
+    agents: projectAgents,
+    allSessions: allSummaries,
+    visibleSessions: summaries,
+    sources: filter,
+  });
   const display = getProjectAgentSessionDisplay({
     agents: displayAgents,
     sessions: summaries,

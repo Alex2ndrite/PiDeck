@@ -1,6 +1,6 @@
 import { ChevronDown } from "lucide-react";
 import type { RefObject, ReactNode, MutableRefObject } from "react";
-import type { AgentRuntimeState, ImageContent } from "../../../../shared/types";
+import type { AgentRuntimeState, ImageContent, SessionRuntimeTarget } from "../../../../shared/types";
 import type { SessionTimelineController } from "../../hooks/useSessionTimelineController";
 import type { QueuedPrompt } from "../../hooks/useQueuedPrompt";
 import type { PiDesktopApi } from "../../../../preload";
@@ -25,6 +25,7 @@ export type SessionViewProps = {
     status?: string;
   } | null;
   activeRuntimeState?: AgentRuntimeState;
+  runtimeTarget?: SessionRuntimeTarget;
   hasActiveConversation: boolean;
   hasProject: boolean;
 
@@ -68,7 +69,9 @@ export type SessionViewProps = {
   // ── Composer ──
   enqueueSessionPrompt: (sessionId: string, snapshot: EnqueuePromptSnapshot) => boolean;
   openFilePath?: (path: string) => void;
+  ensureSessionId?: (sessionId: string) => Promise<string>;
   queuePanel?: ReactNode;
+  runtimeUi?: ReactNode;
 
   // ── Terminal dock ──
   terminalDockVisible: boolean;
@@ -100,6 +103,7 @@ export function SessionView({
   activeAgentId,
   activeAgent,
   activeRuntimeState,
+  runtimeTarget,
   hasActiveConversation,
   hasProject,
   chatHeaderRef,
@@ -133,7 +137,9 @@ export function SessionView({
   canMutateActiveMessages,
   enqueueSessionPrompt,
   openFilePath,
+  ensureSessionId,
   queuePanel,
+  runtimeUi,
   terminalDockVisible,
   terminalOpen,
   terminalDockClosing,
@@ -174,7 +180,6 @@ export function SessionView({
       <NoticeCenter />
 
       <SessionMessageTimeline
-        mode="session"
         sessionId={sessionId}
         controller={sessionTimeline}
         hasProject={hasProject}
@@ -224,7 +229,9 @@ export function SessionView({
           sessionId={sessionId}
           onOpenFile={openFilePath}
           enqueue={enqueueSessionPrompt}
+          ensureSessionId={ensureSessionId}
           queuePanel={queuePanel}
+          runtimeUi={runtimeUi}
         />
       )}
 
@@ -234,7 +241,7 @@ export function SessionView({
         !environmentDialog &&
         terminalDockVisible && (
         <SessionRuntimeDock
-          agentId={activeAgentId}
+          target={runtimeTarget}
           mounted={terminalDockVisible}
           open={terminalOpen}
           closing={terminalDockClosing}

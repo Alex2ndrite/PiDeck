@@ -20,6 +20,8 @@ export class ProjectStore {
   private chatProjectPath = join(app.getPath("userData"), "chat-workspace");
   private projects: Project[] = [];
 
+  constructor(private readonly chooseProjectTitle: () => string = () => "Choose project folder") {}
+
   async load() {
     try {
       const raw = await readFile(this.filePath, "utf8");
@@ -91,7 +93,7 @@ export class ProjectStore {
       throw new WslPathError("INVALID_WSL_PATH", "The active WSL environment is unavailable.");
     }
     const result = await dialog.showOpenDialog({
-      title: "选择项目目录",
+      title: this.chooseProjectTitle(),
       ...(environment === "wsl" ? { defaultPath: wslEnvironment!.windowsHome } : {}),
       properties: ["openDirectory"],
     });

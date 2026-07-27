@@ -19,6 +19,7 @@ import type {
 	FeishuTestResult,
 	ImageContent,
 	AvailableModel,
+	AgentRuntimeState,
 	AgentTab,
 } from "../../shared/types";
 import type {
@@ -50,14 +51,32 @@ import { hasExplicitFeishuFileSendIntent } from "./fileIntent";
 import { createInitialState, reduceFromPiEvent, markInterrupted, markError, markDone, type RunState } from "./CardRunState";
 import { renderRunCard } from "./CardRenderer";
 import { buildModelPickerCard, parseModelActionValue } from "./ModelPickerCard";
+import { feishuLanguage, feishuT, normalizeFeishuLocale, type FeishuLocale } from "./FeishuI18n";
 import type { AgentManager } from "../pi/AgentManager";
 
 export interface SessionRuntimeBindingGateway {
+	ensureSession(input: {
+		projectId: string;
+		title: string;
+		existingSessionId?: string;
+		sessionPath?: string;
+	}): Promise<{ sessionId: string }>;
+	activateRuntime(sessionId: string): Promise<AgentTab>;
 	bindRuntime(input: {
 		projectId: string;
 		agent: AgentTab;
 		existingSessionId?: string;
-	}): Promise<{ sessionId: string; runtimeGeneration: number }>;
+	}): Promise<{ sessionId: string }>;
+	sendPrompt(input: {
+		sessionId: string;
+		message: string;
+		agentMessage?: string;
+		images?: ImageContent[];
+	}): Promise<void>;
+	abortRuntime(sessionId: string): Promise<void>;
+	listRuntimeModels(sessionId: string): Promise<AvailableModel[]>;
+	getRuntimeState(sessionId: string): Promise<AgentRuntimeState | undefined>;
+	setRuntimeModel(sessionId: string, provider: string, modelId: string): Promise<void>;
 }
 
 // ===== 常量 =====
@@ -81,6 +100,7 @@ export class FeishuBridge {
 	private runtimeBindings: SessionRuntimeBindingGateway;
 	private getWindow: () => BrowserWindow | null;
 	private getProjects: () => Array<{ id: string; name: string; path: string }>;
+	private locale: FeishuLocale;
 
 	private status: FeishuBridgeStatus = { status: "disconnected", activeBindings: 0 };
 	private botOpenId: string | null = null;
@@ -133,6 +153,7 @@ export class FeishuBridge {
 		getProjects: () => Array<{ id: string; name: string; path: string }>,
 		runtimeBindings: SessionRuntimeBindingGateway,
 		plainAppSecret?: string,
+		locale: FeishuLocale = "zh-CN",
 	) {
 		this.botConfig = botConfig;
 		// 临时连接不会落盘，无法通过 bot id 解密 secret；这里保留一次性明文供 start() 使用。
@@ -141,6 +162,7 @@ export class FeishuBridge {
 		this.runtimeBindings = runtimeBindings;
 		this.getWindow = getWindow;
 		this.getProjects = getProjects;
+		this.locale = normalizeFeishuLocale(locale);
 	}
 
 	getStatus(): FeishuBridgeStatus { return { ...this.status }; }
@@ -303,7 +325,7 @@ export class FeishuBridge {
 	async start(): Promise<void> {
 		const { appId } = this.botConfig;
 		const plainSecret = this.plainAppSecret ?? getDecryptedBotAppSecret(this.botConfig.id);
-		if (!appId || !plainSecret) throw new Error("请先配置 App ID 和 App Secret");
+		if (!appId || !plainSecret) throw new Error(feishuT(this.locale, "bridge.configRequired"));
 
 		this.updateStatus({ status: "connecting" });
 
@@ -364,10 +386,10 @@ export class FeishuBridge {
 			});
 			log("[Feishu Bridge] connected");
 		} catch (error) {
-			const message = error instanceof Error ? error.message : String(error);
+			const message = feishuT(this.locale, "connection.failed");
 			this.updateStatus({ status: "error", errorMessage: message });
 			logErr("[飞书 Bridge] 启动失败:", error);
-			throw error;
+			throw new Error(message, { cause: error });
 		}
 	}
 
@@ -402,6 +424,10 @@ export class FeishuBridge {
 		log("[飞书 Bridge] 配置已热更新:", Object.keys(patch).join(", "));
 	}
 
+	setLocale(locale: FeishuLocale): void {
+		this.locale = normalizeFeishuLocale(locale);
+	}
+
 	// ===== 测试连接 =====
 
 	async testConnection(appId: string, appSecret: string): Promise<FeishuTestResult> {
@@ -409,10 +435,12 @@ export class FeishuBridge {
 			const lark = (await import("@larksuiteoapi/node-sdk")) as unknown as LarkSDK;
 			const client = new lark.Client({ appId, appSecret, appType: lark.AppType.SelfBuild } as Record<string, unknown>) as LarkClient;
 			const resp = await client.auth.tenantAccessToken.internal({ data: { app_id: appId, app_secret: appSecret } });
-			if ((resp as Record<string, unknown>).code === 0) return { success: true, message: "连接成功！", botName: `App ${appId.slice(0, 8)}...` };
-			return { success: false, message: `飞书 API 错误: ${(resp as Record<string, unknown>).msg ?? "未知错误"}` };
+			if ((resp as Record<string, unknown>).code === 0) return { success: true, message: feishuT(this.locale, "connection.success"), botName: `App ${appId.slice(0, 8)}...` };
+			logErr("[飞书 Bridge] 连接测试 API 校验失败:", resp);
+			return { success: false, message: feishuT(this.locale, "connection.apiFailed") };
 		} catch (error) {
-			return { success: false, message: `连接失败: ${error instanceof Error ? error.message : String(error)}` };
+			logErr("[飞书 Bridge] 连接测试失败:", error);
+			return { success: false, message: feishuT(this.locale, "connection.failed") };
 		}
 	}
 
@@ -425,12 +453,12 @@ export class FeishuBridge {
 			if (replyToMessageId) {
 				await this.client.im.message.reply({
 					path: { message_id: replyToMessageId },
-					data: { msg_type: "text", content: JSON.stringify({ text: "⚡ 已收到" }) },
+					data: { msg_type: "text", content: JSON.stringify({ text: feishuT(this.locale, "message.received") }) },
 				});
 			} else {
 				await this.client.im.message.create({
 					params: { receive_id_type: "chat_id" },
-					data: { receive_id: chatId, msg_type: "text", content: JSON.stringify({ text: "⚡ 已收到" }) },
+					data: { receive_id: chatId, msg_type: "text", content: JSON.stringify({ text: feishuT(this.locale, "message.received") }) },
 				});
 			}
 		} catch { /* fire-and-forget */ }
@@ -534,10 +562,10 @@ export class FeishuBridge {
 				text = parts.join(" ").replace(/@_user_\d+/g, "").trim();
 			} else if (messageType === "image") {
 				const content = JSON.parse(message.content as string) as { image_key?: string };
-				if (content.image_key) { try { const imgData = await this.downloadImage(messageId, content.image_key); imageAttachments.push({ imageKey: content.image_key, data: imgData, mediaType: this.inferImageMediaType(imgData) }); } catch (e) { logErr("[飞书 Bridge] 下载图片失败:", e); await this.sendSmartMessage(chatId, "⚠️ 图片下载失败，请重试。"); return; } }
+				if (content.image_key) { try { const imgData = await this.downloadImage(messageId, content.image_key); imageAttachments.push({ imageKey: content.image_key, data: imgData, mediaType: this.inferImageMediaType(imgData) }); } catch (e) { logErr("[飞书 Bridge] 下载图片失败:", e); await this.sendSmartMessage(chatId, feishuT(this.locale, "attachment.imageDownloadFailed")); return; } }
 			} else if (messageType === "file") {
 				const content = JSON.parse(message.content as string) as { file_key?: string; file_name?: string };
-				if (content.file_key) { try { const fileData = await this.downloadFile(messageId, content.file_key); if (fileData.length > 50 * 1024 * 1024) { await this.sendSmartMessage(chatId, "文件过大（超过 50MB），暂不支持处理。"); return; } fileAttachments.push({ fileKey: content.file_key, fileName: content.file_name || `feishu-${content.file_key}`, data: fileData }); } catch (e) { logErr("[飞书 Bridge] 下载文件失败:", e); await this.sendSmartMessage(chatId, "⚠️ 文件下载失败，请重试。"); return; } }
+				if (content.file_key) { try { const fileData = await this.downloadFile(messageId, content.file_key); if (fileData.length > 50 * 1024 * 1024) { await this.sendSmartMessage(chatId, feishuT(this.locale, "attachment.fileTooLarge50")); return; } fileAttachments.push({ fileKey: content.file_key, fileName: content.file_name || `feishu-${content.file_key}`, data: fileData }); } catch (e) { logErr("[飞书 Bridge] 下载文件失败:", e); await this.sendSmartMessage(chatId, feishuT(this.locale, "attachment.fileDownloadFailed")); return; } }
 			}
 
 			// ===== 文件/图片 + 文字 → 一起处理；仅文件/图片 → 暂存等指令 =====
@@ -549,7 +577,9 @@ export class FeishuBridge {
 				merged.files.push(...fileAttachments);
 				this.pendingAttachments.set(chatId, merged);
 				const names = fileAttachments.map((f) => f.fileName).join("、");
-				const hint = names ? `已收到文件: ${names}，请告诉我需要做什么` : "已收到图片，请告诉我需要做什么";
+				const hint = names
+					? feishuT(this.locale, "attachment.filesReceived", { names })
+					: feishuT(this.locale, "attachment.imageReceived");
 				await this.sendSmartMessage(chatId, `📎 ${hint}`);
 				return;
 			}
@@ -601,20 +631,20 @@ export class FeishuBridge {
 			case "/model": await this.handleModelCommand(ctx, text); break;
 			case "/sendfile": {
 				const fp = text.split(/\s+/).slice(1).join(" ");
-				if (!fp) { await this.sendSmartMessage(chatId, "用法: `/sendfile <文件路径>`"); break; }
+				if (!fp) { await this.sendSmartMessage(chatId, feishuT(this.locale, "command.sendFileUsage")); break; }
 				const result = await this.sendFeishuFile(chatId, fp);
 				await this.sendSmartMessage(chatId, result);
 				break;
 			}
 			case "/newdoc": {
-				const title = text.split(/\s+/).slice(1).join(" ") || "Pi Agent 文档";
+				const title = text.split(/\s+/).slice(1).join(" ") || feishuT(this.locale, "doc.defaultTitle");
 				const result = await this.createFeishuDoc(chatId, title);
 				await this.sendSmartMessage(chatId, result);
 				break;
 			}
 			case "/whoami":
 				await this.sendSmartMessage(chatId,
-					`你的 open_id: \`${userId}\`\n\n📋 你可以将此 ID 填入 PiDeck 飞书配置中的「你的 Open ID」字段，以便新建会话时自动拉你进群。`
+					feishuT(this.locale, "command.whoami", { openId: userId }),
 				);
 				// 将 open_id 推回前端，用于添加 Bot 时自动填入
 				try {
@@ -626,9 +656,9 @@ export class FeishuBridge {
 				break;
 			case "/refresh": case "/r":
 				await this.reloadBindings();
-				await this.sendSmartMessage(chatId, `✅ 已刷新绑定 (${this.chatBindings.size} 个活跃)`);
+				await this.sendSmartMessage(chatId, feishuT(this.locale, "command.bindingsRefreshed", { count: this.chatBindings.size }));
 				break;
-			default: await this.sendSmartMessage(chatId, `未知命令: ${command}。输入 /help 查看帮助。`);
+			default: await this.sendSmartMessage(chatId, feishuT(this.locale, "command.unknown", { command: command ?? "" }));
 		}
 	}
 
@@ -642,7 +672,7 @@ export class FeishuBridge {
 		if (binding) {
 			const runtimeAgentId = await this.ensureRuntimeBinding(binding);
 			if (!runtimeAgentId) {
-				await this.sendSmartMessage(chatId, "⚠️ 会话恢复失败，请尝试 /new 创建新会话");
+				await this.sendSmartMessage(chatId, feishuT(this.locale, "session.restoreFailed"));
 				return;
 			}
 		} else {
@@ -686,7 +716,7 @@ export class FeishuBridge {
 		// 流式卡片：创建后实时更新活动轨迹和输出
 		const cardPromise = CardStream.open(
 			this.client!, chatId,
-			renderRunCard(initialState),
+			renderRunCard(initialState, { locale: this.locale }),
 			{ replyToMessageId: ctx.chatType === "group" ? ctx.messageId : undefined },
 		).catch((e) => { logErr("[飞书 Bridge] 流式卡片创建失败:", e); return null as CardStream | null; });
 
@@ -701,7 +731,12 @@ export class FeishuBridge {
 			const feishuCtx = finalText
 				? `${feishuActionInstruction}\n\n${finalText}\n\n[这是飞书群聊消息。请直接回复用户。]`
 				: `${feishuActionInstruction}\n\n[飞书群聊消息。请直接回复用户。]`;
-			await this.agentManager.sendPrompt({ agentId, message: finalText || "处理附件", agentMessage: feishuCtx, ...(images.length > 0 ? { images } : {}) });
+			await this.runtimeBindings.sendPrompt({
+				sessionId: binding.sessionId,
+				message: finalText || "处理附件",
+				agentMessage: feishuCtx,
+				...(images.length > 0 ? { images } : {}),
+			});
 		} catch (e) {
 			this.feishuDrivenRuns.delete(agentId);
 			this.streamingRunStates.delete(agentId);
@@ -757,18 +792,18 @@ export class FeishuBridge {
 				}
 			}
 		} catch (e) {
-			const msg = e instanceof Error ? e.message : String(e);
-			const errState = markError(createInitialState(), msg.slice(0, 96));
+			logErr("[飞书 Bridge] Agent 运行失败:", e);
+			const errState = markError(createInitialState(), feishuT(this.locale, "agent.failed"));
 			const finalCardStream = this.streamingCards.get(agentId);
 			if (finalCardStream) {
-				await finalCardStream.flush(renderRunCard(errState)).catch(() => {});
+				await finalCardStream.flush(renderRunCard(errState, { locale: this.locale })).catch(() => {});
 				await finalCardStream.close().catch(() => {});
 				this.streamingCards.delete(agentId);
 			}
 			this.streamingRunStates.delete(agentId);
 			this.pendingCardEvents.delete(agentId);
 			this.cardUpdateFailed.delete(agentId);
-			await this.sendSmartMessage(chatId, `❌ Agent 错误: ${msg}`);
+			await this.sendSmartMessage(chatId, feishuT(this.locale, "agent.failed"));
 		} finally {
 			this.feishuDrivenRuns.delete(agentId);
 		}
@@ -782,12 +817,13 @@ export class FeishuBridge {
 		log(`[飞书 Bridge] 回放 ${pending.length} 个缓存事件到卡片`);
 		let currentState = this.streamingRunStates.get(sessionId) ?? createInitialState();
 		for (const ev of pending) {
-			const nextState = reduceFromPiEvent(currentState, ev as Record<string, unknown>);
+			const nextState = reduceFromPiEvent(currentState, ev as Record<string, unknown>, this.locale);
 			if (nextState !== currentState) {
 				currentState = nextState;
 				this.streamingRunStates.set(sessionId, nextState);
 				cardStream.update(renderRunCard(nextState, {
-					stopHint: nextState.terminal === "running" ? "发送 /stop 可终止当前任务" : undefined,
+					locale: this.locale,
+					stopHint: nextState.terminal === "running" ? feishuT(this.locale, "card.stopHint") : undefined,
 				}));
 			}
 		}
@@ -828,7 +864,10 @@ export class FeishuBridge {
 		// 卡片已就绪：直接更新状态和卡片
 		const runState = this.streamingRunStates.get(agentId);
 		if (runState) {
-			const nextState = reduceFromPiEvent(runState, typed);
+			if (typed.type === "agent_end" && (typed.stopReason === "error" || typed.error || typed.errorMessage)) {
+				logErr("[飞书 Bridge] Agent 终态错误:", typed.error ?? typed.errorMessage ?? typed.stopReason);
+			}
+			const nextState = reduceFromPiEvent(runState, typed, this.locale);
 			if (nextState !== runState) {
 				this.streamingRunStates.set(agentId, nextState);
 			}
@@ -839,7 +878,10 @@ export class FeishuBridge {
 					? { ...nextState, outputText: cleanText } : nextState;
 				const chatId = this.sessionToChat.get(agentId) ?? "";
 				const prefix = this.chatBindings.get(chatId)?.groupName ?? "";
-				const card = renderRunCard(displayState, { stopHint: nextState.terminal === "running" ? "发送 /stop 可终止当前任务" : undefined });
+				const card = renderRunCard(displayState, {
+					locale: this.locale,
+					stopHint: nextState.terminal === "running" ? feishuT(this.locale, "card.stopHint") : undefined,
+				});
 				if (nextState.terminal === "running") {
 					cardStream.update(card);
 				} else {
@@ -929,7 +971,7 @@ export class FeishuBridge {
 	/** 由 PiDeck 宿主按当前会话绑定发送文件，避免 Agent 自己搜索群聊发错 chat。 */
 	async sendFileForSession(agentId: string, filePath: string): Promise<string> {
 		const chatId = this.getBestChatId(agentId);
-		if (!chatId) return "当前会话未绑定飞书聊天";
+		if (!chatId) return feishuT(this.locale, "session.unbound");
 		return this.sendFeishuFile(chatId, filePath);
 	}
 
@@ -958,22 +1000,18 @@ export class FeishuBridge {
 	private async createNewSession(ctx: FeishuMessageContext, _title?: string): Promise<void> {
 		const { chatId } = ctx;
 		const projects = this.getProjects();
-		if (projects.length === 0) { await this.sendSmartMessage(chatId, "❌ 请先在 PiDeck 中添加项目（工作区），然后重试。"); return; }
+		if (projects.length === 0) { await this.sendSmartMessage(chatId, feishuT(this.locale, "session.projectRequired")); return; }
 		const projectId = projects[0].id;
 
 		try {
-			const tab = await this.agentManager.create({ projectId });
-			let runtimeBinding: { sessionId: string; runtimeGeneration: number };
-			try {
-				runtimeBinding = await this.runtimeBindings.bindRuntime({ projectId, agent: tab });
-			} catch (error) {
-				await this.agentManager.stop(tab.id).catch(() => undefined);
-				throw error;
-			}
+			const session = await this.runtimeBindings.ensureSession({
+				projectId,
+				title: _title?.trim() || ctx.groupName || feishuT(this.locale, "group.defaultSession"),
+			});
 			const binding: FeishuChatBinding = {
 				chatId, botId: this.botConfig.id, userId: ctx.senderOpenId,
-				sessionId: runtimeBinding.sessionId, agentId: tab.id,
-				sessionPath: tab.sessionPath, workspaceId: this.botConfig.defaultWorkspaceId ?? "", source: "feishu", chatType: ctx.chatType,
+				sessionId: session.sessionId,
+				workspaceId: this.botConfig.defaultWorkspaceId ?? "", source: "feishu", chatType: ctx.chatType,
 				groupName: ctx.groupName, createdAt: Date.now(),
 			};
 			this.chatBindings.set(chatId, binding);
@@ -981,23 +1019,18 @@ export class FeishuBridge {
 			this.updateStatus({ activeBindings: this.chatBindings.size });
 			this.persistBindings();
 			this.pushBindings();
-			// 持久化 chatId 映射，确保断开重连后能复用已有群组
-			if (tab.sessionPath) {
-				setPersistentChatId(tab.sessionPath, chatId);
-			}
-			// stable ID 与 runtime handle 都保存，避免依赖两种 UUID 偶然相等。
+			// /new 只创建稳定 Session；第一条实际消息再激活 runtime。
 			setPersistentChatId(`session:${binding.sessionId}`, chatId);
-			setPersistentChatId(`agent:${tab.id}`, chatId);
-			await this.sendSmartMessage(chatId, `✅ 已创建会话 (${binding.sessionId.slice(0, 8)})`);
+			await this.sendSmartMessage(chatId, feishuT(this.locale, "session.created", { id: binding.sessionId.slice(0, 8) }));
 		} catch (e) {
-			const msg = e instanceof Error ? e.message : String(e);
-			await this.sendSmartMessage(chatId, `❌ 创建会话失败: ${msg}`);
+			logErr("[飞书 Bridge] 创建会话失败:", e);
+			await this.sendSmartMessage(chatId, feishuT(this.locale, "session.createFailed"));
 		}
 	}
 
 	/**
-	 * 绑定失效恢复：当 sessionId 对应的 agent 不存在时，
-	 * 尝试用 sessionPath 恢复会话；若无法恢复则创建新 agent 并复用已有绑定（不留群）。
+	 * 绑定失效恢复：先用 stable Session ID 或 legacy sessionPath 确定 Catalog Session，
+	 * 再由 coordinator 激活 runtime。Bridge 不直接创建或停止 Agent。
 	 * 参考了 Proma 的 ConversationManager 思路：用 chatId 作为稳定 key，
 	 * 会话文件持久化，重启后优先恢复而不是重建。
 	 */
@@ -1009,75 +1042,38 @@ export class FeishuBridge {
 		}
 		const projectId = projects[0].id;
 
-		// 1. 尝试用 sessionPath 恢复已有会话
-		if (binding.sessionPath) {
-			const { existsSync } = await import("node:fs");
-			if (existsSync(binding.sessionPath)) {
-				try {
-					const tab = await this.agentManager.create({
-						projectId,
-						sessionPath: binding.sessionPath,
-						title: binding.groupName || `飞书会话`,
-					});
-					let runtimeBinding: { sessionId: string; runtimeGeneration: number };
-					try {
-						runtimeBinding = await this.runtimeBindings.bindRuntime({
-							projectId,
-							agent: tab,
-							existingSessionId: binding.sessionId,
-						});
-					} catch (error) {
-						await this.agentManager.stop(tab.id).catch(() => undefined);
-						throw error;
-					}
-					log(`[飞书 Bridge] 会话恢复成功: ${tab.id} (从 ${binding.sessionPath})`);
-					const previousAgentId = binding.agentId;
-					const previousSessionId = binding.sessionId;
-					binding.sessionId = runtimeBinding.sessionId;
-					binding.agentId = tab.id;
-					binding.sessionPath = tab.sessionPath;
-					this.indexBinding(binding, previousAgentId, previousSessionId);
-					this.chatBindings.set(binding.chatId, binding);
-					this.persistBindings();
-					this.pushBindings();
-					return binding;
-				} catch (e) {
-					log(`[飞书 Bridge] sessionPath 恢复失败: ${e instanceof Error ? e.message : String(e)}`);
-				}
-			} else {
-				log(`[飞书 Bridge] sessionPath 不存在: ${binding.sessionPath}`);
-			}
-		}
-
-		// 2. sessionPath 不可用 → 创建新 agent，复用已有 chatId 绑定（不新建群）
 		try {
-			const tab = await this.agentManager.create({ projectId, title: binding.groupName || `飞书会话` });
-			let runtimeBinding: { sessionId: string; runtimeGeneration: number };
+			const title = binding.groupName || feishuT(this.locale, "group.defaultSession");
+			let session = await this.runtimeBindings.ensureSession({
+				projectId,
+				title,
+				existingSessionId: binding.sessionId,
+				sessionPath: binding.sessionPath,
+			});
+			let tab: AgentTab;
 			try {
-				runtimeBinding = await this.runtimeBindings.bindRuntime({
-					projectId,
-					agent: tab,
-					existingSessionId: binding.sessionId,
-				});
+				tab = await this.runtimeBindings.activateRuntime(session.sessionId);
 			} catch (error) {
-				await this.agentManager.stop(tab.id).catch(() => undefined);
-				throw error;
+				if (!binding.sessionPath) throw error;
+				log(`[飞书 Bridge] sessionPath 恢复失败，创建新 Session: ${error instanceof Error ? error.message : String(error)}`);
+				session = await this.runtimeBindings.ensureSession({ projectId, title });
+				tab = await this.runtimeBindings.activateRuntime(session.sessionId);
 			}
-			log(`[飞书 Bridge] 已为新 agent ${tab.id} 复用绑定 ${binding.chatId}`);
+			log(`[飞书 Bridge] 已为 Session ${session.sessionId} 激活 runtime ${tab.id}`);
 			const previousAgentId = binding.agentId;
 			const previousSessionId = binding.sessionId;
-			binding.sessionId = runtimeBinding.sessionId;
+			binding.sessionId = session.sessionId;
 			binding.agentId = tab.id;
 			binding.sessionPath = tab.sessionPath;
 			this.indexBinding(binding, previousAgentId, previousSessionId);
 			this.chatBindings.set(binding.chatId, binding);
 			this.persistBindings();
 			this.pushBindings();
-			await this.sendSmartMessage(binding.chatId, `🔄 会话已恢复，新 ID: ${tab.id.slice(0, 8)}`);
+			await this.sendSmartMessage(binding.chatId, feishuT(this.locale, "session.recovered", { id: binding.sessionId.slice(0, 8) }));
 			return binding;
 		} catch (e) {
 			const msg = e instanceof Error ? e.message : String(e);
-			logErr(`[飞书 Bridge] 新建 agent 失败: ${msg}`);
+			logErr(`[飞书 Bridge] Session runtime 恢复失败: ${msg}`);
 			return undefined;
 		}
 	}
@@ -1090,6 +1086,29 @@ export class FeishuBridge {
 			if (this.sessionMirrorPending.get(agentId) === task) this.sessionMirrorPending.delete(agentId);
 		});
 		this.sessionMirrorPending.set(agentId, task);
+		return task;
+	}
+
+	/** Stable Session entry used by public surfaces that already resolved the current runtime target. */
+	async ensureSessionMirrorForSession(
+		sessionId: string,
+		agentId: string,
+		sessionTitle?: string,
+		sessionPath?: string,
+	): Promise<string | undefined> {
+		const pending = this.sessionMirrorPending.get(sessionId);
+		if (pending) return pending;
+		const task = this.ensureSessionMirrorInner(
+			sessionId,
+			agentId,
+			sessionTitle,
+			sessionPath,
+		).finally(() => {
+			if (this.sessionMirrorPending.get(sessionId) === task) {
+				this.sessionMirrorPending.delete(sessionId);
+			}
+		});
+		this.sessionMirrorPending.set(sessionId, task);
 		return task;
 	}
 
@@ -1125,7 +1144,7 @@ export class FeishuBridge {
 			return undefined;
 		}
 
-		const groupName = `Pi Agent - ${(sessionTitle || `新会话 ${sessionId.slice(0, 8)}`).slice(0, 50)}`;
+		const groupName = `Pi Agent - ${(sessionTitle || feishuT(this.locale, "group.newSession", { id: sessionId.slice(0, 8) })).slice(0, 50)}`;
 
 		// 1. stable session 或 runtime 已有任一飞书绑定时直接复用，不创建第二个 mirror。
 		let existingChatId = Array.from(this.chatBindings.entries()).find(([, binding]) => (
@@ -1262,7 +1281,7 @@ export class FeishuBridge {
 			setPersistentChatId(`session:${sessionId}`, chatId);
 			if (agentId) setPersistentChatId(`agent:${agentId}`, chatId);
 
-			await this.sendSmartMessage(chatId, `🤖 Pi Agent 会话已创建\n会话 ID: ${sessionId.slice(0, 8)}\n\n直接发消息即可与 Agent 对话。`);
+			await this.sendSmartMessage(chatId, feishuT(this.locale, "session.mirrorWelcome", { id: sessionId.slice(0, 8) }));
 			return chatId;
 		} catch (e) {
 			const errMsg = e instanceof Error ? e.message : String(e);
@@ -1307,7 +1326,10 @@ export class FeishuBridge {
 		this.streamingRunStates.set(agentId, initialState);
 
 		try {
-			const cardStream = await CardStream.open(this.client!, binding.chatId, renderRunCard(initialState, { stopHint: "发送 /stop 可终止当前任务" }));
+			const cardStream = await CardStream.open(this.client!, binding.chatId, renderRunCard(initialState, {
+				locale: this.locale,
+				stopHint: feishuT(this.locale, "card.stopHint"),
+			}));
 			this.streamingCards.set(agentId, cardStream);
 		} catch (e) {
 			logErr("[飞书 Session Mirror] 流式卡片创建失败:", e);
@@ -1320,7 +1342,7 @@ export class FeishuBridge {
 		const card = this.streamingCards.get(agentId);
 		if (state && card) {
 			const finalState = markInterrupted(state);
-			void card.flush(renderRunCard(finalState)).then(() => card.close()).catch(() => {});
+			void card.flush(renderRunCard(finalState, { locale: this.locale })).then(() => card.close()).catch(() => {});
 		}
 		this.streamingCards.delete(agentId);
 		this.streamingRunStates.delete(agentId);
@@ -1329,28 +1351,36 @@ export class FeishuBridge {
 
 	private async handleStopCommand(ctx: FeishuMessageContext): Promise<void> {
 		const binding = this.chatBindings.get(ctx.chatId);
-		if (!binding) { await this.sendSmartMessage(ctx.chatId, "当前没有绑定的会话。"); return; }
+		if (!binding) { await this.sendSmartMessage(ctx.chatId, feishuT(this.locale, "session.notBound")); return; }
 
 		const agentId = await this.ensureRuntimeBinding(binding);
-		if (!agentId) { await this.sendSmartMessage(ctx.chatId, "当前会话运行时不可用。"); return; }
+		if (!agentId) { await this.sendSmartMessage(ctx.chatId, feishuT(this.locale, "session.runtimeUnavailable")); return; }
 		// 关闭流式卡片
 		const state = this.streamingRunStates.get(agentId);
 		const card = this.streamingCards.get(agentId);
 		if (state && card) {
-			void card.flush(renderRunCard(markInterrupted(state))).then(() => card.close()).catch(() => {});
+			void card.flush(renderRunCard(markInterrupted(state), { locale: this.locale })).then(() => card.close()).catch(() => {});
 			this.streamingCards.delete(agentId);
 			this.streamingRunStates.delete(agentId);
 			this.pendingCardEvents.delete(agentId);
 		}
 
-		await this.agentManager.abort(agentId);
-		await this.sendSmartMessage(ctx.chatId, "⏹ 已停止 Agent");
+		await this.runtimeBindings.abortRuntime(binding.sessionId);
+		await this.sendSmartMessage(ctx.chatId, feishuT(this.locale, "session.stopped"));
 	}
 
 	private async handleStatusCommand(ctx: FeishuMessageContext): Promise<void> {
 		const binding = this.chatBindings.get(ctx.chatId);
-		const lines = ["**飞书 Bridge 状态**", `状态: ${this.status.status}`, `绑定数: ${this.chatBindings.size}`, binding ? `会话: ${binding.sessionId.slice(0, 8)}` : "会话: 未绑定"];
-		await this.sendCardMessage(ctx.chatId, { config: { wide_screen_mode: true, update_multi: true }, header: { title: { tag: "plain_text", content: "当前状态" }, template: "blue" }, elements: [{ tag: "markdown", content: lines.join("\n") }] });
+		const statusLabel = feishuT(this.locale, `status.${this.status.status}` as "status.disconnected" | "status.connecting" | "status.connected" | "status.error");
+		const lines = [
+			feishuT(this.locale, "status.heading"),
+			feishuT(this.locale, "status.status", { status: statusLabel }),
+			feishuT(this.locale, "status.bindings", { count: this.chatBindings.size }),
+			binding
+				? feishuT(this.locale, "status.session", { id: binding.sessionId.slice(0, 8) })
+				: feishuT(this.locale, "status.sessionUnbound"),
+		];
+		await this.sendCardMessage(ctx.chatId, { config: { wide_screen_mode: true, update_multi: true }, header: { title: { tag: "plain_text", content: feishuT(this.locale, "status.header") }, template: "blue" }, elements: [{ tag: "markdown", content: lines.join("\n") }] });
 	}
 
 	// ===== 模型命令 =====
@@ -1362,14 +1392,14 @@ export class FeishuBridge {
 			return;
 		}
 		const binding = this.chatBindings.get(ctx.chatId);
-		if (!binding) { await this.sendSmartMessage(ctx.chatId, "当前没有绑定的会话，请先发消息创建会话。"); return; }
+		if (!binding) { await this.sendSmartMessage(ctx.chatId, feishuT(this.locale, "session.notBoundCreateFirst")); return; }
 		const agentId = await this.ensureRuntimeBinding(binding);
-		if (!agentId) { await this.sendSmartMessage(ctx.chatId, "当前会话运行时不可用。"); return; }
-		const models = await this.agentManager.getAvailableModels(agentId).catch(() => [] as AvailableModel[]);
-		if (!models.length) { await this.sendSmartMessage(ctx.chatId, "没有可用模型。请先在 PiDeck 中配置模型。"); return; }
-		const state = await this.agentManager.getRuntimeState(agentId).catch(() => undefined);
-		const current = state ? `${state.provider}/${state.modelId}` : "无";
-		await this.sendCardMessage(ctx.chatId, buildModelPickerCard({ current, models }));
+		if (!agentId) { await this.sendSmartMessage(ctx.chatId, feishuT(this.locale, "session.runtimeUnavailable")); return; }
+		const models = await this.runtimeBindings.listRuntimeModels(binding.sessionId).catch(() => [] as AvailableModel[]);
+		if (!models.length) { await this.sendSmartMessage(ctx.chatId, feishuT(this.locale, "model.unavailable")); return; }
+		const state = await this.runtimeBindings.getRuntimeState(binding.sessionId).catch(() => undefined);
+		const current = state ? `${state.provider}/${state.modelId}` : feishuT(this.locale, "model.none");
+		await this.sendCardMessage(ctx.chatId, buildModelPickerCard({ current, models, locale: this.locale }));
 	}
 
 
@@ -1379,19 +1409,20 @@ export class FeishuBridge {
 		const action = parseModelActionValue(event.action.value);
 		if (!action) return;
 		const binding = this.chatBindings.get(event.chatId);
-		if (!binding) { await this.sendSmartMessage(event.chatId, "当前没有绑定的会话。"); return; }
+		if (!binding) { await this.sendSmartMessage(event.chatId, feishuT(this.locale, "session.notBound")); return; }
 		const agentId = await this.ensureRuntimeBinding(binding);
-		if (!agentId) { await this.sendSmartMessage(event.chatId, "当前会话运行时不可用。"); return; }
-		const models = await this.agentManager.getAvailableModels(agentId).catch(() => [] as AvailableModel[]);
+		if (!agentId) { await this.sendSmartMessage(event.chatId, feishuT(this.locale, "session.runtimeUnavailable")); return; }
+		const models = await this.runtimeBindings.listRuntimeModels(binding.sessionId).catch(() => [] as AvailableModel[]);
 		if (!models.some((m) => m.provider === action.provider && m.id === action.modelId)) {
-			await this.sendSmartMessage(event.chatId, `❌ 模型不可用: ${action.provider}/${action.modelId}`);
+			await this.sendSmartMessage(event.chatId, feishuT(this.locale, "model.notAvailable", { model: `${action.provider}/${action.modelId}` }));
 			return;
 		}
 		try {
-			await this.agentManager.setModel(agentId, action.provider, action.modelId);
-			await this.sendSmartMessage(event.chatId, `✅ 已切换模型为: ${action.provider}/${action.modelId}`);
+			await this.runtimeBindings.setRuntimeModel(binding.sessionId, action.provider, action.modelId);
+			await this.sendSmartMessage(event.chatId, feishuT(this.locale, "model.switched", { model: `${action.provider}/${action.modelId}` }));
 		} catch (e) {
-			await this.sendSmartMessage(event.chatId, `❌ 切换失败: ${e instanceof Error ? e.message : String(e)}`);
+			logErr("[飞书 Bridge] 模型切换失败:", e);
+			await this.sendSmartMessage(event.chatId, feishuT(this.locale, "model.switchFailed"));
 		}
 	}
 
@@ -1399,18 +1430,19 @@ export class FeishuBridge {
 
 	private async doSetModel(chatId: string, rawId: string): Promise<void> {
 		const parts = rawId.split("/");
-		if (parts.length < 2) { await this.sendSmartMessage(chatId, `格式: provider/modelId，例如 anthropic/claude-sonnet-4`); return; }
+		if (parts.length < 2) { await this.sendSmartMessage(chatId, feishuT(this.locale, "model.usage")); return; }
 		const provider = parts.slice(0, -1).join("/");
 		const modelId = parts[parts.length - 1];
 		const binding = this.chatBindings.get(chatId);
-		if (!binding) { await this.sendSmartMessage(chatId, "当前没有绑定的会话。"); return; }
+		if (!binding) { await this.sendSmartMessage(chatId, feishuT(this.locale, "session.notBound")); return; }
 		const agentId = await this.ensureRuntimeBinding(binding);
-		if (!agentId) { await this.sendSmartMessage(chatId, "当前会话运行时不可用。"); return; }
+		if (!agentId) { await this.sendSmartMessage(chatId, feishuT(this.locale, "session.runtimeUnavailable")); return; }
 		try {
-			await this.agentManager.setModel(agentId, provider, modelId);
-			await this.sendSmartMessage(chatId, `✅ 已切换模型为: ${provider}/${modelId}`);
+			await this.runtimeBindings.setRuntimeModel(binding.sessionId, provider, modelId);
+			await this.sendSmartMessage(chatId, feishuT(this.locale, "model.switched", { model: `${provider}/${modelId}` }));
 		} catch (e) {
-			await this.sendSmartMessage(chatId, `❌ 切换失败: ${e instanceof Error ? e.message : String(e)}`);
+			logErr("[飞书 Bridge] 模型切换失败:", e);
+			await this.sendSmartMessage(chatId, feishuT(this.locale, "model.switchFailed"));
 		}
 	}
 
@@ -1420,13 +1452,14 @@ export class FeishuBridge {
 	private async sendSmartMessage(chatId: string, text: string): Promise<void> {
 		if (!this.client) return;
 		const mode = chooseMessageMode(text);
+		const language = feishuLanguage(this.locale);
 		try {
 			if (mode === "interactive") {
-				for (const card of buildMarkdownCards(text)) {
+				for (const card of buildMarkdownCards(text, language)) {
 					await this.client.im.message.create({ params: { receive_id_type: "chat_id" }, data: { receive_id: chatId, msg_type: "interactive", content: JSON.stringify(card) } });
 				}
 			} else if (mode === "post") {
-				for (const post of buildPostMessages(text)) {
+				for (const post of buildPostMessages(text, language)) {
 					await this.client.im.message.create({ params: { receive_id_type: "chat_id" }, data: { receive_id: chatId, msg_type: "post", content: JSON.stringify(post) } });
 				}
 			} else {
@@ -1443,8 +1476,8 @@ export class FeishuBridge {
 	private async sendHelpCard(chatId: string): Promise<void> {
 		await this.sendCardMessage(chatId, {
 			config: { wide_screen_mode: true, update_multi: true },
-			header: { title: { tag: "plain_text", content: "🤖 Pi Agent 帮助" }, template: "green" },
-			elements: [{ tag: "markdown", content: ["**可用命令**", "", "`/new` 或 `/n` — 创建新会话", "`/stop` 或 `/s` — 停止当前 Agent", "`/model` — 打开模型切换按钮卡片", "`/status` — 查看当前状态", "`/whoami` — 查看你的 open_id", "`/help` 或 `/h` — 查看帮助", "", "**Agent 自主能力**", "让 Agent 帮你导出文件或写报告时，它会自动：", "• 发送文件到飞书聊天", "• 创建飞书文档并分享链接", ""].join("\n") }],
+			header: { title: { tag: "plain_text", content: feishuT(this.locale, "help.title") }, template: "green" },
+			elements: [{ tag: "markdown", content: feishuT(this.locale, "help.body") }],
 		});
 	}
 
@@ -1460,7 +1493,7 @@ export class FeishuBridge {
 		if (!resultText.trim()) return;
 		const duration = ((Date.now() - startTime) / 1000).toFixed(1);
 		const cleanText = sanitizeFeishuUserVisibleText(resultText);
-		if (cleanText) await this.sendSmartMessage(chatId, `${cleanText}\n\n⏱ ${duration}s ✅ 完成`);
+		if (cleanText) await this.sendSmartMessage(chatId, `${cleanText}\n\n${feishuT(this.locale, "result.completed", { duration })}`);
 	}
 
 	/**
@@ -1485,8 +1518,7 @@ export class FeishuBridge {
 				log(`[飞书 Bridge] 检测到 SEND_FILE: ${filePath}`);
 				const result = await this.sendFeishuFile(chatId, filePath);
 				log(`[飞书 Bridge] SEND_FILE 结果: ${result}`);
-				if (!result.startsWith("✅")) await this.sendSmartMessage(chatId, `⚠️ ${result}`);
-				else await this.sendSmartMessage(chatId, result);
+				await this.sendSmartMessage(chatId, result);
 			}
 		} else if (canSendFile) {
 			// 2. 无显式标记 → 自动检测 Agent 回答中提到的文件并发送（前 3 个）
@@ -1503,17 +1535,16 @@ export class FeishuBridge {
 				for (const fp of autoFiles.slice(0, 3)) {
 					const result = await this.sendFeishuFile(chatId, fp);
 					log(`[飞书 Bridge] 自动发送文件结果: ${result}`);
-					if (!result.startsWith("✅")) await this.sendSmartMessage(chatId, `⚠️ ${result}`);
-					else await this.sendSmartMessage(chatId, result);
+					await this.sendSmartMessage(chatId, result);
 				}
 			}
 		}
 		const docMatch = text.match(/\[CREATE_DOC:([^\]]+)\]/);
 		if (docMatch) {
-			const title = docMatch[1].trim() || "Pi Agent 文档";
+			const title = docMatch[1].trim() || feishuT(this.locale, "doc.defaultTitle");
 			const result = await this.createFeishuDoc(chatId, title, text);
 			// createFeishuDoc 内部失败时发了消息，这里补充发送
-			if (result.startsWith("❌") || result.startsWith("创建")) await this.sendSmartMessage(chatId, result);
+			if (result.startsWith("❌")) await this.sendSmartMessage(chatId, result);
 		}
 	}
 
@@ -1522,13 +1553,13 @@ export class FeishuBridge {
 	 * 流程：POST im/v1/files 上传 → 拿到 file_key → im.message.create 发送 file 消息
 	 */
 	private async sendFeishuFile(chatId: string, filePath: string, fileName?: string): Promise<string> {
-		if (!this.client) return "飞书连接未就绪";
+		if (!this.client) return feishuT(this.locale, "file.bridgeNotReady");
 		const { existsSync, readFileSync } = await import("node:fs");
 		const { basename } = await import("node:path");
-		if (!existsSync(filePath)) return `文件不存在: ${filePath}`;
+		if (!existsSync(filePath)) return feishuT(this.locale, "file.notFound", { path: filePath });
 		const fName = fileName || basename(filePath);
 		const fileData = readFileSync(filePath);
-		if (fileData.length > 30 * 1024 * 1024) return "文件不能超过 30MB";
+		if (fileData.length > 30 * 1024 * 1024) return feishuT(this.locale, "file.tooLarge");
 
 		try {
 			// 1. 用 SDK im.file.create 上传文件
@@ -1536,7 +1567,10 @@ export class FeishuBridge {
 				data: { file_type: "stream", file_name: fName, file: fileData },
 			});
 			const fileKey = (uploadResp as Record<string, unknown>)?.file_key as string;
-			if (!fileKey) return "上传文件失败";
+			if (!fileKey) {
+				logErr("[飞书 Bridge] 上传文件未返回 file_key:", uploadResp);
+				return feishuT(this.locale, "file.uploadFailed");
+			}
 
 			// 2. 发送文件消息
 			await this.client.im.message.create({
@@ -1547,9 +1581,10 @@ export class FeishuBridge {
 					content: JSON.stringify({ file_key: fileKey }),
 				},
 			});
-			return `✅ 已发送: ${fName}`;
+			return feishuT(this.locale, "file.sent", { name: fName });
 		} catch (e) {
-			return `发送文件失败: ${e instanceof Error ? e.message : String(e)}`;
+			logErr("[飞书 Bridge] 发送文件失败:", e);
+			return feishuT(this.locale, "file.sendFailed");
 		}
 	}
 
@@ -1558,7 +1593,7 @@ export class FeishuBridge {
 	 * 需在飞书开放平台开启 docx:document 权限。
 	 */
 	private async createFeishuDoc(chatId: string, title: string, body = ""): Promise<string> {
-		if (!this.client) return "飞书连接未就绪";
+		if (!this.client) return feishuT(this.locale, "file.bridgeNotReady");
 		try {
 			const resp = await this.client.request<{
 				code?: number; msg?: string; data?: { document?: { document_id?: string; title?: string; url?: string } };
@@ -1568,7 +1603,10 @@ export class FeishuBridge {
 				data: { title },
 			});
 			const doc = resp?.data?.document;
-			if (!doc?.document_id) return `创建文档失败: ${resp?.msg || resp?.code || "未知错误"}`;
+			if (!doc?.document_id) {
+				logErr("[飞书 Bridge] 创建文档未返回 document_id:", resp);
+				return feishuT(this.locale, "doc.createFailed");
+			}
 
 			const children = buildFeishuTextChildren(body);
 			if (children.length > 0) {
@@ -1580,19 +1618,20 @@ export class FeishuBridge {
 						data: { children, index: 0 },
 					});
 				} catch (writeError) {
-					const reason = writeError instanceof Error ? writeError.message : String(writeError);
+					logErr("[飞书 Bridge] 写入飞书文档正文失败:", writeError);
 					const docUrl = doc.url || `https://www.feishu.cn/docx/${doc.document_id}`;
-					await this.sendSmartMessage(chatId, `📄 **${title}**\n${docUrl}\n\n⚠️ 文档已创建，但正文写入失败：${reason}`);
-					return `✅ 文档已创建但正文写入失败: ${title}\n${docUrl}\n${reason}`;
+					await this.sendSmartMessage(chatId, `📄 **${title}**\n${docUrl}\n\n${feishuT(this.locale, "doc.bodyWriteFailed")}`);
+					return feishuT(this.locale, "doc.bodyWriteFailedResult", { title, url: docUrl });
 				}
 			}
 
 			const docUrl = doc.url || `https://www.feishu.cn/docx/${doc.document_id}`;
 			const preview = stripFeishuActionMarkers(body);
-			await this.sendSmartMessage(chatId, `📄 **${title}**\n${docUrl}${preview ? "\n\n✅ 已写入正文" : ""}`);
-			return `✅ 文档已创建: ${title}\n${docUrl}`;
+			await this.sendSmartMessage(chatId, `📄 **${title}**\n${docUrl}${preview ? `\n\n${feishuT(this.locale, "doc.bodyWritten")}` : ""}`);
+			return feishuT(this.locale, "doc.created", { title, url: docUrl });
 		} catch (e) {
-			return `创建文档失败: ${e instanceof Error ? e.message : String(e)}`;
+			logErr("[飞书 Bridge] 创建飞书文档失败:", e);
+			return feishuT(this.locale, "doc.createFailed");
 		}
 	}
 
@@ -1635,7 +1674,7 @@ export class FeishuBridge {
 		if (!this.client) return null;
 		try {
 			const [chatResp, members] = await Promise.all([this.client.im.chat.get({ path: { chat_id: chatId } }), this.fetchGroupMembers(chatId)]);
-			const name = (chatResp as { data?: { name?: string } }).data?.name ?? "未知群组";
+			const name = (chatResp as { data?: { name?: string } }).data?.name ?? feishuT(this.locale, "group.unknown");
 			const info: FeishuGroupInfo = { chatId, name, members, cachedAt: Date.now() };
 			this.groupInfoCache.set(chatId, info); return info;
 		} catch (e) { warn("[飞书 Bridge] 获取群聊信息失败:", e); return null; }

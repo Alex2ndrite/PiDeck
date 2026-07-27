@@ -5,10 +5,37 @@ import { mkdir, readdir, readFile, rename, rm, stat, unlink, writeFile } from "n
 import { basename, dirname, extname, isAbsolute, join, resolve } from "node:path";
 import { basename as posixBasename, dirname as posixDirname, isAbsolute as posixIsAbsolute, join as posixJoin } from "node:path/posix";
 import type { ChatMessage, ChatRole, SessionSummary } from "../../shared/types";
+import type { MainProcessTranslationKey } from "../../shared/i18n/mainProcessCopy";
 import { getCodexSessionThreadInfo } from "../../shared/codexSessionMeta";
 import { extractMessageText, extractThinkingRaw } from "../pi/messageContent";
 import { toWslLinuxPath, type WslEnvironment } from "../wsl/WslPaths";
 import { SessionSummaryCache, type SessionFileVersion } from "./sessionSummaryCache";
+
+type SessionScannerCopyKey = Extract<MainProcessTranslationKey,
+  | "session.untitled"
+  | "session.emptyPreview"
+  | "session.copyTitle"
+>;
+
+type SessionScannerCopy = (
+  key: SessionScannerCopyKey,
+  params?: Record<string, string | number>,
+) => string;
+
+const defaultSessionScannerCopy: Record<SessionScannerCopyKey, string> = {
+  "session.untitled": "Untitled",
+  "session.emptyPreview": "空会话",
+  "session.copyTitle": "{title} copy",
+};
+
+function defaultTranslate(
+  key: SessionScannerCopyKey,
+  params: Record<string, string | number> = {},
+): string {
+  return defaultSessionScannerCopy[key].replace(/\{([A-Za-z0-9_]+)\}/g, (match, name) => (
+    Object.prototype.hasOwnProperty.call(params, name) ? String(params[name]) : match
+  ));
+}
 
 export class SessionScanner {
   private readonly root = join(app.getPath("home"), ".pi", "agent", "sessions");
@@ -25,6 +52,8 @@ export class SessionScanner {
    * 供子会话父路径推断作为边界。
    */
   private activeScanRoots: string[] = [];
+
+  constructor(private readonly translate: SessionScannerCopy = defaultTranslate) {}
 
   /**
    * wsl.exe 命令与启动模式。优先绝对路径，
@@ -593,7 +622,9 @@ export class SessionScanner {
     const wsl = this.isWslPath(filePath);
     const raw = wsl ? await this.readWslFile(filePath) : await readFile(filePath, "utf8");
     const current = await this.readSummary(filePath).catch(() => null);
-    const copyName = `${current?.name || "Untitled"} copy`;
+    const copyName = this.translate("session.copyTitle", {
+      title: current?.name || this.translate("session.untitled"),
+    });
     const targetPath = this.nextCopyPath(filePath, wsl);
     const meta = JSON.stringify({ sessionName: copyName, copiedFrom: filePath, ts: Date.now() });
     const content = `${meta}\n${raw}`;
@@ -626,7 +657,7 @@ export class SessionScanner {
         return "";
       }
     }).filter(Boolean).join("\n");
-    const title = summary.name || "Untitled";
+    const title = summary.name || this.translate("session.untitled");
     const html = `<!doctype html><html><head><meta charset=\"utf-8\"><title>${this.escapeHtml(title)}</title><style>body{font-family:system-ui,-apple-system,Segoe UI,sans-serif;max-width:920px;margin:32px auto;padding:0 20px;color:#1f2937}.msg{border:1px solid #e5e7eb;border-radius:10px;padding:14px;margin:12px 0;background:#fff}.msg h2{margin:0 0 8px;font-size:13px;color:#64748b}.msg pre{white-space:pre-wrap;margin:0;font:14px/1.6 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}</style></head><body><h1>${this.escapeHtml(title)}</h1><p>${new Date(summary.updatedAt).toLocaleString()} · ${summary.messageCount} messages</p>${rows}</body></html>`;
     const safeName = title.replace(/[\\/:*?\"<>|]/g, "_").slice(0, 80) || "session";
     const targetPath = join(app.getPath("downloads"), `${safeName}-${Date.now()}.html`);
@@ -962,7 +993,8 @@ export class SessionScanner {
 
     let name: string | undefined;
     let projectPath: string | undefined;
-    let preview = "空会话";
+    const emptyPreview = this.translate("session.emptyPreview");
+    let preview = emptyPreview;
     let firstUserText = "";
     let firstAssistantText = "";
     let messageCount = 0;
@@ -1014,7 +1046,7 @@ export class SessionScanner {
       if (message?.role) {
         messageCount += 1;
         const text = this.extractText(message.content).trim();
-        if (text && preview === "空会话") preview = text;
+        if (text && preview === emptyPreview) preview = text;
         if (text && message.role === "user" && !firstUserText) firstUserText = text;
         if (text && message.role === "assistant" && !firstAssistantText) firstAssistantText = text;
       }
@@ -1086,7 +1118,7 @@ export class SessionScanner {
       }
     }
 
-    const inferredName = this.cleanTitle(name) || this.cleanTitle(firstUserText) || this.cleanTitle(firstAssistantText) || "Untitled";
+    const inferredName = this.cleanTitle(name) || this.cleanTitle(firstUserText) || this.cleanTitle(firstAssistantText) || this.translate("session.untitled");
 
     const summary: SessionSummary = {
       id: filePath,

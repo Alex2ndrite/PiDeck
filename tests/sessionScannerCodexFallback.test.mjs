@@ -50,6 +50,50 @@ function loadMessageContentModule() {
 	return messageContent.exports;
 }
 
+function loadWslPathsModule() {
+	const source = readFileSync("src/main/wsl/WslPaths.ts", "utf8");
+	const { outputText } = ts.transpileModule(source, {
+		compilerOptions: {
+			module: ts.ModuleKind.CommonJS,
+			target: ts.ScriptTarget.ES2022,
+		},
+	});
+	const sandbox = {
+		exports: {},
+		require,
+	};
+	vm.runInNewContext(outputText, sandbox, { filename: "WslPaths.ts" });
+	return sandbox.exports;
+}
+
+function loadSessionSummaryCacheModule(homePath) {
+	const source = readFileSync("src/main/sessions/sessionSummaryCache.ts", "utf8");
+	const { outputText } = ts.transpileModule(source, {
+		compilerOptions: {
+			module: ts.ModuleKind.CommonJS,
+			target: ts.ScriptTarget.ES2022,
+		},
+	});
+	const sandbox = {
+		clearTimeout: () => undefined,
+		exports: {},
+		process,
+		require: (id) => {
+			if (id === "electron") {
+				return {
+					app: {
+						getPath: (name) => name === "userData" ? join(homePath, "user-data") : homePath,
+					},
+				};
+			}
+			return require(id);
+		},
+		setTimeout: () => ({ unref: () => undefined }),
+	};
+	vm.runInNewContext(outputText, sandbox, { filename: "sessionSummaryCache.ts" });
+	return sandbox.exports;
+}
+
 function loadSessionScanner(homePath) {
 	const source = readFileSync("src/main/sessions/SessionScanner.ts", "utf8");
 	const { outputText } = ts.transpileModule(source, {
@@ -60,16 +104,26 @@ function loadSessionScanner(homePath) {
 	});
 	const codexMeta = loadCodexMetaModule();
 	const messageContent = loadMessageContentModule();
+	const sessionSummaryCache = loadSessionSummaryCacheModule(homePath);
+	const wslPaths = loadWslPathsModule();
 	const sandbox = {
+		AbortController,
+		AbortSignal,
+		Buffer,
+		clearTimeout,
 		exports: {},
+		process,
 		require: (id) => {
 			if (id === "electron") {
-				return { app: { getPath: () => homePath } };
+				return { app: { getPath: () => homePath }, shell: {} };
 			}
 			if (id === "../../shared/codexSessionMeta") return codexMeta;
 			if (id === "../pi/messageContent") return messageContent;
+			if (id === "../wsl/WslPaths") return wslPaths;
+			if (id === "./sessionSummaryCache") return sessionSummaryCache;
 			return require(id);
 		},
+		setTimeout,
 	};
 	vm.runInNewContext(outputText, sandbox, {
 		filename: "SessionScanner.ts",

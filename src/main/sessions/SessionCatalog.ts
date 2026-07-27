@@ -156,6 +156,11 @@ export class SessionCatalog {
 		return entry ? cloneEntry(entry) : undefined;
 	}
 
+	getRecord(id: string): SessionRecord | undefined {
+		const entry = this.get(id);
+		return entry ? this.recordFromEntry(entry) : undefined;
+	}
+
 	findByFilePath(
 		filePath: string,
 		environment: SessionEnvironment,
@@ -298,7 +303,6 @@ export class SessionCatalog {
 		sessionId: string;
 		filePath?: string;
 		piSessionId?: string;
-		title?: string;
 	}): Promise<SessionCatalogEntry> {
 		this.assertLoaded();
 		return this.enqueueMutation((entries) => {
@@ -306,7 +310,6 @@ export class SessionCatalog {
 			const previousFilePath = entry.filePath;
 			if (input.filePath) entry.filePath = input.filePath;
 			if (input.piSessionId) entry.piSessionId = input.piSessionId;
-			if (input.title) entry.title = input.title;
 			if (entry.filePath) {
 				const pathUnchanged = Boolean(
 					previousFilePath &&

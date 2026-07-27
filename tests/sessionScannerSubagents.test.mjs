@@ -48,6 +48,50 @@ function loadMessageContentModule() {
 	return messageContent.exports;
 }
 
+function loadWslPathsModule() {
+	const source = readFileSync("src/main/wsl/WslPaths.ts", "utf8");
+	const { outputText } = ts.transpileModule(source, {
+		compilerOptions: {
+			module: ts.ModuleKind.CommonJS,
+			target: ts.ScriptTarget.ES2022,
+		},
+	});
+	const sandbox = {
+		exports: {},
+		require,
+	};
+	vm.runInNewContext(outputText, sandbox, { filename: "WslPaths.ts" });
+	return sandbox.exports;
+}
+
+function loadSessionSummaryCacheModule(homePath) {
+	const source = readFileSync("src/main/sessions/sessionSummaryCache.ts", "utf8");
+	const { outputText } = ts.transpileModule(source, {
+		compilerOptions: {
+			module: ts.ModuleKind.CommonJS,
+			target: ts.ScriptTarget.ES2022,
+		},
+	});
+	const sandbox = {
+		clearTimeout: () => undefined,
+		exports: {},
+		process,
+		require: (id) => {
+			if (id === "electron") {
+				return {
+					app: {
+						getPath: (name) => name === "userData" ? join(homePath, "user-data") : homePath,
+					},
+				};
+			}
+			return require(id);
+		},
+		setTimeout: () => ({ unref: () => undefined }),
+	};
+	vm.runInNewContext(outputText, sandbox, { filename: "sessionSummaryCache.ts" });
+	return sandbox.exports;
+}
+
 function loadSessionScanner(homePath, fsOverrides = {}) {
 	const source = readFileSync("src/main/sessions/SessionScanner.ts", "utf8");
 	const { outputText } = ts.transpileModule(source, {
@@ -58,17 +102,22 @@ function loadSessionScanner(homePath, fsOverrides = {}) {
 	});
 	const codexMeta = loadCodexMetaModule();
 	const messageContent = loadMessageContentModule();
+	const sessionSummaryCache = loadSessionSummaryCacheModule(homePath);
+	const wslPaths = loadWslPathsModule();
 	const sandbox = {
 		AbortController,
 		AbortSignal,
 		Buffer,
 		clearTimeout,
 		exports: {},
+		process,
 		setTimeout,
 		require: (id) => {
-			if (id === "electron") return { app: { getPath: () => homePath } };
+			if (id === "electron") return { app: { getPath: () => homePath }, shell: {} };
 			if (id === "../../shared/codexSessionMeta") return codexMeta;
 			if (id === "../pi/messageContent") return messageContent;
+			if (id === "../wsl/WslPaths") return wslPaths;
+			if (id === "./sessionSummaryCache") return sessionSummaryCache;
 			if (id === "node:fs") return { ...require(id), ...fsOverrides };
 			return require(id);
 		},
@@ -121,7 +170,7 @@ test("aborts a hung WSL scan before the renderer watchdog and allows a clean ret
 		scanner.wslConfig = { distro: "Ubuntu", user: "dev", home: "/home/dev" };
 		scanner.scanTimeoutMs = 10;
 		let attempts = 0;
-		scanner.collectWslJsonl = async (signal) => {
+		scanner.collectWslJsonl = async (_sessionsDir, signal) => {
 			attempts += 1;
 			if (attempts > 1) return [];
 			return new Promise((_resolve, reject) => {
@@ -220,7 +269,10 @@ test("groups WSL child sessions with POSIX parent paths", async () => {
 			if (value == null) throw new Error(`missing WSL fixture: ${filePath}`);
 			return value.slice(0, 4096);
 		};
-		scanner.readWslFileMtime = async () => 1;
+		scanner.readWslFileVersion = async (filePath) => ({
+			mtimeMs: 1,
+			size: Buffer.byteLength(files.get(filePath) ?? "", "utf8"),
+		});
 		scanner.existsWslFile = async (filePath) => files.has(filePath);
 
 		const summaries = await scanner.list(projectPath);

@@ -1,0 +1,109 @@
+# Session-first and Jotai migration log
+
+This file records the implementation baseline, phase gates, and any changes to
+the approved migration plan. It is intentionally separate from release notes.
+
+## Baseline
+
+- Target worktree: `F:\PiDeck-worktrees\session-integrator`
+- Target baseline commit: `6ab2ed8`
+- Visible UI and functional reference: main repository `F:\PiDeck`, branch `dev` at `ccc5c4a`
+- Initial test result: 548 tests, 531 passed, 17 failed
+- Shared renderer state target: Jotai
+- Stable user-facing identity: `sessionId`
+- Ephemeral runtime identity: `agentId` plus `runtimeGeneration`
+
+## Phase gates
+
+1. Clean install retains Jotai and contains no Zustand dependency.
+2. `npm test` is the canonical test entry and all tests pass in CI.
+3. Session JSONL mutations use exact or unambiguous identity, mandatory backup,
+   path-scoped locking, and atomic replacement.
+4. Renderer commands are session-addressed; direct `api.agents.*` calls are gone.
+5. Main-process visible messages are localized and the browser guest is isolated.
+6. Large modules are split without visible UI drift from the dev reference.
+
+## Plan deviations
+
+| Date | Phase | Change | Reason | Verification impact |
+| --- | --- | --- | --- | --- |
+| 2026-07-26 | Baseline | None | Approved plan started as written. | None |
+| 2026-07-27 | Baseline correction | Replaced the temporary `dev-sync@6743654` reference with the main repository's actual `dev@ccc5c4a`. | The product baseline is the main repository `dev` branch; `dev-sync` is an integration source only and must not define UI or behavioral acceptance. | All pending UI/function comparisons and any synchronization work use `F:\PiDeck` `dev` as the sole reference; prior `dev-sync` comparison notes are non-acceptance evidence. |
+| 2026-07-27 | Phase 1 | Baseline recaptured at 548 tests, 533 passed, 15 failed. | Existing dependency and UI-parity work reduced the live failure count after the initial 17-failure capture; the phase gate remains zero failures. | Track failures by root cause instead of treating the historical count as the acceptance target. |
+| 2026-07-27 | Phase 1 | Canonical Node test concurrency is capped at 4, with a serial diagnostic script retained. | The default runner concurrency produced six cancelled tests; concurrency 4 produced the same single real failure with zero cancellations. | CI must assert zero failures and zero cancellations under the canonical script; serial remains available for diagnosis. |
+| 2026-07-27 | Phase 2 | Atomic commit verification moved to after temp-file write and fsync; rollback is allowed only from bytes owned by the current transaction. | Reviewing the first editor implementation found a race where a Pi append during temp creation could be overwritten, and unconditional rollback could overwrite reload-time external changes. | Add commit-window and rollback-ownership conflict tests; conflicts preserve the exact backup and fail closed. |
+| 2026-07-27 | UI parity correction | Restored the main `dev@ccc5c4a` HTML preview affordance in FileDiffViewer. | The former `dev-sync` reference was not authoritative. The main `dev` UI supports HTML preview, while the BrowserPanel hardening still forbids opening arbitrary `file:` URLs. | HTML renders in an opaque-origin `srcDoc` iframe with scripts/forms only; no same-origin, popup, top-navigation, or Electron bridge access. Dedicated source-contract tests cover both the UI path and sandbox boundary. |
+| 2026-07-27 | Phase 1/3 | Replaced the stale Web `createAgent` source contract with Session-first Web wiring assertions. | The public Web surface now creates Catalog Session drafts and sends prompts by stable Session identity; restoring `createAgent` only to satisfy a regex would reintroduce the legacy API the migration removes. | `sessionRuntimeBindingCoverage` now asserts `createSessionDraft`, `sendSessionPrompt`, generation-validated runtime stop wiring, and absence of Agent compatibility creation; targeted Web tests and the full suite pass. |
+| 2026-07-27 | Phase 3 | Moved Web runtime message polling behind a coordinator-owned Session snapshot. | Listing runtimes and then reading `getMessages(runtime.agentId)` could cross an A-to-B replacement and attach stale Agent messages to a stable Session response. | Coordinator tests cover stable reads and replacement during read; Web tests omit mismatched snapshots and forbid direct Agent-addressed polling. |
+| 2026-07-27 | Phase 3 | Removed path-addressed Session copy/export/read IPC and renderer compatibility branches. | File paths remain valid file-operation data, but public Session behavior must be addressed by stable `sessionId`; the legacy timeline union and optional send identity also kept two ownership models alive. | Desktop/Web/preview APIs now resolve Catalog records by Session ID; tests forbid the old IPC channels, optional send identity, and legacy timeline mode. |
+| 2026-07-27 | Phase 3 | Made Feishu `/new` Catalog-first and runtime activation coordinator-owned. | Direct `AgentManager.create()` left an unowned runtime window before a stable Session binding existed and made Bridge responsible for Agent cleanup. | `/new` creates a draft without an Agent; first message activates the stable Session through the gateway; FeishuBridge contains no Agent creation call. |
+| 2026-07-27 | Phase 5 | Renderer product copy now uses i18n keys for the remaining Skill/Yao/SkillHub/PromptStore, WSL, editor, timeline, drawer, Mermaid, queue, provider and extension surfaces. | A Chinese/English renderer could still expose hardcoded product copy or raw async exceptions even though the shared dictionary existed. | Added focused renderer product-copy tests; fallback copy is stable and raw exceptions are logged separately. |
+| 2026-07-27 | Phase 7 planning | Deferred production large-file movement until i18n and real Electron validation are frozen; source-contract tests must be changed to domain aggregation or behavior tests before moving implementation. | Existing tests bind behavior to a single file (`main/index.ts`, `AgentManager.ts`, `FeishuBridge.ts`, `styles.css`, and renderer monoliths), so moving code first would create structural false failures and hide real regressions. | The split order is i18n, GitPanel, SurfaceComponents, main, FeishuBridge, AgentManager, App, then CSS; all parity claims now use main `dev@ccc5c4a`. |
+| 2026-07-27 | Phase 8 environment | Installed `@earendil-works/pi-coding-agent@0.82.0` inside WSL so `/usr/bin/pi --version` resolves natively. | The existing `pi` command resolved to a Windows NTFS global shim and hung before `--version`, which would make WSL A9 evidence invalid. | WSL preflight now reports user `root`, HOME `/root`, ext filesystem, and native pi `0.82.0`; A9 still requires the actual fixture and GUI run. |
+| 2026-07-27 | Phase 8 environment | Changed the WSL fixture runner to invoke `sh -s` and send the generated shell program through stdin. | Passing the complete program through `wsl.exe` arguments let Windows command-line processing corrupt shell variables before the Linux shell received them. | Focused fixture tests pass, actual WSL fixture generation succeeds, and the dry run leaves fixture files unchanged. |
+| 2026-07-27 | UI parity | Added a Vite CSS-pipeline test after repairing the truncated notice rules and two interleaved `@font-face` declarations in `styles.css`. | Source-contract tests read CSS as text and did not detect an orphaned `--`, missing closing braces, or a nested font declaration; Electron could not start for the first defect and esbuild only warned for the second. | The canonical test suite now parses with Vite/PostCSS and runs CSS-only esbuild minification with zero warnings; the production build remains the final CSS gate. |
+| 2026-07-27 | Runtime validation | Made boot-overlay dismissal independent of `requestAnimationFrame` after real Electron validation left the React workbench rendered but permanently hidden behind the startup screen. | Electron can throttle rAF while a window is hidden or backgrounded; the previous transition fallback was nested inside rAF and therefore never registered. | The normal two-frame fade remains intact, while an idempotent 1.5 second timer guarantees the mounted UI becomes visible. |
+| 2026-07-27 | Phase 6 runtime | Completed real Electron BrowserPanel guest validation after creating an isolated metadata-only Chat draft through the Session-first UI. | Browser entry is intentionally Session-scoped, and a fresh user-data directory contains no Session to host its tool strip. | Verified the persistent partition, absent Node globals, guest-only storage/cookies, denied notification permission and popups, and blocked `file:`, `javascript:`, and `data:` navigation; the isolated Electron process was stopped afterward. |
+| 2026-07-27 | Phase 4 runtime | Removed the 40-turn Agent prompt-history cap from offline `SessionFile` display reads after A3 showed a 100-message Catalog Session rendering only its newest 80 messages. | Runtime prompt trimming is a resource policy for a live Agent, while a stable Session viewer must retain the complete active branch and let renderer pagination bound the visible page. | Added a 100-message JSONL Viewer regression test and rerun A3 against the isolated Electron fixture. |
+| 2026-07-27 | Phase 4 runtime | Added a timeout fallback to Session timeline pagination after A5 kept its load-more control in `loading` while Electron throttled `requestAnimationFrame`. | The UI state transition used rAF as its only completion mechanism, so a backgrounded Electron renderer could never clear `isLoading`. | The normal rAF update is retained; a 250 ms owner-validated fallback completes exactly once and A5 must show an additional visible page. |
+| 2026-07-27 | Main dev parity | Rebased SettingsModal and GitPanel behavior on main `dev@ccc5c4a`, then reconnected them through the Session-first drawer ports. | The migration branch had an incomplete settings draft that never persisted and a Git drawer that had lost FileTree, relative paths, Push/Pull, and per-file discard. | Node 24 typecheck plus focused settings/Git/UI tests pass; real Electron parity remains required. |
+| 2026-07-27 | Session identity | Corrected history-drawer copy to pass `session.id`, not `session.filePath`. | Catalog mutations are stable-ID addressed; the path was interpreted as an ID and made this product entry point fail. | Added a dedicated DrawerSurface stable-ID regression assertion. |
+| 2026-07-27 | Phase 4 runtime | Replaced full historical timeline IPC with stable-ID paged reads and a bounded renderer byte budget. | Renderer-side slicing still cloned a 50 MiB JSONL-derived `ChatMessage[]` across Electron IPC, and 100 64 KiB Markdown messages could monopolize the renderer. | The main process caches only activity-branch offsets, transfers at most 100 messages and 256 KiB per page, and the Jotai cache prepends older pages under revision and cursor guards. A3-A6 passed in real Electron, including A6 selection in 152 ms and first page completion in 5.7 s. |
+| 2026-07-27 | Phase 4 runtime | Added retry-safe fixture row selection and restored the remaining-history count from the server page total. | A catalog refresh could replace a synthetic test row before React committed its selection; disk-paged caches otherwise reported `0` remaining entries because only loaded rows were counted. | The fixture reruns A3-A5 pass; A5 renders 200 rows after load-more and reports 9,800 remaining entries. |
+| 2026-07-27 | Phase 8 runtime | Completed current-commit Electron scenarios A3-A10 against the isolated fixture manifest. | Node/source checks cannot prove catalog recovery, platform identity, large-history rendering, or generator non-mutation. | A3 100 messages, A4 1,000 messages, A5 10,000 messages, A6 50 MiB, A7 backup recovery, A8 native import identity, A9 WSL case identity, and A10 dry-run all passed; evidence is under `F:\PiDeck-validation\6ab2ed87da1821b68929279cae83da09f628d743\runs`. |
+| 2026-07-27 | UI parity correction | Repaired the truncated `.logo-mark::before` block and its stale closing brace in `styles.css`; restored the main `dev` sidebar wordmark, Chat avatar, and project-action interactivity. | A malformed rule had nested 256 ordinary selectors under a pseudo-element, so Electron rendered major workbench controls with browser-default styling. | New PostCSS AST validation rejects nested style rules; the Vite pipeline and focused CSS tests pass. Direct Electron parity must be repeated because earlier screenshots are invalid. |
+| 2026-07-27 | UI parity correction | Restored `.pi-logo-canvas` to the main `dev` 34px pixel-canvas contract. | The same truncated CSS edit had left pseudo-element declarations inside the canvas rule, overriding it to 8px. | A direct declaration-level CSS regression test and the A3 Electron fixture pass. |
+| 2026-07-27 | UI parity correction | Moved Session runtime `ask_question` rendering from a root modal into the active Composer's inline bar. | Main `dev@ccc5c4a` presents the question directly above the composer; the Jotai migration does not require a modal. | The responder still claims and sends the full `sessionId + agentId + runtimeGeneration` binding. Source-contract and type checks cover both placement and stale-binding rejection. |
+| 2026-07-27 | Phase 7 | Split renderer translation dictionaries into `i18n/rendererCopy.zh-CN.ts` and `i18n/rendererCopy.en-US.ts`, leaving `i18n.ts` as the locale/runtime facade. | The 3,433-line mixed dictionary/runtime module obscured ownership and was the lowest-risk planned large-file split. | All wording and keys move mechanically; a key-set symmetry test and runtime i18n tests pass. |
+| 2026-07-27 | Phase 7 | Moved file-tree, workspace-drawer, and session-history presentation components to `WorkspaceSurface.tsx`, while retaining their `SurfaceComponents.tsx` exports. | This removes a self-contained 700-line display domain from the renderer monolith without changing caller imports, Session identity handling, or runtime ownership. | Typecheck and file-icon/facade contracts cover the extracted module; full test and build gates remain required. |
+| 2026-07-27 | UI parity tooling | Allowed the Electron fixture runner to target an explicit reference checkout through `PIDECK_REPO_ROOT`, keeping the current worktree as its default. | Visual parity must compare the candidate with `F:\PiDeck` `dev@ccc5c4a` using the same fixture data, not a separate integration branch or stale image. | The default fixture command remains unchanged; reference runs are tagged by their invoked repository path. |
+| 2026-07-27 | UI parity tooling | Added a capture-only mode with an optional DOM click selector to the Electron fixture runner. | Main `dev` intentionally lacks the Session-first catalog API, so it needs a visual-only mode rather than compatibility calls that would invalidate the comparison. | Normal A3-A10 assertions remain unchanged; capture-only records the mounted surface, visible modal/drawer classes, and a bounded button inventory for side-by-side evidence. |
+| 2026-07-27 | UI parity tooling | Added a bounded `--capture-wait-ms` option to capture-only Electron runs. | Closing a startup overlay can expose an asynchronous catalog refresh; a fixed per-click delay can otherwise capture a transient loading state as a false visual regression. | The option accepts 0-60000 ms, defaults to zero, and runs only after requested clicks; normal A3-A10 behavior is unchanged. |
+| 2026-07-27 | UI parity correction | Bootstrap the built-in Chat with a renderer-only pre-send surface, then atomically promote it to a Catalog Session on first send. | Persisting a blank draft during startup would add a sidebar entry absent from main `dev`; the Session-first renderer otherwise rendered no Chat surface at all. | Opening Chat neither creates a Catalog entry nor starts Pi. First send migrates draft, attachments, mode, and delivery state into exactly one real Session before coordinator activation. |
+| 2026-07-27 | UI parity correction | Restored missing localized labels for the common and appearance Settings tabs. | The refactored SettingsModal already used `settings.tabs.common` and `settings.tabs.appearance`, but neither renderer dictionary defined them, so the raw keys rendered in the candidate sidebar. | Both locale dictionaries now resolve the dev-equivalent labels; locale symmetry and product-copy tests cover the exact values. |
+| 2026-07-27 | Phase 7 | Extracted Git resource-tree presentation from `GitPanel.tsx` into `app/git/GitResourceTree.tsx`. | Directory grouping, status decoration, Seti icons, rows, and stage/unstage affordances are a pure presentation domain; keeping them separate reduces the panel's request-orchestration surface without altering Git IPC or visible markup. | Existing Git UI contracts now aggregate the panel and resource-tree sources; focused tests and typecheck cover the compatibility imports and no-extra-Discard rule. |
+| 2026-07-27 | UI parity tooling | Made final Electron fixture evidence copying wait for process exit and retry transient Windows file locks. | Chromium can retain its Cookies database briefly after `taskkill`, which made otherwise successful runs fail while copying the final user-data evidence. | The runner waits up to five seconds for child exit and retries only `EBUSY` up to five times; product assertions and failure codes are unchanged. |
+| 2026-07-27 | Phase 7 | Extracted Settings section framing and the storage/logs leaf into `app/settings/SettingsStorageTab.tsx`. | The storage panel owns only log-size polling and its local confirmation feedback; it does not own or mirror the modal's settings draft, save, cancel, or close-confirmation state. | Settings imports the extracted leaf directly, and product-copy tests aggregate it so localized storage controls remain covered after the move. |
+| 2026-07-27 | UI parity | Restored the workbench sidebar default from 260px to the main `dev@ccc5c4a` value of 221px. | Width is presentation geometry and is unrelated to Session-first state ownership; the wider candidate sidebar shifted the entire workbench in same-viewport screenshots. | A focused geometry test protects the 221px default; the next paired Electron capture uses the same fixture and viewport. |
+| 2026-07-27 | Phase 6 hardening | Removed the global Windows `--no-sandbox` switch and routed `browser:open-external` through the shared HTTP(S) gate. | A global switch nullified the BrowserPanel guest sandbox, while that renderer-callable IPC could pass arbitrary URL schemes to the OS. | BrowserPanel security tests assert guest hardening remains enabled and external IPC uses the validated opening path. |
+
+## Implementation progress
+
+- Phase 1 was revalidated on 2026-07-27: a real `npm ci` installed 829
+  packages, `npm ls jotai zustand --depth=0` reported only `jotai@2.20.2`,
+  typecheck passed, and both canonical and serial test runs passed 609/609
+  with zero cancellations.
+- Phase 2 passed on 2026-07-27: SessionFileEditor is connected to AgentManager,
+  38 new editor/integration tests cover real files and adversarial failures,
+  the current full suite passes 609/609, and legacy direct JSONL write symbols in
+  AgentManager are zero.
+- Phase 3 implementation is present: public renderer/preload runtime commands
+  are Session-addressed and generation validated. Full UI and workflow acceptance
+  remains open before the phase is declared complete.
+- Web polling now reads messages through a Session-addressed coordinator snapshot
+  and omits the result if Session, Agent, or runtime generation changes during
+  the read.
+- Session copy, export, and reference reads are now stable-ID addressed across
+  Electron preload, LAN Web, preview, and renderer call sites. Unused path IPC,
+  the legacy timeline union, and optional `useSessionSend` identity are removed.
+- Feishu creation and recovery now establish or locate the Catalog Session
+  before coordinator activation; the Bridge no longer creates or stops Agents.
+- Phase 5 i18n implementation is present across renderer, main-process managers,
+  LAN Web, Feishu, tray/update/WSL/store surfaces, imported/default Session copy,
+  and Session command IPC. Raw provider/process details remain in logs or the
+  explicit local `debugDetails` channel, while Web and Feishu strip them.
+- The 2026-07-27 i18n gate passes focused tests, typecheck, canonical tests, and
+  serial tests: 633/633 passed with zero failures and zero cancellations.
+- Phase 4 real Electron scale and recovery scenarios A3-A10 passed on 2026-07-27.
+  The timeline now reads stable-ID pages; `readRecordMessages` remains only for
+  non-timeline compatibility callers and must not be reintroduced into the renderer timeline.
+- Phase 6 BrowserPanel guest validation is complete. Phase 7 still needs the
+  planned production large-module split and a direct visual comparison against
+  the main repository `dev@ccc5c4a`; green source and Node tests do not claim
+  that UI parity or structural gate has run.
+
+## UI parity rule
+
+Architecture-only renderer changes may alter data flow, props, hooks, and state
+ownership. Changes to visible markup, CSS, icons, spacing, copy, or interaction
+must either match the dev reference or be recorded above with an explicit reason.

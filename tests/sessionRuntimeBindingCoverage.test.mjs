@@ -8,6 +8,18 @@ const coordinator = readFileSync(
 );
 const main = readFileSync("src/main/index.ts", "utf8");
 const app = readFileSync("src/renderer/src/App.tsx", "utf8");
+const runtimeInjector = readFileSync(
+  "src/renderer/src/components/session/SessionRuntimeInjector.tsx",
+  "utf8",
+);
+const runtimeUi = readFileSync(
+  "src/renderer/src/components/overlays/SessionRuntimeUiOverlay.tsx",
+  "utf8",
+);
+const composer = readFileSync(
+  "src/renderer/src/components/session/ComposerArea.tsx",
+  "utf8",
+);
 
 test("catalog scans attach matching existing runtimes in the main process", () => {
   assert.match(coordinator, /attachCatalogRuntimes\(/);
@@ -22,10 +34,28 @@ test("unbound interactive UI is cancelled and cannot be surfaced as Session UI",
   assert.doesNotMatch(app, /api\.agents\.onUiRequest\(/);
 });
 
-test("legacy and external create entry points are explicitly classified", () => {
-  assert.match(main, /LEGACY_EXTERNAL_RUNTIME/);
-  assert.match(main, /agentsCreate[\s\S]*LEGACY_EXTERNAL_RUNTIME/);
-  assert.match(main, /createAgent: \(input\)[\s\S]*LEGACY_EXTERNAL_RUNTIME/);
+test("session UI requests remain generation-bound but render above the composer", () => {
+  assert.match(runtimeInjector, /createSessionRuntimeUiResponder\(/);
+  assert.match(runtimeInjector, /sessionId: currentSessionId/);
+  assert.match(runtimeInjector, /runtimeGeneration: latest\.runtimeGeneration/);
+  assert.match(runtimeInjector, /<SessionRuntimeUiOverlay/);
+  assert.match(runtimeUi, /className="ask-inline-bar"/);
+  assert.doesNotMatch(runtimeUi, /className="modal-backdrop ask-dialog-backdrop"/);
+  assert.match(composer, /\{props\.runtimeUi\}/);
+});
+
+test("Web wiring is Session-first and exposes no Agent compatibility creation", () => {
+  assert.match(
+    main,
+    /createSessionDraft: async \(input\)[\s\S]*sessionCatalog\.createDraft/,
+  );
+  assert.match(
+    main,
+    /sendSessionPrompt: async \(input\)[\s\S]*sessionRuntimeCoordinator\.send\(input\)/,
+  );
+  assert.match(main, /stopSessionRuntime: async \(target\)[\s\S]*sessionRuntimeCoordinator\.stopRuntime\(target\)/);
+  assert.doesNotMatch(main, /createAgent:/);
+  assert.doesNotMatch(main, /LEGACY_EXTERNAL_RUNTIME|ipcChannels\.agentsCreate/);
 });
 
 test("replacement restore is gated by full origin identity in main", () => {

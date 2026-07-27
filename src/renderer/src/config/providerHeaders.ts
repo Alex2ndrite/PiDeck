@@ -1,4 +1,4 @@
-import { t } from "../i18n";
+import { t, type TranslationKey } from "../i18n";
 
 export function getUserAgentOptions() {
 	return [
@@ -10,7 +10,7 @@ export function getUserAgentOptions() {
 		{ value: "Kilo-Code/1.0", label: "Kilo-Code/1.0" },
 		{ value: "OpenAI/JS 6.26.0", label: "OpenAI/JS 6.26.0" },
 		{ value: "anthropic-sdk-typescript/0.27.3", label: "Anthropic SDK (anthropic-sdk-typescript/0.27.3)" },
-		{ value: "Mozilla/5.0", label: "Mozilla/5.0 (浏览器)" },
+		{ value: "Mozilla/5.0", label: t("config.userAgentBrowser") },
 		{ value: "pi-coding-agent", label: "pi-coding-agent" },
 		{ value: "python-requests/2.31.0", label: "Python Requests" },
 		{ value: "axios/1.6.0", label: "Axios" },
@@ -69,22 +69,19 @@ export const API_TYPE_LABELS: Record<string, string> = {
 	"mistral-conversations": "Mistral Conversations",
 };
 
-export const API_TYPE_DESCRIPTIONS: Record<string, string> = {
-	"openai-completions": "OpenAI Chat Completions API — 兼容性最广，适用于大多数第三方服务和本地模型",
-	"openai-responses": "OpenAI Responses API — 新版 API，支持更多功能",
-	"openai-codex-responses": "OpenAI Codex Responses — 用于 ChatGPT Plus/Pro 订阅。如遇问题可尝试 openai-responses + 自定义 User-Agent",
-	"anthropic-messages": "Anthropic Messages API — Claude 系列模型专用",
-	"google-generative-ai": "Google Generative AI API — Gemini 系列模型",
-	"mistral-conversations": "Mistral Conversations API — Mistral 模型原生接口",
+const API_TYPE_DESCRIPTION_KEYS: Record<string, TranslationKey> = {
+	"openai-completions": "config.apiTypeDescription.openaiCompletions",
+	"openai-responses": "config.apiTypeDescription.openaiResponses",
+	"openai-codex-responses": "config.apiTypeDescription.openaiCodexResponses",
+	"anthropic-messages": "config.apiTypeDescription.anthropicMessages",
+	"google-generative-ai": "config.apiTypeDescription.googleGenerativeAi",
+	"mistral-conversations": "config.apiTypeDescription.mistralConversations",
 };
-export const API_TYPE_DESCRIPTIONS_EN: Record<string, string> = {
-	"openai-completions": "OpenAI Chat Completions API — Most compatible, works with most third-party services and local models",
-	"openai-responses": "OpenAI Responses API — Newer API with more features",
-	"openai-codex-responses": "OpenAI Codex Responses — For ChatGPT Plus/Pro. Try openai-responses + custom User-Agent if issues occur",
-	"anthropic-messages": "Anthropic Messages API — For Claude models",
-	"google-generative-ai": "Google Generative AI API — For Gemini models",
-	"mistral-conversations": "Mistral Conversations API — Native Mistral interface",
-};
+
+export function getApiTypeDescription(apiType: string): string {
+	const key = API_TYPE_DESCRIPTION_KEYS[apiType];
+	return key ? t(key) : "";
+}
 
 /**
  * 主流供应商 → API 端点映射。

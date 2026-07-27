@@ -1,12 +1,24 @@
 import type {
+	AgentRuntimeState,
 	AgentTab,
+	AvailableModel,
+	ChatMessage,
 	CreateAgentInput,
+	I18nDescriptor,
+	ImageContent,
+	PiCommand,
 	SendPromptInput,
 	SendPromptResult,
 	SendSessionPromptInput,
 	SendSessionPromptResult,
+	SessionCommandErrorCode,
+	SessionCommandResult,
 	SessionRecord,
 	SessionRuntimeEvent,
+	SessionRuntimeInfo,
+	SessionRuntimeReplacement,
+	SessionRuntimeTarget,
+	SessionTargetedValue,
 	SessionUiResponseInput,
 } from "../../shared/types";
 import { buildSessionOriginKey } from "../../shared/sessionIdentity";
@@ -14,19 +26,42 @@ import type { SessionCatalogEntry } from "./SessionCatalog";
 
 export interface SessionCatalogGateway {
 	get(sessionId: string): SessionCatalogEntry | undefined;
+	getRecord(sessionId: string): SessionRecord | undefined;
+	update(
+		sessionId: string,
+		patch: {
+			title?: string;
+			model?: { provider: string; modelId: string };
+			thinkingLevel?: string;
+			updatedAt?: number;
+		},
+	): Promise<SessionCatalogEntry>;
 	attachRuntime(input: {
 		sessionId: string;
 		filePath?: string;
 		piSessionId?: string;
-		title?: string;
 	}): Promise<unknown>;
 }
 
 export interface SessionAgentGateway {
 	list(): AgentTab[];
+	getMessages(agentId: string): ChatMessage[];
 	create(input: CreateAgentInput): Promise<AgentTab>;
 	restart(agentId: string): Promise<AgentTab>;
 	stop(agentId: string): Promise<void>;
+	rename(agentId: string, name: string): Promise<AgentTab>;
+	abort(agentId: string): Promise<void>;
+	compact(agentId: string, prompt?: string): Promise<AgentRuntimeState>;
+	getRuntimeState(agentId: string): Promise<AgentRuntimeState>;
+	getCommands(agentId: string): Promise<unknown[]>;
+	getAvailableModels(agentId: string): Promise<AvailableModel[]>;
+	exportHtml(agentId: string): Promise<unknown>;
+	editMessage(agentId: string, messageId: string, newText: string): Promise<void>;
+	deleteMessage(agentId: string, messageId: string): Promise<void>;
+	prepareResendFromMessage(
+		agentId: string,
+		messageId: string,
+	): Promise<{ text: string; images?: ImageContent[] }>;
 	setModel(agentId: string, provider: string, modelId: string): Promise<unknown>;
 	setThinking(agentId: string, level: string): Promise<unknown>;
 	sendUIResponse(
@@ -62,6 +97,16 @@ type RuntimeReplacement = SessionRuntimeBinding & {
 type DispatchLease = SessionRuntimeBinding & {
 	leaseId: number;
 };
+
+class SessionRuntimeCommandError extends Error {
+	constructor(
+		readonly code: SessionCommandErrorCode,
+		message: string,
+	) {
+		super(message);
+		this.name = "SessionRuntimeCommandError";
+	}
+}
 
 const DELIVERY_CACHE_TTL_MS = 10 * 60_000;
 const DELIVERY_CACHE_MAX_ENTRIES = 500;
@@ -109,7 +154,9 @@ export class SessionRuntimeCoordinator {
 		if (!sessionId) return Promise.resolve(this.rejected(input, "Session ID is required"));
 		if (!requestId) return Promise.resolve(this.rejected(input, "Request ID is required"));
 		if (!input.message.trim() && !input.images?.length) {
-			return Promise.resolve(this.rejected(input, "消息不能为空"));
+			return Promise.resolve(this.rejected(input, "消息不能为空", {
+				i18nKey: "diagnostic.messageRequired",
+			}));
 		}
 
 		this.pruneDeliveryCache();
@@ -141,6 +188,205 @@ export class SessionRuntimeCoordinator {
 
 	getSessionId(agentId: string): string | undefined {
 		return this.sessionIdByAgent.get(agentId);
+	}
+
+	listRuntimes(): SessionRuntimeInfo[] {
+		const result: SessionRuntimeInfo[] = [];
+		for (const [sessionId, agentId] of this.agentIdBySession) {
+			const tab = this.agents.list().find((candidate) => candidate.id === agentId);
+			if (!tab || isTerminalAgent(tab)) continue;
+			result.push(this.runtimeInfo(sessionId, tab));
+		}
+		return result.sort((left, right) => right.createdAt - left.createdAt);
+	}
+
+	getTarget(sessionId: string): SessionRuntimeTarget | undefined {
+		const agentId = this.getAgentId(sessionId);
+		if (!agentId) return undefined;
+		const binding = this.getRuntimeBinding(agentId);
+		if (!binding || binding.sessionId !== sessionId) return undefined;
+		return { sessionId, agentId, runtimeGeneration: binding.runtimeGeneration };
+	}
+
+	getRuntimeMessages(sessionId: string): SessionTargetedValue<ChatMessage[]> | undefined {
+		const target = this.getTarget(sessionId);
+		if (!target) return undefined;
+		const messages = this.agents.getMessages(target.agentId);
+		// Message reads are synchronous, but the gateway can re-enter coordinator code.
+		// Revalidate after the read so an A -> B replacement cannot label A's messages as B's Session state.
+		if (!this.validateTarget(target).ok) return undefined;
+		return { target, value: messages };
+	}
+
+	async activateRuntime(
+		sessionId: string,
+	): Promise<SessionCommandResult<SessionRuntimeInfo>> {
+		try {
+			const tab = await this.ensureRuntime(sessionId);
+			return { ok: true, value: this.runtimeInfo(sessionId, tab) };
+		} catch (error) {
+			return this.commandFailure(error);
+		}
+	}
+
+	validateTarget(target: SessionRuntimeTarget): SessionCommandResult<SessionRuntimeTarget> {
+		try {
+			this.requireTarget(target);
+			return { ok: true, value: target };
+		} catch (error) {
+			return this.commandFailure(error);
+		}
+	}
+
+	renameRuntime(
+		target: SessionRuntimeTarget,
+		name: string,
+	): Promise<SessionCommandResult<SessionTargetedValue<AgentTab>>> {
+		return this.runTargetCommand(target, (agentId) => this.agents.rename(agentId, name));
+	}
+
+	abortRuntime(
+		target: SessionRuntimeTarget,
+	): Promise<SessionCommandResult<SessionTargetedValue<void>>> {
+		return this.runTargetCommand(target, (agentId) => this.agents.abort(agentId));
+	}
+
+	compactRuntime(
+		target: SessionRuntimeTarget,
+		prompt?: string,
+	): Promise<SessionCommandResult<SessionTargetedValue<AgentRuntimeState>>> {
+		return this.runTargetCommand(target, (agentId) => this.agents.compact(agentId, prompt));
+	}
+
+	getRuntimeState(
+		target: SessionRuntimeTarget,
+	): Promise<SessionCommandResult<SessionTargetedValue<AgentRuntimeState>>> {
+		return this.runTargetCommand(target, (agentId) => this.agents.getRuntimeState(agentId));
+	}
+
+	listRuntimeCommands(
+		target: SessionRuntimeTarget,
+	): Promise<SessionCommandResult<SessionTargetedValue<PiCommand[]>>> {
+		return this.runTargetCommand(target, async (agentId) => (
+			await this.agents.getCommands(agentId) as PiCommand[]
+		));
+	}
+
+	listRuntimeModels(
+		target: SessionRuntimeTarget,
+	): Promise<SessionCommandResult<SessionTargetedValue<AvailableModel[]>>> {
+		return this.runTargetCommand(target, (agentId) => this.agents.getAvailableModels(agentId));
+	}
+
+	exportRuntimeHtml(
+		target: SessionRuntimeTarget,
+	): Promise<SessionCommandResult<SessionTargetedValue<unknown>>> {
+		return this.runTargetCommand(target, (agentId) => this.agents.exportHtml(agentId));
+	}
+
+	editRuntimeMessage(
+		target: SessionRuntimeTarget,
+		messageId: string,
+		newText: string,
+	): Promise<SessionCommandResult<SessionTargetedValue<void>>> {
+		return this.runTargetCommand(
+			target,
+			(agentId) => this.agents.editMessage(agentId, messageId, newText),
+		);
+	}
+
+	deleteRuntimeMessage(
+		target: SessionRuntimeTarget,
+		messageId: string,
+	): Promise<SessionCommandResult<SessionTargetedValue<void>>> {
+		return this.runTargetCommand(
+			target,
+			(agentId) => this.agents.deleteMessage(agentId, messageId),
+		);
+	}
+
+	prepareRuntimeResend(
+		target: SessionRuntimeTarget,
+		messageId: string,
+	): Promise<SessionCommandResult<SessionTargetedValue<{ text: string; images?: ImageContent[] }>>> {
+		return this.runTargetCommand(
+			target,
+			(agentId) => this.agents.prepareResendFromMessage(agentId, messageId),
+		);
+	}
+
+	setRuntimeModel(
+		target: SessionRuntimeTarget,
+		provider: string,
+		modelId: string,
+	): Promise<SessionCommandResult<SessionTargetedValue<AgentRuntimeState>>> {
+		return this.runTargetCommand(target, async (agentId) => {
+			await this.catalog.update(target.sessionId, {
+				model: { provider, modelId },
+				updatedAt: Date.now(),
+			});
+			await this.agents.setModel(agentId, provider, modelId);
+			return this.agents.getRuntimeState(agentId);
+		});
+	}
+
+	setRuntimeThinking(
+		target: SessionRuntimeTarget,
+		level: string,
+	): Promise<SessionCommandResult<SessionTargetedValue<AgentRuntimeState>>> {
+		return this.runTargetCommand(target, async (agentId) => {
+			await this.catalog.update(target.sessionId, {
+				thinkingLevel: level,
+				updatedAt: Date.now(),
+			});
+			await this.agents.setThinking(agentId, level);
+			return this.agents.getRuntimeState(agentId);
+		});
+	}
+
+	async stopRuntime(
+		target: SessionRuntimeTarget,
+	): Promise<SessionCommandResult<SessionRuntimeTarget>> {
+		let reservation: RuntimeReplacement | undefined;
+		try {
+			this.requireTarget(target);
+			reservation = this.reserveBoundRuntime(target.sessionId, target.agentId);
+			await this.agents.stop(target.agentId);
+			this.requireCurrentReservation(reservation);
+			this.releaseRuntimeReplacement(reservation);
+			reservation = undefined;
+			this.unbindAgentUnchecked(target.agentId);
+			return { ok: true, value: target };
+		} catch (error) {
+			return this.commandFailure(error);
+		} finally {
+			if (reservation && this.replacementByAgent.get(target.agentId) === reservation) {
+				this.releaseRuntimeReplacement(reservation);
+			}
+		}
+	}
+
+	async restartRuntime(
+		target: SessionRuntimeTarget,
+	): Promise<SessionCommandResult<SessionRuntimeReplacement>> {
+		try {
+			this.requireTarget(target);
+			const tab = await this.restartSession(target.sessionId, target.agentId);
+			const session = this.catalog.getRecord(target.sessionId);
+			if (!session) {
+				throw new SessionRuntimeCommandError("SESSION_NOT_FOUND", "Session no longer exists");
+			}
+			return {
+				ok: true,
+				value: {
+					previousTarget: target,
+					runtime: this.runtimeInfo(target.sessionId, tab),
+					session: { ...session },
+				},
+			};
+		} catch (error) {
+			return this.commandFailure(error);
+		}
 	}
 
 	bindExistingAgent(sessionId: string, agentId: string): number {
@@ -363,7 +609,6 @@ export class SessionRuntimeCoordinator {
 					sessionId,
 					filePath: tab.sessionPath,
 					piSessionId: tab.sessionId,
-					title: tab.title,
 				});
 			}
 			return tab;
@@ -426,7 +671,6 @@ export class SessionRuntimeCoordinator {
 					sessionId: input.sessionId,
 					filePath: currentTab.sessionPath,
 					piSessionId: currentTab.sessionId,
-					title: currentTab.title,
 				}).catch(() => undefined);
 			}
 			if (!this.isCurrentDispatchLease(lease)) {
@@ -508,7 +752,6 @@ export class SessionRuntimeCoordinator {
 				sessionId,
 				filePath: tab.sessionPath,
 				piSessionId: tab.sessionId,
-				title: tab.title,
 			});
 		}
 		return tab;
@@ -736,6 +979,112 @@ export class SessionRuntimeCoordinator {
 		}
 	}
 
+	private runtimeInfo(sessionId: string, tab: AgentTab): SessionRuntimeInfo {
+		const target = this.getTarget(sessionId);
+		if (!target || target.agentId !== tab.id) {
+			throw new SessionRuntimeCommandError(
+				"SESSION_RUNTIME_CHANGED",
+				"Session runtime binding changed while building runtime state",
+			);
+		}
+		return {
+			...target,
+			projectId: tab.projectId,
+			cwd: tab.cwd,
+			status: tab.status,
+			sessionPath: tab.sessionPath,
+			createdAt: tab.createdAt,
+			compactionCount: tab.compactionCount,
+		};
+	}
+
+	private requireTarget(target: SessionRuntimeTarget): SessionRuntimeBinding {
+		if (!this.catalog.get(target.sessionId)) {
+			throw new SessionRuntimeCommandError(
+				"SESSION_NOT_FOUND",
+				`Session not found: ${target.sessionId}`,
+			);
+		}
+		const binding = this.getRuntimeBinding(target.agentId);
+		if (!binding || this.agentIdBySession.get(target.sessionId) !== target.agentId) {
+			throw new SessionRuntimeCommandError(
+				"SESSION_RUNTIME_UNAVAILABLE",
+				"Session runtime is not available",
+			);
+		}
+		if (
+			binding.sessionId !== target.sessionId ||
+			binding.runtimeGeneration !== target.runtimeGeneration
+		) {
+			throw new SessionRuntimeCommandError(
+				"SESSION_RUNTIME_CHANGED",
+				"Session runtime binding changed",
+			);
+		}
+		return { ...target };
+	}
+
+	private async runTargetCommand<T>(
+		target: SessionRuntimeTarget,
+		operation: (agentId: string) => Promise<T>,
+	): Promise<SessionCommandResult<SessionTargetedValue<T>>> {
+		let lease: DispatchLease | undefined;
+		try {
+			this.requireTarget(target);
+			lease = this.acquireDispatchLease(target.sessionId, target.agentId);
+			if (lease.runtimeGeneration !== target.runtimeGeneration) {
+				throw new SessionRuntimeCommandError(
+					"SESSION_RUNTIME_CHANGED",
+					"Session runtime generation changed before command dispatch",
+				);
+			}
+			const value = await operation(lease.agentId);
+			if (!this.isCurrentDispatchLease(lease)) {
+				throw new SessionRuntimeCommandError(
+					"SESSION_RUNTIME_CHANGED",
+					"Session runtime binding changed during command dispatch",
+				);
+			}
+			return {
+				ok: true,
+				value: {
+					target: {
+						sessionId: lease.sessionId,
+						agentId: lease.agentId,
+						runtimeGeneration: lease.runtimeGeneration,
+					},
+					value,
+				},
+			};
+		} catch (error) {
+			return this.commandFailure(error);
+		} finally {
+			if (lease) this.releaseDispatchLease(lease);
+		}
+	}
+
+	private commandFailure<T>(error: unknown): SessionCommandResult<T> {
+		if (error instanceof SessionRuntimeCommandError) {
+			return {
+				ok: false,
+				error: { code: error.code, debugDetails: error.message },
+			};
+		}
+		const message = errorMessage(error);
+		const lower = message.toLowerCase();
+		const code: SessionCommandErrorCode =
+			lower.includes("not found")
+				? "SESSION_NOT_FOUND"
+				: lower.includes("busy") || lower.includes("in progress") || lower.includes("stream")
+					? "SESSION_RUNTIME_BUSY"
+					: lower.includes("binding") || lower.includes("generation") || lower.includes("changed")
+						? "SESSION_RUNTIME_CHANGED"
+						: lower.includes("runtime") && lower.includes("available")
+							? "SESSION_RUNTIME_UNAVAILABLE"
+							: "SESSION_COMMAND_FAILED";
+		return { ok: false, error: { code, debugDetails: message } };
+	}
+
 	private acquireDispatchLease(sessionId: string, agentId: string): DispatchLease {
 		if (this.replacementBySession.has(sessionId) || this.replacementByAgent.has(agentId)) {
 			throw new Error("Session runtime replacement is in progress");
@@ -833,11 +1182,16 @@ export class SessionRuntimeCoordinator {
 	private rejected(
 		input: Pick<SendSessionPromptInput, "sessionId" | "requestId">,
 		error: string,
+		descriptor: I18nDescriptor = {
+			i18nKey: "diagnostic.promptRejected",
+			debugDetails: error,
+		},
 	): SendSessionPromptResult {
 		return {
 			accepted: false,
 			delivery: "rejected",
 			error,
+			...descriptor,
 			sessionId: input.sessionId,
 			requestId: input.requestId,
 		};
@@ -851,6 +1205,8 @@ export class SessionRuntimeCoordinator {
 			accepted: false,
 			delivery: "unknown",
 			error,
+			i18nKey: "diagnostic.promptDeliveryUnknown",
+			debugDetails: error,
 			sessionId: input.sessionId,
 			requestId: input.requestId,
 		};

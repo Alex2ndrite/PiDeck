@@ -25,10 +25,12 @@ const COMPOSER_MIN_HEIGHT = 175;
 export type ComposerAreaProps = {
   sessionId: string;
   queuePanel?: ReactNode;
+  runtimeUi?: ReactNode;
   statusText?: string;
   onOpenFile?: (path: string) => void;
   onHeightChange?: (height: number) => void;
   enqueue?: (sessionId: string, snapshot: EnqueuePromptSnapshot) => boolean;
+  ensureSessionId?: (sessionId: string) => Promise<string>;
 };
 
 export const ComposerArea = forwardRef<HTMLElement, ComposerAreaProps>(function ComposerArea(
@@ -39,6 +41,7 @@ export const ComposerArea = forwardRef<HTMLElement, ComposerAreaProps>(function 
     sessionId: props.sessionId,
     onOpenFile: props.onOpenFile,
     enqueue: props.enqueue,
+    ensureSessionId: props.ensureSessionId,
   });
   const [height, setHeight] = useState(COMPOSER_MIN_HEIGHT);
   const composerMode = composer.bangMode === "bang-bang"
@@ -108,6 +111,7 @@ export const ComposerArea = forwardRef<HTMLElement, ComposerAreaProps>(function 
               error={composer.sendState.error}
               onAcknowledge={composer.delivery.acknowledgeUnknown}
             />
+            {props.runtimeUi}
             <div
               className={`composer-box ${
                 composer.bangMode === "bang-bang"
@@ -127,14 +131,11 @@ export const ComposerArea = forwardRef<HTMLElement, ComposerAreaProps>(function 
               />
               <ComposerToolbar
                 state={composer.runtime?.state}
-                savedModel={composer.record?.model}
-                savedThinkingLevel={composer.record?.thinkingLevel}
                 compacting={Boolean(composer.runtime?.state?.isCompacting)}
                 disabled={composer.isBusy || composer.isStarting}
                 onPickModel={() => composer.pickers.open("model")}
                 onPickThinking={() => composer.pickers.open("thinking")}
                 onPickPromptTemplate={() => composer.pickers.open("template")}
-                onAttachFile={() => void composer.editor.attachFile()}
                 onCompact={composer.delivery.compact}
                 composerAgentMode={composer.mode}
                 onOpenComposerModePicker={() => composer.pickers.open("mode")}
@@ -234,7 +235,7 @@ export const ComposerArea = forwardRef<HTMLElement, ComposerAreaProps>(function 
                   selectedIndices,
                 );
               }}
-              loadMessages={(filePath) => desktopApi.sessions.readMessages(filePath)}
+              loadMessages={(sessionId) => desktopApi.sessions.readReferenceMessages(sessionId)}
             />
           ) : null}
         </>

@@ -104,16 +104,33 @@ export type TerminalExitEvent = {
 
 export type ChatRole = "user" | "assistant" | "tool" | "system" | "error";
 
+export type I18nParams = Record<string, string | number | boolean | null | undefined>;
+
+/** Structured copy crosses process boundaries without forcing main to choose a locale. */
+export type I18nDescriptor = {
+	i18nKey?: string;
+	i18nParams?: I18nParams;
+	/** Raw provider/process diagnostics. Renderers may expose this separately from localized copy. */
+	debugDetails?: string;
+};
+
 export type ChatMessage = {
 	id: string;
 	agentId: string;
 	role: ChatRole;
 	text: string;
 	timestamp: number;
-	meta?: Record<string, unknown>;
+	meta?: Record<string, unknown> & I18nDescriptor;
 	images?: ImageContent[]; // 用户消息中附加的图片
 	/** 思考内容：来自 thinking 内容块，用于展示模型推理过程 */
 	thinking?: string;
+};
+
+/** A bounded historical timeline slice. `nextBefore` is the exclusive index for an older page. */
+export type SessionMessagePage = {
+	messages: ChatMessage[];
+	total: number;
+	nextBefore: number | null;
 };
 
 export type FileTreeNode = {
@@ -1133,8 +1150,8 @@ export type SendPromptInput = {
 /** 主进程完成 pi prompt 预检后的明确接收结果。 */
 export type SendPromptResult =
 	| { accepted: true }
-	| { accepted: false; error: string; delivery?: "rejected" }
-	| { accepted: false; error: string; delivery: "unknown" };
+	| ({ accepted: false; error: string; delivery?: "rejected" } & I18nDescriptor)
+	| ({ accepted: false; error: string; delivery: "unknown" } & I18nDescriptor);
 
 export type SendSessionPromptInput = Omit<SendPromptInput, "agentId"> & {
 	sessionId: string;
@@ -1156,6 +1173,49 @@ export type SessionRuntimeEvent = {
 	runtimeGeneration: number;
 	sourceChannel: string;
 	payload: unknown;
+};
+
+export type SessionRuntimeTarget = {
+	sessionId: string;
+	agentId: string;
+	runtimeGeneration: number;
+};
+
+export type SessionRuntimeInfo = SessionRuntimeTarget & {
+	projectId: string;
+	cwd: string;
+	status: AgentStatus;
+	sessionPath?: string;
+	createdAt: number;
+	compactionCount?: number;
+};
+
+export type SessionCommandErrorCode =
+	| "SESSION_NOT_FOUND"
+	| "SESSION_RUNTIME_UNAVAILABLE"
+	| "SESSION_RUNTIME_CHANGED"
+	| "SESSION_RUNTIME_BUSY"
+	| "SESSION_COMMAND_FAILED";
+
+export type SessionCommandError = {
+	code: SessionCommandErrorCode;
+	params?: Record<string, string | number>;
+	debugDetails?: string;
+};
+
+export type SessionCommandResult<T> =
+	| { ok: true; value: T }
+	| { ok: false; error: SessionCommandError };
+
+export type SessionTargetedValue<T> = {
+	target: SessionRuntimeTarget;
+	value: T;
+};
+
+export type SessionRuntimeReplacement = {
+	previousTarget: SessionRuntimeTarget;
+	runtime: SessionRuntimeInfo;
+	session: SessionRecord;
 };
 
 export type AgentUiResponse = {
@@ -1285,6 +1345,12 @@ export type FeishuTestResult = {
 	success: boolean;
 	message: string;
 	botName?: string;
+};
+
+export type FeishuSessionBotResult = {
+	success: boolean;
+	message?: string;
+	chatId?: string;
 };
 
 /** 输入框发送模式，决定消息直接执行还是以只读方式触发生成计划。 */

@@ -8,6 +8,10 @@ import type {
 	ClaudeImportStatus,
 	ClaudeSessionSummary,
 } from "../../shared/types";
+import {
+	defaultSessionImportCopy,
+	type SessionImportCopy,
+} from "./SessionImportCopy";
 
 type ParsedClaudeSession = {
 	meta: {
@@ -25,6 +29,8 @@ type ParsedClaudeSession = {
 export class ClaudeSessionImporter {
 	private readonly claudeRoot = join(app.getPath("home"), ".claude", "projects");
 	private readonly piRoot = join(app.getPath("home"), ".pi", "agent", "sessions");
+
+	constructor(private readonly translate: SessionImportCopy = defaultSessionImportCopy) {}
 
 	async scan(projectPath: string): Promise<ClaudeSessionSummary[]> {
 		const projectDir = this.getClaudeProjectDir(projectPath);
@@ -275,13 +281,13 @@ export class ClaudeSessionImporter {
 		const title =
 			titleState.title ||
 			this.cleanTitle(basename(session.sourcePath)) ||
-			"Claude 会话";
+			this.translate("session.importedTitle", { source: "Claude" });
 		lines.splice(1, 0, JSON.stringify({ sessionName: title, cwd: projectPath }));
 
 		return {
 			raw: `${lines.join("\n")}\n`,
 			title,
-			preview: titleState.preview || "Claude imported session",
+			preview: titleState.preview || this.translate("session.importedPreview", { source: "Claude" }),
 			messageCount,
 		};
 	}

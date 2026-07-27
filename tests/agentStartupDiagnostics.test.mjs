@@ -13,8 +13,7 @@ test("agent startup writes diagnostics across renderer IPC and pi launch boundar
 	assert.match(ipcSource, /rendererLog:\s*"renderer:log"/);
 	assert.match(preloadSource, /rendererLog:\s*\(\s*level: AppLogLevel,\s*scope: string,\s*message: string,\s*detail\?: unknown,/);
 	assert.match(indexSource, /ipcChannels\.rendererLog/);
-	assert.match(indexSource, /Agent create IPC received/);
-	assert.match(indexSource, /Agent create IPC completed/);
+	assert.doesNotMatch(indexSource, /Agent create IPC received|ipcChannels\.agentsCreate/);
 	assert.match(mainSource, /Agent create requested/);
 	assert.match(mainSource, /Agent ensure trusted directory start/);
 	assert.match(mainSource, /Agent ensure trusted directory completed/);
@@ -23,6 +22,7 @@ test("agent startup writes diagnostics across renderer IPC and pi launch boundar
 	assert.match(mainSource, /Agent get_state request completed/);
 	assert.match(mainSource, /Agent create failed/);
 	assert.match(indexSource, /Session prompt IPC received/);
+	assert.match(indexSource, /sessionRuntimeCoordinator\.send\(input\)/);
 	assert.match(indexSource, /Session prompt IPC completed/);
 	assert.match(indexSource, /Session prompt IPC failed/);
 	assert.doesNotMatch(appSource, /api\.agents\.create\(/);
@@ -34,4 +34,6 @@ test("renderer startup reports bootstrap mount and global errors", () => {
 	assert.match(rendererMainSource, /Renderer startup uncaught error/);
 	assert.match(rendererMainSource, /Renderer startup unhandled rejection/);
 	assert.match(rendererMainSource, /Renderer root element missing/);
+	assert.match(rendererMainSource, /function dismissBootOverlay\(\)/);
+	assert.match(rendererMainSource, /window\.setTimeout\(dismissBootOverlay, 1500\)/);
 });

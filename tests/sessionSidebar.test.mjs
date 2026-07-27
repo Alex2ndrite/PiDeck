@@ -121,8 +121,9 @@ test("worktree rows expose their child project context menu and loading projects
   const sessionTree = readFileSync("src/renderer/src/components/sidebar/SessionTree.tsx", "utf8");
   const controller = readFileSync("src/renderer/src/hooks/useSidebarController.ts", "utf8");
   assert.match(worktree, /kind: "project",\s*projectId: childProject\.id/);
-  assert.match(worktree, /worktree-workspace-header\$\{props\.currentProjectId === props\.project\.id \? " active" : ""\}/);
-  assert.match(worktree, /childProject && props\.currentProjectId === childProject\.id \? " active" : ""/);
+  assert.match(worktree, /className="conversation worktree-workspace-header"/);
+  assert.match(worktree, /className="conversation worktree-row"/);
+  assert.doesNotMatch(worktree, /currentProjectId|toggleProjectExpanded/);
   assert.match(controller, /useAtomValue\(sessionCatalogLoadStateAtom\)/);
   assert.match(sessionTree, /catalogLoadStateByProject\[props\.project\.id\]\?\.status === "loading"/);
   assert.match(sessionTree, /catalogLoading \|\| draftSessions\.length/);
@@ -160,4 +161,12 @@ test("AppSidebar owns the controller while App keeps business actions as ports",
   assert.match(app, /useAtomValue\(sidebarExpandedProjectIdsAtom\)/);
   assert.match(controller, /useAtom\(sidebarExpandedProjectIdsAtom\)/);
   assert.match(projectTree, /if \(props\.controller\.search\.trim\(\)\) return;/);
+});
+
+test("ProjectTree shows the project directory name like the dev reference", () => {
+  const projectTree = readFileSync("src/renderer/src/components/sidebar/ProjectTree.tsx", "utf8");
+  assert.match(projectTree, /function displayProjectDirectoryName\(project: Project\)/);
+  assert.match(projectTree, /project\.path\.replace\(/);
+  assert.match(projectTree, /const projectDirectoryName = chat/);
+  assert.match(projectTree, /<strong title=\{project\.path\}>\{projectDirectoryName\}<\/strong>/);
 });

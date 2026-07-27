@@ -5,8 +5,13 @@ import { homedir } from "node:os";
 import type { AppSettings, PiCliUpdateResult, PiExtensionListResult, PiExtensionSummary, PiUpdateCheckResult } from "../../shared/types";
 import type { PiLocator } from "../pi/PiLocator";
 import { toWindowsHostPath, type WslEnvironment } from "../wsl/WslPaths";
+import type { MainProcessTranslationKey } from "../../shared/i18n/mainProcessCopy";
 
 type SettingsProvider = () => AppSettings;
+type ExtensionCopy = (
+	key: MainProcessTranslationKey,
+	params?: Record<string, string | number>,
+) => string;
 
 /** PiDeck 内置扩展列表，用于在扫描不到时仍展示在扩展管理页中。 */
 const BUILT_IN_EXTENSIONS = [
@@ -45,6 +50,7 @@ export class ExtensionManager {
 	constructor(
 		private readonly locator: PiLocator,
 		private readonly getSettings: SettingsProvider,
+		private readonly translate: ExtensionCopy = () => "Extension operation failed.",
 	) {}
 
 	/** 将扩展文件边界切换到统一解析出的 WSL HOME；null 恢复 Windows home。 */
@@ -231,7 +237,7 @@ export class ExtensionManager {
 		const name = basename(trimmed);
 		// source 必须等于 basename（如 orca-agent-status.ts），拒绝 ../ 或绝对路径穿越。
 		if (!name || name !== trimmed || name === "." || name === "..") {
-			throw new Error("非法扩展路径");
+			throw new Error(this.translate("mainExtension.invalidPath"));
 		}
 		const targetPath = join(extensionsDir, name);
 		await rm(targetPath, { recursive: true, force: true });
@@ -254,10 +260,10 @@ export class ExtensionManager {
 
 	async uninstall(source: string, scope: PiExtensionSummary["scope"] = "user"): Promise<void> {
 		const normalized = source.trim();
-		if (!normalized) throw new Error("扩展来源不能为空");
+		if (!normalized) throw new Error(this.translate("mainExtension.sourceRequired"));
 		// 阻止卸载 PiDeck 内置扩展（如 pi-deck-file-capture）
 		if (normalized.startsWith("pi-deck-")) {
-			throw new Error("PiDeck 内置扩展不可卸载");
+			throw new Error(this.translate("mainExtension.builtInCannotUninstall"));
 		}
 		// 本地 .ts/目录扩展不在 pi package 列表里，pi remove 会报 No matching package；
 		// 例如 orca-agent-status.ts 只能直接删文件。
@@ -277,7 +283,7 @@ export class ExtensionManager {
 
 	async install(source: string): Promise<string> {
 		const normalized = source.trim();
-		if (!normalized) throw new Error("扩展名称不能为空");
+		if (!normalized) throw new Error(this.translate("mainExtension.nameRequired"));
 		const result = await this.runPi(["install", normalized], 60_000);
 		this.invalidateListCache();
 		return result;
@@ -286,7 +292,7 @@ export class ExtensionManager {
 	async checkPiUpdate(): Promise<PiUpdateCheckResult> {
 		try {
 			const status = await this.locator.check(this.getSettings().customPiPath);
-			if (!status.installed) return { hasUpdate: false, error: status.error ?? "pi 未安装" };
+			if (!status.installed) return { hasUpdate: false, error: this.translate("mainExtension.piNotInstalled") };
 			const latestVersion = await this.npmViewVersion("@earendil-works/pi-coding-agent");
 			return {
 				currentVersion: status.version,
@@ -294,7 +300,8 @@ export class ExtensionManager {
 				hasUpdate: this.compareVersions(latestVersion, status.version ?? "0.0.0") > 0,
 			};
 		} catch (error) {
-			return { hasUpdate: false, error: error instanceof Error ? error.message : String(error) };
+			console.error("[ExtensionManager] Pi update check failed", error);
+			return { hasUpdate: false, error: this.translate("mainExtension.updateCheckFailed") };
 		}
 	}
 
@@ -303,7 +310,10 @@ export class ExtensionManager {
 		if (!check.hasUpdate) {
 			return {
 				command: "pi update pi",
-				output: check.error ?? `当前版本 ${check.currentVersion ?? "unknown"}，最新版本 ${check.latestVersion ?? "unknown"}，无需更新。`,
+				output: check.error ?? this.translate("mainExtension.noUpdate", {
+					current: check.currentVersion ?? "unknown",
+					latest: check.latestVersion ?? "unknown",
+				}),
 				updated: false,
 			};
 		}
@@ -333,7 +343,8 @@ export class ExtensionManager {
 				hasUpdate: Boolean(currentVersion && latestVersion && this.compareVersions(latestVersion, currentVersion) > 0),
 			};
 		} catch (error) {
-			return { ...extension, updateError: error instanceof Error ? error.message : String(error) };
+			console.error("[ExtensionManager] Extension version check failed", error);
+			return { ...extension, updateError: this.translate("mainExtension.versionCheckFailed") };
 		}
 	}
 
@@ -478,8 +489,12 @@ export class ExtensionManager {
 				},
 				(error, stdout, stderr) => {
 					if (error) {
-						const detail = (stderr || error.message).trim();
-						reject(new Error(detail || "pi 扩展命令执行失败"));
+						console.error("[ExtensionManager] pi command failed", {
+							args: finalArgs,
+							error: error.message,
+							stderr: stderr.trim(),
+						});
+						reject(new Error(this.translate("mainExtension.commandFailed")));
 						return;
 					}
 					resolve(stdout);

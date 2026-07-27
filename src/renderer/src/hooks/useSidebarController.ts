@@ -64,13 +64,11 @@ export type SidebarController = {
   toggleSubagentGroup: (groupId: string) => void;
   expandedWorktreePaths: ReadonlySet<string>;
   expandWorktreeSessions: (path: string) => void;
-  isWorkspaceCollapsed: (workspaceKey: string) => boolean;
   /**
    * 点选工作区（主工作区或 worktree）。
    * 切换到其他工作区时自动展开，避免「选中了却看不到会话」；
    * 再次点击当前工作区时切换折叠。
    */
-  selectWorkspace: (workspaceKey: string, wasActive: boolean) => void;
   drag: { sourceProjectId?: string; overProjectId?: string };
   startProjectDrag: (projectId: string) => void;
   setProjectDropTarget: (projectId?: string) => void;
@@ -186,8 +184,6 @@ export function useSidebarController(options: {
   const [sourceFilterOpenProjectId, setSourceFilterOpenProjectId] = useState<string>();
   const [expandedSubagentGroups, setExpandedSubagentGroups] = useState<Set<string>>(() => new Set());
   const [expandedWorktreePaths, setExpandedWorktreePaths] = useState<Set<string>>(() => new Set());
-  /** 折叠的工作区 key 集合（main:${projectId} / wt:${path}），默认展开 */
-  const [collapsedWorkspaceKeys, setCollapsedWorkspaceKeys] = useState<Set<string>>(() => new Set());
   const [drag, setDrag] = useState<{ sourceProjectId?: string; overProjectId?: string }>({});
   const [menu, setMenu] = useState<SidebarMenuTarget | null>(null);
   const [agentRpcLogging, setAgentRpcLoggingById] = useState<Map<string, boolean>>(() => new Map());
@@ -332,20 +328,6 @@ export function useSidebarController(options: {
   const expandWorktreeSessions = useCallback((path: string) => {
     setExpandedWorktreePaths((current) => new Set(current).add(path));
   }, []);
-  const selectWorkspace = useCallback((workspaceKey: string, wasActive: boolean) => {
-    setCollapsedWorkspaceKeys((current) => {
-      const next = new Set(current);
-      if (!wasActive) {
-        // 切到该工作区时默认展开，避免"选中了却看不到会话"
-        if (!next.has(workspaceKey)) return current;
-        next.delete(workspaceKey);
-        return next;
-      }
-      if (next.has(workspaceKey)) next.delete(workspaceKey);
-      else next.add(workspaceKey);
-      return next;
-    });
-  }, []);
   const openMenu = useCallback(async (target: SidebarMenuTarget) => {
     const request = requestGateRef.current.beginMenu();
     if (target.kind === "agent" && options.getRpcLogging) {
@@ -386,8 +368,6 @@ export function useSidebarController(options: {
     toggleSubagentGroup,
     expandedWorktreePaths,
     expandWorktreeSessions,
-    isWorkspaceCollapsed: (workspaceKey) => collapsedWorkspaceKeys.has(workspaceKey),
-    selectWorkspace,
     drag,
     startProjectDrag: (projectId) => setDrag({ sourceProjectId: projectId }),
     setProjectDropTarget: (projectId) => setDrag((current) => ({ ...current, overProjectId: projectId })),

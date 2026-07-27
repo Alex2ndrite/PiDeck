@@ -85,13 +85,13 @@ export function ExtensionWidgetPanel(props: {
 
 export function QueuedPromptPanel(props: {
   trackRef: RefObject<HTMLDivElement | null>;
-  agentId?: string;
+  sessionId?: string;
   prompts: QueuedPromptSnapshot[];
   visiblePrompts: QueuedPromptSnapshot[];
-  onRetract: (agentId: string, prompt: QueuedPromptSnapshot) => void;
-  onDiscard: (agentId: string, promptId: string) => void;
+  onRetract: (sessionId: string, prompt: QueuedPromptSnapshot) => void;
+  onDiscard: (sessionId: string, promptId: string) => void;
 }) {
-  if (!props.agentId || !props.prompts.length) return null;
+  if (!props.sessionId || !props.prompts.length) return null;
   return (
     <div
       ref={props.trackRef}
@@ -148,7 +148,7 @@ export function QueuedPromptPanel(props: {
                     disabled={!canRetractQueuedPromptToInput(status)}
                     title={t("app.retractToInput")}
                     aria-label={t("app.retractToInput")}
-                    onClick={() => props.onRetract(props.agentId!, prompt)}
+                    onClick={() => props.onRetract(props.sessionId!, prompt)}
                   >
                     <Pencil size={13} strokeWidth={2} />
                   </button>
@@ -158,7 +158,7 @@ export function QueuedPromptPanel(props: {
                     disabled={!canDiscardQueuedPrompt(status)}
                     title={t("app.retractDiscard")}
                     aria-label={t("app.retractDiscard")}
-                    onClick={() => props.onDiscard(props.agentId!, prompt.id)}
+                    onClick={() => props.onDiscard(props.sessionId!, prompt.id)}
                   >
                     <X size={13} strokeWidth={2} />
                   </button>

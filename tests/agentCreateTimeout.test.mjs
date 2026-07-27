@@ -7,7 +7,7 @@ const app = readFileSync("src/renderer/src/App.tsx", "utf8");
 
 test("new conversation creates a metadata-only Session draft", () => {
   const createDraftSource = source.match(
-    /async function createSessionDraft\([\s\S]*?\n  \}\n\n  \/\/ ── Session references ──/,
+    /async function createSessionDraft\([\s\S]*?\n  \}\n\n  return \{/,
   )?.[0] ?? "";
   assert.match(createDraftSource, /api\.sessions\.createDraft\(\{/);
   assert.match(

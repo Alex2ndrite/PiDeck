@@ -142,6 +142,28 @@ export const clearSessionComposerSnapshotAtom = atom(
   },
 );
 
+/**
+ * Promote a renderer-only pre-send Chat surface after its first send creates a
+ * Catalog Session. Moving every composer map together prevents a remount from
+ * dropping text, attachments, mode, or delivery state during that transition.
+ */
+export const promoteSessionComposerStateAtom = atom(
+  null,
+  (get, set, input: { fromSessionId: string; toSessionId: string }) => {
+    if (input.fromSessionId === input.toSessionId) return;
+    const move = <T>(source: Record<string, T>) => {
+      if (!(input.fromSessionId in source)) return source;
+      const next = { ...source, [input.toSessionId]: source[input.fromSessionId] };
+      delete next[input.fromSessionId];
+      return next;
+    };
+    set(sessionDraftByIdAtom, move(get(sessionDraftByIdAtom)));
+    set(sessionAttachmentsByIdAtom, move(get(sessionAttachmentsByIdAtom)));
+    set(sessionComposerModeByIdAtom, move(get(sessionComposerModeByIdAtom)));
+    set(sessionSendStateByIdAtom, move(get(sessionSendStateByIdAtom)));
+  },
+);
+
 export const removeSessionComposerStateAtom = atom(null, (get, set, sessionId: string) => {
   const drafts = { ...get(sessionDraftByIdAtom) };
   delete drafts[sessionId];

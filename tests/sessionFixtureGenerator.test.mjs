@@ -8,7 +8,7 @@ import test from "node:test";
 import { promisify } from "node:util";
 import {
 	assertSafeOutputDir,
-	buildWslArgs,
+	buildWslInvocation,
 	buildWslProbeScript,
 	buildWslResetScript,
 	createSizedSessionJsonl,
@@ -21,6 +21,18 @@ import {
 
 const SHA = "724fe6b22020bb90e30393096f5ec2d4b42b64df";
 const execFile = promisify(execFileCallback);
+
+async function findPosixShell() {
+	if (process.platform === "win32") return null;
+	const candidates = [...new Set([process.env.SHELL, "/bin/sh", "sh"].filter(Boolean))];
+	for (const command of candidates) {
+		try {
+			await execFile(command, ["-c", "exit 0"], { encoding: "utf8" });
+			return command;
+		} catch {}
+	}
+	return null;
+}
 
 function digest(value) {
 	return createHash("sha256").update(value).digest("hex");
@@ -195,11 +207,12 @@ test("WSL generation uses parameter arrays, safe local shell argv, exact POSIX c
 		assert.equal(calls.length, 4);
 		for (const call of calls) {
 			assert.equal(call.command, "wsl.exe");
-			assert.deepEqual(call.args.slice(0, 7), ["-d", "Ubuntu Test; echo unsafe", "-u", "o'neil", "--", "sh", "-lc"]);
+			assert.deepEqual(call.args, ["-d", "Ubuntu Test; echo unsafe", "-u", "o'neil", "--", "sh", "-s"]);
 		}
-		assert.match(calls[1].args[7], /rm -rf --/);
-		assert.match(calls[1].args[7], /realpath/);
-		assert.match(calls[1].args[7], /'\"'\"'/);
+		const resetScript = calls[1].options.input;
+		assert.match(resetScript, /rm -rf --/);
+		assert.match(resetScript, /realpath/);
+		assert.match(resetScript, /'\"'\"'/);
 		assert.equal(manifest.wslIdentity.expectedIndependentSessionCount, 2);
 		assert.equal(manifest.scenarios.A9.userDataTemplate, "wsl");
 		assert.equal(manifest.userData.wsl.projects, join(root, "evidence", "user-data", "wsl", "projects.json"));
@@ -232,19 +245,48 @@ test("a WSL reset failure leaves an owned marker that supports a safe native reg
 
 test("shell quoting and WSL invocation keep shell text out of argument positions", async () => {
 	assert.equal(shellQuote("a'b"), `'a'"'"'b'`);
-	assert.deepEqual(buildWslArgs({ distro: "Ubuntu;false", user: "dev user", script: "printf ok" }), [
-		"-d", "Ubuntu;false", "-u", "dev user", "--", "sh", "-lc", "printf ok",
+	const invocation = buildWslInvocation({
+		distro: "Ubuntu;false",
+		user: "dev user;false",
+		script: "printf ok",
+	});
+	assert.equal(invocation.command, "wsl.exe");
+	assert.deepEqual(invocation.args, [
+		"-d", "Ubuntu;false", "-u", "dev user;false", "--", "sh", "-s",
 	]);
+	assert.equal(invocation.args[1], "Ubuntu;false");
+	assert.equal(invocation.args[3], "dev user;false");
+	assert.equal(invocation.options.input, "printf ok");
+	const boundaryPayload = "literal; touch /tmp/pideck-injected; echo escaped";
+	const boundaryScript = `printf %s ${shellQuote(boundaryPayload)}`;
+	const boundaryInvocation = buildWslInvocation({
+		distro: "Ubuntu; touch /tmp/distro-injected",
+		user: "dev; touch /tmp/user-injected",
+		script: boundaryScript,
+	});
+	assert.deepEqual(boundaryInvocation.args, [
+		"-d",
+		"Ubuntu; touch /tmp/distro-injected",
+		"-u",
+		"dev; touch /tmp/user-injected",
+		"--",
+		"sh",
+		"-s",
+	]);
+	assert.equal(boundaryInvocation.options.input, boundaryScript);
+	assert.doesNotMatch(JSON.stringify(boundaryInvocation.args), /literal|pideck-injected|escaped/);
+
+	const shellCommand = await findPosixShell();
+	if (!shellCommand) return;
+
 	await withTempDir(async (root) => {
 		const output = join(root, "quoted-output.txt");
 		const injected = join(root, "injected-by-shell");
 		const payload = `literal; touch ${injected}; echo escaped`;
-		const invocation = buildWslArgs({
-			distro: "not-used-locally",
-			user: "not-used-locally",
-			script: `set -eu; printf %s ${shellQuote(payload)} > ${shellQuote(output)}`,
-		});
-		await execFile(invocation[5], invocation.slice(6), { encoding: "utf8" });
+		const script = `set -eu; printf %s ${shellQuote(payload)} > ${shellQuote(output)}`;
+		const execution = execFile(shellCommand, ["-s"], { encoding: "utf8" });
+		execution.child.stdin.end(script);
+		await execution;
 		assert.equal(await readFile(output, "utf8"), payload);
 		await assert.rejects(readFile(injected, "utf8"));
 	});

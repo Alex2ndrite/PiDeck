@@ -58,7 +58,7 @@ export function useOverlayActions({ activeProject, appInfo, showToast }: UseOver
       cwd: trustRequest.cwd,
       projectName: trustRequest.projectName,
       onChoose: (choice: "trust-remember" | "trust-session" | "deny") => {
-        api.agents.respondTrustRequest(trustRequest.requestId, choice);
+        api.projects.respondTrustRequest(trustRequest.requestId, choice);
         setTrustRequest(null);
       },
     } : undefined,

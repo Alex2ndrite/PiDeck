@@ -37,7 +37,7 @@ const SAFE_DESKTOP_API_MODULE = wrapDesktopApi({
     openExternal: () => undefined,
     feedbackEnvironment: { appVersion: "1.0.0", platform: "win32", arch: "x64" },
   },
-  agents: {
+  projects: {
     respondTrustRequest: () => undefined,
   },
 });
@@ -276,7 +276,7 @@ test("overlayProps.trust structure when trustRequest is set", () => {
   const i18n = { t: (key) => key };
   let trustChoice;
   const desktopApi = wrapDesktopApi({
-    agents: {
+    projects: {
       respondTrustRequest: (requestId, choice) => { trustChoice = { requestId, choice }; },
     },
   });
@@ -316,7 +316,7 @@ test("overlayProps.trust onChoose supports all three trust choices", () => {
   const i18n = { t: (key) => key };
   const choices = [];
   const desktopApi = wrapDesktopApi({
-    agents: {
+    projects: {
       respondTrustRequest: (requestId, choice) => choices.push(choice),
     },
   });

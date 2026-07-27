@@ -17,7 +17,8 @@ test("FeishuBridge.start propagates startup failure to IPC callers", () => {
 	const startIdx = source.indexOf("async start(): Promise<void>");
 	const afterStart = source.indexOf("\n\tasync ", startIdx + 5);
 	const startBlock = source.slice(startIdx, afterStart > 0 ? afterStart : undefined);
-	assert.match(startBlock, /throw error;/);
+	assert.match(startBlock, /throw new Error\(message, \{ cause: error \}\);/);
+	assert.match(startBlock, /feishuT\(this\.locale, "connection\.failed"\)/);
 });
 
 test("updating a saved bot only hot-updates the active bridge for that bot", () => {
@@ -26,11 +27,18 @@ test("updating a saved bot only hot-updates the active bridge for that bot", () 
 	assert.match(handler, /feishuBridge\.getStatus\(\)\.botId === botId/);
 });
 
-test("assigning a session bot refuses to bind through a different active bot", () => {
+test("assigning a Session bot is stable-ID addressed and reports rejected bindings", () => {
 	const source = mainSource();
 	const handler = source.match(/ipcMain\.handle\(ipcChannels\.feishuSessionBotSet,[\s\S]*?\n\t\}\);/)?.[0] ?? "";
+	assert.match(handler, /sessionId: string, botId: string \| null/);
+	assert.match(handler, /sessionRuntimeCoordinator\.getTarget\(sessionId\)/);
 	assert.match(handler, /status\.botId !== botId/);
-	assert.doesNotMatch(handler, /setSessionBotId\(agentId, botId \?\? undefined\);[\s\S]*?status\.botId !== botId/);
+	assert.match(handler, /return \{ success: false, message: feishuT\(currentFeishuLocale\(\), "session\.botMismatch"\) \}/);
+	assert.match(handler, /ensureSessionMirrorForSession\([\s\S]*?sessionId,[\s\S]*?target\.agentId/);
+	assert.ok(
+		handler.indexOf("setSessionBotId(sessionId, botId)") > handler.indexOf("if (!chatId)"),
+		"persistent assignment must happen only after the bridge confirms a chat binding",
+	);
 });
 
 test("renderer bot list never receives stored app secrets", () => {
@@ -75,8 +83,8 @@ test("FeishuBridge registers and handles Feishu model picker card actions", () =
 	assert.match(source, /this\.handleCardAction/);
 	assert.match(method, /parseModelActionValue/);
 	assert.match(method, /const agentId = await this\.ensureRuntimeBinding\(binding\)/);
-	assert.match(method, /this\.agentManager\.getAvailableModels\(agentId\)/);
-	assert.match(method, /this\.agentManager\.setModel\(agentId, action\.provider, action\.modelId\)/);
+	assert.match(method, /this\.runtimeBindings\.listRuntimeModels\(binding\.sessionId\)/);
+	assert.match(method, /this\.runtimeBindings\.setRuntimeModel\(binding\.sessionId, action\.provider, action\.modelId\)/);
 });
 
 test("FeishuBridge does not keep unreachable workspace/resume command code", () => {

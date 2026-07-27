@@ -7,6 +7,7 @@ import {
 	nativeImage,
 	nativeTheme,
 	net,
+	session,
 	shell,
 	Tray,
 } from "electron";
@@ -25,12 +26,6 @@ import {
 import iconPath from "../../build/icon.png?asset";
 
 applyLinuxDisplayBackendWorkaround();
-
-// Windows 上部分安全软件 / 旧 GPU 驱动会导致 Chromium 沙箱初始化触发原生断点异常（0x80000003），
-// 全局禁用沙箱。VS Code、Discord 等知名 Electron 桌面工具在 Windows 上同样默认禁用沙箱。
-if (process.platform === "win32") {
-	app.commandLine.appendSwitch("no-sandbox");
-}
 
 // 开发模式下 stdout 管道可能断开导致 EPIPE 崩溃，全局静默处理
 process.stdout.on("error", (err: NodeJS.ErrnoException) => {
@@ -52,6 +47,12 @@ process.on("unhandledRejection", (reason) => {
 });
 import { ipcChannels } from "../shared/ipc";
 import {
+	mainProcessT,
+	normalizeMainProcessLocale,
+	type MainProcessLocale,
+	type MainProcessTranslationKey,
+} from "../shared/i18n/mainProcessCopy";
+import {
 	buildSessionOriginKey,
 	canonicalizeSessionPath,
 } from "../shared/sessionIdentity";
@@ -68,7 +69,6 @@ import type {
 	ExternalEditorId,
 	ExternalEditorSetting,
 	AppUpdateInfo,
-	CreateAgentInput,
 	CreateSessionDraftInput,
 	UpdateSessionRecordInput,
 	FeishuBotConfig,
@@ -78,7 +78,10 @@ import type {
 	SendPromptInput,
 	SendPromptResult,
 	SendSessionPromptInput,
+	SessionRecord,
+	SessionCommandError,
 	SessionRuntimeEvent,
+	SessionRuntimeTarget,
 	SessionUiResponseInput,
 	CreatePiPromptTemplateInput,
 	CreatePiSkillInput,
@@ -105,6 +108,7 @@ import {
 	SessionRuntimeCoordinator,
 	type SessionRuntimeBinding,
 } from "./sessions/SessionRuntimeCoordinator";
+import { SessionCommandIpcError } from "./sessions/SessionCommandIpcError";
 import { CodexSessionImporter } from "./sessions/CodexSessionImporter";
 import { ClaudeSessionImporter } from "./sessions/ClaudeSessionImporter";
 import { OpenCodeSessionImporter } from "./sessions/OpenCodeSessionImporter";
@@ -135,6 +139,11 @@ import {
 	FeishuBridge,
 	type SessionRuntimeBindingGateway,
 } from "./feishu/FeishuBridge";
+import {
+	feishuT,
+	normalizeFeishuLocale,
+	type FeishuLocale,
+} from "./feishu/FeishuI18n";
 import { wantsFeishuDoc } from "./feishu/docActions";
 import { resolveFeishuFileSendIntent } from "./feishu/fileIntent";
 import {
@@ -146,6 +155,7 @@ import {
 	getDecryptedBotAppSecret,
 	getSessionBotId,
 	setSessionBotId,
+	setFeishuConfigDefaultBotName,
 } from "./feishu/FeishuConfig";
 import type { FeishuChatBinding } from "../shared/types";
 
@@ -179,7 +189,6 @@ let appLogger: AppLogger;
 let rpcLogger: RpcLogger;
 let feishuBridge: FeishuBridge | null = null;
 
-const LEGACY_EXTERNAL_RUNTIME = "legacy-external-runtime";
 
 function sendSessionRuntimeEnvelope(event: SessionRuntimeEvent): void {
 	const window = mainWindow;
@@ -210,13 +219,12 @@ function emitSessionRuntimeEvent(
 			const entry = sessionCatalog.get(runtimeBinding.sessionId);
 			if (
 				canAttachRuntimeMetadata(entry, tab) &&
-				(entry?.filePath !== tab.sessionPath || entry.piSessionId !== tab.sessionId || entry.title !== tab.title)
+				(entry?.filePath !== tab.sessionPath || entry.piSessionId !== tab.sessionId)
 			) {
 				void sessionCatalog.attachRuntime({
 					sessionId: runtimeBinding.sessionId,
 					filePath: tab.sessionPath,
 					piSessionId: tab.sessionId,
-					title: tab.title,
 				}).catch(() => undefined);
 			}
 		}
@@ -246,6 +254,43 @@ function emitReplacementState(binding: SessionRuntimeBinding, includeMessages: b
 			messages: agentManager.getMessages(binding.agentId),
 		});
 	}
+}
+
+async function readCatalogSessionReferenceMessages(sessionId: string) {
+	const entry = sessionCatalog.get(sessionId);
+	if (!entry?.filePath) return [];
+	return sessionScanner.readMessages(entry.filePath);
+}
+
+async function copyCatalogSession(sessionId: string) {
+	const entry = sessionCatalog.get(sessionId);
+	if (!entry?.filePath) throw new Error(mainCopy("session.fileNotFound"));
+	const result = await agentManager.cloneSessionFile(entry.projectId, entry.filePath) as {
+		cancelled?: boolean;
+		sessionPath?: string;
+	};
+	if (result.cancelled || !result.sessionPath) return { cancelled: true };
+	const copied = await sessionCatalog.ensureRuntimeTarget({
+		projectId: entry.projectId,
+		title: entry.title,
+		source: entry.source,
+		environment: entry.environment,
+		filePath: result.sessionPath,
+		wslDistro: entry.wslDistro,
+		wslUser: entry.wslUser,
+		importedSourceId: entry.importedSourceId,
+	});
+	return { cancelled: false, targetSessionId: copied.id };
+}
+
+async function exportCatalogSessionHtml(sessionId: string): Promise<{ path: string }> {
+	const entry = sessionCatalog.get(sessionId);
+	if (!entry?.filePath) throw new Error(mainCopy("session.fileNotFound"));
+	const result = await agentManager.exportSessionHtml(entry.projectId, entry.filePath);
+	if (!result || typeof result !== "object" || !("path" in result) || typeof result.path !== "string") {
+		throw new Error(mainCopy("session.exportFailed"));
+	}
+	return { path: result.path };
 }
 
 type AgentSessionReplacementResult = {
@@ -338,6 +383,46 @@ function cancelUnboundUiRequest(payload: unknown): void {
 }
 
 const feishuSessionRuntimeBindings: SessionRuntimeBindingGateway = {
+	async ensureSession(input) {
+		if (input.existingSessionId) {
+			const existing = sessionCatalog.get(input.existingSessionId);
+			if (existing) return { sessionId: existing.id };
+		}
+		const environment = settingsStore.get().wslEnabled ? "wsl" : "native";
+		if (input.sessionPath) {
+			const existing = sessionCatalog.findByFilePath(input.sessionPath, environment);
+			if (existing) return { sessionId: existing.id };
+			const restored = await sessionCatalog.ensureRuntimeTarget({
+				projectId: input.projectId,
+				title: input.title,
+				source: "pi",
+				environment,
+				filePath: input.sessionPath,
+				wslDistro: environment === "wsl" ? settingsStore.get().wslDistro : undefined,
+				wslUser: environment === "wsl" ? settingsStore.get().wslUser : undefined,
+			});
+			return { sessionId: restored.id };
+		}
+		const draft = await sessionCatalog.createDraft({
+			projectId: input.projectId,
+			title: input.title,
+			environment,
+			source: "pi",
+		});
+		return { sessionId: draft.id };
+	},
+	async activateRuntime(sessionId) {
+		const activated = await sessionRuntimeCoordinator.activateRuntime(sessionId);
+		if (!activated.ok) throw sessionCommandIpcError(activated.error);
+		const tab = agentManager.list().find((candidate) => candidate.id === activated.value.agentId);
+		if (!tab) throw sessionCommandIpcError({
+			code: "SESSION_COMMAND_FAILED",
+			debugDetails: `Activated runtime not found: ${activated.value.agentId}`,
+		});
+		tab.runtimeGeneration = activated.value.runtimeGeneration;
+		emitSessionRuntimeEvent(tab.id, ipcChannels.agentsState, tab);
+		return tab;
+	},
 	async bindRuntime(input) {
 		if (input.agent.status === "error" || input.agent.status === "closed") {
 			throw new Error(`Cannot bind terminal Feishu runtime: ${input.agent.id}`);
@@ -394,18 +479,50 @@ const feishuSessionRuntimeBindings: SessionRuntimeBindingGateway = {
 			sessionId,
 			filePath: input.agent.sessionPath,
 			piSessionId: input.agent.sessionId,
-			title: input.agent.title,
 		} : {
 			sessionId,
 			piSessionId: input.agent.sessionId,
-			title: input.agent.title,
 		});
 		const runtimeGeneration = sessionRuntimeCoordinator.bindExistingAgent(
 			sessionId,
 			input.agent.id,
 		);
+		input.agent.runtimeGeneration = runtimeGeneration;
 		emitSessionRuntimeEvent(input.agent.id, ipcChannels.agentsState, input.agent);
-		return { sessionId, runtimeGeneration };
+		return { sessionId };
+	},
+	async sendPrompt(input) {
+		const result = await sessionRuntimeCoordinator.send({
+			...input,
+			requestId: randomUUID(),
+		});
+		if (!result.accepted) throw new Error(result.error);
+	},
+	async abortRuntime(sessionId) {
+		const target = sessionRuntimeCoordinator.getTarget(sessionId);
+		if (!target) throw sessionCommandIpcError({ code: "SESSION_RUNTIME_UNAVAILABLE" });
+		const result = await sessionRuntimeCoordinator.abortRuntime(target);
+		if (!result.ok) throw sessionCommandIpcError(result.error);
+	},
+	async listRuntimeModels(sessionId) {
+		const target = sessionRuntimeCoordinator.getTarget(sessionId);
+		if (!target) throw sessionCommandIpcError({ code: "SESSION_RUNTIME_UNAVAILABLE" });
+		const result = await sessionRuntimeCoordinator.listRuntimeModels(target);
+		if (!result.ok) throw sessionCommandIpcError(result.error);
+		return result.value.value;
+	},
+	async getRuntimeState(sessionId) {
+		const target = sessionRuntimeCoordinator.getTarget(sessionId);
+		if (!target) return undefined;
+		const result = await sessionRuntimeCoordinator.getRuntimeState(target);
+		if (!result.ok) throw sessionCommandIpcError(result.error);
+		return result.value.value;
+	},
+	async setRuntimeModel(sessionId, provider, modelId) {
+		const target = sessionRuntimeCoordinator.getTarget(sessionId);
+		if (!target) throw sessionCommandIpcError({ code: "SESSION_RUNTIME_UNAVAILABLE" });
+		const result = await sessionRuntimeCoordinator.setRuntimeModel(target, provider, modelId);
+		if (!result.ok) throw sessionCommandIpcError(result.error);
 	},
 };
 
@@ -602,7 +719,8 @@ async function checkForAppUpdate(
 		},
 	});
 	if (!response.ok) {
-		throw new Error(`GitHub Release 检查失败：HTTP ${response.status}`);
+		void appLogger.warn("update", "GitHub release check failed", { status: response.status });
+		throw new Error(mainCopy("update.checkFailed"));
 	}
 	const release = (await response.json()) as GitHubRelease;
 	const latestVersion = normalizeVersion(release.tag_name || currentVersion);
@@ -638,7 +756,11 @@ function emitUpdateProgress(progress: AppUpdateDownloadProgress) {
 
 async function downloadUpdateAsset(asset: AppUpdateAsset): Promise<AppUpdateDownloadResult> {
 	if (!asset.url || !/^https:\/\//i.test(asset.url)) {
-		throw new Error("无效的更新下载地址");
+		void appLogger.warn("update", "Rejected invalid update download URL", {
+			assetName: asset.name,
+			url: asset.url,
+		});
+		throw new Error(mainCopy("update.invalidDownloadUrl"));
 	}
 
 	const safeName = basename(asset.name).replace(/[<>:"/\\|?*]+/g, "-");
@@ -661,9 +783,13 @@ async function downloadUpdateAsset(asset: AppUpdateAsset): Promise<AppUpdateDown
 		});
 		request.on("response", (response) => {
 			if (response.statusCode < 200 || response.statusCode >= 300) {
-				const error = new Error(`下载失败：HTTP ${response.statusCode}`);
-				emitUpdateProgress({ assetName: asset.name, receivedBytes, totalBytes, state: "failed", error: error.message });
-				reject(error);
+				const publicError = new Error(mainCopy("update.downloadFailed"));
+				void appLogger.warn("update", "Update download returned an error status", {
+					assetName: asset.name,
+					statusCode: response.statusCode,
+				});
+				emitUpdateProgress({ assetName: asset.name, receivedBytes, totalBytes, state: "failed", error: publicError.message });
+				reject(publicError);
 				return;
 			}
 
@@ -692,13 +818,23 @@ async function downloadUpdateAsset(asset: AppUpdateAsset): Promise<AppUpdateDown
 				});
 			});
 			output.on("error", (error) => {
-				emitUpdateProgress({ assetName: asset.name, receivedBytes, totalBytes, state: "failed", error: error.message });
-				reject(error);
+				void appLogger.warn("update", "Failed to write update package", {
+					assetName: asset.name,
+					error: error.message,
+				});
+				const publicError = new Error(mainCopy("update.downloadFailed"));
+				emitUpdateProgress({ assetName: asset.name, receivedBytes, totalBytes, state: "failed", error: publicError.message });
+				reject(publicError);
 			});
 		});
 		request.on("error", (error) => {
-			emitUpdateProgress({ assetName: asset.name, receivedBytes, totalBytes, state: "failed", error: error.message });
-			reject(error);
+			void appLogger.warn("update", "Update download request failed", {
+				assetName: asset.name,
+				error: error.message,
+			});
+			const publicError = new Error(mainCopy("update.downloadFailed"));
+			emitUpdateProgress({ assetName: asset.name, receivedBytes, totalBytes, state: "failed", error: publicError.message });
+			reject(publicError);
 		});
 		request.end();
 	});
@@ -708,7 +844,37 @@ async function installDownloadedUpdate(filePath: string) {
 	// Windows/Linux 不同包类型的真正静默自更新风险较高；这里交给系统打开安装包或文件位置。
 	// 便携版用户通常下载 zip/AppImage/tar.gz 后需要替换当前目录,避免在运行中覆盖自身可执行文件。
 	await appLogger.info("update", "Open downloaded update package", { filePath });
-	await shell.openPath(filePath);
+	const openError = await shell.openPath(filePath);
+	if (openError) {
+		await appLogger.warn("update", "Failed to open downloaded update package", {
+			filePath,
+			error: openError,
+		});
+		throw new Error(mainCopy("update.openFailed"));
+	}
+}
+
+function refreshTrayContextMenu(): void {
+	if (!tray) return;
+	tray.setContextMenu(Menu.buildFromTemplate([
+		{
+			label: mainCopy("tray.showWindow"),
+			click: () => {
+				if (mainWindow && !mainWindow.isDestroyed()) {
+					mainWindow.show();
+					mainWindow.focus();
+				}
+			},
+		},
+		{ type: "separator" },
+		{
+			label: mainCopy("tray.quit"),
+			click: () => {
+				isQuitting = true;
+				app.quit();
+			},
+		},
+	]));
 }
 
 function setupTray() {
@@ -725,26 +891,7 @@ function setupTray() {
 		}
 	});
 
-	const contextMenu = Menu.buildFromTemplate([
-		{
-			label: "显示窗口",
-			click: () => {
-				if (mainWindow && !mainWindow.isDestroyed()) {
-					mainWindow.show();
-					mainWindow.focus();
-				}
-			},
-		},
-		{ type: "separator" },
-		{
-			label: "退出 PiDeck",
-			click: () => {
-				isQuitting = true;
-				app.quit();
-			},
-		},
-	]);
-	tray.setContextMenu(contextMenu);
+	refreshTrayContextMenu();
 }
 
 async function openExternalUrl(url: string, forceSystem = false) {
@@ -830,6 +977,96 @@ async function prepareMainPreloadPath() {
 	return preparePreloadPath(sourcePath, "main-preload.js");
 }
 
+const BROWSER_PANEL_PARTITION = "persist:pideck-browser-panel";
+
+function isAllowedBrowserPanelUrl(targetUrl: string): boolean {
+	if (targetUrl === "about:blank") return true;
+	try {
+		const protocol = new URL(targetUrl).protocol;
+		return protocol === "http:" || protocol === "https:";
+	} catch {
+		return false;
+	}
+}
+
+function configureBrowserPanelWebviewHost(window: BrowserWindow): void {
+	const browserPanelSession = session.fromPartition(BROWSER_PANEL_PARTITION);
+	browserPanelSession.setPermissionCheckHandler(() => false);
+	browserPanelSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
+	browserPanelSession.setDevicePermissionHandler(() => false);
+	browserPanelSession.webRequest.onBeforeRequest((details, callback) => {
+		const isFrameNavigation = details.resourceType === "mainFrame" || details.resourceType === "subFrame";
+		if (isFrameNavigation && !isAllowedBrowserPanelUrl(details.url)) {
+			void appLogger.warn("browser", "Blocked unsafe webview frame request", {
+				resourceType: details.resourceType,
+				url: details.url,
+			});
+			callback({ cancel: true });
+			return;
+		}
+		callback({});
+	});
+
+	window.webContents.on("will-attach-webview", (event, webPreferences, params) => {
+		const sourceUrl = params.src || "about:blank";
+		if ((params.partition && params.partition !== BROWSER_PANEL_PARTITION) || !isAllowedBrowserPanelUrl(sourceUrl)) {
+			event.preventDefault();
+			void appLogger.warn("browser", "Blocked unsafe webview attachment", {
+				sourceUrl,
+				partition: params.partition,
+			});
+			return;
+		}
+
+		params.src = sourceUrl;
+		params.partition = BROWSER_PANEL_PARTITION;
+		delete params.preload;
+		delete params.preloadURL;
+		delete params.allowfileaccess;
+		delete params.allowpopups;
+
+		webPreferences.partition = BROWSER_PANEL_PARTITION;
+		webPreferences.sandbox = true;
+		webPreferences.nodeIntegration = false;
+		webPreferences.nodeIntegrationInWorker = false;
+		webPreferences.nodeIntegrationInSubFrames = false;
+		webPreferences.contextIsolation = true;
+		webPreferences.webSecurity = true;
+		webPreferences.allowRunningInsecureContent = false;
+		webPreferences.webviewTag = false;
+		delete webPreferences.preload;
+		delete (webPreferences as Record<string, unknown>).preloadURL;
+	});
+
+	window.webContents.on("did-attach-webview", (_event, guest) => {
+		if (guest.session !== browserPanelSession) {
+			void appLogger.warn("browser", "Closed webview with unexpected session");
+			guest.close();
+			return;
+		}
+
+		const blockUnsafeNavigation = (event: { url: string; preventDefault(): void }, phase: string) => {
+			if (isAllowedBrowserPanelUrl(event.url)) return;
+			event.preventDefault();
+			void appLogger.warn("browser", "Blocked unsafe webview navigation", {
+				phase,
+				url: event.url,
+			});
+		};
+
+		guest.on("will-frame-navigate", (event) => blockUnsafeNavigation(event, "navigate"));
+		guest.on("will-redirect", (event) => blockUnsafeNavigation(event, "redirect"));
+		guest.setWindowOpenHandler(({ url }) => {
+			if (url !== "about:blank" && isAllowedBrowserPanelUrl(url)) {
+				void openExternalUrl(url);
+			} else if (!isAllowedBrowserPanelUrl(url)) {
+				void appLogger.warn("browser", "Blocked unsafe webview window open", { url });
+			}
+			return { action: "deny" };
+		});
+	});
+}
+
 async function createWindow() {
 	applyNativeThemeSource(settingsStore.get());
 	const windowOptions = settingsStore.createWindowOptions();
@@ -886,6 +1123,7 @@ async function createWindow() {
 		},
 	});
 	const createdWindow = mainWindow;
+	configureBrowserPanelWebviewHost(createdWindow);
 	let hasShownMainWindow = false;
 	function showMainWindowOnce() {
 		if (createdWindow.isDestroyed() || hasShownMainWindow) return;
@@ -1065,6 +1303,33 @@ async function autoConnectFeishu() {
 	console.log("[飞书] 检测到已保存的 Bot 配置:", bot.name, "(跳过自动连接，需手动连接)");
 }
 
+function currentMainProcessLocale(): MainProcessLocale {
+	const language = settingsStore.get().language;
+	if (language === "pseudo") return "en-US";
+	return normalizeMainProcessLocale(language === "system" ? app.getLocale() : language);
+}
+
+function mainCopy(
+	key: MainProcessTranslationKey,
+	params?: Record<string, string | number>,
+): string {
+	return mainProcessT(currentMainProcessLocale(), key, params);
+}
+
+function sessionCommandIpcError(error: SessionCommandError): SessionCommandIpcError {
+	if (error.debugDetails) {
+		void appLogger?.warn("session-command", "Session command failed", {
+			code: error.code,
+			debugDetails: error.debugDetails,
+		});
+	}
+	return new SessionCommandIpcError(error, mainCopy);
+}
+
+function currentFeishuLocale(): FeishuLocale {
+	return normalizeFeishuLocale(currentMainProcessLocale());
+}
+
 function registerFeishuIpc() {
 	/** Bot 配置变更后主动推送给 renderer，保证多个页面/弹窗中的 Bot 列表实时同步。 */
 	function broadcastBotsChanged() {
@@ -1079,7 +1344,7 @@ function registerFeishuIpc() {
 		console.log("[Feishu] 收到临时连接请求", JSON.stringify({ appId: appId ? appId.slice(0, 8) + "..." : "", name: input.name, hasSecret: Boolean(appSecret) }));
 		try {
 			if (!appId || !appSecret) {
-				return { success: false, message: "请填写 App ID 和 App Secret" };
+				return { success: false, message: feishuT(currentFeishuLocale(), "bridge.configRequired") };
 			}
 			if (feishuBridge) {
 				feishuBridge.stop();
@@ -1087,7 +1352,7 @@ function registerFeishuIpc() {
 			// 临时构造 botConfig，不做持久化；明文 secret 只传给当前 bridge，不写入磁盘。
 			const botConfig: FeishuBotConfig = {
 				id: "temp-" + randomUUID(),
-				name: input.name?.trim() || "临时机器人",
+				name: input.name?.trim() || feishuT(currentFeishuLocale(), "bridge.tempBotName"),
 				enabled: true,
 				appId,
 				appSecret,
@@ -1100,13 +1365,14 @@ function registerFeishuIpc() {
 				() => projectStore.list(),
 				feishuSessionRuntimeBindings,
 				appSecret,
+				currentFeishuLocale(),
 			);
 			await feishuBridge.start();
 			const status = feishuBridge.getStatus();
 			console.log("[Feishu] 临时连接成功，状态:", JSON.stringify(status));
 			return {
 				success: true,
-				message: "连接成功",
+				message: feishuT(currentFeishuLocale(), "connection.success"),
 				botInfo: { id: botConfig.id, name: botConfig.name },
 			};
 		} catch (error) {
@@ -1126,7 +1392,7 @@ function registerFeishuIpc() {
 			}
 
 			const botConfig = addFeishuBot({
-				name: input.name || "飞书机器人",
+				name: input.name || feishuT(currentFeishuLocale(), "bridge.defaultBotName"),
 				appId: input.appId,
 				appSecret: input.appSecret,
 				defaultUserOpenId: input.defaultUserOpenId,
@@ -1138,12 +1404,14 @@ function registerFeishuIpc() {
 				() => mainWindow,
 				() => projectStore.list(),
 				feishuSessionRuntimeBindings,
+				undefined,
+				currentFeishuLocale(),
 			);
 			await feishuBridge.start();
 			console.log("[Feishu] 连接成功，状态:", JSON.stringify(feishuBridge.getStatus()));
 			void appLogger.info("feishu", "Feishu connected", { botId: botConfig.id, name: botConfig.name });
 			broadcastBotsChanged();
-			return { success: true, message: "连接成功" };
+			return { success: true, message: feishuT(currentFeishuLocale(), "connection.success") };
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
 			console.error("[Feishu] 连接失败:", message);
@@ -1186,7 +1454,7 @@ function registerFeishuIpc() {
 		// 同 feishuConnect，但可以添加多个 Bot
 		try {
 			const botConfig = addFeishuBot({
-				name: input.name || "飞书机器人",
+				name: input.name || feishuT(currentFeishuLocale(), "bridge.defaultBotName"),
 				appId: input.appId,
 				appSecret: input.appSecret,
 				defaultUserOpenId: input.defaultUserOpenId,
@@ -1195,7 +1463,10 @@ function registerFeishuIpc() {
 			broadcastBotsChanged();
 			return { success: true, bot: { ...botConfig, appSecret: "" } };
 		} catch (error) {
-			return { success: false, error: error instanceof Error ? error.message : String(error) };
+			void appLogger.warn("feishu", "Failed to add Feishu bot", {
+				error: error instanceof Error ? error.message : String(error),
+			});
+			return { success: false, error: feishuT(currentFeishuLocale(), "bridge.botAddFailed") };
 		}
 	});
 
@@ -1248,6 +1519,8 @@ function registerFeishuIpc() {
 			() => mainWindow,
 			() => projectStore.list(),
 			feishuSessionRuntimeBindings,
+			undefined,
+			currentFeishuLocale(),
 		);
 		return testBridge.testConnection(appId, appSecret);
 	});
@@ -1292,7 +1565,7 @@ function registerFeishuIpc() {
 			}
 			const botConfig = getBot(botId);
 			if (!botConfig) {
-				return { success: false, message: "Bot 配置不存在" };
+				return { success: false, message: feishuT(currentFeishuLocale(), "bridge.botMissing") };
 			}
 			feishuBridge = new FeishuBridge(
 				botConfig,
@@ -1300,39 +1573,69 @@ function registerFeishuIpc() {
 				() => mainWindow,
 				() => projectStore.list(),
 				feishuSessionRuntimeBindings,
+				undefined,
+				currentFeishuLocale(),
 			);
 			await feishuBridge.start();
 			void appLogger.info("feishu", "Feishu connected by saved bot", { botId, name: botConfig.name });
-			return { success: true, message: "连接成功" };
+			return { success: true, message: feishuT(currentFeishuLocale(), "connection.success") };
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
 			return { success: false, message };
 		}
 	});
 
-	// 获取 Agent 绑定的飞书 Bot ID
-	ipcMain.handle(ipcChannels.feishuSessionBotGet, async (_event, agentId: string) => {
-		return getSessionBotId(agentId) ?? null;
+	// 获取稳定 Session 绑定的飞书 Bot ID，并一次性迁移旧 runtime agentId 键。
+	ipcMain.handle(ipcChannels.feishuSessionBotGet, async (_event, sessionId: string) => {
+		const current = getSessionBotId(sessionId);
+		if (current) return current;
+		const target = sessionRuntimeCoordinator.getTarget(sessionId);
+		if (!target || target.agentId === sessionId) return null;
+		const legacy = getSessionBotId(target.agentId);
+		if (!legacy) return null;
+		setSessionBotId(sessionId, legacy);
+		setSessionBotId(target.agentId, undefined);
+		return legacy;
 	});
 
-	// 设置 Agent 使用的飞书 Bot ID；非空表示用户手动连接当前会话，需要立即创建/复用飞书群绑定。
-	// 传入 null 时取消关联：仅移除绑定（不终止 Agent），同时清理配置映射。
-	ipcMain.handle(ipcChannels.feishuSessionBotSet, async (_event, agentId: string, botId: string | null) => {
+	// 设置稳定 Session 使用的飞书 Bot ID。主进程始终重新解析当前 runtime，避免旧 agentId 操作替换后的会话。
+	ipcMain.handle(ipcChannels.feishuSessionBotSet, async (_event, sessionId: string, botId: string | null) => {
+		const target = sessionRuntimeCoordinator.getTarget(sessionId);
 		if (!botId) {
-			setSessionBotId(agentId, undefined);
+			setSessionBotId(sessionId, undefined);
+			if (target && target.agentId !== sessionId) setSessionBotId(target.agentId, undefined);
 			// 取消当前会话的飞书关联：移除绑定但不停止 Agent 进程
 			if (feishuBridge && feishuBridge.getStatus().status === "connected") {
-				feishuBridge.removeBindingBySessionId(agentId);
+				feishuBridge.removeBindingBySessionId(sessionId);
 			}
-			return;
+			return { success: true };
 		}
 		const status = feishuBridge?.getStatus();
-		if (!feishuBridge || status?.status !== "connected") return;
-		if (status.botId !== botId) return;
-		setSessionBotId(agentId, botId);
-		const tab = agentManager.list().find((item) => item.id === agentId);
-		if (!tab) return;
-		await feishuBridge.ensureSessionMirror(tab.id, tab.title, tab.sessionPath);
+		if (!feishuBridge || status?.status !== "connected") {
+			return { success: false, message: feishuT(currentFeishuLocale(), "session.bridgeUnavailable") };
+		}
+		if (status.botId !== botId) {
+			return { success: false, message: feishuT(currentFeishuLocale(), "session.botMismatch") };
+		}
+		if (!target) {
+			return { success: false, message: feishuT(currentFeishuLocale(), "session.runtimeUnavailable") };
+		}
+		const tab = agentManager.list().find((item) => item.id === target.agentId);
+		if (!tab) {
+			return { success: false, message: feishuT(currentFeishuLocale(), "session.runtimeUnavailable") };
+		}
+		const chatId = await feishuBridge.ensureSessionMirrorForSession(
+			sessionId,
+			target.agentId,
+			tab.title,
+			tab.sessionPath,
+		);
+		if (!chatId) {
+			return { success: false, message: feishuT(currentFeishuLocale(), "session.bindFailed") };
+		}
+		setSessionBotId(sessionId, botId);
+		if (target.agentId !== sessionId) setSessionBotId(target.agentId, undefined);
+		return { success: true, chatId };
 	});
 }
 
@@ -1417,7 +1720,7 @@ function registerIpc() {
 
 	const scanProjectSessions = async (projectId: string) => {
 		const project = projectStore.get(projectId);
-		if (!project) throw new Error(`Project not found: ${projectId}`);
+		if (!project) throw new Error(mainCopy("project.notFound"));
 		let projectPath = project.path;
 		const settings = settingsStore.get();
 		if (settings.wslEnabled && settings.wslDistro) {
@@ -1607,7 +1910,7 @@ function registerIpc() {
 	ipcMain.handle(ipcChannels.projectsChooseChatPath, async () => {
 		// 系统文件选择器，默认定位到当前聊天目录，便于用户就地切换。
 		const result = await dialog.showOpenDialog({
-			title: "选择聊天记录目录",
+			title: mainCopy("dialog.chooseChatHistoryFolder"),
 			defaultPath: projectStore.getChatProjectPath(),
 			properties: ["openDirectory"],
 		});
@@ -1665,8 +1968,9 @@ function registerIpc() {
 	});
 
 	ipcMain.handle(ipcChannels.browserOpenExternal, async (_event, url: string) => {
-		// shell.openExternal 使用系统默认浏览器打开链接，可控且安全。
-		await shell.openExternal(url);
+		// This IPC is renderer-callable, so it must share the protocol gate used by
+		// every other external-link path instead of passing arbitrary schemes to the OS.
+		await openExternalUrl(url, true);
 	});
 
 	ipcMain.handle(ipcChannels.filesReadContent, async (_event, path: string) => {
@@ -1844,11 +2148,21 @@ function registerIpc() {
 	ipcMain.handle(
 		ipcChannels.sessionsCatalogList,
 		async (_event, projectId: string) => {
-			const summaries = await scanProjectSessions(projectId);
+			const project = projectStore.get(projectId);
+			if (!project) throw new Error(mainCopy("project.notFound"));
+			let projectPath = project.path;
+			const settings = settingsStore.get();
+			if (settings.wslEnabled && settings.wslDistro) {
+				projectPath = projectPath
+					.replace(/^([A-Za-z]):\\/, (_: string, drive: string) => `/mnt/${drive.toLowerCase()}/`)
+					.replace(/\\/g, "/");
+			}
+			const summaries = await sessionScanner.list(projectPath);
+			const { wslEnabled, wslDistro, wslUser } = settings;
 			const records = await sessionCatalog.mergeScanned(
 				projectId,
 				summaries,
-				catalogIdentityContext(),
+				wslEnabled ? { wslDistro, wslUser } : {},
 			);
 			const bindings = sessionRuntimeCoordinator.attachCatalogRuntimes(records);
 			for (const binding of bindings) {
@@ -1862,10 +2176,10 @@ function registerIpc() {
 		ipcChannels.sessionsCatalogCreateDraft,
 		async (_event, input: CreateSessionDraftInput) => {
 			const project = projectStore.get(input.projectId);
-			if (!project) throw new Error(`Project not found: ${input.projectId}`);
+			if (!project) throw new Error(mainCopy("project.notFound"));
 			return sessionCatalog.createDraft({
 				projectId: input.projectId,
-				title: input.title?.trim() || "New session",
+				title: input.title?.trim() || mainCopy("session.newTitle"),
 				environment: settingsStore.get().wslEnabled ? "wsl" : "native",
 				model: input.model,
 				thinkingLevel: input.thinkingLevel,
@@ -1876,10 +2190,16 @@ function registerIpc() {
 		ipcChannels.sessionsCatalogUpdate,
 		async (_event, sessionId: string, patch: UpdateSessionRecordInput) => {
 			const entry = sessionCatalog.get(sessionId);
-			if (!entry) throw new Error(`Session not found: ${sessionId}`);
+			if (!entry) throw new Error(mainCopy("session.notFound"));
 			const title = patch.title?.trim();
-			if (title && entry.filePath && title !== entry.title) {
-				await sessionScanner.rename(entry.filePath, title);
+			if (title && title !== entry.title) {
+				const target = sessionRuntimeCoordinator.getTarget(sessionId);
+				if (target) {
+					const renamed = await sessionRuntimeCoordinator.renameRuntime(target, title);
+					if (!renamed.ok) throw sessionCommandIpcError(renamed.error);
+				} else if (entry.filePath) {
+					await sessionScanner.rename(entry.filePath, title);
+				}
 			}
 			return sessionCatalog.update(sessionId, {
 				...patch,
@@ -1907,7 +2227,7 @@ function registerIpc() {
 					canonicalizeSessionPath(agent.sessionPath, entry.environment) === normalizedTarget
 				));
 				if (usingAgent) {
-					throw new Error(`会话“${usingAgent.title}”正在使用中，请先关闭 Agent 后再删除`);
+					throw new Error(mainCopy("session.inUseDeleteBlocked", { title: usingAgent.title }));
 				}
 				await sessionScanner.delete(entry.filePath);
 			}
@@ -1924,6 +2244,26 @@ function registerIpc() {
 			const content = await sessionScanner.readSessionRawText(entry.filePath);
 			return agentManager.readSessionDisplayMessages(entry.filePath, sessionId, content);
 		},
+	);
+	ipcMain.handle(
+		ipcChannels.sessionsCatalogReadMessagePage,
+		async (_event, sessionId: string, before?: number, pageSize?: number) => {
+			const entry = sessionCatalog.get(sessionId);
+			if (!entry?.filePath) return { messages: [], total: 0, nextBefore: null };
+			return agentManager.readSessionDisplayMessagePage(entry.filePath, sessionId, before, pageSize);
+		},
+	);
+	ipcMain.handle(
+		ipcChannels.sessionsCatalogReadReferenceMessages,
+		(_event, sessionId: string) => readCatalogSessionReferenceMessages(sessionId),
+	);
+	ipcMain.handle(
+		ipcChannels.sessionsCatalogCopy,
+		(_event, sessionId: string) => copyCatalogSession(sessionId),
+	);
+	ipcMain.handle(
+		ipcChannels.sessionsCatalogExportHtml,
+		(_event, sessionId: string) => exportCatalogSessionHtml(sessionId),
 	);
 	ipcMain.handle(
 		ipcChannels.sessionsSendPrompt,
@@ -1963,59 +2303,107 @@ function registerIpc() {
 		(_event, input: SessionUiResponseInput) => sessionRuntimeCoordinator.respondToUi(input),
 	);
 	ipcMain.handle(
-		ipcChannels.sessionsRename,
-		async (_event, filePath: string, newName: string) => {
-			await sessionScanner.rename(filePath, newName);
-			void appLogger.info("session", "Session renamed", { filePath, newName });
+		ipcChannels.sessionsRuntimeList,
+		() => sessionRuntimeCoordinator.listRuntimes(),
+	);
+	ipcMain.handle(
+		ipcChannels.sessionsRuntimeStop,
+		async (_event, target: SessionRuntimeTarget) => {
+			const result = await sessionRuntimeCoordinator.stopRuntime(target);
+			if (result.ok) {
+				terminalManager.closeAgent(target.agentId);
+				emitSessionRuntimeDetach(target);
+			}
+			return result;
 		},
 	);
 	ipcMain.handle(
-		ipcChannels.sessionsCopy,
-		(_event, projectId: string, filePath: string) =>
-			agentManager.cloneSessionFile(projectId, filePath),
+		ipcChannels.sessionsRuntimeAbort,
+		(_event, target: SessionRuntimeTarget) => sessionRuntimeCoordinator.abortRuntime(target),
 	);
 	ipcMain.handle(
-		ipcChannels.sessionsExportHtml,
-		(_event, projectId: string, filePath: string) =>
-			agentManager.exportSessionHtml(projectId, filePath),
-	);
-	ipcMain.handle(ipcChannels.sessionsDelete, async (_event, filePath: string) => {
-		// 检查是否有活跃 Agent 正在使用该会话文件；如有则拒绝删除，避免 pi 进程访问已删除文件。
-		const normalizedTarget = filePath.replace(/\\/g, "/").toLowerCase();
-		const activeAgents = agentManager.list();
-		const usingAgent = activeAgents.find((agent) => {
-			const sessionPath = agent.sessionPath?.replace(/\\/g, "/").toLowerCase();
-			return sessionPath === normalizedTarget;
-		});
-		if (usingAgent) {
-			throw new Error(
-				`会话“${usingAgent.title}”正在使用中，请先关闭 Agent 后再删除`,
-			);
-		}
-
-		await sessionScanner.delete(filePath);
-		const removedCatalogEntry = await sessionCatalog.removeByFilePath(filePath, "native")
-			|| await sessionCatalog.removeByFilePath(filePath, "wsl");
-		void appLogger.info("session", "Session deleted", { filePath, removedCatalogEntry });
-	});
-	ipcMain.handle(
-		ipcChannels.sessionsReadMessages,
-		async (_event, filePath: string) => {
-			return sessionScanner.readMessages(filePath);
+		ipcChannels.sessionsRuntimeRestart,
+		async (_event, target: SessionRuntimeTarget) => {
+			terminalManager.closeAgent(target.agentId);
+			const result = await sessionRuntimeCoordinator.restartRuntime(target);
+			if (result.ok) {
+				emitSessionRuntimeDetach(target);
+				emitReplacementState(result.value.runtime, false);
+			}
+			return result;
 		},
 	);
 	ipcMain.handle(
-		ipcChannels.sessionsReadMeta,
-		async (_event, filePath: string) => {
-			return sessionScanner.readSessionMeta(filePath);
-		},
+		ipcChannels.sessionsRuntimeCompact,
+		(_event, target: SessionRuntimeTarget, prompt?: string) =>
+			sessionRuntimeCoordinator.compactRuntime(target, prompt),
 	);
 	ipcMain.handle(
-		ipcChannels.sessionsReadChatMessages,
-		async (_event, filePath: string) => {
-			// SessionScanner 统一处理本地/WSL 文件读取；消息转换与压缩归档完全复用 AgentManager。
-			const content = await sessionScanner.readSessionRawText(filePath);
-			return agentManager.readSessionDisplayMessages(filePath, "session-reader", content);
+		ipcChannels.sessionsRuntimeState,
+		(_event, target: SessionRuntimeTarget) =>
+			sessionRuntimeCoordinator.getRuntimeState(target),
+	);
+	ipcMain.handle(
+		ipcChannels.sessionsRuntimeCommands,
+		(_event, target: SessionRuntimeTarget) =>
+			sessionRuntimeCoordinator.listRuntimeCommands(target),
+	);
+	ipcMain.handle(
+		ipcChannels.sessionsRuntimeExportHtml,
+		(_event, target: SessionRuntimeTarget) =>
+			sessionRuntimeCoordinator.exportRuntimeHtml(target),
+	);
+	ipcMain.handle(
+		ipcChannels.sessionsRuntimeEditMessage,
+		(_event, target: SessionRuntimeTarget, messageId: string, newText: string) =>
+			sessionRuntimeCoordinator.editRuntimeMessage(target, messageId, newText),
+	);
+	ipcMain.handle(
+		ipcChannels.sessionsRuntimeDeleteMessage,
+		(_event, target: SessionRuntimeTarget, messageId: string) =>
+			sessionRuntimeCoordinator.deleteRuntimeMessage(target, messageId),
+	);
+	ipcMain.handle(
+		ipcChannels.sessionsRuntimePrepareResend,
+		(_event, target: SessionRuntimeTarget, messageId: string) =>
+			sessionRuntimeCoordinator.prepareRuntimeResend(target, messageId),
+	);
+	ipcMain.handle(
+		ipcChannels.sessionsRuntimeSetModel,
+		(
+			_event,
+			target: SessionRuntimeTarget,
+			provider: string,
+			modelId: string,
+		) => sessionRuntimeCoordinator.setRuntimeModel(target, provider, modelId),
+	);
+	ipcMain.handle(
+		ipcChannels.sessionsRuntimeSetThinking,
+		(_event, target: SessionRuntimeTarget, level: string) =>
+				sessionRuntimeCoordinator.setRuntimeThinking(target, level),
+	);
+	ipcMain.handle(
+		ipcChannels.sessionsRuntimeClone,
+		async (_event, target: SessionRuntimeTarget) => {
+			const validated = sessionRuntimeCoordinator.validateTarget(target);
+			if (!validated.ok) return validated;
+			try {
+				return {
+					ok: true as const,
+					value: await replaceAgentSession(
+						target.agentId,
+						() => agentManager.cloneSession(target.agentId),
+					),
+				};
+			} catch (error) {
+				return {
+					ok: false as const,
+					error: {
+						code: "SESSION_COMMAND_FAILED" as const,
+						debugDetails: error instanceof Error ? error.message : String(error),
+					},
+				};
+			}
 		},
 	);
 	ipcMain.handle(
@@ -2446,7 +2834,7 @@ function registerIpc() {
 	// WSL: 验证连接性 — 分步检查 distro+user 可达性 和 pi 可用性
 	ipcMain.handle(ipcChannels.wslValidateConnection, async (_event, distro: string, user: string) => {
 		if (process.platform !== "win32") {
-			return { ok: false, whoami: "", piVersion: "", error: "WSL 仅在 Windows 上可用" };
+			return { ok: false, whoami: "", piVersion: "", error: mainCopy("wsl.windowsOnly") };
 		}
 		try {
 			const { execFile } = await import("node:child_process");
@@ -2475,14 +2863,19 @@ function registerIpc() {
 				ok: true,
 				whoami,
 				piVersion,
-				error: piVersion ? "" : "pi CLI 未安装 — 请在 WSL 中运行 npm i -g @earendil-works/pi",
+				error: piVersion ? "" : mainCopy("wsl.piNotInstalled"),
 			};
 		} catch (err) {
+			void appLogger.warn("wsl", "WSL connection validation failed", {
+				distro,
+				user,
+				error: err instanceof Error ? err.message : String(err),
+			});
 			return {
 				ok: false,
 				whoami: "",
 				piVersion: "",
-				error: `无法连接到 WSL 发行版 "${distro}" 用户 "${user}"：${err instanceof Error ? err.message : String(err)}`,
+				error: mainCopy("wsl.connectionFailed"),
 			};
 		}
 	});
@@ -2694,21 +3087,42 @@ function registerIpc() {
 	ipcMain.handle(ipcChannels.logsOpenFolder, async () => appLogger.openFolder());
 	/** 获取 app 日志文件总大小 */
 	ipcMain.handle(ipcChannels.logsSize, async () => appLogger.getSize());
-	/** 获取 RPC 日志文件总大小，可选按 agentId 过滤 */
-	ipcMain.handle(ipcChannels.rpcLogsGetSize, async (_event, agentId?: string) => rpcLogger.getSize(agentId));
-	/** 从文件读取 RPC 日志，可选按 agentId/日期范围过滤 */
-	ipcMain.handle(ipcChannels.rpcLogsGet, async (_event, options?: { agentId?: string; days?: number; limit?: number }) => rpcLogger.getFromFile(options));
-	/** 清空 RPC 日志文件，可选按 agentId 过滤 */
-	ipcMain.handle(ipcChannels.rpcLogsClear, async (_event, agentId?: string) => rpcLogger.clear(agentId));
-	/** 开关某 agent 的 RPC 日志记录 */
-	ipcMain.handle(ipcChannels.rpcLoggingSet, async (_event, agentId: string, enabled: boolean) => {
-		agentManager.setRpcLogging(agentId, enabled);
+	const resolveRpcRuntimeAgent = (target?: SessionRuntimeTarget) => {
+		if (!target) return undefined;
+		const validated = sessionRuntimeCoordinator.validateTarget(target);
+		if (!validated.ok) throw sessionCommandIpcError(validated.error);
+		return target.agentId;
+	};
+	/** 获取 RPC 日志文件总大小，可选按 Session runtime 过滤 */
+	ipcMain.handle(ipcChannels.rpcLogsGetSize, async (_event, target?: SessionRuntimeTarget) =>
+		rpcLogger.getSize(resolveRpcRuntimeAgent(target)),
+	);
+	/** 从文件读取 RPC 日志，可选按 Session runtime/日期范围过滤 */
+	ipcMain.handle(
+		ipcChannels.rpcLogsGet,
+		async (_event, options?: { target?: SessionRuntimeTarget; days?: number; limit?: number }) =>
+			rpcLogger.getFromFile({
+				agentId: resolveRpcRuntimeAgent(options?.target),
+				days: options?.days,
+				limit: options?.limit,
+			}),
+	);
+	/** 清空 RPC 日志文件，可选按 Session runtime 过滤 */
+	ipcMain.handle(ipcChannels.rpcLogsClear, async (_event, target?: SessionRuntimeTarget) =>
+		rpcLogger.clear(resolveRpcRuntimeAgent(target)),
+	);
+	/** 开关某 Session runtime 的 RPC 日志记录 */
+	ipcMain.handle(ipcChannels.rpcLoggingSet, async (_event, target: SessionRuntimeTarget, enabled: boolean) => {
+		agentManager.setRpcLogging(resolveRpcRuntimeAgent(target)!, enabled);
 		return enabled;
 	});
-	/** 查询某 agent 的 RPC 日志记录状态 */
-	ipcMain.handle(ipcChannels.rpcLoggingGet, async (_event, agentId: string) => agentManager.isRpcLogging(agentId));
-	/** 用默认编辑器打开某 agent 的 RPC 日志文件 */
-	ipcMain.handle(ipcChannels.rpcLogsOpenFile, async (_event, agentId: string) => {
+	/** 查询某 Session runtime 的 RPC 日志记录状态 */
+	ipcMain.handle(ipcChannels.rpcLoggingGet, async (_event, target: SessionRuntimeTarget) =>
+		agentManager.isRpcLogging(resolveRpcRuntimeAgent(target)!),
+	);
+	/** 用默认编辑器打开当前 Session runtime 的 RPC 日志目录 */
+	ipcMain.handle(ipcChannels.rpcLogsOpenFile, async (_event, target: SessionRuntimeTarget) => {
+		resolveRpcRuntimeAgent(target);
 		const { shell } = require("electron");
 		const { join } = require("path");
 		const dir = join(app.getPath("userData"), "logs", "rpc");
@@ -2783,6 +3197,11 @@ function registerIpc() {
 			if ("theme" in patch) {
 				applyNativeThemeSource(settings);
 			}
+			if ("language" in patch) {
+				feishuBridge?.setLocale(currentFeishuLocale());
+				setFeishuConfigDefaultBotName(feishuT(currentFeishuLocale(), "bridge.defaultBotName"));
+				refreshTrayContextMenu();
+			}
 			if ("useNativeTitleBar" in patch) {
 				settingsStore.notifyTitleBarChange(mainWindow);
 			}
@@ -2797,10 +3216,18 @@ function registerIpc() {
 				try {
 					await webServiceManager.applySettings(settings);
 				} catch (error) {
+					const debugDetails = error instanceof Error ? error.message : String(error);
+					void appLogger.warn("web", "Failed to apply web service settings", {
+						error: debugDetails,
+					});
 					if (settings.webServiceEnabled) {
 						await settingsStore.update({ webServiceEnabled: false });
 					}
-					throw error;
+					throw new Error(mainCopy(
+						debugDetails === "WEB_SERVICE_INVALID_PORT"
+							? "webService.invalidPort"
+							: "webService.startFailed",
+					));
 				}
 			}
 			// WSL 设置变更时同步更新会话扫描器和配置管理器
@@ -2836,7 +3263,7 @@ function registerIpc() {
 	ipcMain.handle(
 		ipcChannels.settingsTestPiProxy,
 		async () => {
-			const result = await testPiProxy(settingsStore.get());
+			const result = await testPiProxy(settingsStore.get(), undefined, mainCopy);
 			void appLogger.info("settings", "Pi proxy tested", {
 				success: result.success,
 				elapsedMs: result.elapsedMs,
@@ -2951,7 +3378,7 @@ function registerIpc() {
 		} catch (err) {
 			const message = err instanceof Error ? err.message : String(err);
 			void appLogger.warn("prompt-store", "Search failed", { query, error: message });
-			throw new Error(`搜索 prompt 商店失败: ${message}`);
+			throw new Error(mainCopy("store.promptSearchFailed"));
 		}
 	});
 
@@ -2970,7 +3397,7 @@ function registerIpc() {
 		} catch (err) {
 			const message = err instanceof Error ? err.message : String(err);
 			void appLogger.warn("prompt-store", "Get prompt failed", { id, error: message });
-			throw new Error(`获取 prompt 详情失败: ${message}`);
+			throw new Error(mainCopy("store.promptDetailFailed"));
 		}
 	});
 
@@ -3064,7 +3491,7 @@ function registerIpc() {
 				.replace(/[^\p{L}\p{N}-]+/gu, "-")
 				.replace(/-+/g, "-")
 				.replace(/^-|-$/g, "");
-			if (!name) throw new Error("标题中未提取到有效文件名");
+			if (!name) throw new Error(mainCopy("store.invalidItemTitle"));
 
 			// 转换变量格式：prompts.chat 的 ${name} → pi 的 $N
 			const { converted, argumentHint, varCount } = convertStoreVarsToPiVars(content);
@@ -3098,7 +3525,7 @@ function registerIpc() {
 		} catch (err) {
 			const message = err instanceof Error ? err.message : String(err);
 			void appLogger.warn("prompt-store", "Import failed", { title, error: message });
-			throw new Error(`导入 prompt 失败: ${message}`);
+			throw new Error(mainCopy("store.promptImportFailed"));
 		}
 	});
 
@@ -3119,7 +3546,8 @@ function registerIpc() {
 			return result;
 		} catch (err) {
 			const message = err instanceof Error ? err.message : String(err);
-			throw new Error(`搜索 skill 商店失败: ${message}`);
+			void appLogger.warn("skill-store", "Search failed", { query, error: message });
+			throw new Error(mainCopy("store.skillSearchFailed"));
 		}
 	});
 
@@ -3132,7 +3560,7 @@ function registerIpc() {
 				.replace(/[^\p{L}\p{N}-]+/gu, "-")
 				.replace(/-+/g, "-")
 				.replace(/^-|-$/g, "");
-			if (!name) throw new Error("标题中未提取到有效文件名");
+			if (!name) throw new Error(mainCopy("store.invalidItemTitle"));
 
 			const { writeFile } = await import("node:fs/promises");
 
@@ -3152,7 +3580,7 @@ function registerIpc() {
 		} catch (err) {
 			const message = err instanceof Error ? err.message : String(err);
 			void appLogger.warn("skill-store", "Import failed", { title: item.title, error: message });
-			throw new Error(`导入 skill 失败: ${message}`);
+			throw new Error(mainCopy("store.skillImportFailed"));
 		}
 	});
 
@@ -3190,7 +3618,8 @@ function registerIpc() {
 			return { query, total: items.length, items };
 		} catch (err) {
 			const message = err instanceof Error ? err.message : String(err);
-			throw new Error(`Skills.sh search failed: ${message}`);
+			void appLogger.warn("skill-hub", "Search failed", { query, error: message });
+			throw new Error(mainCopy("store.skillsShSearchFailed"));
 		}
 	});
 
@@ -3205,7 +3634,7 @@ function registerIpc() {
 		// P0 security: whitelist shell-safe characters only
 		const SAFE_SLUG_RE = /^[a-zA-Z0-9@/\-_.]+$/;
 		if (!SAFE_SLUG_RE.test(pkg) || (skillName && !SAFE_SLUG_RE.test(skillName))) {
-			return { success: false, slug, installDir: "", error: "Invalid slug: contains unsafe characters" };
+			return { success: false, slug, installDir: "", error: mainCopy("store.skillsShInvalidSlug") };
 		}
 		try {
 			const { exec } = await import("node:child_process");
@@ -3218,7 +3647,7 @@ function registerIpc() {
 		} catch (err) {
 			const message = err instanceof Error ? err.message : String(err);
 			void appLogger.warn("skill-hub", "Install failed", { slug, error: message });
-			return { success: false, slug, installDir: "", error: message };
+			return { success: false, slug, installDir: "", error: mainCopy("store.skillsShInstallFailed") };
 		}
 	});
 
@@ -3236,7 +3665,7 @@ function registerIpc() {
 		} catch (err) {
 			const message = err instanceof Error ? err.message : String(err);
 			void appLogger.warn("yao-prompts", "List failed", { error: message });
-			throw new Error(`读取中文提示词库失败: ${message}`);
+			throw new Error(mainCopy("store.yaoListFailed"));
 		}
 	});
 
@@ -3248,7 +3677,7 @@ function registerIpc() {
 		} catch (err) {
 			const message = err instanceof Error ? err.message : String(err);
 			void appLogger.warn("yao-prompts", "Detail failed", { slug, category, error: message });
-			throw new Error(`读取提示词详情失败: ${message}`);
+			throw new Error(mainCopy("store.yaoDetailFailed"));
 		}
 	});
 
@@ -3260,7 +3689,7 @@ function registerIpc() {
 		} catch (err) {
 			const message = err instanceof Error ? err.message : String(err);
 			void appLogger.warn("yao-prompts", "Import failed", { slug, category, error: message });
-			throw new Error(`导入提示词失败: ${message}`);
+			throw new Error(mainCopy("store.yaoImportFailed"));
 		}
 	});
 
@@ -3292,221 +3721,25 @@ function registerIpc() {
 		return result;
 	});
 
-	ipcMain.handle(ipcChannels.agentsList, () => agentManager.list());
-	ipcMain.handle(ipcChannels.agentsCreate, async (_event, input: CreateAgentInput) => {
-		void appLogger.info("agent", "Agent create IPC received", {
-			projectId: input.projectId,
-			sessionPath: input.sessionPath,
-			title: input.title,
-			runtimeClass: LEGACY_EXTERNAL_RUNTIME,
+	ipcMain.handle(ipcChannels.terminalList, (_event, target: SessionRuntimeTarget) => {
+		const validated = sessionRuntimeCoordinator.validateTarget(target);
+		if (!validated.ok) throw sessionCommandIpcError(validated.error);
+		return terminalManager.list(target.agentId);
+	});
+	ipcMain.handle(ipcChannels.terminalEnsure, (_event, target: SessionRuntimeTarget) => {
+		const validated = sessionRuntimeCoordinator.validateTarget(target);
+		if (!validated.ok) throw sessionCommandIpcError(validated.error);
+		return terminalManager.ensure(target.agentId);
+	});
+	ipcMain.handle(ipcChannels.terminalCreate, async (_event, target: SessionRuntimeTarget) => {
+		const validated = sessionRuntimeCoordinator.validateTarget(target);
+		if (!validated.ok) throw sessionCommandIpcError(validated.error);
+		const result = await terminalManager.create(target.agentId);
+		void appLogger.info("terminal", "Terminal created", {
+			sessionId: target.sessionId,
+			agentId: target.agentId,
+			tabId: result.id,
 		});
-		const tab = await agentManager.create(input);
-		void appLogger.info("agent", "Agent create IPC completed", {
-			agentId: tab.id,
-			projectId: input.projectId,
-			status: tab.status,
-			sessionPath: tab.sessionPath,
-		});
-		void appLogger.info("agent", "Agent created", {
-			agentId: tab.id,
-			projectId: input.projectId,
-			title: tab.title,
-			sessionPath: tab.sessionPath,
-		});
-		// 不再自动为新会话创建飞书群；必须由用户在会话输入框的飞书菜单中手动连接后才同步。
-		return tab;
-	});
-	ipcMain.handle(
-		ipcChannels.agentsRename,
-		async (_event, agentId: string, name: string) => {
-			const result = await agentManager.rename(agentId, name);
-			void appLogger.info("agent", "Agent renamed", { agentId, name });
-			return result;
-		},
-	);
-	ipcMain.handle(ipcChannels.agentsStop, async (_event, agentId: string) => {
-		const runtimeBinding = sessionRuntimeCoordinator.getRuntimeBinding(agentId);
-		const stoppedTab = agentManager.list().find((tab) => tab.id === agentId);
-		terminalManager.closeAgent(agentId);
-		await agentManager.stop(agentId);
-		if (runtimeBinding && stoppedTab) {
-			emitSessionRuntimeEvent(
-				agentId,
-				ipcChannels.agentsState,
-				{ ...stoppedTab, status: "closed" },
-			);
-		}
-		sessionRuntimeCoordinator.unbindAgent(agentId);
-		void appLogger.info("agent", "Agent stopped", { agentId });
-	});
-	ipcMain.handle(
-		ipcChannels.agentsPrompt,
-		(_event, input: SendPromptInput) => sendAgentPromptWithIntegrations(input),
-	);
-	ipcMain.handle(ipcChannels.agentsAbort, async (_event, agentId: string) => {
-		// Session Mirror: 停止飞书流式卡片
-		if (feishuBridge) {
-			feishuBridge.stopSessionMirrorRun(agentId);
-		}
-		const result = await agentManager.abort(agentId);
-		void appLogger.info("agent", "Agent aborted", { agentId });
-		return result;
-	});
-	ipcMain.handle(ipcChannels.agentsExportHtml, (_event, agentId: string) =>
-		agentManager.exportHtml(agentId),
-	);
-	ipcMain.handle(ipcChannels.agentsForkMessages, (_event, agentId: string) =>
-		agentManager.getForkMessages(agentId),
-	);
-	ipcMain.handle(
-		ipcChannels.agentsForkSession,
-		async (_event, agentId: string, entryId: string) => {
-			const result = await replaceAgentSession(
-				agentId,
-				() => agentManager.forkSession(agentId, entryId),
-			);
-			void appLogger.info("agent", "Agent session forked", {
-				agentId,
-				entryId,
-				targetSessionId: result.targetSessionId,
-			});
-			return result;
-		},
-	);
-	ipcMain.handle(ipcChannels.agentsCloneSession, async (_event, agentId: string) => {
-		const result = await replaceAgentSession(
-			agentId,
-			() => agentManager.cloneSession(agentId),
-		);
-		void appLogger.info("agent", "Agent session cloned", {
-			agentId,
-			targetSessionId: result.targetSessionId,
-		});
-		return result;
-	});
-
-	ipcMain.handle(
-		ipcChannels.agentsPrepareResend,
-		async (_event, agentId: string, messageId: string) => {
-			const result = await agentManager.prepareResendFromMessage(agentId, messageId);
-			void appLogger.info("agent", "Prepare resend completed via IPC", { agentId, messageId });
-			return result;
-		},
-	);
-	ipcMain.handle(
-		ipcChannels.agentsSwitchSession,
-		async (_event, agentId: string, sessionPath: string) => {
-			const result = await replaceAgentSession(
-				agentId,
-				() => agentManager.switchSession(agentId, sessionPath),
-			);
-			void appLogger.info("agent", "Agent switched session", {
-				agentId,
-				sessionPath,
-				targetSessionId: result.targetSessionId,
-			});
-			return result;
-		},
-	);
-	ipcMain.handle(ipcChannels.agentsEditMessage, async (_event, agentId: string, messageId: string, text: string) => {
-		await agentManager.editMessage(agentId, messageId, text);
-		void appLogger.info("agent", "Message edited", { agentId, messageId });
-	});
-	ipcMain.handle(ipcChannels.agentsDeleteMessage, async (_event, agentId: string, messageId: string) => {
-		await agentManager.deleteMessage(agentId, messageId);
-		void appLogger.info("agent", "Message deleted", { agentId, messageId });
-	});
-	ipcMain.handle(ipcChannels.agentsReload, async (_event, agentId: string) => {
-		const result = await agentManager.reload(agentId);
-		void appLogger.info("agent", "Agent reloaded", { agentId });
-		return result;
-	});
-	ipcMain.handle(ipcChannels.agentsRestart, async (_event, agentId: string) => {
-		const sessionId = sessionRuntimeCoordinator.getSessionId(agentId);
-		terminalManager.closeAgent(agentId);
-		const result = sessionId
-			? await sessionRuntimeCoordinator.restartSession(sessionId, agentId)
-			: await agentManager.restart(agentId);
-		if (sessionId) {
-			emitSessionRuntimeEvent(result.id, ipcChannels.agentsState, result);
-		} else {
-			void appLogger.info("agent", "Restarted unbound external runtime", {
-				agentId,
-				runtimeClass: LEGACY_EXTERNAL_RUNTIME,
-			});
-		}
-		void appLogger.info("agent", "Agent restarted", { agentId, nextAgentId: result.id, sessionId });
-		return result;
-	});
-	ipcMain.handle(ipcChannels.agentsCompact, async (_event, agentId: string, prompt?: string) => {
-		void appLogger.info("agent", "Agent compact IPC called", { agentId, prompt });
-		try {
-			const result = await agentManager.compact(agentId, prompt);
-			void appLogger.info("agent", "Agent compact IPC succeeded", { agentId });
-			return result;
-		} catch (error) {
-			void appLogger.error("agent", "Agent compact IPC failed", {
-				agentId,
-				error: error instanceof Error ? error.message : String(error),
-			});
-			throw error;
-		}
-	});
-	ipcMain.handle(ipcChannels.agentsRuntimeState, (_event, agentId: string) =>
-		agentManager.getRuntimeState(agentId),
-	);
-	ipcMain.handle(ipcChannels.agentsCycleModel, (_event, agentId: string) =>
-		agentManager.cycleModel(agentId),
-	);
-	ipcMain.handle(ipcChannels.agentsAvailableModels, (_event, agentId: string) =>
-		agentManager.getAvailableModels(agentId),
-	);
-	ipcMain.handle(
-		ipcChannels.agentsSetModel,
-		async (_event, agentId: string, provider: string, modelId: string) => {
-			const result = await agentManager.setModel(agentId, provider, modelId);
-			void appLogger.info("agent", "Agent model changed", { agentId, provider, modelId });
-			return result;
-		},
-	);
-	ipcMain.handle(ipcChannels.agentsRefreshModels, async (_event, agentId: string) => {
-		void appLogger.info("agent", "Agent model refresh requested", { agentId });
-		return agentManager.refreshModels(agentId);
-	});
-	ipcMain.handle(ipcChannels.agentsCycleThinking, (_event, agentId: string) =>
-		agentManager.cycleThinking(agentId),
-	);
-	ipcMain.handle(
-		ipcChannels.agentsSetThinking,
-		async (_event, agentId: string, level: string) => {
-			const result = await agentManager.setThinking(agentId, level);
-			void appLogger.info("agent", "Agent thinking level changed", { agentId, level });
-			return result;
-		},
-	);
-	ipcMain.handle("agents:commands", async (_event, agentId: string) => {
-		try {
-			return await agentManager.getCommands(agentId);
-		} catch {
-			// agent 不存在或 RPC 超时时返回空列表，避免控制台报未处理异常
-			return [];
-		}
-	});
-
-	/** 用户通过 UI 响应了扩展的 ask_question 请求，转发给 AgentManager 发送 extension_ui_response */
-	ipcMain.handle(ipcChannels.agentsUiResponse, async (_event, agentId: string, requestId: string, response: { value?: string | boolean; cancelled?: boolean; confirmed?: boolean }) => {
-		await agentManager.sendUIResponse(agentId, requestId, response);
-	});
-
-	ipcMain.handle(ipcChannels.terminalList, (_event, agentId: string) =>
-		terminalManager.list(agentId),
-	);
-	ipcMain.handle(ipcChannels.terminalEnsure, (_event, agentId: string) =>
-		terminalManager.ensure(agentId),
-	);
-	ipcMain.handle(ipcChannels.terminalCreate, async (_event, agentId: string) => {
-		const result = await terminalManager.create(agentId);
-		void appLogger.info("terminal", "Terminal created", { agentId, tabId: result.id });
 		return result;
 	});
 	ipcMain.handle(
@@ -3541,7 +3774,7 @@ function registerIpc() {
 	);
 	// 项目信任确认：渲染进程回传用户选择，唤醒等待中的 Agent 创建流程（见 AgentManager.ensureProjectTrust）
 	ipcMain.handle(
-		ipcChannels.agentsTrustResponse,
+		ipcChannels.projectsTrustResponse,
 		(_event, requestId: string, choice: "trust-remember" | "trust-session" | "deny") =>
 			agentManager.respondTrustRequest(requestId, choice),
 	);
@@ -3676,24 +3909,27 @@ async function detectExternalEditorsOnFirstLaunch() {
 }
 
 app.whenReady().then(async () => {
-	projectStore = new ProjectStore();
+	projectStore = new ProjectStore(() => mainCopy("dialog.chooseProjectFolder"));
 	fileSystemService = new FileSystemService();
-	sessionScanner = new SessionScanner();
-	codexSessionImporter = new CodexSessionImporter();
-	claudeSessionImporter = new ClaudeSessionImporter();
-	openCodeSessionImporter = new OpenCodeSessionImporter();
+	sessionScanner = new SessionScanner(mainCopy);
+	codexSessionImporter = new CodexSessionImporter(mainCopy);
+	claudeSessionImporter = new ClaudeSessionImporter(mainCopy);
+	openCodeSessionImporter = new OpenCodeSessionImporter(mainCopy);
 	settingsStore = new SettingsStore();
 	appLogger = new AppLogger();
 	rpcLogger = new RpcLogger();
 	gitService = new GitService();
-	worktreeService = new WorktreeService();
-	piLocator = new PiLocator();
-	configManager = new ConfigManager();
-	promptManager = new PromptManager();
+	worktreeService = new WorktreeService(mainCopy);
+	piLocator = new PiLocator(mainCopy);
+	configManager = new ConfigManager(undefined, mainCopy);
+	promptManager = new PromptManager(undefined, mainCopy);
 	xuePromptManager = new XuePromptManager();
-	skillManager = new SkillManager();
-	extensionManager = new ExtensionManager(piLocator, () => settingsStore.get());
-	projectResourceManager = new ProjectResourceManager((projectId) => projectStore.get(projectId));
+	skillManager = new SkillManager(undefined, mainCopy);
+	extensionManager = new ExtensionManager(piLocator, () => settingsStore.get(), mainCopy);
+	projectResourceManager = new ProjectResourceManager(
+		(projectId) => projectStore.get(projectId),
+		mainCopy,
+	);
 	agentManager = new AgentManager(
 		(id) => projectStore.get(id),
 		() => mainWindow,
@@ -3701,31 +3937,166 @@ app.whenReady().then(async () => {
 		configManager,
 		rpcLogger,
 		appLogger,
+		undefined,
+		mainCopy,
 	);
 	webServiceManager = new WebServiceManager({
 		listProjects: () => projectStore.list(),
-		listAgents: () => agentManager.list(),
 		listSessions: (projectId) => {
 			const project = projectStore.get(projectId);
 			return sessionScanner.list(project?.path);
 		},
-		getMessages: (agentId) => agentManager.getMessages(agentId),
-		createAgent: (input) => {
-			void appLogger.info("web", "Creating unbound external runtime", {
-				projectId: input.projectId,
-				runtimeClass: LEGACY_EXTERNAL_RUNTIME,
-			});
-			return agentManager.create(input);
+		getSessionRuntimeMessages: (sessionId) =>
+			sessionRuntimeCoordinator.getRuntimeMessages(sessionId),
+		listCatalogSessions: async (projectId) => {
+			if (!projectId) {
+				return sessionCatalog.listEntries()
+					.map((entry) => sessionCatalog.getRecord(entry.id))
+					.filter((record): record is SessionRecord => Boolean(record));
+			}
+			const project = projectStore.get(projectId);
+			if (!project) throw new Error(mainCopy("project.notFound"));
+			let projectPath = project.path;
+			const settings = settingsStore.get();
+			if (settings.wslEnabled && settings.wslDistro) {
+				projectPath = projectPath
+					.replace(/^([A-Za-z]):\\/, (_: string, drive: string) => `/mnt/${drive.toLowerCase()}/`)
+					.replace(/\\/g, "/");
+			}
+			const summaries = await sessionScanner.list(projectPath);
+			const { wslEnabled, wslDistro, wslUser } = settings;
+			const records = await sessionCatalog.mergeScanned(
+				projectId,
+				summaries,
+				wslEnabled ? { wslDistro, wslUser } : {},
+			);
+			const bindings = sessionRuntimeCoordinator.attachCatalogRuntimes(records);
+			for (const binding of bindings) {
+				const tab = agentManager.list().find((candidate) => candidate.id === binding.agentId);
+				if (tab) emitSessionRuntimeEvent(tab.id, ipcChannels.agentsState, tab);
+			}
+			return records;
 		},
-		sendPrompt: (input) => agentManager.sendPrompt(input),
-		stopAgent: (agentId) => agentManager.stop(agentId),
-		runtimeState: (agentId) => agentManager.getRuntimeState(agentId),
-		cycleModel: (agentId) => agentManager.cycleModel(agentId),
-		availableModels: (agentId) => agentManager.getAvailableModels(agentId),
-		setModel: (agentId, provider, modelId) => agentManager.setModel(agentId, provider, modelId),
-		refreshModels: (agentId) => agentManager.refreshModels(agentId),
-		cycleThinking: (agentId) => agentManager.cycleThinking(agentId),
-		setThinking: (agentId, level) => agentManager.setThinking(agentId, level),
+		createSessionDraft: async (input) => {
+			const project = projectStore.get(input.projectId);
+			if (!project) throw new Error(mainCopy("project.notFound"));
+			return sessionCatalog.createDraft({
+				projectId: input.projectId,
+				title: input.title?.trim() || mainCopy("session.newTitle"),
+				environment: settingsStore.get().wslEnabled ? "wsl" : "native",
+				model: input.model,
+				thinkingLevel: input.thinkingLevel,
+			});
+		},
+		updateSessionRecord: async (sessionId, patch) => {
+			const entry = sessionCatalog.get(sessionId);
+			if (!entry) throw new Error(mainCopy("session.notFound"));
+			const title = patch.title?.trim();
+			if (title && title !== entry.title) {
+				const target = sessionRuntimeCoordinator.getTarget(sessionId);
+				if (target) {
+					const renamed = await sessionRuntimeCoordinator.renameRuntime(target, title);
+					if (!renamed.ok) throw sessionCommandIpcError(renamed.error);
+				} else if (entry.filePath) {
+					await sessionScanner.rename(entry.filePath, title);
+				}
+			}
+			return sessionCatalog.update(sessionId, {
+				...patch,
+				title: title || undefined,
+			});
+		},
+		deleteSessionRecord: async (sessionId) => {
+			const entry = sessionCatalog.get(sessionId);
+			if (!entry) return false;
+			if (sessionRuntimeCoordinator.getTarget(sessionId)) {
+				throw new Error(mainCopy("session.stopBeforeDelete"));
+			}
+			if (entry.filePath) await sessionScanner.delete(entry.filePath);
+			await sessionCatalog.remove(sessionId);
+			return true;
+		},
+		copySessionRecord: (sessionId) => copyCatalogSession(sessionId),
+		exportSessionRecordHtml: (sessionId) => exportCatalogSessionHtml(sessionId),
+		readSessionReferenceMessages: (sessionId) =>
+			readCatalogSessionReferenceMessages(sessionId),
+		readSessionMessages: async (sessionId) => {
+			const entry = sessionCatalog.get(sessionId);
+			if (!entry?.filePath) return [];
+			const content = await sessionScanner.readSessionRawText(entry.filePath);
+			return agentManager.readSessionDisplayMessages(entry.filePath, sessionId, content);
+		},
+		readSessionMessagePage: async (sessionId, before, pageSize) => {
+			const entry = sessionCatalog.get(sessionId);
+			if (!entry?.filePath) return { messages: [], total: 0, nextBefore: null };
+			return agentManager.readSessionDisplayMessagePage(entry.filePath, sessionId, before, pageSize);
+		},
+		sendSessionPrompt: async (input) => {
+			const result = await sessionRuntimeCoordinator.send(input);
+			if (result.agentId) {
+				const tab = agentManager.list().find((candidate) => candidate.id === result.agentId);
+				if (tab) emitSessionRuntimeEvent(tab.id, ipcChannels.agentsState, tab);
+			}
+			return result;
+		},
+		listSessionRuntimes: () => sessionRuntimeCoordinator.listRuntimes(),
+		stopSessionRuntime: async (target) => {
+			const result = await sessionRuntimeCoordinator.stopRuntime(target);
+			if (result.ok) {
+				terminalManager.closeAgent(target.agentId);
+				emitSessionRuntimeDetach(target);
+			}
+			return result;
+		},
+		abortSessionRuntime: (target) => sessionRuntimeCoordinator.abortRuntime(target),
+		restartSessionRuntime: async (target) => {
+			terminalManager.closeAgent(target.agentId);
+			const result = await sessionRuntimeCoordinator.restartRuntime(target);
+			if (result.ok) {
+				emitSessionRuntimeDetach(target);
+				emitReplacementState(result.value.runtime, false);
+			}
+			return result;
+		},
+		compactSessionRuntime: (target, prompt) =>
+			sessionRuntimeCoordinator.compactRuntime(target, prompt),
+		getSessionRuntimeState: (target) =>
+			sessionRuntimeCoordinator.getRuntimeState(target),
+		listSessionRuntimeCommands: (target) =>
+			sessionRuntimeCoordinator.listRuntimeCommands(target),
+		exportSessionRuntimeHtml: (target) =>
+			sessionRuntimeCoordinator.exportRuntimeHtml(target),
+		editSessionRuntimeMessage: (target, messageId, newText) =>
+			sessionRuntimeCoordinator.editRuntimeMessage(target, messageId, newText),
+		deleteSessionRuntimeMessage: (target, messageId) =>
+			sessionRuntimeCoordinator.deleteRuntimeMessage(target, messageId),
+		prepareSessionRuntimeResend: (target, messageId) =>
+			sessionRuntimeCoordinator.prepareRuntimeResend(target, messageId),
+		setSessionRuntimeModel: (target, provider, modelId) =>
+			sessionRuntimeCoordinator.setRuntimeModel(target, provider, modelId),
+		setSessionRuntimeThinking: (target, level) =>
+			sessionRuntimeCoordinator.setRuntimeThinking(target, level),
+		cloneSessionRuntime: async (target) => {
+			const validated = sessionRuntimeCoordinator.validateTarget(target);
+			if (!validated.ok) return validated;
+			try {
+				return {
+					ok: true as const,
+					value: await replaceAgentSession(
+						target.agentId,
+						() => agentManager.cloneSession(target.agentId),
+					),
+				};
+			} catch (error) {
+				return {
+					ok: false as const,
+					error: {
+						code: "SESSION_COMMAND_FAILED" as const,
+						debugDetails: error instanceof Error ? error.message : String(error),
+					},
+				};
+			}
+		},
 	});
 	terminalManager = new TerminalSessionManager(
 		(agentId) => agentManager.getCwd(agentId),
@@ -3733,6 +4104,7 @@ app.whenReady().then(async () => {
 	);
 
 	await settingsStore.load();
+	setFeishuConfigDefaultBotName(feishuT(currentFeishuLocale(), "bridge.defaultBotName"));
 	const initialSessionSettings = settingsStore.get();
 	sessionCatalog = new SessionCatalog(
 		join(app.getPath("userData"), "session-catalog.json"),
@@ -3861,6 +4233,8 @@ app.whenReady().then(async () => {
 		agentManager,
 		settingsStore,
 		getMainWindow: () => mainWindow,
+		resolveSessionId: (agentId) => sessionRuntimeCoordinator.getSessionId(agentId),
+		translate: (key, params) => mainCopy(key, params),
 		recreateMainWindow: async () => {
 			await createWindow();
 			return mainWindow!;

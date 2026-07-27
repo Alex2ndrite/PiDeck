@@ -60,7 +60,7 @@ test("ScratchPad and Notice roots preserve shortcut, closing, and timer cleanup"
 function loadResponder() {
   return compile("components/overlays/SessionRuntimeUiOverlay.tsx", {
     react: {},
-    "lucide-react": { Info: () => null },
+    "lucide-react": { MessageCircle: () => null, X: () => null },
     "../../i18n": { t: (key) => key },
   });
 }
@@ -332,12 +332,12 @@ test("allowOther renders a custom input and sends its value through the responde
   };
   cursor = 0;
   const firstTree = runtime.SessionRuntimeUiOverlay(props);
-  const input = walk(firstTree, (node) => node.props?.className === "ask-dialog-custom-field")[0];
+  const input = walk(firstTree, (node) => node.props?.className === "ask-inline-bar-custom-field")[0];
   assert.ok(input, "allowOther custom field must render");
   input.props.onChange({ target: { value: "custom answer" } });
   cursor = 0;
   const secondTree = runtime.SessionRuntimeUiOverlay(props);
-  const submit = walk(secondTree, (node) => node.props?.className === "ask-dialog-submit-btn")[0];
+  const submit = walk(secondTree, (node) => node.props?.className === "ask-inline-bar-submit-btn")[0];
   assert.ok(submit, "allowOther submit button must render");
   assert.equal(typeof submit.props.onClick, "function");
   await submit.props.onClick();

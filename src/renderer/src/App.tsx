@@ -41,26 +41,29 @@ import { useImportFlow } from "./hooks/useImportFlow";
 import { useQueuedPrompt } from "./hooks/useQueuedPrompt";
 import { activeAgentIdAtom } from "./hooks/useSessionRuntimeController";
 import { PromptDeliveryUnknownError } from "./utils/promptErrors";
+import {
+  requireSessionCommand,
+  toSessionRuntimeTarget,
+} from "./utils/sessionCommands";
+import {
+  CHAT_BOOTSTRAP_SESSION_ID,
+  resolveChatSessionBootstrap,
+} from "./utils/chatSessionBootstrap";
 
 import { usePiUpdate } from "./hooks/usePiUpdate";
 import { useAppUpdateController } from "./hooks/useAppUpdateController";
 import { useProjectSync } from "./hooks/useProjectSync";
 import {
   agentInventoryAtom,
-  applyRuntimeCapabilityAtom,
-  claimSessionRuntimeUiResponseAtom,
+  applySessionRuntimeEventAtom,
   currentSessionAtom,
   currentSessionIdAtom,
   currentSessionRuntimeAtom,
-  currentSessionRuntimeUiAtom,
   projectInventoryAtom,
   removeSessionComposerStateAtom,
   removeSessionStateAtom,
-  replaceAgentInventoryAtom,
   replaceProjectInventoryAtom,
   replaceProjectSessionsAtom,
-  runtimeCapabilityByAgentIdAtomFamily,
-  rollbackSessionRuntimeUiResponseAtom,
   sessionRecordByIdAtomFamily,
   sessionRecordsByProjectIdAtomFamily,
   sessionIdByRuntimeAgentIdAtomFamily,
@@ -71,7 +74,7 @@ import {
   setSessionAttachmentsAtom,
   setSessionCatalogLoadStateAtom,
   setSessionDraftAtom,
-  upsertAgentInventoryAtom,
+  promoteSessionComposerStateAtom,
   upsertSessionAtom,
 } from "./atoms";
 import {
@@ -80,7 +83,7 @@ import {
 import {
   isSameSessionPath,
 } from "./agentListDisplay";
-import { resolveLocale, setI18nLocale, t } from "./i18n";
+import { resolveLocale, setI18nLocale, t, translateI18nDescriptor } from "./i18n";
 import {
   isChatProject,
   loadSessionSourceFilter,
@@ -91,9 +94,6 @@ import {
   COMPOSER_MIN_HEIGHT,
   type PendingAgentTab,
 } from "./rendererUtils";
-import {
-  migrateQueuedPrompts,
-} from "./utils/queuedPromptQueue";
 import { useResize } from "./hooks/useResize";
 import { useSessionTimelineController } from "./hooks/useSessionTimelineController";
 import { useSessionActions } from "./hooks/useSessionActions";
@@ -107,7 +107,6 @@ import { SessionActionOverlays } from "./components/overlays/SessionActionOverla
 import { AppUpdateOverlay } from "./components/overlays/AppUpdateOverlay";
 import { ImportOverlayHost } from "./components/overlays/ImportOverlayHost";
 import { EnvironmentOverlay } from "./components/overlays/EnvironmentOverlay";
-import { SessionRuntimeUiOverlay, createSessionRuntimeUiResponder } from "./components/overlays/SessionRuntimeUiOverlay";
 import {
   ConversationOutline,
   EnvironmentDialog,
@@ -158,7 +157,6 @@ export function App() {
     );
   }
 
-  useSessionRuntimeBridge();
   const store = useStore();
   // Composer input state is owned by ComposerArea; the root does not subscribe to each key.
   const currentSessionId = useAtomValue(currentSessionIdAtom);
@@ -170,52 +168,20 @@ export function App() {
   const setCurrentSessionId = useSetAtom(currentSessionIdAtom);
   const replaceProjectSessions = useSetAtom(replaceProjectSessionsAtom);
   const setProjects = useSetAtom(replaceProjectInventoryAtom);
-  const setAgents = useSetAtom(replaceAgentInventoryAtom);
-  const upsertAgent = useSetAtom(upsertAgentInventoryAtom);
-  const applyRuntimeCapability = useSetAtom(applyRuntimeCapabilityAtom);
-  const claimSessionUiResponse = useSetAtom(claimSessionRuntimeUiResponseAtom);
-  const rollbackSessionUiResponse = useSetAtom(rollbackSessionRuntimeUiResponseAtom);
+  const applyRuntimeEvent = useSetAtom(applySessionRuntimeEventAtom);
   const upsertSession = useSetAtom(upsertSessionAtom);
   const setSessionDraft = useSetAtom(setSessionDraftAtom);
   const setSessionAttachments = useSetAtom(setSessionAttachmentsAtom);
   const setSessionCatalogLoadState = useSetAtom(setSessionCatalogLoadStateAtom);
+  const promoteSessionComposerState = useSetAtom(promoteSessionComposerStateAtom);
   const removeSessionState = useSetAtom(removeSessionStateAtom);
-  // sessionRuntimeUiResponder: sync store read (overlay renders only during UI requests).
-  function getSessionRuntimeUiResponder() {
-    const sid = store.get(currentSessionIdAtom);
-    const rt = sid ? store.get(currentSessionRuntimeAtom) : undefined;
-    if (!sid || !rt?.agentId || rt.runtimeGeneration == null) return undefined;
-    const b = { sessionId: sid, agentId: rt.agentId, runtimeGeneration: rt.runtimeGeneration };
-    return createSessionRuntimeUiResponder({
-      binding: b,
-      readBinding: () => {
-        const r = store.get(currentSessionRuntimeAtom);
-        return r?.agentId ? { sessionId: sid, agentId: r.agentId, runtimeGeneration: r.runtimeGeneration } : undefined;
-      },
-      claim: (i) => claimSessionUiResponse(i),
-      rollback: (i) => rollbackSessionUiResponse(i),
-      send: async (i) => {
-        const cRt = store.get(currentSessionRuntimeAtom);
-        if (!sid || !cRt) return;
-        const input = { sessionId: sid, requestId: i.requestId, agentId: cRt.agentId ?? "", runtimeGeneration: cRt.runtimeGeneration };
-        const ui = store.get(currentSessionRuntimeUiAtom);
-        const currentReq = ui?.requests[i.requestId];
-        const request = currentReq?.request;
-        if (!input.agentId || !request) return;
-        if (currentReq?.status !== "responding" && !claimSessionUiResponse({ ...input, request })) return;
-        void api.sessions.sendUiResponse({ ...input, response: i.response }).catch((error: unknown) => {
-          rollbackSessionUiResponse({ ...input, request });
-          showToast(error instanceof Error ? error.message : String(error), 4000);
-        });
-      },
-    });
-  }
   const removeSessionComposerState = useSetAtom(removeSessionComposerStateAtom);
   const sessionTimeline = useSessionTimelineController({ sessionId: currentSessionId });
   const currentSessionIdRef = useRef<string | undefined>(currentSessionId);
   currentSessionIdRef.current = currentSessionId;
   const openSessionRequestRef = useRef(0);
   const creatingSessionDraftRef = useRef<Set<string>>(new Set());
+  const chatBootstrapPromotionRef = useRef<Promise<string> | undefined>(undefined);
 
   // 项目的 git worktree 列表：{ parentId -> WorktreeEntry[] }
   const [pendingAgents, setPendingAgents] = useState<PendingAgentTab[]>([]);
@@ -252,7 +218,7 @@ export function App() {
 
   // composerAgentModes legacy mirror removed — mode restore uses Session atom in useQueuedPrompt.
   /** 客户端队列按 agent 记录 flush 锁，避免 tool-end 与 idle 并发投递。 */
-  const queueFlushByAgentRef = useRef<Set<string>>(new Set());
+  const queueFlushBySessionRef = useRef<Set<string>>(new Set());
 
   /** & 会话引用选择缓存：key = chip raw（如 "&My Session"），value = 选中的消息列表 */
   const [sessionRefSelections, setSessionRefSelections] = useState<
@@ -412,10 +378,16 @@ export function App() {
   });
 
   const rename = useRename({
-    renameAgent: (id, name) => api.agents.rename(id, name),
+    renameAgent: async (id, name) => {
+      const agent = agentsRef.current.find((candidate) => candidate.id === id);
+      const sessionId = store.get(sessionIdByRuntimeAgentIdAtomFamily(id));
+      if (!agent || !sessionId) throw new Error("Session runtime is not bound");
+      const updated = await api.sessions.updateRecord(sessionId, { title: name });
+      upsertSession(updated);
+      return { ...agent, title: updated.title };
+    },
     renameSession: (id, name) => api.sessions.updateRecord(id, { title: name }),
     showToast,
-    upsertAgent,
     refreshProjectSessions,
     closeAgentMenu: () => undefined,
   });
@@ -424,6 +396,15 @@ export function App() {
     store.get(sessionRecordsByProjectIdAtomFamily(projectId));
   const getSessionRecord = (sessionId: string) =>
     store.get(sessionRecordByIdAtomFamily(sessionId));
+  const getRuntimeTargetForSession = (sessionId: string | undefined) =>
+    sessionId
+      ? toSessionRuntimeTarget(sessionId, store.get(sessionRuntimeBySessionIdAtomFamily(sessionId)))
+      : undefined;
+  const getRuntimeTargetForAgent = (agentId: string | undefined) => {
+    if (!agentId) return undefined;
+    const sessionId = store.get(sessionIdByRuntimeAgentIdAtomFamily(agentId));
+    return getRuntimeTargetForSession(sessionId);
+  };
   const [sessionHistoryLoading, setSessionHistoryLoading] = useState(false);
   const appUpdate = useAppUpdateController({
     checkUpdate: api.app.checkUpdate,
@@ -627,42 +608,42 @@ export function App() {
     if (targetId) setPromptForAgent(targetId, value);
   }
 
-  function setAttachedImagesForAgent(
-    agentId: string,
-    value: ImageContent[] | ((current: ImageContent[]) => ImageContent[]),
-  ) {
-    setSessionAttachments({ sessionId: agentId, value });
-  }
-
-
   // Queue ownership extracted to useQueuedPrompt.
   const queue = useQueuedPrompt({
     displayAgentsRef,
-    activeAgentIdRef,
-    queueFlushByAgentRef,
+    queueFlushBySessionRef,
     composerTextareaRef,
     pendingComposerCaretRef,
-    livePromptByAgentRef,
     store,
-    setPromptForAgent,
-    setAttachedImagesForAgent,
     setComposerCursor: (v: React.SetStateAction<number>) => { /* no-op: cursor managed by composer controller */ },
     showToast,
     unknownDeliveryMessage: t("app.queuedUnknown"),
     dispatchPromptSnapshot,
   });
-  const activeQueuedPrompts = activeAgentId
-    ? (queue.queuedPrompts[activeAgentId] ?? [])
+  useSessionRuntimeBridge({
+    onRuntimeCapabilityChanged: ({ sessionId, previous, current, patch }) => {
+      if (
+        previous?.isExecutingTool &&
+        !current.isExecutingTool &&
+        (patch.toolStateSequence == null ||
+          previous.toolStateSequence == null ||
+          patch.toolStateSequence >= previous.toolStateSequence) &&
+        queue.isSessionRuntimeBusy(sessionId)
+      ) {
+        void queue.flushQueuedSteerPrompts(sessionId);
+      }
+    },
+  });
+  const activeQueuedPrompts = currentSessionId
+    ? (queue.queuedPrompts[currentSessionId] ?? [])
     : [];
 
-  // Adapter: resolve sessionId → agentId for queue enqueue from modern ComposerArea.
   const enqueueSessionPrompt = useCallback((
     sessionId: string,
     snapshot: { displayText: string; message: string; images?: ImageContent[]; agentMode: string },
   ) => {
-    const agentId = store.get(sessionRuntimeBySessionIdAtomFamily(sessionId))?.agentId;
-    if (!agentId) return false;
-    return queue.enqueueQueuedPrompt(agentId, {
+    if (!store.get(sessionRuntimeBySessionIdAtomFamily(sessionId))?.agentId) return false;
+    return queue.enqueueQueuedPrompt(sessionId, {
       id: crypto.randomUUID(),
       message: snapshot.message,
       displayText: snapshot.displayText,
@@ -675,7 +656,10 @@ export function App() {
 
   const activeMessages = sessionTimeline.messages;
   // activeConversationStatus / activeRuntimeState replaced by sync isAgentCurrentlyBusy().
-  const hasActiveConversation = Boolean(currentSession);
+  // The built-in Chat uses a renderer-only Session ID before its first send.
+  // Workspace chrome belongs to that visible conversation surface, not only to
+  // persisted catalog records; otherwise Chat loses the dev-equivalent toolbar.
+  const hasActiveConversation = Boolean(currentSessionId);
 
   // Timeline scroll, pagination and jump ownership lives in sessionTimeline.
   const activeProjectHasBusyAgent = Boolean(
@@ -898,12 +882,6 @@ export function App() {
     t,
   });
 
-  // 优化:建议项计算仅在必要时触发,避免每次输入都重计算导致卡顿
-  // 只有当建议框打开时才计算,关闭时返回空数组
-  const activeProjectSessions = useAtomValue(
-    sessionSummariesByProjectIdAtomFamily(activeProjectId ?? ""),
-  );
-
   const {
     selectProject: selectProjectCommand,
     selectSession: selectSessionCommand,
@@ -921,11 +899,8 @@ export function App() {
     activeProjectId,
     sessionsProjectId,
     projects,
-    activeProjectSessions,
-    sessionRefSelections,
     setActiveProjectId,
     setCurrentSessionId,
-    setSessionRefSelections,
     getSessionRecord,
     getProjectSessionRecords,
     upsertSession,
@@ -935,6 +910,51 @@ export function App() {
     api,
     showToast,
   });
+
+  useEffect(() => {
+    if (!activeProject) return;
+    const action = resolveChatSessionBootstrap({
+      isChatProject: isChatProject(activeProject),
+      currentSessionId,
+      catalogStatus: store.get(sessionCatalogLoadStateAtom)[activeProject.id]?.status,
+    });
+    if (action.kind === "load") {
+      void refreshProjectSessions(activeProject.id).catch(() => undefined);
+    } else if (action.kind === "select") {
+      selectSessionCommand(activeProject.id, action.sessionId, false);
+    }
+  }, [
+    activeProject,
+    currentSessionId,
+    refreshProjectSessions,
+    selectSessionCommand,
+    store,
+  ]);
+
+  const ensureSessionForSend = useCallback(async (sessionId: string) => {
+    if (sessionId !== CHAT_BOOTSTRAP_SESSION_ID) return sessionId;
+    if (chatBootstrapPromotionRef.current) return chatBootstrapPromotionRef.current;
+    const project = projects.find((candidate) => candidate.id === activeProjectId);
+    if (!project || !isChatProject(project)) {
+      throw new Error(t("app.chatBootstrapUnavailable"));
+    }
+    const promotion = api.sessions.createDraft({
+      projectId: project.id,
+      title: t("app.chatProject"),
+    }).then((session) => {
+      upsertSession(session);
+      promoteSessionComposerState({
+        fromSessionId: CHAT_BOOTSTRAP_SESSION_ID,
+        toSessionId: session.id,
+      });
+      selectSessionCommand(project.id, session.id, false);
+      return session.id;
+    }).finally(() => {
+      chatBootstrapPromotionRef.current = undefined;
+    });
+    chatBootstrapPromotionRef.current = promotion;
+    return promotion;
+  }, [activeProjectId, projects, promoteSessionComposerState, selectSessionCommand, upsertSession]);
 
   /** 有效命令名白名单：仅已知命令渲染为 chip */
   const mergedCommands = useMemo(
@@ -993,22 +1013,16 @@ export function App() {
       pendingReplacementById,
       draftIds,
     );
-    queue.updateQueuedPrompts((current) =>
-      migrateQueuedPrompts(current, pendingReplacementById, draftIds),
-    );
-    for (const [oldAgentId] of pendingReplacementById) {
-      queueFlushByAgentRef.current.delete(oldAgentId);
-    }
-    for (const agentId of queueFlushByAgentRef.current) {
-      if (!draftIds.has(agentId)) queueFlushByAgentRef.current.delete(agentId);
-    }
   }
+
+  useEffect(() => {
+    handleAgentInventoryChanged(agents);
+  }, [agents]);
 
   const bootstrapProps = {
     onProjectsChanged: (next: Project[]) => {
       if (!activeProjectId && next.length > 0) setActiveProjectId(next[0].id);
     },
-    onAgentInventoryChanged: handleAgentInventoryChanged,
     onSettingsApplied: (next: AppSettings) => {
       setSettings(next);
       showToast(t("settings.restartNotice"));
@@ -1018,22 +1032,9 @@ export function App() {
       navigateTo(url);
     },
     onTrustRequest: overlays.setTrustRequest,
-    onFocusTarget: (target: { agentId: string }) => {
-      const agent = displayAgentsRef.current.find((item) => item.id === target.agentId);
-      if (!agent) return;
-      const sessionId = store.get(
-        sessionIdByRuntimeAgentIdAtomFamily(target.agentId),
-      );
-      if (sessionId) {
-        selectSessionCommand(agent.projectId, sessionId, false);
-      } else {
-        selectProjectCommand(agent.projectId);
-      }
-    },
-    queueFlushSteer: (agentId: string) => {
-      if (queue.isAgentCurrentlyBusy(agentId)) {
-        void queue.flushQueuedSteerPrompts(agentId);
-      }
+    onFocusTarget: (target: { sessionId: string }) => {
+      const session = store.get(sessionRecordByIdAtomFamily(target.sessionId));
+      if (session) selectSessionCommand(session.projectId, session.id, false);
     },
   };
 
@@ -1166,14 +1167,17 @@ export function App() {
   }, [sessionClampComposerHeight, composerRef]);
 
   useEffect(() => {
-    if (activeAgentId && !isPendingAgentId(activeAgentId))
-      void api.agents
-        .commands(activeAgentId)
-        // goal 模式这版先不公开入口；保留底层实现,等待官方 plan/goal 能力稳定后再决定是否恢复。
-        .then((cmds) => setCommands(cmds))
-        .catch(() => setCommands([]));
-    else setCommands([]);
-  }, [activeAgentId]);
+    const target = getRuntimeTargetForSession(currentSessionId);
+    if (!target) {
+      setCommands([]);
+      return;
+    }
+    void api.sessions
+      .listRuntimeCommands(target)
+      // goal 模式这版先不公开入口；保留底层实现,等待官方 plan/goal 能力稳定后再决定是否恢复。
+      .then((result) => setCommands(requireSessionCommand(result).value))
+      .catch(() => setCommands([]));
+  }, [activeAgentId, currentSessionId]);
 
   // 持久化会话来源过滤配置
   useEffect(() => {
@@ -1299,7 +1303,9 @@ export function App() {
 
   async function cloneAgentSession(agentId: string) {
     try {
-      const result = await api.agents.cloneSession(agentId);
+      const target = getRuntimeTargetForAgent(agentId);
+      if (!target) return;
+      const result = requireSessionCommand(await api.sessions.cloneRuntime(target));
       if (result?.cancelled) {
         showToast(t("app.sessionCopyCancelled"));
         return;
@@ -1397,14 +1403,22 @@ export function App() {
   }
 
   function applyAgentRuntimeState(agentId: string, incoming: AgentRuntimeState) {
-    // applyRuntimeCapabilityAtom internally does mergeAgentRuntimeState.
-    return applyRuntimeCapability({ agentId, state: incoming });
+    const target = getRuntimeTargetForAgent(agentId);
+    if (!target) return undefined;
+    applyRuntimeEvent({
+      ...target,
+      sourceChannel: "agents:runtime-state",
+      payload: { agentId, state: incoming },
+    });
+    return store.get(sessionRuntimeBySessionIdAtomFamily(target.sessionId))?.state;
   }
 
   async function refreshRuntimeState(agentId = activeAgentId) {
     if (!agentId || isPendingAgentId(agentId)) return;
-    const state = await api.agents.runtimeState(agentId).catch(() => undefined);
-    if (state) applyAgentRuntimeState(agentId, state);
+    const target = getRuntimeTargetForAgent(agentId);
+    if (!target) return;
+    const result = await api.sessions.getRuntimeState(target).catch(() => undefined);
+    if (result?.ok) applyAgentRuntimeState(agentId, result.value.value);
   }
 
   /** 调整菜单位置避免溢出视口 */
@@ -1419,17 +1433,21 @@ export function App() {
 
   async function closeAgent(agentId: string) {
     if (isPendingAgentId(agentId)) return;
-    await api.agents.stop(agentId);
+    const target = getRuntimeTargetForAgent(agentId);
+    if (!target) return;
+    requireSessionCommand(await api.sessions.stopRuntime(target));
   }
 
   async function abortAgent(agentId = activeAgentId) {
     if (!agentId || isPendingAgentId(agentId)) return;
+    const target = getRuntimeTargetForAgent(agentId);
+    if (!target) return;
     // 立即清除流式状态，让思考气泡和 loading 立刻消失，不等后端 RPC 返回
-    const previous = store.get(runtimeCapabilityByAgentIdAtomFamily(agentId));
+    const previous = store.get(sessionRuntimeBySessionIdAtomFamily(target.sessionId))?.state;
     if (previous) {
       applyAgentRuntimeState(agentId, { ...previous, isStreaming: false });
     }
-    await api.agents.abort(agentId);
+    requireSessionCommand(await api.sessions.abortRuntime(target));
     // 不调用 refreshRuntimeState：AgentManager.abort() 会通过 emitState 推送正确状态，
     // 避免后端 get_state 返回过时的 isStreaming: true 覆盖前端立刻设的 false。
   }
@@ -1437,6 +1455,8 @@ export function App() {
   async function restartActiveAgent() {
     if (!activeAgentId || !activeAgent) return;
     const restartingAgent = activeAgent;
+    const target = getRuntimeTargetForAgent(restartingAgent.id);
+    if (!target) return;
     setRestartingAgentId(restartingAgent.id);
     setSessionActionsOpen(false);
     pendingAgentsRef.current = [
@@ -1452,12 +1472,12 @@ export function App() {
     ];
     setPendingAgents(pendingAgentsRef.current);
     try {
-      const tab = await api.agents.restart(restartingAgent.id);
+      const replacement = requireSessionCommand(await api.sessions.restartRuntime(target));
       pendingAgentsRef.current = pendingAgentsRef.current.filter(
         (agent) => agent.id !== restartingAgent.id,
       );
       setPendingAgents(pendingAgentsRef.current);
-      void refreshRuntimeState(tab.id);
+      void refreshRuntimeState(replacement.runtime.agentId);
       showToast(t("app.agentRestarted"), 2000);
     } catch (error) {
       pendingAgentsRef.current = pendingAgentsRef.current.map((agent) =>
@@ -1477,7 +1497,11 @@ export function App() {
   async function exportAgentHtml(agentId: string) {
     if (isPendingAgentId(agentId)) return;
     try {
-      const result = await api.agents.exportHtml(agentId);
+      const target = getRuntimeTargetForAgent(agentId);
+      if (!target) return;
+      const result = requireSessionCommand(await api.sessions.exportRuntimeHtml(target)).value as {
+        path: string;
+      };
       showToast(t("app.exportedPath", { path: result.path }), 3500);
     } catch (err) {
       showToast(err instanceof Error ? err.message : String(err), 5000);
@@ -1491,12 +1515,12 @@ export function App() {
     return rt?.status === "running" || Boolean((rt?.state as any)?.isStreaming);
   }
 
-  // 处理所有 agent 的 idle 队列：隐藏会话也不会因切换选中项而卡住。
+  // Drain by stable Session identity so runtime replacement cannot orphan queued work.
   // tool-end 的 steer 投递直接在 onRuntimeState 原始事件上处理，避免批量 render 漏边沿。
   useEffect(() => {
-    for (const agentId of Object.keys(queue.queuedPrompts)) {
-      if (queue.canFlushQueuedPrompt(agentId)) {
-        void queue.flushNextQueuedPrompt(agentId);
+    for (const sessionId of Object.keys(queue.queuedPrompts)) {
+      if (queue.canFlushQueuedPrompt(sessionId)) {
+        void queue.flushNextQueuedPrompt(sessionId);
       }
     }
   }, [activeProjectRuntimeCapabilities, agents, queue.queuedPrompts]);
@@ -1506,7 +1530,7 @@ export function App() {
   // 已删除内置 /goal 与 startNewGoal 实现。
 
   async function dispatchPromptSnapshot(
-    agentId: string,
+    sessionId: string,
     message: string,
     images?: ImageContent[],
     streamingBehavior?: "steer" | "followUp",
@@ -1514,10 +1538,11 @@ export function App() {
     templateDescription?: string,
   ) {
     const submission = buildComposerPromptSubmission(message, agentMode);
-    let result: Awaited<ReturnType<typeof api.agents.prompt>>;
+    let result: Awaited<ReturnType<typeof api.sessions.sendPrompt>>;
     try {
-      result = await api.agents.prompt({
-        agentId,
+      result = await api.sessions.sendPrompt({
+        sessionId,
+        requestId: crypto.randomUUID(),
         message: submission.message,
         images,
         ...(submission.agentMessage ? { agentMessage: submission.agentMessage } : {}),
@@ -1532,15 +1557,16 @@ export function App() {
       );
     }
     if (!result.accepted) {
+		const localizedError = translateI18nDescriptor(result, result.error);
       if (result.delivery === "unknown") {
-        throw new PromptDeliveryUnknownError(result.error);
+        throw new PromptDeliveryUnknownError(localizedError);
       }
-      throw new Error(result.error);
+      throw new Error(localizedError);
     }
   }
 
   async function submitPromptSnapshot(
-    agentId: string,
+    sessionId: string,
     message: string,
     images?: ImageContent[],
     streamingBehavior?: "steer" | "followUp",
@@ -1552,10 +1578,10 @@ export function App() {
     // 客户端队列 drain 直接调用 dispatchPromptSnapshot，并显式指定其投递语义。
     const behavior =
       streamingBehavior ??
-      (agentId === activeAgentId && isAgentCurrentlyBusy() ? "steer" : undefined);
+      (sessionId === currentSessionId && isAgentCurrentlyBusy() ? "steer" : undefined);
     try {
       await dispatchPromptSnapshot(
-        agentId,
+        sessionId,
         message,
         images,
         behavior,
@@ -1584,8 +1610,13 @@ export function App() {
     // 30 秒兜底释放，防止锁泄漏
     setTimeout(() => resendingIdsRef.current.delete(message.id), 30_000);
 
-    // "重新发送"按原消息快照再次提交,不修改输入框,图片也复用原始 base64 内容。
-    void submitPromptSnapshot(activeAgentId, message.text, message.images);
+    const target = getRuntimeTargetForAgent(activeAgentId);
+    if (!target || !currentSessionId) return;
+    // Resend mutates the persisted branch first, then submits the exact returned snapshot.
+    void api.sessions.prepareRuntimeResend(target, message.id)
+      .then((result) => requireSessionCommand(result).value)
+      .then((snapshot) => submitPromptSnapshot(currentSessionId, snapshot.text, snapshot.images))
+      .catch((error) => showToast(error instanceof Error ? error.message : String(error), 5000));
   }
 
   /** agent 切回 idle 时释放所有重发锁，允许下次正常重发。 */
@@ -1609,7 +1640,9 @@ export function App() {
   async function editMessage(messageId: string, newText: string) {
     if (!activeAgentId) return;
     try {
-      await api.agents.editMessage(activeAgentId, messageId, newText);
+      const target = getRuntimeTargetForAgent(activeAgentId);
+      if (!target) return;
+      requireSessionCommand(await api.sessions.editRuntimeMessage(target, messageId, newText));
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       showToast(`${t("message.editFailed")}: ${translateAgentErrorMessage(msg)}`, 5000);
@@ -1629,7 +1662,9 @@ export function App() {
       onConfirm: async () => {
         overlays.clearConfirm();
         try {
-          await api.agents.deleteMessage(activeAgentId!, messageId);
+          const target = getRuntimeTargetForAgent(activeAgentId);
+          if (!target) return;
+          requireSessionCommand(await api.sessions.deleteRuntimeMessage(target, messageId));
         } catch (error) {
           const msg = error instanceof Error ? error.message : String(error);
           showToast(`${t("message.deleteFailed")}: ${translateAgentErrorMessage(msg)}`, 5000);
@@ -1694,7 +1729,6 @@ export function App() {
       // WSL/Windows pi 源切换：重新检测 pi 环境、刷新项目和会话列表
       if ("wslEnabled" in patch || "wslDistro" in patch || "wslUser" in patch) {
         void api.pi.check().then((next) => setPiStatus(next)).catch(() => undefined);
-        void api.agents.list().then(setAgents).catch(() => undefined);
         void api.projects.list().then(setProjects).catch(() => undefined);
         if (activeProjectId) {
           void refreshProjectSessions(activeProjectId, true).catch(() => undefined);
@@ -1954,11 +1988,6 @@ export function App() {
     sessions: {
       open: runOpenSidebarSessionById,
       createDraft: runCreateSessionDraft,
-      createAnonymousAgent: async (projectId: string) => {
-        const project = projects.find((p) => p.id === projectId);
-        if (!project) return;
-        void api.agents.create({ projectId, title: t("app.anonymousChatTitle", { name: project.name }), noSession: true });
-      },
       deleteDraft: deleteDraftSession,
       rename: rename.openSessionRename,
       export: runExportSidebarSession,
@@ -1994,10 +2023,22 @@ export function App() {
       },
     },
     rpc: {
-      getLogging: (agentId) => api.rpcLogs.getLogging(agentId),
-      setLogging: (agentId, enabled) => api.rpcLogs.setLogging(agentId, enabled),
-      openLogFile: (agentId) => api.rpcLogs.openFile(agentId),
-      listLogs: (agentId) => api.rpcLogs.get({ agentId }),
+      getLogging: (agentId) => {
+        const target = getRuntimeTargetForAgent(agentId);
+        return target ? api.rpcLogs.getLogging(target) : Promise.resolve(false);
+      },
+      setLogging: (agentId, enabled) => {
+        const target = getRuntimeTargetForAgent(agentId);
+        return target ? api.rpcLogs.setLogging(target, enabled) : Promise.resolve(false);
+      },
+      openLogFile: (agentId) => {
+        const target = getRuntimeTargetForAgent(agentId);
+        return target ? api.rpcLogs.openFile(target) : Promise.resolve();
+      },
+      listLogs: (agentId) => {
+        const target = getRuntimeTargetForAgent(agentId);
+        return target ? api.rpcLogs.get({ target }) : Promise.resolve([]);
+      },
     },
   };
 
@@ -2054,6 +2095,7 @@ export function App() {
       restartActiveAgent={restartActiveAgent}
       runCreateSessionDraft={runCreateSessionDraft}
       enqueueSessionPrompt={enqueueSessionPrompt}
+      ensureSessionId={ensureSessionForSend}
       resendUserMessage={resendUserMessage}
       editMessage={editMessage}
       deleteMessage={deleteMessage}
@@ -2063,7 +2105,7 @@ export function App() {
       queueRetract={queue.retractQueuedPromptForEdit}
       queueDiscard={queue.discardQueuedPrompt}
       queuedTrackRef={queuedTrackRef}
-      queueFlushByAgentRef={queueFlushByAgentRef}
+      queueFlushBySessionRef={queueFlushBySessionRef}
       restartingAgentId={restartingAgentId}
       sessionDurationByAgent={sessionDurationByAgent}
       activeProjectId={activeProjectId}
@@ -2160,15 +2202,14 @@ export function App() {
           onClick: () => scratchPad.toggle(),
           icon: <Pencil size={17} />,
         }}
-        terminalAction={{
+        terminalAction={activeAgentId ? {
           active: terminalOpen,
           label: t("app.terminal"),
           onClick: () => {
-            if (!activeAgentId) return;
             setTerminalOpenForAgent(activeAgentId, !terminalOpen);
           },
           icon: <Terminal size={17} />,
-        }}
+        } : undefined}
         filesAction={{
           active: drawer === "files",
           label: t("app.files"),
@@ -2182,7 +2223,7 @@ export function App() {
           },
           icon: <FolderOpen size={17} />,
         }}
-        gitAction={settings.enableGitManagement && activeProjectId && !isChatProject(activeProject) ? {
+        gitAction={settings.enableGitManagement && activeProjectId ? {
           active: drawer === "git",
           label: t("drawer.sourceControl"),
           onClick: () => {
@@ -2406,20 +2447,6 @@ export function App() {
         }}
       />
     </EnvironmentOverlay>
-    {currentSessionId && (() => {
-      const responder = getSessionRuntimeUiResponder();
-      if (!responder) return null;
-      const rt = store.get(currentSessionRuntimeAtom);
-      const ui = store.get(currentSessionRuntimeUiAtom);
-      return (
-        <SessionRuntimeUiOverlay
-          sessionId={currentSessionId}
-          runtime={rt}
-          ui={ui}
-          responder={responder}
-        />
-      );
-    })()}
     <SettingsFeatureRoot
       settings={settings}
       piUpdate={piUpdate}

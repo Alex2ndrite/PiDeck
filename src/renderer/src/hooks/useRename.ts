@@ -6,7 +6,6 @@ export interface UseRenameApi {
   renameAgent: (id: string, name: string) => Promise<AgentTab>;
   renameSession: (id: string, name: string) => Promise<unknown>;
   showToast: (message: string, duration?: number) => void;
-  upsertAgent: (tab: AgentTab) => void;
   refreshProjectSessions: (projectId: string, force?: boolean) => Promise<unknown>;
   /** Optional: close agent context menu before opening rename dialog. */
   closeAgentMenu?: () => void;
@@ -53,7 +52,6 @@ export function useRename(api: UseRenameApi) {
     setAgentRenaming(true);
     try {
       const tab = await api.renameAgent(agentRenameTarget.id, name);
-      api.upsertAgent(tab);
       setAgentRenameTarget(null);
       setSessionRenameTarget(null);
       setAgentRenameValue("");

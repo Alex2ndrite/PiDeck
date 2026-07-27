@@ -4,17 +4,26 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { extname, join, normalize } from "node:path";
 import type {
-	AgentTab,
 	AgentRuntimeState,
-	AvailableModel,
 	AppSettings,
 	ChatMessage,
-	CreateAgentInput,
+	CreateSessionDraftInput,
+	ImageContent,
+	PiCommand,
 	Project,
-	SendPromptInput,
-	SendPromptResult,
+	SendSessionPromptInput,
+	SendSessionPromptResult,
+	SessionCommandResult,
+	SessionMessagePage,
+	SessionRecord,
+	SessionRuntimeInfo,
+	SessionRuntimeReplacement,
+	SessionRuntimeTarget,
 	SessionSummary,
+	SessionTargetedValue,
+	UpdateSessionRecordInput,
 } from "../../shared/types";
+import { serializeWebClientDictionaries, webEnUS } from "./WebI18n";
 
 type WebServiceSettings = Pick<
 	AppSettings,
@@ -23,20 +32,85 @@ type WebServiceSettings = Pick<
 
 type WebServiceDependencies = {
 	listProjects: () => Project[];
-	listAgents: () => AgentTab[];
 	listSessions: (projectId: string) => Promise<SessionSummary[]>;
-	getMessages: (agentId: string) => ChatMessage[];
-	createAgent: (input: CreateAgentInput) => Promise<AgentTab>;
-	sendPrompt: (input: SendPromptInput) => Promise<SendPromptResult>;
-	stopAgent: (agentId: string) => Promise<void>;
-	runtimeState: (agentId: string) => Promise<AgentRuntimeState>;
-	cycleModel: (agentId: string) => Promise<AgentRuntimeState>;
-	availableModels: (agentId: string) => Promise<AvailableModel[]>;
-	setModel: (agentId: string, provider: string, modelId: string) => Promise<AgentRuntimeState>;
-	refreshModels: (agentId: string) => Promise<AgentRuntimeState>;
-	cycleThinking: (agentId: string) => Promise<AgentRuntimeState>;
-	setThinking: (agentId: string, level: string) => Promise<AgentRuntimeState>;
+	getSessionRuntimeMessages: (sessionId: string) => SessionTargetedValue<ChatMessage[]> | undefined;
+	listCatalogSessions: (projectId?: string) => Promise<SessionRecord[]>;
+	createSessionDraft: (input: CreateSessionDraftInput) => Promise<SessionRecord>;
+	updateSessionRecord: (sessionId: string, patch: UpdateSessionRecordInput) => Promise<SessionRecord>;
+	deleteSessionRecord: (sessionId: string) => Promise<boolean>;
+	copySessionRecord: (sessionId: string) => Promise<{ cancelled?: boolean; targetSessionId?: string }>;
+	exportSessionRecordHtml: (sessionId: string) => Promise<{ path: string }>;
+	readSessionReferenceMessages: (
+		sessionId: string,
+	) => Promise<Array<{ role: string; content: string; timestamp: number }>>;
+	readSessionMessages: (sessionId: string) => Promise<ChatMessage[]>;
+	readSessionMessagePage: (
+		sessionId: string,
+		before?: number,
+		pageSize?: number,
+	) => Promise<SessionMessagePage>;
+	sendSessionPrompt: (input: SendSessionPromptInput) => Promise<SendSessionPromptResult>;
+	listSessionRuntimes: () => SessionRuntimeInfo[];
+	stopSessionRuntime: (target: SessionRuntimeTarget) => Promise<SessionCommandResult<SessionRuntimeTarget>>;
+	abortSessionRuntime: (target: SessionRuntimeTarget) => Promise<SessionCommandResult<SessionTargetedValue<void>>>;
+	restartSessionRuntime: (target: SessionRuntimeTarget) => Promise<SessionCommandResult<SessionRuntimeReplacement>>;
+	compactSessionRuntime: (target: SessionRuntimeTarget, prompt?: string) => Promise<
+		SessionCommandResult<SessionTargetedValue<AgentRuntimeState>>
+	>;
+	getSessionRuntimeState: (target: SessionRuntimeTarget) => Promise<
+		SessionCommandResult<SessionTargetedValue<AgentRuntimeState>>
+	>;
+	listSessionRuntimeCommands: (target: SessionRuntimeTarget) => Promise<
+		SessionCommandResult<SessionTargetedValue<PiCommand[]>>
+	>;
+	exportSessionRuntimeHtml: (target: SessionRuntimeTarget) => Promise<
+		SessionCommandResult<SessionTargetedValue<unknown>>
+	>;
+	editSessionRuntimeMessage: (
+		target: SessionRuntimeTarget,
+		messageId: string,
+		newText: string,
+	) => Promise<SessionCommandResult<SessionTargetedValue<void>>>;
+	deleteSessionRuntimeMessage: (
+		target: SessionRuntimeTarget,
+		messageId: string,
+	) => Promise<SessionCommandResult<SessionTargetedValue<void>>>;
+	prepareSessionRuntimeResend: (
+		target: SessionRuntimeTarget,
+		messageId: string,
+	) => Promise<SessionCommandResult<SessionTargetedValue<{ text: string; images?: ImageContent[] }>>>;
+	setSessionRuntimeModel: (
+		target: SessionRuntimeTarget,
+		provider: string,
+		modelId: string,
+	) => Promise<SessionCommandResult<SessionTargetedValue<AgentRuntimeState>>>;
+	setSessionRuntimeThinking: (
+		target: SessionRuntimeTarget,
+		level: string,
+	) => Promise<SessionCommandResult<SessionTargetedValue<AgentRuntimeState>>>;
+	cloneSessionRuntime: (target: SessionRuntimeTarget) => Promise<SessionCommandResult<{
+		cancelled?: boolean;
+		targetSessionId?: string;
+		[key: string]: unknown;
+	}>>;
 };
+
+function serializePublicWebPayload(body: unknown): string {
+	return JSON.stringify(body, function (key, value) {
+		if (key === "debugDetails" || key === "stack") return undefined;
+		if (
+			key === "error" &&
+			typeof value === "string" &&
+			this &&
+			typeof this === "object" &&
+			typeof (this as { i18nKey?: unknown }).i18nKey === "string"
+		) {
+			const i18nKey = (this as { i18nKey: string }).i18nKey;
+			return (webEnUS as Record<string, string>)[i18nKey] ?? webEnUS["webError.internal"];
+		}
+		return value;
+	});
+}
 
 export class WebServiceManager {
 	private server: Server | null = null;
@@ -73,7 +147,13 @@ export class WebServiceManager {
 			try {
 				await this.handleRequest(request, response, host, port, server);
 			} catch (error) {
-				this.sendError(response, 500, error instanceof Error ? error.message : String(error));
+				console.error("[WebService] Request failed", error);
+				this.sendError(
+					response,
+					500,
+					"webError.internal",
+					"The web service encountered an internal error",
+				);
 			}
 		});
 
@@ -115,7 +195,7 @@ export class WebServiceManager {
 				return;
 			}
 			if (url.pathname === "/api/state") {
-				this.sendJson(response, this.getState());
+				this.sendJson(response, await this.getState());
 				return;
 			}
 			const sessionsMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/sessions$/);
@@ -124,112 +204,217 @@ export class WebServiceManager {
 				this.sendJson(response, { sessions });
 				return;
 			}
-			if (url.pathname === "/api/agents" && request.method === "POST") {
-				const body = await this.readJson<{ projectId?: string }>(request);
-				if (!body.projectId) {
-					this.sendError(response, 400, "projectId 不能为空");
-					return;
-				}
-				const agent = await this.deps.createAgent({ projectId: body.projectId });
-				this.sendJson(response, { agent });
+			const catalogSessionsMatch = url.pathname.match(
+				/^\/api\/projects\/([^/]+)\/sessions\/catalog$/,
+			);
+			if (catalogSessionsMatch && request.method === "GET") {
+				const sessions = await this.deps.listCatalogSessions(
+					decodeURIComponent(catalogSessionsMatch[1]),
+				);
+				this.sendJson(response, { sessions });
 				return;
 			}
-			const promptMatch = url.pathname.match(/^\/api\/agents\/([^/]+)\/prompt$/);
-			if (promptMatch && request.method === "POST") {
-				const body = await this.readJson<Omit<SendPromptInput, "agentId">>(request);
-				const message = body.message?.trim() ?? "";
-				if (!message && !body.images?.length) {
-					this.sendError(response, 400, "message 或 images 不能为空");
+			if (url.pathname === "/api/sessions/runtimes" && request.method === "GET") {
+				this.sendJson(response, { runtimes: this.deps.listSessionRuntimes() });
+				return;
+			}
+			if (url.pathname === "/api/sessions" && request.method === "POST") {
+				const body = await this.readJson<CreateSessionDraftInput>(request);
+				if (!body.projectId?.trim()) {
+					this.sendError(response, 400, "webError.projectIdRequired", "projectId is required");
 					return;
 				}
-				const result = await this.deps.sendPrompt({
+				const session = await this.deps.createSessionDraft(body);
+				this.sendJson(response, { session });
+				return;
+			}
+			const sessionRecordActionMatch = url.pathname.match(
+				/^\/api\/sessions\/([^/]+)\/(update|delete|copy|export-html)$/,
+			);
+			if (sessionRecordActionMatch && request.method === "POST") {
+				const sessionId = decodeURIComponent(sessionRecordActionMatch[1]);
+				const action = sessionRecordActionMatch[2];
+				if (action === "update") {
+					const patch = await this.readJson<UpdateSessionRecordInput>(request);
+					const session = await this.deps.updateSessionRecord(sessionId, patch);
+					this.sendJson(response, { session });
+				} else if (action === "delete") {
+					const deleted = await this.deps.deleteSessionRecord(sessionId);
+					this.sendJson(response, { deleted });
+				} else if (action === "copy") {
+					const result = await this.deps.copySessionRecord(sessionId);
+					this.sendJson(response, { result });
+				} else {
+					const result = await this.deps.exportSessionRecordHtml(sessionId);
+					this.sendJson(response, { result });
+				}
+				return;
+			}
+			const sessionReferenceMessagesMatch = url.pathname.match(
+				/^\/api\/sessions\/([^/]+)\/reference-messages$/,
+			);
+			if (sessionReferenceMessagesMatch && request.method === "GET") {
+				const messages = await this.deps.readSessionReferenceMessages(
+					decodeURIComponent(sessionReferenceMessagesMatch[1]),
+				);
+				this.sendJson(response, { messages });
+				return;
+			}
+			const sessionMessagePageMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/messages\/page$/);
+			if (sessionMessagePageMatch && request.method === "GET") {
+				const beforeValue = url.searchParams.get("before");
+				const pageSizeValue = url.searchParams.get("pageSize");
+				const before = beforeValue === null ? undefined : Number(beforeValue);
+				const pageSize = pageSizeValue === null ? undefined : Number(pageSizeValue);
+				const page = await this.deps.readSessionMessagePage(
+					decodeURIComponent(sessionMessagePageMatch[1]),
+					Number.isSafeInteger(before) ? before : undefined,
+					Number.isSafeInteger(pageSize) ? pageSize : undefined,
+				);
+				this.sendJson(response, page);
+				return;
+			}
+			const sessionMessagesMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/messages$/);
+			if (sessionMessagesMatch && request.method === "GET") {
+				const messages = await this.deps.readSessionMessages(
+					decodeURIComponent(sessionMessagesMatch[1]),
+				);
+				this.sendJson(response, { messages });
+				return;
+			}
+			const sessionPromptMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/prompt$/);
+			if (sessionPromptMatch && request.method === "POST") {
+				const sessionId = decodeURIComponent(sessionPromptMatch[1]);
+				const body = await this.readJson<Omit<SendSessionPromptInput, "sessionId">>(request);
+				const message = body.message?.trim() ?? "";
+				if (!body.requestId?.trim()) {
+					this.sendError(response, 400, "webError.requestIdRequired", "requestId is required");
+					return;
+				}
+				if (!message && !body.images?.length) {
+					this.sendError(response, 400, "webError.messageRequired", "message or images is required");
+					return;
+				}
+				const result = await this.deps.sendSessionPrompt({
 					...body,
-					agentId: decodeURIComponent(promptMatch[1]),
+					sessionId,
 					message,
 				});
-				// prompt endpoint is a transport for SendPromptResult. Semantic rejection is still
-				// a successful HTTP exchange so browser clients can distinguish rejected from
-				// post-write unknown instead of collapsing both into a thrown fetch error.
 				this.sendJson(response, { result });
 				return;
 			}
-			const stopMatch = url.pathname.match(/^\/api\/agents\/([^/]+)\/stop$/);
-			if (stopMatch && request.method === "POST") {
-				await this.deps.stopAgent(decodeURIComponent(stopMatch[1]));
-				this.sendJson(response, { ok: true });
-				return;
-			}
-			const runtimeMatch = url.pathname.match(/^\/api\/agents\/([^/]+)\/runtime$/);
-			if (runtimeMatch && request.method === "GET") {
-				const state = await this.deps.runtimeState(decodeURIComponent(runtimeMatch[1]));
-				this.sendJson(response, { state });
-				return;
-			}
-			const cycleModelMatch = url.pathname.match(/^\/api\/agents\/([^/]+)\/cycle-model$/);
-			if (cycleModelMatch && request.method === "POST") {
-				const state = await this.deps.cycleModel(decodeURIComponent(cycleModelMatch[1]));
-				this.sendJson(response, { state });
-				return;
-			}
-			const modelsMatch = url.pathname.match(/^\/api\/agents\/([^/]+)\/models$/);
-			if (modelsMatch && request.method === "GET") {
-				const models = await this.deps.availableModels(decodeURIComponent(modelsMatch[1]));
-				this.sendJson(response, { models });
-				return;
-			}
-			const setModelMatch = url.pathname.match(/^\/api\/agents\/([^/]+)\/model$/);
-			if (setModelMatch && request.method === "POST") {
-				const body = await this.readJson<{ provider?: string; modelId?: string }>(request);
-				const state = await this.deps.setModel(
-					decodeURIComponent(setModelMatch[1]),
-					body.provider ?? "",
-					body.modelId ?? "",
-				);
-				this.sendJson(response, { state });
-				return;
-			}
-			const refreshModelsMatch = url.pathname.match(/^\/api\/agents\/([^/]+)\/refresh-models$/);
-			if (refreshModelsMatch && request.method === "POST") {
-				const state = await this.deps.refreshModels(decodeURIComponent(refreshModelsMatch[1]));
-				this.sendJson(response, { state });
-				return;
-			}
-			const cycleThinkingMatch = url.pathname.match(/^\/api\/agents\/([^/]+)\/cycle-thinking$/);
-			if (cycleThinkingMatch && request.method === "POST") {
-				const state = await this.deps.cycleThinking(decodeURIComponent(cycleThinkingMatch[1]));
-				this.sendJson(response, { state });
-				return;
-			}
-			const setThinkingMatch = url.pathname.match(/^\/api\/agents\/([^/]+)\/thinking$/);
-			if (setThinkingMatch && request.method === "POST") {
-				const body = await this.readJson<{ level?: string }>(request);
-				const state = await this.deps.setThinking(decodeURIComponent(setThinkingMatch[1]), body.level ?? "");
-				this.sendJson(response, { state });
+			const sessionRuntimeMatch = url.pathname.match(
+				/^\/api\/sessions\/([^/]+)\/runtime\/(stop|abort|restart|compact|state|commands|export-html|edit-message|delete-message|prepare-resend|model|thinking|clone)$/,
+			);
+			if (sessionRuntimeMatch && request.method === "POST") {
+				const sessionId = decodeURIComponent(sessionRuntimeMatch[1]);
+				const action = sessionRuntimeMatch[2];
+				const body = await this.readJson<{
+					target?: SessionRuntimeTarget;
+					prompt?: string;
+					messageId?: string;
+					newText?: string;
+					provider?: string;
+					modelId?: string;
+					level?: string;
+				}>(request);
+				const target = body.target;
+				if (!target || target.sessionId !== sessionId) {
+					this.sendError(
+						response,
+						400,
+						"webError.runtimeTargetRequired",
+						"A matching Session runtime target is required",
+					);
+					return;
+				}
+				let result: unknown;
+				switch (action) {
+					case "stop":
+						result = await this.deps.stopSessionRuntime(target);
+						break;
+					case "abort":
+						result = await this.deps.abortSessionRuntime(target);
+						break;
+					case "restart":
+						result = await this.deps.restartSessionRuntime(target);
+						break;
+					case "compact":
+						result = await this.deps.compactSessionRuntime(target, body.prompt);
+						break;
+					case "state":
+						result = await this.deps.getSessionRuntimeState(target);
+						break;
+					case "commands":
+						result = await this.deps.listSessionRuntimeCommands(target);
+						break;
+					case "export-html":
+						result = await this.deps.exportSessionRuntimeHtml(target);
+						break;
+					case "edit-message":
+						result = await this.deps.editSessionRuntimeMessage(
+							target,
+							body.messageId ?? "",
+							body.newText ?? "",
+						);
+						break;
+					case "delete-message":
+						result = await this.deps.deleteSessionRuntimeMessage(target, body.messageId ?? "");
+						break;
+					case "prepare-resend":
+						result = await this.deps.prepareSessionRuntimeResend(target, body.messageId ?? "");
+						break;
+					case "model":
+						result = await this.deps.setSessionRuntimeModel(
+							target,
+							body.provider ?? "",
+							body.modelId ?? "",
+						);
+						break;
+					case "thinking":
+						result = await this.deps.setSessionRuntimeThinking(target, body.level ?? "");
+						break;
+					case "clone":
+						result = await this.deps.cloneSessionRuntime(target);
+						break;
+				}
+				this.sendJson(response, { result });
 				return;
 			}
 			if (url.pathname.startsWith("/api/")) {
-				this.sendError(response, 404, "API 不存在");
+				this.sendError(response, 404, "webError.apiNotFound", "API not found");
 				return;
 			}
 
 			await this.serveRenderer(url.pathname, response);
 	}
 
-	private getState() {
-		const agents = this.deps.listAgents();
-		const messagesByAgent = Object.fromEntries(
-			agents.map((agent) => [agent.id, this.deps.getMessages(agent.id)]),
-		);
+	private async getState() {
+		const sessions = await this.deps.listCatalogSessions();
+		const runtimes = this.deps.listSessionRuntimes();
+		const messagesBySession: Record<string, ChatMessage[]> = {};
+		for (const runtime of runtimes) {
+			const snapshot = this.deps.getSessionRuntimeMessages(runtime.sessionId);
+			if (!snapshot) continue;
+			const { target } = snapshot;
+			if (
+				target.sessionId !== runtime.sessionId ||
+				target.agentId !== runtime.agentId ||
+				target.runtimeGeneration !== runtime.runtimeGeneration
+			) continue;
+			messagesBySession[runtime.sessionId] = snapshot.value;
+		}
 		return {
 			projects: this.deps.listProjects(),
-			agents,
-			messagesByAgent,
+			sessions,
+			runtimes,
+			messagesBySession,
 		};
 	}
 
 	private renderPage() {
 		return `<!doctype html>
-<html lang="zh-CN">
+<html lang="en-US">
 <head>
 	<meta charset="utf-8" />
 	<meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -259,8 +444,8 @@ export class WebServiceManager {
 		.item strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 		.item small { color: #687280; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 		.section-title { margin: 18px 0 8px; color: #687280; font-size: 12px; font-weight: 700; }
-		.agent-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; align-items: stretch; }
-		.close-agent { padding: 0 10px; font-size: 12px; }
+		.session-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; align-items: stretch; }
+		.close-session { padding: 0 10px; font-size: 12px; }
 		.messages { overflow: auto; padding: 18px; display: flex; flex-direction: column; gap: 10px; }
 		.message { max-width: min(820px, 88%); border: 1px solid #dfe5ee; background: #fff; border-radius: 8px; padding: 10px 12px; white-space: pre-wrap; line-height: 1.55; }
 		.message.user { align-self: flex-end; background: #eaf8ee; border-color: #bee8c6; }
@@ -281,50 +466,109 @@ export class WebServiceManager {
 	<div class="app">
 		<aside>
 			<h1>PiDeck</h1>
-			<div class="section-title">项目</div>
+			<div id="projects-title" class="section-title"></div>
 			<div id="projects" class="list"></div>
-			<div class="section-title">Agent</div>
-			<div id="agents" class="list"></div>
+			<div id="sessions-title" class="section-title"></div>
+			<div id="sessions" class="list"></div>
 		</aside>
 		<main>
 			<header>
-				<h1 id="title">选择或创建 Agent</h1>
+				<h1 id="title"></h1>
 				<div class="header-actions">
-					<span id="status" class="status">连接中...</span>
-					<button class="danger" type="button" id="stop">关闭 Agent</button>
+					<span id="status" class="status"></span>
+					<button class="danger" type="button" id="stop"></button>
 				</div>
 			</header>
-			<div id="messages" class="messages"><div class="empty">从左侧选择项目创建 Agent，或选择现有 Agent。</div></div>
+			<div id="messages" class="messages"></div>
 			<form id="composer" class="composer">
 				<div class="composer-box">
-					<textarea id="prompt" placeholder="发送消息到当前 Agent"></textarea>
+					<textarea id="prompt"></textarea>
 					<div class="composer-actions">
-						<button class="primary" type="submit">发送</button>
+						<button class="primary" type="submit" id="submit"></button>
 					</div>
 				</div>
-				<div class="composer-hint">Enter 发送，Shift/Ctrl + Enter 换行</div>
+				<div id="composer-hint" class="composer-hint"></div>
 			</form>
 		</main>
 	</div>
 	<script>
-		let state = { projects: [], agents: [], messagesByAgent: {} };
-		let activeAgentId = "";
+		const dictionaries = ${serializeWebClientDictionaries()};
+		const locale = /^zh(?:-|$)/i.test(navigator.languages?.[0] || navigator.language || "") ? "zh-CN" : "en-US";
+		const copy = dictionaries[locale] || dictionaries["en-US"];
+		let state = { projects: [], sessions: [], runtimes: [], messagesBySession: {} };
+		let activeSessionId = "";
 		let creatingProjectId = "";
 		let refreshing = false;
 		const el = (id) => document.getElementById(id);
+		function tr(key, params) {
+			let text = copy[key] || dictionaries["en-US"][key] || key;
+			if (!params) return text;
+			return text.replace(/\\{(\\w+)\\}/g, (match, name) => params[name] == null ? match : String(params[name]));
+		}
+		function trOr(key, fallback) {
+			return copy[key] || dictionaries["en-US"][key] || fallback;
+		}
+		function localizeDescriptor(value, fallback) {
+			if (!value?.i18nKey || !copy[value.i18nKey]) return fallback;
+			return tr(value.i18nKey, value.i18nParams);
+		}
+		function localizeMessage(message) {
+			const localized = localizeDescriptor(message.meta, message.text || "");
+			const debug = typeof message.meta?.debugDetails === "string" ? message.meta.debugDetails.trim() : "";
+			if (debug) console.error(debug);
+			return localized;
+		}
+		function runtimeFor(sessionId) {
+			return state.runtimes.find(runtime => runtime.sessionId === sessionId);
+		}
+		function runtimeTarget(runtime) {
+			return runtime ? {
+				sessionId: runtime.sessionId,
+				agentId: runtime.agentId,
+				runtimeGeneration: runtime.runtimeGeneration,
+			} : undefined;
+		}
+		function displayStatus(session, runtime) {
+			return trOr("web.status." + (runtime?.status || session?.status || "unknown"), tr("web.status.unknown"));
+		}
+		function mergeRejectedDraft(rejected, current) {
+			return [rejected, current].filter(value => value && value.trim()).join("\n\n");
+		}
+		function applyStaticCopy() {
+			document.documentElement.lang = locale;
+			el("projects-title").textContent = tr("web.projects");
+			el("sessions-title").textContent = tr("web.sessions");
+			el("title").textContent = tr("web.chooseSession");
+			el("status").textContent = tr("web.connecting");
+			el("stop").textContent = tr("web.closeSession");
+			el("messages").innerHTML = '<div class="empty">' + escapeHtml(tr("web.emptySelection")) + '</div>';
+			el("prompt").placeholder = tr("web.promptPlaceholder");
+			el("submit").textContent = tr("web.send");
+			el("composer-hint").textContent = tr("web.composerHint");
+		}
 		async function api(path, options) {
 			const res = await fetch(path, { headers: { "content-type": "application/json" }, ...options });
-			if (!res.ok) throw new Error((await res.json()).error || res.statusText);
+			if (!res.ok) {
+				const payload = await res.json().catch(() => ({}));
+				if (payload.debugDetails) console.error(payload.debugDetails);
+				throw new Error(payload.code ? tr(payload.code, payload.params) : (payload.error || res.statusText));
+			}
 			return res.json();
+		}
+		async function loadSessionMessages(sessionId) {
+			const response = await api(\`/api/sessions/\${encodeURIComponent(sessionId)}/messages/page\`);
+			state.messagesBySession = { ...state.messagesBySession, [sessionId]: response.messages || [] };
 		}
 		async function refresh() {
 			if (refreshing) return;
 			refreshing = true;
 			try {
 				state = await api("/api/state");
-				if (!activeAgentId && state.agents[0]) activeAgentId = state.agents[0].id;
+				if (!state.sessions.some(session => session.id === activeSessionId)) {
+					activeSessionId = state.sessions[0]?.id || "";
+				}
+				el("status").textContent = tr("web.connected");
 				render();
-				el("status").textContent = "已连接";
 			} catch (error) {
 				el("status").textContent = error.message || String(error);
 			} finally {
@@ -335,41 +579,52 @@ export class WebServiceManager {
 			el("projects").innerHTML = state.projects.map(project => \`
 				<button class="item \${project.id === creatingProjectId ? "loading" : ""}" data-project="\${project.id}" \${creatingProjectId ? "disabled" : ""}>
 					<strong>\${escapeHtml(project.name)}</strong>
-					<small>\${project.id === creatingProjectId ? '<span class="pulse"></span>正在打开...' : escapeHtml(project.path)}</small>
+					<small>\${project.id === creatingProjectId ? '<span class="pulse"></span>' + escapeHtml(tr("web.opening")) : escapeHtml(project.path)}</small>
 				</button>\`).join("");
-			el("agents").innerHTML = state.agents.map(agent => \`
-				<div class="agent-row">
-					<button class="item \${agent.id === activeAgentId ? "active" : ""}" data-agent="\${agent.id}">
-						<strong>\${escapeHtml(agent.title)}</strong>
-						<small>\${agent.status === "running" ? '<span class="pulse"></span>' : ""}\${agent.status} · \${escapeHtml(agent.cwd)}</small>
+			el("sessions").innerHTML = state.sessions.map(session => {
+				const runtime = runtimeFor(session.id);
+				const project = state.projects.find(item => item.id === session.projectId);
+				return \`<div class="session-row">
+					<button class="item \${session.id === activeSessionId ? "active" : ""}" data-session="\${session.id}">
+						<strong>\${escapeHtml(session.title)}</strong>
+						<small>\${runtime?.status === "running" ? '<span class="pulse"></span>' : ""}\${escapeHtml(displayStatus(session, runtime))} · \${escapeHtml(runtime?.cwd || session.projectPath || project?.path || "")}</small>
 					</button>
-					<button class="close-agent ghost" data-close-agent="\${agent.id}" title="关闭 Agent">关闭</button>
-				</div>\`).join("");
-			const agent = state.agents.find(item => item.id === activeAgentId);
-			el("title").textContent = agent ? agent.title : "选择或创建 Agent";
-			el("status").innerHTML = agent?.status === "running" ? '<span class="pulse"></span>正在响应...' : (agent ? agent.status : "已连接");
-			const messages = activeAgentId ? state.messagesByAgent[activeAgentId] || [] : [];
+					<button class="close-session ghost" data-close-session="\${session.id}" title="\${escapeHtml(tr("web.closeSession"))}" \${runtime ? "" : "disabled"}>\${escapeHtml(tr("web.closeSession"))}</button>
+				</div>\`;
+			}).join("");
+			const session = state.sessions.find(item => item.id === activeSessionId);
+			const runtime = session ? runtimeFor(session.id) : undefined;
+			el("title").textContent = session ? session.title : tr("web.chooseSession");
+			el("status").innerHTML = runtime?.status === "running"
+				? '<span class="pulse"></span>' + escapeHtml(tr("web.responding"))
+				: (session ? escapeHtml(displayStatus(session, runtime)) : escapeHtml(tr("web.connected")));
+			const messages = activeSessionId ? state.messagesBySession[activeSessionId] || [] : [];
 			el("messages").innerHTML = messages.length
-				? messages.map(message => \`<div class="message \${message.role}"><span class="role">\${message.role}</span>\${escapeHtml(message.text || "")}</div>\`).join("")
-				: '<div class="empty">暂无消息</div>';
-			el("prompt").disabled = !agent;
-			el("composer").querySelector("button[type=submit]").disabled = !agent;
-			el("stop").disabled = !agent || agent.status === "closed";
-			el("stop").textContent = agent?.status === "running" ? "停止响应" : "关闭 Agent";
+				? messages.map(message => \`<div class="message \${message.role}"><span class="role">\${escapeHtml(trOr("web.role." + message.role, message.role))}</span>\${escapeHtml(localizeMessage(message))}</div>\`).join("")
+				: '<div class="empty">' + escapeHtml(tr("web.noMessages")) + '</div>';
+			el("prompt").disabled = !session;
+			el("composer").querySelector("button[type=submit]").disabled = !session;
+			el("stop").disabled = !runtime || runtime.status === "closed";
+			el("stop").textContent = runtime?.status === "running" ? tr("web.stopResponse") : tr("web.closeSession");
 		}
 		document.addEventListener("click", async (event) => {
-			const closeButton = event.target.closest("[data-close-agent]");
+			const closeButton = event.target.closest("[data-close-session]");
 			if (closeButton) {
-				const agentId = closeButton.dataset.closeAgent;
+				const sessionId = closeButton.dataset.closeSession;
+				const runtime = runtimeFor(sessionId);
+				if (!runtime) return;
 				closeButton.disabled = true;
-				closeButton.textContent = "关闭中";
+				closeButton.textContent = tr("web.closing");
 				try {
-					await api(\`/api/agents/\${encodeURIComponent(agentId)}/stop\`, { method: "POST" });
-					if (activeAgentId === agentId) activeAgentId = "";
+					const action = runtime.status === "running" ? "abort" : "stop";
+					await api(\`/api/sessions/\${encodeURIComponent(sessionId)}/runtime/\${action}\`, {
+						method: "POST",
+						body: JSON.stringify({ target: runtimeTarget(runtime) }),
+					});
 					await refresh();
 				} finally {
 					closeButton.disabled = false;
-					closeButton.textContent = "关闭";
+					closeButton.textContent = tr("web.closeSession");
 				}
 				return;
 			}
@@ -378,8 +633,8 @@ export class WebServiceManager {
 				creatingProjectId = projectButton.dataset.project;
 				render();
 				try {
-					const result = await api("/api/agents", { method: "POST", body: JSON.stringify({ projectId: projectButton.dataset.project }) });
-					activeAgentId = result.agent.id;
+					const result = await api("/api/sessions", { method: "POST", body: JSON.stringify({ projectId: projectButton.dataset.project }) });
+					activeSessionId = result.session.id;
 					await refresh();
 				} finally {
 					creatingProjectId = "";
@@ -387,9 +642,12 @@ export class WebServiceManager {
 				}
 				return;
 			}
-			const agentButton = event.target.closest("[data-agent]");
-			if (agentButton) {
-				activeAgentId = agentButton.dataset.agent;
+			const sessionButton = event.target.closest("[data-session]");
+			if (sessionButton) {
+				activeSessionId = sessionButton.dataset.session;
+				if (!Object.hasOwn(state.messagesBySession, activeSessionId)) {
+					await loadSessionMessages(activeSessionId);
+				}
 				render();
 			}
 		});
@@ -397,22 +655,27 @@ export class WebServiceManager {
 			event.preventDefault();
 			const prompt = el("prompt");
 			const message = prompt.value.trim();
-			if (!message || !activeAgentId) return;
-			const targetAgentId = activeAgentId;
+			if (!message || !activeSessionId) return;
+			const targetSessionId = activeSessionId;
 			prompt.value = "";
 			try {
-				const response = await api(\`/api/agents/\${encodeURIComponent(targetAgentId)}/prompt\`, { method: "POST", body: JSON.stringify({ message }) });
+				const response = await api(\`/api/sessions/\${encodeURIComponent(targetSessionId)}/prompt\`, {
+					method: "POST",
+					body: JSON.stringify({ requestId: crypto.randomUUID(), message }),
+				});
 				if (!response.result.accepted) {
-					if (response.result.delivery !== "unknown" && activeAgentId === targetAgentId) {
-						prompt.value = message;
+					if (response.result.delivery !== "unknown" && activeSessionId === targetSessionId) {
+						prompt.value = mergeRejectedDraft(message, prompt.value);
 					}
-					throw new Error(response.result.error);
+					el("status").textContent = localizeDescriptor(response.result, response.result.error);
+					return;
 				}
 				await refresh();
 			} catch (error) {
-				// Only transport errors reach this branch. The request may already have been
-				// accepted, so restoring an apparently retryable draft could duplicate it.
-				throw error;
+				// Transport errors are indeterminate after the request leaves the browser.
+				// Never restore automatically because the Session may already have accepted it.
+				el("status").textContent = error.message || String(error);
+				console.error(error);
 			}
 		});
 		el("prompt").addEventListener("keydown", (event) => {
@@ -421,20 +684,26 @@ export class WebServiceManager {
 			el("composer").requestSubmit();
 		});
 		el("stop").addEventListener("click", async () => {
-			if (!activeAgentId) return;
+			if (!activeSessionId) return;
+			const runtime = runtimeFor(activeSessionId);
+			if (!runtime) return;
 			el("stop").disabled = true;
-			el("stop").textContent = "处理中";
+			el("stop").textContent = tr("web.processing");
 			try {
-				await api(\`/api/agents/\${encodeURIComponent(activeAgentId)}/stop\`, { method: "POST" });
-				activeAgentId = "";
+				const action = runtime.status === "running" ? "abort" : "stop";
+				await api(\`/api/sessions/\${encodeURIComponent(activeSessionId)}/runtime/\${action}\`, {
+					method: "POST",
+					body: JSON.stringify({ target: runtimeTarget(runtime) }),
+				});
 				await refresh();
 			} finally {
-				el("stop").textContent = "关闭 Agent";
+				el("stop").textContent = tr("web.closeSession");
 			}
 		});
 		function escapeHtml(value) {
 			return String(value).replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
 		}
+		applyStaticCopy();
 		refresh();
 		setInterval(refresh, 600);
 	</script>
@@ -500,16 +769,26 @@ export class WebServiceManager {
 			"cache-control": "no-store",
 			"access-control-allow-origin": "*",
 		});
-		response.end(JSON.stringify(body));
+		response.end(serializePublicWebPayload(body));
 	}
 
-	private sendError(response: ServerResponse, statusCode: number, error: string) {
+	private sendError(
+		response: ServerResponse,
+		statusCode: number,
+		code: string,
+		error: string,
+		params?: Record<string, string | number>,
+	) {
 		response.writeHead(statusCode, {
 			"content-type": "application/json; charset=utf-8",
 			"cache-control": "no-store",
 			"access-control-allow-origin": "*",
 		});
-		response.end(JSON.stringify({ error }));
+		response.end(JSON.stringify({
+			code,
+			error,
+			...(params ? { params } : {}),
+		}));
 	}
 
 	private sendNoContent(response: ServerResponse) {
@@ -538,7 +817,7 @@ export class WebServiceManager {
 	private normalizePort(value: number) {
 		const port = Number(value);
 		if (!Number.isInteger(port) || port < 1 || port > 65535) {
-			throw new Error("Web 服务端口必须是 1-65535 之间的整数");
+			throw new Error("WEB_SERVICE_INVALID_PORT");
 		}
 		return port;
 	}

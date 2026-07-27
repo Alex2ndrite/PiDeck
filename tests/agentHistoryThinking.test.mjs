@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createRequire } from "node:module";
 import test from "node:test";
 import ts from "typescript";
@@ -45,6 +48,12 @@ function loadAgentManagerModule() {
         };
       }
       if (specifier === "./historyMessages") return { mergeHistoryWithPreservedMessages: (messages) => messages };
+      if (specifier === "./agentSessionIdentity") {
+        return { buildAgentSessionKey: () => undefined };
+      }
+      if (specifier === "./SessionFileEditor") {
+        return { SessionFileEditor: class {} };
+      }
       if (specifier === "./sessionEntryIds") {
         return {
           assertResendRootEntry: () => undefined,
@@ -63,7 +72,8 @@ function loadAgentManagerModule() {
     Map,
     Set,
     Promise,
-    JSON,
+	JSON,
+	Buffer,
     Error,
     setTimeout,
     clearTimeout,
@@ -92,4 +102,112 @@ test("history conversion preserves an assistant turn that contains only thinking
   assert.equal(messages[0].text, "");
   assert.equal(messages[0].thinking, "reason through the tool result");
   assert.equal(messages[0].meta.entryId, "entry-1");
+});
+
+test("offline Session Viewer preserves the full active branch for renderer pagination", async () => {
+  const { AgentManager } = loadAgentManagerModule();
+  const manager = new AgentManager(
+    () => undefined,
+    () => null,
+    { get: () => ({}) },
+    {},
+  );
+  const lines = [JSON.stringify({ id: "session", type: "session" })];
+  let parentId = "session";
+  for (let index = 0; index < 100; index += 1) {
+    const id = `message-${index}`;
+    lines.push(JSON.stringify({
+      id,
+      parentId,
+      type: "message",
+      timestamp: "2026-01-01T00:00:00.000Z",
+      message: {
+        role: index % 2 === 0 ? "user" : "assistant",
+        content: [{ type: "text", text: `fixture message ${index}` }],
+      },
+    }));
+    parentId = id;
+  }
+
+  const messages = await manager.readSessionDisplayMessages(
+    "C:/fixtures/messages-100.jsonl",
+    "viewer",
+    `${lines.join("\n")}\n`,
+  );
+
+  assert.equal(messages.length, 100);
+  assert.equal(messages[0].text, "fixture message 0");
+	assert.equal(messages.at(-1).text, "fixture message 99");
+});
+
+test("offline Session Viewer reads only the requested historical page", async () => {
+	const { AgentManager } = loadAgentManagerModule();
+	const manager = new AgentManager(
+		() => undefined,
+		() => null,
+		{ get: () => ({}) },
+		{},
+	);
+	const directory = await mkdtemp(join(tmpdir(), "pideck-history-page-"));
+	const sessionPath = join(directory, "large.jsonl");
+	const lines = [JSON.stringify({ id: "session", type: "session" })];
+	let parentId = "session";
+	for (let index = 0; index < 150; index += 1) {
+		const id = `message-${index}`;
+		lines.push(JSON.stringify({
+			id,
+			parentId,
+			type: "message",
+			timestamp: "2026-01-01T00:00:00.000Z",
+			message: {
+				role: index % 2 === 0 ? "user" : "assistant",
+				content: [{ type: "text", text: `fixture message ${index}` }],
+			},
+		}));
+		parentId = id;
+	}
+	try {
+		await writeFile(sessionPath, `${lines.join("\n")}\n`, "utf8");
+		const newest = await manager.readSessionDisplayMessagePage(sessionPath, "viewer", undefined, 25);
+		assert.equal(newest.total, 150);
+		assert.equal(newest.messages.length, 25);
+		assert.equal(newest.messages[0].text, "fixture message 125");
+		assert.equal(newest.messages.at(-1).text, "fixture message 149");
+		assert.equal(newest.nextBefore, 125);
+
+		const older = await manager.readSessionDisplayMessagePage(sessionPath, "viewer", newest.nextBefore, 25);
+		assert.equal(older.messages[0].text, "fixture message 100");
+		assert.equal(older.messages.at(-1).text, "fixture message 124");
+		assert.equal(older.nextBefore, 100);
+	} finally {
+		await rm(directory, { recursive: true, force: true });
+	}
+});
+
+test("offline Session Viewer caps a large-text page by bytes without dropping the newest entry", async () => {
+	const { AgentManager } = loadAgentManagerModule();
+	const manager = new AgentManager(() => undefined, () => null, { get: () => ({}) }, {});
+	const directory = await mkdtemp(join(tmpdir(), "pideck-history-page-bytes-"));
+	const sessionPath = join(directory, "large-text.jsonl");
+	const lines = [JSON.stringify({ id: "session", type: "session" })];
+	let parentId = "session";
+	for (let index = 0; index < 10; index += 1) {
+		const id = `message-${index}`;
+		lines.push(JSON.stringify({
+			id,
+			parentId,
+			type: "message",
+			message: { role: "assistant", content: [{ type: "text", text: "x".repeat(100_000) }] },
+		}));
+		parentId = id;
+	}
+	try {
+		await writeFile(sessionPath, `${lines.join("\n")}\n`, "utf8");
+		const page = await manager.readSessionDisplayMessagePage(sessionPath, "viewer", undefined, 100);
+		assert.equal(page.messages.at(-1).text.length, 100_000);
+		assert.ok(page.messages.length < 10, "a byte budget should constrain the requested message count");
+		assert.equal(page.nextBefore, 8);
+	} finally {
+		await rm(directory, { recursive: true, force: true });
+	}
 });

@@ -3,11 +3,7 @@ import { useAtomValue } from "jotai";
 import { selectAtom } from "jotai/utils";
 import { useMemo, useState } from "react";
 import type { ComponentProps, RefObject } from "react";
-import type {
-  AgentRuntimeState,
-  ChatMessage,
-  ImageContent,
-} from "../../../../shared/types";
+import type { ImageContent } from "../../../../shared/types";
 import {
   AskQuestionCard,
   CompactionCard,
@@ -33,7 +29,6 @@ import {
   canLoadSessionTimelineMore,
   deriveSessionSurfaceRuntime,
   isLatestTimelineRunBusy,
-  selectSessionModeValue,
   useSessionTimelineController,
   type SessionTimelineController,
 } from "../../hooks/useSessionTimelineController";
@@ -65,52 +60,14 @@ type TimelineInteractionProps = {
   onToast: (message: string) => void;
 };
 
-type LegacyTimelineProps = TimelineInteractionProps & {
-  mode?: "legacy";
-  sessionId?: never;
-  controller?: never;
-  timelineRef: RefObject<HTMLElement | null>;
-  activeMessages: ChatMessage[];
-  paginatedMessages: ChatMessage[];
-  hasMoreMessages: boolean;
-  isLoadingMoreMessages: boolean;
-  canLoadMoreMessages: boolean;
-  onLoadMoreMessages: () => void;
-  hasActiveConversation: boolean;
-  isConversationLoading: boolean;
-  activeThinking?: string;
-  activeRuntimeState?: AgentRuntimeState;
-  activeConversationStatus?: string;
-  isAgentBusy: boolean;
-  cancellingUi: boolean;
-};
-
-type SessionTimelineProps = TimelineInteractionProps & {
-  mode: "session";
+export type SessionMessageTimelineProps = TimelineInteractionProps & {
   sessionId: string;
   controller?: SessionTimelineController;
   timelineRef?: RefObject<HTMLElement | null>;
-  activeMessages?: never;
-  paginatedMessages?: never;
-  hasMoreMessages?: never;
-  isLoadingMoreMessages?: never;
-  canLoadMoreMessages?: never;
-  onLoadMoreMessages?: never;
-  hasActiveConversation?: never;
-  isConversationLoading?: never;
-  activeThinking?: never;
-  activeRuntimeState?: never;
-  activeConversationStatus?: never;
-  isAgentBusy?: never;
-  cancellingUi?: never;
 };
 
-export type SessionMessageTimelineProps = LegacyTimelineProps | SessionTimelineProps;
-
 export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
-  const sessionMode = props.mode === "session";
-  const sessionId = sessionMode ? props.sessionId : "";
-  const legacyProps = props as LegacyTimelineProps;
+  const sessionId = props.sessionId;
   const session = useAtomValue(sessionRecordByIdAtomFamily(sessionId));
   const runtime = useAtomValue(sessionRuntimeBySessionIdAtomFamily(sessionId));
   const messageLoadStateSelector = useMemo(
@@ -132,29 +89,18 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
   const messageLoadState = useAtomValue(messageLoadStateSelector);
   const sendState = useAtomValue(sendStateSelector);
   const internalController = useSessionTimelineController({
-    sessionId: sessionMode ? sessionId : undefined,
-    // An injected controller owns the scroll effects; legacy ownership remains entirely external.
-    messages: sessionMode ? (props.controller ? [] : undefined) : legacyProps.activeMessages,
+    sessionId,
+    // An injected controller already owns loading and scroll effects; keep this hook inert in that case.
+    messages: props.controller ? [] : undefined,
   });
-  const controller = sessionMode ? (props.controller ?? internalController) : internalController;
-  const timelineRef = sessionMode
-    ? (props.timelineRef ?? controller.timelineRef)
-    : legacyProps.timelineRef;
-  const activeMessages = selectSessionModeValue(
-    sessionMode,
-    controller.messages,
-    legacyProps.activeMessages,
-  );
-  const paginatedMessages = selectSessionModeValue(
-    sessionMode,
-    controller.visibleMessages,
-    legacyProps.paginatedMessages,
-  );
-  const hasMoreMessages = sessionMode ? controller.hasMoreMessages : legacyProps.hasMoreMessages;
-  const isLoadingMoreMessages = sessionMode
-    ? controller.isLoadingMoreMessages
-    : legacyProps.isLoadingMoreMessages;
-  const hasActiveConversation = sessionMode ? Boolean(session) : legacyProps.hasActiveConversation;
+  const controller = props.controller ?? internalController;
+  const timelineRef = props.timelineRef ?? controller.timelineRef;
+  const activeMessages = controller.messages;
+  const paginatedMessages = controller.visibleMessages;
+	const totalMessageCount = controller.totalMessageCount;
+  const hasMoreMessages = controller.hasMoreMessages;
+  const isLoadingMoreMessages = controller.isLoadingMoreMessages;
+  const hasActiveConversation = Boolean(session);
   const modernSurfaceState = deriveSessionSurfaceRuntime(
     activeMessages.length,
     messageLoadState?.status,
@@ -162,30 +108,17 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
     runtime?.status,
     runtime?.state,
   );
-  const isConversationLoading = sessionMode
-    ? modernSurfaceState.isLoading
-    : legacyProps.isConversationLoading;
-  const canLoadMoreMessages = sessionMode
-    ? canLoadSessionTimelineMore(modernSurfaceState.isStarting, activeMessages.length)
-    : legacyProps.canLoadMoreMessages;
-  const activeRuntimeState = selectSessionModeValue(
-    sessionMode,
-    runtime?.state,
-    legacyProps.activeRuntimeState,
+  const isConversationLoading = modernSurfaceState.isLoading;
+  const canLoadMoreMessages = canLoadSessionTimelineMore(
+    modernSurfaceState.isStarting,
+    activeMessages.length,
   );
-  const activeConversationStatus = selectSessionModeValue(
-    sessionMode,
-    modernSurfaceState.status,
-    legacyProps.activeConversationStatus,
-  );
-  const activeThinking = sessionMode ? runtime?.thinking : legacyProps.activeThinking;
-  const isAgentBusy = sessionMode
-    ? modernSurfaceState.isBusy
-    : legacyProps.isAgentBusy;
-  const cancellingUi = sessionMode ? false : legacyProps.cancellingUi;
-  const loadMoreMessages = sessionMode
-    ? controller.loadMoreMessages
-    : legacyProps.onLoadMoreMessages;
+  const activeRuntimeState = runtime?.state;
+  const activeConversationStatus = modernSurfaceState.status;
+  const activeThinking = runtime?.thinking;
+  const isAgentBusy = modernSurfaceState.isBusy;
+  const cancellingUi = false;
+  const loadMoreMessages = controller.loadMoreMessages;
   const [multiSelectOpen, setMultiSelectOpen] = useState(false);
   const renderedRuns = useMemo(
     () => groupToolMessages(paginatedMessages),
@@ -370,8 +303,10 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
             }}
           >
             {isLoadingMoreMessages
-              ? "加载中..."
-              : `加载更多历史消息 (${activeMessages.length - paginatedMessages.length} 条)`}
+              ? t("timeline.loadingMore")
+              : t("timeline.loadMoreHistory", {
+					count: totalMessageCount - paginatedMessages.length,
+                })}
           </button>
         </div>
       )}

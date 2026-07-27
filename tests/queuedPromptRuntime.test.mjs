@@ -8,9 +8,8 @@ import {
   claimPrompt,
   enqueuePrompt,
   getQueuedPromptView,
-  migrateQueuedPrompts,
   QUEUED_PROMPT_LIMIT,
-  replaceAgentQueue,
+  replaceSessionQueue,
   resolveClaimedPrompt,
   retractPrompt,
   retryFailedPrompt,
@@ -40,33 +39,33 @@ function q(...items) {
 }
 
 // ---------------------------------------------------------------------------
-// replaceAgentQueue
+// replaceSessionQueue
 // ---------------------------------------------------------------------------
 
-test("replaceAgentQueue creates a new agent key when none exists", () => {
-  const result = replaceAgentQueue({}, "a", () => q("a1"));
+test("replaceSessionQueue creates a new Session key when none exists", () => {
+  const result = replaceSessionQueue({}, "a", () => q("a1"));
   assert.deepEqual(result.a.map((p) => p.id), ["a1"]);
 });
 
-test("replaceAgentQueue updates an existing agent key", () => {
+test("replaceSessionQueue updates an existing Session key", () => {
   let queues = { a: q("a1") };
-  queues = replaceAgentQueue(queues, "a", (queue) => [...queue, prompt("a2")]);
+  queues = replaceSessionQueue(queues, "a", (queue) => [...queue, prompt("a2")]);
   assert.deepEqual(
     queues.a.map((p) => p.id),
     ["a1", "a2"],
   );
 });
 
-test("replaceAgentQueue removes the agent key when queue becomes empty", () => {
+test("replaceSessionQueue removes the Session key when queue becomes empty", () => {
   let queues = { a: q("a1"), b: q("b1") };
-  queues = replaceAgentQueue(queues, "a", () => []);
+  queues = replaceSessionQueue(queues, "a", () => []);
   assert.equal(queues.a, undefined);
   assert.deepEqual(queues.b.map((p) => p.id), ["b1"]);
 });
 
-test("replaceAgentQueue keeps other agent queues isolated", () => {
+test("replaceSessionQueue keeps other Session queues isolated", () => {
   let queues = { a: q("a1", "a2"), b: q("b1") };
-  queues = replaceAgentQueue(queues, "a", () => q("a3"));
+  queues = replaceSessionQueue(queues, "a", () => q("a3"));
   assert.deepEqual(
     queues.a.map((p) => p.id),
     ["a3"],
@@ -478,86 +477,7 @@ test("claimNextSteerPrompt blocks on an unknown predecessor regardless of mode",
 });
 
 // ---------------------------------------------------------------------------
-// migrateQueuedPrompts — edge cases
-// ---------------------------------------------------------------------------
-
-test("migrateQueuedPrompts returns empty map when no agents are live", () => {
-  const queues = { old: q("p1") };
-  const result = migrateQueuedPrompts(
-    queues,
-    new Map([["old", "replacement"]]),
-    new Set(),
-  );
-  assert.deepEqual(result, {});
-});
-
-test("migrateQueuedPrompts returns empty map for empty input", () => {
-  const result = migrateQueuedPrompts({}, new Map(), new Set(["a"]));
-  assert.deepEqual(result, {});
-});
-
-test("migrateQueuedPrompts keeps entries for agents not being replaced", () => {
-  const queues = { stable: q("p1", "p2") };
-  const result = migrateQueuedPrompts(queues, new Map(), new Set(["stable"]));
-  assert.deepEqual(
-    result.stable.map((p) => p.id),
-    ["p1", "p2"],
-  );
-});
-
-test("migrateQueuedPrompts does not filter sending/unknown for non-replaced agents", () => {
-  const queues = {
-    stable: [
-      prompt("p1", "followUp", "sending"),
-      prompt("p2", "followUp", "unknown"),
-      prompt("p3", "followUp", "pending"),
-    ],
-  };
-  const result = migrateQueuedPrompts(queues, new Map(), new Set(["stable"]));
-  assert.deepEqual(
-    result.stable.map((p) => p.id),
-    ["p1", "p2", "p3"],
-  );
-});
-
-test("migrateQueuedPrompts discards pending/failed items for non-live agents", () => {
-  const queues = { closed: q("p1") };
-  const result = migrateQueuedPrompts(queues, new Map(), new Set(["other"]));
-  assert.equal(result.closed, undefined);
-});
-
-test("migrateQueuedPrompts handles multiple replacements and keeps unrelated agents", () => {
-  const queues = {
-    oldA: [prompt("a1"), prompt("a2", "followUp", "sending")],
-    oldB: [prompt("b1", "followUp", "failed")],
-    stable: q("s1"),
-  };
-  const result = migrateQueuedPrompts(
-    queues,
-    new Map([
-      ["oldA", "newA"],
-      ["oldB", "newB"],
-    ]),
-    new Set(["newA", "newB", "stable"]),
-  );
-  assert.deepEqual(
-    result.newA.map((p) => p.id),
-    ["a1"],
-  );
-  assert.deepEqual(
-    result.newB.map((p) => p.id),
-    ["b1"],
-  );
-  assert.deepEqual(
-    result.stable.map((p) => p.id),
-    ["s1"],
-  );
-  assert.equal(result.oldA, undefined);
-  assert.equal(result.oldB, undefined);
-});
-
-// ---------------------------------------------------------------------------
-// Cross-agent isolation
+// Cross-Session isolation
 // ---------------------------------------------------------------------------
 
 test("operations on one agent never affect another agent's queue", () => {

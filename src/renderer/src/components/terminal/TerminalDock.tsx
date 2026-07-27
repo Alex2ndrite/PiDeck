@@ -11,7 +11,7 @@ import "@xterm/xterm/css/xterm.css";
 import { showNotice } from "../../utils/notice";
 import { ChevronDown, ChevronUp, MoreHorizontal, Plus, X } from "lucide-react";
 import type { PiDesktopApi } from "../../../../preload";
-import type { TerminalTab } from "../../../../shared/types";
+import type { SessionRuntimeTarget, TerminalTab } from "../../../../shared/types";
 import { t } from "../../i18n";
 
 const TERMINAL_THEMES = {
@@ -78,7 +78,7 @@ function stripReplayBuffer(tab: TerminalTab): TerminalTab {
 }
 
 export function TerminalDock(props: {
-	agentId: string;
+	target: SessionRuntimeTarget;
 	open: boolean;
 	closing: boolean;
 	collapsed: boolean;
@@ -156,7 +156,7 @@ export function TerminalDock(props: {
 		async function loadTabs() {
 			setLoading(true);
 			try {
-				const nextTabs = await props.terminal.ensure(props.agentId);
+				const nextTabs = await props.terminal.ensure(props.target);
 				if (cancelled) return;
 				buffersRef.current = nextTabs.reduce<Record<string, string>>(
 					(current, tab) => ({
@@ -175,7 +175,14 @@ export function TerminalDock(props: {
 		return () => {
 			cancelled = true;
 		};
-	}, [props.agentId, props.terminal, open, contentReady]);
+	}, [
+		props.target.sessionId,
+		props.target.agentId,
+		props.target.runtimeGeneration,
+		props.terminal,
+		open,
+		contentReady,
+	]);
 
 	useEffect(() => {
 		const offData = props.terminal.onData((payload) => {
@@ -278,7 +285,7 @@ export function TerminalDock(props: {
 	/* copyNotice cleanup 已禁用（改为 toast sonner） */
 
 	async function addTab() {
-		const next = await props.terminal.create(props.agentId);
+		const next = await props.terminal.create(props.target);
 		setTabs((current) => [...current, stripReplayBuffer(next)]);
 		setActiveTabId(next.id);
 		props.onCollapsedChange(false);

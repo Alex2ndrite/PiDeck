@@ -9,6 +9,12 @@ import type {
 	PiPromptTemplateSummary,
 } from "../../shared/types";
 import type { WslEnvironment } from "../wsl/WslPaths";
+import type { MainProcessTranslationKey } from "../../shared/i18n/mainProcessCopy";
+
+type PromptCopy = (
+	key: MainProcessTranslationKey,
+	params?: Record<string, string | number>,
+) => string;
 
 function makeBuiltinContent(name: string, body: string): string {
 	return `---\ndescription: ${name}\n---\n\n${body}`;
@@ -172,7 +178,10 @@ when appropriate. If unsure whether a skill is needed, follow the rule:
 export class PromptManager {
 	private promptsDir: string;
 
-	constructor(home?: string) {
+	constructor(
+		home?: string,
+		private readonly translate: PromptCopy = () => "Prompt operation failed.",
+	) {
 		this.promptsDir = join(home ?? homedir(), ".pi", "agent", "prompts");
 	}
 
@@ -227,12 +236,12 @@ export class PromptManager {
 
 	async create(input: CreatePiPromptTemplateInput): Promise<PiPromptTemplateSummary> {
 		const name = this.normalizeName(input.name);
-		if (!name) throw new Error("模板名称不能为空，且至少包含一个字母或数字");
+		if (!name) throw new Error(this.translate("mainPrompt.nameRequiredDetailed"));
 		const description = input.description.trim();
-		if (!description) throw new Error("模板描述不能为空");
+		if (!description) throw new Error(this.translate("mainPrompt.descriptionRequired"));
 
 		const filePath = join(this.promptsDir, `${name}.md`);
-		if (existsSync(filePath)) throw new Error(`模板已存在：${name}`);
+		if (existsSync(filePath)) throw new Error(this.translate("mainPrompt.alreadyExists", { name }));
 
 		// 内容仅含 frontmatter 中的 description，正文由用户后续在编辑器中编写，不与 skill 重复展示描述
 		const content = `---\ndescription: ${description.replace(/\n/g, " ")}\n---\n`;
@@ -249,10 +258,10 @@ export class PromptManager {
 
 	async delete(filePath: string): Promise<void> {
 		if (!filePath.startsWith(this.promptsDir)) {
-			throw new Error("只能删除全局 prompt templates 目录下的文件");
+			throw new Error(this.translate("mainPrompt.globalDeleteOnly"));
 		}
 		if (!existsSync(filePath)) {
-			throw new Error("模板文件不存在");
+			throw new Error(this.translate("mainPrompt.fileNotFound"));
 		}
 		await rm(filePath, { force: true });
 	}
@@ -293,11 +302,11 @@ export class PromptManager {
 		const projectPromptsDir = join(projectPath, ".pi", "prompts");
 		await mkdir(projectPromptsDir, { recursive: true });
 		const name = this.normalizeName(input.name);
-		if (!name) throw new Error("模板名称不能为空，且至少包含一个字母或数字");
+		if (!name) throw new Error(this.translate("mainPrompt.nameRequiredDetailed"));
 		const description = input.description.trim();
-		if (!description) throw new Error("模板描述不能为空");
+		if (!description) throw new Error(this.translate("mainPrompt.descriptionRequired"));
 		const filePath = join(projectPromptsDir, `${name}.md`);
-		if (existsSync(filePath)) throw new Error(`模板已存在：${name}`);
+		if (existsSync(filePath)) throw new Error(this.translate("mainPrompt.alreadyExists", { name }));
 		// 内容仅含 frontmatter 中的 description，正文由用户后续编辑
 		const content = `---\ndescription: ${description.replace(/\n/g, " ")}\n---\n`;
 		await writeFile(filePath, content, "utf8");
@@ -314,7 +323,7 @@ export class PromptManager {
 	/** 从项目 .pi/prompts/ 删除模板 */
 	async deleteFromProject(projectPath: string, fileName: string): Promise<void> {
 		const filePath = join(projectPath, ".pi", "prompts", fileName);
-		if (!existsSync(filePath)) throw new Error("模板文件不存在");
+		if (!existsSync(filePath)) throw new Error(this.translate("mainPrompt.fileNotFound"));
 		await rm(filePath, { force: true });
 	}
 
@@ -335,7 +344,7 @@ export class PromptManager {
 	 */
 	async writeContent(filePath: string, content: string): Promise<void> {
 		if (!filePath.startsWith(this.promptsDir)) {
-			throw new Error("只能修改全局 prompt templates 目录下的文件");
+			throw new Error(this.translate("mainPrompt.globalEditOnly"));
 		}
 		await writeFile(filePath, content, "utf8");
 	}
@@ -359,13 +368,13 @@ export class PromptManager {
 	async rename(oldName: string, newName: string): Promise<PiPromptTemplateSummary> {
 		const normalizedOld = this.normalizeName(oldName);
 		const normalizedNew = this.normalizeName(newName);
-		if (!normalizedOld || !normalizedNew) throw new Error("模板名称不能为空");
-		if (normalizedOld === normalizedNew) throw new Error("新旧名称相同");
+		if (!normalizedOld || !normalizedNew) throw new Error(this.translate("mainPrompt.nameRequired"));
+		if (normalizedOld === normalizedNew) throw new Error(this.translate("mainPrompt.sameName"));
 
 		const oldPath = join(this.promptsDir, `${normalizedOld}.md`);
 		const newPath = join(this.promptsDir, `${normalizedNew}.md`);
-		if (!existsSync(oldPath)) throw new Error(`模板不存在：${oldName}`);
-		if (existsSync(newPath)) throw new Error(`模板已存在：${normalizedNew}`);
+		if (!existsSync(oldPath)) throw new Error(this.translate("mainPrompt.notFound", { name: oldName }));
+		if (existsSync(newPath)) throw new Error(this.translate("mainPrompt.alreadyExists", { name: normalizedNew }));
 
 		await rename(oldPath, newPath);
 		// 读取新文件内容返回摘要
@@ -387,13 +396,13 @@ export class PromptManager {
 		const projectPromptsDir = join(projectPath, ".pi", "prompts");
 		const normalizedOld = this.normalizeName(oldName);
 		const normalizedNew = this.normalizeName(newName);
-		if (!normalizedOld || !normalizedNew) throw new Error("模板名称不能为空");
-		if (normalizedOld === normalizedNew) throw new Error("新旧名称相同");
+		if (!normalizedOld || !normalizedNew) throw new Error(this.translate("mainPrompt.nameRequired"));
+		if (normalizedOld === normalizedNew) throw new Error(this.translate("mainPrompt.sameName"));
 
 		const oldPath = join(projectPromptsDir, `${normalizedOld}.md`);
 		const newPath = join(projectPromptsDir, `${normalizedNew}.md`);
-		if (!existsSync(oldPath)) throw new Error(`模板不存在：${oldName}`);
-		if (existsSync(newPath)) throw new Error(`模板已存在：${normalizedNew}`);
+		if (!existsSync(oldPath)) throw new Error(this.translate("mainPrompt.notFound", { name: oldName }));
+		if (existsSync(newPath)) throw new Error(this.translate("mainPrompt.alreadyExists", { name: normalizedNew }));
 
 		await rename(oldPath, newPath);
 		const raw = await readFile(newPath, "utf8");

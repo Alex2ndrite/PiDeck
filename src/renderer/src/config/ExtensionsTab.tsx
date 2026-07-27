@@ -1,8 +1,7 @@
 import { useState } from "react";
-import { Copy, Download, ToggleLeft, ToggleRight, Trash2 } from "lucide-react";
+import { ToggleLeft, ToggleRight, Trash2 } from "lucide-react";
 import type { PiCliUpdateResult, PiExtensionListResult, PiExtensionSummary, PiPackageInfo } from "../../../shared/types";
-import { t } from "../i18n";
-import { showNotice } from "../utils/notice";
+import { t, type TranslationKey } from "../i18n";
 
 type ExtensionsApi = {
 	list: () => Promise<PiExtensionListResult>;
@@ -19,11 +18,15 @@ function getExtensionsApi(): ExtensionsApi {
 	return api;
 }
 
+type RecommendedPackage = Omit<PiPackageInfo, "description"> & {
+	descriptionKey: TranslationKey;
+};
+
 /** 预设推荐扩展包 */
-const RECOMMENDED_PACKAGES: PiPackageInfo[] = [
+const RECOMMENDED_PACKAGES: RecommendedPackage[] = [
 	{
 		name: "context-mode",
-		description: "MCP 插件，可节省 98% 的上下文窗口。支持 Claude Code、Gemini CLI、VS Code Copilot 等。沙箱代码执行、FTS5 知识库和意图驱动搜索。",
+		descriptionKey: "config.recommendedPackage.contextMode",
 		installCmd: "npm:context-mode",
 		tags: ["extension"],
 		downloads: "107K/mo",
@@ -33,7 +36,7 @@ const RECOMMENDED_PACKAGES: PiPackageInfo[] = [
 	},
 	{
 		name: "pi-web-access",
-		description: "网络搜索、URL 抓取、GitHub 仓库克隆、PDF 提取、YouTube 视频理解和本地视频分析。",
+		descriptionKey: "config.recommendedPackage.webAccess",
 		installCmd: "npm:pi-web-access",
 		tags: ["extension"],
 		downloads: "99K/mo",
@@ -43,7 +46,7 @@ const RECOMMENDED_PACKAGES: PiPackageInfo[] = [
 	},
 	{
 		name: "pi-mcp-adapter",
-		description: "MCP（Model Context Protocol）适配器扩展，让 Pi 可以连接任何 MCP 服务器。",
+		descriptionKey: "config.recommendedPackage.mcpAdapter",
 		installCmd: "npm:pi-mcp-adapter",
 		tags: ["extension"],
 		downloads: "99K/mo",
@@ -53,7 +56,7 @@ const RECOMMENDED_PACKAGES: PiPackageInfo[] = [
 	},
 	{
 		name: "@samfp/pi-memory",
-		description: "长期记忆扩展，用于在 Pi 会话之间保存和检索偏好、项目事实与经验教训。",
+		descriptionKey: "config.recommendedPackage.memory",
 		installCmd: "npm:@samfp/pi-memory",
 		tags: ["extension", "memory"],
 		downloads: "",
@@ -62,7 +65,7 @@ const RECOMMENDED_PACKAGES: PiPackageInfo[] = [
 	},
 	{
 		name: "pi-subagents",
-		description: "任务委派扩展，支持链式、并行执行和 TUI 澄清。可将复杂任务拆解给多个子 Agent。",
+		descriptionKey: "config.recommendedPackage.subagents",
 		installCmd: "npm:pi-subagents",
 		tags: ["extension"],
 		downloads: "92K/mo",
@@ -91,7 +94,8 @@ export function ExtensionsTab(props: {
 			// 与安装/卸载一致：强制刷新列表，确保 enabled 与缓存同步。
 			props.onRefresh();
 		} catch (e) {
-			alert(t("config.installFailed") + ": " + (e instanceof Error ? e.message : String(e)));
+			console.error("[Extensions] Toggle failed", e);
+			alert(t("config.extensionToggleFailed"));
 		} finally {
 			setTogglingSource(null);
 		}
@@ -100,14 +104,15 @@ export function ExtensionsTab(props: {
 	const [updateResult, setUpdateResult] = useState<PiCliUpdateResult | null>(null);
 	const [showUpdateDialog, setShowUpdateDialog] = useState(false);
 
-	const handleInstall = async (pkg: PiPackageInfo) => {
+	const handleInstall = async (pkg: RecommendedPackage) => {
 		// 安装任务按扩展源分别记录；多个扩展并发安装时，不能用单一字符串覆盖前一个 loading 状态。
 		setInstallingSources((current) => new Set(current).add(pkg.installCmd));
 		try {
 			await getExtensionsApi().install(pkg.installCmd);
 			props.onRefresh();
 		} catch (e) {
-			alert(t("config.installFailed") + ": " + (e instanceof Error ? e.message : String(e)));
+			console.error("[Extensions] Install failed", e);
+			alert(t("config.installFailed"));
 		} finally {
 			setInstallingSources((current) => {
 				const next = new Set(current);
@@ -125,7 +130,8 @@ export function ExtensionsTab(props: {
 			const result = await getExtensionsApi().update();
 			setUpdateResult(result);
 		} catch (e) {
-			alert(t("settings.extensionsUpdateFailed", { error: e instanceof Error ? e.message : String(e) }));
+			console.error("[Extensions] Update failed", e);
+			alert(t("settings.extensionsUpdateFailedGeneric"));
 		} finally {
 			setUpdating(null);
 		}
@@ -198,37 +204,22 @@ export function ExtensionsTab(props: {
 									<strong>{pkg.name}</strong>
 									{alreadyInstalled && <span className="config-im-connected-badge" style={{ marginLeft: 8 }}>{t("config.installed")}</span>}
 								</div>
-								<div className="extensions-recommended-desc">
-									{pkg.description}
+							<div className="extensions-recommended-desc">
+								{t(pkg.descriptionKey)}
 								</div>
 							</div>
 							<div className="extensions-recommended-action" onClick={(e) => e.stopPropagation()}>
-								{/* 安装中保持与图标按钮同尺寸，避免 config-btn 文本把操作区撑开错位 */}
-								<button
-									className="config-icon-btn"
-									title={installing ? t("config.installing") : alreadyInstalled ? t("config.installed") : t("config.install")}
-									onClick={() => handleInstall(pkg)}
-									disabled={alreadyInstalled || installing}
-									aria-busy={installing}
-								>
-									{installing ? (
-										<span className="skillhub-installing-dot" aria-hidden="true" />
-									) : (
-										<Download size={15} strokeWidth={1.8} aria-hidden="true" />
-									)}
-								</button>
-								<button
-									className="config-icon-btn"
-									title={t("common.copy")}
-									onClick={(e) => {
-										e.stopPropagation();
-										const cmd = `pi install ${pkg.installCmd}`;
-										navigator.clipboard.writeText(cmd);
-										showNotice(t("app.codeCopied"), 1200);
-									}}
-								>
-									<Copy size={14} strokeWidth={1.8} />
-								</button>
+								{installing ? (
+									<span className="config-btn" style={{ opacity: 0.6 }}>{t("config.installing")}</span>
+								) : (
+									<button
+										className="config-btn"
+										onClick={() => handleInstall(pkg)}
+										disabled={alreadyInstalled || installing}
+									>
+										{alreadyInstalled ? t("config.installed") : t("config.install")}
+									</button>
+								)}
 							</div>
 						</div>
 					);
@@ -292,10 +283,7 @@ function ExtensionCard(props: {
 	const { extension } = props;
 	const name = extension.source.replace(/^(?:npm|file|github|git):/i, "");
 	return (
-		<article
-			className={`session-card skill-card extension-card${props.uninstalling ? " extension-removing" : ""}`}
-			aria-busy={props.uninstalling}
-		>
+		<article className="session-card skill-card extension-card">
 			<div className="session-card-display">
 				<div className="session-card-inner skill-card-main">
 					<div className="session-card-title skill-title-row">

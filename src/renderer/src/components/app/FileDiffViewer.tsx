@@ -56,8 +56,6 @@ export function FileDiffViewer(props: {
 	/** 读取文件的 Git HEAD 原始内容，供差异模式左侧基准列使用。 */
 	readOriginalContent?: (path: string) => Promise<string>;
 	saveContent?: (path: string, content: string) => Promise<void>;
-	/** HTML 文件点击预览时，切换到内置浏览器面板预览。 */
-	onPreviewHtml?: (filePath: string) => void;
 	theme?: "light" | "dark";
 	/** 单个文件超过此大小（MB）时不加载编辑器。默认 5MB。 */
 	maxFileSizeMB?: number;
@@ -83,7 +81,7 @@ export function FileDiffViewer(props: {
 	const ext = fileName.split(".").pop()?.toLowerCase() ?? "";
 	const isMarkdown = ext === "md" || ext === "mdx";
 	const isHtml = ext === "html" || ext === "htm";
-	// 只读视图下 markdown 文件默认启用预览；html 走内置浏览器，不在 iframe 内预览。
+	// 只读视图下 markdown 文件默认启用预览；差异模式或编辑模式保持源码视图。
 	const [preview, setPreview] = useState(isMarkdown && !isDiffMode && readOnly);
 
 	useEffect(() => {
@@ -91,10 +89,8 @@ export function FileDiffViewer(props: {
 		setReadOnly(true);
 		setDirty(false);
 		setShowHint(false);
-		// 文件类型切换时重置预览状态，防止跨文件残留导致内容区域空白
-		const isMd = ext === "md" || ext === "mdx";
-		setPreview(isMd && props.mode !== "diff");
-	}, [props.activeTabId, props.filePath, props.mode]);
+		setPreview(isMarkdown && !isDiffMode);
+	}, [isDiffMode, isMarkdown, props.activeTabId, props.filePath]);
 
 	useEffect(() => {
 		ensureMonaco();
@@ -270,7 +266,7 @@ export function FileDiffViewer(props: {
 		...editorOptions,
 		readOnly,
 		renderSideBySide: sideBySide,
-		// 0 = 关闭 Monaco 的「窄宽自动合并」；分栏/合并完全由 UI 按钮控制
+		// 0 = close Monaco narrow-width auto-merge; split/unified controlled by UI button only
 		renderSideBySideInlineBreakpoint: 0,
 		// 显示真实差异，包括行尾空格差异
 		ignoreTrimWhitespace: false,
@@ -327,7 +323,7 @@ export function FileDiffViewer(props: {
 				)}
 				<span className="file-diff-title" title={props.filePath}>
 					{fileName}
-					{dirty && " · 未保存"}
+					{dirty && t("editor.unsavedMarker")}
 					{showHint && <span className="file-diff-hint">{t("app.saveFileShortcut")}</span>}
 				</span>
 				<div className="file-diff-header-actions">
@@ -335,13 +331,7 @@ export function FileDiffViewer(props: {
 						<button
 							className="file-diff-toggle-btn"
 							title={preview ? t("editor.source") : t("editor.preview")}
-							onClick={() => {
-								if (isHtml && props.onPreviewHtml) {
-									props.onPreviewHtml(props.filePath);
-								} else {
-									setPreview(!preview);
-								}
-							}}
+							onClick={() => setPreview(!preview)}
 						>
 							{preview ? <FileCode size={15} /> : <Eye size={15} />}
 						</button>
@@ -404,7 +394,6 @@ export function FileDiffViewer(props: {
 								</ReactMarkdown>
 							</div>
 						)}
-						{/* HTML 预览：仅 view 模式且 preview 启用 */}
 						{!isDiffMode && preview && isHtml && (
 							<HtmlPreview content={content} />
 						)}
@@ -460,6 +449,24 @@ export function FileDiffViewer(props: {
 	);
 }
 
+/**
+ * HTML previews intentionally use an opaque-origin iframe. This restores the
+ * dev preview interaction without giving project HTML the renderer's origin,
+ * Electron bridge, popups, or file-system navigation privileges.
+ */
+function HtmlPreview({ content }: { content: string }) {
+	return (
+		<iframe
+			className="file-diff-preview"
+			srcDoc={content}
+			title={t("editor.htmlPreview")}
+			sandbox="allow-scripts allow-forms"
+			referrerPolicy="no-referrer"
+			style={{ width: "100%", height: "100%", border: "none" }}
+		/>
+	);
+}
+
 function extToMonacoLanguage(ext: string): string {
 	const map: Record<string, string> = {
 		ts: "typescript", tsx: "typescript", js: "javascript", jsx: "javascript", mjs: "javascript", cjs: "javascript",
@@ -471,27 +478,4 @@ function extToMonacoLanguage(ext: string): string {
 		dockerfile: "dockerfile", makefile: "makefile",
 	};
 	return map[ext] ?? "plaintext";
-}
-
-/**
- * HTML 预览组件：通过 sandboxed iframe 渲染 HTML。
- * 使用 srcdoc 避免 CSP frame-src 限制；
- * 放开 allow-scripts / allow-same-origin 以支持本地开发场景的外部 CSS/JS 加载。
- * 注意：被预览的 HTML 中的脚本会执行，仅用于可信本地文件。
- */
-function HtmlPreview({ content }: { content: string }) {
-	return (
-		<iframe
-			className="file-diff-preview"
-			srcDoc={content}
-			title="HTML preview"
-			sandbox="allow-scripts allow-same-origin allow-forms"
-			style={{
-				width: "100%",
-				height: "100%",
-				border: "none",
-				background: "white",
-			}}
-		/>
-	);
 }

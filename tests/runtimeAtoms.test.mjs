@@ -1,117 +1,199 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { createRequire } from "node:module";
 import test from "node:test";
-import ts from "typescript";
-import vm from "node:vm";
 import { createStore } from "jotai/vanilla";
 
-const nodeRequire = createRequire(import.meta.url);
+import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
 
-function loadModule(filePath, imports = {}) {
-  const output = ts.transpileModule(readFileSync(filePath, "utf8"), {
-    compilerOptions: {
-      module: ts.ModuleKind.CommonJS,
-      target: ts.ScriptTarget.ES2022,
-      esModuleInterop: true,
-    },
-    fileName: filePath,
-  }).outputText;
-  const module = { exports: {} };
-  vm.runInNewContext(output, {
-    module,
-    exports: module.exports,
-    require: (specifier) => imports[specifier] ?? nodeRequire(specifier),
-  }, { filename: filePath });
-  return module.exports;
-}
+const atoms = loadTsCommonJs("src/renderer/src/atoms/index.ts");
 
-function tab(id, projectId, status = "idle") {
+function session(id, projectId, title = id) {
   return {
     id,
     projectId,
-    cwd: `C:/${projectId}`,
-    title: id,
-    status,
+    title,
+    environment: "native",
+    source: "pi",
     createdAt: 1,
+    updatedAt: 1,
   };
 }
 
-test("agent inventory is replaceable and exposed through narrow ID/project selectors", () => {
-  const atoms = loadModule("src/renderer/src/atoms/runtime-atoms.ts", {
-    "../utils/agentRuntimeState": loadModule("src/renderer/src/utils/agentRuntimeState.ts"),
-  });
+function runtime(sessionId, agentId, projectId, generation = 1, status = "idle") {
+  return {
+    sessionId,
+    agentId,
+    runtimeGeneration: generation,
+    projectId,
+    cwd: `C:/${projectId}`,
+    status,
+    createdAt: generation,
+  };
+}
+
+function runtimeEvent(sessionId, agentId, generation, sourceChannel, payload, kind = "event") {
+  return {
+    kind,
+    sessionId,
+    agentId,
+    runtimeGeneration: generation,
+    sourceChannel,
+    payload,
+  };
+}
+
+test("agent inventory is a read-only projection of canonical Session runtimes", () => {
   const store = createStore();
-  store.set(atoms.replaceAgentInventoryAtom, [
-    tab("agent-a", "project-a"),
-    tab("agent-b", "project-b", "running"),
+  store.set(atoms.replaceProjectSessionsAtom, {
+    projectId: "project-a",
+    sessions: [session("session-a", "project-a", "Stable title")],
+  });
+  store.set(atoms.replaceSessionRuntimesAtom, [
+    runtime("session-a", "agent-a", "project-a"),
   ]);
 
-  assert.equal(store.get(atoms.agentByIdAtomFamily("agent-a")).title, "agent-a");
-  assert.deepEqual(
-    store.get(atoms.agentsByProjectIdAtomFamily("project-b")).map((agent) => agent.id),
-    ["agent-b"],
+  assert.equal(store.get(atoms.agentByIdAtomFamily("agent-a")).title, "Stable title");
+  assert.equal(
+    store.get(atoms.agentsByProjectIdAtomFamily("project-a")).map((agent) => agent.id).join(","),
+    "agent-a",
   );
+  assert.equal(atoms.replaceAgentInventoryAtom, undefined);
+  assert.equal(atoms.upsertAgentInventoryAtom, undefined);
 });
 
-test("runtime capabilities merge by agent ID without containing Session messages", () => {
-  const atoms = loadModule("src/renderer/src/atoms/runtime-atoms.ts", {
-    "../utils/agentRuntimeState": loadModule("src/renderer/src/utils/agentRuntimeState.ts"),
-  });
+test("runtime capabilities merge in the canonical Session runtime without message data", () => {
   const store = createStore();
-  store.set(atoms.applyRuntimeCapabilityAtom, {
-    agentId: "agent-a",
-    state: { modelName: "Model A", isStreaming: true },
+  store.set(atoms.replaceProjectSessionsAtom, {
+    projectId: "project-a",
+    sessions: [session("session-a", "project-a")],
   });
-  store.set(atoms.applyRuntimeCapabilityAtom, {
-    agentId: "agent-a",
-    state: { isExecutingTool: true },
-  });
+  store.set(atoms.replaceSessionRuntimesAtom, [
+    runtime("session-a", "agent-a", "project-a"),
+  ]);
+  store.set(atoms.applySessionRuntimeEventAtom, runtimeEvent(
+    "session-a",
+    "agent-a",
+    1,
+    "agents:runtime-state",
+    { agentId: "agent-a", state: { modelName: "Model A", isStreaming: true } },
+  ));
+  store.set(atoms.applySessionRuntimeEventAtom, runtimeEvent(
+    "session-a",
+    "agent-a",
+    1,
+    "agents:runtime-state",
+    { agentId: "agent-a", state: { isExecutingTool: true } },
+  ));
 
   const capability = store.get(atoms.runtimeCapabilityByAgentIdAtomFamily("agent-a"));
   assert.equal(capability.modelName, "Model A");
   assert.equal(capability.isStreaming, true);
   assert.equal(capability.isExecutingTool, true);
   assert.equal("messages" in capability, false);
+  assert.equal(atoms.applyRuntimeCapabilityAtom, undefined);
 });
 
-test("project runtime capability selectors isolate notifications and preserve references", () => {
-  const atoms = loadModule("src/renderer/src/atoms/runtime-atoms.ts", {
-    "../utils/agentRuntimeState": loadModule("src/renderer/src/utils/agentRuntimeState.ts"),
-  });
+test("project capability selectors ignore unrelated canonical Session updates", () => {
   const store = createStore();
-  store.set(atoms.replaceAgentInventoryAtom, [
-    tab("agent-a", "project-a"),
-    tab("agent-b", "project-b"),
+  store.set(atoms.replaceProjectSessionsAtom, {
+    projectId: "project-a",
+    sessions: [session("session-a", "project-a")],
+  });
+  store.set(atoms.replaceProjectSessionsAtom, {
+    projectId: "project-b",
+    sessions: [session("session-b", "project-b")],
+  });
+  store.set(atoms.replaceSessionRuntimesAtom, [
+    runtime("session-a", "agent-a", "project-a"),
+    runtime("session-b", "agent-b", "project-b"),
   ]);
-  store.set(atoms.applyRuntimeCapabilityAtom, {
-    agentId: "agent-a",
-    state: { modelName: "Model A" },
-  });
-  store.set(atoms.applyRuntimeCapabilityAtom, {
-    agentId: "agent-b",
-    state: { modelName: "Model B" },
-  });
+  for (const [sessionId, agentId, modelName] of [
+    ["session-a", "agent-a", "Model A"],
+    ["session-b", "agent-b", "Model B"],
+  ]) {
+    store.set(atoms.applySessionRuntimeEventAtom, runtimeEvent(
+      sessionId,
+      agentId,
+      1,
+      "agents:runtime-state",
+      { agentId, state: { modelName } },
+    ));
+  }
 
   const projectAAtom = atoms.runtimeCapabilitiesByProjectIdAtomFamily("project-a");
   const before = store.get(projectAAtom);
   let notifications = 0;
-  const unsubscribe = store.sub(projectAAtom, () => {
-    notifications += 1;
-  });
+  const unsubscribe = store.sub(projectAAtom, () => { notifications += 1; });
 
-  store.set(atoms.applyRuntimeCapabilityAtom, {
-    agentId: "agent-b",
-    state: { isStreaming: true },
-  });
+  store.set(atoms.applySessionRuntimeEventAtom, runtimeEvent(
+    "session-b",
+    "agent-b",
+    1,
+    "agents:runtime-state",
+    { agentId: "agent-b", state: { isStreaming: true } },
+  ));
   assert.equal(store.get(projectAAtom), before);
   assert.equal(notifications, 0);
 
-  store.set(atoms.applyRuntimeCapabilityAtom, {
-    agentId: "agent-a",
-    state: { isStreaming: true },
-  });
+  store.set(atoms.applySessionRuntimeEventAtom, runtimeEvent(
+    "session-a",
+    "agent-a",
+    1,
+    "agents:runtime-state",
+    { agentId: "agent-a", state: { isStreaming: true } },
+  ));
   assert.notEqual(store.get(projectAAtom), before);
   assert.equal(notifications, 1);
   unsubscribe();
+});
+
+test("late events from runtime A cannot revive its inventory or capabilities after replacement B", () => {
+  const store = createStore();
+  store.set(atoms.replaceProjectSessionsAtom, {
+    projectId: "project-a",
+    sessions: [session("session-a", "project-a")],
+  });
+  store.set(atoms.replaceSessionRuntimesAtom, [
+    runtime("session-a", "agent-a", "project-a", 2),
+  ]);
+  store.set(atoms.applySessionRuntimeEventAtom, runtimeEvent(
+    "session-a",
+    "agent-b",
+    3,
+    "agents:state",
+    {
+      id: "agent-b",
+      projectId: "project-a",
+      cwd: "C:/project-a",
+      title: "replacement",
+      status: "idle",
+      createdAt: 3,
+    },
+  ));
+  store.set(atoms.applySessionRuntimeEventAtom, runtimeEvent(
+    "session-a",
+    "agent-b",
+    3,
+    "agents:runtime-state",
+    { agentId: "agent-b", state: { modelName: "B", isStreaming: true } },
+  ));
+
+  store.set(atoms.applySessionRuntimeEventAtom, runtimeEvent(
+    "session-a",
+    "agent-a",
+    2,
+    "agents:state",
+    { id: "agent-a", projectId: "project-a", cwd: "C:/project-a", title: "old", status: "closed", createdAt: 1 },
+  ));
+  store.set(atoms.applySessionRuntimeEventAtom, runtimeEvent(
+    "session-a",
+    "agent-a",
+    2,
+    "agents:detach",
+    undefined,
+    "detach",
+  ));
+
+  assert.equal(store.get(atoms.agentInventoryAtom).map((agent) => agent.id).join(","), "agent-b");
+  assert.equal(store.get(atoms.runtimeCapabilityByAgentIdAtomFamily("agent-a")), undefined);
+  assert.equal(store.get(atoms.runtimeCapabilityByAgentIdAtomFamily("agent-b")).modelName, "B");
 });

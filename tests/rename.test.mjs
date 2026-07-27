@@ -156,7 +156,7 @@ test("openSessionRename falls back to common.untitled when session name is missi
   assert.equal(r2.agentRenameValue, "Untitled");
 });
 
-test("submitAgentRename calls renameAgent API, upsertAgent, showToast, and refreshProjectSessions", async () => {
+test("submitAgentRename updates the Session record, shows a toast, and refreshes sessions", async () => {
   const i18n = { t: (key) => key === "app.sessionRenamed" ? "Renamed!" : key };
   const calls = [];
   const api = createDefaultApi({
@@ -179,7 +179,6 @@ test("submitAgentRename calls renameAgent API, upsertAgent, showToast, and refre
   assert.equal(r2.agentRenameValue, "");
   assert.deepEqual(calls, [
     "renameAgent:agent-1:Old Name",
-    "upsertAgent:Old Name",
     "toast:Renamed!",
     "refresh:proj-a",
   ]);

@@ -4,7 +4,10 @@ import test from "node:test";
 
 const parts = readFileSync("src/renderer/src/components/session/SurfaceComponents.tsx", "utf8");
 const styles = readFileSync("src/renderer/src/styles.css", "utf8");
-const i18n = readFileSync("src/renderer/src/i18n.ts", "utf8");
+const i18n = [
+  readFileSync("src/renderer/src/i18n/rendererCopy.zh-CN.ts", "utf8"),
+  readFileSync("src/renderer/src/i18n/rendererCopy.en-US.ts", "utf8"),
+].join("\n");
 
 function cssRule(selector) {
   const matches = [...styles.matchAll(new RegExp(`${selector} \\{([\\s\\S]*?)\\n\\}`, "g"))];

@@ -13,6 +13,7 @@ test("extensions settings tab does not read preload API at module load", () => {
 test("browser API validates web state before replacing renderer lists", () => {
 	assert.match(browserApiSource, /function isWebState\(/);
 	assert.match(browserApiSource, /Array\.isArray\(.*\.projects\)/);
-	assert.match(browserApiSource, /Array\.isArray\(.*\.agents\)/);
+	assert.match(browserApiSource, /Array\.isArray\(.*\.runtimes\)/);
+	assert.doesNotMatch(browserApiSource, /state\.agents|agents:\s*AgentTab/);
 	assert.match(browserApiSource, /Invalid web service state payload/);
 });

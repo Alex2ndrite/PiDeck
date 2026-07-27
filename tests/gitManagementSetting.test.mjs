@@ -12,7 +12,10 @@ const settingsModal = readFileSync("src/renderer/src/components/app/SettingsModa
 const settingsStore = readFileSync("src/main/settings/SettingsStore.ts", "utf8");
 const sharedTypes = readFileSync("src/shared/types.ts", "utf8");
 const previewApi = readFileSync("src/renderer/src/previewApi.ts", "utf8");
-const i18n = readFileSync("src/renderer/src/i18n.ts", "utf8");
+const i18n = [
+  readFileSync("src/renderer/src/i18n/rendererCopy.zh-CN.ts", "utf8"),
+  readFileSync("src/renderer/src/i18n/rendererCopy.en-US.ts", "utf8"),
+].join("\n");
 const styles = readFileSync("src/renderer/src/styles.css", "utf8");
 
 describe("optional Git management entry", () => {
@@ -26,7 +29,7 @@ describe("optional Git management entry", () => {
   test("exposes a localized settings switch", () => {
     assert.match(settingsModal, /title=\{t\("settings\.gitManagement"\)\}/);
     assert.match(settingsModal, /description=\{t\("settings\.gitManagementDesc"\)\}/);
-    assert.match(settingsModal, /addPatch\(\{ enableGitManagement: checked \}\)/);
+	assert.match(settingsModal, /updateDraft\(\{ enableGitManagement: checked \}\)/);
     assert.equal(i18n.match(/"settings\.gitManagement":/g)?.length, 2);
     assert.equal(i18n.match(/"settings\.gitManagementDesc":/g)?.length, 2);
   });
@@ -34,7 +37,7 @@ describe("optional Git management entry", () => {
   test("places Git beside Files in the floating conversation tools", () => {
     assert.match(appParts, /filesAction\?: EntryAction;\s*gitAction\?: EntryAction;/);
     assert.match(appParts, /props\.filesAction[\s\S]*?props\.gitAction[\s\S]*?props\.editorsAction/);
-    assert.match(app, /gitAction=\{settings\.enableGitManagement && activeProjectId && !isChatProject\(activeProject\) \?/);
+    assert.match(app, /gitAction=\{settings\.enableGitManagement && activeProjectId \?/);
     assert.match(app, /icon:\s*<GitBranch\s+size=\{17\}\s*\/>/);
     assert.match(styles, /\.git-entry\s*\{[\s\S]*?width:\s*34px;[\s\S]*?height:\s*34px/);
   });

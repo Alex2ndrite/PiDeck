@@ -18,6 +18,10 @@ import {
 } from "./ComposerParts";
 import { desktopApi } from "../../desktopApi";
 import { showNotice } from "../../utils/notice";
+import {
+  requireSessionCommand,
+  toSessionRuntimeTarget,
+} from "../../utils/sessionCommands";
 import type { ComposerPickerKind } from "../../hooks/useSessionComposerController";
 
 export type ComposerPickerHostProps = {
@@ -62,23 +66,30 @@ export function ComposerPickerHost(props: ComposerPickerHostProps) {
 
   function currentHandle() {
     const current = store.get(sessionRuntimeByIdAtom)[sessionId];
-    if (!current?.agentId) return undefined;
-    return {
-      agentId: current.agentId,
-      runtimeGeneration: current.runtimeGeneration,
-    };
+    return toSessionRuntimeTarget(sessionId, current);
   }
 
   async function pickModel(model: AvailableModel) {
+    if (!record) return;
     const handle = currentHandle();
     try {
       if (handle) {
-        await desktopApi.agents.setModel(handle.agentId, model.provider, model.id);
+        requireSessionCommand(await desktopApi.sessions.setRuntimeModel(
+          handle,
+          model.provider,
+          model.id,
+        ));
+        upsertSession({
+          ...record,
+          model: { provider: model.provider, modelId: model.id },
+          updatedAt: Date.now(),
+        });
+      } else {
+        const updated = await desktopApi.sessions.updateRecord(sessionId, {
+          model: { provider: model.provider, modelId: model.id },
+        });
+        upsertSession(updated);
       }
-      const updated = await desktopApi.sessions.updateRecord(sessionId, {
-        model: { provider: model.provider, modelId: model.id },
-      });
-      upsertSession(updated);
       props.onClose();
     } catch (error) {
       showNotice(error instanceof Error ? error.message : String(error), 4000);
@@ -86,13 +97,18 @@ export function ComposerPickerHost(props: ComposerPickerHostProps) {
   }
 
   async function pickThinking(level: string) {
+    if (!record) return;
     const handle = currentHandle();
     try {
-      if (handle) await desktopApi.agents.setThinking(handle.agentId, level);
-      const updated = await desktopApi.sessions.updateRecord(sessionId, {
-        thinkingLevel: level,
-      });
-      upsertSession(updated);
+      if (handle) {
+        requireSessionCommand(await desktopApi.sessions.setRuntimeThinking(handle, level));
+        upsertSession({ ...record, thinkingLevel: level, updatedAt: Date.now() });
+      } else {
+        const updated = await desktopApi.sessions.updateRecord(sessionId, {
+          thinkingLevel: level,
+        });
+        upsertSession(updated);
+      }
       props.onClose();
     } catch (error) {
       showNotice(error instanceof Error ? error.message : String(error), 4000);

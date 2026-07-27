@@ -58,12 +58,9 @@ test("the history drawer uses the lazy Session open path", () => {
 test("App routes project and Session selection through the command owner", () => {
   assert.match(appSource, /selectProject: selectProjectCommand/);
   assert.match(appSource, /selectSession: selectSessionCommand/);
-  assert.match(appSource, /selectSessionCommand\(agent\.projectId, sessionId, false\)/);
+  assert.match(appSource, /selectSessionCommand\(session\.projectId, session\.id, false\)/);
   assert.match(appSource, /selectSessionCommand\(projectId, result\.targetSessionId, true\)/);
-  assert.match(
-    appSource,
-    /if \(sessionId\) \{[\s\S]*?selectSessionCommand\(agent\.projectId, sessionId, false\);[\s\S]*?\} else \{[\s\S]*?selectProjectCommand\(agent\.projectId\);/,
-  );
+  assert.match(appSource, /sessionRecordByIdAtomFamily\(target\.sessionId\)/);
   assert.match(
     appSource,
     /select: \(projectId\) => \{\s*selectProjectCommand\(projectId\);[\s\S]*?const loadState = store\.get\(sessionCatalogLoadStateAtom\)\[projectId\];[\s\S]*?loadState\?\.status !== "loading" && loadState\?\.status !== "ready"/,
@@ -76,11 +73,17 @@ test("first Session send is request-addressed and restores rejected snapshots", 
   assert.match(sessionSendSource, /options\.sendPrompt\(\{/);
   assert.match(
     sessionSendSource,
-    /sendingSessionIdsRef\.current\.add\(sessionId\)/,
+    /sendingSessionIdsRef\.current\.add\(sourceSessionId\)/,
   );
   assert.match(sessionSendSource, /result\.delivery === "unknown"/);
   assert.match(sessionSendSource, /\[message, current\]/);
   assert.match(sessionSendSource, /\.\.\.imageSnapshot, \.\.\.current/);
+});
+
+test("the renderer-only Chat surface keeps the dev workspace toolbar before first send", () => {
+  assert.match(appSource, /const hasActiveConversation = Boolean\(currentSessionId\)/);
+  assert.match(appSource, /terminalAction=\{activeAgentId \? \{/);
+  assert.match(appSource, /gitAction=\{settings\.enableGitManagement && activeProjectId \? \{/);
 });
 
 test("active Agent identity is derived from the selected Session runtime", () => {
@@ -96,7 +99,7 @@ test("active Agent identity is derived from the selected Session runtime", () =>
 });
 
 test("Session messages and composer render without an active Agent", () => {
-  assert.match(appSource, /const hasActiveConversation = Boolean\(currentSession\)/);
+  assert.match(appSource, /const hasActiveConversation = Boolean\(currentSessionId\)/);
   assert.match(
     sessionViewSource,
     /\{hasActiveConversation && \(\s*<ComposerArea[\s\S]*sessionId=\{sessionId\}/,

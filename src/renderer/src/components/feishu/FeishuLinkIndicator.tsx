@@ -13,8 +13,8 @@ import { showNotice } from "../../utils/notice";
 type Props = {
 	status: FeishuBridgeStatus;
 	bots: FeishuBotConfig[];
-	/** 当前活跃 Agent ID，用于读取/保存 Bot 分配 */
-	activeAgentId: string | undefined;
+	/** 当前稳定 Session ID，用于读取/保存 Bot 分配 */
+	activeSessionId: string | undefined;
 	/** 当前连接的 Bot ID */
 	activeBotId: string | undefined;
 	/** 当前 Agent 指定的 Bot ID（可能不同于 activeBotId） */
@@ -23,13 +23,13 @@ type Props = {
 	connecting: boolean;
 	onConnectByBot: (botId: string) => Promise<{ success: boolean; message: string }>;
 	onDisconnect: () => void;
-	onSetSessionBot: (agentId: string, botId: string | null) => Promise<{ success: boolean; message?: string; chatId?: string } | void>;
+	onSetSessionBot: (sessionId: string, botId: string | null) => Promise<{ success: boolean; message?: string; chatId?: string } | void>;
 };
 
 export function FeishuLinkIndicator({
 	status,
 	bots,
-	activeAgentId,
+	activeSessionId,
 	activeBotId,
 	sessionBotId,
 	isConnected,
@@ -85,11 +85,11 @@ export function FeishuLinkIndicator({
 					return;
 				}
 			}
-			if (!activeAgentId) {
+			if (!activeSessionId) {
 				showNotice(t("feishu.link.noActiveSession"), 4000, "error");
 				return;
 			}
-			const bindResult = await onSetSessionBot(activeAgentId, botId);
+			const bindResult = await onSetSessionBot(activeSessionId, botId);
 			if (bindResult && bindResult.success === false) {
 				showNotice(bindResult.message || t("feishu.link.bindFailed"), 6500, "error");
 				return;
@@ -98,14 +98,14 @@ export function FeishuLinkIndicator({
 		} finally {
 			window.setTimeout(() => setSelectingBotId(null), 180);
 		}
-	}, [activeBotId, activeAgentId, onConnectByBot, onSetSessionBot]);
+	}, [activeBotId, activeSessionId, onConnectByBot, onSetSessionBot]);
 
 	const handleClearSessionBot = useCallback(async () => {
-		if (activeAgentId) {
-			await onSetSessionBot(activeAgentId, null);
+		if (activeSessionId) {
+			await onSetSessionBot(activeSessionId, null);
 		}
 		setOpen(false);
-	}, [activeAgentId, onSetSessionBot]);
+	}, [activeSessionId, onSetSessionBot]);
 
 	if (!hasBots) return null;
 

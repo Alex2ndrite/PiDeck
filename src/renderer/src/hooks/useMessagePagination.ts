@@ -102,6 +102,7 @@ export function useMessagePagination({
   const ownerKeyRef = useRef(ownerKey);
   const messageCountRef = useRef(messages.length);
   const frameRef = useRef<number | undefined>(undefined);
+  const fallbackTimerRef = useRef<number | undefined>(undefined);
   const frameOwnerRef = useRef<string | undefined>(undefined);
   const previousRef = useRef({ ownerKey, count: messages.length });
   ownerKeyRef.current = ownerKey;
@@ -109,7 +110,9 @@ export function useMessagePagination({
 
   const cancelPendingLoad = useCallback(() => {
     if (frameRef.current != null) cancelAnimationFrame(frameRef.current);
+    if (fallbackTimerRef.current != null) window.clearTimeout(fallbackTimerRef.current);
     frameRef.current = undefined;
+    fallbackTimerRef.current = undefined;
     frameOwnerRef.current = undefined;
   }, []);
 
@@ -160,8 +163,14 @@ export function useMessagePagination({
       return active.isLoading ? active : { ...active, isLoading: true };
     });
     frameOwnerRef.current = requestOwnerKey;
-    frameRef.current = requestAnimationFrame(() => {
+    // Electron can throttle rAF while a window is backgrounded. Keep rAF as the
+    // normal paint-friendly path, but complete the owner-validated update once
+    // through a short timer so the button cannot remain stuck in loading state.
+    const completeLoad = () => {
+      if (frameOwnerRef.current !== requestOwnerKey) return;
       frameRef.current = undefined;
+      if (fallbackTimerRef.current != null) window.clearTimeout(fallbackTimerRef.current);
+      fallbackTimerRef.current = undefined;
       frameOwnerRef.current = undefined;
       if (ownerKeyRef.current !== requestOwnerKey) return;
       setStoredState((current) => completeMessagePaginationLoad(
@@ -171,7 +180,9 @@ export function useMessagePagination({
         pageSize,
         maxVisibleMessages,
       ));
-    });
+    };
+    frameRef.current = requestAnimationFrame(completeLoad);
+    fallbackTimerRef.current = window.setTimeout(completeLoad, 250);
   }, [cancelPendingLoad, enabled, initialPageSize, maxVisibleMessages, ownerKey, pageSize, state.isLoading]);
 
   const loadUntilIncluded = useCallback((index: number) => {

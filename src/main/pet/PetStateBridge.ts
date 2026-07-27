@@ -10,6 +10,19 @@ import { ipcChannels } from "../../shared/ipc";
 
 const PRIORITY: AgentStatus[] = ["error", "running", "starting", "idle"];
 
+export type PetStateCopyKey = "pet.doneNotification" | "pet.agentError";
+
+const defaultPetStateCopy: Record<PetStateCopyKey, string> = {
+	"pet.doneNotification": "Task complete. Remember to review it.",
+	"pet.agentError": "{title} encountered an error",
+};
+
+function defaultTranslate(key: PetStateCopyKey, params: Record<string, string> = {}): string {
+	return defaultPetStateCopy[key].replace(/\{([A-Za-z0-9_]+)\}/g, (match, name) => (
+		Object.prototype.hasOwnProperty.call(params, name) ? params[name] : match
+	));
+}
+
 function statusToMode(status: AgentStatus): PetMode | null {
 	switch (status) {
 		case "running": return "running";
@@ -72,6 +85,7 @@ export class PetStateBridge {
 		private readonly getPetWindow: () => BrowserWindow | null,
 		private readonly patrol: { start: () => void; stop: () => void; active: boolean; setDragging: (d: boolean) => void } | null = null,
 		private readonly isPatrolEnabled: () => boolean = () => true,
+		private readonly translate: (key: PetStateCopyKey, params?: Record<string, string>) => string = defaultTranslate,
 	) {}
 
 	get currentState(): PetAggregateState | null { return this.lastState; }
@@ -137,7 +151,7 @@ export class PetStateBridge {
 		// ── running→review→idle ──
 		if (target === "idle" && prev?.mode === "running") {
 			this.applyState({ ...state, mode: "review" });
-			this.sendNotif({ type: "done", text: "任务完成，记得 Review", timestamp: Date.now() });
+			this.sendNotif({ type: "done", text: this.translate("pet.doneNotification"), timestamp: Date.now() });
 			this.lastChangeAt = Date.now();
 			this.setTransition(4000, () => {
 				this.applyState({ ...state, mode: "idle" });
@@ -157,7 +171,12 @@ export class PetStateBridge {
 			if (prev?.mode !== "failed") {
 				this.applyState(state);
 				const errored = this.currentTabs.find(t => t.status === "error");
-				if (errored) this.sendNotif({ type: "error", text: `${errored.title} 出错了`, agentId: errored.id, timestamp: now });
+				if (errored) this.sendNotif({
+					type: "error",
+					text: this.translate("pet.agentError", { title: errored.title }),
+					agentId: errored.id,
+					timestamp: now,
+				});
 				this.setTransition(4000, () => {
 					this.applyState({ ...state, mode: "idle" });
 					this.maybeStartPatrol();

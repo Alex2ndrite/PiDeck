@@ -2,11 +2,13 @@ import { atom } from "jotai";
 import { selectAtom } from "jotai/utils";
 import type {
   AgentRuntimeState,
-  AgentStatus,
-  AgentUiRequest,
-  ChatMessage,
+	AgentStatus,
+	AgentUiRequest,
+	ChatMessage,
+	SessionMessagePage,
   SessionRecord,
   SessionRuntimeEvent,
+  SessionRuntimeInfo,
 } from "../../../shared/types";
 import { mergeAgentRuntimeState } from "../utils/agentRuntimeState";
 import { sameProjectSessionList } from "../utils/sessionRecordIdentity";
@@ -20,6 +22,13 @@ export type SessionRuntimeViewState = {
   state?: AgentRuntimeState;
   thinking: string;
   updatedAt: number;
+  projectId?: string;
+  cwd?: string;
+  title?: string;
+  piSessionId?: string;
+  sessionPath?: string;
+  createdAt?: number;
+  compactionCount?: number;
 };
 
 export type SessionLoadState = {
@@ -28,10 +37,12 @@ export type SessionLoadState = {
 };
 
 export type SessionMessageCacheEntry = {
-  messages: ChatMessage[];
-  revision: number;
-  source: "disk" | "runtime";
-  updatedAt: number;
+	messages: ChatMessage[];
+	revision: number;
+	source: "disk" | "runtime";
+	updatedAt: number;
+	/** Present only for paged historical reads; runtime owns an authoritative full snapshot. */
+	page?: Pick<SessionMessagePage, "total" | "nextBefore">;
 };
 
 export type SessionRuntimeUiRequestState = {
@@ -100,6 +111,35 @@ export const currentSessionMessagesAtom = atom((get) => {
     : [];
 });
 
+export const replaceSessionRuntimesAtom = atom(
+  null,
+  (get, set, runtimes: SessionRuntimeInfo[]) => {
+    const current = get(sessionRuntimeByIdAtom);
+    const next = { ...current };
+    for (const runtime of runtimes) {
+      const existing = current[runtime.sessionId];
+      if (existing && existing.runtimeGeneration > runtime.runtimeGeneration) continue;
+      const bindingChanged = existing?.agentId !== runtime.agentId ||
+        existing.runtimeGeneration !== runtime.runtimeGeneration;
+      next[runtime.sessionId] = {
+        ...(bindingChanged ? {} : existing),
+        agentId: runtime.agentId,
+        runtimeGeneration: runtime.runtimeGeneration,
+        status: runtime.status,
+        state: bindingChanged ? undefined : existing?.state,
+        thinking: bindingChanged ? "" : (existing?.thinking ?? ""),
+        updatedAt: Date.now(),
+        projectId: runtime.projectId,
+        cwd: runtime.cwd,
+        sessionPath: runtime.sessionPath,
+        createdAt: runtime.createdAt,
+        compactionCount: runtime.compactionCount,
+      };
+    }
+    set(sessionRuntimeByIdAtom, next);
+  },
+);
+
 export const replaceProjectSessionsAtom = atom(
   null,
   (get, set, input: { projectId: string; sessions: SessionRecord[] }) => {
@@ -159,9 +199,10 @@ export const cacheSessionMessagesAtom = atom(
   null,
   (get, set, input: {
     sessionId: string;
-    messages: ChatMessage[];
-    source: "disk" | "runtime";
-    expectedRevision?: number;
+		messages: ChatMessage[];
+		source: "disk" | "runtime";
+		expectedRevision?: number;
+		page?: Pick<SessionMessagePage, "total" | "nextBefore">;
   }) => {
     const cache = get(sessionMessagesCacheAtom);
     const current = cache[input.sessionId];
@@ -177,11 +218,12 @@ export const cacheSessionMessagesAtom = atom(
     const nextCache = {
       ...cache,
       [input.sessionId]: {
-        messages: input.messages,
-        revision,
-        source: input.source,
-        updatedAt: Date.now(),
-      },
+			messages: input.messages,
+			revision,
+			source: input.source,
+			updatedAt: Date.now(),
+			...(input.source === "disk" && input.page ? { page: input.page } : {}),
+		},
     };
     const lru = [
       input.sessionId,
@@ -195,6 +237,36 @@ export const cacheSessionMessagesAtom = atom(
     set(sessionMessageLruAtom, retainedIds);
     return true;
   },
+);
+
+export const prependSessionMessagePageAtom = atom(
+	null,
+	(get, set, input: {
+		sessionId: string;
+		before: number;
+		expectedRevision: number;
+		page: SessionMessagePage;
+	}) => {
+		const current = get(sessionMessagesCacheAtom)[input.sessionId];
+		if (
+			!current ||
+			current.source !== "disk" ||
+			current.revision !== input.expectedRevision ||
+			current.page?.nextBefore !== input.before
+		) {
+			return false;
+		}
+		set(sessionMessagesCacheAtom, {
+			...get(sessionMessagesCacheAtom),
+			[input.sessionId]: {
+				...current,
+				messages: [...input.page.messages, ...current.messages],
+				page: { total: input.page.total, nextBefore: input.page.nextBefore },
+				updatedAt: Date.now(),
+			},
+		});
+		return true;
+	},
 );
 
 export const touchSessionMessagesAtom = atom(null, (get, set, sessionId: string) => {
@@ -260,7 +332,7 @@ function applySessionRuntimeUiEvent(
       }
     : current;
   if (
-    event.sourceChannel === "agents:state" &&
+    (event.sourceChannel === "agents:state" || event.sourceChannel === "sessions:runtime") &&
     (payload.status === "error" || payload.status === "closed")
   ) {
     return {
@@ -394,7 +466,10 @@ export const applySessionRuntimeEventAtom = atom(
       ? event.payload as Record<string, unknown>
       : undefined;
 
-    if (event.sourceChannel === "agents:state" && payload) {
+    if (
+      (event.sourceChannel === "agents:state" || event.sourceChannel === "sessions:runtime") &&
+      payload
+    ) {
       const status = payload.status;
       if (
         status === "starting" ||
@@ -403,7 +478,19 @@ export const applySessionRuntimeEventAtom = atom(
         status === "error" ||
         status === "closed"
       ) {
-        nextRuntime = { ...nextRuntime, status };
+        nextRuntime = {
+          ...nextRuntime,
+          status,
+          projectId: typeof payload.projectId === "string" ? payload.projectId : nextRuntime.projectId,
+          cwd: typeof payload.cwd === "string" ? payload.cwd : nextRuntime.cwd,
+          title: typeof payload.title === "string" ? payload.title : nextRuntime.title,
+          piSessionId: typeof payload.sessionId === "string" ? payload.sessionId : nextRuntime.piSessionId,
+          sessionPath: typeof payload.sessionPath === "string" ? payload.sessionPath : nextRuntime.sessionPath,
+          createdAt: typeof payload.createdAt === "number" ? payload.createdAt : nextRuntime.createdAt,
+          compactionCount: typeof payload.compactionCount === "number"
+            ? payload.compactionCount
+            : nextRuntime.compactionCount,
+        };
       }
     } else if (event.sourceChannel === "agents:runtime-state" && payload?.state) {
       nextRuntime = {
@@ -418,7 +505,10 @@ export const applySessionRuntimeEventAtom = atom(
         ...nextRuntime,
         thinking: typeof payload.thinking === "string" ? payload.thinking : "",
       };
-    } else if (event.sourceChannel === "agents:message" && payload) {
+    } else if (
+      (event.sourceChannel === "agents:message" || event.sourceChannel === "sessions:messages") &&
+      payload
+    ) {
       const messages = payload.messages;
       if (Array.isArray(messages)) {
         set(cacheSessionMessagesAtom, {

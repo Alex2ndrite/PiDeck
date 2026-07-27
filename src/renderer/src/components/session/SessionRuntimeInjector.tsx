@@ -1,9 +1,19 @@
 import React from "react";
-import { useAtomValue } from "jotai";
+import { useAtomValue, useSetAtom } from "jotai";
 import type { AgentTab, AgentUiResponse, ChatMessage } from "../../../../shared/types";
 import type { ImageContent } from "../../../../shared/types";
 import { settingsOpenAtom } from "../../atoms";
+import {
+  claimSessionRuntimeUiResponseAtom,
+  currentSessionRuntimeAtom,
+  currentSessionRuntimeUiAtom,
+  rollbackSessionRuntimeUiResponseAtom,
+} from "../../atoms/session-atoms";
 import { useSessionRuntimeController } from "../../hooks/useSessionRuntimeController";
+import {
+  createSessionRuntimeUiResponder,
+  SessionRuntimeUiOverlay,
+} from "../overlays/SessionRuntimeUiOverlay";
 import type { QueuedPrompt } from "../../hooks/useQueuedPrompt";
 import type { SessionTimelineController } from "../../hooks/useSessionTimelineController";
 import { QueuedPromptPanel } from "./ComposerPanels";
@@ -38,6 +48,7 @@ export interface SessionRuntimeInjectorProps {
     sessionId: string,
     snapshot: { displayText: string; message: string; images?: ImageContent[]; agentMode: string },
   ) => boolean;
+  ensureSessionId?: (sessionId: string) => Promise<string>;
 
   // Message handlers (match SessionView prop types)
   resendUserMessage?: (message: any) => void;
@@ -50,10 +61,10 @@ export interface SessionRuntimeInjectorProps {
   // Queue
   activeQueuedPrompts: QueuedPrompt[];
   visibleQueuedPrompts: QueuedPrompt[];
-  queueRetract: (agentId: string, prompt: QueuedPrompt) => void;
-  queueDiscard: (agentId: string, promptId: string) => void;
+  queueRetract: (sessionId: string, prompt: QueuedPrompt) => void;
+  queueDiscard: (sessionId: string, promptId: string) => void;
   queuedTrackRef: React.MutableRefObject<HTMLDivElement | null>;
-  queueFlushByAgentRef: React.MutableRefObject<Set<string>>;
+  queueFlushBySessionRef: React.MutableRefObject<Set<string>>;
   restartingAgentId: string | null;
   sessionDurationByAgent: Record<string, number>;
 
@@ -119,6 +130,7 @@ export const SessionRuntimeInjector = React.memo(function SessionRuntimeInjector
     restartActiveAgent,
     runCreateSessionDraft,
     enqueueSessionPrompt,
+    ensureSessionId,
     resendUserMessage,
     editMessage,
     deleteMessage,
@@ -128,7 +140,7 @@ export const SessionRuntimeInjector = React.memo(function SessionRuntimeInjector
     queueRetract,
     queueDiscard,
     queuedTrackRef,
-    queueFlushByAgentRef,
+    queueFlushBySessionRef,
     restartingAgentId,
     sessionDurationByAgent,
     activeProjectId,
@@ -149,12 +161,55 @@ export const SessionRuntimeInjector = React.memo(function SessionRuntimeInjector
     api,
   } = props;
   const settingsOpen = useAtomValue(settingsOpenAtom);
+  const currentSessionRuntime = useAtomValue(currentSessionRuntimeAtom);
+  const currentSessionRuntimeUi = useAtomValue(currentSessionRuntimeUiAtom);
+  const claimSessionUiResponse = useSetAtom(claimSessionRuntimeUiResponseAtom);
+  const rollbackSessionUiResponse = useSetAtom(rollbackSessionRuntimeUiResponseAtom);
+  const runtimeRef = React.useRef(currentSessionRuntime);
+  runtimeRef.current = currentSessionRuntime;
+
+  const runtimeUiResponder = React.useMemo(() => {
+    if (!currentSessionRuntime?.agentId) return undefined;
+    const binding = {
+      sessionId: currentSessionId,
+      agentId: currentSessionRuntime.agentId,
+      runtimeGeneration: currentSessionRuntime.runtimeGeneration,
+    };
+
+    return createSessionRuntimeUiResponder({
+      binding,
+      // A response is valid only for the runtime that issued the request. The ref
+      // lets the responder reject a detach/rebind occurring between click and IPC.
+      readBinding: () => {
+        const latest = runtimeRef.current;
+        return latest?.agentId
+          ? {
+              sessionId: currentSessionId,
+              agentId: latest.agentId,
+              runtimeGeneration: latest.runtimeGeneration,
+            }
+          : undefined;
+      },
+      claim: claimSessionUiResponse,
+      rollback: rollbackSessionUiResponse,
+      send: api.sessions.sendUiResponse,
+      onError: (error) => showToast(error instanceof Error ? error.message : String(error), 4000),
+    });
+  }, [
+    api.sessions.sendUiResponse,
+    claimSessionUiResponse,
+    currentSessionId,
+    currentSessionRuntime?.agentId,
+    currentSessionRuntime?.runtimeGeneration,
+    rollbackSessionUiResponse,
+    showToast,
+  ]);
 
   // ── internal runtime subscriptions (the reason this component exists) ──
   const runtime = useSessionRuntimeController({
     agents,
-    queueFlushByAgentRef,
-    queuedPrompts: {},
+    queueFlushBySessionRef,
+    activeQueuedPrompts,
     restartingAgentId,
     sessionDurationByAgent,
     activeProjectId,
@@ -177,6 +232,7 @@ export const SessionRuntimeInjector = React.memo(function SessionRuntimeInjector
       activeAgentId={runtime.activeAgentId ?? undefined}
       activeAgent={activeAgent}
       activeRuntimeState={runtime.activeRuntimeState}
+      runtimeTarget={runtime.runtimeTarget}
       hasActiveConversation={runtime.hasActiveConversation}
       hasProject={runtime.sessionHasProject}
       chatHeaderRef={chatHeaderRef}
@@ -230,12 +286,23 @@ export const SessionRuntimeInjector = React.memo(function SessionRuntimeInjector
       onToast={(message: string) => showToast(message)}
       canMutateActiveMessages={canMutateActiveMessages}
       enqueueSessionPrompt={enqueueSessionPrompt}
+      ensureSessionId={ensureSessionId}
       openFilePath={onOpenFile}
+      runtimeUi={
+        runtimeUiResponder ? (
+          <SessionRuntimeUiOverlay
+            sessionId={currentSessionId}
+            runtime={currentSessionRuntime}
+            ui={currentSessionRuntimeUi}
+            responder={runtimeUiResponder}
+          />
+        ) : null
+      }
       queuePanel={
-        runtime.activeAgentId ? (
+        currentSessionId ? (
           <QueuedPromptPanel
             trackRef={queuedTrackRef}
-            agentId={runtime.activeAgentId}
+            sessionId={currentSessionId}
             prompts={activeQueuedPrompts}
             visiblePrompts={visibleQueuedPrompts}
             onRetract={queueRetract}

@@ -32,22 +32,33 @@ export const ipcChannels = {
 	filesDelete: "files:delete",
 	filesRename: "files:rename",
 	sessionsList: "sessions:list",
-	/** Session-first catalog APIs. Existing sessions:* handlers remain during migration. */
+	/** Session-first catalog APIs. */
 	sessionsCatalogList: "sessions:catalog-list",
 	sessionsCatalogCreateDraft: "sessions:catalog-create-draft",
 	sessionsCatalogUpdate: "sessions:catalog-update",
 	sessionsCatalogDelete: "sessions:catalog-delete",
 	sessionsCatalogReadMessages: "sessions:catalog-read-messages",
+	sessionsCatalogReadMessagePage: "sessions:catalog-read-message-page",
+	sessionsCatalogReadReferenceMessages: "sessions:catalog-read-reference-messages",
+	sessionsCatalogCopy: "sessions:catalog-copy",
+	sessionsCatalogExportHtml: "sessions:catalog-export-html",
 	sessionsSendPrompt: "sessions:send-prompt",
 	sessionsRuntimeEvent: "sessions:runtime-event",
 	sessionsUiResponse: "sessions:ui-response",
-	sessionsRename: "sessions:rename",
-	sessionsCopy: "sessions:copy",
-	sessionsExportHtml: "sessions:export-html",
-	sessionsDelete: "sessions:delete",
-	sessionsReadMessages: "sessions:read-messages",
-	sessionsReadMeta: "sessions:read-meta",
-	sessionsReadChatMessages: "sessions:read-chat-messages",
+	sessionsRuntimeList: "sessions:runtime-list",
+	sessionsRuntimeStop: "sessions:runtime-stop",
+	sessionsRuntimeAbort: "sessions:runtime-abort",
+	sessionsRuntimeRestart: "sessions:runtime-restart",
+	sessionsRuntimeCompact: "sessions:runtime-compact",
+	sessionsRuntimeState: "sessions:runtime-state",
+	sessionsRuntimeCommands: "sessions:runtime-commands",
+	sessionsRuntimeExportHtml: "sessions:runtime-export-html",
+	sessionsRuntimeEditMessage: "sessions:runtime-edit-message",
+	sessionsRuntimeDeleteMessage: "sessions:runtime-delete-message",
+	sessionsRuntimePrepareResend: "sessions:runtime-prepare-resend",
+	sessionsRuntimeSetModel: "sessions:runtime-set-model",
+	sessionsRuntimeSetThinking: "sessions:runtime-set-thinking",
+	sessionsRuntimeClone: "sessions:runtime-clone",
 	codexSessionsScan: "codex-sessions:scan",
 	codexSessionsImport: "codex-sessions:import",
 	claudeSessionsScan: "claude-sessions:scan",
@@ -119,6 +130,7 @@ export const ipcChannels = {
 	gitDropCommit: "git:drop-commit",
 	gitGenerateCommitMessage: "git:generate-commit-message",
 	gitInit: "git:init",
+	gitFetch: "git:fetch",
 	piCheck: "pi:check",
 	piCheckCustom: "pi:check-custom",
 	/** 获取已安装的 WSL 发行版列表（仅 Windows） */
@@ -163,31 +175,7 @@ export const ipcChannels = {
 	appWindowToggleMaximize: "app:window-toggle-maximize",
 	appWindowToggleAlwaysOnTop: "app:window-toggle-always-on-top",
 	appWindowClose: "app:window-close",
-	agentsList: "agents:list",
-	agentsCreate: "agents:create",
-	agentsRename: "agents:rename",
-	agentsStop: "agents:stop",
-	agentsPrompt: "agents:prompt",
-	agentsAbort: "agents:abort",
-	agentsExportHtml: "agents:export-html",
-	agentsForkMessages: "agents:fork-messages",
-	agentsForkSession: "agents:fork-session",
-	agentsCloneSession: "agents:clone-session",
-	agentsPrepareResend: "agents:prepare-resend",
-	agentsSwitchSession: "agents:switch-session",
-	agentsReload: "agents:reload",
-	agentsEditMessage: "agents:edit-message",
-	agentsDeleteMessage: "agents:delete-message",
-	agentsRestart: "agents:restart",
-	agentsCompact: "agents:compact",
 	agentsRuntimeState: "agents:runtime-state",
-	agentsCycleModel: "agents:cycle-model",
-	agentsAvailableModels: "agents:available-models",
-	agentsSetModel: "agents:set-model",
-	/** 刷新模型配置：通知运行中的 agent 重新加载 models.json，无需重启 */
-	agentsRefreshModels: "agents:refresh-models",
-	agentsCycleThinking: "agents:cycle-thinking",
-	agentsSetThinking: "agents:set-thinking",
 	agentsState: "agents:state",
 	projectsListModels: "projects:list-models",
 	agentsEvent: "agents:event",
@@ -199,12 +187,10 @@ export const ipcChannels = {
 
 	/** Agent Extension UI 协议：主进程 → 渲染进程，推送扩展的 UI 请求（select/confirm/input/editor） */
 	agentsUiRequest: "agents:ui-request",
-	/** 渲染进程 → 主进程，传递用户在 UI 请求中的响应（选中的选项、输入的文本等） */
-	agentsUiResponse: "agents:ui-response",
 	/** 项目信任确认：主进程 → 渲染进程，启动 Agent 前请求用户对含 .pi 资源的项目做信任决策 */
-	agentsTrustRequest: "agents:trust-request",
+	projectsTrustRequest: "projects:trust-request",
 	/** 项目信任确认：渲染进程 → 主进程，回传用户的信任选择（trust-remember/trust-session/deny） */
-	agentsTrustResponse: "agents:trust-response",
+	projectsTrustResponse: "projects:trust-response",
 
 	configGetModels: "config:get-models",
 	configGetAuth: "config:get-auth",
@@ -259,9 +245,9 @@ export const ipcChannels = {
 	feishuConnectByBot: "feishu:connect-by-bot",
 	/** Pi 创建会话时触发飞书自动拉群 */
 	feishuAutoGroup: "feishu:auto-group",
-	/** 获取指定 Agent 绑定的飞书 Bot ID */
+	/** 获取指定稳定 Session 绑定的飞书 Bot ID */
 	feishuSessionBotGet: "feishu:session-bot-get",
-	/** 设置指定 Agent 使用的飞书 Bot ID */
+	/** 设置指定稳定 Session 使用的飞书 Bot ID */
 	feishuSessionBotSet: "feishu:session-bot-set",
 	/** 飞书 /whoami 结果推回前端 */
 	feishuWhoamiResult: "feishu:whoami-result",
@@ -319,4 +305,5 @@ export const ipcChannels = {
 
 	// ===== 内置浏览器 =====
 	browserOpenExternal: "browser:open-external",
+
 } as const;

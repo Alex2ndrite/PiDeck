@@ -62,8 +62,11 @@ test("timeline auto-scroll only sticks while the reader remains near the bottom"
 });
 
 test("timeline owns paging, resize, mutation, and outline jump lifecycle", () => {
-  assert.match(source, /selectAtom\([\s\S]*sessionMessagesCacheAtom/);
-  assert.match(source, /new ResizeObserver\(stickToBottom\)/);
+	assert.match(source, /selectAtom\([\s\S]*sessionMessagesCacheAtom/);
+	assert.match(source, /readRecordMessagePage\(sessionId/);
+	assert.match(source, /prependMessagePage/);
+	assert.match(source, /totalMessageCount: diskPage \? diskPage\.total : messages\.length/);
+	assert.match(source, /new ResizeObserver\(stickToBottom\)/);
   assert.match(source, /new MutationObserver\(stickToBottom\)/);
   assert.match(source, /pagination\.loadUntilIncluded\(index\)/);
   assert.match(source, /restoreTimelineAnchor\(/);

@@ -14,7 +14,7 @@ import type {
 	FeishuChatBinding,
 	FeishuTestResult,
 } from "../../../shared/types";
-import { t } from "../i18n";
+import { formatI18nDateTime, t } from "../i18n";
 
 type Props = {
 	onSave?: () => void;
@@ -157,7 +157,8 @@ export function ImTab(_props: Props) {
 			setStatus(statusRes ?? { status: "disconnected", activeBindings: 0 });
 			setBindings(bindingsList ?? []);
 		} catch (e) {
-			setError(e instanceof Error ? e.message : String(e));
+			console.error("[Feishu] Failed to load configuration", e);
+			setError(t("config.im.loadFailed"));
 		} finally {
 			setLoading(false);
 		}
@@ -200,7 +201,8 @@ export function ImTab(_props: Props) {
 				setAddError(result.message);
 			}
 		} catch (e) {
-			setAddError(e instanceof Error ? e.message : String(e));
+			console.error("[Feishu] Temporary connection failed", e);
+			setAddError(t("config.im.connectFailed"));
 		} finally {
 			setAddConnecting(false);
 		}
@@ -232,7 +234,8 @@ export function ImTab(_props: Props) {
 				setAddError(result.error ?? t("config.im.addFailed"));
 			}
 		} catch (e) {
-			setAddError(e instanceof Error ? e.message : String(e));
+			console.error("[Feishu] Failed to save Bot", e);
+			setAddError(t("config.im.addFailed"));
 		} finally {
 			setAdding(false);
 		}
@@ -408,7 +411,7 @@ export function ImTab(_props: Props) {
 						)}
 
 						{addStep === "input" && addConnecting && (
-							<div className="config-im-test-result info">⏳ 正在连接飞书…</div>
+							<div className="config-im-test-result info">⏳ {t("config.im.connectingToFeishu")}</div>
 						)}
 
 						{addError && (
@@ -428,15 +431,15 @@ export function ImTab(_props: Props) {
 							)}
 							{addStep === "connected" && (
 								<>
-									<div className="config-im-connected-info">✅ 已连接到飞书</div>
+									<div className="config-im-connected-info">✅ {t("config.im.connectedToFeishu")}</div>
 									<button
 										className="config-btn primary"
 										onClick={handleSaveBot}
 										disabled={adding || !addFormOpenId.trim()}
 										style={{ flex: 1 }}
-										title={!addFormOpenId.trim() ? "请先获取 Open ID" : undefined}
+										title={!addFormOpenId.trim() ? t("config.im.openIdRequired") : undefined}
 									>
-										{adding ? t("config.im.saving") : "保存 Bot"}
+										{adding ? t("config.im.saving") : t("config.im.saveBot")}
 									</button>
 								</>
 							)}
@@ -504,8 +507,9 @@ export function ImTab(_props: Props) {
 												try {
 													await api?.connectByBot?.(bot.id);
 													await loadData();
-												} catch (e) {
-													setError(e instanceof Error ? e.message : String(e));
+											} catch (e) {
+												console.error("[Feishu] Failed to connect saved Bot", e);
+												setError(t("config.im.connectFailed"));
 												} finally {
 													setConnecting(false);
 												}
@@ -598,7 +602,7 @@ export function ImTab(_props: Props) {
 														<div className="config-im-binding-info">
 															<div className="config-im-binding-title">{binding.groupName || binding.chatId.slice(0, 10)}</div>
 															<div className="config-im-binding-meta">
-																{t("config.im.agentId")}: {binding.sessionId.slice(0, 8)} · {t("config.im.chat")}: {binding.chatId.slice(0, 10)} · {new Date(binding.createdAt).toLocaleString()}
+														{t("config.im.agentId")}: {binding.sessionId.slice(0, 8)} · {t("config.im.chat")}: {binding.chatId.slice(0, 10)} · {formatI18nDateTime(binding.createdAt)}
 															</div>
 														</div>
 														<button className="config-btn danger-fill small" onClick={() => handleRemoveBinding(binding.chatId)}>

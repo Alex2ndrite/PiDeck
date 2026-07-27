@@ -85,14 +85,18 @@ test("uninstall removes a local extension and clears its stale disable entry", a
     await writeFile(join(extensionsDir, "local-tool.ts"), "export default {};", "utf8");
     await writeFile(settingsPath, JSON.stringify({ disabledExtensions: ["local-tool.ts", "other.ts"] }), "utf8");
 
-    const manager = new ExtensionManager({}, () => ({}));
+    const manager = new ExtensionManager(
+      {},
+      () => ({}),
+      (key) => key === "mainExtension.invalidPath" ? "Invalid extension path." : key,
+    );
     manager.wslEnvironment = { windowsHome: home };
     await manager.uninstall("local-tool.ts");
 
     await assert.rejects(readFile(join(extensionsDir, "local-tool.ts"), "utf8"), { code: "ENOENT" });
     const settings = JSON.parse(await readFile(settingsPath, "utf8"));
     assert.deepEqual(settings.disabledExtensions, ["other.ts"]);
-    await assert.rejects(manager.uninstall("../outside.ts"), /非法扩展路径/);
+    await assert.rejects(manager.uninstall("../outside.ts"), /Invalid extension path/);
   } finally {
     await rm(home, { recursive: true, force: true });
   }

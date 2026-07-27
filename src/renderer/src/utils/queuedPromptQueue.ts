@@ -24,15 +24,15 @@ export const QUEUED_PROMPT_LIMIT = 10;
 /** 队列面板默认最多展示的行数，超出以 +N 提示。 */
 export const QUEUED_PROMPT_VISIBLE = 3;
 
-export function replaceAgentQueue(
+export function replaceSessionQueue(
   current: QueuedPromptMap,
-  agentId: string,
+  sessionId: string,
   updater: (queue: QueuedPromptSnapshot[]) => QueuedPromptSnapshot[],
 ): QueuedPromptMap {
-  const nextQueue = updater(current[agentId] ?? []);
+  const nextQueue = updater(current[sessionId] ?? []);
   const next = { ...current };
-  if (nextQueue.length > 0) next[agentId] = nextQueue;
-  else delete next[agentId];
+  if (nextQueue.length > 0) next[sessionId] = nextQueue;
+  else delete next[sessionId];
   return next;
 }
 
@@ -42,13 +42,13 @@ export function replaceAgentQueue(
  */
 export function enqueuePrompt(
   current: QueuedPromptMap,
-  agentId: string,
+  sessionId: string,
   prompt: QueuedPromptSnapshot,
   limit: number = QUEUED_PROMPT_LIMIT,
 ): QueuedPromptMap {
-  const existing = current[agentId] ?? [];
+  const existing = current[sessionId] ?? [];
   if (existing.length >= limit) return current;
-  return replaceAgentQueue(current, agentId, (queue) => [
+  return replaceSessionQueue(current, sessionId, (queue) => [
     ...queue,
     { ...prompt, status: "pending", error: undefined },
   ]);
@@ -80,10 +80,10 @@ export function canDiscardQueuedPrompt(status?: QueuedPromptStatus): boolean {
 
 export function retryFailedPrompt(
   current: QueuedPromptMap,
-  agentId: string,
+  sessionId: string,
   promptId: string,
 ): QueuedPromptMap {
-  return replaceAgentQueue(current, agentId, (queue) =>
+  return replaceSessionQueue(current, sessionId, (queue) =>
     queue.map((prompt) =>
       prompt.id === promptId && prompt.status === "failed"
         ? { ...prompt, status: "pending", error: undefined }
@@ -98,10 +98,10 @@ export function retryFailedPrompt(
  */
 export function retractPrompt(
   current: QueuedPromptMap,
-  agentId: string,
+  sessionId: string,
   promptId: string,
 ): QueuedPromptMap {
-  return replaceAgentQueue(current, agentId, (queue) =>
+  return replaceSessionQueue(current, sessionId, (queue) =>
     queue.filter(
       (prompt) =>
         prompt.id !== promptId ||
@@ -114,10 +114,10 @@ export function retractPrompt(
 /** 用户检查会话后仅移除未知结果提示；该操作永远不重新提交原快照。 */
 export function acknowledgeUnknownPrompt(
   current: QueuedPromptMap,
-  agentId: string,
+  sessionId: string,
   promptId: string,
 ): QueuedPromptMap {
-  return replaceAgentQueue(current, agentId, (queue) =>
+  return replaceSessionQueue(current, sessionId, (queue) =>
     queue.filter(
       (prompt) => prompt.id !== promptId || prompt.status !== "unknown",
     ),
@@ -127,15 +127,15 @@ export function acknowledgeUnknownPrompt(
 /** 原子 claim 指定快照；只有 pending 能进入 sending。 */
 export function claimPrompt(
   current: QueuedPromptMap,
-  agentId: string,
+  sessionId: string,
   promptId: string,
 ): { queues: QueuedPromptMap; prompt?: QueuedPromptSnapshot } {
-  const prompt = current[agentId]?.find((item) => item.id === promptId);
+  const prompt = current[sessionId]?.find((item) => item.id === promptId);
   if (!prompt || (prompt.status != null && prompt.status !== "pending")) {
     return { queues: current };
   }
   return {
-    queues: replaceAgentQueue(current, agentId, (queue) =>
+    queues: replaceSessionQueue(current, sessionId, (queue) =>
       queue.map((item) =>
         item.id === promptId
           ? { ...item, status: "sending", error: undefined }
@@ -149,22 +149,22 @@ export function claimPrompt(
 /** idle drain 严格只查看队首；失败/未知队首会阻止越过它发送后续消息。 */
 export function claimIdleHead(
   current: QueuedPromptMap,
-  agentId: string,
+  sessionId: string,
 ): { queues: QueuedPromptMap; prompt?: QueuedPromptSnapshot } {
-  const head = current[agentId]?.[0];
+  const head = current[sessionId]?.[0];
   if (!head) return { queues: current };
-  return claimPrompt(current, agentId, head.id);
+  return claimPrompt(current, sessionId, head.id);
 }
 
 export function resolveClaimedPrompt(
   current: QueuedPromptMap,
-  agentId: string,
+  sessionId: string,
   promptId: string,
   outcome:
     | { type: "accepted" }
     | { type: "failed" | "unknown"; error: string },
 ): QueuedPromptMap {
-  return replaceAgentQueue(current, agentId, (queue) => {
+  return replaceSessionQueue(current, sessionId, (queue) => {
     const live = queue.find((prompt) => prompt.id === promptId);
     if (!live || live.status !== "sending") return queue;
     if (outcome.type === "accepted") {
@@ -181,9 +181,9 @@ export function resolveClaimedPrompt(
 /** 同一 final tool-end 窗口按队列顺序原子 claim 第一个 pending steer。 */
 export function claimNextSteerPrompt(
   current: QueuedPromptMap,
-  agentId: string,
+  sessionId: string,
 ): { queues: QueuedPromptMap; prompt?: QueuedPromptSnapshot } {
-  for (const prompt of current[agentId] ?? []) {
+  for (const prompt of current[sessionId] ?? []) {
     // Any indeterminate/in-flight predecessor is an ordering barrier, regardless of its delivery
     // mode. Pending follow-up entries may be skipped intentionally so a later steer can still join
     // the current turn, but rejected/unknown predecessors require explicit user resolution first.
@@ -195,33 +195,7 @@ export function claimNextSteerPrompt(
       return { queues: current };
     }
     if (prompt.behavior !== "steer") continue;
-    return claimPrompt(current, agentId, prompt.id);
+    return claimPrompt(current, sessionId, prompt.id);
   }
   return { queues: current };
 }
-
-/**
- * 重启只迁移确定尚未投递的 pending/failed 项。sending/unknown 可能已被旧进程接收，
- * 复制到 replacement agent 会造成重复发送，因此必须丢弃。
- */
-export function migrateQueuedPrompts(
-  current: QueuedPromptMap,
-  replacementById: Map<string, string>,
-  liveIds: Set<string>,
-): QueuedPromptMap {
-  const next: QueuedPromptMap = {};
-  for (const [agentId, queue] of Object.entries(current)) {
-    const replacementId = replacementById.get(agentId);
-    const targetAgentId = replacementId ?? agentId;
-    if (!liveIds.has(targetAgentId)) continue;
-      const safeQueue = replacementId
-      ? queue.filter(
-          (prompt) =>
-            prompt.status !== "sending" && prompt.status !== "unknown",
-        )
-      : queue;
-    if (safeQueue.length > 0) next[targetAgentId] = safeQueue;
-  }
-  return next;
-}
-

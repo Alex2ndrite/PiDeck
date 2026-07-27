@@ -11,7 +11,6 @@ import {
   claimPrompt,
   enqueuePrompt,
   getQueuedPromptView,
-  migrateQueuedPrompts,
   resolveClaimedPrompt,
   retractPrompt,
   retryFailedPrompt,
@@ -130,32 +129,6 @@ test("unknown delivery cannot be reclaimed or retried after a deferred response 
   if (retry.prompt) submissions += 1;
   assert.equal(retry.prompt, undefined);
   assert.equal(submissions, 1, "indeterminate delivery must never submit twice");
-});
-
-test("restart migrates only definitely unsent snapshots", () => {
-  const queues = {
-    old: [
-      prompt("pending"),
-      prompt("failed", "followUp", "failed"),
-      prompt("sending", "followUp", "sending"),
-      prompt("unknown", "followUp", "unknown"),
-    ],
-    stable: [prompt("stable")],
-    closed: [prompt("closed")],
-  };
-  const migrated = migrateQueuedPrompts(
-    queues,
-    new Map([["old", "replacement"]]),
-    new Set(["replacement", "stable"]),
-  );
-
-  assert.deepEqual(
-    migrated.replacement.map((item) => item.id),
-    ["pending", "failed"],
-  );
-  assert.equal(migrated.stable[0].id, "stable");
-  assert.equal(migrated.old, undefined);
-  assert.equal(migrated.closed, undefined);
 });
 
 test("steer claims exactly one item and treats failed or unknown as an ordering barrier", () => {

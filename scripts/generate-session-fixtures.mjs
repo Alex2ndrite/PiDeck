@@ -138,9 +138,18 @@ export function shellQuote(value) {
 	return "'" + String(value).split("'").join("'\"'\"'") + "'";
 }
 
-export function buildWslArgs({ distro, user, script }) {
-	if (!distro || !user || !script) throw new Error("distro, user, and script are required");
-	return ["-d", distro, "-u", user, "--", "sh", "-lc", script];
+export function buildWslArgs({ distro, user }) {
+	if (!distro || !user) throw new Error("distro and user are required");
+	return ["-d", distro, "-u", user, "--", "sh", "-s"];
+}
+
+export function buildWslInvocation({ distro, user, script }) {
+	if (!script) throw new Error("script is required");
+	return {
+		command: "wsl.exe",
+		args: buildWslArgs({ distro, user }),
+		options: { input: String(script) },
+	};
 }
 
 export function isAllowedWslFixtureDir(directory, home) {
@@ -205,7 +214,17 @@ export function buildWslResetScript({ home, sha }) {
 }
 
 async function defaultWslRunner(command, args, options = {}) {
-	return execFile(command, args, { encoding: "utf8", maxBuffer: 4 * 1024 * 1024, ...options });
+	const { input, ...execOptions } = options;
+	const execution = execFile(command, args, {
+		encoding: "utf8",
+		maxBuffer: 4 * 1024 * 1024,
+		...execOptions,
+	});
+	if (input !== undefined) {
+		if (!execution.child?.stdin) throw new Error("WSL runner stdin is unavailable");
+		execution.child.stdin.end(String(input));
+	}
+	return execution;
 }
 
 async function existingPath(path, accessFn = access) {
@@ -281,7 +300,8 @@ function originKey({ source, environment, filePath, distro, user, importedSource
 }
 
 async function probeWsl({ distro, user, expectedHome, runner }) {
-	const result = await runner("wsl.exe", buildWslArgs({ distro, user, script: buildWslProbeScript(user) }));
+	const invocation = buildWslInvocation({ distro, user, script: buildWslProbeScript(user) });
+	const result = await runner(invocation.command, invocation.args, invocation.options);
 	const fields = parseWslProbe(result.stdout);
 	const home = canonicalPosixPath(fields.HOME, "WSL HOME");
 	if (fields.RAW_HOME !== home) throw new Error(`WSL HOME realpath mismatch: ${fields.RAW_HOME ?? "<empty>"} -> ${home}`);
@@ -295,12 +315,18 @@ async function writeWslIdentityFixtures({ distro, user, home, sha, runner }) {
 	const directory = `${home}/.pi/agent/sessions/pideck-validation-${sha}`;
 	const projectCwd = `${directory}/project`;
 	if (!isAllowedWslFixtureDir(directory, home)) throw new Error(`Refusing unsafe WSL fixture directory: ${directory}`);
-	await runner("wsl.exe", buildWslArgs({ distro, user, script: buildWslResetScript({ home, sha }) }));
+	const reset = buildWslInvocation({ distro, user, script: buildWslResetScript({ home, sha }) });
+	await runner(reset.command, reset.args, reset.options);
 	const upper = createSessionJsonl({ label: "wsl-identity-upper", messageCount: 2, cwd: projectCwd });
 	const lower = createSessionJsonl({ label: "wsl-identity-lower", messageCount: 2, cwd: projectCwd });
 	for (const [name, content] of [["Case.jsonl", upper], ["case.jsonl", lower]]) {
 		const filePath = `${directory}/${name}`;
-		await runner("wsl.exe", buildWslArgs({ distro, user, script: `set -eu; printf %s ${shellQuote(content)} > ${shellQuote(filePath)}` }));
+		const write = buildWslInvocation({
+			distro,
+			user,
+			script: `set -eu; printf %s ${shellQuote(content)} > ${shellQuote(filePath)}`,
+		});
+		await runner(write.command, write.args, write.options);
 	}
 	return { directory, projectCwd, paths: [`${directory}/Case.jsonl`, `${directory}/case.jsonl`] };
 }

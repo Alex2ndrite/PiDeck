@@ -10,6 +10,8 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import {
+  ArrowDownToLine,
+  ArrowUpFromLine,
   Check,
   ChevronDown,
   GitBranch,
@@ -20,7 +22,6 @@ import {
   Sparkles,
 } from "lucide-react";
 import { Button } from "../ui/Button";
-import { IconButton } from "../ui/IconButton";
 import { ConfirmDialog } from "./AppParts";
 import { showNotice } from "../../utils/notice";
 import type {
@@ -28,16 +29,26 @@ import type {
   CommitDetail,
   CommitEntry,
   GitChangedFile,
-  GitFileStatus,
   GitResourceGroupType,
   GitResourceGroups,
 } from "../../../../shared/types";
 import { GitStatus } from "../../../../shared/types";
-import { getFileIconColor, getFileIconSeti } from "../../fileIcons";
 import { t, type TranslationKey } from "../../i18n";
+import {
+  compareStatusLetter,
+  FileIcon,
+  fileNameOnly,
+  FileTree,
+  ResourceGroup,
+  ResourceRow,
+  statusTone,
+  Twistie,
+} from "./git/GitResourceTree";
 
 type GitPanelProps = {
   projectId: string;
+  /** 项目根目录路径，用于将绝对路径转为相对路径显示 */
+  projectRoot?: string;
   commitLog: (
     projectId: string,
     options?: { maxEntries?: number; ref?: string; allBranches?: boolean },
@@ -89,6 +100,10 @@ type GitPanelProps = {
   ) => Promise<string>;
   /** 初始化 Git 仓库 */
   gitInit?: (projectId: string) => Promise<void>;
+  /** Push：将当前分支推送到远程 */
+  push?: (projectId: string) => Promise<void>;
+  /** Pull：从远程拉取并合并到当前分支 */
+  pull?: (projectId: string) => Promise<void>;
 };
 
 type PaneId = "changes" | "graph" | "compare";
@@ -295,217 +310,6 @@ function relativeTime(ms: number): string {
   return t("git.relativeYears", { count: Math.floor(seconds / 31536000) });
 }
 
-function fileNameOnly(path: string): string {
-  return path.split(/[/\\]/).pop() ?? path;
-}
-
-function statusTone(
-  status: GitStatus | GitFileStatus,
-  isCompareContext = false,
-): string {
-  if (isCompareContext) {
-    switch (status) {
-      case "added":
-        return "status-added";
-      case "deleted":
-        return "status-deleted";
-      case "renamed":
-        return "status-renamed";
-      default:
-        return "status-modified";
-    }
-  }
-
-  switch (status) {
-    case GitStatus.INDEX_ADDED:
-    case GitStatus.UNTRACKED:
-    case GitStatus.INTENT_TO_ADD:
-      return "status-added";
-    case GitStatus.INDEX_DELETED:
-    case GitStatus.DELETED:
-      return "status-deleted";
-    case GitStatus.INDEX_RENAMED:
-    case GitStatus.INDEX_COPIED:
-    case GitStatus.INTENT_TO_RENAME:
-      return "status-renamed";
-    case GitStatus.ADDED_BY_US:
-    case GitStatus.ADDED_BY_THEM:
-    case GitStatus.DELETED_BY_US:
-    case GitStatus.DELETED_BY_THEM:
-    case GitStatus.BOTH_ADDED:
-    case GitStatus.BOTH_DELETED:
-    case GitStatus.BOTH_MODIFIED:
-      return "status-conflicting";
-    default:
-      return "status-modified";
-  }
-}
-
-function compareStatusLetter(status: GitFileStatus): string {
-  switch (status) {
-    case "added":
-      return "A";
-    case "deleted":
-      return "D";
-    case "renamed":
-      return "R";
-    default:
-      return "M";
-  }
-}
-
-function FileIcon({ name }: { name: string }) {
-  try {
-    const { svg, colorName } = getFileIconSeti(name);
-    return (
-      <span
-        aria-hidden="true"
-        className="git-file-icon"
-        style={{ color: getFileIconColor(colorName) }}
-        dangerouslySetInnerHTML={{ __html: svg }}
-      />
-    );
-  } catch {
-    return (
-      <span aria-hidden="true" className="git-file-icon git-file-fallback" />
-    );
-  }
-}
-
-/** Mirrors VS Code's monaco-tl-twistie without importing structural icons. */
-function Twistie({ open }: { open: boolean }) {
-  return (
-    <span className={`git-twistie${open ? " open" : ""}`} aria-hidden="true" />
-  );
-}
-
-function GitStageGlyph({ unstage = false }: { unstage?: boolean }) {
-  return (
-    <span className="git-stage-glyph" aria-hidden="true">
-      {unstage ? "\u2212" : "+"}
-    </span>
-  );
-}
-
-function ResourceRow(props: {
-  status: GitStatus;
-  letter: string;
-  path: string;
-  compareStatus?: GitFileStatus;
-  actions?: Array<{
-    label: string;
-    kind: "stage" | "unstage" | "discard";
-    disabled?: boolean;
-    run: () => void;
-  }>;
-  onOpen?: () => void | Promise<void>;
-}) {
-  const [opening, setOpening] = useState(false);
-  const name = fileNameOnly(props.path);
-  const tone = props.compareStatus
-    ? statusTone(props.compareStatus, true)
-    : statusTone(props.status);
-  const letter = props.compareStatus
-    ? compareStatusLetter(props.compareStatus)
-    : props.letter;
-  return (
-    <div className={`git-resource-row ${tone}`} title={props.path}>
-      {props.onOpen ? (
-        <button
-          type="button"
-          className="git-resource-open"
-          aria-label={t("git.openWorkspaceDiff", { path: props.path })}
-          aria-busy={opening}
-          disabled={opening}
-          onClick={async () => {
-            setOpening(true);
-            try {
-              await props.onOpen?.();
-            } finally {
-              setOpening(false);
-            }
-          }}
-        >
-          <FileIcon name={name} />
-          <span className="git-resource-name">{name}</span>
-        </button>
-      ) : (
-        <div className="git-resource-open static">
-          <FileIcon name={name} />
-          <span className="git-resource-name">{name}</span>
-        </div>
-      )}
-      {props.actions && props.actions.length > 0 && (
-        <div className="git-resource-actions">
-          {props.actions.map((action) => (
-            <IconButton
-              key={action.kind}
-              className={`git-action-btn${action.kind === "discard" ? " git-discard-action" : " git-stage-action"}`}
-              label={action.label}
-              disabled={action.disabled}
-              onClick={action.run}
-            >
-              {action.kind === "discard" ? (
-                <RotateCcw size={14} strokeWidth={2} aria-hidden="true" />
-              ) : (
-                <GitStageGlyph unstage={action.kind === "unstage"} />
-              )}
-            </IconButton>
-          ))}
-        </div>
-      )}
-      <span className="git-decoration" aria-hidden="true">
-        {opening ? <Loader2 size={13} className="git-spin" /> : letter}
-      </span>
-    </div>
-  );
-}
-
-function ResourceGroup(props: {
-  title: string;
-  count: number;
-  open: boolean;
-  onToggle: () => void;
-  allAction?: () => void;
-  allLabel?: string;
-  allDisabled?: boolean;
-  children: ReactNode;
-}) {
-  return (
-    <div className={`git-resource-group${props.open ? " open" : ""}`}>
-      <div className="git-resource-group-header">
-        <button
-          type="button"
-          className="git-resource-group-toggle"
-          aria-expanded={props.open}
-          onClick={props.onToggle}
-        >
-          <Twistie open={props.open} />
-          <span className="git-resource-group-name">{props.title}</span>
-        </button>
-        {props.allAction && (
-          <div className="git-resource-group-actions">
-            <button
-              type="button"
-              className="git-action-btn git-stage-action"
-              aria-label={props.allLabel}
-              title={props.allLabel}
-              disabled={props.allDisabled}
-              onClick={() => props.allAction?.()}
-            >
-              <GitStageGlyph unstage={props.allLabel === t("git.unstageAll")} />
-            </button>
-          </div>
-        )}
-        <span className="git-resource-group-count">{props.count}</span>
-      </div>
-      {props.open && (
-        <div className="git-resource-group-body">{props.children}</div>
-      )}
-    </div>
-  );
-}
-
 function PaneHeader(props: {
   id: PaneId;
   title: string;
@@ -611,7 +415,7 @@ function GitCompactFilter(props: {
                 setOpen(false);
               }}
             >
-              {opt.label}
+              <span className="git-compact-filter-opt-label">{opt.label}</span>
               {opt.value === props.value && (
                 <Check size={12} className="git-compact-filter-check" />
               )}
@@ -742,6 +546,8 @@ export function GitPanel(props: GitPanelProps) {
   const [error, setError] = useState<string | null>(null);
   const [commitMessage, setCommitMessage] = useState("");
   const [committing, setCommitting] = useState(false);
+  const [pushing, setPushing] = useState(false);
+  const [pulling, setPulling] = useState(false);
   const [mutating, setMutating] = useState(false);
   const [notAGitRepo, setNotAGitRepo] = useState(false);
   const [gitNotInstalled, setGitNotInstalled] = useState(false);
@@ -1032,6 +838,56 @@ export function GitPanel(props: GitPanelProps) {
     );
   };
 
+  const doPush = async () => {
+    if (!props.push || mutationRunningRef.current) return;
+    const projectId = props.projectId;
+    const mutationRequest = ++mutationRequestRef.current;
+    mutationRunningRef.current = true;
+    setPushing(true);
+    setError(null);
+    try {
+      await props.push(projectId);
+      if (projectId !== projectIdRef.current) return;
+      await refresh();
+    } catch (caught) {
+      if (projectId === projectIdRef.current) {
+        const msg = errorMessage(caught);
+        setError(msg);
+        showNotice(msg, 10000, "error");
+      }
+    } finally {
+      if (mutationRequest === mutationRequestRef.current) {
+        mutationRunningRef.current = false;
+        if (projectId === projectIdRef.current) setPushing(false);
+      }
+    }
+  };
+
+  const doPull = async () => {
+    if (!props.pull || mutationRunningRef.current) return;
+    const projectId = props.projectId;
+    const mutationRequest = ++mutationRequestRef.current;
+    mutationRunningRef.current = true;
+    setPulling(true);
+    setError(null);
+    try {
+      await props.pull(projectId);
+      if (projectId !== projectIdRef.current) return;
+      await refresh();
+    } catch (caught) {
+      if (projectId === projectIdRef.current) {
+        const msg = errorMessage(caught);
+        setError(msg);
+        showNotice(msg, 10000, "error");
+      }
+    } finally {
+      if (mutationRequest === mutationRequestRef.current) {
+        mutationRunningRef.current = false;
+        if (projectId === projectIdRef.current) setPulling(false);
+      }
+    }
+  };
+
   const visibleSashAfterChanges = adjacentVisiblePane(
     paneState.open,
     "changes",
@@ -1056,23 +912,6 @@ export function GitPanel(props: GitPanelProps) {
   );
 
   /** 新建分支弹窗状态 */
-	const [pushing, setPushing] = useState(false);
-	const [pulling, setPulling] = useState(false);
-	const doPush = async () => {
-		if (pushing || pulling) return;
-		setPushing(true); setError(null);
-		try { await (window as any).piDesktop?.git?.push(props.projectId); await refresh(); }
-		catch (e) { setError(errorMessage(e)); }
-		finally { setPushing(false); }
-	};
-	const doPull = async () => {
-		if (pushing || pulling) return;
-		setPulling(true); setError(null);
-		try { await (window as any).piDesktop?.git?.pull(props.projectId); await refresh(); }
-		catch (e) { setError(errorMessage(e)); }
-		finally { setPulling(false); }
-	};
-
   const [commitGenLoading, setCommitGenLoading] = useState(false);
   const [branchOpen, setBranchOpen] = useState(false);
   const [branchCreating, setBranchCreating] = useState(false);
@@ -1128,6 +967,32 @@ export function GitPanel(props: GitPanelProps) {
             className={`git-branch-chevron${branchOpen ? " open" : ""}`}
           />
         </button>
+        {notAGitRepo && (
+          <button
+            type="button"
+            className="git-init-branch-btn"
+            title={t("git.initInBranchBar")}
+            disabled={initializing}
+            onClick={async () => {
+              if (!props.gitInit) return;
+              setInitializing(true);
+              try {
+                await props.gitInit(props.projectId);
+                setNotAGitRepo(false);
+                void refresh();
+              } catch (caught) {
+                setError(errorMessage(caught));
+              }
+              setInitializing(false);
+            }}
+          >
+            {initializing ? (
+              <Loader2 size={14} className="git-spin" />
+            ) : (
+              <Plus size={14} />
+            )}
+          </button>
+        )}
         {branchOpen && (
           <div className="git-branch-dropdown">
             {props.branches.map((branch) => (
@@ -1224,6 +1089,38 @@ export function GitPanel(props: GitPanelProps) {
           >
             <RefreshCw size={14} />
           </button>
+          {props.push && (
+            <button
+              type="button"
+              className="git-action-btn"
+              title={t("git.push")}
+              aria-label={t("git.push")}
+              disabled={pushing || mutationRunningRef.current}
+              onClick={() => void doPush()}
+            >
+              {pushing ? (
+                <Loader2 size={14} className="git-spin" />
+              ) : (
+                <ArrowUpFromLine size={14} />
+              )}
+            </button>
+          )}
+          {props.pull && (
+            <button
+              type="button"
+              className="git-action-btn"
+              title={t("git.pull")}
+              aria-label={t("git.pull")}
+              disabled={pulling || mutationRunningRef.current}
+              onClick={() => void doPull()}
+            >
+              {pulling ? (
+                <Loader2 size={14} className="git-spin" />
+              ) : (
+                <ArrowDownToLine size={14} />
+              )}
+            </button>
+          )}
         </PaneHeader>
         {paneState.open.changes && (
           <div className="git-pane-body git-changes-body">
@@ -1262,7 +1159,6 @@ export function GitPanel(props: GitPanelProps) {
                 </button>
               </div>
             ) : (
-              <>
             <div className="git-scm-input-wrap">
               <textarea
                 className="git-scm-input"
@@ -1290,24 +1186,21 @@ export function GitPanel(props: GitPanelProps) {
                   disabled={commitGenLoading || mutating}
                   onClick={async () => {
                     if (!props.generateCommitMessage) return;
-                    // 无暂存文件时提示用户先暂存再生成摘要
                     if (groups.index.length === 0) {
                       showNotice(t("git.stageBeforeGenerateCommitMessage"), 3000);
                       return;
                     }
                     setCommitGenLoading(true);
                     try {
-                      const message = await props.generateCommitMessage(
-                        props.projectId,
-                      );
+                      const message = await props.generateCommitMessage(props.projectId);
                       if (message) setCommitMessage(message);
+                      setCommitGenLoading(false);
                     } catch (err) {
                       showNotice(
                         err instanceof Error ? err.message : t("git.generateCommitMessageFailed"),
                         5000,
                         "error",
                       );
-                    } finally {
                       setCommitGenLoading(false);
                     }
                   }}
@@ -1329,6 +1222,7 @@ export function GitPanel(props: GitPanelProps) {
                 </Button>
               </div>
             </div>
+            )}
 
             {error && <div className="git-status-msg error">{error}</div>}
             {!loading && total === 0 && !error && (
@@ -1343,30 +1237,13 @@ export function GitPanel(props: GitPanelProps) {
                   open={resourceOpen.merge}
                   onToggle={() => toggleResource("merge")}
                 >
-                  {groups.merge.map((resource) => (
-                    <ResourceRow
-                      key={resource.path}
-                      status={resource.status}
-                      letter={resource.letter}
-                      path={resource.path}
-                      onOpen={() =>
-                        props.onOpenWorkspaceFileDiff("merge", resource.path)
-                      }
-                      actions={[
-                        {
-                          kind: "stage",
-                          label: t("git.stage"),
-                          disabled: mutating || committing,
-                          run: () =>
-                            act(() =>
-                              props.stageFiles(props.projectId, [
-                                resource.path,
-                              ]),
-                            ),
-                        },
-                      ]}
-                    />
-                  ))}
+                  <FileTree
+                    resources={groups.merge}
+                    groupType="merge"
+                    onOpenWorkspaceFileDiff={props.onOpenWorkspaceFileDiff}
+                    mutating={mutating || committing}
+                    projectRoot={props.projectRoot}
+                  />
                 </ResourceGroup>
               )}
               {groups.index.length > 0 && (
@@ -1386,30 +1263,14 @@ export function GitPanel(props: GitPanelProps) {
                   allLabel={t("git.unstageAll")}
                   allDisabled={mutating || committing}
                 >
-                  {groups.index.map((resource) => (
-                    <ResourceRow
-                      key={resource.path}
-                      status={resource.status}
-                      letter={resource.letter}
-                      path={resource.path}
-                      onOpen={() =>
-                        props.onOpenWorkspaceFileDiff("index", resource.path)
-                      }
-                      actions={[
-                        {
-                          kind: "unstage",
-                          label: t("git.unstage"),
-                          disabled: mutating || committing,
-                          run: () =>
-                            act(() =>
-                              props.unstageFiles(props.projectId, [
-                                resource.path,
-                              ]),
-                            ),
-                        },
-                      ]}
-                    />
-                  ))}
+                  <FileTree
+                    resources={groups.index}
+                    groupType="index"
+                    onOpenWorkspaceFileDiff={props.onOpenWorkspaceFileDiff}
+                    mutating={mutating || committing}
+                    unstageFile={(path) => act(() => props.unstageFiles(props.projectId, [path]))}
+                    projectRoot={props.projectRoot}
+                  />
                 </ResourceGroup>
               )}
               {workingChanges.length > 0 && (
@@ -1429,56 +1290,18 @@ export function GitPanel(props: GitPanelProps) {
                   allLabel={t("git.stageAll")}
                   allDisabled={mutating || committing}
                 >
-                  {workingChanges.map((resource) => (
-                    <ResourceRow
-                      key={`${resource.status}-${resource.path}`}
-                      status={resource.status}
-                      letter={resource.letter}
-                      path={resource.path}
-                      onOpen={() =>
-                        props.onOpenWorkspaceFileDiff(
-                          resource.status === GitStatus.UNTRACKED
-                            ? "untracked"
-                            : "workingTree",
-                          resource.path,
-                        )
-                      }
-                      actions={[
-                        {
-                          kind: "discard",
-                          label:
-                            resource.status === GitStatus.UNTRACKED
-                              ? t("git.discardUntracked")
-                              : t("git.discard"),
-                          disabled: mutating || committing,
-                          run: () =>
-                            setDiscardTarget({
-                              group:
-                                resource.status === GitStatus.UNTRACKED
-                                  ? "untracked"
-                                  : "workingTree",
-                              path: resource.path,
-                            }),
-                        },
-                        {
-                          kind: "stage",
-                          label: t("git.stage"),
-                          disabled: mutating || committing,
-                          run: () =>
-                            act(() =>
-                              props.stageFiles(props.projectId, [
-                                resource.path,
-                              ]),
-                            ),
-                        },
-                      ]}
-                    />
-                  ))}
+                  <FileTree
+                    resources={workingChanges}
+                    groupType="workingTree"
+                    onOpenWorkspaceFileDiff={props.onOpenWorkspaceFileDiff}
+                    mutating={mutating || committing}
+                    stageFile={(path) => act(() => props.stageFiles(props.projectId, [path]))}
+                    discardFile={(path, group) => setDiscardTarget({ group, path })}
+                    projectRoot={props.projectRoot}
+                  />
                 </ResourceGroup>
               )}
             </div>
-              </>
-            )}
           </div>
         )}
       </section>

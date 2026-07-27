@@ -95,7 +95,7 @@ export function ComposerRuntimeIntegrations(props: {
     setSessionBotId(undefined);
     if (!runtimeHandle) return;
     const expected = runtimeHandle;
-    void feishu.getSessionBot(expected.agentId).then((botId) => {
+    void feishu.getSessionBot(props.sessionId).then((botId) => {
       if (
         sequence === botRequestSequenceRef.current &&
         sameRuntimeHandle(runtimeHandleRef.current, expected)
@@ -140,13 +140,14 @@ export function ComposerRuntimeIntegrations(props: {
     });
   }
 
-  async function setRuntimeBot(_agentId: string, botId: string | null) {
+  async function setRuntimeBot(sessionId: string, botId: string | null) {
     const expected = runtimeHandleRef.current;
     if (!expected) return;
-    await feishu.setSessionBot(expected.agentId, botId);
-    if (sameRuntimeHandle(runtimeHandleRef.current, expected)) {
+    const result = await feishu.setSessionBot(sessionId, botId);
+    if (result.success && sameRuntimeHandle(runtimeHandleRef.current, expected)) {
       setSessionBotId(botId ?? undefined);
     }
+		return result;
   }
 
   const widgetSlot = props.widgetsCollapsed || Object.keys(widgets).length === 0
@@ -170,7 +171,7 @@ export function ComposerRuntimeIntegrations(props: {
     <FeishuLinkIndicator
       status={feishu.status}
       bots={feishu.bots}
-      activeAgentId={runtimeHandle.agentId}
+      activeSessionId={props.sessionId}
       activeBotId={feishu.activeBotId}
       sessionBotId={sessionBotId}
       isConnected={feishu.isConnected}

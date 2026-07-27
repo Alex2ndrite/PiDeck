@@ -64,8 +64,18 @@ function createHarness(options = {}) {
     create: 0,
     restart: 0,
     stop: 0,
+	abort: 0,
+	compact: 0,
+	runtimeState: 0,
+	commands: 0,
+	messages: 0,
+	exportHtml: 0,
+	editMessage: 0,
+	deleteMessage: 0,
+	prepareResend: 0,
     setModel: 0,
     setThinking: 0,
+	update: 0,
     attach: 0,
     send: 0,
     uiResponse: 0,
@@ -73,6 +83,16 @@ function createHarness(options = {}) {
   const tabs = options.tabs ? [...options.tabs] : [];
   const catalog = {
     get: (sessionId) => sessionId === entry.id ? { ...entry } : undefined,
+    getRecord: (sessionId) => sessionId === entry.id ? {
+      ...entry,
+      preview: "",
+      messageCount: 0,
+    } : undefined,
+    update: async (_sessionId, patch) => {
+      calls.update += 1;
+      Object.assign(entry, patch);
+      return { ...entry };
+    },
     attachRuntime: async (input) => {
       calls.attach += 1;
       entry.filePath = input.filePath;
@@ -81,6 +101,11 @@ function createHarness(options = {}) {
   };
   const agents = {
     list: () => tabs,
+	getMessages: (agentId) => {
+	  calls.messages += 1;
+	  if (options.getMessages) return options.getMessages(agentId);
+	  return [{ id: "message-1", role: "assistant", text: agentId, timestamp: 1 }];
+	},
     create: async (input) => {
       calls.create += 1;
       if (options.createDelay) {
@@ -122,6 +147,36 @@ function createHarness(options = {}) {
       const index = tabs.findIndex((tab) => tab.id === agentId);
       if (index >= 0) tabs.splice(index, 1);
     },
+    abort: async () => {
+      calls.abort += 1;
+      if (options.abortError) throw new Error(options.abortError);
+    },
+    compact: async () => {
+      calls.compact += 1;
+      return options.runtimeState ?? { isStreaming: false };
+    },
+    getRuntimeState: async () => {
+      calls.runtimeState += 1;
+      return options.runtimeState ?? { isStreaming: false };
+    },
+    getCommands: async () => {
+      calls.commands += 1;
+      return options.commands ?? [{ name: "compact" }];
+    },
+    exportHtml: async () => {
+      calls.exportHtml += 1;
+      return { path: "C:/export.html" };
+    },
+    editMessage: async () => {
+      calls.editMessage += 1;
+    },
+    deleteMessage: async () => {
+      calls.deleteMessage += 1;
+    },
+    prepareResendFromMessage: async () => {
+      calls.prepareResend += 1;
+      return { text: "hello" };
+    },
     setModel: async () => {
       calls.setModel += 1;
       if (options.modelError) throw new Error(options.modelError);
@@ -162,6 +217,25 @@ test("rejects an empty prompt before activating a runtime", async () => {
   assert.equal(result.accepted, false);
   assert.equal(result.delivery, "rejected");
   assert.equal(harness.calls.create, 0);
+  assert.equal(harness.calls.send, 0);
+});
+
+test("explicit activation creates a runtime that is bound to the requested Session", async () => {
+  const { SessionRuntimeCoordinator } = loadCoordinator();
+  const harness = createHarness();
+  const coordinator = new SessionRuntimeCoordinator(
+    harness.catalog,
+    harness.agents,
+    harness.sender,
+  );
+
+  const result = await coordinator.activateRuntime("session-1");
+
+  assert.equal(result.ok, true);
+  assert.equal(result.value.sessionId, "session-1");
+  assert.equal(result.value.agentId, "agent-1");
+  assert.equal(result.value.runtimeGeneration, 1);
+  assert.equal(harness.calls.create, 1);
   assert.equal(harness.calls.send, 0);
 });
 
@@ -601,4 +675,188 @@ test("Session UI response is rejected after the closed runtime is unbound", asyn
     /runtime binding changed/i,
   );
   assert.equal(harness.calls.uiResponse, 0);
+});
+
+test("session runtime inventory and target expose the stable binding triple", () => {
+  const { SessionRuntimeCoordinator } = loadCoordinator();
+  const harness = createHarness({
+    tabs: [{
+      id: "agent-a",
+      projectId: "project-1",
+      cwd: "C:/project",
+      status: "idle",
+      sessionPath: "C:/sessions/session-1.jsonl",
+      createdAt: 10,
+    }],
+  });
+  const coordinator = new SessionRuntimeCoordinator(harness.catalog, harness.agents, harness.sender);
+  const generation = coordinator.bindExistingAgent("session-1", "agent-a");
+  assert.deepEqual(JSON.parse(JSON.stringify(coordinator.getTarget("session-1"))), {
+    sessionId: "session-1",
+    agentId: "agent-a",
+    runtimeGeneration: generation,
+  });
+  assert.deepEqual(JSON.parse(JSON.stringify(coordinator.listRuntimes())), [{
+    sessionId: "session-1",
+    agentId: "agent-a",
+    runtimeGeneration: generation,
+    projectId: "project-1",
+    cwd: "C:/project",
+    status: "idle",
+    sessionPath: "C:/sessions/session-1.jsonl",
+    createdAt: 10,
+  }]);
+});
+
+test("stale generation is rejected before a runtime command reaches AgentManager", async () => {
+  const { SessionRuntimeCoordinator } = loadCoordinator();
+  const harness = createHarness({
+    tabs: [{ id: "agent-a", status: "idle", createdAt: 1 }],
+  });
+  const coordinator = new SessionRuntimeCoordinator(harness.catalog, harness.agents, harness.sender);
+  const generation = coordinator.bindExistingAgent("session-1", "agent-a");
+  const result = await coordinator.abortRuntime({
+    sessionId: "session-1",
+    agentId: "agent-a",
+    runtimeGeneration: generation - 1,
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.error.code, "SESSION_RUNTIME_CHANGED");
+  assert.equal(harness.calls.abort, 0);
+});
+
+test("targeted runtime commands return the validated target and command value", async () => {
+  const { SessionRuntimeCoordinator } = loadCoordinator();
+  const harness = createHarness({
+    tabs: [{ id: "agent-a", status: "idle", createdAt: 1 }],
+    runtimeState: { isStreaming: false, modelId: "model-a" },
+  });
+  const coordinator = new SessionRuntimeCoordinator(harness.catalog, harness.agents, harness.sender);
+  const runtimeGeneration = coordinator.bindExistingAgent("session-1", "agent-a");
+  const target = { sessionId: "session-1", agentId: "agent-a", runtimeGeneration };
+  const [state, commands, compact, edited, deleted, resend, exported, aborted] = await Promise.all([
+    coordinator.getRuntimeState(target),
+    coordinator.listRuntimeCommands(target),
+    coordinator.compactRuntime(target, "compact now"),
+    coordinator.editRuntimeMessage(target, "message-1", "updated"),
+    coordinator.deleteRuntimeMessage(target, "message-2"),
+    coordinator.prepareRuntimeResend(target, "message-3"),
+    coordinator.exportRuntimeHtml(target),
+    coordinator.abortRuntime(target),
+  ]);
+  for (const result of [state, commands, compact, edited, deleted, resend, exported, aborted]) {
+    assert.equal(result.ok, true);
+    assert.deepEqual(JSON.parse(JSON.stringify(result.value.target)), target);
+  }
+  assert.equal(harness.calls.runtimeState, 1);
+  assert.equal(harness.calls.commands, 1);
+  assert.equal(harness.calls.compact, 1);
+  assert.equal(harness.calls.editMessage, 1);
+  assert.equal(harness.calls.deleteMessage, 1);
+  assert.equal(harness.calls.prepareResend, 1);
+  assert.equal(harness.calls.exportHtml, 1);
+  assert.equal(harness.calls.abort, 1);
+});
+
+test("runtime message snapshots retain the validated Session target", () => {
+  const { SessionRuntimeCoordinator } = loadCoordinator();
+  const harness = createHarness({
+    tabs: [{ id: "agent-a", projectId: "project-1", cwd: "C:/project", status: "idle", createdAt: 1 }],
+  });
+  const coordinator = new SessionRuntimeCoordinator(harness.catalog, harness.agents, harness.sender);
+  const runtimeGeneration = coordinator.bindExistingAgent("session-1", "agent-a");
+
+  assert.deepEqual(JSON.parse(JSON.stringify(coordinator.getRuntimeMessages("session-1"))), {
+    target: { sessionId: "session-1", agentId: "agent-a", runtimeGeneration },
+    value: [{ id: "message-1", role: "assistant", text: "agent-a", timestamp: 1 }],
+  });
+  assert.equal(harness.calls.messages, 1);
+});
+
+test("runtime message snapshots fail closed when the runtime is replaced during the read", () => {
+  const { SessionRuntimeCoordinator } = loadCoordinator();
+  let coordinator;
+  const harness = createHarness({
+    tabs: [
+      { id: "agent-a", projectId: "project-1", cwd: "C:/project", status: "idle", createdAt: 1 },
+      { id: "agent-b", projectId: "project-1", cwd: "C:/project", status: "idle", createdAt: 2 },
+    ],
+    getMessages: (agentId) => {
+      assert.equal(agentId, "agent-a");
+      coordinator.bindExistingAgent("session-1", "agent-b");
+      return [{ id: "message-a", role: "assistant", text: "stale", timestamp: 1 }];
+    },
+  });
+  coordinator = new SessionRuntimeCoordinator(harness.catalog, harness.agents, harness.sender);
+  coordinator.bindExistingAgent("session-1", "agent-a");
+
+  assert.equal(coordinator.getRuntimeMessages("session-1"), undefined);
+  assert.equal(coordinator.getTarget("session-1").agentId, "agent-b");
+});
+
+test("runtime model preference is persisted before AgentManager failure", async () => {
+  const { SessionRuntimeCoordinator } = loadCoordinator();
+  const harness = createHarness({
+    tabs: [{ id: "agent-a", status: "idle", createdAt: 1 }],
+    modelError: "model apply failed",
+  });
+  const coordinator = new SessionRuntimeCoordinator(harness.catalog, harness.agents, harness.sender);
+  const runtimeGeneration = coordinator.bindExistingAgent("session-1", "agent-a");
+  const result = await coordinator.setRuntimeModel(
+    { sessionId: "session-1", agentId: "agent-a", runtimeGeneration },
+    "openai",
+    "gpt-test",
+  );
+  assert.equal(result.ok, false);
+  assert.equal(result.error.code, "SESSION_COMMAND_FAILED");
+  assert.equal(harness.entry.model.provider, "openai");
+  assert.equal(harness.entry.model.modelId, "gpt-test");
+  assert.equal(harness.calls.update, 1);
+  assert.equal(harness.calls.setModel, 1);
+});
+
+test("stop invalidates the target and restart replaces it with a higher generation", async () => {
+  const { SessionRuntimeCoordinator } = loadCoordinator();
+  const baseTab = {
+    id: "agent-a",
+    projectId: "project-1",
+    cwd: "C:/project",
+    title: "Session",
+    status: "idle",
+    sessionPath: "C:/sessions/session-1.jsonl",
+    createdAt: 1,
+  };
+
+  const stopHarness = createHarness({ tabs: [{ ...baseTab }] });
+  const stopCoordinator = new SessionRuntimeCoordinator(
+    stopHarness.catalog,
+    stopHarness.agents,
+    stopHarness.sender,
+  );
+  const stopGeneration = stopCoordinator.bindExistingAgent("session-1", "agent-a");
+  const stopped = await stopCoordinator.stopRuntime({
+    sessionId: "session-1",
+    agentId: "agent-a",
+    runtimeGeneration: stopGeneration,
+  });
+  assert.equal(stopped.ok, true);
+  assert.equal(stopCoordinator.getTarget("session-1"), undefined);
+
+  const restartHarness = createHarness({ tabs: [{ ...baseTab }] });
+  const restartCoordinator = new SessionRuntimeCoordinator(
+    restartHarness.catalog,
+    restartHarness.agents,
+    restartHarness.sender,
+  );
+  const restartGeneration = restartCoordinator.bindExistingAgent("session-1", "agent-a");
+  const restarted = await restartCoordinator.restartRuntime({
+    sessionId: "session-1",
+    agentId: "agent-a",
+    runtimeGeneration: restartGeneration,
+  });
+  assert.equal(restarted.ok, true);
+  assert.equal(restarted.value.previousTarget.runtimeGeneration, restartGeneration);
+  assert.equal(restarted.value.runtime.agentId, "agent-restarted");
+  assert.equal(restarted.value.runtime.runtimeGeneration > restartGeneration, true);
+  assert.equal(restarted.value.session.id, "session-1");
 });
