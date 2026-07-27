@@ -82,6 +82,8 @@ the approved migration plan. It is intentionally separate from release notes.
 
 | 2026-07-28 | Phase 7 main IPC | Extracted project-resource, terminal, and Git IPC registration into one-way `registerXxxIpc(deps)` modules. | These handler groups had explicit service boundaries and can be moved without coupling new modules back to `main/index.ts`; Session runtime validation remains mandatory for terminal creation/listing. | Focused project-resource, terminal, Git IPC, and Git panel contracts pass along with typecheck. The entry now injects dependencies only; the modules preserve ProjectResourceManager path checks, terminal target validation, bounded Git diffs, and stale worktree-record cleanup. |
 
+| 2026-07-28 | Phase 7 AgentManager | Extracted persisted JSONL display loading, paged offset indexes, compaction archive recovery, and large-session history reads to `pi/SessionHistoryReader.ts`. | These operations must not start Pi and have distinct bounded-I/O constraints; keeping them in the process/runtime owner coupled offline Session viewing to unrelated lifecycle state. | AgentManager retains the public Session-first facade and supplies path conversion, message conversion, trimming, logging, and translation callbacks. Direct Reader tests cover host-path mapping, active-branch selection, malformed JSONL tolerance, and pagination; full tests pass 690/690, production build passes, and A3 renders 100 rows in 335ms with zero runtimes. |
+
 ## Implementation progress
 
 - Phase 1 was revalidated on 2026-07-27: a real `npm ci` installed 829

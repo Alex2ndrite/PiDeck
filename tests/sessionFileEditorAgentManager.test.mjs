@@ -41,6 +41,7 @@ function loadAgentManager() {
       if (specifier === "./historyMessages") return { mergeHistoryWithPreservedMessages: (messages) => messages };
       if (specifier === "./agentSessionIdentity") return { buildAgentSessionKey: () => undefined };
       if (specifier === "./SessionFileEditor") return { SessionFileEditor: class {} };
+      if (specifier === "./SessionHistoryReader") return { SessionHistoryReader: class {} };
       if (specifier === "./sessionEntryIds") {
         return { takeActiveEntryId: (ids, index) => ({ entryId: ids?.[index], nextIndex: index + 1 }) };
       }

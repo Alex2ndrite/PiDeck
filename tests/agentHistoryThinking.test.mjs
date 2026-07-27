@@ -11,7 +11,31 @@ import vm from "node:vm";
 const nodeRequire = createRequire(import.meta.url);
 
 function loadAgentManagerModule() {
-  const output = ts.transpileModule(
+	const historyReaderModule = { exports: {} };
+	const historyReaderOutput = ts.transpileModule(
+		readFileSync("src/main/pi/SessionHistoryReader.ts", "utf8"),
+		{
+			compilerOptions: {
+				module: ts.ModuleKind.CommonJS,
+				target: ts.ScriptTarget.ES2022,
+				esModuleInterop: true,
+			},
+			fileName: "SessionHistoryReader.ts",
+		},
+	).outputText;
+	vm.runInNewContext(historyReaderOutput, {
+		module: historyReaderModule,
+		exports: historyReaderModule.exports,
+		require: nodeRequire,
+		Buffer,
+		Date,
+		Map,
+		Set,
+		Promise,
+		JSON,
+		console,
+	}, { filename: "SessionHistoryReader.ts" });
+	const output = ts.transpileModule(
     readFileSync("src/main/pi/AgentManager.ts", "utf8"),
     {
       compilerOptions: {
@@ -51,9 +75,10 @@ function loadAgentManagerModule() {
       if (specifier === "./agentSessionIdentity") {
         return { buildAgentSessionKey: () => undefined };
       }
-      if (specifier === "./SessionFileEditor") {
-        return { SessionFileEditor: class {} };
-      }
+		if (specifier === "./SessionFileEditor") {
+			return { SessionFileEditor: class {} };
+		}
+		if (specifier === "./SessionHistoryReader") return historyReaderModule.exports;
       if (specifier === "./sessionEntryIds") {
         return {
           assertResendRootEntry: () => undefined,

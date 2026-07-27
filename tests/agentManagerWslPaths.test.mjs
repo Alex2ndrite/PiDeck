@@ -55,6 +55,15 @@ function loadAgentManager() {
 		unlink: async (...args) => { calls.unlink.push(args); },
 		writeFile: async (...args) => { calls.writeFile.push(args); },
 	};
+	const historyReaderModule = { exports: {} };
+	vm.runInNewContext(transpile("src/main/pi/SessionHistoryReader.ts"), {
+		Buffer,
+		console: { log() {}, warn() {}, error() {} },
+		exports: historyReaderModule.exports,
+		module: historyReaderModule,
+		Promise,
+		require: (id) => id === "node:fs/promises" ? fsPromises : require(id),
+	}, { filename: "SessionHistoryReader.ts" });
 	class SessionFileEditor {
 		async truncateForResend({ file }) {
 			const content = await fsPromises.readFile(file.hostPath, "utf8");
@@ -101,6 +110,7 @@ function loadAgentManager() {
 			if (id === "./historyMessages") return { mergeHistoryWithPreservedMessages: (value) => value };
 			if (id === "./agentSessionIdentity") return { buildAgentSessionKey: () => undefined };
 			if (id === "./SessionFileEditor") return { SessionFileEditor };
+			if (id === "./SessionHistoryReader") return historyReaderModule.exports;
 			if (id === "./sessionEntryIds") return sessionEntryIds;
 			if (id === "./LatestByKeyEmitter") return { LatestByKeyEmitter };
 			if (id === "../../shared/toolRuntimeState") return { updateActiveToolCalls: () => new Map() };
