@@ -83,7 +83,14 @@ const timeline = read("src/renderer/src/components/session/SessionMessageTimelin
 const settings = read("src/renderer/src/components/app/SettingsModal.tsx");
 const settingsStorage = read("src/renderer/src/components/app/settings/SettingsStorageTab.tsx");
 const drawer = read("src/renderer/src/components/workspace/DrawerSurface.tsx");
-const surface = read("src/renderer/src/components/session/SurfaceComponents.tsx");
+const surface = [
+	read("src/renderer/src/components/session/SurfaceComponents.tsx"),
+	read("src/renderer/src/components/session/MarkdownComponents.tsx"),
+	read("src/renderer/src/components/session/ComposerOverlayComponents.tsx"),
+	read("src/renderer/src/components/session/ToolCallComponents.tsx"),
+	read("src/renderer/src/components/session/TimelineEventCards.tsx"),
+	read("src/renderer/src/components/session/MessageShareModal.tsx"),
+].join("\n");
 const skillStore = read("src/renderer/src/config/SkillStoreTab.tsx");
 const yaoStore = read("src/renderer/src/config/YaoPromptTab.tsx");
 const skillHub = read("src/renderer/src/config/SkillHubStorePanel.tsx");

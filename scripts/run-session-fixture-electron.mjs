@@ -52,6 +52,11 @@ async function connectCdp(target) {
   const socket = new WebSocket(target.webSocketDebuggerUrl);
   let nextId = 1;
   const pending = new Map();
+  const rejectPending = (cause) => {
+    const error = cause instanceof Error ? cause : new Error(String(cause));
+    for (const request of pending.values()) request.reject(error);
+    pending.clear();
+  };
   socket.on("message", (raw) => {
     const message = JSON.parse(String(raw));
     const request = pending.get(message.id);
@@ -60,6 +65,8 @@ async function connectCdp(target) {
     if (message.error) request.reject(new Error(JSON.stringify(message.error)));
     else request.resolve(message.result);
   });
+  socket.on("close", () => rejectPending(new Error("CDP connection closed")));
+  socket.on("error", (error) => rejectPending(error));
   await new Promise((resolveOpen, rejectOpen) => {
     socket.once("open", resolveOpen);
     socket.once("error", rejectOpen);
@@ -89,6 +96,21 @@ async function evaluate(cdp, expression) {
     throw new Error(result.exceptionDetails.text ?? "CDP evaluation failed");
   }
   return result.result?.value;
+}
+
+async function clickMountedElement(cdp, selector, timeoutMs = 15_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const clicked = await evaluate(cdp, `(() => {
+      const target = document.querySelector(${JSON.stringify(selector)});
+      if (!(target instanceof HTMLElement)) return false;
+      target.click();
+      return true;
+    })()`);
+    if (clicked) return;
+    await sleep(150);
+  }
+  throw new Error(`Could not find visual-parity click target: ${selector}`);
 }
 
 async function waitForMountedWorkbench(cdp) {
@@ -159,6 +181,20 @@ async function waitForChildExit(child, timeoutMs = 5_000) {
   ]);
 }
 
+async function closeElectronGracefully(cdp) {
+  if (!cdp) return;
+  try {
+    // Electron can detach its browser descendants from electron-vite's process
+    // tree on Windows. Closing through CDP gives Chromium a chance to shut down
+    // those descendants before taskkill becomes the fallback.
+    await cdp.command("Browser.close");
+  } catch {
+    // A failed CDP close still falls through to the process-tree cleanup below.
+  } finally {
+    cdp.close();
+  }
+}
+
 async function copyWithRetry(source, destination, attempts = 5) {
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     try {
@@ -168,6 +204,28 @@ async function copyWithRetry(source, destination, attempts = 5) {
       const code = error && typeof error === "object" ? error.code : undefined;
       if (code !== "EBUSY" || attempt === attempts) throw error;
       await sleep(attempt * 250);
+    }
+  }
+}
+
+const FINAL_USER_DATA_EVIDENCE = [
+  "settings.json",
+  "projects.json",
+  "session-catalog.json",
+  "session-catalog.json.bak",
+  "logs",
+];
+
+async function copyFinalUserDataEvidence(userData, destination) {
+  await mkdir(destination, { recursive: true });
+  // Chromium cache and storage files are neither application state nor stable
+  // test evidence. Copying them makes teardown exceed the test timeout on Windows.
+  for (const entry of FINAL_USER_DATA_EVIDENCE) {
+    try {
+      await copyWithRetry(join(userData, entry), join(destination, entry));
+    } catch (error) {
+      if (error && typeof error === "object" && error.code === "ENOENT") continue;
+      throw error;
     }
   }
 }
@@ -302,13 +360,7 @@ async function run() {
     if (captureOnly) {
       const clicked = [];
       for (const clickSelector of clickSelectors) {
-        const matched = await evaluate(cdp, `(() => {
-          const target = document.querySelector(${JSON.stringify(clickSelector)});
-          if (!(target instanceof HTMLElement)) return false;
-          target.click();
-          return true;
-        })()`);
-        if (!matched) throw new Error(`Could not find visual-parity click target: ${clickSelector}`);
+        await clickMountedElement(cdp, clickSelector);
         clicked.push(clickSelector);
         await sleep(500);
       }
@@ -384,6 +436,23 @@ async function run() {
         })),
         modalClasses: [...document.querySelectorAll(".modal-backdrop, .picker-backdrop, .drawer-surface, .terminal-dock")]
           .map((element) => element.className),
+        modalLayouts: [".settings-modal", ".config-modal"].map((selector) => {
+          const element = document.querySelector(selector);
+          if (!(element instanceof HTMLElement)) return { selector, present: false };
+          const rect = element.getBoundingClientRect();
+          const style = getComputedStyle(element);
+          return {
+            selector,
+            present: true,
+            display: style.display,
+            visibility: style.visibility,
+            opacity: style.opacity,
+            width: Math.round(rect.width),
+            height: Math.round(rect.height),
+            top: Math.round(rect.top),
+            left: Math.round(rect.left),
+          };
+        }),
         chatSurfaceVisible: Boolean(document.querySelector(".chat-header, .composer-area")),
         composerSessionId: document.querySelector(".composer[data-session-id]")?.getAttribute("data-session-id") ?? null,
         text: document.body.innerText.slice(0, 1200),
@@ -546,11 +615,11 @@ async function run() {
     await writeFile(join(runDir, "report.json"), JSON.stringify(report, null, 2), "utf8");
     if (errors.length > 0) throw new Error(`${scenario} assertions failed: ${errors.join("; ")}`);
   } finally {
-    cdp?.close();
+    await closeElectronGracefully(cdp);
+    await waitForChildExit(child, 2_000);
     await stopChildTree(child);
     await waitForChildExit(child);
-    await mkdir(join(runDir, "final-user-data"), { recursive: true });
-    await copyWithRetry(userData, join(runDir, "final-user-data"));
+    await copyFinalUserDataEvidence(userData, join(runDir, "final-user-data"));
     await writeFile(join(runDir, "exit-code.txt"), `${report?.errors?.length ? 1 : 0}\n`, "utf8");
   }
   console.log(JSON.stringify({ scenario, runDir, report }, null, 2));

@@ -157,13 +157,13 @@ test("structured main-process copy translates parameters and preserves fallback 
 });
 
 test("diagnostic renderer localizes copy while keeping raw details separate", () => {
-  const surface = readFileSync(
-    "src/renderer/src/components/session/SurfaceComponents.tsx",
+  const diagnosticCard = readFileSync(
+    "src/renderer/src/components/session/TimelineEventCards.tsx",
     "utf8",
   );
-  assert.match(surface, /translateI18nDescriptor\(props\.message\.meta, props\.message\.text\)/);
-  assert.match(surface, /typeof props\.message\.meta\?\.debugDetails === "string"/);
-  assert.match(surface, /debugDetails \? `\$\{localizedText\}\\n\\n\$\{debugDetails\}`/);
+  assert.match(diagnosticCard, /translateI18nDescriptor\(props\.message\.meta, props\.message\.text\)/);
+  assert.match(diagnosticCard, /typeof props\.message\.meta\?\.debugDetails === "string"/);
+  assert.match(diagnosticCard, /debugDetails \? `\$\{localizedText\}\\n\\n\$\{debugDetails\}`/);
 });
 
 test("AgentManager user-visible runtime diagnostics carry i18n descriptors", () => {

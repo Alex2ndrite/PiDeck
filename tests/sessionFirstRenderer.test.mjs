@@ -84,6 +84,11 @@ test("the renderer-only Chat surface keeps the dev workspace toolbar before firs
   assert.match(appSource, /const hasActiveConversation = Boolean\(currentSessionId\)/);
   assert.match(appSource, /terminalAction=\{activeAgentId \? \{/);
   assert.match(appSource, /gitAction=\{settings\.enableGitManagement && activeProjectId \? \{/);
+  assert.match(appSource, /browserAction=\{\{[\s\S]*?active: drawer === "browser"/);
+  assert.doesNotMatch(
+    appSource.match(/browserAction=\{\{[\s\S]*?\n\s*\}\}/)?.[0] ?? "",
+    /activeAgentId/,
+  );
 });
 
 test("active Agent identity is derived from the selected Session runtime", () => {

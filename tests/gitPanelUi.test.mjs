@@ -7,7 +7,15 @@ const resourceTree = readFileSync(
   "src/renderer/src/components/app/git/GitResourceTree.tsx",
   "utf8",
 );
-const gitSurface = [panel, resourceTree].join("\n");
+const graph = readFileSync(
+  "src/renderer/src/components/app/git/GitGraph.tsx",
+  "utf8",
+);
+const panelControls = readFileSync(
+  "src/renderer/src/components/app/git/GitPanelControls.tsx",
+  "utf8",
+);
+const gitSurface = [panel, resourceTree, graph, panelControls].join("\n");
 const styles = readFileSync("src/renderer/src/styles.css", "utf8");
 const i18n = [
   readFileSync("src/renderer/src/i18n.ts", "utf8"),
@@ -66,7 +74,7 @@ describe("Git panel VS Code Source Control contract", () => {
     assert.doesNotMatch(panel, /id === "changes" \? true/);
     assert.match(panel, /pideck:git-panel:\$\{projectId\}:pane-state:v3/);
     assert.match(panel, /id="git-pane-changes"/);
-    assert.match(panel, /id="git-pane-graph"/);
+    assert.match(graph, /id="git-pane-graph"/);
     assert.match(panel, /id="git-pane-compare"/);
     assert.match(styles, /\.git-panel\s*\{[\s\S]*?overflow:\s*hidden/);
     assert.match(styles, /\.git-pane-body\s*\{[\s\S]*?overflow:\s*auto/);
@@ -102,14 +110,14 @@ describe("Git panel VS Code Source Control contract", () => {
   });
 
   test("renders SVG graph lanes and does not retain the old fixed graph height", () => {
-    assert.match(panel, /function GraphLanes/);
-    assert.match(panel, /function buildGraphRows/);
-    assert.match(panel, /<svg\s+className="git-graph-svg"/);
-    assert.match(panel, /const GRAPH_ROW_HEIGHT = 28/);
-    assert.match(panel, /lastNodeIndex\(\s*output,\s*commit\.parents\[parentIndex\],\s*\)/);
+    assert.match(graph, /function GraphLanes/);
+    assert.match(graph, /function buildGraphRows/);
+    assert.match(graph, /<svg\s+className="git-graph-svg"/);
+    assert.match(graph, /const GRAPH_ROW_HEIGHT = 28/);
+    assert.match(graph, /lastNodeIndex\(\s*output,\s*commit\.parents\[parentIndex\],\s*\)/);
     assert.match(gitService, /"--topo-order"/);
-    assert.doesNotMatch(panel, /graphPrefix/);
-    assert.doesNotMatch(panel, /<pre className="git-commit-graph"/);
+    assert.doesNotMatch(graph, /graphPrefix/);
+    assert.doesNotMatch(graph, /<pre className="git-commit-graph"/);
     assert.doesNotMatch(styles, /\.git-history-list\s*\{[^}]*max-height:\s*310px/);
   });
 
@@ -137,9 +145,9 @@ describe("Git panel VS Code Source Control contract", () => {
   test("aligns the commit-log IPC boundary with allBranches filtering", () => {
     assert.match(preload, /allBranches\?: boolean/);
     assert.match(main, /allBranches\?: boolean/);
-    assert.match(panel, /allBranches:\s*!ref/);
-    assert.doesNotMatch(panel, /setAllBranches/);
-    assert.doesNotMatch(panel, /git-branch-filter-icon/);
+    assert.match(graph, /allBranches:\s*!ref/);
+    assert.doesNotMatch(graph, /setAllBranches/);
+    assert.doesNotMatch(graph, /git-branch-filter-icon/);
   });
 
   test("guards async state and constrains visible pane heights", () => {
@@ -163,10 +171,10 @@ describe("Git panel VS Code Source Control contract", () => {
     assert.match(i18n, /"git\.smartCommitPrompt"/);
     assert.match(i18n, /"git\.smartCommitAlways"/);
     assert.match(i18n, /"git\.smartCommitNever"/);
-    assert.match(panel, /git-history-author/);
-    assert.doesNotMatch(panel, /git-history-date/);
-    assert.doesNotMatch(panel, /selectedHash/);
-    assert.doesNotMatch(panel, /git-commit-detail/);
+    assert.match(graph, /git-history-author/);
+    assert.doesNotMatch(graph, /git-history-date/);
+    assert.doesNotMatch(graph, /selectedHash/);
+    assert.doesNotMatch(graph, /git-commit-detail/);
     assert.match(styles, /grid-template-columns:\s*auto minmax\(0, 1fr\) auto/);
     assert.match(styles, /font-size:\s*var\(--font-size-body\)/);
     assert.match(cssRule("\\.git-compact-filter-menu"), /min-width:\s*160px/);
@@ -193,30 +201,30 @@ describe("Git panel VS Code Source Control contract", () => {
   });
 
   test("shows details only after a short mouse hover and lazily expands files on click", () => {
-    assert.match(panel, /function CommitHoverCard/);
-    assert.match(panel, /createPortal\([\s\S]*?document\.body/);
-    assert.match(panel, /const COMMIT_HOVER_OPEN_DELAY_MS = 500/);
-    assert.match(panel, /window\.setTimeout\([\s\S]*?COMMIT_HOVER_OPEN_DELAY_MS/);
-    assert.match(panel, /const COMMIT_HOVER_DISMISS_DELAY_MS = 400/);
-    assert.match(panel, /window\.setTimeout\([\s\S]*?COMMIT_HOVER_DISMISS_DELAY_MS/);
-    assert.match(panel, /onClick=\{\(\) => \{[\s\S]*?dismissHover\(\);[\s\S]*?toggleCommit\(commit\.hash\);/);
-    assert.doesNotMatch(panel, /onFocus=\{\(event\) => scheduleHover/);
-    assert.match(panel, /void loadCommitDetail\(commit\.hash\)/);
-    assert.match(panel, /detailRequests\.current\.get\(hash\)/);
+    assert.match(graph, /function CommitHoverCard/);
+    assert.match(graph, /createPortal\([\s\S]*?document\.body/);
+    assert.match(graph, /const COMMIT_HOVER_OPEN_DELAY_MS = 500/);
+    assert.match(graph, /window\.setTimeout\([\s\S]*?COMMIT_HOVER_OPEN_DELAY_MS/);
+    assert.match(graph, /const COMMIT_HOVER_DISMISS_DELAY_MS = 400/);
+    assert.match(graph, /window\.setTimeout\([\s\S]*?COMMIT_HOVER_DISMISS_DELAY_MS/);
+    assert.match(graph, /onClick=\{\(\) => \{[\s\S]*?dismissHover\(\);[\s\S]*?toggleCommit\(commit\.hash\);/);
+    assert.doesNotMatch(graph, /onFocus=\{\(event\) => scheduleHover/);
+    assert.match(graph, /void loadCommitDetail\(commit\.hash\)/);
+    assert.match(graph, /detailRequests\.current\.get\(hash\)/);
     assert.match(styles, /\.git-commit-hover\s*\{[\s\S]*?pointer-events:\s*none/);
-    assert.match(panel, /onMouseEnter=\{handleCardMouseEnter\}/);
-    assert.match(panel, /onMouseLeave=\{handleCardMouseLeave\}/);
-    assert.match(panel, /role="list"/);
-    assert.match(panel, /role="listitem"/);
-    assert.match(panel, /className=\{`git-history-row/);
-    assert.match(panel, /type="button"/);
-    assert.match(panel, /aria-expanded=\{expanded\}/);
-    assert.doesNotMatch(panel, /role="tree"/);
-    assert.doesNotMatch(panel, /role="treeitem"/);
-    assert.match(panel, /function CommitFileRow/);
-    assert.match(panel, /function GraphContinuation/);
+    assert.match(graph, /onMouseEnter=\{handleCardMouseEnter\}/);
+    assert.match(graph, /onMouseLeave=\{handleCardMouseLeave\}/);
+    assert.match(graph, /role="list"/);
+    assert.match(graph, /role="listitem"/);
+    assert.match(graph, /className=\{`git-history-row/);
+    assert.match(graph, /type="button"/);
+    assert.match(graph, /aria-expanded=\{expanded\}/);
+    assert.doesNotMatch(graph, /role="tree"/);
+    assert.doesNotMatch(graph, /role="treeitem"/);
+    assert.match(graph, /function CommitFileRow/);
+    assert.match(graph, /function GraphContinuation/);
     assert.match(gitSurface, /getFileIconSeti\(name\)/);
-    assert.doesNotMatch(panel, /title=\{`\$\{commit\.message\}/);
+    assert.doesNotMatch(graph, /title=\{`\$\{commit\.message\}/);
     assert.match(app, /gitApi:/);
     assert.match(app, /commitDetail=\{git\.gitApi\.commitDetail\}/);
     assert.match(preload, /Promise<CommitDetail \| null>/);
@@ -226,8 +234,8 @@ describe("Git panel VS Code Source Control contract", () => {
 
   test("opens committed files as isolated read-only first-parent diffs", () => {
     assert.match(panel, /onOpenCommitFileDiff/);
-    assert.match(panel, /aria-label=\{t\("git\.openFileDiff"/);
-    assert.match(panel, /props\.onOpenCommitFileDiff\(commit, file\)/);
+    assert.match(graph, /aria-label=\{t\("git\.openFileDiff"/);
+    assert.match(graph, /props\.onOpenCommitFileDiff\(commit, file\)/);
     assert.match(app, /api\.git\.commitFileDiff/);
     assert.match(app, /setGitDrawerDiff\(\{/);
     assert.match(app, /label: `\$\{diff\.path\.split[\s\S]*?\$\{commit\.shortHash\}/);
