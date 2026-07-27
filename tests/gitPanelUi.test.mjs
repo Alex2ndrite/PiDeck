@@ -30,6 +30,7 @@ const app = [
 ].join("\n");
 const preload = readFileSync("src/preload/index.ts", "utf8");
 const main = readFileSync("src/main/index.ts", "utf8");
+const gitIpc = readFileSync("src/main/ipc/gitIpc.ts", "utf8");
 const gitService = readFileSync("src/main/git/GitService.ts", "utf8");
 
 function sourceBetween(startMarker, endMarker) {
@@ -144,7 +145,7 @@ describe("Git panel VS Code Source Control contract", () => {
 
   test("aligns the commit-log IPC boundary with allBranches filtering", () => {
     assert.match(preload, /allBranches\?: boolean/);
-    assert.match(main, /allBranches\?: boolean/);
+    assert.match(gitIpc, /allBranches\?: boolean/);
     assert.match(graph, /allBranches:\s*!ref/);
     assert.doesNotMatch(graph, /setAllBranches/);
     assert.doesNotMatch(graph, /git-branch-filter-icon/);
@@ -241,7 +242,7 @@ describe("Git panel VS Code Source Control contract", () => {
     assert.match(app, /label: `\$\{diff\.path\.split[\s\S]*?\$\{commit\.shortHash\}/);
     assert.match(app, /<FileDiffViewer[\s\S]*?displayMode="drawer"[\s\S]*?gitDrawerDiff\.originalContent/);
     assert.match(preload, /gitCommitFileDiff/);
-    assert.match(main, /gitCommitFileDiff/);
+    assert.match(gitIpc, /gitCommitFileDiff/);
     assert.match(gitService, /async getCommitFileDiff/);
     assert.match(gitService, /detail\.commit\.parents\[0\]/);
     assert.match(gitService, /4b825dc642cb6eb9a060e54bf8d69288fbee4904/);
@@ -267,7 +268,7 @@ describe("Git panel VS Code Source Control contract", () => {
     const commitOpen = app.match(/async function openCommitFileDiff[\s\S]*?async function refreshSessionHistory/)?.[0] ?? "";
     assert.doesNotMatch(commitOpen, /setDrawer\(null\)/);
     assert.match(preload, /workspaceFileDiff:/);
-    assert.match(main, /gitWorkspaceFileDiff/);
+    assert.match(gitIpc, /gitWorkspaceFileDiff/);
     assert.match(gitService, /async getWorkspaceFileDiff/);
     assert.match(gitService, /group === "untracked"/);
     assert.match(gitService, /group === "index"/);
@@ -298,7 +299,7 @@ describe("Git panel VS Code Source Control contract", () => {
 
   test("keeps single-file discard internal rather than adding a dev-divergent row action", () => {
     assert.match(preload, /discard: \(projectId: string, group: "workingTree" \| "untracked", filePath: string\)/);
-    assert.match(main, /ipcChannels\.gitDiscard/);
+    assert.match(gitIpc, /ipcChannels\.gitDiscard/);
     assert.match(gitService, /async discardFile/);
     assert.match(gitService, /"--literal-pathspecs", "add"/);
     assert.match(gitService, /"--literal-pathspecs", "restore", "--staged"/);

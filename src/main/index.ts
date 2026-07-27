@@ -12,7 +12,7 @@ import {
 	Tray,
 } from "electron";
 import { randomUUID } from "node:crypto";
-import { basename, join, resolve } from "node:path";
+import { basename, join } from "node:path";
 import { createWriteStream, existsSync } from "node:fs";
 import { copyFile, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { is } from "@electron-toolkit/utils";
@@ -85,7 +85,6 @@ import type {
 	SessionUiResponseInput,
 	CreatePiPromptTemplateInput,
 	CreatePiSkillInput,
-	CreateProjectSkillInput,
 	PiPromptTemplateSummary,
 	PromptStoreSearchResult,
 	PromptStoreSearchResponse,
@@ -124,6 +123,9 @@ import { XuePromptManager } from "./prompts/XuePromptManager";
 import { SkillManager } from "./skills/SkillManager";
 import { ExtensionManager } from "./extensions/ExtensionManager";
 import { ProjectResourceManager } from "./projects/ProjectResourceManager";
+import { registerProjectResourceIpc } from "./ipc/projectResourceIpc";
+import { registerGitIpc } from "./ipc/gitIpc";
+import { registerTerminalIpc } from "./ipc/terminalIpc";
 import { WebServiceManager } from "./web/WebServiceManager";
 import { preparePreloadPath } from "./preloadPath";
 import { AppLogger } from "./logging/AppLogger";
@@ -1826,37 +1828,9 @@ function registerIpc() {
 			return getVisibleProjects();
 		},
 	);
-	ipcMain.handle(ipcChannels.projectResourcesList, async (_event, projectId: string) => {
-		return projectResourceManager.list(projectId);
-	});
-	ipcMain.handle(ipcChannels.projectResourcesCreateSkill, async (_event, input: CreateProjectSkillInput) => {
-		const result = await projectResourceManager.createSkill(input);
-		void appLogger.info("project-resource", "Project skill created", { projectId: input.projectId, name: result.name });
-		return result;
-	});
-	ipcMain.handle(ipcChannels.projectResourcesDeleteSkill, async (_event, projectId: string, skillPath: string) => {
-		// 项目资源删除由 ProjectResourceManager 再次校验路径归属，避免 renderer 传入任意文件路径。
-		await projectResourceManager.deleteSkill(projectId, skillPath);
-		void appLogger.info("project-resource", "Project skill deleted", { projectId, skillPath });
-	});
-	ipcMain.handle(ipcChannels.projectResourcesDeleteExtension, async (_event, projectId: string, extensionPath: string) => {
-		// 项目级 extension 是自动发现的本地文件/目录，删除时仅移除项目 .pi/extensions 下对应资源。
-		await projectResourceManager.deleteExtension(projectId, extensionPath);
-		void appLogger.info("project-resource", "Project extension deleted", { projectId, extensionPath });
-	});
-	ipcMain.handle(ipcChannels.projectResourcesToggleSkill, async (_event, projectId: string, skillPath: string, enabled: boolean) => {
-		const result = await projectResourceManager.toggleSkill(projectId, skillPath, enabled);
-		void appLogger.info("project-resource", "Project skill toggled", { projectId, skillPath, enabled });
-		return result;
-	});
-	ipcMain.handle(ipcChannels.projectResourcesToggleExtension, async (_event, projectId: string, extensionPath: string, enabled: boolean) => {
-		await projectResourceManager.toggleExtension(projectId, extensionPath, enabled);
-		void appLogger.info("project-resource", "Project extension toggled", { projectId, extensionPath, enabled });
-	});
-	ipcMain.handle(ipcChannels.projectResourcesRenameSkill, async (_event, projectId: string, skillPath: string, newName: string) => {
-		const result = await projectResourceManager.renameSkill(projectId, skillPath, newName);
-		void appLogger.info("project-resource", "Project skill renamed", { projectId, skillPath, newName });
-		return result;
+	registerProjectResourceIpc({
+		appLogger,
+		projectResourceManager,
 	});
 
 	// ── Worktree 项目管理 ──
@@ -2455,315 +2429,14 @@ function registerIpc() {
 		},
 	);
 
-	ipcMain.handle(ipcChannels.gitBranches, async (_event, projectId: string) => {
-		const project = projectStore.get(projectId);
-		if (!project) throw new Error(`Project not found: ${projectId}`);
-		return gitService.getBranches(project.path);
+	registerGitIpc({
+		appLogger,
+		gitService,
+		piLocator,
+		projectStore,
+		settingsStore,
+		worktreeService,
 	});
-
-	ipcMain.handle(
-		ipcChannels.gitCheckout,
-		async (_event, projectId: string, branch: string) => {
-			const project = projectStore.get(projectId);
-			if (!project) throw new Error(`Project not found: ${projectId}`);
-			return gitService.checkout(project.path, branch);
-		},
-	);
-
-	ipcMain.handle(
-		ipcChannels.gitCreateBranch,
-		async (_event, projectId: string, branchName: string) => {
-			const project = projectStore.get(projectId);
-			if (!project) throw new Error(`Project not found: ${projectId}`);
-			return gitService.createBranch(project.path, branchName);
-		},
-	);
-
-	// 差异查看需要文件的 Git HEAD 原始内容作为对比基准；参数是绝对文件路径，后端自行定位仓库根。
-	ipcMain.handle(
-		ipcChannels.gitOriginalContent,
-		async (_event, filePath: string) => {
-			const maxBytes = Math.max(1, settingsStore.get().maxEditorFileSizeMB) * 1024 * 1024;
-			return gitService.getOriginalContent(filePath, maxBytes);
-		},
-	);
-
-	ipcMain.handle(
-		ipcChannels.gitWorktreeList,
-		async (_event, projectId: string) => {
-			const project = projectStore.get(projectId);
-			if (!project) throw new Error(`Project not found: ${projectId}`);
-			const entries = await worktreeService.list(project.path);
-			// 每次扫描都同步注册外部新增 worktree，保证侧栏数据和 git 状态一致。
-			for (const wt of entries) {
-				await projectStore.add(wt.path, projectId);
-			}
-			return entries;
-		},
-	);
-
-	ipcMain.handle(
-		ipcChannels.gitWorktreeCreate,
-		async (_event, projectId: string, branchName: string) => {
-			const project = projectStore.get(projectId);
-			if (!project) throw new Error(`Project not found: ${projectId}`);
-			const info = await worktreeService.create(project.path, projectId, branchName);
-			await projectStore.add(info.path, projectId);
-			return info;
-		},
-	);
-
-	ipcMain.handle(
-		ipcChannels.gitWorktreeRemove,
-		async (_event, projectId: string, worktreePath: string) => {
-			const project = projectStore.get(projectId);
-			if (!project) throw new Error(`Project not found: ${projectId}`);
-			const ok = await worktreeService.remove(worktreePath, project.path);
-			const normalizeForCompare = (value: string) => {
-				const resolved = resolve(value);
-				return process.platform === "win32" ? resolved.toLowerCase() : resolved;
-			};
-			const normalizedTarget = normalizeForCompare(worktreePath);
-			const stillInGit = (await worktreeService.list(project.path)).some(
-				(entry) => normalizeForCompare(entry.path) === normalizedTarget,
-			);
-			// 如果 git 已经没有该 worktree（包括用户在外部删过导致 remove 返回 false），
-			// 也要清理 PiDeck 项目记录，否则重启后会从 projects.json 恢复成“删不掉”。
-			if (ok || !stillInGit) {
-				const child = projectStore.findByPath(worktreePath);
-				if (child) await projectStore.remove(child.id);
-				return true;
-			}
-			return false;
-		},
-	);
-
-	// -- Git 增强：提交历史 / 分支对比 / Graph
-	ipcMain.handle(
-		ipcChannels.gitCommitLog,
-		async (_event, projectId: string, options?: { maxEntries?: number; ref?: string; path?: string; allBranches?: boolean }) => {
-			const project = projectStore.get(projectId);
-			if (!project) return [];
-			return gitService.getCommitLog(project.path, options);
-		},
-	);
-
-	ipcMain.handle(
-		ipcChannels.gitRefs,
-		async (_event, projectId: string) => {
-			const project = projectStore.get(projectId);
-			if (!project) return [];
-			return gitService.getRefs(project.path);
-		},
-	);
-
-	ipcMain.handle(
-		ipcChannels.gitBranchCompare,
-		async (_event, projectId: string, base: string, target: string) => {
-			const project = projectStore.get(projectId);
-			if (!project) throw new Error(`Project not found: ${projectId}`);
-			return gitService.compareBranches(project.path, base, target);
-		},
-	);
-
-	ipcMain.handle(
-		ipcChannels.gitCommitDetail,
-		async (_event, projectId: string, ref: string) => {
-			const project = projectStore.get(projectId);
-			if (!project) return null;
-			return gitService.getCommitDetail(project.path, ref);
-		},
-	);
-
-	ipcMain.handle(
-		ipcChannels.gitCommitFileDiff,
-		async (_event, projectId: string, ref: string, filePath: string, originalPath?: string) => {
-			const project = projectStore.get(projectId);
-			if (!project) return null;
-			const maxBytes = Math.max(1, settingsStore.get().maxEditorFileSizeMB) * 1024 * 1024;
-			return gitService.getCommitFileDiff(project.path, ref, filePath, originalPath, maxBytes);
-		},
-	);
-
-	ipcMain.handle(
-		ipcChannels.gitDiffFileBetween,
-		async (_event, projectId: string, ref1: string, ref2: string, filePath: string) => {
-			const project = projectStore.get(projectId);
-			if (!project) return "";
-			return gitService.diffFileBetweenRefs(project.path, ref1, ref2, filePath);
-		},
-	);
-
-
-	// Git 工作区状态 + Stage/Unstage
-	ipcMain.handle(
-		ipcChannels.gitStatus,
-		async (_event, projectId: string) => {
-			const project = projectStore.get(projectId);
-			if (!project) return { merge: [], index: [], workingTree: [], untracked: [] };
-			return gitService.getStatus(project.path);
-		},
-	);
-
-	ipcMain.handle(
-		ipcChannels.gitWorkspaceFileDiff,
-		async (_event, projectId: string, group: import("../shared/types").GitWorkspaceDiffGroup, filePath: string) => {
-			const project = projectStore.get(projectId);
-			if (!project) return null;
-			const maxBytes = Math.max(1, settingsStore.get().maxEditorFileSizeMB) * 1024 * 1024;
-			return gitService.getWorkspaceFileDiff(project.path, group, filePath, maxBytes);
-		},
-	);
-
-	ipcMain.handle(
-		ipcChannels.gitStage,
-		async (_event, projectId: string, paths: string[]) => {
-			const project = projectStore.get(projectId);
-			if (!project) throw new Error(`Project not found: ${projectId}`);
-			await gitService.stageFiles(project.path, paths);
-		},
-	);
-
-	ipcMain.handle(
-		ipcChannels.gitUnstage,
-		async (_event, projectId: string, paths: string[]) => {
-			const project = projectStore.get(projectId);
-			if (!project) throw new Error(`Project not found: ${projectId}`);
-			await gitService.unstageFiles(project.path, paths);
-		},
-	);
-
-	ipcMain.handle(
-		ipcChannels.gitDiscard,
-		async (_event, projectId: string, group: "workingTree" | "untracked", filePath: string) => {
-			const project = projectStore.get(projectId);
-			if (!project) throw new Error(`Project not found: ${projectId}`);
-			await gitService.discardFile(project.path, group, filePath);
-		},
-	);
-
-	ipcMain.handle(
-		ipcChannels.gitCommit,
-		async (_event, projectId: string, message: string) => {
-			const project = projectStore.get(projectId);
-			if (!project) throw new Error(`Project not found: ${projectId}`);
-			await gitService.commit(project.path, message);
-		},
-	);
-
-	ipcMain.handle(
-		ipcChannels.gitCherryPick,
-		async (_event, projectId: string, hash: string) => {
-			const project = projectStore.get(projectId);
-			if (!project) throw new Error(`Project not found: ${projectId}`);
-			await gitService.cherryPick(project.path, hash);
-		},
-	);
-
-	ipcMain.handle(
-		ipcChannels.gitRevert,
-		async (_event, projectId: string, hash: string) => {
-			const project = projectStore.get(projectId);
-			if (!project) throw new Error(`Project not found: ${projectId}`);
-			await gitService.revertCommit(project.path, hash);
-		},
-	);
-
-	ipcMain.handle(
-		ipcChannels.gitPush,
-		async (_event, projectId: string) => {
-			const project = projectStore.get(projectId);
-			if (!project) throw new Error(`Project not found: ${projectId}`);
-			await gitService.push(project.path);
-		},
-	);
-
-	ipcMain.handle(
-		ipcChannels.gitPull,
-		async (_event, projectId: string) => {
-			const project = projectStore.get(projectId);
-			if (!project) throw new Error(`Project not found: ${projectId}`);
-			await gitService.pull(project.path);
-		},
-	);
-
-	ipcMain.handle(
-		ipcChannels.gitReset,
-		async (_event, projectId: string, hash: string, mode: "soft" | "mixed" | "hard") => {
-			const project = projectStore.get(projectId);
-			if (!project) throw new Error(`Project not found: ${projectId}`);
-			await gitService.resetToCommit(project.path, hash, mode);
-		},
-	);
-
-	ipcMain.handle(
-		ipcChannels.gitDropCommit,
-		async (_event, projectId: string, hash: string) => {
-			const project = projectStore.get(projectId);
-			if (!project) throw new Error(`Project not found: ${projectId}`);
-			await gitService.dropCommit(project.path, hash);
-		},
-	);
-
-	ipcMain.handle(
-		ipcChannels.gitGenerateCommitMessage,
-		async (_event, projectId: string) => {
-			const project = projectStore.get(projectId);
-			if (!project) return "";
-			const diff = await gitService.getStagedDiff(project.path);
-			if (!diff.trim()) return "";
-
-			// 构建提示词：因在模板字面量中避免嵌套反引号，使用数组拼接
-			const prompt = [
-				"请根据以下 git diff 生成一条中文 git commit message。",
-				"格式：feat: / fix: / refactor: / chore: / docs: / style: / perf: / test: 等标准约定式提交前缀。",
-				"只输出 message 本身，不要解释，不要包含 markdown 标记。",
-				"",
-				diff.slice(0, 8000),
-			].join("\n");
-
-			const settings = settingsStore.get();
-			const command = piLocator.resolveCommand(
-				settings.customPiPath,
-				settings.wslEnabled,
-				settings.wslDistro,
-				settings.wslUser,
-			);
-			const invocation = piLocator.createInvocation(command, [
-				"-p", prompt,
-			]);
-			const { execFile } = await import("node:child_process");
-			const result = await new Promise<string>((resolve, reject) => {
-				execFile(invocation.command, invocation.args, {
-					env: piLocator.createProcessEnv(settings, invocation.pathPrefix, invocation.wsl),
-					shell: invocation.shell,
-					windowsHide: true,
-					timeout: 30_000,
-					encoding: "utf8",
-					windowsVerbatimArguments: invocation.windowsVerbatimArguments,
-				}, (error, stdout, stderr) => {
-					if (error) {
-						const message = (stderr || error.message).slice(0, 500);
-						void appLogger.warn("git", "Generate commit message failed", { error: message });
-						reject(new Error(message));
-						return;
-					}
-					resolve(stdout.trim());
-				});
-			});
-			return result;
-		},
-	);
-
-	ipcMain.handle(
-		ipcChannels.gitInit,
-		async (_event, projectId: string) => {
-			const project = projectStore.get(projectId);
-			if (!project) throw new Error(`Project not found: ${projectId}`);
-			const { execFile } = await import("node:child_process");
-			await execFile("git", ["init"], { cwd: project.path });
-		},
-	);
 
 	ipcMain.handle(ipcChannels.piCheck, async () => {
 		// 用户手动指定的路径优先于自动检测
@@ -3721,42 +3394,11 @@ function registerIpc() {
 		return result;
 	});
 
-	ipcMain.handle(ipcChannels.terminalList, (_event, target: SessionRuntimeTarget) => {
-		const validated = sessionRuntimeCoordinator.validateTarget(target);
-		if (!validated.ok) throw sessionCommandIpcError(validated.error);
-		return terminalManager.list(target.agentId);
-	});
-	ipcMain.handle(ipcChannels.terminalEnsure, (_event, target: SessionRuntimeTarget) => {
-		const validated = sessionRuntimeCoordinator.validateTarget(target);
-		if (!validated.ok) throw sessionCommandIpcError(validated.error);
-		return terminalManager.ensure(target.agentId);
-	});
-	ipcMain.handle(ipcChannels.terminalCreate, async (_event, target: SessionRuntimeTarget) => {
-		const validated = sessionRuntimeCoordinator.validateTarget(target);
-		if (!validated.ok) throw sessionCommandIpcError(validated.error);
-		const result = await terminalManager.create(target.agentId);
-		void appLogger.info("terminal", "Terminal created", {
-			sessionId: target.sessionId,
-			agentId: target.agentId,
-			tabId: result.id,
-		});
-		return result;
-	});
-	ipcMain.handle(
-		ipcChannels.terminalInput,
-		(_event, tabId: string, data: string) => {
-			terminalManager.input(tabId, data);
-		},
-	);
-	ipcMain.handle(
-		ipcChannels.terminalResize,
-		(_event, tabId: string, cols: number, rows: number) => {
-			terminalManager.resize(tabId, cols, rows);
-		},
-	);
-	ipcMain.handle(ipcChannels.terminalClose, (_event, tabId: string) => {
-		terminalManager.close(tabId);
-		void appLogger.info("terminal", "Terminal closed", { tabId });
+	registerTerminalIpc({
+		appLogger,
+		sessionRuntimeCoordinator,
+		terminalManager,
+		toSessionCommandIpcError: sessionCommandIpcError,
 	});
 
 	// ── 配置管理 ──────────────────────────────────────

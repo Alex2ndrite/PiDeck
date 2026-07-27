@@ -80,6 +80,8 @@ the approved migration plan. It is intentionally separate from release notes.
 
 | 2026-07-28 | Phase 7 acceptance | Completed the post-split regression gates and revalidated the Chat lifecycle boundary in isolated Electron. | Moving presentation domains must not change Session promotion or offline-history behavior. | `npm test` passes 684/684, `npm run build:fast` passes, A3 renders all 100 offline messages with zero runtimes and no error boundary; an empty Chat reports zero Catalog records/runtimes and `renderer:chat-bootstrap`, while its first send creates exactly one Catalog Session, spawns Pi, and promotes the composer to a real UUID. |
 
+| 2026-07-28 | Phase 7 main IPC | Extracted project-resource, terminal, and Git IPC registration into one-way `registerXxxIpc(deps)` modules. | These handler groups had explicit service boundaries and can be moved without coupling new modules back to `main/index.ts`; Session runtime validation remains mandatory for terminal creation/listing. | Focused project-resource, terminal, Git IPC, and Git panel contracts pass along with typecheck. The entry now injects dependencies only; the modules preserve ProjectResourceManager path checks, terminal target validation, bounded Git diffs, and stale worktree-record cleanup. |
+
 ## Implementation progress
 
 - Phase 1 was revalidated on 2026-07-27: a real `npm ci` installed 829

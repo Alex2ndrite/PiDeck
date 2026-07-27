@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { mainIpcSource } from "./helpers/mainIpcSources.mjs";
 
 const main = readFileSync("src/main/index.ts", "utf8");
 const preload = readFileSync("src/preload/index.ts", "utf8");
@@ -34,13 +35,18 @@ test("terminal creation and listing cross IPC with a generation-validated Sessio
 	assert.match(terminalDock, /props\.terminal\.ensure\(props\.target\)/);
 	assert.match(terminalDock, /props\.terminal\.create\(props\.target\)/);
 	assert.match(
-		main,
-		/terminalList[\s\S]*validateTarget\(target\)[\s\S]*terminalManager\.list\(target\.agentId\)/,
+		mainIpcSource,
+		/const requireRuntimeTarget = \(target: SessionRuntimeTarget\)[\s\S]*validateTarget\(target\)/,
 	);
 	assert.match(
-		main,
-		/terminalCreate[\s\S]*validateTarget\(target\)[\s\S]*terminalManager\.create\(target\.agentId\)/,
+		mainIpcSource,
+		/terminalList[\s\S]*requireRuntimeTarget\(target\)[\s\S]*terminalManager\.list\(target\.agentId\)/,
 	);
+	assert.match(
+		mainIpcSource,
+		/terminalCreate[\s\S]*requireRuntimeTarget\(target\)[\s\S]*terminalManager\.create\(target\.agentId\)/,
+	);
+	assert.doesNotMatch(main, /ipcMain\.handle\(ipcChannels\.terminal/);
 });
 
 test("RPC logging controls resolve the current Session target before touching AgentManager", () => {
