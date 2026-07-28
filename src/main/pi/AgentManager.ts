@@ -41,6 +41,15 @@ import {
 } from "./AgentMessageProjector";
 import { LatestByKeyEmitter } from "./LatestByKeyEmitter";
 import {
+	stripAnsi,
+	pickNumber,
+	clampPercent,
+	trimHistoryMessages,
+	cleanTitle,
+	inferTitleFromMessages,
+	isDefaultAgentTitle,
+} from "./agentUtils";
+import {
   updateActiveToolCalls,
   type ActiveToolCallState,
 } from "../../shared/toolRuntimeState";
@@ -173,7 +182,7 @@ export class AgentManager {
 			toHostPath: (sessionPath) => this.toSessionHostPath(sessionPath),
 			convertMessages: (agentId, rawMessages, activeEntryIds) =>
 				this.convertAgentMessages(agentId, rawMessages, activeEntryIds),
-			trimMessages: (rawMessages, maxTurns) => this.trimHistoryMessages(rawMessages, maxTurns),
+			trimMessages: (rawMessages, maxTurns) => trimHistoryMessages(rawMessages, maxTurns),
 			translate: this.translate,
 			logger: appLogger,
 		});
@@ -304,7 +313,7 @@ export class AgentManager {
 
 		// 按对话轮次截断（保留最近若干轮 user 消息）。压缩摘要不是 user 消息，会被此逻辑保留在尾部，
 		// 因此下方会单独把它插到最前面，确保不被按 user 轮次切掉。
-		const trimmed = this.trimHistoryMessages(rawMessages);
+		const trimmed = trimHistoryMessages(rawMessages);
 
 		// 解析会话文件里的压缩记录：拿到所有压缩段摘要 + 归档消息。
 		// pi 的 get_messages 对压缩会话只返回压缩后的消息，通常不带压缩摘要；
@@ -1489,7 +1498,7 @@ export class AgentManager {
 		const stats = statsResponse.data as any;
 		const model = state?.model;
 		const tokens = stats?.tokens;
-		const inputTokens = this.pickNumber(
+		const inputTokens = pickNumber(
 			tokens?.input,
 			tokens?.inputTokens,
 			tokens?.prompt,
@@ -1497,7 +1506,7 @@ export class AgentManager {
 			stats?.inputTokens,
 			stats?.usage?.input,
 		);
-		const outputTokens = this.pickNumber(
+		const outputTokens = pickNumber(
 			tokens?.output,
 			tokens?.outputTokens,
 			tokens?.completion,
@@ -1505,19 +1514,19 @@ export class AgentManager {
 			stats?.outputTokens,
 			stats?.usage?.output,
 		);
-		const cacheRead = this.pickNumber(
+		const cacheRead = pickNumber(
 			tokens?.cacheRead,
 			tokens?.cache?.read,
 			stats?.cacheRead,
 			stats?.usage?.cacheRead,
 		);
-		const cacheWrite = this.pickNumber(
+		const cacheWrite = pickNumber(
 			tokens?.cacheWrite,
 			tokens?.cache?.write,
 			stats?.cacheWrite,
 			stats?.usage?.cacheWrite,
 		);
-		const directCacheHitPercent = this.pickNumber(
+		const directCacheHitPercent = pickNumber(
 			tokens?.cacheHitPercent,
 			tokens?.cacheHitRate != null ? tokens.cacheHitRate * 100 : undefined,
 			stats?.cacheHitPercent,
@@ -1530,7 +1539,7 @@ export class AgentManager {
 		const computedCacheHitPercent = runtime.tab.sessionPath
 			? await this.getLatestCacheMessageHitRate(runtime.tab.sessionPath)
 			: undefined;
-		const cacheHitPercent = this.clampPercent(
+		const cacheHitPercent = clampPercent(
 			directCacheHitPercent ?? computedCacheHitPercent,
 		);
 		return {
@@ -1611,37 +1620,6 @@ export class AgentManager {
 		} catch {
 			// 运行态刷新失败不影响主流程；下一次轮询或事件会继续同步。
 		}
-	}
-
-	private pickNumber(...values: unknown[]) {
-		for (const value of values) {
-			if (typeof value === "number" && Number.isFinite(value)) return value;
-			if (typeof value === "string" && value.trim()) {
-				const parsed = Number(value);
-				if (Number.isFinite(parsed)) return parsed;
-			}
-		}
-		return undefined;
-	}
-
-	private clampPercent(value: number | undefined) {
-		if (value == null || !Number.isFinite(value)) return undefined;
-		return Math.max(0, Math.min(100, value));
-	}
-
-	private trimHistoryMessages(rawMessages: unknown[], maxTurns = 40) {
-		if (rawMessages.length === 0) return rawMessages;
-		// 按对话轮次截断：找到最后 maxTurns 个用户提问，保留对应轮次及之后的全部消息
-		const userIndices: number[] = [];
-		for (let i = rawMessages.length - 1; i >= 0; i--) {
-			const msg = rawMessages[i] as { role?: unknown } | undefined;
-			if (msg?.role === "user") {
-				userIndices.unshift(i);
-				if (userIndices.length >= maxTurns) break;
-			}
-		}
-		if (userIndices.length === 0) return rawMessages.slice(-50);
-		return rawMessages.slice(userIndices[0]);
 	}
 
 	async cycleModel(agentId: string) {
@@ -2786,7 +2764,7 @@ export class AgentManager {
 			const prev = this.streamingThinking.get(agentId) ?? "";
 			const delta = String(assistantEvent.delta ?? "");
 			this.streamingThinking.set(agentId, prev + delta);
-			this.thinkingEmitter.push(agentId, this.stripAnsi(prev + delta));
+			this.thinkingEmitter.push(agentId, stripAnsi(prev + delta));
 			this.upsertAssistantMessage(agentId, partialMessage);
 			return;
 		}
@@ -2797,7 +2775,7 @@ export class AgentManager {
 			);
 			if (finalThinking) {
 				this.streamingThinking.set(agentId, finalThinking);
-				this.thinkingEmitter.push(agentId, this.stripAnsi(finalThinking));
+				this.thinkingEmitter.push(agentId, stripAnsi(finalThinking));
 				this.thinkingEmitter.flush(agentId);
 			}
 			this.upsertAssistantMessage(agentId, partialMessage);
@@ -2842,7 +2820,7 @@ export class AgentManager {
 				? this.messageProjector.extractThinking((partialMessage as any).content)
 				: "";
 		const pendingThinking = this.streamingThinking.get(agentId);
-		const nextThinking = this.stripAnsi(extractedThinking || pendingThinking || "");
+		const nextThinking = stripAnsi(extractedThinking || pendingThinking || "");
 
 		if (existing) {
 			existing.text = extractedText || `${existing.text}${fallbackDelta}`;
@@ -3068,39 +3046,14 @@ export class AgentManager {
 		if (!runtime) return false;
 		const project = this.getProject(runtime.tab.projectId);
 		if (!project) return false;
-		if (!this.isDefaultAgentTitle(runtime.tab.title, project)) return false;
-		const nextTitle = this.inferTitleFromMessages(this.messages.get(agentId) ?? []);
+		if (!isDefaultAgentTitle(runtime.tab.title, project, this.translate as (key: string, params?: Record<string, string | number>) => string)) return false;
+		const nextTitle = inferTitleFromMessages(this.messages.get(agentId) ?? []);
 		if (!nextTitle || nextTitle === runtime.tab.title) return false;
 		// Agent 列表标题应和历史会话列表的“摘要名”一致；
 		// 只覆盖默认标题，避免打开/重命名过的历史会话名称被第一条消息反向改掉。
 		runtime.tab.title = nextTitle;
 		this.emitState();
 		return true;
-	}
-
-	private isDefaultAgentTitle(title: string, project: Project) {
-		return (
-			title === `${project.name} agent` ||
-			title === this.translate("session.historyTitle", { project: project.name }) ||
-			title === this.translate("session.historyFallbackTitle") ||
-			// Keep recognizing titles persisted by older Chinese builds after a locale switch.
-			title === `${project.name} 历史会话` ||
-			title === "历史会话"
-		);
-	}
-
-	private inferTitleFromMessages(messages: ChatMessage[]) {
-		const firstUserText = messages.find((message) => message.role === "user")?.text;
-		const firstAssistantText = messages.find(
-			(message) => message.role === "assistant",
-		)?.text;
-		return this.cleanTitle(firstUserText) || this.cleanTitle(firstAssistantText);
-	}
-
-	private cleanTitle(value?: string) {
-		const text = value?.replace(/\s+/g, " ").trim();
-		if (!text || /^untitled$/i.test(text)) return undefined;
-		return text.length > 32 ? `${text.slice(0, 32)}…` : text;
 	}
 
 	private addDetailedErrorMessage(agentId: string, errorMessage?: string) {
@@ -3277,11 +3230,6 @@ export class AgentManager {
 		this.emitThinking(agentId, "");
 		this.emitState();
 		void this.emitRuntimeState(agentId);
-	}
-
-	/** Cleans terminal ANSI sequences from live reasoning updates before IPC emission. */
-	private stripAnsi(text: string): string {
-		return text.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "");
 	}
 
 	private requireRuntime(agentId: string) {
