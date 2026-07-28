@@ -930,7 +930,7 @@ body.is-resizing .wechat-shell {
   padding-top: var(--window-drag-height);
 }
 .window-drag-layer {
-  position: absolute;
+  position: fixed;
   top: 0;
   left: 0;
   right: 200px;
@@ -940,12 +940,24 @@ body.is-resizing .wechat-shell {
   -webkit-app-region: drag;
 }
 .window-controls {
-  position: absolute;
+  position: fixed;
   top: 0;
   right: 0;
   z-index: 920;
   display: grid;
   grid-template-columns: repeat(4, 50px);
+  height: var(--window-drag-height);
+  background: var(--color-bg-sidebar);
+  -webkit-app-region: no-drag;
+}
+/* The sidebar restore control belongs to the titlebar, not the sidebar content. */
+.window-controls-left {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 920;
+  display: grid;
+  grid-template-columns: repeat(1, 50px);
   height: var(--window-drag-height);
   -webkit-app-region: no-drag;
 }
@@ -1365,32 +1377,10 @@ body.is-resizing .wechat-shell {
   color: var(--color-accent);
 }
 
-.collapse-button {
-  position: absolute;
-  z-index: 8;
-  border: 0;
-  background: transparent;
-  color: var(--color-text-tertiary);
-  border-radius: var(--radius-xs);
-  width: 24px;
-  height: 24px;
-  display: grid;
-  place-items: center;
-  box-shadow: none;
-  font-size: var(--font-size-title);
-}
-.collapse-button:hover {
-  color: var(--color-accent);
-  background: var(--color-bg-hover);
-}
-.list-collapse {
-  right: 10px;
-  bottom: 11px;
-  width: 24px;
-  height: 24px;
-  color: var(--color-text-tertiary);
-  display: none;
-}
+/*
+ * Restoring the sidebar is handled by the titlebar button. Keeping only the edge
+ * here prevents a hover overlay from covering the branded sidebar header.
+ */
 .list-collapsed .chat-list-pane {
   position: absolute;
   left: 0;
@@ -1402,12 +1392,9 @@ body.is-resizing .wechat-shell {
   box-shadow: none;
   overflow: hidden;
   background: transparent;
-  transition:
-    width 0.16s ease,
-    background 0.16s ease,
-    box-shadow 0.16s ease;
+  transition: width 0.16s ease;
 }
-.list-collapsed .chat-list-pane > :not(.list-collapse-edge) {
+.list-collapsed .chat-list-pane > * {
   display: none;
 }
 .list-collapsed .chat-list-pane::before {
@@ -1418,50 +1405,6 @@ body.is-resizing .wechat-shell {
   bottom: 0;
   width: 6px;
   background: color-mix(in srgb, var(--color-border-strong) 42%, transparent);
-}
-body:not(.is-list-resizing)
-  .list-collapsed:not(.list-hover-suppressed)
-  .chat-list-pane:hover,
-.list-collapsed:not(.list-hover-suppressed) .chat-list-pane:focus-within {
-  width: var(--list-hover-width);
-  overflow: hidden;
-  background: var(--color-bg-sidebar);
-  border-right: 1px solid var(--color-border-subtle);
-  box-shadow: 12px 0 28px
-    color-mix(in srgb, var(--color-text-primary) 12%, transparent);
-}
-body:not(.is-list-resizing)
-  .list-collapsed:not(.list-hover-suppressed)
-  .chat-list-pane:hover
-  > *,
-.list-collapsed:not(.list-hover-suppressed) .chat-list-pane:focus-within > * {
-  display: flex;
-}
-body:not(.is-list-resizing)
-  .list-collapsed:not(.list-hover-suppressed)
-  .chat-list-pane:hover
-  .search-row,
-.list-collapsed:not(.list-hover-suppressed)
-  .chat-list-pane:focus-within
-  .search-row {
-  display: grid;
-}
-body:not(.is-list-resizing)
-  .list-collapsed:not(.list-hover-suppressed)
-  .chat-list-pane:hover
-  .list-collapse,
-.list-collapsed:not(.list-hover-suppressed)
-  .chat-list-pane:focus-within
-  .list-collapse {
-  display: grid;
-  right: 10px;
-  top: 10px;
-  bottom: auto;
-  background: color-mix(in srgb, var(--color-bg-panel) 72%, transparent);
-  border: 1px solid
-    color-mix(in srgb, var(--color-border-strong) 38%, transparent);
-  box-shadow: 0 6px 16px
-    color-mix(in srgb, var(--color-text-primary) 8%, transparent);
 }
 .list-collapsed .splitter-left {
   display: none;

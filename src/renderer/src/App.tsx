@@ -724,10 +724,7 @@ export function App() {
     setListWidth,
     listCollapsed,
     setListCollapsed,
-    listHoverRevealSuppressed,
-    setListHoverRevealSuppressed,
     toggleListCollapsed,
-    releaseListHoverSuppression,
   } = useResize({
     resolvedComposerHeight,
     maxComposerHeight,
@@ -2070,12 +2067,6 @@ export function App() {
       branchByProject={branchByProject}
       creatingWorktree={worktreeCreating}
       isLanWeb={isLanWeb}
-      listCollapsed={listCollapsed}
-      listHoverRevealSuppressed={listHoverRevealSuppressed}
-      onToggleListCollapsed={toggleListCollapsed}
-      onPointerLeave={() => {
-        if (listHoverRevealSuppressed) setListHoverRevealSuppressed(false);
-      }}
       onOpenConfig={() => setConfigOpen(true)}
       onOpenFeedback={() => overlays.setFeedbackOpen(true)}
       settingsExpandedProjectIds={settings.sidebarExpandedProjectIds}
@@ -2189,7 +2180,6 @@ export function App() {
     <AppShell
       listCollapsed={listCollapsed}
       listWidth={listWidth}
-      listHoverRevealSuppressed={listHoverRevealSuppressed}
       drawer={drawer}
       drawerCollapsed={drawerCollapsed}
       drawerWidth={drawerWidth}
@@ -2295,7 +2285,6 @@ export function App() {
       setDrawerCollapsed={setDrawerCollapsed}
       setDrawerWidth={setDrawerWidth}
       onToggleListCollapsed={toggleListCollapsed}
-      onReleaseListHoverSuppression={releaseListHoverSuppression}
       onDrawerCollapse={workspace.collapseDrawer}
       onDrawerClose={workspace.closeDrawer}
       onDrawerRestore={() => workspace.expandDrawer()}

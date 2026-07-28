@@ -65,6 +65,7 @@ import type {
 	AppLogLevel,
 	AppLogQuery,
 	AppUpdateDownloadResult,
+	AvailableModel,
 	ExternalEditor,
 	ExternalEditorId,
 	ExternalEditorSetting,
@@ -2516,24 +2517,82 @@ function registerIpc() {
 		});
 		return status;
 	});
-	// 直接从 models.json 读取模型列表，无需启动 agent，无缓存（实时反映文件变化）
+	// ── 模型列表（pi --list-models + 全局缓存） ────────────────────
+
+	/**
+	 * 解析 pi --list-models 的文本表格输出。
+	 * 表格格式：provider  model  context  max-out  thinking  images
+	 */
+	function parsePiListModels(stdout: string): AvailableModel[] {
+		const lines = stdout.split(/\r?\n/).filter(Boolean);
+		if (lines.length < 2) return [];
+		// 跳过表头
+		const dataLines = lines.slice(1);
+		const models: AvailableModel[] = [];
+		for (const line of dataLines) {
+			const parts = line.trim().split(/\s+/);
+			if (parts.length < 3) continue;
+			const provider = parts[0];
+			const modelId = parts[1];
+			// thinking 和 images 在倒数第二列和最后一列
+			const thinking = parts[parts.length - 2]?.toLowerCase() === "yes";
+			models.push({
+				provider,
+				id: modelId,
+				name: `${provider}/${modelId}`,
+				reasoning: thinking,
+			});
+		}
+		return models;
+	}
+
+	/** 全局缓存：首次调用 fork pi --list-models，之后直接读缓存 */
+	let cachedListModels: AvailableModel[] | null = null;
+	let cachedListModelsPending: Promise<AvailableModel[]> | null = null;
+
 	ipcMain.handle(ipcChannels.projectsListModels, async (_event, _projectId?: string) => {
 		try {
-			const result = await configManager.getModelsConfig();
-			const models: { provider: string; id: string; name?: string; reasoning?: boolean }[] = [];
-			for (const [providerName, providerConfig] of Object.entries(result.parsed.providers)) {
-				for (const model of (providerConfig.models ?? [])) {
-					models.push({
-						provider: providerName,
-						id: model.id,
-						name: model.name || model.id,
-						reasoning: model.reasoning,
+			if (cachedListModels) return cachedListModels;
+			// 已有在途请求时复用同一个 Promise，避免并发 fork 多个 pi 进程
+			if (cachedListModelsPending) return cachedListModelsPending;
+
+			cachedListModelsPending = (async () => {
+				const settings = settingsStore.get();
+				const command = piLocator.resolveCommand(
+					settings.customPiPath,
+					settings.wslEnabled,
+					settings.wslDistro,
+					settings.wslUser,
+				);
+				const invocation = piLocator.createInvocation(command, ["--list-models"]);
+				const { execFile } = await import("node:child_process");
+				const result = await new Promise<{ stdout: string }>((resolve, reject) => {
+					execFile(invocation.command, invocation.args, {
+						env: piLocator.createProcessEnv(settings, invocation.pathPrefix, invocation.wsl),
+						shell: invocation.shell,
+						windowsHide: true,
+						timeout: 15_000,
+						encoding: "utf8",
+						windowsVerbatimArguments: invocation.windowsVerbatimArguments,
+					}, (error, stdout, stderr) => {
+						if (error) {
+							const message = (stderr || error.message).slice(0, 300);
+							reject(new Error(message));
+						} else {
+							resolve({ stdout });
+						}
 					});
-				}
-			}
+				});
+				const models = parsePiListModels(result.stdout);
+				cachedListModels = models;
+				return models;
+			})();
+
+			const models = await cachedListModelsPending;
 			return models;
 		} catch (error) {
-			void appLogger.warn("pi", "Failed to read models config", {
+			cachedListModelsPending = null;
+			void appLogger.warn("pi", "Failed to list models via pi --list-models", {
 				error: error instanceof Error ? error.message : String(error),
 			});
 			return [];
@@ -3488,11 +3547,17 @@ function registerIpc() {
 	);
 	ipcMain.handle(ipcChannels.configSaveModels, async (_event, data) => {
 		const result = await configManager.saveModelsConfig(data);
+		// 模型或认证变更后清空缓存，下次打开模型选择器自动重新获取
+		cachedListModels = null;
+		cachedListModelsPending = null;
 		void appLogger.info("config", "Models config saved", { providerCount: Object.keys(data?.providers ?? {}).length });
 		return result;
 	});
 	ipcMain.handle(ipcChannels.configSaveAuth, async (_event, data) => {
 		const result = await configManager.saveAuthConfig(data);
+		// 认证变更也可能影响可用模型列表（如新增 API key 激活新的 provider）
+		cachedListModels = null;
+		cachedListModelsPending = null;
 		void appLogger.info("config", "Auth config saved", { authCount: Object.keys(data ?? {}).length });
 		return result;
 	});

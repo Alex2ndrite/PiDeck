@@ -6,7 +6,6 @@ import type { WorkspaceDrawerPanel } from "../../hooks/useWorkspacePanels";
 export interface AppShellProps {
   listCollapsed: boolean;
   listWidth: number;
-  listHoverRevealSuppressed: boolean;
   drawer: WorkspaceDrawerPanel | null;
   drawerCollapsed: boolean;
   drawerWidth: number;
@@ -27,7 +26,6 @@ export interface AppShellProps {
   setDrawerCollapsed: (v: boolean) => void;
   setDrawerWidth: (v: number) => void;
   onToggleListCollapsed: () => void;
-  onReleaseListHoverSuppression: (event: PointerEvent<HTMLDivElement>) => void;
   onDrawerCollapse: () => void;
   onDrawerClose: () => void;
   onDrawerRestore: () => void;
@@ -43,13 +41,13 @@ export interface AppShellProps {
 
 export function AppShell(props: AppShellProps) {
   const {
-    listCollapsed, listWidth, listHoverRevealSuppressed,
+    listCollapsed, listWidth,
     drawer, drawerCollapsed, drawerWidth, drawerPinned,
     useNativeTitleBar,
     chatPaneRef, terminalRowHeight, contentMaxWidth,
     sidebarContent, chatPaneContent, drawerContent, outlineContent,
     setListCollapsed, setListWidth, setDrawerCollapsed, setDrawerWidth,
-    onToggleListCollapsed, onReleaseListHoverSuppression,
+    onToggleListCollapsed,
     onDrawerCollapse, onDrawerClose, onDrawerRestore, onToggleDrawerPin,
     toggleAlwaysOnTop, minimizeWindow, toggleMaximizeWindow, closeWindow,
     children,
@@ -99,23 +97,17 @@ export function AppShell(props: AppShellProps) {
     onToggleListCollapsed();
   }
 
-  function handleReleaseListHoverSuppression(event: PointerEvent<HTMLDivElement>) {
-    onReleaseListHoverSuppression(event);
-  }
-
   return (
     <div
       className={[
         "wechat-shell",
         drawer ? "drawer-open" : "",
         listCollapsed ? "list-collapsed" : "",
-        listHoverRevealSuppressed ? "list-hover-suppressed" : "",
         drawerCollapsed ? "drawer-collapsed" : "",
         useNativeTitleBar ? "" : "custom-titlebar-enabled",
       ]
         .filter(Boolean)
         .join(" ")}
-      onPointerMove={handleReleaseListHoverSuppression}
       style={
         {
           "--list-width": `${listCollapsed ? 0 : listWidth}px`,
@@ -129,6 +121,8 @@ export function AppShell(props: AppShellProps) {
     >
       <AppHeader
         useNativeTitleBar={useNativeTitleBar}
+        listCollapsed={listCollapsed}
+        toggleListCollapsed={handleToggleListCollapsed}
         toggleAlwaysOnTop={toggleAlwaysOnTop}
         minimizeWindow={minimizeWindow}
         toggleMaximizeWindow={toggleMaximizeWindow}

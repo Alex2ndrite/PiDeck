@@ -24,8 +24,6 @@ export function useResize({
 }: UseResizeOptions) {
   const [listWidth, setListWidth] = useState(DEFAULT_LIST_WIDTH);
   const [listCollapsed, setListCollapsed] = useState(false);
-  const [listHoverRevealSuppressed, setListHoverRevealSuppressed] =
-    useState(false);
 
   // 使用 ref 避免 resize 事件处理器闭包捕获陈旧值
   const resolvedComposerHeightRef = useRef(resolvedComposerHeight);
@@ -73,17 +71,10 @@ export function useResize({
     const nextCollapsed = !listCollapsed;
     if (!nextCollapsed) setListWidth(DEFAULT_LIST_WIDTH);
     if (nextCollapsed) {
-      // 点击折叠后鼠标和焦点仍在侧栏内;先释放焦点并抑制 hover,避免刚折叠就被 CSS 展开。
+      // 收起后焦点仍可能留在侧栏中的控件上；先释放，避免隐藏内容保留键盘焦点。
       (document.activeElement as HTMLElement | null)?.blur();
     }
-    setListHoverRevealSuppressed(nextCollapsed);
     setListCollapsed(nextCollapsed);
-  }
-
-  function releaseListHoverSuppression(event: PointerEvent<HTMLDivElement>) {
-    if (listCollapsed && listHoverRevealSuppressed && event.clientX > 24) {
-      setListHoverRevealSuppressed(false);
-    }
   }
 
   return {
@@ -91,11 +82,8 @@ export function useResize({
     setListWidth,
     listCollapsed,
     setListCollapsed,
-    listHoverRevealSuppressed,
-    setListHoverRevealSuppressed,
     DEFAULT_LIST_WIDTH,
     startComposerResize,
     toggleListCollapsed,
-    releaseListHoverSuppression,
   };
 }

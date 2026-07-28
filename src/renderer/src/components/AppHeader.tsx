@@ -1,16 +1,27 @@
 import { useState } from "react";
-import { Pin, Minus, Square, X } from "lucide-react";
+import { PanelLeft, Pin, Minus, Square, X } from "lucide-react";
+import { IconButton } from "./ui/IconButton";
 import { t } from "../i18n";
 
 type Props = {
   useNativeTitleBar: boolean;
+  listCollapsed: boolean;
+  toggleListCollapsed: () => void;
   toggleAlwaysOnTop: () => Promise<boolean>;
   minimizeWindow: () => void;
   toggleMaximizeWindow: () => void;
   closeWindow: () => void;
 };
 
-export function AppHeader({ useNativeTitleBar, toggleAlwaysOnTop, minimizeWindow, toggleMaximizeWindow, closeWindow }: Props) {
+export function AppHeader({
+  useNativeTitleBar,
+  listCollapsed,
+  toggleListCollapsed,
+  toggleAlwaysOnTop,
+  minimizeWindow,
+  toggleMaximizeWindow,
+  closeWindow,
+}: Props) {
   const [windowAlwaysOnTop, setWindowAlwaysOnTop] = useState(false);
 
   if (useNativeTitleBar) return null;
@@ -18,6 +29,15 @@ export function AppHeader({ useNativeTitleBar, toggleAlwaysOnTop, minimizeWindow
   return (
     <>
       <div className="window-drag-layer" aria-hidden="true" />
+      <div className="window-controls-left">
+        <IconButton
+          className={`window-control sidebar-toggle${listCollapsed ? " collapsed" : ""}`}
+          label={listCollapsed ? t("app.expandList") : t("app.collapseList")}
+          onClick={toggleListCollapsed}
+        >
+          <PanelLeft size={13} strokeWidth={2.2} aria-hidden="true" />
+        </IconButton>
+      </div>
       <div className="window-controls" aria-label={t("app.windowControls")}>
         <button
           type="button"

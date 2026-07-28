@@ -1,10 +1,12 @@
 import { ipcMain } from "electron";
 import { resolve } from "node:path";
+import { spawn, type ChildProcess } from "node:child_process";
 import { ipcChannels } from "../../shared/ipc";
 import type { GitWorkspaceDiffGroup } from "../../shared/types";
 import type { GitService } from "../git/GitService";
 import type { AppLogger } from "../logging/AppLogger";
 import type { PiLocator } from "../pi/PiLocator";
+import { PiRpcClient } from "../pi/PiRpcClient";
 import type { ProjectStore } from "../projects/ProjectStore";
 import type { SettingsStore } from "../settings/SettingsStore";
 import type { WorktreeService } from "../git/WorktreeService";
@@ -17,6 +19,156 @@ export type GitIpcDeps = {
 	settingsStore: SettingsStore;
 	worktreeService: WorktreeService;
 };
+
+// ── QuickGen：持久化轻量 pi 进程，通过 RPC 生成提交摘要 ──────────────
+
+/** 轻量 pi 进程，用 RPC 模式运行，只做文本生成，不加载 session/tools/extensions */
+let genProcess: ChildProcess | null = null;
+let genRpcClient: PiRpcClient | null = null;
+let genProcessCwd = "";
+let genIdleTimer: NodeJS.Timeout | null = null;
+
+/** 清理快速生成进程 */
+function stopGenProcess() {
+	if (genIdleTimer) {
+		clearTimeout(genIdleTimer);
+		genIdleTimer = null;
+	}
+	genRpcClient?.close();
+	genRpcClient = null;
+	if (genProcess && genProcess.exitCode === null) {
+		try { genProcess.kill(); } catch { /* ignore */ }
+	}
+	genProcess = null;
+	genProcessCwd = "";
+}
+
+/** 重置空闲定时器：30 分钟无请求自动杀掉进程释放内存 */
+function resetGenIdleTimer() {
+	if (genIdleTimer) clearTimeout(genIdleTimer);
+	genIdleTimer = setTimeout(() => {
+		stopGenProcess();
+	}, 30 * 60_000);
+}
+
+/** 确保有一个轻量 pi RPC 进程在运行，跨项目复用 */
+async function ensureGenProcess(
+	projectPath: string,
+	command: string,
+	piLocator: PiLocator,
+	settingsStore: SettingsStore,
+	appLogger: Pick<AppLogger, "warn">,
+): Promise<PiRpcClient> {
+	// 已有进程还在运行，直接复用
+	if (genProcess && genRpcClient && genProcess.exitCode === null) {
+		genProcessCwd = projectPath;
+		resetGenIdleTimer();
+		return genRpcClient;
+	}
+
+	// 清理已死的旧进程
+	if (genProcess) stopGenProcess();
+
+	const settings = settingsStore.get();
+	const invocation = piLocator.createInvocation(command, [
+		"--mode", "rpc",
+		"--no-session",
+		"--no-tools",
+		"--no-extensions",
+		"--no-skills",
+		"--no-prompt-templates",
+		"--no-context-files",
+		"--no-themes",
+		"--thinking", "off",
+	]);
+
+	genProcess = spawn(invocation.command, invocation.args, {
+		cwd: projectPath,
+		env: piLocator.createProcessEnv(settings, invocation.pathPrefix, invocation.wsl),
+		stdio: ["pipe", "pipe", "pipe"],
+		shell: invocation.shell,
+		windowsHide: true,
+		windowsVerbatimArguments: invocation.windowsVerbatimArguments,
+	});
+	genProcessCwd = projectPath;
+
+	genRpcClient = new PiRpcClient(genProcess.stdin!, genProcess.stdout!);
+
+	// stderr 仅用于调试日志
+	genProcess.stderr!.on("data", (chunk: Buffer) => {
+		const text = chunk.toString("utf8").slice(0, 300);
+		void appLogger.warn("git", "QuickGen stderr", { text });
+	});
+
+	genProcess.on("exit", () => {
+		stopGenProcess();
+	});
+
+	resetGenIdleTimer();
+	return genRpcClient;
+}
+
+/** 通过持久化 RPC 进程快速生成文本，避免每次 fork 新进程 */
+async function quickGenerate(
+	projectPath: string,
+	prompt: string,
+	piLocator: PiLocator,
+	settingsStore: SettingsStore,
+	appLogger: Pick<AppLogger, "warn">,
+): Promise<string> {
+	const settings = settingsStore.get();
+	const command = piLocator.resolveCommand(
+		settings.customPiPath,
+		settings.wslEnabled,
+		settings.wslDistro,
+		settings.wslUser,
+	);
+
+	const rpc = await ensureGenProcess(projectPath, command, piLocator, settingsStore, appLogger);
+
+	return new Promise<string>((resolve, reject) => {
+		const collected: string[] = [];
+		let settled = false;
+		const timeout = setTimeout(() => {
+			if (!settled) {
+				void appLogger.warn("git", "QuickGen timed out", {});
+				reject(new Error("Quick generate timed out"));
+			}
+		}, 60_000);
+
+		const onEvent = (event: Record<string, unknown>) => {
+			const eventType = event.type as string;
+			if (eventType === "message_update") {
+				const ae = (event as Record<string, unknown>).assistantMessageEvent as Record<string, unknown> | undefined;
+				if (ae?.type === "text_delta" && typeof ae.delta === "string") {
+					collected.push(ae.delta);
+				}
+			}
+			if (eventType === "agent_settled" || eventType === "agent_end") {
+				settled = true;
+				clearTimeout(timeout);
+				rpc.off("event", onEvent);
+				resolve(collected.join(""));
+			}
+		};
+
+		rpc.on("event", onEvent);
+
+		rpc.request({ type: "prompt", message: prompt }).then((response) => {
+			if (!response.success) {
+				clearTimeout(timeout);
+				rpc.off("event", onEvent);
+				reject(new Error(response.error ?? "Prompt rejected"));
+			}
+		}).catch((err) => {
+			clearTimeout(timeout);
+			rpc.off("event", onEvent);
+			reject(err);
+		});
+	});
+}
+
+// ── IPC 注册 ────────────────────────────────────────────────────────
 
 export function registerGitIpc({
 	appLogger,
@@ -99,7 +251,7 @@ export function registerGitIpc({
 				(entry) => normalizeForCompare(entry.path) === normalizedTarget,
 			);
 			// 如果 git 已经没有该 worktree（包括用户在外部删过导致 remove 返回 false），
-			// 也要清理 PiDeck 项目记录，否则重启后会从 projects.json 恢复成“删不掉”。
+			// 也要清理 PiDeck 项目记录，否则重启后会从 projects.json 恢复成"删不掉"。
 			if (ok || !stillInGit) {
 				const child = projectStore.findByPath(worktreePath);
 				if (child) await projectStore.remove(child.id);
@@ -281,48 +433,30 @@ export function registerGitIpc({
 		async (_event, projectId: string) => {
 			const project = projectStore.get(projectId);
 			if (!project) return "";
+
 			const diff = await gitService.getStagedDiff(project.path);
 			if (!diff.trim()) return "";
 
-			// 构建提示词：因在模板字面量中避免嵌套反引号，使用数组拼接
-			const prompt = [
-				"请根据以下 git diff 生成一条中文 git commit message。",
-				"格式：feat: / fix: / refactor: / chore: / docs: / style: / perf: / test: 等标准约定式提交前缀。",
-				"只输出 message 本身，不要解释，不要包含 markdown 标记。",
-				"",
-				diff.slice(0, 8000),
-			].join("\n");
+			// 从设置中读取提示词模板，替换 {diff} 为实际 diff 内容
+			const promptTemplate = settingsStore.get().gitCommitMessagePrompt ||
+				"请根据以下 git diff 生成一条中文 git commit message。\n\n{diff}\n\n直接输出 commit 消息。";
+			const prompt = promptTemplate.replace("{diff}", diff.slice(0, 8000));
 
-			const settings = settingsStore.get();
-			const command = piLocator.resolveCommand(
-				settings.customPiPath,
-				settings.wslEnabled,
-				settings.wslDistro,
-				settings.wslUser,
-			);
-			const invocation = piLocator.createInvocation(command, [
-				"-p", prompt,
-			]);
-			const { execFile } = await import("node:child_process");
-			const result = await new Promise<string>((resolve, reject) => {
-				execFile(invocation.command, invocation.args, {
-					env: piLocator.createProcessEnv(settings, invocation.pathPrefix, invocation.wsl),
-					shell: invocation.shell,
-					windowsHide: true,
-					timeout: 30_000,
-					encoding: "utf8",
-					windowsVerbatimArguments: invocation.windowsVerbatimArguments,
-				}, (error, stdout, stderr) => {
-					if (error) {
-						const message = (stderr || error.message).slice(0, 500);
-						void appLogger.warn("git", "Generate commit message failed", { error: message });
-						reject(new Error(message));
-						return;
-					}
-					resolve(stdout.trim());
-				});
-			});
-			return result;
+			try {
+				const result = await quickGenerate(
+					project.path,
+					prompt,
+					piLocator,
+					settingsStore,
+					appLogger,
+				);
+				void appLogger.warn("git", "Generate commit message result", { length: result.length });
+				return result.trim();
+			} catch (err) {
+				const msg = err instanceof Error ? err.message : String(err);
+				void appLogger.warn("git", "Generate commit message failed", { error: msg });
+				throw err;
+			}
 		},
 	);
 

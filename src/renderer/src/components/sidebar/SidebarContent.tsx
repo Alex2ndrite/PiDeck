@@ -72,7 +72,6 @@ export type SidebarContentProps = {
   creatingWorktree?: boolean;
   isLanWeb?: boolean;
   chrome?: ReactNode;
-  onPointerLeave?: () => void;
   onOpenSettings?: () => void;
   onOpenConfig?: () => void;
   onOpenFeedback?: () => void;
@@ -103,7 +102,6 @@ export function SidebarContent(props: SidebarContentProps) {
     <aside
       className="chat-list-pane v3-braun"
       aria-label={t("app.search")}
-      onPointerLeave={props.onPointerLeave}
     >
       <div className="sidebar-body">
         {props.chrome}

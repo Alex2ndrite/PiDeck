@@ -6,7 +6,7 @@ import { readRendererStyles } from "./helpers/rendererStyles.mjs";
 const css = readRendererStyles();
 
 const v3SidebarRule = css.match(
-  /\.wechat-shell:not\(\.list-collapsed\) \.chat-list-pane\.v3-braun,\n\.list-collapsed:not\(\.list-hover-suppressed\) \.chat-list-pane\.v3-braun:hover,\n\.list-collapsed:not\(\.list-hover-suppressed\) \.chat-list-pane\.v3-braun:focus-within \{([\s\S]*?)\n\}/,
+  /\.wechat-shell:not\(\.list-collapsed\) \.chat-list-pane\.v3-braun \{([\s\S]*?)\n\}/,
 )?.[1];
 
 test("v3 sidebar has no right divider in expanded or revealed states", () => {

@@ -1545,9 +1545,7 @@ html[data-theme="dark"] .scratch-pad-md mark {
   border-bottom-right-radius: 0;
 }
 
-.wechat-shell:not(.list-collapsed) .chat-list-pane.v3-braun,
-.list-collapsed:not(.list-hover-suppressed) .chat-list-pane.v3-braun:hover,
-.list-collapsed:not(.list-hover-suppressed) .chat-list-pane.v3-braun:focus-within {
+.wechat-shell:not(.list-collapsed) .chat-list-pane.v3-braun {
   background: var(--color-bg-panel);
 }
 

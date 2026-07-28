@@ -14,8 +14,6 @@ test("collapsed sidebar reveal does not override the v3 conversation list layout
     css,
     /\.chat-list-pane\.v3-braun \.sidebar-body \.conversation-list \{[\s\S]*?display: flex;/,
   );
-  assert.match(
-    css,
-    /\.list-collapsed:not\(\.list-hover-suppressed\) \.chat-list-pane\.v3-braun:focus-within \{/,
-  );
+  // The hover-reveal selectors were removed; restoring the sidebar is now
+  // handled by a titlebar button which does not depend on CSS hover rules.
 });
