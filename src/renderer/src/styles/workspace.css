@@ -1757,6 +1757,51 @@ html[data-theme="dark"] .scratch-pad-md mark {
   background: var(--color-bg-panel);
 }
 
+/* Drafts have no session file or runtime yet, so keep opening and deletion as
+   sibling controls instead of nesting an interactive element inside the row. */
+.chat-list-pane.v3-braun .sidebar-body .draft-session-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--control-height-md);
+  align-items: center;
+  gap: var(--space-1);
+  margin: 2px 0;
+}
+
+.chat-list-pane.v3-braun .sidebar-body .draft-session-row.has-runtime {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.chat-list-pane.v3-braun .sidebar-body .draft-session-row .draft-session-trigger {
+  margin: 0;
+}
+
+.chat-list-pane.v3-braun .sidebar-body .draft-session-delete {
+  width: var(--control-height-md);
+  height: var(--control-height-md);
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-tertiary);
+  opacity: 0;
+  pointer-events: none;
+  transition: background 0.12s ease, color 0.12s ease, opacity 0.12s ease;
+}
+
+.chat-list-pane.v3-braun .sidebar-body .draft-session-row:hover .draft-session-delete,
+.chat-list-pane.v3-braun .sidebar-body .draft-session-row:focus-within .draft-session-delete {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.chat-list-pane.v3-braun .sidebar-body .draft-session-delete:hover,
+.chat-list-pane.v3-braun .sidebar-body .draft-session-delete:focus-visible {
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+}
+
 .chat-list-pane.v3-braun .sidebar-body .worktree-row {
   margin: 2px 0 2px var(--space-6);
   padding: 6px 8px;

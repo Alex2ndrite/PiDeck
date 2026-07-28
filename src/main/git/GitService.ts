@@ -93,10 +93,12 @@ export class GitService {
 
 	async getBranches(cwd: string): Promise<GitBranchInfo> {
 		try {
-			// 获取当前分支和所有本地分支（不包含远程分支）
+			// 获取当前分支和所有本地分支（不包含远程分支）。
+			// 显式设置 maxBuffer 防止仓库分支数过多时 stdout 超过 1MB 默认上限而被截断。
+			const BRANCH_MAX_BUFFER = 10 * 1024 * 1024;
 			const [{ stdout: currentRaw }, { stdout: localRaw }] = await Promise.all([
 				execFileAsync("git", ["branch", "--show-current"], { cwd }),
-				execFileAsync("git", ["branch", "--format=%(refname:short)"], { cwd }),
+				execFileAsync("git", ["branch", "--format=%(refname:short)"], { cwd, maxBuffer: BRANCH_MAX_BUFFER }),
 			]);
 
 			const current = currentRaw.trim() || null;

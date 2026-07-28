@@ -116,6 +116,32 @@ test("request gate rejects stale menu and RPC results after a newer request or c
   assert.equal(gate.isCurrentRpcLogs(rpcB), false);
 });
 
+test("unstarted drafts have an independent delete control and context menu", () => {
+  const sessionTree = readFileSync("src/renderer/src/components/sidebar/SessionTree.tsx", "utf8");
+  const content = readFileSync("src/renderer/src/components/sidebar/SidebarContent.tsx", "utf8");
+  const controller = readFileSync("src/renderer/src/hooks/useSidebarController.ts", "utf8");
+  const parts = readFileSync("src/renderer/src/components/sidebar/SidebarParts.tsx", "utf8");
+  const components = readFileSync("src/renderer/src/components/sidebar/SidebarComponents.tsx", "utf8");
+  const styles = readFileSync("src/renderer/src/styles/workspace.css", "utf8");
+
+  assert.match(controller, /kind: "draft"/);
+  assert.match(sessionTree, /const openDraftContext/);
+  assert.match(sessionTree, /getBoundSidebarRuntimeAgent\(props\.controller\.catalog, session\.id\)/);
+  assert.match(sessionTree, /kind: "agent",\s*agentId: runtimeAgent\.id/);
+  assert.match(sessionTree, /className=\{`draft-session-row\$\{canDelete \? "" : " has-runtime"\}`\}/);
+  assert.match(sessionTree, /onContextMenu=\{\(event\) => openDraftContext\(event, session\)\}/);
+  assert.match(sessionTree, /canDelete && \([\s\S]*<IconButton[\s\S]*className="draft-session-delete"/);
+  assert.doesNotMatch(sessionTree, /<span className="project-action" role="button"/);
+  assert.match(parts, /DraftSessionContextMenu/);
+  assert.match(components, /export function DraftSessionContextMenu/);
+  assert.match(content, /menu\?\.kind === "draft"/);
+  assert.match(content, /!hasLiveSidebarRuntime\(menuDraftRuntime\)/);
+  assert.match(content, /<DraftSessionContextMenu/);
+  assert.match(styles, /\.draft-session-row/);
+  assert.match(styles, /grid-template-columns: minmax\(0, 1fr\) var\(--control-height-md\)/);
+  assert.match(styles, /\.draft-session-row\.has-runtime/);
+});
+
 test("worktree rows expose their child project context menu and loading projects keep a surface", () => {
   const worktree = readFileSync("src/renderer/src/components/sidebar/WorktreeTree.tsx", "utf8");
   const sessionTree = readFileSync("src/renderer/src/components/sidebar/SessionTree.tsx", "utf8");

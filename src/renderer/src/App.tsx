@@ -1321,9 +1321,15 @@ export function App() {
   }
 
   async function deleteDraftSession(session: SessionRecord) {
-    await api.sessions.deleteRecord(session.id);
-    removeSessionState(session.id);
-    removeSessionComposerState(session.id);
+    try {
+      await api.sessions.deleteRecord(session.id);
+      // A false result means another path already removed the catalog record;
+      // clear the stale sidebar row the same way as a successful deletion.
+      removeSessionState(session.id);
+      removeSessionComposerState(session.id);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : String(error), 4000);
+    }
   }
 
   async function reorderProjects(

@@ -368,6 +368,26 @@ export function AgentContextMenu(props: {
 	);
 }
 
+export function DraftSessionContextMenu(props: {
+	menu: { x: number; y: number };
+	onClose: () => void;
+	onDelete: () => void;
+}) {
+	const { pos, ref } = useMenuPosition(props.menu);
+	return (
+		<div className="context-backdrop" onClick={props.onClose}>
+			<div
+				className="context-menu"
+				style={{ left: pos.x, top: pos.y }}
+				ref={ref}
+				onClick={(event) => event.stopPropagation()}
+			>
+				<button className="danger" onClick={props.onDelete}>{t("common.delete")}</button>
+			</div>
+		</div>
+	);
+}
+
 export function SessionContextMenu(props: {
 	menu: { x: number; y: number; session: SessionSummary };
 	actionLoading?: "copy" | "export" | null;

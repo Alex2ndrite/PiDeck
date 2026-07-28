@@ -10,6 +10,7 @@ import {
   bindSessionRuntimeAtom,
   cacheSessionMessagesAtom,
   sessionAttachmentsByIdAtom,
+  sessionMessagesCacheAtom,
   sessionComposerModeByIdAtom,
   sessionDraftByIdAtom,
   sessionRecordsAtom,
@@ -236,22 +237,24 @@ export function useSessionSend(options: UseSessionSendOptions) {
     });
     clearSnapshot(sessionId);
 
-    // Optimistic: show user message immediately, even if Agent hasn't started yet.
+    // Optimistic: show user message immediately, appended to existing history.
     // Agent's subsequent messages:event will replace this with the authoritative list.
-    if (!runtimeAgentId) {
-      setCacheMessages({
-        sessionId,
-        messages: [{
-          id: requestId,
-          agentId: "",
-          role: "user" as const,
-          text: message,
-          timestamp: Date.now(),
-          images: imageSnapshot,
-        }],
-        source: "runtime" as const,
-      });
-    }
+    // Appending (instead of replacing) avoids a flash where history disappears during the
+    // send→acknowledge gap, which is the root cause of perceived "jitter" on send.
+    const cacheEntry = store.get(sessionMessagesCacheAtom)?.[sessionId];
+    const previousMessages = cacheEntry?.messages ?? [];
+    setCacheMessages({
+      sessionId,
+      messages: [...previousMessages, {
+        id: requestId,
+        agentId: runtimeAgentId ?? "",
+        role: "user" as const,
+        text: message,
+        timestamp: Date.now(),
+        images: imageSnapshot,
+      }],
+      source: "runtime" as const,
+    });
 
     options.resetComposerUi?.();
 

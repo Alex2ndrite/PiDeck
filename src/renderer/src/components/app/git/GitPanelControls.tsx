@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { Check, ChevronDown } from "lucide-react";
 import { Twistie } from "./GitResourceTree";
 
@@ -35,6 +36,10 @@ export function PaneHeader(props: {
 /**
  * Compact Git pane filter with the app's listbox behavior instead of the
  * platform-native select, so pane headers render consistently on Windows.
+ *
+ * The dropdown menu is rendered via portal to document.body to avoid being
+ * clipped by parent overflow containers (drawer-content-frame, git-drawer-stack,
+ * git-drawer-source all have overflow:hidden/auto).
  */
 export function GitCompactFilter(props: {
   value: string;
@@ -44,27 +49,86 @@ export function GitCompactFilter(props: {
   className?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const [menuStyle, setMenuStyle] = useState<React.CSSProperties>({});
   const containerRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+
+  const closeMenu = useCallback(() => {
+    setOpen(false);
+  }, []);
+
+  // 计算下拉菜单位置：相对于触发按钮的左下角
+  const updateMenuPosition = useCallback(() => {
+    if (!buttonRef.current) return;
+    const rect = buttonRef.current.getBoundingClientRect();
+    setMenuStyle({
+      position: "fixed",
+      left: rect.left,
+      top: rect.bottom + 2,
+      minWidth: Math.max(160, rect.width),
+      zIndex: 9999,
+    });
+  }, []);
 
   useEffect(() => {
     if (!open) return;
+    updateMenuPosition();
+
     const handlePointerDown = (event: PointerEvent) => {
+      // 点击容器（按钮）外部关闭菜单
       if (!containerRef.current?.contains(event.target as Node)) {
-        setOpen(false);
+        closeMenu();
       }
     };
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
+      if (event.key === "Escape") closeMenu();
     };
+    // 滚动/缩放时重新定位，确保菜单始终跟随按钮
+    const handleScroll = () => updateMenuPosition();
+    const handleResize = () => updateMenuPosition();
+
     document.addEventListener("pointerdown", handlePointerDown);
     document.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("scroll", handleScroll, true);
+    window.addEventListener("resize", handleResize);
     return () => {
       document.removeEventListener("pointerdown", handlePointerDown);
       document.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("scroll", handleScroll, true);
+      window.removeEventListener("resize", handleResize);
     };
-  }, [open]);
+  }, [open, closeMenu, updateMenuPosition]);
 
   const selected = props.options.find((option) => option.value === props.value);
+
+  const menuElement = open ? (
+    <div
+      className="git-compact-filter-menu"
+      role="listbox"
+      style={menuStyle}
+    >
+      {props.options.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          className={`git-compact-filter-opt${option.value === props.value ? " active" : ""}`}
+          role="option"
+          aria-selected={option.value === props.value}
+          onClick={() => {
+            props.onChange(option.value);
+            closeMenu();
+          }}
+        >
+          <span className="git-compact-filter-opt-label">
+            {option.label}
+          </span>
+          {option.value === props.value && (
+            <Check size={12} className="git-compact-filter-check" />
+          )}
+        </button>
+      ))}
+    </div>
+  ) : null;
 
   return (
     <div
@@ -72,15 +136,20 @@ export function GitCompactFilter(props: {
       className={`git-compact-filter${props.className ? ` ${props.className}` : ""}`}
     >
       <button
+        ref={buttonRef}
         type="button"
         className="git-compact-filter-btn"
         aria-label={props.ariaLabel}
         aria-haspopup="listbox"
         aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
+        onClick={() => {
+          if (!open) updateMenuPosition();
+          setOpen((value) => !value);
+        }}
         onKeyDown={(event) => {
           if (event.key === "ArrowDown" || event.key === "ArrowUp") {
             event.preventDefault();
+            if (!open) updateMenuPosition();
             setOpen(true);
           }
         }}
@@ -93,30 +162,7 @@ export function GitCompactFilter(props: {
           className={`git-compact-filter-chevron${open ? " open" : ""}`}
         />
       </button>
-      {open && (
-        <div className="git-compact-filter-menu" role="listbox">
-          {props.options.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              className={`git-compact-filter-opt${option.value === props.value ? " active" : ""}`}
-              role="option"
-              aria-selected={option.value === props.value}
-              onClick={() => {
-                props.onChange(option.value);
-                setOpen(false);
-              }}
-            >
-              <span className="git-compact-filter-opt-label">
-                {option.label}
-              </span>
-              {option.value === props.value && (
-                <Check size={12} className="git-compact-filter-check" />
-              )}
-            </button>
-          ))}
-        </div>
-      )}
+      {menuElement && createPortal(menuElement, document.body)}
     </div>
   );
 }

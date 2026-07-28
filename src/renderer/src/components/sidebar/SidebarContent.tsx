@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import type { AgentTab, Project, SessionRecord, SessionSummary, WorktreeEntry } from "../../../../shared/types";
 import {
   AgentContextMenu,
+  DraftSessionContextMenu,
   ProjectContextMenu,
   RpcLogModal,
   SessionContextMenu,
@@ -12,7 +13,7 @@ import {
 } from "./SidebarParts";
 import { sessionRecordToSummary } from "../../atoms";
 import { t } from "../../i18n";
-import { getBoundSidebarRuntimeAgent, type SidebarController, type SidebarRpcLog } from "../../hooks/useSidebarController";
+import { getBoundSidebarRuntimeAgent, hasLiveSidebarRuntime, type SidebarController, type SidebarRpcLog } from "../../hooks/useSidebarController";
 import { ProjectTree } from "./ProjectTree";
 
 export type SidebarActions = {
@@ -89,6 +90,12 @@ export function SidebarContent(props: SidebarContentProps) {
     : undefined;
   const menuSessionRecord = menu?.kind === "session"
     ? controller.catalog.sessionsByProject[menu.projectId]?.find((session) => session.id === menu.sessionId)
+    : undefined;
+  const menuDraft = menu?.kind === "draft"
+    ? controller.catalog.sessionsByProject[menu.projectId]?.find((session) => session.id === menu.sessionId)
+    : undefined;
+  const menuDraftRuntime = menuDraft
+    ? controller.catalog.runtimeBySessionId[menuDraft.id]
     : undefined;
   const menuSession = menuSessionRecord ? sessionRecordToSummary(menuSessionRecord) : undefined;
   const menuSessionRuntimeAgent = menuSessionRecord
@@ -185,6 +192,13 @@ export function SidebarContent(props: SidebarContentProps) {
           isRpcLogging={controller.isAgentRpcLogging(menuAgent.id)}
           onOpenLogFile={() => { void actions.rpc.openLogFile(menuAgent.id); controller.closeMenu(); }}
           onCloseAgent={() => { void actions.agents.close(menuAgent); controller.closeMenu(); }}
+        />
+      )}
+      {menuDraft && menu?.kind === "draft" && menuDraft.status === "draft" && !hasLiveSidebarRuntime(menuDraftRuntime) && (
+        <DraftSessionContextMenu
+          menu={{ x: menu.x, y: menu.y }}
+          onClose={controller.closeMenu}
+          onDelete={() => { void actions.sessions.deleteDraft(menuDraft); controller.closeMenu(); }}
         />
       )}
       {menuSession && menu?.kind === "session" && (

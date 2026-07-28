@@ -158,6 +158,9 @@ export type SessionSummary = {
 	source?: SessionSource;
 	/** 标记此会话文件来自 WSL，rename/delete/copy 等操作需走 wsl.exe */
 	wsl?: boolean;
+	/** 从 JSONL 中的 model_change / thinking_level_change 提取的最后值 */
+	model?: { provider: string; modelId: string };
+	thinkingLevel?: string;
 	codexSessionId?: string;
 	codexThreadSource?: "user" | "subagent";
 	codexParentThreadId?: string;

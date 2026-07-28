@@ -429,6 +429,19 @@ export class SessionCatalog {
 			const summaryById = new Map<string, SessionSummary>();
 			let changed = false;
 
+			// Restore model/thinking from the session file when the catalog lacks them.
+			// (Explicit user picks are already stored on the entry and are preserved.)
+			function inheritSessionMeta(entry: SessionCatalogEntry, summary: SessionSummary) {
+				if (!entry.model && summary.model) {
+					entry.model = { ...summary.model };
+					changed = true;
+				}
+				if (!entry.thinkingLevel && summary.thinkingLevel) {
+					entry.thinkingLevel = summary.thinkingLevel;
+					changed = true;
+				}
+			}
+
 			for (const summary of summaries) {
 				const originKey = buildSummaryOriginKey(summary, context);
 				const importedSourceId = getImportedSessionSourceId(summary);
@@ -481,6 +494,7 @@ export class SessionCatalog {
 					}
 				}
 				summaryById.set(entry.id, summary);
+				inheritSessionMeta(entry, summary);
 			}
 
 			const records = entries

@@ -816,11 +816,27 @@ export function GitPanel(props: GitPanelProps) {
   const [branchOpen, setBranchOpen] = useState(false);
   const [branchCreating, setBranchCreating] = useState(false);
   const [newBranchName, setNewBranchName] = useState("");
+  const [branchDropdownStyle, setBranchDropdownStyle] = useState<React.CSSProperties>({});
   const branchBarRef = useRef<HTMLDivElement>(null);
+  const branchTriggerRef = useRef<HTMLButtonElement>(null);
+
+  // 计算下拉位置（portal 到 body 后需要手动对齐触发按钮）
+  const updateBranchDropdownPosition = useCallback(() => {
+    if (!branchTriggerRef.current) return;
+    const rect = branchTriggerRef.current.getBoundingClientRect();
+    setBranchDropdownStyle({
+      position: "fixed",
+      left: rect.left,
+      top: rect.bottom + 2,
+      minWidth: Math.max(180, rect.width),
+      zIndex: 9999,
+    });
+  }, []);
 
   // 点击外部关闭分支下拉
   useEffect(() => {
     if (!branchOpen) return;
+    updateBranchDropdownPosition();
     const handler = (event: MouseEvent) => {
       if (
         branchBarRef.current &&
@@ -831,9 +847,17 @@ export function GitPanel(props: GitPanelProps) {
         setNewBranchName("");
       }
     };
+    const handleScroll = () => updateBranchDropdownPosition();
+    const handleResize = () => updateBranchDropdownPosition();
     document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [branchOpen]);
+    window.addEventListener("scroll", handleScroll, true);
+    window.addEventListener("resize", handleResize);
+    return () => {
+      document.removeEventListener("mousedown", handler);
+      window.removeEventListener("scroll", handleScroll, true);
+      window.removeEventListener("resize", handleResize);
+    };
+  }, [branchOpen, updateBranchDropdownPosition]);
 
   return (
     <div
@@ -844,8 +868,12 @@ export function GitPanel(props: GitPanelProps) {
       {/* 当前分支 + 切换下拉 */}
       <div className="git-branch-bar" ref={branchBarRef}>
         <button
+          ref={branchTriggerRef}
           className="git-branch-trigger"
-          onClick={() => setBranchOpen((v) => !v)}
+          onClick={() => {
+            if (!branchOpen) updateBranchDropdownPosition();
+            setBranchOpen((v) => !v);
+          }}
           title={
             props.currentBranch
               ? t("app.branchCurrent", {
@@ -893,8 +921,9 @@ export function GitPanel(props: GitPanelProps) {
             )}
           </button>
         )}
-        {branchOpen && (
-          <div className="git-branch-dropdown">
+        {branchOpen &&
+          createPortal(
+            <div className="git-branch-dropdown" style={branchDropdownStyle}>
             {props.branches.map((branch) => (
               <button
                 key={branch}
@@ -958,7 +987,8 @@ export function GitPanel(props: GitPanelProps) {
                 <span>{t("app.branchCreate")}</span>
               </button>
             )}
-          </div>
+          </div>,
+          document.body,
         )}
       </div>
       <section

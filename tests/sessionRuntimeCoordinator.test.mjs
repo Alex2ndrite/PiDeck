@@ -239,6 +239,21 @@ test("explicit activation creates a runtime that is bound to the requested Sessi
   assert.equal(harness.calls.send, 0);
 });
 
+test("reports a draft activation before its runtime binding completes", async () => {
+  const { SessionRuntimeCoordinator } = loadCoordinator();
+  const harness = createHarness({ createDelay: 20 });
+  const coordinator = new SessionRuntimeCoordinator(
+    harness.catalog,
+    harness.agents,
+    harness.sender,
+  );
+
+  const activation = coordinator.activateRuntime("session-1");
+  assert.equal(coordinator.isActivating("session-1"), true);
+  await activation;
+  assert.equal(coordinator.isActivating("session-1"), false);
+});
+
 test("deduplicates concurrent retries by session ID and request ID", async () => {
   const { SessionRuntimeCoordinator } = loadCoordinator();
   const harness = createHarness({ createDelay: 20 });

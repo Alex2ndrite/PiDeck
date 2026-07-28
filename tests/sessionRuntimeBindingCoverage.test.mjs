@@ -59,6 +59,12 @@ test("Web wiring is Session-first and exposes no Agent compatibility creation", 
   assert.doesNotMatch(main, /LEGACY_EXTERNAL_RUNTIME|ipcChannels\.agentsCreate/);
 });
 
+test("catalog deletion rejects bound or activating Session runtimes", () => {
+  assert.match(main, /sessionsCatalogDelete[\s\S]*sessionRuntimeCoordinator\.getTarget\(sessionId\)[\s\S]*sessionRuntimeCoordinator\.isActivating\(sessionId\)/);
+  assert.match(main, /deleteSessionRecord: async \(sessionId\)[\s\S]*sessionRuntimeCoordinator\.getTarget\(sessionId\)[\s\S]*sessionRuntimeCoordinator\.isActivating\(sessionId\)/);
+  assert.match(coordinator, /isActivating\(sessionId: string\): boolean/);
+});
+
 test("replacement restore is gated by full origin identity in main", () => {
   assert.match(main, /const originKey = originEntry\?\.filePath[\s\S]*buildSessionOriginKey/);
   assert.match(main, /canRestoreOrigin: \(\) => \{[\s\S]*buildSessionOriginKey[\s\S]*\) === originKey;/);

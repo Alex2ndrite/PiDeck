@@ -29,7 +29,8 @@ export type SidebarSourceFilterMenu = {
 export type SidebarMenuTarget =
   | { kind: "project"; projectId: string; x: number; y: number }
   | { kind: "agent"; agentId: string; x: number; y: number }
-  | { kind: "session"; projectId: string; sessionId: string; x: number; y: number };
+  | { kind: "session"; projectId: string; sessionId: string; x: number; y: number }
+  | { kind: "draft"; projectId: string; sessionId: string; x: number; y: number };
 
 export type SidebarRpcLog = {
   id: string;
@@ -40,13 +41,28 @@ export type SidebarRpcLog = {
   data?: unknown;
 };
 
+export type SidebarRuntimeSummary = {
+  agentId?: string;
+  status: string;
+};
+
 export type SidebarCatalog = {
   projects: readonly Project[];
   agents: readonly AgentTab[];
   sessionsByProject: Readonly<Record<string, readonly SessionRecord[]>>;
-  runtimeBySessionId: Readonly<Record<string, { agentId?: string; status: string } | undefined>>;
+  runtimeBySessionId: Readonly<Record<string, SidebarRuntimeSummary | undefined>>;
   catalogLoadStateByProject: Readonly<Record<string, { status: string } | undefined>>;
 };
+
+/** A terminal runtime no longer owns its Session and may safely be discarded. */
+export function hasLiveSidebarRuntime(runtime: SidebarRuntimeSummary | undefined): boolean {
+  return Boolean(
+    runtime?.agentId &&
+    runtime.status !== "detached" &&
+    runtime.status !== "closed" &&
+    runtime.status !== "error",
+  );
+}
 
 export type SidebarController = {
   catalog: SidebarCatalog;
@@ -105,10 +121,9 @@ export function getBoundSidebarRuntimeAgent(
   sessionId: string,
 ): AgentTab | undefined {
   const runtime = catalog.runtimeBySessionId[sessionId];
-  if (!runtime?.agentId || runtime.status === "detached" || runtime.status === "closed" || runtime.status === "error") {
-    return undefined;
-  }
-  const agent = catalog.agents.find((candidate) => candidate.id === runtime.agentId);
+  const agentId = runtime?.agentId;
+  if (!hasLiveSidebarRuntime(runtime) || !agentId) return undefined;
+  const agent = catalog.agents.find((candidate) => candidate.id === agentId);
   return agent && agent.status !== "closed" && agent.status !== "error" ? agent : undefined;
 }
 

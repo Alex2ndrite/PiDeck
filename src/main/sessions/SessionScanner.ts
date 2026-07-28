@@ -1009,6 +1009,10 @@ export class SessionScanner {
     let latestSessionInfoName: string | undefined;
     let forkParentSession: string | undefined;
     let hasSubagentChildMarker = false;
+    /** 最后一条 model_change / thinking_level_change 记录 */
+    let modelProvider: string | undefined;
+    let modelId: string | undefined;
+    let thinkingLevel: string | undefined;
 
     for (const line of lines) {
       const entry = JSON.parse(line) as any;
@@ -1041,6 +1045,15 @@ export class SessionScanner {
 
       name ||= entry.sessionName || entry.name || entry.data?.name || entry.header?.name || entry.session?.name;
       projectPath ||= entry.cwd || entry.projectPath || entry.header?.cwd || entry.data?.cwd || entry.session?.cwd || entry.data?.session?.cwd;
+
+      // Track the last model_change / thinking_level_change so the catalog can
+      // surface them to the renderer even when the Agent is not running.
+      if (entry.type === "model_change") {
+        modelProvider = typeof entry.provider === "string" ? entry.provider : modelProvider;
+        modelId = typeof entry.modelId === "string" ? entry.modelId : modelId;
+      } else if (entry.type === "thinking_level_change") {
+        thinkingLevel = typeof entry.thinkingLevel === "string" ? entry.thinkingLevel : thinkingLevel;
+      }
 
       const message = entry.message ?? entry.data?.message ?? entry;
       if (message?.role) {
@@ -1135,6 +1148,8 @@ export class SessionScanner {
       codexAgentRole,
       codexAgentNickname,
       parentSessionPath,
+      model: modelProvider && modelId ? { provider: modelProvider, modelId } : undefined,
+      thinkingLevel,
       // 标记 WSL 来源，供 rename/delete/copy/readMessages 等操作识别
       wsl: isWsl || undefined,
     };

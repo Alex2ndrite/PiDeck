@@ -4,7 +4,8 @@ import type { AgentTab, Project, SessionRecord, SessionSummary } from "../../../
 import { filterAgentsForSidebarDisplay, getProjectAgentSessionDisplay } from "../../agentListDisplay";
 import { sessionRecordToSummary } from "../../atoms";
 import { t } from "../../i18n";
-import { filterSidebarSessions, getBoundSidebarRuntimeAgent, type SidebarController } from "../../hooks/useSidebarController";
+import { filterSidebarSessions, getBoundSidebarRuntimeAgent, hasLiveSidebarRuntime, type SidebarController } from "../../hooks/useSidebarController";
+import { IconButton } from "../ui/IconButton";
 import type { SidebarActions } from "./SidebarContent";
 
 function matchesSearch(value: string, search: string) {
@@ -67,6 +68,30 @@ export function SessionTree(props: {
       ? { kind: "agent", agentId: runtime.id, x: event.clientX, y: event.clientY }
       : { kind: "session", projectId: props.project.id, sessionId: session.id, x: event.clientX, y: event.clientY });
   };
+  const openDraftContext = (event: React.MouseEvent, session: SessionRecord) => {
+    event.preventDefault();
+    const runtime = props.controller.catalog.runtimeBySessionId[session.id];
+    const runtimeAgent = getBoundSidebarRuntimeAgent(props.controller.catalog, session.id);
+    if (runtimeAgent) {
+      void props.controller.openMenu({
+        kind: "agent",
+        agentId: runtimeAgent.id,
+        x: event.clientX,
+        y: event.clientY,
+      });
+      return;
+    }
+    // The runtime snapshot can arrive just before the Agent inventory. Suppress
+    // a destructive menu in that gap; the main process applies the same guard.
+    if (hasLiveSidebarRuntime(runtime)) return;
+    void props.controller.openMenu({
+      kind: "draft",
+      projectId: props.project.id,
+      sessionId: session.id,
+      x: event.clientX,
+      y: event.clientY,
+    });
+  };
   const renderSubagent = (session: SessionSummary, label: ReactNode) => {
     return (
       <button
@@ -104,23 +129,33 @@ export function SessionTree(props: {
     <div className={props.nested ? "worktree-children" : "session-card"}>
       {draftSessions.map((session) => {
         const runtime = props.controller.catalog.runtimeBySessionId[session.id];
+        const canDelete = !hasLiveSidebarRuntime(runtime);
         return (
-          <button
+          <div
             key={`draft:${session.id}`}
-            className={`conversation agent-row session-row${session.id === props.currentSessionId ? " active" : ""}`}
-            title={session.title}
-            onClick={() => void props.actions.sessions.open(props.project.id, session.id)}
+            className={`draft-session-row${canDelete ? "" : " has-runtime"}`}
+            onContextMenu={(event) => openDraftContext(event, session)}
           >
-            <span className="session-node-marker" aria-hidden="true" />
-            <div className="conversation-body"><div className="conversation-title">
-              {runtime && runtime.status !== "detached" && <span className={`agent-status-indicator status-${runtime.status}`}>{runtime.status}</span>}
-              <strong>{session.title}</strong>
-            </div></div>
-            <span className="project-action" role="button" tabIndex={0} title={t("common.delete")}
-              onClick={(event) => { event.stopPropagation(); void props.actions.sessions.deleteDraft(session); }}
-              onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); void props.actions.sessions.deleteDraft(session); } }}
-            ><Trash2 size={12} /></span>
-          </button>
+            <button
+              className={`conversation agent-row session-row draft-session-trigger${session.id === props.currentSessionId ? " active" : ""}`}
+              title={session.title}
+              onClick={() => void props.actions.sessions.open(props.project.id, session.id)}
+            >
+              <div className="conversation-body"><div className="conversation-title">
+                {runtime && runtime.status !== "detached" && <span className={`agent-status-indicator status-${runtime.status}`}>{runtime.status}</span>}
+                <strong>{session.title}</strong>
+              </div></div>
+            </button>
+            {canDelete && (
+              <IconButton
+                className="draft-session-delete"
+                label={t("common.delete")}
+                onClick={() => void props.actions.sessions.deleteDraft(session)}
+              >
+                <Trash2 size={14} aria-hidden="true" />
+              </IconButton>
+            )}
+          </div>
         );
       })}
       {catalogLoading && <div className="project-session-loading"><div className="loader" /><span>{t("app.projectSessionsLoading")}</span></div>}

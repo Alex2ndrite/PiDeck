@@ -2257,6 +2257,14 @@ function registerIpc() {
 		async (_event, sessionId: string) => {
 			const entry = sessionCatalog.get(sessionId);
 			if (!entry) return false;
+			// A draft may be promoted while a renderer click is in flight. Never delete
+			// a catalog record that has acquired, or is acquiring, a Session runtime.
+			if (
+				sessionRuntimeCoordinator.getTarget(sessionId) ||
+				sessionRuntimeCoordinator.isActivating(sessionId)
+			) {
+				throw new Error(mainCopy("session.stopBeforeDelete"));
+			}
 			if (entry.filePath) {
 				const normalizedTarget = canonicalizeSessionPath(
 					entry.filePath,
@@ -3783,7 +3791,10 @@ app.whenReady().then(async () => {
 		deleteSessionRecord: async (sessionId) => {
 			const entry = sessionCatalog.get(sessionId);
 			if (!entry) return false;
-			if (sessionRuntimeCoordinator.getTarget(sessionId)) {
+			if (
+				sessionRuntimeCoordinator.getTarget(sessionId) ||
+				sessionRuntimeCoordinator.isActivating(sessionId)
+			) {
 				throw new Error(mainCopy("session.stopBeforeDelete"));
 			}
 			if (entry.filePath) await sessionScanner.delete(entry.filePath);

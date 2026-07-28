@@ -211,6 +211,11 @@ export class SessionRuntimeCoordinator {
 		return { sessionId, agentId, runtimeGeneration: binding.runtimeGeneration };
 	}
 
+	/** A pending activation owns the Session even before AgentManager binding completes. */
+	isActivating(sessionId: string): boolean {
+		return this.activationBySession.has(sessionId);
+	}
+
 	getRuntimeMessages(sessionId: string): SessionTargetedValue<ChatMessage[]> | undefined {
 		const target = this.getTarget(sessionId);
 		if (!target) return undefined;
