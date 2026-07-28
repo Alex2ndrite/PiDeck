@@ -2861,15 +2861,26 @@ export class AgentManager {
 			});
 		}
 
-		if (nextThinking && (extractedText || fallbackDelta)) {
+		// 思考切换到正文（text_delta）时，emitThinking("") 会立即清空渲染进程的
+		// runtime.thinking，若消息仍走 50ms 节流，思考内容会在底部卡片消失后、
+		// TurnRow 出现前短暂不可见，产生视觉闪烁。此时必须立即 flush，让消息中
+		// 的 thinking 与清空事件同时到达。用 fallbackDelta 区分 text_delta（有值）
+		// 和 thinking_delta（无值），避免思考阶段高频 delta 破坏节流。
+		const shouldClearThinking = nextThinking && (extractedText || fallbackDelta);
+		if (shouldClearThinking) {
 			this.streamingThinking.delete(agentId);
 			this.emitThinking(agentId, "");
 		}
 
 		this.messages.set(agentId, list);
-		// upsertAssistantMessage 被 text_delta/thinking_delta 高频调用，走节流合并；
-		// message_end/thinking_end 等终态调用方会在调用后显式 flush，保证最终状态及时。
-		this.scheduleMessageEmit(agentId);
+		if (shouldClearThinking && fallbackDelta) {
+			// text_delta 清空思考：立即 flush，消除闪烁间隙
+			this.flushMessageEmit(agentId);
+		} else {
+			// upsertAssistantMessage 被 text_delta/thinking_delta 高频调用，走节流合并；
+			// message_end/thinking_end 等终态调用方会在调用后显式 flush，保证最终状态及时。
+			this.scheduleMessageEmit(agentId);
+		}
 	}
 
 	private upsertToolMessage(

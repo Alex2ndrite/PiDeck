@@ -843,8 +843,8 @@ const api = {
 			ipcRenderer.invoke(ipcChannels.skillHubInstall, slug, installDir) as Promise<import("../shared/types").SkillHubInstallResult>,
 	},
 	yaoPrompts: {
-		list: () =>
-			ipcRenderer.invoke(ipcChannels.yaoPromptsList) as Promise<YaoPromptListResult>,
+		list: (opts?: { category?: string; search?: string; page?: number; pageSize?: number }) =>
+			ipcRenderer.invoke(ipcChannels.yaoPromptsList, opts) as Promise<YaoPromptListResult>,
 		detail: (slug: string, category: string) =>
 			ipcRenderer.invoke(ipcChannels.yaoPromptsDetail, slug, category) as Promise<YaoPromptDetailResult>,
 		import: (slug: string, category: string) =>

@@ -3,6 +3,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { Search, Download, ArrowLeft, Check, AlertCircle, X, Trash2, BadgeCheck } from "lucide-react";
 import { t } from "../i18n";
 import { showNotice } from "../utils/notice";
+import { desktopApi } from "../desktopApi";
 import type { SkillHubItem, SkillHubDetail, SkillHubSearchResult, SkillHubInstallResult, PiSkillListResult } from "../../../shared/types";
 
 const STORAGE_KEY = "skillhub-installed-v1";
@@ -44,9 +45,7 @@ function persistInstall(prev: PersistedInstall[], slug: string, name: string): P
 /** 获取本地已安装 skill 名称集合 */
 async function getInstalledNames(): Promise<Set<string>> {
 	try {
-		const piDesktop = (window as any).piDesktop;
-		if (!piDesktop?.skills?.list) return new Set();
-		const list: PiSkillListResult = await piDesktop.skills.list();
+		const list: PiSkillListResult = await desktopApi.skills.list();
 		return new Set(list.skills.map((s) => s.name.toLowerCase()));
 	} catch {
 		return new Set();

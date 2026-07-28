@@ -28,7 +28,7 @@ export function IconButton(props: ButtonHTMLAttributes<HTMLButtonElement> & {
 
 export function CloseIconButton(props: {
 	label: string;
-	onClick: () => void;
+	onClick?: () => void;
 	className?: string;
 }) {
 	return (

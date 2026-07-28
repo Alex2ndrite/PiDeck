@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeft, BookOpen, Check, Download, ExternalLink, Globe, Search } from "lucide-react";
 import type { PromptStoreItem, PromptStoreSearchResult, PiPromptTemplateSummary, PiPromptTemplateListResult } from "../../../shared/types";
 import { t } from "../i18n";
+import { desktopApi } from "../desktopApi";
 import { YaoPromptTab } from "./YaoPromptTab";
 
 /**
@@ -20,16 +21,12 @@ function predictImportName(title: string): string {
 /** 获取本地已安装 prompt 名称集合 */
 async function getInstalledPromptNames(): Promise<Set<string>> {
 	try {
-		const piDesktop = (window as any).piDesktop;
-		if (!piDesktop?.prompts?.list) return new Set();
-		const list: PiPromptTemplateListResult = await piDesktop.prompts.list();
+		const list: PiPromptTemplateListResult = await desktopApi.prompts.list();
 		return new Set(list.templates.filter((t) => t.userCreated).map((t) => t.name.toLowerCase()));
 	} catch {
 		return new Set();
 	}
 }
-
-const api = (window as unknown as { piDesktop: { promptStore: { search: (q: string, opts?: { limit?: number }) => Promise<PromptStoreSearchResult>; get: (id: string) => Promise<PromptStoreItem>; import: (data: { title: string; description: string; content: string }) => Promise<PiPromptTemplateSummary> } } }).piDesktop;
 
 /**
  * 搜索提示常量：用户在商店搜索栏中看到的热门推荐关键词。
@@ -71,7 +68,7 @@ export function PromptStoreTab(props: {
 		setSearching(true);
 		try {
 			const [data, installed] = await Promise.all([
-				api.promptStore.search(q, { limit: 20 }),
+				desktopApi.promptStore.search(q, { limit: 20 }),
 				getInstalledPromptNames(),
 			]);
 			setResult(data);
@@ -99,7 +96,7 @@ export function PromptStoreTab(props: {
 		setImportingId(item.id);
 		setError(null);
 		try {
-			await api.promptStore.import({
+			await desktopApi.promptStore.import({
 				title: item.title,
 				description: item.description,
 				content: item.content,

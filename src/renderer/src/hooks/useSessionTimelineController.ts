@@ -9,6 +9,7 @@ import {
 } from "react";
 import { useAtomValue, useSetAtom } from "jotai";
 import { selectAtom } from "jotai/utils";
+import { desktopApi } from "../desktopApi";
 import type { AgentRuntimeState, ChatMessage } from "../../../shared/types";
 import {
 	cacheSessionMessagesAtom,
@@ -23,7 +24,9 @@ import { useMessagePagination } from "./useMessagePagination";
 let nextLoadSequence = 0;
 const latestLoadBySession = new Map<string, number>();
 
-const BOTTOM_THRESHOLD = 100;
+// 用户主动向上滚超过此阈值后停止自动跟底。值设很小是为了让用户稍微滚一点就能挣脱自动滚动，
+// 避免流式消息频繁触发 ResizeObserver/MutationObserver 把用户弹回底部造成"颤抖"。
+const BOTTOM_THRESHOLD = 16;
 const LEGACY_OWNER_KEY = "legacy";
 
 type Tagged<T> = { ownerKey: string; value: T };
@@ -145,7 +148,7 @@ export function useSessionTimelineController(options: {
     if (entry) touchMessages(sessionId);
     setLoadState({ sessionId, state: { status: "loading" } });
 
-		void (window as any).piDesktop.sessions
+		void desktopApi.sessions
 			.readRecordMessagePage(sessionId, undefined, options.initialPageSize ?? 100)
 			.then((page: { messages: ChatMessage[]; total: number; nextBefore: number | null }) => {
 				if (latestLoadBySession.get(sessionId) !== sequence) return;
@@ -238,7 +241,7 @@ export function useSessionTimelineController(options: {
 			latestLoadBySession.set(sessionId, sequence);
 			const expectedRevision = cachedEntry?.revision ?? 0;
 			setIsLoadingMessagePage(true);
-			void (window as any).piDesktop.sessions
+			void desktopApi.sessions
 				.readRecordMessagePage(sessionId, before, options.pageSize ?? 100)
 				.then((page: { messages: ChatMessage[]; total: number; nextBefore: number | null }) => {
 					if (latestLoadBySession.get(sessionId) !== sequence) return;

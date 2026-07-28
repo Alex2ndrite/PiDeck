@@ -3,13 +3,12 @@ import { useEffect, useState } from "react";
 import { ArrowLeft, Check, ChevronLeft, ChevronRight, Download, Search } from "lucide-react";
 import type { YaoPromptListResult, YaoPromptItem, YaoPromptDetailResult, PiPromptTemplateSummary, PiPromptTemplateListResult } from "../../../shared/types";
 import { t } from "../i18n";
-
-const api = (window as unknown as { piDesktop: { yaoPrompts: { list: (options?: { category?: string; search?: string; page?: number; pageSize?: number }) => Promise<YaoPromptListResult>; detail: (slug: string, category: string) => Promise<YaoPromptDetailResult>; import: (slug: string, category: string) => Promise<PiPromptTemplateSummary> } } }).piDesktop;
+import { desktopApi } from "../desktopApi";
 const PAGE_SIZE = 20;
 
 async function getInstalledPromptNames(): Promise<Set<string>> {
 	try {
-		const list: PiPromptTemplateListResult = await (window as any).piDesktop.prompts.list();
+		const list: PiPromptTemplateListResult = await desktopApi.prompts.list();
 		return new Set(list.templates.filter((template) => template.userCreated).map((template) => template.name.toLowerCase()));
 	} catch {
 		return new Set();
@@ -47,7 +46,7 @@ export function YaoPromptTab(props: {
 		setError(null);
 		try {
 			const [result, installed] = await Promise.all([
-				api.yaoPrompts.list(),
+				desktopApi.yaoPrompts.list(),
 				getInstalledPromptNames(),
 			]);
 			setData(result);
@@ -67,7 +66,7 @@ export function YaoPromptTab(props: {
 		setLoading(true);
 		setError(null);
 		try {
-			const result = await api.yaoPrompts.list({
+			const result = await desktopApi.yaoPrompts.list({
 				category: activeCategory ?? undefined,
 				search: searchQuery.trim() || undefined,
 				page,
@@ -97,7 +96,7 @@ export function YaoPromptTab(props: {
 		setPreviewLoading(true);
 		setPreviewDetail(null);
 		try {
-			const detail = await api.yaoPrompts.detail(item.slug, item.category);
+			const detail = await desktopApi.yaoPrompts.detail(item.slug, item.category);
 			setPreviewDetail(detail);
 		} catch (err) {
 			console.error("[YaoPrompts] Preview failed", err);
@@ -111,7 +110,7 @@ export function YaoPromptTab(props: {
 		setImportingSlug(item.slug);
 		setError(null);
 		try {
-			await api.yaoPrompts.import(item.slug, item.category);
+			await desktopApi.yaoPrompts.import(item.slug, item.category);
 			showNotice(t("config.promptStoreImported"), 2500);
 			props.onImported?.();
 			setInstalledNames(await getInstalledPromptNames());
