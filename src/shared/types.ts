@@ -170,6 +170,11 @@ export type SessionRecord = {
 	id: string;
 	projectId: string;
 	title: string;
+	/**
+	 * Runtime-only anonymous conversations are deliberately kept out of the
+	 * persisted catalog and disappear when their process is closed.
+	 */
+	noSession?: boolean;
 	source: SessionSource;
 	environment: SessionEnvironment;
 	filePath?: string;
@@ -199,6 +204,17 @@ export type CreateSessionDraftInput = {
 	title?: string;
 	model?: { provider: string; modelId: string };
 	thinkingLevel?: string;
+};
+
+/** Creates a live `--no-session` runtime without writing a session file. */
+export type CreateAnonymousSessionInput = {
+	projectId: string;
+	title?: string;
+};
+
+export type CreateAnonymousSessionResult = {
+	session: SessionRecord;
+	runtime: SessionRuntimeInfo;
 };
 
 export type UpdateSessionRecordInput = {
@@ -1188,6 +1204,7 @@ export type SessionRuntimeInfo = SessionRuntimeTarget & {
 	sessionPath?: string;
 	createdAt: number;
 	compactionCount?: number;
+	noSession?: boolean;
 };
 
 export type SessionCommandErrorCode =

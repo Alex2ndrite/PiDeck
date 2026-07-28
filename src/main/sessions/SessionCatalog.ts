@@ -28,6 +28,8 @@ export type SessionCatalogEntry = {
 	projectId: string;
 	originKey?: string;
 	title: string;
+	/** Anonymous entries are in-memory only and are never written to session-catalog.json. */
+	noSession?: boolean;
 	source: SessionSource;
 	environment: SessionEnvironment;
 	filePath?: string;
@@ -102,6 +104,8 @@ export function canAttachRuntimeMetadata(
 
 export class SessionCatalog {
 	private entries: SessionCatalogEntry[] = [];
+	/** Runtime-only records share the catalog lookup contract without durable storage. */
+	private transientEntries = new Map<string, SessionCatalogEntry>();
 	private loaded = false;
 	private writeQueue: Promise<void> = Promise.resolve();
 	private skipNextBackup = false;
@@ -147,13 +151,45 @@ export class SessionCatalog {
 
 	listEntries(): SessionCatalogEntry[] {
 		this.assertLoaded();
-		return this.entries.map(cloneEntry);
+		return [
+			...this.entries.map(cloneEntry),
+			...Array.from(this.transientEntries.values(), cloneEntry),
+		];
 	}
 
 	get(id: string): SessionCatalogEntry | undefined {
 		this.assertLoaded();
-		const entry = this.entries.find((candidate) => candidate.id === id);
+		const entry = this.transientEntries.get(id) ?? this.entries.find((candidate) => candidate.id === id);
 		return entry ? cloneEntry(entry) : undefined;
+	}
+
+	createAnonymous(input: {
+		projectId: string;
+		title: string;
+		environment: SessionEnvironment;
+	}): SessionRecord {
+		this.assertLoaded();
+		const now = Date.now();
+		const entry: SessionCatalogEntry = {
+			id: randomUUID(),
+			projectId: input.projectId,
+			title: input.title,
+			noSession: true,
+			source: "pi",
+			environment: input.environment,
+			wslDistro: input.environment === "wsl" ? this.identityContext.wslDistro : undefined,
+			wslUser: input.environment === "wsl" ? this.identityContext.wslUser : undefined,
+			status: "active",
+			createdAt: now,
+			updatedAt: now,
+		};
+		this.transientEntries.set(entry.id, entry);
+		return this.recordFromEntry(entry);
+	}
+
+	removeTransient(id: string): boolean {
+		this.assertLoaded();
+		return this.transientEntries.delete(id);
 	}
 
 	getRecord(id: string): SessionRecord | undefined {
@@ -288,6 +324,14 @@ export class SessionCatalog {
 		>>,
 	): Promise<SessionRecord> {
 		this.assertLoaded();
+		const transient = this.transientEntries.get(id);
+		if (transient) {
+			if (patch.title !== undefined) transient.title = patch.title;
+			if (patch.model !== undefined) transient.model = patch.model;
+			if (patch.thinkingLevel !== undefined) transient.thinkingLevel = patch.thinkingLevel;
+			transient.updatedAt = patch.updatedAt ?? Date.now();
+			return this.recordFromEntry(transient);
+		}
 		const entry = await this.enqueueMutation((entries) => {
 			const nextEntry = this.requireEntry(entries, id);
 			if (patch.title !== undefined) nextEntry.title = patch.title;
@@ -343,6 +387,7 @@ export class SessionCatalog {
 
 	async remove(id: string): Promise<boolean> {
 		this.assertLoaded();
+		if (this.transientEntries.delete(id)) return true;
 		return this.enqueueMutation((entries) => {
 			const index = entries.findIndex((entry) => entry.id === id);
 			if (index < 0) return { value: false, changed: false };
@@ -459,7 +504,12 @@ export class SessionCatalog {
 				value: records.sort((left, right) => right.updatedAt - left.updatedAt),
 				changed,
 			};
-		});
+		}).then((records) => [
+			...Array.from(this.transientEntries.values())
+				.filter((entry) => entry.projectId === projectId)
+				.map((entry) => this.recordFromEntry(entry)),
+			...records,
+		].sort((left, right) => right.updatedAt - left.updatedAt));
 	}
 
 	private recordFromEntry(
@@ -470,6 +520,7 @@ export class SessionCatalog {
 			id: entry.id,
 			projectId: entry.projectId,
 			title: summary?.name || entry.title,
+			noSession: entry.noSession,
 			source: summary?.source ?? entry.source,
 			environment: summary ? getSessionEnvironment(summary) : entry.environment,
 			filePath: summary?.filePath ?? entry.filePath,

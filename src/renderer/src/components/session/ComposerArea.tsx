@@ -1,6 +1,6 @@
 import { forwardRef, useState, type PointerEvent, type ReactNode } from "react";
 import {
-  ComposerToolbar,
+  ComposerBottomBar,
   ImagePreviewModal,
   PromptSuggestions,
 } from "./ComposerParts";
@@ -19,14 +19,15 @@ import { ComposerPickerHost } from "./ComposerPickerHost";
 import { ComposerRuntimeIntegrations } from "./ComposerRuntimeIntegrations";
 import { desktopApi } from "../../desktopApi";
 import type { EnqueuePromptSnapshot } from "../../hooks/useSessionSend";
+import type { GitBranchInfo } from "../../../../shared/types";
 
 const COMPOSER_MIN_HEIGHT = 175;
 
 export type ComposerAreaProps = {
   sessionId: string;
+  gitInfo?: GitBranchInfo;
   queuePanel?: ReactNode;
   runtimeUi?: ReactNode;
-  statusText?: string;
   onOpenFile?: (path: string) => void;
   onHeightChange?: (height: number) => void;
   enqueue?: (sessionId: string, snapshot: EnqueuePromptSnapshot) => boolean;
@@ -44,23 +45,6 @@ export const ComposerArea = forwardRef<HTMLElement, ComposerAreaProps>(function 
     ensureSessionId: props.ensureSessionId,
   });
   const [height, setHeight] = useState(COMPOSER_MIN_HEIGHT);
-  const composerMode = composer.bangMode === "bang-bang"
-    ? "silent-shell"
-    : composer.bangMode === "bang"
-      ? "shell"
-      : composer.mode === "plan"
-        ? "plan"
-        : null;
-  const statusText = props.statusText ?? (
-    composerMode === "silent-shell"
-      ? t("app.composerSilentStatus")
-      : composerMode === "shell"
-        ? t("app.composerShellStatus")
-        : composerMode === "plan"
-          ? t("app.composerPlanStatus")
-          : composer.record?.filePath ?? ""
-  );
-
   function startResize(event: PointerEvent<HTMLDivElement>) {
     const startY = event.clientY;
     const startHeight = height;
@@ -129,19 +113,6 @@ export const ComposerArea = forwardRef<HTMLElement, ComposerAreaProps>(function 
                 title={t("app.resizeComposer")}
                 onPointerDown={startResize}
               />
-              <ComposerToolbar
-                state={composer.runtime?.state}
-                compacting={Boolean(composer.runtime?.state?.isCompacting)}
-                disabled={composer.isBusy || composer.isStarting}
-                onPickModel={() => composer.pickers.open("model")}
-                onPickThinking={() => composer.pickers.open("thinking")}
-                onPickPromptTemplate={() => composer.pickers.open("template")}
-                onCompact={composer.delivery.compact}
-                composerAgentMode={composer.mode}
-                onOpenComposerModePicker={() => composer.pickers.open("mode")}
-                onCancelPlan={() => composer.pickers.setMode("normal")}
-                feishuIndicator={feishuIndicator}
-              />
               <RichInput
                 ref={composer.editor.ref}
                 value={composer.draft}
@@ -189,22 +160,38 @@ export const ComposerArea = forwardRef<HTMLElement, ComposerAreaProps>(function 
                   onPick={composer.suggestions.pick}
                 />
               ) : null}
-              <ComposerSendControls
-                composerMode={composerMode}
-                statusText={statusText}
-                isAgentBusy={composer.isBusy}
-                isAgentStarting={composer.isStarting}
-                keepBusyDraftControls={composer.busyDraftLocked}
-                showBusySendControls={composer.isBusy || composer.busyDraftLocked}
-                hasComposerContent={composer.hasContent}
-                canSend={composer.delivery.canSend}
-                sendBehaviorMenuOpen={composer.delivery.sendBehaviorMenuOpen}
-                onSend={composer.delivery.send}
-                onSendFollowUp={composer.delivery.followUp}
-                onStop={composer.delivery.abort}
-                onToggleBehaviorMenu={composer.delivery.toggleSendBehaviorMenu}
-                onKeepBehaviorMenuOpen={composer.delivery.keepSendBehaviorMenuOpen}
-                onScheduleBehaviorMenuClose={composer.delivery.scheduleSendBehaviorMenuClose}
+              <ComposerBottomBar
+                state={composer.runtime?.state}
+                compacting={Boolean(composer.runtime?.state?.isCompacting)}
+                disabled={composer.isBusy || composer.isStarting}
+                composerAgentMode={composer.mode}
+                gitInfo={props.gitInfo}
+                record={composer.record}
+                feishuIndicator={feishuIndicator}
+                onPickModel={() => composer.pickers.open("model")}
+                onPickThinking={() => composer.pickers.open("thinking")}
+                onPickPromptTemplate={() => composer.pickers.open("template")}
+                onCompact={composer.delivery.compact}
+                onOpenComposerModePicker={() => composer.pickers.open("mode")}
+                onCancelPlan={() => composer.pickers.setMode("normal")}
+                onAttachFile={composer.editor.attachFile}
+                sendControls={
+                  <ComposerSendControls
+                    isAgentBusy={composer.isBusy}
+                    isAgentStarting={composer.isStarting}
+                    keepBusyDraftControls={composer.busyDraftLocked}
+                    showBusySendControls={composer.isBusy || composer.busyDraftLocked}
+                    hasComposerContent={composer.hasContent}
+                    canSend={composer.delivery.canSend}
+                    sendBehaviorMenuOpen={composer.delivery.sendBehaviorMenuOpen}
+                    onSend={composer.delivery.send}
+                    onSendFollowUp={composer.delivery.followUp}
+                    onStop={composer.delivery.abort}
+                    onToggleBehaviorMenu={composer.delivery.toggleSendBehaviorMenu}
+                    onKeepBehaviorMenuOpen={composer.delivery.keepSendBehaviorMenuOpen}
+                    onScheduleBehaviorMenuClose={composer.delivery.scheduleSendBehaviorMenuClose}
+                  />
+                }
               />
             </div>
           </footer>

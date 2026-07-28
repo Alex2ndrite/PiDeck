@@ -75,7 +75,7 @@ function fixture(overrides = {}) {
 		status: "idle",
 		createdAt: 2,
 	};
-	const calls = { createDraft: 0, createAgent: 0, send: [], stateTargets: [], messageSessions: [] };
+	const calls = { createDraft: 0, createAnonymous: 0, createAgent: 0, send: [], stateTargets: [], messageSessions: [] };
 	const targeted = (target, value) => ({ ok: true, value: { target, value } });
 	const deps = {
 		listProjects: () => [{ id: "project-1", name: "Project", path: "C:/project" }],
@@ -89,6 +89,26 @@ function fixture(overrides = {}) {
 		createSessionDraft: async (input) => {
 			calls.createDraft += 1;
 			return { ...session, projectId: input.projectId, title: input.title || session.title };
+		},
+		createAnonymousSession: async (input) => {
+			calls.createAnonymous += 1;
+			const anonymousSession = {
+				...session,
+				id: "anonymous-1",
+				projectId: input.projectId,
+				title: input.title || "Anonymous Chat",
+				noSession: true,
+				status: "active",
+			};
+			return {
+				session: anonymousSession,
+				runtime: {
+					...runtime,
+					sessionId: anonymousSession.id,
+					agentId: "anonymous-agent",
+					noSession: true,
+				},
+			};
 		},
 		updateSessionRecord: async (_sessionId, patch) => ({ ...session, ...patch }),
 		deleteSessionRecord: async () => true,
@@ -180,6 +200,22 @@ test("native Session HTTP routes create drafts and send by stable Session identi
 		assert.equal(prompted.result.sessionId, "session-1");
 		assert.equal(calls.send.length, 1);
 		assert.equal(calls.send[0].message, "hello");
+	});
+});
+
+test("anonymous Session HTTP route creates a runtime-only Session record", async () => {
+	await withServer(async ({ baseUrl, calls }) => {
+		const response = await fetch(`${baseUrl}/api/sessions/anonymous`, {
+			method: "POST",
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify({ projectId: "project-1", title: "Private work" }),
+		});
+		const created = await response.json();
+		assert.equal(created.session.id, "anonymous-1");
+		assert.equal(created.session.noSession, true);
+		assert.equal(created.runtime.noSession, true);
+		assert.equal(calls.createAnonymous, 1);
+		assert.equal(calls.createDraft, 0);
 	});
 });
 

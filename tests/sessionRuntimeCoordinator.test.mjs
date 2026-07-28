@@ -708,6 +708,36 @@ test("session runtime inventory and target expose the stable binding triple", ()
   }]);
 });
 
+test("anonymous runtime binds an existing --no-session process without attaching a file", async () => {
+  const { SessionRuntimeCoordinator } = loadCoordinator();
+  const harness = createHarness({
+    entry: { noSession: true, status: "active" },
+    tabs: [{
+      id: "anonymous-agent",
+      projectId: "project-1",
+      cwd: "C:/project",
+      title: "Anonymous Chat",
+      status: "idle",
+      noSession: true,
+      createdAt: 1,
+    }],
+  });
+  const coordinator = new SessionRuntimeCoordinator(harness.catalog, harness.agents, harness.sender);
+  const runtime = coordinator.bindAnonymousRuntime("session-1", "anonymous-agent");
+  assert.equal(runtime.noSession, true);
+  assert.equal(runtime.sessionPath, undefined);
+
+  const sent = await coordinator.send(prompt());
+  assert.equal(sent.accepted, true);
+  assert.equal(harness.calls.create, 0);
+  assert.equal(harness.calls.attach, 0);
+
+  const restarted = await coordinator.restartRuntime(runtime);
+  assert.equal(restarted.ok, true);
+  assert.equal(restarted.value.runtime.noSession, true);
+  assert.equal(harness.calls.attach, 0);
+});
+
 test("stale generation is rejected before a runtime command reaches AgentManager", async () => {
   const { SessionRuntimeCoordinator } = loadCoordinator();
   const harness = createHarness({

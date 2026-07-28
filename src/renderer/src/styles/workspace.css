@@ -2001,6 +2001,28 @@ html[data-theme="dark"] .scratch-pad-md mark {
   outline: none;
   box-shadow: var(--focus-ring);
 }
+/* 分支栏中未初始化 Git 时的初始化按钮 */
+.git-init-branch-btn {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.git-init-branch-btn:hover {
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 8%, transparent);
+}
+.git-init-branch-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 /* 分支下拉菜单与 GitCompactFilter 菜单统一风格；加强边框和 hover 区分度 */
 .git-branch-dropdown {
   position: absolute;
@@ -2517,6 +2539,49 @@ body.is-git-pane-resizing, body.is-git-pane-resizing * { cursor: row-resize !imp
 .git-resource-group.open .git-resource-group-actions { display: flex; }
 .git-resource-group-count { min-width: 14px; margin-left: var(--space-1); color: var(--git-desc-fg); font-family: var(--git-ui-font); font-size: var(--font-size-caption); text-align: right; }
 .git-resource-group-body { min-width: 0; }
+
+/* 变更文件树目录头 —— 点击折叠/展开 + 显示每个目录下的文件计数 */
+.git-tree-directory {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  cursor: pointer;
+  border-radius: var(--radius-xs);
+  user-select: none;
+}
+.git-tree-directory:hover {
+  background: var(--git-panel-hover);
+}
+.git-tree-chevron {
+  flex-shrink: 0;
+  color: var(--color-text-tertiary);
+  transition: transform 0.12s ease;
+}
+.git-tree-chevron.open {
+  transform: rotate(0deg);
+}
+.git-tree-chevron:not(.open) {
+  transform: rotate(-90deg);
+}
+.git-tree-directory-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-caption);
+  font-family: var(--font-family-business);
+}
+.git-tree-directory-count {
+  margin-left: auto;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-micro);
+  font-family: var(--font-family-business);
+  padding: 0 4px;
+}
+
 .git-resource-row {
   display: flex;
   height: 26px;
@@ -2622,6 +2687,12 @@ body.is-git-pane-resizing, body.is-git-pane-resizing * { cursor: row-resize !imp
   border-radius: var(--radius-md);
   background: var(--color-bg-panel);
   box-shadow: var(--shadow-lg), 0 0 0 1px rgba(0,0,0,0.04) inset;
+}
+.git-compact-filter-opt-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .git-compact-filter-opt {
   display: flex;

@@ -1,25 +1,27 @@
-import type { ReactNode } from "react";
+import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { X } from "lucide-react";
 
-export function IconButton(props: {
+export function IconButton(props: ButtonHTMLAttributes<HTMLButtonElement> & {
 	label: string;
 	children: ReactNode;
-	onClick?: () => void;
-	className?: string;
-	title?: string;
-	type?: "button" | "submit" | "reset";
-	disabled?: boolean;
 }) {
+	const {
+		children,
+		className,
+		label,
+		title,
+		type = "button",
+		...buttonProps
+	} = props;
 	return (
 		<button
-			type={props.type ?? "button"}
-			className={["ui-icon-button", props.className].filter(Boolean).join(" ")}
-			aria-label={props.label}
-			title={props.title ?? props.label}
-			onClick={props.onClick}
-			disabled={props.disabled}
+			{...buttonProps}
+			type={type}
+			className={["ui-icon-button", className].filter(Boolean).join(" ")}
+			aria-label={label}
+			title={title ?? label}
 		>
-			{props.children}
+			{children}
 		</button>
 	);
 }

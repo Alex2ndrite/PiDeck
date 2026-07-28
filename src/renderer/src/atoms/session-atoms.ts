@@ -29,6 +29,7 @@ export type SessionRuntimeViewState = {
   sessionPath?: string;
   createdAt?: number;
   compactionCount?: number;
+  noSession?: boolean;
 };
 
 export type SessionLoadState = {
@@ -70,6 +71,8 @@ export type SessionRuntimeUiState = {
 };
 
 export const sessionRecordsAtom = atom<Record<string, SessionRecord>>({});
+/** IDs detached from an in-memory runtime; rejects late catalog refreshes for them. */
+export const discardedTransientSessionIdsAtom = atom<Set<string>>(new Set<string>());
 export const sessionIdsByProjectAtom = atom<Record<string, string[]>>({});
 export const currentSessionIdAtom = atom<string | undefined>(undefined);
 export const sessionRuntimeByIdAtom = atom<Record<string, SessionRuntimeViewState>>({});
@@ -134,6 +137,7 @@ export const replaceSessionRuntimesAtom = atom(
         sessionPath: runtime.sessionPath,
         createdAt: runtime.createdAt,
         compactionCount: runtime.compactionCount,
+        noSession: runtime.noSession,
       };
     }
     set(sessionRuntimeByIdAtom, next);
@@ -143,16 +147,22 @@ export const replaceSessionRuntimesAtom = atom(
 export const replaceProjectSessionsAtom = atom(
   null,
   (get, set, input: { projectId: string; sessions: SessionRecord[] }) => {
+    const discardedTransientIds = get(discardedTransientSessionIdsAtom);
+    // A close can race a catalog scan that started before the runtime detached.
+    // Do not let that stale response resurrect a no-session row in the sidebar.
+    const sessions = input.sessions.filter((session) => (
+      !session.noSession || !discardedTransientIds.has(session.id)
+    ));
     const previousIds = get(sessionIdsByProjectAtom)[input.projectId] ?? [];
     // 轮询刷新绝大多数轮次内容未变；此时保持 atom 引用稳定，避免整棵侧栏重渲染。
-    if (sameProjectSessionList(previousIds, get(sessionRecordsAtom), input.sessions)) return;
-    const nextIds = input.sessions.map((session) => session.id);
+    if (sameProjectSessionList(previousIds, get(sessionRecordsAtom), sessions)) return;
+    const nextIds = sessions.map((session) => session.id);
     const nextIdSet = new Set(nextIds);
     const nextRecords = { ...get(sessionRecordsAtom) };
     for (const previousId of previousIds) {
       if (!nextIdSet.has(previousId)) delete nextRecords[previousId];
     }
-    for (const session of input.sessions) nextRecords[session.id] = session;
+    for (const session of sessions) nextRecords[session.id] = session;
     set(sessionRecordsAtom, nextRecords);
     set(sessionIdsByProjectAtom, {
       ...get(sessionIdsByProjectAtom),
@@ -162,6 +172,11 @@ export const replaceProjectSessionsAtom = atom(
 );
 
 export const upsertSessionAtom = atom(null, (get, set, session: SessionRecord) => {
+  if (session.noSession && get(discardedTransientSessionIdsAtom).has(session.id)) {
+    const nextDiscarded = new Set(get(discardedTransientSessionIdsAtom));
+    nextDiscarded.delete(session.id);
+    set(discardedTransientSessionIdsAtom, nextDiscarded);
+  }
   set(sessionRecordsAtom, {
     ...get(sessionRecordsAtom),
     [session.id]: session,
@@ -424,6 +439,17 @@ export const applySessionRuntimeEventAtom = atom(
       ) {
         return;
       }
+      // Anonymous records only exist while their --no-session runtime exists.
+      // Remove every renderer cache at detach so a future catalog refresh cannot
+      // leave a closed anonymous row selectable in the sidebar.
+      if (get(sessionRecordsAtom)[event.sessionId]?.noSession) {
+        set(
+          discardedTransientSessionIdsAtom,
+          new Set(get(discardedTransientSessionIdsAtom)).add(event.sessionId),
+        );
+        set(removeSessionStateAtom, event.sessionId);
+        return;
+      }
       const nextUiById = { ...get(sessionRuntimeUiByIdAtom) };
       delete nextUiById[event.sessionId];
       set(sessionRuntimeUiByIdAtom, nextUiById);
@@ -490,6 +516,7 @@ export const applySessionRuntimeEventAtom = atom(
           compactionCount: typeof payload.compactionCount === "number"
             ? payload.compactionCount
             : nextRuntime.compactionCount,
+          noSession: payload.noSession === true || nextRuntime.noSession,
         };
       }
     } else if (event.sourceChannel === "agents:runtime-state" && payload?.state) {

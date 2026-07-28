@@ -23,6 +23,8 @@ import type {
 	ConfigFileDiagnostic,
 	DraftMeta,
 	CreateSessionDraftInput,
+	CreateAnonymousSessionInput,
+	CreateAnonymousSessionResult,
 	UpdateSessionRecordInput,
 	SessionRecord,
 	CreatePiSkillInput,
@@ -338,6 +340,8 @@ const api = {
 			>,
 		createDraft: (input: CreateSessionDraftInput) =>
 			ipcRenderer.invoke(ipcChannels.sessionsCatalogCreateDraft, input) as Promise<SessionRecord>,
+		createAnonymous: (input: CreateAnonymousSessionInput) =>
+			ipcRenderer.invoke(ipcChannels.sessionsCreateAnonymous, input) as Promise<CreateAnonymousSessionResult>,
 		updateRecord: (sessionId: string, patch: UpdateSessionRecordInput) =>
 			ipcRenderer.invoke(
 				ipcChannels.sessionsCatalogUpdate,

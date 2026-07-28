@@ -33,6 +33,7 @@ export type GitGraphProps = {
     file: GitChangedFile,
   ) => void | Promise<void>;
   branches: string[];
+  currentBranch: string | null;
   open: boolean;
   height: number;
   onToggle: () => void;

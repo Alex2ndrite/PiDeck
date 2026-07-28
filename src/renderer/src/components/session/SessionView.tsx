@@ -1,6 +1,6 @@
 import { ChevronDown } from "lucide-react";
 import type { RefObject, ReactNode, MutableRefObject } from "react";
-import type { AgentRuntimeState, ImageContent, SessionRuntimeTarget } from "../../../../shared/types";
+import type { AgentRuntimeState, GitBranchInfo, ImageContent, SessionRuntimeTarget } from "../../../../shared/types";
 import type { SessionTimelineController } from "../../hooks/useSessionTimelineController";
 import type { QueuedPrompt } from "../../hooks/useQueuedPrompt";
 import type { PiDesktopApi } from "../../../../preload";
@@ -22,6 +22,7 @@ export type SessionViewProps = {
   activeAgentId?: string;
   activeAgent?: {
     compactionCount?: number;
+    noSession?: boolean;
     status?: string;
   } | null;
   activeRuntimeState?: AgentRuntimeState;
@@ -68,6 +69,7 @@ export type SessionViewProps = {
 
   // ── Composer ──
   enqueueSessionPrompt: (sessionId: string, snapshot: EnqueuePromptSnapshot) => boolean;
+  gitInfo?: GitBranchInfo;
   openFilePath?: (path: string) => void;
   ensureSessionId?: (sessionId: string) => Promise<string>;
   queuePanel?: ReactNode;
@@ -136,6 +138,7 @@ export function SessionView({
   onToast,
   canMutateActiveMessages,
   enqueueSessionPrompt,
+  gitInfo,
   openFilePath,
   ensureSessionId,
   queuePanel,
@@ -162,6 +165,7 @@ export function SessionView({
         comboRef={sessionComboRef}
         title={sessionTitle}
         compactionCount={activeAgent?.compactionCount}
+        isAnonymous={activeAgent?.noSession}
         runtimeState={activeRuntimeState}
         duration={sessionDuration}
         isStarting={isAgentStarting}
@@ -227,6 +231,7 @@ export function SessionView({
         <ComposerArea
           ref={composerRef}
           sessionId={sessionId}
+          gitInfo={gitInfo}
           onOpenFile={openFilePath}
           enqueue={enqueueSessionPrompt}
           ensureSessionId={ensureSessionId}

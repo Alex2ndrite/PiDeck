@@ -1,4 +1,4 @@
-import { ChevronDown, Plus } from "lucide-react";
+import { ChevronDown, HatGlasses, Plus } from "lucide-react";
 import { useAtomValue } from "jotai";
 import { selectAtom } from "jotai/utils";
 import { useMemo, type RefObject } from "react";
@@ -15,6 +15,7 @@ type HeaderActions = {
   headerRef: RefObject<HTMLElement | null>;
   comboRef: RefObject<HTMLDivElement | null>;
   compactionCount?: number;
+  isAnonymous?: boolean;
   duration?: number;
   hasProject: boolean;
   menuOpen: boolean;
@@ -70,12 +71,18 @@ export function SessionHeader(props: SessionHeaderProps) {
     ? runtime?.status === "starting" || sendState?.status === "activating"
     : legacyProps.isStarting;
   const hasSession = sessionMode ? Boolean(session) : legacyProps.hasSession;
+  const isAnonymous = props.isAnonymous || (sessionMode && session?.noSession === true);
 
   return (
     <header ref={props.headerRef} className="chat-header">
       <div className="chat-title-block">
         <div className="chat-title-row">
           <strong title={title}>{title}</strong>
+          {isAnonymous && (
+            <span className="anonymous-badge" title={t("app.anonymousChat")} aria-label={t("app.anonymousChat")}>
+              <HatGlasses size={14} aria-hidden="true" />
+            </span>
+          )}
           {props.compactionCount ? (
             <span
               className="compaction-count-badge"

@@ -215,6 +215,50 @@ test("ignores late events from an older runtime generation", () => {
   assert.equal(messages[0].text, "new runtime");
 });
 
+test("anonymous detach clears its record and rejects a late catalog refresh", () => {
+  const atoms = loadAtoms();
+  const store = createStore();
+  const anonymous = session("anonymous-1", "project-1", {
+    noSession: true,
+    status: "active",
+  });
+  store.set(atoms.replaceProjectSessionsAtom, {
+    projectId: "project-1",
+    sessions: [anonymous],
+  });
+  store.set(atoms.applySessionRuntimeEventAtom, {
+    sessionId: anonymous.id,
+    agentId: "anonymous-agent",
+    runtimeGeneration: 1,
+    sourceChannel: "agents:state",
+    payload: {
+      id: "anonymous-agent",
+      projectId: "project-1",
+      cwd: "C:/project",
+      status: "idle",
+      createdAt: 1,
+      noSession: true,
+    },
+  });
+  store.set(atoms.applySessionRuntimeEventAtom, {
+    kind: "detach",
+    sessionId: anonymous.id,
+    agentId: "anonymous-agent",
+    runtimeGeneration: 1,
+    sourceChannel: "sessions:runtime-detach",
+    payload: null,
+  });
+  assert.equal(store.get(atoms.sessionRecordsAtom)[anonymous.id], undefined);
+  assert.equal(store.get(atoms.discardedTransientSessionIdsAtom).has(anonymous.id), true);
+
+  store.set(atoms.replaceProjectSessionsAtom, {
+    projectId: "project-1",
+    sessions: [anonymous],
+  });
+  assert.equal(store.get(atoms.sessionRecordsAtom)[anonymous.id], undefined);
+  assert.deepEqual(store.get(atoms.sessionIdsByProjectAtom)["project-1"], []);
+});
+
 test("isolates composer state and only clears the submitted snapshot", () => {
   const atoms = loadAtoms();
   const store = createStore();

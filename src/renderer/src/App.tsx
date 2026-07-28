@@ -893,6 +893,7 @@ export function App() {
     copySidebarSession: runCopySidebarSession,
     exportSidebarSession: runExportSidebarSession,
     createSessionDraft: runCreateSessionDraft,
+    createAnonymousSession: runCreateAnonymousSession,
   } = useSessionActions({
     openSessionRequestRef,
     creatingSessionDraftRef,
@@ -1436,6 +1437,23 @@ export function App() {
     const target = getRuntimeTargetForAgent(agentId);
     if (!target) return;
     requireSessionCommand(await api.sessions.stopRuntime(target));
+  }
+
+  function requestCloseAgent(agent: AgentTab): Promise<void> {
+    if (!agent.noSession) return closeAgent(agent.id);
+    overlays.showConfirm({
+      title: t("app.anonymousChatCloseTitle"),
+      message: t("app.anonymousChatCloseBody"),
+      danger: true,
+      confirmLabel: t("common.close"),
+      onConfirm: () => {
+        overlays.clearConfirm();
+        void closeAgent(agent.id).catch((error) => {
+          showToast(error instanceof Error ? error.message : String(error), 5000);
+        });
+      },
+    });
+    return Promise.resolve();
   }
 
   async function abortAgent(agentId = activeAgentId) {
@@ -1988,6 +2006,7 @@ export function App() {
     sessions: {
       open: runOpenSidebarSessionById,
       createDraft: runCreateSessionDraft,
+      createAnonymous: runCreateAnonymousSession,
       deleteDraft: deleteDraftSession,
       rename: rename.openSessionRename,
       export: runExportSidebarSession,
@@ -2011,7 +2030,7 @@ export function App() {
         showToast(t("common.copied"));
       },
       openSessionFile: (agent) => agent.sessionPath ? api.files.open(agent.sessionPath) : Promise.resolve(),
-      close: (agent) => closeAgent(agent.id),
+      close: requestCloseAgent,
     },
     worktrees: {
       create: async (projectId, branchName) => {
@@ -2109,6 +2128,7 @@ export function App() {
       restartingAgentId={restartingAgentId}
       sessionDurationByAgent={sessionDurationByAgent}
       activeProjectId={activeProjectId}
+      gitInfo={gitInfo}
       showThinking={settings.showThinking}
       validCommandNames={validCommandNames}
       validFilePaths={validFilePaths}

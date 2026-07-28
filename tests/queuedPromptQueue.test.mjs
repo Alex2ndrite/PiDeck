@@ -134,15 +134,15 @@ test("busy composer keeps stop and queued-send controls separate", () => {
   const sendControls = componentInvocation(composerAreaSource, "ComposerSendControls");
 
   assert.match(sendControls, /onSendFollowUp=\{composer\.delivery\.followUp\}/);
-  assert.match(composerPanelsSource, /className="btn-circle stop"/);
+  assert.match(composerPanelsSource, /className="composer-bar-btn stop"/);
   assert.match(composerPanelsSource, /className="send-behavior-toggle"/);
   assert.match(composerPanelsSource, /className="send-behavior-primary"/);
   assert.match(composerPanelsSource, /className="send-behavior-chevron"/);
   assert.match(composerPanelsSource, /\{props\.showBusySendControls && props\.hasComposerContent && \(/);
   assert.match(composerPanelsSource, /\) : !props\.keepBusyDraftControls \? \(/);
   assert.match(sendControls, /showBusySendControls=\{composer\.isBusy \|\| composer\.busyDraftLocked\}/);
-  assert.match(stylesSource, /\.send-behavior-menu-wrap \{[\s\S]*?gap: 8px;/);
-  assert.match(stylesSource, /\.composer-footer \.send-behavior-toggle \{[\s\S]*?height: 36px;[\s\S]*?background: var\(--color-accent\);[\s\S]*?border-radius: var\(--radius-pill\)/);
+  assert.match(stylesSource, /\.send-behavior-menu-wrap \{[\s\S]*?gap: 6px;/);
+  assert.match(stylesSource, /\.composer-bottom-bar \.send-behavior-toggle \{[\s\S]*?height: 28px;[\s\S]*?background: var\(--color-accent\);[\s\S]*?border-radius: var\(--radius-sm\)/);
   assert.match(stylesSource, /\.send-behavior-chevron \{[\s\S]*?border-left:/);
   assert.match(composerPanelsSource, /className="send-behavior-primary"[\s\S]*?onClick=\{props\.onSend\}/);
   assert.match(composerPanelsSource, /className="send-behavior-chevron"[\s\S]*?onMouseEnter=\{props\.onKeepBehaviorMenuOpen\}[\s\S]*?onClick=\{props\.onToggleBehaviorMenu\}/);
@@ -166,8 +166,8 @@ test("composer keeps native typing inside the Session feature root", () => {
   assert.doesNotMatch(queuedPromptHookSource, /promptByAgent/);
   assert.match(appSource, /livePromptByAgentRef\.current = migrateAgentRecord/);
   assert.match(composerPanelsSource, /props\.sendBehaviorMenuOpen &&\s*props\.showBusySendControls &&\s*props\.hasComposerContent/);
-  assert.match(composerPanelsSource, /className="send-behavior-option steer"\s*type="button"/);
-  assert.match(composerPanelsSource, /className="send-behavior-option follow-up"\s*type="button"/);
+  assert.match(composerPanelsSource, /className="send-behavior-option steer"[\s\S]*?role="menuitem"/);
+  assert.match(composerPanelsSource, /className="send-behavior-option follow-up"[\s\S]*?role="menuitem"/);
 });
 
 test("queue drain is serialized and waits for an ordered canonical Session capability event", () => {

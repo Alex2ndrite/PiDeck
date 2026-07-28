@@ -7,6 +7,8 @@ import type {
 	AgentRuntimeState,
 	AppSettings,
 	ChatMessage,
+	CreateAnonymousSessionInput,
+	CreateAnonymousSessionResult,
 	CreateSessionDraftInput,
 	ImageContent,
 	PiCommand,
@@ -36,6 +38,7 @@ type WebServiceDependencies = {
 	getSessionRuntimeMessages: (sessionId: string) => SessionTargetedValue<ChatMessage[]> | undefined;
 	listCatalogSessions: (projectId?: string) => Promise<SessionRecord[]>;
 	createSessionDraft: (input: CreateSessionDraftInput) => Promise<SessionRecord>;
+	createAnonymousSession: (input: CreateAnonymousSessionInput) => Promise<CreateAnonymousSessionResult>;
 	updateSessionRecord: (sessionId: string, patch: UpdateSessionRecordInput) => Promise<SessionRecord>;
 	deleteSessionRecord: (sessionId: string) => Promise<boolean>;
 	copySessionRecord: (sessionId: string) => Promise<{ cancelled?: boolean; targetSessionId?: string }>;
@@ -226,6 +229,16 @@ export class WebServiceManager {
 				}
 				const session = await this.deps.createSessionDraft(body);
 				this.sendJson(response, { session });
+				return;
+			}
+			if (url.pathname === "/api/sessions/anonymous" && request.method === "POST") {
+				const body = await this.readJson<CreateAnonymousSessionInput>(request);
+				if (!body.projectId?.trim()) {
+					this.sendError(response, 400, "webError.projectIdRequired", "projectId is required");
+					return;
+				}
+				const result = await this.deps.createAnonymousSession(body);
+				this.sendJson(response, result);
 				return;
 			}
 			const sessionRecordActionMatch = url.pathname.match(

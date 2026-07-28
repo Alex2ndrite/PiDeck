@@ -182,7 +182,10 @@ export class SessionRuntimeCoordinator {
 		if (!agentId) return undefined;
 		const tab = this.agents.list().find((candidate) => candidate.id === agentId);
 		if (tab && !isTerminalAgent(tab)) return agentId;
-		this.unbindAgent(agentId);
+		// A terminal process cannot safely receive a delayed prompt result. Remove
+		// the binding even if its dispatch lease has not unwound yet, which makes
+		// that result fail closed instead of reviving a dead runtime association.
+		this.unbindTerminalAgent(agentId);
 		return undefined;
 	}
 
@@ -227,6 +230,23 @@ export class SessionRuntimeCoordinator {
 		} catch (error) {
 			return this.commandFailure(error);
 		}
+	}
+
+	/**
+	 * An anonymous record already has a process created with `--no-session`.
+	 * Bind it directly instead of routing it through normal activation, which
+	 * would otherwise create a second runtime and a persisted pi session.
+	 */
+	bindAnonymousRuntime(sessionId: string, agentId: string): SessionRuntimeInfo {
+		const entry = this.catalog.get(sessionId);
+		if (!entry?.noSession) throw new Error(`Anonymous session not found: ${sessionId}`);
+		const tab = this.agents.list().find((candidate) => candidate.id === agentId);
+		if (!tab?.noSession || isTerminalAgent(tab)) {
+			throw new Error(`Anonymous runtime is not available: ${agentId}`);
+		}
+		const runtimeGeneration = this.bind(sessionId, agentId);
+		tab.runtimeGeneration = runtimeGeneration;
+		return this.runtimeInfo(sessionId, tab);
 	}
 
 	validateTarget(target: SessionRuntimeTarget): SessionCommandResult<SessionRuntimeTarget> {
@@ -564,6 +584,11 @@ export class SessionRuntimeCoordinator {
 		this.unbindAgentUnchecked(agentId);
 	}
 
+	/** Fail closed after a process reaches a terminal state, including mid-dispatch. */
+	unbindTerminalAgent(agentId: string): void {
+		this.unbindAgentUnchecked(agentId);
+	}
+
 	private unbindAgentUnchecked(agentId: string): void {
 		const replacement = this.replacementByAgent.get(agentId);
 		if (replacement) this.releaseRuntimeReplacement(replacement);
@@ -604,7 +629,7 @@ export class SessionRuntimeCoordinator {
 			this.unbindAgentUnchecked(agentId);
 			const runtimeGeneration = this.bind(sessionId, tab.id);
 			tab.runtimeGeneration = runtimeGeneration;
-			if (tab.sessionPath) {
+			if (tab.sessionPath && !entry.noSession) {
 				await this.catalog.attachRuntime({
 					sessionId,
 					filePath: tab.sessionPath,
@@ -666,7 +691,7 @@ export class SessionRuntimeCoordinator {
 			if (!currentTab) {
 				return this.unknownDelivery(input, "Session runtime stopped during prompt dispatch");
 			}
-			if (currentTab.sessionPath) {
+			if (currentTab.sessionPath && !this.catalog.get(input.sessionId)?.noSession) {
 				await this.catalog.attachRuntime({
 					sessionId: input.sessionId,
 					filePath: currentTab.sessionPath,
@@ -730,6 +755,7 @@ export class SessionRuntimeCoordinator {
 				wslDistro: entry.wslDistro,
 				wslUser: entry.wslUser,
 				importedSourceId: entry.importedSourceId,
+				noSession: entry.noSession,
 			});
 		}
 		if (tab.status === "starting") tab = await this.waitUntilReady(tab);
@@ -747,7 +773,7 @@ export class SessionRuntimeCoordinator {
 
 		const runtimeGeneration = this.bind(sessionId, tab.id);
 		tab.runtimeGeneration = runtimeGeneration;
-		if (tab.sessionPath) {
+		if (tab.sessionPath && !entry.noSession) {
 			await this.catalog.attachRuntime({
 				sessionId,
 				filePath: tab.sessionPath,
@@ -995,6 +1021,7 @@ export class SessionRuntimeCoordinator {
 			sessionPath: tab.sessionPath,
 			createdAt: tab.createdAt,
 			compactionCount: tab.compactionCount,
+			noSession: tab.noSession,
 		};
 	}
 

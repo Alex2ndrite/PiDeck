@@ -1291,6 +1291,13 @@ body.is-resizing .wechat-shell {
   display: block;
   flex: none;
 }
+.ui-button-content {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  max-width: 100%;
+}
 /* Button loading 状态 */
 .ui-button-loading {
   position: relative;
@@ -1645,6 +1652,18 @@ body:not(.is-list-resizing)
   background: color-mix(in srgb, var(--color-accent) 12%, transparent);
   color: var(--color-accent);
   margin-left: 2px;
+}
+.conversation-title .anonymous-indicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  margin-left: 4px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-text-primary) 8%, transparent);
+  color: var(--color-text-tertiary);
 }
 .chat-agent-id {
   display: inline-flex;

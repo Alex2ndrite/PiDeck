@@ -35,6 +35,8 @@ export const ipcChannels = {
 	/** Session-first catalog APIs. */
 	sessionsCatalogList: "sessions:catalog-list",
 	sessionsCatalogCreateDraft: "sessions:catalog-create-draft",
+	/** Starts an in-memory `--no-session` conversation. */
+	sessionsCreateAnonymous: "sessions:create-anonymous",
 	sessionsCatalogUpdate: "sessions:catalog-update",
 	sessionsCatalogDelete: "sessions:catalog-delete",
 	sessionsCatalogReadMessages: "sessions:catalog-read-messages",

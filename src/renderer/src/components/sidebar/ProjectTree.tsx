@@ -1,8 +1,8 @@
-import { Filter, FolderCog, Play, Plus } from "lucide-react";
+import { Filter, FolderCog, HatGlasses, Play, Plus } from "lucide-react";
 import type { DragEvent } from "react";
-import type { Project, SessionSource, WorktreeEntry } from "../../../../shared/types";
+import type { Project, WorktreeEntry } from "../../../../shared/types";
 import { ProjectAvatar } from "./SidebarParts";
-import { SIDEBAR_SESSION_SOURCES, type SidebarController } from "../../hooks/useSidebarController";
+import type { SidebarController } from "../../hooks/useSidebarController";
 import { t } from "../../i18n";
 import type { SidebarActions } from "./SidebarContent";
 import { SessionTree } from "./SessionTree";
@@ -78,21 +78,32 @@ export function ProjectTree(props: {
           <ProjectAvatar name={projectDirectoryName} kind={chat ? "chat" : "project"} />
           <div className="conversation-body"><div className="conversation-title">
             <strong title={project.path}>{projectDirectoryName}</strong>
-            <span className="filter-indicator" role="button" tabIndex={0} title={t("menu.filterSessions")}
-              onClick={(event) => { event.stopPropagation(); props.controller.openSourceFilter(project.id); }}
-              onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); props.controller.openSourceFilter(project.id); } }}
-            ><Filter size={12} /></span>
-            {sourceFilter !== null && <Filter size={12} className="filter-indicator" />}
+            {sourceFilter !== null && (
+              <span
+                className="filter-indicator"
+                role="button"
+                tabIndex={0}
+                title={t("menu.filterSessions")}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  props.controller.openSourceFilter(project.id, event.clientX, event.clientY);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    const rect = event.currentTarget.getBoundingClientRect();
+                    props.controller.openSourceFilter(project.id, rect.left, rect.bottom);
+                  }
+                }}
+              ><Filter size={12} /></span>
+            )}
           </div>{chat && <p className="chat-project-guide">{t("app.projectChatGuide")}</p>}</div>
           <span className="project-row-actions">
             {chat && props.actions.projects.changeChatPath && <span className="project-action" title={t("app.chatProjectSettings")} onClick={(event) => { event.stopPropagation(); void props.actions.projects.changeChatPath!(project); }}><FolderCog size={14} /></span>}
             <span className="project-action" title={t("app.projectNewAgent")} onClick={(event) => { event.stopPropagation(); void props.actions.sessions.createDraft(project.id); }}><Plus size={14} /></span>
+            <span className="project-action" title={t("app.anonymousChat")} onClick={(event) => { event.stopPropagation(); void props.actions.sessions.createAnonymous(project.id); }}><HatGlasses size={14} /></span>
           </span>
         </button>
-        {!collapsed && props.controller.sourceFilterOpenProjectId === project.id && <div className="session-source-filter-menu">
-          {SIDEBAR_SESSION_SOURCES.map((source) => <label key={source}><input type="checkbox" checked={sourceFilter === null || sourceFilter.has(source)} onChange={(event) => props.controller.setSourceEnabled(project.id, source as SessionSource, event.target.checked)} />{t(`sessionSource.${source}` as never)}</label>)}
-          <button onClick={() => { props.controller.clearSourceFilter(project.id); props.controller.closeSourceFilter(); }}>{t("common.clear")}</button>
-        </div>}
         {!collapsed && project.worktreeEnabled && <WorktreeTree
           project={project}
           controller={props.controller}

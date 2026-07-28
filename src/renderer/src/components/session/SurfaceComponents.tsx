@@ -1002,7 +1002,7 @@ export const UserBubble = memo(function UserBubble(props: {
 	};
 	/** 编辑后重发：放回 composer 输入框，由用户自行修改后发送。 */
 	const handleEditAndResend = () => {
-		document.querySelector<HTMLTextAreaElement>(".composer-box textarea")?.focus();
+		document.querySelector<HTMLElement>(".composer-box .rich-input, .composer-box textarea")?.focus();
 		window.dispatchEvent(
 			new CustomEvent("user-message-edit", { detail: { text: message.text } }),
 		);

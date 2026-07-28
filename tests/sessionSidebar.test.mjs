@@ -163,6 +163,22 @@ test("AppSidebar owns the controller while App keeps business actions as ports",
   assert.match(projectTree, /if \(props\.controller\.search\.trim\(\)\) return;/);
 });
 
+test("sidebar uses the dev-style source filter overlay and anonymous Session entry", () => {
+  const projectTree = readFileSync("src/renderer/src/components/sidebar/ProjectTree.tsx", "utf8");
+  const sessionTree = readFileSync("src/renderer/src/components/sidebar/SessionTree.tsx", "utf8");
+  const content = readFileSync("src/renderer/src/components/sidebar/SidebarContent.tsx", "utf8");
+  const controller = readFileSync("src/renderer/src/hooks/useSidebarController.ts", "utf8");
+  const header = readFileSync("src/renderer/src/components/session/SessionHeader.tsx", "utf8");
+  assert.doesNotMatch(projectTree, /sourceFilterOpenProjectId|session-source-filter-menu/);
+  assert.match(projectTree, /sourceFilter !== null/);
+  assert.match(projectTree, /createAnonymous\(project\.id\)/);
+  assert.match(content, /SessionSourceFilterMenu/);
+  assert.match(controller, /toggleSourceFilter/);
+  assert.match(sessionTree, /anonymous-indicator/);
+  assert.match(sessionTree, /runtimeBySessionId\[session\.id\]\?\.agentId === child\.agent\.id/);
+  assert.match(header, /anonymous-badge/);
+});
+
 test("ProjectTree shows the project directory name like the dev reference", () => {
   const projectTree = readFileSync("src/renderer/src/components/sidebar/ProjectTree.tsx", "utf8");
   assert.match(projectTree, /function displayProjectDirectoryName\(project: Project\)/);

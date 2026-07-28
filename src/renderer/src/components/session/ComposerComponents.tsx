@@ -1,8 +1,30 @@
 import { useState, useRef, useEffect, useCallback, type ReactNode } from "react";
-import { ChevronDown, ChevronLeft, ChevronsDownUp, ChevronsUpDown, Eye, FileText, MoveDown, MoveUp, Paperclip, Star, Search, X } from "lucide-react";
+import {
+	ChevronDown,
+	ChevronLeft,
+	ChevronsDownUp,
+	ChevronsUpDown,
+	Eye,
+	FileText,
+	GitBranch,
+	ListChecks,
+	MoveDown,
+	MoveUp,
+	Paperclip,
+	Star,
+	Wrench,
+	X,
+} from "lucide-react";
 import { t, type TranslationKey } from "../../i18n";
+import { Button } from "../ui/Button";
 import { IconButton } from "../ui/IconButton";
-import type { AppSettings, AgentTab, Project, AgentRuntimeState, ComposerAgentMode, AvailableModel } from "../../../../shared/types";
+import type {
+	AgentRuntimeState,
+	AvailableModel,
+	ComposerAgentMode,
+	GitBranchInfo,
+	SessionRecord,
+} from "../../../../shared/types";
 
 
 /** 单个 extension widget 卡片：可折叠标题栏 + 内容行，支持手动关闭 */
@@ -97,108 +119,149 @@ export function ExtensionWidgetCard(props: {
 	);
 }
 
-export function ComposerToolbar(props: {
+export function ComposerBottomBar(props: {
 	state?: AgentRuntimeState;
 	compacting: boolean;
 	disabled?: boolean;
+	composerAgentMode: ComposerAgentMode;
+	gitInfo?: GitBranchInfo;
+	/** Draft sessions do not have a runtime yet, so retain their persisted settings in the bar. */
+	record?: Pick<SessionRecord, "model" | "thinkingLevel">;
+	feishuIndicator?: ReactNode;
+	sendControls: ReactNode;
 	onPickModel: () => void;
 	onPickPromptTemplate: () => void;
 	onPickThinking: () => void;
 	onCompact: () => void;
-	/** 当前发送模式，用于按钮文字和轻高亮 */
-	composerAgentMode?: ComposerAgentMode;
-	onOpenComposerModePicker?: () => void;
-	/** 取消计划模式：直接切回普通发送模式，不经过模式选择器 */
-	onCancelPlan?: () => void;
-	/** 在思考按钮后插入的额外指示器（如飞书链接状态） */
-	feishuIndicator?: ReactNode;
-	/** 会话文件路径卡片,渲染在思考按钮之后、feishuIndicator 之后 */
-	pathIndicator?: ReactNode;
-	/** 文件引用按钮回调 */
-	onAttachFile?: () => void;
-
+	onOpenComposerModePicker: () => void;
+	onCancelPlan: () => void;
+	onAttachFile: () => void;
 }) {
 	const ctxPercent = props.state?.contextPercent;
 	const showCompact = ctxPercent != null && ctxPercent > 30;
-	const currentThinkingLevel = props.state?.thinkingLevel;
+	const contextPercent = ctxPercent ?? 0;
+	const currentThinkingLevel = props.state?.thinkingLevel ?? props.record?.thinkingLevel;
 	const thinkingLevelLabel = currentThinkingLevel
 		? THINKING_LEVELS.find((level) => level.value === currentThinkingLevel)?.labelKey
 		: undefined;
-	const thinkingDisplay = thinkingLevelLabel ? t(thinkingLevelLabel) : "-";
-
-	// mode 选择器：和模型/思考面板保持一致，默认普通。
-	const activeMode = props.composerAgentMode ?? "normal";
-	const activeModeLabel = activeMode === "plan" ? t("app.composerModePlan") : t("app.composerModeNormal");
+	const thinkingDisplay = thinkingLevelLabel
+		? t(thinkingLevelLabel)
+		: currentThinkingLevel ?? t("app.think");
+	const isPlanMode = props.composerAgentMode === "plan";
+	const modeLabel = isPlanMode
+		? t("app.composerModePlan")
+		: t("app.composerModeNormal");
+	const modelLabel = props.state?.modelName
+		? `${props.state.provider ? `${props.state.provider}/` : ""}${props.state.modelName}`
+		: props.record?.model
+			? `${props.record.model.provider}/${props.record.model.modelId}`
+			: `${t("app.model")}: -`;
 
 	return (
-		<div className="composer-toolbar">
-			{props.onOpenComposerModePicker && (
-				<button
-					className={activeMode === "plan" ? "composer-mode-active" : ""}
-					disabled={props.disabled}
-					onClick={props.onOpenComposerModePicker}
-					title={t("app.composerModeTitle")}
-				>
-					{activeModeLabel}
-				</button>
-			)}
-			{activeMode === "plan" && props.onCancelPlan && (
-				<button
-					className="composer-mode-cancel"
-					disabled={props.disabled}
-					onClick={props.onCancelPlan}
-					title={t("app.composerModeCancelPlan")}
-				>
-					<X size={14} strokeWidth={2.5} aria-hidden="true" />
-					{t("app.composerModeCancelPlan")}
-				</button>
-			)}
-			<button className="model" onClick={props.onPickModel} disabled={props.disabled}>
-				{t("app.model")}: {props.state?.provider ? `${props.state.provider}/` : ""}{props.state?.modelName ?? "-"}
-			</button>
-			<button
-				onClick={props.onPickPromptTemplate}
-				disabled={props.disabled}
-				title={t("app.promptTemplatePickerTitle")}
-			>
-				{t("app.promptTemplatePickerTitle")}
-			</button>
-			<button className="thinking" onClick={props.onPickThinking} disabled={props.disabled}>
-				{t("app.think")}: {thinkingDisplay}
-			</button>
-			{props.onAttachFile && (
-				<button
-					onClick={props.onAttachFile}
-					disabled={props.disabled}
-					title={t("menu.attachFile")}
-				>
-					<Paperclip size={14} strokeWidth={1.8} />
-					{t("menu.attachFile")}
-				</button>
-			)}
-			{props.feishuIndicator}
-			{props.pathIndicator}
-
-			{showCompact && (
-				<button
-					className={
-						props.state?.isCompacting || props.compacting ? "compacting" : ""
-					}
-					disabled={
-						props.state?.isCompacting ||
-						props.compacting ||
-						!!props.state?.isStreaming
-					}
-					title={t("app.contextCompactTitle", {
-						percent: ctxPercent.toFixed(1),
-					})}
-					onClick={props.onCompact}
-				>
-					{props.state?.isCompacting || props.compacting
-						? t("app.compacting")
-						: `${t("app.compact")} ${ctxPercent.toFixed(0)}%`}
-				</button>
-			)}
+		<div className="composer-bottom-bar">
+			<div className="composer-bottom-layout">
+				<div className="composer-bottom-left">
+					<Button
+						variant="ghost"
+						buttonSize="sm"
+						className={`composer-bar-btn${isPlanMode ? " active" : ""}`}
+						disabled={props.disabled}
+						onClick={props.onOpenComposerModePicker}
+						title={t("app.composerModeTitle")}
+					>
+						{isPlanMode ? (
+							<ListChecks size={15} strokeWidth={2} aria-hidden="true" />
+						) : (
+							<Wrench size={15} strokeWidth={2} aria-hidden="true" />
+						)}
+						<span>{modeLabel}</span>
+					</Button>
+					{isPlanMode && (
+						<IconButton
+							className="composer-bar-btn icon mode-cancel"
+							label={t("app.composerModeCancelPlan")}
+							disabled={props.disabled}
+							onClick={props.onCancelPlan}
+						>
+							<X size={14} strokeWidth={2.2} aria-hidden="true" />
+						</IconButton>
+					)}
+					<IconButton
+						className="composer-bar-btn icon"
+						label={t("app.promptTemplatePickerTitle")}
+						disabled={props.disabled}
+						onClick={props.onPickPromptTemplate}
+					>
+						<FileText size={15} strokeWidth={1.8} aria-hidden="true" />
+					</IconButton>
+					<IconButton
+						className="composer-bar-btn icon"
+						label={t("menu.attachFile")}
+						disabled={props.disabled}
+						onClick={props.onAttachFile}
+					>
+						<Paperclip size={15} strokeWidth={1.8} aria-hidden="true" />
+					</IconButton>
+					{props.feishuIndicator}
+				</div>
+				<div className="composer-bottom-center">
+					<Button
+						variant="ghost"
+						buttonSize="sm"
+						className="composer-bar-btn model"
+						disabled={props.disabled}
+						onClick={props.onPickModel}
+						title={t("app.modelPickerTitle")}
+					>
+						{modelLabel}
+					</Button>
+					<Button
+						variant="ghost"
+						buttonSize="sm"
+						className="composer-bar-btn thinking"
+						disabled={props.disabled}
+						onClick={props.onPickThinking}
+						title={t("app.thinkingPickerTitle")}
+					>
+						{thinkingDisplay}
+					</Button>
+					{showCompact && (
+						<Button
+							variant="ghost"
+							buttonSize="sm"
+							className={`composer-bar-btn${props.state?.isCompacting || props.compacting ? " compacting" : ""}`}
+							disabled={
+								props.state?.isCompacting ||
+								props.compacting ||
+								Boolean(props.state?.isStreaming)
+							}
+							title={t("app.contextCompactTitle", {
+								percent: contextPercent.toFixed(1),
+							})}
+							onClick={props.onCompact}
+						>
+							{props.state?.isCompacting || props.compacting
+								? t("app.compacting")
+								: `${t("app.compact")} ${contextPercent.toFixed(0)}%`}
+						</Button>
+					)}
+				</div>
+				<div className="composer-bottom-right">
+					{props.gitInfo?.current && (
+						<span
+							className="composer-bar-branch"
+							title={t("app.branchCurrent", {
+								branch: props.gitInfo.current,
+								count: props.gitInfo.branches.length,
+							})}
+						>
+							<GitBranch size={12} strokeWidth={1.8} aria-hidden="true" />
+							<span className="composer-bar-branch-name">{props.gitInfo.current}</span>
+						</span>
+					)}
+					{props.sendControls}
+				</div>
+			</div>
 		</div>
 	);
 }

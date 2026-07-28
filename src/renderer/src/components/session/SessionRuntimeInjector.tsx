@@ -1,6 +1,6 @@
 import React from "react";
 import { useAtomValue, useSetAtom } from "jotai";
-import type { AgentTab, AgentUiResponse, ChatMessage } from "../../../../shared/types";
+import type { AgentTab, AgentUiResponse, ChatMessage, GitBranchInfo } from "../../../../shared/types";
 import type { ImageContent } from "../../../../shared/types";
 import { settingsOpenAtom } from "../../atoms";
 import {
@@ -70,6 +70,7 @@ export interface SessionRuntimeInjectorProps {
 
   // Project
   activeProjectId: string | undefined;
+  gitInfo: GitBranchInfo;
 
   // Settings
   showThinking: boolean;
@@ -144,6 +145,7 @@ export const SessionRuntimeInjector = React.memo(function SessionRuntimeInjector
     restartingAgentId,
     sessionDurationByAgent,
     activeProjectId,
+    gitInfo,
     showThinking,
     validCommandNames,
     validFilePaths,
@@ -286,6 +288,7 @@ export const SessionRuntimeInjector = React.memo(function SessionRuntimeInjector
       onToast={(message: string) => showToast(message)}
       canMutateActiveMessages={canMutateActiveMessages}
       enqueueSessionPrompt={enqueueSessionPrompt}
+      gitInfo={gitInfo}
       ensureSessionId={ensureSessionId}
       openFilePath={onOpenFile}
       runtimeUi={

@@ -444,14 +444,18 @@
 .feishu-link-indicator {
   display: inline-flex;
   align-items: center;
+  flex: 0 1 auto;
+  min-width: 0;
   position: relative;
 }
 
-/* 在 toolbar 中与按钮高度对齐 */
-.feishu-link-trigger {
+/* 与 composer 底栏的紧凑控件保持同一高度。 */
+.composer-bottom-left .feishu-link-trigger {
   display: inline-flex;
   align-items: center;
   gap: 5px;
+  min-width: 0;
+  max-width: min(156px, 100%);
   height: var(--control-height-xs);
   border: 0;
   border-radius: var(--radius-xs);
@@ -465,25 +469,25 @@
     color 0.12s,
     background 0.12s;
 }
-.feishu-link-trigger:hover {
+.composer-bottom-left .feishu-link-trigger:hover {
   color: var(--color-accent);
   background: var(--color-bg-active);
 }
-.feishu-link-trigger:focus-visible {
+.composer-bottom-left .feishu-link-trigger:focus-visible {
   outline: var(--focus-ring);
   outline-offset: 1px;
 }
-.feishu-link-trigger:active {
+.composer-bottom-left .feishu-link-trigger:active {
   background: var(--color-bg-active);
 }
 
-/* toolbar 入口与模型/思考保持同样文字样式，连接状态只通过小圆点表达。 */
-.feishu-link-trigger.connected,
-.feishu-link-trigger.connecting {
+/* 底栏入口与模型/思考保持同样文字样式，连接状态只通过小圆点表达。 */
+.composer-bottom-left .feishu-link-trigger.connected,
+.composer-bottom-left .feishu-link-trigger.connecting {
   color: var(--color-text-secondary);
 }
-.feishu-link-trigger.connected:hover,
-.feishu-link-trigger.connecting:hover {
+.composer-bottom-left .feishu-link-trigger.connected:hover,
+.composer-bottom-left .feishu-link-trigger.connecting:hover {
   color: var(--color-accent);
   background: var(--color-bg-active);
 }
@@ -510,6 +514,7 @@
 }
 
 .feishu-link-label {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -527,8 +532,9 @@
   left: 0;
   bottom: calc(100% + 8px);
   z-index: 130;
-  min-width: 420px;
-  max-width: 520px;
+  width: min(420px, calc(100vw - 24px));
+  min-width: 0;
+  max-width: min(520px, calc(100vw - 24px));
   padding: 8px;
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-lg);
@@ -578,7 +584,7 @@
   color: var(--color-text-tertiary);
 }
 
-.composer-toolbar .feishu-link-popover-action {
+.composer-bottom-left .feishu-link-popover-action {
   height: auto;
   min-width: 0;
   border: 0;
@@ -589,15 +595,15 @@
   padding: 2px 8px;
   border-radius: var(--radius-sm);
 }
-.composer-toolbar .feishu-link-popover-action:hover {
+.composer-bottom-left .feishu-link-popover-action:hover {
   background: var(--color-bg-active);
   color: var(--color-text-primary);
 }
-.composer-toolbar .feishu-link-popover-action:focus-visible {
+.composer-bottom-left .feishu-link-popover-action:focus-visible {
   outline: var(--focus-ring);
   outline-offset: 1px;
 }
-.composer-toolbar .feishu-link-popover-action:disabled {
+.composer-bottom-left .feishu-link-popover-action:disabled {
   opacity: 0.5;
   cursor: default;
 }
@@ -620,7 +626,7 @@
   padding-right: 2px;
 }
 
-.composer-toolbar .feishu-link-bot-item {
+.composer-bottom-left .feishu-link-bot-item {
   display: flex;
   align-items: center;
   gap: 9px;
@@ -640,23 +646,23 @@
     border-color 0.12s ease,
     transform 0.12s ease;
 }
-.composer-toolbar .feishu-link-bot-item:hover {
+.composer-bottom-left .feishu-link-bot-item:hover {
   background: var(--color-bg-active);
   border-color: var(--color-border-subtle);
   color: var(--color-text-primary);
 }
-.composer-toolbar .feishu-link-bot-item:active {
+.composer-bottom-left .feishu-link-bot-item:active {
   transform: translateY(1px);
 }
-.composer-toolbar .feishu-link-bot-item:focus-visible {
+.composer-bottom-left .feishu-link-bot-item:focus-visible {
   outline: var(--focus-ring);
   outline-offset: -1px;
 }
-.composer-toolbar .feishu-link-bot-item:disabled {
+.composer-bottom-left .feishu-link-bot-item:disabled {
   opacity: 0.6;
   cursor: default;
 }
-.composer-toolbar .feishu-link-bot-item.active {
+.composer-bottom-left .feishu-link-bot-item.active {
   border-color: color-mix(
     in srgb,
     var(--color-accent) 28%,
@@ -664,7 +670,7 @@
   );
   background: color-mix(in srgb, var(--color-accent) 8%, var(--color-bg-panel));
 }
-.composer-toolbar .feishu-link-bot-item.pinned {
+.composer-bottom-left .feishu-link-bot-item.pinned {
   box-shadow: inset 2px 0 0 var(--color-accent);
 }
 

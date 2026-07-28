@@ -1,5 +1,5 @@
 import { Fragment, type ReactNode } from "react";
-import { ChevronDown, Trash2 } from "lucide-react";
+import { ChevronDown, HatGlasses, Trash2 } from "lucide-react";
 import type { AgentTab, Project, SessionRecord, SessionSummary } from "../../../../shared/types";
 import { filterAgentsForSidebarDisplay, getProjectAgentSessionDisplay } from "../../agentListDisplay";
 import { sessionRecordToSummary } from "../../atoms";
@@ -128,14 +128,18 @@ export function SessionTree(props: {
         const groupKey = `${props.project.id}:${child.key}`;
         const childCount = child.codexSubagents.length + child.piSubagents.length;
         if (child.type === "agent") {
-          const agentSession = summaries.find((session) => session.filePath === child.agent.sessionPath);
+          const agentSession = props.sessions.find((session) => (
+            props.controller.catalog.runtimeBySessionId[session.id]?.agentId === child.agent.id
+          )) ?? summaries.find((session) => session.filePath === child.agent.sessionPath);
           return <Fragment key={child.key}>
             <button className={`conversation agent-row${agentSession?.id === props.currentSessionId ? " active" : ""}`}
               onContextMenu={(event) => { event.preventDefault(); void props.controller.openMenu({ kind: "agent", agentId: child.agent.id, x: event.clientX, y: event.clientY }); }}
               onClick={() => { if (agentSession) void props.actions.sessions.open(props.project.id, agentSession.id); }}
             >
               <span className="agent-node-marker" aria-hidden="true" /><div className="conversation-body"><div className="conversation-title">
-                <span className={`agent-status-indicator status-${child.agent.status}`}>{child.agent.status}</span><strong>{child.agent.title}</strong>{renderToggle(groupKey, childCount)}
+                <span className={`agent-status-indicator status-${child.agent.status}`}>{child.agent.status}</span><strong>{child.agent.title}</strong>
+                {child.agent.noSession && <span className="anonymous-indicator" title={t("app.anonymousChat")}><HatGlasses size={11} aria-hidden="true" /></span>}
+                {renderToggle(groupKey, childCount)}
               </div></div>
             </button>
             {renderSubagents(groupKey, child.codexSubagents, child.piSubagents)}

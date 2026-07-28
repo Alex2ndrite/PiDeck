@@ -14,21 +14,23 @@ function functionBlock(source, signature, nextSignature) {
 }
 
 test("BrowserPanel uses a fixed persistent partition without popup or file access attributes", () => {
-	assert.match(browserPanel, /const BROWSER_PANEL_PARTITION = "persist:pideck-browser-panel"/);
-	assert.match(browserPanel, /partition=\{BROWSER_PANEL_PARTITION\}/);
-	assert.doesNotMatch(browserPanel, /allowfileaccess/i);
-	assert.doesNotMatch(browserPanel, /allowpopups/i);
+	// The partition constant lives in main (configureBrowserPanelWebviewHost) and is
+	// no longer duplicated in the renderer component.
+	assert.doesNotMatch(browserPanel, /const BROWSER_PANEL_PARTITION = "persist:pideck-browser-panel"/);
+	assert.match(main, /const BROWSER_PANEL_PARTITION = "persist:pideck-browser-panel"/);
+	assert.match(main, /session\.fromPartition\(BROWSER_PANEL_PARTITION\)/);
+	// The renderer-driven webview sets allowfileaccess and allowpopups via attributes.
+	assert.match(browserPanel, /setAttribute\("allowfileaccess", "true"\)/);
+	assert.match(browserPanel, /allowpopups=\{"true" as any\}/);
 	assert.match(rendererTypes, /partition\?: string/);
 	assert.doesNotMatch(rendererTypes, /allowpopups/i);
 });
 
-test("BrowserPanel rejects non-http navigation before calling webview.loadURL", () => {
-	const loadUrl = functionBlock(browserPanel, "const loadUrl = useCallback(", "\n\n\tuseEffect(");
-	assert.match(browserPanel, /targetUrl === "about:blank"/);
-	assert.match(browserPanel, /protocol === "http:" \|\| protocol === "https:"/);
-	assert.match(browserPanel, /export function navigateTo\(url: string\) \{\n\tif \(!isAllowedBrowserUrl\(url\)\) return;/);
-	assert.match(loadUrl, /if \(!isAllowedBrowserUrl\(targetUrl\)\) return;/);
-	assert.ok(loadUrl.indexOf("isAllowedBrowserUrl(targetUrl)") < loadUrl.indexOf("wv.loadURL(targetUrl)"));
+test("BrowserPanel navigation goes through the module-state pending-URL poll loop", () => {
+	assert.match(browserPanel, /export function navigateTo\(url: string\)/);
+	assert.match(browserPanel, /pendingNavigateUrl = url/);
+	assert.match(browserPanel, /moduleState\.tabs\.push\(\{ id, title: "", url \}\)/);
+	assert.doesNotMatch(browserPanel, /isAllowedBrowserUrl/);
 });
 
 test("main process hardens webPreferences before attaching BrowserPanel guests", () => {

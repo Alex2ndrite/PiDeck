@@ -53,7 +53,8 @@ test("Web wiring is Session-first and exposes no Agent compatibility creation", 
     main,
     /sendSessionPrompt: async \(input\)[\s\S]*sessionRuntimeCoordinator\.send\(input\)/,
   );
-  assert.match(main, /stopSessionRuntime: async \(target\)[\s\S]*sessionRuntimeCoordinator\.stopRuntime\(target\)/);
+  // stopSessionRuntime is now a shared helper called from both IPC and the web deps.
+  assert.match(main, /async function stopSessionRuntime\(target[^)]*\)[\s\S]*sessionRuntimeCoordinator\.stopRuntime\(target\)/);
   assert.doesNotMatch(main, /createAgent:/);
   assert.doesNotMatch(main, /LEGACY_EXTERNAL_RUNTIME|ipcChannels\.agentsCreate/);
 });

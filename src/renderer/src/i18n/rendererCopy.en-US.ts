@@ -1201,6 +1201,7 @@ export const enUS: Record<TranslationKey, string> = {
   "drawer.closePanel": "Close panel",
   "drawer.collapsePanel": "Collapse panel",
   "drawer.collapseAllDirs": "Collapse all directories",
+  "drawer.expandAllDirs": "Expand all directories",
   "drawer.sourceControl": "Source Control",
   "drawer.expandPanel": "Expand right panel",
   "drawer.fileItems": "{count} items",

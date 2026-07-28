@@ -13,6 +13,8 @@ import {
   canRetractQueuedPromptToInput,
 } from "../../utils/queuedPromptQueue";
 import { t } from "../../i18n";
+import { Button } from "../ui/Button";
+import { IconButton } from "../ui/IconButton";
 import { ExtensionWidgetCard } from "./ComposerParts";
 
 export function ComposerAttachmentBar(props: {
@@ -32,24 +34,23 @@ export function ComposerAttachmentBar(props: {
             onClick={() => props.onPreview(image)}
             style={{ cursor: "pointer" }}
           />
-          <button
-            type="button"
+          <IconButton
             className="image-remove-btn"
+            label={t("app.imageRemove")}
             onClick={() => props.onRemove(index)}
-            title={t("app.imageRemove")}
           >
-            <X size={12} strokeWidth={2.4} />
-          </button>
+            <X size={12} strokeWidth={2.4} aria-hidden="true" />
+          </IconButton>
         </div>
       ))}
-      <button
-        type="button"
+      <Button
+        variant="secondary"
+        buttonSize="sm"
         className="image-clear-btn"
         onClick={props.onClear}
-        title={t("app.clearImagesTitle")}
       >
         {t("app.clearImages")}
-      </button>
+      </Button>
     </div>
   );
 }
@@ -142,26 +143,22 @@ export function QueuedPromptPanel(props: {
                   </span>
                 ) : null}
                 <div className="queued-actions">
-                  <button
-                    type="button"
+                  <IconButton
                     className="queued-icon-btn"
+                    label={t("app.retractToInput")}
                     disabled={!canRetractQueuedPromptToInput(status)}
-                    title={t("app.retractToInput")}
-                    aria-label={t("app.retractToInput")}
                     onClick={() => props.onRetract(props.sessionId!, prompt)}
                   >
-                    <Pencil size={13} strokeWidth={2} />
-                  </button>
-                  <button
-                    type="button"
+                    <Pencil size={13} strokeWidth={2} aria-hidden="true" />
+                  </IconButton>
+                  <IconButton
                     className="queued-icon-btn danger"
+                    label={t("app.retractDiscard")}
                     disabled={!canDiscardQueuedPrompt(status)}
-                    title={t("app.retractDiscard")}
-                    aria-label={t("app.retractDiscard")}
                     onClick={() => props.onDiscard(props.sessionId!, prompt.id)}
                   >
-                    <X size={13} strokeWidth={2} />
-                  </button>
+                    <X size={13} strokeWidth={2} aria-hidden="true" />
+                  </IconButton>
                 </div>
               </div>
             );
@@ -189,16 +186,14 @@ export function SessionDeliveryNotice(props: {
         <small>{t("app.queuedUnknown")}</small>
         {props.error ? <small>{props.error}</small> : null}
       </div>
-      <button type="button" onClick={props.onAcknowledge}>
+      <Button variant="secondary" buttonSize="sm" onClick={props.onAcknowledge}>
         {t("common.confirm")}
-      </button>
+      </Button>
     </div>
   );
 }
 
 export function ComposerSendControls(props: {
-  composerMode?: string | null;
-  statusText: string;
   isAgentBusy: boolean;
   isAgentStarting: boolean;
   keepBusyDraftControls: boolean;
@@ -214,93 +209,82 @@ export function ComposerSendControls(props: {
   onScheduleBehaviorMenuClose: () => void;
 }) {
   return (
-    <div className="composer-footer">
-      {props.composerMode && (
-        <span className="composer-mode-status">{props.statusText}</span>
-      )}
-      <div className="footer-actions">
-        <div
-          className="send-behavior-menu-wrap"
-          onMouseLeave={props.onScheduleBehaviorMenuClose}
-        >
-          {props.showBusySendControls && props.hasComposerContent && (
-            <div className="send-behavior-toggle">
-              <button
-                type="button"
-                className="send-behavior-primary"
-                title={t("app.sendSteerTitle")}
-                aria-label={t("app.sendSteerTitle")}
+    <div
+      className="composer-send-controls"
+      onMouseLeave={props.onScheduleBehaviorMenuClose}
+    >
+      <div className="send-behavior-menu-wrap">
+        {props.showBusySendControls && props.hasComposerContent && (
+          <div className="send-behavior-toggle">
+            <IconButton
+              className="send-behavior-primary"
+              label={t("app.sendSteerTitle")}
+              onClick={props.onSend}
+            >
+              <ArrowUp size={15} strokeWidth={2.4} aria-hidden="true" />
+            </IconButton>
+            <IconButton
+              className="send-behavior-chevron"
+              label={t("app.sendBehaviorTitle")}
+              aria-haspopup="menu"
+              aria-expanded={props.sendBehaviorMenuOpen}
+              onMouseEnter={props.onKeepBehaviorMenuOpen}
+              onFocus={props.onKeepBehaviorMenuOpen}
+              onClick={props.onToggleBehaviorMenu}
+            >
+              <ChevronDown size={12} strokeWidth={2.2} aria-hidden="true" />
+            </IconButton>
+          </div>
+        )}
+        {props.isAgentBusy ? (
+          <IconButton
+            className="composer-bar-btn stop"
+            label={t("app.stop")}
+            onClick={props.onStop}
+          >
+            <Square size={15} strokeWidth={0} fill="currentColor" aria-hidden="true" />
+          </IconButton>
+        ) : !props.keepBusyDraftControls ? (
+          <IconButton
+            className="composer-bar-btn send"
+            label={t("app.send")}
+            disabled={props.isAgentStarting || !props.canSend}
+            onClick={props.onSend}
+          >
+            <ArrowUp size={16} strokeWidth={2.5} aria-hidden="true" />
+          </IconButton>
+        ) : null}
+        {props.sendBehaviorMenuOpen &&
+          props.showBusySendControls &&
+          props.hasComposerContent && (
+            <div
+              className="send-behavior-menu"
+              role="menu"
+              onMouseEnter={props.onKeepBehaviorMenuOpen}
+              onMouseLeave={props.onScheduleBehaviorMenuClose}
+            >
+              <Button
+                variant="ghost"
+                buttonSize="sm"
+                className="send-behavior-option steer"
+                role="menuitem"
                 onClick={props.onSend}
               >
-                <ArrowUp size={15} strokeWidth={2.4} />
-              </button>
-              <button
-                type="button"
-                className="send-behavior-chevron"
-                title={t("app.sendBehaviorTitle")}
-                aria-label={t("app.sendBehaviorTitle")}
-                aria-haspopup="menu"
-                aria-expanded={props.sendBehaviorMenuOpen}
-                onMouseEnter={props.onKeepBehaviorMenuOpen}
-                onFocus={props.onKeepBehaviorMenuOpen}
-                onClick={props.onToggleBehaviorMenu}
+                <span className="send-behavior-option-dot" aria-hidden="true" />
+                <span>{t("app.sendSteerTitle")}</span>
+              </Button>
+              <Button
+                variant="ghost"
+                buttonSize="sm"
+                className="send-behavior-option follow-up"
+                role="menuitem"
+                onClick={props.onSendFollowUp}
               >
-                <ChevronDown size={12} strokeWidth={2.2} />
-              </button>
+                <span className="send-behavior-option-dot" aria-hidden="true" />
+                <span>{t("app.sendFollowUpTitle")}</span>
+              </Button>
             </div>
           )}
-          {props.isAgentBusy ? (
-            <button
-              type="button"
-              className="btn-circle stop"
-              onClick={props.onStop}
-              title={t("app.stop")}
-              aria-label={t("app.stop")}
-            >
-              <Square size={18} strokeWidth={0} fill="currentColor" />
-            </button>
-          ) : !props.keepBusyDraftControls ? (
-            <button
-              type="button"
-              disabled={props.isAgentStarting || !props.canSend}
-              className="btn-circle send"
-              onClick={props.onSend}
-              title={t("app.send")}
-              aria-label={t("app.send")}
-            >
-              <ArrowUp size={18} strokeWidth={2.5} />
-            </button>
-          ) : null}
-          {props.sendBehaviorMenuOpen &&
-            props.showBusySendControls &&
-            props.hasComposerContent && (
-              <div
-                className="send-behavior-menu"
-                role="menu"
-                onMouseEnter={props.onKeepBehaviorMenuOpen}
-                onMouseLeave={props.onScheduleBehaviorMenuClose}
-              >
-                <button
-                  className="send-behavior-option steer"
-                  type="button"
-                  role="menuitem"
-                  onClick={props.onSend}
-                >
-                  <span className="send-behavior-option-dot" aria-hidden="true" />
-                  <span>{t("app.sendSteerTitle")}</span>
-                </button>
-                <button
-                  className="send-behavior-option follow-up"
-                  type="button"
-                  role="menuitem"
-                  onClick={props.onSendFollowUp}
-                >
-                  <span className="send-behavior-option-dot" aria-hidden="true" />
-                  <span>{t("app.sendFollowUpTitle")}</span>
-                </button>
-              </div>
-            )}
-        </div>
       </div>
     </div>
   );

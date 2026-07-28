@@ -1963,6 +1963,7 @@ export class AgentManager {
 			wslDistro,
 			wslUser,
 			importedSourceId,
+			noSession,
 		} = runtime.tab;
 
 		// 优先从 pi 获取最新 sessionFile，兜底用 tab 上缓存的值；
@@ -1993,13 +1994,14 @@ export class AgentManager {
 		// 用相同的 session 重新创建 agent，新进程会重新加载所有配置
 		return this.create({
 			projectId,
-			sessionPath,
+			sessionPath: noSession ? undefined : sessionPath,
 			title,
 			environment,
 			source,
 			wslDistro,
 			wslUser,
 			importedSourceId,
+			noSession,
 		});
 	}
 

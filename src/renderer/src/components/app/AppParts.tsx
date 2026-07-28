@@ -17,7 +17,7 @@ export type { WorkspaceDrawerPanel as DrawerPanel } from "../../hooks/useWorkspa
 // Re-exports from leaf modules (A12 migration in progress)
 import { PiLogoCanvas } from "./PiLogoCanvas";
 export { WorktreeCreateDialog } from "../sidebar/SidebarComponents";
-export { ComposerToolbar, ModelPicker, PromptTemplatePicker, ThinkingPicker, ComposerModePicker, ExtensionWidgetCard } from "../session/ComposerComponents";
+export { ComposerBottomBar, ModelPicker, PromptTemplatePicker, ThinkingPicker, ComposerModePicker, ExtensionWidgetCard } from "../session/ComposerComponents";
 
 export type SessionModifiedFile = {
 	path: string;

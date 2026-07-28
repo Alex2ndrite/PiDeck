@@ -1,5 +1,6 @@
 import type { MutableRefObject } from "react";
 import type {
+  CreateAnonymousSessionResult,
   Project,
   SessionRecord,
   SessionSummary,
@@ -44,6 +45,7 @@ export interface UseSessionActionsOptions {
       exportRecordHtml: (sessionId: string) => Promise<{ path: string }>;
       deleteRecord: (sessionId: string) => Promise<boolean>;
       createDraft: (input: { projectId: string; title: string }) => Promise<SessionRecord>;
+      createAnonymous: (input: { projectId: string; title: string }) => Promise<CreateAnonymousSessionResult>;
     };
   };
 
@@ -219,6 +221,25 @@ export function useSessionActions(options: UseSessionActionsOptions) {
     }
   }
 
+  async function createAnonymousSession(projectId = activeProjectId) {
+    if (!projectId || creatingSessionDraftRef.current.has(projectId)) return;
+    const project = projects.find((item) => item.id === projectId);
+    if (!project) return;
+    creatingSessionDraftRef.current.add(projectId);
+    try {
+      const { session } = await api.sessions.createAnonymous({
+        projectId,
+        title: t("app.anonymousChatTitle", { name: project.name }),
+      });
+      upsertSession(session);
+      commitSessionSelection(projectId, session.id, true);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : String(error), 4000);
+    } finally {
+      creatingSessionDraftRef.current.delete(projectId);
+    }
+  }
+
   return {
     selectProject,
     selectSession,
@@ -230,5 +251,6 @@ export function useSessionActions(options: UseSessionActionsOptions) {
     copySidebarSession,
     exportSidebarSession,
     createSessionDraft,
+    createAnonymousSession,
   };
 }

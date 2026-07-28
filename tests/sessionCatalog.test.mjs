@@ -319,6 +319,40 @@ test("runtime event attachment rejects active origin changes but accepts metadat
   }), true);
 });
 
+test("keeps anonymous records in memory and excludes them from the durable catalog", async () => {
+  const { SessionCatalog } = loadCatalog();
+  const dir = await mkdtemp(join(tmpdir(), "pideck-catalog-"));
+  const filePath = join(dir, "sessions.json");
+  try {
+    const catalog = new SessionCatalog(filePath);
+    await catalog.load();
+    const anonymous = catalog.createAnonymous({
+      projectId: "project-1",
+      title: "Anonymous Chat",
+      environment: "native",
+    });
+    assert.equal(anonymous.noSession, true);
+    assert.equal((await catalog.mergeScanned("project-1", [])).map((record) => record.id).includes(anonymous.id), true);
+    await assert.rejects(readFile(filePath, "utf8"), /ENOENT/);
+
+    await catalog.createDraft({
+      projectId: "project-1",
+      title: "Saved draft",
+      environment: "native",
+    });
+    const snapshot = JSON.parse(await readFile(filePath, "utf8"));
+    assert.equal(snapshot.sessions.some((entry) => entry.id === anonymous.id), false);
+
+    const reloaded = new SessionCatalog(filePath);
+    await reloaded.load();
+    assert.equal(reloaded.get(anonymous.id), undefined);
+    assert.equal(catalog.removeTransient(anonymous.id), true);
+    assert.equal(catalog.get(anonymous.id), undefined);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("runtime replacement resolves a full-origin target without mutating the origin record", async () => {
   const { SessionCatalog } = loadCatalog();
   const dir = await mkdtemp(join(tmpdir(), "pideck-catalog-"));

@@ -51,6 +51,18 @@ function groupByDir(
 	return dirs;
 }
 
+/** 收集变更列表中可折叠的目录键（单根无目录头时返回空） */
+export function getCollapsibleChangeDirs(
+	resources: GitResource[],
+	projectRoot?: string,
+): string[] {
+	const byDir = groupByDir(resources, projectRoot);
+	const dirs = [...byDir.keys()];
+	// 与 FileTree 一致：仅一个根目录时不显示目录头，也就没有可折叠项
+	if (dirs.length === 1 && dirs[0] === "") return [];
+	return dirs;
+}
+
 /** 按目录树渲染文件列表 */
 export function FileTree(props: {
 	resources: GitResource[];
@@ -62,6 +74,9 @@ export function FileTree(props: {
 	onOpenWorkspaceFileDiff: (group: GitResourceGroupType, path: string) => void;
 	/** 项目根目录路径，用于显示相对路径 */
 	projectRoot?: string;
+	/** 受控：已折叠目录集合（与父级「收起/展开全部」共享） */
+	collapsedDirs: Set<string>;
+	onToggleDir: (dir: string) => void;
 }) {
 	const byDir = groupByDir(props.resources, props.projectRoot);
 	// 按目录名排序，根目录排最前
@@ -70,16 +85,6 @@ export function FileTree(props: {
 		if (b === "") return 1;
 		return a.localeCompare(b);
 	});
-	// 每个目录的折叠状态
-	const [collapsedDirs, setCollapsedDirs] = useState<Set<string>>(new Set());
-	const toggleDir = (dir: string) => {
-		setCollapsedDirs((prev) => {
-			const next = new Set(prev);
-			if (next.has(dir)) next.delete(dir);
-			else next.add(dir);
-			return next;
-		});
-	};
 
 	return (
 		<>
@@ -92,11 +97,11 @@ export function FileTree(props: {
 					{!isSingleRoot && (
 						<div
 							className="git-tree-directory"
-							onClick={() => toggleDir(dir)}
+							onClick={() => props.onToggleDir(dir)}
 						>
 							<ChevronDown
 								size={12}
-								className={`git-tree-chevron${collapsedDirs.has(dir) ? "" : " open"}`}
+								className={`git-tree-chevron${props.collapsedDirs.has(dir) ? "" : " open"}`}
 							/>
 							<span className="git-tree-directory-name" title={dir || "/"}>
 								{shortenDir(dir) || "/"}
@@ -104,7 +109,7 @@ export function FileTree(props: {
 							<span className="git-tree-directory-count">{resources.length}</span>
 						</div>
 					)}
-					{(!collapsedDirs.has(dir) || isSingleRoot) && resources.map((r) => {
+					{(!props.collapsedDirs.has(dir) || isSingleRoot) && resources.map((r) => {
 						const actions: Array<{
 							label: string;
 							kind: "stage" | "unstage" | "discard";

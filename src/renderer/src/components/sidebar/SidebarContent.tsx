@@ -7,6 +7,7 @@ import {
   RpcLogModal,
   SessionContextMenu,
   SessionManagerModal,
+  SessionSourceFilterMenu,
   WorktreeCreateDialog,
 } from "./SidebarParts";
 import { sessionRecordToSummary } from "../../atoms";
@@ -32,6 +33,7 @@ export type SidebarActions = {
   sessions: {
     open: (projectId: string, sessionId: string) => Promise<void>;
     createDraft: (projectId: string) => Promise<void>;
+    createAnonymous: (projectId: string) => Promise<void>;
     deleteDraft: (session: SessionRecord) => Promise<void>;
     rename: (projectId: string, session: SessionSummary) => void;
     export: (projectId: string, session: SessionSummary) => Promise<void>;
@@ -140,6 +142,17 @@ export function SidebarContent(props: SidebarContentProps) {
         )}
       </div>
 
+      {controller.sourceFilterMenu && (
+        <SessionSourceFilterMenu
+          menu={controller.sourceFilterMenu}
+          filter={controller.sourceFilterFor(controller.sourceFilterMenu.projectId)}
+          onToggleSource={(source) =>
+            controller.toggleSourceFilter(controller.sourceFilterMenu!.projectId, source)
+          }
+          onClear={() => controller.clearSourceFilter(controller.sourceFilterMenu!.projectId)}
+          onClose={controller.closeSourceFilter}
+        />
+      )}
       {menuProject && menu?.kind === "project" && (
         <ProjectContextMenu
           menu={{ x: menu.x, y: menu.y, project: menuProject }}
@@ -151,7 +164,7 @@ export function SidebarContent(props: SidebarContentProps) {
           onImportOpenCodeSessions={() => { actions.projects.importSessions(menuProject, "opencode"); controller.closeMenu(); }}
           onManageProjectResources={() => { actions.projects.manageResources(menuProject); controller.closeMenu(); }}
           onManageSessions={() => { controller.openSessionManager(menuProject.id); controller.closeMenu(); }}
-          onFilterSessions={() => { controller.openSourceFilter(menuProject.id); controller.closeMenu(); }}
+          onFilterSessions={() => { controller.openSourceFilter(menuProject.id, menu.x, menu.y + 20); controller.closeMenu(); }}
           onToggleWorktree={() => { void actions.projects.toggleWorktree(menuProject); controller.closeMenu(); }}
           onRefreshProject={() => { void actions.projects.refresh(menuProject.id); controller.closeMenu(); }}
           onCopyProjectPath={() => { void actions.projects.copyPath(menuProject); controller.closeMenu(); }}

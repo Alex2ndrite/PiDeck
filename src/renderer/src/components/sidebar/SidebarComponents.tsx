@@ -2,7 +2,7 @@ import { useState, useRef, useLayoutEffect, useEffect, useMemo, type ReactNode }
 import { X, MessageCircle, Folder } from "lucide-react";
 import { t } from "../../i18n";
 import { CloseIconButton } from "../ui/IconButton";
-import type { SessionSummary, Project, AgentTab } from "../../../../shared/types";
+import type { SessionSource, SessionSummary, Project, AgentTab } from "../../../../shared/types";
 
 export function SessionManagerModal(props: {
 	sessions: SessionSummary[];
@@ -201,6 +201,58 @@ function useMenuPosition(initial: { x: number; y: number }) {
 		if (x !== pos.x || y !== pos.y) setPos({ x, y });
 	}, [initial.x, initial.y]);
 	return { pos, ref };
+}
+
+export function SessionSourceFilterMenu(props: {
+	menu: { projectId: string; x: number; y: number };
+	filter: ReadonlySet<SessionSource> | null;
+	onToggleSource: (source: SessionSource) => void;
+	onClear: () => void;
+	onClose: () => void;
+}) {
+	const { pos, ref } = useMenuPosition(props.menu);
+	useEffect(() => {
+		const onKeyDown = (event: KeyboardEvent) => {
+			if (event.key === "Escape") props.onClose();
+		};
+		window.addEventListener("keydown", onKeyDown);
+		return () => window.removeEventListener("keydown", onKeyDown);
+	}, [props.onClose]);
+	const sources: SessionSource[] = ["pi", "codex", "claude", "opencode"];
+	return (
+		<div className="context-backdrop sidebar-filter-backdrop" onClick={props.onClose}>
+			<div
+				className="context-menu filter-menu"
+				style={{ left: pos.x, top: pos.y }}
+				ref={ref}
+				onClick={(event) => event.stopPropagation()}
+			>
+				<div className="filter-menu-header">{t("menu.filterSessions")}</div>
+				<label className="filter-menu-item">
+					<input
+						type="checkbox"
+						checked={props.filter === null}
+						onChange={(event) => {
+							if (event.target.checked) props.onClear();
+						}}
+					/>
+					{t("menu.filterSourceAll")}
+				</label>
+				{sources.map((source) => (
+					<label key={source} className="filter-menu-item">
+						<input
+							type="checkbox"
+							checked={props.filter !== null && props.filter.has(source)}
+							onChange={() => props.onToggleSource(source)}
+						/>
+						<span className={`session-source-badge ${source}`}>
+							{t(`sessionSource.${source}` as never)}
+						</span>
+					</label>
+				))}
+			</div>
+		</div>
+	);
 }
 
 export function ProjectContextMenu(props: {

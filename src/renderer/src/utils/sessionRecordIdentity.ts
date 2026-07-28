@@ -22,6 +22,7 @@ export function sameSessionRecord(a: SessionRecord, b: SessionRecord): boolean {
     a.id === b.id &&
     a.projectId === b.projectId &&
     a.title === b.title &&
+    a.noSession === b.noSession &&
     a.source === b.source &&
     a.environment === b.environment &&
     a.filePath === b.filePath &&

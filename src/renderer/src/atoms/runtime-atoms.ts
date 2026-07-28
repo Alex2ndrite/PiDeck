@@ -35,6 +35,7 @@ export const agentInventoryAtom = atom((get) => {
         wslDistro: record?.wslDistro,
         wslUser: record?.wslUser,
         importedSourceId: record?.importedSourceId,
+        noSession: runtime.noSession ?? record?.noSession,
         runtimeGeneration: runtime.runtimeGeneration,
         createdAt: runtime.createdAt,
         compactionCount: runtime.compactionCount,

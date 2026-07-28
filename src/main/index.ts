@@ -70,6 +70,8 @@ import type {
 	ExternalEditorSetting,
 	AppUpdateInfo,
 	CreateSessionDraftInput,
+	CreateAnonymousSessionInput,
+	CreateAnonymousSessionResult,
 	UpdateSessionRecordInput,
 	FeishuBotConfig,
 	FeishuBridgeStatus,
@@ -232,6 +234,16 @@ function emitSessionRuntimeEvent(
 		}
 	}
 	sendSessionRuntimeEnvelope(event);
+	const tab = payload && typeof payload === "object" && !Array.isArray(payload)
+		? payload as Partial<AgentTab>
+		: undefined;
+	// A crashed anonymous process has no durable session to reopen. The regular
+	// Agent state event reaches the renderer first so diagnostics remain visible
+	// for the current tick, then detach removes the transient conversation.
+	if (tab?.noSession && tab.status === "closed") {
+		sessionRuntimeCoordinator.unbindTerminalAgent(agentId);
+		discardAnonymousSession({ ...runtimeBinding, agentId });
+	}
 	return true;
 }
 
@@ -244,6 +256,60 @@ function emitSessionRuntimeDetach(binding: SessionRuntimeBinding): void {
 		sourceChannel: "sessions:runtime-detach",
 		payload: null,
 	});
+}
+
+/**
+ * Anonymous chats have no catalog file to rediscover. Once their runtime stops,
+ * discard the in-memory record after broadcasting detach so every renderer can
+ * remove its transient Session state.
+ */
+function discardAnonymousSession(binding: SessionRuntimeBinding): void {
+	if (!sessionCatalog.get(binding.sessionId)?.noSession) return;
+	sessionCatalog.removeTransient(binding.sessionId);
+	emitSessionRuntimeDetach(binding);
+}
+
+async function createAnonymousSession(
+	input: CreateAnonymousSessionInput,
+): Promise<CreateAnonymousSessionResult> {
+	const project = projectStore.get(input.projectId);
+	if (!project) throw new Error(mainCopy("project.notFound"));
+	const session = sessionCatalog.createAnonymous({
+		projectId: project.id,
+		title: input.title?.trim() || mainCopy("session.anonymousTitle", { project: project.name }),
+		environment: settingsStore.get().wslEnabled ? "wsl" : "native",
+	});
+	let agentId: string | undefined;
+	try {
+		const tab = await agentManager.create({
+			projectId: project.id,
+			title: session.title,
+			environment: session.environment,
+			source: "pi",
+			wslDistro: session.wslDistro,
+			wslUser: session.wslUser,
+			noSession: true,
+		});
+		agentId = tab.id;
+		const runtime = sessionRuntimeCoordinator.bindAnonymousRuntime(session.id, tab.id);
+		emitReplacementState(runtime, true);
+		return { session, runtime };
+	} catch (error) {
+		if (agentId) await agentManager.stop(agentId).catch(() => undefined);
+		sessionCatalog.removeTransient(session.id);
+		throw error;
+	}
+}
+
+async function stopSessionRuntime(target: SessionRuntimeTarget) {
+	const anonymous = sessionCatalog.get(target.sessionId)?.noSession === true;
+	const result = await sessionRuntimeCoordinator.stopRuntime(target);
+	if (result.ok) {
+		terminalManager.closeAgent(target.agentId);
+		if (anonymous) discardAnonymousSession(target);
+		else emitSessionRuntimeDetach(target);
+	}
+	return result;
 }
 
 function emitReplacementState(binding: SessionRuntimeBinding, includeMessages: boolean): void {
@@ -2161,6 +2227,10 @@ function registerIpc() {
 		},
 	);
 	ipcMain.handle(
+		ipcChannels.sessionsCreateAnonymous,
+		(_event, input: CreateAnonymousSessionInput) => createAnonymousSession(input),
+	);
+	ipcMain.handle(
 		ipcChannels.sessionsCatalogUpdate,
 		async (_event, sessionId: string, patch: UpdateSessionRecordInput) => {
 			const entry = sessionCatalog.get(sessionId);
@@ -2282,14 +2352,7 @@ function registerIpc() {
 	);
 	ipcMain.handle(
 		ipcChannels.sessionsRuntimeStop,
-		async (_event, target: SessionRuntimeTarget) => {
-			const result = await sessionRuntimeCoordinator.stopRuntime(target);
-			if (result.ok) {
-				terminalManager.closeAgent(target.agentId);
-				emitSessionRuntimeDetach(target);
-			}
-			return result;
-		},
+		(_event, target: SessionRuntimeTarget) => stopSessionRuntime(target),
 	);
 	ipcMain.handle(
 		ipcChannels.sessionsRuntimeAbort,
@@ -2301,7 +2364,10 @@ function registerIpc() {
 			terminalManager.closeAgent(target.agentId);
 			const result = await sessionRuntimeCoordinator.restartRuntime(target);
 			if (result.ok) {
-				emitSessionRuntimeDetach(target);
+				// A --no-session restart is a binding replacement, not a close. Its
+				// higher generation state event clears old runtime UI without deleting
+				// the transient SessionRecord from the renderer.
+				if (!result.value.session.noSession) emitSessionRuntimeDetach(target);
 				emitReplacementState(result.value.runtime, false);
 			}
 			return result;
@@ -3630,6 +3696,7 @@ app.whenReady().then(async () => {
 				thinkingLevel: input.thinkingLevel,
 			});
 		},
+		createAnonymousSession,
 		updateSessionRecord: async (sessionId, patch) => {
 			const entry = sessionCatalog.get(sessionId);
 			if (!entry) throw new Error(mainCopy("session.notFound"));
@@ -3682,20 +3749,13 @@ app.whenReady().then(async () => {
 			return result;
 		},
 		listSessionRuntimes: () => sessionRuntimeCoordinator.listRuntimes(),
-		stopSessionRuntime: async (target) => {
-			const result = await sessionRuntimeCoordinator.stopRuntime(target);
-			if (result.ok) {
-				terminalManager.closeAgent(target.agentId);
-				emitSessionRuntimeDetach(target);
-			}
-			return result;
-		},
+		stopSessionRuntime: stopSessionRuntime,
 		abortSessionRuntime: (target) => sessionRuntimeCoordinator.abortRuntime(target),
 		restartSessionRuntime: async (target) => {
 			terminalManager.closeAgent(target.agentId);
 			const result = await sessionRuntimeCoordinator.restartRuntime(target);
 			if (result.ok) {
-				emitSessionRuntimeDetach(target);
+				if (!result.value.session.noSession) emitSessionRuntimeDetach(target);
 				emitReplacementState(result.value.runtime, false);
 			}
 			return result;

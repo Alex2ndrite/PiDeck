@@ -21,6 +21,11 @@ export const SIDEBAR_SESSION_SOURCES = ["pi", "codex", "claude", "opencode"] as 
 
 export type SidebarSourceFilter = Set<SessionSource> | null;
 export type SidebarSourceFilters = Record<string, SidebarSourceFilter | undefined>;
+export type SidebarSourceFilterMenu = {
+  projectId: string;
+  x: number;
+  y: number;
+};
 export type SidebarMenuTarget =
   | { kind: "project"; projectId: string; x: number; y: number }
   | { kind: "agent"; agentId: string; x: number; y: number }
@@ -54,9 +59,11 @@ export type SidebarController = {
   setProjectExpanded: (projectId: string, forceExpand?: boolean) => void;
   sourceFilterFor: (projectId: string) => SidebarSourceFilter;
   setSourceEnabled: (projectId: string, source: SessionSource, enabled: boolean) => void;
+  /** Matches the dev filter menu: first source click narrows from All to that source. */
+  toggleSourceFilter: (projectId: string, source: SessionSource) => void;
   clearSourceFilter: (projectId: string) => void;
-  sourceFilterOpenProjectId?: string;
-  openSourceFilter: (projectId: string) => void;
+  sourceFilterMenu?: SidebarSourceFilterMenu;
+  openSourceFilter: (projectId: string, x: number, y: number) => void;
   closeSourceFilter: () => void;
   visibleChildCountFor: (projectId: string) => number;
   showMoreChildren: (projectId: string) => void;
@@ -181,7 +188,7 @@ export function useSidebarController(options: {
     readSidebarSourceFilters(options.storage ?? (typeof window === "undefined" ? undefined : window.localStorage)),
   );
   const [visibleChildCountByProject, setVisibleChildCountByProject] = useState<Record<string, number>>({});
-  const [sourceFilterOpenProjectId, setSourceFilterOpenProjectId] = useState<string>();
+  const [sourceFilterMenu, setSourceFilterMenu] = useState<SidebarSourceFilterMenu>();
   const [expandedSubagentGroups, setExpandedSubagentGroups] = useState<Set<string>>(() => new Set());
   const [expandedWorktreePaths, setExpandedWorktreePaths] = useState<Set<string>>(() => new Set());
   const [drag, setDrag] = useState<{ sourceProjectId?: string; overProjectId?: string }>({});
@@ -308,6 +315,16 @@ export function useSidebarController(options: {
       return { ...current, [projectId]: next.size === SIDEBAR_SESSION_SOURCES.length ? null : next };
     });
   }, []);
+  const toggleSourceFilter = useCallback((projectId: string, source: SessionSource) => {
+    setSourceFilters((current) => {
+      const previous = current[projectId] ?? null;
+      if (previous === null) return { ...current, [projectId]: new Set([source]) };
+      const next = new Set(previous);
+      if (next.has(source)) next.delete(source);
+      else next.add(source);
+      return { ...current, [projectId]: next.size === 0 ? null : next };
+    });
+  }, []);
   const clearSourceFilter = useCallback((projectId: string) => {
     setSourceFilters((current) => ({ ...current, [projectId]: null }));
   }, []);
@@ -358,10 +375,11 @@ export function useSidebarController(options: {
     setProjectExpanded,
     sourceFilterFor: (projectId) => sourceFilters[projectId] ?? null,
     setSourceEnabled,
+    toggleSourceFilter,
     clearSourceFilter,
-    sourceFilterOpenProjectId,
-    openSourceFilter: setSourceFilterOpenProjectId,
-    closeSourceFilter: () => setSourceFilterOpenProjectId(undefined),
+    sourceFilterMenu,
+    openSourceFilter: (projectId, x, y) => setSourceFilterMenu({ projectId, x, y }),
+    closeSourceFilter: () => setSourceFilterMenu(undefined),
     visibleChildCountFor: (projectId) => visibleChildCountByProject[projectId] ?? pageSize,
     showMoreChildren,
     expandedSubagentGroups,

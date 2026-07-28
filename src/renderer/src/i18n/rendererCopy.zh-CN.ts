@@ -1180,6 +1180,7 @@ export const zhCN = {
   "drawer.closePanel": "关闭面板",
   "drawer.collapsePanel": "折叠面板",
   "drawer.collapseAllDirs": "收起全部目录",
+  "drawer.expandAllDirs": "展开全部目录",
   "drawer.sourceControl": "源代码管理",
   "drawer.expandPanel": "展开右侧面板",
   "drawer.fileItems": "{count} 个项目",
