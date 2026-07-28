@@ -128,6 +128,7 @@ import { ExtensionManager } from "./extensions/ExtensionManager";
 import { ProjectResourceManager } from "./projects/ProjectResourceManager";
 import { registerProjectsIpc } from "./ipc/projectsIpc";
 import { registerGitIpc } from "./ipc/gitIpc";
+import { registerStoreIpc } from "./ipc/storeIpc";
 import { registerTerminalIpc } from "./ipc/terminalIpc";
 import { registerScratchPadIpc } from "./ipc/scratchPadIpc";
 import { registerFilesIpc } from "./ipc/filesIpc";
