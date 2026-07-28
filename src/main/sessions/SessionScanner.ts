@@ -695,34 +695,6 @@ export class SessionScanner {
   }
 
   /**
-   * 从会话 JSONL 文件头部读取模型和思考级别信息。
-   * 取最后一条 model_change / thinking_level_change 记录作为当前值。
-   */
-  async readSessionMeta(filePath: string): Promise<{
-    provider?: string;
-    modelId?: string;
-    thinkingLevel?: string;
-  }> {
-    const raw = await this.readSessionRawText(filePath);
-    const lines = raw.split(/\r?\n/).filter(Boolean);
-    let provider: string | undefined;
-    let modelId: string | undefined;
-    let thinkingLevel: string | undefined;
-    for (const line of lines) {
-      try {
-        const entry = JSON.parse(line) as Record<string, unknown>;
-        if (entry.type === "model_change") {
-          provider = typeof entry.provider === "string" ? entry.provider : provider;
-          modelId = typeof entry.modelId === "string" ? entry.modelId : modelId;
-        } else if (entry.type === "thinking_level_change") {
-          thinkingLevel = typeof entry.thinkingLevel === "string" ? entry.thinkingLevel : thinkingLevel;
-        }
-      } catch { /* skip malformed lines */ }
-    }
-    return { provider, modelId, thinkingLevel };
-  }
-
-  /**
    * 读会话文件并返回与 Agent 运行时完全一致的 ChatMessage[]。
    * 使用与 AgentManager.convertAgentMessages 相同的提取逻辑：
    *  - user 消息：extractMessageText + extractImages
@@ -1013,6 +985,8 @@ export class SessionScanner {
     let modelProvider: string | undefined;
     let modelId: string | undefined;
     let thinkingLevel: string | undefined;
+    /** 最后一条 assistant 消息携带的 provider/model（旧格式兼容回退）。 */
+    let lastAssistantModel: { provider: string; modelId: string } | undefined;
 
     for (const line of lines) {
       const entry = JSON.parse(line) as any;
@@ -1062,7 +1036,25 @@ export class SessionScanner {
         if (text && preview === emptyPreview) preview = text;
         if (text && message.role === "user" && !firstUserText) firstUserText = text;
         if (text && message.role === "assistant" && !firstAssistantText) firstAssistantText = text;
+        // 旧 JSONL 可能没有 model_change；从最后一条 assistant 消息回退模型。
+        if (message.role === "assistant" && typeof message.provider === "string" && typeof message.model === "string") {
+          lastAssistantModel = { provider: message.provider, modelId: message.model };
+        }
       }
+    }
+
+    // 旧会话不包含 model_change / thinking_level_change 时，
+    // 按 pi getSessionContextSettings 的回退规则补齐：
+    //   - 模型取自最后一条 assistant 消息的 provider / model 字段
+    //   - 模型从消息恢复成功时，认为 Agent 曾经运行过，未记录的思考强度视为 "off"
+    if (!modelProvider || !modelId) {
+      if (lastAssistantModel) {
+        modelProvider = lastAssistantModel.provider;
+        modelId = lastAssistantModel.modelId;
+      }
+    }
+    if (thinkingLevel == null && (modelProvider || lastAssistantModel)) {
+      thinkingLevel = "off";
     }
 
     // 检测子会话：任意扩展产生的内部 worker/reviewer 会话。

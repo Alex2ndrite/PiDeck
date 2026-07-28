@@ -404,3 +404,111 @@ test("resolves fork child with absolute Windows parent path via parentSession he
 		rmSync(home, { recursive: true, force: true });
 	}
 });
+
+test("recovers last-used model from assistant message when JSONL has no model_change", async () => {
+	const home = mkdtempSync(join(tmpdir(), "pideck-model-fallback-"));
+	try {
+		const projectPath = "C:\\repo\\project";
+		const piDir = join(home, ".pi", "agent", "sessions", "--C--repo-project--");
+		const sessionFile = join(piDir, "legacy.jsonl");
+		writeSession(sessionFile, [
+			{ type: "session_info", name: "Legacy Session", cwd: projectPath },
+			// No model_change / thinking_level_change — only message-level provider/model.
+			{
+				type: "message",
+				message: {
+					role: "user",
+					content: [{ type: "text", text: "hello" }],
+				},
+			},
+			{
+				type: "message",
+				message: {
+					role: "assistant",
+					provider: "deepseek",
+					model: "deepseek-v4-pro",
+					content: [{ type: "text", text: "hi there" }],
+				},
+			},
+		]);
+
+		const { SessionScanner } = loadSessionScanner(home);
+		const summaries = await new SessionScanner().list(projectPath);
+
+		assert.equal(summaries.length, 1);
+		assert.equal(summaries[0].model?.provider, "deepseek");
+		assert.equal(summaries[0].model?.modelId, "deepseek-v4-pro");
+		assert.equal(summaries[0].thinkingLevel, "off");
+	} finally {
+		rmSync(home, { recursive: true, force: true });
+	}
+});
+
+test("model_change takes precedence over message-level model", async () => {
+	const home = mkdtempSync(join(tmpdir(), "pideck-model-prec-"));
+	try {
+		const projectPath = "C:\\repo\\project";
+		const piDir = join(home, ".pi", "agent", "sessions", "--C--repo-project--");
+		const sessionFile = join(piDir, "mixed.jsonl");
+		writeSession(sessionFile, [
+			{ type: "session_info", name: "Mixed Session", cwd: projectPath },
+			// Assistant message first, then explicit model_change — the latter must win.
+			{
+				type: "message",
+				message: {
+					role: "assistant",
+					provider: "openai",
+					model: "gpt-4o",
+					content: [{ type: "text", text: "first" }],
+				},
+			},
+			{
+				type: "model_change",
+				provider: "anthropic",
+				modelId: "claude-sonnet-4",
+			},
+			{
+				type: "thinking_level_change",
+				thinkingLevel: "high",
+			},
+		]);
+
+		const { SessionScanner } = loadSessionScanner(home);
+		const summaries = await new SessionScanner().list(projectPath);
+
+		assert.equal(summaries.length, 1);
+		assert.equal(summaries[0].model?.provider, "anthropic");
+		assert.equal(summaries[0].model?.modelId, "claude-sonnet-4");
+		assert.equal(summaries[0].thinkingLevel, "high");
+	} finally {
+		rmSync(home, { recursive: true, force: true });
+	}
+});
+
+test("only user messages yield undefined model and undefined thinking", async () => {
+	const home = mkdtempSync(join(tmpdir(), "pideck-user-only-"));
+	try {
+		const projectPath = "C:\\repo\\project";
+		const piDir = join(home, ".pi", "agent", "sessions", "--C--repo-project--");
+		const sessionFile = join(piDir, "user-only.jsonl");
+		writeSession(sessionFile, [
+			{ type: "session_info", name: "User Only", cwd: projectPath },
+			{
+				type: "message",
+				message: {
+					role: "user",
+					content: [{ type: "text", text: "hello" }],
+				},
+			},
+		]);
+
+		const { SessionScanner } = loadSessionScanner(home);
+		const summaries = await new SessionScanner().list(projectPath);
+
+		assert.equal(summaries.length, 1);
+		assert.equal(summaries[0].model, undefined);
+		assert.equal(summaries[0].thinkingLevel, undefined);
+	} finally {
+		rmSync(home, { recursive: true, force: true });
+	}
+});

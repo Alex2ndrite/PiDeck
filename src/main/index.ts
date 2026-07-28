@@ -2640,46 +2640,50 @@ function registerIpc() {
 	let cachedListModels: AvailableModel[] | null = null;
 	let cachedListModelsPending: Promise<AvailableModel[]> | null = null;
 
+	/** 执行一次 pi --list-models，将结果写入模块级缓存。
+	 *  已有缓存或在途请求时不会重复 fork 新进程。 */
+	function fetchModelList(): Promise<AvailableModel[]> {
+		if (cachedListModels) return Promise.resolve(cachedListModels);
+		if (cachedListModelsPending) return cachedListModelsPending;
+
+		cachedListModelsPending = (async () => {
+			const settings = settingsStore.get();
+			const command = piLocator.resolveCommand(
+				settings.customPiPath,
+				settings.wslEnabled,
+				settings.wslDistro,
+				settings.wslUser,
+			);
+			const invocation = piLocator.createInvocation(command, ["--list-models"]);
+			const { execFile } = await import("node:child_process");
+			const result = await new Promise<{ stdout: string }>((resolve, reject) => {
+				execFile(invocation.command, invocation.args, {
+					env: piLocator.createProcessEnv(settings, invocation.pathPrefix, invocation.wsl),
+					shell: invocation.shell,
+					windowsHide: true,
+					timeout: 15_000,
+					encoding: "utf8",
+					windowsVerbatimArguments: invocation.windowsVerbatimArguments,
+				}, (error, stdout, stderr) => {
+					if (error) {
+						const message = (stderr || error.message).slice(0, 300);
+						reject(new Error(message));
+					} else {
+						resolve({ stdout });
+					}
+				});
+			});
+			const models = parsePiListModels(result.stdout);
+			cachedListModels = models;
+			return models;
+		})();
+
+		return cachedListModelsPending;
+	}
+
 	ipcMain.handle(ipcChannels.projectsListModels, async (_event, _projectId?: string) => {
 		try {
-			if (cachedListModels) return cachedListModels;
-			// 已有在途请求时复用同一个 Promise，避免并发 fork 多个 pi 进程
-			if (cachedListModelsPending) return cachedListModelsPending;
-
-			cachedListModelsPending = (async () => {
-				const settings = settingsStore.get();
-				const command = piLocator.resolveCommand(
-					settings.customPiPath,
-					settings.wslEnabled,
-					settings.wslDistro,
-					settings.wslUser,
-				);
-				const invocation = piLocator.createInvocation(command, ["--list-models"]);
-				const { execFile } = await import("node:child_process");
-				const result = await new Promise<{ stdout: string }>((resolve, reject) => {
-					execFile(invocation.command, invocation.args, {
-						env: piLocator.createProcessEnv(settings, invocation.pathPrefix, invocation.wsl),
-						shell: invocation.shell,
-						windowsHide: true,
-						timeout: 15_000,
-						encoding: "utf8",
-						windowsVerbatimArguments: invocation.windowsVerbatimArguments,
-					}, (error, stdout, stderr) => {
-						if (error) {
-							const message = (stderr || error.message).slice(0, 300);
-							reject(new Error(message));
-						} else {
-							resolve({ stdout });
-						}
-					});
-				});
-				const models = parsePiListModels(result.stdout);
-				cachedListModels = models;
-				return models;
-			})();
-
-			const models = await cachedListModelsPending;
-			return models;
+			return await fetchModelList();
 		} catch (error) {
 			cachedListModelsPending = null;
 			void appLogger.warn("pi", "Failed to list models via pi --list-models", {
@@ -3730,6 +3734,19 @@ function registerIpc() {
 		mainWindow.webContents.openDevTools({ mode: "detach" });
 		return true;
 	});
+
+	// 后台预取 pi --list-models 缓存：registerIpc 完成后异步执行一次，
+	// 使用户首次打开模型/思考选择器时不需要等待 fork pi 进程。
+	// 已有缓存或在途请求时不会重复 fork。
+	if (typeof piLocator !== "undefined" && typeof settingsStore !== "undefined") {
+		setTimeout(() => {
+			if (!cachedListModels && !cachedListModelsPending) {
+				void fetchModelList().catch(() => {
+					// 预取失败静默；用户首次点击选择器时会自动重试。
+				});
+			}
+		}, 500);
+	}
 }
 
 function sendTelemetryHeartbeat() {

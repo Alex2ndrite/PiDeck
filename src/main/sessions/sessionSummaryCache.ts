@@ -27,7 +27,8 @@ interface DiskCacheFile<V> {
   entries: Record<string, CacheEntry<V>>;
 }
 
-const DISK_SCHEMA_VERSION = 1;
+/** Bump when Summary fields change so old caches are discarded and re-scanned. */
+const DISK_SCHEMA_VERSION = 2;
 const SAVE_DEBOUNCE_MS = 800;
 
 export class SessionSummaryCache<V> {
