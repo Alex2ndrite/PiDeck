@@ -204,9 +204,12 @@ export function groupToolMessages(messages: ChatMessage[]): RenderMessage[] {
 	function flushThinking() {
 		if (currentThinking.length === 0) return;
 		const previous = currentRun[currentRun.length - 1];
+		// 使用首个消息 ID 作为稳定 key：流式期间 thinking 文本持续增长并多次 flush，
+		// 若每次拼接 ID 会导致 React key 变化 → 组件卸载重建 → expanded 状态丢失。
+		const stableId = currentThinking[0]?.id ?? "";
 		const nextGroup: ThinkingGroupItem = {
 			kind: "thinking-group",
-			id: currentThinking.map((message) => message.id).join("|"),
+			id: stableId,
 			messages: currentThinking,
 			text: currentThinking
 				.map((message) => stripAnsi(message.thinking ?? ""))
@@ -217,7 +220,7 @@ export function groupToolMessages(messages: ChatMessage[]): RenderMessage[] {
 				currentThinking[currentThinking.length - 1]?.timestamp ?? runEndedAt,
 		};
 		if (previous?.kind === "thinking-group") {
-			previous.id = `${previous.id}|${nextGroup.id}`;
+			// 保留原有 stable id，仅合并内容和消息列表
 			previous.messages = [...previous.messages, ...nextGroup.messages];
 			previous.text = [previous.text, nextGroup.text].filter(Boolean).join("\n\n");
 			previous.endedAt = nextGroup.endedAt;
@@ -231,9 +234,11 @@ export function groupToolMessages(messages: ChatMessage[]): RenderMessage[] {
 	function flushTools() {
 		if (currentTools.length === 0) return;
 		flushThinking();
+		// 使用首个工具消息 ID 作为稳定 key，与 flushThinking 同理。
+		const stableId = currentTools[0]?.id ?? "";
 		const group: ToolGroupItem = {
 			kind: "tool-group",
-			id: currentTools.map((message) => message.id).join("|"),
+			id: stableId,
 			messages: currentTools,
 		};
 		currentRun.push(group);
@@ -246,7 +251,8 @@ export function groupToolMessages(messages: ChatMessage[]): RenderMessage[] {
 		flushThinking();
 		if (currentRun.length === 0) return;
 
-		// 合并连续的 assistant 文本消息，避免同一轮回答被拆成多个气泡
+		// 合并连续的 assistant 文本消息，避免同一轮回答被拆成多个气泡。
+		// 合并时保留首个消息 ID 作为稳定 key，流式期间不变化。
 		const merged: Array<MessageItem | ToolGroupItem | ThinkingGroupItem> = [];
 		for (const item of currentRun) {
 			const prev = merged[merged.length - 1];
@@ -260,18 +266,19 @@ export function groupToolMessages(messages: ChatMessage[]): RenderMessage[] {
 					...prev.message,
 					text: prev.message.text + "\n\n" + item.message.text,
 					thinking: (prev.message.thinking || "") + (item.message.thinking ? "\n\n" + item.message.thinking : ""),
-					id: prev.message.id + "|" + item.message.id,
 				};
 			} else {
 				merged.push(item);
 			}
 		}
 
+		// run id 取首个条目的稳定 id，流式期间不会变，React key 保持稳定
+		const runStableId = merged[0]
+			? (merged[0].kind === "message" ? merged[0].message.id : merged[0].id)
+			: "";
 		result.push({
 			kind: "agent-run",
-			id: merged
-				.map((item) => (item.kind === "message" ? item.message.id : item.id))
-				.join("|"),
+			id: runStableId,
 			items: merged,
 			// 回合起点优先用触发它的用户消息时间戳，无用户消息时回退到 run 内首条消息时间戳
 			startedAt: lastUserTimestamp || runStartedAt,

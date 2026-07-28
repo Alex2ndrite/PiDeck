@@ -56,6 +56,21 @@ export interface UseQueuedPromptOptions {
   ) => Promise<void>;
 }
 
+/** 队列发送超时：防止 dispatchPromptSnapshot 长时间挂起导致队列项永久卡在 sending。 */
+const QUEUED_SEND_TIMEOUT_MS = 30_000;
+
+function withSendTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number = QUEUED_SEND_TIMEOUT_MS,
+): Promise<{ ok: true; value: T } | { ok: false }> {
+  return Promise.race([
+    promise.then((value) => ({ ok: true as const, value })),
+    new Promise<{ ok: false }>((resolve) =>
+      setTimeout(() => resolve({ ok: false }), timeoutMs),
+    ),
+  ]);
+}
+
 export function useQueuedPrompt(options: UseQueuedPromptOptions) {
   const {
     displayAgentsRef,
@@ -71,8 +86,13 @@ export function useQueuedPrompt(options: UseQueuedPromptOptions) {
 
   const [queuedPrompts, setQueuedPrompts] = useState<Record<string, QueuedPrompt[]>>({});
   const queuedPromptsRef = useRef<Record<string, QueuedPrompt[]>>({});
-  const mountedRef = useRef(true);
-  useEffect(() => () => { mountedRef.current = false; }, []);
+  // 使用 ref 跟踪组件是否挂载，但必须在 effect 中显式置 true，
+  // 避免 StrictMode double-mount 导致 mountedRef 永远为 false。
+  const mountedRef = useRef(false);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
   function updateQueuedPrompts(
     updater: (current: Record<string, QueuedPrompt[]>) => Record<string, QueuedPrompt[]>,
@@ -195,14 +215,26 @@ export function useQueuedPrompt(options: UseQueuedPromptOptions) {
         setQueuedPrompts(claimed.queues);
 
         try {
-          await dispatchPromptSnapshot(
-            sessionId,
-            queuedPrompt.message,
-            queuedPrompt.images,
-            "steer",
-            queuedPrompt.agentMode,
-            queuedPrompt.templateDescription,
+          const outcome = await withSendTimeout(
+            dispatchPromptSnapshot(
+              sessionId,
+              queuedPrompt.message,
+              queuedPrompt.images,
+              "steer",
+              queuedPrompt.agentMode,
+              queuedPrompt.templateDescription,
+            ),
           );
+          if (!outcome.ok) {
+            updateQueuedPrompts((current) =>
+              resolveClaimedPrompt(current, sessionId, queuedPrompt.id, {
+                type: "unknown",
+                error: "Send timed out",
+              }),
+            );
+            showToast(unknownDeliveryMessage, 6000);
+            break;
+          }
           updateQueuedPrompts((current) =>
             resolveClaimedPrompt(current, sessionId, queuedPrompt.id, {
               type: "accepted",
@@ -243,15 +275,26 @@ export function useQueuedPrompt(options: UseQueuedPromptOptions) {
     setQueuedPrompts(claimed.queues);
     queueFlushBySessionRef.current.add(sessionId);
     try {
-      await dispatchPromptSnapshot(
-        sessionId,
-        queuedPrompt.message,
-        queuedPrompt.images,
-        queuedPrompt.behavior === "direct" ? undefined : queuedPrompt.behavior,
-        queuedPrompt.agentMode,
-        queuedPrompt.templateDescription,
+      const outcome = await withSendTimeout(
+        dispatchPromptSnapshot(
+          sessionId,
+          queuedPrompt.message,
+          queuedPrompt.images,
+          queuedPrompt.behavior === "direct" ? undefined : queuedPrompt.behavior,
+          queuedPrompt.agentMode,
+          queuedPrompt.templateDescription,
+        ),
       );
-      if (!mountedRef.current) return;
+      if (!outcome.ok) {
+        updateQueuedPrompts((current) =>
+          resolveClaimedPrompt(current, sessionId, queuedPrompt.id, {
+            type: "unknown",
+            error: "Send timed out",
+          }),
+        );
+        showToast(unknownDeliveryMessage, 6000);
+        return;
+      }
       updateQueuedPrompts((current) =>
         resolveClaimedPrompt(current, sessionId, queuedPrompt.id, {
           type: "accepted",

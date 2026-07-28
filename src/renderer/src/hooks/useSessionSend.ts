@@ -31,6 +31,8 @@ export type EnqueuePromptSnapshot = {
   message: string;
   images?: ImageContent[];
   agentMode: string;
+  /** 排队投递策略，决定在 agent busy/idle 哪个阶段排空。 */
+  behavior?: "steer" | "followUp";
 };
 
 type PromptTemplate = {
@@ -204,10 +206,12 @@ export function useSessionSend(options: UseSessionSendOptions) {
       }
     }
 
-    // Queue shortcut: when the agent is busy (streamingBehavior === "steer"), enqueue locally
-    // instead of sending through the session API. The queue panel shows the pending item and
-    // drain dispatches it through agents.prompt when the agent becomes idle.
-    if (streamingBehavior === "steer" && options.enqueue) {
+    // Queue shortcut: when the agent is busy, enqueue locally instead of sending through
+    // the session API. The queue panel shows the pending item and drain dispatches it
+    // through the appropriate flush path based on behavior:
+    //   steer    → flushQueuedSteerPrompts (while agent is busy)
+    //   followUp → flushNextQueuedPrompt (when agent becomes idle)
+    if (options.enqueue && (streamingBehavior === "steer" || streamingBehavior === "followUp")) {
       const { message: expandedMessage } = expandPromptTemplates(
         message,
         options.templates,
@@ -217,6 +221,7 @@ export function useSessionSend(options: UseSessionSendOptions) {
         message: expandedMessage,
         images: imageSnapshot,
         agentMode: store.get(sessionComposerModeByIdAtom)[sessionId] ?? "normal",
+        behavior: streamingBehavior,
       });
       if (enqueued) {
         clearSnapshot(sessionId);
@@ -224,7 +229,7 @@ export function useSessionSend(options: UseSessionSendOptions) {
         sendingSessionIdsRef.current.delete(sourceSessionId);
         return;
       }
-      // Queue full: fall through to direct steer send.
+      // Queue full: fall through to direct send.
     }
 
     const requestId = crypto.randomUUID();

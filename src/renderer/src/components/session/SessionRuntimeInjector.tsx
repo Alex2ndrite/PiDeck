@@ -46,7 +46,7 @@ export interface SessionRuntimeInjectorProps {
   runCreateSessionDraft: () => Promise<void>;
   enqueueSessionPrompt: (
     sessionId: string,
-    snapshot: { displayText: string; message: string; images?: ImageContent[]; agentMode: string },
+    snapshot: { displayText: string; message: string; images?: ImageContent[]; agentMode: string; behavior?: "steer" | "followUp" },
   ) => boolean;
   ensureSessionId?: (sessionId: string) => Promise<string>;
 

@@ -34,7 +34,7 @@ import { useSessionRuntimeBridge } from "./hooks/useSessionRuntimeBridge";
 import { useSessionLayout } from "./hooks/useSessionLayout";
 import { useFileEditor } from "./hooks/useFileEditor";
 import { useOverlayActions } from "./hooks/useOverlayActions";
-import { useWorkspacePanels, type WorkspaceDrawerPanel } from "./hooks/useWorkspacePanels";
+import { useWorkspacePanels, type WorkspaceDrawerPanel, type WorkspaceExternalEditorAdapter } from "./hooks/useWorkspacePanels";
 import { useDrawerPorts } from "./hooks/useDrawerPorts";
 import { useTerminalDock } from "./hooks/useTerminalDock";
 import { useImportFlow } from "./hooks/useImportFlow";
@@ -262,7 +262,13 @@ export function App() {
   const promptHistoryRef = useRef<Record<string, string[]>>({});
 
   // Drawer state delegated to useWorkspacePanels.
-  const workspace = useWorkspacePanels({ projectId: activeProjectId });
+  // 外部编辑器适配器：将 desktopApi 包装为 WorkspaceExternalEditorAdapter，
+  // 供 useWorkspacePanels 的 loadExternalEditors / openProjectInExternalEditor 使用。
+  const editorsAdapter = useMemo<WorkspaceExternalEditorAdapter>(() => ({
+    list: () => api.editors.list(),
+    openProject: (editor, projectPath) => api.editors.openProject(editor, projectPath),
+  }), []);
+  const workspace = useWorkspacePanels({ projectId: activeProjectId, editors: editorsAdapter });
   const drawer = workspace.drawer;
   const drawerCollapsed = workspace.drawerCollapsed;
   const drawerPinned = workspace.drawerPinned;
@@ -640,7 +646,7 @@ export function App() {
 
   const enqueueSessionPrompt = useCallback((
     sessionId: string,
-    snapshot: { displayText: string; message: string; images?: ImageContent[]; agentMode: string },
+    snapshot: { displayText: string; message: string; images?: ImageContent[]; agentMode: string; behavior?: "steer" | "followUp" },
   ) => {
     if (!store.get(sessionRuntimeBySessionIdAtomFamily(sessionId))?.agentId) return false;
     return queue.enqueueQueuedPrompt(sessionId, {
@@ -648,7 +654,7 @@ export function App() {
       message: snapshot.message,
       displayText: snapshot.displayText,
       images: snapshot.images,
-      behavior: "steer",
+      behavior: snapshot.behavior ?? "steer",
       agentMode: snapshot.agentMode as ComposerAgentMode,
       timestamp: Date.now(),
     });
@@ -1055,7 +1061,6 @@ export function App() {
           .redetect()
           .then((updated) => {
             setSettings(updated);
-            return api.editors.list();
           })
           .then(() => workspace.loadExternalEditors())
           .catch(() => undefined);

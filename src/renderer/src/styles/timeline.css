@@ -4683,7 +4683,7 @@ body.is-composer-resizing .composer-resize-handle::after {
   max-height: calc(100vh - 56px);
 }
 .context-backdrop {
-  position: absolute;
+  position: fixed;
   inset: 0;
   z-index: 45;
 }
