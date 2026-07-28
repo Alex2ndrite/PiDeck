@@ -3499,6 +3499,7 @@ function registerIpc() {
 		settingsStore,
 		appLogger,
 		getMainWindow: () => mainWindow,
+		openExternalUrl,
 	});
 }
 
