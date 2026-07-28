@@ -12,6 +12,7 @@ export type FilesIpcDeps = {
 	settingsStore: SettingsStore;
 	appLogger: Pick<AppLogger, "info">;
 	getMainWindow: () => BrowserWindow | null;
+	openExternalUrl: (url: string, forceSystem?: boolean) => Promise<void>;
 };
 
 export function registerFilesIpc({
@@ -20,6 +21,7 @@ export function registerFilesIpc({
 	settingsStore,
 	appLogger,
 	getMainWindow,
+	openExternalUrl,
 }: FilesIpcDeps): void {
 	// 将 WSL Linux 路径转为 Windows 可访问的路径（/mnt/c → C:\，/home/... → \\wsl$\<distro>\...）
 	const toWindowsPath = (linuxPath: string): string => {
@@ -61,8 +63,7 @@ export function registerFilesIpc({
 	ipcMain.handle(ipcChannels.browserOpenExternal, async (_event, url: string) => {
 		// This IPC is renderer-callable, so it must share the protocol gate used by
 		// every other external-link path instead of passing arbitrary schemes to the OS.
-		if (!url.startsWith("http:") && !url.startsWith("https:")) return;
-		await shell.openExternal(url);
+		await openExternalUrl(url, true);
 	});
 
 	ipcMain.handle(ipcChannels.filesReadContent, async (_event, path: string) => {
