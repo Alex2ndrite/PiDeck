@@ -44,6 +44,7 @@ import {
 } from "./git/GitResourceTree";
 import { GitCompactFilter, PaneHeader } from "./git/GitPanelControls";
 import { SourceControlGraph } from "./git/GitGraph";
+import { getViewportBoundMenuPlacement } from "./git/floatingMenuPosition";
 
 type GitPanelProps = {
   projectId: string;
@@ -819,16 +820,23 @@ export function GitPanel(props: GitPanelProps) {
   const [branchDropdownStyle, setBranchDropdownStyle] = useState<React.CSSProperties>({});
   const branchBarRef = useRef<HTMLDivElement>(null);
   const branchTriggerRef = useRef<HTMLButtonElement>(null);
+  const branchDropdownRef = useRef<HTMLDivElement>(null);
 
-  // 计算下拉位置（portal 到 body 后需要手动对齐触发按钮）
   const updateBranchDropdownPosition = useCallback(() => {
     if (!branchTriggerRef.current) return;
     const rect = branchTriggerRef.current.getBoundingClientRect();
+    const placement = getViewportBoundMenuPlacement(
+      rect,
+      { width: window.innerWidth, height: window.innerHeight },
+      { preferredWidth: 240, maxHeight: 300, gap: 2 },
+    );
     setBranchDropdownStyle({
       position: "fixed",
-      left: rect.left,
-      top: rect.bottom + 2,
-      minWidth: Math.max(180, rect.width),
+      left: placement.left,
+      top: placement.top,
+      bottom: placement.bottom,
+      width: placement.width,
+      maxHeight: placement.maxHeight,
       zIndex: 9999,
     });
   }, []);
@@ -838,14 +846,17 @@ export function GitPanel(props: GitPanelProps) {
     if (!branchOpen) return;
     updateBranchDropdownPosition();
     const handler = (event: MouseEvent) => {
+      const target = event.target as Node;
+      // Portal 出来的菜单不再是 branchBar 的后代，二者都属于菜单交互区。
       if (
-        branchBarRef.current &&
-        !branchBarRef.current.contains(event.target as Node)
+        branchBarRef.current?.contains(target) ||
+        branchDropdownRef.current?.contains(target)
       ) {
-        setBranchOpen(false);
-        setBranchCreating(false);
-        setNewBranchName("");
+        return;
       }
+      setBranchOpen(false);
+      setBranchCreating(false);
+      setNewBranchName("");
     };
     const handleScroll = () => updateBranchDropdownPosition();
     const handleResize = () => updateBranchDropdownPosition();
@@ -923,11 +934,16 @@ export function GitPanel(props: GitPanelProps) {
         )}
         {branchOpen &&
           createPortal(
-            <div className="git-branch-dropdown" style={branchDropdownStyle}>
+            <div
+              ref={branchDropdownRef}
+              className="git-branch-dropdown"
+              style={branchDropdownStyle}
+            >
             {props.branches.map((branch) => (
               <button
                 key={branch}
                 className={`git-branch-item${branch === props.currentBranch ? " active" : ""}`}
+                title={branch}
                 onClick={() => {
                   if (branch !== props.currentBranch)
                     props.onSwitchBranch?.(branch);

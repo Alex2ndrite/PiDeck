@@ -179,7 +179,14 @@ describe("Git panel VS Code Source Control contract", () => {
     assert.doesNotMatch(graph, /git-commit-detail/);
     assert.match(styles, /grid-template-columns:\s*auto minmax\(0, 1fr\) auto/);
     assert.match(styles, /font-size:\s*var\(--font-size-body\)/);
-    assert.match(cssRule("\\.git-compact-filter-menu"), /min-width:\s*160px/);
+    const compactFilterMenu = cssRule("\\.git-compact-filter-menu");
+    assert.match(compactFilterMenu, /position:\s*fixed/);
+    assert.match(compactFilterMenu, /max-width:\s*calc\(100vw - var\(--space-4\)\)/);
+    assert.match(panelControls, /getViewportBoundMenuPlacement/);
+    assert.match(panelControls, /menuRef\.current\?\.contains\(target\)/);
+    assert.match(panel, /getViewportBoundMenuPlacement/);
+    assert.match(panel, /preferredWidth:\s*240/);
+    assert.match(panel, /branchDropdownRef\.current\?\.contains\(target\)/);
     const compactFilterButton = cssRule("\\.git-compact-filter-btn");
     assert.match(compactFilterButton, /min-width:\s*0/);
     assert.match(compactFilterButton, /overflow:\s*hidden/);

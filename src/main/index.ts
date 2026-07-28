@@ -275,10 +275,50 @@ async function createAnonymousSession(
 ): Promise<CreateAnonymousSessionResult> {
 	const project = projectStore.get(input.projectId);
 	if (!project) throw new Error(mainCopy("project.notFound"));
+
+	// Resolve pi-configured defaults so the composer bar shows the effective
+	// model / thinking level even before the anonymous Agent is fully started.
+	let model: { provider: string; modelId: string } | undefined;
+	let thinkingLevel: string | undefined;
+	try {
+		const [settingsResult, modelsResult] = await Promise.all([
+			configManager.getSettingsConfig(),
+			configManager.getModelsConfig(),
+		]);
+		const settings = settingsResult.parsed;
+		const defaultProvider = typeof settings.defaultProvider === "string"
+			? settings.defaultProvider
+			: undefined;
+		const defaultModelId = typeof settings.defaultModel === "string"
+			? settings.defaultModel
+			: undefined;
+		if (defaultProvider && defaultModelId) {
+			model = { provider: defaultProvider, modelId: defaultModelId };
+		} else {
+			const providers = modelsResult.parsed?.providers;
+			if (providers) {
+				const firstProviderName = Object.keys(providers)[0];
+				const firstProvider = firstProviderName ? providers[firstProviderName] : undefined;
+				const firstModel = firstProvider?.models?.[0];
+				if (firstProviderName && firstModel?.id) {
+					model = { provider: firstProviderName, modelId: firstModel.id };
+				}
+			}
+		}
+		const level = typeof settings.defaultThinkingLevel === "string"
+			? settings.defaultThinkingLevel
+			: undefined;
+		thinkingLevel = level;
+	} catch {
+		// Config read is best-effort.
+	}
+
 	const session = sessionCatalog.createAnonymous({
 		projectId: project.id,
 		title: input.title?.trim() || mainCopy("session.anonymousTitle", { project: project.name }),
 		environment: settingsStore.get().wslEnabled ? "wsl" : "native",
+		model,
+		thinkingLevel,
 	});
 	let agentId: string | undefined;
 	try {
@@ -2218,12 +2258,54 @@ function registerIpc() {
 		async (_event, input: CreateSessionDraftInput) => {
 			const project = projectStore.get(input.projectId);
 			if (!project) throw new Error(mainCopy("project.notFound"));
+			// Auto-fill model / thinkingLevel from pi config when the caller hasn't
+			// provided them, so the composer bar shows the effective default.
+			let model = input.model;
+			let thinkingLevel = input.thinkingLevel;
+			if (!model || !thinkingLevel) {
+				try {
+					const [settingsResult, modelsResult] = await Promise.all([
+						configManager.getSettingsConfig(),
+						configManager.getModelsConfig(),
+					]);
+					const settings = settingsResult.parsed;
+					const defaultProvider = typeof settings.defaultProvider === "string"
+						? settings.defaultProvider
+						: undefined;
+					const defaultModelId = typeof settings.defaultModel === "string"
+						? settings.defaultModel
+						: undefined;
+					if (!model && defaultProvider && defaultModelId) {
+						model = { provider: defaultProvider, modelId: defaultModelId };
+					} else if (!model) {
+						// Fallback: first provider's first model from models.json
+						const providers = modelsResult.parsed?.providers;
+						if (providers) {
+							const firstProviderName = Object.keys(providers)[0];
+							const firstProvider = firstProviderName ? providers[firstProviderName] : undefined;
+							const firstModel = firstProvider?.models?.[0];
+							if (firstProviderName && firstModel?.id) {
+								model = { provider: firstProviderName, modelId: firstModel.id };
+							}
+						}
+					}
+					if (!thinkingLevel) {
+						const level = typeof settings.defaultThinkingLevel === "string"
+							? settings.defaultThinkingLevel
+							: undefined;
+						// pi's schema uses underscore; the runtime and UI use camelCase.
+						thinkingLevel = level;
+					}
+				} catch {
+					// Config read is best-effort; draft creation must never block.
+				}
+			}
 			return sessionCatalog.createDraft({
 				projectId: input.projectId,
 				title: input.title?.trim() || mainCopy("session.newTitle"),
 				environment: settingsStore.get().wslEnabled ? "wsl" : "native",
-				model: input.model,
-				thinkingLevel: input.thinkingLevel,
+				model,
+				thinkingLevel,
 			});
 		},
 	);

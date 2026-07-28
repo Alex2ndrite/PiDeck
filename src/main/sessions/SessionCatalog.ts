@@ -167,6 +167,8 @@ export class SessionCatalog {
 		projectId: string;
 		title: string;
 		environment: SessionEnvironment;
+		model?: { provider: string; modelId: string };
+		thinkingLevel?: string;
 	}): SessionRecord {
 		this.assertLoaded();
 		const now = Date.now();
@@ -180,6 +182,8 @@ export class SessionCatalog {
 			wslDistro: input.environment === "wsl" ? this.identityContext.wslDistro : undefined,
 			wslUser: input.environment === "wsl" ? this.identityContext.wslUser : undefined,
 			status: "active",
+			model: input.model,
+			thinkingLevel: input.thinkingLevel,
 			createdAt: now,
 			updatedAt: now,
 		};

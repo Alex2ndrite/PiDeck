@@ -1,7 +1,15 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import { createPortal } from "react-dom";
 import { Check, ChevronDown } from "lucide-react";
 import { Twistie } from "./GitResourceTree";
+import { getViewportBoundMenuPlacement } from "./floatingMenuPosition";
 
 export function PaneHeader(props: {
   id: string;
@@ -49,23 +57,30 @@ export function GitCompactFilter(props: {
   className?: string;
 }) {
   const [open, setOpen] = useState(false);
-  const [menuStyle, setMenuStyle] = useState<React.CSSProperties>({});
+  const [menuStyle, setMenuStyle] = useState<CSSProperties>({});
   const containerRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   const closeMenu = useCallback(() => {
     setOpen(false);
   }, []);
 
-  // 计算下拉菜单位置：相对于触发按钮的左下角
   const updateMenuPosition = useCallback(() => {
     if (!buttonRef.current) return;
     const rect = buttonRef.current.getBoundingClientRect();
+    const placement = getViewportBoundMenuPlacement(
+      rect,
+      { width: window.innerWidth, height: window.innerHeight },
+      { preferredWidth: 240, maxHeight: 240, gap: 2 },
+    );
     setMenuStyle({
       position: "fixed",
-      left: rect.left,
-      top: rect.bottom + 2,
-      minWidth: Math.max(160, rect.width),
+      left: placement.left,
+      top: placement.top,
+      bottom: placement.bottom,
+      width: placement.width,
+      maxHeight: placement.maxHeight,
       zIndex: 9999,
     });
   }, []);
@@ -75,15 +90,19 @@ export function GitCompactFilter(props: {
     updateMenuPosition();
 
     const handlePointerDown = (event: PointerEvent) => {
-      // 点击容器（按钮）外部关闭菜单
-      if (!containerRef.current?.contains(event.target as Node)) {
-        closeMenu();
+      const target = event.target as Node;
+      // Portal 菜单不属于触发器的 DOM 子树，必须作为同一交互边界处理。
+      if (
+        containerRef.current?.contains(target) ||
+        menuRef.current?.contains(target)
+      ) {
+        return;
       }
+      closeMenu();
     };
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") closeMenu();
     };
-    // 滚动/缩放时重新定位，确保菜单始终跟随按钮
     const handleScroll = () => updateMenuPosition();
     const handleResize = () => updateMenuPosition();
 
@@ -103,6 +122,7 @@ export function GitCompactFilter(props: {
 
   const menuElement = open ? (
     <div
+      ref={menuRef}
       className="git-compact-filter-menu"
       role="listbox"
       style={menuStyle}
@@ -114,6 +134,7 @@ export function GitCompactFilter(props: {
           className={`git-compact-filter-opt${option.value === props.value ? " active" : ""}`}
           role="option"
           aria-selected={option.value === props.value}
+          title={option.label}
           onClick={() => {
             props.onChange(option.value);
             closeMenu();

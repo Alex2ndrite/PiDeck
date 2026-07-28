@@ -2066,16 +2066,17 @@ html[data-theme="dark"] .scratch-pad-md mark {
   opacity: 0.5;
   cursor: not-allowed;
 }
-/* 分支下拉菜单与 GitCompactFilter 菜单统一风格；加强边框和 hover 区分度 */
+/* Portal 菜单由运行时按视口定位；这里仅保留视觉样式和安全兜底。 */
 .git-branch-dropdown {
-  position: absolute;
-  left: 8px;
-  top: 100%;
-  z-index: 30;
-  min-width: 180px;
-  max-height: 300px;
-  overflow-y: auto;
-  margin-top: 2px;
+  position: fixed;
+  left: var(--space-2);
+  top: var(--space-2);
+  z-index: 9999;
+  min-width: 0;
+  max-width: calc(100vw - var(--space-4));
+  max-height: calc(100vh - var(--space-4));
+  overflow: auto;
+  margin: 0;
   padding: 4px;
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-md);
@@ -2084,19 +2085,25 @@ html[data-theme="dark"] .scratch-pad-md mark {
 }
 .git-branch-item {
   display: flex;
+  min-width: 0;
+  min-height: 28px;
   align-items: center;
   gap: 6px;
   width: 100%;
-  height: 28px;
-  padding: 0 8px;
+  padding: 5px 8px;
   border: none;
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--color-text-primary);
   font-family: var(--font-family-base);
   font-size: var(--font-size-caption);
+  line-height: var(--line-height-caption);
   text-align: left;
   cursor: pointer;
+}
+.git-branch-item > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .git-branch-item:hover {
   background: color-mix(in srgb, var(--color-text-primary) 8%, var(--color-bg-panel));
@@ -2717,14 +2724,15 @@ body.is-git-pane-resizing, body.is-git-pane-resizing * { cursor: row-resize !imp
   transform: rotate(180deg);
 }
 .git-compact-filter-menu {
-  position: absolute;
-  left: 0;
-  top: 100%;
-  z-index: 30;
-  min-width: 160px;
-  max-height: 240px;
-  overflow-y: auto;
-  margin-top: 2px;
+  position: fixed;
+  left: var(--space-2);
+  top: var(--space-2);
+  z-index: 9999;
+  min-width: 0;
+  max-width: calc(100vw - var(--space-4));
+  max-height: calc(100vh - var(--space-4));
+  overflow: auto;
+  margin: 0;
   padding: 4px;
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-md);
@@ -2733,22 +2741,23 @@ body.is-git-pane-resizing, body.is-git-pane-resizing * { cursor: row-resize !imp
 }
 .git-compact-filter-opt-label {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  flex: 1;
+  overflow-wrap: anywhere;
 }
 .git-compact-filter-opt {
   display: flex;
+  min-width: 0;
+  min-height: 28px;
   align-items: center;
   gap: 6px;
   width: 100%;
-  height: 28px;
-  padding: 0 8px;
+  padding: 5px 8px;
   border: none;
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--color-text-primary);
   font-size: var(--font-size-caption);
+  line-height: var(--line-height-caption);
   text-align: left;
   cursor: pointer;
 }
