@@ -86,6 +86,8 @@ the approved migration plan. It is intentionally separate from release notes.
 | 2026-07-28 | Phase 7 AgentManager | Extracted persisted and live message projection to `pi/AgentMessageProjector.ts`. | Entry-ID alignment, historical tool reconstruction, thinking/image recovery, and bounded tool details are display transformations, not process ownership. Keeping them in AgentManager obscured the Session-first offline-read boundary. | AgentManager now injects translation and cancelled-ask state into the projector while retaining its compatibility facade and live ANSI cleanup. Direct projector tests cover entry alignment, image placeholders, bounded tool output, cancelled questions, and branch traversal; typecheck, 695/695 tests, build, and Electron A3 pass with 100 rendered rows and zero runtimes. |
 | 2026-07-28 | Phase 7 CSS | Split the 20,079-line renderer stylesheet into ordered foundation, timeline, surfaces, integrations, and workspace sources, with `styles.css` retained as the single import entry point. | A monolithic stylesheet made domain ownership unreviewable and encouraged accidental brace/cascade damage. The five cuts are PostCSS top-level boundaries and preserve original source order exactly. | Static style contracts now consume a cascade-ordered aggregate helper instead of binding to one file. The split preserves rule content and order; only four font URLs change for the new directory and pre-existing trailing whitespace is normalized. PostCSS, Vite CSS transform, typecheck, 696/696 tests, build, and production-built Electron A3 pass with 100 rows, zero runtimes, and no error boundary. |
 | 2026-07-28 | UI parity tooling | Added `--built` mode to the isolated Electron fixture runner. | The local Vite dependency optimizer can exhaust process memory before the renderer mounts, which prevents a dev-server fixture from producing UI evidence even when the production build is valid. | `--built` starts the just-built Electron main entry with the same isolated user data, CDP, screenshots, and A3 assertions; it explicitly removes the dev renderer URL so the renderer loads packaged `file:` assets. |
+| 2026-07-28 | Main dev parity correction | Restored the drawer default and grid column from the migration-local `270px`/hard-coded `260px` behavior to main `dev@ccc5c4a`'s dynamic `320px` drawer-width contract. | A paired BrowserPanel capture exposed a visible width mismatch and showed that drag resizing could update state without fully updating the grid column. This is unrelated to the approved lazy-start behavior. | `AppShell` now applies `drawerWidth` to both drawer variables; the default is 320px, a regression test protects the contract, and the rebuilt BrowserPanel capture aligns with the main `dev` reference. |
+| 2026-07-28 | Final acceptance | Re-ran the complete dependency, source, build, production-Electron, and paired-reference gates on the final worktree. | Final claims must be based on the current production build rather than earlier intermediate commits. | `npm ci --ignore-scripts --dry-run`, `npm test` (696/696), typecheck, and `build:fast` with an 8GB Node heap all passed. Built A3 renders 100 rows in 168ms with zero runtime/error boundary; empty Chat is `0 Catalog / 0 runtime`, and first send creates one Catalog Session, promotes the composer to a UUID, and observes a Pi spawn. |
 
 ## Implementation progress
 
@@ -117,10 +119,35 @@ the approved migration plan. It is intentionally separate from release notes.
 - Phase 4 real Electron scale and recovery scenarios A3-A10 passed on 2026-07-27.
   The timeline now reads stable-ID pages; `readRecordMessages` remains only for
   non-timeline compatibility callers and must not be reintroduced into the renderer timeline.
-- Phase 6 BrowserPanel guest validation is complete. Phase 7 still needs the
-  planned production large-module split and a direct visual comparison against
-  the main repository `dev@ccc5c4a`; green source and Node tests do not claim
-  that UI parity or structural gate has run.
+- Phase 6 BrowserPanel guest validation is complete. The planned Phase 7
+  production splits are complete where they have a stable ownership boundary:
+  i18n, Session history/message projection, renderer presentation domains,
+  main IPC registration, Git presentation, and CSS. `App.tsx` remains the
+  composition root and `FeishuBridge.ts` retains cross-protocol coordination;
+  splitting either further would duplicate Session/runtime ownership without a
+  safe boundary.
+
+## Final acceptance (2026-07-28)
+
+- Dependency and lockfile: `npm ci --ignore-scripts --dry-run` succeeds and
+  the top-level dependency tree contains `jotai@2.20.2` with no Zustand.
+- Test entry and JSONL safety: `npm test` is the canonical runner and passes
+  696/696. Real-file and failure-injection coverage exercises atomic temp-file
+  replacement, fsync, backup retention, path locking, and rollback conflicts.
+- Session-first lifecycle: all renderer/preload/Web/Feishu commands are stable
+  `sessionId` addressed. The only approved visible behavior difference from
+  main `dev` is the pre-send Composer: opening Chat creates neither a Catalog
+  record nor a Pi runtime; sending the first message creates the record and
+  activates Pi.
+- UI parity: paired production-built captures against `F:\PiDeck` at
+  `dev@ccc5c4a` confirm the workbench geometry, Settings and Config dialogs,
+  BrowserPanel toolbar, and dynamic 320px drawer contract. The candidate keeps
+  the same desktop workbench and adds only the approved pre-send Composer.
+- Final built evidence lives under
+  `F:\PiDeck-validation\session-integrator-current\runs`: A3 at
+  `A3-2026-07-28T06-51-05-282Z`, empty Chat at
+  `A3-2026-07-28T06-51-20-404Z`, and first-send activation at
+  `A3-2026-07-28T06-51-38-464Z`.
 
 ## UI parity rule
 

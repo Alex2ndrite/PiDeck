@@ -122,7 +122,7 @@ export function AppShell(props: AppShellProps) {
           "--list-expanded-width": `${listWidth}px`,
           "--list-hover-width": `${Math.max(190, listWidth)}px`,
           "--drawer-width": `${drawer && !drawerCollapsed ? drawerWidth : 0}px`,
-          "--drawer-col-w": `${drawer && !drawerCollapsed ? 260 : 0}px`,
+          "--drawer-col-w": `${drawer && !drawerCollapsed ? drawerWidth : 0}px`,
           "--drawer-splitter-w": `${drawer && !drawerCollapsed ? 6 : 0}px`,
         } as CSSProperties
       }

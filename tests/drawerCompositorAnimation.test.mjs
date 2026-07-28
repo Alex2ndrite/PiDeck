@@ -37,7 +37,10 @@ test("drawer keeps its content mounted through the layout transition", () => {
   assert.match(appShell, /WorkspaceDrawerHost/);
   assert.match(appShell, /renderPanel=\{\(panel\) => drawerContent\(panel\)\}/);
   assert.match(appShell, /drawer && !drawerCollapsed \? drawerWidth : 0/);
-  assert.match(appShell, /drawer && !drawerCollapsed \? 260 : 0/);
+  assert.match(
+    appShell,
+    /"--drawer-col-w": `\$\{drawer && !drawerCollapsed \? drawerWidth : 0\}px`/,
+  );
 });
 
 test("file rows use the integer control line-height token", () => {

@@ -508,7 +508,7 @@ export function App() {
     api,
   });
   const { piStatus, piChecking, environmentDialog, setPiStatus, setEnvironmentDialog } = piUpdate;
-  const [drawerWidth, setDrawerWidth] = useState(270);
+  const [drawerWidth, setDrawerWidth] = useState(320);
   const [composerHeight, setComposerHeight] = useState(COMPOSER_MIN_HEIGHT);
   const [composerOffsetHeight, setComposerOffsetHeight] = useState(0);
   /** ResizeObserver 驱动布局预算重新计算；ref 尺寸本身变化不会触发 React render。 */
