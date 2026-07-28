@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, test } from "node:test";
+import { readRendererStyles } from "./helpers/rendererStyles.mjs";
 
 const panel = readFileSync("src/renderer/src/components/app/GitPanel.tsx", "utf8");
 const resourceTree = readFileSync(
@@ -16,7 +17,7 @@ const panelControls = readFileSync(
   "utf8",
 );
 const gitSurface = [panel, resourceTree, graph, panelControls].join("\n");
-const styles = readFileSync("src/renderer/src/styles.css", "utf8");
+const styles = readRendererStyles();
 const i18n = [
   readFileSync("src/renderer/src/i18n.ts", "utf8"),
   readFileSync("src/renderer/src/i18n/rendererCopy.zh-CN.ts", "utf8"),

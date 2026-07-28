@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { readRendererStyles } from "./helpers/rendererStyles.mjs";
 
-const css = readFileSync("src/renderer/src/styles.css", "utf8");
+const css = readRendererStyles();
 
 test("collapsed sidebar reveal does not override the v3 conversation list layout", () => {
   assert.doesNotMatch(

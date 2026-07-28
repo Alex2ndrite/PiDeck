@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { readRendererStyles } from "./helpers/rendererStyles.mjs";
 
 const appSource = readFileSync("src/renderer/src/App.tsx", "utf8");
 const sessionViewSource = readFileSync(
@@ -11,7 +12,7 @@ const headerSource = readFileSync(
   "src/renderer/src/components/session/SessionHeader.tsx",
   "utf8",
 );
-const css = readFileSync("src/renderer/src/styles.css", "utf8");
+const css = readRendererStyles();
 
 function componentInvocation(source, componentName) {
   const start = source.indexOf(`<${componentName}`);

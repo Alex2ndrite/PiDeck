@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { readRendererStyles } from "./helpers/rendererStyles.mjs";
 
-const css = readFileSync("src/renderer/src/styles.css", "utf8");
+const css = readRendererStyles();
 
 const v3SidebarRule = css.match(
   /\.wechat-shell:not\(\.list-collapsed\) \.chat-list-pane\.v3-braun,\n\.list-collapsed:not\(\.list-hover-suppressed\) \.chat-list-pane\.v3-braun:hover,\n\.list-collapsed:not\(\.list-hover-suppressed\) \.chat-list-pane\.v3-braun:focus-within \{([\s\S]*?)\n\}/,

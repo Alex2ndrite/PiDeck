@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { readRendererStyles } from "./helpers/rendererStyles.mjs";
 import ts from "typescript";
 import vm from "node:vm";
 
@@ -18,7 +19,7 @@ function loadAppUtils() {
 }
 
 test("multi-select image export stays renderable for html-to-image", () => {
-  const styles = readFileSync("src/renderer/src/styles.css", "utf8");
+  const styles = readRendererStyles();
   const rule = styles.match(/\.multi-select-image-export \{([\s\S]*?)\n\}/)?.[1] ?? "";
 
   assert.match(rule, /left:\s*0;/);

@@ -137,6 +137,21 @@ function scenarioPort(scenario) {
   return 9400 + numeric;
 }
 
+function builtElectronExecutable(root) {
+  const executable = process.platform === "win32"
+    ? "electron.exe"
+    : process.platform === "darwin"
+      ? "Electron.app/Contents/MacOS/Electron"
+      : "electron";
+  return join(root, "node_modules", "electron", "dist", executable);
+}
+
+function builtLaunchEnvironment() {
+  const env = { ...process.env };
+  delete env.ELECTRON_RENDERER_URL;
+  return env;
+}
+
 async function copyTemplate(manifest, scenario, runDir) {
   const templateName = manifest.scenarios[scenario]?.userDataTemplate;
   const template = manifest.userData[templateName];
@@ -306,6 +321,7 @@ function assertScenario({ scenario, manifest, observed, recoveredCatalog }) {
 async function run() {
   const scenario = requiredOption("--scenario");
   const evidence = resolve(requiredOption("--evidence"));
+  const useBuiltApp = process.argv.includes("--built");
   const captureOnly = process.argv.includes("--capture-only");
   const clickSelectors = options("--click-selector");
   const sendText = option("--send-text");
@@ -338,10 +354,26 @@ async function run() {
   if (!Number.isSafeInteger(selectionTimeoutMs) || selectionTimeoutMs < 1_000) {
     throw new Error("--selection-timeout-ms must be an integer of at least 1000");
   }
-  const command = `${process.execPath} scripts/dev.js -- --user-data-dir=${userData} --remote-debugging-port=${port}`;
+  const launch = useBuiltApp
+    ? {
+      command: builtElectronExecutable(repoRoot),
+      args: [
+        join(repoRoot, "out", "main", "index.js"),
+        `--user-data-dir=${userData}`,
+        `--remote-debugging-port=${port}`,
+      ],
+      env: builtLaunchEnvironment(),
+    }
+    : {
+      command: process.execPath,
+      args: ["scripts/dev.js", "--", `--user-data-dir=${userData}`, `--remote-debugging-port=${port}`],
+      env: process.env,
+    };
+  const command = `${launch.command} ${launch.args.join(" ")}`;
   await writeFile(join(runDir, "command.txt"), `${command}\n`, "utf8");
-  const child = spawn(process.execPath, ["scripts/dev.js", "--", `--user-data-dir=${userData}`, `--remote-debugging-port=${port}`], {
+  const child = spawn(launch.command, launch.args, {
     cwd: repoRoot,
+    env: launch.env,
     stdio: ["ignore", "pipe", "pipe"],
   });
   const stdout = await import("node:fs").then(({ createWriteStream }) => createWriteStream(join(logsDir, "electron.stdout.log")));

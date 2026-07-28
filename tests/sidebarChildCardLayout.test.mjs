@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { readRendererStyles } from "./helpers/rendererStyles.mjs";
 
-const styles = readFileSync("src/renderer/src/styles.css", "utf8");
+const styles = readRendererStyles();
 const appSource = readFileSync("src/renderer/src/App.tsx", "utf8");
 
 test("sidebar child cards share the workspace card's horizontal bounds", () => {

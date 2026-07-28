@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { readRendererStyles } from "./helpers/rendererStyles.mjs";
 
 import { mergeAgentRuntimeState } from "../src/renderer/src/utils/agentRuntimeState.ts";
 import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
@@ -28,7 +29,7 @@ const composerPanelsSource = readFileSync(
   "src/renderer/src/components/session/ComposerPanels.tsx",
   "utf8",
 );
-const stylesSource = readFileSync("src/renderer/src/styles.css", "utf8");
+const stylesSource = readRendererStyles();
 const i18nSource = [
   readFileSync("src/renderer/src/i18n/rendererCopy.zh-CN.ts", "utf8"),
   readFileSync("src/renderer/src/i18n/rendererCopy.en-US.ts", "utf8"),

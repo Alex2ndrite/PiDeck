@@ -44,3 +44,12 @@ test("Electron fixture waits for delayed session-first controls before parity cl
   assert.match(source, /await clickMountedElement\(cdp, clickSelector\)/);
   assert.doesNotMatch(source, /const matched = await evaluate\(cdp/);
 });
+
+test("Electron fixture can validate the production build without a Vite dev server", () => {
+  const source = readFileSync("scripts/run-session-fixture-electron.mjs", "utf8");
+  assert.match(source, /const useBuiltApp = process\.argv\.includes\("--built"\)/);
+  assert.match(source, /function builtElectronExecutable\(root\)/);
+  assert.match(source, /join\(repoRoot, "out", "main", "index\.js"\)/);
+  assert.match(source, /function builtLaunchEnvironment\(\)/);
+  assert.match(source, /delete env\.ELECTRON_RENDERER_URL/);
+});

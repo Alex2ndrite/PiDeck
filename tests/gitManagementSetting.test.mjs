@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, test } from "node:test";
+import { readRendererStyles } from "./helpers/rendererStyles.mjs";
 
 const app = [
   readFileSync("src/renderer/src/App.tsx", "utf8"),
@@ -16,7 +17,7 @@ const i18n = [
   readFileSync("src/renderer/src/i18n/rendererCopy.zh-CN.ts", "utf8"),
   readFileSync("src/renderer/src/i18n/rendererCopy.en-US.ts", "utf8"),
 ].join("\n");
-const styles = readFileSync("src/renderer/src/styles.css", "utf8");
+const styles = readRendererStyles();
 
 describe("optional Git management entry", () => {
   test("persists an upgrade-safe enabled-by-default setting", () => {

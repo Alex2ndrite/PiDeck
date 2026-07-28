@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import test from "node:test";
 import postcss from "postcss";
 import { build, createLogger, createServer } from "vite";
+import { readRendererStyles } from "./helpers/rendererStyles.mjs";
 
 test("renderer stylesheet has no nested style rules", async () => {
-  const stylesheet = await readFile("src/renderer/src/styles.css", "utf8");
+  const stylesheet = readRendererStyles();
   const root = postcss.parse(stylesheet);
   const nestedRules = [];
 
@@ -21,7 +21,7 @@ test("renderer stylesheet has no nested style rules", async () => {
 });
 
 test("sidebar canvas logo keeps the main dev dimensions", async () => {
-  const stylesheet = await readFile("src/renderer/src/styles.css", "utf8");
+  const stylesheet = readRendererStyles();
   const root = postcss.parse(stylesheet);
   const rule = root.nodes.find(
     (node) => node.type === "rule" && node.selector === ".pi-logo-canvas",

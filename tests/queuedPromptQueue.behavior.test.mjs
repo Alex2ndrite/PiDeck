@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { readRendererStyles } from "./helpers/rendererStyles.mjs";
 
 import {
   acknowledgeUnknownPrompt,
@@ -280,7 +281,7 @@ test("layout budget uses compact queue chrome and terminal still yields first", 
   assert.match(appSource, /queuedPromptCount: activeQueuedPrompts\.length/);
   assert.match(queueStateSource, /export const QUEUED_PROMPT_VISIBLE = 3/);
   assert.match(appSource, /const visibleQueuedPrompts = activeQueuedPrompts/);
-  const stylesSource = readFileSync("src/renderer/src/styles.css", "utf8");
+  const stylesSource = readRendererStyles();
   assert.match(stylesSource, /\.queued-list \{[\s\S]*?max-height: 102px;[\s\S]*?overflow-y: auto;/);
 });
 
