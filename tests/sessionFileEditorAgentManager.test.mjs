@@ -51,6 +51,17 @@ function loadAgentManager() {
       if (specifier === "./sessionEntryIds") {
         return { takeActiveEntryId: (ids, index) => ({ entryId: ids?.[index], nextIndex: index + 1 }) };
       }
+      if (specifier === "./agentUtils") {
+        return {
+          stripAnsi: (text) => text,
+          pickNumber: (...values) => { for (const v of values) if (typeof v === "number") return v; },
+          clampPercent: (v) => v,
+          trimHistoryMessages: (msgs) => msgs,
+          cleanTitle: (t) => t,
+          inferTitleFromMessages: () => undefined,
+          isDefaultAgentTitle: () => false,
+        };
+      }
       if (specifier === "./LatestByKeyEmitter") return { LatestByKeyEmitter };
       if (specifier === "../../shared/toolRuntimeState") return { updateActiveToolCalls: () => undefined };
       if (specifier === "../wsl/WslPaths") {

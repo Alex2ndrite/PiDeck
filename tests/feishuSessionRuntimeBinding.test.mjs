@@ -99,6 +99,16 @@ function compileBridge(loadBindings = [], options = {}) {
 	const imports = {
 		"electron": { app: { getPath: () => "." } },
 		"../../shared/ipc": { ipcChannels: {} },
+		"./FeishuConnection": {
+			FeishuConnection: class {
+				async start() { return { botOpenId: "test-open-id" }; }
+				stop() {}
+				async testConnection() { return { success: true, message: "ok" }; }
+				onCardAction() {}
+				onMessage() {}
+				client = null;
+			},
+		},
 		"./FeishuConfig": {
 			listBots: () => [], addBot: () => undefined, removeBot: () => false, updateBot: () => undefined,
 			getDecryptedBotAppSecret: () => "", loadBindings: () => loadBindings, saveBindings: () => undefined,
@@ -221,7 +231,7 @@ test("existing Feishu binding is reused by ensureSessionMirror without creating 
 	}, () => null, () => [], { bindRuntime: async () => ({ sessionId: "S", runtimeGeneration: 1 }) });
 	await bridge.loadPersistedBindings();
 	let createCount = 0;
-	bridge.client = { im: { chat: { create: async () => { createCount += 1; return { data: { chat_id: "mirror-chat" } }; } } } };
+	bridge.connection.client = { im: { chat: { create: async () => { createCount += 1; return { data: { chat_id: "mirror-chat" } }; } } } };
 	bridge.status = { status: "connected", activeBindings: 1 };
 	assert.equal(await bridge.ensureSessionMirror("A", "Local prompt", tab.sessionPath), "feishu-chat");
 	const replacementTab = makeAgent("B");
@@ -280,7 +290,7 @@ test("a stale S1 handle moved to S2 is cleared without issuing any command to A"
 		throw new Error("runtime already coordinated to S2");
 	} }, calls);
 	bridge.getProjects = () => [];
-	bridge.client = { im: { message: { create: async () => undefined } } };
+	bridge.connection.client = { im: { message: { create: async () => undefined } } };
 	const binding = {
 		chatId: "chat", botId: "bot", userId: "u", sessionId: "S1", agentId: "A",
 		sessionPath: "/sessions/S1.json", workspaceId: "", source: "feishu", chatType: "p2p", createdAt: 1,

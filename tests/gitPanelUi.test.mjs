@@ -31,6 +31,7 @@ const app = [
 ].join("\n");
 const preload = readFileSync("src/preload/index.ts", "utf8");
 const main = readFileSync("src/main/index.ts", "utf8");
+const systemIpc = readFileSync("src/main/ipc/systemIpc.ts", "utf8");
 const gitIpc = readFileSync("src/main/ipc/gitIpc.ts", "utf8");
 const gitService = readFileSync("src/main/git/GitService.ts", "utf8");
 
@@ -136,7 +137,7 @@ describe("Git panel VS Code Source Control contract", () => {
   });
 
   test("prefers Electron system language data while preserving explicit locale choices", () => {
-    assert.match(main, /app\.getPreferredSystemLanguages\(\)/);
+    assert.match(systemIpc, /app\.getPreferredSystemLanguages\(\)/);
     assert.match(preload, /preferredSystemLanguages/);
     assert.match(app, /api\.app\s*\.preferredSystemLanguages\(\)/);
     assert.match(i18n, /navigator\.languages\?\.\[0\]/);

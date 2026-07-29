@@ -27,7 +27,7 @@ const composerAtoms = compile("src/renderer/src/atoms/composer-atoms.ts", {
   "./session-atoms": sessionAtoms,
 });
 const timeline = compile("src/renderer/src/hooks/useSessionTimelineController.ts", {
-  react: {}, jotai: {}, "jotai/utils": {}, "../atoms": {}, "./useMessagePagination": {},
+  react: {}, jotai: {}, "jotai/utils": {}, "../atoms": {}, "./useMessagePagination": {}, "../desktopApi": {},
 });
 
 test("session load and send selectors retain current references across background patches", () => {

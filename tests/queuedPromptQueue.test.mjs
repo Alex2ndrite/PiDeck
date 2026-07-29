@@ -51,7 +51,10 @@ const webServiceSource = readFileSync(
   "src/main/web/WebServiceManager.ts",
   "utf8",
 );
-const sharedTypesSource = readFileSync("src/shared/types.ts", "utf8");
+const sharedTypesSource = [
+  readFileSync("src/shared/types.ts", "utf8"),
+  readFileSync("src/shared/types/session.ts", "utf8"),
+].join("\n");
 // Queue ownership now lives in useQueuedPrompt.
 const queuedPromptHookSource = readFileSync(
   "src/renderer/src/hooks/useQueuedPrompt.ts",

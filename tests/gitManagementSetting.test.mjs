@@ -11,7 +11,10 @@ const app = [
 const appParts = readFileSync("src/renderer/src/components/session/SurfaceComponents.tsx", "utf8");
 const settingsModal = readFileSync("src/renderer/src/components/app/SettingsModal.tsx", "utf8");
 const settingsStore = readFileSync("src/main/settings/SettingsStore.ts", "utf8");
-const sharedTypes = readFileSync("src/shared/types.ts", "utf8");
+const sharedTypes = [
+  readFileSync("src/shared/types.ts", "utf8"),
+  readFileSync("src/shared/types/settings.ts", "utf8"),
+].join("\n");
 const previewApi = readFileSync("src/renderer/src/previewApi.ts", "utf8");
 const i18n = [
   readFileSync("src/renderer/src/i18n/rendererCopy.zh-CN.ts", "utf8"),

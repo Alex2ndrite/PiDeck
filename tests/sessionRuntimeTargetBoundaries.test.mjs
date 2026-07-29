@@ -52,8 +52,8 @@ test("terminal creation and listing cross IPC with a generation-validated Sessio
 test("RPC logging controls resolve the current Session target before touching AgentManager", () => {
 	assert.match(preload, /setLogging: \(target: SessionRuntimeTarget, enabled: boolean\)/);
 	assert.match(preload, /getLogging: \(target: SessionRuntimeTarget\)/);
-	assert.match(main, /const resolveRpcRuntimeAgent = \(target\?: SessionRuntimeTarget\)/);
-	assert.match(main, /sessionRuntimeCoordinator\.validateTarget\(target\)/);
+	assert.match(mainIpcSource, /const resolveRpcRuntimeAgent = \(target\?: SessionRuntimeTarget\)/);
+	assert.match(mainIpcSource, /sessionRuntimeCoordinator\.validateTarget\(target\)/);
 	assert.match(app, /api\.rpcLogs\.setLogging\(target, enabled\)/);
 	assert.doesNotMatch(app, /api\.rpcLogs\.setLogging\(agentId/);
 });

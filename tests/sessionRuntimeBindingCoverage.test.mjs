@@ -7,6 +7,7 @@ const coordinator = readFileSync(
   "utf8",
 );
 const main = readFileSync("src/main/index.ts", "utf8");
+const sessionIpc = readFileSync("src/main/ipc/sessionIpc.ts", "utf8");
 const app = readFileSync("src/renderer/src/App.tsx", "utf8");
 const runtimeInjector = readFileSync(
   "src/renderer/src/components/session/SessionRuntimeInjector.tsx",
@@ -24,7 +25,7 @@ const composer = readFileSync(
 test("catalog scans attach matching existing runtimes in the main process", () => {
   assert.match(coordinator, /attachCatalogRuntimes\(/);
   assert.match(main, /attachCatalogRuntimes\(records\)/);
-  assert.match(main, /sessionsCatalogList[\s\S]*mergeScanned[\s\S]*attachCatalogRuntimes/);
+  assert.match(sessionIpc, /sessionsCatalogList[\s\S]*mergeScanned[\s\S]*attachCatalogRuntimes/);
 });
 
 test("unbound interactive UI is cancelled and cannot be surfaced as Session UI", () => {
@@ -60,7 +61,7 @@ test("Web wiring is Session-first and exposes no Agent compatibility creation", 
 });
 
 test("catalog deletion rejects bound or activating Session runtimes", () => {
-  assert.match(main, /sessionsCatalogDelete[\s\S]*sessionRuntimeCoordinator\.getTarget\(sessionId\)[\s\S]*sessionRuntimeCoordinator\.isActivating\(sessionId\)/);
+  assert.match(sessionIpc, /sessionsCatalogDelete[\s\S]*sessionRuntimeCoordinator\.getTarget\(sessionId\)[\s\S]*sessionRuntimeCoordinator\.isActivating\(sessionId\)/);
   assert.match(main, /deleteSessionRecord: async \(sessionId\)[\s\S]*sessionRuntimeCoordinator\.getTarget\(sessionId\)[\s\S]*sessionRuntimeCoordinator\.isActivating\(sessionId\)/);
   assert.match(coordinator, /isActivating\(sessionId: string\): boolean/);
 });

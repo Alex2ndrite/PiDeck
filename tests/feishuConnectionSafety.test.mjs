@@ -4,6 +4,7 @@ import test from "node:test";
 
 const mainSource = () => readFileSync("src/main/index.ts", "utf8");
 const bridgeSource = () => readFileSync("src/main/feishu/FeishuBridge.ts", "utf8");
+const connectionSource = () => readFileSync("src/main/feishu/FeishuConnection.ts", "utf8");
 const configSource = () => readFileSync("src/main/feishu/FeishuConfig.ts", "utf8");
 
 function promptIntegrationSource(source) {
@@ -78,8 +79,9 @@ test("Feishu-origin messages also tell the agent to use SEND_FILE markers", () =
 
 test("FeishuBridge registers and handles Feishu model picker card actions", () => {
 	const source = bridgeSource();
+	const conn = connectionSource();
 	const method = source.match(/private async handleCardAction\([\s\S]*?\n\t\}/)?.[0] ?? "";
-	assert.match(source, /"card\.action\.trigger"/);
+	assert.match(conn, /"card\.action\.trigger"/);
 	assert.match(source, /this\.handleCardAction/);
 	assert.match(method, /parseModelActionValue/);
 	assert.match(method, /const agentId = await this\.ensureRuntimeBinding\(binding\)/);

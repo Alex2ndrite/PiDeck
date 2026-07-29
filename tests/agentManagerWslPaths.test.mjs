@@ -118,6 +118,17 @@ function loadAgentManager() {
 				};
 			}
 			if (id === "./sessionEntryIds") return sessionEntryIds;
+			if (id === "./agentUtils") {
+				return {
+					stripAnsi: (text) => text,
+					pickNumber: (...values) => { for (const v of values) if (typeof v === "number") return v; },
+					clampPercent: (v) => v,
+					trimHistoryMessages: (msgs) => msgs,
+					cleanTitle: (t) => t,
+					inferTitleFromMessages: () => undefined,
+					isDefaultAgentTitle: () => false,
+				};
+			}
 			if (id === "./LatestByKeyEmitter") return { LatestByKeyEmitter };
 			if (id === "../../shared/toolRuntimeState") return { updateActiveToolCalls: () => new Map() };
 			if (id === "../wsl/WslPaths") return wslPaths;

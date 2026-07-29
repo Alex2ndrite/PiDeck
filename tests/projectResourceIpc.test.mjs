@@ -3,11 +3,12 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const entry = readFileSync("src/main/index.ts", "utf8");
+const projectsIpc = readFileSync("src/main/ipc/projectsIpc.ts", "utf8");
 const projectResourceIpc = readFileSync("src/main/ipc/projectResourceIpc.ts", "utf8");
 
 test("project resource IPC is registered through one-way dependencies", () => {
-  assert.match(entry, /registerProjectResourceIpc\(\{[\s\S]*appLogger,[\s\S]*projectResourceManager,[\s\S]*\}\)/);
-  assert.doesNotMatch(entry, /ipcChannels\.projectResources/);
+  assert.match(projectsIpc, /registerProjectResourceIpc\(\{[\s\S]*appLogger,[\s\S]*projectResourceManager,[\s\S]*\}\)/);
+  assert.doesNotMatch(projectsIpc, /ipcChannels\.projectResources/);
   assert.doesNotMatch(projectResourceIpc, /from\s+["']\.\.\/index["']/);
 });
 

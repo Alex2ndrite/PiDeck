@@ -4,6 +4,8 @@ import test from "node:test";
 
 const mainSource = readFileSync("src/main/pi/AgentManager.ts", "utf8");
 const indexSource = readFileSync("src/main/index.ts", "utf8");
+const systemIpcSource = readFileSync("src/main/ipc/systemIpc.ts", "utf8");
+const sessionIpcSource = readFileSync("src/main/ipc/sessionIpc.ts", "utf8");
 const preloadSource = readFileSync("src/preload/index.ts", "utf8");
 const ipcSource = readFileSync("src/shared/ipc.ts", "utf8");
 const appSource = readFileSync("src/renderer/src/App.tsx", "utf8");
@@ -12,7 +14,7 @@ const rendererMainSource = readFileSync("src/renderer/src/main.tsx", "utf8");
 test("agent startup writes diagnostics across renderer IPC and pi launch boundaries", () => {
 	assert.match(ipcSource, /rendererLog:\s*"renderer:log"/);
 	assert.match(preloadSource, /rendererLog:\s*\(\s*level: AppLogLevel,\s*scope: string,\s*message: string,\s*detail\?: unknown,/);
-	assert.match(indexSource, /ipcChannels\.rendererLog/);
+	assert.match(systemIpcSource, /ipcChannels\.rendererLog/);
 	assert.doesNotMatch(indexSource, /Agent create IPC received|ipcChannels\.agentsCreate/);
 	assert.match(mainSource, /Agent create requested/);
 	assert.match(mainSource, /Agent ensure trusted directory start/);
@@ -21,10 +23,10 @@ test("agent startup writes diagnostics across renderer IPC and pi launch boundar
 	assert.match(mainSource, /Agent get_state request start/);
 	assert.match(mainSource, /Agent get_state request completed/);
 	assert.match(mainSource, /Agent create failed/);
-	assert.match(indexSource, /Session prompt IPC received/);
-	assert.match(indexSource, /sessionRuntimeCoordinator\.send\(input\)/);
-	assert.match(indexSource, /Session prompt IPC completed/);
-	assert.match(indexSource, /Session prompt IPC failed/);
+	assert.match(sessionIpcSource, /Session prompt IPC received/);
+	assert.match(sessionIpcSource, /sessionRuntimeCoordinator\.send\(input\)/);
+	assert.match(sessionIpcSource, /Session prompt IPC completed/);
+	assert.match(sessionIpcSource, /Session prompt IPC failed/);
 	assert.doesNotMatch(appSource, /api\.agents\.create\(/);
 });
 

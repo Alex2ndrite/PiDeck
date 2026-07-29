@@ -5,6 +5,7 @@ import test from "node:test";
 const browserPanel = readFileSync("src/renderer/src/components/app/BrowserPanel.tsx", "utf8");
 const rendererTypes = readFileSync("src/renderer/src/types.d.ts", "utf8");
 const main = readFileSync("src/main/index.ts", "utf8");
+const filesIpc = readFileSync("src/main/ipc/filesIpc.ts", "utf8");
 
 function functionBlock(source, signature, nextSignature) {
 	const start = source.indexOf(signature);
@@ -75,7 +76,7 @@ test("webview hardening is installed before the main window loads renderer conte
 });
 
 test("external browser IPC shares the HTTP(S) protocol gate and Chromium sandbox stays enabled", () => {
-	const browserOpenExternal = functionBlock(main, 'ipcMain.handle(ipcChannels.browserOpenExternal', "\n\n\tipcMain.handle(");
+	const browserOpenExternal = functionBlock(filesIpc, 'ipcMain.handle(ipcChannels.browserOpenExternal', "\n\n\tipcMain.handle(");
 	assert.match(browserOpenExternal, /await openExternalUrl\(url, true\)/);
 	assert.doesNotMatch(browserOpenExternal, /shell\.openExternal\(url\)/);
 	assert.doesNotMatch(main, /appendSwitch\(["']no-sandbox["']\)/);

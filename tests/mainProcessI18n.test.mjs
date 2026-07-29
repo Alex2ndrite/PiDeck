@@ -5,6 +5,7 @@ import { join } from "node:path";
 import test from "node:test";
 
 import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
+import { mainIpcSource } from "./helpers/mainIpcSources.mjs";
 
 const {
   setI18nLocale,
@@ -235,7 +236,7 @@ test("main-process Session IPC errors expose stable copy and retain diagnostics 
 });
 
 test("main-process user surfaces use stable copy and keep caught details in logs", () => {
-  const source = readFileSync("src/main/index.ts", "utf8");
+  const source = mainIpcSource;
   for (const key of [
     "tray.showWindow",
     "tray.quit",

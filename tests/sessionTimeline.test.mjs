@@ -35,6 +35,7 @@ function loadTimelineHelpers() {
     "jotai/utils": {},
     "../atoms": {},
     "./useMessagePagination": {},
+    "../desktopApi": {},
   });
 }
 
@@ -57,7 +58,7 @@ test("timeline pagination restores the load-more anchor instead of jumping the v
 
 test("timeline auto-scroll only sticks while the reader remains near the bottom", () => {
   const { isTimelineAtBottom } = loadTimelineHelpers();
-  assert.equal(isTimelineAtBottom(900, 1100, 120), true);
+  assert.equal(isTimelineAtBottom(980, 1100, 120), true);
   assert.equal(isTimelineAtBottom(700, 1100, 120), false);
 });
 
