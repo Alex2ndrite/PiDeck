@@ -74,7 +74,7 @@ export function ComposerPickerHost(props: ComposerPickerHostProps) {
     const handle = currentHandle();
     try {
       if (handle) {
-        requireSessionCommand(await desktopApi.sessions.setRuntimeModel(
+        const result = requireSessionCommand(await desktopApi.sessions.setRuntimeModel(
           handle,
           model.provider,
           model.id,
@@ -84,6 +84,21 @@ export function ComposerPickerHost(props: ComposerPickerHostProps) {
           model: { provider: model.provider, modelId: model.id },
           updatedAt: Date.now(),
         });
+        // 立即将返回的 AgentRuntimeState 合并到 runtime state atom，
+        // 使底部栏的模型名称、provider 即刻刷新，无需等待 emitState 事件
+        const agentState = result.value;
+        const current = store.get(sessionRuntimeByIdAtom)[sessionId];
+        if (current) {
+          store.set(sessionRuntimeByIdAtom, {
+            ...store.get(sessionRuntimeByIdAtom),
+            [sessionId]: {
+              ...current,
+              state: current.state
+                ? { ...current.state, ...agentState }
+                : agentState,
+            },
+          });
+        }
       } else {
         const updated = await desktopApi.sessions.updateRecord(sessionId, {
           model: { provider: model.provider, modelId: model.id },
@@ -101,8 +116,23 @@ export function ComposerPickerHost(props: ComposerPickerHostProps) {
     const handle = currentHandle();
     try {
       if (handle) {
-        requireSessionCommand(await desktopApi.sessions.setRuntimeThinking(handle, level));
+        const result = requireSessionCommand(await desktopApi.sessions.setRuntimeThinking(handle, level));
         upsertSession({ ...record, thinkingLevel: level, updatedAt: Date.now() });
+        // 立即将返回的 AgentRuntimeState 合并到 runtime state atom，
+        // 使底部栏的思考强度即刻刷新
+        const agentState = result.value;
+        const current = store.get(sessionRuntimeByIdAtom)[sessionId];
+        if (current) {
+          store.set(sessionRuntimeByIdAtom, {
+            ...store.get(sessionRuntimeByIdAtom),
+            [sessionId]: {
+              ...current,
+              state: current.state
+                ? { ...current.state, ...agentState }
+                : agentState,
+            },
+          });
+        }
       } else {
         const updated = await desktopApi.sessions.updateRecord(sessionId, {
           thinkingLevel: level,

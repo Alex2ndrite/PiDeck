@@ -1643,6 +1643,7 @@ export class AgentManager {
 			{ type: "set_model", provider, modelId },
 			60_000,
 		);
+		this.emitState();
 		return this.getRuntimeState(agentId);
 	}
 
@@ -1731,6 +1732,7 @@ export class AgentManager {
 			{ type: "set_thinking_level", level },
 			60_000,
 		);
+		this.emitState();
 		return this.getRuntimeState(agentId);
 	}
 
