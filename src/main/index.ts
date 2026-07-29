@@ -1846,6 +1846,43 @@ function registerIpc() {
 		getMainWindow: () => mainWindow,
 	});
 
+	registerScratchPadIpc({ appLogger });
+
+	registerSessionIpc({
+		projectStore,
+		settingsStore,
+		sessionScanner,
+		sessionCatalog,
+		sessionRuntimeCoordinator,
+		agentManager,
+		configManager,
+		codexSessionImporter,
+		claudeSessionImporter,
+		openCodeSessionImporter,
+		appLogger,
+		terminalManager,
+		mainCopy: mainCopy as (key: string, params?: Record<string, string | number>) => string,
+		getMainWindow: () => mainWindow,
+		emitSessionRuntimeEvent,
+		emitSessionRuntimeDetach,
+		createAnonymousSession,
+		stopSessionRuntime,
+		emitReplacementState,
+		readCatalogSessionReferenceMessages,
+		copyCatalogSession,
+		exportCatalogSessionHtml,
+		replaceAgentSession,
+	});
+
+	registerGitIpc({
+		appLogger,
+		gitService,
+		piLocator,
+		projectStore,
+		settingsStore,
+		worktreeService,
+	});
+
 	registerSystemIpc({
 		piLocator,
 		settingsStore,
