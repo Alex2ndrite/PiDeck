@@ -3049,23 +3049,73 @@
   align-items: center;
   gap: 3px;
 }
-.skillhub-card-install-btn {
+.skillhub-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.skillhub-card-action-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-sm);
   background: var(--color-bg-panel);
-  color: var(--color-accent);
+  color: var(--color-text-tertiary);
   cursor: pointer;
   flex-shrink: 0;
-  transition: background 0.15s;
+  transition: background-color 0.15s, border-color 0.15s, color 0.15s;
 }
-.skillhub-card-install-btn:hover {
+.skillhub-card-action-btn:hover:not(:disabled) {
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
+}
+.skillhub-card-action-btn.primary {
+  color: var(--color-accent);
+}
+.skillhub-card-action-btn.primary:hover:not(:disabled) {
   background: var(--color-accent-soft);
   border-color: var(--color-accent);
+}
+.skillhub-card-action-btn:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+.skillhub-card-source {
+  font-size: var(--font-size-micro);
+  font-family: var(--font-family-business);
+  color: var(--color-text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.skillhub-installed-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 8px;
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  background: var(--color-success-soft, color-mix(in srgb, #22c55e 12%, transparent));
+  color: var(--color-success, #22c55e);
+  font-size: 11px;
+  font-weight: 500;
+  vertical-align: middle;
+}
+.skillhub-installing-dot {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--color-accent);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: skillhub-spin 0.6s linear infinite;
+}
+@keyframes skillhub-spin {
+  to { transform: rotate(360deg); }
 }
 /* 详情视图 */
 .skillhub-detail-toolbar {
@@ -3805,6 +3855,13 @@ a.config-btn {
   padding-left: 2px;
 }
 
+.config-base-url-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  width: 100%;
+}
 .config-form-row input:not([type]),
 .config-form-row input[type="text"],
 .config-form-row input[type="number"],

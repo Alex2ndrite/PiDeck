@@ -12,7 +12,6 @@ import type {
 	PromptStoreRawItem,
 	PromptStoreSearchResponse,
 	PromptStoreSearchResult,
-	SkillStoreSearchResult,
 } from "../../shared/types";
 import type { AppLogger } from "../logging/AppLogger";
 import type { PromptManager } from "../prompts/PromptManager";
@@ -256,10 +255,10 @@ export function registerStoreIpc({
 			const response = await fetch(url, { signal: AbortSignal.timeout(10_000) });
 			if (!response.ok) throw new Error(`prompts.chat API 返回 ${response.status}`);
 			const raw = (await response.json()) as PromptStoreSearchResponse;
-			const result: SkillStoreSearchResult = {
+			const result = {
 				query,
 				count: raw.total,
-				items: raw.prompts.map(flattenPromptItem),
+				prompts: raw.prompts.map(flattenPromptItem),
 			};
 			return result;
 		} catch (err) {

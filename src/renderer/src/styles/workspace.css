@@ -935,6 +935,24 @@
 .prompt-store-votes {
   color: var(--color-accent);
 }
+.prompt-store-installed-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 8px;
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  background: var(--color-success-soft, color-mix(in srgb, #22c55e 12%, transparent));
+  color: var(--color-success, #22c55e);
+  font-size: 11px;
+  font-weight: 500;
+  vertical-align: middle;
+}
+.prompt-store-preview-install-name {
+  margin-top: 8px;
+  font-size: var(--font-size-caption);
+  color: var(--color-text-tertiary);
+}
 .prompt-store-tags {
   display: flex;
   flex-wrap: wrap;
@@ -1022,6 +1040,19 @@
   flex-wrap: wrap;
   gap: 4px;
   margin-top: 4px;
+}
+.yao-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 16px 0 8px;
+}
+.yao-pagination-info {
+  font-size: var(--font-size-caption);
+  color: var(--color-text-tertiary);
+  min-width: 60px;
+  text-align: center;
 }
 /* ── 重试配置 ── */
 .config-retry-group {

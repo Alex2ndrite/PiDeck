@@ -2483,7 +2483,8 @@ body.is-terminal-resizing {
 .chat-pane[style*="--content-max-width"] .composer-box,
 .chat-pane[style*="--content-max-width"] .image-preview-area,
 .chat-pane[style*="--content-max-width"] .extension-widgets-container,
-.chat-pane[style*="--content-max-width"] .queued-track {
+.chat-pane[style*="--content-max-width"] .queued-track,
+.chat-pane[style*="--content-max-width"] .composer .ask-inline-bar {
   width: min(100%, var(--content-max-width));
   max-width: var(--content-max-width);
   margin-inline: auto;
