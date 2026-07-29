@@ -51,6 +51,8 @@ import {
   X,
   PanelLeft,
   PanelRight,
+  // 上下文压缩按钮：用 Shrink 表达“收拢上下文”，与模型/思考等底栏控件并列。
+  Shrink,
 } from "lucide-react";
 import { showNotice } from "./utils/notice";
 import { createPreviewApi } from "./previewApi";
@@ -81,7 +83,7 @@ import {
   isSameSessionPath,
   isSidebarSessionRowActive,
 } from "./agentListDisplay";
-import { resolveLocale, setI18nLocale, t } from "./i18n";
+import { resolveLocale, setI18nLocale, t, type TranslationKey } from "./i18n";
 import { mergeAgentRuntimeState } from "./utils/agentRuntimeState";
 import { sameSessionSummaryList } from "./utils/sessionSummaryList";
 import {
@@ -1821,36 +1823,6 @@ export function App() {
   }, [activeMessages, renderedRuns]);
 
 
-  /**
-   * 判断用户消息是否可重发：仅当该消息为最后一条用户消息，且其后的 assistant 响应
-   * 被中止（系统提示）或执行失败（error 消息）时才显示重发按钮。
-   * 正常完成的 assistant 响应不应触发重发。
-   */
-  const resendableMessageIds = useMemo(() => {
-    const ids = new Set<string>();
-    for (let i = activeMessages.length - 1; i >= 0; i--) {
-      const msg = activeMessages[i];
-      if (msg.role !== "user") continue;
-      // 从最后一条用户消息开始，检查其后最近的消息状态
-      let hasAbortOrError = false;
-      for (let j = i + 1; j < activeMessages.length; j++) {
-        const next = activeMessages[j];
-        if (next.role === "user") break; // 下一条用户消息，不属本轮
-        if (next.role === "error") { hasAbortOrError = true; break; }
-        if (next.role === "system") {
-          const meta = next.meta as Record<string, unknown> | undefined;
-          if (meta?.i18nKey === "app.abortRequested") { hasAbortOrError = true; break; }
-        }
-        if (next.role === "assistant" && next.text?.trim()) {
-          // 存在正常的 assistant 回复 → 不显示重发
-          break;
-        }
-      }
-      if (hasAbortOrError) ids.add(msg.id);
-      break; // 只检查最后一条用户消息
-    }
-    return ids;
-  }, [activeMessages]);
 
   // 从 activeUiRequest 提取正在进行的交互式请求（select/confirm/input/editor/batch_ask）
   // 这是 ask_question 在 pi RPC 模式下的表现方式：pi 通过 extension_ui_request 将
@@ -2427,6 +2399,14 @@ export function App() {
         [payload.agentId]: payload.thinking,
       })),
     );
+    // 主进程瞬时状态反馈（如 abort 已请求停止）走 toast，不进会话时间线
+    const offNotice = api.agents.onNotice((payload) => {
+      const text =
+        payload.i18nKey
+          ? t(payload.i18nKey as TranslationKey)
+          : payload.message;
+      showNotice(text, payload.duration ?? 2500, payload.kind ?? "info");
+    });
     // 监听 Extension UI 请求：对话类渲染为提问卡片；setWidget 类作为 composer 上方的轻量状态块展示。
     const offUiRequest = api.agents.onUiRequest((request) => {
       if (request.method === "notify") {
@@ -2577,6 +2557,7 @@ export function App() {
       offOpenInBrowser?.();
       offRuntimeState();
       offThinking();
+      offNotice();
       offUiRequest();
       offTrustRequest();
       offRpcLog();
@@ -4650,13 +4631,22 @@ export function App() {
 
   async function compactAgent(compactPrompt?: string, agentId = activeAgentId) {
     if (!agentId || isPendingAgentId(agentId)) return;
+    // 按 agent 维度锁 compacting：避免全局 boolean 在切换会话时错绑状态，
+    // 也保证 /compact 与底栏按钮走同一条路径、同一套 busy/toast 语义。
     setCompacting(true);
     try {
       const state = await api.agents.compact(agentId, compactPrompt);
       applyAgentRuntimeState(agentId, state);
       showToast(t("app.compactDone"));
     } catch (e) {
-      showToast(t("app.compactFailed"));
+      // 主进程会把 pi 的可读错误（Already compacted / session too small / 鉴权失败）原样抛出。
+      const detail = e instanceof Error ? e.message.trim() : String(e ?? "").trim();
+      showToast(
+        detail
+          ? t("app.compactFailedWithReason", { error: detail })
+          : t("app.compactFailed"),
+        6500,
+      );
     } finally {
       setCompacting(false);
     }
@@ -4671,11 +4661,18 @@ export function App() {
 
   async function abortAgent(agentId = activeAgentId) {
     if (!agentId || isPendingAgentId(agentId)) return;
-    // 立即清除流式状态，让思考气泡和 loading 立刻消失，不等后端 RPC 返回
+    // 立即清除流式状态与本地 thinking 缓存，让思考气泡和 loading 立刻消失，不等后端 RPC 返回。
+    // 若不先清 streamingThinking，后端残留 delta 被拦截前 UI 仍会继续显示旧思考。
     const previous = runtimeStateByAgentRef.current[agentId];
     if (previous) {
       applyAgentRuntimeState(agentId, { ...previous, isStreaming: false });
     }
+    setStreamingThinking((current) => {
+      if (!(agentId in current)) return current;
+      const next = { ...current };
+      delete next[agentId];
+      return next;
+    });
     await api.agents.abort(agentId);
     // 不调用 refreshRuntimeState：AgentManager.abort() 会通过 emitState 推送正确状态，
     // 避免后端 get_state 返回过时的 isStreaming: true 覆盖前端立刻设的 false。
@@ -5086,9 +5083,13 @@ export function App() {
 
   const isAgentStarting = activeAgent?.status === "starting";
   const composerDisabled = !activeAgent || isAgentStarting;
+  // isCompacting / 本地 compacting 也算 busy：压缩期间禁止再发消息，并显示停止区语义。
   const isAgentBusy = Boolean(
     activeAgent &&
-    (activeAgent.status === "running" || activeRuntimeState?.isStreaming),
+    (activeAgent.status === "running" ||
+      activeRuntimeState?.isStreaming ||
+      activeRuntimeState?.isCompacting ||
+      compacting),
   );
   // hasComposerContent 合并文本状态（hasComposerText，仅在空↔非空翻转时触发重渲染）
   // 与图片附件；images 本身已是 state 变化即触发重渲染。
@@ -5227,12 +5228,16 @@ export function App() {
     // 已删除内置 /goal 拦截，命令直接发给 agent。
 
     // ── /compact 命令处理 ──
-    if (/^\/compact(?:\s|$)/.test(trimmedMessage)) {
-      const compactPrompt = trimmedMessage.replace(/^\/compact\s*/, "").trim();
-      // /compact 是桌面端内置控制命令，必须走 RPC compact 通道；否则会被当作普通消息发送给 agent。
+    // 与底栏“压缩”按钮同一实现：走 agents.compact RPC，而不是把 /compact 当普通 prompt 发给模型。
+    if (/^\/compact(?:\s|$)/i.test(trimmedMessage)) {
+      const compactPrompt = trimmedMessage.replace(/^\/compact\s*/i, "").trim();
       setPromptForAgent(targetAgentId, "");
       setAttachedImagesForAgent(targetAgentId, []);
       setSuggestionsOpen(false);
+      // 清空 contentEditable 显示（仅清 ref 时 DOM 可能残留 /compact 文本）
+      if (composerTextareaRef.current) {
+        composerTextareaRef.current.textContent = "";
+      }
       await compactAgent(compactPrompt || undefined, targetAgentId);
       return;
     }
@@ -5515,76 +5520,6 @@ export function App() {
       return false;
     }
   }
-
-  /** 重发防重复：通过 messageId 锁避免同一消息多次重发。
-   *  锁会在 agent 状态切回 idle 时自动清除（下方 useEffect），超时 30s 兜底释放。 */
-  const resendingIdsRef = useRef<Set<string>>(new Set());
-
-  async function resendUserMessage(message: ChatMessage) {
-    if (!activeAgentId || message.agentId !== activeAgentId) return;
-    if (resendingIdsRef.current.has(message.id)) return;
-    // 同文件截断重发需要 idle：只删当前用户消息及其本轮后代，保留更早历史，再重新 prompt。
-    if (isAgentBusy || isAgentStarting) {
-      showToast(t("message.busyGeneric"), 3000);
-      return;
-    }
-    resendingIdsRef.current.add(message.id);
-    // 30 秒兜底释放，防止锁泄漏
-    setTimeout(() => resendingIdsRef.current.delete(message.id), 30_000);
-
-    // 与 sendPrompt 一致：无论用户是否在回看历史，重发都强制贴底并持续跟随流式输出。
-    // 否则截断后消息变短、视口停在中部，新消息会“悬在上面一点”，ResizeObserver 也不会跟踪。
-    setAutoScroll(true);
-    autoScrollRef.current = true;
-    setShowScrollToBottom(false);
-    programmaticScrollRef.current = true;
-    const resendTimeline = timelineRef.current;
-    if (resendTimeline) {
-      resendTimeline.scrollTo({ top: resendTimeline.scrollHeight, behavior: "instant" });
-    }
-
-    try {
-      // 不走 fork（会新建会话文件），在同文件内截断后重发。
-      const prepared = await api.agents.prepareResend(activeAgentId, message.id);
-      const text =
-        typeof prepared?.text === "string" && prepared.text.trim()
-          ? prepared.text
-          : message.text;
-      const images =
-        prepared?.images && prepared.images.length > 0
-          ? prepared.images
-          : message.images;
-      const accepted = await submitPromptSnapshot(activeAgentId, text, images);
-      if (accepted !== true) return;
-
-      // 截断重载 + 重新 prompt 后，DOM 会先缩后涨；多帧贴底，保证新用户消息与流式回复都可见。
-      const stickToBottom = () => {
-        if (!autoScrollRef.current) return;
-        const timeline = timelineRef.current;
-        if (!timeline) return;
-        programmaticScrollRef.current = true;
-        timeline.scrollTo({ top: timeline.scrollHeight, behavior: "instant" });
-      };
-      requestAnimationFrame(() => {
-        stickToBottom();
-        requestAnimationFrame(stickToBottom);
-      });
-    } catch (error) {
-      showToast(
-        t("app.resendFailed", {
-          error: error instanceof Error ? error.message : String(error),
-        }),
-        4000,
-      );
-    }
-  }
-
-  /** agent 切回 idle 时释放所有重发锁，允许下次正常重发。 */
-  useEffect(() => {
-    if (activeAgent?.status !== "running" && activeAgent?.status !== "starting") {
-      resendingIdsRef.current.clear();
-    }
-  }, [activeAgent?.status]);
 
   /** 将主进程抛出的错误消息中的 BUSY_ 前缀码转为前端多语言文案 */
   function translateAgentErrorMessage(msg: string): string {
@@ -7585,11 +7520,9 @@ export function App() {
                       message={message}
                       onPreviewImage={setPreviewImage}
                       onOpenFile={openFilePath}
-                      onResendUserMessage={resendUserMessage}
                       onEditMessage={editMessage}
                       onDeleteMessage={deleteMessage}
                       agentRunning={isAgentBusy}
-                      showResendButton={resendableMessageIds.has(message.id)}
                       validCommandNames={validCommandNames}
                       validFilePaths={validFilePaths}
                       onEnterMultiSelect={() => setMultiSelectOpen(true)}
@@ -8498,6 +8431,39 @@ export function App() {
                       const level = THINKING_LEVELS.find((l) => l.value === activeRuntimeState.thinkingLevel);
                       return level ? t(level.labelKey) : activeRuntimeState.thinkingLevel;
                     })()}
+                  </button>
+                )}
+                {/* 上下文压缩：与 /compact 同一路径。
+                    旧 ComposerToolbar 有此按钮，底栏改版后漏接；
+                    有 context 百分比时显示百分比，否则仍提供手动入口。 */}
+                {activeAgentId && !isPendingAgentId(activeAgentId) && (
+                  <button
+                    type="button"
+                    className={`composer-bar-btn compact${compacting || activeRuntimeState?.isCompacting ? " compacting" : ""}`}
+                    disabled={
+                      isAgentStarting ||
+                      compacting ||
+                      Boolean(activeRuntimeState?.isCompacting) ||
+                      Boolean(activeRuntimeState?.isStreaming)
+                    }
+                    onClick={() => void compactAgent()}
+                    title={
+                      activeRuntimeState?.contextPercent != null
+                        ? t("app.contextCompactTitle", {
+                            percent: Number(activeRuntimeState.contextPercent).toFixed(1),
+                          })
+                        : t("app.compact")
+                    }
+                    aria-label={t("app.compact")}
+                  >
+                    <Shrink size={14} strokeWidth={1.9} aria-hidden="true" />
+                    <span>
+                      {compacting || activeRuntimeState?.isCompacting
+                        ? t("app.compacting")
+                        : activeRuntimeState?.contextPercent != null
+                          ? `${t("app.compact")} ${Number(activeRuntimeState.contextPercent).toFixed(0)}%`
+                          : t("app.compact")}
+                    </span>
                   </button>
                 )}
               </div>
