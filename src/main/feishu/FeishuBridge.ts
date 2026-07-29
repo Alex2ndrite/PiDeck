@@ -46,6 +46,7 @@ import {
 } from "./FeishuConfig";
 import { chooseMessageMode, buildPostMessages, buildMarkdownCards } from "./rich-text";
 import { CardStream } from "./CardStream";
+import { FeishuConnection } from "./FeishuConnection";
 import { buildFeishuTextChildren, sanitizeFeishuUserVisibleText, stripFeishuActionMarkers, wantsFeishuDoc, wrapHostInstruction } from "./docActions";
 import { hasExplicitFeishuFileSendIntent } from "./fileIntent";
 import { createInitialState, reduceFromPiEvent, markInterrupted, markError, markDone, type RunState } from "./CardRunState";
@@ -101,6 +102,8 @@ export class FeishuBridge {
 	private getWindow: () => BrowserWindow | null;
 	private getProjects: () => Array<{ id: string; name: string; path: string }>;
 	private locale: FeishuLocale;
+
+	private connection: FeishuConnection;
 
 	private status: FeishuBridgeStatus = { status: "disconnected", activeBindings: 0 };
 	private botOpenId: string | null = null;
@@ -163,6 +166,7 @@ export class FeishuBridge {
 		this.getWindow = getWindow;
 		this.getProjects = getProjects;
 		this.locale = normalizeFeishuLocale(locale);
+		this.connection = new FeishuConnection(botConfig, plainAppSecret, this.locale);
 	}
 
 	getStatus(): FeishuBridgeStatus { return { ...this.status }; }
@@ -323,54 +327,14 @@ export class FeishuBridge {
 	// ===== 生命周期 =====
 
 	async start(): Promise<void> {
-		const { appId } = this.botConfig;
-		const plainSecret = this.plainAppSecret ?? getDecryptedBotAppSecret(this.botConfig.id);
-		if (!appId || !plainSecret) throw new Error(feishuT(this.locale, "bridge.configRequired"));
-
 		this.updateStatus({ status: "connecting" });
 
 		try {
-			const lark = (await import("@larksuiteoapi/node-sdk")) as unknown as LarkSDK;
-			this.client = new lark.Client({
-				appId, appSecret: plainSecret,
-				appType: lark.AppType.SelfBuild, domain: lark.Domain.Feishu,
-				loggerLevel: lark.LoggerLevel.error,
-			} as Record<string, unknown>) as LarkClient;
-
-			try {
-				const botInfoResp = await this.client.request<{
-					code?: number; bot?: { open_id?: string; app_name?: string };
-					data?: { bot?: { open_id?: string; app_name?: string } };
-				}>({ method: "GET", url: "https://open.feishu.cn/open-apis/bot/v3/info/" });
-				this.botOpenId = botInfoResp?.bot?.open_id ?? botInfoResp?.data?.bot?.open_id ?? null;
-				if (this.botOpenId) {
-					log(`[飞书 Bridge] Bot 自身 open_id: ${this.botOpenId}`);
-					if (this.botConfig.defaultUserOpenId === this.botOpenId) {
-						warn(`[飞书 Bridge] ⚠️ 配置中的 defaultUserOpenId 是 Bot 自己的 open_id，不是你的！`);
-						warn(`[飞书 Bridge] 💡 请在飞书中给 Bot 发送 /whoami 获取你的真实 open_id，然后填入配置`);
-					}
-				}
-			} catch (e) { warn("[飞书 Bridge] 获取 Bot info 失败（非致命）:", e); }
-
-			const dispatcher = new lark.EventDispatcher({ loggerLevel: lark.LoggerLevel.error }).register({
-				"im.message.receive_v1": async (data: unknown) => {
-					await this.handleRawMessage(data as Record<string, unknown>).catch((err) =>
-						logErr("[飞书 Bridge] handleRawMessage 异常:", err));
-				},
-				"card.action.trigger": async (data: unknown) => {
-					const event = lark.normalizeCardAction(data as Record<string, unknown>, { includeRaw: true });
-					if (event) await this.handleCardAction(event);
-				},
-				"im.message.reaction.created_v1": async () => {},
-				"im.chat.member.bot.added_v1": async () => {},
-			});
-
-			const ws = new lark.WSClient({
-				appId, appSecret: plainSecret, domain: lark.Domain.Feishu, loggerLevel: lark.LoggerLevel.error,
-			});
-			this.wsClient = ws;
-			ws.start({ eventDispatcher: dispatcher });
-			log("[飞书 Bridge] WSClient 已启动");
+			const { botOpenId } = await this.connection.start(
+				async (data) => { await this.handleRawMessage(data).catch((err) => logErr("[飞书 Bridge] handleRawMessage 异常:", err)); },
+				async (event) => { await this.handleCardAction(event); },
+			);
+			this.botOpenId = botOpenId;
 
 			this.unsubscribeLocalEvents = this.agentManager.addLocalEventListener(
 				(agentId, event) => this.handleAgentEvent(agentId, event),
@@ -400,9 +364,7 @@ export class FeishuBridge {
 		this.streamingRunStates.clear();
 		this.pendingCardEvents.clear();
 
-		const ws = this.wsClient as { stop?: () => void } | null;
-		if (ws?.stop) try { ws.stop(); } catch {}
-		this.wsClient = null; this.client = null;
+		this.connection.stop();
 		this.chatBindings.clear(); this.sessionToChat.clear(); this.feishuSessions.clear();
 		this.recentMessageIds.clear(); this.recentEventIds.clear(); this.recentContent.clear();
 		this.processingChats.clear(); this.lastUserMessageId.clear();
@@ -431,32 +393,22 @@ export class FeishuBridge {
 	// ===== 测试连接 =====
 
 	async testConnection(appId: string, appSecret: string): Promise<FeishuTestResult> {
-		try {
-			const lark = (await import("@larksuiteoapi/node-sdk")) as unknown as LarkSDK;
-			const client = new lark.Client({ appId, appSecret, appType: lark.AppType.SelfBuild } as Record<string, unknown>) as LarkClient;
-			const resp = await client.auth.tenantAccessToken.internal({ data: { app_id: appId, app_secret: appSecret } });
-			if ((resp as Record<string, unknown>).code === 0) return { success: true, message: feishuT(this.locale, "connection.success"), botName: `App ${appId.slice(0, 8)}...` };
-			logErr("[飞书 Bridge] 连接测试 API 校验失败:", resp);
-			return { success: false, message: feishuT(this.locale, "connection.apiFailed") };
-		} catch (error) {
-			logErr("[飞书 Bridge] 连接测试失败:", error);
-			return { success: false, message: feishuT(this.locale, "connection.failed") };
-		}
+		return this.connection.testConnection(appId, appSecret);
 	}
 
 	// ===== 闪电确认 =====
 
 	/** ⚡ 闪电确认：收到消息后立即 fire-and-forget 一条 text 回复，让用户感知 Bot 已响应 */
 	private async sendLightningConfirm(chatId: string, replyToMessageId?: string): Promise<void> {
-		if (!this.client) return;
+		if (!this.connection.client) return;
 		try {
 			if (replyToMessageId) {
-				await this.client.im.message.reply({
+				await this.connection.client.im.message.reply({
 					path: { message_id: replyToMessageId },
 					data: { msg_type: "text", content: JSON.stringify({ text: feishuT(this.locale, "message.received") }) },
 				});
 			} else {
-				await this.client.im.message.create({
+				await this.connection.client.im.message.create({
 					params: { receive_id_type: "chat_id" },
 					data: { receive_id: chatId, msg_type: "text", content: JSON.stringify({ text: feishuT(this.locale, "message.received") }) },
 				});
@@ -475,7 +427,7 @@ export class FeishuBridge {
 	}
 
 	private async handleMessage(data: Record<string, unknown>): Promise<void> {
-		if (!this.client) return;
+		if (!this.connection.client) return;
 		const eventId = data.event_id as string | undefined;
 		if (eventId && this.recentEventIds.has(eventId)) return;
 		if (eventId) { this.recentEventIds.add(eventId); if (this.recentEventIds.size > DEDUP_MAX) this.recentEventIds.delete(this.recentEventIds.values().next().value as string); }
@@ -715,7 +667,7 @@ export class FeishuBridge {
 
 		// 流式卡片：创建后实时更新活动轨迹和输出
 		const cardPromise = CardStream.open(
-			this.client!, chatId,
+			this.connection.client!, chatId,
 			renderRunCard(initialState, { locale: this.locale }),
 			{ replyToMessageId: ctx.chatType === "group" ? ctx.messageId : undefined },
 		).catch((e) => { logErr("[飞书 Bridge] 流式卡片创建失败:", e); return null as CardStream | null; });
@@ -918,7 +870,7 @@ export class FeishuBridge {
 			log(`[Feishu Bridge] agent_end 触发 syncPiMessageToFeishu, agentId=${agentId.slice(0,8)}`);
 			// 优先用 session-mirror 群聊，没有则回退到 sessionToChat
 			const chatId = this.getBestChatId(agentId);
-			if (chatId && this.client) {
+			if (chatId && this.connection.client) {
 				this.syncPiMessageToFeishu(agentId, chatId).catch((e) =>
 					logErr("[Feishu Bridge] sync Pi message failed:", e));
 			}
@@ -927,7 +879,7 @@ export class FeishuBridge {
 
 	/** 将 Pi Agent 回复同步到飞书（带去重，避免同一结果重复推送） */
 	private async syncPiMessageToFeishu(agentId: string, chatId: string): Promise<void> {
-		if (!this.client) return;
+		if (!this.connection.client) return;
 		const messages = this.agentManager.getMessages(agentId);
 		const assistantMessages = messages.filter((m) => m.role === "assistant");
 		const lastAssistant = assistantMessages.pop();
@@ -977,7 +929,7 @@ export class FeishuBridge {
 
 	/** 将 PiDeck 中的用户消息转发到飞书群（双向同步：Pi → 飞书） */
 	async forwardUserMessageToFeishu(agentId: string, text: string): Promise<void> {
-		if (!this.client || !text.trim()) return;
+		if (!this.connection.client || !text.trim()) return;
 		const chatId = this.getBestChatId(agentId);
 		if (!chatId) {
 			// 没有绑定，尝试创建 session mirror
@@ -1139,7 +1091,7 @@ export class FeishuBridge {
 	}
 
 	private async ensureSessionMirrorInner(sessionId: string, agentId: string | undefined, sessionTitle?: string, sessionPath?: string): Promise<string | undefined> {
-		if (!this.client || this.status.status !== "connected") {
+		if (!this.connection.client || this.status.status !== "connected") {
 			log("[飞书 Session Mirror] Bridge 未连接，跳过自动拉群");
 			return undefined;
 		}
@@ -1242,7 +1194,7 @@ export class FeishuBridge {
 				chatData.user_id_list = [effectiveUserOpenId];
 			}
 
-			const resp = await this.client.im.chat.create({
+			const resp = await this.connection.client.im.chat.create({
 				data: chatData,
 				params: { user_id_type: "open_id" },
 			});
@@ -1296,9 +1248,9 @@ export class FeishuBridge {
 
 	/** 修复空群：将用户加入已有但只有 Bot 的群聊 */
 	private async repairEmptyGroup(chatId: string, userOpenId: string): Promise<void> {
-		if (!this.client) return;
+		if (!this.connection.client) return;
 		try {
-			await this.client.im.chat.members.add({
+			await this.connection.client.im.chat.members.add({
 				path: { chat_id: chatId },
 				data: { id_list: [userOpenId] },
 				params: { member_id_type: "open_id" },
@@ -1311,7 +1263,7 @@ export class FeishuBridge {
 
 	/** Session Mirror: Agent 运行前为 Pi 侧会话打开流式卡片 */
 	async startSessionMirrorRun(agentId: string, sessionTitle?: string, sessionPath?: string): Promise<void> {
-		if (!this.client || this.status.status !== "connected") return;
+		if (!this.connection.client || this.status.status !== "connected") return;
 
 		// 该 API 的调用方传 AgentManager handle；stable ID 仅留在 binding.sessionId。
 		await this.ensureSessionMirror(agentId, sessionTitle, sessionPath);
@@ -1326,7 +1278,7 @@ export class FeishuBridge {
 		this.streamingRunStates.set(agentId, initialState);
 
 		try {
-			const cardStream = await CardStream.open(this.client!, binding.chatId, renderRunCard(initialState, {
+			const cardStream = await CardStream.open(this.connection.client!, binding.chatId, renderRunCard(initialState, {
 				locale: this.locale,
 				stopHint: feishuT(this.locale, "card.stopHint"),
 			}));
@@ -1450,27 +1402,27 @@ export class FeishuBridge {
 	// ===== 飞书消息发送（智能模式） =====
 
 	private async sendSmartMessage(chatId: string, text: string): Promise<void> {
-		if (!this.client) return;
+		if (!this.connection.client) return;
 		const mode = chooseMessageMode(text);
 		const language = feishuLanguage(this.locale);
 		try {
 			if (mode === "interactive") {
 				for (const card of buildMarkdownCards(text, language)) {
-					await this.client.im.message.create({ params: { receive_id_type: "chat_id" }, data: { receive_id: chatId, msg_type: "interactive", content: JSON.stringify(card) } });
+					await this.connection.client.im.message.create({ params: { receive_id_type: "chat_id" }, data: { receive_id: chatId, msg_type: "interactive", content: JSON.stringify(card) } });
 				}
 			} else if (mode === "post") {
 				for (const post of buildPostMessages(text, language)) {
-					await this.client.im.message.create({ params: { receive_id_type: "chat_id" }, data: { receive_id: chatId, msg_type: "post", content: JSON.stringify(post) } });
+					await this.connection.client.im.message.create({ params: { receive_id_type: "chat_id" }, data: { receive_id: chatId, msg_type: "post", content: JSON.stringify(post) } });
 				}
 			} else {
-				await this.client.im.message.create({ params: { receive_id_type: "chat_id" }, data: { receive_id: chatId, msg_type: "text", content: JSON.stringify({ text }) } });
+				await this.connection.client.im.message.create({ params: { receive_id_type: "chat_id" }, data: { receive_id: chatId, msg_type: "text", content: JSON.stringify({ text }) } });
 			}
 		} catch (e) { logErr("[飞书 Bridge] 发送消息失败:", e); }
 	}
 
 	private async sendCardMessage(chatId: string, card: Record<string, unknown>): Promise<void> {
-		if (!this.client) return;
-		try { await this.client.im.message.create({ params: { receive_id_type: "chat_id" }, data: { receive_id: chatId, msg_type: "interactive", content: JSON.stringify(card) } }); } catch (e) { logErr("[飞书 Bridge] 发送卡片失败:", e); }
+		if (!this.connection.client) return;
+		try { await this.connection.client.im.message.create({ params: { receive_id_type: "chat_id" }, data: { receive_id: chatId, msg_type: "interactive", content: JSON.stringify(card) } }); } catch (e) { logErr("[飞书 Bridge] 发送卡片失败:", e); }
 	}
 
 	private async sendHelpCard(chatId: string): Promise<void> {
@@ -1553,7 +1505,7 @@ export class FeishuBridge {
 	 * 流程：POST im/v1/files 上传 → 拿到 file_key → im.message.create 发送 file 消息
 	 */
 	private async sendFeishuFile(chatId: string, filePath: string, fileName?: string): Promise<string> {
-		if (!this.client) return feishuT(this.locale, "file.bridgeNotReady");
+		if (!this.connection.client) return feishuT(this.locale, "file.bridgeNotReady");
 		const { existsSync, readFileSync } = await import("node:fs");
 		const { basename } = await import("node:path");
 		if (!existsSync(filePath)) return feishuT(this.locale, "file.notFound", { path: filePath });
@@ -1563,7 +1515,7 @@ export class FeishuBridge {
 
 		try {
 			// 1. 用 SDK im.file.create 上传文件
-			const uploadResp = await this.client.im.file!.create({
+			const uploadResp = await this.connection.client.im.file!.create({
 				data: { file_type: "stream", file_name: fName, file: fileData },
 			});
 			const fileKey = (uploadResp as Record<string, unknown>)?.file_key as string;
@@ -1573,7 +1525,7 @@ export class FeishuBridge {
 			}
 
 			// 2. 发送文件消息
-			await this.client.im.message.create({
+			await this.connection.client.im.message.create({
 				params: { receive_id_type: "chat_id" },
 				data: {
 					receive_id: chatId,
@@ -1593,9 +1545,9 @@ export class FeishuBridge {
 	 * 需在飞书开放平台开启 docx:document 权限。
 	 */
 	private async createFeishuDoc(chatId: string, title: string, body = ""): Promise<string> {
-		if (!this.client) return feishuT(this.locale, "file.bridgeNotReady");
+		if (!this.connection.client) return feishuT(this.locale, "file.bridgeNotReady");
 		try {
-			const resp = await this.client.request<{
+			const resp = await this.connection.client.request<{
 				code?: number; msg?: string; data?: { document?: { document_id?: string; title?: string; url?: string } };
 			}>({
 				method: "POST",
@@ -1611,7 +1563,7 @@ export class FeishuBridge {
 			const children = buildFeishuTextChildren(body);
 			if (children.length > 0) {
 				try {
-					await this.client.request({
+					await this.connection.client.request({
 						method: "POST",
 						url: `https://open.feishu.cn/open-apis/docx/v1/documents/${doc.document_id}/blocks/${doc.document_id}/children`,
 						params: { document_revision_id: -1 },
@@ -1638,16 +1590,16 @@ export class FeishuBridge {
 	// ===== 图片/文件下载 =====
 
 	private async downloadImage(messageId: string, imageKey: string): Promise<Buffer> {
-		if (!this.client) throw new Error("飞书 Client 未初始化");
+		if (!this.connection.client) throw new Error("飞书 Client 未初始化");
 		try { return await this.downloadMessageResource(messageId, imageKey, "image"); } catch { warn("[飞书 Bridge] messageResource 失败，回退到 image.get"); }
 		return this.downloadViaImageGet(imageKey);
 	}
 	private async downloadMessageResource(messageId: string, fileKey: string, type: "image" | "file"): Promise<Buffer> {
-		const resp = await this.client!.im.messageResource.get({ path: { message_id: messageId, file_key: fileKey }, params: { type } });
+		const resp = await this.connection.client!.im.messageResource.get({ path: { message_id: messageId, file_key: fileKey }, params: { type } });
 		return this.streamToBuffer(resp);
 	}
 	private async downloadViaImageGet(imageKey: string): Promise<Buffer> {
-		const resp = await this.client!.request({ method: "GET", url: `https://open.feishu.cn/open-apis/im/v1/images/${imageKey}` });
+		const resp = await this.connection.client!.request({ method: "GET", url: `https://open.feishu.cn/open-apis/im/v1/images/${imageKey}` });
 		return this.streamToBuffer(resp);
 	}
 	private async downloadFile(messageId: string, fileKey: string): Promise<Buffer> { return this.downloadMessageResource(messageId, fileKey, "file"); }
@@ -1671,9 +1623,9 @@ export class FeishuBridge {
 	private async getGroupInfo(chatId: string): Promise<FeishuGroupInfo | null> {
 		const cached = this.groupInfoCache.get(chatId);
 		if (cached && Date.now() - cached.cachedAt < GROUP_CACHE_TTL) return cached;
-		if (!this.client) return null;
+		if (!this.connection.client) return null;
 		try {
-			const [chatResp, members] = await Promise.all([this.client.im.chat.get({ path: { chat_id: chatId } }), this.fetchGroupMembers(chatId)]);
+			const [chatResp, members] = await Promise.all([this.connection.client.im.chat.get({ path: { chat_id: chatId } }), this.fetchGroupMembers(chatId)]);
 			const name = (chatResp as { data?: { name?: string } }).data?.name ?? feishuT(this.locale, "group.unknown");
 			const info: FeishuGroupInfo = { chatId, name, members, cachedAt: Date.now() };
 			this.groupInfoCache.set(chatId, info); return info;
@@ -1681,9 +1633,9 @@ export class FeishuBridge {
 	}
 
 	private async fetchGroupMembers(chatId: string): Promise<FeishuGroupMember[]> {
-		if (!this.client) return [];
+		if (!this.connection.client) return [];
 		try {
-			const resp = await this.client.im.chat.members.get({ path: { chat_id: chatId }, params: { user_id_type: "open_id", page_size: 100 } });
+			const resp = await this.connection.client.im.chat.members.get({ path: { chat_id: chatId }, params: { user_id_type: "open_id", page_size: 100 } });
 			return ((resp as { data?: { items?: Array<{ open_id: string; name?: string }> } }).data?.items ?? []).map((m) => ({ openId: m.open_id, name: m.name ?? m.open_id }));
 		} catch (e) { warn("[飞书 Bridge] 获取群成员失败:", e); return []; }
 	}
