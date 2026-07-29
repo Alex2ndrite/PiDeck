@@ -98,6 +98,7 @@ import { useResize } from "./hooks/useResize";
 import { useSessionTimelineController } from "./hooks/useSessionTimelineController";
 import { useSessionActions } from "./hooks/useSessionActions";
 import { useScratchPad } from "./hooks/useScratchPad";
+import { useWorktreeActions } from "./hooks/useWorktreeActions";
 import { SessionRuntimeInjector } from "./components/session/SessionRuntimeInjector";
 import { ScratchPadOverlay } from "./components/overlays/ScratchPadOverlay";
 import { AppShell } from "./components/app/AppShell";
@@ -246,12 +247,6 @@ export function App() {
     name: string;
   } | null>(null);
   const [renamingFileInput, setRenamingFileInput] = useState("");
-  /** worktree 创建进行中，用于禁用弹框按钮并显示"创建中" */
-  const [worktreeCreating, setWorktreeCreating] = useState(false);
-  /** 正在被删除的 worktree 路径集合：触发淡出动画期间保留 DOM，动画结束后才移除。 */
-  const [removingWorktreePaths, setRemovingWorktreePaths] = useState<
-    Set<string>
-  >(() => new Set());
   /** 历史会话来源过滤（按项目）：undefined=显示全部，Record 含项目ID对应 Set */
   const [sessionSourceFilter] = useState<
   	Record<string, Set<"pi" | "codex" | "claude" | "opencode"> | null>
@@ -573,6 +568,23 @@ export function App() {
       ),
     ];
   }, [agents, pendingAgents]);
+
+  // === worktree actions hook ===
+  const {
+    worktreeCreating,
+    removingWorktreePaths,
+    createWorktree,
+    removeWorktree,
+    requestRemoveWorktree,
+    toggleProjectWorktree,
+  } = useWorktreeActions({
+    projects,
+    displayAgents,
+    setProjects,
+    refreshWorktrees,
+    overlays,
+  });
+
   // displayAgents 的 ref，供只挂载一次的 IPC 监听器读取最新 Agent 列表，避免闭包陈旧
   const displayAgentsRef = useRef(displayAgents);
   displayAgentsRef.current = displayAgents;
@@ -1802,87 +1814,6 @@ export function App() {
     }
   }
 
-  /** 创建新的 git worktree 工作区 */
-  async function createWorktree(projectId: string, branchName: string) {
-    setWorktreeCreating(true);
-    try {
-      const result = await api.git.worktreeCreate(projectId, branchName);
-      // 刷新项目列表（新 worktree 已注册为项目）
-      const next = await api.projects.list();
-      setProjects(next);
-      // 刷新 worktree 列表
-      await refreshWorktrees(projectId);
-      showToast(t("app.worktreeCreated") + result.branch);
-      return result;
-    } catch (e) {
-      const message = e instanceof Error ? e.message : String(e);
-      showToast(t("app.worktreeCreateFailed") + message, 5000);
-      throw e;
-    } finally {
-      setWorktreeCreating(false);
-    }
-  }
-
-  /** 删除 worktree 工作区 */
-  async function removeWorktree(parentProjectId: string, worktreePath: string) {
-    try {
-      const removed = await api.git.worktreeRemove(parentProjectId, worktreePath);
-      if (!removed) {
-        throw new Error(t("app.worktreeRemoveNotFound"));
-      }
-      const next = await api.projects.list();
-      setProjects(next);
-      await refreshWorktrees(parentProjectId);
-      showToast(t("app.worktreeRemoved"));
-    } catch (e) {
-      const message = e instanceof Error ? e.message : String(e);
-      showToast(t("app.worktreeRemoveFailed") + message, 5000);
-    } finally {
-      // 无论成功还是失败，都移除动画状态，避免 worktree 行永久隐藏
-      setRemovingWorktreePaths((prev) => {
-        const next = new Set(prev);
-        next.delete(worktreePath);
-        return next;
-      });
-    }
-  }
-
-  /**
-   * 请求删除 worktree：先校验是否有运行中的 Agent，再弹确认框，确认后执行删除。
-   * 避免误删正在使用的 worktree，也保证删除结果通过 toast 反馈给用户。
-   */
-  function requestRemoveWorktree(
-    parentProjectId: string,
-    worktreePath: string,
-    childProject: Project | undefined,
-  ) {
-    const childAgents = childProject
-      ? displayAgents.filter(
-          (a) =>
-            a.projectId === childProject.id &&
-            (a.status === "running" || a.status === "starting"),
-        )
-      : [];
-    if (childAgents.length > 0) {
-      showToast(t("app.worktreeRemoveBlockedByAgents"), 5000);
-      return;
-    }
-    overlays.showConfirm({
-      title: t("app.worktreeRemoveConfirmTitle"),
-      message: t("app.worktreeRemoveConfirmMessage"),
-      danger: true,
-      confirmLabel: t("common.delete"),
-      onConfirm: () => {
-        overlays.clearConfirm();
-        // 先触发淡出动画（添加 removing 类），等动画结束后再执行真实删除。
-        setRemovingWorktreePaths((prev) => new Set(prev).add(worktreePath));
-        setTimeout(() => {
-          void removeWorktree(parentProjectId, worktreePath);
-        }, 280);
-      },
-    });
-  }
-
   function toggleDirectory(path: string) {
     // 文件树默认折叠,只有用户显式展开目录才显示子项,避免大仓库一打开就产生视觉噪音。
     setExpandedDirs((current) => {
@@ -1934,22 +1865,6 @@ export function App() {
         void deleteSidebarSession(projectId, session);
       },
     });
-  }
-
-  async function toggleProjectWorktree(project: Project) {
-    try {
-      const updated = await api.projects.toggleWorktreeEnabled(project.id);
-      if (!updated) return;
-      setProjects(await api.projects.list());
-      if (updated.worktreeEnabled) void refreshWorktrees(updated.id);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (message.includes("NOT_A_GIT_REPO")) {
-        showToast(t("app.worktreeNotGitRepo"), 5000);
-      } else {
-        showToast(message, 5000);
-      }
-    }
   }
 
   async function removeSidebarProject(project: Project) {
