@@ -29,15 +29,8 @@ import type {
 	FeishuFileAttachment,
 	FeishuMessageContext,
 	FeishuCardActionEvent,
-	LarkSDK,
-	LarkClient,
 } from "./types";
 import {
-	listBots,
-	addBot,
-	removeBot,
-	updateBot,
-	getDecryptedBotAppSecret,
 	loadBindings,
 	saveBindings,
 	getPersistentChatId,
@@ -47,9 +40,9 @@ import {
 import { chooseMessageMode, buildPostMessages, buildMarkdownCards } from "./rich-text";
 import { CardStream } from "./CardStream";
 import { FeishuConnection } from "./FeishuConnection";
-import { buildFeishuTextChildren, sanitizeFeishuUserVisibleText, stripFeishuActionMarkers, wantsFeishuDoc, wrapHostInstruction } from "./docActions";
+import { buildFeishuTextChildren, sanitizeFeishuUserVisibleText, stripFeishuActionMarkers, wantsFeishuDoc } from "./docActions";
 import { hasExplicitFeishuFileSendIntent } from "./fileIntent";
-import { createInitialState, reduceFromPiEvent, markInterrupted, markError, markDone, type RunState } from "./CardRunState";
+import { createInitialState, reduceFromPiEvent, markInterrupted, markError, type RunState } from "./CardRunState";
 import { renderRunCard } from "./CardRenderer";
 import { buildModelPickerCard, parseModelActionValue } from "./ModelPickerCard";
 import { feishuLanguage, feishuT, normalizeFeishuLocale, type FeishuLocale } from "./FeishuI18n";
@@ -93,10 +86,7 @@ const warn = (...args: unknown[]) => safeLog("warn", ...args);
 const logErr = (...args: unknown[]) => safeLog("error", ...args);
 
 export class FeishuBridge {
-	private wsClient: unknown = null;
-	private client: LarkClient | null = null;
 	private botConfig: FeishuBotConfig;
-	private readonly plainAppSecret?: string;
 	private agentManager: AgentManager;
 	private runtimeBindings: SessionRuntimeBindingGateway;
 	private getWindow: () => BrowserWindow | null;
@@ -159,8 +149,6 @@ export class FeishuBridge {
 		locale: FeishuLocale = "zh-CN",
 	) {
 		this.botConfig = botConfig;
-		// 临时连接不会落盘，无法通过 bot id 解密 secret；这里保留一次性明文供 start() 使用。
-		this.plainAppSecret = plainAppSecret;
 		this.agentManager = agentManager;
 		this.runtimeBindings = runtimeBindings;
 		this.getWindow = getWindow;

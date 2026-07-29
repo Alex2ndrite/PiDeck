@@ -4,7 +4,6 @@
  */
 
 import type {
-	FeishuBridgeStatus,
 	FeishuBotConfig,
 	FeishuTestResult,
 } from "../../shared/types";
