@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import { Brain, Check, FileText, MessageCircle, X } from "lucide-react";
+import { Modal } from "../ui/Modal";
 import type { AgentRunItem, MessageItem, RenderMessage } from "../app/AppUtils";
 import { summarizeMessage } from "../app/AppUtils";
 import { t } from "../../i18n";
@@ -116,26 +117,13 @@ export function MultiSelectModal(props: {
 	const totalCount = allSelectableIds.length;
 
 	return (
-		<div
-			className="multi-select-modal-overlay"
-			onClick={props.onClose}
+		<Modal
+			open
+			onClose={props.onClose}
+			size="medium"
+			title={t("app.multiSelectEnter")}
+			contentClassName="multi-select-modal"
 		>
-			<div
-				className="multi-select-modal"
-				onClick={(e) => e.stopPropagation()}
-			>
-				{/* 标题栏 */}
-				<header className="multi-select-modal-header">
-					<h3>{t("app.multiSelectEnter")}</h3>
-					<button
-						className="multi-select-modal-close"
-						onClick={props.onClose}
-						aria-label={t("common.close")}
-					>
-						<X size={18} strokeWidth={2} />
-					</button>
-				</header>
-
 				{/* 树状列表 */}
 				<div className="multi-select-modal-tree">
 					{props.renderedRuns.map((item) => {
@@ -304,7 +292,6 @@ export function MultiSelectModal(props: {
 						</button>
 					</div>
 				</footer>
-			</div>
-		</div>
+		</Modal>
 	);
 }

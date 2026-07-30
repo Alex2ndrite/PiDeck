@@ -28,6 +28,7 @@ import { t } from "../../i18n";
 import type { WorkspaceDrawerPanel } from "../../hooks/useWorkspacePanels";
 import { showNotice } from "../../utils/notice";
 import { IconButton } from "../ui/IconButton";
+import { Modal } from "../ui/Modal";
 import type { FileTreeNode, Project, SessionSummary } from "../../../../shared/types";
 
 type DiffFileHandler = (path: string, originalContent?: string, content?: string) => void;
@@ -726,24 +727,13 @@ export function SessionHistoryModal(props: {
 	onDelete: (session: SessionSummary) => void | Promise<void>;
 }) {
 	return (
-		<div className="picker-backdrop session-history-backdrop" onClick={props.onClose}>
-			<section
-				className="session-history-modal command-palette"
-				onClick={(event) => event.stopPropagation()}
-			>
-				<div className="command-palette-header session-history-header">
-					<div>
-						<strong>{t("drawer.historyTitle")}</strong>
-						<span>{props.project.name}</span>
-					</div>
-					<IconButton
-						className="command-palette-close"
-						label={t("common.close")}
-						onClick={props.onClose}
-					>
-						<X size={16} strokeWidth={2.2} aria-hidden="true" />
-					</IconButton>
-				</div>
+		<Modal
+			open
+			onClose={props.onClose}
+			size="medium"
+			title={`${t("drawer.historyTitle")} · ${props.project.name}`}
+			contentClassName="session-history-modal"
+		>
 				<div className="session-history-path" title={props.project.path}>
 					{props.project.path}
 				</div>
@@ -765,8 +755,7 @@ export function SessionHistoryModal(props: {
 						/>
 					)}
 				</div>
-			</section>
-		</div>
+		</Modal>
 	);
 }
 
