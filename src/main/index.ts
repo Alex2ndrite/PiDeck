@@ -391,6 +391,16 @@ async function createAnonymousSession(
 	} catch (error) {
 		if (agentId) await agentManager.stop(agentId).catch(() => undefined);
 		sessionCatalog.removeTransient(session.id);
+		// createUnlocked 内部已尽量把 pi 启动失败落到会话错误卡；这里兜底信任/项目查找等
+		// 前置异常，保证 IPC 层也有结构化日志，方便 Mac 闪退类反馈对照 userData/logs。
+		void appLogger.error("agent", "Agent create IPC failed", {
+			projectId: project.id,
+			title: input.title,
+			error: error instanceof Error ? error.message : String(error),
+			stack: error instanceof Error ? error.stack : undefined,
+			platform: process.platform,
+			arch: process.arch,
+		});
 		throw error;
 	}
 }
@@ -1372,7 +1382,19 @@ async function createWindow() {
 	);
 	mainWindow.webContents.on("render-process-gone", (_event, details) => {
 		const level: AppLogLevel = details.reason === "clean-exit" ? "info" : "error";
-		void appLogger.log(level, "app", "Main window renderer process gone", details);
+		void appLogger.log(level, "app", "Main window renderer process gone", {
+			...details,
+			platform: process.platform,
+			arch: process.arch,
+		});
+	});
+	// 子进程（含 GPU/utility）异常退出：Mac 上偶发“整窗闪一下”，需要留下 reason/exitCode。
+	app.on("child-process-gone", (_event, details) => {
+		void appLogger.error("process", "Child process gone", {
+			...details,
+			platform: process.platform,
+			arch: process.arch,
+		});
 	});
 	mainWindow.webContents.on("preload-error", (_event, preloadPath, error) => {
 		void appLogger.error("app", "Main window preload failed", {

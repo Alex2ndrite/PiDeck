@@ -52,6 +52,16 @@ function loadAgentMessageProjectorModule() {
 }
 
 function loadAgentManagerModule() {
+	// AgentManager 新增 streamGate 依赖（abort 流式封印），真实加载以保持闸门行为。
+	const streamGateModule = { exports: {} };
+	vm.runInNewContext(
+		ts.transpileModule(readFileSync("src/main/pi/streamGate.ts", "utf8"), {
+			compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+			fileName: "streamGate.ts",
+		}).outputText,
+		{ module: streamGateModule, exports: streamGateModule.exports },
+		{ filename: "streamGate.ts" },
+	);
 	const messageProjectorModule = loadAgentMessageProjectorModule();
 	const historyReaderModule = { exports: {} };
 	const historyReaderOutput = ts.transpileModule(
@@ -131,6 +141,7 @@ function loadAgentManagerModule() {
         };
       }
       if (specifier === "./LatestByKeyEmitter") return { LatestByKeyEmitter };
+      if (specifier === "./streamGate") return streamGateModule.exports;
       if (specifier === "../../shared/toolRuntimeState") return { updateActiveToolCalls: () => undefined };
       if (specifier === "../wsl/WslPaths") {
         return { toWindowsHostPath: (path) => path, toWslLinuxPath: (path) => path };

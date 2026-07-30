@@ -25,6 +25,12 @@ function loadWslPaths() {
 
 function loadAgentManager() {
 	const wslPaths = loadWslPaths();
+	// AgentManager 新增 streamGate 依赖（abort 流式封印）；与 WslPaths 一样显式沙箱加载。
+	const streamGate = (() => {
+		const sandbox = { exports: {}, require };
+		vm.runInNewContext(transpile("src/main/pi/streamGate.ts"), sandbox, { filename: "streamGate.ts" });
+		return sandbox.exports;
+	})();
 	const sessionEntryIds = (() => {
 		const sandbox = { exports: {}, require };
 		vm.runInNewContext(transpile("src/main/pi/sessionEntryIds.ts"), sandbox, {
@@ -130,6 +136,7 @@ function loadAgentManager() {
 				};
 			}
 			if (id === "./LatestByKeyEmitter") return { LatestByKeyEmitter };
+			if (id === "./streamGate") return streamGate;
 			if (id === "../../shared/toolRuntimeState") return { updateActiveToolCalls: () => new Map() };
 			if (id === "../wsl/WslPaths") return wslPaths;
 			return require(id);

@@ -57,7 +57,9 @@ export function YaoPromptTab(props: {
 			}
 			setInitialLoading(false);
 		} catch (err) {
-			setError(err instanceof Error ? err.message : t("config.promptStoreError"));
+			// 原始错误可能含路径/堆栈，只进日志；用户侧展示稳定的本地化文案。
+			console.error("[YaoPrompts] Initial load failed", err);
+			setError(t("config.yaoLoadError"));
 			setInitialLoading(false);
 		}
 	};

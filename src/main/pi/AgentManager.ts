@@ -41,6 +41,14 @@ import {
 } from "./AgentMessageProjector";
 import { LatestByKeyEmitter } from "./LatestByKeyEmitter";
 import {
+	createStreamGateState,
+	isStreamGateSealed,
+	noteAbortSettled,
+	openStreamGateForNewRun,
+	sealStreamGate,
+	type StreamGateState,
+} from "./streamGate";
+import {
 	stripAnsi,
 	pickNumber,
 	clampPercent,
@@ -142,6 +150,23 @@ export class AgentManager {
 	private readonly userInitiatedStop = new Set<string>();
 	/** 已尝试过自动重连的 agent（防止无限循环），重连成功后清除 */
 	private readonly autoRestartAttempted = new Set<string>();
+	/**
+	 * 用户主动 abort 后正在等待 pi 确认的 agent。
+	 * abort() 先加入该集合，再发送 abort RPC；在收到 agent_settled 或下一个 agent_start 之前，
+	 * 用于抑制 auto-retry/compaction 等状态回写，避免把侧边栏重新标成 running。
+	 * 流式事件拦截改走 streamGate（按 generation 封印），不再依赖本集合。
+	 */
+	private readonly recentlyAborted = new Set<string>();
+	/**
+	 * 每个 agent 的流式 generation 闸门。
+	 * abort 封印当前 generation；须等 abort settled（或超时兜底）后，
+	 * 再由 agent_start 推进 generation 放行，防止残留 thinking/text delta 串台。
+	 */
+	private readonly streamGates = new Map<string, StreamGateState>();
+	/** abort 后等待 agent_settled 的超时定时器；避免 pi 漏发 settled 导致永久封印。 */
+	private readonly abortSettledFallbackTimers = new Map<string, NodeJS.Timeout>();
+	/** abort settled 兜底超时：覆盖多数管道残留，同时不让“立刻重发”永久卡死。 */
+	private static readonly ABORT_SETTLED_FALLBACK_MS = 1500;
 
 	/**
 	 * 待处理的 Extension UI 请求。key 为 agentId，value 为 Map<requestId, { method, title, options }>。
@@ -554,7 +579,36 @@ export class AgentManager {
 		this.messages.set(id, []);
 		this.emitState();
 
-		const client = await process.start(input.sessionPath, trustOverride, input.noSession);
+		// 关键：监听器必须在 process.start() 之前挂上。
+		// spawn 的 ENOENT / EACCES 等 error 事件是异步的；若等 start() 返回后再 on("error")，
+		// 中间窗口可能 0 listener，EventEmitter 会把 error 升级成未捕获异常，
+		// 在部分 macOS arm 环境上表现为“一点启动 Agent 就闪退”。
+		this.attachPiProcessLifecycle(id, process, {
+			projectPath: project.path,
+			onExit: (payload) => this.handleCreateProcessExit(id, tab, payload),
+		});
+
+		let client: Awaited<ReturnType<PiProcess["start"]>>;
+		try {
+			client = await process.start(input.sessionPath, trustOverride, input.noSession);
+		} catch (error) {
+			// start() 同步失败（非法 cwd、spawn 抛错等）也要落到会话错误卡，而不是 IPC 裸抛。
+			tab.status = "error";
+			const rawMessage = error instanceof Error ? error.message : String(error);
+			void this.appLogger?.error("agent", "Agent pi process start threw", {
+				agentId: id,
+				projectId: project.id,
+				sessionPath: input.sessionPath,
+				error: rawMessage,
+				diagnostics: process.getDiagnostics(),
+				// 注意：局部变量 process 是 PiProcess，宿主平台要用 globalThis.process
+				platform: globalThis.process.platform,
+				arch: globalThis.process.arch,
+			});
+			this.addMessage(id, "error", this.buildStartupFailureMessage(rawMessage, process.getDiagnostics()));
+			this.emitState();
+			return tab;
+		}
 		const t3 = Date.now();
 		const diag = process.getDiagnostics();
 		void this.appLogger?.info("agent", "Pi process spawned", {
@@ -573,122 +627,6 @@ export class AgentManager {
 		const statePromise = client.request({ type: "get_state" });
 		const historyLoadDecision = this.getHistoryAutoLoadDecision(input.sessionPath);
 
-		// ... 事件监听器（省略，与原来一致）
-		process.on("event", (event) => this.handlePiEvent(id, event));
-		process.on("stderr", (text) =>
-			this.emit(ipcChannels.agentsLog, { agentId: id, text }),
-		);
-		process.on("protocol-error", (line) => {
-			this.emit(ipcChannels.agentsLog, {
-				agentId: id,
-				text: `Protocol error: ${line}`,
-			});
-			this.appLogger?.error("agent", `Protocol error: ${(line as string)?.slice(0, 200)}`, {
-				agentId: id,
-				project: project.path,
-			});
-		});
-		// 转发 RPC 日志到前端，用于调试面板展示请求/响应/事件
-		process.on("rpc-log", (entry: { direction: string; data: unknown }) => {
-			const data = entry.data as Record<string, any>;
-			let summary: string;
-			if (entry.direction === "send") {
-				// 发送的命令：显示类型和关键参数
-				const type = data.type ?? "?";
-				if (type === "prompt")
-					summary = `→ prompt: ${(data.message ?? "").slice(0, 60)}`;
-				else if (type === "set_model")
-					summary = `→ set_model: ${data.provider}/${data.modelId}`;
-				else if (type === "set_thinking_level")
-					summary = `→ set_thinking: ${data.level}`;
-				else if (type === "bash")
-					summary = `→ bash: ${(data.command ?? "").slice(0, 60)}`;
-				else summary = `→ ${type}`;
-			} else {
-				// 收到的响应/事件
-				const type = data.type ?? "?";
-				if (type === "response")
-					summary = `← ${data.command ?? "?"} ${data.success ? "✓" : "✗"}${data.error ? ` ${data.error}` : ""}`;
-				else if (type === "message_update") {
-					const evt = data.assistantMessageEvent?.type ?? "?";
-					summary = `← message_update.${evt}`;
-				} else summary = `← ${type}`;
-			}
-			const logEntry = {
-				id: randomUUID(),
-				agentId: id,
-				direction: entry.direction,
-				summary,
-				data,
-				time: Date.now(),
-			};
-			this.emit(ipcChannels.agentsRpcLog, logEntry);
-			// 只有用户手动开启 RPC 日志记录的 agent 才落盘
-			if (this.rpcLoggingAgents.has(id)) {
-				this.rpcLogger?.push(logEntry);
-			}
-		});
-		process.on("exit", (payload: { code: number | null; signal: string | null }) => {
-			// 模型配置刷新期间的进程退出由 refreshModels() 负责重连，此处静默忽略
-			if (this.modelRefreshingAgents.has(id)) return;
-			// 用户主动停止 → 不自动重连
-			if (this.userInitiatedStop.has(id)) {
-				this.userInitiatedStop.delete(id);
-				tab.status = "closed";
-				this.emitState();
-				return;
-			}
-
-			// 手动压缩期间退出 → compact() 的 catch 块会负责重连
-			if (this.compactingAgents.has(id)) {
-				tab.status = "closed";
-				this.emitState();
-				return;
-			}
-
-			// 自动压缩 / 进程干净退出（exit code 0）且有会话路径 → 尝试一次自动重连
-			if (!this.autoRestartAttempted.has(id) && tab.sessionPath && payload.code === 0) {
-				this.autoRestartAttempted.add(id);
-				tab.status = "starting";
-				this.emitState();
-				this.reattachProcess(id, tab.sessionPath)
-					.then(() => {
-						tab.status = "idle";
-						this.addLocalizedMessage(
-							id,
-							"system",
-							"diagnostic.compactReconnected",
-							"会话压缩完成，Agent 已自动重连",
-						);
-						this.emitState();
-					})
-					.catch(() => {
-						tab.status = "closed";
-						this.addLocalizedMessage(
-							id,
-							"error",
-							"diagnostic.processReconnectFailed",
-							"Agent 进程意外退出，自动重连失败",
-						);
-						this.emitState();
-					});
-				return;
-			}
-
-			tab.status = "closed";
-			this.emitState();
-		});
-		process.on("error", (error) => {
-			tab.status = "error";
-			this.addLocalizedMessage(id, "error", "diagnostic.runtimeError", "Agent 运行时发生错误。", {
-				debugDetails: error.message,
-			});
-			this.appLogger?.error("agent", "Pi process error", {
-				agentId: id,
-				error: error instanceof Error ? error.message : String(error),
-			});
-			this.emitState();
-		});
 
 		try {
 			void this.appLogger?.info("agent", "Agent get_state request completed", { agentId: id });
@@ -1171,6 +1109,15 @@ export class AgentManager {
 			}
 		}
 
+		// 标记最近中止的 agent，用于抑制 auto-retry/compaction 把状态重新标为 running。
+		// 必须在发送 abort RPC 之前加入集合，避免事件处理函数在 RPC 发出后、
+		// handlePiEvent 返回前收到管道中的旧事件并重建 assistant 消息。
+		this.recentlyAborted.add(agentId);
+		// 封印当前 stream generation：比 recentlyAborted 更硬，不依赖 activeAssistantMessageIds 例外条件，
+		// 残留 thinking/text/tool 事件在 abort settled 前一律丢弃。
+		this.sealAgentStream(agentId);
+		this.scheduleAbortSettledFallback(agentId);
+
 		runtime.process.client
 			.request({ type: "abort" }, 10_000)
 			.catch(() => {
@@ -1188,10 +1135,21 @@ export class AgentManager {
 		this.toolMessageIds.delete(agentId);
 		this.activeToolCallsByAgent.delete(agentId);
 		this.toolExecutingByAgent.set(agentId, null);
+		// 取消节流中的 thinking/message 推送，避免 abort 后还有 pending flush 把旧内容刷回 UI。
+		this.thinkingEmitter.cancel(agentId);
 		this.emitThinking(agentId, "");
+		this.cancelMessageEmit(agentId);
 
 		runtime.tab.status = "idle";
-		this.addMessage(agentId, "system", "已请求停止当前响应", { i18nKey: "app.abortRequested" });
+		// 停止反馈改 toast，不再写入会话时间线：
+		// 1) 系统状态卡片太抢眼；2) 插在 assistant 中间会打断 agent-run 分组，放大“消息串台”体感。
+		this.emit(ipcChannels.agentsNotice, {
+			agentId,
+			message: "已请求停止当前响应",
+			i18nKey: "app.abortRequested",
+			kind: "info",
+			duration: 2500,
+		});
 		this.emitState();
 	}
 
@@ -1308,6 +1266,12 @@ export class AgentManager {
 		});
 
 		const process = new PiProcess(project.path, this.settingsStore.get());
+		// 与 createUnlocked 同理：监听器必须在 start() 前挂上，
+		// 避免重连窗口期 spawn error 变成未捕获异常。
+		this.attachPiProcessLifecycle(agentId, process, {
+			projectPath: project.path,
+			onExit: (payload) => this.handleReattachProcessExit(agentId, runtime, payload),
+		});
 		const client = await process.start(sessionPath);
 		const restartDiag = process.getDiagnostics();
 		void this.appLogger?.info("agent", "Pi process restarted", {
@@ -1317,93 +1281,6 @@ export class AgentManager {
 			cwd: restartDiag?.cwd,
 		});
 
-		// 注册事件监听（与 create() 保持一致）
-		process.on("event", (event) => this.handlePiEvent(agentId, event));
-		process.on("stderr", (text) =>
-			this.emit(ipcChannels.agentsLog, { agentId, text }),
-		);
-		process.on("protocol-error", (line) => {
-			this.emit(ipcChannels.agentsLog, {
-				agentId,
-				text: `Protocol error: ${line}`,
-			});
-		});
-		process.on("rpc-log", (entry: { direction: string; data: unknown }) => {
-			const data = entry.data as Record<string, any>;
-			let summary: string;
-			if (entry.direction === "send") {
-				const type = data.type ?? "?";
-				if (type === "prompt") {
-					const desc = data.description ? ` [${data.description}]` : "";
-					summary = `→ prompt${desc}: ${(data.message ?? "").slice(0, 60)}`;
-				}
-				else summary = `→ ${type}`;
-			} else {
-				const type = data.type ?? "?";
-				if (type === "response")
-					summary = `← ${data.command ?? "?"} ${data.success ? "✓" : "✗"}${data.error ? ` ${data.error}` : ""}`;
-				else summary = `← ${type}`;
-			}
-			const logEntry = {
-				id: randomUUID(),
-				agentId,
-				direction: entry.direction,
-				summary,
-				data,
-				time: Date.now(),
-			};
-			this.emit(ipcChannels.agentsRpcLog, logEntry);
-		});
-		process.on("exit", (payload: { code: number | null; signal: string | null }) => {
-			// 模型配置刷新期间的进程退出由 refreshModels() 负责重连，此处静默忽略
-			if (this.modelRefreshingAgents.has(agentId)) return;
-			if (this.userInitiatedStop.has(agentId)) {
-				this.userInitiatedStop.delete(agentId);
-				runtime.tab.status = "closed";
-				this.emitState();
-				return;
-			}
-
-			// 自动压缩也可能发生在重连后的进程中；继续复用同一会话文件重附加，
-			// 但仍用 autoRestartAttempted 做单次保护，避免真正异常退出时无限重启。
-			if (!this.autoRestartAttempted.has(agentId) && runtime.tab.sessionPath && payload.code === 0) {
-				this.autoRestartAttempted.add(agentId);
-				runtime.tab.status = "starting";
-				this.emitState();
-				this.reattachProcess(agentId, runtime.tab.sessionPath)
-					.then(() => {
-						runtime.tab.status = "idle";
-						this.addLocalizedMessage(
-							agentId,
-							"system",
-							"diagnostic.compactReconnected",
-							"会话压缩完成，Agent 已自动重连",
-						);
-						this.emitState();
-					})
-					.catch(() => {
-						runtime.tab.status = "closed";
-						this.addLocalizedMessage(
-							agentId,
-							"error",
-							"diagnostic.processReconnectFailed",
-							"Agent 进程意外退出，自动重连失败",
-						);
-						this.emitState();
-					});
-				return;
-			}
-
-			runtime.tab.status = "closed";
-			this.emitState();
-		});
-		process.on("error", (error) => {
-			runtime.tab.status = "error";
-			this.addLocalizedMessage(agentId, "error", "diagnostic.runtimeError", "Agent 运行时发生错误。", {
-				debugDetails: error.message,
-			});
-			this.emitState();
-		});
 
 		// 替换旧进程引用（但不修改 agents map 中的 key）
 		runtime.process = process;
@@ -2133,6 +2010,7 @@ export class AgentManager {
 		this.activeToolCallsByAgent.delete(agentId);
 		this.toolExecutingByAgent.delete(agentId);
 		this.toolStateSequenceByAgent.delete(agentId);
+		this.clearStreamGate(agentId);
 		// agent 关闭时自动关闭 RPC 日志记录
 		this.rpcLoggingAgents.delete(agentId);
 		process.stop();
@@ -2170,7 +2048,324 @@ export class AgentManager {
 		}
 		this.agents.clear();
 		this.messages.clear();
+		// 退出时统一清理所有 gate / abort 兜底定时器，避免泄漏到下一次生命周期。
+		for (const agentId of [...this.streamGates.keys()]) this.clearStreamGate(agentId);
+		this.recentlyAborted.clear();
 		this.emitState();
+	}
+
+
+	/**
+	 * 统一挂接 PiProcess 生命周期监听。
+	 * 必须在 start() 之前调用，避免 spawn error 在无 listener 窗口升级成未捕获异常。
+	 */
+	private attachPiProcessLifecycle(
+		agentId: string,
+		piProcess: PiProcess,
+		options: {
+			projectPath?: string;
+			onExit: (payload: { code: number | null; signal: string | null }) => void;
+		},
+	) {
+		piProcess.on("event", (event) => {
+			try {
+				this.handlePiEvent(agentId, event);
+			} catch (error) {
+				// 单条 pi 事件处理失败不能拖垮主进程；记录后继续接收后续事件。
+				void this.appLogger?.error("agent", "handlePiEvent failed", {
+					agentId,
+					error: error instanceof Error ? error.message : String(error),
+					stack: error instanceof Error ? error.stack : undefined,
+					eventType:
+						event && typeof event === "object"
+							? String((event as { type?: unknown }).type ?? "unknown")
+							: typeof event,
+				});
+			}
+		});
+		piProcess.on("stderr", (text) =>
+			this.emit(ipcChannels.agentsLog, { agentId, text }),
+		);
+		piProcess.on("protocol-error", (line) => {
+			this.emit(ipcChannels.agentsLog, {
+				agentId,
+				text: `Protocol error: ${line}`,
+			});
+			void this.appLogger?.error(
+				"agent",
+				`Protocol error: ${(line as string)?.slice(0, 200)}`,
+				{
+					agentId,
+					project: options.projectPath,
+				},
+			);
+		});
+		// 转发 RPC 日志到前端，用于调试面板展示请求/响应/事件
+		piProcess.on("rpc-log", (entry: { direction: string; data: unknown }) => {
+			try {
+				const data = entry.data as Record<string, any>;
+				let summary: string;
+				if (entry.direction === "send") {
+					const type = data.type ?? "?";
+					if (type === "prompt") {
+						const desc = data.description ? ` [${data.description}]` : "";
+						summary = `→ prompt${desc}: ${(data.message ?? "").slice(0, 60)}`;
+					}
+					else if (type === "set_model")
+						summary = `→ set_model: ${data.provider}/${data.modelId}`;
+					else if (type === "set_thinking_level")
+						summary = `→ set_thinking: ${data.level}`;
+					else if (type === "bash")
+						summary = `→ bash: ${(data.command ?? "").slice(0, 60)}`;
+					else summary = `→ ${type}`;
+				} else {
+					const type = data.type ?? "?";
+					if (type === "response")
+						summary = `← ${data.command ?? "?"} ${data.success ? "✓" : "✗"}${data.error ? ` ${data.error}` : ""}`;
+					else if (type === "message_update") {
+						const evt = data.assistantMessageEvent?.type ?? "?";
+						summary = `← message_update.${evt}`;
+					} else summary = `← ${type}`;
+				}
+				const logEntry = {
+					id: randomUUID(),
+					agentId,
+					direction: entry.direction,
+					summary,
+					data,
+					time: Date.now(),
+				};
+				this.emit(ipcChannels.agentsRpcLog, logEntry);
+				// 只有用户手动开启 RPC 日志记录的 agent 才落盘
+				if (this.rpcLoggingAgents.has(agentId)) {
+					this.rpcLogger?.push(logEntry);
+				}
+			} catch (error) {
+				void this.appLogger?.warn("agent", "rpc-log handler failed", {
+					agentId,
+					error: error instanceof Error ? error.message : String(error),
+				});
+			}
+		});
+		piProcess.on("exit", (payload: { code: number | null; signal: string | null }) => {
+			try {
+				void this.appLogger?.info("agent", "Pi process exit", {
+					agentId,
+					code: payload.code,
+					signal: payload.signal,
+					diagnostics: piProcess.getDiagnostics(),
+				});
+				options.onExit(payload);
+			} catch (error) {
+				void this.appLogger?.error("agent", "Pi process exit handler failed", {
+					agentId,
+					error: error instanceof Error ? error.message : String(error),
+				});
+			}
+		});
+		piProcess.on("error", (error: Error) => {
+			const runtime = this.agents.get(agentId);
+			if (runtime) runtime.tab.status = "error";
+			const message = error instanceof Error ? error.message : String(error);
+			void this.appLogger?.error("agent", "Pi process error", {
+				agentId,
+				error: message,
+				stack: error instanceof Error ? error.stack : undefined,
+				diagnostics: piProcess.getDiagnostics(),
+				platform: globalThis.process.platform,
+				arch: globalThis.process.arch,
+			});
+			// 启动期 error 多半意味着进程没起来：卡片文案走 i18n，
+			// 可复制的诊断详情放 debugDetails（含排查步骤），而不是静默闪退。
+			this.addLocalizedMessage(agentId, "error", "diagnostic.runtimeError", "Agent 运行时发生错误。", {
+				debugDetails: this.buildStartupFailureMessage(message, piProcess.getDiagnostics()),
+			});
+			this.emitState();
+		});
+	}
+
+	/** createUnlocked 路径的进程 exit：支持压缩后自动重连，其余标 closed。 */
+	private handleCreateProcessExit(
+		agentId: string,
+		tab: AgentTab,
+		payload: { code: number | null; signal: string | null },
+	) {
+		// 模型配置刷新期间的进程退出由 refreshModels() 负责重连，此处静默忽略
+		if (this.modelRefreshingAgents.has(agentId)) return;
+		// 用户主动停止 → 不自动重连
+		if (this.userInitiatedStop.has(agentId)) {
+			this.userInitiatedStop.delete(agentId);
+			tab.status = "closed";
+			this.emitState();
+			return;
+		}
+		// 手动压缩期间退出 → compact() 的 catch 块会负责重连
+		if (this.compactingAgents.has(agentId)) {
+			tab.status = "closed";
+			this.emitState();
+			return;
+		}
+		// 自动压缩 / 进程干净退出（exit code 0）且有会话路径 → 尝试一次自动重连
+		if (!this.autoRestartAttempted.has(agentId) && tab.sessionPath && payload.code === 0) {
+			this.autoRestartAttempted.add(agentId);
+			tab.status = "starting";
+			this.emitState();
+			this.reattachProcess(agentId, tab.sessionPath)
+				.then(() => {
+					tab.status = "idle";
+					this.addLocalizedMessage(
+						agentId,
+						"system",
+						"diagnostic.compactReconnected",
+						"会话压缩完成，Agent 已自动重连",
+					);
+					this.emitState();
+				})
+				.catch(() => {
+					tab.status = "closed";
+					this.addLocalizedMessage(
+						agentId,
+						"error",
+						"diagnostic.processReconnectFailed",
+						"Agent 进程意外退出，自动重连失败",
+					);
+					this.emitState();
+				});
+			return;
+		}
+		tab.status = "closed";
+		// 非 0 退出且还没写过错误卡时，补一条可排查信息（避免用户只看到 closed）。
+		if (payload.code !== 0 && payload.code !== null) {
+			const runtime = this.agents.get(agentId);
+			const diag = runtime?.process.getDiagnostics() ?? null;
+			this.addMessage(
+				agentId,
+				"error",
+				this.buildStartupFailureMessage(
+					`pi 进程退出 code=${payload.code}${payload.signal ? ` signal=${payload.signal}` : ""}`,
+					diag,
+				),
+			);
+		}
+		this.emitState();
+	}
+
+	/** reattach 路径的进程 exit：同样做单次自动重连保护。 */
+	private handleReattachProcessExit(
+		agentId: string,
+		runtime: AgentRuntime,
+		payload: { code: number | null; signal: string | null },
+	) {
+		if (this.modelRefreshingAgents.has(agentId)) return;
+		if (this.userInitiatedStop.has(agentId)) {
+			this.userInitiatedStop.delete(agentId);
+			runtime.tab.status = "closed";
+			this.emitState();
+			return;
+		}
+		// 自动压缩也可能发生在重连后的进程中；继续复用同一会话文件重附加，
+		// 但仍用 autoRestartAttempted 做单次保护，避免真正异常退出时无限重启。
+		if (!this.autoRestartAttempted.has(agentId) && runtime.tab.sessionPath && payload.code === 0) {
+			this.autoRestartAttempted.add(agentId);
+			runtime.tab.status = "starting";
+			this.emitState();
+			this.reattachProcess(agentId, runtime.tab.sessionPath)
+				.then(() => {
+					runtime.tab.status = "idle";
+					this.addLocalizedMessage(
+						agentId,
+						"system",
+						"diagnostic.compactReconnected",
+						"会话压缩完成，Agent 已自动重连",
+					);
+					this.emitState();
+				})
+				.catch(() => {
+					runtime.tab.status = "closed";
+					this.addLocalizedMessage(
+						agentId,
+						"error",
+						"diagnostic.processReconnectFailed",
+						"Agent 进程意外退出，自动重连失败",
+					);
+					this.emitState();
+				});
+			return;
+		}
+		runtime.tab.status = "closed";
+		this.emitState();
+	}
+
+	/**
+	 * 把 pi 启动/退出失败整理成可复制的诊断文案。
+	 * 目标：用户不至于只看到闪退或空白，Issue 也能直接贴日志。
+	 */
+	private buildStartupFailureMessage(
+		rawMessage: string,
+		diag: ReturnType<PiProcess["getDiagnostics"]>,
+	): string {
+		if (!diag) {
+			return `⚠️ Pi RPC 启动失败\n\n${rawMessage}\n\nplatform=${globalThis.process.platform} arch=${globalThis.process.arch}`;
+		}
+		const lines: string[] = [];
+		if (diag.exitCode !== null) {
+			lines.push(`退出码: ${diag.exitCode}${diag.exitSignal ? ` (signal: ${diag.exitSignal})` : ""}`);
+		}
+		const stderrText = diag.stderr.join("").trim();
+		if (stderrText) {
+			const snippet = stderrText.length > 600 ? "…" + stderrText.slice(-600) : stderrText;
+			lines.push(`进程错误输出:\n${snippet}`);
+		}
+		lines.push(`pi 路径: ${diag.command}`);
+		if (diag.customPiPath) lines.push(`自定义路径: ${diag.customPiPath}`);
+		lines.push(`工作目录: ${diag.cwd}`);
+		lines.push(`版本检测: ${diag.versionCheck ? "✓ 通过" : "✗ 失败"}`);
+		lines.push(`运行环境: ${globalThis.process.platform}/${globalThis.process.arch}`);
+		if (diag.blockedExtensions && diag.blockedExtensions.length > 0) {
+			// 桌面端已自动隔离的扩展（如 codeisland），方便用户对照「为何 RPC 没加载该扩展」。
+			lines.push(`已自动隔离扩展: ${diag.blockedExtensions.join(", ")}`);
+		}
+		lines.push("");
+		lines.push("━━━ 排查步骤 ━━━");
+		if (!diag.versionCheck) {
+			lines.push("1. 在终端执行 pi --version，确认 pi 是否已安装且路径正确");
+			lines.push("2. 如未安装，执行 npm install -g @earendil-works/pi-coding-agent");
+			lines.push("3. macOS 若从 Dock 启动，可在设置中填写完整 pi 路径（Homebrew 常见 /opt/homebrew/bin/pi）");
+		} else if (diag.exitCode !== 0 && diag.exitCode !== null) {
+			lines.push("1. 在终端执行 pi --mode rpc 看是否能正常启动");
+			lines.push("2. 注意终端中的错误信息（架构不匹配/权限/扩展崩溃都会体现在这里）");
+		} else if (!stderrText && diag.exitCode === null) {
+			lines.push("1. 桌面端已自动重试 get_state，但 pi 仍未响应。");
+			lines.push("2. 在终端执行 pi --mode rpc 看是否能正常启动，注意终端中的错误信息");
+		} else {
+			lines.push("1. 在终端执行 pi --mode rpc 确认 pi 能否正常启动");
+			lines.push("2. 检查设置中的 pi 路径是否正确");
+		}
+		const startFlags = this.settingsStore.get();
+		const noExt = Boolean(startFlags.piRpcNoExtensions);
+		const noSkills = Boolean(startFlags.piRpcNoSkills);
+		lines.push("");
+		lines.push("━━━ 扩展 / 技能排查 ━━━");
+		if (noExt || noSkills) {
+			lines.push(
+				`当前启动已禁用：${[
+					noExt ? "扩展 (--no-extensions)" : null,
+					noSkills ? "技能 (--no-skills)" : null,
+				]
+					.filter(Boolean)
+					.join("、")}`,
+			);
+			lines.push("若仍失败，更可能是 pi 本体/路径/会话文件问题，而不是扩展加载。");
+		} else {
+			lines.push("若怀疑某个扩展或技能导致启动失败：");
+			lines.push("1. 打开 设置 → 开发设置");
+			lines.push("2. 临时开启「禁用扩展启动」和/或「禁用技能启动」");
+			lines.push("3. 保存后重新启动 Agent 验证");
+			lines.push("若禁用后能启动，再逐个排查 ~/.pi/agent/extensions 与 skills。");
+		}
+		lines.push("");
+		lines.push("如问题持续，可在 GitHub 提交 Issue 并附上以上信息与应用日志。");
+		return `⚠️ Pi RPC 启动失败\n\n${rawMessage}\n\n${lines.join("\n")}`;
 	}
 
 	private handlePiEvent(agentId: string, event: unknown) {
@@ -2199,6 +2394,11 @@ export class AgentManager {
 		}
 
 		if (typed.type === "agent_start" && runtime) {
+			// agent_start 表示一轮新的 agent run 开始：
+			// 1) 清理 recentlyAborted，允许状态机恢复 running
+			// 2) 推进 stream generation，解封流式闸门（唯一合法解封点）
+			this.recentlyAborted.delete(agentId);
+			this.openAgentStream(agentId);
 			runtime.tab.status = "running";
 			this.activeAssistantMessageIds.delete(agentId);
 			this.toolMessageIds.delete(agentId);
@@ -2208,13 +2408,18 @@ export class AgentManager {
 		}
 
 		if (typed.type === "message_start" && typed.message?.role === "assistant") {
+			// abort 封印后的残留 assistant 事件应丢弃，防止误重新激活流式状态。
+			if (this.isAgentStreamSealed(agentId)) {
+				return;
+			}
 			this.beginAssistantMessage(agentId);
 			this.upsertAssistantMessage(agentId, typed.message);
 		}
 
 		if (typed.type === "auto_retry_start") {
 			this.upsertRetryStatusMessage(agentId, typed, "running");
-			if (runtime) {
+			// 用户已主动中止时不重新激活 running 状态，避免 abort 后 auto-retry 事件误覆盖 state
+			if (runtime && !this.recentlyAborted.has(agentId)) {
 				// pi 在等待指数退避期间可能短暂结束一轮 agent run；桌面端保持 running，
 				// 让用户明确知道当前不是最终失败，而是在等待下一次自动重试。
 				runtime.tab.status = "running";
@@ -2228,13 +2433,22 @@ export class AgentManager {
 				typed,
 				typed.success ? "success" : "error",
 			);
+			// 自动重试最终失败：如果用户没有主动中止，则保持 agent 的 error 状态
+			// 不被后续 agent_settled 覆盖，确保侧边栏状态显示失败标记。
+			if (!typed.success && runtime && !this.recentlyAborted.has(agentId)) {
+				runtime.tab.status = "error";
+				const reason = typed.finalError ?? typed.errorMessage ?? "API 请求失败";
+				this.addMessage(agentId, "error", `请求失败：${String(reason)}`);
+				this.emitState();
+			}
 		}
 
 		// 自动/手动压缩事件（pi 在自动或手动压缩完成后会发出这些事件），
 		// 用于记录压缩耗时和结果，便于排查压缩性能问题。
 		if (typed.type === "compaction_start") {
 			this.rpcCompactingAgents.add(agentId);
-			if (runtime) {
+			// 用户已主动中止或出错时不重新激活 running 状态
+			if (runtime && !this.recentlyAborted.has(agentId) && runtime.tab.status !== "error") {
 				// 自动压缩在 agent_end 之后触发：Pi 仍在改写上下文，但不会再发 agent_start。
 				// 因此桌面端必须主动保持 running，阻止用户误以为空闲并继续发送消息。
 				runtime.tab.status = "running";
@@ -2252,7 +2466,8 @@ export class AgentManager {
 				// compaction 会向 session JSONL 写入新的边界记录；立即重载消息，
 				// 避免前端仍展示压缩前分支，下一轮继续对话时看起来像“断在旧会话”。
 				void this.loadMessages(agentId).catch(() => undefined);
-				if (runtime.tab.status !== "error") {
+				// 用户已主动中止或出错时不重新激活 running 状态
+				if (!this.recentlyAborted.has(agentId) && runtime.tab.status !== "error") {
 					// compaction_end 之后 Pi 仍可能因 overflow retry 或 queued follow-up 自动继续。
 					// 只有 agent_settled 才表示不会再自动发起下一轮，不能在这里提前 idle。
 					runtime.tab.status = "running";
@@ -2349,6 +2564,12 @@ export class AgentManager {
 		}
 
 		if (typed.type === "agent_settled") {
+			// agent_settled 是 Pi 的最终稳定点。
+			// 通知 stream gate：abort 对应的 settled 已到。
+			// 若 settled 前已有 agent_start（用户立刻重发），此处才真正解封；
+			// 若还没有新 start，则保持封印，防止 settled 后残留 delta 复活旧气泡。
+			this.noteAgentAbortSettled(agentId);
+			this.recentlyAborted.delete(agentId);
 			if (runtime && runtime.tab.status !== "error" && runtime.tab.status !== "closed") {
 				// agent_settled 是 Pi 的最终稳定点：没有自动重试、自动压缩、压缩 retry
 				// 或 queued follow-up 会继续执行，此时才允许恢复 idle 并通知用户完成。
@@ -2359,6 +2580,7 @@ export class AgentManager {
 				this.activeToolCallsByAgent.delete(agentId);
 				this.toolExecutingByAgent.set(agentId, null);
 				this.rpcCompactingAgents.delete(agentId);
+				this.thinkingEmitter.cancel(agentId);
 				this.emitThinking(agentId, "");
 				this.emitState();
 				void this.emitRuntimeState(agentId);
@@ -2375,21 +2597,33 @@ export class AgentManager {
 			typed.type === "message_update" &&
 			typed.assistantMessageEvent
 		) {
+			// abort 封印后的延迟 text/thinking delta 一律丢弃，避免重建气泡或串台。
+			if (this.isAgentStreamSealed(agentId)) {
+				return;
+			}
 			this.handleAssistantMessageEvent(agentId, typed);
 		}
 
 		if (
 			typed.type === "message_end" &&
-			typed.message?.role === "assistant" &&
-			this.activeAssistantMessageIds.has(agentId)
+			typed.message?.role === "assistant"
 		) {
-			this.upsertAssistantMessage(agentId, typed.message);
-			this.activeAssistantMessageIds.delete(agentId);
-			// message_end 是本轮回答的最终状态，立即 flush 确保完整消息及时可见
-			this.flushMessageEmit(agentId);
+			if (this.isAgentStreamSealed(agentId)) {
+				return;
+			}
+			if (this.activeAssistantMessageIds.has(agentId)) {
+				this.upsertAssistantMessage(agentId, typed.message);
+				this.activeAssistantMessageIds.delete(agentId);
+				// message_end 是本轮回答的最终状态，立即 flush 确保完整消息及时可见
+				this.flushMessageEmit(agentId);
+			}
 		}
 
 		if (typed.type === "tool_execution_start") {
+			// abort 封印后的延迟工具事件应丢弃，避免重新激活流式状态。
+			if (this.isAgentStreamSealed(agentId)) {
+				return;
+			}
 			this.upsertToolMessage(agentId, typed, "running");
 			// 并行工具会先连续发多个 start；按 toolCallId 追踪，只有最后一个 end 才能表示工具阶段完成。
 			const toolName = typed.toolName ?? "tool";
@@ -2409,6 +2643,10 @@ export class AgentManager {
 		}
 
 		if (typed.type === "tool_execution_end") {
+			// abort 封印后的延迟工具事件应丢弃。
+			if (this.isAgentStreamSealed(agentId)) {
+				return;
+			}
 			this.upsertToolMessage(
 				agentId,
 				typed,
@@ -2435,6 +2673,10 @@ export class AgentManager {
 		}
 
 		if (typed.type === "tool_execution_update") {
+			// abort 封印后的延迟工具事件应丢弃。
+			if (this.isAgentStreamSealed(agentId)) {
+				return;
+			}
 			this.upsertToolMessage(agentId, typed, "running");
 		}
 
@@ -2709,6 +2951,8 @@ export class AgentManager {
 	}
 
 	private handleAssistantMessageEvent(agentId: string, event: Record<string, any>) {
+		// 双保险：即使调用方漏判，也在这里拦截封印 generation 的残留 delta。
+		if (this.isAgentStreamSealed(agentId)) return;
 		const assistantEvent = event.assistantMessageEvent as Record<string, any>;
 		const eventType = assistantEvent.type as string | undefined;
 		const partialMessage =
@@ -3259,6 +3503,84 @@ export class AgentManager {
 	 * 安排一次消息 emit。流式高频事件走节流合并（同一 agent 50ms 内多次调用只 emit 一次最新数组）；
 	 * immediate=true 时跳过节流立即 flush，用于 message_end/tool_execution_end 等终态事件，确保最终状态不丢。
 	 */
+	/** 取/建 agent 的 stream gate 状态。 */
+	private getStreamGate(agentId: string): StreamGateState {
+		let gate = this.streamGates.get(agentId);
+		if (!gate) {
+			gate = createStreamGateState();
+			this.streamGates.set(agentId, gate);
+		}
+		return gate;
+	}
+
+	/** abort 时封印当前 generation。 */
+	private sealAgentStream(agentId: string) {
+		const next = sealStreamGate(this.getStreamGate(agentId));
+		this.streamGates.set(agentId, next);
+	}
+
+	/** agent_start 时尝试推进 generation；若仍在等 abort settled，则只记 pending。 */
+	private openAgentStream(agentId: string) {
+		const next = openStreamGateForNewRun(this.getStreamGate(agentId));
+		this.streamGates.set(agentId, next);
+	}
+
+	/** abort 后的 agent_settled：结束 waiting，必要时解封 pending start。 */
+	private noteAgentAbortSettled(agentId: string) {
+		this.clearAbortSettledFallback(agentId);
+		const next = noteAbortSettled(this.getStreamGate(agentId));
+		this.streamGates.set(agentId, next);
+	}
+
+	/**
+	 * pi 偶发不发 agent_settled 时的兜底：超时后按 settled 处理，
+	 * 避免用户立刻重发时新一轮永远无法接收流式事件。
+	 */
+	private scheduleAbortSettledFallback(agentId: string) {
+		this.clearAbortSettledFallback(agentId);
+		const timer = setTimeout(() => {
+			this.abortSettledFallbackTimers.delete(agentId);
+			// 仅在仍 waiting 时生效；正常 settled 路径会先 clear 定时器。
+			if (this.getStreamGate(agentId).waitingForAbortSettled) {
+				this.noteAgentAbortSettled(agentId);
+			}
+		}, AgentManager.ABORT_SETTLED_FALLBACK_MS);
+		timer.unref?.();
+		this.abortSettledFallbackTimers.set(agentId, timer);
+	}
+
+	private clearAbortSettledFallback(agentId: string) {
+		const timer = this.abortSettledFallbackTimers.get(agentId);
+		if (timer) {
+			clearTimeout(timer);
+			this.abortSettledFallbackTimers.delete(agentId);
+		}
+	}
+
+	/** 当前 generation 是否已封印，封印期间所有流式事件应丢弃。 */
+	private isAgentStreamSealed(agentId: string): boolean {
+		return isStreamGateSealed(this.getStreamGate(agentId));
+	}
+
+	/** agent 关闭/重建时清理 gate，避免泄漏到新生命周期。 */
+	private clearStreamGate(agentId: string) {
+		this.clearAbortSettledFallback(agentId);
+		this.streamGates.delete(agentId);
+		this.recentlyAborted.delete(agentId);
+		this.thinkingEmitter.cancel(agentId);
+		this.cancelMessageEmit(agentId);
+	}
+
+	/** 取消节流中的消息推送（不触发 emit），用于 abort/关闭时丢弃 pending 的旧内容。 */
+	private cancelMessageEmit(agentId: string) {
+		const timer = this.messageFlushTimers.get(agentId);
+		if (timer) {
+			clearTimeout(timer);
+			this.messageFlushTimers.delete(agentId);
+		}
+		this.pendingMessageAgents.delete(agentId);
+	}
+
 	private scheduleMessageEmit(agentId: string, immediate = false) {
 		if (immediate) {
 			this.flushMessageEmit(agentId);

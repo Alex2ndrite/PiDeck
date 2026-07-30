@@ -210,6 +210,24 @@ export function TerminalDock(props: {
 		contentReady,
 	]);
 
+	// 独立加载可用 shell 列表，避免与 loadTabs 耦合
+	useEffect(() => {
+		if (!open || !contentReady) return;
+		let cancelled = false;
+		void props.terminal
+			.shells()
+			.then((list) => {
+				if (!cancelled) setShells(list);
+			})
+			.catch(() => {
+				// shell 列表失败不阻断终端主体
+				if (!cancelled) setShells([]);
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [props.terminal, open, contentReady]);
+
 	useEffect(() => {
 		const offData = props.terminal.onData((payload) => {
 			buffersRef.current[payload.tabId] =

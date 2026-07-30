@@ -13,7 +13,15 @@ function loadAppUtils() {
       target: ts.ScriptTarget.ES2022,
     },
   });
-  const sandbox = { exports: {}, location: { href: "file:///Users/test/app" } };
+  // AppUtils 拆分后引用了 ./RichInput 的 formatFilePathRef；vm 沙箱不会解析相对模块，显式桩掉。
+  const sandbox = {
+    exports: {},
+    location: { href: "file:///Users/test/app" },
+    require: (id) => {
+      if (id === "./RichInput") return { formatFilePathRef: (p) => p };
+      return {};
+    },
+  };
   vm.runInNewContext(outputText, sandbox, { filename: "AppUtils.ts" });
   return sandbox.exports;
 }

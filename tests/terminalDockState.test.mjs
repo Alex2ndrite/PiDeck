@@ -59,13 +59,27 @@ test("preserves collapsed state when toggling terminal open state", () => {
   assert.equal(reopened.agentA.collapsed, true);
 });
 
-test("prunes terminal dock state for removed agents", () => {
-  const { pruneTerminalDockState } = loadTerminalDockStateModule();
-  const next = pruneTerminalDockState({
-    agentA: { open: true, collapsed: true }, agentB: { open: true, collapsed: false },
-  }, new Set(["agentB"]));
-  assert.equal(next.agentA, undefined);
-  assert.equal(next.agentB.open, true);
+test("prunes agent and project keys against their own live sets", () => {
+  const { pruneTerminalDockState, terminalOwnerKey } = loadTerminalDockStateModule();
+  const agentA = terminalOwnerKey({ kind: "agent", id: "agentA" });
+  const agentB = terminalOwnerKey({ kind: "agent", id: "agentB" });
+  const projectP = terminalOwnerKey({ kind: "project", id: "projP" });
+  const current = {
+    [agentA]: { open: true, collapsed: true },
+    [agentB]: { open: true, collapsed: false },
+    [projectP]: { open: true, collapsed: false },
+  };
+
+  // 关键回归：不能用 agent 集合误删 project 键
+  const next = pruneTerminalDockState(
+    current,
+    new Set(["agentB"]),
+    new Set(["projP"]),
+  );
+
+  assert.equal(next[agentA], undefined);
+  assert.equal(next[agentB].open, true);
+  assert.equal(next[projectP].open, true);
 });
 
 test("rapid reopen cancels the closing state without a second timer owner", () => {

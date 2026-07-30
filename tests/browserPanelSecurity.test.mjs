@@ -79,5 +79,8 @@ test("external browser IPC shares the HTTP(S) protocol gate and Chromium sandbox
 	const browserOpenExternal = functionBlock(filesIpc, 'ipcMain.handle(ipcChannels.browserOpenExternal', "\n\n\tipcMain.handle(");
 	assert.match(browserOpenExternal, /await openExternalUrl\(url, true\)/);
 	assert.doesNotMatch(browserOpenExternal, /shell\.openExternal\(url\)/);
-	assert.doesNotMatch(main, /appendSwitch\(["']no-sandbox["']\)/);
+	// Chromium 沙箱默认关闭是刻意的（Windows 安全软件/旧 GPU 驱动会在沙箱初始化触发原生断点），
+	// 但只能在用户未显式开启 electronChromiumSandbox 时才附带 no-sandbox；
+	// 用户开启沙箱后必须保持 Chromium 默认沙箱，不能无条件追加 no-sandbox。
+	assert.match(main, /if \(!electronChromiumSandboxEnabled\) \{\s*\/\/[^\n]*\n\s*app\.commandLine\.appendSwitch\("no-sandbox"\);/);
 });

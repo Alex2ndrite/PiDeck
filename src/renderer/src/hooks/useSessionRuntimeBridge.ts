@@ -7,6 +7,9 @@ import {
   sessionRuntimeByIdAtom,
 } from "../atoms";
 import { desktopApi } from "../desktopApi";
+import { t } from "../i18n";
+import type { TranslationKey } from "../i18n/rendererCopy.zh-CN";
+import { showNotice } from "../utils/notice";
 
 type RuntimeBridgeCallbacks = {
   onRuntimeCapabilityChanged?: (input: {
@@ -30,6 +33,19 @@ export function useSessionRuntimeBridge(callbacks: RuntimeBridgeCallbacks = {}):
     }).catch(() => undefined);
 
     const offRuntimeEvents = desktopApi.sessions.onRuntimeEvent((event) => {
+      // 主进程瞬时状态反馈（如 abort 已请求停止）走 toast，不进会话时间线：
+      // 系统卡片太抢眼，且插在 assistant 中间会打断 agent-run 分组。
+      if (event.sourceChannel === "agents:notice" && event.payload && typeof event.payload === "object") {
+        const notice = event.payload as {
+          message?: string;
+          i18nKey?: string;
+          kind?: "info" | "warning" | "error";
+          duration?: number;
+        };
+        const text = notice.i18nKey ? t(notice.i18nKey as TranslationKey) : notice.message;
+        if (text) showNotice(text, notice.duration ?? 2500, notice.kind ?? "info");
+        return;
+      }
       const previousRuntime = store.get(sessionRuntimeByIdAtom)[event.sessionId];
       store.set(applySessionRuntimeEventAtom, event);
       if (event.sourceChannel !== "agents:runtime-state") return;

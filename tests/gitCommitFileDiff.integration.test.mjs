@@ -48,6 +48,9 @@ before(() => {
   ({ GitService } = require(join(buildDir, "main/git/GitService.js")));
 
   git("init");
+  // Windows 开发机常配 core.autocrlf=true，会把 checkout 内容转成 CRLF，
+  // 使基于 `\n` 的内容断言在 Windows 上偶发失败；测试仓库强制关闭。
+  git("config", "core.autocrlf", "false");
   git("config", "user.name", "PiDeck Test");
   git("config", "user.email", "test@example.com");
 });
@@ -303,6 +306,7 @@ describe("GitService committed-file diff integration", () => {
     }).trim();
     try {
       unbornGit("init");
+      unbornGit("config", "core.autocrlf", "false");
       const filePath = join(unbornDir, "first.txt");
       writeFileSync(filePath, "first\n");
       await service.stageFiles(unbornDir, [filePath]);

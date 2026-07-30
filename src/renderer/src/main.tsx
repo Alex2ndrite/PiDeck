@@ -28,7 +28,7 @@ window.addEventListener("error", (event) => {
   // 资源加载失败（script/img）也会进 error 事件，但 event.error 通常为空；
   // 这类错误不适合弹业务 toast，只记日志。
   const isResourceError = event.target instanceof HTMLElement;
-  writeStartupLog("error", "Renderer startup uncaught error", {
+  writeStartupLog("error", "Renderer uncaught error", {
     message: event.message,
     filename: event.filename,
     lineno: event.lineno,

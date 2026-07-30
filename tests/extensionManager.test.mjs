@@ -85,9 +85,12 @@ test("uninstall removes a local extension and clears its stale disable entry", a
     await writeFile(join(extensionsDir, "local-tool.ts"), "export default {};", "utf8");
     await writeFile(settingsPath, JSON.stringify({ disabledExtensions: ["local-tool.ts", "other.ts"] }), "utf8");
 
+    // 拆分后构造签名：(locator, getSettings, getPiDeckSettings, patchPiDeckSettings, translate)
     const manager = new ExtensionManager(
       {},
       () => ({}),
+      () => ({}),
+      async () => ({}),
       (key) => key === "mainExtension.invalidPath" ? "Invalid extension path." : key,
     );
     manager.wslEnvironment = { windowsHome: home };
