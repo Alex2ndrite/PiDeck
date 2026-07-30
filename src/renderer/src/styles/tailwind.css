@@ -16,6 +16,19 @@
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
 /**
+ * shadcn 基础层（最小化版）：组件源码约定 `border` 类只设宽度、颜色全局继承
+ * border token（官方 globals.css 里是 `* { @apply border-border }`）。
+ * 不开全量 preflight 的前提下补这一条，否则所有 shadcn 边框退化为 currentColor（黑）。
+ * 影响面评估：旧 CSS 的边框基本都显式设了颜色，未设的少数元素从黑边变为
+ * --color-border-default，视觉更收敛，属可接受变化。
+ */
+@layer base {
+  *, ::before, ::after {
+    border-color: var(--color-border);
+  }
+}
+
+/**
  * Token 平移表：@theme inline 让 Tailwind 工具类直接引用现有 CSS 变量，
  * 单一事实源仍在 foundation.css（明暗主题切换零改动）；后续 token 迁移到
  * Tailwind  theme 时只需把值内联进来，类名不变。
