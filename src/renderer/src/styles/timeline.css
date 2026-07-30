@@ -3337,61 +3337,7 @@ body.ask-dialog-open .ask-question-card.pending {
     opacity 0.14s ease,
     background 0.14s ease;
 }
-.composer-resize-handle {
-  position: absolute;
-  left: 10px;
-  right: 10px;
-  top: -5px;
-  height: 10px;
-  cursor: ns-resize;
-  z-index: 4;
-}
-.composer-resize-handle::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 4px;
-  height: 2px;
-  border-radius: 999px;
-  background: transparent;
-  transition:
-    background 0.12s ease,
-    box-shadow 0.12s ease;
-}
-.composer-resize-handle::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  top: 2px;
-  width: 42px;
-  height: 5px;
-  border-radius: 999px;
-  background: var(--color-border-strong);
-  opacity: 0.75;
-  transform: translateX(-50%);
-  transition:
-    background 0.12s ease,
-    opacity 0.12s ease;
-}
-.composer-resize-handle:hover::before,
-body.is-composer-resizing .composer-resize-handle::before {
-  background: color-mix(
-    in srgb,
-    var(--color-accent) 28%,
-    var(--color-border-strong)
-  );
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-accent) 14%, transparent);
-}
-.composer-resize-handle:hover::after,
-body.is-composer-resizing .composer-resize-handle::after {
-  background: color-mix(
-    in srgb,
-    var(--color-accent) 42%,
-    var(--color-border-strong)
-  );
-  opacity: 1;
-}
+
 .composer textarea {
   display: block;
   width: 100%;

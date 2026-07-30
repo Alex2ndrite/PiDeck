@@ -391,41 +391,17 @@ export function TerminalDock(props: {
 		window.requestAnimationFrame(() => xtermRef.current?.focus());
 	}
 
-	function startResize(event: PointerEvent<HTMLDivElement>) {
-		event.preventDefault();
-		const startY = event.clientY;
-		const startHeight = props.height;
-		document.body.classList.add("is-terminal-resizing");
 
-		const move = (moveEvent: globalThis.PointerEvent) => {
-			const next = Math.min(
-				420,
-				Math.max(120, startHeight - (moveEvent.clientY - startY)),
-			);
-			props.onHeightChange(next);
-		};
-		const up = () => {
-			document.body.classList.remove("is-terminal-resizing");
-			window.removeEventListener("pointermove", move);
-			window.removeEventListener("pointerup", up);
-		};
-		window.addEventListener("pointermove", move);
-		window.addEventListener("pointerup", up);
-	}
-
+	// #115 U5：dock 高度由外层 react-resizable-panels 面板持有（分隔条拖拽），
+	// 手写 pointer 拖拽与 .terminal-resize-handle 已删除；这里充满父面板即可。
 	return (
 		<section
 			className={`terminal-dock${collapsed ? " collapsed" : ""}`}
 			data-theme={themeId}
 			data-open={open}
 			data-motion-state={props.closing || !motionOpen ? "hidden" : "visible"}
-			style={{ height: collapsed ? 34 : props.height }}
+			style={{ height: "100%" }}
 		>
-			<div
-				className="terminal-resize-handle"
-				onPointerDown={startResize}
-				title={t("terminal.resize")}
-			/>
 			<header className="terminal-dock-header">
 				<div className="terminal-tabs">
 					{tabs.map((tab) => (

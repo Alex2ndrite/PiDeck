@@ -93,7 +93,6 @@ import {
   isReplacementForPendingAgent,
   isPendingAgentId,
   migrateAgentRecord,
-  COMPOSER_MIN_HEIGHT,
   type PendingAgentTab,
 } from "./rendererUtils";
 import { useResize } from "./hooks/useResize";
@@ -555,11 +554,7 @@ export function App() {
   });
   const { piStatus, piChecking, environmentDialog, setPiStatus, setEnvironmentDialog } = piUpdate;
   const [drawerWidth, setDrawerWidth] = useState(320);
-  const [composerHeight, setComposerHeight] = useState(COMPOSER_MIN_HEIGHT);
   const [composerOffsetHeight, setComposerOffsetHeight] = useState(0);
-  /** ResizeObserver 驱动布局预算重新计算；ref 尺寸本身变化不会触发 React render。 */
-  const [composerAutoHeight, setComposerAutoHeight] =
-    useState(COMPOSER_MIN_HEIGHT);
   const {
     terminalOpen,
     terminalCollapsed,
@@ -772,9 +767,7 @@ export function App() {
     headerRef: sessionHeaderRef,
     composerRef: sessionComposerRef,
     terminalRowHeight,
-    maxComposerHeight,
     availableTerminalHeight,
-    clampComposerHeight: sessionClampComposerHeight,
   } = sessionLayout;
 
   // Alias hook refs to the names App.tsx expects.
@@ -783,10 +776,6 @@ export function App() {
   const composerRef = sessionComposerRef;
 
   const visibleQueuedPrompts = activeQueuedPrompts;
-  const resolvedComposerHeight = Math.min(
-    maxComposerHeight,
-    Math.max(composerHeight, composerAutoHeight),
-  );
 
   const {
     listWidth,
@@ -794,12 +783,7 @@ export function App() {
     listCollapsed,
     setListCollapsed,
     toggleListCollapsed,
-  } = useResize({
-    resolvedComposerHeight,
-    maxComposerHeight,
-    setComposerHeight,
-    setComposerAutoHeight,
-  });
+  } = useResize();
   useEffect(() => {
     if (!workspace.drawerPinnedPanel) return;
     if (workspace.drawer !== workspace.drawerPinnedPanel) workspace.openDrawer(workspace.drawerPinnedPanel);
@@ -1271,21 +1255,14 @@ export function App() {
     };
   }, [activeProjectId, activeProjectHasBusyAgent, activeProjectSessionSyncKey, expandedProjects, expandedProjectsReady]);
 
-  // Composer sizing is owned by ComposerArea and useSessionLayout.
-  // 待发送轨道高度变化会改变 composer 的 chrome 高度；队列增删后重新 clamp，
-  // 保证大量卡片出现时输入框仍留在可视区域，撤回后也不会保留过高尺寸。
+  // Composer sizing is owned by the composer panel (react-resizable-panels) since #115 U5.
+  // 待发送轨道高度变化只影响面板可用空间，不再回写 composer 高度状态。
+  // composerOffsetHeight 仍由 ResizeObserver/布局效应测量，供「回到底部」按钮定位。 
   useLayoutEffect(() => {
-    const maxHeight = maxComposerHeight;
-    setComposerHeight((current) => Math.min(current, maxHeight));
-    setComposerAutoHeight((current) => Math.min(current, maxHeight));
-  }, [activeAgentId, activeQueuedPrompts.length]);
+    setComposerOffsetHeight(composerRef.current?.offsetHeight ?? 0);
+  }, [activeAgentId, activeQueuedPrompts.length, composerRef]);
 
   // Outline jumps through the same timeline controller that owns pagination and scroll state.
-  // Clamp composer height when layout changes (useSessionLayout handles ResizeObserver).
-  useLayoutEffect(() => {
-    setComposerHeight((current) => sessionClampComposerHeight(current));
-    setComposerOffsetHeight(composerRef.current?.offsetHeight ?? 0);
-  }, [sessionClampComposerHeight, composerRef]);
 
   useEffect(() => {
     const target = getRuntimeTargetForSession(currentSessionId);

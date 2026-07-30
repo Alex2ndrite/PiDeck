@@ -1,4 +1,4 @@
-import { forwardRef, useState, type PointerEvent, type ReactNode } from "react";
+import { forwardRef, useState, type ReactNode } from "react";
 import {
   ComposerBottomBar,
   ImagePreviewModal,
@@ -29,6 +29,9 @@ export type ComposerAreaProps = {
   queuePanel?: ReactNode;
   runtimeUi?: ReactNode;
   onOpenFile?: (path: string) => void;
+  /** 受控高度（px）。传入时由外层面板（react-resizable-panels）持有尺寸，
+   *  本地 state 仅作非受控回退（#115 U5 布局换装）。 */
+  height?: number;
   onHeightChange?: (height: number) => void;
   enqueue?: (sessionId: string, snapshot: EnqueuePromptSnapshot) => boolean;
   ensureSessionId?: (sessionId: string) => Promise<string>;
@@ -44,36 +47,10 @@ export const ComposerArea = forwardRef<HTMLElement, ComposerAreaProps>(function 
     enqueue: props.enqueue,
     ensureSessionId: props.ensureSessionId,
   });
-  const [height, setHeight] = useState(COMPOSER_MIN_HEIGHT);
-  function startResize(event: PointerEvent<HTMLDivElement>) {
-    const startY = event.clientY;
-    const startHeight = height;
-    let frame = 0;
-    const onMove = (moveEvent: globalThis.PointerEvent) => {
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => {
-        const maxHeight = Math.max(
-          COMPOSER_MIN_HEIGHT,
-          Math.min(620, window.innerHeight - 260),
-        );
-        const next = Math.min(
-          maxHeight,
-          Math.max(COMPOSER_MIN_HEIGHT, startHeight + startY - moveEvent.clientY),
-        );
-        setHeight(next);
-        props.onHeightChange?.(next);
-      });
-    };
-    const onUp = () => {
-      cancelAnimationFrame(frame);
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-      document.body.classList.remove("is-composer-resizing");
-    };
-    document.body.classList.add("is-composer-resizing");
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
-  }
+  // 受控/非受控双模：SessionView 以面板分隔条控制高度时传 height；
+  // 其余场景（测试、嵌入）回退本地默认值。
+  const [localHeight, setLocalHeight] = useState(COMPOSER_MIN_HEIGHT);
+  const height = props.height ?? localHeight;
 
   return (
     <ComposerRuntimeIntegrations sessionId={props.sessionId}>
@@ -106,13 +83,8 @@ export const ComposerArea = forwardRef<HTMLElement, ComposerAreaProps>(function 
                       ? "plan-mode"
                       : ""
               }`}
-              style={{ height }}
+              style={{ height: props.height != null ? "100%" : height }}
             >
-              <div
-                className="composer-resize-handle"
-                title={t("app.resizeComposer")}
-                onPointerDown={startResize}
-              />
               <RichInput
                 ref={composer.editor.ref}
                 value={composer.draft}

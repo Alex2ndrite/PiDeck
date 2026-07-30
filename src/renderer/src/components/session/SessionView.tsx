@@ -1,5 +1,12 @@
 import { ChevronDown } from "lucide-react";
-import type { RefObject, ReactNode, MutableRefObject } from "react";
+import { useEffect, useRef, useState, type RefObject, type ReactNode, type MutableRefObject } from "react";
+import {
+  Group,
+  Panel,
+  Separator,
+  type PanelImperativeHandle,
+  type PanelSize,
+} from "react-resizable-panels";
 import type { AgentRuntimeState, GitBranchInfo, ImageContent, SessionRuntimeTarget } from "../../../../shared/types";
 import type { SessionTimelineController } from "../../hooks/useSessionTimelineController";
 import type { QueuedPrompt } from "../../hooks/useQueuedPrompt";
@@ -164,6 +171,52 @@ export function SessionView({
   abortAgent,
   restartActiveAgent,
 }: SessionViewProps) {
+  // #115 U5 垂直轴：timeline | composer | terminal 三段由 react-resizable-panels 接管。
+  // composer 高度本地持有（px），终端高度/折叠仍由 useTerminalDock 的 per-agent
+  // 状态持有，拖拽结果经 onResize 回写，外部状态经 imperative API 同步。
+  const [composerHeight, setComposerHeight] = useState(175);
+  const terminalPanelRef = useRef<PanelImperativeHandle | null>(null);
+
+  // 终端 Panel 随 terminalOpen 动态挂载，约束注册有一帧延迟（与抽屉同款问题），
+  // imperative 同步统一推迟一帧并容错。
+  useEffect(() => {
+    const panel = terminalPanelRef.current;
+    if (!panel) return;
+    const frame = requestAnimationFrame(() => {
+      try {
+        if (terminalCollapsed) { if (!panel.isCollapsed()) panel.collapse(); }
+        else if (panel.isCollapsed()) panel.expand();
+      } catch { /* 约束未就绪，下轮状态再同步 */ }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [terminalCollapsed, terminalOpen, terminalDockVisible]);
+
+  function handleComposerResize(size: PanelSize) {
+    setComposerHeight(Math.round(size.inPixels));
+  }
+
+  function handleTerminalResize(size: PanelSize) {
+    const px = Math.round(size.inPixels);
+    if (!activeAgentId) return;
+    // 34px 为折叠条高度：拖到折叠阈值视为折叠，拖回展开
+    if (px <= 35) {
+      if (!terminalCollapsed) setTerminalCollapsedForAgent(activeAgentId, true);
+      return;
+    }
+    if (terminalCollapsed) setTerminalCollapsedForAgent(activeAgentId, false);
+    const maxHeight = Math.max(120, availableTerminalHeight);
+    setTerminalHeightByAgent((current) => ({
+      ...current,
+      [activeAgentId]: Math.min(px, maxHeight),
+    }));
+  }
+
+  // 与旧拖拽实现一致的上限公式（渲染期快照，与旧行为同为非响应式）
+  const composerMaxHeight = Math.max(175, Math.min(620, window.innerHeight - 260));
+  const terminalPanelVisible =
+    !isLanWeb && !settingsOpen && !configOpen && !environmentDialog &&
+    terminalDockVisible && terminalOpen;
+
   return (
     <>
       <SessionHeader
@@ -191,7 +244,9 @@ export function SessionView({
       />
       <NoticeCenter />
 
-      <SessionMessageTimeline
+      <Group orientation="vertical" className="session-v-group">
+        <Panel id="timeline" minSize={160} className="session-v-timeline">
+          <SessionMessageTimeline
         sessionId={sessionId}
         controller={sessionTimeline}
         hasProject={hasProject}
@@ -217,67 +272,88 @@ export function SessionView({
         }
         forkingMessageId={forkingMessageId}
         onToast={onToast}
-      />
+          />
 
-      {sessionTimeline.showScrollToBottom && (
-        <button
-          className="scroll-to-bottom-btn"
-          style={{
-            bottom: Math.max(
-              24,
-              terminalRowHeight + composerOffsetHeight + 18,
-            ),
-          }}
-          onClick={sessionTimeline.scrollToBottom}
-          title={t("app.scrollToBottom")}
-        >
-          <ChevronDown size={18} />
-        </button>
-      )}
+          {sessionTimeline.showScrollToBottom && (
+            <button
+              className="scroll-to-bottom-btn"
+              style={{
+                bottom: Math.max(
+                  24,
+                  terminalRowHeight + composerOffsetHeight + 18,
+                ),
+              }}
+              onClick={sessionTimeline.scrollToBottom}
+              title={t("app.scrollToBottom")}
+            >
+              <ChevronDown size={18} />
+            </button>
+          )}
+        </Panel>
 
-      {hasActiveConversation && (
-        <ComposerArea
-          ref={composerRef}
-          sessionId={sessionId}
-          gitInfo={gitInfo}
-          onOpenFile={openFilePath}
-          enqueue={enqueueSessionPrompt}
-          ensureSessionId={ensureSessionId}
-          queuePanel={queuePanel}
-          runtimeUi={runtimeUi}
-        />
-      )}
+        {hasActiveConversation && (
+          <>
+            <Separator className="v-splitter" />
+            <Panel
+              id="composer"
+              minSize={175}
+              maxSize={composerMaxHeight}
+              defaultSize={composerHeight}
+              onResize={handleComposerResize}
+              className="session-v-composer"
+            >
+              <ComposerArea
+                ref={composerRef}
+                sessionId={sessionId}
+                gitInfo={gitInfo}
+                height={composerHeight}
+                onOpenFile={openFilePath}
+                enqueue={enqueueSessionPrompt}
+                ensureSessionId={ensureSessionId}
+                queuePanel={queuePanel}
+                runtimeUi={runtimeUi}
+              />
+            </Panel>
+          </>
+        )}
 
-      {!isLanWeb &&
-        !settingsOpen &&
-        !configOpen &&
-        !environmentDialog &&
-        terminalDockVisible && (
-        <SessionRuntimeDock
-          target={runtimeTarget}
-          mounted={terminalDockVisible}
-          open={terminalOpen}
-          closing={terminalDockClosing}
-          collapsed={terminalCollapsed}
-          height={terminalRowHeight}
-          terminal={api.terminal}
-          onOpenChange={(open) => {
-            if (activeAgentId) setTerminalOpenForAgent(activeAgentId, open);
-          }}
-          onCollapsedChange={(collapsed) => {
-            if (activeAgentId)
-              setTerminalCollapsedForAgent(activeAgentId, collapsed);
-          }}
-          onHeightChange={(height) => {
-            if (!activeAgentId) return;
-            const maxHeight = Math.max(120, availableTerminalHeight);
-            setTerminalHeightByAgent((current) => ({
-              ...current,
-              [activeAgentId]: Math.min(height, maxHeight),
-            }));
-          }}
-        />
-      )}
+        {terminalPanelVisible && (
+          <>
+            <Separator className="v-splitter" />
+            <Panel
+              id="terminal"
+              panelRef={terminalPanelRef}
+              collapsible
+              collapsedSize={34}
+              minSize={120}
+              maxSize={Math.max(120, availableTerminalHeight)}
+              defaultSize={terminalCollapsed ? 34 : terminalRowHeight}
+              onResize={handleTerminalResize}
+              className="session-v-terminal"
+            >
+              <SessionRuntimeDock
+                target={runtimeTarget}
+                mounted={terminalDockVisible}
+                open={terminalOpen}
+                closing={terminalDockClosing}
+                collapsed={terminalCollapsed}
+                height={terminalRowHeight}
+                terminal={api.terminal}
+                onOpenChange={(open) => {
+                  if (activeAgentId) setTerminalOpenForAgent(activeAgentId, open);
+                }}
+                onCollapsedChange={(collapsed) => {
+                  if (activeAgentId)
+                    setTerminalCollapsedForAgent(activeAgentId, collapsed);
+                }}
+                onHeightChange={() => {
+                  // 高度由面板 onResize 统一回写，此回调保留仅为兼容接口
+                }}
+              />
+            </Panel>
+          </>
+        )}
+      </Group>
     </>
   );
 }

@@ -2441,30 +2441,55 @@ body.is-resizing .splitter::before {
     var(--color-border-strong)
   );
 }
-body.is-resizing {
-  cursor: col-resize;
-  user-select: none;
-}
-body.is-composer-resizing {
-  cursor: ns-resize;
-  user-select: none;
-}
-body.is-terminal-resizing {
-  cursor: ns-resize;
-  user-select: none;
-}
+/* react-resizable-panels 拖拽期间自行管理全局 cursor（#115 U5），旧的 is-composer/is-terminal-resizing 类已随手写拖拽删除。 */
 
 .chat-pane {
   position: relative;
-  grid-column: 3;
-  display: grid;
+  /* #115 U5：会话区纵向三段（timeline|composer|terminal）由 react-resizable-panels
+     接管，grid 行轨道与 120ms 过渡一并移除，改为 flex 列容器。 */
+  display: flex;
+  flex-direction: column;
   --terminal-row-h: 0px;
-  grid-template-rows: auto minmax(0, 1fr) auto var(--terminal-row-h);
   min-width: 0;
   min-height: 0;
+  height: 100%;
   background: var(--color-bg-panel);
   overflow: hidden;
-  transition: grid-template-rows 120ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* 垂直面板组：充满 header 以外的高度；各 Panel 内容撑满面板 */
+.session-v-group {
+  flex: 1;
+  min-height: 0;
+}
+.session-v-timeline,
+.session-v-composer,
+.session-v-terminal {
+  height: 100%;
+  min-height: 0;
+}
+.session-v-timeline > *,
+.session-v-terminal > * {
+  height: 100%;
+  min-height: 0;
+}
+/* composer 在面板内撑满；旧布局的底部外边距在面板模式下会造成溢出 */
+.session-v-composer .composer {
+  height: 100%;
+  margin-bottom: 0;
+  box-sizing: border-box;
+}
+/* 纵向分隔条（composer/terminal 拖拽手柄） */
+.v-splitter {
+  flex: 0 0 auto;
+  height: 4px;
+  cursor: row-resize;
+  background: transparent;
+  transition: background 0.12s ease;
+}
+.v-splitter:hover,
+.v-splitter[data-resizing] {
+  background: var(--color-border-subtle);
 }
 
 /* ── 内容行宽限制：仅在 --content-max-width 由 JS 注入时生效 ── */
@@ -3544,29 +3569,7 @@ body.is-terminal-resizing {
   min-height: 30px;
   grid-template-rows: 30px;
 }
-.terminal-resize-handle {
-  position: absolute;
-  left: 14px;
-  right: 14px;
-  top: -5px;
-  height: 10px;
-  cursor: ns-resize;
-  z-index: 3;
-}
-.terminal-resize-handle::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 4px;
-  height: 2px;
-  border-radius: 999px;
-  background: transparent;
-}
-.terminal-resize-handle:hover::before,
-body.is-terminal-resizing .terminal-resize-handle::before {
-  background: var(--color-accent);
-}
+
 .terminal-dock-header {
   display: flex;
   align-items: center;
