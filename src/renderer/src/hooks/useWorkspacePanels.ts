@@ -177,15 +177,27 @@ export function useWorkspacePanels(options: WorkspacePanelOptions = {}) {
   const saveDrawerState = useCallback((id: string, panel: WorkspaceDrawerPanel | null, pinned: boolean) =>
     writeDrawerState(storageRef.current, `${drawerPrefixRef.current}${id}`, panel, pinned), []);
 
+  // 项目上下文水合（null → 首个 projectId）不得视为「切换项目」：
+  // 用户在水合完成前已手动打开的抽屉会被保存态重置误关（E2E 与快速操作均可复现）。
+  // 仅 A → B 的真实项目切换才重置/恢复抽屉；首次水合只在抽屉仍为空时应用保存态。
+  const prevProjectIdRef = useRef<string | null>(null);
   useEffect(() => {
+    const prevProjectId = prevProjectIdRef.current;
+    prevProjectIdRef.current = projectId;
+    const isInitialHydration = prevProjectId === null;
     if (!projectId) {
-      setDrawer(null);
-      setDrawerCollapsed(false);
+      // 项目被移除/清空才重置；首次水合前的 null 阶段不动用户已打开的抽屉
+      if (!isInitialHydration) {
+        setDrawer(null);
+        setDrawerCollapsed(false);
+      }
       return;
     }
     const saved = loadDrawerState(projectId);
-    setDrawer(saved?.panel ?? null);
-    setDrawerCollapsed(false);
+    if (!isInitialHydration || !drawerRef.current) {
+      setDrawer(saved?.panel ?? null);
+      setDrawerCollapsed(false);
+    }
     setDrawerPinnedByProject((current) => {
       const next = { ...current };
       if (saved?.pinned && saved.panel) next[projectId] = saved.panel;

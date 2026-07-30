@@ -152,3 +152,11 @@ test("drawer host renders an injected activity rail while open", () => {
   // Git 入口受 enableGitManagement 门控（与 outline 一致）
   assert.match(app, /settings\.enableGitManagement && activeProjectId \? \[\{/);
 });
+
+// 回归：项目上下文水合（null → 首个 projectId）不得重置用户已打开的抽屉；
+// 只有真实项目切换（A → B）才恢复目标项目的保存态。
+test("project hydration does not clobber a user-opened drawer", () => {
+  assert.match(hook, /prevProjectIdRef/);
+  assert.match(hook, /isInitialHydration = prevProjectId === null/);
+  assert.match(hook, /!isInitialHydration \|\| !drawerRef\.current/);
+});

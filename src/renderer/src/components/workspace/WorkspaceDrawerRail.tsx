@@ -28,6 +28,7 @@ export function WorkspaceDrawerRail(props: { actions: WorkspaceDrawerRailAction[
           type="button"
           role="tab"
           aria-selected={action.active}
+          data-testid={`drawer-rail-${action.id}`}
           className={`drawer-activity-rail-button${action.active ? " active" : ""}`}
           title={action.label}
           aria-label={action.label}

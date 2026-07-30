@@ -70,7 +70,10 @@
     "postinstall": "node scripts/fix-pty-permissions.js",
     "typecheck": "tsc --noEmit",
     "make-icon": "node scripts/make-icon.js",
-    "compile-exe": "node scripts/compile-exe.js"
+    "compile-exe": "node scripts/compile-exe.js",
+    "test:e2e": "npm run build:fast && playwright test",
+    "e2e": "playwright test",
+    "verify": "npm run typecheck && npm test && npm run test:e2e"
   },
   "dependencies": {
     "@astron-team/skillhub": "^0.1.8",
@@ -169,6 +172,7 @@
     "@electron-toolkit/preload": "^3.0.2",
     "@fiahfy/icns": "^0.0.7",
     "@monaco-editor/react": "^4.7.0",
+    "@playwright/test": "^1.62.0",
     "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^24.0.0",
     "@types/react": "^19.0.0",
