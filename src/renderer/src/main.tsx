@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import type { AppLogLevel } from "@shared/types";
 import { App } from "./App";
 import { AppErrorBoundary } from "./components/ui/AppErrorBoundary";
+import { TooltipProvider } from "./components/ui-shadcn/tooltip";
 import { t } from "./i18n";
 import { showNotice } from "./utils/notice";
 import "./styles.css";
@@ -68,7 +69,10 @@ if (!rootElement) {
 ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
     <AppErrorBoundary>
-      <App />
+      {/* shadcn Tooltip 必须在 Provider 树内使用（#115 U1） */}
+      <TooltipProvider>
+        <App />
+      </TooltipProvider>
     </AppErrorBoundary>
   </React.StrictMode>,
 );

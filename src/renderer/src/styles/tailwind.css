@@ -8,6 +8,8 @@
  */
 @import "tailwindcss/theme.css";
 @import "tailwindcss/utilities";
+/* shadcn 组件的 enter/exit 动画类（animate-in/fade-in/zoom-in…）由该包提供。 */
+@import "tw-animate-css";
 
 /* 暗色模式跟随应用现有的 data-theme 机制（document.documentElement.dataset.theme），
  * shadcn 组件的 dark: 变体直接落到现有主题开关上，不引入第二套暗色方案。 */
