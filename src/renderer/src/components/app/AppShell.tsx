@@ -19,6 +19,8 @@ export interface AppShellProps {
   sidebarContent: ReactNode;
   chatPaneContent: ReactNode;
   drawerContent: (panel: WorkspaceDrawerPanel) => ReactNode;
+  /** 抽屉活动栏（files/git/browser 切换），由 App 注入；抽屉打开时常驻。 */
+  drawerRail?: ReactNode;
   outlineContent: ReactNode;
 
   setListCollapsed: (v: boolean) => void;
@@ -45,7 +47,7 @@ export function AppShell(props: AppShellProps) {
     drawer, drawerCollapsed, drawerWidth, drawerPinned,
     useNativeTitleBar,
     chatPaneRef, terminalRowHeight, contentMaxWidth,
-    sidebarContent, chatPaneContent, drawerContent, outlineContent,
+    sidebarContent, chatPaneContent, drawerContent, drawerRail, outlineContent,
     setListCollapsed, setListWidth, setDrawerCollapsed, setDrawerWidth,
     onToggleListCollapsed,
     onDrawerCollapse, onDrawerClose, onDrawerRestore, onToggleDrawerPin,
@@ -166,6 +168,7 @@ export function AppShell(props: AppShellProps) {
         onClose={onDrawerClose}
         onRestore={onDrawerRestore}
         onTogglePin={onToggleDrawerPin}
+        rail={drawerRail}
         renderPanel={(panel) => drawerContent(panel)}
       />
       {children}

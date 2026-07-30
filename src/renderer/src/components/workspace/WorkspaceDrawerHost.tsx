@@ -25,6 +25,8 @@ export type WorkspaceDrawerHostProps = {
   onClose?: () => void;
   onRestore?: () => void;
   onTogglePin?: () => void;
+  /** 抽屉打开期间常驻的活动栏（面板切换入口），由 App 层组装后注入。 */
+  rail?: ReactNode;
   renderPanel: (panel: WorkspaceDrawerPanel) => ReactNode;
 };
 
@@ -77,6 +79,7 @@ export function WorkspaceDrawerHost(props: WorkspaceDrawerHostProps) {
         data-pinned={Boolean(props.pinned)}
         style={props.style}
       >
+        {open && props.rail}
         {visiblePanel && <div className="drawer-content-frame">{rendered}</div>}
       </aside>
       {props.panel && props.collapsed && props.onRestore && (

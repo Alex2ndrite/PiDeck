@@ -102,6 +102,7 @@ import { useWorktreeActions } from "./hooks/useWorktreeActions";
 import { SessionRuntimeInjector } from "./components/session/SessionRuntimeInjector";
 import { ScratchPadOverlay } from "./components/overlays/ScratchPadOverlay";
 import { AppShell } from "./components/app/AppShell";
+import { WorkspaceDrawerRail } from "./components/workspace/WorkspaceDrawerRail";
 import { DrawerSurface } from "./components/workspace/DrawerSurface";
 import { RenameModals } from "./components/RenameModals";
 import { SessionActionOverlays } from "./components/overlays/SessionActionOverlays";
@@ -933,6 +934,22 @@ export function App() {
     commitFileDiff: api.git.commitFileDiff,
     t,
   });
+
+  // 工具抽屉（files/git/browser）的统一切换语义：当前面板已展开 → 关闭；
+  // 其余情况打开/切到目标面板。outline 浮动按钮与抽屉活动栏共用同一套语义，
+  // 保证两个入口行为一致。注意必须放在 useFileEditor 之后（依赖 gitDrawerDiff）。
+  const handleToolDrawerAction = useCallback((panel: WorkspaceDrawerPanel) => {
+    if (workspace.drawer === panel && !workspace.drawerCollapsed) {
+      if (panel === "git" && gitDrawerDiff) {
+        closeGitDiff();
+        return;
+      }
+      workspace.closeDrawer();
+    } else {
+      if (panel === "files" && activeProjectId) void refreshFiles(activeProjectId, true);
+      workspace.openDrawer(panel);
+    }
+  }, [workspace, gitDrawerDiff, closeGitDiff, activeProjectId, refreshFiles]);
 
   const {
     selectProject: selectProjectCommand,
@@ -2319,6 +2336,34 @@ export function App() {
       contentMaxWidth={settings.contentMaxWidth}
       sidebarContent={sidebarContentNode}
       chatPaneContent={chatPaneContentNode}
+      drawerRail={
+        <WorkspaceDrawerRail
+          actions={[
+            {
+              id: "files",
+              label: t("app.files"),
+              icon: <FolderOpen size={16} />,
+              active: drawer === "files",
+              onClick: () => handleToolDrawerAction("files"),
+            },
+            // Git 面板受设置开关与项目上下文双重门控，与 outline 入口保持一致
+            ...(settings.enableGitManagement && activeProjectId ? [{
+              id: "git",
+              label: t("drawer.sourceControl"),
+              icon: <GitBranch size={16} />,
+              active: drawer === "git",
+              onClick: () => handleToolDrawerAction("git"),
+            }] : []),
+            {
+              id: "browser",
+              label: t("app.browser"),
+              icon: <Globe size={16} />,
+              active: drawer === "browser",
+              onClick: () => handleToolDrawerAction("browser"),
+            },
+          ]}
+        />
+      }
       drawerContent={(visibleDrawerPanel) => (
         <DrawerSurface
           drawer={visibleDrawerPanel}
@@ -2352,30 +2397,13 @@ export function App() {
         filesAction={{
           active: drawer === "files",
           label: t("app.files"),
-          onClick: () => {
-            if (drawer === "files" && !drawerCollapsed) {
-              workspace.closeDrawer();
-            } else {
-              if (activeProjectId) void refreshFiles(activeProjectId, true);
-              workspace.openDrawer("files");
-            }
-          },
+          onClick: () => handleToolDrawerAction("files"),
           icon: <FolderOpen size={17} />,
         }}
         gitAction={settings.enableGitManagement && activeProjectId ? {
           active: drawer === "git",
           label: t("drawer.sourceControl"),
-          onClick: () => {
-            if (drawer === "git" && !drawerCollapsed) {
-              if (gitDrawerDiff) {
-                closeGitDiff();
-                return;
-              }
-              workspace.closeDrawer();
-            } else {
-              workspace.openDrawer("git");
-            }
-          },
+          onClick: () => handleToolDrawerAction("git"),
           icon: <GitBranch size={17} />,
         } : undefined}
         editorsAction={{
@@ -2398,13 +2426,7 @@ export function App() {
         browserAction={{
           active: drawer === "browser",
           label: t("app.browser"),
-          onClick: () => {
-            if (drawer === "browser" && !drawerCollapsed) {
-              workspace.closeDrawer();
-            } else {
-              workspace.openDrawer("browser");
-            }
-          },
+          onClick: () => handleToolDrawerAction("browser"),
           icon: <Globe size={17} />,
         }}
       />

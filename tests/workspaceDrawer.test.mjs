@@ -128,3 +128,27 @@ test("browser surface has explicit fullscreen and minimize paths", () => {
   assert.match(hook, /const minimizeBrowser = useCallback/);
   assert.match(hook, /openBrowser\(\)/);
 });
+
+// 回归（#113 parity）：抽屉面板切换入口必须挂在抽屉自身（activity rail），
+// 不能只在会话 outline 浮动按钮里 —— 否则无活跃会话时无法切到 git/browser。
+test("drawer host renders an injected activity rail while open", () => {
+  const rail = readFileSync("src/renderer/src/components/workspace/WorkspaceDrawerRail.tsx", "utf8");
+  const app = readFileSync("src/renderer/src/App.tsx", "utf8");
+  const shell = readFileSync("src/renderer/src/components/app/AppShell.tsx", "utf8");
+  // rail 组件：垂直 tablist + 激活态
+  assert.match(rail, /role="tablist"/);
+  assert.match(rail, /aria-orientation="vertical"/);
+  assert.match(rail, /aria-selected=\{action\.active\}/);
+  // host：打开期间渲染注入的 rail
+  assert.match(host, /rail\?: ReactNode/);
+  assert.match(host, /\{open && props\.rail\}/);
+  // shell：drawerRail 透传
+  assert.match(shell, /drawerRail\?: ReactNode/);
+  assert.match(shell, /rail=\{drawerRail\}/);
+  // App：rail 三个面板入口齐全，且与 outline 共用同一套切换语义
+  assert.match(app, /handleToolDrawerAction\("files"\)/);
+  assert.match(app, /handleToolDrawerAction\("git"\)/);
+  assert.match(app, /handleToolDrawerAction\("browser"\)/);
+  // Git 入口受 enableGitManagement 门控（与 outline 一致）
+  assert.match(app, /settings\.enableGitManagement && activeProjectId \? \[\{/);
+});

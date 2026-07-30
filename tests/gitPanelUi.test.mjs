@@ -302,8 +302,12 @@ describe("Git panel VS Code Source Control contract", () => {
     assert.match(app, /const request = \+\+gitDiffRequestSequenceRef\.current/g);
     assert.match(app, /request !== gitDiffRequestSequenceRef\.current/g);
     assert.match(app, /const closeGitDiff = useCallback\(\(\) => \{[\s\S]*?gitDiffRequestSequenceRef\.current \+= 1;[\s\S]*?setGitDrawerDiff\(null\)/);
-    const gitAction = app.match(/gitAction=\{[\s\S]*?\} : undefined\}/)?.[0] ?? "";
-    assert.match(gitAction, /if \(gitDrawerDiff\) \{\s*closeGitDiff\(\);\s*return;/);
+    // Git 面板再次点击时优先关闭 diff 详情：该语义现收拢在共享的
+    // handleToolDrawerAction 中（outline 与抽屉活动栏共用，见 workspaceDrawer 测试）。
+    const toolDrawerAction = app.match(/handleToolDrawerAction = useCallback[\s\S]*?\}, \[workspace, gitDrawerDiff/)?.[0] ?? "";
+    assert.match(toolDrawerAction, /if \(panel === "git" && gitDrawerDiff\) \{\s*closeGitDiff\(\);\s*return;/);
+    // outline 入口必须走共享 handler，不得回退到 inline 复制
+    assert.match(app, /gitAction=\{settings\.enableGitManagement && activeProjectId \? \{[\s\S]*?onClick: \(\) => handleToolDrawerAction\("git"\)/);
   });
 
   test("keeps single-file discard internal rather than adding a dev-divergent row action", () => {
