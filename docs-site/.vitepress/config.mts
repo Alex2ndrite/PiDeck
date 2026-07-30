@@ -151,14 +151,7 @@ export default defineConfig({
   head: [
     ["link", { rel: "icon", href: `${base}icon.svg` }],
     ["link", { rel: "canonical", href: `${siteOrigin}/` }],
-    [
-      "meta",
-      {
-        name: "keywords",
-        content:
-          "PiDeck, pi, pi-agent, ai-coding-agent, desktop, electron, rpc, local-ai, developer-tools, coding-assistant, workspace, session-management, git, terminal, windows, macos, linux, open-source",
-      },
-    ],
+    ["meta", { name: "keywords", content: "PiDeck, pi, pi-agent, ai-coding-agent, desktop, electron, rpc, local-ai, developer-tools, coding-assistant, workspace, session-management, git, terminal, windows, macos, linux, open-source" }],
     ["meta", { name: "author", content: "ayuayue" }],
     ["meta", { name: "robots", content: "index, follow" }],
     ["meta", { property: "og:site_name", content: "PiDeck" }],
@@ -170,14 +163,7 @@ export default defineConfig({
     ["meta", { property: "og:image:height", content: "630" }],
     ["meta", { name: "twitter:card", content: "summary_large_image" }],
     ["meta", { name: "twitter:title", content: "PiDeck - pi Agent Desktop Workbench" }],
-    [
-      "meta",
-      {
-        name: "twitter:description",
-        content:
-          "Manage multiple pi AI coding agents in local workspaces. Open-source desktop app with sessions, Git, terminal, and extensions.",
-      },
-    ],
+    ["meta", { name: "twitter:description", content: "Manage multiple pi AI coding agents in local workspaces. Open-source desktop app with sessions, Git, terminal, and extensions." }],
     ["meta", { name: "twitter:image", content: `${siteOrigin}/og-image.png` }],
     [
       "script",
@@ -185,18 +171,25 @@ export default defineConfig({
       JSON.stringify({
         "@context": "https://schema.org",
         "@type": "SoftwareApplication",
-        name: "PiDeck",
-        applicationCategory: "DeveloperApplication",
-        operatingSystem: "Windows, macOS, Linux",
-        description:
-          "Open-source desktop workbench for managing multiple pi AI coding agents across local project folders.",
-        url: siteOrigin,
-        downloadUrl: "https://github.com/ayuayue/PiDeck/releases",
-        sourceCodeRepository: "https://github.com/ayuayue/PiDeck",
-        license: "https://opensource.org/licenses/MIT",
-        author: { "@type": "Organization", name: "ayuayue", url: "https://github.com/ayuayue" },
-        offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
-      }),
-    ],
+        "name": "PiDeck",
+        "applicationCategory": "DeveloperApplication",
+        "operatingSystem": "Windows, macOS, Linux",
+        "description": "Open-source desktop workbench for managing multiple pi AI coding agents across local project folders.",
+        "url": siteOrigin,
+        "downloadUrl": "https://github.com/ayuayue/PiDeck/releases",
+        "sourceCodeRepository": "https://github.com/ayuayue/PiDeck",
+        "license": "https://opensource.org/licenses/MIT",
+        "author": {
+          "@type": "Organization",
+          "name": "ayuayue",
+          "url": "https://github.com/ayuayue"
+        },
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "USD"
+        }
+      })
+    ]
   ],
 });

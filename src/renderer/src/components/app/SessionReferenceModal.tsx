@@ -16,7 +16,7 @@ export function SessionReferenceModal(props: {
 	session: SessionSummary;
 	onClose: () => void;
 	onConfirm: (result: SessionReferenceResult, selectedIndices: number[]) => void;
-	loadMessages: (filePath: string) => Promise<SessionMessage[]>;
+	loadMessages: (sessionId: string) => Promise<SessionMessage[]>;
 	initialSelected?: Set<number>;
 }) {
 	// 原始顺序存储，selectedIds 始终引用原始索引
@@ -29,7 +29,7 @@ export function SessionReferenceModal(props: {
 		let cancelled = false;
 		setLoading(true);
 		setError(null);
-		props.loadMessages(props.session.filePath).then((msgs) => {
+		props.loadMessages(props.session.id).then((msgs) => {
 			if (!cancelled) {
 				setMessages(msgs);
 				if (props.initialSelected && props.initialSelected.size > 0) {
@@ -43,7 +43,7 @@ export function SessionReferenceModal(props: {
 			if (!cancelled) { setError(String(err)); setLoading(false); }
 		});
 		return () => { cancelled = true; };
-	}, [props.session.filePath]);
+	}, [props.session.id]);
 
 	// 倒序显示分组（最新的在前面），内部索引保持原始顺序不变
 	const items = useMemo(() => {

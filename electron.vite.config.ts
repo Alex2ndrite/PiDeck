@@ -5,6 +5,36 @@ import { resolve } from "node:path";
 import type { Plugin } from "vite";
 
 /**
+ * Monaco TS worker 引用了压缩过的 typescriptServices.js（TypeScript 编译器本体），
+ * Rollup 无法解析该文件的语法。本插件在构建时跳过对这个 worker 的预处理，
+ * 让运行时通过 new Worker() 自行加载 worker 文件。
+ */
+function monacoTsWorkerPlugin(): Plugin {
+	const WORKER_PATH = "monaco-editor/esm/vs/language/typescript/ts.worker";
+	return {
+		name: "monaco-ts-worker",
+		// enforce: "pre" 确保在 Rollup/Vite 默认解析前拦截，
+		// 否则 Rollup 会直接处理 ts.worker.js（无 default export）导致构建失败。
+		enforce: "pre",
+		resolveId(id) {
+			if (id === WORKER_PATH || id.startsWith(WORKER_PATH + "?")) {
+				return "\0monaco-ts-worker";
+			}
+		},
+		load(id) {
+			if (id === "\0monaco-ts-worker") {
+				// 返回一个空的 worker 代理；TSServer 通常在桌面 IDE 用不上，
+				// diff viewer 等场景用纯文本模式体验差异可接受。
+				return {
+					code: `export default class TsWorker {};`,
+					map: null,
+				};
+			}
+		},
+	};
+}
+
+/**
  * KaTeX 字体精简 Vite 插件
  *
  * katex.min.css 中的每个 @font-face 声明了三种格式（woff2 / woff / truetype），
@@ -63,7 +93,7 @@ export default defineConfig({
         "@shared": resolve("src/shared"),
       },
     },
-    plugins: [react(), tailwindcss(), katexWoff2OnlyPlugin()],
+    plugins: [react(), katexWoff2OnlyPlugin(), monacoTsWorkerPlugin()],
     build: {
       // 不计算 gzip 压缩后大小（节约构建时间）
       reportCompressedSize: false,

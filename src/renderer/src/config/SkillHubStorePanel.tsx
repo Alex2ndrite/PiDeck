@@ -3,8 +3,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { Search, Download, ArrowLeft, Check, AlertCircle, X, Trash2, BadgeCheck } from "lucide-react";
 import { t } from "../i18n";
 import { showNotice } from "../utils/notice";
-import { writeClipboard } from "../utils/clipboard";
-import { openInSystemBrowser } from "../utils/openExternal";
+import { desktopApi } from "../desktopApi";
 import type { SkillHubItem, SkillHubDetail, SkillHubSearchResult, SkillHubInstallResult, PiSkillListResult } from "../../../shared/types";
 
 const STORAGE_KEY = "skillhub-installed-v1";
@@ -46,9 +45,7 @@ function persistInstall(prev: PersistedInstall[], slug: string, name: string): P
 /** 获取本地已安装 skill 名称集合 */
 async function getInstalledNames(): Promise<Set<string>> {
 	try {
-		const piDesktop = (window as any).piDesktop;
-		if (!piDesktop?.skills?.list) return new Set();
-		const list: PiSkillListResult = await piDesktop.skills.list();
+		const list: PiSkillListResult = await desktopApi.skills.list();
 		return new Set(list.skills.map((s) => s.name.toLowerCase()));
 	} catch {
 		return new Set();
@@ -144,7 +141,8 @@ export function SkillHubStorePanel() {
 			setResult(data);
 			setInstalledSlugs(merged);
 		} catch (err) {
-			setError(err instanceof Error ? err.message : String(err));
+			console.error("[SkillHub] Search failed", err);
+			setError(t("config.skillHubSearchError"));
 		} finally {
 			setSearching(false);
 		}
@@ -162,7 +160,8 @@ export function SkillHubStorePanel() {
 		try {
 			const data = await api.skillHub.detail(slug);
 			setDetail(data);
-		} catch {
+		} catch (err) {
+			console.error("[SkillHub] Detail load failed", err);
 			setDetail(null);
 		} finally {
 			setDetailLoading(false);
@@ -182,10 +181,12 @@ export function SkillHubStorePanel() {
 				// 刷新搜索结果（更新已安装标注）
 				void handleSearch(query);
 			} else {
-				showNotice(result.error || t("common.error"), 5000, "error");
+				if (result.error) console.error("[SkillHub] Install rejected", result.error);
+				showNotice(t("config.skillHubInstallError"), 5000, "error");
 			}
 		} catch (err) {
-			showNotice(err instanceof Error ? err.message : String(err), 5000, "error");
+			console.error("[SkillHub] Install failed", err);
+			showNotice(t("config.skillHubInstallError"), 5000, "error");
 		} finally {
 			setInstallingSlugs((prev) => {
 				const next = new Set(prev);
@@ -201,12 +202,16 @@ export function SkillHubStorePanel() {
 		setInstallResult(null);
 		try {
 			const result = await api.skillHub.install(previewSlug, "");
-			setInstallResult(result);
 			if (result.success) {
+				setInstallResult(result);
 				showNotice(t("app.skillsInstalled", { name: detail?.skill?.displayName || previewSlug }), 3000);
+			} else {
+				if (result.error) console.error("[SkillHub] Install rejected", result.error);
+				setInstallResult({ ...result, error: t("config.skillHubInstallError") });
 			}
 		} catch (err) {
-			setInstallResult({ success: false, slug: previewSlug, installDir: "", error: String(err) });
+			console.error("[SkillHub] Install failed", err);
+			setInstallResult({ success: false, slug: previewSlug, installDir: "", error: t("config.skillHubInstallError") });
 		} finally {
 			setInstalling(false);
 		}
@@ -284,7 +289,7 @@ export function SkillHubStorePanel() {
 							key={item.slug}
 							className="skillhub-card"
 							onClick={() => {
-								openInSystemBrowser(
+								window.piDesktop.app.openExternal(
 									`https://www.skills.sh/search?q=${encodeURIComponent(item.name)}`
 								);
 							}}
@@ -292,27 +297,27 @@ export function SkillHubStorePanel() {
 							<div className="skillhub-card-main">
 								<strong className="skillhub-card-title">
 									{item.name}
-									{installedSlugs.has(item.slug) && (
-										<span className="skillhub-installed-badge">
-											<Check size={11} /> 已安装
-										</span>
+							{installedSlugs.has(item.slug) && (
+								<span className="skillhub-installed-badge">
+									<Check size={11} /> {t("config.installed")}
+								</span>
 									)}
 								</strong>
-								<div className="skillhub-card-meta">
-									<span className="skillhub-card-stats">
-										<Download size={12} /> {fmtNum(item.downloads)} 安装
-									</span>
+							<div className="skillhub-card-meta">
+								<span className="skillhub-card-stats">
+									<Download size={12} /> {t("config.skillHubInstallCount", { count: fmtNum(item.downloads) })}
+								</span>
 									<span className="skillhub-card-source">{item.ownerName}</span>
 								</div>
 							</div>
 							<div className="skillhub-card-actions">
-								<button
-									className="skillhub-card-action-btn"
-									title="复制安装命令"
+							<button
+								className="skillhub-card-action-btn"
+								title={t("config.skillHubCopyInstallCommand")}
 									onClick={(e) => {
 										e.stopPropagation();
 										const pkg = item.slug.slice(0, item.slug.lastIndexOf("/"));
-										writeClipboard(`npx skills add ${pkg}`);
+										navigator.clipboard.writeText(`npx skills add ${pkg}`);
 										showNotice(t("app.codeCopied"), 1200);
 									}}
 								>

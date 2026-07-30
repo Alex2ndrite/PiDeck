@@ -13,7 +13,6 @@ function loadBrowserApiModule() {
 		},
 	});
 	const previewProjects = [{ id: "preview-project", name: "Preview" }];
-	const previewAgents = [{ id: "preview-agent", title: "Preview Agent" }];
 	const sandbox = {
 		exports: {},
 		require: (specifier) => {
@@ -27,11 +26,6 @@ function loadBrowserApiModule() {
 					createPreviewApi: () => ({
 						projects: {
 							list: async () => previewProjects,
-						},
-						agents: {
-							list: async () => previewAgents,
-							onState: () => () => undefined,
-							onMessages: () => () => undefined,
 						},
 						sessions: {
 							list: async () => [],
@@ -55,7 +49,7 @@ function loadBrowserApiModule() {
 	return sandbox.exports;
 }
 
-test("falls back to preview lists when Vite returns HTML for web state", async () => {
+test("falls back to the preview project list when Vite returns HTML for web state", async () => {
 	const { createBrowserApi } = loadBrowserApiModule();
 	const previousFetch = globalThis.fetch;
 	globalThis.fetch = async () => ({
@@ -71,10 +65,8 @@ test("falls back to preview lists when Vite returns HTML for web state", async (
 
 	try {
 		const projects = await api.projects.list();
-		const agents = await api.agents.list();
 
 		assert.deepEqual(projects, [{ id: "preview-project", name: "Preview" }]);
-		assert.deepEqual(agents, [{ id: "preview-agent", title: "Preview Agent" }]);
 	} finally {
 		globalThis.fetch = previousFetch;
 	}

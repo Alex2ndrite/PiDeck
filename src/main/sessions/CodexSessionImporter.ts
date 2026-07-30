@@ -9,6 +9,10 @@ import type {
 	CodexSessionSummary,
 } from "../../shared/types";
 import { getCodexSessionThreadInfo } from "../../shared/codexSessionMeta";
+import {
+	defaultSessionImportCopy,
+	type SessionImportCopy,
+} from "./SessionImportCopy";
 
 type ParsedCodexSession = {
 	meta: Record<string, any>;
@@ -21,6 +25,8 @@ type ParsedCodexSession = {
 export class CodexSessionImporter {
 	private readonly codexRoot = join(app.getPath("home"), ".codex", "sessions");
 	private readonly piRoot = join(app.getPath("home"), ".pi", "agent", "sessions");
+
+	constructor(private readonly translate: SessionImportCopy = defaultSessionImportCopy) {}
 
 	async scan(projectPath: string): Promise<CodexSessionSummary[]> {
 		const files = await this.collectJsonl(this.codexRoot).catch(() => []);
@@ -305,13 +311,14 @@ export class CodexSessionImporter {
 			]);
 		}
 
-		const title = titleState.title || this.cleanTitle(basename(session.sourcePath)) || "Codex 会话";
+		const title = titleState.title || this.cleanTitle(basename(session.sourcePath)) ||
+			this.translate("session.importedTitle", { source: "Codex" });
 		lines.splice(1, 0, JSON.stringify({ sessionName: title, cwd: projectPath }));
 
 		return {
 			raw: `${lines.join("\n")}\n`,
 			title,
-			preview: titleState.preview || "Codex imported session",
+			preview: titleState.preview || this.translate("session.importedPreview", { source: "Codex" }),
 			messageCount,
 		};
 	}

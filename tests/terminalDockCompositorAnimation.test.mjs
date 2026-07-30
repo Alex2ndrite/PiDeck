@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { readRendererStyles } from "./helpers/rendererStyles.mjs";
 
-const app = readFileSync("src/renderer/src/App.tsx", "utf8");
-const styles = readFileSync("src/renderer/src/styles.css", "utf8");
+const terminalHook = readFileSync("src/renderer/src/hooks/useTerminalDock.ts", "utf8");
+const runtimeDock = readFileSync("src/renderer/src/components/session/SessionRuntimeDock.tsx", "utf8");
+const styles = readRendererStyles();
 
 function cssRule(selector) {
   return styles.match(new RegExp(`${selector} \\{([\\s\\S]*?)\\n\\}`))?.[1];
@@ -22,9 +24,11 @@ test("terminal dock combines a short grid transition with composited motion", ()
 });
 
 test("terminal dock remains mounted while its exit transform runs", () => {
-  assert.match(app, /const TERMINAL_DOCK_MOTION_MS = 180;/);
-  assert.match(app, /const \[terminalDockMounted, setTerminalDockMounted\] = useState\(false\);/);
-  assert.match(app, /const \[terminalDockClosing, setTerminalDockClosing\] = useState\(false\);/);
-  assert.match(app, /window\.setTimeout\(\s*\(\) => \{\s*setTerminalDockMounted\(false\);\s*setTerminalDockClosing\(false\);\s*\},\s*TERMINAL_DOCK_MOTION_MS,/);
-  assert.match(app, /terminalDockVisible && \(/);
+  assert.match(terminalHook, /const TERMINAL_DOCK_MOTION_MS = 180;/);
+  assert.match(terminalHook, /const \[terminalDockMounted, setTerminalDockMounted\] = useState\(false\);/);
+  assert.match(terminalHook, /const \[terminalDockClosing, setTerminalDockClosing\] = useState\(false\);/);
+  assert.match(terminalHook, /window\.setTimeout\(\s*\(\) => \{\s*setTerminalDockMounted\(false\);\s*setTerminalDockClosing\(false\);\s*\},\s*TERMINAL_DOCK_MOTION_MS,/);
+  assert.match(runtimeDock, /mounted: boolean;/);
+  assert.match(runtimeDock, /closing: boolean;/);
+  assert.match(runtimeDock, /closing=\{props\.closing\}/);
 });

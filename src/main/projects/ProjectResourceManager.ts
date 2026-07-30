@@ -9,17 +9,25 @@ import type {
 	Project,
 	ProjectResourceListResult,
 } from "../../shared/types";
+import type { MainProcessTranslationKey } from "../../shared/i18n/mainProcessCopy";
 
 const SKILL_FILE = "SKILL.md";
 
 type ProjectProvider = (projectId: string) => Project | undefined;
+type ProjectResourceCopy = (
+	key: MainProcessTranslationKey,
+	params?: Record<string, string | number>,
+) => string;
 
 /**
  * 管理单个项目目录内的 pi 资源。
  * 仅扫描/删除项目目录下的 .pi/.agents 资源，避免把全局 skill/extension 混入项目级弹框。
  */
 export class ProjectResourceManager {
-	constructor(private readonly getProject: ProjectProvider) {}
+	constructor(
+		private readonly getProject: ProjectProvider,
+		private readonly translate: ProjectResourceCopy = () => "Project resource operation failed.",
+	) {}
 
 	async list(projectId: string): Promise<ProjectResourceListResult> {
 		const project = this.requireProject(projectId);
@@ -34,16 +42,16 @@ export class ProjectResourceManager {
 		const project = this.requireProject(input.projectId);
 		const location = this.skillLocations(project)[0];
 		const normalizedName = this.normalizeSkillName(input.name);
-		if (!normalizedName) throw new Error("Skill 名称只能包含小写字母、数字和连字符");
+		if (!normalizedName) throw new Error(this.translate("mainProjectResource.skillNameCharacters"));
 		// 保留用户原始输入作为显示名；标准化名仅用于目录/文件路径，SKILL.md 内存原始名
 		// 这样 readSkill/refresh 后 UI 展示的是用户输入的原始名称，不会被 normalizeSkillName 截断。
 		const displayName = input.name.trim();
 		const description = input.description.trim();
-		if (!description) throw new Error("Skill 描述不能为空");
+		if (!description) throw new Error(this.translate("mainSkill.descriptionRequired"));
 
 		const skillDir = join(location.path, normalizedName);
 		this.assertInsideProject(project, skillDir);
-		if (existsSync(skillDir)) throw new Error(`项目 Skill 已存在：${normalizedName}`);
+		if (existsSync(skillDir)) throw new Error(this.translate("mainProjectResource.skillAlreadyExists", { name: normalizedName }));
 		await mkdir(skillDir, { recursive: true });
 		const skillPath = join(skillDir, SKILL_FILE);
 		await writeFile(
@@ -112,7 +120,7 @@ export class ProjectResourceManager {
 	async deleteExtension(projectId: string, extensionPath: string): Promise<void> {
 		const project = this.requireProject(projectId);
 		const extension = (await this.listExtensions(project)).find((item) => item.path === extensionPath);
-		if (!extension?.path) throw new Error(`项目 Extension 不存在：${extensionPath}`);
+		if (!extension?.path) throw new Error(this.translate("mainProjectResource.extensionNotFound"));
 		this.assertInsideProject(project, extension.path);
 		await rm(extension.path, { recursive: true, force: true });
 	}
@@ -162,7 +170,7 @@ export class ProjectResourceManager {
 		const warnings = this.validateSkill(name, description);
 		return {
 			id: `${location.id}:${skillPath}`,
-			name: name || dirname(skillPath).split(/[\\/]/).pop() || "未命名 Skill",
+			name: name || dirname(skillPath).split(/[\\/]/).pop() || this.translate("mainSkill.unnamed"),
 			description,
 			path: skillPath,
 			dir: dirname(skillPath),
@@ -232,8 +240,8 @@ export class ProjectResourceManager {
 
 	private requireProject(projectId: string) {
 		const project = this.getProject(projectId);
-		if (!project) throw new Error(`Project not found: ${projectId}`);
-		if (project.kind === "chat") throw new Error("Chat 项目不支持项目级资源");
+		if (!project) throw new Error(this.translate("project.notFound"));
+		if (project.kind === "chat") throw new Error(this.translate("mainProjectResource.chatUnsupported"));
 		return project;
 	}
 
@@ -242,7 +250,7 @@ export class ProjectResourceManager {
 		const project = this.requireProject(projectId);
 		const skill = await this.findSkill(project, skillPath);
 		const normalizedNew = this.normalizeSkillName(newName);
-		if (!normalizedNew) throw new Error("Skill 名称不能为空");
+		if (!normalizedNew) throw new Error(this.translate("mainSkill.nameRequired"));
 
 		const displayName = newName.trim();
 		const oldDir = skill.dir;
@@ -250,8 +258,8 @@ export class ProjectResourceManager {
 		const newDir = join(parentDir, normalizedNew);
 
 		this.assertInsideProject(project, newDir);
-		if (oldDir === newDir) throw new Error("新旧名称相同");
-		if (existsSync(newDir)) throw new Error(`项目 Skill 已存在：${normalizedNew}`);
+		if (oldDir === newDir) throw new Error(this.translate("mainSkill.sameName"));
+		if (existsSync(newDir)) throw new Error(this.translate("mainProjectResource.skillAlreadyExists", { name: normalizedNew }));
 
 		// 更新 SKILL.md 中的 name frontmatter
 		const raw = await readFile(skill.path, "utf8");
@@ -279,7 +287,7 @@ export class ProjectResourceManager {
 
 	private async findSkill(project: Project, skillPath: string) {
 		const skill = (await this.listSkills(project)).find((item) => item.path === skillPath);
-		if (!skill) throw new Error(`项目 Skill 不存在：${skillPath}`);
+		if (!skill) throw new Error(this.translate("mainProjectResource.skillNotFound"));
 		return skill;
 	}
 
@@ -289,7 +297,7 @@ export class ProjectResourceManager {
 		const rel = relative(root, target);
 		// 所有删除/创建都必须落在当前项目目录内，防止 renderer 传入任意路径误删全局资源。
 		if (rel.startsWith("..") || rel === "" || resolve(root, rel) !== target) {
-			throw new Error("资源路径不在项目目录内，已拒绝操作");
+			throw new Error(this.translate("mainProjectResource.pathOutsideProject"));
 		}
 	}
 
@@ -310,13 +318,13 @@ export class ProjectResourceManager {
 
 	private validateSkill(name: string, description: string) {
 		const warnings: string[] = [];
-		if (!name) warnings.push("缺少 name");
+		if (!name) warnings.push(this.translate("mainSkill.warningNameRequired"));
 		if (name && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(name)) {
-			warnings.push("name 只能包含小写字母、数字和单个连字符");
+			warnings.push(this.translate("mainProjectResource.warningNameCharacters"));
 		}
-		if (name.length > 64) warnings.push("name 超过 64 个字符");
-		if (!description) warnings.push("缺少 description，pi 不会加载该 skill");
-		if (description.length > 1024) warnings.push("description 超过 1024 个字符");
+		if (name.length > 64) warnings.push(this.translate("mainSkill.warningNameTooLong"));
+		if (!description) warnings.push(this.translate("mainSkill.warningDescriptionRequired"));
+		if (description.length > 1024) warnings.push(this.translate("mainSkill.warningDescriptionTooLong"));
 		return warnings;
 	}
 

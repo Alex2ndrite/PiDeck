@@ -1,0 +1,942 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import test from "node:test";
+import ts from "typescript";
+import vm from "node:vm";
+
+const nodeRequire = createRequire(import.meta.url);
+
+function compileModule(filePath, imports = {}) {
+  const source = readFileSync(filePath, "utf8");
+  const output = ts.transpileModule(source, {
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2022,
+    },
+    fileName: filePath,
+  }).outputText;
+  const module = { exports: {} };
+  const localRequire = (specifier) => imports[specifier] ?? nodeRequire(specifier);
+  vm.runInNewContext(output, {
+    module,
+    exports: module.exports,
+    require: localRequire,
+    console,
+    setTimeout,
+    clearTimeout,
+  }, { filename: filePath });
+  return module.exports;
+}
+
+function loadCoordinator() {
+  const identity = compileModule("src/shared/sessionIdentity.ts");
+  return compileModule("src/main/sessions/SessionRuntimeCoordinator.ts", {
+    "../../shared/sessionIdentity": identity,
+  });
+}
+
+function deferred() {
+  let resolve;
+  const promise = new Promise((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
+
+function catalogEntry(overrides = {}) {
+  return {
+    id: "session-1",
+    projectId: "project-1",
+    title: "Session 1",
+    source: "pi",
+    environment: "native",
+    status: "draft",
+    createdAt: 1,
+    updatedAt: 1,
+    ...overrides,
+  };
+}
+
+function createHarness(options = {}) {
+  const entry = catalogEntry(options.entry);
+  const calls = {
+    create: 0,
+    restart: 0,
+    stop: 0,
+	abort: 0,
+	compact: 0,
+	runtimeState: 0,
+	commands: 0,
+	messages: 0,
+	exportHtml: 0,
+	editMessage: 0,
+	deleteMessage: 0,
+	prepareResend: 0,
+    setModel: 0,
+    setThinking: 0,
+	update: 0,
+    attach: 0,
+    send: 0,
+    uiResponse: 0,
+  };
+  const tabs = options.tabs ? [...options.tabs] : [];
+  const catalog = {
+    get: (sessionId) => sessionId === entry.id ? { ...entry } : undefined,
+    getRecord: (sessionId) => sessionId === entry.id ? {
+      ...entry,
+      preview: "",
+      messageCount: 0,
+    } : undefined,
+    update: async (_sessionId, patch) => {
+      calls.update += 1;
+      Object.assign(entry, patch);
+      return { ...entry };
+    },
+    attachRuntime: async (input) => {
+      calls.attach += 1;
+      entry.filePath = input.filePath;
+      entry.status = input.filePath ? "active" : entry.status;
+    },
+  };
+  const agents = {
+    list: () => tabs,
+	getMessages: (agentId) => {
+	  calls.messages += 1;
+	  if (options.getMessages) return options.getMessages(agentId);
+	  return [{ id: "message-1", role: "assistant", text: agentId, timestamp: 1 }];
+	},
+    create: async (input) => {
+      calls.create += 1;
+      if (options.createDelay) {
+        await new Promise((resolve) => setTimeout(resolve, options.createDelay));
+      }
+      const tab = options.createdTab ?? {
+        id: "agent-1",
+        projectId: input.projectId,
+        cwd: "C:/project",
+        title: input.title ?? "Session 1",
+        status: "idle",
+        sessionId: "pi-session-1",
+        sessionPath: input.sessionPath ?? "C:/sessions/session-1.jsonl",
+        sessionEnvironment: input.environment,
+        sessionSource: input.source,
+        wslDistro: input.wslDistro,
+        wslUser: input.wslUser,
+        importedSourceId: input.importedSourceId,
+        createdAt: 1,
+      };
+      tabs.push(tab);
+      return tab;
+    },
+    restart: async (agentId) => {
+      calls.restart += 1;
+      const index = tabs.findIndex((tab) => tab.id === agentId);
+      const previous = index >= 0 ? tabs.splice(index, 1)[0] : undefined;
+      const tab = options.restartedTab ?? {
+        ...previous,
+        id: "agent-restarted",
+        status: "idle",
+        createdAt: 2,
+      };
+      tabs.push(tab);
+      return tab;
+    },
+    stop: async (agentId) => {
+      calls.stop += 1;
+      const index = tabs.findIndex((tab) => tab.id === agentId);
+      if (index >= 0) tabs.splice(index, 1);
+    },
+    abort: async () => {
+      calls.abort += 1;
+      if (options.abortError) throw new Error(options.abortError);
+    },
+    compact: async () => {
+      calls.compact += 1;
+      return options.runtimeState ?? { isStreaming: false };
+    },
+    getRuntimeState: async () => {
+      calls.runtimeState += 1;
+      return options.runtimeState ?? { isStreaming: false };
+    },
+    getCommands: async () => {
+      calls.commands += 1;
+      return options.commands ?? [{ name: "compact" }];
+    },
+    exportHtml: async () => {
+      calls.exportHtml += 1;
+      return { path: "C:/export.html" };
+    },
+    editMessage: async () => {
+      calls.editMessage += 1;
+    },
+    deleteMessage: async () => {
+      calls.deleteMessage += 1;
+    },
+    prepareResendFromMessage: async () => {
+      calls.prepareResend += 1;
+      return { text: "hello" };
+    },
+    setModel: async () => {
+      calls.setModel += 1;
+      if (options.modelError) throw new Error(options.modelError);
+    },
+    setThinking: async () => {
+      calls.setThinking += 1;
+    },
+    sendUIResponse: async () => {
+      calls.uiResponse += 1;
+    },
+  };
+  const sender = async (input) => {
+    calls.send += 1;
+    if (options.sender) return options.sender(input);
+    return options.sendResult ?? { accepted: true };
+  };
+  return { entry, calls, tabs, catalog, agents, sender };
+}
+
+function prompt(overrides = {}) {
+  return {
+    sessionId: "session-1",
+    requestId: "request-1",
+    message: "hello",
+    ...overrides,
+  };
+}
+
+test("rejects an empty prompt before activating a runtime", async () => {
+  const { SessionRuntimeCoordinator } = loadCoordinator();
+  const harness = createHarness();
+  const coordinator = new SessionRuntimeCoordinator(
+    harness.catalog,
+    harness.agents,
+    harness.sender,
+  );
+  const result = await coordinator.send(prompt({ message: "   " }));
+  assert.equal(result.accepted, false);
+  assert.equal(result.delivery, "rejected");
+  assert.equal(harness.calls.create, 0);
+  assert.equal(harness.calls.send, 0);
+});
+
+test("explicit activation creates a runtime that is bound to the requested Session", async () => {
+  const { SessionRuntimeCoordinator } = loadCoordinator();
+  const harness = createHarness();
+  const coordinator = new SessionRuntimeCoordinator(
+    harness.catalog,
+    harness.agents,
+    harness.sender,
+  );
+
+  const result = await coordinator.activateRuntime("session-1");
+
+  assert.equal(result.ok, true);
+  assert.equal(result.value.sessionId, "session-1");
+  assert.equal(result.value.agentId, "agent-1");
+  assert.equal(result.value.runtimeGeneration, 1);
+  assert.equal(harness.calls.create, 1);
+  assert.equal(harness.calls.send, 0);
+});
+
+test("reports a draft activation before its runtime binding completes", async () => {
+  const { SessionRuntimeCoordinator } = loadCoordinator();
+  const harness = createHarness({ createDelay: 20 });
+  const coordinator = new SessionRuntimeCoordinator(
+    harness.catalog,
+    harness.agents,
+    harness.sender,
+  );
+
+  const activation = coordinator.activateRuntime("session-1");
+  assert.equal(coordinator.isActivating("session-1"), true);
+  await activation;
+  assert.equal(coordinator.isActivating("session-1"), false);
+});
+
+test("deduplicates concurrent retries by session ID and request ID", async () => {
+  const { SessionRuntimeCoordinator } = loadCoordinator();
+  const harness = createHarness({ createDelay: 20 });
+  const coordinator = new SessionRuntimeCoordinator(
+    harness.catalog,
+    harness.agents,
+    harness.sender,
+  );
+  const [first, second] = await Promise.all([
+    coordinator.send(prompt()),
+    coordinator.send(prompt()),
+  ]);
+  assert.equal(first.accepted, true);
+  assert.equal(second.accepted, true);
+  assert.equal(first.agentId, "agent-1");
+  assert.equal(harness.calls.create, 1);
+  assert.equal(harness.calls.send, 1);
+  assert.equal(harness.calls.attach, 2);
+});
+
+test("serializes activation but delivers distinct requests once each", async () => {
+  const { SessionRuntimeCoordinator } = loadCoordinator();
+  const harness = createHarness({
+    createDelay: 20,
+    entry: {
+      model: { provider: "openai", modelId: "gpt-test" },
+      thinkingLevel: "high",
+    },
+  });
+  const coordinator = new SessionRuntimeCoordinator(
+    harness.catalog,
+    harness.agents,
+    harness.sender,
+  );
+  const [first, second] = await Promise.all([
+    coordinator.send(prompt({ requestId: "request-1" })),
+    coordinator.send(prompt({ requestId: "request-2" })),
+  ]);
+  assert.equal(first.accepted, true);
+  assert.equal(second.accepted, true);
+  assert.equal(harness.calls.create, 1);
+  assert.equal(harness.calls.setModel, 1);
+  assert.equal(harness.calls.setThinking, 1);
+  assert.equal(harness.calls.send, 2);
+});
+
+test("dispatch lease blocks restart, direct bind, and catalog scan until send settles", async () => {
+  const { SessionRuntimeCoordinator } = loadCoordinator();
+  const started = deferred();
+  const release = deferred();
+  const harness = createHarness({
+    entry: { status: "active", filePath: "C:/sessions/session-1.jsonl" },
+    tabs: [{
+      id: "agent-1",
+      projectId: "project-1",
+      cwd: "C:/project",
+      title: "Session 1",
+      status: "idle",
+      sessionPath: "C:/sessions/session-1.jsonl",
+      sessionEnvironment: "native",
+      sessionSource: "pi",
+      createdAt: 1,
+    }, {
+      id: "agent-2",
+      projectId: "project-1",
+      cwd: "C:/project",
+      title: "Session 1 duplicate",
+      status: "idle",
+      sessionPath: "C:/sessions/session-1.jsonl",
+      sessionEnvironment: "native",
+      sessionSource: "pi",
+      createdAt: 2,
+    }],
+    sender: async () => {
+      started.resolve();
+      await release.promise;
+      return { accepted: true };
+    },
+  });
+  const coordinator = new SessionRuntimeCoordinator(harness.catalog, harness.agents, harness.sender);
+  coordinator.bindExistingAgent("session-1", "agent-1");
+
+  const sending = coordinator.send(prompt());
+  await started.promise;
+  assert.throws(
+    () => coordinator.bindExistingAgent("session-1", "agent-2"),
+    /prompt dispatch is in progress/,
+  );
+  await assert.rejects(
+    coordinator.restartSession("session-1", "agent-1"),
+    /prompt dispatch is in progress/,
+  );
+  assert.equal(coordinator.attachCatalogRuntimes([{
+    ...catalogEntry({ status: "active", filePath: "C:/sessions/session-1.jsonl" }),
+    preview: "",
+    messageCount: 0,
+  }]).length, 0);
+  assert.equal(harness.calls.restart, 0);
+
+  release.resolve();
+  const result = await sending;
+  assert.equal(result.accepted, true);
+  const restarted = await coordinator.restartSession("session-1", "agent-1");
+  assert.equal(restarted.id, "agent-restarted");
+  assert.equal(harness.calls.restart, 1);
+});
+
+test("dispatch lease is released when sender throws", async () => {
+  const { SessionRuntimeCoordinator } = loadCoordinator();
+  const started = deferred();
+  const release = deferred();
+  const harness = createHarness({
+    sender: async () => {
+      started.resolve();
+      await release.promise;
+      throw new Error("transport uncertain");
+    },
+  });
+  const coordinator = new SessionRuntimeCoordinator(harness.catalog, harness.agents, harness.sender);
+  const sending = coordinator.send(prompt());
+  await started.promise;
+  assert.throws(
+    () => coordinator.bindExistingAgent("session-1", "agent-1"),
+    /prompt dispatch is in progress/,
+  );
+  release.resolve();
+  const result = await sending;
+  assert.equal(result.accepted, false);
+  assert.equal(result.delivery, "unknown");
+  assert.equal(result.agentId, "agent-1");
+  assert.doesNotThrow(() => coordinator.bindExistingAgent("session-1", "agent-1"));
+});
+
+test("stale send result fails closed without exposing a runtime handle", async () => {
+  const { SessionRuntimeCoordinator } = loadCoordinator();
+  const started = deferred();
+  const release = deferred();
+  const harness = createHarness({
+    sender: async () => {
+      started.resolve();
+      await release.promise;
+      return { accepted: true };
+    },
+  });
+  const coordinator = new SessionRuntimeCoordinator(harness.catalog, harness.agents, harness.sender);
+  const sending = coordinator.send(prompt());
+  await started.promise;
+
+  coordinator.agentIdBySession.set("session-1", "agent-stale");
+  coordinator.sessionIdByAgent.delete("agent-1");
+  coordinator.generationBySession.set("session-1", 2);
+  release.resolve();
+
+  const result = await sending;
+  assert.equal(result.accepted, false);
+  assert.equal(result.delivery, "unknown");
+  assert.equal(result.agentId, undefined);
+  assert.equal(result.runtimeGeneration, undefined);
+  assert.equal(result.sessionPath, undefined);
+  coordinator.agentIdBySession.delete("session-1");
+  assert.doesNotThrow(() => coordinator.bindExistingAgent("session-1", "agent-1"));
+});
+
+test("reuses an already-running historical session by canonical path", async () => {
+  const { SessionRuntimeCoordinator } = loadCoordinator();
+  const harness = createHarness({
+    entry: {
+      status: "active",
+      filePath: "C:\\Sessions\\History.jsonl",
+      model: { provider: "anthropic", modelId: "claude-test" },
+    },
+    tabs: [{
+      id: "agent-history",
+      projectId: "project-1",
+      cwd: "C:/project",
+      title: "History",
+      status: "idle",
+      sessionId: "pi-history",
+      sessionPath: "c:/sessions/history.jsonl",
+      createdAt: 1,
+    }],
+  });
+  const coordinator = new SessionRuntimeCoordinator(
+    harness.catalog,
+    harness.agents,
+    harness.sender,
+  );
+  const result = await coordinator.send(prompt());
+  assert.equal(result.accepted, true);
+  assert.equal(result.agentId, "agent-history");
+  assert.equal(harness.calls.create, 0);
+  assert.equal(harness.calls.setModel, 1);
+  assert.equal(harness.calls.send, 1);
+});
+
+test("keeps a draft unbound when Agent startup fails", async () => {
+  const { SessionRuntimeCoordinator } = loadCoordinator();
+  const harness = createHarness({
+    createdTab: {
+      id: "agent-error",
+      projectId: "project-1",
+      cwd: "C:/project",
+      title: "Session 1",
+      status: "error",
+      createdAt: 1,
+    },
+  });
+  const coordinator = new SessionRuntimeCoordinator(
+    harness.catalog,
+    harness.agents,
+    harness.sender,
+  );
+  const result = await coordinator.send(prompt());
+  assert.equal(result.accepted, false);
+  assert.equal(result.delivery, "rejected");
+  assert.match(result.error, /Failed to start session runtime/);
+  assert.equal(harness.entry.status, "draft");
+  assert.equal(harness.calls.attach, 0);
+  assert.equal(harness.calls.send, 0);
+  assert.equal(harness.calls.stop, 1);
+});
+
+test("moves the Session binding when a runtime is restarted", () => {
+  const { SessionRuntimeCoordinator } = loadCoordinator();
+  const harness = createHarness({
+    tabs: [{ id: "agent-new", status: "idle", createdAt: 2 }],
+  });
+  const coordinator = new SessionRuntimeCoordinator(
+    harness.catalog,
+    harness.agents,
+    harness.sender,
+  );
+  coordinator.bindExistingAgent("session-1", "agent-old");
+  coordinator.bindExistingAgent("session-1", "agent-new");
+  assert.equal(coordinator.getSessionId("agent-old"), undefined);
+  assert.equal(coordinator.getSessionId("agent-new"), "session-1");
+  assert.equal(coordinator.getAgentId("session-1"), "agent-new");
+});
+
+test("restart reapplies catalog preferences before binding a new generation", async () => {
+  const { SessionRuntimeCoordinator } = loadCoordinator();
+  const harness = createHarness({
+    entry: {
+      status: "active",
+      filePath: "C:/sessions/session-1.jsonl",
+      model: { provider: "openai", modelId: "gpt-test" },
+      thinkingLevel: "high",
+    },
+    tabs: [{
+      id: "agent-old",
+      projectId: "project-1",
+      cwd: "C:/project",
+      title: "Session 1",
+      status: "idle",
+      sessionPath: "C:/sessions/session-1.jsonl",
+      sessionEnvironment: "native",
+      sessionSource: "pi",
+      createdAt: 1,
+    }],
+  });
+  const coordinator = new SessionRuntimeCoordinator(
+    harness.catalog,
+    harness.agents,
+    harness.sender,
+  );
+  const firstGeneration = coordinator.bindExistingAgent("session-1", "agent-old");
+  const restarted = await coordinator.restartSession("session-1", "agent-old");
+
+  assert.equal(firstGeneration, 1);
+  assert.equal(restarted.id, "agent-restarted");
+  assert.equal(restarted.runtimeGeneration, 2);
+  assert.equal(harness.calls.restart, 1);
+  assert.equal(harness.calls.setModel, 1);
+  assert.equal(harness.calls.setThinking, 1);
+  assert.equal(harness.calls.attach, 1);
+  assert.equal(coordinator.getSessionId("agent-old"), undefined);
+  assert.deepEqual(
+    { ...coordinator.getRuntimeBinding("agent-restarted") },
+    { sessionId: "session-1", runtimeGeneration: 2 },
+  );
+});
+
+test("does not send or bind a new runtime when model setup fails", async () => {
+  const { SessionRuntimeCoordinator } = loadCoordinator();
+  const harness = createHarness({
+    entry: { model: { provider: "bad", modelId: "missing" } },
+    modelError: "model unavailable",
+  });
+  const coordinator = new SessionRuntimeCoordinator(
+    harness.catalog,
+    harness.agents,
+    harness.sender,
+  );
+  const result = await coordinator.send(prompt());
+  assert.equal(result.accepted, false);
+  assert.equal(result.delivery, "rejected");
+  assert.match(result.error, /model unavailable/);
+  assert.equal(harness.entry.status, "draft");
+  assert.equal(harness.calls.attach, 0);
+  assert.equal(harness.calls.send, 0);
+  assert.equal(harness.calls.stop, 1);
+});
+
+test("attaches catalog runtimes by full origin identity", () => {
+  const { SessionRuntimeCoordinator } = loadCoordinator();
+  const harness = createHarness({
+    tabs: [{
+      id: "agent-existing",
+      projectId: "project-1",
+      cwd: "/workspace",
+      title: "Existing",
+      status: "idle",
+      sessionPath: "/home/dev/session.jsonl",
+      sessionEnvironment: "wsl",
+      sessionSource: "pi",
+      wslDistro: "Ubuntu",
+      wslUser: "dev",
+      createdAt: 1,
+    }],
+  });
+  const coordinator = new SessionRuntimeCoordinator(
+    harness.catalog,
+    harness.agents,
+    harness.sender,
+  );
+  const bindings = coordinator.attachCatalogRuntimes([{
+    ...catalogEntry({
+      environment: "wsl",
+      filePath: "/home/dev/session.jsonl",
+      wslDistro: "Ubuntu",
+      wslUser: "dev",
+      status: "active",
+    }),
+    preview: "",
+    messageCount: 0,
+  }]);
+
+  assert.equal(bindings.length, 1);
+  assert.equal(bindings[0].agentId, "agent-existing");
+  assert.deepEqual(
+    { ...coordinator.getRuntimeBinding("agent-existing") },
+    { sessionId: "session-1", runtimeGeneration: 1 },
+  );
+});
+
+test("Session UI response requires the current binding, generation, and pending request", async () => {
+  const { SessionRuntimeCoordinator } = loadCoordinator();
+  const harness = createHarness({
+    tabs: [{ id: "agent-a", status: "idle", createdAt: 1 }],
+  });
+  const coordinator = new SessionRuntimeCoordinator(
+    harness.catalog,
+    harness.agents,
+    harness.sender,
+  );
+  const generation = coordinator.bindExistingAgent("session-1", "agent-a");
+  coordinator.observeRuntimeEvent({
+    sessionId: "session-1",
+    agentId: "agent-a",
+    runtimeGeneration: generation,
+    sourceChannel: "agents:ui-request",
+    payload: {
+      agentId: "agent-a",
+      requestId: "request-ui",
+      method: "confirm",
+      title: "Continue?",
+    },
+  });
+
+  await assert.rejects(
+    coordinator.respondToUi({
+      sessionId: "session-1",
+      requestId: "request-ui",
+      agentId: "agent-a",
+      runtimeGeneration: generation - 1,
+      response: { confirmed: true },
+    }),
+    /runtime binding changed/i,
+  );
+  await coordinator.respondToUi({
+    sessionId: "session-1",
+    requestId: "request-ui",
+    agentId: "agent-a",
+    runtimeGeneration: generation,
+    response: { confirmed: true },
+  });
+  await assert.rejects(
+    coordinator.respondToUi({
+      sessionId: "session-1",
+      requestId: "request-ui",
+      agentId: "agent-a",
+      runtimeGeneration: generation,
+      response: { confirmed: true },
+    }),
+    /not pending/i,
+  );
+  assert.equal(harness.calls.uiResponse, 1);
+});
+
+test("batch Ask Question is accepted by the Session UI response gate", async () => {
+  const { SessionRuntimeCoordinator } = loadCoordinator();
+  const harness = createHarness({
+    tabs: [{ id: "agent-a", status: "idle", createdAt: 1 }],
+  });
+  const coordinator = new SessionRuntimeCoordinator(
+    harness.catalog,
+    harness.agents,
+    harness.sender,
+  );
+  const generation = coordinator.bindExistingAgent("session-1", "agent-a");
+  coordinator.observeRuntimeEvent({
+    sessionId: "session-1",
+    agentId: "agent-a",
+    runtimeGeneration: generation,
+    sourceChannel: "agents:ui-request",
+    payload: {
+      agentId: "agent-a",
+      requestId: "batch-ui",
+      method: "batch_ask",
+      batchQuestions: [{ id: "runtime", type: "select", question: "Runtime?" }],
+    },
+  });
+
+  await coordinator.respondToUi({
+    sessionId: "session-1",
+    requestId: "batch-ui",
+    agentId: "agent-a",
+    runtimeGeneration: generation,
+    response: { value: JSON.stringify({ answers: [{ id: "runtime", value: "node" }] }) },
+  });
+
+  assert.equal(harness.calls.uiResponse, 1);
+});
+
+test("Session UI response is rejected after the closed runtime is unbound", async () => {
+  const { SessionRuntimeCoordinator } = loadCoordinator();
+  const harness = createHarness({
+    tabs: [{ id: "agent-a", status: "idle", createdAt: 1 }],
+  });
+  const coordinator = new SessionRuntimeCoordinator(
+    harness.catalog,
+    harness.agents,
+    harness.sender,
+  );
+  const generation = coordinator.bindExistingAgent("session-1", "agent-a");
+  coordinator.observeRuntimeEvent({
+    sessionId: "session-1",
+    agentId: "agent-a",
+    runtimeGeneration: generation,
+    sourceChannel: "agents:ui-request",
+    payload: {
+      agentId: "agent-a",
+      requestId: "request-ui",
+      method: "confirm",
+      title: "Continue?",
+    },
+  });
+
+  coordinator.unbindAgent("agent-a");
+
+  await assert.rejects(
+    coordinator.respondToUi({
+      sessionId: "session-1",
+      requestId: "request-ui",
+      agentId: "agent-a",
+      runtimeGeneration: generation,
+      response: { confirmed: true },
+    }),
+    /runtime binding changed/i,
+  );
+  assert.equal(harness.calls.uiResponse, 0);
+});
+
+test("session runtime inventory and target expose the stable binding triple", () => {
+  const { SessionRuntimeCoordinator } = loadCoordinator();
+  const harness = createHarness({
+    tabs: [{
+      id: "agent-a",
+      projectId: "project-1",
+      cwd: "C:/project",
+      status: "idle",
+      sessionPath: "C:/sessions/session-1.jsonl",
+      createdAt: 10,
+    }],
+  });
+  const coordinator = new SessionRuntimeCoordinator(harness.catalog, harness.agents, harness.sender);
+  const generation = coordinator.bindExistingAgent("session-1", "agent-a");
+  assert.deepEqual(JSON.parse(JSON.stringify(coordinator.getTarget("session-1"))), {
+    sessionId: "session-1",
+    agentId: "agent-a",
+    runtimeGeneration: generation,
+  });
+  assert.deepEqual(JSON.parse(JSON.stringify(coordinator.listRuntimes())), [{
+    sessionId: "session-1",
+    agentId: "agent-a",
+    runtimeGeneration: generation,
+    projectId: "project-1",
+    cwd: "C:/project",
+    status: "idle",
+    sessionPath: "C:/sessions/session-1.jsonl",
+    createdAt: 10,
+  }]);
+});
+
+test("anonymous runtime binds an existing --no-session process without attaching a file", async () => {
+  const { SessionRuntimeCoordinator } = loadCoordinator();
+  const harness = createHarness({
+    entry: { noSession: true, status: "active" },
+    tabs: [{
+      id: "anonymous-agent",
+      projectId: "project-1",
+      cwd: "C:/project",
+      title: "Anonymous Chat",
+      status: "idle",
+      noSession: true,
+      createdAt: 1,
+    }],
+  });
+  const coordinator = new SessionRuntimeCoordinator(harness.catalog, harness.agents, harness.sender);
+  const runtime = coordinator.bindAnonymousRuntime("session-1", "anonymous-agent");
+  assert.equal(runtime.noSession, true);
+  assert.equal(runtime.sessionPath, undefined);
+
+  const sent = await coordinator.send(prompt());
+  assert.equal(sent.accepted, true);
+  assert.equal(harness.calls.create, 0);
+  assert.equal(harness.calls.attach, 0);
+
+  const restarted = await coordinator.restartRuntime(runtime);
+  assert.equal(restarted.ok, true);
+  assert.equal(restarted.value.runtime.noSession, true);
+  assert.equal(harness.calls.attach, 0);
+});
+
+test("stale generation is rejected before a runtime command reaches AgentManager", async () => {
+  const { SessionRuntimeCoordinator } = loadCoordinator();
+  const harness = createHarness({
+    tabs: [{ id: "agent-a", status: "idle", createdAt: 1 }],
+  });
+  const coordinator = new SessionRuntimeCoordinator(harness.catalog, harness.agents, harness.sender);
+  const generation = coordinator.bindExistingAgent("session-1", "agent-a");
+  const result = await coordinator.abortRuntime({
+    sessionId: "session-1",
+    agentId: "agent-a",
+    runtimeGeneration: generation - 1,
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.error.code, "SESSION_RUNTIME_CHANGED");
+  assert.equal(harness.calls.abort, 0);
+});
+
+test("targeted runtime commands return the validated target and command value", async () => {
+  const { SessionRuntimeCoordinator } = loadCoordinator();
+  const harness = createHarness({
+    tabs: [{ id: "agent-a", status: "idle", createdAt: 1 }],
+    runtimeState: { isStreaming: false, modelId: "model-a" },
+  });
+  const coordinator = new SessionRuntimeCoordinator(harness.catalog, harness.agents, harness.sender);
+  const runtimeGeneration = coordinator.bindExistingAgent("session-1", "agent-a");
+  const target = { sessionId: "session-1", agentId: "agent-a", runtimeGeneration };
+  const [state, commands, compact, edited, deleted, resend, exported, aborted] = await Promise.all([
+    coordinator.getRuntimeState(target),
+    coordinator.listRuntimeCommands(target),
+    coordinator.compactRuntime(target, "compact now"),
+    coordinator.editRuntimeMessage(target, "message-1", "updated"),
+    coordinator.deleteRuntimeMessage(target, "message-2"),
+    coordinator.prepareRuntimeResend(target, "message-3"),
+    coordinator.exportRuntimeHtml(target),
+    coordinator.abortRuntime(target),
+  ]);
+  for (const result of [state, commands, compact, edited, deleted, resend, exported, aborted]) {
+    assert.equal(result.ok, true);
+    assert.deepEqual(JSON.parse(JSON.stringify(result.value.target)), target);
+  }
+  assert.equal(harness.calls.runtimeState, 1);
+  assert.equal(harness.calls.commands, 1);
+  assert.equal(harness.calls.compact, 1);
+  assert.equal(harness.calls.editMessage, 1);
+  assert.equal(harness.calls.deleteMessage, 1);
+  assert.equal(harness.calls.prepareResend, 1);
+  assert.equal(harness.calls.exportHtml, 1);
+  assert.equal(harness.calls.abort, 1);
+});
+
+test("runtime message snapshots retain the validated Session target", () => {
+  const { SessionRuntimeCoordinator } = loadCoordinator();
+  const harness = createHarness({
+    tabs: [{ id: "agent-a", projectId: "project-1", cwd: "C:/project", status: "idle", createdAt: 1 }],
+  });
+  const coordinator = new SessionRuntimeCoordinator(harness.catalog, harness.agents, harness.sender);
+  const runtimeGeneration = coordinator.bindExistingAgent("session-1", "agent-a");
+
+  assert.deepEqual(JSON.parse(JSON.stringify(coordinator.getRuntimeMessages("session-1"))), {
+    target: { sessionId: "session-1", agentId: "agent-a", runtimeGeneration },
+    value: [{ id: "message-1", role: "assistant", text: "agent-a", timestamp: 1 }],
+  });
+  assert.equal(harness.calls.messages, 1);
+});
+
+test("runtime message snapshots fail closed when the runtime is replaced during the read", () => {
+  const { SessionRuntimeCoordinator } = loadCoordinator();
+  let coordinator;
+  const harness = createHarness({
+    tabs: [
+      { id: "agent-a", projectId: "project-1", cwd: "C:/project", status: "idle", createdAt: 1 },
+      { id: "agent-b", projectId: "project-1", cwd: "C:/project", status: "idle", createdAt: 2 },
+    ],
+    getMessages: (agentId) => {
+      assert.equal(agentId, "agent-a");
+      coordinator.bindExistingAgent("session-1", "agent-b");
+      return [{ id: "message-a", role: "assistant", text: "stale", timestamp: 1 }];
+    },
+  });
+  coordinator = new SessionRuntimeCoordinator(harness.catalog, harness.agents, harness.sender);
+  coordinator.bindExistingAgent("session-1", "agent-a");
+
+  assert.equal(coordinator.getRuntimeMessages("session-1"), undefined);
+  assert.equal(coordinator.getTarget("session-1").agentId, "agent-b");
+});
+
+test("runtime model preference is persisted before AgentManager failure", async () => {
+  const { SessionRuntimeCoordinator } = loadCoordinator();
+  const harness = createHarness({
+    tabs: [{ id: "agent-a", status: "idle", createdAt: 1 }],
+    modelError: "model apply failed",
+  });
+  const coordinator = new SessionRuntimeCoordinator(harness.catalog, harness.agents, harness.sender);
+  const runtimeGeneration = coordinator.bindExistingAgent("session-1", "agent-a");
+  const result = await coordinator.setRuntimeModel(
+    { sessionId: "session-1", agentId: "agent-a", runtimeGeneration },
+    "openai",
+    "gpt-test",
+  );
+  assert.equal(result.ok, false);
+  assert.equal(result.error.code, "SESSION_COMMAND_FAILED");
+  assert.equal(harness.entry.model.provider, "openai");
+  assert.equal(harness.entry.model.modelId, "gpt-test");
+  assert.equal(harness.calls.update, 1);
+  assert.equal(harness.calls.setModel, 1);
+});
+
+test("stop invalidates the target and restart replaces it with a higher generation", async () => {
+  const { SessionRuntimeCoordinator } = loadCoordinator();
+  const baseTab = {
+    id: "agent-a",
+    projectId: "project-1",
+    cwd: "C:/project",
+    title: "Session",
+    status: "idle",
+    sessionPath: "C:/sessions/session-1.jsonl",
+    createdAt: 1,
+  };
+
+  const stopHarness = createHarness({ tabs: [{ ...baseTab }] });
+  const stopCoordinator = new SessionRuntimeCoordinator(
+    stopHarness.catalog,
+    stopHarness.agents,
+    stopHarness.sender,
+  );
+  const stopGeneration = stopCoordinator.bindExistingAgent("session-1", "agent-a");
+  const stopped = await stopCoordinator.stopRuntime({
+    sessionId: "session-1",
+    agentId: "agent-a",
+    runtimeGeneration: stopGeneration,
+  });
+  assert.equal(stopped.ok, true);
+  assert.equal(stopCoordinator.getTarget("session-1"), undefined);
+
+  const restartHarness = createHarness({ tabs: [{ ...baseTab }] });
+  const restartCoordinator = new SessionRuntimeCoordinator(
+    restartHarness.catalog,
+    restartHarness.agents,
+    restartHarness.sender,
+  );
+  const restartGeneration = restartCoordinator.bindExistingAgent("session-1", "agent-a");
+  const restarted = await restartCoordinator.restartRuntime({
+    sessionId: "session-1",
+    agentId: "agent-a",
+    runtimeGeneration: restartGeneration,
+  });
+  assert.equal(restarted.ok, true);
+  assert.equal(restarted.value.previousTarget.runtimeGeneration, restartGeneration);
+  assert.equal(restarted.value.runtime.agentId, "agent-restarted");
+  assert.equal(restarted.value.runtime.runtimeGeneration > restartGeneration, true);
+  assert.equal(restarted.value.session.id, "session-1");
+});

@@ -12,8 +12,10 @@ import type {
 	FeishuChatBinding,
 	FeishuChatMessage,
 	FeishuConnectInput,
+	FeishuSessionBotResult,
 	FeishuTestResult,
 } from "../../../shared/types";
+import { t } from "../i18n";
 
 type PiDesktopFeishuApi = {
 	connect: (input: FeishuConnectInput) => Promise<{ success: boolean; message: string }>;
@@ -35,12 +37,35 @@ type PiDesktopFeishuApi = {
 	onBindingsChanged: (callback: (bindings: FeishuChatBinding[]) => void) => () => void;
 	onBotsChanged: (callback: (bots: FeishuBotConfig[]) => void) => () => void;
 	onWhoamiResult: (callback: (openId: string) => void) => () => void;
-	sessionBotGet: (agentId: string) => Promise<string | null>;
-	sessionBotSet: (agentId: string, botId: string | null) => Promise<{ success: boolean; message?: string; chatId?: string }>;
+	sessionBotGet: (sessionId: string) => Promise<string | null>;
+	sessionBotSet: (sessionId: string, botId: string | null) => Promise<FeishuSessionBotResult>;
 };
 
 function getApi(): PiDesktopFeishuApi | undefined {
 	return (window as unknown as { piDesktop?: { feishu?: PiDesktopFeishuApi } }).piDesktop?.feishu;
+}
+
+export function retainBoundSessionBots(
+	current: Record<string, string>,
+	bindings: FeishuChatBinding[],
+): Record<string, string> {
+	const boundSessionIds = new Set(bindings.map((binding) => binding.sessionId));
+	return Object.fromEntries(
+		Object.entries(current).filter(([sessionId]) => boundSessionIds.has(sessionId)),
+	);
+}
+
+export function applySessionBotAssignment(
+	current: Record<string, string>,
+	sessionId: string,
+	botId: string | null,
+	result: FeishuSessionBotResult,
+): Record<string, string> {
+	if (!result.success) return current;
+	if (botId) return { ...current, [sessionId]: botId };
+	const next = { ...current };
+	delete next[sessionId];
+	return next;
 }
 
 export function useFeishuBridge() {
@@ -53,7 +78,7 @@ export function useFeishuBridge() {
 	const [error, setError] = useState<string | null>(null);
 	/** 当前连接的 Bot ID，从 status 的 botId 或通过 activeBotId 跟踪 */
 	const [activeBotId, setActiveBotId] = useState<string | undefined>(undefined);
-	/** Agent → Bot 映射缓存 */
+	/** Stable Session → Bot 映射缓存 */
 	const [sessionBotMap, setSessionBotMap] = useState<Record<string, string>>({});
 
 	const api = getApi();
@@ -74,7 +99,7 @@ export function useFeishuBridge() {
 				setBots(b);
 				setBindings(bi);
 			} catch (e) {
-				console.error("飞书状态加载失败:", e);
+				console.error("[Feishu] Failed to load bridge state", e);
 			}
 		})();
 	}, [api]);
@@ -103,18 +128,9 @@ export function useFeishuBridge() {
 			setBindings(bi);
 			// 绑定列表变更时，同步清理 sessionBotMap 中已失效的条目：
 			// 某个会话的绑定被移除（如从配置页断开关联）后，
-			// 其 agentId 不再出现在 bindings 中，应在内存缓存中同步清除。
+			// 其 stable sessionId 不再出现在 bindings 中，应在内存缓存中同步清除。
 			// 否则 getSessionBot 会命中旧缓存，UI 仍显示「已连接」。
-			const boundSessionIds = new Set(bi.map((b) => b.sessionId));
-			setSessionBotMap((prev) => {
-				const next: Record<string, string> = {};
-				for (const [agentId, botId] of Object.entries(prev)) {
-					if (boundSessionIds.has(agentId)) {
-						next[agentId] = botId;
-					}
-				}
-				return next;
-			});
+			setSessionBotMap((prev) => retainBoundSessionBots(prev, bi));
 		});
 	}, [api]);
 
@@ -129,8 +145,8 @@ export function useFeishuBridge() {
 			setSessionBotMap((current) => {
 				const aliveIds = new Set(nextBots.map((b) => b.id));
 				const next: Record<string, string> = {};
-				for (const [agentId, botId] of Object.entries(current)) {
-					if (aliveIds.has(botId)) next[agentId] = botId;
+				for (const [sessionId, botId] of Object.entries(current)) {
+					if (aliveIds.has(botId)) next[sessionId] = botId;
 				}
 				return next;
 			});
@@ -138,48 +154,40 @@ export function useFeishuBridge() {
 	}, [api]);
 
 	/**
-	 * 读取某个 Agent 的 Bot 分配
+	 * 读取某个稳定 Session 的 Bot 分配
 	 */
-	const getSessionBot = useCallback(async (agentId: string): Promise<string | undefined> => {
+	const getSessionBot = useCallback(async (sessionId: string): Promise<string | undefined> => {
 		if (!api) return undefined;
 		// 先查缓存
-		if (sessionBotMap[agentId]) return sessionBotMap[agentId];
-		const botId = await api.sessionBotGet(agentId);
+		if (sessionBotMap[sessionId]) return sessionBotMap[sessionId];
+		const botId = await api.sessionBotGet(sessionId);
 		if (botId) {
-			setSessionBotMap((prev) => ({ ...prev, [agentId]: botId }));
+			setSessionBotMap((prev) => ({ ...prev, [sessionId]: botId }));
 		}
 		return botId ?? undefined;
 	}, [api, sessionBotMap]);
 
 	/**
-	 * 设置某个 Agent 使用的 Bot ID
+	 * 设置某个稳定 Session 使用的 Bot ID
 	 */
-	const setSessionBot = useCallback(async (agentId: string, botId: string | null) => {
-		if (!api) return { success: false, message: "API 未就绪" };
-		const result = await api.sessionBotSet(agentId, botId);
+	const setSessionBot = useCallback(async (sessionId: string, botId: string | null) => {
+		if (!api) return { success: false, message: t("feishu.apiUnavailable") };
+		const result = await api.sessionBotSet(sessionId, botId);
 		// 仅在主进程真正绑定成功后更新本地映射，避免 UI 假阳性“已连接”。
-		if (result?.success !== false) {
-			setSessionBotMap((prev) => {
-				if (botId) {
-					return { ...prev, [agentId]: botId };
-				}
-				const next = { ...prev };
-				delete next[agentId];
-				return next;
-			});
-		}
-		return result ?? { success: true };
+		setSessionBotMap((prev) => applySessionBotAssignment(prev, sessionId, botId, result));
+		return result;
 	}, [api]);
 
 	const connectTemp = useCallback(async (input: FeishuConnectInput) => {
-		if (!api) return { success: false, message: "API 未就绪" };
+		if (!api) return { success: false, message: t("feishu.apiUnavailable") };
 		setConnecting(true);
 		setError(null);
 		try {
 			const result = await api.connectTemp(input);
 			return result;
 		} catch (e) {
-			const msg = e instanceof Error ? e.message : String(e);
+			console.error("[Feishu] Temporary connection failed", e);
+			const msg = t("config.im.connectFailed");
 			setError(msg);
 			return { success: false, message: msg };
 		} finally {
@@ -188,7 +196,7 @@ export function useFeishuBridge() {
 	}, [api]);
 
 	const connect = useCallback(async (input: FeishuConnectInput) => {
-		if (!api) return { success: false, message: "API 未就绪" };
+		if (!api) return { success: false, message: t("feishu.apiUnavailable") };
 		setConnecting(true);
 		setError(null);
 		try {
@@ -202,7 +210,8 @@ export function useFeishuBridge() {
 			}
 			return result;
 		} catch (e) {
-			const msg = e instanceof Error ? e.message : String(e);
+			console.error("[Feishu] Connection failed", e);
+			const msg = t("config.im.connectFailed");
 			setError(msg);
 			return { success: false, message: msg };
 		} finally {
@@ -214,7 +223,7 @@ export function useFeishuBridge() {
 	 * 使用已保存的 Bot 配置连接（自动解密 Secret）
 	 */
 	const connectByBot = useCallback(async (botId: string) => {
-		if (!api) return { success: false, message: "API 未就绪" };
+		if (!api) return { success: false, message: t("feishu.apiUnavailable") };
 		setConnecting(true);
 		setError(null);
 		try {
@@ -234,7 +243,8 @@ export function useFeishuBridge() {
 			}
 			return result;
 		} catch (e) {
-			const msg = e instanceof Error ? e.message : String(e);
+			console.error("[Feishu] Saved Bot connection failed", e);
+			const msg = t("config.im.connectFailed");
 			setError(msg);
 			return { success: false, message: msg };
 		} finally {
@@ -250,7 +260,7 @@ export function useFeishuBridge() {
 	}, [api]);
 
 	const addBot = useCallback(async (input: FeishuConnectInput) => {
-		if (!api) return { success: false, error: "API 未就绪" };
+		if (!api) return { success: false, error: t("feishu.apiUnavailable") };
 		const result = await api.botAdd(input);
 		if (result.success) {
 			setBots((prev) => [...prev, result.bot!]);
@@ -280,10 +290,13 @@ export function useFeishuBridge() {
 	}, [api]);
 
 	const testConnection = useCallback(async (appId: string, appSecret: string) => {
-		if (!api) return { success: false, message: "API 未就绪" };
+		if (!api) return { success: false, message: t("feishu.apiUnavailable") };
 		setTesting(true);
 		try {
 			return await api.testConnection(appId, appSecret);
+		} catch (e) {
+			console.error("[Feishu] Connection test failed", e);
+			return { success: false, message: t("config.im.testFailed") };
 		} finally {
 			setTesting(false);
 		}

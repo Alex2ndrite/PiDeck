@@ -4,7 +4,6 @@ import type {
 	YaoPromptListResult,
 	YaoPromptDetailResult,
 	AgentRuntimeState,
-	AgentTab,
 	AppInfo,
 	AppLogEntry,
 	AppLogLevel,
@@ -23,7 +22,11 @@ import type {
 	OpenCodeSessionSummary,
 	ConfigFileDiagnostic,
 	DraftMeta,
-	CreateAgentInput,
+	CreateSessionDraftInput,
+	CreateAnonymousSessionInput,
+	CreateAnonymousSessionResult,
+	UpdateSessionRecordInput,
+	SessionRecord,
 	CreatePiSkillInput,
 	CreateProjectSkillInput,
 	ProjectResourceListResult,
@@ -40,9 +43,10 @@ import type {
 	FeishuChatBinding,
 	FeishuChatMessage,
 	FeishuConnectInput,
+	FeishuSessionBotResult,
 	FeishuTestResult,
 	FileTreeNode,
-	ForkMessage,
+	ImageContent,
 	GitBranchInfo,
 	ImageContent,
 	CommitDetail,
@@ -70,13 +74,19 @@ import type {
 	PromptStoreSearchResult,
 	PromptStoreItem,
 	ScratchPadData,
-	SendPromptInput,
-	SendPromptResult,
+	SendSessionPromptInput,
+	SendSessionPromptResult,
+	SessionCommandResult,
+	SessionRuntimeEvent,
+	SessionRuntimeInfo,
+	SessionRuntimeReplacement,
+	SessionRuntimeTarget,
+	SessionTargetedValue,
+	SessionUiResponseInput,
 	SessionSummary,
 	TerminalDataEvent,
 	TerminalExitEvent,
 	TerminalTab,
-	ThinkingUpdate,
 } from "../shared/types";
 
 /**
@@ -250,6 +260,15 @@ const api = {
 			ipcRenderer.invoke(ipcChannels.projectsListModels, projectId) as Promise<
 				AvailableModel[]
 			>,
+		onTrustRequest: (callback: (request: {
+			requestId: string;
+			cwd: string;
+			projectName: string;
+		}) => void) => subscribe(ipcChannels.projectsTrustRequest, callback),
+		respondTrustRequest: (
+			requestId: string,
+			choice: "trust-remember" | "trust-session" | "deny",
+		) => ipcRenderer.invoke(ipcChannels.projectsTrustResponse, requestId, choice) as Promise<void>,
 	},
 	projectResources: {
 		list: (projectId: string) =>
@@ -285,14 +304,10 @@ const api = {
 			ipcRenderer.invoke(ipcChannels.filesWriteContent, path, content) as Promise<void>,
 		delete: (path: string, recursive?: boolean) =>
 			ipcRenderer.invoke(ipcChannels.filesDelete, path, recursive) as Promise<void>,
-		rename: (path: string, newName: string) =>
-			ipcRenderer.invoke(ipcChannels.filesRename, path, newName) as Promise<string>,
 		create: (parentDir: string, name: string, type: "file" | "directory") =>
 			ipcRenderer.invoke(ipcChannels.filesCreate, parentDir, name, type) as Promise<string>,
-		copy: (sourcePaths: string[], targetDir: string) =>
-			ipcRenderer.invoke(ipcChannels.filesCopy, sourcePaths, targetDir) as Promise<string[]>,
-		move: (sourcePaths: string[], targetDir: string) =>
-			ipcRenderer.invoke(ipcChannels.filesMove, sourcePaths, targetDir) as Promise<string[]>,
+		rename: (path: string, newName: string) =>
+			ipcRenderer.invoke(ipcChannels.filesRename, path, newName) as Promise<string>,
 		/**
 		 * Electron 32+ 已移除 File.path，拖拽/粘贴得到的 File 必须经 webUtils 解析本地路径。
 		 * 同步返回，可在 drop/paste 事件中立即使用。
@@ -310,45 +325,138 @@ const api = {
 		 */
 		getClipboardPaths: () => readClipboardFilePaths(),
 	},
+	dialog: {
+		/**
+		 * 打开系统原生文件/文件夹选择器，支持多选。
+		 * 返回选中路径列表，取消时返回空数组。
+		 */
+		pickFiles: (options?: { title?: string }) =>
+			ipcRenderer.invoke(ipcChannels.dialogPickFiles, options) as Promise<string[]>,
+	},
 	sessions: {
 		list: (projectId?: string) =>
 			ipcRenderer.invoke(ipcChannels.sessionsList, projectId) as Promise<
 				SessionSummary[]
 			>,
-		rename: (filePath: string, newName: string) =>
+		listCatalog: (projectId: string) =>
+			ipcRenderer.invoke(ipcChannels.sessionsCatalogList, projectId) as Promise<
+				SessionRecord[]
+			>,
+		createDraft: (input: CreateSessionDraftInput) =>
+			ipcRenderer.invoke(ipcChannels.sessionsCatalogCreateDraft, input) as Promise<SessionRecord>,
+		createAnonymous: (input: CreateAnonymousSessionInput) =>
+			ipcRenderer.invoke(ipcChannels.sessionsCreateAnonymous, input) as Promise<CreateAnonymousSessionResult>,
+		updateRecord: (sessionId: string, patch: UpdateSessionRecordInput) =>
 			ipcRenderer.invoke(
-				ipcChannels.sessionsRename,
-				filePath,
-				newName,
-			) as Promise<void>,
-		copy: (projectId: string, filePath: string) =>
-			ipcRenderer.invoke(ipcChannels.sessionsCopy, projectId, filePath) as Promise<{
+				ipcChannels.sessionsCatalogUpdate,
+				sessionId,
+				patch,
+			) as Promise<SessionRecord>,
+		deleteRecord: (sessionId: string) =>
+			ipcRenderer.invoke(ipcChannels.sessionsCatalogDelete, sessionId) as Promise<boolean>,
+		readRecordMessages: (sessionId: string) =>
+			ipcRenderer.invoke(ipcChannels.sessionsCatalogReadMessages, sessionId) as Promise<
+				import("../shared/types").ChatMessage[]
+			>,
+		readRecordMessagePage: (sessionId: string, before?: number, pageSize?: number) =>
+			ipcRenderer.invoke(
+				ipcChannels.sessionsCatalogReadMessagePage,
+				sessionId,
+				before,
+				pageSize,
+			) as Promise<import("../shared/types").SessionMessagePage>,
+		readReferenceMessages: (sessionId: string) =>
+			ipcRenderer.invoke(
+				ipcChannels.sessionsCatalogReadReferenceMessages,
+				sessionId,
+			) as Promise<Array<{ role: string; content: string; timestamp: number }>>,
+		copyRecord: (sessionId: string) =>
+			ipcRenderer.invoke(ipcChannels.sessionsCatalogCopy, sessionId) as Promise<{
 				cancelled?: boolean;
-				sessionPath?: string;
+				targetSessionId?: string;
 			}>,
-		exportHtml: (projectId: string, filePath: string) =>
-			ipcRenderer.invoke(
-				ipcChannels.sessionsExportHtml,
-				projectId,
-				filePath,
-			) as Promise<{
+		exportRecordHtml: (sessionId: string) =>
+			ipcRenderer.invoke(ipcChannels.sessionsCatalogExportHtml, sessionId) as Promise<{
 				path: string;
 			}>,
-		delete: (filePath: string) =>
-			ipcRenderer.invoke(ipcChannels.sessionsDelete, filePath) as Promise<void>,
-		readMessages: (filePath: string) =>
-			ipcRenderer.invoke(ipcChannels.sessionsReadMessages, filePath) as Promise<
-				Array<{ role: string; content: string; timestamp: number }>
+		sendPrompt: (input: SendSessionPromptInput) =>
+			ipcRenderer.invoke(ipcChannels.sessionsSendPrompt, input) as Promise<SendSessionPromptResult>,
+		sendUiResponse: (input: SessionUiResponseInput) =>
+			ipcRenderer.invoke(ipcChannels.sessionsUiResponse, input) as Promise<void>,
+		onRuntimeEvent: (callback: (event: SessionRuntimeEvent) => void) =>
+			subscribe(ipcChannels.sessionsRuntimeEvent, callback),
+		listRuntimes: () =>
+			ipcRenderer.invoke(ipcChannels.sessionsRuntimeList) as Promise<SessionRuntimeInfo[]>,
+		stopRuntime: (target: SessionRuntimeTarget) =>
+			ipcRenderer.invoke(ipcChannels.sessionsRuntimeStop, target) as Promise<
+				SessionCommandResult<SessionRuntimeTarget>
 			>,
-		readSessionMeta: (filePath: string) =>
-			ipcRenderer.invoke(ipcChannels.sessionsReadMeta, filePath) as Promise<{
-				provider?: string;
-				modelId?: string;
-				thinkingLevel?: string;
-			}>,
-		readChatMessages: (filePath: string) =>
-			ipcRenderer.invoke(ipcChannels.sessionsReadChatMessages, filePath) as Promise<
-				import("../shared/types").ChatMessage[]
+		abortRuntime: (target: SessionRuntimeTarget) =>
+			ipcRenderer.invoke(ipcChannels.sessionsRuntimeAbort, target) as Promise<
+				SessionCommandResult<SessionTargetedValue<void>>
+			>,
+		restartRuntime: (target: SessionRuntimeTarget) =>
+			ipcRenderer.invoke(ipcChannels.sessionsRuntimeRestart, target) as Promise<
+				SessionCommandResult<SessionRuntimeReplacement>
+			>,
+		compactRuntime: (target: SessionRuntimeTarget, prompt?: string) =>
+			ipcRenderer.invoke(ipcChannels.sessionsRuntimeCompact, target, prompt) as Promise<
+				SessionCommandResult<SessionTargetedValue<AgentRuntimeState>>
+			>,
+		getRuntimeState: (target: SessionRuntimeTarget) =>
+			ipcRenderer.invoke(ipcChannels.sessionsRuntimeState, target) as Promise<
+				SessionCommandResult<SessionTargetedValue<AgentRuntimeState>>
+			>,
+		listRuntimeCommands: (target: SessionRuntimeTarget) =>
+			ipcRenderer.invoke(ipcChannels.sessionsRuntimeCommands, target) as Promise<
+				SessionCommandResult<SessionTargetedValue<PiCommand[]>>
+			>,
+		exportRuntimeHtml: (target: SessionRuntimeTarget) =>
+			ipcRenderer.invoke(ipcChannels.sessionsRuntimeExportHtml, target) as Promise<
+				SessionCommandResult<SessionTargetedValue<unknown>>
+			>,
+		editRuntimeMessage: (target: SessionRuntimeTarget, messageId: string, newText: string) =>
+			ipcRenderer.invoke(
+				ipcChannels.sessionsRuntimeEditMessage,
+				target,
+				messageId,
+				newText,
+			) as Promise<SessionCommandResult<SessionTargetedValue<void>>>,
+		deleteRuntimeMessage: (target: SessionRuntimeTarget, messageId: string) =>
+			ipcRenderer.invoke(
+				ipcChannels.sessionsRuntimeDeleteMessage,
+				target,
+				messageId,
+			) as Promise<SessionCommandResult<SessionTargetedValue<void>>>,
+		prepareRuntimeResend: (target: SessionRuntimeTarget, messageId: string) =>
+			ipcRenderer.invoke(
+				ipcChannels.sessionsRuntimePrepareResend,
+				target,
+				messageId,
+			) as Promise<SessionCommandResult<SessionTargetedValue<{
+				text: string;
+				images?: ImageContent[];
+			}>>>,
+		setRuntimeModel: (target: SessionRuntimeTarget, provider: string, modelId: string) =>
+			ipcRenderer.invoke(
+				ipcChannels.sessionsRuntimeSetModel,
+				target,
+				provider,
+				modelId,
+			) as Promise<SessionCommandResult<SessionTargetedValue<AgentRuntimeState>>>,
+		setRuntimeThinking: (target: SessionRuntimeTarget, level: string) =>
+			ipcRenderer.invoke(
+				ipcChannels.sessionsRuntimeSetThinking,
+				target,
+				level,
+			) as Promise<SessionCommandResult<SessionTargetedValue<AgentRuntimeState>>>,
+		cloneRuntime: (target: SessionRuntimeTarget) =>
+			ipcRenderer.invoke(ipcChannels.sessionsRuntimeClone, target) as Promise<
+				SessionCommandResult<{
+					cancelled?: boolean;
+					targetSessionId?: string;
+					[key: string]: unknown;
+				}>
 			>,
 	},
 	codexSessions: {
@@ -539,6 +647,18 @@ const api = {
 				hash,
 				mode,
 			) as Promise<void>,
+	/** git pull — 从远程拉取并合并到当前分支 */
+	pull: (projectId: string) =>
+		ipcRenderer.invoke(
+			ipcChannels.gitPull,
+			projectId,
+		) as Promise<void>,
+	/** git push — 推送当前分支到远程 */
+	push: (projectId: string) =>
+		ipcRenderer.invoke(
+			ipcChannels.gitPush,
+			projectId,
+		) as Promise<void>,
 		dropCommit: (projectId: string, hash: string) =>
 			ipcRenderer.invoke(
 				ipcChannels.gitDropCommit,
@@ -619,18 +739,18 @@ const api = {
 			ipcRenderer.invoke(ipcChannels.logsSize) as Promise<number>,
 	},
 	rpcLogs: {
-		getSize: (agentId?: string) =>
-			ipcRenderer.invoke(ipcChannels.rpcLogsGetSize, agentId) as Promise<number>,
-		get: (options?: { agentId?: string; days?: number; limit?: number }) =>
+		getSize: (target?: SessionRuntimeTarget) =>
+			ipcRenderer.invoke(ipcChannels.rpcLogsGetSize, target) as Promise<number>,
+		get: (options?: { target?: SessionRuntimeTarget; days?: number; limit?: number }) =>
 			ipcRenderer.invoke(ipcChannels.rpcLogsGet, options) as Promise<Array<{ id: string; agentId: string; direction: string; summary: string; time: number; data?: unknown }>>,
-		clear: (agentId?: string) =>
-			ipcRenderer.invoke(ipcChannels.rpcLogsClear, agentId) as Promise<void>,
-		setLogging: (agentId: string, enabled: boolean) =>
-			ipcRenderer.invoke(ipcChannels.rpcLoggingSet, agentId, enabled) as Promise<boolean>,
-		getLogging: (agentId: string) =>
-			ipcRenderer.invoke(ipcChannels.rpcLoggingGet, agentId) as Promise<boolean>,
-		openFile: (agentId: string) =>
-			ipcRenderer.invoke(ipcChannels.rpcLogsOpenFile, agentId) as Promise<void>,
+		clear: (target?: SessionRuntimeTarget) =>
+			ipcRenderer.invoke(ipcChannels.rpcLogsClear, target) as Promise<void>,
+		setLogging: (target: SessionRuntimeTarget, enabled: boolean) =>
+			ipcRenderer.invoke(ipcChannels.rpcLoggingSet, target, enabled) as Promise<boolean>,
+		getLogging: (target: SessionRuntimeTarget) =>
+			ipcRenderer.invoke(ipcChannels.rpcLoggingGet, target) as Promise<boolean>,
+		openFile: (target: SessionRuntimeTarget) =>
+			ipcRenderer.invoke(ipcChannels.rpcLogsOpenFile, target) as Promise<void>,
 	},
 	app: {
 		info: () => ipcRenderer.invoke(ipcChannels.appInfo) as Promise<AppInfo>,
@@ -753,8 +873,7 @@ const api = {
 			ipcRenderer.invoke(ipcChannels.yaoPromptsImport, slug, category) as Promise<PiPromptTemplateSummary>,
 	},
 	extensions: {
-		// forceRefresh=true 时跳过主进程缓存并补充 npm 版本信息。
-		list: (forceRefresh = false) =>
+		list: (forceRefresh?: boolean) =>
 			ipcRenderer.invoke(ipcChannels.extensionsList, forceRefresh) as Promise<PiExtensionListResult>,
 		uninstall: (source: string, scope?: "user" | "project" | "unknown") =>
 			ipcRenderer.invoke(ipcChannels.extensionsUninstall, source, scope) as Promise<void>,
@@ -844,9 +963,6 @@ const api = {
 				success: boolean;
 				models?: Array<{ id: string; name?: string }>;
 				error?: string;
-				requestUrl?: string;
-				sessionBaseUrlNeedsVersion?: boolean;
-				/** 检测走通版本路径时，建议写入配置的 baseUrl（含 /v1） */
 				suggestedBaseUrl?: string;
 			}>,
 		/** 快速测试 provider 连接：发送一条最小请求验证配置是否正常 */
@@ -869,169 +985,8 @@ const api = {
 				error?: string;
 				requestUrl?: string;
 				requestBody?: string;
-				sessionBaseUrlNeedsVersion?: boolean;
 				suggestedBaseUrl?: string;
 			}>,
-	},
-	agents: {
-		list: () =>
-			ipcRenderer.invoke(ipcChannels.agentsList) as Promise<AgentTab[]>,
-		create: (input: CreateAgentInput) =>
-			ipcRenderer.invoke(ipcChannels.agentsCreate, input) as Promise<AgentTab>,
-		rename: (agentId: string, name: string) =>
-			ipcRenderer.invoke(
-				ipcChannels.agentsRename,
-				agentId,
-				name,
-			) as Promise<AgentTab>,
-		stop: (agentId: string) =>
-			ipcRenderer.invoke(ipcChannels.agentsStop, agentId) as Promise<void>,
-		prompt: (input: SendPromptInput) =>
-			ipcRenderer.invoke(ipcChannels.agentsPrompt, input) as Promise<SendPromptResult>,
-		abort: (agentId: string) =>
-			ipcRenderer.invoke(ipcChannels.agentsAbort, agentId) as Promise<void>,
-		exportHtml: (agentId: string) =>
-			ipcRenderer.invoke(ipcChannels.agentsExportHtml, agentId) as Promise<{
-				path: string;
-			}>,
-		getForkMessages: (agentId: string) =>
-			ipcRenderer.invoke(ipcChannels.agentsForkMessages, agentId) as Promise<
-				ForkMessage[]
-			>,
-		forkSession: (agentId: string, entryId: string) =>
-			ipcRenderer.invoke(
-				ipcChannels.agentsForkSession,
-				agentId,
-				entryId,
-			) as Promise<{ text?: string; cancelled?: boolean }>,
-		cloneSession: (agentId: string) =>
-			ipcRenderer.invoke(ipcChannels.agentsCloneSession, agentId) as Promise<{
-				cancelled?: boolean;
-			}>,
-		switchSession: (agentId: string, sessionPath: string) =>
-			ipcRenderer.invoke(
-				ipcChannels.agentsSwitchSession,
-				agentId,
-				sessionPath,
-			) as Promise<{ cancelled?: boolean }>,
-		editMessage: (agentId: string, messageId: string, text: string) =>
-			ipcRenderer.invoke(
-				ipcChannels.agentsEditMessage,
-				agentId,
-				messageId,
-				text,
-			) as Promise<void>,
-		deleteMessage: (agentId: string, messageId: string) =>
-			ipcRenderer.invoke(
-				ipcChannels.agentsDeleteMessage,
-				agentId,
-				messageId,
-			) as Promise<void>,
-		// 同文件重发准备：截断原用户消息及其后续，返回可重新 prompt 的原文。
-		prepareResend: (agentId: string, messageId: string) =>
-			ipcRenderer.invoke(
-				ipcChannels.agentsPrepareResend,
-				agentId,
-				messageId,
-			) as Promise<{ text: string; images?: ImageContent[] }>,
-		reload: (agentId: string) =>
-			ipcRenderer.invoke(ipcChannels.agentsReload, agentId) as Promise<void>,
-		restart: (agentId: string) =>
-			ipcRenderer.invoke(
-				ipcChannels.agentsRestart,
-				agentId,
-			) as Promise<AgentTab>,
-		compact: (agentId: string, prompt?: string) =>
-			ipcRenderer.invoke(
-				ipcChannels.agentsCompact,
-				agentId,
-				prompt,
-			) as Promise<AgentRuntimeState>,
-		runtimeState: (agentId: string) =>
-			ipcRenderer.invoke(
-				ipcChannels.agentsRuntimeState,
-				agentId,
-			) as Promise<AgentRuntimeState>,
-		cycleModel: (agentId: string) =>
-			ipcRenderer.invoke(
-				ipcChannels.agentsCycleModel,
-				agentId,
-			) as Promise<AgentRuntimeState>,
-		availableModels: (agentId: string) =>
-			ipcRenderer.invoke(ipcChannels.agentsAvailableModels, agentId) as Promise<
-				AvailableModel[]
-			>,
-		setModel: (agentId: string, provider: string, modelId: string) =>
-			ipcRenderer.invoke(
-				ipcChannels.agentsSetModel,
-				agentId,
-				provider,
-				modelId,
-			) as Promise<AgentRuntimeState>,
-		/** 刷新模型配置，让运行中的 agent 重新加载 models.json */
-		refreshModels: (agentId: string) =>
-			ipcRenderer.invoke(
-				ipcChannels.agentsRefreshModels,
-				agentId,
-			) as Promise<AgentRuntimeState>,
-		cycleThinking: (agentId: string) =>
-			ipcRenderer.invoke(
-				ipcChannels.agentsCycleThinking,
-				agentId,
-			) as Promise<AgentRuntimeState>,
-		setThinking: (agentId: string, level: string) =>
-			ipcRenderer.invoke(
-				ipcChannels.agentsSetThinking,
-				agentId,
-				level,
-			) as Promise<AgentRuntimeState>,
-		commands: (agentId: string) =>
-			ipcRenderer.invoke("agents:commands", agentId) as Promise<PiCommand[]>,
-		onState: (callback: (tabs: AgentTab[]) => void) =>
-			subscribe(ipcChannels.agentsState, callback),
-		/** 桌面宠物点击跳转：主进程通知主窗切换到活跃 Agent tab */
-		onFocusTarget: (callback: (target: { agentId: string }) => void) =>
-			subscribe(ipcChannels.petFocusAgentTarget, callback),
-		onMessages: (
-			callback: (payload: { agentId: string; messages: ChatMessage[] }) => void,
-		) => subscribe(ipcChannels.agentsMessage, callback),
-		onLog: (callback: (payload: { agentId: string; text: string }) => void) =>
-			subscribe(ipcChannels.agentsLog, callback),
-		onThinking: (
-			callback: (payload: ThinkingUpdate) => void,
-		) => subscribe(ipcChannels.agentsThinking, callback),
-		/** 主进程轻量 toast 通知（如 abort 已请求停止） */
-		onNotice: (
-			callback: (payload: {
-				agentId?: string;
-				message: string;
-				i18nKey?: string;
-				kind?: "info" | "warning" | "error";
-				duration?: number;
-			}) => void,
-		) => subscribe(ipcChannels.agentsNotice, callback),
-		onRpcLog: (
-			callback: (payload: { agentId: string; direction: string; summary: string; data: unknown }) => void,
-		) => subscribe(ipcChannels.agentsRpcLog, callback),
-		onRuntimeState: (
-			callback: (payload: {
-				agentId: string;
-				state: AgentRuntimeState;
-			}) => void,
-		) => subscribe(ipcChannels.agentsRuntimeState, callback),
-		/** 向 Agent 发送扩展 UI 响应（用户回答了 select/confirm/input/editor 对话框） */
-		// value 允许 null：普通 select 点叉取消时发 value:null，避免 cancelled→undefined 被旧扩展回落第一项
-		sendUiResponse: (agentId: string, requestId: string, response: { value?: string | boolean | null; cancelled?: boolean; confirmed?: boolean }) =>
-			ipcRenderer.invoke(ipcChannels.agentsUiResponse, agentId, requestId, response) as Promise<void>,
-		/** 监听 Agent 扩展 UI 请求（模型通过扩展调用了 ctx.ui.select/confirm/input/editor） */
-		onUiRequest: (callback: (request: { agentId: string; requestId: string; method: string; title: string; options?: string[]; placeholder?: string; prefill?: string; allowOther?: boolean; completed?: boolean; value?: string; cancelled?: boolean; message?: string; notifyType?: "info" | "warning" | "error"; text?: string; widgetKey?: string; widgetLines?: string[]; widgetPlacement?: "aboveEditor" | "belowEditor" }) => void) =>
-			subscribe(ipcChannels.agentsUiRequest, callback),
-		/** 监听项目信任确认请求（主进程在启动 Agent 前对含 .pi 资源的项目发起） */
-		onTrustRequest: (callback: (request: { requestId: string; cwd: string; projectName: string }) => void) =>
-			subscribe(ipcChannels.agentsTrustRequest, callback),
-		/** 回传用户对项目信任确认弹窗的选择（trust-remember/trust-session/deny） */
-		respondTrustRequest: (requestId: string, choice: "trust-remember" | "trust-session" | "deny") =>
-			ipcRenderer.invoke(ipcChannels.agentsTrustResponse, requestId, choice) as Promise<void>,
 	},
 	pet: {
 		/** 宠物窗监听主进程推送的聚合状态 */
@@ -1052,6 +1007,8 @@ const api = {
 		/** 点击宠物跳转活跃 Agent */
 		focusAgent: () =>
 			ipcRenderer.invoke(ipcChannels.petFocusAgent) as Promise<void>,
+		onFocusTarget: (callback: (target: { sessionId: string }) => void) =>
+			subscribe(ipcChannels.petFocusAgentTarget, callback),
 		/** 主进程推送当前选中宠物的 manifest，据此加载 spritesheet */
 		onSprite: (callback: (manifest: PetManifest) => void) =>
 			subscribe(ipcChannels.petCurrentSprite, callback),
@@ -1085,16 +1042,16 @@ const api = {
 		contextMenu: () => ipcRenderer.invoke(ipcChannels.petContextMenu) as Promise<void>,
 	},
 	terminal: {
-		list: (agentId: string) =>
-			ipcRenderer.invoke(ipcChannels.terminalList, agentId) as Promise<
+		list: (target: SessionRuntimeTarget) =>
+			ipcRenderer.invoke(ipcChannels.terminalList, target) as Promise<
 				TerminalTab[]
 			>,
-		ensure: (agentId: string, cwd?: string) =>
-			ipcRenderer.invoke(ipcChannels.terminalEnsure, agentId, cwd) as Promise<
+		ensure: (target: SessionRuntimeTarget) =>
+			ipcRenderer.invoke(ipcChannels.terminalEnsure, target) as Promise<
 				TerminalTab[]
 			>,
-		create: (agentId: string, shell?: string, cwd?: string) =>
-			ipcRenderer.invoke(ipcChannels.terminalCreate, agentId, shell, cwd) as Promise<
+		create: (target: SessionRuntimeTarget) =>
+			ipcRenderer.invoke(ipcChannels.terminalCreate, target) as Promise<
 				TerminalTab
 			>,
 		input: (tabId: string, data: string) =>
@@ -1124,11 +1081,13 @@ const api = {
 			ipcRenderer.invoke(ipcChannels.feishuConnect, input) as Promise<{
 				success: boolean;
 				message: string;
+				detail?: string;
 			}>,
 		connectTemp: (input: FeishuConnectInput) =>
 			ipcRenderer.invoke(ipcChannels.feishuConnectTemp, input) as Promise<{
 				success: boolean;
 				message: string;
+				detail?: string;
 				botInfo?: { id: string; name: string };
 			}>,
 		disconnect: () =>
@@ -1137,6 +1096,7 @@ const api = {
 			ipcRenderer.invoke(ipcChannels.feishuConnectByBot, botId) as Promise<{
 				success: boolean;
 				message: string;
+				detail?: string;
 			}>,
 		statusRequest: () =>
 			ipcRenderer.invoke(ipcChannels.feishuStatusRequest) as Promise<FeishuBridgeStatus>,
@@ -1172,44 +1132,17 @@ const api = {
 			subscribe(ipcChannels.feishuWhoamiResult, callback),
 		onBotsChanged: (callback: (bots: FeishuBotConfig[]) => void) =>
 			subscribe(ipcChannels.feishuBotsChanged, callback),
-		sessionBotGet: (agentId: string) =>
-			ipcRenderer.invoke(ipcChannels.feishuSessionBotGet, agentId) as Promise<string | null>,
-		sessionBotSet: (agentId: string, botId: string | null) =>
-			ipcRenderer.invoke(ipcChannels.feishuSessionBotSet, agentId, botId) as Promise<{
-				success: boolean;
-				message?: string;
-				chatId?: string;
-			}>,
-	},
-
-	// ===== 系统文件选择器 =====
-	dialog: {
-		/**
-		 * 打开系统原生文件/文件夹选择器，支持多选。
-		 * 返回选中路径列表，取消时返回空数组。
-		 */
-		pickFiles: (options?: { title?: string }) =>
-			ipcRenderer.invoke(ipcChannels.dialogPickFiles, options) as Promise<string[]>,
-	},
-
-	// ===== 剪贴板 =====
-	clipboard: {
-		/**
-		 * 写入文本到系统剪贴板。
-		 * 使用 Electron 主进程 clipboard API，不依赖 document focus，
-		 * 避免 navigator.clipboard.writeText() 在窗口失焦时抛
-		 * "Document is not focused" 异常。
-		 */
-		writeText: (text: string) => {
-			clipboard.writeText(text);
-		},
+		sessionBotGet: (sessionId: string) =>
+			ipcRenderer.invoke(ipcChannels.feishuSessionBotGet, sessionId) as Promise<string | null>,
+		sessionBotSet: (sessionId: string, botId: string | null) =>
+			ipcRenderer.invoke(ipcChannels.feishuSessionBotSet, sessionId, botId) as Promise<FeishuSessionBotResult>,
 	},
 
 	// ===== 内置浏览器 =====
 	browser: {
 		/** 在系统默认浏览器中打开外部链接。
 		 *  用于 webview 不支持或需要另开浏览器查看的场景。 */
-		openExternal: (url: string) =>
+		openExternal: (url: string, forceSystem?: boolean) =>
 			ipcRenderer.invoke(ipcChannels.browserOpenExternal, url) as Promise<void>,
 	},
 

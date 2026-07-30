@@ -456,48 +456,6 @@ function ConfigModalContent(props: ConfigModalProps) {
 		return (matched?.[1] ?? raw).trim();
 	};
 
-	/**
-	 * 模型配置保存后，通知所有运行中的 Agent 尝试刷新模型配置。
-	 *
-	 * 当前仅尝试 reload_config RPC（策略 1），pi 0.80.10 尚未支持此命令，
-	 * 因此实际为 no-op。进程重启方案（策略 2）已注释，原因：
-	 *   - 运行中重启会打断用户对话/工具执行
-	 *   - 涉及 exit 事件竞态、模型恢复等复杂边界
-	 *
-	 * pi 合并 https://github.com/earendil-works/pi/issues/6890 后自动生效。
-	 */
-	const refreshRunningAgents = async () => {
-		try {
-			const agents = await api.agents.list();
-			// 只刷新状态为 running 或 idle 的活跃 Agent（排除 closed/error/starting）
-			const activeAgents = agents.filter(
-				(agent) => agent.status === "running" || agent.status === "idle",
-			);
-			if (activeAgents.length === 0) return;
-
-			let refreshed = 0;
-			let failed = 0;
-			for (const agent of activeAgents) {
-				try {
-					await api.agents.refreshModels(agent.id);
-					refreshed++;
-				} catch {
-					failed++;
-				}
-			}
-
-			// pi 官方尚未支持 reload_config RPC，刷新实际为 no-op，先注释提示避免误导
-			// if (refreshed > 0 && failed === 0) {
-			// 	showToast(t("config.modelsRefreshed", { count: refreshed }));
-			// } else if (refreshed > 0) {
-			// 	showToast(t("config.modelsRefreshedPartial", { refreshed, failed }));
-			// }
-		} catch {
-			// 获取 agent 列表失败时静默忽略，模型配置已保存，下次启动 agent 生效
-		}
-
-	};
-
 	const saveAndReload = async (
 		saveFn: () => Promise<{ valid: boolean; error?: string }>,
 		successMessage?: string,
@@ -1333,7 +1291,7 @@ function ConfigModalContent(props: ConfigModalProps) {
 			return;
 		}
 		setUninstallExtensionConfirm(null);
-		// 立刻进入卸载态以触发卡片退场动画，同时发起真实卸载；两者并行，避免“删完才闪一下”。
+		// 立刻进入卸载态以触发卡片退场动画，同时发起真实卸载；两者并行，避免"删完才闪一下"。
 		setUninstallingExtensionSource(target.source);
 		const exitAnimation = new Promise<void>((resolve) => {
 			window.setTimeout(resolve, 280);
@@ -1766,4 +1724,3 @@ function ConfigModalContent(props: ConfigModalProps) {
 		</div>
 	);
 }
-

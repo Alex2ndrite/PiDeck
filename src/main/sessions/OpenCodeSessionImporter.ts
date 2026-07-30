@@ -10,6 +10,10 @@ import type {
 	OpenCodeImportStatus,
 	OpenCodeSessionSummary,
 } from "../../shared/types";
+import {
+	defaultSessionImportCopy,
+	type SessionImportCopy,
+} from "./SessionImportCopy";
 
 type OpenCodeMessage = {
 	id: string;
@@ -39,6 +43,8 @@ type ParsedOpenCodeSession = {
 export class OpenCodeSessionImporter {
 	private readonly openCodeDb = join(app.getPath("home"), ".local", "share", "opencode", "opencode.db");
 	private readonly piRoot = join(app.getPath("home"), ".pi", "agent", "sessions");
+
+	constructor(private readonly translate: SessionImportCopy = defaultSessionImportCopy) {}
 
 	async scan(projectPath: string): Promise<OpenCodeSessionSummary[]> {
 		if (!existsSync(this.openCodeDb)) return [];
@@ -209,12 +215,14 @@ export class OpenCodeSessionImporter {
 			}
 		}
 
-		const title = this.cleanTitle(String(session.meta.title ?? "")) || titleState.title || this.cleanTitle(basename(session.sourcePath)) || "OpenCode 会话";
+		const title = this.cleanTitle(String(session.meta.title ?? "")) || titleState.title ||
+			this.cleanTitle(basename(session.sourcePath)) ||
+			this.translate("session.importedTitle", { source: "OpenCode" });
 		lines.splice(1, 0, JSON.stringify({ sessionName: title, cwd: projectPath }));
 		return {
 			raw: `${lines.join("\n")}\n`,
 			title,
-			preview: titleState.preview || "OpenCode imported session",
+			preview: titleState.preview || this.translate("session.importedPreview", { source: "OpenCode" }),
 			messageCount,
 		};
 	}

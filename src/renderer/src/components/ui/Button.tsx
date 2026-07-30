@@ -38,7 +38,16 @@ export function Button(
 				.join(" ")}
 		>
 			{loading && <span className="ui-button-spinner" />}
-			<span className={loading ? "ui-button-content-loading" : ""}>{children}</span>
+			<span
+				className={[
+					"ui-button-content",
+					loading && "ui-button-content-loading",
+				]
+					.filter(Boolean)
+					.join(" ")}
+			>
+				{children}
+			</span>
 		</button>
 	);
 }

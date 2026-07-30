@@ -1,9 +1,7 @@
 import { useEffect, useState } from "react";
 import { Copy, Download, RotateCcw, Trash2 } from "lucide-react";
 import type { PiCliUpdateResult, PiExtensionListResult, PiExtensionSummary, PiPackageInfo } from "../../../shared/types";
-import { t } from "../i18n";
-import { showNotice } from "../utils/notice";
-import { writeClipboard } from "../utils/clipboard";
+import { t, type TranslationKey } from "../i18n";
 
 type ExtensionsApi = {
 	list: () => Promise<PiExtensionListResult>;
@@ -21,16 +19,12 @@ function getExtensionsApi(): ExtensionsApi {
 	return api;
 }
 
-/** PiDeck 内置扩展名 → source 文件名映射 */
-const PIDEK_BUILTIN_SOURCE: Record<string, string> = {
-	"pi-deck-todo": "pi-deck-todo.ts",
-	"pi-deck-plan-mode": "pi-deck-plan-mode.ts",
-	"pi-deck-ask-question": "pi-deck-ask-question.ts",
-	"pi-deck-nul-redirect-fix": "pi-deck-nul-redirect-fix.ts",
+type RecommendedPackage = Omit<PiPackageInfo, "description"> & {
+	descriptionKey: TranslationKey;
 };
 
 /** 预设推荐扩展包 */
-const RECOMMENDED_PACKAGES: PiPackageInfo[] = [
+const RECOMMENDED_PACKAGES: RecommendedPackage[] = [
 	{
 		name: "pi-deck-todo",
 		description: "PiDeck 内置：TODO 列表扩展，支持在对话中添加和管理任务项，自动追踪完成状态并在会话间持久化。",
@@ -73,7 +67,7 @@ const RECOMMENDED_PACKAGES: PiPackageInfo[] = [
 	},
 	{
 		name: "context-mode",
-		description: "MCP 插件，可节省 98% 的上下文窗口。沙箱代码执行、FTS5 知识库和意图驱动搜索。",
+		descriptionKey: "config.recommendedPackage.contextMode",
 		installCmd: "npm:context-mode",
 		tags: ["extension"],
 		downloads: "107K/mo",
@@ -83,7 +77,7 @@ const RECOMMENDED_PACKAGES: PiPackageInfo[] = [
 	},
 	{
 		name: "pi-web-access",
-		description: "网络搜索、URL 抓取、GitHub 仓库克隆、PDF 提取、YouTube 视频理解和本地视频分析。",
+		descriptionKey: "config.recommendedPackage.webAccess",
 		installCmd: "npm:pi-web-access",
 		tags: ["extension"],
 		downloads: "99K/mo",
@@ -93,7 +87,7 @@ const RECOMMENDED_PACKAGES: PiPackageInfo[] = [
 	},
 	{
 		name: "pi-mcp-adapter",
-		description: "MCP（Model Context Protocol）适配器扩展，让 Pi 可以连接任何 MCP 服务器。",
+		descriptionKey: "config.recommendedPackage.mcpAdapter",
 		installCmd: "npm:pi-mcp-adapter",
 		tags: ["extension"],
 		downloads: "99K/mo",
@@ -102,8 +96,17 @@ const RECOMMENDED_PACKAGES: PiPackageInfo[] = [
 		repoUrl: "https://github.com/nicobailon/pi-mcp-adapter",
 	},
 	{
+		name: "@samfp/pi-memory",
+		descriptionKey: "config.recommendedPackage.memory",
+		installCmd: "npm:@samfp/pi-memory",
+		tags: ["extension", "memory"],
+		downloads: "",
+		updated: "",
+		npmUrl: "https://pi.dev/packages/@samfp/pi-memory?name=%40samfp%2Fpi-memory",
+	},
+	{
 		name: "pi-subagents",
-		description: "任务委派扩展，支持链式、并行执行和 TUI 澄清。可将复杂任务拆解给多个子 Agent。",
+		descriptionKey: "config.recommendedPackage.subagents",
 		installCmd: "npm:pi-subagents",
 		tags: ["extension"],
 		downloads: "92K/mo",
@@ -151,10 +154,13 @@ export function ExtensionsTab(props: {
 		if (removingBuiltIn) return;
 		setRemovingBuiltIn(extension.source);
 		try {
-			await getExtensionsApi().removeBuiltIn(extension.source);
+			const nextEnabled = extension.enabled !== false ? false : true;
+			await getExtensionsApi().toggle(extension.source, nextEnabled);
+			// 与安装/卸载一致：强制刷新列表，确保 enabled 与缓存同步。
 			props.onRefresh();
 		} catch (e) {
-			alert(t("config.installFailed") + ": " + (e instanceof Error ? e.message : String(e)));
+			console.error("[Extensions] Toggle failed", e);
+			alert(t("config.extensionToggleFailed"));
 		} finally {
 			setRemovingBuiltIn(null);
 		}
@@ -176,7 +182,8 @@ export function ExtensionsTab(props: {
 	const [updateResult, setUpdateResult] = useState<PiCliUpdateResult | null>(null);
 	const [showUpdateDialog, setShowUpdateDialog] = useState(false);
 
-	const handleInstall = async (pkg: PiPackageInfo) => {
+	const handleInstall = async (pkg: RecommendedPackage) => {
+		// 安装任务按扩展源分别记录；多个扩展并发安装时，不能用单一字符串覆盖前一个 loading 状态。
 		setInstallingSources((current) => new Set(current).add(pkg.installCmd));
 		try {
 			// 对已移除的内置扩展，走恢复流程而非 npm 安装
@@ -188,7 +195,8 @@ export function ExtensionsTab(props: {
 			}
 			props.onRefresh();
 		} catch (e) {
-			alert(t("config.installFailed") + ": " + (e instanceof Error ? e.message : String(e)));
+			console.error("[Extensions] Install failed", e);
+			alert(t("config.installFailed"));
 		} finally {
 			setInstallingSources((current) => {
 				const next = new Set(current);
@@ -206,7 +214,8 @@ export function ExtensionsTab(props: {
 			const result = await getExtensionsApi().update();
 			setUpdateResult(result);
 		} catch (e) {
-			alert(t("settings.extensionsUpdateFailed", { error: e instanceof Error ? e.message : String(e) }));
+			console.error("[Extensions] Update failed", e);
+			alert(t("settings.extensionsUpdateFailedGeneric"));
 		} finally {
 			setUpdating(null);
 		}
@@ -287,8 +296,8 @@ export function ExtensionsTab(props: {
 									<strong>{pkg.name}</strong>
 									{alreadyInstalled && <span className="config-im-connected-badge" style={{ marginLeft: 8 }}>{t("config.installed")}</span>}
 								</div>
-								<div className="extensions-recommended-desc">
-									{pkg.description}
+							<div className="extensions-recommended-desc">
+								{t(pkg.descriptionKey)}
 								</div>
 							</div>
 							<div className="extensions-recommended-action" onClick={(e) => e.stopPropagation()}>

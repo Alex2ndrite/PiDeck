@@ -41,6 +41,76 @@ function loadCodexMetaModule() {
 	return sandbox.exports;
 }
 
+function loadMessageContentModule() {
+	const compilerOptions = {
+		module: ts.ModuleKind.CommonJS,
+		target: ts.ScriptTarget.ES2022,
+	};
+	const docActions = { exports: {} };
+	vm.runInNewContext(
+		ts.transpileModule(readFileSync("src/main/feishu/docActions.ts", "utf8"), { compilerOptions }).outputText,
+		docActions,
+		{ filename: "docActions.ts" },
+	);
+	const messageContent = {
+		exports: {},
+		require: (id) => {
+			if (id === "../feishu/docActions") return docActions.exports;
+			throw new Error(`Unexpected messageContent import: ${id}`);
+		},
+	};
+	vm.runInNewContext(
+		ts.transpileModule(readFileSync("src/main/pi/messageContent.ts", "utf8"), { compilerOptions }).outputText,
+		messageContent,
+		{ filename: "messageContent.ts" },
+	);
+	return messageContent.exports;
+}
+
+function loadWslPathsModule() {
+	const source = readFileSync("src/main/wsl/WslPaths.ts", "utf8");
+	const { outputText } = ts.transpileModule(source, {
+		compilerOptions: {
+			module: ts.ModuleKind.CommonJS,
+			target: ts.ScriptTarget.ES2022,
+		},
+	});
+	const sandbox = {
+		exports: {},
+		require,
+	};
+	vm.runInNewContext(outputText, sandbox, { filename: "WslPaths.ts" });
+	return sandbox.exports;
+}
+
+function loadSessionSummaryCacheModule(homePath) {
+	const source = readFileSync("src/main/sessions/sessionSummaryCache.ts", "utf8");
+	const { outputText } = ts.transpileModule(source, {
+		compilerOptions: {
+			module: ts.ModuleKind.CommonJS,
+			target: ts.ScriptTarget.ES2022,
+		},
+	});
+	const sandbox = {
+		clearTimeout: () => undefined,
+		exports: {},
+		process,
+		require: (id) => {
+			if (id === "electron") {
+				return {
+					app: {
+						getPath: (name) => name === "userData" ? join(homePath, "user-data") : homePath,
+					},
+				};
+			}
+			return require(id);
+		},
+		setTimeout: () => ({ unref: () => undefined }),
+	};
+	vm.runInNewContext(outputText, sandbox, { filename: "sessionSummaryCache.ts" });
+	return sandbox.exports;
+}
+
 function loadSessionScanner(homePath, fsOverrides = {}) {
 	const source = readFileSync("src/main/sessions/SessionScanner.ts", "utf8");
 	const { outputText } = ts.transpileModule(source, {
@@ -50,35 +120,23 @@ function loadSessionScanner(homePath, fsOverrides = {}) {
 		},
 	});
 	const codexMeta = loadCodexMetaModule();
-	const messageContent = loadTranspiledModule(
-		"src/main/pi/messageContent.ts",
-		new Map([["../feishu/docActions", { stripFeishuDocActionHint: (text) => text }]]),
-	);
-	const sessionSummaryCache = loadTranspiledModule(
-		"src/main/sessions/sessionSummaryCache.ts",
-		new Map([["electron", { app: { getPath: () => homePath } }]]),
-	);
-	const wslPaths = loadTranspiledModule("src/main/wsl/WslPaths.ts");
+	const messageContent = loadMessageContentModule();
+	const sessionSummaryCache = loadSessionSummaryCacheModule(homePath);
+	const wslPaths = loadWslPathsModule();
 	const sandbox = {
 		AbortController,
 		AbortSignal,
 		Buffer,
 		clearTimeout,
 		exports: {},
+		process,
 		setTimeout,
 		require: (id) => {
-			if (id === "electron") {
-				return {
-					app: {
-						getPath: (key) => (key === "home" ? homePath : join(homePath, String(key))),
-					},
-					shell: { trashItem: async () => {} },
-				};
-			}
+			if (id === "electron") return { app: { getPath: () => homePath }, shell: {} };
 			if (id === "../../shared/codexSessionMeta") return codexMeta;
 			if (id === "../pi/messageContent") return messageContent;
-			if (id === "./sessionSummaryCache") return sessionSummaryCache;
 			if (id === "../wsl/WslPaths") return wslPaths;
+			if (id === "./sessionSummaryCache") return sessionSummaryCache;
 			if (id === "node:fs") return { ...require(id), ...fsOverrides };
 			return require(id);
 		},
@@ -131,7 +189,6 @@ test("aborts a hung WSL scan before the renderer watchdog and allows a clean ret
 		scanner.wslConfig = { distro: "Ubuntu", user: "dev", home: "/home/dev" };
 		scanner.scanTimeoutMs = 10;
 		let attempts = 0;
-		// collectWslJsonl(sessionsDir, signal?)：支持自定义 sessionDir 后首参为扫描根
 		scanner.collectWslJsonl = async (_sessionsDir, signal) => {
 			attempts += 1;
 			if (attempts > 1) return [];
@@ -234,7 +291,7 @@ test("groups WSL child sessions with POSIX parent paths", async () => {
 		};
 		scanner.readWslFileVersion = async (filePath) => ({
 			mtimeMs: 1,
-			size: files.get(filePath)?.length ?? 0,
+			size: Buffer.byteLength(files.get(filePath) ?? "", "utf8"),
 		});
 		scanner.existsWslFile = async (filePath) => files.has(filePath);
 		// 避免 resolveScanRoots 走真实 wsl.exe 探测自定义 sessionDir
@@ -370,72 +427,110 @@ test("resolves fork child with absolute Windows parent path via parentSession he
 	}
 });
 
-test("reads project sessionDir from .pi/settings.json and lists local sessions", async () => {
-	const home = mkdtempSync(join(tmpdir(), "pideck-session-dir-"));
-	const projectRoot = mkdtempSync(join(tmpdir(), "pideck-session-dir-project-"));
+test("recovers last-used model from assistant message when JSONL has no model_change", async () => {
+	const home = mkdtempSync(join(tmpdir(), "pideck-model-fallback-"));
 	try {
-		// 模拟 xxljob 场景：项目 .pi/settings.json 指定 sessionDir=.pi/sessions
-		mkdirSync(join(projectRoot, ".pi"), { recursive: true });
-		writeFileSync(
-			join(projectRoot, ".pi", "settings.json"),
-			JSON.stringify({ sessionDir: ".pi/sessions" }),
-			"utf8",
-		);
-
-		const localSessionDir = join(projectRoot, ".pi", "sessions");
-		const localSession = join(localSessionDir, "2026-07-24_local.jsonl");
-		const localChild = join(localSessionDir, "2026-07-24_local", "run-1", "run-0", "session.jsonl");
-		writeSession(localSession, session("Project local session", projectRoot));
-		writeSession(localChild, [
-			...session("subagent-worker-local-0", projectRoot),
-			{ type: "custom", customType: "pi-subagents.child-session", data: { schemaVersion: 1 } },
+		const projectPath = "C:\\repo\\project";
+		const piDir = join(home, ".pi", "agent", "sessions", "--C--repo-project--");
+		const sessionFile = join(piDir, "legacy.jsonl");
+		writeSession(sessionFile, [
+			{ type: "session_info", name: "Legacy Session", cwd: projectPath },
+			// No model_change / thinking_level_change — only message-level provider/model.
+			{
+				type: "message",
+				message: {
+					role: "user",
+					content: [{ type: "text", text: "hello" }],
+				},
+			},
+			{
+				type: "message",
+				message: {
+					role: "assistant",
+					provider: "deepseek",
+					model: "deepseek-v4-pro",
+					content: [{ type: "text", text: "hi there" }],
+				},
+			},
 		]);
 
-		// 历史会话仍在全局 encoded-cwd 目录
-		const legacyDir = join(
-			home,
-			".pi",
-			"agent",
-			"sessions",
-			`--${projectRoot.replace(/^[/\\]/, "").replace(/[/\\:]/g, "-")}--`,
-		);
-		const legacySession = join(legacyDir, "legacy.jsonl");
-		writeSession(legacySession, session("Legacy global session", projectRoot));
-
 		const { SessionScanner } = loadSessionScanner(home);
-		const summaries = await new SessionScanner().list(projectRoot);
-		const paths = new Set(summaries.map((item) => item.filePath));
+		const summaries = await new SessionScanner().list(projectPath);
 
-		assert.equal(paths.has(localSession), true);
-		assert.equal(paths.has(localChild), true);
-		assert.equal(paths.has(legacySession), true);
-		assert.equal(summaries.find((item) => item.filePath === localSession)?.name, "Project local session");
-		assert.equal(summaries.find((item) => item.filePath === localChild)?.parentSessionPath, localSession);
+		assert.equal(summaries.length, 1);
+		assert.equal(summaries[0].model?.provider, "deepseek");
+		assert.equal(summaries[0].model?.modelId, "deepseek-v4-pro");
+		assert.equal(summaries[0].thinkingLevel, "off");
 	} finally {
 		rmSync(home, { recursive: true, force: true });
-		rmSync(projectRoot, { recursive: true, force: true });
 	}
 });
 
-test("falls back to global sessionDir when project settings omit it", async () => {
-	const home = mkdtempSync(join(tmpdir(), "pideck-global-session-dir-"));
-	const projectRoot = mkdtempSync(join(tmpdir(), "pideck-global-session-dir-project-"));
+test("model_change takes precedence over message-level model", async () => {
+	const home = mkdtempSync(join(tmpdir(), "pideck-model-prec-"));
 	try {
-		mkdirSync(join(home, ".pi", "agent"), { recursive: true });
-		writeFileSync(
-			join(home, ".pi", "agent", "settings.json"),
-			JSON.stringify({ sessionDir: ".pi/sessions" }),
-			"utf8",
-		);
-
-		const localSession = join(projectRoot, ".pi", "sessions", "from-global-config.jsonl");
-		writeSession(localSession, session("From global sessionDir", projectRoot));
+		const projectPath = "C:\\repo\\project";
+		const piDir = join(home, ".pi", "agent", "sessions", "--C--repo-project--");
+		const sessionFile = join(piDir, "mixed.jsonl");
+		writeSession(sessionFile, [
+			{ type: "session_info", name: "Mixed Session", cwd: projectPath },
+			// Assistant message first, then explicit model_change — the latter must win.
+			{
+				type: "message",
+				message: {
+					role: "assistant",
+					provider: "openai",
+					model: "gpt-4o",
+					content: [{ type: "text", text: "first" }],
+				},
+			},
+			{
+				type: "model_change",
+				provider: "anthropic",
+				modelId: "claude-sonnet-4",
+			},
+			{
+				type: "thinking_level_change",
+				thinkingLevel: "high",
+			},
+		]);
 
 		const { SessionScanner } = loadSessionScanner(home);
-		const summaries = await new SessionScanner().list(projectRoot);
-		assert.equal(summaries.some((item) => item.filePath === localSession), true);
+		const summaries = await new SessionScanner().list(projectPath);
+
+		assert.equal(summaries.length, 1);
+		assert.equal(summaries[0].model?.provider, "anthropic");
+		assert.equal(summaries[0].model?.modelId, "claude-sonnet-4");
+		assert.equal(summaries[0].thinkingLevel, "high");
 	} finally {
 		rmSync(home, { recursive: true, force: true });
-		rmSync(projectRoot, { recursive: true, force: true });
+	}
+});
+
+test("only user messages yield undefined model and undefined thinking", async () => {
+	const home = mkdtempSync(join(tmpdir(), "pideck-user-only-"));
+	try {
+		const projectPath = "C:\\repo\\project";
+		const piDir = join(home, ".pi", "agent", "sessions", "--C--repo-project--");
+		const sessionFile = join(piDir, "user-only.jsonl");
+		writeSession(sessionFile, [
+			{ type: "session_info", name: "User Only", cwd: projectPath },
+			{
+				type: "message",
+				message: {
+					role: "user",
+					content: [{ type: "text", text: "hello" }],
+				},
+			},
+		]);
+
+		const { SessionScanner } = loadSessionScanner(home);
+		const summaries = await new SessionScanner().list(projectPath);
+
+		assert.equal(summaries.length, 1);
+		assert.equal(summaries[0].model, undefined);
+		assert.equal(summaries[0].thinkingLevel, undefined);
+	} finally {
+		rmSync(home, { recursive: true, force: true });
 	}
 });

@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { readRendererStyles } from "./helpers/rendererStyles.mjs";
 
-const css = readFileSync(new URL("../src/renderer/src/styles.css", import.meta.url), "utf8");
+const css = readRendererStyles();
 
 function block(selector) {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

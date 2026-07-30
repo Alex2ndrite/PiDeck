@@ -2,8 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { MouseEvent } from "react";
 import { Check, Eye, EyeOff, ChevronDown } from "lucide-react";
 import { t } from "../i18n";
-import { writeClipboard } from "../utils/clipboard";
-import { PROVIDER_API_OPTIONS, API_TYPE_LABELS, API_TYPE_DESCRIPTIONS, API_TYPE_DESCRIPTIONS_EN } from "./providerHeaders";
+import { PROVIDER_API_OPTIONS, API_TYPE_LABELS, getApiTypeDescription } from "./providerHeaders";
 
 // ── 复制到剪贴板工具 ──────────────────────────────────
 
@@ -261,7 +260,7 @@ export function ApiTypeInput(props: {
 							}}
 						>
 							<span className="config-api-type-label">{API_TYPE_LABELS[option] || option}</span>
-							<small className="config-api-type-desc">{API_TYPE_DESCRIPTIONS[option] || ""}</small>
+							<small className="config-api-type-desc">{getApiTypeDescription(option)}</small>
 						</button>
 					))}
 				</div>
@@ -269,5 +268,4 @@ export function ApiTypeInput(props: {
 		</div>
 	);
 }
-
 

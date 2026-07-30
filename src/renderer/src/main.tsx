@@ -28,7 +28,7 @@ window.addEventListener("error", (event) => {
   // 资源加载失败（script/img）也会进 error 事件，但 event.error 通常为空；
   // 这类错误不适合弹业务 toast，只记日志。
   const isResourceError = event.target instanceof HTMLElement;
-  writeStartupLog("error", "Renderer uncaught error", {
+  writeStartupLog("error", "Renderer startup uncaught error", {
     message: event.message,
     filename: event.filename,
     lineno: event.lineno,
@@ -73,19 +73,11 @@ ReactDOM.createRoot(rootElement).render(
   </React.StrictMode>,
 );
 
-/**
- * React 首次渲染完成后，淡出启动画面覆盖层，动画结束后移除 DOM 节点。
- *
- * 使用 requestAnimationFrame 确保 React commit 阶段已完成、样式已计算。
- * 再用 requestAnimationFrame 触发 fade-out 类，让浏览器在下一次帧中
- * 执行 CSS transition，实现平滑过渡。
- * 额外设置 fallback 超时，避免 transitionend 丢失导致遮罩残留。
- */
-requestAnimationFrame(() => {
-  writeStartupLog("info", "Renderer React tree mounted");
-
+function dismissBootOverlay() {
   const overlay = document.getElementById("boot-overlay");
   if (!overlay) return;
+  if (overlay.dataset.dismissing === "true") return;
+  overlay.dataset.dismissing = "true";
 
   let removed = false;
   const removeOverlay = () => {
@@ -94,13 +86,21 @@ requestAnimationFrame(() => {
     overlay.remove();
   };
 
-  // 下一帧触发 fade-out class，确保 CSS transition 生效
-  requestAnimationFrame(() => {
-    overlay.classList.add("fade-out");
+  overlay.classList.add("fade-out");
+  // 过渡结束后从 DOM 移除覆盖层，释放层级上下文。
+  overlay.addEventListener("transitionend", removeOverlay, { once: true });
+  // 兜底：某些环境下 transitionend 可能不触发。
+  window.setTimeout(removeOverlay, 700);
+}
 
-    // 过渡结束后从 DOM 移除覆盖层，释放层级上下文
-    overlay.addEventListener("transitionend", removeOverlay, { once: true });
-    // 兜底：某些环境下 transitionend 可能不触发
-    window.setTimeout(removeOverlay, 700);
-  });
+/**
+ * React 首次渲染完成后淡出启动遮罩。前台窗口走双 rAF，保证 transition
+ * 有独立的布局帧；独立超时不依赖 rAF，因为 Electron 隐藏或后台窗口可将
+ * rAF 长时间节流，不能让已挂载的工作台永久被遮挡。
+ */
+requestAnimationFrame(() => {
+  writeStartupLog("info", "Renderer React tree mounted");
+  requestAnimationFrame(dismissBootOverlay);
 });
+
+window.setTimeout(dismissBootOverlay, 1500);

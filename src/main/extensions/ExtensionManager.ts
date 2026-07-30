@@ -5,8 +5,13 @@ import { homedir } from "node:os";
 import type { AppSettings, PiCliUpdateResult, PiExtensionListResult, PiExtensionSummary, PiUpdateCheckResult } from "../../shared/types";
 import type { PiLocator } from "../pi/PiLocator";
 import { toWindowsHostPath, type WslEnvironment } from "../wsl/WslPaths";
+import type { MainProcessTranslationKey } from "../../shared/i18n/mainProcessCopy";
 
 type SettingsProvider = () => AppSettings;
+type ExtensionCopy = (
+	key: MainProcessTranslationKey,
+	params?: Record<string, string | number>,
+) => string;
 
 /** PiDeck 内置扩展列表，用于在扫描不到时仍展示在扩展管理页中。 */
 export const BUILT_IN_EXTENSIONS = [
@@ -36,14 +41,16 @@ export class ExtensionManager {
 	 * 用于丢弃失效前已发出的 in-flight 结果，避免旧列表写回缓存导致 UI 不刷新。
 	 */
 	private listCacheGeneration = 0;
+	/**
+	 * 每次实际扫描递增。强制刷新可绕过轻量扫描；旧的轻量结果随后返回时，
+	 * 不能覆盖已经拿到版本信息的强制刷新缓存。
+	 */
+	private listRequestSequence = 0;
 
 	constructor(
 		private readonly locator: PiLocator,
 		private readonly getSettings: SettingsProvider,
-		/** 获取 PiDeck 桌面设置 */
-		private readonly getPiDeckSettings: () => AppSettings,
-		/** 保存 PiDeck 桌面设置的部分更新 */
-		private readonly patchPiDeckSettings: (patch: Partial<AppSettings>) => Promise<AppSettings>,
+		private readonly translate: ExtensionCopy = () => "Extension operation failed.",
 	) {}
 
 	/** 将扩展文件边界切换到统一解析出的 WSL HOME；null 恢复 Windows home。 */
@@ -91,11 +98,16 @@ export class ExtensionManager {
 
 		// 捕获当前代数：若请求返回前发生 install/uninstall/toggle，丢弃结果并改走最新 list。
 		const generation = this.listCacheGeneration;
+		const requestSequence = ++this.listRequestSequence;
 		this.listInflightForce = forceRefresh;
 		const request = this.loadList(forceRefresh)
 			.then((result) => {
-				if (generation !== this.listCacheGeneration) {
-					// 失效前的调用方也必须拿到变更后的列表，否则 UI 会短暂/永久停在旧数据。
+				if (
+					generation !== this.listCacheGeneration ||
+					requestSequence !== this.listRequestSequence
+				) {
+					// 失效前或被更强刷新取代的调用方也必须拿到最新列表，
+					// 否则慢到的轻量扫描会覆盖已包含版本信息的强制刷新缓存。
 					return this.list(forceRefresh);
 				}
 				this.listCache = result;
@@ -148,8 +160,8 @@ export class ExtensionManager {
 			}
 		}
 
-		// 通过 PiDeck 桌面设置标记内置扩展移除状态
-		const removedBuiltIn = new Set(this.getPiDeckSettings().removedBuiltInExtensions ?? []);
+		// 读取 disabledExtensions 列表，标记扩展启用/禁用状态
+		const disabledExts = await this.getDisabledExtensions();
 		for (const ext of merged) {
 			ext.enabled = !(ext.builtIn && removedBuiltIn.has(ext.source));
 		}
@@ -268,20 +280,36 @@ export class ExtensionManager {
 		const name = basename(trimmed);
 		// source 必须等于 basename（如 orca-agent-status.ts），拒绝 ../ 或绝对路径穿越。
 		if (!name || name !== trimmed || name === "." || name === "..") {
-			throw new Error("非法扩展路径");
+			throw new Error(this.translate("mainExtension.invalidPath"));
 		}
 		const targetPath = join(extensionsDir, name);
 		await rm(targetPath, { recursive: true, force: true });
 	}
 
+	/** 卸载后从 disabledExtensions 清掉对应项，避免残留无效禁用记录。 */
+	private async clearDisabledEntry(source: string): Promise<void> {
+		try {
+			const settingsPath = join(this.homeDir, ".pi", "agent", "settings.json");
+			const raw = await readFile(settingsPath, "utf8");
+			const settings = JSON.parse(raw) as { disabledExtensions?: string[] };
+			const disabled = settings.disabledExtensions ?? [];
+			if (!disabled.includes(source)) return;
+			settings.disabledExtensions = disabled.filter((item) => item !== source);
+			await writeFile(settingsPath, JSON.stringify(settings, null, 2), "utf8");
+		} catch {
+			// settings 不存在或解析失败时忽略；卸载主流程已成功
+		}
+	}
+
 	async uninstall(source: string, scope: PiExtensionSummary["scope"] = "user"): Promise<void> {
 		const normalized = source.trim();
-		if (!normalized) throw new Error("扩展来源不能为空");
-		// 内置扩展走 removeBuiltIn（设置 + 删文件），不要走 pi remove
+		if (!normalized) throw new Error(this.translate("mainExtension.sourceRequired"));
+		// 阻止卸载 PiDeck 内置扩展（如 pi-deck-file-capture）
 		if (normalized.startsWith("pi-deck-")) {
-			throw new Error("内置扩展请使用 removeBuiltIn 操作");
+			throw new Error(this.translate("mainExtension.builtInCannotUninstall"));
 		}
-		// 本地 .ts/目录扩展不在 pi package 列表里，pi remove 会报 No matching package
+		// 本地 .ts/目录扩展不在 pi package 列表里，pi remove 会报 No matching package；
+		// 例如 orca-agent-status.ts 只能直接删文件。
 		if (this.isLocalFileExtension(normalized)) {
 			await this.removeLocalExtension(normalized);
 		} else {
@@ -291,75 +319,14 @@ export class ExtensionManager {
 				...(scope === "project" ? ["-l"] : []),
 			], 30_000);
 		}
+		await this.clearDisabledEntry(normalized);
+		// 列表已变，清缓存，避免 UI 继续读到旧安装态。
 		this.invalidateListCache();
-	}
-
-	/**
-	 * 「移除」内置扩展：写入 PiDeck 设置跳过自动部署，并删除用户目录中的扩展文件。
-	 * 必须删文件：pi 会自动加载 ~/.pi/agent/extensions 下的 .ts，仅改设置无法阻止加载，
-	 * 与同名三方工具（如 npm:@juicesharp/rpiv-todo 的 todo）会直接冲突导致 RPC 启动失败。
-	 * 恢复时由 ensurePiDeckExtension 从 resources 重新部署。
-	 */
-	async removeBuiltIn(source: string): Promise<void> {
-		const normalized = source.trim();
-		if (!normalized.startsWith("pi-deck-")) {
-			throw new Error("只能操作内置扩展");
-		}
-		await this.disableBuiltIn(normalized);
-	}
-
-	/**
-	 * 恢复已移除的内置扩展：从 PiDeck 设置中移除记录，下次启动自动部署。
-	 * 实际文件由调用方 ensurePiDeckExtension 写回。
-	 */
-	async restoreBuiltIn(source: string): Promise<void> {
-		const normalized = source.trim();
-		const current = this.getPiDeckSettings().removedBuiltInExtensions ?? [];
-		const next = current.filter((s) => s !== normalized);
-		if (next.length === current.length) return;
-		await this.saveRemovedBuiltIn(next);
-		this.invalidateListCache();
-	}
-
-	/**
-	 * 禁用内置扩展的统一路径：记入 removedBuiltInExtensions + 删除磁盘文件。
-	 * 供手动移除与三方冲突自动让位共用，保证 pi 进程侧立即不再加载。
-	 */
-	async disableBuiltIn(source: string): Promise<void> {
-		const normalized = source.trim();
-		if (!normalized.startsWith("pi-deck-")) {
-			throw new Error("只能操作内置扩展");
-		}
-		const current = this.getPiDeckSettings().removedBuiltInExtensions ?? [];
-		if (!current.includes(normalized)) {
-			await this.saveRemovedBuiltIn([...current, normalized]);
-		}
-		await this.removeBuiltInFile(normalized);
-		this.invalidateListCache();
-	}
-
-	/**
-	 * 删除用户扩展目录中的内置扩展文件。
-	 * 只允许 pi-deck-* 单层 basename，防止路径穿越。
-	 * force: 文件本就不存在时静默成功（幂等，适合启动残留清理）。
-	 */
-	async removeBuiltInFile(source: string): Promise<void> {
-		const extensionsDir = join(this.homeDir, ".pi", "agent", "extensions");
-		const trimmed = source.trim();
-		const name = basename(trimmed);
-		if (!name || name !== trimmed || !name.startsWith("pi-deck-") || name === "." || name === "..") {
-			throw new Error("非法内置扩展路径");
-		}
-		await rm(join(extensionsDir, name), { force: true });
-	}
-
-	private async saveRemovedBuiltIn(removedList: string[]): Promise<void> {
-		await this.patchPiDeckSettings({ removedBuiltInExtensions: removedList });
 	}
 
 	async install(source: string): Promise<string> {
 		const normalized = source.trim();
-		if (!normalized) throw new Error("扩展名称不能为空");
+		if (!normalized) throw new Error(this.translate("mainExtension.nameRequired"));
 		const result = await this.runPi(["install", normalized], 60_000);
 		this.invalidateListCache();
 		return result;
@@ -368,7 +335,7 @@ export class ExtensionManager {
 	async checkPiUpdate(): Promise<PiUpdateCheckResult> {
 		try {
 			const status = await this.locator.check(this.getSettings().customPiPath);
-			if (!status.installed) return { hasUpdate: false, error: status.error ?? "pi 未安装" };
+			if (!status.installed) return { hasUpdate: false, error: this.translate("mainExtension.piNotInstalled") };
 			const latestVersion = await this.npmViewVersion("@earendil-works/pi-coding-agent");
 			return {
 				currentVersion: status.version,
@@ -376,7 +343,8 @@ export class ExtensionManager {
 				hasUpdate: this.compareVersions(latestVersion, status.version ?? "0.0.0") > 0,
 			};
 		} catch (error) {
-			return { hasUpdate: false, error: error instanceof Error ? error.message : String(error) };
+			console.error("[ExtensionManager] Pi update check failed", error);
+			return { hasUpdate: false, error: this.translate("mainExtension.updateCheckFailed") };
 		}
 	}
 
@@ -385,7 +353,10 @@ export class ExtensionManager {
 		if (!check.hasUpdate) {
 			return {
 				command: "pi update pi",
-				output: check.error ?? `当前版本 ${check.currentVersion ?? "unknown"}，最新版本 ${check.latestVersion ?? "unknown"}，无需更新。`,
+				output: check.error ?? this.translate("mainExtension.noUpdate", {
+					current: check.currentVersion ?? "unknown",
+					latest: check.latestVersion ?? "unknown",
+				}),
 				updated: false,
 			};
 		}
@@ -415,7 +386,8 @@ export class ExtensionManager {
 				hasUpdate: Boolean(currentVersion && latestVersion && this.compareVersions(latestVersion, currentVersion) > 0),
 			};
 		} catch (error) {
-			return { ...extension, updateError: error instanceof Error ? error.message : String(error) };
+			console.error("[ExtensionManager] Extension version check failed", error);
+			return { ...extension, updateError: this.translate("mainExtension.versionCheckFailed") };
 		}
 	}
 
@@ -468,6 +440,35 @@ export class ExtensionManager {
 			if (diff !== 0) return diff;
 		}
 		return 0;
+	}
+
+	async setEnabled(source: string, enabled: boolean): Promise<void> {
+		const settingsPath = join(this.homeDir, ".pi", "agent", "settings.json");
+		let raw = "{}";
+		try { raw = await readFile(settingsPath, "utf8"); } catch {}
+		const settings = JSON.parse(raw);
+		const disabled: string[] = settings.disabledExtensions ?? [];
+		if (enabled) {
+			settings.disabledExtensions = disabled.filter((s) => s !== source);
+		} else {
+			if (!disabled.includes(source)) {
+				settings.disabledExtensions = [...disabled, source];
+			}
+		}
+		await writeFile(settingsPath, JSON.stringify(settings, null, 2), "utf8");
+		// 开关状态变化后同步清缓存，避免 UI 显示旧 enabled。
+		this.invalidateListCache();
+	}
+
+	private async getDisabledExtensions(): Promise<Set<string>> {
+		const settingsPath = join(this.homeDir, ".pi", "agent", "settings.json");
+		try {
+			const raw = await readFile(settingsPath, "utf8");
+			const settings = JSON.parse(raw);
+			return new Set<string>(settings.disabledExtensions ?? []);
+		} catch {
+			return new Set<string>();
+		}
 	}
 
 	/**
@@ -531,8 +532,12 @@ export class ExtensionManager {
 				},
 				(error, stdout, stderr) => {
 					if (error) {
-						const detail = (stderr || error.message).trim();
-						reject(new Error(detail || "pi 扩展命令执行失败"));
+						console.error("[ExtensionManager] pi command failed", {
+							args: finalArgs,
+							error: error.message,
+							stderr: stderr.trim(),
+						});
+						reject(new Error(this.translate("mainExtension.commandFailed")));
 						return;
 					}
 					resolve(stdout);

@@ -7,11 +7,12 @@ import {
 	nativeImage,
 	nativeTheme,
 	net,
+	session,
 	shell,
 	Tray,
 } from "electron";
 import { randomUUID } from "node:crypto";
-import { basename, join, resolve } from "node:path";
+import { basename, join } from "node:path";
 import { createWriteStream, existsSync } from "node:fs";
 import { copyFile, cp, mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { spawn, type ChildProcess } from "node:child_process";
@@ -32,45 +33,6 @@ import type { StartupWindowMode } from "../shared/types";
 import iconPath from "../../build/icon.png?asset";
 
 applyLinuxDisplayBackendWorkaround();
-
-// 开发态与正式版隔离 userData。
-// 否则 npm run dev 会与已安装的 PiDeck 共用数据/锁，表现为「开发启动被复用到正式版窗口」。
-// 必须在读取 settings / 版本单实例锁之前设置。
-if (!app.isPackaged) {
-	const baseUserData = app.getPath("userData");
-	// 仅在尚未指向 *-dev 时追加，避免重复拼接。
-	if (!/[\\/]pi-desktop-dev$/i.test(baseUserData) && !/dev$/i.test(baseUserData)) {
-		app.setPath("userData", `${baseUserData}-dev`);
-	}
-}
-
-// Chromium 沙箱开关必须在 app.ready 前生效。
-// 默认关闭：Windows 上部分安全软件/旧 GPU 驱动会在沙箱初始化时触发原生断点（0x80000003）。
-// 用户可在「开发设置」中开启 electronChromiumSandbox，重启后走 Chromium 默认沙箱。
-const electronChromiumSandboxEnabled = readElectronChromiumSandboxPreference();
-if (!electronChromiumSandboxEnabled) {
-	// 关闭沙箱时显式附带 no-sandbox，避免部分环境仍按默认策略启用。
-	app.commandLine.appendSwitch("no-sandbox");
-}
-
-// 按「应用版本」隔离的单实例：同版本复用窗口，不同版本可并行。
-// 不用 Electron requestSingleInstanceLock：它按 userData 全局互斥，会导致 0.6.7 与 0.6.8 无法同开。
-// focus 回调稍后挂到 focusMainWindow（定义在文件后部），避免顶层 TDZ。
-let focusExistingWindow: (() => void) | null = null;
-const singleInstanceEnabled = readSingleInstancePreference();
-const versionSingleInstance = acquireVersionSingleInstance(
-	singleInstanceEnabled,
-	app.getVersion(),
-	() => {
-		focusExistingWindow?.();
-	},
-);
-const gotSingleInstanceLock = versionSingleInstance.isPrimary;
-if (singleInstanceEnabled && !gotSingleInstanceLock) {
-	// 同版本已有实例：立即退出，由主实例 watch .focus 后唤起窗口。
-	// 用 exit(0) 而不是 quit()：第二进程尚未 ready，quit 更慢。
-	app.exit(0);
-}
 
 // 开发模式下 stdout 管道可能断开导致 EPIPE 崩溃，全局静默处理
 process.stdout.on("error", (err: NodeJS.ErrnoException) => {
@@ -105,26 +67,48 @@ process.on("unhandledRejection", (reason) => {
 	console.error("Unhandled rejection:", reason);
 });
 import { ipcChannels } from "../shared/ipc";
+import {
+	mainProcessT,
+	normalizeMainProcessLocale,
+	type MainProcessLocale,
+	type MainProcessTranslationKey,
+} from "../shared/i18n/mainProcessCopy";
+import {
+	buildSessionOriginKey,
+	canonicalizeSessionPath,
+} from "../shared/sessionIdentity";
 import type {
+	AgentTab,
+	AgentUiRequest,
 	AppSettings,
 	AppUpdateAsset,
 	AppUpdateDownloadProgress,
 	AppLogLevel,
 	AppLogQuery,
 	AppUpdateDownloadResult,
+	AvailableModel,
 	ExternalEditor,
 	ExternalEditorId,
 	ExternalEditorSetting,
 	AppUpdateInfo,
-	CreateAgentInput,
+	CreateSessionDraftInput,
+	CreateAnonymousSessionInput,
+	CreateAnonymousSessionResult,
+	UpdateSessionRecordInput,
 	FeishuBotConfig,
 	FeishuBridgeStatus,
 	FeishuConnectInput,
 	FeishuTestResult,
 	SendPromptInput,
+	SendPromptResult,
+	SendSessionPromptInput,
+	SessionRecord,
+	SessionCommandError,
+	SessionRuntimeEvent,
+	SessionRuntimeTarget,
+	SessionUiResponseInput,
 	CreatePiPromptTemplateInput,
 	CreatePiSkillInput,
-	CreateProjectSkillInput,
 	PiPromptTemplateSummary,
 	PromptStoreSearchResult,
 	PromptStoreSearchResponse,
@@ -142,6 +126,15 @@ import { PiProcess } from "./pi/PiProcess";
 import { PiRpcClient } from "./pi/PiRpcClient";
 import { testPiProxy } from "./pi/PiProxyTester";
 import { SessionScanner } from "./sessions/SessionScanner";
+import {
+	SessionCatalog,
+	canAttachRuntimeMetadata,
+} from "./sessions/SessionCatalog";
+import {
+	SessionRuntimeCoordinator,
+	type SessionRuntimeBinding,
+} from "./sessions/SessionRuntimeCoordinator";
+import { SessionCommandIpcError } from "./sessions/SessionCommandIpcError";
 import { CodexSessionImporter } from "./sessions/CodexSessionImporter";
 import { ClaudeSessionImporter } from "./sessions/ClaudeSessionImporter";
 import { OpenCodeSessionImporter } from "./sessions/OpenCodeSessionImporter";
@@ -158,12 +151,20 @@ import { SkillManager } from "./skills/SkillManager";
 import { BUILT_IN_EXTENSIONS, ExtensionManager } from "./extensions/ExtensionManager";
 import { restoreAllParkedExtensions } from "./pi/piExtensionFilter";
 import { ProjectResourceManager } from "./projects/ProjectResourceManager";
+import { registerProjectsIpc } from "./ipc/projectsIpc";
+import { registerGitIpc } from "./ipc/gitIpc";
+import { registerStoreIpc } from "./ipc/storeIpc";
+import { registerTerminalIpc } from "./ipc/terminalIpc";
+import { registerScratchPadIpc } from "./ipc/scratchPadIpc";
+import { registerSessionIpc } from "./ipc/sessionIpc";
+import { registerSystemIpc } from "./ipc/systemIpc";
+import { fetchModelList, getCachedModelList } from "./pi/modelListCache";
+import { registerFilesIpc } from "./ipc/filesIpc";
 import { WebServiceManager } from "./web/WebServiceManager";
 import { preparePreloadPath } from "./preloadPath";
 import { AppLogger } from "./logging/AppLogger";
 import { RpcLogger } from "./logging/RpcLogger";
-import { resolveWslEnvironment } from "./wsl/WslEnvironment";
-import type { WslEnvironment } from "./wsl/WslPaths";
+import { registerEditorsIpc } from "./ipc/editorsIpc";
 import {
 	detectExternalEditors,
 	listConfiguredExternalEditors,
@@ -171,8 +172,16 @@ import {
 	openProjectInEditor,
 	validateExternalEditorCommand,
 } from "./editors/EditorDetector";
-import { FeishuBridge } from "./feishu/FeishuBridge";
-import { wantsFeishuDoc, wrapHostInstruction } from "./feishu/docActions";
+import {
+	FeishuBridge,
+	type SessionRuntimeBindingGateway,
+} from "./feishu/FeishuBridge";
+import {
+	feishuT,
+	normalizeFeishuLocale,
+	type FeishuLocale,
+} from "./feishu/FeishuI18n";
+import { wantsFeishuDoc } from "./feishu/docActions";
 import { resolveFeishuFileSendIntent } from "./feishu/fileIntent";
 import {
 	listBots,
@@ -183,6 +192,7 @@ import {
 	getDecryptedBotAppSecret,
 	getSessionBotId,
 	setSessionBotId,
+	setFeishuConfigDefaultBotName,
 } from "./feishu/FeishuConfig";
 import type { FeishuChatBinding } from "../shared/types";
 
@@ -193,6 +203,8 @@ let isQuitting = false;
 let projectStore: ProjectStore;
 let fileSystemService: FileSystemService;
 let sessionScanner: SessionScanner;
+let sessionCatalog: SessionCatalog;
+let sessionRuntimeCoordinator: SessionRuntimeCoordinator;
 let codexSessionImporter: CodexSessionImporter;
 let claudeSessionImporter: ClaudeSessionImporter;
 let openCodeSessionImporter: OpenCodeSessionImporter;
@@ -240,35 +252,446 @@ async function syncWslEnvironment(settings: AppSettings): Promise<WslEnvironment
 	return environment;
 }
 
+
+function sendSessionRuntimeEnvelope(event: SessionRuntimeEvent): void {
+	const window = mainWindow;
+	if (window && !window.isDestroyed()) {
+		window.webContents.send(ipcChannels.sessionsRuntimeEvent, event);
+	}
+}
+
+function emitSessionRuntimeEvent(
+	agentId: string,
+	sourceChannel: string,
+	payload: unknown,
+): boolean {
+	const runtimeBinding = sessionRuntimeCoordinator.getRuntimeBinding(agentId);
+	if (!runtimeBinding) return false;
+	const event: SessionRuntimeEvent = {
+		kind: "event",
+		sessionId: runtimeBinding.sessionId,
+		agentId,
+		runtimeGeneration: runtimeBinding.runtimeGeneration,
+		sourceChannel,
+		payload,
+	};
+	sessionRuntimeCoordinator.observeRuntimeEvent(event);
+	if (payload && typeof payload === "object" && !Array.isArray(payload)) {
+		const tab = payload as Partial<AgentTab>;
+		if (typeof tab.sessionPath === "string" && tab.sessionPath) {
+			const entry = sessionCatalog.get(runtimeBinding.sessionId);
+			if (
+				canAttachRuntimeMetadata(entry, tab) &&
+				(entry?.filePath !== tab.sessionPath || entry.piSessionId !== tab.sessionId)
+			) {
+				void sessionCatalog.attachRuntime({
+					sessionId: runtimeBinding.sessionId,
+					filePath: tab.sessionPath,
+					piSessionId: tab.sessionId,
+				}).catch(() => undefined);
+			}
+		}
+	}
+	sendSessionRuntimeEnvelope(event);
+	const tab = payload && typeof payload === "object" && !Array.isArray(payload)
+		? payload as Partial<AgentTab>
+		: undefined;
+	// A crashed anonymous process has no durable session to reopen. The regular
+	// Agent state event reaches the renderer first so diagnostics remain visible
+	// for the current tick, then detach removes the transient conversation.
+	if (tab?.noSession && tab.status === "closed") {
+		sessionRuntimeCoordinator.unbindTerminalAgent(agentId);
+		discardAnonymousSession({ ...runtimeBinding, agentId });
+	}
+	return true;
+}
+
+function emitSessionRuntimeDetach(binding: SessionRuntimeBinding): void {
+	sendSessionRuntimeEnvelope({
+		kind: "detach",
+		sessionId: binding.sessionId,
+		agentId: binding.agentId,
+		runtimeGeneration: binding.runtimeGeneration,
+		sourceChannel: "sessions:runtime-detach",
+		payload: null,
+	});
+}
+
 /**
- * 解析 pi --list-models 表格输出为 AvailableModel[]。
- * 表格格式：provider  model  context  max-out  thinking  images
+ * Anonymous chats have no catalog file to rediscover. Once their runtime stops,
+ * discard the in-memory record after broadcasting detach so every renderer can
+ * remove its transient Session state.
  */
-function parsePiListModels(stdout: string): Array<{ provider: string; id: string; name?: string; thinking: boolean; supportsImages: boolean }> {
-	const lines = stdout.split(/\r?\n/).filter(Boolean);
-	if (lines.length < 2) return [];
-	// 跳过表头
-	const dataLines = lines.slice(1);
-	const models: Array<{ provider: string; id: string; name?: string; thinking: boolean; supportsImages: boolean }> = [];
-	for (const line of dataLines) {
-		// 列1: provider, 列2: model, 列6: thinking (yes/no), 列7: images (yes/no)
-		const parts = line.trim().split(/\s+/);
-		if (parts.length < 3) continue;
-		const provider = parts[0];
-		const modelId = parts[1];
-		// thinking 和 images 在倒数第二列和最后一列
-		const thinking = parts[parts.length - 2]?.toLowerCase() === "yes";
-		const images = parts[parts.length - 1]?.toLowerCase() === "yes";
-		models.push({
-			provider,
-			id: modelId,
-			name: `${provider}/${modelId}`,
-			thinking,
-			supportsImages: images,
+function discardAnonymousSession(binding: SessionRuntimeBinding): void {
+	if (!sessionCatalog.get(binding.sessionId)?.noSession) return;
+	sessionCatalog.removeTransient(binding.sessionId);
+	emitSessionRuntimeDetach(binding);
+}
+
+async function createAnonymousSession(
+	input: CreateAnonymousSessionInput,
+): Promise<CreateAnonymousSessionResult> {
+	const project = projectStore.get(input.projectId);
+	if (!project) throw new Error(mainCopy("project.notFound"));
+
+	// Resolve pi-configured defaults so the composer bar shows the effective
+	// model / thinking level even before the anonymous Agent is fully started.
+	let model: { provider: string; modelId: string } | undefined;
+	let thinkingLevel: string | undefined;
+	try {
+		const [settingsResult, modelsResult] = await Promise.all([
+			configManager.getSettingsConfig(),
+			configManager.getModelsConfig(),
+		]);
+		const settings = settingsResult.parsed;
+		const defaultProvider = typeof settings.defaultProvider === "string"
+			? settings.defaultProvider
+			: undefined;
+		const defaultModelId = typeof settings.defaultModel === "string"
+			? settings.defaultModel
+			: undefined;
+		if (defaultProvider && defaultModelId) {
+			model = { provider: defaultProvider, modelId: defaultModelId };
+		} else {
+			const providers = modelsResult.parsed?.providers;
+			if (providers) {
+				const firstProviderName = Object.keys(providers)[0];
+				const firstProvider = firstProviderName ? providers[firstProviderName] : undefined;
+				const firstModel = firstProvider?.models?.[0];
+				if (firstProviderName && firstModel?.id) {
+					model = { provider: firstProviderName, modelId: firstModel.id };
+				}
+			}
+		}
+		const level = typeof settings.defaultThinkingLevel === "string"
+			? settings.defaultThinkingLevel
+			: undefined;
+		thinkingLevel = level;
+	} catch {
+		// Config read is best-effort.
+	}
+
+	const session = sessionCatalog.createAnonymous({
+		projectId: project.id,
+		title: input.title?.trim() || mainCopy("session.anonymousTitle", { project: project.name }),
+		environment: settingsStore.get().wslEnabled ? "wsl" : "native",
+		model,
+		thinkingLevel,
+	});
+	let agentId: string | undefined;
+	try {
+		const tab = await agentManager.create({
+			projectId: project.id,
+			title: session.title,
+			environment: session.environment,
+			source: "pi",
+			wslDistro: session.wslDistro,
+			wslUser: session.wslUser,
+			noSession: true,
+		});
+		agentId = tab.id;
+		const runtime = sessionRuntimeCoordinator.bindAnonymousRuntime(session.id, tab.id);
+		emitReplacementState(runtime, true);
+		return { session, runtime };
+	} catch (error) {
+		if (agentId) await agentManager.stop(agentId).catch(() => undefined);
+		sessionCatalog.removeTransient(session.id);
+		throw error;
+	}
+}
+
+async function stopSessionRuntime(target: SessionRuntimeTarget) {
+	const anonymous = sessionCatalog.get(target.sessionId)?.noSession === true;
+	const result = await sessionRuntimeCoordinator.stopRuntime(target);
+	if (result.ok) {
+		terminalManager.closeAgent(target.agentId);
+		if (anonymous) discardAnonymousSession(target);
+		else emitSessionRuntimeDetach(target);
+	}
+	return result;
+}
+
+function emitReplacementState(binding: SessionRuntimeBinding, includeMessages: boolean): void {
+	const tab = agentManager.list().find((candidate) => candidate.id === binding.agentId);
+	if (!tab) return;
+	emitSessionRuntimeEvent(binding.agentId, ipcChannels.agentsState, tab);
+	if (includeMessages) {
+		emitSessionRuntimeEvent(binding.agentId, ipcChannels.agentsMessage, {
+			agentId: binding.agentId,
+			messages: agentManager.getMessages(binding.agentId),
 		});
 	}
-	return models;
 }
+
+async function readCatalogSessionReferenceMessages(sessionId: string) {
+	const entry = sessionCatalog.get(sessionId);
+	if (!entry?.filePath) return [];
+	return sessionScanner.readMessages(entry.filePath);
+}
+
+async function copyCatalogSession(sessionId: string) {
+	const entry = sessionCatalog.get(sessionId);
+	if (!entry?.filePath) throw new Error(mainCopy("session.fileNotFound"));
+	const result = await agentManager.cloneSessionFile(entry.projectId, entry.filePath) as {
+		cancelled?: boolean;
+		sessionPath?: string;
+	};
+	if (result.cancelled || !result.sessionPath) return { cancelled: true };
+	const copied = await sessionCatalog.ensureRuntimeTarget({
+		projectId: entry.projectId,
+		title: entry.title,
+		source: entry.source,
+		environment: entry.environment,
+		filePath: result.sessionPath,
+		wslDistro: entry.wslDistro,
+		wslUser: entry.wslUser,
+		importedSourceId: entry.importedSourceId,
+	});
+	return { cancelled: false, targetSessionId: copied.id };
+}
+
+async function exportCatalogSessionHtml(sessionId: string): Promise<{ path: string }> {
+	const entry = sessionCatalog.get(sessionId);
+	if (!entry?.filePath) throw new Error(mainCopy("session.fileNotFound"));
+	const result = await agentManager.exportSessionHtml(entry.projectId, entry.filePath);
+	if (!result || typeof result !== "object" || !("path" in result) || typeof result.path !== "string") {
+		throw new Error(mainCopy("session.exportFailed"));
+	}
+	return { path: result.path };
+}
+
+type AgentSessionReplacementResult = {
+	cancelled?: boolean;
+	[key: string]: unknown;
+};
+
+async function replaceAgentSession(
+	agentId: string,
+	replace: () => Promise<unknown>,
+): Promise<AgentSessionReplacementResult & { targetSessionId?: string }> {
+	const originBinding = sessionRuntimeCoordinator.getRuntimeBinding(agentId);
+	const originEntry = originBinding
+		? sessionCatalog.get(originBinding.sessionId)
+		: undefined;
+	const originKey = originEntry?.filePath
+		? buildSessionOriginKey({
+			source: originEntry.source,
+			environment: originEntry.environment,
+			filePath: originEntry.filePath,
+			wslDistro: originEntry.wslDistro,
+			wslUser: originEntry.wslUser,
+			importedSourceId: originEntry.importedSourceId,
+		})
+		: undefined;
+	return sessionRuntimeCoordinator.replaceBoundRuntime({
+		agentId,
+		replace: async () => {
+			const result = await replace();
+			return result && typeof result === "object" && !Array.isArray(result)
+				? result as AgentSessionReplacementResult
+				: {};
+		},
+		resolveTargetSessionId: async () => {
+			const tab = agentManager.list().find((candidate) => candidate.id === agentId);
+			if (!tab?.sessionPath) {
+				throw new Error(`Replacement runtime has no session path: ${agentId}`);
+			}
+			const environment = tab.sessionEnvironment ?? originEntry?.environment ?? "native";
+			const target = await sessionCatalog.ensureRuntimeTarget({
+				projectId: tab.projectId,
+				title: tab.title,
+				source: tab.sessionSource ?? originEntry?.source ?? "pi",
+				environment,
+				filePath: tab.sessionPath,
+				wslDistro: tab.wslDistro ?? (environment === "wsl" ? originEntry?.wslDistro : undefined),
+				wslUser: tab.wslUser ?? (environment === "wsl" ? originEntry?.wslUser : undefined),
+				importedSourceId: tab.importedSourceId ?? originEntry?.importedSourceId,
+				piSessionId: tab.sessionId,
+			});
+			return target.id;
+		},
+		canRestoreOrigin: () => {
+			const tab = agentManager.list().find((candidate) => candidate.id === agentId);
+			if (!originKey || !tab?.sessionPath) return false;
+			return buildSessionOriginKey({
+				source: tab.sessionSource ?? "pi",
+				environment: tab.sessionEnvironment ?? "native",
+				filePath: tab.sessionPath,
+				wslDistro: tab.wslDistro,
+				wslUser: tab.wslUser,
+				importedSourceId: tab.importedSourceId,
+			}) === originKey;
+		},
+		onDetached: emitSessionRuntimeDetach,
+		onAttached: (binding) => emitReplacementState(binding, true),
+		onRestored: (binding) => emitReplacementState(binding, false),
+	});
+}
+
+function cancelUnboundUiRequest(payload: unknown): void {
+	if (!payload || typeof payload !== "object" || Array.isArray(payload)) return;
+	const request = payload as Partial<AgentUiRequest>;
+	if (
+		typeof request.agentId !== "string" ||
+		typeof request.requestId !== "string" ||
+		request.completed === true ||
+		!(["select", "confirm", "input", "editor", "batch_ask"] as const).some(
+			(method) => method === request.method,
+		)
+	) {
+		return;
+	}
+	void appLogger.warn("session", "Cancelled unbound runtime UI request", {
+		agentId: request.agentId,
+		requestId: request.requestId,
+		method: request.method,
+	});
+	void agentManager.sendUIResponse(request.agentId, request.requestId, { cancelled: true });
+}
+
+const feishuSessionRuntimeBindings: SessionRuntimeBindingGateway = {
+	async ensureSession(input) {
+		if (input.existingSessionId) {
+			const existing = sessionCatalog.get(input.existingSessionId);
+			if (existing) return { sessionId: existing.id };
+		}
+		const environment = settingsStore.get().wslEnabled ? "wsl" : "native";
+		if (input.sessionPath) {
+			const existing = sessionCatalog.findByFilePath(input.sessionPath, environment);
+			if (existing) return { sessionId: existing.id };
+			const restored = await sessionCatalog.ensureRuntimeTarget({
+				projectId: input.projectId,
+				title: input.title,
+				source: "pi",
+				environment,
+				filePath: input.sessionPath,
+				wslDistro: environment === "wsl" ? settingsStore.get().wslDistro : undefined,
+				wslUser: environment === "wsl" ? settingsStore.get().wslUser : undefined,
+			});
+			return { sessionId: restored.id };
+		}
+		const draft = await sessionCatalog.createDraft({
+			projectId: input.projectId,
+			title: input.title,
+			environment,
+			source: "pi",
+		});
+		return { sessionId: draft.id };
+	},
+	async activateRuntime(sessionId) {
+		const activated = await sessionRuntimeCoordinator.activateRuntime(sessionId);
+		if (!activated.ok) throw sessionCommandIpcError(activated.error);
+		const tab = agentManager.list().find((candidate) => candidate.id === activated.value.agentId);
+		if (!tab) throw sessionCommandIpcError({
+			code: "SESSION_COMMAND_FAILED",
+			debugDetails: `Activated runtime not found: ${activated.value.agentId}`,
+		});
+		tab.runtimeGeneration = activated.value.runtimeGeneration;
+		emitSessionRuntimeEvent(tab.id, ipcChannels.agentsState, tab);
+		return tab;
+	},
+	async bindRuntime(input) {
+		if (input.agent.status === "error" || input.agent.status === "closed") {
+			throw new Error(`Cannot bind terminal Feishu runtime: ${input.agent.id}`);
+		}
+		const environment = input.agent.sessionEnvironment ?? (
+			settingsStore.get().wslEnabled ? "wsl" : "native"
+		);
+		const source = input.agent.sessionSource ?? "pi";
+		let sessionId: string | undefined;
+		if (input.existingSessionId) {
+			const existing = sessionCatalog.get(input.existingSessionId);
+			if (existing) {
+				const currentBinding = sessionRuntimeCoordinator.getRuntimeBinding(input.agent.id);
+				if (currentBinding && currentBinding.sessionId !== existing.id) {
+					throw new Error(`Runtime is already bound to a different Session: ${currentBinding.sessionId}`);
+				}
+				if (input.agent.sessionPath && !canAttachRuntimeMetadata(existing, input.agent)) {
+					throw new Error(`Existing Session origin does not match runtime: ${existing.id}`);
+				}
+				sessionId = existing.id;
+			}
+		}
+		if (!sessionId && input.agent.sessionPath) {
+			const targetOrigin = buildSessionOriginKey({
+				source,
+				environment,
+				filePath: input.agent.sessionPath,
+				wslDistro: input.agent.wslDistro,
+				wslUser: input.agent.wslUser,
+				importedSourceId: input.agent.importedSourceId,
+			});
+			sessionId = sessionCatalog.listEntries().find((candidate) => (
+				candidate.filePath &&
+				buildSessionOriginKey({
+					source: candidate.source,
+					environment: candidate.environment,
+					filePath: candidate.filePath,
+					wslDistro: candidate.wslDistro,
+					wslUser: candidate.wslUser,
+					importedSourceId: candidate.importedSourceId,
+				}) === targetOrigin
+			))?.id;
+		}
+		if (!sessionId) {
+			const draft = await sessionCatalog.createDraft({
+				projectId: input.projectId,
+				title: input.agent.title || "Feishu session",
+				environment,
+				source,
+			});
+			sessionId = draft.id;
+		}
+		await sessionCatalog.attachRuntime(input.agent.sessionPath ? {
+			sessionId,
+			filePath: input.agent.sessionPath,
+			piSessionId: input.agent.sessionId,
+		} : {
+			sessionId,
+			piSessionId: input.agent.sessionId,
+		});
+		const runtimeGeneration = sessionRuntimeCoordinator.bindExistingAgent(
+			sessionId,
+			input.agent.id,
+		);
+		input.agent.runtimeGeneration = runtimeGeneration;
+		emitSessionRuntimeEvent(input.agent.id, ipcChannels.agentsState, input.agent);
+		return { sessionId };
+	},
+	async sendPrompt(input) {
+		const result = await sessionRuntimeCoordinator.send({
+			...input,
+			requestId: randomUUID(),
+		});
+		if (!result.accepted) throw new Error(result.error);
+	},
+	async abortRuntime(sessionId) {
+		const target = sessionRuntimeCoordinator.getTarget(sessionId);
+		if (!target) throw sessionCommandIpcError({ code: "SESSION_RUNTIME_UNAVAILABLE" });
+		const result = await sessionRuntimeCoordinator.abortRuntime(target);
+		if (!result.ok) throw sessionCommandIpcError(result.error);
+	},
+	async listRuntimeModels(sessionId) {
+		const target = sessionRuntimeCoordinator.getTarget(sessionId);
+		if (!target) throw sessionCommandIpcError({ code: "SESSION_RUNTIME_UNAVAILABLE" });
+		const result = await sessionRuntimeCoordinator.listRuntimeModels(target);
+		if (!result.ok) throw sessionCommandIpcError(result.error);
+		return result.value.value;
+	},
+	async getRuntimeState(sessionId) {
+		const target = sessionRuntimeCoordinator.getTarget(sessionId);
+		if (!target) return undefined;
+		const result = await sessionRuntimeCoordinator.getRuntimeState(target);
+		if (!result.ok) throw sessionCommandIpcError(result.error);
+		return result.value.value;
+	},
+	async setRuntimeModel(sessionId, provider, modelId) {
+		const target = sessionRuntimeCoordinator.getTarget(sessionId);
+		if (!target) throw sessionCommandIpcError({ code: "SESSION_RUNTIME_UNAVAILABLE" });
+		const result = await sessionRuntimeCoordinator.setRuntimeModel(target, provider, modelId);
+		if (!result.ok) throw sessionCommandIpcError(result.error);
+	},
+};
 
 function applyNativeThemeSource(settings: AppSettings) {
 	// 原生标题栏不受 renderer CSS 影响；跟随应用主题，避免暗色界面顶部仍是系统浅色栏。
@@ -493,7 +916,8 @@ async function checkForAppUpdate(
 		},
 	});
 	if (!response.ok) {
-		throw new Error(`GitHub Release 检查失败：HTTP ${response.status}`);
+		void appLogger.warn("update", "GitHub release check failed", { status: response.status });
+		throw new Error(mainCopy("update.checkFailed"));
 	}
 	const release = (await response.json()) as GitHubRelease;
 	const latestVersion = normalizeVersion(release.tag_name || currentVersion);
@@ -529,7 +953,11 @@ function emitUpdateProgress(progress: AppUpdateDownloadProgress) {
 
 async function downloadUpdateAsset(asset: AppUpdateAsset): Promise<AppUpdateDownloadResult> {
 	if (!asset.url || !/^https:\/\//i.test(asset.url)) {
-		throw new Error("无效的更新下载地址");
+		void appLogger.warn("update", "Rejected invalid update download URL", {
+			assetName: asset.name,
+			url: asset.url,
+		});
+		throw new Error(mainCopy("update.invalidDownloadUrl"));
 	}
 
 	const safeName = basename(asset.name).replace(/[<>:"/\\|?*]+/g, "-");
@@ -552,9 +980,13 @@ async function downloadUpdateAsset(asset: AppUpdateAsset): Promise<AppUpdateDown
 		});
 		request.on("response", (response) => {
 			if (response.statusCode < 200 || response.statusCode >= 300) {
-				const error = new Error(`下载失败：HTTP ${response.statusCode}`);
-				emitUpdateProgress({ assetName: asset.name, receivedBytes, totalBytes, state: "failed", error: error.message });
-				reject(error);
+				const publicError = new Error(mainCopy("update.downloadFailed"));
+				void appLogger.warn("update", "Update download returned an error status", {
+					assetName: asset.name,
+					statusCode: response.statusCode,
+				});
+				emitUpdateProgress({ assetName: asset.name, receivedBytes, totalBytes, state: "failed", error: publicError.message });
+				reject(publicError);
 				return;
 			}
 
@@ -583,13 +1015,23 @@ async function downloadUpdateAsset(asset: AppUpdateAsset): Promise<AppUpdateDown
 				});
 			});
 			output.on("error", (error) => {
-				emitUpdateProgress({ assetName: asset.name, receivedBytes, totalBytes, state: "failed", error: error.message });
-				reject(error);
+				void appLogger.warn("update", "Failed to write update package", {
+					assetName: asset.name,
+					error: error.message,
+				});
+				const publicError = new Error(mainCopy("update.downloadFailed"));
+				emitUpdateProgress({ assetName: asset.name, receivedBytes, totalBytes, state: "failed", error: publicError.message });
+				reject(publicError);
 			});
 		});
 		request.on("error", (error) => {
-			emitUpdateProgress({ assetName: asset.name, receivedBytes, totalBytes, state: "failed", error: error.message });
-			reject(error);
+			void appLogger.warn("update", "Update download request failed", {
+				assetName: asset.name,
+				error: error.message,
+			});
+			const publicError = new Error(mainCopy("update.downloadFailed"));
+			emitUpdateProgress({ assetName: asset.name, receivedBytes, totalBytes, state: "failed", error: publicError.message });
+			reject(publicError);
 		});
 		request.end();
 	});
@@ -599,7 +1041,37 @@ async function installDownloadedUpdate(filePath: string) {
 	// Windows/Linux 不同包类型的真正静默自更新风险较高；这里交给系统打开安装包或文件位置。
 	// 便携版用户通常下载 zip/AppImage/tar.gz 后需要替换当前目录,避免在运行中覆盖自身可执行文件。
 	await appLogger.info("update", "Open downloaded update package", { filePath });
-	await shell.openPath(filePath);
+	const openError = await shell.openPath(filePath);
+	if (openError) {
+		await appLogger.warn("update", "Failed to open downloaded update package", {
+			filePath,
+			error: openError,
+		});
+		throw new Error(mainCopy("update.openFailed"));
+	}
+}
+
+function refreshTrayContextMenu(): void {
+	if (!tray) return;
+	tray.setContextMenu(Menu.buildFromTemplate([
+		{
+			label: mainCopy("tray.showWindow"),
+			click: () => {
+				if (mainWindow && !mainWindow.isDestroyed()) {
+					mainWindow.show();
+					mainWindow.focus();
+				}
+			},
+		},
+		{ type: "separator" },
+		{
+			label: mainCopy("tray.quit"),
+			click: () => {
+				isQuitting = true;
+				app.quit();
+			},
+		},
+	]));
 }
 
 /** 从托盘/任务栏/二次启动唤起主窗口：处理最小化、隐藏到托盘两种状态。 */
@@ -655,72 +1127,12 @@ function setupTray() {
 		focusMainWindow();
 	});
 
-	const contextMenu = Menu.buildFromTemplate([
-		{
-			label: "显示窗口",
-			click: () => {
-				focusMainWindow();
-			},
-		},
-		{ type: "separator" },
-		{
-			label: "退出 PiDeck",
-			click: () => {
-				isQuitting = true;
-				app.quit();
-			},
-		},
-	]);
-	tray.setContextMenu(contextMenu);
+	refreshTrayContextMenu();
 }
 
-/** 启动窗口预设 → BrowserWindow 初始尺寸；fullscreen/maximized 另用 setFullScreen/maximize。 */
-function resolveStartupWindowBounds(mode: StartupWindowMode): {
-	width: number;
-	height: number;
-} {
-	switch (mode) {
-		case "normal-compact":
-			return { width: 1100, height: 720 };
-		case "normal-medium":
-			return { width: 1280, height: 840 };
-		case "normal-large":
-			return { width: 1480, height: 960 };
-		case "maximized":
-		case "fullscreen":
-		default:
-			// 全屏/最大化前仍给一个合理兜底尺寸，避免显示器信息异常时缩成最小窗
-			return { width: 1480, height: 960 };
-	}
-}
-
-/** 在窗口创建后应用启动尺寸预设；隐藏态先 maximize/fullscreen，减少首帧跳动。 */
-function applyStartupWindowMode(
-	window: BrowserWindow,
-	mode: StartupWindowMode,
-	showImmediately: boolean,
-) {
-	if (mode === "fullscreen") {
-		// setFullScreen 在某些平台要求窗口已 show；隐藏态先 maximize 再在 show 后补全屏。
-		if (showImmediately) {
-			window.setFullScreen(true);
-		} else {
-			window.maximize();
-			window.once("show", () => {
-				if (!window.isDestroyed()) window.setFullScreen(true);
-			});
-		}
-		return;
-	}
-	if (mode === "maximized") {
-		window.maximize();
-	}
-}
-
-async function openExternalUrl(url: string, forceSystem?: boolean) {
-	// 允许 http/https 以及 file:// 协议（用于本地 HTML 预览等场景）
-	if (!url.startsWith("http:") && !url.startsWith("https:") && !url.startsWith("file:")) return;
-	// forceSystem 为 true 时绕过 linkOpenMode 设置，始终用系统默认浏览器
+async function openExternalUrl(url: string, forceSystem = false) {
+	if (!url.startsWith("http:") && !url.startsWith("https:")) return;
+	// 更新页的发行说明和安装包必须离开内置浏览器，避免下载被 webview 的导航策略拦截。
 	if (forceSystem) {
 		await shell.openExternal(url);
 		return;
@@ -801,6 +1213,96 @@ async function prepareMainPreloadPath() {
 	return preparePreloadPath(sourcePath, "main-preload.js");
 }
 
+const BROWSER_PANEL_PARTITION = "persist:pideck-browser-panel";
+
+function isAllowedBrowserPanelUrl(targetUrl: string): boolean {
+	if (targetUrl === "about:blank") return true;
+	try {
+		const protocol = new URL(targetUrl).protocol;
+		return protocol === "http:" || protocol === "https:";
+	} catch {
+		return false;
+	}
+}
+
+function configureBrowserPanelWebviewHost(window: BrowserWindow): void {
+	const browserPanelSession = session.fromPartition(BROWSER_PANEL_PARTITION);
+	browserPanelSession.setPermissionCheckHandler(() => false);
+	browserPanelSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
+	browserPanelSession.setDevicePermissionHandler(() => false);
+	browserPanelSession.webRequest.onBeforeRequest((details, callback) => {
+		const isFrameNavigation = details.resourceType === "mainFrame" || details.resourceType === "subFrame";
+		if (isFrameNavigation && !isAllowedBrowserPanelUrl(details.url)) {
+			void appLogger.warn("browser", "Blocked unsafe webview frame request", {
+				resourceType: details.resourceType,
+				url: details.url,
+			});
+			callback({ cancel: true });
+			return;
+		}
+		callback({});
+	});
+
+	window.webContents.on("will-attach-webview", (event, webPreferences, params) => {
+		const sourceUrl = params.src || "about:blank";
+		if ((params.partition && params.partition !== BROWSER_PANEL_PARTITION) || !isAllowedBrowserPanelUrl(sourceUrl)) {
+			event.preventDefault();
+			void appLogger.warn("browser", "Blocked unsafe webview attachment", {
+				sourceUrl,
+				partition: params.partition,
+			});
+			return;
+		}
+
+		params.src = sourceUrl;
+		params.partition = BROWSER_PANEL_PARTITION;
+		delete params.preload;
+		delete params.preloadURL;
+		delete params.allowfileaccess;
+		delete params.allowpopups;
+
+		webPreferences.partition = BROWSER_PANEL_PARTITION;
+		webPreferences.sandbox = true;
+		webPreferences.nodeIntegration = false;
+		webPreferences.nodeIntegrationInWorker = false;
+		webPreferences.nodeIntegrationInSubFrames = false;
+		webPreferences.contextIsolation = true;
+		webPreferences.webSecurity = true;
+		webPreferences.allowRunningInsecureContent = false;
+		webPreferences.webviewTag = false;
+		delete webPreferences.preload;
+		delete (webPreferences as Record<string, unknown>).preloadURL;
+	});
+
+	window.webContents.on("did-attach-webview", (_event, guest) => {
+		if (guest.session !== browserPanelSession) {
+			void appLogger.warn("browser", "Closed webview with unexpected session");
+			guest.close();
+			return;
+		}
+
+		const blockUnsafeNavigation = (event: { url: string; preventDefault(): void }, phase: string) => {
+			if (isAllowedBrowserPanelUrl(event.url)) return;
+			event.preventDefault();
+			void appLogger.warn("browser", "Blocked unsafe webview navigation", {
+				phase,
+				url: event.url,
+			});
+		};
+
+		guest.on("will-frame-navigate", (event) => blockUnsafeNavigation(event, "navigate"));
+		guest.on("will-redirect", (event) => blockUnsafeNavigation(event, "redirect"));
+		guest.setWindowOpenHandler(({ url }) => {
+			if (url !== "about:blank" && isAllowedBrowserPanelUrl(url)) {
+				void openExternalUrl(url);
+			} else if (!isAllowedBrowserPanelUrl(url)) {
+				void appLogger.warn("browser", "Blocked unsafe webview window open", { url });
+			}
+			return { action: "deny" };
+		});
+	});
+}
+
 async function createWindow() {
 	applyNativeThemeSource(settingsStore.get());
 	const windowOptions = settingsStore.createWindowOptions();
@@ -861,6 +1363,7 @@ async function createWindow() {
 		},
 	});
 	const createdWindow = mainWindow;
+	configureBrowserPanelWebviewHost(createdWindow);
 	let hasShownMainWindow = false;
 	function showMainWindowOnce() {
 		if (createdWindow.isDestroyed() || hasShownMainWindow) return;
@@ -1054,6 +1557,33 @@ async function autoConnectFeishu() {
 	console.log("[飞书] 检测到已保存的 Bot 配置:", bot.name, "(跳过自动连接，需手动连接)");
 }
 
+function currentMainProcessLocale(): MainProcessLocale {
+	const language = settingsStore.get().language;
+	if (language === "pseudo") return "en-US";
+	return normalizeMainProcessLocale(language === "system" ? app.getLocale() : language);
+}
+
+function mainCopy(
+	key: MainProcessTranslationKey,
+	params?: Record<string, string | number>,
+): string {
+	return mainProcessT(currentMainProcessLocale(), key, params);
+}
+
+function sessionCommandIpcError(error: SessionCommandError): SessionCommandIpcError {
+	if (error.debugDetails) {
+		void appLogger?.warn("session-command", "Session command failed", {
+			code: error.code,
+			debugDetails: error.debugDetails,
+		});
+	}
+	return new SessionCommandIpcError(error, mainCopy);
+}
+
+function currentFeishuLocale(): FeishuLocale {
+	return normalizeFeishuLocale(currentMainProcessLocale());
+}
+
 function registerFeishuIpc() {
 	/** Bot 配置变更后主动推送给 renderer，保证多个页面/弹窗中的 Bot 列表实时同步。 */
 	function broadcastBotsChanged() {
@@ -1068,7 +1598,7 @@ function registerFeishuIpc() {
 		console.log("[Feishu] 收到临时连接请求", JSON.stringify({ appId: appId ? appId.slice(0, 8) + "..." : "", name: input.name, hasSecret: Boolean(appSecret) }));
 		try {
 			if (!appId || !appSecret) {
-				return { success: false, message: "请填写 App ID 和 App Secret" };
+				return { success: false, message: feishuT(currentFeishuLocale(), "bridge.configRequired") };
 			}
 			if (feishuBridge) {
 				feishuBridge.stop();
@@ -1076,25 +1606,34 @@ function registerFeishuIpc() {
 			// 临时构造 botConfig，不做持久化；明文 secret 只传给当前 bridge，不写入磁盘。
 			const botConfig: FeishuBotConfig = {
 				id: "temp-" + randomUUID(),
-				name: input.name?.trim() || "临时机器人",
+				name: input.name?.trim() || feishuT(currentFeishuLocale(), "bridge.tempBotName"),
 				enabled: true,
 				appId,
 				appSecret,
 				defaultUserOpenId: input.defaultUserOpenId,
 			};
-			feishuBridge = new FeishuBridge(botConfig, agentManager, () => mainWindow, () => projectStore.list(), appSecret);
+			feishuBridge = new FeishuBridge(
+				botConfig,
+				agentManager,
+				() => mainWindow,
+				() => projectStore.list(),
+				feishuSessionRuntimeBindings,
+				appSecret,
+				currentFeishuLocale(),
+			);
 			await feishuBridge.start();
 			const status = feishuBridge.getStatus();
 			console.log("[Feishu] 临时连接成功，状态:", JSON.stringify(status));
 			return {
 				success: true,
-				message: "连接成功",
+				message: feishuT(currentFeishuLocale(), "connection.success"),
 				botInfo: { id: botConfig.id, name: botConfig.name },
 			};
 		} catch (error) {
+			const detail = error instanceof Error ? (error as Error & { cause?: unknown }).cause ?? error.message : String(error);
 			const message = error instanceof Error ? error.message : String(error);
-			console.error("[Feishu] 临时连接失败:", message);
-			return { success: false, message };
+			console.error("[Feishu] 临时连接失败:", detail);
+			return { success: false, message, detail: String(detail) };
 		}
 	});
 
@@ -1107,24 +1646,48 @@ function registerFeishuIpc() {
 				feishuBridge.stop();
 			}
 
+			// 先建立临时配置，不持久化；连接成功后再存盘
+			const plainAppSecret = input.appSecret;
+			const tempId = "pending-" + randomUUID();
+
+			feishuBridge = new FeishuBridge(
+				{
+					id: tempId,
+					name: input.name || feishuT(currentFeishuLocale(), "bridge.defaultBotName"),
+					enabled: true,
+					appId: input.appId,
+					appSecret: "",
+					defaultUserOpenId: input.defaultUserOpenId,
+				},
+				agentManager,
+				() => mainWindow,
+				() => projectStore.list(),
+				feishuSessionRuntimeBindings,
+				plainAppSecret,
+				currentFeishuLocale(),
+			);
+			await feishuBridge.start();
+
+			// 连接成功后再持久化
 			const botConfig = addFeishuBot({
-				name: input.name || "飞书机器人",
+				name: input.name || feishuT(currentFeishuLocale(), "bridge.defaultBotName"),
 				appId: input.appId,
 				appSecret: input.appSecret,
 				defaultUserOpenId: input.defaultUserOpenId,
 			});
+			feishuBridge.updateBotConfig({ id: botConfig.id });
 
-			feishuBridge = new FeishuBridge(botConfig, agentManager, () => mainWindow, () => projectStore.list());
-			await feishuBridge.start();
 			console.log("[Feishu] 连接成功，状态:", JSON.stringify(feishuBridge.getStatus()));
 			void appLogger.info("feishu", "Feishu connected", { botId: botConfig.id, name: botConfig.name });
 			broadcastBotsChanged();
-			return { success: true, message: "连接成功" };
+			return { success: true, message: feishuT(currentFeishuLocale(), "connection.success") };
 		} catch (error) {
+			const detail = error instanceof Error ? (error as Error & { cause?: unknown }).cause ?? error.message : String(error);
 			const message = error instanceof Error ? error.message : String(error);
-			console.error("[Feishu] 连接失败:", message);
+			console.error("[Feishu] 连接失败:", detail);
 			void appLogger.error("feishu", "Feishu connect failed", error);
-			return { success: false, message };
+			// 返回详细错误信息（包含原始错误说明），供前端展示
+			return { success: false, message, detail: String(detail) };
 		}
 	});
 
@@ -1162,7 +1725,7 @@ function registerFeishuIpc() {
 		// 同 feishuConnect，但可以添加多个 Bot
 		try {
 			const botConfig = addFeishuBot({
-				name: input.name || "飞书机器人",
+				name: input.name || feishuT(currentFeishuLocale(), "bridge.defaultBotName"),
 				appId: input.appId,
 				appSecret: input.appSecret,
 				defaultUserOpenId: input.defaultUserOpenId,
@@ -1171,7 +1734,10 @@ function registerFeishuIpc() {
 			broadcastBotsChanged();
 			return { success: true, bot: { ...botConfig, appSecret: "" } };
 		} catch (error) {
-			return { success: false, error: error instanceof Error ? error.message : String(error) };
+			void appLogger.warn("feishu", "Failed to add Feishu bot", {
+				error: error instanceof Error ? error.message : String(error),
+			});
+			return { success: false, error: feishuT(currentFeishuLocale(), "bridge.botAddFailed") };
 		}
 	});
 
@@ -1223,6 +1789,9 @@ function registerFeishuIpc() {
 			agentManager,
 			() => mainWindow,
 			() => projectStore.list(),
+			feishuSessionRuntimeBindings,
+			undefined,
+			currentFeishuLocale(),
 		);
 		return testBridge.testConnection(appId, appSecret);
 	});
@@ -1267,2318 +1836,240 @@ function registerFeishuIpc() {
 			}
 			const botConfig = getBot(botId);
 			if (!botConfig) {
-				return { success: false, message: "Bot 配置不存在" };
+				return { success: false, message: feishuT(currentFeishuLocale(), "bridge.botMissing") };
 			}
-			feishuBridge = new FeishuBridge(botConfig, agentManager, () => mainWindow, () => projectStore.list());
+			feishuBridge = new FeishuBridge(
+				botConfig,
+				agentManager,
+				() => mainWindow,
+				() => projectStore.list(),
+				feishuSessionRuntimeBindings,
+				undefined,
+				currentFeishuLocale(),
+			);
 			await feishuBridge.start();
 			void appLogger.info("feishu", "Feishu connected by saved bot", { botId, name: botConfig.name });
-			return { success: true, message: "连接成功" };
+			return { success: true, message: feishuT(currentFeishuLocale(), "connection.success") };
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
 			return { success: false, message };
 		}
 	});
 
-	// 获取 Agent 绑定的飞书 Bot ID
-	ipcMain.handle(ipcChannels.feishuSessionBotGet, async (_event, agentId: string) => {
-		return getSessionBotId(agentId) ?? null;
+	// 获取稳定 Session 绑定的飞书 Bot ID，并一次性迁移旧 runtime agentId 键。
+	ipcMain.handle(ipcChannels.feishuSessionBotGet, async (_event, sessionId: string) => {
+		const current = getSessionBotId(sessionId);
+		if (current) return current;
+		const target = sessionRuntimeCoordinator.getTarget(sessionId);
+		if (!target || target.agentId === sessionId) return null;
+		const legacy = getSessionBotId(target.agentId);
+		if (!legacy) return null;
+		setSessionBotId(sessionId, legacy);
+		setSessionBotId(target.agentId, undefined);
+		return legacy;
 	});
 
-	// 设置 Agent 使用的飞书 Bot ID；非空表示用户手动连接当前会话，需要立即创建/复用飞书群绑定。
-	// 传入 null 时取消关联：仅移除绑定（不终止 Agent），同时清理配置映射。
-	// 返回结果给前端：以前静默 return 会导致 UI 显示“已连接”但实际没有群绑定，飞书发消息无响应。
-	ipcMain.handle(ipcChannels.feishuSessionBotSet, async (_event, agentId: string, botId: string | null) => {
+	// 设置稳定 Session 使用的飞书 Bot ID。主进程始终重新解析当前 runtime，避免旧 agentId 操作替换后的会话。
+	ipcMain.handle(ipcChannels.feishuSessionBotSet, async (_event, sessionId: string, botId: string | null) => {
+		const target = sessionRuntimeCoordinator.getTarget(sessionId);
 		if (!botId) {
-			setSessionBotId(agentId, undefined);
+			setSessionBotId(sessionId, undefined);
+			if (target && target.agentId !== sessionId) setSessionBotId(target.agentId, undefined);
 			// 取消当前会话的飞书关联：移除绑定但不停止 Agent 进程
 			if (feishuBridge && feishuBridge.getStatus().status === "connected") {
-				feishuBridge.removeBindingBySessionId(agentId);
+				feishuBridge.removeBindingBySessionId(sessionId);
 			}
 			return { success: true };
 		}
 		const status = feishuBridge?.getStatus();
 		if (!feishuBridge || status?.status !== "connected") {
-			return { success: false, message: "飞书未连接，请先在配置中连接机器人" };
+			return { success: false, message: feishuT(currentFeishuLocale(), "session.bridgeUnavailable") };
 		}
 		if (status.botId !== botId) {
-			return { success: false, message: "请先切换并连接所选机器人，再绑定当前会话" };
+			return { success: false, message: feishuT(currentFeishuLocale(), "session.botMismatch") };
 		}
-		const tab = agentManager.list().find((item) => item.id === agentId);
+		if (!target) {
+			return { success: false, message: feishuT(currentFeishuLocale(), "session.runtimeUnavailable") };
+		}
+		const tab = agentManager.list().find((item) => item.id === target.agentId);
 		if (!tab) {
-			return { success: false, message: "当前会话不存在或已关闭" };
+			return { success: false, message: feishuT(currentFeishuLocale(), "session.runtimeUnavailable") };
 		}
-		// 先建群绑定，成功后再写映射；避免“映射成功但群创建失败”的假连接状态。
-		const chatId = await feishuBridge.ensureSessionMirror(tab.id, tab.title, tab.sessionPath);
+		const chatId = await feishuBridge.ensureSessionMirrorForSession(
+			sessionId,
+			target.agentId,
+			tab.title,
+			tab.sessionPath,
+		);
 		if (!chatId) {
-			return {
-				success: false,
-				message:
-					"创建/复用飞书群失败。请检查：1) 开放平台已开通 im:chat 权限 2) 已配置你的 Open ID（可向 Bot 发送 /whoami 获取）",
-			};
+			return { success: false, message: feishuT(currentFeishuLocale(), "session.bindFailed") };
 		}
-		setSessionBotId(agentId, botId);
+		setSessionBotId(sessionId, botId);
+		if (target.agentId !== sessionId) setSessionBotId(target.agentId, undefined);
 		return { success: true, chatId };
 	});
 }
 
+async function sendAgentPromptWithIntegrations(
+	input: SendPromptInput,
+): Promise<SendPromptResult> {
+	const bridge = feishuBridge;
+	const bridgeConnected = bridge?.getStatus().status === "connected";
+	const hasFeishuBinding = bridgeConnected && bridge.hasSessionBinding(input.agentId);
+	const docTitle = bridgeConnected ? wantsFeishuDoc(input.message) : undefined;
+	const sessionChatId = bridgeConnected ? bridge.getSessionChatId(input.agentId) : undefined;
+	let agentInstruction: string | undefined;
+	const buildFeishuActionInstruction = (chatId?: string) => [
+		"当前会话已连接飞书聊天。严禁调用 lark-cli、飞书 IM API 或搜索群聊来发送文件；不要询问 chat_id。需要把本地文件发到当前飞书聊天时，最终回答末尾独立一行写 [SEND_FILE:本地文件路径]，PiDeck 会按当前会话绑定自动上传。",
+		chatId ? `当前绑定的飞书 chat_id: ${chatId}。这是只读上下文，用于确认当前会话绑定；发送文件仍必须用 [SEND_FILE:本地文件路径]。` : undefined,
+	].filter(Boolean).join("\n");
+
+	if (bridgeConnected && hasFeishuBinding) {
+		const filePath = resolveFeishuFileSendIntent(input.message, agentManager.getCwd(input.agentId));
+		if (filePath) {
+			const result = await bridge.sendFileForSession(input.agentId, filePath);
+			agentManager.recordHostExchange(input.agentId, input.message, result);
+			void appLogger.info("feishu", "File sent through current session binding", {
+				agentId: input.agentId,
+				filePath,
+				success: result.startsWith("✅"),
+			});
+			return { accepted: true };
+		}
+	}
+
+	if (bridgeConnected && docTitle && !hasFeishuBinding) {
+		const tab = agentManager.list().find((item) => item.id === input.agentId);
+		if (tab) {
+			await bridge.ensureSessionMirror(tab.id, tab.title, tab.sessionPath).catch((error) => {
+				console.error("[Feishu] auto-bind session mirror failed:", error);
+			});
+			bridge.trackDocRequest(tab.id, docTitle);
+			void bridge.forwardUserMessageToFeishu(tab.id, input.message).catch((error) => {
+				console.error("[Feishu] forward PiDeck message failed:", error);
+			});
+			agentInstruction = `${buildFeishuActionInstruction(bridge.getSessionChatId(tab.id))}\n创建飞书文档时，先输出完整正文，最后独立一行写 [CREATE_DOC:文档标题]。`;
+		}
+	} else if (hasFeishuBinding) {
+		agentInstruction = buildFeishuActionInstruction(sessionChatId);
+		const tab = agentManager.list().find((item) => item.id === input.agentId);
+		if (tab) {
+			void bridge.startSessionMirrorRun(tab.id, tab.title, tab.sessionPath).catch((error) => {
+				console.error("[Feishu] session mirror card init failed:", error);
+			});
+			if (input.message.trim()) {
+				void bridge.forwardUserMessageToFeishu(tab.id, input.message).catch((error) => {
+					console.error("[Feishu] forward PiDeck message failed:", error);
+				});
+			}
+		}
+	}
+	const result = await agentManager.sendPrompt(
+		agentInstruction
+			? { ...input, agentMessage: `${agentInstruction}\n\n${input.message}` }
+			: input,
+	);
+	void appLogger.info("agent", "Prompt sent", {
+		agentId: input.agentId,
+		messageLength: input.message.length,
+		imageCount: input.images?.length ?? 0,
+		streamingBehavior: input.streamingBehavior,
+	});
+	return result;
+}
+
 function registerIpc() {
-	// 获取当前环境过滤后的项目列表（WSL 模式只显示 WSL 项目，Chat 始终显示）
-	const getVisibleProjects = () => {
-		const settings = settingsStore.get();
-		const all = projectStore.list();
-		if (settings.wslEnabled) {
-			return all.filter((p) => p.kind === "chat" || p.environment === "wsl");
-		}
-		return all.filter((p) => p.kind === "chat" || !p.environment || p.environment === "windows");
+	const catalogIdentityContext = () => {
+		const { wslEnabled, wslDistro, wslUser } = settingsStore.get();
+		return wslEnabled ? { wslDistro, wslUser } : {};
 	};
 
-	ipcMain.handle(ipcChannels.projectsList, () => getVisibleProjects());
-	ipcMain.handle(ipcChannels.editorsList, async () => listConfiguredExternalEditors(settingsStore.get()));
-	ipcMain.handle(ipcChannels.editorsChooseExecutable, async () => {
-		const options = {
-			properties: ["openFile"],
-			filters: process.platform === "win32"
-				? [
-						{ name: "Applications", extensions: ["exe", "cmd", "bat"] },
-						{ name: "All Files", extensions: ["*"] },
-					]
-				: [{ name: "All Files", extensions: ["*"] }],
-		} satisfies Electron.OpenDialogOptions;
-		const result = mainWindow
-			? await dialog.showOpenDialog(mainWindow, options)
-			: await dialog.showOpenDialog(options);
-		return result.canceled ? null : result.filePaths[0] ?? null;
-	});
-	ipcMain.handle(ipcChannels.editorsRedetect, async () => {
-		const detected = await detectExternalEditors();
-		const settings = await settingsStore.update({
-			externalEditors: mergeDetectedExternalEditors(settingsStore.get().externalEditors, detected),
-		});
-		void appLogger.info("editor", "External editors redetected", { count: detected.length });
-		return settings;
-	});
-	ipcMain.handle(
-		ipcChannels.editorsUpdate,
-		async (_event, editorId: ExternalEditorId, patch: Partial<ExternalEditorSetting>) => {
-			const current = settingsStore.get().externalEditors;
-			const existing = current[editorId];
-			if (!existing) throw new Error(`Unsupported editor: ${editorId}`);
-			const command = typeof patch.command === "string" ? patch.command.trim() : existing.command;
-			if (command) {
-				const validation = await validateExternalEditorCommand(command);
-				if (!validation.valid) throw new Error(`Editor path does not exist: ${command}`);
-			}
-			const settings = await settingsStore.update({
-				externalEditors: {
-					...current,
-					[editorId]: {
-						...existing,
-						...patch,
-						command,
-						detectedFrom: patch.command !== undefined ? "manual" : (patch.detectedFrom ?? existing.detectedFrom),
-						updatedAt: Date.now(),
-					},
-				},
-			});
-			void appLogger.info("editor", "External editor settings updated", { editorId, keys: Object.keys(patch) });
-			return settings;
-		},
-	);
-	ipcMain.handle(
-		ipcChannels.editorsOpenProject,
-		async (_event, editor: ExternalEditor, projectPath: string) => {
-			// 只接收已检测到的编辑器配置；打开项目不经过 shell 拼接命令,降低路径含空格时失败的概率。
-			await openProjectInEditor(editor, projectPath);
-			void appLogger.info("editor", "Project opened in external editor", {
-				editorId: editor.id,
-				editorName: editor.name,
-				command: editor.command,
-				args: editor.args,
-				projectPath,
-			});
-		},
-	);
-	ipcMain.handle(ipcChannels.projectsAdd, async () => {
-		const settings = settingsStore.get();
-		const env = settings.wslEnabled ? "wsl" as const : "windows" as const;
-		// 上游将 WSL 初始化移到首帧后的后台任务；用户若立即点击添加项目，按需等待同一环境解析。
-		const wslEnvironment = env === "wsl"
-			? activeWslEnvironment ?? await syncWslEnvironment(settings)
-			: null;
-		const project = await projectStore.chooseAndAdd(env, wslEnvironment);
-		void appLogger.info("project", "Project added", { projectId: project?.id, path: project?.path, environment: env });
-		return project;
-	});
-	ipcMain.handle(ipcChannels.projectsRemove, async (_event, id: string) => {
-		// 删除前拦截：项目仍有运行中的 Agent（pi 子进程）时禁止删除，避免进程悬挂后台继续占用资源。
-		if (agentManager.hasAgentForProject(id)) {
-			throw new Error("PROJECT_HAS_RUNNING_AGENT");
-		}
-		await projectStore.remove(id);
-		void appLogger.info("project", "Project removed", { projectId: id });
-		return getVisibleProjects();
-	});
-	ipcMain.handle(
-		ipcChannels.projectsReorder,
-		async (_event, projectIds: string[]) => {
-			const result = await projectStore.reorder(projectIds);
-			void appLogger.info("project", "Projects reordered", { count: projectIds.length });
-			return getVisibleProjects();
-		},
-	);
-	ipcMain.handle(ipcChannels.projectResourcesList, async (_event, projectId: string) => {
-		return projectResourceManager.list(projectId);
-	});
-	ipcMain.handle(ipcChannels.projectResourcesCreateSkill, async (_event, input: CreateProjectSkillInput) => {
-		const result = await projectResourceManager.createSkill(input);
-		void appLogger.info("project-resource", "Project skill created", { projectId: input.projectId, name: result.name });
-		return result;
-	});
-	ipcMain.handle(ipcChannels.projectResourcesDeleteSkill, async (_event, projectId: string, skillPath: string) => {
-		// 项目资源删除由 ProjectResourceManager 再次校验路径归属，避免 renderer 传入任意文件路径。
-		await projectResourceManager.deleteSkill(projectId, skillPath);
-		void appLogger.info("project-resource", "Project skill deleted", { projectId, skillPath });
-	});
-	ipcMain.handle(ipcChannels.projectResourcesDeleteExtension, async (_event, projectId: string, extensionPath: string) => {
-		// 项目级 extension 是自动发现的本地文件/目录，删除时仅移除项目 .pi/extensions 下对应资源。
-		await projectResourceManager.deleteExtension(projectId, extensionPath);
-		void appLogger.info("project-resource", "Project extension deleted", { projectId, extensionPath });
-	});
-	ipcMain.handle(ipcChannels.projectResourcesToggleSkill, async (_event, projectId: string, skillPath: string, enabled: boolean) => {
-		const result = await projectResourceManager.toggleSkill(projectId, skillPath, enabled);
-		void appLogger.info("project-resource", "Project skill toggled", { projectId, skillPath, enabled });
-		return result;
-	});
-	ipcMain.handle(ipcChannels.projectResourcesToggleExtension, async (_event, projectId: string, extensionPath: string, enabled: boolean) => {
-		await projectResourceManager.toggleExtension(projectId, extensionPath, enabled);
-		void appLogger.info("project-resource", "Project extension toggled", { projectId, extensionPath, enabled });
-	});
-	ipcMain.handle(ipcChannels.projectResourcesRenameSkill, async (_event, projectId: string, skillPath: string, newName: string) => {
-		const result = await projectResourceManager.renameSkill(projectId, skillPath, newName);
-		void appLogger.info("project-resource", "Project skill renamed", { projectId, skillPath, newName });
-		return result;
-	});
-
-	// ── Worktree 项目管理 ──
-
-	ipcMain.handle(ipcChannels.projectsListRoot, () => {
-		return projectStore.listRoot();
-	});
-
-	ipcMain.handle(
-		ipcChannels.projectsListWorktreeChildren,
-		async (_event, parentId: string) => {
-			return projectStore.listWorktreeChildren(parentId);
-		},
-	);
-
-	ipcMain.handle(
-		ipcChannels.projectsToggleWorktreeEnabled,
-		async (_event, projectId: string) => {
-			const existing = projectStore.get(projectId);
-			if (!existing) throw new Error(`Project not found: ${projectId}`);
-			// 即将启用时先校验是否 git 仓库；非 git 项目开启工作区模式没有意义，
-			// 只会看到空列表并在创建时报错，这里提前给出明确错误让前端提示用户。
-			if (!existing.worktreeEnabled) {
-				const isRepo = await gitService.isGitRepo(existing.path);
-				if (!isRepo) {
-					throw new Error("NOT_A_GIT_REPO");
-				}
-			}
-			const project = await projectStore.toggleWorktreeEnabled(projectId);
-			if (!project) throw new Error(`Project not found: ${projectId}`);
-			// 开启 worktree 模式时，自动注册已有的 git worktree
-			if (project.worktreeEnabled) {
-				try {
-					const entries = await worktreeService.list(project.path);
-					for (const wt of entries) {
-						// findByPath 返回 null 表示未注册
-						if (!projectStore.findByPath(wt.path)) {
-							await projectStore.add(wt.path, projectId);
-						}
-					}
-				} catch {
-					// worktree 查询失败不阻塞 toggle
-				}
-			}
-			return project;
-		},
-	);
-
-	// ── 聊天项目目录设置 ──
-
-	ipcMain.handle(ipcChannels.projectsChooseChatPath, async () => {
-		// 系统文件选择器，默认定位到当前聊天目录，便于用户就地切换。
-		const result = await dialog.showOpenDialog({
-			title: "选择聊天记录目录",
-			defaultPath: projectStore.getChatProjectPath(),
-			properties: ["openDirectory"],
-		});
-		if (result.canceled || result.filePaths.length === 0) return null;
-		return result.filePaths[0];
-	});
-
-	ipcMain.handle(ipcChannels.dialogPickFiles, async (_event, options?: { title?: string }) => {
-		const result = await dialog.showOpenDialog({
-			title: options?.title ?? "选择文件或文件夹",
-			properties: ["openFile", "openDirectory", "multiSelections"],
-		});
-		return result.canceled ? [] : result.filePaths;
-	});
-
-	ipcMain.handle(
-		ipcChannels.projectsSetChatPath,
-		async (_event, path: string) => {
-			if (typeof path !== "string" || path.length === 0) throw new Error("Invalid chat path");
-			const project = await projectStore.setChatProjectPath(path);
-			// 路径变更后广播项目列表变化，渲染端据此刷新聊天项目的会话。
-			mainWindow?.webContents.send(ipcChannels.projectsChanged, getVisibleProjects());
-			void appLogger.info("project", "Chat project path updated", { path });
-			return project;
-		},
-	);
-
-	ipcMain.handle(ipcChannels.filesList, async (_event, projectId: string) => {
-		const project = projectStore.get(projectId);
-		if (!project) throw new Error(`Project not found: ${projectId}`);
-		return fileSystemService.listTree(project.path);
-	});
-
-	// 将 WSL Linux 路径转为 Windows 可访问的路径（/mnt/c → C:\，/home/... → \\wsl$\<distro>\...）
-	const toWindowsPath = (linuxPath: string): string => {
-		if (!linuxPath || /^[A-Za-z]:/.test(linuxPath)) return linuxPath; // 已是 Windows 路径
-		// /mnt/c/Users/... → C:\Users\...
-		const mntMatch = linuxPath.match(/^\/mnt\/([a-z])\/(.*)/);
-		if (mntMatch) {
-			return `${mntMatch[1].toUpperCase()}:\\${mntMatch[2].replace(/\//g, '\\')}`;
-		}
-		// /home/user/... → \\wsl$\<distro>\home\user\...
-		const settings = settingsStore.get();
-		if (settings.wslEnabled && settings.wslDistro) {
-			return `\\\\wsl$\\${settings.wslDistro}\\${linuxPath.replace(/^\//, '').replace(/\//g, '\\')}`;
-		}
-		return linuxPath;
-	};
-
-	ipcMain.handle(ipcChannels.filesOpen, async (_event, path: string) => {
-		const error = await shell.openPath(toWindowsPath(path));
-		// Electron 通过返回字符串报告打开失败；显式抛出后前端才能提示路径不存在或系统无法打开。
-		if (error) throw new Error(error);
-	});
-
-	ipcMain.handle(ipcChannels.browserOpenExternal, async (_event, url: string) => {
-		// shell.openExternal 使用系统默认浏览器打开链接，可控且安全。
-		await shell.openExternal(url);
-	});
-
-	ipcMain.handle(ipcChannels.filesReadContent, async (_event, path: string) => {
-		try {
-			return await readFile(toWindowsPath(path), "utf8");
-		} catch (error) {
-			if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-				return "";
-			}
-			throw error;
-		}
-	});
-
-	/** 读取本地图片等二进制文件为 data URL，供粘贴资源管理器图片文件时附加到消息。 */
-	ipcMain.handle(ipcChannels.filesReadBase64, async (_event, path: string) => {
-		const hostPath = toWindowsPath(path);
-		const buf = await readFile(hostPath);
-		const ext = hostPath.split(/[\\/]/).pop()?.split(".").pop()?.toLowerCase() ?? "";
-		const mime =
-			ext === "jpg" || ext === "jpeg"
-				? "image/jpeg"
-				: ext === "gif"
-					? "image/gif"
-					: ext === "webp"
-						? "image/webp"
-						: ext === "bmp"
-							? "image/bmp"
-							: "image/png";
-		return `data:${mime};base64,${buf.toString("base64")}`;
-	});
-
-	ipcMain.handle(ipcChannels.filesWriteContent, async (_event, path: string, content: string) => {
-		await writeFile(path, content, "utf8");
-		void appLogger.info("file", "File written", { path, bytes: Buffer.byteLength(content, "utf8") });
-	});
-
-	ipcMain.handle(ipcChannels.filesDelete, async (_event, path: string, recursive?: boolean) => {
-		await fileSystemService.delete(path, recursive);
-		void appLogger.info("file", "File deleted", { path, recursive: Boolean(recursive) });
-	});
-
-	ipcMain.handle(ipcChannels.filesRename, async (_event, path: string, newName: string) => {
-		const result = await fileSystemService.rename(path, newName);
-		void appLogger.info("file", "File renamed", { path, newName, result });
-		return result;
-	});
-
-	ipcMain.handle(
-		ipcChannels.filesCreate,
-		async (_event, parentDir: string, name: string, type: "file" | "directory") => {
-			const result = await fileSystemService.create(parentDir, name, type);
-			void appLogger.info("file", "File/folder created", { parentDir, name, type, result });
-			return result;
-		},
-	);
-
-	ipcMain.handle(
-		ipcChannels.filesCopy,
-		async (_event, sourcePaths: string[], targetDir: string) => {
-			const results: string[] = [];
-			for (const src of sourcePaths) {
-				try {
-					const name = basename(src);
-					const dest = join(targetDir, name);
-					await cp(src, dest, { recursive: true, errorOnExist: false });
-					results.push(dest);
-					void appLogger.info("file", "File/folder copied", { src, dest });
-				} catch (error) {
-					void appLogger.error("file", "File copy failed", { src, targetDir, error });
-					throw error;
-				}
-			}
-			return results;
-		},
-	);
-
-	ipcMain.handle(
-		ipcChannels.filesMove,
-		async (_event, sourcePaths: string[], targetDir: string) => {
-			const results: string[] = [];
-			for (const src of sourcePaths) {
-				try {
-					const name = basename(src);
-					const dest = join(targetDir, name);
-					// 先尝试 rename（同设备快），跨设备 fallback 到 cp+rm
-					try {
-						await rename(src, dest);
-					} catch {
-						await cp(src, dest, { recursive: true });
-						await rm(src, { recursive: true, force: true });
-					}
-					results.push(dest);
-					void appLogger.info("file", "File/folder moved", { src, dest });
-				} catch (error) {
-					void appLogger.error("file", "File move failed", { src, targetDir, error });
-					throw error;
-				}
-			}
-			return results;
-		},
-	);
-
-	// Scratch Pad（草稿本）：多草稿支持，每份草稿为 drafts/ 下的独立 .md 文件
-	const draftsDir = join(app.getPath("userData"), "drafts");
-
-	/** 确保 drafts 目录存在，首次访问时如果旧 scratch-pad.md 存在则迁移为草稿 */
-	async function ensureDraftsDir(): Promise<void> {
-		try {
-			await mkdir(draftsDir, { recursive: true });
-		} catch {
-			// 忽略目录已存在错误
-		}
-		// 迁移旧 scratch-pad.md：如果存在且有内容，移入 drafts 目录
-		const oldPath = join(app.getPath("userData"), "scratch-pad.md");
-		try {
-			const oldStat = await stat(oldPath);
-			if (oldStat.size > 0) {
-				const ts = new Date(oldStat.mtimeMs);
-				const name = `${ts.getFullYear()}-${String(ts.getMonth() + 1).padStart(2, "0")}-${String(ts.getDate()).padStart(2, "0")} ${String(ts.getHours()).padStart(2, "0")}-${String(ts.getMinutes()).padStart(2, "0")}-${String(ts.getSeconds()).padStart(2, "0")}.md`;
-				await copyFile(oldPath, join(draftsDir, name));
-			}
-			await rm(oldPath);
-		} catch {
-			// 旧文件不存在则忽略
-		}
-	}
-
-	/** 生成以当前时间命名的默认文件名：YYYY-MM-DD HH-mm-ss.md */
-	function generateDraftName(): string {
-		const now = new Date();
-		return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")} ${String(now.getHours()).padStart(2, "0")}-${String(now.getMinutes()).padStart(2, "0")}-${String(now.getSeconds()).padStart(2, "0")}.md`;
-	}
-
-	/** 列出所有草稿，按更新时间降序排列 */
-	ipcMain.handle(ipcChannels.scratchPadList, async (): Promise<import("../shared/types").DraftMeta[]> => {
-		await ensureDraftsDir();
-		const files = await readdir(draftsDir);
-		const mdFiles = files.filter(f => f.endsWith(".md"));
-		const drafts = await Promise.all(
-			mdFiles.map(async (f) => {
-				const fullPath = join(draftsDir, f);
-				try {
-					const s = await stat(fullPath);
-					return {
-						id: f.replace(/\.md$/, ""),
-						name: f.replace(/\.md$/, ""),
-						path: fullPath,
-						createdAt: s.birthtimeMs,
-						updatedAt: s.mtimeMs,
-					};
-				} catch {
-					return null;
-				}
-			}),
-		);
-		return drafts
-			.filter((d): d is NonNullable<typeof d> => d !== null)
-			.sort((a, b) => b.updatedAt - a.updatedAt);
-	});
-
-	/** 创建新草稿，默认文件名为当前时间 */
-	ipcMain.handle(ipcChannels.scratchPadCreate, async (): Promise<import("../shared/types").DraftMeta> => {
-		await ensureDraftsDir();
-		const name = generateDraftName();
-		const fullPath = join(draftsDir, name);
-		await writeFile(fullPath, "", "utf8");
-		const s = await stat(fullPath);
-		void appLogger.info("scratchPad", "draft created", { path: fullPath });
-		return {
-			id: name.replace(/\.md$/, ""),
-			name: name.replace(/\.md$/, ""),
-			path: fullPath,
-			createdAt: s.birthtimeMs,
-			updatedAt: s.mtimeMs,
-		};
-	});
-
-	/** 删除指定草稿 */
-	ipcMain.handle(ipcChannels.scratchPadDelete, async (_event, draftPath: string): Promise<void> => {
-		await rm(draftPath);
-		void appLogger.info("scratchPad", "draft deleted", { path: draftPath });
-	});
-
-	/** 加载指定草稿内容，path 为空时返回空内容 */
-	ipcMain.handle(ipcChannels.scratchPadLoad, async (_event, draftPath?: string): Promise<import("../shared/types").ScratchPadData> => {
-		if (!draftPath) return { content: "", lastEditedAt: 0, cursorPosition: 0 };
-		try {
-			const content = await readFile(draftPath, "utf8");
-			const fileStat = await stat(draftPath);
-			return { content, lastEditedAt: fileStat.mtimeMs, cursorPosition: 0 };
-		} catch {
-			return { content: "", lastEditedAt: 0, cursorPosition: 0 };
-		}
-	});
-
-	/** 保存内容到指定草稿 */
-	ipcMain.handle(ipcChannels.scratchPadSave, async (_event, draftPath: string, content: string, cursorPosition: number) => {
-		await ensureDraftsDir();
-		await writeFile(draftPath, content, "utf8");
-		void appLogger.info("scratchPad", "saved", { path: draftPath, bytes: Buffer.byteLength(content, "utf8"), cursorPosition });
-	});
-
-	/** 导出指定草稿到用户选择的路径 */
-	ipcMain.handle(ipcChannels.scratchPadExport, async (_event, draftPath?: string) => {
-		if (!draftPath) return false;
-		const suggestedName = basename(draftPath);
-		const { canceled, filePath } = await dialog.showSaveDialog({
-			defaultPath: suggestedName,
-			filters: [{ name: "Markdown", extensions: ["md"] }],
-		});
-		if (canceled || !filePath) return false;
-		const content = await readFile(draftPath, "utf8");
-		await writeFile(filePath, content, "utf8");
-		return true;
-	});
-
-	ipcMain.handle(
-		ipcChannels.filesShowInFolder,
-		async (_event, path: string) => {
-			shell.showItemInFolder(toWindowsPath(path));
-		},
-	);
-
-	ipcMain.handle(
-		ipcChannels.sessionsList,
-		async (_event, projectId?: string) => {
-			const project = projectId ? projectStore.get(projectId) : undefined;
-			return sessionScanner.list(project?.path);
-		},
-	);
-	ipcMain.handle(
-		ipcChannels.sessionsRename,
-		async (_event, filePath: string, newName: string) => {
-			await sessionScanner.rename(filePath, newName);
-			void appLogger.info("session", "Session renamed", { filePath, newName });
-		},
-	);
-	ipcMain.handle(
-		ipcChannels.sessionsCopy,
-		(_event, projectId: string, filePath: string) =>
-			agentManager.cloneSessionFile(projectId, filePath),
-	);
-	ipcMain.handle(
-		ipcChannels.sessionsExportHtml,
-		(_event, projectId: string, filePath: string) =>
-			agentManager.exportSessionHtml(projectId, filePath),
-	);
-	ipcMain.handle(ipcChannels.sessionsDelete, async (_event, filePath: string) => {
-		// 检查是否有活跃 Agent 正在使用该会话文件；如有则拒绝删除，避免 pi 进程访问已删除文件。
-		const normalizedTarget = filePath.replace(/\\/g, "/").toLowerCase();
-		const activeAgents = agentManager.list();
-		const usingAgent = activeAgents.find((agent) => {
-			const sessionPath = agent.sessionPath?.replace(/\\/g, "/").toLowerCase();
-			return sessionPath === normalizedTarget;
-		});
-		if (usingAgent) {
-			throw new Error(
-				`会话“${usingAgent.title}”正在使用中，请先关闭 Agent 后再删除`,
-			);
-		}
-
-		await sessionScanner.delete(filePath);
-		void appLogger.info("session", "Session deleted", { filePath });
-	});
-	ipcMain.handle(
-		ipcChannels.sessionsReadMessages,
-		async (_event, filePath: string) => {
-			return sessionScanner.readMessages(filePath);
-		},
-	);
-	ipcMain.handle(
-		ipcChannels.sessionsReadMeta,
-		async (_event, filePath: string) => {
-			return sessionScanner.readSessionMeta(filePath);
-		},
-	);
-	ipcMain.handle(
-		ipcChannels.sessionsReadChatMessages,
-		async (_event, filePath: string) => {
-			// SessionScanner 统一处理本地/WSL 文件读取；消息转换与压缩归档完全复用 AgentManager。
-			const content = await sessionScanner.readSessionRawText(filePath);
-			return agentManager.readSessionDisplayMessages(filePath, "_viewer", content);
-		},
-	);
-	ipcMain.handle(
-		ipcChannels.codexSessionsScan,
-		async (_event, projectId: string) => {
-			const project = projectStore.get(projectId);
-			if (!project) throw new Error(`Project not found: ${projectId}`);
-			return codexSessionImporter.scan(project.path);
-		},
-	);
-	ipcMain.handle(
-		ipcChannels.codexSessionsImport,
-		async (_event, projectId: string, sourcePaths: string[]) => {
-			const project = projectStore.get(projectId);
-			if (!project) throw new Error(`Project not found: ${projectId}`);
-			return codexSessionImporter.import(project.path, sourcePaths);
-		},
-	);
-	ipcMain.handle(
-		ipcChannels.claudeSessionsScan,
-		async (_event, projectId: string) => {
-			const project = projectStore.get(projectId);
-			if (!project) throw new Error(`Project not found: ${projectId}`);
-			return claudeSessionImporter.scan(project.path);
-		},
-	);
-	ipcMain.handle(
-		ipcChannels.claudeSessionsImport,
-		async (_event, projectId: string, sourcePaths: string[]) => {
-			const project = projectStore.get(projectId);
-			if (!project) throw new Error(`Project not found: ${projectId}`);
-			return claudeSessionImporter.import(project.path, sourcePaths);
-		},
-	);
-	ipcMain.handle(
-		ipcChannels.openCodeSessionsScan,
-		async (_event, projectId: string) => {
-			const project = projectStore.get(projectId);
-			if (!project) throw new Error(`Project not found: ${projectId}`);
-			return openCodeSessionImporter.scan(project.path);
-		},
-	);
-	ipcMain.handle(
-		ipcChannels.openCodeSessionsImport,
-		async (_event, projectId: string, sourcePaths: string[]) => {
-			const project = projectStore.get(projectId);
-			if (!project) throw new Error(`Project not found: ${projectId}`);
-			return openCodeSessionImporter.import(project.path, sourcePaths);
-		},
-	);
-
-	ipcMain.handle(ipcChannels.gitBranches, async (_event, projectId: string) => {
-		const project = projectStore.get(projectId);
-		if (!project) throw new Error(`Project not found: ${projectId}`);
-		return gitService.getBranches(project.path);
-	});
-
-	ipcMain.handle(
-		ipcChannels.gitCheckout,
-		async (_event, projectId: string, branch: string) => {
-			const project = projectStore.get(projectId);
-			if (!project) throw new Error(`Project not found: ${projectId}`);
-			return gitService.checkout(project.path, branch);
-		},
-	);
-
-	ipcMain.handle(
-		ipcChannels.gitCreateBranch,
-		async (_event, projectId: string, branchName: string) => {
-			const project = projectStore.get(projectId);
-			if (!project) throw new Error(`Project not found: ${projectId}`);
-			return gitService.createBranch(project.path, branchName);
-		},
-	);
-
-	// 差异查看需要文件的 Git HEAD 原始内容作为对比基准；参数是绝对文件路径，后端自行定位仓库根。
-	ipcMain.handle(
-		ipcChannels.gitOriginalContent,
-		async (_event, filePath: string) => {
-			const maxBytes = Math.max(1, settingsStore.get().maxEditorFileSizeMB) * 1024 * 1024;
-			return gitService.getOriginalContent(filePath, maxBytes);
-		},
-	);
-
-	ipcMain.handle(
-		ipcChannels.gitWorktreeList,
-		async (_event, projectId: string) => {
-			const project = projectStore.get(projectId);
-			if (!project) throw new Error(`Project not found: ${projectId}`);
-			const entries = await worktreeService.list(project.path);
-			// 每次扫描都同步注册外部新增 worktree，保证侧栏数据和 git 状态一致。
-			for (const wt of entries) {
-				await projectStore.add(wt.path, projectId);
-			}
-			return entries;
-		},
-	);
-
-	ipcMain.handle(
-		ipcChannels.gitWorktreeCreate,
-		async (_event, projectId: string, branchName: string) => {
-			const project = projectStore.get(projectId);
-			if (!project) throw new Error(`Project not found: ${projectId}`);
-			const info = await worktreeService.create(project.path, projectId, branchName);
-			await projectStore.add(info.path, projectId);
-			return info;
-		},
-	);
-
-	ipcMain.handle(
-		ipcChannels.gitWorktreeRemove,
-		async (_event, projectId: string, worktreePath: string) => {
-			const project = projectStore.get(projectId);
-			if (!project) throw new Error(`Project not found: ${projectId}`);
-			const ok = await worktreeService.remove(worktreePath, project.path);
-			const normalizeForCompare = (value: string) => {
-				const resolved = resolve(value);
-				return process.platform === "win32" ? resolved.toLowerCase() : resolved;
-			};
-			const normalizedTarget = normalizeForCompare(worktreePath);
-			const stillInGit = (await worktreeService.list(project.path)).some(
-				(entry) => normalizeForCompare(entry.path) === normalizedTarget,
-			);
-			// 如果 git 已经没有该 worktree（包括用户在外部删过导致 remove 返回 false），
-			// 也要清理 PiDeck 项目记录，否则重启后会从 projects.json 恢复成“删不掉”。
-			if (ok || !stillInGit) {
-				const child = projectStore.findByPath(worktreePath);
-				if (child) await projectStore.remove(child.id);
-				return true;
-			}
-			return false;
-		},
-	);
-
-	// -- Git 增强：提交历史 / 分支对比 / Graph
-	ipcMain.handle(
-		ipcChannels.gitCommitLog,
-		async (_event, projectId: string, options?: { maxEntries?: number; ref?: string; path?: string; allBranches?: boolean }) => {
-			const project = projectStore.get(projectId);
-			if (!project) return [];
-			return gitService.getCommitLog(project.path, options);
-		},
-	);
-
-	ipcMain.handle(
-		ipcChannels.gitRefs,
-		async (_event, projectId: string) => {
-			const project = projectStore.get(projectId);
-			if (!project) return [];
-			return gitService.getRefs(project.path);
-		},
-	);
-
-	ipcMain.handle(
-		ipcChannels.gitBranchCompare,
-		async (_event, projectId: string, base: string, target: string) => {
-			const project = projectStore.get(projectId);
-			if (!project) throw new Error(`Project not found: ${projectId}`);
-			return gitService.compareBranches(project.path, base, target);
-		},
-	);
-
-	ipcMain.handle(
-		ipcChannels.gitCommitDetail,
-		async (_event, projectId: string, ref: string) => {
-			const project = projectStore.get(projectId);
-			if (!project) return null;
-			return gitService.getCommitDetail(project.path, ref);
-		},
-	);
-
-	ipcMain.handle(
-		ipcChannels.gitCommitFileDiff,
-		async (_event, projectId: string, ref: string, filePath: string, originalPath?: string) => {
-			const project = projectStore.get(projectId);
-			if (!project) return null;
-			const maxBytes = Math.max(1, settingsStore.get().maxEditorFileSizeMB) * 1024 * 1024;
-			return gitService.getCommitFileDiff(project.path, ref, filePath, originalPath, maxBytes);
-		},
-	);
-
-	ipcMain.handle(
-		ipcChannels.gitDiffFileBetween,
-		async (_event, projectId: string, ref1: string, ref2: string, filePath: string) => {
-			const project = projectStore.get(projectId);
-			if (!project) return "";
-			return gitService.diffFileBetweenRefs(project.path, ref1, ref2, filePath);
-		},
-	);
-
-
-	// Git 工作区状态 + Stage/Unstage
-	ipcMain.handle(
-		ipcChannels.gitStatus,
-		async (_event, projectId: string) => {
-			const project = projectStore.get(projectId);
-			if (!project) return { merge: [], index: [], workingTree: [], untracked: [] };
-			return gitService.getStatus(project.path);
-		},
-	);
-
-	ipcMain.handle(
-		ipcChannels.gitWorkspaceFileDiff,
-		async (_event, projectId: string, group: import("../shared/types").GitWorkspaceDiffGroup, filePath: string) => {
-			const project = projectStore.get(projectId);
-			if (!project) return null;
-			const maxBytes = Math.max(1, settingsStore.get().maxEditorFileSizeMB) * 1024 * 1024;
-			return gitService.getWorkspaceFileDiff(project.path, group, filePath, maxBytes);
-		},
-	);
-
-	ipcMain.handle(
-		ipcChannels.gitStage,
-		async (_event, projectId: string, paths: string[]) => {
-			const project = projectStore.get(projectId);
-			if (!project) throw new Error(`Project not found: ${projectId}`);
-			await gitService.stageFiles(project.path, paths);
-		},
-	);
-
-	ipcMain.handle(
-		ipcChannels.gitUnstage,
-		async (_event, projectId: string, paths: string[]) => {
-			const project = projectStore.get(projectId);
-			if (!project) throw new Error(`Project not found: ${projectId}`);
-			await gitService.unstageFiles(project.path, paths);
-		},
-	);
-
-	ipcMain.handle(
-		ipcChannels.gitDiscard,
-		async (_event, projectId: string, group: "workingTree" | "untracked", filePath: string) => {
-			const project = projectStore.get(projectId);
-			if (!project) throw new Error(`Project not found: ${projectId}`);
-			await gitService.discardFile(project.path, group, filePath);
-		},
-	);
-
-	ipcMain.handle(
-		ipcChannels.gitCommit,
-		async (_event, projectId: string, message: string) => {
-			const project = projectStore.get(projectId);
-			if (!project) throw new Error(`Project not found: ${projectId}`);
-			await gitService.commit(project.path, message);
-		},
-	);
-
-	ipcMain.handle(
-		ipcChannels.gitCherryPick,
-		async (_event, projectId: string, hash: string) => {
-			const project = projectStore.get(projectId);
-			if (!project) throw new Error(`Project not found: ${projectId}`);
-			await gitService.cherryPick(project.path, hash);
-		},
-	);
-
-	ipcMain.handle(
-		ipcChannels.gitRevert,
-		async (_event, projectId: string, hash: string) => {
-			const project = projectStore.get(projectId);
-			if (!project) throw new Error(`Project not found: ${projectId}`);
-			await gitService.revertCommit(project.path, hash);
-		},
-	);
-
-	ipcMain.handle(
-		ipcChannels.gitReset,
-		async (_event, projectId: string, hash: string, mode: "soft" | "mixed" | "hard") => {
-			const project = projectStore.get(projectId);
-			if (!project) throw new Error(`Project not found: ${projectId}`);
-			await gitService.resetToCommit(project.path, hash, mode);
-		},
-	);
-
-	ipcMain.handle(
-		ipcChannels.gitDropCommit,
-		async (_event, projectId: string, hash: string) => {
-			const project = projectStore.get(projectId);
-			if (!project) throw new Error(`Project not found: ${projectId}`);
-			await gitService.dropCommit(project.path, hash);
-		},
-	);
-
-	async function ensureGenProcess(
-		projectPath: string,
-		command: string,
-	): Promise<PiRpcClient> {
-		console.log("[QuickGen] ensureGenProcess", { projectPath, command, existingPid: genProcess?.pid ?? null });
-
-		// 如果已有进程还在运行，直接复用（跨项目也复用）
-		if (genProcess && genRpcClient && genProcess.exitCode === null) {
-			console.log("[QuickGen] reusing existing process, pid:", genProcess.pid);
-			genProcessCwd = projectPath;
-			resetGenIdleTimer();
-			return genRpcClient;
-		}
-
-		// 清理旧进程（已死才重建）
-		if (genProcess) {
-			console.log("[QuickGen] stopping old process");
-			stopGenProcess();
-		}
-
-		const settings = settingsStore.get();
-		const invocation = piLocator.createInvocation(command, [
-			"--mode", "rpc",
-			"--no-session",
-			"--no-tools",
-			"--no-extensions",
-			"--no-skills",
-			"--no-prompt-templates",
-			"--no-context-files",
-			"--no-themes",
-			"--thinking", "off",
-		]);
-
-		console.log("[QuickGen] spawning", { command: invocation.command, args: invocation.args, cwd: projectPath });
-
-		genProcess = spawn(invocation.command, invocation.args, {
-			cwd: projectPath,
-			env: piLocator.createProcessEnv(settings, invocation.pathPrefix, invocation.wsl),
-			stdio: ["pipe", "pipe", "pipe"],
-			shell: invocation.shell,
-			windowsHide: true,
-			windowsVerbatimArguments: invocation.windowsVerbatimArguments,
-		});
-		genProcessCwd = projectPath;
-		console.log("[QuickGen] spawned, pid:", genProcess.pid);
-
-		genRpcClient = new PiRpcClient(genProcess.stdin!, genProcess.stdout!);
-		console.log("[QuickGen] RPC client created");
-
-		// stderr 仅用于调试日志
-		genProcess.stderr!.on("data", (chunk: Buffer) => {
-			const text = chunk.toString("utf8").slice(0, 300);
-			console.log("[QuickGen] stderr:", text);
-			void appLogger?.warn("git", "QuickGen stderr", text);
-		});
-
-		// 进程退出时清理状态
-		genProcess.on("exit", (code, signal) => {
-			console.log("[QuickGen] process exited", { code, signal });
-			void appLogger?.warn("git", "QuickGen process exited", { code, signal });
-			stopGenProcess();
-		});
-
-		genProcess.on("error", (err) => {
-			console.log("[QuickGen] process ERROR", err.message);
-			void appLogger?.error("git", "QuickGen process error", err.message);
-		});
-
-		resetGenIdleTimer();
-		return genRpcClient;
-	}
-
-	/** 通过持久化的 RPC 进程快速生成文本 */
-	async function quickGenerate(projectPath: string, prompt: string): Promise<string> {
-		console.log("[QuickGen] quickGenerate called", { projectPath });
-		const settings = settingsStore.get();
-		const command = piLocator.resolveCommand(
-			settings.customPiPath,
-			settings.wslEnabled,
-			settings.wslDistro,
-			settings.wslUser,
-		);
-		console.log("[QuickGen] resolved command", { command });
-
-		const rpc = await ensureGenProcess(projectPath, command);
-		console.log("[QuickGen] process ready, sending prompt", { length: prompt.length });
-
-		return new Promise<string>((resolve, reject) => {
-			const collected: string[] = [];
-			let settled = false;
-			const timeout = setTimeout(() => {
-				if (!settled) {
-					console.log("[QuickGen] TIMEOUT", { collected: collected.join("").slice(0, 200) });
-					void appLogger?.warn("git", "QuickGen timed out", { collected: collected.join("").slice(0, 200) });
-					reject(new Error("Quick generate timed out"));
-				}
-			}, 60_000);
-
-			const onEvent = (event: Record<string, unknown>) => {
-				const eventType = event.type as string;
-				if (eventType === "message_update") {
-					const ae = (event as Record<string, unknown>).assistantMessageEvent as Record<string, unknown> | undefined;
-					if (ae?.type === "text_delta" && typeof ae.delta === "string") {
-						collected.push(ae.delta);
-						console.log("[QuickGen] text_delta", { delta: ae.delta.slice(0, 50) });
-					}
-				}
-				if (eventType === "agent_settled" || eventType === "agent_end") {
-					console.log("[QuickGen] event received", { eventType });
-					settled = true;
-					clearTimeout(timeout);
-					rpc.off("event", onEvent);
-					const text = collected.join("");
-					console.log("[QuickGen] completed", { length: text.length });
-					void appLogger?.warn("git", "QuickGen completed", { length: text.length });
-					resolve(text);
-				}
-			};
-
-			rpc.on("event", onEvent);
-
-			console.log("[QuickGen] sending prompt via RPC");
-			rpc.request({ type: "prompt", message: prompt }).then((response) => {
-				console.log("[QuickGen] prompt response", { success: response.success, error: response.error });
-				if (!response.success) {
-					clearTimeout(timeout);
-					rpc.off("event", onEvent);
-					reject(new Error(response.error ?? "Prompt rejected"));
-				}
-			}).catch((err) => {
-				console.log("[QuickGen] prompt request failed", { error: err.message });
-				clearTimeout(timeout);
-				rpc.off("event", onEvent);
-				reject(err);
-			});
-		});
-	}
-
-	console.log("[QuickGen] gitGenerateCommitMessage handler registered");
-	ipcMain.handle(
-		ipcChannels.gitGenerateCommitMessage,
-		async (_event, projectId: string) => {
-			console.log("[QuickGen] IPC handler called", { projectId });
-			const project = projectStore.get(projectId);
-			if (!project) {
-				console.log("[QuickGen] project not found");
-				return "";
-			}
-
-			const diff = await gitService.getStagedDiff(project.path, 10000);
-			if (!diff.trim()) {
-				console.log("[QuickGen] no staged diff");
-				return "";
-			}
-			console.log("[QuickGen] diff obtained", { length: diff.length });
-
-			// 从设置中读取提示词模板，替换 {diff} 为实际 diff 内容
-			const promptTemplate = settingsStore.get().gitCommitMessagePrompt ||
-				"请根据以下 git diff 生成一条中文 git commit message。\n\n{diff}\n\n直接输出 commit 消息。";
-			const prompt = promptTemplate.replace("{diff}", diff.slice(0, 8000));
-
-			try {
-				console.log("[QuickGen] calling quickGenerate");
-				const result = await quickGenerate(project.path, prompt);
-				console.log("[QuickGen] done", { length: result.length });
-				void appLogger?.warn("git", "Generate commit message result", { length: result.length, text: result.slice(0, 100) });
-				return result.trim();
-			} catch (err) {
-				const msg = err instanceof Error ? err.message : String(err);
-				console.log("[QuickGen] FAILED", { error: msg });
-				void appLogger?.warn("git", "Generate commit message failed", { error: msg });
-				throw err;
-			}
-		},
-	);
-
-	ipcMain.handle(
-		ipcChannels.gitPush,
-		async (_event, projectId: string) => {
-			const project = projectStore.get(projectId);
-			if (!project) throw new Error(`Project not found: ${projectId}`);
-			await gitService.push(project.path);
-		},
-	);
-
-	ipcMain.handle(
-		ipcChannels.gitPull,
-		async (_event, projectId: string) => {
-			const project = projectStore.get(projectId);
-			if (!project) throw new Error(`Project not found: ${projectId}`);
-			await gitService.pull(project.path);
-		},
-	);
-
-	ipcMain.handle(
-		ipcChannels.gitFetch,
-		async (_event, projectId: string) => {
-			const project = projectStore.get(projectId);
-			if (!project) throw new Error(`Project not found: ${projectId}`);
-			await gitService.fetch(project.path);
-		},
-	);
-
-	ipcMain.handle(
-		ipcChannels.gitInit,
-		async (_event, projectId: string) => {
-			const project = projectStore.get(projectId);
-			if (!project) throw new Error(`Project not found: ${projectId}`);
-			const { execFile } = await import("node:child_process");
-			const { promisify } = await import("node:util");
-			const execFileAsync = promisify(execFile);
-			// 初始化仓库并创建 main 分支，生成一个初始空提交
-			await execFileAsync("git", ["init"], { cwd: project.path });
-			try {
-				await execFileAsync("git", ["checkout", "-b", "main"], { cwd: project.path });
-			} catch {
-				// 部分 git 版本在无提交时 checkout -b 可能失败，改用 branch -M
-				await execFileAsync("git", ["branch", "-M", "main"], { cwd: project.path });
-			}
-			await execFileAsync("git", ["commit", "--allow-empty", "-m", "Initial commit"], {
-				cwd: project.path,
-				env: { ...process.env, GIT_AUTHOR_NAME: "PiDeck", GIT_AUTHOR_EMAIL: "pideck@local", GIT_COMMITTER_NAME: "PiDeck", GIT_COMMITTER_EMAIL: "pideck@local" },
-			});
-		},
-	);
-
-	ipcMain.handle(ipcChannels.piCheck, async () => {
-		// 用户手动指定的路径优先于自动检测
-		const settings = settingsStore.get();
-		const status = await piLocator.check(settings.customPiPath, settings.wslEnabled, settings.wslDistro, settings.wslUser);
-		void appLogger.info("pi", "Pi check completed", {
-			installed: status.installed,
-			version: status.version,
-			command: status.command,
-			error: status.error,
-		});
-		return status;
-	});
-	// 从 pi --list-models 获取可用模型列表（无需启动 agent）
-	// 全局缓存：首次运行后复用，避免每次打开选择器都 fork 子进程
-	let cachedListModels: ReturnType<typeof parsePiListModels> | null = null;
-	let cachedListModelsPending: Promise<ReturnType<typeof parsePiListModels>> | null = null;
-	ipcMain.handle(ipcChannels.projectsListModels, async (_event, projectId?: string) => {
-		try {
-			if (cachedListModels) return cachedListModels;
-			// 已有在途请求时复用同一个 Promise，避免并发 fork 多个 pi 进程
-			if (cachedListModelsPending) return cachedListModelsPending;
-
-			cachedListModelsPending = (async () => {
-				const settings = settingsStore.get();
-				const command = piLocator.resolveCommand(
-					settings.customPiPath,
-					settings.wslEnabled,
-					settings.wslDistro,
-					settings.wslUser,
-				);
-				const invocation = piLocator.createInvocation(command, ["--list-models"]);
-				const { execFile } = await import("node:child_process");
-				const result = await new Promise<{ stdout: string }>((resolve, reject) => {
-					execFile(invocation.command, invocation.args, {
-						env: piLocator.createProcessEnv(settings, invocation.pathPrefix, invocation.wsl),
-						shell: invocation.shell,
-						windowsHide: true,
-						timeout: 15_000,
-						encoding: "utf8",
-						windowsVerbatimArguments: invocation.windowsVerbatimArguments,
-					}, (error, stdout, stderr) => {
-						if (error) {
-							const message = (stderr || error.message).slice(0, 300);
-							reject(new Error(message));
-						} else {
-							resolve({ stdout });
-						}
-					});
-				});
-				const models = parsePiListModels(result.stdout);
-				cachedListModels = models;
-				return models;
-			})();
-			const models = await cachedListModelsPending;
-			return models;
-		} catch (error) {
-			cachedListModelsPending = null;
-			void appLogger.warn("pi", "Failed to list models", {
-				error: error instanceof Error ? error.message : String(error),
-			});
-			return [];
-		}
-	});
-	// 智能查找 wsl.exe：优先绝对路径（含 32-bit Sysnative 绕过），全部不存在时回退到 PATH
-	const wslExeResolved = (() => {
-		const root = process.env.SystemRoot || "C:\\Windows";
-		const candidates = process.arch === "ia32"
-			? [join(root, "Sysnative", "wsl.exe"), join(root, "System32", "wsl.exe")]
-			: [join(root, "System32", "wsl.exe")];
-		for (const candidate of candidates) {
-			if (existsSync(candidate)) return { command: candidate, shell: false };
-		}
-		return { command: "wsl", shell: true };
-	})();
-	const wslExePath = wslExeResolved.command;
-	const wslShell = wslExeResolved.shell;
-	// WSL: 列出已安装的发行版（仅 Windows 有效，其他平台返回空数组）
-	ipcMain.handle(ipcChannels.wslListDistros, async () => {
-		if (process.platform !== "win32") return [] as string[];
-		try {
-			const { execFile } = await import("node:child_process");
-			return new Promise<string[]>((resolve) => {
-				execFile(wslExePath, ["-l", "-q"], { encoding: "utf8", timeout: 10_000, windowsHide: true, shell: wslShell },
-					(err, stdout) => {
-						if (err) { resolve([]); return; }
-						// 过滤空行、\0 字符、Windows 文件后缀等非法发行版名
-						const distros = stdout.split(/\r?\n/)
-							.map((s) => s.trim())
-							.filter((s) => s.length > 0 && !s.includes("\\") && !s.includes("\x00"));
-						resolve(distros);
-					});
-			});
-		} catch { return [] as string[]; }
-	});
-	// WSL: 验证连接性 — 分步检查 distro+user 可达性 和 pi 可用性
-	ipcMain.handle(ipcChannels.wslValidateConnection, async (_event, distro: string, user: string) => {
-		if (process.platform !== "win32") {
-			return { ok: false, whoami: "", piVersion: "", error: "WSL 仅在 Windows 上可用" };
-		}
-		try {
-			const { execFile } = await import("node:child_process");
-			// Step 1: 验证 distro + user 可达
-			const whoami = await new Promise<string>((resolve, reject) => {
-				execFile(wslExePath, ["-d", distro, "-u", user, "whoami"],
-					{ encoding: "utf8", timeout: 10_000, windowsHide: true, shell: wslShell },
-					(err, stdout) => {
-						if (err) { reject(err); return; }
-						resolve(stdout.trim());
-					});
-			});
-			// Step 2: 检查 pi 是否已安装
-			let piVersion = "";
-			try {
-				piVersion = await new Promise<string>((resolve, reject) => {
-					execFile(wslExePath, ["-d", distro, "-u", user, "pi", "--version"],
-						{ encoding: "utf8", timeout: 10_000, windowsHide: true, shell: wslShell },
-						(err, stdout) => {
-							if (err) { reject(err); return; }
-							resolve(stdout.trim());
-						});
-				});
-			} catch { /* pi 未安装，piVersion 保持空 */ }
-			return {
-				ok: true,
-				whoami,
-				piVersion,
-				error: piVersion ? "" : "pi CLI 未安装 — 请在 WSL 中运行 npm i -g @earendil-works/pi",
-			};
-		} catch (err) {
-			return {
-				ok: false,
-				whoami: "",
-				piVersion: "",
-				error: `无法连接到 WSL 发行版 "${distro}" 用户 "${user}"：${err instanceof Error ? err.message : String(err)}`,
-			};
-		}
-	});
-	ipcMain.handle(ipcChannels.piUpdateCheck, async () => {
-		const result = await extensionManager.checkPiUpdate();
-		void appLogger.info("pi", "Pi update check completed", { currentVersion: result.currentVersion, latestVersion: result.latestVersion, hasUpdate: result.hasUpdate, error: result.error });
-		return result;
-	});
-	ipcMain.handle(ipcChannels.piUpdate, async () => {
-		const result = await extensionManager.updatePi();
-		void appLogger.info("pi", "Pi update command completed", { updated: result.updated, bytes: result.output.length });
-		return result;
-	});
-	ipcMain.handle(
-		ipcChannels.piCheckCustom,
-		async (_event, customPath: string) => {
-			const status = await piLocator.validateCustomPath(customPath);
-			// 校验通过后持久化归一化后的路径，后续启动 agent 时 PiProcess 会从 settings 读取。
-			// 例如用户粘贴 "D:\\foo\\pi" 时，PiLocator 会返回可执行的 D:\foo\pi.cmd。
-			if (status.installed && status.command) {
-				await settingsStore.update({ customPiPath: status.command });
-			}
-			void appLogger.info("pi", "Custom pi path checked", {
-				installed: status.installed,
-				version: status.version,
-				command: status.command,
-				error: status.error,
-			});
-			return status;
-		},
-	);
-
-	/**
-	 * 执行 npm install 安装命令，返回 stdout/stderr/exitCode。
-	 * 用于首次安装向导中让用户一键安装 pi CLI。
-	 * 使用 execFile 而非 spawn 以确保命令执行完毕后一次性返回完整输出。
-	 */
-	ipcMain.handle(
-		ipcChannels.piExecInstall,
-		async (_event, command: string): Promise<import("../shared/types").PiInstallExecResult> => {
-			void appLogger.info("pi", "Executing install command", { command });
-			try {
-				const { execFile } = await import("node:child_process");
-				const result = await new Promise<import("../shared/types").PiInstallExecResult>((resolve) => {
-					// Windows 下通过 cmd /c 执行命令，确保 npm.cmd shim 能被正确调用。
-					// Unix 直接使用 shell:true 兼容通过 nvm/n 等版本管理器安装的 npm。
-					const isWin = process.platform === "win32";
-					if (isWin) {
-						const child = execFile(
-							process.env.ComSpec || "cmd.exe",
-							["/d", "/s", "/c", command],
-							{
-								cwd: app.getPath("home"),
-								timeout: 120_000, // npm install 最长 2 分钟
-								env: { ...process.env, npm_config_fund: "false", npm_config_audit: "false" },
-								windowsHide: true,
-								encoding: "utf8",
-								shell: false,
-							},
-							(error: unknown, stdout: string, stderr: string) => {
-								const execError = error as { code?: number | string } | null;
-								resolve({
-									success: !error,
-									exitCode: typeof execError?.code === "number" ? execError.code : execError ? -1 : 0,
-									stdout: stdout || "",
-									stderr: stderr || "",
-								});
-							},
-						);
-					} else {
-						execFile(
-							"/bin/sh",
-							["-c", command],
-							{
-								cwd: app.getPath("home"),
-								timeout: 120_000,
-								env: { ...process.env, npm_config_fund: "false", npm_config_audit: "false" },
-								encoding: "utf8",
-							},
-							(error: unknown, stdout: string, stderr: string) => {
-								const execError = error as { code?: number | string } | null;
-								resolve({
-									success: !error,
-									exitCode: typeof execError?.code === "number" ? execError.code : execError ? -1 : 0,
-									stdout: stdout || "",
-									stderr: stderr || "",
-								});
-							},
-						);
-					}
-				});
-				void appLogger.info("pi", "Install command completed", {
-					success: result.success,
-					exitCode: result.exitCode,
-					stdoutLength: result.stdout.length,
-					stderrLength: result.stderr.length,
-				});
-				return result;
-			} catch (error) {
-				const message = error instanceof Error ? error.message : String(error);
-				void appLogger.error("pi", "Install command threw", { error: message });
-				return { success: false, exitCode: -1, stdout: "", stderr: message };
-			}
-		},
-	);
-
-	/**
-	 * 检查 npm 是否可在系统中执行。
-	 * 通过执行 npm --version 判断，返回版本号或错误信息。
-	 * 用于首次安装向导中判断是否应显示 npm install 按钮或引导安装 Node.js。
-	 */
-	ipcMain.handle(
-		ipcChannels.piCheckNpm,
-		async (): Promise<import("../shared/types").NpmAvailabilityResult> => {
-			try {
-				const { execFile } = await import("node:child_process");
-				const result = await new Promise<import("../shared/types").NpmAvailabilityResult>((resolve) => {
-					const isWin = process.platform === "win32";
-					if (isWin) {
-						execFile(
-							process.env.ComSpec || "cmd.exe",
-							["/d", "/s", "/c", "npm --version"],
-							{ timeout: 10_000, encoding: "utf8", windowsHide: true, shell: false },
-							(error, stdout) => {
-								if (error) {
-									resolve({ available: false, error: error.message });
-								} else {
-									resolve({ available: true, version: stdout.trim() });
-								}
-							},
-						);
-					} else {
-						execFile(
-							"npm",
-							["--version"],
-							{ timeout: 10_000, encoding: "utf8" },
-							(error, stdout) => {
-								if (error) {
-									resolve({ available: false, error: error.message });
-								} else {
-									resolve({ available: true, version: stdout.trim() });
-								}
-							},
-						);
-					}
-				});
-				return result;
-			} catch (error) {
-				const message = error instanceof Error ? error.message : String(error);
-				return { available: false, error: message };
-			}
-		},
-	);
-	ipcMain.handle(ipcChannels.appInfo, () => ({
-		version: app.getVersion(),
-		releasesUrl: RELEASES_URL,
-		platform: process.platform,
-	}));
-	ipcMain.handle(ipcChannels.appPreferredSystemLanguages, () => {
-		// Renderer navigator.language can reflect Chromium launch flags or a stale browser locale.
-		// Electron exposes the OS preference order directly; use it for the "follow system" setting.
-		try {
-			return app.getPreferredSystemLanguages();
-		} catch {
-			return [];
-		}
-	});
-	ipcMain.handle(ipcChannels.appCheckUpdate, () =>
-		checkForAppUpdate(settingsStore.get().installationType),
-	);
-	ipcMain.handle(
-		ipcChannels.appDownloadUpdate,
-		async (_event, asset: AppUpdateAsset) => downloadUpdateAsset(asset),
-	);
-	ipcMain.handle(
-		ipcChannels.appInstallUpdate,
-		async (_event, filePath: string) => installDownloadedUpdate(filePath),
-	);
-	ipcMain.handle(ipcChannels.logsList, async (_event, query: AppLogQuery) =>
-		appLogger.list(query),
-	);
-	ipcMain.handle(
-		ipcChannels.rendererLog,
-		async (
-			_event,
-			level: AppLogLevel,
-			scope: string,
-			message: string,
-			detail?: unknown,
-		) => {
-			const safeLevel = ["debug", "info", "warn", "error"].includes(level)
-				? level
-				: "info";
-			await appLogger.log(safeLevel as AppLogLevel, scope, message, detail);
-		},
-	);
-	ipcMain.on(ipcChannels.preloadReady, (event) => {
-		void appLogger.info("app", "Preload API exposed", {
-			url: event.sender.getURL(),
-		});
-	});
-	ipcMain.on(ipcChannels.preloadError, (event, detail) => {
-		void appLogger.error("app", "Preload API expose failed", {
-			url: event.sender.getURL(),
-			detail,
-		});
-	});
-	ipcMain.handle(ipcChannels.logsClear, async () => appLogger.clear());
-	ipcMain.handle(ipcChannels.logsOpenFolder, async () => appLogger.openFolder());
-	/** 获取 app 日志文件总大小 */
-	ipcMain.handle(ipcChannels.logsSize, async () => appLogger.getSize());
-	/** 获取 RPC 日志文件总大小，可选按 agentId 过滤 */
-	ipcMain.handle(ipcChannels.rpcLogsGetSize, async (_event, agentId?: string) => rpcLogger.getSize(agentId));
-	/** 从文件读取 RPC 日志，可选按 agentId/日期范围过滤 */
-	ipcMain.handle(ipcChannels.rpcLogsGet, async (_event, options?: { agentId?: string; days?: number; limit?: number }) => rpcLogger.getFromFile(options));
-	/** 清空 RPC 日志文件，可选按 agentId 过滤 */
-	ipcMain.handle(ipcChannels.rpcLogsClear, async (_event, agentId?: string) => rpcLogger.clear(agentId));
-	/** 开关某 agent 的 RPC 日志记录 */
-	ipcMain.handle(ipcChannels.rpcLoggingSet, async (_event, agentId: string, enabled: boolean) => {
-		agentManager.setRpcLogging(agentId, enabled);
-		return enabled;
-	});
-	/** 查询某 agent 的 RPC 日志记录状态 */
-	ipcMain.handle(ipcChannels.rpcLoggingGet, async (_event, agentId: string) => agentManager.isRpcLogging(agentId));
-	/** 用默认编辑器打开某 agent 的 RPC 日志文件 */
-	ipcMain.handle(ipcChannels.rpcLogsOpenFile, async (_event, agentId: string) => {
-		const { shell } = require("electron");
-		const { join } = require("path");
-		const dir = join(app.getPath("userData"), "logs", "rpc");
-		await shell.openPath(dir);
-	});
-	ipcMain.handle(ipcChannels.appFeedbackEnvironment, async () => {
-		// 反馈报告只包含诊断必需的运行时版本与 pi 检测结果，不读取配置密钥或会话内容。
-		const pi = await piLocator.check();
-		return {
-			appVersion: app.getVersion(),
-			platform: process.platform,
-			arch: process.arch,
-			electronVersion: process.versions.electron ?? "",
-			chromeVersion: process.versions.chrome ?? "",
-			nodeVersion: process.versions.node,
-			pi,
-		};
-	});
-	ipcMain.handle(ipcChannels.appOpenExternal, async (_event, url: string, forceSystem?: boolean) => {
-		// 外部链接统一经主进程打开，避免 renderer 直接依赖 shell 权限，并遵守用户设置的打开方式。
-		// forceSystem 为 true 时绕过 linkOpenMode 检查，始终用系统默认浏览器。
-		await openExternalUrl(url, forceSystem);
-	});
-	ipcMain.handle(ipcChannels.appRestart, async () => {
-		// 标记为退出状态，避免 closeToTray 阻止重启
-		isQuitting = true;
-		// 停止所有 Agent 和服务
-		await webServiceManager?.stop();
-		terminalManager?.closeAll();
-		agentManager?.stopAll();
-		// 重启应用
-		app.relaunch();
-		app.quit();
-	});
-	ipcMain.handle(ipcChannels.appWindowMinimize, () => {
-		if (!mainWindow || mainWindow.isDestroyed()) return;
-		mainWindow.minimize();
-	});
-	ipcMain.handle(ipcChannels.appWindowToggleMaximize, () => {
-		if (!mainWindow || mainWindow.isDestroyed()) return;
-		if (mainWindow.isMaximized()) mainWindow.unmaximize();
-		else mainWindow.maximize();
-	});
-	ipcMain.handle(ipcChannels.appWindowToggleAlwaysOnTop, () => {
-		if (!mainWindow || mainWindow.isDestroyed()) return false;
-		const next = !mainWindow.isAlwaysOnTop();
-		// floating 适合工具型桌面窗口；跨平台由 Electron 映射到各系统的置顶层级。
-		mainWindow.setAlwaysOnTop(next, "floating");
-		return next;
-	});
-	ipcMain.handle(ipcChannels.appWindowClose, () => {
-		if (!mainWindow || mainWindow.isDestroyed()) return;
-		mainWindow.close();
-	});
-
-	ipcMain.handle(ipcChannels.settingsGet, () => settingsStore.get());
-	ipcMain.handle(
-		ipcChannels.settingsUpdate,
-		async (_event, patch: Partial<AppSettings>) => {
-			// 记录更新前的设置，用于驱动桌面宠物对 pet 字段变化的反应
-			const prevSettings = settingsStore.get();
-			const settings = await settingsStore.update(patch);
-			void appLogger.info("settings", "Settings updated", { keys: Object.keys(patch) });
-			// 桌面宠物：设置面板走 settings.update，这里统一驱动开窗/切换/置顶
-			await petSystem?.reactToSettings(prevSettings, settings);
-			if (
-				"desktopProxyEnabled" in patch ||
-				"desktopProxyUrl" in patch ||
-				"desktopProxyBypass" in patch
-			) {
-				await applyDesktopProxy(settings);
-			}
-			if ("theme" in patch) {
-				applyNativeThemeSource(settings);
-			}
-			if ("useNativeTitleBar" in patch) {
-				settingsStore.notifyTitleBarChange(mainWindow);
-			}
-			if ("zoomFactor" in patch) {
-				mainWindow?.webContents.setZoomFactor(settings.zoomFactor);
-			}
-			if (
-				"webServiceEnabled" in patch ||
-				"webServiceHost" in patch ||
-				"webServicePort" in patch
-			) {
-				try {
-					await webServiceManager.applySettings(settings);
-				} catch (error) {
-					if (settings.webServiceEnabled) {
-						await settingsStore.update({ webServiceEnabled: false });
-					}
-					throw error;
-				}
-			}
-			// WSL 设置变更时同步更新会话扫描器和配置管理器
-			if ("wslEnabled" in patch || "wslDistro" in patch || "wslUser" in patch) {
-				await syncWslEnvironment(settings);
-			}
-			return settings;
-		},
-	);
-	ipcMain.handle(
-		ipcChannels.settingsTestPiProxy,
-		async () => {
-			const result = await testPiProxy(settingsStore.get());
-			void appLogger.info("settings", "Pi proxy tested", {
-				success: result.success,
-				elapsedMs: result.elapsedMs,
-				statusCode: result.statusCode,
-				error: result.error,
-			});
-			return result;
-		},
-	);
-
-	ipcMain.handle(ipcChannels.skillsList, () => skillManager.list());
-	ipcMain.handle(ipcChannels.skillsCreate, async (_event, input: CreatePiSkillInput) => {
-		const result = await skillManager.create(input);
-		void appLogger.info("skill", "Skill created", { name: input.name, locationId: input.locationId });
-		return result;
-	});
-	ipcMain.handle(ipcChannels.skillsToggle, async (_event, path: string, enabled: boolean) => {
-		const result = await skillManager.toggle(path, enabled);
-		void appLogger.info("skill", "Skill toggled", { path, enabled });
-		return result;
-	});
-	ipcMain.handle(ipcChannels.skillsDelete, async (_event, path: string) => {
-		const result = await skillManager.delete(path);
-		void appLogger.info("skill", "Skill deleted", { path });
-		return result;
-	});
-	ipcMain.handle(ipcChannels.skillsOpenFolder, (_event, path?: string) =>
-		skillManager.openFolder(path),
-	);
-
-	// ── Prompt Templates ──
-	ipcMain.handle(ipcChannels.promptsList, () => promptManager.list());
-	ipcMain.handle(ipcChannels.promptsCreate, async (_event, input: CreatePiPromptTemplateInput) => {
-		const result = await promptManager.create(input);
-		void appLogger.info("prompt", "Prompt template created", { name: input.name });
-		return result;
-	});
-	ipcMain.handle(ipcChannels.promptsDelete, async (_event, filePath: string) => {
-		await promptManager.delete(filePath);
-		void appLogger.info("prompt", "Prompt template deleted", { filePath });
-	});
-	ipcMain.handle(ipcChannels.promptsOpenFolder, () => promptManager.openFolder());
-	ipcMain.handle(ipcChannels.promptsEdit, async (_event, filePath: string, content?: string) => {
-		if (content !== undefined) {
-			await promptManager.writeContent(filePath, content);
-			return;
-		}
-		return promptManager.readContent(filePath);
-	});
-	ipcMain.handle(ipcChannels.promptsListByProject, async (_event, projectPath: string) => {
-		return promptManager.listByProject(projectPath);
-	});
-	ipcMain.handle(ipcChannels.promptsCreateInProject, async (_event, projectPath: string, input: CreatePiPromptTemplateInput) => {
-		const result = await promptManager.createInProject(projectPath, input);
-		void appLogger.info("prompt", "Project prompt template created", {
-			projectPath,
-			name: input.name,
-		});
-		return result;
-	});
-	ipcMain.handle(ipcChannels.promptsDeleteInProject, async (_event, projectPath: string, fileName: string) => {
-		await promptManager.deleteFromProject(projectPath, fileName);
-		void appLogger.info("prompt", "Project prompt template deleted", { projectPath, fileName });
-	});
-	ipcMain.handle(ipcChannels.promptsRename, async (_event, oldName: string, newName: string) => {
-		const result = await promptManager.rename(oldName, newName);
-		void appLogger.info("prompt", "Prompt template renamed", { oldName, newName });
-		return result;
-	});
-	ipcMain.handle(ipcChannels.promptsRenameInProject, async (_event, projectPath: string, oldName: string, newName: string) => {
-		const result = await promptManager.renameInProject(projectPath, oldName, newName);
-		void appLogger.info("prompt", "Project prompt template renamed", { projectPath, oldName, newName });
-		return result;
-	});
-
-	// ── Prompt Store (prompts.chat) ──────────────────────────────────────
-	/** prompts.chat REST API 端点 */
-	const PROMPT_STORE_BASE = "https://prompts.chat/api";
-
-	/**
-	 * 搜索 prompts.chat 公开 prompt 市场。
-	 * 使用 REST API 搜索，返回结构化结果供用户浏览和选择导入。
-	 */
-	ipcMain.handle(ipcChannels.promptStoreSearch, async (_event, query: string, options?: {
-		limit?: number;
-		type?: string;
-		category?: string;
-		tag?: string;
-	}) => {
-		try {
-			const params = new URLSearchParams({ q: query });
-			if (options?.limit) params.set("perPage", String(options.limit));
-			if (options?.type) params.set("type", options.type);
-			if (options?.category) params.set("category", options.category);
-			if (options?.tag) params.set("tag", options.tag);
-
-			const url = `${PROMPT_STORE_BASE}/prompts?${params.toString()}`;
-			const response = await fetch(url, {
-				signal: AbortSignal.timeout(10_000),
-			});
-			if (!response.ok) {
-				throw new Error(`prompts.chat API 返回 ${response.status}`);
-			}
-			// API 返回原始结构，扁平化为 UI 消费的格式
-			const raw = (await response.json()) as PromptStoreSearchResponse;
-			const result: PromptStoreSearchResult = {
-				query,
-				count: raw.total,
-				prompts: raw.prompts.map(flattenPromptItem),
-			};
-			return result;
-		} catch (err) {
-			const message = err instanceof Error ? err.message : String(err);
-			void appLogger.warn("prompt-store", "Search failed", { query, error: message });
-			throw new Error(`搜索 prompt 商店失败: ${message}`);
-		}
-	});
-
-	/** 通过 ID 获取 prompts.chat 单个 prompt 的完整内容 */
-	ipcMain.handle(ipcChannels.promptStoreGet, async (_event, id: string) => {
-		try {
-			const url = `${PROMPT_STORE_BASE}/prompts/${encodeURIComponent(id)}`;
-			const response = await fetch(url, {
-				signal: AbortSignal.timeout(10_000),
-			});
-			if (!response.ok) {
-				throw new Error(`prompts.chat API 返回 ${response.status}`);
-			}
-			const raw = (await response.json()) as PromptStoreRawItem;
-			return flattenPromptItem(raw);
-		} catch (err) {
-			const message = err instanceof Error ? err.message : String(err);
-			void appLogger.warn("prompt-store", "Get prompt failed", { id, error: message });
-			throw new Error(`获取 prompt 详情失败: ${message}`);
-		}
-	});
-
-	/** 将 prompts.chat 原始 prompt 条目扁平化为 UI 消费的格式 */
-	function flattenPromptItem(raw: PromptStoreRawItem): PromptStoreItem {
-		return {
-			id: raw.id,
-			title: raw.title,
-			description: raw.description,
-			content: raw.content,
-			type: raw.type,
-			author: raw.author?.name ?? "",
-			category: raw.category?.name ?? "",
-			tags: raw.tags?.map((t) => t.tag?.name).filter(Boolean) ?? [],
-			votes: raw.voteCount ?? 0,
-			createdAt: raw.createdAt,
-		};
-	}
-
-	/**
-	 * 将 prompts.chat 的命名变量（${name} / ${name:default}）
-	 * 转换为 pi 的位置参数（$N / ${N:-default}）。
-	 * 同时生成 argument-hint。
-	 */
-	function convertStoreVarsToPiVars(content: string): { converted: string; argumentHint: string; varCount: number } {
-		// 收集所有 ${name} 和 ${name:default}，保留出现顺序
-		const varMap = new Map<string, { index: number; hasDefault: boolean; defaultVal?: string }>();
-		let nextIndex = 1;
-		// 先扫描所有变量并分配序号
-		const scanRegex = /\$\{([a-zA-Z_]\w*)(?::(.*?))?\}/g;
-		let scanMatch: RegExpExecArray | null;
-		while ((scanMatch = scanRegex.exec(content)) !== null) {
-			const varName = scanMatch[1];
-			if (!varMap.has(varName)) {
-				varMap.set(varName, {
-					index: nextIndex++,
-					hasDefault: scanMatch[2] !== undefined,
-					defaultVal: scanMatch[2],
-				});
-			}
-		}
-
-		// 如果没有变量，直接返回原文
-		if (varMap.size === 0) {
-			return { converted: content, argumentHint: "", varCount: 0 };
-		}
-
-		// 替换变量
-		let converted = content.replace(
-			/\$\{([a-zA-Z_]\w*)(?::(.*?))?\}/g,
-			(_match, varName: string, defaultVal?: string) => {
-				const info = varMap.get(varName)!;
-				if (defaultVal !== undefined) {
-					return `\${${info.index}:-${defaultVal}}`;
-				}
-				return `$${info.index}`;
-			},
-		);
-
-		// 生成 argument-hint：无默认值的用 <>, 有默认值的用 []
-		const hints: string[] = [];
-		for (let i = 1; i < nextIndex; i++) {
-			const entry = Array.from(varMap.entries()).find(([, v]) => v.index === i);
-			if (!entry) continue;
-			const [varName, info] = entry;
-			if (info.hasDefault) {
-				hints.push(`[${varName}:${info.defaultVal}]`);
-			} else {
-				hints.push(`<${varName}>`);
-			}
-		}
-		const argumentHint = hints.length > 0 ? hints.join(" ") : "";
-
-		return { converted, argumentHint, varCount: varMap.size };
-	}
-
-	/** 从 prompts.chat 导入 prompt 到本地 ~/.pi/agent/prompts/ */
-	ipcMain.handle(ipcChannels.promptStoreImport, async (_event, {
-		title,
-		description,
-		content,
-	}: {
-		title: string;
-		description: string;
-		content: string;
-	}) => {
-		try {
-			const name = title
-				.trim()
-				.toLowerCase()
-				.replace(/[^\p{L}\p{N}-]+/gu, "-")
-				.replace(/-+/g, "-")
-				.replace(/^-|-$/g, "");
-			if (!name) throw new Error("标题中未提取到有效文件名");
-
-			// 转换变量格式：prompts.chat 的 ${name} → pi 的 $N
-			const { converted, argumentHint, varCount } = convertStoreVarsToPiVars(content);
-
-			// 使用 PromptManager.create 来创建，统一命名规范
-			// 但如果 create 失败（模板已存在名），加后缀
-			const tryCreate = async (tryName: string): Promise<PiPromptTemplateSummary> => {
-				try {
-					return await promptManager.create({ name: tryName, description });
-				} catch {
-					// 名称冲突，加数字后缀重试
-					const match = tryName.match(/-(\d+)$/);
-					const nextNum = match ? parseInt(match[1], 10) + 1 : 2;
-					const suffixName = tryName.replace(/-\d+$/, "") + "-" + nextNum;
-					return tryCreate(suffixName);
-				}
-			};
-
-			// 如果有 argument-hint，在 frontmatter 中标注
-			const hintLine = argumentHint ? `\nargument-hint: ${argumentHint}` : "";
-			const frontmatter = `---\ndescription: ${description.replace(/\n/g, " ")}\nsource: prompts.chat${hintLine}\n---\n\n`;
-			const summary = await tryCreate(name);
-			await promptManager.writeContent(summary.path, frontmatter + converted);
-
-			void appLogger.info("prompt-store", "Imported prompt from store", {
-				title,
-				localName: summary.name,
-				variables: varCount,
-			});
-			return summary;
-		} catch (err) {
-			const message = err instanceof Error ? err.message : String(err);
-			void appLogger.warn("prompt-store", "Import failed", { title, error: message });
-			throw new Error(`导入 prompt 失败: ${message}`);
-		}
-	});
-
-	// ── Skill Store（prompts.chat skills） ─────────────────────────────
-	/** 搜索 prompts.chat 的公开 skill。复用 prompts 搜索，按 skill 关键词过滤 */
-	ipcMain.handle(ipcChannels.skillStoreSearch, async (_event, query: string) => {
-		try {
-			const params = new URLSearchParams({ q: query, perPage: "20" });
-			const url = `https://prompts.chat/api/prompts?${params.toString()}`;
-			const response = await fetch(url, { signal: AbortSignal.timeout(10_000) });
-			if (!response.ok) throw new Error(`prompts.chat API 返回 ${response.status}`);
-			const raw = (await response.json()) as PromptStoreSearchResponse;
-			const result: PromptStoreSearchResult = {
-				query,
-				count: raw.total,
-				prompts: raw.prompts.map(flattenPromptItem),
-			};
-			return result;
-		} catch (err) {
-			const message = err instanceof Error ? err.message : String(err);
-			throw new Error(`搜索 skill 商店失败: ${message}`);
-		}
-	});
-
-	/** 从 prompts.chat 导入为本地 skill */
-	ipcMain.handle(ipcChannels.skillStoreImport, async (_event, item: PromptStoreItem, locationId: "pi-global" | "agents-global" = "pi-global") => {
-		try {
-			const name = item.title
-				.trim()
-				.toLowerCase()
-				.replace(/[^\p{L}\p{N}-]+/gu, "-")
-				.replace(/-+/g, "-")
-				.replace(/^-|-$/g, "");
-			if (!name) throw new Error("标题中未提取到有效文件名");
-
-			const { writeFile } = await import("node:fs/promises");
-
-			// 用 SkillManager 创建 skill（默认 pi-global，用户可通过 dropdown 切换）
-			const summary = await skillManager.create({
-				name,
-				description: item.description || item.title,
-				locationId: locationId ?? "pi-global",
-			});
-
-			// 覆盖 SKILL.md 为实际内容
-			const skillContent = `---\nname: ${name}\ndescription: ${(item.description || item.title).replace(/\n/g, " ")}\nsource: prompts.chat\n---\n\n# ${item.title}\n\n${item.content}`;
-			await writeFile(summary.path, skillContent, "utf8");
-
-			void appLogger.info("skill-store", "Imported skill from store", { title: item.title, localName: name });
-			return summary;
-		} catch (err) {
-			const message = err instanceof Error ? err.message : String(err);
-			void appLogger.warn("skill-store", "Import failed", { title: item.title, error: message });
-			throw new Error(`导入 skill 失败: ${message}`);
-		}
-	});
-
-	// ── Skills.sh（https://www.skills.sh） ─────────────────────────
-	/** 搜索 Skills.sh 注册中心 */
-	ipcMain.handle(ipcChannels.skillHubSearch, async (_event, opts: { query: string; limit?: number }) => {
-		const { query, limit = 50 } = opts;
-		try {
-			const response = await fetch(
-				`https://www.skills.sh/api/search?q=${encodeURIComponent(query)}&limit=${limit}`,
-				{ signal: AbortSignal.timeout(15_000) },
-			);
-			if (!response.ok) throw new Error(`API 返回 ${response.status}`);
-			const json = (await response.json()) as {
-				skills?: Array<{ id: string; skillId: string; name: string; installs: number; source: string }>;
-			};
-			const skills = json.skills ?? [];
-			// skills.sh 的 id 格式为 "source/skillName"，提取 package 名用于安装
-			const items = skills.map((item) => ({
-				slug: item.id,
-				name: item.name,
-				description: "",
-				description_zh: "",
-				iconUrl: undefined,
-				stars: 0,
-				downloads: item.installs,
-				installs: item.installs,
-				category: "",
-				version: "",
-				ownerName: item.source,
-				source: "skills.sh",
-			}));
-			// 按安装量降序排列
-			items.sort((a, b) => b.installs - a.installs);
-			return { query, total: items.length, items };
-		} catch (err) {
-			const message = err instanceof Error ? err.message : String(err);
-			throw new Error(`搜索 Skills.sh 失败: ${message}`);
-		}
-	});
-
-	/** 获取 Skills.sh skill 详情（直接返回 null，用不到） */
-	ipcMain.handle(ipcChannels.skillHubDetail, async () => null);
-
-	/** 安装 Skills.sh skill：npx skills add <package> */
-	ipcMain.handle(ipcChannels.skillHubInstall, async (_event, slug: string) => {
-		// slug 是 "source/skillName" 格式，例如 "anthropics/skills/pdf"
-		const lastSlash = slug.lastIndexOf("/");
-		const pkg = lastSlash > 0 ? slug.slice(0, lastSlash) : slug;
-		const skillName = lastSlash > 0 ? slug.slice(lastSlash + 1) : "";
-		try {
-			const { exec } = await import("node:child_process");
-			const { promisify } = await import("node:util");
-			const execAsync = promisify(exec);
-			// -g 安装到用户全局目录, -s 指定单个 skill, -y 跳过交互确认
-			const cmd = `npx skills add "${pkg}" -g -s "${skillName}" -y`;
-			await execAsync(cmd, { encoding: "utf8", timeout: 120_000, maxBuffer: 10 * 1024 * 1024 });
-			void appLogger.info("skill-hub", "Installed skill", { slug, pkg, skillName });
-			return { success: true, slug, installDir: "" };
-		} catch (err) {
-			const message = err instanceof Error ? err.message : String(err);
-			void appLogger.warn("skill-hub", "Install failed", { slug, error: message });
-			return { success: false, slug, installDir: "", error: message };
-		}
-	});
-
-	// ── Yao Open Prompts（中文提示词精选） ─────────────────────────────
-	ipcMain.handle(ipcChannels.yaoPromptsList, async (_event, opts?: {
-		category?: string;
-		search?: string;
-		page?: number;
-		pageSize?: number;
-	}) => {
-		try {
-			const result = await xuePromptManager.list(opts);
-			return result;
-		} catch (err) {
-			const message = err instanceof Error ? err.message : String(err);
-			void appLogger.warn("yao-prompts", "List failed", { error: message });
-			throw new Error(`读取中文提示词库失败: ${message}`);
-		}
-	});
-
-	ipcMain.handle(ipcChannels.yaoPromptsDetail, async (_event, slug: string, category: string) => {
-		try {
-			const result = await xuePromptManager.detail(slug, category);
-			if (!result) throw new Error(`未找到提示词: ${slug}`);
-			return result;
-		} catch (err) {
-			const message = err instanceof Error ? err.message : String(err);
-			void appLogger.warn("yao-prompts", "Detail failed", { slug, category, error: message });
-			throw new Error(`读取提示词详情失败: ${message}`);
-		}
-	});
-
-	ipcMain.handle(ipcChannels.yaoPromptsImport, async (_event, slug: string, category: string) => {
-		try {
-			const result = await xuePromptManager.importToPi(slug, category);
-			void appLogger.info("yao-prompts", "Imported to pi templates", { slug, localName: result.name });
-			return result;
-		} catch (err) {
-			const message = err instanceof Error ? err.message : String(err);
-			void appLogger.warn("yao-prompts", "Import failed", { slug, category, error: message });
-			throw new Error(`导入提示词失败: ${message}`);
-		}
-	});
-
-	// forceRefresh=true 时跳过内存缓存，重新跑 pi list 并查 npm 版本；默认走缓存。
-	ipcMain.handle(ipcChannels.extensionsList, (_event, forceRefresh?: boolean) =>
-		extensionManager.list(Boolean(forceRefresh)),
-	);
-	ipcMain.handle(ipcChannels.extensionsUninstall, async (_event, source: string, scope?: "user" | "project" | "unknown") => {
-		const result = await extensionManager.uninstall(source, scope);
-		void appLogger.info("extension", "Extension uninstalled", { source, scope });
-		return result;
-	});
-	ipcMain.handle(ipcChannels.extensionsInstall, async (_event, source: string) => {
-		const result = await extensionManager.install(source);
-		void appLogger.info("extension", "Extension installed", { source });
-		return result;
-	});
-	ipcMain.handle(ipcChannels.extensionsRemoveBuiltIn, async (_event, source: string) => {
-		// 移除内置扩展：标记跳过自动部署，并删除用户目录文件，避免 pi 仍加载导致工具冲突
-		await extensionManager.removeBuiltIn(source);
-		void appLogger.info("extension", "Built-in extension removed", { source });
-	});
-
-	ipcMain.handle(ipcChannels.extensionsRestoreBuiltIn, async (_event, source: string) => {
-		// 恢复内置扩展：从 PiDeck 移除标记中删除，并确保文件存在
-		await extensionManager.restoreBuiltIn(source);
-		await ensurePiDeckExtension(source, activeWslEnvironment?.windowsHome);
-		void appLogger.info("extension", "Built-in extension restored", { source });
-	});
-	ipcMain.handle(ipcChannels.extensionsUpdate, async () => {
-		const result = await extensionManager.updateExtensions();
-		void appLogger.info("extension", "Extensions update command completed", { updated: result.updated, bytes: result.output.length });
-		return result;
-	});
-
-	ipcMain.handle(ipcChannels.agentsList, () => agentManager.list());
-	ipcMain.handle(ipcChannels.agentsCreate, async (_event, input: CreateAgentInput) => {
-		void appLogger.info("agent", "Agent create IPC received", {
-			projectId: input.projectId,
-			sessionPath: input.sessionPath,
-			title: input.title,
-			platform: process.platform,
-			arch: process.arch,
-		});
-		try {
-			const tab = await agentManager.create(input);
-			void appLogger.info("agent", "Agent create IPC completed", {
-				agentId: tab.id,
-				projectId: input.projectId,
-				status: tab.status,
-				sessionPath: tab.sessionPath,
-			});
-			void appLogger.info("agent", "Agent created", {
-				agentId: tab.id,
-				projectId: input.projectId,
-				title: tab.title,
-				sessionPath: tab.sessionPath,
-			});
-			// 不再自动为新会话创建飞书群；必须由用户在会话输入框的飞书菜单中手动连接后才同步。
-			return tab;
-		} catch (error) {
-			// createUnlocked 内部已尽量吞掉 pi 启动失败；这里兜底信任/项目查找等前置异常，
-			// 保证 IPC 层也有结构化日志，方便 Mac 闪退类反馈对照 userData/logs。
-			void appLogger.error("agent", "Agent create IPC failed", {
-				projectId: input.projectId,
-				sessionPath: input.sessionPath,
-				error: error instanceof Error ? error.message : String(error),
-				stack: error instanceof Error ? error.stack : undefined,
-				platform: process.platform,
-				arch: process.arch,
-			});
-			throw error;
-		}
-	});
-	ipcMain.handle(
-		ipcChannels.agentsRename,
-		async (_event, agentId: string, name: string) => {
-			const result = await agentManager.rename(agentId, name);
-			void appLogger.info("agent", "Agent renamed", { agentId, name });
-			return result;
-		},
-	);
-	ipcMain.handle(ipcChannels.agentsStop, async (_event, agentId: string) => {
-		terminalManager.closeAgent(agentId);
-		await agentManager.stop(agentId);
-		void appLogger.info("agent", "Agent stopped", { agentId });
-	});
-	ipcMain.handle(ipcChannels.agentsPrompt, async (_event, input: SendPromptInput) => {
-		const bridge = feishuBridge;
-		const bridgeConnected = bridge?.getStatus().status === "connected";
-		const hasFeishuBinding = bridgeConnected && bridge.hasSessionBinding(input.agentId);
-		const docTitle = bridgeConnected ? wantsFeishuDoc(input.message) : undefined;
-		const sessionChatId = bridgeConnected ? bridge.getSessionChatId(input.agentId) : undefined;
-		let agentInstruction: string | undefined;
-		const buildFeishuActionInstruction = (chatId?: string) => [
-			"当前会话已连接飞书聊天。严禁调用 lark-cli、飞书 IM API 或搜索群聊来发送文件；不要询问 chat_id。需要把本地文件发到当前飞书聊天时，最终回答末尾独立一行写 [SEND_FILE:本地文件路径]，PiDeck 会按当前会话绑定自动上传。",
-			chatId ? `当前绑定的飞书 chat_id: ${chatId}。这是只读上下文，用于确认当前会话绑定；发送文件仍必须用 [SEND_FILE:本地文件路径]。` : undefined,
-		].filter(Boolean).join("\n");
-
-		if (bridgeConnected && hasFeishuBinding) {
-			const filePath = resolveFeishuFileSendIntent(input.message, agentManager.getCwd(input.agentId));
-			if (filePath) {
-				const result = await bridge.sendFileForSession(input.agentId, filePath);
-				agentManager.recordHostExchange(input.agentId, input.message, result);
-				void appLogger.info("feishu", "File sent through current session binding", {
-					agentId: input.agentId,
-					filePath,
-					success: result.startsWith("✅"),
-				});
-				return;
-			}
-		}
-
-		// 用户说了要做飞书文档但当前会话未绑定 → 自动绑定并告知 Agent 可用 lark-cli
-		if (bridgeConnected && docTitle && !hasFeishuBinding) {
-			const tab = agentManager.list().find((item) => item.id === input.agentId);
-			if (tab) {
-				await bridge.ensureSessionMirror(tab.id, tab.title, tab.sessionPath).catch((e) => {
-					console.error("[Feishu] auto-bind session mirror failed:", e);
-				});
-				bridge.trackDocRequest(tab.id, docTitle);
-				void bridge.forwardUserMessageToFeishu(tab.id, input.message).catch((e) => {
-					console.error("[Feishu] forward PiDeck message failed:", e);
-				});
-				agentInstruction = `${buildFeishuActionInstruction(bridge.getSessionChatId(tab.id))}\n创建飞书文档时，先输出完整正文，最后独立一行写 [CREATE_DOC:文档标题]。`;
-			}
-		} else if (hasFeishuBinding) {
-			agentInstruction = buildFeishuActionInstruction(sessionChatId);
-			const tab = agentManager.list().find((item) => item.id === input.agentId);
-			if (tab) {
-				void bridge.startSessionMirrorRun(tab.id, tab.title, tab.sessionPath).catch((e) => {
-					console.error("[Feishu] session mirror card init failed:", e);
-				});
-				if (input.message.trim()) {
-					void bridge.forwardUserMessageToFeishu(tab.id, input.message).catch((e) => {
-						console.error("[Feishu] forward PiDeck message failed:", e);
-					});
-				}
-			}
-		}
-		// agentMessage 用隐藏标记包裹宿主指令，UI/历史展示只显示用户原文。
-		const result = await agentManager.sendPrompt(
-			agentInstruction
-				? {
-						...input,
-						agentMessage: wrapHostInstruction(agentInstruction, input.message),
-					}
-				: input,
-		);
-		void appLogger.info("agent", "Prompt sent", {
-			agentId: input.agentId,
-			messageLength: input.message.length,
-			imageCount: input.images?.length ?? 0,
-			streamingBehavior: input.streamingBehavior,
-		});
-		return result;
-	});
-	ipcMain.handle(ipcChannels.agentsAbort, async (_event, agentId: string) => {
-		// Session Mirror: 停止飞书流式卡片
-		if (feishuBridge) {
-			feishuBridge.stopSessionMirrorRun(agentId);
-		}
-		const result = await agentManager.abort(agentId);
-		void appLogger.info("agent", "Agent aborted", { agentId });
-		return result;
-	});
-	ipcMain.handle(ipcChannels.agentsExportHtml, (_event, agentId: string) =>
-		agentManager.exportHtml(agentId),
-	);
-	ipcMain.handle(ipcChannels.agentsForkMessages, (_event, agentId: string) =>
-		agentManager.getForkMessages(agentId),
-	);
-	ipcMain.handle(
-		ipcChannels.agentsForkSession,
-		(_event, agentId: string, entryId: string) =>
-			agentManager.forkSession(agentId, entryId),
-	);
-	ipcMain.handle(ipcChannels.agentsCloneSession, async (_event, agentId: string) => {
-		const result = await agentManager.cloneSession(agentId);
-		void appLogger.info("agent", "Agent session cloned", { agentId });
-		return result;
-	});
-	ipcMain.handle(
-		ipcChannels.agentsSwitchSession,
-		async (_event, agentId: string, sessionPath: string) => {
-			const result = await agentManager.switchSession(agentId, sessionPath);
-			void appLogger.info("agent", "Agent switched session", { agentId, sessionPath });
-			return result;
-		},
-	);
-	ipcMain.handle(ipcChannels.agentsEditMessage, async (_event, agentId: string, messageId: string, text: string) => {
-		await agentManager.editMessage(agentId, messageId, text);
-		void appLogger.info("agent", "Message edited", { agentId, messageId });
-	});
-	ipcMain.handle(ipcChannels.agentsDeleteMessage, async (_event, agentId: string, messageId: string) => {
-		await agentManager.deleteMessage(agentId, messageId);
-		void appLogger.info("agent", "Message deleted", { agentId, messageId });
-	});
-	ipcMain.handle(
-		ipcChannels.agentsPrepareResend,
-		async (_event, agentId: string, messageId: string) => {
-			const result = await agentManager.prepareResendFromMessage(agentId, messageId);
-			void appLogger.info("agent", "Message prepared for resend", { agentId, messageId });
-			return result;
-		},
-	);
-	ipcMain.handle(ipcChannels.agentsReload, async (_event, agentId: string) => {
-		const result = await agentManager.reload(agentId);
-		void appLogger.info("agent", "Agent reloaded", { agentId });
-		return result;
-	});
-	ipcMain.handle(ipcChannels.agentsRestart, async (_event, agentId: string) => {
-		terminalManager.closeAgent(agentId);
-		const result = await agentManager.restart(agentId);
-		void appLogger.info("agent", "Agent restarted", { agentId });
-		return result;
-	});
-	ipcMain.handle(ipcChannels.agentsCompact, async (_event, agentId: string, prompt?: string) => {
-		void appLogger.info("agent", "Agent compact IPC called", { agentId, prompt });
-		try {
-			const result = await agentManager.compact(agentId, prompt);
-			void appLogger.info("agent", "Agent compact IPC succeeded", { agentId });
-			return result;
-		} catch (error) {
-			void appLogger.error("agent", "Agent compact IPC failed", {
-				agentId,
-				error: error instanceof Error ? error.message : String(error),
-			});
-			throw error;
-		}
-	});
-	ipcMain.handle(ipcChannels.agentsRuntimeState, (_event, agentId: string) =>
-		agentManager.getRuntimeState(agentId),
-	);
-	ipcMain.handle(ipcChannels.agentsCycleModel, (_event, agentId: string) =>
-		agentManager.cycleModel(agentId),
-	);
-	ipcMain.handle(ipcChannels.agentsAvailableModels, (_event, agentId: string) =>
-		agentManager.getAvailableModels(agentId),
-	);
-	ipcMain.handle(
-		ipcChannels.agentsSetModel,
-		async (_event, agentId: string, provider: string, modelId: string) => {
-			const result = await agentManager.setModel(agentId, provider, modelId);
-			void appLogger.info("agent", "Agent model changed", { agentId, provider, modelId });
-			return result;
-		},
-	);
-	ipcMain.handle(ipcChannels.agentsRefreshModels, async (_event, agentId: string) => {
-		void appLogger.info("agent", "Agent model refresh requested", { agentId });
-		return agentManager.refreshModels(agentId);
-	});
-	ipcMain.handle(ipcChannels.agentsCycleThinking, (_event, agentId: string) =>
-		agentManager.cycleThinking(agentId),
-	);
-	ipcMain.handle(
-		ipcChannels.agentsSetThinking,
-		async (_event, agentId: string, level: string) => {
-			const result = await agentManager.setThinking(agentId, level);
-			void appLogger.info("agent", "Agent thinking level changed", { agentId, level });
-			return result;
-		},
-	);
-	ipcMain.handle("agents:commands", async (_event, agentId: string) => {
-		try {
-			return await agentManager.getCommands(agentId);
-		} catch {
-			// agent 不存在或 RPC 超时时返回空列表，避免控制台报未处理异常
-			return [];
-		}
-	});
-
-	/** 用户通过 UI 响应了扩展的 ask_question 请求，转发给 AgentManager 发送 extension_ui_response */
-	ipcMain.handle(ipcChannels.agentsUiResponse, async (_event, agentId: string, requestId: string, response: { value?: string | boolean | null; cancelled?: boolean; confirmed?: boolean }) => {
-		await agentManager.sendUIResponse(agentId, requestId, response);
-	});
-
-	ipcMain.handle(ipcChannels.terminalList, (_event, agentId: string) =>
-		terminalManager.list(agentId),
-	);
-	/**
-	 * terminal ensure/create 依赖 agentManager.getCwd(agentId)。
-	 * 渲染层 pending-* 占位 id 或 agent 刚销毁时会抛 Agent not found；
-	 * 这里软失败返回空列表，避免 IPC reject → renderer unhandledrejection
-	 * （Mac 上用户感知为「一启动 agent 就闪退/报错」）。
-	 */
-	ipcMain.handle(ipcChannels.terminalEnsure, (_event, agentId: string, cwd?: string) => {
-		if (typeof agentId === "string" && agentId.startsWith("pending-")) return [];
-		try {
-			return terminalManager.ensure(agentId, cwd);
-		} catch (error) {
-			const message = error instanceof Error ? error.message : String(error);
-			if (/Agent not found/i.test(message)) {
-				void appLogger.warn("terminal", "terminal:ensure skipped, agent not ready", {
-					agentId,
-					error: message,
-				});
-				return [];
-			}
-			throw error;
-		}
-	});
-	ipcMain.handle(ipcChannels.terminalCreate, async (_event, agentId: string, shell?: string, cwd?: string) => {
-		if (typeof agentId === "string" && agentId.startsWith("pending-")) {
-			throw new Error("Terminal is not ready while agent is still starting");
-		}
-		try {
-			const result = terminalManager.create(agentId, shell as TerminalShell | undefined, cwd);
-			void appLogger.info("terminal", "Terminal created", { agentId, tabId: result.id, shell });
-			return result;
-		} catch (error) {
-			const message = error instanceof Error ? error.message : String(error);
-			if (/Agent not found/i.test(message)) {
-				throw new Error("Terminal is not ready: agent not found");
-			}
-			throw error;
-		}
-	});
-	ipcMain.handle(
-		ipcChannels.terminalInput,
-		(_event, tabId: string, data: string) => {
-			terminalManager.input(tabId, data);
-		},
-	);
-	ipcMain.handle(
-		ipcChannels.terminalResize,
-		(_event, tabId: string, cols: number, rows: number) => {
-			terminalManager.resize(tabId, cols, rows);
-		},
-	);
-	ipcMain.handle(ipcChannels.terminalClose, (_event, tabId: string) => {
-		terminalManager.close(tabId);
-		void appLogger.info("terminal", "Terminal closed", { tabId });
+	registerEditorsIpc({
+		settingsStore,
+		appLogger,
+		getMainWindow: () => mainWindow,
+	});
+	registerProjectsIpc({
+		projectStore,
+		settingsStore,
+		gitService,
+		worktreeService,
+		agentManager,
+		appLogger,
+		projectResourceManager,
+		mainCopy: mainCopy as (key: string, params?: Record<string, string | number>) => string,
+		getMainWindow: () => mainWindow,
+	});
+
+	registerScratchPadIpc({ appLogger });
+
+	registerSessionIpc({
+		projectStore,
+		settingsStore,
+		sessionScanner,
+		sessionCatalog,
+		sessionRuntimeCoordinator,
+		agentManager,
+		configManager,
+		codexSessionImporter,
+		claudeSessionImporter,
+		openCodeSessionImporter,
+		appLogger,
+		terminalManager,
+		mainCopy: mainCopy as (key: string, params?: Record<string, string | number>) => string,
+		getMainWindow: () => mainWindow,
+		emitSessionRuntimeEvent,
+		emitSessionRuntimeDetach,
+		createAnonymousSession,
+		stopSessionRuntime,
+		emitReplacementState,
+		readCatalogSessionReferenceMessages,
+		copyCatalogSession,
+		exportCatalogSessionHtml,
+		replaceAgentSession,
+	});
+
+	registerGitIpc({
+		appLogger,
+		gitService,
+		piLocator,
+		projectStore,
+		settingsStore,
+		worktreeService,
+	});
+
+	registerSystemIpc({
+		piLocator,
+		settingsStore,
+		configManager,
+		agentManager,
+		skillManager,
+		appLogger,
+		rpcLogger,
+		sessionRuntimeCoordinator,
+		getMainWindow: () => mainWindow,
+		mainCopy: mainCopy as (key: string, params?: Record<string, string | number>) => string,
+		checkForAppUpdate: checkForAppUpdate as (installationType?: string) => Promise<AppUpdateInfo | null>,
+		downloadUpdateAsset,
+		installDownloadedUpdate,
+		openExternalUrl,
+	});
+
+	registerStoreIpc({
+		promptManager,
+		skillManager,
+		xuePromptManager,
+		extensionManager,
+		appLogger,
+		mainCopy: mainCopy as (key: string, params?: Record<string, string | number>) => string,
+		ensurePiDeckExtension,
+	});
+
+	registerTerminalIpc({
+		appLogger,
+		sessionRuntimeCoordinator,
+		terminalManager,
+		toSessionCommandIpcError: sessionCommandIpcError,
 	});
 
 	ipcMain.handle(ipcChannels.terminalShells, () => {
@@ -3586,112 +2077,27 @@ function registerIpc() {
 	});
 
 	// ── 配置管理 ──────────────────────────────────────
-	ipcMain.handle(ipcChannels.configGetModels, () =>
-		configManager.getModelsConfig(),
-	);
-	ipcMain.handle(ipcChannels.configGetAuth, () =>
-		configManager.getAuthConfig(),
-	);
-	ipcMain.handle(ipcChannels.configGetSettings, () =>
-		configManager.getSettingsConfig(),
-	);
-	ipcMain.handle(ipcChannels.configGetTrust, () =>
-		configManager.getTrustConfig(),
-	);
-	// 项目信任确认：渲染进程回传用户选择，唤醒等待中的 Agent 创建流程（见 AgentManager.ensureProjectTrust）
-	ipcMain.handle(
-		ipcChannels.agentsTrustResponse,
-		(_event, requestId: string, choice: "trust-remember" | "trust-session" | "deny") =>
-			agentManager.respondTrustRequest(requestId, choice),
-	);
-	ipcMain.handle(ipcChannels.configSaveModels, async (_event, data) => {
-		const result = await configManager.saveModelsConfig(data);
-		void appLogger.info("config", "Models config saved", { providerCount: Object.keys(data?.providers ?? {}).length });
-		return result;
-	});
-	ipcMain.handle(ipcChannels.configSaveAuth, async (_event, data) => {
-		const result = await configManager.saveAuthConfig(data);
-		void appLogger.info("config", "Auth config saved", { authCount: Object.keys(data ?? {}).length });
-		return result;
-	});
-	ipcMain.handle(ipcChannels.configSaveSettings, async (_event, settings) => {
-		const result = await configManager.saveSettingsConfig(settings);
-		void appLogger.info("config", "Pi settings config saved", { keys: Object.keys(settings ?? {}) });
-		return result;
-	});
-	ipcMain.handle(ipcChannels.configSaveRaw, async (_event, fileName, rawJson) => {
-		const result = await configManager.saveRawConfig(fileName, rawJson);
-		void appLogger.info("config", "Raw config saved", { fileName, bytes: Buffer.byteLength(rawJson, "utf8") });
-		return result;
-	});
-	ipcMain.handle(ipcChannels.configExport, () =>
-		configManager.exportConfig(),
-	);
-	ipcMain.handle(ipcChannels.configImport, async (_event, packageJson: string) => {
-		const result = await configManager.importConfig(packageJson);
-		void appLogger.info("config", "Config imported", { bytes: Buffer.byteLength(packageJson, "utf8"), valid: result.valid });
-		return result;
-	});
-	// 远程拉取 provider 模型列表
-	ipcMain.handle(
-		ipcChannels.configFetchModels,
-		async (
-			_event,
-			payload: { baseUrl: string; apiKey: string; apiType?: string },
-		) => {
-			const result = await configManager.fetchProviderModels(
-				payload.baseUrl,
-				payload.apiKey,
-				payload.apiType,
-			);
-			void appLogger.info("config", "Provider models fetched", {
-				baseUrl: payload.baseUrl,
-				apiType: payload.apiType,
-				modelCount: Array.isArray(result) ? result.length : undefined,
-			});
-			return result;
-		},
-	);
-	// 快速测试 provider 连接
-	ipcMain.handle(
-		ipcChannels.configTestProvider,
-		async (
-			_event,
-			payload: {
-				baseUrl: string;
-				apiKey: string;
-				modelId: string;
-				apiType?: string;
-				headers?: Record<string, string>;
-			},
-		) => {
-			const result = await configManager.testProviderConnection(
-				payload.baseUrl,
-				payload.apiKey,
-				payload.modelId,
-				payload.apiType,
-				payload.headers,
-			);
-			void appLogger.info("config", "Provider connection tested", {
-				baseUrl: payload.baseUrl,
-				apiType: payload.apiType,
-				modelId: payload.modelId,
-				success: result.success,
-				error: result.error,
-			});
-			return result;
-		},
-	);
 
-	// 切换开发者控制台
-	ipcMain.handle(ipcChannels.appToggleDevTools, () => {
-		if (!mainWindow || mainWindow.isDestroyed()) return false;
-		if (mainWindow.webContents.isDevToolsOpened()) {
-			mainWindow.webContents.closeDevTools();
-			return false;
-		}
-		mainWindow.webContents.openDevTools({ mode: "detach" });
-		return true;
+	// 后台预取 pi --list-models 缓存：registerIpc 完成后异步执行一次，
+	// 使用户首次打开模型/思考选择器时不需要等待 fork pi 进程。
+	// 已有缓存或在途请求时不会重复 fork。
+	if (typeof piLocator !== "undefined" && typeof settingsStore !== "undefined") {
+		setTimeout(() => {
+			if (!getCachedModelList()) {
+				void fetchModelList(piLocator, settingsStore).catch(() => {
+					// 预取失败静默；用户首次点击选择器时会自动重试。
+				});
+			}
+		}, 500);
+	}
+
+	registerFilesIpc({
+		fileSystemService,
+		projectStore,
+		settingsStore,
+		appLogger,
+		getMainWindow: () => mainWindow,
+		openExternalUrl,
 	});
 }
 
@@ -3769,32 +2175,27 @@ function resetGenIdleTimer() {
 // 不再使用 Electron 全局 second-instance（它无法按版本区分）。
 
 app.whenReady().then(async () => {
-	// 未拿到同版本主实例锁时不要继续初始化，避免第二进程短暂闪窗。
-	if (singleInstanceEnabled && !gotSingleInstanceLock) return;
-
-	projectStore = new ProjectStore();
+	projectStore = new ProjectStore(() => mainCopy("dialog.chooseProjectFolder"));
 	fileSystemService = new FileSystemService();
-	sessionScanner = new SessionScanner();
-	codexSessionImporter = new CodexSessionImporter();
-	claudeSessionImporter = new ClaudeSessionImporter();
-	openCodeSessionImporter = new OpenCodeSessionImporter();
+	sessionScanner = new SessionScanner(mainCopy);
+	codexSessionImporter = new CodexSessionImporter(mainCopy);
+	claudeSessionImporter = new ClaudeSessionImporter(mainCopy);
+	openCodeSessionImporter = new OpenCodeSessionImporter(mainCopy);
 	settingsStore = new SettingsStore();
 	appLogger = new AppLogger();
 	rpcLogger = new RpcLogger();
 	gitService = new GitService();
-	worktreeService = new WorktreeService();
-	piLocator = new PiLocator();
-	configManager = new ConfigManager();
-	promptManager = new PromptManager();
+	worktreeService = new WorktreeService(mainCopy);
+	piLocator = new PiLocator(mainCopy);
+	configManager = new ConfigManager(undefined, mainCopy);
+	promptManager = new PromptManager(undefined, mainCopy);
 	xuePromptManager = new XuePromptManager();
-	skillManager = new SkillManager();
-	extensionManager = new ExtensionManager(
-		piLocator,
-		() => settingsStore.get(),
-		() => settingsStore.get(),
-		(patch) => settingsStore.update(patch),
+	skillManager = new SkillManager(undefined, mainCopy);
+	extensionManager = new ExtensionManager(piLocator, () => settingsStore.get(), mainCopy);
+	projectResourceManager = new ProjectResourceManager(
+		(projectId) => projectStore.get(projectId),
+		mainCopy,
 	);
-	projectResourceManager = new ProjectResourceManager((projectId) => projectStore.get(projectId));
 	agentManager = new AgentManager(
 		(id) => projectStore.get(id),
 		() => mainWindow,
@@ -3802,25 +2203,163 @@ app.whenReady().then(async () => {
 		configManager,
 		rpcLogger,
 		appLogger,
+		undefined,
+		mainCopy,
 	);
 	webServiceManager = new WebServiceManager({
 		listProjects: () => projectStore.list(),
-		listAgents: () => agentManager.list(),
 		listSessions: (projectId) => {
 			const project = projectStore.get(projectId);
 			return sessionScanner.list(project?.path);
 		},
-		getMessages: (agentId) => agentManager.getMessages(agentId),
-		createAgent: (input) => agentManager.create(input),
-		sendPrompt: (input) => agentManager.sendPrompt(input),
-		stopAgent: (agentId) => agentManager.stop(agentId),
-		runtimeState: (agentId) => agentManager.getRuntimeState(agentId),
-		cycleModel: (agentId) => agentManager.cycleModel(agentId),
-		availableModels: (agentId) => agentManager.getAvailableModels(agentId),
-		setModel: (agentId, provider, modelId) => agentManager.setModel(agentId, provider, modelId),
-		refreshModels: (agentId) => agentManager.refreshModels(agentId),
-		cycleThinking: (agentId) => agentManager.cycleThinking(agentId),
-		setThinking: (agentId, level) => agentManager.setThinking(agentId, level),
+		getSessionRuntimeMessages: (sessionId) =>
+			sessionRuntimeCoordinator.getRuntimeMessages(sessionId),
+		listCatalogSessions: async (projectId) => {
+			if (!projectId) {
+				return sessionCatalog.listEntries()
+					.map((entry) => sessionCatalog.getRecord(entry.id))
+					.filter((record): record is SessionRecord => Boolean(record));
+			}
+			const project = projectStore.get(projectId);
+			if (!project) throw new Error(mainCopy("project.notFound"));
+			let projectPath = project.path;
+			const settings = settingsStore.get();
+			if (settings.wslEnabled && settings.wslDistro) {
+				projectPath = projectPath
+					.replace(/^([A-Za-z]):\\/, (_: string, drive: string) => `/mnt/${drive.toLowerCase()}/`)
+					.replace(/\\/g, "/");
+			}
+			const summaries = await sessionScanner.list(projectPath);
+			const { wslEnabled, wslDistro, wslUser } = settings;
+			const records = await sessionCatalog.mergeScanned(
+				projectId,
+				summaries,
+				wslEnabled ? { wslDistro, wslUser } : {},
+			);
+			const bindings = sessionRuntimeCoordinator.attachCatalogRuntimes(records);
+			for (const binding of bindings) {
+				const tab = agentManager.list().find((candidate) => candidate.id === binding.agentId);
+				if (tab) emitSessionRuntimeEvent(tab.id, ipcChannels.agentsState, tab);
+			}
+			return records;
+		},
+		createSessionDraft: async (input) => {
+			const project = projectStore.get(input.projectId);
+			if (!project) throw new Error(mainCopy("project.notFound"));
+			return sessionCatalog.createDraft({
+				projectId: input.projectId,
+				title: input.title?.trim() || mainCopy("session.newTitle"),
+				environment: settingsStore.get().wslEnabled ? "wsl" : "native",
+				model: input.model,
+				thinkingLevel: input.thinkingLevel,
+			});
+		},
+		createAnonymousSession,
+		updateSessionRecord: async (sessionId, patch) => {
+			const entry = sessionCatalog.get(sessionId);
+			if (!entry) throw new Error(mainCopy("session.notFound"));
+			const title = patch.title?.trim();
+			if (title && title !== entry.title) {
+				const target = sessionRuntimeCoordinator.getTarget(sessionId);
+				if (target) {
+					const renamed = await sessionRuntimeCoordinator.renameRuntime(target, title);
+					if (!renamed.ok) throw sessionCommandIpcError(renamed.error);
+				} else if (entry.filePath) {
+					await sessionScanner.rename(entry.filePath, title);
+				}
+			}
+			return sessionCatalog.update(sessionId, {
+				...patch,
+				title: title || undefined,
+			});
+		},
+		deleteSessionRecord: async (sessionId) => {
+			const entry = sessionCatalog.get(sessionId);
+			if (!entry) return false;
+			if (
+				sessionRuntimeCoordinator.getTarget(sessionId) ||
+				sessionRuntimeCoordinator.isActivating(sessionId)
+			) {
+				throw new Error(mainCopy("session.stopBeforeDelete"));
+			}
+			if (entry.filePath) await sessionScanner.delete(entry.filePath);
+			await sessionCatalog.remove(sessionId);
+			return true;
+		},
+		copySessionRecord: (sessionId) => copyCatalogSession(sessionId),
+		exportSessionRecordHtml: (sessionId) => exportCatalogSessionHtml(sessionId),
+		readSessionReferenceMessages: (sessionId) =>
+			readCatalogSessionReferenceMessages(sessionId),
+		readSessionMessages: async (sessionId) => {
+			const entry = sessionCatalog.get(sessionId);
+			if (!entry?.filePath) return [];
+			const content = await sessionScanner.readSessionRawText(entry.filePath);
+			return agentManager.readSessionDisplayMessages(entry.filePath, sessionId, content);
+		},
+		readSessionMessagePage: async (sessionId, before, pageSize) => {
+			const entry = sessionCatalog.get(sessionId);
+			if (!entry?.filePath) return { messages: [], total: 0, nextBefore: null };
+			return agentManager.readSessionDisplayMessagePage(entry.filePath, sessionId, before, pageSize);
+		},
+		sendSessionPrompt: async (input) => {
+			const result = await sessionRuntimeCoordinator.send(input);
+			if (result.agentId) {
+				const tab = agentManager.list().find((candidate) => candidate.id === result.agentId);
+				if (tab) emitSessionRuntimeEvent(tab.id, ipcChannels.agentsState, tab);
+			}
+			return result;
+		},
+		listSessionRuntimes: () => sessionRuntimeCoordinator.listRuntimes(),
+		stopSessionRuntime: stopSessionRuntime,
+		abortSessionRuntime: (target) => sessionRuntimeCoordinator.abortRuntime(target),
+		restartSessionRuntime: async (target) => {
+			terminalManager.closeAgent(target.agentId);
+			const result = await sessionRuntimeCoordinator.restartRuntime(target);
+			if (result.ok) {
+				if (!result.value.session.noSession) emitSessionRuntimeDetach(target);
+				emitReplacementState(result.value.runtime, false);
+			}
+			return result;
+		},
+		compactSessionRuntime: (target, prompt) =>
+			sessionRuntimeCoordinator.compactRuntime(target, prompt),
+		getSessionRuntimeState: (target) =>
+			sessionRuntimeCoordinator.getRuntimeState(target),
+		listSessionRuntimeCommands: (target) =>
+			sessionRuntimeCoordinator.listRuntimeCommands(target),
+		exportSessionRuntimeHtml: (target) =>
+			sessionRuntimeCoordinator.exportRuntimeHtml(target),
+		editSessionRuntimeMessage: (target, messageId, newText) =>
+			sessionRuntimeCoordinator.editRuntimeMessage(target, messageId, newText),
+		deleteSessionRuntimeMessage: (target, messageId) =>
+			sessionRuntimeCoordinator.deleteRuntimeMessage(target, messageId),
+		prepareSessionRuntimeResend: (target, messageId) =>
+			sessionRuntimeCoordinator.prepareRuntimeResend(target, messageId),
+		setSessionRuntimeModel: (target, provider, modelId) =>
+			sessionRuntimeCoordinator.setRuntimeModel(target, provider, modelId),
+		setSessionRuntimeThinking: (target, level) =>
+			sessionRuntimeCoordinator.setRuntimeThinking(target, level),
+		cloneSessionRuntime: async (target) => {
+			const validated = sessionRuntimeCoordinator.validateTarget(target);
+			if (!validated.ok) return validated;
+			try {
+				return {
+					ok: true as const,
+					value: await replaceAgentSession(
+						target.agentId,
+						() => agentManager.cloneSession(target.agentId),
+					),
+				};
+			} catch (error) {
+				return {
+					ok: false as const,
+					error: {
+						code: "SESSION_COMMAND_FAILED" as const,
+						debugDetails: error instanceof Error ? error.message : String(error),
+					},
+				};
+			}
+		},
 	});
 	terminalManager = new TerminalSessionManager(
 		(agentId) => agentManager.getCwd(agentId),
@@ -3838,23 +2377,60 @@ app.whenReady().then(async () => {
 	// 启动关键路径只等设置加载与 IPC 注册，尽快 createWindow。
 	// 扩展部署、WSL 同步、代理/Web 服务/宠物等后置，避免打包后点击启动要先等一长串磁盘/网络 IO。
 	await settingsStore.load();
-	registerIpc();
-	registerFeishuIpc();
-	await createWindow();
-	setupTray();
-
-	void runPostWindowStartupTasks().catch((error) => {
-		void appLogger.warn("app", "Post-window startup tasks failed", error);
+	setFeishuConfigDefaultBotName(feishuT(currentFeishuLocale(), "bridge.defaultBotName"));
+	const initialSessionSettings = settingsStore.get();
+	sessionCatalog = new SessionCatalog(
+		join(app.getPath("userData"), "session-catalog.json"),
+		initialSessionSettings.wslEnabled
+			? { wslDistro: initialSessionSettings.wslDistro, wslUser: initialSessionSettings.wslUser }
+			: {},
+	);
+	await sessionCatalog.load();
+	sessionRuntimeCoordinator = new SessionRuntimeCoordinator(
+		sessionCatalog,
+		agentManager,
+		sendAgentPromptWithIntegrations,
+	);
+	agentManager.onOutput((sourceChannel, payload) => {
+		if (sourceChannel === ipcChannels.agentsState && Array.isArray(payload)) {
+			for (const tab of payload) {
+				if (tab && typeof tab === "object" && typeof tab.id === "string") {
+					emitSessionRuntimeEvent(tab.id, sourceChannel, tab);
+				}
+			}
+			return;
+		}
+		if (payload && typeof payload === "object" && "agentId" in payload) {
+			const agentId = (payload as { agentId?: unknown }).agentId;
+			if (typeof agentId !== "string") return;
+			const forwarded = emitSessionRuntimeEvent(agentId, sourceChannel, payload);
+			if (!forwarded && sourceChannel === ipcChannels.agentsUiRequest) {
+				cancelUnboundUiRequest(payload);
+			}
+		}
 	});
 
-	// macOS dock 点击或任务栏点击时恢复窗口
-	app.on("activate", () => {
-		if (mainWindow && !mainWindow.isDestroyed()) {
-			focusMainWindow();
-		} else {
-			void createWindow().catch((error) => {
-				void appLogger.error("app", "Failed to create window on activate", error);
+	// 根据已加载的 WSL 设置配置会话扫描器，使其能同时扫描 WSL 中的 pi 会话目录
+	const syncWslConfig = async () => {
+		const { wslEnabled, wslDistro, wslUser } = settingsStore.get();
+		if (wslEnabled && wslDistro && wslUser) {
+			const { resolveWslEnvironment: resolveWsl2 } = await import("./wsl/WslEnvironment");
+			const wslEnv = await resolveWsl2(wslDistro, wslUser, {
+				warn: (msg: string, detail: unknown) => console.warn("[PiDeck] " + String(msg), detail),
 			});
+			await sessionScanner.configureWsl(wslEnv);
+			skillManager.configureWsl(wslEnv);
+			promptManager.configureWsl(wslEnv);
+			extensionManager.configureWsl(wslEnv);
+			if (configManager) configManager.configureWsl(wslEnv);
+			if (xuePromptManager) xuePromptManager.configureWsl(wslEnv);
+		} else {
+			sessionScanner.clearWsl();
+			skillManager.configureWsl(null);
+			promptManager.configureWsl(null);
+			extensionManager.configureWsl(null);
+			if (configManager) configManager.configureWsl(null);
+			if (xuePromptManager) xuePromptManager.configureWsl(null);
 		}
 	});
 });
@@ -4047,6 +2623,8 @@ async function runPostWindowStartupTasks(): Promise<void> {
 		agentManager,
 		settingsStore,
 		getMainWindow: () => mainWindow,
+		resolveSessionId: (agentId) => sessionRuntimeCoordinator.getSessionId(agentId),
+		translate: (key, params) => mainCopy(key, params),
 		recreateMainWindow: async () => {
 			await createWindow();
 			return mainWindow!;

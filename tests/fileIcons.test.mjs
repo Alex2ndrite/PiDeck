@@ -8,6 +8,18 @@ const definitions = JSON.parse(
 const icons = JSON.parse(
   readFileSync("src/renderer/src/vendor/seti-icons/icons.json", "utf8"),
 );
+const workspaceSurface = readFileSync(
+  "src/renderer/src/components/session/WorkspaceSurface.tsx",
+  "utf8",
+);
+const surfaceFacade = readFileSync(
+  "src/renderer/src/components/session/SurfaceComponents.tsx",
+  "utf8",
+);
+const gitResourceTree = readFileSync(
+  "src/renderer/src/components/app/git/GitResourceTree.tsx",
+  "utf8",
+);
 
 function iconFor(fileName) {
   const details = definitions.files[fileName]
@@ -45,7 +57,7 @@ describe("Seti file icon integration", () => {
   });
 
   test("file tree renders trusted Seti SVG and file type labels", () => {
-    const source = readFileSync("src/renderer/src/components/app/AppParts.tsx", "utf8");
+    const source = workspaceSurface;
     assert.match(source, /getFileIconSeti\(name\)/);
     assert.match(source, /dangerouslySetInnerHTML=\{\{ __html: svg \}\}/);
     assert.match(source, /aria-hidden="true"/);
@@ -55,16 +67,23 @@ describe("Seti file icon integration", () => {
   });
 
   test("Git panel and file tree share the same vendored Seti lookup and color mapping", () => {
-    const fileTree = readFileSync("src/renderer/src/components/app/AppParts.tsx", "utf8");
-    const gitPanel = readFileSync("src/renderer/src/components/app/GitPanel.tsx", "utf8");
+    const fileTree = workspaceSurface;
+    const gitPanel = gitResourceTree;
     const sharedLookup = readFileSync("src/renderer/src/fileIcons.ts", "utf8");
 
     assert.match(fileTree, /import \{ getFileIconSeti, getFileIconColor, getFileTypeLabel \} from "\.\.\/\.\.\/fileIcons"/);
-    assert.match(gitPanel, /import \{ getFileIconColor, getFileIconSeti \} from "\.\.\/\.\.\/fileIcons"/);
+    assert.match(gitPanel, /from "\.\.\/\.\.\/\.\.\/fileIcons"/);
     assert.match(fileTree, /getFileIconSeti\(name\)/);
     assert.match(gitPanel, /getFileIconSeti\(name\)/);
     assert.match(sharedLookup, /from "\.\/vendor\/seti-icons"/);
     assert.match(sharedLookup, /SETI_COLOR_TO_CSS/);
+  });
+
+  test("workspace drawer symbols retain the SurfaceComponents compatibility export", () => {
+    assert.match(
+      surfaceFacade,
+      /export \{ DrawerContent, SessionFileSummary, SessionHistoryModal \} from "\.\/WorkspaceSurface";/,
+    );
   });
 
   test("Git status and history parsers preserve rename paths", () => {

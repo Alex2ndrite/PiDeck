@@ -73,7 +73,7 @@ export function FileDiffViewer(props: {
 	const ext = fileName.split(".").pop()?.toLowerCase() ?? "";
 	const isMarkdown = ext === "md" || ext === "mdx";
 	const isHtml = ext === "html" || ext === "htm";
-	// 只读视图下 markdown 文件默认启用预览；html 走内置浏览器，不在 iframe 内预览。
+	// 只读视图下 markdown 文件默认启用预览；差异模式或编辑模式保持源码视图。
 	const [preview, setPreview] = useState(isMarkdown && !isDiffMode && readOnly);
 
 	useEffect(() => {
@@ -81,10 +81,8 @@ export function FileDiffViewer(props: {
 		setReadOnly(true);
 		setDirty(false);
 		setShowHint(false);
-		// 文件类型切换时重置预览状态，防止跨文件残留导致内容区域空白
-		const isMd = ext === "md" || ext === "mdx";
-		setPreview(isMd && props.mode !== "diff");
-	}, [props.activeTabId, props.filePath, props.mode]);
+		setPreview(isMarkdown && !isDiffMode);
+	}, [isDiffMode, isMarkdown, props.activeTabId, props.filePath]);
 
 	useEffect(() => {
 		ensureMonaco();
@@ -259,7 +257,7 @@ export function FileDiffViewer(props: {
 		...editorOptions,
 		readOnly,
 		renderSideBySide: sideBySide,
-		// 0 = 关闭 Monaco 的「窄宽自动合并」；分栏/合并完全由 UI 按钮控制
+		// 0 = close Monaco narrow-width auto-merge; split/unified controlled by UI button only
 		renderSideBySideInlineBreakpoint: 0,
 		// 显示真实差异，包括行尾空格差异
 		ignoreTrimWhitespace: false,
@@ -316,7 +314,7 @@ export function FileDiffViewer(props: {
 				)}
 				<span className="file-diff-title" title={props.filePath}>
 					{fileName}
-					{dirty && " · 未保存"}
+					{dirty && t("editor.unsavedMarker")}
 					{showHint && <span className="file-diff-hint">{t("app.saveFileShortcut")}</span>}
 				</span>
 				<div className="file-diff-header-actions">
@@ -393,7 +391,6 @@ export function FileDiffViewer(props: {
 								</ReactMarkdown>
 							</div>
 						)}
-						{/* HTML 预览：仅 view 模式且 preview 启用 */}
 						{!isDiffMode && preview && isHtml && (
 							<HtmlPreview content={content} />
 						)}
@@ -446,6 +443,24 @@ export function FileDiffViewer(props: {
 		<div className="file-diff-viewer">
 			{headerContent}
 		</div>
+	);
+}
+
+/**
+ * HTML previews intentionally use an opaque-origin iframe. This restores the
+ * dev preview interaction without giving project HTML the renderer's origin,
+ * Electron bridge, popups, or file-system navigation privileges.
+ */
+function HtmlPreview({ content }: { content: string }) {
+	return (
+		<iframe
+			className="file-diff-preview"
+			srcDoc={content}
+			title={t("editor.htmlPreview")}
+			sandbox="allow-scripts allow-forms"
+			referrerPolicy="no-referrer"
+			style={{ width: "100%", height: "100%", border: "none" }}
+		/>
 	);
 }
 

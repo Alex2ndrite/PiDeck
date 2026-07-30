@@ -12,7 +12,7 @@ import { showNotice } from "../../utils/notice";
 import { writeClipboard } from "../../utils/clipboard";
 import { ChevronDown, ChevronUp, MoreHorizontal, Plus, X } from "lucide-react";
 import type { PiDesktopApi } from "../../../../preload";
-import type { TerminalTab } from "../../../../shared/types";
+import type { SessionRuntimeTarget, TerminalTab } from "../../../../shared/types";
 import { t } from "../../i18n";
 
 const TERMINAL_THEMES = {
@@ -79,9 +79,7 @@ function stripReplayBuffer(tab: TerminalTab): TerminalTab {
 }
 
 export function TerminalDock(props: {
-	/** 主进程 PTY 桶键：agentId，或无 agent 时的 `cwd:...` */
-	sessionKey?: string;
-	projectCwd?: string;
+	target: SessionRuntimeTarget;
 	open: boolean;
 	closing: boolean;
 	collapsed: boolean;
@@ -171,7 +169,7 @@ export function TerminalDock(props: {
 		async function loadTabs() {
 			setLoading(true);
 			try {
-				const nextTabs = await props.terminal.ensure(sessionKey!, effectiveCwd);
+				const nextTabs = await props.terminal.ensure(props.target);
 				if (cancelled) return;
 				buffersRef.current = nextTabs.reduce<Record<string, string>>(
 					(current, tab) => ({
@@ -201,25 +199,14 @@ export function TerminalDock(props: {
 		return () => {
 			cancelled = true;
 		};
-	}, [sessionKey, effectiveCwd, props.terminal, open, contentReady]);
-
-	// 独立加载可用 shell 列表，避免与 loadTabs 耦合
-	useEffect(() => {
-		if (!open || !contentReady) return;
-		let cancelled = false;
-		void props.terminal
-			.shells()
-			.then((list) => {
-				if (!cancelled) setShells(list);
-			})
-			.catch(() => {
-				// shell 列表失败不阻断终端主体
-				if (!cancelled) setShells([]);
-			});
-		return () => {
-			cancelled = true;
-		};
-	}, [props.terminal, open, contentReady]);
+	}, [
+		props.target.sessionId,
+		props.target.agentId,
+		props.target.runtimeGeneration,
+		props.terminal,
+		open,
+		contentReady,
+	]);
 
 	useEffect(() => {
 		const offData = props.terminal.onData((payload) => {
@@ -322,31 +309,10 @@ export function TerminalDock(props: {
 	/* copyNotice cleanup 已禁用（改为 toast sonner） */
 
 	async function addTab() {
-		if (!sessionKey || sessionKey.startsWith("pending-")) return;
-		try {
-			const next = await props.terminal.create(sessionKey, undefined, effectiveCwd);
-			setTabs((current) => [...current, stripReplayBuffer(next)]);
-			setActiveTabId(next.id);
-			props.onCollapsedChange(false);
-		} catch (error) {
-			const message = error instanceof Error ? error.message : String(error);
-			showNotice(message, 4000, "error");
-		}
-	}
-
-	/** 用指定 shell 创建新终端 tab */
-	async function addTabWithShell(shell: string) {
-		if (!sessionKey || sessionKey.startsWith("pending-")) return;
-		try {
-			const next = await props.terminal.create(sessionKey, shell, effectiveCwd);
-			setTabs((current) => [...current, stripReplayBuffer(next)]);
-			setActiveTabId(next.id);
-			props.onCollapsedChange(false);
-			setShellMenuOpen(false);
-		} catch (error) {
-			const message = error instanceof Error ? error.message : String(error);
-			showNotice(message, 4000, "error");
-		}
+		const next = await props.terminal.create(props.target);
+		setTabs((current) => [...current, stripReplayBuffer(next)]);
+		setActiveTabId(next.id);
+		props.onCollapsedChange(false);
 	}
 
 	async function closeTab(tab: TerminalTab) {

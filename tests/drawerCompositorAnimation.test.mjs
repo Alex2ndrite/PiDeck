@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { readRendererStyles } from "./helpers/rendererStyles.mjs";
 
-const app = readFileSync("src/renderer/src/App.tsx", "utf8");
-const styles = readFileSync("src/renderer/src/styles.css", "utf8");
+const appShell = readFileSync("src/renderer/src/components/app/AppShell.tsx", "utf8");
+const styles = readRendererStyles();
 
 function cssRule(selector) {
   return styles.match(new RegExp(`${selector} \\{([\\s\\S]*?)\\n\\}`))?.[1];
@@ -33,13 +34,13 @@ test("drawer uses only the short grid transition for open and close", () => {
 });
 
 test("drawer keeps its content mounted through the layout transition", () => {
-  assert.match(app, /const DRAWER_ANIMATION_MS = 120;/);
+  assert.match(appShell, /WorkspaceDrawerHost/);
+  assert.match(appShell, /renderPanel=\{\(panel\) => drawerContent\(panel\)\}/);
+  assert.match(appShell, /drawer && !drawerCollapsed \? drawerWidth : 0/);
   assert.match(
-    app,
-    /const drawerContentPanel = drawer && !drawerCollapsed \? drawer : renderedDrawer;/,
+    appShell,
+    /"--drawer-col-w": `\$\{drawer && !drawerCollapsed \? drawerWidth : 0\}px`/,
   );
-  assert.match(app, /drawer && !drawerCollapsed \? drawerWidth : 0/);
-  assert.match(app, /drawer && !drawerCollapsed \? 260 : 0/);
 });
 
 test("file rows use the integer control line-height token", () => {

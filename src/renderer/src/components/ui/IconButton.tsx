@@ -35,20 +35,25 @@ export function IconButton(
 		...buttonProps
 	} = props;
 
+export function IconButton(props: ButtonHTMLAttributes<HTMLButtonElement> & {
+	label: string;
+	children: ReactNode;
+}) {
+	const {
+		children,
+		className,
+		label,
+		title,
+		type = "button",
+		...buttonProps
+	} = props;
 	return (
 		<button
 			{...buttonProps}
 			type={type}
+			className={["ui-icon-button", className].filter(Boolean).join(" ")}
 			aria-label={label}
 			title={title ?? label}
-			aria-pressed={active || undefined}
-			className={cn(
-				"ui-icon-button",
-				`ui-icon-button-${variant}`,
-				`ui-icon-button-${buttonSize}`,
-				active && "active",
-				className,
-			)}
 		>
 			{children}
 		</button>
@@ -57,7 +62,7 @@ export function IconButton(
 
 export function CloseIconButton(props: {
 	label: string;
-	onClick: () => void;
+	onClick?: () => void;
 	className?: string;
 }) {
 	return (

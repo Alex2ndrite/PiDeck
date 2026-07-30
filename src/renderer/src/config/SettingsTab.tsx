@@ -132,21 +132,6 @@ export function SettingsTab(props: {
 		});
 	};
 
-	const updateCompaction = (patch: Partial<typeof compactionConfig>) => {
-		const existingExtra =
-			data.compaction && typeof data.compaction === "object" && !Array.isArray(data.compaction)
-				? (data.compaction as Record<string, unknown>)
-				: {};
-		props.onChange({
-			...data,
-			compaction: {
-				...existingExtra,
-				...compactionConfig,
-				...patch,
-			},
-		});
-	};
-
 	/**
 	 * 配置键名 → 显示标签。
 	 * 已登记 i18n 的键走多语言；未登记回退原始 key，避免未知字段空白。
@@ -330,14 +315,8 @@ export function SettingsTab(props: {
 				</div>
 
 				{entries
-					// sessionDir / retry / compaction / enabledModels 已有专用区块，避免列表里重复一行
-					.filter(
-						([key]) =>
-							key !== "enabledModels" &&
-							key !== "retry" &&
-							key !== "sessionDir" &&
-							key !== "compaction",
-					)
+					// sessionDir / retry / enabledModels 已有专用区块，避免列表里重复一行
+					.filter(([key]) => key !== "enabledModels" && key !== "retry" && key !== "sessionDir")
 					.map(([key, value]) => (
 					<div key={key} className="config-settings-row">
 						<span className="config-settings-key">{configLabel(key)}</span>

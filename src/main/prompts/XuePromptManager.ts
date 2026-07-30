@@ -11,7 +11,6 @@ import type {
 	YaoPromptDetailResult,
 	PiPromptTemplateSummary,
 } from "../../shared/types";
-import type { WslEnvironment } from "../wsl/WslPaths";
 
 /**
  * 基于 SQLite 的 XuePrompt 提示词管理器。
@@ -62,8 +61,9 @@ export class XuePromptManager {
 		return this.sqlPromise;
 	}
 
-	configureWsl(environment: WslEnvironment | null) {
-		this.promptManager.configureWsl(environment);
+	// configureWsl deferred until WSL infrastructure is ported
+	configureWsl(_wsl: any) {
+		this.promptManager.configureWsl(null);
 	}
 
 	/**

@@ -4,7 +4,7 @@ import type { SettingsStore } from "../settings/SettingsStore";
 import type { AgentTab, AppSettings, PetManifest } from "../../shared/types";
 import { ipcChannels } from "../../shared/ipc";
 import { PetWindow, detectPetWindowCaps } from "./PetWindow";
-import { PetStateBridge } from "./PetStateBridge";
+import { PetStateBridge, type PetStateCopyKey } from "./PetStateBridge";
 import { PetPackageManager } from "./PetPackageManager";
 import { PetPatrol } from "./PetPatrol";
 
@@ -12,7 +12,18 @@ export type PetSystemDeps = {
 	agentManager: AgentManager;
 	settingsStore: SettingsStore;
 	getMainWindow: () => BrowserWindow | null;
+	resolveSessionId: (agentId: string) => string | undefined;
 	recreateMainWindow?: () => Promise<BrowserWindow>;
+	translate?: (key: PetCopyKey, params?: Record<string, string | number>) => string;
+};
+
+type PetCopyKey = PetStateCopyKey | "pet.switch" | "pet.close";
+
+const defaultPetCopy: Record<PetCopyKey, string> = {
+	"pet.switch": "Switch pet",
+	"pet.close": "Close pet",
+	"pet.doneNotification": "Task complete. Remember to review it.",
+	"pet.agentError": "{title} encountered an error",
 };
 
 export class PetSystem {
@@ -32,7 +43,15 @@ export class PetSystem {
 			() => this.petWindow.window,
 			this.patrol,
 			() => this.deps.settingsStore.get().petPatrolEnabled ?? true,
+			(key, params) => this.translate(key, params),
 		);
+	}
+
+	private translate(key: PetCopyKey, params: Record<string, string | number> = {}): string {
+		const translated = this.deps.translate?.(key, params) ?? defaultPetCopy[key];
+		return translated.replace(/\{([A-Za-z0-9_]+)\}/g, (match, name) => (
+			Object.prototype.hasOwnProperty.call(params, name) ? String(params[name]) : match
+		));
 	}
 
 	async start() {
@@ -97,7 +116,8 @@ export class PetSystem {
 			if (!main.isVisible()) main.show();
 			main.focus();
 			const agentId = this.bridge.currentState?.activeAgentId;
-			if (agentId) main.webContents.send(C.petFocusAgentTarget, { agentId });
+			const sessionId = agentId ? this.deps.resolveSessionId(agentId) : undefined;
+			if (sessionId) main.webContents.send(C.petFocusAgentTarget, { sessionId });
 		});
 
 		// 测试：模拟真实的 failed/review 状态 + 通知 + 自动恢复 idle（与 PetStateBridge 行为一致）
@@ -107,13 +127,13 @@ export class PetSystem {
 			const ts = Date.now();
 			if (type === "error") {
 				win.webContents.send(C.petState, { mode: "failed", runningCount: 0, errorCount: 1, activeAgentId: null, timestamp: ts });
-				win.webContents.send(C.petNotify, { type: "error", text: "Agent 出错了", timestamp: performance.now() });
+				win.webContents.send(C.petNotify, { type: "error", text: this.translate("pet.agentError", { title: "Agent" }), timestamp: performance.now() });
 				setTimeout(() => {
 					if (win && !win.isDestroyed()) win.webContents.send(C.petState, { mode: "idle", runningCount: 0, errorCount: 0, activeAgentId: null, timestamp: Date.now() });
 				}, 4000);
 			} else {
 				win.webContents.send(C.petState, { mode: "review", runningCount: 0, errorCount: 0, activeAgentId: null, timestamp: ts });
-				win.webContents.send(C.petNotify, { type: "done", text: "任务完成，记得 Review", timestamp: performance.now() });
+				win.webContents.send(C.petNotify, { type: "done", text: this.translate("pet.doneNotification"), timestamp: performance.now() });
 				setTimeout(() => {
 					if (win && !win.isDestroyed()) win.webContents.send(C.petState, { mode: "idle", runningCount: 0, errorCount: 0, activeAgentId: null, timestamp: Date.now() });
 				}, 4000);
@@ -146,7 +166,7 @@ export class PetSystem {
 			// 切换宠物子菜单
 			if (pets.length > 0) {
 				template.push({
-					label: "切换宠物",
+					label: this.translate("pet.switch"),
 					submenu: pets.map((p) => ({
 						label: p.displayName ?? p.id,
 						type: "radio" as const,
@@ -163,7 +183,7 @@ export class PetSystem {
 
 			// 关闭宠物
 			template.push({
-				label: "关闭宠物",
+				label: this.translate("pet.close"),
 				click: async () => {
 					const prev = settingsStore.get();
 					const next = await settingsStore.update({ petEnabled: false });

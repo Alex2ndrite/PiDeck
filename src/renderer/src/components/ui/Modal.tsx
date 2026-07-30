@@ -1,5 +1,7 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import type { ReactNode } from "react";
+import { CloseIconButton } from "./IconButton";
+import { t } from "../../i18n";
 
 export type ModalSize = "full" | "medium" | "small";
 
@@ -59,12 +61,7 @@ export function Modal({
 								<strong>{title}</strong>
 							</Dialog.Title>
 							<Dialog.Close asChild>
-								<button
-									type="button"
-									aria-label="Close"
-								>
-									✕
-								</button>
+								<CloseIconButton label={t("common.close")} />
 							</Dialog.Close>
 						</div>
 					)}

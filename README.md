@@ -10,16 +10,6 @@
 ![React](https://img.shields.io/badge/React-19-61dafb)
 ![Version](https://img.shields.io/badge/version-0.6.6-yellow)
 
-
-<!-- star-history:start -->
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/star-history/star-history-dark.svg">
-  <img alt="Star history" src="assets/star-history/star-history-light.svg">
-</picture>
-<!-- star-history:end -->
-
----
-
 **PiDeck** 是一个开源的Pi桌面工作台，用于在本地项目目录中统一管理 pi Agent 会话，并支持导入 Codex、Claude 本地会话以便统一浏览和恢复。基于 Electron + TypeScript 构建，提供多项目工作区、AI 会话管理、Git 集成、内置终端、模型配置和插件扩展能力，让本地 AI 编码助手在多项目环境中保持统一、可追溯、可配置。
 
 **适合谁用：** 希望在桌面端同时管理多个本地项目的 AI 编程助手会话、需要统一查看会话历史与 Git 状态、并希望以图形化方式管理 pi 配置的开发者。
@@ -30,25 +20,21 @@
 
 ## 📋 更新日志
 
-> **最新版本 v0.6.7**（2026-07-29）
+> **最新版本 v0.6.6**（2026-07-24）
 
-### v0.6.7 更新亮点
-- 🚀 **紧凑标题栏 + Codex 风格右侧栏**
-- 🚀 **文件编辑器收纳到 Files Tab**
-- 🚀 **文件树拖放 / 粘贴 / 移动**
-- 🚀 **@ 文件建议支持目录树与搜索**
-- 🚀 **Composer 粘贴 / 拖入路径引用**
-- 🚀 **文本链接默认内置编辑器打开**
-- 🚀 **批量提问 Tab UI**
-- 🚀 **Ctrl/Cmd+点击 Markdown 链接打开系统浏览器**
-- 🚀 **Tailwind CSS v4 + shadcn + sonner Toast**
-- 🚀 **侧栏项目展开/折叠状态持久化**
-- 🚀 **会话消息 Fork**
-- 🚀 **启动页官方 pi 拼装动画**
-- ✨ **Plan 模式流程打磨**
-- ✨ **Composer 挂件与扩展 UI**
-- ✨ **上下文压缩入口**
-- ✨ **UI 去饱和绿色**
+### v0.6.6 更新亮点
+- 🚀 **侧栏品牌区重新设计**：Pi 官方 canvas logo 裁掉空边 + Plantin 字标，agent 启停动画
+- 🚀 **多 Tab 文件编辑器**：最多 5 个并发 Tab，弹框/侧栏双模式，Diff 差异对比
+- 🚀 **& 会话引用**：键入 & 弹出会话列表，选择特定消息或引用全部上下文
+- 🚀 **飞书/Lark 集成**：双向对话、流式卡片、自动拉群、成员管理
+- 🚀 **Git 大重构**：VS Code 风格 3 Tab 面板 + AI 提交摘要 + Git 图形历史 + 复杂操作
+- 🚀 **XuePrompt 中文提示词精选**：SQLite 存储 4000+ 提示词，分类/搜索/一键导入
+- 🚀 **Composer 重新设计**：OpenCode 风格底部操作栏，模式/Prompt/附件/模型/Think
+- 🚀 **客户端消息队列**：Agent 忙碌时可排队，可撤回编辑
+- 🚀 **Git Push / Pull**：变更面板直接推拉
+- ✨ 设置页重构（全局保存/取消）、字号分区配置、文件侧栏增强、Diff 分栏修复
+- 🐛 大量 Bug 修复（Monaco CSP、白屏崩溃、WSL 路径、中文乱码等）
+- 🧪 WSL 实验性支持
 
 [查看完整更新日志 →](CHANGELOG.zh-CN.md)
 

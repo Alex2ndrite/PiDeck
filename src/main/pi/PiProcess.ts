@@ -126,61 +126,12 @@ export class PiProcess extends EventEmitter {
     return this.diagnostics;
   }
 
-  /** 本进程生命周期内临时停放的扩展，exit/stop 时还原。 */
-  private parkedExtensions: ParkedExtension[] = [];
-
-  /**
-   * 仅停放 codeisland 等黑名单文件，不碰 npm packages / 其它本地扩展。
-   * 用户已开 piRpcNoExtensions 时无需停放（扩展本就不会加载）。
-   */
-  private parkIncompatibleExtensions(): string[] {
-    if (this.settings?.piRpcNoExtensions) return [];
-    const home = this.options.agentHomeDir?.trim() || homedir();
-    const dirs = [
-      join(home, ".pi", "agent", "extensions"),
-      join(this.cwd, ".pi", "extensions"),
-    ];
-    const parked: ParkedExtension[] = [];
-    for (const dir of dirs) {
-      parked.push(...parkBlockedExtensionsInDir(dir));
-    }
-    this.parkedExtensions = parked;
-    // 去重 basename 供诊断展示
-    return [...new Set(parked.map((p) => p.name))];
-  }
-
-  /** 还原本进程停放的扩展；幂等，可多次调用。 */
-  private restoreParkedExtensions(): void {
-    if (this.parkedExtensions.length === 0) return;
-    unparkBlockedExtensions(this.parkedExtensions);
-    this.parkedExtensions = [];
-  }
-
   async start(sessionPath?: string, trustOverride?: "approve" | "no-approve", noSession?: boolean) {
     if (this.proc) return this.rpc!;
 
     // 信任确认由桌面端 AgentManager.ensureProjectTrust 在启动 pi 前完成，不再静默 --approve。
     // pi 在 RPC 模式下 project_trust 事件 hasUI 恒为 false，故信任弹窗由桌面端自行处理。
     const args = ["--mode", "rpc"];
-    // RPC 无 TUI，不需要主题发现/加载；跳过可少扫用户/项目/package themes，加快冷启动。
-    // 内置 dark/light 仍可被扩展渲染路径按需使用，只是不扫盘加载自定义主题。
-    args.push("--no-themes");
-    // 桌面端模型列表来自本地 models.json；默认 --offline 跳过 pi 启动期模型目录网络刷新。
-    if (this.settings?.piRpcOffline !== false) args.push("--offline");
-    // 诊断开关：坏扩展/技能有时会拖垮 RPC 初始化；用户可在开发设置临时关闭后重试。
-    if (this.settings?.piRpcNoExtensions) args.push("--no-extensions");
-    if (this.settings?.piRpcNoSkills) args.push("--no-skills");
-
-    // 仅临时停放 codeisland 等黑名单扩展文件；npm packages 与其它本地扩展照常加载。
-    // 不用 --no-extensions 白名单，避免误伤 package 扩展。
-    const blockedNames = this.parkIncompatibleExtensions();
-    if (blockedNames.length > 0) {
-      console.warn(
-        "[PiProcess] Desktop-incompatible extensions parked for RPC:",
-        blockedNames.join(", "),
-      );
-    }
-
     if (noSession) args.push("--no-session");
     if (sessionPath) args.push("--session", sessionPath);
 

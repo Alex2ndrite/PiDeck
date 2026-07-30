@@ -4,8 +4,13 @@ import { rm, realpath } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { promisify } from "node:util";
 import type { WorktreeEntry } from "../../shared/types";
+import type { MainProcessTranslationKey } from "../../shared/i18n/mainProcessCopy";
 
 const execFileAsync = promisify(execFile);
+type WorktreeCopy = (
+	key: MainProcessTranslationKey,
+	params?: Record<string, string | number>,
+) => string;
 
 /**
  * 管理 git worktree 的创建、查询、删除。
@@ -15,6 +20,10 @@ const execFileAsync = promisify(execFile);
  * 用户可以直接在文件管理器中找到 worktree 文件。
  */
 export class WorktreeService {
+	constructor(
+		private readonly translate: WorktreeCopy = () => "Worktree operation failed.",
+	) {}
+
 	/**
 	 * 获取指定项目仓库的所有 worktree（排除主工作区）。
 	 * 使用 git worktree list --porcelain 解析。
@@ -50,18 +59,24 @@ export class WorktreeService {
 		const { worktreeDir, branch } = await this.allocateWorktreeTarget(projectPath, parentDir, baseSlug);
 
 		// 创建 worktree（仅创建目录结构，不 checkout），再 reset --hard 填充内容。
-		await execFileAsync(
-			"git",
-			["worktree", "add", "--no-checkout", "-b", branch, worktreeDir],
-			{ cwd: projectPath },
-		);
+		try {
+			await execFileAsync(
+				"git",
+				["worktree", "add", "--no-checkout", "-b", branch, worktreeDir],
+				{ cwd: projectPath },
+			);
+		} catch (error) {
+			console.error("[WorktreeService] git worktree add failed", error);
+			throw new Error(this.translate("mainWorktree.createFailed"));
+		}
 
 		try {
 			await execFileAsync("git", ["reset", "--hard"], { cwd: worktreeDir });
 		} catch (error) {
 			// reset 失败时清理刚创建的 worktree，避免残留半初始化目录。
 			await this.remove(worktreeDir, projectPath).catch(() => false);
-			throw error;
+			console.error("[WorktreeService] git reset failed for new worktree", error);
+			throw new Error(this.translate("mainWorktree.createFailed"));
 		}
 
 		return { path: worktreeDir, branch };
@@ -110,13 +125,13 @@ export class WorktreeService {
 		const worktreeDir = join(parentDir, slug);
 		const branch = slug;
 		if (existsSync(worktreeDir)) {
-			throw new Error(`工作区目录已存在：${worktreeDir}`);
+			throw new Error(this.translate("mainWorktree.folderExists"));
 		}
 		const ref = await execFileAsync("git", ["show-ref", "--verify", "--quiet", `refs/heads/${branch}`], { cwd: projectPath })
 			.then(() => true)
 			.catch(() => false);
 		if (ref) {
-			throw new Error(`分支已存在：${branch}`);
+			throw new Error(this.translate("mainWorktree.branchExists"));
 		}
 		return { worktreeDir, branch };
 	}

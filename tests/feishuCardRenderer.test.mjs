@@ -22,10 +22,13 @@ function loadRichTextModule() {
 
 function loadCardRendererModule() {
 	const richText = loadRichTextModule();
+	const i18nSandbox = { exports: {} };
+	vm.runInNewContext(transpile("src/main/feishu/FeishuI18n.ts"), i18nSandbox, { filename: "FeishuI18n.ts" });
 	const sandbox = {
 		exports: {},
 		require: (name) => {
 			if (name === "./rich-text") return richText;
+			if (name === "./FeishuI18n") return i18nSandbox.exports;
 			throw new Error(`unexpected require: ${name}`);
 		},
 	};

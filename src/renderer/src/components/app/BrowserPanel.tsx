@@ -83,8 +83,7 @@ function getInitialActiveTab(): TabEntry {
  */
 /**
  * 供外部（App.tsx）调用：在浏览器侧栏/弹框中导航到指定 URL。
- * 如果没有标签页则创建一个，然后切换到该标签页并加载 URL。
- * 通过递增 navigateKey 触发 BrowserPanel 的 useEffect 执行导航。
+ * 每次都新建 tab，避免多个外部链接复用同一个 tab。
  */
 /** 待消费的外部导航 URL，BrowserPanel 通过轮询检测。 */
 let pendingNavigateUrl: string | null = null;

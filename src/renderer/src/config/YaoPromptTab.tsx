@@ -1,18 +1,15 @@
 import { showNotice } from "../utils/notice";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import { ArrowLeft, Check, ChevronLeft, ChevronRight, Download, Search } from "lucide-react";
-import type { YaoPromptListResult, YaoPromptItem, YaoPromptDetailResult, PiPromptTemplateSummary, YaoPromptCategory, PiPromptTemplateListResult } from "../../../shared/types";
+import type { YaoPromptListResult, YaoPromptItem, YaoPromptDetailResult, PiPromptTemplateSummary, PiPromptTemplateListResult } from "../../../shared/types";
 import { t } from "../i18n";
+import { desktopApi } from "../desktopApi";
+const PAGE_SIZE = 20;
 
-const api = (window as unknown as { piDesktop: { yaoPrompts: { list: (opts?: { category?: string; search?: string; page?: number; pageSize?: number }) => Promise<YaoPromptListResult>; detail: (slug: string, category: string) => Promise<YaoPromptDetailResult>; import: (slug: string, category: string) => Promise<PiPromptTemplateSummary> } } }).piDesktop;
-
-/** 获取本地已安装 prompt 名称集合 */
 async function getInstalledPromptNames(): Promise<Set<string>> {
 	try {
-		const piDesktop = (window as any).piDesktop;
-		if (!piDesktop?.prompts?.list) return new Set();
-		const list: PiPromptTemplateListResult = await piDesktop.prompts.list();
-		return new Set(list.templates.filter((t) => t.userCreated).map((t) => t.name.toLowerCase()));
+		const list: PiPromptTemplateListResult = await desktopApi.prompts.list();
+		return new Set(list.templates.filter((template) => template.userCreated).map((template) => template.name.toLowerCase()));
 	} catch {
 		return new Set();
 	}
@@ -41,19 +38,16 @@ export function YaoPromptTab(props: {
 		void loadCategories();
 	}, []);
 
-	// 分类/搜索/页码变更时加载分页数据
 	useEffect(() => {
-		if (!initialLoading) {
-			void loadPrompts();
-		}
-	}, [activeCategory, searchQuery, page, initialLoading]);
+		if (!initialLoading) void loadPrompts();
+	}, [activeCategory, initialLoading, page, searchQuery]);
 
 	const loadCategories = async () => {
 		setInitialLoading(true);
 		setError(null);
 		try {
 			const [result, installed] = await Promise.all([
-				api.yaoPrompts.list(),
+				desktopApi.yaoPrompts.list(),
 				getInstalledPromptNames(),
 			]);
 			setData(result);
@@ -81,7 +75,27 @@ export function YaoPromptTab(props: {
 			});
 			setData((prev) => prev ? { ...prev, prompts: result.prompts, total: result.total, page: result.page, pageSize: result.pageSize } : prev);
 		} catch (err) {
-			setError(err instanceof Error ? err.message : t("config.promptStoreError"));
+			console.error("[YaoPrompts] Load failed", err);
+			setError(t("config.yaoLoadError"));
+		} finally {
+			setInitialLoading(false);
+		}
+	};
+
+	const loadPrompts = async () => {
+		setLoading(true);
+		setError(null);
+		try {
+			const result = await desktopApi.yaoPrompts.list({
+				category: activeCategory ?? undefined,
+				search: searchQuery.trim() || undefined,
+				page,
+				pageSize: PAGE_SIZE,
+			});
+			setData((previous) => previous ? { ...previous, ...result, categories: previous.categories } : result);
+		} catch (err) {
+			console.error("[YaoPrompts] Search failed", err);
+			setError(t("config.yaoLoadError"));
 		} finally {
 			setLoading(false);
 		}
@@ -102,10 +116,11 @@ export function YaoPromptTab(props: {
 		setPreviewLoading(true);
 		setPreviewDetail(null);
 		try {
-			const detail = await api.yaoPrompts.detail(item.slug, item.category);
+			const detail = await desktopApi.yaoPrompts.detail(item.slug, item.category);
 			setPreviewDetail(detail);
 		} catch (err) {
-			setError(err instanceof Error ? err.message : String(err));
+			console.error("[YaoPrompts] Preview failed", err);
+			setError(t("config.yaoPreviewError"));
 		} finally {
 			setPreviewLoading(false);
 		}
@@ -115,14 +130,13 @@ export function YaoPromptTab(props: {
 		setImportingSlug(item.slug);
 		setError(null);
 		try {
-			await api.yaoPrompts.import(item.slug, item.category);
-			showNotice("已导入到本地模板", 2500);
+			await desktopApi.yaoPrompts.import(item.slug, item.category);
+			showNotice(t("config.promptStoreImported"), 2500);
 			props.onImported?.();
-			// 刷新已安装标注，立即可见
-			const installed = await getInstalledPromptNames();
-			setInstalledNames(installed);
+			setInstalledNames(await getInstalledPromptNames());
 		} catch (err) {
-			setError(err instanceof Error ? err.message : String(err));
+			console.error("[YaoPrompts] Import failed", err);
+			setError(t("config.yaoImportError"));
 		} finally {
 			setImportingSlug(null);
 		}
@@ -181,9 +195,9 @@ export function YaoPromptTab(props: {
 					<Search size={15} strokeWidth={1.8} className="prompt-store-search-icon" />
 					<input
 						type="text"
-						value={searchQuery}
-						onChange={(e) => handleSearchChange(e.target.value)}
-						placeholder="搜索中文提示词…"
+					value={searchQuery}
+					onChange={(e) => handleSearchChange(e.target.value)}
+					placeholder={t("config.yaoSearchPlaceholder")}
 					/>
 				</div>
 			</div>
@@ -193,7 +207,7 @@ export function YaoPromptTab(props: {
 			{initialLoading ? (
 				<div className="config-loading">{t("common.loading")}</div>
 			) : !data || data.categories.length === 0 ? (
-				<div className="config-empty">暂无提示词数据</div>
+				<div className="config-empty">{t("config.yaoNoData")}</div>
 			) : (
 				<>
 					{/* 分类导航 */}
@@ -202,7 +216,7 @@ export function YaoPromptTab(props: {
 							className={`yao-category-chip ${!activeCategory ? "active" : ""}`}
 							onClick={() => handleCategoryChange(null)}
 						>
-							全部
+							{t("config.yaoAll")}
 							<small>{data.categories.reduce((s, c) => s + c.count, 0)}</small>
 						</button>
 						{data.categories.map((cat) => (
@@ -218,11 +232,11 @@ export function YaoPromptTab(props: {
 					</div>
 
 					{/* 提示词列表 */}
-					<div className="prompt-store-results">
-						{loading ? (
-							<div className="config-loading">{t("common.loading")}</div>
-						) : activePrompts.length === 0 ? (
-							<div className="config-empty">未匹配到提示词</div>
+				<div className="prompt-store-results">
+					{loading ? (
+						<div className="config-loading">{t("common.loading")}</div>
+					) : activePrompts.length === 0 ? (
+						<div className="config-empty">{t("config.yaoNoMatches")}</div>
 						) : (
 							activePrompts.map((item) => (
 								<article

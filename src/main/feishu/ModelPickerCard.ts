@@ -1,4 +1,5 @@
 import type { AvailableModel } from "../../shared/types";
+import { feishuT, type FeishuLocale } from "./FeishuI18n";
 
 const MAX_MODEL_BUTTONS = 18;
 const BUTTONS_PER_ROW = 3;
@@ -7,6 +8,7 @@ const MODEL_ACTION = "pideck.set_model";
 type ModelPickerInput = {
 	current: string;
 	models: AvailableModel[];
+	locale?: FeishuLocale;
 };
 
 type ModelAction = {
@@ -21,11 +23,11 @@ type CardButton = {
 	value: { action: string; provider: string; modelId: string };
 };
 
-export function buildModelPickerCard({ current, models }: ModelPickerInput) {
+export function buildModelPickerCard({ current, models, locale = "zh-CN" }: ModelPickerInput) {
 	const shown = models.slice(0, MAX_MODEL_BUTTONS);
 	const hidden = Math.max(0, models.length - shown.length);
 	const elements: object[] = [
-		{ tag: "markdown", content: `当前模型：\`${current}\`` },
+		{ tag: "markdown", content: feishuT(locale, "model.current", { model: current }) },
 	];
 
 	for (const [provider, providerModels] of groupByProvider(shown)) {
@@ -40,13 +42,13 @@ export function buildModelPickerCard({ current, models }: ModelPickerInput) {
 	}
 
 	const note = hidden > 0
-		? `已显示前 ${shown.length} 个模型；其余 ${hidden} 个仍可手动发送 /model provider/modelId 切换。`
-		: "点击按钮即可切换当前会话模型。";
+		? feishuT(locale, "model.hiddenNote", { shown: shown.length, hidden })
+		: feishuT(locale, "model.readyNote");
 	elements.push({ tag: "note", elements: [{ tag: "plain_text", content: note }] });
 
 	return {
 		config: { wide_screen_mode: true, update_multi: true },
-		header: { title: { tag: "plain_text", content: "切换模型" }, template: "blue" },
+		header: { title: { tag: "plain_text", content: feishuT(locale, "model.title") }, template: "blue" },
 		elements,
 	};
 }
