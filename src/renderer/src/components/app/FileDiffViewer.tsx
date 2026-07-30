@@ -476,26 +476,3 @@ function extToMonacoLanguage(ext: string): string {
 	};
 	return map[ext] ?? "plaintext";
 }
-
-/**
- * HTML 预览组件：通过 sandboxed iframe 渲染 HTML。
- * 使用 srcdoc 避免 CSP frame-src 限制；
- * 放开 allow-scripts / allow-same-origin 以支持本地开发场景的外部 CSS/JS 加载。
- * 注意：被预览的 HTML 中的脚本会执行，仅用于可信本地文件。
- */
-function HtmlPreview({ content }: { content: string }) {
-	return (
-		<iframe
-			className="file-diff-preview"
-			srcDoc={content}
-			title="HTML preview"
-			sandbox="allow-scripts allow-same-origin allow-forms"
-			style={{
-				width: "100%",
-				height: "100%",
-				border: "none",
-				background: "white",
-			}}
-		/>
-	);
-}

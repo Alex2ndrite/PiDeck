@@ -91,6 +91,8 @@ export type PiPackageInfo = {
 export type PiExtensionListResult = {
 	extensions: PiExtensionSummary[];
 	raw: string;
+	/** 检测到的扩展冲突：内置扩展因与三方扩展同名而被自动禁用 */
+	conflicts?: { builtIn: string; thirdParty: string }[];
 };
 
 export type PiCliUpdateResult = {
@@ -123,6 +125,8 @@ export type AppInfo = {
 	releasesUrl: string;
 	/** 当前运行平台：win32 / darwin / linux，用于 UI 中按平台条件渲染（如 WSL 选项仅在 Windows 显示） */
 	platform: NodeJS.Platform;
+	/** 用户 home 目录，供扩展读取本地文件（如 memory-store.json） */
+	homeDir: string;
 };
 
 export type FeedbackEnvironment = {

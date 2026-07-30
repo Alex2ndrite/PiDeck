@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  type TerminalDockStateByAgent,
+  type TerminalDockStateByOwner,
   setTerminalDockOpen,
   setTerminalDockCollapsed,
   pruneTerminalDockState,
@@ -11,7 +11,7 @@ const TERMINAL_DOCK_MOTION_MS = 180;
 
 export function useTerminalDock(activeAgentId: string | undefined) {
   const [terminalDockStateByAgent, setTerminalDockStateByAgent] =
-    useState<TerminalDockStateByAgent>({});
+    useState<TerminalDockStateByOwner>({});
   const [terminalHeightByAgent, setTerminalHeightByAgent] = useState<
     Record<string, number>
   >({});
@@ -82,7 +82,7 @@ export function useTerminalDock(activeAgentId: string | undefined) {
   /** 清理已关闭 agent 的终端状态，在 agent 列表变化时调用。 */
   function prune(activeIds: Set<string>) {
     setTerminalDockStateByAgent((current) =>
-      pruneTerminalDockState(current, activeIds),
+      pruneTerminalDockState(current, activeIds, new Set()),
     );
     setTerminalHeightByAgent((current) =>
       Object.fromEntries(

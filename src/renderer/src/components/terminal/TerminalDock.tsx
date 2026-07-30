@@ -88,15 +88,17 @@ export function TerminalDock(props: {
 	onCollapsedChange: (collapsed: boolean) => void;
 	onHeightChange: (height: number) => void;
 	onClose: () => void;
+	/** 可选：终端 owner 键；缺省时用 agentId */
+	sessionKey?: string;
+	/** 无 agent 时作为 CWD 的项目路径 */
+	projectCwd?: string;
 }) {
 	const containerRef = useRef<HTMLDivElement>(null);
 	const xtermRef = useRef<Terminal | null>(null);
 	const fitRef = useRef<FitAddon | null>(null);
 	const activeTabIdRef = useRef("");
 	const buffersRef = useRef<Record<string, string>>({});
-	// sessionKey 由 App 按 owner 解析；缺省时不应 ensure，避免误写入全局桶
-	const sessionKey = props.sessionKey;
-	/** 无 agent（cwd 桶）时显式传项目路径作为 CWD */
+	const sessionKey = props.sessionKey ?? props.target.agentId;
 	const effectiveCwd =
 		sessionKey && sessionKey.startsWith("cwd:") ? props.projectCwd : undefined;
 	/* copyNotice 已改用 toast (sonner) 实现 */
@@ -307,6 +309,12 @@ export function TerminalDock(props: {
 	}, [activeTab?.id, activeTab?.exited, collapsed, contentReady]);
 
 	/* copyNotice cleanup 已禁用（改为 toast sonner） */
+
+	async function addTabWithShell(_shell: string) {
+		// 当前 preload API 仅支持 create(target)；shell 选择先走默认 create，后续再扩展参数。
+		setShellMenuOpen(false);
+		await addTab();
+	}
 
 	async function addTab() {
 		const next = await props.terminal.create(props.target);

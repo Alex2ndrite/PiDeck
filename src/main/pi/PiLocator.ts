@@ -129,6 +129,47 @@ export class PiLocator {
     return this.applyPiProxyEnv(env, settings);
   }
 
+  /**
+   * 给 pi 子进程消毒 Electron 宿主环境。
+   * 桌面端主进程 env 常带 ELECTRON_* / 可能含 electron 注入的 NODE_OPTIONS；
+   * 原样继承后 jiti 加载扩展或子进程行为可能与终端 CLI 不一致。
+   */
+  sanitizePiChildEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+    const next: NodeJS.ProcessEnv = { ...env };
+
+    for (const key of Object.keys(next)) {
+      if (key.startsWith("ELECTRON_") || key === "ELECTRON_RUN_AS_NODE") {
+        delete next[key];
+        continue;
+      }
+      if (key.startsWith("CHROME_") || key.startsWith("GOOGLE_API_")) {
+        delete next[key];
+      }
+    }
+
+    const nodeOptions = next.NODE_OPTIONS;
+    if (typeof nodeOptions === "string" && nodeOptions.trim()) {
+      const cleaned = nodeOptions
+        .split(/\s+/)
+        .filter((token) => {
+          if (!token) return false;
+          const lower = token.toLowerCase();
+          return !(
+            lower.includes("electron") ||
+            lower.includes("asar") ||
+            lower.includes("app.asar") ||
+            lower.includes("electron-vite")
+          );
+        })
+        .join(" ")
+        .trim();
+      if (cleaned) next.NODE_OPTIONS = cleaned;
+      else delete next.NODE_OPTIONS;
+    }
+
+    return next;
+  }
+
   createInvocation(command: string, args: string[], options: { wslCwd?: string } = {}): PiCommandInvocation {
     // WSL 模式：command 为 "wsl://<distro>/<user>/pi" 形式的标记
     if (command.startsWith("wsl://")) {

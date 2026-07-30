@@ -6,9 +6,13 @@
  * 保证全局错误处理仍能给用户可见反馈。
  */
 
-import { toast } from "sonner";
+type NoticeData = {
+  message: string;
+  duration: number;
+  kind?: "info" | "error" | "warning";
+};
 
-export type NoticeKind = "info" | "error" | "warning";
+type Listener = (data: NoticeData | null) => void;
 
 let listener: Listener | null = null;
 let fallbackHost: HTMLDivElement | null = null;

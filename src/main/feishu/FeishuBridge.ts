@@ -837,7 +837,7 @@ export class FeishuBridge {
 							log(`[飞书 Bridge] 终态卡片 patch 失败: ${cardStream.lastPatchError}`);
 							// 卡片交付失败时再补一条纯文本，保证用户仍能看到结果。
 							const chatIdForFallback = this.getBestChatId(agentId);
-							if (chatIdForFallback && this.client) {
+							if (chatIdForFallback && this.connection.client) {
 								void this.syncPiMessageToFeishu(agentId, chatIdForFallback).catch((e) =>
 									logErr("[Feishu Bridge] card-fallback sync failed:", e),
 								);
@@ -848,7 +848,7 @@ export class FeishuBridge {
 						this.cardTerminalSucceeded.delete(agentId);
 						logErr("[飞书 Bridge] 终态卡片 flush/close 异常:", e);
 						const chatIdForFallback = this.getBestChatId(agentId);
-						if (chatIdForFallback && this.client) {
+						if (chatIdForFallback && this.connection.client) {
 							void this.syncPiMessageToFeishu(agentId, chatIdForFallback).catch((err) =>
 								logErr("[Feishu Bridge] card-fallback sync failed:", err),
 							);

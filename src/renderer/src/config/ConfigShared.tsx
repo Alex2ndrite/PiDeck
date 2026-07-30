@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { MouseEvent } from "react";
 import { Check, Eye, EyeOff, ChevronDown } from "lucide-react";
 import { t } from "../i18n";
+import { writeClipboard } from "../utils/clipboard";
 import { PROVIDER_API_OPTIONS, API_TYPE_LABELS, getApiTypeDescription } from "./providerHeaders";
 
 // ── 复制到剪贴板工具 ──────────────────────────────────

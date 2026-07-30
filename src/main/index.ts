@@ -2105,7 +2105,13 @@ app.whenReady().then(async () => {
 	promptManager = new PromptManager(undefined, mainCopy);
 	xuePromptManager = new XuePromptManager();
 	skillManager = new SkillManager(undefined, mainCopy);
-	extensionManager = new ExtensionManager(piLocator, () => settingsStore.get(), mainCopy);
+	extensionManager = new ExtensionManager(
+		piLocator,
+		() => settingsStore.get(),
+		() => settingsStore.get(),
+		(patch) => settingsStore.update(patch),
+		mainCopy,
+	);
 	projectResourceManager = new ProjectResourceManager(
 		(projectId) => projectStore.get(projectId),
 		mainCopy,

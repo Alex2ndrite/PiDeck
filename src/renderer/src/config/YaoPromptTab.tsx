@@ -62,25 +62,7 @@ export function YaoPromptTab(props: {
 		}
 	};
 
-	const loadPrompts = async () => {
-		setLoading(true);
-		setError(null);
-		try {
-			// 分类默认选择全部（不传 category），当 activeCategory 不为 null 时传它
-			const result = await api.yaoPrompts.list({
-				category: activeCategory || undefined,
-				search: searchQuery.trim() || undefined,
-				page,
-				pageSize: PAGE_SIZE,
-			});
-			setData((prev) => prev ? { ...prev, prompts: result.prompts, total: result.total, page: result.page, pageSize: result.pageSize } : prev);
-		} catch (err) {
-			console.error("[YaoPrompts] Load failed", err);
-			setError(t("config.yaoLoadError"));
-		} finally {
-			setInitialLoading(false);
-		}
-	};
+	;
 
 	const loadPrompts = async () => {
 		setLoading(true);

@@ -12,6 +12,13 @@ export type LinkOpenMode = "external" | "internal";
 export type AppFontSizeMode = "compact" | "default" | "medium" | "large" | "xlarge";
 export type AppFontBaseMode = "system" | "sans" | "serif" | "custom";
 export type AppFontMonoMode = "commit-mono" | "system-mono" | "custom";
+/** 主窗口启动尺寸预设：fullscreen 占满屏幕，maximized 最大化，其余为固定窗口 */
+export type StartupWindowMode =
+	| "fullscreen"
+	| "maximized"
+	| "normal-large"
+	| "normal-medium"
+	| "normal-compact";
 
 export type AppSettings = {
 	useNativeTitleBar: boolean;
@@ -23,6 +30,8 @@ export type AppSettings = {
 	lightBackground: LightBackgroundMode;
 	/** 界面语言，system 跟随系统语言；pseudo 用于长文案布局压力测试 */
 	language: AppLanguageMode;
+	/** 启动时主窗口尺寸预设，默认 maximized（与历史 ready-to-show 后 maximize 一致） */
+	startupWindowMode: StartupWindowMode;
 	piEnvironmentChecked: boolean;
 	/** 是否启用会话右侧的 Git 源代码管理入口与面板，默认开启以保持升级前行为。 */
 	enableGitManagement: boolean;
@@ -30,12 +39,23 @@ export type AppSettings = {
 	gitCommitMessagePrompt: string;
 	/** 关闭窗口时隐藏到系统托盘而不是退出 */
 	closeToTray: boolean;
+	/**
+	 * 单实例模式：再次打开应用时复用已有窗口（托盘隐藏也会唤起）。
+	 * 默认 true；关闭后允许同时跑多个 PiDeck 进程。
+	 */
+	singleInstance: boolean;
 	/** 会话结束时发送系统通知 */
 	enableNotifications: boolean;
 	/** 是否在会话中显示模型思考过程，默认开启 */
 	showThinking: boolean;
 	/** 是否开启开发者控制台（DevTools） */
 	showDevTools: boolean;
+	/**
+	 * Electron Chromium 渲染进程沙箱（与 pi Agent 无关）。
+	 * false（默认）：关闭沙箱，兼容 Windows 安全软件/旧 GPU 驱动；
+	 * true：启用 Chromium 沙箱，需重启 PiDeck 后生效。
+	 */
+	electronChromiumSandbox: boolean;
 	/** 是否给 pi agent 子进程注入代理环境变量，不影响 desktop 自身网络请求 */
 	piProxyEnabled: boolean;
 	/** pi agent 使用的代理地址，例如 http://127.0.0.1:7890 */
@@ -126,6 +146,23 @@ export type AppSettings = {
 	 *  开启后自动跳过启动和定时检测，设置页中检测按钮也禁用。 */
 	disableUpdateCheck: boolean;
 
+	// ── Agent 启动诊断/加速（开发设置） ──
+	/**
+	 * 启动 pi RPC 时附加 --offline，跳过 pi 启动期模型目录网络刷新。
+	 * 桌面端模型列表来自本地 models.json，默认开启以加快冷启动。
+	 */
+	piRpcOffline: boolean;
+	/**
+	 * 启动 pi RPC 时附加 --no-extensions，跳过扩展发现与加载。
+	 * 用于排查「坏扩展导致 RPC 起不来」；开启后 todo/plan/ask 等扩展不可用。
+	 */
+	piRpcNoExtensions: boolean;
+	/**
+	 * 启动 pi RPC 时附加 --no-skills，跳过 skills 发现与加载。
+	 * 用于排查/加速；开启后技能命令与 skill 相关能力不可用。
+	 */
+	piRpcNoSkills: boolean;
+
 	// ── 侧栏 UI 状态 ──
 	/**
 	 * 左侧边栏处于展开状态的项目 id 列表（含 builtin-chat）。
@@ -133,6 +170,13 @@ export type AppSettings = {
 	 * 缺省时由渲染层按「仅展开 chat」处理。
 	 */
 	sidebarExpandedProjectIds?: string[];
+
+	// ── 扩展管理 ──
+	/**
+	 * 用户手动移除（或因三方冲突自动让位）的内置扩展列表（如 pi-deck-todo.ts）。
+	 * 下次启动跳过自动部署，并清理用户目录残留文件，避免 pi 仍加载导致工具冲突。
+	 */
+	removedBuiltInExtensions: string[];
 
 };
 

@@ -46,7 +46,6 @@ import type {
 	FeishuSessionBotResult,
 	FeishuTestResult,
 	FileTreeNode,
-	ImageContent,
 	GitBranchInfo,
 	ImageContent,
 	CommitDetail,
@@ -665,18 +664,6 @@ const api = {
 				hash,
 				mode,
 			) as Promise<void>,
-	/** git pull — 从远程拉取并合并到当前分支 */
-	pull: (projectId: string) =>
-		ipcRenderer.invoke(
-			ipcChannels.gitPull,
-			projectId,
-		) as Promise<void>,
-	/** git push — 推送当前分支到远程 */
-	push: (projectId: string) =>
-		ipcRenderer.invoke(
-			ipcChannels.gitPush,
-			projectId,
-		) as Promise<void>,
 		dropCommit: (projectId: string, hash: string) =>
 			ipcRenderer.invoke(
 				ipcChannels.gitDropCommit,
@@ -897,6 +884,8 @@ const api = {
 			ipcRenderer.invoke(ipcChannels.extensionsUninstall, source, scope) as Promise<void>,
 		install: (source: string) =>
 			ipcRenderer.invoke(ipcChannels.extensionsInstall, source) as Promise<string>,
+		toggle: (source: string, enabled: boolean) =>
+			ipcRenderer.invoke(ipcChannels.extensionsToggle, source, enabled) as Promise<void>,
 		removeBuiltIn: (source: string) =>
 			ipcRenderer.invoke(ipcChannels.extensionsRemoveBuiltIn, source) as Promise<void>,
 		restoreBuiltIn: (source: string) =>

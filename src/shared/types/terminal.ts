@@ -1,4 +1,20 @@
-export type TerminalShell = "pwsh" | "powershell" | "cmd" | "zsh" | "bash" | "fish" | "sh";
+export type TerminalShell =
+	| "pwsh"
+	| "powershell"
+	| "cmd"
+	| "zsh"
+	| "bash"
+	| "fish"
+	| "sh"
+	| "git-bash"
+	| "wsl";
+
+export type TerminalShellCandidate = {
+	shell: TerminalShell;
+	label: string;
+	available: boolean;
+	path?: string;
+};
 
 export type TerminalTab = {
 	id: string;

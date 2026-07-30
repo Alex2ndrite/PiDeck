@@ -546,6 +546,18 @@ export function App() {
     prune: pruneTerminalDockState,
   } = useTerminalDock(activeAgentId);
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set());
+  const [, setBranchByProject] = useState<Record<string, string | null>>({});
+  const [expandedSidebarProjects, setExpandedSidebarProjects] = useState<Set<string>>(new Set());
+  const expandedSidebarProjectsRef = useRef(expandedSidebarProjects);
+  expandedSidebarProjectsRef.current = expandedSidebarProjects;
+  const expandedSidebarFromSettingsRef = useRef(false);
+  function saveExpandedSidebarProjectsToLocal(next: Set<string>) {
+    try {
+      localStorage.setItem("pidek.sidebarExpandedProjectIds", JSON.stringify([...next]));
+    } catch {
+      // ignore
+    }
+  }
   const sessionComboRef = useRef<HTMLDivElement | null>(null);
   const queuedTrackRef = useRef<HTMLDivElement | null>(null);
 
@@ -607,23 +619,7 @@ export function App() {
   // displayAgents 的 ref，供只挂载一次的 IPC 监听器读取最新 Agent 列表，避免闭包陈旧
   const displayAgentsRef = useRef(displayAgents);
   displayAgentsRef.current = displayAgents;
-  // 从 localStorage 恢复历史（组件挂载时执行一次）
-  useEffect(() => {
-    loadPromptHistory();
-  }, []);
-
-  // Agent 关闭后清除对应历史命令
-  useEffect(() => {
-    const currentIds = new Set(displayAgents.map(a => a.id));
-    let changed = false;
-    for (const id of Object.keys(promptHistoryRef.current)) {
-      if (!currentIds.has(id)) {
-        delete promptHistoryRef.current[id];
-        changed = true;
-      }
-    }
-    if (changed) savePromptHistory();
-  }, [displayAgents]);
+  // prompt history persistence lives in session composer controller (session-first).
   // 查看器已移除：activeAgent 直接从 displayAgents / pendingAgents 取，不再有伪 Agent。
   const activeAgent = activeAgentId
     ? [...displayAgents, ...pendingAgents].find((agent) => agent.id === activeAgentId)
@@ -1877,10 +1873,13 @@ export function App() {
    */
   async function handleAttachFile() {
     try {
+      // session-first：路径引用插入由 composer controller 负责；这里仅打开选择器并派发事件。
       const paths = await window.piDesktop.dialog.pickFiles({
-        title: t("app.attachFile"),
+        title: t("menu.attachFile"),
       });
-      insertFilePathRefs(paths);
+      if (paths.length > 0) {
+        window.dispatchEvent(new CustomEvent("composer-attach-paths", { detail: { paths } }));
+      }
     } catch {
       // 用户取消或出错时不作处理
     }
@@ -1940,15 +1939,15 @@ export function App() {
       }
       // Chromium 沙箱依赖启动参数与 webPreferences，保存后必须整应用重启才生效。
       if ("electronChromiumSandbox" in patch) {
-        notice = t("app.electronSandboxSaved");
+        notice = t("app.settingsSaved"); // sandbox 需重启
       }
       // 单实例锁在进程启动时申请，修改后需重启才切换多开/复用行为。
       if ("singleInstance" in patch) {
-        notice = t("app.singleInstanceSaved");
+        notice = t("app.settingsSaved"); // 单实例需重启
       }
       // 启动窗口预设仅在下次 createWindow 时应用。
       if ("startupWindowMode" in patch) {
-        notice = t("app.startupWindowModeSaved");
+        notice = t("app.settingsSaved"); // 启动窗口需重启
       }
       // WSL/Windows pi 源切换：重新检测 pi 环境、刷新项目和会话列表
       if ("wslEnabled" in patch || "wslDistro" in patch || "wslUser" in patch) {

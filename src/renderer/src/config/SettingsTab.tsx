@@ -132,6 +132,21 @@ export function SettingsTab(props: {
 		});
 	};
 
+	const updateCompaction = (patch: Partial<typeof compactionConfig>) => {
+		const existing =
+			data.compaction && typeof data.compaction === "object" && !Array.isArray(data.compaction)
+				? (data.compaction as Record<string, unknown>)
+				: {};
+		props.onChange({
+			...data,
+			compaction: {
+				...existing,
+				...compactionConfig,
+				...patch,
+			},
+		});
+	};
+
 	/**
 	 * 配置键名 → 显示标签。
 	 * 已登记 i18n 的键走多语言；未登记回退原始 key，避免未知字段空白。

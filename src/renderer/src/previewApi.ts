@@ -250,11 +250,10 @@ export function createPreviewApi(): PiDesktopApi {
 			open: async () => undefined,
 			showInFolder: async () => undefined,
 			readContent: async () => "",
+			readBase64: async () => "",
 			create: async () => "/mock/created",
 			writeContent: async () => undefined,
 			delete: async () => undefined,
-			copy: async () => [],
-			move: async () => [],
 			rename: async () => "",
 			getPathForFile: () => "",
 			getClipboardPaths: () => [],
@@ -485,6 +484,7 @@ export function createPreviewApi(): PiDesktopApi {
 				init: async () => {},
 			pull: async () => {},
 			push: async () => {},
+			fetch: async () => undefined,
 		},
 		logs: {
 			list: async () => [],
@@ -663,6 +663,7 @@ export function createPreviewApi(): PiDesktopApi {
 			}),
 			uninstall: async () => undefined,
 			install: async (_source: string) => "",
+			toggle: async () => undefined,
 			removeBuiltIn: async () => undefined,
 			restoreBuiltIn: async () => undefined,
 			update: async () => ({
@@ -898,8 +899,6 @@ export function createPreviewApi(): PiDesktopApi {
 			export: async () => false,
 		},
 
-		clipboard: {
-			writeText: async (_text: string) => {},
-		},
+
 	};
 }

@@ -50,6 +50,12 @@ export class ExtensionManager {
 	constructor(
 		private readonly locator: PiLocator,
 		private readonly getSettings: SettingsProvider,
+		/** 获取 PiDeck 桌面设置（含 removedBuiltInExtensions） */
+		private readonly getPiDeckSettings: () => AppSettings = getSettings,
+		/** 保存 PiDeck 桌面设置的部分更新 */
+		private readonly patchPiDeckSettings: (
+			patch: Partial<AppSettings>,
+		) => Promise<AppSettings> = async () => getSettings(),
 		private readonly translate: ExtensionCopy = () => "Extension operation failed.",
 	) {}
 
@@ -160,8 +166,9 @@ export class ExtensionManager {
 			}
 		}
 
-		// 读取 disabledExtensions 列表，标记扩展启用/禁用状态
-		const disabledExts = await this.getDisabledExtensions();
+		// 通过 PiDeck 桌面设置标记内置扩展移除状态（与 pi disabledExtensions 分离）。
+		// 必须在冲突检测前初始化：后续逻辑会写回 removedBuiltInExtensions 并删磁盘文件。
+		const removedBuiltIn = new Set(this.getPiDeckSettings().removedBuiltInExtensions ?? []);
 		for (const ext of merged) {
 			ext.enabled = !(ext.builtIn && removedBuiltIn.has(ext.source));
 		}
@@ -299,6 +306,59 @@ export class ExtensionManager {
 		} catch {
 			// settings 不存在或解析失败时忽略；卸载主流程已成功
 		}
+	}
+
+	/**
+	 * 删除用户扩展目录中的内置扩展文件。
+	 * 只允许 pi-deck-* 单层 basename，防止路径穿越。
+	 * force: 文件本就不存在时静默成功（幂等，适合启动残留清理）。
+	 */
+	async removeBuiltInFile(source: string): Promise<void> {
+		const extensionsDir = join(this.homeDir, ".pi", "agent", "extensions");
+		const trimmed = source.trim();
+		const name = basename(trimmed);
+		if (!name || name !== trimmed || !name.startsWith("pi-deck-") || name === "." || name === "..") {
+			throw new Error("非法内置扩展路径");
+		}
+		await rm(join(extensionsDir, name), { force: true });
+	}
+
+	private async saveRemovedBuiltIn(removedList: string[]): Promise<void> {
+		await this.patchPiDeckSettings({ removedBuiltInExtensions: removedList });
+	}
+
+	/**
+	 * 禁用内置扩展的统一路径：记入 removedBuiltInExtensions + 删除磁盘文件。
+	 * 供手动移除与三方冲突自动让位共用，保证 pi 进程侧立即不再加载。
+	 */
+	async disableBuiltIn(source: string): Promise<void> {
+		const normalized = source.trim();
+		if (!normalized.startsWith("pi-deck-")) {
+			throw new Error("只能操作内置扩展");
+		}
+		const current = this.getPiDeckSettings().removedBuiltInExtensions ?? [];
+		if (!current.includes(normalized)) {
+			await this.saveRemovedBuiltIn([...current, normalized]);
+		}
+		await this.removeBuiltInFile(normalized);
+		this.invalidateListCache();
+	}
+
+	async removeBuiltIn(source: string): Promise<void> {
+		const normalized = source.trim();
+		if (!normalized.startsWith("pi-deck-")) {
+			throw new Error("只能操作内置扩展");
+		}
+		await this.disableBuiltIn(normalized);
+	}
+
+	async restoreBuiltIn(source: string): Promise<void> {
+		const normalized = source.trim();
+		const current = this.getPiDeckSettings().removedBuiltInExtensions ?? [];
+		const next = current.filter((s) => s !== normalized);
+		if (next.length === current.length) return;
+		await this.saveRemovedBuiltIn(next);
+		this.invalidateListCache();
 	}
 
 	async uninstall(source: string, scope: PiExtensionSummary["scope"] = "user"): Promise<void> {
