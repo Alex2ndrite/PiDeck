@@ -3,6 +3,7 @@ import { selectAtom } from "jotai/utils";
 import type {
   AgentRuntimeState,
 	AgentStatus,
+	AgentUiBatchQuestion,
 	AgentUiRequest,
 	ChatMessage,
 	SessionMessagePage,
@@ -298,6 +299,48 @@ function toAgentUiRequest(
 ): AgentUiRequest | undefined {
   const requestId = typeof payload.requestId === "string" ? payload.requestId : "";
   if (!requestId) return undefined;
+  const batchQuestions: AgentUiBatchQuestion[] | undefined = Array.isArray(payload.batchQuestions)
+    ? payload.batchQuestions.reduce<AgentUiBatchQuestion[]>((questions, question) => {
+        if (!question || typeof question !== "object") return questions;
+        const typed = question as Record<string, unknown>;
+        if (
+          typeof typed.id !== "string" ||
+          typeof typed.question !== "string" ||
+          !["select", "confirm", "input", "editor"].includes(String(typed.type))
+        ) {
+          return questions;
+        }
+        const options = Array.isArray(typed.options)
+          ? typed.options.reduce<NonNullable<AgentUiBatchQuestion["options"]>>((items, option) => {
+              if (typeof option === "string") {
+                items.push(option);
+                return items;
+              }
+              if (!option || typeof option !== "object") return items;
+              const typedOption = option as Record<string, unknown>;
+              if (typeof typedOption.label !== "string") return items;
+              items.push({
+                label: typedOption.label,
+                ...(typeof typedOption.value === "string" ? { value: typedOption.value } : {}),
+                ...(typeof typedOption.description === "string"
+                  ? { description: typedOption.description }
+                  : {}),
+              });
+              return items;
+            }, [])
+          : undefined;
+        questions.push({
+          id: typed.id,
+          type: typed.type as AgentUiBatchQuestion["type"],
+          question: typed.question,
+          ...(options?.length ? { options } : {}),
+          ...(typeof typed.allowOther === "boolean" ? { allowOther: typed.allowOther } : {}),
+          ...(typeof typed.placeholder === "string" ? { placeholder: typed.placeholder } : {}),
+          ...(typeof typed.prefill === "string" ? { prefill: typed.prefill } : {}),
+        });
+        return questions;
+      }, [])
+    : undefined;
   return {
     agentId,
     requestId,
@@ -327,6 +370,8 @@ function toAgentUiRequest(
     widgetPlacement: payload.widgetPlacement === "aboveEditor" || payload.widgetPlacement === "belowEditor"
       ? payload.widgetPlacement
       : undefined,
+    batchQuestions: batchQuestions?.length ? batchQuestions : undefined,
+    batchReview: payload.batchReview === true,
   };
 }
 
@@ -410,7 +455,7 @@ function applySessionRuntimeUiEvent(
     else delete widgets[widgetKey];
     return { ...base, revision, widgets };
   }
-  if (!["select", "confirm", "input", "editor"].includes(request.method)) {
+  if (!["select", "confirm", "input", "editor", "batch_ask"].includes(request.method)) {
     return { ...base, revision };
   }
   return {

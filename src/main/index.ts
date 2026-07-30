@@ -484,7 +484,7 @@ function cancelUnboundUiRequest(payload: unknown): void {
 		typeof request.agentId !== "string" ||
 		typeof request.requestId !== "string" ||
 		request.completed === true ||
-		!(["select", "confirm", "input", "editor"] as const).some(
+		!(["select", "confirm", "input", "editor", "batch_ask"] as const).some(
 			(method) => method === request.method,
 		)
 	) {
@@ -1492,9 +1492,10 @@ function registerFeishuIpc() {
 				botInfo: { id: botConfig.id, name: botConfig.name },
 			};
 		} catch (error) {
+			const detail = error instanceof Error ? (error as Error & { cause?: unknown }).cause ?? error.message : String(error);
 			const message = error instanceof Error ? error.message : String(error);
-			console.error("[Feishu] 临时连接失败:", message);
-			return { success: false, message };
+			console.error("[Feishu] 临时连接失败:", detail);
+			return { success: false, message, detail: String(detail) };
 		}
 	});
 
@@ -1507,32 +1508,48 @@ function registerFeishuIpc() {
 				feishuBridge.stop();
 			}
 
+			// 先建立临时配置，不持久化；连接成功后再存盘
+			const plainAppSecret = input.appSecret;
+			const tempId = "pending-" + randomUUID();
+
+			feishuBridge = new FeishuBridge(
+				{
+					id: tempId,
+					name: input.name || feishuT(currentFeishuLocale(), "bridge.defaultBotName"),
+					enabled: true,
+					appId: input.appId,
+					appSecret: "",
+					defaultUserOpenId: input.defaultUserOpenId,
+				},
+				agentManager,
+				() => mainWindow,
+				() => projectStore.list(),
+				feishuSessionRuntimeBindings,
+				plainAppSecret,
+				currentFeishuLocale(),
+			);
+			await feishuBridge.start();
+
+			// 连接成功后再持久化
 			const botConfig = addFeishuBot({
 				name: input.name || feishuT(currentFeishuLocale(), "bridge.defaultBotName"),
 				appId: input.appId,
 				appSecret: input.appSecret,
 				defaultUserOpenId: input.defaultUserOpenId,
 			});
+			feishuBridge.updateBotConfig({ id: botConfig.id });
 
-			feishuBridge = new FeishuBridge(
-				botConfig,
-				agentManager,
-				() => mainWindow,
-				() => projectStore.list(),
-				feishuSessionRuntimeBindings,
-				undefined,
-				currentFeishuLocale(),
-			);
-			await feishuBridge.start();
 			console.log("[Feishu] 连接成功，状态:", JSON.stringify(feishuBridge.getStatus()));
 			void appLogger.info("feishu", "Feishu connected", { botId: botConfig.id, name: botConfig.name });
 			broadcastBotsChanged();
 			return { success: true, message: feishuT(currentFeishuLocale(), "connection.success") };
 		} catch (error) {
+			const detail = error instanceof Error ? (error as Error & { cause?: unknown }).cause ?? error.message : String(error);
 			const message = error instanceof Error ? error.message : String(error);
-			console.error("[Feishu] 连接失败:", message);
+			console.error("[Feishu] 连接失败:", detail);
 			void appLogger.error("feishu", "Feishu connect failed", error);
-			return { success: false, message };
+			// 返回详细错误信息（包含原始错误说明），供前端展示
+			return { success: false, message, detail: String(detail) };
 		}
 	});
 

@@ -76,6 +76,61 @@ test("Session UI requests and widgets are stored under the generation envelope",
   assert.deepEqual(ui.widgets.plan, ["Step 1"]);
 });
 
+test("batch Ask Question envelopes retain sanitized tab data in the runtime UI", () => {
+  const atoms = loadAtoms();
+  const store = createStore();
+  store.set(atoms.applySessionRuntimeEventAtom, event({
+    payload: {
+      agentId: "agent-a",
+      requestId: "batch-a",
+      method: "batch_ask",
+      title: "",
+      batchReview: true,
+      batchQuestions: [
+        {
+          id: "runtime",
+          type: "select",
+          question: "Which runtime?",
+          options: [
+            { label: "Node.js", value: "node", description: "Recommended" },
+            "Python",
+            { invalid: true },
+          ],
+          allowOther: true,
+        },
+        {
+          id: "package-manager",
+          type: "select",
+          question: "Which package manager?",
+          options: ["npm"],
+          allowOther: false,
+        },
+      ],
+    },
+  }));
+
+  const request = store.get(atoms.sessionRuntimeUiByIdAtom)["session-a"].requests["batch-a"].request;
+  assert.equal(request.method, "batch_ask");
+  assert.equal(request.title, "");
+  assert.equal(request.batchReview, true);
+  assert.deepEqual(JSON.parse(JSON.stringify(request.batchQuestions)), [{
+    id: "runtime",
+    type: "select",
+    question: "Which runtime?",
+    options: [
+      { label: "Node.js", value: "node", description: "Recommended" },
+      "Python",
+    ],
+    allowOther: true,
+  }, {
+    id: "package-manager",
+    type: "select",
+    question: "Which package manager?",
+    options: ["npm"],
+    allowOther: false,
+  }]);
+});
+
 test("renderer claim rejects stale generation and duplicate UI responses", () => {
   const atoms = loadAtoms();
   const store = createStore();

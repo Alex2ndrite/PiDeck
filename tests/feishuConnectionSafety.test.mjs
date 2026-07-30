@@ -18,7 +18,9 @@ test("FeishuBridge.start propagates startup failure to IPC callers", () => {
 	const startIdx = source.indexOf("async start(): Promise<void>");
 	const afterStart = source.indexOf("\n\tasync ", startIdx + 5);
 	const startBlock = source.slice(startIdx, afterStart > 0 ? afterStart : undefined);
-	assert.match(startBlock, /throw new Error\(message, \{ cause: error \}\);/);
+	// The error message includes the original detail; both the structured cause and the
+	// display text must remain available for the renderer.
+	assert.match(startBlock, /throw new Error\([^;]+ \{ cause: error \}\);/);
 	assert.match(startBlock, /feishuT\(this\.locale, "connection\.failed"\)/);
 });
 

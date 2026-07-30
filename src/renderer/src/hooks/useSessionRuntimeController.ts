@@ -1,14 +1,12 @@
-import { useCallback, useEffect, useRef } from "react";
-import { useAtomValue, useSetAtom } from "jotai";
+import { useEffect, useRef } from "react";
+import { useAtomValue } from "jotai";
 import { selectAtom } from "jotai/utils";
-import type { AgentTab, AgentUiResponse, SessionRecord, SessionRuntimeTarget } from "../../../shared/types";
+import type { AgentTab, SessionRecord, SessionRuntimeTarget } from "../../../shared/types";
 import {
-  claimSessionRuntimeUiResponseAtom,
   currentSessionAtom,
   currentSessionIdAtom,
   currentSessionRuntimeAtom,
   currentSessionRuntimeUiAtom,
-  rollbackSessionRuntimeUiResponseAtom,
 } from "../atoms/session-atoms";
 import { currentSessionSendStateAtom } from "../atoms/composer-atoms";
 import type { QueuedPrompt } from "./useQueuedPrompt";
@@ -44,7 +42,6 @@ export interface SessionRuntimeController {
   sessionDuration: number | undefined;
   isRestartingThisAgent: boolean;
   sessionHasProject: boolean;
-  sendSessionUiResponse: (requestId: string, response: AgentUiResponse) => void;
 }
 
 export interface UseSessionRuntimeControllerOptions {
@@ -55,18 +52,6 @@ export interface UseSessionRuntimeControllerOptions {
   sessionDurationByAgent: Record<string, number>;
   activeProjectId: string | undefined;
   showNotice: (message: string, duration?: number) => void;
-  showToast: (message: string, duration?: number) => void;
-  api: {
-    sessions: {
-      sendUiResponse: (input: {
-        sessionId: string;
-        requestId: string;
-        agentId: string;
-        runtimeGeneration: number;
-        response: AgentUiResponse;
-      }) => Promise<void>;
-    };
-  };
 }
 
 export function useSessionRuntimeController(
@@ -80,8 +65,6 @@ export function useSessionRuntimeController(
     sessionDurationByAgent,
     activeProjectId,
     showNotice,
-    showToast,
-    api,
   } = options;
 
   const currentSessionId = useAtomValue(currentSessionIdAtom);
@@ -97,12 +80,6 @@ export function useSessionRuntimeController(
 			runtimeGeneration: currentSessionRuntime.runtimeGeneration,
 		}
 		: undefined;
-  const claimSessionUiResponse = useSetAtom(claimSessionRuntimeUiResponseAtom);
-  const rollbackSessionUiResponse = useSetAtom(rollbackSessionRuntimeUiResponseAtom);
-
-  const currentSessionRuntimeRef = useRef(currentSessionRuntime);
-  currentSessionRuntimeRef.current = currentSessionRuntime;
-
   const activeAgent = activeAgentId
     ? agents.find((a) => a.id === activeAgentId)
     : undefined;
@@ -175,46 +152,6 @@ export function useSessionRuntimeController(
 
   const sessionHasProject = Boolean(activeProjectId);
 
-  // ── runtime UI bridge ──
-
-  const sendSessionUiResponse = useCallback(
-    (requestId: string, response: AgentUiResponse) => {
-      const rt = currentSessionRuntimeRef.current;
-      if (!currentSessionId || !rt) return;
-      const input = {
-        sessionId: currentSessionId,
-        requestId,
-        agentId: rt.agentId ?? "",
-        runtimeGeneration: rt.runtimeGeneration,
-      };
-      const currentReq = currentSessionRuntimeUi?.requests[requestId];
-      const request = currentReq?.request;
-      if (!input.agentId || !request) return;
-      if (
-        currentReq?.status !== "responding" &&
-        !claimSessionUiResponse({ ...input, request })
-      )
-        return;
-      void api.sessions
-        .sendUiResponse({ ...input, response })
-        .catch((error: unknown) => {
-          rollbackSessionUiResponse({ ...input, request });
-          showToast(
-            error instanceof Error ? error.message : String(error),
-            4000,
-          );
-        });
-    },
-    [
-      currentSessionId,
-      currentSessionRuntimeUi,
-      claimSessionUiResponse,
-      rollbackSessionUiResponse,
-      api.sessions,
-      showToast,
-    ],
-  );
-
   // ── UI notification effect ──
 
   const lastNoticeRef = useRef("");
@@ -247,6 +184,5 @@ export function useSessionRuntimeController(
     sessionDuration,
     isRestartingThisAgent,
     sessionHasProject,
-    sendSessionUiResponse,
   };
 }

@@ -125,7 +125,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isInteractiveUiMethod(method: unknown): boolean {
-	return method === "select" || method === "confirm" || method === "input" || method === "editor";
+	return method === "select" ||
+		method === "confirm" ||
+		method === "input" ||
+		method === "editor" ||
+		method === "batch_ask";
 }
 
 export class SessionRuntimeCoordinator {

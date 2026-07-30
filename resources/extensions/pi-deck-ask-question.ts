@@ -2,12 +2,15 @@
  * PiDeck Ask Question Extension
  *
  * 注册 ask_question 工具，让 LLM 可以向用户提问并从桌面端 UI 获取回答。
- * 使用 pi RPC Extension UI Protocol（ctx.ui.select/confirm/input/editor）实现用户交互，
+ * 使用 pi RPC Extension UI Protocol（ctx.ui.select/input/editor）实现用户交互，
  * 桌面端处理 extension_ui_request/response 协议循环。
+ * confirm 不调用 ctx.ui.confirm：RPC 把 cancelled 也解析成 false，与「否」无法区分；
+ * 改为 select(是/否)，点叉走 value:null，与 select 取消语义一致。
  *
  * 两种用法：
  *   1. 单问题模式（向后兼容）：顶层 type/question/options/placeholder/prefill/allowOther
- *   2. 批量模式：questions 数组，串行提问，一次性返回所有答案
+ *   2. 批量模式：questions 数组；桌面端以 Tab 标签页一次展示全部问题
+ *      （RPC 只能串行 dialog，因此批量走一次 input envelope，由桌面端展开为 Tab UI）
  *
  * select 选项支持字符串或 {label, value?, description?} 对象；description 会拼进选项
  * 显示文本，让用户在桌面端按钮上直接看到说明。allowOther（默认 true）由扩展层在
@@ -65,6 +68,12 @@ interface AskCtx {
 	};
 }
 
+/**
+ * RPC only supports one dialog at a time. Batch questions travel in an input
+ * envelope, which the desktop expands into its single composer-adjacent form.
+ */
+export const BATCH_ASK_ENVELOPE_KEY = "__piDeckBatchAsk";
+
 // allowOther 追加项的固定文案；选中后触发 ctx.ui.input 收集自定义答案
 const OTHER_LABEL = "✎ 自行输入...";
 
@@ -96,6 +105,12 @@ const AskQuestionParams = Type.Object({
 		Type.Array(QuestionSchema, {
 			description:
 				"Multiple questions to ask in sequence (batch mode). When provided, the single-question fields below are ignored.",
+		}),
+	),
+	review: Type.Optional(
+		Type.Boolean({
+			description:
+				"When true and in batch mode, shows a Submit/review tab of all answers for confirmation. Default false.",
 		}),
 	),
 	// 单问题模式（向后兼容）
@@ -169,6 +184,7 @@ function toQuestions(params: Record<string, unknown>): NormalizedQuestion[] {
 
 /** 单问题结果：保持 {question,type,answer,answered} 结构，兼容历史会话反推 */
 function singleResult(q: NormalizedQuestion, a: Answer, cancelled: boolean) {
+	const answered = !cancelled && a.value !== null && a.value !== undefined;
 	return {
 		content: [
 			{
@@ -181,7 +197,7 @@ function singleResult(q: NormalizedQuestion, a: Answer, cancelled: boolean) {
 			type: q.type,
 			answer: cancelled ? null : a.value,
 			answerLabel: a.label,
-			answered: !cancelled && a.value !== null,
+			answered,
 			options: q.options,
 			...(cancelled ? { cancelled: true } : {}),
 		},
@@ -227,22 +243,38 @@ async function askOne(q: NormalizedQuestion, ctx: AskCtx): Promise<Answer> {
 			// 循环：取消「自行输入」后回到选单，而非直接返回
 			while (true) {
 				const selected = await ctx.ui.select(q.question, labels);
-				const chosen = opts.find((o) => optionDisplayText(o) === selected) ?? opts[0];
+				if (selected == null || selected === "") {
+					return { id: q.id, type: q.type, value: null };
+				}
+				const chosen =
+					opts.find((option) => optionDisplayText(option) === selected) ??
+					opts.find((option) => option.value === selected) ??
+					opts.find((option) => option.label === selected) ??
+					(selected === OTHER_LABEL || selected === "__other__"
+						? opts.find((option) => option.isOther)
+						: undefined);
+				if (!chosen) {
+					// PiDeck's inline custom field returns text directly instead of opening
+					// a second RPC dialog. Preserve that answer when custom input is allowed.
+					return q.allowOther !== false
+						? { id: q.id, type: q.type, value: selected, label: selected, wasCustom: true }
+						: { id: q.id, type: q.type, value: null };
+				}
 				if (chosen.isOther) {
 					const custom = await ctx.ui.input(`${q.question}（自行输入）`, "");
 					if (custom?.trim()) {
 						return { id: q.id, type: q.type, value: custom.trim(), label: custom.trim(), wasCustom: true };
 					}
-					// 取消或空内容 → 继续循环，重新展示选单
 					continue;
 				}
 				return { id: q.id, type: q.type, value: chosen.value, label: chosen.label, wasCustom: false };
 			}
 		}
 		case "confirm": {
-			// 第二参数留空时 pi 会用 question 作为描述，保持原行为
-			const confirmed = await ctx.ui.confirm(q.question, q.question);
-			return { id: q.id, type: q.type, value: confirmed };
+			const selected = await ctx.ui.select(q.question, ["是", "否"]);
+			if (selected === "是") return { id: q.id, type: q.type, value: true, label: "是" };
+			if (selected === "否") return { id: q.id, type: q.type, value: false, label: "否" };
+			return { id: q.id, type: q.type, value: null };
 		}
 		case "editor": {
 			const text = await ctx.ui.editor(q.question, q.prefill ?? "");
@@ -256,6 +288,32 @@ async function askOne(q: NormalizedQuestion, ctx: AskCtx): Promise<Answer> {
 	}
 }
 
+/** Submit a complete batch through one RPC dialog so desktop can render all tabs at once. */
+async function askBatch(
+	questions: NormalizedQuestion[],
+	review: boolean,
+	ctx: AskCtx,
+): Promise<{ answers: Answer[]; cancelled: boolean }> {
+	const envelope = JSON.stringify({
+		[BATCH_ASK_ENVELOPE_KEY]: 1,
+		review,
+		questions,
+	});
+	const raw = await ctx.ui.input(envelope, "__piDeckBatchAsk__");
+	if (typeof raw !== "string" || !raw.trim()) return { answers: [], cancelled: true };
+	try {
+		const parsed = JSON.parse(raw) as { cancelled?: boolean; answers?: Answer[] };
+		const answers = Array.isArray(parsed.answers) ? parsed.answers : [];
+		const complete =
+			!parsed.cancelled &&
+			answers.length >= questions.length &&
+			answers.every((answer) => answer?.value !== null && answer?.value !== undefined);
+		return { answers, cancelled: !complete };
+	} catch {
+		return { answers: [], cancelled: true };
+	}
+}
+
 export default function (pi: ExtensionAPI) {
 	pi.registerTool({
 		name: "ask_question",
@@ -264,7 +322,8 @@ export default function (pi: ExtensionAPI) {
 			"Ask the user to provide input, make a selection, or confirm an action.",
 			"The tool blocks until the user responds through the desktop UI.",
 			"Single question: use type/question/options/placeholder/prefill.",
-			"Multiple questions: use questions:[{id,type,question,options,allowOther,...}] to ask in sequence and get all answers at once.",
+			"Multiple questions: use questions:[{id,type,question,options,allowOther,...}] to ask all at once in a tabbed batch UI.",
+			"For batch mode, set review:true to require a Submit/review tab before final submit.",
 		].join(" "),
 		promptSnippet: "Ask the user a question (or a batch of questions) and wait for responses",
 		promptGuidelines: [
@@ -272,8 +331,9 @@ export default function (pi: ExtensionAPI) {
 			"Use type:select with options when the user should pick from predefined choices. Options may be strings or {label, value?, description?} objects; use description to explain long options.",
 			"Use type:confirm when you need a yes/no decision before proceeding (e.g. destructive operations, irreversible changes).",
 			"Use type:input for short free-text responses, and type:editor for multi-line content like code or long explanations.",
-			"For multiple related questions, pass a questions array instead of calling the tool repeatedly — this collects all answers in one interaction.",
+			"For multiple related questions, pass a questions array instead of calling the tool repeatedly — desktop shows a tabbed batch UI and returns all answers at once.",
 			"Set allowOther:false on a select question to forbid custom input (default true).",
+			"For batch questions, set review:true to force a Submit/review tab so the user confirms all answers before submitting.",
 		],
 		parameters: AskQuestionParams,
 
@@ -317,20 +377,22 @@ export default function (pi: ExtensionAPI) {
 				}
 			}
 
-			const answers: Answer[] = [];
-			for (const q of questions) {
+			if (isBatch) {
 				try {
-					answers.push(await askOne(q, ctx));
+					const { answers, cancelled } = await askBatch(questions, record.review === true, ctx);
+					return batchResult(questions, answers, cancelled);
 				} catch {
-					// 用户取消（框架层抛出）：中断剩余问题，返回已收集答案
-					return isBatch
-						? batchResult(questions, answers, true)
-						: singleResult(q, { id: q.id, type: q.type, value: null }, true);
+					return batchResult(questions, [], true);
 				}
 			}
 
-			if (isBatch) return batchResult(questions, answers, false);
-			return singleResult(questions[0], answers[0], false);
+			try {
+				const answer = await askOne(questions[0], ctx);
+				const cancelled = answer.value === null || answer.value === undefined;
+				return singleResult(questions[0], answer, cancelled);
+			} catch {
+				return singleResult(questions[0], { id: questions[0].id, type: questions[0].type, value: null }, true);
+			}
 		},
 	});
 }

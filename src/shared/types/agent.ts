@@ -75,6 +75,16 @@ export type AgentUiResponse = {
 	confirmed?: boolean;
 };
 
+export type AgentUiBatchQuestion = {
+	id: string;
+	type: "select" | "confirm" | "input" | "editor";
+	question: string;
+	options?: Array<string | { label: string; value?: string; description?: string }>;
+	allowOther?: boolean;
+	placeholder?: string;
+	prefill?: string;
+};
+
 export type AgentUiRequest = {
 	agentId: string;
 	requestId: string;
@@ -94,6 +104,9 @@ export type AgentUiRequest = {
 	widgetKey?: string;
 	widgetLines?: string[];
 	widgetPlacement?: "aboveEditor" | "belowEditor";
+	/** A batched ask_question envelope rendered as tabs above the composer. */
+	batchQuestions?: AgentUiBatchQuestion[];
+	batchReview?: boolean;
 };
 
 /** 实时思考内容更新，用于流式展示模型推理过程 */

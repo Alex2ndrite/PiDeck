@@ -216,8 +216,6 @@ export const SessionRuntimeInjector = React.memo(function SessionRuntimeInjector
     sessionDurationByAgent,
     activeProjectId,
     showNotice,
-    showToast,
-    api,
   });
 
   const activeAgent = runtime.activeAgentId
@@ -281,10 +279,6 @@ export const SessionRuntimeInjector = React.memo(function SessionRuntimeInjector
       onDeleteMessage={
         canMutateActiveMessages ? deleteMessage : undefined
       }
-      onSendUiResponse={(requestId, response) => {
-        if (!runtime.activeAgentId) return;
-        runtime.sendSessionUiResponse(requestId, response);
-      }}
       onToast={(message: string) => showToast(message)}
       canMutateActiveMessages={canMutateActiveMessages}
       enqueueSessionPrompt={enqueueSessionPrompt}

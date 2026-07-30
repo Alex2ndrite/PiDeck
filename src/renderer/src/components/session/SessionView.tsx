@@ -63,7 +63,6 @@ export type SessionViewProps = {
   onResendUserMessage?: (message: any) => void;
   onEditMessage?: (messageId: string, newText: string) => void;
   onDeleteMessage?: (messageId: string) => void;
-  onSendUiResponse: (requestId: string, response: { value?: string | boolean; cancelled?: boolean; confirmed?: boolean }) => void;
   onToast: (message: string) => void;
   canMutateActiveMessages: boolean;
 
@@ -134,7 +133,6 @@ export function SessionView({
   onResendUserMessage,
   onEditMessage,
   onDeleteMessage,
-  onSendUiResponse,
   onToast,
   canMutateActiveMessages,
   enqueueSessionPrompt,
@@ -204,10 +202,6 @@ export function SessionView({
         onDeleteMessage={
           canMutateActiveMessages ? onDeleteMessage : undefined
         }
-        onSendUiResponse={(requestId, response) => {
-          if (!activeAgentId) return;
-          onSendUiResponse(requestId, response);
-        }}
         onToast={onToast}
       />
 

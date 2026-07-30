@@ -7,6 +7,7 @@ const coordinator = readFileSync(
   "utf8",
 );
 const main = readFileSync("src/main/index.ts", "utf8");
+const agentManager = readFileSync("src/main/pi/AgentManager.ts", "utf8");
 const sessionIpc = readFileSync("src/main/ipc/sessionIpc.ts", "utf8");
 const app = readFileSync("src/renderer/src/App.tsx", "utf8");
 const runtimeInjector = readFileSync(
@@ -30,9 +31,17 @@ test("catalog scans attach matching existing runtimes in the main process", () =
 
 test("unbound interactive UI is cancelled and cannot be surfaced as Session UI", () => {
   assert.match(main, /cancelUnboundUiRequest/);
+  assert.match(main, /"batch_ask"/);
   assert.match(main, /sendUIResponse\([^,]+,[^,]+, \{ cancelled: true \}\)/);
   assert.doesNotMatch(app, /bindSessionRuntimeAtom|bindSessionRuntime\(/);
   assert.doesNotMatch(app, /api\.agents\.onUiRequest\(/);
+});
+
+test("Ask Question keeps normalized batch requests pending for the session responder", () => {
+  assert.match(coordinator, /method === "batch_ask"/);
+  assert.match(agentManager, /hasCustomOption/);
+  assert.match(agentManager, /option\.startsWith\("✎"\)/);
+  assert.match(agentManager, /allowOther: typed\.allowOther === true \|\| hasCustomOption/);
 });
 
 test("session UI requests remain generation-bound but render above the composer", () => {

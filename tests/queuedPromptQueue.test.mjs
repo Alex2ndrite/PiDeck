@@ -97,9 +97,11 @@ test("pending prompts render inside the composer before composer-box", () => {
 });
 
 test("pending prompts share the native content width constraint without hiding composer", () => {
+  // The rule uses a comma-separated selector list; queued-track may be followed by
+  // additional selectors before the opening brace.
   assert.match(
     stylesSource,
-    /\.chat-pane\[style\*="--content-max-width"\] \.queued-track\s*\{[\s\S]*?width: min\(100%, var\(--content-max-width\)\)/,
+    /\.chat-pane\[style\*="--content-max-width"\] \.queued-track[\s\S]*?width: min\(100%, var\(--content-max-width\)\)/,
   );
   // Outer track is a full-width anchor; the compact panel sits on the right with proportional width.
   assert.match(stylesSource, /\.queued-track \{[\s\S]*?justify-content: flex-end;/);

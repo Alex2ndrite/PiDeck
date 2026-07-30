@@ -653,6 +653,41 @@ test("Session UI response requires the current binding, generation, and pending 
   assert.equal(harness.calls.uiResponse, 1);
 });
 
+test("batch Ask Question is accepted by the Session UI response gate", async () => {
+  const { SessionRuntimeCoordinator } = loadCoordinator();
+  const harness = createHarness({
+    tabs: [{ id: "agent-a", status: "idle", createdAt: 1 }],
+  });
+  const coordinator = new SessionRuntimeCoordinator(
+    harness.catalog,
+    harness.agents,
+    harness.sender,
+  );
+  const generation = coordinator.bindExistingAgent("session-1", "agent-a");
+  coordinator.observeRuntimeEvent({
+    sessionId: "session-1",
+    agentId: "agent-a",
+    runtimeGeneration: generation,
+    sourceChannel: "agents:ui-request",
+    payload: {
+      agentId: "agent-a",
+      requestId: "batch-ui",
+      method: "batch_ask",
+      batchQuestions: [{ id: "runtime", type: "select", question: "Runtime?" }],
+    },
+  });
+
+  await coordinator.respondToUi({
+    sessionId: "session-1",
+    requestId: "batch-ui",
+    agentId: "agent-a",
+    runtimeGeneration: generation,
+    response: { value: JSON.stringify({ answers: [{ id: "runtime", value: "node" }] }) },
+  });
+
+  assert.equal(harness.calls.uiResponse, 1);
+});
+
 test("Session UI response is rejected after the closed runtime is unbound", async () => {
   const { SessionRuntimeCoordinator } = loadCoordinator();
   const harness = createHarness({

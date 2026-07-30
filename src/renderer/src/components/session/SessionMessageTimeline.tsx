@@ -5,7 +5,6 @@ import { useMemo, useState } from "react";
 import type { ComponentProps, RefObject } from "react";
 import type { ImageContent } from "../../../../shared/types";
 import {
-  AskQuestionCard,
   CompactionCard,
   DiagnosticMessageCard,
   EmptyState,
@@ -34,12 +33,6 @@ import {
 } from "../../hooks/useSessionTimelineController";
 import { t } from "../../i18n";
 
-type UiResponse = {
-  value?: string | boolean;
-  cancelled?: boolean;
-  confirmed?: boolean;
-};
-
 type TurnRowProps = ComponentProps<typeof TurnRow>;
 type UserBubbleProps = ComponentProps<typeof UserBubble>;
 
@@ -56,7 +49,6 @@ type TimelineInteractionProps = {
   onResendUserMessage?: UserBubbleProps["onResendUserMessage"];
   onEditMessage?: TurnRowProps["onEditMessage"];
   onDeleteMessage?: TurnRowProps["onDeleteMessage"];
-  onSendUiResponse: (requestId: string, response: UiResponse) => void;
   onToast: (message: string) => void;
 };
 
@@ -409,18 +401,9 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
               if (message.role === "system") {
                 const meta = message.meta as any;
                 if (meta?.type === "askQuestion") {
-                  return (
-                    <AskQuestionCard
-                      key={message.id}
-                      message={message}
-                      onRespond={(response) => {
-                        const request = meta.uiRequest;
-                        if (request) {
-                          props.onSendUiResponse(request.requestId, response);
-                        }
-                      }}
-                    />
-                  );
+                  // Pending extension UI is rendered once above the composer.
+                  // Legacy in-memory messages may still contain this placeholder.
+                  return null;
                 }
                 if (meta?.type === "compaction") {
                   return <CompactionCard key={message.id} message={message} />;

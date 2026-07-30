@@ -338,10 +338,11 @@ export class FeishuBridge {
 			});
 			log("[Feishu Bridge] connected");
 		} catch (error) {
+			const detail = error instanceof Error ? error.message : String(error);
 			const message = feishuT(this.locale, "connection.failed");
-			this.updateStatus({ status: "error", errorMessage: message });
-			logErr("[飞书 Bridge] 启动失败:", error);
-			throw new Error(message, { cause: error });
+			this.updateStatus({ status: "error", errorMessage: detail });
+			logErr("[飞书 Bridge] 启动失败:", detail);
+			throw new Error(message + " (" + detail + ")", { cause: error });
 		}
 	}
 

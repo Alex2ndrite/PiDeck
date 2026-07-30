@@ -1053,11 +1053,13 @@ const api = {
 			ipcRenderer.invoke(ipcChannels.feishuConnect, input) as Promise<{
 				success: boolean;
 				message: string;
+				detail?: string;
 			}>,
 		connectTemp: (input: FeishuConnectInput) =>
 			ipcRenderer.invoke(ipcChannels.feishuConnectTemp, input) as Promise<{
 				success: boolean;
 				message: string;
+				detail?: string;
 				botInfo?: { id: string; name: string };
 			}>,
 		disconnect: () =>
@@ -1066,6 +1068,7 @@ const api = {
 			ipcRenderer.invoke(ipcChannels.feishuConnectByBot, botId) as Promise<{
 				success: boolean;
 				message: string;
+				detail?: string;
 			}>,
 		statusRequest: () =>
 			ipcRenderer.invoke(ipcChannels.feishuStatusRequest) as Promise<FeishuBridgeStatus>,

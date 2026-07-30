@@ -703,8 +703,8 @@ export function App() {
   }, [activeProjectId, activeProjectRuntimeCapabilities, displayAgents]);
 
 
-  // Runtime UI responder: sync store.get() (SessionRuntimeUiOverlay renders rarely).
-  // sendSessionUiResponse and notification effect: owned by useSessionRuntimeController.
+  // Runtime UI responses are generation-bound in SessionRuntimeUiOverlay.
+  // Runtime notifications remain owned by useSessionRuntimeController.
 
   // Runtime editor text is applied by useSessionComposerController, which owns the draft guard.
 

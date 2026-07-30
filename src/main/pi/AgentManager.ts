@@ -1160,6 +1160,14 @@ export class AgentManager {
 					id: requestId,
 					value: null,
 				});
+				// The extension receives null to preserve its cancellation semantics, while
+				// the renderer must immediately remove the runtime-only interaction.
+				this.emit(ipcChannels.agentsUiRequest, {
+					agentId,
+					requestId,
+					completed: true,
+					cancelled: true,
+				});
 			}
 		}
 
@@ -1169,24 +1177,8 @@ export class AgentManager {
 				// abort 超时或失败不影响前端状态切换
 			});
 
-		// 立即清理 pending UI 记录并移除 ask_question 卡片，不等待 abort 返回
+		// Pending dialogs are runtime-only, so clearing their request map is enough.
 		if (pending && pending.size > 0) {
-			const messages = this.messages.get(agentId);
-			if (messages) {
-				for (const [requestId] of pending) {
-					const idx = messages.findIndex(
-						(msg) =>
-							msg.role === "system" &&
-							msg.meta?.type === "askQuestion" &&
-							(msg.meta as Record<string, unknown>).uiRequest &&
-							((msg.meta as Record<string, unknown>).uiRequest as Record<string, unknown>).requestId === requestId,
-					);
-					if (idx !== -1) {
-						messages.splice(idx, 1);
-					}
-				}
-				this.messages.set(agentId, messages);
-			}
 			this.pendingUIRequests.delete(agentId);
 		}
 		// abort 时必须清除所有流式状态，防止后续 pi 的延迟事件（text_delta、thinking_delta、tool_execution_* 等）
@@ -2516,16 +2508,38 @@ export class AgentManager {
 			return;
 		}
 
-		const request = {
-			agentId,
-			requestId,
-			method,
-			title: String(typed.title ?? typed.question ?? ""),
-			options: typed.options as string[] | undefined,
-			placeholder: typed.placeholder as string | undefined,
-			prefill: typed.prefill as string | undefined,
-			allowOther: typed.allowOther === true,
-		};
+		// Batch ask_question sends its form as an input title envelope. Decode it at
+		// the process boundary so no renderer can mistake the raw JSON for a prompt.
+		const rawTitle = String(typed.title ?? typed.question ?? "");
+		const batchEnvelope = this.tryParseBatchAskEnvelope(rawTitle);
+		const rawOptions = Array.isArray(typed.options)
+			? typed.options.filter((option): option is string => typeof option === "string")
+			: undefined;
+		// The bundled extension appends this marker for non-desktop clients. Replace it
+		// with the desktop's own inline field so selecting custom text never opens a
+		// second request above the composer.
+		const hasCustomOption = rawOptions?.some((option) => option.startsWith("✎")) ?? false;
+		const request = batchEnvelope
+			? {
+					agentId,
+					requestId,
+					method: "batch_ask" as const,
+					title: "",
+					batchQuestions: batchEnvelope.questions,
+					batchReview: batchEnvelope.review,
+				}
+			: {
+					agentId,
+					requestId,
+					method,
+					title: rawTitle,
+					options: hasCustomOption
+						? rawOptions?.filter((option) => !option.startsWith("✎"))
+						: rawOptions,
+					placeholder: typed.placeholder as string | undefined,
+					prefill: typed.prefill as string | undefined,
+					allowOther: typed.allowOther === true || hasCustomOption,
+				};
 
 		// 记录 pending UI 请求，用于 abort 时自动 cancel
 		if (!this.pendingUIRequests.has(agentId)) {
@@ -2533,14 +2547,8 @@ export class AgentManager {
 		}
 		this.pendingUIRequests.get(agentId)!.set(requestId, { method, title: request.title });
 
-		// 插入 system 消息作为卡片占位
-		this.addMessage(agentId, "system", request.title, {
-			type: "askQuestion",
-			status: "pending",
-			uiRequest: request,
-		});
-
-		// 通知渲染进程显示交互卡片
+		// The session runtime owns pending UI. Do not write an additional system
+		// message, because that creates a second interactive card in the timeline.
 		this.emit(ipcChannels.agentsUiRequest, request);
 		this.scheduleUIRequestTimeout(agentId, requestId, typed.timeout);
 	}
@@ -2571,39 +2579,6 @@ export class AgentManager {
 		if (pending) {
 			pending.delete(requestId);
 			if (pending.size === 0) this.pendingUIRequests.delete(agentId);
-		}
-
-		// 更新卡片消息状态为 answered 或 cancelled；cancelled 时从消息流移除，不留痕迹
-		const messages = this.messages.get(agentId);
-		if (messages) {
-			if (response.cancelled) {
-				// 取消交互：从消息流中移除对应的 askQuestion 卡片，不在时间线上留下痕迹
-				const idx = messages.findIndex(
-					(msg) =>
-						msg.role === "system" &&
-						msg.meta?.type === "askQuestion" &&
-						(msg.meta as Record<string, unknown>).uiRequest &&
-						((msg.meta as Record<string, unknown>).uiRequest as Record<string, unknown>).requestId === requestId,
-				);
-				if (idx !== -1) {
-					messages.splice(idx, 1);
-					this.messages.set(agentId, messages);
-				}
-			} else {
-				for (const msg of messages) {
-					if (
-						msg.role === "system" &&
-						msg.meta?.type === "askQuestion" &&
-						(msg.meta as Record<string, unknown>).uiRequest &&
-						((msg.meta as Record<string, unknown>).uiRequest as Record<string, unknown>).requestId === requestId
-					) {
-						(msg.meta as Record<string, string>).status = "answered";
-						(msg.meta as Record<string, unknown>).response = response;
-						break;
-					}
-				}
-			}
-			this.scheduleMessageEmit(agentId, false);
 		}
 
 		// 通知渲染进程 UI 请求已完成
@@ -3169,33 +3144,49 @@ export class AgentManager {
 		return this.messageProjector.convert(agentId, rawMessages, activeEntryIds);
 	}
 
+	/**
+	 * The bundled ask_question extension wraps batch questions in one input request
+	 * because Pi RPC dialogs are otherwise strictly sequential. Validate the shape
+	 * before forwarding it so malformed extension data falls back to normal input.
+	 */
+	private tryParseBatchAskEnvelope(title: string): {
+		review: boolean;
+		questions: Array<Record<string, unknown>>;
+	} | undefined {
+		const raw = title.trim();
+		if (!raw.startsWith("{")) return undefined;
+		try {
+			const parsed = JSON.parse(raw) as Record<string, unknown>;
+			if (parsed.__piDeckBatchAsk !== 1 || !Array.isArray(parsed.questions)) {
+				return undefined;
+			}
+			const questions = parsed.questions.filter(
+				(question): question is Record<string, unknown> => {
+					if (!question || typeof question !== "object") return false;
+					const typed = question as Record<string, unknown>;
+					return (
+						typeof typed.id === "string" &&
+						typeof typed.question === "string" &&
+						["select", "confirm", "input", "editor"].includes(String(typed.type))
+					);
+				},
+			);
+			return questions.length > 0
+				? { review: parsed.review === true, questions }
+				: undefined;
+		} catch {
+			return undefined;
+		}
+	}
+
 	private scheduleUIRequestTimeout(agentId: string, requestId: string, timeout: unknown) {
 		if (typeof timeout !== "number" || !Number.isFinite(timeout) || timeout <= 0) return;
 
 		const timer = setTimeout(() => {
-			const pending = this.pendingUIRequests.get(agentId);
-			if (!pending?.has(requestId)) return;
-
-			pending.delete(requestId);
-			if (pending.size === 0) this.pendingUIRequests.delete(agentId);
-
-			const messages = this.messages.get(agentId);
-			if (messages) {
-				const idx = messages.findIndex(
-					(msg) =>
-						msg.role === "system" &&
-						msg.meta?.type === "askQuestion" &&
-						(msg.meta as Record<string, unknown>).uiRequest &&
-						((msg.meta as Record<string, unknown>).uiRequest as Record<string, unknown>).requestId === requestId,
-				);
-				if (idx !== -1) {
-					messages.splice(idx, 1);
-					this.messages.set(agentId, messages);
-					this.scheduleMessageEmit(agentId, false);
-				}
-			}
-
-			this.emit(ipcChannels.agentsUiRequest, { agentId, requestId, completed: true, cancelled: true });
+			if (!this.pendingUIRequests.get(agentId)?.has(requestId)) return;
+			// A timeout must close both ends of the protocol. Merely hiding the
+			// renderer form leaves Pi blocked on extension_ui_response indefinitely.
+			this.sendUIResponse(agentId, requestId, { cancelled: true });
 		}, Math.floor(timeout));
 		timer.unref?.();
 	}

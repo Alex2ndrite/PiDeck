@@ -77,6 +77,9 @@ export class FeishuConnection {
 
 			const ws = new lark.WSClient({
 				appId, appSecret: plainSecret, domain: lark.Domain.Feishu, loggerLevel: lark.LoggerLevel.error,
+				onError: (wsErr: unknown) => {
+					logErr("[飞书 Bridge] WSClient 连接异常:", wsErr);
+				},
 			});
 			this.wsClient = ws;
 			ws.start({ eventDispatcher: dispatcher });
@@ -84,9 +87,10 @@ export class FeishuConnection {
 
 			return { botOpenId };
 		} catch (error) {
+			const detail = error instanceof Error ? error.message : String(error);
 			const message = feishuT(this.locale, "connection.failed");
-			logErr("[飞书 Bridge] 启动失败:", error);
-			throw new Error(message, { cause: error });
+			logErr("[飞书 Bridge] 启动失败:", detail);
+			throw new Error(message + " (" + detail + ")", { cause: error });
 		}
 	}
 
