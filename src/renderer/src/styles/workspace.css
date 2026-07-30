@@ -3065,3 +3065,10 @@ body.is-git-pane-resizing, body.is-git-pane-resizing * { cursor: row-resize !imp
 .detail-drawer:has(.drawer-activity-rail) .drawer-content-frame {
   min-width: 0;
 }
+
+/* WebContentsView 占位矩形（#115 U4）：实际页面由主进程视图叠加渲染 */
+.browser-view-placeholder {
+  flex: 1;
+  min-height: 0;
+  background: var(--color-bg-panel);
+}

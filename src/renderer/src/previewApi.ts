@@ -890,6 +890,15 @@ export function createPreviewApi(): PiDesktopApi {
 		browser: {
 			openExternal: async () => {},
 		},
+		browserView: {
+			show: async () => {},
+			hide: async () => {},
+			setBounds: async () => {},
+			navigate: async () => true,
+			action: async () => {},
+			onState: () => () => {},
+			onNewWindow: () => () => {},
+		},
 		scratchPad: {
 			list: async () => [],
 			create: async () => ({ id: "", name: "", path: "", createdAt: 0, updatedAt: 0 }),

@@ -26,3 +26,9 @@ export const sidebarExpandedProjectIdsAtom = atom<ReadonlySet<string>>(
  * 由 App 在 settings 加载/变更时同步；默认 false 走旧 react-markdown 管线。
  */
 export const useStreamdownRendererAtom = atom(false);
+
+/**
+ * 实验开关：内置浏览器走 WebContentsView 管线（UI 2.0 / issue #115 U4 灰度）。
+ * 由 App 在 settings 加载/变更时同步；默认 false 走 <webview>。
+ */
+export const useWebContentsViewBrowserAtom = atom(false);

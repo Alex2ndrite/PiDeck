@@ -12,6 +12,8 @@ import {
 	X,
 } from "lucide-react";
 import { t } from "../../i18n";
+import { useAtomValue } from "jotai";
+import { useWebContentsViewBrowserAtom } from "../../atoms/app-ui-atoms";
 
 const DEFAULT_HOME = "https://ayuayue.github.io/PiDeck/";
 
@@ -121,6 +123,9 @@ export function BrowserPanel(props: {
 	hideChromeClose?: boolean;
 }) {
 	const { onClose, onMinimize, onToggleFullscreen } = props;
+	// #115 U4 灰度：开启后页面由主进程 WebContentsView 渲染，webview 不再创建
+	const useViewPipeline = useAtomValue(useWebContentsViewBrowserAtom);
+	const viewStageRef = useRef<HTMLDivElement | null>(null);
 	const [initialTab] = useState(() => getInitialActiveTab());
 	const webviewRef = useRef<any>(null);
 	const defaultUARef = useRef<string | null>(null);
@@ -168,6 +173,14 @@ export function BrowserPanel(props: {
 
 	const loadUrl = useCallback(
 		(targetUrl: string, nextDevice = moduleState.device) => {
+			if (useViewPipeline) {
+				// WebContentsView 管线：UA 随导航指令下发，主进程做白名单校验
+				const preset = DEVICE_PRESETS.find((item) => item.id === nextDevice);
+				setUrl(targetUrl);
+				setInputValue(targetUrl);
+				void window.piDesktop.browserView.navigate(targetUrl, preset?.userAgent ?? null);
+				return;
+			}
 			const wv = webviewRef.current;
 			if (!wv) return;
 			applyDeviceUserAgent(wv, nextDevice);
@@ -175,10 +188,11 @@ export function BrowserPanel(props: {
 			setInputValue(targetUrl);
 			wv.loadURL(targetUrl);
 		},
-		[applyDeviceUserAgent],
+		[applyDeviceUserAgent, useViewPipeline],
 	);
 
 	useEffect(() => {
+		if (useViewPipeline) return;
 		const wv = webviewRef.current;
 		if (!wv) return;
 
@@ -262,7 +276,63 @@ export function BrowserPanel(props: {
 			wv.removeEventListener("new-window", onNewWindow);
 			webviewReadyRef.current = false;
 		};
-	}, [applyDeviceUserAgent, updateActiveTab, url]);
+	}, [applyDeviceUserAgent, updateActiveTab, url, useViewPipeline]);
+
+	// ── WebContentsView 管线（#115 U4）：状态订阅 + 显示生命周期 + bounds 同步 ──
+	useEffect(() => {
+		if (!useViewPipeline) return;
+		const api = window.piDesktop.browserView;
+		const offState = api.onState((state) => {
+			setUrl(state.url || url);
+			if (state.url) setInputValue(state.url);
+			setIsLoading(state.isLoading);
+			setCanGoBack(state.canGoBack);
+			setCanGoForward(state.canGoForward);
+			if (state.url) updateActiveTab({ url: state.url });
+			if (state.title) updateActiveTab({ title: state.title });
+			if (!state.isLoading) setLoadProgress(0);
+		});
+		const offNewWindow = api.onNewWindow((target) => {
+			if (target.startsWith("http://") || target.startsWith("https://")) {
+				// 与 webview 管线同策略：http(s) 在面板新 tab 打开
+				navigateTo(target);
+			} else {
+				void window.piDesktop.browser.openExternal(target);
+			}
+		});
+		const stage = viewStageRef.current;
+		const reportBounds = () => {
+			const el = viewStageRef.current;
+			if (!el) return;
+			const rect = el.getBoundingClientRect();
+			// WebContentsView bounds 相对窗口内容区（DIP）；渲染层 viewport 坐标同系。
+			// 已知限制：窗口 zoomFactor ≠ 1 时存在缩放偏差（灰度期记录在设置描述中）。
+			void api.setBounds({ x: rect.left, y: rect.top, width: rect.width, height: rect.height });
+		};
+		const observer = new ResizeObserver(reportBounds);
+		if (stage) observer.observe(stage);
+		window.addEventListener("resize", reportBounds);
+		reportBounds();
+		void api.show(
+			(() => {
+				const rect = stage?.getBoundingClientRect();
+				return rect
+					? { x: rect.left, y: rect.top, width: rect.width, height: rect.height }
+					: { x: 0, y: 0, width: 0, height: 0 };
+			})(),
+			moduleState.tabs.find((tab) => tab.id === moduleState.activeTabId)?.url,
+		);
+		return () => {
+			offState();
+			offNewWindow();
+			observer.disconnect();
+			window.removeEventListener("resize", reportBounds);
+			// 组件卸载（关抽屉/切面板/进全屏重建）时隐藏视图；WebContents 保留，状态不丢
+			void api.hide();
+		};
+		// url 不放入依赖：导航状态由 onState 单向回流
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [useViewPipeline, updateActiveTab]);
 
 	// 不再在卸载时清空 moduleState：折叠抽屉、切换面板后重新打开仍保留之前的 tab 状态。
 	// 关闭最后一个 tab 时 closeTab 已处理 moduleState 清理并调用 onClose。
@@ -307,6 +377,18 @@ export function BrowserPanel(props: {
 			if (!pendingNavigateUrl) return;
 			const url = pendingNavigateUrl;
 			moduleState.navigateKey = 0;
+			if (useViewPipeline) {
+				// WebContentsView 管线：加载中跳过保留 pending，等下次轮询（状态由 onState 回流）
+				if (isLoading) return;
+				pendingNavigateUrl = null;
+				const activeTab = moduleState.tabs.find((t) => t.id === moduleState.activeTabId);
+				if (activeTab) {
+					setTabs([...moduleState.tabs]);
+					setActiveTabId(moduleState.activeTabId);
+					loadUrl(url);
+				}
+				return;
+			}
 			const wv = webviewRef.current;
 			if (!wv) return;
 			// 如果 webview 正在加载中，跳过本次轮询保留 pendingNavigateUrl，
@@ -323,7 +405,7 @@ export function BrowserPanel(props: {
 			}
 		}, 50);
 		return () => window.clearInterval(interval);
-	}, [applyDeviceUserAgent]);
+	}, [applyDeviceUserAgent, useViewPipeline, isLoading, loadUrl]);
 
 	const closeTab = useCallback(
 		(tabId: string, event: React.MouseEvent) => {
@@ -420,13 +502,13 @@ export function BrowserPanel(props: {
 			</div>
 
 			<div className="browser-toolbar">
-				<button className="browser-nav-btn" disabled={!canGoBack} onClick={() => webviewRef.current?.goBack()} title={t("browser.back")}>
+				<button className="browser-nav-btn" disabled={!canGoBack} onClick={() => useViewPipeline ? void window.piDesktop.browserView.action("back") : webviewRef.current?.goBack()} title={t("browser.back")}>
 					<ArrowLeft size={15} />
 				</button>
-				<button className="browser-nav-btn" disabled={!canGoForward} onClick={() => webviewRef.current?.goForward()} title={t("browser.forward")}>
+				<button className="browser-nav-btn" disabled={!canGoForward} onClick={() => useViewPipeline ? void window.piDesktop.browserView.action("forward") : webviewRef.current?.goForward()} title={t("browser.forward")}>
 					<ArrowRight size={15} />
 				</button>
-				<button className="browser-nav-btn" onClick={() => webviewRef.current?.reload()} title={t("browser.reload")}>
+				<button className="browser-nav-btn" onClick={() => useViewPipeline ? void window.piDesktop.browserView.action("reload") : webviewRef.current?.reload()} title={t("browser.reload")}>
 					<RefreshCw size={15} />
 				</button>
 				<button className="browser-nav-btn" onClick={() => loadUrl(DEFAULT_HOME)} title={t("browser.home")}>
@@ -488,7 +570,12 @@ export function BrowserPanel(props: {
 			)}
 
 			<div className="browser-webview-stage">
-				<webview ref={(el) => { (webviewRef as React.MutableRefObject<any>).current = el; if (el) el.setAttribute("allowfileaccess", "true"); }} className="browser-webview" src={initialTab.url} allowpopups={"true" as any} />
+				{useViewPipeline ? (
+					// WebContentsView 管线：主进程视图叠加在此占位矩形上，bounds 由 effect 同步
+					<div ref={viewStageRef} className="browser-view-placeholder" />
+				) : (
+					<webview ref={(el) => { (webviewRef as React.MutableRefObject<any>).current = el; if (el) el.setAttribute("allowfileaccess", "true"); }} className="browser-webview" src={initialTab.url} allowpopups={"true" as any} />
+				)}
 			</div>
 		</div>
 	);

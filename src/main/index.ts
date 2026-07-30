@@ -187,6 +187,11 @@ import { registerSessionIpc } from "./ipc/sessionIpc";
 import { registerSystemIpc } from "./ipc/systemIpc";
 import { fetchModelList, getCachedModelList } from "./pi/modelListCache";
 import { registerFilesIpc } from "./ipc/filesIpc";
+import { registerBrowserViewIpc } from "./ipc/browserViewIpc";
+import {
+	BROWSER_PANEL_PARTITION as BROWSER_PANEL_PARTITION_SHARED,
+	isAllowedBrowserPanelUrl as isAllowedBrowserPanelUrlShared,
+} from "./browser/browserSecurity";
 import { WebServiceManager } from "./web/WebServiceManager";
 import { preparePreloadPath } from "./preloadPath";
 import { AppLogger } from "./logging/AppLogger";
@@ -1196,16 +1201,10 @@ async function prepareMainPreloadPath() {
 	return preparePreloadPath(sourcePath, "main-preload.js");
 }
 
-const BROWSER_PANEL_PARTITION = "persist:pideck-browser-panel";
+const BROWSER_PANEL_PARTITION = BROWSER_PANEL_PARTITION_SHARED;
 
 function isAllowedBrowserPanelUrl(targetUrl: string): boolean {
-	if (targetUrl === "about:blank") return true;
-	try {
-		const protocol = new URL(targetUrl).protocol;
-		return protocol === "http:" || protocol === "https:";
-	} catch {
-		return false;
-	}
+	return isAllowedBrowserPanelUrlShared(targetUrl);
 }
 
 function configureBrowserPanelWebviewHost(window: BrowserWindow): void {
@@ -2014,6 +2013,10 @@ function registerIpc() {
 		settingsStore,
 		appLogger,
 		getMainWindow: () => mainWindow,
+	});
+	registerBrowserViewIpc({
+		getMainWindow: () => mainWindow,
+		appLogger,
 	});
 	registerProjectsIpc({
 		projectStore,

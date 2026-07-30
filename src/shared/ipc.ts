@@ -326,4 +326,15 @@ export const ipcChannels = {
 	// ===== 内置浏览器 =====
 	browserOpenExternal: "browser:open-external",
 
+	// ===== 内置浏览器（WebContentsView 管线，#115 U4 灰度） =====
+	browserViewShow: "browser-view:show",
+	browserViewHide: "browser-view:hide",
+	browserViewSetBounds: "browser-view:set-bounds",
+	browserViewNavigate: "browser-view:navigate",
+	browserViewAction: "browser-view:action",
+	/** 主进程 → 渲染层：导航/加载状态推送 */
+	browserViewState: "browser-view:state",
+	/** 主进程 → 渲染层：页面请求新窗口（target=_blank / window.open） */
+	browserViewNewWindow: "browser-view:new-window",
+
 } as const;

@@ -158,6 +158,7 @@ Gitmoji 对应关系：
 
   // ── 实验性渲染（#115）：Streamdown 灰度默认关闭 ──
   useStreamdownRenderer: false,
+  useWebContentsViewBrowser: false,
 
   // 字体配置：默认值保证与历史版本行为一致，零回归
   fontSize: "default",

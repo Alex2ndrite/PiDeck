@@ -170,6 +170,13 @@ export type AppSettings = {
 	 */
 	useStreamdownRenderer?: boolean;
 
+	/**
+	 * 内置浏览器使用 WebContentsView 管线（灰度开关，默认 false 走 <webview>）。
+	 * 开启后页面由主进程持有的 WebContentsView 渲染，安全策略集中在主进程；
+	 * 已知限制：窗口缩放（zoomFactor ≠ 100%）时视图对齐可能有偏差。
+	 */
+	useWebContentsViewBrowser?: boolean;
+
 	// ── 侧栏 UI 状态 ──
 	/**
 	 * 左侧边栏处于展开状态的项目 id 列表（含 builtin-chat）。
