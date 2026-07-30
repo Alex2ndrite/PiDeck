@@ -6,6 +6,7 @@ import {
 	ChevronsUpDown,
 	Eye,
 	FileText,
+	FoldVertical,
 	GitBranch,
 	ListChecks,
 	MoveDown,
@@ -225,26 +226,33 @@ export function ComposerBottomBar(props: {
 					>
 						{thinkingDisplay}
 					</Button>
-					{showCompact && (
-						<Button
-							variant="ghost"
-							buttonSize="sm"
-							className={`composer-bar-btn${props.state?.isCompacting || props.compacting ? " compacting" : ""}`}
-							disabled={
-								props.state?.isCompacting ||
-								props.compacting ||
-								Boolean(props.state?.isStreaming)
-							}
-							title={t("app.contextCompactTitle", {
-								percent: contextPercent.toFixed(1),
-							})}
-							onClick={props.onCompact}
-						>
-							{props.state?.isCompacting || props.compacting
-								? t("app.compacting")
-								: `${t("app.compact")} ${contextPercent.toFixed(0)}%`}
-						</Button>
-					)}
+					{showCompact && (() => {
+						// 与 main 一致：>30% 才显示；70%/90% 用色阶提示紧迫度，不做成常驻高饱和按钮。
+						const isCompactingNow = Boolean(props.state?.isCompacting || props.compacting);
+						const urgency =
+							contextPercent >= 90 ? " critical" : contextPercent >= 70 ? " warn" : "";
+						return (
+							<Button
+								variant="ghost"
+								buttonSize="sm"
+								className={`composer-bar-btn compact${urgency}${isCompactingNow ? " compacting" : ""}`}
+								disabled={
+									isCompactingNow ||
+									Boolean(props.state?.isStreaming)
+								}
+								title={t("app.contextCompactTitle", {
+									percent: contextPercent.toFixed(1),
+								})}
+								aria-label={t("app.compact")}
+								onClick={props.onCompact}
+							>
+								<FoldVertical size={13} strokeWidth={1.8} aria-hidden="true" />
+								{isCompactingNow
+									? t("app.compacting")
+									: t("app.compactUsage", { percent: contextPercent.toFixed(0) })}
+							</Button>
+						);
+					})()}
 				</div>
 				<div className="composer-bottom-right">
 					{props.gitInfo?.current && (

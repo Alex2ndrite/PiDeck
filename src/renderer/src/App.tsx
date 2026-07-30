@@ -276,6 +276,18 @@ export function App() {
   const workspace = useWorkspacePanels({ projectId: activeProjectId, editors: editorsAdapter });
   const drawer = workspace.drawer;
   const drawerCollapsed = workspace.drawerCollapsed;
+  // 与 main 一致：右侧栏开关优先折叠/展开当前抽屉；无抽屉时默认打开 files
+  const toggleRightDrawer = useCallback(() => {
+    if (workspace.drawer && !workspace.drawerCollapsed) {
+      workspace.collapseDrawer();
+      return;
+    }
+    if (workspace.drawer && workspace.drawerCollapsed) {
+      workspace.expandDrawer();
+      return;
+    }
+    workspace.openDrawer("files");
+  }, [workspace]);
   const drawerPinned = workspace.drawerPinned;
   const browserFullscreen = workspace.browserFullscreen;
   const externalEditors = workspace.externalEditors;
@@ -2217,6 +2229,8 @@ export function App() {
       abortAgent={abortAgent}
       restartActiveAgent={restartActiveAgent}
       runCreateSessionDraft={runCreateSessionDraft}
+      onToggleDrawer={toggleRightDrawer}
+      drawerOpen={Boolean(drawer && !drawerCollapsed)}
       enqueueSessionPrompt={enqueueSessionPrompt}
       ensureSessionId={ensureSessionForSend}
       resendUserMessage={resendUserMessage}

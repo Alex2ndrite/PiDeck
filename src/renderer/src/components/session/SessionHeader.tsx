@@ -1,4 +1,4 @@
-import { ChevronDown, HatGlasses, Plus } from "lucide-react";
+import { ChevronDown, HatGlasses, PanelRight, Plus } from "lucide-react";
 import { useAtomValue } from "jotai";
 import { selectAtom } from "jotai/utils";
 import { useMemo, type RefObject } from "react";
@@ -9,6 +9,7 @@ import {
   sessionSendStateByIdAtom,
 } from "../../atoms";
 import { t } from "../../i18n";
+import { IconButton } from "../ui/IconButton";
 import { SessionStatus } from "./SurfaceParts";
 
 type HeaderActions = {
@@ -28,6 +29,9 @@ type HeaderActions = {
   onNewSession: () => void;
   onStop: () => void;
   onRestart: () => void;
+  /** 右侧抽屉开关：与 main 会话标题栏行为对齐，保持现有 IconButton 风格 */
+  onToggleDrawer?: () => void;
+  drawerOpen?: boolean;
 };
 
 type LegacySessionHeaderProps = HeaderActions & {
@@ -141,6 +145,15 @@ export function SessionHeader(props: SessionHeaderProps) {
               )}
             </div>
           </div>
+          {props.onToggleDrawer && (
+            <IconButton
+              label={props.drawerOpen ? t("app.collapseDrawer") : t("app.expandDrawer")}
+              className={`header-drawer-toggle${props.drawerOpen ? " active" : ""}`}
+              onClick={props.onToggleDrawer}
+            >
+              <PanelRight size={14} strokeWidth={2} aria-hidden="true" />
+            </IconButton>
+          )}
         </div>
       </div>
     </header>

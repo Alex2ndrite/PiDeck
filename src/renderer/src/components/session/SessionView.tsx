@@ -52,6 +52,8 @@ export type SessionViewProps = {
   onNewSession: () => void;
   onStop: () => void;
   onRestart: () => void;
+  onToggleDrawer?: () => void;
+  drawerOpen?: boolean;
 
   // ── Timeline interaction ──
   showThinking: boolean;
@@ -126,6 +128,8 @@ export function SessionView({
   onNewSession,
   onStop,
   onRestart,
+  onToggleDrawer,
+  drawerOpen,
   showThinking,
   validCommandNames,
   validFilePaths,
@@ -182,6 +186,8 @@ export function SessionView({
         onNewSession={onNewSession}
         onStop={onStop}
         onRestart={onRestart}
+        onToggleDrawer={onToggleDrawer}
+        drawerOpen={drawerOpen}
       />
       <NoticeCenter />
 

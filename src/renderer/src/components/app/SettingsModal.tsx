@@ -714,6 +714,14 @@ function SettingsModalContent(props: SettingsModalProps) {
 										}
 									/>
 									<SettingSwitch
+										title={t("settings.singleInstance")}
+										description={t("settings.singleInstanceDesc")}
+										checked={draftSettings.singleInstance}
+										onChange={(checked) =>
+											updateDraft({ singleInstance: checked })
+										}
+									/>
+									<SettingSwitch
 										title={t("settings.enableNotifications")}
 										checked={draftSettings.enableNotifications}
 										onChange={(checked) =>
@@ -781,7 +789,28 @@ function SettingsModalContent(props: SettingsModalProps) {
 						{activeTab === "appearance" && (
 							<>
 								<SettingsSection title={t("settings.interface")}>
-									<div className="setting-field">
+																		<div className="setting-field">
+										<span>
+											{t("settings.startupWindowMode")}
+											<DirtyMarker
+												dirty={isDirty("startupWindowMode")}
+												label={t("settings.startupWindowMode")}
+											/>
+										</span>
+										<SelectField
+											value={draftSettings.startupWindowMode}
+											options={startupWindowModeOptions}
+											onChange={(value) =>
+												updateDraft({
+													startupWindowMode: value as AppSettings["startupWindowMode"],
+												})
+											}
+										/>
+										<small style={{ color: "var(--color-text-tertiary)", fontSize: "var(--font-size-caption)" }}>
+											{t("settings.startupWindowModeDesc")}
+										</small>
+									</div>
+<div className="setting-field">
 										<span>
 											{t("settings.lightBackground")}
 											<DirtyMarker dirty={isDirty("lightBackground")} label={t("settings.lightBackground")} />
@@ -1196,6 +1225,38 @@ function SettingsModalContent(props: SettingsModalProps) {
 										onChange={(checked) =>
 											updateDraft({ disableUpdateCheck: checked })
 										}
+									/>
+																	<SettingSwitch
+										title={t("settings.electronSandbox")}
+										description={t("settings.electronSandboxDesc")}
+										checked={draftSettings.electronChromiumSandbox}
+										onChange={(checked) =>
+											updateDraft({ electronChromiumSandbox: checked })
+										}
+									/>
+									<div className="setting-row setting-row--section-label">
+										<div>
+											<strong>{t("settings.piRpcStartup")}</strong>
+											<small>{t("settings.piRpcStartupDesc")}</small>
+										</div>
+									</div>
+									<SettingSwitch
+										title={t("settings.piRpcOffline")}
+										description={t("settings.piRpcOfflineDesc")}
+										checked={draftSettings.piRpcOffline}
+										onChange={(checked) => updateDraft({ piRpcOffline: checked })}
+									/>
+									<SettingSwitch
+										title={t("settings.piRpcNoExtensions")}
+										description={t("settings.piRpcNoExtensionsDesc")}
+										checked={draftSettings.piRpcNoExtensions}
+										onChange={(checked) => updateDraft({ piRpcNoExtensions: checked })}
+									/>
+									<SettingSwitch
+										title={t("settings.piRpcNoSkills")}
+										description={t("settings.piRpcNoSkillsDesc")}
+										checked={draftSettings.piRpcNoSkills}
+										onChange={(checked) => updateDraft({ piRpcNoSkills: checked })}
 									/>
 								</SettingsSection>
 								<SettingsSection title={t("settings.debug")}>
