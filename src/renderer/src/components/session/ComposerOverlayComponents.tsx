@@ -4,6 +4,13 @@ import type { FileTreeNode } from "../../../../shared/types";
 import { t } from "../../i18n";
 import type { SuggestionItem } from "../app/AppUtils";
 import { IconButton } from "../ui/IconButton";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuSeparator,
+	DropdownMenuTrigger,
+} from "../ui-shadcn/dropdown-menu";
 export function PromptSuggestions(props: {
 	prompt: string;
 	items: SuggestionItem[];
@@ -82,48 +89,48 @@ export function FileContextMenu(props: {
 	onDelete?: () => void;
 	onRename?: () => void;
 }) {
-	const menuRef = useRef<HTMLDivElement | null>(null);
-	const [pos, setPos] = useState({ x: props.menu.x, y: props.menu.y });
 	const isFile = props.menu.node.type === "file";
-	const isDir = props.menu.node.type === "directory";
 
-	// 测量菜单实际高度，超底部时向上翻转，避免底部文件右键菜单被视口遮挡。
-	// 翻转后至少保留 8px 上边距，使菜单始终可读。
-	useEffect(() => {
-		const el = menuRef.current;
-		if (!el) return;
-		const rect = el.getBoundingClientRect();
-		const overflowY = rect.bottom - window.innerHeight;
-		if (overflowY > 0) {
-			setPos({ x: props.menu.x, y: Math.max(8, props.menu.y - rect.height) });
-		}
-	}, [props.menu.x, props.menu.y]);
-
+	// #115 U5：右键菜单换 Radix DropdownMenu。虚拟锚点把菜单钉在右键坐标上，
+	// 视口碰撞翻转/焦点圈定/ESC 关闭全由 Radix 负责，删掉手写的测高翻转与遮罩。
 	return (
-		<div className="context-backdrop" onClick={props.onClose}>
-			<div
-				ref={menuRef}
-				className="context-menu"
-				style={{ left: pos.x, top: pos.y }}
-				onClick={(event) => event.stopPropagation()}
-			>
-				<button disabled={!isFile} onClick={props.onAttach}>
+		<DropdownMenu open onOpenChange={(open) => { if (!open) props.onClose(); }}>
+			{/* 不可见 Trigger 钉在右键坐标上：Radix dropdown-menu 没有 Anchor 部件，
+			    受控 open 下仍按 Trigger 矩形定位，这是官方推荐的坐标菜单模式。 */}
+			<DropdownMenuTrigger
+				aria-hidden
+				tabIndex={-1}
+				style={{
+					position: "fixed",
+					left: props.menu.x,
+					top: props.menu.y,
+					width: 0,
+					height: 0,
+					padding: 0,
+					border: 0,
+					background: "transparent",
+					pointerEvents: "none",
+				}}
+			/>
+			<DropdownMenuContent align="start" side="bottom" className="min-w-40">
+				<DropdownMenuItem disabled={!isFile} onSelect={props.onAttach}>
 					{t("menu.attachFile")}
-				</button>
-				<button disabled={!isFile} onClick={props.onOpen}>
+				</DropdownMenuItem>
+				<DropdownMenuItem disabled={!isFile} onSelect={props.onOpen}>
 					{t("menu.defaultOpen")}
-				</button>
-				<button onClick={props.onReveal}>{t("menu.revealFile")}</button>
-				<button onClick={props.onCopyPath}>{t("menu.copyPath")}</button>
+				</DropdownMenuItem>
+				<DropdownMenuItem onSelect={props.onReveal}>{t("menu.revealFile")}</DropdownMenuItem>
+				<DropdownMenuItem onSelect={props.onCopyPath}>{t("menu.copyPath")}</DropdownMenuItem>
+				{(props.onRename || props.onDelete) && <DropdownMenuSeparator />}
 				{props.onRename && (
-					<button onClick={props.onRename}>{t("common.rename")}</button>
+					<DropdownMenuItem onSelect={props.onRename}>{t("common.rename")}</DropdownMenuItem>
 				)}
 				{props.onDelete && (
-					<button className="danger" onClick={props.onDelete}>
+					<DropdownMenuItem variant="destructive" onSelect={props.onDelete}>
 						{t("common.delete")}
-					</button>
+					</DropdownMenuItem>
 				)}
-			</div>
-		</div>
+			</DropdownMenuContent>
+		</DropdownMenu>
 	);
 }

@@ -1,5 +1,20 @@
-import { X } from "lucide-react";
 import { t } from "../i18n";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "./ui-shadcn/dialog";
+import { Input } from "./ui-shadcn/input";
+import { Button } from "./ui-shadcn/button";
+
+/**
+ * 重命名对话框（#115 U5）：统一为 shadcn Dialog + Input + Button。
+ * 调用方按条件渲染（{x && <RenameModals/>}），组件挂载即打开；
+ * ESC/遮罩关闭走 onClose（agent 保存中禁用关闭，防中途丢状态）。
+ */
 
 type FileRenameProps = {
   path: string;
@@ -25,40 +40,77 @@ type Props = {
 };
 
 export function RenameModals({ fileRename, agentRename }: Props) {
+  // 文件重命名的确认语义：非空且与原名不同才提交，否则视为取消
+  const submitFileRename = () => {
+    if (!fileRename) return;
+    const next = fileRename.inputValue.trim();
+    if (next && next !== fileRename.name) fileRename.onConfirm(fileRename.path, next);
+    else fileRename.onClose();
+  };
+
   return <>
     {agentRename && (
-      <div className="modal-backdrop rename-dialog-backdrop" onClick={() => { if (!agentRename.saving) agentRename.onClose(); }}>
-        <form className="rename-dialog" onClick={(e) => e.stopPropagation()} onSubmit={(e) => { e.preventDefault(); agentRename.onSubmit(); }}>
-          <div className="rename-dialog-header">
-            <strong>{t("app.renameSessionTitle")}</strong>
-            <button type="button" disabled={agentRename.saving} onClick={agentRename.onClose}><X size={15} /></button>
-          </div>
-          <input autoFocus value={agentRename.value} onChange={(e) => agentRename.onValueChange(e.target.value)} placeholder={t("app.renameSessionPlaceholder")} disabled={agentRename.saving} />
-          <div className="rename-dialog-actions">
-            <button type="button" disabled={agentRename.saving} onClick={agentRename.onClose}>{t("common.cancel")}</button>
-            <button type="submit" disabled={agentRename.saving}>{agentRename.saving ? t("common.saving") : t("common.save")}</button>
-          </div>
-        </form>
-      </div>
+      <Dialog open onOpenChange={(open) => { if (!open && !agentRename.saving) agentRename.onClose(); }}>
+        <DialogContent
+          className="sm:max-w-sm"
+          onOpenAutoFocus={(event) => {
+            // 默认 autofocus 第一个可聚焦元素是关闭按钮；改为聚焦输入框
+            event.preventDefault();
+            const root = event.currentTarget as HTMLElement | null;
+            root?.querySelector("input")?.focus();
+          }}
+        >
+          <form onSubmit={(e) => { e.preventDefault(); agentRename.onSubmit(); }}>
+            <DialogHeader>
+              <DialogTitle>{t("app.renameSessionTitle")}</DialogTitle>
+              <DialogDescription className="sr-only">{t("app.renameSessionPlaceholder")}</DialogDescription>
+            </DialogHeader>
+            <Input
+              value={agentRename.value}
+              onChange={(e) => agentRename.onValueChange(e.target.value)}
+              placeholder={t("app.renameSessionPlaceholder")}
+              disabled={agentRename.saving}
+            />
+            <DialogFooter>
+              <Button type="button" variant="outline" disabled={agentRename.saving} onClick={agentRename.onClose}>
+                {t("common.cancel")}
+              </Button>
+              <Button type="submit" disabled={agentRename.saving}>
+                {agentRename.saving ? t("common.saving") : t("common.save")}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     )}
     {fileRename && (
-      <div className="config-modal-overlay" onClick={fileRename.onClose}>
-        <div className="config-modal-dialog" onClick={(e) => e.stopPropagation()}>
-          <strong>{t("drawer.renameTitle")}</strong>
-          <div style={{ margin: "12px 0" }}>
-            <input type="text" value={fileRename.inputValue} onChange={(e) => fileRename.onInputChange(e.target.value)} className="config-input" autoFocus
-              onKeyDown={(e) => {
-                if (e.key === "Enter") { const n = fileRename.inputValue.trim(); if (n && n !== fileRename.name) fileRename.onConfirm(fileRename.path, n); else fileRename.onClose(); }
-                if (e.key === "Escape") fileRename.onClose();
-              }}
+      <Dialog open onOpenChange={(open) => { if (!open) fileRename.onClose(); }}>
+        <DialogContent
+          className="sm:max-w-sm"
+          onOpenAutoFocus={(event) => {
+            event.preventDefault();
+            const root = event.currentTarget as HTMLElement | null;
+            root?.querySelector("input")?.focus();
+          }}
+        >
+          <form onSubmit={(e) => { e.preventDefault(); submitFileRename(); }}>
+            <DialogHeader>
+              <DialogTitle>{t("drawer.renameTitle")}</DialogTitle>
+              <DialogDescription className="sr-only">{fileRename.name}</DialogDescription>
+            </DialogHeader>
+            <Input
+              value={fileRename.inputValue}
+              onChange={(e) => fileRename.onInputChange(e.target.value)}
             />
-          </div>
-          <div className="config-modal-actions">
-            <button className="config-btn" onClick={fileRename.onClose}>{t("common.cancel")}</button>
-            <button className="config-btn primary" onClick={() => { const n = fileRename.inputValue.trim(); if (n && n !== fileRename.name) fileRename.onConfirm(fileRename.path, n); else fileRename.onClose(); }}>{t("common.confirm")}</button>
-          </div>
-        </div>
-      </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={fileRename.onClose}>
+                {t("common.cancel")}
+              </Button>
+              <Button type="submit">{t("common.confirm")}</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     )}
   </>;
 }

@@ -19,6 +19,8 @@ import {
 	X,
 } from "lucide-react";
 import { normalizeSessionPathForCompare } from "../../agentListDisplay";
+import { Button } from "../ui-shadcn/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../ui-shadcn/collapsible";
 import { getFileIconSeti, getFileIconColor, getFileTypeLabel } from "../../fileIcons";
 import { t } from "../../i18n";
 import type { WorkspaceDrawerPanel } from "../../hooks/useWorkspacePanels";
@@ -348,10 +350,13 @@ function FileNode(props: {
 		event.preventDefault();
 		props.onFileContextMenu(node, event.clientX, event.clientY);
 	};
+	// #115 U5：树行换 shadcn File Tree 模式（Collapsible + ghost Button + chevron 旋转），
+	// 懒加载/持久化展开态（expandedDirs）/拖拽/右键等业务行为不变；
+	// 既有 class 钩子（file-node-row 等）保留给样式 token 与测试断言。
 	if (node.type === "file")
 		return (
 			<div className="file-node" style={rowStyle}>
-				<button className="file file-node-row" style={rowStyle}
+				<Button variant="ghost" className="file file-node-row w-full justify-start" style={rowStyle}
 					title={`${node.relativePath}\n${typeLabel}`}
 					onClick={() => props.onViewFile?.(node.path)}
 					onContextMenu={menu}>
@@ -360,33 +365,39 @@ function FileNode(props: {
 					</span>
 					<span className="file-node-name">{node.name}</span>
 					<span className="file-node-type-label">{typeLabel}</span>
-				</button>
+				</Button>
 			</div>
 		);
 	return (
 		<div className="file-node" style={rowStyle}>
-			<button className="directory file-node-row" style={rowStyle}
-				onClick={() => onToggleDirectory(node.path)}
-				onContextMenu={menu}
-				title={node.relativePath}>
-				<span className="file-node-icon">
-					{fileIconElement(node.name, true, expanded)}
-				</span>
-				<span className="file-node-name">{node.name}</span>
-			</button>
-			{expanded && node.children && node.children.length > 0 && (
-				<div className="file-children">
-					{node.children.map((child) => (
-						<FileNode key={child.path} node={child}
-							expandedDirs={expandedDirs}
-							onToggleDirectory={onToggleDirectory}
-							onFileContextMenu={props.onFileContextMenu}
-							onOpenFile={props.onOpenFile}
-							onViewFile={props.onViewFile}
-							depth={depth + 1} />
-					))}
-				</div>
-			)}
+			<Collapsible open={expanded} onOpenChange={() => onToggleDirectory(node.path)}>
+				<CollapsibleTrigger asChild>
+					<Button variant="ghost" className="directory file-node-row group w-full justify-start" style={rowStyle}
+						title={node.relativePath}
+						onContextMenu={menu}>
+						<ChevronRight className="file-node-chevron transition-transform group-data-[state=open]:rotate-90" size={13} />
+						<span className="file-node-icon">
+							{fileIconElement(node.name, true, expanded)}
+						</span>
+						<span className="file-node-name">{node.name}</span>
+					</Button>
+				</CollapsibleTrigger>
+				<CollapsibleContent>
+					{node.children && node.children.length > 0 && (
+						<div className="file-children">
+							{node.children.map((child) => (
+								<FileNode key={child.path} node={child}
+									expandedDirs={expandedDirs}
+									onToggleDirectory={onToggleDirectory}
+									onFileContextMenu={props.onFileContextMenu}
+									onOpenFile={props.onOpenFile}
+									onViewFile={props.onViewFile}
+									depth={depth + 1} />
+							))}
+						</div>
+					)}
+				</CollapsibleContent>
+			</Collapsible>
 		</div>
 	);
 }
