@@ -2,6 +2,15 @@ import { useState, useRef, useLayoutEffect, useEffect, useMemo, type ReactNode }
 import { X, MessageCircle, Folder } from "lucide-react";
 import { t } from "../../i18n";
 import { CloseIconButton } from "../ui/IconButton";
+import {
+	DropdownMenu,
+	DropdownMenuCheckboxItem,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuLabel,
+	DropdownMenuSeparator,
+	DropdownMenuTrigger,
+} from "../ui-shadcn/dropdown-menu";
 import type { SessionSource, SessionSummary, Project, AgentTab } from "../../../../shared/types";
 
 export function SessionManagerModal(props: {
@@ -174,33 +183,24 @@ export function SessionManagerModal(props: {
 }
 
 /**
- * 右键菜单定位：渲染后按真实尺寸修正位置。
- * 当菜单超出视口底部/右侧时向上/向左翻转，仍放不下则夹紧到视口内，
- * 保证整块菜单始终可见、不被屏幕裁切（不使用滚动）。
+ * 右键菜单外壳（#115 U5）：统一 Radix DropdownMenu + 虚拟坐标 Trigger。
+ * 视口碰撞翻转/焦点圈定/ESC 关闭全部由 Radix 负责；旧 useMenuPosition
+ * 手写测尺寸翻转逻辑与 context-backdrop 遮罩已删除。
+ * 触发器不可见但提供定位矩形（Radix dropdown-menu 无独立 Anchor 部件）。
  */
-function useMenuPosition(initial: { x: number; y: number }) {
-	const [pos, setPos] = useState(initial);
-	const ref = useRef<HTMLDivElement>(null);
-	useLayoutEffect(() => {
-		const el = ref.current;
-		if (!el) return;
-		const rect = el.getBoundingClientRect();
-		const vw = window.innerWidth;
-		const vh = window.innerHeight;
-		let { x, y } = initial;
-		// 下方空间不足时翻转到光标上方，仍放不下则夹紧到视口内
-		if (y + rect.height > vh) {
-			const flipped = y - rect.height;
-			y = flipped >= 8 ? flipped : Math.max(8, vh - rect.height - 8);
-		}
-		// 右侧空间不足时翻转到光标左侧，仍放不下则夹紧到视口内
-		if (x + rect.width > vw) {
-			const flipped = x - rect.width;
-			x = flipped >= 8 ? flipped : Math.max(8, vw - rect.width - 8);
-		}
-		if (x !== pos.x || y !== pos.y) setPos({ x, y });
-	}, [initial.x, initial.y]);
-	return { pos, ref };
+function MenuShell(props: { x: number; y: number; onClose: () => void; className?: string; children: ReactNode }) {
+	return (
+		<DropdownMenu open onOpenChange={(open) => { if (!open) props.onClose(); }}>
+			<DropdownMenuTrigger
+				aria-hidden
+				tabIndex={-1}
+				style={{ position: "fixed", left: props.x, top: props.y, width: 0, height: 0, padding: 0, border: 0, background: "transparent", pointerEvents: "none" }}
+			/>
+			<DropdownMenuContent align="start" side="bottom" className={props.className}>
+				{props.children}
+			</DropdownMenuContent>
+		</DropdownMenu>
+	);
 }
 
 export function SessionSourceFilterMenu(props: {
@@ -210,48 +210,32 @@ export function SessionSourceFilterMenu(props: {
 	onClear: () => void;
 	onClose: () => void;
 }) {
-	const { pos, ref } = useMenuPosition(props.menu);
-	useEffect(() => {
-		const onKeyDown = (event: KeyboardEvent) => {
-			if (event.key === "Escape") props.onClose();
-		};
-		window.addEventListener("keydown", onKeyDown);
-		return () => window.removeEventListener("keydown", onKeyDown);
-	}, [props.onClose]);
 	const sources: SessionSource[] = ["pi", "codex", "claude", "opencode"];
+	// 过滤菜单需要连续勾选，onSelect preventDefault 保持菜单打开
 	return (
-		<div className="context-backdrop sidebar-filter-backdrop" onClick={props.onClose}>
-			<div
-				className="context-menu filter-menu"
-				style={{ left: pos.x, top: pos.y }}
-				ref={ref}
-				onClick={(event) => event.stopPropagation()}
+		<MenuShell x={props.menu.x} y={props.menu.y} onClose={props.onClose} className="min-w-44">
+			<DropdownMenuLabel>{t("menu.filterSessions")}</DropdownMenuLabel>
+			<DropdownMenuCheckboxItem
+				checked={props.filter === null}
+				onSelect={(event) => event.preventDefault()}
+				onCheckedChange={(checked) => { if (checked) props.onClear(); }}
 			>
-				<div className="filter-menu-header">{t("menu.filterSessions")}</div>
-				<label className="filter-menu-item">
-					<input
-						type="checkbox"
-						checked={props.filter === null}
-						onChange={(event) => {
-							if (event.target.checked) props.onClear();
-						}}
-					/>
-					{t("menu.filterSourceAll")}
-				</label>
-				{sources.map((source) => (
-					<label key={source} className="filter-menu-item">
-						<input
-							type="checkbox"
-							checked={props.filter !== null && props.filter.has(source)}
-							onChange={() => props.onToggleSource(source)}
-						/>
-						<span className={`session-source-badge ${source}`}>
-							{t(`sessionSource.${source}` as never)}
-						</span>
-					</label>
-				))}
-			</div>
-		</div>
+				{t("menu.filterSourceAll")}
+			</DropdownMenuCheckboxItem>
+			<DropdownMenuSeparator />
+			{sources.map((source) => (
+				<DropdownMenuCheckboxItem
+					key={source}
+					checked={props.filter !== null && props.filter.has(source)}
+					onSelect={(event) => event.preventDefault()}
+					onCheckedChange={() => props.onToggleSource(source)}
+				>
+					<span className={`session-source-badge ${source}`}>
+						{t(`sessionSource.${source}` as never)}
+					</span>
+				</DropdownMenuCheckboxItem>
+			))}
+		</MenuShell>
 	);
 }
 
@@ -272,43 +256,28 @@ export function ProjectContextMenu(props: {
 	onRemoveProject: () => void;
 }) {
 	const isWorktreeEnabled = props.menu.project.worktreeEnabled ?? false;
-	const { pos, ref } = useMenuPosition(props.menu);
 	return (
-		<div className="context-backdrop" onClick={props.onClose}>
-			<div
-				className="context-menu"
-				style={{ left: pos.x, top: pos.y }}
-				ref={ref}
-				onClick={(event) => event.stopPropagation()}
-			>
-				<button onClick={props.onRevealProject}>{t("menu.revealProject")}</button>
-				<button onClick={props.onOpenWithEditor}>{t("app.openWithEditor")}</button>
-				<button onClick={props.onImportCodexSessions}>
-					{t("menu.importCodex")}
-				</button>
-				<button onClick={props.onImportClaudeSessions}>
-					{t("menu.importClaude")}
-				</button>
-				<button onClick={props.onImportOpenCodeSessions}>
-					{t("menu.importOpenCode")}
-				</button>
-				<hr className="context-separator" />
-				<button onClick={props.onManageProjectResources}>{t("menu.projectResources")}</button>
-				<button onClick={props.onManageSessions}>{t("menu.manageSessions")}</button>
-				<hr className="context-separator" />
-				<button onClick={props.onFilterSessions}>{t("menu.filterSessions")}</button>
-				<hr className="context-separator" />
-				<button onClick={props.onToggleWorktree}>
-					{isWorktreeEnabled ? t("menu.disableWorktree") : t("menu.enableWorktree")}
-				</button>
-				<hr className="context-separator" />
-				<button onClick={props.onCopyProjectPath}>{t("menu.copyProjectPath")}</button>
-				<hr className="context-separator" />
-				<button onClick={props.onRefreshProject}>{t("app.projectRefresh")}</button>
-				<hr className="context-separator" />
-				<button onClick={props.onRemoveProject}>{t("menu.removeProject")}</button>
-			</div>
-		</div>
+		<MenuShell x={props.menu.x} y={props.menu.y} onClose={props.onClose}>
+			<DropdownMenuItem onSelect={props.onRevealProject}>{t("menu.revealProject")}</DropdownMenuItem>
+			<DropdownMenuItem onSelect={props.onOpenWithEditor}>{t("app.openWithEditor")}</DropdownMenuItem>
+			<DropdownMenuItem onSelect={props.onImportCodexSessions}>{t("menu.importCodex")}</DropdownMenuItem>
+			<DropdownMenuItem onSelect={props.onImportClaudeSessions}>{t("menu.importClaude")}</DropdownMenuItem>
+			<DropdownMenuItem onSelect={props.onImportOpenCodeSessions}>{t("menu.importOpenCode")}</DropdownMenuItem>
+			<DropdownMenuSeparator />
+			<DropdownMenuItem onSelect={props.onManageProjectResources}>{t("menu.projectResources")}</DropdownMenuItem>
+			<DropdownMenuItem onSelect={props.onManageSessions}>{t("menu.manageSessions")}</DropdownMenuItem>
+			<DropdownMenuSeparator />
+			<DropdownMenuItem onSelect={props.onFilterSessions}>{t("menu.filterSessions")}</DropdownMenuItem>
+			<DropdownMenuSeparator />
+			<DropdownMenuItem onSelect={props.onToggleWorktree}>
+				{isWorktreeEnabled ? t("menu.disableWorktree") : t("menu.enableWorktree")}
+			</DropdownMenuItem>
+			<DropdownMenuSeparator />
+			<DropdownMenuItem onSelect={props.onCopyProjectPath}>{t("menu.copyProjectPath")}</DropdownMenuItem>
+			<DropdownMenuItem onSelect={props.onRefreshProject}>{t("app.projectRefresh")}</DropdownMenuItem>
+			<DropdownMenuSeparator />
+			<DropdownMenuItem variant="destructive" onSelect={props.onRemoveProject}>{t("menu.removeProject")}</DropdownMenuItem>
+		</MenuShell>
 	);
 }
 
@@ -326,45 +295,40 @@ export function AgentContextMenu(props: {
 	onOpenSessionFile?: () => void;
 	onCloseAgent: () => void;
 }) {
-	const { pos, ref } = useMenuPosition(props.menu);
+	const busy = Boolean(props.actionLoading);
 	return (
-		<div className="context-backdrop" onClick={props.onClose}>
-			<div
-				className="context-menu"
-				style={{ left: pos.x, top: pos.y }}
-				ref={ref}
-				onClick={(event) => event.stopPropagation()}
-			>
-				<button disabled={Boolean(props.actionLoading)} onClick={props.onRename}>{t("common.rename")}</button>
-				<button disabled={Boolean(props.actionLoading)} onClick={props.onCopySession}>
-					{props.actionLoading === "copy" && <span className="mini-loader" />}
-					{props.actionLoading === "copy" ? t("menu.copying") : t("menu.copySession")}
-				</button>
-				<button disabled={Boolean(props.actionLoading)} onClick={props.onExport}>
-					{props.actionLoading === "export" && <span className="mini-loader" />}
-					{props.actionLoading === "export" ? t("menu.exporting") : t("menu.exportHtml")}
-				</button>
-				{props.menu.agent.sessionPath && (
-					<>
-						<button disabled={Boolean(props.actionLoading)} onClick={props.onCopySessionFilePath}>
-							{t("menu.copySessionFilePath")}
-						</button>
-						<button disabled={Boolean(props.actionLoading)} onClick={props.onOpenSessionFile}>
-							{t("menu.openAgentSessionFile")}
-						</button>
-					</>
-				)}
-				<button disabled={Boolean(props.actionLoading)} onClick={props.onToggleRpcLogging}>
-					{props.isRpcLogging ? `✓ ${t("menu.rpcLoggingOn")}` : t("menu.rpcLogging")}
-				</button>
-				{props.isRpcLogging && (
-					<button disabled={Boolean(props.actionLoading)} onClick={props.onOpenLogFile}>
-						{t("menu.rpcLogFile")}
-					</button>
-				)}
-				<button className="danger" onClick={props.onCloseAgent}>{t("menu.closeAgent")}</button>
-			</div>
-		</div>
+		<MenuShell x={props.menu.x} y={props.menu.y} onClose={props.onClose}>
+			<DropdownMenuItem disabled={busy} onSelect={props.onRename}>{t("common.rename")}</DropdownMenuItem>
+			<DropdownMenuItem disabled={busy} onSelect={props.onCopySession}>
+				{props.actionLoading === "copy" && <span className="mini-loader" />}
+				{props.actionLoading === "copy" ? t("menu.copying") : t("menu.copySession")}
+			</DropdownMenuItem>
+			<DropdownMenuItem disabled={busy} onSelect={props.onExport}>
+				{props.actionLoading === "export" && <span className="mini-loader" />}
+				{props.actionLoading === "export" ? t("menu.exporting") : t("menu.exportHtml")}
+			</DropdownMenuItem>
+			{props.menu.agent.sessionPath && (
+				<>
+					<DropdownMenuItem disabled={busy} onSelect={props.onCopySessionFilePath}>
+						{t("menu.copySessionFilePath")}
+					</DropdownMenuItem>
+					<DropdownMenuItem disabled={busy} onSelect={props.onOpenSessionFile}>
+						{t("menu.openAgentSessionFile")}
+					</DropdownMenuItem>
+				</>
+			)}
+			<DropdownMenuSeparator />
+			<DropdownMenuItem disabled={busy} onSelect={props.onToggleRpcLogging}>
+				{props.isRpcLogging ? `✓ ${t("menu.rpcLoggingOn")}` : t("menu.rpcLogging")}
+			</DropdownMenuItem>
+			{props.isRpcLogging && (
+				<DropdownMenuItem disabled={busy} onSelect={props.onOpenLogFile}>
+					{t("menu.rpcLogFile")}
+				</DropdownMenuItem>
+			)}
+			<DropdownMenuSeparator />
+			<DropdownMenuItem variant="destructive" onSelect={props.onCloseAgent}>{t("menu.closeAgent")}</DropdownMenuItem>
+		</MenuShell>
 	);
 }
 
@@ -373,18 +337,10 @@ export function DraftSessionContextMenu(props: {
 	onClose: () => void;
 	onDelete: () => void;
 }) {
-	const { pos, ref } = useMenuPosition(props.menu);
 	return (
-		<div className="context-backdrop" onClick={props.onClose}>
-			<div
-				className="context-menu"
-				style={{ left: pos.x, top: pos.y }}
-				ref={ref}
-				onClick={(event) => event.stopPropagation()}
-			>
-				<button className="danger" onClick={props.onDelete}>{t("common.delete")}</button>
-			</div>
-		</div>
+		<MenuShell x={props.menu.x} y={props.menu.y} onClose={props.onClose}>
+			<DropdownMenuItem variant="destructive" onSelect={props.onDelete}>{t("common.delete")}</DropdownMenuItem>
+		</MenuShell>
 	);
 }
 
@@ -400,40 +356,31 @@ export function SessionContextMenu(props: {
 	onShowLogs?: () => void;
 	onDeleteSession: () => void;
 }) {
-	const { pos, ref } = useMenuPosition(props.menu);
+	const busy = Boolean(props.actionLoading);
 	return (
-		<div className="context-backdrop" onClick={props.onClose}>
-			<div
-				className="context-menu"
-				style={{ left: pos.x, top: pos.y }}
-				ref={ref}
-				onClick={(event) => event.stopPropagation()}
-			>
-				<button disabled={Boolean(props.actionLoading)} onClick={props.onRename}>{t("common.rename")}</button>
-				<button disabled={Boolean(props.actionLoading)} onClick={props.onCopySession}>
-					{props.actionLoading === "copy" && <span className="mini-loader" />}
-					{props.actionLoading === "copy" ? t("menu.copying") : t("menu.copySession")}
-				</button>
-				<button disabled={Boolean(props.actionLoading)} onClick={props.onExport}>
-					{props.actionLoading === "export" && <span className="mini-loader" />}
-					{props.actionLoading === "export" ? t("menu.exporting") : t("menu.exportHtml")}
-				</button>
-				<button disabled={Boolean(props.actionLoading)} onClick={props.onCopySessionFilePath}>
-					{t("menu.copySessionFilePath")}
-				</button>
-				<button disabled={Boolean(props.actionLoading)} onClick={props.onOpenSessionFile}>
-					{t("menu.openSessionFile")}
-				</button>
-				<button disabled={Boolean(props.actionLoading)} onClick={props.onShowLogs}>{t("menu.rpcLogs")}</button>
-				<button
-					className="danger"
-					disabled={Boolean(props.actionLoading)}
-					onClick={props.onDeleteSession}
-				>
-					{t("common.delete")}
-				</button>
-			</div>
-		</div>
+		<MenuShell x={props.menu.x} y={props.menu.y} onClose={props.onClose}>
+			<DropdownMenuItem disabled={busy} onSelect={props.onRename}>{t("common.rename")}</DropdownMenuItem>
+			<DropdownMenuItem disabled={busy} onSelect={props.onCopySession}>
+				{props.actionLoading === "copy" && <span className="mini-loader" />}
+				{props.actionLoading === "copy" ? t("menu.copying") : t("menu.copySession")}
+			</DropdownMenuItem>
+			<DropdownMenuItem disabled={busy} onSelect={props.onExport}>
+				{props.actionLoading === "export" && <span className="mini-loader" />}
+				{props.actionLoading === "export" ? t("menu.exporting") : t("menu.exportHtml")}
+			</DropdownMenuItem>
+			<DropdownMenuSeparator />
+			<DropdownMenuItem disabled={busy} onSelect={props.onCopySessionFilePath}>
+				{t("menu.copySessionFilePath")}
+			</DropdownMenuItem>
+			<DropdownMenuItem disabled={busy} onSelect={props.onOpenSessionFile}>
+				{t("menu.openSessionFile")}
+			</DropdownMenuItem>
+			<DropdownMenuItem disabled={busy} onSelect={props.onShowLogs}>{t("menu.rpcLogs")}</DropdownMenuItem>
+			<DropdownMenuSeparator />
+			<DropdownMenuItem variant="destructive" disabled={busy} onSelect={props.onDeleteSession}>
+				{t("common.delete")}
+			</DropdownMenuItem>
+		</MenuShell>
 	);
 }
 export function ProjectAvatar(props: { name: string; kind?: "chat" | "project" }) {
