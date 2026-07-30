@@ -15,6 +15,7 @@ import { Button } from "../ui/Button";
 import { CloseIconButton, IconButton } from "../ui/IconButton";
 import { SelectField } from "../ui/SelectField";
 import { TextField } from "../ui/TextField";
+import { Switch } from "../ui-shadcn/switch";
 import { SettingsSection, StorageTab } from "./settings/SettingsStorageTab";
 import type { AppSettings, AppInfo, PiInstallStatus, PiUpdateCheckResult, PiCliUpdateResult, PetManifest } from "../../../shared/types";
 import { GRID_COLS, CELL_W, CELL_H, MODE_ROW, MODE_FRAMES } from "../../pet/PetSpriteSheet";
@@ -42,17 +43,17 @@ function SettingSwitch(props: {
 	disabled?: boolean;
 	onChange: (checked: boolean) => void;
 }) {
+	// #115 U5：开关换 shadcn Switch（Radix），行布局与文案结构不变
 	return (
 		<label className="setting-switch-row">
 			<span>
 				<strong>{props.title}</strong>
 				{props.description && <small>{props.description}</small>}
 			</span>
-			<input
-				type="checkbox"
+			<Switch
 				checked={props.checked}
 				disabled={props.disabled}
-				onChange={(event) => props.onChange(event.target.checked)}
+				onCheckedChange={props.onChange}
 			/>
 		</label>
 	);
