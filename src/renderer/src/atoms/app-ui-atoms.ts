@@ -20,3 +20,9 @@ export const sidebarExpandedProjectIdsAtom = atom<ReadonlySet<string>>(
     return cached ? new Set(cached) : defaultExpandedSidebarProjects();
   })(),
 );
+
+/**
+ * 实验开关：助手消息使用 Streamdown 渲染引擎（UI 2.0 / issue #115 U2 灰度）。
+ * 由 App 在 settings 加载/变更时同步；默认 false 走旧 react-markdown 管线。
+ */
+export const useStreamdownRendererAtom = atom(false);

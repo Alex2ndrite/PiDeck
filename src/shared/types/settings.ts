@@ -163,6 +163,13 @@ export type AppSettings = {
 	 */
 	piRpcNoSkills: boolean;
 
+	// ── 实验性渲染（UI 2.0 / issue #115） ──
+	/**
+	 * 助手消息使用 Streamdown 渲染引擎（灰度开关，默认 false 走旧 react-markdown 管线）。
+	 * 开启后获得流式半截 markdown 容错与 block 级 memo；组件覆盖（mermaid/链接）保持一致。
+	 */
+	useStreamdownRenderer?: boolean;
+
 	// ── 侧栏 UI 状态 ──
 	/**
 	 * 左侧边栏处于展开状态的项目 id 列表（含 builtin-chat）。

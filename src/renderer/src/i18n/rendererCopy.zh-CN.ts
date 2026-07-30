@@ -1461,6 +1461,8 @@ export const zhCN = {
   "app.collapseDrawer": "折叠右侧边栏",
   "settings.piRpcNoSkillsDesc": "启动时不发现/加载 skills。用于排查或加速；开启后技能命令不可用。",
   "settings.piRpcNoSkills": "禁用技能启动 (--no-skills)",
+  "settings.useStreamdownRenderer": "Streamdown 渲染引擎（实验）",
+  "settings.useStreamdownRendererDesc": "助手消息改用 Streamdown 渲染：流式半截 Markdown 容错更好、按块缓存更流畅。遇异常可关回旧渲染。",
   "settings.piRpcNoExtensionsDesc": "启动时不加载任何扩展。用于排查坏扩展导致 RPC 起不来；开启后 todo/plan/ask 等扩展会失效。",
   "settings.piRpcNoExtensions": "禁用扩展启动 (--no-extensions)",
   "settings.piRpcOfflineDesc": "跳过 pi 启动时的模型目录网络刷新。桌面端模型列表来自本地 models.json，建议保持开启以加快冷启动。",

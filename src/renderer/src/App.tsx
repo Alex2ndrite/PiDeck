@@ -69,6 +69,7 @@ import {
   sessionIdByRuntimeAgentIdAtomFamily,
   sessionRuntimeBySessionIdAtomFamily,
   sidebarExpandedProjectIdsAtom,
+  useStreamdownRendererAtom,
   sessionCatalogLoadStateAtom,
   sessionSummariesByProjectIdAtomFamily,
   setSessionAttachmentsAtom,
@@ -511,6 +512,12 @@ export function App() {
     piRpcNoExtensions: false,
     piRpcNoSkills: false,
   });
+
+  // 实验渲染开关（#115 U2）：settings → atom 单向同步，AssistantText 读 atom 切换引擎
+  const setStreamdownRenderer = useSetAtom(useStreamdownRendererAtom);
+  useEffect(() => {
+    setStreamdownRenderer(Boolean(settings.useStreamdownRenderer));
+  }, [settings.useStreamdownRenderer, setStreamdownRenderer]);
 
   // Guard: hide git drawer when git management is disabled.
   // Equivalent to: if (panel === "git" && !settings.enableGitManagement) return

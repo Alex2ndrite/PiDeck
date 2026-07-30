@@ -1258,6 +1258,12 @@ function SettingsModalContent(props: SettingsModalProps) {
 										checked={draftSettings.piRpcNoSkills}
 										onChange={(checked) => updateDraft({ piRpcNoSkills: checked })}
 									/>
+									<SettingSwitch
+										title={t("settings.useStreamdownRenderer")}
+										description={t("settings.useStreamdownRendererDesc")}
+										checked={Boolean(draftSettings.useStreamdownRenderer)}
+										onChange={(checked) => updateDraft({ useStreamdownRenderer: checked })}
+									/>
 								</SettingsSection>
 								<SettingsSection title={t("settings.debug")}>
 									<div className="setting-row">

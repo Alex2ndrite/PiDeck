@@ -1488,6 +1488,8 @@ export const enUS: Record<TranslationKey, string> = {
   "app.collapseDrawer": "Collapse right drawer",
   "settings.piRpcNoSkillsDesc": "Do not discover/load skills. Use for debugging or speed; skill commands will be unavailable.",
   "settings.piRpcNoSkills": "Disable skills on start (--no-skills)",
+  "settings.useStreamdownRenderer": "Streamdown renderer (experimental)",
+  "settings.useStreamdownRendererDesc": "Render assistant messages with Streamdown: better incomplete-markdown handling while streaming and per-block caching. Switch back if anything looks off.",
   "settings.piRpcNoExtensionsDesc": "Do not load any extensions. Use this to debug broken extensions blocking RPC; todo/plan/ask will be unavailable.",
   "settings.piRpcNoExtensions": "Disable extensions on start (--no-extensions)",
   "settings.piRpcOfflineDesc": "Skip model-catalog network refresh during pi startup. Desktop models come from local models.json; keep enabled for faster cold start.",

@@ -13,7 +13,15 @@ import {
 	type ReactNode,
 } from "react";
 import { toBlob } from "html-to-image";
-import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
+import ReactMarkdown from "react-markdown";
+import {
+	markdownUrlTransform,
+	MarkdownLink,
+	remarkLinkifyPaths,
+} from "./MarkdownLink";
+import { MarkdownStream } from "./MarkdownStream";
+import { useAtomValue } from "jotai";
+import { useStreamdownRendererAtom } from "../../atoms/app-ui-atoms";
 import rehypeKatex from "rehype-katex";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
@@ -516,6 +524,8 @@ export const AssistantText = memo(
 		const cleanText = stripThinkingTags(stripAnsi(props.text));
 		// 流式期间用轻量管线（仅 GFM + 路径链接化），回答结束后切回含数学/图表的完整渲染。
 		const streaming = Boolean(props.isStreaming);
+		// 灰度开关（#115 U2）：开启后同一正文走 Streamdown 引擎，组件覆盖保持一致
+		const useStreamdown = useAtomValue(useStreamdownRendererAtom);
 		return (
 			<div className="assistant-text markdown-body">
 				{props.images && props.images.length > 0 && (
@@ -531,6 +541,14 @@ export const AssistantText = memo(
 						))}
 					</div>
 				)}
+				{useStreamdown ? (
+					<MarkdownStream
+						text={cleanText}
+						isStreaming={streaming}
+						onOpenExternal={props.onOpenExternal}
+						onOpenFile={props.onOpenFile}
+					/>
+				) : (
 				<ReactMarkdown
 					remarkPlugins={
 						streaming
@@ -554,6 +572,7 @@ export const AssistantText = memo(
 				>
 					{cleanText}
 				</ReactMarkdown>
+				)}
 			</div>
 		);
 	},
@@ -1152,74 +1171,6 @@ export const UserBubble = memo(function UserBubble(props: {
 	);
 });
 
-/**
- * remark 插件：把助手正文里的裸文件路径转换成可点击的 file:// 链接。
- *
- * 以前用对原始 markdown 字符串做正则替换的 linkifyFilePaths，缺点是会把
- * ```代码块``` 里的路径字符串也改写掉（例如 AI 给出的 path: "D:\..." 示例
- * 被替换成 [D:\...](file://...) 破坏代码块），且 file:// 经 encodeURIComponent
- * 后反斜杠全被编码，链接既不可用又渲染异常。
- *
- * 改为在 mdast 层遍历，只处理 type === "text" 的叶子节点，天然跳过
- * code / inlineCode / link 内的文本，从根上消除双重处理与代码块破坏。
- * URL 用 file:// + encodeURIComponent 编码路径，MarkdownLink 里解码还原。
- */
-const FILE_PATH_RE =
-	/(?:[A-Z]:[\\/][^\s<>"'`|?*\n\[\]()]+|(?:\.\.?\/|\/)[^\s<>"'`|?*\n\[\]()]+|(?:[a-zA-Z_][a-zA-Z0-9_-]*[\\/])+[^\s<>"'`|?*\n\[\]()]+)\.[a-zA-Z0-9]+/g;
-
-const remarkLinkifyPaths = () => {
-	return (tree: any) => {
-		// 遍历 mdast，仅替换 text 叶子节点；code/inlineCode/link 等节点不被处理。
-		// 文本节点无 children，所以先用 __segs 标记待拆分节点，由父节点遍历时展开。
-		const visit = (node: any) => {
-			if (!node || typeof node !== "object") return;
-			const type: string = node.type;
-			if (type === "code" || type === "inlineCode" || type === "link") return;
-			if (type === "text" && typeof node.value === "string") {
-				const text: string = node.value;
-				FILE_PATH_RE.lastIndex = 0;
-				const segs: any[] = [];
-				let last = 0;
-				let m: RegExpExecArray | null;
-				let touched = false;
-				while ((m = FILE_PATH_RE.exec(text)) !== null) {
-					const start = m.index;
-					const end = start + m[0].length;
-					if (start > last) segs.push({ type: "text", value: text.slice(last, start) });
-					segs.push({
-						type: "link",
-						url: `file://${encodeURIComponent(m[0])}`,
-						children: [{ type: "text", value: m[0] }],
-					});
-					last = end;
-					touched = true;
-				}
-				if (touched) {
-					if (last < text.length) segs.push({ type: "text", value: text.slice(last) });
-					node.__segs = segs;
-				}
-				return;
-			}
-			const children: any[] | undefined = node.children;
-			if (Array.isArray(children)) {
-				const next: any[] = [];
-				for (const child of children) {
-					visit(child);
-					if (child && (child as any).__segs) {
-						const segs = (child as any).__segs;
-						delete (child as any).__segs;
-						next.push(...segs);
-					} else {
-						next.push(child);
-					}
-				}
-				node.children = next;
-			}
-		};
-		visit(tree);
-	};
-};
-
 export function ImagePreviewModal(props: {
 	image: ImageContent;
 	onClose: () => void;
@@ -1306,63 +1257,6 @@ export {
 	ThinkingBlock,
 };
 export { MultiSelectModal };
-
-/** Markdown 内的链接默认会在 Electron 窗口内导航,这里拦截点击统一用系统浏览器打开。
- * 支持文件路径链接（file:// 协议）点击打开文件。
- */
-function markdownUrlTransform(url: string): string {
-	// react-markdown 默认会清空 file:// 协议；这里只放行本地文件链接，普通外链仍使用默认安全过滤。
-	return url.startsWith("file://") ? url : defaultUrlTransform(url);
-}
-
-function MarkdownLink(
-	props: React.AnchorHTMLAttributes<HTMLAnchorElement> & {
-		onOpenExternal: (url: string) => void;
-		onOpenFile?: (path: string) => void;
-	},
-) {
-	const { onOpenExternal, onOpenFile, children, className, title, ...anchorProps } = props;
-	// remarkLinkifyPaths 生成的文件路径链接走 file:// 协议，与普通外链区分展示
-	const isFileLink = props.href?.startsWith("file://") ?? false;
-	const handleClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
-		e.preventDefault();
-		if (!props.href) return;
-		
-		// 处理文件路径链接（file:// 协议）
-		if (props.href.startsWith('file://')) {
-			const filePath = decodeURIComponent(props.href.slice(7));
-			if (onOpenFile) {
-				void onOpenFile(filePath);
-			}
-		} else {
-			// 普通 URL 链接用系统浏览器打开
-			void onOpenExternal(props.href);
-		}
-	};
-	const linkClass =
-		[className, isFileLink ? "markdown-link-file" : undefined]
-			.filter(Boolean)
-			.join(" ") || undefined;
-	return (
-		<a
-			{...anchorProps}
-			className={linkClass}
-			onClick={handleClick}
-			// 文件链接 hover 展示解码后的完整路径，便于确认目标文件；
-			// 普通链接不传 title，保留 markdown 自带 title 语法的原行为
-			title={isFileLink ? decodeURIComponent(props.href!.slice(7)) : title}
-		>
-			{isFileLink ? (
-				<>
-					<FileText size={12} className="markdown-link-file-icon" />
-					<span>{children}</span>
-				</>
-			) : (
-				children
-			)}
-		</a>
-	);
-}
 
 /** 将毫秒数格式化为短可读形式,如 "3.2s" "1m23s" */
 type EntryAction = {
