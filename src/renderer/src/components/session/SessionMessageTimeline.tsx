@@ -49,6 +49,8 @@ type TimelineInteractionProps = {
   onResendUserMessage?: UserBubbleProps["onResendUserMessage"];
   onEditMessage?: TurnRowProps["onEditMessage"];
   onDeleteMessage?: TurnRowProps["onDeleteMessage"];
+  onForkMessage?: UserBubbleProps["onForkMessage"];
+  forkingMessageId?: string | null;
   onToast: (message: string) => void;
 };
 
@@ -386,6 +388,8 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
                     onResendUserMessage={props.onResendUserMessage}
                     onEditMessage={props.onEditMessage}
                     onDeleteMessage={props.onDeleteMessage}
+                    onForkMessage={props.onForkMessage}
+                    forking={props.forkingMessageId === message.id}
                     agentRunning={isAgentBusy}
                     isLastUserMessage={message.id === lastUserMessageId}
                     showResendButton={resendableMessageIds.has(message.id)}

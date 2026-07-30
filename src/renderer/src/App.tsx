@@ -1784,6 +1784,92 @@ export function App() {
     });
   }
 
+  /** 正在 fork 的用户消息 id；用于按钮 loading，避免连点重复 fork。 */
+  const [forkingMessageId, setForkingMessageId] = useState<string | null>(null);
+
+  /**
+   * 解析用户消息对应的 pi session entryId。
+   * 优先 meta.entryId；其次 id 里的 history 片段；再回退 get_fork_messages 按正文匹配。
+   */
+  async function resolveForkEntryId(
+    agentId: string,
+    message: ChatMessage,
+  ): Promise<string | undefined> {
+    if (typeof message.meta?.entryId === "string" && message.meta.entryId) {
+      return message.meta.entryId;
+    }
+    const historyPrefix = `${agentId}-history-`;
+    if (message.id.startsWith(historyPrefix)) {
+      const fromId = message.id.slice(historyPrefix.length).trim();
+      if (fromId && fromId !== String(message.meta?._piDeckMsgSeq ?? "")) {
+        // 纯数字序号是无 entryId 时的 index 回退，不能当 fork entryId。
+        if (!/^\d+$/.test(fromId)) return fromId;
+      }
+    }
+    try {
+      const target = getRuntimeTargetForAgent(agentId);
+      if (!target) return undefined;
+      const forkMessages = requireSessionCommand(
+        await api.sessions.getRuntimeForkMessages(target),
+      ).value;
+      const targetText = message.text.trim();
+      if (!targetText) return undefined;
+      // 相同文案多条时取最后一次，贴近用户点的“当前这句”。
+      for (let i = forkMessages.length - 1; i >= 0; i -= 1) {
+        const item = forkMessages[i];
+        if (item?.entryId && item.text?.trim() === targetText) return item.entryId;
+      }
+    } catch {
+      // getForkMessages 失败时交给上层 toast
+    }
+    return undefined;
+  }
+
+  /**
+   * 从用户消息 fork 新会话（pi /fork）。
+   * 忙碌中不展示入口；点击时再解析 entryId（meta 缺失时走 getForkMessages 回退）。
+   * 成功后主进程会替换 sessionPath 并重载消息，这里把原 prompt 预填回输入框供修改再发。
+   */
+  async function forkFromUserMessage(message: ChatMessage) {
+    if (!activeAgentId || isAgentCurrentlyBusy()) return;
+    if (forkingMessageId) return;
+    setForkingMessageId(message.id);
+    try {
+      const entryId = await resolveForkEntryId(activeAgentId, message);
+      if (!entryId) {
+        showToast(t("app.forkMissingEntryId"), 4000);
+        return;
+      }
+      const target = getRuntimeTargetForAgent(activeAgentId);
+      if (!target) return;
+      const result = requireSessionCommand(
+        await api.sessions.forkRuntimeSession(target, entryId),
+      );
+      if ((result as { cancelled?: boolean })?.cancelled) {
+        showToast(t("app.forkCancelled"), 3500);
+        return;
+      }
+      const promptText =
+        typeof (result as { text?: string })?.text === "string" &&
+        (result as { text?: string }).text!.length > 0
+          ? (result as { text: string }).text
+          : message.text;
+      // session-first 架构：通过自定义事件把 fork 原文塞回 composer（与 edit-and-resend 同通道）。
+      window.dispatchEvent(
+        new CustomEvent("user-message-edit", { detail: { text: promptText } }),
+      );
+      if (activeProjectId) {
+        void refreshProjectSessions(activeProjectId).catch(() => undefined);
+      }
+      showToast(t("app.forkDone"), 3500);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      showToast(t("app.forkFailed", { error: translateAgentErrorMessage(msg) }), 5000);
+    } finally {
+      setForkingMessageId(null);
+    }
+  }
+
 
   /**
    * 打开系统原生文件/文件夹选择器，将选中路径以 @path 引用格式插入到消息中。
@@ -2137,6 +2223,8 @@ export function App() {
       resendUserMessage={resendUserMessage}
       editMessage={editMessage}
       deleteMessage={deleteMessage}
+      forkFromUserMessage={forkFromUserMessage}
+      forkingMessageId={forkingMessageId}
       agents={displayAgents}
       activeQueuedPrompts={activeQueuedPrompts}
       visibleQueuedPrompts={visibleQueuedPrompts}

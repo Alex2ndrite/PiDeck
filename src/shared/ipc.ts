@@ -67,6 +67,9 @@ export const ipcChannels = {
 	sessionsRuntimeSetModel: "sessions:runtime-set-model",
 	sessionsRuntimeSetThinking: "sessions:runtime-set-thinking",
 	sessionsRuntimeClone: "sessions:runtime-clone",
+	// 从用户消息 fork 新会话（pi /fork）；与 clone 不同，会按 entryId 裁剪会话树
+	sessionsRuntimeGetForkMessages: "sessions:runtime-get-fork-messages",
+	sessionsRuntimeFork: "sessions:runtime-fork",
 	codexSessionsScan: "codex-sessions:scan",
 	codexSessionsImport: "codex-sessions:import",
 	claudeSessionsScan: "claude-sessions:scan",

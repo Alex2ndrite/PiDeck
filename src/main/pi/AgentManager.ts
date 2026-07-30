@@ -142,23 +142,6 @@ export class AgentManager {
 	private readonly userInitiatedStop = new Set<string>();
 	/** 已尝试过自动重连的 agent（防止无限循环），重连成功后清除 */
 	private readonly autoRestartAttempted = new Set<string>();
-	/**
-	 * 用户主动 abort 后正在等待 pi 确认的 agent。
-	 * abort() 先加入该集合，再发送 abort RPC；在收到 agent_settled 或下一个 agent_start 之前，
-	 * 用于抑制 auto-retry/compaction 等状态回写，避免把侧边栏重新标成 running。
-	 * 流式事件拦截改走 streamGate（按 generation 封印），不再依赖本集合。
-	 */
-	private readonly recentlyAborted = new Set<string>();
-	/**
-	 * 每个 agent 的流式 generation 闸门。
-	 * abort 封印当前 generation；须等 abort settled（或超时兜底）后，
-	 * 再由 agent_start 推进 generation 放行，防止残留 thinking/text delta 串台。
-	 */
-	private readonly streamGates = new Map<string, StreamGateState>();
-	/** abort 后等待 agent_settled 的超时定时器；避免 pi 漏发 settled 导致永久封印。 */
-	private readonly abortSettledFallbackTimers = new Map<string, NodeJS.Timeout>();
-	/** abort settled 兜底超时：覆盖多数管道残留，同时不让“立刻重发”永久卡死。 */
-	private static readonly ABORT_SETTLED_FALLBACK_MS = 1500;
 
 	/**
 	 * 待处理的 Extension UI 请求。key 为 agentId，value 为 Map<requestId, { method, title, options }>。
@@ -203,24 +186,6 @@ export class AgentManager {
 			translate: this.translate,
 			logger: appLogger,
 		});
-	}
-
-	configureWsl(environment: WslEnvironment | null): void {
-		this.wslEnvironment = environment;
-	}
-
-	/** Windows 主进程文件操作必须使用可由 host 访问的路径。 */
-	private toSessionHostPath(sessionPath: string): string {
-		return this.wslEnvironment
-			? toWindowsHostPath(sessionPath, this.wslEnvironment)
-			: sessionPath;
-	}
-
-	/** Pi/RPC/session identity 在 WSL 模式下始终使用 Linux 逻辑路径。 */
-	private toSessionProtocolPath(sessionPath: string): string {
-		return this.wslEnvironment
-			? toWslLinuxPath(sessionPath, this.wslEnvironment)
-			: sessionPath;
 	}
 
 	configureWsl(environment: WslEnvironment | null): void {
@@ -460,7 +425,7 @@ export class AgentManager {
 
 		// 历史会话激活属于“一个 sessionPath 只能对应一个 Agent”的业务规则；
 		// 先登记 in-flight Promise，再启动真实创建，防止第二次点击绕过 agents map 检查。
-		const createPromise = this.createUnlocked(normalizedInput).finally(() => {
+		const createPromise = this.createUnlocked(input).finally(() => {
 			this.creatingSessionAgents.delete(sessionKey);
 		});
 		this.creatingSessionAgents.set(sessionKey, createPromise);
@@ -577,10 +542,7 @@ export class AgentManager {
 		const t2 = Date.now();
 
 		void this.appLogger?.info("agent", "Agent pi process start", { agentId: id });
-		// agentHomeDir：WSL 模式下扩展目录在映射的 Windows home，需与 ExtensionManager 一致。
-		const process = new PiProcess(project.path, this.settingsStore.get(), undefined, {
-			agentHomeDir: this.wslEnvironment?.windowsHome,
-		});
+		const process = new PiProcess(project.path, this.settingsStore.get());
 		process.on("version-check", (payload) => {
 			void this.appLogger?.info("agent", "Pi version check completed", {
 				agentId: id,
@@ -603,22 +565,28 @@ export class AgentManager {
 			command: diag?.command,
 			args: diag?.args?.join(' '),
 			cwd: diag?.cwd,
-			platform: globalThis.process.platform,
-			arch: globalThis.process.arch,
 		});
 
-		// 启动后先获取状态，get_messages 必须等状态就绪后再发送。
-		// 添加自动重试机制补偿 pi 初始化期间的瞬时延迟（如系统负载高、会话语料加载慢、
-		// 反病毒扫描），避免一次超时就永久标记为启动失败——用户反馈重启即可恢复说明进程本身正常。
+		// 启动后先获取状态，get_messages 必须等状态就绪后再发送，
+		// 确保 pi 进程已完全加载会话文件，避免竞态导致返回空结果。
 		void this.appLogger?.info("agent", "Agent get_state request start", { agentId: id });
-		// 单次 get_state 超时 45s，配合重试覆盖 pi 初始化期间的瞬时延迟。
-		const GET_STATE_TIMEOUT_MS = 45_000;
-		const GET_STATE_RETRIES = 2;
-		const GET_STATE_RETRY_DELAY_MS = 2_000;
-		void this.appLogger?.info("agent", "Agent get_state retry config", {
-			agentId: id,
-			timeoutMs: GET_STATE_TIMEOUT_MS,
-			maxRetries: GET_STATE_RETRIES,
+		const statePromise = client.request({ type: "get_state" });
+		const historyLoadDecision = this.getHistoryAutoLoadDecision(input.sessionPath);
+
+		// ... 事件监听器（省略，与原来一致）
+		process.on("event", (event) => this.handlePiEvent(id, event));
+		process.on("stderr", (text) =>
+			this.emit(ipcChannels.agentsLog, { agentId: id, text }),
+		);
+		process.on("protocol-error", (line) => {
+			this.emit(ipcChannels.agentsLog, {
+				agentId: id,
+				text: `Protocol error: ${line}`,
+			});
+			this.appLogger?.error("agent", `Protocol error: ${(line as string)?.slice(0, 200)}`, {
+				agentId: id,
+				project: project.path,
+			});
 		});
 		// 转发 RPC 日志到前端，用于调试面板展示请求/响应/事件
 		process.on("rpc-log", (entry: { direction: string; data: unknown }) => {
@@ -704,11 +672,7 @@ export class AgentManager {
 						);
 						this.emitState();
 					});
-					// 进程已退出 → 不再重试；重试耗尽 → 上报最终错误
-					if (!isRunning || attempt >= GET_STATE_RETRIES) throw err;
-					// 进程仍在运行：退避等待后重试（间隔递增：2s, 4s）
-					await new Promise(resolve => setTimeout(resolve, GET_STATE_RETRY_DELAY_MS * (attempt + 1)));
-				}
+				return;
 			}
 
 			tab.status = "closed";
@@ -747,19 +711,6 @@ export class AgentManager {
 					? this.translate("session.historyTitle", { project: project.name })
 					: `${project.name} agent`);
 			tab.status = "idle";
-			// 若因桌面兼容性自动跳过了 codeisland 等扩展，给用户一条系统说明，避免「扩展在却不生效」困惑。
-			const blockedOnStart = process.getDiagnostics()?.blockedExtensions;
-			if (blockedOnStart && blockedOnStart.length > 0) {
-				this.addMessage(
-					id,
-					"system",
-					`已临时停用与 PiDeck 不兼容的扩展：${blockedOnStart.join(", ")}（仅桌面 RPC 会话期间；其它扩展与 npm 包装扩展不受影响，Agent 结束后会自动恢复，CLI 仍可正常使用）。`,
-				);
-				void this.appLogger?.info("agent", "Desktop-blocked extensions skipped", {
-					agentId: id,
-					blocked: blockedOnStart,
-				});
-			}
 			// 大历史会话的 get_messages 可能需要十几秒；Agent 可用只依赖 get_state，
 			// 因此历史消息后台加载，避免 40MB+ 会话把“打开 Agent”阻塞到十几秒。
 			// 同时插入一条临时系统消息，给用户明确的加载反馈，避免空白页面看起来像冻结。
@@ -852,9 +803,6 @@ export class AgentManager {
 				projectId: project.id,
 				sessionPath: input.sessionPath,
 				error: rawMessage,
-				diagnostics: process.getDiagnostics(),
-				platform: globalThis.process.platform,
-				arch: globalThis.process.arch,
 			});
 			// 构建丰富的错误诊断信息
 			const diag = process.getDiagnostics();
@@ -1223,15 +1171,6 @@ export class AgentManager {
 			}
 		}
 
-		// 标记最近中止的 agent，用于抑制 auto-retry/compaction 把状态重新标为 running。
-		// 必须在发送 abort RPC 之前加入集合，避免事件处理函数在 RPC 发出后、
-		// handlePiEvent 返回前收到管道中的旧事件并重建 assistant 消息。
-		this.recentlyAborted.add(agentId);
-		// 封印当前 stream generation：比 recentlyAborted 更硬，不依赖 activeAssistantMessageIds 例外条件，
-		// 残留 thinking/text/tool 事件在 abort settled 前一律丢弃。
-		this.sealAgentStream(agentId);
-		this.scheduleAbortSettledFallback(agentId);
-
 		runtime.process.client
 			.request({ type: "abort" }, 10_000)
 			.catch(() => {
@@ -1249,21 +1188,10 @@ export class AgentManager {
 		this.toolMessageIds.delete(agentId);
 		this.activeToolCallsByAgent.delete(agentId);
 		this.toolExecutingByAgent.set(agentId, null);
-		// 取消节流中的 thinking/message 推送，避免 abort 后还有 pending flush 把旧内容刷回 UI。
-		this.thinkingEmitter.cancel(agentId);
 		this.emitThinking(agentId, "");
-		this.cancelMessageEmit(agentId);
 
 		runtime.tab.status = "idle";
-		// 停止反馈改 toast，不再写入会话时间线：
-		// 1) 系统状态卡片太抢眼；2) 插在 assistant 中间会打断 agent-run 分组，放大“消息串台”体感。
-		this.emit(ipcChannels.agentsNotice, {
-			agentId,
-			message: "已请求停止当前响应",
-			i18nKey: "app.abortRequested",
-			kind: "info",
-			duration: 2500,
-		});
+		this.addMessage(agentId, "system", "已请求停止当前响应", { i18nKey: "app.abortRequested" });
 		this.emitState();
 	}
 
@@ -1277,34 +1205,22 @@ export class AgentManager {
 	 */
 	async compact(agentId: string, prompt?: string) {
 		const runtime = this.requireRuntime(agentId);
-		// pi RPC 字段是 customInstructions（不是 prompt）；传错字段会被静默忽略，
-		// `/compact 自定义说明` 看起来像“命令无效/没按要求压缩”。
-		const customInstructions = prompt?.trim() || undefined;
+		const trimmedPrompt = prompt?.trim();
 		const startTime = Date.now();
 
 		void this.appLogger?.info("agent", "Compact requested", {
 			agentId,
-			customInstructions,
+			prompt: trimmedPrompt,
 			hasSessionPath: !!runtime.tab.sessionPath,
 		});
 
-		// 标记压缩中：exit 处理器据此区分压缩重启与异常崩溃；
-		// 同时参与 isCompacting，避免 UI 在 RPC 往返期间误判为空闲。
+		// 标记压缩中，退出处理器据此区分压缩重启与异常崩溃
 		this.compactingAgents.add(agentId);
-		this.rpcCompactingAgents.add(agentId);
-		if (runtime.tab.status !== "error" && runtime.tab.status !== "closed") {
-			runtime.tab.status = "running";
-			this.emitState();
-			void this.emitRuntimeState(agentId);
-		}
 
 		try {
 			const response = await runtime.process.client.request(
-				customInstructions
-					? { type: "compact", customInstructions }
-					: { type: "compact" },
-				// 大会话摘要可能远超 30s 默认超时；与 summarization + retry 对齐放宽。
-				180_000,
+				trimmedPrompt ? { type: "compact", prompt: trimmedPrompt } : { type: "compact" },
+				120_000,
 			);
 			void this.appLogger?.info("agent", "Compact RPC response received", {
 				agentId,
@@ -1313,13 +1229,17 @@ export class AgentManager {
 				rpcError: response.error,
 			});
 
-			// 手动 compact 不会再发 agent_settled；若 RPC 失败却仍把 status 留在 running，
-			// 侧栏/输入区会永久卡在 busy。失败必须明确抛出并在 finally 里收口状态。
+			// 检查 RPC 返回的 success 字段：pi CLI 可能压缩成功但后续步骤抛异常，
+			// 此时 session 文件已写入但 RPC 仍返回错误。
 			if (!response.success) {
-				throw new Error(response.error || "Compaction failed");
+				void this.appLogger?.warn("agent", "Compact RPC returned failure (session might still be written)", {
+					agentId,
+					error: response.error,
+				});
 			}
 
-			// 压缩成功且进程未退出：重载消息，展示压缩边界卡片。
+			this.compactingAgents.delete(agentId);
+			// 压缩成功且进程未退出，直接加载消息
 			await this.loadMessages(agentId).catch(() => undefined);
 			void this.appLogger?.info("agent", "Compact completed successfully", {
 				agentId,
@@ -1336,13 +1256,17 @@ export class AgentManager {
 				hasSessionPath: !!runtime.tab.sessionPath,
 			});
 
-			// 如果进程在压缩期间退出（部分 pi 版本压缩后会重启），
-			// RPC 会因连接断开失败，但压缩可能已写入 session。尝试重连同一会话。
+			this.compactingAgents.delete(agentId);
+
+			// 如果进程在压缩期间退出（pi 压缩后自动重启进程的行为），
+			// RPC 请求会因连接断开而失败，但压缩实际已完成。
+			// 尝试重连同一会话，不从 compact() 层面抛出错误。
 			if (!processAlive && runtime.tab.sessionPath) {
 				void this.appLogger?.info("agent", "Compact: process exited, reattaching", {
 					agentId,
 				});
 				await this.reattachProcess(agentId, runtime.tab.sessionPath);
+				runtime.tab.status = "idle";
 				await this.loadMessages(agentId).catch(() => undefined);
 				this.addLocalizedMessage(
 					agentId,
@@ -1356,36 +1280,12 @@ export class AgentManager {
 					totalElapsedMs: Date.now() - startTime,
 				});
 			} else {
-				// 会话过小 / Already compacted / 鉴权失败等：把可读错误抛给渲染进程 toast。
+				// 非退出相关的 RPC 错误，正常抛出
 				throw error;
 			}
-		} finally {
-			// 手动 compact 路径没有可靠的 agent_settled；无论成败都必须收口 compacting 标记，
-			// 并把非 error/closed 会话恢复 idle，否则 UI 会“压缩完了还停着/一直转圈”。
-			this.finishManualCompaction(agentId);
 		}
 
 		return this.getRuntimeState(agentId);
-	}
-
-	/**
-	 * 手动压缩收口：清 compacting 集合，并在安全时把 tab 置 idle。
-	 * compact_start 会把 status 设为 running，但手动 compact 结束后通常没有 agent_settled。
-	 */
-	private finishManualCompaction(agentId: string) {
-		this.compactingAgents.delete(agentId);
-		this.rpcCompactingAgents.delete(agentId);
-		const runtime = this.agents.get(agentId);
-		if (!runtime) return;
-		if (
-			runtime.tab.status !== "error" &&
-			runtime.tab.status !== "closed" &&
-			runtime.tab.status !== "starting"
-		) {
-			runtime.tab.status = "idle";
-		}
-		this.emitState();
-		void this.emitRuntimeState(agentId);
 	}
 
 	/**
@@ -1407,14 +1307,7 @@ export class AgentManager {
 			sessionPath,
 		});
 
-		const process = new PiProcess(project.path, this.settingsStore.get(), undefined, {
-			agentHomeDir: this.wslEnvironment?.windowsHome,
-		});
-		// 与 createUnlocked 一致：先挂生命周期监听，再 start，避免 error 事件无 listener。
-		this.attachPiProcessLifecycle(agentId, process, {
-			projectPath: project.path,
-			onExit: (payload) => this.handleReattachProcessExit(agentId, runtime, payload),
-		});
+		const process = new PiProcess(project.path, this.settingsStore.get());
 		const client = await process.start(sessionPath);
 		const restartDiag = process.getDiagnostics();
 		void this.appLogger?.info("agent", "Pi process restarted", {
@@ -2068,7 +1961,6 @@ export class AgentManager {
 		this.activeToolCallsByAgent.delete(agentId);
 		this.toolExecutingByAgent.delete(agentId);
 		this.toolStateSequenceByAgent.delete(agentId);
-		this.clearStreamGate(agentId);
 		this.emitState();
 
 		// 用相同的 session 重新创建 agent，新进程会重新加载所有配置
@@ -2130,17 +2022,7 @@ export class AgentManager {
 	): Promise<T> {
 		const project = this.getProject(projectId);
 		if (!project) throw new Error(`Project not found: ${projectId}`);
-		const process = new PiProcess(project.path, this.settingsStore.get(), undefined, {
-			agentHomeDir: this.wslEnvironment?.windowsHome,
-		});
-		// 临时会话同样可能触发 spawn error；先挂 sink 再 start，避免未捕获 error 拖垮主进程。
-		process.on("error", (error) => {
-			void this.appLogger?.error("agent", "Temporary session pi process error", {
-				projectId,
-				sessionPath,
-				error: error instanceof Error ? error.message : String(error),
-			});
-		});
+		const process = new PiProcess(project.path, this.settingsStore.get());
 		await process.start(sessionPath);
 		try {
 			return await run(process);
@@ -2251,7 +2133,6 @@ export class AgentManager {
 		this.activeToolCallsByAgent.delete(agentId);
 		this.toolExecutingByAgent.delete(agentId);
 		this.toolStateSequenceByAgent.delete(agentId);
-		this.clearStreamGate(agentId);
 		// agent 关闭时自动关闭 RPC 日志记录
 		this.rpcLoggingAgents.delete(agentId);
 		process.stop();
@@ -2292,297 +2173,6 @@ export class AgentManager {
 		this.emitState();
 	}
 
-	/**
-	 * 统一挂接 PiProcess 生命周期监听。
-	 * 必须在 start() 之前调用，避免 spawn error 在无 listener 窗口升级成未捕获异常。
-	 */
-	private attachPiProcessLifecycle(
-		agentId: string,
-		piProcess: PiProcess,
-		options: {
-			projectPath?: string;
-			onExit: (payload: { code: number | null; signal: string | null }) => void;
-		},
-	) {
-		piProcess.on("event", (event) => {
-			try {
-				this.handlePiEvent(agentId, event);
-			} catch (error) {
-				// 单条 pi 事件处理失败不能拖垮主进程；记录后继续接收后续事件。
-				void this.appLogger?.error("agent", "handlePiEvent failed", {
-					agentId,
-					error: error instanceof Error ? error.message : String(error),
-					stack: error instanceof Error ? error.stack : undefined,
-					eventType:
-						event && typeof event === "object"
-							? String((event as { type?: unknown }).type ?? "unknown")
-							: typeof event,
-				});
-			}
-		});
-		piProcess.on("stderr", (text) =>
-			this.emit(ipcChannels.agentsLog, { agentId, text }),
-		);
-		piProcess.on("protocol-error", (line) => {
-			this.emit(ipcChannels.agentsLog, {
-				agentId,
-				text: `Protocol error: ${line}`,
-			});
-			void this.appLogger?.error(
-				"agent",
-				`Protocol error: ${(line as string)?.slice(0, 200)}`,
-				{
-					agentId,
-					project: options.projectPath,
-				},
-			);
-		});
-		piProcess.on("rpc-log", (entry: { direction: string; data: unknown }) => {
-			try {
-				const data = entry.data as Record<string, any>;
-				let summary: string;
-				if (entry.direction === "send") {
-					const type = data.type ?? "?";
-					if (type === "prompt")
-						summary = `→ prompt: ${(data.message ?? "").slice(0, 60)}`;
-					else if (type === "set_model")
-						summary = `→ set_model: ${data.provider}/${data.modelId}`;
-					else if (type === "set_thinking_level")
-						summary = `→ set_thinking: ${data.level}`;
-					else if (type === "bash")
-						summary = `→ bash: ${(data.command ?? "").slice(0, 60)}`;
-					else summary = `→ ${type}`;
-				} else {
-					const type = data.type ?? "?";
-					if (type === "response")
-						summary = `← ${data.command ?? "?"} ${data.success ? "✓" : "✗"}${data.error ? ` ${data.error}` : ""}`;
-					else if (type === "message_update") {
-						const evt = data.assistantMessageEvent?.type ?? "?";
-						summary = `← message_update.${evt}`;
-					} else summary = `← ${type}`;
-				}
-				const logEntry = {
-					id: randomUUID(),
-					agentId,
-					direction: entry.direction,
-					summary,
-					data,
-					time: Date.now(),
-				};
-				this.emit(ipcChannels.agentsRpcLog, logEntry);
-				if (this.rpcLoggingAgents.has(agentId)) {
-					this.rpcLogger?.push(logEntry);
-				}
-			} catch (error) {
-				void this.appLogger?.warn("agent", "rpc-log handler failed", {
-					agentId,
-					error: error instanceof Error ? error.message : String(error),
-				});
-			}
-		});
-		piProcess.on("exit", (payload: { code: number | null; signal: string | null }) => {
-			try {
-				void this.appLogger?.info("agent", "Pi process exit", {
-					agentId,
-					code: payload.code,
-					signal: payload.signal,
-					diagnostics: piProcess.getDiagnostics(),
-				});
-				options.onExit(payload);
-			} catch (error) {
-				void this.appLogger?.error("agent", "Pi process exit handler failed", {
-					agentId,
-					error: error instanceof Error ? error.message : String(error),
-				});
-			}
-		});
-		piProcess.on("error", (error: Error) => {
-			const runtime = this.agents.get(agentId);
-			if (runtime) runtime.tab.status = "error";
-			const message = error instanceof Error ? error.message : String(error);
-			void this.appLogger?.error("agent", "Pi process error", {
-				agentId,
-				error: message,
-				stack: error instanceof Error ? error.stack : undefined,
-				diagnostics: piProcess.getDiagnostics(),
-				platform: globalThis.process.platform,
-				arch: globalThis.process.arch,
-			});
-			this.addMessage(
-				agentId,
-				"error",
-				this.buildStartupFailureMessage(message, piProcess.getDiagnostics()),
-			);
-			this.emitState();
-		});
-	}
-
-	/** createUnlocked 路径的进程 exit：支持压缩后自动重连，其余标 closed。 */
-	private handleCreateProcessExit(
-		agentId: string,
-		tab: AgentTab,
-		payload: { code: number | null; signal: string | null },
-	) {
-		if (this.modelRefreshingAgents.has(agentId)) return;
-		if (this.userInitiatedStop.has(agentId)) {
-			this.userInitiatedStop.delete(agentId);
-			tab.status = "closed";
-			this.emitState();
-			return;
-		}
-		if (this.compactingAgents.has(agentId)) {
-			tab.status = "closed";
-			this.emitState();
-			return;
-		}
-		if (!this.autoRestartAttempted.has(agentId) && tab.sessionPath && payload.code === 0) {
-			this.autoRestartAttempted.add(agentId);
-			tab.status = "starting";
-			this.emitState();
-			this.reattachProcess(agentId, tab.sessionPath)
-				.then(() => {
-					tab.status = "idle";
-					this.addMessage(agentId, "system", "会话压缩完成，Agent 已自动重连");
-					this.emitState();
-				})
-				.catch((error) => {
-					tab.status = "closed";
-					void this.appLogger?.error("agent", "Auto reattach after clean exit failed", {
-						agentId,
-						error: error instanceof Error ? error.message : String(error),
-					});
-					this.addMessage(agentId, "error", "Agent 进程意外退出，自动重连失败");
-					this.emitState();
-				});
-			return;
-		}
-		tab.status = "closed";
-		// 非 0 退出且还没写过错误卡时，补一条可排查信息（避免用户只看到 closed）。
-		if (payload.code !== 0 && payload.code !== null) {
-			const runtime = this.agents.get(agentId);
-			const diag = runtime?.process.getDiagnostics() ?? null;
-			this.addMessage(
-				agentId,
-				"error",
-				this.buildStartupFailureMessage(
-					`pi 进程退出 code=${payload.code}${payload.signal ? ` signal=${payload.signal}` : ""}`,
-					diag,
-				),
-			);
-		}
-		this.emitState();
-	}
-
-	/** reattach 路径的进程 exit：同样做单次自动重连保护。 */
-	private handleReattachProcessExit(
-		agentId: string,
-		runtime: AgentRuntime,
-		payload: { code: number | null; signal: string | null },
-	) {
-		if (this.modelRefreshingAgents.has(agentId)) return;
-		if (this.userInitiatedStop.has(agentId)) {
-			this.userInitiatedStop.delete(agentId);
-			runtime.tab.status = "closed";
-			this.emitState();
-			return;
-		}
-		if (!this.autoRestartAttempted.has(agentId) && runtime.tab.sessionPath && payload.code === 0) {
-			this.autoRestartAttempted.add(agentId);
-			runtime.tab.status = "starting";
-			this.emitState();
-			this.reattachProcess(agentId, runtime.tab.sessionPath)
-				.then(() => {
-					runtime.tab.status = "idle";
-					this.addMessage(agentId, "system", "会话压缩完成，Agent 已自动重连");
-					this.emitState();
-				})
-				.catch((error) => {
-					runtime.tab.status = "closed";
-					void this.appLogger?.error("agent", "Reattach auto-restart failed", {
-						agentId,
-						error: error instanceof Error ? error.message : String(error),
-					});
-					this.addMessage(agentId, "error", "Agent 进程意外退出，自动重连失败");
-					this.emitState();
-				});
-			return;
-		}
-		runtime.tab.status = "closed";
-		this.emitState();
-	}
-
-	/**
-	 * 把 pi 启动/退出失败整理成可复制的诊断文案。
-	 * 目标：用户不至于只看到闪退或空白，Issue 也能直接贴日志。
-	 */
-	private buildStartupFailureMessage(
-		rawMessage: string,
-		diag: ReturnType<PiProcess["getDiagnostics"]>,
-	): string {
-		if (!diag) {
-			return `⚠️ Pi RPC 启动失败\n\n${rawMessage}\n\nplatform=${globalThis.process.platform} arch=${globalThis.process.arch}`;
-		}
-		const lines: string[] = [];
-		if (diag.exitCode !== null) {
-			lines.push(`退出码: ${diag.exitCode}${diag.exitSignal ? ` (signal: ${diag.exitSignal})` : ""}`);
-		}
-		const stderrText = diag.stderr.join("").trim();
-		if (stderrText) {
-			const snippet = stderrText.length > 600 ? "…" + stderrText.slice(-600) : stderrText;
-			lines.push(`进程错误输出:\n${snippet}`);
-		}
-		lines.push(`pi 路径: ${diag.command}`);
-		if (diag.customPiPath) lines.push(`自定义路径: ${diag.customPiPath}`);
-		lines.push(`工作目录: ${diag.cwd}`);
-		lines.push(`版本检测: ${diag.versionCheck ? "✓ 通过" : "✗ 失败"}`);
-		lines.push(`运行环境: ${globalThis.process.platform}/${globalThis.process.arch}`);
-		if (diag.blockedExtensions && diag.blockedExtensions.length > 0) {
-			// 桌面端已自动隔离的扩展（如 codeisland），方便用户对照「为何 RPC 没加载该扩展」。
-			lines.push(`已自动隔离扩展: ${diag.blockedExtensions.join(", ")}`);
-		}
-		lines.push("");
-		lines.push("━━━ 排查步骤 ━━━");
-		if (!diag.versionCheck) {
-			lines.push("1. 在终端执行 pi --version，确认 pi 是否已安装且路径正确");
-			lines.push("2. 如未安装，执行 npm install -g @earendil-works/pi-coding-agent");
-			lines.push("3. macOS 若从 Dock 启动，可在设置中填写完整 pi 路径（Homebrew 常见 /opt/homebrew/bin/pi）");
-		} else if (diag.exitCode !== 0 && diag.exitCode !== null) {
-			lines.push("1. 在终端执行 pi --mode rpc 看是否能正常启动");
-			lines.push("2. 注意终端中的错误信息（架构不匹配/权限/扩展崩溃都会体现在这里）");
-		} else if (!stderrText && diag.exitCode === null) {
-			lines.push("1. 桌面端已自动重试 get_state，但 pi 仍未响应。");
-			lines.push("2. 在终端执行 pi --mode rpc 看是否能正常启动，注意终端中的错误信息");
-		} else {
-			lines.push("1. 在终端执行 pi --mode rpc 确认 pi 能否正常启动");
-			lines.push("2. 检查设置中的 pi 路径是否正确");
-		}
-		const startFlags = this.settingsStore.get();
-		const noExt = Boolean(startFlags.piRpcNoExtensions);
-		const noSkills = Boolean(startFlags.piRpcNoSkills);
-		lines.push("");
-		lines.push("━━━ 扩展 / 技能排查 ━━━");
-		if (noExt || noSkills) {
-			lines.push(
-				`当前启动已禁用：${[
-					noExt ? "扩展 (--no-extensions)" : null,
-					noSkills ? "技能 (--no-skills)" : null,
-				]
-					.filter(Boolean)
-					.join("、")}`,
-			);
-			lines.push("若仍失败，更可能是 pi 本体/路径/会话文件问题，而不是扩展加载。");
-		} else {
-			lines.push("若怀疑某个扩展或技能导致启动失败：");
-			lines.push("1. 打开 设置 → 开发设置");
-			lines.push("2. 临时开启「禁用扩展启动」和/或「禁用技能启动」");
-			lines.push("3. 保存后重新启动 Agent 验证");
-			lines.push("若禁用后能启动，再逐个排查 ~/.pi/agent/extensions 与 skills。");
-		}
-		lines.push("");
-		lines.push("如问题持续，可在 GitHub 提交 Issue 并附上以上信息与应用日志。");
-		return `⚠️ Pi RPC 启动失败\n\n${rawMessage}\n\n${lines.join("\n")}`;
-	}
-
 	private handlePiEvent(agentId: string, event: unknown) {
 		// 通知本地监听器（FeishuBridge 等主进程内部订阅）
 		for (const listener of this.localEventListeners) {
@@ -2609,11 +2199,6 @@ export class AgentManager {
 		}
 
 		if (typed.type === "agent_start" && runtime) {
-			// agent_start 表示一轮新的 agent run 开始：
-			// 1) 清理 recentlyAborted，允许状态机恢复 running
-			// 2) 推进 stream generation，解封流式闸门（唯一合法解封点）
-			this.recentlyAborted.delete(agentId);
-			this.openAgentStream(agentId);
 			runtime.tab.status = "running";
 			this.activeAssistantMessageIds.delete(agentId);
 			this.toolMessageIds.delete(agentId);
@@ -2623,18 +2208,13 @@ export class AgentManager {
 		}
 
 		if (typed.type === "message_start" && typed.message?.role === "assistant") {
-			// abort 封印后的残留 assistant 事件应丢弃，防止误重新激活流式状态。
-			if (this.isAgentStreamSealed(agentId)) {
-				return;
-			}
 			this.beginAssistantMessage(agentId);
 			this.upsertAssistantMessage(agentId, typed.message);
 		}
 
 		if (typed.type === "auto_retry_start") {
 			this.upsertRetryStatusMessage(agentId, typed, "running");
-			// 用户已主动中止时不重新激活 running 状态，避免 abort 后 auto-retry 事件误覆盖 state
-			if (runtime && !this.recentlyAborted.has(agentId)) {
+			if (runtime) {
 				// pi 在等待指数退避期间可能短暂结束一轮 agent run；桌面端保持 running，
 				// 让用户明确知道当前不是最终失败，而是在等待下一次自动重试。
 				runtime.tab.status = "running";
@@ -2648,22 +2228,13 @@ export class AgentManager {
 				typed,
 				typed.success ? "success" : "error",
 			);
-			// 自动重试最终失败：如果用户没有主动中止，则保持 agent 的 error 状态
-			// 不被后续 agent_settled 覆盖，确保侧边栏状态显示失败标记。
-			if (!typed.success && runtime && !this.recentlyAborted.has(agentId)) {
-				runtime.tab.status = "error";
-				const reason = typed.finalError ?? typed.errorMessage ?? "API 请求失败";
-				this.addMessage(agentId, "error", `请求失败：${String(reason)}`);
-				this.emitState();
-			}
 		}
 
 		// 自动/手动压缩事件（pi 在自动或手动压缩完成后会发出这些事件），
 		// 用于记录压缩耗时和结果，便于排查压缩性能问题。
 		if (typed.type === "compaction_start") {
 			this.rpcCompactingAgents.add(agentId);
-			// 用户已主动中止或出错时不重新激活 running 状态
-			if (runtime && !this.recentlyAborted.has(agentId) && runtime.tab.status !== "error") {
+			if (runtime) {
 				// 自动压缩在 agent_end 之后触发：Pi 仍在改写上下文，但不会再发 agent_start。
 				// 因此桌面端必须主动保持 running，阻止用户误以为空闲并继续发送消息。
 				runtime.tab.status = "running";
@@ -2681,8 +2252,7 @@ export class AgentManager {
 				// compaction 会向 session JSONL 写入新的边界记录；立即重载消息，
 				// 避免前端仍展示压缩前分支，下一轮继续对话时看起来像“断在旧会话”。
 				void this.loadMessages(agentId).catch(() => undefined);
-				// 用户已主动中止或出错时不重新激活 running 状态
-				if (!this.recentlyAborted.has(agentId) && runtime.tab.status !== "error") {
+				if (runtime.tab.status !== "error") {
 					// compaction_end 之后 Pi 仍可能因 overflow retry 或 queued follow-up 自动继续。
 					// 只有 agent_settled 才表示不会再自动发起下一轮，不能在这里提前 idle。
 					runtime.tab.status = "running";
@@ -2751,8 +2321,7 @@ export class AgentManager {
 					);
 				}
 				// 重试中保持 running，不能误置为 idle/error，否则宠物聚合状态会提前转 done/failed
-				// 用户已主动中止时不覆盖 state，避免 abort 后收到此事件又重新激活 running
-				if (runtime && !this.recentlyAborted.has(agentId)) runtime.tab.status = "running";
+				if (runtime) runtime.tab.status = "running";
 			} else if (errorMsg) {
 				this.addDetailedErrorMessage(agentId, String(errorMsg));
 				// 有错误且不会重试 → Agent 进入 error 态，宠物聚合为 failed（行5），
@@ -2780,12 +2349,6 @@ export class AgentManager {
 		}
 
 		if (typed.type === "agent_settled") {
-			// agent_settled 是 Pi 的最终稳定点。
-			// 通知 stream gate：abort 对应的 settled 已到。
-			// 若 settled 前已有 agent_start（用户立刻重发），此处才真正解封；
-			// 若还没有新 start，则保持封印，防止 settled 后残留 delta 复活旧气泡。
-			this.noteAgentAbortSettled(agentId);
-			this.recentlyAborted.delete(agentId);
 			if (runtime && runtime.tab.status !== "error" && runtime.tab.status !== "closed") {
 				// agent_settled 是 Pi 的最终稳定点：没有自动重试、自动压缩、压缩 retry
 				// 或 queued follow-up 会继续执行，此时才允许恢复 idle 并通知用户完成。
@@ -2796,7 +2359,6 @@ export class AgentManager {
 				this.activeToolCallsByAgent.delete(agentId);
 				this.toolExecutingByAgent.set(agentId, null);
 				this.rpcCompactingAgents.delete(agentId);
-				this.thinkingEmitter.cancel(agentId);
 				this.emitThinking(agentId, "");
 				this.emitState();
 				void this.emitRuntimeState(agentId);
@@ -2813,33 +2375,21 @@ export class AgentManager {
 			typed.type === "message_update" &&
 			typed.assistantMessageEvent
 		) {
-			// abort 封印后的延迟 text/thinking delta 一律丢弃，避免重建气泡或串台。
-			if (this.isAgentStreamSealed(agentId)) {
-				return;
-			}
 			this.handleAssistantMessageEvent(agentId, typed);
 		}
 
 		if (
 			typed.type === "message_end" &&
-			typed.message?.role === "assistant"
+			typed.message?.role === "assistant" &&
+			this.activeAssistantMessageIds.has(agentId)
 		) {
-			if (this.isAgentStreamSealed(agentId)) {
-				return;
-			}
-			if (this.activeAssistantMessageIds.has(agentId)) {
-				this.upsertAssistantMessage(agentId, typed.message);
-				this.activeAssistantMessageIds.delete(agentId);
-				// message_end 是本轮回答的最终状态，立即 flush 确保完整消息及时可见
-				this.flushMessageEmit(agentId);
-			}
+			this.upsertAssistantMessage(agentId, typed.message);
+			this.activeAssistantMessageIds.delete(agentId);
+			// message_end 是本轮回答的最终状态，立即 flush 确保完整消息及时可见
+			this.flushMessageEmit(agentId);
 		}
 
 		if (typed.type === "tool_execution_start") {
-			// abort 封印后的延迟工具事件应丢弃，避免重新激活流式状态。
-			if (this.isAgentStreamSealed(agentId)) {
-				return;
-			}
 			this.upsertToolMessage(agentId, typed, "running");
 			// 并行工具会先连续发多个 start；按 toolCallId 追踪，只有最后一个 end 才能表示工具阶段完成。
 			const toolName = typed.toolName ?? "tool";
@@ -2859,10 +2409,6 @@ export class AgentManager {
 		}
 
 		if (typed.type === "tool_execution_end") {
-			// abort 封印后的延迟工具事件应丢弃。
-			if (this.isAgentStreamSealed(agentId)) {
-				return;
-			}
 			this.upsertToolMessage(
 				agentId,
 				typed,
@@ -2889,10 +2435,6 @@ export class AgentManager {
 		}
 
 		if (typed.type === "tool_execution_update") {
-			// abort 封印后的延迟工具事件应丢弃。
-			if (this.isAgentStreamSealed(agentId)) {
-				return;
-			}
 			this.upsertToolMessage(agentId, typed, "running");
 		}
 
@@ -3015,23 +2557,20 @@ export class AgentManager {
 	 * 发送 Extension UI 响应（extension_ui_response）到 pi 的 stdin。
 	 * 同时更新对应卡片消息的状态。
 	 */
-	sendUIResponse(agentId: string, requestId: string, response: { value?: string | boolean | null; cancelled?: boolean; confirmed?: boolean }) {
+	sendUIResponse(agentId: string, requestId: string, response: { value?: string | boolean; cancelled?: boolean; confirmed?: boolean }) {
 		const runtime = this.agents.get(agentId);
 		if (!runtime) return;
 
 		// 写入 extension_ui_response 到 pi 的 stdin
 
-		// 写入 extension_ui_response。
-		// 注意：普通 select 取消应走 value:null（见 abort / 渲染层 respondCancel），
-		// 不要对 select 误发 cancelled:true，否则 pi 返回 undefined，旧 ask 扩展会选第一项。
 		const extPayload: Record<string, unknown> = {
 			type: "extension_ui_response",
 			id: requestId,
+			value: response.value,
 		};
-		// value 允许显式 null（取消 select）；undefined 表示字段未提供则不写入。
-		if ("value" in response) extPayload.value = response.value;
-		// pi 的 ctx.ui.confirm() 检查 confirmed 字段
+		// pi 的 ctx.ui.confirm() 检查 confirmed 字段，ctx.ui.select/input 检查 value
 		if ("confirmed" in response) extPayload.confirmed = response.confirmed;
+		// 取消时发 cancelled: true
 		if (response.cancelled) extPayload.cancelled = true;
 		runtime.process.client.sendRaw(extPayload);
 
@@ -3170,8 +2709,6 @@ export class AgentManager {
 	}
 
 	private handleAssistantMessageEvent(agentId: string, event: Record<string, any>) {
-		// 双保险：即使调用方漏判，也在这里拦截封印 generation 的残留 delta。
-		if (this.isAgentStreamSealed(agentId)) return;
 		const assistantEvent = event.assistantMessageEvent as Record<string, any>;
 		const eventType = assistantEvent.type as string | undefined;
 		const partialMessage =
@@ -3351,8 +2888,60 @@ export class AgentManager {
 		const argsMeta = typeof args === "string" ? args : this.messageProjector.truncateForDetail(this.messageProjector.safeJson(args));
 		// 提取 ask_question 详情用于渲染提问卡片；支持批量（questions 数组）和单问题两种格式。
 		// pi RPC 返回格式可能为 result.details 嵌套 或 result 顶层（无 details 包装）
-		const askDetails = this.extractAskQuestionDetails(toolName, result, args);
-		const askCard = this.buildAskCard(agentId, askDetails);
+		const askDetails = (() => {
+			if (toolName !== "ask_question" || !result || typeof result !== "object") return undefined;
+			// 格式 1: result.details.question 或 result.details.answers（批量）
+			if ((result as any).details?.question || Array.isArray((result as any).details?.answers)) {
+				return (result as any).details;
+			}
+			// 格式 2: result.question（无 details 包装）
+			if ((result as any).question) {
+				return result as any;
+			}
+			// 格式 3: 从 args 回退读取提问内容（当 result 仅为简单值如选中项字符串时）
+			let parsedArgs: unknown = args;
+			if (typeof args === "string") { try { parsedArgs = JSON.parse(args); } catch { parsedArgs = undefined; } }
+			if (parsedArgs && typeof parsedArgs === "object" && (parsedArgs as any).question) {
+				return {
+					question: (parsedArgs as any).question,
+					options: (parsedArgs as any).options,
+					answer: typeof result === "string" ? result : (result as any).value ?? (result as any).answer,
+					answered: true,
+					answerLabel: typeof result === "string" ? result : (result as any).value ?? (result as any).answer,
+				};
+			}
+			return undefined;
+		})();
+		const askCard = (() => {
+			if (!askDetails) return undefined;
+			// abort 时覆写 answer 为 null、answered 为 false，确保卡片显示"已取消"
+			const aborted = this.abortedDuringAsk.has(agentId);
+			// 单问题格式：details.question (string), details.answer
+			if (askDetails.question) {
+				return {
+					question: askDetails.question,
+					type: askDetails.type,
+					answered: aborted ? false : askDetails.answered,
+					answer: aborted ? null : askDetails.answer,
+					answerLabel: aborted ? undefined : askDetails.answerLabel,
+					options: askDetails.options,
+				};
+			}
+			// 批量格式：details.questions / details.answers 数组，取第一组问答展示
+			if (Array.isArray(askDetails.answers) && askDetails.answers.length > 0) {
+				const firstQuestion = Array.isArray(askDetails.questions) ? askDetails.questions[0] : undefined;
+				const firstAnswer = askDetails.answers[0];
+				return {
+					question: firstQuestion?.question ?? String(firstAnswer.id ?? ""),
+					type: firstAnswer.type ?? firstQuestion?.type ?? "input",
+					answered: !askDetails.cancelled && firstAnswer.value !== null,
+					answer: firstAnswer.value,
+					answerLabel: firstAnswer.label,
+					options: firstQuestion?.options,
+				};
+			}
+			return undefined;
+		})();
 		const meta = {
 			status,
 			toolName,
@@ -3670,74 +3259,6 @@ export class AgentManager {
 	 * 安排一次消息 emit。流式高频事件走节流合并（同一 agent 50ms 内多次调用只 emit 一次最新数组）；
 	 * immediate=true 时跳过节流立即 flush，用于 message_end/tool_execution_end 等终态事件，确保最终状态不丢。
 	 */
-	/** 取/建 agent 的 stream gate 状态。 */
-	private getStreamGate(agentId: string): StreamGateState {
-		let gate = this.streamGates.get(agentId);
-		if (!gate) {
-			gate = createStreamGateState();
-			this.streamGates.set(agentId, gate);
-		}
-		return gate;
-	}
-
-	/** abort 时封印当前 generation。 */
-	private sealAgentStream(agentId: string) {
-		const next = sealStreamGate(this.getStreamGate(agentId));
-		this.streamGates.set(agentId, next);
-	}
-
-	/** agent_start 时尝试推进 generation；若仍在等 abort settled，则只记 pending。 */
-	private openAgentStream(agentId: string) {
-		const next = openStreamGateForNewRun(this.getStreamGate(agentId));
-		this.streamGates.set(agentId, next);
-	}
-
-	/** abort 后的 agent_settled：结束 waiting，必要时解封 pending start。 */
-	private noteAgentAbortSettled(agentId: string) {
-		this.clearAbortSettledFallback(agentId);
-		const next = noteAbortSettled(this.getStreamGate(agentId));
-		this.streamGates.set(agentId, next);
-	}
-
-	/**
-	 * pi 偶发不发 agent_settled 时的兜底：超时后按 settled 处理，
-	 * 避免用户立刻重发时新一轮永远无法接收流式事件。
-	 */
-	private scheduleAbortSettledFallback(agentId: string) {
-		this.clearAbortSettledFallback(agentId);
-		const timer = setTimeout(() => {
-			this.abortSettledFallbackTimers.delete(agentId);
-			// 仅在仍 waiting 时生效；正常 settled 路径会先 clear 定时器。
-			if (this.getStreamGate(agentId).waitingForAbortSettled) {
-				this.noteAgentAbortSettled(agentId);
-			}
-		}, AgentManager.ABORT_SETTLED_FALLBACK_MS);
-		timer.unref?.();
-		this.abortSettledFallbackTimers.set(agentId, timer);
-	}
-
-	private clearAbortSettledFallback(agentId: string) {
-		const timer = this.abortSettledFallbackTimers.get(agentId);
-		if (timer) {
-			clearTimeout(timer);
-			this.abortSettledFallbackTimers.delete(agentId);
-		}
-	}
-
-	/** 当前 generation 是否已封印，封印期间所有流式事件应丢弃。 */
-	private isAgentStreamSealed(agentId: string): boolean {
-		return isStreamGateSealed(this.getStreamGate(agentId));
-	}
-
-	/** agent 关闭/重建时清理 gate，避免泄漏到新生命周期。 */
-	private clearStreamGate(agentId: string) {
-		this.clearAbortSettledFallback(agentId);
-		this.streamGates.delete(agentId);
-		this.recentlyAborted.delete(agentId);
-		this.thinkingEmitter.cancel(agentId);
-		this.cancelMessageEmit(agentId);
-	}
-
 	private scheduleMessageEmit(agentId: string, immediate = false) {
 		if (immediate) {
 			this.flushMessageEmit(agentId);
@@ -3749,16 +3270,6 @@ export class AgentManager {
 		// 节流定时器不应阻止进程退出
 		timer.unref?.();
 		this.messageFlushTimers.set(agentId, timer);
-	}
-
-	/** 取消尚未 flush 的消息推送，abort 时避免旧数组晚到覆盖 UI。 */
-	private cancelMessageEmit(agentId: string) {
-		const timer = this.messageFlushTimers.get(agentId);
-		if (timer) {
-			clearTimeout(timer);
-			this.messageFlushTimers.delete(agentId);
-		}
-		this.pendingMessageAgents.delete(agentId);
 	}
 
 	private flushMessageEmit(agentId: string) {

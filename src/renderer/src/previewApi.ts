@@ -390,6 +390,14 @@ export function createPreviewApi(): PiDesktopApi {
 				ok: true,
 				value: { target, value: {} },
 			}),
+			getRuntimeForkMessages: async (target) => ({
+				ok: true,
+				value: { target, value: [] },
+			}),
+			forkRuntimeSession: async (target) => ({
+				ok: true,
+				value: { cancelled: false, text: "" },
+			}),
 			getRuntimeState: async (target) => ({
 				ok: true,
 				value: { target, value: {} },

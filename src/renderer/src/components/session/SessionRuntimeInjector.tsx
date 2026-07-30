@@ -54,6 +54,8 @@ export interface SessionRuntimeInjectorProps {
   resendUserMessage?: (message: any) => void;
   editMessage?: (messageId: string, newText: string) => void;
   deleteMessage?: (messageId: string) => void;
+  forkFromUserMessage?: (message: any) => void;
+  forkingMessageId?: string | null;
 
   // Agents
   agents: AgentTab[];
@@ -135,6 +137,8 @@ export const SessionRuntimeInjector = React.memo(function SessionRuntimeInjector
     resendUserMessage,
     editMessage,
     deleteMessage,
+    forkFromUserMessage,
+    forkingMessageId,
     agents,
     activeQueuedPrompts,
     visibleQueuedPrompts,
@@ -279,6 +283,10 @@ export const SessionRuntimeInjector = React.memo(function SessionRuntimeInjector
       onDeleteMessage={
         canMutateActiveMessages ? deleteMessage : undefined
       }
+      onForkMessage={
+        canMutateActiveMessages ? forkFromUserMessage : undefined
+      }
+      forkingMessageId={forkingMessageId}
       onToast={(message: string) => showToast(message)}
       canMutateActiveMessages={canMutateActiveMessages}
       enqueueSessionPrompt={enqueueSessionPrompt}

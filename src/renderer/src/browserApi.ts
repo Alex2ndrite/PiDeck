@@ -315,6 +315,10 @@ export function createBrowserApi(): PiDesktopApi {
 			setRuntimeThinking: (target, level) =>
 				sessionRuntimeCommand(target, "thinking", { level }),
 			cloneRuntime: (target) => sessionRuntimeCommand(target, "clone"),
+			getRuntimeForkMessages: (target) =>
+				sessionRuntimeCommand(target, "get-fork-messages"),
+			forkRuntimeSession: (target, entryId) =>
+				sessionRuntimeCommand(target, "fork", { entryId }),
 		},
 		settings: {
 			...base.settings,

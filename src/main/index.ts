@@ -14,8 +14,7 @@ import {
 import { randomUUID } from "node:crypto";
 import { basename, join } from "node:path";
 import { createWriteStream, existsSync } from "node:fs";
-import { copyFile, cp, mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
-import { spawn, type ChildProcess } from "node:child_process";
+import { copyFile, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { is } from "@electron-toolkit/utils";
 import { PetSystem, type PetSystemDeps } from "./pet";
 import {
@@ -34,6 +33,46 @@ import iconPath from "../../build/icon.png?asset";
 
 applyLinuxDisplayBackendWorkaround();
 
+// 开发态与正式版隔离 userData。
+// 否则 npm run dev 会与已安装的 PiDeck 共用数据/锁，表现为「开发启动被复用到正式版窗口」。
+// 必须在读取 settings / 版本单实例锁之前设置。
+if (!app.isPackaged) {
+	const baseUserData = app.getPath("userData");
+	// 仅在尚未指向 *-dev 时追加，避免重复拼接。
+	if (!/[\/]pi-desktop-dev$/i.test(baseUserData) && !/dev$/i.test(baseUserData)) {
+		app.setPath("userData", `${baseUserData}-dev`);
+	}
+}
+
+// Chromium 沙箱开关必须在 app.ready 前生效。
+// 默认关闭：Windows 上部分安全软件/旧 GPU 驱动会在沙箱初始化时触发原生断点（0x80000003）。
+// 用户可在「开发设置」中开启 electronChromiumSandbox，重启后走 Chromium 默认沙箱。
+const electronChromiumSandboxEnabled = readElectronChromiumSandboxPreference();
+if (!electronChromiumSandboxEnabled) {
+	// 关闭沙箱时显式附带 no-sandbox，避免部分环境仍按默认策略启用。
+	app.commandLine.appendSwitch("no-sandbox");
+}
+
+// 按「应用版本」隔离的单实例：同版本复用窗口，不同版本可并行。
+// 不用 Electron requestSingleInstanceLock：它按 userData 全局互斥，会导致 0.6.7 与 0.6.8 无法同开。
+// focus 回调稍后挂到 focusMainWindow（定义在文件后部），避免顶层 TDZ。
+let focusExistingWindow: (() => void) | null = null;
+const singleInstanceEnabled = readSingleInstancePreference();
+const versionSingleInstance = acquireVersionSingleInstance(
+	singleInstanceEnabled,
+	app.getVersion(),
+	() => {
+		focusExistingWindow?.();
+	},
+);
+const gotSingleInstanceLock = versionSingleInstance.isPrimary;
+if (singleInstanceEnabled && !gotSingleInstanceLock) {
+	// 同版本已有实例：立即退出，由主实例 watch .focus 后唤起窗口。
+	// 用 exit(0) 而不是 quit()：第二进程尚未 ready，quit 更慢。
+	app.exit(0);
+}
+
+
 // 开发模式下 stdout 管道可能断开导致 EPIPE 崩溃，全局静默处理
 process.stdout.on("error", (err: NodeJS.ErrnoException) => {
 	if (err.code === "EPIPE") return;
@@ -45,25 +84,11 @@ process.stderr.on("error", (err: NodeJS.ErrnoException) => {
 });
 
 process.on("uncaughtException", (error) => {
-	// 绝不在这里 process.exit：目标是“失败可诊断”，而不是把偶发 spawn/事件错误变成整应用闪退。
-	// 尤其 macOS arm 上 pi 子进程 ENOENT/架构不匹配时，历史上曾出现 error 事件无 listener 升级为 uncaught。
-	void appLogger?.error("process", "Uncaught exception", {
-		name: error instanceof Error ? error.name : typeof error,
-		message: error instanceof Error ? error.message : String(error),
-		stack: error instanceof Error ? error.stack : undefined,
-		platform: process.platform,
-		arch: process.arch,
-	});
+	void appLogger?.error("process", "Uncaught exception", error);
 	console.error("Uncaught exception:", error);
 });
 process.on("unhandledRejection", (reason) => {
-	void appLogger?.error("process", "Unhandled rejection", {
-		reason: reason instanceof Error
-			? { name: reason.name, message: reason.message, stack: reason.stack }
-			: reason,
-		platform: process.platform,
-		arch: process.arch,
-	});
+	void appLogger?.error("process", "Unhandled rejection", reason);
 	console.error("Unhandled rejection:", reason);
 });
 import { ipcChannels } from "../shared/ipc";
@@ -114,7 +139,6 @@ import type {
 	PromptStoreSearchResponse,
 	PromptStoreRawItem,
 	PromptStoreItem,
-	TerminalShell,
 	YaoPromptListResult,
 	YaoPromptDetailResult,
 } from "../shared/types";
@@ -122,8 +146,6 @@ import { ProjectStore } from "./projects/ProjectStore";
 import { FileSystemService } from "./fs/FileSystemService";
 import { AgentManager } from "./pi/AgentManager";
 import { PiLocator } from "./pi/PiLocator";
-import { PiProcess } from "./pi/PiProcess";
-import { PiRpcClient } from "./pi/PiRpcClient";
 import { testPiProxy } from "./pi/PiProxyTester";
 import { SessionScanner } from "./sessions/SessionScanner";
 import {
@@ -148,8 +170,7 @@ import { TelemetryService } from "./telemetry/TelemetryService";
 import { PromptManager } from "./prompts/PromptManager";
 import { XuePromptManager } from "./prompts/XuePromptManager";
 import { SkillManager } from "./skills/SkillManager";
-import { BUILT_IN_EXTENSIONS, ExtensionManager } from "./extensions/ExtensionManager";
-import { restoreAllParkedExtensions } from "./pi/piExtensionFilter";
+import { ExtensionManager } from "./extensions/ExtensionManager";
 import { ProjectResourceManager } from "./projects/ProjectResourceManager";
 import { registerProjectsIpc } from "./ipc/projectsIpc";
 import { registerGitIpc } from "./ipc/gitIpc";
@@ -225,32 +246,6 @@ let petSystem: PetSystem | null = null;
 let appLogger: AppLogger;
 let rpcLogger: RpcLogger;
 let feishuBridge: FeishuBridge | null = null;
-let activeWslEnvironment: WslEnvironment | null = null;
-
-/**
- * WSL HOME 只在这里解析一次，再把同一个环境对象下发给所有文件边界消费者。
- * 这样 root、自定义 HOME 和普通用户不会在各管理器中被分别猜测。
- */
-async function syncWslEnvironment(settings: AppSettings): Promise<WslEnvironment | null> {
-	const environment = settings.wslEnabled && settings.wslDistro && settings.wslUser
-		? await resolveWslEnvironment(settings.wslDistro, settings.wslUser, {
-			warn: (message, detail) => {
-				console.warn(`[PiDeck] ${message}`, detail);
-				void appLogger?.warn("wsl", message, detail);
-			},
-		})
-		: null;
-
-	activeWslEnvironment = environment;
-	await sessionScanner.configureWsl(environment);
-	skillManager.configureWsl(environment);
-	promptManager.configureWsl(environment);
-	extensionManager.configureWsl(environment);
-	agentManager?.configureWsl(environment);
-	configManager?.configureWsl(environment);
-	xuePromptManager?.configureWsl(environment);
-	return environment;
-}
 
 
 function sendSessionRuntimeEnvelope(event: SessionRuntimeEvent): void {
@@ -725,47 +720,17 @@ function normalizeVersion(version: string) {
 	return version.trim().replace(/^v/i, "");
 }
 
-function parseVersion(version: string) {
-	const normalized = normalizeVersion(version);
-	const dashIdx = normalized.indexOf("-");
-	const mainVer = dashIdx >= 0 ? normalized.slice(0, dashIdx) : normalized;
-	const preRel = dashIdx >= 0 ? normalized.slice(dashIdx + 1) : "";
-	return {
-		main: mainVer.split(".").map((p) => Number(p)),
-		pre: preRel
-			? preRel.split(/[.-]/).map((p) => (isNaN(Number(p)) ? p : Number(p)))
-			: [],
-	};
-}
-
-/**
- * 语义化版本比较，符合 semver 规范：
- * - 主版本号（major.minor.patch）逐段比较
- * - pre-release 版本 < 正式版（如 0.6.6-beta.1 < 0.6.6）
- * - pre-release 之间逐段比较，数字按数值、字符串按字典序
- */
 function compareVersions(left: string, right: string) {
-	const l = parseVersion(left);
-	const r = parseVersion(right);
-	const maxLen = Math.max(l.main.length, r.main.length);
-	for (let i = 0; i < maxLen; i++) {
-		const diff = (l.main[i] ?? 0) - (r.main[i] ?? 0);
+	const leftParts = normalizeVersion(left)
+		.split(/[.-]/)
+		.map((part) => Number(part) || 0);
+	const rightParts = normalizeVersion(right)
+		.split(/[.-]/)
+		.map((part) => Number(part) || 0);
+	const length = Math.max(leftParts.length, rightParts.length);
+	for (let index = 0; index < length; index += 1) {
+		const diff = (leftParts[index] ?? 0) - (rightParts[index] ?? 0);
 		if (diff !== 0) return diff;
-	}
-	// 主版本相等时比较 pre-release
-	if (l.pre.length === 0 && r.pre.length > 0) return 1;  // 正式版 > pre-release
-	if (l.pre.length > 0 && r.pre.length === 0) return -1; // pre-release < 正式版
-	// 两个都是 pre-release，逐段比较
-	const preLen = Math.max(l.pre.length, r.pre.length);
-	for (let i = 0; i < preLen; i++) {
-		if (l.pre[i] === undefined) return -1;
-		if (r.pre[i] === undefined) return 1;
-		if (typeof l.pre[i] === "number" && typeof r.pre[i] === "number") {
-			if (l.pre[i] !== r.pre[i]) return (l.pre[i] as number) - (r.pre[i] as number);
-		} else {
-			const cmp = String(l.pre[i]).localeCompare(String(r.pre[i]));
-			if (cmp !== 0) return cmp;
-		}
 	}
 	return 0;
 }
@@ -1074,17 +1039,16 @@ function refreshTrayContextMenu(): void {
 	]));
 }
 
+
 /** 从托盘/任务栏/二次启动唤起主窗口：处理最小化、隐藏到托盘两种状态。 */
 function focusMainWindow() {
 	if (!mainWindow || mainWindow.isDestroyed()) return;
 	if (mainWindow.isMinimized()) mainWindow.restore();
-	// 托盘隐藏时需重新显示任务栏按钮，否则只 focus 可能仍不可见。
 	if (typeof mainWindow.setSkipTaskbar === "function") {
 		mainWindow.setSkipTaskbar(false);
 	}
 	mainWindow.show();
 	mainWindow.focus();
-	// Windows：短暂置顶再取消，避免已有窗口在后台时 second-instance 只亮任务栏不前置。
 	if (process.platform === "win32") {
 		mainWindow.setAlwaysOnTop(true);
 		mainWindow.setAlwaysOnTop(false);
@@ -1124,7 +1088,10 @@ function setupTray() {
 
 	// 双击托盘图标恢复窗口（Windows 常见交互）
 	tray.on("double-click", () => {
-		focusMainWindow();
+		if (mainWindow && !mainWindow.isDestroyed()) {
+			mainWindow.show();
+			mainWindow.focus();
+		}
 	});
 
 	refreshTrayContextMenu();
@@ -1338,14 +1305,11 @@ async function createWindow() {
 		? "#111315"
 		: (lightBgColors[lightBg] ?? "#f3f4f1");
 
-	const startupWindowMode = settingsStore.get().startupWindowMode ?? "maximized";
-	const startupBounds = resolveStartupWindowBounds(startupWindowMode);
-
 	mainWindow = new BrowserWindow({
 		show: showMainWindowImmediately,
 		backgroundColor,
-		width: startupBounds.width,
-		height: startupBounds.height,
+		width: 1480,
+		height: 960,
 		minWidth: 880,
 		minHeight: 640,
 		title: "",
@@ -1355,8 +1319,7 @@ async function createWindow() {
 		...(windowOptions.trafficLightPosition ? { trafficLightPosition: windowOptions.trafficLightPosition } : {}),
 		webPreferences: {
 			preload: mainPreloadPath,
-			// 与启动期 no-sandbox 开关一致；改配置后必须整应用重启。
-			sandbox: electronChromiumSandboxEnabled,
+			sandbox: false,
 			contextIsolation: true,
 			nodeIntegration: false,
 			webviewTag: true,
@@ -1374,12 +1337,10 @@ async function createWindow() {
 		printStartupInfo();
 	}
 
-	// 按外观设置的启动预设调整尺寸；隐藏态先 maximize/fullscreen，减少首帧跳动。
-	applyStartupWindowMode(
-		mainWindow,
-		startupWindowMode,
-		showMainWindowImmediately,
-	);
+	// 窗口保持隐藏时先最大化，再加载页面；避免 ready-to-show 后再最大化造成首帧布局跳变。
+	if (!showMainWindowImmediately) {
+		mainWindow.maximize();
+	}
 
 	// 所有 target="_blank" 或 window.open 的链接统一经同一入口处理，遵守用户设置的打开方式。
 	mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -1411,19 +1372,7 @@ async function createWindow() {
 	);
 	mainWindow.webContents.on("render-process-gone", (_event, details) => {
 		const level: AppLogLevel = details.reason === "clean-exit" ? "info" : "error";
-		void appLogger.log(level, "app", "Main window renderer process gone", {
-			...details,
-			platform: process.platform,
-			arch: process.arch,
-		});
-	});
-	// 子进程（含 GPU/utility）异常退出：Mac 上偶发“整窗闪一下”，需要留下 reason/exitCode。
-	app.on("child-process-gone", (_event, details) => {
-		void appLogger.error("process", "Child process gone", {
-			...details,
-			platform: process.platform,
-			arch: process.arch,
-		});
+		void appLogger.log(level, "app", "Main window renderer process gone", details);
 	});
 	mainWindow.webContents.on("preload-error", (_event, preloadPath, error) => {
 		void appLogger.error("app", "Main window preload failed", {
@@ -2072,10 +2021,6 @@ function registerIpc() {
 		toSessionCommandIpcError: sessionCommandIpcError,
 	});
 
-	ipcMain.handle(ipcChannels.terminalShells, () => {
-		return terminalManager.listShells();
-	});
-
 	// ── 配置管理 ──────────────────────────────────────
 
 	// 后台预取 pi --list-models 缓存：registerIpc 完成后异步执行一次，
@@ -2140,41 +2085,10 @@ async function detectExternalEditorsOnFirstLaunch() {
 	void appLogger.info("editor", "External editors detected on first launch", { count: detected.length });
 }
 
-// ── 持久化轻量 pi RPC 进程（用于快速文本生成，避免每次启动开销） ──────
-let genProcess: ChildProcess | null = null;
-let genRpcClient: PiRpcClient | null = null;
-let genProcessCwd = "";
-let genIdleTimer: NodeJS.Timeout | null = null;
-
-/** 清理快速生成进程，包括 RPC 客户端和空闲定时器 */
-function stopGenProcess() {
-	if (genIdleTimer) {
-		clearTimeout(genIdleTimer);
-		genIdleTimer = null;
-	}
-	genRpcClient?.close();
-	genRpcClient = null;
-	if (genProcess && genProcess.exitCode === null) {
-		try { genProcess.kill(); } catch { /* ignore */ }
-	}
-	genProcess = null;
-	genProcessCwd = "";
-}
-
-/** 重置空闲定时器：30 分钟无请求自动杀掉进程释放内存 */
-function resetGenIdleTimer() {
-	if (genIdleTimer) clearTimeout(genIdleTimer);
-	genIdleTimer = setTimeout(() => {
-		void appLogger?.debug("git", "QuickGen idle timeout, killing process");
-		stopGenProcess();
-	}, 30 * 60 * 1000);
-	if (genIdleTimer && typeof genIdleTimer === "object") genIdleTimer.unref?.();
-}
-
-// 同版本二次启动的唤起由 acquireVersionSingleInstance 的 .focus 文件 + handleVersionFocusRequest 完成。
-// 不再使用 Electron 全局 second-instance（它无法按版本区分）。
-
 app.whenReady().then(async () => {
+	// 未拿到同版本主实例锁时不要继续初始化，避免第二进程短暂闪窗。
+	if (singleInstanceEnabled && !gotSingleInstanceLock) return;
+
 	projectStore = new ProjectStore(() => mainCopy("dialog.chooseProjectFolder"));
 	fileSystemService = new FileSystemService();
 	sessionScanner = new SessionScanner(mainCopy);
@@ -2363,19 +2277,9 @@ app.whenReady().then(async () => {
 	});
 	terminalManager = new TerminalSessionManager(
 		(agentId) => agentManager.getCwd(agentId),
-		(channel, payload) => {
-			try {
-				if (mainWindow && !mainWindow.webContents.isDestroyed()) {
-					mainWindow.webContents.send(channel, payload);
-				}
-			} catch {
-				// 窗口已关闭时静默忽略，避免 pty 后发事件抛 "Object has been destroyed"
-			}
-		},
+		(channel, payload) => mainWindow?.webContents.send(channel, payload),
 	);
 
-	// 启动关键路径只等设置加载与 IPC 注册，尽快 createWindow。
-	// 扩展部署、WSL 同步、代理/Web 服务/宠物等后置，避免打包后点击启动要先等一长串磁盘/网络 IO。
 	await settingsStore.load();
 	setFeishuConfigDefaultBotName(feishuT(currentFeishuLocale(), "bridge.defaultBotName"));
 	const initialSessionSettings = settingsStore.get();
@@ -2432,188 +2336,71 @@ app.whenReady().then(async () => {
 			if (configManager) configManager.configureWsl(null);
 			if (xuePromptManager) xuePromptManager.configureWsl(null);
 		}
-	});
-});
+	};
+	await syncWslConfig();
 
-/**
- * 窗口出现后的后台启动任务。
- * 这些工作不影响首帧可见，但会拖慢 packaged app 的“点击图标 → 窗口出来”。
- */
-async function runPostWindowStartupTasks(): Promise<void> {
-	// 启动后异步校准内置扩展：对比 resources 与用户目录全文，不一致则覆盖。
-	// 用户手动移除的记在 removedBuiltInExtensions，跳过自动部署。
+	// 自动部署 PiDeck 内置扩展：这些扩展提供桌面端差异预览、提问卡片和 Plan Mode。
+	// Windows 和 WSL 环境各自部署一份，保证切换 pi 来源后扩展仍然可用。
 	const deployExtensionsTo = async (homeDir: string) => {
-		// 迁移旧的 pi disabledExtensions 配置到 PiDeck 自有设置
-		try {
-			const piSettingsPath = join(homeDir, ".pi", "agent", "settings.json");
-			const piRaw = await readFile(piSettingsPath, "utf-8").catch(() => "");
-			if (piRaw) {
-				const piSettings = JSON.parse(piRaw) as { disabledExtensions?: string[] };
-				const oldDisabled = piSettings.disabledExtensions ?? [];
-				const piDeckSettings = settingsStore.get();
-				const currentRemoved = new Set(piDeckSettings.removedBuiltInExtensions ?? []);
-				let changed = false;
-				for (const entry of oldDisabled) {
-					if (entry.startsWith("pi-deck-") && !currentRemoved.has(entry)) {
-						currentRemoved.add(entry);
-						changed = true;
-					}
-				}
-				// 清除旧的 pi disabledExtensions 防止重复迁移
-				if (piSettings.disabledExtensions && piSettings.disabledExtensions.length > 0) {
-					piSettings.disabledExtensions = piSettings.disabledExtensions.filter(
-						(s) => !s.startsWith("pi-deck-")
-					);
-					await writeFile(piSettingsPath, JSON.stringify(piSettings, null, 2), "utf-8").catch(() => {});
-				}
-				if (changed) {
-					await settingsStore.update({ removedBuiltInExtensions: [...currentRemoved] });
-				}
-			}
-		} catch {
-			// 迁移失败不影响主流程
-		}
-
-		const removedBuiltIn = new Set(settingsStore.get().removedBuiltInExtensions ?? []);
-		const summary = {
-			homeDir,
-			installed: [] as string[],
-			updated: [] as string[],
-			unchanged: [] as string[],
-			skippedRemoved: [] as string[],
-			missingSource: [] as string[],
-			failed: [] as Array<{ name: string; error: string }>,
-		};
-
-		// 并行校准：磁盘 IO 为主，互不依赖
-		await Promise.all(
-			BUILT_IN_EXTENSIONS.map(async (extensionName) => {
-				if (removedBuiltIn.has(extensionName)) {
-					summary.skippedRemoved.push(extensionName);
-					// 历史「仅标记移除、文件仍保留」会让 pi 继续加载残留扩展，
-					// 与三方同名工具（如 rpiv-todo 的 todo）冲突导致 RPC 启动失败。启动时清残留。
-					try {
-						await rm(join(homeDir, ".pi", "agent", "extensions", extensionName), { force: true });
-					} catch (error) {
-						const message = error instanceof Error ? error.message : String(error);
-						summary.failed.push({ name: extensionName, error: `purge residual: ${message}` });
-						console.error(`Failed to purge residual ${extensionName}:`, error);
-					}
-					return;
-				}
-				try {
-					const result = await ensurePiDeckExtension(extensionName, homeDir);
-					if (result === "installed") summary.installed.push(extensionName);
-					else if (result === "updated") summary.updated.push(extensionName);
-					else if (result === "unchanged") summary.unchanged.push(extensionName);
-					else if (result === "missing-source") summary.missingSource.push(extensionName);
-				} catch (error) {
-					const message = error instanceof Error ? error.message : String(error);
-					summary.failed.push({ name: extensionName, error: message });
-					console.error(`Failed to sync ${extensionName}:`, error);
-				}
-			}),
-		);
-
-		const changedCount = summary.installed.length + summary.updated.length;
-		if (changedCount > 0) {
-			// 文件有变时清扩展列表缓存，配置页/下次 list 能看到最新状态
-			extensionManager.invalidateListCache();
-		}
-
-		void appLogger.info("extension", "Built-in extensions sync finished", {
-			homeDir: summary.homeDir,
-			installed: summary.installed,
-			updated: summary.updated,
-			unchanged: summary.unchanged,
-			skippedRemoved: summary.skippedRemoved,
-			missingSource: summary.missingSource,
-			failed: summary.failed,
-			changedCount,
-		});
-		if (summary.failed.length > 0) {
-			void appLogger.warn("extension", "Some built-in extensions failed to sync", {
-				homeDir: summary.homeDir,
-				failed: summary.failed,
+		const extDisabledPath = join(homeDir, ".pi", "agent", "settings.json");
+		const disabledExtList: string[] = await readFile(extDisabledPath, "utf-8")
+			.then((raw: string) => JSON.parse(raw).disabledExtensions ?? [])
+			.catch(() => [] as string[]);
+		const disabledBuiltIn = new Set<string>(disabledExtList);
+		for (const extensionName of ["pi-deck-ask-question.ts", "pi-deck-nul-redirect-fix.ts", "pi-deck-plan-mode.ts", "pi-deck-todo.ts"]) {
+			if (disabledBuiltIn.has(extensionName)) continue;
+			await ensurePiDeckExtension(extensionName, homeDir).catch((error) => {
+				console.error(`Failed to install ${extensionName}:`, error);
 			});
 		}
 	};
-
-	// 并行做无依赖的后台初始化，缩短窗口出现后的空闲等待。
-	await Promise.all([
-		syncWslEnvironment(settingsStore.get()).catch((error) => {
-			console.error("Failed to sync WSL config:", error);
-		}),
-		deployExtensionsTo(app.getPath("home")).catch((error) => {
-			console.error("Failed to deploy extensions:", error);
-		}),
-		applyDesktopProxy(settingsStore.get()).catch((error) => {
-			console.error("Failed to apply desktop proxy:", error);
-		}),
-		// 预热 pi --version 缓存：避免首次创建 Agent 时 trust 路径同步卡住 数秒。
-		PiProcess.warmVersionCache(settingsStore.get()).catch((error) => {
-			console.warn("[PiDeck] Failed to warm pi version cache:", error);
-		}),
-		appLogger.info("app", "Application started", {
-			version: app.getVersion(),
-			platform: process.platform,
-			arch: process.arch,
-			installationType: settingsStore.get().installationType,
-		}),
-	]);
-
-	// WSL 启用时额外部署到动态解析出的 HOME。
-	if (activeWslEnvironment) {
-		void deployExtensionsTo(activeWslEnvironment.windowsHome).catch(() => {
-			console.warn("[PiDeck] Failed to deploy extensions to WSL, skipping");
+	// 始终部署到 Windows 本地 home
+	await deployExtensionsTo(app.getPath("home"));
+	// WSL 启用时额外部署到 WSL 目录（通过 \\wsl$ UNC）
+	const wslSettings = settingsStore.get();
+	if (wslSettings.wslEnabled && wslSettings.wslDistro && wslSettings.wslUser) {
+		const wslUncHome = `\\\\wsl$\\${wslSettings.wslDistro}\\home\\${wslSettings.wslUser}`;
+		await deployExtensionsTo(wslUncHome).catch(() => {
+			console.warn('[PiDeck] Failed to deploy extensions to WSL, skipping');
 		});
 	}
 
 	// 补齐 pi settings.json 缺失的默认配置项，新安装或精简配置的用户无需手动添加。
-	void ensureAllPiSettingsDefaults().catch((error) => {
+	await ensureAllPiSettingsDefaults().catch((error) => {
 		console.error("Failed to ensure pi settings defaults:", error);
 	});
 
-	// 清理上次异常退出留下的 codeisland 停放文件，避免扩展在磁盘上永久消失。
-	try {
-		const home = app.getPath("home");
-		const restored = restoreAllParkedExtensions([
-			join(home, ".pi", "agent", "extensions"),
-		]);
-		if (restored.length > 0) {
-			void appLogger.info("extension", "Restored parked incompatible extensions from previous session", {
-				restored,
-			});
-		}
-	} catch (error) {
-		console.error("Failed to restore parked extensions:", error);
-	}
-
 	// 清理已废弃的 pi-deck-project-trust 扩展：RPC 模式下 pi 的 project_trust 事件 hasUI 恒为 false，
 	// 该扩展无法弹窗，信任确认改由桌面端 AgentManager.ensureProjectTrust 自行处理，删除残留避免用户误解。
-	void removeStalePiDeckExtension("pi-deck-project-trust.ts").catch((error) => {
+	await removeStalePiDeckExtension("pi-deck-project-trust.ts").catch((error) => {
 		console.error("Failed to remove stale pi-deck-project-trust extension:", error);
 	});
 
 	// 清理已废弃的 pi-deck-file-capture 扩展：该扩展的功能已被 renderer 端的直接工具参数解析取代。
-	void removeStalePiDeckExtension("pi-deck-file-capture.ts").catch((error) => {
+	await removeStalePiDeckExtension("pi-deck-file-capture.ts").catch((error) => {
 		console.error("Failed to remove stale pi-deck-file-capture extension:", error);
 	});
 
-	void webServiceManager.applySettings(settingsStore.get()).catch((error) => {
+	await appLogger.info("app", "Application started", {
+		version: app.getVersion(),
+		platform: process.platform,
+		arch: process.arch,
+		installationType: settingsStore.get().installationType,
+	});
+	await applyDesktopProxy(settingsStore.get());
+	await webServiceManager.applySettings(settingsStore.get()).catch((error) => {
 		console.error("Failed to start web service:", error);
 		void settingsStore.update({ webServiceEnabled: false });
 	});
+	registerIpc();
+	registerFeishuIpc();
 
-	// 自动连接：如果已有 Bot 配置，自动启动飞书连接
+	// 🆕 自动连接：如果已有 Bot 配置，自动启动飞书连接
 	autoConnectFeishu();
+
 	sendTelemetryHeartbeat();
-
-	// 启动后预热扩展列表缓存，打开配置页时优先命中内存结果。
-	void extensionManager.list(false).catch((error) => {
-		void appLogger.warn("extension", "Warmup extensions list failed", error);
-	});
-
+	await createWindow();
+	setupTray();
 	void detectExternalEditorsOnFirstLaunch().catch((error) => {
 		void appLogger.warn("editor", "External editor first launch detection failed", error);
 	});
@@ -2653,27 +2440,25 @@ async function runPostWindowStartupTasks(): Promise<void> {
 			void appLogger.warn("settings", "Failed to ensure rpcTimeout minimum", error);
 		});
 	}, 0);
-}
 
-/** ensurePiDeckExtension 的校准结果，供启动任务汇总日志。 */
-type PiDeckExtensionSyncResult =
-	| "installed"
-	| "updated"
-	| "unchanged"
-	| "missing-source";
+	// macOS dock 点击或任务栏点击时恢复窗口
+	app.on("activate", () => {
+		if (mainWindow) {
+			mainWindow.show();
+			mainWindow.focus();
+		} else {
+			void createWindow().catch((error) => {
+				void appLogger.error("app", "Failed to create window on activate", error);
+			});
+		}
+	});
+});
 
 /**
  * 将 PiDeck 内置的 pi 扩展部署到用户扩展目录，使 pi 自动加载。
- * 启动时异步对比 resources 源文件与 ~/.pi/agent/extensions 目标：
- * - 目标不存在 → 安装
- * - 内容不一致（老版本/用户手改）→ 覆盖为 PiDeck 当前版本
- * - 内容一致 → 跳过写盘
- * 用户在设置里「移除」的内置扩展由调用方按 removedBuiltInExtensions 跳过，本函数不读该列表。
+ * 仅在目标文件不存在或内容不一致时覆盖写入，避免不必要的磁盘操作。
  */
-async function ensurePiDeckExtension(
-	extensionName: string,
-	wslHome?: string,
-): Promise<PiDeckExtensionSyncResult> {
+async function ensurePiDeckExtension(extensionName: string, wslHome?: string): Promise<void> {
 	const home = wslHome ?? app.getPath("home");
 	const extensionsDir = join(home, ".pi", "agent", "extensions");
 	const targetPath = join(extensionsDir, extensionName);
@@ -2683,34 +2468,20 @@ async function ensurePiDeckExtension(
 		? join(app.getAppPath(), "resources", "extensions", extensionName)
 		: join(process.resourcesPath, "extensions", extensionName);
 
+	// 检查源文件是否存在
 	const sourceContent = await readFile(sourcePath, "utf-8").catch(() => null);
 	if (!sourceContent) {
 		console.warn(`[PiDeck] Extension source not found: ${sourcePath}`);
-		void appLogger?.warn("extension", "Built-in extension source missing", {
-			extensionName,
-			sourcePath,
-		});
-		return "missing-source";
+		return;
 	}
 
+	// 读取目标文件，只在内容不一致时覆盖（兼顾首次安装和版本更新）
 	const existingContent = await readFile(targetPath, "utf-8").catch(() => null);
-	// 全文比对：任意与 resources 不一致都覆盖，避免用户仍跑旧版 ask/plan/todo 扩展。
-	if (existingContent === sourceContent) {
-		return "unchanged";
-	}
+	if (existingContent === sourceContent) return;
 
-	const action: PiDeckExtensionSyncResult = existingContent == null ? "installed" : "updated";
 	await mkdir(extensionsDir, { recursive: true });
 	await writeFile(targetPath, sourceContent, "utf-8");
-	console.log(`[PiDeck] ${action === "installed" ? "Installed" : "Updated"} extension: ${targetPath}`);
-	void appLogger?.info("extension", `Built-in extension ${action}`, {
-		extensionName,
-		targetPath,
-		sourcePath,
-		previousBytes: existingContent?.length ?? 0,
-		nextBytes: sourceContent.length,
-	});
-	return action;
+	console.log(`[PiDeck] Installed extension: ${targetPath}`);
 }
 
 /**
@@ -2779,8 +2550,8 @@ async function ensureAllPiSettingsDefaults(): Promise<void> {
 	await ensurePiSettingsDefaults(winDir, piVersion).catch(() => {});
 
 	// WSL（如果已配置）
-	if (activeWslEnvironment) {
-		const wslDir = join(activeWslEnvironment.windowsHome, ".pi", "agent");
+	if (s.wslEnabled && s.wslDistro && s.wslUser) {
+		const wslDir = join(`\\\\wsl$\\${s.wslDistro}\\home\\${s.wslUser}`, ".pi", "agent");
 		await ensurePiSettingsDefaults(wslDir, piVersion).catch(() => {});
 	}
 }
@@ -2792,11 +2563,8 @@ app.on("before-quit", () => {
 	void webServiceManager?.stop();
 	terminalManager?.closeAll();
 	agentManager?.stopAll();
-	// 退出前刷盘会话摘要缓存，保证下次冷启动可复用未变化文件的摘要。
-	void sessionScanner?.flushSummaryCache();
 	petSystem?.stop();
 	petSystem = null;
-	stopGenProcess();
 });
 
 app.on("window-all-closed", () => {

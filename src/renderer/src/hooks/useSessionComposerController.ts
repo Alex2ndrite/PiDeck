@@ -832,7 +832,22 @@ export function useSessionComposerController(
     try {
       requireSessionCommand(await desktopApi.sessions.compactRuntime(target));
     } catch (error) {
-      showNotice(error instanceof Error ? error.message : String(error), 4000);
+      // 主进程会把 pi 的可读错误原样抛出；去掉 IPC 包装后映射友好文案，避免「会话太小」吓人。
+      const raw = error instanceof Error ? error.message.trim() : String(error ?? "").trim();
+      const detail = raw
+        .replace(/^Error invoking remote method ['"][^'"]+['"]:\s*/i, "")
+        .replace(/^Error:\s*/i, "")
+        .trim();
+      const lower = detail.toLowerCase();
+      const friendly =
+        /nothing to compact|already compacted/i.test(lower)
+          ? t("app.compactNothingToDo")
+          : /session too small|too small/i.test(lower)
+            ? t("app.compactSessionTooSmall")
+            : detail
+              ? t("app.compactFailedWithReason", { error: detail })
+              : t("app.compactFailed");
+      showNotice(friendly, 6500);
     }
   }, [runtime?.agentId, runtime?.runtimeGeneration, sessionId, setDraft, send]);
 

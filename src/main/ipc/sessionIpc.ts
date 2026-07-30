@@ -429,6 +429,36 @@ export function registerSessionIpc(deps: SessionIpcDeps): void {
 			}
 		},
 	);
+	// fork 与 clone 共用 replaceAgentSession：RPC 成功后刷新 sessionPath / 消息投影
+	ipcMain.handle(
+		ipcChannels.sessionsRuntimeGetForkMessages,
+		(_event, target: SessionRuntimeTarget) =>
+			sessionRuntimeCoordinator.getRuntimeForkMessages(target),
+	);
+	ipcMain.handle(
+		ipcChannels.sessionsRuntimeFork,
+		async (_event, target: SessionRuntimeTarget, entryId: string) => {
+			const validated = sessionRuntimeCoordinator.validateTarget(target);
+			if (!validated.ok) return validated;
+			try {
+				return {
+					ok: true as const,
+					value: await replaceAgentSession(
+						target.agentId,
+						() => agentManager.forkSession(target.agentId, entryId),
+					),
+				};
+			} catch (error) {
+				return {
+					ok: false as const,
+					error: {
+						code: "SESSION_COMMAND_FAILED" as const,
+						debugDetails: error instanceof Error ? error.message : String(error),
+					},
+				};
+			}
+		},
+	);
 	ipcMain.handle(
 		ipcChannels.codexSessionsScan,
 		async (_event, projectId: string) => {

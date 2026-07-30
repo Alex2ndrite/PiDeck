@@ -63,6 +63,8 @@ export type SessionViewProps = {
   onResendUserMessage?: (message: any) => void;
   onEditMessage?: (messageId: string, newText: string) => void;
   onDeleteMessage?: (messageId: string) => void;
+  onForkMessage?: (message: any) => void;
+  forkingMessageId?: string | null;
   onToast: (message: string) => void;
   canMutateActiveMessages: boolean;
 
@@ -133,6 +135,8 @@ export function SessionView({
   onResendUserMessage,
   onEditMessage,
   onDeleteMessage,
+  onForkMessage,
+  forkingMessageId,
   onToast,
   canMutateActiveMessages,
   enqueueSessionPrompt,
@@ -202,6 +206,10 @@ export function SessionView({
         onDeleteMessage={
           canMutateActiveMessages ? onDeleteMessage : undefined
         }
+        onForkMessage={
+          canMutateActiveMessages ? onForkMessage : undefined
+        }
+        forkingMessageId={forkingMessageId}
         onToast={onToast}
       />
 

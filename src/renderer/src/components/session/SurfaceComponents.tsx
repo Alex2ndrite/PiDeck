@@ -78,6 +78,7 @@ import {
 	SquarePen,
 	Send,
 	UserPen,
+	GitFork,
 } from "lucide-react";
 import { getFileIconSeti, getFileIconColor, getFileTypeLabel } from "../../fileIcons";
 import { normalizeSessionPathForCompare } from "../../agentListDisplay";
@@ -957,6 +958,8 @@ export const UserBubble = memo(function UserBubble(props: {
 	onResendUserMessage?: (message: ChatMessage) => void;
 	onEditMessage?: (messageId: string, newText: string) => void;
 	onDeleteMessage?: (messageId: string) => void;
+	/** 从该用户消息 fork 新会话；忙碌时不展示入口 */
+	onForkMessage?: (message: ChatMessage) => void;
 	/** 是否为最后一条用户消息，用于控制重发按钮的显隐 */
 	isLastUserMessage?: boolean;
 	/** 仅当该消息后出现 error/abort 时显示重发（取代无条件 isLastUserMessage） */
@@ -965,10 +968,14 @@ export const UserBubble = memo(function UserBubble(props: {
 	validFilePaths?: Set<string>;
 	/** Agent 正在处理请求或流式输出中时禁用编辑/删除等操作按钮 */
 	agentRunning?: boolean;
+	/** fork 进行中：仅当前消息禁用按钮，避免连点重复 fork */
+	forking?: boolean;
 	/** 打开多选分享弹框 */
 	onEnterMultiSelect?: () => void;
 }) {
 	const { message } = props;
+	// 空闲时始终展示 fork 入口；entryId 解析放到点击时做（meta 缺失时走 getForkMessages 回退）。
+	const canFork = Boolean(props.onForkMessage) && !props.agentRunning;
 	const rowRef = useRef<HTMLElement | null>(null);
 	const [editing, setEditing] = useState(false);
 	const [editText, setEditText] = useState("");
@@ -1093,6 +1100,18 @@ export const UserBubble = memo(function UserBubble(props: {
 						</button>
 				{!editing && !props.agentRunning && (
 					<>
+						{canFork && (
+							<button
+								type="button"
+								className="user-turn-action-btn"
+								disabled={props.forking}
+								onClick={() => props.onForkMessage?.(message)}
+								title={t("app.forkFromMessageTitle")}
+								aria-label={t("app.forkFromMessage")}
+							>
+								<GitFork size={14} strokeWidth={1.8} aria-hidden="true" />
+							</button>
+						)}
 						{props.onEditMessage && (
 							<button className="user-turn-action-btn" onClick={() => {
 								setEditText(cleanText);

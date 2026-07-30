@@ -64,6 +64,8 @@ export interface SessionAgentGateway {
 	): Promise<{ text: string; images?: ImageContent[] }>;
 	setModel(agentId: string, provider: string, modelId: string): Promise<unknown>;
 	setThinking(agentId: string, level: string): Promise<unknown>;
+	getForkMessages(agentId: string): Promise<Array<{ entryId: string; text: string }>>;
+	forkSession(agentId: string, entryId: string): Promise<unknown>;
 	sendUIResponse(
 		agentId: string,
 		requestId: string,
@@ -341,6 +343,27 @@ export class SessionRuntimeCoordinator {
 		return this.runTargetCommand(
 			target,
 			(agentId) => this.agents.prepareResendFromMessage(agentId, messageId),
+		);
+	}
+
+	/** 列出可 fork 的用户消息 entryId（供 UI 在 meta.entryId 缺失时回退匹配）。 */
+	getRuntimeForkMessages(
+		target: SessionRuntimeTarget,
+	): Promise<SessionCommandResult<SessionTargetedValue<Array<{ entryId: string; text: string }>>>> {
+		return this.runTargetCommand(
+			target,
+			(agentId) => this.agents.getForkMessages(agentId),
+		);
+	}
+
+	/** 按 entryId 执行 pi /fork；成功后调用方需走 replaceAgentSession 刷新绑定。 */
+	forkRuntimeSession(
+		target: SessionRuntimeTarget,
+		entryId: string,
+	): Promise<SessionCommandResult<SessionTargetedValue<unknown>>> {
+		return this.runTargetCommand(
+			target,
+			(agentId) => this.agents.forkSession(agentId, entryId),
 		);
 	}
 
