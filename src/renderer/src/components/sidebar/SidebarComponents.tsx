@@ -11,6 +11,9 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "../ui-shadcn/dropdown-menu";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "../ui-shadcn/dialog";
+import { Input } from "../ui-shadcn/input";
+import { Button } from "../ui-shadcn/button";
 import type { SessionSource, SessionSummary, Project, AgentTab } from "../../../../shared/types";
 
 export function SessionManagerModal(props: {
@@ -575,14 +578,14 @@ export function WorktreeCreateDialog(props: {
 		return slug || "workspace";
 	}, [name]);
 
+	// #115 U5：外壳换 shadcn Dialog；分支名预览逻辑不变
 	return (
-		<div className="context-backdrop worktree-create-backdrop" onClick={props.onClose}>
-			<div
-				className="worktree-create-dialog"
-				onClick={(e) => e.stopPropagation()}
-			>
-				<h3>{t("app.worktreeCreateTitle")}</h3>
-				<input
+		<Dialog open onOpenChange={(open) => { if (!open) props.onClose(); }}>
+			<DialogContent className="sm:max-w-sm worktree-create-dialog">
+				<DialogHeader>
+					<DialogTitle>{t("app.worktreeCreateTitle")}</DialogTitle>
+				</DialogHeader>
+				<Input
 					ref={inputRef}
 					type="text"
 					className="worktree-create-input"
@@ -602,23 +605,18 @@ export function WorktreeCreateDialog(props: {
 						{t("app.worktreeBranchPreview", { name: previewSlug })}
 					</p>
 				)}
-				<div className="worktree-create-actions">
-					<button
-						className="worktree-create-cancel"
-						onClick={props.onClose}
-						disabled={props.creating}
-					>
+				<DialogFooter>
+					<Button variant="outline" onClick={props.onClose} disabled={props.creating}>
 						{t("common.cancel")}
-					</button>
-					<button
-						className="worktree-create-confirm"
+					</Button>
+					<Button
 						disabled={!name.trim() || props.creating}
 						onClick={() => props.onCreate(name.trim())}
 					>
 						{props.creating ? t("app.worktreeCreating") : t("app.worktreeCreate")}
-					</button>
-				</div>
-			</div>
-		</div>
+					</Button>
+				</DialogFooter>
+			</DialogContent>
+		</Dialog>
 	);
 }

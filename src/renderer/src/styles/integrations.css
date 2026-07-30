@@ -1486,15 +1486,7 @@
 }
 
 .logs-filters input,
-.logs-level-select .ui-select-control {
-  height: var(--control-height-md);
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-sm);
-  background: var(--color-bg-panel);
-  color: var(--color-text-primary);
-  padding: 7px 9px;
-  font-size: var(--font-size-control);
-}
+
 
 .logs-level-select {
   position: relative;
@@ -1517,11 +1509,7 @@
 }
 
 .logs-filters input:focus-visible,
-.logs-level-select .ui-select-control:focus-visible {
-  border-color: var(--color-accent);
-  box-shadow: var(--focus-ring);
-  outline: 0;
-}
+
 
 .logs-filters input[type="datetime-local"] {
   flex: 0 0 210px;

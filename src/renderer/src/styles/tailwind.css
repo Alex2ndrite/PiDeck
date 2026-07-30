@@ -1,13 +1,12 @@
 /**
- * Tailwind v4 入口（UI 2.0 / issue #115，批次 U0）。
+ * Tailwind v4 入口（UI 2.0 / issue #115）。
  *
- * 共存策略：新旧样式并行期间**不引入 preflight**——Tailwind 的全局 reset 会冲击
- * 现有手写 CSS 的布局假设，preflight 在旧样式删除完成后再开启（U5 收口）。
- * 这里只加载 theme tokens + utilities，生成的工具类挂在 @layer utilities，
- * 由 styles.css 最后引入保证优先级。
+ * #115 U5 收口：shadcn 组件已全面接管交互层，旧组件 CSS 已删除，
+ * 现启用完整 Tailwind（含 preflight 全局 reset）。legacy 域样式
+ * （timeline/composer/terminal 等）均显式声明自身排版，reset 不应改变
+ * 布局结构；个别依赖浏览器默认样式的地方在视觉收口阶段逐个修正。
  */
-@import "tailwindcss/theme.css";
-@import "tailwindcss/utilities";
+@import "tailwindcss";
 /* shadcn 组件的 enter/exit 动画类（animate-in/fade-in/zoom-in…）由该包提供。 */
 @import "tw-animate-css";
 

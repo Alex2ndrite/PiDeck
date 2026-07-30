@@ -9,6 +9,13 @@ import {
 import { createPortal } from "react-dom";
 import { GitBranch, Loader2, RefreshCw, RotateCcw } from "lucide-react";
 import { ConfirmDialog } from "../AppParts";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "../../ui-shadcn/dropdown-menu";
 import { showNotice } from "../../../utils/notice";
 import type { CommitDetail, CommitEntry, GitChangedFile } from "../../../../../shared/types";
 import { t, type TranslationKey } from "../../../i18n";
@@ -1002,15 +1009,12 @@ export function SourceControlGraph(props: GitGraphProps) {
               onMouseLeave={handleCardMouseLeave}
             />
           )}
-          {/* 提交右键菜单 */}
+          {/* 提交右键菜单（#115 U5：Radix DropdownMenu，虚拟坐标 Trigger 定位） */}
           {contextMenu && (
-            <div className="context-backdrop" onClick={closeContextMenu}>
-              <div
-                className="context-menu"
-                style={{ left: contextMenu.x, top: contextMenu.y }}
-                onClick={(event) => event.stopPropagation()}
-              >
-                <button
+            <DropdownMenu open onOpenChange={(open) => { if (!open) closeContextMenu(); }}>
+              <DropdownMenuTrigger aria-hidden tabIndex={-1} style={{ position: "fixed", left: contextMenu.x, top: contextMenu.y, width: 0, height: 0, padding: 0, border: 0, background: "transparent", pointerEvents: "none" }} />
+              <DropdownMenuContent align="start" side="bottom">
+                <DropdownMenuItem
                   disabled={contextMenuLoading !== null}
                   onClick={() =>
                     runGitAction(
@@ -1030,8 +1034,8 @@ export function SourceControlGraph(props: GitGraphProps) {
                     <GitBranch size={14} />
                   )}
                   {t("git.cherryPick")}
-                </button>
-                <button
+                </DropdownMenuItem>
+                <DropdownMenuItem
                   disabled={contextMenuLoading !== null}
                   onClick={() =>
                     runGitAction(
@@ -1051,9 +1055,9 @@ export function SourceControlGraph(props: GitGraphProps) {
                     <RotateCcw size={14} />
                   )}
                   {t("git.revert")}
-                </button>
-                <hr className="context-separator" />
-                <button
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
                   disabled={contextMenuLoading !== null}
                   onClick={() =>
                     runGitAction(
@@ -1072,8 +1076,8 @@ export function SourceControlGraph(props: GitGraphProps) {
                     <Loader2 size={14} className="git-spin" />
                   ) : null}
                   {t("git.resetSoft")}
-                </button>
-                <button
+                </DropdownMenuItem>
+                <DropdownMenuItem
                   disabled={contextMenuLoading !== null}
                   onClick={() =>
                     runGitAction(
@@ -1092,8 +1096,8 @@ export function SourceControlGraph(props: GitGraphProps) {
                     <Loader2 size={14} className="git-spin" />
                   ) : null}
                   {t("git.resetMixed")}
-                </button>
-                <button
+                </DropdownMenuItem>
+                <DropdownMenuItem
                   disabled={contextMenuLoading !== null}
                   onClick={() => {
                     closeContextMenu();
@@ -1117,10 +1121,10 @@ export function SourceControlGraph(props: GitGraphProps) {
                   }}
                 >
                   {t("git.resetHard")}
-                </button>
-                <hr className="context-separator" />
-                <button
-                  className="danger"
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  variant="destructive"
                   disabled={contextMenuLoading !== null}
                   onClick={() => {
                     closeContextMenu();
@@ -1146,9 +1150,9 @@ export function SourceControlGraph(props: GitGraphProps) {
                     <Loader2 size={14} className="git-spin" />
                   ) : null}
                   {t("git.dropCommit")}
-                </button>
-              </div>
-            </div>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
           {/* 确认弹框 */}
           {confirmAction && (

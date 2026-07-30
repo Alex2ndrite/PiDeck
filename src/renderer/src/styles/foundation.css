@@ -1215,9 +1215,6 @@ select:focus-visible {
   background: var(--color-bg-hover);
   color: var(--color-accent);
 }
-.ui-icon-button svg {
-  display: block;
-}
 .ui-button {
   min-height: var(--control-height-md);
   display: inline-flex;
@@ -1962,13 +1959,7 @@ select:focus-visible {
 }
 
 /* ── Worktree 创建对话框 ── */
-.worktree-create-backdrop {
-  z-index: 960;
-  display: grid;
-  place-items: center;
-  background: var(--overlay-backdrop);
-  backdrop-filter: blur(2px);
-}
+
 .worktree-create-dialog {
   position: relative;
   width: min(380px, calc(100vw - 48px));
@@ -2027,46 +2018,6 @@ select:focus-visible {
   font-size: var(--font-size-caption);
   color: var(--color-text-secondary);
   font-family: var(--font-family-business);
-}
-.worktree-create-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 16px;
-}
-.worktree-create-actions button {
-  padding: 7px 14px;
-  font-size: var(--font-size-caption);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  border: 1px solid var(--color-border-subtle);
-  background: var(--color-bg-panel);
-  color: var(--color-text-primary);
-  transition:
-    background 0.15s,
-    border-color 0.15s,
-    color 0.15s,
-    box-shadow 0.15s;
-}
-.worktree-create-actions button:hover:not(:disabled) {
-  background: var(--color-bg-hover);
-  border-color: var(--color-border-strong);
-}
-.worktree-create-actions button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-.worktree-create-actions .worktree-create-confirm {
-  background: var(--color-accent);
-  color: white;
-  border-color: var(--color-accent);
-}
-.worktree-create-actions .worktree-create-confirm:hover:not(:disabled) {
-  /* 确认按钮 hover 必须保持明确的主按钮对比度，避免被通用 hover 白底覆盖。 */
-  border-color: var(--color-accent-strong);
-  background: var(--color-accent-strong);
-  color: var(--color-text-inverse);
-  box-shadow: var(--focus-ring);
 }
 
 .filter-indicator {
@@ -3070,12 +3021,7 @@ body.is-resizing .splitter::before {
 }
 
 /* 文件树新建项弹层：输入框占满宽度，避免 label/input 挤在一行 */
-.drawer-create-item-dialog .ui-text-field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-bottom: 16px;
-}
+
 .file-action-menu button,
 .session-combo-menu button {
   width: 100%;
