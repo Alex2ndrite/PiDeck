@@ -20,6 +20,8 @@ import {
 } from "lucide-react";
 import { normalizeSessionPathForCompare } from "../../agentListDisplay";
 import { Button } from "../ui-shadcn/button";
+import { Input } from "../ui-shadcn/input";
+import { ConfirmDialog } from "../ui-shadcn/ConfirmDialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../ui-shadcn/collapsible";
 import { getFileIconSeti, getFileIconColor, getFileTypeLabel } from "../../fileIcons";
 import { t } from "../../i18n";
@@ -497,7 +499,7 @@ function SessionsPanel(props: {
 		<div className="sessions-panel">
 			<div className="panel-action-row">
 				<span>{t("drawer.sessionCount", { count: parentSessions.length })}</span>
-				<button onClick={props.onRefresh}>{t("common.refresh")}</button>
+				<Button variant="ghost" size="sm" onClick={props.onRefresh}>{t("common.refresh")}</Button>
 			</div>
 			{parentSessions.length === 0 && (
 				<div className="sessions-empty">
@@ -517,7 +519,7 @@ function SessionsPanel(props: {
 					<div className="session-card">
 					{renamingPath === session.filePath ? (
 						<div className="session-rename-row">
-							<input
+							<Input
 								ref={inputRef}
 								value={editValue}
 								onChange={(e) => setEditValue(e.target.value)}
@@ -530,15 +532,17 @@ function SessionsPanel(props: {
 								}}
 								autoFocus
 							/>
-							<button onClick={confirmRename}>{t("common.save")}</button>
-							<button
+							<Button size="sm" onClick={confirmRename}>{t("common.save")}</Button>
+							<Button
+								size="sm"
+								variant="outline"
 								onClick={() => {
 									setRenamingPath(null);
 									setEditValue("");
 								}}
 							>
 								{t("common.cancel")}
-							</button>
+							</Button>
 						</div>
 					) : (
 						<div className="session-card-display">
@@ -563,7 +567,8 @@ function SessionsPanel(props: {
 								</div>
 							</button>
 							<div className="session-card-actions">
-								<button
+								<Button
+									variant="ghost"
 									className="session-rename-button"
 									title={t("menu.copySession")}
 									disabled={Boolean(sessionActionLoading)}
@@ -584,8 +589,9 @@ function SessionsPanel(props: {
 											? t("menu.copying")
 											: t("common.copy")}
 									</span>
-								</button>
-								<button
+								</Button>
+								<Button
+									variant="ghost"
 									className="session-rename-button"
 									title={t("menu.exportHtml")}
 									disabled={Boolean(sessionActionLoading)}
@@ -606,16 +612,18 @@ function SessionsPanel(props: {
 											? t("menu.exporting")
 											: t("common.export")}
 									</span>
-								</button>
-								<button
+								</Button>
+								<Button
+									variant="ghost"
 									className="session-rename-button"
 									title={t("common.rename")}
 									onClick={() => startRename(session)}
 								>
 									<span>{t("common.rename")}</span>
-								</button>
-								<button
-									className="session-rename-button danger"
+								</Button>
+								<Button
+									variant="ghost"
+									className="session-rename-button text-destructive"
 									title={t("common.delete")}
 									disabled={Boolean(sessionActionLoading)}
 									onClick={() => setDeleteConfirmSession(session)}
@@ -628,7 +636,7 @@ function SessionsPanel(props: {
 											? t("drawer.sessionActionDeleting")
 											: t("common.delete")}
 									</span>
-								</button>
+								</Button>
 							</div>
 							{/* sessionActionNotice 已改用 toast (sonner) 实现 */}
 						</div>
@@ -673,15 +681,11 @@ function SessionsPanel(props: {
 			})}
 			{deleteConfirmSession && (() => {
 					const deleteChildren = parentToChildren.get(normalizeSessionPathForCompare(deleteConfirmSession.filePath) ?? "") ?? [];
+					// #115 U5：删除确认统一走 shadcn ConfirmDialog（danger 变体），删掉散装 backdrop
 					return (
-				<div className="session-delete-confirm-backdrop" onClick={() => setDeleteConfirmSession(null)}>
-					<section
-						className="session-delete-confirm"
-						onClick={(event) => event.stopPropagation()}
-					>
-						<strong>{t("drawer.sessionDeleteTitle")}</strong>
-						<p>
-							{deleteChildren.length > 0
+						<ConfirmDialog
+							title={t("drawer.sessionDeleteTitle")}
+							message={deleteChildren.length > 0
 								? t("drawer.sessionDeleteBodyWithChildren", {
 										name: deleteConfirmSession.name || t("common.untitled"),
 										count: deleteChildren.length,
@@ -689,28 +693,21 @@ function SessionsPanel(props: {
 								: t("drawer.sessionDeleteBody", {
 										name: deleteConfirmSession.name || t("common.untitled"),
 									})}
-						</p>
-						<div className="session-delete-confirm-actions">
-							<button onClick={() => setDeleteConfirmSession(null)}>{t("common.cancel")}</button>
-							<button
-								className="danger"
-								onClick={() => {
-									const target = deleteConfirmSession;
-									setDeleteConfirmSession(null);
-									void runSessionAction(
-										target,
-										"delete",
-										() => props.onDelete(target),
-										t("drawer.sessionDeleted"),
-									);
-								}}
-							>
-								{t("common.delete")}
-							</button>
-						</div>
-					</section>
-				</div>
-			); })()
+							confirmLabel={t("common.delete")}
+							danger
+							onCancel={() => setDeleteConfirmSession(null)}
+							onConfirm={() => {
+								const target = deleteConfirmSession;
+								setDeleteConfirmSession(null);
+								void runSessionAction(
+									target,
+									"delete",
+									() => props.onDelete(target),
+									t("drawer.sessionDeleted"),
+								);
+							}}
+						/>
+					); })()
 		}
 		</div>
 	);
