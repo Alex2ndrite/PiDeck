@@ -3,6 +3,9 @@ const SettingsModal = lazy(() => import("../app/SettingsModal").then((module) =>
 import { ConfirmDialog } from "./OverlayParts";
 import { TrustConfirmModal } from "../app/TrustConfirmModal";
 import { CloseIconButton } from "../ui/IconButton";
+import { Modal } from "../ui/Modal";
+import { Button } from "../ui/Button";
+import { Textarea } from "../ui-shadcn/textarea";
 import { t } from "../../i18n";
 import type { AppInfo, FeedbackEnvironment, Project } from "../../../../shared/types";
 
@@ -68,16 +71,14 @@ export function FeedbackOverlay({ open, project, appInfo, loadEnvironment, onClo
 	const issueUrl = `https://github.com/ayuayue/pi-desktop/issues/new?title=${encodeURIComponent(issueTitle)}&body=${encodeURIComponent(report)}`;
 	const copyReport = async () => { await navigator.clipboard.writeText(report); onCopy?.(); };
 	return (
-		<div className="modal-backdrop feedback-backdrop" onClick={onClose}>
-			<section className="feedback-modal" onClick={(event) => event.stopPropagation()}>
-				<div className="modal-header feedback-header"><div><strong>{t("feedback.title")}</strong><small>{t("feedback.intro")}</small></div><CloseIconButton label={t("common.close")} onClick={onClose} /></div>
-				<div className="feedback-body">
-					<div className="feedback-form-section"><div className="feedback-section-header"><strong>{t("feedback.descriptionLabel")}</strong><small>{t("feedback.descriptionHint")}</small></div><textarea className="feedback-textarea" value={description} onChange={(event) => setDescription(event.target.value)} placeholder={t("feedback.descriptionPlaceholder")} /><div className="feedback-section-header"><strong>{t("feedback.stepsLabel")}</strong><small>{t("feedback.stepsHint")}</small></div><textarea className="feedback-textarea" value={steps} onChange={(event) => setSteps(event.target.value)} placeholder={t("feedback.stepsPlaceholder")} /></div>
-					<div className="feedback-environment-section"><div className="feedback-section-header"><strong>{t("feedback.environmentTitle")}</strong><small>{loading ? t("feedback.reportLoading") : t("feedback.environmentHint")}</small></div><pre className="feedback-environment-content">{report}</pre></div>
-				</div>
-				<div className="feedback-actions"><button onClick={() => void copyReport()}>{t("feedback.copyReport")}</button><button onClick={() => void onOpenExternal("https://github.com/ayuayue")}>{t("feedback.authorGithub")}</button><button className="primary" onClick={() => void onOpenExternal(issueUrl)}>{t("feedback.openIssue")}</button></div>
-			</section>
-		</div>
+		<Modal open onClose={onClose} size="medium" contentClassName="feedback-modal-shell">
+			<div className="modal-header feedback-header"><div><strong>{t("feedback.title")}</strong><small>{t("feedback.intro")}</small></div><CloseIconButton label={t("common.close")} onClick={onClose} /></div>
+			<div className="feedback-body">
+				<div className="feedback-form-section"><div className="feedback-section-header"><strong>{t("feedback.descriptionLabel")}</strong><small>{t("feedback.descriptionHint")}</small></div><Textarea className="feedback-textarea" value={description} onChange={(event) => setDescription(event.target.value)} placeholder={t("feedback.descriptionPlaceholder")} /><div className="feedback-section-header"><strong>{t("feedback.stepsLabel")}</strong><small>{t("feedback.stepsHint")}</small></div><Textarea className="feedback-textarea" value={steps} onChange={(event) => setSteps(event.target.value)} placeholder={t("feedback.stepsPlaceholder")} /></div>
+				<div className="feedback-environment-section"><div className="feedback-section-header"><strong>{t("feedback.environmentTitle")}</strong><small>{loading ? t("feedback.reportLoading") : t("feedback.environmentHint")}</small></div><pre className="feedback-environment-content">{report}</pre></div>
+			</div>
+			<div className="feedback-actions"><Button variant="secondary" onClick={() => void copyReport()}>{t("feedback.copyReport")}</Button><Button variant="secondary" onClick={() => void onOpenExternal("https://github.com/ayuayue")}>{t("feedback.authorGithub")}</Button><Button variant="primary" onClick={() => void onOpenExternal(issueUrl)}>{t("feedback.openIssue")}</Button></div>
+		</Modal>
 	);
 }
 
