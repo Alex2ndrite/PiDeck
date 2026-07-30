@@ -3,6 +3,9 @@ import { showNotice } from "../../utils/notice";
 
 import { Check, FileEdit, Pencil, ToggleLeft, ToggleRight, Trash2, X } from "lucide-react";
 import { LazyMonacoEditor } from "../ui/LazyMonacoEditor";
+import { Modal } from "../ui/Modal";
+import { CloseIconButton } from "../ui/IconButton";
+import { ConfirmDialog } from "../ui-shadcn/ConfirmDialog";
 import type {
 	PiExtensionSummary,
 	PiPromptTemplateSummary,
@@ -314,26 +317,14 @@ export function ProjectResourcesModal(props: {
 	};
 
 	return (
-		<div className="modal-backdrop project-resources-backdrop" onClick={props.onClose}>
-			<section
-				className="project-resources-dialog"
-				role="dialog"
-				aria-modal="true"
-				onClick={(event) => event.stopPropagation()}
-			>
+		<>
+		<Modal open onClose={props.onClose} size="medium" contentClassName="project-resources-dialog">
 				<header className="project-resources-header">
 					<div>
 						<strong>{t("projectResources.title")}</strong>
 						<small>{props.project.path}</small>
 					</div>
-					<button
-						type="button"
-						onClick={props.onClose}
-						aria-label={t("common.close")}
-						title={t("common.close")}
-					>
-						<X size={18} />
-					</button>
+					<CloseIconButton label={t("common.close")} onClick={props.onClose} />
 				</header>
 
 				<div className="project-resources-toolbar">
@@ -619,37 +610,24 @@ export function ProjectResourcesModal(props: {
 						</div>
 					</div>
 				)}
-			</section>
+			</Modal>
 
-			{/* 统一确认删除弹框 */}
+			{/* 统一确认删除弹框（#115 U5：换 shadcn ConfirmDialog） */}
 			{deleteTarget && (
-				<div className="modal-backdrop" onClick={() => { if (!deleteBusy) setDeleteTarget(null); }}>
-					<section
-						className="project-resources-confirm-dialog"
-						role="dialog"
-						aria-modal="true"
-						onClick={(event) => event.stopPropagation()}
-					>
-						<strong>{t("common.deleteConfirm")}</strong>
-						<p>
-							{deleteTarget.kind === "skill"
-								? t("projectResources.deleteSkillConfirm", { name: deleteTarget.item.name })
-								: deleteTarget.kind === "extension"
-									? t("projectResources.deleteExtensionConfirm", { name: deleteTarget.item.source })
-									: t("projectResources.deletePromptConfirm", { name: deleteTarget.item.name })}
-						</p>
-						<div className="rename-dialog-actions">
-							<button disabled={deleteBusy} onClick={() => setDeleteTarget(null)}>
-								{t("common.cancel")}
-							</button>
-							<button className="danger" disabled={deleteBusy} onClick={() => void confirmDelete()}>
-								{deleteBusy ? t("common.deleting") : t("common.delete")}
-							</button>
-						</div>
-					</section>
-				</div>
+				<ConfirmDialog
+					title={t("common.deleteConfirm")}
+					message={deleteTarget.kind === "skill"
+						? t("projectResources.deleteSkillConfirm", { name: deleteTarget.item.name })
+						: deleteTarget.kind === "extension"
+							? t("projectResources.deleteExtensionConfirm", { name: deleteTarget.item.source })
+							: t("projectResources.deletePromptConfirm", { name: deleteTarget.item.name })}
+					confirmLabel={deleteBusy ? t("common.deleting") : t("common.delete")}
+					danger
+					onCancel={() => { if (!deleteBusy) setDeleteTarget(null); }}
+					onConfirm={() => void confirmDelete()}
+				/>
 			)}
-		</div>
+		</>
 	);
 }
 
