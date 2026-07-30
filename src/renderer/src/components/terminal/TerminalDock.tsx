@@ -7,10 +7,13 @@ import {
 } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
+import { WebLinksAddon } from "@xterm/addon-web-links";
 import "@xterm/xterm/css/xterm.css";
+import { openInSystemBrowser } from "../../utils/openExternal";
 import { showNotice } from "../../utils/notice";
 import { writeClipboard } from "../../utils/clipboard";
 import { ChevronDown, ChevronUp, MoreHorizontal, Plus, X } from "lucide-react";
+import { ConfirmDialog } from "../ui-shadcn/ConfirmDialog";
 import type { PiDesktopApi } from "../../../../preload";
 import type { SessionRuntimeTarget, TerminalTab } from "../../../../shared/types";
 import { t } from "../../i18n";
@@ -269,6 +272,8 @@ export function TerminalDock(props: {
 		});
 		const fit = new FitAddon();
 		terminal.loadAddon(fit);
+		// 终端内 URL 可点：交给系统浏览器，与消息区链接策略一致（#115 U3）
+		terminal.loadAddon(new WebLinksAddon((_event, uri) => openInSystemBrowser(uri)));
 		terminal.open(containerRef.current);
 		let resizeFrame: number | null = null;
 		const dataDisposable = terminal.onData((data) => {
@@ -573,23 +578,14 @@ export function TerminalDock(props: {
 				</div>
 			)}
 			{confirmCloseAllOpen && (
-				<div className="terminal-confirm-backdrop">
-					<div className="terminal-confirm">
-						<strong>{t("terminal.closeAllConfirm")}</strong>
-						<p>{t("terminal.closeAllDescription")}</p>
-						<div className="terminal-confirm-actions">
-							<button onClick={() => setConfirmCloseAllOpen(false)}>
-								{t("common.cancel")}
-							</button>
-							<button
-								className="danger"
-								onClick={() => void closeAllTabs()}
-							>
-								{t("terminal.closeAll")}
-							</button>
-						</div>
-					</div>
-				</div>
+				<ConfirmDialog
+					title={t("terminal.closeAllConfirm")}
+					message={t("terminal.closeAllDescription")}
+					confirmLabel={t("terminal.closeAll")}
+					danger
+					onConfirm={() => void closeAllTabs()}
+					onCancel={() => setConfirmCloseAllOpen(false)}
+				/>
 			)}
 		</section>
 	);
