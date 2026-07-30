@@ -89,11 +89,12 @@ export default defineConfig({
     },
     resolve: {
       alias: {
+        "@": resolve("src/renderer/src"),
         "@renderer": resolve("src/renderer/src"),
         "@shared": resolve("src/shared"),
       },
     },
-    plugins: [react(), katexWoff2OnlyPlugin(), monacoTsWorkerPlugin()],
+    plugins: [react(), tailwindcss(), katexWoff2OnlyPlugin(), monacoTsWorkerPlugin()],
     build: {
       // 不计算 gzip 压缩后大小（节约构建时间）
       reportCompressedSize: false,

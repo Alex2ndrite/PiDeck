@@ -3,3 +3,5 @@
 @import "./styles/surfaces.css";
 @import "./styles/integrations.css";
 @import "./styles/workspace.css";
+/* Tailwind 工具类层必须最后引入，保证 utilities 优先级高于手写样式（#115 U0）。 */
+@import "./styles/tailwind.css";

@@ -1,0 +1,72 @@
+/**
+ * Tailwind v4 入口（UI 2.0 / issue #115，批次 U0）。
+ *
+ * 共存策略：新旧样式并行期间**不引入 preflight**——Tailwind 的全局 reset 会冲击
+ * 现有手写 CSS 的布局假设，preflight 在旧样式删除完成后再开启（U5 收口）。
+ * 这里只加载 theme tokens + utilities，生成的工具类挂在 @layer utilities，
+ * 由 styles.css 最后引入保证优先级。
+ */
+@import "tailwindcss/theme.css";
+@import "tailwindcss/utilities";
+
+/* 暗色模式跟随应用现有的 data-theme 机制（document.documentElement.dataset.theme），
+ * shadcn 组件的 dark: 变体直接落到现有主题开关上，不引入第二套暗色方案。 */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/**
+ * Token 平移表：@theme inline 让 Tailwind 工具类直接引用现有 CSS 变量，
+ * 单一事实源仍在 foundation.css（明暗主题切换零改动）；后续 token 迁移到
+ * Tailwind  theme 时只需把值内联进来，类名不变。
+ */
+@theme inline {
+  /* ── 颜色：语义 token ── */
+  --color-bg-app: var(--color-bg-app);
+  --color-bg-panel: var(--color-bg-panel);
+  --color-bg-sidebar: var(--color-bg-sidebar);
+  --color-bg-muted: var(--color-bg-muted);
+  --color-bg-hover: var(--color-bg-hover);
+  --color-bg-active: var(--color-bg-active);
+  --color-text-primary: var(--color-text-primary);
+  --color-text-secondary: var(--color-text-secondary);
+  --color-text-tertiary: var(--color-text-tertiary);
+  --color-text-inverse: var(--color-text-inverse);
+  --color-border-subtle: var(--color-border-subtle);
+  --color-border-default: var(--color-border-default);
+  --color-border-strong: var(--color-border-strong);
+  --color-accent: var(--color-accent);
+  --color-accent-soft: var(--color-accent-soft);
+  --color-accent-strong: var(--color-accent-strong);
+  --color-danger: var(--color-danger);
+  --color-danger-soft: var(--color-danger-soft);
+  --color-warning: var(--color-warning);
+  --color-info: var(--color-info);
+
+  /* ── shadcn 约定别名：组件内部使用 bg-background/text-foreground 等类名，
+   * 映射到 PiDeck 语义 token，避免为组件单独维护第二套色板。 ── */
+  --color-background: var(--color-bg-app);
+  --color-foreground: var(--color-text-primary);
+  --color-card: var(--color-bg-panel);
+  --color-card-foreground: var(--color-text-primary);
+  --color-popover: var(--color-bg-panel);
+  --color-popover-foreground: var(--color-text-primary);
+  --color-primary: var(--color-accent);
+  --color-primary-foreground: var(--color-text-inverse);
+  --color-secondary: var(--color-bg-muted);
+  --color-secondary-foreground: var(--color-text-primary);
+  --color-muted: var(--color-bg-muted);
+  --color-muted-foreground: var(--color-text-secondary);
+  --color-destructive: var(--color-danger);
+  --color-destructive-foreground: var(--color-text-inverse);
+  --color-border: var(--color-border-default);
+  --color-input: var(--color-border-default);
+  --color-ring: var(--color-accent);
+
+  /* ── 圆角 ── */
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+
+  /* ── 字体 ── */
+  --font-sans: var(--font-family-base);
+  --font-mono: var(--font-family-mono);
+}
