@@ -1321,11 +1321,15 @@ async function createWindow() {
 		? "#111315"
 		: (lightBgColors[lightBg] ?? "#f3f4f1");
 
+	// 按外观设置的启动预设调整初始尺寸；隐藏态先 maximize/fullscreen，减少首帧跳动。
+	const startupWindowMode = settingsStore.get().startupWindowMode ?? "maximized";
+	const startupBounds = resolveStartupWindowBounds(startupWindowMode);
+
 	mainWindow = new BrowserWindow({
 		show: showMainWindowImmediately,
 		backgroundColor,
-		width: 1480,
-		height: 960,
+		width: startupBounds.width,
+		height: startupBounds.height,
 		minWidth: 880,
 		minHeight: 640,
 		title: "",
@@ -1353,10 +1357,13 @@ async function createWindow() {
 		printStartupInfo();
 	}
 
-	// 窗口保持隐藏时先最大化，再加载页面；避免 ready-to-show 后再最大化造成首帧布局跳变。
-	if (!showMainWindowImmediately) {
-		mainWindow.maximize();
-	}
+	// 窗口保持隐藏时先按启动预设调整（maximize/fullscreen），再加载页面；
+	// 避免 ready-to-show 后再调整造成首帧布局跳变。
+	applyStartupWindowMode(
+		mainWindow,
+		startupWindowMode,
+		showMainWindowImmediately,
+	);
 
 	// 所有 target="_blank" 或 window.open 的链接统一经同一入口处理，遵守用户设置的打开方式。
 	mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -1519,6 +1526,48 @@ function shouldUseDevRendererUrl() {
 
 function shouldShowMainWindowImmediately() {
 	return isUsingLinuxXWaylandWorkaround(petEnabledAtLaunch);
+}
+
+/** 启动尺寸预设 → 初始窗口尺寸；全屏/最大化也给合理兜底，避免显示器信息异常时缩成最小窗。 */
+function resolveStartupWindowBounds(mode: StartupWindowMode): {
+	width: number;
+	height: number;
+} {
+	switch (mode) {
+		case "normal-compact":
+			return { width: 1100, height: 720 };
+		case "normal-medium":
+			return { width: 1280, height: 840 };
+		case "normal-large":
+			return { width: 1480, height: 960 };
+		case "maximized":
+		case "fullscreen":
+		default:
+			return { width: 1480, height: 960 };
+	}
+}
+
+/** 在窗口创建后应用启动尺寸预设；隐藏态先 maximize/fullscreen，减少首帧跳动。 */
+function applyStartupWindowMode(
+	window: BrowserWindow,
+	mode: StartupWindowMode,
+	showImmediately: boolean,
+) {
+	if (mode === "fullscreen") {
+		// setFullScreen 在某些平台要求窗口已 show；隐藏态先 maximize 再在 show 后补全屏。
+		if (showImmediately) {
+			window.setFullScreen(true);
+		} else {
+			window.maximize();
+			window.once("show", () => {
+				if (!window.isDestroyed()) window.setFullScreen(true);
+			});
+		}
+		return;
+	}
+	if (mode === "maximized") {
+		window.maximize();
+	}
 }
 
 // ===== 飞书桥接 IPC =====
