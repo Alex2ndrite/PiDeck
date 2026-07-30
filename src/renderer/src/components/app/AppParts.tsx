@@ -9,6 +9,7 @@
 
 import { t } from "../../i18n";
 import { Modal } from "../ui/Modal";
+import { ConfirmDialog as ShadcnConfirmDialog } from "../ui-shadcn/ConfirmDialog";
 import type { PiInstallStatus, PiInstallExecResult } from "../../../../shared/types";
 
 // Re-exports from other modules
@@ -381,25 +382,9 @@ export function ConfirmDialog(props: {
 	confirmLabel?: string;
 	danger?: boolean;
 }) {
-	return (
-		<div className="config-modal-overlay" onClick={props.onCancel}>
-			<div className="config-modal-dialog" onClick={(e) => e.stopPropagation()}>
-				<strong>{props.title}</strong>
-				<p>{props.message}</p>
-				<div className="config-modal-actions">
-					<button className="config-btn" onClick={props.onCancel}>
-						{t("common.cancel")}
-					</button>
-					<button
-						className={`config-btn${props.danger ? " danger" : " primary"}`}
-						onClick={props.onConfirm}
-					>
-						{props.confirmLabel ?? t("common.confirm")}
-					</button>
-				</div>
-			</div>
-		</div>
-	);
+	// 实现已收敛到 ui-shadcn/ConfirmDialog（AlertDialog），此处仅保留兼容转发，
+	// 避免一次性改动所有 import 路径；后续批量替换 import 后删除本包装。
+	return <ShadcnConfirmDialog {...props} />;
 }
 
 // ============================================================
