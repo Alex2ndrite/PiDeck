@@ -10,7 +10,7 @@ function cssRule(selector) {
   return styles.match(new RegExp(`${selector} \\{([\\s\\S]*?)\\n\\}`))?.[1];
 }
 
-test("drawer uses only the short grid transition for open and close", () => {
+test("drawer motion is delegated to resizable panels, not CSS grid transition", () => {
   const shell = cssRule("\\.wechat-shell");
   const drawer = cssRule("\\.detail-drawer");
   const closedDrawer = cssRule(
@@ -18,11 +18,9 @@ test("drawer uses only the short grid transition for open and close", () => {
   );
 
   assert.ok(shell, "shell styles must exist");
-  assert.match(shell, /transition:\s*grid-template-columns 120ms/);
-  assert.match(
-    styles,
-    /body\.is-resizing \.wechat-shell \{\s*transition:\s*none;/,
-  );
+  // #115 U5：三栏宽度由 react-resizable-panels 接管，shell 不再使用 grid 轨道过渡
+  assert.doesNotMatch(shell, /transition:\s*grid-template-columns/);
+  assert.match(shell, /display:\s*flex/);
 
   assert.ok(drawer, "drawer styles must exist");
   assert.doesNotMatch(drawer, /(?:transform|will-change)\s*:/);

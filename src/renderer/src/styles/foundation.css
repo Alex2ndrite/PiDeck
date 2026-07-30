@@ -904,26 +904,27 @@ select:focus-visible {
   --list-expanded-width: 190px;
   --list-hover-width: 250px;
   --drawer-width: 320px;
-  /* 抽屉列宽由 JS 按实际展开状态注入，短过渡与面板滑动同步。 */
+  /* 抽屉列宽变量保留：抽屉内部动画/合成器仍引用；三栏布局本身已由
+     react-resizable-panels 接管（#115 U5），不再用 grid 轨道驱动宽度。 */
   --drawer-col-w: 0px;
   --drawer-splitter-w: 0px;
   --window-drag-height: 0px;
   height: 100vh;
   min-height: 0;
-  display: grid;
-  grid-template-columns:
-    var(--list-width) 6px minmax(0, 1fr)
-    var(--drawer-splitter-w) max(
-      var(--drawer-col-w),
-      min(var(--drawer-width), 38vw)
-    );
-  grid-template-rows: minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
   background: var(--color-bg-app);
-  transition: grid-template-columns 120ms cubic-bezier(0.22, 1, 0.36, 1);
 }
-/* 拖拽调整列宽时禁用过渡，避免宽度变化跟手延迟。 */
-body.is-resizing .wechat-shell {
-  transition: none;
+/* 三栏面板组：充满标题栏以外的全部空间 */
+.shell-panel-group {
+  flex: 1;
+  min-height: 0;
+}
+/* Panel 是库渲染的 flex item；内容需要明确撑满高度 */
+.shell-panel-list .chat-list-pane,
+.shell-panel-chat .chat-pane,
+.shell-panel-drawer .detail-drawer {
+  height: 100%;
 }
 .wechat-shell.custom-titlebar-enabled {
   --window-drag-height: 40px;
@@ -1020,16 +1021,8 @@ body.is-resizing .wechat-shell {
 .custom-titlebar-enabled button {
   -webkit-app-region: no-drag;
 }
-/* 抽屉开合已由 --drawer-col-w / --drawer-splitter-w 驱动 5 列恒定模板平滑过渡，
-   不再需要按 drawer-open / drawer-collapsed 切换轨道数。保留 class 仅为语义/选择器兼容。 */
-.wechat-shell.list-collapsed {
-  grid-template-columns:
-    0 0 minmax(0, 1fr)
-    var(--drawer-splitter-w) max(
-      var(--drawer-col-w),
-      min(var(--drawer-width), 38vw)
-    );
-}
+/* 抽屉开合的 grid 过渡随布局换装移除（#115 U5）；drawer-open/drawer-collapsed
+   class 保留仅为语义/选择器兼容。 */
 
 .chat-list-pane {
   position: relative;
