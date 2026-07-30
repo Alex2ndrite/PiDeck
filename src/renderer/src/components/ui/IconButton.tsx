@@ -1,6 +1,11 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { X } from "lucide-react";
+import { Button } from "../ui-shadcn/button";
 
+/**
+ * 图标按钮（#115 U5）：API 不变，内部为 shadcn ghost icon Button。
+ * label 同时承担 aria-label 与原生 title 提示（轻量场景不引入 Tooltip）。
+ */
 export function IconButton(props: ButtonHTMLAttributes<HTMLButtonElement> & {
 	label: string;
 	children: ReactNode;
@@ -14,15 +19,17 @@ export function IconButton(props: ButtonHTMLAttributes<HTMLButtonElement> & {
 		...buttonProps
 	} = props;
 	return (
-		<button
+		<Button
 			{...buttonProps}
 			type={type}
-			className={["ui-icon-button", className].filter(Boolean).join(" ")}
+			variant="ghost"
+			size="icon"
+			className={className}
 			aria-label={label}
 			title={title ?? label}
 		>
 			{children}
-		</button>
+		</Button>
 	);
 }
 

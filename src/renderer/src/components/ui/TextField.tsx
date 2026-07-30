@@ -1,5 +1,9 @@
 import type { KeyboardEventHandler, ReactNode } from "react";
+import { Input } from "../ui-shadcn/input";
 
+/**
+ * 文本输入字段（#115 U5）：API 不变，内部换成 shadcn Input。
+ */
 export function TextField(props: {
 	label: ReactNode;
 	value: string;
@@ -15,13 +19,9 @@ export function TextField(props: {
 	onKeyDown?: KeyboardEventHandler<HTMLInputElement>;
 }) {
 	return (
-		<label
-			className={["ui-field ui-text-field", props.className]
-				.filter(Boolean)
-				.join(" ")}
-		>
+		<label className={["ui-field", props.className].filter(Boolean).join(" ")}>
 			<span className="ui-field-label">{props.label}</span>
-			<input
+			<Input
 				type={props.type ?? "text"}
 				value={props.value}
 				placeholder={props.placeholder}
