@@ -27,21 +27,25 @@
 
 ## 📋 Changelog
 
-> **Latest: v0.6.6** (2026-07-24)
+> **Latest: v0.6.7** (2026-07-29)
 
-### v0.6.6 Release Highlights
-- 🚀 **Sidebar brand lockup redesign**: Cropped pi logo + Plantin wordmark, agent start/stop animation
-- 🚀 **Multi-tab file editor**: Up to 5 concurrent tabs, modal/drawer dual mode, diff comparison
-- 🚀 **Session reference (@-mention)**: Type & to pick sessions, select messages or full context
-- 🚀 **Feishu/Lark integration**: Bi-directional chat, streaming cards, auto group creation
-- 🚀 **Git major rewrite**: VS Code-style 3-tab panel + AI commit messages + Git graph + advanced ops
-- 🚀 **XuePrompt Chinese Prompt Store**: SQLite with 4000+ prompts, categorized/search/one-click import
-- 🚀 **Composer redesign**: OpenCode-style bottom bar: mode/Prompt/attachment/model/Think
-- 🚀 **Client message queue**: Queue while agent busy, retract to edit
-- 🚀 **Git Push / Pull**: Direct push/pull from Changes pane
-- ✨ Settings redesign (global save/cancel), per-zone font config, file sidebar enhancements, diff toggle fix
-- 🐛 Numerous bug fixes (Monaco CSP, white screen crash, WSL paths, Chinese encoding, etc.)
-- 🧪 Experimental WSL support
+### v0.6.7 Release Highlights
+- 🚀 **Compact titlebar + Codex-style right sidebar**
+- 🚀 **File editor nested under Files tab**
+- 🚀 **File tree drag / drop / move**
+- 🚀 **@ file suggestions with directory tree & search**
+- 🚀 **Composer file path refs via paste / drop**
+- 🚀 **Text links open in built-in editor**
+- 🚀 **Batch Ask Tab UI**
+- 🚀 **Ctrl/Cmd+click markdown links open system browser**
+- 🚀 **Tailwind CSS v4 + shadcn + sonner toasts**
+- 🚀 **Sidebar project expand/collapse persistence**
+- 🚀 **Session message Fork**
+- 🚀 **Boot splash official pi assembly animation**
+- ✨ **Plan mode flow polish**
+- ✨ **Composer widgets & extension UI**
+- ✨ **Context compact entry**
+- ✨ **UI color neutralization**
 
 [View Full Changelog →](CHANGELOG.md)
 

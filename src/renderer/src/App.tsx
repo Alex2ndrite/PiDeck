@@ -51,8 +51,8 @@ import {
   X,
   PanelLeft,
   PanelRight,
-  // 上下文压缩按钮：用 Shrink 表达“收拢上下文”，与模型/思考等底栏控件并列。
-  Shrink,
+  // 上下文压缩：用 FoldVertical 表达“折叠上下文”，比 Shrink 更克制、不抢模型名视线。
+  FoldVertical,
 } from "lucide-react";
 import { showNotice } from "./utils/notice";
 import { createPreviewApi } from "./previewApi";
@@ -132,7 +132,6 @@ import {
   ImagePreviewModal,
   BrandLockup,
   AgentStatusIndicator,
-  LogoMark,
   ModelPicker,
   PromptTemplatePicker,
   ProjectAvatar,
@@ -554,8 +553,16 @@ export function App() {
   if (missingElectronPreload) {
     return (
       <div className="boot-screen root-loading">
-        <div className="boot-logo root-loading-logo">
-          <LogoMark />
+        {/* 与 EmptyState / index.html 启动标同一 path，避免 LogoMark 再套一层不同底色 */}
+        <div className="boot-logo root-loading-logo" aria-hidden="true">
+          <svg viewBox="140 140 520 520" width="48" height="48">
+            <path
+              fill="#fff"
+              fillRule="evenodd"
+              d="M165.29 165.29H517.36V400H400V517.36H282.65V634.72H165.29ZM282.65 282.65V400H400V282.65Z"
+            />
+            <path fill="#fff" d="M517.36 400H634.72V634.72H517.36Z" />
+          </svg>
         </div>
         <strong>PiDeck</strong>
         <span>{t("app.preloadMissing")}</span>
@@ -659,6 +666,8 @@ export function App() {
   const [composerBangMode, setComposerBangMode] = useState<"none" | "bang" | "bang-bang">("none");
   /** 当前正在重启的 Agent，用于仅给对应会话显示 loading，避免切到其他 Agent 后仍被全局禁用。 */
   const [restartingAgentId, setRestartingAgentId] = useState<string | null>(null);
+  /** 正在 fork 的用户消息 id；用于按钮 loading，避免连点重复 fork。 */
+  const [forkingMessageId, setForkingMessageId] = useState<string | null>(null);
   /** 用户点击 ask_question 取消/abort 后的过渡标记，立即隐藏运行指示器。 */
   const [cancellingUi, setCancellingUi] = useState(false);
   const [attachedImagesByAgent, setAttachedImagesByAgent] = useState<
@@ -1286,14 +1295,18 @@ export function App() {
     theme: "system",
     lightBackground: "white",
     language: "system",
+    startupWindowMode: "maximized",
     piEnvironmentChecked: false,
     enableGitManagement: true,
     gitCommitMessagePrompt: "",
     closeToTray: true,
+    singleInstance: true,
     enableNotifications: true,
     // showThinking 由 pi agent 的 hideThinkingBlock 控制，启动后从主进程加载的真实值会覆盖此处
     showThinking: true,
     showDevTools: false,
+    // Electron Chromium 沙箱默认关，与主进程历史兼容策略一致
+    electronChromiumSandbox: false,
     piProxyEnabled: false,
     piProxyUrl: "http://127.0.0.1:7890",
     piProxyBypass: "localhost,127.0.0.1,::1",
@@ -3591,7 +3604,27 @@ export function App() {
 
   function openFilePath(path: string) {
     // 绝对路径直接打开;相对路径按当前 agent cwd / 项目目录解析。
-    const resolvedPath = resolveFileLinkPath(path, activeAgent?.cwd ?? activeProject?.path);
+    // unwrapFileChipPath 已剥尾斜杠；这里再兜底一次，兼容消息里手写的 src/
+    const cleanedPath = path.replace(/[/\\]+$/, "");
+    const resolvedPath = resolveFileLinkPath(cleanedPath, activeAgent?.cwd ?? activeProject?.path);
+    // 目录引用：在资源管理器中定位，避免被 isTextFile 误当成无扩展名文本文件打开。
+    const normalizedInput = cleanedPath.replace(/\\/g, "/");
+    const normalizedResolved = resolvedPath.replace(/\\/g, "/");
+    const isDirectoryRef = flatFiles.some(
+      (node) =>
+        node.type === "directory" &&
+        (node.path === resolvedPath ||
+          node.relativePath === normalizedInput ||
+          node.relativePath === normalizedResolved),
+    );
+    if (isDirectoryRef) {
+      void api.files.showInFolder(resolvedPath).catch((error) => {
+        showToast(t("app.openFileFailed", {
+          error: error instanceof Error ? error.message : String(error),
+        }));
+      });
+      return;
+    }
     // 文本文件→内置编辑器；二进制→系统默认应用。
     if (isTextFile(resolvedPath)) {
       viewFilePath(resolvedPath);
@@ -4640,13 +4673,22 @@ export function App() {
       showToast(t("app.compactDone"));
     } catch (e) {
       // 主进程会把 pi 的可读错误（Already compacted / session too small / 鉴权失败）原样抛出。
-      const detail = e instanceof Error ? e.message.trim() : String(e ?? "").trim();
-      showToast(
-        detail
-          ? t("app.compactFailedWithReason", { error: detail })
-          : t("app.compactFailed"),
-        6500,
-      );
+      // 对“会话太小”类错误做友好文案，避免把 IPC 包装层一起甩给用户。
+      const raw = e instanceof Error ? e.message.trim() : String(e ?? "").trim();
+      const detail = raw
+        .replace(/^Error invoking remote method ['"][^'"]+['"]:\s*/i, "")
+        .replace(/^Error:\s*/i, "")
+        .trim();
+      const lower = detail.toLowerCase();
+      const friendly =
+        /nothing to compact|already compacted/i.test(lower)
+          ? t("app.compactNothingToDo")
+          : /session too small|too small/i.test(lower)
+            ? t("app.compactSessionTooSmall")
+            : detail
+              ? t("app.compactFailedWithReason", { error: detail })
+              : t("app.compactFailed");
+      showToast(friendly, 6500);
     } finally {
       setCompacting(false);
     }
@@ -5565,6 +5607,85 @@ export function App() {
   }
 
   /**
+   * 解析用户消息对应的 pi session entryId。
+   * 优先 meta.entryId；其次 id 里的 history 片段；再回退 get_fork_messages 按正文匹配。
+   */
+  async function resolveForkEntryId(
+    agentId: string,
+    message: ChatMessage,
+  ): Promise<string | undefined> {
+    if (typeof message.meta?.entryId === "string" && message.meta.entryId) {
+      return message.meta.entryId;
+    }
+    // convertAgentMessages 生成的 id：`${agentId}-history-${entryId}`
+    const historyPrefix = `${agentId}-history-`;
+    if (message.id.startsWith(historyPrefix)) {
+      const fromId = message.id.slice(historyPrefix.length).trim();
+      if (fromId && fromId !== String(message.meta?._piDeckMsgSeq ?? "")) {
+        // 纯数字序号是无 entryId 时的 index 回退，不能当 fork entryId。
+        if (!/^\d+$/.test(fromId)) return fromId;
+      }
+    }
+    try {
+      const forkMessages = await api.agents.getForkMessages(agentId);
+      const target = message.text.trim();
+      if (!target) return undefined;
+      // 相同文案多条时取最后一次，贴近用户点的“当前这句”。
+      for (let i = forkMessages.length - 1; i >= 0; i -= 1) {
+        const item = forkMessages[i];
+        if (item?.entryId && item.text?.trim() === target) return item.entryId;
+      }
+    } catch {
+      // getForkMessages 失败时交给上层 toast
+    }
+    return undefined;
+  }
+
+  /**
+   * 从用户消息 fork 新会话（pi /fork）。
+   * 忙碌中不展示入口；点击时再解析 entryId（meta 缺失时走 getForkMessages 回退）。
+   * 成功后主进程会替换 sessionPath 并重载消息，这里把原 prompt 预填回输入框供修改再发。
+   */
+  async function forkFromUserMessage(message: ChatMessage) {
+    if (!activeAgentId || isPendingAgentId(activeAgentId) || isAgentBusy) return;
+    if (forkingMessageId) return;
+    setForkingMessageId(message.id);
+    try {
+      const entryId = await resolveForkEntryId(activeAgentId, message);
+      if (!entryId) {
+        showToast(t("app.forkMissingEntryId"), 4000);
+        return;
+      }
+      const result = await api.agents.forkSession(activeAgentId, entryId);
+      if (result?.cancelled) {
+        showToast(t("app.forkCancelled"), 3500);
+        return;
+      }
+      // 优先用 RPC 返回的原文；扩展取消/空 text 时回退到气泡正文。
+      const promptText =
+        typeof result?.text === "string" && result.text.length > 0
+          ? result.text
+          : message.text;
+      setPrompt(promptText);
+      pendingComposerCaretRef.current = promptText.length;
+      requestAnimationFrame(() => {
+        composerTextareaRef.current?.focus();
+      });
+      // 新会话文件会出现在项目会话列表；刷新侧栏避免用户误以为还在原会话。
+      if (activeProjectId) {
+        void refreshProjectSessions(activeProjectId).catch(() => undefined);
+      }
+      void api.agents.list().then(setAgents).catch(() => undefined);
+      showToast(t("app.forkDone"), 3500);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      showToast(t("app.forkFailed", { error: translateAgentErrorMessage(msg) }), 5000);
+    } finally {
+      setForkingMessageId(null);
+    }
+  }
+
+  /**
    * 处理图片文件,转为 pi RPC 可识别的 ImageContent。
    * 大图会压缩到最长边 2000px,避免 base64 过大导致 RPC 传输和模型上下文成本上升。
    */
@@ -5655,8 +5776,23 @@ export function App() {
     const liveComposerPrompt = activeAgentIdRef.current
       ? (livePromptByAgentRef.current[activeAgentIdRef.current] ?? prompt)
       : prompt;
-    // 含空格路径写成 @"C:\Users\a b\file.txt"，避免 chip 解析在空格处截断。
-    const refText = paths.map((p) => formatFilePathRef(p)).join(" ");
+    // 含空格路径写成 @"C:\Users\a b\file.txt"；工作区目录追加尾斜杠，避免 @src 被当成智能体。
+    const refText = paths
+      .map((p) => {
+        const cleaned = p.replace(/[/\\]+$/, "");
+        const normalized = cleaned.replace(/\\/g, "/");
+        const isDir =
+          /[/\\]$/.test(p) ||
+          flatFiles.some(
+            (node) =>
+              node.type === "directory" &&
+              (node.path === cleaned ||
+                node.path === p ||
+                node.relativePath === normalized),
+          );
+        return formatFilePathRef(p, { isDirectory: isDir });
+      })
+      .join(" ");
     const spacer =
       cursor > 0 &&
       liveComposerPrompt[cursor - 1] !== " " &&
@@ -5881,6 +6017,18 @@ export function App() {
       }
       if ("useNativeTitleBar" in patch) {
         notice = t("app.titleBarSaved");
+      }
+      // Chromium 沙箱依赖启动参数与 webPreferences，保存后必须整应用重启才生效。
+      if ("electronChromiumSandbox" in patch) {
+        notice = t("app.electronSandboxSaved");
+      }
+      // 单实例锁在进程启动时申请，修改后需重启才切换多开/复用行为。
+      if ("singleInstance" in patch) {
+        notice = t("app.singleInstanceSaved");
+      }
+      // 启动窗口预设仅在下次 createWindow 时应用。
+      if ("startupWindowMode" in patch) {
+        notice = t("app.startupWindowModeSaved");
       }
       // WSL/Windows pi 源切换：重新检测 pi 环境、刷新项目和会话列表
       if ("wslEnabled" in patch || "wslDistro" in patch || "wslUser" in patch) {
@@ -7522,7 +7670,9 @@ export function App() {
                       onOpenFile={openFilePath}
                       onEditMessage={editMessage}
                       onDeleteMessage={deleteMessage}
+                      onForkMessage={forkFromUserMessage}
                       agentRunning={isAgentBusy}
+                      forking={forkingMessageId === message.id}
                       validCommandNames={validCommandNames}
                       validFilePaths={validFilePaths}
                       onEnterMultiSelect={() => setMultiSelectOpen(true)}
@@ -8434,38 +8584,61 @@ export function App() {
                   </button>
                 )}
                 {/* 上下文压缩：与 /compact 同一路径。
-                    旧 ComposerToolbar 有此按钮，底栏改版后漏接；
-                    有 context 百分比时显示百分比，否则仍提供手动入口。 */}
-                {activeAgentId && !isPendingAgentId(activeAgentId) && (
-                  <button
-                    type="button"
-                    className={`composer-bar-btn compact${compacting || activeRuntimeState?.isCompacting ? " compacting" : ""}`}
-                    disabled={
-                      isAgentStarting ||
-                      compacting ||
-                      Boolean(activeRuntimeState?.isCompacting) ||
-                      Boolean(activeRuntimeState?.isStreaming)
-                    }
-                    onClick={() => void compactAgent()}
-                    title={
-                      activeRuntimeState?.contextPercent != null
-                        ? t("app.contextCompactTitle", {
-                            percent: Number(activeRuntimeState.contextPercent).toFixed(1),
-                          })
-                        : t("app.compact")
-                    }
-                    aria-label={t("app.compact")}
-                  >
-                    <Shrink size={14} strokeWidth={1.9} aria-hidden="true" />
-                    <span>
-                      {compacting || activeRuntimeState?.isCompacting
-                        ? t("app.compacting")
-                        : activeRuntimeState?.contextPercent != null
-                          ? `${t("app.compact")} ${Number(activeRuntimeState.contextPercent).toFixed(0)}%`
-                          : t("app.compact")}
-                    </span>
-                  </button>
-                )}
+                    仅在占用达到阈值后显示，避免会话过小仍点压缩触发 Nothing to compact。
+                    阈值与旧 ComposerToolbar 一致（>30%）；压缩进行中始终保留入口。 */}
+                {(() => {
+                  const contextPercent =
+                    activeRuntimeState?.contextPercent != null
+                      ? Number(activeRuntimeState.contextPercent)
+                      : null;
+                  const isCompactingNow =
+                    compacting || Boolean(activeRuntimeState?.isCompacting);
+                  // 30% 以下几乎总会被 pi 拒绝；70%/90% 用色阶提示紧迫度，而不是常驻抢眼按钮。
+                  // 压缩进行中即使百分比短暂缺失也保留入口，避免状态闪断。
+                  const showCompactButton =
+                    Boolean(activeAgentId) &&
+                    !isPendingAgentId(activeAgentId) &&
+                    (isCompactingNow ||
+                      (contextPercent != null && contextPercent > 30));
+                  if (!showCompactButton) return null;
+                  const urgency =
+                    contextPercent != null && contextPercent >= 90
+                      ? " critical"
+                      : contextPercent != null && contextPercent >= 70
+                        ? " warn"
+                        : "";
+                  return (
+                    <button
+                      type="button"
+                      className={`composer-bar-btn compact${urgency}${isCompactingNow ? " compacting" : ""}`}
+                      disabled={
+                        isAgentStarting ||
+                        isCompactingNow ||
+                        Boolean(activeRuntimeState?.isStreaming)
+                      }
+                      onClick={() => void compactAgent()}
+                      title={
+                        contextPercent != null
+                          ? t("app.contextCompactTitle", {
+                              percent: contextPercent.toFixed(1),
+                            })
+                          : t("app.compact")
+                      }
+                      aria-label={t("app.compact")}
+                    >
+                      <FoldVertical size={13} strokeWidth={1.8} aria-hidden="true" />
+                      <span>
+                        {isCompactingNow
+                          ? t("app.compacting")
+                          : contextPercent != null
+                            ? t("app.compactUsage", {
+                                percent: contextPercent.toFixed(0),
+                              })
+                            : t("app.compact")}
+                      </span>
+                    </button>
+                  );
+                })()}
               </div>
               <div className="composer-bottom-right">
                 {/* 当前项目分支只读展示：放右侧发送区前，纯文本样式无边框阴影。 */}
@@ -9030,9 +9203,13 @@ export function App() {
             setFileMenu(null);
           }}
           onAttach={() => {
+            // 目录引用必须带尾斜杠，保证渲染为路径 chip 且模型不误判为智能体 mention。
+            const ref = formatFilePathRef(fileMenu.node.relativePath, {
+              isDirectory: fileMenu.node.type === "directory",
+            });
             setPrompt(
               (current) =>
-                `${current}${current.endsWith(" ") || current.length === 0 ? "" : " "}@${fileMenu.node.relativePath} `,
+                `${current}${current.endsWith(" ") || current.length === 0 ? "" : " "}${ref} `,
             );
             setFileMenu(null);
           }}

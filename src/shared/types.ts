@@ -303,6 +303,13 @@ export type LinkOpenMode = "external" | "internal";
 export type AppFontSizeMode = "compact" | "default" | "medium" | "large" | "xlarge";
 export type AppFontBaseMode = "system" | "sans" | "serif" | "custom";
 export type AppFontMonoMode = "commit-mono" | "system-mono" | "custom";
+/** 主窗口启动尺寸预设：fullscreen 占满屏幕，maximized 最大化，其余为固定窗口 */
+export type StartupWindowMode =
+	| "fullscreen"
+	| "maximized"
+	| "normal-large"
+	| "normal-medium"
+	| "normal-compact";
 
 export type AppSettings = {
 	useNativeTitleBar: boolean;
@@ -314,6 +321,8 @@ export type AppSettings = {
 	lightBackground: LightBackgroundMode;
 	/** 界面语言，system 跟随系统语言；pseudo 用于长文案布局压力测试 */
 	language: AppLanguageMode;
+	/** 启动时主窗口尺寸预设，默认 maximized（与历史 ready-to-show 后 maximize 一致） */
+	startupWindowMode: StartupWindowMode;
 	piEnvironmentChecked: boolean;
 	/** 是否启用会话右侧的 Git 源代码管理入口与面板，默认开启以保持升级前行为。 */
 	enableGitManagement: boolean;
@@ -321,12 +330,23 @@ export type AppSettings = {
 	gitCommitMessagePrompt: string;
 	/** 关闭窗口时隐藏到系统托盘而不是退出 */
 	closeToTray: boolean;
+	/**
+	 * 单实例模式：再次打开应用时复用已有窗口（托盘隐藏也会唤起）。
+	 * 默认 true；关闭后允许同时跑多个 PiDeck 进程。
+	 */
+	singleInstance: boolean;
 	/** 会话结束时发送系统通知 */
 	enableNotifications: boolean;
 	/** 是否在会话中显示模型思考过程，默认开启 */
 	showThinking: boolean;
 	/** 是否开启开发者控制台（DevTools） */
 	showDevTools: boolean;
+	/**
+	 * Electron Chromium 渲染进程沙箱（与 pi Agent 无关）。
+	 * false（默认）：关闭沙箱，兼容 Windows 安全软件/旧 GPU 驱动；
+	 * true：启用 Chromium 沙箱，需重启 PiDeck 后生效。
+	 */
+	electronChromiumSandbox: boolean;
 	/** 是否给 pi agent 子进程注入代理环境变量，不影响 desktop 自身网络请求 */
 	piProxyEnabled: boolean;
 	/** pi agent 使用的代理地址，例如 http://127.0.0.1:7890 */

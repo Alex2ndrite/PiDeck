@@ -16,7 +16,7 @@ title: 贡献者
   <div class="contributor-info">
     <strong>1900EasonJin</strong>
     <span class="contributor-handle">@1900EasonJin</span>
-    <p>飞书/Lark 远程控制集成 — 双向对话、流式卡片、自动拉群</p>
+    <p>飞书/Lark 远程控制集成、系统标题栏侧栏开关 (#104)、宠物状态卡死修复 (#107)</p>
     <a href="https://github.com/1900EasonJin" target="_blank" rel="noreferrer">GitHub</a>
   </div>
 </div>
@@ -58,6 +58,76 @@ title: 贡献者
     <span class="contributor-handle">@pangolinknight</span>
     <p>主进程流式消息节流合并与工具结果截断，修复大会话渲染进程白屏</p>
     <a href="https://github.com/pangolinknight" target="_blank" rel="noreferrer">GitHub</a>
+  </div>
+</div>
+
+<div class="contributor-card">
+  <div class="contributor-avatar">m9</div>
+  <div class="contributor-info">
+    <strong>me9rez</strong>
+    <span class="contributor-handle">@me9rez</span>
+    <p>依赖清理、SkillManager 软连接扫描、TypeScript 增量编译产物整理 (#97, #86, #69)</p>
+    <a href="https://github.com/me9rez" target="_blank" rel="noreferrer">GitHub</a>
+  </div>
+</div>
+
+<div class="contributor-card">
+  <div class="contributor-avatar">bf</div>
+  <div class="contributor-info">
+    <strong>bfzha</strong>
+    <span class="contributor-handle">@bfzha</span>
+    <p>VS Code 风格 Git 面板与复杂工作流支持 (#68)</p>
+    <a href="https://github.com/bfzha" target="_blank" rel="noreferrer">GitHub</a>
+  </div>
+</div>
+
+<div class="contributor-card">
+  <div class="contributor-avatar">Lp</div>
+  <div class="contributor-info">
+    <strong>Lopution</strong>
+    <span class="contributor-handle">@Lopution</span>
+    <p>跨桌面边界 WSL 路径处理 (#84)</p>
+    <a href="https://github.com/Lopution" target="_blank" rel="noreferrer">GitHub</a>
+  </div>
+</div>
+
+<div class="contributor-card">
+  <div class="contributor-avatar">bs</div>
+  <div class="contributor-info">
+    <strong>buaassp</strong>
+    <span class="contributor-handle">@buaassp</span>
+    <p>隐藏内部 pi-subagent 会话 (#57)</p>
+    <a href="https://github.com/buaassp" target="_blank" rel="noreferrer">GitHub</a>
+  </div>
+</div>
+
+<div class="contributor-card">
+  <div class="contributor-avatar">zz</div>
+  <div class="contributor-info">
+    <strong>zzq168281-coder</strong>
+    <span class="contributor-handle">@zzq168281-coder</span>
+    <p>本地文件链接可交互、todo 挂件字体跟随界面设置 (#103)</p>
+    <a href="https://github.com/zzq168281-coder" target="_blank" rel="noreferrer">GitHub</a>
+  </div>
+</div>
+
+<div class="contributor-card">
+  <div class="contributor-avatar">ws</div>
+  <div class="contributor-info">
+    <strong>weishiair</strong>
+    <span class="contributor-handle">@weishiair</span>
+    <p>禁用/冲突让位时删除内置扩展用户目录文件，避免第三方扩展工具冲突导致 RPC 失败</p>
+    <a href="https://github.com/weishiair" target="_blank" rel="noreferrer">GitHub</a>
+  </div>
+</div>
+
+<div class="contributor-card">
+  <div class="contributor-avatar">cl</div>
+  <div class="contributor-info">
+    <strong>clancyclaw</strong>
+    <span class="contributor-handle">@clancyclaw</span>
+    <p>修复 RichInput 换行被吞掉，保证多行草稿完整保留</p>
+    <a href="https://github.com/clancyclaw" target="_blank" rel="noreferrer">GitHub</a>
   </div>
 </div>
 

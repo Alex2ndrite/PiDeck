@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { is } from "@electron-toolkit/utils";
 import type { PetWindowCaps } from "../../shared/types";
 import { preparePreloadPath } from "../preloadPath";
+import { readElectronChromiumSandboxPreference } from "../settings/SettingsStore";
 
 /** 三端宠物窗能力探测；Wayland 降级 */
 export function detectPetWindowCaps(): PetWindowCaps {
@@ -88,7 +89,10 @@ export class PetWindow {
 			webPreferences: {
 				preload: preloadPath,
 				partition: "persist:pet",
-				sandbox: false, contextIsolation: true, nodeIntegration: false,
+				// 与主窗口共用开发设置里的 Chromium 沙箱偏好，避免宠物窗单独写死 false。
+				sandbox: readElectronChromiumSandboxPreference(),
+				contextIsolation: true,
+				nodeIntegration: false,
 			},
 		});
 		this.win.webContents.on("preload-error", (_event, failedPreloadPath, error) => {

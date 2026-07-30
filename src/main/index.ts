@@ -21,16 +21,55 @@ import {
 	applyLinuxDisplayBackendWorkaround,
 	isUsingLinuxXWaylandWorkaround,
 } from "./linuxDisplayBackend";
+import {
+	readElectronChromiumSandboxPreference,
+	readSingleInstancePreference,
+} from "./settings/SettingsStore";
+import { acquireVersionSingleInstance } from "./singleInstance";
+import type { StartupWindowMode } from "../shared/types";
 // 使用 ?asset 后缀导入图标，electron-vite 会在构建时将其复制到输出目录并提供正确的运行时路径
 // 这解决了打包后 build/ 目录不在 asar 中导致托盘图标丢失的问题
 import iconPath from "../../build/icon.png?asset";
 
 applyLinuxDisplayBackendWorkaround();
 
-// Windows 上部分安全软件 / 旧 GPU 驱动会导致 Chromium 沙箱初始化触发原生断点异常（0x80000003），
-// 全局禁用沙箱。VS Code、Discord 等知名 Electron 桌面工具在 Windows 上同样默认禁用沙箱。
-if (process.platform === "win32") {
+// 开发态与正式版隔离 userData。
+// 否则 npm run dev 会与已安装的 PiDeck 共用数据/锁，表现为「开发启动被复用到正式版窗口」。
+// 必须在读取 settings / 版本单实例锁之前设置。
+if (!app.isPackaged) {
+	const baseUserData = app.getPath("userData");
+	// 仅在尚未指向 *-dev 时追加，避免重复拼接。
+	if (!/[\\/]pi-desktop-dev$/i.test(baseUserData) && !/dev$/i.test(baseUserData)) {
+		app.setPath("userData", `${baseUserData}-dev`);
+	}
+}
+
+// Chromium 沙箱开关必须在 app.ready 前生效。
+// 默认关闭：Windows 上部分安全软件/旧 GPU 驱动会在沙箱初始化时触发原生断点（0x80000003）。
+// 用户可在「开发设置」中开启 electronChromiumSandbox，重启后走 Chromium 默认沙箱。
+const electronChromiumSandboxEnabled = readElectronChromiumSandboxPreference();
+if (!electronChromiumSandboxEnabled) {
+	// 关闭沙箱时显式附带 no-sandbox，避免部分环境仍按默认策略启用。
 	app.commandLine.appendSwitch("no-sandbox");
+}
+
+// 按「应用版本」隔离的单实例：同版本复用窗口，不同版本可并行。
+// 不用 Electron requestSingleInstanceLock：它按 userData 全局互斥，会导致 0.6.7 与 0.6.8 无法同开。
+// focus 回调稍后挂到 focusMainWindow（定义在文件后部），避免顶层 TDZ。
+let focusExistingWindow: (() => void) | null = null;
+const singleInstanceEnabled = readSingleInstancePreference();
+const versionSingleInstance = acquireVersionSingleInstance(
+	singleInstanceEnabled,
+	app.getVersion(),
+	() => {
+		focusExistingWindow?.();
+	},
+);
+const gotSingleInstanceLock = versionSingleInstance.isPrimary;
+if (singleInstanceEnabled && !gotSingleInstanceLock) {
+	// 同版本已有实例：立即退出，由主实例 watch .focus 后唤起窗口。
+	// 用 exit(0) 而不是 quit()：第二进程尚未 ready，quit 更慢。
+	app.exit(0);
 }
 
 // 开发模式下 stdout 管道可能断开导致 EPIPE 崩溃，全局静默处理
@@ -563,6 +602,48 @@ async function installDownloadedUpdate(filePath: string) {
 	await shell.openPath(filePath);
 }
 
+/** 从托盘/任务栏/二次启动唤起主窗口：处理最小化、隐藏到托盘两种状态。 */
+function focusMainWindow() {
+	if (!mainWindow || mainWindow.isDestroyed()) return;
+	if (mainWindow.isMinimized()) mainWindow.restore();
+	// 托盘隐藏时需重新显示任务栏按钮，否则只 focus 可能仍不可见。
+	if (typeof mainWindow.setSkipTaskbar === "function") {
+		mainWindow.setSkipTaskbar(false);
+	}
+	mainWindow.show();
+	mainWindow.focus();
+	// Windows：短暂置顶再取消，避免已有窗口在后台时 second-instance 只亮任务栏不前置。
+	if (process.platform === "win32") {
+		mainWindow.setAlwaysOnTop(true);
+		mainWindow.setAlwaysOnTop(false);
+	}
+}
+
+/**
+ * 同版本次实例请求聚焦：窗口已在则前置；若窗口尚未创建/已销毁，ready 后重建。
+ * 挂到顶层 focusExistingWindow，供版本单实例锁的 .focus 信号调用。
+ */
+function handleVersionFocusRequest() {
+	if (mainWindow && !mainWindow.isDestroyed()) {
+		focusMainWindow();
+		return;
+	}
+	void app.whenReady().then(() => {
+		if (mainWindow && !mainWindow.isDestroyed()) {
+			focusMainWindow();
+			return;
+		}
+		if (settingsStore) {
+			void createWindow().catch((error) => {
+				void appLogger?.error("app", "Failed to recreate window on version focus request", error);
+			});
+		}
+	});
+}
+
+// 顶层锁回调延后绑定：focusMainWindow / createWindow 定义在锁申请之后。
+focusExistingWindow = handleVersionFocusRequest;
+
 function setupTray() {
 	// iconPath 由 electron-vite 的 ?asset 后缀自动解析，打包后也能正确定位
 	const icon = nativeImage.createFromPath(iconPath);
@@ -571,20 +652,14 @@ function setupTray() {
 
 	// 双击托盘图标恢复窗口（Windows 常见交互）
 	tray.on("double-click", () => {
-		if (mainWindow && !mainWindow.isDestroyed()) {
-			mainWindow.show();
-			mainWindow.focus();
-		}
+		focusMainWindow();
 	});
 
 	const contextMenu = Menu.buildFromTemplate([
 		{
 			label: "显示窗口",
 			click: () => {
-				if (mainWindow && !mainWindow.isDestroyed()) {
-					mainWindow.show();
-					mainWindow.focus();
-				}
+				focusMainWindow();
 			},
 		},
 		{ type: "separator" },
@@ -597,6 +672,49 @@ function setupTray() {
 		},
 	]);
 	tray.setContextMenu(contextMenu);
+}
+
+/** 启动窗口预设 → BrowserWindow 初始尺寸；fullscreen/maximized 另用 setFullScreen/maximize。 */
+function resolveStartupWindowBounds(mode: StartupWindowMode): {
+	width: number;
+	height: number;
+} {
+	switch (mode) {
+		case "normal-compact":
+			return { width: 1100, height: 720 };
+		case "normal-medium":
+			return { width: 1280, height: 840 };
+		case "normal-large":
+			return { width: 1480, height: 960 };
+		case "maximized":
+		case "fullscreen":
+		default:
+			// 全屏/最大化前仍给一个合理兜底尺寸，避免显示器信息异常时缩成最小窗
+			return { width: 1480, height: 960 };
+	}
+}
+
+/** 在窗口创建后应用启动尺寸预设；隐藏态先 maximize/fullscreen，减少首帧跳动。 */
+function applyStartupWindowMode(
+	window: BrowserWindow,
+	mode: StartupWindowMode,
+	showImmediately: boolean,
+) {
+	if (mode === "fullscreen") {
+		// setFullScreen 在某些平台要求窗口已 show；隐藏态先 maximize 再在 show 后补全屏。
+		if (showImmediately) {
+			window.setFullScreen(true);
+		} else {
+			window.maximize();
+			window.once("show", () => {
+				if (!window.isDestroyed()) window.setFullScreen(true);
+			});
+		}
+		return;
+	}
+	if (mode === "maximized") {
+		window.maximize();
+	}
 }
 
 async function openExternalUrl(url: string, forceSystem?: boolean) {
@@ -718,11 +836,14 @@ async function createWindow() {
 		? "#111315"
 		: (lightBgColors[lightBg] ?? "#f3f4f1");
 
+	const startupWindowMode = settingsStore.get().startupWindowMode ?? "maximized";
+	const startupBounds = resolveStartupWindowBounds(startupWindowMode);
+
 	mainWindow = new BrowserWindow({
 		show: showMainWindowImmediately,
 		backgroundColor,
-		width: 1480,
-		height: 960,
+		width: startupBounds.width,
+		height: startupBounds.height,
 		minWidth: 880,
 		minHeight: 640,
 		title: "",
@@ -732,7 +853,8 @@ async function createWindow() {
 		...(windowOptions.trafficLightPosition ? { trafficLightPosition: windowOptions.trafficLightPosition } : {}),
 		webPreferences: {
 			preload: mainPreloadPath,
-			sandbox: false,
+			// 与启动期 no-sandbox 开关一致；改配置后必须整应用重启。
+			sandbox: electronChromiumSandboxEnabled,
 			contextIsolation: true,
 			nodeIntegration: false,
 			webviewTag: true,
@@ -749,10 +871,12 @@ async function createWindow() {
 		printStartupInfo();
 	}
 
-	// 窗口保持隐藏时先最大化，再加载页面；避免 ready-to-show 后再最大化造成首帧布局跳变。
-	if (!showMainWindowImmediately) {
-		mainWindow.maximize();
-	}
+	// 按外观设置的启动预设调整尺寸；隐藏态先 maximize/fullscreen，减少首帧跳动。
+	applyStartupWindowMode(
+		mainWindow,
+		startupWindowMode,
+		showMainWindowImmediately,
+	);
 
 	// 所有 target="_blank" 或 window.open 的链接统一经同一入口处理，遵守用户设置的打开方式。
 	mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -3641,7 +3765,13 @@ function resetGenIdleTimer() {
 	if (genIdleTimer && typeof genIdleTimer === "object") genIdleTimer.unref?.();
 }
 
+// 同版本二次启动的唤起由 acquireVersionSingleInstance 的 .focus 文件 + handleVersionFocusRequest 完成。
+// 不再使用 Electron 全局 second-instance（它无法按版本区分）。
+
 app.whenReady().then(async () => {
+	// 未拿到同版本主实例锁时不要继续初始化，避免第二进程短暂闪窗。
+	if (singleInstanceEnabled && !gotSingleInstanceLock) return;
+
 	projectStore = new ProjectStore();
 	fileSystemService = new FileSystemService();
 	sessionScanner = new SessionScanner();
@@ -3719,9 +3849,8 @@ app.whenReady().then(async () => {
 
 	// macOS dock 点击或任务栏点击时恢复窗口
 	app.on("activate", () => {
-		if (mainWindow) {
-			mainWindow.show();
-			mainWindow.focus();
+		if (mainWindow && !mainWindow.isDestroyed()) {
+			focusMainWindow();
 		} else {
 			void createWindow().catch((error) => {
 				void appLogger.error("app", "Failed to create window on activate", error);

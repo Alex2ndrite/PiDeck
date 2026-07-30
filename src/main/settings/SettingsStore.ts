@@ -4,9 +4,44 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createDefaultExternalEditorSettings, type AppSettings } from "../../shared/types";
 
+/** 桌面端 settings.json（userData），与 pi agent settings 分离 */
+function desktopSettingsPath() {
+	return join(app.getPath("userData"), "settings.json");
+}
+
 /** pi agent 的 settings.json 路径（~/.pi/agent/settings.json） */
 function piAgentSettingsPath() {
 	return join(app.getPath("home"), ".pi", "agent", "settings.json");
+}
+
+/** 同步读取桌面 settings.json（app.ready 前可用）。文件缺失时返回空对象。 */
+function readDesktopSettingsSync(): Partial<AppSettings> {
+	try {
+		const raw = readFileSync(desktopSettingsPath(), "utf8");
+		return JSON.parse(raw) as Partial<AppSettings>;
+	} catch {
+		return {};
+	}
+}
+
+/**
+ * 在 app.ready 之前同步读取 Chromium 沙箱偏好。
+ * `no-sandbox` 必须在 ready 前 append，否则本进程已无法改 Chromium 启动参数。
+ * 缺省 false：保持历史兼容（Windows 安全软件/旧驱动）。
+ */
+export function readElectronChromiumSandboxPreference(): boolean {
+	return readDesktopSettingsSync().electronChromiumSandbox === true;
+}
+
+/**
+ * 在 app.ready 之前同步读取单实例偏好。
+ * 版本级单实例锁必须在 ready 前申请（见 main/singleInstance.ts）。
+ * 缺省 true：同一版本再次打开时复用窗口；不同版本始终可并行。
+ */
+export function readSingleInstancePreference(): boolean {
+	const value = readDesktopSettingsSync().singleInstance;
+	// 未配置时默认开启单实例；只有显式 false 才允许同版本多开。
+	return value !== false;
 }
 
 /**
@@ -36,6 +71,9 @@ const defaultSettings: AppSettings = {
   theme: "system",
   lightBackground: "white",
   language: "system",
+  // 默认最大化：与历史 createWindow 在 ready-to-show 后 maximize() 的行为一致
+  // （1480×960 只是最大化前的兜底尺寸，不是最终展示态）
+  startupWindowMode: "maximized",
   piEnvironmentChecked: false,
   enableGitManagement: true,
   gitCommitMessagePrompt: `请根据以下 git diff 生成一条中文 git commit message。
@@ -58,9 +96,13 @@ Gitmoji 对应关系：
 3. 后续用 - 列出具体变更点
 4. 直接输出 commit 消息，不要解释`,
   closeToTray: true,
+  // 默认单实例：托盘隐藏后再次点击快捷方式会唤起原窗口，而不是再开一个进程
+  singleInstance: true,
   enableNotifications: true,
   showThinking: readPiAgentShowThinking() ?? true,
   showDevTools: false,
+  // 默认关闭 Chromium 沙箱：与历史 Windows no-sandbox 兼容策略一致
+  electronChromiumSandbox: false,
   piProxyEnabled: false,
   piProxyUrl: "http://127.0.0.1:7890",
   piProxyBypass: "localhost,127.0.0.1,::1",
@@ -117,7 +159,7 @@ Gitmoji 对应关系：
 };
 
 export class SettingsStore {
-  private readonly filePath = join(app.getPath("userData"), "settings.json");
+  private readonly filePath = desktopSettingsPath();
   private settings: AppSettings = { ...defaultSettings };
 
   async load() {

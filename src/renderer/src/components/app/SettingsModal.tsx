@@ -448,6 +448,13 @@ function SettingsModalContent(props: SettingsModalProps) {
 		{ value: "blue", label: t("settings.lightBackgroundBlue") },
 		{ value: "green", label: t("settings.lightBackgroundGreen") },
 	];
+	const startupWindowModeOptions = [
+		{ value: "maximized", label: t("settings.startupWindow.maximized") },
+		{ value: "normal-large", label: t("settings.startupWindow.large") },
+		{ value: "normal-medium", label: t("settings.startupWindow.medium") },
+		{ value: "normal-compact", label: t("settings.startupWindow.compact") },
+		{ value: "fullscreen", label: t("settings.startupWindow.fullscreen") },
+	];
 	const languageOptions = [
 		{ value: "system", label: t("settings.languageSystem") },
 		{ value: "zh-CN", label: t("settings.languageZh") },
@@ -721,6 +728,14 @@ function SettingsModalContent(props: SettingsModalProps) {
 										}
 									/>
 									<SettingSwitch
+										title={t("settings.singleInstance")}
+										description={t("settings.singleInstanceDesc")}
+										checked={draftSettings.singleInstance}
+										onChange={(checked) =>
+											updateDraft({ singleInstance: checked })
+										}
+									/>
+									<SettingSwitch
 										title={t("settings.enableNotifications")}
 										checked={draftSettings.enableNotifications}
 										onChange={(checked) =>
@@ -788,6 +803,27 @@ function SettingsModalContent(props: SettingsModalProps) {
 						{activeTab === "appearance" && (
 							<>
 								<SettingsSection title={t("settings.interface")}>
+									<div className="setting-field">
+										<span>
+											{t("settings.startupWindowMode")}
+											<DirtyMarker
+												dirty={isDirty("startupWindowMode")}
+												label={t("settings.startupWindowMode")}
+											/>
+										</span>
+										<SelectField
+											value={draftSettings.startupWindowMode}
+											options={startupWindowModeOptions}
+											onChange={(value) =>
+												updateDraft({
+													startupWindowMode: value as AppSettings["startupWindowMode"],
+												})
+											}
+										/>
+										<small style={{ color: "var(--color-text-tertiary)", fontSize: "var(--font-size-caption)" }}>
+											{t("settings.startupWindowModeDesc")}
+										</small>
+									</div>
 									<div className="setting-field">
 										<span>
 											{t("settings.lightBackground")}
@@ -1202,6 +1238,16 @@ function SettingsModalContent(props: SettingsModalProps) {
 										checked={draftSettings.disableUpdateCheck}
 										onChange={(checked) =>
 											updateDraft({ disableUpdateCheck: checked })
+										}
+									/>
+
+									{/* Electron Chromium 沙箱：与 pi Agent 无关，改完需整应用重启。 */}
+									<SettingSwitch
+										title={t("settings.electronSandbox")}
+										description={t("settings.electronSandboxDesc")}
+										checked={draftSettings.electronChromiumSandbox}
+										onChange={(checked) =>
+											updateDraft({ electronChromiumSandbox: checked })
 										}
 									/>
 

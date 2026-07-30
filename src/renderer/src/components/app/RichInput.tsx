@@ -100,22 +100,38 @@ function overlapsUrl(
  */
 /**
  * 从 file chip 的 raw 取出真实路径。
- * 支持 @path 与 @"path with space" 两种写法。
+ * 支持 @path、@path/、@"path with space" 三种写法。
+ * 目录引用的尾斜杠会剥离，便于 open/showInFolder 使用真实路径。
  */
 export function unwrapFileChipPath(raw: string): string {
 	const body = raw.startsWith("@") ? raw.slice(1) : raw;
-	if (body.length >= 2 && body.startsWith('"') && body.endsWith('"')) {
-		return body.slice(1, -1);
-	}
-	return body;
+	let path =
+		body.length >= 2 && body.startsWith('"') && body.endsWith('"')
+			? body.slice(1, -1)
+			: body;
+	// 统一去掉目录标记尾斜杠（含 Windows 反斜杠），避免 FS API 拿到 "src/"
+	path = path.replace(/[/\\]+$/, "");
+	return path;
 }
 
-/** 含空格/特殊空白的路径在插入时需要加引号，否则 chip 正则会在空格处截断。 */
-export function formatFilePathRef(path: string): string {
-	const needsQuote = /[\s"]/.test(path);
-	if (!needsQuote) return `@${path}`;
+/**
+ * 将路径格式化为消息中的 @ 引用。
+ * 目录必须带尾斜杠（@src/），否则 chip 规则要求路径含 /\. 时，
+ * 裸名 @src 不会渲染为文件 chip，模型也容易当成「智能体/人」mention。
+ */
+export function formatFilePathRef(
+	path: string,
+	options?: { isDirectory?: boolean },
+): string {
+	// 先规范化：去掉已有尾分隔符，再按 isDirectory 统一追加 /
+	let normalized = path.replace(/[/\\]+$/, "");
+	if (options?.isDirectory) {
+		normalized = `${normalized}/`;
+	}
+	const needsQuote = /[\s"]/.test(normalized);
+	if (!needsQuote) return `@${normalized}`;
 	// 路径内若已有双引号，做简单转义；Windows 路径通常不含 "。
-	const escaped = path.replace(/"/g, '\\"');
+	const escaped = normalized.replace(/"/g, '\\"');
 	return `@"${escaped}"`;
 }
 
@@ -147,30 +163,34 @@ export function parseRichInputChips(
 		if (m.index === slashRe.lastIndex) slashRe.lastIndex++;
 	}
 
-	// @path：支持两种写法
+	// @path：支持三种写法
 	// 1) 无空格：@C:\foo\bar.txt / @src/a.ts
 	// 2) 含空格：@"C:\Users\a b\file.txt"（粘贴/拖拽自动加引号）
-	// 白名单：相对路径校验；绝对路径绕过白名单。
+	// 3) 目录：@src/ 或 @"my dir/"（尾斜杠是目录标记，避免被当成智能体 mention）
+	// 白名单：相对路径校验（去掉尾斜杠后比对）；绝对路径绕过白名单。
 	const atRe = /(?<![:/.\w#!~])(@(?:"[^"]+"|[^\s@"]+))/g;
 	while ((m = atRe.exec(text)) !== null) {
 		const start = m.index;
 		const end = start + m[1].length;
 		if (!overlapsUrl(start, end, urlSpans)) {
 			const rawToken = m[1];
-			// raw 形如 @path 或 @"path with space"
+			// 保留 raw 中的尾斜杠用于展示；路径校验用剥离后的路径
+			const body = rawToken.startsWith("@") ? rawToken.slice(1) : rawToken;
+			const quoted = body.length >= 2 && body.startsWith('"') && body.endsWith('"');
+			const rawPath = quoted ? body.slice(1, -1) : body;
+			const isDirectoryRef = /[/\\]$/.test(rawPath);
+			// 无分隔符且非目录尾斜杠的裸名（@alice）不渲染为文件 chip，避免误伤
+			if (!isDirectoryRef && !/[\\/.]/.test(rawPath)) continue;
 			const seg = unwrapFileChipPath(rawToken);
-			if (!/[\\/.]/.test(seg)) continue;
 			const normalized = seg.replace(/\\/g, "/");
 			const pathKey = normalized.startsWith("./") ? normalized.slice(2) : normalized;
 			const isAbsPath = /^[a-zA-Z]:[\\/]/.test(pathKey) || /^\/[^/]+\//.test(pathKey);
 			if (!isAbsPath && validFilePaths && !validFilePaths.has(pathKey)) continue;
-			// 绝对路径 chip 显示完整路径；相对路径仍用文件名保持紧凑。
-			const label = isAbsPath
-				? (normalized || seg)
-				: normalized.includes("/")
-					? normalized.slice(normalized.lastIndexOf("/") + 1)
-					: normalized;
-			chips.push({ start, end, raw: rawToken, kind: "file", label: label || seg });
+			// 显示完整相对路径（含目录结构），不再只取 basename，避免选完只剩文件名看不出位置。
+			// 绝对路径同样展示完整路径；目录补尾斜杠。
+			const baseLabel = pathKey || normalized || seg;
+			const label = isDirectoryRef ? `${baseLabel.replace(/[/\\]+$/, "")}/` : baseLabel;
+			chips.push({ start, end, raw: rawToken, kind: "file", label });
 		}
 		if (m.index === atRe.lastIndex) atRe.lastIndex++;
 	}

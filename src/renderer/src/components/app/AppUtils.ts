@@ -66,9 +66,15 @@ export function displayPath(path?: string) {
 	return friendly.length > 36 ? `...${friendly.slice(-35)}` : friendly;
 }
 
+/**
+ * 将文件树展平为文件 + 目录列表。
+ * 目录节点一并保留，供 @ 引用搜索与 chip 白名单使用（空目录也能被引用）。
+ */
 export function flattenFiles(nodes: FileTreeNode[]): FileTreeNode[] {
 	return nodes.flatMap((node) =>
-		node.type === "file" ? [node] : flattenFiles(node.children ?? []),
+		node.type === "file"
+			? [node]
+			: [node, ...flattenFiles(node.children ?? [])],
 	);
 }
 
@@ -417,11 +423,14 @@ export function detectTrigger(
 		return { start, char, query: segment };
 	}
 	if (char === "/") {
-		// 检查 / 是否属于 @file 路径（@ 在前且无空格），是则当作 @ 触发而非命令
+		// 检查 / 是否属于 @file 路径（@ 在前且路径段内无空白），是则当作 @ 触发而非命令。
+		// 关键：路径完成后光标后有空格/后续文本时（@src/ 说明…），必须关闭，
+		// 否则路径中的每个 / 都会把建议框永久钉住。
 		const beforeSlash = before.slice(0, start);
 		const atBefore = beforeSlash.lastIndexOf("@");
 		if (atBefore >= 0 && !/\s/.test(beforeSlash.slice(atBefore))) {
 			const fileSegment = before.slice(atBefore + 1);
+			if (/\s/.test(fileSegment)) return null;
 			return { start: atBefore, char: "@", query: fileSegment };
 		}
 	}
@@ -447,12 +456,23 @@ export function applySuggestion(
 	return { text, cursor: trigger.start + value.length + 1 };
 }
 
+/**
+ * 关闭建议框时的文本处理。
+ * 默认只关面板、不改输入——用户可能已在 @path 后继续写说明文字，
+ * 若删掉从触发符到光标的整段，会把正文一起清掉（Esc 全没了）。
+ * 仅当「触发后还没有任何有效查询」时（刚输入 @ / &）才去掉触发符本身，避免残留孤立符号。
+ */
 export function clearSuggestionTrigger(
 	current: string,
 	cursor: number,
 ): ComposerSuggestionResult {
 	const trigger = detectTrigger(current, cursor);
 	if (!trigger) return { text: current, cursor };
+	// 已有查询内容：保留全文，只表示关闭菜单
+	if (trigger.query.length > 0) {
+		return { text: current, cursor };
+	}
+	// 空触发符（单独的 @ / &）：去掉触发符，避免占位
 	const text = `${current.slice(0, trigger.start)}${current.slice(cursor)}`;
 	return { text, cursor: trigger.start };
 }
@@ -462,10 +482,12 @@ export type SuggestionItem = {
 	label: string;
 	description: string;
 	value: string;
-	/** 不可选中的目录分组头/树目录节点，用于 @ 无关键词时展示项目结构 */
+	/** 不可选中的分组头；目录本身可选，不再使用 disabled 表示目录 */
 	disabled?: boolean;
 	/** 树形缩进层级（0=根目录），仅在 @ 无关键词时使用 */
 	treeDepth?: number;
+	/** 目录引用：UI 显示文件夹图标，插入路径与文件相同 */
+	isDirectory?: boolean;
 	sessionMeta?: { sessionId: string; filePath: string; projectPath?: string };
 };
 
@@ -537,29 +559,52 @@ function fuzzyScore(value: string, keyword: string) {
 	return score;
 }
 
+/** 目录引用在建议列表与插入文本中都用尾斜杠标记，避免 @src 被模型当成智能体。 */
+function formatPathSuggestionLabel(node: FileTreeNode): string {
+	return node.type === "directory" ? `@${node.name}/` : `@${node.name}`;
+}
+
+function formatPathSuggestionValue(node: FileTreeNode): string {
+	return formatFilePathRef(node.relativePath, {
+		isDirectory: node.type === "directory",
+	});
+}
+
 /**
- * 从扁平文件列表构建目录树扁平列表（带 treeDepth 缩进层级）。
- * 每个目录节点渲染为不可选中的 header，文件节点可选。
+ * 从扁平路径列表（文件 + 目录）重建一级树视图。
+ * 目录与文件均可选，便于直接 @src 这类目录引用。
  */
-function buildFileTreeItems(files: FileTreeNode[]): SuggestionItem[] {
+function buildFileTreeItems(entries: FileTreeNode[]): SuggestionItem[] {
 	interface PathNode {
 		name: string;
+		relativePath: string;
 		children: Map<string, PathNode>;
 		files: FileTreeNode[];
+		dirNode?: FileTreeNode;
 	}
-	// 用 / 分隔符构建路径树
-	const root: PathNode = { name: "", children: new Map(), files: [] };
-	for (const file of files) {
-		const parts = file.relativePath.replace(/\\/g, "/").split("/");
-		const fileName = parts.pop()!;
-		let node = root;
-		for (const part of parts) {
-			if (!node.children.has(part)) {
-				node.children.set(part, { name: part, children: new Map(), files: [] });
-			}
-			node = node.children.get(part)!;
+	// 用 / 分隔符构建路径树；目录节点单独挂 dirNode，空目录也能出现。
+	const root: PathNode = { name: "", relativePath: "", children: new Map(), files: [] };
+	const ensureDir = (parent: PathNode, part: string): PathNode => {
+		let child = parent.children.get(part);
+		if (!child) {
+			const relativePath = parent.relativePath ? `${parent.relativePath}/${part}` : part;
+			child = { name: part, relativePath, children: new Map(), files: [] };
+			parent.children.set(part, child);
 		}
-		node.files.push(file);
+		return child;
+	};
+	for (const entry of entries) {
+		const parts = entry.relativePath.replace(/\\/g, "/").split("/").filter(Boolean);
+		if (parts.length === 0) continue;
+		if (entry.type === "directory") {
+			let node = root;
+			for (const part of parts) node = ensureDir(node, part);
+			node.dirNode = entry;
+			continue;
+		}
+		let node = root;
+		for (const part of parts.slice(0, -1)) node = ensureDir(node, part);
+		node.files.push(entry);
 	}
 	// 仅展平第一层（根目录文件 + 一级目录），避免大项目卡顿
 	const result: SuggestionItem[] = [];
@@ -567,23 +612,26 @@ function buildFileTreeItems(files: FileTreeNode[]): SuggestionItem[] {
 		const sortedDirs = [...node.children.values()].sort((a, b) => a.name.localeCompare(b.name));
 		const sortedFiles = [...node.files].sort((a, b) => a.name.localeCompare(b.name));
 		for (const dir of sortedDirs) {
+			const dirPath = dir.dirNode?.relativePath ?? dir.relativePath;
 			result.push({
-				key: `dir:${depth}:${dir.name}`,
-				label: dir.name,
-				description: "",
-				value: "",
-				disabled: true,
+				key: dir.dirNode?.path ?? `dir:${dirPath}`,
+				label: `@${dir.name}/`,
+				description: dirPath,
+				// 必须插入 @dir/：裸 @dir 无法过 chip 路径规则，也易被模型当成 mention
+				value: formatFilePathRef(dirPath, { isDirectory: true }),
 				treeDepth: depth,
+				isDirectory: true,
 			});
 			if (depth < maxDepth) flatten(dir, depth + 1, maxDepth);
 		}
 		for (const file of sortedFiles) {
 			result.push({
 				key: file.path,
-				label: `@${file.name}`,
+				label: formatPathSuggestionLabel(file),
 				description: file.relativePath,
-				value: formatFilePathRef(file.relativePath),
+				value: formatPathSuggestionValue(file),
 				treeDepth: depth,
+				isDirectory: file.type === "directory",
 			});
 		}
 	}
@@ -621,26 +669,28 @@ export function buildSuggestionItems(
 	}
 	if (trigger.char === "@") {
 		if (!keyword) {
-			// 无关键词：展示完整目录树（扁平递归展开，带缩进层级）
+			// 无关键词：展示一级目录/文件；目录可直接选中引用
 			return buildFileTreeItems(files);
 		}
-		// 有关键词：模糊搜索
+		// 有关键词：文件与目录一起模糊搜索；同名时目录略优先，方便找文件夹
 		return files
 			.map((file) => ({
 				file,
 				score:
 					fuzzyScore(file.relativePath, keyword) +
-					fuzzyScore(file.name, keyword) * 2,
+					fuzzyScore(file.name, keyword) * 2 +
+					(file.type === "directory" ? 4 : 0),
 			}))
 			.filter((item) => item.score > 0)
 			.sort((a, b) => b.score - a.score)
 			.slice(0, 15)
 			.map((item) => ({
 				key: item.file.path,
-				label: `@${item.file.name}`,
+				label: formatPathSuggestionLabel(item.file),
 				description: item.file.relativePath,
-				// 相对路径含空格时同样加引号，保证 chip 不被截断。
-				value: formatFilePathRef(item.file.relativePath),
+				// 相对路径含空格时同样加引号；目录追加 / 以通过 chip 规则并语义化为路径。
+				value: formatPathSuggestionValue(item.file),
+				isDirectory: item.file.type === "directory",
 			}));
 	}
 	if (trigger.char === "&") {

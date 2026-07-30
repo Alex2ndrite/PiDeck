@@ -96,6 +96,8 @@ import {
 	Share,
 	SquarePen,
 	UserPen,
+	// 会话 fork：从该用户消息切出新会话（对应 pi /fork），忙碌时不展示。
+	GitFork,
 } from "lucide-react";
 import { getFileIconSeti, getFileIconColor, getFileTypeLabel } from "../../fileIcons";
 import { normalizeSessionPathForCompare } from "../../agentListDisplay";
@@ -3666,14 +3668,21 @@ export const UserBubble = memo(function UserBubble(props: {
 	onOpenFile?: (path: string) => void;
 	onEditMessage?: (messageId: string, newText: string) => void;
 	onDeleteMessage?: (messageId: string) => void;
+	/** 从该用户消息 fork 新会话；需 message.meta.entryId，忙碌时不展示入口 */
+	onForkMessage?: (message: ChatMessage) => void;
 	validCommandNames?: Set<string>;
 	validFilePaths?: Set<string>;
 	/** Agent 正在处理请求或流式输出中时禁用编辑/删除等操作按钮 */
 	agentRunning?: boolean;
+	/** fork 进行中：仅当前消息禁用按钮，避免连点重复 fork */
+	forking?: boolean;
 	/** 打开多选分享弹框 */
 	onEnterMultiSelect?: () => void;
 }) {
 	const { message } = props;
+	// 空闲时始终展示 fork 入口；entryId 解析放到点击时做（meta 缺失时会走 getForkMessages 回退）。
+	// 忙碌中与编辑/删除一致隐藏，避免半完成回合上 fork。
+	const canFork = Boolean(props.onForkMessage) && !props.agentRunning;
 	const rowRef = useRef<HTMLElement | null>(null);
 	const [editing, setEditing] = useState(false);
 	const [editText, setEditText] = useState("");
@@ -3798,6 +3807,18 @@ export const UserBubble = memo(function UserBubble(props: {
 						</button>
 				{!editing && !props.agentRunning && (
 					<>
+						{canFork && (
+							<button
+								type="button"
+								className="user-turn-action-btn"
+								disabled={props.forking}
+								onClick={() => props.onForkMessage?.(message)}
+								title={t("app.forkFromMessageTitle")}
+								aria-label={t("app.forkFromMessage")}
+							>
+								<GitFork size={14} strokeWidth={1.8} aria-hidden="true" />
+							</button>
+						)}
 						<button className="user-turn-action-btn" onClick={() => {
 							setEditText(cleanText);
 							setEditing(true);
@@ -3806,7 +3827,7 @@ export const UserBubble = memo(function UserBubble(props: {
 						</button>
 						<button
 							className="user-turn-action-btn"
-							onClick={handleEditAndResend}
+					onClick={handleEditAndResend}
 							title={t("app.editAndResendTitle")}
 						>
 							<UserPen size={14} />
@@ -3827,6 +3848,7 @@ export const UserBubble = memo(function UserBubble(props: {
 }, (previous, next) =>
 	sameChatMessageForRender(previous.message, next.message) &&
 	previous.agentRunning === next.agentRunning &&
+	previous.forking === next.forking &&
 	previous.validCommandNames === next.validCommandNames &&
 	previous.validFilePaths === next.validFilePaths,
 );
@@ -6105,8 +6127,8 @@ export function PromptSuggestions(props: {
 			<div className="command-palette-list" ref={listRef}>
 				{props.items.map((item, index) => {
 				const indent = item.treeDepth != null ? `${item.treeDepth * 20}px` : "0px";
-				if (item.disabled) {
-					// 目录树节点：缩进 + 文件夹图标，选中时加高亮背景
+			if (item.disabled) {
+					// 不可选分组头（保留兼容）；目录本身已改为可选建议项
 					return (
 						<div
 							key={item.key}
@@ -6122,12 +6144,19 @@ export function PromptSuggestions(props: {
 				return (
 					<button
 						key={item.key}
-						className={`command-palette-item${index === props.selectedIndex ? " selected" : ""}`}
+						className={`command-palette-item${item.isDirectory ? " is-directory" : ""}${index === props.selectedIndex ? " selected" : ""}`}
 						style={{ paddingLeft: `calc(12px + ${indent})` }}
 						onMouseEnter={() => props.onSelectedIndexChange(index)}
 						onClick={() => props.onPick(item.value)}
 					>
-						<span className="command-palette-label">{item.label}</span>
+						{item.isDirectory ? (
+							<span className="command-palette-label command-palette-dir-label">
+								<Folder size={13} strokeWidth={1.8} aria-hidden="true" />
+								{item.label}
+							</span>
+						) : (
+							<span className="command-palette-label">{item.label}</span>
+						)}
 						<span className="command-palette-desc">{item.description}</span>
 					</button>
 				);
@@ -6817,6 +6846,31 @@ export function SettingsModal(props: {
 										}
 									/>
 									<SettingSwitch
+										title={t("settings.singleInstance")}
+										description={t("settings.singleInstanceDesc")}
+										checked={props.settings.singleInstance}
+										onChange={(checked) =>
+											props.onChange({ singleInstance: checked })
+										}
+									/>
+									<SelectField
+										className="setting-field"
+										label={t("settings.startupWindowMode")}
+										value={props.settings.startupWindowMode}
+										options={[
+											{ value: "maximized", label: t("settings.startupWindow.maximized") },
+											{ value: "normal-large", label: t("settings.startupWindow.large") },
+											{ value: "normal-medium", label: t("settings.startupWindow.medium") },
+											{ value: "normal-compact", label: t("settings.startupWindow.compact") },
+											{ value: "fullscreen", label: t("settings.startupWindow.fullscreen") },
+										]}
+										onChange={(value) =>
+											props.onChange({
+												startupWindowMode: value as AppSettings["startupWindowMode"],
+											})
+										}
+									/>
+									<SettingSwitch
 										title={t("settings.enableNotifications")}
 										checked={props.settings.enableNotifications}
 										onChange={(checked) =>
@@ -7127,6 +7181,15 @@ export function SettingsModal(props: {
 									checked={props.settings.disableUpdateCheck}
 									onChange={(checked) =>
 										props.onChange({ disableUpdateCheck: checked })
+									}
+								/>
+								{/* Electron Chromium 沙箱：与 pi Agent 无关，改完需整应用重启。 */}
+								<SettingSwitch
+									title={t("settings.electronSandbox")}
+									description={t("settings.electronSandboxDesc")}
+									checked={props.settings.electronChromiumSandbox}
+									onChange={(checked) =>
+										props.onChange({ electronChromiumSandbox: checked })
 									}
 								/>
 								{/* 不要再插 setting-divider：SettingSwitch 已有 border-bottom，叠 divider 会双线。 */}

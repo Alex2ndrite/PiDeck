@@ -30,6 +30,24 @@ All notable changes to PiDeck are documented here.
   toast notifications migrate to `sonner` with theme-aware presentation.
 - **Sidebar project expand/collapse persistence** — Project fold state is
   remembered across app restarts.
+- **Session message Fork** — Fork a new session from a user message (pi `/fork`);
+  hidden while the agent is busy; fills the original prompt into the composer
+  for edit-and-resend.
+- **Boot splash official pi assembly animation** — Cold-start overlay loops the
+  same pixel tetromino logo animation as the sidebar (larger/faster); PiDeck
+  title and subtitle use Plantin brand serif to match the empty-state tone.
+- **Single-instance window reuse** — On by default: opening PiDeck again focuses
+  the existing window (including tray-hidden) instead of spawning another
+  process; can be disabled in Common settings (restart required).
+- **Startup window size presets** — Appearance setting for maximized / fullscreen
+  / large-medium-compact windows; default maximized (historical behavior that
+  keeps the taskbar visible).
+- **Compaction settings UI** — Config → Settings splits `compaction` into Auto
+  compact / Reserve reply tokens / Keep recent tokens instead of raw JSON.
+- **LaTeX / math fence rendering** — Session `latex`/`tex`/`math` code fences
+  render with KaTeX.
+- **Electron Chromium sandbox toggle** — Dev setting to enable renderer sandbox
+  (off by default for Windows AV/GPU compatibility); requires app restart.
 
 ### ✨ UX Improvements
 
@@ -38,6 +56,9 @@ All notable changes to PiDeck are documented here.
 - **Composer widgets & extension UI** — Extension widgets stay above the
   composer, height is more compact, and built-in extension conflict handling is
   friendlier (including todo labels).
+- **Context compact entry** — Composer compact control only shows when context
+  usage is above 30%; calmer styling, and friendly toasts for session-too-small
+  / nothing-to-compact errors.
 - **UI color neutralization** — Reduce saturated green accents; refine composer
   bar and status indicator contrast.
 - **Worktree sidebar hierarchy** — Clearer nesting, collapsible worktree
@@ -47,9 +68,9 @@ All notable changes to PiDeck are documented here.
 - **RPC / agent launch options** — Optional `--no-themes` / `--offline` /
   `--no-extensions` / `--no-skills`, version cache warm-up on app start, and
   dev settings to disable extensions/skills for faster or safer launches.
-- **Docs & community** — Docs-site screenshots updated to the latest UI; README
-  Star History chart auto-updates via CI; tutorial video production workflow
-  added for maintainers.
+- **Docs & community** — Docs-site screenshots updated to the latest UI; expanded
+  English home and bilingual nav; README Star History chart auto-updates via CI;
+  tutorial video production workflow added for maintainers.
 
 ### 🐛 Bug Fixes
 
@@ -62,6 +83,17 @@ All notable changes to PiDeck are documented here.
   failure cards, and log platform/arch + child-process-gone details for Issue
   triage. Also expand macOS pi search paths (`/opt/homebrew/bin`, etc.) for
   Dock-launched PATH gaps.
+- **Pet stuck on review/failed/jumping** (#107) — Transition recovery timers are
+  no longer cleared by cooldown/overlap early-returns, so review/failed return
+  to idle on schedule.
+- **Stop abort afterglow** — Seal stream generations on abort so delayed
+  thinking/text no longer mix into the next reply; stop feedback is toast-only.
+- **Disabled built-in extensions still loaded** — Remove/conflict yield now deletes
+  user-dir built-in extension files and purges residuals so third-party tools no
+  longer clash and break RPC.
+- **Manual compact button & state** — Restore composer compact control; send
+  `customInstructions` on RPC; clear `isCompacting` and return to idle after
+  finish; surface concrete failure reasons in toasts.
 - **System titlebar missing sidebar toggles** (#104) — Left/right sidebar
   switches remain available when using the OS native title bar.
 - **Paste image as attachment + spaced path refs** — Image paste attaches as
@@ -96,9 +128,11 @@ All notable changes to PiDeck are documented here.
 
 Thanks to all contributors for their PRs, issues, and feedback in this release:
 
-- **@1900EasonJin** — System titlebar sidebar toggles (#104)
+- **@1900EasonJin** — System titlebar sidebar toggles (#104); pet stuck-state fix (#107)
 - **@zzq168281-coder** — Interactive local file links & todo font honor (#103)
 - **@me9rez** — TypeScript incremental build output hygiene (#97)
+- **@weishiair** — Delete residual built-in extension files on disable to stop tool conflicts/RPC failures
+- **@clancyclaw** — Preserve RichInput newlines for multi-line drafts
 
 Special thanks to **微时佬友** for providing the Grok model service used in our
 community testing environment 🎉
