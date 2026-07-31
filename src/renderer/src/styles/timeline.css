@@ -3084,6 +3084,7 @@ body.ask-dialog-open .ask-question-card.pending {
 .markdown-body :not(pre) > code {
   padding: 0.15em 0.35em;
   background: var(--color-bg-muted);
+  border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-sm);
   color: var(--color-text-primary);
 }
@@ -3139,10 +3140,10 @@ body.ask-dialog-open .ask-question-card.pending {
 .markdown-body blockquote {
   margin: 0.8em 0;
   padding: 0.6em 1em;
-  border-left: 3px solid var(--color-border-strong);
-  background: var(--color-bg-muted);
+  border-left: 3px solid color-mix(in srgb, var(--color-accent) 45%, transparent);
+  background: color-mix(in srgb, var(--color-accent-soft) 55%, var(--color-bg-panel));
   color: var(--color-text-secondary);
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
 }
 .markdown-body blockquote p:last-child {
   margin-bottom: 0;
@@ -3171,7 +3172,8 @@ body.ask-dialog-open .ask-question-card.pending {
   color: var(--color-text-secondary);
 }
 
-/* 文件路径链接（remarkLinkifyPaths 生成的 file:// 链接）：等宽字体 + 图标 chip，与普通外链区分 */
+/* 文件路径链接（remarkLinkifyPaths 生成的 file:// 链接）：药丸式 chip，
+   accent-soft 底 + 同色描边，与普通外链（纯文本色）一眼区分 */
 .markdown-link-file {
   display: inline-flex;
   align-items: center;
@@ -3179,18 +3181,23 @@ body.ask-dialog-open .ask-question-card.pending {
   font-family: var(--font-family-mono);
   font-size: 0.92em;
   color: var(--color-accent);
-  background: var(--color-bg-muted);
-  padding: 0.1em 0.4em;
-  border-radius: var(--radius-sm);
+  background: var(--color-accent-soft);
+  border: 1px solid color-mix(in srgb, var(--color-accent) 24%, transparent);
+  padding: 0.05em 0.45em;
+  border-radius: var(--radius-pill);
   text-decoration: none;
   overflow-wrap: anywhere;
   transition:
     background-color 0.15s,
-    color 0.15s;
+    border-color 0.15s,
+    transform 0.15s;
 }
 .markdown-link-file:hover {
-  background: var(--color-bg-hover);
-  text-decoration: underline;
+  background: color-mix(in srgb, var(--color-accent) 18%, var(--color-bg-panel));
+  border-color: color-mix(in srgb, var(--color-accent) 42%, transparent);
+  /* 药丸式 chip 不用下划线表达 hover，改用微位移，避免和等宽路径文本挤在一起 */
+  text-decoration: none;
+  transform: translateY(-1px);
 }
 .markdown-link-file-icon {
   flex-shrink: 0;

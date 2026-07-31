@@ -71,7 +71,15 @@ test("visual tour: live session states", async ({ window }) => {
 	await shot(window, "34-thinking-picker");
 	await thinkingPalette.getByRole("button", { name: /关闭|Close/ }).click();
 
-	// 6. 暗色主题下的会话页：切主题后重截一张完整对话
+	// 6. markdown 渲染元素巡检（MDEMO 触发 mock 富文本回复：文件链接/外链/引用/行内代码/代码块/表格）
+	await composer.click();
+	await window.keyboard.type("MDEMO 元素巡检");
+	await window.keyboard.press("Enter");
+	await expect(timeline).toContainText("渲染元素巡检", { timeout: 15_000 });
+	await expect(window.locator(".composer-bar-btn.send")).toBeVisible({ timeout: 15_000 });
+	await shot(window, "36-markdown-elements");
+
+	// 7. 暗色主题下的会话页：切主题后重截一张完整对话 + markdown 元素
 	await window.locator(".settings-icon").click();
 	const modal = window.locator(".settings-modal");
 	await expect(modal).toBeVisible();
@@ -84,4 +92,5 @@ test("visual tour: live session states", async ({ window }) => {
 	await window.keyboard.press("Escape");
 	await expect(modal).toBeHidden({ timeout: 5000 }).catch(() => undefined);
 	await shot(window, "35-session-dark");
+	await shot(window, "37-markdown-elements-dark");
 });

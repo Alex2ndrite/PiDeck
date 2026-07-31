@@ -25,6 +25,9 @@ test("streamdown pipeline keeps project overrides (code blocks, file links, math
   assert.match(stream, /rehypeKatex/);
   // file:// 链接放行（sanitize 被有意排除，见组件注释）
   assert.doesNotMatch(stream, /defaultRehypePlugins\.sanitize/);
+  // harden 也必须排除：它把 file: 写死进 blockedProtocols（不可覆盖），
+  // 会杀死「文件路径可点击打开」核心能力（危险协议由 urlTransform 拦截）
+  assert.doesNotMatch(stream, /defaultRehypePlugins\.harden/);
 });
 
 test("link handling is shared between legacy and streamdown pipelines", () => {
@@ -37,10 +40,10 @@ test("link handling is shared between legacy and streamdown pipelines", () => {
   assert.match(link, /export function markdownUrlTransform/);
 });
 
-test("streamdown flag defaults off and is wired settings → atom → AssistantText", () => {
+test("streamdown flag defaults ON (graduated) and is wired settings → atom → AssistantText", () => {
   assert.match(settingsType, /useStreamdownRenderer\?: boolean/);
-  assert.match(store, /useStreamdownRenderer: false/);
-  assert.match(atoms, /export const useStreamdownRendererAtom = atom\(false\)/);
+  // 转正后默认开启；设置项保留作为回退通道（AGENTS 灰度规则）
+  assert.match(store, /useStreamdownRenderer: true/);
   assert.match(app, /setStreamdownRenderer\(Boolean\(settings\.useStreamdownRenderer\)\)/);
   // AssistantText 按开关分流，两条路径共用 cleanText
   assert.match(surface, /useAtomValue\(useStreamdownRendererAtom\)/);

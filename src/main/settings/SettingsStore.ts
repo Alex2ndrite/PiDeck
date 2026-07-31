@@ -156,8 +156,9 @@ Gitmoji 对应关系：
   piRpcNoExtensions: false,
   piRpcNoSkills: false,
 
-  // ── 实验性渲染（#115）：Streamdown 灰度默认关闭 ──
-  useStreamdownRenderer: false,
+  // ── 实验性渲染（#115）：Streamdown 多轮 E2E 验证后转正默认开启；
+  //    设置项保留，出现异常可手动回退旧 react-markdown 管线 ──
+  useStreamdownRenderer: true,
   useWebContentsViewBrowser: false,
 
   // 字体配置：默认值保证与历史版本行为一致，零回归

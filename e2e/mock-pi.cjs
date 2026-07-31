@@ -117,7 +117,28 @@ function startStream(userText) {
 	streaming = true;
 	const slow = userText.includes("SLOW");
 	streamIntervalMs = slow ? 220 : 80;
-	const reply = `Mock 回复：「${userText.slice(0, 40)}」流式渲染验证完成。`;
+	// prompt 含 "MDEMO" 时回复富 markdown，用于截图巡检渲染元素（链接/代码/表格/引用）
+	const reply = userText.includes("MDEMO")
+		? [
+			"以下是渲染元素巡检：",
+			"",
+			"修改了 src/main/index.ts 和 ./docs/ui-2.0-revamp-plan.md，详见 https://github.com/miaojingang/pi-desktop 。",
+			"",
+			"> 引用块：重构期间禁止静默吞掉对方改动，每个冲突都要确认能力归属。",
+			"",
+			"行内代码 `npm run typecheck` 必须通过。",
+			"",
+			"```ts",
+			"const gate = await runTypecheck();",
+			"if (!gate.ok) throw new Error(\"typecheck failed\");",
+			"```",
+			"",
+			"| 批次 | 状态 | 说明 |",
+			"| --- | --- | --- |",
+			"| U2 | ✅ | Streamdown 渲染管线 |",
+			"| U5 | ✅ | 组件清扫 |",
+		].join("\n")
+		: `Mock 回复：「${userText.slice(0, 40)}」流式渲染验证完成。`;
 	const chunkCount = slow ? 18 : 12;
 	const per = Math.max(1, Math.ceil(reply.length / chunkCount));
 	streamChunks = [];

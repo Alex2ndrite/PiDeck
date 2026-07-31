@@ -40,7 +40,11 @@ window.addEventListener("error", (event) => {
   });
   if (!isResourceError) {
     const message = formatRuntimeError(event.error ?? event.message);
-    if (message) {
+    // ResizeObserver loop 警告是 Chromium 的良性通知（同一帧内 RO 回调又触发 resize），
+    // Streamdown 动画 + resizable panels 组合下常见；只记日志，不弹错误 toast 干扰用户。
+    const isBenignResizeObserverLoop = typeof event.message === "string"
+      && event.message.includes("ResizeObserver loop");
+    if (message && !isBenignResizeObserverLoop) {
       showNotice(`${t("app.runtimeErrorToast")}: ${message}`, 6000, "error");
     }
   }
