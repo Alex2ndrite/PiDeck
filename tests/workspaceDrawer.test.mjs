@@ -135,10 +135,12 @@ test("drawer host renders an injected activity rail while open", () => {
   const rail = readFileSync("src/renderer/src/components/workspace/WorkspaceDrawerRail.tsx", "utf8");
   const app = readFileSync("src/renderer/src/App.tsx", "utf8");
   const shell = readFileSync("src/renderer/src/components/app/AppShell.tsx", "utf8");
-  // rail 组件：水平 tablist + 激活态（#115：用户明确选择横排 tab，不要竖排 rail）
+  // rail 组件：水平 tablist + 激活态（pure official：shadcn Button + 下缘指示条）
   assert.match(rail, /role="tablist"/);
   assert.match(rail, /aria-orientation="horizontal"/);
   assert.match(rail, /aria-selected=\{action\.active\}/);
+  assert.match(rail, /from "\.\.\/ui-shadcn\/button"/);
+  assert.match(rail, /variant=\{action\.active \? "secondary" : "ghost"\}/);
   // host：打开期间渲染注入的 rail
   assert.match(host, /rail\?: ReactNode/);
   assert.match(host, /\{open && props\.rail\}/);

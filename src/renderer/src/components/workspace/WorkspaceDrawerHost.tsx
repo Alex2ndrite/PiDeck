@@ -73,19 +73,23 @@ export function WorkspaceDrawerHost(props: WorkspaceDrawerHostProps) {
   return (
     <>
       <aside
-        className={props.className ?? "detail-drawer"}
+        className={props.className ?? "detail-drawer flex h-full min-h-0 min-w-0 flex-col overflow-hidden border-l border-border bg-background"}
         data-open={open}
         data-rendered={Boolean(visiblePanel)}
         data-pinned={Boolean(props.pinned)}
         style={props.style}
       >
         {open && props.rail}
-        {visiblePanel && <div className="drawer-content-frame">{rendered}</div>}
+        {visiblePanel && (
+          <div className="drawer-content-frame flex min-h-0 flex-1 flex-col overflow-hidden">
+            {rendered}
+          </div>
+        )}
       </aside>
       {props.panel && props.collapsed && props.onRestore && (
         <button
           type="button"
-          className="drawer-restore"
+          className="drawer-restore inline-flex size-8 items-center justify-center rounded-md border border-border bg-background text-muted-foreground shadow-sm hover:bg-accent hover:text-accent-foreground"
           title={t("drawer.expandPanel")}
           aria-label={t("drawer.expandPanel")}
           onClick={props.onRestore}

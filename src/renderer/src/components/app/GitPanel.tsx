@@ -874,14 +874,15 @@ export function GitPanel(props: GitPanelProps) {
   return (
     <div
       ref={panelRef}
-      className="git-panel"
+      className="git-panel flex h-full min-h-0 flex-col overflow-hidden bg-background text-foreground"
       aria-label={t("git.sourceControl")}
     >
-      {/* 当前分支 + 切换下拉 */}
-      <div className="git-branch-bar" ref={branchBarRef}>
+      {/* 当前分支 + 切换下拉（pure official：outline 触发器 + popover 菜单） */}
+      <div className="git-branch-bar flex shrink-0 items-center gap-1 border-b border-border bg-background px-2 py-1.5" ref={branchBarRef}>
         <button
           ref={branchTriggerRef}
-          className="git-branch-trigger"
+          type="button"
+          className="git-branch-trigger inline-flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md border border-border bg-background px-2 text-left text-xs text-foreground hover:bg-accent"
           onClick={() => {
             if (!branchOpen) updateBranchDropdownPosition();
             setBranchOpen((v) => !v);
@@ -895,22 +896,22 @@ export function GitPanel(props: GitPanelProps) {
               : undefined
           }
         >
-          <GitBranch size={14} />
-          <span className="git-branch-label">
+          <GitBranch size={14} className="shrink-0 text-muted-foreground" />
+          <span className="git-branch-label min-w-0 flex-1 truncate">
             {props.currentBranch || t("app.branchNone")}
           </span>
           {props.branches.length > 0 && (
-            <span className="git-branch-badge">{props.branches.length}</span>
+            <span className="git-branch-badge inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-muted px-1.5 text-[11px] font-medium text-muted-foreground">{props.branches.length}</span>
           )}
           <ChevronDown
             size={12}
-            className={`git-branch-chevron${branchOpen ? " open" : ""}`}
+            className={`git-branch-chevron shrink-0 text-muted-foreground${branchOpen ? " open" : ""}`}
           />
         </button>
         {notAGitRepo && (
           <button
             type="button"
-            className="git-init-branch-btn"
+            className="git-init-branch-btn inline-grid size-7 place-items-center rounded-md border border-border text-muted-foreground hover:bg-accent hover:text-accent-foreground"
             title={t("git.initInBranchBar")}
             disabled={initializing}
             onClick={async () => {
@@ -937,13 +938,14 @@ export function GitPanel(props: GitPanelProps) {
           createPortal(
             <div
               ref={branchDropdownRef}
-              className="git-branch-dropdown"
+              className="git-branch-dropdown z-50 max-h-60 min-w-48 overflow-auto rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md"
               style={branchDropdownStyle}
             >
             {props.branches.map((branch) => (
               <button
+                type="button"
                 key={branch}
-                className={`git-branch-item${branch === props.currentBranch ? " active" : ""}`}
+                className={`git-branch-item flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-xs hover:bg-accent${branch === props.currentBranch ? " active bg-accent" : ""}`}
                 title={branch}
                 onClick={() => {
                   if (branch !== props.currentBranch)
@@ -952,16 +954,17 @@ export function GitPanel(props: GitPanelProps) {
                 }}
               >
                 {branch === props.currentBranch && (
-                  <Check size={14} className="git-branch-check" />
+                  <Check size={14} className="git-branch-check shrink-0" />
                 )}
-                <span>{branch}</span>
+                <span className="truncate">{branch}</span>
               </button>
             ))}
-            <div className="git-branch-divider" />
+            <div className="git-branch-divider my-1 h-px bg-border" />
             {branchCreating ? (
-              <div className="git-branch-create-form">
+              <div className="git-branch-create-form flex items-center gap-1 px-1 py-1">
                 <input
                   type="text"
+                  className="h-7 min-w-0 flex-1 rounded-md border border-border bg-background px-2 text-xs outline-none focus-visible:ring-1 focus-visible:ring-ring"
                   placeholder={
                     t("app.branchNewPlaceholder") ??
                     t("app.branchNewPlaceholder")
@@ -983,7 +986,8 @@ export function GitPanel(props: GitPanelProps) {
                   autoFocus
                 />
                 <button
-                  className="git-branch-create-confirm"
+                  type="button"
+                  className="git-branch-create-confirm inline-grid size-7 place-items-center rounded-md bg-primary text-primary-foreground disabled:opacity-40"
                   disabled={!newBranchName.trim()}
                   onClick={() => {
                     props.onCreateBranch?.(newBranchName.trim());
@@ -997,7 +1001,8 @@ export function GitPanel(props: GitPanelProps) {
               </div>
             ) : (
               <button
-                className="git-branch-item git-branch-create-btn"
+                type="button"
+                className="git-branch-item git-branch-create-btn flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-xs hover:bg-accent"
                 onClick={() => setBranchCreating(true)}
               >
                 <Plus size={14} />

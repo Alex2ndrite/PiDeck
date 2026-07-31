@@ -135,14 +135,14 @@ export function DrawerSurface(props: DrawerSurfaceProps) {
           onEnterFullscreen={browser.onEnterBrowserFullscreen}
         />
       ) : git.enableGitManagement && drawer === "git" && !drawerCollapsed && git.activeProjectId ? (
-        <div className="drawer-content-frame">
-          <div className="drawer-header">
-            <strong>{files.t("drawer.sourceControl")}</strong>
-            <div className="drawer-header-actions">
-              <button onClick={chrome.onCollapseDrawer} title={files.t("drawer.collapsePanel")}>
+        <div className="drawer-content-frame flex min-h-0 flex-1 flex-col overflow-hidden">
+          <div className="drawer-header flex h-12 shrink-0 items-center justify-between gap-3 border-b border-border bg-background px-3">
+            <strong className="truncate text-sm font-semibold text-foreground">{files.t("drawer.sourceControl")}</strong>
+            <div className="drawer-header-actions flex shrink-0 items-center gap-1">
+              <button type="button" className="inline-grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground" onClick={chrome.onCollapseDrawer} title={files.t("drawer.collapsePanel")}>
                 <Minus size={15} />
               </button>
-              <button onClick={chrome.onCloseDrawer} title={files.t("common.close")}>
+              <button type="button" className="inline-grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground" onClick={chrome.onCloseDrawer} title={files.t("common.close")}>
                 <X size={15} />
               </button>
             </div>

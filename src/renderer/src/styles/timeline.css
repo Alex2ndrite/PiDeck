@@ -3949,53 +3949,7 @@ body.ask-dialog-open .ask-question-card.pending {
 .detail-drawer:not([data-open="true"]) {
   pointer-events: none;
 }
-.drawer-header {
-  height: 55px;
-  flex: 0 0 55px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  padding: 0 var(--space-4) 0 18px;
-  border-bottom: 1px solid var(--color-border-subtle);
-  background: var(--color-bg-panel);
-}
-.drawer-header strong {
-  color: var(--color-text-primary);
-  font-size: var(--font-size-title);
-  line-height: var(--line-height-title);
-  font-weight: 600;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.drawer-header-actions {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  flex-shrink: 0;
-}
-.drawer-header-actions button {
-  border: 0;
-  background: transparent;
-  color: var(--color-text-tertiary);
-  border-radius: var(--radius-sm);
-  width: var(--control-height-sm);
-  height: var(--control-height-sm);
-  padding: 0;
-  display: inline-grid;
-  place-items: center;
-  line-height: 1;
-}
-.drawer-header-actions button:hover:not(:disabled) {
-  background: var(--color-bg-hover);
-  color: var(--color-text-primary);
-}
-.drawer-header-actions button.active {
-  background: var(--color-bg-active);
-  color: var(--color-accent);
-}
+/* pure official：drawer-header 由 DrawerSurface Tailwind 承担 */
 .drawer-header-actions button:disabled {
   opacity: 0.34;
   cursor: not-allowed;

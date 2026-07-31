@@ -20,22 +20,22 @@ export function PaneHeader(props: {
   children?: ReactNode;
 }) {
   return (
-    <div className="git-pane-header">
+    <div className="git-pane-header flex h-8 shrink-0 items-center gap-1 border-b border-border bg-background px-2">
       <button
         type="button"
-        className="git-pane-header-toggle"
+        className="git-pane-header-toggle inline-flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-1 py-0.5 text-left text-xs font-medium text-foreground hover:bg-accent"
         aria-expanded={props.open}
         aria-controls={`git-pane-${props.id}`}
         onClick={props.onToggle}
       >
         <Twistie open={props.open} />
-        <span className="git-pane-title">{props.title}</span>
+        <span className="git-pane-title truncate">{props.title}</span>
       </button>
       {props.children && (
-        <div className="git-pane-header-actions">{props.children}</div>
+        <div className="git-pane-header-actions flex shrink-0 items-center gap-0.5">{props.children}</div>
       )}
       {typeof props.count === "number" && props.count > 0 && (
-        <span className="git-pane-count">{props.count}</span>
+        <span className="git-pane-count inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-muted px-1.5 text-[11px] font-medium text-muted-foreground">{props.count}</span>
       )}
     </div>
   );

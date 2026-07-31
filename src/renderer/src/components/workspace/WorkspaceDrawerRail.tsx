@@ -1,4 +1,6 @@
 import type { ReactNode } from "react";
+import { Button } from "../ui-shadcn/button";
+import { cn } from "../../lib/utils";
 
 /**
  * 抽屉活动栏动作项：由 App 层组装（复用与 outline 相同的打开/关闭语义），
@@ -13,29 +15,42 @@ export type WorkspaceDrawerRailAction = {
 };
 
 /**
- * 右侧抽屉的活动栏（activity rail）。
- * 新架构下面板切换入口从「会话 outline 浮动按钮」下沉到抽屉自身：
- * 抽屉打开期间始终可见，无活跃会话时也能切换 files/git/browser，
- * 不依赖 outline 是否渲染。
+ * 右侧抽屉活动栏（#115 pure official）：横排 tab，shadcn ghost/secondary 按钮。
+ * 抽屉打开期间始终可见，无活跃会话时也能切换 files/git/browser。
  */
 export function WorkspaceDrawerRail(props: { actions: WorkspaceDrawerRailAction[] }) {
   if (props.actions.length === 0) return null;
   return (
-    <div className="drawer-activity-rail" role="tablist" aria-orientation="horizontal">
+    <div
+      className="drawer-activity-rail flex shrink-0 items-center gap-1 border-b border-border bg-background px-2 py-1"
+      role="tablist"
+      aria-orientation="horizontal"
+    >
       {props.actions.map((action) => (
-        <button
+        <Button
           key={action.id}
           type="button"
           role="tab"
           aria-selected={action.active}
           data-testid={`drawer-rail-${action.id}`}
-          className={`drawer-activity-rail-button${action.active ? " active" : ""}`}
+          variant={action.active ? "secondary" : "ghost"}
+          size="icon"
+          className={cn(
+            "drawer-activity-rail-button relative size-8",
+            action.active && "active",
+          )}
           title={action.label}
           aria-label={action.label}
           onClick={action.onClick}
         >
           {action.icon}
-        </button>
+          {action.active ? (
+            <span
+              className="pointer-events-none absolute inset-x-1.5 -bottom-1 h-0.5 rounded-full bg-foreground"
+              aria-hidden="true"
+            />
+          ) : null}
+        </Button>
       ))}
     </div>
   );
