@@ -128,3 +128,62 @@ test("agent flow: model picker and thinking level switch apply", async ({ window
 	await thinkingPalette.locator(".picker-palette-item", { hasText: "low" }).first().click();
 	await expect(thinkingButton).toContainText("low", { timeout: 10_000 });
 });
+
+/**
+ * compact（#113 3.2-7）：上下文占比 >30% 显示压缩 chip；点击后走真实
+ * compact RPC + compaction_start/end 事件序列；完成后占比降至 12%，
+ * chip 应消失、agent 回到空闲（发送按钮回归）。
+ */
+test("agent flow: compact chip compacts and disappears", async ({ window }) => {
+	test.setTimeout(120_000);
+	await expect(window.locator("#boot-overlay")).toHaveCount(0, { timeout: 20_000 });
+	const composer = await startAgent(window);
+	const timeline = window.locator(".message-timeline");
+
+	// 首轮 run 结束后 emitRuntimeState 带上 contextUsage.percent=45 → chip 出现
+	await composer.click();
+	await window.keyboard.type("压缩前消息");
+	await window.keyboard.press("Enter");
+	await expect(timeline).toContainText("Mock 回复：「压缩前消息」流式渲染验证完成", { timeout: 20_000 });
+
+	const compactChip = window.locator(".composer-bar-btn.compact");
+	await expect(compactChip).toBeVisible({ timeout: 10_000 });
+	await compactChip.click();
+
+	// 压缩完成：占比降至 12%（≤30%），chip 隐藏；agent 回到空闲可继续发送
+	await expect(compactChip).toBeHidden({ timeout: 15_000 });
+	await expect(window.locator(".composer-bar-btn.send")).toBeVisible({ timeout: 10_000 });
+
+	// 压缩后会话仍可继续
+	await composer.click();
+	await window.keyboard.type("压缩后继续");
+	await window.keyboard.press("Enter");
+	await expect(timeline).toContainText("Mock 回复：「压缩后继续」流式渲染验证完成", { timeout: 20_000 });
+});
+
+/**
+ * fork（#113 3.2-8）：从用户消息 fork 新会话。
+ * 走 get_fork_messages（entryId 回退匹配）→ fork RPC → 会话替换刷新，
+ * 原文预填回输入框并出成功 toast。
+ */
+test("agent flow: fork from user message prefills composer", async ({ window }) => {
+	test.setTimeout(120_000);
+	await expect(window.locator("#boot-overlay")).toHaveCount(0, { timeout: 20_000 });
+	const composer = await startAgent(window);
+	const timeline = window.locator(".message-timeline");
+
+	await composer.click();
+	await window.keyboard.type("fork 源句");
+	await window.keyboard.press("Enter");
+	await expect(timeline).toContainText("Mock 回复：「fork 源句」流式渲染验证完成", { timeout: 20_000 });
+
+	// 悬停用户气泡出现 Fork 操作（忙碌中不显示，此处已空闲）
+	const userBubble = timeline.locator("article", { hasText: "fork 源句" }).first();
+	await userBubble.hover();
+	await window.getByRole("button", { name: "Fork" }).first().click();
+
+	// fork 成功 toast（3.5s 自动消失，先行断言）
+	await expect(window.getByText("已 fork 为新会话，原文已放入输入框")).toBeVisible({ timeout: 5000 });
+	// 原文预填回输入框
+	await expect(composer).toContainText("fork 源句", { timeout: 10_000 });
+});

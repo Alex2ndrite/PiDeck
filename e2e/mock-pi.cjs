@@ -59,6 +59,20 @@ const MODELS = [
 ];
 let currentModel = MODELS[0];
 let currentThinking = "medium";
+// 上下文占比：初始 >30% 让 compact chip 显示（桌面端 >30% 才渲染，见
+// ComposerComponents showCompact）；compact 成功后降到 12%，验证 chip 消失。
+let contextPercent = 45;
+// 记录收到的用户 prompt：fork 用例的 get_fork_messages 按文本匹配 entryId。
+const userPrompts = [];
+// 会话文件：真实 pi 在首轮 prompt 后即有 session 文件；fork/clone 的
+// replaceAgentSession 要求 tab.sessionPath 非空，mock 在首个 prompt 后落一个
+// 真实空 JSONL 文件并在 get_state 中返回（路径经 SessionRuntimeCoordinator 校验）。
+let sessionFile = null;
+function ensureSessionFile() {
+	if (sessionFile) return;
+	sessionFile = path.join(require("node:os").tmpdir(), `${sessionId}.jsonl`);
+	try { fs.writeFileSync(sessionFile, ""); } catch { /* 写失败仅影响 fork 类用例 */ }
+}
 let streamTimer = null;
 let streamStep = 0;
 let streamChunks = [];
@@ -143,6 +157,7 @@ function handleCommand(cmd) {
 			respond(cmd, {
 				sessionId,
 				sessionName: "Mock Agent",
+				sessionFile: sessionFile ?? undefined,
 				model: currentModel,
 				thinkingLevel: currentThinking,
 			});
@@ -154,7 +169,7 @@ function handleCommand(cmd) {
 			respond(cmd, { entries: [] });
 			return;
 		case "get_session_stats":
-			respond(cmd, { tokens: 0, contextTokens: 1024 });
+			respond(cmd, { tokens: { input: 100, output: 50 }, contextUsage: { percent: contextPercent } });
 			return;
 		case "get_available_models":
 			respond(cmd, { models: MODELS });
@@ -180,11 +195,38 @@ function handleCommand(cmd) {
 			// 先回 success（桌面端据此认为已受理），再异步推流
 			respond(cmd, {});
 			const text = typeof cmd.message === "string" ? cmd.message : "";
+			ensureSessionFile();
+			if (text) userPrompts.push(text);
 			if (streaming) {
 				pendingPrompts.push(text);
 			} else {
 				startStream(text);
 			}
+			return;
+		}
+		case "compact":
+			// 模拟 pi 压缩事件序列：compaction_start → RPC success → compaction_end
+			// → agent_settled。桌面端据此 running → 重载消息 → idle；
+			// compaction_end 触发 emitRuntimeState，占比下降后 compact chip 应消失。
+			emit({ type: "compaction_start", reason: "manual" });
+			setTimeout(() => {
+				respond(cmd, {});
+				contextPercent = 12;
+				setTimeout(() => {
+					emit({ type: "compaction_end", reason: "manual" });
+					emit({ type: "agent_settled" });
+				}, 150);
+			}, 100);
+			return;
+		case "get_fork_messages":
+			respond(cmd, {
+				messages: userPrompts.map((text, i) => ({ entryId: `entry-${i + 1}`, text })),
+			});
+			return;
+		case "fork": {
+			const found = userPrompts.find((_, i) => `entry-${i + 1}` === cmd.entryId);
+			// 桌面端读取 result.text 预填回输入框；cancelled 为空对象语义
+			respond(cmd, { text: found ?? "" });
 			return;
 		}
 		case "abort":

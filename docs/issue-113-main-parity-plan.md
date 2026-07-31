@@ -164,8 +164,8 @@ git log --oneline HEAD..origin/main --since="7 days ago"
 
 5. 新建会话 → 发送消息 → 流式渲染 → 停止　🤖 **已自动化**（`e2e/agent-flow.spec.ts` + `e2e/mock-pi.cjs`，真实 spawn+RPC）
 6. 重启 Agent → 会话可继续
-7. compact：上下文 >30% 出现 chip，点击压缩成功；nothing-to-do 场景出友好文案
-8. fork：从某条用户消息 fork 出新会话
+7. compact：上下文 >30% 出现 chip，点击压缩成功；nothing-to-do 场景出友好文案　🤖 **压缩主路径已自动化**（`e2e/agent-flow.spec.ts`：chip 出现→点击→占比下降 chip 消失→可续聊；nothing-to-do 仍手动）
+8. fork：从某条用户消息 fork 出新会话　🤖 **已自动化**（同 spec：get_fork_messages→fork RPC→toast+原文预填）
 9. 关闭再打开应用 → 历史会话恢复
 10. 排队消息：发送中再发 → 排队 → 可撤回　🤖 **排队+顺序回答已自动化**（同上 spec 第二用例；「可撤回」仍手动）
 
