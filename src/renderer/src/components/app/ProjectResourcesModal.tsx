@@ -1,3 +1,4 @@
+import { Button } from "../ui-shadcn/button";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { showNotice } from "../../utils/notice";
 
@@ -401,9 +402,9 @@ export function ProjectResourcesModal(props: {
 								<span>{t("config.description")}</span>
 								<textarea value={newDescription} placeholder="Use when..." onChange={(event) => setNewDescription(event.target.value)} />
 							</label>
-							<button className="config-btn primary" onClick={createSkill} disabled={!canCreateSkill || createBusy}>
+							<Button  variant="default" onClick={createSkill} disabled={!canCreateSkill || createBusy}>
 								{createBusy ? t("config.creatingSkill") : t("config.addSkill")}
-							</button>
+							</Button>
 						</section>
 						<div className="project-resources-list-section">
 						<ResourceListEmpty loading={loading} empty={data.skills.length === 0} label={t("projectResources.emptySkills")} />
@@ -569,9 +570,9 @@ export function ProjectResourcesModal(props: {
 								<span>{t("config.description")}</span>
 								<textarea value={newPromptDescription} placeholder="Use when..." onChange={(event) => setNewPromptDescription(event.target.value)} />
 							</label>
-							<button className="config-btn primary" onClick={createProjectPrompt} disabled={!canCreatePrompt || creatingPrompt}>
+							<Button  variant="default" onClick={createProjectPrompt} disabled={!canCreatePrompt || creatingPrompt}>
 								{creatingPrompt ? t("config.creatingSkill") : t("config.addSkill")}
-							</button>
+							</Button>
 						</section>
 						<div className="project-resources-list-section">
 						<ResourceListEmpty loading={promptsLoading} empty={prompts.length === 0} label={t("projectResources.emptyPrompts")} />

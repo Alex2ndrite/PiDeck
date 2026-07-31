@@ -1,3 +1,4 @@
+import { ConfirmDialog } from "../../ui-shadcn/ConfirmDialog";
 import { useEffect, useState, type ReactNode } from "react";
 import { t } from "../../../i18n";
 import { Button } from "../../ui/Button";
@@ -96,23 +97,14 @@ export function StorageTab(props: {
 	return (
 		<>
 			{confirmDialog && (
-				<div className="config-modal-overlay" onClick={() => setConfirmDialog(null)}>
-					<div className="config-modal-dialog" onClick={(e) => e.stopPropagation()}>
-						<strong>{confirmDialog.title}</strong>
-						<p>{confirmDialog.message}</p>
-						<div className="config-modal-actions">
-							<button className="config-btn" onClick={() => setConfirmDialog(null)}>
-								{t("common.cancel")}
-							</button>
-							<button
-								className="config-btn danger"
-								onClick={confirmDialog.onConfirm}
-							>
-								{t("common.confirm")}
-							</button>
-						</div>
-					</div>
-				</div>
+				// #115：手写确认浮层删除，统一走 shadcn ConfirmDialog（AlertDialog）
+				<ConfirmDialog
+					title={confirmDialog.title}
+					message={confirmDialog.message}
+					danger
+					onConfirm={confirmDialog.onConfirm}
+					onCancel={() => setConfirmDialog(null)}
+				/>
 			)}
 			<SettingsSection title={t("settings.storage.appLogs")}>
 				<div className="setting-row">

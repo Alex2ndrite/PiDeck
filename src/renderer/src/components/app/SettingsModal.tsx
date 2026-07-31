@@ -1,4 +1,5 @@
 // @ts-nocheck - extracted from AppParts, pre-existing type issues
+import { Button } from "../ui-shadcn/button";
 import { Component, useState, useEffect, useRef, useMemo, type ReactNode } from "react";
 import {
 	Settings2,
@@ -475,12 +476,12 @@ function SettingsModalContent(props: SettingsModalProps) {
 						{/* 全局保存/取消按钮：仅在存在未保存变更时显示，样式与配置弹框的导入/导出按钮一致 */}
 						{hasDirtyChanges && (
 							<>
-								<button className="config-btn primary" onClick={saveAll}>
+								<Button  variant="default" onClick={saveAll}>
 									{t("common.save")}
-								</button>
-								<button className="config-btn" onClick={cancelAll}>
+								</Button>
+								<Button  variant="outline" onClick={cancelAll}>
 									{t("common.cancel")}
-								</button>
+								</Button>
 							</>
 						)}
 						<CloseIconButton
@@ -1518,15 +1519,15 @@ function SettingsModalContent(props: SettingsModalProps) {
 							<strong>{t("settings.unsavedTitle")}</strong>
 							<p>{t("settings.unsavedMessage")}</p>
 							<div className="config-modal-actions">
-								<button className="config-btn" onClick={() => setCloseConfirmOpen(false)}>
+								<Button  variant="outline" onClick={() => setCloseConfirmOpen(false)}>
 									{t("common.cancel")}
-								</button>
-								<button className="config-btn danger" onClick={handleDiscardAndClose}>
+								</Button>
+								<Button  variant="outline" className="text-destructive" onClick={handleDiscardAndClose}>
 									{t("settings.discardChanges")}
-								</button>
-								<button className="config-btn primary" onClick={handleSaveAndClose}>
+								</Button>
+								<Button  variant="default" onClick={handleSaveAndClose}>
 									{t("settings.saveAndClose")}
-								</button>
+								</Button>
 							</div>
 						</div>
 					</div>

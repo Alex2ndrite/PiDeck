@@ -28,6 +28,8 @@ export interface ModalProps {
 	size?: ModalSize;
 	/** 主体内容 */
 	children: ReactNode;
+	/** header 右侧附加动作区（导出/导入等），渲染在关闭按钮左侧 */
+	headerActions?: ReactNode;
 	/** 额外的根元素 class（保留参数，当前不再使用） */
 	className?: string;
 	/** 额外的 content wrapper class */
@@ -46,6 +48,7 @@ export function Modal({
 	title,
 	size = "full",
 	children,
+	headerActions,
 	contentClassName,
 }: ModalProps) {
 	return (
@@ -57,9 +60,12 @@ export function Modal({
 				{title && (
 					<DialogHeader className="flex-row items-center justify-between px-4 py-3">
 						<DialogTitle>{title}</DialogTitle>
-						<DialogClose asChild>
-							<CloseIconButton label={t("common.close")} />
-						</DialogClose>
+						<div className="flex items-center gap-2">
+							{headerActions}
+							<DialogClose asChild>
+								<CloseIconButton label={t("common.close")} />
+							</DialogClose>
+						</div>
 					</DialogHeader>
 				)}
 				{children}

@@ -1,3 +1,6 @@
+import { Button } from "./components/ui-shadcn/button";
+import { Modal } from "./components/ui/Modal";
+import { ConfirmDialog } from "./components/ui-shadcn/ConfirmDialog";
 import { showNotice } from "./utils/notice";
 import { Component, useState, useEffect, useCallback, type ReactNode } from "react";
 import type { PiDesktopApi } from "../../preload";
@@ -103,8 +106,8 @@ function ConfigDiagnosticCard(props: {
 			</div>
 			{diagnostic.snippet && <pre>{diagnostic.snippet}</pre>}
 			<div className="config-diagnostic-actions">
-				<button className="config-btn primary" onClick={props.onOpenRaw}>{t("config.openRawFile")}</button>
-				<button className="config-btn" onClick={props.onOpenDocs}>{t("config.openOfficialDocs")}</button>
+				<Button  variant="default" onClick={props.onOpenRaw}>{t("config.openRawFile")}</Button>
+				<Button  variant="outline" onClick={props.onOpenDocs}>{t("config.openOfficialDocs")}</Button>
 			</div>
 		</div>
 	);
@@ -135,17 +138,10 @@ class ConfigModalErrorBoundary extends Component<
 	override render() {
 		if (!this.state.error) return this.props.children;
 		if (!this.props.open) return null;
+		// #115：错误兜底同样走 shadcn Modal 外壳
 		return (
-			<div className="modal-backdrop" onClick={this.props.onClose}>
-				<div className="config-modal" onClick={(e) => e.stopPropagation()}>
-					<div className="modal-header">
-						<strong>{t("config.loadFailed")}</strong>
-						<CloseIconButton
-							label={t("common.close")}
-							onClick={this.props.onClose}
-						/>
-					</div>
-					<div className="config-content">
+			<Modal open={this.props.open} onClose={this.props.onClose} title={t("config.loadFailed")} contentClassName="config-modal">
+				<div className="config-content">
 						<div className="config-diagnostic-card">
 							<div>
 								<strong>{t("config.renderCrashed")}</strong>
@@ -161,8 +157,7 @@ class ConfigModalErrorBoundary extends Component<
 							<pre>{this.state.error.stack ?? this.state.error.message}</pre>
 						</div>
 					</div>
-				</div>
-			</div>
+			</Modal>
 		);
 	}
 }
@@ -1351,26 +1346,25 @@ function ConfigModalContent(props: ConfigModalProps) {
 	if (!open) return null;
 
 	return (
-		<div className="modal-backdrop" onClick={onClose}>
-			<div className="config-modal" onClick={(e) => e.stopPropagation()}>
-				<div className="modal-header">
-					<strong>{t("config.title")}</strong>
-					<div className="modal-header-actions">
-						{section === "config" && (
-							<>
-								<button className="config-btn primary" onClick={handleExport}>
-									{t("common.export")}
-								</button>
-								<button className="config-btn blue" onClick={handleImport}>
-									{t("common.import")}
-								</button>
-							</>
-						)}
-						<CloseIconButton label={t("common.close")} onClick={onClose} />
-					</div>
-				</div>
-
-				<div className="config-layout">
+		<Modal
+			open={open}
+			onClose={onClose}
+			title={t("config.title")}
+			contentClassName="config-modal"
+			headerActions={
+				section === "config" ? (
+					<>
+						<Button variant="default" size="sm" onClick={handleExport}>
+							{t("common.export")}
+						</Button>
+						<Button variant="secondary" size="sm" onClick={handleImport}>
+							{t("common.import")}
+						</Button>
+					</>
+				) : undefined
+			}
+		>
+			<div className="config-layout">
 					<aside className="config-sidebar" aria-label={t("config.title")}>
 						<div className="config-sidebar-group">
 							<span>{t("config.group.config")}</span>
@@ -1666,61 +1660,38 @@ function ConfigModalContent(props: ConfigModalProps) {
 				</div>
 
 				{deleteSkillConfirm && (
-					<div className="session-delete-confirm-backdrop" onClick={() => setDeleteSkillConfirm(null)}>
-						<div className="session-delete-confirm skill-delete-confirm" onClick={(event) => event.stopPropagation()}>
-							<strong>{t("config.deleteSkillConfirmTitle")}</strong>
-							<p>
-								{t("config.deleteSkillConfirmBody", {
-									name: deleteSkillConfirm.name,
-								})}
-							</p>
-							<small>{deleteSkillConfirm.path}</small>
-							<div className="session-delete-confirm-actions">
-								<button onClick={() => setDeleteSkillConfirm(null)}>{t("common.cancel")}</button>
-								<button className="danger" onClick={() => void confirmDeleteSkill()}>
-									{t("common.delete")}
-								</button>
-							</div>
-						</div>
-					</div>
+					<ConfirmDialog
+						title={t("config.deleteSkillConfirmTitle")}
+						message={t("config.deleteSkillConfirmBody", { name: deleteSkillConfirm.name }) + "\n" + deleteSkillConfirm.path}
+						confirmLabel={t("common.delete")}
+						danger
+						onConfirm={() => void confirmDeleteSkill()}
+						onCancel={() => setDeleteSkillConfirm(null)}
+					/>
 				)}
 
 				{uninstallExtensionConfirm && (
-					<div className="session-delete-confirm-backdrop" onClick={() => setUninstallExtensionConfirm(null)}>
-						<div className="session-delete-confirm skill-delete-confirm" onClick={(event) => event.stopPropagation()}>
-							<strong>{t("config.uninstallExtensionTitle")}</strong>
-							<p>
-								{t("config.uninstallExtensionBody", {
-									source: uninstallExtensionConfirm.source,
-								})}
-							</p>
-							{uninstallExtensionConfirm.path && <small>{uninstallExtensionConfirm.path}</small>}
-							<div className="session-delete-confirm-actions">
-								<button onClick={() => setUninstallExtensionConfirm(null)}>{t("common.cancel")}</button>
-								<button className="danger" onClick={confirmUninstallExtension}>{t("config.uninstall")}</button>
-							</div>
-						</div>
-					</div>
+					<ConfirmDialog
+						title={t("config.uninstallExtensionTitle")}
+						message={t("config.uninstallExtensionBody", { source: uninstallExtensionConfirm.source }) + (uninstallExtensionConfirm.path ? "\n" + uninstallExtensionConfirm.path : "")}
+						confirmLabel={t("config.uninstall")}
+						danger
+						onConfirm={confirmUninstallExtension}
+						onCancel={() => setUninstallExtensionConfirm(null)}
+					/>
 				)}
 
 				{/* toast 已改用 sonner */}
 				{deleteConfirm && (
-					<div className="config-modal-overlay" onClick={() => setDeleteConfirm(null)}>
-						<div className="config-modal-dialog" onClick={(e) => e.stopPropagation()}>
-							<strong>{deleteConfirm.title}</strong>
-							<p>{deleteConfirm.message}</p>
-							<div className="config-modal-actions">
-								<button className="config-btn danger" onClick={deleteConfirm.onConfirm}>
-									{t("common.delete")}
-								</button>
-								<button className="config-btn" onClick={() => setDeleteConfirm(null)}>
-									{t("common.cancel")}
-								</button>
-							</div>
-						</div>
-					</div>
+					<ConfirmDialog
+						title={deleteConfirm.title}
+						message={deleteConfirm.message}
+						confirmLabel={t("common.delete")}
+						danger
+						onConfirm={deleteConfirm.onConfirm}
+						onCancel={() => setDeleteConfirm(null)}
+					/>
 				)}
-			</div>
-		</div>
+		</Modal>
 	);
 }

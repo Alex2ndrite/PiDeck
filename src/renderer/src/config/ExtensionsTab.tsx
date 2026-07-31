@@ -1,3 +1,4 @@
+import { Button } from "../components/ui-shadcn/button";
 import { useEffect, useState } from "react";
 import { Copy, Download, RotateCcw, Trash2 } from "lucide-react";
 import type { PiCliUpdateResult, PiExtensionListResult, PiExtensionSummary, PiPackageInfo } from "../../../shared/types";
@@ -243,8 +244,8 @@ export function ExtensionsTab(props: {
 							{updateResult ? `${updateResult.command}\n${updateResult.output}` : t("settings.extensionsUpdating")}
 						</pre>
 						<div className="config-update-dialog-actions">
-							<button
-								className="config-btn primary"
+							<Button
+								 variant="default"
 								onClick={() => {
 									setShowUpdateDialog(false);
 									props.onRefresh();
@@ -252,7 +253,7 @@ export function ExtensionsTab(props: {
 								disabled={Boolean(updating)}
 							>
 								{t("common.close")}
-							</button>
+							</Button>
 						</div>
 					</div>
 				</div>
@@ -346,12 +347,12 @@ export function ExtensionsTab(props: {
 						</small>
 					</div>
 					<div className="skills-toolbar-actions">
-						<button className="config-btn" onClick={handleUpdateExtensions} disabled={props.loading || Boolean(updating)}>
+						<Button  variant="outline" onClick={handleUpdateExtensions} disabled={props.loading || Boolean(updating)}>
 							{updating ? t("settings.updating") : t("settings.updateExtensionsAll")}
-						</button>
-						<button className="config-btn" onClick={props.onRefresh} disabled={props.loading}>
+						</Button>
+						<Button  variant="outline" onClick={props.onRefresh} disabled={props.loading}>
 							{t("common.refresh")}
-						</button>
+						</Button>
 					</div>
 				</div>
 				<div className="skills-list">

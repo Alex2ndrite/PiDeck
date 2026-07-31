@@ -1,4 +1,5 @@
 // @ts-nocheck - SkillHub store panel, new feature
+import { Button } from "../components/ui-shadcn/button";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Search, Download, ArrowLeft, Check, AlertCircle, X, Trash2, BadgeCheck } from "lucide-react";
 import { t } from "../i18n";
@@ -222,10 +223,10 @@ export function SkillHubStorePanel() {
 		return (
 			<div className="skillhub-panel">
 				<div className="skillhub-detail-toolbar">
-					<button className="config-btn" onClick={() => { setPreviewSlug(null); setDetail(null); setInstallResult(null); }}>
+					<Button  variant="outline" onClick={() => { setPreviewSlug(null); setDetail(null); setInstallResult(null); }}>
 						<ArrowLeft size={14} />
 						{t("config.promptStoreBack")}
-					</button>
+					</Button>
 				</div>
 				<div className="config-empty" style={{ marginTop: 24 }}>
 					<p>{t("config.skillHubDetailNotAvailable")}</p>
@@ -249,13 +250,13 @@ export function SkillHubStorePanel() {
 						placeholder={t("config.skillHubSearchPlaceholder")}
 						disabled={searching}
 					/>
-					<button
-						className="config-btn primary"
+					<Button
+						 variant="default"
 						onClick={() => void handleSearch(query)}
 						disabled={searching || !query.trim()}
 					>
 						{searching ? t("common.searching") + "…" : <Search size={14} />}
-					</button>
+					</Button>
 				</div>
 				{!result && !searching && (
 					<div className="skillhub-suggestions">

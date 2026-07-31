@@ -1,3 +1,4 @@
+import { Button } from "../components/ui-shadcn/button";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { PiDesktopApi } from "../../../preload";
 import type { AppLogEntry, AppLogLevel } from "../../../shared/types";
@@ -91,9 +92,9 @@ export function LogsTab() {
 					/>
 				</div>
 				<div className="skills-toolbar-actions">
-					<button className="config-btn" onClick={refresh} disabled={loading}>{t("common.refresh")}</button>
-					<button className="config-btn" onClick={() => api.logs.openFolder()}>{t("logs.openFolder")}</button>
-					<button className="config-btn danger" onClick={clear}>{t("logs.clear")}</button>
+					<Button  variant="outline" onClick={refresh} disabled={loading}>{t("common.refresh")}</Button>
+					<Button  variant="outline" onClick={() => api.logs.openFolder()}>{t("logs.openFolder")}</Button>
+					<Button  variant="outline" className="text-destructive" onClick={clear}>{t("logs.clear")}</Button>
 				</div>
 			</div>
 			<p className="config-im-form-hint">{t("logs.hint")}</p>

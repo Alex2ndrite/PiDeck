@@ -444,12 +444,12 @@ export function RpcLogModal(props: {
 						})}
 					</strong>
 					<div className="modal-header-actions rpc-log-header-actions">
-						<button className="config-btn primary" onClick={() => copyLogs(props.logs)}>
+						<Button  variant="default" onClick={() => copyLogs(props.logs)}>
 							{t("common.copyAll")}
-						</button>
-						<button className="config-btn blue" onClick={() => copyLogs(visibleLogs)}>
+						</Button>
+						<Button  variant="secondary" onClick={() => copyLogs(visibleLogs)}>
 							{t("common.copyVisible")}
-						</button>
+						</Button>
 						<CloseIconButton
 							label={t("common.close")}
 							onClick={props.onClose}

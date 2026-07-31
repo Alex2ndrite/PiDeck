@@ -1,3 +1,4 @@
+import { Button } from "../components/ui-shadcn/button";
 import { useEffect, useState } from "react";
 import { ChevronDown, ChevronRight, Copy, ExternalLink, Trash2 } from "lucide-react";
 import { t } from "../i18n";
@@ -84,8 +85,8 @@ export function AuthTab(props: {
 					{t("config.count.auth", { count: providers.length })}
 				</span>
 				<div className="config-toolbar-actions">
-					<button
-						className="config-btn"
+					<Button
+						 variant="outline"
 						onClick={() => {
 							setSelectingProvider(true);
 							setSelectedProvider("");
@@ -95,16 +96,16 @@ export function AuthTab(props: {
 						disabled={saving}
 					>
 						{t("config.addAuth")}
-					</button>
-					<button
-						className="config-btn"
+					</Button>
+					<Button
+						 variant="outline"
 						onClick={() => setShowGuide(!showGuide)}
 						disabled={saving}
 					>
 						{t("config.authGuide")}
-					</button>
-					<button
-						className="config-btn danger-fill"
+					</Button>
+					<Button
+						 variant="destructive"
 						onClick={() => {
 							if (batchMode) {
 								setBatchMode(false);
@@ -116,10 +117,10 @@ export function AuthTab(props: {
 						disabled={saving || providers.length === 0}
 					>
 						{batchMode ? t("common.cancel") : t("common.deleteBatch")}
-					</button>
+					</Button>
 					{batchMode && (
-						<button
-							className="config-btn danger-fill"
+						<Button
+							 variant="destructive"
 							onClick={() => {
 								if (selectedAuths.size > 0) {
 									props.onDeleteAuths([...selectedAuths] as string[]);
@@ -130,15 +131,15 @@ export function AuthTab(props: {
 							disabled={selectedAuths.size === 0}
 						>
 							{t("common.deleteSelected")} ({selectedAuths.size})
-						</button>
+						</Button>
 					)}
-					<button
-						className="config-btn primary"
+					<Button
+						 variant="default"
 						onClick={props.onSave}
 						disabled={saving}
 					>
 						{saving ? t("common.saving") : t("common.save")}
-					</button>
+					</Button>
 				</div>
 			</div>
 
@@ -252,8 +253,8 @@ export function AuthTab(props: {
 								)}
 							</div>
 						)}
-						<button
-							className="config-btn primary"
+						<Button
+							 variant="default"
 							onClick={() => {
 								const finalName = customProviderName.trim() || selectedProvider;
 								if (!finalName) return;
@@ -264,10 +265,10 @@ export function AuthTab(props: {
 							disabled={!selectedProvider && !customProviderName.trim()}
 						>
 							{t("config.authAddSelected")}
-						</button>
-						<button className="config-btn" onClick={() => setSelectingProvider(false)}>
+						</Button>
+						<Button  variant="outline" onClick={() => setSelectingProvider(false)}>
 							{t("common.cancel")}
-						</button>
+						</Button>
 					</div>
 				</div>
 			)}

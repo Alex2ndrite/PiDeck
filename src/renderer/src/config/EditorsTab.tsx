@@ -1,3 +1,4 @@
+import { Button } from "../components/ui-shadcn/button";
 import { useEffect, useState } from "react";
 import type { PiDesktopApi } from "../../../preload";
 import {
@@ -94,9 +95,9 @@ export function EditorsTab() {
 					<strong>{t("editors.title")}</strong>
 					<p className="config-im-form-hint">{t("editors.hint")}</p>
 				</div>
-				<button className="config-btn" onClick={redetect} disabled={detecting}>
+				<Button  variant="outline" onClick={redetect} disabled={detecting}>
 					{detecting ? t("editors.detecting") : t("editors.redetect")}
-				</button>
+				</Button>
 			</div>
 			{error && <div className="config-error">{error}</div>}
 			<div className="editors-list">
@@ -138,25 +139,25 @@ export function EditorsTab() {
 									}
 									placeholder={t("editors.pathPlaceholder")}
 								/>
-								<button className="config-btn" onClick={() => void chooseExecutable(editor.id)}>
+								<Button  variant="outline" onClick={() => void chooseExecutable(editor.id)}>
 									{t("editors.browse")}
-								</button>
+								</Button>
 							</div>
 							<div className="editor-config-actions">
-								<button
-									className="config-btn primary"
+								<Button
+									 variant="default"
 									onClick={() => void updateEditor(editor.id, { command: draft })}
 									disabled={saving || draft === configured.command}
 								>
 									{saving ? t("common.saving") : t("common.save")}
-								</button>
-								<button
-									className="config-btn"
+								</Button>
+								<Button
+									 variant="outline"
 									onClick={() => void updateEditor(editor.id, { command: "", enabled: false })}
 									disabled={saving || (!configured.command && !configured.enabled)}
 								>
 									{t("editors.clear")}
-								</button>
+								</Button>
 							</div>
 						</section>
 					);

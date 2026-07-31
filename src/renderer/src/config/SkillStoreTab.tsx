@@ -1,3 +1,4 @@
+import { Button } from "../components/ui-shadcn/button";
 import { showNotice } from "../utils/notice";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeft, Download, ExternalLink, Search, Sparkles } from "lucide-react";
@@ -70,12 +71,12 @@ export function SkillStoreTab(props: {
 				{error && <div className="config-error">{error}</div>}
 				{/* toast 已改用 sonner */}
 				<div className="prompt-store-toolbar">
-					<button className="config-btn" onClick={() => { setPreviewItem(null); }}>
+					<Button  variant="outline" onClick={() => { setPreviewItem(null); }}>
 						<ArrowLeft size={14} strokeWidth={1.8} />
 						{t("config.promptStoreBack")}
-					</button>
-					<button
-						className="config-btn primary"
+					</Button>
+					<Button
+						 variant="default"
 						onClick={() => void handleImport(previewItem)}
 						disabled={importingId === previewItem.id}
 					>
@@ -84,7 +85,7 @@ export function SkillStoreTab(props: {
 						) : (
 							<><Download size={14} strokeWidth={1.8} /> {t("config.skillStoreImportAs")}</>
 						)}
-					</button>
+					</Button>
 				</div>
 				<div className="prompt-store-preview">
 					<div className="prompt-store-preview-header">
@@ -126,13 +127,13 @@ export function SkillStoreTab(props: {
 					placeholder={t("config.skillStoreSearchPlaceholder")}
 						disabled={searching}
 					/>
-					<button
-						className="config-btn primary"
+					<Button
+						 variant="default"
 						onClick={() => void handleSearch(query)}
 						disabled={searching || !query.trim()}
 					>
 					{searching ? t("config.promptStoreSearching") : <Search size={14} strokeWidth={1.8} />}
-					</button>
+					</Button>
 				</div>
 				{!result && !searching && (
 					<div className="prompt-store-suggestions">
@@ -181,13 +182,13 @@ export function SkillStoreTab(props: {
 								>
 									<ExternalLink size={14} strokeWidth={1.8} />
 								</button>
-								<button
-									className="config-btn primary small"
+								<Button
+									 variant="default" size="sm"
 									onClick={(e) => { e.stopPropagation(); void handleImport(item); }}
 									disabled={importingId === item.id}
 								>
 							{importingId === item.id ? t("config.promptStoreImporting") : t("config.promptStoreImport")}
-								</button>
+								</Button>
 							</div>
 						</article>
 					))}

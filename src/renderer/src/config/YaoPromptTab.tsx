@@ -1,3 +1,4 @@
+import { Button } from "../components/ui-shadcn/button";
 import { showNotice } from "../utils/notice";
 import { useEffect, useState } from "react";
 import { ArrowLeft, Check, ChevronLeft, ChevronRight, Download, Search } from "lucide-react";
@@ -136,12 +137,12 @@ export function YaoPromptTab(props: {
 				{error && <div className="config-error">{error}</div>}
 				{/* toast 已改用 sonner */}
 				<div className="prompt-store-toolbar">
-					<button className="config-btn" onClick={() => { setPreviewItem(null); setPreviewDetail(null); }}>
+					<Button  variant="outline" onClick={() => { setPreviewItem(null); setPreviewDetail(null); }}>
 						<ArrowLeft size={14} strokeWidth={1.8} />
 						{t("config.promptStoreBack")}
-					</button>
-					<button
-						className="config-btn primary"
+					</Button>
+					<Button
+						 variant="default"
 						onClick={() => void handleImport(previewItem)}
 						disabled={importingSlug === previewItem.slug}
 					>
@@ -150,7 +151,7 @@ export function YaoPromptTab(props: {
 						) : (
 							<><Download size={14} strokeWidth={1.8} /> {t("config.promptStoreImport")}</>
 						)}
-					</button>
+					</Button>
 				</div>
 				{previewLoading ? (
 					<div className="config-loading">{t("common.loading")}</div>
@@ -250,13 +251,13 @@ export function YaoPromptTab(props: {
 									</div>
 									<div className="prompt-store-card-actions">
 										{!installedNames.has(item.slug.toLowerCase()) && (
-											<button
-												className="config-btn primary small"
+											<Button
+												 variant="default" size="sm"
 												onClick={(e) => { e.stopPropagation(); void handleImport(item); }}
 												disabled={importingSlug === item.slug}
 											>
 												{importingSlug === item.slug ? t("config.promptStoreImporting") : t("config.promptStoreImport")}
-											</button>
+											</Button>
 										)}
 									</div>
 								</article>
@@ -267,23 +268,23 @@ export function YaoPromptTab(props: {
 					{/* 分页控件 */}
 					{totalPages > 1 && (
 						<div className="yao-pagination">
-							<button
-								className="config-btn"
+							<Button
+								 variant="outline"
 								disabled={page <= 1}
 								onClick={() => setPage((p) => Math.max(1, p - 1))}
 							>
 								<ChevronLeft size={14} />
-							</button>
+							</Button>
 							<span className="yao-pagination-info">
 								{page} / {totalPages}
 							</span>
-							<button
-								className="config-btn"
+							<Button
+								 variant="outline"
 								disabled={page >= totalPages}
 								onClick={() => setPage((p) => p + 1)}
 							>
 								<ChevronRight size={14} />
-							</button>
+							</Button>
 						</div>
 					)}
 				</>

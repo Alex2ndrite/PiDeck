@@ -1,3 +1,4 @@
+import { Button } from "../components/ui-shadcn/button";
 import { useState, useRef, useCallback, useEffect } from "react";
 import { X, Plus, Check } from "lucide-react";
 import type { AuthFile, SettingsFile, ModelsFile } from "./configTypes";
@@ -214,13 +215,13 @@ export function SettingsTab(props: {
 				<span className="config-count">
 					{t("config.count.configItems", { count: entries.length })}
 				</span>
-				<button
-					className="config-btn primary"
+				<Button
+					 variant="default"
 					onClick={props.onSave}
 					disabled={saving}
 				>
 					{saving ? t("common.saving") : t("common.save")}
-				</button>
+				</Button>
 			</div>
 			<div className="config-settings-list">
 				{/* enabledModels 始终显示在最前面 */}
@@ -348,13 +349,13 @@ export function SettingsTab(props: {
 				))}
 				{!hasEnabledModels && (
 					<div className="config-settings-row config-settings-row--add">
-						<button
-							className="config-btn"
+						<Button
+							 variant="outline"
 							onClick={() => props.onChange({ ...data, enabledModels: [] })}
 						>
 							<Plus size={14} />
 							{t("config.settings.addEnabledModels")}
-						</button>
+						</Button>
 					</div>
 				)}
 				{entries.length === 0 && <div className="config-empty">{t("config.emptyConfig")}</div>}
