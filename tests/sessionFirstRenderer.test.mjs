@@ -107,7 +107,7 @@ test("Session messages and composer render without an active Agent", () => {
   assert.match(appSource, /const hasActiveConversation = Boolean\(currentSessionId\)/);
   assert.match(
     sessionViewSource,
-    /\{hasActiveConversation && \(\s*<ComposerArea[\s\S]*sessionId=\{sessionId\}/,
+    /\{hasActiveConversation && \([\s\S]*<ComposerArea[\s\S]*sessionId=\{sessionId\}/,
   );
   assert.match(composerSource, /useSessionComposerController\(/);
   assert.match(composerSource, /sessionId=\{props\.sessionId\}/);

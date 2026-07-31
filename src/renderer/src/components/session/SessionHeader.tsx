@@ -20,7 +20,6 @@ type HeaderActions = {
   duration?: number;
   hasProject: boolean;
   menuOpen: boolean;
-  notice?: string;
   canStop: boolean;
   canRestart: boolean;
   isRestarting: boolean;
@@ -120,11 +119,6 @@ export function SessionHeader(props: SessionHeaderProps) {
                   </span>
                 )}
               </button>
-              {props.notice && (
-                <div className="app-notice" role="status">
-                  {props.notice}
-                </div>
-              )}
               {props.menuOpen && hasSession && (
                 <div className="session-combo-menu">
                   <button onClick={props.onNewSession}>

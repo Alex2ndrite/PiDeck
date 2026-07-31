@@ -14,7 +14,6 @@ import type { PiDesktopApi } from "../../../../preload";
 import { t } from "../../i18n";
 import { isLanWeb, desktopApi as api } from "../../desktopApi";
 import { SessionHeader } from "./SessionHeader";
-import { NoticeCenter } from "../overlays/NoticeCenter";
 import { SessionMessageTimeline } from "./SessionMessageTimeline";
 import { ComposerArea } from "./ComposerArea";
 import { SessionRuntimeDock } from "./SessionRuntimeDock";
@@ -242,7 +241,6 @@ export function SessionView({
         onToggleDrawer={onToggleDrawer}
         drawerOpen={drawerOpen}
       />
-      <NoticeCenter />
 
       <Group orientation="vertical" className="session-v-group">
         <Panel id="timeline" minSize={160} className="session-v-timeline">

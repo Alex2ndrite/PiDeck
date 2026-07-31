@@ -11,12 +11,16 @@ function cssRule(selector) {
   return styles.match(new RegExp(`${selector} \\{([\\s\\S]*?)\\n\\}`))?.[1];
 }
 
-test("terminal dock combines a short grid transition with composited motion", () => {
+test("terminal dock combines panel layout with composited motion", () => {
   const chatPane = cssRule("\\.chat-pane");
   const terminalDock = cssRule("\\.terminal-dock");
 
   assert.ok(chatPane, "chat pane styles must exist");
-  assert.match(chatPane, /transition:\s*grid-template-rows 120ms/);
+  // #115 U5：纵向三段已交 react-resizable-panels，chat-pane 是纯 flex 列容器，
+  // 不再有 grid-template-rows 过渡（回归锁：不得把旧 grid 动画加回来）
+  assert.match(chatPane, /display:\s*flex;/);
+  assert.match(chatPane, /flex-direction:\s*column;/);
+  assert.doesNotMatch(chatPane, /grid-template-rows/);
   assert.ok(terminalDock, "terminal dock styles must exist");
   assert.match(terminalDock, /will-change:\s*transform;/);
   assert.match(terminalDock, /transition:\s*transform/);

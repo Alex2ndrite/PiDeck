@@ -1,46 +1,42 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { readRendererStyles } from "./helpers/rendererStyles.mjs";
 
-const app = readFileSync("src/renderer/src/App.tsx", "utf8");
+// #115 U5 收尾：通知机制从自研 app-notice 锚点浮层迁移为 sonner 全局 toast。
+// 本测试锁定新契约：notify 请求仍经 showNotice 出口，showNotice 落到 sonner，
+// Toaster 在渲染树根挂载，旧的 app-notice/NoticeCenter 不再回流。
+
+const sessionAtoms = readFileSync("src/renderer/src/atoms/session-atoms.ts", "utf8");
+const mainEntry = readFileSync("src/renderer/src/main.tsx", "utf8");
+const notice = readFileSync("src/renderer/src/utils/notice.ts", "utf8");
 const sessionView = readFileSync(
   "src/renderer/src/components/session/SessionView.tsx",
   "utf8",
 );
-const sessionAtoms = readFileSync("src/renderer/src/atoms/session-atoms.ts", "utf8");
 const header = readFileSync(
   "src/renderer/src/components/session/SessionHeader.tsx",
   "utf8",
 );
-const styles = readRendererStyles();
 
-function cssRule(selector) {
-  return styles.match(new RegExp(`${selector} \\{([\\s\\S]*?)\\n\\}`))?.[1];
-}
-
-test("通知锚定在新会话控件下方而不是全局 toast", () => {
+test("通知统一走 sonner 全局 toast（不再有 app-notice 锚点浮层）", () => {
+  // pi extension 的 notify 请求仍渲染进 runtime atom
   assert.match(sessionAtoms, /request\.method === "notify"/);
   assert.match(sessionAtoms, /notification:\s*\{/);
+
+  // showNotice 出口保持，内部落到 sonner
   const runtimeController = readFileSync(
     "src/renderer/src/hooks/useSessionRuntimeController.ts",
     "utf8",
   );
   assert.match(runtimeController, /showNotice\(\s*notification\.message/);
-  assert.match(sessionView, /<NoticeCenter \/>/);
+  assert.match(notice, /from "sonner"/);
+  assert.match(notice, /toast\.(error|warning|info|\()/);
 
-  const noticeIndex = sessionView.indexOf("<NoticeCenter");
-  const comboInAppIndex = sessionView.indexOf('className="session-combo"');
-  assert.ok(noticeIndex > 0, "NoticeCenter must render in SessionView");
-  assert.ok(noticeIndex > comboInAppIndex, "NoticeCenter must render after session combo in SessionView");
+  // Toaster 挂载在渲染树根（TooltipProvider 同级）
+  assert.match(mainEntry, /ui-shadcn\/sonner/);
+  assert.match(mainEntry, /<Toaster \/>/);
 
-  const notice = cssRule("\\.app-notice");
-  assert.ok(notice, "通知样式必须存在");
-  assert.match(notice, /position:\s*absolute;/);
-  assert.match(notice, /top:\s*calc\(100% \+ 20px\);/);
-  assert.match(notice, /right:\s*0;/);
-
-  const combo = cssRule("\\.session-combo,\\n\\.file-action-combo");
-  assert.ok(combo, "Session combo anchor styles must exist");
-  assert.match(combo, /position:\s*relative;/);
+  // 旧自研浮层不得回流
+  assert.doesNotMatch(sessionView, /NoticeCenter/);
+  assert.doesNotMatch(header, /app-notice/);
 });

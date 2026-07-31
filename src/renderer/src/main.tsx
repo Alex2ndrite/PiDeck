@@ -4,6 +4,7 @@ import type { AppLogLevel } from "@shared/types";
 import { App } from "./App";
 import { AppErrorBoundary } from "./components/ui/AppErrorBoundary";
 import { TooltipProvider } from "./components/ui-shadcn/tooltip";
+import { Toaster } from "./components/ui-shadcn/sonner";
 import { t } from "./i18n";
 import { showNotice } from "./utils/notice";
 import "./styles.css";
@@ -72,6 +73,8 @@ ReactDOM.createRoot(rootElement).render(
       {/* shadcn Tooltip 必须在 Provider 树内使用（#115 U1） */}
       <TooltipProvider>
         <App />
+        {/* 全局 toast 出口（#115）：showNotice 经 sonner 在此渲染 */}
+        <Toaster />
       </TooltipProvider>
     </AppErrorBoundary>
   </React.StrictMode>,

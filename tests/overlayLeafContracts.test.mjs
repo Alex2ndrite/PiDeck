@@ -47,14 +47,11 @@ test("async leaf controllers contain cancellation and stale-result guards", () =
   assert.match(updates, /downloadGate\.current\.settle/);
 });
 
-test("ScratchPad and Notice roots preserve shortcut, closing, and timer cleanup", () => {
+test("ScratchPad root preserves shortcut, closing, and timer cleanup", () => {
   const scratch = read("components/overlays/ScratchPadOverlay.tsx");
-  const notice = read("components/overlays/NoticeCenter.tsx");
   assert.match(scratch, /ctrlKey.*shiftKey/);
   assert.match(scratch, /event\.key === "Escape"/);
   assert.match(scratch, /isClosing/);
-  assert.match(notice, /clearTimeout/);
-  assert.match(notice, /unsubscribe\(\)/);
 });
 
 function loadResponder() {

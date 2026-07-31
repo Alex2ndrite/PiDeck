@@ -264,7 +264,7 @@ export function App() {
   	Record<string, Set<"pi" | "codex" | "claude" | "opencode"> | null>
   >(() => loadSessionSourceFilter());
   /** 编辑器展示模式：弹框或侧栏 */
-  // showToast 使用 app-notice 统一展示，见下方函数定义
+  // showToast 经 showNotice → sonner 全局 toast（#115）
   // 历史命令：按 agent 隔离，agent 关闭即清除（不持久化）
   const promptHistoryRef = useRef<Record<string, string[]>>({});
 
@@ -533,7 +533,7 @@ export function App() {
     if (drawer === "git") workspace.closeDrawer();
   }, [settings.enableGitManagement, drawer, workspace.closeDrawer]);
 
-  /* settingsNotice 已改用 showToast (app-notice) 实现 */
+  /* settingsNotice 已改用 showToast（sonner）实现 */
   const [webServiceChanging, setWebServiceChanging] = useState(false);
   const [appInfo, setAppInfo] = useState<AppInfo>({
     version: "-",
@@ -1399,7 +1399,7 @@ export function App() {
     };
   }, [activeProjectId]);
 
-  /** 统一通知：所有非模态消息都走 app-notice 位置 */
+  /** 统一通知：所有非模态消息都走 sonner 全局 toast */
   function showToast(message: string, duration = 3500) {
     showNotice(message, duration);
   }
