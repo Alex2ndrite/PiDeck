@@ -172,13 +172,13 @@ export function ComposerBottomBar(props: {
 			: `${t("app.model")}: -`;
 
 	return (
-		<div className="composer-bottom-bar">
-			<div className="composer-bottom-layout">
-				<div className="composer-bottom-left">
+		<div className="composer-bottom-bar border-t border-border/80 px-2 py-1.5">
+			<div className="composer-bottom-layout flex min-w-0 items-center gap-2">
+				<div className="composer-bottom-left flex min-w-0 flex-wrap items-center gap-1">
 					<Button
 						variant="ghost"
 						buttonSize="sm"
-						className={`composer-bar-btn${isPlanMode ? " active" : ""}`}
+						className={`composer-bar-btn h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground${isPlanMode ? " active" : ""}`}
 						disabled={props.disabled}
 						onClick={props.onOpenComposerModePicker}
 						title={t("app.composerModeTitle")}
@@ -192,7 +192,7 @@ export function ComposerBottomBar(props: {
 					</Button>
 					{isPlanMode && (
 						<IconButton
-							className="composer-bar-btn icon mode-cancel"
+							className="composer-bar-btn icon mode-cancel size-7"
 							label={t("app.composerModeCancelPlan")}
 							disabled={props.disabled}
 							onClick={props.onCancelPlan}
@@ -201,7 +201,7 @@ export function ComposerBottomBar(props: {
 						</IconButton>
 					)}
 					<IconButton
-						className="composer-bar-btn icon"
+						className="composer-bar-btn icon size-7"
 						label={t("app.promptTemplatePickerTitle")}
 						disabled={props.disabled}
 						onClick={props.onPickPromptTemplate}
@@ -209,7 +209,7 @@ export function ComposerBottomBar(props: {
 						<FileText size={15} strokeWidth={1.8} aria-hidden="true" />
 					</IconButton>
 					<IconButton
-						className="composer-bar-btn icon"
+						className="composer-bar-btn icon size-7"
 						label={t("menu.attachFile")}
 						disabled={props.disabled}
 						onClick={props.onAttachFile}
@@ -218,11 +218,11 @@ export function ComposerBottomBar(props: {
 					</IconButton>
 					{props.feishuIndicator}
 				</div>
-				<div className="composer-bottom-center">
+				<div className="composer-bottom-center flex min-w-0 flex-1 items-center justify-center gap-1 overflow-hidden">
 					<Button
 						variant="ghost"
 						buttonSize="sm"
-						className="composer-bar-btn model"
+						className="composer-bar-btn model h-7 max-w-[42ch] truncate px-2 text-xs text-muted-foreground hover:text-foreground"
 						disabled={props.disabled}
 						onClick={props.onPickModel}
 						title={t("app.modelPickerTitle")}
@@ -232,7 +232,7 @@ export function ComposerBottomBar(props: {
 					<Button
 						variant="ghost"
 						buttonSize="sm"
-						className="composer-bar-btn thinking"
+						className="composer-bar-btn thinking h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
 						disabled={props.disabled}
 						onClick={props.onPickThinking}
 						title={t("app.thinkingPickerTitle")}
@@ -248,7 +248,7 @@ export function ComposerBottomBar(props: {
 							<Button
 								variant="ghost"
 								buttonSize="sm"
-								className={`composer-bar-btn compact${urgency}${isCompactingNow ? " compacting" : ""}`}
+								className={`composer-bar-btn compact h-7 gap-1 px-2 text-xs${urgency}${isCompactingNow ? " compacting" : ""}`}
 								disabled={
 									isCompactingNow ||
 									Boolean(props.state?.isStreaming)
@@ -267,17 +267,17 @@ export function ComposerBottomBar(props: {
 						);
 					})()}
 				</div>
-				<div className="composer-bottom-right">
+				<div className="composer-bottom-right ml-auto flex shrink-0 items-center gap-1.5">
 					{props.gitInfo?.current && (
 						<span
-							className="composer-bar-branch"
+							className="composer-bar-branch inline-flex max-w-[12rem] items-center gap-1 truncate text-[11px] text-muted-foreground"
 							title={t("app.branchCurrent", {
 								branch: props.gitInfo.current,
 								count: props.gitInfo.branches.length,
 							})}
 						>
 							<GitBranch size={12} strokeWidth={1.8} aria-hidden="true" />
-							<span className="composer-bar-branch-name">{props.gitInfo.current}</span>
+							<span className="composer-bar-branch-name truncate">{props.gitInfo.current}</span>
 						</span>
 					)}
 					{props.sendControls}

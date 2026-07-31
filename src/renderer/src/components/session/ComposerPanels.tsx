@@ -210,21 +210,21 @@ export function ComposerSendControls(props: {
 }) {
   return (
     <div
-      className="composer-send-controls"
+      className="composer-send-controls flex items-center"
       onMouseLeave={props.onScheduleBehaviorMenuClose}
     >
-      <div className="send-behavior-menu-wrap">
+      <div className="send-behavior-menu-wrap relative flex items-center gap-1.5">
         {props.showBusySendControls && props.hasComposerContent && (
-          <div className="send-behavior-toggle">
+          <div className="send-behavior-toggle inline-flex h-7 overflow-hidden rounded-md bg-primary text-primary-foreground">
             <IconButton
-              className="send-behavior-primary"
+              className="send-behavior-primary size-7 rounded-none text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground"
               label={t("app.sendSteerTitle")}
               onClick={props.onSend}
             >
               <ArrowUp size={15} strokeWidth={2.4} aria-hidden="true" />
             </IconButton>
             <IconButton
-              className="send-behavior-chevron"
+              className="send-behavior-chevron size-5 rounded-none border-l border-primary-foreground/20 text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground"
               label={t("app.sendBehaviorTitle")}
               aria-haspopup="menu"
               aria-expanded={props.sendBehaviorMenuOpen}
@@ -238,7 +238,7 @@ export function ComposerSendControls(props: {
         )}
         {props.isAgentBusy ? (
           <IconButton
-            className="composer-bar-btn stop"
+            className="composer-bar-btn stop size-8 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground"
             label={t("app.stop")}
             onClick={props.onStop}
           >
@@ -246,7 +246,7 @@ export function ComposerSendControls(props: {
           </IconButton>
         ) : !props.keepBusyDraftControls ? (
           <IconButton
-            className="composer-bar-btn send"
+            className="composer-bar-btn send size-8 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground disabled:opacity-40"
             label={t("app.send")}
             disabled={props.isAgentStarting || !props.canSend}
             onClick={props.onSend}
@@ -258,7 +258,7 @@ export function ComposerSendControls(props: {
           props.showBusySendControls &&
           props.hasComposerContent && (
             <div
-              className="send-behavior-menu"
+              className="send-behavior-menu absolute right-0 bottom-[calc(100%+6px)] z-50 flex w-40 flex-col gap-0.5 rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md"
               role="menu"
               onMouseEnter={props.onKeepBehaviorMenuOpen}
               onMouseLeave={props.onScheduleBehaviorMenuClose}
@@ -266,21 +266,21 @@ export function ComposerSendControls(props: {
               <Button
                 variant="ghost"
                 buttonSize="sm"
-                className="send-behavior-option steer"
+                className="send-behavior-option steer justify-start gap-2 px-2"
                 role="menuitem"
                 onClick={props.onSend}
               >
-                <span className="send-behavior-option-dot" aria-hidden="true" />
+                <span className="send-behavior-option-dot size-1.5 rounded-full bg-foreground" aria-hidden="true" />
                 <span>{t("app.sendSteerTitle")}</span>
               </Button>
               <Button
                 variant="ghost"
                 buttonSize="sm"
-                className="send-behavior-option follow-up"
+                className="send-behavior-option follow-up justify-start gap-2 px-2"
                 role="menuitem"
                 onClick={props.onSendFollowUp}
               >
-                <span className="send-behavior-option-dot" aria-hidden="true" />
+                <span className="send-behavior-option-dot size-1.5 rounded-full bg-muted-foreground" aria-hidden="true" />
                 <span>{t("app.sendFollowUpTitle")}</span>
               </Button>
             </div>

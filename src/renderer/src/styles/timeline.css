@@ -3322,21 +3322,12 @@ body.ask-dialog-open .ask-question-card.pending {
   flex-direction: column;
   gap: var(--space-2);
 }
+/* pure official：composer-box 布局/边框/阴影由 ComposerArea Tailwind 承担 */
 .composer-box {
   position: relative;
   min-height: 112px;
   min-width: 0;
-  display: flex;
-  flex-direction: column;
-  border: 1px solid var(--color-border-subtle);
-  background: var(--color-bg-panel);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-composer);
   overflow: visible;
-  transition:
-    border-color 0.14s ease,
-    background 0.14s ease,
-    box-shadow 0.14s ease;
 }
 .composer-box::before {
   content: "";
@@ -3479,7 +3470,8 @@ body.ask-dialog-open .ask-question-card.pending {
 .session-ref-error { color: var(--color-error); }
 
 .composer-box:focus-within {
-  border-color: var(--color-accent);
+  /* 中性 focus：ring 走 foreground，不再品牌绿 */
+  border-color: var(--color-text-primary);
   box-shadow: var(--shadow-composer), var(--focus-ring);
 }
 .composer-box.shell-mode {
@@ -3682,132 +3674,24 @@ body.ask-dialog-open .ask-question-card.pending {
   color: var(--color-success);
   font-weight: 700;
 }
+/* pure official P2-3：bottom bar / send 控件布局与颜色由组件 Tailwind 承担。
+ * 仅保留 container query 与 compacting 动画。 */
 .composer-bottom-bar {
   position: relative;
   z-index: 1;
-  min-height: 32px;
-  padding: 4px 10px 8px;
-  border-top: 1px solid var(--color-border-subtle);
-  background-color: inherit;
-  color: var(--color-text-tertiary);
-  font-size: var(--font-size-caption);
   flex: 0 0 auto;
   container-type: inline-size;
 }
-.composer-bottom-layout {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  min-width: 0;
-}
-.composer-bottom-left,
-.composer-bottom-center,
-.composer-bottom-right,
-.composer-send-controls,
-.send-behavior-menu-wrap {
-  display: inline-flex;
-  align-items: center;
-  min-width: 0;
-}
-.composer-bottom-left {
-  flex: 0 1 auto;
-  gap: 4px;
-  max-width: 44%;
-  overflow: visible;
-}
-.composer-bottom-left > .composer-bar-btn:first-child {
-  flex: 0 1 auto;
-  max-width: 136px;
-}
-.composer-bottom-left > .composer-bar-btn:first-child {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.composer-bottom-center {
-  flex: 1 1 160px;
-  justify-content: center;
-  gap: 4px;
-  overflow: hidden;
-}
-.composer-bottom-right {
-  flex: 0 0 auto;
-  justify-content: flex-end;
-  gap: 6px;
-  margin-left: auto;
-}
 .composer-bar-btn {
   min-width: 0;
-  height: 26px;
-  min-height: 26px;
-  border: 0;
-  border-radius: var(--radius-md);
-  background: transparent;
-  color: var(--color-text-tertiary);
-  font-family: var(--font-family-base);
-  font-size: var(--font-size-caption);
-  font-weight: 400;
-  line-height: 1;
   white-space: nowrap;
 }
-.composer-bar-btn.ui-icon-button {
-  display: inline-grid;
-  width: 26px;
-  padding: 0;
-  place-items: center;
-}
-.composer-bottom-bar .composer-bar-btn:hover:not(:disabled) {
-  border-color: transparent;
-  background: var(--color-bg-hover);
-  color: var(--color-text-primary);
-}
-.composer-bottom-bar .composer-bar-btn:active:not(:disabled) {
-  background: var(--color-bg-active);
-}
-.composer-bottom-bar .composer-bar-btn:focus-visible {
-  outline: none;
-  box-shadow: var(--focus-ring);
-}
 .composer-bottom-bar .composer-bar-btn.active {
-  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
-  color: var(--color-accent);
-}
-.composer-bottom-bar .composer-bar-btn.active:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--color-accent) 18%, transparent);
-  color: var(--color-accent);
+  background: var(--color-bg-active);
+  color: var(--color-text-primary);
 }
 .composer-bottom-bar .composer-bar-btn.mode-cancel {
   color: var(--color-danger);
-}
-.composer-bottom-bar .composer-bar-btn.mode-cancel:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--color-danger) 8%, transparent);
-  color: var(--color-danger);
-}
-.composer-bottom-bar .composer-bar-btn.model,
-.composer-bottom-bar .composer-bar-btn.thinking {
-  height: 22px;
-  min-height: 22px;
-  padding: 0 6px;
-  font-family: var(--font-family-business);
-  font-size: var(--font-size-micro);
-}
-.composer-bottom-bar .composer-bar-btn.model {
-  max-width: min(42ch, 100%);
-}
-.composer-bottom-bar .composer-bar-btn.model {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.composer-bottom-bar .composer-bar-btn.thinking {
-  color: var(--color-text-secondary);
-}
-.composer-bottom-bar .composer-bar-btn.thinking:hover:not(:disabled) {
-  background: var(--color-bg-hover);
-  color: var(--color-text-primary);
 }
 .composer-bottom-bar .composer-bar-btn.compacting {
   background: color-mix(in srgb, var(--color-warning) 16%, var(--color-bg-panel));
@@ -3819,108 +3703,9 @@ body.ask-dialog-open .ask-question-card.pending {
   opacity: 0.7;
 }
 .composer-bar-branch {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  width: min(140px, 22vw);
-  min-width: 0;
-  height: 22px;
-  color: var(--color-text-tertiary);
-  font-family: var(--font-family-business);
-  font-size: var(--font-size-micro);
   pointer-events: none;
-  white-space: nowrap;
 }
-.composer-bar-branch-name {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.composer-send-controls {
-  flex: 0 0 auto;
-}
-.send-behavior-menu-wrap {
-  position: relative;
-  flex: 0 0 auto;
-  gap: 6px;
-}
-.composer-bottom-bar .composer-bar-btn.send,
-.composer-bottom-bar .composer-bar-btn.stop {
-  width: 28px;
-  height: 28px;
-  min-height: 28px;
-  padding: 0;
-  place-items: center;
-}
-.composer-bottom-bar .composer-bar-btn.send {
-  background: var(--color-accent);
-  color: var(--color-text-inverse);
-}
-.composer-bottom-bar .composer-bar-btn.send:hover:not(:disabled) {
-  background: var(--color-accent-strong);
-  color: var(--color-text-inverse);
-}
-.composer-bottom-bar .composer-bar-btn.send:disabled {
-  background: var(--color-border-subtle);
-  color: var(--color-text-tertiary);
-  opacity: 0.35;
-}
-.composer-bottom-bar .composer-bar-btn.stop {
-  background: color-mix(in srgb, var(--color-danger) 8%, transparent);
-  color: var(--color-danger);
-}
-.composer-bottom-bar .composer-bar-btn.stop:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--color-danger) 18%, transparent);
-  color: var(--color-danger);
-}
-.composer-bottom-bar .send-behavior-toggle {
-  display: inline-flex;
-  align-items: stretch;
-  height: 28px;
-  overflow: hidden;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: var(--color-accent);
-  color: var(--color-text-inverse);
-  transition: background-color 0.12s ease;
-}
-.composer-bottom-bar .send-behavior-toggle:hover {
-  background: var(--color-accent-strong);
-}
-.composer-bottom-bar .send-behavior-toggle:focus-within {
-  box-shadow: var(--focus-ring);
-}
-.composer-bottom-bar .send-behavior-primary,
-.composer-bottom-bar .send-behavior-chevron {
-  display: inline-grid;
-  min-width: 0;
-  height: 100%;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  place-items: center;
-  background: transparent;
-  color: inherit;
-}
-.composer-bottom-bar .send-behavior-primary {
-  width: 28px;
-}
-.composer-bottom-bar .send-behavior-chevron {
-  width: 20px;
-  border-left: 1px solid color-mix(in srgb, var(--color-text-inverse) 25%, transparent);
-  color: color-mix(in srgb, var(--color-text-inverse) 70%, transparent);
-}
-.composer-bottom-bar .send-behavior-primary:hover,
-.composer-bottom-bar .send-behavior-chevron:hover {
-  background: color-mix(in srgb, #fff 14%, transparent);
-  color: var(--color-text-inverse);
-}
-.composer-bottom-bar .send-behavior-primary:focus-visible,
-.composer-bottom-bar .send-behavior-chevron:focus-visible {
-  outline: none;
-  box-shadow: inset var(--focus-ring);
-}
+
 @keyframes compact-pulse {
   0%,
   100% {

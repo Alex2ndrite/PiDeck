@@ -56,7 +56,11 @@ export const ComposerArea = forwardRef<HTMLElement, ComposerAreaProps>(function 
     <ComposerRuntimeIntegrations sessionId={props.sessionId}>
       {({ widgets, feishuIndicator }) => (
         <>
-          <footer ref={footerRef} className="composer" data-session-id={props.sessionId}>
+          <footer
+            ref={footerRef}
+            className="composer flex w-full min-w-0 flex-col gap-2 bg-background px-3 pb-3"
+            data-session-id={props.sessionId}
+          >
             <ComposerAttachmentBar
               images={composer.attachments}
               onPreview={composer.images.preview}
@@ -74,15 +78,15 @@ export const ComposerArea = forwardRef<HTMLElement, ComposerAreaProps>(function 
             />
             {props.runtimeUi}
             <div
-              className={`composer-box ${
+              className={["composer-box relative flex min-h-[7rem] min-w-0 flex-col overflow-visible rounded-xl border border-border bg-card text-card-foreground shadow-sm transition-[border-color,box-shadow,background-color]",
                 composer.bangMode === "bang-bang"
                   ? "shell-silent-mode"
                   : composer.bangMode === "bang"
                     ? "shell-mode"
                     : composer.mode === "plan"
                       ? "plan-mode"
-                      : ""
-              }`}
+                      : "",
+              ].filter(Boolean).join(" ")}
               style={{ height: props.height != null ? "100%" : height }}
             >
               <RichInput
