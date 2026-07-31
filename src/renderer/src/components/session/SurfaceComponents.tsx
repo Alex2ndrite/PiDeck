@@ -772,13 +772,13 @@ export const TurnRow = memo(function TurnRow(props: {
 	// 没有助手指令消息的情况：整轮只含工具/思考，用执行过程折叠渲染
 	if (lastAssistantIndex === -1) {
 		return (
-			<article ref={rowRef} className="turn-row" data-message-id={run.id}>
-				<div className="turn-row-body">
-					<div className="turn-row-meta">
-						<span className="turn-row-agent">pi</span>
-						<time>{formatTime(run.endedAt)}</time>
+			<article ref={rowRef} className="turn-row mb-6 w-full min-w-0 max-w-full" data-message-id={run.id}>
+				<div className="turn-row-body flex min-w-0 flex-col gap-3">
+					<div className="turn-row-meta mb-1 inline-flex items-center gap-2 text-xs text-muted-foreground tabular-nums">
+						<span className="turn-row-agent font-semibold text-foreground/80">pi</span>
+						<time className="text-[11px]">{formatTime(run.endedAt)}</time>
 						{showDuration && (
-							<span className="turn-row-duration">{formatDuration(duration)}</span>
+							<span className="turn-row-duration text-[11px] text-muted-foreground">{formatDuration(duration)}</span>
 						)}
 					</div>
 					{/* 执行过程概要（含工具/思考），默认折叠 */}
@@ -820,13 +820,13 @@ export const TurnRow = memo(function TurnRow(props: {
 	}
 
 	return (
-		<article ref={rowRef} className="turn-row" data-message-id={run.id}>
-			<div className="turn-row-body">
-				<div className="turn-row-meta">
-					<span className="turn-row-agent">pi</span>
-					<time>{formatTime(run.endedAt)}</time>
+		<article ref={rowRef} className="turn-row mb-6 w-full min-w-0 max-w-full" data-message-id={run.id}>
+			<div className="turn-row-body flex min-w-0 flex-col gap-3">
+				<div className="turn-row-meta mb-1 inline-flex items-center gap-2 text-xs text-muted-foreground tabular-nums">
+					<span className="turn-row-agent font-semibold text-foreground/80">pi</span>
+					<time className="text-[11px]">{formatTime(run.endedAt)}</time>
 					{showDuration && (
-						<span className="turn-row-duration">{formatDuration(duration)}</span>
+						<span className="turn-row-duration text-[11px] text-muted-foreground">{formatDuration(duration)}</span>
 					)}
 				</div>
 				{/* 执行过程概要（含工具/思考/中间回答），置于最终回答之前以保持调用顺序。 */}
@@ -910,10 +910,11 @@ export const TurnRow = memo(function TurnRow(props: {
 				)}
 				{/* 操作栏 */}
 				{mergedText && !editing && (
-					<div className="turn-row-actions">
+					<div className="turn-row-actions flex min-h-6 items-center gap-1 opacity-55 transition-opacity hover:opacity-100 focus-within:opacity-100">
 						<CopyMenu text={stripMarkdown(mergedText)} markdown={mergedText} targetRef={rowRef} />
 						<button
-							className="turn-row-action-btn"
+							type="button"
+							className="turn-row-action-btn inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground"
 							onClick={props.onEnterMultiSelect}
 						title={t("app.multiSelectEnter")}
 						>
@@ -923,7 +924,8 @@ export const TurnRow = memo(function TurnRow(props: {
 							<>
 								{props.onEditMessage && (
 									<button
-										className="turn-row-action-btn"
+										type="button"
+										className="turn-row-action-btn inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground"
 										onClick={() => {
 											setEditText(mergedText);
 											setEditing(true);
@@ -935,7 +937,8 @@ export const TurnRow = memo(function TurnRow(props: {
 								)}
 								{props.onDeleteMessage && (
 									<button
-										className="turn-row-action-btn"
+										type="button"
+										className="turn-row-action-btn inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground"
 										onClick={() => {
 											const targetId = assistantMessages.at(-1)?.message.id;
 											if (targetId) props.onDeleteMessage?.(targetId);
@@ -1037,11 +1040,11 @@ export const UserBubble = memo(function UserBubble(props: {
 		);
 	};
 	return (
-		<article ref={rowRef} className="user-turn" data-message-id={message.id}>
+		<article ref={rowRef} className="user-turn group/user mb-4 w-full min-w-0" data-message-id={message.id}>
 			{skills.length > 0 && (
-				<div className="user-turn-skills">
+				<div className="user-turn-skills mb-1.5 flex flex-wrap gap-1.5">
 					{skills.map((name) => (
-						<span key={name} className="user-turn-skill-badge" title={`/${name}`}>
+						<span key={name} className="user-turn-skill-badge inline-flex items-center gap-0.5 rounded-full border border-border bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground" title={`/${name}`}>
 							<span className="user-turn-skill-icon">/</span>
 							{name}
 						</span>
@@ -1049,21 +1052,21 @@ export const UserBubble = memo(function UserBubble(props: {
 				</div>
 			)}
 			{message.images && message.images.length > 0 && (
-				<div className="user-turn-attachments">
+				<div className="user-turn-attachments mb-2 flex flex-wrap gap-2">
 					{message.images.map((img, index) => (
 						<img
 							key={index}
 							src={`data:${img.mimeType};base64,${img.data}`}
 							alt={t("app.imageAlt", { index: index + 1 })}
-							className="user-turn-attachment"
+							className="user-turn-attachment max-h-40 rounded-md border border-border"
 							onClick={() => props.onPreviewImage(img)}
 						/>
 					))}
 				</div>
 			)}
 			{cleanText && !editing && (
-				<div className="user-turn-bubble">
-					<div className="user-turn-text">
+				<div className="user-turn-bubble rounded-xl border border-border bg-muted/60 px-3 py-2 text-sm text-foreground">
+					<div className="user-turn-text whitespace-pre-wrap break-words">
 						{renderChipText(cleanText, props.onOpenFile, props.validCommandNames, props.validFilePaths)}
 					</div>
 				</div>
@@ -1111,10 +1114,10 @@ export const UserBubble = memo(function UserBubble(props: {
 				)}
 				<time>{formatTime(message.timestamp)}</time>
 			</div>
-			<div className="user-turn-actions">
+			<div className="user-turn-actions flex min-h-6 items-center gap-0.5 opacity-0 transition-opacity group-hover/user:opacity-100 focus-within:opacity-100">
 				<CopyMenu text={stripMarkdown(cleanText)} markdown={message.text} targetRef={rowRef} />
 				<button
-					className="user-turn-action-btn"
+					className="user-turn-action-btn inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground"
 					onClick={props.onEnterMultiSelect}
 					title={t("app.multiSelectEnter")}
 						>
@@ -1125,7 +1128,7 @@ export const UserBubble = memo(function UserBubble(props: {
 						{canFork && (
 							<button
 								type="button"
-								className="user-turn-action-btn"
+								className="user-turn-action-btn inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground"
 								disabled={props.forking}
 								onClick={() => props.onForkMessage?.(message)}
 								title={t("app.forkFromMessageTitle")}
@@ -1135,7 +1138,7 @@ export const UserBubble = memo(function UserBubble(props: {
 							</button>
 						)}
 						{props.onEditMessage && (
-							<button className="user-turn-action-btn" onClick={() => {
+							<button className="user-turn-action-btn inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground" onClick={() => {
 								setEditText(cleanText);
 								setEditing(true);
 							}} title={t("common.edit")}>
@@ -1143,7 +1146,7 @@ export const UserBubble = memo(function UserBubble(props: {
 							</button>
 						)}
 						<button
-							className="user-turn-action-btn"
+							className="user-turn-action-btn inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground"
 							onClick={handleEditAndResend}
 							title={t("app.editAndResendTitle")}
 						>
@@ -1151,7 +1154,7 @@ export const UserBubble = memo(function UserBubble(props: {
 						</button>
 						{props.onDeleteMessage && (
 							<button
-								className="user-turn-action-btn"
+								className="user-turn-action-btn inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground"
 								onClick={() => props.onDeleteMessage?.(message.id)}
 								title={t("common.delete")}
 							>
@@ -1160,7 +1163,7 @@ export const UserBubble = memo(function UserBubble(props: {
 						)}
 						{((props.isLastUserMessage || props.showResendButton) && props.onResendUserMessage) && (
 							<button
-								className="user-turn-action-btn"
+								className="user-turn-action-btn inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground"
 								onClick={() => props.onResendUserMessage?.(message)}
 								title={t("app.resendTitle")}
 							>

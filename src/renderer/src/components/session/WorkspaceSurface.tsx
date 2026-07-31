@@ -75,11 +75,13 @@ export function DrawerContent(props: {
 				: t("drawer.historyTitle");
 	return (
 		<>
-			<div className="drawer-header">
-				<strong>{title}</strong>
-				<div className="drawer-header-actions">
+			{/* pure official：与 Git 抽屉共用 h-12 顶栏密度 */}
+			<div className="drawer-header flex h-12 shrink-0 items-center justify-between gap-3 border-b border-border bg-background px-3">
+				<strong className="truncate text-sm font-semibold text-foreground">{title}</strong>
+				<div className="drawer-header-actions flex shrink-0 items-center gap-1">
 					<button
-						className={props.pinned ? "active" : ""}
+						type="button"
+						className={`inline-grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground${props.pinned ? " active bg-accent text-accent-foreground" : ""}`}
 						title={props.pinned ? t("drawer.unpin") : t("drawer.pin")}
 						aria-label={props.pinned ? t("drawer.unpin") : t("drawer.pin")}
 						onClick={props.onTogglePin}
@@ -87,6 +89,8 @@ export function DrawerContent(props: {
 						<Pin size={15} />
 					</button>
 					<button
+						type="button"
+						className="inline-grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground disabled:opacity-40"
 						disabled={props.pinned}
 						title={props.pinned ? t("drawer.pinnedCannotClose") : t("drawer.closePanel")}
 						aria-label={t("drawer.closePanel")}
@@ -137,19 +141,20 @@ function FilesPanel(props: {
 	onViewFile?: (path: string) => void;
 }) {
 	return (
-		<div className="files-panel">
-			<div className="panel-action-row">
+		<div className="files-panel flex min-h-0 flex-1 flex-col overflow-hidden">
+			<div className="panel-action-row flex h-9 shrink-0 items-center justify-between gap-2 border-b border-border px-3 text-xs text-muted-foreground">
 				<span>{t("drawer.fileItems", { count: props.files.length })}</span>
-				<div className="panel-action-buttons">
+				<div className="panel-action-buttons flex items-center gap-1">
 					{props.onOpenFolder && (
-						<button onClick={props.onOpenFolder} title={t("drawer.openFolder")}>
+						<button type="button" className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-xs text-muted-foreground hover:bg-accent hover:text-accent-foreground" onClick={props.onOpenFolder} title={t("drawer.openFolder")}>
 							<Folder size={14} />
 							{t("drawer.openFolder")}
 						</button>
 					)}
-					{/* 刷新与全部收起使用纯图标按钮，保持工具栏紧凑、与列表项字号对齐 */}
+					{/* 刷新与全部收起：纯图标，密度对齐 shadcn icon button */}
 					<button
-						className="icon-only"
+						type="button"
+						className="icon-only inline-grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground"
 						onClick={props.onRefreshFiles}
 						title={t("common.refresh")}
 						aria-label={t("common.refresh")}
@@ -158,7 +163,8 @@ function FilesPanel(props: {
 					</button>
 					{props.onCollapseAll && (
 						<button
-							className="icon-only"
+							type="button"
+							className="icon-only inline-grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground disabled:opacity-40"
 							onClick={props.onCollapseAll}
 							title={t("drawer.collapseAllDirs")}
 							aria-label={t("drawer.collapseAllDirs")}
