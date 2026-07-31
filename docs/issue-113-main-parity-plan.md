@@ -176,7 +176,7 @@ git log --oneline HEAD..origin/main --since="7 days ago"
 
 ### 3.4 集成 smoke
 
-13. 模型选择 + thinking 级别切换
+13. 模型选择 + thinking 级别切换　🤖 **已自动化**（`e2e/agent-flow.spec.ts` 第三用例：set_model/set_thinking_level 真实 RPC 闭环）
 14. Git 面板看 status/diff，做一次 commit
 15. 飞书连接 + 收发一条消息
 16. 安装/卸载一个扩展；开关一个技能

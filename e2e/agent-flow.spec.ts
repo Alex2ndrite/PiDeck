@@ -1,4 +1,26 @@
 import { test, expect } from "./mock-pi-fixture";
+import type { Page } from "@playwright/test";
+
+/**
+ * 点击欢迎页「启动 Agent」并等待其生效。
+ * 启动初期界面存在重渲染竞态（偶发 click 落在被替换的 DOM 节点上丢失），
+ * 用户也会双击，这里以「按钮消失 / 会话视图出现」为生效信号做有限重试。
+ */
+async function startAgent(window: Page) {
+	const startButton = window.getByRole("button", { name: "启动 Agent" });
+	const composer = window.locator(".composer .rich-input");
+	for (let attempt = 0; attempt < 4; attempt += 1) {
+		await startButton.click();
+		// agent 启动后欢迎页按钮消失；同时等待 composer 可用
+		const gone = await startButton
+			.waitFor({ state: "hidden", timeout: 5000 })
+			.then(() => true)
+			.catch(() => false);
+		if (gone) break;
+	}
+	await expect(composer).toHaveAttribute("aria-disabled", "false", { timeout: 30_000 });
+	return composer;
+}
 
 /**
  * 会话路径完整流程（#113 3.2-5/6、#115 U6）：
@@ -10,11 +32,7 @@ test("agent flow: prompt -> streaming -> done -> prompt -> abort", async ({ wind
 	await expect(window.locator("#boot-overlay")).toHaveCount(0, { timeout: 20_000 });
 
 	// 1. 内置聊天项目欢迎页：启动 Agent（spawn mock pi）
-	await window.getByRole("button", { name: "启动 Agent" }).click();
-
-	// 2. agent 就绪后 composer 可用（get_state 完成前 RichInput 处于 disabled）
-	const composer = window.locator(".composer .rich-input");
-	await expect(composer).toHaveAttribute("aria-disabled", "false", { timeout: 30_000 });
+	const composer = await startAgent(window);
 
 	// 3. 发送第一条消息：流式渲染 → 完整回复
 	await composer.click();
@@ -53,9 +71,7 @@ test("agent flow: prompt -> streaming -> done -> prompt -> abort", async ({ wind
 test("agent flow: queued prompt while busy drains in order", async ({ window }) => {
 	test.setTimeout(120_000);
 	await expect(window.locator("#boot-overlay")).toHaveCount(0, { timeout: 20_000 });
-	await window.getByRole("button", { name: "启动 Agent" }).click();
-	const composer = window.locator(".composer .rich-input");
-	await expect(composer).toHaveAttribute("aria-disabled", "false", { timeout: 30_000 });
+	const composer = await startAgent(window);
 	const timeline = window.locator(".message-timeline");
 
 	// 慢速流期间发送第二条
@@ -71,4 +87,44 @@ test("agent flow: queued prompt while busy drains in order", async ({ window }) 
 	// 第一段完整收尾后，第二段按顺序回答
 	await expect(timeline).toContainText("SLOW 排队一」流式渲染验证完成", { timeout: 20_000 });
 	await expect(timeline).toContainText("Mock 回复：「排队二」流式渲染验证完成", { timeout: 20_000 });
+});
+
+/**
+ * 模型选择 + thinking 级别切换（#113 3.4-13）：
+ * 走真实 set_model/set_thinking_level RPC → mock 更新状态 → get_state 回读 →
+ * composer 按钮标签刷新。验证「选择 → 生效 → UI 同步」闭环。
+ */
+test("agent flow: model picker and thinking level switch apply", async ({ window }) => {
+	test.setTimeout(120_000);
+	await expect(window.locator("#boot-overlay")).toHaveCount(0, { timeout: 20_000 });
+	const composer = await startAgent(window);
+	const timeline = window.locator(".message-timeline");
+
+	// 「启动 Agent」只创建草稿；真实 pi 进程在首次发送时 spawn。
+	// 首轮 run 结束后 main 会 emitRuntimeState（含 modelName/thinkingLevel），
+	// composer 按钮标签据此刷新。
+	await composer.click();
+	await window.keyboard.type("热身");
+	await window.keyboard.press("Enter");
+	await expect(timeline).toContainText("Mock 回复：「热身」流式渲染验证完成", { timeout: 20_000 });
+
+	// 初始模型来自 get_state
+	const modelButton = window.locator(".composer-bar-btn.model");
+	await expect(modelButton).toContainText("Mock Model", { timeout: 10_000 });
+
+	// 打开模型选择器，切到 Mock Model Pro
+	await modelButton.click();
+	const modelPalette = window.locator(".picker-palette.model-picker");
+	await expect(modelPalette).toBeVisible({ timeout: 5000 });
+	await modelPalette.locator(".picker-palette-item", { hasText: "mock-model-pro" }).click();
+	await expect(modelButton).toContainText("Mock Model Pro", { timeout: 10_000 });
+
+	// thinking 级别切换：初始值取决于会话配置（可能来自 ~/.pi/agent/settings.json），
+	// 不断言具体档位，切到 low 后验证生效
+	const thinkingButton = window.locator(".composer-bar-btn.thinking");
+	await thinkingButton.click();
+	const thinkingPalette = window.locator(".picker-palette.thinking-picker");
+	await expect(thinkingPalette).toBeVisible({ timeout: 5000 });
+	await thinkingPalette.locator(".picker-palette-item", { hasText: "low" }).first().click();
+	await expect(thinkingButton).toContainText("low", { timeout: 10_000 });
 });

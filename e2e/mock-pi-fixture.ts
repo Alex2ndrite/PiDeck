@@ -27,13 +27,14 @@ export const test = base.extend<MockPiFixture>({
 				shimPath,
 				`@echo off\r\n"${process.execPath}" "${scriptPath}" %*\r\n`,
 			);
-			// 预置设置：customPiPath 指向 shim。其余字段缺省，由 SettingsStore 默认值兜底。
+			// 预置设置：customPiPath 指向 shim；piEnvironmentChecked=true 跳过启动
+			// 环境检测弹窗（否则会盖住欢迎页按钮造成点击竞态）。其余字段缺省。
 			// 注意：未打包运行时 main/index.ts 会把 userData 追加 "-dev" 后缀，
 			// 真实 userData 是 <root>/profile-dev（与 fixtures.ts 的隔离机制一致）。
 			mkdirSync(join(userDataRoot, "profile-dev"), { recursive: true });
 			writeFileSync(
 				join(userDataRoot, "profile-dev", "settings.json"),
-				JSON.stringify({ customPiPath: shimPath }),
+				JSON.stringify({ customPiPath: shimPath, piEnvironmentChecked: true }),
 			);
 
 			const env = {
@@ -53,7 +54,12 @@ export const test = base.extend<MockPiFixture>({
 			await use(app);
 			await app.close();
 		} finally {
-			try { rmSync(userDataRoot, { recursive: true, force: true }); } catch { /* Windows 文件锁，忽略 */ }
+			// 调试可用 PIDECK_E2E_KEEP=1 保留 userData（含主进程日志），排查 spawn/状态问题
+			if (!process.env.PIDECK_E2E_KEEP) {
+				try { rmSync(userDataRoot, { recursive: true, force: true }); } catch { /* Windows 文件锁，忽略 */ }
+			} else {
+				console.log("[mock-pi-fixture] kept userDataRoot:", userDataRoot);
+			}
 		}
 	},
 	window: async ({ app }, use) => {

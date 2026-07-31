@@ -25,9 +25,40 @@ if (process.argv.includes("--version")) {
 	process.exit(0);
 }
 
+// 模型列表：桌面端模型选择器通过 `pi --list-models` 文本表格获取候选
+//（modelListCache.parsePiListModels，无需启动 agent），列序：
+// provider  model  context  max-out  thinking  images
+if (process.argv.includes("--list-models")) {
+	process.stdout.write(
+		"provider  model           context  max-out  thinking  images\n" +
+		"mock      mock-model      128000   8192     yes       no\n" +
+		"mock      mock-model-pro  256000   8192     yes       no\n",
+	);
+	process.exit(0);
+}
+
 const readline = require("node:readline");
+const fs = require("node:fs");
+const path = require("node:path");
+
+// 调试：记录收到的命令/发出的响应，便于排查 E2E 状态不同步问题
+const LOG_PATH = path.join(require("node:os").tmpdir(), `mock-pi-${process.pid}.log`);
+function log(direction, payload) {
+	try {
+		fs.mkdirSync(path.dirname(LOG_PATH), { recursive: true });
+		fs.appendFileSync(LOG_PATH, `${direction} ${JSON.stringify(payload)}\n`);
+	} catch { /* 日志失败不影响协议 */ }
+}
 
 const sessionId = "mock-session-" + Date.now().toString(36);
+// 模型/思考级别有状态跟踪：桌面端 set_model/set_thinking_level 后会重新
+// get_state 拉取（AgentManager.getRuntimeState），mock 必须返回更新后的值。
+const MODELS = [
+	{ provider: "mock", id: "mock-model", name: "Mock Model", contextWindow: 128000, reasoning: true },
+	{ provider: "mock", id: "mock-model-pro", name: "Mock Model Pro", contextWindow: 256000, reasoning: true },
+];
+let currentModel = MODELS[0];
+let currentThinking = "medium";
 let streamTimer = null;
 let streamStep = 0;
 let streamChunks = [];
@@ -38,6 +69,7 @@ let streaming = false;
 const pendingPrompts = [];
 
 function send(payload) {
+	log(">", payload);
 	process.stdout.write(JSON.stringify(payload) + "\n");
 }
 
@@ -111,8 +143,8 @@ function handleCommand(cmd) {
 			respond(cmd, {
 				sessionId,
 				sessionName: "Mock Agent",
-				model: { provider: "mock", id: "mock-model", name: "Mock Model" },
-				thinkingLevel: "medium",
+				model: currentModel,
+				thinkingLevel: currentThinking,
 			});
 			return;
 		case "get_messages":
@@ -125,13 +157,25 @@ function handleCommand(cmd) {
 			respond(cmd, { tokens: 0, contextTokens: 1024 });
 			return;
 		case "get_available_models":
-			respond(cmd, {
-				models: [
-					{ provider: "mock", id: "mock-model", name: "Mock Model" },
-					{ provider: "mock", id: "mock-model-pro", name: "Mock Model Pro" },
-				],
-			});
+			respond(cmd, { models: MODELS });
 			return;
+		case "set_model": {
+			const found = MODELS.find((m) => m.provider === cmd.provider && m.id === cmd.modelId);
+			if (found) currentModel = found;
+			respond(cmd, { model: currentModel });
+			return;
+		}
+		case "set_thinking_level":
+			currentThinking = typeof cmd.level === "string" ? cmd.level : currentThinking;
+			respond(cmd, {});
+			return;
+		case "cycle_thinking_level": {
+			const levels = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
+			const idx = levels.indexOf(currentThinking);
+			currentThinking = levels[(idx + 1) % levels.length];
+			respond(cmd, {});
+			return;
+		}
 		case "prompt": {
 			// 先回 success（桌面端据此认为已受理），再异步推流
 			respond(cmd, {});
@@ -167,6 +211,7 @@ rl.on("line", (line) => {
 		return; // 非 JSON 输入直接忽略（桌面端也只记录 protocol-error）
 	}
 	try {
+		log("<", cmd);
 		handleCommand(cmd);
 	} catch (error) {
 		// 命令处理异常不能击穿进程：桌面端依赖进程存活性判断
