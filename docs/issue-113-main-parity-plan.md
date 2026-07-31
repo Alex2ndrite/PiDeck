@@ -171,8 +171,8 @@ git log --oneline HEAD..origin/main --since="7 days ago"
 
 ### 3.3 布局
 
-11. 左侧栏折叠/展开；右侧抽屉开关、切换 files/git/browser、钉住
-12. 终端 Dock 开合、拖拽高度、切换 shell
+11. 左侧栏折叠/展开；右侧抽屉开关、切换 files/git/browser、钉住　🤖 **已自动化**（`e2e/layout.spec.ts`）
+12. 终端 Dock 开合、拖拽高度、切换 shell　🤖 **开合/shell 菜单已自动化**（`e2e/layout-terminal.spec.ts`，mock pi；拖拽高度仍手动）
 
 ### 3.4 集成 smoke
 
