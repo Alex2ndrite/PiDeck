@@ -43,4 +43,28 @@ test("layout: terminal dock open/shell/collapse", async ({ window }) => {
 	// 折叠 dock：「收起终端」按钮 → collapsed 类出现
 	await dock.getByTitle("收起终端").dispatchEvent("click");
 	await expect(dock).toHaveClass(/collapsed/, { timeout: 3000 });
+
+	// 拖拽高度：react-resizable-panels 在 headless Electron 上 pointer 命中不稳定，
+	// 保留 soft check（不 fail 整用例）。硬断言仍以开合/shell 菜单为准。
+	await dock.getByTitle("展开终端").dispatchEvent("click").catch(async () => {
+		await dock.dispatchEvent("click");
+	});
+	if (!(await dock.evaluate((el) => el.classList.contains("collapsed")))) {
+		const heightBefore = (await dock.boundingBox())?.height ?? 0;
+		const splitter = window.locator(".v-splitter").last();
+		const box = await splitter.boundingBox().catch(() => null);
+		if (box && heightBefore >= 80) {
+			const cx = box.x + box.width / 2;
+			const cy = box.y + box.height / 2;
+			await window.mouse.move(cx, cy);
+			await window.mouse.down();
+			await window.mouse.move(cx, cy - 100, { steps: 12 });
+			await window.mouse.up();
+			await window.waitForTimeout(250);
+			const heightAfter = (await dock.boundingBox())?.height ?? 0;
+			if (heightAfter < heightBefore + 10) {
+				console.warn(`[layout-terminal] drag soft-check skipped: ${heightBefore} → ${heightAfter}`);
+			}
+		}
+	}
 });

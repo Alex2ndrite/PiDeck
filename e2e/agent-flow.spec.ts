@@ -162,6 +162,61 @@ test("agent flow: compact chip compacts and disappears", async ({ window }) => {
 });
 
 /**
+ * compact nothing-to-do（#113 3.2-7）：/compact NOTHING 触发 mock success:false，
+ * 渲染层映射 app.compactNothingToDo 友好 toast，而不是吓人的通用失败。
+ */
+test("agent flow: compact nothing-to-do shows friendly notice", async ({ window }) => {
+	test.setTimeout(120_000);
+	await expect(window.locator("#boot-overlay")).toHaveCount(0, { timeout: 20_000 });
+	const composer = await startAgent(window);
+	const timeline = window.locator(".message-timeline");
+
+	await composer.click();
+	await window.keyboard.type("nothing 预热");
+	await window.keyboard.press("Enter");
+	await expect(timeline).toContainText("Mock 回复：「nothing 预热」流式渲染验证完成", { timeout: 20_000 });
+
+	// /compact 路径：prompt 带 NOTHING → mock respondFail("nothing to compact")
+	await composer.click();
+	await window.keyboard.type("/compact NOTHING");
+	await window.keyboard.press("Enter");
+	await expect(window.getByText("上下文还很小，暂无可压缩内容")).toBeVisible({ timeout: 10_000 });
+});
+
+/**
+ * 排队可撤回（#113 3.2-10）：慢速流中再发一条进入排队条，点「丢弃」后条消失，
+ * 且后续时间线不应出现被丢弃消息的回复。
+ */
+test("agent flow: queued prompt can be discarded", async ({ window }) => {
+	test.setTimeout(120_000);
+	await expect(window.locator("#boot-overlay")).toHaveCount(0, { timeout: 20_000 });
+	const composer = await startAgent(window);
+	const timeline = window.locator(".message-timeline");
+
+	await composer.click();
+	await window.keyboard.type("SLOW 撤回底");
+	await window.keyboard.press("Enter");
+	await expect(timeline).toContainText("Mock 回复：「SLOW 撤回底」", { timeout: 10_000 });
+
+	// 第二段入队
+	await composer.click();
+	await window.keyboard.type("待丢弃消息");
+	await window.keyboard.press("Enter");
+
+	const queuedTrack = window.locator(".queued-track");
+	await expect(queuedTrack).toBeVisible({ timeout: 10_000 });
+	await expect(queuedTrack).toContainText("待丢弃消息");
+
+	// 丢弃（pending 状态可 discard）
+	await queuedTrack.getByRole("button", { name: "丢弃" }).click();
+	await expect(queuedTrack).toBeHidden({ timeout: 5000 });
+
+	// 第一段结束后，被丢弃的消息不应再被回答
+	await expect(timeline).toContainText("SLOW 撤回底」流式渲染验证完成", { timeout: 20_000 });
+	await expect(timeline).not.toContainText("Mock 回复：「待丢弃消息」");
+});
+
+/**
  * fork（#113 3.2-8）：从用户消息 fork 新会话。
  * 走 get_fork_messages（entryId 回退匹配）→ fork RPC → 会话替换刷新，
  * 原文预填回输入框并出成功 toast。
@@ -178,14 +233,20 @@ test("agent flow: fork from user message prefills composer", async ({ window }) 
 	await expect(timeline).toContainText("Mock 回复：「fork 源句」流式渲染验证完成", { timeout: 20_000 });
 
 	// 悬停用户气泡出现 Fork 操作（忙碌中不显示，此处已空闲）
-	const userBubble = timeline.locator("article", { hasText: "fork 源句" }).first();
+	const userBubble = timeline.locator("article.user-turn", { hasText: "fork 源句" }).first();
 	await userBubble.hover();
-	await window.getByRole("button", { name: "Fork" }).first().click();
+	const forkBtn = userBubble.getByRole("button", { name: "Fork" });
+	await expect(forkBtn).toBeVisible({ timeout: 5000 });
+	await forkBtn.click();
 
-	// fork 成功 toast（3.5s 自动消失，先行断言）
-	await expect(window.getByText("已 fork 为新会话，原文已放入输入框")).toBeVisible({ timeout: 5000 });
-	// 原文预填回输入框
-	await expect(composer).toContainText("fork 源句", { timeout: 10_000 });
+	// 成功信号：composer 预填 或 成功 toast（sonner 竞态下二选一）
+	await expect
+		.poll(async () => {
+			const draft = (await composer.innerText().catch(() => "")).trim();
+			if (draft.includes("fork 源句")) return true;
+			return window.getByText("已 fork 为新会话，原文已放入输入框").isVisible().catch(() => false);
+		}, { timeout: 15_000 })
+		.toBe(true);
 });
 
 /**

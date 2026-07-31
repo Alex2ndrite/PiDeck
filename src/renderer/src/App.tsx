@@ -1869,7 +1869,10 @@ export function App() {
         (result as { text?: string }).text!.length > 0
           ? (result as { text: string }).text
           : message.text;
-      // session-first 架构：通过自定义事件把 fork 原文塞回 composer（与 edit-and-resend 同通道）。
+      // 直接写 Session draft atom（session-first 真源），再派发事件做 caret/focus。
+      // 仅靠事件时，若 currentSessionId 在 fork 刷新瞬间短暂为空，setPrompt 会静默丢草稿。
+      const draftTarget = currentSessionIdRef.current ?? activeAgentIdRef.current;
+      if (draftTarget) setPromptForAgent(draftTarget, promptText);
       window.dispatchEvent(
         new CustomEvent("user-message-edit", { detail: { text: promptText } }),
       );

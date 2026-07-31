@@ -61,6 +61,29 @@ import {
 } from "../utils/sessionCommands";
 import { useSessionSend, type EnqueuePromptSnapshot } from "./useSessionSend";
 
+/**
+ * compact 错误友好文案：requireSessionCommand 的 message 是 i18n 通用失败，
+ * pi 原错在 debugDetails。优先用 debugDetails 匹配 nothing-to-do / too-small。
+ */
+function friendlyCompactError(error: unknown): string {
+  const debugDetails =
+    error && typeof error === "object" && "debugDetails" in error
+      ? String((error as { debugDetails?: unknown }).debugDetails ?? "").trim()
+      : "";
+  const rawMessage = error instanceof Error ? error.message.trim() : String(error ?? "").trim();
+  const raw = debugDetails || rawMessage;
+  const detail = raw
+    .replace(/^Error invoking remote method ['"][^'"]+['"]:\s*/i, "")
+    .replace(/^Error:\s*/i, "")
+    .trim();
+  const lower = detail.toLowerCase();
+  if (/nothing to compact|already compacted/i.test(lower)) return t("app.compactNothingToDo");
+  if (/session too small|too small/i.test(lower)) return t("app.compactSessionTooSmall");
+  return detail
+    ? t("app.compactFailedWithReason", { error: detail })
+    : t("app.compactFailed");
+}
+
 export type ComposerPickerKind = "model" | "mode" | "thinking" | "template";
 
 export type UseSessionComposerControllerOptions = {
@@ -508,7 +531,12 @@ export function useSessionComposerController(
     prepareMessage: resolveSessionReferences,
     onDraftMutation: markDraftMutation,
     compact: async (target, prompt) => {
-      requireSessionCommand(await desktopApi.sessions.compactRuntime(target, prompt));
+      // /compact 与 chip 共用同一友好错误映射（nothing-to-do / too-small）
+      try {
+        requireSessionCommand(await desktopApi.sessions.compactRuntime(target, prompt));
+      } catch (error) {
+        showNotice(friendlyCompactError(error), 6500);
+      }
     },
     resetComposerUi: resetEphemeralUi,
     recordPromptHistory: (targetSessionId, message) => {
@@ -832,22 +860,7 @@ export function useSessionComposerController(
     try {
       requireSessionCommand(await desktopApi.sessions.compactRuntime(target));
     } catch (error) {
-      // 主进程会把 pi 的可读错误原样抛出；去掉 IPC 包装后映射友好文案，避免「会话太小」吓人。
-      const raw = error instanceof Error ? error.message.trim() : String(error ?? "").trim();
-      const detail = raw
-        .replace(/^Error invoking remote method ['"][^'"]+['"]:\s*/i, "")
-        .replace(/^Error:\s*/i, "")
-        .trim();
-      const lower = detail.toLowerCase();
-      const friendly =
-        /nothing to compact|already compacted/i.test(lower)
-          ? t("app.compactNothingToDo")
-          : /session too small|too small/i.test(lower)
-            ? t("app.compactSessionTooSmall")
-            : detail
-              ? t("app.compactFailedWithReason", { error: detail })
-              : t("app.compactFailed");
-      showNotice(friendly, 6500);
+      showNotice(friendlyCompactError(error), 6500);
     }
   }, [runtime?.agentId, runtime?.runtimeGeneration, sessionId, setDraft, send]);
 

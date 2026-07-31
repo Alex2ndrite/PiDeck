@@ -68,18 +68,46 @@ let currentThinking = "medium";
 let contextPercent = 45;
 // 记录收到的用户 prompt：fork 用例的 get_fork_messages 按文本匹配 entryId。
 const userPrompts = [];
-// 会话文件：真实 pi 在首轮 prompt 后即有 session 文件；fork/clone 的
-// replaceAgentSession 要求 tab.sessionPath 非空，mock 在首个 prompt 后落一个
-// 真实空 JSONL 文件并在 get_state 中返回（路径经 SessionRuntimeCoordinator 校验）。
+// 内存消息列表：get_messages 在 fork/reload 后需要返回真实对话，
+// 否则 refreshRuntimeAfterSessionReplacement 会把时间线清空。
+const conversationMessages = [];
+/** 把 cwd 编码成 pi sessions 目录名（与 SessionScanner.decodeSessionDir 对偶） */
+function encodeSessionDir(cwd) {
+	const norm = path.resolve(cwd).replace(/\\/g, "/");
+	if (/^[A-Za-z]:/.test(norm)) {
+		const drive = norm[0].toUpperCase();
+		const rest = norm.slice(2).replace(/^\//, "").replace(/\//g, "-");
+		return `--${drive}--${rest}--`;
+	}
+	return `--${norm.replace(/^\//, "").replace(/\//g, "-")}--`;
+}
+
+// 会话文件双写：
+// 1) tmp 路径作为 get_state.sessionFile（fork/reattach 原语义，不绑项目路径）
+// 2) 项目 cwd/.pi/sessions 镜像，SessionScanner 扫历史（#113 3.2-9）
 let sessionFile = null;
-const SESSION_FILE_PATH = path.join(require("node:os").tmpdir(), `${sessionId}.jsonl`);
+let sessionHeaderWritten = false;
+const TMP_SESSION_FILE_PATH = path.join(require("node:os").tmpdir(), sessionId + ".jsonl");
+const PROJECT_SESSIONS_DIR = path.join(process.cwd(), ".pi", "sessions");
+const PROJECT_SESSION_FILE_PATH = path.join(PROJECT_SESSIONS_DIR, sessionId + ".jsonl");
 function ensureSessionFile() {
 	if (sessionFile) return;
-	try { fs.writeFileSync(SESSION_FILE_PATH, "", { flag: "a" }); } catch { /* 写失败仅影响 fork 类用例 */ }
-	sessionFile = SESSION_FILE_PATH;
+	try {
+		fs.writeFileSync(TMP_SESSION_FILE_PATH, "", { flag: "a" });
+		fs.mkdirSync(PROJECT_SESSIONS_DIR, { recursive: true });
+		const settingsPath = path.join(process.cwd(), ".pi", "settings.json");
+		if (!fs.existsSync(settingsPath)) {
+			fs.writeFileSync(settingsPath, JSON.stringify({ sessionDir: ".pi/sessions" }, null, 2));
+		}
+		fs.writeFileSync(PROJECT_SESSION_FILE_PATH, "", { flag: "a" });
+	} catch { /* 写失败仅影响 fork/历史恢复类用例 */ }
+	sessionFile = TMP_SESSION_FILE_PATH;
 }
-// 重启后的新进程：文件已存在则立即恢复 sessionFile（桌面端 reattach 语义）
-if (fs.existsSync(SESSION_FILE_PATH)) sessionFile = SESSION_FILE_PATH;
+// 重启后的新进程：tmp 文件已存在则恢复 sessionFile（桌面端 reattach 语义）
+if (fs.existsSync(TMP_SESSION_FILE_PATH)) {
+	sessionFile = TMP_SESSION_FILE_PATH;
+	try { sessionHeaderWritten = fs.statSync(TMP_SESSION_FILE_PATH).size > 0; } catch { /* ignore */ }
+}
 let streamTimer = null;
 let streamStep = 0;
 let streamChunks = [];
@@ -96,6 +124,61 @@ function send(payload) {
 
 function respond(cmd, data) {
 	send({ type: "response", id: cmd.id, command: cmd.type, success: true, data });
+}
+
+/** compact nothing-to-do 等失败路径：success:false + error 文案，桌面端映射友好 toast */
+function respondFail(cmd, error) {
+	send({ type: "response", id: cmd.id, command: cmd.type, success: false, error });
+}
+
+// SessionHistoryReader 沿 parentId 回溯活动分支；每条 entry 必须有稳定 id。
+let nextEntrySeq = 1;
+let lastEntryId = null;
+
+/** 把对话写成可被 SessionHistoryReader 分页读取的真实 JSONL（#113 3.2-9） */
+function appendSessionMessages(userText, assistantText) {
+	ensureSessionFile();
+	if (!sessionFile) return;
+	const now = Date.now();
+	const lines = [];
+	if (!sessionHeaderWritten) {
+		const headerId = `e${nextEntrySeq++}`;
+		lines.push(JSON.stringify({
+			type: "session_info",
+			id: headerId,
+			parentId: null,
+			name: userText.slice(0, 40) || "mock session",
+			cwd: process.cwd(),
+			timestamp: new Date(now).toISOString(),
+		}));
+		lastEntryId = headerId;
+		sessionHeaderWritten = true;
+	}
+	const userParent = lastEntryId;
+	const userId = `e${nextEntrySeq++}`;
+	lines.push(JSON.stringify({
+		type: "message",
+		id: userId,
+		parentId: userParent,
+		timestamp: new Date(now).toISOString(),
+		message: { role: "user", content: [{ type: "text", text: userText }] },
+	}));
+	const assistantId = `e${nextEntrySeq++}`;
+	lines.push(JSON.stringify({
+		type: "message",
+		id: assistantId,
+		parentId: userId,
+		timestamp: new Date(now + 1).toISOString(),
+		message: { role: "assistant", content: [{ type: "text", text: assistantText }] },
+	}));
+	lastEntryId = assistantId;
+	const payload = lines.join("\n") + "\n";
+	// 双写：tmp（runtime sessionFile）+ 项目 sessions（历史扫描）
+	try { fs.appendFileSync(sessionFile, payload); } catch { /* ignore */ }
+	try {
+		fs.mkdirSync(PROJECT_SESSIONS_DIR, { recursive: true });
+		fs.appendFileSync(PROJECT_SESSION_FILE_PATH, payload);
+	} catch { /* ignore */ }
 }
 
 function emit(event) {
@@ -163,6 +246,12 @@ function startStream(userText) {
 			emit({ type: "message_end", message: full });
 			emit({ type: "agent_end", messages: [full] });
 			emit({ type: "agent_settled" });
+			// 落盘 + 内存同步：历史恢复扫文件；fork/reload 走 get_messages
+			appendSessionMessages(userText, reply);
+			conversationMessages.push(
+				{ role: "user", content: [{ type: "text", text: userText }] },
+				{ role: "assistant", content: [{ type: "text", text: reply }] },
+			);
 			streaming = false;
 			// 排队 prompt 串行开下一轮
 			const next = pendingPrompts.shift();
@@ -191,7 +280,7 @@ function handleCommand(cmd) {
 			});
 			return;
 		case "get_messages":
-			respond(cmd, { messages: [] });
+			respond(cmd, { messages: conversationMessages.slice() });
 			return;
 		case "get_entries":
 			respond(cmd, { entries: [] });
@@ -233,6 +322,12 @@ function handleCommand(cmd) {
 			return;
 		}
 		case "compact":
+			// prompt 含 NOTHING 时走失败路径：success:false + "nothing to compact"，
+			// 桌面端映射 app.compactNothingToDo 友好 toast（#113 3.2-7）。
+			if (typeof cmd.prompt === "string" && cmd.prompt.includes("NOTHING")) {
+				respondFail(cmd, "nothing to compact");
+				return;
+			}
 			// 模拟 pi 压缩事件序列：compaction_start → RPC success → compaction_end
 			// → agent_settled。桌面端据此 running → 重载消息 → idle；
 			// compaction_end 触发 emitRuntimeState，占比下降后 compact chip 应消失。

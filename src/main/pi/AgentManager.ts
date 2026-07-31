@@ -1187,13 +1187,16 @@ export class AgentManager {
 				rpcError: response.error,
 			});
 
-			// 检查 RPC 返回的 success 字段：pi CLI 可能压缩成功但后续步骤抛异常，
-			// 此时 session 文件已写入但 RPC 仍返回错误。
+			// success:false 必须抛给上层：渲染层靠错误文案映射 nothing-to-do / too-small
+			// 友好 toast。之前只 warn 不抛，导致「暂无可压缩内容」永远到不了 UI（#113 3.2-7）。
 			if (!response.success) {
-				void this.appLogger?.warn("agent", "Compact RPC returned failure (session might still be written)", {
+				const rpcError = response.error?.trim() || "compact failed";
+				void this.appLogger?.warn("agent", "Compact RPC returned failure", {
 					agentId,
-					error: response.error,
+					error: rpcError,
 				});
+				this.compactingAgents.delete(agentId);
+				throw new Error(rpcError);
 			}
 
 			this.compactingAgents.delete(agentId);

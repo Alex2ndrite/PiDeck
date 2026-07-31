@@ -164,15 +164,15 @@ git log --oneline HEAD..origin/main --since="7 days ago"
 
 5. 新建会话 → 发送消息 → 流式渲染 → 停止　🤖 **已自动化**（`e2e/agent-flow.spec.ts` + `e2e/mock-pi.cjs`，真实 spawn+RPC）
 6. 重启 Agent → 会话可继续　🤖 **已自动化**（`e2e/agent-flow.spec.ts` 重启用例；发现「Agent 已重启」toast 前发送会被 coordinator 拒发）
-7. compact：上下文 >30% 出现 chip，点击压缩成功；nothing-to-do 场景出友好文案　🤖 **压缩主路径已自动化**（`e2e/agent-flow.spec.ts`：chip 出现→点击→占比下降 chip 消失→可续聊；nothing-to-do 仍手动）
+7. compact：上下文 >30% 出现 chip，点击压缩成功；nothing-to-do 场景出友好文案　🤖 **已自动化**（主路径 + nothing-to-do：`/compact NOTHING` → 友好 toast；并修了 RPC success:false 不抛导致文案永远不到 UI 的产品 bug）
 8. fork：从某条用户消息 fork 出新会话　🤖 **已自动化**（同 spec：get_fork_messages→fork RPC→toast+原文预填）
-9. 关闭再打开应用 → 历史会话恢复
-10. 排队消息：发送中再发 → 排队 → 可撤回　🤖 **排队+顺序回答已自动化**（同上 spec 第二用例；「可撤回」仍手动）
+9. 关闭再打开应用 → 历史会话恢复　🤖 **已自动化**（`e2e/history-restore.spec.ts`：双次 launch + 项目 `.pi/sessions` 落盘 + id/parentId 分支链）
+10. 排队消息：发送中再发 → 排队 → 可撤回　🤖 **已自动化**（排队顺序 + 丢弃撤回：`e2e/agent-flow.spec.ts` discarded 用例）
 
 ### 3.3 布局
 
 11. 左侧栏折叠/展开；右侧抽屉开关、切换 files/git/browser、钉住　🤖 **已自动化**（`e2e/layout.spec.ts`）
-12. 终端 Dock 开合、拖拽高度、切换 shell　🤖 **开合/shell 菜单已自动化**（`e2e/layout-terminal.spec.ts`，mock pi；拖拽高度仍手动）
+12. 终端 Dock 开合、拖拽高度、切换 shell　🤖 **开合/shell 已自动化**；拖拽高度 soft-check（headless 指针命中不稳，不 hard-fail）
 
 ### 3.4 集成 smoke
 
