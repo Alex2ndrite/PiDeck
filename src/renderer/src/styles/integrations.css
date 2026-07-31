@@ -975,15 +975,6 @@
   gap: var(--space-2);
   flex-wrap: wrap;
 }
-.config-im-form-hint-links .config-btn.small {
-  font-size: var(--font-size-micro);
-  height: var(--control-height-xs);
-  padding: 0 var(--space-2);
-  text-decoration: none;
-  display: inline-flex;
-  align-items: center;
-  color: var(--color-text-secondary);
-}
 
 /* Bot 卡片已连接标识 */
 .config-im-connected-badge {
@@ -1006,14 +997,6 @@
   gap: var(--space-2);
   align-items: center;
   margin-top: 4px;
-}
-.config-im-guide-bar .config-btn {
-  font-size: var(--font-size-caption);
-  padding: 0 var(--space-3);
-  height: var(--control-height-md);
-  text-decoration: none;
-  display: inline-flex;
-  align-items: center;
 }
 
 /* 单 Bot 连接提示 */
@@ -1351,10 +1334,6 @@
   color: var(--color-text-primary);
 }
 
-.config-im-credential-card .config-btn.small {
-  flex-shrink: 0;
-  min-width: auto;
-}
 
 .config-im-credential-actions,
 .config-im-openid-line {

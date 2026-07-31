@@ -2840,28 +2840,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-.config-btn {
-  height: var(--control-height-md);
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-sm);
-  background: var(--color-bg-panel);
-  color: var(--color-text-primary);
-  font-size: var(--font-size-caption);
-  padding: 0 var(--space-3);
-  cursor: pointer;
-  transition:
-    background-color 0.15s,
-    border-color 0.15s,
-    color 0.15s;
-}
 /* a 标签用作按钮时（如在线文档链接）补全 flex 布局 */
-a.config-btn {
-  text-decoration: none;
-  display: inline-flex;
-  align-items: center;
-  white-space: nowrap;
-  box-sizing: border-box;
-}
 
 /* 在段落中作为链接使用的 button，保持文本链接外观并继承字体 */
 .config-link-like {
@@ -2875,35 +2854,10 @@ a.config-btn {
   color: var(--color-accent-strong);
 }
 
-.config-btn:hover:not(:disabled) {
-  background: var(--color-bg-hover);
-  border-color: var(--color-border-strong);
-}
 
-.config-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
 
-.config-btn.primary {
-  border-color: var(--color-accent);
-  background: var(--color-accent);
-  color: var(--color-text-inverse);
-}
 
-.config-btn.primary:hover:not(:disabled) {
-  background: var(--color-accent-strong);
-  border-color: var(--color-accent-strong);
-}
 
-.config-btn.danger {
-  border-color: color-mix(
-    in srgb,
-    var(--color-danger) 22%,
-    var(--color-border-subtle)
-  );
-  color: var(--color-danger);
-}
 
 /* 批量选择 checkbox */
 .config-batch-checkbox {
@@ -2923,51 +2877,12 @@ a.config-btn {
   margin: 0;
 }
 
-.config-btn.danger:hover:not(:disabled) {
-  background: var(--color-danger-soft);
-}
 
 /* 确认对话框中的危险按钮（红色背景） */
-.config-modal-actions .config-btn.danger {
-  background: var(--color-danger);
-  color: white;
-  border-color: var(--color-danger);
-}
-.config-modal-actions .config-btn.danger:hover {
-  opacity: 0.85;
-}
 
-.config-btn.danger-fill {
-  background: var(--color-danger);
-  color: white;
-  border-color: var(--color-danger);
-}
-.config-btn.danger-fill:hover:not(:disabled) {
-  opacity: 0.85;
-}
-.config-btn.danger-fill:disabled {
-  background: var(--color-bg-hover);
-  color: var(--color-text-tertiary);
-  border-color: var(--color-border-subtle);
-  cursor: not-allowed;
-}
 
-.config-btn.small {
-  height: var(--control-height-sm);
-  padding: 0 8px;
-  font-size: var(--font-size-micro);
-}
 
-.config-btn.blue {
-  border-color: var(--color-info);
-  background: var(--color-info);
-  color: var(--color-text-inverse);
-}
 
-.config-btn.blue:hover:not(:disabled) {
-  background: var(--color-info);
-  border-color: var(--color-info);
-}
 
 .config-toolbar-actions,
 .config-model-list-actions,
@@ -3042,33 +2957,6 @@ a.config-btn {
 }
 
 /* 头部导出/导入按钮：完全覆盖 .modal-header button 的固定宽高，回归 config-btn 原始尺寸 */
-.modal-header-actions .config-btn {
-  height: 32px !important;
-  width: auto !important;
-  min-width: 0 !important;
-  padding: 0 14px !important;
-  font-size: var(--font-size-caption) !important;
-  line-height: 1 !important;
-  border: 1px solid var(--color-border-subtle) !important;
-}
-.modal-header-actions .config-btn.primary {
-  border-color: var(--color-accent) !important;
-  background: var(--color-accent) !important;
-  color: var(--color-text-inverse) !important;
-}
-.modal-header-actions .config-btn.primary:hover:not(:disabled) {
-  background: var(--color-accent-strong) !important;
-  border-color: var(--color-accent-strong) !important;
-}
-.modal-header-actions .config-btn.blue {
-  border-color: var(--color-info) !important;
-  background: var(--color-info) !important;
-  color: var(--color-text-inverse) !important;
-}
-.modal-header-actions .config-btn.blue:hover:not(:disabled) {
-  background: var(--color-info) !important;
-  border-color: var(--color-info) !important;
-}
 
 /* 配置弹窗关闭按钮 */
 .modal-close-btn {
@@ -4161,9 +4049,6 @@ a.config-btn {
   margin-top: 12px;
   padding-top: 10px;
   border-top: 1px solid var(--color-border-subtle);
-}
-.config-auth-selector-actions .config-btn {
-  flex-shrink: 0;
 }
 .config-auth-selector-info {
   flex: 1;

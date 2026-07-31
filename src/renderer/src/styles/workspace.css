@@ -212,9 +212,6 @@
   font-size: var(--font-size-caption);
   line-height: var(--line-height-caption);
 }
-.project-skill-create .config-btn.primary {
-  justify-self: start;
-}
 
 /* 创建表单字段 */
 .project-resources-name-field {
@@ -775,10 +772,6 @@
 .prompt-store-search-input-wrap input::placeholder {
   color: var(--color-text-tertiary);
 }
-.prompt-store-search-input-wrap .config-btn {
-  flex-shrink: 0;
-  white-space: nowrap;
-}
 .prompt-store-suggestions {
   display: flex;
   flex-wrap: wrap;
@@ -858,20 +851,11 @@
   gap: 6px;
   flex-shrink: 0;
 }
-.prompt-store-card-actions .config-btn.small {
-  padding: 4px 10px;
-  font-size: var(--font-size-caption);
-}
 
 .prompt-store-toolbar {
   display: flex;
   align-items: center;
   gap: 8px;
-}
-.prompt-store-toolbar .config-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
 }
 
 .prompt-store-preview {
