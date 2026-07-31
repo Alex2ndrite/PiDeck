@@ -1,7 +1,7 @@
 import { useState, useRef, useLayoutEffect, useEffect, useMemo, type ReactNode } from "react";
-import { X, MessageCircle, Folder } from "lucide-react";
+import { MessageCircle, Folder } from "lucide-react";
 import { t } from "../../i18n";
-import { CloseIconButton } from "../ui/IconButton";
+import { Modal } from "../ui/Modal";
 import {
 	DropdownMenu,
 	DropdownMenuCheckboxItem,
@@ -77,22 +77,18 @@ export function SessionManagerModal(props: {
 	};
 
 	return (
-		<div className="modal-backdrop" onClick={props.onClose}>
-			<section className="session-manager-modal" onClick={(e) => e.stopPropagation()}>
-				<header className="modal-header">
-					<div>
-						<strong>{t("menu.manageSessions")}</strong>
-						<small>{filteredSessions.length} / {props.sessions.length} sessions</small>
-					</div>
-					<button
-						className="modal-close"
-						onClick={props.onClose}
-						aria-label={t("common.close")}
-					>
-						<X size={18} strokeWidth={2} />
-					</button>
-				</header>
-
+		<Modal
+			open
+			onClose={props.onClose}
+			title={t("menu.manageSessions")}
+			size="full"
+			headerActions={
+				<small className="text-muted-foreground">
+					{filteredSessions.length} / {props.sessions.length} sessions
+				</small>
+			}
+		>
+			<div className="session-manager-modal session-manager-modal--embedded">
 				<div className="session-manager-toolbar">
 					<div className="session-manager-toolbar-left">
 						<label className="session-manager-select-all">
@@ -180,8 +176,8 @@ export function SessionManagerModal(props: {
 						);
 					})}
 				</div>
-			</section>
-		</div>
+			</div>
+		</Modal>
 	);
 }
 
@@ -434,28 +430,27 @@ export function RpcLogModal(props: {
 		navigator.clipboard.writeText(logs.map(formatRpcLogForCopy).join("\n"));
 
 	return (
-		<div className="modal-backdrop" onClick={props.onClose}>
-			<div className="rpc-log-modal" onClick={(e) => e.stopPropagation()}>
-				<div className="modal-header rpc-log-header">
-					<strong>
-						{t("rpc.title", {
-							visible: visibleLogs.length,
-							total: props.logs.length,
-						})}
-					</strong>
-					<div className="modal-header-actions rpc-log-header-actions">
-						<Button  variant="default" onClick={() => copyLogs(props.logs)}>
-							{t("common.copyAll")}
-						</Button>
-						<Button  variant="secondary" onClick={() => copyLogs(visibleLogs)}>
-							{t("common.copyVisible")}
-						</Button>
-						<CloseIconButton
-							label={t("common.close")}
-							onClick={props.onClose}
-						/>
-					</div>
-				</div>
+		<Modal
+			open
+			onClose={props.onClose}
+			title={t("rpc.title", {
+				visible: visibleLogs.length,
+				total: props.logs.length,
+			})}
+			size="full"
+			contentClassName="sm:max-w-[min(1000px,92vw)] h-[min(720px,82vh)]"
+			headerActions={
+				<>
+					<Button variant="default" onClick={() => copyLogs(props.logs)}>
+						{t("common.copyAll")}
+					</Button>
+					<Button variant="secondary" onClick={() => copyLogs(visibleLogs)}>
+						{t("common.copyVisible")}
+					</Button>
+				</>
+			}
+		>
+			<div className="rpc-log-modal rpc-log-modal--embedded">
 				<div className="rpc-log-toolbar">
 					<div className="rpc-log-filter-tabs">
 						<button
@@ -527,7 +522,7 @@ export function RpcLogModal(props: {
 					)}
 				</div>
 			</div>
-		</div>
+		</Modal>
 	);
 }
 
