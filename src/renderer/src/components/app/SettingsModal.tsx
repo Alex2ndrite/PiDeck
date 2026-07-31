@@ -16,6 +16,18 @@ import { CloseIconButton, IconButton } from "../ui/IconButton";
 import { SelectField } from "../ui/SelectField";
 import { TextField } from "../ui/TextField";
 import { Switch } from "../ui-shadcn/switch";
+import { Modal } from "../ui/Modal";
+import { buttonVariants } from "../ui-shadcn/button";
+import {
+	AlertDialog,
+	AlertDialogAction,
+	AlertDialogCancel,
+	AlertDialogContent,
+	AlertDialogDescription,
+	AlertDialogFooter,
+	AlertDialogHeader,
+	AlertDialogTitle,
+} from "../ui-shadcn/alert-dialog";
 import { SettingsSection, StorageTab } from "./settings/SettingsStorageTab";
 import type { AppSettings, AppInfo, PiInstallStatus, PiUpdateCheckResult, PiCliUpdateResult, PetManifest } from "../../../shared/types";
 import { GRID_COLS, CELL_W, CELL_H, MODE_ROW, MODE_FRAMES } from "../../pet/PetSpriteSheet";
@@ -158,30 +170,22 @@ class SettingsModalErrorBoundary extends Component<
 
 	override render() {
 		if (!this.state.error) return this.props.children;
+		// #115：错误兜底同走 shadcn Modal 外壳
 		return (
-			<div className="modal-backdrop" onClick={this.props.onClose}>
-				<div className="settings-modal" onClick={(e) => e.stopPropagation()}>
-					<div className="modal-header">
-						<strong>{t("settings.loadFailed")}</strong>
-						<CloseIconButton
-							label={t("common.close")}
-							onClick={this.props.onClose}
-						/>
-					</div>
-					<div className="settings-layout">
-						<div className="settings-content" style={{ padding: "var(--space-5)" }}>
-							<div className="config-diagnostic-card">
-								<div>
-									<strong>{t("settings.renderCrashed")}</strong>
-									<span>{this.state.error.message}</span>
-									<small>{t("settings.renderCrashedHelp")}</small>
-								</div>
-								<pre>{this.state.error.stack ?? this.state.error.message}</pre>
+			<Modal open onClose={this.props.onClose} title={t("settings.loadFailed")} contentClassName="settings-modal">
+				<div className="settings-layout">
+					<div className="settings-content" style={{ padding: "var(--space-5)" }}>
+						<div className="config-diagnostic-card">
+							<div>
+								<strong>{t("settings.renderCrashed")}</strong>
+								<span>{this.state.error.message}</span>
+								<small>{t("settings.renderCrashedHelp")}</small>
 							</div>
+							<pre>{this.state.error.stack ?? this.state.error.message}</pre>
 						</div>
 					</div>
 				</div>
-			</div>
+			</Modal>
 		);
 	}
 }
@@ -463,33 +467,29 @@ function SettingsModalContent(props: SettingsModalProps) {
 	// 代理 tab 仍展示未保存提示；实际保存/取消统一走全局草稿，避免旧 proxyDirty 局部状态残留。
 	const proxyDirty = PROXY_FIELDS.some((field) => dirtyFields.has(field));
 
+	// #115 U5：外壳换 shadcn Dialog（ui/Modal）。旧 .modal-backdrop z-index 100
+	// 会盖住 Radix Select 的 z-50 portal，导致设置页所有下拉“点开看不见、点不动”。
+	// onClose 仍走 handleClose（未保存变更拦截），语义不变。
 	return (
-		<div className="modal-backdrop" onClick={handleClose}>
-			<div
-				className="settings-modal"
-				onClick={(e) => e.stopPropagation()}
-			>
-				<div className="modal-header">
-					<strong>{t("settings.title")}</strong>
-					<div className="modal-header-actions" style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
-						{/* 全局保存/取消按钮：仅在存在未保存变更时显示，样式与配置弹框的导入/导出按钮一致 */}
-						{hasDirtyChanges && (
-							<>
-								<Button variant="primary" onClick={saveAll}>
-									{t("common.save")}
-								</Button>
-								<Button variant="secondary" onClick={cancelAll}>
-									{t("common.cancel")}
-								</Button>
-							</>
-						)}
-						<CloseIconButton
-							label={t("common.close")}
-							onClick={handleClose}
-						/>
-					</div>
-				</div>
-				<div className="settings-layout">
+		<Modal
+			open
+			onClose={handleClose}
+			title={t("settings.title")}
+			contentClassName="settings-modal"
+			headerActions={
+				hasDirtyChanges ? (
+					<>
+						<Button variant="primary" buttonSize="sm" onClick={saveAll}>
+							{t("common.save")}
+						</Button>
+						<Button variant="secondary" buttonSize="sm" onClick={cancelAll}>
+							{t("common.cancel")}
+						</Button>
+					</>
+				) : undefined
+			}
+		>
+			<div className="settings-layout">
 					<nav className="settings-tabs" aria-label={t("settings.title")}>
 						{tabs.map((tab) => (
 							<button
@@ -1511,28 +1511,27 @@ function SettingsModalContent(props: SettingsModalProps) {
 						)}
 					</div>
 				</div>
-				{/* 未保存变更确认对话框 */}
-				{closeConfirmOpen && (
-					<div className="config-modal-overlay" onClick={() => setCloseConfirmOpen(false)}>
-						<div className="config-modal-dialog" onClick={(e) => e.stopPropagation()}>
-							<strong>{t("settings.unsavedTitle")}</strong>
-							<p>{t("settings.unsavedMessage")}</p>
-							<div className="config-modal-actions">
-								<Button variant="secondary" onClick={() => setCloseConfirmOpen(false)}>
-									{t("common.cancel")}
-								</Button>
-								<Button variant="danger" onClick={handleDiscardAndClose}>
-									{t("settings.discardChanges")}
-								</Button>
-								<Button  variant="default" onClick={handleSaveAndClose}>
-									{t("settings.saveAndClose")}
-								</Button>
-							</div>
-						</div>
-					</div>
-				)}
-			</div>
-		</div>
+			{/* 未保存变更确认对话框 */}
+			{closeConfirmOpen && (
+				<AlertDialog open onOpenChange={(open) => { if (!open) setCloseConfirmOpen(false); }}>
+					<AlertDialogContent>
+						<AlertDialogHeader>
+							<AlertDialogTitle>{t("settings.unsavedTitle")}</AlertDialogTitle>
+							<AlertDialogDescription>{t("settings.unsavedMessage")}</AlertDialogDescription>
+						</AlertDialogHeader>
+						<AlertDialogFooter>
+							<AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+							<AlertDialogAction className={buttonVariants({ variant: "destructive" })} onClick={handleDiscardAndClose}>
+								{t("settings.discardChanges")}
+							</AlertDialogAction>
+							<AlertDialogAction onClick={handleSaveAndClose}>
+								{t("settings.saveAndClose")}
+							</AlertDialogAction>
+						</AlertDialogFooter>
+					</AlertDialogContent>
+				</AlertDialog>
+			)}
+		</Modal>
 	);
 }
 

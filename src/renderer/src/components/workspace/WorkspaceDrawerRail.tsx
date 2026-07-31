@@ -21,7 +21,7 @@ export type WorkspaceDrawerRailAction = {
 export function WorkspaceDrawerRail(props: { actions: WorkspaceDrawerRailAction[] }) {
   if (props.actions.length === 0) return null;
   return (
-    <div className="drawer-activity-rail" role="tablist" aria-orientation="vertical">
+    <div className="drawer-activity-rail" role="tablist" aria-orientation="horizontal">
       {props.actions.map((action) => (
         <button
           key={action.id}

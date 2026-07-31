@@ -3017,17 +3017,15 @@ body.is-git-pane-resizing, body.is-git-pane-resizing * { cursor: row-resize !imp
 /* ── 抽屉活动栏（activity rail）──
  * 新架构的面板切换入口：抽屉打开期间常驻左缘，files/git/browser 切换不再依赖
  * 会话 outline 是否渲染。rail 占位在抽屉列宽内，内容区随之收窄。 */
-.detail-drawer:has(.drawer-activity-rail) {
-  flex-direction: row;
-}
+/* #115：tab 条回归横排——抽屉顶部一行 tab，替代 VS Code 式竖排 activity rail */
 .drawer-activity-rail {
-  flex: 0 0 40px;
+  flex: 0 0 auto;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
   gap: var(--space-1);
-  padding: var(--space-2) 0;
-  border-right: 1px solid var(--color-border-subtle);
+  padding: var(--space-1) var(--space-2);
+  border-bottom: 1px solid var(--color-border-subtle);
   background: var(--color-bg-panel);
 }
 .drawer-activity-rail-button {
@@ -3051,14 +3049,14 @@ body.is-git-pane-resizing, body.is-git-pane-resizing * { cursor: row-resize !imp
   background: var(--color-bg-active);
   color: var(--color-accent);
 }
-/* 激活态左缘指示条：与 VS Code 活动栏同一视觉语言，弱化背景块依赖 */
+/* 激活态下缘指示条：横排 tab 的标准视觉语言 */
 .drawer-activity-rail-button.active::before {
   content: "";
   position: absolute;
-  left: -4px;
-  top: 6px;
-  bottom: 6px;
-  width: 2px;
+  left: 6px;
+  right: 6px;
+  bottom: -5px;
+  height: 2px;
   border-radius: 1px;
   background: var(--color-accent);
 }

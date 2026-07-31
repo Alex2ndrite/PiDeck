@@ -116,10 +116,10 @@ test("visual tour: light + dark", async ({ window }) => {
 	await window.keyboard.press("Escape");
 	await window.waitForTimeout(300);
 
-	// 文件抽屉（默认可能已开）
-	const drawerFiles = window.locator(".drawer-files, [class*='files-panel'], .file-tree").first();
-	if (await drawerFiles.count()) {
-		await shot(window, "11-drawer-files-light");
+	// 文件抽屉 + tab 条（横排 rail 回归验证）
+	const rail = window.locator(".drawer-activity-rail");
+	if (await rail.count()) {
+		await window.locator(".detail-drawer").first().screenshot({ path: join(OUT_DIR, "11-drawer-files-light.png") });
 	}
 
 	// ── 暗色：直接切 data-theme（应用主题机制） ──
