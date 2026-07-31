@@ -4635,9 +4635,6 @@ a.config-btn {
   border-top: 1px solid var(--color-border-subtle);
 }
 
-.config-model-combobox-menu button {
-  display: flex;
-}
 
 .config-model-chip-list {
   display: flex;
@@ -4732,48 +4729,12 @@ a.config-btn {
   text-align: center;
 }
 
-.config-model-combobox-menu small {
-  color: var(--color-text-tertiary);
-  font-size: var(--font-size-micro);
-  line-height: 1.2;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 
 .config-model-combobox-menu button:hover small,
-.config-model-combobox-menu button.active small {
-  color: var(--color-accent);
-}
 
-.config-model-combobox-menu-actions {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
-  padding: 0 4px 5px;
-  margin-bottom: 4px;
-  border-bottom: 1px solid var(--color-border-subtle);
-}
 
-.config-model-combobox-menu-actions button {
-  width: auto;
-  min-height: 26px;
-  padding: 4px 8px;
-  color: var(--color-accent);
-  font-size: var(--font-size-micro);
-  font-weight: 650;
-}
 
-.config-model-combobox-menu-actions button:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
 
-.config-model-combobox-menu-actions span {
-  color: var(--color-text-tertiary);
-  font-size: var(--font-size-micro);
-}
 
 .config-model-combobox-option {
   align-items: center;
@@ -5527,20 +5488,7 @@ a.config-btn {
   font-weight: 600;
 }
 
-.modified-file-lines,
-.modified-file-tool {
-  flex: 0 0 auto;
-  font-size: var(--font-size-micro);
-  color: var(--color-text-secondary);
-  padding: 2px 6px;
-  border-radius: var(--radius-xs);
-  background: var(--color-bg-hover);
-}
 
-.modified-file-lines {
-  color: var(--color-accent);
-  background: var(--color-accent-soft);
-}
 
 .modified-files-toggle {
   margin: 6px 8px 0;

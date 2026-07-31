@@ -389,43 +389,14 @@
 }
 
 /* 项目资源内嵌确认弹框 */
-.project-resources-confirm-dialog {
-  display: grid;
-  gap: 14px;
-  max-width: 420px;
-  padding: 20px;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-lg);
-  background: var(--color-bg-panel);
-  box-shadow: var(--shadow-popover);
-}
-.project-resources-confirm-dialog strong {
-  font-size: var(--font-size-body);
-  color: var(--color-text-primary);
-}
-.project-resources-confirm-dialog p {
-  margin: 0;
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-control);
-  line-height: var(--line-height-body);
-}
 .project-resources-confirm-dialog .rename-dialog-actions button.danger {
   background: var(--color-danger);
   color: var(--color-bg-panel);
 }
 .project-resources-confirm-dialog
   .rename-dialog-actions
-  button.danger:hover:not(:disabled) {
-  background: var(--color-danger-hover);
-}
 
 /* 项目资源内嵌编辑器 */
-.project-resources-editor-overlay {
-  display: grid;
-  grid-template-rows: auto 1fr auto;
-  gap: 0;
-  overflow: hidden;
-}
 .project-resources-editor-overlay .project-resources-editor-header {
   display: flex;
   align-items: center;
@@ -457,19 +428,6 @@
   button:hover {
   background: var(--color-bg-active);
   color: var(--color-text-primary);
-}
-.project-resources-editor-overlay textarea {
-  flex: 1;
-  width: 100%;
-  padding: 16px 20px;
-  border: 0;
-  background: var(--color-bg-panel);
-  color: var(--color-text-primary);
-  font-family: var(--font-family-mono);
-  font-size: var(--font-size-caption);
-  line-height: var(--line-height-body);
-  resize: none;
-  outline: none;
 }
 .project-resources-editor-footer {
   display: flex;

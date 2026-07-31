@@ -391,45 +391,7 @@
 }
 
 /* 帮助区域 */
-.feishu-help-toggle {
-  width: 100%;
-  border: 0;
-  background: none;
-  color: var(--color-text-tertiary);
-  font-size: var(--font-size-caption);
-  padding: var(--space-2) var(--space-3);
-  cursor: pointer;
-  text-align: left;
-  transition: color 0.15s ease;
-  font-family: var(--font-family-base);
-}
-.feishu-help-toggle:hover {
-  color: var(--color-text-secondary);
-}
-.feishu-help-content {
-  padding: 0 var(--space-3) var(--space-3);
-  font-size: var(--font-size-caption);
-  color: var(--color-text-secondary);
-  line-height: 1.8;
-}
-.feishu-help-content p {
-  margin: 0 0 var(--space-1);
-}
-.feishu-help-content ul {
-  padding-left: 20px;
-  margin: var(--space-1) 0;
-}
-.feishu-help-content a,
-.feishu-help-link {
-  all: unset;
-  color: var(--color-accent);
-  text-decoration: none;
-  cursor: pointer;
-}
 .feishu-help-content a:hover,
-.feishu-help-link:hover {
-  text-decoration: underline;
-}
 
 .feishu-help-footer {
   border-top: 1px solid var(--color-border-subtle);

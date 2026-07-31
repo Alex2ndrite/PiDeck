@@ -1923,9 +1923,6 @@ select:focus-visible {
 .session-more-row::before {
   display: none;
 }
-.agent-more-branch {
-  display: none;
-}
 .agent-more-row:hover,
 .session-more-row:hover {
   background: var(--color-bg-hover);
@@ -2062,30 +2059,10 @@ select:focus-visible {
   padding-left: 18px;
   min-height: 24px;
 }
-.codex-subagent-sidebar-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  border: 0;
-  border-radius: var(--radius-md);
-  background: transparent;
-  color: var(--color-text-tertiary);
-  font-size: var(--font-size-caption);
-  line-height: var(--line-height-caption);
-  cursor: pointer;
-  text-align: left;
-}
 .codex-subagent-sidebar-toggle:hover,
 .codex-subagent-sidebar-row:hover {
   background: var(--color-bg-hover);
   color: var(--color-text-secondary);
-}
-.codex-subagent-sidebar-toggle svg {
-  transform: rotate(-90deg);
-  transition: transform 0.12s ease;
-}
-.codex-subagent-sidebar-toggle svg.expanded {
-  transform: rotate(0deg);
 }
 .codex-subagent-sidebar-row .conversation-title strong {
   color: var(--color-text-tertiary);
