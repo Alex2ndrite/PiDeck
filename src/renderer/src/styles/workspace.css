@@ -1593,61 +1593,11 @@ html[data-theme="dark"] .scratch-pad-md mark {
   display: flex;
 }
 
-.chat-list-pane.v3-braun .sidebar-body .list-toolbar {
-  height: auto;
-  padding: 0;
-  flex-shrink: 0;
-}
-
-.chat-list-pane.v3-braun .sidebar-body .app-badge {
-  padding: var(--space-1) 0;
-}
-
-.chat-list-pane.v3-braun .sidebar-body .brand-wordmark {
-  transform: translateY(-1px);
-}
-
+/* pure official：list-toolbar / search / round-add 由组件 Tailwind+shadcn 承担，
+ * 不再用 v3-braun 硬编码高度与绿色 hover。 */
+.chat-list-pane.v3-braun .sidebar-body .list-toolbar,
 .chat-list-pane.v3-braun .sidebar-body .search-row {
-  height: auto;
-  padding: 0;
-  grid-template-columns: minmax(0, 1fr) 34px;
   flex-shrink: 0;
-}
-
-.chat-list-pane.v3-braun .sidebar-body .search-box {
-  height: 34px;
-  border-radius: var(--radius-md);
-  background: #FAFAFA;
-  border-color: var(--color-border-subtle);
-}
-
-:root[data-theme="dark"] .chat-list-pane.v3-braun .sidebar-body .search-box {
-  background: var(--color-bg-muted);
-}
-
-.chat-list-pane.v3-braun .sidebar-body .search-box:focus-within {
-  box-shadow: none;
-  outline: 2px solid color-mix(in srgb, var(--color-accent) 16%, transparent);
-  outline-offset: 1px;
-}
-
-.chat-list-pane.v3-braun .sidebar-body .search-box input {
-  font-size: var(--font-size-control);
-}
-
-.chat-list-pane.v3-braun .sidebar-body .round-add {
-  width: 34px;
-  height: 34px;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-md);
-  background: var(--color-bg-panel);
-  color: var(--color-text-secondary);
-}
-
-.chat-list-pane.v3-braun .sidebar-body .round-add:hover {
-  background: var(--color-accent-soft);
-  border-color: var(--color-accent);
-  color: var(--color-accent);
 }
 
 .chat-list-pane.v3-braun .sidebar-body .conversation-list {
@@ -2003,37 +1953,9 @@ html[data-theme="dark"] .scratch-pad-md mark {
   padding: var(--space-1) 0;
 }
 
+/* 底栏按钮：shadcn ghost icon，不再强制 flex:1 铺满 */
 .chat-list-pane.v3-braun .sidebar-body .sidebar-bottom-actions {
-  padding: 0;
-  margin-top: 0;
-  border-top: none;
   flex-shrink: 0;
-  gap: var(--space-1);
-}
-
-.chat-list-pane.v3-braun
-  .sidebar-body
-  .sidebar-bottom-actions
-  .sidebar-bottom-primary-actions {
-  display: contents;
-}
-
-.chat-list-pane.v3-braun .sidebar-body .sidebar-bottom-actions .icon-button {
-  flex: 1;
-  width: auto;
-  height: 32px;
-  border: 0;
-  border-radius: var(--radius-md);
-  background: var(--color-bg-panel);
-  color: var(--color-text-secondary);
-}
-
-.chat-list-pane.v3-braun
-  .sidebar-body
-  .sidebar-bottom-actions
-  .icon-button:hover {
-  background: var(--color-bg-hover);
-  color: var(--color-text-primary);
 }
 /* ═══════════════════════════════════════════════════════════════
    Git panel — VS Code-style three-pane Source Control workbench

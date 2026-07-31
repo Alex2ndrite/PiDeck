@@ -29,6 +29,8 @@
   --color-bg-app: var(--color-bg-app);
   --color-bg-panel: var(--color-bg-panel);
   --color-bg-sidebar: var(--color-bg-sidebar);
+  --color-sidebar: var(--color-bg-sidebar);
+  --color-sidebar-foreground: var(--color-text-primary);
   --color-bg-muted: var(--color-bg-muted);
   --color-bg-hover: var(--color-bg-hover);
   --color-bg-active: var(--color-bg-active);

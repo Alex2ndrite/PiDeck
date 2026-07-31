@@ -211,14 +211,17 @@ function formatCompact(value?: number | null) {
 
 export function LogoMark() {
 	return (
-		<div className="logo-mark" aria-label={t("app.logoLabel")}>
-			<svg viewBox="140 140 520 520" width="22" height="22" aria-hidden="true">
+		<div
+			className="logo-mark relative grid size-8 place-items-center overflow-hidden rounded-md bg-primary text-primary-foreground shadow-sm"
+			aria-label={t("app.logoLabel")}
+		>
+			<svg viewBox="140 140 520 520" width="18" height="18" aria-hidden="true">
 				<path
-					fill="#fff"
+					fill="currentColor"
 					fillRule="evenodd"
 					d="M165.29 165.29H517.36V400H400V517.36H282.65V634.72H165.29ZM282.65 282.65V400H400V282.65Z"
 				/>
-				<path fill="#fff" d="M517.36 400H634.72V634.72H517.36Z" />
+				<path fill="currentColor" d="M517.36 400H634.72V634.72H517.36Z" />
 			</svg>
 		</div>
 	);

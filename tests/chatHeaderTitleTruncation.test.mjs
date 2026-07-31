@@ -1,23 +1,19 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { readRendererStyles } from "./helpers/rendererStyles.mjs";
 
-const css = readRendererStyles();
+/**
+ * pure official：标题截断/布局改由 SessionHeader Tailwind 承担。
+ */
 
-function block(selector) {
-  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const match = css.match(new RegExp(`${escaped} \\{([^}]*)\\}`));
-  assert.ok(match, `missing ${selector}`);
-  return match[1];
-}
+const header = readFileSync(
+  "src/renderer/src/components/session/SessionHeader.tsx",
+  "utf8",
+);
 
 test("chat header gives the agent title remaining width before ellipsis", () => {
-  assert.match(block(".chat-header"), /grid-template-columns:\s*minmax\(0, 1fr\) auto;/);
-  assert.match(block(".chat-title-block"), /flex:\s*1 1 auto;/);
-  assert.match(block(".chat-title-block"), /min-width:\s*0;/);
-  assert.match(block(".chat-header strong"), /max-width:\s*100%;/);
-  assert.match(block(".chat-header strong"), /text-overflow:\s*ellipsis;/);
-  assert.match(block(".chat-header-actions"), /justify-self:\s*end;/);
-  assert.match(block(".chat-header-actions"), /flex:\s*0 0 auto;/);
+  assert.match(header, /grid-cols-\[minmax\(0,1fr\)_auto\]/);
+  assert.match(header, /chat-title-block flex min-w-0 flex-1/);
+  assert.match(header, /truncate text-base font-semibold/);
+  assert.match(header, /chat-header-actions flex min-w-0 items-center justify-end/);
 });

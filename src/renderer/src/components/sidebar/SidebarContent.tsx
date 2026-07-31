@@ -15,6 +15,8 @@ import { sessionRecordToSummary } from "../../atoms";
 import { t } from "../../i18n";
 import { getBoundSidebarRuntimeAgent, hasLiveSidebarRuntime, type SidebarController, type SidebarRpcLog } from "../../hooks/useSidebarController";
 import { ProjectTree } from "./ProjectTree";
+import { Button } from "../ui-shadcn/button";
+import { Input } from "../ui-shadcn/input";
 
 export type SidebarActions = {
   projects: {
@@ -107,25 +109,39 @@ export function SidebarContent(props: SidebarContentProps) {
 
   return (
     <aside
-      className="chat-list-pane v3-braun"
+      className="chat-list-pane v3-braun flex h-full min-w-0 flex-col overflow-hidden border-r border-border bg-sidebar text-sidebar-foreground"
       aria-label={t("app.search")}
     >
-      <div className="sidebar-body">
+      <div className="sidebar-body flex min-h-0 flex-1 flex-col gap-2 p-2">
         {props.chrome}
-        <div className="search-row">
-          <div className="search-box">
-            <span className="search-icon"><Search size={14} /></span>
-            <input
+        {/* pure official：搜索行用 shadcn Input + icon Button */}
+        <div className="search-row grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
+          <div className="search-box relative min-w-0">
+            <Search
+              size={14}
+              className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"
+              aria-hidden="true"
+            />
+            <Input
               value={controller.search}
               onChange={(event) => controller.setSearch(event.target.value)}
               placeholder={t("app.search")}
+              className="h-9 pl-8"
             />
           </div>
-          <button className="round-add" onClick={() => void actions.projects.add()} title={t("app.addProject")}>
-            <Plus size={18} />
-          </button>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="round-add size-9 shrink-0"
+            onClick={() => void actions.projects.add()}
+            title={t("app.addProject")}
+            aria-label={t("app.addProject")}
+          >
+            <Plus className="size-4" />
+          </Button>
         </div>
-        <div className="conversation-list">
+        <div className="conversation-list min-h-0 flex-1 overflow-y-auto">
           <ProjectTree
             controller={controller}
             actions={actions}
@@ -136,12 +152,12 @@ export function SidebarContent(props: SidebarContentProps) {
           />
         </div>
         {!props.isLanWeb && (
-          <div className="toolbar-actions sidebar-bottom-actions">
-            <div className="sidebar-bottom-primary-actions">
-              <button className="icon-button settings-icon" title={t("settings.title")} onClick={props.onOpenSettings}><Settings size={17} /></button>
-              <button className="icon-button config-icon" title={t("config.title")} onClick={props.onOpenConfig}><Sliders size={17} /></button>
-              <button className="icon-button feedback-icon" title={t("feedback.title")} onClick={props.onOpenFeedback}><MessageSquare size={17} /></button>
-              <button className="icon-button homepage-icon" title={t("app.homepage")} onClick={props.onOpenHomepage}><Globe size={17} /></button>
+          <div className="toolbar-actions sidebar-bottom-actions flex shrink-0 items-center gap-1 border-t border-border pt-2">
+            <div className="sidebar-bottom-primary-actions flex min-w-0 flex-1 items-center gap-1">
+              <Button type="button" variant="ghost" size="icon" className="icon-button settings-icon size-8" title={t("settings.title")} aria-label={t("settings.title")} onClick={props.onOpenSettings}><Settings className="size-4" /></Button>
+              <Button type="button" variant="ghost" size="icon" className="icon-button config-icon size-8" title={t("config.title")} aria-label={t("config.title")} onClick={props.onOpenConfig}><Sliders className="size-4" /></Button>
+              <Button type="button" variant="ghost" size="icon" className="icon-button feedback-icon size-8" title={t("feedback.title")} aria-label={t("feedback.title")} onClick={props.onOpenFeedback}><MessageSquare className="size-4" /></Button>
+              <Button type="button" variant="ghost" size="icon" className="icon-button homepage-icon size-8" title={t("app.homepage")} aria-label={t("app.homepage")} onClick={props.onOpenHomepage}><Globe className="size-4" /></Button>
             </div>
           </div>
         )}

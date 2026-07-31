@@ -1014,11 +1014,10 @@ select:focus-visible {
   box-shadow: none;
 }
 .list-toolbar {
-  height: 50px;
+  /* 高度/内边距由 AppSidebar Tailwind 承担 */
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 14px 0 18px;
 }
 .toolbar-actions {
   display: flex;
@@ -1045,17 +1044,9 @@ select:focus-visible {
   background: color-mix(in srgb, var(--color-info) 10%, var(--color-bg-panel));
   color: var(--color-info);
 }
-.sidebar-bottom-actions {
-  margin-top: calc(100% + 20px);
-  padding: 8px 12px 12px;
-  border-top: 1px solid var(--color-border-subtle);
-  justify-content: space-between;
-  gap: 8px;
-}
+.sidebar-bottom-actions,
 .sidebar-bottom-primary-actions {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
+  /* 底栏布局由 SidebarContent Tailwind 承担 */
   min-width: 0;
 }
 .sidebar-collapse-logo {
@@ -1084,64 +1075,25 @@ select:focus-visible {
   min-width: 0;
 }
 .brand-wordmark {
-  display: inline-flex;
-  align-items: center;
-  height: 34px;
+  /* 字重/字号由 BrandLockup Tailwind 控制；保留 class 兼容旧选择器 */
   min-width: 0;
-  margin: 0;
-  padding: 0;
-  font-family: var(--font-family-brand);
-  font-size: 22px;
-  line-height: 1;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  color: var(--color-text-primary);
   white-space: nowrap;
-  transform: translateY(2px);
-  -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
 }
 .homepage-icon:hover {
   background: var(--color-bg-hover);
   color: var(--color-accent);
 }
 
+/* pure official：LogoMark 样式由组件 Tailwind class 承担；仅保留最小兜底 */
 .logo-mark {
-  position: relative;
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-  display: grid;
-  place-items: center;
-  background: var(--logo-mark-gradient);
-  color: var(--color-text-inverse);
-  font-size: var(--font-size-heading);
-  font-weight: 900;
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, var(--color-text-inverse) 24%, transparent),
-    inset 0 -1px 0 color-mix(in srgb, #000 10%, transparent),
-    0 8px 18px color-mix(in srgb, var(--color-logo-green) 20%, transparent);
-  overflow: hidden;
+  flex: 0 0 auto;
 }
 .logo-mark::before {
-  content: "";
-  position: absolute;
-  inset: 5px 6px auto auto;
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--color-text-inverse) 18%, transparent);
+  display: none;
 }
 .brand-lockup {
-  display: inline-flex;
-  align-items: center;
-  gap: 14px;
-  height: 34px;
-  /* 整体右移，避免贴侧栏左缘 */
-  margin-left: 8px;
-  color: var(--color-text-primary);
+  /* 布局由 BrandLockup Tailwind class 承担；保留 class 给 titlebar drag 选择器 */
   min-width: 0;
-  line-height: 0;
 }
 
 .pi-logo-canvas-stage {
@@ -1194,54 +1146,11 @@ select:focus-visible {
   background: var(--color-bg-hover);
   color: var(--color-accent);
 }
-.search-row {
-  height: 52px;
-  display: grid;
-  /* 搜索框允许收缩，新增按钮固定宽度，避免窗口缩放时“+ 项目”被搜索框挤压或遮挡。 */
-  grid-template-columns: minmax(0, 1fr) 32px;
-  gap: 8px;
-  align-items: center;
-  padding: 8px 12px;
-}
-.search-box {
-  height: var(--control-height-lg);
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  min-width: 0;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-sm);
-  background: var(--color-bg-panel);
-  color: var(--color-text-tertiary);
-  padding: 0 9px;
-}
-.search-box input {
-  flex: 1;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  color: var(--color-text-primary);
-  min-width: 0;
-}
-.search-box:focus-within {
-  border-color: var(--color-accent);
-  box-shadow: var(--focus-ring);
-}
+/* search-row / search-box / round-add：布局与控件由 SidebarContent Tailwind+shadcn 承担 */
+.search-row,
+.search-box,
 .round-add {
-  width: 32px;
-  height: 32px;
-  border: 0;
-  padding: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--color-text-secondary);
-  display: grid;
-  place-items: center;
-  line-height: 1;
-}
-.round-add:hover {
-  background: var(--color-bg-hover);
-  color: var(--color-accent);
+  /* 保留 class 名给 titlebar no-drag 选择器 */
 }
 
 /*
@@ -2337,15 +2246,7 @@ body.is-resizing .splitter::before {
 }
 /* queued-track 与 composer 同宽容器；内部 .queued-panel 再缩成右上角小面板 */
 .chat-header {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 12px;
-  align-items: center;
-  padding: 12px 18px;
-  border-bottom: 1px solid var(--color-border-subtle);
-  background: var(--color-bg-panel);
-  box-shadow: none;
-  min-width: 0;
+  /* 布局/边框/背景由 SessionHeader Tailwind 承担；保留 overflow 兼容下拉菜单 */
   overflow: visible;
 }
 .chat-title-block {
@@ -2369,15 +2270,7 @@ body.is-resizing .splitter::before {
   flex-shrink: 1;
 }
 .chat-header strong {
-  display: block;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: var(--font-size-title);
-  line-height: 30px;
-  font-weight: 700;
-  color: var(--color-text-primary);
+  /* 标题排版由 SessionHeader Tailwind 承担 */
 }
 .chat-agent-id {
   display: inline-flex;
@@ -2398,22 +2291,7 @@ body.is-resizing .splitter::before {
 /* 标题后的压缩次数小徽标：只显示数字，带边框，与 session-source-badge 等状态徽标视觉一致；
    hover 通过 title 提示“压缩了几次，仅显示压缩后的会话记录”。 */
 .compaction-count-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
-  margin-left: 6px;
-  border: 1px solid color-mix(in srgb, var(--color-accent) 30%, var(--color-border-subtle));
-  border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--color-accent) 8%, var(--color-bg-panel));
-  color: var(--color-text-secondary);
-  font-family: var(--font-family-business);
-  font-size: var(--font-size-micro);
-  font-weight: 600;
-  line-height: 1;
-  white-space: nowrap;
+  /* 徽标样式由 SessionHeader Tailwind 承担 */
   flex: 0 0 auto;
   cursor: default;
 }
@@ -2573,17 +2451,11 @@ body.is-resizing .splitter::before {
 }
 
 .chat-header-actions {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  justify-content: flex-start;
-  justify-self: end;
+  /* flex/gap 由 SessionHeader Tailwind 承担 */
   overflow: visible;
   max-width: 100%;
   min-width: 0;
-  padding-bottom: 0;
   flex: 0 0 auto;
-  flex-wrap: nowrap;
   scrollbar-width: none;
 }
 .chat-header-actions::-webkit-scrollbar {

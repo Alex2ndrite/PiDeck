@@ -53,8 +53,9 @@ export function AppSidebar(props: AppSidebarProps) {
       creatingWorktree={props.creatingWorktree}
       isLanWeb={props.isLanWeb}
       chrome={<>
-        <div className="list-toolbar">
-          <div className="app-badge">
+        {/* pure official：品牌区更紧、更接近 shadcn sidebar header */}
+        <div className="list-toolbar flex h-12 shrink-0 items-center px-1">
+          <div className="app-badge flex min-w-0 items-center">
             <BrandLockup />
           </div>
         </div>

@@ -1,29 +1,27 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { readRendererStyles } from "./helpers/rendererStyles.mjs";
 
-const css = readRendererStyles();
+/**
+ * pure official：侧栏搜索改为 shadcn Input，不再依赖 v3-braun 硬编码 #FAFAFA 背景。
+ * 契约锁在组件结构上：Input + 左侧 Search 图标 + outline 新增按钮。
+ */
 
-test("sidebar search uses #FAFAFA in light mode and preserves the dark theme surface", () => {
-  const lightRule = css.match(
-    /\.chat-list-pane\.v3-braun \.sidebar-body \.search-box \{([\s\S]*?)\n\}/,
-  )?.[1];
+const sidebar = readFileSync(
+  "src/renderer/src/components/sidebar/SidebarContent.tsx",
+  "utf8",
+);
 
-  assert.ok(lightRule, "sidebar search styles must exist");
-  assert.match(lightRule, /background:\s*#FAFAFA;/);
-  assert.match(
-    css,
-    /:root\[data-theme="dark"\] \.chat-list-pane\.v3-braun \.sidebar-body \.search-box \{\n  background: var\(--color-bg-muted\);\n\}/,
-  );
+test("sidebar search uses shadcn Input with leading icon", () => {
+  assert.match(sidebar, /from "\.\.\/ui-shadcn\/input"/);
+  assert.match(sidebar, /from "\.\.\/ui-shadcn\/button"/);
+  assert.match(sidebar, /<Input[\s\S]*placeholder=\{t\("app\.search"\)\}/);
+  assert.match(sidebar, /className="h-9 pl-8"/);
+  assert.match(sidebar, /<Search[\s\S]*absolute/);
 });
 
-test("sidebar search focus uses an outline instead of a shadow", () => {
-  const focusRule = css.match(
-    /\.chat-list-pane\.v3-braun \.sidebar-body \.search-box:focus-within \{([\s\S]*?)\n\}/,
-  )?.[1];
-
-  assert.ok(focusRule, "sidebar search focus styles must exist");
-  assert.match(focusRule, /box-shadow:\s*none;/);
-  assert.match(focusRule, /outline:/);
+test("sidebar add-project control is outline icon button", () => {
+  assert.match(sidebar, /variant="outline"/);
+  assert.match(sidebar, /aria-label=\{t\("app\.addProject"\)\}/);
+  assert.match(sidebar, /className="round-add size-9 shrink-0"/);
 });
