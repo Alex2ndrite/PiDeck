@@ -2223,55 +2223,18 @@
 }
 
 .config-sidebar {
+  /* 布局由 ConfigModal Tailwind 承担 */
   min-height: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  padding: var(--space-3);
-  border-right: 1px solid var(--color-border-subtle);
-  background: var(--color-bg-sidebar);
   overflow: auto;
 }
 
-.config-sidebar-group {
-  display: grid;
-  gap: var(--space-1);
-}
-
 .config-sidebar-group > span {
-  padding: 0 var(--space-2) var(--space-1);
-  color: var(--color-text-tertiary);
-  font-size: var(--font-size-micro);
-  font-weight: 600;
-  line-height: var(--line-height-micro);
+  /* 分组标题由 Tailwind 承担 */
 }
 
-.config-sidebar-group button {
-  width: 100%;
-  min-height: var(--control-height-lg);
-  border: 1px solid transparent;
-  border-radius: var(--radius-md);
-  background: transparent;
-  color: var(--color-text-secondary);
-  padding: 0 var(--space-3);
-  text-align: left;
-  font-size: var(--font-size-control);
-  font-weight: 600;
-}
-
-.config-sidebar-group button:hover {
-  background: var(--color-bg-hover);
-  color: var(--color-text-primary);
-}
-
-.config-sidebar-group button.active {
-  border-color: color-mix(
-    in srgb,
-    var(--color-accent) 24%,
-    var(--color-border-subtle)
-  );
-  background: var(--color-bg-active);
-  color: var(--color-text-primary);
+/* pure official：nav 按钮为 shadcn ghost/secondary，不再需要旧皮肤 */
+.config-nav-btn {
+  min-height: 2rem;
 }
 
 .config-main {
@@ -2282,62 +2245,9 @@
   background: var(--color-bg-panel);
 }
 
-.config-primary-tabs {
-  display: flex;
-  gap: var(--space-2);
-  padding: var(--space-3) 18px 0;
-  background: var(--color-bg-panel);
-}
-.config-primary-tabs button {
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-pill);
-  background: var(--color-bg-muted);
-  color: var(--color-text-secondary);
-  padding: var(--space-2) var(--space-4);
-  font-size: var(--font-size-control);
-  font-weight: 600;
-  cursor: pointer;
-}
-.config-primary-tabs button.active {
-  border-color: color-mix(
-    in srgb,
-    var(--color-accent) 28%,
-    var(--color-border-subtle)
-  );
-  background: var(--color-bg-active);
-  color: var(--color-accent);
-}
-.config-tabs {
-  display: flex;
-  gap: 0;
-  border-bottom: 1px solid var(--color-border-subtle);
-  padding: 0 20px;
-  background: var(--color-bg-panel);
-}
 
-.config-tabs button {
-  height: 44px;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  background: transparent;
-  color: var(--color-text-tertiary);
-  font-size: var(--font-size-control);
-  font-weight: 500;
-  padding: 0 16px;
-  cursor: pointer;
-  transition:
-    color 0.15s,
-    border-color 0.15s;
-}
 
-.config-tabs button:hover {
-  color: var(--color-text-primary);
-}
 
-.config-tabs button.active {
-  color: var(--color-accent);
-  border-bottom-color: var(--color-accent);
-}
 
 .config-content {
   flex: 1;
@@ -2761,20 +2671,6 @@
   font-size: var(--font-size-caption);
 }
 
-.config-toast {
-  position: absolute;
-  bottom: 18px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: color-mix(in srgb, var(--color-bg-app) 28%, black);
-  color: var(--color-text-inverse);
-  padding: 8px 18px;
-  border-radius: var(--radius-pill);
-  font-size: var(--font-size-control);
-  white-space: nowrap;
-  z-index: 10;
-  animation: fadeInUp 0.2s ease;
-}
 
 @keyframes fadeInUp {
   from {

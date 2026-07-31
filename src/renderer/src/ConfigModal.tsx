@@ -1364,72 +1364,84 @@ function ConfigModalContent(props: ConfigModalProps) {
 				) : undefined
 			}
 		>
-			<div className="config-layout">
-					<aside className="config-sidebar" aria-label={t("config.title")}>
-						<div className="config-sidebar-group">
-							<span>{t("config.group.config")}</span>
+			<div className="config-layout grid min-h-0 flex-1 grid-cols-[160px_minmax(0,1fr)] bg-muted">
+					<aside className="config-sidebar flex min-h-0 flex-col gap-3 overflow-auto border-r border-border bg-sidebar p-3" aria-label={t("config.title")}>
+						<div className="config-sidebar-group grid gap-1">
+							<span className="px-2 pb-1 text-[11px] font-semibold text-muted-foreground">{t("config.group.config")}</span>
 							{configNavItems.map((item) => (
-								<button
+								<Button
 									key={item.id}
-									className={
-										section === "config" && tab === item.id ? "active" : ""
-									}
+									type="button"
+									variant={section === "config" && tab === item.id ? "secondary" : "ghost"}
+									className={`config-nav-btn justify-start px-3 text-[13px] font-medium${section === "config" && tab === item.id ? " active" : ""}`}
 									onClick={() => {
 										setSection("config");
 										setTab(item.id);
 									}}
 								>
 									{item.label}
-								</button>
+								</Button>
 							))}
 						</div>
-						<div className="config-sidebar-group">
-							<span>{t("config.group.agent")}</span>
-							<button
-								className={section === "extensions" ? "active" : ""}
+						<div className="config-sidebar-group grid gap-1">
+							<span className="px-2 pb-1 text-[11px] font-semibold text-muted-foreground">{t("config.group.agent")}</span>
+							<Button
+								type="button"
+								variant={section === "extensions" ? "secondary" : "ghost"}
+								className={`config-nav-btn justify-start px-3 text-[13px] font-medium${section === "extensions" ? " active" : ""}`}
 								onClick={() => setSection("extensions")}
 							>
 								{t("config.nav.extensions")}
-							</button>
-							<button
-								className={section === "skills" ? "active" : ""}
+							</Button>
+							<Button
+								type="button"
+								variant={section === "skills" ? "secondary" : "ghost"}
+								className={`config-nav-btn justify-start px-3 text-[13px] font-medium${section === "skills" ? " active" : ""}`}
 								onClick={() => setSection("skills")}
 							>
 								{t("config.nav.skills")}
-							</button>
-							<button
-								className={section === "prompts" ? "active" : ""}
+							</Button>
+							<Button
+								type="button"
+								variant={section === "prompts" ? "secondary" : "ghost"}
+								className={`config-nav-btn justify-start px-3 text-[13px] font-medium${section === "prompts" ? " active" : ""}`}
 								onClick={() => setSection("prompts")}
 							>
 								{t("config.nav.prompts")}
-							</button>
+							</Button>
 						</div>
-						<div className="config-sidebar-group">
-							<span>{t("config.group.im")}</span>
-							<button
-								className={section === "im" ? "active" : ""}
+						<div className="config-sidebar-group grid gap-1">
+							<span className="px-2 pb-1 text-[11px] font-semibold text-muted-foreground">{t("config.group.im")}</span>
+							<Button
+								type="button"
+								variant={section === "im" ? "secondary" : "ghost"}
+								className={`config-nav-btn justify-start px-3 text-[13px] font-medium${section === "im" ? " active" : ""}`}
 								onClick={() => setSection("im")}
 							>
 								{t("config.nav.im")}
-							</button>
+							</Button>
 						</div>
-						<div className="config-sidebar-group">
-							<span>{t("config.group.other")}</span>
-							<button
-								className={section === "editors" ? "active" : ""}
+						<div className="config-sidebar-group grid gap-1">
+							<span className="px-2 pb-1 text-[11px] font-semibold text-muted-foreground">{t("config.group.other")}</span>
+							<Button
+								type="button"
+								variant={section === "editors" ? "secondary" : "ghost"}
+								className={`config-nav-btn justify-start px-3 text-[13px] font-medium${section === "editors" ? " active" : ""}`}
 								onClick={() => setSection("editors")}
 							>
 								{t("config.nav.editors")}
-							</button>
+							</Button>
 						</div>
-						<div className="config-sidebar-group">
-							<span>{t("config.group.diagnostics")}</span>
-							<button
-								className={section === "logs" ? "active" : ""}
+						<div className="config-sidebar-group grid gap-1">
+							<span className="px-2 pb-1 text-[11px] font-semibold text-muted-foreground">{t("config.group.diagnostics")}</span>
+							<Button
+								type="button"
+								variant={section === "logs" ? "secondary" : "ghost"}
+								className={`config-nav-btn justify-start px-3 text-[13px] font-medium${section === "logs" ? " active" : ""}`}
 								onClick={() => setSection("logs")}
 							>
 								{t("config.nav.logs")}
-							</button>
+							</Button>
 						</div>
 					</aside>
 
