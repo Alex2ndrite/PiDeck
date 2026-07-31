@@ -402,146 +402,150 @@ export function TerminalDock(props: {
 			data-motion-state={props.closing || !motionOpen ? "hidden" : "visible"}
 			style={{ height: "100%" }}
 		>
-			<header className="terminal-dock-header">
-				<div className="terminal-tabs">
-					{tabs.map((tab) => (
-						<div
-							key={tab.id}
-							className={`terminal-tab${tab.id === activeTab?.id ? " active" : ""}`}
+		<header className="terminal-dock-header flex shrink-0 items-center justify-between gap-2 border-b px-2">
+			<div className="terminal-tabs flex min-w-0 items-center gap-0.5 overflow-hidden">
+				{tabs.map((tab) => (
+					<div
+						key={tab.id}
+						className={`terminal-tab inline-flex max-w-[9rem] items-center gap-0.5 rounded-md px-0.5 pl-2${tab.id === activeTab?.id ? " active" : ""}`}
+					>
+						<button
+							className="terminal-tab-label max-w-[6.5rem] min-w-0 flex-1 truncate text-left"
+							onClick={() => {
+								setActiveTabId(tab.id);
+								props.onCollapsedChange(false);
+								focusTerminalSoon();
+							}}
+							title={tab.cwd}
 						>
-							<button
-								className="terminal-tab-label"
-								onClick={() => {
-									setActiveTabId(tab.id);
-									props.onCollapsedChange(false);
-									focusTerminalSoon();
-								}}
-								title={tab.cwd}
-							>
-								{tab.title}
-								{tab.exited ? ` · ${t("terminal.exited")}` : ""}
-							</button>
-							<button
-								className="terminal-tab-close"
-								onClick={(event) => {
-									event.stopPropagation();
-									void closeTab(tab);
-								}}
-								title={t("terminal.closeCurrent")}
-							>
-								<X size={12} />
-							</button>
-						</div>
-					))}
+							{tab.title}
+							{tab.exited ? ` · ${t("terminal.exited")}` : ""}
+						</button>
+						<button
+							type="button"
+							className="terminal-tab-close grid size-5 shrink-0 place-items-center rounded-sm opacity-60"
+							onClick={(event) => {
+								event.stopPropagation();
+								void closeTab(tab);
+							}}
+							title={t("terminal.closeCurrent")}
+						>
+							<X size={12} />
+						</button>
+					</div>
+				))}
+				<button
+					type="button"
+					className="terminal-icon-btn inline-grid size-6 shrink-0 place-items-center rounded-md"
+					onClick={() => void addTab()}
+					title={t("terminal.new")}
+					disabled={loading || !contentReady}
+				>
+					<Plus size={14} />
+				</button>
+				{/* Shell 选择器：点击创建指定 shell 的终端 */}
+				<div
+					className="relative grid place-items-center"
+				>
 					<button
-						className="terminal-icon-btn"
-						onClick={() => void addTab()}
-						title={t("terminal.new")}
+						type="button"
+						className="terminal-icon-btn inline-grid size-6 place-items-center rounded-md"
+						onClick={() => setShellMenuOpen((open) => !open)}
+						title={t("terminal.selectShell")}
 						disabled={loading || !contentReady}
 					>
-						<Plus size={14} />
+						<ChevronDown size={12} />
 					</button>
-					{/* Shell 选择器：点击创建指定 shell 的终端 */}
-					<div
-						style={{ position: "relative", display: "grid", placeItems: "center" }}
-					>
-						<button
-							className="terminal-icon-btn"
-							onClick={() => setShellMenuOpen((open) => !open)}
-							title={t("terminal.selectShell")}
-							disabled={loading || !contentReady}
-						>
-							<ChevronDown size={12} />
-						</button>
-						{shellMenuOpen && (
-							<div className="terminal-shell-menu">
-								<strong>{t("terminal.selectShell")}</strong>
-								{shells.length === 0 && (
-									<span className="terminal-shell-menu-empty" />
-								)}
-								{shells.map((s) => (
-									<button
-										key={s.shell}
-										className={s.available ? "" : "unavailable"}
-										onClick={() => {
-											if (!s.available) return;
-											void addTabWithShell(s.shell);
-										}}
-										title={s.available ? undefined : t("terminal.shellNotAvailable")}
-									>
-										{s.label}
-									</button>
-								))}
-							</div>
-						)}
-						{/* 点击菜单外部关闭 */}
-						{shellMenuOpen && (
-							<div
-								style={{
-									position: "fixed",
-									inset: 0,
-									zIndex: 119,
-								}}
-								onClick={() => setShellMenuOpen(false)}
-							/>
-						)}
-					</div>
+					{shellMenuOpen && (
+						<div className="terminal-shell-menu absolute bottom-[calc(100%+6px)] left-0 z-[120] grid w-44 gap-0.5 rounded-lg border bg-popover p-1.5 text-popover-foreground shadow-md">
+							<strong className="px-1 text-xs">{t("terminal.selectShell")}</strong>
+							{shells.length === 0 && (
+								<span className="terminal-shell-menu-empty" />
+							)}
+							{shells.map((s) => (
+								<button
+									key={s.shell}
+									type="button"
+									className={`w-full rounded-md px-2 py-1 text-left text-xs hover:bg-accent${s.available ? "" : " unavailable opacity-50"}`}
+									onClick={() => {
+										if (!s.available) return;
+										void addTabWithShell(s.shell);
+									}}
+									title={s.available ? undefined : t("terminal.shellNotAvailable")}
+								>
+									{s.label}
+								</button>
+							))}
+						</div>
+					)}
+					{/* 点击菜单外部关闭 */}
+					{shellMenuOpen && (
+						<div
+							className="fixed inset-0 z-[119]"
+							onClick={() => setShellMenuOpen(false)}
+						/>
+					)}
 				</div>
-				<div className="terminal-actions">
-					<div
-						className="terminal-more-menu"
-						onBlur={() => window.setTimeout(() => setThemeMenuOpen(false), 80)}
-					>
-						<button
-							className="terminal-icon-btn"
-							onMouseDown={(event) => {
-								event.preventDefault();
-								setThemeMenuOpen((open) => !open);
-							}}
-							title={t("terminal.more")}
-						>
-							<MoreHorizontal size={14} />
-						</button>
-						{themeMenuOpen && (
-							<div className="terminal-theme-menu">
-								<strong>{t("terminal.theme")}</strong>
-								<span>{t("terminal.themeCurrent")}: {theme.label}</span>
-								{Object.entries(TERMINAL_THEMES).map(([id, item]) => (
-									<button
-										key={id}
-										className={id === themeId ? "active" : ""}
-										onMouseDown={(event) => {
-											event.preventDefault();
-											setThemeId(id as TerminalThemeId);
-											setThemeMenuOpen(false);
-										}}
-									>
-										{item.label}
-									</button>
-								))}
-							</div>
-						)}
-					</div>
+			</div>
+			<div className="terminal-actions flex shrink-0 items-center gap-0.5">
+				<div
+					className="terminal-more-menu relative grid place-items-center"
+					onBlur={() => window.setTimeout(() => setThemeMenuOpen(false), 80)}
+				>
 					<button
-						className="terminal-icon-btn"
-						onClick={() => {
-							props.onCollapsedChange(!collapsed);
-							focusTerminalSoon();
+						type="button"
+						className="terminal-icon-btn inline-grid size-6 place-items-center rounded-md"
+						onMouseDown={(event) => {
+							event.preventDefault();
+							setThemeMenuOpen((open) => !open);
 						}}
-						title={collapsed ? t("terminal.expand") : t("terminal.collapse")}
+						title={t("terminal.more")}
 					>
-						{collapsed ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+						<MoreHorizontal size={14} />
 					</button>
-					<button
-						className="terminal-icon-btn"
-						onClick={() => setConfirmCloseAllOpen(true)}
-						title={t("terminal.closeAll")}
-						disabled={tabs.length === 0}
-					>
-						<X size={14} />
-					</button>
+					{themeMenuOpen && (
+						<div className="terminal-theme-menu absolute right-0 bottom-[calc(100%+6px)] z-[120] grid w-48 gap-1 rounded-lg border bg-popover p-2 text-popover-foreground shadow-md">
+							<strong className="px-1 text-xs">{t("terminal.theme")}</strong>
+							<span className="px-1 text-[11px] text-muted-foreground">{t("terminal.themeCurrent")}: {theme.label}</span>
+							{Object.entries(TERMINAL_THEMES).map(([id, item]) => (
+								<button
+									key={id}
+									type="button"
+									className={`w-full rounded-md px-2 py-1 text-left text-xs hover:bg-accent${id === themeId ? " active bg-accent" : ""}`}
+									onMouseDown={(event) => {
+										event.preventDefault();
+										setThemeId(id as TerminalThemeId);
+										setThemeMenuOpen(false);
+									}}
+								>
+									{item.label}
+								</button>
+							))}
+						</div>
+					)}
 				</div>
-			</header>
+				<button
+					type="button"
+					className="terminal-icon-btn inline-grid size-6 place-items-center rounded-md"
+					onClick={() => {
+						props.onCollapsedChange(!collapsed);
+						focusTerminalSoon();
+					}}
+					title={collapsed ? t("terminal.expand") : t("terminal.collapse")}
+				>
+					{collapsed ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+				</button>
+				<button
+					type="button"
+					className="terminal-icon-btn inline-grid size-6 place-items-center rounded-md"
+					onClick={() => setConfirmCloseAllOpen(true)}
+					title={t("terminal.closeAll")}
+					disabled={tabs.length === 0}
+				>
+					<X size={14} />
+				</button>
+			</div>
+		</header>
 			{!collapsed && (
 				<div
 					className="terminal-pane-shell"

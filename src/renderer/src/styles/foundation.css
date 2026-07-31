@@ -3139,62 +3139,9 @@ body.is-resizing .splitter::before {
 }
 
 .terminal-dock-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 0 10px 0 12px;
+  /* pure official：布局由 TerminalDock Tailwind 承担；颜色仍走终端主题变量 */
   border-bottom: 1px solid var(--terminal-border);
   background: var(--terminal-header);
-  min-width: 0;
-}
-.terminal-tabs {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  min-width: 0;
-  overflow: hidden;
-}
-.terminal-tab,
-.terminal-actions button {
-  height: 22px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--terminal-muted);
-  font-size: 11px;
-  padding: 0 8px;
-  cursor: pointer;
-}
-.terminal-tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  padding: 0 3px 0 8px;
-  max-width: 140px;
-}
-.terminal-tab-label,
-.terminal-tab-close {
-  border: 0;
-  background: transparent;
-  color: inherit;
-  height: 22px;
-  padding: 0;
-}
-.terminal-tab-label {
-  min-width: 0;
-  max-width: 110px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  text-align: left;
-}
-.terminal-tab-close {
-  display: inline-grid;
-  place-items: center;
-  width: 20px;
-  border-radius: var(--radius-sm);
-  opacity: 0.62;
 }
 .terminal-tab.active {
   background: var(--terminal-active-bg);
@@ -3203,7 +3150,8 @@ body.is-resizing .splitter::before {
   font-weight: 600;
 }
 .terminal-tab:hover,
-.terminal-actions button:hover {
+.terminal-actions button:hover,
+.terminal-icon-btn:hover {
   background: var(--terminal-hover);
   color: var(--terminal-fg);
 }
@@ -3212,79 +3160,7 @@ body.is-resizing .splitter::before {
   color: var(--color-danger);
   opacity: 1;
 }
-.terminal-actions {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex: 0 0 auto;
-}
-.terminal-more-menu {
-  position: relative;
-  display: grid;
-  place-items: center;
-}
-.terminal-theme-menu {
-  position: absolute;
-  right: 0;
-  bottom: calc(100% + 6px);
-  z-index: 120;
-  width: 190px;
-  display: grid;
-  gap: 4px;
-  padding: 8px;
-  border: 1px solid var(--terminal-border);
-  border-radius: var(--radius-lg);
-  background: var(--terminal-panel);
-  color: var(--terminal-fg);
-  box-shadow: var(--shadow-popover);
-}
-.terminal-theme-menu strong,
-.terminal-theme-menu span {
-  padding: 0 4px;
-  line-height: var(--line-height-caption);
-}
-.terminal-theme-menu strong {
-  font-size: var(--font-size-caption);
-}
-.terminal-theme-menu span {
-  color: var(--terminal-muted);
-  font-size: var(--font-size-micro);
-}
-.terminal-theme-menu button {
-  width: 100%;
-  min-height: 28px;
-  height: auto;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--terminal-fg);
-  padding: 0 8px;
-  text-align: left;
-  font-size: var(--font-size-caption);
-}
-.terminal-theme-menu button:hover,
-.terminal-theme-menu button.active {
-  border-color: var(--terminal-border);
-  background: var(--terminal-active-bg);
-  color: var(--terminal-active-fg);
-}
-.terminal-icon-btn {
-  display: inline-grid;
-  place-items: center;
-  width: 24px;
-  min-width: 24px;
-  height: 22px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--terminal-muted);
-  padding: 0;
-  cursor: pointer;
-}
-.terminal-icon-btn:hover {
-  background: var(--terminal-hover);
-  color: var(--terminal-fg);
-}
+
 .terminal-pane-shell {
   position: relative;
   min-height: 0;
