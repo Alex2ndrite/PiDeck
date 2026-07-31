@@ -187,3 +187,36 @@ test("agent flow: fork from user message prefills composer", async ({ window }) 
 	// 原文预填回输入框
 	await expect(composer).toContainText("fork 源句", { timeout: 10_000 });
 });
+
+/**
+ * 重启 Agent → 会话可继续（#113 3.2-6）：
+ * 会话头部 combo 菜单 → 重启；mock 按 cwd 稳定 sessionFile，重启后
+ * 同一文件被重新接管，续发消息正常流式回答。
+ */
+test("agent flow: restart agent keeps session usable", async ({ window }) => {
+	test.setTimeout(120_000);
+	await expect(window.locator("#boot-overlay")).toHaveCount(0, { timeout: 20_000 });
+	const composer = await startAgent(window);
+	const timeline = window.locator(".message-timeline");
+
+	await composer.click();
+	await window.keyboard.type("重启前");
+	await window.keyboard.press("Enter");
+	await expect(timeline).toContainText("Mock 回复：「重启前」流式渲染验证完成", { timeout: 20_000 });
+
+	// 会话头部 combo → 重启
+	await window.locator(".session-combo-trigger").click();
+	await window.getByRole("button", { name: "重启", exact: true }).click();
+
+	// 等重启真正完成：完成 toast 是唯一可靠的完成信号；
+	// 过早发送会撞上 replacement reservation，被 coordinator 拒发（delivery:rejected）。
+	await expect(window.getByText("Agent 已重启")).toBeVisible({ timeout: 30_000 });
+	await expect(composer).toHaveAttribute("aria-disabled", "false", { timeout: 30_000 });
+	await expect(window.locator(".composer-bar-btn.send")).toBeVisible({ timeout: 30_000 });
+
+	// 续聊正常
+	await composer.click();
+	await window.keyboard.type("重启后");
+	await window.keyboard.press("Enter");
+	await expect(timeline).toContainText("Mock 回复：「重启后」流式渲染验证完成", { timeout: 20_000 });
+});

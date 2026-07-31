@@ -50,7 +50,11 @@ function log(direction, payload) {
 	} catch { /* 日志失败不影响协议 */ }
 }
 
-const sessionId = "mock-session-" + Date.now().toString(36);
+// sessionId 按 cwd 稳定哈希：重启 Agent（杀进程重 spawn）后桌面端期望
+// 同一会话文件被重新接管（#113 3.2-6 续聊语义），不能按时间乱变。
+const crypto = require("node:crypto");
+const sessionId =
+	"mock-" + crypto.createHash("md5").update(process.cwd()).digest("hex").slice(0, 10);
 // 模型/思考级别有状态跟踪：桌面端 set_model/set_thinking_level 后会重新
 // get_state 拉取（AgentManager.getRuntimeState），mock 必须返回更新后的值。
 const MODELS = [
@@ -68,11 +72,14 @@ const userPrompts = [];
 // replaceAgentSession 要求 tab.sessionPath 非空，mock 在首个 prompt 后落一个
 // 真实空 JSONL 文件并在 get_state 中返回（路径经 SessionRuntimeCoordinator 校验）。
 let sessionFile = null;
+const SESSION_FILE_PATH = path.join(require("node:os").tmpdir(), `${sessionId}.jsonl`);
 function ensureSessionFile() {
 	if (sessionFile) return;
-	sessionFile = path.join(require("node:os").tmpdir(), `${sessionId}.jsonl`);
-	try { fs.writeFileSync(sessionFile, ""); } catch { /* 写失败仅影响 fork 类用例 */ }
+	try { fs.writeFileSync(SESSION_FILE_PATH, "", { flag: "a" }); } catch { /* 写失败仅影响 fork 类用例 */ }
+	sessionFile = SESSION_FILE_PATH;
 }
+// 重启后的新进程：文件已存在则立即恢复 sessionFile（桌面端 reattach 语义）
+if (fs.existsSync(SESSION_FILE_PATH)) sessionFile = SESSION_FILE_PATH;
 let streamTimer = null;
 let streamStep = 0;
 let streamChunks = [];
