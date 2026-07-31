@@ -44,3 +44,31 @@ test("agent flow: prompt -> streaming -> done -> prompt -> abort", async ({ wind
 	await window.waitForTimeout(1500); // 给残留流 1.5s 窗口，验证封印生效
 	await expect(timeline).not.toContainText("SLOW 第二段」流式渲染验证完成");
 });
+
+/**
+ * 排队消息（#113 3.2-10）：agent 流式输出中再发一条，应进入本地排队；
+ * 当前 run 结束后按顺序继续回答第二条（默认忙碌行为 steer，桌面端冲刷后
+ * 由 mock 串行开新 run，语义与 followUp 一致：先答的先出、后答的接上）。
+ */
+test("agent flow: queued prompt while busy drains in order", async ({ window }) => {
+	test.setTimeout(120_000);
+	await expect(window.locator("#boot-overlay")).toHaveCount(0, { timeout: 20_000 });
+	await window.getByRole("button", { name: "启动 Agent" }).click();
+	const composer = window.locator(".composer .rich-input");
+	await expect(composer).toHaveAttribute("aria-disabled", "false", { timeout: 30_000 });
+	const timeline = window.locator(".message-timeline");
+
+	// 慢速流期间发送第二条
+	await composer.click();
+	await window.keyboard.type("SLOW 排队一");
+	await window.keyboard.press("Enter");
+	await expect(timeline).toContainText("Mock 回复：「SLOW 排队一」", { timeout: 10_000 });
+
+	await composer.click();
+	await window.keyboard.type("排队二");
+	await window.keyboard.press("Enter");
+
+	// 第一段完整收尾后，第二段按顺序回答
+	await expect(timeline).toContainText("SLOW 排队一」流式渲染验证完成", { timeout: 20_000 });
+	await expect(timeline).toContainText("Mock 回复：「排队二」流式渲染验证完成", { timeout: 20_000 });
+});

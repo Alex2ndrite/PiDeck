@@ -32,6 +32,10 @@ let streamTimer = null;
 let streamStep = 0;
 let streamChunks = [];
 let streamIntervalMs = 80;
+let streaming = false;
+// steer/followUp 中途到达的 prompt 排队串行处理：真实 pi 也是单 run 语义，
+// 桌面端排队用例依赖「先到的先答、后到的接着答」的顺序性。
+const pendingPrompts = [];
 
 function send(payload) {
 	process.stdout.write(JSON.stringify(payload) + "\n");
@@ -57,6 +61,7 @@ function stopStream(settled) {
 }
 
 function startStream(userText) {
+	streaming = true;
 	const slow = userText.includes("SLOW");
 	streamIntervalMs = slow ? 220 : 80;
 	const reply = `Mock 回复：「${userText.slice(0, 40)}」流式渲染验证完成。`;
@@ -84,6 +89,10 @@ function startStream(userText) {
 			emit({ type: "message_end", message: full });
 			emit({ type: "agent_end", messages: [full] });
 			emit({ type: "agent_settled" });
+			streaming = false;
+			// 排队 prompt 串行开下一轮
+			const next = pendingPrompts.shift();
+			if (next !== undefined) startStream(next);
 			return;
 		}
 		const accumulated = streamChunks.slice(0, streamStep + 1).join("");
@@ -127,11 +136,17 @@ function handleCommand(cmd) {
 			// 先回 success（桌面端据此认为已受理），再异步推流
 			respond(cmd, {});
 			const text = typeof cmd.message === "string" ? cmd.message : "";
-			startStream(text);
+			if (streaming) {
+				pendingPrompts.push(text);
+			} else {
+				startStream(text);
+			}
 			return;
 		}
 		case "abort":
 			respond(cmd, {});
+			pendingPrompts.length = 0;
+			streaming = false;
 			stopStream(true);
 			return;
 		default:
