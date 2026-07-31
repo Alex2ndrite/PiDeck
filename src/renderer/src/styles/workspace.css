@@ -1626,15 +1626,18 @@ html[data-theme="dark"] .scratch-pad-md mark {
   height: 8px;
 }
 
+/*
+ * pure official P2-2：项目/会话行 hover/active 由组件 Tailwind（bg-accent）承担。
+ * 这里只保留结构性兼容与 draft 删除按钮交互，不再铺面板底色/左边线。
+ */
 .chat-list-pane.v3-braun .sidebar-body .project-group {
   background: transparent;
   border: none;
   border-radius: 0;
   border-bottom: 1px solid var(--color-border-subtle);
-  padding: var(--space-2) 0;
+  padding: 0.25rem 0;
   margin-bottom: 0;
   box-shadow: none;
-  transition: none;
 }
 
 .chat-list-pane.v3-braun .sidebar-body .project-group:last-child {
@@ -1645,7 +1648,6 @@ html[data-theme="dark"] .scratch-pad-md mark {
   background: transparent;
   border: 0;
   border-radius: 0;
-  padding: 2px 0;
   overflow: visible;
 }
 
@@ -1653,112 +1655,24 @@ html[data-theme="dark"] .scratch-pad-md mark {
   background: transparent;
 }
 
-.chat-list-pane.v3-braun .sidebar-body .project-group:hover {
-  border-color: var(--color-border-subtle);
-  box-shadow: none;
-}
-
-.chat-list-pane.v3-braun .sidebar-body .project-group.chat-project-group {
-  padding: var(--space-2) 0;
-}
-
-.chat-list-pane.v3-braun
-  .sidebar-body
-  .project-group.chat-project-group
-  > .conversation:first-child {
-  background: transparent;
-}
-
-.chat-list-pane.v3-braun
-  .sidebar-body
-  .project-group.chat-project-group
-  > .conversation:first-child:hover {
-  background: var(--color-bg-hover);
-}
-
-.chat-list-pane.v3-braun
-  .sidebar-body
-  .project-group.chat-project-group
-  > .conversation:first-child.active {
-  background: var(--color-accent-soft);
-}
-
-.chat-list-pane.v3-braun
-  .sidebar-body
-  .project-group
-  > .conversation:first-child {
-  grid-template-columns: 24px minmax(0, 1fr) max-content;
-  min-height: 28px;
-  padding: var(--space-1) var(--space-2) var(--space-1) 0;
-  gap: var(--space-2);
-}
-
-.chat-list-pane.v3-braun
-  .sidebar-body
-  .project-group
-  > .conversation:first-child:hover {
-  background: var(--color-bg-hover);
-}
-
-.chat-list-pane.v3-braun
-  .sidebar-body
-  .project-group
-  > .conversation:first-child.active {
-  background: var(--color-accent-soft);
-  box-shadow: inset 0 0 0 1px
-    color-mix(in srgb, var(--color-accent) 12%, transparent);
-}
-
-.chat-list-pane.v3-braun
-  .sidebar-body
-  .project-group
-  > .conversation:first-child.active::before {
+.chat-list-pane.v3-braun .sidebar-body .project-group > .conversation:first-child.active::before,
+.chat-list-pane.v3-braun .sidebar-body .agent-row.active::before,
+.chat-list-pane.v3-braun .sidebar-body .session-row.active::before,
+.chat-list-pane.v3-braun .sidebar-body .worktree-row.active::before {
   display: none;
 }
 
 .chat-list-pane.v3-braun .sidebar-body .project-avatar {
-  width: 24px;
-  height: 24px;
+  width: 1.25rem;
+  height: 1.25rem;
   border-radius: var(--radius-sm);
   font-size: var(--font-size-caption);
 }
 
-.chat-list-pane.v3-braun .sidebar-body .project-row-actions {
-  padding: 0;
-}
-
-.chat-list-pane.v3-braun .sidebar-body .agent-row,
-.chat-list-pane.v3-braun .sidebar-body .session-row {
-  width: 100%;
-  height: var(--control-height-md);
-  margin: 2px 0;
-  padding: var(--space-1) var(--space-2);
-  border-left: 2px solid transparent;
-  border-radius: var(--radius-sm);
-  background: var(--color-bg-panel);
-}
-
-/* Drafts have no session file or runtime yet, so keep opening and deletion as
-   sibling controls instead of nesting an interactive element inside the row. */
-.chat-list-pane.v3-braun .sidebar-body .draft-session-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) var(--control-height-md);
-  align-items: center;
-  gap: var(--space-1);
-  margin: 2px 0;
-}
-
-.chat-list-pane.v3-braun .sidebar-body .draft-session-row.has-runtime {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.chat-list-pane.v3-braun .sidebar-body .draft-session-row .draft-session-trigger {
-  margin: 0;
-}
-
+/* Draft：打开与删除并列，避免嵌套可交互元素 */
 .chat-list-pane.v3-braun .sidebar-body .draft-session-delete {
-  width: var(--control-height-md);
-  height: var(--control-height-md);
+  width: 2rem;
+  height: 2rem;
   display: grid;
   place-items: center;
   padding: 0;
@@ -1784,55 +1698,7 @@ html[data-theme="dark"] .scratch-pad-md mark {
 }
 
 .chat-list-pane.v3-braun .sidebar-body .worktree-row {
-  margin: 2px 0 2px var(--space-6);
-  padding: 6px 8px;
-  width: auto;
-  border-left: 2px solid transparent;
-  border-radius: var(--radius-sm);
-  background: var(--color-bg-panel);
-}
-
-.chat-list-pane.v3-braun .sidebar-body .agent-row:last-child,
-.chat-list-pane.v3-braun .sidebar-body .session-row:last-child,
-.chat-list-pane.v3-braun .sidebar-body .worktree-row:last-child {
-  margin-bottom: 0;
-}
-
-.chat-list-pane.v3-braun .sidebar-body .agent-row:hover,
-.chat-list-pane.v3-braun .sidebar-body .session-row:hover,
-.chat-list-pane.v3-braun .sidebar-body .worktree-row:hover {
-  background: var(--color-bg-hover);
-}
-
-.chat-list-pane.v3-braun .sidebar-body .agent-row.active,
-.chat-list-pane.v3-braun .sidebar-body .session-row.active,
-.chat-list-pane.v3-braun .sidebar-body .worktree-row.active {
-  border-left-color: var(--color-accent);
-  background: var(--color-accent-soft);
-  box-shadow: none;
-}
-
-.chat-list-pane.v3-braun .sidebar-body .agent-row.active:hover,
-.chat-list-pane.v3-braun .sidebar-body .session-row.active:hover,
-.chat-list-pane.v3-braun .sidebar-body .worktree-row.active:hover {
-  background: var(--color-accent-soft);
-}
-
-.chat-list-pane.v3-braun .sidebar-body .agent-row.active::before,
-.chat-list-pane.v3-braun .sidebar-body .session-row.active::before,
-.chat-list-pane.v3-braun .sidebar-body .worktree-row.active::before {
-  display: none;
-}
-
-.chat-list-pane.v3-braun .sidebar-body .agent-row .conversation-title,
-.chat-list-pane.v3-braun .sidebar-body .session-row .conversation-title,
-.chat-list-pane.v3-braun
-  .sidebar-body
-  .codex-subagent-sidebar-row
-  .conversation-title,
-.chat-list-pane.v3-braun .sidebar-body .worktree-row .conversation-title {
-  justify-content: flex-start;
-  gap: 6px;
+  margin-left: 1.25rem;
 }
 
 .chat-list-pane.v3-braun .sidebar-body .agent-row .conversation-title strong,

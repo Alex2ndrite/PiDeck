@@ -7,6 +7,11 @@ import { t } from "../../i18n";
 import { filterSidebarSessions, getBoundSidebarRuntimeAgent, hasLiveSidebarRuntime, type SidebarController } from "../../hooks/useSidebarController";
 import { IconButton } from "../ui/IconButton";
 import type { SidebarActions } from "./SidebarContent";
+import { cn } from "../../lib/utils";
+
+/** pure official：与 ProjectTree 对齐的会话/agent 行底色 */
+const sessionRowClass =
+	"conversation agent-row relative flex h-8 w-full items-center gap-2 rounded-md border-0 bg-transparent px-2 text-left text-sm text-foreground transition-colors hover:bg-accent hover:text-accent-foreground";
 
 function matchesSearch(value: string, search: string) {
   return !search || value.toLowerCase().includes(search.toLowerCase());
@@ -95,13 +100,18 @@ export function SessionTree(props: {
   const renderSubagent = (session: SessionSummary, label: ReactNode) => {
     return (
       <button
+        type="button"
         key={session.id}
-        className={`conversation agent-row session-row codex-subagent-sidebar-row${session.id === props.currentSessionId ? " active" : ""}`}
+        className={cn(
+          sessionRowClass,
+          "session-row codex-subagent-sidebar-row pl-6",
+          session.id === props.currentSessionId && "active bg-accent text-accent-foreground",
+        )}
         title={session.filePath}
         onContextMenu={(event) => openContext(event, session)}
         onClick={() => void props.actions.sessions.open(props.project.id, session.id)}
       >
-        <div className="conversation-body"><div className="conversation-title">{label}</div></div>
+        <div className="conversation-body min-w-0 flex-1"><div className="conversation-title flex min-w-0 items-center gap-1.5">{label}</div></div>
       </button>
     );
   };
@@ -126,24 +136,29 @@ export function SessionTree(props: {
   ) : null;
 
   return (
-    <div className={props.nested ? "worktree-children" : "session-card"}>
+    <div className={cn(props.nested ? "worktree-children" : "session-card", "flex flex-col gap-0.5 py-0.5")}>
       {draftSessions.map((session) => {
         const runtime = props.controller.catalog.runtimeBySessionId[session.id];
         const canDelete = !hasLiveSidebarRuntime(runtime);
         return (
           <div
             key={`draft:${session.id}`}
-            className={`draft-session-row${canDelete ? "" : " has-runtime"}`}
+            className={cn("draft-session-row group/draft grid items-center gap-1", canDelete ? "grid-cols-[minmax(0,1fr)_2rem]" : "grid-cols-1 has-runtime")}
             onContextMenu={(event) => openDraftContext(event, session)}
           >
             <button
-              className={`conversation agent-row session-row draft-session-trigger${session.id === props.currentSessionId ? " active" : ""}`}
+              type="button"
+              className={cn(
+                sessionRowClass,
+                "session-row draft-session-trigger",
+                session.id === props.currentSessionId && "active bg-accent text-accent-foreground",
+              )}
               title={session.title}
               onClick={() => void props.actions.sessions.open(props.project.id, session.id)}
             >
-              <div className="conversation-body"><div className="conversation-title">
+              <div className="conversation-body min-w-0 flex-1"><div className="conversation-title flex min-w-0 items-center gap-1.5">
                 {runtime && runtime.status !== "detached" && <span className={`agent-status-indicator status-${runtime.status}`}>{runtime.status}</span>}
-                <strong>{session.title}</strong>
+                <strong className="min-w-0 flex-1 truncate font-medium">{session.title}</strong>
               </div></div>
             </button>
             {canDelete && (
@@ -167,12 +182,19 @@ export function SessionTree(props: {
             props.controller.catalog.runtimeBySessionId[session.id]?.agentId === child.agent.id
           )) ?? summaries.find((session) => session.filePath === child.agent.sessionPath);
           return <Fragment key={child.key}>
-            <button className={`conversation agent-row${agentSession?.id === props.currentSessionId ? " active" : ""}`}
+            <button
+              type="button"
+              className={cn(
+                sessionRowClass,
+                agentSession?.id === props.currentSessionId && "active bg-accent text-accent-foreground",
+              )}
               onContextMenu={(event) => { event.preventDefault(); void props.controller.openMenu({ kind: "agent", agentId: child.agent.id, x: event.clientX, y: event.clientY }); }}
               onClick={() => { if (agentSession) void props.actions.sessions.open(props.project.id, agentSession.id); }}
             >
-              <span className="agent-node-marker" aria-hidden="true" /><div className="conversation-body"><div className="conversation-title">
-                <span className={`agent-status-indicator status-${child.agent.status}`}>{child.agent.status}</span><strong>{child.agent.title}</strong>
+              <span className="agent-node-marker size-1.5 shrink-0 rounded-full bg-muted-foreground/50" aria-hidden="true" />
+              <div className="conversation-body min-w-0 flex-1"><div className="conversation-title flex min-w-0 items-center gap-1.5">
+                <span className={`agent-status-indicator status-${child.agent.status}`}>{child.agent.status}</span>
+                <strong className="min-w-0 flex-1 truncate font-medium">{child.agent.title}</strong>
                 {child.agent.noSession && <span className="anonymous-indicator" title={t("app.anonymousChat")}><HatGlasses size={11} aria-hidden="true" /></span>}
                 {renderToggle(groupKey, childCount)}
               </div></div>
@@ -183,14 +205,20 @@ export function SessionTree(props: {
         const runtime = getBoundSidebarRuntimeAgent(props.controller.catalog, child.session.id);
         return <Fragment key={child.session.id}>
           <button
-            className={`conversation agent-row session-row${child.session.id === props.currentSessionId ? " active" : ""}`}
+            type="button"
+            className={cn(
+              sessionRowClass,
+              "session-row",
+              child.session.id === props.currentSessionId && "active bg-accent text-accent-foreground",
+            )}
             title={child.session.filePath}
             onContextMenu={(event) => openContext(event, child.session)}
             onClick={() => void props.actions.sessions.open(props.project.id, child.session.id)}
           >
-            <span className="session-node-marker" aria-hidden="true" /><div className="conversation-body"><div className="conversation-title">
+            <span className="session-node-marker size-1.5 shrink-0 rounded-full bg-border" aria-hidden="true" />
+            <div className="conversation-body min-w-0 flex-1"><div className="conversation-title flex min-w-0 items-center gap-1.5">
               {runtime && <span className={`agent-status-indicator status-${runtime.status}`}>{runtime.status}</span>}
-              <strong>{child.session.name || t("common.untitled")}</strong>
+              <strong className="min-w-0 flex-1 truncate font-medium">{child.session.name || t("common.untitled")}</strong>
               {child.session.source && child.session.source !== "pi" && <span className={`session-source-badge ${child.session.source}`}>{t(`sessionSource.${child.session.source}` as never)}</span>}
               {renderToggle(groupKey, childCount)}
             </div></div>

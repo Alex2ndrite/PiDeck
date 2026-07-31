@@ -7,6 +7,11 @@ import { t } from "../../i18n";
 import type { SidebarActions } from "./SidebarContent";
 import { SessionTree } from "./SessionTree";
 import { WorktreeTree } from "./WorktreeTree";
+import { cn } from "../../lib/utils";
+
+/** pure official：项目/会话树行共享的 shadcn 风格底（hover=accent 面，active 同系） */
+const treeRowClass =
+	"conversation relative w-full items-center gap-2 rounded-md border-0 bg-transparent px-2 py-1.5 text-left text-sm text-foreground transition-colors hover:bg-accent hover:text-accent-foreground";
 
 function isChatProject(project: Project) {
   return project.kind === "chat";
@@ -62,9 +67,18 @@ export function ProjectTree(props: {
       const sourceFilter = props.controller.sourceFilterFor(project.id);
       const dragging = props.controller.drag.sourceProjectId === project.id;
       const dragOver = props.controller.drag.overProjectId === project.id;
-      return <div key={project.id} className={`project-group${chat ? " chat-project-group" : ""}${project.worktreeEnabled ? " worktree-enabled" : ""}`}>
+      return <div key={project.id} className={cn("project-group mb-0.5", chat && "chat-project-group", project.worktreeEnabled && "worktree-enabled")}>
         <button
-          className={["conversation", !chat && !props.controller.search.trim() ? "project-draggable" : "", chat ? "chat-project" : "", dragging ? "dragging" : "", dragOver ? "drag-over" : ""].filter(Boolean).join(" ")}
+          type="button"
+          className={cn(
+            treeRowClass,
+            "flex min-h-8",
+            !chat && !props.controller.search.trim() && "project-draggable",
+            chat && "chat-project",
+            dragging && "dragging opacity-60",
+            dragOver && "drag-over ring-1 ring-border",
+            props.currentProjectId === project.id && "active bg-accent text-accent-foreground",
+          )}
           draggable={!chat && !props.controller.search.trim()}
           onDragStart={(event) => dragStart(event, project.id)}
           onDragOver={(event) => { if (props.controller.drag.sourceProjectId && props.controller.drag.sourceProjectId !== project.id) { event.preventDefault(); props.controller.setProjectDropTarget(project.id); } }}
@@ -74,10 +88,10 @@ export function ProjectTree(props: {
           onContextMenu={(event) => { event.preventDefault(); void props.controller.openMenu({ kind: "project", projectId: project.id, x: event.clientX, y: event.clientY }); }}
           onClick={() => { props.controller.toggleProject(project.id); props.actions.projects.select(project.id); }}
         >
-          <span className={`project-fold${collapsed ? " folded" : ""}`} title={collapsed ? t("app.projectExpand") : t("app.projectCollapse")}><Play size={12} /></span>
+          <span className={cn("project-fold grid size-5 place-items-center text-muted-foreground", collapsed && "folded")} title={collapsed ? t("app.projectExpand") : t("app.projectCollapse")}><Play size={12} className={cn("transition-transform", !collapsed && "rotate-90")} /></span>
           <ProjectAvatar name={projectDirectoryName} kind={chat ? "chat" : "project"} />
-          <div className="conversation-body"><div className="conversation-title">
-            <strong title={project.path}>{projectDirectoryName}</strong>
+          <div className="conversation-body min-w-0 flex-1"><div className="conversation-title flex min-w-0 items-center gap-1.5">
+            <strong className="min-w-0 flex-1 truncate font-medium" title={project.path}>{projectDirectoryName}</strong>
             {sourceFilter !== null && (
               <span
                 className="filter-indicator"
@@ -97,11 +111,11 @@ export function ProjectTree(props: {
                 }}
               ><Filter size={12} /></span>
             )}
-          </div>{chat && <p className="chat-project-guide">{t("app.projectChatGuide")}</p>}</div>
-          <span className="project-row-actions">
-            {chat && props.actions.projects.changeChatPath && <span className="project-action" title={t("app.chatProjectSettings")} onClick={(event) => { event.stopPropagation(); void props.actions.projects.changeChatPath!(project); }}><FolderCog size={14} /></span>}
-            <span className="project-action" title={t("app.projectNewAgent")} onClick={(event) => { event.stopPropagation(); void props.actions.sessions.createDraft(project.id); }}><Plus size={14} /></span>
-            <span className="project-action" title={t("app.anonymousChat")} onClick={(event) => { event.stopPropagation(); void props.actions.sessions.createAnonymous(project.id); }}><HatGlasses size={14} /></span>
+          </div>{chat && <p className="chat-project-guide mt-0.5 truncate text-[11px] text-muted-foreground">{t("app.projectChatGuide")}</p>}</div>
+          <span className="project-row-actions flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 [[data-active]_&]:opacity-100 [.conversation:hover_&]:opacity-100">
+            {chat && props.actions.projects.changeChatPath && <span className="project-action inline-flex size-6 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-background/80 hover:text-foreground" title={t("app.chatProjectSettings")} onClick={(event) => { event.stopPropagation(); void props.actions.projects.changeChatPath!(project); }}><FolderCog size={14} /></span>}
+            <span className="project-action inline-flex size-6 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-background/80 hover:text-foreground" title={t("app.projectNewAgent")} onClick={(event) => { event.stopPropagation(); void props.actions.sessions.createDraft(project.id); }}><Plus size={14} /></span>
+            <span className="project-action inline-flex size-6 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-background/80 hover:text-foreground" title={t("app.anonymousChat")} onClick={(event) => { event.stopPropagation(); void props.actions.sessions.createAnonymous(project.id); }}><HatGlasses size={14} /></span>
           </span>
         </button>
         {!collapsed && project.worktreeEnabled && <WorktreeTree

@@ -128,7 +128,8 @@ test("unstarted drafts have an independent delete control and context menu", () 
   assert.match(sessionTree, /const openDraftContext/);
   assert.match(sessionTree, /getBoundSidebarRuntimeAgent\(props\.controller\.catalog, session\.id\)/);
   assert.match(sessionTree, /kind: "agent",\s*agentId: runtimeAgent\.id/);
-  assert.match(sessionTree, /className=\{`draft-session-row\$\{canDelete \? "" : " has-runtime"\}`\}/);
+  assert.match(sessionTree, /draft-session-row/);
+  assert.match(sessionTree, /has-runtime/);
   assert.match(sessionTree, /onContextMenu=\{\(event\) => openDraftContext\(event, session\)\}/);
   assert.match(sessionTree, /canDelete && \([\s\S]*<IconButton[\s\S]*className="draft-session-delete"/);
   assert.doesNotMatch(sessionTree, /<span className="project-action" role="button"/);
@@ -137,9 +138,10 @@ test("unstarted drafts have an independent delete control and context menu", () 
   assert.match(content, /menu\?\.kind === "draft"/);
   assert.match(content, /!hasLiveSidebarRuntime\(menuDraftRuntime\)/);
   assert.match(content, /<DraftSessionContextMenu/);
-  assert.match(styles, /\.draft-session-row/);
-  assert.match(styles, /grid-template-columns: minmax\(0, 1fr\) var\(--control-height-md\)/);
-  assert.match(styles, /\.draft-session-row\.has-runtime/);
+  // draft 行布局改由 SessionTree Tailwind 承担（pure official P2-2）
+  assert.match(sessionTree, /grid-cols-\[minmax\(0,1fr\)_2rem\]/);
+  assert.match(sessionTree, /has-runtime/);
+  assert.match(styles, /\.draft-session-delete/);
 });
 
 test("worktree rows expose their child project context menu and loading projects keep a surface", () => {
@@ -210,5 +212,6 @@ test("ProjectTree shows the project directory name like the dev reference", () =
   assert.match(projectTree, /function displayProjectDirectoryName\(project: Project\)/);
   assert.match(projectTree, /project\.path\.replace\(/);
   assert.match(projectTree, /const projectDirectoryName = chat/);
-  assert.match(projectTree, /<strong title=\{project\.path\}>\{projectDirectoryName\}<\/strong>/);
+  assert.match(projectTree, /title=\{project\.path\}/);
+  assert.match(projectTree, /\{projectDirectoryName\}/);
 });
