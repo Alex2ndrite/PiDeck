@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { readRendererStyles } from "./helpers/rendererStyles.mjs";
 
-const css = readFileSync(new URL("../src/renderer/src/styles.css", import.meta.url), "utf8");
+const css = readRendererStyles();
 
 function block(selector) {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -12,12 +13,13 @@ function block(selector) {
 }
 
 test("fixed light chat/table colors are tokenized for dark mode", () => {
-  assert.match(block(":root"), /--color-chat-card-bg:\s*#fafafa;/i);
+  // pure official / zinc：浅色卡片用白底，暗色对齐 zinc-950 系
+  assert.match(block(":root"), /--color-chat-card-bg:\s*#ffffff;/i);
   assert.match(block(":root"), /--color-chat-muted-bg:\s*#f4f4f5;/i);
   assert.match(block(":root"), /--color-chat-table-bg:\s*#ffffff;/i);
-  assert.match(block(":root[data-theme=\"dark\"]"), /--color-chat-card-bg:\s*#20242a;/i);
-  assert.match(block(":root[data-theme=\"dark\"]"), /--color-chat-muted-bg:\s*#242932;/i);
-  assert.match(block(":root[data-theme=\"dark\"]"), /--color-chat-table-bg:\s*#1d2024;/i);
+  assert.match(block(":root[data-theme=\"dark\"]"), /--color-chat-card-bg:\s*#09090b;/i);
+  assert.match(block(":root[data-theme=\"dark\"]"), /--color-chat-muted-bg:\s*#18181b;/i);
+  assert.match(block(":root[data-theme=\"dark\"]"), /--color-chat-table-bg:\s*#09090b;/i);
 
   assert.match(block(".diagnostic-card"), /background:\s*var\(--color-chat-muted-bg\);/);
   assert.match(block(".user-turn-bubble"), /background:\s*var\(--color-chat-card-bg\);/);

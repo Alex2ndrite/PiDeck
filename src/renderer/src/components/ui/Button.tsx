@@ -1,7 +1,20 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
+import { Button as ShadcnButton } from "../ui-shadcn/button";
 
+/**
+ * 共享 Button（#115 U5）：API 保持旧版不变，内部换到 shadcn Button。
+ * 旧变体映射：primary→default / secondary→secondary / danger→destructive / ghost→ghost。
+ * loading 语义保留：禁用 + 行内 spinner，防止提交类操作重复触发。
+ */
 export type ButtonVariant = "primary" | "secondary" | "danger" | "ghost";
 export type ButtonSize = "sm" | "md";
+
+const VARIANT_MAP = {
+	primary: "default",
+	secondary: "secondary",
+	danger: "destructive",
+	ghost: "ghost",
+} as const;
 
 export function Button(
 	props: ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -23,22 +36,21 @@ export function Button(
 	} = props;
 
 	return (
-		<button
+		<ShadcnButton
 			{...buttonProps}
 			type={type}
+			variant={VARIANT_MAP[variant]}
+			size={buttonSize === "sm" ? "sm" : "default"}
 			disabled={disabled || loading}
-			className={[
-				"ui-button",
-				`ui-button-${variant}`,
-				`ui-button-${buttonSize}`,
-				loading && "ui-button-loading",
-				className,
-			]
-				.filter(Boolean)
-				.join(" ")}
+			className={className}
 		>
-			{loading && <span className="ui-button-spinner" />}
-			<span className={loading ? "ui-button-content-loading" : ""}>{children}</span>
-		</button>
+			{loading && (
+				<span
+					className="size-3.5 shrink-0 animate-spin rounded-full border-2 border-current border-t-transparent"
+					aria-hidden="true"
+				/>
+			)}
+			<span className={loading ? "opacity-70" : undefined}>{children}</span>
+		</ShadcnButton>
 	);
 }

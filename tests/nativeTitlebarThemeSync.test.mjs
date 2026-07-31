@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { mainIpcSource } from "./helpers/mainIpcSources.mjs";
 
-const source = readFileSync(new URL("../src/main/index.ts", import.meta.url), "utf8");
+const source = mainIpcSource;
 
 test("main process syncs native titlebar appearance with app theme", () => {
   assert.match(source, /function applyNativeThemeSource\(settings: AppSettings\)/);

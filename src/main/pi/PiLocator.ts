@@ -3,6 +3,12 @@ import { existsSync, readdirSync } from "node:fs";
 import { delimiter, dirname, extname, join } from "node:path";
 import { app } from "electron";
 import type { AppSettings, PiInstallStatus } from "../../shared/types";
+import type { MainProcessTranslationKey } from "../../shared/i18n/mainProcessCopy";
+
+type PiLocatorCopy = (
+  key: MainProcessTranslationKey,
+  params?: Record<string, string | number>,
+) => string;
 
 type PiProxySettings = Pick<
   AppSettings,
@@ -32,6 +38,10 @@ export type PiCommandInvocation = {
 
 /** Resolves the pi CLI across packaged Electron environments where shell PATH is often incomplete. */
 export class PiLocator {
+  constructor(
+    private readonly translate: PiLocatorCopy = () => "Could not run pi CLI.",
+  ) {}
+
   /**
    * Resolves the pi CLI across packaged Electron environments where shell PATH is often incomplete.
    * When `customPath` is provided, it takes priority over auto-detection —
@@ -122,25 +132,21 @@ export class PiLocator {
   /**
    * 给 pi 子进程消毒 Electron 宿主环境。
    * 桌面端主进程 env 常带 ELECTRON_* / 可能含 electron 注入的 NODE_OPTIONS；
-   * 原样继承后 jiti 加载扩展或子进程行为可能与终端 CLI 不一致，
-   * 极端情况下与第三方扩展（如 CodeIsland）组合会导致整应用异常退出。
+   * 原样继承后 jiti 加载扩展或子进程行为可能与终端 CLI 不一致。
    */
   sanitizePiChildEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
     const next: NodeJS.ProcessEnv = { ...env };
 
     for (const key of Object.keys(next)) {
-      // Electron 运行时变量不应进入独立 Node/pi 进程。
       if (key.startsWith("ELECTRON_") || key === "ELECTRON_RUN_AS_NODE") {
         delete next[key];
         continue;
       }
-      // Chromium/打包壳相关变量对 pi 无意义，避免污染工具链探测。
       if (key.startsWith("CHROME_") || key.startsWith("GOOGLE_API_")) {
         delete next[key];
       }
     }
 
-    // NODE_OPTIONS 若含 electron / asar / 宿主 require 钩子，会让子进程 Node 行为偏离终端。
     const nodeOptions = next.NODE_OPTIONS;
     if (typeof nodeOptions === "string" && nodeOptions.trim()) {
       const cleaned = nodeOptions
@@ -242,12 +248,12 @@ export class PiLocator {
   async validateCustomPath(customPath: string): Promise<PiInstallStatus> {
     const command = this.normalizeCustomPath(customPath);
     if (!command) {
-      return { installed: false, searchedDirs: [], error: "请输入 pi.cmd 或 pi 路径。" };
+      return { installed: false, searchedDirs: [], error: this.translate("mainPi.pathRequired") };
     }
     if (this.isUnsupportedPowerShellShim(command)) return this.unsupportedPowerShellStatus(command);
     if (command.startsWith("wsl://")) {
       const parsed = this.parseWslUrl(command);
-      if (!parsed) return { installed: false, searchedDirs: [], error: "Invalid wsl:// URL" };
+      if (!parsed) return { installed: false, searchedDirs: [], error: this.translate("mainPi.invalidWslUrl") };
       return this.checkWslCommand(parsed.distro, parsed.user, parsed.piCommand);
     }
     return this.runCheck(command, []);
@@ -263,7 +269,7 @@ export class PiLocator {
 
     if (command.startsWith("wsl://")) {
       const parsed = this.parseWslUrl(command);
-      if (!parsed) return { installed: false, command, searchedDirs: [], error: "Invalid wsl:// URL" };
+      if (!parsed) return { installed: false, command, searchedDirs: [], error: this.translate("mainPi.invalidWslUrl") };
       const wslStatus = await this.checkWslCommand(parsed.distro, parsed.user, parsed.piCommand);
       return {
         ...wslStatus,
@@ -326,7 +332,7 @@ export class PiLocator {
       installed: false,
       command,
       searchedDirs,
-      error: "暂不支持 PowerShell 的 pi.ps1，请使用 CMD 的 where pi 查到的 pi.cmd 或 pi.exe 路径。",
+      error: this.translate("mainPi.powershellUnsupported"),
     };
   }
 
@@ -353,7 +359,8 @@ export class PiLocator {
           // 优先使用 stderr 中的实际错误信息（如"系统找不到指定的文件"），
           // 并处理 Windows GBK 编码问题。兜底用 error.message 但去掉冗余的命令行前缀。
           const raw = this.decodeBuffer(stderr) || this.cleanExecError(error.message);
-          resolve({ installed: false, command, searchedDirs, error: raw });
+          console.error("[PiLocator] pi CLI check failed", { command, error: raw });
+          resolve({ installed: false, command, searchedDirs, error: this.translate("mainPi.checkFailed") });
           return;
         }
 
@@ -438,7 +445,8 @@ export class PiLocator {
       }, (error, stdout, stderr) => {
         if (error) {
           const raw = stderr?.trim() || this.cleanExecError(error.message);
-          resolve({ installed: false, searchedDirs: [], error: raw });
+          console.error("[PiLocator] WSL pi CLI check failed", { error: raw });
+          resolve({ installed: false, searchedDirs: [], error: this.translate("mainPi.checkFailed") });
           return;
         }
         resolve({ installed: true, command: `wsl -d ${distro} -u ${user} ${piCommand}`, version: stdout.trim(), searchedDirs: [] });

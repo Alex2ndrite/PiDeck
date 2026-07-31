@@ -25,6 +25,12 @@ function loadWslPaths() {
 
 function loadAgentManager() {
 	const wslPaths = loadWslPaths();
+	// AgentManager 新增 streamGate 依赖（abort 流式封印）；与 WslPaths 一样显式沙箱加载。
+	const streamGate = (() => {
+		const sandbox = { exports: {}, require };
+		vm.runInNewContext(transpile("src/main/pi/streamGate.ts"), sandbox, { filename: "streamGate.ts" });
+		return sandbox.exports;
+	})();
 	const sessionEntryIds = (() => {
 		const sandbox = { exports: {}, require };
 		vm.runInNewContext(transpile("src/main/pi/sessionEntryIds.ts"), sandbox, {
@@ -55,6 +61,21 @@ function loadAgentManager() {
 		unlink: async (...args) => { calls.unlink.push(args); },
 		writeFile: async (...args) => { calls.writeFile.push(args); },
 	};
+	const historyReaderModule = { exports: {} };
+	vm.runInNewContext(transpile("src/main/pi/SessionHistoryReader.ts"), {
+		Buffer,
+		console: { log() {}, warn() {}, error() {} },
+		exports: historyReaderModule.exports,
+		module: historyReaderModule,
+		Promise,
+		require: (id) => id === "node:fs/promises" ? fsPromises : require(id),
+	}, { filename: "SessionHistoryReader.ts" });
+	class SessionFileEditor {
+		async truncateForResend({ file }) {
+			const content = await fsPromises.readFile(file.hostPath, "utf8");
+			await fsPromises.writeFile(file.hostPath, content, "utf8");
+		}
+	}
 	class LatestByKeyEmitter {
 		push() {}
 		flush() {}
@@ -93,8 +114,29 @@ function loadAgentManager() {
 			if (id === "./bashResult") return { formatBashToolMessage: () => ({}) };
 			if (id === "./messageContent") return { extractMessageText: (value) => String(value ?? "") };
 			if (id === "./historyMessages") return { mergeHistoryWithPreservedMessages: (value) => value };
+			if (id === "./agentSessionIdentity") return { buildAgentSessionKey: () => undefined };
+			if (id === "./SessionFileEditor") return { SessionFileEditor };
+			if (id === "./SessionHistoryReader") return historyReaderModule.exports;
+			if (id === "./AgentMessageProjector") {
+				return {
+					AgentMessageProjector: class {},
+					buildActiveBranchEntryIds: () => [],
+				};
+			}
 			if (id === "./sessionEntryIds") return sessionEntryIds;
+			if (id === "./agentUtils") {
+				return {
+					stripAnsi: (text) => text,
+					pickNumber: (...values) => { for (const v of values) if (typeof v === "number") return v; },
+					clampPercent: (v) => v,
+					trimHistoryMessages: (msgs) => msgs,
+					cleanTitle: (t) => t,
+					inferTitleFromMessages: () => undefined,
+					isDefaultAgentTitle: () => false,
+				};
+			}
 			if (id === "./LatestByKeyEmitter") return { LatestByKeyEmitter };
+			if (id === "./streamGate") return streamGate;
 			if (id === "../../shared/toolRuntimeState") return { updateActiveToolCalls: () => new Map() };
 			if (id === "../wsl/WslPaths") return wslPaths;
 			return require(id);
@@ -113,30 +155,24 @@ function createManager(AgentManager, configManager = {}) {
 	);
 }
 
-test("maps WSL session file operations to host paths while deduping by Linux identity", async () => {
+test("maps WSL Session file operations to host paths while retaining Linux protocol identity", async () => {
 	const { AgentManager, calls, wslPaths } = loadAgentManager();
 	const manager = createManager(AgentManager);
 	manager.configureWsl(wslPaths.createWslEnvironment("Ubuntu-24.04", "root", "/root"));
 	const sessionPath = "/root/.pi/agent/sessions/session.jsonl";
 
 	assert.equal(
-		manager.normalizeSessionPathForCompare("//wsl$/Ubuntu-24.04/root/.pi/agent/sessions/session.jsonl"),
+		wslPaths.toWslLinuxPath("//wsl$/Ubuntu-24.04/root/.pi/agent/sessions/session.jsonl", manager.wslEnvironment),
 		sessionPath,
 	);
 	assert.notEqual(
-		manager.normalizeSessionPathForCompare("/root/.pi/agent/sessions/Session.jsonl"),
-		manager.normalizeSessionPathForCompare("/root/.pi/agent/sessions/session.jsonl"),
-	);
-	assert.equal(
-		manager.normalizeSessionPathForCompare("/mnt/c/Users/Test/Session.jsonl"),
-		manager.normalizeSessionPathForCompare("/mnt/c/users/test/session.jsonl"),
+		wslPaths.toWslLinuxPath("/root/.pi/agent/sessions/Session.jsonl", manager.wslEnvironment),
+		wslPaths.toWslLinuxPath("/root/.pi/agent/sessions/session.jsonl", manager.wslEnvironment),
 	);
 	const loadDecision = manager.getHistoryAutoLoadDecision(sessionPath);
 	assert.equal(loadDecision.shouldLoad, true);
 	assert.equal(loadDecision.sizeBytes, 128);
 	await manager.readRecentMessagesFromSessionFile(sessionPath, 1);
-	await manager.backupSessionFile(sessionPath);
-	const latestBackup = manager.findLatestBackup(sessionPath);
 	manager.agents.set("agent", {
 		process: { client: {} },
 		tab: {
@@ -152,17 +188,14 @@ test("maps WSL session file operations to host paths while deduping by Linux ide
 		{ id: "message", agentId: "agent", role: "user", text: "hello", meta: { entryId: "entry-user" } },
 	]);
 	manager.reloadSession = async () => {};
+	manager.loadMessages = async () => {};
 	await manager.prepareResendFromMessage("agent", "message");
 
 	const expectedHostPath = "\\\\wsl.localhost\\Ubuntu-24.04\\root\\.pi\\agent\\sessions\\session.jsonl";
 	assert.equal(calls.statSync[0], expectedHostPath);
 	assert.equal(calls.readFile[0][0], expectedHostPath);
-	assert.equal(calls.copyFile[0][0], expectedHostPath);
 	assert.equal(calls.readFile[1][0], expectedHostPath);
 	assert.equal(calls.writeFile[0][0], expectedHostPath);
-	assert.equal(calls.readdir[0][0], path.win32.dirname(expectedHostPath));
-	assert.equal(calls.readdirSync[0], path.win32.dirname(expectedHostPath));
-	assert.equal(latestBackup.endsWith("session.jsonl.200.edit-backup"), true);
 });
 
 test("keeps switch_session RPC paths in Linux form", async () => {

@@ -1,11 +1,10 @@
 import type { PiDesktopApi } from "../../preload";
 import { createDefaultExternalEditorSettings } from "../../shared/types";
 import type {
-	AgentTab,
 	AppSettings,
-	ChatMessage,
 	FileTreeNode,
 	Project,
+	SessionRecord,
 	SessionSummary,
 	TerminalDataEvent,
 	TerminalExitEvent,
@@ -33,49 +32,6 @@ const projects: Project[] = [
 		sortOrder: 0,
 	},
 ];
-
-let previewAgentTitle: string | null = null;
-
-function getAgents(): AgentTab[] {
-	return [
-		{
-			id: "preview-agent",
-			projectId: "builtin-chat",
-			cwd: projects[0].path,
-			title: previewAgentTitle ?? t("preview.agentTitle"),
-			status: "idle",
-			sessionId: "preview",
-			createdAt: now,
-		},
-	];
-}
-
-function getMessages(): ChatMessage[] {
-	return [
-		{
-			id: "m1",
-			agentId: "preview-agent",
-			role: "user",
-			text: t("preview.userPrompt"),
-			timestamp: now - 120000,
-		},
-		{
-			id: "m2",
-			agentId: "preview-agent",
-			role: "assistant",
-			text: t("preview.assistantText"),
-			timestamp: now - 90000,
-		},
-		{
-			id: "m3",
-			agentId: "preview-agent",
-			role: "tool",
-			text: "✓ read done",
-			timestamp: now - 60000,
-			meta: { detailText: t("preview.toolDetail") },
-		},
-	];
-}
 
 const files: FileTreeNode[] = [
 	{
@@ -241,6 +197,8 @@ export function createPreviewApi(): PiDesktopApi {
 			chooseChatPath: async () => null,
 			setChatPath: async () => projects[0],
 			listModels: async () => [],
+			onTrustRequest: noop,
+			respondTrustRequest: async () => undefined,
 		},
 		projectResources: {
 			list: async () => ({ skills: [], extensions: [] }),
@@ -293,31 +251,188 @@ export function createPreviewApi(): PiDesktopApi {
 			showInFolder: async () => undefined,
 			readContent: async () => "",
 			readBase64: async () => "",
+			create: async () => "/mock/created",
 			writeContent: async () => undefined,
 			delete: async () => undefined,
-			copy: async () => [],
-			move: async () => [],
 			rename: async () => "",
-			create: async () => "",
 			getPathForFile: () => "",
 			getClipboardPaths: () => [],
 		},
+		dialog: {
+			pickFiles: async () => [],
+		},
 		sessions: {
 			list: async () => getSessions(),
-			rename: async () => undefined,
-			copy: async (_projectId, filePath) => ({
-				cancelled: false,
-				sessionPath: `${filePath}-copy`,
+			listCatalog: async (projectId): Promise<SessionRecord[]> => getSessions().map((session) => ({
+				id: `preview-record:${session.id}`,
+				projectId,
+				title: session.name || "Preview session",
+				source: session.source || "pi",
+				environment: session.wsl ? "wsl" : "native",
+				filePath: session.filePath,
+				parentSessionPath: session.parentSessionPath,
+				projectPath: session.projectPath,
+				preview: session.preview,
+				messageCount: session.messageCount,
+				status: "active",
+				createdAt: session.updatedAt,
+				updatedAt: session.updatedAt,
+				wsl: session.wsl,
+			})),
+			createDraft: async (input): Promise<SessionRecord> => ({
+				id: `preview-draft:${input.projectId}`,
+				projectId: input.projectId,
+				title: input.title || "New session",
+				source: "pi",
+				environment: "native",
+				preview: "",
+				messageCount: 0,
+				status: "draft",
+				model: input.model,
+				thinkingLevel: input.thinkingLevel,
+				createdAt: now,
+				updatedAt: now,
 			}),
-			exportHtml: async () => ({ path: "preview-session.html" }),
-			delete: async () => undefined,
-			// 预览模式下返回固定 mock 数据，真实环境由主进程从 JSONL 文件读取
-			readMessages: async () => [
+			createAnonymous: async (input) => ({
+				session: {
+					id: `preview-anonymous:${input.projectId}`,
+					projectId: input.projectId,
+					title: input.title || "Anonymous chat",
+					noSession: true,
+					source: "pi",
+					environment: "native",
+					preview: "",
+					messageCount: 0,
+					status: "active",
+					createdAt: now,
+					updatedAt: now,
+				},
+				runtime: {
+					sessionId: `preview-anonymous:${input.projectId}`,
+					agentId: "preview-anonymous-agent",
+					runtimeGeneration: 1,
+					projectId: input.projectId,
+					cwd: projects.find((project) => project.id === input.projectId)?.path || "",
+					status: "idle",
+					createdAt: now,
+					noSession: true,
+				},
+			}),
+			updateRecord: async (sessionId, patch): Promise<SessionRecord> => ({
+				id: sessionId,
+				projectId: projects[0].id,
+				title: patch.title || "Preview session",
+				source: "pi",
+				environment: "native",
+				preview: "",
+				messageCount: 0,
+				status: "draft",
+				model: patch.model,
+				thinkingLevel: patch.thinkingLevel,
+				createdAt: now,
+				updatedAt: now,
+			}),
+			deleteRecord: async () => true,
+			copyRecord: async (sessionId) => ({
+				cancelled: false,
+				targetSessionId: `${sessionId}:copy`,
+			}),
+			exportRecordHtml: async () => ({ path: "preview-session.html" }),
+			readRecordMessages: async () => [],
+			readRecordMessagePage: async () => ({ messages: [], total: 0, nextBefore: null }),
+			readReferenceMessages: async () => [
 				{ role: "user", content: "Preview user message", timestamp: Date.now() - 60000 },
 				{ role: "assistant", content: "Preview assistant response", timestamp: Date.now() - 30000 },
 			],
-			readSessionMeta: async () => ({}),
-			readChatMessages: async () => [],
+			sendPrompt: async (input) => ({
+				accepted: true,
+				sessionId: input.sessionId,
+				requestId: input.requestId,
+				agentId: "preview-agent",
+				sessionPath: "C:/Users/preview/.pi/session.jsonl",
+				runtimeGeneration: 1,
+			}),
+			sendUiResponse: async () => undefined,
+			onRuntimeEvent: noop,
+			listRuntimes: async () => [],
+			stopRuntime: async (target) => ({ ok: true, value: target }),
+			abortRuntime: async (target) => ({
+				ok: true,
+				value: { target, value: undefined },
+			}),
+			restartRuntime: async (target) => ({
+				ok: true,
+				value: {
+					previousTarget: target,
+					runtime: {
+						...target,
+						projectId: projects[0].id,
+						cwd: projects[0].path,
+						status: "idle" as const,
+						createdAt: now,
+					},
+					session: {
+						id: target.sessionId,
+						projectId: projects[0].id,
+						title: "Preview session",
+						source: "pi" as const,
+						environment: "native" as const,
+						preview: "",
+						messageCount: 0,
+						status: "active" as const,
+						createdAt: now,
+						updatedAt: now,
+					},
+				},
+			}),
+			compactRuntime: async (target) => ({
+				ok: true,
+				value: { target, value: {} },
+			}),
+			getRuntimeForkMessages: async (target) => ({
+				ok: true,
+				value: { target, value: [] },
+			}),
+			forkRuntimeSession: async (target) => ({
+				ok: true,
+				value: { cancelled: false, text: "" },
+			}),
+			getRuntimeState: async (target) => ({
+				ok: true,
+				value: { target, value: {} },
+			}),
+			listRuntimeCommands: async (target) => ({
+				ok: true,
+				value: { target, value: [] },
+			}),
+			exportRuntimeHtml: async (target) => ({
+				ok: true,
+				value: { target, value: { path: "preview-session.html" } },
+			}),
+			editRuntimeMessage: async (target) => ({
+				ok: true,
+				value: { target, value: undefined },
+			}),
+			deleteRuntimeMessage: async (target) => ({
+				ok: true,
+				value: { target, value: undefined },
+			}),
+			prepareRuntimeResend: async (target) => ({
+				ok: true,
+				value: { target, value: { text: "" } },
+			}),
+			setRuntimeModel: async (target) => ({
+				ok: true,
+				value: { target, value: {} },
+			}),
+			setRuntimeThinking: async (target) => ({
+				ok: true,
+				value: { target, value: {} },
+			}),
+			cloneRuntime: async (target) => ({
+				ok: true,
+				value: { targetSessionId: `${target.sessionId}:copy` },
+			}),
 		},
 		codexSessions: {
 			scan: async () => [],
@@ -367,9 +482,9 @@ export function createPreviewApi(): PiDesktopApi {
 				dropCommit: async () => {},
 				generateCommitMessage: async () => "",
 				init: async () => {},
-				push: async () => {},
-				pull: async () => {},
-				fetch: async () => {},
+			pull: async () => {},
+			push: async () => {},
+			fetch: async () => undefined,
 		},
 		logs: {
 			list: async () => [],
@@ -548,6 +663,7 @@ export function createPreviewApi(): PiDesktopApi {
 			}),
 			uninstall: async () => undefined,
 			install: async (_source: string) => "",
+			toggle: async () => undefined,
 			removeBuiltIn: async () => undefined,
 			restoreBuiltIn: async () => undefined,
 			update: async () => ({
@@ -688,105 +804,6 @@ export function createPreviewApi(): PiDesktopApi {
 				requestBody: '{"model":"gpt-4o-mini","messages":[{"role":"user","content":"Hi"}],"max_tokens":10}',
 			}),
 		},
-		agents: {
-			list: async () => getAgents(),
-			create: async () => getAgents()[0],
-			rename: async (agentId, name) => {
-				const agent =
-					getAgents().find((item) => item.id === agentId) ?? getAgents()[0];
-				previewAgentTitle = name;
-				agent.title = previewAgentTitle;
-				return agent;
-			},
-			stop: async () => undefined,
-			prompt: async () => ({ accepted: true }),
-			abort: async () => undefined,
-			exportHtml: async () => ({ path: "preview.html" }),
-			getForkMessages: async () => [
-				{ entryId: "preview-user-1", text: "Preview prompt" },
-			],
-			forkSession: async () => ({ text: "Preview prompt", cancelled: false }),
-			cloneSession: async () => ({ cancelled: false }),
-			switchSession: async () => ({ cancelled: false }),
-			reload: async () => undefined,
-			restart: async (agentId: string) => ({
-				id: agentId,
-				projectId: "preview",
-				cwd: "/preview",
-				title: previewAgentTitle ?? t("preview.agentTitle"),
-				status: "idle" as const,
-				createdAt: Date.now(),
-			}),
-			compact: async () => ({
-				modelName: "Preview GPT",
-				provider: "preview",
-				modelId: "preview",
-				thinkingLevel: "low",
-				contextPercent: 5,
-				contextTokens: 5000,
-				contextWindow: 100000,
-				cacheTotal: 53000000,
-			}),
-			runtimeState: async () => ({
-				modelName: "Preview GPT",
-				provider: "preview",
-				modelId: "preview",
-				thinkingLevel: "low",
-				contextPercent: 12,
-				contextTokens: 12000,
-				contextWindow: 100000,
-				cacheTotal: 53000000,
-			}),
-			cycleModel: async () => ({
-				modelName: "Preview GPT",
-				thinkingLevel: "low",
-			}),
-			availableModels: async () => [
-				{ id: "preview", name: "Preview GPT", provider: "preview" },
-			],
-			setModel: async () => ({
-				modelName: "Preview GPT",
-				thinkingLevel: "low",
-			}),
-			refreshModels: async () => ({
-				modelName: "Preview GPT",
-				thinkingLevel: "low",
-			}),
-			cycleThinking: async () => ({
-				modelName: "Preview GPT",
-				thinkingLevel: "medium",
-			}),
-			setThinking: async (_agentId, level) => ({
-				modelName: "Preview GPT",
-				thinkingLevel: level,
-			}),
-			commands: async () => [
-				{ name: "reload", description: "Reload runtime", source: "builtin" },
-			],
-			editMessage: async () => undefined,
-			deleteMessage: async () => undefined,
-			prepareResend: async () => ({ text: "Preview prompt" }),
-			onState: noop,
-			onFocusTarget: noop,
-			onMessages: ((
-				callback: (payload: {
-					agentId: string;
-					messages: ChatMessage[];
-				}) => void,
-			) => {
-				setTimeout(() => callback({ agentId: "preview-agent", messages: getMessages() }), 0);
-				return () => undefined;
-			}) as any,
-			onLog: noop,
-			onThinking: noop,
-			onNotice: noop,
-			onRpcLog: noop,
-			onRuntimeState: noop,
-			onUiRequest: noop,
-			sendUiResponse: async () => undefined,
-			onTrustRequest: noop,
-			respondTrustRequest: async () => undefined,
-		},
 		pet: {
 			onState: noop,
 			list: async () => [
@@ -799,6 +816,7 @@ export function createPreviewApi(): PiDesktopApi {
 			ready: () => undefined,
 			contextMenu: async () => undefined,
 			focusAgent: async () => undefined,
+			onFocusTarget: noop,
 			onSprite: noop,
 			onNotify: noop,
 			setPreviewMode: async () => undefined,
@@ -810,14 +828,14 @@ export function createPreviewApi(): PiDesktopApi {
 			getCurrent: async () => ({ id: "clawd", displayName: "Clawd", source: "builtin", spritesheetUrl: "" }),
 		},
 		terminal: {
-			list: async (agentId) =>
-				terminalTabs.filter((tab) => tab.agentId === agentId),
-			ensure: async (agentId, cwd) => {
-				const existing = terminalTabs.filter((tab) => tab.agentId === agentId);
+			list: async (target) =>
+				terminalTabs.filter((tab) => tab.agentId === target.agentId),
+			ensure: async (target) => {
+				const existing = terminalTabs.filter((tab) => tab.agentId === target.agentId);
 				if (existing.length > 0) return existing;
-				return [await createTerminalTab(agentId, undefined, cwd)];
+				return [await createTerminalTab(target.agentId)];
 			},
-			create: createTerminalTab,
+			create: (target) => createTerminalTab(target.agentId),
 			input: async (tabId, data) => {
 				for (const listener of terminalDataListeners) {
 					listener({ tabId, data });
@@ -869,11 +887,17 @@ export function createPreviewApi(): PiDesktopApi {
 			sessionBotGet: async () => null,
 			sessionBotSet: async () => ({ success: true }),
 		},
-		dialog: {
-			pickFiles: async () => [],
-		},
 		browser: {
 			openExternal: async () => {},
+		},
+		browserView: {
+			show: async () => {},
+			hide: async () => {},
+			setBounds: async () => {},
+			navigate: async () => true,
+			action: async () => {},
+			onState: () => () => {},
+			onNewWindow: () => () => {},
 		},
 		scratchPad: {
 			list: async () => [],
@@ -884,8 +908,6 @@ export function createPreviewApi(): PiDesktopApi {
 			export: async () => false,
 		},
 
-		clipboard: {
-			writeText: async (_text: string) => {},
-		},
+
 	};
 }

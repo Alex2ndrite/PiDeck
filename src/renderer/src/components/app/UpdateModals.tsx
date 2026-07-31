@@ -1,6 +1,10 @@
 import { t } from "../../i18n";
-import { CloseIconButton } from "../ui/IconButton";
+import { Modal } from "../ui/Modal";
+import { Button } from "../ui/Button";
 
+/**
+ * 更新结果弹窗（#115 U5）：外壳换 shadcn Modal（small），内部排版类保留。
+ */
 export function UpdateErrorModal(props: {
   message: string;
   releasesUrl: string;
@@ -8,33 +12,27 @@ export function UpdateErrorModal(props: {
   onOpenRelease: () => void;
 }) {
   return (
-    <div className="modal-backdrop update-backdrop">
-      <section className="update-modal update-error-modal">
-        <div className="modal-header">
-          <strong>{t("update.checkFailedTitle")}</strong>
-          <CloseIconButton label={t("common.close")} onClick={props.onClose} />
+    <Modal open onClose={props.onClose} title={t("update.checkFailedTitle")} size="small">
+      <div className="update-body">
+        <p className="update-version-line">
+          {t("update.checkFailedDescription")}
+        </p>
+        <div className="update-error-detail">
+          {t("update.errorInfo", { message: props.message })}
         </div>
-        <div className="update-body">
-          <p className="update-version-line">
-            {t("update.checkFailedDescription")}
-          </p>
-          <div className="update-error-detail">
-            {t("update.errorInfo", { message: props.message })}
-          </div>
-          <p className="update-asset-line">
-            {t("update.manualReleaseHint")}
-            <br />
-            <span>{props.releasesUrl}</span>
-          </p>
-        </div>
-        <div className="update-actions">
-          <button onClick={props.onClose}>{t("common.close")}</button>
-          <button className="primary" onClick={props.onOpenRelease}>
-            {t("update.openReleasePage")}
-          </button>
-        </div>
-      </section>
-    </div>
+        <p className="update-asset-line">
+          {t("update.manualReleaseHint")}
+          <br />
+          <span>{props.releasesUrl}</span>
+        </p>
+      </div>
+      <div className="update-actions">
+        <Button variant="ghost" onClick={props.onClose}>{t("common.close")}</Button>
+        <Button variant="primary" onClick={props.onOpenRelease}>
+          {t("update.openReleasePage")}
+        </Button>
+      </div>
+    </Modal>
   );
 }
 
@@ -45,24 +43,18 @@ export function UpToDateModal(props: {
   onOpenRelease: () => void;
 }) {
   return (
-    <div className="modal-backdrop update-backdrop">
-      <section className="update-modal update-uptodate-modal">
-        <div className="modal-header">
-          <strong>{t("update.upToDateTitle")}</strong>
-          <CloseIconButton label={t("common.close")} onClick={props.onClose} />
-        </div>
-        <div className="update-body">
-          <p className="update-version-line">
-            {t("update.upToDateMessage", { version: props.version })}
-          </p>
-        </div>
-        <div className="update-actions">
-          <button onClick={props.onClose}>{t("common.close")}</button>
-          <button onClick={props.onOpenRelease}>
-            {t("update.openReleasePage")}
-          </button>
-        </div>
-      </section>
-    </div>
+    <Modal open onClose={props.onClose} title={t("update.upToDateTitle")} size="small">
+      <div className="update-body">
+        <p className="update-version-line">
+          {t("update.upToDateMessage", { version: props.version })}
+        </p>
+      </div>
+      <div className="update-actions">
+        <Button variant="ghost" onClick={props.onClose}>{t("common.close")}</Button>
+        <Button variant="secondary" onClick={props.onOpenRelease}>
+          {t("update.openReleasePage")}
+        </Button>
+      </div>
+    </Modal>
   );
 }

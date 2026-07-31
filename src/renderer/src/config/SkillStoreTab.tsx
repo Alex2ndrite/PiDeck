@@ -1,3 +1,4 @@
+import { Button } from "../components/ui-shadcn/button";
 import { showNotice } from "../utils/notice";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeft, Download, ExternalLink, Search, Sparkles } from "lucide-react";
@@ -36,7 +37,8 @@ export function SkillStoreTab(props: {
 			const data = await api.skillStore.search(q);
 			setResult(data);
 		} catch (err) {
-			setError("搜索 skill 商店失败");
+			console.error("[SkillStore] Search failed", err);
+			setError(t("config.skillStoreSearchError"));
 			setResult(null);
 		} finally {
 			setSearching(false);
@@ -52,10 +54,11 @@ export function SkillStoreTab(props: {
 		setError(null);
 		try {
 			await api.skillStore.import(item, props.locationId);
-			showNotice("已导入到本地 Skills", 2500);
+			showNotice(t("config.skillStoreImported"), 2500);
 			props.onImported?.();
 		} catch (err) {
-			setError(err instanceof Error ? err.message : String(err));
+			console.error("[SkillStore] Import failed", err);
+			setError(t("config.skillStoreImportError"));
 		} finally {
 			setImportingId(null);
 		}
@@ -68,28 +71,28 @@ export function SkillStoreTab(props: {
 				{error && <div className="config-error">{error}</div>}
 				{/* toast 已改用 sonner */}
 				<div className="prompt-store-toolbar">
-					<button className="config-btn" onClick={() => { setPreviewItem(null); }}>
+					<Button  variant="outline" onClick={() => { setPreviewItem(null); }}>
 						<ArrowLeft size={14} strokeWidth={1.8} />
 						{t("config.promptStoreBack")}
-					</button>
-					<button
-						className="config-btn primary"
+					</Button>
+					<Button
+						 variant="default"
 						onClick={() => void handleImport(previewItem)}
 						disabled={importingId === previewItem.id}
 					>
 						{importingId === previewItem.id ? (
-							"导入中…"
+							t("config.promptStoreImporting")
 						) : (
-							<><Download size={14} strokeWidth={1.8} /> 导入为 Skill</>
+							<><Download size={14} strokeWidth={1.8} /> {t("config.skillStoreImportAs")}</>
 						)}
-					</button>
+					</Button>
 				</div>
 				<div className="prompt-store-preview">
 					<div className="prompt-store-preview-header">
-						<h3>{previewItem.title}</h3>
-						<div className="prompt-store-preview-meta">
-							<span>作者 <strong>{previewItem.author}</strong></span>
-							{previewItem.category && <span>分类 <strong>{previewItem.category}</strong></span>}
+					<h3>{previewItem.title}</h3>
+					<div className="prompt-store-preview-meta">
+						<span>{t("config.skillStoreAuthor")} <strong>{previewItem.author}</strong></span>
+						{previewItem.category && <span>{t("config.skillStoreCategory")} <strong>{previewItem.category}</strong></span>}
 						</div>
 						{previewItem.tags.length > 0 && (
 							<div className="prompt-store-tags">
@@ -119,18 +122,18 @@ export function SkillStoreTab(props: {
 						ref={searchInputRef}
 						type="text"
 						value={query}
-						onChange={(e) => setQuery(e.target.value)}
-						onKeyDown={handleKeyDown}
-						placeholder="搜索 prompt.chat 中的 Skill…"
+					onChange={(e) => setQuery(e.target.value)}
+					onKeyDown={handleKeyDown}
+					placeholder={t("config.skillStoreSearchPlaceholder")}
 						disabled={searching}
 					/>
-					<button
-						className="config-btn primary"
+					<Button
+						 variant="default"
 						onClick={() => void handleSearch(query)}
 						disabled={searching || !query.trim()}
 					>
-						{searching ? "搜索中…" : <Search size={14} strokeWidth={1.8} />}
-					</button>
+					{searching ? t("config.promptStoreSearching") : <Search size={14} strokeWidth={1.8} />}
+					</Button>
 				</div>
 				{!result && !searching && (
 					<div className="prompt-store-suggestions">
@@ -145,15 +148,15 @@ export function SkillStoreTab(props: {
 
 			{error && <div className="config-error">{error}</div>}
 			{/* toast 已改用 sonner */}
-			{searching && <div className="config-loading">搜索中…</div>}
+		{searching && <div className="config-loading">{t("config.promptStoreSearching")}</div>}
 
-			{result && !searching && result.count === 0 && (
-				<div className="config-empty">无搜索结果</div>
-			)}
+		{result && !searching && result.count === 0 && (
+			<div className="config-empty">{t("config.skillStoreNoResults")}</div>
+		)}
 
 			{result && result.count > 0 && (
 				<div className="prompt-store-results">
-					<small className="prompt-store-result-count">{result.count} results</small>
+				<small className="prompt-store-result-count">{t("config.skillStoreResultCount", { count: result.count })}</small>
 					{result.prompts.map((item) => (
 						<article
 							key={item.id}
@@ -179,13 +182,13 @@ export function SkillStoreTab(props: {
 								>
 									<ExternalLink size={14} strokeWidth={1.8} />
 								</button>
-								<button
-									className="config-btn primary small"
+								<Button
+									 variant="default" size="sm"
 									onClick={(e) => { e.stopPropagation(); void handleImport(item); }}
 									disabled={importingId === item.id}
 								>
-									{importingId === item.id ? "导入中…" : "导入"}
-								</button>
+							{importingId === item.id ? t("config.promptStoreImporting") : t("config.promptStoreImport")}
+								</Button>
 							</div>
 						</article>
 					))}

@@ -3,7 +3,10 @@ import type { MouseEvent } from "react";
 import { Check, Eye, EyeOff, ChevronDown } from "lucide-react";
 import { t } from "../i18n";
 import { writeClipboard } from "../utils/clipboard";
-import { PROVIDER_API_OPTIONS, API_TYPE_LABELS, API_TYPE_DESCRIPTIONS, API_TYPE_DESCRIPTIONS_EN } from "./providerHeaders";
+import { PROVIDER_API_OPTIONS, API_TYPE_LABELS, getApiTypeDescription } from "./providerHeaders";
+import { Button } from "../components/ui-shadcn/button";
+import { Input } from "../components/ui-shadcn/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui-shadcn/select";
 
 // ── 复制到剪贴板工具 ──────────────────────────────────
 
@@ -67,47 +70,25 @@ export function ConfigSelect(props: {
 	onChange: (value: string) => void;
 	placeholder?: string;
 }) {
-	const [open, setOpen] = useState(false);
-	const selected = props.options.find((option) => option.value === props.value);
+	// #115：手写 combobox（focus/mouseDown 时序 hack）整体删除，换 shadcn Select。
+	// Radix 不允许空字符串 value，用哨兵值映射回 ""。
+	const SENTINEL = "__none__";
 	return (
-		<div
-			className="config-combobox config-select"
-			onBlur={() => {
-				// 和 API 类型 combobox 保持一致：先让选项 mouseDown 完成，再关闭菜单。
-				window.setTimeout(() => setOpen(false), 80);
-			}}
+		<Select
+			value={props.value === "" ? SENTINEL : props.value}
+			onValueChange={(value) => props.onChange(value === SENTINEL ? "" : value)}
 		>
-			<button
-				type="button"
-				className="config-select-trigger"
-				onFocus={() => setOpen(true)}
-				onMouseDown={(e) => {
-					e.preventDefault();
-					setOpen((current) => !current);
-				}}
-			>
-				<span>{selected?.label ?? props.placeholder ?? props.value}</span>
-				<ChevronDown size={14} />
-			</button>
-			{open && (
-				<div className="config-combobox-menu">
-					{props.options.map((option) => (
-						<button
-							key={option.value || "none"}
-							type="button"
-							className={option.value === props.value ? "active" : ""}
-							onMouseDown={(e) => {
-								e.preventDefault();
-								props.onChange(option.value);
-								setOpen(false);
-							}}
-						>
-							{option.label}
-						</button>
-					))}
-				</div>
-			)}
-		</div>
+			<SelectTrigger className="config-select-trigger">
+				<SelectValue placeholder={props.placeholder ?? props.options.find((o) => o.value === props.value)?.label ?? props.value} />
+			</SelectTrigger>
+			<SelectContent>
+				{props.options.map((option) => (
+					<SelectItem key={option.value || "none"} value={option.value === "" ? SENTINEL : option.value}>
+						{option.label}
+					</SelectItem>
+				))}
+			</SelectContent>
+		</Select>
 	);
 }
 
@@ -261,7 +242,7 @@ export function ApiTypeInput(props: {
 							}}
 						>
 							<span className="config-api-type-label">{API_TYPE_LABELS[option] || option}</span>
-							<small className="config-api-type-desc">{API_TYPE_DESCRIPTIONS[option] || ""}</small>
+							<small className="config-api-type-desc">{getApiTypeDescription(option)}</small>
 						</button>
 					))}
 				</div>
@@ -269,5 +250,4 @@ export function ApiTypeInput(props: {
 		</div>
 	);
 }
-
 

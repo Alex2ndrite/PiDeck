@@ -4,146 +4,7 @@
 
 All notable changes to PiDeck are documented here.
 
-## v0.6.7 - 2026-07-29
-
-### 🚀 New Features
-
-- **Compact titlebar + Codex-style right sidebar** — Slimmer top chrome and
-  right-drawer tabs restyled for denser multi-panel workflows (Files / Git /
-  Browser / ScratchPad).
-- **File editor nested under Files tab** — Editor tabs live inside the Files
-  drawer instead of a separate surface; drawer chrome is tighter and more
-  consistent with Git/Browser panels.
-- **File tree drag / drop / move** — Drag files into the tree, paste files, and
-  drag-to-move entries inside the project file panel.
-- **@ file suggestions with directory tree & search** — File picker shows a
-  browsable tree plus filter, making deep paths easier to reference.
-- **Composer file path refs via paste / drop** — Drop or paste files into the
-  input to insert path chips; spaced paths are preserved correctly.
-- **Text links open in built-in editor** — Clicking text-file links opens the
-  in-app editor; binary files still open externally.
-- **Batch Ask Tab UI** — `ask_question` batch mode renders all questions as tabs
-  with an optional Submit/review step before returning answers.
-- **Ctrl/Cmd+click markdown links open system browser** — Modifier-click leaves
-  the in-app browser and hands the URL to the OS default browser.
-- **Tailwind CSS v4 + shadcn + sonner toasts** — Renderer styling stack upgraded;
-  toast notifications migrate to `sonner` with theme-aware presentation.
-- **Sidebar project expand/collapse persistence** — Project fold state is
-  remembered across app restarts.
-- **Session message Fork** — Fork a new session from a user message (pi `/fork`);
-  hidden while the agent is busy; fills the original prompt into the composer
-  for edit-and-resend.
-- **Boot splash official pi assembly animation** — Cold-start overlay loops the
-  same pixel tetromino logo animation as the sidebar (larger/faster); PiDeck
-  title and subtitle use Plantin brand serif to match the empty-state tone.
-- **Single-instance window reuse** — On by default: opening PiDeck again focuses
-  the existing window (including tray-hidden) instead of spawning another
-  process; can be disabled in Common settings (restart required).
-- **Startup window size presets** — Appearance setting for maximized / fullscreen
-  / large-medium-compact windows; default maximized (historical behavior that
-  keeps the taskbar visible).
-- **Compaction settings UI** — Config → Settings splits `compaction` into Auto
-  compact / Reserve reply tokens / Keep recent tokens instead of raw JSON.
-- **LaTeX / math fence rendering** — Session `latex`/`tex`/`math` code fences
-  render with KaTeX.
-- **Electron Chromium sandbox toggle** — Dev setting to enable renderer sandbox
-  (off by default for Windows AV/GPU compatibility); requires app restart.
-
-### ✨ UX Improvements
-
-- **Plan mode flow polish** — End-of-plan three-card layout, revise back button,
-  and clearer read-only skip behavior.
-- **Composer widgets & extension UI** — Extension widgets stay above the
-  composer, height is more compact, and built-in extension conflict handling is
-  friendlier (including todo labels).
-- **Context compact entry** — Composer compact control only shows when context
-  usage is above 30%; calmer styling, and friendly toasts for session-too-small
-  / nothing-to-compact errors.
-- **UI color neutralization** — Reduce saturated green accents; refine composer
-  bar and status indicator contrast.
-- **Worktree sidebar hierarchy** — Clearer nesting, collapsible worktree
-  sessions, lighter fills, and less visual noise on active rows.
-- **Extension install / uninstall UX** — Clearer progress and reliable local file
-  cleanup on uninstall.
-- **RPC / agent launch options** — Optional `--no-themes` / `--offline` /
-  `--no-extensions` / `--no-skills`, version cache warm-up on app start, and
-  dev settings to disable extensions/skills for faster or safer launches.
-- **Docs & community** — Docs-site screenshots updated to the latest UI; expanded
-  English home and bilingual nav; README Star History chart auto-updates via CI;
-  tutorial video production workflow added for maintainers.
-
-### 🐛 Bug Fixes
-
-- **Composer history ↑/↓ drops half-typed draft** — ArrowUp now snapshots the
-  live draft from `livePromptByAgentRef` instead of a stale rendered prompt, so
-  ArrowDown restores the full in-progress text.
-- **Agent start crash-safety / diagnostics (esp. macOS arm)** — Attach pi process
-  lifecycle listeners before `spawn`, keep a default `error` sink so ENOENT no
-  longer becomes an uncaught main-process crash, surface structured startup
-  failure cards, and log platform/arch + child-process-gone details for Issue
-  triage. Also expand macOS pi search paths (`/opt/homebrew/bin`, etc.) for
-  Dock-launched PATH gaps.
-- **Pet stuck on review/failed/jumping** (#107) — Transition recovery timers are
-  no longer cleared by cooldown/overlap early-returns, so review/failed return
-  to idle on schedule.
-- **Stop abort afterglow** — Seal stream generations on abort so delayed
-  thinking/text no longer mix into the next reply; stop feedback is toast-only.
-- **Disabled built-in extensions still loaded** — Remove/conflict yield now deletes
-  user-dir built-in extension files and purges residuals so third-party tools no
-  longer clash and break RPC.
-- **Manual compact button & state** — Restore composer compact control; send
-  `customInstructions` on RPC; clear `isCompacting` and return to idle after
-  finish; surface concrete failure reasons in toasts.
-- **System titlebar missing sidebar toggles** (#104) — Left/right sidebar
-  switches remain available when using the OS native title bar.
-- **Paste image as attachment + spaced path refs** — Image paste attaches as
-  image content; file path chips keep spaces instead of breaking mid-path.
-- **Terminal dock race / unhandled rejection** — Harden dock against pending
-  agent transitions and avoid unhandled promise rejections on close/switch.
-- **Terminal dock owner isolation** — Dock state is keyed by owner so project
-  terminals no longer leak across agents/sessions.
-- **Clipboard “Document is not focused”** — All copy paths go through Electron
-  main-process `clipboard.writeText` via preload, with graceful fallbacks.
-- **Local file links + todo widget fonts** (#103) — Local file links are
-  clickable again; todo widgets honor the configured interface font.
-- **Incomplete tool/thinking turns merge into next reply** — Thinking-only
-  assistant turns are preserved; normal incomplete runs no longer get merged
-  into the following answer.
-- **Resend safety** — Resend only truncates descendants of the current user
-  turn and refuses unsafe non-last-user roots.
-- **Select cancel no longer picks first option** — Cancel returns `value: null`
-  instead of a cancelled sentinel that could be misread as a selection.
-- **Agent `get_state` timeout auto-retry** — Startup state fetch retries on
-  timeout instead of leaving the agent stuck.
-- **Composer placeholder & prompt history** — Clearing the input restores the
-  placeholder; prompt history persists across restart.
-- **Manual release with empty tag** — Workflow_dispatch without a tag publishes
-  a formal release instead of a draft-only artifact.
-- **macOS test build OOM** — CI mac build uses `build:fast` and a higher Node
-  heap limit.
-- **package-lock dependency sync** — Restore missing lockfile entries after
-  merge/tooling drift.
-
-### 🙏 Acknowledgements
-
-Thanks to all contributors for their PRs, issues, and feedback in this release:
-
-- **@1900EasonJin** — System titlebar sidebar toggles (#104); pet stuck-state fix (#107)
-- **@zzq168281-coder** — Interactive local file links & todo font honor (#103)
-- **@me9rez** — TypeScript incremental build output hygiene (#97)
-- **@weishiair** — Delete residual built-in extension files on disable to stop tool conflicts/RPC failures
-- **@clancyclaw** — Preserve RichInput newlines for multi-line drafts
-
-Special thanks to **微时佬友** for providing the Grok model service used in our
-community testing environment 🎉
-
-> 💬 **Join our QQ group for feedback & discussion: 1026218644**
-
-Thanks to all users who submitted suggestions and bug reports for PiDeck! 🙏
-
----
-
-## v0.6.6 - 2026-07-25
+## v0.6.6 - 2026-07-24
 
 ### 🚀 New Features
 
@@ -200,14 +61,6 @@ Thanks to all users who submitted suggestions and bug reports for PiDeck! 🙏
   path handling adapted for WSL.
 - **WSL environment support** — Session scanning, file operations, and path
   handling adapted for WSL (via @Lopution PR #84).
-
-### 🔧 Terminal & UX
-
-- **Terminal shell selector** — Detect available shells (pwsh, Windows PowerShell,
-  cmd, Git Bash, WSL) on Windows. Dropdown menu next to the + button lets you pick
-  which shell to open.
-- **Project-level terminal** — Terminal is now tied to the project, not the agent.
-  It stays open when switching agents or when no agent is running.
 
 ### ✨ UX Improvements
 
@@ -277,25 +130,6 @@ Thanks to all users who submitted suggestions and bug reports for PiDeck! 🙏
   hide background card when dialog open, filter out Pi's default ✎ option.
 - **Message CPA_DONE marker cleanup** — Strips `CPA_DONE` from message end.
 - **User message edit** — Edited text backfilled to composer for re-sending.
-- **Feishu link "Cannot find package @larksuiteoapi/node-sdk" after packaging** —
-  The `afterPack` cleanup script was deleting the CJS build (`lib/`) assuming
-  `await import()` would use the ESM entry, but the package has no `exports` field
-  so Node.js resolves via `main` → `./lib/index.js`. Removed the deletion to fix
-  runtime resolution.
-
-### 🐛 Terminal Fixes
-
-- **Terminal always opened pwsh.exe** — `spawnShell` computed the priority-sorted
-  candidate list but was iterating over the original unsorted array, so the
-  preferred shell was always ignored.
-- **Shell dropdown clipped by overflow:hidden** — `.terminal-tabs` had
-  `overflow: hidden` which clipped the absolutely-positioned shell menu above it.
-- **Object destroyed crash on terminal data after window close** — The emit
-  callback lacked a guard against destroyed `webContents`.
-- **Stop button not cancelling on first click** — Added `recentlyAborted` set to
-  discard delayed pi events after abort.
-- **429 error not shown in chat** — Auto-retry failure now sets agent status to
-  error and appends a visible error message.
 
 ### 🙏 Acknowledgements
 
@@ -314,10 +148,6 @@ Thanks to all contributors for their PRs, issues, and feedback:
 
 Special thanks to **微时佬友** for providing the Grok model service used in our
 community testing environment 🎉
-
-> 💬 **Join our QQ group for feedback & discussion: 1026218644**
-
-Thanks to all users who submitted suggestions and bug reports for PiDeck! 🙏
 
 ---
 

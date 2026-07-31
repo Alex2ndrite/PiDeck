@@ -32,7 +32,7 @@ test("treats silent commands with non-zero empty output as done", () => {
 	assert.equal(message.text, "✓ code .");
 	assert.equal(message.meta.status, "done");
 	assert.equal(message.meta.isError, false);
-	assert.match(message.meta.detailText, /退出码：1/);
+	assert.match(message.meta.detailText, /Exit code: 1/);
 });
 
 test("keeps normal non-zero commands as errors", () => {

@@ -3,7 +3,32 @@ type BashToolMessageInput = {
 	output: string;
 	exitCode: number;
 	excludeFromContext: boolean;
+	translate?: (key: BashCopyKey, params?: Record<string, string | number>) => string;
 };
+
+type BashCopyKey =
+	| "mainTool.command"
+	| "mainTool.exitCode"
+	| "mainTool.output"
+	| "mainTool.noOutput";
+
+const defaultBashCopy: Record<BashCopyKey, string> = {
+	"mainTool.command": "Command: {command}",
+	"mainTool.exitCode": "Exit code: {exitCode}",
+	"mainTool.output": "Output:\n{output}",
+	"mainTool.noOutput": "(no output)",
+};
+
+function bashCopy(
+	input: BashToolMessageInput,
+	key: BashCopyKey,
+	params: Record<string, string | number> = {},
+): string {
+	const template = input.translate?.(key, params) ?? defaultBashCopy[key];
+	return template.replace(/\{([A-Za-z0-9_]+)\}/g, (match, name) => (
+		Object.prototype.hasOwnProperty.call(params, name) ? String(params[name]) : match
+	));
+}
 
 export function formatBashToolMessage(input: BashToolMessageInput) {
 	const isSilentLauncherResult =
@@ -17,9 +42,11 @@ export function formatBashToolMessage(input: BashToolMessageInput) {
 	const isError = input.exitCode !== 0 && !isSilentLauncherResult;
 	const statusIcon = isError ? "✗" : "✓";
 	const detailSections = [
-		`命令：${input.command}`,
-		`退出码：${input.exitCode}`,
-		input.output ? `输出：\n${input.output}` : "(无输出)",
+		bashCopy(input, "mainTool.command", { command: input.command }),
+		bashCopy(input, "mainTool.exitCode", { exitCode: input.exitCode }),
+		input.output
+			? bashCopy(input, "mainTool.output", { output: input.output })
+			: bashCopy(input, "mainTool.noOutput"),
 	].filter(Boolean);
 
 	return {

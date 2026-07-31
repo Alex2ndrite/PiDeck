@@ -19,8 +19,14 @@ import type {
 	PiSkillSummary,
 } from "../../shared/types";
 import type { WslEnvironment } from "../wsl/WslPaths";
+import type { MainProcessTranslationKey } from "../../shared/i18n/mainProcessCopy";
 
 const SKILL_FILE = "SKILL.md";
+
+type SkillCopy = (
+	key: MainProcessTranslationKey,
+	params?: Record<string, string | number>,
+) => string;
 
 /**
  * 管理 pi 全局 Skill 目录。
@@ -29,7 +35,10 @@ const SKILL_FILE = "SKILL.md";
 export class SkillManager {
 	private locations: PiSkillLocation[];
 
-	constructor(home?: string) {
+	constructor(
+		home?: string,
+		private readonly translate: SkillCopy = () => "Skill operation failed.",
+	) {
 		this.locations = this.buildLocations(home ?? homedir());
 	}
 
@@ -75,11 +84,11 @@ export class SkillManager {
 		const location = this.requireLocation(input.locationId);
 		const name = this.normalizeSkillName(input.name);
 		const description = input.description.trim();
-		if (!name) throw new Error("Skill 名称不能为空，且至少包含一个字母或数字");
-		if (!description) throw new Error("Skill 描述不能为空");
+		if (!name) throw new Error(this.translate("mainSkill.nameRequiredDetailed"));
+		if (!description) throw new Error(this.translate("mainSkill.descriptionRequired"));
 
 		const skillDir = join(location.path, name);
-		if (existsSync(skillDir)) throw new Error(`Skill 已存在：${name}`);
+		if (existsSync(skillDir)) throw new Error(this.translate("mainSkill.alreadyExists", { name }));
 		await mkdir(skillDir, { recursive: true });
 		const skillPath = join(skillDir, SKILL_FILE);
 		await writeFile(
@@ -190,7 +199,7 @@ export class SkillManager {
 		const warnings = this.validateSkill(name, description);
 		return {
 			id: `${location.id}:${skillPath}`,
-			name: name || dirname(skillPath).split(/[\\/]/).pop() || "未命名 Skill",
+			name: name || dirname(skillPath).split(/[\\/]/).pop() || this.translate("mainSkill.unnamed"),
 			description,
 			path: skillPath,
 			dir: type === "directory" ? dirname(skillPath) : dirname(skillPath),
@@ -234,13 +243,13 @@ export class SkillManager {
 
 	private validateSkill(name: string, description: string) {
 		const warnings: string[] = [];
-		if (!name) warnings.push("缺少 name");
+		if (!name) warnings.push(this.translate("mainSkill.warningNameRequired"));
 		if (name && !/^[\p{L}\p{N}]+(?:-[\p{L}\p{N}]+)*$/u.test(name)) {
-			warnings.push("name 只能包含字母（含中文等）、数字和单个连字符");
+			warnings.push(this.translate("mainSkill.warningNameCharacters"));
 		}
-		if (name.length > 64) warnings.push("name 超过 64 个字符");
-		if (!description) warnings.push("缺少 description，pi 不会加载该 skill");
-		if (description.length > 1024) warnings.push("description 超过 1024 个字符");
+		if (name.length > 64) warnings.push(this.translate("mainSkill.warningNameTooLong"));
+		if (!description) warnings.push(this.translate("mainSkill.warningDescriptionRequired"));
+		if (description.length > 1024) warnings.push(this.translate("mainSkill.warningDescriptionTooLong"));
 		return warnings;
 	}
 
@@ -248,15 +257,15 @@ export class SkillManager {
 	async rename(skillPath: string, newName: string): Promise<PiSkillSummary> {
 		const skill = await this.findByPath(skillPath);
 		const normalizedNew = this.normalizeSkillName(newName);
-		if (!normalizedNew) throw new Error("Skill 名称不能为空");
+		if (!normalizedNew) throw new Error(this.translate("mainSkill.nameRequired"));
 
 		const displayName = newName.trim();
 		const oldDir = skill.dir;
 		const parentDir = skill.dir.split(/[\\/]/).slice(0, -1).join("\\");
 		const newDir = join(parentDir, normalizedNew);
 
-		if (oldDir === newDir) throw new Error("新旧名称相同");
-		if (existsSync(newDir)) throw new Error(`Skill 已存在：${normalizedNew}`);
+		if (oldDir === newDir) throw new Error(this.translate("mainSkill.sameName"));
+		if (existsSync(newDir)) throw new Error(this.translate("mainSkill.alreadyExists", { name: normalizedNew }));
 
 		// 更新 SKILL.md 中的 name frontmatter
 		const raw = await readFile(skill.path, "utf8");
@@ -296,14 +305,14 @@ export class SkillManager {
 
 	private requireLocation(id: PiSkillLocation["id"]) {
 		const location = this.locations.find((item) => item.id === id);
-		if (!location) throw new Error(`未知 Skill 位置：${id}`);
+		if (!location) throw new Error(this.translate("mainSkill.unknownLocation", { id }));
 		return location;
 	}
 
 	private async findByPath(skillPath: string) {
 		const { skills } = await this.list();
 		const skill = skills.find((item) => item.path === skillPath);
-		if (!skill) throw new Error(`Skill 不存在：${skillPath}`);
+		if (!skill) throw new Error(this.translate("mainSkill.notFound"));
 		return skill;
 	}
 }

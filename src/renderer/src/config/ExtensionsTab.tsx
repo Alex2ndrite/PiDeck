@@ -1,7 +1,9 @@
+import { Button } from "../components/ui-shadcn/button";
 import { useEffect, useState } from "react";
 import { Copy, Download, RotateCcw, Trash2 } from "lucide-react";
 import type { PiCliUpdateResult, PiExtensionListResult, PiExtensionSummary, PiPackageInfo } from "../../../shared/types";
 import { t } from "../i18n";
+import type { TranslationKey } from "../i18n/rendererCopy.zh-CN";
 import { showNotice } from "../utils/notice";
 import { writeClipboard } from "../utils/clipboard";
 
@@ -29,11 +31,12 @@ const PIDEK_BUILTIN_SOURCE: Record<string, string> = {
 	"pi-deck-nul-redirect-fix": "pi-deck-nul-redirect-fix.ts",
 };
 
-/** 预设推荐扩展包 */
-const RECOMMENDED_PACKAGES: PiPackageInfo[] = [
+/** 推荐扩展包：描述走 i18n（descriptionKey），不在组件里硬编码中英文案。 */
+type RecommendedPackage = Omit<PiPackageInfo, "description"> & { descriptionKey: TranslationKey };
+const RECOMMENDED_PACKAGES: RecommendedPackage[] = [
 	{
 		name: "pi-deck-todo",
-		description: "PiDeck 内置：TODO 列表扩展，支持在对话中添加和管理任务项，自动追踪完成状态并在会话间持久化。",
+		descriptionKey: "config.extRecommended.piDeckTodo",
 		installCmd: "npm:@earendil-works/pi-deck-todo",
 		tags: ["extension"],
 		downloads: "",
@@ -43,7 +46,7 @@ const RECOMMENDED_PACKAGES: PiPackageInfo[] = [
 	},
 	{
 		name: "pi-deck-plan-mode",
-		description: "PiDeck 内置：计划模式扩展，让 AI 在回复前首先生成执行计划，复杂任务一目了然。",
+		descriptionKey: "config.extRecommended.piDeckPlanMode",
 		installCmd: "npm:@earendil-works/pi-deck-plan-mode",
 		tags: ["extension"],
 		downloads: "",
@@ -53,7 +56,7 @@ const RECOMMENDED_PACKAGES: PiPackageInfo[] = [
 	},
 	{
 		name: "pi-deck-ask-question",
-		description: "PiDeck 内置：在对话中插入精心设计的问题卡片，引导 AI 给出更精准的回答。",
+		descriptionKey: "config.extRecommended.piDeckAskQuestion",
 		installCmd: "npm:@earendil-works/pi-deck-ask-question",
 		tags: ["extension"],
 		downloads: "",
@@ -63,7 +66,7 @@ const RECOMMENDED_PACKAGES: PiPackageInfo[] = [
 	},
 	{
 		name: "pi-deck-nul-redirect-fix",
-		description: "PiDeck 内置：修复 Windows 下 pi 重定向到 NUL 设备时可能产生的残留文件问题。",
+		descriptionKey: "config.extRecommended.piDeckNulRedirectFix",
 		installCmd: "npm:@earendil-works/pi-deck-nul-redirect-fix",
 		tags: ["extension"],
 		downloads: "",
@@ -73,7 +76,7 @@ const RECOMMENDED_PACKAGES: PiPackageInfo[] = [
 	},
 	{
 		name: "context-mode",
-		description: "MCP 插件，可节省 98% 的上下文窗口。沙箱代码执行、FTS5 知识库和意图驱动搜索。",
+		descriptionKey: "config.extRecommended.contextMode",
 		installCmd: "npm:context-mode",
 		tags: ["extension"],
 		downloads: "107K/mo",
@@ -83,7 +86,7 @@ const RECOMMENDED_PACKAGES: PiPackageInfo[] = [
 	},
 	{
 		name: "pi-web-access",
-		description: "网络搜索、URL 抓取、GitHub 仓库克隆、PDF 提取、YouTube 视频理解和本地视频分析。",
+		descriptionKey: "config.extRecommended.piWebAccess",
 		installCmd: "npm:pi-web-access",
 		tags: ["extension"],
 		downloads: "99K/mo",
@@ -93,7 +96,7 @@ const RECOMMENDED_PACKAGES: PiPackageInfo[] = [
 	},
 	{
 		name: "pi-mcp-adapter",
-		description: "MCP（Model Context Protocol）适配器扩展，让 Pi 可以连接任何 MCP 服务器。",
+		descriptionKey: "config.extRecommended.piMcpAdapter",
 		installCmd: "npm:pi-mcp-adapter",
 		tags: ["extension"],
 		downloads: "99K/mo",
@@ -103,7 +106,7 @@ const RECOMMENDED_PACKAGES: PiPackageInfo[] = [
 	},
 	{
 		name: "pi-subagents",
-		description: "任务委派扩展，支持链式、并行执行和 TUI 澄清。可将复杂任务拆解给多个子 Agent。",
+		descriptionKey: "config.extRecommended.piSubagents",
 		installCmd: "npm:pi-subagents",
 		tags: ["extension"],
 		downloads: "92K/mo",
@@ -154,7 +157,8 @@ export function ExtensionsTab(props: {
 			await getExtensionsApi().removeBuiltIn(extension.source);
 			props.onRefresh();
 		} catch (e) {
-			alert(t("config.installFailed") + ": " + (e instanceof Error ? e.message : String(e)));
+			console.error("[Extensions] Install/remove failed", e);
+			alert(t("config.installFailed"));
 		} finally {
 			setRemovingBuiltIn(null);
 		}
@@ -167,7 +171,8 @@ export function ExtensionsTab(props: {
 			await getExtensionsApi().restoreBuiltIn(extension.source);
 			props.onRefresh();
 		} catch (e) {
-			alert(t("config.installFailed") + ": " + (e instanceof Error ? e.message : String(e)));
+			console.error("[Extensions] Install/remove failed", e);
+			alert(t("config.installFailed"));
 		} finally {
 			setRestoringBuiltIn(null);
 		}
@@ -176,7 +181,7 @@ export function ExtensionsTab(props: {
 	const [updateResult, setUpdateResult] = useState<PiCliUpdateResult | null>(null);
 	const [showUpdateDialog, setShowUpdateDialog] = useState(false);
 
-	const handleInstall = async (pkg: PiPackageInfo) => {
+	const handleInstall = async (pkg: Pick<PiPackageInfo, "name" | "installCmd">) => {
 		setInstallingSources((current) => new Set(current).add(pkg.installCmd));
 		try {
 			// 对已移除的内置扩展，走恢复流程而非 npm 安装
@@ -188,7 +193,8 @@ export function ExtensionsTab(props: {
 			}
 			props.onRefresh();
 		} catch (e) {
-			alert(t("config.installFailed") + ": " + (e instanceof Error ? e.message : String(e)));
+			console.error("[Extensions] Install/remove failed", e);
+			alert(t("config.installFailed"));
 		} finally {
 			setInstallingSources((current) => {
 				const next = new Set(current);
@@ -206,7 +212,8 @@ export function ExtensionsTab(props: {
 			const result = await getExtensionsApi().update();
 			setUpdateResult(result);
 		} catch (e) {
-			alert(t("settings.extensionsUpdateFailed", { error: e instanceof Error ? e.message : String(e) }));
+			console.error("[Extensions] Update failed", e);
+			alert(t("settings.extensionsUpdateFailedGeneric"));
 		} finally {
 			setUpdating(null);
 		}
@@ -237,8 +244,8 @@ export function ExtensionsTab(props: {
 							{updateResult ? `${updateResult.command}\n${updateResult.output}` : t("settings.extensionsUpdating")}
 						</pre>
 						<div className="config-update-dialog-actions">
-							<button
-								className="config-btn primary"
+							<Button
+								 variant="default"
 								onClick={() => {
 									setShowUpdateDialog(false);
 									props.onRefresh();
@@ -246,7 +253,7 @@ export function ExtensionsTab(props: {
 								disabled={Boolean(updating)}
 							>
 								{t("common.close")}
-							</button>
+							</Button>
 						</div>
 					</div>
 				</div>
@@ -288,7 +295,7 @@ export function ExtensionsTab(props: {
 									{alreadyInstalled && <span className="config-im-connected-badge" style={{ marginLeft: 8 }}>{t("config.installed")}</span>}
 								</div>
 								<div className="extensions-recommended-desc">
-									{pkg.description}
+									{t(pkg.descriptionKey)}
 								</div>
 							</div>
 							<div className="extensions-recommended-action" onClick={(e) => e.stopPropagation()}>
@@ -340,12 +347,12 @@ export function ExtensionsTab(props: {
 						</small>
 					</div>
 					<div className="skills-toolbar-actions">
-						<button className="config-btn" onClick={handleUpdateExtensions} disabled={props.loading || Boolean(updating)}>
+						<Button  variant="outline" onClick={handleUpdateExtensions} disabled={props.loading || Boolean(updating)}>
 							{updating ? t("settings.updating") : t("settings.updateExtensionsAll")}
-						</button>
-						<button className="config-btn" onClick={props.onRefresh} disabled={props.loading}>
+						</Button>
+						<Button  variant="outline" onClick={props.onRefresh} disabled={props.loading}>
 							{t("common.refresh")}
-						</button>
+						</Button>
 					</div>
 				</div>
 				<div className="skills-list">

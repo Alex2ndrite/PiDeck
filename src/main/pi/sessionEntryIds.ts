@@ -140,8 +140,9 @@ export function assertResendRootEntry(
 		throw new Error("Resend root must be a user message entry");
 	}
 	const entryText = extractText(message.content);
-	// 图片消息桌面端可能显示为「[图片]」，与 JSONL 原文不完全一致时放宽
-	if (entryText !== expectedText && expectedText !== "[图片]") {
+	// Image-only messages use a localized UI placeholder that is not present in JSONL.
+	const isImagePlaceholder = expectedText === "[图片]" || expectedText === "[Image]";
+	if (entryText !== expectedText && !isImagePlaceholder) {
 		throw new Error(
 			`Resend root text mismatch: expected ${JSON.stringify(expectedText.slice(0, 80))}, got ${JSON.stringify(entryText.slice(0, 80))}`,
 		);

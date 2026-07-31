@@ -69,10 +69,8 @@ interface AskCtx {
 }
 
 /**
- * 批量 envelope 协议标记。
- * RPC 只支持串行 select/confirm/input/editor，无法一次弹多个 dialog。
- * 批量时用一次 input，title 放 JSON envelope；桌面端识别后渲染 Tab 问卷，
- * 最终把全部答案 JSON 字符串作为 value 回传，扩展再解析。
+ * RPC only supports one dialog at a time. Batch questions travel in an input
+ * envelope, which the desktop expands into its single composer-adjacent form.
  */
 export const BATCH_ASK_ENVELOPE_KEY = "__piDeckBatchAsk";
 
@@ -109,11 +107,10 @@ const AskQuestionParams = Type.Object({
 				"Multiple questions to ask in sequence (batch mode). When provided, the single-question fields below are ignored.",
 		}),
 	),
-	// 审阅模式：批量模式下全部回答后进入 Submit tab 汇总确认，防误提交
 	review: Type.Optional(
 		Type.Boolean({
 			description:
-				"When true and in batch mode, shows a Submit/review tab of all answers for user confirmation before submitting. Default false.",
+				"When true and in batch mode, shows a Submit/review tab of all answers for confirmation. Default false.",
 		}),
 	),
 	// 单问题模式（向后兼容）
@@ -202,7 +199,6 @@ function singleResult(q: NormalizedQuestion, a: Answer, cancelled: boolean) {
 			type: q.type,
 			answer: cancelled ? null : a.value,
 			answerLabel: a.label,
-			// 显式写 answered，避免桌面端把 undefined 当成「未回答」
 			answered,
 			options: q.options,
 			...(cancelled ? { cancelled: true } : {}),
@@ -249,52 +245,37 @@ async function askOne(q: NormalizedQuestion, ctx: AskCtx): Promise<Answer> {
 			// 循环：取消「自行输入」后回到选单，而非直接返回
 			while (true) {
 				const selected = await ctx.ui.select(q.question, labels);
-				// 用户点叉/取消：桌面端发 value:null 或 cancelled → selected 为 null/undefined。
-				// 绝不能 fallback 到 opts[0]，否则会「取消却答了第一项」。
 				if (selected == null || selected === "") {
 					return { id: q.id, type: q.type, value: null };
 				}
-				// 兼容桌面端回传显示文案 / value / OTHER_LABEL 三种形态，
-				// 避免「自行输入」因文案拼接差异匹配失败而落成取消。
 				const chosen =
-					opts.find((o) => optionDisplayText(o) === selected) ??
-					opts.find((o) => o.value === selected) ??
-					opts.find((o) => o.label === selected) ??
+					opts.find((option) => optionDisplayText(option) === selected) ??
+					opts.find((option) => option.value === selected) ??
+					opts.find((option) => option.label === selected) ??
 					(selected === OTHER_LABEL || selected === "__other__"
-						? opts.find((o) => o.isOther)
+						? opts.find((option) => option.isOther)
 						: undefined);
 				if (!chosen) {
-					// 未知返回值也当取消，避免误绑第一项
-					return { id: q.id, type: q.type, value: null };
+					// PiDeck's inline custom field returns text directly instead of opening
+					// a second RPC dialog. Preserve that answer when custom input is allowed.
+					return q.allowOther !== false
+						? { id: q.id, type: q.type, value: selected, label: selected, wasCustom: true }
+						: { id: q.id, type: q.type, value: null };
 				}
 				if (chosen.isOther) {
 					const custom = await ctx.ui.input(`${q.question}（自行输入）`, "");
 					if (custom?.trim()) {
 						return { id: q.id, type: q.type, value: custom.trim(), label: custom.trim(), wasCustom: true };
 					}
-					// 取消或空内容 → 继续循环，重新展示选单
 					continue;
 				}
 				return { id: q.id, type: q.type, value: chosen.value, label: chosen.label, wasCustom: false };
 			}
 		}
 		case "confirm": {
-			// pi RPC 的 ctx.ui.confirm：cancelled 与缺省都解析为 false，和点「否」无法区分。
-			// 因此 confirm 改走 select（是/否）；点叉发 value:null → selected 为 null/undefined，
-			// 与 select 取消路径一致，不会误答成 false。
-			const yesLabel = "是";
-			const noLabel = "否";
-			const selected = await ctx.ui.select(q.question, [yesLabel, noLabel]);
-			if (selected == null || selected === "") {
-				return { id: q.id, type: q.type, value: null };
-			}
-			if (selected === yesLabel) {
-				return { id: q.id, type: q.type, value: true, label: yesLabel };
-			}
-			if (selected === noLabel) {
-				return { id: q.id, type: q.type, value: false, label: noLabel };
-			}
-			// 未知回传当取消，避免误绑
+			const selected = await ctx.ui.select(q.question, ["是", "否"]);
+			if (selected === "是") return { id: q.id, type: q.type, value: true, label: "是" };
+			if (selected === "否") return { id: q.id, type: q.type, value: false, label: "否" };
 			return { id: q.id, type: q.type, value: null };
 		}
 		case "editor": {
@@ -309,37 +290,26 @@ async function askOne(q: NormalizedQuestion, ctx: AskCtx): Promise<Answer> {
 	}
 }
 
-/**
- * 批量：一次 envelope 交给桌面端 Tab UI。
- * 回传 value 为 JSON：{ cancelled?: true, answers: Answer[] }
- * 解析失败或用户取消 → cancelled。
- */
+/** Submit a complete batch through one RPC dialog so desktop can render all tabs at once. */
 async function askBatch(
 	questions: NormalizedQuestion[],
 	review: boolean,
 	ctx: AskCtx,
 ): Promise<{ answers: Answer[]; cancelled: boolean }> {
-	// title 放 envelope；placeholder 给桌面端兜底文案（非 JSON 客户端会当普通 input）
 	const envelope = JSON.stringify({
 		[BATCH_ASK_ENVELOPE_KEY]: 1,
-		review: review === true,
+		review,
 		questions,
 	});
 	const raw = await ctx.ui.input(envelope, "__piDeckBatchAsk__");
-	if (typeof raw !== "string" || !raw.trim()) {
-		return { answers: [], cancelled: true };
-	}
+	if (typeof raw !== "string" || !raw.trim()) return { answers: [], cancelled: true };
 	try {
-		const parsed = JSON.parse(raw) as {
-			cancelled?: boolean;
-			answers?: Answer[];
-		};
-		if (parsed.cancelled) return { answers: parsed.answers ?? [], cancelled: true };
+		const parsed = JSON.parse(raw) as { cancelled?: boolean; answers?: Answer[] };
 		const answers = Array.isArray(parsed.answers) ? parsed.answers : [];
-		// 至少要有与问题等量的有效答案，否则视为取消/半完成
 		const complete =
+			!parsed.cancelled &&
 			answers.length >= questions.length &&
-			answers.every((a) => a && a.value !== null && a.value !== undefined);
+			answers.every((answer) => answer?.value !== null && answer?.value !== undefined);
 		return { answers, cancelled: !complete };
 	} catch {
 		return { answers: [], cancelled: true };
@@ -355,7 +325,7 @@ export default function (pi: ExtensionAPI) {
 			"The tool blocks until the user responds through the desktop UI.",
 			"Single question: use type/question/options/placeholder/prefill.",
 			"Multiple questions: use questions:[{id,type,question,options,allowOther,...}] to ask all at once in a tabbed batch UI.",
-			"For batch mode, set review:true to require a Submit/review tab before final submit (prevents accidental submit).",
+			"For batch mode, set review:true to require a Submit/review tab before final submit.",
 		].join(" "),
 		promptSnippet: "Ask the user a question (or a batch of questions) and wait for responses",
 		promptGuidelines: [
@@ -365,7 +335,7 @@ export default function (pi: ExtensionAPI) {
 			"Use type:input for short free-text responses, and type:editor for multi-line content like code or long explanations.",
 			"For multiple related questions, pass a questions array instead of calling the tool repeatedly — desktop shows a tabbed batch UI and returns all answers at once.",
 			"Set allowOther:false on a select question to forbid custom input (default true).",
-			"For batch questions, set review:true to force a Submit review tab so the user confirms all answers before submitting.",
+			"For batch questions, set review:true to force a Submit/review tab so the user confirms all answers before submitting.",
 		],
 		parameters: AskQuestionParams,
 
@@ -409,7 +379,6 @@ export default function (pi: ExtensionAPI) {
 				}
 			}
 
-			// 批量：一次 envelope → 桌面 Tab UI（含可选 Submit 审阅）
 			if (isBatch) {
 				try {
 					const { answers, cancelled } = await askBatch(questions, record.review === true, ctx);
@@ -419,11 +388,8 @@ export default function (pi: ExtensionAPI) {
 				}
 			}
 
-			// 单问题：保持原有 select/confirm/input/editor 串行协议
 			try {
 				const answer = await askOne(questions[0], ctx);
-				// select/confirm 点叉 → value:null；input/editor 取消 → undefined。
-				// 必须标 cancelled，否则 LLM 会把空答案当有效回复（confirm 更不能把取消当 false）。
 				const cancelled = answer.value === null || answer.value === undefined;
 				return singleResult(questions[0], answer, cancelled);
 			} catch {

@@ -11,6 +11,13 @@ import { join } from "node:path";
 import { app } from "electron";
 import type { FeishuBotConfig } from "../../shared/types";
 
+let defaultBotName = "Feishu bot";
+
+export function setFeishuConfigDefaultBotName(name: string): void {
+	const normalized = name.trim();
+	if (normalized) defaultBotName = normalized;
+}
+
 // ===== 配置文件路径 =====
 
 function getConfigDir(): string {
@@ -54,7 +61,7 @@ function readConfig(): FeishuMultiBotConfig {
 				bots: [
 					{
 						id: parsed.id || randomUUID(),
-						name: parsed.name || "默认机器人",
+						name: parsed.name || defaultBotName,
 						enabled: parsed.enabled !== false,
 						appId: parsed.appId || "",
 						appSecret: parsed.appSecret || "",
@@ -201,7 +208,7 @@ export function setPersistentChatId(sessionPath: string, chatId: string): void {
 // ===== 会话-Bot 分配持久化 =====
 
 /**
- * 为每个 Agent 分配一个指定的飞书 Bot。
+ * 为每个稳定 Session 分配一个指定的飞书 Bot。
  * 如果未分配，默认使用连接中的 Bot。
  */
 const SESSION_BOT_MAP_PATH = join(getConfigDir(), "feishu-session-bot.json");
@@ -219,19 +226,19 @@ function writeSessionBotMap(map: Record<string, string>): void {
 	writeFileSync(SESSION_BOT_MAP_PATH, JSON.stringify(map, null, 2), "utf-8");
 }
 
-/** 获取某个 Agent 指定的 Bot ID，如果未指定返回 undefined */
-export function getSessionBotId(agentId: string): string | undefined {
+/** 获取某个稳定 Session 指定的 Bot ID，如果未指定返回 undefined。 */
+export function getSessionBotId(sessionId: string): string | undefined {
 	const map = readSessionBotMap();
-	return map[agentId];
+	return map[sessionId];
 }
 
-/** 设置/清除某个 Agent 使用的 Bot ID。传 undefined 或空字符串清除分配。 */
-export function setSessionBotId(agentId: string, botId: string | undefined): void {
+/** 设置/清除某个稳定 Session 使用的 Bot ID。传 undefined 或空字符串清除分配。 */
+export function setSessionBotId(sessionId: string, botId: string | undefined): void {
 	const map = readSessionBotMap();
 	if (botId) {
-		map[agentId] = botId;
+		map[sessionId] = botId;
 	} else {
-		delete map[agentId];
+		delete map[sessionId];
 	}
 	writeSessionBotMap(map);
 }
@@ -243,6 +250,8 @@ export type FeishuChatBindingPersist = {
 	botId: string;
 	userId: string;
 	sessionId: string;
+	/** Current AgentManager runtime handle (optional for pre-agentId persisted data). */
+	agentId?: string;
 	sessionPath?: string;
 	workspaceId: string;
 	channelId?: string;

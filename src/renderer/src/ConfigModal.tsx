@@ -1,3 +1,6 @@
+import { Button } from "./components/ui-shadcn/button";
+import { Modal } from "./components/ui/Modal";
+import { ConfirmDialog } from "./components/ui-shadcn/ConfirmDialog";
 import { showNotice } from "./utils/notice";
 import { Component, useState, useEffect, useCallback, type ReactNode } from "react";
 import type { PiDesktopApi } from "../../preload";
@@ -103,8 +106,8 @@ function ConfigDiagnosticCard(props: {
 			</div>
 			{diagnostic.snippet && <pre>{diagnostic.snippet}</pre>}
 			<div className="config-diagnostic-actions">
-				<button className="config-btn primary" onClick={props.onOpenRaw}>{t("config.openRawFile")}</button>
-				<button className="config-btn" onClick={props.onOpenDocs}>{t("config.openOfficialDocs")}</button>
+				<Button  variant="default" onClick={props.onOpenRaw}>{t("config.openRawFile")}</Button>
+				<Button  variant="outline" onClick={props.onOpenDocs}>{t("config.openOfficialDocs")}</Button>
 			</div>
 		</div>
 	);
@@ -135,17 +138,10 @@ class ConfigModalErrorBoundary extends Component<
 	override render() {
 		if (!this.state.error) return this.props.children;
 		if (!this.props.open) return null;
+		// #115：错误兜底同样走 shadcn Modal 外壳
 		return (
-			<div className="modal-backdrop" onClick={this.props.onClose}>
-				<div className="config-modal" onClick={(e) => e.stopPropagation()}>
-					<div className="modal-header">
-						<strong>{t("config.loadFailed")}</strong>
-						<CloseIconButton
-							label={t("common.close")}
-							onClick={this.props.onClose}
-						/>
-					</div>
-					<div className="config-content">
+			<Modal open={this.props.open} onClose={this.props.onClose} title={t("config.loadFailed")} contentClassName="config-modal">
+				<div className="config-content">
 						<div className="config-diagnostic-card">
 							<div>
 								<strong>{t("config.renderCrashed")}</strong>
@@ -161,8 +157,7 @@ class ConfigModalErrorBoundary extends Component<
 							<pre>{this.state.error.stack ?? this.state.error.message}</pre>
 						</div>
 					</div>
-				</div>
-			</div>
+			</Modal>
 		);
 	}
 }
@@ -454,48 +449,6 @@ function ConfigModalContent(props: ConfigModalProps) {
 			/Error invoking remote method '[^']+':\s*(?:Error:\s*)?([\s\S]+)$/i,
 		);
 		return (matched?.[1] ?? raw).trim();
-	};
-
-	/**
-	 * 模型配置保存后，通知所有运行中的 Agent 尝试刷新模型配置。
-	 *
-	 * 当前仅尝试 reload_config RPC（策略 1），pi 0.80.10 尚未支持此命令，
-	 * 因此实际为 no-op。进程重启方案（策略 2）已注释，原因：
-	 *   - 运行中重启会打断用户对话/工具执行
-	 *   - 涉及 exit 事件竞态、模型恢复等复杂边界
-	 *
-	 * pi 合并 https://github.com/earendil-works/pi/issues/6890 后自动生效。
-	 */
-	const refreshRunningAgents = async () => {
-		try {
-			const agents = await api.agents.list();
-			// 只刷新状态为 running 或 idle 的活跃 Agent（排除 closed/error/starting）
-			const activeAgents = agents.filter(
-				(agent) => agent.status === "running" || agent.status === "idle",
-			);
-			if (activeAgents.length === 0) return;
-
-			let refreshed = 0;
-			let failed = 0;
-			for (const agent of activeAgents) {
-				try {
-					await api.agents.refreshModels(agent.id);
-					refreshed++;
-				} catch {
-					failed++;
-				}
-			}
-
-			// pi 官方尚未支持 reload_config RPC，刷新实际为 no-op，先注释提示避免误导
-			// if (refreshed > 0 && failed === 0) {
-			// 	showToast(t("config.modelsRefreshed", { count: refreshed }));
-			// } else if (refreshed > 0) {
-			// 	showToast(t("config.modelsRefreshedPartial", { refreshed, failed }));
-			// }
-		} catch {
-			// 获取 agent 列表失败时静默忽略，模型配置已保存，下次启动 agent 生效
-		}
-
 	};
 
 	const saveAndReload = async (
@@ -1333,7 +1286,7 @@ function ConfigModalContent(props: ConfigModalProps) {
 			return;
 		}
 		setUninstallExtensionConfirm(null);
-		// 立刻进入卸载态以触发卡片退场动画，同时发起真实卸载；两者并行，避免“删完才闪一下”。
+		// 立刻进入卸载态以触发卡片退场动画，同时发起真实卸载；两者并行，避免"删完才闪一下"。
 		setUninstallingExtensionSource(target.source);
 		const exitAnimation = new Promise<void>((resolve) => {
 			window.setTimeout(resolve, 280);
@@ -1393,91 +1346,102 @@ function ConfigModalContent(props: ConfigModalProps) {
 	if (!open) return null;
 
 	return (
-		<div className="modal-backdrop" onClick={onClose}>
-			<div className="config-modal" onClick={(e) => e.stopPropagation()}>
-				<div className="modal-header">
-					<strong>{t("config.title")}</strong>
-					<div className="modal-header-actions">
-						{section === "config" && (
-							<>
-								<button className="config-btn primary" onClick={handleExport}>
-									{t("common.export")}
-								</button>
-								<button className="config-btn blue" onClick={handleImport}>
-									{t("common.import")}
-								</button>
-							</>
-						)}
-						<CloseIconButton label={t("common.close")} onClick={onClose} />
-					</div>
-				</div>
-
-				<div className="config-layout">
-					<aside className="config-sidebar" aria-label={t("config.title")}>
-						<div className="config-sidebar-group">
-							<span>{t("config.group.config")}</span>
+		<Modal
+			open={open}
+			onClose={onClose}
+			title={t("config.title")}
+			contentClassName="config-modal"
+			headerActions={
+				section === "config" ? (
+					<>
+						<Button variant="default" size="sm" onClick={handleExport}>
+							{t("common.export")}
+						</Button>
+						<Button variant="secondary" size="sm" onClick={handleImport}>
+							{t("common.import")}
+						</Button>
+					</>
+				) : undefined
+			}
+		>
+			<div className="config-layout grid min-h-0 flex-1 grid-cols-[160px_minmax(0,1fr)] bg-muted">
+					<aside className="config-sidebar flex min-h-0 flex-col gap-3 overflow-auto border-r border-border bg-sidebar p-3" aria-label={t("config.title")}>
+						<div className="config-sidebar-group grid gap-1">
+							<span className="px-2 pb-1 text-[11px] font-semibold text-muted-foreground">{t("config.group.config")}</span>
 							{configNavItems.map((item) => (
-								<button
+								<Button
 									key={item.id}
-									className={
-										section === "config" && tab === item.id ? "active" : ""
-									}
+									type="button"
+									variant={section === "config" && tab === item.id ? "secondary" : "ghost"}
+									className={`config-nav-btn justify-start px-3 text-[13px] font-medium${section === "config" && tab === item.id ? " active" : ""}`}
 									onClick={() => {
 										setSection("config");
 										setTab(item.id);
 									}}
 								>
 									{item.label}
-								</button>
+								</Button>
 							))}
 						</div>
-						<div className="config-sidebar-group">
-							<span>{t("config.group.agent")}</span>
-							<button
-								className={section === "extensions" ? "active" : ""}
+						<div className="config-sidebar-group grid gap-1">
+							<span className="px-2 pb-1 text-[11px] font-semibold text-muted-foreground">{t("config.group.agent")}</span>
+							<Button
+								type="button"
+								variant={section === "extensions" ? "secondary" : "ghost"}
+								className={`config-nav-btn justify-start px-3 text-[13px] font-medium${section === "extensions" ? " active" : ""}`}
 								onClick={() => setSection("extensions")}
 							>
 								{t("config.nav.extensions")}
-							</button>
-							<button
-								className={section === "skills" ? "active" : ""}
+							</Button>
+							<Button
+								type="button"
+								variant={section === "skills" ? "secondary" : "ghost"}
+								className={`config-nav-btn justify-start px-3 text-[13px] font-medium${section === "skills" ? " active" : ""}`}
 								onClick={() => setSection("skills")}
 							>
 								{t("config.nav.skills")}
-							</button>
-							<button
-								className={section === "prompts" ? "active" : ""}
+							</Button>
+							<Button
+								type="button"
+								variant={section === "prompts" ? "secondary" : "ghost"}
+								className={`config-nav-btn justify-start px-3 text-[13px] font-medium${section === "prompts" ? " active" : ""}`}
 								onClick={() => setSection("prompts")}
 							>
 								{t("config.nav.prompts")}
-							</button>
+							</Button>
 						</div>
-						<div className="config-sidebar-group">
-							<span>{t("config.group.im")}</span>
-							<button
-								className={section === "im" ? "active" : ""}
+						<div className="config-sidebar-group grid gap-1">
+							<span className="px-2 pb-1 text-[11px] font-semibold text-muted-foreground">{t("config.group.im")}</span>
+							<Button
+								type="button"
+								variant={section === "im" ? "secondary" : "ghost"}
+								className={`config-nav-btn justify-start px-3 text-[13px] font-medium${section === "im" ? " active" : ""}`}
 								onClick={() => setSection("im")}
 							>
 								{t("config.nav.im")}
-							</button>
+							</Button>
 						</div>
-						<div className="config-sidebar-group">
-							<span>{t("config.group.other")}</span>
-							<button
-								className={section === "editors" ? "active" : ""}
+						<div className="config-sidebar-group grid gap-1">
+							<span className="px-2 pb-1 text-[11px] font-semibold text-muted-foreground">{t("config.group.other")}</span>
+							<Button
+								type="button"
+								variant={section === "editors" ? "secondary" : "ghost"}
+								className={`config-nav-btn justify-start px-3 text-[13px] font-medium${section === "editors" ? " active" : ""}`}
 								onClick={() => setSection("editors")}
 							>
 								{t("config.nav.editors")}
-							</button>
+							</Button>
 						</div>
-						<div className="config-sidebar-group">
-							<span>{t("config.group.diagnostics")}</span>
-							<button
-								className={section === "logs" ? "active" : ""}
+						<div className="config-sidebar-group grid gap-1">
+							<span className="px-2 pb-1 text-[11px] font-semibold text-muted-foreground">{t("config.group.diagnostics")}</span>
+							<Button
+								type="button"
+								variant={section === "logs" ? "secondary" : "ghost"}
+								className={`config-nav-btn justify-start px-3 text-[13px] font-medium${section === "logs" ? " active" : ""}`}
 								onClick={() => setSection("logs")}
 							>
 								{t("config.nav.logs")}
-							</button>
+							</Button>
 						</div>
 					</aside>
 
@@ -1708,62 +1672,38 @@ function ConfigModalContent(props: ConfigModalProps) {
 				</div>
 
 				{deleteSkillConfirm && (
-					<div className="session-delete-confirm-backdrop" onClick={() => setDeleteSkillConfirm(null)}>
-						<div className="session-delete-confirm skill-delete-confirm" onClick={(event) => event.stopPropagation()}>
-							<strong>{t("config.deleteSkillConfirmTitle")}</strong>
-							<p>
-								{t("config.deleteSkillConfirmBody", {
-									name: deleteSkillConfirm.name,
-								})}
-							</p>
-							<small>{deleteSkillConfirm.path}</small>
-							<div className="session-delete-confirm-actions">
-								<button onClick={() => setDeleteSkillConfirm(null)}>{t("common.cancel")}</button>
-								<button className="danger" onClick={() => void confirmDeleteSkill()}>
-									{t("common.delete")}
-								</button>
-							</div>
-						</div>
-					</div>
+					<ConfirmDialog
+						title={t("config.deleteSkillConfirmTitle")}
+						message={t("config.deleteSkillConfirmBody", { name: deleteSkillConfirm.name }) + "\n" + deleteSkillConfirm.path}
+						confirmLabel={t("common.delete")}
+						danger
+						onConfirm={() => void confirmDeleteSkill()}
+						onCancel={() => setDeleteSkillConfirm(null)}
+					/>
 				)}
 
 				{uninstallExtensionConfirm && (
-					<div className="session-delete-confirm-backdrop" onClick={() => setUninstallExtensionConfirm(null)}>
-						<div className="session-delete-confirm skill-delete-confirm" onClick={(event) => event.stopPropagation()}>
-							<strong>{t("config.uninstallExtensionTitle")}</strong>
-							<p>
-								{t("config.uninstallExtensionBody", {
-									source: uninstallExtensionConfirm.source,
-								})}
-							</p>
-							{uninstallExtensionConfirm.path && <small>{uninstallExtensionConfirm.path}</small>}
-							<div className="session-delete-confirm-actions">
-								<button onClick={() => setUninstallExtensionConfirm(null)}>{t("common.cancel")}</button>
-								<button className="danger" onClick={confirmUninstallExtension}>{t("config.uninstall")}</button>
-							</div>
-						</div>
-					</div>
+					<ConfirmDialog
+						title={t("config.uninstallExtensionTitle")}
+						message={t("config.uninstallExtensionBody", { source: uninstallExtensionConfirm.source }) + (uninstallExtensionConfirm.path ? "\n" + uninstallExtensionConfirm.path : "")}
+						confirmLabel={t("config.uninstall")}
+						danger
+						onConfirm={confirmUninstallExtension}
+						onCancel={() => setUninstallExtensionConfirm(null)}
+					/>
 				)}
 
 				{/* toast 已改用 sonner */}
 				{deleteConfirm && (
-					<div className="config-modal-overlay" onClick={() => setDeleteConfirm(null)}>
-						<div className="config-modal-dialog" onClick={(e) => e.stopPropagation()}>
-							<strong>{deleteConfirm.title}</strong>
-							<p>{deleteConfirm.message}</p>
-							<div className="config-modal-actions">
-								<button className="config-btn danger" onClick={deleteConfirm.onConfirm}>
-									{t("common.delete")}
-								</button>
-								<button className="config-btn" onClick={() => setDeleteConfirm(null)}>
-									{t("common.cancel")}
-								</button>
-							</div>
-						</div>
-					</div>
+					<ConfirmDialog
+						title={deleteConfirm.title}
+						message={deleteConfirm.message}
+						confirmLabel={t("common.delete")}
+						danger
+						onConfirm={deleteConfirm.onConfirm}
+						onCancel={() => setDeleteConfirm(null)}
+					/>
 				)}
-			</div>
-		</div>
+		</Modal>
 	);
 }
-

@@ -38,13 +38,38 @@ export const ipcChannels = {
 	/** 读取文件返回 base64 编码的数据 URL，用于图片等二进制文件 */
 	filesReadBase64: "files:read-base64",
 	sessionsList: "sessions:list",
-	sessionsRename: "sessions:rename",
-	sessionsCopy: "sessions:copy",
-	sessionsExportHtml: "sessions:export-html",
-	sessionsDelete: "sessions:delete",
-	sessionsReadMessages: "sessions:read-messages",
-	sessionsReadMeta: "sessions:read-meta",
-	sessionsReadChatMessages: "sessions:read-chat-messages",
+	/** Session-first catalog APIs. */
+	sessionsCatalogList: "sessions:catalog-list",
+	sessionsCatalogCreateDraft: "sessions:catalog-create-draft",
+	/** Starts an in-memory `--no-session` conversation. */
+	sessionsCreateAnonymous: "sessions:create-anonymous",
+	sessionsCatalogUpdate: "sessions:catalog-update",
+	sessionsCatalogDelete: "sessions:catalog-delete",
+	sessionsCatalogReadMessages: "sessions:catalog-read-messages",
+	sessionsCatalogReadMessagePage: "sessions:catalog-read-message-page",
+	sessionsCatalogReadReferenceMessages: "sessions:catalog-read-reference-messages",
+	sessionsCatalogCopy: "sessions:catalog-copy",
+	sessionsCatalogExportHtml: "sessions:catalog-export-html",
+	sessionsSendPrompt: "sessions:send-prompt",
+	sessionsRuntimeEvent: "sessions:runtime-event",
+	sessionsUiResponse: "sessions:ui-response",
+	sessionsRuntimeList: "sessions:runtime-list",
+	sessionsRuntimeStop: "sessions:runtime-stop",
+	sessionsRuntimeAbort: "sessions:runtime-abort",
+	sessionsRuntimeRestart: "sessions:runtime-restart",
+	sessionsRuntimeCompact: "sessions:runtime-compact",
+	sessionsRuntimeState: "sessions:runtime-state",
+	sessionsRuntimeCommands: "sessions:runtime-commands",
+	sessionsRuntimeExportHtml: "sessions:runtime-export-html",
+	sessionsRuntimeEditMessage: "sessions:runtime-edit-message",
+	sessionsRuntimeDeleteMessage: "sessions:runtime-delete-message",
+	sessionsRuntimePrepareResend: "sessions:runtime-prepare-resend",
+	sessionsRuntimeSetModel: "sessions:runtime-set-model",
+	sessionsRuntimeSetThinking: "sessions:runtime-set-thinking",
+	sessionsRuntimeClone: "sessions:runtime-clone",
+	// 从用户消息 fork 新会话（pi /fork）；与 clone 不同，会按 entryId 裁剪会话树
+	sessionsRuntimeGetForkMessages: "sessions:runtime-get-fork-messages",
+	sessionsRuntimeFork: "sessions:runtime-fork",
 	codexSessionsScan: "codex-sessions:scan",
 	codexSessionsImport: "codex-sessions:import",
 	claudeSessionsScan: "claude-sessions:scan",
@@ -87,6 +112,7 @@ export const ipcChannels = {
 	extensionsList: "extensions:list",
 	extensionsUninstall: "extensions:uninstall",
 	extensionsInstall: "extensions:install",
+	extensionsToggle: "extensions:toggle",
 	extensionsRemoveBuiltIn: "extensions:remove-built-in",
 	extensionsRestoreBuiltIn: "extensions:restore-built-in",
 	extensionsUpdate: "extensions:update",
@@ -111,12 +137,12 @@ export const ipcChannels = {
 	gitCommit: "git:commit",
 	gitCherryPick: "git:cherry-pick",
 	gitRevert: "git:revert",
+	gitPush: "git:push",
+	gitPull: "git:pull",
 	gitReset: "git:reset",
 	gitDropCommit: "git:drop-commit",
 	gitGenerateCommitMessage: "git:generate-commit-message",
 	gitInit: "git:init",
-	gitPush: "git:push",
-	gitPull: "git:pull",
 	gitFetch: "git:fetch",
 	piCheck: "pi:check",
 	piCheckCustom: "pi:check-custom",
@@ -162,32 +188,7 @@ export const ipcChannels = {
 	appWindowToggleMaximize: "app:window-toggle-maximize",
 	appWindowToggleAlwaysOnTop: "app:window-toggle-always-on-top",
 	appWindowClose: "app:window-close",
-	agentsList: "agents:list",
-	agentsCreate: "agents:create",
-	agentsRename: "agents:rename",
-	agentsStop: "agents:stop",
-	agentsPrompt: "agents:prompt",
-	agentsAbort: "agents:abort",
-	agentsExportHtml: "agents:export-html",
-	agentsForkMessages: "agents:fork-messages",
-	agentsForkSession: "agents:fork-session",
-	agentsCloneSession: "agents:clone-session",
-	agentsSwitchSession: "agents:switch-session",
-	agentsReload: "agents:reload",
-	agentsEditMessage: "agents:edit-message",
-	agentsDeleteMessage: "agents:delete-message",
-	/** 同文件重发：截断该用户消息及其后续，不生成新会话文件 */
-	agentsPrepareResend: "agents:prepare-resend",
-	agentsRestart: "agents:restart",
-	agentsCompact: "agents:compact",
 	agentsRuntimeState: "agents:runtime-state",
-	agentsCycleModel: "agents:cycle-model",
-	agentsAvailableModels: "agents:available-models",
-	agentsSetModel: "agents:set-model",
-	/** 刷新模型配置：通知运行中的 agent 重新加载 models.json，无需重启 */
-	agentsRefreshModels: "agents:refresh-models",
-	agentsCycleThinking: "agents:cycle-thinking",
-	agentsSetThinking: "agents:set-thinking",
 	agentsState: "agents:state",
 	projectsListModels: "projects:list-models",
 	agentsEvent: "agents:event",
@@ -205,12 +206,10 @@ export const ipcChannels = {
 
 	/** Agent Extension UI 协议：主进程 → 渲染进程，推送扩展的 UI 请求（select/confirm/input/editor） */
 	agentsUiRequest: "agents:ui-request",
-	/** 渲染进程 → 主进程，传递用户在 UI 请求中的响应（选中的选项、输入的文本等） */
-	agentsUiResponse: "agents:ui-response",
 	/** 项目信任确认：主进程 → 渲染进程，启动 Agent 前请求用户对含 .pi 资源的项目做信任决策 */
-	agentsTrustRequest: "agents:trust-request",
+	projectsTrustRequest: "projects:trust-request",
 	/** 项目信任确认：渲染进程 → 主进程，回传用户的信任选择（trust-remember/trust-session/deny） */
-	agentsTrustResponse: "agents:trust-response",
+	projectsTrustResponse: "projects:trust-response",
 
 	configGetModels: "config:get-models",
 	configGetAuth: "config:get-auth",
@@ -266,9 +265,9 @@ export const ipcChannels = {
 	feishuConnectByBot: "feishu:connect-by-bot",
 	/** Pi 创建会话时触发飞书自动拉群 */
 	feishuAutoGroup: "feishu:auto-group",
-	/** 获取指定 Agent 绑定的飞书 Bot ID */
+	/** 获取指定稳定 Session 绑定的飞书 Bot ID */
 	feishuSessionBotGet: "feishu:session-bot-get",
-	/** 设置指定 Agent 使用的飞书 Bot ID */
+	/** 设置指定稳定 Session 使用的飞书 Bot ID */
 	feishuSessionBotSet: "feishu:session-bot-set",
 	/** 飞书 /whoami 结果推回前端 */
 	feishuWhoamiResult: "feishu:whoami-result",
@@ -321,10 +320,21 @@ export const ipcChannels = {
 	/** 设置面板 → 主进程：发送测试通知（调试弹窗样式） */
 	petTestNotify: "pet:test-notify",
 
+	// ===== 系统文件选择器 =====
+	dialogPickFiles: "dialog:pick-files",
+
 	// ===== 内置浏览器 =====
 	browserOpenExternal: "browser:open-external",
 
-	// ===== 系统文件选择器 =====
-	/** 打开系统原生文件/文件夹选择器，返回选中路径列表 */
-	dialogPickFiles: "dialog:pick-files",
+	// ===== 内置浏览器（WebContentsView 管线，#115 U4 灰度） =====
+	browserViewShow: "browser-view:show",
+	browserViewHide: "browser-view:hide",
+	browserViewSetBounds: "browser-view:set-bounds",
+	browserViewNavigate: "browser-view:navigate",
+	browserViewAction: "browser-view:action",
+	/** 主进程 → 渲染层：导航/加载状态推送 */
+	browserViewState: "browser-view:state",
+	/** 主进程 → 渲染层：页面请求新窗口（target=_blank / window.open） */
+	browserViewNewWindow: "browser-view:new-window",
+
 } as const;

@@ -10,6 +10,10 @@ import {
 	suggestNormalizedBaseUrl,
 } from "./baseUrlPath";
 import type { WslEnvironment } from "../wsl/WslPaths";
+import {
+	mainProcessT,
+	type MainProcessTranslationKey,
+} from "../../shared/i18n/mainProcessCopy";
 
 /** pi 全局配置目录：~/.pi/agent/ */
 const PI_AGENT_DIR = join(homedir(), ".pi", "agent");
@@ -20,7 +24,6 @@ const PI_AGENT_DIR = join(homedir(), ".pi", "agent");
 // Provider 连接测试面对的是第三方网关和 reasoning 模型，首包可能慢于普通模型；
 // 放宽超时并在错误文案中说明“超时不等于兼容模式不支持”，避免误导用户改错配置。
 const PROVIDER_TEST_TIMEOUT_MS = 45_000;
-const PROVIDER_TEST_TIMEOUT_SECONDS = PROVIDER_TEST_TIMEOUT_MS / 1000;
 
 export type PiModelItem = {
 	id: string;
@@ -68,7 +71,13 @@ export type PiSettings = Record<string, unknown>;
 export type ConfigValidationResult = {
 	valid: boolean;
 	error?: string;
+	debugDetails?: string;
 };
+
+type ConfigCopy = (
+	key: MainProcessTranslationKey,
+	params?: Record<string, string | number>,
+) => string;
 
 type TestRequest = {
 	url: string;
@@ -84,7 +93,10 @@ type TestRequest = {
 export class ConfigManager {
 	private configDir: string;
 
-	constructor(configDir?: string) {
+	constructor(
+		configDir?: string,
+		private readonly translate: ConfigCopy = (key, params) => mainProcessT("zh-CN", key, params),
+	) {
 		this.configDir = configDir ?? PI_AGENT_DIR;
 	}
 
@@ -218,15 +230,21 @@ export class ConfigManager {
 		try {
 			JSON.parse(rawJson);
 		} catch (e) {
+			const debugDetails = e instanceof Error ? e.message : String(e);
+			console.error("[ConfigManager] Invalid JSON input", e);
 			return {
 				valid: false,
-				error: `JSON 格式错误：${e instanceof Error ? e.message : String(e)}`,
+				error: this.translate("mainConfig.invalidJson"),
+				debugDetails,
 			};
 		}
 
 		const allowed = ["models.json", "auth.json", "settings.json", "trust.json"];
 		if (!allowed.includes(fileName)) {
-			return { valid: false, error: `不允许编辑的文件：${fileName}` };
+			return {
+				valid: false,
+				error: this.translate("mainConfig.fileNotEditable", { fileName }),
+			};
 		}
 
 		await this.writeJsonFile(fileName, rawJson);
@@ -237,13 +255,13 @@ export class ConfigManager {
 
 	private validateModels(data: PiModelsFile): ConfigValidationResult {
 		if (!data.providers || typeof data.providers !== "object") {
-			return { valid: false, error: "models.json 缺少 providers 字段" };
+			return { valid: false, error: this.translate("mainConfig.modelsProvidersRequired") };
 		}
 		for (const [providerName, config] of Object.entries(data.providers)) {
 			if (!config.models || !Array.isArray(config.models)) {
 				return {
 					valid: false,
-					error: `provider "${providerName}" 缺少 models 数组`,
+					error: this.translate("mainConfig.providerModelsRequired", { provider: providerName }),
 				};
 			}
 			for (let i = 0; i < config.models.length; i++) {
@@ -251,7 +269,7 @@ export class ConfigManager {
 				if (!m.id || typeof m.id !== "string") {
 					return {
 						valid: false,
-						error: `provider "${providerName}" 的模型 #${i + 1} 缺少有效的 id`,
+						error: this.translate("mainConfig.modelIdRequired", { provider: providerName, index: i + 1 }),
 					};
 				}
 			}
@@ -349,6 +367,7 @@ export class ConfigManager {
 		success: boolean;
 		models?: Array<{ id: string; name?: string }>;
 		error?: string;
+		debugDetails?: string;
 		/** 实际成功/最后一次请求的 URL（脱敏），用于 UI 对比会话侧路径 */
 		requestUrl?: string;
 		/** 检测侧补了版本路径，而配置 baseUrl 仍是根路径 → 会话可能 404 */
@@ -358,6 +377,7 @@ export class ConfigManager {
 	}> {
 		const requests = this.buildModelsRequest(baseUrl, apiKey, apiType);
 		let lastError: string | undefined;
+		let lastDebugDetails: string | undefined;
 		let lastRequestUrl: string | undefined;
 
 		for (const request of requests) {
@@ -376,7 +396,12 @@ export class ConfigManager {
 					});
 
 					if (!res.ok) {
-						lastError = `HTTP ${res.status}: ${res.statusText}`;
+						lastDebugDetails = `HTTP ${res.status}: ${res.statusText}`;
+						console.warn("[ConfigManager] Provider model list request failed", {
+							status: res.status,
+							requestUrl: lastRequestUrl,
+						});
+						lastError = this.translate("mainConfig.fetchModelsFailed");
 						continue;
 					}
 
@@ -384,7 +409,7 @@ export class ConfigManager {
 					const models = this.parseModelsResponse(body, apiType);
 
 					if (models.length === 0) {
-						lastError = "接口返回了空的模型列表";
+						lastError = this.translate("mainConfig.emptyModelList");
 						continue;
 					}
 
@@ -407,19 +432,19 @@ export class ConfigManager {
 					clearTimeout(timeout);
 				}
 			} catch (e) {
-				const msg =
-					e instanceof Error
-						? e.name === "AbortError"
-							? "请求超时，请检查网络或 baseUrl"
-							: e.message
-						: String(e);
-				lastError = this.redactSecret(msg, apiKey);
+				if (e instanceof Error && e.name === "AbortError") {
+					lastError = this.translate("mainConfig.fetchTimeout");
+				} else {
+					console.error("[ConfigManager] Provider model list request failed", e);
+					lastError = this.translate("mainConfig.fetchModelsFailed");
+				}
 			}
 		}
 
 		return {
 			success: false,
-			error: lastError ?? "获取模型列表失败",
+			error: lastError ?? this.translate("mainConfig.fetchModelsFailed"),
+			...(lastDebugDetails ? { debugDetails: lastDebugDetails } : {}),
 			requestUrl: lastRequestUrl,
 			sessionBaseUrlNeedsVersion: needsSessionBaseUrlVersionHint(
 				baseUrl,
@@ -752,7 +777,7 @@ export class ConfigManager {
 		switch (api) {
 			case "openai-completions": {
 				const choices = body.choices as Array<Record<string, unknown>> | undefined;
-				const text = (choices?.[0]?.text as string) ?? "(空响应)";
+				const text = (choices?.[0]?.text as string) ?? this.translate("mainConfig.emptyResponse");
 				const usage = body.usage as Record<string, unknown> | undefined;
 				return {
 					model: (body.model as string) ?? modelId,
@@ -774,8 +799,8 @@ export class ConfigManager {
 				const text =
 					(content?.[0]?.text as string | undefined) ??
 					(functionCall
-						? `工具调用兼容：${String(functionCall.name ?? "function_call")}`
-						: "(空响应)");
+						? this.translate("mainConfig.toolCompatibility", { name: String(functionCall.name ?? "function_call") })
+						: this.translate("mainConfig.emptyResponse"));
 				const usage = body.usage as Record<string, unknown> | undefined;
 				return {
 					model: (body.model as string) ?? modelId,
@@ -789,7 +814,7 @@ export class ConfigManager {
 
 			case "anthropic-messages": {
 				const content = body.content as Array<Record<string, unknown>> | undefined;
-				const text = (content?.[0]?.text as string) ?? "(空响应)";
+				const text = (content?.[0]?.text as string) ?? this.translate("mainConfig.emptyResponse");
 				const usage = body.usage as Record<string, unknown> | undefined;
 				return {
 					model: (body.model as string) ?? modelId,
@@ -804,7 +829,7 @@ export class ConfigManager {
 			case "google-generative-ai": {
 				const candidates = body.candidates as Array<Record<string, unknown>> | undefined;
 				const parts = candidates?.[0]?.content as Record<string, unknown> | undefined;
-				const text = (parts?.parts as Array<Record<string, unknown>>)?.[0]?.text as string ?? "(空响应)";
+				const text = (parts?.parts as Array<Record<string, unknown>>)?.[0]?.text as string ?? this.translate("mainConfig.emptyResponse");
 				const usage = body.usageMetadata as Record<string, unknown> | undefined;
 				return {
 					model: (body.modelVersion as string) ?? modelId,
@@ -831,7 +856,7 @@ export class ConfigManager {
 						.join(" ")
 					: typeof content === "string"
 						? content
-						: (body.response as string | undefined) ?? "(空响应)";
+						: (body.response as string | undefined) ?? this.translate("mainConfig.emptyResponse");
 				const usage = body.usage as Record<string, unknown> | undefined;
 				return {
 					model: (body.model as string) ?? modelId,
@@ -848,7 +873,7 @@ export class ConfigManager {
 			{
 				const choices = body.choices as Array<Record<string, unknown>> | undefined;
 				const message = choices?.[0]?.message as Record<string, unknown> | undefined;
-				const text = (message?.content as string) ?? "(空响应)";
+				const text = (message?.content as string) ?? this.translate("mainConfig.emptyResponse");
 				const usage = body.usage as Record<string, unknown> | undefined;
 				return {
 					model: (body.model as string) ?? modelId,
@@ -877,6 +902,7 @@ export class ConfigManager {
 		error?: string;
 		requestUrl?: string;
 		requestBody?: string;
+		debugDetails?: string;
 		/** 检测侧补了 /v1，配置仍是根路径 → 会话侧可能失败 */
 		sessionBaseUrlNeedsVersion?: boolean;
 		/** 建议写入配置的 baseUrl；仅 success 时由 UI 自动改写 */
@@ -927,9 +953,15 @@ export class ConfigManager {
 					/* 忽略解析错误 */
 				}
 				// 失败时不自动改写 baseUrl，只保留诊断字段。
+				const debugDetails = this.redactSecret(detail, apiKey);
+				console.warn("[ConfigManager] Provider connection test failed", {
+					status: res.status,
+					requestUrl: safeRequestUrl,
+				});
 				return {
 					success: false,
-					error: this.redactSecret(detail, apiKey),
+					error: this.translate("mainConfig.providerTestFailed"),
+					debugDetails,
 					latencyMs,
 					requestUrl: safeRequestUrl,
 					requestBody: safeRequestBody,
@@ -951,15 +983,11 @@ export class ConfigManager {
 			};
 		} catch (e) {
 			const latencyMs = Date.now() - startedAt;
-			const msg =
-				e instanceof Error
-					? e.name === "AbortError"
-					? `请求超时（${PROVIDER_TEST_TIMEOUT_SECONDS} 秒）。这不一定代表兼容模式不支持或配置错误，可能是模型首包较慢、上游排队、代理/网络波动，或 reasoning 模型仍在内部思考。请稍后重试，或换用更轻量模型测试；如果模型列表可正常拉取，也可以保存配置后直接启动会话验证。`
-					: e.message
-					: String(e);
+			const isTimeout = e instanceof Error && e.name === "AbortError";
+			if (!isTimeout) console.error("[ConfigManager] Provider connection test failed", e);
 			return {
 				success: false,
-				error: this.redactSecret(msg, apiKey),
+				error: this.translate(isTimeout ? "mainConfig.providerTestTimeout" : "mainConfig.providerTestFailed"),
 				latencyMs,
 				requestUrl: safeRequestUrl,
 				requestBody: safeRequestBody,
@@ -1000,15 +1028,18 @@ export class ConfigManager {
 		try {
 			pkg = JSON.parse(packageJson);
 		} catch (e) {
+			const debugDetails = e instanceof Error ? e.message : String(e);
+			console.error("[ConfigManager] Invalid configuration import JSON", e);
 			return {
 				valid: false,
-				error: `JSON 格式错误：${e instanceof Error ? e.message : String(e)}`,
+				error: this.translate("mainConfig.invalidJson"),
+				debugDetails,
 			};
 		}
 		const data = pkg as Record<string, unknown>;
 		const files = data.files as Record<string, unknown> | undefined;
 		if (!files || typeof files !== "object") {
-			return { valid: false, error: "导入文件缺少 files 字段，请确认是 PiDeck 导出的配置包" };
+			return { valid: false, error: this.translate("mainConfig.importFilesRequired") };
 		}
 
 		// 按需写入，只处理三个已知文件名，忽略其他 key

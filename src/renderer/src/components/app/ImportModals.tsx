@@ -1,8 +1,9 @@
-// @ts-nocheck - extracted from AppParts, pre-existing type issues
+
 import { useState } from "react";
 import { Check, RefreshCw, UploadCloud } from "lucide-react";
 import { t } from "../../i18n";
 import { CloseIconButton } from "../ui/IconButton";
+import { Modal } from "../ui/Modal";
 import type {
 	CodexSessionSummary,
 	CodexImportReport,
@@ -129,17 +130,9 @@ export function CodexImportModal(props: {
 		</label>
 	);
 	return (
-		<div className="modal-backdrop" onClick={props.onClose}>
-			<section className="codex-import-modal" onClick={(e) => e.stopPropagation()}>
-				<div className="modal-header">
-					<div>
-						<strong>{t("codex.title")}</strong>
-						<small>{props.project.name}</small>
-					</div>
-					<CloseIconButton
-						label={t("common.close")}
-						onClick={props.onClose}
-					/>
+		<Modal open onClose={props.onClose} size="medium" title={t("codex.title")} contentClassName="codex-import-modal">
+				<div className="modal-header-sub">
+					<small>{props.project.name}</small>
 				</div>
 				<div className="codex-import-toolbar">
 					<div>
@@ -249,8 +242,7 @@ export function CodexImportModal(props: {
 						</div>
 					</div>
 				)}
-			</section>
-		</div>
+		</Modal>
 	);
 }
 
@@ -272,17 +264,9 @@ export function ClaudeImportModal(props: {
 		props.sessions.length > 0 &&
 		props.sessions.every((session) => selected.has(session.sourcePath));
 	return (
-		<div className="modal-backdrop" onClick={props.onClose}>
-			<section className="codex-import-modal" onClick={(e) => e.stopPropagation()}>
-				<div className="modal-header">
-					<div>
-						<strong>{t("claude.title")}</strong>
-						<small>{props.project.name}</small>
-					</div>
-					<CloseIconButton
-						label={t("common.close")}
-						onClick={props.onClose}
-					/>
+		<Modal open onClose={props.onClose} size="medium" title={t("claude.title")} contentClassName="codex-import-modal">
+				<div className="modal-header-sub">
+					<small>{props.project.name}</small>
 				</div>
 				<div className="codex-import-toolbar">
 					<div>
@@ -374,8 +358,7 @@ export function ClaudeImportModal(props: {
 						</div>
 					</div>
 				)}
-			</section>
-		</div>
+		</Modal>
 	);
 }
 
@@ -397,17 +380,9 @@ export function OpenCodeImportModal(props: {
 		props.sessions.length > 0 &&
 		props.sessions.every((session) => selected.has(session.sourcePath));
 	return (
-		<div className="modal-backdrop" onClick={props.onClose}>
-			<section className="codex-import-modal" onClick={(e) => e.stopPropagation()}>
-				<div className="modal-header">
-					<div>
-						<strong>{t("opencode.title")}</strong>
-						<small>{props.project.name}</small>
-					</div>
-					<CloseIconButton
-						label={t("common.close")}
-						onClick={props.onClose}
-					/>
+		<Modal open onClose={props.onClose} size="medium" title={t("opencode.title")} contentClassName="codex-import-modal">
+				<div className="modal-header-sub">
+					<small>{props.project.name}</small>
 				</div>
 				<div className="codex-import-toolbar">
 					<div>
@@ -503,7 +478,6 @@ export function OpenCodeImportModal(props: {
 						</div>
 					</div>
 				)}
-			</section>
-		</div>
+			</Modal>
 	);
 }

@@ -1,3 +1,4 @@
+import { Button } from "../components/ui-shadcn/button";
 import { useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { t } from "../i18n";
@@ -42,13 +43,13 @@ export function TrustTab(props: {
 					<strong>{t("config.nav.trust")}</strong>
 					<p>{t("config.trust.hint")}</p>
 				</div>
-				<button
-					className="config-btn primary"
+				<Button
+					 variant="default"
 					onClick={props.onSave}
 					disabled={props.saving}
 				>
 					{props.saving ? t("common.saving") : t("common.save")}
-				</button>
+				</Button>
 			</div>
 
 			<div className="config-trust-add">
@@ -62,14 +63,14 @@ export function TrustTab(props: {
 					}}
 					placeholder={t("config.trust.addPlaceholder")}
 				/>
-				<button
-					className="config-btn"
+				<Button
+					 variant="outline"
 					onClick={addEntry}
 					disabled={!addPath.trim() || props.saving}
 				>
 					<Plus size={14} />
 					{t("config.trust.add")}
-				</button>
+				</Button>
 			</div>
 
 			{entries.length === 0 ? (
@@ -94,14 +95,14 @@ export function TrustTab(props: {
 									{trusted ? t("config.trust.statusTrusted") : t("config.trust.statusIgnored")}
 								</span>
 							</label>
-							<button
-								className="config-btn small danger"
+							<Button
+								 variant="outline" size="sm" className="text-destructive"
 								title={t("common.delete")}
 								onClick={() => removeEntry(path)}
 								disabled={props.saving}
 							>
 								<Trash2 size={13} />
-							</button>
+							</Button>
 						</div>
 					))}
 				</div>

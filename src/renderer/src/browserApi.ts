@@ -1,27 +1,35 @@
 import type { PiDesktopApi } from "../../preload";
 import type {
-	AgentTab,
 	ChatMessage,
-	SendPromptInput,
-	SendPromptResult,
+	SessionCommandResult,
+	SessionRecord,
+	SessionRuntimeEvent,
+	SessionRuntimeInfo,
+	SessionRuntimeTarget,
 } from "../../shared/types";
 import { t } from "./i18n";
 import { createPreviewApi } from "./previewApi";
 
 type WebState = {
 	projects: Awaited<ReturnType<PiDesktopApi["projects"]["list"]>>;
-	agents: AgentTab[];
-	messagesByAgent: Record<string, ChatMessage[]>;
+	sessions: SessionRecord[];
+	runtimes: SessionRuntimeInfo[];
+	messagesBySession: Record<string, ChatMessage[]>;
 };
 
 const base = createPreviewApi();
-let state: WebState = { projects: [], agents: [], messagesByAgent: {} };
+let state: WebState = {
+	projects: [],
+	sessions: [],
+	runtimes: [],
+	messagesBySession: {},
+};
 let connected = false;
 let polling = false;
 let pollTimer: number | undefined;
-const stateListeners = new Set<(tabs: AgentTab[]) => void>();
-const messageListeners = new Set<(payload: { agentId: string; messages: ChatMessage[] }) => void>();
-let lastMessages = new Map<string, string>();
+const runtimeListeners = new Set<(event: SessionRuntimeEvent) => void>();
+let lastRuntimeBySession = new Map<string, SessionRuntimeInfo>();
+let lastSessionMessages = new Map<string, string>();
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -32,8 +40,9 @@ function isWebState(value: unknown): value is WebState {
 	if (!isRecord(value)) return false;
 	return (
 		Array.isArray(value.projects) &&
-		Array.isArray(value.agents) &&
-		isRecord(value.messagesByAgent)
+		Array.isArray(value.sessions) &&
+		Array.isArray(value.runtimes) &&
+		isRecord(value.messagesBySession)
 	);
 }
 
@@ -66,13 +75,52 @@ async function refreshState() {
 	}
 	state = nextState;
 	connected = true;
-	for (const listener of stateListeners) listener(state.agents);
-	for (const [agentId, messages] of Object.entries(state.messagesByAgent)) {
-		const key = JSON.stringify(messages);
-		if (lastMessages.get(agentId) === key) continue;
-		lastMessages.set(agentId, key);
-		for (const listener of messageListeners) listener({ agentId, messages });
+	const nextRuntimeBySession = new Map(
+		state.runtimes.map((runtime) => [runtime.sessionId, runtime]),
+	);
+	for (const [sessionId, previous] of lastRuntimeBySession) {
+		if (nextRuntimeBySession.has(sessionId)) continue;
+		lastSessionMessages.delete(sessionId);
+		for (const listener of runtimeListeners) {
+			listener({
+				kind: "detach",
+				sessionId,
+				agentId: previous.agentId,
+				runtimeGeneration: previous.runtimeGeneration,
+				sourceChannel: "sessions:runtime-detach",
+				payload: null,
+			});
+		}
 	}
+	for (const runtime of state.runtimes) {
+		const previous = lastRuntimeBySession.get(runtime.sessionId);
+		if (JSON.stringify(previous) !== JSON.stringify(runtime)) {
+			for (const listener of runtimeListeners) {
+				listener({
+					sessionId: runtime.sessionId,
+					agentId: runtime.agentId,
+					runtimeGeneration: runtime.runtimeGeneration,
+					sourceChannel: "sessions:runtime",
+					payload: runtime,
+				});
+			}
+		}
+		const messages = state.messagesBySession[runtime.sessionId] ?? [];
+		const messageKey = `${runtime.agentId}:${runtime.runtimeGeneration}:${JSON.stringify(messages)}`;
+		if (lastSessionMessages.get(runtime.sessionId) !== messageKey) {
+			lastSessionMessages.set(runtime.sessionId, messageKey);
+			for (const listener of runtimeListeners) {
+				listener({
+					sessionId: runtime.sessionId,
+					agentId: runtime.agentId,
+					runtimeGeneration: runtime.runtimeGeneration,
+					sourceChannel: "sessions:messages",
+					payload: { agentId: runtime.agentId, messages },
+				});
+			}
+		}
+	}
+	lastRuntimeBySession = nextRuntimeBySession;
 	return state;
 }
 
@@ -90,12 +138,30 @@ function subscribe<T>(set: Set<(payload: T) => void>, callback: (payload: T) => 
 	set.add(callback);
 	return () => {
 		set.delete(callback);
-		if (stateListeners.size === 0 && messageListeners.size === 0 && pollTimer) {
+		if (
+			runtimeListeners.size === 0 &&
+			pollTimer
+		) {
 			window.clearInterval(pollTimer);
 			pollTimer = undefined;
 			polling = false;
 		}
 	};
+}
+
+async function sessionRuntimeCommand<T>(
+	target: SessionRuntimeTarget,
+	action: string,
+	payload: Record<string, unknown> = {},
+): Promise<SessionCommandResult<T>> {
+	const response = await request<{ result: SessionCommandResult<T> }>(
+		`/api/sessions/${encodeURIComponent(target.sessionId)}/runtime/${action}`,
+		{
+			method: "POST",
+			body: JSON.stringify({ target, ...payload }),
+		},
+	);
+	return response.result;
 }
 
 export function createBrowserApi(): PiDesktopApi {
@@ -120,109 +186,139 @@ export function createBrowserApi(): PiDesktopApi {
 				);
 				return result.sessions;
 			},
-		},
-		agents: {
-			...base.agents,
-			list: async () => {
-				try {
-					return (await refreshState()).agents;
-				} catch {
-					return connected ? state.agents : base.agents.list();
-				}
+			listCatalog: async (projectId) => {
+				const result = await request<{ sessions: SessionRecord[] }>(
+					`/api/projects/${encodeURIComponent(projectId)}/sessions/catalog`,
+				);
+				return result.sessions;
 			},
-			create: async (input) => {
-				const result = await request<{ agent: AgentTab }>("/api/agents", {
+			createDraft: async (input) => {
+				const result = await request<{ session: SessionRecord }>("/api/sessions", {
 					method: "POST",
 					body: JSON.stringify(input),
 				});
-				return result.agent;
+				void refreshState().catch(() => undefined);
+				return result.session;
 			},
-			stop: async (agentId) => {
-				await request(`/api/agents/${encodeURIComponent(agentId)}/stop`, {
+			createAnonymous: async (input) => {
+				const result = await request<{
+					session: SessionRecord;
+					runtime: SessionRuntimeInfo;
+				}>("/api/sessions/anonymous", {
 					method: "POST",
-					body: "{}",
+					body: JSON.stringify(input),
 				});
-				await refreshState();
+				void refreshState().catch(() => undefined);
+				return result;
 			},
-			abort: async (agentId) => {
-				await request(`/api/agents/${encodeURIComponent(agentId)}/stop`, {
-					method: "POST",
-					body: "{}",
-				});
-				await refreshState();
-			},
-			prompt: async (input: SendPromptInput) => {
-				const response = await request<{ result: SendPromptResult }>(
-					`/api/agents/${encodeURIComponent(input.agentId)}/prompt`,
-					{
-						method: "POST",
-						body: JSON.stringify(input),
-					},
+			updateRecord: async (sessionId, patch) => {
+				const result = await request<{ session: SessionRecord }>(
+					`/api/sessions/${encodeURIComponent(sessionId)}/update`,
+					{ method: "POST", body: JSON.stringify(patch) },
 				);
-				// The SendPromptResult is already authoritative. State refresh is best-effort and
-				// must not turn an explicit semantic rejection into an indeterminate delivery.
+				void refreshState().catch(() => undefined);
+				return result.session;
+			},
+			deleteRecord: async (sessionId) => {
+				const result = await request<{ deleted: boolean }>(
+					`/api/sessions/${encodeURIComponent(sessionId)}/delete`,
+					{ method: "POST", body: "{}" },
+				);
+				void refreshState().catch(() => undefined);
+				return result.deleted;
+			},
+			copyRecord: async (sessionId) => {
+				const response = await request<{
+					result: Awaited<ReturnType<PiDesktopApi["sessions"]["copyRecord"]>>;
+				}>(`/api/sessions/${encodeURIComponent(sessionId)}/copy`, {
+					method: "POST",
+					body: "{}",
+				});
 				void refreshState().catch(() => undefined);
 				return response.result;
 			},
-			runtimeState: async (agentId) => {
-				const result = await request<{ state: Awaited<ReturnType<PiDesktopApi["agents"]["runtimeState"]>> }>(
-					`/api/agents/${encodeURIComponent(agentId)}/runtime`,
-				);
-				return result.state;
+			exportRecordHtml: async (sessionId) => {
+				const response = await request<{
+					result: Awaited<ReturnType<PiDesktopApi["sessions"]["exportRecordHtml"]>>;
+				}>(`/api/sessions/${encodeURIComponent(sessionId)}/export-html`, {
+					method: "POST",
+					body: "{}",
+				});
+				return response.result;
 			},
-			cycleModel: async (agentId) => {
-				const result = await request<{ state: Awaited<ReturnType<PiDesktopApi["agents"]["cycleModel"]>> }>(
-					`/api/agents/${encodeURIComponent(agentId)}/cycle-model`,
-					{ method: "POST", body: "{}" },
+			readRecordMessages: async (sessionId) => {
+				const result = await request<{ messages: ChatMessage[] }>(
+					`/api/sessions/${encodeURIComponent(sessionId)}/messages`,
 				);
-				return result.state;
+				return result.messages;
 			},
-			availableModels: async (agentId) => {
-				const result = await request<{ models: Awaited<ReturnType<PiDesktopApi["agents"]["availableModels"]>> }>(
-					`/api/agents/${encodeURIComponent(agentId)}/models`,
+			readRecordMessagePage: async (sessionId, before, pageSize) => {
+				const params = new URLSearchParams();
+				if (before !== undefined) params.set("before", String(before));
+				if (pageSize !== undefined) params.set("pageSize", String(pageSize));
+				const suffix = params.size ? `?${params}` : "";
+				return request<Awaited<ReturnType<PiDesktopApi["sessions"]["readRecordMessagePage"]>>>(
+					`/api/sessions/${encodeURIComponent(sessionId)}/messages/page${suffix}`,
 				);
-				return result.models;
 			},
-			setModel: async (agentId, provider, modelId) => {
-				const result = await request<{ state: Awaited<ReturnType<PiDesktopApi["agents"]["setModel"]>> }>(
-					`/api/agents/${encodeURIComponent(agentId)}/model`,
-					{ method: "POST", body: JSON.stringify({ provider, modelId }) },
+			readReferenceMessages: async (sessionId) => {
+				const result = await request<{
+					messages: Awaited<ReturnType<PiDesktopApi["sessions"]["readReferenceMessages"]>>;
+				}>(`/api/sessions/${encodeURIComponent(sessionId)}/reference-messages`);
+				return result.messages;
+			},
+			sendPrompt: async (input) => {
+				const response = await request<{
+					result: Awaited<ReturnType<PiDesktopApi["sessions"]["sendPrompt"]>>;
+				}>(`/api/sessions/${encodeURIComponent(input.sessionId)}/prompt`, {
+					method: "POST",
+					body: JSON.stringify(input),
+				});
+				void refreshState().catch(() => undefined);
+				return response.result;
+			},
+			onRuntimeEvent: (callback) => subscribe(runtimeListeners, callback),
+			listRuntimes: async () => {
+				const result = await request<{ runtimes: SessionRuntimeInfo[] }>(
+					"/api/sessions/runtimes",
 				);
-				return result.state;
+				return result.runtimes;
 			},
-			refreshModels: async (agentId) => {
-				const result = await request<{ state: Awaited<ReturnType<PiDesktopApi["agents"]["refreshModels"]>> }>(
-					`/api/agents/${encodeURIComponent(agentId)}/refresh-models`,
-					{ method: "POST", body: "{}" },
-				);
-				return result.state;
+			stopRuntime: async (target) => {
+				const result = await sessionRuntimeCommand<SessionRuntimeTarget>(target, "stop");
+				void refreshState().catch(() => undefined);
+				return result;
 			},
-			cycleThinking: async (agentId) => {
-				const result = await request<{ state: Awaited<ReturnType<PiDesktopApi["agents"]["cycleThinking"]>> }>(
-					`/api/agents/${encodeURIComponent(agentId)}/cycle-thinking`,
-					{ method: "POST", body: "{}" },
-				);
-				return result.state;
+			abortRuntime: (target) => sessionRuntimeCommand(target, "abort"),
+			restartRuntime: async (target) => {
+				const result = await sessionRuntimeCommand<
+					Awaited<ReturnType<PiDesktopApi["sessions"]["restartRuntime"]>> extends SessionCommandResult<infer T>
+						? T
+						: never
+				>(target, "restart");
+				void refreshState().catch(() => undefined);
+				return result;
 			},
-			setThinking: async (agentId, level) => {
-				const result = await request<{ state: Awaited<ReturnType<PiDesktopApi["agents"]["setThinking"]>> }>(
-					`/api/agents/${encodeURIComponent(agentId)}/thinking`,
-					{ method: "POST", body: JSON.stringify({ level }) },
-				);
-				return result.state;
-			},
-			onState: (callback) => subscribe(stateListeners, callback),
-			onMessages: (callback) => subscribe(messageListeners, callback),
-			onThinking: () => () => undefined,
-			onNotice: () => () => undefined,
-			onLog: () => () => undefined,
-			onRpcLog: () => () => undefined,
-			onRuntimeState: () => () => undefined,
-			onUiRequest: () => () => undefined,
-			onFocusTarget: () => () => undefined,
-			onTrustRequest: () => () => undefined,
-			sendUiResponse: async () => undefined,
-			respondTrustRequest: async () => undefined,
+			compactRuntime: (target, prompt) =>
+				sessionRuntimeCommand(target, "compact", { prompt }),
+			getRuntimeState: (target) => sessionRuntimeCommand(target, "state"),
+			listRuntimeCommands: (target) => sessionRuntimeCommand(target, "commands"),
+			exportRuntimeHtml: (target) => sessionRuntimeCommand(target, "export-html"),
+			editRuntimeMessage: (target, messageId, newText) =>
+				sessionRuntimeCommand(target, "edit-message", { messageId, newText }),
+			deleteRuntimeMessage: (target, messageId) =>
+				sessionRuntimeCommand(target, "delete-message", { messageId }),
+			prepareRuntimeResend: (target, messageId) =>
+				sessionRuntimeCommand(target, "prepare-resend", { messageId }),
+			setRuntimeModel: (target, provider, modelId) =>
+				sessionRuntimeCommand(target, "model", { provider, modelId }),
+			setRuntimeThinking: (target, level) =>
+				sessionRuntimeCommand(target, "thinking", { level }),
+			cloneRuntime: (target) => sessionRuntimeCommand(target, "clone"),
+			getRuntimeForkMessages: (target) =>
+				sessionRuntimeCommand(target, "get-fork-messages"),
+			forkRuntimeSession: (target, entryId) =>
+				sessionRuntimeCommand(target, "fork", { entryId }),
 		},
 		settings: {
 			...base.settings,

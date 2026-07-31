@@ -163,7 +163,6 @@ export class PiProcess extends EventEmitter {
     // pi 在 RPC 模式下 project_trust 事件 hasUI 恒为 false，故信任弹窗由桌面端自行处理。
     const args = ["--mode", "rpc"];
     // RPC 无 TUI，不需要主题发现/加载；跳过可少扫用户/项目/package themes，加快冷启动。
-    // 内置 dark/light 仍可被扩展渲染路径按需使用，只是不扫盘加载自定义主题。
     args.push("--no-themes");
     // 桌面端模型列表来自本地 models.json；默认 --offline 跳过 pi 启动期模型目录网络刷新。
     if (this.settings?.piRpcOffline !== false) args.push("--offline");
@@ -172,7 +171,6 @@ export class PiProcess extends EventEmitter {
     if (this.settings?.piRpcNoSkills) args.push("--no-skills");
 
     // 仅临时停放 codeisland 等黑名单扩展文件；npm packages 与其它本地扩展照常加载。
-    // 不用 --no-extensions 白名单，避免误伤 package 扩展。
     const blockedNames = this.parkIncompatibleExtensions();
     if (blockedNames.length > 0) {
       console.warn(

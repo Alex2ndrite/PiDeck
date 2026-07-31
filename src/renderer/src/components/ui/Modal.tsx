@@ -1,6 +1,20 @@
-import * as Dialog from "@radix-ui/react-dialog";
 import type { ReactNode } from "react";
+import {
+	Dialog,
+	DialogClose,
+	DialogContent,
+	DialogHeader,
+	DialogTitle,
+} from "../ui-shadcn/dialog";
+import { cn } from "../../lib/utils";
+import { CloseIconButton } from "./IconButton";
+import { t } from "../../i18n";
 
+/**
+ * 共享弹框（#115 U5）：API 不变，内部换到 shadcn Dialog。
+ * 尺寸规范沿用 AGENTS.md 约定（full/medium/small 三档），
+ * 布局语义对齐旧实现：flex column + overflow hidden，padding 由内容区自管。
+ */
 export type ModalSize = "full" | "medium" | "small";
 
 export interface ModalProps {
@@ -14,63 +28,48 @@ export interface ModalProps {
 	size?: ModalSize;
 	/** 主体内容 */
 	children: ReactNode;
-	/** 额外的根元素 class */
+	/** header 右侧附加动作区（导出/导入等），渲染在关闭按钮左侧 */
+	headerActions?: ReactNode;
+	/** 额外的根元素 class（保留参数，当前不再使用） */
 	className?: string;
 	/** 额外的 content wrapper class */
 	contentClassName?: string;
 }
 
-/**
- * 基于 Radix UI Dialog 的共享弹框组件。
- * 遵循 AGENTS.md 弹框尺寸规范：
- * - full:  width/height → min(1300px / 850px, calc(100vw - 48px) / calc(100vh - 48px))
- * - medium: width → min(800px, calc(100vw - 48px))，高度自适应
- * - small:  width → min(480px, calc(100vw - 48px))，高度自适应
- *
- * 默认使用 Portal 渲染，不受父容器 z-index / overflow 影响。
- */
+const SIZE_CLASS: Record<ModalSize, string> = {
+	full: "sm:max-w-[min(1300px,calc(100vw-48px))] h-[min(850px,calc(100vh-48px))]",
+	medium: "sm:max-w-[min(800px,calc(100vw-48px))]",
+	small: "sm:max-w-[min(480px,calc(100vw-48px))]",
+};
+
 export function Modal({
 	open,
 	onClose,
 	title,
 	size = "full",
 	children,
-	className,
+	headerActions,
 	contentClassName,
 }: ModalProps) {
 	return (
-		<Dialog.Root open={open} onOpenChange={(open) => !open && onClose()}>
-			<Dialog.Portal>
-				<Dialog.Overlay
-					className={["modal-radix-overlay", className].filter(Boolean).join(" ")}
-				/>
-				<Dialog.Content
-					className={[
-						"modal-radix-content",
-						`modal-radix-${size}`,
-						contentClassName,
-					]
-						.filter(Boolean)
-						.join(" ")}
-				>
-					{title && (
-						<div className="modal-header">
-							<Dialog.Title asChild>
-								<strong>{title}</strong>
-							</Dialog.Title>
-							<Dialog.Close asChild>
-								<button
-									type="button"
-									aria-label="Close"
-								>
-									✕
-								</button>
-							</Dialog.Close>
+		<Dialog open={open} onOpenChange={(next) => !next && onClose()}>
+			<DialogContent
+				showCloseButton={false}
+				className={cn("flex flex-col gap-0 overflow-hidden p-0", SIZE_CLASS[size], contentClassName)}
+			>
+				{title && (
+					<DialogHeader className="flex-row items-center justify-between px-4 py-3">
+						<DialogTitle>{title}</DialogTitle>
+						<div className="flex items-center gap-2">
+							{headerActions}
+							<DialogClose asChild>
+								<CloseIconButton label={t("common.close")} />
+							</DialogClose>
 						</div>
-					)}
-					{children}
-				</Dialog.Content>
-			</Dialog.Portal>
-		</Dialog.Root>
+					</DialogHeader>
+				)}
+				{children}
+			</DialogContent>
+		</Dialog>
 	);
 }

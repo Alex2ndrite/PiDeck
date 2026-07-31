@@ -2,6 +2,10 @@ import net from "node:net";
 import tls from "node:tls";
 import { Buffer } from "node:buffer";
 import type { AppSettings, PiProxyTestResult } from "../../shared/types";
+import {
+	mainProcessT,
+	type MainProcessTranslationKey,
+} from "../../shared/i18n/mainProcessCopy";
 
 type PiProxySettings = Pick<
 	AppSettings,
@@ -11,26 +15,41 @@ type PiProxySettings = Pick<
 const DEFAULT_PROXY_TEST_URL = "https://api.openai.com/v1/models";
 const PROXY_TEST_TIMEOUT_MS = 8_000;
 
+type ProxyCopy = (
+	key: MainProcessTranslationKey,
+	params?: Record<string, string | number>,
+) => string;
+
+class ProxyTestError extends Error {
+	constructor(
+		readonly key: MainProcessTranslationKey,
+		readonly params?: Record<string, string | number>,
+	) {
+		super(key);
+	}
+}
+
 export async function testPiProxy(
 	settings: PiProxySettings,
 	testUrl = DEFAULT_PROXY_TEST_URL,
+	translate: ProxyCopy = (key, params) => mainProcessT("zh-CN", key, params),
 ): Promise<PiProxyTestResult> {
 	const startedAt = Date.now();
 
 	try {
 		const target = new URL(testUrl);
 		if (!settings.piProxyEnabled) {
-			return failure("请先启用 pi agent 代理。", startedAt, testUrl);
+			return failure(translate("mainProxy.enableFirst"), startedAt, testUrl);
 		}
 
 		const proxyValue = settings.piProxyUrl.trim();
 		if (!proxyValue) {
-			return failure("代理地址为空。", startedAt, testUrl);
+			return failure(translate("mainProxy.addressRequired"), startedAt, testUrl);
 		}
 
 		if (matchesNoProxy(target.hostname, getUrlPort(target), settings.piProxyBypass)) {
 			return {
-				...failure("检测目标命中绕过代理列表，本次不会经过代理。", startedAt, testUrl),
+				...failure(translate("mainProxy.bypassed"), startedAt, testUrl),
 				bypassed: true,
 			};
 		}
@@ -42,10 +61,10 @@ export async function testPiProxy(
 			url: testUrl,
 			statusCode: result.statusCode,
 			elapsedMs: Date.now() - startedAt,
-			message: `代理可用，目标返回 HTTP ${result.statusCode}`,
+			message: translate("mainProxy.success", { status: result.statusCode }),
 		};
 	} catch (error) {
-		return failure(formatProxyError(error), startedAt, testUrl);
+		return failure(formatProxyError(error, translate), startedAt, testUrl);
 	}
 }
 
@@ -55,10 +74,10 @@ function normalizeProxyUrl(value: string) {
 
 async function requestThroughProxy(proxy: URL, target: URL) {
 	if (proxy.protocol !== "http:" && proxy.protocol !== "https:") {
-		throw new Error("仅支持 http:// 或 https:// 代理地址。");
+		throw new ProxyTestError("mainProxy.proxyProtocolUnsupported");
 	}
 	if (target.protocol !== "http:" && target.protocol !== "https:") {
-		throw new Error("检测目标仅支持 HTTP/HTTPS。");
+		throw new ProxyTestError("mainProxy.targetProtocolUnsupported");
 	}
 
 	if (target.protocol === "http:") {
@@ -83,7 +102,7 @@ async function requestHttpsTargetThroughProxy(proxy: URL, target: URL) {
 
 		const connectHead = await readHttpHead(socket);
 		if (connectHead.statusCode !== 200) {
-			throw new Error(`代理 CONNECT 返回 HTTP ${connectHead.statusCode}`);
+			throw new ProxyTestError("mainProxy.connectStatus", { status: connectHead.statusCode });
 		}
 
 		const secureSocket = await upgradeToTls(socket, target.hostname);
@@ -120,7 +139,7 @@ function connectProxySocket(proxy: URL): Promise<net.Socket | tls.TLSSocket> {
 				: net.connect({ host, port });
 		const timer = setTimeout(() => {
 			socket.destroy();
-			reject(new Error("连接代理超时。"));
+			reject(new ProxyTestError("mainProxy.connectTimeout"));
 		}, PROXY_TEST_TIMEOUT_MS);
 
 		function cleanup() {
@@ -152,7 +171,7 @@ function upgradeToTls(socket: net.Socket | tls.TLSSocket, servername: string) {
 		const secureSocket = tls.connect({ socket, servername });
 		const timer = setTimeout(() => {
 			secureSocket.destroy();
-			reject(new Error("TLS 握手超时。"));
+			reject(new ProxyTestError("mainProxy.tlsTimeout"));
 		}, PROXY_TEST_TIMEOUT_MS);
 
 		function cleanup() {
@@ -179,7 +198,7 @@ function readHttpHead(socket: net.Socket | tls.TLSSocket) {
 		let buffer = "";
 		const timer = setTimeout(() => {
 			cleanup();
-			reject(new Error("等待响应超时。"));
+			reject(new ProxyTestError("mainProxy.responseTimeout"));
 		}, PROXY_TEST_TIMEOUT_MS);
 
 		function cleanup() {
@@ -192,7 +211,7 @@ function readHttpHead(socket: net.Socket | tls.TLSSocket) {
 			buffer += chunk.toString("latin1");
 			if (buffer.length > 64 * 1024) {
 				cleanup();
-				reject(new Error("响应头过大。"));
+				reject(new ProxyTestError("mainProxy.headerTooLarge"));
 				return;
 			}
 			const headEnd = buffer.indexOf("\r\n\r\n");
@@ -201,7 +220,7 @@ function readHttpHead(socket: net.Socket | tls.TLSSocket) {
 			const match = /^HTTP\/\d(?:\.\d)?\s+(\d{3})\b/.exec(statusLine);
 			cleanup();
 			if (!match) {
-				reject(new Error("代理返回了无效的 HTTP 响应。"));
+				reject(new ProxyTestError("mainProxy.invalidResponse"));
 				return;
 			}
 			resolve({ statusCode: Number(match[1]) });
@@ -212,7 +231,7 @@ function readHttpHead(socket: net.Socket | tls.TLSSocket) {
 		}
 		function onEnd() {
 			cleanup();
-			reject(new Error("连接在返回响应前关闭。"));
+			reject(new ProxyTestError("mainProxy.closedEarly"));
 		}
 
 		socket.on("data", onData);
@@ -295,12 +314,15 @@ function failure(error: string, startedAt: number, url: string): PiProxyTestResu
 	};
 }
 
-function formatProxyError(error: unknown) {
-	if (!(error instanceof Error)) return String(error);
-	if (error.message === "Invalid URL") return "代理地址格式无效。";
-	if (error.message.includes("ECONNREFUSED")) return "代理端口拒绝连接，请确认代理客户端正在运行。";
-	if (error.message.includes("ENOTFOUND")) return "代理主机无法解析，请检查代理地址。";
-	if (error.message.includes("ECONNRESET")) return "连接被代理或远端重置。";
-	if (error.message.includes("ETIMEDOUT")) return "连接超时，请检查代理地址和网络。";
-	return error.message;
+function formatProxyError(error: unknown, translate: ProxyCopy) {
+	if (error instanceof ProxyTestError) return translate(error.key, error.params);
+	if (error instanceof Error) {
+		if (error.message === "Invalid URL") return translate("mainProxy.invalidUrl");
+		if (error.message.includes("ECONNREFUSED")) return translate("mainProxy.connectionRefused");
+		if (error.message.includes("ENOTFOUND")) return translate("mainProxy.hostNotFound");
+		if (error.message.includes("ECONNRESET")) return translate("mainProxy.connectionReset");
+		if (error.message.includes("ETIMEDOUT")) return translate("mainProxy.connectionTimeout");
+	}
+	console.error("[PiProxyTester] Proxy test failed", error);
+	return translate("mainProxy.unknownError");
 }

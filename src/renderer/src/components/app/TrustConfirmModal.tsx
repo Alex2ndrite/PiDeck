@@ -1,4 +1,13 @@
 import { t } from "../../i18n";
+import {
+	Dialog,
+	DialogContent,
+	DialogDescription,
+	DialogFooter,
+	DialogHeader,
+	DialogTitle,
+} from "../ui-shadcn/dialog";
+import { Button } from "../ui/Button";
 
 /**
  * 项目信任确认弹窗。
@@ -13,8 +22,8 @@ import { t } from "../../i18n";
  *   - trust-session：仅本次会话信任，不落盘
  *   - deny：拒绝信任，阻止 Agent 创建并记录 false 避免重复打扰
  *
- * 样式复用 config-modal-overlay / config-modal-dialog / config-btn，与 ConfirmDialog 风格一致。
- * 遮罩不绑定 onClick 关闭，强制用户做出明确选择，避免误关后 Agent 卡在等待。
+ * #115 U5 起改用 shadcn Dialog；刻意屏蔽 ESC/遮罩/关闭按钮，强制用户做出
+ * 明确选择，避免误关后 Agent 卡在等待信任决策的状态。
  */
 export function TrustConfirmModal(props: {
 	cwd: string;
@@ -22,35 +31,32 @@ export function TrustConfirmModal(props: {
 	onChoose: (choice: "trust-remember" | "trust-session" | "deny") => void;
 }) {
 	return (
-		<div className="config-modal-overlay">
-			<div className="config-modal-dialog" onClick={(e) => e.stopPropagation()}>
-				<strong>{t("agent.trust.title")}</strong>
-				<p>{t("agent.trust.message")}</p>
-				<p
-					style={{
-						wordBreak: "break-all",
-						fontFamily: "var(--font-family-mono)",
-						fontSize: "var(--font-size-sm)",
-						color: "var(--color-text-muted)",
-					}}
-				>
+		<Dialog open onOpenChange={() => { /* 强制三选一，不允许被动关闭 */ }}>
+			<DialogContent
+				className="sm:max-w-md"
+				showCloseButton={false}
+				onEscapeKeyDown={(e) => e.preventDefault()}
+				onInteractOutside={(e) => e.preventDefault()}
+			>
+				<DialogHeader>
+					<DialogTitle>{t("agent.trust.title")}</DialogTitle>
+					<DialogDescription>{t("agent.trust.message")}</DialogDescription>
+				</DialogHeader>
+				<p className="break-all font-mono text-sm text-muted-foreground">
 					{t("agent.trust.project")}: {props.cwd}
 				</p>
-				<div className="config-modal-actions">
-					<button className="config-btn" onClick={() => props.onChoose("deny")}>
+				<DialogFooter className="sm:justify-end">
+					<Button variant="ghost" onClick={() => props.onChoose("deny")}>
 						{t("agent.trust.deny")}
-					</button>
-					<button className="config-btn" onClick={() => props.onChoose("trust-session")}>
+					</Button>
+					<Button variant="secondary" onClick={() => props.onChoose("trust-session")}>
 						{t("agent.trust.trustSession")}
-					</button>
-					<button
-						className="config-btn primary"
-						onClick={() => props.onChoose("trust-remember")}
-					>
+					</Button>
+					<Button variant="primary" onClick={() => props.onChoose("trust-remember")}>
 						{t("agent.trust.trustRemember")}
-					</button>
-				</div>
-			</div>
-		</div>
+					</Button>
+				</DialogFooter>
+			</DialogContent>
+		</Dialog>
 	);
 }

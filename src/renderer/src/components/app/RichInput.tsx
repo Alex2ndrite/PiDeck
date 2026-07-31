@@ -647,6 +647,9 @@ export const RichInput = forwardRef<HTMLDivElement, RichInputProps>(
 
 		const rootRef = useRef<HTMLDivElement | null>(null);
 		const composingRef = useRef(false);
+		// 语音输入 / IME 可能分段确认：compositionend → rAF → handleInput。
+		// 在此期间 useLayoutEffect 不得 rebuildDom，否则会破坏浏览器正在写入的文字。
+		const compositionSyncPendingRef = useRef(false);
 
 		// contentEditable 先原生更新 DOM，再通过 input 事件回传最新值。
 		// 保存最后一次 handleInput 捕获的原生文本与光标偏移，
@@ -755,6 +758,11 @@ export const RichInput = forwardRef<HTMLDivElement, RichInputProps>(
 			const domText = collectFlatText(root);
 
 			if (value !== domText) {
+				// 语音输入分段确认期间（compositionend 已触发但 handleInput 尚未通过 rAF 执行），
+				// DOM 归浏览器掌管，严禁 rebuildDom 覆盖，否则会吞掉刚写入的文字。
+				if (composingRef.current || compositionSyncPendingRef.current) {
+					return;
+				}
 				// 如果 value 与 handleInput 刚回传的原生值一致，说明 React 正在确认用户输入，
 				// 不做任何操作——DOM 已经是最新的，等待下一个 effect 清理 nativeInputValue 标记。
 				if (nativeInputValue !== null && value === nativeInputValue) {
@@ -885,8 +893,22 @@ export const RichInput = forwardRef<HTMLDivElement, RichInputProps>(
 			[onKeyDown],
 		);
 
-		const handleCompositionStart = () => { composingRef.current = true; };
-		const handleCompositionEnd = () => { composingRef.current = false; handleInput(); };
+		const handleCompositionStart = () => {
+			composingRef.current = true;
+			compositionSyncPendingRef.current = false;
+		};
+		const handleCompositionEnd = () => {
+			composingRef.current = false;
+			compositionSyncPendingRef.current = true;
+			// compositionend 触发时浏览器可能尚未完成文字替换（Windows 语音输入尤甚）。
+			// 延迟到下一帧读取 DOM，确保拿到的是最终文本而非临时占位。
+			requestAnimationFrame(() => {
+				compositionSyncPendingRef.current = false;
+				// 如果在帧等待期间又开始了新 composition，跳过本次同步
+				if (composingRef.current) return;
+				handleInput();
+			});
+		};
 
 		const classNames = [
 			"rich-input",

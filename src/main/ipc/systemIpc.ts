@@ -1,0 +1,716 @@
+/**
+ * System IPC handlers: pi check/exec, WSL, model list, logging, config, app update, dev tools.
+ * Phase 3.7: extracted from src/main/index.ts registerIpc().
+ */
+
+import { app, dialog, ipcMain, shell } from "electron";
+import { join } from "node:path";
+import { existsSync } from "node:fs";
+import { ipcChannels } from "../../shared/ipc";
+import type {
+	AppLogLevel,
+	AppLogQuery,
+	AppSettings,
+	AppUpdateAsset,
+	AvailableModel,
+	CreatePiSkillInput,
+	SessionRuntimeTarget,
+} from "../../shared/types";
+import type { PiLocator } from "../pi/PiLocator";
+import type { SettingsStore } from "../settings/SettingsStore";
+import type { ConfigManager } from "../config/ConfigManager";
+import type { AgentManager } from "../pi/AgentManager";
+import type { AppLogger } from "../logging/AppLogger";
+import type { RpcLogger } from "../logging/RpcLogger";
+import type { SessionRuntimeCoordinator } from "../sessions/SessionRuntimeCoordinator";
+import type { SkillManager } from "../skills/SkillManager";
+import { fetchModelList, invalidateModelListCache, getCachedModelList } from "../pi/modelListCache";
+import { getWslExe } from "../wsl/wslExe";
+
+export type SystemIpcDeps = {
+	piLocator: PiLocator;
+	settingsStore: SettingsStore;
+	configManager: ConfigManager;
+	agentManager: AgentManager;
+	skillManager: SkillManager;
+	appLogger: AppLogger;
+	rpcLogger: RpcLogger;
+	sessionRuntimeCoordinator: SessionRuntimeCoordinator;
+	getMainWindow: () => Electron.BrowserWindow | null;
+	mainCopy: (key: string, params?: Record<string, string | number>) => string;
+	/** Check for app update; defined in index.ts */
+	checkForAppUpdate: (installationType?: string) => Promise<import("../../shared/types").AppUpdateInfo | null>;
+	/** Download update asset */
+	downloadUpdateAsset: (asset: AppUpdateAsset) => Promise<import("../../shared/types").AppUpdateDownloadResult>;
+	/** Install downloaded update */
+	installDownloadedUpdate: (filePath: string) => Promise<void>;
+	/** Open external URL */
+	openExternalUrl: (url: string, forceSystem?: boolean) => Promise<void>;
+	/** Resolve WSL environment (lazy import): used by settingsUpdate when WSL settings change */
+	resolveWslEnvironment?: (distro: string, user: string, logger: { warn: (msg: string, detail: unknown) => void }) => Promise<{
+		wslDistro: string;
+		wslUser: string;
+		wslPath: (linuxPath: string) => string;
+	}>;
+	/** React to settings changes for pet system */
+	reactToPetSettings?: (prev: AppSettings, next: AppSettings) => Promise<void>;
+	/** Session scanner WSL config */
+	configureSessionScannerWsl?: (env: unknown) => Promise<void>;
+	clearSessionScannerWsl?: () => void;
+	/** Set feishu locale */
+	setFeishuLocale?: (locale: unknown) => void;
+	/** Set default bot name */
+	setFeishuConfigDefaultBotName?: (name: string) => void;
+	/** Refresh tray context menu */
+	refreshTrayContextMenu?: () => void;
+	/** Notify title bar change */
+	notifyTitleBarChange?: (window: Electron.BrowserWindow) => void;
+	/** Apply native theme source */
+	applyNativeThemeSource?: (settings: AppSettings) => void;
+	/** Apply desktop proxy settings */
+	applyDesktopProxy?: (settings: AppSettings) => Promise<void>;
+	/** Test Pi proxy */
+	testPiProxy?: (settings: AppSettings, proxyUrl?: string, translate?: (key: string, params?: Record<string, string | number>) => string) => Promise<import("../../shared/types").PiProxyTestResult>;
+	/** Web service manager apply settings */
+	applyWebServiceSettings?: (settings: AppSettings) => Promise<void>;
+	/** Session catalog set identity context */
+	setSessionCatalogIdentityContext?: (ctx: { wslDistro?: string; wslUser?: string }) => void;
+	/** Configure WSL for various services */
+	configureSkillManagerWsl?: (env: unknown) => void;
+	configurePromptManagerWsl?: (env: unknown) => void;
+	configureExtensionManagerWsl?: (env: unknown) => void;
+	configureConfigManagerWsl?: (env: unknown) => void;
+	configureXuePromptManagerWsl?: (env: unknown) => void;
+	/** Session command IPC error converter */
+	sessionCommandIpcError?: (error: import("../../shared/types").SessionCommandError) => Error;
+	/** Extension manager for pi update */
+	extensionManager?: {
+		checkPiUpdate: () => Promise<import("../../shared/types").PiUpdateCheckResult>;
+		updatePi: () => Promise<import("../../shared/types").PiCliUpdateResult>;
+	};
+	/** Web service manager for restart */
+	webServiceManager?: { stop: () => Promise<void> };
+	/** Terminal manager for restart */
+	terminalManager?: { closeAll: () => void };
+	/** Is quitting flag (for restart) */
+	isQuitting?: { value: boolean };
+	/** Releases URL */
+	RELEASES_URL?: string;
+};
+
+export function registerSystemIpc(deps: SystemIpcDeps): void {
+	const {
+		piLocator,
+		settingsStore,
+		configManager,
+		agentManager,
+		skillManager,
+		appLogger,
+		rpcLogger,
+		sessionRuntimeCoordinator,
+		getMainWindow,
+		mainCopy,
+		checkForAppUpdate,
+		downloadUpdateAsset,
+		installDownloadedUpdate,
+		openExternalUrl: doOpenExternalUrl,
+		resolveWslEnvironment,
+		reactToPetSettings,
+		configureSessionScannerWsl,
+		clearSessionScannerWsl,
+		setFeishuLocale,
+		setFeishuConfigDefaultBotName,
+		refreshTrayContextMenu,
+		notifyTitleBarChange,
+		applyNativeThemeSource,
+		applyDesktopProxy,
+		testPiProxy,
+		applyWebServiceSettings,
+		setSessionCatalogIdentityContext,
+		configureSkillManagerWsl,
+		configurePromptManagerWsl,
+		configureExtensionManagerWsl,
+		configureConfigManagerWsl,
+		configureXuePromptManagerWsl,
+		sessionCommandIpcError,
+		extensionManager,
+		webServiceManager,
+		terminalManager,
+		isQuitting,
+		RELEASES_URL,
+	} = deps;
+
+	// ── Pi 检测 ──────────────────────────────────────────────────────
+
+	ipcMain.handle(ipcChannels.piCheck, async () => {
+		const settings = settingsStore.get();
+		const status = await piLocator.check(settings.customPiPath, settings.wslEnabled, settings.wslDistro, settings.wslUser);
+		void appLogger.info("pi", "Pi check completed", {
+			installed: status.installed,
+			version: status.version,
+			command: status.command,
+			error: status.error,
+		});
+		return status;
+	});
+
+	ipcMain.handle(ipcChannels.piCheckCustom, async (_event, customPath: string) => {
+		const status = await piLocator.validateCustomPath(customPath);
+		if (status.installed && status.command) {
+			await settingsStore.update({ customPiPath: status.command });
+		}
+		void appLogger.info("pi", "Custom pi path checked", {
+			installed: status.installed,
+			version: status.version,
+			command: status.command,
+			error: status.error,
+		});
+		return status;
+	});
+
+	// ── 模型列表 ────────────────────────────────────────────────────
+
+	ipcMain.handle(ipcChannels.projectsListModels, async (_event, _projectId?: string) => {
+		try {
+			return await fetchModelList(piLocator, settingsStore);
+		} catch (error) {
+			void appLogger.warn("pi", "Failed to list models via pi --list-models", {
+				error: error instanceof Error ? error.message : String(error),
+			});
+			return [];
+		}
+	});
+
+	// ── WSL ──────────────────────────────────────────────────────────
+
+	const wslExe = getWslExe();
+	const wslExePath = wslExe.command;
+	const wslShell = wslExe.shell;
+
+	ipcMain.handle(ipcChannels.wslListDistros, async () => {
+		if (process.platform !== "win32") return [] as string[];
+		try {
+			const { execFile } = await import("node:child_process");
+			return new Promise<string[]>((resolve) => {
+				execFile(wslExePath, ["-l", "-q"], { encoding: "utf8", timeout: 10_000, windowsHide: true, shell: wslShell },
+					(err, stdout) => {
+						if (err) { resolve([]); return; }
+						const distros = stdout.split(/\r?\n/)
+							.map((s) => s.trim())
+							.filter((s) => s.length > 0 && !s.includes("\\") && !s.includes("\x00"));
+						resolve(distros);
+					});
+			});
+		} catch { return [] as string[]; }
+	});
+
+	ipcMain.handle(ipcChannels.wslValidateConnection, async (_event, distro: string, user: string) => {
+		if (process.platform !== "win32") {
+			return { ok: false, whoami: "", piVersion: "", error: mainCopy("wsl.windowsOnly") };
+		}
+		try {
+			const { execFile } = await import("node:child_process");
+			const whoami = await new Promise<string>((resolve, reject) => {
+				execFile(wslExePath, ["-d", distro, "-u", user, "whoami"],
+					{ encoding: "utf8", timeout: 10_000, windowsHide: true, shell: wslShell },
+					(err, stdout) => {
+						if (err) { reject(err); return; }
+						resolve(stdout.trim());
+					});
+			});
+			let piVersion = "";
+			try {
+				piVersion = await new Promise<string>((resolve, reject) => {
+					execFile(wslExePath, ["-d", distro, "-u", user, "pi", "--version"],
+						{ encoding: "utf8", timeout: 10_000, windowsHide: true, shell: wslShell },
+						(err, stdout) => {
+							if (err) { reject(err); return; }
+							resolve(stdout.trim());
+						});
+				});
+			} catch { /* pi 未安装，piVersion 保持空 */ }
+			return {
+				ok: true,
+				whoami,
+				piVersion,
+				error: piVersion ? "" : mainCopy("wsl.piNotInstalled"),
+			};
+		} catch (err) {
+			void appLogger.warn("wsl", "WSL connection validation failed", {
+				distro,
+				user,
+				error: err instanceof Error ? err.message : String(err),
+			});
+			return {
+				ok: false,
+				whoami: "",
+				piVersion: "",
+				error: mainCopy("wsl.connectionFailed"),
+			};
+		}
+	});
+
+	// ── Pi 安装 / NPM ────────────────────────────────────────────────
+
+	ipcMain.handle(ipcChannels.piExecInstall, async (_event, command: string): Promise<import("../../shared/types").PiInstallExecResult> => {
+		void appLogger.info("pi", "Executing install command", { command });
+		try {
+			const { execFile } = await import("node:child_process");
+			const result = await new Promise<import("../../shared/types").PiInstallExecResult>((resolve) => {
+				const isWin = process.platform === "win32";
+				if (isWin) {
+					const child = execFile(
+						process.env.ComSpec || "cmd.exe",
+						["/d", "/s", "/c", command],
+						{
+							cwd: app.getPath("home"),
+							timeout: 120_000,
+							env: { ...process.env, npm_config_fund: "false", npm_config_audit: "false" },
+							windowsHide: true,
+							encoding: "utf8",
+							shell: false,
+						},
+						(error: unknown, stdout: string, stderr: string) => {
+							const execError = error as { code?: number | string } | null;
+							resolve({
+								success: !error,
+								exitCode: typeof execError?.code === "number" ? execError.code : execError ? -1 : 0,
+								stdout: stdout || "",
+								stderr: stderr || "",
+							});
+						},
+					);
+				} else {
+					execFile(
+						"/bin/sh",
+						["-c", command],
+						{
+							cwd: app.getPath("home"),
+							timeout: 120_000,
+							env: { ...process.env, npm_config_fund: "false", npm_config_audit: "false" },
+							encoding: "utf8",
+						},
+						(error: unknown, stdout: string, stderr: string) => {
+							const execError = error as { code?: number | string } | null;
+							resolve({
+								success: !error,
+								exitCode: typeof execError?.code === "number" ? execError.code : execError ? -1 : 0,
+								stdout: stdout || "",
+								stderr: stderr || "",
+							});
+						},
+					);
+				}
+			});
+			void appLogger.info("pi", "Install command completed", {
+				success: result.success,
+				exitCode: result.exitCode,
+				stdoutLength: result.stdout.length,
+				stderrLength: result.stderr.length,
+			});
+			return result;
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			void appLogger.error("pi", "Install command threw", { error: message });
+			return { success: false, exitCode: -1, stdout: "", stderr: message };
+		}
+	});
+
+	ipcMain.handle(ipcChannels.piCheckNpm, async (): Promise<import("../../shared/types").NpmAvailabilityResult> => {
+		try {
+			const { execFile } = await import("node:child_process");
+			const result = await new Promise<import("../../shared/types").NpmAvailabilityResult>((resolve) => {
+				const isWin = process.platform === "win32";
+				if (isWin) {
+					execFile(
+						process.env.ComSpec || "cmd.exe",
+						["/d", "/s", "/c", "npm --version"],
+						{ timeout: 10_000, encoding: "utf8", windowsHide: true, shell: false },
+						(error, stdout) => {
+							if (error) {
+								resolve({ available: false, error: error.message });
+							} else {
+								resolve({ available: true, version: stdout.trim() });
+							}
+						},
+					);
+				} else {
+					execFile(
+						"npm",
+						["--version"],
+						{ timeout: 10_000, encoding: "utf8" },
+						(error, stdout) => {
+							if (error) {
+								resolve({ available: false, error: error.message });
+							} else {
+								resolve({ available: true, version: stdout.trim() });
+							}
+						},
+					);
+				}
+			});
+			return result;
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			return { available: false, error: message };
+		}
+	});
+
+	// ── Pi 更新 ──────────────────────────────────────────────────────
+
+	if (extensionManager) {
+		ipcMain.handle(ipcChannels.piUpdateCheck, async () => {
+			const result = await extensionManager.checkPiUpdate();
+			void appLogger.info("pi", "Pi update check completed", { currentVersion: result.currentVersion, latestVersion: result.latestVersion, hasUpdate: result.hasUpdate, error: result.error });
+			return result;
+		});
+		ipcMain.handle(ipcChannels.piUpdate, async () => {
+			const result = await extensionManager.updatePi();
+			void appLogger.info("pi", "Pi update command completed", { updated: result.updated, bytes: result.output.length });
+			return result;
+		});
+	}
+
+	// ── 应用信息 ─────────────────────────────────────────────────────
+
+	ipcMain.handle(ipcChannels.appInfo, () => ({
+		version: app.getVersion(),
+		releasesUrl: RELEASES_URL ?? "https://github.com/ayuayue/pi-desktop/releases",
+		platform: process.platform,
+	}));
+
+	ipcMain.handle(ipcChannels.appPreferredSystemLanguages, () => {
+		try { return app.getPreferredSystemLanguages(); } catch { return []; }
+	});
+
+	// ── 应用更新 ─────────────────────────────────────────────────────
+
+	ipcMain.handle(ipcChannels.appCheckUpdate, () =>
+		checkForAppUpdate(settingsStore.get().installationType),
+	);
+	ipcMain.handle(ipcChannels.appDownloadUpdate, async (_event, asset: AppUpdateAsset) =>
+		downloadUpdateAsset(asset),
+	);
+	ipcMain.handle(ipcChannels.appInstallUpdate, async (_event, filePath: string) =>
+		installDownloadedUpdate(filePath),
+	);
+
+	// ── 应用日志 ─────────────────────────────────────────────────────
+
+	ipcMain.handle(ipcChannels.logsList, async (_event, query: AppLogQuery) =>
+		appLogger.list(query),
+	);
+	ipcMain.handle(ipcChannels.rendererLog, async (
+		_event, level: AppLogLevel, scope: string, message: string, detail?: unknown,
+	) => {
+		const safeLevel = ["debug", "info", "warn", "error"].includes(level) ? level : "info";
+		await appLogger.log(safeLevel as AppLogLevel, scope, message, detail);
+	});
+	ipcMain.on(ipcChannels.preloadReady, (event) => {
+		void appLogger.info("app", "Preload API exposed", { url: event.sender.getURL() });
+	});
+	ipcMain.on(ipcChannels.preloadError, (event, detail) => {
+		void appLogger.error("app", "Preload API expose failed", { url: event.sender.getURL(), detail });
+	});
+	ipcMain.handle(ipcChannels.logsClear, async () => appLogger.clear());
+	ipcMain.handle(ipcChannels.logsOpenFolder, async () => appLogger.openFolder());
+	ipcMain.handle(ipcChannels.logsSize, async () => appLogger.getSize());
+
+	// ── RPC 日志 ─────────────────────────────────────────────────────
+
+	const resolveRpcRuntimeAgent = (target?: SessionRuntimeTarget) => {
+		if (!target) return undefined;
+		const validated = sessionRuntimeCoordinator.validateTarget(target);
+		if (!validated.ok) {
+			if (sessionCommandIpcError) throw sessionCommandIpcError((validated as { ok: false; error: import("../../shared/types").SessionCommandError }).error);
+			return undefined;
+		}
+		return target.agentId;
+	};
+
+	ipcMain.handle(ipcChannels.rpcLogsGetSize, async (_event, target?: SessionRuntimeTarget) =>
+		rpcLogger.getSize(resolveRpcRuntimeAgent(target)),
+	);
+	ipcMain.handle(ipcChannels.rpcLogsGet, async (_event, options?: { target?: SessionRuntimeTarget; days?: number; limit?: number }) =>
+		rpcLogger.getFromFile({ agentId: resolveRpcRuntimeAgent(options?.target), days: options?.days, limit: options?.limit }),
+	);
+	ipcMain.handle(ipcChannels.rpcLogsClear, async (_event, target?: SessionRuntimeTarget) =>
+		rpcLogger.clear(resolveRpcRuntimeAgent(target)),
+	);
+	ipcMain.handle(ipcChannels.rpcLoggingSet, async (_event, target: SessionRuntimeTarget, enabled: boolean) => {
+		agentManager.setRpcLogging(resolveRpcRuntimeAgent(target)!, enabled);
+		return enabled;
+	});
+	ipcMain.handle(ipcChannels.rpcLoggingGet, async (_event, target: SessionRuntimeTarget) =>
+		agentManager.isRpcLogging(resolveRpcRuntimeAgent(target)!),
+	);
+	ipcMain.handle(ipcChannels.rpcLogsOpenFile, async (_event, target: SessionRuntimeTarget) => {
+		resolveRpcRuntimeAgent(target);
+		const dir = join(app.getPath("userData"), "logs", "rpc");
+		await shell.openPath(dir);
+	});
+
+	// ── 反馈环境 ─────────────────────────────────────────────────────
+
+	ipcMain.handle(ipcChannels.appFeedbackEnvironment, async () => {
+		const pi = await piLocator.check();
+		return {
+			appVersion: app.getVersion(),
+			platform: process.platform,
+			arch: process.arch,
+			electronVersion: process.versions.electron ?? "",
+			chromeVersion: process.versions.chrome ?? "",
+			nodeVersion: process.versions.node,
+			pi,
+		};
+	});
+
+	// ── 外部链接 / 重启 / 窗口控制 ──────────────────────────────────
+
+	ipcMain.handle(ipcChannels.appOpenExternal, async (_event, url: string, forceSystem?: boolean) => {
+		await doOpenExternalUrl(url, forceSystem);
+	});
+
+	ipcMain.handle(ipcChannels.appRestart, async () => {
+		if (isQuitting) isQuitting.value = true;
+		await webServiceManager?.stop();
+		terminalManager?.closeAll();
+		agentManager?.stopAll();
+		app.relaunch();
+		app.quit();
+	});
+
+	const mainWindow = getMainWindow();
+
+	ipcMain.handle(ipcChannels.appWindowMinimize, () => {
+		const win = getMainWindow();
+		if (!win || win.isDestroyed()) return;
+		win.minimize();
+	});
+	ipcMain.handle(ipcChannels.appWindowToggleMaximize, () => {
+		const win = getMainWindow();
+		if (!win || win.isDestroyed()) return;
+		if (win.isMaximized()) win.unmaximize();
+		else win.maximize();
+	});
+	ipcMain.handle(ipcChannels.appWindowToggleAlwaysOnTop, () => {
+		const win = getMainWindow();
+		if (!win || win.isDestroyed()) return false;
+		const next = !win.isAlwaysOnTop();
+		win.setAlwaysOnTop(next, "floating");
+		return next;
+	});
+	ipcMain.handle(ipcChannels.appWindowClose, () => {
+		const win = getMainWindow();
+		if (!win || win.isDestroyed()) return;
+		win.close();
+	});
+
+	// ── 设置 ─────────────────────────────────────────────────────────
+
+	ipcMain.handle(ipcChannels.settingsGet, () => settingsStore.get());
+
+	ipcMain.handle(ipcChannels.settingsUpdate, async (_event, patch: Partial<AppSettings>) => {
+		const prevSettings = settingsStore.get();
+		const settings = await settingsStore.update(patch);
+		void appLogger.info("settings", "Settings updated", { keys: Object.keys(patch) });
+
+		if (typeof reactToPetSettings === "function") {
+			await reactToPetSettings(prevSettings, settings);
+		}
+		if (
+			"desktopProxyEnabled" in patch ||
+			"desktopProxyUrl" in patch ||
+			"desktopProxyBypass" in patch
+		) {
+			if (applyDesktopProxy) await applyDesktopProxy(settings);
+		}
+		if ("theme" in patch) {
+			if (applyNativeThemeSource) applyNativeThemeSource(settings);
+		}
+		if ("language" in patch) {
+			if (setFeishuLocale) setFeishuLocale(undefined);
+			if (setFeishuConfigDefaultBotName) setFeishuConfigDefaultBotName("");
+			if (refreshTrayContextMenu) refreshTrayContextMenu();
+		}
+		if ("useNativeTitleBar" in patch) {
+			if (notifyTitleBarChange) notifyTitleBarChange(getMainWindow()!);
+		}
+		if ("zoomFactor" in patch) {
+			getMainWindow()?.webContents.setZoomFactor(settings.zoomFactor);
+		}
+		if (
+			"webServiceEnabled" in patch ||
+			"webServiceHost" in patch ||
+			"webServicePort" in patch
+		) {
+			try {
+				if (applyWebServiceSettings) await applyWebServiceSettings(settings);
+			} catch (error) {
+				const debugDetails = error instanceof Error ? error.message : String(error);
+				void appLogger.warn("web", "Failed to apply web service settings", { error: debugDetails });
+				if (settings.webServiceEnabled) {
+					await settingsStore.update({ webServiceEnabled: false });
+				}
+				throw new Error(mainCopy(
+					debugDetails === "WEB_SERVICE_INVALID_PORT"
+						? "webService.invalidPort"
+						: "webService.startFailed",
+				));
+			}
+		}
+		// WSL 设置变更时同步更新会话扫描器和配置管理器
+		if ("wslEnabled" in patch || "wslDistro" in patch || "wslUser" in patch) {
+			if (setSessionCatalogIdentityContext) {
+				setSessionCatalogIdentityContext(
+					settings.wslEnabled
+						? { wslDistro: settings.wslDistro, wslUser: settings.wslUser }
+						: {},
+				);
+			}
+			if (settings.wslEnabled && settings.wslDistro && settings.wslUser && resolveWslEnvironment) {
+				const environment = await resolveWslEnvironment(settings.wslDistro, settings.wslUser, {
+					warn: (msg: string, detail: unknown) => console.warn("[PiDeck] " + String(msg), detail),
+				});
+				if (configureSessionScannerWsl) await configureSessionScannerWsl(environment);
+				if (configureSkillManagerWsl) configureSkillManagerWsl(environment);
+				if (configurePromptManagerWsl) configurePromptManagerWsl(environment);
+				if (configureExtensionManagerWsl) configureExtensionManagerWsl(environment);
+				if (configureConfigManagerWsl) configureConfigManagerWsl(environment);
+				if (configureXuePromptManagerWsl) configureXuePromptManagerWsl(environment);
+			} else {
+				if (clearSessionScannerWsl) clearSessionScannerWsl();
+				if (configureSkillManagerWsl) configureSkillManagerWsl(null);
+				if (configurePromptManagerWsl) configurePromptManagerWsl(null);
+				if (configureExtensionManagerWsl) configureExtensionManagerWsl(null);
+				if (configureConfigManagerWsl) configureConfigManagerWsl(null);
+				if (configureXuePromptManagerWsl) configureXuePromptManagerWsl(null);
+			}
+		}
+		return settings;
+	});
+
+	ipcMain.handle(ipcChannels.settingsTestPiProxy, async () => {
+		if (!testPiProxy) throw new Error("testPiProxy not available");
+		const result = await testPiProxy(settingsStore.get(), undefined, mainCopy);
+		void appLogger.info("settings", "Pi proxy tested", {
+			success: result.success,
+			elapsedMs: result.elapsedMs,
+			statusCode: result.statusCode,
+			error: result.error,
+		});
+		return result;
+	});
+
+	// ── Skills CRUD ──────────────────────────────────────────────────
+
+	ipcMain.handle(ipcChannels.skillsList, () => skillManager.list());
+	ipcMain.handle(ipcChannels.skillsCreate, async (_event, input: CreatePiSkillInput) => {
+		const result = await skillManager.create(input);
+		void appLogger.info("skill", "Skill created", { name: input.name, locationId: input.locationId });
+		return result;
+	});
+	ipcMain.handle(ipcChannels.skillsToggle, async (_event, path: string, enabled: boolean) => {
+		const result = await skillManager.toggle(path, enabled);
+		void appLogger.info("skill", "Skill toggled", { path, enabled });
+		return result;
+	});
+	ipcMain.handle(ipcChannels.skillsDelete, async (_event, path: string) => {
+		const result = await skillManager.delete(path);
+		void appLogger.info("skill", "Skill deleted", { path });
+		return result;
+	});
+	ipcMain.handle(ipcChannels.skillsOpenFolder, (_event, path?: string) =>
+		skillManager.openFolder(path),
+	);
+
+	// ── 配置管理 ─────────────────────────────────────────────────────
+
+	ipcMain.handle(ipcChannels.configGetModels, () =>
+		configManager.getModelsConfig(),
+	);
+	ipcMain.handle(ipcChannels.configGetAuth, () =>
+		configManager.getAuthConfig(),
+	);
+	ipcMain.handle(ipcChannels.configGetSettings, () =>
+		configManager.getSettingsConfig(),
+	);
+	ipcMain.handle(ipcChannels.configGetTrust, () =>
+		configManager.getTrustConfig(),
+	);
+	ipcMain.handle(ipcChannels.projectsTrustResponse,
+		(_event, requestId: string, choice: "trust-remember" | "trust-session" | "deny") =>
+			agentManager.respondTrustRequest(requestId, choice),
+	);
+	ipcMain.handle(ipcChannels.configSaveModels, async (_event, data) => {
+		const result = await configManager.saveModelsConfig(data);
+		invalidateModelListCache();
+		void appLogger.info("config", "Models config saved", { providerCount: Object.keys(data?.providers ?? {}).length });
+		return result;
+	});
+	ipcMain.handle(ipcChannels.configSaveAuth, async (_event, data) => {
+		const result = await configManager.saveAuthConfig(data);
+		invalidateModelListCache();
+		void appLogger.info("config", "Auth config saved", { authCount: Object.keys(data ?? {}).length });
+		return result;
+	});
+	ipcMain.handle(ipcChannels.configSaveSettings, async (_event, settings) => {
+		const result = await configManager.saveSettingsConfig(settings);
+		void appLogger.info("config", "Pi settings config saved", { keys: Object.keys(settings ?? {}) });
+		return result;
+	});
+	ipcMain.handle(ipcChannels.configSaveRaw, async (_event, fileName, rawJson) => {
+		const result = await configManager.saveRawConfig(fileName, rawJson);
+		void appLogger.info("config", "Raw config saved", { fileName, bytes: Buffer.byteLength(rawJson, "utf8") });
+		return result;
+	});
+	ipcMain.handle(ipcChannels.configExport, () =>
+		configManager.exportConfig(),
+	);
+	ipcMain.handle(ipcChannels.configImport, async (_event, packageJson: string) => {
+		const result = await configManager.importConfig(packageJson);
+		void appLogger.info("config", "Config imported", { bytes: Buffer.byteLength(packageJson, "utf8"), valid: result.valid });
+		return result;
+	});
+	ipcMain.handle(ipcChannels.configFetchModels, async (
+		_event,
+		payload: { baseUrl: string; apiKey: string; apiType?: string },
+	) => {
+		const result = await configManager.fetchProviderModels(payload.baseUrl, payload.apiKey, payload.apiType);
+		void appLogger.info("config", "Provider models fetched", {
+			baseUrl: payload.baseUrl,
+			apiType: payload.apiType,
+			modelCount: Array.isArray(result) ? result.length : undefined,
+		});
+		return result;
+	});
+	ipcMain.handle(ipcChannels.configTestProvider, async (
+		_event,
+		payload: { baseUrl: string; apiKey: string; modelId: string; apiType?: string; headers?: Record<string, string> },
+	) => {
+		const result = await configManager.testProviderConnection(
+			payload.baseUrl, payload.apiKey, payload.modelId, payload.apiType, payload.headers,
+		);
+		void appLogger.info("config", "Provider connection tested", {
+			baseUrl: payload.baseUrl,
+			apiType: payload.apiType,
+			modelId: payload.modelId,
+			success: result.success,
+			error: result.error,
+		});
+		return result;
+	});
+
+	// ── 开发者控制台 ─────────────────────────────────────────────────
+
+	ipcMain.handle(ipcChannels.appToggleDevTools, () => {
+		const win = getMainWindow();
+		if (!win || win.isDestroyed()) return false;
+		if (win.webContents.isDevToolsOpened()) {
+			win.webContents.closeDevTools();
+			return false;
+		}
+		win.webContents.openDevTools({ mode: "detach" });
+		return true;
+	});
+}

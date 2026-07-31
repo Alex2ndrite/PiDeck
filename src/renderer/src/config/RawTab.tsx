@@ -1,3 +1,4 @@
+import { Button } from "../components/ui-shadcn/button";
 import { t } from "../i18n";
 import { ConfigSelect } from "./ConfigShared";
 
@@ -26,13 +27,13 @@ export function RawTab(props: {
 					options={RAW_FILE_OPTIONS}
 					onChange={props.onChangeFileName}
 				/>
-				<button
-					className="config-btn primary"
+				<Button
+					 variant="default"
 					onClick={props.onSave}
 					disabled={props.saving}
 				>
 					{props.saving ? t("common.saving") : t("common.save")}
-				</button>
+				</Button>
 			</div>
 			<textarea
 				className="config-raw-editor"

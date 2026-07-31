@@ -11,18 +11,9 @@ import JsonWorker from "monaco-editor/esm/vs/language/json/json.worker?worker";
 import CssWorker from "monaco-editor/esm/vs/language/css/css.worker?worker";
 import HtmlWorker from "monaco-editor/esm/vs/language/html/html.worker?worker";
 
-// 缓存 TsWorker 实例，防止多次打开 TS 文件时重复加载
-let tsWorkerPromise: Promise<Worker> | null = null;
-async function getTsWorker(): Promise<Worker> {
-	if (!tsWorkerPromise) {
-		tsWorkerPromise = (async () => {
-			// 动态 import TypeScript Worker，Vite 会将其拆为独立 chunk，仅在首次访问 TS/JS 语言时下载
-			const mod = await import("monaco-editor/esm/vs/language/typescript/ts.worker?worker");
-			return new mod.default();
-		})();
-	}
-	return tsWorkerPromise;
-}
+// TypeScript Worker 被 Vite 插件替换为纯文本模式桩（electron.vite.config.ts:monacoTsWorkerPlugin）。
+// ts.worker 的依赖链包含压缩过的完整 TypeScript 编译器（~13MB），Rollup 无法解析。
+import TsWorker from "monaco-editor/esm/vs/language/typescript/ts.worker";
 
 export function setupMonaco(): void {
 	self.MonacoEnvironment = {
@@ -30,7 +21,7 @@ export function setupMonaco(): void {
 			switch (label) {
 				case "typescript":
 				case "javascript":
-					return getTsWorker();
+					return new TsWorker();
 				case "json":
 					return new JsonWorker();
 				case "css":

@@ -24,6 +24,13 @@ function loadWslPaths() {
 	return sandbox.exports;
 }
 
+// PiProcess 拆分出的扩展隔离模块；vm 沙箱不会自动解析相对模块，需与 WslPaths 一样显式登记。
+function loadPiExtensionFilter() {
+	const sandbox = { exports: {}, require };
+	vm.runInNewContext(transpile("src/main/pi/piExtensionFilter.ts"), sandbox, { filename: "piExtensionFilter.ts" });
+	return sandbox.exports;
+}
+
 function createChildProcess() {
 	const child = new EventEmitter();
 	child.stdin = new PassThrough();
@@ -35,6 +42,7 @@ function createChildProcess() {
 
 function loadPiProcess(spawnCalls) {
 	const paths = loadWslPaths();
+	const extensionFilter = loadPiExtensionFilter();
 	class FakeRpcClient extends EventEmitter {
 		close() {}
 	}
@@ -61,6 +69,7 @@ function loadPiProcess(spawnCalls) {
 			if (id === "./PiRpcClient") return { PiRpcClient: FakeRpcClient };
 			if (id === "./PiLocator") return { PiLocator: FakePiLocator };
 			if (id === "../wsl/WslPaths") return paths;
+			if (id === "./piExtensionFilter") return extensionFilter;
 			return require(id);
 		},
 	};

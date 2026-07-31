@@ -28,13 +28,15 @@ function createChildProcess() {
 }
 
 function loadPiProcess(spawnImpl) {
-	const paths = (() => {
+	// vm 沙箱内加载 transpile 后的 CommonJS 源码模块；
+	// 新增拆分出的内部依赖时需要在此同步登记，否则 require 会落到真实文件系统解析失败。
+	const loadSandboxed = (filePath, name) => {
 		const sandbox = { exports: {}, require };
-		vm.runInNewContext(transpile("src/main/wsl/WslPaths.ts"), sandbox, {
-			filename: "WslPaths.ts",
-		});
+		vm.runInNewContext(transpile(filePath), sandbox, { filename: name });
 		return sandbox.exports;
-	})();
+	};
+	const paths = loadSandboxed("src/main/wsl/WslPaths.ts", "WslPaths.ts");
+	const extensionFilter = loadSandboxed("src/main/pi/piExtensionFilter.ts", "piExtensionFilter.ts");
 
 	class FakeRpcClient extends EventEmitter {
 		close() {}
@@ -59,6 +61,7 @@ function loadPiProcess(spawnImpl) {
 			if (id === "./PiRpcClient") return { PiRpcClient: FakeRpcClient };
 			if (id === "./PiLocator") return { PiLocator: FakePiLocator };
 			if (id === "../wsl/WslPaths") return paths;
+			if (id === "./piExtensionFilter") return extensionFilter;
 			return require(id);
 		},
 	};

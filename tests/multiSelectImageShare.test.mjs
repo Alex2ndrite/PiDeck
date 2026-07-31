@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { readRendererStyles } from "./helpers/rendererStyles.mjs";
 import ts from "typescript";
 import vm from "node:vm";
 
@@ -12,13 +13,21 @@ function loadAppUtils() {
       target: ts.ScriptTarget.ES2022,
     },
   });
-  const sandbox = { exports: {}, location: { href: "file:///Users/test/app" } };
+  // AppUtils 拆分后引用了 ./RichInput 的 formatFilePathRef；vm 沙箱不会解析相对模块，显式桩掉。
+  const sandbox = {
+    exports: {},
+    location: { href: "file:///Users/test/app" },
+    require: (id) => {
+      if (id === "./RichInput") return { formatFilePathRef: (p) => p };
+      return {};
+    },
+  };
   vm.runInNewContext(outputText, sandbox, { filename: "AppUtils.ts" });
   return sandbox.exports;
 }
 
 test("multi-select image export stays renderable for html-to-image", () => {
-  const styles = readFileSync("src/renderer/src/styles.css", "utf8");
+  const styles = readRendererStyles();
   const rule = styles.match(/\.multi-select-image-export \{([\s\S]*?)\n\}/)?.[1] ?? "";
 
   assert.match(rule, /left:\s*0;/);

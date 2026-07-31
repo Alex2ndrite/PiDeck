@@ -1,3 +1,4 @@
+import { Button } from "../components/ui-shadcn/button";
 import { showNotice } from "../utils/notice";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, FileEdit, Pencil, ShoppingBag, Trash2, X } from "lucide-react";
@@ -121,16 +122,16 @@ export function PromptsTab(props: {
 					<small className="prompts-restart-hint">{t("config.restartHint")}</small>
 				</div>
 				<div className="prompts-toolbar-actions">
-					<button
-						className="config-btn"
+					<Button
+						 variant="outline"
 						onClick={props.onRefresh}
 						disabled={props.loading}
 					>
 						{t("common.refresh")}
-					</button>
-					<button className="config-btn blue" onClick={props.onOpenRoot}>
+					</Button>
+					<Button  variant="secondary" onClick={props.onOpenRoot}>
 						{t("config.openFolder")}
-					</button>
+					</Button>
 				</div>
 			</div>
 
@@ -154,13 +155,13 @@ export function PromptsTab(props: {
 						rows={3}
 					/>
 				</label>
-				<button
-					className="config-btn primary"
+				<Button
+					 variant="default"
 					disabled={!canCreate || props.creating}
 					onClick={props.onCreate}
 				>
 					{props.loading || props.creating ? t("common.loading") : t("config.create")}
-				</button>
+				</Button>
 			</section>
 
 			<section className="prompts-list">

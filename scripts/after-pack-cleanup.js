@@ -2,8 +2,7 @@
  * afterPack 钩子：打包后执行多项清理，缩减安装包体积。
  *
  * 1. Locale 精简 —— 只保留中英文，删除 Electron 其余 52 个语言包（节省 ~42MB）
- * 2. larksuiteoapi 冗余清理 —— 删除未使用的 CJS 模块 lib/（节省 ~5MB）
- * 3. 通用 node_modules 清理 —— 删除文档、许可证、测试等无用文件
+ * 2. 保留第三方包的运行时入口，清理文档、许可证、测试等非运行时文件
  *
  * 参考: https://www.electron.build/configuration/configuration#afterpack
  */
@@ -184,11 +183,9 @@ exports.default = async function (context) {
 
   let totalRemoved = 0;
 
-  // --- 3a. @larksuiteoapi 清理
-  // 注意：@larksuiteoapi/node-sdk 的 package.json 中 main 指向 ./lib/index.js（CJS），
-  // 没有 exports 字段。Node.js await import() 在无 exports 字段时仍使用 main 字段，
-  // 因此不能删除 lib/ 目录。如果希望减少体积，应把 main 改为 ./es/index.js 后再删除 lib/。
-  // 目前保留不动以避免 Cannot find package 运行时错误。
+  // --- 3a. 保留 @larksuiteoapi 的 CJS 运行时入口 ---
+  // node-sdk 的 package.json 将 main 指向 ./lib/index.js，且未声明 exports。
+  // Node.js 的动态 import() 仍会按 main 解析，所以不能删除 lib/；否则打包版会找不到 SDK。
 
   // --- 3b. 删除所有 node_modules 中的 source map、文档、测试文件 ---
   const nmExtractDir = path.join(extractDir, "node_modules");

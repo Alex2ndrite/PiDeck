@@ -14,7 +14,7 @@ declare namespace JSX {
 		webview: React.DetailedHTMLProps<
 			React.HTMLAttributes<HTMLElement> & {
 				src?: string;
-				allowpopups?: boolean;
+				partition?: string;
 			},
 			HTMLElement
 		>;

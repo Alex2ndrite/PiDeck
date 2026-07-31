@@ -1,10 +1,14 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { readRendererStyles } from "./helpers/rendererStyles.mjs";
 
-const parts = readFileSync("src/renderer/src/components/app/AppParts.tsx", "utf8");
-const styles = readFileSync("src/renderer/src/styles.css", "utf8");
-const i18n = readFileSync("src/renderer/src/i18n.ts", "utf8");
+const parts = readFileSync("src/renderer/src/components/session/SurfaceComponents.tsx", "utf8");
+const styles = readRendererStyles();
+const i18n = [
+  readFileSync("src/renderer/src/i18n/rendererCopy.zh-CN.ts", "utf8"),
+  readFileSync("src/renderer/src/i18n/rendererCopy.en-US.ts", "utf8"),
+].join("\n");
 
 function cssRule(selector) {
   const matches = [...styles.matchAll(new RegExp(`${selector} \\{([\\s\\S]*?)\\n\\}`, "g"))];
@@ -32,7 +36,8 @@ test("empty state shows the pi agent ownership tagline with branded yours", () =
 
   assert.match(logo, /width:\s*118px;[\s\S]*height:\s*118px;/);
   assert.match(button, /min-width:\s*148px;[\s\S]*height:\s*46px;/);
-  assert.match(styles, /--color-accent-soft:\s*#eaf6ed;/i);
+  // pure official / zinc：accent-soft 为浅灰，不再是品牌绿 #eaf6ed
+  assert.match(styles, /--color-accent-soft:\s*#f4f4f5;/i);
   assert.match(button, /background:\s*var\(--color-accent-soft\);[\s\S]*font-size:\s*var\(--font-size-brand\);/);
   assert.match(button, /color:\s*var\(--color-accent-strong\);/);
   assert.match(button, /font-family:\s*var\(--font-family-base\);/);

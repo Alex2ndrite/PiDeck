@@ -1,3 +1,4 @@
+import { Button } from "../components/ui-shadcn/button";
 import { useState } from "react";
 import { Check, FileEdit, Pencil, ShoppingBag, ToggleLeft, ToggleRight, Trash2, X, Store, Globe } from "lucide-react";
 import type {
@@ -99,12 +100,12 @@ export function SkillsTab(props: {
 					</small>
 				</div>
 				<div className="skills-toolbar-actions">
-					<button className="config-btn" onClick={props.onRefresh} disabled={props.loading}>
+					<Button  variant="outline" onClick={props.onRefresh} disabled={props.loading}>
 						{t("common.refresh")}
-					</button>
-					<button className="config-btn blue" onClick={props.onOpenRoot}>
+					</Button>
+					<Button  variant="secondary" onClick={props.onOpenRoot}>
 						{t("config.openFolder")}
-					</button>
+					</Button>
 				</div>
 			</div>
 
@@ -170,13 +171,13 @@ export function SkillsTab(props: {
 						onChange={(event) => props.onChangeNewDescription(event.target.value)}
 					/>
 				</label>
-				<button
-					className="config-btn primary"
+				<Button
+					 variant="default"
 					onClick={props.onCreate}
 					disabled={!canCreate || props.creating}
 				>
 					{props.creating ? t("config.creatingSkill") : t("config.addSkill")}
-				</button>
+				</Button>
 			</section>
 
 			<div className="skills-list">

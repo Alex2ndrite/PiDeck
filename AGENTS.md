@@ -6,221 +6,207 @@ PiDeck 是一个面向本地开发工作的 Electron 桌面应用，用于在多
 
 技术栈：Electron 38 + React 19 + TypeScript + Vite。
 
+**核心边界（不可逾越）：**
+
+- pi 负责 Agent 行为、工具调用、会话读写、模型调用 —— **pi 的事不要替它做**。
+- PiDeck 负责窗口管理、进程生命周期、会话浏览/导入、Git 面板、终端、设置 —— **UI 框架的事 pi 也不要做**。
+- 两者通过 stdio JSON-RPC 通信，禁止引入第二条通信通道（如直接 HTTP 到 pi 内部）。
+
 ## 目录结构
 
 ```
 src/
 ├── main/              # Electron 主进程
 │   ├── pi/            # pi RPC 进程管理、消息解析
-│   ├── sessions/      # 会话扫描、导入、摘要缓存
+│   ├── sessions/      # 会话扫描、导入、摘要缓存、SessionRuntimeCoordinator
 │   ├── git/           # GitService（status/diff/commit/cherry-pick 等）
 │   ├── prompts/       # PromptManager（本地模板）+ XuePromptManager（SQLite 中文精选）
 │   ├── skills/        # SkillManager
 │   ├── extensions/    # ExtensionManager
 │   ├── settings/      # SettingsStore + DesktopProxy
-│   ├── terminal/      # 终端会话管理
+│   ├── terminal/      # 终端会话管理（node-pty）
 │   ├── pet/           # 桌面宠物
-│   ├── feishu/        # 飞书集成
+│   ├── feishu/        # 飞书集成（FeishuBridge + FeishuConnection）
+│   ├── ipc/           # ★ IPC 域注册（sessionIpc/systemIpc/gitIpc/storeIpc/...）
 │   └── web/           # Web 服务管理
-├── preload/           # preload 脚本，暴露 IPC API
+├── preload/           # preload 脚本，经 contextBridge 暴露受限 IPC API
 ├── renderer/
 │   └── src/
+│       ├── atoms/         # Jotai 状态（session-first）
 │       ├── components/
-│       │   ├── ui/        # ★ 共享 UI 组件（Button/IconButton/SelectField/TextField/Modal）
-│       │   ├── app/       # 业务组件（AppParts/GitPanel/BrowserPanel/FileDiffViewer 等）
-│       │   ├── terminal/  # 终端 Dock
-│       │   ├── scratchPad/# 草稿本
-│       │   └── feishu/     # 飞书相关
-│       ├── config/        # 配置弹窗各 tab（Models/Auth/Settings/Skills/Prompts/Extensions）
-│       ├── assets/        # 字体、编辑器图标、git-logo
-│       ├── utils/         # monacoSetup、openExternal、notice、agentRuntimeState 等
-│       ├── i18n.ts        # 所有可见文案
-│       └── styles.css     # 全局样式 + 语义 token
-└── shared/            # 主进程与渲染进程共享类型和 IPC 通道定义
+│       │   ├── ui/        # 共享 UI 组件（Button/IconButton/SelectField/TextField/Modal）
+│       │   ├── session/   # 会话视图族（SessionView/Composer*/Timeline*）
+│       │   ├── sidebar/   # 左侧栏
+│       │   ├── workspace/ # 右侧抽屉（files/git/browser/editor）
+│       │   └── app/       # 业务组件
+│       ├── hooks/         # 渲染层 hooks（useWorkspacePanels/useSessionComposerController 等）
+│       ├── i18n/          # 文案（zh-CN / en-US，rendererCopy.*.ts）
+│       └── styles/        # 按域拆分的样式 + 语义 token
+└── shared/            # 主/渲染共享类型（按域拆分）与 IPC 通道定义
 ```
 
-## 开发要求
+## 架构规则（硬性）
 
-- 修改核心逻辑、复杂状态流转、业务规则、数据转换或异常处理时，需要补充有价值的代码注释。
-- 注释应说明为什么这样做、对应的业务规则或边界条件，不要逐行解释显而易见的代码。
-- UI 调整应尽量保持现有桌面三栏布局和微信式交互风格，避免引入无关重构。
-- 修改后应根据影响范围运行必要验证，例如 `npm run typecheck`。
+1. **session-first**：会话是一等公民。新功能优先挂在 session/runtime 链路上，不要退回“围绕 agent tab 堆全局 state”。
+2. **状态管理用 Jotai**：新增跨组件状态放 `atoms/`，按域建 atom；禁止再引入第二种全局状态方案。
+3. **IPC 按域注册**：主进程 handler 一律放 `src/main/ipc/*Ipc.ts`，`index.ts` 只做装配；通道名集中在 `shared/ipc.ts` 定义，禁止散落字符串字面量。
+4. **类型共享走 `shared/types/`**：按域拆文件；主进程、preload、渲染进程不得各自重复定义同一结构。
+5. **单向依赖**：`renderer → shared → main`；main 不得 import renderer 代码，renderer 不得直接碰 Node API（一律走 preload）。
+6. **文件体量红线**：
+   - 组件/模块单文件目标 ≤ 400 行，超过 600 行必须评估拆分。
+   - `App.tsx`、`main/index.ts` 只增装配代码，不增业务逻辑；新业务先建新模块。
+   - 为“省一次 import”把逻辑塞回大文件，视为架构倒退，评审应拒绝。
 
-## 共享 UI 组件（必须使用）
+## 代码风格
 
-> **核心规则：新增 UI 时优先使用 `src/renderer/src/components/ui/` 下的共享组件，不要自己造轮子，也不要用原生 HTML 控件。**
+- TypeScript strict；禁止新增 `any`（与第三方交互不得不用时，用 `unknown` + 收窄，并注释原因）。
+- 禁止用 `as` 强转绕过类型错误；测试数据需要部分字段时用工厂函数构造完整对象。
+- 命名：类型/类 PascalCase，函数/变量 camelCase，常量 UPPER_SNAKE；IPC 通道用 `domain:action` 格式。
+- React：函数组件 + hooks；副作用必须有清理函数；派生状态用 `useMemo`，禁止把可计算值存进 state。
+- 文案：所有用户可见文本走 `i18n`（`i18n/rendererCopy.zh-CN.ts` + `en-US.ts` 同步加 key），JSX 中禁止硬编码中英文。
+- 日志/调试输出/内部标识符可硬编码，但日志用主进程 logging 模块，不散落 `console.log`（调试残留需删除）。
 
-### 已有组件
+## 注释要求
 
-| 组件 | 路径 | 用途 | 何时用 |
-|------|------|------|--------|
-| `Button` | `components/ui/Button.tsx` | 主按钮、次按钮、危险按钮、ghost 按钮；支持 `loading` | 任何可点击的操作按钮 |
-| `IconButton` | `components/ui/IconButton.tsx` | 纯图标按钮，带 `aria-label` | 工具栏图标按钮、行内操作按钮 |
-| `CloseIconButton` | `components/ui/IconButton.tsx` | 统一的关闭按钮（X 图标） | 弹框/抽屉的关闭按钮 |
-| `SelectField` | `components/ui/SelectField.tsx` | 自定义下拉选择器（按钮 + 弹出 listbox） | **替代所有原生 `<select>`** |
-| `TextField` | `components/ui/TextField.tsx` | 带标签的文本输入 | 表单输入、配置项编辑 |
-| `Modal` | `components/ui/Modal.tsx` | 基于 Radix Dialog 的弹框，支持 full/medium/small 三档尺寸 | 全屏弹框、中/小弹框 |
-| `LazyMonacoEditor` | `components/ui/LazyMonacoEditor.tsx` | Monaco 编辑器懒加载封装 | 代码编辑、SKILL.md 编辑 |
+- 对核心逻辑、复杂判断、业务规则、状态流转、权限校验、数据转换、异常处理添加必要注释。
+- 注释解释“为什么这样做”“对应什么业务规则”“边界条件是什么”，不要逐行解释显而易见的代码。
+- 新增函数、类、模块添加简短功能说明。
+- 修改旧代码时，相关逻辑缺上下文说明的应顺手补注释。
 
-### 禁止的做法
+## 测试标准（硬性门禁）
 
-| ❌ 禁止 | ✅ 正确 |
-|---------|---------|
-| `<select><option>...</option></select>` | `<SelectField label=... value=... options=... onChange=... />` |
-| `<input type="text" />` 裸写 | `<TextField label=... value=... onChange=... />` |
-| `<button className="随便写">` | `<Button variant="primary">...</Button>` 或 `<IconButton label="...">{icon}</IconButton>` |
-| 手写 `div + onClick` 弹框 | `<Modal open=... onClose=...>...</Modal>` |
-| 自己实现 `✕` 关闭按钮 | `<CloseIconButton label={t("common.close")} onClick=... />` |
+测试位于 `tests/*.test.mjs`，运行 `npm test`（node --test）。
 
-### 自定义下拉的例外
+1. **必过门禁**：任何合并前 `npm run typecheck` 与 `npm test` 必须全绿；不许“先合再修”。
+2. **何时必须写测试**：
+   - 修复 bug：先写复现测试（红），再修到绿。回归测试永久保留。
+   - 新增主进程业务逻辑（sessions/git/settings/extensions/prompts 等）：必须有单测。
+   - 新增数据转换/解析/状态机逻辑：必须有单测。
+   - 纯 UI 布局调整可不强求，但涉及交互状态流转的 hook 应有测试。
+3. **测试写法**：
+   - 测行为不测实现：从公开接口/IPC 边界断言结果，不断言内部私有函数调用次数。
+   - 不依赖执行顺序、不依赖真实网络/真实 pi 进程；外部依赖用 mock/替身。
+   - 一个测试只验证一件事，命名即意图（如 `agentCreateTimeout.test.mjs`）。
+4. **禁止**：为通过测试而放宽断言、注释掉失败测试、把测试改成恒真。
 
-如果 `SelectField` 无法满足需求（例如选项里需要显示图标、两行文字、分组等），可以参考 `GitPanel.tsx` 的 `GitCompactFilter` 自定义实现，但必须：
-- 使用 `button + role="listbox"` + `role="option"` 的 ARIA 结构
-- 用 `ChevronDown` 图标（来自 lucide-react）
-- 支持 `Escape` 关闭、点击外部关闭、键盘 `ArrowDown/ArrowUp` 打开
-- 样式走 `--color-*` 语义 token，不要写死颜色
+## 安全约束
 
-## 图标系统
+1. **IPC 最小权限**：preload 只暴露当前页面需要的 API；新增通道必须加进类型定义，禁止 `ipcRenderer` 透传。
+2. **输入校验在边界**：所有 IPC handler 的第一行职责是校验入参（类型、路径合法性、枚举范围）；渲染层来的数据一律不可信。
+3. **路径安全**：文件读写必须限制在项目目录或应用数据目录内；拼接路径前做规范化与逃逸检查，禁止直接拼用户输入。
+4. **进程调用**：spawn/exec 的参数必须数组形式传递，禁止字符串插值拼 shell 命令；子进程环境变量经 `sanitizePiChildEnv` 类函数清洗。
+5. **Webview/浏览器面板**：禁止加载 `file://` 以外的任意本地内容；`allowpopups`、node integration 等属性保持最小化，新增 webview 属性需评审。
+6. **密钥与令牌**：Auth 配置只经 `config/` 模块读写；日志、错误上报、遥测中禁止输出 token/key。
+7. **依赖引入**：新增依赖需说明理由；优先用已有依赖能力，禁止为一个小功能引重型库。
 
-> **图标统一使用 `lucide-react`，不要引入其他图标库，不要用 emoji 代替功能图标。**
+## Electron 开发规范与经验总结
 
-### 使用规范
+> 本节沉淀本项目在 Electron 上的硬性规范与踩坑经验。改动 `main/index.ts`、窗口创建、preload、打包配置前必读。
 
-- 所有功能图标来自 `lucide-react`（已在 `package.json` 中，`^1.17.0`）。
-- 图标尺寸：按钮内 `14~18`，行内 `12~15`，标题旁 `18~20`。
-- `strokeWidth` 统一 `1.8`（默认）或 `2.0~2.4`（强调状态）。
-- 交互图标必须带 `aria-hidden="true"`（纯装饰），可点击的图标按钮用 `IconButton` + `aria-label`。
-- 不要用 emoji（🚀🔥✅ 等）作为 UI 控件图标，只能用于文案/通知。
+### 启动与进程生命周期
 
-### Logo
+1. **app.ready 前的配置窗口**：`commandLine.appendSwitch`、`app.setPath("userData")`、单实例判断等必须在 `app.whenReady()` 之前完成；错过时机一律无效，不要试图在 ready 后补救。
+2. **启动失败要可诊断**：主进程关键节点（窗口创建、load 开始/结束、preload 路径、pi 启动）必须写 `appLogger`，黑屏/白屏排查只靠日志。
+3. **首帧体验**：窗口保持隐藏时先 `maximize()` 再加载页面，避免 `ready-to-show` 后再最大化造成布局跳变；`zoomFactor` 等用户设置在 `did-finish-load` 后应用，防止被加载过程覆盖。
+4. **单实例用自研按版本互斥，不用 `requestSingleInstanceLock`**：原生锁按 userData 全局互斥，会导致不同版本无法并行。本项目实现见 `acquireVersionSingleInstance`（同版本复用窗口、不同版本并存）；第二实例用 `app.exit(0)`（未 ready，比 `quit()` 快）。
+5. **开发/正式数据目录隔离**：dev 模式 userData 追加 `-dev` 后缀，防止开发调试污染正式数据；追加前判断已有后缀，避免重复拼接。
+6. **退出清理**：quit 路径必须覆盖 pi 子进程、node-pty、文件 watcher、单实例锁文件；新增常驻资源时在退出清单里同步登记。
 
-项目 Logo 是一个**特定的 SVG 路径**，不是通用图标，不要用 lucide 的图标替代。
+### 窗口与 webContents
 
-- **品牌 Logo（应用图标/启动画面/Agent 头像）**：使用 `LogoMark` 组件（`AppParts.tsx`），它内嵌 PiDeck 标志的 SVG path。
-  ```tsx
-  <LogoMark />  // 22x22 品牌标志
-  ```
-- **Agent 头像**：使用 `AgentAvatar` 组件（`AppParts.tsx`），内嵌相同的 SVG path + 状态 class。
-- **启动画面 Logo**：见 `index.html` 中的 `#boot-logo`，SVG path 与 `LogoMark` 保持一致。
-- **项目头像**：使用 `ProjectAvatar` 组件（`AppParts.tsx`），区分 chat / project 两种 kind。
-- **编辑器 Logo**：使用 `src/renderer/src/assets/editors/` 下的对应图片，通过 `new URL("./assets/editors/vscode.png", import.meta.url).href` 引用，配合 `editor-logo` class。
-- **Git Logo**：`src/renderer/src/assets/git-logo.svg`。
+7. **主窗口 webPreferences 基线**：`contextIsolation: true`、`nodeIntegration: false`、`sandbox` 跟随用户设置、`webviewTag: true`（仅主窗口，浏览器面板需要）。新增窗口以此为起点逐项评估，禁止默认全开。
+8. **Chromium 沙箱默认关闭是刻意的**：Windows 上部分安全软件/旧 GPU 驱动会在沙箱初始化时触发原生断点（0x80000003）。关闭时必须显式 `appendSwitch("no-sandbox")`；`electronChromiumSandbox` 开关改动需整应用重启生效，不要做成运行时热切换。
+9. **`setWindowOpenHandler` 统一收口**：主窗口与 webview guest 都必须注册，走 `openExternalUrl` 并 `deny`；漏注册 = 用户点击链接开出无管控新窗口。
+10. **自定义标题栏**：frame/titleBarStyle 相关改动要同时验证三平台窗口控制按钮、拖拽区、双击最大化；全屏式弹层内容不得被窗口控制区遮挡。
 
-> 修改 Logo 时，`LogoMark`、`AgentAvatar`、`EmptyState`、`index.html` 中的 SVG path 必须保持一致。
+### Webview（内置浏览器面板）
 
-## UI 设计规范
+11. **独立 partition + 收敛 webPreferences**：webview 用专属 `partition`，强制 `sandbox: true`、`nodeIntegration: false`、`webSecurity: true`、`allowRunningInsecureContent: false`、`webviewTag: false`，并删除外部传入的 `preload`/`preloadURL`/`allowpopups` 等危险参数（见 `configureBrowserPanelWebviewHost`）。
+12. **session 校验**：`did-attach-webview` 时校验 guest.session 是否为预期 partition，不是立即 `close()` —— 防止页面注入意外 guest。
+13. **导航白名单**：`will-frame-navigate` / `will-redirect` / `setWindowOpenHandler` 三层都要过 `isAllowedBrowserPanelUrl` 白名单；只拦一层会被重定向绕过。
 
-- 主界面保持桌面工作台结构：左侧项目/Agent 列表、中间会话、右侧上下文抽屉和底部终端。不要把核心体验改成营销页、卡片堆叠页或强装饰布局。
-- 视觉风格以安静、克制、开发工具感为主。颜色优先使用 `styles.css` 顶部的语义 token；新增颜色前应先判断能否复用 `--color-*`、`--shadow-*`、`--focus-ring`。
-- 圆角统一使用小圆角 token，常规控件优先 `--radius-sm` / `--radius-md`，大型页面式弹层不使用夸张圆角；避免在组件中直接写新的固定圆角值。
-- 字号优先使用 `--font-size-*` 和 `--line-height-*` token。普通正文、按钮、表单、列表 meta 不再直接写散落的 `px` 字号；图形 logo 等视觉标识可保留独立尺寸。
-- 间距尽量遵守 4px 栅格，优先使用 `--space-*` 或与相邻布局一致的响应式 padding。列表 hover、按钮显隐不能造成文本跳动。
-- 交互态必须覆盖 hover、active、disabled 和 `focus-visible`。输入、下拉、按钮和可点击列表项应使用统一焦点环，不要只依赖颜色变化表达状态。
-- 暗色模式必须通过语义 token 自然适配。新增面板、弹层、菜单、日志、代码块时，不要写死浅色背景或固定深色块，除非是明确的终端主题或图片预览遮罩。
+### IPC 与 preload
 
-## 多语言文案
+14. **handle/invoke 成对注册**：新增通道三处同步——`shared/ipc.ts` 通道常量、主进程 `ipc/*Ipc.ts` handler、preload 白名单暴露；漏任何一处就是运行时 undefined。
+15. **preload 不做业务**：preload 只做参数校验后的 `invoke` 转发与事件订阅封装，禁止在 preload 里写业务逻辑或缓存状态。
+16. **事件推送要可退订**：`webContents.send` 类推送，preload 侧返回 unsubscribe 函数；渲染层组件卸载必须退订，防止向已销毁页面推送导致泄漏。
 
-> **所有用户可见文本必须走 `i18n.ts`，不要在 JSX 中硬编码中英文。**
+### 原生模块与打包
 
-- 新增文案时在 `i18n.ts` 中添加 key，同时提供中文（`zh`）和英文（`en`）。
-- 按钮、tab、label、placeholder、toast、空状态文案都属于"可见文本"。
-- 按钮和 tab 需要为英文、中文和伪翻译预留伸缩空间（不要用固定宽度）。
-- 日志、调试输出、内部标识符不算"可见文本"，可以硬编码。
+17. **node-pty 等原生模块**：必须 `asarUnpack` 并在 postinstall 修权限（`scripts/fix-pty-permissions.js`）；新增原生依赖时同步检查这两项，否则打包后运行时才炸。
+18. **afterPack 清理要谨慎**：删除 node_modules 冗余文件（如 `@larksuiteoapi/node-sdk` 的 lib/）必须有对应测试（`tests/afterPackCleanup.test.mjs`）；清理脚本误删运行时必需文件 = 打包能过、用户启动崩。
+19. **打包验证分层**：`npm run pack`（--dir 快速验证）→ `dist:win/mac/linux`；发版前至少跑过一次目标平台完整安装包的人工 smoke，不依赖 CI 构建成功即发布。
+20. **资源路径**：运行时资源用 `process.resourcesPath` / `app.getAppPath()` 推导，禁止写相对 `__dirname` 的裸路径假设 asar 内可直接读；preload 路径统一走 `preloadPath.ts` 解析。
 
-## 样式与布局
+### 跨平台
 
-- 全局样式在 `src/renderer/src/styles.css`，所有语义 token 定义在文件顶部 `:root`。
-- 新增样式优先复用已有 class（如 `config-btn`、`config-icon-btn`、`config-toolbar`、`config-empty`、`config-loading`、`config-error`、`modal-backdrop` 等），避免散落的内联 style。
-- 设置、配置管理、反馈等全屏页面式弹层需要适配自定义标题栏，内容不能被顶部窗口控制栏遮挡。
+21. **路径与命令**：禁止硬编码 `/` 或 `\`；shell 检测、外部编辑器、git 路径查找必须覆盖 win/mac/linux（含 WSL 场景，见 `wslExe.ts`）。
+22. **平台 workaround 集中管理**：如 `linuxDisplayBackend.ts`，平台特判写在专属模块并注明触发条件，不散落在业务代码里。
+23. **Windows 特有问题优先怀疑**：路径空格、杀毒软件锁文件、长路径、权限弹窗；Windows 上的"偶发失败"大多不是偶发，日志要带足上下文。
 
-### 弹框尺寸规范
+## 稳定性与可扩展性约束
 
-所有全屏式弹框（设置、配置、导入、会话管理、项目资源等）使用统一的尺寸，以确保视觉一致性：
+1. **错误处理分层**：
+   - 主进程：catch 后写日志 + 向渲染层返回结构化错误（不抛裸异常跨 IPC）。
+   - 渲染层：用户可感知错误走 toast/内联友好文案（i18n），不只 console。
+   - 异步函数禁止无 catch 的“裸 promise”。
+2. **生命周期配对**：注册 listener / timer / 子进程 / watcher 的地方，必须能在同一模块找到对应清理路径（unmount、quit、session close）。
+3. **资源边界**：大文件读取、会话扫描、diff 计算要有大小上限或流式处理；渲染进程不做全量日志/历史的主存。
+4. **向后兼容**：设置项、会话文件、缓存格式变更必须有迁移或默认值兜底；删除旧字段前先保留一个版本的读取兼容。
+5. **特性开关**：高风险或实验性功能（如 RPC 启动 flags、沙箱开关）必须可从设置关闭/回退，默认值取保守项。
+6. **扩展点**：新增能力优先做成“注册式”（如 IPC 域注册、面板注册），避免在既有 switch/if 链上继续加分支。
 
-```css
-width: min(1300px, calc(100vw - 48px));
-height: min(850px, calc(100vh - 48px));
-```
+## 验证命令
 
-如果弹框内容无需那么高，可以缩小高度但不要改变宽度。小号选择器弹框（如模型选择器、思考级别选择器）不受此限。
+| 场景 | 命令 |
+|------|------|
+| 类型检查（每次改动后） | `npm run typecheck` |
+| 全量单测 | `npm test` |
+| 单测串行（排查并发干扰） | `npm run test:serial` |
 
-弹框使用以下样式基底：
-- `border-radius: var(--radius-lg)`
-- `box-shadow: var(--shadow-xl)`
-- 点击 backdrop（`<div className="modal-backdrop">`）关闭弹框，弹框本身通过 `stopPropagation()` 阻止冒泡
+改动影响主进程/IPC/会话链路时，两个命令都必须跑；纯 UI 样式微调至少跑 typecheck。
 
-> **推荐使用 `components/ui/Modal.tsx`**，它基于 Radix Dialog 已内置以上规范。
+## UI 约定（简版）
 
-## 字体使用标准
+> UI 细节规范（组件用法、图标、弹框尺寸、字体、token）后续会单独整理，本节只保留底线。
 
-- `--font-family-base` 用于全局 UI 正文、按钮、表单、列表和长说明文本，保持系统 UI 字体优先，以保证中英文和 Windows 渲染清晰。
-- `PiDeckPlantin` 用于品牌字标、站点展示标题或少量品牌化标题，不用于长正文、密集列表和表单标签。
-- `PiDeckCommitMono` 是默认等宽字体，用于代码块、终端、RPC 日志、路径、模型 ID、端口和需要对齐的技术文本。
-- `PiDeckDepartureMono` 仅用于文档站或品牌展示页的少量展示型技术标识；Desktop 主应用不要使用，避免密集工具界面显得粗糙。
-- `--font-family-business` 用于业务展示型短文本，例如状态徽标、计数、耗时、模型 chip、端口和运行状态；Desktop 中该 token 应指向 `PiDeckCommitMono`，正文、按钮和长说明仍使用 `--font-family-base`。
-- 新增字体文件应放在 renderer 或 docs-site 对应资产目录，并配套 `font-display: swap`。不要从远程 CDN 加载运行时字体。
+- 新增 UI 优先复用 `components/ui/` 共享组件（Button/IconButton/SelectField/TextField/Modal），不用原生 `<select>`、不裸写 `<input>`。
+- 图标统一 `lucide-react`，不用 emoji 充当功能图标；品牌 Logo 用 `LogoMark`（`AppParts.tsx`），不用通用图标替代。
+- 颜色/圆角/字号优先复用 `styles/` 里的语义 token，不写死色值；暗色模式必须自然适配。
+- 布局保持桌面工作台结构（左列表 / 中会话 / 右抽屉 / 底终端），不引入营销页式大改版。
 
 ## Issue 修复流程
 
-处理 GitHub Issue 或外部反馈缺陷时，应按以下分支流程进行，避免直接在 `main` 上修复：
-
-1. 从最新 `main` 创建短修复分支，命名建议为 `fix/issue-<number>-<short-description>`，例如 `fix/issue-1-windows-pi-path-spaces`。
-2. 修复前先定位根因，记录影响范围；如果问题涉及启动、环境检测、会话恢复等核心流程，应同步检查相邻路径是否存在同类问题。
-3. 修复提交应聚焦单一问题，提交信息建议使用 `fix:` 前缀，并在 PR 或提交说明中关联 issue。
-4. 推送修复分支后创建 PR，PR 描述需包含问题原因、修复摘要、验证命令，并使用 `Closes #<number>` 让合并后自动关闭 issue。
-5. 合并建议使用 Squash and merge，保持 `main` 历史清晰；合并后视用户影响决定是否发布 patch 版本。
-6. 如果修复包含用户可见行为变化或需要发版，应同步遵守下方发版要求。
+1. 从最新 `main` 建短修复分支：`fix/issue-<number>-<short-description>`。
+2. 先定位根因，记录影响范围；涉及启动、环境检测、会话恢复等核心流程时，同步检查相邻路径同类问题。
+3. 修复聚焦单一问题，`fix:` 前缀提交，关联 issue。
+4. PR 描述包含：问题原因、修复摘要、验证命令、`Closes #<number>`。
+5. 建议 Squash and merge；合并后按用户影响决定是否发 patch。
 
 ## 发版要求
 
-发版或准备 release 时，必须核对并更新以下内容：
+1. 核对 `README.md` / `README.en.md` 功能与安装说明仍准确。
+2. `CHANGELOG.md` / `CHANGELOG.zh-CN.md` 加版本号与日期，条目记录用户可感知变化，中英文一致。
+3. GitHub Release notes 写明主要变化，不接受只写版本号。
+4. `package.json` 与 `package-lock.json` 版本号一致；发版提交用 `chore: release vX.Y.Z`。
+5. docs-site 官网同步更新。
+6. 架构级变更（如 session-first 切换）先发 pre-release 观察，再标正式版。
 
-1. `README.md` / `README.en.md`
-   - 核对功能说明、截图说明、安装/使用说明是否仍然准确。
-   - 如果本次版本包含用户可见的新功能、行为变化或配置变化，需要同步补充说明。
+## 提交 commit 规则
 
-2. `CHANGELOG.md` / `CHANGELOG.zh-CN.md`
-   - 为新版本增加对应版本号和日期。
-   - 用简洁条目记录新增、优化、修复等用户可感知变化。
-   - 中英文更新日志应保持信息一致。
+> **不要自以为是地提交代码。只有用户明确要求时，AI 助手才可以执行 `git add`、`git commit` 或 `git push`。**
 
-3. GitHub Release 说明
-   - 发布时需要在 release notes 中写明本次版本的主要变化。
-   - Release 说明应覆盖 README 和 CHANGELOG 中提到的关键用户可见调整，避免只写版本号或空说明。
+1. 工作过程中不自动 commit；完成一步后也不提交。
+2. 只有用户明确说「提交吧」「commit」「push」等意图时才执行。
+3. 整个功能/修复完成后简要总结，并询问「需要我提交吗？」。
+4. 用户同意提交时，一个功能/修复的全部变更放在一个 commit，不拆多个小 commit（用户另有要求除外）。
 
-4. 版本号
-   - 核对 `package.json` 和 `package-lock.json` 中版本号一致。
-   - 发版提交应清晰标识版本，例如 `chore: release vX.Y.Z`。
+### GitHub 协作说明
 
-5. docs-site同步修改
-   官网pages项目也要记得更新
+详见 `docs/PiDeck-协作说明.md`。
 
-## 提交commit规则
+## 长期重构纪律
 
-### 核心原则
-
-> **不要自以为是地提交代码。** 只有用户明确要求时，AI 助手才可以执行 `git add`、`git commit` 或 `git push`。**
-
-### 规则
-
-1. **禁止在工作过程中自动 commit** — 无论是修改文件、修复 bug 还是新增功能，完成一步后都不应自动提交。修改只是过程，不是节点。
-2. **等待用户指令** — 只有用户说出「可以 commit 了」「提交吧」「推上去」「push」等明确意图时，才能执行 commit 或 push。用户没说，就不动。
-3. **完成后再确认** — 整个功能或修复完成后，应向用户简要总结做了什么，并询问「需要我提交吗？」或类似措辞，等待用户确认。
-4. **提交粒度** — 如果用户同意提交，应在一个 commit 中包含该功能/修复的全部文件变更，不要拆成多个小 commit。用户另有要求除外。
-
-### 举例
-
-| ❌ 错误做法                           | ✅ 正确做法                                  |
-| ------------------------------------- | -------------------------------------------- |
-| 改完一个文件就 `git add + git commit` | 改完整个功能后，问用户「可以提交吗？」       |
-| 认为用户默认让自己提交                | 用户明确说了「提交」「commit」「push」才执行 |
-| 把一个小修复拆成 3 个 commit          | 整个修复放在 1 个 commit 里                  |
-
-### 提醒
-
-如果用户长时间没有给出提交指令，可以主动询问一次，但不要频繁追问。
-
-
-### GitHub协作说明
-
-请查看 docs/PiDeck-协作说明.md 文件了解 GitHub 协作流程。
+- 大重构必须先写对照计划（参考 `docs/issue-113-main-parity-plan.md`），明确能力 parity 表与合并门禁。
+- 禁止无对照表的长期分叉分支；main 的用户可感知改动当周回填到进行中重构分支。
+- 重构期间禁止用 `-X theirs`/`-X ours` 静默吞掉对方改动；每个冲突都要确认能力归属。

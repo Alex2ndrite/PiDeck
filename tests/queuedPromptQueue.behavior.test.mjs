@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { readRendererStyles } from "./helpers/rendererStyles.mjs";
 
 import {
   acknowledgeUnknownPrompt,
@@ -11,7 +12,6 @@ import {
   claimPrompt,
   enqueuePrompt,
   getQueuedPromptView,
-  migrateQueuedPrompts,
   resolveClaimedPrompt,
   retractPrompt,
   retryFailedPrompt,
@@ -132,32 +132,6 @@ test("unknown delivery cannot be reclaimed or retried after a deferred response 
   assert.equal(submissions, 1, "indeterminate delivery must never submit twice");
 });
 
-test("restart migrates only definitely unsent snapshots", () => {
-  const queues = {
-    old: [
-      prompt("pending"),
-      prompt("failed", "followUp", "failed"),
-      prompt("sending", "followUp", "sending"),
-      prompt("unknown", "followUp", "unknown"),
-    ],
-    stable: [prompt("stable")],
-    closed: [prompt("closed")],
-  };
-  const migrated = migrateQueuedPrompts(
-    queues,
-    new Map([["old", "replacement"]]),
-    new Set(["replacement", "stable"]),
-  );
-
-  assert.deepEqual(
-    migrated.replacement.map((item) => item.id),
-    ["pending", "failed"],
-  );
-  assert.equal(migrated.stable[0].id, "stable");
-  assert.equal(migrated.old, undefined);
-  assert.equal(migrated.closed, undefined);
-});
-
 test("steer claims exactly one item and treats failed or unknown as an ordering barrier", () => {
   let queues = {
     agentA: [
@@ -248,16 +222,20 @@ test("parallel tools complete only after the final toolCallId ends", () => {
 });
 
 test("immediate unknown snapshots stay visible and acknowledgement-only", () => {
-  const appSource = readFileSync("src/renderer/src/App.tsx", "utf8");
-  assert.match(
-    appSource,
-    /if \(accepted === "unknown"\) \{\s*appendUnknownQueuedPrompt\(targetAgentId, queuedPromptSnapshot\);\s*return;/,
+  const sessionSendSource = readFileSync("src/renderer/src/hooks/useSessionSend.ts", "utf8");
+  const composerPanelsSource = readFileSync(
+    "src/renderer/src/components/session/ComposerPanels.tsx",
+    "utf8",
   );
+  assert.match(sessionSendSource, /outcome === "unknown"/);
+  assert.match(sessionSendSource, /status: "unknown"[\s\S]*?unknownSnapshot: \{[\s\S]*?message/);
+  assert.match(composerPanelsSource, /function SessionDeliveryNotice/);
+  assert.match(composerPanelsSource, /status !== "unknown"/);
+  assert.match(composerPanelsSource, /onAcknowledge/);
   // Unknown rows stay in the compact panel; discard may clear them, but retract-to-input stays disabled.
-  assert.match(appSource, /status === "unknown"/);
-  assert.match(appSource, /canRetractQueuedPromptToInput/);
-  assert.match(appSource, /canDiscardQueuedPrompt/);
-  assert.match(appSource, /discardQueuedPrompt/);
+  assert.match(composerPanelsSource, /status === "unknown"/);
+  assert.match(composerPanelsSource, /canRetractQueuedPromptToInput\(status\)/);
+  assert.match(composerPanelsSource, /canDiscardQueuedPrompt\(status\)/);
   assert.equal(canRetractQueuedPromptToInput("pending"), true);
   assert.equal(canRetractQueuedPromptToInput("failed"), true);
   assert.equal(canRetractQueuedPromptToInput("sending"), false);
@@ -265,6 +243,19 @@ test("immediate unknown snapshots stay visible and acknowledgement-only", () => 
   assert.equal(canDiscardQueuedPrompt("pending"), true);
   assert.equal(canDiscardQueuedPrompt("unknown"), true);
   assert.equal(canDiscardQueuedPrompt("sending"), false);
+});
+
+test("the Session composer leaves the legacy agent queue behind an explicit runtime slot", () => {
+  const areaSource = readFileSync(
+    "src/renderer/src/components/session/ComposerArea.tsx",
+    "utf8",
+  );
+  const controllerSource = readFileSync(
+    "src/renderer/src/hooks/useSessionComposerController.ts",
+    "utf8",
+  );
+  assert.match(areaSource, /queuePanel\?: ReactNode/);
+  assert.doesNotMatch(controllerSource, /enqueuePrompt|claimIdleHead|claimNextSteerPrompt/);
 });
 
 test("browser prompt returns the received SendPromptResult before background state refresh", () => {
@@ -281,16 +272,16 @@ test("browser prompt returns the received SendPromptResult before background sta
 
 test("layout budget uses compact queue chrome and terminal still yields first", () => {
   const appSource = readFileSync("src/renderer/src/App.tsx", "utf8");
-  assert.match(appSource, /observer\?\.observe\(chatPane\)/);
-  assert.match(appSource, /setChatLayoutHeight/);
-  assert.match(
-    appSource,
-    /terminalRowHeight = terminalCollapsed[\s\S]*?Math\.min\([\s\S]*?requestedTerminalRowHeight[\s\S]*?chatPaneHeight - fixedChatHeight/,
-  );
-  assert.match(appSource, /queuedChromeBudget/);
-  assert.match(appSource, /QUEUED_PROMPT_VISIBLE/);
+  const layoutSource = readFileSync("src/renderer/src/hooks/useSessionLayout.ts", "utf8");
+  const queueStateSource = readFileSync("src/renderer/src/utils/queuedPromptQueue.ts", "utf8");
+  // ResizeObserver now lives in useSessionLayout.
+  assert.match(layoutSource, /observer\.observe\(/);
+  assert.match(layoutSource, /terminalRowHeight = input\.terminalCollapsed/);
+  // The root passes queue cardinality to the layout owner; queue constants stay with the queue state machine.
+  assert.match(appSource, /queuedPromptCount: activeQueuedPrompts\.length/);
+  assert.match(queueStateSource, /export const QUEUED_PROMPT_VISIBLE = 3/);
   assert.match(appSource, /const visibleQueuedPrompts = activeQueuedPrompts/);
-  const stylesSource = readFileSync("src/renderer/src/styles.css", "utf8");
+  const stylesSource = readRendererStyles();
   assert.match(stylesSource, /\.queued-list \{[\s\S]*?max-height: 102px;[\s\S]*?overflow-y: auto;/);
 });
 

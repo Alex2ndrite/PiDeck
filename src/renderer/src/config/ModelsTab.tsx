@@ -1,3 +1,4 @@
+import { Button } from "../components/ui-shadcn/button";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Check, ChevronDown, ChevronRight, Copy, ExternalLink, Trash2 } from "lucide-react";
 import { t } from "../i18n";
@@ -84,9 +85,9 @@ function FetchedModelCombobox(props: {
 					onChange={(e) => setFilter(e.target.value)}
 					placeholder={t("config.modelSearchPlaceholder")}
 				/>
-				<button
+				<Button
 					type="button"
-					className="config-btn small"
+					 variant="outline" size="sm"
 					onClick={() => {
 						// 全选只作用于当前筛选结果，方便大列表按关键字批量选择，同时不会误选已配置模型。
 						const visibleIds = selectableVisibleModels.map((model) => model.id);
@@ -99,7 +100,7 @@ function FetchedModelCombobox(props: {
 					disabled={selectableVisibleModels.length === 0}
 				>
 					{allSelectableSelected ? t("common.deselectAll") : t("common.selectAll")}
-				</button>
+				</Button>
 			</div>
 			<div className="config-model-combobox-summary">
 				<span>
@@ -242,22 +243,22 @@ export function ModelsTab(props: {
 					{t("config.count.providers", { count: providerNames.length })}
 				</span>
 				<div className="config-toolbar-actions">
-					<button
-						className="config-btn"
+					<Button
+						 variant="outline"
 						onClick={props.onStartAddProvider}
 						disabled={saving}
 					>
 						{t("config.addProvider")}
-					</button>
-					<button
-						className="config-btn"
+					</Button>
+					<Button
+						 variant="outline"
 						onClick={() => setShowGuide(!showGuide)}
 						disabled={saving}
 					>
 						{t("config.providerGuide")}
-					</button>
-					<button
-						className="config-btn danger-fill"
+					</Button>
+					<Button
+						 variant="destructive"
 						onClick={() => {
 							if (batchMode) {
 								setBatchMode(false);
@@ -269,10 +270,10 @@ export function ModelsTab(props: {
 						disabled={saving || providerNames.length === 0}
 					>
 						{batchMode ? t("common.cancel") : t("common.deleteBatch")}
-					</button>
+					</Button>
 					{batchMode && (
-						<button
-							className="config-btn danger-fill"
+						<Button
+							 variant="destructive"
 							onClick={() => {
 								if (selectedProviders.size > 0) {
 									props.onDeleteProviders([...selectedProviders] as string[]);
@@ -283,15 +284,15 @@ export function ModelsTab(props: {
 							disabled={selectedProviders.size === 0}
 						>
 							{t("common.deleteSelected")} ({selectedProviders.size})
-						</button>
+						</Button>
 					)}
-					<button
-						className="config-btn primary"
+					<Button
+						 variant="default"
 						onClick={props.onSave}
 						disabled={saving}
 					>
 						{saving ? t("common.saving") : t("common.save")}
-					</button>
+					</Button>
 				</div>
 			</div>
 
@@ -378,16 +379,16 @@ export function ModelsTab(props: {
 						onKeyDown={(e) => e.key === "Enter" && props.onConfirmAddProvider()}
 						autoFocus
 					/>
-					<button
-						className="config-btn primary"
+					<Button
+						 variant="default"
 						onClick={props.onConfirmAddProvider}
 						disabled={!props.newProviderName.trim()}
 					>
 						{t("common.confirm")}
-					</button>
-					<button className="config-btn" onClick={props.onCancelAddProvider}>
+					</Button>
+					<Button  variant="outline" onClick={props.onCancelAddProvider}>
 						{t("common.cancel")}
-					</button>
+					</Button>
 				</div>
 			)}
 
@@ -625,15 +626,15 @@ export function ModelsTab(props: {
 														provider.models[0]?.id ?? t("config.testModelPlaceholder")
 													}
 												/>
-												<button
-													className="config-btn primary"
+												<Button
+													 variant="default"
 													onClick={() => props.onTestProvider(name)}
 													disabled={props.testingProvider === name}
 												>
 													{props.testingProvider === name
 														? t("config.testingConnection")
 														: t("config.testConnection")}
-												</button>
+												</Button>
 											</div>
 										</div>
 
@@ -813,17 +814,17 @@ export function ModelsTab(props: {
 										<div className="config-models-header">
 											<span>{t("config.modelList")}</span>
 											<div className="config-model-list-actions">
-												<button
-													className="config-btn small"
+												<Button
+													 variant="outline" size="sm"
 													onClick={() => props.onFetchModels(name)}
 													disabled={props.fetchingProvider === name}
 												>
 													{props.fetchingProvider === name
 														? t("config.fetchingModels")
 														: t("config.fetchModels")}
-												</button>
-												<button
-													className="config-btn small"
+												</Button>
+												<Button
+													 variant="outline" size="sm"
 													onClick={() => {
 														setPendingModelFocusKey(
 															getModelInputKey(name, provider.models.length),
@@ -832,7 +833,7 @@ export function ModelsTab(props: {
 													}}
 												>
 													{t("config.addModelManual")}
-												</button>
+												</Button>
 											</div>
 										</div>
 
@@ -850,8 +851,8 @@ export function ModelsTab(props: {
 													onChange={(modelIds) => setSelectedFetchedModels(name, modelIds)}
 												/>
 												<div className="config-model-dropdown-actions">
-													<button
-														className="config-btn primary small"
+													<Button
+														 variant="default" size="sm"
 														onClick={() => {
 														const currentProvider = data.providers[name];
 														if (!currentProvider) return;
@@ -871,7 +872,7 @@ export function ModelsTab(props: {
 													disabled={(selectedFetchedModelIds[name] ?? []).length === 0}
 												>
 													{t("config.saveSelectedModels")}
-												</button>
+												</Button>
 											</div>
 										</div>
 										)}

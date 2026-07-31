@@ -1,5 +1,9 @@
 import type { KeyboardEventHandler, ReactNode } from "react";
+import { Input } from "../ui-shadcn/input";
 
+/**
+ * 文本输入字段（#115 U5）：API 不变，内部换成 shadcn Input。
+ */
 export function TextField(props: {
 	label: ReactNode;
 	value: string;
@@ -15,13 +19,9 @@ export function TextField(props: {
 	onKeyDown?: KeyboardEventHandler<HTMLInputElement>;
 }) {
 	return (
-		<label
-			className={["ui-field ui-text-field", props.className]
-				.filter(Boolean)
-				.join(" ")}
-		>
-			<span className="ui-field-label">{props.label}</span>
-			<input
+		<label className={["grid gap-1.5", props.className].filter(Boolean).join(" ")}>
+			<span className="text-sm font-medium leading-none text-foreground">{props.label}</span>
+			<Input
 				type={props.type ?? "text"}
 				value={props.value}
 				placeholder={props.placeholder}
@@ -33,7 +33,7 @@ export function TextField(props: {
 				onKeyDown={props.onKeyDown}
 			/>
 			{props.description && (
-				<small className="ui-field-description">{props.description}</small>
+				<small className="text-xs text-muted-foreground">{props.description}</small>
 			)}
 		</label>
 	);

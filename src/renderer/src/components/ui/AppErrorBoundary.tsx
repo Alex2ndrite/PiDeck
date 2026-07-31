@@ -1,3 +1,4 @@
+import { Button } from "../ui-shadcn/button";
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { t } from "../../i18n";
 import { showNotice } from "../../utils/notice";
@@ -71,20 +72,20 @@ export class AppErrorBoundary extends Component<
 						{this.state.error.stack ?? this.state.error.message}
 					</pre>
 					<div className="app-error-boundary-actions">
-						<button
+						<Button
 							type="button"
-							className="config-btn"
+							 variant="outline"
 							onClick={this.handleReset}
 						>
 							{t("app.renderErrorRetry")}
-						</button>
-						<button
+						</Button>
+						<Button
 							type="button"
-							className="config-btn primary"
+							 variant="default"
 							onClick={this.handleReload}
 						>
 							{t("app.renderErrorReload")}
-						</button>
+						</Button>
 					</div>
 				</div>
 			</div>

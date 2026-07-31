@@ -15,6 +15,20 @@ import { Button } from "../ui/Button";
 import { CloseIconButton, IconButton } from "../ui/IconButton";
 import { SelectField } from "../ui/SelectField";
 import { TextField } from "../ui/TextField";
+import { Switch } from "../ui-shadcn/switch";
+import { Modal } from "../ui/Modal";
+import { buttonVariants } from "../ui-shadcn/button";
+import {
+	AlertDialog,
+	AlertDialogAction,
+	AlertDialogCancel,
+	AlertDialogContent,
+	AlertDialogDescription,
+	AlertDialogFooter,
+	AlertDialogHeader,
+	AlertDialogTitle,
+} from "../ui-shadcn/alert-dialog";
+import { SettingsSection, StorageTab } from "./settings/SettingsStorageTab";
 import type { AppSettings, AppInfo, PiInstallStatus, PiUpdateCheckResult, PiCliUpdateResult, PetManifest } from "../../../shared/types";
 import { GRID_COLS, CELL_W, CELL_H, MODE_ROW, MODE_FRAMES } from "../../pet/PetSpriteSheet";
 
@@ -34,22 +48,6 @@ const PROXY_FIELDS: (keyof AppSettings)[] = [
 	"desktopProxyBypass",
 ];
 
-function SettingsSection(props: {
-	title: string;
-	description?: string;
-	children: ReactNode;
-}) {
-	return (
-		<section className="settings-section">
-			<div className="settings-section-header">
-				<strong>{props.title}</strong>
-				{props.description && <small>{props.description}</small>}
-			</div>
-			<div className="settings-section-body">{props.children}</div>
-		</section>
-	);
-}
-
 function SettingSwitch(props: {
 	title: string;
 	description?: string;
@@ -57,17 +55,17 @@ function SettingSwitch(props: {
 	disabled?: boolean;
 	onChange: (checked: boolean) => void;
 }) {
+	// #115 U5：开关换 shadcn Switch（Radix），行布局与文案结构不变
 	return (
 		<label className="setting-switch-row">
 			<span>
 				<strong>{props.title}</strong>
 				{props.description && <small>{props.description}</small>}
 			</span>
-			<input
-				type="checkbox"
+			<Switch
 				checked={props.checked}
 				disabled={props.disabled}
-				onChange={(event) => props.onChange(event.target.checked)}
+				onCheckedChange={props.onChange}
 			/>
 		</label>
 	);
@@ -172,30 +170,22 @@ class SettingsModalErrorBoundary extends Component<
 
 	override render() {
 		if (!this.state.error) return this.props.children;
+		// #115：错误兜底同走 shadcn Modal 外壳
 		return (
-			<div className="modal-backdrop" onClick={this.props.onClose}>
-				<div className="settings-modal" onClick={(e) => e.stopPropagation()}>
-					<div className="modal-header">
-						<strong>{t("settings.loadFailed")}</strong>
-						<CloseIconButton
-							label={t("common.close")}
-							onClick={this.props.onClose}
-						/>
-					</div>
-					<div className="settings-layout">
-						<div className="settings-content" style={{ padding: "var(--space-5)" }}>
-							<div className="config-diagnostic-card">
-								<div>
-									<strong>{t("settings.renderCrashed")}</strong>
-									<span>{this.state.error.message}</span>
-									<small>{t("settings.renderCrashedHelp")}</small>
-								</div>
-								<pre>{this.state.error.stack ?? this.state.error.message}</pre>
+			<Modal open onClose={this.props.onClose} title={t("settings.loadFailed")} contentClassName="settings-modal">
+				<div className="settings-layout">
+					<div className="settings-content" style={{ padding: "var(--space-5)" }}>
+						<div className="config-diagnostic-card">
+							<div>
+								<strong>{t("settings.renderCrashed")}</strong>
+								<span>{this.state.error.message}</span>
+								<small>{t("settings.renderCrashedHelp")}</small>
 							</div>
+							<pre>{this.state.error.stack ?? this.state.error.message}</pre>
 						</div>
 					</div>
 				</div>
-			</div>
+			</Modal>
 		);
 	}
 }
@@ -355,7 +345,7 @@ function SettingsModalContent(props: SettingsModalProps) {
 
 	const handleValidateWslUser = async () => {
 		if (!window.piDesktop.wsl) {
-			setWslValidation({ ok: false, whoami: "", piVersion: "", error: "WSL API 未就绪，请重启应用后再试" });
+			setWslValidation({ ok: false, whoami: "", piVersion: "", error: t("settings.wsl.apiUnavailable") });
 			return;
 		}
 		setWslValidating(true);
@@ -368,7 +358,8 @@ function SettingsModalContent(props: SettingsModalProps) {
 				updateDraft({ wslUser: wslUserInput });
 			}
 		} catch (err) {
-			setWslValidation({ ok: false, whoami: "", piVersion: "", error: String(err) });
+			console.error("[Settings] WSL validation failed", err);
+			setWslValidation({ ok: false, whoami: "", piVersion: "", error: t("settings.wsl.validationFailed") });
 		} finally {
 			setWslValidating(false);
 		}
@@ -476,33 +467,29 @@ function SettingsModalContent(props: SettingsModalProps) {
 	// 代理 tab 仍展示未保存提示；实际保存/取消统一走全局草稿，避免旧 proxyDirty 局部状态残留。
 	const proxyDirty = PROXY_FIELDS.some((field) => dirtyFields.has(field));
 
+	// #115 U5：外壳换 shadcn Dialog（ui/Modal）。旧 .modal-backdrop z-index 100
+	// 会盖住 Radix Select 的 z-50 portal，导致设置页所有下拉“点开看不见、点不动”。
+	// onClose 仍走 handleClose（未保存变更拦截），语义不变。
 	return (
-		<div className="modal-backdrop" onClick={handleClose}>
-			<div
-				className="settings-modal"
-				onClick={(e) => e.stopPropagation()}
-			>
-				<div className="modal-header">
-					<strong>{t("settings.title")}</strong>
-					<div className="modal-header-actions" style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
-						{/* 全局保存/取消按钮：仅在存在未保存变更时显示，样式与配置弹框的导入/导出按钮一致 */}
-						{hasDirtyChanges && (
-							<>
-								<button className="config-btn primary" onClick={saveAll}>
-									{t("common.save")}
-								</button>
-								<button className="config-btn" onClick={cancelAll}>
-									{t("common.cancel")}
-								</button>
-							</>
-						)}
-						<CloseIconButton
-							label={t("common.close")}
-							onClick={handleClose}
-						/>
-					</div>
-				</div>
-				<div className="settings-layout">
+		<Modal
+			open
+			onClose={handleClose}
+			title={t("settings.title")}
+			contentClassName="settings-modal"
+			headerActions={
+				hasDirtyChanges ? (
+					<>
+						<Button variant="primary" buttonSize="sm" onClick={saveAll}>
+							{t("common.save")}
+						</Button>
+						<Button variant="secondary" buttonSize="sm" onClick={cancelAll}>
+							{t("common.cancel")}
+						</Button>
+					</>
+				) : undefined
+			}
+		>
+			<div className="settings-layout">
 					<nav className="settings-tabs" aria-label={t("settings.title")}>
 						{tabs.map((tab) => (
 							<button
@@ -642,8 +629,8 @@ function SettingsModalContent(props: SettingsModalProps) {
 											</div>
 										</>
 									)}
-									{/* 不接 setting-divider：上方 SettingSwitch 已有 border-bottom，再画线会双线 */}
-									<div className="setting-field setting-field--after-switch">
+									<hr className="setting-divider" />
+									<div className="setting-field">
 										<span>
 											{t("settings.fontFamilyBase")}
 											<DirtyMarker dirty={isDirty("fontFamilyBase")} label={t("settings.fontFamilyBase")} />
@@ -803,7 +790,7 @@ function SettingsModalContent(props: SettingsModalProps) {
 						{activeTab === "appearance" && (
 							<>
 								<SettingsSection title={t("settings.interface")}>
-									<div className="setting-field">
+																		<div className="setting-field">
 										<span>
 											{t("settings.startupWindowMode")}
 											<DirtyMarker
@@ -824,7 +811,7 @@ function SettingsModalContent(props: SettingsModalProps) {
 											{t("settings.startupWindowModeDesc")}
 										</small>
 									</div>
-									<div className="setting-field">
+<div className="setting-field">
 										<span>
 											{t("settings.lightBackground")}
 											<DirtyMarker dirty={isDirty("lightBackground")} label={t("settings.lightBackground")} />
@@ -1240,9 +1227,7 @@ function SettingsModalContent(props: SettingsModalProps) {
 											updateDraft({ disableUpdateCheck: checked })
 										}
 									/>
-
-									{/* Electron Chromium 沙箱：与 pi Agent 无关，改完需整应用重启。 */}
-									<SettingSwitch
+																	<SettingSwitch
 										title={t("settings.electronSandbox")}
 										description={t("settings.electronSandboxDesc")}
 										checked={draftSettings.electronChromiumSandbox}
@@ -1250,9 +1235,6 @@ function SettingsModalContent(props: SettingsModalProps) {
 											updateDraft({ electronChromiumSandbox: checked })
 										}
 									/>
-
-									{/* Agent RPC 启动诊断：改完后需重启 Agent。
-									    不要再插 setting-divider：SettingSwitch 已有 border-bottom，叠 divider 会双线。 */}
 									<div className="setting-row setting-row--section-label">
 										<div>
 											<strong>{t("settings.piRpcStartup")}</strong>
@@ -1276,6 +1258,18 @@ function SettingsModalContent(props: SettingsModalProps) {
 										description={t("settings.piRpcNoSkillsDesc")}
 										checked={draftSettings.piRpcNoSkills}
 										onChange={(checked) => updateDraft({ piRpcNoSkills: checked })}
+									/>
+									<SettingSwitch
+										title={t("settings.useStreamdownRenderer")}
+										description={t("settings.useStreamdownRendererDesc")}
+										checked={Boolean(draftSettings.useStreamdownRenderer)}
+										onChange={(checked) => updateDraft({ useStreamdownRenderer: checked })}
+									/>
+									<SettingSwitch
+										title={t("settings.useWebContentsViewBrowser")}
+										description={t("settings.useWebContentsViewBrowserDesc")}
+										checked={Boolean(draftSettings.useWebContentsViewBrowser)}
+										onChange={(checked) => updateDraft({ useWebContentsViewBrowser: checked })}
 									/>
 								</SettingsSection>
 								<SettingsSection title={t("settings.debug")}>
@@ -1517,28 +1511,27 @@ function SettingsModalContent(props: SettingsModalProps) {
 						)}
 					</div>
 				</div>
-				{/* 未保存变更确认对话框 */}
-				{closeConfirmOpen && (
-					<div className="config-modal-overlay" onClick={() => setCloseConfirmOpen(false)}>
-						<div className="config-modal-dialog" onClick={(e) => e.stopPropagation()}>
-							<strong>{t("settings.unsavedTitle")}</strong>
-							<p>{t("settings.unsavedMessage")}</p>
-							<div className="config-modal-actions">
-								<button className="config-btn" onClick={() => setCloseConfirmOpen(false)}>
-									{t("common.cancel")}
-								</button>
-								<button className="config-btn danger" onClick={handleDiscardAndClose}>
-									{t("settings.discardChanges")}
-								</button>
-								<button className="config-btn primary" onClick={handleSaveAndClose}>
-									{t("settings.saveAndClose")}
-								</button>
-							</div>
-						</div>
-					</div>
-				)}
-			</div>
-		</div>
+			{/* 未保存变更确认对话框 */}
+			{closeConfirmOpen && (
+				<AlertDialog open onOpenChange={(open) => { if (!open) setCloseConfirmOpen(false); }}>
+					<AlertDialogContent>
+						<AlertDialogHeader>
+							<AlertDialogTitle>{t("settings.unsavedTitle")}</AlertDialogTitle>
+							<AlertDialogDescription>{t("settings.unsavedMessage")}</AlertDialogDescription>
+						</AlertDialogHeader>
+						<AlertDialogFooter>
+							<AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+							<AlertDialogAction className={buttonVariants({ variant: "destructive" })} onClick={handleDiscardAndClose}>
+								{t("settings.discardChanges")}
+							</AlertDialogAction>
+							<AlertDialogAction onClick={handleSaveAndClose}>
+								{t("settings.saveAndClose")}
+							</AlertDialogAction>
+						</AlertDialogFooter>
+					</AlertDialogContent>
+				</AlertDialog>
+			)}
+		</Modal>
 	);
 }
 
@@ -1606,171 +1599,4 @@ function PetChooserPreview(props: {
 			<canvas ref={canvasRef} width={CELL_W} height={CELL_H} aria-hidden="true" />
 		</div>
 	);
-}
-
-/** 存储管理子标签页 */
-function StorageTab(props: {
-	settings: AppSettings;
-	onChange: (patch: Partial<AppSettings>) => void;
-}) {
-	const [logsSize, setLogsSize] = useState<string>("");
-	const [rpcLogsSize, setRpcLogsSize] = useState<string>("");
-	const [clearing, setClearing] = useState<string | null>(null);
-	const [feedback, setFeedback] = useState("");
-	const [confirmDialog, setConfirmDialog] = useState<{
-		title: string;
-		message: string;
-		onConfirm: () => void;
-	} | null>(null);
-
-	useEffect(() => {
-		let mounted = true;
-		const refresh = () => {
-			void window.piDesktop.logs.getSize().then((bytes) => {
-				if (mounted) setLogsSize(formatBytes(bytes));
-			});
-		};
-		refresh();
-		const timer = setInterval(refresh, 5000);
-		return () => { mounted = false; clearInterval(timer); };
-	}, []);
-
-	useEffect(() => {
-		let mounted = true;
-		const refresh = () => {
-			void window.piDesktop.rpcLogs.getSize().then((bytes) => {
-				if (mounted) setRpcLogsSize(formatBytes(bytes));
-			});
-		};
-		refresh();
-		const timer = setInterval(refresh, 5000);
-		return () => { mounted = false; clearInterval(timer); };
-	}, []);
-
-	const doClear = async (target: string) => {
-		setClearing(target);
-		setFeedback("");
-		try {
-			if (target === "app") {
-				await window.piDesktop.logs.clear();
-			} else if (target === "rpc") {
-				await window.piDesktop.rpcLogs.clear();
-			} else {
-				await window.piDesktop.logs.clear();
-				await window.piDesktop.rpcLogs.clear();
-			}
-			setFeedback(t("settings.storage.clearSuccess"));
-		} catch (e) {
-			setFeedback(`${t("common.error")}: ${e instanceof Error ? e.message : String(e)}`);
-		} finally {
-			setClearing(null);
-		}
-	};
-
-	const confirmClear = (target: string, label: string) => {
-		setConfirmDialog({
-			title: t("app.confirm"),
-			message: t("settings.storage.clearConfirm", { label }),
-			onConfirm: () => { doClear(target); setConfirmDialog(null); },
-		});
-	};
-
-	const handleOpenFolder = async () => {
-		try {
-			await window.piDesktop.logs.openFolder();
-		} catch (e) {
-			setFeedback(`${t("common.error")}: ${e instanceof Error ? e.message : String(e)}`);
-		}
-	};
-
-	return (
-		<>
-			{confirmDialog && (
-				<div className="config-modal-overlay" onClick={() => setConfirmDialog(null)}>
-					<div className="config-modal-dialog" onClick={(e) => e.stopPropagation()}>
-						<strong>{confirmDialog.title}</strong>
-						<p>{confirmDialog.message}</p>
-						<div className="config-modal-actions">
-							<button className="config-btn" onClick={() => setConfirmDialog(null)}>
-								{t("common.cancel")}
-							</button>
-							<button
-								className="config-btn danger"
-								onClick={confirmDialog.onConfirm}
-							>
-								{t("common.confirm")}
-							</button>
-						</div>
-					</div>
-				</div>
-			)}
-			<SettingsSection title={t("settings.storage.appLogs")}>
-				<div className="setting-row">
-					<div>
-						<strong>{t("settings.storage.appLogsSize")}</strong>
-						<small>{logsSize || t("common.loading")}</small>
-					</div>
-					<Button
-						loading={clearing === "app" || clearing === "all"}
-						disabled={clearing !== null}
-						onClick={() => confirmClear("app", t("settings.storage.appLogs"))}
-					>
-						{t("common.delete")}
-					</Button>
-				</div>
-			</SettingsSection>
-			<SettingsSection title={t("settings.storage.rpcLogs")}>
-				<div className="setting-row">
-					<div>
-						<strong>{t("settings.storage.rpcLogsSize")}</strong>
-						<small>{rpcLogsSize || t("common.loading")}</small>
-					</div>
-					<Button
-						loading={clearing === "rpc" || clearing === "all"}
-						disabled={clearing !== null}
-						onClick={() => confirmClear("rpc", t("settings.storage.rpcLogs"))}
-					>
-						{t("common.delete")}
-					</Button>
-				</div>
-				{feedback && (
-					<small className={`setting-status ${feedback.includes(t("common.error")) ? "error" : "success"}`}>
-						{feedback}
-					</small>
-				)}
-			</SettingsSection>
-			<SettingsSection title={t("settings.storage.actions")}>
-				<div className="setting-row">
-					<div>
-						<strong>{t("settings.storage.clearAll")}</strong>
-						<small>{t("settings.storage.clearAllDesc")}</small>
-					</div>
-					<Button
-						variant="danger"
-						loading={clearing === "all"}
-						disabled={clearing !== null}
-						onClick={() => confirmClear("all", `${t("settings.storage.appLogs")} + ${t("settings.storage.rpcLogs")}`)}
-					>
-						{t("settings.storage.clearAllButton")}
-					</Button>
-				</div>
-				<div className="setting-row">
-					<div>
-						<strong>{t("settings.storage.openFolder")}</strong>
-						<small>{t("settings.storage.openFolderDesc")}</small>
-					</div>
-					<Button onClick={handleOpenFolder}>
-						{t("common.open")}
-					</Button>
-				</div>
-			</SettingsSection>
-		</>
-	);
-}
-
-function formatBytes(value: number) {
-	if (value === 0) return "0 B";
-	const units = ["B", "KB", "MB", "GB"];
-	const index = Math.min(Math.floor(Math.log(value) / Math.log(1024)), units.length - 1);
-	return `${(value / 1024 ** index).toFixed(index > 0 ? 1 : 0)} ${units[index]}`;
 }

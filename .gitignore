@@ -55,12 +55,5 @@ opencode-source/
 nul
 
 
-*.tsbuildinfo
-
-# 视频制作产物（源脚本与说明见 video-series/；详细规则见 video-series/.gitignore）
-video-series/decks/EP0*/
-video-series/decks/index.html
-video-series/decks/assets/
-video-series/pipeline/EP0*/
-video-series/pipeline/demo/
-video-series/pipeline/*.mp4
+*.tsbuildinfotest-results/
+playwright-report/

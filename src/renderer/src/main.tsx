@@ -3,6 +3,8 @@ import ReactDOM from "react-dom/client";
 import type { AppLogLevel } from "@shared/types";
 import { App } from "./App";
 import { AppErrorBoundary } from "./components/ui/AppErrorBoundary";
+import { TooltipProvider } from "./components/ui-shadcn/tooltip";
+import { Toaster } from "./components/ui-shadcn/sonner";
 import { t } from "./i18n";
 import { showNotice } from "./utils/notice";
 import "./styles.css";
@@ -38,7 +40,11 @@ window.addEventListener("error", (event) => {
   });
   if (!isResourceError) {
     const message = formatRuntimeError(event.error ?? event.message);
-    if (message) {
+    // ResizeObserver loop 警告是 Chromium 的良性通知（同一帧内 RO 回调又触发 resize），
+    // Streamdown 动画 + resizable panels 组合下常见；只记日志，不弹错误 toast 干扰用户。
+    const isBenignResizeObserverLoop = typeof event.message === "string"
+      && event.message.includes("ResizeObserver loop");
+    if (message && !isBenignResizeObserverLoop) {
       showNotice(`${t("app.runtimeErrorToast")}: ${message}`, 6000, "error");
     }
   }
@@ -68,24 +74,21 @@ if (!rootElement) {
 ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
     <AppErrorBoundary>
-      <App />
+      {/* shadcn Tooltip 必须在 Provider 树内使用（#115 U1） */}
+      <TooltipProvider>
+        <App />
+        {/* 全局 toast 出口（#115）：showNotice 经 sonner 在此渲染 */}
+        <Toaster />
+      </TooltipProvider>
     </AppErrorBoundary>
   </React.StrictMode>,
 );
 
-/**
- * React 首次渲染完成后，淡出启动画面覆盖层，动画结束后移除 DOM 节点。
- *
- * 使用 requestAnimationFrame 确保 React commit 阶段已完成、样式已计算。
- * 再用 requestAnimationFrame 触发 fade-out 类，让浏览器在下一次帧中
- * 执行 CSS transition，实现平滑过渡。
- * 额外设置 fallback 超时，避免 transitionend 丢失导致遮罩残留。
- */
-requestAnimationFrame(() => {
-  writeStartupLog("info", "Renderer React tree mounted");
-
+function dismissBootOverlay() {
   const overlay = document.getElementById("boot-overlay");
   if (!overlay) return;
+  if (overlay.dataset.dismissing === "true") return;
+  overlay.dataset.dismissing = "true";
 
   let removed = false;
   const removeOverlay = () => {
@@ -94,13 +97,21 @@ requestAnimationFrame(() => {
     overlay.remove();
   };
 
-  // 下一帧触发 fade-out class，确保 CSS transition 生效
-  requestAnimationFrame(() => {
-    overlay.classList.add("fade-out");
+  overlay.classList.add("fade-out");
+  // 过渡结束后从 DOM 移除覆盖层，释放层级上下文。
+  overlay.addEventListener("transitionend", removeOverlay, { once: true });
+  // 兜底：某些环境下 transitionend 可能不触发。
+  window.setTimeout(removeOverlay, 700);
+}
 
-    // 过渡结束后从 DOM 移除覆盖层，释放层级上下文
-    overlay.addEventListener("transitionend", removeOverlay, { once: true });
-    // 兜底：某些环境下 transitionend 可能不触发
-    window.setTimeout(removeOverlay, 700);
-  });
+/**
+ * React 首次渲染完成后淡出启动遮罩。前台窗口走双 rAF，保证 transition
+ * 有独立的布局帧；独立超时不依赖 rAF，因为 Electron 隐藏或后台窗口可将
+ * rAF 长时间节流，不能让已挂载的工作台永久被遮挡。
+ */
+requestAnimationFrame(() => {
+  writeStartupLog("info", "Renderer React tree mounted");
+  requestAnimationFrame(dismissBootOverlay);
 });
+
+window.setTimeout(dismissBootOverlay, 1500);

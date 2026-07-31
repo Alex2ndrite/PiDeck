@@ -44,6 +44,10 @@ function loadModule(mockProcess = {}) {
 			if (id === "../preloadPath") {
 				return { preparePreloadPath: async (sourcePath) => sourcePath };
 			}
+			// 拆分后 PetWindow 会读取 Chromium 沙箱偏好；测试中固定为未开启（默认路径）。
+			if (id === "../settings/SettingsStore") {
+				return { readElectronChromiumSandboxPreference: () => false };
+			}
 			return require(id);
 		},
 	};

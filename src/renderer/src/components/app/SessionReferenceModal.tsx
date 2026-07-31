@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { X, MessageCircle, Brain, FileText } from "lucide-react";
+import { MessageCircle, Brain, FileText } from "lucide-react";
+import { Modal } from "../ui/Modal";
 import { t } from "../../i18n";
 import type { SessionSummary } from "../../../../shared/types";
 import { summarizeMessage, stripAnsi, formatTime } from "./AppUtils";
@@ -16,7 +17,7 @@ export function SessionReferenceModal(props: {
 	session: SessionSummary;
 	onClose: () => void;
 	onConfirm: (result: SessionReferenceResult, selectedIndices: number[]) => void;
-	loadMessages: (filePath: string) => Promise<SessionMessage[]>;
+	loadMessages: (sessionId: string) => Promise<SessionMessage[]>;
 	initialSelected?: Set<number>;
 }) {
 	// 原始顺序存储，selectedIds 始终引用原始索引
@@ -29,7 +30,7 @@ export function SessionReferenceModal(props: {
 		let cancelled = false;
 		setLoading(true);
 		setError(null);
-		props.loadMessages(props.session.filePath).then((msgs) => {
+		props.loadMessages(props.session.id).then((msgs) => {
 			if (!cancelled) {
 				setMessages(msgs);
 				if (props.initialSelected && props.initialSelected.size > 0) {
@@ -43,7 +44,7 @@ export function SessionReferenceModal(props: {
 			if (!cancelled) { setError(String(err)); setLoading(false); }
 		});
 		return () => { cancelled = true; };
-	}, [props.session.filePath]);
+	}, [props.session.id]);
 
 	// 倒序显示分组（最新的在前面），内部索引保持原始顺序不变
 	const items = useMemo(() => {
@@ -113,18 +114,13 @@ export function SessionReferenceModal(props: {
 	const allSelected = selectedCount === messages.length;
 
 	return (
-		<div className="multi-select-modal-overlay" onClick={props.onClose}>
-			<div className="multi-select-modal session-ref-modal" onClick={(e) => e.stopPropagation()}>
-				<header className="multi-select-modal-header">
-					<h3>
-						{t("sessionRef.title")}:{" "}
-						<span className="session-ref-name">{props.session.name ?? props.session.filePath}</span>
-					</h3>
-					<button className="multi-select-modal-close" onClick={props.onClose} aria-label={t("common.close")}>
-						<X size={18} strokeWidth={2} />
-					</button>
-				</header>
-
+		<Modal
+			open
+			onClose={props.onClose}
+			size="medium"
+			title={`${t("sessionRef.title")}: ${props.session.name ?? props.session.filePath}`}
+			contentClassName="multi-select-modal session-ref-modal"
+		>
 				<div className="multi-select-modal-tree session-ref-message-list">
 					{loading && <div className="session-ref-loading">{t("common.loading")}...</div>}
 					{error && <div className="session-ref-error">{t("sessionRef.loadError")}: {error}</div>}
@@ -225,7 +221,6 @@ export function SessionReferenceModal(props: {
 						</button>
 					</div>
 				</footer>
-			</div>
-		</div>
+		</Modal>
 	);
 }

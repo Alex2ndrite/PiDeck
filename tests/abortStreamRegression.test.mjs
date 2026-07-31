@@ -49,8 +49,10 @@ test("abort feedback is toast-only and seals stream generation", () => {
 	assert.match(settledBlock, /recentlyAborted\.delete\(agentId\)/);
 	assert.doesNotMatch(settledBlock, /openAgentStream/);
 
-	// 5) 前端 abort 立即清本地 thinking，并订阅 notice toast
-	assert.match(app, /setStreamingThinking\(/);
-	assert.match(app, /api\.agents\.onNotice/);
-	assert.match(app, /showNotice\(/);
+	// 5) 前端 notice 走 runtime bridge toast；abort 后本地 thinking 由主进程 agents:thinking 空串事件清零
+	const bridge = readFileSync("src/renderer/src/hooks/useSessionRuntimeBridge.ts", "utf8");
+	const atoms = readFileSync("src/renderer/src/atoms/session-atoms.ts", "utf8");
+	assert.match(bridge, /agents:notice/);
+	assert.match(bridge, /showNotice\(/);
+	assert.match(atoms, /agents:thinking/);
 });

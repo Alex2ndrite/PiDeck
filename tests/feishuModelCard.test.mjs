@@ -5,6 +5,16 @@ import ts from "typescript";
 import vm from "node:vm";
 
 function loadModelCardModule() {
+	const i18nSource = readFileSync("src/main/feishu/FeishuI18n.ts", "utf8");
+	const { outputText: i18nOutput } = ts.transpileModule(i18nSource, {
+		compilerOptions: {
+			module: ts.ModuleKind.CommonJS,
+			target: ts.ScriptTarget.ES2022,
+		},
+	});
+	const i18nSandbox = { exports: {} };
+	vm.runInNewContext(i18nOutput, i18nSandbox, { filename: "FeishuI18n.ts" });
+
 	const source = readFileSync("src/main/feishu/ModelPickerCard.ts", "utf8");
 	const { outputText } = ts.transpileModule(source, {
 		compilerOptions: {
@@ -12,7 +22,13 @@ function loadModelCardModule() {
 			target: ts.ScriptTarget.ES2022,
 		},
 	});
-	const sandbox = { exports: {} };
+	const sandbox = {
+		exports: {},
+		require: (name) => {
+			if (name === "./FeishuI18n") return i18nSandbox.exports;
+			throw new Error(`unexpected require: ${name}`);
+		},
+	};
 	vm.runInNewContext(outputText, sandbox, { filename: "ModelPickerCard.ts" });
 	return sandbox.exports;
 }

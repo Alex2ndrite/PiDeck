@@ -1,0 +1,466 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import test from "node:test";
+import ts from "typescript";
+import vm from "node:vm";
+
+const bridgeSource = readFileSync("src/main/feishu/FeishuBridge.ts", "utf8");
+const mainSource = readFileSync("src/main/index.ts", "utf8");
+const i18nSource = readFileSync("src/main/feishu/FeishuI18n.ts", "utf8");
+
+function compileFeishuI18n() {
+	const output = ts.transpileModule(i18nSource, {
+		compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+	}).outputText;
+	const sandbox = { exports: {} };
+	vm.runInNewContext(output, sandbox, { filename: "FeishuI18n.ts" });
+	return sandbox.exports;
+}
+
+test("FeishuBridge receives a narrow Session runtime binding gateway", () => {
+	assert.match(bridgeSource, /export interface SessionRuntimeBindingGateway/);
+	assert.match(bridgeSource, /private runtimeBindings: SessionRuntimeBindingGateway/);
+	assert.doesNotMatch(bridgeSource, /sessionRuntimeByIdAtom|bindSessionRuntimeAtom/);
+	assert.doesNotMatch(
+		bridgeSource,
+		/this\.agentManager\.(sendPrompt|abort|getRuntimeState|getAvailableModels|setModel)\(/,
+	);
+});
+
+test("Feishu commands resolve a fresh Session target instead of persisting a generation", () => {
+	const gateway = mainSource.match(/const feishuSessionRuntimeBindings:[\s\S]*?\n\};/)?.[0] ?? "";
+	assert.match(gateway, /sessionRuntimeCoordinator\.getTarget\(sessionId\)/);
+	assert.match(gateway, /sessionRuntimeCoordinator\.send\(/);
+	assert.match(gateway, /sessionRuntimeCoordinator\.abortRuntime\(target\)/);
+	assert.match(gateway, /sessionRuntimeCoordinator\.setRuntimeModel\(target, provider, modelId\)/);
+	assert.doesNotMatch(bridgeSource, /runtimeGeneration/);
+});
+
+test("Feishu creation is Catalog-first and never owns Agent lifecycle", () => {
+	assert.doesNotMatch(bridgeSource, /this\.agentManager\.create\(/);
+	assert.match(bridgeSource, /this\.runtimeBindings\.ensureSession\(/);
+	assert.match(bridgeSource, /this\.runtimeBindings\.activateRuntime\(session\.sessionId\)/);
+	const createBlock = bridgeSource.match(/private async createNewSession[\s\S]*?\n\t}/)?.[0] ?? "";
+	assert.match(createBlock, /runtimeBindings\.ensureSession/);
+	assert.doesNotMatch(createBlock, /activateRuntime|agentManager\.create/);
+});
+
+test("main injects an origin-safe catalog gateway into every Feishu bridge", () => {
+	assert.match(mainSource, /const feishuSessionRuntimeBindings/);
+	assert.match(mainSource, /const existing = sessionCatalog\.get\(input\.existingSessionId\)/);
+	assert.match(mainSource, /input\.agent\.sessionPath && !canAttachRuntimeMetadata\(existing, input\.agent\)/);
+	assert.match(mainSource, /Existing Session origin does not match runtime/);
+	assert.match(mainSource, /if \(!sessionId && input\.agent\.sessionPath\)/);
+	const guardIndex = mainSource.indexOf("input.agent.sessionPath && !canAttachRuntimeMetadata(existing, input.agent)");
+	const attachIndex = mainSource.indexOf("await sessionCatalog.attachRuntime(", guardIndex);
+	assert.ok(guardIndex >= 0 && attachIndex > guardIndex, "origin guard must precede runtime metadata attachment");
+	const constructors = [...mainSource.matchAll(/new FeishuBridge\(/g)].length;
+	const injections = [...mainSource.matchAll(/feishuSessionRuntimeBindings/g)].length - 1;
+	assert.ok(constructors >= 4);
+	assert.ok(injections >= constructors);
+});
+
+test("main gateway rejects terminal or differently coordinated runtimes before binding", () => {
+	const gateway = mainSource.match(/const feishuSessionRuntimeBindings:[\s\S]*?\n\};/)?.[0] ?? "";
+	assert.match(gateway, /input\.agent\.status === "error" \|\| input\.agent\.status === "closed"/);
+	assert.match(gateway, /sessionRuntimeCoordinator\.getRuntimeBinding\(input\.agent\.id\)/);
+	assert.match(gateway, /currentBinding\.sessionId !== existing\.id/);
+	assert.match(gateway, /Runtime is already bound to a different Session/);
+	assert.ok(
+		gateway.indexOf("currentBinding.sessionId !== existing.id") < gateway.indexOf("sessionRuntimeCoordinator.bindExistingAgent"),
+		"coordinator mismatch must reject before bind",
+	);
+});
+
+test("main gateway keeps a pathless existing Session and attaches metadata without file origin", () => {
+	const gateway = mainSource.match(/const feishuSessionRuntimeBindings:[\s\S]*?\n\};/)?.[0] ?? "";
+	assert.match(gateway, /if \(input\.agent\.sessionPath && !canAttachRuntimeMetadata/);
+	assert.match(gateway, /sessionId = existing\.id/);
+	const pathlessBranch = gateway.match(/: \{\n\s*sessionId,\n\s*piSessionId: input\.agent\.sessionId,\n\s*\}\);/)?.[0] ?? "";
+	assert.ok(pathlessBranch, "pathless branch must attach only runtime metadata");
+	assert.doesNotMatch(pathlessBranch, /filePath|origin/);
+	assert.doesNotMatch(pathlessBranch, /title/, "runtime metadata must not overwrite Session title");
+});
+
+function compileBridge(loadBindings = [], options = {}) {
+	const output = ts.transpileModule(bridgeSource, {
+		compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+	}).outputText;
+	const module = { exports: {} };
+	const feishuI18n = compileFeishuI18n();
+	const richText = { chooseMessageMode: () => "text", buildPostMessages: () => [], buildMarkdownCards: () => [] };
+	const cardState = {
+		createInitialState: () => ({ terminal: "running", outputText: "" }),
+		reduceFromPiEvent: (state) => state,
+		markInterrupted: (state) => state,
+		markError: (state) => state,
+		markDone: (state) => state,
+	};
+	const imports = {
+		"electron": { app: { getPath: () => "." } },
+		"../../shared/ipc": { ipcChannels: {} },
+		"./FeishuConnection": {
+			FeishuConnection: class {
+				async start() { return { botOpenId: "test-open-id" }; }
+				stop() {}
+				async testConnection() { return { success: true, message: "ok" }; }
+				onCardAction() {}
+				onMessage() {}
+				client = null;
+			},
+		},
+		"./FeishuConfig": {
+			listBots: () => [], addBot: () => undefined, removeBot: () => false, updateBot: () => undefined,
+			getDecryptedBotAppSecret: () => "", loadBindings: () => loadBindings, saveBindings: () => undefined,
+			getPersistentChatId: options.getPersistentChatId ?? (() => undefined), setPersistentChatId: () => undefined,
+		},
+		"node:fs": { existsSync: options.existsSync ?? (() => false) },
+		"./rich-text": richText,
+		"./CardStream": { CardStream: { open: async () => ({}) } },
+		"./docActions": { buildFeishuTextChildren: () => [], stripFeishuActionMarkers: (text) => text, wantsFeishuDoc: () => undefined },
+		"./fileIntent": { hasExplicitFeishuFileSendIntent: () => false },
+		"./CardRunState": cardState,
+		"./CardRenderer": { renderRunCard: () => ({}) },
+		"./ModelPickerCard": { buildModelPickerCard: () => ({}), parseModelActionValue: () => undefined },
+		"./FeishuI18n": feishuI18n,
+	};
+	vm.runInNewContext(output, {
+		module,
+		exports: module.exports,
+		require: (specifier) => imports[specifier] ?? (() => { throw new Error(`unexpected import: ${specifier}`); })(),
+		console,
+		Buffer,
+		setTimeout,
+		clearTimeout,
+		Promise,
+	}, { filename: "FeishuBridge.ts" });
+	return module.exports;
+}
+
+function makeAgent(id, projectId = "p", sessionPath = `/sessions/${id}.json`) {
+	return { id, projectId, sessionPath, title: id, cwd: ".", status: "idle", createdAt: 1 };
+}
+
+function makeBridge(agents, gateway, calls = {}) {
+	const { FeishuBridge } = compileBridge();
+	const manager = {
+		list: () => agents,
+		create: async () => { const tab = manager.list()[0]; calls.create = (calls.create ?? 0) + 1; return tab; },
+		stop: async (id) => calls.stop?.push(id),
+		abort: async (id) => calls.abort?.push(id),
+		sendPrompt: async (input) => calls.prompts?.push(input.agentId),
+		getAvailableModels: async (id) => { calls.models?.push(id); return []; },
+		getRuntimeState: async (id) => { calls.states?.push(id); return undefined; },
+		setModel: async (id, provider, modelId) => calls.setModel?.push([id, provider, modelId]),
+		getMessages: () => [],
+		addLocalEventListener: () => () => undefined,
+	};
+	const runtimeGateway = {
+		ensureSession: async (input) => {
+			calls.ensureSession?.push(input);
+			return { sessionId: input.existingSessionId ?? "S" };
+		},
+		activateRuntime: async (sessionId) => {
+			calls.activate?.push(sessionId);
+			const tab = manager.list()[0];
+			if (!tab) throw new Error("runtime unavailable");
+			return tab;
+		},
+		sendPrompt: async (input) => calls.prompts?.push(input.sessionId),
+		abortRuntime: async (sessionId) => calls.abort?.push(sessionId),
+		listRuntimeModels: async (sessionId) => { calls.models?.push(sessionId); return []; },
+		getRuntimeState: async (sessionId) => { calls.states?.push(sessionId); return undefined; },
+		setRuntimeModel: async (sessionId, provider, modelId) =>
+			calls.setModel?.push([sessionId, provider, modelId]),
+		...gateway,
+	};
+	const bridge = new FeishuBridge(
+		{ id: "bot", name: "bot", enabled: true, appId: "app", appSecret: "secret" },
+		manager,
+		() => null,
+		() => [{ id: "p", name: "project", path: "." }],
+		runtimeGateway,
+	);
+	bridge.status = { status: "connected", activeBindings: 0 };
+	return { bridge, manager };
+}
+
+test("/new stores a stable Catalog Session without eagerly creating an Agent", async () => {
+	const tab = makeAgent("A");
+	const calls = { create: 0, ensureSession: [], activate: [] };
+	const { bridge } = makeBridge([tab], {}, calls);
+	await bridge.createNewSession({ chatId: "chat", senderOpenId: "user", chatType: "p2p", groupName: "", messageId: "m" });
+	assert.equal(JSON.stringify(bridge.listBindings().map(({ sessionId, agentId }) => ({ sessionId, agentId }))), JSON.stringify([{ sessionId: "S" }]));
+	assert.equal(calls.create, 0);
+	assert.equal(calls.ensureSession.length, 1);
+	assert.deepEqual(calls.activate, []);
+	assert.equal(bridge.getSessionChatId("S"), "chat");
+	assert.equal(bridge.getSessionChatId("A"), undefined);
+});
+
+test("first Feishu message activates the existing stable Session through the coordinator gateway", async () => {
+	const oldTab = makeAgent("A", "p", "");
+	const calls = { create: 0, ensureSession: [], activate: [], abort: [], setModel: [], models: [] };
+	const { bridge } = makeBridge([oldTab], {}, calls);
+	await bridge.createNewSession({ chatId: "chat", senderOpenId: "user", chatType: "p2p", groupName: "", messageId: "m" });
+	const nextTab = makeAgent("B", "p", "");
+	bridge.agentManager.list = () => [nextTab];
+	const binding = bridge.listBindings()[0];
+	const restored = await bridge.resumeOrCreateAgent(binding);
+	assert.equal(restored.sessionId, "S");
+	assert.equal(restored.agentId, "B");
+	assert.equal(calls.create, 0);
+	assert.equal(calls.ensureSession.length, 2);
+	assert.equal(calls.ensureSession[1].existingSessionId, "S");
+	assert.deepEqual(calls.activate, ["S"]);
+	assert.equal(bridge.getSessionChatId("A"), undefined);
+	assert.equal(bridge.getSessionChatId("B"), "chat");
+	await bridge.doSetModel("chat", "provider/model");
+	await bridge.handleStopCommand({ chatId: "chat" });
+	assert.deepEqual(calls.setModel, [["S", "provider", "model"]]);
+	assert.deepEqual(calls.abort, ["S"]);
+});
+
+test("existing Feishu binding is reused by ensureSessionMirror without creating or overwriting a mirror", async () => {
+	const persisted = [{ chatId: "feishu-chat", botId: "bot", userId: "u", sessionId: "S", agentId: "A", sessionPath: "/sessions/A.json", workspaceId: "", source: "feishu", chatType: "p2p", createdAt: 1 }];
+	const { FeishuBridge } = compileBridge(persisted);
+	const tab = makeAgent("A");
+	let tabs = [tab];
+	const bridge = new FeishuBridge({ id: "bot", name: "bot", enabled: true, appId: "app", appSecret: "secret" }, {
+		list: () => tabs,
+	}, () => null, () => [], { bindRuntime: async () => ({ sessionId: "S", runtimeGeneration: 1 }) });
+	await bridge.loadPersistedBindings();
+	let createCount = 0;
+	bridge.connection.client = { im: { chat: { create: async () => { createCount += 1; return { data: { chat_id: "mirror-chat" } }; } } } };
+	bridge.status = { status: "connected", activeBindings: 1 };
+	assert.equal(await bridge.ensureSessionMirror("A", "Local prompt", tab.sessionPath), "feishu-chat");
+	const replacementTab = makeAgent("B");
+	tabs = [replacementTab];
+	assert.equal(await bridge.ensureSessionMirror("B", "Local prompt", replacementTab.sessionPath), "feishu-chat");
+	assert.equal(createCount, 0);
+	assert.equal(JSON.stringify(bridge.listBindings().map(({ chatId, source, sessionId, agentId }) => ({ chatId, source, sessionId, agentId }))), JSON.stringify([
+		{ chatId: "feishu-chat", source: "feishu", sessionId: "S", agentId: "B" },
+	]));
+	assert.equal(bridge.getSessionChatId("S"), "feishu-chat");
+	assert.equal(bridge.getSessionChatId("A"), undefined);
+	assert.equal(bridge.getSessionChatId("B"), "feishu-chat");
+});
+
+test("removing a stale binding does not remove another binding's current indexes", async () => {
+	const persisted = [
+		{ chatId: "current", botId: "bot", userId: "u", sessionId: "S", workspaceId: "", source: "feishu", chatType: "p2p", createdAt: 1 },
+		{ chatId: "stale", botId: "bot", userId: "u", sessionId: "S", workspaceId: "", source: "feishu", chatType: "p2p", createdAt: 2 },
+	];
+	const { FeishuBridge } = compileBridge(persisted);
+	const bridge = new FeishuBridge({ id: "bot", name: "bot", enabled: true, appId: "app", appSecret: "secret" }, { list: () => [] }, () => null, () => [], { bindRuntime: async () => ({ sessionId: "S", runtimeGeneration: 1 }) });
+	await bridge.loadPersistedBindings();
+	assert.equal(bridge.getSessionChatId("S"), "current");
+	assert.equal(bridge.removeBinding("stale"), true);
+	assert.equal(bridge.getSessionChatId("S"), "current");
+	assert.equal(bridge.feishuSessions.has("S"), true);
+});
+
+test("legacy ID absent from catalog may migrate to a new stable ID during resume", async () => {
+	const persisted = [{ chatId: "chat", botId: "bot", userId: "u", sessionId: "legacy", workspaceId: "", source: "feishu", chatType: "p2p", createdAt: 1 }];
+	const { FeishuBridge } = compileBridge(persisted);
+	const tab = makeAgent("B", "p", "");
+	const bindInputs = [];
+	const manager = {
+		list: () => [],
+	};
+	const bridge = new FeishuBridge({ id: "bot", name: "bot", enabled: true, appId: "app", appSecret: "secret" }, manager, () => null, () => [{ id: "p", name: "project", path: "." }], {
+		ensureSession: async (input) => {
+			bindInputs.push(input.existingSessionId);
+			return { sessionId: "S2" };
+		},
+		activateRuntime: async () => tab,
+	} );
+	await bridge.loadPersistedBindings();
+	const resumed = await bridge.resumeOrCreateAgent(bridge.listBindings()[0]);
+	assert.equal(resumed.sessionId, "S2");
+	assert.deepEqual(bindInputs, ["legacy"]);
+});
+
+test("a stale S1 handle moved to S2 is cleared without issuing any command to A", async () => {
+	const tab = makeAgent("A", "p", "/sessions/S2.json");
+	const calls = { create: 0, stop: [], abort: [], prompts: [], models: [], states: [], setModel: [] };
+	const bindInputs = [];
+	const { bridge } = makeBridge([tab], { bindRuntime: async (input) => {
+		bindInputs.push({ agentId: input.agent.id, existingSessionId: input.existingSessionId });
+		throw new Error("runtime already coordinated to S2");
+	} }, calls);
+	bridge.getProjects = () => [];
+	bridge.connection.client = { im: { message: { create: async () => undefined } } };
+	const binding = {
+		chatId: "chat", botId: "bot", userId: "u", sessionId: "S1", agentId: "A",
+		sessionPath: "/sessions/S1.json", workspaceId: "", source: "feishu", chatType: "p2p", createdAt: 1,
+	};
+	bridge.chatBindings.set("chat", binding);
+	bridge.indexBinding(binding);
+
+	await bridge.runAgent({ chatId: "chat", senderOpenId: "u", chatType: "p2p", messageId: "m" }, "hello", [], []);
+	assert.deepEqual(bindInputs, [{ agentId: "A", existingSessionId: "S1" }]);
+	assert.equal(binding.agentId, undefined);
+	assert.equal(bridge.getSessionChatId("A"), undefined);
+	assert.equal(bridge.getSessionChatId("S1"), "chat");
+	assert.equal(calls.create, 0);
+	assert.deepEqual({ stop: calls.stop, abort: calls.abort, prompts: calls.prompts, models: calls.models, states: calls.states, setModel: calls.setModel }, {
+		stop: [], abort: [], prompts: [], models: [], states: [], setModel: [],
+	});
+});
+
+test("gateway verification of the same stable Session authorizes reuse of A", async () => {
+	const tab = makeAgent("A");
+	const bindInputs = [];
+	const { bridge } = makeBridge([tab], { bindRuntime: async (input) => {
+		bindInputs.push({ agentId: input.agent.id, existingSessionId: input.existingSessionId });
+		return { sessionId: "S1", runtimeGeneration: 4 };
+	} });
+	const binding = {
+		chatId: "chat", botId: "bot", userId: "u", sessionId: "S1", agentId: "A",
+		workspaceId: "", source: "feishu", chatType: "p2p", createdAt: 1,
+	};
+	bridge.chatBindings.set("chat", binding);
+	bridge.indexBinding(binding);
+	assert.equal(await bridge.ensureRuntimeBinding(binding), "A");
+	assert.deepEqual(bindInputs, [{ agentId: "A", existingSessionId: "S1" }]);
+	assert.equal(binding.agentId, "A");
+});
+
+test("terminal A is cleared without gateway reuse or AgentManager commands", async () => {
+	const tab = { ...makeAgent("A"), status: "closed" };
+	const calls = { create: 0, stop: [], abort: [], prompts: [], models: [], states: [], setModel: [] };
+	let gatewayCalls = 0;
+	const { bridge } = makeBridge([tab], { bindRuntime: async () => {
+		gatewayCalls += 1;
+		return { sessionId: "S1", runtimeGeneration: 1 };
+	} }, calls);
+	bridge.getProjects = () => [];
+	const binding = {
+		chatId: "chat", botId: "bot", userId: "u", sessionId: "S1", agentId: "A",
+		workspaceId: "", source: "feishu", chatType: "p2p", createdAt: 1,
+	};
+	bridge.chatBindings.set("chat", binding);
+	bridge.indexBinding(binding);
+	assert.equal(await bridge.ensureRuntimeBinding(binding), undefined);
+	assert.equal(gatewayCalls, 0);
+	assert.equal(binding.agentId, undefined);
+	assert.equal(bridge.getSessionChatId("A"), undefined);
+	assert.deepEqual({ stop: calls.stop, abort: calls.abort, prompts: calls.prompts, models: calls.models, states: calls.states, setModel: calls.setModel }, {
+		stop: [], abort: [], prompts: [], models: [], states: [], setModel: [],
+	});
+});
+
+test("gateway stable ID mismatch clears A instead of reusing it", async () => {
+	const tab = makeAgent("A");
+	const calls = { create: 0, stop: [] };
+	const { bridge } = makeBridge([tab], { bindRuntime: async () => ({ sessionId: "S2", runtimeGeneration: 2 }) }, calls);
+	bridge.getProjects = () => [];
+	const binding = {
+		chatId: "chat", botId: "bot", userId: "u", sessionId: "S1", agentId: "A",
+		workspaceId: "", source: "feishu", chatType: "p2p", createdAt: 1,
+	};
+	bridge.chatBindings.set("chat", binding);
+	bridge.indexBinding(binding);
+	assert.equal(await bridge.ensureRuntimeBinding(binding), undefined);
+	assert.equal(binding.agentId, undefined);
+	assert.equal(bridge.getSessionChatId("A"), undefined);
+	assert.deepEqual(calls.stop, []);
+});
+
+test("legacy ID and unique path candidates activate only through the Session gateway", async () => {
+	const tab = makeAgent("legacy", "p", "/same");
+	const calls = { create: 0, stop: [], ensureSession: [], activate: [] };
+	const { bridge } = makeBridge([tab], {}, calls);
+	const binding = {
+		chatId: "chat", botId: "bot", userId: "u", sessionId: "legacy",
+		sessionPath: "/same", workspaceId: "", source: "feishu", chatType: "p2p", createdAt: 1,
+	};
+	bridge.chatBindings.set("chat", binding);
+	const agentId = await bridge.ensureRuntimeBinding(binding);
+	assert.equal(agentId, "legacy");
+	assert.equal(calls.create, 0);
+	assert.equal(calls.ensureSession[0].existingSessionId, "legacy");
+	assert.equal(calls.ensureSession[0].sessionPath, "/same");
+	assert.deepEqual(calls.activate, ["legacy"]);
+	assert.equal(binding.agentId, "legacy");
+});
+
+test("gateway activation rejection leaves the binding unowned without AgentManager cleanup", async () => {
+	const tab = makeAgent("B", "p", "");
+	const calls = { create: 0, stop: [] };
+	const { bridge } = makeBridge([tab], { activateRuntime: async () => {
+		throw new Error("active origin mismatch");
+	} }, calls);
+	const binding = {
+		chatId: "chat", botId: "bot", userId: "u", sessionId: "S",
+		workspaceId: "", source: "feishu", chatType: "p2p", createdAt: 1,
+	};
+	bridge.chatBindings.set("chat", binding);
+	assert.equal(await bridge.ensureRuntimeBinding(binding), undefined);
+	assert.equal(calls.create, 0);
+	assert.deepEqual(calls.stop, []);
+	assert.equal(binding.agentId, undefined);
+});
+
+test("persisted path collision with a different source stays unowned when gateway rejects it", async () => {
+	const persisted = [{
+		chatId: "chat", botId: "bot", userId: "u", sessionId: "S", sessionPath: "/same",
+		workspaceId: "", source: "feishu", chatType: "p2p", createdAt: 1,
+	}];
+	const { FeishuBridge } = compileBridge(persisted);
+	const tab = { ...makeAgent("B", "p", "/same"), sessionSource: "codex" };
+	let gatewayCalls = 0;
+	const bridge = new FeishuBridge(
+		{ id: "bot", name: "bot", enabled: true, appId: "app", appSecret: "secret" },
+		{ list: () => [tab] },
+		() => null,
+		() => [],
+		{ bindRuntime: async () => {
+			gatewayCalls += 1;
+			throw new Error("source mismatch");
+		} },
+	);
+	await bridge.loadPersistedBindings();
+	assert.equal(gatewayCalls, 1);
+	assert.equal(bridge.listBindings()[0].sessionId, "S");
+	assert.equal(bridge.listBindings()[0].agentId, undefined);
+});
+
+test("a persisted path candidate cannot migrate to a different stable Session ID", async () => {
+	const persisted = [{ chatId: "chat", botId: "bot", userId: "u", sessionId: "A", sessionPath: "/same", workspaceId: "", source: "feishu", chatType: "p2p", createdAt: 1 }];
+	const tab = makeAgent("B", "p", "/same");
+	const { bridge } = makeBridge([tab], { bindRuntime: async () => ({ sessionId: "S", runtimeGeneration: 3 }) });
+	const { FeishuBridge } = compileBridge(persisted);
+	const manager = bridge.agentManager;
+	const bindInputs = [];
+	const loaded = new FeishuBridge({ id: "bot", name: "bot", enabled: true, appId: "app", appSecret: "secret" }, manager, () => null, () => [], { bindRuntime: async (input) => {
+		bindInputs.push(input.existingSessionId);
+		return { sessionId: "S", runtimeGeneration: 3 };
+	} });
+	await loaded.loadPersistedBindings();
+	assert.equal(JSON.stringify(loaded.listBindings().map(({ sessionId, agentId }) => ({ sessionId, agentId }))), JSON.stringify([{ sessionId: "A" }]));
+	assert.deepEqual(bindInputs, ["A"]);
+});
+
+test("two persisted rows sharing a path stay unowned even with one runtime candidate", async () => {
+	const legacy = { botId: "bot", userId: "u", sessionPath: "/same", workspaceId: "", chatType: "p2p", createdAt: 1 };
+	const ambiguous = [
+		{ ...legacy, chatId: "one", sessionId: "old-one", source: "feishu" },
+		{ ...legacy, chatId: "two", sessionId: "old-two", source: "session-mirror" },
+	];
+	const { FeishuBridge } = compileBridge(ambiguous);
+	const bindInputs = [];
+	const bridge = new FeishuBridge({ id: "bot", name: "bot", enabled: true, appId: "app", appSecret: "secret" }, {
+		list: () => [makeAgent("B", "p", "/same")],
+	}, () => null, () => [], { bindRuntime: async (input) => {
+		bindInputs.push(input);
+		return { sessionId: "unexpected", runtimeGeneration: 1 };
+	} });
+	await bridge.loadPersistedBindings();
+	assert.equal(JSON.stringify(bridge.listBindings().map(({ sessionId, agentId }) => ({ sessionId, agentId }))), JSON.stringify([
+		{ sessionId: "old-one" },
+		{ sessionId: "old-two" },
+	]));
+	assert.equal(bindInputs.length, 0);
+});

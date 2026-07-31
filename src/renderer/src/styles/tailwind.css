@@ -1,0 +1,76 @@
+/**
+ * Tailwind v4 入口（UI 2.0 / issue #115）。
+ *
+ * pure official：shadcn new-york + zinc。
+ * - primary / ring → 正文色（zinc-900 / 暗色 zinc-50）
+ * - accent → 悬停浅面（bg-active），与官方一致
+ * - 不把 primary 绑到 foundation 的 --color-accent，避免与 accent 语义打架
+ */
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+@layer base {
+  *,
+  ::before,
+  ::after {
+    border-color: var(--color-border);
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+  }
+}
+
+@theme inline {
+  /* 应用域 token（旧 CSS 继续用） */
+  --color-bg-app: var(--color-bg-app);
+  --color-bg-panel: var(--color-bg-panel);
+  --color-bg-sidebar: var(--color-bg-sidebar);
+  --color-sidebar: var(--color-bg-sidebar);
+  --color-sidebar-foreground: var(--color-text-primary);
+  --color-bg-muted: var(--color-bg-muted);
+  --color-bg-hover: var(--color-bg-hover);
+  --color-bg-active: var(--color-bg-active);
+  --color-text-primary: var(--color-text-primary);
+  --color-text-secondary: var(--color-text-secondary);
+  --color-text-tertiary: var(--color-text-tertiary);
+  --color-text-inverse: var(--color-text-inverse);
+  --color-border-subtle: var(--color-border-subtle);
+  --color-border-default: var(--color-border-default);
+  --color-border-strong: var(--color-border-strong);
+  --color-danger: var(--color-danger);
+  --color-danger-soft: var(--color-danger-soft);
+  --color-warning: var(--color-warning);
+  --color-info: var(--color-info);
+
+  /* shadcn 语义（pure official） */
+  --color-background: var(--color-bg-app);
+  --color-foreground: var(--color-text-primary);
+  --color-card: var(--color-bg-panel);
+  --color-card-foreground: var(--color-text-primary);
+  --color-popover: var(--color-bg-panel);
+  --color-popover-foreground: var(--color-text-primary);
+  --color-primary: var(--color-text-primary);
+  --color-primary-foreground: var(--color-bg-app);
+  --color-secondary: var(--color-bg-muted);
+  --color-secondary-foreground: var(--color-text-primary);
+  --color-muted: var(--color-bg-muted);
+  --color-muted-foreground: var(--color-text-secondary);
+  --color-accent: var(--color-bg-active);
+  --color-accent-foreground: var(--color-text-primary);
+  --color-destructive: var(--color-danger);
+  --color-destructive-foreground: #fafafa;
+  --color-border: var(--color-border-default);
+  --color-input: var(--color-border-default);
+  --color-ring: var(--color-text-primary);
+
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+
+  --font-sans: var(--font-family-base);
+  --font-mono: var(--font-family-mono);
+}

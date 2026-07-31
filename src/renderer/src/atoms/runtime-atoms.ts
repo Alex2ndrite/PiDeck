@@ -1,0 +1,84 @@
+import { atom } from "jotai";
+import { atomFamily, selectAtom } from "jotai/utils";
+import type { AgentRuntimeState, AgentStatus, AgentTab } from "../../../shared/types";
+import { sessionRecordsAtom, sessionRuntimeByIdAtom } from "./session-atoms";
+
+export const agentInventoryAtom = atom((get) => {
+  const records = get(sessionRecordsAtom);
+  return Object.entries(get(sessionRuntimeByIdAtom))
+    .filter((entry): entry is [string, typeof entry[1] & {
+      agentId: string;
+      projectId: string;
+      cwd: string;
+      createdAt: number;
+      status: AgentStatus;
+    }] => Boolean(
+      entry[1].agentId &&
+      entry[1].projectId &&
+      entry[1].cwd &&
+      entry[1].createdAt != null &&
+      entry[1].status !== "detached",
+    ))
+    .sort((left, right) => left[1].createdAt - right[1].createdAt)
+    .map(([sessionId, runtime]): AgentTab => {
+      const record = records[sessionId];
+      return {
+        id: runtime.agentId,
+        projectId: runtime.projectId,
+        cwd: runtime.cwd,
+        title: record?.title ?? runtime.title ?? "Session",
+        status: runtime.status,
+        sessionId: runtime.piSessionId,
+        sessionPath: runtime.sessionPath,
+        sessionEnvironment: record?.environment,
+        sessionSource: record?.source,
+        wslDistro: record?.wslDistro,
+        wslUser: record?.wslUser,
+        importedSourceId: record?.importedSourceId,
+        noSession: runtime.noSession ?? record?.noSession,
+        runtimeGeneration: runtime.runtimeGeneration,
+        createdAt: runtime.createdAt,
+        compactionCount: runtime.compactionCount,
+      };
+    });
+});
+
+export const agentByIdAtomFamily = atomFamily((agentId: string) =>
+  atom((get) => get(agentInventoryAtom).find((agent) => agent.id === agentId)),
+);
+
+export const agentsByProjectIdAtomFamily = atomFamily((projectId: string) =>
+  atom((get) => get(agentInventoryAtom).filter((agent) => agent.projectId === projectId)),
+);
+
+export const runtimeCapabilityByAgentIdAtomFamily = atomFamily((agentId: string) =>
+  atom((get) => Object.values(get(sessionRuntimeByIdAtom))
+    .find((runtime) => runtime.agentId === agentId)?.state),
+);
+
+function areRuntimeCapabilityRecordsEqual(
+  left: Record<string, AgentRuntimeState>,
+  right: Record<string, AgentRuntimeState>,
+): boolean {
+  const leftIds = Object.keys(left);
+  const rightIds = Object.keys(right);
+  return leftIds.length === rightIds.length &&
+    leftIds.every((agentId) => left[agentId] === right[agentId]);
+}
+
+export const runtimeCapabilitiesByProjectIdAtomFamily = atomFamily((projectId: string) => {
+  const projectCapabilitiesAtom = atom((get) => Object.fromEntries(
+    get(agentsByProjectIdAtomFamily(projectId))
+      .map((agent) => {
+        const runtime = Object.values(get(sessionRuntimeByIdAtom))
+          .find((candidate) => candidate.agentId === agent.id);
+        return [agent.id, runtime?.state] as const;
+      })
+      .filter((entry): entry is readonly [string, AgentRuntimeState] => Boolean(entry[1])),
+  ));
+  return selectAtom(
+    projectCapabilitiesAtom,
+    (capabilities) => capabilities,
+    areRuntimeCapabilityRecordsEqual,
+  );
+});

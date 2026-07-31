@@ -1,8 +1,10 @@
+import { Button } from "../components/ui-shadcn/button";
 import { showNotice } from "../utils/notice";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeft, BookOpen, Check, Download, ExternalLink, Globe, Search } from "lucide-react";
 import type { PromptStoreItem, PromptStoreSearchResult, PiPromptTemplateSummary, PiPromptTemplateListResult } from "../../../shared/types";
 import { t } from "../i18n";
+import { desktopApi } from "../desktopApi";
 import { YaoPromptTab } from "./YaoPromptTab";
 
 /**
@@ -20,16 +22,12 @@ function predictImportName(title: string): string {
 /** 获取本地已安装 prompt 名称集合 */
 async function getInstalledPromptNames(): Promise<Set<string>> {
 	try {
-		const piDesktop = (window as any).piDesktop;
-		if (!piDesktop?.prompts?.list) return new Set();
-		const list: PiPromptTemplateListResult = await piDesktop.prompts.list();
+		const list: PiPromptTemplateListResult = await desktopApi.prompts.list();
 		return new Set(list.templates.filter((t) => t.userCreated).map((t) => t.name.toLowerCase()));
 	} catch {
 		return new Set();
 	}
 }
-
-const api = (window as unknown as { piDesktop: { promptStore: { search: (q: string, opts?: { limit?: number }) => Promise<PromptStoreSearchResult>; get: (id: string) => Promise<PromptStoreItem>; import: (data: { title: string; description: string; content: string }) => Promise<PiPromptTemplateSummary> } } }).piDesktop;
 
 /**
  * 搜索提示常量：用户在商店搜索栏中看到的热门推荐关键词。
@@ -71,12 +69,13 @@ export function PromptStoreTab(props: {
 		setSearching(true);
 		try {
 			const [data, installed] = await Promise.all([
-				api.promptStore.search(q, { limit: 20 }),
+				desktopApi.promptStore.search(q, { limit: 20 }),
 				getInstalledPromptNames(),
 			]);
 			setResult(data);
 			setInstalledNames(installed);
 		} catch (err) {
+			console.error("[PromptStore] Search failed", err);
 			setError(t("config.promptStoreError"));
 			setResult(null);
 		} finally {
@@ -98,7 +97,7 @@ export function PromptStoreTab(props: {
 		setImportingId(item.id);
 		setError(null);
 		try {
-			await api.promptStore.import({
+			await desktopApi.promptStore.import({
 				title: item.title,
 				description: item.description,
 				content: item.content,
@@ -110,7 +109,8 @@ export function PromptStoreTab(props: {
 				void handleSearch(query);
 			}
 		} catch (err) {
-			setError(err instanceof Error ? err.message : String(err));
+			console.error("[PromptStore] Import failed", err);
+			setError(t("config.promptStoreImportError"));
 		} finally {
 			setImportingId(null);
 		}
@@ -132,12 +132,12 @@ export function PromptStoreTab(props: {
 				{error && <div className="config-error">{error}</div>}
 				{/* toast 已改用 sonner */}
 				<div className="prompt-store-toolbar">
-					<button className="config-btn" onClick={backToList}>
+					<Button  variant="outline" onClick={backToList}>
 						<ArrowLeft size={14} strokeWidth={1.8} />
 						{t("config.promptStoreBack")}
-					</button>
-					<button
-						className="config-btn primary"
+					</Button>
+					<Button
+						 variant="default"
 						onClick={() => void handleImport(previewItem)}
 						disabled={importingId === previewItem.id}
 					>
@@ -146,7 +146,7 @@ export function PromptStoreTab(props: {
 						) : (
 							<><Download size={14} strokeWidth={1.8} /> {t("config.promptStoreImport")}</>
 						)}
-					</button>
+					</Button>
 				</div>
 				<div className="prompt-store-preview">
 					<div className="prompt-store-preview-header">
@@ -194,7 +194,7 @@ export function PromptStoreTab(props: {
 					onClick={() => setStoreSubTab("yao")}
 				>
 					<BookOpen size={14} strokeWidth={1.8} />
-					中文精选
+					{t("config.promptStoreChinesePicks")}
 				</button>
 			</div>
 
@@ -215,13 +215,13 @@ export function PromptStoreTab(props: {
 						placeholder={t("config.promptStoreSearchPlaceholder")}
 						disabled={searching}
 					/>
-					<button
-						className="config-btn primary"
+					<Button
+						 variant="default"
 						onClick={() => void handleSearch(query)}
 						disabled={searching || !query.trim()}
 					>
 						{searching ? t("config.promptStoreSearching") : <Search size={14} strokeWidth={1.8} />}
-					</button>
+					</Button>
 				</div>
 				{/* 热门搜索建议 */}
 				{!result && !searching && (
@@ -252,7 +252,7 @@ export function PromptStoreTab(props: {
 
 			{result && result.count > 0 && (
 				<div className="prompt-store-results">
-					<small className="prompt-store-result-count">{result.count} results</small>
+					<small className="prompt-store-result-count">{t("config.promptStoreResultCount", { count: result.count })}</small>
 					{result.prompts.map((item) => (
 						<article
 							key={item.id}
@@ -283,13 +283,13 @@ export function PromptStoreTab(props: {
 									<ExternalLink size={14} strokeWidth={1.8} />
 								</button>
 								{!installedNames.has(predictImportName(item.title)) && (
-									<button
-										className="config-btn primary small"
+									<Button
+										 variant="default" size="sm"
 										onClick={(e) => { e.stopPropagation(); void handleImport(item); }}
 										disabled={importingId === item.id}
 									>
 										{importingId === item.id ? t("config.promptStoreImporting") : t("config.promptStoreImport")}
-									</button>
+									</Button>
 								)}
 							</div>
 						</article>

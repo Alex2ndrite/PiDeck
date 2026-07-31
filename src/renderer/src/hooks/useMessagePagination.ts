@@ -1,123 +1,216 @@
-/**
- * 消息分页加载 Hook
- * 实现首屏加载最新消息，向上滚动时加载更多历史消息
- */
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChatMessage } from "../../../shared/types";
 
-interface MessagePaginationOptions {
+export type MessagePaginationState = {
+  ownerKey: string;
+  visibleCount: number;
+  isLoading: boolean;
+};
+
+type MessagePaginationOptions = {
   messages: ChatMessage[];
+  ownerKey?: string;
   initialPageSize?: number;
   pageSize?: number;
   maxVisibleMessages?: number;
   enabled?: boolean;
-}
+};
 
-interface MessagePaginationResult {
+type MessagePaginationResult = {
   visibleMessages: ChatMessage[];
   hasMore: boolean;
   loadMore: () => void;
-  /** 一次性扩展分页窗口直到包含指定索引的消息（用于会话定位跳转）。 */
   loadUntilIncluded: (index: number) => void;
   isLoading: boolean;
   reset: () => void;
   totalCount: number;
   visibleCount: number;
+};
+
+const DEFAULT_INITIAL_PAGE_SIZE = 100;
+const DEFAULT_PAGE_SIZE = 100;
+const DEFAULT_MAX_VISIBLE = Infinity;
+const DEFAULT_OWNER_KEY = "legacy";
+
+export function createMessagePaginationState(
+  ownerKey: string,
+  initialPageSize: number,
+): MessagePaginationState {
+  return { ownerKey, visibleCount: initialPageSize, isLoading: false };
 }
 
-const DEFAULT_INITIAL_PAGE_SIZE = 100; // 首屏加载最近100条消息
-const DEFAULT_PAGE_SIZE = 100; // 每次加载100条历史消息
-const DEFAULT_MAX_VISIBLE = Infinity; // 默认无限制，但分批加载
+// A mismatched state is never rendered. This makes an owner switch atomic from React's render.
+export function currentMessagePaginationState(
+  state: MessagePaginationState,
+  ownerKey: string,
+  initialPageSize: number,
+): MessagePaginationState {
+  return state.ownerKey === ownerKey
+    ? state
+    : createMessagePaginationState(ownerKey, initialPageSize);
+}
+
+export function completeMessagePaginationLoad(
+  state: MessagePaginationState,
+  ownerKey: string,
+  messageCount: number,
+  pageSize: number,
+  maxVisibleMessages: number,
+): MessagePaginationState {
+  if (state.ownerKey !== ownerKey) return state;
+  return {
+    ownerKey,
+    visibleCount: Math.min(
+      state.visibleCount + pageSize,
+      maxVisibleMessages,
+      messageCount,
+    ),
+    isLoading: false,
+  };
+}
+
+export function includeMessagePaginationIndex(
+  state: MessagePaginationState,
+  ownerKey: string,
+  index: number,
+  messageCount: number,
+  maxVisibleMessages: number,
+): MessagePaginationState {
+  if (state.ownerKey !== ownerKey || index < 0 || index >= messageCount) return state;
+  return {
+    ...state,
+    visibleCount: Math.min(
+      Math.max(state.visibleCount, messageCount - index),
+      messageCount,
+      maxVisibleMessages,
+    ),
+  };
+}
 
 export function useMessagePagination({
   messages,
+  ownerKey = DEFAULT_OWNER_KEY,
   initialPageSize = DEFAULT_INITIAL_PAGE_SIZE,
   pageSize = DEFAULT_PAGE_SIZE,
   maxVisibleMessages = DEFAULT_MAX_VISIBLE,
   enabled = true,
 }: MessagePaginationOptions): MessagePaginationResult {
-  const [visibleCount, setVisibleCount] = useState(initialPageSize);
-  const [isLoading, setIsLoading] = useState(false);
+  const [storedState, setStoredState] = useState(() =>
+    createMessagePaginationState(ownerKey, initialPageSize),
+  );
+  const state = currentMessagePaginationState(storedState, ownerKey, initialPageSize);
+  const ownerKeyRef = useRef(ownerKey);
+  const messageCountRef = useRef(messages.length);
+  const frameRef = useRef<number | undefined>(undefined);
+  const fallbackTimerRef = useRef<number | undefined>(undefined);
+  const frameOwnerRef = useRef<string | undefined>(undefined);
+  const previousRef = useRef({ ownerKey, count: messages.length });
+  ownerKeyRef.current = ownerKey;
+  messageCountRef.current = messages.length;
 
-  // 重置分页状态
-  const reset = useCallback(() => {
-    setVisibleCount(initialPageSize);
-    setIsLoading(false);
-  }, [initialPageSize]);
+  const cancelPendingLoad = useCallback(() => {
+    if (frameRef.current != null) cancelAnimationFrame(frameRef.current);
+    if (fallbackTimerRef.current != null) window.clearTimeout(fallbackTimerRef.current);
+    frameRef.current = undefined;
+    fallbackTimerRef.current = undefined;
+    frameOwnerRef.current = undefined;
+  }, []);
 
-  // 当切换会话时重置
   useEffect(() => {
-    if (messages.length === 0) {
-      reset();
-    }
-  }, [messages.length === 0, reset]);
+    cancelPendingLoad();
+    previousRef.current = { ownerKey, count: messages.length };
+    setStoredState(createMessagePaginationState(ownerKey, initialPageSize));
+    return cancelPendingLoad;
+  }, [cancelPendingLoad, initialPageSize, ownerKey]);
 
-  // 跟踪上一次的完整消息数量，用于区分“新增消息（流式追加）”与“手动加载更多导致的 visibleCount 变化”。
-  // 只有 messages.length 真正增长时才自动展开窗口，避免手动 loadMore/loadUntilIncluded 后窗口被意外拉满。
-  const prevMessageCountRef = useRef(messages.length);
-
-  // 当有新消息追加时，智能处理：少量新消息（<10条，典型为流式回答）自动纳入可视窗口。
-  // 仅按新增条数递增 visibleCount，避免用户在回看历史时被新消息强行拉满窗口。
   useEffect(() => {
     if (!enabled) return;
-    const prev = prevMessageCountRef.current;
-    const delta = messages.length - prev;
-    prevMessageCountRef.current = messages.length;
-    if (delta > 0 && delta < 10) {
-      setVisibleCount((prevCount) =>
-        Math.min(prevCount + delta, messages.length, maxVisibleMessages),
-      );
+    const previous = previousRef.current;
+    if (previous.ownerKey !== ownerKey) {
+      previousRef.current = { ownerKey, count: messages.length };
+      return;
     }
-  }, [messages.length, enabled, maxVisibleMessages]);
-
-  // 加载更多历史消息
-  const loadMore = useCallback(() => {
-    if (!enabled || isLoading) return;
-
-    setIsLoading(true);
-
-    // 模拟异步加载，使用 requestAnimationFrame 保持流畅
-    requestAnimationFrame(() => {
-      setVisibleCount((prev) => {
-        const next = prev + pageSize;
-        const capped = Math.min(next, maxVisibleMessages, messages.length);
-        return capped;
-      });
-      setIsLoading(false);
+    const delta = messages.length - previous.count;
+    previousRef.current = { ownerKey, count: messages.length };
+    if (delta <= 0 || delta >= 10) return;
+    setStoredState((current) => {
+      if (current.ownerKey !== ownerKey) return current;
+      return {
+        ...current,
+        visibleCount: Math.min(
+          current.visibleCount + delta,
+          messages.length,
+          maxVisibleMessages,
+        ),
+      };
     });
-  }, [enabled, isLoading, pageSize, maxVisibleMessages, messages.length]);
+  }, [enabled, maxVisibleMessages, messages.length, ownerKey]);
 
-  // 一次性把分页窗口扩展到包含 `index`（在完整 messages 数组中的下标）。
-  // 可见窗口始终取末尾 visibleCount 条，起始 = length - visibleCount；
-  // 要包含 index 需要 visibleCount >= length - index，取较大值并封顶。
-  // 用于右侧“会话定位”点击未加载的旧消息时，先把该消息加载进可视范围再滚动定位。
-  const loadUntilIncluded = useCallback(
-    (index: number) => {
-      if (!enabled || index < 0 || index >= messages.length) return;
-      const needed = messages.length - index;
-      setVisibleCount((prev) =>
-        Math.min(Math.max(prev, needed), messages.length, maxVisibleMessages),
-      );
-    },
-    [enabled, messages.length, maxVisibleMessages],
-  );
+  const reset = useCallback(() => {
+    cancelPendingLoad();
+    setStoredState(createMessagePaginationState(ownerKey, initialPageSize));
+  }, [cancelPendingLoad, initialPageSize, ownerKey]);
 
-  // 可见的消息列表（从末尾开始取）
+  const loadMore = useCallback(() => {
+    if (!enabled || state.isLoading) return;
+    if (frameRef.current != null) {
+      if (frameOwnerRef.current === ownerKey) return;
+      cancelPendingLoad();
+    }
+    const requestOwnerKey = ownerKey;
+    setStoredState((current) => {
+      const active = currentMessagePaginationState(current, requestOwnerKey, initialPageSize);
+      return active.isLoading ? active : { ...active, isLoading: true };
+    });
+    frameOwnerRef.current = requestOwnerKey;
+    // Electron can throttle rAF while a window is backgrounded. Keep rAF as the
+    // normal paint-friendly path, but complete the owner-validated update once
+    // through a short timer so the button cannot remain stuck in loading state.
+    const completeLoad = () => {
+      if (frameOwnerRef.current !== requestOwnerKey) return;
+      frameRef.current = undefined;
+      if (fallbackTimerRef.current != null) window.clearTimeout(fallbackTimerRef.current);
+      fallbackTimerRef.current = undefined;
+      frameOwnerRef.current = undefined;
+      if (ownerKeyRef.current !== requestOwnerKey) return;
+      setStoredState((current) => completeMessagePaginationLoad(
+        current,
+        requestOwnerKey,
+        messageCountRef.current,
+        pageSize,
+        maxVisibleMessages,
+      ));
+    };
+    frameRef.current = requestAnimationFrame(completeLoad);
+    fallbackTimerRef.current = window.setTimeout(completeLoad, 250);
+  }, [cancelPendingLoad, enabled, initialPageSize, maxVisibleMessages, ownerKey, pageSize, state.isLoading]);
+
+  const loadUntilIncluded = useCallback((index: number) => {
+    if (!enabled) return;
+    const requestOwnerKey = ownerKey;
+    setStoredState((current) => includeMessagePaginationIndex(
+      currentMessagePaginationState(current, requestOwnerKey, initialPageSize),
+      requestOwnerKey,
+      index,
+      messageCountRef.current,
+      maxVisibleMessages,
+    ));
+  }, [enabled, initialPageSize, maxVisibleMessages, ownerKey]);
+
   const visibleMessages = useMemo(() => {
     if (!enabled) return messages;
-
-    const start = Math.max(0, messages.length - visibleCount);
-    return messages.slice(start);
-  }, [messages, visibleCount, enabled]);
-
-  const hasMore = enabled && visibleCount < messages.length && visibleCount < maxVisibleMessages;
+    return messages.slice(Math.max(0, messages.length - state.visibleCount));
+  }, [enabled, messages, state.visibleCount]);
+  const hasMore = enabled &&
+    state.visibleCount < messages.length &&
+    state.visibleCount < maxVisibleMessages;
 
   return {
     visibleMessages,
     hasMore,
     loadMore,
     loadUntilIncluded,
-    isLoading,
+    isLoading: state.isLoading,
     reset,
     totalCount: messages.length,
     visibleCount: visibleMessages.length,

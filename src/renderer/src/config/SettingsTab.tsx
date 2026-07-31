@@ -1,3 +1,4 @@
+import { Button } from "../components/ui-shadcn/button";
 import { useState, useRef, useCallback, useEffect } from "react";
 import { X, Plus, Check } from "lucide-react";
 import type { AuthFile, SettingsFile, ModelsFile } from "./configTypes";
@@ -133,14 +134,14 @@ export function SettingsTab(props: {
 	};
 
 	const updateCompaction = (patch: Partial<typeof compactionConfig>) => {
-		const existingExtra =
+		const existing =
 			data.compaction && typeof data.compaction === "object" && !Array.isArray(data.compaction)
 				? (data.compaction as Record<string, unknown>)
 				: {};
 		props.onChange({
 			...data,
 			compaction: {
-				...existingExtra,
+				...existing,
 				...compactionConfig,
 				...patch,
 			},
@@ -214,13 +215,13 @@ export function SettingsTab(props: {
 				<span className="config-count">
 					{t("config.count.configItems", { count: entries.length })}
 				</span>
-				<button
-					className="config-btn primary"
+				<Button
+					 variant="default"
 					onClick={props.onSave}
 					disabled={saving}
 				>
 					{saving ? t("common.saving") : t("common.save")}
-				</button>
+				</Button>
 			</div>
 			<div className="config-settings-list">
 				{/* enabledModels 始终显示在最前面 */}
@@ -330,14 +331,8 @@ export function SettingsTab(props: {
 				</div>
 
 				{entries
-					// sessionDir / retry / compaction / enabledModels 已有专用区块，避免列表里重复一行
-					.filter(
-						([key]) =>
-							key !== "enabledModels" &&
-							key !== "retry" &&
-							key !== "sessionDir" &&
-							key !== "compaction",
-					)
+					// sessionDir / retry / enabledModels 已有专用区块，避免列表里重复一行
+					.filter(([key]) => key !== "enabledModels" && key !== "retry" && key !== "sessionDir")
 					.map(([key, value]) => (
 					<div key={key} className="config-settings-row">
 						<span className="config-settings-key">{configLabel(key)}</span>
@@ -354,13 +349,13 @@ export function SettingsTab(props: {
 				))}
 				{!hasEnabledModels && (
 					<div className="config-settings-row config-settings-row--add">
-						<button
-							className="config-btn"
+						<Button
+							 variant="outline"
 							onClick={() => props.onChange({ ...data, enabledModels: [] })}
 						>
 							<Plus size={14} />
 							{t("config.settings.addEnabledModels")}
-						</button>
+						</Button>
 					</div>
 				)}
 				{entries.length === 0 && <div className="config-empty">{t("config.emptyConfig")}</div>}

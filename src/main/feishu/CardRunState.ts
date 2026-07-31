@@ -12,6 +12,8 @@
  * 所有 reducer 是纯函数：reduce(state, event) → state。
  */
 
+import { feishuT, type FeishuLocale } from "./FeishuI18n";
+
 export type ToolStatus = "running" | "done" | "error";
 
 export interface ToolEntry {
@@ -109,12 +111,16 @@ function finalizeAllTrail(state: RunState): RunState {
 // ===== 主 reducer =====
 
 /** 从 AgentManager 事件 reduce 状态 */
-export function reduceFromPiEvent(state: RunState, event: Record<string, unknown>): RunState {
+export function reduceFromPiEvent(
+	state: RunState,
+	event: Record<string, unknown>,
+	locale: FeishuLocale = "zh-CN",
+): RunState {
 	switch (event.type) {
 		case "agent_start":
 			return addTrail(
 				{ ...state, footer: "thinking" },
-				"agent", "agent 启动", "done",
+				"agent", feishuT(locale, "run.agentStarted"), "done",
 			);
 
 		// turn_start 已移除，轮次信息对用户感知价值不大，且计数容易不准
@@ -122,7 +128,7 @@ export function reduceFromPiEvent(state: RunState, event: Record<string, unknown
 		case "message_start": {
 			const msg = event.message as Record<string, unknown> | undefined;
 			if (msg?.role === "assistant") {
-				return appendText(state, "");
+				return appendText(state, "", locale);
 			}
 			return state;
 		}
@@ -134,23 +140,23 @@ export function reduceFromPiEvent(state: RunState, event: Record<string, unknown
 			if (assistantEvent.type === "text_delta") {
 				// AgentManager 发出的字段是 delta，兼容 delta 和 text 两种格式
 				const text = (assistantEvent as { delta?: string; text?: string }).delta ?? (assistantEvent as { text?: string }).text ?? "";
-				if (text) return appendText(state, text);
+				if (text) return appendText(state, text, locale);
 			}
 			if (assistantEvent.type === "thinking_delta") {
 				// AgentManager 发出的字段是 delta，兼容 delta 和 thinking 两种格式
 				const thinking = (assistantEvent as { delta?: string; thinking?: string }).delta ?? (assistantEvent as { thinking?: string }).thinking ?? "";
-				if (thinking) return appendThinking(state, thinking);
+				if (thinking) return appendThinking(state, thinking, locale);
 			}
 			if (assistantEvent.type === "toolcall_start") {
 				const toolCall = (assistantEvent as { toolCall?: Record<string, unknown> }).toolCall;
 				if (toolCall && typeof toolCall.id === "string" && typeof toolCall.name === "string") {
-					return startToolInState(state, toolCall.id, toolCall.name, toolCall.input as Record<string, unknown> | undefined);
+					return startToolInState(state, toolCall.id, toolCall.name, toolCall.input as Record<string, unknown> | undefined, locale);
 				}
 			}
 			if (assistantEvent.type === "toolcall_end") {
 				const toolCall = (assistantEvent as { toolCall?: Record<string, unknown> }).toolCall;
 				if (toolCall && typeof toolCall.id === "string") {
-					return completeToolInState(state, toolCall.id, toolCall.isError === true);
+					return completeToolInState(state, toolCall.id, toolCall.isError === true, locale);
 				}
 			}
 			if (assistantEvent.type === "done") {
@@ -162,7 +168,7 @@ export function reduceFromPiEvent(state: RunState, event: Record<string, unknown
 		case "tool_execution_start": {
 			const toolName = typeof event.toolName === "string" ? event.toolName : "tool";
 			const toolId = `tool_${toolName}_${Date.now()}`;
-			return startToolInState(state, toolId, toolName, event.args as Record<string, unknown> | undefined);
+			return startToolInState(state, toolId, toolName, event.args as Record<string, unknown> | undefined, locale);
 		}
 
 		case "tool_execution_end": {
@@ -172,20 +178,19 @@ export function reduceFromPiEvent(state: RunState, event: Record<string, unknown
 				(b) => b.kind === "tool" && b.tool.name === toolName && b.tool.status === "running",
 			);
 			if (toolBlock && toolBlock.kind === "tool") {
-				return completeToolInState(state, toolBlock.tool.id, event.isError === true);
+				return completeToolInState(state, toolBlock.tool.id, event.isError === true, locale);
 			}
 			return state;
 		}
 
 		case "compaction_start": {
-			const reason = typeof event.reason === "string" ? event.reason : "";
-			return addTrail(state, "compaction", `上下文压缩${reason ? ": " + reason : ""}`, "running");
+			return addTrail(state, "compaction", feishuT(locale, "run.compacting"), "running");
 		}
 
 		case "auto_retry_start": {
 			const attempt = typeof event.attempt === "number" ? event.attempt : "?";
 			const max = typeof event.maxAttempts === "number" ? event.maxAttempts : "?";
-			return addTrail(state, "retry", `自动重试: ${attempt}/${max}`, "running");
+			return addTrail(state, "retry", feishuT(locale, "run.autoRetry", { attempt, max }), "running");
 		}
 
 		case "auto_retry_end": {
@@ -194,7 +199,7 @@ export function reduceFromPiEvent(state: RunState, event: Record<string, unknown
 
 		case "agent_end": {
 			if (event.stopReason === "error" || event.error) {
-				return markError(finalizeAllTrail(state), String(event.error || event.errorMessage || "Agent 运行出错"));
+				return markError(finalizeAllTrail(state), feishuT(locale, "agent.failed"));
 			}
 			return markDone(finalizeAllTrail(state));
 		}
@@ -212,7 +217,7 @@ function closeStreamingText(blocks: Block[]): Block[] {
 	);
 }
 
-function appendText(state: RunState, delta: string): RunState {
+function appendText(state: RunState, delta: string, locale: FeishuLocale): RunState {
 	const last = state.blocks[state.blocks.length - 1];
 	const newOutputText = state.outputText + delta;
 	const isFirstOutput = state.outputText.length === 0 && delta.length > 0;
@@ -239,14 +244,19 @@ function appendText(state: RunState, delta: string): RunState {
 
 	// 首次输出时：标记思考完成 + 添加输出轨迹
 	if (isFirstOutput) {
-		next = addTrail(next, "agent", "开始输出", "running");
+		next = addTrail(next, "agent", feishuT(locale, "run.startOutput"), "running");
 		// 标记上一个"开始思考"为完成
-		next = updateLastTrailByText(next, "开始思考", "done", "思考完成");
+		next = updateLastTrailByText(
+			next,
+			feishuT(locale, "run.startThinking"),
+			"done",
+			feishuT(locale, "run.thinkingDone"),
+		);
 	}
 	return next;
 }
 
-function appendThinking(state: RunState, delta: string): RunState {
+function appendThinking(state: RunState, delta: string, locale: FeishuLocale): RunState {
 	const isFirstThinking = state.reasoning.content.length === 0;
 	const next = {
 		...state,
@@ -255,12 +265,18 @@ function appendThinking(state: RunState, delta: string): RunState {
 	};
 	// 第一次思考时追加轨迹条目
 	if (isFirstThinking) {
-		return addTrail(next, "agent", "开始思考", "running");
+		return addTrail(next, "agent", feishuT(locale, "run.startThinking"), "running");
 	}
 	return next;
 }
 
-function startToolInState(state: RunState, id: string, name: string, input?: Record<string, unknown>): RunState {
+function startToolInState(
+	state: RunState,
+	id: string,
+	name: string,
+	input: Record<string, unknown> | undefined,
+	locale: FeishuLocale,
+): RunState {
 	const detail = toolInputSummary(name, input);
 	const tool: ToolEntry = { id, name, input, status: "running" };
 	return addTrail(
@@ -271,13 +287,13 @@ function startToolInState(state: RunState, id: string, name: string, input?: Rec
 			footer: "tool_running",
 		},
 		"tool",
-		`工具调用: ${name}`,
+		feishuT(locale, "run.toolCall", { name }),
 		"running",
 		detail,
 	);
 }
 
-function completeToolInState(state: RunState, id: string, isError: boolean): RunState {
+function completeToolInState(state: RunState, id: string, isError: boolean, locale: FeishuLocale): RunState {
 	const blocks = state.blocks.map((b) => {
 		if (b.kind !== "tool" || b.tool.id !== id) return b;
 		return {
@@ -286,9 +302,15 @@ function completeToolInState(state: RunState, id: string, isError: boolean): Run
 		};
 	});
 	// 也更新 trail 中最后一个对应状态的 tool
+	const completedTool = blocks.find((block) => block.kind === "tool" && block.tool.id === id);
+	const toolName = completedTool?.kind === "tool" ? completedTool.tool.name : "tool";
 	const trail = state.trail.map((t, i) => {
 		if (t.type === "tool" && t.status === "running" && i === lastRunningToolIndex(state.trail)) {
-			return { ...t, status: isError ? ("error" as const) : ("done" as const), text: t.text.replace("工具调用", isError ? "工具失败" : "工具完成") };
+			return {
+				...t,
+				status: isError ? ("error" as const) : ("done" as const),
+				text: feishuT(locale, isError ? "run.toolFailed" : "run.toolDone", { name: toolName }),
+			};
 		}
 		return t;
 	});

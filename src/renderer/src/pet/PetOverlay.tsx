@@ -201,16 +201,16 @@ function wrapText(ctx: CanvasRenderingContext2D, text: string, maxW: number): st
 // ═══ 降级（无素材时） ═══
 
 const FALLBACK: Record<PetMode, { color: string; emoji: string }> = {
-	idle: { color: "#8a909c", emoji: "😌" },
-	running: { color: "#16a34a", emoji: "⚙️" },
-	failed: { color: "#dc2626", emoji: "😥" },
-	waiting: { color: "#b45309", emoji: "🥺" },
-	waving: { color: "#2563eb", emoji: "👋" },
-	jumping: { color: "#8b5cf6", emoji: "🤸" },
-	"running-right": { color: "#16a34a", emoji: "🏃" },
-	"running-left": { color: "#16a34a", emoji: "🏃‍♂️" },
-	review: { color: "#2563eb", emoji: "🔍" },
-	hidden: { color: "#8a909c", emoji: "" },
+	idle: { color: "#a1a1aa", emoji: "😌" },
+	running: { color: "#18181b", emoji: "⚙️" },
+	failed: { color: "#ef4444", emoji: "😥" },
+	waiting: { color: "#ca8a04", emoji: "🥺" },
+	waving: { color: "#3f3f46", emoji: "👋" },
+	jumping: { color: "#52525b", emoji: "🤸" },
+	"running-right": { color: "#18181b", emoji: "🏃" },
+	"running-left": { color: "#18181b", emoji: "🏃‍♂️" },
+	review: { color: "#3f3f46", emoji: "🔍" },
+	hidden: { color: "#a1a1aa", emoji: "" },
 };
 
 function FallbackCanvas({ mode }: { mode: PetMode }) {
