@@ -1,5 +1,4 @@
 // @ts-nocheck - extracted from AppParts, pre-existing type issues
-import { Button } from "../ui-shadcn/button";
 import { Component, useState, useEffect, useRef, useMemo, type ReactNode } from "react";
 import {
 	Settings2,
@@ -476,10 +475,10 @@ function SettingsModalContent(props: SettingsModalProps) {
 						{/* 全局保存/取消按钮：仅在存在未保存变更时显示，样式与配置弹框的导入/导出按钮一致 */}
 						{hasDirtyChanges && (
 							<>
-								<Button  variant="default" onClick={saveAll}>
+								<Button variant="primary" onClick={saveAll}>
 									{t("common.save")}
 								</Button>
-								<Button  variant="outline" onClick={cancelAll}>
+								<Button variant="secondary" onClick={cancelAll}>
 									{t("common.cancel")}
 								</Button>
 							</>
@@ -1519,10 +1518,10 @@ function SettingsModalContent(props: SettingsModalProps) {
 							<strong>{t("settings.unsavedTitle")}</strong>
 							<p>{t("settings.unsavedMessage")}</p>
 							<div className="config-modal-actions">
-								<Button  variant="outline" onClick={() => setCloseConfirmOpen(false)}>
+								<Button variant="secondary" onClick={() => setCloseConfirmOpen(false)}>
 									{t("common.cancel")}
 								</Button>
-								<Button  variant="outline" className="text-destructive" onClick={handleDiscardAndClose}>
+								<Button variant="danger" onClick={handleDiscardAndClose}>
 									{t("settings.discardChanges")}
 								</Button>
 								<Button  variant="default" onClick={handleSaveAndClose}>

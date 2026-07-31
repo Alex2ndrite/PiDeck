@@ -10,7 +10,9 @@
     <title></title>
     <style>
       /* 启动画面：独立于 #root，React 挂载后淡出移除；不依赖外部字体/图片，保证首帧极快。 */
-      * { margin: 0; padding: 0; box-sizing: border-box; }
+      /* 注意：reset 必须限定在 boot-overlay 内——全局 * 规则是无层级的，
+         会压过 Tailwind @layer utilities 的所有间距工具类（#115 曾因此导致菜单/弹窗无内边距）。 */
+      #boot-overlay, #boot-overlay * { margin: 0; padding: 0; box-sizing: border-box; }
       html, body {
         height: 100%;
         overflow: hidden;
