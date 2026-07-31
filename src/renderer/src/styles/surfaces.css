@@ -1628,7 +1628,7 @@
   border-top: 1px solid var(--color-border-subtle);
 }
 .setting-field > span,
-.setting-field .ui-field-label {
+.setting-field .text-sm {
   color: var(--color-text-secondary);
   font-size: var(--font-size-control);
 }
@@ -1639,11 +1639,6 @@
   background: var(--color-bg-panel);
   padding: 0 var(--space-3);
   color: var(--color-text-primary);
-}
-.ui-field-description {
-  color: var(--color-text-tertiary);
-  font-size: var(--font-size-caption);
-  line-height: var(--line-height-caption);
 }
 .setting-fontsize-group {
   display: flex;
@@ -1657,7 +1652,7 @@
   gap: 4px;
 }
 /* 整个行点击折叠，但仅在标签和图标区域显示为可点击光标 */
-.setting-fontsize-header .ui-field-label {
+.setting-fontsize-header .text-sm {
   cursor: pointer;
 }
 
@@ -1836,7 +1831,7 @@
   color: var(--color-text-tertiary);
   font-size: var(--font-size-micro);
 }
-.web-endpoint-summary .ui-button {
+.web-endpoint-summary > button {
   justify-self: end;
 }
 

@@ -1,39 +1,31 @@
 /**
  * Tailwind v4 入口（UI 2.0 / issue #115）。
  *
- * #115 U5 收口：shadcn 组件已全面接管交互层，旧组件 CSS 已删除，
- * 现启用完整 Tailwind（含 preflight 全局 reset）。legacy 域样式
- * （timeline/composer/terminal 等）均显式声明自身排版，reset 不应改变
- * 布局结构；个别依赖浏览器默认样式的地方在视觉收口阶段逐个修正。
+ * pure official：shadcn new-york + zinc。
+ * - primary / ring → 正文色（zinc-900 / 暗色 zinc-50）
+ * - accent → 悬停浅面（bg-active），与官方一致
+ * - 不把 primary 绑到 foundation 的 --color-accent，避免与 accent 语义打架
  */
 @import "tailwindcss";
-/* shadcn 组件的 enter/exit 动画类（animate-in/fade-in/zoom-in…）由该包提供。 */
 @import "tw-animate-css";
 
-/* 暗色模式跟随应用现有的 data-theme 机制（document.documentElement.dataset.theme），
- * shadcn 组件的 dark: 变体直接落到现有主题开关上，不引入第二套暗色方案。 */
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
-/**
- * shadcn 基础层（最小化版）：组件源码约定 `border` 类只设宽度、颜色全局继承
- * border token（官方 globals.css 里是 `* { @apply border-border }`）。
- * 不开全量 preflight 的前提下补这一条，否则所有 shadcn 边框退化为 currentColor（黑）。
- * 影响面评估：旧 CSS 的边框基本都显式设了颜色，未设的少数元素从黑边变为
- * --color-border-default，视觉更收敛，属可接受变化。
- */
 @layer base {
-  *, ::before, ::after {
+  *,
+  ::before,
+  ::after {
     border-color: var(--color-border);
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
   }
 }
 
-/**
- * Token 平移表：@theme inline 让 Tailwind 工具类直接引用现有 CSS 变量，
- * 单一事实源仍在 foundation.css（明暗主题切换零改动）；后续 token 迁移到
- * Tailwind  theme 时只需把值内联进来，类名不变。
- */
 @theme inline {
-  /* ── 颜色：语义 token ── */
+  /* 应用域 token（旧 CSS 继续用） */
   --color-bg-app: var(--color-bg-app);
   --color-bg-panel: var(--color-bg-panel);
   --color-bg-sidebar: var(--color-bg-sidebar);
@@ -47,43 +39,36 @@
   --color-border-subtle: var(--color-border-subtle);
   --color-border-default: var(--color-border-default);
   --color-border-strong: var(--color-border-strong);
-  /* shadcn 语义里的 accent 是「悬停/选中时的柔和表面色」（灰阶），不是品牌色；
-   * 品牌绿走 --color-primary（见下）。这里映射到 bg-active，避免菜单/命令项悬停变亮绿。 */
-  --color-accent: var(--color-bg-active);
-  --color-accent-foreground: var(--color-text-primary);
-  --color-accent-soft: var(--color-accent-soft);
-  --color-accent-strong: var(--color-accent-strong);
   --color-danger: var(--color-danger);
   --color-danger-soft: var(--color-danger-soft);
   --color-warning: var(--color-warning);
   --color-info: var(--color-info);
 
-  /* ── shadcn 约定别名：组件内部使用 bg-background/text-foreground 等类名，
-   * 映射到 PiDeck 语义 token，避免为组件单独维护第二套色板。 ── */
+  /* shadcn 语义（pure official） */
   --color-background: var(--color-bg-app);
   --color-foreground: var(--color-text-primary);
   --color-card: var(--color-bg-panel);
   --color-card-foreground: var(--color-text-primary);
   --color-popover: var(--color-bg-panel);
   --color-popover-foreground: var(--color-text-primary);
-  --color-primary: var(--color-accent);
-  --color-primary-foreground: var(--color-text-inverse);
+  --color-primary: var(--color-text-primary);
+  --color-primary-foreground: var(--color-bg-app);
   --color-secondary: var(--color-bg-muted);
   --color-secondary-foreground: var(--color-text-primary);
   --color-muted: var(--color-bg-muted);
   --color-muted-foreground: var(--color-text-secondary);
+  --color-accent: var(--color-bg-active);
+  --color-accent-foreground: var(--color-text-primary);
   --color-destructive: var(--color-danger);
-  --color-destructive-foreground: var(--color-text-inverse);
+  --color-destructive-foreground: #fafafa;
   --color-border: var(--color-border-default);
   --color-input: var(--color-border-default);
-  --color-ring: var(--color-accent);
+  --color-ring: var(--color-text-primary);
 
-  /* ── 圆角 ── */
   --radius-sm: var(--radius-sm);
   --radius-md: var(--radius-md);
   --radius-lg: var(--radius-lg);
 
-  /* ── 字体 ── */
   --font-sans: var(--font-family-base);
   --font-mono: var(--font-family-mono);
 }

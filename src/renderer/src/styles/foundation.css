@@ -57,40 +57,46 @@
   --line-height-input: 22px;
   --line-height-title: 24px;
   --line-height-heading: 28px;
-  --color-bg-app: #f3f4f1;
-  --color-bg-sidebar: #f7f7f3;
+  /*
+   * #115 官方 shadcn new-york / zinc 色板（pure official）。
+   * 品牌绿不再做全局 primary/accent，仅保留 logo-* 给 Logo 使用。
+   */
+  --color-bg-app: #fafafa;
+  --color-bg-sidebar: #f4f4f5;
   --color-bg-panel: #ffffff;
-  --color-bg-muted: #f8f8f5;
-  --color-bg-hover: #f0f1ed;
-  --color-bg-active: #e9f6ed;
-  --color-text-primary: #202124;
-  --color-text-secondary: #5f6368;
-  --color-text-tertiary: #8b8f94;
-  --color-text-inverse: #ffffff;
-  --color-border-subtle: #e5e5df;
-  --color-border-default: #dfdfd7;
-  --color-border-strong: #d7d7cf;
-  --color-accent: #238636;
-  --color-accent-strong: #1f7a32;
-  --color-accent-soft: #eaf6ed;
-  --color-brand-green: #0f766e;
-  --color-brand-blue: #2563eb;
-  --color-brand-purple: #7c3aed;
-  --color-brand-amber: #b45309;
-  --color-logo-green: #14b814;
-  --color-logo-green-mid: #12a812;
-  --color-logo-green-deep: #0b8f0b;
-  --color-danger: #b42318;
-  --color-danger-soft: #fdecea;
-  --color-warning: #b7791f;
-  --color-info: #2563eb;
-  --color-code-bg: #111418;
-  --color-code-text: #d1d5db;
-  --color-chat-card-bg: #fafafa;
+  --color-bg-muted: #f4f4f5;
+  --color-bg-hover: #f4f4f5;
+  --color-bg-active: #e4e4e7;
+  --color-text-primary: #09090b;
+  --color-text-secondary: #71717a;
+  --color-text-tertiary: #a1a1aa;
+  --color-text-inverse: #fafafa;
+  --color-border-subtle: #f4f4f5;
+  --color-border-default: #e4e4e7;
+  --color-border-strong: #d4d4d8;
+  /* pure official：primary 动作色用 zinc-900；soft 为浅灰底。
+   * 注意：tailwind 里 shadcn 的 accent（悬停面）映射到 bg-active，不绑这里。 */
+  --color-accent: #18181b;
+  --color-accent-strong: #09090b;
+  --color-accent-soft: #f4f4f5;
+  --color-brand-green: #18181b;
+  --color-brand-blue: #18181b;
+  --color-brand-purple: #18181b;
+  --color-brand-amber: #a16207;
+  --color-logo-green: #18181b;
+  --color-logo-green-mid: #27272a;
+  --color-logo-green-deep: #09090b;
+  --color-danger: #ef4444;
+  --color-danger-soft: #fef2f2;
+  --color-warning: #ca8a04;
+  --color-info: #18181b;
+  --color-code-bg: #09090b;
+  --color-code-text: #e4e4e7;
+  --color-chat-card-bg: #ffffff;
   --color-chat-muted-bg: #f4f4f5;
   --color-chat-control-bg: #ffffff;
   --color-chat-table-bg: #ffffff;
-  --color-chat-link: #2762ea;
+  --color-chat-link: #18181b;
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -98,11 +104,12 @@
   --space-5: 20px;
   --space-6: 24px;
   --space-8: 32px;
+  /* shadcn new-york 默认 radius 约 0.5rem，整体略圆一点更接近官方 */
   --radius-xs: 4px;
-  --radius-sm: 5px;
-  --radius-md: 6px;
-  --radius-lg: 8px;
-  --radius-xl: 8px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-xl: 12px;
   --radius-pill: 999px;
   --control-height-xs: 24px;
   --control-height-sm: 28px;
@@ -111,13 +118,13 @@
   --list-item-compact: 32px;
   --list-item-default: 36px;
   --list-item-rich: 48px;
-  --shadow-border: 0 0 0 1px rgba(20, 24, 31, 0.06);
-  --shadow-popover: 0 12px 32px rgba(20, 24, 31, 0.12);
-  --shadow-modal: 0 24px 80px rgba(20, 24, 31, 0.22);
-  --shadow-composer: 0 8px 28px rgba(20, 24, 31, 0.08);
-  --shadow-drawer: -8px 0 24px rgba(20, 24, 31, 0.05);
-  --focus-ring: 0 0 0 2px rgba(35, 134, 54, 0.16);
-  --overlay-backdrop: rgba(15, 18, 24, 0.35);
+  --shadow-border: 0 0 0 1px rgba(9, 9, 11, 0.06);
+  --shadow-popover: 0 4px 6px -1px rgba(9, 9, 11, 0.1), 0 2px 4px -2px rgba(9, 9, 11, 0.1);
+  --shadow-modal: 0 10px 15px -3px rgba(9, 9, 11, 0.1), 0 4px 6px -4px rgba(9, 9, 11, 0.1);
+  --shadow-composer: 0 1px 2px 0 rgba(9, 9, 11, 0.05);
+  --shadow-drawer: -4px 0 12px rgba(9, 9, 11, 0.06);
+  --focus-ring: 0 0 0 3px rgba(24, 24, 27, 0.16);
+  --overlay-backdrop: rgba(9, 9, 11, 0.4);
   --overlay-backdrop-soft: rgba(15, 23, 42, 0.14);
   --overlay-backdrop-subtle: rgba(15, 23, 42, 0.08);
   --image-preview-backdrop: rgba(0, 0, 0, 0.78);
@@ -171,25 +178,20 @@
     ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
 }
 
-:root[data-theme="light"][data-light-background="white"] {
-  --color-bg-app: #ffffff;
-  --color-bg-sidebar: #fcfcfc;
+/* pure official：浅色背景预设全部收敛到 zinc 中性，去掉旧绿色/暖色/蓝调偏移 */
+:root[data-theme="light"][data-light-background="white"],
+:root[data-theme="light"][data-light-background="warm"],
+:root[data-theme="light"][data-light-background="paper"],
+:root[data-theme="light"][data-light-background="blue"] {
+  --color-bg-app: #fafafa;
+  --color-bg-sidebar: #f4f4f5;
   --color-bg-panel: #ffffff;
-  --color-bg-muted: #f5f5f5;
-  --color-bg-hover: #eaeaea;
-  --color-bg-active: #d4edda;
-  --color-border-subtle: #e2e2e2;
-  --color-border-default: #d9d9d9;
-  --color-border-strong: #d0d0d0;
-  --shadow-composer: 0 8px 28px rgba(20, 24, 31, 0.06);
-  --shadow-drawer: -8px 0 24px rgba(20, 24, 31, 0.06);
-}
-
-:root[data-theme="light"][data-light-background="warm"] {
-  --color-bg-app: #f7f6f1;
-  --color-bg-sidebar: #fbfaf6;
-  --color-bg-muted: #f8f8f5;
-  --color-bg-hover: #f0f1ed;
+  --color-bg-muted: #f4f4f5;
+  --color-bg-hover: #f4f4f5;
+  --color-bg-active: #e4e4e7;
+  --color-border-subtle: #f4f4f5;
+  --color-border-default: #e4e4e7;
+  --color-border-strong: #d4d4d8;
 }
 :root[data-theme="light"][data-light-background="warm"] .chat-pane,
 :root[data-theme="light"][data-light-background="warm"] .composer,
@@ -197,37 +199,7 @@
   background: #ffffff;
 }
 
-:root[data-theme="light"][data-light-background="paper"] {
-  --color-bg-app: #fffaf0;
-  --color-bg-sidebar: #fffdf7;
-  --color-bg-muted: #fff8e8;
-  --color-bg-hover: #f7efd8;
-  --color-border-subtle: #eadfc8;
-  --color-border-default: #e2d5b9;
-  --color-border-strong: #dacbad;
-}
-
-:root[data-theme="light"][data-light-background="blue"] {
-  --color-bg-app: #f4f8ff;
-  --color-bg-sidebar: #f8fbff;
-  --color-bg-muted: #eef5ff;
-  --color-bg-hover: #e8f1ff;
-  --color-bg-active: #e6f0ff;
-  --color-border-subtle: #d9e6f7;
-  --color-border-default: #d0dff3;
-  --color-border-strong: #c7d9ef;
-}
-
-:root[data-theme="light"][data-light-background="green"] {
-  --color-bg-app: #f4fbf6;
-  --color-bg-sidebar: #f8fdf9;
-  --color-bg-muted: #eef8f1;
-  --color-bg-hover: #e7f3eb;
-  --color-bg-active: #e2f4e8;
-  --color-border-subtle: #d6e8dc;
-  --color-border-default: #cee0d4;
-  --color-border-strong: #c5d9cc;
-}
+/* blue/green 预设已并入上方中性收敛；旧设置值仍可解析，只是视觉统一为 zinc */
 
 /* 字号预设：拆分为 UI / 会话正文 / 输入框三轨，各自通过 data 属性切换。
    - data-ui-font-size 控制 sidebar、按钮、列表、弹窗等 UI 字号
@@ -334,44 +306,49 @@
    由 JS 在 documentElement.dataset.fontSize 上保留。 */
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --color-bg-app: #111315;
-  --color-bg-sidebar: #171a1d;
-  --color-bg-panel: #1d2024;
-  --color-bg-muted: #16191c;
-  --color-bg-hover: #252a2f;
-  --color-bg-active: #17351f;
-  --color-text-primary: #eceff3;
-  --color-text-secondary: #b9c0c8;
-  --color-text-tertiary: #858e99;
-  --color-text-inverse: #ffffff;
-  --color-border-subtle: #2a2f35;
-  --color-border-default: #32383f;
-  --color-border-strong: #3a414a;
-  --color-accent: #35c45a;
-  --color-accent-strong: #55d774;
-  --color-accent-soft: #17351f;
-  --color-danger: #ff7b72;
-  --color-danger-soft: #3b1f1d;
-  --color-warning: #d4a72c;
-  --color-brand-purple: #c4b5fd;
-  --color-brand-blue: #93bbfd;
-  --color-info: #6aa4ff;
-  --color-code-bg: #111418;
-  --color-code-text: #d1d5db;
-  --color-chat-card-bg: #20242a;
-  --color-chat-muted-bg: #242932;
-  --color-chat-control-bg: #1d2024;
-  --color-chat-table-bg: #1d2024;
-  --color-chat-link: #93c5fd;
-  --shadow-border: 0 0 0 1px rgba(255, 255, 255, 0.06);
-  --shadow-popover: 0 14px 36px rgba(0, 0, 0, 0.38);
-  --shadow-modal: 0 24px 80px rgba(0, 0, 0, 0.55);
-  --shadow-composer: 0 8px 28px rgba(0, 0, 0, 0.28);
-  --shadow-drawer: -8px 0 24px rgba(0, 0, 0, 0.32);
-  --focus-ring: 0 0 0 2px rgba(85, 215, 116, 0.28);
-  --overlay-backdrop: rgba(0, 0, 0, 0.48);
-  --overlay-backdrop-soft: rgba(0, 0, 0, 0.4);
-  --overlay-backdrop-subtle: rgba(0, 0, 0, 0.24);
+  /* shadcn new-york zinc dark */
+  --color-bg-app: #09090b;
+  --color-bg-sidebar: #09090b;
+  --color-bg-panel: #09090b;
+  --color-bg-muted: #27272a;
+  --color-bg-hover: #27272a;
+  --color-bg-active: #3f3f46;
+  --color-text-primary: #fafafa;
+  --color-text-secondary: #a1a1aa;
+  --color-text-tertiary: #71717a;
+  --color-text-inverse: #18181b;
+  --color-border-subtle: #27272a;
+  --color-border-default: #27272a;
+  --color-border-strong: #3f3f46;
+  --color-accent: #fafafa;
+  --color-accent-strong: #ffffff;
+  --color-accent-soft: #27272a;
+  --color-danger: #7f1d1d;
+  --color-danger-soft: #450a0a;
+  --color-warning: #a16207;
+  --color-brand-green: #fafafa;
+  --color-brand-purple: #fafafa;
+  --color-brand-blue: #fafafa;
+  --color-info: #fafafa;
+  --color-code-bg: #18181b;
+  --color-code-text: #e4e4e7;
+  --color-chat-card-bg: #09090b;
+  --color-chat-muted-bg: #18181b;
+  --color-chat-control-bg: #09090b;
+  --color-chat-table-bg: #09090b;
+  --color-chat-link: #fafafa;
+  --color-logo-green: #fafafa;
+  --color-logo-green-mid: #e4e4e7;
+  --color-logo-green-deep: #a1a1aa;
+  --shadow-border: 0 0 0 1px rgba(255, 255, 255, 0.08);
+  --shadow-popover: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -2px rgba(0, 0, 0, 0.3);
+  --shadow-modal: 0 10px 15px -3px rgba(0, 0, 0, 0.45), 0 4px 6px -4px rgba(0, 0, 0, 0.35);
+  --shadow-composer: 0 1px 2px 0 rgba(0, 0, 0, 0.35);
+  --shadow-drawer: -4px 0 12px rgba(0, 0, 0, 0.35);
+  --focus-ring: 0 0 0 3px rgba(250, 250, 250, 0.2);
+  --overlay-backdrop: rgba(0, 0, 0, 0.7);
+  --overlay-backdrop-soft: rgba(0, 0, 0, 0.55);
+  --overlay-backdrop-subtle: rgba(0, 0, 0, 0.35);
 }
 * {
   box-sizing: border-box;
@@ -397,7 +374,8 @@ button:focus-visible,
 [role="button"]:focus-visible,
 a:focus-visible,
 select:focus-visible {
-  outline: 2px solid var(--color-accent);
+  /* pure official：中性 focus ring，不再用品牌绿 */
+  outline: 2px solid var(--color-text-primary);
   outline-offset: 2px;
 }
 @media (prefers-reduced-motion: reduce) {
@@ -1215,108 +1193,6 @@ select:focus-visible {
 .icon-button:hover {
   background: var(--color-bg-hover);
   color: var(--color-accent);
-}
-.ui-button {
-  min-height: var(--control-height-md);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-1);
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-md);
-  background: var(--color-bg-panel);
-  color: var(--color-text-primary);
-  padding: 0 var(--space-3);
-  font-size: var(--font-size-control);
-  font-weight: 600;
-  line-height: var(--line-height-control);
-  white-space: nowrap;
-  transition:
-    background-color 0.15s,
-    border-color 0.15s,
-    color 0.15s,
-    box-shadow 0.15s;
-}
-.ui-button-sm {
-  min-height: var(--control-height-sm);
-  padding: 0 10px;
-  font-size: var(--font-size-caption);
-}
-.ui-button-primary {
-  border-color: var(--color-accent);
-  background: var(--color-accent);
-  color: var(--color-text-inverse);
-}
-.ui-button-secondary {
-  border-color: var(--color-border-subtle);
-  background: var(--color-bg-panel);
-  color: var(--color-text-primary);
-}
-.ui-button-danger {
-  border-color: color-mix(
-    in srgb,
-    var(--color-danger) 28%,
-    var(--color-border-subtle)
-  );
-  background: var(--color-danger-soft);
-  color: var(--color-danger);
-}
-.ui-button-ghost {
-  border-color: transparent;
-  background: transparent;
-  color: var(--color-text-secondary);
-}
-.ui-button:hover:not(:disabled) {
-  border-color: var(--color-border-strong);
-  background: var(--color-bg-hover);
-  color: var(--color-text-primary);
-}
-.ui-button-primary:hover:not(:disabled) {
-  border-color: var(--color-accent-strong);
-  background: var(--color-accent-strong);
-  color: var(--color-text-inverse);
-}
-.ui-button-danger:hover:not(:disabled) {
-  border-color: var(--color-danger);
-  background: color-mix(
-    in srgb,
-    var(--color-danger-soft) 82%,
-    var(--color-danger)
-  );
-  color: var(--color-danger);
-}
-.ui-button:disabled {
-  background: var(--color-bg-muted);
-  color: var(--color-text-tertiary);
-  cursor: not-allowed;
-}
-.ui-button svg {
-  display: block;
-  flex: none;
-}
-.ui-button-content {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  min-width: 0;
-  max-width: 100%;
-}
-/* Button loading 状态 */
-.ui-button-loading {
-  position: relative;
-  cursor: wait;
-}
-.ui-button-spinner {
-  width: 14px;
-  height: 14px;
-  border: 2px solid currentColor;
-  border-top-color: transparent;
-  border-radius: var(--radius-pill);
-  animation: spin 0.7s linear infinite;
-  flex: none;
-}
-.ui-button-content-loading {
-  opacity: 0.6;
 }
 .search-row {
   height: 52px;

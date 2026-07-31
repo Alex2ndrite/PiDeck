@@ -1494,7 +1494,7 @@
   min-width: 0;
 }
 
-.logs-level-select .ui-field-label {
+.logs-level-select .text-sm {
   position: absolute;
   width: 1px;
   height: 1px;

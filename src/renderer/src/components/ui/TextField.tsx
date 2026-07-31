@@ -19,8 +19,8 @@ export function TextField(props: {
 	onKeyDown?: KeyboardEventHandler<HTMLInputElement>;
 }) {
 	return (
-		<label className={["ui-field", props.className].filter(Boolean).join(" ")}>
-			<span className="ui-field-label">{props.label}</span>
+		<label className={["grid gap-1.5", props.className].filter(Boolean).join(" ")}>
+			<span className="text-sm font-medium leading-none text-foreground">{props.label}</span>
 			<Input
 				type={props.type ?? "text"}
 				value={props.value}
@@ -33,7 +33,7 @@ export function TextField(props: {
 				onKeyDown={props.onKeyDown}
 			/>
 			{props.description && (
-				<small className="ui-field-description">{props.description}</small>
+				<small className="text-xs text-muted-foreground">{props.description}</small>
 			)}
 		</label>
 	);

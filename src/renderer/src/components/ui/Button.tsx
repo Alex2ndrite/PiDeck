@@ -44,7 +44,12 @@ export function Button(
 			disabled={disabled || loading}
 			className={className}
 		>
-			{loading && <span className="ui-button-spinner" aria-hidden="true" />}
+			{loading && (
+				<span
+					className="size-3.5 shrink-0 animate-spin rounded-full border-2 border-current border-t-transparent"
+					aria-hidden="true"
+				/>
+			)}
 			<span className={loading ? "opacity-70" : undefined}>{children}</span>
 		</ShadcnButton>
 	);

@@ -29,8 +29,8 @@ export function SelectField(props: {
 	disabled?: boolean;
 }) {
 	return (
-		<div className={["ui-field", props.className].filter(Boolean).join(" ")}>
-			<span className="ui-field-label">{props.label}</span>
+		<div className={["grid gap-1.5", props.className].filter(Boolean).join(" ")}>
+			<span className="text-sm font-medium leading-none text-foreground">{props.label}</span>
 			<Select value={props.value} onValueChange={props.onChange} disabled={props.disabled}>
 				<SelectTrigger className="w-full">
 					<SelectValue />
@@ -44,7 +44,7 @@ export function SelectField(props: {
 				</SelectContent>
 			</Select>
 			{props.description && (
-				<small className="ui-field-description">{props.description}</small>
+				<small className="text-xs text-muted-foreground">{props.description}</small>
 			)}
 		</div>
 	);

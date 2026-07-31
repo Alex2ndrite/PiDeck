@@ -13,12 +13,13 @@ function block(selector) {
 }
 
 test("fixed light chat/table colors are tokenized for dark mode", () => {
-  assert.match(block(":root"), /--color-chat-card-bg:\s*#fafafa;/i);
+  // pure official / zinc：浅色卡片用白底，暗色对齐 zinc-950 系
+  assert.match(block(":root"), /--color-chat-card-bg:\s*#ffffff;/i);
   assert.match(block(":root"), /--color-chat-muted-bg:\s*#f4f4f5;/i);
   assert.match(block(":root"), /--color-chat-table-bg:\s*#ffffff;/i);
-  assert.match(block(":root[data-theme=\"dark\"]"), /--color-chat-card-bg:\s*#20242a;/i);
-  assert.match(block(":root[data-theme=\"dark\"]"), /--color-chat-muted-bg:\s*#242932;/i);
-  assert.match(block(":root[data-theme=\"dark\"]"), /--color-chat-table-bg:\s*#1d2024;/i);
+  assert.match(block(":root[data-theme=\"dark\"]"), /--color-chat-card-bg:\s*#09090b;/i);
+  assert.match(block(":root[data-theme=\"dark\"]"), /--color-chat-muted-bg:\s*#18181b;/i);
+  assert.match(block(":root[data-theme=\"dark\"]"), /--color-chat-table-bg:\s*#09090b;/i);
 
   assert.match(block(".diagnostic-card"), /background:\s*var\(--color-chat-muted-bg\);/);
   assert.match(block(".user-turn-bubble"), /background:\s*var\(--color-chat-card-bg\);/);

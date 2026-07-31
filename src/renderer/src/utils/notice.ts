@@ -45,7 +45,7 @@ function showFallbackNotice(message: string, duration: number, kind: NoticeData[
 	const host = ensureFallbackHost();
 	const item = document.createElement("div");
 	const accent =
-		kind === "error" ? "#b42318" : kind === "warning" ? "#b7791f" : "#238636";
+		kind === "error" ? "#ef4444" : kind === "warning" ? "#ca8a04" : "#18181b";
 	item.style.cssText = [
 		"pointer-events:auto",
 		"padding:10px 14px",

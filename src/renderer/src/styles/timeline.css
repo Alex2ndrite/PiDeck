@@ -2418,17 +2418,9 @@ body.ask-dialog-open .ask-question-card.pending {
 .ask-batch-nav-spacer {
   flex: 1;
 }
-.ask-batch-nav-btn.ui-button {
+.ask-batch-nav-btn {
   height: 28px;
   padding: 0 var(--space-3);
-}
-.ask-batch-nav-btn.ui-button.primary {
-  border-color: var(--color-accent);
-  color: var(--color-accent);
-}
-.ask-batch-nav-btn.ui-button.primary:hover:not(:disabled) {
-  background: var(--color-accent);
-  color: var(--color-text-inverse);
 }
 .ask-batch-review-title {
   display: inline-flex;
@@ -2480,7 +2472,7 @@ body.ask-dialog-open .ask-question-card.pending {
   color: var(--color-warning);
   font-size: var(--font-size-caption);
 }
-.ask-batch-submit-all-btn.ui-button {
+.ask-batch-submit-all-btn {
   align-self: flex-end;
   height: 32px;
   padding: 0 var(--space-4);
@@ -3728,7 +3720,7 @@ body.ask-dialog-open .ask-question-card.pending {
   flex: 0 1 auto;
   max-width: 136px;
 }
-.composer-bottom-left > .composer-bar-btn:first-child .ui-button-content {
+.composer-bottom-left > .composer-bar-btn:first-child {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3759,9 +3751,6 @@ body.ask-dialog-open .ask-question-card.pending {
   font-weight: 400;
   line-height: 1;
   white-space: nowrap;
-}
-.composer-bar-btn.ui-button {
-  padding: 0 8px;
 }
 .composer-bar-btn.ui-icon-button {
   display: inline-grid;
@@ -3807,18 +3796,18 @@ body.ask-dialog-open .ask-question-card.pending {
 .composer-bottom-bar .composer-bar-btn.model {
   max-width: min(42ch, 100%);
 }
-.composer-bottom-bar .composer-bar-btn.model .ui-button-content {
+.composer-bottom-bar .composer-bar-btn.model {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .composer-bottom-bar .composer-bar-btn.thinking {
-  color: var(--color-accent);
+  color: var(--color-text-secondary);
 }
 .composer-bottom-bar .composer-bar-btn.thinking:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
-  color: var(--color-accent);
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
 }
 .composer-bottom-bar .composer-bar-btn.compacting {
   background: color-mix(in srgb, var(--color-warning) 16%, var(--color-bg-panel));
@@ -4013,7 +4002,7 @@ body.ask-dialog-open .ask-question-card.pending {
   white-space: nowrap;
   cursor: pointer;
 }
-.composer-bottom-bar .send-behavior-menu .send-behavior-option .ui-button-content {
+.composer-bottom-bar .send-behavior-menu .send-behavior-option {
   justify-content: flex-start;
   gap: 8px;
   width: 100%;

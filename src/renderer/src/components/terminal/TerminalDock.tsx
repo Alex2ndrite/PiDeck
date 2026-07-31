@@ -24,14 +24,14 @@ const TERMINAL_THEMES = {
 		xterm: {
 			background: "#ffffff",
 			foreground: "#243244",
-			cursor: "#16a34a",
-			selectionBackground: "#d9f0e0",
+			cursor: "#18181b",
+			selectionBackground: "#e4e4e7",
 		},
 		xtermDark: {
-			background: "#15191d",
-			foreground: "#d9e2dc",
-			cursor: "#35c45a",
-			selectionBackground: "#1f3f2b",
+			background: "#09090b",
+			foreground: "#e4e4e7",
+			cursor: "#fafafa",
+			selectionBackground: "#3f3f46",
 		},
 	},
 	"solarized-light": {
