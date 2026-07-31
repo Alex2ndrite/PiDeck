@@ -110,15 +110,29 @@ Streamdown 专为该场景设计：容错解析未终结语法、内置 GFM/表�
 
 ## 6. 拆分迁移批次（每批 = 独立 PR + 回归门禁）
 
-| 批次 | 内容 | 依赖 |
-|---|---|---|
-| U0 | Tailwind v4 接入 + token 平移表 + shadcn init（不改组件） | 无 |
-| U1 | 原子组件替换（Button/Input/Select/Dialog/Tooltip/DropdownMenu）+ AlertDialog 统一 | U0 |
-| U2 | 流式渲染换 Streamdown + 链接渲染收口 | U1（按钮/复制样式统一） |
-| U3 | 终端换 xterm.js | U0（主题 token） |
-| U4 | 浏览器换 WebContentsView（主进程重构，含 bounds 同步） | 无（主进程独立） |
-| U5 | 布局换 Resizable + 文件树交互件替换 + 旧 CSS/旧 ui 组件删除 | U1 |
-| U6 | 测试体系建设（见 §7），与前序批次并行，U5 完成后强制门禁 | U0 |
+> **进度（2025-01 更新）**：U0–U5 全部完成并推送（分支 `refactor/issue-113-structure`）。
+> U5 收尾三个线上 bug 已修复并验证：
+> 1. `index.html` 启动画面内联 `* { margin:0; padding:0 }` 无层级规则压过全部
+>    Tailwind `@layer utilities` 间距类（菜单/弹窗失去内边距）→ reset 限定到
+>    `#boot-overlay`（`7276281`）；
+> 2. 设置页 Select 点开无反应 → 旧 `.modal-backdrop` z-index 100/940 盖住 Radix
+>    portal z-50，SettingsModal 外壳换 shadcn Dialog（`9fc6e4e`）；
+> 3. SettingsModal 双 Button import 导致 vite 500（`@ts-nocheck` 掩盖），已修（`7276281`）。
+> 另：ConfigModal 全域（pi管理/模型/认证/技能等 16 个 tab 文件）完成 shadcn 化
+> （`6cceda9`）；抽屉 tab 条从竖排 rail 回归横排（`9fc6e4e`）。
+> 新增 E2E 视觉巡检 `e2e/visual-tour.spec.ts`（明暗两色 × 11 面，`145cadd`），
+> 截图经人工审查全部正常。剩余：U6 扩展（mock pi 的 #113 手动清单覆盖）、
+> 视觉统一收口（间距/圆角/token 最终统一）。
+
+| 批次 | 内容 | 依赖 | 状态 |
+|---|---|---|---|
+| U0 | Tailwind v4 接入 + token 平移表 + shadcn init（不改组件） | 无 | ✅ `43c561c` |
+| U1 | 原子组件替换（Button/Input/Select/Dialog/Tooltip/DropdownMenu）+ AlertDialog 统一 | U0 | ✅ `cc95836` `3be11e9` |
+| U2 | 流式渲染换 Streamdown + 链接渲染收口 | U1（按钮/复制样式统一） | ✅ `698846b`（灰度开关） |
+| U3 | 终端换 xterm.js | U0（主题 token） | ✅ `97a6042` |
+| U4 | 浏览器换 WebContentsView（主进程重构，含 bounds 同步） | 无（主进程独立） | ✅ `faa70ec`（灰度开关） |
+| U5 | 布局换 Resizable + 文件树交互件替换 + 旧 CSS/旧 ui 组件删除 | U1 | ✅ 见上方进度注记 |
+| U6 | 测试体系建设（见 §7），与前序批次并行，U5 完成后强制门禁 | U0 | 🔶 Playwright 骨架+视觉巡检已就位，mock pi 流程用例待扩 |
 
 每批完成后：`npm run typecheck` + `npm test` 全绿 + 该域手测清单勾选。
 
