@@ -2,16 +2,9 @@
 
 /* Overlay（backdrop）*/
 
-
-
 /* Content（弹框主体）*/
 
-
-
 /* 尺寸变体 */
-
-
-
 
 .feedback-modal {
   width: min(1300px, calc(100vw - 48px));
@@ -1377,269 +1370,7 @@
 .composer-box.shell-silent-mode .rich-input {
   padding-left: 18px;
 }
-/* 模型/思考选择器复用斜线命令面板的视觉语言，但通过轻遮罩承载按钮触发的弹层。 */
-.picker-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 115;
-  background: var(--overlay-backdrop-subtle);
-}
-.picker-palette {
-  position: fixed;
-  left: 50%;
-  bottom: 160px;
-  transform: translateX(-50%);
-  width: min(800px, calc(100vw - 120px));
-  max-height: 380px;
-  display: flex;
-  flex-direction: column;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-lg);
-  background: var(--color-bg-panel);
-  box-shadow: var(--shadow-popover);
-  animation: palette-in 0.12s ease-out;
-  overflow: hidden;
-}
-.picker-palette-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--color-border-subtle);
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-caption);
-  font-weight: 500;
-}
-.thinking-picker-header-content {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  flex: 1;
-  min-width: 0;
-}
-.thinking-picker-hint {
-  color: var(--color-text-tertiary);
-  font-size: var(--font-size-micro);
-  font-weight: 400;
-  line-height: 1.4;
-}
-.picker-palette-close {
-  width: var(--control-height-xs);
-  height: var(--control-height-xs);
-  border: 0;
-  border-radius: var(--radius-xs);
-  background: transparent;
-  color: var(--color-text-tertiary);
-  font-size: var(--font-size-title);
-  cursor: pointer;
-  transition:
-    background-color 0.1s,
-    color 0.1s;
-}
-.picker-palette-close:hover {
-  background: var(--color-bg-hover);
-  color: var(--color-text-secondary);
-}
-.picker-palette-search {
-  padding: 8px 10px 6px;
-  border-bottom: 1px solid var(--color-border-subtle);
-}
-.picker-palette-search-row {
-  position: relative;
-}
-.picker-palette-actions {
-  position: absolute;
-  top: 50%;
-  right: 8px;
-  transform: translateY(-50%);
-  display: inline-flex;
-  gap: 2px;
-  align-items: center;
-}
-.picker-palette-action-icon {
-  width: 20px;
-  height: 20px;
-  border: 0;
-  border-radius: var(--radius-xs);
-  background: transparent;
-  color: var(--color-text-quaternary, var(--color-text-tertiary));
-}
-.picker-palette-action-icon:hover:not(:disabled) {
-  background: var(--color-bg-hover);
-  color: var(--color-text-primary);
-}
-.picker-palette-action-icon:disabled {
-  opacity: 0.28;
-  cursor: default;
-}
-.picker-palette-action-icon:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 1px;
-}
 
-/* ── 列表浮层滚动按钮 ── */
-.picker-palette-scroll-btn {
-  position: sticky;
-  float: right;
-  z-index: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  margin: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  color: var(--color-text-tertiary);
-  cursor: pointer;
-  opacity: 0.5;
-  transition:
-    opacity 0.12s,
-    color 0.12s;
-}
-.picker-palette-scroll-btn:hover {
-  opacity: 1;
-  color: var(--color-text-primary);
-}
-.picker-palette-scroll-btn:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 1px;
-}
-.picker-palette-scroll-top {
-  top: 2px;
-}
-.picker-palette-scroll-bottom {
-  bottom: 2px;
-}
-
-.picker-palette-search input {
-  width: 100%;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-lg);
-  background: var(--color-bg-muted);
-  color: var(--color-text-primary);
-  font-size: var(--font-size-control);
-  padding: 8px 10px;
-  outline: none;
-}
-.picker-palette-search input.has-actions {
-  padding-right: 56px;
-}
-.picker-palette-search input:focus {
-  border-color: var(--color-accent);
-  background: var(--color-bg-panel);
-  box-shadow: var(--focus-ring);
-}
-.picker-palette-list {
-  flex: 1;
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding: 6px;
-}
-.model-group {
-  margin-bottom: 4px;
-}
-.model-group:last-child {
-  margin-bottom: 0;
-}
-.model-group-header {
-  padding: 6px 12px;
-  font-size: var(--font-size-base);
-  font-weight: 600;
-  color: var(--color-text-primary);
-  background: var(--color-bg-subtle);
-  border-radius: var(--radius-md);
-  margin-bottom: 2px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
-  user-select: none;
-}
-.model-group-header:hover {
-  background: var(--color-bg-hover);
-}
-.model-group-header::before {
-  content: "▼";
-  font-size: 10px;
-  color: var(--color-text-tertiary);
-  transition: transform 0.15s;
-}
-.model-group-header.collapsed::before {
-  transform: rotate(-90deg);
-}
-.model-group-count {
-  font-size: var(--font-size-micro);
-  font-weight: 400;
-  color: var(--color-text-tertiary);
-  margin-left: auto;
-}
-.model-group .picker-palette-item {
-  margin-left: 10px;
-  margin-bottom: 2px;
-  border-left: 2px solid var(--color-border-subtle);
-  border-radius: 0 var(--radius-md) var(--radius-md) 0;
-}
-
-/* 模型收藏分区：标题用 ★ 替代 ▼ 箭头 */
-.model-favorites-group {
-  margin-bottom: 8px;
-}
-
-.model-favorites-group .model-group-header::before {
-  display: none;
-}
-
-.model-favorites-group .model-group-header {
-  gap: 4px;
-}
-
-.model-favorites-arrow {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  color: var(--color-warning);
-  transition: transform 0.15s;
-}
-
-.model-favorites-arrow.collapsed {
-  transform: rotate(-90deg);
-}
-.picker-palette-item {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  border: 0;
-  border-radius: var(--radius-lg);
-  background: transparent;
-  padding: 8px 10px;
-  text-align: left;
-  cursor: pointer;
-  transition: background 0.08s;
-}
-.picker-palette-item:hover,
-.picker-palette-item.selected {
-  background: var(--color-bg-active);
-}
-.picker-palette-item.selected {
-  background: var(--color-accent-soft);
-  box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 36%, transparent),
-    0 4px 14px color-mix(in srgb, var(--color-accent) 18%, transparent);
-  animation: picker-selected-pop 0.16s ease-out;
-}
-@keyframes picker-selected-pop {
-  from {
-    transform: scale(0.985);
-  }
-  to {
-    transform: scale(1);
-  }
-}
 .picker-palette-label {
   flex: 0 0 auto;
   min-width: 90px;
@@ -1671,17 +1402,6 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-/* picker-palette 内每个模板条目容器，包裹按钮和预览 */
-.picker-palette-item-wrap {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 2px;
-}
-.picker-palette-item-wrap .picker-palette-item {
-  flex: 1;
-  min-width: 0;
 }
 .picker-palette-preview-btn {
   flex: 0 0 auto;
@@ -1764,32 +1484,6 @@
   color: var(--color-warning);
 }
 
-.picker-palette-check {
-  flex: 0 0 auto;
-  display: inline-grid;
-  place-items: center;
-  width: 18px;
-  height: 18px;
-  border-radius: 999px;
-  background: var(--color-accent);
-  color: var(--color-text-inverse);
-  font-size: var(--font-size-caption);
-  font-weight: 700;
-  box-shadow: 0 3px 10px
-    color-mix(in srgb, var(--color-accent) 28%, transparent);
-  animation: picker-check-in 0.18s ease-out;
-}
-@keyframes picker-check-in {
-  from {
-    opacity: 0;
-    transform: scale(0.65);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
 @keyframes toast-in {
   from {
     opacity: 0;
@@ -1799,19 +1493,6 @@
     opacity: 1;
     transform: scale(1) translateY(0);
   }
-}
-.picker-palette-empty {
-  padding: 22px 12px;
-  text-align: center;
-  color: var(--color-text-tertiary);
-  font-size: var(--font-size-caption);
-}
-.thinking-picker {
-  width: min(480px, calc(100vw - 120px));
-}
-.thinking-picker .picker-palette-label {
-  min-width: 96px;
-  max-width: 120px;
 }
 .settings-panel {
   min-height: 0;
@@ -3340,7 +3021,6 @@ a.config-btn {
 :root[data-theme="dark"] .web-endpoint-panel,
 :root[data-theme="dark"] .feedback-report-block,
 :root[data-theme="dark"] .codex-import-modal,
-:root[data-theme="dark"] .picker-palette,
 :root[data-theme="dark"] .context-menu,
 :root[data-theme="dark"] .branch-dropdown {
   background: var(--color-bg-panel);

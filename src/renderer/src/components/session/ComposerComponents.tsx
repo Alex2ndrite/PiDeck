@@ -1,16 +1,13 @@
 import { useState, useRef, useEffect, useCallback, type ReactNode } from "react";
 import {
+	Check,
 	ChevronDown,
 	ChevronLeft,
-	ChevronsDownUp,
-	ChevronsUpDown,
 	Eye,
 	FileText,
 	FoldVertical,
 	GitBranch,
 	ListChecks,
-	MoveDown,
-	MoveUp,
 	Paperclip,
 	Star,
 	Wrench,
@@ -18,7 +15,23 @@ import {
 } from "lucide-react";
 import { t, type TranslationKey } from "../../i18n";
 import { Button } from "../ui/Button";
-import { IconButton } from "../ui/IconButton";
+import { CloseIconButton, IconButton } from "../ui/IconButton";
+import {
+	Command,
+	CommandEmpty,
+	CommandGroup,
+	CommandInput,
+	CommandItem,
+	CommandList,
+} from "../ui-shadcn/command";
+import {
+	Dialog,
+	DialogClose,
+	DialogContent,
+	DialogHeader,
+	DialogTitle,
+} from "../ui-shadcn/dialog";
+import { cn } from "../../lib/utils";
 import type {
 	AgentRuntimeState,
 	AvailableModel,
@@ -274,6 +287,45 @@ export function ComposerBottomBar(props: {
 	);
 }
 
+/**
+ * 选择器对话框外壳（#115 U5 收尾）：统一 shadcn Dialog + cmdk Command，
+ * 替换旧自研 picker-backdrop/picker-palette 浮层。
+ * 删除的 workaround：手写 backdrop、分组折叠状态、上下滚动按钮、
+ * 手动 scrollIntoView（cmdk defaultValue 自动定位当前项）。
+ */
+function PickerDialog(props: {
+	title: string;
+	hint?: string;
+	onClose: () => void;
+	className?: string;
+	children: ReactNode;
+}) {
+	return (
+		<Dialog open onOpenChange={(next) => !next && props.onClose()}>
+			<DialogContent
+				showCloseButton={false}
+				className={cn(
+					"flex flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(560px,calc(100vw-48px))]",
+					props.className,
+				)}
+			>
+				<DialogHeader className="flex-row items-center justify-between px-4 py-3">
+					<div className="grid gap-0.5">
+						<DialogTitle>{props.title}</DialogTitle>
+						{props.hint && (
+							<small className="text-muted-foreground text-xs">{props.hint}</small>
+						)}
+					</div>
+					<DialogClose asChild>
+						<CloseIconButton label={t("common.close")} />
+					</DialogClose>
+				</DialogHeader>
+				{props.children}
+			</DialogContent>
+		</Dialog>
+	);
+}
+
 export function ModelPicker(props: {
 	models: AvailableModel[];
 	current?: { provider?: string; modelId?: string; modelName?: string };
@@ -284,34 +336,13 @@ export function ModelPicker(props: {
 	/** 切换收藏状态 */
 	onToggleFavorite: (provider: string, modelId: string) => void;
 }) {
-	const [modelPickerSearch, setModelPickerSearch] = useState("");
-	const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
-	const normalizedSearch = modelPickerSearch.trim().toLowerCase();
-	const selectedItemRef = useRef<HTMLButtonElement | null>(null);
-	const modelPickerListRef = useRef<HTMLDivElement | null>(null);
 	const currentModelKey = props.current?.provider && props.current?.modelId
 		? `${props.current.provider}/${props.current.modelId}`
 		: undefined;
 	const favoritesSet = new Set(props.favoriteModels ?? []);
 
-	// 搜索同时覆盖模型展示名、模型 id 和 provider,避免用户只记得任一字段时找不到模型。
-	const filteredModels = normalizedSearch
-		? props.models.filter((model) =>
-				[
-					model.name,
-					model.id,
-					model.provider,
-					`${model.provider}/${model.id}`,
-				]
-					.filter(Boolean)
-					.some((value) =>
-						String(value).toLowerCase().includes(normalizedSearch),
-					),
-			)
-		: props.models;
-
 	// 收藏列表（从全部模型中提取，不移除原供应商分组下的显示）
-	const favorites: AvailableModel[] = filteredModels.filter((model) =>
+	const favorites: AvailableModel[] = props.models.filter((model) =>
 		favoritesSet.has(`${model.provider}/${model.id}`),
 	);
 	favorites.sort((a, b) => {
@@ -321,8 +352,9 @@ export function ModelPicker(props: {
 		return (a.name ?? a.id).localeCompare(b.name ?? b.id);
 	});
 
-	// 全量模型按供应商分组（收藏模型也保留在原分组）
-	const groupedModels = filteredModels.reduce<Record<string, AvailableModel[]>>((groups, model) => {
+	// 全量模型按供应商分组（收藏模型也保留在原分组）；
+	// 搜索交给 cmdk（item 的 value/keywords 同时覆盖 name/id/provider）
+	const groupedModels = props.models.reduce<Record<string, AvailableModel[]>>((groups, model) => {
 		const provider = model.provider || 'other';
 		if (!groups[provider]) {
 			groups[provider] = [];
@@ -330,7 +362,6 @@ export function ModelPicker(props: {
 		groups[provider].push(model);
 		return groups;
 	}, {});
-	// 每个分组按展示名排序
 	for (const provider of Object.keys(groupedModels)) {
 		groupedModels[provider].sort((a, b) =>
 			(a.name ?? a.id).localeCompare(b.name ?? b.id),
@@ -347,22 +378,18 @@ export function ModelPicker(props: {
 		if (bIndex !== -1) return 1;
 		return a.localeCompare(b);
 	});
-	const providerGroupKeys = favorites.length > 0
-		? ['__favorites__', ...sortedProviders]
-		: sortedProviders;
-	const allProviderGroupsCollapsed =
-		providerGroupKeys.length > 0 && providerGroupKeys.every((groupKey) => collapsedGroups.has(groupKey));
 
 	const renderModelRow = (model: AvailableModel) => {
 		const modelKey = `${model.provider}/${model.id}`;
 		const selected = modelKey === currentModelKey;
 		const favorited = favoritesSet.has(modelKey);
 		return (
-			<button
-				ref={selected ? selectedItemRef : undefined}
+			<CommandItem
 				key={modelKey}
-				className={`picker-palette-item${selected ? " selected" : ""}`}
-				onClick={() => props.onPick(model)}
+				value={modelKey}
+				keywords={[model.name ?? "", model.id, model.provider, modelKey]}
+				onSelect={() => props.onPick(model)}
+				className="picker-model-item"
 			>
 				{/* 收藏/取消收藏按钮：填充星为收藏，空心为未收藏 */}
 				<span
@@ -379,152 +406,30 @@ export function ModelPicker(props: {
 				<span className="picker-palette-desc">
 					{model.provider}/{model.id}
 				</span>
-				{selected && <span className="picker-palette-check">✓</span>}
-			</button>
+				{selected && <Check size={14} className="ml-auto text-primary" aria-hidden="true" />}
+			</CommandItem>
 		);
 	};
 
-	// 打开选模型弹框时，自动滚动到当前选中的模型行，避免用户从头翻找。
-	useEffect(() => {
-		if (!selectedItemRef.current) return;
-		// 在布局完成后再滚动，确保列表已渲染且尺寸稳定。
-		requestAnimationFrame(() => {
-			selectedItemRef.current?.scrollIntoView({ block: "center", inline: "nearest" });
-		});
-	}, [currentModelKey, normalizedSearch]);
-
 	return (
-		<div className="picker-backdrop" onClick={props.onClose}>
-			<div
-				className="picker-palette model-picker"
-				onClick={(event) => event.stopPropagation()}
-			>
-				<div className="picker-palette-header">
-					<span>{t("app.modelPickerTitle")}</span>
-					<IconButton
-						className="picker-palette-close"
-						label={t("common.close")}
-						onClick={props.onClose}
-					>
-						<X size={16} strokeWidth={2.2} aria-hidden="true" />
-					</IconButton>
-				</div>
-				<div className="picker-palette-search">
-					<div className="picker-palette-search-row">
-						<input
-							autoFocus
-							value={modelPickerSearch}
-							onChange={(event) => setModelPickerSearch(event.target.value)}
-							placeholder={t("app.modelPickerSearch")}
-							className={providerGroupKeys.length > 0 ? "has-actions" : undefined}
-						/>
-						{providerGroupKeys.length > 0 && (
-							<div className="picker-palette-actions">
-								<IconButton
-									className="picker-palette-action-icon"
-									label={t("app.modelCollapseAllProviders")}
-									title={t("app.modelCollapseAllProviders")}
-									onClick={() => {
-										// 一键折叠当前结果里的所有 provider 分组，适合像 IDE 一样快速收拢长列表。
-										setCollapsedGroups((prev) => {
-											const next = new Set(prev);
-											for (const groupKey of providerGroupKeys) next.add(groupKey);
-											return next;
-										});
-									}}
-									disabled={allProviderGroupsCollapsed}
-								>
-									<ChevronsDownUp size={13} strokeWidth={2} aria-hidden="true" />
-								</IconButton>
-								<IconButton
-									className="picker-palette-action-icon"
-									label={t("app.modelExpandAllProviders")}
-									title={t("app.modelExpandAllProviders")}
-									onClick={() => {
-										// 展开当前结果里的所有 provider 分组，避免用户折叠后还要逐个恢复。
-										setCollapsedGroups((prev) => {
-											const next = new Set(prev);
-											for (const groupKey of providerGroupKeys) next.delete(groupKey);
-											return next;
-										});
-									}}
-									disabled={!allProviderGroupsCollapsed}
-								>
-									<ChevronsUpDown size={13} strokeWidth={2} aria-hidden="true" />
-								</IconButton>
-							</div>
-						)}
-					</div>
-				</div>
-				<div className="picker-palette-list" ref={modelPickerListRef}>
-					<button
-						type="button"
-						className="picker-palette-scroll-btn picker-palette-scroll-top"
-						title={t("app.modelScrollToTop")}
-						onClick={() => modelPickerListRef.current?.scrollTo({ top: 0, behavior: "smooth" })}
-					>
-						<MoveUp size={14} strokeWidth={1.8} aria-hidden="true" />
-					</button>
-					{/* 收藏分区：置于最顶部，可折叠 */}
+		<PickerDialog title={t("app.modelPickerTitle")} onClose={props.onClose} className="model-picker">
+			<Command defaultValue={currentModelKey}>
+				<CommandInput placeholder={t("app.modelPickerSearch")} autoFocus />
+				<CommandList>
+					<CommandEmpty>{t("app.modelPickerEmpty")}</CommandEmpty>
 					{favorites.length > 0 && (
-						<div className="model-group model-favorites-group">
-							<div
-								className={`model-group-header${collapsedGroups.has('__favorites__') ? ' collapsed' : ''}`}
-								onClick={() => {
-									setCollapsedGroups(prev => {
-										const next = new Set(prev);
-										if (next.has('__favorites__')) next.delete('__favorites__');
-										else next.add('__favorites__');
-										return next;
-									});
-								}}
-							>
-								<span className={`model-favorites-arrow${collapsedGroups.has('__favorites__') ? ' collapsed' : ''}`}>
-									<Star size={14} strokeWidth={1.8} fill='currentColor' />
-								</span>
-								{t("app.modelFavorites")}
-								<span className="model-group-count">{favorites.length}</span>
-							</div>
-							{!collapsedGroups.has('__favorites__') && favorites.map(renderModelRow)}
-						</div>
+						<CommandGroup heading={`${t("app.modelFavorites")} (${favorites.length})`}>
+							{favorites.map(renderModelRow)}
+						</CommandGroup>
 					)}
-					{/* 其余模型按供应商分组 */}
 					{sortedProviders.map((provider) => (
-						<div key={provider} className="model-group">
-							<div
-								className={`model-group-header${collapsedGroups.has(provider) ? ' collapsed' : ''}`}
-								onClick={() => {
-									setCollapsedGroups(prev => {
-										const next = new Set(prev);
-										if (next.has(provider)) next.delete(provider);
-										else next.add(provider);
-										return next;
-									});
-								}}
-							>
-								{provider}
-								<span className="model-group-count">{groupedModels[provider].length}</span>
-							</div>
-							{!collapsedGroups.has(provider) && groupedModels[provider].map(renderModelRow)}
-						</div>
+						<CommandGroup key={provider} heading={`${provider} (${groupedModels[provider].length})`}>
+							{groupedModels[provider].map(renderModelRow)}
+						</CommandGroup>
 					))}
-					{favorites.length === 0 && sortedProviders.length === 0 && (
-						<div className="picker-palette-empty">{t("app.modelPickerEmpty")}</div>
-					)}
-					<button
-						type="button"
-						className="picker-palette-scroll-btn picker-palette-scroll-bottom"
-						title={t("app.modelScrollToBottom")}
-						onClick={() => {
-							const el = modelPickerListRef.current;
-							if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-						}}
-					>
-						<MoveDown size={14} strokeWidth={1.8} aria-hidden="true" />
-					</button>
-				</div>
-			</div>
-		</div>
+				</CommandList>
+			</Command>
+		</PickerDialog>
 	);
 }
 
@@ -560,41 +465,26 @@ export function ComposerModePicker(props: {
 	];
 
 	return (
-		<div className="picker-backdrop" onClick={props.onClose}>
-			<div
-				className="picker-palette composer-mode-picker"
-				onClick={(event) => event.stopPropagation()}
-			>
-				<div className="picker-palette-header">
-					<div className="thinking-picker-header-content">
-						<span>{t("app.composerModeTitle")}</span>
-					</div>
-					<IconButton
-						className="picker-palette-close"
-						label={t("common.close")}
-						onClick={props.onClose}
-					>
-						<X size={16} strokeWidth={2.2} aria-hidden="true" />
-					</IconButton>
-				</div>
-				<div className="picker-palette-list">
+		<PickerDialog title={t("app.composerModeTitle")} onClose={props.onClose} className="composer-mode-picker">
+			<Command defaultValue={props.currentMode}>
+				<CommandList>
 					{items.map((item) => {
 						const selected = item.value === props.currentMode;
 						return (
-							<button
+							<CommandItem
 								key={item.value}
-								className={`picker-palette-item${selected ? " selected" : ""}`}
-								onClick={() => props.onPick(item.value)}
+								value={item.value}
+								onSelect={() => props.onPick(item.value)}
 							>
 								<span className="picker-palette-label">{t(item.labelKey)}</span>
 								<span className="picker-palette-desc">{t(item.descriptionKey)}</span>
-								{selected && <span className="picker-palette-check">✓</span>}
-							</button>
+								{selected && <Check size={14} className="ml-auto text-primary" aria-hidden="true" />}
+							</CommandItem>
 						);
 					})}
-				</div>
-			</div>
-		</div>
+				</CommandList>
+			</Command>
+		</PickerDialog>
 	);
 }
 
@@ -604,44 +494,31 @@ export function ThinkingPicker(props: {
 	onPick: (level: string) => void;
 }) {
 	return (
-		<div className="picker-backdrop" onClick={props.onClose}>
-			<div
-				className="picker-palette thinking-picker"
-				onClick={(event) => event.stopPropagation()}
-			>
-				<div className="picker-palette-header">
-					<div className="thinking-picker-header-content">
-						<span>{t("app.thinkingPickerTitle")}</span>
-						<small className="thinking-picker-hint">
-							{t("app.thinkingPickerHint")}
-						</small>
-					</div>
-					<IconButton
-						className="picker-palette-close"
-						label={t("common.close")}
-						onClick={props.onClose}
-					>
-						<X size={16} strokeWidth={2.2} aria-hidden="true" />
-					</IconButton>
-				</div>
-				<div className="picker-palette-list">
+		<PickerDialog
+			title={t("app.thinkingPickerTitle")}
+			hint={t("app.thinkingPickerHint")}
+			onClose={props.onClose}
+			className="thinking-picker"
+		>
+			<Command defaultValue={props.current}>
+				<CommandList>
 					{THINKING_LEVELS.map((level) => {
 						const selected = level.value === props.current;
 						return (
-							<button
+							<CommandItem
 								key={level.value}
-								className={`picker-palette-item${selected ? " selected" : ""}`}
-								onClick={() => props.onPick(level.value)}
+								value={level.value}
+								onSelect={() => props.onPick(level.value)}
 							>
 								<span className="picker-palette-label">{t(level.labelKey)}</span>
 								<span className="picker-palette-desc">{t(level.descriptionKey)}</span>
-								{selected && <span className="picker-palette-check">✓</span>}
-							</button>
+								{selected && <Check size={14} className="ml-auto text-primary" aria-hidden="true" />}
+							</CommandItem>
 						);
 					})}
-				</div>
-			</div>
-		</div>
+				</CommandList>
+			</Command>
+		</PickerDialog>
 	);
 }
 
@@ -669,107 +546,69 @@ export function PromptTemplatePicker(props: {
 	}) => void;
 }) {
 	type TemplateItem = typeof props.templates[number];
-	const [search, setSearch] = useState("");
 	const [previewTemplate, setPreviewTemplate] = useState<TemplateItem | null>(null);
-	const normalizedSearch = search.trim().toLowerCase();
-	const filtered: TemplateItem[] = normalizedSearch
-		? props.templates.filter(
-				(t: TemplateItem) =>
-					t.name.toLowerCase().includes(normalizedSearch) ||
-					t.description.toLowerCase().includes(normalizedSearch),
-			)
-		: props.templates;
 
-	const templateList = filtered.map((template) => (
-		<div
-			key={template.path}
-			className="picker-palette-item-wrap"
-		>
-			<button
-				className="picker-palette-item"
-				onClick={() => props.onPick(template)}
+	// 预览态：替换标题为返回按钮 + 模板名，正文为模板内容（沿用旧内联预览设计）
+	if (previewTemplate) {
+		return (
+			<PickerDialog
+				title={t("app.promptTemplatePreviewTitle", { name: "/" + previewTemplate.name })}
+				onClose={props.onClose}
+				className="prompt-template-picker"
 			>
-				<FileText size={14} strokeWidth={1.8} aria-hidden="true" />
-				<span className="picker-palette-label">/{template.name}</span>
-				{template.argumentHint && (
-					<code className="picker-palette-arg-hint">{template.argumentHint}</code>
-				)}
-				<span className="picker-palette-desc">{template.description}</span>
-			</button>
-			<button
-				className="picker-palette-preview-btn"
-				title={t("common.preview")}
-				onClick={(e) => {
-					e.stopPropagation();
-					setPreviewTemplate(
-						previewTemplate?.path === template.path ? null : template,
-					);
-				}}
-			>
-				<Eye size={14} strokeWidth={1.8} />
-			</button>
-		</div>
-	));
-
-	const emptyState = filtered.length === 0 && (
-		<div className="picker-palette-empty">
-			{search
-				? t("app.promptTemplateSearchEmpty")
-				: t("app.promptTemplateEmpty")}
-		</div>
-	);
+				<div className="picker-preview-inline">
+					<button
+						type="button"
+						className="picker-preview-back-btn"
+						onClick={() => setPreviewTemplate(null)}
+						title={t("app.promptTemplateBackToPicker")}
+					>
+						<ChevronLeft size={16} strokeWidth={2.2} />
+						{t("app.promptTemplateBackToPicker")}
+					</button>
+					<pre className="picker-preview-content">{previewTemplate.content}</pre>
+				</div>
+			</PickerDialog>
+		);
+	}
 
 	return (
-		<div className="picker-backdrop" onClick={props.onClose}>
-			<div
-				className="picker-palette prompt-template-picker"
-				onClick={(event) => event.stopPropagation()}
-			>
-				<div className="picker-palette-header">
-					{previewTemplate ? (
-						<>
-							<button
-								className="picker-preview-back-btn"
-								onClick={() => setPreviewTemplate(null)}
-								title={t("app.promptTemplateBackToPicker")}
-							>
-								<ChevronLeft size={16} strokeWidth={2.2} />
-							</button>
-							<span>{t("app.promptTemplatePreviewTitle", { name: "/" + previewTemplate.name })}</span>
-						</>
-					) : (
-						<span>{t("app.promptTemplatePickerTitle")}</span>
+		<PickerDialog title={t("app.promptTemplatePickerTitle")} onClose={props.onClose} className="prompt-template-picker">
+			<Command>
+				<CommandInput placeholder={t("app.promptTemplateSearchPlaceholder")} autoFocus />
+				<CommandList>
+					<CommandEmpty>{t("app.promptTemplateSearchEmpty")}</CommandEmpty>
+					{props.templates.length === 0 && (
+						<div className="py-6 text-center text-sm text-muted-foreground">{t("app.promptTemplateEmpty")}</div>
 					)}
-					<IconButton
-						className="picker-palette-close"
-						label={t("common.close")}
-						onClick={props.onClose}
-					>
-						<X size={16} strokeWidth={2.2} aria-hidden="true" />
-					</IconButton>
-				</div>
-				{!previewTemplate && (
-					<div className="picker-palette-search">
-						<input
-							autoFocus
-							value={search}
-							onChange={(e) => setSearch(e.target.value)}
-							placeholder={t("app.promptTemplateSearchPlaceholder")}
-						/>
-					</div>
-				)}
-				{previewTemplate ? (
-					<div className="picker-preview-inline">
-						<pre className="picker-preview-content">{previewTemplate.content}</pre>
-					</div>
-				) : (
-					<div className="picker-palette-list">
-						{templateList}
-						{emptyState}
-					</div>
-				)}
-				{/* 旧的弹框预览已移除，改为内联显示 */}
-			</div>
-		</div>
+					{props.templates.map((template) => (
+						<CommandItem
+							key={template.path}
+							value={`/${template.name}`}
+							keywords={[template.name, template.description]}
+							onSelect={() => props.onPick(template)}
+						>
+							<FileText size={14} strokeWidth={1.8} aria-hidden="true" />
+							<span className="picker-palette-label">/{template.name}</span>
+							{template.argumentHint && (
+								<code className="picker-palette-arg-hint">{template.argumentHint}</code>
+							)}
+							<span className="picker-palette-desc">{template.description}</span>
+							<button
+								type="button"
+								className="picker-palette-preview-btn"
+								title={t("common.preview")}
+								onClick={(e) => {
+									e.stopPropagation();
+									setPreviewTemplate(template);
+								}}
+							>
+								<Eye size={14} strokeWidth={1.8} />
+							</button>
+						</CommandItem>
+					))}
+				</CommandList>
+			</Command>
+		</PickerDialog>
 	);
 }

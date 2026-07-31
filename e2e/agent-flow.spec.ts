@@ -114,18 +114,18 @@ test("agent flow: model picker and thinking level switch apply", async ({ window
 
 	// 打开模型选择器，切到 Mock Model Pro
 	await modelButton.click();
-	const modelPalette = window.locator(".picker-palette.model-picker");
+	const modelPalette = window.locator("[data-slot='dialog-content'].model-picker");
 	await expect(modelPalette).toBeVisible({ timeout: 5000 });
-	await modelPalette.locator(".picker-palette-item", { hasText: "mock-model-pro" }).click();
+	await modelPalette.locator("[data-slot='command-item']", { hasText: "mock-model-pro" }).click();
 	await expect(modelButton).toContainText("Mock Model Pro", { timeout: 10_000 });
 
 	// thinking 级别切换：初始值取决于会话配置（可能来自 ~/.pi/agent/settings.json），
 	// 不断言具体档位，切到 low 后验证生效
 	const thinkingButton = window.locator(".composer-bar-btn.thinking");
 	await thinkingButton.click();
-	const thinkingPalette = window.locator(".picker-palette.thinking-picker");
+	const thinkingPalette = window.locator("[data-slot='dialog-content'].thinking-picker");
 	await expect(thinkingPalette).toBeVisible({ timeout: 5000 });
-	await thinkingPalette.locator(".picker-palette-item", { hasText: "low" }).first().click();
+	await thinkingPalette.locator("[data-slot='command-item']", { hasText: "low" }).first().click();
 	await expect(thinkingButton).toContainText("low", { timeout: 10_000 });
 });
 

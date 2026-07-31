@@ -47,7 +47,10 @@
   --color-border-subtle: var(--color-border-subtle);
   --color-border-default: var(--color-border-default);
   --color-border-strong: var(--color-border-strong);
-  --color-accent: var(--color-accent);
+  /* shadcn 语义里的 accent 是「悬停/选中时的柔和表面色」（灰阶），不是品牌色；
+   * 品牌绿走 --color-primary（见下）。这里映射到 bg-active，避免菜单/命令项悬停变亮绿。 */
+  --color-accent: var(--color-bg-active);
+  --color-accent-foreground: var(--color-text-primary);
   --color-accent-soft: var(--color-accent-soft);
   --color-accent-strong: var(--color-accent-strong);
   --color-danger: var(--color-danger);

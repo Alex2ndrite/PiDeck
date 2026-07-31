@@ -59,17 +59,17 @@ test("visual tour: live session states", async ({ window }) => {
 
 	// 4. 模型选择器
 	await window.locator(".composer-bar-btn.model").click();
-	const modelPalette = window.locator(".picker-palette.model-picker");
+	const modelPalette = window.locator("[data-slot='dialog-content'].model-picker");
 	await expect(modelPalette).toBeVisible({ timeout: 5000 });
 	await shot(window, "33-model-picker");
-	await modelPalette.locator(".picker-palette-close").click();
+	await modelPalette.getByRole("button", { name: /关闭|Close/ }).click();
 
 	// 5. thinking 选择器
 	await window.locator(".composer-bar-btn.thinking").click();
-	const thinkingPalette = window.locator(".picker-palette.thinking-picker");
+	const thinkingPalette = window.locator("[data-slot='dialog-content'].thinking-picker");
 	await expect(thinkingPalette).toBeVisible({ timeout: 5000 });
 	await shot(window, "34-thinking-picker");
-	await thinkingPalette.locator(".picker-palette-close").click();
+	await thinkingPalette.getByRole("button", { name: /关闭|Close/ }).click();
 
 	// 6. 暗色主题下的会话页：切主题后重截一张完整对话
 	await window.locator(".settings-icon").click();
