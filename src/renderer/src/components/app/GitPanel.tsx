@@ -374,7 +374,7 @@ function PaneSash(props: {
 
   return (
     <div
-      className="git-pane-sash"
+      className="git-pane-sash relative z-[1] box-border h-1.5 shrink-0 basis-1.5 -my-[3px] cursor-row-resize touch-none before:absolute before:top-0.5 before:right-0 before:left-0 before:h-px before:bg-[var(--git-panel-border)] before:transition-[background-color,height] before:duration-150 hover:before:h-0.5 hover:before:bg-[var(--color-accent)] focus-visible:before:h-0.5 focus-visible:before:bg-[var(--color-accent)]"
       role="separator"
       tabIndex={0}
       aria-orientation="horizontal"
@@ -879,12 +879,12 @@ export function GitPanel(props: GitPanelProps) {
       aria-label={t("git.sourceControl")}
     >
       {/* 当前分支 + 切换下拉（pure official：outline 触发器 + popover 菜单） */}
-      <div className="git-branch-bar flex shrink-0 items-center gap-1 border-b border-border bg-background px-2 py-1.5" ref={branchBarRef}>
+      <div className="flex shrink-0 items-center gap-1 border-b border-border bg-background px-2 py-1.5" ref={branchBarRef}>
         <Button
           ref={branchTriggerRef}
           type="button"
           variant="outline"
-          className="git-branch-trigger inline-flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md border border-border bg-background px-2 text-left text-xs text-foreground hover:bg-accent"
+          className="inline-flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md border border-border bg-background px-2 text-left text-xs text-foreground hover:bg-accent"
           onClick={() => {
             if (!branchOpen) updateBranchDropdownPosition();
             setBranchOpen((v) => !v);
@@ -899,21 +899,21 @@ export function GitPanel(props: GitPanelProps) {
           }
         >
           <GitBranch size={14} className="shrink-0 text-muted-foreground" />
-          <span className="git-branch-label min-w-0 flex-1 truncate">
+          <span className="min-w-0 max-w-[120px] flex-1 truncate">
             {props.currentBranch || t("app.branchNone")}
           </span>
           {props.branches.length > 0 && (
-            <span className="git-branch-badge inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-muted px-1.5 text-[11px] font-medium text-muted-foreground">{props.branches.length}</span>
+            <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-muted px-1.5 font-mono text-[11px] font-medium tabular-nums text-muted-foreground">{props.branches.length}</span>
           )}
           <ChevronDown
             size={12}
-            className={`git-branch-chevron shrink-0 text-muted-foreground${branchOpen ? " open" : ""}`}
+            className={`shrink-0 text-muted-foreground transition-transform duration-150${branchOpen ? " rotate-180" : ""}`}
           />
         </Button>
         {notAGitRepo && (
           <Button
             type="button"
-            variant="ghost" size="icon-sm" className="git-init-branch-btn size-7 inline-grid size-7 place-items-center rounded-md border border-border text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+            variant="ghost" size="icon-sm" className="size-7 inline-grid size-7 place-items-center rounded-md border border-border text-muted-foreground hover:bg-accent hover:text-accent-foreground"
             title={t("git.initInBranchBar")}
             disabled={initializing}
             onClick={async () => {
@@ -930,7 +930,7 @@ export function GitPanel(props: GitPanelProps) {
             }}
           >
             {initializing ? (
-              <Loader2 size={14} className="git-spin" />
+              <Loader2 size={14} className="animate-spin" />
             ) : (
               <Plus size={14} />
             )}
@@ -940,7 +940,7 @@ export function GitPanel(props: GitPanelProps) {
           createPortal(
             <div
               ref={branchDropdownRef}
-              className="git-branch-dropdown z-50 max-h-60 min-w-48 overflow-auto rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md"
+              className="z-50 max-h-[calc(100vh-16px)] max-w-[calc(100vw-16px)] min-w-48 overflow-auto rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md"
               style={branchDropdownStyle}
             >
             {props.branches.map((branch) => (
@@ -949,7 +949,7 @@ export function GitPanel(props: GitPanelProps) {
                 key={branch}
                 variant="ghost"
                 size="sm"
-                className={`h-auto git-branch-item flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-xs hover:bg-accent${branch === props.currentBranch ? " active bg-accent" : ""}`}
+                className={`h-auto flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-xs hover:bg-accent${branch === props.currentBranch ? " bg-accent font-semibold text-[color:var(--color-accent)]" : ""}`}
                 title={branch}
                 onClick={() => {
                   if (branch !== props.currentBranch)
@@ -958,14 +958,14 @@ export function GitPanel(props: GitPanelProps) {
                 }}
               >
                 {branch === props.currentBranch && (
-                  <Check size={14} className="git-branch-check shrink-0" />
+                  <Check size={14} className="shrink-0 text-[color:var(--color-accent)]" />
                 )}
                 <span className="truncate">{branch}</span>
               </Button>
             ))}
-            <div className="git-branch-divider my-1 h-px bg-border" />
+            <div className="my-1 h-px bg-border" />
             {branchCreating ? (
-              <div className="git-branch-create-form flex items-center gap-1 px-1 py-1">
+              <div className="flex items-center gap-1 px-1 py-1">
                 <Input
                   className="h-7 min-w-0 flex-1 rounded-md border border-border bg-background px-2 text-xs outline-none focus-visible:ring-1 focus-visible:ring-ring"
                   placeholder={
@@ -992,7 +992,7 @@ export function GitPanel(props: GitPanelProps) {
                   type="button"
                   variant="default"
                   size="icon-sm"
-                  className="git-branch-create-confirm inline-grid size-7 place-items-center rounded-md bg-primary text-primary-foreground disabled:opacity-40"
+                  className="inline-grid size-7 place-items-center rounded-md bg-primary text-primary-foreground disabled:opacity-40"
                   disabled={!newBranchName.trim()}
                   onClick={() => {
                     props.onCreateBranch?.(newBranchName.trim());
@@ -1007,7 +1007,7 @@ export function GitPanel(props: GitPanelProps) {
             ) : (
               <Button
                 type="button"
-                variant="ghost" size="sm" className="git-branch-item git-branch-create-btn h-auto flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-xs hover:bg-accent"
+                variant="ghost" size="sm" className="h-auto flex w-full items-center gap-1.5 rounded-sm px-2 py-1.5 text-left text-xs text-text-secondary hover:bg-accent"
                 onClick={() => setBranchCreating(true)}
               >
                 <Plus size={14} />
@@ -1020,7 +1020,7 @@ export function GitPanel(props: GitPanelProps) {
       </div>
       <section
         id="git-pane-changes"
-        className={`git-pane git-pane-changes${paneState.open.changes ? " open" : " collapsed"}`}
+        className={`flex min-h-0 flex-[0_0_auto] flex-col overflow-hidden border-b border-[var(--git-panel-border)] bg-[var(--git-panel-bg)] last:border-b-0${paneState.open.changes ? " h-[calc(var(--git-pane-height)+26px)]" : " h-[26px]"}`}
         style={paneStyle("changes")}
       >
         <PaneHeader
@@ -1033,14 +1033,14 @@ export function GitPanel(props: GitPanelProps) {
           {loading && (
             <Loader2
               size={14}
-              className="git-spin"
+              className="animate-spin"
               aria-label={t("common.loading")}
             />
           )}
           {/* 与文件树一致：收起/展开全部变更目录 */}
           <Button
             type="button"
-            variant="ghost" size="icon-sm" className="git-action-btn size-7"
+            variant="ghost" size="icon-sm" className="size-7"
             title={t("drawer.collapseAllDirs")}
             aria-label={t("drawer.collapseAllDirs")}
             disabled={!canCollapseChangeDirs || allChangeDirsCollapsed}
@@ -1050,7 +1050,7 @@ export function GitPanel(props: GitPanelProps) {
           </Button>
           <Button
             type="button"
-            variant="ghost" size="icon-sm" className="git-action-btn size-7"
+            variant="ghost" size="icon-sm" className="size-7"
             title={t("drawer.expandAllDirs")}
             aria-label={t("drawer.expandAllDirs")}
             disabled={!canCollapseChangeDirs || allChangeDirsExpanded}
@@ -1060,7 +1060,7 @@ export function GitPanel(props: GitPanelProps) {
           </Button>
           <Button
             type="button"
-            variant="ghost" size="icon-sm" className="git-action-btn size-7"
+            variant="ghost" size="icon-sm" className="size-7"
             title={t("common.refresh")}
             aria-label={t("common.refresh")}
             onClick={() => void refresh()}
@@ -1070,14 +1070,14 @@ export function GitPanel(props: GitPanelProps) {
           {props.push && (
             <Button
               type="button"
-              variant="ghost" size="icon-sm" className="git-action-btn size-7"
+              variant="ghost" size="icon-sm" className="size-7"
               title={t("git.push")}
               aria-label={t("git.push")}
               disabled={pushing || mutationRunningRef.current}
               onClick={() => void doPush()}
             >
               {pushing ? (
-                <Loader2 size={14} className="git-spin" />
+                <Loader2 size={14} className="animate-spin" />
               ) : (
                 <ArrowUpFromLine size={14} />
               )}
@@ -1086,14 +1086,14 @@ export function GitPanel(props: GitPanelProps) {
           {props.pull && (
             <Button
               type="button"
-              variant="ghost" size="icon-sm" className="git-action-btn size-7"
+              variant="ghost" size="icon-sm" className="size-7"
               title={t("git.pull")}
               aria-label={t("git.pull")}
               disabled={pulling || mutationRunningRef.current}
               onClick={() => void doPull()}
             >
               {pulling ? (
-                <Loader2 size={14} className="git-spin" />
+                <Loader2 size={14} className="animate-spin" />
               ) : (
                 <ArrowDownToLine size={14} />
               )}
@@ -1101,7 +1101,7 @@ export function GitPanel(props: GitPanelProps) {
           )}
         </PaneHeader>
         {paneState.open.changes && (
-          <div className="git-pane-body git-changes-body">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
             {gitNotInstalled ? (
               <div className="flex flex-col items-center gap-3 px-4 py-10 text-center">
                 <div className="text-[32px] leading-none opacity-60">⚡</div>
@@ -1113,7 +1113,7 @@ export function GitPanel(props: GitPanelProps) {
                 <div className="text-[13px] leading-[22px] text-[var(--git-desc-fg)]">{t("git.notAGitRepo")}</div>
                 <Button
                   type="button"
-                  variant="ghost" size="sm" className="git-compare-btn h-auto px-2.5 text-[13px]"
+                  variant="ghost" size="sm" className=" h-auto px-2.5 text-[13px]"
                   disabled={initializing}
                   onClick={async () => {
                     if (!props.gitInit) return;
@@ -1130,16 +1130,16 @@ export function GitPanel(props: GitPanelProps) {
                   }}
                 >
                   {initializing ? (
-                    <Loader2 size={14} className="git-spin" />
+                    <Loader2 size={14} className="animate-spin" />
                   ) : (
                     t("git.initRepo")
                   )}
                 </Button>
               </div>
             ) : (
-            <div className="git-scm-input-wrap">
+            <div className="flex shrink-0 flex-col gap-2 border-b border-[var(--git-panel-border)] bg-[var(--git-panel-bg)] px-2.5 pt-2 pb-1.5">
               <textarea
-                className="git-scm-input"
+                className="min-h-14 max-h-[100px] w-full resize-y rounded-sm border border-[var(--git-input-border)] bg-[var(--git-input-bg)] px-2 py-1 font-mono text-[13px] leading-[20px] text-[var(--git-panel-fg)] outline-none placeholder:text-[var(--git-desc-fg)]"
                 placeholder={t("git.commitPlaceholder", {
                   branch: props.currentBranch ?? "HEAD",
                 })}
@@ -1156,12 +1156,12 @@ export function GitPanel(props: GitPanelProps) {
                 }}
                 rows={3}
               />
-              <div className="git-commit-actions">
+              <div className="flex items-stretch gap-2">
                 <Button
                   type="button"
                   variant="ghost"
                   size="icon-sm"
-                  className="git-commit-gen-btn"
+                  className="min-w-8 border border-border-subtle bg-bg-panel text-text-secondary hover:bg-bg-hover hover:text-text-primary"
                   title={t("git.generateCommitMessage")}
                   disabled={commitGenLoading || mutating}
                   onClick={async () => {
@@ -1186,14 +1186,14 @@ export function GitPanel(props: GitPanelProps) {
                   }}
                 >
                   {commitGenLoading ? (
-                    <Loader2 size={14} className="git-spin" />
+                    <Loader2 size={14} className="animate-spin" />
                   ) : (
                     <Sparkles size={14} />
                   )}
                 </Button>
                 <Button
                   variant="default"
-                  className="git-commit-btn"
+                  className="min-w-0 flex-1 font-mono"
                   loading={committing}
                   disabled={!canCommit}
                   onClick={() => void doCommit()}
@@ -1209,7 +1209,7 @@ export function GitPanel(props: GitPanelProps) {
               <div className="flex min-h-[22px] shrink-0 items-center gap-1 px-[9px] text-[13px] text-[var(--git-desc-fg)]">{t("git.noPendingChanges")}</div>
             )}
 
-            <div className="git-resource-list">
+            <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain">
               {groups.merge.length > 0 && (
                 <ResourceGroup
                   title={t("git.mergeChanges")}
@@ -1356,43 +1356,46 @@ export function GitPanel(props: GitPanelProps) {
       {showSmartCommitPrompt &&
         createPortal(
           <div
-            className="git-smart-commit-backdrop"
+            className="absolute inset-0 z-[1200] flex items-center justify-center bg-[var(--overlay-backdrop-soft)] p-6"
             role="presentation"
             onClick={() => setShowSmartCommitPrompt(false)}
           >
             <div
-              className="git-smart-commit-dialog"
+              className="w-[min(520px,calc(100vw-48px))] rounded-lg border border-border-subtle bg-bg-panel p-4 font-sans text-text-primary shadow-[var(--shadow-modal)]"
               role="alertdialog"
               aria-modal="true"
               aria-labelledby="git-smart-commit-title"
               onClick={(event) => event.stopPropagation()}
             >
-              <strong id="git-smart-commit-title">
+              <strong id="git-smart-commit-title" className="text-base leading-6">
                 {t("git.smartCommitTitle")}
               </strong>
-              <p>{t("git.smartCommitPrompt")}</p>
-              <div className="git-smart-commit-actions">
+              <p className="my-3 mb-4 text-sm leading-[22px] whitespace-pre-line text-text-secondary">{t("git.smartCommitPrompt")}</p>
+              <div className="flex flex-wrap justify-end gap-2">
                 <Button
                   type="button"
+                  variant="outline" size="sm"
                   onClick={() => setShowSmartCommitPrompt(false)}
                 >
                   {t("common.cancel")}
                 </Button>
                 <Button
                   type="button"
+                  variant="outline" size="sm"
                   onClick={() => chooseSmartCommit("never")}
                 >
                   {t("git.smartCommitNever")}
                 </Button>
                 <Button
                   type="button"
+                  variant="outline" size="sm"
                   onClick={() => chooseSmartCommit("always")}
                 >
                   {t("git.smartCommitAlways")}
                 </Button>
                 <Button
                   type="button"
-                  className="primary"
+                  variant="default" size="sm"
                   autoFocus
                   onClick={() => chooseSmartCommit("yes")}
                 >
@@ -1466,7 +1469,7 @@ function CompareChanges(props: {
   return (
     <section
       id="git-pane-compare"
-      className={`git-pane git-pane-compare${props.open ? " open" : " collapsed"}`}
+      className={`flex min-h-0 flex-[0_0_auto] flex-col overflow-hidden border-b border-[var(--git-panel-border)] bg-[var(--git-panel-bg)] last:border-b-0${props.open ? " h-[calc(var(--git-pane-height)+26px)]" : " h-[26px]"}`}
       style={
         { "--git-pane-height": `${props.height}px` } as React.CSSProperties
       }
@@ -1479,7 +1482,7 @@ function CompareChanges(props: {
         onToggle={props.onToggle}
       />
       {props.open && (
-        <div className="git-pane-body git-compare-body">
+        <div className="flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto overscroll-contain">
           <div className="git-compare-controls">
             <label>
               <span>{t("git.base")}</span>
@@ -1496,7 +1499,7 @@ function CompareChanges(props: {
                 onChange={(value) => setBase(value)}
               />
             </label>
-            <span className="git-compare-arrow" aria-hidden="true">
+            <span className="flex items-center pb-px text-[var(--git-desc-fg)]" aria-hidden="true">
               →
             </span>
             <label>
@@ -1516,12 +1519,12 @@ function CompareChanges(props: {
             </label>
             <Button
               type="button"
-              variant="ghost" size="sm" className="git-compare-btn h-auto px-2.5 text-[13px]"
+              variant="ghost" size="sm" className=" h-auto px-2.5 text-[13px]"
               disabled={!base || !target || base === target || loading}
               onClick={() => void run()}
             >
               {loading ? (
-                <Loader2 size={14} className="git-spin" />
+                <Loader2 size={14} className="animate-spin" />
               ) : (
                 t("git.compare")
               )}
@@ -1530,14 +1533,14 @@ function CompareChanges(props: {
           {error && <div className="flex min-h-[22px] shrink-0 items-center gap-1 px-[9px] text-[13px] text-[var(--git-conflict)]">{error}</div>}
           {result && (
             <>
-              <div className="git-compare-summary">
+              <div className="flex-[0_0_auto] border-t border-[var(--git-panel-border)] px-2.5 py-1 font-mono text-[11px] text-[var(--git-desc-fg)]">
                 {t("git.compareSummary", {
                   ahead: result.ahead,
                   behind: result.behind,
                   count: result.files.length,
                 })}
               </div>
-              <div className="git-compare-files">
+              <div className="min-h-0 flex-1 overflow-auto overscroll-contain">
                 {result.files.map((file) => (
                   <ResourceRow
                     key={file.path}

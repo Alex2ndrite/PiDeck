@@ -230,9 +230,9 @@ function GraphLanes({ row, current }: { row: GraphRow; current: boolean }) {
     ) +
       1);
   return (
-    <span className="git-graph-cell" style={{ width }}>
+    <span className="block h-7 shrink-0 overflow-hidden" style={{ width }}>
       <svg
-        className="git-graph-svg"
+        className="block max-w-none [&_path]:[vector-effect:non-scaling-stroke] [&_circle]:[vector-effect:non-scaling-stroke]"
         width={width}
         height={GRAPH_ROW_HEIGHT}
         viewBox={`0 0 ${width} ${GRAPH_ROW_HEIGHT}`}
@@ -312,12 +312,12 @@ function GraphContinuation({ row }: { row: GraphRow }) {
     (Math.min(MAX_VISIBLE_GRAPH_LANES, Math.max(row.output.length, 1)) + 1);
   return (
     <span
-      className="git-graph-cell git-graph-continuation"
+      className="block h-[26px] shrink-0 overflow-hidden"
       style={{ width }}
       aria-hidden="true"
     >
       <svg
-        className="git-graph-svg"
+        className="block max-w-none [&_path]:[vector-effect:non-scaling-stroke] [&_circle]:[vector-effect:non-scaling-stroke]"
         width={width}
         height="26"
         viewBox={`0 0 ${width} 26`}
@@ -351,7 +351,7 @@ function CommitFileRow(props: {
   return (
     <button
       type="button"
-      className={`git-history-file-row ${statusTone(file.status, true)}`}
+      className={`git-history-file-row grid min-h-[26px] w-full cursor-pointer appearance-none grid-cols-[auto_minmax(0,1fr)_16px] items-center gap-2 border-0 bg-transparent p-0 pr-2.5 pl-0.5 font-mono text-[13px] leading-[26px] text-left text-inherit focus-visible:shadow-[inset_var(--focus-ring)] focus-visible:outline-none disabled:cursor-progress disabled:opacity-70 hover:bg-[var(--git-panel-hover)] active:bg-[var(--git-panel-selection)] ${statusTone(file.status, true)}`}
       title={
         file.originalPath ? `${file.originalPath} → ${file.path}` : file.path
       }
@@ -369,14 +369,14 @@ function CommitFileRow(props: {
       }}
     >
       <GraphContinuation row={row} />
-      <span className="git-history-file-content">
+      <span className="flex min-w-0 items-center overflow-hidden">
         <FileIcon name={name} />
-        <span className="git-history-file-name">{name}</span>
-        <span className="git-history-file-path">{description}</span>
+        <span className="min-w-0 flex-[0_1_auto] truncate text-[var(--git-panel-fg)]">{name}</span>
+        <span className="min-w-0 flex-1 truncate pl-[7px] text-right text-xs text-[var(--git-desc-fg)]">{description}</span>
       </span>
-      <span className="git-decoration" aria-hidden="true">
+      <span className="ml-[5px] flex w-4 shrink-0 justify-end font-mono text-xs font-semibold text-right text-[var(--git-desc-fg)]" aria-hidden="true">
         {opening ? (
-          <Loader2 size={13} className="git-spin" />
+          <Loader2 size={13} className="animate-spin" />
         ) : (
           compareStatusLetter(file.status)
         )}
@@ -451,52 +451,52 @@ function CommitHoverCard(props: {
   return createPortal(
     <div
       id="git-commit-hover"
-      className="git-commit-hover"
+      className="pointer-events-none absolute z-[1800] box-border max-h-[min(420px,calc(100vh-16px))] overflow-auto rounded-md border border-[var(--git-panel-border)] bg-[var(--git-panel-bg)] p-3 text-[var(--git-panel-fg)] shadow-[var(--shadow-popover)] [--git-panel-bg:var(--color-bg-panel)] [--git-panel-fg:var(--color-text-primary)] [--git-panel-border:var(--color-border-subtle)] [--git-desc-fg:var(--color-text-tertiary)] [--git-added:var(--color-accent)] [--git-deleted:var(--color-danger)]"
       role="tooltip"
       style={{ left, top, width }}
       onMouseEnter={props.onMouseEnter}
       onMouseLeave={props.onMouseLeave}
     >
-      <div className="git-commit-hover-author">
-        <span className="git-commit-hover-avatar" aria-hidden="true">
+      <div className="flex min-w-0 items-start gap-2">
+        <span className="inline-flex size-6 shrink-0 items-center justify-center rounded-sm bg-bg-muted font-mono text-xs font-semibold text-[var(--git-panel-fg)]" aria-hidden="true">
           {initial}
         </span>
-        <span className="git-commit-hover-author-text">
-          <strong>{commit.authorName}</strong>
-          {commit.authorEmail && <span>{`<${commit.authorEmail}>`}</span>}
-          <small>
+        <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-[5px]">
+          <strong className="truncate">{commit.authorName}</strong>
+          {commit.authorEmail && <span className="truncate text-[var(--git-desc-fg)]">{`<${commit.authorEmail}>`}</span>}
+          <small className="w-full text-xs text-[var(--git-desc-fg)]">
             {relativeTime(commit.authorDate)} ·{" "}
             {absoluteTime(commit.authorDate)}
           </small>
         </span>
       </div>
-      <div className="git-commit-hover-message">
+      <div className="my-2.5 border-y border-[var(--git-panel-border)] py-[9px] break-words whitespace-pre-wrap">
         {commit.fullMessage || commit.message}
       </div>
-      <div className="git-commit-hover-identity">
-        <code>{commit.hash}</code>
+      <div className="mt-2">
+        <code className="block truncate font-mono text-xs text-[var(--git-desc-fg)]">{commit.hash}</code>
         {refs.length > 0 && (
-          <div className="git-commit-hover-refs">
+          <div className="mt-1.5 flex flex-wrap gap-1">
             {refs.map((item) => (
-              <span key={item}>{item}</span>
+              <span key={item} className="max-w-full truncate rounded-sm border border-[var(--git-panel-border)] px-1.5 py-px text-xs text-[var(--git-desc-fg)]">{item}</span>
             ))}
           </div>
         )}
       </div>
       {props.state?.loading && (
-        <div className="git-commit-hover-status">
-          <Loader2 size={13} className="git-spin" />{" "}
+        <div className="mt-[9px] flex items-center gap-[7px] border-t border-[var(--git-panel-border)] pt-2 text-[var(--git-desc-fg)]">
+          <Loader2 size={13} className="animate-spin" />{" "}
           {t("git.loadingCommitDetails")}
         </div>
       )}
       {props.state?.error && (
-        <div className="git-commit-hover-status error">{props.state.error}</div>
+        <div className="mt-[9px] flex items-center gap-[7px] border-t border-[var(--git-panel-border)] pt-2 text-[var(--color-danger)]">{props.state.error}</div>
       )}
       {shortStat && (
-        <div className="git-commit-hover-stat">
+        <div className="mt-[9px] flex items-center gap-[7px] border-t border-[var(--git-panel-border)] pt-2 text-[var(--git-desc-fg)]">
           <span>{t("git.filesChanged", { count: shortStat.files })}</span>
-          <span className="added">+{shortStat.insertions}</span>
-          <span className="deleted">-{shortStat.deletions}</span>
+          <span className="ml-auto text-[var(--git-added)]">+{shortStat.insertions}</span>
+          <span className="text-[var(--git-deleted)]">-{shortStat.deletions}</span>
         </div>
       )}
     </div>,
@@ -840,7 +840,7 @@ export function SourceControlGraph(props: GitGraphProps) {
   return (
     <section
       id="git-pane-graph"
-      className={`git-pane git-pane-graph${props.open ? " open" : " collapsed"}`}
+      className={`flex min-h-0 flex-[0_0_auto] flex-col overflow-hidden border-b border-[var(--git-panel-border)] bg-[var(--git-panel-bg)] last:border-b-0${props.open ? " h-[calc(var(--git-pane-height)+26px)]" : " h-[26px]"}`}
       style={
         { "--git-pane-height": `${props.height}px` } as CSSProperties
       }
@@ -866,7 +866,7 @@ export function SourceControlGraph(props: GitGraphProps) {
         />
         <Button
           type="button"
-          variant="ghost" size="icon-sm" className="git-action-btn size-7"
+          variant="ghost" size="icon-sm" className="size-7"
           title={t("common.refresh")}
           aria-label={t("common.refresh")}
           onClick={() => void load()}
@@ -875,10 +875,10 @@ export function SourceControlGraph(props: GitGraphProps) {
         </Button>
       </PaneHeader>
       {props.open && (
-        <div className="git-pane-body git-graph-body">
+        <div className="flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto overscroll-contain">
           {loading && !commits.length && (
             <div className="git-status-msg">
-              <Loader2 size={14} className="git-spin" />{" "}
+              <Loader2 size={14} className="animate-spin" />{" "}
               {t("git.loadingCommits")}
             </div>
           )}
@@ -888,7 +888,7 @@ export function SourceControlGraph(props: GitGraphProps) {
           )}
           {commits.length > 0 && (
             <div
-              className="git-history-list"
+              className="min-h-0 flex-1 overflow-auto overscroll-contain [scrollbar-gutter:stable]"
               role="list"
               onScroll={dismissHover}
             >
@@ -904,12 +904,12 @@ export function SourceControlGraph(props: GitGraphProps) {
                 return (
                   <div
                     key={commit.hash}
-                    className="git-history-item"
+                    className=""
                     role="listitem"
                   >
                     <button
                       type="button"
-                      className={`git-history-row${isCurrent ? " current" : ""}${expanded ? " expanded" : ""}`}
+                      className={`git-history-row grid h-7 w-full cursor-pointer appearance-none grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-0 bg-transparent p-0 pr-2.5 pl-0.5 font-mono text-sm leading-7 text-left text-inherit focus-visible:shadow-[inset_var(--focus-ring)] focus-visible:outline-none${isCurrent ? " current" : ""}${expanded ? " expanded" : ""}`}
                       aria-expanded={expanded}
                       aria-describedby={
                         hover?.commit.hash === commit.hash
@@ -935,42 +935,42 @@ export function SourceControlGraph(props: GitGraphProps) {
                       onMouseLeave={handleRowMouseLeave}
                     >
                       <GraphLanes row={row} current={isCurrent} />
-                      <span className="git-history-label">
-                        <span className="git-history-msg">
+                      <span className="flex min-w-0 items-baseline gap-2.5 overflow-hidden">
+                        <span className="flex min-w-0 flex-[1_1_auto] items-center overflow-hidden whitespace-nowrap text-[var(--git-panel-fg)]">
                           <Twistie open={expanded} />
                           {commit.message}
                         </span>
-                        <span className="git-history-author">
+                        <span className="min-w-[48px] flex-[0_1_78px] truncate font-mono text-xs text-[var(--git-desc-fg)]">
                           {commit.authorName}
                         </span>
                       </span>
                       {ref && (
-                        <span className={`git-ref git-ref-${ref.kind}`}>
+                        <span className={`max-w-[108px] truncate rounded-full border border-current px-[7px] font-mono text-xs font-medium leading-[18px]${ref.kind === "branch" ? " text-[var(--git-modified)]" : " text-[var(--git-conflict)]"}`}>
                           {ref.label}
                         </span>
                       )}
                     </button>
                     {expanded && (
-                      <div className="git-history-children">
+                      <div className="min-w-0">
                         {detailState?.loading && (
-                          <div className="git-history-detail-status">
+                          <div className="grid min-h-[26px] grid-cols-[auto_minmax(0,1fr)_16px] items-center gap-2 px-2.5 pl-0.5 font-mono text-[13px] leading-[26px] text-[var(--git-desc-fg)]">
                             <GraphContinuation row={row} />
-                            <span>
-                              <Loader2 size={13} className="git-spin" />{" "}
+                            <span className="flex min-w-0 items-center gap-[5px] truncate">
+                              <Loader2 size={13} className="animate-spin" />{" "}
                               {t("git.loadingCommitFiles")}
                             </span>
                           </div>
                         )}
                         {detailState?.error && !detailState.loading && (
-                          <div className="git-history-detail-status error">
+                          <div className="grid min-h-[26px] grid-cols-[auto_minmax(0,1fr)_16px] items-center gap-2 px-2.5 pl-0.5 font-mono text-[13px] leading-[26px] text-[var(--git-desc-fg)] text-[var(--color-danger)]">
                             <GraphContinuation row={row} />
-                            <span>{detailState.error}</span>
+                            <span className="flex min-w-0 items-center gap-[5px] truncate">{detailState.error}</span>
                           </div>
                         )}
                         {detailState?.detail && commitFiles.length === 0 && (
-                          <div className="git-history-detail-status">
+                          <div className="grid min-h-[26px] grid-cols-[auto_minmax(0,1fr)_16px] items-center gap-2 px-2.5 pl-0.5 font-mono text-[13px] leading-[26px] text-[var(--git-desc-fg)]">
                             <GraphContinuation row={row} />
-                            <span>{t("git.noCommitFiles")}</span>
+                            <span className="flex min-w-0 items-center gap-[5px] truncate">{t("git.noCommitFiles")}</span>
                           </div>
                         )}
                         {commitFiles.map((file) => (
@@ -992,7 +992,7 @@ export function SourceControlGraph(props: GitGraphProps) {
               {commits.length === loadCount && commits.length > 0 && (
                 <Button
                   type="button"
-                  variant="ghost" size="sm" className="git-load-more-btn h-auto w-full justify-center py-2 text-xs"
+                  variant="ghost" size="sm" className="w-full border border-dashed border-border-subtle py-2 text-xs text-text-secondary transition-colors duration-150 hover:bg-bg-hover hover:text-text-primary"
                   onClick={() => {
                     setLoadCount((prev) => prev + 30);
                   }}
@@ -1030,7 +1030,7 @@ export function SourceControlGraph(props: GitGraphProps) {
                   }
                 >
                   {contextMenuLoading === "cherryPick" ? (
-                    <Loader2 size={14} className="git-spin" />
+                    <Loader2 size={14} className="animate-spin" />
                   ) : (
                     <GitBranch size={14} />
                   )}
@@ -1051,7 +1051,7 @@ export function SourceControlGraph(props: GitGraphProps) {
                   }
                 >
                   {contextMenuLoading === "revert" ? (
-                    <Loader2 size={14} className="git-spin" />
+                    <Loader2 size={14} className="animate-spin" />
                   ) : (
                     <RotateCcw size={14} />
                   )}
@@ -1074,7 +1074,7 @@ export function SourceControlGraph(props: GitGraphProps) {
                   }
                 >
                   {contextMenuLoading === "resetSoft" ? (
-                    <Loader2 size={14} className="git-spin" />
+                    <Loader2 size={14} className="animate-spin" />
                   ) : null}
                   {t("git.resetSoft")}
                 </DropdownMenuItem>
@@ -1094,7 +1094,7 @@ export function SourceControlGraph(props: GitGraphProps) {
                   }
                 >
                   {contextMenuLoading === "resetMixed" ? (
-                    <Loader2 size={14} className="git-spin" />
+                    <Loader2 size={14} className="animate-spin" />
                   ) : null}
                   {t("git.resetMixed")}
                 </DropdownMenuItem>
@@ -1148,7 +1148,7 @@ export function SourceControlGraph(props: GitGraphProps) {
                   }}
                 >
                   {contextMenuLoading === "drop" ? (
-                    <Loader2 size={14} className="git-spin" />
+                    <Loader2 size={14} className="animate-spin" />
                   ) : null}
                   {t("git.dropCommit")}
                 </DropdownMenuItem>

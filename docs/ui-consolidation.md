@@ -79,6 +79,26 @@ collapsible/resizable/scroll-area/alert-dialog/sonner/input/textarea/confirm-dia
 迁移中的坑：组合变体（`.config-im-bot-card.connected` 覆盖基础类 border-color）会被 utility 层覆盖，
 必须在 JSX 同步改为 utility 条件类；后代选择器（`.config-form-row label`、`.config-test-result-row > span`）
 会放大迁移面，留待手动批次。
+| git-smart-commit + 死类终清 | 9 处 + 14 条 | 14 条+ | 智能提交弹窗（CSS 已死，纯类名清理 + Button variant 化）；git-action-btn/git-compare-btn 类清理；组合选择器残留规则保守保留（活类锚点依赖，如 current 行粗体）；修复误删 git-drawer-detail（App.tsx 引用） |
+
+| GitGraph（history + SVG + hover 卡） | 33 处 | 7 条+ | 历史列表/行（grid 布局 + ref 徽章条件色）、提交文件行、加载更多按钮、SVG 图区（vector-effect 任意变体）、hover 详情卡（portal 定位 + 局部 --git-* 变量覆盖用任意属性）；git-history-row/file-row 类保留作状态色锚点；测试断言 8 处同步 |
+
+| GitResourceTree | 22 处 | 10 条+ | 目录头/chevron/文件图标/stage 符号/资源行（group-hover 操作按钮显隐）/分组头；`git-resource-row` 类保留作状态色锚点（status-* 规则依赖）；测试断言同步 |
+
+| git-pane 布局 + twistie | 9 处 | 2 条+ | pane 动态高度（open/collapsed 条件类 h-[calc(var(--git-pane-height)+26px)]）、pane-body/changes/resource-list/graph/compare 容器、sash 拖拽条（保留类依赖 body 状态规则）、twistie 箭头（before:content 伪元素）；组合选择器规则保守保留 |
+
+| git-scm-input / git-commit | 5 处 | 7 条 | 提交输入区（textarea 用 git 面板变量 arbitrary value、生成消息按钮补边框/背景、提交按钮补 flex-1） |
+
+| git-branch 系列 | 13 处 | 22 条 | 分支栏/触发器/下拉/创建表单死类清理（JSX 已 utility 化，补 max-width/tabular-nums/rotate 等缺失 utility）；active 态 → utility 条件类 |
+
+| GitPanelControls（pane header + compact filter） | 11 处 | 15 条 | PaneHeader 布局类清理（JSX 已 utility 化）；自绘筛选下拉 → Button + utility（fixed 菜单 + portal）；测试断言同步更新 |
+
+| git-spin + compare 布局 | 20 处 | 5 条 | 加载旋转 → `animate-spin`（17 处）；compare 箭头/摘要/文件区 → utility；`git-compare-controls`（含后代选择器）留待下批 |
+
+| config-enabled-models（末组） | 24 处 | 32 条 | SettingsTab 启用模型多选下拉（tags/tag-remove→Button/dropdown/glob/option/checkbox selected 条件类/provider 分组折叠）；config 域全部清零 |
+
+| config-api-type / rename-input / advanced-preserved | 8 处 | 9 条 | 宽菜单定制（w-[1200px]）、重命名输入、高级字段保留区；同步更新 i18n 结构断言测试 |
+
 | config-model 系列 | 15 处 | 17 条 | 模型选择器（搜索/全选/chip 列表 selected/configured 条件类）；dropdown-row/advanced-note；`config-model-list-actions` 共享块保留 |
 
 | config-provider card/list/form | 11 处 | 11 条 | ModelsTab/AuthTab 提供商卡片列表（expanded 展开态条件类含 overflow-visible）；`.config-provider-card.expanded` 组合规则保守保留 |

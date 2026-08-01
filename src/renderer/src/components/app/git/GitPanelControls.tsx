@@ -8,6 +8,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { Check, ChevronDown } from "lucide-react";
+import { Button } from "../../ui-shadcn/button";
 import { Twistie } from "./GitResourceTree";
 import { getViewportBoundMenuPlacement } from "./floatingMenuPosition";
 
@@ -20,22 +21,22 @@ export function PaneHeader(props: {
   children?: ReactNode;
 }) {
   return (
-    <div className="git-pane-header flex h-8 shrink-0 items-center gap-1 border-b border-border bg-background px-2">
+    <div className="flex h-8 shrink-0 items-center gap-1 border-b border-border bg-background px-2">
       <button
         type="button"
-        className="git-pane-header-toggle inline-flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-1 py-0.5 text-left text-xs font-medium text-foreground hover:bg-accent"
+        className="inline-flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-1 py-0.5 text-left text-xs font-medium text-foreground hover:bg-accent"
         aria-expanded={props.open}
         aria-controls={`git-pane-${props.id}`}
         onClick={props.onToggle}
       >
         <Twistie open={props.open} />
-        <span className="git-pane-title truncate">{props.title}</span>
+        <span className="min-w-0 flex-1 truncate font-mono text-[13px] font-semibold tracking-normal uppercase text-[var(--git-panel-fg)]">{props.title}</span>
       </button>
       {props.children && (
-        <div className="git-pane-header-actions flex shrink-0 items-center gap-0.5">{props.children}</div>
+        <div className="flex shrink-0 items-center gap-0.5">{props.children}</div>
       )}
       {typeof props.count === "number" && props.count > 0 && (
-        <span className="git-pane-count inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-muted px-1.5 text-[11px] font-medium text-muted-foreground">{props.count}</span>
+        <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-muted px-1.5 text-[11px] font-medium text-muted-foreground">{props.count}</span>
       )}
     </div>
   );
@@ -123,7 +124,7 @@ export function GitCompactFilter(props: {
   const menuElement = open ? (
     <div
       ref={menuRef}
-      className="git-compact-filter-menu"
+      className="fixed min-w-0 max-w-[calc(100vw-16px)] max-h-[calc(100vh-16px)] overflow-auto border border-border-strong bg-bg-panel p-1 shadow-[var(--shadow-lg),0_0_0_1px_rgba(0,0,0,0.04)_inset] rounded-md"
       role="listbox"
       style={menuStyle}
     >
@@ -131,7 +132,7 @@ export function GitCompactFilter(props: {
         <button
           key={option.value}
           type="button"
-          className={`git-compact-filter-opt${option.value === props.value ? " active" : ""}`}
+          className={`flex min-h-7 w-full min-w-0 cursor-pointer items-center gap-1.5 rounded-sm border-none bg-transparent px-2 py-[5px] text-left text-xs leading-[18px] text-text-primary hover:bg-[color:color-mix(in_srgb,var(--color-text-primary)_8%,var(--color-bg-panel))]${option.value === props.value ? " font-semibold text-[color:var(--color-accent)]" : ""}`}
           role="option"
           aria-selected={option.value === props.value}
           title={option.label}
@@ -140,11 +141,11 @@ export function GitCompactFilter(props: {
             closeMenu();
           }}
         >
-          <span className="git-compact-filter-opt-label">
+          <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">
             {option.label}
           </span>
           {option.value === props.value && (
-            <Check size={12} className="git-compact-filter-check" />
+            <Check size={12} className="ml-auto shrink-0 text-[color:var(--color-accent)]" />
           )}
         </button>
       ))}
@@ -154,12 +155,14 @@ export function GitCompactFilter(props: {
   return (
     <div
       ref={containerRef}
-      className={`git-compact-filter${props.className ? ` ${props.className}` : ""}`}
+      className={`relative inline-flex${props.className ? ` ${props.className}` : ""}`}
     >
-      <button
+      <Button
         ref={buttonRef}
         type="button"
-        className="git-compact-filter-btn"
+        variant="ghost"
+        size="sm"
+        className="h-6 min-w-0 gap-1 overflow-hidden rounded-sm border border-transparent px-2 font-mono text-[13px] whitespace-nowrap text-text-primary transition-[border-color,background-color] duration-150 hover:border-border-subtle hover:bg-bg-hover focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
         aria-label={props.ariaLabel}
         aria-haspopup="listbox"
         aria-expanded={open}
@@ -175,14 +178,14 @@ export function GitCompactFilter(props: {
           }
         }}
       >
-        <span className="git-compact-filter-label">
+        <span className="max-w-[80px] truncate">
           {selected?.label ?? props.value}
         </span>
         <ChevronDown
           size={12}
-          className={`git-compact-filter-chevron${open ? " open" : ""}`}
+          className={`shrink-0 text-text-tertiary transition-transform duration-150${open ? " rotate-180" : ""}`}
         />
-      </button>
+      </Button>
       {menuElement && createPortal(menuElement, document.body)}
     </div>
   );

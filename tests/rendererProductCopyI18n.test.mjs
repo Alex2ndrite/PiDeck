@@ -161,7 +161,7 @@ test("reachable renderer surfaces use i18n without changing their UI structure",
 	assert.match(skillHub, /className="skillhub-installed-badge"[\s\S]*?t\("config\.installed"\)/);
 	assert.match(promptStore, /className=\{`prompts-tab-btn[\s\S]*?t\("config\.promptStoreChinesePicks"\)/);
 	assert.match(extensions, /className="extensions-recommended-desc">[\s\S]*?t\(pkg\.descriptionKey\)/);
-	assert.match(configShared, /className="config-api-type-desc">\{getApiTypeDescription\(option\)\}/);
+	assert.match(configShared, /getApiTypeDescription\(option\)/);
 	assert.match(providerHeaders, /label: t\("config\.userAgentBrowser"\)/);
 	assert.match(queuedPrompt, /unknownDeliveryMessage = t\("app\.queuedDeliveryUnknown"\)/);
 

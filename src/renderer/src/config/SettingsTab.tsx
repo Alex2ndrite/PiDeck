@@ -440,24 +440,26 @@ function EnabledModelsInput(props: {
 	const hasResults = providerNames.length > 0 || isGlob;
 
 	return (
-		<div ref={containerRef} className="config-enabled-models">
-			<div className="config-enabled-models-tags" onClick={() => setOpen(true)}>
+		<div ref={containerRef} className="relative min-w-0 flex-1">
+			<div className="flex min-h-[38px] cursor-pointer flex-wrap items-center gap-1.5 rounded-sm border border-border-subtle bg-bg-panel px-2.5 py-[5px] transition-colors duration-150 hover:border-border-strong" onClick={() => setOpen(true)}>
 				{[...selected].map((id) => (
-					<span key={id} className="config-enabled-models-tag">
+					<span key={id} className="inline-flex h-6 items-center gap-[3px] rounded-full border border-[color-mix(in_srgb,var(--color-accent)_24%,var(--color-border-subtle))] bg-[color:color-mix(in_srgb,var(--color-accent)_8%,var(--color-bg-panel))] pl-[9px] pr-[5px] font-mono text-xs leading-[18px] whitespace-nowrap text-text-primary">
 						<span>{id}</span>
-						<button
+						<Button
 							type="button"
-							className="config-enabled-models-tag-remove"
+							variant="ghost"
+							size="icon-xs"
+							className="rounded-full border-0 bg-transparent text-text-tertiary hover:bg-[color:color-mix(in_srgb,var(--color-danger)_16%,transparent)] hover:text-[color:var(--color-danger)]"
 							onClick={(e) => {
 								e.stopPropagation();
 								removeSelected(id);
 							}}
 						>
 							<X size={12} />
-						</button>
+						</Button>
 					</span>
 				))}
-				<span className="config-enabled-models-trigger-text">
+				<span className="text-xs leading-[18px] text-text-tertiary">
 					{selected.size === 0
 						? t("config.settings.enabledModelsPlaceholder")
 						: `${selected.size} ${t("config.settings.enabledModelsSelected")}`}
@@ -465,38 +467,39 @@ function EnabledModelsInput(props: {
 			</div>
 
 			{open && (
-				<div className="config-enabled-models-dropdown">
-					<div className="config-enabled-models-dropdown-search">
+				<div className="absolute top-[calc(100%+2px)] right-0 left-0 z-[100] overflow-hidden rounded-md border border-border-subtle bg-bg-panel shadow-[var(--shadow-popover)]">
+					<div className="border-b border-border-subtle p-2">
 						<input
 							autoFocus
 							value={filter}
 							onChange={(e) => setFilter(e.target.value)}
 							placeholder={t("config.settings.enabledModelsSearchPlaceholder")}
+							className="h-8 w-full rounded-sm border border-border-subtle bg-bg-panel px-2.5 text-[13px] text-text-primary outline-none placeholder:text-text-tertiary focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]"
 						/>
 					</div>
-					<div className="config-enabled-models-dropdown-list">
+					<div className="max-h-[240px] overflow-y-auto">
 						{/* glob 模式行：输入含 * 或 ? 时显示，可勾选为自定义模式 */}
 						{filter && isGlob && (
-							<div className="config-enabled-models-glob-row">
+							<div className="px-2 py-0.5">
 								<button
 									type="button"
-									className={`config-enabled-models-glob-add${selected.has(filter) ? " selected" : ""}`}
+									className={`flex w-full cursor-pointer items-center gap-2 rounded-sm border border-dashed border-[var(--color-accent)] bg-[color:color-mix(in_srgb,var(--color-accent)_6%,transparent)] px-2 py-[7px] text-[13px] text-text-primary transition-colors duration-100 hover:bg-[color:color-mix(in_srgb,var(--color-accent)_12%,transparent)]${selected.has(filter) ? " border-[var(--color-danger)] bg-[color:color-mix(in_srgb,var(--color-danger)_6%,transparent)]" : ""}`}
 									onClick={() => toggleModel(filter)}
 								>
-									<span className="config-enabled-models-checkbox">
+									<span className="flex size-[18px] shrink-0 items-center justify-center rounded-[4px] border-[1.5px] border-border-strong text-[color:var(--color-accent)] transition-[border-color,background-color] duration-100 group-hover:border-[var(--color-accent)]">
 										{selected.has(filter) && <Check size={12} />}
 									</span>
-									<span className="config-enabled-models-glob-label">{filter}</span>
-									<span className="config-enabled-models-glob-hint">{t("config.settings.enabledModelsGlobHint")}</span>
+									<span className="font-mono text-xs">{filter}</span>
+									<span className="ml-auto font-mono text-[11px] text-text-tertiary">{t("config.settings.enabledModelsGlobHint")}</span>
 								</button>
 							</div>
 						)}
 						{hasResults && providerNames.map((provider) => (
-							<div key={provider} className="config-enabled-provider-group">
+							<div key={provider} className="border-b border-border-subtle last:border-none">
 								{/* 供应商分组头：点击折叠/展开 */}
 								<button
 									type="button"
-									className={`config-enabled-provider-header${collapsed.has(provider) ? " collapsed" : ""}`}
+									className={`flex w-full cursor-pointer items-center gap-2 border-0 bg-bg-hover px-3 py-2 text-left text-[13px] font-medium text-text-primary transition-colors duration-100 before:mr-1 before:text-[9px] before:text-text-tertiary before:transition-transform before:duration-150 before:content-['▾'] hover:bg-bg-active${collapsed.has(provider) ? " before:rotate-[-90deg]" : ""}`}
 									onClick={() => {
 										setCollapsed((prev) => {
 											const next = new Set(prev);
@@ -506,26 +509,26 @@ function EnabledModelsInput(props: {
 										});
 									}}
 								>
-									<span className="config-enabled-provider-name">{provider}</span>
-									<span className="config-enabled-provider-count">{grouped[provider].length}</span>
+									<span className="flex-1">{provider}</span>
+									<span className="font-mono text-[11px] text-text-tertiary">{grouped[provider].length}</span>
 								</button>
 								{!collapsed.has(provider) && grouped[provider].map((m) => (
 									<label
 										key={`${m.provider}/${m.id}`}
-										className={`config-enabled-models-option${selected.has(m.id) ? " selected" : ""}`}
+										className={`group flex cursor-pointer items-center gap-2 py-[7px] pr-3 pl-7 transition-colors duration-100 hover:bg-bg-hover${selected.has(m.id) ? " bg-[color:color-mix(in_srgb,var(--color-accent)_6%,var(--color-bg-panel))]" : ""}`}
 										onClick={() => toggleModel(m.id)}
 									>
-										<span className="config-enabled-models-checkbox">
+										<span className={`flex size-[18px] shrink-0 items-center justify-center rounded-[4px] border-[1.5px] border-border-strong text-[color:var(--color-accent)] transition-[border-color,background-color] duration-100 group-hover:border-[var(--color-accent)]${selected.has(m.id) ? " border-[var(--color-accent)] bg-[var(--color-accent)] text-white" : ""}`}>
 											{selected.has(m.id) && <Check size={12} />}
 										</span>
-										<span className="config-enabled-model-label">{m.name ?? m.id}</span>
-										<span className="config-enabled-model-provider">{m.provider}/{m.id}</span>
+										<span className="text-[13px] text-text-primary">{m.name ?? m.id}</span>
+										<span className="ml-auto font-mono text-xs text-text-tertiary">{m.provider}/{m.id}</span>
 									</label>
 								))}
 							</div>
 						))}
 						{!hasResults && (
-							<div className="config-enabled-models-empty">{t("app.modelPickerEmpty")}</div>
+							<div className="p-4 text-center text-xs text-text-tertiary">{t("app.modelPickerEmpty")}</div>
 						)}
 					</div>
 				</div>

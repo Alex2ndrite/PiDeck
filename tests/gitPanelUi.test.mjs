@@ -65,9 +65,9 @@ const gitKeys = [
 describe("Git panel VS Code Source Control contract", () => {
   test("uses a CSS triangle twistie without structural icon imports", () => {
     const twistie = sourceBetween("function Twistie(", "function GitStageGlyph(");
-    assert.match(twistie, /<span\s+className=\{`git-twistie\$\{open \? " open" : ""\}`\}\s+aria-hidden="true"\s*\/>/);
-    assert.match(styles, /\.git-twistie::before\s*\{\s*content:\s*"\\25B6"/);
-    assert.doesNotMatch(twistie, /ChevronDown|ChevronRight|GitBranch|GitCommit|GitCompare|GitGraph|Ellipsis|Minus|Plus/);
+    assert.match(twistie, /before:content-\['▶'\]/);
+    assert.doesNotMatch(twistie, /\.git-twistie/);
+assert.doesNotMatch(twistie, /ChevronDown|ChevronRight|GitBranch|GitCommit|GitCompare|GitGraph|Ellipsis|Minus|Plus/);
   });
 
   test("uses exactly three independently collapsible persisted panes with Changes open by default", () => {
@@ -80,7 +80,7 @@ describe("Git panel VS Code Source Control contract", () => {
     assert.match(graph, /id="git-pane-graph"/);
     assert.match(panel, /id="git-pane-compare"/);
     assert.match(styles, /\.git-panel\s*\{[\s\S]*?overflow:\s*hidden/);
-    assert.match(styles, /\.git-pane-body\s*\{[\s\S]*?overflow:\s*auto/);
+    assert.match(panel, /min-h-0 flex-1 overflow-x-hidden overflow-y-auto/);
   });
 
   test("provides visible-adjacent pointer and keyboard-accessible resize sashes", () => {
@@ -102,11 +102,10 @@ describe("Git panel VS Code Source Control contract", () => {
     assert.match(panel, /\[\.\.\.groups\.workingTree, \.\.\.groups\.untracked\]/);
     assert.match(panel, /groups\.merge\.length \+ stagedCount \+ workingChanges\.length/);
     assert.match(resourceTree, /function GitStageGlyph/);
-    assert.match(resourceTree, /git-stage-action/);
-    assert.match(styles, /\.git-stage-glyph\s*\{[\s\S]*?font-size:\s*20px/);
-    assert.match(styles, /\.git-stage-action\s*\{\s*width:\s*26px;\s*height:\s*24px/);
-    assert.match(styles, /\.git-decoration\s*\{[\s\S]*?width:\s*16px/);
-    assert.match(styles, /margin-left:\s*5px/);
+    assert.match(resourceTree, /size-7\$/);
+    assert.match(resourceTree, /text-xl font-medium/);
+    assert.match(resourceTree, /w-4 shrink-0/);
+    assert.match(resourceTree, /ml-\[5px\]/);
     assert.match(resourceTree, /case GitStatus\.INDEX_ADDED:/);
     assert.match(resourceTree, /case GitStatus\.BOTH_MODIFIED:/);
     assert.doesNotMatch(gitSurface, /status === [0-9]/);
@@ -115,7 +114,7 @@ describe("Git panel VS Code Source Control contract", () => {
   test("renders SVG graph lanes and does not retain the old fixed graph height", () => {
     assert.match(graph, /function GraphLanes/);
     assert.match(graph, /function buildGraphRows/);
-    assert.match(graph, /<svg\s+className="git-graph-svg"/);
+    assert.match(graph, /<svg\s+className="block max-w-none/);
     assert.match(graph, /const GRAPH_ROW_HEIGHT = 28/);
     assert.match(graph, /lastNodeIndex\(\s*output,\s*commit\.parents\[parentIndex\],\s*\)/);
     assert.match(gitService, /"--topo-order"/);
@@ -174,23 +173,20 @@ describe("Git panel VS Code Source Control contract", () => {
     assert.match(i18n, /"git\.smartCommitPrompt"/);
     assert.match(i18n, /"git\.smartCommitAlways"/);
     assert.match(i18n, /"git\.smartCommitNever"/);
-    assert.match(graph, /git-history-author/);
+    assert.match(graph, /min-w-\[48px\] flex-\[0_1_78px\]/);
     assert.doesNotMatch(graph, /git-history-date/);
     assert.doesNotMatch(graph, /selectedHash/);
     assert.doesNotMatch(graph, /git-commit-detail/);
     assert.match(styles, /grid-template-columns:\s*auto minmax\(0, 1fr\) auto/);
     assert.match(styles, /font-size:\s*var\(--font-size-body\)/);
-    const compactFilterMenu = cssRule("\\.git-compact-filter-menu");
-    assert.match(compactFilterMenu, /position:\s*fixed/);
-    assert.match(compactFilterMenu, /max-width:\s*calc\(100vw - var\(--space-4\)\)/);
-    assert.match(panelControls, /getViewportBoundMenuPlacement/);
+    const compactFilterMenu = cssRule("\.git-compact-filter-menu");
+    assert.match(panelControls, /className="fixed min-w-0 max-w-\[calc\(100vw-16px\)\] max-h-\[calc\(100vh-16px\)\]/);
     assert.match(panelControls, /menuRef\.current\?\.contains\(target\)/);
     assert.match(panel, /getViewportBoundMenuPlacement/);
     assert.match(panel, /preferredWidth:\s*240/);
     assert.match(panel, /branchDropdownRef\.current\?\.contains\(target\)/);
-    const compactFilterButton = cssRule("\\.git-compact-filter-btn");
-    assert.match(compactFilterButton, /min-width:\s*0/);
-    assert.match(compactFilterButton, /overflow:\s*hidden/);
+    const compactFilterButton = cssRule("\.git-compact-filter-btn");
+    assert.match(panelControls, /min-w-0 gap-1 overflow-hidden/);
   });
 
   test("runs silent refreshes without overlapping slow status requests", () => {
@@ -221,12 +217,12 @@ describe("Git panel VS Code Source Control contract", () => {
     assert.doesNotMatch(graph, /onFocus=\{\(event\) => scheduleHover/);
     assert.match(graph, /void loadCommitDetail\(commit\.hash\)/);
     assert.match(graph, /detailRequests\.current\.get\(hash\)/);
-    assert.match(styles, /\.git-commit-hover\s*\{[\s\S]*?pointer-events:\s*none/);
+    assert.match(graph, /pointer-events-none absolute z-\[1800\]/);
     assert.match(graph, /onMouseEnter=\{handleCardMouseEnter\}/);
     assert.match(graph, /onMouseLeave=\{handleCardMouseLeave\}/);
     assert.match(graph, /role="list"/);
     assert.match(graph, /role="listitem"/);
-    assert.match(graph, /className=\{`git-history-row/);
+    assert.match(graph, /className=\{`git-history-row grid h-7/);
     assert.match(graph, /type="button"/);
     assert.match(graph, /aria-expanded=\{expanded\}/);
     assert.doesNotMatch(graph, /role="tree"/);
@@ -238,8 +234,8 @@ describe("Git panel VS Code Source Control contract", () => {
     assert.match(app, /gitApi:/);
     assert.match(app, /commitDetail=\{git\.gitApi\.commitDetail\}/);
     assert.match(preload, /Promise<CommitDetail \| null>/);
-    assert.match(styles, /\.git-commit-hover\s*\{/);
-    assert.match(styles, /\.git-history-file-row/);
+    assert.match(graph, /\[--git-panel-bg:var\(--color-bg-panel\)\]/);
+    assert.match(graph, /git-history-file-row grid min-h-\[26px\]/);
   });
 
   test("opens committed files as isolated read-only first-parent diffs", () => {
@@ -257,11 +253,11 @@ describe("Git panel VS Code Source Control contract", () => {
     assert.match(gitService, /4b825dc642cb6eb9a060e54bf8d69288fbee4904/);
     assert.match(gitService, /file\.originalPath \?\? file\.path/);
     assert.match(i18n, /"git\.openFileDiff"/);
-    assert.match(styles, /\.git-history-file-row:focus-visible/);
+    assert.match(graph, /focus-visible:shadow-\[inset_var\(--focus-ring\)\]/);
   });
 
   test("opens workspace resources lazily without replacing the Git drawer", () => {
-    assert.match(resourceTree, /className="git-resource-open"/);
+    assert.match(resourceTree, /focus-visible:shadow-\[inset_var\(--focus-ring\)\]/);
     assert.match(resourceTree, /onOpenWorkspaceFileDiff\(props\.groupType, r\.path\)/);
     assert.match(panel, /groupType="merge"/);
     assert.match(panel, /groupType="index"/);
@@ -282,7 +278,7 @@ describe("Git panel VS Code Source Control contract", () => {
     assert.match(gitService, /group === "untracked"/);
     assert.match(gitService, /group === "index"/);
     assert.match(gitService, /group === "workingTree"/);
-    assert.match(styles, /\.git-resource-open:focus-visible/);
+    assert.match(resourceTree, /disabled:cursor-progress disabled:opacity-70/);
     assert.match(i18n, /"git\.openWorkspaceDiff"/);
   });
 

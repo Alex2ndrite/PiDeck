@@ -239,7 +239,7 @@ export function ApiTypeInput(props: {
 				<ChevronDown size={14} />
 			</Button>
 			{open && (
-				<div className="absolute top-[calc(100%+4px)] right-0 left-0 z-30 max-h-[220px] overflow-y-auto rounded-lg border border-border-subtle bg-bg-panel p-[5px] shadow-[var(--shadow-popover)] config-api-type-menu">
+				<div className="absolute top-[calc(100%+4px)] right-0 left-0 z-30 max-h-[320px] w-[1200px] max-w-[calc(100vw-40px)] overflow-y-auto rounded-lg border border-border-subtle bg-bg-panel p-[5px] shadow-[var(--shadow-popover)]">
 					{PROVIDER_API_OPTIONS.map((option) => (
 						<Button
 							key={option}
@@ -253,8 +253,8 @@ export function ApiTypeInput(props: {
 								setOpen(false);
 							}}
 						>
-							<span className="config-api-type-label">{API_TYPE_LABELS[option] || option}</span>
-							<small className="config-api-type-desc">{getApiTypeDescription(option)}</small>
+							<span className="text-[13px] font-semibold">{API_TYPE_LABELS[option] || option}</span>
+							<small className="text-[11px] leading-[1.4] text-text-tertiary">{getApiTypeDescription(option)}</small>
 						</Button>
 					))}
 				</div>

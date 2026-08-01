@@ -96,17 +96,17 @@ export function FileTree(props: {
 				<Fragment key={dir || "root"}>
 					{!isSingleRoot && (
 						<div
-							className="git-tree-directory"
+							className="flex cursor-pointer items-center gap-1 rounded-[4px] px-2 py-[3px] select-none hover:bg-[var(--git-panel-hover)]"
 							onClick={() => props.onToggleDir(dir)}
 						>
 							<ChevronDown
 								size={12}
-								className={`git-tree-chevron${props.collapsedDirs.has(dir) ? "" : " open"}`}
+								className={`shrink-0 text-text-tertiary transition-transform duration-150${props.collapsedDirs.has(dir) ? " -rotate-90" : " rotate-0"}`}
 							/>
-							<span className="git-tree-directory-name" title={dir || "/"}>
+							<span className="min-w-0 flex-1 truncate font-mono text-xs text-text-secondary" title={dir || "/"}>
 								{shortenDir(dir) || "/"}
 							</span>
-							<span className="git-tree-directory-count">{resources.length}</span>
+							<span className="ml-auto px-1 font-mono text-[11px] text-text-tertiary">{resources.length}</span>
 						</div>
 					)}
 					{(!props.collapsedDirs.has(dir) || isSingleRoot) && resources.map((r) => {
@@ -210,14 +210,14 @@ export function FileIcon({ name }: { name: string }) {
     return (
       <span
         aria-hidden="true"
-        className="git-file-icon"
+        className="mr-1.5 inline-flex size-5 shrink-0 items-center justify-center [&_svg]:size-full [&_svg]:fill-current"
         style={{ color: getFileIconColor(colorName) }}
         dangerouslySetInnerHTML={{ __html: svg }}
       />
     );
   } catch {
     return (
-      <span aria-hidden="true" className="git-file-icon git-file-fallback" />
+      <span aria-hidden="true" className="mr-1.5 box-border inline-flex size-3 shrink-0 items-center justify-center rounded-[4px] border border-[var(--git-desc-fg)] [&_svg]:size-full [&_svg]:fill-current" />
     );
   }
 }
@@ -225,13 +225,13 @@ export function FileIcon({ name }: { name: string }) {
 /** Mirrors VS Code's monaco-tl-twistie without importing structural icons. */
 export function Twistie({ open }: { open: boolean }) {
   return (
-    <span className={`git-twistie${open ? " open" : ""}`} aria-hidden="true" />
+    <span className={`inline-flex size-3.5 shrink-0 items-center justify-center text-[9px] text-[var(--git-desc-fg)] before:block before:content-['▶'] before:transition-transform before:duration-150${open ? " before:rotate-0" : " before:-rotate-90"}`} aria-hidden="true" />
   );
 }
 
 function GitStageGlyph({ unstage = false }: { unstage?: boolean }) {
   return (
-    <span className="git-stage-glyph" aria-hidden="true">
+    <span className="flex size-5 items-center justify-center font-sans text-xl font-medium leading-5 -translate-y-px" aria-hidden="true">
       {unstage ? "\u2212" : "+"}
     </span>
   );
@@ -259,11 +259,11 @@ export function ResourceRow(props: {
     ? compareStatusLetter(props.compareStatus)
     : props.letter;
   return (
-    <div className={`git-resource-row ${tone}`} title={props.path}>
+    <div className={`group git-resource-row flex h-[26px] items-center pr-[7px] font-mono text-sm leading-[26px] hover:bg-[var(--git-panel-hover)] focus-within:bg-[var(--git-panel-hover)] ${tone}`} title={props.path}>
       {props.onOpen ? (
         <button
           type="button"
-          className="git-resource-open"
+          className="flex h-[26px] min-w-0 flex-1 cursor-pointer appearance-none items-center border-0 bg-transparent p-0 pl-3 text-left font-inherit focus-visible:shadow-[inset_var(--focus-ring)] focus-visible:outline-none disabled:cursor-progress disabled:opacity-70"
           aria-label={t("git.openWorkspaceDiff", { path: props.path })}
           aria-busy={opening}
           disabled={opening}
@@ -277,20 +277,20 @@ export function ResourceRow(props: {
           }}
         >
           <FileIcon name={name} />
-          <span className="git-resource-name">{name}</span>
+          <span className="min-w-0 flex-[0_1_auto] truncate text-[var(--git-panel-fg)]">{name}</span>
         </button>
       ) : (
-        <div className="git-resource-open static">
+        <div className="flex h-[26px] min-w-0 flex-1 cursor-default items-center border-0 bg-transparent p-0 pl-3 text-left font-inherit">
           <FileIcon name={name} />
-          <span className="git-resource-name">{name}</span>
+          <span className="min-w-0 flex-[0_1_auto] truncate text-[var(--git-panel-fg)]">{name}</span>
         </div>
       )}
       {props.actions && props.actions.length > 0 && (
-        <div className="git-resource-actions">
+        <div className="invisible mr-1 flex flex-[0_0_auto] gap-px group-hover:visible group-focus-within:visible">
           {props.actions.map((action) => (
             <Button variant="ghost" size="icon"
               key={action.kind}
-              className={`git-action-btn${action.kind === "discard" ? " git-discard-action" : " git-stage-action"}`}
+              className={`size-7${action.kind === "discard" ? " hover:text-[var(--color-danger)]" : ""}`}
               aria-label={action.label} title={action.label}
               disabled={action.disabled}
               onClick={action.run}
@@ -304,8 +304,8 @@ export function ResourceRow(props: {
           ))}
         </div>
       )}
-      <span className="git-decoration" aria-hidden="true">
-        {opening ? <Loader2 size={13} className="git-spin" /> : letter}
+      <span className="ml-[5px] flex w-4 shrink-0 justify-end font-mono text-xs font-semibold text-right text-[var(--git-desc-fg)]" aria-hidden="true">
+        {opening ? <Loader2 size={13} className="animate-spin" /> : letter}
       </span>
     </div>
   );
@@ -322,22 +322,22 @@ export function ResourceGroup(props: {
   children: ReactNode;
 }) {
   return (
-    <div className={`git-resource-group${props.open ? " open" : ""}`}>
-      <div className="git-resource-group-header">
+    <div className={`border-b border-[var(--git-panel-border)] last:border-b-0${props.open ? " open" : ""}`}>
+      <div className="group flex h-[22px] items-center bg-transparent px-[7px] pl-[3px] hover:bg-[var(--git-panel-hover)]">
         <button
           type="button"
-          className="git-resource-group-toggle"
+          className="inline-flex h-[22px] min-w-0 flex-1 cursor-pointer items-center border-0 bg-transparent p-0 text-left text-inherit focus-visible:shadow-[inset_var(--focus-ring)] focus-visible:outline-none"
           aria-expanded={props.open}
           onClick={props.onToggle}
         >
           <Twistie open={props.open} />
-          <span className="git-resource-group-name">{props.title}</span>
+          <span className="ml-px min-w-0 flex-1 truncate font-mono text-[13px] font-semibold tracking-normal uppercase text-[var(--git-panel-fg)]">{props.title}</span>
         </button>
         {props.allAction && (
-          <div className="git-resource-group-actions">
+          <div className="hidden items-center gap-px group-hover:flex group-focus-within:flex">
             <Button
               type="button"
-              variant="ghost" size="icon-sm" className="git-action-btn git-stage-action size-7"
+              variant="ghost" size="icon-sm" className="size-7"
               aria-label={props.allLabel}
               title={props.allLabel}
               disabled={props.allDisabled}
@@ -347,10 +347,10 @@ export function ResourceGroup(props: {
             </Button>
           </div>
         )}
-        <span className="git-resource-group-count">{props.count}</span>
+        <span className="ml-1 min-w-[14px] text-right font-mono text-xs text-[var(--git-desc-fg)]">{props.count}</span>
       </div>
       {props.open && (
-        <div className="git-resource-group-body">{props.children}</div>
+        <div className="min-w-0">{props.children}</div>
       )}
     </div>
   );

@@ -238,7 +238,7 @@ export function ModelsTab(props: {
 	}, [data.providers, pendingModelFocusKey]);
 
 	return (
-		<div className="config-model-tab">
+		<div>
 			<div className="mb-3.5 flex items-center justify-between">
 				<span className="font-mono text-xs tabular-nums text-text-tertiary">
 					{t("config.count.providers", { count: providerNames.length })}
@@ -443,7 +443,7 @@ export function ModelsTab(props: {
 							<div className="flex min-w-0 flex-1 items-center gap-2.5">
 									{props.renamingProvider === name ? (
 										<input
-											className="config-rename-input"
+											className="h-[30px] min-w-[120px] rounded-sm border border-border-subtle bg-bg-panel px-2.5 text-sm font-semibold text-text-primary outline-none transition-colors duration-150 focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]"
 											value={props.renameValue}
 											onChange={(e) => props.onChangeRenameValue(e.target.value)}
 											onKeyDown={(e) => {
@@ -792,8 +792,8 @@ export function ModelsTab(props: {
 										</div>
 
 										{(providerComplexFields.length > 0 || providerAdvancedFields.length > 0) && (
-											<div className="config-advanced-preserved">
-												<strong>{t("config.advancedPreservedTitle")}</strong>
+											<div className="mt-1.5 mb-2.5 flex items-start gap-2.5 rounded-r-sm border-l-[3px] border-border-default bg-bg-muted px-3 py-2 text-text-secondary">
+												<strong className="min-w-[100px] shrink-0 whitespace-nowrap text-[11px] font-semibold text-text-primary">{t("config.advancedPreservedTitle")}</strong>
 												<span>
 													{t("config.advancedPreservedProvider", {
 														fields: [...providerComplexFields, ...providerAdvancedFields].join(", "),
@@ -803,7 +803,7 @@ export function ModelsTab(props: {
 														pi {t("config.docsModels")}
 													</a>
 													{" / "}
-													<a href="https://pi.dev/docs/latest/custom-provider" target="_blank" rel="noreferrer">
+													<a href="https://pi.dev/docs/latest/custom-provider" target="_blank" rel="noreferrer" className="font-medium text-[color:var(--color-accent)] no-underline hover:underline">
 														{t("config.docsCustomProvider")}
 													</a>
 												</span>
