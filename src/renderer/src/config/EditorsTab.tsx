@@ -86,11 +86,11 @@ export function EditorsTab() {
 		}));
 	};
 
-	if (!settings) return <div className="config-loading">{t("common.loading")}</div>;
+	if (!settings) return <div className="py-12 text-center text-[13px] text-text-tertiary">{t("common.loading")}</div>;
 
 	return (
 		<div className="editors-tab">
-			<div className="config-toolbar">
+			<div className="mb-3.5 flex items-center justify-between">
 				<div>
 					<strong>{t("editors.title")}</strong>
 					<p className="config-im-form-hint">{t("editors.hint")}</p>
@@ -99,7 +99,7 @@ export function EditorsTab() {
 					{detecting ? t("editors.detecting") : t("editors.redetect")}
 				</Button>
 			</div>
-			{error && <div className="config-error">{error}</div>}
+			{error && <div className="mb-3.5 rounded-sm border border-danger/20 bg-danger-soft px-3.5 py-2.5 text-[13px] leading-relaxed text-danger whitespace-pre-line">{error}</div>}
 			<div className="editors-list">
 				{SUPPORTED_EXTERNAL_EDITORS.map((editor) => {
 					const configured = settings.externalEditors[editor.id];

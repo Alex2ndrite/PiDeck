@@ -1103,14 +1103,14 @@ export function GitPanel(props: GitPanelProps) {
         {paneState.open.changes && (
           <div className="git-pane-body git-changes-body">
             {gitNotInstalled ? (
-              <div className="git-not-installed">
-                <div className="git-not-installed-icon">⚡</div>
-                <div className="git-not-installed-title">{t("git.gitNotInstalled")}</div>
-                <div className="git-not-installed-desc">{t("git.gitNotInstalledDesc")}</div>
+              <div className="flex flex-col items-center gap-3 px-4 py-10 text-center">
+                <div className="text-[32px] leading-none opacity-60">⚡</div>
+                <div className="text-sm font-semibold text-text-primary">{t("git.gitNotInstalled")}</div>
+                <div className="max-w-[360px] text-xs leading-[22px] text-text-tertiary">{t("git.gitNotInstalledDesc")}</div>
               </div>
             ) : notAGitRepo ? (
-              <div className="git-not-init">
-                <div className="git-not-init-prompt">{t("git.notAGitRepo")}</div>
+              <div className="flex flex-col items-center gap-4 px-4 py-8 text-center">
+                <div className="text-[13px] leading-[22px] text-[var(--git-desc-fg)]">{t("git.notAGitRepo")}</div>
                 <Button
                   type="button"
                   variant="ghost" size="sm" className="git-compare-btn h-auto px-2.5 text-[13px]"
@@ -1204,9 +1204,9 @@ export function GitPanel(props: GitPanelProps) {
             </div>
             )}
 
-            {error && <div className="git-status-msg error">{error}</div>}
+            {error && <div className="flex min-h-[22px] shrink-0 items-center gap-1 px-[9px] text-[13px] text-[var(--git-conflict)]">{error}</div>}
             {!loading && total === 0 && !error && (
-              <div className="git-status-msg">{t("git.noPendingChanges")}</div>
+              <div className="flex min-h-[22px] shrink-0 items-center gap-1 px-[9px] text-[13px] text-[var(--git-desc-fg)]">{t("git.noPendingChanges")}</div>
             )}
 
             <div className="git-resource-list">
@@ -1527,7 +1527,7 @@ function CompareChanges(props: {
               )}
             </Button>
           </div>
-          {error && <div className="git-status-msg error">{error}</div>}
+          {error && <div className="flex min-h-[22px] shrink-0 items-center gap-1 px-[9px] text-[13px] text-[var(--git-conflict)]">{error}</div>}
           {result && (
             <>
               <div className="git-compare-summary">
@@ -1551,7 +1551,7 @@ function CompareChanges(props: {
             </>
           )}
           {!result && !error && (
-            <div className="git-status-msg">{t("git.compareHint")}</div>
+            <div className="flex min-h-[22px] shrink-0 items-center gap-1 px-[9px] text-[13px] text-[var(--git-desc-fg)]">{t("git.compareHint")}</div>
           )}
         </div>
       )}

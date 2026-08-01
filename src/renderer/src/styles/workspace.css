@@ -836,19 +836,6 @@
 .config-retry-group .config-retry-subsection-header {
   border-top: 1px solid var(--color-border-subtle);
 }
-.config-retry-header-row {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  padding: 10px 16px 4px;
-  border: none;
-  border-radius: 0;
-  cursor: default;
-}
-.config-retry-header-row:hover {
-  border-color: transparent;
-}
 .config-settings-section-title {
   font-size: var(--font-size-control);
   font-weight: 600;
@@ -2108,17 +2095,6 @@ body.is-git-pane-resizing, body.is-git-pane-resizing * { cursor: row-resize !imp
 .git-smart-commit-actions button.primary { border-color: var(--git-action-bg); background: var(--git-action-bg); color: var(--git-action-fg); }
 .git-smart-commit-actions button.primary:hover { background: var(--color-accent-strong); }
 
-.git-status-msg {
-  display: flex;
-  flex-shrink: 0;
-  min-height: 22px;
-  align-items: center;
-  gap: var(--space-1);
-  padding: 0 9px;
-  color: var(--git-desc-fg);
-  font-size: var(--font-size-control);
-}
-.git-status-msg.error { color: var(--git-conflict); }
 .git-resource-group { border-bottom: 1px solid var(--git-panel-border); }
 /* 最后一个分组不要底部边框，避免在列表末尾残留一条横线 */
 .git-resource-group:last-child { border-bottom: none; }
@@ -2475,45 +2451,8 @@ body.is-git-pane-resizing, body.is-git-pane-resizing * { cursor: row-resize !imp
 @keyframes git-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
 /* Git 未安装时的提示 */
-.git-not-installed {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-10) var(--space-4);
-  text-align: center;
-}
-.git-not-installed-icon {
-  font-size: 32px;
-  line-height: 1;
-  opacity: 0.6;
-}
-.git-not-installed-title {
-  color: var(--color-text-primary);
-  font-size: var(--font-size-body);
-  font-weight: 600;
-}
-.git-not-installed-desc {
-  color: var(--color-text-tertiary);
-  font-size: var(--font-size-caption);
-  line-height: var(--line-height-body);
-  max-width: 360px;
-}
 
 /* 未初始化 Git 仓库时的提示 */
-.git-not-init {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-4);
-  padding: var(--space-8) var(--space-4);
-  text-align: center;
-}
-.git-not-init-prompt {
-  color: var(--git-desc-fg);
-  font-size: var(--font-size-control);
-  line-height: var(--line-height-body);
-}
 @media (max-width: 420px) {
   .git-history-label { gap: 6px; }
   .git-history-author, .git-resource-path { display: none; }

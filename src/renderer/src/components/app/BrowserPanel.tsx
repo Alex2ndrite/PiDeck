@@ -294,7 +294,11 @@ export function BrowserPanel(props: {
 			setCanGoForward(state.canGoForward);
 			if (state.url) updateActiveTab({ url: state.url });
 			if (state.title) updateActiveTab({ title: state.title });
-			if (!state.isLoading) setLoadProgress(0);
+			if (!state.isLoading) {
+				// 加载结束：先补满进度条再清零，避免在慢速网络上"卡在 90%"的观感
+				setLoadProgress(1);
+				window.setTimeout(() => setLoadProgress(0), 220);
+			}
 		});
 		const offNewWindow = api.onNewWindow((target) => {
 			if (target.startsWith("http://") || target.startsWith("https://")) {
@@ -337,6 +341,17 @@ export function BrowserPanel(props: {
 		// url 不放入依赖：导航状态由 onState 单向回流
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [useViewPipeline, updateActiveTab]);
+
+	// WebContentsView 管线不推送 load-progress：加载中用模拟进度（0.08→0.9 慢速爬升）
+	// 驱动 loading bar，停止时由 onState 补满后清零（见上方 stop 分支）。
+	useEffect(() => {
+		if (!useViewPipeline || !isLoading) return;
+		setLoadProgress(0.08);
+		const timer = window.setInterval(() => {
+			setLoadProgress((prev) => (prev >= 0.9 ? 0.9 : prev + (0.9 - prev) * 0.1));
+		}, 120);
+		return () => window.clearInterval(timer);
+	}, [useViewPipeline, isLoading]);
 
 	// 不再在卸载时清空 moduleState：折叠抽屉、切换面板后重新打开仍保留之前的 tab 状态。
 	// 关闭最后一个 tab 时 closeTab 已处理 moduleState 清理并调用 onClose。
@@ -474,30 +489,30 @@ export function BrowserPanel(props: {
 
 	return (
 		<div className={panelClass} onClick={(event) => event.stopPropagation()}>
-			<div className="browser-tabbar">
+			<div className="flex shrink-0 items-stretch overflow-x-auto overflow-y-hidden border-b border-border-subtle bg-bg-subtle [scrollbar-width:thin] [&::-webkit-scrollbar]:h-0">
 				{tabs.map((tab) => (
 					<div
 						key={tab.id}
-						className={`browser-tab${tab.id === activeTabId ? " active" : ""}`}
+						className={`flex max-w-[180px] shrink-0 cursor-pointer items-center gap-1 border-r border-border-subtle px-2.5 py-1 text-xs whitespace-nowrap select-none text-text-tertiary${tab.id === activeTabId ? " border-b-2 border-[var(--color-accent)] -mb-px bg-bg-panel text-text-primary" : ""}`}
 						onClick={() => switchTab(tab.id)}
 					>
-						<span className="browser-tab-title">{tab.title || tab.url}</span>
+						<span className="min-w-0 truncate">{tab.title || tab.url}</span>
 						<button className="browser-tab-close" onClick={(event) => closeTab(tab.id, event)} title={t("browser.closeTab")}>
 							<X size={11} />
 						</button>
 					</div>
 				))}
-<Button variant="ghost" size="icon-sm" className="browser-tab-add size-[30px]" onClick={addTab} title={t("browser.newTab")}>
+<Button variant="ghost" size="icon-sm" className="size-[30px] text-text-tertiary hover:text-[color:var(--color-accent)]" onClick={addTab} title={t("browser.newTab")}>
 					<Plus size={14} />
 				</Button>
 				{!props.isFullscreen && (
-					<div className="browser-tabbar-actions">
-<Button variant="ghost" size="icon-sm" className="browser-tabbar-btn size-[26px]" onClick={onToggleFullscreen} title={t("browser.fullscreen")}>
+					<div className="ml-auto flex shrink-0 items-center gap-0.5 pr-1">
+<Button variant="ghost" size="icon-sm" className="size-[26px] rounded-sm text-text-tertiary hover:bg-bg-hover hover:text-text-primary" onClick={onToggleFullscreen} title={t("browser.fullscreen")}>
 							<Maximize2 size={13} />
 						</Button>
 						{/* 统一 drawer chrome 已提供关闭；此处仅在独立/旧布局时保留 */}
 						{!props.hideChromeClose && (
-<Button variant="ghost" size="icon-sm" className="browser-tabbar-btn size-[26px]" onClick={onClose} title={t("common.close")}>
+<Button variant="ghost" size="icon-sm" className="size-[26px] rounded-sm text-text-tertiary hover:bg-bg-hover hover:text-text-primary" onClick={onClose} title={t("common.close")}>
 								<X size={14} />
 							</Button>
 						)}
@@ -506,22 +521,22 @@ export function BrowserPanel(props: {
 			</div>
 
 			<div className="flex shrink-0 items-center gap-1 border-b border-border-subtle px-2 py-1.5">
-<Button variant="ghost" size="icon-sm" className="browser-nav-btn size-[30px]" disabled={!canGoBack} onClick={() => useViewPipeline ? void window.piDesktop.browserView.action("back") : webviewRef.current?.goBack()} title={t("browser.back")}>
+<Button variant="ghost" size="icon-sm" className="size-[30px] rounded-sm text-text-secondary hover:bg-bg-hover hover:text-text-primary disabled:opacity-30" disabled={!canGoBack} onClick={() => useViewPipeline ? void window.piDesktop.browserView.action("back") : webviewRef.current?.goBack()} title={t("browser.back")}>
 					<ArrowLeft size={15} />
 				</Button>
-<Button variant="ghost" size="icon-sm" className="browser-nav-btn size-[30px]" disabled={!canGoForward} onClick={() => useViewPipeline ? void window.piDesktop.browserView.action("forward") : webviewRef.current?.goForward()} title={t("browser.forward")}>
+<Button variant="ghost" size="icon-sm" className="size-[30px] rounded-sm text-text-secondary hover:bg-bg-hover hover:text-text-primary disabled:opacity-30" disabled={!canGoForward} onClick={() => useViewPipeline ? void window.piDesktop.browserView.action("forward") : webviewRef.current?.goForward()} title={t("browser.forward")}>
 					<ArrowRight size={15} />
 				</Button>
-<Button variant="ghost" size="icon-sm" className="browser-nav-btn size-[30px]" onClick={() => useViewPipeline ? void window.piDesktop.browserView.action("reload") : webviewRef.current?.reload()} title={t("browser.reload")}>
+<Button variant="ghost" size="icon-sm" className="size-[30px] rounded-sm text-text-secondary hover:bg-bg-hover hover:text-text-primary disabled:opacity-30" onClick={() => useViewPipeline ? void window.piDesktop.browserView.action("reload") : webviewRef.current?.reload()} title={t("browser.reload")}>
 					<RefreshCw size={15} />
 				</Button>
-<Button variant="ghost" size="icon-sm" className="browser-nav-btn size-[30px]" onClick={() => loadUrl(DEFAULT_HOME)} title={t("browser.home")}>
+<Button variant="ghost" size="icon-sm" className="size-[30px] rounded-sm text-text-secondary hover:bg-bg-hover hover:text-text-primary disabled:opacity-30" onClick={() => loadUrl(DEFAULT_HOME)} title={t("browser.home")}>
 					<Home size={15} />
 				</Button>
 				<div className="min-w-0 flex-1">
 					<input
 						type="text"
-						className="h-[30px] w-full rounded-md border border-border-subtle bg-input px-2.5 text-[13px] text-primary outline-none focus:border-accent focus:shadow-[var(--focus-ring)]"
+						className="h-[30px] w-full rounded-md border border-border-subtle bg-bg-input px-2.5 text-[13px] text-text-primary outline-none focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]"
 						value={inputValue}
 						onChange={(event) => setInputValue(event.target.value)}
 						onKeyDown={handleKeyDown}
@@ -529,12 +544,12 @@ export function BrowserPanel(props: {
 						placeholder={t("browser.urlPlaceholder")}
 					/>
 				</div>
-				<div className="browser-device-wrapper" ref={deviceMenuRef}>
+				<div className="relative flex shrink-0 items-center text-text-tertiary" ref={deviceMenuRef}>
 					<Button
 						type="button"
 						variant="outline"
 						size="sm"
-						className={`h-7 px-2 browser-device-trigger${deviceMenuOpen ? " active" : ""}`}
+						className={`h-7 min-w-[68px] gap-1 border border-border-subtle bg-bg-panel px-2 text-xs text-text-secondary outline-none focus-visible:shadow-[var(--focus-ring)]${deviceMenuOpen ? " border-[var(--color-accent)] bg-bg-hover text-[color:var(--color-accent)]" : ""} hover:border-[var(--color-accent)] hover:bg-bg-hover hover:text-[color:var(--color-accent)]`}
 						onClick={() => setDeviceMenuOpen((open) => !open)}
 						title={t("browser.deviceLabel")}
 					>
@@ -542,17 +557,17 @@ export function BrowserPanel(props: {
 						<span>{t(activeDevicePreset.label as any)}</span>
 					</Button>
 					{deviceMenuOpen && (
-						<div className="browser-device-menu">
+						<div className="absolute top-[calc(100%+6px)] right-0 z-30 min-w-[112px] rounded-md border border-border-subtle bg-bg-panel p-1 shadow-[var(--shadow-popover)]">
 							{DEVICE_PRESETS.map((preset) => (
 								<Button
 									key={preset.id}
 									type="button"
 									variant="ghost"
 									size="sm"
-									className={`h-[30px] browser-device-menu-item${preset.id === device ? " active" : ""}`}
+									className={`h-[30px] w-full items-center gap-[7px] rounded-sm px-2 text-xs text-text-secondary text-left${preset.id === device ? " bg-bg-active text-[color:var(--color-accent)]" : ""} hover:bg-bg-hover hover:text-[color:var(--color-accent)]`}
 									onClick={() => selectDevice(preset.id)}
 								>
-									{preset.id === "mobile" ? <Smartphone size={13} /> : preset.id === "tablet" ? <Tablet size={13} /> : <span className="browser-device-pc-dot" />}
+									{preset.id === "mobile" ? <Smartphone size={13} /> : preset.id === "tablet" ? <Tablet size={13} /> : <span className="size-[13px] rounded-[3px] border border-current" />}
 									<span>{t(preset.label as any)}</span>
 								</Button>
 							))}
@@ -561,10 +576,10 @@ export function BrowserPanel(props: {
 				</div>
 				{props.isFullscreen ? (
 					<>
-<Button variant="ghost" size="icon-sm" className="browser-nav-btn size-[30px]" onClick={onMinimize} title={t("browser.minimize")}>
+<Button variant="ghost" size="icon-sm" className="size-[30px] rounded-sm text-text-secondary hover:bg-bg-hover hover:text-text-primary disabled:opacity-30" onClick={onMinimize} title={t("browser.minimize")}>
 							<Minus size={15} />
 						</Button>
-<Button variant="ghost" size="icon-sm" className="browser-nav-btn size-[30px]" onClick={onClose} title={t("browser.close")}>
+<Button variant="ghost" size="icon-sm" className="size-[30px] rounded-sm text-text-secondary hover:bg-bg-hover hover:text-text-primary disabled:opacity-30" onClick={onClose} title={t("browser.close")}>
 							<X size={15} />
 						</Button>
 					</>
@@ -572,12 +587,12 @@ export function BrowserPanel(props: {
 			</div>
 
 			{isLoading && (
-				<div className="h-0.5 shrink-0 overflow-hidden bg-subtle">
-					<div className="h-full bg-accent transition-[width] duration-150" style={{ width: `${Math.max(5, loadProgress * 100)}%` }} />
+				<div className="h-0.5 shrink-0 overflow-hidden bg-bg-subtle">
+					<div className="h-full bg-[var(--color-accent)] transition-[width] duration-150" style={{ width: `${Math.max(5, loadProgress * 100)}%` }} />
 				</div>
 			)}
 
-			<div className="browser-webview-stage">
+			<div className="flex min-h-0 flex-1 justify-center overflow-hidden bg-bg-subtle">
 				{useViewPipeline ? (
 					// WebContentsView 管线：主进程视图叠加在此占位矩形上，bounds 由 effect 同步
 					<div ref={viewStageRef} className="browser-view-placeholder" />

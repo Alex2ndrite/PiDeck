@@ -21,7 +21,7 @@ export function RawTab(props: {
 }) {
 	return (
 		<div className="config-raw-tab">
-			<div className="config-toolbar">
+			<div className="mb-3.5 flex items-center justify-between">
 				<ConfigSelect
 					value={props.fileName}
 					options={RAW_FILE_OPTIONS}

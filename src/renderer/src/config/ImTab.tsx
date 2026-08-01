@@ -292,7 +292,7 @@ export function ImTab(_props: Props) {
 	const statusLabel = t(`config.im.status.${status.status}` as any) || status.status;
 
 	if (loading) {
-		return <div className="config-loading">{t("common.loading")}</div>;
+		return <div className="py-12 text-center text-[13px] text-text-tertiary">{t("common.loading")}</div>;
 	}
 
 	return (
@@ -322,7 +322,7 @@ export function ImTab(_props: Props) {
 			{error && (
 				<div className="config-im-error">
 					<span>{error}</span>
-					<button className="config-icon-btn" onClick={() => setError(null)}>×</button>
+					<Button variant="ghost" size="icon-sm" className="size-7" onClick={() => setError(null)}>×</Button>
 				</div>
 			)}
 
@@ -333,9 +333,9 @@ export function ImTab(_props: Props) {
 
 			{/* ── Bot 配置管理 ── */}
 			<div className="config-section">
-				<div className="config-toolbar">
-					<span className="config-count">{t("config.im.botConfig", { count: bots.length })}</span>
-					<div className="config-toolbar-actions">
+				<div className="mb-3.5 flex items-center justify-between">
+					<span className="font-mono text-xs tabular-nums text-text-tertiary">{t("config.im.botConfig", { count: bots.length })}</span>
+					<div className="flex min-w-0 items-center gap-2">
 						<Button
 							 variant="outline"
 							onClick={() => setGuideOpen(true)}
@@ -450,7 +450,7 @@ export function ImTab(_props: Props) {
 				)}
 
 				{bots.length === 0 && !showAddForm && (
-					<div className="config-empty">{t("config.im.noBotConfig")}</div>
+					<div className="py-12 text-center text-[13px] text-text-tertiary">{t("config.im.noBotConfig")}</div>
 				)}
 
 				{bots.slice(0, visibleBots).map((bot) => {
@@ -463,9 +463,9 @@ export function ImTab(_props: Props) {
 					const visibleBotBindings = botBindings.slice(0, visibleBindingCount);
 					const secretValue = revealedSecrets[bot.id];
 					return (
-						<div key={bot.id} className={`config-card config-im-bot-card${isThisConnected ? " connected" : ""}`}>
+						<div key={bot.id} className={`mb-2 overflow-hidden rounded-lg border border-border-subtle bg-bg-panel transition-[border-color,box-shadow,background-color] duration-150 config-im-bot-card${isThisConnected ? " border-[var(--color-accent)]/30" : ""}`}>
 							<div
-								className="config-card-header config-im-bot-header"
+								className="flex cursor-pointer items-center gap-3 px-3.5 py-2.5 hover:bg-bg-hover config-im-bot-header"
 								onClick={() => setExpandedBotIds((prev) => {
 									const next = new Set(prev);
 									if (next.has(bot.id)) next.delete(bot.id);
@@ -473,17 +473,17 @@ export function ImTab(_props: Props) {
 									return next;
 								})}
 							>
-								<div className="config-card-info">
-									<div className="config-card-name">
+								<div className="min-w-0 flex-1">
+									<div className="truncate text-[13px] font-semibold text-text-primary">
 										<span className="config-im-expand-caret">{isExpanded ? "▾" : "▸"}</span>
 										{bot.name}
 										{isThisConnected && <span className="config-im-connected-badge">{t("config.im.connected")}</span>}
 									</div>
-									<div className="config-card-meta">
+									<div className="text-[11px] text-text-tertiary">
 										{t("config.im.expandHint")} · {t("config.im.appId")}: {bot.appId.slice(0, 14)}… · {t("config.im.linkedAgentsCount", { count: botBindings.length })}
 									</div>
 								</div>
-								<div className="config-card-actions" onClick={(e) => e.stopPropagation()}>
+								<div className="flex shrink-0 gap-1.5" onClick={(e) => e.stopPropagation()}>
 									{isThisConnected ? (
 										<Button
 											 variant="outline" size="sm" className="text-destructive"
@@ -539,7 +539,7 @@ export function ImTab(_props: Props) {
 								</div>
 							</div>
 							{isExpanded && (
-								<div className="config-card-details config-im-bot-details" onClick={(e) => e.stopPropagation()}>
+								<div className="border-t border-border-subtle px-3.5 py-2.5 text-xs config-im-bot-details" onClick={(e) => e.stopPropagation()}>
 									<div className="config-im-bot-detail-section">
 										<div className="config-im-section-title">{t("config.im.appCredentials")}</div>
 										<div className="config-im-credential-grid">
@@ -595,7 +595,7 @@ export function ImTab(_props: Props) {
 									<div className="config-im-bot-detail-section">
 										<div className="config-im-section-title">{t("config.im.linkedAgents", { count: botBindings.length })}</div>
 										{botBindings.length === 0 ? (
-											<div className="config-empty config-im-inline-empty">{t("config.im.noBotBindings")}</div>
+											<div className="py-12 text-center text-[13px] text-text-tertiary config-im-inline-empty">{t("config.im.noBotBindings")}</div>
 										) : (
 											<div className="config-im-binding-list">
 												{visibleBotBindings.map((binding) => (
@@ -665,12 +665,12 @@ export function ImTab(_props: Props) {
 					<div className="config-im-guide-modal">
 						<div className="config-im-guide-modal-header">
 							<strong>{t("config.im.guide")}</strong>
-							<button
-								className="config-icon-btn"
+							<Button
+								variant="ghost" size="icon-sm" className="size-7"
 								onClick={() => { setGuideAnimating(true); setTimeout(() => { setGuideAnimating(false); setGuideOpen(false); }, 150); }}
 							>
 								<X size={16} strokeWidth={2.2} />
-							</button>
+							</Button>
 						</div>
 						<div className="config-im-guide-modal-body">
 							<p><strong>{t("config.im.guideMethodTitle")}</strong></p>

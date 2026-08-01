@@ -67,6 +67,56 @@ collapsible/resizable/scroll-area/alert-dialog/sonner/input/textarea/confirm-dia
 已迁移示范组（BrowserPanel）：`browser-toolbar` / `browser-url-bar` / `browser-url-input`（含 :focus）/
 `browser-loading-bar` / `browser-loading-fill`。tabbar/tab/nav-btn/device 菜单等因含状态类
 （`.active`）与模板动态类（`device-${x}`），留待后续批次。
+### config/setting 域已迁移组（优先级 1）
+
+| 组 | JSX 替换 | CSS 规则 | 说明 |
+|---|---|---|---|
+| `config-settings-*` | 33 处 | 12 条 | SettingsTab/ConfigShared 键值设置行；含 `--add`/`retry-header-row` 变体组合迁移 |
+| `config-card` 系列 | 7 处 | 8 条 | ImTab 机器人卡片；`connected` 变体边框被 utility 覆盖，同步改 `border-accent/30` |
+| `config-empty` / `config-empty-sm` | 22 处 | 2 条 | 跨 14 个文件的空状态 |
+| `config-error` / `config-loading` | 22 处 | 2 条 | 跨 10 个文件；danger-soft 背景 + danger/20 边框 |
+
+迁移中的坑：组合变体（`.config-im-bot-card.connected` 覆盖基础类 border-color）会被 utility 层覆盖，
+必须在 JSX 同步改为 utility 条件类；后代选择器（`.config-form-row label`、`.config-test-result-row > span`）
+会放大迁移面，留待手动批次。
+| config-model 系列 | 15 处 | 17 条 | 模型选择器（搜索/全选/chip 列表 selected/configured 条件类）；dropdown-row/advanced-note；`config-model-list-actions` 共享块保留 |
+
+| config-provider card/list/form | 11 处 | 11 条 | ModelsTab/AuthTab 提供商卡片列表（expanded 展开态条件类含 overflow-visible）；`.config-provider-card.expanded` 组合规则保守保留 |
+
+| config-provider guide 区 + 散类 | 40 处 | 18 条 | ModelsTab 引导区（api-grid/api-item/compat-table/guide-list）；toolbar/count/chevron/batch-checkbox/field-hint 跨 11 个 config 文件；`config-toolbar-actions` 共享块保守保留 |
+
+| `config-form-row` | 8 行 + 8 label + 2 input | 5 条 | AuthTab/ModelsTab 表单行（90px 标签 + 内容列）；baseUrl/testModel 裸 input 补类；ConfigSelect（shadcn）与 base-url-field 等容器类保留 |
+
+| config-auth card/list/eye-btn | 6 处 | 8 条 | 认证卡片列表（editing 展开态条件类）、眼睛按钮 → shadcn Button；config-auth 组全部完成 |
+
+| config-auth guide/selector/item + SecretInput | 34 处 | 33 条 | AuthTab 使用指南/供应商选择器/选中项状态类；SecretInput 组件级迁移；badge 用 accent 系替代未定义的 `--color-success` |
+
+| browser tab/device/webview 系列 | 13 处 | 19 条 | BrowserPanel 标签栏/tab（active 条件类）/tab-add/tabbar-btn/nav-btn/device 菜单/webview-stage；`browser-tab-close`（16px）与 `.browser-panel` 本体及 device-* 变体保留 |
+
+### ⚠️ Tailwind v4 键名规则（迁移必读）
+
+应用域 token（`--color-bg-panel`、`--color-text-primary` 等）生成的 utility 名是 **`前缀 + 完整后缀`**：
+- `--color-bg-panel` → `bg-bg-panel`（不是 `bg-panel`）
+- `--color-text-primary` → `text-text-primary`（`text-primary` 是 shadcn `--color-primary` = accent 语义）
+- `--color-border-subtle` → `border-border-subtle`（这个写对了）
+
+写错的表现：类不生成（背景/文字透明继承）或撞 shadcn 语义（`text-primary` 变 accent 绿、`bg-input` 变边框色）。
+已修正 77 行（config 域 + browser 域迁移写入的 utility）。
+### ⚠️ 任意值颜色必须有类型提示（tailwind-merge 陷阱）
+
+`text-[var(--color-accent)]` 会被 tailwind-merge 推断为 **font-size**（无提示时 text-[] 默认字号类），
+与 `text-xs` 合并后字号变成无效值 → **文字消失**。颜色必须写 `text-[color:var(--color-accent)]`。
+同理 `bg-[color:color-mix(...)]`（bg 的 color-mix 需要 color: 提示）；`border-[]`/`bg-[]`/`shadow-[]` 的
+默认推断已是颜色/阴影，无需提示。已修正 11 处（combobox 选中项、tab hover、浏览器面板等）。
+
+
+| `config-combobox` / `-toggle` / `-menu` | 10 处 | 6 条 | ConfigShared 两个自绘组合框（ApiTypeInput + 通用 ComboboxInput）；输入框补 `pr-[38px]`（修复 `.config-combobox input` 的 padding-right 被 px-3 覆盖的隐藏 bug）；菜单项 active 态 → `bg-bg-active text-accent` 条件类；`config-select-trigger`（shadcn SelectTrigger 定制）保留 |
+
+| `config-icon-btn` | 32 处 | 2 条 | 8 个 config tab 的 28px 图标按钮 → shadcn Button ghost icon-sm + size-7；danger 变体 → destructive hover；嵌套选择器（`.project-resource-actions .config-icon-btn` 等）保守保留 |
+
+| `config-test-result-row` / `-error-row` | 9 块 | 5 条 | ModelsTab 测试结果行；后代选择器（span:first-child/strong）逐子元素迁移 |
+| `git-status-msg` / `git-not-installed` / `git-not-init` | 10 处 | 8 条 | GitPanel 状态提示区；git 面板专属变量用 arbitrary value（`text-[var(--git-desc-fg)]`） |
+
 
 ### 迁移优先级对照表
 

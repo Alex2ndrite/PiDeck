@@ -80,11 +80,11 @@ export function AuthTab(props: {
 
 	return (
 		<div className="config-auth-tab">
-			<div className="config-toolbar">
-				<span className="config-count">
+			<div className="mb-3.5 flex items-center justify-between">
+				<span className="font-mono text-xs tabular-nums text-text-tertiary">
 					{t("config.count.auth", { count: providers.length })}
 				</span>
-				<div className="config-toolbar-actions">
+				<div className="flex min-w-0 items-center gap-2">
 					<Button
 						 variant="outline"
 						onClick={() => {
@@ -145,21 +145,21 @@ export function AuthTab(props: {
 
 			{/* 使用引导 */}
 			{showGuide && (
-				<div className="config-auth-guide">
-					<div className="config-auth-guide-header">
-						<strong>{t("config.authGuideTitle")}</strong>
-						<button className="config-icon-btn" onClick={() => setShowGuide(false)}>×</button>
+				<div className="mb-4 rounded-md border border-border-subtle bg-bg-subtle p-4">
+					<div className="mb-2.5 flex items-center justify-between">
+						<strong className="text-sm text-text-primary">{t("config.authGuideTitle")}</strong>
+						<Button variant="ghost" size="icon-sm" className="size-7" onClick={() => setShowGuide(false)}>×</Button>
 					</div>
-					<div className="config-auth-guide-body">
+					<div className="text-xs leading-relaxed text-text-secondary">
 						<p>{t("config.authGuideDesc")}</p>
-						<ul>
-							<li>{t("config.authGuideStep1")}</li>
-							<li>{t("config.authGuideStep2")}</li>
-							<li>{t("config.authGuideStep3")}</li>
+						<ul className="my-2 list-disc pl-5">
+							<li className="mb-1">{t("config.authGuideStep1")}</li>
+							<li className="mb-1">{t("config.authGuideStep2")}</li>
+							<li className="mb-1">{t("config.authGuideStep3")}</li>
 						</ul>
-						<p className="config-auth-guide-note">
+						<p className="mt-3 border-t border-border-subtle pt-2.5 text-text-tertiary">
 							{t("config.authGuideNote")}{" "}
-							<a href="https://pi.dev/docs/latest/providers#auth-file" target="_blank" rel="noreferrer">
+							<a href="https://pi.dev/docs/latest/providers#auth-file" target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 text-[color:var(--color-accent)] no-underline">
 								pi docs <ExternalLink size={12} />
 							</a>
 						</p>
@@ -169,26 +169,26 @@ export function AuthTab(props: {
 
 			{/* 选择供应商弹窗 */}
 			{selectingProvider && (
-				<div className="config-auth-selector">
-					<div className="config-auth-selector-header">
-						<strong>{t("config.authSelectProvider")}</strong>
-						<button className="config-icon-btn" onClick={() => setSelectingProvider(false)}>×</button>
+				<div className="mb-4 rounded-lg border border-border-default bg-bg-panel p-4 shadow-[0_4px_12px_color-mix(in_srgb,var(--color-text-primary)_8%,transparent)]">
+					<div className="mb-3 flex items-center justify-between border-b border-border-subtle pb-2.5">
+						<strong className="text-sm text-text-primary">{t("config.authSelectProvider")}</strong>
+						<Button variant="ghost" size="icon-sm" className="size-7" onClick={() => setSelectingProvider(false)}>×</Button>
 					</div>
-					<div className="config-auth-selector-list">
+					<div className="grid max-h-[320px] grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-1.5 overflow-y-auto">
 						{PRESET_PROVIDERS.map((provider) => {
 							const alreadyConfigured = providers.includes(provider.value);
 							return (
 								<button
 									key={provider.value}
-									className={`config-auth-selector-item${selectedProvider === provider.value ? " selected" : ""}${alreadyConfigured ? " configured" : ""}`}
+									className={`flex cursor-pointer flex-col items-start rounded-md border border-border-subtle bg-bg-muted px-3 py-2.5 text-left text-xs transition-all duration-150 hover:border-[var(--color-accent)] hover:bg-[color:color-mix(in_srgb,var(--color-accent)_5%,var(--color-bg-panel))]${selectedProvider === provider.value ? " border-[var(--color-accent)] font-medium" : ""}${alreadyConfigured ? " opacity-60" : ""}`}
 									onClick={() => {
 										setSelectedProvider(provider.value);
 									}}
 								>
-									<span className="config-auth-selector-name">{provider.label}</span>
-									<span className="config-auth-selector-id">{provider.value}</span>
+									<span className="font-medium text-text-primary">{provider.label}</span>
+									<span className="mt-0.5 font-mono text-[11px] text-text-tertiary">{provider.value}</span>
 									{alreadyConfigured && (
-										<span className="config-auth-selector-badge">{t("config.configured")}</span>
+										<span className="mt-1 rounded-[4px] bg-[color:color-mix(in_srgb,var(--color-accent)_10%,transparent)] px-1.5 py-px text-[11px] text-[color:var(--color-accent)]">{t("config.configured")}</span>
 									)}
 								</button>
 							);
@@ -196,23 +196,25 @@ export function AuthTab(props: {
 						{/* 从 models.json 读取已配置的服务商 */}
 						{props.modelsData && Object.keys(props.modelsData.providers).length > 0 && (
 							<>
-								<div className="config-auth-selector-separator">
+								<div className="flex items-center gap-2 text-xs text-text-tertiary">
+									<span className="h-px flex-1 bg-border-subtle" aria-hidden="true" />
 									<span>{t("config.authFromModels")}</span>
+									<span className="h-px flex-1 bg-border-subtle" aria-hidden="true" />
 								</div>
 								{Object.keys(props.modelsData.providers).map((providerName) => {
 									const alreadyConfigured = providers.includes(providerName);
 									return (
 										<button
 											key={providerName}
-											className={`config-auth-selector-item${selectedProvider === providerName ? " selected" : ""}${alreadyConfigured ? " configured" : ""}`}
+											className={`flex cursor-pointer flex-col items-start rounded-md border border-border-subtle bg-bg-muted px-3 py-2.5 text-left text-xs transition-all duration-150 hover:border-[var(--color-accent)] hover:bg-[color:color-mix(in_srgb,var(--color-accent)_5%,var(--color-bg-panel))]${selectedProvider === providerName ? " border-[var(--color-accent)] font-medium" : ""}${alreadyConfigured ? " opacity-60" : ""}`}
 											onClick={() => {
 												setSelectedProvider(providerName);
 											}}
 										>
-											<span className="config-auth-selector-name">{providerName}</span>
-											<span className="config-auth-selector-id">{t("config.fromModels")}</span>
+											<span className="font-medium text-text-primary">{providerName}</span>
+											<span className="mt-0.5 font-mono text-[11px] text-text-tertiary">{t("config.fromModels")}</span>
 											{alreadyConfigured && (
-												<span className="config-auth-selector-badge">{t("config.configured")}</span>
+												<span className="mt-1 rounded-[4px] bg-[color:color-mix(in_srgb,var(--color-accent)_10%,transparent)] px-1.5 py-px text-[11px] text-[color:var(--color-accent)]">{t("config.configured")}</span>
 											)}
 										</button>
 									);
@@ -220,9 +222,9 @@ export function AuthTab(props: {
 							</>
 						)}
 					</div>
-					<div className="config-auth-selector-bottom">
-						<p className="config-auth-selector-custom-hint">
-							<span className="config-auth-selector-custom-label">{t("config.authCustomHint")}</span>
+					<div className="mt-3 border-t border-border-subtle pt-3">
+						<p className="m-0 flex items-center gap-2 text-xs text-text-tertiary">
+							<span className="shrink-0 whitespace-nowrap">{t("config.authCustomHint")}</span>
 							<input
 								value={customProviderName}
 								onChange={(e) => {
@@ -230,24 +232,25 @@ export function AuthTab(props: {
 									if (e.target.value) setSelectedProvider("");
 								}}
 								placeholder={t("config.authCustomPlaceholder")}
+								className="h-8 min-w-0 flex-1 rounded-sm border border-border-default bg-bg-muted px-2.5 text-[13px] text-text-primary outline-none focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]"
 							/>
 						</p>
 					</div>
 					{(selectedProvider || customProviderName.trim()) && (
-						<div className="config-auth-selector-key">
-							<label>{t("config.field.apiKey")}</label>
+						<div className="mt-2.5 rounded-sm border border-border-subtle bg-bg-hover p-3">
+							<label className="mb-1.5 block text-xs font-medium text-text-secondary">{t("config.field.apiKey")}</label>
 							<SecretInput
 								value={newAuthKey}
 								onChange={setNewAuthKey}
 							/>
 						</div>
 					)}
-					<div className="config-auth-selector-actions">
+					<div className="mt-3 flex items-center gap-2 border-t border-border-subtle pt-2.5">
 						{selectedProvider && presetProvider && (
-							<div className="config-auth-selector-info">
-								{t("config.authEnvVar")}: <code>{presetProvider.env}</code>
+							<div className="flex flex-1 items-center gap-1.5 text-xs text-text-tertiary">
+								{t("config.authEnvVar")}: <code className="rounded-[4px] bg-bg-hover px-1.5 py-px font-mono text-[11px]">{presetProvider.env}</code>
 								{presetProvider.url && (
-									<a href={presetProvider.url} target="_blank" rel="noreferrer">
+									<a href={presetProvider.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 text-[11px] text-[color:var(--color-accent)] no-underline">
 										{t("config.authGetKey")} <ExternalLink size={10} />
 									</a>
 								)}
@@ -273,21 +276,21 @@ export function AuthTab(props: {
 				</div>
 			)}
 
-			<div className="config-auth-list">
+			<div className="flex flex-col gap-2.5">
 				{providers.map((name) => {
 					const auth = data[name];
 					const isExpanded = expandedAuth === name;
 					return (
 						<div
 							key={name}
-							className={`config-auth-card ${isExpanded ? "editing" : ""}`}
+							className={`rounded-lg border border-border-subtle bg-bg-panel transition-[border-color,box-shadow,background-color] duration-150${isExpanded ? " border-[color-mix(in_srgb,var(--color-accent)_32%,var(--color-border-subtle))] shadow-[var(--shadow-border)]" : ""}`}
 						>
 							<div
-								className="config-auth-card-header"
+								className="flex cursor-pointer items-center gap-3 rounded-t-lg px-3.5 py-2 transition-colors duration-150 hover:bg-bg-hover"
 								onClick={() => props.onToggleAuth(name)}
 							>
 						{batchMode && (
-							<label className="config-batch-checkbox" onClick={(e) => e.stopPropagation()}>
+							<label className="mr-2.5 inline-flex size-4 shrink-0 items-center justify-center" onClick={(e) => e.stopPropagation()}>
 								<input
 									type="checkbox"
 									checked={selectedAuths.has(name)}
@@ -303,15 +306,15 @@ export function AuthTab(props: {
 								/>
 							</label>
 						)}
-								<span className="config-auth-provider">{name}</span>
-								<span className="config-auth-key-preview">
+								<span className="text-[13px] font-semibold text-text-primary">{name}</span>
+								<span className="min-w-0 flex-1 truncate font-mono text-xs text-text-tertiary">
 									{auth.key
 										? `${auth.key.slice(0, 10)}••••••${auth.key.slice(-4)}`
 										: t("config.authKeyPreviewEmpty")}
 								</span>
-								<div className="config-provider-actions">
-									<button
-										className="config-icon-btn danger"
+								<div className="flex items-center gap-1">
+									<Button
+										variant="ghost" size="icon-sm" className="size-7 text-destructive hover:bg-destructive/10 hover:text-destructive"
 										onClick={(e) => {
 											e.stopPropagation();
 											props.onDeleteAuth(name);
@@ -319,8 +322,8 @@ export function AuthTab(props: {
 										title={t("common.delete")}
 									>
 										<Trash2 size={14} />
-									</button>
-									<span className="config-chevron">
+									</Button>
+									<span className="ml-1 text-[13px] text-text-tertiary">
 										{isExpanded ? (
 											<ChevronDown size={14} />
 										) : (
@@ -330,9 +333,9 @@ export function AuthTab(props: {
 								</div>
 							</div>
 							{isExpanded && (
-								<div className="config-provider-form">
-									<div className="config-form-row">
-										<label>{t("config.field.type")}</label>
+								<div className="mx-4 my-3.5 grid gap-2.5 rounded-lg border border-border-subtle bg-bg-panel p-3.5">
+									<div className="grid grid-cols-[90px_1fr] items-center gap-2.5">
+										<label className="pl-0.5 text-left text-xs font-medium text-text-secondary">{t("config.field.type")}</label>
 										<ConfigComboboxInput
 											value={auth.type ?? "api_key"}
 											options={AUTH_TYPE_OPTIONS}
@@ -341,8 +344,8 @@ export function AuthTab(props: {
 											}
 										/>
 									</div>
-									<div className="config-form-row">
-										<label>{t("config.field.apiKey")}</label>
+									<div className="grid grid-cols-[90px_1fr] items-center gap-2.5">
+										<label className="mb-1.5 block text-xs font-medium text-text-secondary">{t("config.field.apiKey")}</label>
 										<SecretInput
 											value={auth.key ?? ""}
 											onChange={(v) => props.onUpdate(name, "key", v)}
@@ -355,7 +358,7 @@ export function AuthTab(props: {
 					);
 				})}
 				{providers.length === 0 && (
-					<div className="config-empty">{t("config.authEmpty")}</div>
+					<div className="py-12 text-center text-[13px] text-text-tertiary">{t("config.authEmpty")}</div>
 				)}
 			</div>
 		</div>

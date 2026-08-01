@@ -129,7 +129,7 @@ export function PromptStoreTab(props: {
 		return (
 			<div className="prompt-store-tab">
 				{/* 预览视图也需要错误提示和 toast 反馈 */}
-				{error && <div className="config-error">{error}</div>}
+				{error && <div className="mb-3.5 rounded-sm border border-danger/20 bg-danger-soft px-3.5 py-2.5 text-[13px] leading-relaxed text-danger whitespace-pre-line">{error}</div>}
 				{/* toast 已改用 sonner */}
 				<div className="prompt-store-toolbar">
 					<Button  variant="outline" onClick={backToList}>
@@ -240,14 +240,14 @@ export function PromptStoreTab(props: {
 			</div>
 
 			{/* 错误提示 */}
-			{error && <div className="config-error">{error}</div>}
+			{error && <div className="mb-3.5 rounded-sm border border-danger/20 bg-danger-soft px-3.5 py-2.5 text-[13px] leading-relaxed text-danger whitespace-pre-line">{error}</div>}
 
 			{/* Toast 已改用 sonner */}
 			{/* 搜索结果 */}
-			{searching && <div className="config-loading">{t("config.promptStoreSearching")}</div>}
+			{searching && <div className="py-12 text-center text-[13px] text-text-tertiary">{t("config.promptStoreSearching")}</div>}
 
 			{result && !searching && result.count === 0 && (
-				<div className="config-empty">{t("config.promptStoreSearchEmpty")}</div>
+				<div className="py-12 text-center text-[13px] text-text-tertiary">{t("config.promptStoreSearchEmpty")}</div>
 			)}
 
 			{result && result.count > 0 && (
@@ -275,13 +275,13 @@ export function PromptStoreTab(props: {
 							</div>
 							</div>
 							<div className="prompt-store-card-actions">
-								<button
-									className="config-icon-btn"
+								<Button
+									variant="ghost" size="icon-sm" className="size-7"
 									title={t("config.promptStorePreview")}
 									onClick={(e) => { e.stopPropagation(); showPreview(item); }}
 								>
 									<ExternalLink size={14} strokeWidth={1.8} />
-								</button>
+								</Button>
 								{!installedNames.has(predictImportName(item.title)) && (
 									<Button
 										 variant="default" size="sm"

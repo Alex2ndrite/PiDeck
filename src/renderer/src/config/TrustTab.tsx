@@ -38,7 +38,7 @@ export function TrustTab(props: {
 
 	return (
 		<div className="config-trust-tab">
-			<div className="config-toolbar">
+			<div className="mb-3.5 flex items-center justify-between">
 				<div>
 					<strong>{t("config.nav.trust")}</strong>
 					<p>{t("config.trust.hint")}</p>

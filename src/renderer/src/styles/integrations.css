@@ -511,13 +511,6 @@
   color: var(--color-text-tertiary);
 }
 
-.config-field-hint {
-  display: block;
-  font-size: var(--font-size-micro);
-  color: var(--color-text-tertiary);
-  margin-top: 4px;
-  line-height: 1.5;
-}
 
 .config-input {
   width: 100%;

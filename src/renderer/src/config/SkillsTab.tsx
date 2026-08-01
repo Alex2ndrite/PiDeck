@@ -90,9 +90,9 @@ export function SkillsTab(props: {
 				</div>
 			) : (
 				<>
-					<div className="config-toolbar">
+					<div className="mb-3.5 flex items-center justify-between">
 				<div>
-					<span className="config-count">
+					<span className="font-mono text-xs tabular-nums text-text-tertiary">
 						{t("config.count.skills", { count: filteredSkills.length })}
 					</span>
 					<small className="skills-restart-hint">
@@ -182,7 +182,7 @@ export function SkillsTab(props: {
 
 			<div className="skills-list">
 				{filteredSkills.length === 0 ? (
-					<div className="config-empty">{t("config.emptySkills")}</div>
+					<div className="py-12 text-center text-[13px] text-text-tertiary">{t("config.emptySkills")}</div>
 				) : (
 					filteredSkills.map((skill) => (
 						<SkillCard
@@ -247,12 +247,12 @@ function SkillCard(props: {
 									autoFocus
 									disabled={renameBusy}
 								/>
-								<button className="config-icon-btn" onClick={handleRename} disabled={renameBusy} title={t("common.confirm")}>
+								<Button variant="ghost" size="icon-sm" className="size-7" onClick={handleRename} disabled={renameBusy} title={t("common.confirm")}>
 									<Check size={14} strokeWidth={2} />
-								</button>
-								<button className="config-icon-btn" onClick={() => setRenaming(false)} disabled={renameBusy} title={t("common.cancel")}>
+								</Button>
+								<Button variant="ghost" size="icon-sm" className="size-7" onClick={() => setRenaming(false)} disabled={renameBusy} title={t("common.cancel")}>
 									<X size={14} strokeWidth={2} />
-								</button>
+								</Button>
 							</div>
 						) : (
 							<strong>{skill.name}</strong>
@@ -275,35 +275,35 @@ function SkillCard(props: {
 					)}
 				</button>
 				<div className="prompts-list-item-actions">
-					<button
-						className="config-icon-btn"
+					<Button
+						variant="ghost" size="icon-sm" className="size-7"
 						onClick={() => props.onToggle(skill, !skill.enabled)}
 						title={skill.enabled ? t("common.disable") : t("common.enabled")}
 						style={skill.enabled ? { color: "var(--color-accent)" } : undefined}
 					>
 						{skill.enabled ? <ToggleRight size={18} strokeWidth={1.8} /> : <ToggleLeft size={18} strokeWidth={1.8} />}
-					</button>
-					<button
-						className="config-icon-btn"
+					</Button>
+					<Button
+						variant="ghost" size="icon-sm" className="size-7"
 						onClick={() => props.onEdit(skill)}
 						title={t("common.edit")}
 					>
 						<Pencil size={14} strokeWidth={1.8} />
-					</button>
-					<button
-						className="config-icon-btn"
+					</Button>
+					<Button
+						variant="ghost" size="icon-sm" className="size-7"
 						onClick={() => { setRenaming(true); setRenameValue(skill.name); }}
 						title={t("common.rename")}
 					>
 						<FileEdit size={14} strokeWidth={1.8} />
-					</button>
-					<button
-						className="config-icon-btn danger"
+					</Button>
+					<Button
+						variant="ghost" size="icon-sm" className="size-7 text-destructive hover:bg-destructive/10 hover:text-destructive"
 						onClick={() => props.onDelete(skill)}
 						title={t("common.delete")}
 					>
 						<Trash2 size={14} strokeWidth={1.8} />
-					</button>
+					</Button>
 				</div>
 			</div>
 		</article>

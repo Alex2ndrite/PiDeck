@@ -65,7 +65,7 @@ export function LogsTab() {
 
 	return (
 		<div className="logs-tab">
-			<div className="config-toolbar logs-toolbar">
+			<div className="mb-3.5 flex items-center justify-between logs-toolbar">
 				<div className="logs-filters">
 					<div className="logs-level-select grid gap-1.5">
 						<span className="text-sm font-medium leading-none text-foreground">{t("logs.levelFilter")}</span>
@@ -103,11 +103,11 @@ export function LogsTab() {
 				</div>
 			</div>
 			<p className="config-im-form-hint">{t("logs.hint")}</p>
-			{error && <div className="config-error">{error}</div>}
+			{error && <div className="mb-3.5 rounded-sm border border-danger/20 bg-danger-soft px-3.5 py-2.5 text-[13px] leading-relaxed text-danger whitespace-pre-line">{error}</div>}
 			{loading ? (
-				<div className="config-loading">{t("common.loading")}</div>
+				<div className="py-12 text-center text-[13px] text-text-tertiary">{t("common.loading")}</div>
 			) : entries.length === 0 ? (
-				<div className="config-empty">{t("logs.empty")}</div>
+				<div className="py-12 text-center text-[13px] text-text-tertiary">{t("logs.empty")}</div>
 			) : (
 				<div className="logs-list">
 					{entries.map((entry) => {

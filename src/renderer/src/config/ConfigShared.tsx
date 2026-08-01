@@ -43,20 +43,23 @@ export function SecretInput(props: {
 }) {
 	const [visible, setVisible] = useState(false);
 	return (
-		<div className="config-secret-input">
+		<div className="flex w-full items-center gap-1.5">
 			<input
 				type={visible ? "text" : "password"}
 				value={props.value}
 				onChange={(e) => props.onChange(e.target.value)}
 				placeholder={props.placeholder ?? t("config.apiKeyPlaceholder")}
+				className="h-9 min-w-0 flex-1 rounded-sm border border-border-subtle bg-bg-panel px-3 font-mono text-[13px] text-text-primary outline-none transition-[border-color,box-shadow,background-color] duration-150 focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]"
 			/>
-			<button
-				className="config-eye-btn"
+			<Button
+				variant="outline"
+				size="icon-sm"
+				className="size-9 rounded-sm"
 				onClick={() => setVisible(!visible)}
 				title={visible ? t("common.hide") : t("common.show")}
 			>
 				{visible ? <EyeOff size={15} /> : <Eye size={15} />}
-			</button>
+			</Button>
 			<CopyButton text={props.value} />
 		</div>
 	);
@@ -141,7 +144,7 @@ export function ConfigComboboxInput(props: {
 		: props.options;
 
 	return (
-		<div ref={containerRef} className="config-combobox config-settings-combobox">
+		<div ref={containerRef} className="relative min-w-0 flex-1">
 			<input
 				value={open ? filter : props.value}
 				onFocus={handleFocus}
@@ -151,11 +154,13 @@ export function ConfigComboboxInput(props: {
 					setOpen(true);
 				}}
 				placeholder={props.placeholder}
-				className="config-settings-input"
+				className="h-9 min-w-0 w-full flex-1 rounded-sm border border-border-subtle bg-bg-panel px-3 pr-[38px] text-[13px] text-text-primary outline-none focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]"
 			/>
-			<button
+			<Button
 				type="button"
-				className="config-combobox-toggle"
+				variant="ghost"
+				size="icon-sm"
+				className="absolute top-px right-px size-[34px] rounded-l-none border-l border-border-subtle text-text-tertiary hover:bg-bg-hover hover:text-text-primary"
 				onMouseDown={(e) => {
 					e.preventDefault();
 					if (open) {
@@ -167,17 +172,19 @@ export function ConfigComboboxInput(props: {
 				}}
 			>
 				<ChevronDown size={14} />
-			</button>
+			</Button>
 			{open && (
-				<div className="config-combobox-menu config-settings-combobox-menu">
+				<div className="absolute top-[calc(100%+4px)] right-0 left-0 z-30 max-h-[220px] overflow-y-auto rounded-lg border border-border-subtle bg-bg-panel p-[5px] shadow-[var(--shadow-popover)]">
 					{filtered.length === 0 && (
 						<div className="config-combobox-empty">{t("config.noMatchingOptions")}</div>
 					)}
 					{filtered.map((option) => (
-						<button
+						<Button
 							key={option.value}
 							type="button"
-							className={option.value === props.value ? "active" : ""}
+							variant="ghost"
+							size="sm"
+							className={`h-auto min-h-[30px] w-full justify-start rounded-sm px-[9px] py-1.5 text-xs${option.value === props.value ? " bg-bg-active text-[color:var(--color-accent)]" : ""}`}
 							onMouseDown={(e) => {
 								e.preventDefault();
 								props.onChange(option.value);
@@ -185,7 +192,7 @@ export function ConfigComboboxInput(props: {
 							}}
 						>
 							{option.label ?? option.value}
-						</button>
+						</Button>
 					))}
 				</div>
 			)}
@@ -202,7 +209,7 @@ export function ApiTypeInput(props: {
 
 	return (
 		<div
-			className="config-combobox"
+			className="relative min-w-0"
 			onBlur={() => {
 				// 等待 option 的 mouseDown 先写入值，再关闭下拉，避免点击被 blur 截断。
 				window.setTimeout(() => setOpen(false), 80);
@@ -216,10 +223,13 @@ export function ApiTypeInput(props: {
 					setOpen(true);
 				}}
 				placeholder={t("config.apiTypePlaceholder")}
+				className="h-9 w-full rounded-sm border border-border-subtle bg-bg-panel px-3 pr-[38px] text-[13px] text-text-primary outline-none focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]"
 			/>
-			<button
+			<Button
 				type="button"
-				className="config-combobox-toggle"
+				variant="ghost"
+				size="icon-sm"
+				className="absolute top-px right-px size-[34px] rounded-l-none border-l border-border-subtle text-text-tertiary hover:bg-bg-hover hover:text-text-primary"
 				onMouseDown={(e) => {
 					e.preventDefault();
 					setOpen((current) => !current);
@@ -227,14 +237,16 @@ export function ApiTypeInput(props: {
 				title={t("config.apiTypeExpand")}
 			>
 				<ChevronDown size={14} />
-			</button>
+			</Button>
 			{open && (
-				<div className="config-combobox-menu config-api-type-menu">
+				<div className="absolute top-[calc(100%+4px)] right-0 left-0 z-30 max-h-[220px] overflow-y-auto rounded-lg border border-border-subtle bg-bg-panel p-[5px] shadow-[var(--shadow-popover)] config-api-type-menu">
 					{PROVIDER_API_OPTIONS.map((option) => (
-						<button
+						<Button
 							key={option}
 							type="button"
-							className={option === props.value ? "active" : ""}
+							variant="ghost"
+							size="sm"
+							className={`h-auto min-h-[30px] w-full justify-start rounded-sm px-[9px] py-1.5 text-xs${option === props.value ? " bg-bg-active text-[color:var(--color-accent)]" : ""}`}
 							onMouseDown={(e) => {
 								e.preventDefault();
 								props.onChange(option);
@@ -243,7 +255,7 @@ export function ApiTypeInput(props: {
 						>
 							<span className="config-api-type-label">{API_TYPE_LABELS[option] || option}</span>
 							<small className="config-api-type-desc">{getApiTypeDescription(option)}</small>
-						</button>
+						</Button>
 					))}
 				</div>
 			)}

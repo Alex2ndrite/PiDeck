@@ -77,13 +77,14 @@ function FetchedModelCombobox(props: {
 	}
 
 	return (
-		<div className="config-model-combobox">
-			<div className="config-model-combobox-toolbar">
+		<div className="min-w-0">
+			<div className="flex items-center gap-2">
 				<input
 					ref={inputRef}
 					value={filter}
 					onChange={(e) => setFilter(e.target.value)}
 					placeholder={t("config.modelSearchPlaceholder")}
+					className="h-7 min-w-0 flex-1 rounded-sm border border-border-subtle bg-bg-panel px-2.5 text-[13px] text-text-primary outline-none transition-[border-color,box-shadow,background-color] duration-150 focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]"
 				/>
 				<Button
 					type="button"
@@ -102,7 +103,7 @@ function FetchedModelCombobox(props: {
 					{allSelectableSelected ? t("common.deselectAll") : t("common.selectAll")}
 				</Button>
 			</div>
-			<div className="config-model-combobox-summary">
+			<div className="text-[11px] text-text-tertiary">
 				<span>
 					{t("config.modelFetchSelectionSummary", {
 						selected: selectedModels.length,
@@ -110,7 +111,7 @@ function FetchedModelCombobox(props: {
 					})}
 				</span>
 			</div>
-			<div className="config-model-chip-list">
+			<div className="mt-2 flex max-h-[220px] flex-wrap gap-2 overflow-auto p-1">
 				{visibleModels.map((model) => {
 					const selected = selectedModelIdSet.has(model.id);
 					const configured = existingModelIdSet.has(model.id);
@@ -118,18 +119,18 @@ function FetchedModelCombobox(props: {
 						<button
 							key={model.id}
 							type="button"
-							className={`config-model-chip${selected ? " selected" : ""}${configured ? " configured" : ""}`}
+							className={`inline-flex min-h-7 max-w-[260px] cursor-pointer items-center gap-1 rounded-sm border border-border-subtle bg-bg-panel px-2 py-1 text-xs text-text-primary transition-[background-color,border-color,color,box-shadow] duration-150 hover:border-[color-mix(in_srgb,var(--color-accent)_42%,var(--color-border-subtle))] hover:bg-bg-hover focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none${selected ? " border-[color-mix(in_srgb,var(--color-accent)_70%,var(--color-border-subtle))] bg-[color:color-mix(in_srgb,var(--color-accent)_12%,var(--color-bg-panel))] text-[color:var(--color-accent)]" : ""}${configured ? " cursor-not-allowed bg-bg-muted opacity-70" : ""}`}
 							onClick={() => toggleModel(model.id)}
 							disabled={configured}
 							aria-pressed={selected}
 						>
-							<span className="config-model-chip-label">{model.name ?? model.id}</span>
+							<span className="min-w-0 truncate font-medium">{model.name ?? model.id}</span>
 							{model.name && model.name !== model.id && (
-								<span className="config-model-chip-id">{model.id}</span>
+								<span className="truncate text-[11px] text-text-tertiary">{model.id}</span>
 							)}
-							{selected && !configured && <Check size={12} className="config-model-chip-check" />}
+							{selected && !configured && <Check size={12} className="shrink-0" />}
 							{configured && (
-								<span className="config-model-combobox-badge">
+								<span className="shrink-0 rounded-sm bg-bg-muted px-1.5 py-0.5 text-[11px] leading-tight text-text-tertiary">
 									{t("config.configured")}
 								</span>
 							)}
@@ -137,7 +138,7 @@ function FetchedModelCombobox(props: {
 					);
 				})}
 				{visibleModels.length === 0 && (
-					<div className="config-model-combobox-empty">{t("app.modelPickerEmpty")}</div>
+					<div className="w-full p-3 text-center text-xs text-text-tertiary">{t("app.modelPickerEmpty")}</div>
 				)}
 			</div>
 		</div>
@@ -238,11 +239,11 @@ export function ModelsTab(props: {
 
 	return (
 		<div className="config-model-tab">
-			<div className="config-toolbar">
-				<span className="config-count">
+			<div className="mb-3.5 flex items-center justify-between">
+				<span className="font-mono text-xs tabular-nums text-text-tertiary">
 					{t("config.count.providers", { count: providerNames.length })}
 				</span>
-				<div className="config-toolbar-actions">
+				<div className="flex min-w-0 items-center gap-2">
 					<Button
 						 variant="outline"
 						onClick={props.onStartAddProvider}
@@ -298,71 +299,71 @@ export function ModelsTab(props: {
 
 			{/* Provider 配置指南 */}
 			{showGuide && (
-				<div className="config-auth-guide config-provider-guide">
-					<div className="config-auth-guide-header">
-						<strong>{t("config.providerGuideTitle")}</strong>
-						<button className="config-icon-btn" onClick={() => setShowGuide(false)}>×</button>
+				<div className="mb-4 rounded-md border border-border-subtle bg-bg-subtle p-4">
+					<div className="mb-2.5 flex items-center justify-between">
+						<strong className="text-sm text-text-primary">{t("config.providerGuideTitle")}</strong>
+						<Button variant="ghost" size="icon-sm" className="size-7" onClick={() => setShowGuide(false)}>×</Button>
 					</div>
-					<div className="config-auth-guide-body">
+					<div className="text-xs leading-relaxed text-text-secondary">
 						<p>{t("config.providerGuideIntro")}</p>
 
-						<strong className="config-provider-guide-section">{t("config.providerGuideApis")}</strong>
-						<div className="config-provider-api-grid">
-							<div className="config-provider-api-item">
-								<code>openai-completions</code>
-								<span>{t("config.providerGuideApiDesc1")}</span>
+						<strong className="mt-3.5 mb-1.5 block text-sm text-text-primary">{t("config.providerGuideApis")}</strong>
+						<div className="grid grid-cols-3 gap-1.5">
+							<div className="flex flex-col gap-0.5 rounded-sm bg-bg-hover px-2.5 py-2">
+								<code className="font-mono text-[11px] font-semibold text-[color:var(--color-accent)]">openai-completions</code>
+								<span className="text-[11px] text-text-tertiary">{t("config.providerGuideApiDesc1")}</span>
 							</div>
-							<div className="config-provider-api-item">
-								<code>anthropic-messages</code>
-								<span>{t("config.providerGuideApiDesc2")}</span>
+							<div className="flex flex-col gap-0.5 rounded-sm bg-bg-hover px-2.5 py-2">
+								<code className="font-mono text-[11px] font-semibold text-[color:var(--color-accent)]">anthropic-messages</code>
+								<span className="text-[11px] text-text-tertiary">{t("config.providerGuideApiDesc2")}</span>
 							</div>
-							<div className="config-provider-api-item">
-								<code>openai-responses</code>
-								<span>{t("config.providerGuideApiDesc3")}</span>
+							<div className="flex flex-col gap-0.5 rounded-sm bg-bg-hover px-2.5 py-2">
+								<code className="font-mono text-[11px] font-semibold text-[color:var(--color-accent)]">openai-responses</code>
+								<span className="text-[11px] text-text-tertiary">{t("config.providerGuideApiDesc3")}</span>
 							</div>
-							<div className="config-provider-api-item">
-								<code>openai-codex-responses</code>
-								<span>{t("config.providerGuideApiDesc5")}</span>
+							<div className="flex flex-col gap-0.5 rounded-sm bg-bg-hover px-2.5 py-2">
+								<code className="font-mono text-[11px] font-semibold text-[color:var(--color-accent)]">openai-codex-responses</code>
+								<span className="text-[11px] text-text-tertiary">{t("config.providerGuideApiDesc5")}</span>
 							</div>
-							<div className="config-provider-api-item">
-								<code>google-generative-ai</code>
-								<span>{t("config.providerGuideApiDesc4")}</span>
+							<div className="flex flex-col gap-0.5 rounded-sm bg-bg-hover px-2.5 py-2">
+								<code className="font-mono text-[11px] font-semibold text-[color:var(--color-accent)]">google-generative-ai</code>
+								<span className="text-[11px] text-text-tertiary">{t("config.providerGuideApiDesc4")}</span>
 							</div>
-							<div className="config-provider-api-item">
-								<code>mistral-conversations</code>
-								<span>{t("config.providerGuideApiDesc6")}</span>
+							<div className="flex flex-col gap-0.5 rounded-sm bg-bg-hover px-2.5 py-2">
+								<code className="font-mono text-[11px] font-semibold text-[color:var(--color-accent)]">mistral-conversations</code>
+								<span className="text-[11px] text-text-tertiary">{t("config.providerGuideApiDesc6")}</span>
 							</div>
 						</div>
 
-						<strong className="config-provider-guide-section">{t("config.providerGuideCompat")}</strong>
-						<table className="config-provider-compat-table">
+						<strong className="mt-3.5 mb-1.5 block text-sm text-text-primary">{t("config.providerGuideCompat")}</strong>
+						<table className="w-full border-collapse text-xs">
 							<tbody>
 								<tr>
-									<td><code>supportsDeveloperRole</code></td>
-									<td>{t("config.providerGuideCompatDevRole")}</td>
+									<td className="w-[180px] border-b border-border-subtle px-2.5 py-1.5 align-top"><code className="rounded-[4px] bg-[color:color-mix(in_srgb,var(--color-accent)_5%,transparent)] px-1.5 py-px font-mono text-[11px] text-[color:var(--color-accent)]">supportsDeveloperRole</code></td>
+									<td className="border-b border-border-subtle px-2.5 py-1.5 align-top">{t("config.providerGuideCompatDevRole")}</td>
 								</tr>
 								<tr>
-									<td><code>supportsReasoningEffort</code></td>
-									<td>{t("config.providerGuideCompatReasoning")}</td>
+									<td className="w-[180px] border-b border-border-subtle px-2.5 py-1.5 align-top"><code className="rounded-[4px] bg-[color:color-mix(in_srgb,var(--color-accent)_5%,transparent)] px-1.5 py-px font-mono text-[11px] text-[color:var(--color-accent)]">supportsReasoningEffort</code></td>
+									<td className="border-b border-border-subtle px-2.5 py-1.5 align-top">{t("config.providerGuideCompatReasoning")}</td>
 								</tr>
 							</tbody>
 						</table>
 
-						<strong className="config-provider-guide-section">{t("config.providerGuideTroubleshoot")}</strong>
-						<ul className="config-provider-guide-list">
-							<li>{t("config.providerGuideTip1")}</li>
-							<li>{t("config.providerGuideTip2")}</li>
-							<li>{t("config.providerGuideTip3")}</li>
-							<li>{t("config.providerGuideTip4")}</li>
+						<strong className="mt-3.5 mb-1.5 block text-sm text-text-primary">{t("config.providerGuideTroubleshoot")}</strong>
+						<ul className="my-1.5 list-disc pl-5 text-xs text-text-secondary">
+							<li className="mb-1.5 leading-relaxed">{t("config.providerGuideTip1")}</li>
+							<li className="mb-1.5 leading-relaxed">{t("config.providerGuideTip2")}</li>
+							<li className="mb-1.5 leading-relaxed">{t("config.providerGuideTip3")}</li>
+							<li className="mb-1.5 leading-relaxed">{t("config.providerGuideTip4")}</li>
 						</ul>
 
-						<p className="config-auth-guide-note">
+						<p className="mt-3 border-t border-border-subtle pt-2.5 text-text-tertiary">
 							{t("config.providerGuideNote")}{" "}
-							<a href="https://pi.dev/docs/latest/models" target="_blank" rel="noreferrer">
+							<a href="https://pi.dev/docs/latest/models" target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 text-[color:var(--color-accent)] no-underline">
 								{t("config.modelsDocs")} <ExternalLink size={12} />
 							</a>
 							{" · "}
-							<a href="https://pi.dev/docs/latest/providers" target="_blank" rel="noreferrer">
+							<a href="https://pi.dev/docs/latest/providers" target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 text-[color:var(--color-accent)] no-underline">
 								{t("config.providersDocs")} <ExternalLink size={12} />
 							</a>
 						</p>
@@ -392,7 +393,7 @@ export function ModelsTab(props: {
 				</div>
 			)}
 
-			<div className="config-provider-list">
+			<div className="flex flex-col gap-2.5">
 				{providerNames.map((name) => {
 					const provider = data.providers[name];
 					const isExpanded = expandedProvider === name;
@@ -412,10 +413,10 @@ export function ModelsTab(props: {
 					return (
 						<div
 							key={name}
-							className={`config-provider-card ${isExpanded ? "expanded" : ""}`}
+							className={`overflow-hidden rounded-lg border border-border-subtle bg-bg-panel transition-[border-color,box-shadow,background-color] duration-150${isExpanded ? " border-[color-mix(in_srgb,var(--color-accent)_32%,var(--color-border-subtle))] shadow-[var(--shadow-border)] overflow-visible" : ""}`}
 						>
 							<div
-								className="config-provider-header"
+								className="flex cursor-pointer items-center justify-between px-3.5 py-2 transition-colors duration-150 hover:bg-bg-hover"
 								onClick={() => {
 									// 重命名模式下点击不折叠展开
 									if (props.renamingProvider === name) return;
@@ -423,7 +424,7 @@ export function ModelsTab(props: {
 								}}
 							>
 								{batchMode && (
-								<label className="config-batch-checkbox" onClick={(e) => e.stopPropagation()}>
+								<label className="mr-2.5 inline-flex size-4 shrink-0 items-center justify-center" onClick={(e) => e.stopPropagation()}>
 									<input
 										type="checkbox"
 										checked={selectedProviders.has(name)}
@@ -439,7 +440,7 @@ export function ModelsTab(props: {
 									/>
 								</label>
 							)}
-							<div className="config-provider-info">
+							<div className="flex min-w-0 flex-1 items-center gap-2.5">
 									{props.renamingProvider === name ? (
 										<input
 											className="config-rename-input"
@@ -453,24 +454,24 @@ export function ModelsTab(props: {
 											autoFocus
 										/>
 									) : (
-										<span className="config-provider-name">{name}</span>
+										<span className="text-[13px] font-semibold text-text-primary">{name}</span>
 									)}
-									<span className="config-provider-badge">
+									<span className="rounded-full bg-[var(--color-accent-soft)] px-2 py-0.5 font-mono text-[11px] font-medium tabular-nums text-[color:var(--color-accent)]">
 										{t("config.count.models", {
 											count: provider.models.length,
 										})}
 									</span>
 									{provider.baseUrl && (
-										<span className="config-provider-url">
+										<span className="max-w-[240px] truncate text-[11px] text-text-tertiary">
 											{provider.baseUrl}
 										</span>
 									)}
 								</div>
-								<div className="config-provider-actions">
+								<div className="flex items-center gap-1">
 									{props.renamingProvider === name ? (
 										<>
-											<button
-												className="config-icon-btn"
+											<Button
+												variant="ghost" size="icon-sm" className="size-7"
 												onClick={(e) => {
 													e.stopPropagation();
 													props.onConfirmRename(name);
@@ -478,9 +479,9 @@ export function ModelsTab(props: {
 												title={t("config.renameConfirm")}
 											>
 												<Check size={14} />
-											</button>
-											<button
-												className="config-icon-btn"
+											</Button>
+											<Button
+												variant="ghost" size="icon-sm" className="size-7"
 												onClick={(e) => {
 													e.stopPropagation();
 													props.onCancelRename();
@@ -488,11 +489,11 @@ export function ModelsTab(props: {
 												title={t("config.renameCancel")}
 											>
 												×
-											</button>
+											</Button>
 										</>
 									) : (
-										<button
-											className="config-icon-btn"
+										<Button
+											variant="ghost" size="icon-sm" className="size-7"
 											onClick={(e) => {
 												e.stopPropagation();
 												props.onStartRename(name);
@@ -500,10 +501,10 @@ export function ModelsTab(props: {
 											title={t("config.renameProvider")}
 										>
 											✎
-										</button>
+										</Button>
 									)}
-									<button
-										className="config-icon-btn"
+									<Button
+										variant="ghost" size="icon-sm" className="size-7"
 										onClick={(e) => {
 											e.stopPropagation();
 											props.onDuplicateProvider(name);
@@ -511,9 +512,9 @@ export function ModelsTab(props: {
 										title={t("config.duplicateProvider")}
 									>
 										<Copy size={14} />
-									</button>
-									<button
-										className="config-icon-btn danger"
+									</Button>
+									<Button
+										variant="ghost" size="icon-sm" className="size-7 text-destructive hover:bg-destructive/10 hover:text-destructive"
 										onClick={(e) => {
 											e.stopPropagation();
 											props.onDeleteProvider(name);
@@ -521,8 +522,8 @@ export function ModelsTab(props: {
 										title={t("config.deleteProvider")}
 									>
 										<Trash2 size={14} />
-									</button>
-									<span className="config-chevron">
+									</Button>
+									<span className="ml-1 text-[13px] text-text-tertiary">
 										{isExpanded ? (
 											<ChevronDown size={14} />
 										) : (
@@ -533,13 +534,13 @@ export function ModelsTab(props: {
 							</div>
 
 							{isExpanded && (
-								<div className="config-provider-body">
-									<div className="config-provider-form">
-										<div className="config-form-row">
-											<label>{t("config.field.baseUrl")}</label>
+								<div className="border-t border-border-subtle bg-bg-muted pt-3">
+									<div className="mx-4 my-3.5 grid gap-2.5 rounded-lg border border-border-subtle bg-bg-panel p-3.5">
+										<div className="grid grid-cols-[90px_1fr] items-center gap-2.5">
+											<label className="pl-0.5 text-left text-xs font-medium text-text-secondary">{t("config.field.baseUrl")}</label>
 											<div className="config-base-url-field">
 												<input
-													value={provider.baseUrl ?? ""}
+													value={provider.baseUrl ?? ""} className="h-9 min-w-0 rounded-sm border border-border-subtle bg-bg-panel px-3 text-[13px] text-text-primary outline-none transition-[border-color,box-shadow,background-color] duration-150 focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]"
 													onChange={(e) =>
 														props.onChangeProvider(
 															name,
@@ -550,11 +551,11 @@ export function ModelsTab(props: {
 													placeholder="https://api.openai.com/v1"
 												/>
 												{/* 说明检测兼容补路径 vs 会话原样使用 baseUrl 的差异 */}
-												<span className="config-field-hint">{t("config.baseUrlHint")}</span>
+												<span className="mt-1 block text-[11px] leading-relaxed text-text-tertiary">{t("config.baseUrlHint")}</span>
 											</div>
 										</div>
-										<div className="config-form-row">
-											<label>{t("config.field.apiType")}</label>
+										<div className="grid grid-cols-[90px_1fr] items-center gap-2.5">
+											<label className="pl-0.5 text-left text-xs font-medium text-text-secondary">{t("config.field.apiType")}</label>
 											<ApiTypeInput
 												value={provider.api ?? ""}
 												onChange={(value) =>
@@ -562,8 +563,8 @@ export function ModelsTab(props: {
 												}
 											/>
 										</div>
-										<div className="config-form-row">
-											<label>{t("config.field.apiKey")}</label>
+										<div className="grid grid-cols-[90px_1fr] items-center gap-2.5">
+											<label className="pl-0.5 text-left text-xs font-medium text-text-secondary">{t("config.field.apiKey")}</label>
 											<SecretInput
 												value={provider.apiKey ?? ""}
 												onChange={(v) =>
@@ -571,8 +572,8 @@ export function ModelsTab(props: {
 												}
 											/>
 										</div>
-										<div className="config-form-row">
-											<label>{t("config.field.userAgent")}</label>
+										<div className="grid grid-cols-[90px_1fr] items-center gap-2.5">
+											<label className="pl-0.5 text-left text-xs font-medium text-text-secondary">{t("config.field.userAgent")}</label>
 											<div className="config-header-field">
 												<ConfigSelect
 													value={userAgentSelectValue}
@@ -614,11 +615,11 @@ export function ModelsTab(props: {
 
 
 										{/* 快速测试连接 */}
-										<div className="config-form-row">
-											<label>{t("config.testModel")}</label>
+										<div className="grid grid-cols-[90px_1fr] items-center gap-2.5">
+											<label className="pl-0.5 text-left text-xs font-medium text-text-secondary">{t("config.testModel")}</label>
 											<div className="config-test-controls">
 												<input
-													value={props.testModelIdByProvider[name] ?? ""}
+													value={props.testModelIdByProvider[name] ?? ""} className="h-9 min-w-0 rounded-sm border border-border-subtle bg-bg-panel px-3 text-[13px] text-text-primary outline-none transition-[border-color,box-shadow,background-color] duration-150 focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]"
 													onChange={(e) =>
 														props.onChangeTestModelId(name, e.target.value)
 													}
@@ -650,27 +651,27 @@ export function ModelsTab(props: {
 																? `✅ ${t("config.connectionOk")}`
 																: `❌ ${t("config.connectionFailed")}`}
 														</span>
-														<button
-															className="config-icon-btn"
+														<Button
+															variant="ghost" size="icon-sm" className="size-7"
 															onClick={props.onClearTestResult}
 															title={t("config.clearResult")}
 														>
 															×
-														</button>
+														</Button>
 													</div>
 													{props.testResult.success ? (
 														<div className="config-test-result-body">
-															<div className="config-test-result-row">
-																<span>{t("config.model")}</span>
-																<strong>{props.testResult.model}</strong>
+															<div className="flex items-baseline gap-4 text-[13px]">
+																<span className="basis-12 shrink-0 text-xs text-text-secondary">{t("config.model")}</span>
+																<strong className="break-all text-text-primary">{props.testResult.model}</strong>
 															</div>
-															<div className="config-test-result-row">
-																<span>{t("config.response")}</span>
-																<span>{props.testResult.snippet}</span>
+															<div className="flex items-baseline gap-4 text-[13px]">
+																<span className="basis-12 shrink-0 text-xs text-text-secondary">{t("config.response")}</span>
+																<span className="break-all text-text-primary">{props.testResult.snippet}</span>
 															</div>
 															{props.testResult.requestUrl && (
-																<div className="config-test-result-row">
-																	<span>{t("config.request")}</span>
+																<div className="flex items-baseline gap-4 text-[13px]">
+																	<span className="basis-12 shrink-0 text-xs text-text-secondary">{t("config.request")}</span>
 																	<code className="config-test-request-url">
 																		POST{" "}
 																		{props.testResult.requestUrl}
@@ -680,9 +681,9 @@ export function ModelsTab(props: {
 															{props.testResult.tokens &&
 																(props.testResult.tokens.input != null ||
 																	props.testResult.tokens.output != null) && (
-																<div className="config-test-result-row">
-																	<span>{t("config.tokens")}</span>
-																	<span>
+																<div className="flex items-baseline gap-4 text-[13px]">
+																	<span className="basis-12 shrink-0 text-xs text-text-secondary">{t("config.tokens")}</span>
+																	<span className="break-all text-text-primary">
 																		{t("config.testInputTokens", {
 																			count: props.testResult.tokens.input ?? "-",
 																		})}
@@ -694,9 +695,9 @@ export function ModelsTab(props: {
 																</div>
 															)}
 															{props.testResult.latencyMs != null && (
-																<div className="config-test-result-row">
-																	<span>{t("config.testLatency")}</span>
-																	<span>
+																<div className="flex items-baseline gap-4 text-[13px]">
+																	<span className="basis-12 shrink-0 text-xs text-text-secondary">{t("config.testLatency")}</span>
+																	<span className="break-all text-text-primary">
 																		{props.testResult.latencyMs < 1000
 																			? `${props.testResult.latencyMs} ms`
 																			: `${(props.testResult.latencyMs / 1000).toFixed(1)} s`}
@@ -708,14 +709,14 @@ export function ModelsTab(props: {
 														<div className="config-test-result-body">
 															{/* 失败原因放在详情第一行，保证用户从折叠卡片展开后立刻看到核心错误，
 															   不会只看到请求/Body 等排障信息而误判测试结果。 */}
-															<div className="config-test-result-row config-test-result-error-row">
-																<span>{t("config.reason")}</span>
-																<strong>{props.testResult.error}</strong>
+															<div className="flex items-start gap-4 text-[13px]">
+																<span className="basis-12 shrink-0 text-xs text-text-secondary">{t("config.reason")}</span>
+																<strong className="break-all leading-relaxed text-danger">{props.testResult.error}</strong>
 															</div>
 															{props.testResult.latencyMs != null && (
-																<div className="config-test-result-row">
-																	<span>{t("config.testElapsed")}</span>
-																	<span>
+																<div className="flex items-baseline gap-4 text-[13px]">
+																	<span className="basis-12 shrink-0 text-xs text-text-secondary">{t("config.testElapsed")}</span>
+																	<span className="break-all text-text-primary">
 																		{props.testResult.latencyMs < 1000
 																			? `${props.testResult.latencyMs} ms`
 																			: `${(props.testResult.latencyMs / 1000).toFixed(1)} s`}
@@ -723,8 +724,8 @@ export function ModelsTab(props: {
 																</div>
 															)}
 															{props.testResult.requestUrl && (
-																<div className="config-test-result-row">
-																	<span>{t("config.request")}</span>
+																<div className="flex items-baseline gap-4 text-[13px]">
+																	<span className="basis-12 shrink-0 text-xs text-text-secondary">{t("config.request")}</span>
 																	<code className="config-test-request-url">
 																		POST{" "}
 																		{props.testResult.requestUrl}
@@ -732,8 +733,8 @@ export function ModelsTab(props: {
 																</div>
 															)}
 															{props.testResult.requestBody && (
-																<div className="config-test-result-row">
-																	<span>{t("config.requestBody")}</span>
+																<div className="flex items-baseline gap-4 text-[13px]">
+																	<span className="basis-12 shrink-0 text-xs text-text-secondary">{t("config.requestBody")}</span>
 																	<code className="config-test-request-body">
 																		{props.testResult.requestBody}
 																	</code>
@@ -750,8 +751,8 @@ export function ModelsTab(props: {
 									</div>
 								)}
 
-										<div className="config-form-row">
-											<label>{t("config.compatibility")}</label>
+										<div className="grid grid-cols-[90px_1fr] items-center gap-2.5">
+											<label className="pl-0.5 text-left text-xs font-medium text-text-secondary">{t("config.compatibility")}</label>
 											<div className="config-compat-group">
 												<div className="config-compat-item">
 													<label className="config-checkbox-label">
@@ -798,7 +799,7 @@ export function ModelsTab(props: {
 														fields: [...providerComplexFields, ...providerAdvancedFields].join(", "),
 													})}
 													{" "}
-													<a href="https://pi.dev/docs/latest/models" target="_blank" rel="noreferrer">
+													<a href="https://pi.dev/docs/latest/models" target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 text-[color:var(--color-accent)] no-underline">
 														pi {t("config.docsModels")}
 													</a>
 													{" / "}
@@ -813,7 +814,7 @@ export function ModelsTab(props: {
 									<div className="config-models-section">
 										<div className="config-models-header">
 											<span>{t("config.modelList")}</span>
-											<div className="config-model-list-actions">
+											<div className="flex min-w-0 items-center gap-2">
 												<Button
 													 variant="outline" size="sm"
 													onClick={() => props.onFetchModels(name)}
@@ -838,19 +839,19 @@ export function ModelsTab(props: {
 										</div>
 
 										{props.fetchModelsErrorByProvider[name] && (
-											<div className="config-error">{props.fetchModelsErrorByProvider[name]}</div>
+											<div className="mb-3.5 rounded-sm border border-danger/20 bg-danger-soft px-3.5 py-2.5 text-[13px] leading-relaxed text-danger whitespace-pre-line">{props.fetchModelsErrorByProvider[name]}</div>
 										)}
 
 										{/* 自动获取后直接在同一区块勾选保存，保留手动添加作为兜底入口。 */}
 										{props.fetchedModels[name] && props.fetchedModels[name].length > 0 && (
-											<div className="config-model-dropdown-row">
+											<div className="mb-2.5 flex flex-col gap-2 rounded-md border border-border-subtle bg-bg-subtle p-2.5">
 												<FetchedModelCombobox
 													models={props.fetchedModels[name]}
 													value={selectedFetchedModelIds[name] ?? []}
 													existingModelIds={provider.models.map((model) => model.id)}
 													onChange={(modelIds) => setSelectedFetchedModels(name, modelIds)}
 												/>
-												<div className="config-model-dropdown-actions">
+												<div className="flex justify-end border-t border-border-subtle pt-2">
 													<Button
 														 variant="default" size="sm"
 														onClick={() => {
@@ -1003,19 +1004,19 @@ export function ModelsTab(props: {
 															<span>{t("config.inputTypeImage")}</span>
 														</label>
 													</div>
-													<button
-														className="config-icon-btn danger"
+													<Button
+														variant="ghost" size="icon-sm" className="size-7 text-destructive hover:bg-destructive/10 hover:text-destructive"
 														onClick={() => props.onDeleteModel(name, i)}
 														title={t("config.deleteModel")}
 													>
 													<Trash2 size={14} />
-												</button>
+												</Button>
 												{(modelComplexFields.length > 0 || modelAdvancedFields.length > 0) && (
-													<div className="config-model-advanced-note">
+													<div className="col-span-full mt-[-4px] rounded-sm bg-bg-muted px-2 py-1.5 text-[11px] leading-relaxed text-text-secondary">
 														{t("config.advancedPreservedModel", {
 															fields: [...modelComplexFields, ...modelAdvancedFields].join(", "),
 														})}
-														<a href="https://pi.dev/docs/latest/models" target="_blank" rel="noreferrer">
+														<a href="https://pi.dev/docs/latest/models" target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 text-[color:var(--color-accent)] no-underline">
 															{t("config.docsModels")}
 														</a>
 													</div>
@@ -1024,7 +1025,7 @@ export function ModelsTab(props: {
 											);
 										})}
 										{provider.models.length === 0 && (
-											<div className="config-empty-sm">
+											<div className="py-5 text-center text-xs text-text-tertiary">
 												{t("config.emptyModels")}
 											</div>
 										)}
@@ -1035,7 +1036,7 @@ export function ModelsTab(props: {
 					);
 				})}
 				{providerNames.length === 0 && (
-					<div className="config-empty">{t("config.emptyProviders")}</div>
+					<div className="py-12 text-center text-[13px] text-text-tertiary">{t("config.emptyProviders")}</div>
 				)}
 			</div>
 		</div>

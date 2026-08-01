@@ -68,7 +68,7 @@ export function SkillStoreTab(props: {
 	if (previewItem) {
 		return (
 			<div className="prompt-store-tab">
-				{error && <div className="config-error">{error}</div>}
+				{error && <div className="mb-3.5 rounded-sm border border-danger/20 bg-danger-soft px-3.5 py-2.5 text-[13px] leading-relaxed text-danger whitespace-pre-line">{error}</div>}
 				{/* toast 已改用 sonner */}
 				<div className="prompt-store-toolbar">
 					<Button  variant="outline" onClick={() => { setPreviewItem(null); }}>
@@ -146,12 +146,12 @@ export function SkillStoreTab(props: {
 				)}
 			</div>
 
-			{error && <div className="config-error">{error}</div>}
+			{error && <div className="mb-3.5 rounded-sm border border-danger/20 bg-danger-soft px-3.5 py-2.5 text-[13px] leading-relaxed text-danger whitespace-pre-line">{error}</div>}
 			{/* toast 已改用 sonner */}
-		{searching && <div className="config-loading">{t("config.promptStoreSearching")}</div>}
+		{searching && <div className="py-12 text-center text-[13px] text-text-tertiary">{t("config.promptStoreSearching")}</div>}
 
 		{result && !searching && result.count === 0 && (
-			<div className="config-empty">{t("config.skillStoreNoResults")}</div>
+			<div className="py-12 text-center text-[13px] text-text-tertiary">{t("config.skillStoreNoResults")}</div>
 		)}
 
 			{result && result.count > 0 && (
@@ -175,13 +175,13 @@ export function SkillStoreTab(props: {
 								</div>
 							</div>
 							<div className="prompt-store-card-actions">
-								<button
-									className="config-icon-btn"
+								<Button
+									variant="ghost" size="icon-sm" className="size-7"
 									title={t("config.promptStorePreview")}
 									onClick={(e) => { e.stopPropagation(); setPreviewItem(item); }}
 								>
 									<ExternalLink size={14} strokeWidth={1.8} />
-								</button>
+								</Button>
 								<Button
 									 variant="default" size="sm"
 									onClick={(e) => { e.stopPropagation(); void handleImport(item); }}

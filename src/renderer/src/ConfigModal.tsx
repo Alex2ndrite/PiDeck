@@ -1468,8 +1468,8 @@ function ConfigModalContent(props: ConfigModalProps) {
 
 					<main className="config-main">
 						<div className="config-content">
-					{loading && <div className="config-loading">{t("common.loading")}</div>}
-					{error && <div className="config-error">{error}</div>}
+					{loading && <div className="py-12 text-center text-[13px] text-text-tertiary">{t("common.loading")}</div>}
+					{error && <div className="mb-3.5 rounded-sm border border-danger/20 bg-danger-soft px-3.5 py-2.5 text-[13px] leading-relaxed text-danger whitespace-pre-line">{error}</div>}
 					{section === "config" && configDiagnostic && (
 						<ConfigDiagnosticCard
 							diagnostic={configDiagnostic}
@@ -1597,7 +1597,7 @@ function ConfigModalContent(props: ConfigModalProps) {
 										</div>
 									</div>
 									{editGlobalLoading ? (
-										<div className="config-empty">{t("common.loading")}</div>
+										<div className="py-12 text-center text-[13px] text-text-tertiary">{t("common.loading")}</div>
 									) : (
 										<div className="prompts-monaco-wrap">
 											<LazyMonacoEditor

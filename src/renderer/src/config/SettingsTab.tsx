@@ -211,8 +211,8 @@ export function SettingsTab(props: {
 
 	return (
 		<div className="config-settings-tab">
-			<div className="config-toolbar">
-				<span className="config-count">
+			<div className="mb-3.5 flex items-center justify-between">
+				<span className="font-mono text-xs tabular-nums text-text-tertiary">
 					{t("config.count.configItems", { count: entries.length })}
 				</span>
 				<Button
@@ -223,10 +223,10 @@ export function SettingsTab(props: {
 					{saving ? t("common.saving") : t("common.save")}
 				</Button>
 			</div>
-			<div className="config-settings-list">
+			<div className="flex flex-col gap-2">
 				{/* enabledModels 始终显示在最前面 */}
-				<div className="config-settings-row">
-					<span className="config-settings-key">{configLabel("enabledModels")}</span>
+				<div className="flex items-center gap-3.5 rounded-sm border border-border-subtle px-4 py-2 transition-colors hover:border-border-strong">
+					<span className="min-w-[180px] text-[13px] font-medium text-text-primary">{configLabel("enabledModels")}</span>
 					<EnabledModelsInput
 						value={
 							Array.isArray(data.enabledModels) ? data.enabledModels : undefined
@@ -238,14 +238,14 @@ export function SettingsTab(props: {
 
 				{/* ── 全局会话目录（仅编辑 ~/.pi/agent/settings.json 的 sessionDir） ── */}
 				<div className="config-retry-group">
-					<div className="config-settings-row config-retry-header-row">
+					<div className="flex items-center gap-3.5 rounded-sm border border-border-subtle px-4 py-2 transition-colors hover:border-border-strong flex flex-col items-start gap-0.5 rounded-none border-none px-4 pb-1 pt-2.5 hover:border-transparent">
 						<span className="config-settings-section-title">{t("config.sessionDir.title")}</span>
 						<span className="config-settings-section-hint">{t("config.sessionDir.hint")}</span>
 					</div>
-					<div className="config-settings-row">
-						<span className="config-settings-key">{t("config.label.sessionDir")}</span>
+					<div className="flex items-center gap-3.5 rounded-sm border border-border-subtle px-4 py-2 transition-colors hover:border-border-strong">
+						<span className="min-w-[180px] text-[13px] font-medium text-text-primary">{t("config.label.sessionDir")}</span>
 						<input
-							className="config-settings-input"
+							className="h-9 min-w-0 flex-1 rounded-sm border border-border-subtle bg-bg-panel px-3 text-[13px] text-text-primary outline-none focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]"
 							type="text"
 							value={sessionDirValue}
 							placeholder={t("config.sessionDir.placeholder")}
@@ -256,28 +256,28 @@ export function SettingsTab(props: {
 
 				{/* ── 重试配置 ── */}
 				<div className="config-retry-group">
-					<div className="config-settings-row config-retry-header-row">
+					<div className="flex items-center gap-3.5 rounded-sm border border-border-subtle px-4 py-2 transition-colors hover:border-border-strong flex flex-col items-start gap-0.5 rounded-none border-none px-4 pb-1 pt-2.5 hover:border-transparent">
 					<span className="config-settings-section-title">{t("config.retry.title")}</span>
 					<span className="config-settings-section-hint">{t("config.retry.hint")}</span>
 				</div>
-				<div className="config-settings-row">
-					<span className="config-settings-key">{t("config.retry.maxRetries")}</span>
-					<input className="config-settings-input" type="number" min={0} max={50} value={retryConfig.maxRetries} onChange={(e) => updateRetry({ maxRetries: Number(e.target.value) })} />
+				<div className="flex items-center gap-3.5 rounded-sm border border-border-subtle px-4 py-2 transition-colors hover:border-border-strong">
+					<span className="min-w-[180px] text-[13px] font-medium text-text-primary">{t("config.retry.maxRetries")}</span>
+					<input className="h-9 min-w-0 flex-1 rounded-sm border border-border-subtle bg-bg-panel px-3 text-[13px] text-text-primary outline-none focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]" type="number" min={0} max={50} value={retryConfig.maxRetries} onChange={(e) => updateRetry({ maxRetries: Number(e.target.value) })} />
 				</div>
-				<div className="config-settings-row">
-					<span className="config-settings-key">{t("config.retry.baseDelayMs")}</span>
-					<input className="config-settings-input" type="number" min={100} step={100} value={retryConfig.baseDelayMs} onChange={(e) => updateRetry({ baseDelayMs: Number(e.target.value) })} />
+				<div className="flex items-center gap-3.5 rounded-sm border border-border-subtle px-4 py-2 transition-colors hover:border-border-strong">
+					<span className="min-w-[180px] text-[13px] font-medium text-text-primary">{t("config.retry.baseDelayMs")}</span>
+					<input className="h-9 min-w-0 flex-1 rounded-sm border border-border-subtle bg-bg-panel px-3 text-[13px] text-text-primary outline-none focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]" type="number" min={100} step={100} value={retryConfig.baseDelayMs} onChange={(e) => updateRetry({ baseDelayMs: Number(e.target.value) })} />
 				</div>
 				</div>
 
 				{/* ── 会话压缩：拆成开关 + 两个 token 数，避免用户直接改 JSON 对象 ── */}
 				<div className="config-retry-group">
-					<div className="config-settings-row config-retry-header-row">
+					<div className="flex items-center gap-3.5 rounded-sm border border-border-subtle px-4 py-2 transition-colors hover:border-border-strong flex flex-col items-start gap-0.5 rounded-none border-none px-4 pb-1 pt-2.5 hover:border-transparent">
 						<span className="config-settings-section-title">{t("config.compaction.title")}</span>
 						<span className="config-settings-section-hint">{t("config.compaction.hint")}</span>
 					</div>
-					<div className="config-settings-row">
-						<span className="config-settings-key">{t("config.compaction.enabled")}</span>
+					<div className="flex items-center gap-3.5 rounded-sm border border-border-subtle px-4 py-2 transition-colors hover:border-border-strong">
+						<span className="min-w-[180px] text-[13px] font-medium text-text-primary">{t("config.compaction.enabled")}</span>
 						<label className="config-checkbox-label">
 							<input
 								type="checkbox"
@@ -291,12 +291,12 @@ export function SettingsTab(props: {
 							</span>
 						</label>
 					</div>
-					<div className="config-settings-row">
-						<span className="config-settings-key" title={t("config.compaction.reserveTokensHint")}>
+					<div className="flex items-center gap-3.5 rounded-sm border border-border-subtle px-4 py-2 transition-colors hover:border-border-strong">
+						<span className="min-w-[180px] text-[13px] font-medium text-text-primary" title={t("config.compaction.reserveTokensHint")}>
 							{t("config.compaction.reserveTokens")}
 						</span>
 						<input
-							className="config-settings-input"
+							className="h-9 min-w-0 flex-1 rounded-sm border border-border-subtle bg-bg-panel px-3 text-[13px] text-text-primary outline-none focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]"
 							type="number"
 							min={0}
 							step={1024}
@@ -308,12 +308,12 @@ export function SettingsTab(props: {
 							}
 						/>
 					</div>
-					<div className="config-settings-row">
-						<span className="config-settings-key" title={t("config.compaction.keepRecentTokensHint")}>
+					<div className="flex items-center gap-3.5 rounded-sm border border-border-subtle px-4 py-2 transition-colors hover:border-border-strong">
+						<span className="min-w-[180px] text-[13px] font-medium text-text-primary" title={t("config.compaction.keepRecentTokensHint")}>
 							{t("config.compaction.keepRecentTokens")}
 						</span>
 						<input
-							className="config-settings-input"
+							className="h-9 min-w-0 flex-1 rounded-sm border border-border-subtle bg-bg-panel px-3 text-[13px] text-text-primary outline-none focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]"
 							type="number"
 							min={0}
 							step={1024}
@@ -325,7 +325,7 @@ export function SettingsTab(props: {
 							}
 						/>
 					</div>
-					<div className="config-settings-row config-retry-header-row">
+					<div className="flex items-center gap-3.5 rounded-sm border border-border-subtle px-4 py-2 transition-colors hover:border-border-strong flex flex-col items-start gap-0.5 rounded-none border-none px-4 pb-1 pt-2.5 hover:border-transparent">
 						<span className="config-settings-section-hint">{t("config.compaction.manualHint")}</span>
 					</div>
 				</div>
@@ -334,8 +334,8 @@ export function SettingsTab(props: {
 					// sessionDir / retry / enabledModels 已有专用区块，避免列表里重复一行
 					.filter(([key]) => key !== "enabledModels" && key !== "retry" && key !== "sessionDir")
 					.map(([key, value]) => (
-					<div key={key} className="config-settings-row">
-						<span className="config-settings-key">{configLabel(key)}</span>
+					<div key={key} className="flex items-center gap-3.5 rounded-sm border border-border-subtle px-4 py-2 transition-colors hover:border-border-strong">
+						<span className="min-w-[180px] text-[13px] font-medium text-text-primary">{configLabel(key)}</span>
 						<SettingsValueInput
 							value={value}
 							fieldKey={key}
@@ -348,7 +348,7 @@ export function SettingsTab(props: {
 					</div>
 				))}
 				{!hasEnabledModels && (
-					<div className="config-settings-row config-settings-row--add">
+					<div className="flex items-center gap-3.5 rounded-sm border border-border-subtle px-4 py-2 transition-colors hover:border-border-strong justify-center border-dashed opacity-70 hover:opacity-100">
 						<Button
 							 variant="outline"
 							onClick={() => props.onChange({ ...data, enabledModels: [] })}
@@ -358,7 +358,7 @@ export function SettingsTab(props: {
 						</Button>
 					</div>
 				)}
-				{entries.length === 0 && <div className="config-empty">{t("config.emptyConfig")}</div>}
+				{entries.length === 0 && <div className="py-12 text-center text-[13px] text-text-tertiary">{t("config.emptyConfig")}</div>}
 			</div>
 		</div>
 	);
@@ -692,7 +692,7 @@ function SettingsValueInput(props: {
 				type="number"
 				value={value}
 				onChange={(e) => props.onChange(Number(e.target.value))}
-				className="config-settings-input"
+				className="h-9 min-w-0 flex-1 rounded-sm border border-border-subtle bg-bg-panel px-3 text-[13px] text-text-primary outline-none focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]"
 			/>
 		);
 	}
@@ -701,7 +701,7 @@ function SettingsValueInput(props: {
 			<input
 				value={value}
 				onChange={(e) => props.onChange(e.target.value)}
-				className="config-settings-input"
+				className="h-9 min-w-0 flex-1 rounded-sm border border-border-subtle bg-bg-panel px-3 text-[13px] text-text-primary outline-none focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]"
 			/>
 		);
 	}
@@ -715,7 +715,7 @@ function SettingsValueInput(props: {
 					/* 输入过程中 JSON 不合法时暂不更新 */
 				}
 			}}
-			className="config-settings-input"
+			className="h-9 min-w-0 flex-1 rounded-sm border border-border-subtle bg-bg-panel px-3 text-[13px] text-text-primary outline-none focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]"
 		/>
 	);
 }

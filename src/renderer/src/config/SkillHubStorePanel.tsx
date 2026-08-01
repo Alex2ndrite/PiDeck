@@ -228,7 +228,7 @@ export function SkillHubStorePanel() {
 						{t("config.promptStoreBack")}
 					</Button>
 				</div>
-				<div className="config-empty" style={{ marginTop: 24 }}>
+				<div className="py-12 text-center text-[13px] text-text-tertiary" style={{ marginTop: 24 }}>
 					<p>{t("config.skillHubDetailNotAvailable")}</p>
 				</div>
 			</div>
@@ -273,11 +273,11 @@ export function SkillHubStorePanel() {
 				)}
 			</div>
 
-			{error && <div className="config-error">{error}</div>}
-			{searching && <div className="config-loading">{t("common.searching")}…</div>}
+			{error && <div className="mb-3.5 rounded-sm border border-danger/20 bg-danger-soft px-3.5 py-2.5 text-[13px] leading-relaxed text-danger whitespace-pre-line">{error}</div>}
+			{searching && <div className="py-12 text-center text-[13px] text-text-tertiary">{t("common.searching")}…</div>}
 
 			{result && !searching && result.total === 0 && (
-				<div className="config-empty">{t("config.noSearchResults")}</div>
+				<div className="py-12 text-center text-[13px] text-text-tertiary">{t("config.noSearchResults")}</div>
 			)}
 
 			{result && result.total > 0 && (

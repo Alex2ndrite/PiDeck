@@ -391,7 +391,7 @@ export function ProjectResourcesModal(props: {
 								</div>
 							</div>
 							{editLoading ? (
-								<div className="config-empty">{t("common.loading")}</div>
+								<div className="py-12 text-center text-[13px] text-text-tertiary">{t("common.loading")}</div>
 							) : (
 								<div className="prompts-monaco-wrap">
 									<LazyMonacoEditor
@@ -570,7 +570,7 @@ export function ProjectResourcesModal(props: {
 								</div>
 							</div>
 							{editProjectPromptLoading ? (
-								<div className="config-empty">{t("common.loading")}</div>
+								<div className="py-12 text-center text-[13px] text-text-tertiary">{t("common.loading")}</div>
 							) : (
 								<div className="prompts-monaco-wrap">
 									<LazyMonacoEditor
@@ -669,7 +669,7 @@ export function ProjectResourcesModal(props: {
 }
 
 function ResourceListEmpty(props: { loading: boolean; empty: boolean; label: string }) {
-	if (props.loading) return <div className="config-empty">{t("common.loading")}</div>;
-	if (props.empty) return <div className="config-empty">{props.label}</div>;
+	if (props.loading) return <div className="py-12 text-center text-[13px] text-text-tertiary">{t("common.loading")}</div>;
+	if (props.empty) return <div className="py-12 text-center text-[13px] text-text-tertiary">{props.label}</div>;
 	return null;
 }
