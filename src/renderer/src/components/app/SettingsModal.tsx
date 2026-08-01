@@ -11,6 +11,7 @@ import {
 	Plus,
 } from "lucide-react";
 import { t } from "../../i18n";
+import { ACCENT_PRESETS } from "../../themePresets";
 import { Button } from "../ui-shadcn/button";
 import {
 	Select,
@@ -455,13 +456,11 @@ function SettingsModalContent(props: SettingsModalProps) {
 		{ value: "light", label: t("settings.themeLight") },
 		{ value: "dark", label: t("settings.themeDark") },
 	];
-	const lightBackgroundOptions = [
-		{ value: "white", label: t("settings.lightBackgroundWhite") },
-		{ value: "warm", label: t("settings.lightBackgroundWarm") },
-		{ value: "paper", label: t("settings.lightBackgroundPaper") },
-		{ value: "blue", label: t("settings.lightBackgroundBlue") },
-		{ value: "green", label: t("settings.lightBackgroundGreen") },
-	];
+	// 主题色预设来自 themePresets.ts；新增自定义主题 = 扩展色板后这里自动出现
+	const accentOptions = ACCENT_PRESETS.map((preset) => ({
+		value: preset.id,
+		label: t(preset.labelKey),
+	}));
 	const startupWindowModeOptions = [
 		{ value: "maximized", label: t("settings.startupWindow.maximized") },
 		{ value: "normal-large", label: t("settings.startupWindow.large") },
@@ -484,7 +483,6 @@ function SettingsModalContent(props: SettingsModalProps) {
 		{ value: "external", label: t("settings.linkOpenMode.external") },
 		{ value: "internal", label: t("settings.linkOpenMode.internal") },
 	];
-	const lightBackgroundDisabled = draftSettings.theme === "dark";
 
 	const hasDirtyChanges = dirtyFields.size > 0;
 	// 代理 tab 仍展示未保存提示；实际保存/取消统一走全局草稿，避免旧 proxyDirty 局部状态残留。
@@ -876,7 +874,28 @@ function SettingsModalContent(props: SettingsModalProps) {
 						{activeTab === "appearance" && (
 							<>
 								<SettingsSection title={t("settings.interface")}>
-																		<div className="setting-field">
+									<div className="setting-field">
+										<span>
+											{t("settings.accent")}
+											<DirtyMarker dirty={isDirty("accent")} label={t("settings.accent")} />
+										</span>
+										<div className="grid gap-1.5">
+	<Select value={draftSettings.accent} onValueChange={(value) =>
+												updateDraft({ accent: value as AppSettings["accent"] })
+											}>
+		<SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+		<SelectContent>
+			{accentOptions.map((option) => (
+				<SelectItem key={option.value} value={option.value} disabled={option.disabled}>
+					{option.label}
+				</SelectItem>
+			))}
+		</SelectContent>
+	</Select>
+</div>
+										<small className="text-xs text-muted-foreground">{t("settings.accentDesc")}</small>
+									</div>
+									<div className="setting-field">
 										<span>
 											{t("settings.startupWindowMode")}
 											<DirtyMarker
@@ -903,26 +922,6 @@ function SettingsModalContent(props: SettingsModalProps) {
 										<small style={{ color: "var(--color-text-tertiary)", fontSize: "var(--font-size-caption)" }}>
 											{t("settings.startupWindowModeDesc")}
 										</small>
-									</div>
-<div className="setting-field">
-										<span>
-											{t("settings.lightBackground")}
-											<DirtyMarker dirty={isDirty("lightBackground")} label={t("settings.lightBackground")} />
-										</span>
-										<div className="grid gap-1.5">
-	<Select value={draftSettings.lightBackground} onValueChange={(value) =>
-												updateDraft({ lightBackground: value as AppSettings["lightBackground"] })
-											} disabled={lightBackgroundDisabled}>
-		<SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-		<SelectContent>
-			{lightBackgroundOptions.map((option) => (
-				<SelectItem key={option.value} value={option.value} disabled={option.disabled}>
-					{option.label}
-				</SelectItem>
-			))}
-		</SelectContent>
-	</Select>
-</div>
 									</div>
 									<SettingSwitch
 										title={t("settings.nativeTitleBar")}

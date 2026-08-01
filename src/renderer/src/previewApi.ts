@@ -79,7 +79,7 @@ let previewSettings: AppSettings = {
 	showNativeMenu: false,
 	sendShortcut: "enter-send",
 	theme: "system",
-	lightBackground: "white",
+	accent: "green",
 	language: "system",
 	startupWindowMode: "maximized",
 	piEnvironmentChecked: true,

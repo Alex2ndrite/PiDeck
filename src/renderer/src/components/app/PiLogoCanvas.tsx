@@ -48,6 +48,20 @@ const BORDER_COLORS: Partial<Record<ColorKey, string>> = {
 	logoGreen: "#0b8f0b",
 };
 
+/**
+ * 主题色 logo：实时读 CSS 变量（跟随 data-accent 与自制主题），
+ * 无变量（如独立预览环境）时回退淡绿。COLORS 静态表只保留其他块色。
+ */
+function resolveLogoGreen(): { fill: string; deep: string } {
+	const style = getComputedStyle(document.documentElement);
+	const fill = style.getPropertyValue("--color-logo-green").trim();
+	const deep = style.getPropertyValue("--color-logo-green-deep").trim();
+	return {
+		fill: fill || "#2cb35c",
+		deep: deep || "#1f8f45",
+	};
+}
+
 const TOP: Piece = {
 	color: "cyan",
 	cells: [[0, 0], [0, 1], [0, 2], [1, 2]],
@@ -193,8 +207,8 @@ function drawBlock(
 	color: ColorKey,
 	neighbors: { top?: string; right?: string; bottom?: string; left?: string },
 ) {
-	const fillColor = COLORS[color] ?? COLORS.white;
-	const borderColor = BORDER_COLORS[color] ?? fillColor;
+	const fillColor = color === "logoGreen" ? resolveLogoGreen().fill : (COLORS[color] ?? COLORS.white);
+	const borderColor = color === "logoGreen" ? resolveLogoGreen().deep : (BORDER_COLORS[color] ?? fillColor);
 	const sameTop = neighbors.top === color;
 	const sameRight = neighbors.right === color;
 	const sameBottom = neighbors.bottom === color;
@@ -451,9 +465,9 @@ export function PiLogoCanvas(props: PiLogoCanvasProps) {
 			// 播放中不抢画布，等本轮结束后的 showStatic 会用新主题色
 			if (!busyRef.current) showStatic();
 		};
-		// PiDeck 主题切换会改 data-theme
+		// PiDeck 主题/主题色切换会改 data-theme / data-accent
 		const observer = new MutationObserver(onTheme);
-		observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+		observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme", "data-accent"] });
 
 		return () => {
 			// 卸载：作废当前世代，阻止后续 paint / pending 补播
@@ -661,7 +675,7 @@ export function PiDeckWordmarkCanvas(props: PiDeckWordmarkCanvasProps) {
 		const observer = new MutationObserver(paint);
 		observer.observe(document.documentElement, {
 			attributes: true,
-			attributeFilter: ["data-theme"],
+			attributeFilter: ["data-theme", "data-accent"],
 		});
 		return () => observer.disconnect();
 	}, [paint]);

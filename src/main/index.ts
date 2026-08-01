@@ -1304,21 +1304,12 @@ async function createWindow() {
 	});
 
 	// 根据用户的主题设置选择窗口背景色，避免系统标题栏与暗色主题间出现浅色条带。
+	// 色值与 foundation.css 的 light/dark 基底保持一致（暖白 / 暖黑）。
 	const theme = settingsStore.get().theme;
-	const lightBg = settingsStore.get().lightBackground;
 	const isDark =
 		theme === "dark" ||
 		(theme === "system" && nativeTheme.shouldUseDarkColors);
-	const lightBgColors: Record<string, string> = {
-		white: "#ffffff",
-		warm: "#f3f4f1",
-		paper: "#f7f6f1",
-		blue: "#f4f8ff",
-		green: "#f4fbf6",
-	};
-	const backgroundColor = isDark
-		? "#111315"
-		: (lightBgColors[lightBg] ?? "#f3f4f1");
+	const backgroundColor = isDark ? "#121212" : "#f8f8f5";
 
 	// 按外观设置的启动预设调整初始尺寸；隐藏态先 maximize/fullscreen，减少首帧跳动。
 	const startupWindowMode = settingsStore.get().startupWindowMode ?? "maximized";

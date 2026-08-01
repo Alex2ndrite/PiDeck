@@ -58,45 +58,46 @@
   --line-height-title: 24px;
   --line-height-heading: 28px;
   /*
-   * #115 官方 shadcn new-york / zinc 色板（pure official）。
-   * 品牌绿不再做全局 primary/accent，仅保留 logo-* 给 Logo 使用。
+   * 主题色板：暖白基底（对齐 main 的米白/暖灰层次），accent 为可切换主题色。
+   * 默认 accent=green（品牌绿）；其他预设色由 :root[data-accent="…"] 覆盖，
+   * 自定义主题=新增一个 data-accent 值 + 设置页色板预设条目（见 SettingsModal 的 ACCENT_PRESETS）。
    */
-  --color-bg-app: #fafafa;
-  --color-bg-sidebar: #f4f4f5;
+  --color-bg-app: #f8f8f5;
+  --color-bg-sidebar: #f2f2ee;
   --color-bg-panel: #ffffff;
-  --color-bg-muted: #f4f4f5;
-  --color-bg-hover: #f4f4f5;
-  --color-bg-active: #e4e4e7;
-  --color-text-primary: #09090b;
-  --color-text-secondary: #71717a;
-  --color-text-tertiary: #a1a1aa;
-  --color-text-inverse: #fafafa;
-  --color-border-subtle: #f4f4f5;
-  --color-border-default: #e4e4e7;
-  --color-border-strong: #d4d4d8;
-  /* pure official：primary 动作色用 zinc-900；soft 为浅灰底。
-   * 注意：tailwind 里 shadcn 的 accent（悬停面）映射到 bg-active，不绑这里。 */
-  --color-accent: #18181b;
-  --color-accent-strong: #09090b;
-  --color-accent-soft: #f4f4f5;
-  --color-brand-green: #18181b;
-  --color-brand-blue: #18181b;
-  --color-brand-purple: #18181b;
-  --color-brand-amber: #a16207;
-  --color-logo-green: #18181b;
-  --color-logo-green-mid: #27272a;
-  --color-logo-green-deep: #09090b;
-  --color-danger: #ef4444;
-  --color-danger-soft: #fef2f2;
-  --color-warning: #ca8a04;
-  --color-info: #18181b;
-  --color-code-bg: #09090b;
-  --color-code-text: #e4e4e7;
-  --color-chat-card-bg: #ffffff;
+  --color-bg-muted: #f0f1ed;
+  --color-bg-hover: #f0f1ed;
+  --color-bg-active: #eceee9;
+  --color-text-primary: #202124;
+  --color-text-secondary: #5f6368;
+  --color-text-tertiary: #8b8f94;
+  --color-text-inverse: #ffffff;
+  --color-border-subtle: #e5e5df;
+  --color-border-default: #dfdfd7;
+  --color-border-strong: #d7d7cf;
+  /* 主题色（默认品牌绿）：primary 动作、链接、选中态、logo 共用 */
+  --color-accent: #238636;
+  --color-accent-strong: #1f7a32;
+  --color-accent-soft: #eaf6ed;
+  --color-brand-green: #0f766e;
+  --color-brand-blue: #2563eb;
+  --color-brand-purple: #7c3aed;
+  --color-brand-amber: #b45309;
+  --color-brand-rose: #e11d48;
+  --color-logo-green: #2cb35c;
+  --color-logo-green-mid: #27a452;
+  --color-logo-green-deep: #1f8f45;
+  --color-danger: #b42318;
+  --color-danger-soft: #fdecea;
+  --color-warning: #b7791f;
+  --color-info: #2563eb;
+  --color-code-bg: #111418;
+  --color-code-text: #d1d5db;
+  --color-chat-card-bg: #fafafa;
   --color-chat-muted-bg: #f4f4f5;
   --color-chat-control-bg: #ffffff;
   --color-chat-table-bg: #ffffff;
-  --color-chat-link: #18181b;
+  --color-chat-link: #2762ea;
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -161,6 +162,55 @@
   color: var(--color-text-primary);
 }
 
+/* ===== 主题色预设（data-accent） =====
+ * 默认 green 已在 :root 定义；其余预设覆盖 accent/logo 系变量。
+ * 自定义主题：新增一个 data-accent 值 + SettingsModal 色板预设条目即可。
+ */
+:root[data-accent="blue"] {
+  --color-accent: #2563eb;
+  --color-accent-strong: #1d4ed8;
+  --color-accent-soft: #eff6ff;
+  --color-logo-green: #3b82f6;
+  --color-logo-green-mid: #2f6fe0;
+  --color-logo-green-deep: #2456b8;
+  --color-brand-green: #1d4ed8;
+  --color-info: #2563eb;
+  --color-chat-link: #2563eb;
+}
+:root[data-accent="purple"] {
+  --color-accent: #7c3aed;
+  --color-accent-strong: #6d28d9;
+  --color-accent-soft: #f5f3ff;
+  --color-logo-green: #8b5cf6;
+  --color-logo-green-mid: #7c3aed;
+  --color-logo-green-deep: #6d28d9;
+  --color-brand-green: #6d28d9;
+  --color-info: #7c3aed;
+  --color-chat-link: #7c3aed;
+}
+:root[data-accent="amber"] {
+  --color-accent: #b45309;
+  --color-accent-strong: #92400e;
+  --color-accent-soft: #fffbeb;
+  --color-logo-green: #d97706;
+  --color-logo-green-mid: #c26a06;
+  --color-logo-green-deep: #9a5505;
+  --color-brand-green: #92400e;
+  --color-info: #b45309;
+  --color-chat-link: #b45309;
+}
+:root[data-accent="rose"] {
+  --color-accent: #e11d48;
+  --color-accent-strong: #be123c;
+  --color-accent-soft: #fff1f2;
+  --color-logo-green: #f43f5e;
+  --color-logo-green-mid: #e11d48;
+  --color-logo-green-deep: #be123c;
+  --color-brand-green: #be123c;
+  --color-info: #e11d48;
+  --color-chat-link: #e11d48;
+}
+
 :root[data-font-base="sans"] {
   --font-family-base:
     "Inter", "Segoe UI", "Microsoft YaHei", "PingFang SC", "HarmonyOS Sans SC",
@@ -177,29 +227,6 @@
   --font-family-mono:
     ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
 }
-
-/* pure official：浅色背景预设全部收敛到 zinc 中性，去掉旧绿色/暖色/蓝调偏移 */
-:root[data-theme="light"][data-light-background="white"],
-:root[data-theme="light"][data-light-background="warm"],
-:root[data-theme="light"][data-light-background="paper"],
-:root[data-theme="light"][data-light-background="blue"] {
-  --color-bg-app: #fafafa;
-  --color-bg-sidebar: #f4f4f5;
-  --color-bg-panel: #ffffff;
-  --color-bg-muted: #f4f4f5;
-  --color-bg-hover: #f4f4f5;
-  --color-bg-active: #e4e4e7;
-  --color-border-subtle: #f4f4f5;
-  --color-border-default: #e4e4e7;
-  --color-border-strong: #d4d4d8;
-}
-:root[data-theme="light"][data-light-background="warm"] .chat-pane,
-:root[data-theme="light"][data-light-background="warm"] .composer,
-:root[data-theme="light"][data-light-background="warm"] .composer-box {
-  background: #ffffff;
-}
-
-/* blue/green 预设已并入上方中性收敛；旧设置值仍可解析，只是视觉统一为 zinc */
 
 /* 字号预设：拆分为 UI / 会话正文 / 输入框三轨，各自通过 data 属性切换。
    - data-ui-font-size 控制 sidebar、按钮、列表、弹窗等 UI 字号
@@ -306,40 +333,39 @@
    由 JS 在 documentElement.dataset.fontSize 上保留。 */
 :root[data-theme="dark"] {
   color-scheme: dark;
-  /* shadcn new-york zinc dark */
-  --color-bg-app: #09090b;
-  --color-bg-sidebar: #09090b;
-  --color-bg-panel: #09090b;
-  --color-bg-muted: #27272a;
-  --color-bg-hover: #27272a;
-  --color-bg-active: #3f3f46;
-  --color-text-primary: #fafafa;
-  --color-text-secondary: #a1a1aa;
-  --color-text-tertiary: #71717a;
-  --color-text-inverse: #18181b;
-  --color-border-subtle: #27272a;
-  --color-border-default: #27272a;
-  --color-border-strong: #3f3f46;
-  --color-accent: #fafafa;
-  --color-accent-strong: #ffffff;
-  --color-accent-soft: #27272a;
-  --color-danger: #7f1d1d;
-  --color-danger-soft: #450a0a;
-  --color-warning: #a16207;
-  --color-brand-green: #fafafa;
-  --color-brand-purple: #fafafa;
-  --color-brand-blue: #fafafa;
-  --color-info: #fafafa;
-  --color-code-bg: #18181b;
-  --color-code-text: #e4e4e7;
-  --color-chat-card-bg: #09090b;
-  --color-chat-muted-bg: #18181b;
-  --color-chat-control-bg: #09090b;
-  --color-chat-table-bg: #09090b;
-  --color-chat-link: #fafafa;
-  --color-logo-green: #fafafa;
-  --color-logo-green-mid: #e4e4e7;
-  --color-logo-green-deep: #a1a1aa;
+  /* 暗色暖黑基底 + 主题色（默认亮绿，data-accent 可切换） */
+  --color-bg-app: #121212;
+  --color-bg-sidebar: #171717;
+  --color-bg-panel: #171717;
+  --color-bg-muted: #262626;
+  --color-bg-hover: #262626;
+  --color-bg-active: #333333;
+  --color-text-primary: #ecece7;
+  --color-text-secondary: #a8a8a2;
+  --color-text-tertiary: #777773;
+  --color-text-inverse: #121212;
+  --color-border-subtle: #262626;
+  --color-border-default: #2e2e2e;
+  --color-border-strong: #3a3a3a;
+  --color-accent: #4ade80;
+  --color-accent-strong: #22c55e;
+  --color-accent-soft: #1c2b22;
+  --color-brand-green: #34d399;
+  --color-brand-purple: #a78bfa;
+  --color-brand-blue: #60a5fa;
+  --color-brand-amber: #fbbf24;
+  --color-brand-rose: #fb7185;
+  --color-info: #60a5fa;
+  --color-code-bg: #1a1a1a;
+  --color-code-text: #d1d5db;
+  --color-chat-card-bg: #171717;
+  --color-chat-muted-bg: #202020;
+  --color-chat-control-bg: #171717;
+  --color-chat-table-bg: #171717;
+  --color-chat-link: #4ade80;
+  --color-logo-green: #4ade80;
+  --color-logo-green-mid: #22c55e;
+  --color-logo-green-deep: #16a34a;
   --shadow-border: 0 0 0 1px rgba(255, 255, 255, 0.08);
   --shadow-popover: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -2px rgba(0, 0, 0, 0.3);
   --shadow-modal: 0 10px 15px -3px rgba(0, 0, 0, 0.45), 0 4px 6px -4px rgba(0, 0, 0, 0.35);
@@ -349,6 +375,52 @@
   --overlay-backdrop: rgba(0, 0, 0, 0.7);
   --overlay-backdrop-soft: rgba(0, 0, 0, 0.55);
   --overlay-backdrop-subtle: rgba(0, 0, 0, 0.35);
+}
+
+/* 暗色主题色预设（data-accent），亮色系保证可读性 */
+:root[data-theme="dark"][data-accent="blue"] {
+  --color-accent: #60a5fa;
+  --color-accent-strong: #3b82f6;
+  --color-accent-soft: #17233a;
+  --color-logo-green: #60a5fa;
+  --color-logo-green-mid: #3b82f6;
+  --color-logo-green-deep: #2563eb;
+  --color-brand-green: #60a5fa;
+  --color-info: #60a5fa;
+  --color-chat-link: #60a5fa;
+}
+:root[data-theme="dark"][data-accent="purple"] {
+  --color-accent: #a78bfa;
+  --color-accent-strong: #8b5cf6;
+  --color-accent-soft: #241f3a;
+  --color-logo-green: #a78bfa;
+  --color-logo-green-mid: #8b5cf6;
+  --color-logo-green-deep: #7c3aed;
+  --color-brand-green: #a78bfa;
+  --color-info: #a78bfa;
+  --color-chat-link: #a78bfa;
+}
+:root[data-theme="dark"][data-accent="amber"] {
+  --color-accent: #fbbf24;
+  --color-accent-strong: #f59e0b;
+  --color-accent-soft: #33291a;
+  --color-logo-green: #fbbf24;
+  --color-logo-green-mid: #f59e0b;
+  --color-logo-green-deep: #d97706;
+  --color-brand-green: #fbbf24;
+  --color-info: #fbbf24;
+  --color-chat-link: #fbbf24;
+}
+:root[data-theme="dark"][data-accent="rose"] {
+  --color-accent: #fb7185;
+  --color-accent-strong: #f43f5e;
+  --color-accent-soft: #332028;
+  --color-logo-green: #fb7185;
+  --color-logo-green-mid: #f43f5e;
+  --color-logo-green-deep: #e11d48;
+  --color-brand-green: #fb7185;
+  --color-info: #fb7185;
+  --color-chat-link: #fb7185;
 }
 * {
   box-sizing: border-box;
@@ -898,6 +970,12 @@ select:focus-visible {
   flex: 1;
   min-height: 0;
 }
+/* Panel 是库渲染的 flex item；内容容器需显式 100% 高度（v4 默认 maxHeight 依赖父高） */
+.shell-panel-list,
+.shell-panel-chat,
+.shell-panel-drawer {
+  height: 100%;
+}
 /* Panel 是库渲染的 flex item；内容需要明确撑满高度 */
 .shell-panel-list .chat-list-pane,
 .shell-panel-chat .chat-pane,
@@ -981,6 +1059,9 @@ select:focus-visible {
 .custom-titlebar-enabled .chat-list-pane {
   margin-top: calc(-1 * var(--window-drag-height));
   padding-top: var(--window-drag-height);
+  /* 上移了 --window-drag-height，高度同步补偿（100% + 拖拽区高），
+     否则侧栏底部悬空 40px——底栏（sidebar-bottom-actions）不贴底。 */
+  height: calc(100% + var(--window-drag-height));
 }
 .custom-titlebar-enabled .list-toolbar {
   position: relative;
@@ -1023,7 +1104,6 @@ select:focus-visible {
   display: flex;
   gap: 4px;
   align-items: center;
-  padding: 0 12px;
 }
 
 .toolbar-actions .icon-button {
@@ -1166,6 +1246,13 @@ select:focus-visible {
 }
 .list-collapsed .splitter-left {
   display: none;
+}
+/* 折叠态浮动恢复按钮：固定定位在侧栏折叠条左侧（main 同款），品牌区随折叠隐藏后提供展开入口 */
+.list-toggle-native.floating {
+  position: fixed;
+  top: 12px;
+  left: 22px;
+  z-index: 920;
 }
 
 /* ── 全局统一滚动条：细滑块、透明轨道，融入面板背景 ──
@@ -2050,9 +2137,11 @@ select:focus-visible {
 .splitter-right {
   grid-column: 4;
 }
-/* 右侧分隔条宽度由 --drawer-splitter-w 驱动；关闭/折叠时宽度 0 且不响应交互。 */
+/* 右侧分隔条宽度由 --drawer-splitter-w 驱动；关闭/折叠时宽度 0 且不响应交互。
+   常驻挂载下 drawer=null 时 data-active=false，宽度归零避免 1px 占位线。 */
 .splitter-right:not([data-active="true"]) {
   pointer-events: none;
+  width: 0 !important;
 }
 .splitter-right:not([data-active="true"])::before,
 .splitter-right:not([data-active="true"])::after {
@@ -2067,16 +2156,19 @@ select:focus-visible {
   width: 1px;
   border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--color-border-strong) 58%, transparent);
+  transition: width 0.12s ease, background 0.12s ease;
 }
+/* 扩展命中区（±12px = 24px 宽）：官方 Resizable 同款更易抓取 */
 .splitter::after {
   content: "";
   position: absolute;
   top: 0;
   bottom: 0;
-  left: -8px;
-  right: -8px;
+  left: -12px;
+  right: -12px;
 }
 .splitter:hover::before,
+.splitter:active::before,
 body.is-resizing .splitter::before {
   width: 2px;
   background: color-mix(
@@ -2126,14 +2218,15 @@ body.is-resizing .splitter::before {
 /* 纵向分隔条（composer/terminal 拖拽手柄） */
 .v-splitter {
   flex: 0 0 auto;
-  height: 4px;
+  height: 6px;
   cursor: row-resize;
   background: transparent;
   transition: background 0.12s ease;
 }
 .v-splitter:hover,
+.v-splitter:active,
 .v-splitter[data-resizing] {
-  background: var(--color-border-subtle);
+  background: color-mix(in srgb, var(--color-accent) 14%, var(--color-border-subtle));
 }
 
 /* ── 内容行宽限制：仅在 --content-max-width 由 JS 注入时生效 ── */
@@ -2641,6 +2734,11 @@ body.is-resizing .splitter::before {
     background 0.15s,
     border-color 0.15s,
     color 0.15s;
+}
+/* 文件面板工具行按钮密度由组件 Tailwind 承担（icon 28px / Select 限宽），
+   覆盖上方全局 min-width 60px，避免 icon 按钮被撑宽导致工具栏溢出。 */
+.files-panel .panel-action-row button {
+  min-width: 0;
 }
 .chat-header-actions .session-combo-trigger {
   min-width: 102px;

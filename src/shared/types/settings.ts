@@ -6,7 +6,8 @@ export type SendShortcutMode =
 	| "shift-enter-send";
 
 export type AppThemeMode = "system" | "light" | "dark";
-export type LightBackgroundMode = "white" | "warm" | "paper" | "blue" | "green";
+/** 主题色预设：data-accent 属性驱动 foundation.css 的 accent/logo 变量 */
+export type AppAccentMode = "green" | "blue" | "purple" | "amber" | "rose";
 export type AppLanguageMode = "system" | "zh-CN" | "en-US" | "pseudo";
 export type LinkOpenMode = "external" | "internal";
 export type AppFontSizeMode = "compact" | "default" | "medium" | "large" | "xlarge";
@@ -26,8 +27,8 @@ export type AppSettings = {
 	sendShortcut: SendShortcutMode;
 	/** 界面主题，system 跟随系统浅色/暗色偏好 */
 	theme: AppThemeMode;
-	/** 浅色主题的工作台背景预设；暗色主题下忽略，便于用户快速试不同淡色底。 */
-	lightBackground: LightBackgroundMode;
+	/** 主题色（accent）预设，data-accent 驱动；新增预设只需扩充 AppAccentMode 与色板 */
+	accent: AppAccentMode;
 	/** 界面语言，system 跟随系统语言；pseudo 用于长文案布局压力测试 */
 	language: AppLanguageMode;
 	/** 启动时主窗口尺寸预设，默认 maximized（与历史 ready-to-show 后 maximize 一致） */

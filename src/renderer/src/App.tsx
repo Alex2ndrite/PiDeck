@@ -453,7 +453,7 @@ export function App() {
     showNativeMenu: false,
     sendShortcut: "enter-send",
     theme: "system",
-    lightBackground: "white",
+    accent: "green",
     language: "system",
     startupWindowMode: "maximized",
     piEnvironmentChecked: false,
@@ -804,13 +804,14 @@ export function App() {
             : "light"
           : settings.theme;
       document.documentElement.dataset.theme = resolvedTheme;
-      document.documentElement.dataset.lightBackground = settings.lightBackground;
+      // 主题色预设：data-accent 驱动 foundation.css 的 accent/logo 变量
+      document.documentElement.dataset.accent = settings.accent;
     };
     applyTheme();
     if (settings.theme !== "system" || !media) return;
     media.addEventListener?.("change", applyTheme);
     return () => media.removeEventListener?.("change", applyTheme);
-  }, [settings.theme, settings.lightBackground]);
+  }, [settings.theme]);
 
   // 字号与命名字体预设由 data 属性选择 CSS token；只有 custom 字体需要注入用户输入。
   useEffect(() => {
@@ -2195,6 +2196,8 @@ export function App() {
 
   const sidebarContentNode = (
     <AppSidebar
+      listCollapsed={listCollapsed}
+      toggleListCollapsed={toggleListCollapsed}
       actions={sidebarActions}
       currentProjectId={activeProjectId}
       currentSessionId={currentSessionId}
@@ -2238,9 +2241,9 @@ export function App() {
       onPreviewImage={setPreviewImage}
       abortAgent={abortAgent}
       restartActiveAgent={restartActiveAgent}
-      runCreateSessionDraft={runCreateSessionDraft}
       onToggleDrawer={toggleRightDrawer}
       drawerOpen={Boolean(drawer && !drawerCollapsed)}
+      runCreateSessionDraft={runCreateSessionDraft}
       enqueueSessionPrompt={enqueueSessionPrompt}
       ensureSessionId={ensureSessionForSend}
       resendUserMessage={resendUserMessage}
@@ -2387,18 +2390,8 @@ export function App() {
           },
           icon: <Terminal size={17} />,
         } : undefined}
-        filesAction={{
-          active: drawer === "files",
-          label: t("app.files"),
-          onClick: () => handleToolDrawerAction("files"),
-          icon: <FolderOpen size={17} />,
-        }}
-        gitAction={settings.enableGitManagement && activeProjectId ? {
-          active: drawer === "git",
-          label: t("drawer.sourceControl"),
-          onClick: () => handleToolDrawerAction("git"),
-          icon: <GitBranch size={17} />,
-        } : undefined}
+        filesAction={undefined}
+        gitAction={undefined}
         editorsAction={{
           active: editorsOpen,
           label: t("app.openWithEditor"),
@@ -2416,12 +2409,7 @@ export function App() {
           },
           icon: <Code size={17} />,
         }}
-        browserAction={{
-          active: drawer === "browser",
-          label: t("app.browser"),
-          onClick: () => handleToolDrawerAction("browser"),
-          icon: <Globe size={17} />,
-        }}
+        browserAction={undefined}
       />
     ) : null}
       setListCollapsed={setListCollapsed}

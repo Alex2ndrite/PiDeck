@@ -46,15 +46,15 @@
   --color-warning: var(--color-warning);
   --color-info: var(--color-info);
 
-  /* shadcn 语义（pure official） */
+  /* shadcn 语义：primary 动作色跟随主题色（data-accent），不再绑正文色 */
   --color-background: var(--color-bg-app);
   --color-foreground: var(--color-text-primary);
   --color-card: var(--color-bg-panel);
   --color-card-foreground: var(--color-text-primary);
   --color-popover: var(--color-bg-panel);
   --color-popover-foreground: var(--color-text-primary);
-  --color-primary: var(--color-text-primary);
-  --color-primary-foreground: var(--color-bg-app);
+  --color-primary: var(--color-accent);
+  --color-primary-foreground: var(--color-text-inverse);
   --color-secondary: var(--color-bg-muted);
   --color-secondary-foreground: var(--color-text-primary);
   --color-muted: var(--color-bg-muted);
@@ -65,7 +65,7 @@
   --color-destructive-foreground: #fafafa;
   --color-border: var(--color-border-default);
   --color-input: var(--color-border-default);
-  --color-ring: var(--color-text-primary);
+  --color-ring: var(--color-accent-strong);
 
   --radius-sm: var(--radius-sm);
   --radius-md: var(--radius-md);

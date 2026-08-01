@@ -36,8 +36,8 @@ test("empty state shows the pi agent ownership tagline with branded yours", () =
 
   assert.match(logo, /width:\s*118px;[\s\S]*height:\s*118px;/);
   assert.match(button, /min-width:\s*148px;[\s\S]*height:\s*46px;/);
-  // pure official / zinc：accent-soft 为浅灰，不再是品牌绿 #eaf6ed
-  assert.match(styles, /--color-accent-soft:\s*#f4f4f5;/i);
+  // 主题色回归品牌绿：accent-soft 为浅绿底，不再是 zinc 浅灰
+  assert.match(styles, /--color-accent-soft:\s*#eaf6ed;/i);
   assert.match(button, /background:\s*var\(--color-accent-soft\);[\s\S]*font-size:\s*var\(--font-size-brand\);/);
   assert.match(button, /color:\s*var\(--color-accent-strong\);/);
   assert.match(button, /font-family:\s*var\(--font-family-base\);/);
