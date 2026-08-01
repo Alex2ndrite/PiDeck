@@ -95,15 +95,15 @@ export function QueuedPromptPanel(props: {
   return (
     <div
       ref={props.trackRef}
-      className="queued-track"
+      className="flex min-w-0 w-full justify-end p-0 pb-2"
       aria-label={t("app.queuedMessagesLabel")}
     >
-      <div className="queued-panel">
-        <div className="queued-panel-header">
+      <div className="flex min-w-0 w-[clamp(13.5rem,36%,22.5rem)] max-w-full flex-col gap-1 rounded-[9px] border border-[color-mix(in_srgb,var(--color-border-subtle)_82%,transparent)] bg-[color:color-mix(in_srgb,var(--color-bg-panel)_95%,var(--color-chat-card-bg))] p-[7px] pb-2 shadow-[var(--shadow-border),0_6px_18px_color-mix(in_srgb,#000_5%,transparent)]">
+        <div className="flex items-center justify-between gap-2 px-[3px] pb-[3px] font-mono text-[11px] font-semibold leading-4 tracking-[0.02em] text-text-tertiary">
           <span>{t("app.queuedMessagesLabel")}</span>
-          <span className="queued-panel-count">{props.prompts.length}</span>
+          <span className="tabular-nums text-text-secondary">{props.prompts.length}</span>
         </div>
-        <div className="queued-list">
+        <div className="flex min-w-0 max-h-[102px] flex-col gap-[3px] overflow-x-hidden overflow-y-auto overscroll-contain [scrollbar-width:thin] [scrollbar-color:transparent_transparent] hover:[scrollbar-color:var(--color-border-default)_transparent] focus-within:[scrollbar-color:var(--color-border-default)_transparent] [&::-webkit-scrollbar]:w-[5px] [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-transparent hover:[&::-webkit-scrollbar-thumb]:bg-[var(--color-border-default)] focus-within:[&::-webkit-scrollbar-thumb]:bg-[var(--color-border-default)]">
           {props.visiblePrompts.map((prompt, index) => {
             const status = prompt.status ?? "pending";
             const previewText =
@@ -118,32 +118,32 @@ export function QueuedPromptPanel(props: {
             return (
               <div
                 key={prompt.id}
-                className={`queued-row ${status} queued-behavior-${prompt.behavior}`}
+                className={`queued-row flex min-h-8 shrink-0 basis-8 items-center gap-1.5 rounded-[7px] border border-transparent px-[5px] py-1 pl-2 transition-[border-color,background-color] duration-100 ${status} queued-behavior-${prompt.behavior}`}
                 title={rowTitle}
               >
-                <span className="queued-index" aria-hidden="true">
+                <span className="w-[1.1em] shrink-0 text-center font-mono text-[11px] leading-none tabular-nums text-text-tertiary" aria-hidden="true">
                   {index + 1}
                 </span>
-                <span className="queued-text">{previewText}</span>
+                <span className="min-w-0 flex-[1_1_auto] truncate text-xs leading-[18px] text-text-primary">{previewText}</span>
                 {prompt.images?.length ? (
-                  <span className="queued-meta">
+                  <span className="shrink-0 font-mono text-[11px] leading-none text-text-tertiary">
                     {t("app.queuedImageCount", {
                       count: String(prompt.images.length),
                     })}
                   </span>
                 ) : null}
                 {status === "sending" ? (
-                  <span className="queued-meta">{t("app.queuedSending")}</span>
+                  <span className="shrink-0 font-mono text-[11px] leading-none text-text-tertiary">{t("app.queuedSending")}</span>
                 ) : status === "failed" ? (
-                  <span className="queued-meta failed">{t("app.queuedFailed")}</span>
+                  <span className="shrink-0 font-mono text-[11px] leading-none text-[var(--color-danger)]">{t("app.queuedFailed")}</span>
                 ) : status === "unknown" ? (
-                  <span className="queued-meta unknown">
+                  <span className="shrink-0 font-mono text-[11px] leading-none text-[var(--color-warning)]">
                     {t("app.queuedUnknownShort")}
                   </span>
                 ) : null}
-                <div className="queued-actions">
+                <div className="inline-flex shrink-0 items-center gap-px">
                   <Button variant="ghost" size="icon"
-                    className="queued-icon-btn"
+                    className="size-[26px] rounded-[4px] p-0 text-text-tertiary hover:bg-[color:color-mix(in_srgb,var(--color-accent)_10%,transparent)] hover:text-[color:var(--color-accent)]"
                     aria-label={t("app.retractToInput")} title={t("app.retractToInput")}
                     disabled={!canRetractQueuedPromptToInput(status)}
                     onClick={() => props.onRetract(props.sessionId!, prompt)}
@@ -151,7 +151,7 @@ export function QueuedPromptPanel(props: {
                     <Pencil size={13} strokeWidth={2} aria-hidden="true" />
                   </Button>
                   <Button variant="ghost" size="icon"
-                    className="queued-icon-btn danger"
+                    className="size-[26px] rounded-[4px] p-0 text-text-tertiary hover:bg-[var(--color-danger-soft)] hover:text-[var(--color-danger)]"
                     aria-label={t("app.retractDiscard")} title={t("app.retractDiscard")}
                     disabled={!canDiscardQueuedPrompt(status)}
                     onClick={() => props.onDiscard(props.sessionId!, prompt.id)}

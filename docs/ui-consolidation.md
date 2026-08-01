@@ -79,6 +79,23 @@ collapsible/resizable/scroll-area/alert-dialog/sonner/input/textarea/confirm-dia
 迁移中的坑：组合变体（`.config-im-bot-card.connected` 覆盖基础类 border-color）会被 utility 层覆盖，
 必须在 JSX 同步改为 utility 条件类；后代选择器（`.config-form-row label`、`.config-test-result-row > span`）
 会放大迁移面，留待手动批次。
+| archived-message | 4 处 | 5 条 | 压缩归档消息列表（角色条件色） |
+| markdown-body（保留决策） | — | — | 42 条规则**保留**：react-markdown 库生成 p/code/table 等元素无法加 utility，内容排版体系用 CSS 是正确架构（shadcn prose 同理）；迁移无收益且高风险 |
+
+| turn-row / user-turn 核心时间线 | 33 处 | 34 条/274 行 | 会话轮次（编辑区/textarea/投递徽章/附件图/气泡——JSX 原已大半 utility 化，类清理 + 补 font-mono/尺寸缺失）；暗色 token 测试断言同步 |
+
+| thinking/compaction/diagnostic 卡片 | 24 处 | 29 条 | 折叠触发器（focus-visible outline 任意值）、压缩徽章、诊断卡 tone 锚点保留 |
+
+| tool-group-card | 2 处 | 2 条 | 多工具聚合平铺容器 |
+
+| session-manager | 16 处 | 22 条/156 行 | 会话管理弹窗（embedded 组合、工具栏/来源筛选 pill（active 条件）、列表行 group-hover 操作显隐）；dialog 头覆盖规则同步迁移到 DialogHeader 类 |
+
+| tool-card 系列 | 15 处 | 19 条/163 行 | 工具卡（trigger/图标/状态/spinner→animate-spin/chevron 旋转/diff 徽章/复制按钮→Button）；`tool-card` 类保留（tone/data-tool-kind 锚点） |
+
+| multi-select 树 | 38 处 | 14 条/106 行 | 消息多选树（MessageShareModal/SessionReferenceModal 共用）：节点行/run 分组/checkbox accent/时间戳；弹窗尺寸 1300×850 保留为 utility（P1 size=xl 变体候选） |
+
+| queued 队列面板（timeline 首组） | 15 处 | 20 条/136 行 | 排队提示面板（clamp 宽度、自定义 scrollbar 任意变体、行为状态锚点保留 queued-row）；测试断言 5 处同步 |
+
 | git-smart-commit + 死类终清 | 9 处 + 14 条 | 14 条+ | 智能提交弹窗（CSS 已死，纯类名清理 + Button variant 化）；git-action-btn/git-compare-btn 类清理；组合选择器残留规则保守保留（活类锚点依赖，如 current 行粗体）；修复误删 git-drawer-detail（App.tsx 引用） |
 
 | GitGraph（history + SVG + hover 卡） | 33 处 | 7 条+ | 历史列表/行（grid 布局 + ref 徽章条件色）、提交文件行、加载更多按钮、SVG 图区（vector-effect 任意变体）、hover 详情卡（portal 定位 + 局部 --git-* 变量覆盖用任意属性）；git-history-row/file-row 类保留作状态色锚点；测试断言 8 处同步 |

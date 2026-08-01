@@ -128,7 +128,7 @@ export function MultiSelectModal(props: {
 		<Dialog open onOpenChange={(next) => !next && props.onClose()}>
 			<DialogContent
 				showCloseButton={false}
-				className={cn("flex flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(800px,calc(100vw-48px))]", "multi-select-modal")}
+				className={cn("flex flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(800px,calc(100vw-48px))]", "h-[min(850px,calc(100vh-48px))] w-[min(1300px,calc(100vw-48px))] max-w-[min(1300px,calc(100vw-48px))] flex flex-col overflow-hidden rounded-lg border border-border bg-bg-panel shadow-[var(--shadow-xl)] animate-in fade-in-0 slide-in-from-bottom-2 duration-150")}
 			>
 				<DialogHeader className="flex-row items-center justify-between px-4 py-3">
 					<DialogTitle>{t("app.multiSelectEnter")}</DialogTitle>
@@ -139,7 +139,7 @@ export function MultiSelectModal(props: {
 					</DialogClose>
 				</DialogHeader>
 				{/* 树状列表 */}
-				<div className="multi-select-modal-tree">
+				<div className="min-h-0 flex-1 overflow-y-auto px-3 py-2.5 [&>*]:my-0.5">
 					{props.renderedRuns.map((item) => {
 						if (item.kind === "message") {
 							const msg = item.message;
@@ -148,19 +148,20 @@ export function MultiSelectModal(props: {
 								return (
 									<label
 										key={msg.id}
-										className={`multi-select-tree-node${isChecked ? " selected" : ""}`}
+										className={`flex cursor-pointer items-center gap-2 rounded-sm border border-transparent px-2.5 py-[7px] text-[13px] leading-relaxed transition-[background,border-color] duration-100 hover:border-border-subtle hover:bg-bg-hover${isChecked ? " selected" : ""}`}
 									>
 										<input
 											type="checkbox"
 											checked={isChecked}
 											onChange={() => toggleMessage(msg.id)}
+											className="m-0 shrink-0 cursor-pointer accent-[var(--color-accent)]"
 										/>
 										<MessageCircle
 											size={14}
-											className="multi-select-node-icon user"
+											className="shrink-0 text-text-tertiary"
 										/>
-										<span className="multi-select-node-label">
-											<span className="multi-select-node-summary">
+										<span className="flex min-w-0 flex-1 items-baseline gap-2">
+											<span className="min-w-0 truncate font-sans text-text-primary">
 												{summarizeMessage(stripAnsi(msg.text))}
 											</span>
 										</span>
@@ -186,29 +187,29 @@ export function MultiSelectModal(props: {
 							if (assistantMsgs.length === 0) return null;
 
 							return (
-								<div key={item.id} className="multi-select-tree-run">
+								<div key={item.id} className="my-1.5 overflow-hidden rounded-md border border-border-subtle bg-[color:color-mix(in_srgb,var(--color-bg-muted)_52%,transparent)]">
 									<div
-										className={`multi-select-tree-node run-parent${runAnyChecked ? " selected" : ""}`}
+										className={`flex cursor-pointer items-center gap-2 rounded-sm border border-transparent px-2.5 py-[7px] text-[13px] leading-relaxed transition-[background,border-color] duration-100 hover:border-border-subtle hover:bg-bg-hover run-parent cursor-pointer rounded-none border-0 border-b border-border-subtle bg-[color:color-mix(in_srgb,var(--color-bg-muted)_78%,var(--color-bg-panel))] p-2.5 font-medium select-none${runAnyChecked ? " selected" : ""}`}
 										onClick={() => toggleRun(item)}
 									>
-										<Brain size={15} className="multi-select-node-icon assistant" />
-										<span className="multi-select-node-label">
-											<span className="multi-select-node-run-label">pi</span>
-											<span className="multi-select-node-time">
+										<Brain size={15} className="shrink-0 text-text-tertiary" />
+										<span className="flex min-w-0 flex-1 items-baseline gap-2">
+											<span className="font-mono text-xs font-semibold tracking-[0.4px] uppercase text-text-secondary">pi</span>
+											<span className="shrink-0 text-xs whitespace-nowrap text-text-tertiary">
 												{formatTime(item.endedAt)}
 											</span>
 										</span>
-										<span className="multi-select-node-assistant-count">
+										<span className="min-w-[18px] shrink-0 rounded-[10px] bg-bg-muted px-[7px] text-center font-mono text-[11px] leading-[18px] text-text-tertiary">
 											{assistantMsgs.length}
 										</span>
 									</div>
-									<div className="multi-select-run-children">
+									<div className="flex flex-col gap-0.5 bg-bg-panel p-1 pl-7">
 										{assistantMsgs.map((sub) => {
 											const subChecked = selectedIds.has(sub.message.id);
 											return (
 												<label
 													key={sub.message.id}
-													className={`multi-select-tree-node run-child${subChecked ? " selected" : ""}`}
+													className={`flex cursor-pointer items-center gap-2 rounded-sm border border-transparent px-2.5 py-[7px] text-[13px] leading-relaxed transition-[background,border-color] duration-100 hover:border-border-subtle hover:bg-bg-hover run-child rounded-sm p-1.5${subChecked ? " selected" : ""}`}
 												>
 													<input
 														type="checkbox"
@@ -216,13 +217,14 @@ export function MultiSelectModal(props: {
 														onChange={() =>
 															toggleMessage(sub.message.id)
 														}
+														className="m-0 shrink-0 cursor-pointer accent-[var(--color-accent)]"
 													/>
 													<FileText
 														size={14}
-														className="multi-select-node-icon child"
+														className="shrink-0 text-text-tertiary"
 													/>
-													<span className="multi-select-node-label">
-														<span className="multi-select-node-summary">
+													<span className="flex min-w-0 flex-1 items-baseline gap-2">
+														<span className="min-w-0 truncate font-sans text-text-primary">
 															{summarizeMessage(
 																stripAnsi(sub.message.text),
 															)}

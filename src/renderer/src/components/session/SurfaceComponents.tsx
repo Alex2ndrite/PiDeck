@@ -779,12 +779,12 @@ export const TurnRow = memo(function TurnRow(props: {
 	if (lastAssistantIndex === -1) {
 		return (
 			<article ref={rowRef} className="turn-row mb-6 w-full min-w-0 max-w-full" data-message-id={run.id}>
-				<div className="turn-row-body flex min-w-0 flex-col gap-3">
-					<div className="turn-row-meta mb-1 inline-flex items-center gap-2 text-xs text-muted-foreground tabular-nums">
-						<span className="turn-row-agent font-semibold text-foreground/80">pi</span>
-						<time className="text-[11px]">{formatTime(run.endedAt)}</time>
+				<div className="flex min-w-0 flex-col gap-3">
+					<div className="mb-1 inline-flex items-center gap-2 text-xs text-muted-foreground tabular-nums">
+						<span className="shrink-0 font-mono font-semibold text-foreground/80">pi</span>
+						<time className="shrink-0 font-mono text-[11px]">{formatTime(run.endedAt)}</time>
 						{showDuration && (
-							<span className="turn-row-duration text-[11px] text-muted-foreground">{formatDuration(duration)}</span>
+							<span className="shrink-0 font-mono text-[11px] text-muted-foreground">{formatDuration(duration)}</span>
 						)}
 					</div>
 					{/* 执行过程概要（含工具/思考），默认折叠 */}
@@ -827,12 +827,12 @@ export const TurnRow = memo(function TurnRow(props: {
 
 	return (
 		<article ref={rowRef} className="turn-row mb-6 w-full min-w-0 max-w-full" data-message-id={run.id}>
-			<div className="turn-row-body flex min-w-0 flex-col gap-3">
-				<div className="turn-row-meta mb-1 inline-flex items-center gap-2 text-xs text-muted-foreground tabular-nums">
-					<span className="turn-row-agent font-semibold text-foreground/80">pi</span>
-					<time className="text-[11px]">{formatTime(run.endedAt)}</time>
+			<div className="flex min-w-0 flex-col gap-3">
+				<div className="mb-1 inline-flex items-center gap-2 text-xs text-muted-foreground tabular-nums">
+					<span className="shrink-0 font-mono font-semibold text-foreground/80">pi</span>
+					<time className="shrink-0 font-mono text-[11px]">{formatTime(run.endedAt)}</time>
 					{showDuration && (
-						<span className="turn-row-duration text-[11px] text-muted-foreground">{formatDuration(duration)}</span>
+						<span className="shrink-0 font-mono text-[11px] text-muted-foreground">{formatDuration(duration)}</span>
 					)}
 				</div>
 				{/* 执行过程概要（含工具/思考/中间回答），置于最终回答之前以保持调用顺序。 */}
@@ -872,10 +872,10 @@ export const TurnRow = memo(function TurnRow(props: {
 				{finalMessageItem && (
 					<Fragment key={finalMessageItem.message.id}>
 						{editing ? (
-							<div className="turn-row-edit-area" ref={editAreaRef}>
-								<div className="edit-area-indicator">{t("common.edit")}</div>
+							<div className="flex flex-col gap-2 rounded-sm border-l-[3px] border-l-[var(--color-accent)] bg-[color:color-mix(in_srgb,var(--color-accent)_3%,var(--color-bg-panel))] pl-2" ref={editAreaRef}>
+								<div className="flex items-center gap-1 text-xs font-medium text-[var(--color-accent)] before:content-['✎'] before:text-sm">{t("common.edit")}</div>
 								<textarea
-									className="turn-row-edit-textarea"
+									className="min-h-[100px] max-h-[400px] w-full resize-y rounded-sm border border-[var(--color-accent)] bg-bg-panel p-2 font-mono text-sm leading-relaxed text-text-primary outline-none focus:border-[var(--color-accent)] focus:shadow-[0_0_0_2px_var(--focus-ring)]"
 									value={editText}
 									onChange={(e) => setEditText(e.target.value)}
 									onKeyDown={(e) => {
@@ -891,15 +891,15 @@ export const TurnRow = memo(function TurnRow(props: {
 									}}
 									autoFocus
 								/>
-								<div className="turn-row-edit-actions">
-									<Button variant="outline" size="sm" className="turn-row-edit-btn primary h-auto px-3 py-1 text-xs shadow-none hover:text-accent" onClick={() => {
+								<div className="flex justify-end gap-2">
+									<Button variant="outline" size="sm" className="h-auto border-[var(--color-accent)] px-3 py-1 text-xs text-[var(--color-accent)] shadow-none hover:text-[var(--color-accent)]" onClick={() => {
 										const targetId = assistantMessages.at(-1)?.message.id;
 										if (targetId && props.onEditMessage) {
 											props.onEditMessage(targetId, editText);
 											setEditing(false);
 										}
 									}}>{t("common.save")}</Button>
-									<Button variant="outline" size="sm" className="turn-row-edit-btn h-auto px-3 py-1 text-xs shadow-none" onClick={() => setEditing(false)}>{t("common.cancel")}</Button>
+									<Button variant="outline" size="sm" className="h-auto px-3 py-1 text-xs shadow-none" onClick={() => setEditing(false)}>{t("common.cancel")}</Button>
 								</div>
 							</div>
 						) : finalTxt ? (
@@ -916,7 +916,7 @@ export const TurnRow = memo(function TurnRow(props: {
 				)}
 				{/* 操作栏 */}
 				{mergedText && !editing && (
-					<div className="turn-row-actions flex min-h-6 items-center gap-1 opacity-55 transition-opacity hover:opacity-100 focus-within:opacity-100">
+					<div className="flex min-h-6 items-center gap-1 opacity-55 transition-opacity hover:opacity-100 focus-within:opacity-100">
 						<CopyMenu text={stripMarkdown(mergedText)} markdown={mergedText} targetRef={rowRef} />
 						<Button
 							type="button"
@@ -1046,42 +1046,42 @@ export const UserBubble = memo(function UserBubble(props: {
 		);
 	};
 	return (
-		<article ref={rowRef} className="user-turn group/user mb-4 w-full min-w-0" data-message-id={message.id}>
+		<article ref={rowRef} className="group/user mb-4 flex w-full min-w-0 max-w-full flex-col items-end" data-message-id={message.id}>
 			{skills.length > 0 && (
-				<div className="user-turn-skills mb-1.5 flex flex-wrap gap-1.5">
+				<div className="mb-1.5 flex flex-wrap justify-end gap-1.5">
 					{skills.map((name) => (
 						<span key={name} className="user-turn-skill-badge inline-flex items-center gap-0.5 rounded-full border border-border bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground" title={`/${name}`}>
-							<span className="user-turn-skill-icon">/</span>
+							<span className="font-mono text-[11px] font-medium text-muted-foreground">/</span>
 							{name}
 						</span>
 					))}
 				</div>
 			)}
 			{message.images && message.images.length > 0 && (
-				<div className="user-turn-attachments mb-2 flex flex-wrap gap-2">
+				<div className="mb-2 flex max-w-[min(82%,64ch)] flex-wrap justify-end gap-2">
 					{message.images.map((img, index) => (
 						<img
 							key={index}
 							src={`data:${img.mimeType};base64,${img.data}`}
 							alt={t("app.imageAlt", { index: index + 1 })}
-							className="user-turn-attachment max-h-40 rounded-md border border-border"
+							className="size-16 max-h-40 cursor-pointer rounded-md border border-border object-cover transition-colors duration-150 hover:border-border-strong"
 							onClick={() => props.onPreviewImage(img)}
 						/>
 					))}
 				</div>
 			)}
 			{cleanText && !editing && (
-				<div className="user-turn-bubble rounded-xl border border-border bg-muted/60 px-3 py-2 text-sm text-foreground">
-					<div className="user-turn-text whitespace-pre-wrap break-words">
+				<div className="w-fit min-w-0 max-w-[min(82%,64ch)] rounded-[14px] border border-border bg-muted/60 px-3 py-2 text-sm text-foreground [overflow-wrap:anywhere] break-words">
+					<div className="text-[15px] leading-[1.6] text-text-primary whitespace-pre-wrap break-words">
 						{renderChipText(cleanText, props.onOpenFile, props.validCommandNames, props.validFilePaths)}
 					</div>
 				</div>
 			)}
 			{editing && (
-				<div className="user-turn-edit-area" ref={editAreaRef}>
-					<div className="edit-area-indicator">{t("common.edit")}</div>
+				<div className="flex w-full min-w-0 flex-col gap-2 rounded-sm border-l-[3px] border-l-[var(--color-accent)] bg-[color:color-mix(in_srgb,var(--color-accent)_3%,var(--color-bg-panel))] pl-2" ref={editAreaRef}>
+					<div className="flex items-center gap-1 text-xs font-medium text-[var(--color-accent)] before:content-['✎'] before:text-sm">{t("common.edit")}</div>
 					<textarea
-						className="message-edit-textarea"
+						className="min-h-[100px] max-h-[400px] w-full resize-y rounded-sm border border-[var(--color-accent)] bg-bg-panel p-2 font-mono text-sm leading-relaxed text-text-primary outline-none focus:border-[var(--color-accent)] focus:shadow-[0_0_0_2px_var(--focus-ring)]"
 						value={editText}
 						onChange={(e) => setEditText(e.target.value)}
 						onKeyDown={(e) => {
@@ -1093,21 +1093,21 @@ export const UserBubble = memo(function UserBubble(props: {
 						}}
 						autoFocus
 					/>
-					<div className="message-edit-actions">
-						<Button variant="outline" size="sm" className="message-edit-btn primary h-auto px-3 py-1 text-xs shadow-none hover:text-accent" onClick={handleSaveEdit}>
+					<div className="flex justify-end gap-2">
+						<Button variant="outline" size="sm" className="h-auto border-[var(--color-accent)] px-3 py-1 text-xs text-[var(--color-accent)] shadow-none hover:text-[var(--color-accent)]" onClick={handleSaveEdit}>
 							{t("common.save")}
 						</Button>
-						<Button variant="outline" size="sm" className="message-edit-btn h-auto px-3 py-1 text-xs shadow-none" onClick={() => setEditing(false)}>
+						<Button variant="outline" size="sm" className="h-auto px-3 py-1 text-xs shadow-none" onClick={() => setEditing(false)}>
 							{t("common.cancel")}
 						</Button>
 					</div>
 				</div>
 			)}
-			<div className="user-turn-meta">
+			<div className="mt-1 inline-flex items-center gap-2 text-[11px] tabular-nums text-text-tertiary">
 				{deliveryLabel && (
 					<span
-						className={`user-turn-delivery${
-							deliveryBehavior === "followUp" ? " follow-up" : " steer"
+						className={`inline-flex h-[18px] items-center rounded-full border border-[color-mix(in_srgb,var(--color-accent)_24%,var(--color-border-subtle))] bg-[var(--color-accent-soft)] px-[7px] font-mono text-[11px] font-semibold leading-none text-[var(--color-accent)]${
+							deliveryBehavior === "followUp" ? " border-[color-mix(in_srgb,var(--color-info)_20%,var(--color-border-subtle))] bg-[color:color-mix(in_srgb,var(--color-info)_10%,var(--color-bg-panel))] text-[var(--color-info)]" : ""
 						}`}
 						title={
 							deliveryBehavior === "followUp"
@@ -1118,7 +1118,7 @@ export const UserBubble = memo(function UserBubble(props: {
 						{deliveryLabel}
 					</span>
 				)}
-				<time>{formatTime(message.timestamp)}</time>
+				<time className="font-mono">{formatTime(message.timestamp)}</time>
 			</div>
 			<div className="user-turn-actions flex min-h-6 items-center gap-0.5 opacity-0 transition-opacity group-hover/user:opacity-100 focus-within:opacity-100">
 				<CopyMenu text={stripMarkdown(cleanText)} markdown={message.text} targetRef={rowRef} />

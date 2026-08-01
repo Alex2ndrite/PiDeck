@@ -34,44 +34,44 @@ export const CompactionCard = memo(function CompactionCard(props: {
 
 	return (
 		<article
-			className={`compaction-card${expanded ? " compaction-card--expanded" : ""}`}
+			className={`my-px flex flex-col overflow-hidden rounded-sm border border-[color-mix(in_srgb,var(--color-accent)_8%,transparent)] bg-[color:color-mix(in_srgb,var(--color-accent)_4%,var(--color-bg-panel))]${expanded ? " compaction-card--expanded" : ""}`}
 			data-message-id={props.message.id}
 		>
 			<button
 				type="button"
-				className="compaction-card-header"
+				className="flex w-full cursor-pointer items-start gap-2 rounded-[inherit] border-none bg-none p-1 px-3 text-left text-inherit select-none hover:bg-[color:color-mix(in_srgb,var(--color-accent)_6%,transparent)] focus-visible:-outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
 				onClick={() => hasArchived && setExpanded(!expanded)}
 				disabled={!hasArchived}
 				aria-expanded={expanded}
 			>
-				<span className="compaction-card-icon" aria-hidden="true">
+				<span className="shrink-0 text-sm leading-6" aria-hidden="true">
 					{hasArchived ? (expanded ? "📂" : "📁") : "🔁"}
 				</span>
-				<div className="compaction-card-body">
-					<span className="compaction-card-summary">{stripAnsi(summary)}</span>
-					<div className="compaction-card-meta">
+				<div className="flex min-w-0 flex-1 flex-col gap-0.5">
+					<span className="truncate text-xs leading-[1.4] text-text-secondary">{stripAnsi(summary)}</span>
+					<div className="flex flex-wrap items-center gap-1">
 						{typeof compactionCount === "number" && compactionCount > 0 && (
-							<span className="compaction-card-count">
+							<span className="inline-flex items-center rounded-full border border-[color-mix(in_srgb,var(--color-accent)_16%,transparent)] bg-[color:color-mix(in_srgb,var(--color-accent)_8%,transparent)] px-1.5 font-mono text-[11px] text-text-tertiary">
 								{t("app.compactionCount", { count: compactionCount })}
 							</span>
 						)}
 						{typeof tokensBefore === "number" && (
-							<span className="compaction-card-tokens">
+							<span className="font-mono text-[11px] text-text-tertiary">
 								{t("app.compactionTokensBefore", { count: Math.round(tokensBefore / 1000) })}
 							</span>
 						)}
 						{hasArchived && (
-							<span className="compaction-card-hint">
+							<span className="font-mono text-[11px] opacity-80 text-text-tertiary">
 								{expanded ? t("app.compactionCollapse") : t("app.compactionExpand")}
 							</span>
 						)}
 					</div>
-					<time className="compaction-card-time">{time}</time>
+					<time className="text-[11px] opacity-70 text-text-tertiary">{time}</time>
 				</div>
 			</button>
 			{expanded && hasArchived && (
-				<div className="compaction-card-archive">
-					<div className="compaction-card-archive-divider" />
+				<div className="border-t border-[color-mix(in_srgb,var(--color-accent)_8%,transparent)]">
+					<div />
 					<ArchivedMessageList messages={archivedMessages} />
 				</div>
 			)}
@@ -82,7 +82,7 @@ export const CompactionCard = memo(function CompactionCard(props: {
 /** 归档消息列表：压缩卡片展开时，以简略格式渲染压缩前的消息历史。 */
 function ArchivedMessageList({ messages }: { messages: ChatMessage[] }) {
 	return (
-		<div className="archived-message-list">
+		<div className="flex max-h-[360px] flex-col overflow-y-auto p-1 px-2">
 			{messages.map((msg) => (
 				<ArchivedMessage key={msg.id} message={msg} />
 			))}
@@ -102,9 +102,9 @@ function ArchivedMessage({ message }: { message: ChatMessage }) {
 		message.role === "tool" ? "🔧" : "💬";
 
 	return (
-		<div className={`archived-message archived-message--${message.role}`}>
-			<span className="archived-message-role">{roleIcon}</span>
-			<span className="archived-message-text">{preview || "(empty)"}</span>
+		<div className={`flex items-start gap-1 rounded-[2px] p-0.5 px-1 text-xs leading-[1.4] hover:bg-[color:color-mix(in_srgb,var(--color-accent)_4%,transparent)]${message.role === "user" ? "" : ""}`}>
+			<span className="w-5 shrink-0 text-center text-xs">{roleIcon}</span>
+			<span className={`min-w-0 flex-1 truncate${message.role === "user" ? " text-text-primary" : message.role === "tool" ? " font-mono text-[11px] text-text-tertiary" : " text-text-secondary"}`}>{preview || "(empty)"}</span>
 		</div>
 	);
 }
@@ -124,16 +124,16 @@ export const DiagnosticMessageCard = memo(function DiagnosticMessageCard(props: 
 		: t("diagnostic.systemTitle");
 	return (
 		<article
-			className={`diagnostic-card tone-${tone}`}
+			className={`diagnostic-card w-full min-w-0 overflow-hidden rounded-md border border-border-subtle bg-[var(--color-chat-muted-bg)] tone-${tone}`}
 			data-message-id={props.message.id}
 			data-role={props.message.role}
 		>
-			<div className="diagnostic-card-header">
+			<div className="flex items-center gap-2 px-2 py-1.5 font-mono text-xs text-text-secondary">
 				<AlertTriangle size={14} aria-hidden="true" />
-				<span>{title}</span>
-				<time>{formatTime(props.message.timestamp)}</time>
+				<span className="font-semibold">{title}</span>
+				<time className="ml-auto text-[11px] tabular-nums text-text-tertiary">{formatTime(props.message.timestamp)}</time>
 			</div>
-			<pre className="diagnostic-card-body">{stripAnsi(body)}</pre>
+			<pre className="m-0 p-2 font-mono text-xs leading-relaxed break-words whitespace-pre-wrap text-text-secondary">{stripAnsi(body)}</pre>
 		</article>
 	);
 });
@@ -330,26 +330,26 @@ export const ThinkingBlock = memo(function ThinkingBlock(props: {
 			: null;
 	const durationText = durationMs != null ? formatDuration(durationMs) : null;
 	return (
-		<section className="thinking-card">
+		<section className="w-full min-w-0 overflow-hidden rounded-md border-0">
 			<button
-				className="thinking-card-trigger"
+				className="flex min-h-8 w-full cursor-pointer items-center gap-2 border-0 bg-transparent p-1.5 pl-2.5 text-left text-[13px] leading-5 text-text-secondary transition-colors duration-150 hover:bg-[color:color-mix(in_srgb,var(--color-bg-hover)_50%,var(--color-bg))] focus-visible:-outline-offset-2 focus-visible:outline-2 [&_svg]:shrink-0 [&_svg]:text-[var(--color-info)]"
 				onClick={() => setExpanded((v) => !v)}
 				aria-expanded={expanded}
 			>
 				<Brain size={15} />
-				<span>{t("thinking.title")}</span>
+				<span className="shrink-0 text-sm font-[650] text-text-primary">{t("thinking.title")}</span>
 				<ChevronDown
 					size={15}
-					className={`thinking-card-chevron${expanded ? " open" : ""}`}
+					className={`shrink-0 text-text-tertiary transition-transform duration-150${expanded ? " rotate-180" : ""}`}
 				/>
 				{!expanded && props.text && (
-					<span className="thinking-card-subtitle" title={props.text}>
+					<span className="min-w-0 flex-[1_1_auto] truncate font-mono text-xs text-text-tertiary" title={props.text}>
 						{props.text.slice(0, 80)}{props.text.length > 80 ? "..." : ""}
 					</span>
 				)}
-				{durationText && <small>{durationText}</small>}
+				{durationText && <small className="shrink-0 font-mono text-[11px] tabular-nums text-text-tertiary">{durationText}</small>}
 			</button>
-			{expanded && <div className="thinking-card-content">{previewText}</div>}
+			{expanded && <div className="border-t border-border-subtle px-3 pt-2 pb-3 text-xs text-text-tertiary">{previewText}</div>}
 		</section>
 	);
 });

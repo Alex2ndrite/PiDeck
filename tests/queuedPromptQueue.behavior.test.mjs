@@ -281,8 +281,8 @@ test("layout budget uses compact queue chrome and terminal still yields first", 
   assert.match(appSource, /queuedPromptCount: activeQueuedPrompts\.length/);
   assert.match(queueStateSource, /export const QUEUED_PROMPT_VISIBLE = 3/);
   assert.match(appSource, /const visibleQueuedPrompts = activeQueuedPrompts/);
-  const stylesSource = readRendererStyles();
-  assert.match(stylesSource, /\.queued-list \{[\s\S]*?max-height: 102px;[\s\S]*?overflow-y: auto;/);
+  const composerPanelsSrc = readFileSync("src/renderer/src/components/session/ComposerPanels.tsx", "utf8");
+  assert.match(composerPanelsSrc, /max-h-\[102px\]/);
 });
 
 test("enqueue is per-agent and accepted resolution removes only the claimed ID", () => {

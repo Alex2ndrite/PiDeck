@@ -100,24 +100,24 @@ export function SessionManagerModal(props: {
 						</DialogClose>
 					</div>
 				</DialogHeader>
-			<div className="session-manager-modal session-manager-modal--embedded">
-				<div className="session-manager-toolbar">
-					<div className="session-manager-toolbar-left">
-						<label className="session-manager-select-all">
+			<div className="flex min-h-0 flex-1 flex-col overflow-hidden border-none bg-transparent shadow-none">
+				<div className="flex shrink-0 items-center justify-between border-b border-border-subtle bg-bg-muted px-5 py-2.5">
+					<div className="flex items-center gap-3.5">
+						<label className="flex cursor-pointer items-center gap-2 text-[13px] text-text-secondary select-none">
 							<input
 								type="checkbox"
 								checked={selectAll}
 								onChange={handleToggleAll}
-							/>
+							className="m-0 size-[15px] cursor-pointer accent-[var(--color-accent)]" />
 							{t("common.selectAll")}
 						</label>
-						<div className="session-manager-source-filters">
+						<div className="flex items-center gap-1">
 							{SOURCES.map((source) => (
 								<Button
 									key={source}
 									variant="outline"
 									size="sm"
-									className={`h-auto rounded-full px-3 py-1 text-xs shadow-none session-source-btn${activeSources.has(source) ? " active" : ""}`}
+									className={`h-auto rounded-full border border-border-subtle bg-transparent px-3 py-1 text-xs font-medium text-text-tertiary transition-all duration-150 hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]${activeSources.has(source) ? " border-[var(--color-accent)] bg-bg-active font-semibold text-[var(--color-accent)]" : ""}`}
 									onClick={() => toggleSource(source)}
 								>
 									{t(`sessionSource.${source}` as any)}
@@ -127,7 +127,7 @@ export function SessionManagerModal(props: {
 					</div>
 					{selected.size > 0 && (
 						<Button
-							variant="outline" size="sm" className="session-manager-delete-btn h-auto px-3 py-1 text-xs shadow-none"
+							variant="outline" size="sm" className="h-auto gap-1 border border-[color-mix(in_srgb,var(--color-danger)_28%,transparent)] px-3 py-1 text-xs font-medium text-[var(--color-danger)] shadow-none transition-all duration-150 hover:border-[var(--color-danger)] hover:bg-[var(--color-danger-soft)]"
 							onClick={handleDeleteSelected}
 						>
 							{t("common.deleteSelected", { count: selected.size })}
@@ -135,26 +135,26 @@ export function SessionManagerModal(props: {
 					)}
 				</div>
 
-				<div className="session-manager-list">
+				<div className="flex-1 overflow-y-auto bg-bg-muted">
 					{filteredSessions.map((session) => {
 						const isChecked = selected.has(session.filePath);
 						return (
 							<div
 								key={session.filePath}
-								className={`session-manager-row${isChecked ? " selected" : ""}`}
+								className={`group flex items-center gap-3 border-b border-border-subtle bg-bg-panel px-5 py-2.5 transition-colors duration-100 last:border-b-0 hover:bg-bg-hover${isChecked ? " bg-[color:color-mix(in_srgb,var(--color-accent)_6%,var(--color-bg-panel))]" : ""}`}
 							>
-								<label className="session-manager-row-checkbox">
+								<label className="flex shrink-0 cursor-pointer items-center">
 									<input
 										type="checkbox"
 										checked={isChecked}
 										onChange={() => handleToggle(session.filePath)}
-									/>
+									className="m-0 size-[15px] cursor-pointer accent-[var(--color-accent)]" />
 								</label>
 								<div
-									className="session-manager-row-info"
+									className="flex min-w-0 flex-1 cursor-pointer items-center gap-2"
 									onClick={() => handleToggle(session.filePath)}
 								>
-									<div className="session-manager-row-name">
+									<div className="truncate text-[13px] text-text-primary">
 										{session.name || session.preview?.slice(0, 60) || t("common.untitled")}
 									</div>
 									{session.source && session.source !== "pi" && (
@@ -163,23 +163,23 @@ export function SessionManagerModal(props: {
 										</span>
 									)}
 								</div>
-								<div className="session-manager-row-actions">
+								<div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
 									<Button
-										variant="ghost" size="sm" className="session-manager-action-btn h-auto px-2 text-xs"
+										variant="ghost" size="sm" className="h-auto gap-[3px] rounded-[4px] px-2 text-xs text-text-tertiary transition-all duration-150 hover:bg-bg-hover hover:text-[var(--color-accent)]"
 										onClick={() => props.onRename(session)}
 										title={t("common.rename")}
 									>
 										{t("common.rename")}
 									</Button>
 									<Button
-										variant="ghost" size="sm" className="session-manager-action-btn h-auto px-2 text-xs"
+										variant="ghost" size="sm" className="h-auto gap-[3px] rounded-[4px] px-2 text-xs text-text-tertiary transition-all duration-150 hover:bg-bg-hover hover:text-[var(--color-accent)]"
 										onClick={() => props.onExport(session)}
 										title={t("menu.exportHtml")}
 									>
 										{t("menu.exportHtml")}
 									</Button>
 									<Button
-										variant="ghost" size="sm" className="session-manager-action-btn danger h-auto px-2 text-xs hover:bg-destructive/10 hover:text-destructive"
+										variant="ghost" size="sm" className="h-auto gap-[3px] rounded-[4px] px-2 text-xs text-text-tertiary transition-all duration-150 hover:bg-[var(--color-danger-soft)] hover:text-[var(--color-danger)]"
 										onClick={() => props.onDelete([session])}
 										title={t("common.delete")}
 									>

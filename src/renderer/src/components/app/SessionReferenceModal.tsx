@@ -125,7 +125,7 @@ export function SessionReferenceModal(props: {
 		<Dialog open onOpenChange={(next) => !next && props.onClose()}>
 			<DialogContent
 				showCloseButton={false}
-				className={cn("flex flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(800px,calc(100vw-48px))]", "multi-select-modal session-ref-modal")}
+				className={cn("flex flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(800px,calc(100vw-48px))]", "h-[min(850px,calc(100vh-48px))] w-[min(1300px,calc(100vw-48px))] max-w-[min(1300px,calc(100vw-48px))] flex flex-col overflow-hidden rounded-lg border border-border bg-bg-panel shadow-[var(--shadow-xl)] animate-in fade-in-0 slide-in-from-bottom-2 duration-150 session-ref-modal")}
 			>
 				<DialogHeader className="flex-row items-center justify-between px-4 py-3">
 					<DialogTitle>{`${t("sessionRef.title")}: ${props.session.name ?? props.session.filePath}`}</DialogTitle>
@@ -135,7 +135,7 @@ export function SessionReferenceModal(props: {
 						</Button>
 					</DialogClose>
 				</DialogHeader>
-				<div className="multi-select-modal-tree session-ref-message-list">
+				<div className="min-h-0 flex-1 overflow-y-auto px-3 py-2.5 [&>*]:my-0.5 session-ref-message-list">
 					{loading && <div className="session-ref-loading">{t("common.loading")}...</div>}
 					{error && <div className="session-ref-error">{t("sessionRef.loadError")}: {error}</div>}
 
@@ -146,12 +146,12 @@ export function SessionReferenceModal(props: {
 							return (
 								<label
 									key={item.index}
-									className={`multi-select-tree-node${isChecked ? " selected" : ""}`}
+									className={`flex cursor-pointer items-center gap-2 rounded-sm border border-transparent px-2.5 py-[7px] text-[13px] leading-relaxed transition-[background,border-color] duration-100 hover:border-border-subtle hover:bg-bg-hover${isChecked ? " selected" : ""}`}
 								>
 									<input type="checkbox" checked={isChecked} onChange={() => toggleMessage(item.index)} />
-									<MessageCircle size={14} className="multi-select-node-icon user" />
-									<span className="multi-select-node-label">
-										<span className="multi-select-node-summary">
+									<MessageCircle size={14} className="shrink-0 text-text-tertiary" />
+									<span className="flex min-w-0 flex-1 items-baseline gap-2">
+										<span className="min-w-0 truncate font-sans text-text-primary">
 											{summarizeMessage(stripAnsi(item.msg.content))}
 										</span>
 									</span>
@@ -166,35 +166,35 @@ export function SessionReferenceModal(props: {
 							const runAnyChecked = runChecked || runHasSome;
 
 							return (
-								<div key={item.indices[0]} className="multi-select-tree-run">
+								<div key={item.indices[0]} className="my-1.5 overflow-hidden rounded-md border border-border-subtle bg-[color:color-mix(in_srgb,var(--color-bg-muted)_52%,transparent)]">
 									<div
-										className={`multi-select-tree-node run-parent${runAnyChecked ? " selected" : ""}`}
+										className={`flex cursor-pointer items-center gap-2 rounded-sm border border-transparent px-2.5 py-[7px] text-[13px] leading-relaxed transition-[background,border-color] duration-100 hover:border-border-subtle hover:bg-bg-hover run-parent cursor-pointer rounded-none border-0 border-b border-border-subtle bg-[color:color-mix(in_srgb,var(--color-bg-muted)_78%,var(--color-bg-panel))] p-2.5 font-medium select-none${runAnyChecked ? " selected" : ""}`}
 										onClick={() => toggleRun(item.indices)}
 									>
-										<Brain size={15} className="multi-select-node-icon assistant" />
-										<span className="multi-select-node-label">
-											<span className="multi-select-node-run-label">pi</span>
-											<span className="multi-select-node-time">
+										<Brain size={15} className="shrink-0 text-text-tertiary" />
+										<span className="flex min-w-0 flex-1 items-baseline gap-2">
+											<span className="font-mono text-xs font-semibold tracking-[0.4px] uppercase text-text-secondary">pi</span>
+											<span className="shrink-0 text-xs whitespace-nowrap text-text-tertiary">
 												{formatTime(item.msgs[item.msgs.length - 1]?.timestamp ?? 0)}
 											</span>
 										</span>
-										<span className="multi-select-node-assistant-count">
+										<span className="min-w-[18px] shrink-0 rounded-[10px] bg-bg-muted px-[7px] text-center font-mono text-[11px] leading-[18px] text-text-tertiary">
 											{item.msgs.length}
 										</span>
 									</div>
-									<div className="multi-select-run-children">
+									<div className="flex flex-col gap-0.5 bg-bg-panel p-1 pl-7">
 										{item.msgs.map((sub, si) => {
 											const idx = item.indices[si];
 											const subChecked = selectedIds.has(idx);
 											return (
 												<label
 													key={idx}
-													className={`multi-select-tree-node run-child${subChecked ? " selected" : ""}`}
+													className={`flex cursor-pointer items-center gap-2 rounded-sm border border-transparent px-2.5 py-[7px] text-[13px] leading-relaxed transition-[background,border-color] duration-100 hover:border-border-subtle hover:bg-bg-hover run-child rounded-sm p-1.5${subChecked ? " selected" : ""}`}
 												>
 													<input type="checkbox" checked={subChecked} onChange={() => toggleMessage(idx)} />
-													<FileText size={14} className="multi-select-node-icon child" />
-													<span className="multi-select-node-label">
-														<span className="multi-select-node-summary">
+													<FileText size={14} className="shrink-0 text-text-tertiary" />
+													<span className="flex min-w-0 flex-1 items-baseline gap-2">
+														<span className="min-w-0 truncate font-sans text-text-primary">
 															{summarizeMessage(stripAnsi(sub.content))}
 														</span>
 													</span>

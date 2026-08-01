@@ -22,6 +22,7 @@ import {
   type ToolGroupItem,
 } from "../app/AppUtils";
 import { t } from "../../i18n";
+import { Button } from "../ui-shadcn/button";
 import { showNotice } from "../../utils/notice";
 import type { ChatMessage } from "../../../../shared/types";
 import {
@@ -243,52 +244,52 @@ const statusLabel =
 	};
 	return (
 		<section
-			className={`tool-card tone-${tone}${isSkillRead ? " tool-card--skill" : ""}${isAskCard ? " tool-card--ask" : ""}`}
+			className={`tool-card w-full min-w-0 overflow-hidden rounded-md border border-border-subtle bg-bg-panel transition-[border-color,background-color] duration-150 tone-${tone}${isSkillRead ? " tool-card--skill" : ""}${isAskCard ? " tool-card--ask" : ""}`}
 			data-status={status}
 			data-tool-kind={isSkillRead ? "skill" : getToolKind(toolName)}
 			data-message-id={props.message.id}
 		>
-			<div className={`tool-card-header${diffTarget ? " has-diff" : ""}`}>
+			<div className={`flex min-h-8 items-center transition-colors duration-150 hover:bg-[color:color-mix(in_srgb,var(--color-bg-hover)_55%,var(--color-bg-panel))]${diffTarget ? " gap-2" : ""}`}>
 				<button
-					className="tool-card-trigger"
+					className="flex min-h-8 min-w-0 flex-[1_1_auto] cursor-pointer items-center gap-2 border-0 bg-transparent p-1.5 pl-2.5 text-left text-[13px] leading-5 text-text-secondary focus-visible:-outline-offset-2 focus-visible:outline-2"
 					onClick={() => setExpanded((v) => !v)}
 					aria-expanded={expanded}
 				>
-					<span className="tool-card-icon">
+					<span className="inline-flex shrink-0 items-center justify-center text-text-tertiary">
 						{isSkillRead ? <Brain size={15} /> : isAskCard ? <MessageCircle size={15} /> : toolIcon(toolName)}
 					</span>
-					<span className="tool-card-name">
+					<span className="shrink-0 text-sm font-[650] lowercase text-text-primary">
 						{isSkillRead ? `skill:${skillName}` : isAskCard ? t("ask.toolName") : toolName}
 					</span>
 					<ChevronDown
 						size={14}
-						className={`tool-card-chevron${expanded ? " open" : ""}`}
+						className={`shrink-0 text-text-tertiary transition-transform duration-150${expanded ? " rotate-180" : ""}`}
 					/>
 					{!isSkillRead && kindLabel && (
 						<span className="tool-card-kind">{kindLabel}</span>
 					)}
-					<span className="tool-card-status">
-						{status === "running" && <span className="tool-card-spinner" aria-hidden="true" />}
+					<span className="inline-flex shrink-0 items-center gap-[5px] font-mono text-[11px] tabular-nums text-text-tertiary">
+						{status === "running" && <span className="size-2.5 animate-spin rounded-full border-2 border-[color:color-mix(in_srgb,var(--color-warning)_30%,transparent)] border-t-[var(--color-warning)]" aria-hidden="true" />}
 						{askCard?.answered ? t("ask.answered") : (statusLabel)}
 					</span>
 					{showDuration && (
-						<span className="tool-card-duration" title={t("tool.durationTitle")}>
+						<span className="shrink-0 font-mono text-[11px] tabular-nums text-text-tertiary" title={t("tool.durationTitle")}>
 							{formatDuration(durationMs)}
 						</span>
 					)}
 					{isAskCard && askCard?.question ? (
-						<span className="tool-card-subtitle" title={askCard.question}>
+						<span className="min-w-0 flex-[1_1_auto] truncate font-mono text-xs text-text-tertiary" title={askCard.question}>
 							| {askCard.question}
 						</span>
 					) : subtitle ? (
-						<span className="tool-card-subtitle" title={subtitle}>
+						<span className="min-w-0 flex-[1_1_auto] truncate font-mono text-xs text-text-tertiary" title={subtitle}>
 							| {subtitle}
 						</span>
 					) : null}
 				</button>
 				{diffTarget && props.onDiffFile && (
 					<button
-						className="tool-card-diff-chip"
+						className="mr-auto inline-flex h-[22px] shrink-0 cursor-pointer items-center self-center rounded-sm border border-[color-mix(in_srgb,var(--color-accent)_24%,var(--color-border-subtle))] bg-transparent px-2 font-mono text-[11px] leading-none text-[color:color-mix(in_srgb,var(--color-accent)_80%,var(--color-text-tertiary))] transition-[background-color,border-color,color] duration-150 hover:border-[var(--color-accent)] hover:bg-[color:color-mix(in_srgb,var(--color-accent)_6%,transparent)] hover:text-[var(--color-accent)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
 						type="button"
 						onClick={() => props.onDiffFile?.(diffTarget.path, diffTarget.originalContent, diffTarget.content)}
 						title={`${t("tool.viewDiff")} · ${diffTarget.path}`}
@@ -298,7 +299,7 @@ const statusLabel =
 				)}
 			</div>
 			{expanded && (
-				<div className="tool-card-content">
+				<div className="relative rounded-b-sm border-t border-border-subtle bg-transparent">
 					{isAskCard && askCard ? (
 						<div className="ask-question-card-tool-inner">
 							<div className="ask-question-card-title"><MessageCircle size={13} />{askCard.question}</div>
@@ -350,15 +351,16 @@ const statusLabel =
 							)}
 						</div>
 					) : (
-						<pre className="tool-card-detail">{detailText}</pre>
+						<pre className="m-0 max-h-[320px] overflow-auto p-2 font-mono text-xs leading-relaxed break-words whitespace-pre-wrap text-text-tertiary">{detailText}</pre>
 					)}
-					<button
-						className="tool-card-copy"
+					<Button
+						variant="ghost" size="icon-sm"
+						className="tool-card-copy absolute top-1.5 right-1.5 size-7 rounded-[4px] p-0 text-text-tertiary opacity-55 hover:text-[var(--color-accent)]"
 						onClick={handleCopy}
 						title={t("tool.copyDetail")}
 					>
 						{copied ? <Check size={14} /> : <Copy size={14} />}
-					</button>
+					</Button>
 				</div>
 			)}
 		</section>
@@ -370,8 +372,8 @@ export const ToolGroupCard = memo(function ToolGroupCard(props: {
 	onDiffFile?: DiffFileHandler;
 }) {
 	return (
-		<section className="tool-group-card flat" data-message-id={props.group.id}>
-			<div className="tool-group-card-list">
+		<section className="w-full min-w-0 overflow-hidden rounded-none border-0 bg-transparent" data-message-id={props.group.id}>
+			<div className="flex flex-col gap-1 p-0">
 				{props.group.messages.map((message) => (
 					<ToolCard key={message.id} message={message} onDiffFile={props.onDiffFile} />
 				))}

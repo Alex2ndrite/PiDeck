@@ -22,7 +22,7 @@ test("fixed light chat/table colors are tokenized for dark mode", () => {
   assert.match(block(":root[data-theme=\"dark\"]"), /--color-chat-table-bg:\s*#171717;/i);
 
   assert.match(block(".diagnostic-card"), /background:\s*var\(--color-chat-muted-bg\);/);
-  assert.match(block(".user-turn-bubble"), /background:\s*var\(--color-chat-card-bg\);/);
+  assert.doesNotMatch(css, /\.user-turn-bubble\s*\{/);  // 迁移后无独立规则，背景由 bg-muted/60 utility 承担
   assert.match(block(".markdown-body .table-wrap"), /background:\s*var\(--color-chat-table-bg\);/);
   assert.match(block(".markdown-body .table-wrap thead"), /background:\s*var\(--color-chat-muted-bg\);/);
   assert.match(block(".markdown-body .table-wrap tr td"), /background:\s*var\(--color-chat-table-bg\);/);
