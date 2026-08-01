@@ -28,7 +28,7 @@ type HeaderActions = {
   onNewSession: () => void;
   onStop: () => void;
   onRestart: () => void;
-  /** 右侧抽屉开关：与 main 会话标题栏行为对齐，保持现有 IconButton 风格 */
+  /** 右侧抽屉开关（main 布局：新会话按钮右侧），不传则不渲染 */
   onToggleDrawer?: () => void;
   drawerOpen?: boolean;
 };

@@ -43,9 +43,9 @@ export interface SessionRuntimeInjectorProps {
   onPreviewImage: (img: ImageContent | null) => void;
   abortAgent: (agentId?: string) => Promise<void>;
   restartActiveAgent: () => Promise<void>;
-  runCreateSessionDraft: () => Promise<void>;
   onToggleDrawer?: () => void;
   drawerOpen?: boolean;
+  runCreateSessionDraft: () => Promise<void>;
   enqueueSessionPrompt: (
     sessionId: string,
     snapshot: { displayText: string; message: string; images?: ImageContent[]; agentMode: string; behavior?: "steer" | "followUp" },
@@ -133,9 +133,9 @@ export const SessionRuntimeInjector = React.memo(function SessionRuntimeInjector
     onPreviewImage,
     abortAgent,
     restartActiveAgent,
-    runCreateSessionDraft,
     onToggleDrawer,
     drawerOpen,
+    runCreateSessionDraft,
     enqueueSessionPrompt,
     ensureSessionId,
     resendUserMessage,

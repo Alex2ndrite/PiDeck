@@ -1,11 +1,13 @@
 import { useEffect, useRef, type ReactNode, type CSSProperties } from "react";
 import {
-  Group,
-  Panel,
-  Separator,
   type PanelImperativeHandle,
   type PanelSize,
 } from "react-resizable-panels";
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "../ui-shadcn/resizable";
 import { AppHeader } from "../AppHeader";
 import { WorkspaceDrawerHost } from "../workspace/WorkspaceDrawerHost";
 import type { WorkspaceDrawerPanel } from "../../hooks/useWorkspacePanels";
@@ -100,16 +102,17 @@ export function AppShell(props: AppShellProps) {
     else if (panel.isCollapsed()) panel.expand();
   }, [listCollapsed]);
 
-  // 抽屉 Panel 是动态挂载的（drawer 从 null 变为具体面板时才挂载），
-  // 挂载当帧其尺寸约束可能尚未注册到 Group，直接调 imperative API 会抛
-  // "Panel constraints not found"；统一推迟一帧并容错，下轮状态变化仍会再同步。
+  // 抽屉 Panel 常驻挂载（drawer=null 时折叠 0 宽），此 effect 统一同步折叠态；
+  // 推迟一帧 + 容错：常驻挂载后约束始终就绪，保留 try/catch 仅为防御。
   useEffect(() => {
     const panel = drawerPanelRef.current;
     if (!panel) return;
     const frame = requestAnimationFrame(() => {
       try {
-        if (drawerCollapsed) { if (!panel.isCollapsed()) panel.collapse(); }
-        else if (panel.isCollapsed()) panel.expand();
+        // drawer 为空时必须折叠（常驻挂载下避免空面板意外展开）
+        if (!drawer || drawerCollapsed) {
+          if (!panel.isCollapsed()) panel.collapse();
+        } else if (panel.isCollapsed()) panel.expand();
       } catch { /* 约束未就绪，忽略本轮同步 */ }
     });
     return () => cancelAnimationFrame(frame);
@@ -177,15 +180,13 @@ export function AppShell(props: AppShellProps) {
     >
       <AppHeader
         useNativeTitleBar={useNativeTitleBar}
-        listCollapsed={listCollapsed}
-        toggleListCollapsed={onToggleListCollapsed}
         toggleAlwaysOnTop={toggleAlwaysOnTop}
         minimizeWindow={minimizeWindow}
         toggleMaximizeWindow={toggleMaximizeWindow}
         closeWindow={closeWindow}
       />
-      <Group orientation="horizontal" className="shell-panel-group">
-        <Panel
+      <ResizablePanelGroup orientation="horizontal" className="shell-panel-group">
+        <ResizablePanel
           id="list"
           panelRef={listPanelRef}
           collapsible
@@ -197,10 +198,10 @@ export function AppShell(props: AppShellProps) {
           className="shell-panel-list"
         >
           {sidebarContent}
-        </Panel>
-        <Separator className="splitter splitter-left" />
+        </ResizablePanel>
+        <ResizableHandle className="splitter splitter-left" />
 
-        <Panel id="chat" minSize={360} className="shell-panel-chat">
+        <ResizablePanel id="chat" minSize={360} className="shell-panel-chat">
           <main
             ref={chatPaneRef}
             className="chat-pane"
@@ -215,40 +216,41 @@ export function AppShell(props: AppShellProps) {
           >
             {chatPaneContent}
           </main>
-        </Panel>
+        </ResizablePanel>
 
         {outlineContent}
 
-        {/* 抽屉关闭（drawer=null）时整段卸载；重开时按 drawerWidth 作为初始尺寸 */}
-        {drawer && (
-          <>
-            <Separator className="splitter splitter-right" data-active={!drawerCollapsed} />
-            <Panel
-              id="drawer"
-              panelRef={drawerPanelRef}
-              collapsible={!drawerPinned}
-              collapsedSize={0}
-              minSize={drawerPinned ? DRAWER_MIN_PINNED : DRAWER_MIN}
-              maxSize={DRAWER_MAX}
-              defaultSize={drawerCollapsed ? 0 : drawerWidth}
-              onResize={handleDrawerResize}
-              className="shell-panel-drawer"
-            >
-              <WorkspaceDrawerHost
-                panel={drawer}
-                collapsed={drawerCollapsed}
-                pinned={drawerPinned}
-                onCollapse={onDrawerCollapse}
-                onClose={onDrawerClose}
-                onRestore={onDrawerRestore}
-                onTogglePin={onToggleDrawerPin}
-                rail={drawerRail}
-                renderPanel={(panel) => drawerContent(panel)}
-              />
-            </Panel>
-          </>
-        )}
-      </Group>
+        {/* 抽屉面板常驻挂载：drawer=null 时折叠为 0 宽，避免动态挂载导致
+            Group 布局时序错误（Invalid panel layout / constraints not found）。
+            内容由 WorkspaceDrawerHost 的空态兜底。 */}
+        <ResizableHandle
+          className="splitter splitter-right"
+          data-active={Boolean(drawer) && !drawerCollapsed}
+        />
+        <ResizablePanel
+          id="drawer"
+          panelRef={drawerPanelRef}
+          collapsible={!drawerPinned}
+          collapsedSize={0}
+          minSize={drawerPinned ? DRAWER_MIN_PINNED : DRAWER_MIN}
+          maxSize={DRAWER_MAX}
+          defaultSize={0}
+          onResize={handleDrawerResize}
+          className="shell-panel-drawer"
+        >
+          <WorkspaceDrawerHost
+            panel={drawer}
+            collapsed={drawerCollapsed}
+            pinned={drawerPinned}
+            onCollapse={onDrawerCollapse}
+            onClose={onDrawerClose}
+            onRestore={onDrawerRestore}
+            onTogglePin={onToggleDrawerPin}
+            rail={drawerRail}
+            renderPanel={(panel) => drawerContent(panel)}
+          />
+        </ResizablePanel>
+      </ResizablePanelGroup>
       {children}
     </div>
   );

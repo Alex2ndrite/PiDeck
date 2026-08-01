@@ -1,12 +1,9 @@
 import { useState } from "react";
-import { PanelLeft, Pin, Minus, Square, X } from "lucide-react";
-import { Button } from "./ui-shadcn/button";
+import { Pin, Minus, Square, X } from "lucide-react";
 import { t } from "../i18n";
 
 type Props = {
   useNativeTitleBar: boolean;
-  listCollapsed: boolean;
-  toggleListCollapsed: () => void;
   toggleAlwaysOnTop: () => Promise<boolean>;
   minimizeWindow: () => void;
   toggleMaximizeWindow: () => void;
@@ -15,8 +12,6 @@ type Props = {
 
 export function AppHeader({
   useNativeTitleBar,
-  listCollapsed,
-  toggleListCollapsed,
   toggleAlwaysOnTop,
   minimizeWindow,
   toggleMaximizeWindow,
@@ -29,15 +24,6 @@ export function AppHeader({
   return (
     <>
       <div className="window-drag-layer" aria-hidden="true" />
-      <div className="window-controls-left">
-        <Button variant="ghost" size="icon"
-          className={`window-control sidebar-toggle${listCollapsed ? " collapsed" : ""}`}
-          aria-label={listCollapsed ? t("app.expandList") : t("app.collapseList")} title={listCollapsed ? t("app.expandList") : t("app.collapseList")}
-          onClick={toggleListCollapsed}
-        >
-          <PanelLeft size={13} strokeWidth={2.2} aria-hidden="true" />
-        </Button>
-      </div>
       <div className="window-controls" aria-label={t("app.windowControls")}>
         <button
           type="button"

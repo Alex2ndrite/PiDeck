@@ -1,12 +1,14 @@
 import { ChevronDown } from "lucide-react";
 import { useEffect, useRef, useState, type RefObject, type ReactNode, type MutableRefObject } from "react";
 import {
-  Group,
-  Panel,
-  Separator,
   type PanelImperativeHandle,
   type PanelSize,
 } from "react-resizable-panels";
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "../ui-shadcn/resizable";
 import type { AgentRuntimeState, GitBranchInfo, ImageContent, SessionRuntimeTarget } from "../../../../shared/types";
 import type { SessionTimelineController } from "../../hooks/useSessionTimelineController";
 import type { QueuedPrompt } from "../../hooks/useQueuedPrompt";
@@ -58,6 +60,7 @@ export type SessionViewProps = {
   onNewSession: () => void;
   onStop: () => void;
   onRestart: () => void;
+  /** 右侧抽屉开关（main 布局：新会话按钮右侧），不传则不渲染 */
   onToggleDrawer?: () => void;
   drawerOpen?: boolean;
 
@@ -242,8 +245,8 @@ export function SessionView({
         drawerOpen={drawerOpen}
       />
 
-      <Group orientation="vertical" className="session-v-group">
-        <Panel id="timeline" minSize={160} className="session-v-timeline">
+      <ResizablePanelGroup orientation="vertical" className="session-v-group">
+        <ResizablePanel id="timeline" minSize={160} className="session-v-timeline">
           <SessionMessageTimeline
         sessionId={sessionId}
         controller={sessionTimeline}
@@ -287,12 +290,12 @@ export function SessionView({
               <ChevronDown size={18} />
             </button>
           )}
-        </Panel>
+        </ResizablePanel>
 
         {hasActiveConversation && (
           <>
-            <Separator className="v-splitter" />
-            <Panel
+            <ResizableHandle className="v-splitter" />
+            <ResizablePanel
               id="composer"
               minSize={175}
               maxSize={composerMaxHeight}
@@ -311,14 +314,14 @@ export function SessionView({
                 queuePanel={queuePanel}
                 runtimeUi={runtimeUi}
               />
-            </Panel>
+            </ResizablePanel>
           </>
         )}
 
         {terminalPanelVisible && (
           <>
-            <Separator className="v-splitter" />
-            <Panel
+            <ResizableHandle className="v-splitter" />
+            <ResizablePanel
               id="terminal"
               panelRef={terminalPanelRef}
               collapsible
@@ -348,10 +351,10 @@ export function SessionView({
                   // 高度由面板 onResize 统一回写，此回调保留仅为兼容接口
                 }}
               />
-            </Panel>
+            </ResizablePanel>
           </>
         )}
-      </Group>
+      </ResizablePanelGroup>
     </>
   );
 }

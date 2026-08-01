@@ -79,9 +79,9 @@ export function WorkspaceDrawerHost(props: WorkspaceDrawerHostProps) {
         data-pinned={Boolean(props.pinned)}
         style={props.style}
       >
-        {open && props.rail}
         {visiblePanel && (
           <div className="drawer-content-frame flex min-h-0 flex-1 flex-col overflow-hidden">
+            {open && props.rail}
             {rendered}
           </div>
         )}

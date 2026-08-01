@@ -128,12 +128,26 @@ export function DrawerSurface(props: DrawerSurfaceProps) {
           />
         </Suspense>
       ) : drawer === "browser" && !drawerCollapsed ? (
-        <BrowserSurface
-          fullscreen={browser.browserFullscreen}
-          onClose={browser.onCloseBrowser}
-          onMinimize={browser.onMinimizeBrowser}
-          onEnterFullscreen={browser.onEnterBrowserFullscreen}
-        />
+        <div className="drawer-content-frame flex min-h-0 flex-1 flex-col overflow-hidden">
+          {/* 与 files/git 对齐的抽屉标题栏：浏览器面板此前缺 header，点叉无法关闭侧边栏 */}
+          <div className="drawer-header flex h-12 shrink-0 items-center justify-between gap-3 border-b border-border bg-background px-3">
+            <strong className="truncate text-sm font-semibold text-foreground">{files.t("app.browser")}</strong>
+            <div className="drawer-header-actions flex shrink-0 items-center gap-1">
+              <button type="button" className="inline-grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground" onClick={chrome.onCollapseDrawer} title={files.t("drawer.collapsePanel")}>
+                <Minus size={15} />
+              </button>
+              <button type="button" className="inline-grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground" onClick={chrome.onCloseDrawer} title={files.t("common.close")}>
+                <X size={15} />
+              </button>
+            </div>
+          </div>
+          <BrowserSurface
+            fullscreen={browser.browserFullscreen}
+            onClose={browser.onCloseBrowser}
+            onMinimize={browser.onMinimizeBrowser}
+            onEnterFullscreen={browser.onEnterBrowserFullscreen}
+          />
+        </div>
       ) : git.enableGitManagement && drawer === "git" && !drawerCollapsed && git.activeProjectId ? (
         <div className="drawer-content-frame flex min-h-0 flex-1 flex-col overflow-hidden">
           <div className="drawer-header flex h-12 shrink-0 items-center justify-between gap-3 border-b border-border bg-background px-3">

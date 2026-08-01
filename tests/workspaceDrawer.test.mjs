@@ -147,12 +147,10 @@ test("drawer host renders an injected activity rail while open", () => {
   // shell：drawerRail 透传
   assert.match(shell, /drawerRail\?: ReactNode/);
   assert.match(shell, /rail=\{drawerRail\}/);
-  // App：rail 三个面板入口齐全，且与 outline 共用同一套切换语义
-  assert.match(app, /handleToolDrawerAction\("files"\)/);
-  assert.match(app, /handleToolDrawerAction\("git"\)/);
-  assert.match(app, /handleToolDrawerAction\("browser"\)/);
-  // Git 入口受 enableGitManagement 门控（与 outline 一致）
-  assert.match(app, /settings\.enableGitManagement && activeProjectId \? \[\{/);
+  // App 不再注入悬浮 rail（用户决策：去掉 git/文件/浏览器入口，由标题栏抽屉开关打开默认 files）；
+  // 切换语义仍由 handleToolDrawerAction 承载（供其他入口复用），rail 组件与 host 透传能力保留。
+  assert.match(app, /handleToolDrawerAction\s*=\s*useCallback\(\(panel: WorkspaceDrawerPanel\)\s*=>/);
+  assert.match(app, /const toggleRightDrawer = useCallback\(\(\) => \{\n\s*if \(workspace\.drawer && !workspace\.drawerCollapsed\) \{\n\s*workspace\.collapseDrawer\(\);/);
 });
 
 // 回归：项目上下文水合（null → 首个 projectId）不得重置用户已打开的抽屉；

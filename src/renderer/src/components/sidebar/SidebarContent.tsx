@@ -151,17 +151,19 @@ export function SidebarContent(props: SidebarContentProps) {
             branchByProject={props.branchByProject}
           />
         </div>
-        {!props.isLanWeb && (
-          <div className="toolbar-actions sidebar-bottom-actions flex shrink-0 items-center gap-1 border-t border-border pt-2">
-            <div className="sidebar-bottom-primary-actions flex min-w-0 flex-1 items-center gap-1">
-              <Button type="button" variant="ghost" size="icon" className="icon-button settings-icon size-8" title={t("settings.title")} aria-label={t("settings.title")} onClick={props.onOpenSettings}><Settings className="size-4" /></Button>
-              <Button type="button" variant="ghost" size="icon" className="icon-button config-icon size-8" title={t("config.title")} aria-label={t("config.title")} onClick={props.onOpenConfig}><Sliders className="size-4" /></Button>
-              <Button type="button" variant="ghost" size="icon" className="icon-button feedback-icon size-8" title={t("feedback.title")} aria-label={t("feedback.title")} onClick={props.onOpenFeedback}><MessageSquare className="size-4" /></Button>
-              <Button type="button" variant="ghost" size="icon" className="icon-button homepage-icon size-8" title={t("app.homepage")} aria-label={t("app.homepage")} onClick={props.onOpenHomepage}><Globe className="size-4" /></Button>
-            </div>
-          </div>
-        )}
       </div>
+      {/* 底栏在 sidebar-body 之外（aside 直接子）：body 的 p-2 / v3-braun space-4
+          内边距不再把底栏从侧栏底边顶起，真正贴底 */}
+      {!props.isLanWeb && (
+        <div className="toolbar-actions sidebar-bottom-actions flex shrink-0 items-center gap-1 border-t border-border px-4 py-2">
+          <div className="sidebar-bottom-primary-actions flex min-w-0 flex-1 items-center gap-1">
+            <Button type="button" variant="ghost" size="icon" className="icon-button settings-icon size-8" title={t("settings.title")} aria-label={t("settings.title")} onClick={props.onOpenSettings}><Settings className="size-4" /></Button>
+            <Button type="button" variant="ghost" size="icon" className="icon-button config-icon size-8" title={t("config.title")} aria-label={t("config.title")} onClick={props.onOpenConfig}><Sliders className="size-4" /></Button>
+            <Button type="button" variant="ghost" size="icon" className="icon-button feedback-icon size-8" title={t("feedback.title")} aria-label={t("feedback.title")} onClick={props.onOpenFeedback}><MessageSquare className="size-4" /></Button>
+            <Button type="button" variant="ghost" size="icon" className="icon-button homepage-icon size-8" title={t("app.homepage")} aria-label={t("app.homepage")} onClick={props.onOpenHomepage}><Globe className="size-4" /></Button>
+          </div>
+        </div>
+      )}
 
       {controller.sourceFilterMenu && (
         <SessionSourceFilterMenu

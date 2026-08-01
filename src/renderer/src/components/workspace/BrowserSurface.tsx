@@ -29,7 +29,9 @@ export function BrowserSurface(props: BrowserSurfaceProps) {
 
   return (
     <div className="drawer-content-frame">
+      {/* 抽屉模式下由 DrawerSurface 的统一 drawer-header 提供关闭，隐藏面板内部叉避免重复 */}
       <BrowserPanel
+        hideChromeClose
         onClose={props.onClose}
         onToggleFullscreen={props.onEnterFullscreen}
       />

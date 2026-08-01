@@ -72,7 +72,10 @@ function Button({
           aria-hidden="true"
         />
       )}
-      <span className={loading ? "opacity-70" : undefined}>{children}</span>
+      {/* 仅 loading 态包 span 降透明度；常规路径 children 直接挂在按钮上，
+          保持 shadcn 官方 inline-flex + gap 横向排布（#115 曾无条件包 span 导致
+          “图标+文字”按钮内部变 inline 流式，文字被 h-7 裁切/换行） */}
+      {loading ? <span className="opacity-70">{children}</span> : children}
     </Comp>
   )
 }
