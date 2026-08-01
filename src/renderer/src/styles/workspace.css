@@ -2576,8 +2576,8 @@ body.is-git-pane-resizing, body.is-git-pane-resizing * { cursor: row-resize !imp
 }
 
 /* ── 抽屉活动栏（activity rail）──
- * 新架构的面板切换入口：抽屉打开期间常驻左缘，files/git/browser 切换不再依赖
- * 会话 outline 是否渲染。rail 占位在抽屉列宽内，内容区随之收窄。 */
+ * 面板切换入口（files/git/browser）：抽屉打开期间横排在抽屉内容区顶部
+ * （pure official 横排 tab，见 WorkspaceDrawerRail），不再依赖会话 outline。 */
 /* pure official P2-4：activity rail 布局由 WorkspaceDrawerRail Tailwind 承担 */
 .drawer-activity-rail-button.active::before {
   display: none; /* 指示条改由组件内 span 渲染 */

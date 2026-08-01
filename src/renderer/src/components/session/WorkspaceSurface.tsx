@@ -7,10 +7,14 @@ import {
 	useState,
 	type CSSProperties,
 	type MouseEvent as ReactMouseEvent,
+	type ReactNode,
 } from "react";
 import {
 	ChevronDown,
 	ChevronRight,
+	ArrowDown,
+	ArrowUp,
+	ArrowUpDown,
 	ChevronsDownUp,
 	FileText,
 	Folder,
@@ -24,7 +28,9 @@ import { Button } from "../ui-shadcn/button";
 import { Input } from "../ui-shadcn/input";
 import { ConfirmDialog } from "../ui-shadcn/ConfirmDialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../ui-shadcn/collapsible";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui-shadcn/select";
 import { getFileIconSeti, getFileIconColor, getFileTypeLabel } from "../../fileIcons";
+import { sortFileNodes, FILE_SORT_OPTIONS, FILE_SORT_DEFAULT_DIRECTION, type FileSortMode, type FileSortDirection } from "../../utils/fileTreeSort";
 import { t } from "../../i18n";
 import type { WorkspaceDrawerPanel } from "../../hooks/useWorkspacePanels";
 import { showNotice } from "../../utils/notice";
@@ -146,15 +152,64 @@ function FilesPanel(props: {
 	onOpenFile?: (path: string) => void;
 	onViewFile?: (path: string) => void;
 }) {
+	// 排序维度/方向持久化到 localStorage：文件树排序是用户偏好，跨会话保留
+	const FILE_SORT_KEY = "pi-desktop:file-sort";
+	const FILE_SORT_DIR_KEY = "pi-desktop:file-sort-dir";
+	const [sortMode, setSortMode] = useState<FileSortMode>(() => {
+		const saved = typeof window !== "undefined" ? localStorage.getItem(FILE_SORT_KEY) : null;
+		return FILE_SORT_OPTIONS.some((o) => o.value === saved) ? (saved as FileSortMode) : "name";
+	});
+	const [sortDirection, setSortDirection] = useState<FileSortDirection>(() => {
+		const saved = typeof window !== "undefined" ? localStorage.getItem(FILE_SORT_DIR_KEY) : null;
+		return saved === "asc" || saved === "desc" ? saved : FILE_SORT_DEFAULT_DIRECTION["name"];
+	});
+	useEffect(() => {
+		localStorage.setItem(FILE_SORT_KEY, sortMode);
+		// 切换维度时方向跟随该维度的默认方向（名称升序；时间/大小倒序）
+		setSortDirection(FILE_SORT_DEFAULT_DIRECTION[sortMode]);
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [sortMode]);
+	useEffect(() => {
+		localStorage.setItem(FILE_SORT_DIR_KEY, sortDirection);
+	}, [sortDirection]);
+	// 排序是纯展示层变换：不改变 props.files 引用，只影响渲染次序
+	const sortedFiles = useMemo(
+		() => sortFileNodes(props.files, sortMode, sortDirection),
+		[props.files, sortMode, sortDirection],
+	);
 	return (
 		<div className="files-panel flex min-h-0 flex-1 flex-col overflow-hidden">
-			<div className="panel-action-row flex h-9 shrink-0 items-center justify-between gap-2 border-b border-border px-3 text-xs text-muted-foreground">
-				<span>{t("drawer.fileItems", { count: props.files.length })}</span>
-				<div className="panel-action-buttons flex items-center gap-1">
+			{/* 工具行：min-w-0 允许收缩；计数 nowrap 不被压断；Select 限宽防窄抽屉换行/竖排 */}
+			<div className="panel-action-row flex h-9 min-w-0 shrink-0 items-center justify-between gap-2 border-b border-border px-3 text-xs text-muted-foreground">
+				<span className="shrink-0 whitespace-nowrap">{t("drawer.fileItems", { count: props.files.length })}</span>
+				<div className="panel-action-buttons flex min-w-0 items-center gap-1">
+					{/* 文件树排序：维度 Select + 方向切换（asc/desc），方向跟随维度默认值可再手动翻转 */}
+					<Select value={sortMode} onValueChange={(value) => setSortMode(value as FileSortMode)}>
+						<SelectTrigger className="h-7 max-w-[7.5rem] gap-1 rounded-md px-2 text-xs text-muted-foreground [&_span]:truncate" aria-label={t("drawer.fileSort")} title={t("drawer.fileSort")}>
+							<ArrowUpDown size={13} />
+							<SelectValue />
+						</SelectTrigger>
+						<SelectContent>
+							{FILE_SORT_OPTIONS.map((option) => (
+								<SelectItem key={option.value} value={option.value}>
+									{t(option.labelKey)}
+								</SelectItem>
+							))}
+						</SelectContent>
+					</Select>
+					<button
+						type="button"
+						className="icon-only inline-grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+						onClick={() => setSortDirection((d) => (d === "asc" ? "desc" : "asc"))}
+						title={sortDirection === "asc" ? t("drawer.fileSortDesc") : t("drawer.fileSortAsc")}
+						aria-label={sortDirection === "asc" ? t("drawer.fileSortDesc") : t("drawer.fileSortAsc")}
+					>
+						{sortDirection === "asc" ? <ArrowUp size={13} /> : <ArrowDown size={13} />}
+					</button>
 					{props.onOpenFolder && (
-						<button type="button" className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-xs text-muted-foreground hover:bg-accent hover:text-accent-foreground" onClick={props.onOpenFolder} title={t("drawer.openFolder")}>
+						<button type="button" className="inline-flex h-7 shrink-0 items-center gap-1 whitespace-nowrap rounded-md px-2 text-xs text-muted-foreground hover:bg-accent hover:text-accent-foreground" onClick={props.onOpenFolder} title={t("drawer.openFolder")}>
 							<Folder size={14} />
-							{t("drawer.openFolder")}
+							<span className="open-folder-label">{t("drawer.openFolder")}</span>
 						</button>
 					)}
 					{/* 刷新与全部收起：纯图标，密度对齐 shadcn icon button */}
@@ -181,7 +236,7 @@ function FilesPanel(props: {
 					)}
 				</div>
 			</div>
-			{props.files.map((node) => (
+			{sortedFiles.map((node) => (
 				<FileNode
 					key={node.path}
 					node={node}

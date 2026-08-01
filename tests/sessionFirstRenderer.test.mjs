@@ -83,12 +83,10 @@ test("first Session send is request-addressed and restores rejected snapshots", 
 test("the renderer-only Chat surface keeps the dev workspace toolbar before first send", () => {
   assert.match(appSource, /const hasActiveConversation = Boolean\(currentSessionId\)/);
   assert.match(appSource, /terminalAction=\{activeAgentId \? \{/);
-  assert.match(appSource, /gitAction=\{settings\.enableGitManagement && activeProjectId \? \{/);
-  assert.match(appSource, /browserAction=\{\{[\s\S]*?active: drawer === "browser"/);
-  assert.doesNotMatch(
-    appSource.match(/browserAction=\{\{[\s\S]*?\n\s*\}\}/)?.[0] ?? "",
-    /activeAgentId/,
-  );
+  // 悬浮栏不再暴露 files/git/browser（入口收进抽屉活动栏，files 由标题栏抽屉开关打开）
+  assert.match(appSource, /filesAction=\{undefined\}/);
+  assert.match(appSource, /gitAction=\{undefined\}/);
+  assert.match(appSource, /browserAction=\{undefined\}/);
 });
 
 test("active Agent identity is derived from the selected Session runtime", () => {

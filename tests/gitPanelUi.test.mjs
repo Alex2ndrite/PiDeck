@@ -306,8 +306,8 @@ describe("Git panel VS Code Source Control contract", () => {
     // handleToolDrawerAction 中（outline 与抽屉活动栏共用，见 workspaceDrawer 测试）。
     const toolDrawerAction = app.match(/handleToolDrawerAction = useCallback[\s\S]*?\}, \[workspace, gitDrawerDiff/)?.[0] ?? "";
     assert.match(toolDrawerAction, /if \(panel === "git" && gitDrawerDiff\) \{\s*closeGitDiff\(\);\s*return;/);
-    // outline 入口必须走共享 handler，不得回退到 inline 复制
-    assert.match(app, /gitAction=\{settings\.enableGitManagement && activeProjectId \? \{[\s\S]*?onClick: \(\) => handleToolDrawerAction\("git"\)/);
+    // git 入口收进抽屉活动栏（rail，与 outline 一致走共享 handler，受同一开关门控）
+    assert.match(app, /\.\.\.\(settings\.enableGitManagement && activeProjectId \? \[\{[\s\S]*?id: "git"[\s\S]*?onClick: \(\) => handleToolDrawerAction\("git"\)/);
   });
 
   test("keeps single-file discard internal rather than adding a dev-divergent row action", () => {

@@ -35,6 +35,10 @@ export type FileTreeNode = {
 	relativePath: string;
 	type: "file" | "directory";
 	children?: FileTreeNode[];
+	/** 文件元数据（文件树排序用；缺失时回退按名称）。目录 size 无意义恒为 0。 */
+	mtimeMs?: number;
+	ctimeMs?: number;
+	size?: number;
 };
 
 export type SessionSource = "pi" | "codex" | "claude" | "opencode";

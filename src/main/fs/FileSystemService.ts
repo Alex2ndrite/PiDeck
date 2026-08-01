@@ -1,4 +1,4 @@
-import { readdir, unlink, rename as fsRename, rm, mkdir, writeFile } from "node:fs/promises";
+import { readdir, unlink, rename as fsRename, rm, mkdir, writeFile, stat } from "node:fs/promises";
 import { join, relative, dirname } from "node:path";
 import type { FileTreeNode } from "../../shared/types";
 
@@ -14,13 +14,30 @@ export class FileSystemService {
 
   private async readDirectory(root: string, current: string, depth: number, maxDepth: number): Promise<FileTreeNode[]> {
     const entries = await readdir(current, { withFileTypes: true });
+    // 并行 stat：为排序（名称/更新时间/创建时间/大小）附加元数据。
+    // 目录 stat.size 无意义，恒置 0；目录仍保留时间戳用于“按更新时间/创建时间”排序。
+    const stats = await Promise.all(
+      entries.map(async (entry) => {
+        try {
+          return await stat(join(current, entry.name));
+        } catch {
+          // 竞态删除/无权限：回退空 stat，节点仍以名称排序兜底
+          return null;
+        }
+      }),
+    );
     const nodes: FileTreeNode[] = [];
 
-    for (const entry of entries) {
+    for (let i = 0; i < entries.length; i++) {
+      const entry = entries[i];
       if (ignoredNames.has(entry.name)) continue;
 
       const absolutePath = join(current, entry.name);
       const relativePath = relative(root, absolutePath).replace(/\\/g, "/");
+      const meta = stats[i];
+      const sharedMeta = meta
+        ? { mtimeMs: meta.mtimeMs, ctimeMs: meta.ctimeMs, size: meta.isDirectory() ? 0 : meta.size }
+        : undefined;
 
       if (entry.isDirectory()) {
         nodes.push({
@@ -28,6 +45,7 @@ export class FileSystemService {
           path: absolutePath,
           relativePath,
           type: "directory",
+          ...sharedMeta,
           // 深度达到上限时停止继续递归；上限由默认常量控制，兼顾深层目录展示和大仓库性能。
           children: depth < maxDepth ? await this.readDirectory(root, absolutePath, depth + 1, maxDepth) : [],
         });
@@ -37,10 +55,12 @@ export class FileSystemService {
           path: absolutePath,
           relativePath,
           type: "file",
+          ...sharedMeta,
         });
       }
     }
 
+    // 默认按名称（目录优先）排序；维度切换排序由渲染层 fileTreeSort 承担
     return nodes.sort((a, b) => {
       if (a.type !== b.type) return a.type === "directory" ? -1 : 1;
       return a.name.localeCompare(b.name);

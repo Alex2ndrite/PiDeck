@@ -3660,15 +3660,19 @@ body.ask-dialog-open .ask-question-card.pending {
   /* 作为右侧抽屉的 flex 内容区时必须允许收缩，否则深层文件树会撑开容器导致滚动条失效。 */
   flex: 1;
   min-height: 0;
-  overflow: auto;
+  /* 仅纵向滚动：工具行/树行 min-content 撑破时不再制造横向滚动条 */
+  overflow-x: hidden;
+  overflow-y: auto;
   padding: var(--space-4);
 }
 .file-node-row {
   --file-depth-offset: 0px;
   width: 100%;
   height: 26px;
-  display: grid;
-  grid-template-columns: 22px minmax(0, 1fr);
+  /* #115 shadcn 化：行改用 flex（与 Button 的 inline-flex 同构），
+     目录行的 chevron 作为第一个 flex 子项，不再依赖旧 grid 列契约
+     （grid 2/3 列无法容纳 chevron + 图标 + 名称 + 类型标签的变体）。 */
+  display: flex;
   gap: var(--space-2);
   align-items: center;
   border: 0;
@@ -3682,6 +3686,13 @@ body.ask-dialog-open .ask-question-card.pending {
   font-weight: 400;
   line-height: var(--line-height-control);
   white-space: nowrap;
+}
+/* chevron 固定宽度不参与压缩；目录图标 22px 由 .file-node-icon 保证 */
+.file-node-chevron {
+  flex-shrink: 0;
+}
+.file-node-row .file-node-name {
+  flex: 1 1 auto;
 }
 .file-node-row:hover {
   background: var(--color-bg-hover);
@@ -3703,11 +3714,14 @@ body.ask-dialog-open .ask-question-card.pending {
 }
 .file-node-icon {
   width: 22px;
-  color: var(--color-accent);
+  /* 目录用 lucide 描边 Folder：颜色取 Seti 文件夹绿而非品牌 accent，
+     避免整树目录被染成同一实心色块（文件行 Seti 图标由 inline style 覆盖此色）。 */
+  color: var(--file-icon-folder);
   font-size: var(--font-size-caption);
   text-align: center;
   display: inline-grid;
   place-items: center;
+  flex-shrink: 0;
 }
 .file-node-name {
   min-width: 0;
@@ -3731,6 +3745,7 @@ body.ask-dialog-open .ask-question-card.pending {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  min-width: 0;
   color: var(--color-text-tertiary);
   font-size: var(--font-size-caption);
   margin-bottom: var(--space-3);

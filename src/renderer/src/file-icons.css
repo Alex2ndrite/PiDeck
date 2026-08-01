@@ -45,20 +45,19 @@
   --file-icon-folder-special: #7ac4e0;
 }
 
-/* ── 文件树行（覆盖原 2 列 grid 为 3 列，容纳类型标签） ── */
+/* ── 文件树行：布局由 timeline.css 的 flex 契约承担（#115 shadcn 化），
+   这里只保留类型标签在窄抽屉下的隐藏策略 */
 .files-panel {
   container-type: inline-size;
-}
-.file-node-row {
-  grid-template-columns: 22px minmax(0, 1fr) auto !important;
 }
 
 /* 窄抽屉优先保证文件名可读；图标保持稳定尺寸，类型仍可通过 title 查看。 */
 @container (max-width: 340px) {
-  .file-node-row {
-    grid-template-columns: 22px minmax(0, 1fr) !important;
-  }
   .file-node-type-label {
+    display: none;
+  }
+  /* 工具栏：隐藏「打开文件夹」文案只留图标（title 提示仍在），防止工具行溢出 */
+  .files-panel .panel-action-row .open-folder-label {
     display: none;
   }
 }
@@ -88,7 +87,7 @@
 
 /* ── Git 状态小圆点 ── */
 
-/* ── 文件类型标签（hover 显示） ── */
+/* ── 文件类型标签（hover 显示，flex 行内右对齐） ── */
 .file-node-type-label {
   font-size: var(--font-size-micro);
   color: var(--file-node-type-label-color);
@@ -98,6 +97,8 @@
   transition: opacity 0.15s ease;
   padding-right: var(--space-1);
   white-space: nowrap;
+  flex-shrink: 0;
+  margin-left: auto;
 }
 .file-node-row:hover .file-node-type-label {
   opacity: 1;

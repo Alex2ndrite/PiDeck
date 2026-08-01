@@ -38,12 +38,13 @@ describe("optional Git management entry", () => {
     assert.equal(i18n.match(/"settings\.gitManagementDesc":/g)?.length, 2);
   });
 
-  test("places Git beside Files in the floating conversation tools", () => {
+  test("Git entry lives in the drawer rail, not the floating conversation tools", () => {
+    // 悬浮栏（outline）不再暴露 git 入口；git 收进抽屉活动栏，受同一开关门控
     assert.match(appParts, /filesAction\?: EntryAction;\s*gitAction\?: EntryAction;/);
-    assert.match(appParts, /props\.filesAction[\s\S]*?props\.gitAction[\s\S]*?props\.editorsAction/);
-    assert.match(app, /gitAction=\{settings\.enableGitManagement && activeProjectId \?/);
-    assert.match(app, /icon:\s*<GitBranch\s+size=\{17\}\s*\/>/);
-    assert.match(styles, /\.git-entry\s*\{[\s\S]*?width:\s*34px;[\s\S]*?height:\s*34px/);
+    assert.match(app, /gitAction=\{undefined\}/);
+    assert.match(app, /\.\.\.\(settings\.enableGitManagement && activeProjectId \? \[\{[\s\S]*?id: "git"[\s\S]*?icon: <GitBranch\s+size=\{16\}/);
+    // 抽屉活动栏按钮与 outline 共用同一套切换语义（handleToolDrawerAction）
+    assert.match(app, /onClick: \(\) => handleToolDrawerAction\("git"\)/);
   });
 
   test("removes the old header button and guards the drawer", () => {
