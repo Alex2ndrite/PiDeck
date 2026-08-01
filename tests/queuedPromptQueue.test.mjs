@@ -93,7 +93,7 @@ test("pending prompts render inside the composer before composer-box", () => {
     queuePanelIndex >= 0,
     "QueuedPromptPanel should exist in SessionRuntimeInjector",
   );
-  assert.match(composerPanelsSource, /className="flex min-w-0 w-full justify-end p-0 pb-2"/);
+  assert.match(composerPanelsSource, /className="queued-track flex min-w-0 w-full justify-end p-0 pb-2"/);
 });
 
 test("pending prompts share the native content width constraint without hiding composer", () => {

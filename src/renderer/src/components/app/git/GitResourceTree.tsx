@@ -263,7 +263,7 @@ export function ResourceRow(props: {
       {props.onOpen ? (
         <button
           type="button"
-          className="flex h-[26px] min-w-0 flex-1 cursor-pointer appearance-none items-center border-0 bg-transparent p-0 pl-3 text-left font-inherit focus-visible:shadow-[inset_var(--focus-ring)] focus-visible:outline-none disabled:cursor-progress disabled:opacity-70"
+          className="git-resource-open flex h-[26px] min-w-0 flex-1 cursor-pointer appearance-none items-center border-0 bg-transparent p-0 pl-3 text-left font-inherit focus-visible:shadow-[inset_var(--focus-ring)] focus-visible:outline-none disabled:cursor-progress disabled:opacity-70"
           aria-label={t("git.openWorkspaceDiff", { path: props.path })}
           aria-busy={opening}
           disabled={opening}
@@ -277,12 +277,12 @@ export function ResourceRow(props: {
           }}
         >
           <FileIcon name={name} />
-          <span className="min-w-0 flex-[0_1_auto] truncate text-[var(--git-panel-fg)]">{name}</span>
+          <span className="git-resource-name min-w-0 flex-[0_1_auto] truncate text-[var(--git-panel-fg)]">{name}</span>
         </button>
       ) : (
         <div className="flex h-[26px] min-w-0 flex-1 cursor-default items-center border-0 bg-transparent p-0 pl-3 text-left font-inherit">
           <FileIcon name={name} />
-          <span className="min-w-0 flex-[0_1_auto] truncate text-[var(--git-panel-fg)]">{name}</span>
+          <span className="git-resource-name min-w-0 flex-[0_1_auto] truncate text-[var(--git-panel-fg)]">{name}</span>
         </div>
       )}
       {props.actions && props.actions.length > 0 && (
@@ -322,8 +322,8 @@ export function ResourceGroup(props: {
   children: ReactNode;
 }) {
   return (
-    <div className={`border-b border-[var(--git-panel-border)] last:border-b-0${props.open ? " open" : ""}`}>
-      <div className="group flex h-[22px] items-center bg-transparent px-[7px] pl-[3px] hover:bg-[var(--git-panel-hover)]">
+    <div className={`group border-b border-[var(--git-panel-border)] last:border-b-0${props.open ? " open" : ""}`}>
+      <div className="flex h-[22px] items-center bg-transparent px-[7px] pl-[3px] hover:bg-[var(--git-panel-hover)]">
         <button
           type="button"
           className="inline-flex h-[22px] min-w-0 flex-1 cursor-pointer items-center border-0 bg-transparent p-0 text-left text-inherit focus-visible:shadow-[inset_var(--focus-ring)] focus-visible:outline-none"
@@ -334,7 +334,7 @@ export function ResourceGroup(props: {
           <span className="ml-px min-w-0 flex-1 truncate font-mono text-[13px] font-semibold tracking-normal uppercase text-[var(--git-panel-fg)]">{props.title}</span>
         </button>
         {props.allAction && (
-          <div className="hidden items-center gap-px group-hover:flex group-focus-within:flex">
+          <div className="hidden items-center gap-px group-hover:flex group-focus-within:flex group-[.open]:flex">
             <Button
               type="button"
               variant="ghost" size="icon-sm" className="size-7"

@@ -186,6 +186,11 @@ collapsible/resizable/scroll-area/alert-dialog/sonner/input/textarea/confirm-dia
 - **shadcn Tabs 替换 ✅**：新增 `ui-shadcn/tabs.tsx`（下划线式定制，与既有 prompts-tab-btn 视觉对齐）；
   PromptsTab / PromptStoreTab / SkillsTab 共 8 处原生按钮 tab → Tabs（一级+二级）；
   FileDiffViewer（文件标签带关闭）/ WorkspaceDrawerRail（图标 rail）/ batch 提问 tab（状态色）评估后**不替换**（非 Tabs 语义）
+- **E2E 全套 20/20 全绿 ✅**（agent-flow 8 + git-panel + 视觉/布局/历史恢复）：迁移回归修复 7 处
+  e2e 锚点类（queued-track/user-turn/git-branch-label/git-scm-input/git-commit-btn/
+  git-resource-name/git-resource-open/git-status-msg）+ group-[.open]:flex 语义修复（group 类移到外层容器）
+- **教训（已固化）**：e2e 的类选择器是隐式锚点——迁移删类前必须  核对，
+  锚点类保留（空类无视觉影响）；group 组合状态（）迁移时 group 类必须与状态类同元素
 - **仍开放（低优先）**：UI 2.0 全面目测验收一轮
 
 ## 7. 迁移终态统计

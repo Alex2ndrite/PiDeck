@@ -1046,7 +1046,7 @@ export const UserBubble = memo(function UserBubble(props: {
 		);
 	};
 	return (
-		<article ref={rowRef} className="group/user mb-4 flex w-full min-w-0 max-w-full flex-col items-end" data-message-id={message.id}>
+		<article /* user-turn 为 e2e 选择器锚点 */ ref={rowRef} className="user-turn group/user mb-4 flex w-full min-w-0 max-w-full flex-col items-end" data-message-id={message.id}>
 			{skills.length > 0 && (
 				<div className="mb-1.5 flex flex-wrap justify-end gap-1.5">
 					{skills.map((name) => (

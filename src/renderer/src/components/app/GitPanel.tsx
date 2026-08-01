@@ -899,7 +899,7 @@ export function GitPanel(props: GitPanelProps) {
           }
         >
           <GitBranch size={14} className="shrink-0 text-muted-foreground" />
-          <span className="min-w-0 max-w-[120px] flex-1 truncate">
+          <span className="git-branch-label min-w-0 max-w-[120px] flex-1 truncate">
             {props.currentBranch || t("app.branchNone")}
           </span>
           {props.branches.length > 0 && (
@@ -1139,7 +1139,7 @@ export function GitPanel(props: GitPanelProps) {
             ) : (
             <div className="flex shrink-0 flex-col gap-2 border-b border-[var(--git-panel-border)] bg-[var(--git-panel-bg)] px-2.5 pt-2 pb-1.5">
               <textarea
-                className="min-h-14 max-h-[100px] w-full resize-y rounded-sm border border-[var(--git-input-border)] bg-[var(--git-input-bg)] px-2 py-1 font-mono text-[13px] leading-[20px] text-[var(--git-panel-fg)] outline-none placeholder:text-[var(--git-desc-fg)]"
+                className="git-scm-input min-h-14 max-h-[100px] w-full resize-y rounded-sm border border-[var(--git-input-border)] bg-[var(--git-input-bg)] px-2 py-1 font-mono text-[13px] leading-[20px] text-[var(--git-panel-fg)] outline-none placeholder:text-[var(--git-desc-fg)]"
                 placeholder={t("git.commitPlaceholder", {
                   branch: props.currentBranch ?? "HEAD",
                 })}
@@ -1193,7 +1193,7 @@ export function GitPanel(props: GitPanelProps) {
                 </Button>
                 <Button
                   variant="default"
-                  className="min-w-0 flex-1 font-mono"
+                  className="git-commit-btn min-w-0 flex-1 font-mono"
                   loading={committing}
                   disabled={!canCommit}
                   onClick={() => void doCommit()}
@@ -1206,7 +1206,7 @@ export function GitPanel(props: GitPanelProps) {
 
             {error && <div className="flex min-h-[22px] shrink-0 items-center gap-1 px-[9px] text-[13px] text-[var(--git-conflict)]">{error}</div>}
             {!loading && total === 0 && !error && (
-              <div className="flex min-h-[22px] shrink-0 items-center gap-1 px-[9px] text-[13px] text-[var(--git-desc-fg)]">{t("git.noPendingChanges")}</div>
+              <div className="git-status-msg flex min-h-[22px] shrink-0 items-center gap-1 px-[9px] text-[13px] text-[var(--git-desc-fg)]">{t("git.noPendingChanges")}</div>
             )}
 
             <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain">

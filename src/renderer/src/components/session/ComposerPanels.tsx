@@ -95,7 +95,7 @@ export function QueuedPromptPanel(props: {
   return (
     <div
       ref={props.trackRef}
-      className="flex min-w-0 w-full justify-end p-0 pb-2"
+      className="queued-track flex min-w-0 w-full justify-end p-0 pb-2"
       aria-label={t("app.queuedMessagesLabel")}
     >
       <div className="flex min-w-0 w-[clamp(13.5rem,36%,22.5rem)] max-w-full flex-col gap-1 rounded-[9px] border border-[color-mix(in_srgb,var(--color-border-subtle)_82%,transparent)] bg-[color:color-mix(in_srgb,var(--color-bg-panel)_95%,var(--color-chat-card-bg))] p-[7px] pb-2 shadow-[var(--shadow-border),0_6px_18px_color-mix(in_srgb,#000_5%,transparent)]">
