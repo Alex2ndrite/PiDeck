@@ -216,6 +216,20 @@ export function useWorkspacePanels(options: WorkspacePanelOptions = {}) {
     setDrawerCollapsed(false);
   }, [invalidateGitDiff, saveDrawerState]);
 
+  /**
+   * 强制打开面板（不 toggle）：外部入口（如消息链接“在浏览器打开”）需要确保
+   * browser 面板打开；openDrawer 在已是同一面板且展开时会关闭抽屉，导致
+   * 首次点击关抽屉、二次点击才打开且 tab 重复入栈。
+   */
+  const openDrawerForce = useCallback((panel: WorkspaceDrawerPanel) => {
+    const pinnedPanel = projectIdRef.current ? drawerPinnedByProjectRef.current[projectIdRef.current] : undefined;
+    if (pinnedPanel && pinnedPanel !== panel) return;
+    if (panel !== "git") invalidateGitDiff();
+    if (projectIdRef.current) saveDrawerState(projectIdRef.current, panel, Boolean(pinnedPanel && panel === pinnedPanel));
+    setDrawer(panel);
+    setDrawerCollapsed(false);
+  }, [invalidateGitDiff, saveDrawerState]);
+
   const closeDrawer = useCallback(() => {
     if (drawerPinnedRef.current) return;
     invalidateGitDiff();
@@ -372,6 +386,7 @@ export function useWorkspacePanels(options: WorkspacePanelOptions = {}) {
     drawerPinned,
     drawerPinnedPanel,
     openDrawer,
+    openDrawerForce,
     closeDrawer,
     collapseDrawer,
     expandDrawer,

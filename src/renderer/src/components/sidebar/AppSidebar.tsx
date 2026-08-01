@@ -67,8 +67,8 @@ export function AppSidebar(props: AppSidebarProps) {
           <Button
             type="button"
             variant="ghost"
-            size="icon"
-            className="icon-button list-toggle-native size-8"
+            size="icon-sm"
+            className="icon-button list-toggle-native"
             aria-label={props.listCollapsed ? t("app.expandList") : t("app.collapseList")}
             title={props.listCollapsed ? t("app.expandList") : t("app.collapseList")}
             onClick={props.toggleListCollapsed}
@@ -87,7 +87,7 @@ export function AppSidebar(props: AppSidebarProps) {
       <Button
         type="button"
         variant="outline"
-        size="icon"
+        size="icon-sm"
         className="list-toggle-native floating"
         aria-label={t("app.expandList")}
         title={t("app.expandList")}

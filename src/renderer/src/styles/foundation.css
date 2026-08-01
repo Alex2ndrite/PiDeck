@@ -1247,12 +1247,17 @@ select:focus-visible {
 .list-collapsed .splitter-left {
   display: none;
 }
-/* 折叠态浮动恢复按钮：固定定位在侧栏折叠条左侧（main 同款），品牌区随折叠隐藏后提供展开入口 */
+/* 折叠态浮动恢复按钮：固定在标题栏下方、折叠条右侧（main 同款位置）；
+   会话标题由 .list-collapsed .chat-header 的 padding-left 让位，按钮不遮挡文字 */
 .list-toggle-native.floating {
   position: fixed;
-  top: 12px;
-  left: 22px;
+  top: calc(var(--window-drag-height) + 8px);
+  left: 20px;
   z-index: 920;
+}
+/* 折叠时标题让位：chat-header 默认 px-4(16px)，右移避开按钮占用的 20-52px 区域 */
+.wechat-shell.list-collapsed .chat-header {
+  padding-left: 56px;
 }
 
 /* ── 全局统一滚动条：细滑块、透明轨道，融入面板背景 ──
@@ -2734,6 +2739,25 @@ body.is-resizing .splitter::before {
     background 0.15s,
     border-color 0.15s,
     color 0.15s;
+}
+/* 抽屉开关是纯 icon 按钮：豁免上方全局规则的 min-width:60px / 白底 / border，
+   保持 shadcn ghost icon-sm 的 32px 紧凑方块（否则被撑成 60px 白块）。 */
+.chat-header-actions button.header-drawer-toggle {
+  min-width: 0;
+  height: auto;
+  border: 0;
+  background: transparent;
+  padding: 0;
+}
+.chat-header-actions button.header-drawer-toggle:hover {
+  background: transparent;
+  border-color: transparent;
+}
+.chat-header-actions button.header-drawer-toggle.active {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  color: var(--color-accent);
 }
 /* 文件面板工具行按钮密度由组件 Tailwind 承担（icon 28px / Select 限宽），
    覆盖上方全局 min-width 60px，避免 icon 按钮被撑宽导致工具栏溢出。 */

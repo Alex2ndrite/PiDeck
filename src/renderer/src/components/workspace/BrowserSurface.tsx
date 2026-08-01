@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { BrowserPanel } from "../app/BrowserPanel";
 
 export type BrowserSurfaceProps = {
@@ -13,7 +14,9 @@ export type BrowserSurfaceProps = {
 /** Provides one BrowserPanel owner while moving it between drawer and fullscreen compositor. */
 export function BrowserSurface(props: BrowserSurfaceProps) {
   if (props.fullscreen) {
-    return (
+    // portal 到 body：modal-backdrop 是 absolute 定位，留在抽屉 Panel 内会被
+    // 面板的定位上下文限制成“只在侧边栏全屏”；挂到 body 后覆盖整个主界面。
+    return createPortal(
       <div className={props.className ?? "modal-backdrop"} onClick={props.onClose}>
         <div className="browser-modal" onClick={(event) => event.stopPropagation()}>
           <BrowserPanel
@@ -23,7 +26,8 @@ export function BrowserSurface(props: BrowserSurfaceProps) {
           />
           {props.children}
         </div>
-      </div>
+      </div>,
+      document.body,
     );
   }
 

@@ -1096,7 +1096,9 @@ export function App() {
       showToast(t("settings.restartNotice"));
     },
     onOpenInBrowser: (url: string) => {
-      workspace.openDrawer("browser");
+      // 外部链接必须强制打开 browser 面板（openDrawer 是 toggle 语义，
+      // 已是 browser 展开时会关抽屉，导致首次点击关抽屉、二次重复入栈）
+      workspace.openDrawerForce("browser");
       navigateTo(url);
     },
     onTrustRequest: overlays.setTrustRequest,
