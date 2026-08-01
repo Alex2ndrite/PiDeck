@@ -1,4 +1,5 @@
 import { Button } from "../components/ui-shadcn/button";
+import { Tabs, TabsList, TabsTrigger } from "../components/ui-shadcn/tabs";
 import { showNotice } from "../utils/notice";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, FileEdit, Pencil, ShoppingBag, Trash2, X } from "lucide-react";
@@ -90,22 +91,22 @@ export function PromptsTab(props: {
 
 	return (
 		<div className="prompts-tab">
-			{/* tab 切换栏 */}
-			<div className="prompts-tab-bar">
-				<button
-					className={`prompts-tab-btn ${promptTab === "local" ? "active" : ""}`}
-					onClick={() => { setPromptTab("local"); props.onRefresh(); }}
-				>
-					{t("config.nav.prompts")}
-				</button>
-				<button
-					className={`prompts-tab-btn ${promptTab === "store" ? "active" : ""}`}
-					onClick={() => setPromptTab("store")}
-				>
-					<ShoppingBag size={14} strokeWidth={1.8} />
-					{t("config.promptStoreTab")}
-				</button>
-			</div>
+			{/* tab 切换栏：shadcn Tabs（下划线式，与既有 prompts-tab-btn 视觉一致） */}
+			<Tabs
+				value={promptTab}
+				onValueChange={(v) => { if (v === "local" || v === "store") setPromptTab(v); }}
+				className="gap-0"
+			>
+				<TabsList className="w-full">
+					<TabsTrigger value="local" onClick={() => props.onRefresh()}>
+						{t("config.nav.prompts")}
+					</TabsTrigger>
+					<TabsTrigger value="store">
+						<ShoppingBag size={14} strokeWidth={1.8} />
+						{t("config.promptStoreTab")}
+					</TabsTrigger>
+				</TabsList>
+			</Tabs>
 
 			{promptTab === "store" ? (
 				<PromptStoreTab

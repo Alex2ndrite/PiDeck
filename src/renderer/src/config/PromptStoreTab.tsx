@@ -1,4 +1,5 @@
 import { Button } from "../components/ui-shadcn/button";
+import { Tabs, TabsList, TabsTrigger } from "../components/ui-shadcn/tabs";
 import { showNotice } from "../utils/notice";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeft, BookOpen, Check, Download, ExternalLink, Globe, Search } from "lucide-react";
@@ -180,23 +181,23 @@ export function PromptStoreTab(props: {
 
 	return (
 		<div className="prompt-store-tab">
-			{/* 子 tab 切换：国际商店 / 中文精选 */}
-			<div className="prompts-tab-bar">
-				<button
-					className={`prompts-tab-btn ${storeSubTab === "store" ? "active" : ""}`}
-					onClick={() => setStoreSubTab("store")}
-				>
-					<Globe size={14} strokeWidth={1.8} />
-					prompts.chat
-				</button>
-				<button
-					className={`prompts-tab-btn ${storeSubTab === "yao" ? "active" : ""}`}
-					onClick={() => setStoreSubTab("yao")}
-				>
-					<BookOpen size={14} strokeWidth={1.8} />
-					{t("config.promptStoreChinesePicks")}
-				</button>
-			</div>
+			{/* 子 tab 切换：国际商店 / 中文精选（shadcn Tabs） */}
+			<Tabs
+				value={storeSubTab}
+				onValueChange={(v) => { if (v === "store" || v === "yao") setStoreSubTab(v); }}
+				className="gap-0"
+			>
+				<TabsList className="w-full">
+					<TabsTrigger value="store">
+						<Globe size={14} strokeWidth={1.8} />
+						prompts.chat
+					</TabsTrigger>
+					<TabsTrigger value="yao">
+						<BookOpen size={14} strokeWidth={1.8} />
+						{t("config.promptStoreChinesePicks")}
+					</TabsTrigger>
+				</TabsList>
+			</Tabs>
 
 			{storeSubTab === "yao" ? (
 				<YaoPromptTab onImported={props.onImported} />

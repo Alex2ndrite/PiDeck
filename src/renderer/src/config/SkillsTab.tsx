@@ -1,4 +1,5 @@
 import { Button } from "../components/ui-shadcn/button";
+import { Tabs, TabsList, TabsTrigger } from "../components/ui-shadcn/tabs";
 import { useState } from "react";
 import { Check, FileEdit, Pencil, ShoppingBag, ToggleLeft, ToggleRight, Trash2, X, Store, Globe } from "lucide-react";
 import type {
@@ -43,42 +44,42 @@ export function SkillsTab(props: {
 		data.locations[0];
 	return (
 		<div className="skills-tab">
-			{/* 一级 tab：本地 / 商店 */}
-			<div className="prompts-tab-bar">
-				<button
-					className={`prompts-tab-btn ${skillTab === "local" ? "active" : ""}`}
-					onClick={() => { setSkillTab("local"); props.onRefresh(); }}
-				>
+		{/* 一级 tab：本地 / 商店（shadcn Tabs） */}
+		<Tabs
+			value={skillTab}
+			onValueChange={(v) => { if (v === "local" || v === "store") setSkillTab(v); }}
+			className="gap-0"
+		>
+			<TabsList className="w-full">
+				<TabsTrigger value="local" onClick={() => props.onRefresh()}>
 					{t("config.nav.skills")}
-				</button>
-				<button
-					className={`prompts-tab-btn ${skillTab === "store" ? "active" : ""}`}
-					onClick={() => setSkillTab("store")}
-				>
+				</TabsTrigger>
+				<TabsTrigger value="store">
 					<ShoppingBag size={14} strokeWidth={1.8} />
 					{t("config.promptStoreTab")}
-				</button>
-			</div>
+				</TabsTrigger>
+			</TabsList>
+		</Tabs>
 
 			{skillTab === "store" ? (
 				<div className="skills-store-content">
-					{/* 二级 tab：供应商切换 */}
-					<div className="prompts-tab-bar skills-store-source-bar">
-						<button
-							className={`prompts-tab-btn ${storeSource === "skillhub" ? "active" : ""}`}
-							onClick={() => setStoreSource("skillhub")}
-						>
-							<Store size={14} strokeWidth={1.8} />
-							{t("config.tabs.skillHub")}
-						</button>
-						<button
-							className={`prompts-tab-btn ${storeSource === "promptchat" ? "active" : ""}`}
-							onClick={() => setStoreSource("promptchat")}
-						>
-							<Globe size={14} strokeWidth={1.8} />
-							Prompt.chat
-						</button>
-					</div>
+					{/* 二级 tab：供应商切换（shadcn Tabs，紧凑变体） */}
+					<Tabs
+						value={storeSource}
+						onValueChange={(v) => { if (v === "skillhub" || v === "promptchat") setStoreSource(v); }}
+						className="gap-0"
+					>
+						<TabsList className="w-full">
+							<TabsTrigger value="skillhub" className="px-3 py-1 text-xs">
+								<Store size={14} strokeWidth={1.8} />
+								{t("config.tabs.skillHub")}
+							</TabsTrigger>
+							<TabsTrigger value="promptchat" className="px-3 py-1 text-xs">
+								<Globe size={14} strokeWidth={1.8} />
+								Prompt.chat
+							</TabsTrigger>
+						</TabsList>
+					</Tabs>
 					{storeSource === "skillhub" ? (
 						<SkillHubStorePanel />
 					) : (

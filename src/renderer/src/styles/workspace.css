@@ -529,31 +529,6 @@
 }
 
 /* ── Prompt 商店（prompts.chat） ── */
-.prompts-tab-bar {
-  display: flex;
-  gap: 2px;
-  border-bottom: 1px solid var(--color-border-subtle);
-  padding-bottom: 0;
-  margin-bottom: 0;
-}
-.prompts-tab-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 16px;
-  border: none;
-  border-bottom: 2px solid transparent;
-  background: none;
-  color: var(--color-text-tertiary);
-  font-size: var(--font-size-control);
-  cursor: pointer;
-  transition:
-    color 0.15s,
-    border-color 0.15s;
-}
-.prompts-tab-btn:hover {
-  color: var(--color-text-primary);
-}
 .prompts-tab-btn.active {
   color: var(--color-accent);
   border-bottom-color: var(--color-accent);

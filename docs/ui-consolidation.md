@@ -183,7 +183,10 @@ collapsible/resizable/scroll-area/alert-dialog/sonner/input/textarea/confirm-dia
   `unist-util-visit`（无源码引用，lock 中为传递依赖保留）
 - **P3 规范固化 ✅**：AGENTS.md「新样式一律走 Tailwind utility + shadcn 组合，禁止新增手写 CSS class
   （token 与 keyframes 除外）」
-- **仍开放（低优先）**：shadcn Tabs 替换原生 tab 导航（4 处）；UI 2.0 全面目测验收一轮
+- **shadcn Tabs 替换 ✅**：新增 `ui-shadcn/tabs.tsx`（下划线式定制，与既有 prompts-tab-btn 视觉对齐）；
+  PromptsTab / PromptStoreTab / SkillsTab 共 8 处原生按钮 tab → Tabs（一级+二级）；
+  FileDiffViewer（文件标签带关闭）/ WorkspaceDrawerRail（图标 rail）/ batch 提问 tab（状态色）评估后**不替换**（非 Tabs 语义）
+- **仍开放（低优先）**：UI 2.0 全面目测验收一轮
 
 ## 7. 迁移终态统计
 
