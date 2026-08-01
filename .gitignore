@@ -55,5 +55,6 @@ opencode-source/
 nul
 
 
-*.tsbuildinfotest-results/
+*.tsbuildinfo
+test-results/
 playwright-report/
