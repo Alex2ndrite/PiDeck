@@ -2,7 +2,7 @@ import { Button } from "../components/ui-shadcn/button";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { PiDesktopApi } from "../../../preload";
 import type { AppLogEntry, AppLogLevel } from "../../../shared/types";
-import { SelectField } from "../components/ui/SelectField";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui-shadcn/select";
 import { t } from "../i18n";
 
 const api: PiDesktopApi = (window as unknown as { piDesktop: PiDesktopApi }).piDesktop;
@@ -67,16 +67,21 @@ export function LogsTab() {
 		<div className="logs-tab">
 			<div className="config-toolbar logs-toolbar">
 				<div className="logs-filters">
-					<SelectField
-						className="logs-level-select"
-						label={t("logs.levelFilter")}
-						value={level}
-						options={LEVELS.map((item) => ({
-							value: item,
-							label: t(`logs.level.${item}`),
-						}))}
-						onChange={(value) => setLevel(value as AppLogLevel | "all")}
-					/>
+					<div className="logs-level-select grid gap-1.5">
+						<span className="text-sm font-medium leading-none text-foreground">{t("logs.levelFilter")}</span>
+						<Select value={level} onValueChange={(value) => setLevel(value as AppLogLevel | "all")}>
+							<SelectTrigger className="w-full">
+								<SelectValue />
+							</SelectTrigger>
+							<SelectContent>
+								{LEVELS.map((item) => (
+									<SelectItem key={item} value={item}>
+										{t(`logs.level.${item}`)}
+									</SelectItem>
+								))}
+							</SelectContent>
+						</Select>
+					</div>
 					<input
 						className="logs-search-input"
 						value={search}

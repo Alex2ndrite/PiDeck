@@ -14,8 +14,7 @@ import {
 	X,
 } from "lucide-react";
 import { t, type TranslationKey } from "../../i18n";
-import { Button } from "../ui/Button";
-import { CloseIconButton, IconButton } from "../ui/IconButton";
+import { Button } from "../ui-shadcn/button";
 import {
 	Command,
 	CommandEmpty,
@@ -177,7 +176,7 @@ export function ComposerBottomBar(props: {
 				<div className="composer-bottom-left flex min-w-0 flex-wrap items-center gap-1">
 					<Button
 						variant="ghost"
-						buttonSize="sm"
+						size="sm"
 						className={`composer-bar-btn h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground${isPlanMode ? " active" : ""}`}
 						disabled={props.disabled}
 						onClick={props.onOpenComposerModePicker}
@@ -191,37 +190,37 @@ export function ComposerBottomBar(props: {
 						<span>{modeLabel}</span>
 					</Button>
 					{isPlanMode && (
-						<IconButton
+						<Button variant="ghost" size="icon"
 							className="composer-bar-btn icon mode-cancel size-7"
-							label={t("app.composerModeCancelPlan")}
+							aria-label={t("app.composerModeCancelPlan")} title={t("app.composerModeCancelPlan")}
 							disabled={props.disabled}
 							onClick={props.onCancelPlan}
 						>
 							<X size={14} strokeWidth={2.2} aria-hidden="true" />
-						</IconButton>
+						</Button>
 					)}
-					<IconButton
+					<Button variant="ghost" size="icon"
 						className="composer-bar-btn icon size-7"
-						label={t("app.promptTemplatePickerTitle")}
+						aria-label={t("app.promptTemplatePickerTitle")} title={t("app.promptTemplatePickerTitle")}
 						disabled={props.disabled}
 						onClick={props.onPickPromptTemplate}
 					>
 						<FileText size={15} strokeWidth={1.8} aria-hidden="true" />
-					</IconButton>
-					<IconButton
+					</Button>
+					<Button variant="ghost" size="icon"
 						className="composer-bar-btn icon size-7"
-						label={t("menu.attachFile")}
+						aria-label={t("menu.attachFile")} title={t("menu.attachFile")}
 						disabled={props.disabled}
 						onClick={props.onAttachFile}
 					>
 						<Paperclip size={15} strokeWidth={1.8} aria-hidden="true" />
-					</IconButton>
+					</Button>
 					{props.feishuIndicator}
 				</div>
 				<div className="composer-bottom-center flex min-w-0 flex-1 items-center justify-center gap-1 overflow-hidden">
 					<Button
 						variant="ghost"
-						buttonSize="sm"
+						size="sm"
 						className="composer-bar-btn model h-7 max-w-[42ch] truncate px-2 text-xs text-muted-foreground hover:text-foreground"
 						disabled={props.disabled}
 						onClick={props.onPickModel}
@@ -231,7 +230,7 @@ export function ComposerBottomBar(props: {
 					</Button>
 					<Button
 						variant="ghost"
-						buttonSize="sm"
+						size="sm"
 						className="composer-bar-btn thinking h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
 						disabled={props.disabled}
 						onClick={props.onPickThinking}
@@ -247,7 +246,7 @@ export function ComposerBottomBar(props: {
 						return (
 							<Button
 								variant="ghost"
-								buttonSize="sm"
+								size="sm"
 								className={`composer-bar-btn compact h-7 gap-1 px-2 text-xs${urgency}${isCompactingNow ? " compacting" : ""}`}
 								disabled={
 									isCompactingNow ||
@@ -317,7 +316,7 @@ function PickerDialog(props: {
 						)}
 					</div>
 					<DialogClose asChild>
-						<CloseIconButton label={t("common.close")} />
+						<Button variant="ghost" size="icon" aria-label={t("common.close")} title={t("common.close")}><X size={18} strokeWidth={2.2} aria-hidden="true" /></Button>
 					</DialogClose>
 				</DialogHeader>
 				{props.children}

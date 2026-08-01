@@ -13,8 +13,7 @@ import {
   canRetractQueuedPromptToInput,
 } from "../../utils/queuedPromptQueue";
 import { t } from "../../i18n";
-import { Button } from "../ui/Button";
-import { IconButton } from "../ui/IconButton";
+import { Button } from "../ui-shadcn/button";
 import { ExtensionWidgetCard } from "./ComposerParts";
 
 export function ComposerAttachmentBar(props: {
@@ -34,18 +33,18 @@ export function ComposerAttachmentBar(props: {
             onClick={() => props.onPreview(image)}
             style={{ cursor: "pointer" }}
           />
-          <IconButton
+          <Button variant="ghost" size="icon"
             className="image-remove-btn"
-            label={t("app.imageRemove")}
+            aria-label={t("app.imageRemove")} title={t("app.imageRemove")}
             onClick={() => props.onRemove(index)}
           >
             <X size={12} strokeWidth={2.4} aria-hidden="true" />
-          </IconButton>
+          </Button>
         </div>
       ))}
       <Button
         variant="secondary"
-        buttonSize="sm"
+        size="sm"
         className="image-clear-btn"
         onClick={props.onClear}
       >
@@ -143,22 +142,22 @@ export function QueuedPromptPanel(props: {
                   </span>
                 ) : null}
                 <div className="queued-actions">
-                  <IconButton
+                  <Button variant="ghost" size="icon"
                     className="queued-icon-btn"
-                    label={t("app.retractToInput")}
+                    aria-label={t("app.retractToInput")} title={t("app.retractToInput")}
                     disabled={!canRetractQueuedPromptToInput(status)}
                     onClick={() => props.onRetract(props.sessionId!, prompt)}
                   >
                     <Pencil size={13} strokeWidth={2} aria-hidden="true" />
-                  </IconButton>
-                  <IconButton
+                  </Button>
+                  <Button variant="ghost" size="icon"
                     className="queued-icon-btn danger"
-                    label={t("app.retractDiscard")}
+                    aria-label={t("app.retractDiscard")} title={t("app.retractDiscard")}
                     disabled={!canDiscardQueuedPrompt(status)}
                     onClick={() => props.onDiscard(props.sessionId!, prompt.id)}
                   >
                     <X size={13} strokeWidth={2} aria-hidden="true" />
-                  </IconButton>
+                  </Button>
                 </div>
               </div>
             );
@@ -186,7 +185,7 @@ export function SessionDeliveryNotice(props: {
         <small>{t("app.queuedUnknown")}</small>
         {props.error ? <small>{props.error}</small> : null}
       </div>
-      <Button variant="secondary" buttonSize="sm" onClick={props.onAcknowledge}>
+      <Button variant="secondary" size="sm" onClick={props.onAcknowledge}>
         {t("common.confirm")}
       </Button>
     </div>
@@ -216,16 +215,16 @@ export function ComposerSendControls(props: {
       <div className="send-behavior-menu-wrap relative flex items-center gap-1.5">
         {props.showBusySendControls && props.hasComposerContent && (
           <div className="send-behavior-toggle inline-flex h-7 overflow-hidden rounded-md bg-primary text-primary-foreground">
-            <IconButton
+            <Button variant="ghost" size="icon"
               className="send-behavior-primary size-7 rounded-none text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground"
-              label={t("app.sendSteerTitle")}
+              aria-label={t("app.sendSteerTitle")} title={t("app.sendSteerTitle")}
               onClick={props.onSend}
             >
               <ArrowUp size={15} strokeWidth={2.4} aria-hidden="true" />
-            </IconButton>
-            <IconButton
+            </Button>
+            <Button variant="ghost" size="icon"
               className="send-behavior-chevron size-5 rounded-none border-l border-primary-foreground/20 text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground"
-              label={t("app.sendBehaviorTitle")}
+              aria-label={t("app.sendBehaviorTitle")} title={t("app.sendBehaviorTitle")}
               aria-haspopup="menu"
               aria-expanded={props.sendBehaviorMenuOpen}
               onMouseEnter={props.onKeepBehaviorMenuOpen}
@@ -233,26 +232,26 @@ export function ComposerSendControls(props: {
               onClick={props.onToggleBehaviorMenu}
             >
               <ChevronDown size={12} strokeWidth={2.2} aria-hidden="true" />
-            </IconButton>
+            </Button>
           </div>
         )}
         {props.isAgentBusy ? (
-          <IconButton
+          <Button variant="ghost" size="icon"
             className="composer-bar-btn stop size-8 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground"
-            label={t("app.stop")}
+            aria-label={t("app.stop")} title={t("app.stop")}
             onClick={props.onStop}
           >
             <Square size={15} strokeWidth={0} fill="currentColor" aria-hidden="true" />
-          </IconButton>
+          </Button>
         ) : !props.keepBusyDraftControls ? (
-          <IconButton
+          <Button variant="ghost" size="icon"
             className="composer-bar-btn send size-8 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground disabled:opacity-40"
-            label={t("app.send")}
+            aria-label={t("app.send")} title={t("app.send")}
             disabled={props.isAgentStarting || !props.canSend}
             onClick={props.onSend}
           >
             <ArrowUp size={16} strokeWidth={2.5} aria-hidden="true" />
-          </IconButton>
+          </Button>
         ) : null}
         {props.sendBehaviorMenuOpen &&
           props.showBusySendControls &&
@@ -265,7 +264,7 @@ export function ComposerSendControls(props: {
             >
               <Button
                 variant="ghost"
-                buttonSize="sm"
+                size="sm"
                 className="send-behavior-option steer justify-start gap-2 px-2"
                 role="menuitem"
                 onClick={props.onSend}
@@ -275,7 +274,7 @@ export function ComposerSendControls(props: {
               </Button>
               <Button
                 variant="ghost"
-                buttonSize="sm"
+                size="sm"
                 className="send-behavior-option follow-up justify-start gap-2 px-2"
                 role="menuitem"
                 onClick={props.onSendFollowUp}

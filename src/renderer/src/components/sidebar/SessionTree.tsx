@@ -5,7 +5,7 @@ import { filterAgentsForSidebarDisplay, getProjectAgentSessionDisplay } from "..
 import { sessionRecordToSummary } from "../../atoms";
 import { t } from "../../i18n";
 import { filterSidebarSessions, getBoundSidebarRuntimeAgent, hasLiveSidebarRuntime, type SidebarController } from "../../hooks/useSidebarController";
-import { IconButton } from "../ui/IconButton";
+import { Button } from "../ui-shadcn/button";
 import type { SidebarActions } from "./SidebarContent";
 import { cn } from "../../lib/utils";
 
@@ -162,13 +162,13 @@ export function SessionTree(props: {
               </div></div>
             </button>
             {canDelete && (
-              <IconButton
+              <Button variant="ghost" size="icon"
                 className="draft-session-delete"
-                label={t("common.delete")}
+                aria-label={t("common.delete")} title={t("common.delete")}
                 onClick={() => void props.actions.sessions.deleteDraft(session)}
               >
                 <Trash2 size={14} aria-hidden="true" />
-              </IconButton>
+              </Button>
             )}
           </div>
         );

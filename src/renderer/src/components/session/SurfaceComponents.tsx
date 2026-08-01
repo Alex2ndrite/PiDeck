@@ -92,10 +92,7 @@ import { getFileIconSeti, getFileIconColor, getFileTypeLabel } from "../../fileI
 import { normalizeSessionPathForCompare } from "../../agentListDisplay";
 import { t } from "../../i18n";
 import { showNotice } from "../../utils/notice";
-import { Button } from "../ui/Button";
-import { Modal } from "../ui/Modal";
-import { SelectField } from "../ui/SelectField";
-import { TextField } from "../ui/TextField";
+import { Button } from "../ui-shadcn/button";
 import type {
 	AgentRuntimeState,
 	AgentTab,

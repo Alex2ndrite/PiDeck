@@ -9,7 +9,7 @@ import type { Plugin } from "unified";
 import type { Root, Element, Text } from "hast";
 import type { DraftMeta } from "../../../../shared/types";
 import { t } from "../../i18n";
-import { IconButton } from "../ui/IconButton";
+import { Button } from "../ui-shadcn/button";
 
 type Mode = "edit" | "preview";
 
@@ -21,10 +21,10 @@ function ToolButton({ icon, label, text, active, onClick }: {
 	onClick: () => void;
 }) {
 	return (
-		<IconButton label={label} onClick={onClick} className={active ? "scratch-pad-tool-btn active" : "scratch-pad-tool-btn"}>
+		<Button variant="ghost" size="icon" aria-label={label} title={label} onClick={onClick} className={active ? "scratch-pad-tool-btn active" : "scratch-pad-tool-btn"}>
 			{icon}
 			{text && <span className="scratch-pad-tool-text">{text}</span>}
-		</IconButton>
+		</Button>
 	);
 }
 

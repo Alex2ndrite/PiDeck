@@ -1,10 +1,17 @@
 import { lazy, Suspense, useEffect, useMemo, useState, type ComponentProps } from "react";
+import { cn } from "../../lib/utils";
 const SettingsModal = lazy(() => import("../app/SettingsModal").then((module) => ({ default: module.SettingsModal })));
 import { ConfirmDialog } from "./OverlayParts";
 import { TrustConfirmModal } from "../app/TrustConfirmModal";
-import { CloseIconButton } from "../ui/IconButton";
-import { Modal } from "../ui/Modal";
-import { Button } from "../ui/Button";
+import { Button } from "../ui-shadcn/button";
+import { X } from "lucide-react";
+import {
+	Dialog,
+	DialogClose,
+	DialogContent,
+	DialogHeader,
+	DialogTitle,
+} from "../ui-shadcn/dialog";
 import { Textarea } from "../ui-shadcn/textarea";
 import { t } from "../../i18n";
 import type { AppInfo, FeedbackEnvironment, Project } from "../../../../shared/types";
@@ -71,14 +78,25 @@ export function FeedbackOverlay({ open, project, appInfo, loadEnvironment, onClo
 	const issueUrl = `https://github.com/ayuayue/pi-desktop/issues/new?title=${encodeURIComponent(issueTitle)}&body=${encodeURIComponent(report)}`;
 	const copyReport = async () => { await navigator.clipboard.writeText(report); onCopy?.(); };
 	return (
-		<Modal open onClose={onClose} size="medium" contentClassName="feedback-modal-shell">
-			<div className="modal-header feedback-header"><div><strong>{t("feedback.title")}</strong><small>{t("feedback.intro")}</small></div><CloseIconButton label={t("common.close")} onClick={onClose} /></div>
+		<Dialog open onOpenChange={ (next) => !next && onClose }>
+			<DialogContent showCloseButton={false} className={cn("flex flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(800px,calc(100vw-48px))]", "feedback-modal-shell")}>
+				<DialogHeader className="flex-row items-center justify-between px-4 py-3">
+					<DialogTitle></DialogTitle>
+					<DialogClose asChild>
+						<Button variant="ghost" size="icon" aria-label={t("common.close")} title={t("common.close")}>
+							<X size={18} strokeWidth={2.2} aria-hidden="true" />
+						</Button>
+					</DialogClose>
+				</DialogHeader>
+			<div className="modal-header feedback-header"><div><strong>{t("feedback.title")}</strong><small>{t("feedback.intro")}</small></div><Button variant="ghost" size="icon" aria-label={t("common.close")} title={t("common.close")} onClick={onClose}><X size={18} strokeWidth={2.2} aria-hidden="true" /></Button></div>
 			<div className="feedback-body">
 				<div className="feedback-form-section"><div className="feedback-section-header"><strong>{t("feedback.descriptionLabel")}</strong><small>{t("feedback.descriptionHint")}</small></div><Textarea className="feedback-textarea" value={description} onChange={(event) => setDescription(event.target.value)} placeholder={t("feedback.descriptionPlaceholder")} /><div className="feedback-section-header"><strong>{t("feedback.stepsLabel")}</strong><small>{t("feedback.stepsHint")}</small></div><Textarea className="feedback-textarea" value={steps} onChange={(event) => setSteps(event.target.value)} placeholder={t("feedback.stepsPlaceholder")} /></div>
 				<div className="feedback-environment-section"><div className="feedback-section-header"><strong>{t("feedback.environmentTitle")}</strong><small>{loading ? t("feedback.reportLoading") : t("feedback.environmentHint")}</small></div><pre className="feedback-environment-content">{report}</pre></div>
 			</div>
-			<div className="feedback-actions"><Button variant="secondary" onClick={() => void copyReport()}>{t("feedback.copyReport")}</Button><Button variant="secondary" onClick={() => void onOpenExternal("https://github.com/ayuayue")}>{t("feedback.authorGithub")}</Button><Button variant="primary" onClick={() => void onOpenExternal(issueUrl)}>{t("feedback.openIssue")}</Button></div>
-		</Modal>
+			<div className="feedback-actions"><Button variant="secondary" onClick={() => void copyReport()}>{t("feedback.copyReport")}</Button><Button variant="secondary" onClick={() => void onOpenExternal("https://github.com/ayuayue")}>{t("feedback.authorGithub")}</Button><Button variant="default" onClick={() => void onOpenExternal(issueUrl)}>{t("feedback.openIssue")}</Button></div>
+		
+			</DialogContent>
+		</Dialog>
 	);
 }
 

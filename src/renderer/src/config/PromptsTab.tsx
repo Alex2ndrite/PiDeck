@@ -8,8 +8,7 @@ import type {
 	PiPromptTemplateSummary,
 } from "../../../shared/types";
 import { t } from "../i18n";
-import { CloseIconButton } from "../components/ui/IconButton";
-import { LazyMonacoEditor } from "../components/ui/LazyMonacoEditor";
+import { LazyMonacoEditor } from "../components/app/LazyMonacoEditor";
 import { PromptStoreTab } from "./PromptStoreTab";
 
 export function PromptsTab(props: {
@@ -257,10 +256,9 @@ export function PromptsTab(props: {
 								{showHint && <span className="file-diff-hint">{t("config.promptSaveHint")}</span>}
 							</span>
 							<div className="file-diff-header-actions">
-								<CloseIconButton
-									label={t("common.close")}
-									onClick={props.onCancelEdit}
-								/>
+								<Button variant="ghost" size="icon" aria-label={t("common.close")} title={t("common.close")} onClick={props.onCancelEdit}>
+									<X size={18} strokeWidth={2.2} aria-hidden="true" />
+								</Button>
 							</div>
 						</div>
 						{props.editLoading ? (

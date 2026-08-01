@@ -1,9 +1,17 @@
 
 import { useState } from "react";
+import { cn } from "../../lib/utils";
+import { Button } from "../ui-shadcn/button";
+import { X } from "lucide-react";
 import { Check, RefreshCw, UploadCloud } from "lucide-react";
 import { t } from "../../i18n";
-import { CloseIconButton } from "../ui/IconButton";
-import { Modal } from "../ui/Modal";
+import {
+	Dialog,
+	DialogClose,
+	DialogContent,
+	DialogHeader,
+	DialogTitle,
+} from "../ui-shadcn/dialog";
 import type {
 	CodexSessionSummary,
 	CodexImportReport,
@@ -130,7 +138,16 @@ export function CodexImportModal(props: {
 		</label>
 	);
 	return (
-		<Modal open onClose={props.onClose} size="medium" title={t("codex.title")} contentClassName="codex-import-modal">
+		<Dialog open onOpenChange={ (next) => !next && props.onClose }>
+			<DialogContent showCloseButton={false} className={cn("flex flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(800px,calc(100vw-48px))]", "codex-import-modal")}>
+				<DialogHeader className="flex-row items-center justify-between px-4 py-3">
+					<DialogTitle>{t("codex.title")}</DialogTitle>
+					<DialogClose asChild>
+						<Button variant="ghost" size="icon" aria-label={t("common.close")} title={t("common.close")}>
+							<X size={18} strokeWidth={2.2} aria-hidden="true" />
+						</Button>
+					</DialogClose>
+				</DialogHeader>
 				<div className="modal-header-sub">
 					<small>{props.project.name}</small>
 				</div>
@@ -242,7 +259,9 @@ export function CodexImportModal(props: {
 						</div>
 					</div>
 				)}
-		</Modal>
+		
+			</DialogContent>
+		</Dialog>
 	);
 }
 
@@ -264,7 +283,16 @@ export function ClaudeImportModal(props: {
 		props.sessions.length > 0 &&
 		props.sessions.every((session) => selected.has(session.sourcePath));
 	return (
-		<Modal open onClose={props.onClose} size="medium" title={t("claude.title")} contentClassName="codex-import-modal">
+		<Dialog open onOpenChange={ (next) => !next && props.onClose }>
+			<DialogContent showCloseButton={false} className={cn("flex flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(800px,calc(100vw-48px))]", "codex-import-modal")}>
+				<DialogHeader className="flex-row items-center justify-between px-4 py-3">
+					<DialogTitle>{t("claude.title")}</DialogTitle>
+					<DialogClose asChild>
+						<Button variant="ghost" size="icon" aria-label={t("common.close")} title={t("common.close")}>
+							<X size={18} strokeWidth={2.2} aria-hidden="true" />
+						</Button>
+					</DialogClose>
+				</DialogHeader>
 				<div className="modal-header-sub">
 					<small>{props.project.name}</small>
 				</div>
@@ -358,7 +386,9 @@ export function ClaudeImportModal(props: {
 						</div>
 					</div>
 				)}
-		</Modal>
+		
+			</DialogContent>
+		</Dialog>
 	);
 }
 
@@ -380,7 +410,16 @@ export function OpenCodeImportModal(props: {
 		props.sessions.length > 0 &&
 		props.sessions.every((session) => selected.has(session.sourcePath));
 	return (
-		<Modal open onClose={props.onClose} size="medium" title={t("opencode.title")} contentClassName="codex-import-modal">
+		<Dialog open onOpenChange={ (next) => !next && props.onClose }>
+			<DialogContent showCloseButton={false} className={cn("flex flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(800px,calc(100vw-48px))]", "codex-import-modal")}>
+				<DialogHeader className="flex-row items-center justify-between px-4 py-3">
+					<DialogTitle>{t("opencode.title")}</DialogTitle>
+					<DialogClose asChild>
+						<Button variant="ghost" size="icon" aria-label={t("common.close")} title={t("common.close")}>
+							<X size={18} strokeWidth={2.2} aria-hidden="true" />
+						</Button>
+					</DialogClose>
+				</DialogHeader>
 				<div className="modal-header-sub">
 					<small>{props.project.name}</small>
 				</div>
@@ -478,6 +517,8 @@ export function OpenCodeImportModal(props: {
 						</div>
 					</div>
 				)}
-			</Modal>
+			
+			</DialogContent>
+		</Dialog>
 	);
 }

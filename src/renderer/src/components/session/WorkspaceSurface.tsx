@@ -1,3 +1,4 @@
+import { cn } from "../../lib/utils";
 import {
 	useCallback,
 	useEffect,
@@ -27,8 +28,13 @@ import { getFileIconSeti, getFileIconColor, getFileTypeLabel } from "../../fileI
 import { t } from "../../i18n";
 import type { WorkspaceDrawerPanel } from "../../hooks/useWorkspacePanels";
 import { showNotice } from "../../utils/notice";
-import { IconButton } from "../ui/IconButton";
-import { Modal } from "../ui/Modal";
+import {
+	Dialog,
+	DialogClose,
+	DialogContent,
+	DialogHeader,
+	DialogTitle,
+} from "../ui-shadcn/dialog";
 import type { FileTreeNode, Project, SessionSummary } from "../../../../shared/types";
 
 type DiffFileHandler = (path: string, originalContent?: string, content?: string) => void;
@@ -733,13 +739,16 @@ export function SessionHistoryModal(props: {
 	onDelete: (session: SessionSummary) => void | Promise<void>;
 }) {
 	return (
-		<Modal
-			open
-			onClose={props.onClose}
-			size="medium"
-			title={`${t("drawer.historyTitle")} · ${props.project.name}`}
-			contentClassName="session-history-modal"
-		>
+		<Dialog open onOpenChange={ (next) => !next && props.onClose }>
+			<DialogContent showCloseButton={false} className={cn("flex flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(800px,calc(100vw-48px))]", "session-history-modal")}>
+				<DialogHeader className="flex-row items-center justify-between px-4 py-3">
+					<DialogTitle></DialogTitle>
+					<DialogClose asChild>
+						<Button variant="ghost" size="icon" aria-label={t("common.close")} title={t("common.close")}>
+							<X size={18} strokeWidth={2.2} aria-hidden="true" />
+						</Button>
+					</DialogClose>
+				</DialogHeader>
 				<div className="session-history-path" title={props.project.path}>
 					{props.project.path}
 				</div>
@@ -761,7 +770,9 @@ export function SessionHistoryModal(props: {
 						/>
 					)}
 				</div>
-		</Modal>
+		
+			</DialogContent>
+		</Dialog>
 	);
 }
 

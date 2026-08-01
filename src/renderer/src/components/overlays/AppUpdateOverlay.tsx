@@ -1,7 +1,16 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { t } from "../../i18n";
-import { Modal } from "../ui/Modal";
+import {
+	Dialog,
+	DialogClose,
+	DialogContent,
+	DialogHeader,
+	DialogTitle,
+} from "../ui-shadcn/dialog";
+import { Button } from "../ui-shadcn/button";
+import { X } from "lucide-react";
+import { cn } from "../../lib/utils";
 import type { AppUpdateInfo, AppUpdateDownloadProgress } from "../../../../shared/types";
 import type { AppUpdateControllerState } from "../../hooks/useAppUpdateController";
 
@@ -40,13 +49,19 @@ function UpdateDialog(props: {
 }) {
 	const percent = props.progress?.percent ?? 0;
 	return (
-		<Modal
-			open
-			onClose={props.onClose}
-			title={t("update.availableTitle", { version: props.info.latestVersion })}
-			size="medium"
-			contentClassName="sm:max-w-[min(620px,calc(100vw-36px))] max-h-[min(720px,calc(100vh-48px))]"
-		>
+		<Dialog open onOpenChange={(next) => !next && props.onClose()}>
+			<DialogContent
+				showCloseButton={false}
+				className={cn("flex flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(800px,calc(100vw-48px))]", "sm:max-w-[min(620px,calc(100vw-36px))] max-h-[min(720px,calc(100vh-48px))]")}
+			>
+				<DialogHeader className="flex-row items-center justify-between px-4 py-3">
+					<DialogTitle>{t("update.availableTitle", { version: props.info.latestVersion })}</DialogTitle>
+					<DialogClose asChild>
+						<Button variant="ghost" size="icon" aria-label={t("common.close")} title={t("common.close")}>
+							<X size={18} strokeWidth={2.2} aria-hidden="true" />
+						</Button>
+					</DialogClose>
+				</DialogHeader>
 			<section className="update-modal update-modal--embedded">
 				<div className="update-body">
 					<p className="update-version-line">{t("update.currentLatest", { current: props.info.currentVersion, latest: props.info.latestVersion })}</p>
@@ -68,7 +83,8 @@ function UpdateDialog(props: {
 					{props.downloadedPath ? <button className="primary" onClick={props.onInstall}>{t("update.installDownloaded")}</button> : <button className="primary" disabled={props.checking || props.downloading || !props.info.recommendedAsset} onClick={props.onDownload}>{props.downloading ? t("update.downloading") : t("update.downloadInApp")}</button>}
 				</div>
 			</section>
-		</Modal>
+			</DialogContent>
+		</Dialog>
 	);
 }
 
@@ -79,34 +95,48 @@ export function AppUpdateOverlay({ controller, releasesUrl, openExternal, upToDa
 	}
 	if (controller.error) {
 		return (
-			<Modal
-				open
-				onClose={controller.clear}
-				title={t("update.checkFailedTitle")}
-				size="medium"
-				contentClassName="sm:max-w-[min(620px,calc(100vw-36px))]"
-			>
+			<Dialog open onOpenChange={(next) => !next && controller.clear()}>
+				<DialogContent
+					showCloseButton={false}
+					className={cn("flex flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(800px,calc(100vw-48px))]", "sm:max-w-[min(620px,calc(100vw-36px))]")}
+				>
+					<DialogHeader className="flex-row items-center justify-between px-4 py-3">
+						<DialogTitle>{t("update.checkFailedTitle")}</DialogTitle>
+						<DialogClose asChild>
+							<Button variant="ghost" size="icon" aria-label={t("common.close")} title={t("common.close")}>
+								<X size={18} strokeWidth={2.2} aria-hidden="true" />
+							</Button>
+						</DialogClose>
+					</DialogHeader>
 				<section className="update-modal update-modal--embedded update-error-modal">
 					<div className="update-body"><p className="update-version-line">{t("update.checkFailedDescription")}</p><div className="update-error-detail">{t("update.errorInfo", { message: controller.error })}</div><p className="update-asset-line">{t("update.manualReleaseHint")}<br /><span>{releasesUrl}</span></p></div>
 					<div className="update-actions"><button onClick={controller.clear}>{t("common.close")}</button><button className="primary" onClick={() => void openExternal(releasesUrl, true)}>{t("update.openReleasePage")}</button></div>
 				</section>
-			</Modal>
+				</DialogContent>
+			</Dialog>
 		);
 	}
 	if (upToDateVersion) {
 		return (
-			<Modal
-				open
-				onClose={onDismissUpToDate ?? (() => undefined)}
-				title={t("update.upToDateTitle")}
-				size="medium"
-				contentClassName="sm:max-w-[min(620px,calc(100vw-36px))]"
-			>
+			<Dialog open onOpenChange={(next) => !next && (onDismissUpToDate ?? (() => undefined))()}>
+				<DialogContent
+					showCloseButton={false}
+					className={cn("flex flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(800px,calc(100vw-48px))]", "sm:max-w-[min(620px,calc(100vw-36px))]")}
+				>
+					<DialogHeader className="flex-row items-center justify-between px-4 py-3">
+						<DialogTitle>{t("update.upToDateTitle")}</DialogTitle>
+						<DialogClose asChild>
+							<Button variant="ghost" size="icon" aria-label={t("common.close")} title={t("common.close")}>
+								<X size={18} strokeWidth={2.2} aria-hidden="true" />
+							</Button>
+						</DialogClose>
+					</DialogHeader>
 				<section className="update-modal update-modal--embedded update-uptodate-modal">
 					<div className="update-body"><p className="update-version-line">{t("update.upToDateMessage", { version: upToDateVersion })}</p></div>
 					<div className="update-actions"><button onClick={onDismissUpToDate}>{t("common.close")}</button><button onClick={() => void openExternal(releasesUrl, true)}>{t("update.openReleasePage")}</button></div>
 				</section>
-			</Modal>
+				</DialogContent>
+			</Dialog>
 		);
 	}
 	return null;

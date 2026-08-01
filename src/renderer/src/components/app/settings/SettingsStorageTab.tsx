@@ -1,7 +1,7 @@
 import { ConfirmDialog } from "../../ui-shadcn/ConfirmDialog";
 import { useEffect, useState, type ReactNode } from "react";
 import { t } from "../../../i18n";
-import { Button } from "../../ui/Button";
+import { Button } from "../../ui-shadcn/button";
 import type { AppSettings } from "../../../../../shared/types";
 
 export function SettingsSection(props: {
@@ -112,7 +112,7 @@ export function StorageTab(props: {
 						<strong>{t("settings.storage.appLogsSize")}</strong>
 						<small>{logsSize || t("common.loading")}</small>
 					</div>
-					<Button
+					<Button variant="secondary"
 						loading={clearing === "app" || clearing === "all"}
 						disabled={clearing !== null}
 						onClick={() => confirmClear("app", t("settings.storage.appLogs"))}
@@ -127,7 +127,7 @@ export function StorageTab(props: {
 						<strong>{t("settings.storage.rpcLogsSize")}</strong>
 						<small>{rpcLogsSize || t("common.loading")}</small>
 					</div>
-					<Button
+					<Button variant="secondary"
 						loading={clearing === "rpc" || clearing === "all"}
 						disabled={clearing !== null}
 						onClick={() => confirmClear("rpc", t("settings.storage.rpcLogs"))}
@@ -148,7 +148,7 @@ export function StorageTab(props: {
 						<small>{t("settings.storage.clearAllDesc")}</small>
 					</div>
 					<Button
-						variant="danger"
+						variant="destructive"
 						loading={clearing === "all"}
 						disabled={clearing !== null}
 						onClick={() => confirmClear("all", `${t("settings.storage.appLogs")} + ${t("settings.storage.rpcLogs")}`)}
@@ -161,7 +161,7 @@ export function StorageTab(props: {
 						<strong>{t("settings.storage.openFolder")}</strong>
 						<small>{t("settings.storage.openFolderDesc")}</small>
 					</div>
-					<Button onClick={handleOpenFolder}>
+					<Button variant="secondary" onClick={handleOpenFolder}>
 						{t("common.open")}
 					</Button>
 				</div>

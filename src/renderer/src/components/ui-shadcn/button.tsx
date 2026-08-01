@@ -42,11 +42,18 @@ function Button({
   className,
   variant = "default",
   size = "default",
+  loading = false,
   asChild = false,
+  children,
   ...props
 }: React.ComponentProps<"button"> &
   VariantProps<typeof buttonVariants> & {
     asChild?: boolean
+    /**
+     * 提交类操作加载态：禁用按钮 + 行内 spinner（承接 legacy components/ui/Button 的 loading 语义，
+     * 防止双击重复提交）。children 保持渲染，spinner 随内容换行。
+     */
+    loading?: boolean
   }) {
   const Comp = asChild ? Slot.Root : "button"
 
@@ -56,8 +63,17 @@ function Button({
       data-variant={variant}
       data-size={size}
       className={cn(buttonVariants({ variant, size, className }))}
+      disabled={loading || props.disabled}
       {...props}
-    />
+    >
+      {loading && (
+        <span
+          className="size-3.5 shrink-0 animate-spin rounded-full border-2 border-current border-t-transparent"
+          aria-hidden="true"
+        />
+      )}
+      <span className={loading ? "opacity-70" : undefined}>{children}</span>
+    </Comp>
   )
 }
 

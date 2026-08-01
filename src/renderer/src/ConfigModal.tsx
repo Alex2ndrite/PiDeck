@@ -1,6 +1,14 @@
 import { Button } from "./components/ui-shadcn/button";
-import { Modal } from "./components/ui/Modal";
+import {
+	Dialog,
+	DialogClose,
+	DialogContent,
+	DialogHeader,
+	DialogTitle,
+} from "./components/ui-shadcn/dialog";
 import { ConfirmDialog } from "./components/ui-shadcn/ConfirmDialog";
+import { X } from "lucide-react";
+import { cn } from "./lib/utils";
 import { showNotice } from "./utils/notice";
 import { Component, useState, useEffect, useCallback, type ReactNode } from "react";
 import type { PiDesktopApi } from "../../preload";
@@ -15,9 +23,8 @@ import { ExtensionsTab } from "./config/ExtensionsTab";
 import { EditorsTab } from "./config/EditorsTab";
 import { ImTab } from "./config/ImTab";
 import { LogsTab } from "./config/LogsTab";
-import { CloseIconButton } from "./components/ui/IconButton";
 import { t } from "./i18n";
-import { LazyMonacoEditor } from "./components/ui/LazyMonacoEditor";
+import { LazyMonacoEditor } from "./components/app/LazyMonacoEditor";
 import { translateBuiltinPromptDescription } from "./composerBehavior";
 import type {
 	AuthFile,
@@ -138,9 +145,18 @@ class ConfigModalErrorBoundary extends Component<
 	override render() {
 		if (!this.state.error) return this.props.children;
 		if (!this.props.open) return null;
-		// #115：错误兜底同样走 shadcn Modal 外壳
+		// #115：错误兜底直接走 shadcn Dialog（components/ui/Modal 薄包装已退役）
 		return (
-			<Modal open={this.props.open} onClose={this.props.onClose} title={t("config.loadFailed")} contentClassName="config-modal">
+			<Dialog open={this.props.open} onOpenChange={(next) => !next && this.props.onClose()}>
+			<DialogContent showCloseButton={false} className={cn("flex flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(1300px,calc(100vw-48px))] h-[min(850px,calc(100vh-48px))]", "config-modal")}>
+				<DialogHeader className="flex-row items-center justify-between px-4 py-3">
+					<DialogTitle>{t("config.loadFailed")}</DialogTitle>
+					<DialogClose asChild>
+						<Button variant="ghost" size="icon" aria-label={t("common.close")} title={t("common.close")}>
+							<X size={18} strokeWidth={2.2} aria-hidden="true" />
+						</Button>
+					</DialogClose>
+				</DialogHeader>
 				<div className="config-content">
 						<div className="config-diagnostic-card">
 							<div>
@@ -157,7 +173,8 @@ class ConfigModalErrorBoundary extends Component<
 							<pre>{this.state.error.stack ?? this.state.error.message}</pre>
 						</div>
 					</div>
-			</Modal>
+			</DialogContent>
+			</Dialog>
 		);
 	}
 }
@@ -1346,24 +1363,28 @@ function ConfigModalContent(props: ConfigModalProps) {
 	if (!open) return null;
 
 	return (
-		<Modal
-			open={open}
-			onClose={onClose}
-			title={t("config.title")}
-			contentClassName="config-modal"
-			headerActions={
-				section === "config" ? (
-					<>
-						<Button variant="default" size="sm" onClick={handleExport}>
-							{t("common.export")}
-						</Button>
-						<Button variant="secondary" size="sm" onClick={handleImport}>
-							{t("common.import")}
-						</Button>
-					</>
-				) : undefined
-			}
-		>
+		<Dialog open={open} onOpenChange={(next) => !next && onClose()}>
+			<DialogContent showCloseButton={false} className={cn("flex flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(1300px,calc(100vw-48px))] h-[min(850px,calc(100vh-48px))]", "config-modal")}>
+				<DialogHeader className="flex-row items-center justify-between px-4 py-3">
+					<DialogTitle>{t("config.title")}</DialogTitle>
+					<div className="flex items-center gap-2">
+						{section === "config" ? (
+							<>
+								<Button variant="default" size="sm" onClick={handleExport}>
+									{t("common.export")}
+								</Button>
+								<Button variant="secondary" size="sm" onClick={handleImport}>
+									{t("common.import")}
+								</Button>
+							</>
+						) : undefined}
+						<DialogClose asChild>
+							<Button variant="ghost" size="icon" aria-label={t("common.close")} title={t("common.close")}>
+								<X size={18} strokeWidth={2.2} aria-hidden="true" />
+							</Button>
+						</DialogClose>
+					</div>
+				</DialogHeader>
 			<div className="config-layout grid min-h-0 flex-1 grid-cols-[160px_minmax(0,1fr)] bg-muted">
 					<aside className="config-sidebar flex min-h-0 flex-col gap-3 overflow-auto border-r border-border bg-sidebar p-3" aria-label={t("config.title")}>
 						<div className="config-sidebar-group grid gap-1">
@@ -1570,7 +1591,9 @@ function ConfigModalContent(props: ConfigModalProps) {
 									<div className="file-diff-header">
 										<span className="file-diff-header-file">{editingGlobalSkill.name} · SKILL.md</span>
 										<div className="file-diff-header-actions">
-											<CloseIconButton label={t("common.close")} onClick={() => setEditingGlobalSkill(null)} />
+											<Button variant="ghost" size="icon" aria-label={t("common.close")} title={t("common.close")} onClick={() => setEditingGlobalSkill(null)}>
+												<X size={18} strokeWidth={2.2} aria-hidden="true" />
+											</Button>
 										</div>
 									</div>
 									{editGlobalLoading ? (
@@ -1704,6 +1727,7 @@ function ConfigModalContent(props: ConfigModalProps) {
 						onCancel={() => setDeleteConfirm(null)}
 					/>
 				)}
-		</Modal>
+				</DialogContent>
+		</Dialog>
 	);
 }

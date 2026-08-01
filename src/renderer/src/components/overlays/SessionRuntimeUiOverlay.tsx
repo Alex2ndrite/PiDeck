@@ -8,8 +8,7 @@ import type {
 } from "../../../../shared/types";
 import type { SessionRuntimeUiState, SessionRuntimeViewState } from "../../atoms/session-atoms";
 import { t } from "../../i18n";
-import { Button } from "../ui/Button";
-import { IconButton } from "../ui/IconButton";
+import { Button } from "../ui-shadcn/button";
 
 export type RuntimeUiBinding = {
 	sessionId: string;
@@ -149,14 +148,14 @@ function BatchAskInlineBar(props: {
 				<span className="ask-inline-bar-batch-progress">
 					{t("ask.batchProgress", { done: answeredCount, total })}
 				</span>
-				<IconButton
+				<Button variant="ghost" size="icon"
 					className="ask-inline-bar-close"
-					label={t("common.close")}
+					aria-label={t("common.close")} title={t("common.close")}
 					disabled={props.responding}
 					onClick={props.onCancel}
 				>
 					<X size={14} aria-hidden="true" />
-				</IconButton>
+				</Button>
 			</div>
 
 			<div className="ask-batch-tabs" role="tablist">
@@ -222,7 +221,7 @@ function BatchAskInlineBar(props: {
 						) : null}
 						<Button
 							className="ask-batch-submit-all-btn"
-							variant="primary"
+							variant="default"
 							disabled={!allAnswered || props.responding}
 							onClick={submitAnswers}
 						>
@@ -339,7 +338,7 @@ function BatchQuestion(props: {
 								/>
 								<Button
 									className="ask-inline-bar-submit-btn"
-									variant="primary"
+									variant="default"
 									disabled={props.responding || !props.inputValue.trim()}
 									onClick={props.onSubmitInput}
 								>
@@ -376,7 +375,7 @@ function BatchQuestion(props: {
 						/>
 						<Button
 							className="ask-inline-bar-submit-btn"
-							variant="primary"
+							variant="default"
 							disabled={props.responding || !props.inputValue.trim()}
 							onClick={props.onSubmitInput}
 						>
@@ -462,14 +461,14 @@ export function SessionRuntimeUiOverlay({ sessionId, runtime, ui, responder }: S
 				{request.method === "select" && request.options?.length ? (
 					<span className="ask-inline-bar-cancel-hint">{t("ask.cancelHint")}</span>
 				) : null}
-				<IconButton
+				<Button variant="ghost" size="icon"
 					className="ask-inline-bar-close"
-					label={t("common.close")}
+					aria-label={t("common.close")} title={t("common.close")}
 					disabled={responding}
 					onClick={cancel}
 				>
 					<X size={14} aria-hidden="true" />
-				</IconButton>
+				</Button>
 			</div>
 			<div className="ask-inline-bar-question">{request.title || t("ask.defaultTitle")}</div>
 			<div className="ask-inline-bar-body">
@@ -500,7 +499,7 @@ export function SessionRuntimeUiOverlay({ sessionId, runtime, ui, responder }: S
 								/>
 								<Button
 									className="ask-inline-bar-submit-btn"
-									variant="primary"
+									variant="default"
 									disabled={responding || !value.trim()}
 									onClick={() => void answer({ value: value.trim() })}
 								>
@@ -533,7 +532,7 @@ export function SessionRuntimeUiOverlay({ sessionId, runtime, ui, responder }: S
 								if (event.key === "Enter" && value.trim()) void answer({ value: value.trim() });
 							}}
 						/>
-						<Button className="ask-inline-bar-submit-btn" variant="primary" disabled={responding || !value.trim()} onClick={() => void answer({ value: value.trim() })}>
+						<Button className="ask-inline-bar-submit-btn" variant="default" disabled={responding || !value.trim()} onClick={() => void answer({ value: value.trim() })}>
 							{t("ask.submit")}
 						</Button>
 					</div>
@@ -548,7 +547,7 @@ export function SessionRuntimeUiOverlay({ sessionId, runtime, ui, responder }: S
 							disabled={responding}
 							onChange={(event) => setValue(event.target.value)}
 						/>
-						<Button className="ask-inline-bar-submit-btn" variant="primary" disabled={responding || !value.trim()} onClick={() => void answer({ value })}>
+						<Button className="ask-inline-bar-submit-btn" variant="default" disabled={responding || !value.trim()} onClick={() => void answer({ value })}>
 							{t("ask.submit")}
 						</Button>
 					</div>

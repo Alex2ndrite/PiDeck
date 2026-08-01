@@ -11,12 +11,25 @@ import {
 	Plus,
 } from "lucide-react";
 import { t } from "../../i18n";
-import { Button } from "../ui/Button";
-import { CloseIconButton, IconButton } from "../ui/IconButton";
-import { SelectField } from "../ui/SelectField";
-import { TextField } from "../ui/TextField";
+import { Button } from "../ui-shadcn/button";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "../ui-shadcn/select";
 import { Switch } from "../ui-shadcn/switch";
-import { Modal } from "../ui/Modal";
+import { Input } from "../ui-shadcn/input";
+import {
+	Dialog,
+	DialogClose,
+	DialogContent,
+	DialogHeader,
+	DialogTitle,
+} from "../ui-shadcn/dialog";
+import { X } from "lucide-react";
+import { cn } from "../../lib/utils";
 import { buttonVariants } from "../ui-shadcn/button";
 import {
 	AlertDialog,
@@ -170,9 +183,18 @@ class SettingsModalErrorBoundary extends Component<
 
 	override render() {
 		if (!this.state.error) return this.props.children;
-		// #115：错误兜底同走 shadcn Modal 外壳
+		// #115：错误兜底直接走 shadcn Dialog 外壳
 		return (
-			<Modal open onClose={this.props.onClose} title={t("settings.loadFailed")} contentClassName="settings-modal">
+			<Dialog open onOpenChange={(next) => !next && this.props.onClose()}>
+			<DialogContent showCloseButton={false} className={cn("flex flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(1300px,calc(100vw-48px))] h-[min(850px,calc(100vh-48px))]", "settings-modal")}>
+				<DialogHeader className="flex-row items-center justify-between px-4 py-3">
+					<DialogTitle>{t("settings.loadFailed")}</DialogTitle>
+					<DialogClose asChild>
+						<Button variant="ghost" size="icon" aria-label={t("common.close")} title={t("common.close")}>
+							<X size={18} strokeWidth={2.2} aria-hidden="true" />
+						</Button>
+					</DialogClose>
+				</DialogHeader>
 				<div className="settings-layout">
 					<div className="settings-content" style={{ padding: "var(--space-5)" }}>
 						<div className="config-diagnostic-card">
@@ -185,7 +207,8 @@ class SettingsModalErrorBoundary extends Component<
 						</div>
 					</div>
 				</div>
-			</Modal>
+			</DialogContent>
+			</Dialog>
 		);
 	}
 }
@@ -467,28 +490,29 @@ function SettingsModalContent(props: SettingsModalProps) {
 	// 代理 tab 仍展示未保存提示；实际保存/取消统一走全局草稿，避免旧 proxyDirty 局部状态残留。
 	const proxyDirty = PROXY_FIELDS.some((field) => dirtyFields.has(field));
 
-	// #115 U5：外壳换 shadcn Dialog（ui/Modal）。旧 .modal-backdrop z-index 100
-	// 会盖住 Radix Select 的 z-50 portal，导致设置页所有下拉“点开看不见、点不动”。
-	// onClose 仍走 handleClose（未保存变更拦截），语义不变。
-	return (
-		<Modal
-			open
-			onClose={handleClose}
-			title={t("settings.title")}
-			contentClassName="settings-modal"
-			headerActions={
-				hasDirtyChanges ? (
-					<>
-						<Button variant="primary" buttonSize="sm" onClick={saveAll}>
-							{t("common.save")}
-						</Button>
-						<Button variant="secondary" buttonSize="sm" onClick={cancelAll}>
-							{t("common.cancel")}
-						</Button>
-					</>
-				) : undefined
-			}
-		>
+		return (
+		<Dialog open onOpenChange={(next) => !next && handleClose()}>
+			<DialogContent showCloseButton={false} className={cn("flex flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(1300px,calc(100vw-48px))] h-[min(850px,calc(100vh-48px))]", "settings-modal")}>
+				<DialogHeader className="flex-row items-center justify-between px-4 py-3">
+					<DialogTitle>{t("settings.title")}</DialogTitle>
+					<div className="flex items-center gap-2">
+						{hasDirtyChanges ? (
+							<>
+								<Button variant="default" size="sm" onClick={saveAll}>
+									{t("common.save")}
+								</Button>
+								<Button variant="secondary" size="sm" onClick={cancelAll}>
+									{t("common.cancel")}
+								</Button>
+							</>
+						) : undefined}
+						<DialogClose asChild>
+							<Button variant="ghost" size="icon" aria-label={t("common.close")} title={t("common.close")}>
+								<X size={18} strokeWidth={2.2} aria-hidden="true" />
+							</Button>
+						</DialogClose>
+					</div>
+				</DialogHeader>
 			<div className="settings-layout">
 					<nav className="settings-tabs" aria-label={t("settings.title")}>
 						{tabs.map((tab) => (
@@ -512,26 +536,40 @@ function SettingsModalContent(props: SettingsModalProps) {
 											{t("settings.theme")}
 											<DirtyMarker dirty={isDirty("theme")} label={t("settings.theme")} />
 										</span>
-										<SelectField
-											value={draftSettings.theme}
-											options={themeOptions}
-											onChange={(value) =>
+										<div className="grid gap-1.5">
+	<Select value={draftSettings.theme} onValueChange={(value) =>
 												updateDraft({ theme: value as AppSettings["theme"] })
-											}
-										/>
+											}>
+		<SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+		<SelectContent>
+			{themeOptions.map((option) => (
+				<SelectItem key={option.value} value={option.value} disabled={option.disabled}>
+					{option.label}
+				</SelectItem>
+			))}
+		</SelectContent>
+	</Select>
+</div>
 									</div>
 									<div className="setting-field">
 										<span>
 											{t("settings.language")}
 											<DirtyMarker dirty={isDirty("language")} label={t("settings.language")} />
 										</span>
-										<SelectField
-											value={draftSettings.language}
-											options={languageOptions}
-											onChange={(value) =>
+										<div className="grid gap-1.5">
+	<Select value={draftSettings.language} onValueChange={(value) =>
 												updateDraft({ language: value as AppSettings["language"] })
-											}
-										/>
+											}>
+		<SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+		<SelectContent>
+			{languageOptions.map((option) => (
+				<SelectItem key={option.value} value={option.value} disabled={option.disabled}>
+					{option.label}
+				</SelectItem>
+			))}
+		</SelectContent>
+	</Select>
+</div>
 									</div>
 									<div className="setting-field setting-zoom-field">
 										<span>
@@ -539,25 +577,25 @@ function SettingsModalContent(props: SettingsModalProps) {
 											<DirtyMarker dirty={isDirty("zoomFactor")} label={t("settings.zoomFactor")} />
 										</span>
 										<div className="setting-zoom-control">
-											<IconButton
+											<Button variant="ghost" size="icon"
 												className="icon-button setting-zoom-button"
-												label={t("settings.zoomOut")}
+												
 												disabled={draftSettings.zoomFactor <= ZOOM_FACTOR_MIN}
-												onClick={() => changeZoomFactor(-ZOOM_FACTOR_STEP)}
-											>
+												onClick={() => changeZoomFactor(-ZOOM_FACTOR_STEP)} aria-label={t("settings.zoomOut")} title={t("settings.zoomOut")}>
 												<Minus size={16} strokeWidth={2.2} aria-hidden="true" />
-											</IconButton>
+											</Button>
 											<output className="setting-zoom-value" aria-live="polite">
 												{Math.round(draftSettings.zoomFactor * 100)}%
 											</output>
-											<IconButton
+											<Button variant="ghost" size="icon"
 												className="icon-button setting-zoom-button"
-												label={t("settings.zoomIn")}
+												
 												disabled={draftSettings.zoomFactor >= ZOOM_FACTOR_MAX}
+																aria-label={t("settings.zoomIn")} title={t("settings.zoomIn")}
 												onClick={() => changeZoomFactor(ZOOM_FACTOR_STEP)}
 											>
 												<Plus size={16} strokeWidth={2.2} aria-hidden="true" />
-											</IconButton>
+											</Button>
 										</div>
 									</div>
 								</SettingsSection>
@@ -567,13 +605,20 @@ function SettingsModalContent(props: SettingsModalProps) {
 											{t("settings.fontSize")}
 											<DirtyMarker dirty={isDirty("fontSize")} label={t("settings.fontSize")} />
 										</span>
-										<SelectField
-											value={draftSettings.fontSize}
-											options={fontSizeOptions}
-											onChange={(value) =>
+										<div className="grid gap-1.5">
+	<Select value={draftSettings.fontSize} onValueChange={(value) =>
 												updateDraft({ fontSize: value as AppSettings["fontSize"] })
-											}
-										/>
+											}>
+		<SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+		<SelectContent>
+			{fontSizeOptions.map((option) => (
+				<SelectItem key={option.value} value={option.value} disabled={option.disabled}>
+					{option.label}
+				</SelectItem>
+			))}
+		</SelectContent>
+	</Select>
+</div>
 									</div>
 									<SettingSwitch
 										title={t("settings.fontSizePerArea")}
@@ -593,39 +638,60 @@ function SettingsModalContent(props: SettingsModalProps) {
 													{t("settings.uiFontSize")}
 													<DirtyMarker dirty={isDirty("uiFontSize")} label={t("settings.uiFontSize")} />
 												</span>
-												<SelectField
-													value={draftSettings.uiFontSize ?? draftSettings.fontSize}
-													options={fontSizeOptions}
-													onChange={(value) =>
+												<div className="grid gap-1.5">
+	<Select value={draftSettings.uiFontSize ?? draftSettings.fontSize} onValueChange={(value) =>
 														updateDraft({ uiFontSize: value as AppSettings["uiFontSize"] })
-													}
-												/>
+													}>
+		<SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+		<SelectContent>
+			{fontSizeOptions.map((option) => (
+				<SelectItem key={option.value} value={option.value} disabled={option.disabled}>
+					{option.label}
+				</SelectItem>
+			))}
+		</SelectContent>
+	</Select>
+</div>
 											</div>
 											<div className="setting-field">
 												<span>
 													{t("settings.chatFontSize")}
 													<DirtyMarker dirty={isDirty("chatFontSize")} label={t("settings.chatFontSize")} />
 												</span>
-												<SelectField
-													value={draftSettings.chatFontSize ?? draftSettings.fontSize}
-													options={fontSizeOptions}
-													onChange={(value) =>
+												<div className="grid gap-1.5">
+	<Select value={draftSettings.chatFontSize ?? draftSettings.fontSize} onValueChange={(value) =>
 														updateDraft({ chatFontSize: value as AppSettings["chatFontSize"] })
-													}
-												/>
+													}>
+		<SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+		<SelectContent>
+			{fontSizeOptions.map((option) => (
+				<SelectItem key={option.value} value={option.value} disabled={option.disabled}>
+					{option.label}
+				</SelectItem>
+			))}
+		</SelectContent>
+	</Select>
+</div>
 											</div>
 											<div className="setting-field">
 												<span>
 													{t("settings.inputFontSize")}
 													<DirtyMarker dirty={isDirty("inputFontSize")} label={t("settings.inputFontSize")} />
 												</span>
-												<SelectField
-													value={draftSettings.inputFontSize ?? draftSettings.fontSize}
-													options={fontSizeOptions}
-													onChange={(value) =>
+												<div className="grid gap-1.5">
+	<Select value={draftSettings.inputFontSize ?? draftSettings.fontSize} onValueChange={(value) =>
 														updateDraft({ inputFontSize: value as AppSettings["inputFontSize"] })
-													}
-												/>
+													}>
+		<SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+		<SelectContent>
+			{fontSizeOptions.map((option) => (
+				<SelectItem key={option.value} value={option.value} disabled={option.disabled}>
+					{option.label}
+				</SelectItem>
+			))}
+		</SelectContent>
+	</Select>
+</div>
 											</div>
 										</>
 									)}
@@ -635,24 +701,27 @@ function SettingsModalContent(props: SettingsModalProps) {
 											{t("settings.fontFamilyBase")}
 											<DirtyMarker dirty={isDirty("fontFamilyBase")} label={t("settings.fontFamilyBase")} />
 										</span>
-										<SelectField
-											value={draftSettings.fontFamilyBase}
-											options={fontBaseOptions}
-											onChange={(value) =>
+										<div className="grid gap-1.5">
+	<Select value={draftSettings.fontFamilyBase} onValueChange={(value) =>
 												updateDraft({ fontFamilyBase: value as AppSettings["fontFamilyBase"] })
-											}
-										/>
+											}>
+		<SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+		<SelectContent>
+			{fontBaseOptions.map((option) => (
+				<SelectItem key={option.value} value={option.value} disabled={option.disabled}>
+					{option.label}
+				</SelectItem>
+			))}
+		</SelectContent>
+	</Select>
+</div>
 									</div>
 									{draftSettings.fontFamilyBase === "custom" && (
-										<TextField
-											className="setting-field"
-											label={t("settings.fontFamilyBaseCustomField")}
-											value={draftSettings.fontFamilyBaseCustom}
-											placeholder={t("settings.fontFamilyBaseCustomPlaceholder")}
-											onChange={(value) =>
-												updateDraft({ fontFamilyBaseCustom: value })
-											}
-										/>
+										<label className="grid gap-1.5 setting-field">
+	<span className="text-sm font-medium leading-none text-foreground">{t("settings.fontFamilyBaseCustomField")}</span>
+	<Input type="text" value={draftSettings.fontFamilyBaseCustom} placeholder={t("settings.fontFamilyBaseCustomPlaceholder")} onChange={(event) => updateDraft({ fontFamilyBaseCustom: event.target.value })
+											} />
+</label>
 									)}
 									<hr className="setting-divider" />
 									<div className="setting-field">
@@ -660,24 +729,27 @@ function SettingsModalContent(props: SettingsModalProps) {
 											{t("settings.fontFamilyMono")}
 											<DirtyMarker dirty={isDirty("fontFamilyMono")} label={t("settings.fontFamilyMono")} />
 										</span>
-										<SelectField
-											value={draftSettings.fontFamilyMono}
-											options={fontMonoOptions}
-											onChange={(value) =>
+										<div className="grid gap-1.5">
+	<Select value={draftSettings.fontFamilyMono} onValueChange={(value) =>
 												updateDraft({ fontFamilyMono: value as AppSettings["fontFamilyMono"] })
-											}
-										/>
+											}>
+		<SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+		<SelectContent>
+			{fontMonoOptions.map((option) => (
+				<SelectItem key={option.value} value={option.value} disabled={option.disabled}>
+					{option.label}
+				</SelectItem>
+			))}
+		</SelectContent>
+	</Select>
+</div>
 									</div>
 									{draftSettings.fontFamilyMono === "custom" && (
-										<TextField
-											className="setting-field"
-											label={t("settings.fontFamilyMonoCustomField")}
-											value={draftSettings.fontFamilyMonoCustom}
-											placeholder={t("settings.fontFamilyMonoCustomPlaceholder")}
-											onChange={(value) =>
-												updateDraft({ fontFamilyMonoCustom: value })
-											}
-										/>
+										<label className="grid gap-1.5 setting-field">
+	<span className="text-sm font-medium leading-none text-foreground">{t("settings.fontFamilyMonoCustomField")}</span>
+	<Input type="text" value={draftSettings.fontFamilyMonoCustom} placeholder={t("settings.fontFamilyMonoCustomPlaceholder")} onChange={(event) => updateDraft({ fontFamilyMonoCustom: event.target.value })
+											} />
+</label>
 									)}
 								</SettingsSection>
 								<SettingsSection title={t("settings.notificationSection")}>
@@ -686,26 +758,40 @@ function SettingsModalContent(props: SettingsModalProps) {
 											{t("settings.inputShortcut")}
 											<DirtyMarker dirty={isDirty("sendShortcut")} label={t("settings.inputShortcut")} />
 										</span>
-										<SelectField
-											value={draftSettings.sendShortcut}
-											options={sendShortcutOptions}
-											onChange={(value) =>
+										<div className="grid gap-1.5">
+	<Select value={draftSettings.sendShortcut} onValueChange={(value) =>
 												updateDraft({ sendShortcut: value as AppSettings["sendShortcut"] })
-											}
-										/>
+											}>
+		<SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+		<SelectContent>
+			{sendShortcutOptions.map((option) => (
+				<SelectItem key={option.value} value={option.value} disabled={option.disabled}>
+					{option.label}
+				</SelectItem>
+			))}
+		</SelectContent>
+	</Select>
+</div>
 									</div>
 									<div className="setting-field">
 										<span>
 											{t("settings.linkOpenMode")}
 											<DirtyMarker dirty={isDirty("linkOpenMode")} label={t("settings.linkOpenMode")} />
 										</span>
-										<SelectField
-											value={draftSettings.linkOpenMode}
-											options={linkOpenModeOptions}
-											onChange={(value) =>
+										<div className="grid gap-1.5">
+	<Select value={draftSettings.linkOpenMode} onValueChange={(value) =>
 												updateDraft({ linkOpenMode: value as AppSettings["linkOpenMode"] })
-											}
-										/>
+											}>
+		<SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+		<SelectContent>
+			{linkOpenModeOptions.map((option) => (
+				<SelectItem key={option.value} value={option.value} disabled={option.disabled}>
+					{option.label}
+				</SelectItem>
+			))}
+		</SelectContent>
+	</Select>
+</div>
 									</div>
 									<SettingSwitch
 										title={t("settings.closeToTray")}
@@ -798,15 +884,22 @@ function SettingsModalContent(props: SettingsModalProps) {
 												label={t("settings.startupWindowMode")}
 											/>
 										</span>
-										<SelectField
-											value={draftSettings.startupWindowMode}
-											options={startupWindowModeOptions}
-											onChange={(value) =>
+										<div className="grid gap-1.5">
+	<Select value={draftSettings.startupWindowMode} onValueChange={(value) =>
 												updateDraft({
 													startupWindowMode: value as AppSettings["startupWindowMode"],
 												})
-											}
-										/>
+											}>
+		<SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+		<SelectContent>
+			{startupWindowModeOptions.map((option) => (
+				<SelectItem key={option.value} value={option.value} disabled={option.disabled}>
+					{option.label}
+				</SelectItem>
+			))}
+		</SelectContent>
+	</Select>
+</div>
 										<small style={{ color: "var(--color-text-tertiary)", fontSize: "var(--font-size-caption)" }}>
 											{t("settings.startupWindowModeDesc")}
 										</small>
@@ -816,14 +909,20 @@ function SettingsModalContent(props: SettingsModalProps) {
 											{t("settings.lightBackground")}
 											<DirtyMarker dirty={isDirty("lightBackground")} label={t("settings.lightBackground")} />
 										</span>
-										<SelectField
-											disabled={lightBackgroundDisabled}
-											value={draftSettings.lightBackground}
-											options={lightBackgroundOptions}
-											onChange={(value) =>
+										<div className="grid gap-1.5">
+	<Select value={draftSettings.lightBackground} onValueChange={(value) =>
 												updateDraft({ lightBackground: value as AppSettings["lightBackground"] })
-											}
-										/>
+											} disabled={lightBackgroundDisabled}>
+		<SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+		<SelectContent>
+			{lightBackgroundOptions.map((option) => (
+				<SelectItem key={option.value} value={option.value} disabled={option.disabled}>
+					{option.label}
+				</SelectItem>
+			))}
+		</SelectContent>
+	</Select>
+</div>
 									</div>
 									<SettingSwitch
 										title={t("settings.nativeTitleBar")}
@@ -891,25 +990,17 @@ function SettingsModalContent(props: SettingsModalProps) {
 									/>
 									{draftSettings.piProxyEnabled && (
 										<div className="setting-proxy-panel">
-											<TextField
-												className="setting-field"
-												label={t("settings.proxyUrl")}
-												value={draftSettings.piProxyUrl}
-												placeholder="http://127.0.0.1:7890"
-												onChange={(value) =>
-													updateDraft({ piProxyUrl: value })
-												}
-											/>
-											<TextField
-												className="setting-field"
-												label={t("settings.proxyBypass")}
-												value={draftSettings.piProxyBypass}
-												placeholder="localhost,127.0.0.1,::1"
-												description={t("settings.noProxyHint")}
-												onChange={(value) =>
-													updateDraft({ piProxyBypass: value })
-												}
-											/>
+											<label className="grid gap-1.5 setting-field">
+	<span className="text-sm font-medium leading-none text-foreground">{t("settings.proxyUrl")}</span>
+	<Input type="text" value={draftSettings.piProxyUrl} placeholder={"http://127.0.0.1:7890"} onChange={(event) => updateDraft({ piProxyUrl: event.target.value })
+												} />
+</label>
+											<label className="grid gap-1.5 setting-field">
+	<span className="text-sm font-medium leading-none text-foreground">{t("settings.proxyBypass")}</span>
+	<Input type="text" value={draftSettings.piProxyBypass} placeholder={"localhost,127.0.0.1,::1"} onChange={(event) => updateDraft({ piProxyBypass: event.target.value })
+												} />
+	<small className="text-xs text-muted-foreground">{t("settings.noProxyHint")}</small>
+</label>
 											<div className="setting-row">
 												<div>
 													<strong>{t("settings.proxyTest")}</strong>
@@ -920,7 +1011,7 @@ function SettingsModalContent(props: SettingsModalProps) {
 														</small>
 													)}
 												</div>
-												<Button
+												<Button variant="secondary"
 													onClick={props.onTestPiProxy}
 													disabled={props.piProxyChecking}
 												>
@@ -946,25 +1037,17 @@ function SettingsModalContent(props: SettingsModalProps) {
 									/>
 									{draftSettings.desktopProxyEnabled && (
 										<div className="setting-proxy-panel">
-											<TextField
-												className="setting-field"
-												label={t("settings.proxyUrl")}
-												value={draftSettings.desktopProxyUrl}
-												placeholder="http://127.0.0.1:7890"
-												onChange={(value) =>
-													updateDraft({ desktopProxyUrl: value })
-												}
-											/>
-											<TextField
-												className="setting-field"
-												label={t("settings.proxyBypass")}
-												value={draftSettings.desktopProxyBypass}
-												placeholder="localhost,127.0.0.1,::1"
-												description={t("settings.electronProxyHint")}
-												onChange={(value) =>
-													updateDraft({ desktopProxyBypass: value })
-												}
-											/>
+											<label className="grid gap-1.5 setting-field">
+	<span className="text-sm font-medium leading-none text-foreground">{t("settings.proxyUrl")}</span>
+	<Input type="text" value={draftSettings.desktopProxyUrl} placeholder={"http://127.0.0.1:7890"} onChange={(event) => updateDraft({ desktopProxyUrl: event.target.value })
+												} />
+</label>
+											<label className="grid gap-1.5 setting-field">
+	<span className="text-sm font-medium leading-none text-foreground">{t("settings.proxyBypass")}</span>
+	<Input type="text" value={draftSettings.desktopProxyBypass} placeholder={"localhost,127.0.0.1,::1"} onChange={(event) => updateDraft({ desktopProxyBypass: event.target.value })
+												} />
+	<small className="text-xs text-muted-foreground">{t("settings.electronProxyHint")}</small>
+</label>
 										</div>
 									)}
 								</SettingsSection>
@@ -1005,27 +1088,27 @@ function SettingsModalContent(props: SettingsModalProps) {
 											</div>
 										</div>
 										<div className="setting-inline-actions">
-											<Button onClick={props.onCheckPi} disabled={props.piChecking}>
+											<Button variant="secondary" onClick={props.onCheckPi} disabled={props.piChecking}>
 												{props.piChecking
 													? t("settings.detecting")
 													: t("settings.detectEnvironment")}
 											</Button>
 											{props.onClearCheckFlag && (
-												<Button
+												<Button variant="secondary"
 													className="setting-btn-secondary"
 													onClick={props.onClearCheckFlag}
 												>
 													{t("environment.clearCheckFlag")}
 												</Button>
 											)}
-											<Button
+											<Button variant="secondary"
 												onClick={props.onCheckPiUpdate}
 												loading={props.piUpdateChecking}
 												disabled={draftSettings.disableUpdateCheck}
 											>
 												{t("settings.checkPiUpdate")}
 											</Button>
-											<Button
+											<Button variant="secondary"
 												onClick={props.onUpdatePi}
 												loading={props.piUpdating}
 												disabled={
@@ -1052,60 +1135,67 @@ function SettingsModalContent(props: SettingsModalProps) {
 									<div className="setting-pi-source-block">
 										<div className="setting-pi-source-row">
 											<span>{t("settings.piSource.label")}</span>
-											<SelectField
-												value={draftSettings.wslEnabled ? "wsl" : "windows"}
-												options={[
-													{ value: "windows", label: t("settings.piSource.windows") },
-													{ value: "wsl", label: t("settings.piSource.wsl") },
-												]}
-												onChange={(value) => {
+											<div className="grid gap-1.5">
+	<Select value={draftSettings.wslEnabled ? "wsl" : "windows"} onValueChange={(value) => {
 													updateDraft({ wslEnabled: value === "wsl" });
 													setWslValidation(null);
-												}}
-											/>
+												}}>
+		<SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+		<SelectContent>
+			{[
+													{ value: "windows", label: t("settings.piSource.windows") },
+													{ value: "wsl", label: t("settings.piSource.wsl") },
+												].map((option) => (
+				<SelectItem key={option.value} value={option.value} disabled={option.disabled}>
+					{option.label}
+				</SelectItem>
+			))}
+		</SelectContent>
+	</Select>
+</div>
 										</div>
 										{draftSettings.wslEnabled && (
 											<div className="setting-pi-wsl-config">
 												<div className="setting-wsl-fields">
 													{wslDistros.length > 0 ? (
-														<SelectField
-															className="setting-field"
-															label={t("settings.wsl.distro")}
-															value={draftSettings.wslDistro}
-															options={distroOptions}
-															onChange={(value) => {
+														<div className="grid gap-1.5 setting-field">
+	<span className="text-sm font-medium leading-none text-foreground">{t("settings.wsl.distro")}</span>
+	<Select value={draftSettings.wslDistro} onValueChange={(value) => {
 																updateDraft({ wslDistro: value });
 																setWslValidation(null);
-															}}
-														/>
+															}}>
+		<SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+		<SelectContent>
+			{distroOptions.map((option) => (
+				<SelectItem key={option.value} value={option.value} disabled={option.disabled}>
+					{option.label}
+				</SelectItem>
+			))}
+		</SelectContent>
+	</Select>
+</div>
 													) : (
-														<TextField
-															className="setting-field"
-															label={t("settings.wsl.distro")}
-															value={draftSettings.wslDistro}
-															onChange={(value) => {
-																updateDraft({ wslDistro: value });
+														<label className="grid gap-1.5 setting-field">
+	<span className="text-sm font-medium leading-none text-foreground">{t("settings.wsl.distro")}</span>
+	<Input type="text" value={draftSettings.wslDistro} placeholder={"Ubuntu"} onChange={(event) => {
+																updateDraft({ wslDistro: event.target.value });
 																setWslValidation(null);
-															}}
-															placeholder="Ubuntu"
-														/>
+															}} />
+</label>
 													)}
 													{wslDistrosLoading && (
 														<small className="setting-status info">{t("settings.wsl.detectingDistros")}</small>
 													)}
 													<div className="setting-wsl-user-row">
-														<TextField
-															className="setting-field"
-															label={t("settings.wsl.user")}
-															value={wslUserInput}
-															onChange={(value) => {
-																setWslUserInput(value);
+														<label className="grid gap-1.5 setting-field">
+	<span className="text-sm font-medium leading-none text-foreground">{t("settings.wsl.user")}</span>
+	<Input type="text" value={wslUserInput} placeholder={"root"} onChange={(event) => {
+																setWslUserInput(event.target.value);
 																setWslValidation(null);
-															}}
-															placeholder="root"
-														/>
-														<Button
-															buttonSize="sm"
+															}} />
+</label>
+														<Button variant="secondary"
+															size="sm"
 															disabled={!wslUserInput.trim() || wslValidating}
 															loading={wslValidating}
 															onClick={handleValidateWslUser}
@@ -1148,20 +1238,16 @@ function SettingsModalContent(props: SettingsModalProps) {
 
 									{/* 自定义 Pi 路径 */}
 									<div className="setting-pi-path-panel">
-										<TextField
-											className="setting-field"
-											label={t("settings.customPiPath")}
-											value={props.customPiPath}
-											placeholder={
+										<label className="grid gap-1.5 setting-field">
+	<span className="text-sm font-medium leading-none text-foreground">{t("settings.customPiPath")}</span>
+	<Input type="text" value={props.customPiPath} placeholder={
 												piPath ||
 												"D:\\mise-data\\installs\\node\\24 13 0\\pi.cmd"
-											}
-											description={t("settings.customPiPathHint")}
-											disabled={props.customPathValidating}
-											onChange={props.onCustomPathChange}
-										/>
+											} disabled={props.customPathValidating} onChange={(event) => props.onCustomPathChange(event.target.value)} />
+	<small className="text-xs text-muted-foreground">{t("settings.customPiPathHint")}</small>
+</label>
 										<div className="setting-pi-path-actions">
-											<Button
+											<Button variant="secondary"
 												onClick={props.onValidateCustomPath}
 												disabled={!props.customPiPath.trim() || props.customPathValidating}
 											>
@@ -1169,7 +1255,7 @@ function SettingsModalContent(props: SettingsModalProps) {
 													? t("settings.validating")
 													: t("settings.validatePiPath")}
 											</Button>
-											<Button
+											<Button variant="secondary"
 												onClick={props.onClearCustomPath}
 												disabled={!props.settings.customPiPath || props.customPathValidating}
 											>
@@ -1205,7 +1291,7 @@ function SettingsModalContent(props: SettingsModalProps) {
 											</span>
 										</div>
 										<div className="setting-inline-actions">
-											<Button
+											<Button variant="secondary"
 												onClick={draftSettings.disableUpdateCheck ? undefined : props.onCheckUpdate}
 												loading={props.updateChecking}
 												disabled={draftSettings.disableUpdateCheck}
@@ -1278,7 +1364,7 @@ function SettingsModalContent(props: SettingsModalProps) {
 											<strong>{t("settings.restartApp")}</strong>
 											<small>{t("settings.restartAppDesc")}</small>
 										</div>
-										<Button onClick={props.onRestartApp}>
+										<Button variant="secondary" onClick={props.onRestartApp}>
 											{t("settings.restartAppButton")}
 										</Button>
 									</div>
@@ -1287,7 +1373,7 @@ function SettingsModalContent(props: SettingsModalProps) {
 											<strong>{t("settings.devTools")}</strong>
 											<small>{t("settings.devToolsDesc")}</small>
 										</div>
-										<Button onClick={props.onToggleDevTools}>
+										<Button variant="secondary" onClick={props.onToggleDevTools}>
 											{t("settings.toggle")}
 										</Button>
 									</div>
@@ -1340,8 +1426,8 @@ function SettingsModalContent(props: SettingsModalProps) {
 												</strong>
 												<small>{t("settings.localWebHint")}</small>
 											</div>
-											<Button
-												buttonSize="sm"
+											<Button variant="secondary"
+												size="sm"
 												disabled={!draftSettings.webServiceEnabled}
 												onClick={() =>
 													props.onOpenWebService(webPortDraft || String(draftSettings.webServicePort))
@@ -1410,16 +1496,22 @@ function SettingsModalContent(props: SettingsModalProps) {
 									</div>
 								</SettingsSection>
 								<SettingsSection title={t("settings.pet.choose")}>
-									<SelectField
-										className="setting-field"
-										label={t("settings.pet.choose")}
-										value={draftSettings.petId}
-										options={petOptions}
-										onChange={(value) => {
+									<div className="grid gap-1.5 setting-field">
+	<span className="text-sm font-medium leading-none text-foreground">{t("settings.pet.choose")}</span>
+	<Select value={draftSettings.petId} onValueChange={(value) => {
 											setPetPreviewMode("__auto");
 											updateDraft({ petId: value });
-										}}
-									/>
+										}}>
+		<SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+		<SelectContent>
+			{petOptions.map((option) => (
+				<SelectItem key={option.value} value={option.value} disabled={option.disabled}>
+					{option.label}
+				</SelectItem>
+			))}
+		</SelectContent>
+	</Select>
+</div>
 									<small className="setting-status">{t("settings.pet.petdexHint")}</small>
 									{(() => {
 										const selected = petList.find((pet) => pet.id === draftSettings.petId);
@@ -1463,11 +1555,15 @@ function SettingsModalContent(props: SettingsModalProps) {
 									</div>
 								</SettingsSection>
 								<SettingsSection title={t("settings.pet.preview")} description={t("settings.pet.previewDesc")}>
-									<SelectField
-										className="setting-field"
-										label={t("settings.pet.previewMode")}
-										value={petPreviewMode}
-										options={[
+									<div className="grid gap-1.5 setting-field">
+	<span className="text-sm font-medium leading-none text-foreground">{t("settings.pet.previewMode")}</span>
+	<Select value={petPreviewMode} onValueChange={(value) => {
+											setPetPreviewMode(value);
+											void window.piDesktop.pet.setPreviewMode(value === "__auto" ? "" : value);
+										}}>
+		<SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+		<SelectContent>
+			{[
 											{ value: "__auto", label: t("settings.pet.previewAuto") },
 											{ value: "idle", label: "idle (row 0)" },
 											{ value: "running", label: "running (row 7)" },
@@ -1478,22 +1574,24 @@ function SettingsModalContent(props: SettingsModalProps) {
 											{ value: "running-left", label: "running-left (row 2)" },
 											{ value: "jumping", label: "jumping (row 4)" },
 											{ value: "review", label: "review (row 8)" },
-										]}
-										onChange={(value) => {
-											setPetPreviewMode(value);
-											void window.piDesktop.pet.setPreviewMode(value === "__auto" ? "" : value);
-										}}
-									/>
+										].map((option) => (
+				<SelectItem key={option.value} value={option.value} disabled={option.disabled}>
+					{option.label}
+				</SelectItem>
+			))}
+		</SelectContent>
+	</Select>
+</div>
 									<div className="setting-inline-actions pet-test-actions">
 										<Button
-											buttonSize="sm"
-											variant="danger"
+											size="sm"
+											variant="destructive"
 											onClick={() => void window.piDesktop.pet.testNotify("error")}
 										>
 											{t("settings.pet.testError")}
 										</Button>
-										<Button
-											buttonSize="sm"
+										<Button variant="secondary"
+											size="sm"
 											onClick={() => void window.piDesktop.pet.testNotify("done")}
 										>
 											{t("settings.pet.testDone")}
@@ -1531,7 +1629,8 @@ function SettingsModalContent(props: SettingsModalProps) {
 					</AlertDialogContent>
 				</AlertDialog>
 			)}
-		</Modal>
+			</DialogContent>
+		</Dialog>
 	);
 }
 

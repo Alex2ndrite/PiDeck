@@ -1,6 +1,6 @@
 import { Fragment, useState, type ReactNode } from "react";
 import { ChevronDown, Loader2, RotateCcw } from "lucide-react";
-import { IconButton } from "../../ui/IconButton";
+import { Button } from "../../ui-shadcn/button";
 import { getFileIconColor, getFileIconSeti } from "../../../fileIcons";
 import { t } from "../../../i18n";
 import {
@@ -288,10 +288,10 @@ export function ResourceRow(props: {
       {props.actions && props.actions.length > 0 && (
         <div className="git-resource-actions">
           {props.actions.map((action) => (
-            <IconButton
+            <Button variant="ghost" size="icon"
               key={action.kind}
               className={`git-action-btn${action.kind === "discard" ? " git-discard-action" : " git-stage-action"}`}
-              label={action.label}
+              aria-label={action.label} title={action.label}
               disabled={action.disabled}
               onClick={action.run}
             >
@@ -300,7 +300,7 @@ export function ResourceRow(props: {
               ) : (
                 <GitStageGlyph unstage={action.kind === "unstage"} />
               )}
-            </IconButton>
+            </Button>
           ))}
         </div>
       )}

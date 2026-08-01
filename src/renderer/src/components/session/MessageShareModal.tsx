@@ -1,6 +1,14 @@
 import { useCallback, useMemo, useState } from "react";
 import { Brain, Check, FileText, MessageCircle, X } from "lucide-react";
-import { Modal } from "../ui/Modal";
+import {
+	Dialog,
+	DialogClose,
+	DialogContent,
+	DialogHeader,
+	DialogTitle,
+} from "../ui-shadcn/dialog";
+import { Button } from "../ui-shadcn/button";
+import { cn } from "../../lib/utils";
 import type { AgentRunItem, MessageItem, RenderMessage } from "../app/AppUtils";
 import { summarizeMessage } from "../app/AppUtils";
 import { t } from "../../i18n";
@@ -117,13 +125,19 @@ export function MultiSelectModal(props: {
 	const totalCount = allSelectableIds.length;
 
 	return (
-		<Modal
-			open
-			onClose={props.onClose}
-			size="medium"
-			title={t("app.multiSelectEnter")}
-			contentClassName="multi-select-modal"
-		>
+		<Dialog open onOpenChange={(next) => !next && props.onClose()}>
+			<DialogContent
+				showCloseButton={false}
+				className={cn("flex flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(800px,calc(100vw-48px))]", "multi-select-modal")}
+			>
+				<DialogHeader className="flex-row items-center justify-between px-4 py-3">
+					<DialogTitle>{t("app.multiSelectEnter")}</DialogTitle>
+					<DialogClose asChild>
+						<Button variant="ghost" size="icon" aria-label={t("common.close")} title={t("common.close")}>
+							<X size={18} strokeWidth={2.2} aria-hidden="true" />
+						</Button>
+					</DialogClose>
+				</DialogHeader>
 				{/* 树状列表 */}
 				<div className="multi-select-modal-tree">
 					{props.renderedRuns.map((item) => {
@@ -292,6 +306,7 @@ export function MultiSelectModal(props: {
 						</button>
 					</div>
 				</footer>
-		</Modal>
+			</DialogContent>
+		</Dialog>
 	);
 }

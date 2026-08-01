@@ -1,6 +1,14 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { MessageCircle, Brain, FileText } from "lucide-react";
-import { Modal } from "../ui/Modal";
+	import { useCallback, useEffect, useMemo, useState } from "react";
+import { MessageCircle, Brain, FileText, X } from "lucide-react";
+import {
+	Dialog,
+	DialogClose,
+	DialogContent,
+	DialogHeader,
+	DialogTitle,
+} from "../ui-shadcn/dialog";
+import { Button } from "../ui-shadcn/button";
+import { cn } from "../../lib/utils";
 import { t } from "../../i18n";
 import type { SessionSummary } from "../../../../shared/types";
 import { summarizeMessage, stripAnsi, formatTime } from "./AppUtils";
@@ -114,13 +122,19 @@ export function SessionReferenceModal(props: {
 	const allSelected = selectedCount === messages.length;
 
 	return (
-		<Modal
-			open
-			onClose={props.onClose}
-			size="medium"
-			title={`${t("sessionRef.title")}: ${props.session.name ?? props.session.filePath}`}
-			contentClassName="multi-select-modal session-ref-modal"
-		>
+		<Dialog open onOpenChange={(next) => !next && props.onClose()}>
+			<DialogContent
+				showCloseButton={false}
+				className={cn("flex flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(800px,calc(100vw-48px))]", "multi-select-modal session-ref-modal")}
+			>
+				<DialogHeader className="flex-row items-center justify-between px-4 py-3">
+					<DialogTitle>{`${t("sessionRef.title")}: ${props.session.name ?? props.session.filePath}`}</DialogTitle>
+					<DialogClose asChild>
+						<Button variant="ghost" size="icon" aria-label={t("common.close")} title={t("common.close")}>
+							<X size={18} strokeWidth={2.2} aria-hidden="true" />
+						</Button>
+					</DialogClose>
+				</DialogHeader>
 				<div className="multi-select-modal-tree session-ref-message-list">
 					{loading && <div className="session-ref-loading">{t("common.loading")}...</div>}
 					{error && <div className="session-ref-error">{t("sessionRef.loadError")}: {error}</div>}
@@ -221,6 +235,7 @@ export function SessionReferenceModal(props: {
 						</button>
 					</div>
 				</footer>
-		</Modal>
+				</DialogContent>
+		</Dialog>
 	);
 }

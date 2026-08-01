@@ -2,7 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import type { AppLogLevel } from "@shared/types";
 import { App } from "./App";
-import { AppErrorBoundary } from "./components/ui/AppErrorBoundary";
+import { AppErrorBoundary } from "./components/app/AppErrorBoundary";
 import { TooltipProvider } from "./components/ui-shadcn/tooltip";
 import { Toaster } from "./components/ui-shadcn/sonner";
 import { t } from "./i18n";

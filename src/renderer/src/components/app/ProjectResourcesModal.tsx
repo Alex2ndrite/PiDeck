@@ -1,11 +1,17 @@
 import { Button } from "../ui-shadcn/button";
+import { cn } from "../../lib/utils";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { showNotice } from "../../utils/notice";
 
 import { Check, FileEdit, Pencil, ToggleLeft, ToggleRight, Trash2, X } from "lucide-react";
-import { LazyMonacoEditor } from "../ui/LazyMonacoEditor";
-import { Modal } from "../ui/Modal";
-import { CloseIconButton } from "../ui/IconButton";
+import { LazyMonacoEditor } from "../app/LazyMonacoEditor";
+import {
+	Dialog,
+	DialogClose,
+	DialogContent,
+	DialogHeader,
+	DialogTitle,
+} from "../ui-shadcn/dialog";
 import { ConfirmDialog } from "../ui-shadcn/ConfirmDialog";
 import type {
 	PiExtensionSummary,
@@ -319,13 +325,24 @@ export function ProjectResourcesModal(props: {
 
 	return (
 		<>
-		<Modal open onClose={props.onClose} size="medium" contentClassName="project-resources-dialog">
+		<Dialog open onOpenChange={ (next) => !next && props.onClose }>
+			<DialogContent showCloseButton={false} className={cn("flex flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(800px,calc(100vw-48px))]", "project-resources-dialog")}>
+				<DialogHeader className="flex-row items-center justify-between px-4 py-3">
+					<DialogTitle></DialogTitle>
+					<DialogClose asChild>
+						<Button variant="ghost" size="icon" aria-label={t("common.close")} title={t("common.close")}>
+							<X size={18} strokeWidth={2.2} aria-hidden="true" />
+						</Button>
+					</DialogClose>
+				</DialogHeader>
 				<header className="project-resources-header">
 					<div>
 						<strong>{t("projectResources.title")}</strong>
 						<small>{props.project.path}</small>
 					</div>
-					<CloseIconButton label={t("common.close")} onClick={props.onClose} />
+					<Button variant="ghost" size="icon" aria-label={t("common.close")} title={t("common.close")} onClick={props.onClose}>
+						<X size={18} strokeWidth={2.2} aria-hidden="true" />
+					</Button>
 				</header>
 
 				<div className="project-resources-toolbar">
@@ -611,7 +628,9 @@ export function ProjectResourcesModal(props: {
 						</div>
 					</div>
 				)}
-			</Modal>
+			
+			</DialogContent>
+		</Dialog>
 
 			{/* 统一确认删除弹框（#115 U5：换 shadcn ConfirmDialog） */}
 			{deleteTarget && (

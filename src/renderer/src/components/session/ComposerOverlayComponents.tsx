@@ -3,7 +3,7 @@ import { X } from "lucide-react";
 import type { FileTreeNode } from "../../../../shared/types";
 import { t } from "../../i18n";
 import type { SuggestionItem } from "../app/AppUtils";
-import { IconButton } from "../ui/IconButton";
+import { Button } from "../ui-shadcn/button";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -49,13 +49,13 @@ export function PromptSuggestions(props: {
 		>
 			<div className="command-palette-header">
 				<span>{headerLabel}</span>
-				<IconButton
+				<Button variant="ghost" size="icon"
 					className="command-palette-close"
-					label={t("common.close")}
+					aria-label={t("common.close")} title={t("common.close")}
 					onClick={props.onClose}
 				>
 					<X size={16} strokeWidth={2.2} aria-hidden="true" />
-				</IconButton>
+				</Button>
 			</div>
 			<div className="command-palette-list" ref={listRef}>
 				{props.items.map((item, index) => (

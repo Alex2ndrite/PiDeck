@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { PanelLeft, Pin, Minus, Square, X } from "lucide-react";
-import { IconButton } from "./ui/IconButton";
+import { Button } from "./ui-shadcn/button";
 import { t } from "../i18n";
 
 type Props = {
@@ -30,13 +30,13 @@ export function AppHeader({
     <>
       <div className="window-drag-layer" aria-hidden="true" />
       <div className="window-controls-left">
-        <IconButton
+        <Button variant="ghost" size="icon"
           className={`window-control sidebar-toggle${listCollapsed ? " collapsed" : ""}`}
-          label={listCollapsed ? t("app.expandList") : t("app.collapseList")}
+          aria-label={listCollapsed ? t("app.expandList") : t("app.collapseList")} title={listCollapsed ? t("app.expandList") : t("app.collapseList")}
           onClick={toggleListCollapsed}
         >
           <PanelLeft size={13} strokeWidth={2.2} aria-hidden="true" />
-        </IconButton>
+        </Button>
       </div>
       <div className="window-controls" aria-label={t("app.windowControls")}>
         <button

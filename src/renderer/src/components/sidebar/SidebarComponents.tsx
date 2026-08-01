@@ -1,7 +1,16 @@
 import { useState, useRef, useLayoutEffect, useEffect, useMemo, type ReactNode } from "react";
 import { MessageCircle, Folder } from "lucide-react";
 import { t } from "../../i18n";
-import { Modal } from "../ui/Modal";
+import {
+	Dialog,
+	DialogClose,
+	DialogContent,
+	DialogFooter,
+	DialogHeader,
+	DialogTitle,
+} from "../ui-shadcn/dialog";
+import { X } from "lucide-react";
+import { cn } from "../../lib/utils";
 import {
 	DropdownMenu,
 	DropdownMenuCheckboxItem,
@@ -11,7 +20,6 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "../ui-shadcn/dropdown-menu";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "../ui-shadcn/dialog";
 import { Input } from "../ui-shadcn/input";
 import { Button } from "../ui-shadcn/button";
 import type { SessionSource, SessionSummary, Project, AgentTab } from "../../../../shared/types";
@@ -77,17 +85,21 @@ export function SessionManagerModal(props: {
 	};
 
 	return (
-		<Modal
-			open
-			onClose={props.onClose}
-			title={t("menu.manageSessions")}
-			size="full"
-			headerActions={
-				<small className="text-muted-foreground">
-					{filteredSessions.length} / {props.sessions.length} sessions
-				</small>
-			}
-		>
+		<Dialog open onOpenChange={(next) => !next && props.onClose()}>
+			<DialogContent showCloseButton={false} className={cn("flex flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(1300px,calc(100vw-48px))] h-[min(850px,calc(100vh-48px))]")}>
+				<DialogHeader className="flex-row items-center justify-between px-4 py-3">
+					<DialogTitle>{t("menu.manageSessions")}</DialogTitle>
+					<div className="flex items-center gap-2">
+						<small className="text-muted-foreground">
+							{filteredSessions.length} / {props.sessions.length} sessions
+						</small>
+						<DialogClose asChild>
+							<Button variant="ghost" size="icon" aria-label={t("common.close")} title={t("common.close")}>
+								<X size={18} strokeWidth={2.2} aria-hidden="true" />
+							</Button>
+						</DialogClose>
+					</div>
+				</DialogHeader>
 			<div className="session-manager-modal session-manager-modal--embedded">
 				<div className="session-manager-toolbar">
 					<div className="session-manager-toolbar-left">
@@ -177,7 +189,8 @@ export function SessionManagerModal(props: {
 					})}
 				</div>
 			</div>
-		</Modal>
+			</DialogContent>
+		</Dialog>
 	);
 }
 
@@ -430,26 +443,27 @@ export function RpcLogModal(props: {
 		navigator.clipboard.writeText(logs.map(formatRpcLogForCopy).join("\n"));
 
 	return (
-		<Modal
-			open
-			onClose={props.onClose}
-			title={t("rpc.title", {
-				visible: visibleLogs.length,
-				total: props.logs.length,
-			})}
-			size="full"
-			contentClassName="sm:max-w-[min(1000px,92vw)] h-[min(720px,82vh)]"
-			headerActions={
-				<>
-					<Button variant="default" onClick={() => copyLogs(props.logs)}>
-						{t("common.copyAll")}
-					</Button>
-					<Button variant="secondary" onClick={() => copyLogs(visibleLogs)}>
-						{t("common.copyVisible")}
-					</Button>
-				</>
-			}
-		>
+		<Dialog open onOpenChange={(next) => !next && props.onClose()}>
+			<DialogContent showCloseButton={false} className={cn("flex flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(1300px,calc(100vw-48px))] h-[min(850px,calc(100vh-48px))]", "sm:max-w-[min(1000px,92vw)] h-[min(720px,82vh)]")}>
+				<DialogHeader className="flex-row items-center justify-between px-4 py-3">
+					<DialogTitle>{t("rpc.title", {
+						visible: visibleLogs.length,
+						total: props.logs.length,
+					})}</DialogTitle>
+					<div className="flex items-center gap-2">
+						<Button variant="default" onClick={() => copyLogs(props.logs)}>
+							{t("common.copyAll")}
+						</Button>
+						<Button variant="secondary" onClick={() => copyLogs(visibleLogs)}>
+							{t("common.copyVisible")}
+						</Button>
+						<DialogClose asChild>
+							<Button variant="ghost" size="icon" aria-label={t("common.close")} title={t("common.close")}>
+								<X size={18} strokeWidth={2.2} aria-hidden="true" />
+							</Button>
+						</DialogClose>
+					</div>
+				</DialogHeader>
 			<div className="rpc-log-modal rpc-log-modal--embedded">
 				<div className="rpc-log-toolbar">
 					<div className="rpc-log-filter-tabs">
@@ -522,7 +536,8 @@ export function RpcLogModal(props: {
 					)}
 				</div>
 			</div>
-		</Modal>
+			</DialogContent>
+		</Dialog>
 	);
 }
 

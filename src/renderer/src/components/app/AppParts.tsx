@@ -8,7 +8,16 @@
 // ============================================================
 
 import { t } from "../../i18n";
-import { Modal } from "../ui/Modal";
+import {
+	Dialog,
+	DialogClose,
+	DialogContent,
+	DialogHeader,
+	DialogTitle,
+} from "../ui-shadcn/dialog";
+import { Button } from "../ui-shadcn/button";
+import { X } from "lucide-react";
+import { cn } from "../../lib/utils";
 import { ConfirmDialog as ShadcnConfirmDialog } from "../ui-shadcn/ConfirmDialog";
 import type { PiInstallStatus, PiInstallExecResult } from "../../../../shared/types";
 
@@ -84,12 +93,16 @@ export function EnvironmentDialog(props: {
 	const refCmd = 'where pi';
 
 	return (
-		<Modal
-			open={true}
-			onClose={props.onClose}
-			title={t("environment.title")}
-			size="medium"
-		>
+		<Dialog open onOpenChange={(next) => !next && props.onClose()}>
+			<DialogContent showCloseButton={false} className={cn("flex flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(800px,calc(100vw-48px))]")}>
+				<DialogHeader className="flex-row items-center justify-between px-4 py-3">
+					<DialogTitle>{t("environment.title")}</DialogTitle>
+					<DialogClose asChild>
+						<Button variant="ghost" size="icon" aria-label={t("common.close")} title={t("common.close")}>
+							<X size={18} strokeWidth={2.2} aria-hidden="true" />
+						</Button>
+					</DialogClose>
+				</DialogHeader>
 			<div className="environment-body">
 					<div className="env-stepper" aria-label={t("environment.title")}>
 						{steps.map((step, index) => (
@@ -369,7 +382,8 @@ export function EnvironmentDialog(props: {
 						</button>
 					)}
 				</div>
-			</Modal>
+				</DialogContent>
+		</Dialog>
 	);
 }
 

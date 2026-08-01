@@ -7,7 +7,7 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "../ui-shadcn/dialog";
-import { Button } from "../ui/Button";
+import { Button } from "../ui-shadcn/button";
 
 /**
  * 项目信任确认弹窗。
@@ -52,7 +52,7 @@ export function TrustConfirmModal(props: {
 					<Button variant="secondary" onClick={() => props.onChoose("trust-session")}>
 						{t("agent.trust.trustSession")}
 					</Button>
-					<Button variant="primary" onClick={() => props.onChoose("trust-remember")}>
+					<Button variant="default" onClick={() => props.onChoose("trust-remember")}>
 						{t("agent.trust.trustRemember")}
 					</Button>
 				</DialogFooter>

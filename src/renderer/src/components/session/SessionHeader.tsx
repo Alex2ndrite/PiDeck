@@ -10,7 +10,6 @@ import {
 } from "../../atoms";
 import { t } from "../../i18n";
 import { Button } from "../ui-shadcn/button";
-import { IconButton } from "../ui/IconButton";
 import { SessionStatus } from "./SurfaceParts";
 
 type HeaderActions = {
@@ -147,13 +146,13 @@ export function SessionHeader(props: SessionHeaderProps) {
             </div>
           </div>
           {props.onToggleDrawer && (
-            <IconButton
-              label={props.drawerOpen ? t("app.collapseDrawer") : t("app.expandDrawer")}
+            <Button variant="ghost" size="icon"
+              aria-label={props.drawerOpen ? t("app.collapseDrawer") : t("app.expandDrawer")} title={props.drawerOpen ? t("app.collapseDrawer") : t("app.expandDrawer")}
               className={`header-drawer-toggle${props.drawerOpen ? " active" : ""}`}
               onClick={props.onToggleDrawer}
             >
               <PanelRight size={14} strokeWidth={2} aria-hidden="true" />
-            </IconButton>
+            </Button>
           )}
         </div>
       </div>

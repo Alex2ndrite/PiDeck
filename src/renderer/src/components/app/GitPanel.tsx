@@ -23,7 +23,7 @@ import {
   RotateCcw,
   Sparkles,
 } from "lucide-react";
-import { Button } from "../ui/Button";
+import { Button } from "../ui-shadcn/button";
 import { ConfirmDialog } from "./AppParts";
 import { showNotice } from "../../utils/notice";
 import type {
@@ -1185,7 +1185,7 @@ export function GitPanel(props: GitPanelProps) {
                   )}
                 </button>
                 <Button
-                  variant="primary"
+                  variant="default"
                   className="git-commit-btn"
                   loading={committing}
                   disabled={!canCommit}
