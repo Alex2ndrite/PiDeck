@@ -4,6 +4,12 @@ import type { ChatMessage } from "../../../../shared/types";
 import { t, translateI18nDescriptor } from "../../i18n";
 import { formatDuration, formatTime, stripAnsi } from "./TimelineFormat";
 
+// Button 收口状态（P0）：本文件按钮全部保留原生——
+// compaction-card-header / thinking-card-trigger 是折叠触发器 + 内容排版容器（内部 span/small/em 结构）；
+// ask-question-card-option 是选项卡片；ask-question-card-submit/cancel 是品牌视觉按钮
+// （30px 圆角 14px + 2px 边框 + 硬编码品牌绿/危险色，非 token 值，换装会丢失品牌感）。
+// 迁移路径见 P2 CSS 收口。
+
 function getDiagnosticTone(message: ChatMessage): "error" | "warning" | "success" | "info" {
 	if (message.role === "error") return "error";
 	const status = String(message.meta?.status ?? "");

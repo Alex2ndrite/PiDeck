@@ -115,25 +115,6 @@
 .project-resources-tabs button:hover:not(.active) {
   color: var(--color-text-primary);
 }
-.project-resources-refresh {
-  height: 28px;
-  padding: 0 10px;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--color-text-tertiary);
-  font-size: var(--font-size-caption);
-  cursor: pointer;
-  transition: all 0.12s ease;
-}
-.project-resources-refresh:hover {
-  border-color: var(--color-accent);
-  color: var(--color-accent);
-}
-.project-resources-refresh:disabled {
-  opacity: 0.5;
-  cursor: wait;
-}
 
 /* 错误提示 */
 .project-resources-error {
@@ -2540,32 +2521,7 @@ body.is-git-pane-resizing, body.is-git-pane-resizing * { cursor: row-resize !imp
   .git-pane-header-actions .git-compact-filter-label { max-width: 60px; }
 }
 
-.app-notice:not(.app-notice-error):not(.app-notice-warning) {
-  padding-right: var(--space-3);
-}
 /* accent 小圆点 */
-.app-notice::before {
-  content: "";
-  display: block;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--color-accent);
-  flex-shrink: 0;
-  margin-top: 7px;
-}
-.app-notice.app-notice-error::before {
-  background: var(--color-danger);
-}
-.app-notice.app-notice-warning::before {
-  background: var(--color-warning);
-}
-.app-notice.app-notice-error {
-  border: 1px solid color-mix(in srgb, var(--color-danger) 28%, transparent);
-}
-.app-notice.app-notice-warning {
-  border: 1px solid color-mix(in srgb, var(--color-warning) 28%, transparent);
-}
 
 .chat-list-pane.v3-braun .sidebar-body .brand-lockup {
   gap: 14px;

@@ -4,6 +4,7 @@ import type { SidebarController } from "../../hooks/useSidebarController";
 import { t } from "../../i18n";
 import type { SidebarActions } from "./SidebarContent";
 import { SessionTree } from "./SessionTree";
+import { Button } from "../ui-shadcn/button";
 
 export function WorktreeTree(props: {
   project: Project;
@@ -35,9 +36,9 @@ export function WorktreeTree(props: {
       <div className="worktree-children worktree-sandbox-list">
         <div className="worktree-sandbox-toolbar">
           <span>{t("app.worktreeOtherWorkspaces")}</span>
-          <button className="worktree-create-btn" title={t("app.worktreeNew")} onClick={() => props.controller.openWorktreeCreate(props.project.id)}>
+          <Button variant="ghost" size="sm" className="worktree-create-btn h-6 gap-[3px] px-[5px] text-xs rounded-[6px]" title={t("app.worktreeNew")} onClick={() => props.controller.openWorktreeCreate(props.project.id)}>
             <GitBranch size={12} /><span>{t("app.worktreeNewShort")}</span>
-          </button>
+          </Button>
         </div>
         {entries.map((entry) => {
           const childProject = childProjects.find((project) => project.path === entry.path);

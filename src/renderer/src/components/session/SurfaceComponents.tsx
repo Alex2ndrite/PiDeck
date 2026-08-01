@@ -143,6 +143,15 @@ import { MultiSelectModal } from "./MessageShareModal";
 // ============================================================
 // Surface & Workspace domain components
 // 从 AppParts.tsx 提取，包含所有会话渲染组件
+//
+// Button 收口状态（P0 UI 统一）：
+// - 已换装 shadcn Button：turn-row-action-btn / user-turn-action-btn 9 个（ghost icon-sm，
+//   原 tailwind class 保留，tailwind-merge 合并后视觉零变化）；turn-row-edit-btn /
+//   message-edit-btn 4 个（outline sm + h-auto 反制默认高度，保留 .*-edit-btn class 作 CSS 兜底）。
+// - 保留原生 button（样式完全由自定义 CSS 驱动，直接换装会被 Tailwind utilities 覆盖默认尺寸
+//   导致回归，需先做 CSS→utility 迁移）：copy-menu-trigger、copy-menu-popover 菜单项、
+//   code-copy、execution-summary-toggle/collapse、image-preview-close、outline-* 系列、
+//   scratch/terminal/files/git/editors/browser-entry、空状态创建按钮。迁移路径见 P2 CSS 收口。
 // ============================================================
 
 type SessionModifiedFile = {
@@ -883,14 +892,14 @@ export const TurnRow = memo(function TurnRow(props: {
 									autoFocus
 								/>
 								<div className="turn-row-edit-actions">
-									<button className="turn-row-edit-btn primary" onClick={() => {
+									<Button variant="outline" size="sm" className="turn-row-edit-btn primary h-auto px-3 py-1 text-xs shadow-none hover:text-accent" onClick={() => {
 										const targetId = assistantMessages.at(-1)?.message.id;
 										if (targetId && props.onEditMessage) {
 											props.onEditMessage(targetId, editText);
 											setEditing(false);
 										}
-									}}>{t("common.save")}</button>
-									<button className="turn-row-edit-btn" onClick={() => setEditing(false)}>{t("common.cancel")}</button>
+									}}>{t("common.save")}</Button>
+									<Button variant="outline" size="sm" className="turn-row-edit-btn h-auto px-3 py-1 text-xs shadow-none" onClick={() => setEditing(false)}>{t("common.cancel")}</Button>
 								</div>
 							</div>
 						) : finalTxt ? (
@@ -909,18 +918,18 @@ export const TurnRow = memo(function TurnRow(props: {
 				{mergedText && !editing && (
 					<div className="turn-row-actions flex min-h-6 items-center gap-1 opacity-55 transition-opacity hover:opacity-100 focus-within:opacity-100">
 						<CopyMenu text={stripMarkdown(mergedText)} markdown={mergedText} targetRef={rowRef} />
-						<button
+						<Button
 							type="button"
 							className="turn-row-action-btn inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground"
 							onClick={props.onEnterMultiSelect}
 						title={t("app.multiSelectEnter")}
 						>
 							<Share size={14} />
-						</button>
+						</Button>
 						{!props.isStreaming && !props.agentRunning && assistantMessages.at(-1)?.message.id && (
 							<>
 								{props.onEditMessage && (
-									<button
+									<Button
 										type="button"
 										className="turn-row-action-btn inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground"
 										onClick={() => {
@@ -930,10 +939,10 @@ export const TurnRow = memo(function TurnRow(props: {
 										title={t("common.edit")}
 									>
 										<SquarePen size={14} />
-									</button>
+									</Button>
 								)}
 								{props.onDeleteMessage && (
-									<button
+									<Button
 										type="button"
 										className="turn-row-action-btn inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground"
 										onClick={() => {
@@ -943,7 +952,7 @@ export const TurnRow = memo(function TurnRow(props: {
 										title={t("common.delete")}
 									>
 										<Trash size={14} />
-									</button>
+									</Button>
 								)}
 							</>
 						)}
@@ -1085,12 +1094,12 @@ export const UserBubble = memo(function UserBubble(props: {
 						autoFocus
 					/>
 					<div className="message-edit-actions">
-						<button className="message-edit-btn primary" onClick={handleSaveEdit}>
+						<Button variant="outline" size="sm" className="message-edit-btn primary h-auto px-3 py-1 text-xs shadow-none hover:text-accent" onClick={handleSaveEdit}>
 							{t("common.save")}
-						</button>
-						<button className="message-edit-btn" onClick={() => setEditing(false)}>
+						</Button>
+						<Button variant="outline" size="sm" className="message-edit-btn h-auto px-3 py-1 text-xs shadow-none" onClick={() => setEditing(false)}>
 							{t("common.cancel")}
-						</button>
+						</Button>
 					</div>
 				</div>
 			)}
@@ -1113,17 +1122,17 @@ export const UserBubble = memo(function UserBubble(props: {
 			</div>
 			<div className="user-turn-actions flex min-h-6 items-center gap-0.5 opacity-0 transition-opacity group-hover/user:opacity-100 focus-within:opacity-100">
 				<CopyMenu text={stripMarkdown(cleanText)} markdown={message.text} targetRef={rowRef} />
-				<button
+				<Button
 					className="user-turn-action-btn inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground"
 					onClick={props.onEnterMultiSelect}
 					title={t("app.multiSelectEnter")}
 						>
 							<Share size={14} />
-						</button>
+						</Button>
 				{!editing && !props.agentRunning && (
 					<>
 						{canFork && (
-							<button
+							<Button
 								type="button"
 								className="user-turn-action-btn inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground"
 								disabled={props.forking}
@@ -1132,40 +1141,40 @@ export const UserBubble = memo(function UserBubble(props: {
 								aria-label={t("app.forkFromMessage")}
 							>
 								<GitFork size={14} strokeWidth={1.8} aria-hidden="true" />
-							</button>
+							</Button>
 						)}
 						{props.onEditMessage && (
-							<button className="user-turn-action-btn inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground" onClick={() => {
+							<Button className="user-turn-action-btn inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground" onClick={() => {
 								setEditText(cleanText);
 								setEditing(true);
 							}} title={t("common.edit")}>
 								<SquarePen size={14} />
-							</button>
+							</Button>
 						)}
-						<button
+						<Button
 							className="user-turn-action-btn inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground"
 							onClick={handleEditAndResend}
 							title={t("app.editAndResendTitle")}
 						>
 							<UserPen size={14} />
-						</button>
+						</Button>
 						{props.onDeleteMessage && (
-							<button
+							<Button
 								className="user-turn-action-btn inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground"
 								onClick={() => props.onDeleteMessage?.(message.id)}
 								title={t("common.delete")}
 							>
 								<Trash size={14} />
-							</button>
+							</Button>
 						)}
 						{((props.isLastUserMessage || props.showResendButton) && props.onResendUserMessage) && (
-							<button
+							<Button
 								className="user-turn-action-btn inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground"
 								onClick={() => props.onResendUserMessage?.(message)}
 								title={t("app.resendTitle")}
 							>
 								<Send size={14} />
-							</button>
+							</Button>
 						)}
 					</>
 				)}

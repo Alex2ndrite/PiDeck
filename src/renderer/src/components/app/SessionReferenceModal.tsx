@@ -218,21 +218,21 @@ export function SessionReferenceModal(props: {
 								: t("sessionRef.selectedCount", { count: selectedCount, total: messages.length })}
 						</span>
 						<div className="multi-select-bulk-actions">
-							<button className="multi-select-bulk-btn" onClick={toggleAll} disabled={!messages.length}>
+							<Button variant="ghost" size="sm" className="multi-select-bulk-btn h-auto px-2 py-0.5 text-xs" onClick={toggleAll} disabled={!messages.length}>
 								{allSelected ? t("common.deselectAll") : t("common.selectAll")}
-							</button>
+							</Button>
 						</div>
 					</div>
 					<div className="multi-select-modal-footer-bottom">
-						<button
-							className="multi-select-action-btn"
+						<Button
+							variant="outline" size="sm" className="multi-select-action-btn h-auto px-4 py-1.5 text-xs shadow-none rounded-[6px]"
 							disabled={loading || !!error || selectedCount === 0}
 							onClick={handleConfirm}
 						>
 							{allSelected
 								? t("sessionRef.insertAll", { count: messages.length })
 								: t("sessionRef.insertSelected", { count: selectedCount })}
-						</button>
+						</Button>
 					</div>
 				</footer>
 				</DialogContent>

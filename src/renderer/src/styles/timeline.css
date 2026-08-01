@@ -684,10 +684,6 @@
 .tool-group-card-chevron.open {
   transform: rotate(180deg);
 }
-.tool-group-card-chip.muted {
-  color: var(--color-text-tertiary);
-  background: transparent;
-}
 .tool-group-card.flat {
   border: 0;
   border-radius: 0;
@@ -2327,18 +2323,6 @@ body.ask-dialog-open .ask-question-card.pending {
 }
 
 /* ask_question 弹出 dialog */
-.ask-dialog {
-  display: grid;
-  gap: 16px;
-  width: min(480px, calc(100vw - 64px));
-  max-height: min(80vh, 600px);
-  padding: 24px;
-  margin: 24px;
-  border-radius: var(--radius-lg);
-  background: var(--color-bg-panel);
-  box-shadow: var(--shadow-modal);
-  overflow-y: auto;
-}
 @keyframes ask-dialog-pulse {
   0%,
   100% {

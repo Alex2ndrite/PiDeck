@@ -4,6 +4,7 @@ import type * as Monaco from "monaco-editor";
 import { t } from "../../i18n";
 import { ArrowLeft, Edit3, Maximize, Minimize2, SquareSplitHorizontal, X, Eye, FileCode } from "lucide-react";
 import { setupMonaco } from "../../utils/monacoSetup";
+import { Button } from "../ui-shadcn/button";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeKatex from "rehype-katex";
@@ -303,14 +304,16 @@ export function FileDiffViewer(props: {
 			)}
 			<div className="file-diff-header">
 				{props.onBack && displayMode === "drawer" && (
-					<button
+					<Button
+						variant="ghost"
+						size="icon-sm"
 						className="file-diff-close"
 						onClick={props.onBack}
 						title={t("common.back")}
 						aria-label={t("common.back")}
 					>
 						<ArrowLeft size={18} />
-					</button>
+					</Button>
 				)}
 				<span className="file-diff-title" title={props.filePath}>
 					{fileName}
@@ -319,7 +322,9 @@ export function FileDiffViewer(props: {
 				</span>
 				<div className="file-diff-header-actions">
 					{(isMarkdown || isHtml) && !isDiffMode && !loading && !error && (
-						<button
+						<Button
+							variant="ghost"
+							size="icon-sm"
 							className="file-diff-toggle-btn"
 							title={preview ? t("editor.source") : t("editor.preview")}
 							onClick={() => {
@@ -331,47 +336,55 @@ export function FileDiffViewer(props: {
 							}}
 						>
 							{preview ? <FileCode size={15} /> : <Eye size={15} />}
-						</button>
+						</Button>
 					)}
 					{isDiffMode && !loading && !error && displayMode !== "drawer" && (
-						<button
+						<Button
+							variant="ghost"
+							size="icon-sm"
 							className="file-diff-toggle-btn"
 							title={sideBySide ? t("app.showSingle") : t("app.showSplit")}
 							onClick={() => setSideBySide(!sideBySide)}
 						>
 							<SquareSplitHorizontal size={15} />
-						</button>
+						</Button>
 					)}
 					{props.saveContent && readOnly && (
-						<button
+						<Button
+							variant="ghost"
+							size="icon-sm"
 							className="file-diff-toggle-btn"
 							title={t("app.editFile")}
 							onClick={handleEditToggle}
 						>
 							<Edit3 size={15} />
-						</button>
+						</Button>
 					)}
 					{!readOnly && props.saveContent && (
-						<button
+						<Button
+							variant="ghost"
+							size="icon-sm"
 							className="file-diff-toggle-btn"
 							title={t("app.exitEdit")}
 							onClick={handleExitEdit}
 						>
 							<X size={15} />
-						</button>
+						</Button>
 					)}
 					{props.onToggleMode && (
-						<button
+						<Button
+							variant="ghost"
+							size="icon-sm"
 							className="file-diff-toggle-btn"
 							title={displayMode === "modal" ? t("app.minimizeToDrawer") : t("app.expandToModal")}
 							onClick={props.onToggleMode}
 						>
 							{displayMode === "modal" ? <Minimize2 size={15} /> : <Maximize size={15} />}
-						</button>
+						</Button>
 					)}
-					<button className="file-diff-close" onClick={handleClose} aria-label={t("common.close")}>
+					<Button variant="ghost" size="icon-sm" className="file-diff-close" onClick={handleClose} aria-label={t("common.close")}>
 						<X size={18} />
-					</button>
+					</Button>
 				</div>
 			</div>
 			<div className="file-diff-body">

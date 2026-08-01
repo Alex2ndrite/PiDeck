@@ -556,15 +556,15 @@ export function PromptTemplatePicker(props: {
 				className="prompt-template-picker"
 			>
 				<div className="picker-preview-inline">
-					<button
+					<Button
 						type="button"
-						className="picker-preview-back-btn"
+						className="picker-preview-back-btn h-auto gap-1 px-1 text-xs"
 						onClick={() => setPreviewTemplate(null)}
 						title={t("app.promptTemplateBackToPicker")}
 					>
 						<ChevronLeft size={16} strokeWidth={2.2} />
 						{t("app.promptTemplateBackToPicker")}
-					</button>
+					</Button>
 					<pre className="picker-preview-content">{previewTemplate.content}</pre>
 				</div>
 			</PickerDialog>
@@ -593,7 +593,7 @@ export function PromptTemplatePicker(props: {
 								<code className="picker-palette-arg-hint">{template.argumentHint}</code>
 							)}
 							<span className="picker-palette-desc">{template.description}</span>
-							<button
+							<Button
 								type="button"
 								className="picker-palette-preview-btn"
 								title={t("common.preview")}
@@ -603,7 +603,7 @@ export function PromptTemplatePicker(props: {
 								}}
 							>
 								<Eye size={14} strokeWidth={1.8} />
-							</button>
+							</Button>
 						</CommandItem>
 					))}
 				</CommandList>

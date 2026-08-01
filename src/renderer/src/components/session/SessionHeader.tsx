@@ -127,19 +127,19 @@ export function SessionHeader(props: SessionHeaderProps) {
               </Button>
               {props.menuOpen && hasSession && (
                 <div className="session-combo-menu absolute top-[calc(100%+6px)] right-0 z-50 min-w-40 overflow-hidden rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md">
-                  <button type="button" className="flex w-full items-center rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent" onClick={props.onNewSession}>
+                  <Button type="button" variant="ghost" size="sm" className="h-auto w-full justify-start px-2 py-1.5 text-sm hover:bg-accent" onClick={props.onNewSession}>
                     <span>{t("app.newSession")}</span>
-                  </button>
+                  </Button>
                   <div className="session-combo-divider my-1 h-px bg-border" />
-                  <button type="button" className="flex w-full items-center rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent disabled:opacity-50" disabled={!props.canStop} onClick={props.onStop}>
+                  <Button type="button" variant="ghost" size="sm" className="h-auto w-full justify-start px-2 py-1.5 text-sm hover:bg-accent disabled:opacity-50" disabled={!props.canStop} onClick={props.onStop}>
                     {t("app.stop")}
-                  </button>
+                  </Button>
                   {props.showRestart && (
-                    <button type="button" className="flex w-full items-center rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent disabled:opacity-50" disabled={!props.canRestart} onClick={props.onRestart}>
+                    <Button type="button" variant="ghost" size="sm" className="h-auto w-full justify-start px-2 py-1.5 text-sm hover:bg-accent disabled:opacity-50" disabled={!props.canRestart} onClick={props.onRestart}>
                       {props.isRestarting
                         ? t("app.restarting")
                         : t("app.restart")}
-                    </button>
+                    </Button>
                   )}
                 </div>
               )}

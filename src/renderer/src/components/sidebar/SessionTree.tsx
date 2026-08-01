@@ -227,15 +227,15 @@ export function SessionTree(props: {
         </Fragment>;
       })}
       {display.hiddenChildCount > 0 && (
-        <button
-          className={props.nested ? "worktree-sessions-more" : "session-more-row"}
+        <Button
+          variant="ghost" size="sm" className={`h-auto w-full justify-start px-2 text-xs ${props.nested ? "worktree-sessions-more" : "session-more-row"}`}
           onClick={props.onShowMore ?? (() => props.controller.showMoreChildren(props.project.id))}
         >
           <span>{props.nested
             ? t("app.worktreeShowMoreSessions", { count: display.hiddenChildCount })
             : t("app.projectShowMoreChildren", { count: display.hiddenChildCount })}
           </span>
-        </button>
+        </Button>
       )}
     </div>
   );

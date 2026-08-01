@@ -66,16 +66,26 @@ function Button({
       disabled={loading || props.disabled}
       {...props}
     >
-      {loading && (
-        <span
-          className="size-3.5 shrink-0 animate-spin rounded-full border-2 border-current border-t-transparent"
-          aria-hidden="true"
-        />
+      {/* asChild 模式（AlertDialogAction/Cancel 等）：Slot 要求 children 必须是单个
+          React 元素，不能像普通按钮那样挂两个表达式（loading spinner + children 会
+          组成数组 children，触发 “Slot failed to slot onto its children”）。
+          asChild 调用方不传 loading，直接透传单元素 children。 */}
+      {asChild ? (
+        children
+      ) : (
+        <>
+          {loading && (
+            <span
+              className="size-3.5 shrink-0 animate-spin rounded-full border-2 border-current border-t-transparent"
+              aria-hidden="true"
+            />
+          )}
+          {/* 仅 loading 态包 span 降透明度；常规路径 children 直接挂在按钮上，
+              保持 shadcn 官方 inline-flex + gap 横向排布（#115 曾无条件包 span 导致
+              “图标+文字”按钮内部变 inline 流式，文字被 h-7 裁切/换行） */}
+          {loading ? <span className="opacity-70">{children}</span> : children}
+        </>
       )}
-      {/* 仅 loading 态包 span 降透明度；常规路径 children 直接挂在按钮上，
-          保持 shadcn 官方 inline-flex + gap 横向排布（#115 曾无条件包 span 导致
-          “图标+文字”按钮内部变 inline 流式，文字被 h-7 裁切/换行） */}
-      {loading ? <span className="opacity-70">{children}</span> : children}
     </Comp>
   )
 }

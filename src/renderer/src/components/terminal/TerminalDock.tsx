@@ -14,6 +14,7 @@ import { showNotice } from "../../utils/notice";
 import { writeClipboard } from "../../utils/clipboard";
 import { ChevronDown, ChevronUp, MoreHorizontal, Plus, X } from "lucide-react";
 import { ConfirmDialog } from "../ui-shadcn/ConfirmDialog";
+import { Button } from "../ui-shadcn/button";
 import type { PiDesktopApi } from "../../../../preload";
 import type { SessionRuntimeTarget, TerminalTab } from "../../../../shared/types";
 import { t } from "../../i18n";
@@ -409,8 +410,8 @@ export function TerminalDock(props: {
 						key={tab.id}
 						className={`terminal-tab inline-flex max-w-[9rem] items-center gap-0.5 rounded-md px-0.5 pl-2${tab.id === activeTab?.id ? " active" : ""}`}
 					>
-						<button
-							className="terminal-tab-label max-w-[6.5rem] min-w-0 flex-1 truncate text-left"
+						<Button
+							variant="ghost" size="sm" className="terminal-tab-label h-auto min-w-0 flex-1 justify-start truncate px-2 py-0.5 max-w-[6.5rem] min-w-0 flex-1 truncate text-left"
 							onClick={() => {
 								setActiveTabId(tab.id);
 								props.onCollapsedChange(false);
@@ -420,10 +421,10 @@ export function TerminalDock(props: {
 						>
 							{tab.title}
 							{tab.exited ? ` · ${t("terminal.exited")}` : ""}
-						</button>
-						<button
+						</Button>
+						<Button
 							type="button"
-							className="terminal-tab-close grid size-5 shrink-0 place-items-center rounded-sm opacity-60"
+							variant="ghost" size="icon-xs" className="terminal-tab-close size-5 grid size-5 shrink-0 place-items-center rounded-sm opacity-60"
 							onClick={(event) => {
 								event.stopPropagation();
 								void closeTab(tab);
@@ -431,31 +432,31 @@ export function TerminalDock(props: {
 							title={t("terminal.closeCurrent")}
 						>
 							<X size={12} />
-						</button>
+						</Button>
 					</div>
 				))}
-				<button
+				<Button
 					type="button"
-					className="terminal-icon-btn inline-grid size-6 shrink-0 place-items-center rounded-md"
+					variant="ghost" size="icon-xs" className="terminal-icon-btn size-6 inline-grid size-6 shrink-0 place-items-center rounded-md"
 					onClick={() => void addTab()}
 					title={t("terminal.new")}
 					disabled={loading || !contentReady}
 				>
 					<Plus size={14} />
-				</button>
+				</Button>
 				{/* Shell 选择器：点击创建指定 shell 的终端 */}
 				<div
 					className="relative grid place-items-center"
 				>
-					<button
+					<Button
 						type="button"
-						className="terminal-icon-btn inline-grid size-6 place-items-center rounded-md"
+						variant="ghost" size="icon-xs" className="terminal-icon-btn size-6 inline-grid size-6 place-items-center rounded-md"
 						onClick={() => setShellMenuOpen((open) => !open)}
 						title={t("terminal.selectShell")}
 						disabled={loading || !contentReady}
 					>
 						<ChevronDown size={12} />
-					</button>
+					</Button>
 					{shellMenuOpen && (
 						<div className="terminal-shell-menu absolute bottom-[calc(100%+6px)] left-0 z-[120] grid w-44 gap-0.5 rounded-lg border bg-popover p-1.5 text-popover-foreground shadow-md">
 							<strong className="px-1 text-xs">{t("terminal.selectShell")}</strong>
@@ -463,10 +464,12 @@ export function TerminalDock(props: {
 								<span className="terminal-shell-menu-empty" />
 							)}
 							{shells.map((s) => (
-								<button
+								<Button
 									key={s.shell}
 									type="button"
-									className={`w-full rounded-md px-2 py-1 text-left text-xs hover:bg-accent${s.available ? "" : " unavailable opacity-50"}`}
+									variant="ghost"
+									size="sm"
+									className={`h-auto w-full justify-start rounded-md px-2 py-1 px-2 py-1 text-left text-xs hover:bg-accent${s.available ? "" : " unavailable opacity-50"}`}
 									onClick={() => {
 										if (!s.available) return;
 										void addTabWithShell(s.shell);
@@ -474,7 +477,7 @@ export function TerminalDock(props: {
 									title={s.available ? undefined : t("terminal.shellNotAvailable")}
 								>
 									{s.label}
-								</button>
+								</Button>
 							))}
 						</div>
 					)}
@@ -492,9 +495,9 @@ export function TerminalDock(props: {
 					className="terminal-more-menu relative grid place-items-center"
 					onBlur={() => window.setTimeout(() => setThemeMenuOpen(false), 80)}
 				>
-					<button
+					<Button
 						type="button"
-						className="terminal-icon-btn inline-grid size-6 place-items-center rounded-md"
+						variant="ghost" size="icon-xs" className="terminal-icon-btn size-6 inline-grid size-6 place-items-center rounded-md"
 						onMouseDown={(event) => {
 							event.preventDefault();
 							setThemeMenuOpen((open) => !open);
@@ -502,16 +505,18 @@ export function TerminalDock(props: {
 						title={t("terminal.more")}
 					>
 						<MoreHorizontal size={14} />
-					</button>
+					</Button>
 					{themeMenuOpen && (
 						<div className="terminal-theme-menu absolute right-0 bottom-[calc(100%+6px)] z-[120] grid w-48 gap-1 rounded-lg border bg-popover p-2 text-popover-foreground shadow-md">
 							<strong className="px-1 text-xs">{t("terminal.theme")}</strong>
 							<span className="px-1 text-[11px] text-muted-foreground">{t("terminal.themeCurrent")}: {theme.label}</span>
 							{Object.entries(TERMINAL_THEMES).map(([id, item]) => (
-								<button
+								<Button
 									key={id}
 									type="button"
-									className={`w-full rounded-md px-2 py-1 text-left text-xs hover:bg-accent${id === themeId ? " active bg-accent" : ""}`}
+									variant="ghost"
+									size="sm"
+									className={`h-auto w-full justify-start rounded-md px-2 py-1 px-2 py-1 text-left text-xs hover:bg-accent${id === themeId ? " active bg-accent" : ""}`}
 									onMouseDown={(event) => {
 										event.preventDefault();
 										setThemeId(id as TerminalThemeId);
@@ -519,14 +524,14 @@ export function TerminalDock(props: {
 									}}
 								>
 									{item.label}
-								</button>
+								</Button>
 							))}
 						</div>
 					)}
 				</div>
-				<button
+				<Button
 					type="button"
-					className="terminal-icon-btn inline-grid size-6 place-items-center rounded-md"
+					variant="ghost" size="icon-xs" className="terminal-icon-btn size-6 inline-grid size-6 place-items-center rounded-md"
 					onClick={() => {
 						props.onCollapsedChange(!collapsed);
 						focusTerminalSoon();
@@ -534,16 +539,16 @@ export function TerminalDock(props: {
 					title={collapsed ? t("terminal.expand") : t("terminal.collapse")}
 				>
 					{collapsed ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-				</button>
-				<button
+				</Button>
+				<Button
 					type="button"
-					className="terminal-icon-btn inline-grid size-6 place-items-center rounded-md"
+					variant="ghost" size="icon-xs" className="terminal-icon-btn size-6 inline-grid size-6 place-items-center rounded-md"
 					onClick={() => setConfirmCloseAllOpen(true)}
 					title={t("terminal.closeAll")}
 					disabled={tabs.length === 0}
 				>
 					<X size={14} />
-				</button>
+				</Button>
 			</div>
 		</header>
 			{!collapsed && (

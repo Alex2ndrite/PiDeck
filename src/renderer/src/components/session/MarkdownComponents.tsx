@@ -2,6 +2,7 @@ import { isValidElement, useEffect, useId, useRef, useState, type CSSProperties,
 import type React from "react";
 import { Check, Copy } from "lucide-react";
 import { defaultUrlTransform } from "react-markdown";
+import { Button } from "../ui-shadcn/button";
 import { t } from "../../i18n";
 import { showNotice } from "../../utils/notice";
 
@@ -125,11 +126,11 @@ function MermaidDiagram(props: { chart: string }) {
 			) : (
 				<>
 					<div className="mermaid-toolbar" aria-label={t("mermaid.controls")}>
-						<button type="button" onClick={() => { navigator.clipboard.writeText(`\`\`\`mermaid\n${props.chart}\n\`\`\``); showNotice(t("app.mermaidCopied"), 1200); }} title={t("common.copy")}><Copy size={14} /></button>
-						<button type="button" onClick={() => setZoom((value) => Math.max(0.5, value - 0.1))}>−</button>
+						<Button type="button" variant="ghost" size="sm" className="h-6 min-w-7 rounded-[6px] px-[7px] text-xs shadow-none" onClick={() => { navigator.clipboard.writeText(`\`\`\`mermaid\n${props.chart}\n\`\`\``); showNotice(t("app.mermaidCopied"), 1200); }} title={t("common.copy")}><Copy size={14} /></Button>
+						<Button type="button" variant="ghost" size="sm" className="h-6 min-w-7 rounded-[6px] px-[7px] text-xs shadow-none" onClick={() => setZoom((value) => Math.max(0.5, value - 0.1))}>−</Button>
 						<span>{Math.round(zoom * 100)}%</span>
-						<button type="button" onClick={() => setZoom((value) => Math.min(2.5, value + 0.1))}>＋</button>
-						<button type="button" onClick={() => setZoom(1)}>100%</button>
+						<Button type="button" variant="ghost" size="sm" className="h-6 min-w-7 rounded-[6px] px-[7px] text-xs shadow-none" onClick={() => setZoom((value) => Math.min(2.5, value + 0.1))}>＋</Button>
+						<Button type="button" variant="ghost" size="sm" className="h-6 min-w-7 rounded-[6px] px-[7px] text-xs shadow-none" onClick={() => setZoom(1)}>100%</Button>
 					</div>
 					<div className="mermaid-viewport">
 						<div

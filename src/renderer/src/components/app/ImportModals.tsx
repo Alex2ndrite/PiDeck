@@ -157,16 +157,16 @@ export function CodexImportModal(props: {
 						<span>{displayPath(props.project.path)}</span>
 					</div>
 					<div className="codex-import-actions">
-						<button onClick={props.onRefresh} disabled={props.loading || props.importing}>
+						<Button variant="outline" size="sm" className="h-7 px-2.5 text-xs shadow-none rounded-lg gap-1.5" onClick={props.onRefresh} disabled={props.loading || props.importing}>
 							<RefreshCw size={14} />
 							{t("common.refresh")}
-						</button>
-						<button onClick={props.onToggleAll} disabled={props.sessions.length === 0}>
+						</Button>
+						<Button variant="outline" size="sm" className="h-7 px-2.5 text-xs shadow-none rounded-lg gap-1.5" onClick={props.onToggleAll} disabled={props.sessions.length === 0}>
 							<Check size={14} />
 							{allSelected ? t("codex.selectNone") : t("common.selectAll")}
-						</button>
-						<button
-							className="primary-action"
+						</Button>
+						<Button
+							variant="default" size="sm" className="primary-action h-7 px-2.5 text-xs shadow-none rounded-lg gap-1.5"
 							onClick={props.onImport}
 							disabled={props.importing || props.selectedPaths.length === 0}
 						>
@@ -176,7 +176,7 @@ export function CodexImportModal(props: {
 								: t("codex.importSelected", {
 										count: props.selectedPaths.length,
 									})}
-						</button>
+						</Button>
 					</div>
 				</div>
 				<div className="codex-import-body">
@@ -199,15 +199,15 @@ export function CodexImportModal(props: {
 									<div key={session.sourcePath} className="codex-session-group">
 										{renderRow(session)}
 										{children.length > 0 && (
-											<button
+											<Button
 												type="button"
-												className="codex-subagent-toggle"
+												variant="ghost" size="sm" className="codex-subagent-toggle h-auto px-1.5 text-xs"
 												onClick={() => toggleSubagents(session.id)}
 											>
 												{expanded
 													? t("codex.hideSubagents", { count: children.length })
 													: t("codex.showSubagents", { count: children.length })}
-											</button>
+											</Button>
 										)}
 										{expanded && children.length > 0 && (
 											<div className="codex-subagent-list">
@@ -219,13 +219,13 @@ export function CodexImportModal(props: {
 							})}
 							{grouped.orphanSubagents.length > 0 && (
 								<div className="codex-session-group">
-									<button
+									<Button
 										type="button"
-										className="codex-subagent-toggle codex-orphan-subagents-title"
+										variant="ghost" size="sm" className="codex-subagent-toggle h-auto px-1.5 text-xs codex-orphan-subagents-title"
 										onClick={() => setShowOrphanSubagents((current) => !current)}
 									>
 										{t("codex.orphanSubagents", { count: grouped.orphanSubagents.length })}
-									</button>
+									</Button>
 									{showOrphanSubagents && (
 										<div className="codex-subagent-list">
 											{grouped.orphanSubagents.map((session) =>
@@ -302,16 +302,16 @@ export function ClaudeImportModal(props: {
 						<span>{displayPath(props.project.path)}</span>
 					</div>
 					<div className="codex-import-actions">
-						<button onClick={props.onRefresh} disabled={props.loading || props.importing}>
+						<Button variant="outline" size="sm" className="h-7 px-2.5 text-xs shadow-none rounded-lg gap-1.5" onClick={props.onRefresh} disabled={props.loading || props.importing}>
 							<RefreshCw size={14} />
 							{t("common.refresh")}
-						</button>
-						<button onClick={props.onToggleAll} disabled={props.sessions.length === 0}>
+						</Button>
+						<Button variant="outline" size="sm" className="h-7 px-2.5 text-xs shadow-none rounded-lg gap-1.5" onClick={props.onToggleAll} disabled={props.sessions.length === 0}>
 							<Check size={14} />
 							{allSelected ? t("claude.selectNone") : t("common.selectAll")}
-						</button>
-						<button
-							className="primary-action"
+						</Button>
+						<Button
+							variant="default" size="sm" className="primary-action h-7 px-2.5 text-xs shadow-none rounded-lg gap-1.5"
 							onClick={props.onImport}
 							disabled={props.importing || props.selectedPaths.length === 0}
 						>
@@ -321,7 +321,7 @@ export function ClaudeImportModal(props: {
 								: t("claude.importSelected", {
 										count: props.selectedPaths.length,
 									})}
-						</button>
+						</Button>
 					</div>
 				</div>
 				<div className="codex-import-body">
@@ -433,16 +433,16 @@ export function OpenCodeImportModal(props: {
 						<span>{displayPath(props.project.path)}</span>
 					</div>
 					<div className="codex-import-actions">
-						<button onClick={props.onRefresh} disabled={props.loading || props.importing}>
+						<Button variant="outline" size="sm" className="h-7 px-2.5 text-xs shadow-none rounded-lg gap-1.5" onClick={props.onRefresh} disabled={props.loading || props.importing}>
 							<RefreshCw size={14} />
 							{t("common.refresh")}
-						</button>
-						<button onClick={props.onToggleAll} disabled={props.sessions.length === 0}>
+						</Button>
+						<Button variant="outline" size="sm" className="h-7 px-2.5 text-xs shadow-none rounded-lg gap-1.5" onClick={props.onToggleAll} disabled={props.sessions.length === 0}>
 							<Check size={14} />
 							{allSelected ? t("opencode.selectNone") : t("common.selectAll")}
-						</button>
-						<button
-							className="primary-action"
+						</Button>
+						<Button
+							variant="default" size="sm" className="primary-action h-7 px-2.5 text-xs shadow-none rounded-lg gap-1.5"
 							onClick={props.onImport}
 							disabled={props.importing || props.selectedPaths.length === 0}
 						>
@@ -452,7 +452,7 @@ export function OpenCodeImportModal(props: {
 								: t("opencode.importSelected", {
 										count: props.selectedPaths.length,
 									})}
-						</button>
+						</Button>
 					</div>
 				</div>
 				<div className="codex-import-body">

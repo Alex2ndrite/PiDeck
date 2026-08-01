@@ -27,6 +27,7 @@ import {
   Twistie,
 } from "./GitResourceTree";
 import { GitCompactFilter, PaneHeader } from "./GitPanelControls";
+import { Button } from "../../ui-shadcn/button";
 
 export type GitGraphProps = {
   projectId: string;
@@ -863,15 +864,15 @@ export function SourceControlGraph(props: GitGraphProps) {
           ]}
           onChange={(value) => setRef(value)}
         />
-        <button
+        <Button
           type="button"
-          className="git-action-btn"
+          variant="ghost" size="icon-sm" className="git-action-btn size-7"
           title={t("common.refresh")}
           aria-label={t("common.refresh")}
           onClick={() => void load()}
         >
           <RefreshCw size={14} />
-        </button>
+        </Button>
       </PaneHeader>
       {props.open && (
         <div className="git-pane-body git-graph-body">
@@ -989,15 +990,15 @@ export function SourceControlGraph(props: GitGraphProps) {
               })}
               {/* "加载更多"按钮放在列表底部；当返回的提交数等于当前请求数时，可能还有更多可加载 */}
               {commits.length === loadCount && commits.length > 0 && (
-                <button
+                <Button
                   type="button"
-                  className="git-load-more-btn"
+                  variant="ghost" size="sm" className="git-load-more-btn h-auto w-full justify-center py-2 text-xs"
                   onClick={() => {
                     setLoadCount((prev) => prev + 30);
                   }}
                 >
                   {t("git.loadMore")}
-                </button>
+                </Button>
               )}
             </div>
           )}

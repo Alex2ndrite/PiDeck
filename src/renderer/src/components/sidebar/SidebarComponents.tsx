@@ -113,23 +113,25 @@ export function SessionManagerModal(props: {
 						</label>
 						<div className="session-manager-source-filters">
 							{SOURCES.map((source) => (
-								<button
+								<Button
 									key={source}
-									className={`session-source-btn${activeSources.has(source) ? " active" : ""}`}
+									variant="outline"
+									size="sm"
+									className={`h-auto rounded-full px-3 py-1 text-xs shadow-none session-source-btn${activeSources.has(source) ? " active" : ""}`}
 									onClick={() => toggleSource(source)}
 								>
 									{t(`sessionSource.${source}` as any)}
-								</button>
+								</Button>
 							))}
 						</div>
 					</div>
 					{selected.size > 0 && (
-						<button
-							className="session-manager-delete-btn"
+						<Button
+							variant="outline" size="sm" className="session-manager-delete-btn h-auto px-3 py-1 text-xs shadow-none"
 							onClick={handleDeleteSelected}
 						>
 							{t("common.deleteSelected", { count: selected.size })}
-						</button>
+						</Button>
 					)}
 				</div>
 
@@ -162,27 +164,27 @@ export function SessionManagerModal(props: {
 									)}
 								</div>
 								<div className="session-manager-row-actions">
-									<button
-										className="session-manager-action-btn"
+									<Button
+										variant="ghost" size="sm" className="session-manager-action-btn h-auto px-2 text-xs"
 										onClick={() => props.onRename(session)}
 										title={t("common.rename")}
 									>
 										{t("common.rename")}
-									</button>
-									<button
-										className="session-manager-action-btn"
+									</Button>
+									<Button
+										variant="ghost" size="sm" className="session-manager-action-btn h-auto px-2 text-xs"
 										onClick={() => props.onExport(session)}
 										title={t("menu.exportHtml")}
 									>
 										{t("menu.exportHtml")}
-									</button>
-									<button
-										className="session-manager-action-btn danger"
+									</Button>
+									<Button
+										variant="ghost" size="sm" className="session-manager-action-btn danger h-auto px-2 text-xs hover:bg-destructive/10 hover:text-destructive"
 										onClick={() => props.onDelete([session])}
 										title={t("common.delete")}
 									>
 										{t("common.delete")}
-									</button>
+									</Button>
 								</div>
 							</div>
 						);
@@ -467,24 +469,30 @@ export function RpcLogModal(props: {
 			<div className="rpc-log-modal rpc-log-modal--embedded">
 				<div className="rpc-log-toolbar">
 					<div className="rpc-log-filter-tabs">
-						<button
-							className={directionFilter === "all" ? "active" : ""}
+						<Button
+							variant="outline"
+							size="sm"
+							className={`h-auto px-2 py-1 text-xs shadow-none${directionFilter === "all" ? " active" : ""}`}
 							onClick={() => setDirectionFilter("all")}
 						>
 							{t("rpc.filterAll")}
-						</button>
-						<button
-							className={directionFilter === "send" ? "active" : ""}
+						</Button>
+						<Button
+							variant="outline"
+							size="sm"
+							className={`h-auto px-2 py-1 text-xs shadow-none${directionFilter === "send" ? " active" : ""}`}
 							onClick={() => setDirectionFilter("send")}
 						>
 							{t("rpc.filterSend")}
-						</button>
-						<button
-							className={directionFilter === "recv" ? "active" : ""}
+						</Button>
+						<Button
+							variant="outline"
+							size="sm"
+							className={`h-auto px-2 py-1 text-xs shadow-none${directionFilter === "recv" ? " active" : ""}`}
 							onClick={() => setDirectionFilter("recv")}
 						>
 							{t("rpc.filterReceive")}
-						</button>
+						</Button>
 					</div>
 					<input
 						value={keyword}
@@ -515,12 +523,12 @@ export function RpcLogModal(props: {
 									</span>
 									<span className="log-summary">{log.summary}</span>
 									<div className="rpc-log-entry-actions" onClick={(event) => event.stopPropagation()}>
-										<button onClick={() => navigator.clipboard.writeText(formatRpcLogForCopy(log))}>
+										<Button variant="outline" size="sm" className="h-auto px-2 py-1 text-xs shadow-none" onClick={() => navigator.clipboard.writeText(formatRpcLogForCopy(log))}>
 											{t("common.copy")}
-										</button>
-										<button onClick={() => navigator.clipboard.writeText(jsonText)}>
+										</Button>
+										<Button variant="outline" size="sm" className="h-auto px-2 py-1 text-xs shadow-none" onClick={() => navigator.clipboard.writeText(jsonText)}>
 											{t("rpc.copyJson")}
-										</button>
+										</Button>
 									</div>
 								</div>
 								{expandedId === log.id && log.data != null && (

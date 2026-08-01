@@ -7,6 +7,7 @@ import { DrawerContent } from "../app/AppParts";
 import { LazyWrapper } from "../../hooks/useLazyComponent";
 import type { WorkspaceDrawerPanel } from "../../hooks/useWorkspacePanels";
 import { t } from "../../i18n";
+import { Button } from "../ui-shadcn/button";
 
 // ── port objects (typed loosely — type tightening is a follow-up task) ──
 
@@ -133,12 +134,12 @@ export function DrawerSurface(props: DrawerSurfaceProps) {
           <div className="drawer-header flex h-12 shrink-0 items-center justify-between gap-3 border-b border-border bg-background px-3">
             <strong className="truncate text-sm font-semibold text-foreground">{files.t("app.browser")}</strong>
             <div className="drawer-header-actions flex shrink-0 items-center gap-1">
-              <button type="button" className="inline-grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground" onClick={chrome.onCollapseDrawer} title={files.t("drawer.collapsePanel")}>
+              <Button type="button" variant="ghost" size="icon-sm" className="inline-grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground" onClick={chrome.onCollapseDrawer} title={files.t("drawer.collapsePanel")}>
                 <Minus size={15} />
-              </button>
-              <button type="button" className="inline-grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground" onClick={chrome.onCloseDrawer} title={files.t("common.close")}>
+              </Button>
+              <Button type="button" variant="ghost" size="icon-sm" className="inline-grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground" onClick={chrome.onCloseDrawer} title={files.t("common.close")}>
                 <X size={15} />
-              </button>
+              </Button>
             </div>
           </div>
           <BrowserSurface
@@ -153,12 +154,12 @@ export function DrawerSurface(props: DrawerSurfaceProps) {
           <div className="drawer-header flex h-12 shrink-0 items-center justify-between gap-3 border-b border-border bg-background px-3">
             <strong className="truncate text-sm font-semibold text-foreground">{files.t("drawer.sourceControl")}</strong>
             <div className="drawer-header-actions flex shrink-0 items-center gap-1">
-              <button type="button" className="inline-grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground" onClick={chrome.onCollapseDrawer} title={files.t("drawer.collapsePanel")}>
+              <Button type="button" variant="ghost" size="icon-sm" className="inline-grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground" onClick={chrome.onCollapseDrawer} title={files.t("drawer.collapsePanel")}>
                 <Minus size={15} />
-              </button>
-              <button type="button" className="inline-grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground" onClick={chrome.onCloseDrawer} title={files.t("common.close")}>
+              </Button>
+              <Button type="button" variant="ghost" size="icon-sm" className="inline-grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground" onClick={chrome.onCloseDrawer} title={files.t("common.close")}>
                 <X size={15} />
-              </button>
+              </Button>
             </div>
           </div>
           <div className="git-drawer-stack" data-detail-open={Boolean(git.gitDrawerDiff && git.gitDiffDisplayMode === "drawer")}>

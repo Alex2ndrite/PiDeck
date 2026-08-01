@@ -43,6 +43,11 @@ import {
 } from "../ui-shadcn/dialog";
 import type { FileTreeNode, Project, SessionSummary } from "../../../../shared/types";
 
+// Button 收口状态（P0 UI 统一）：抽屉头部/文件工具行图标按钮已换 shadcn Button（ghost + 原 tailwind class 保留）。
+// 保留原生 button（内容排版/折叠区块语义 + 自定义 CSS 驱动，P2 CSS 收口时迁移）：
+// session-file-summary-header / -row / -toggle（会话文件摘要）、session-card-inner（会话卡片整卡）、
+// session-card-expand-btn（子会话折叠）。
+
 type DiffFileHandler = (path: string, originalContent?: string, content?: string) => void;
 
 type SessionModifiedFile = {
@@ -91,17 +96,21 @@ export function DrawerContent(props: {
 			<div className="drawer-header flex h-12 shrink-0 items-center justify-between gap-3 border-b border-border bg-background px-3">
 				<strong className="truncate text-sm font-semibold text-foreground">{title}</strong>
 				<div className="drawer-header-actions flex shrink-0 items-center gap-1">
-					<button
+					<Button
 						type="button"
+						variant="ghost"
+						size="icon-sm"
 						className={`inline-grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground${props.pinned ? " active bg-accent text-accent-foreground" : ""}`}
 						title={props.pinned ? t("drawer.unpin") : t("drawer.pin")}
 						aria-label={props.pinned ? t("drawer.unpin") : t("drawer.pin")}
 						onClick={props.onTogglePin}
 					>
 						<Pin size={15} />
-					</button>
-					<button
+					</Button>
+					<Button
 						type="button"
+						variant="ghost"
+						size="icon-sm"
 						className="inline-grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground disabled:opacity-40"
 						disabled={props.pinned}
 						title={props.pinned ? t("drawer.pinnedCannotClose") : t("drawer.closePanel")}
@@ -109,7 +118,7 @@ export function DrawerContent(props: {
 						onClick={props.onClose}
 					>
 						<X size={16} />
-					</button>
+					</Button>
 				</div>
 			</div>
 			{props.panel === "files" && (
@@ -197,34 +206,40 @@ function FilesPanel(props: {
 							))}
 						</SelectContent>
 					</Select>
-					<button
+					<Button
 						type="button"
+						variant="ghost"
+						size="icon-sm"
 						className="icon-only inline-grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground"
 						onClick={() => setSortDirection((d) => (d === "asc" ? "desc" : "asc"))}
 						title={sortDirection === "asc" ? t("drawer.fileSortDesc") : t("drawer.fileSortAsc")}
 						aria-label={sortDirection === "asc" ? t("drawer.fileSortDesc") : t("drawer.fileSortAsc")}
 					>
 						{sortDirection === "asc" ? <ArrowUp size={13} /> : <ArrowDown size={13} />}
-					</button>
+					</Button>
 					{props.onOpenFolder && (
-						<button type="button" className="inline-flex h-7 shrink-0 items-center gap-1 whitespace-nowrap rounded-md px-2 text-xs text-muted-foreground hover:bg-accent hover:text-accent-foreground" onClick={props.onOpenFolder} title={t("drawer.openFolder")}>
+						<Button type="button" variant="ghost" size="sm" className="inline-flex h-7 shrink-0 items-center gap-1 whitespace-nowrap rounded-md px-2 text-xs text-muted-foreground hover:bg-accent hover:text-accent-foreground" onClick={props.onOpenFolder} title={t("drawer.openFolder")}>
 							<Folder size={14} />
 							<span className="open-folder-label">{t("drawer.openFolder")}</span>
-						</button>
+						</Button>
 					)}
 					{/* 刷新与全部收起：纯图标，密度对齐 shadcn icon button */}
-					<button
+					<Button
 						type="button"
+						variant="ghost"
+						size="icon-sm"
 						className="icon-only inline-grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground"
 						onClick={props.onRefreshFiles}
 						title={t("common.refresh")}
 						aria-label={t("common.refresh")}
 					>
 						<RefreshCw size={14} />
-					</button>
+					</Button>
 					{props.onCollapseAll && (
-						<button
+						<Button
 							type="button"
+							variant="ghost"
+							size="icon-sm"
 							className="icon-only inline-grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground disabled:opacity-40"
 							onClick={props.onCollapseAll}
 							title={t("drawer.collapseAllDirs")}
@@ -232,7 +247,7 @@ function FilesPanel(props: {
 							disabled={props.expandedDirs.size === 0}
 						>
 							<ChevronsDownUp size={14} />
-						</button>
+						</Button>
 					)}
 				</div>
 			</div>

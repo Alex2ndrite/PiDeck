@@ -335,16 +335,16 @@ export function ResourceGroup(props: {
         </button>
         {props.allAction && (
           <div className="git-resource-group-actions">
-            <button
+            <Button
               type="button"
-              className="git-action-btn git-stage-action"
+              variant="ghost" size="icon-sm" className="git-action-btn git-stage-action size-7"
               aria-label={props.allLabel}
               title={props.allLabel}
               disabled={props.allDisabled}
               onClick={() => props.allAction?.()}
             >
               <GitStageGlyph unstage={props.allLabel === t("git.unstageAll")} />
-            </button>
+            </Button>
           </div>
         )}
         <span className="git-resource-group-count">{props.count}</span>

@@ -148,12 +148,14 @@ export function EnvironmentDialog(props: {
 
 								{/* npm 可用性检测 */}
 								{props.npmAvailable === null && !props.npmChecking && (
-									<button
-										className="env-card-btn"
+									<Button
+										variant="outline"
+										size="sm"
+										className="env-card-btn env-card-btn h-auto rounded-[6px] px-4 py-[7px] text-xs shadow-none"
 										onClick={props.onCheckNpm}
 									>
 										{t("environment.stepInstall")}
-									</button>
+									</Button>
 								)}
 
 								{props.npmChecking && (
@@ -187,8 +189,10 @@ export function EnvironmentDialog(props: {
 											/>
 										</div>
 										<div className="env-install-actions">
-											<button
-												className={`env-card-btn env-mirror-btn ${props.installUseMirror ? "active" : ""}`}
+											<Button
+												variant="outline"
+												size="sm"
+												className={`env-card-btn env-mirror-btn ${props.installUseMirror ? "active" : ""} env-card-btn h-auto rounded-[6px] px-4 py-[7px] text-xs shadow-none`}
 												onClick={props.onToggleInstallMirror}
 												disabled={props.installExecuting}
 												title={t("environment.installUseMirror")}
@@ -196,16 +200,18 @@ export function EnvironmentDialog(props: {
 												{props.installUseMirror
 													? t("environment.installRemoveMirror")
 													: t("environment.installUseMirror")}
-											</button>
-											<button
-												className="env-card-btn primary"
+											</Button>
+											<Button
+												variant="default"
+												size="sm"
+												className="env-card-btn primary env-card-btn h-auto rounded-[6px] px-4 py-[7px] text-xs shadow-none"
 												onClick={props.onExecInstall}
 												disabled={props.installExecuting || !props.installCommand.trim()}
 											>
 												{props.installExecuting
 													? t("environment.installExecuting")
 													: t("environment.installExec")}
-											</button>
+											</Button>
 										</div>
 
 										{/* 安装进行中：显示进度 */}
@@ -224,12 +230,14 @@ export function EnvironmentDialog(props: {
 													<strong>{t("environment.installSuccess")}</strong>
 													<small>{t("environment.installRestartHint")}</small>
 												</div>
-												<button
-													className="env-card-btn primary"
+												<Button
+													variant="default"
+													size="sm"
+													className="env-card-btn primary env-card-btn h-auto rounded-[6px] px-4 py-[7px] text-xs shadow-none"
 													onClick={props.onRestartApp}
 												>
 													{t("environment.restartApp")}
-												</button>
+												</Button>
 											</div>
 										)}
 
@@ -261,8 +269,10 @@ export function EnvironmentDialog(props: {
 									<div className="env-install-npm-missing">
 										<strong>{t("environment.npmNotFoundTitle")}</strong>
 										<small>{t("environment.npmNotFoundDesc")}</small>
-										<button
-											className="env-card-btn"
+										<Button
+											variant="outline"
+											size="sm"
+											className="env-card-btn env-card-btn h-auto rounded-[6px] px-4 py-[7px] text-xs shadow-none"
 											onClick={() =>
 												window.piDesktop.app.openExternal(
 													"https://nodejs.org/zh-cn/download/"
@@ -270,7 +280,7 @@ export function EnvironmentDialog(props: {
 											}
 										>
 											{t("environment.openNodejsOrg")}
-										</button>
+										</Button>
 									</div>
 								)}
 							</div>
@@ -296,8 +306,10 @@ export function EnvironmentDialog(props: {
 										}
 										disabled={props.customPathValidating}
 									/>
-									<button
-										className="env-card-btn primary"
+									<Button
+										variant="default"
+										size="sm"
+										className="env-card-btn primary env-card-btn h-auto rounded-[6px] px-4 py-[7px] text-xs shadow-none"
 										onClick={props.onValidateCustomPath}
 										disabled={
 											!props.customPath.trim() ||
@@ -307,7 +319,7 @@ export function EnvironmentDialog(props: {
 										{props.customPathValidating
 											? t("environment.validatingPath")
 											: t("environment.validatePath")}
-									</button>
+									</Button>
 								</div>
 								{props.customPathResult && (
 									<div
@@ -337,20 +349,25 @@ export function EnvironmentDialog(props: {
 				</div>
 
 				<div className="environment-footer">
-					<button
+					<Button
+					variant="default"
+					size="sm"
+					className="h-auto rounded-[6px] px-4 py-2.5 text-[13px]"
 						onClick={props.onRecheck}
 						disabled={props.checking || props.customPathValidating}
 					>
 						{t("environment.recheck")}
-					</button>
+					</Button>
 					{props.onClearCheckFlag && (
-						<button
-							className="env-clear-flag-btn"
+						<Button
+							variant="ghost"
+							size="sm"
+							className="env-clear-flag-btn h-auto rounded-[6px] px-4 py-2.5 text-[13px]"
 							onClick={props.onClearCheckFlag}
 							title={t("environment.clearCheckFlagHint")}
 						>
 							{t("environment.clearCheckFlag")}
-						</button>
+						</Button>
 					)}
 				</div>
 			

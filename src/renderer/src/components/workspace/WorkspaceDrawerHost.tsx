@@ -2,6 +2,7 @@ import { ChevronLeft } from "lucide-react";
 import type { CSSProperties, ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import { t } from "../../i18n";
+import { Button } from "../ui-shadcn/button";
 import {
   DRAWER_ANIMATION_MS,
   type WorkspaceDrawerPanel,
@@ -87,15 +88,15 @@ export function WorkspaceDrawerHost(props: WorkspaceDrawerHostProps) {
         )}
       </aside>
       {props.panel && props.collapsed && props.onRestore && (
-        <button
+        <Button
           type="button"
-          className="drawer-restore inline-flex size-8 items-center justify-center rounded-md border border-border bg-background text-muted-foreground shadow-sm hover:bg-accent hover:text-accent-foreground"
+          variant="outline" size="icon" className="drawer-restore inline-flex size-8 items-center justify-center rounded-md border border-border bg-background text-muted-foreground shadow-sm hover:bg-accent hover:text-accent-foreground"
           title={t("drawer.expandPanel")}
           aria-label={t("drawer.expandPanel")}
           onClick={props.onRestore}
         >
           <ChevronLeft size={16} />
-        </button>
+        </Button>
       )}
     </>
   );

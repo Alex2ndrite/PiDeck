@@ -347,6 +347,9 @@ export function ProjectResourcesModal(props: {
 
 				<div className="project-resources-toolbar">
 					<div className="project-resources-tabs">
+						{/* 分段 tab 保留原生：下划线式 active 指示是自定义语义，shadcn Tabs 未引入，
+							强行套 Button 会与 .project-resources-tabs 的 border-bottom 样式冲突，
+							待 P1 弹窗体系收口时统一引入 shadcn Tabs 迁移。 */}
 						<button
 							type="button"
 							className={activeTab === "skills" ? "active" : ""}
@@ -369,9 +372,9 @@ export function ProjectResourcesModal(props: {
 							{t("projectResources.promptsTab", { count: prompts.length })}
 						</button>
 					</div>
-					<button type="button" className="project-resources-refresh" onClick={() => void refresh(true)} disabled={loading}>
+					<Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => void refresh(true)} disabled={loading}>
 						{loading ? t("common.loading") : t("common.refresh")}
-					</button>
+					</Button>
 				</div>
 
 				{error && <div className="project-resources-error">{error}</div>}
@@ -382,9 +385,9 @@ export function ProjectResourcesModal(props: {
 							<div className="file-diff-header">
 								<span className="file-diff-header-file">{editingSkill.name} · SKILL.md</span>
 								<div className="file-diff-header-actions">
-									<button type="button" onClick={() => setEditingSkill(null)} aria-label={t("common.close")} className="config-icon-btn">
+									<Button variant="ghost" size="icon-sm" onClick={() => setEditingSkill(null)} aria-label={t("common.close")} title={t("common.close")}>
 										<X size={16} />
-									</button>
+									</Button>
 								</div>
 							</div>
 							{editLoading ? (
@@ -443,12 +446,13 @@ export function ProjectResourcesModal(props: {
 													autoFocus
 													disabled={renameSkillBusy}
 												/>
-												<button className="config-icon-btn" onClick={() => void renameSkillConfirm(skill, renameSkillValue)} disabled={renameSkillBusy} title={t("common.confirm")}>
+												{/* 内联行内按钮用 icon-xs（24px），避免 icon-sm 32px 撑高 28px 输入行 */}
+												<Button variant="ghost" size="icon-xs" onClick={() => void renameSkillConfirm(skill, renameSkillValue)} disabled={renameSkillBusy} title={t("common.confirm")}>
 													<Check size={14} strokeWidth={2} />
-												</button>
-												<button className="config-icon-btn" onClick={() => setRenamingSkill(null)} disabled={renameSkillBusy} title={t("common.cancel")}>
+												</Button>
+												<Button variant="ghost" size="icon-xs" onClick={() => setRenamingSkill(null)} disabled={renameSkillBusy} title={t("common.cancel")}>
 													<X size={14} strokeWidth={2} />
-												</button>
+												</Button>
 											</div>
 										) : (
 											<strong>{skill.name}</strong>
@@ -464,35 +468,41 @@ export function ProjectResourcesModal(props: {
 								<small>{skill.sourceLabel} · {skill.path}</small>
 								</button>
 								<div className="skill-card-actions project-resource-actions">
-									<button
-										className="config-icon-btn"
+									{/* hover 显隐由 .project-resource-actions 控制；换 shadcn ghost 图标按钮统一尺寸 */}
+									<Button
+										variant="ghost"
+										size="icon-sm"
 										onClick={() => void openEditor(skill)}
 										title={t("common.edit")}
 									>
 										<Pencil size={14} strokeWidth={1.8} />
-									</button>
-									<button
-										className="config-icon-btn"
+									</Button>
+									<Button
+										variant="ghost"
+										size="icon-sm"
 										onClick={() => { setRenamingSkill(skill.id); setRenameSkillValue(skill.name); }}
 										title={t("common.rename")}
 									>
 										<FileEdit size={14} strokeWidth={1.8} />
-									</button>
-									<button
-										className="config-icon-btn"
+									</Button>
+									<Button
+										variant="ghost"
+										size="icon-sm"
 										onClick={() => void toggleSkill(skill)}
 										title={skill.enabled ? t("common.disable") : t("common.enabled")}
 										style={skill.enabled ? { color: "var(--color-accent)" } : undefined}
 									>
 										{skill.enabled ? <ToggleRight size={18} strokeWidth={1.8} /> : <ToggleLeft size={18} strokeWidth={1.8} />}
-									</button>
-									<button
-										className="config-icon-btn danger"
+									</Button>
+									<Button
+										variant="ghost"
+										size="icon-sm"
+										className="text-destructive hover:bg-destructive/10 hover:text-destructive"
 										onClick={() => setDeleteTarget({ kind: "skill", item: skill })}
 										title={t("common.delete")}
 									>
 										<Trash2 size={14} strokeWidth={1.8} />
-									</button>
+									</Button>
 								</div>
 							</article>
 						))}
@@ -524,22 +534,25 @@ export function ProjectResourcesModal(props: {
 									<small>{extension.path}</small>
 								</div>
 								<div className="skill-card-actions project-resource-actions">
-									<button
-										className="config-icon-btn"
+									<Button
+										variant="ghost"
+										size="icon-sm"
 										onClick={() => void toggleExtension(extension)}
 										title={extension.enabled !== false ? t("common.disable") : t("common.enabled")}
 										style={extension.enabled !== false ? { color: "var(--color-accent)" } : undefined}
 									>
 										{extension.enabled !== false ? <ToggleRight size={18} strokeWidth={1.8} /> : <ToggleLeft size={18} strokeWidth={1.8} />}
-									</button>
-									<button
-										className="config-icon-btn danger"
+									</Button>
+									<Button
+										variant="ghost"
+										size="icon-sm"
+										className="text-destructive hover:bg-destructive/10 hover:text-destructive"
 										onClick={() => setDeleteTarget({ kind: "extension", item: extension })}
 										disabled={!extension.path}
 										title={t("common.delete")}
 									>
 										<Trash2 size={14} strokeWidth={1.8} />
-									</button>
+									</Button>
 								</div>
 							</article>
 						))}
@@ -551,9 +564,9 @@ export function ProjectResourcesModal(props: {
 							<div className="file-diff-header">
 								<span className="file-diff-header-file">{editingProjectPrompt.name}.md</span>
 								<div className="file-diff-header-actions">
-									<button type="button" onClick={cancelProjectPromptEditor} aria-label={t("common.close")} className="config-icon-btn">
+									<Button variant="ghost" size="icon-sm" onClick={cancelProjectPromptEditor} aria-label={t("common.close")} title={t("common.close")}>
 										<X size={16} />
-									</button>
+									</Button>
 								</div>
 							</div>
 							{editProjectPromptLoading ? (
@@ -595,6 +608,7 @@ export function ProjectResourcesModal(props: {
 						<ResourceListEmpty loading={promptsLoading} empty={prompts.length === 0} label={t("projectResources.emptyPrompts")} />
 						{prompts.map((prompt) => (
 							<article key={prompt.path} className="project-resource-card">
+								{/* 整卡可点击区保留原生 button：内容是 title/desc 排版容器，非图标按钮 */}
 								<button
 									type="button"
 									className="project-resource-info"
@@ -608,20 +622,23 @@ export function ProjectResourcesModal(props: {
 									<small>{prompt.path}</small>
 								</button>
 								<div className="skill-card-actions project-resource-actions">
-									<button
-										className="config-icon-btn"
+									<Button
+										variant="ghost"
+										size="icon-sm"
 										onClick={() => void openProjectPromptEditor(prompt)}
 										title={t("common.edit")}
 									>
 										<Pencil size={14} strokeWidth={1.8} />
-									</button>
-									<button
-										className="config-icon-btn danger"
+									</Button>
+									<Button
+										variant="ghost"
+										size="icon-sm"
+										className="text-destructive hover:bg-destructive/10 hover:text-destructive"
 										onClick={() => setDeleteTarget({ kind: "prompt", item: prompt })}
 										title={t("common.delete")}
 									>
 										<Trash2 size={14} strokeWidth={1.8} />
-									</button>
+									</Button>
 								</div>
 							</article>
 						))}

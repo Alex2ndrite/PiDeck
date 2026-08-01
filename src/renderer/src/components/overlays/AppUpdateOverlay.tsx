@@ -78,9 +78,9 @@ function UpdateDialog(props: {
 					<div className="update-notes markdown-body"><ReactMarkdown remarkPlugins={[remarkGfm]}>{props.info.releaseNotes.trim() || t("update.noReleaseNotes")}</ReactMarkdown></div>
 				</div>
 				<div className="update-actions">
-					<button onClick={props.onOpenRelease}>{t("update.openRelease")}</button>
-					<button onClick={props.onBrowserDownload}>{t("update.browserDownload")}</button>
-					{props.downloadedPath ? <button className="primary" onClick={props.onInstall}>{t("update.installDownloaded")}</button> : <button className="primary" disabled={props.checking || props.downloading || !props.info.recommendedAsset} onClick={props.onDownload}>{props.downloading ? t("update.downloading") : t("update.downloadInApp")}</button>}
+					<Button variant="outline" size="sm" className="h-auto px-3 py-2 text-[13px] shadow-none" onClick={props.onOpenRelease}>{t("update.openRelease")}</Button>
+					<Button variant="outline" size="sm" className="h-auto px-3 py-2 text-[13px] shadow-none" onClick={props.onBrowserDownload}>{t("update.browserDownload")}</Button>
+					{props.downloadedPath ? <Button variant="default" size="sm" className="h-auto px-3 py-2 text-[13px] shadow-none" onClick={props.onInstall}>{t("update.installDownloaded")}</Button> : <Button variant="default" size="sm" className="h-auto px-3 py-2 text-[13px] shadow-none" disabled={props.checking || props.downloading || !props.info.recommendedAsset} onClick={props.onDownload}>{props.downloading ? t("update.downloading") : t("update.downloadInApp")}</Button>}
 				</div>
 			</section>
 			</DialogContent>
@@ -110,7 +110,7 @@ export function AppUpdateOverlay({ controller, releasesUrl, openExternal, upToDa
 					</DialogHeader>
 				<section className="update-modal update-modal--embedded update-error-modal">
 					<div className="update-body"><p className="update-version-line">{t("update.checkFailedDescription")}</p><div className="update-error-detail">{t("update.errorInfo", { message: controller.error })}</div><p className="update-asset-line">{t("update.manualReleaseHint")}<br /><span>{releasesUrl}</span></p></div>
-					<div className="update-actions"><button onClick={controller.clear}>{t("common.close")}</button><button className="primary" onClick={() => void openExternal(releasesUrl, true)}>{t("update.openReleasePage")}</button></div>
+					<div className="update-actions"><Button variant="outline" size="sm" className="h-auto px-3 py-2 text-[13px] shadow-none" onClick={controller.clear}>{t("common.close")}</Button><Button variant="default" size="sm" className="h-auto px-3 py-2 text-[13px] shadow-none" onClick={() => void openExternal(releasesUrl, true)}>{t("update.openReleasePage")}</Button></div>
 				</section>
 				</DialogContent>
 			</Dialog>
@@ -133,7 +133,7 @@ export function AppUpdateOverlay({ controller, releasesUrl, openExternal, upToDa
 					</DialogHeader>
 				<section className="update-modal update-modal--embedded update-uptodate-modal">
 					<div className="update-body"><p className="update-version-line">{t("update.upToDateMessage", { version: upToDateVersion })}</p></div>
-					<div className="update-actions"><button onClick={onDismissUpToDate}>{t("common.close")}</button><button onClick={() => void openExternal(releasesUrl, true)}>{t("update.openReleasePage")}</button></div>
+					<div className="update-actions"><Button variant="outline" size="sm" className="h-auto px-3 py-2 text-[13px] shadow-none" onClick={onDismissUpToDate}>{t("common.close")}</Button><Button variant="outline" size="sm" className="h-auto px-3 py-2 text-[13px] shadow-none" onClick={() => void openExternal(releasesUrl, true)}>{t("update.openReleasePage")}</Button></div>
 				</section>
 				</DialogContent>
 			</Dialog>

@@ -247,25 +247,31 @@ export function MultiSelectModal(props: {
 							{t("app.multiSelectCount", { count: selectedCount })}
 						</span>
 						<div className="multi-select-bulk-actions">
-							<button
-								className="multi-select-bulk-btn"
+							<Button
+								variant="ghost"
+								size="sm"
+								className="multi-select-bulk-btn h-auto px-2 py-0.5 text-xs"
 								onClick={selectAll}
 								disabled={!totalCount}
 							>
 								{t("common.selectAll")}
-							</button>
-							<button
-								className="multi-select-bulk-btn"
+							</Button>
+							<Button
+								variant="ghost"
+								size="sm"
+								className="multi-select-bulk-btn h-auto px-2 py-0.5 text-xs"
 								onClick={deselectAll}
 								disabled={!selectedCount}
 							>
 								{t("common.deselectAll")}
-							</button>
+							</Button>
 						</div>
 					</div>
 					<div className="multi-select-modal-footer-bottom">
-						<button
-							className={`multi-select-action-btn${copying === "text" ? " copying" : ""}`}
+						<Button
+							variant="outline"
+							size="sm"
+							className={`multi-select-action-btn${copying === "text" ? " copying" : ""} h-auto px-4 py-1.5 text-xs shadow-none rounded-[6px]`}
 							disabled={!selectedCount || !!copying}
 							onClick={() => handleCopy("text")}
 						>
@@ -274,9 +280,11 @@ export function MultiSelectModal(props: {
 							) : (
 								t("app.shareAsText")
 							)}
-						</button>
-						<button
-							className={`multi-select-action-btn${copying === "markdown" ? " copying" : ""}`}
+						</Button>
+						<Button
+							variant="outline"
+							size="sm"
+							className={`multi-select-action-btn${copying === "markdown" ? " copying" : ""} h-auto px-4 py-1.5 text-xs shadow-none rounded-[6px]`}
 							disabled={!selectedCount || !!copying}
 							onClick={() => handleCopy("markdown")}
 						>
@@ -285,9 +293,11 @@ export function MultiSelectModal(props: {
 							) : (
 								t("app.shareAsMarkdown")
 							)}
-						</button>
-						<button
-							className={`multi-select-action-btn${copying === "image" ? " copying" : ""}`}
+						</Button>
+						<Button
+							variant="outline"
+							size="sm"
+							className={`multi-select-action-btn${copying === "image" ? " copying" : ""} h-auto px-4 py-1.5 text-xs shadow-none rounded-[6px]`}
 							disabled={!selectedCount || !!copying}
 							onClick={() => handleCopy("image")}
 						>
@@ -296,14 +306,16 @@ export function MultiSelectModal(props: {
 							) : (
 								t("app.shareAsImage")
 							)}
-						</button>
-						<button
-							className="multi-select-action-btn primary"
+						</Button>
+						<Button
+							variant="default"
+							size="sm"
+							className="multi-select-action-btn primary h-auto px-4 py-1.5 text-xs shadow-none rounded-[6px]"
 							onClick={props.onClose}
 							disabled={!!copying}
 						>
 							{t("app.multiSelectCancel")}
-						</button>
+						</Button>
 					</div>
 				</footer>
 			</DialogContent>

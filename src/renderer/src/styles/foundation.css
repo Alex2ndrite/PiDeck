@@ -1008,16 +1008,6 @@ select:focus-visible {
   -webkit-app-region: no-drag;
 }
 /* The sidebar restore control belongs to the titlebar, not the sidebar content. */
-.window-controls-left {
-  position: fixed;
-  top: 0;
-  left: 0;
-  z-index: 920;
-  display: grid;
-  grid-template-columns: repeat(1, 50px);
-  height: var(--window-drag-height);
-  -webkit-app-region: no-drag;
-}
 .window-control {
   border: 0;
   border-radius: 0;
@@ -1428,22 +1418,6 @@ select:focus-visible {
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--color-text-primary) 8%, transparent);
   color: var(--color-text-tertiary);
-}
-.chat-agent-id {
-  display: inline-flex;
-  align-items: center;
-  height: 28px;
-  padding: 0 10px;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-md);
-  background: var(--color-chat-card-bg);
-  color: var(--color-text-primary);
-  flex: 0 0 auto;
-  font-family: var(--font-family-business);
-  font-size: var(--font-size-caption);
-  line-height: var(--line-height-caption);
-  white-space: nowrap;
-  cursor: default;
 }
 /* 标题后的压缩次数小徽标：只显示数字，带边框，与 session-source-badge 等状态徽标视觉一致；
    hover 通过 title 提示“压缩了几次，仅显示压缩后的会话记录”。 */
@@ -2277,22 +2251,6 @@ body.is-resizing .splitter::before {
 .chat-header strong {
   /* 标题排版由 SessionHeader Tailwind 承担 */
 }
-.chat-agent-id {
-  display: inline-flex;
-  align-items: center;
-  height: 28px;
-  padding: 0 10px;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-pill);
-  background: var(--color-chat-card-bg);
-  color: var(--color-text-primary);
-  flex: 0 0 auto;
-  font-family: var(--font-family-business);
-  font-size: var(--font-size-caption);
-  line-height: var(--line-height-caption);
-  white-space: nowrap;
-  cursor: default;
-}
 /* 标题后的压缩次数小徽标：只显示数字，带边框，与 session-source-badge 等状态徽标视觉一致；
    hover 通过 title 提示“压缩了几次，仅显示压缩后的会话记录”。 */
 .compaction-count-badge {
@@ -2791,14 +2749,6 @@ body.is-resizing .splitter::before {
 }
 
 /* ---- Branch custom dropdown ---- */
-.branch-label {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: inherit;
-  font-weight: inherit;
-  line-height: inherit;
-}
 .branch-chevron.open {
   transform: rotate(180deg);
 }
