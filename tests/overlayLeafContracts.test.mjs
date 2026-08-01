@@ -329,12 +329,12 @@ test("allowOther renders a custom input and sends its value through the responde
   };
   cursor = 0;
   const firstTree = runtime.SessionRuntimeUiOverlay(props);
-  const input = walk(firstTree, (node) => node.props?.className === "ask-inline-bar-custom-field")[0];
+  const input = walk(firstTree, (node) => node.props?.className?.split(" ")?.includes("h-9") && typeof node.props?.value === "string")[0];
   assert.ok(input, "allowOther custom field must render");
   input.props.onChange({ target: { value: "custom answer" } });
   cursor = 0;
   const secondTree = runtime.SessionRuntimeUiOverlay(props);
-  const submit = walk(secondTree, (node) => node.props?.className === "ask-inline-bar-submit-btn")[0];
+  const submit = walk(secondTree, (node) => node.props?.variant === "default" && node.props?.disabled !== undefined)[0];
   assert.ok(submit, "allowOther submit button must render");
   assert.equal(typeof submit.props.onClick, "function");
   await submit.props.onClick();

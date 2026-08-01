@@ -49,7 +49,7 @@ test("session UI requests remain generation-bound but render above the composer"
   assert.match(runtimeInjector, /sessionId: currentSessionId/);
   assert.match(runtimeInjector, /runtimeGeneration: latest\.runtimeGeneration/);
   assert.match(runtimeInjector, /<SessionRuntimeUiOverlay/);
-  assert.match(runtimeUi, /className="ask-inline-bar"/);
+  assert.match(runtimeUi, /ask-inline-bar rounded-t-md/);  // 迁移后布局 utility 化，锚点类保留
   assert.doesNotMatch(runtimeUi, /className="modal-backdrop ask-dialog-backdrop"/);
   assert.match(composer, /\{props\.runtimeUi\}/);
 });

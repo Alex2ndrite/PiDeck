@@ -187,7 +187,7 @@ class SettingsModalErrorBoundary extends Component<
 		// #115：错误兜底直接走 shadcn Dialog 外壳
 		return (
 			<Dialog open onOpenChange={(next) => !next && this.props.onClose()}>
-			<DialogContent showCloseButton={false} className={cn("flex flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(1300px,calc(100vw-48px))] h-[min(850px,calc(100vh-48px))]", "settings-modal")}>
+			<DialogContent showCloseButton={false} size="xl" className={cn("flex flex-col gap-0 overflow-hidden p-0", "settings-modal")}>
 				<DialogHeader className="flex-row items-center justify-between px-4 py-3">
 					<DialogTitle>{t("settings.loadFailed")}</DialogTitle>
 					<DialogClose asChild>
@@ -490,7 +490,7 @@ function SettingsModalContent(props: SettingsModalProps) {
 
 		return (
 		<Dialog open onOpenChange={(next) => !next && handleClose()}>
-			<DialogContent showCloseButton={false} className={cn("flex flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(1300px,calc(100vw-48px))] h-[min(850px,calc(100vh-48px))]", "settings-modal")}>
+			<DialogContent showCloseButton={false} size="xl" className={cn("flex flex-col gap-0 overflow-hidden p-0", "settings-modal")}>
 				<DialogHeader className="flex-row items-center justify-between px-4 py-3">
 					<DialogTitle>{t("settings.title")}</DialogTitle>
 					<div className="flex items-center gap-2">

@@ -79,6 +79,8 @@ collapsible/resizable/scroll-area/alert-dialog/sonner/input/textarea/confirm-dia
 迁移中的坑：组合变体（`.config-im-bot-card.connected` 覆盖基础类 border-color）会被 utility 层覆盖，
 必须在 JSX 同步改为 utility 条件类；后代选择器（`.config-form-row label`、`.config-test-result-row > span`）
 会放大迁移面，留待手动批次。
+| ask-inline-bar（内联提问条 + batch 表单） | 54 处 | 42 条/277 行 | 提问条（含 batch tabs/review/选项按钮/输入框），option/tab 状态族（selected/yes/no/active/answered）锚点保留；2 个测试断言同步 |
+
 | archived-message | 4 处 | 5 条 | 压缩归档消息列表（角色条件色） |
 | markdown-body（保留决策） | — | — | 42 条规则**保留**：react-markdown 库生成 p/code/table 等元素无法加 utility，内容排版体系用 CSS 是正确架构（shadcn prose 同理）；迁移无收益且高风险 |
 
@@ -172,10 +174,21 @@ collapsible/resizable/scroll-area/alert-dialog/sonner/input/textarea/confirm-dia
 - 禁止批量替换多个域后一次性验证（定位回归成本高）
 - 目标：自定义 CSS 16.5k 行 → ≤8k 行；迁移完成的域删除对应 CSS 规则
 
-## 6. 后续工作（P1/P3）
+## 6. 收尾状态（P1/P3 已完成）
 
-- **P1 弹窗体系收口**：1300×850 大弹窗尺寸重复 4 处（settings/browser/codex-import/project-resources），
-  抽 shadcn Dialog `size="xl"` 变体；引入 shadcn Tabs 替换 4 个原生 tab 导航
-- **P3 依赖清理**：移除 `@radix-ui/react-dialog`（渲染层已 0 引用，全部走 `radix-ui` 聚合包）
-- **P3 规范固化**：AGENTS.md 增加「新样式一律走 Tailwind utility + shadcn 组合，禁止新增手写 CSS class
+- **P1 弹窗体系收口 ✅**：`DialogContent` 新增 `size="xl"` 变体（1300×850），4 处内联尺寸
+  （settings×2 / SessionReferenceModal / 项目列表）统一走变体
+- **P3 依赖清理 ✅**：移除 `@radix-ui/react-dialog`（渲染层 0 引用，走 `radix-ui` 聚合包）、
+  `@electron-toolkit/preload`（preload 只用 electron+shared）、`remark-highlight-mark` 与
+  `unist-util-visit`（无源码引用，lock 中为传递依赖保留）
+- **P3 规范固化 ✅**：AGENTS.md「新样式一律走 Tailwind utility + shadcn 组合，禁止新增手写 CSS class
   （token 与 keyframes 除外）」
+- **仍开放（低优先）**：shadcn Tabs 替换原生 tab 导航（4 处）；UI 2.0 全面目测验收一轮
+
+## 7. 迁移终态统计
+
+- 手写 CSS：**16,813 → 13,325 行**（-3,488，-21%）；迁移全程无视觉回归门禁（stylesSyntax/暗色 token 断言）
+- timeline 域（优先级 4）主体完成：queued/multi-select/tool-card/session-manager/卡片组/
+  turn-row/user-turn/archived-message/ask-inline-bar 共 **270+ 处 JSX** 迁移，**170+ 条规则**清理
+- **保留（合理）**：markdown-body 42 条内容排版规则（react-markdown 库渲染元素无法 utility 化，
+  与 shadcn prose 同理）；git 域 9 个活类锚点；诊断卡 tone-* / ask option / batch-tab 状态族锚点

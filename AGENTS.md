@@ -174,6 +174,7 @@ src/
 - 图标统一 `lucide-react`，不用 emoji 充当功能图标；品牌 Logo 用 `LogoMark`（`AppParts.tsx`），不用通用图标替代。
 - 颜色/圆角/字号优先复用 `styles/` 里的语义 token，不写死色值；暗色模式必须自然适配。
 - 布局保持桌面工作台结构（左列表 / 中会话 / 右抽屉 / 底终端），不引入营销页式大改版。
+- **新样式一律走 Tailwind utility + shadcn 组合**：禁止新增手写 CSS class（token 定义与 keyframes 除外）；动态状态色通过保留锚点类（如 `tone-*`/`status-*`）+ 状态规则实现，不写新的状态 class。
 
 ## Issue 修复流程
 

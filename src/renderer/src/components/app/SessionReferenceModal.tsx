@@ -125,7 +125,7 @@ export function SessionReferenceModal(props: {
 		<Dialog open onOpenChange={(next) => !next && props.onClose()}>
 			<DialogContent
 				showCloseButton={false}
-				className={cn("flex flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(800px,calc(100vw-48px))]", "h-[min(850px,calc(100vh-48px))] w-[min(1300px,calc(100vw-48px))] max-w-[min(1300px,calc(100vw-48px))] flex flex-col overflow-hidden rounded-lg border border-border bg-bg-panel shadow-[var(--shadow-xl)] animate-in fade-in-0 slide-in-from-bottom-2 duration-150 session-ref-modal")}
+				size="xl" className={cn("flex flex-col gap-0 overflow-hidden rounded-lg border border-border bg-bg-panel p-0 shadow-[var(--shadow-xl)] animate-in fade-in-0 slide-in-from-bottom-2 duration-150 session-ref-modal")}
 			>
 				<DialogHeader className="flex-row items-center justify-between px-4 py-3">
 					<DialogTitle>{`${t("sessionRef.title")}: ${props.session.name ?? props.session.filePath}`}</DialogTitle>

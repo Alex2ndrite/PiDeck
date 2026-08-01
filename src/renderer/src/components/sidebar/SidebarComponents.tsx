@@ -86,7 +86,7 @@ export function SessionManagerModal(props: {
 
 	return (
 		<Dialog open onOpenChange={(next) => !next && props.onClose()}>
-			<DialogContent showCloseButton={false} className={cn("flex flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(1300px,calc(100vw-48px))] h-[min(850px,calc(100vh-48px))]")}>
+			<DialogContent showCloseButton={false} size="xl" className={cn("flex flex-col gap-0 overflow-hidden p-0")}>
 				<DialogHeader className="flex-row items-center justify-between px-4 py-3">
 					<DialogTitle>{t("menu.manageSessions")}</DialogTitle>
 					<div className="flex items-center gap-2">

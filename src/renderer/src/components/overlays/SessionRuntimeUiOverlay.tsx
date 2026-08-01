@@ -141,16 +141,15 @@ function BatchAskInlineBar(props: {
 	if (total === 0) return null;
 
 	return (
-		<div className="ask-inline-bar ask-inline-bar--batch">
-			<div className="ask-inline-bar-header">
+		<div className="ask-inline-bar rounded-t-md border border-b-0 border-border-strong bg-[color:color-mix(in_srgb,var(--color-accent)_6%,var(--color-bg-panel))] p-3 max-h-[55vh] overflow-y-auto">
+			<div className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-[var(--color-accent)]">
 				<MessageCircle size={14} aria-hidden="true" />
 				<span>{t("ask.batchTitle", { count: total })}</span>
-				<span className="ask-inline-bar-batch-progress">
+				<span className="ml-auto text-[11px] font-normal text-text-tertiary">
 					{t("ask.batchProgress", { done: answeredCount, total })}
 				</span>
 				<Button variant="ghost" size="icon"
-					className="ask-inline-bar-close"
-					aria-label={t("common.close")} title={t("common.close")}
+										aria-label={t("common.close")} title={t("common.close")}
 					disabled={props.responding}
 					onClick={props.onCancel}
 				>
@@ -158,7 +157,7 @@ function BatchAskInlineBar(props: {
 				</Button>
 			</div>
 
-			<div className="ask-batch-tabs" role="tablist">
+			<div className="mb-2 flex gap-1 overflow-x-auto border-b border-border-subtle pb-2" role="tablist">
 				{questions.map((question, index) => {
 					const answered = answers[question.id] !== undefined;
 					const active = index === currentTab;
@@ -168,13 +167,13 @@ function BatchAskInlineBar(props: {
 							variant="ghost"
 							role="tab"
 							aria-selected={active}
-							className={`ask-batch-tab${active ? " active" : ""}${answered ? " answered" : ""}`}
+							className={`ask-batch-tab inline-flex h-[26px] flex-none items-center gap-1 rounded-md border border-border-subtle bg-transparent px-2 font-sans text-[11px] whitespace-nowrap text-text-secondary transition-colors hover:border-border-strong hover:text-text-primary focus-visible:outline-[var(--focus-ring)] focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-55${active ? " active" : ""}${answered ? " answered" : ""}`}
 							disabled={props.responding}
 							onClick={() => setCurrentTab(index)}
 						>
-							<span className="ask-batch-tab-num">{index + 1}</span>
-							<span className="ask-batch-tab-label">{question.question}</span>
-							{answered ? <Check size={11} className="ask-batch-tab-check" aria-hidden="true" /> : null}
+							<span className="min-w-[14px] text-center font-mono font-semibold">{index + 1}</span>
+							<span className="max-w-[14ch] truncate">{question.question}</span>
+							{answered ? <Check size={11} className="shrink-0 text-[var(--color-success)]" aria-hidden="true" /> : null}
 						</Button>
 					);
 				})}
@@ -183,7 +182,7 @@ function BatchAskInlineBar(props: {
 						variant="ghost"
 						role="tab"
 						aria-selected={reviewTab}
-						className={`ask-batch-tab ask-batch-tab--review${reviewTab ? " active" : ""}`}
+						className={`ask-batch-tab ask-batch-tab--review border-[var(--color-warning)] text-[var(--color-warning)] inline-flex h-[26px] flex-none items-center gap-1 rounded-md px-2 font-sans text-[11px] whitespace-nowrap transition-colors disabled:cursor-not-allowed disabled:opacity-55${reviewTab ? " active" : ""}`}
 						disabled={props.responding}
 						onClick={() => setCurrentTab(total)}
 					>
@@ -193,23 +192,23 @@ function BatchAskInlineBar(props: {
 				) : null}
 			</div>
 
-			<div className="ask-inline-bar-body">
+			<div>
 				{reviewTab ? (
-					<div className="ask-batch-review">
-						<div className="ask-batch-review-title">
+					<div className="flex flex-col gap-2">
+						<div className="inline-flex items-center gap-1 text-sm font-semibold text-text-primary">
 							<ClipboardList size={16} aria-hidden="true" />
 							<span>{t("ask.batchReviewTitle")}</span>
 						</div>
-						<div className="ask-batch-review-hint">{t("ask.batchReviewHint")}</div>
-						<div className="ask-batch-review-list">
+						<div className="text-xs text-text-tertiary">{t("ask.batchReviewHint")}</div>
+						<div className="flex max-h-[240px] flex-col gap-1 overflow-y-auto rounded-sm bg-bg-muted p-2">
 							{questions.map((question, index) => {
 								const value = answers[question.id];
 								const answered = value !== undefined;
 								return (
-									<div key={question.id} className="ask-batch-review-item">
-										<span className="ask-batch-review-num">{index + 1}</span>
-										<span className="ask-batch-review-q">{question.question}</span>
-										<span className={`ask-batch-review-a${answered ? " answered" : " unanswered"}`}>
+									<div key={question.id} className="grid grid-cols-[20px_minmax(0,1fr)_minmax(0,30ch)] items-start gap-2 text-xs leading-[1.6] text-text-primary">
+										<span className="font-mono font-semibold">{index + 1}</span>
+										<span className="min-w-0 [overflow-wrap:anywhere]">{question.question}</span>
+										<span className={`min-w-0 text-right font-mono font-medium [overflow-wrap:anywhere]${answered ? " answered" : " unanswered"}`}>
 											{answered ? answerLabels[question.id] ?? batchAnswerLabel(value) : "-"}
 										</span>
 									</div>
@@ -217,11 +216,10 @@ function BatchAskInlineBar(props: {
 							})}
 						</div>
 						{!allAnswered ? (
-							<div className="ask-batch-review-warning">{t("ask.batchIncomplete")}</div>
+							<div className="rounded-sm bg-[color:color-mix(in_srgb,var(--color-warning)_10%,transparent)] p-2 text-xs text-[var(--color-warning)]">{t("ask.batchIncomplete")}</div>
 						) : null}
 						<Button
-							className="ask-batch-submit-all-btn"
-							variant="default"
+														variant="default"
 							disabled={!allAnswered || props.responding}
 							onClick={submitAnswers}
 						>
@@ -275,16 +273,16 @@ function BatchQuestion(props: {
 }) {
 	const { question } = props;
 	return (
-		<div className="ask-batch-question">
-			<div className="ask-batch-question-num">
+		<div className="flex flex-col gap-2">
+			<div className="font-mono text-xs font-semibold text-text-tertiary">
 				{t("common.details")} {props.questionIndex + 1}/{props.total}
 			</div>
-			<div className="ask-inline-bar-question">{question.question}</div>
+			<div className="mb-3 text-sm font-medium leading-[1.6] break-words text-text-primary">{question.question}</div>
 			<div className="ask-batch-question-body">
 				{question.type === "confirm" ? (
-					<div className="ask-inline-bar-options ask-inline-bar-options-confirm">
+					<div className="flex gap-2">
 						<Button
-							className={`ask-inline-bar-option ask-inline-bar-option-yes${props.answer === true ? " selected" : ""}`}
+							className={`ask-inline-bar-option ask-inline-bar-option-yes flex-none items-center justify-center whitespace-nowrap${props.answer === true ? " selected" : ""}`}
 							variant="ghost"
 							disabled={props.responding}
 							onClick={() => props.onAnswer(true, t("common.true"))}
@@ -292,7 +290,7 @@ function BatchQuestion(props: {
 							{t("common.true")}
 						</Button>
 						<Button
-							className={`ask-inline-bar-option ask-inline-bar-option-no${props.answer === false ? " selected" : ""}`}
+							className={`ask-inline-bar-option ask-inline-bar-option-no flex-none items-center justify-center whitespace-nowrap${props.answer === false ? " selected" : ""}`}
 							variant="ghost"
 							disabled={props.responding}
 							onClick={() => props.onAnswer(false, t("common.false"))}
@@ -302,7 +300,7 @@ function BatchQuestion(props: {
 					</div>
 				) : question.type === "select" && question.options?.length ? (
 					<>
-						<div className="ask-inline-bar-options">
+						<div className="flex max-h-[180px] flex-wrap gap-2 overflow-y-auto pr-1">
 							{question.options.map((option, index) => {
 								const label = typeof option === "string" ? option : option.label;
 								const value = typeof option === "string" ? option : option.value ?? label;
@@ -310,21 +308,21 @@ function BatchQuestion(props: {
 								return (
 									<Button
 										key={`${question.id}:${index}`}
-										className={`ask-inline-bar-option${props.answer === value ? " selected" : ""}`}
+										className={`ask-inline-bar-option min-h-[30px] flex-1 max-w-full items-start justify-start px-3.5 py-1.5 text-left break-words whitespace-normal${props.answer === value ? " selected" : ""}`}
 										variant="ghost"
 										disabled={props.responding}
 										onClick={() => props.onAnswer(value, label)}
 									>
-										<span className="ask-inline-bar-option-marker">{label}</span>
-										{description ? <span className="ask-inline-bar-option-desc">{description}</span> : null}
+										<span className="text-[13px] font-medium leading-[1.6] text-text-primary">{label}</span>
+										{description ? <span className="text-xs font-normal text-text-tertiary">{description}</span> : null}
 									</Button>
 								);
 							})}
 						</div>
 						{question.allowOther !== false ? (
-							<div className="ask-inline-bar-custom-input">
+							<div className="flex w-full items-center gap-2">
 								<input
-									className="ask-inline-bar-custom-field"
+									className="h-9 flex-1 rounded-sm border border-border-subtle bg-bg-panel px-2.5 text-[13px] text-text-primary outline-none transition-[border-color,box-shadow] duration-150 focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]"
 									value={props.inputValue}
 									placeholder={question.placeholder || t("ask.customPlaceholder")}
 									disabled={props.responding}
@@ -337,8 +335,7 @@ function BatchQuestion(props: {
 									}}
 								/>
 								<Button
-									className="ask-inline-bar-submit-btn"
-									variant="default"
+																		variant="default"
 									disabled={props.responding || !props.inputValue.trim()}
 									onClick={props.onSubmitInput}
 								>
@@ -349,7 +346,7 @@ function BatchQuestion(props: {
 					</>
 				) : question.type === "editor" ? (
 					<textarea
-						className="ask-inline-bar-input ask-batch-textarea"
+						className="h-auto min-h-[80px] w-full flex-1 resize-y rounded-sm border border-border-subtle bg-bg-panel p-2 text-[13px] leading-[1.6] text-text-primary outline-none transition-[border-color,box-shadow] duration-150 focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]"
 						value={props.inputValue}
 						placeholder={question.placeholder || t("ask.editorPlaceholder")}
 						disabled={props.responding}
@@ -359,9 +356,9 @@ function BatchQuestion(props: {
 						}}
 					/>
 				) : (
-					<div className="ask-inline-bar-input-area">
+					<div className="flex w-full items-center gap-2">
 						<input
-							className="ask-inline-bar-input"
+							className="h-9 flex-1 rounded-sm border border-border-subtle bg-bg-panel px-2.5 text-[13px] text-text-primary outline-none transition-[border-color,box-shadow] duration-150 focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]"
 							value={props.inputValue}
 							placeholder={question.placeholder || t("ask.inputPlaceholder")}
 							disabled={props.responding}
@@ -374,8 +371,7 @@ function BatchQuestion(props: {
 							}}
 						/>
 						<Button
-							className="ask-inline-bar-submit-btn"
-							variant="default"
+														variant="default"
 							disabled={props.responding || !props.inputValue.trim()}
 							onClick={props.onSubmitInput}
 						>
@@ -454,41 +450,40 @@ export function SessionRuntimeUiOverlay({ sessionId, runtime, ui, responder }: S
 	}
 
 	return (
-		<div className="ask-inline-bar">
-			<div className="ask-inline-bar-header">
+		<div className="ask-inline-bar rounded-t-md border border-b-0 border-border-strong bg-[color:color-mix(in_srgb,var(--color-accent)_6%,var(--color-bg-panel))] p-3">
+			<div className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-[var(--color-accent)]">
 				<MessageCircle size={14} aria-hidden="true" />
 				<span>{t("ask.toolName")}</span>
 				{request.method === "select" && request.options?.length ? (
-					<span className="ask-inline-bar-cancel-hint">{t("ask.cancelHint")}</span>
+					<span className="ml-2 text-[11px] font-normal text-text-tertiary">{t("ask.cancelHint")}</span>
 				) : null}
 				<Button variant="ghost" size="icon"
-					className="ask-inline-bar-close"
-					aria-label={t("common.close")} title={t("common.close")}
+										aria-label={t("common.close")} title={t("common.close")}
 					disabled={responding}
 					onClick={cancel}
 				>
 					<X size={14} aria-hidden="true" />
 				</Button>
 			</div>
-			<div className="ask-inline-bar-question">{request.title || t("ask.defaultTitle")}</div>
-			<div className="ask-inline-bar-body">
+			<div className="mb-3 text-sm font-medium leading-[1.6] break-words text-text-primary">{request.title || t("ask.defaultTitle")}</div>
+			<div>
 				{request.method === "select" && request.options?.length ? (
-					<div className="ask-inline-bar-options">
+					<div className="flex max-h-[180px] flex-wrap gap-2 overflow-y-auto pr-1">
 						{request.options.map((option) => (
 							<Button
 								key={`${request.requestId}:${option}`}
-								className="ask-inline-bar-option"
+								className="ask-inline-bar-option min-h-[30px] flex-1 max-w-full items-start justify-start px-3.5 py-1.5 text-left break-words whitespace-normal"
 								variant="ghost"
 								disabled={responding}
 								onClick={() => void answer({ value: option })}
 							>
-								<span className="ask-inline-bar-option-marker">{option}</span>
+								<span className="text-[13px] font-medium leading-[1.6] text-text-primary">{option}</span>
 							</Button>
 						))}
 						{request.allowOther ? (
-							<div className="ask-inline-bar-custom-input">
+							<div className="flex w-full items-center gap-2">
 								<input
-									className="ask-inline-bar-custom-field"
+									className="h-9 flex-1 rounded-sm border border-border-subtle bg-bg-panel px-2.5 text-[13px] text-text-primary outline-none transition-[border-color,box-shadow] duration-150 focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]"
 									value={value}
 									placeholder={t("ask.customPlaceholder")}
 									disabled={responding}
@@ -498,8 +493,7 @@ export function SessionRuntimeUiOverlay({ sessionId, runtime, ui, responder }: S
 									}}
 								/>
 								<Button
-									className="ask-inline-bar-submit-btn"
-									variant="default"
+																		variant="default"
 									disabled={responding || !value.trim()}
 									onClick={() => void answer({ value: value.trim() })}
 								>
@@ -510,7 +504,7 @@ export function SessionRuntimeUiOverlay({ sessionId, runtime, ui, responder }: S
 					</div>
 				) : null}
 				{request.method === "confirm" ? (
-					<div className="ask-inline-bar-options ask-inline-bar-options-confirm">
+					<div className="flex gap-2">
 						<Button className="ask-inline-bar-option ask-inline-bar-option-yes" variant="ghost" disabled={responding} onClick={() => void answer({ confirmed: true, value: true })}>
 							{t("common.confirm")}
 						</Button>
@@ -520,9 +514,9 @@ export function SessionRuntimeUiOverlay({ sessionId, runtime, ui, responder }: S
 					</div>
 				) : null}
 				{request.method === "input" ? (
-					<div className="ask-inline-bar-input-area">
+					<div className="flex w-full items-center gap-2">
 						<input
-							className="ask-inline-bar-input"
+							className="h-9 flex-1 rounded-sm border border-border-subtle bg-bg-panel px-2.5 text-[13px] text-text-primary outline-none transition-[border-color,box-shadow] duration-150 focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]"
 							autoFocus
 							value={value}
 							placeholder={request.placeholder || t("ask.inputPlaceholder")}
@@ -538,9 +532,9 @@ export function SessionRuntimeUiOverlay({ sessionId, runtime, ui, responder }: S
 					</div>
 				) : null}
 				{request.method === "editor" ? (
-					<div className="ask-inline-bar-input-area">
+					<div className="flex w-full items-center gap-2">
 						<textarea
-							className="ask-inline-bar-input ask-batch-textarea"
+							className="h-auto min-h-[80px] w-full flex-1 resize-y rounded-sm border border-border-subtle bg-bg-panel p-2 text-[13px] leading-[1.6] text-text-primary outline-none transition-[border-color,box-shadow] duration-150 focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]"
 							autoFocus
 							value={value}
 							placeholder={request.placeholder || t("ask.editorPlaceholder")}

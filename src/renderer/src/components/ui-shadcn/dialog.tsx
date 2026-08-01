@@ -49,9 +49,12 @@ function DialogContent({
   className,
   children,
   showCloseButton = true,
+  size = "default",
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean
+  /** 尺寸变体：xl 用于全尺寸工作台弹窗（如设置/项目管理，1300×850） */
+  size?: "default" | "xl"
 }) {
   return (
     <DialogPortal data-slot="dialog-portal">
@@ -60,6 +63,8 @@ function DialogContent({
         data-slot="dialog-content"
         className={cn(
           "fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border bg-background p-6 shadow-lg duration-200 outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 sm:max-w-lg",
+          size === "xl" &&
+            "sm:max-w-[min(1300px,calc(100vw-48px))] h-[min(850px,calc(100vh-48px))]",
           className
         )}
         {...props}
