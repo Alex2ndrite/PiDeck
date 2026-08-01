@@ -1049,24 +1049,6 @@ select:focus-visible {
   /* 底栏布局由 SidebarContent Tailwind 承担 */
   min-width: 0;
 }
-.sidebar-collapse-logo {
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  justify-self: flex-end;
-  border: 1px solid var(--color-border-subtle);
-  background: var(--color-bg-panel);
-  color: var(--color-text-secondary);
-}
-.sidebar-collapse-logo:hover {
-  border-color: color-mix(
-    in srgb,
-    var(--color-accent) 28%,
-    var(--color-border-subtle)
-  );
-  background: var(--color-bg-active);
-  color: var(--color-accent);
-}
 .app-badge {
   display: flex;
   align-items: center;
@@ -1289,15 +1271,6 @@ select:focus-visible {
   50% {
     opacity: 0.6;
   }
-}
-.conversation-loading {
-  width: 12px;
-  height: 12px;
-  border: 2px solid var(--color-border-subtle);
-  border-top-color: var(--color-accent);
-  border-radius: var(--radius-pill);
-  animation: spin 0.75s linear infinite;
-  flex-shrink: 0;
 }
 .conversation-body {
   min-width: 0;
@@ -1675,10 +1648,6 @@ select:focus-visible {
   color: var(--color-accent);
   background: var(--color-bg-hover);
 }
-.worktree-nested-row {
-  margin-left: 8px;
-  width: calc(100% - 8px);
-}
 .worktree-children .worktree-nested-row {
   /* 子工作区里的会话/Agent 已经处在二级容器内，缩进收窄避免出现“楼梯越走越深”。 */
   padding-left: 20px;
@@ -1846,20 +1815,6 @@ select:focus-visible {
   color: var(--color-text-primary);
   opacity: 1;
 }
-.project-delete:hover {
-  background: var(--color-danger-soft);
-  color: var(--color-danger);
-}
-.action-new {
-  color: var(--color-accent);
-}
-.action-new:hover {
-  background: color-mix(
-    in srgb,
-    var(--color-accent) 12%,
-    var(--color-bg-panel)
-  );
-}
 .agent-row {
   grid-template-columns: minmax(0, 1fr);
   min-height: 28px;
@@ -1927,11 +1882,6 @@ select:focus-visible {
 .session-more-row:hover {
   background: var(--color-bg-hover);
   color: var(--color-text-secondary);
-}
-.project-session-list {
-  display: grid;
-  gap: 0;
-  margin: 0;
 }
 .session-row {
   grid-template-columns: minmax(0, 1fr);
@@ -2435,13 +2385,6 @@ body.is-resizing .splitter::before {
 .panel-group button:not(.active) {
   background: transparent;
 }
-.branch-group {
-  position: relative;
-  overflow: visible;
-  padding: 0;
-  border: 0;
-  background: transparent;
-}
 .header-actions-right {
   display: flex;
   gap: 6px;
@@ -2513,11 +2456,6 @@ body.is-resizing .splitter::before {
 }
 .session-combo-chevron.open {
   transform: rotate(180deg);
-}
-.file-action-trigger {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
 }
 /* Header 面板按钮统一按同一控件模型排版；带下拉箭头的“新会话/文件”和普通“终端”保持相同基线、字号和高度。 */
 .header-action-group > button,
@@ -2731,63 +2669,6 @@ body.is-resizing .splitter::before {
 }
 
 /* ---- Branch custom dropdown ---- */
-.branch-select {
-  position: relative;
-  display: inline-flex;
-}
-.branch-trigger {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  height: var(--control-height-md);
-  min-width: 60px;
-  border: 1px solid transparent;
-  background: var(--color-bg-panel);
-  color: var(--color-text-primary);
-  border-radius: var(--radius-sm);
-  padding: 0 6px;
-  font-size: var(--font-size-control);
-  font-weight: 600;
-  line-height: var(--line-height-control);
-  max-width: 120px;
-  cursor: pointer;
-  transition:
-    background 0.15s,
-    border-color 0.15s,
-    box-shadow 0.15s;
-}
-.branch-trigger:hover {
-  background: var(--color-bg-active);
-  border-color: color-mix(in srgb, var(--color-accent) 36%, transparent);
-}
-.branch-trigger:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 1px;
-}
-.branch-icon {
-  color: var(--color-accent);
-  font-size: var(--font-size-body);
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-}
-.branch-badge {
-  font-family: var(--font-family-business);
-  font-size: var(--font-size-micro);
-  color: var(--color-text-primary);
-  background: var(--color-bg-hover);
-  padding: 1px 6px;
-  border-radius: 999px;
-  font-weight: 600;
-  line-height: var(--line-height-micro);
-  font-variant-numeric: tabular-nums;
-}
-.branch-empty-hint {
-  text-align: center;
-  color: var(--color-text-tertiary);
-  font-size: var(--font-size-caption);
-  padding: 8px 10px;
-}
 .branch-label {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2796,33 +2677,8 @@ body.is-resizing .splitter::before {
   font-weight: inherit;
   line-height: inherit;
 }
-.branch-chevron {
-  font-size: var(--font-size-micro);
-  color: var(--color-text-secondary);
-  transition: transform 0.2s ease;
-  flex-shrink: 0;
-  margin-left: 2px;
-}
 .branch-chevron.open {
   transform: rotate(180deg);
-}
-.branch-dropdown {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 50%;
-  transform: translateX(-50%);
-  min-width: 100px;
-  width: max-content;
-  max-width: 320px;
-  max-height: 280px;
-  overflow-y: auto;
-  z-index: 100;
-  padding: var(--space-1);
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-md);
-  background: var(--color-bg-panel);
-  box-shadow: var(--shadow-popover);
-  animation: branch-dropdown-in 0.15s ease-out;
 }
 @keyframes branch-dropdown-in {
   from {
@@ -2834,96 +2690,13 @@ body.is-resizing .splitter::before {
     transform: translateX(-50%) translateY(0);
   }
 }
-.branch-dropdown button {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-height: var(--list-item-compact);
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--color-text-primary);
-  padding: 6px var(--space-3);
-  text-align: left;
-  font-size: var(--font-size-control);
-  cursor: pointer;
-  transition: background 0.1s;
-}
-.branch-dropdown button:hover {
-  background: var(--color-bg-hover);
-}
 .branch-dropdown button.active {
   color: var(--color-accent);
   font-weight: 600;
   background: color-mix(in srgb, var(--color-accent) 8%, transparent);
 }
-.branch-item-icon {
-  font-size: var(--font-size-caption);
-  width: 16px;
-  text-align: center;
-  flex-shrink: 0;
-  color: var(--color-text-tertiary);
-}
 .branch-dropdown button.active .branch-item-icon {
   color: var(--color-accent);
-}
-.branch-item-label {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.branch-create-trigger {
-  border-top: 1px solid var(--color-border-subtle);
-  margin-top: var(--space-1);
-  padding-top: var(--space-1) !important;
-  color: var(--color-accent) !important;
-  font-weight: 500;
-}
-.branch-create-trigger:hover {
-  background: var(--color-accent-soft) !important;
-}
-.branch-create-form {
-  display: flex;
-  gap: var(--space-2);
-  padding: var(--space-2);
-  border-top: 1px solid var(--color-border-subtle);
-  margin-top: var(--space-1);
-}
-.branch-create-form input {
-  flex: 1;
-  height: 32px;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-sm);
-  background: var(--color-bg-panel);
-  color: var(--color-text-primary);
-  padding: 0 var(--space-2);
-  font-size: var(--font-size-control);
-  outline: none;
-}
-.branch-create-form input:focus {
-  border-color: var(--color-accent);
-  box-shadow: var(--focus-ring);
-}
-.branch-create-confirm {
-  width: 32px !important;
-  height: 32px !important;
-  min-height: auto !important;
-  padding: 0 !important;
-  border: 1px solid var(--color-accent) !important;
-  background: var(--color-accent) !important;
-  color: var(--color-text-inverse) !important;
-  border-radius: var(--radius-sm) !important;
-  display: flex !important;
-  align-items: center;
-  justify-content: center;
-}
-.branch-create-confirm:hover:not(:disabled) {
-  background: var(--color-accent-strong) !important;
-}
-.branch-create-confirm:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 
 /* ---- Header action buttons ---- */
@@ -3162,76 +2935,9 @@ body.is-resizing .splitter::before {
 .terminal-xterm .xterm-viewport {
   scrollbar-color: var(--terminal-muted) var(--terminal-bg);
 }
-.terminal-line {
-  white-space: pre-wrap;
-}
 .terminal-placeholder {
   margin-top: 14px;
   color: var(--terminal-muted);
-}
-.terminal-copy-notice {
-  position: absolute;
-  top: 10px;
-  right: 14px;
-  z-index: 4;
-  border: 1px solid var(--terminal-border);
-  border-radius: 999px;
-  background: var(--terminal-panel);
-  color: var(--terminal-active-fg);
-  font-size: var(--font-size-micro);
-  line-height: 1;
-  padding: 6px 9px;
-  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.16);
-  pointer-events: none;
-}
-.terminal-confirm-backdrop {
-  position: absolute;
-  inset: 30px 0 0;
-  display: grid;
-  place-items: center;
-  padding: 18px;
-  background: color-mix(in srgb, var(--terminal-bg) 78%, transparent);
-  backdrop-filter: blur(2px);
-  z-index: 6;
-}
-.terminal-confirm {
-  width: min(360px, 100%);
-  border: 1px solid var(--terminal-border);
-  border-radius: var(--radius-lg);
-  background: var(--terminal-bg);
-  color: var(--terminal-fg);
-  box-shadow: 0 16px 38px rgba(15, 23, 42, 0.22);
-  padding: 16px;
-}
-.terminal-confirm strong {
-  display: block;
-  font-size: var(--font-size-body);
-  margin-bottom: 6px;
-}
-.terminal-confirm p {
-  margin: 0;
-  color: var(--terminal-muted);
-  font-size: var(--font-size-control);
-  line-height: 1.5;
-}
-.terminal-confirm-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 16px;
-}
-.terminal-confirm-actions button {
-  height: 30px;
-  border: 1px solid var(--terminal-border);
-  border-radius: var(--radius-lg);
-  background: var(--terminal-panel);
-  color: var(--terminal-fg);
-  padding: 0 12px;
-  font-size: var(--font-size-control);
-  cursor: pointer;
-}
-.terminal-confirm-actions button:hover {
-  background: var(--terminal-hover);
 }
 .terminal-confirm-actions button.danger {
   background: var(--color-danger);

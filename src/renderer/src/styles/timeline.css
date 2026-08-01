@@ -663,37 +663,6 @@
   background: transparent;
   overflow: hidden;
 }
-.tool-group-card-trigger {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  width: 100%;
-  min-height: 28px;
-  padding: 4px 7px;
-  border: 0;
-  background: transparent;
-  color: var(--color-text-secondary);
-  font-family: var(--font-family-base);
-  font-size: var(--font-size-control);
-  line-height: var(--line-height-control);
-  text-align: left;
-  cursor: pointer;
-  transition: background-color 0.12s ease;
-}
-.tool-group-card-trigger:hover {
-  background: var(--color-bg-hover);
-}
-.tool-group-card-trigger:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: -2px;
-}
-.tool-group-card-dot {
-  flex: 0 0 auto;
-  width: 7px;
-  height: 7px;
-  border-radius: var(--radius-pill);
-  background: var(--color-text-tertiary);
-}
 .tool-group-card.tone-running .tool-group-card-dot {
   background: var(--color-warning);
   animation: toolGroupDotPulse 1.4s ease-in-out infinite;
@@ -712,58 +681,8 @@
     opacity: 0.7;
   }
 }
-.tool-group-card-title {
-  flex: 0 0 auto;
-  font-weight: 500;
-  color: var(--color-text-primary);
-}
-.tool-group-card-trigger strong {
-  flex: 0 0 auto;
-  font-weight: 600;
-  color: var(--color-text-secondary);
-  font-variant-numeric: tabular-nums;
-}
-.tool-group-card-duration {
-  flex: 0 0 auto;
-  color: var(--color-text-tertiary);
-  font-family: var(--font-family-business);
-  font-size: var(--font-size-caption);
-  font-variant-numeric: tabular-nums;
-}
-.tool-group-card-trigger em {
-  flex: 1 1 auto;
-  text-align: right;
-  color: var(--color-info);
-  font-style: normal;
-  font-size: var(--font-size-caption);
-}
-.tool-group-card-chevron {
-  flex: 0 0 auto;
-  color: var(--color-text-tertiary);
-  transition: transform 0.15s ease;
-}
 .tool-group-card-chevron.open {
   transform: rotate(180deg);
-}
-.tool-group-card-strip {
-  display: flex;
-  flex: 1 1 auto;
-  flex-wrap: wrap;
-  gap: 4px;
-  min-width: 0;
-}
-.tool-group-card-chip {
-  max-width: 150px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-pill);
-  background: var(--color-bg-panel);
-  color: var(--color-text-secondary);
-  padding: 1px 7px;
-  font-size: var(--font-size-micro);
-  font-family: var(--font-family-mono);
 }
 .tool-group-card-chip.muted {
   color: var(--color-text-tertiary);
@@ -873,7 +792,6 @@
   overflow: auto;
 }
 /* 流式思考卡片：实时展示推理过程 */
-
 
 /* ---------- 流式响应指示器：RespondingIndicator ---------- */
 .responding-indicator {
@@ -1268,14 +1186,6 @@
   outline: none;
   box-shadow: var(--focus-ring);
 }
-.queued-more {
-  padding: 2px 8px 0;
-  color: var(--color-text-tertiary);
-  font-family: var(--font-family-business);
-  font-size: var(--font-size-micro);
-  line-height: var(--line-height-micro);
-  text-align: right;
-}
 @media (hover: none), (pointer: coarse) {
   .queued-icon-btn {
     width: 32px;
@@ -1327,16 +1237,6 @@
 
 /* ── 多选模式复选框 ── */
 /* ── 多选分享弹框 ── */
-.multi-select-modal-overlay {
-  position: absolute;
-  inset: 0;
-  z-index: 1000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--overlay-backdrop);
-  animation: multi-select-fade-in 0.15s ease;
-}
 @keyframes multi-select-fade-in {
   from {
     opacity: 0;
@@ -1370,41 +1270,6 @@
 }
 
 /* 标题栏 */
-.multi-select-modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 14px 20px;
-  border-bottom: 1px solid var(--color-border-subtle);
-  flex-shrink: 0;
-}
-.multi-select-modal-header h3 {
-  margin: 0;
-  font-size: var(--font-size-base);
-  font-weight: 600;
-  color: var(--color-text-primary);
-}
-.multi-select-modal-close {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border: none;
-  background: transparent;
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  border-radius: var(--radius-sm);
-  transition: all 0.12s ease;
-}
-.multi-select-modal-close:hover {
-  background: var(--color-bg-hover);
-  color: var(--color-text-primary);
-}
-.multi-select-modal-close:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 1px;
-}
 
 /* 树状列表 */
 .multi-select-modal-tree {
@@ -1818,28 +1683,11 @@
 }
 
 /* 底部操作栏 */
-.multi-select-action-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  padding: 14px 24px;
-  background: var(--color-bg-panel);
-  border-top: 1px solid var(--color-border);
-  box-shadow: 0 -2px 16px
-    color-mix(in srgb, var(--color-shadow) 20%, transparent);
-  z-index: 10;
-}
 .multi-select-count {
   font-size: var(--font-size-base);
   font-weight: 500;
   color: var(--color-text-secondary);
   white-space: nowrap;
-}
-.multi-select-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
 }
 
 /* 分享按钮 */
@@ -2491,106 +2339,6 @@ body.ask-dialog-open .ask-question-card.pending {
   box-shadow: var(--shadow-modal);
   overflow-y: auto;
 }
-.ask-dialog-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--color-accent);
-  font-weight: 600;
-  font-size: var(--font-size-control);
-}
-.ask-dialog-question {
-  font-size: var(--font-size-title);
-  line-height: var(--line-height-title);
-  word-break: break-word;
-  color: var(--color-text-primary);
-  font-weight: 500;
-}
-.ask-dialog-options {
-  display: grid;
-  gap: 8px;
-}
-.ask-dialog-options-confirm {
-  display: flex;
-  gap: 10px;
-  justify-content: center;
-}
-.ask-dialog-options-confirm .ask-dialog-option {
-  flex: 1;
-  justify-content: center;
-  text-align: center;
-}
-.ask-dialog-option {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 14px;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-md);
-  background: var(--color-bg-muted);
-}
-.ask-dialog-option-marker {
-  font-size: var(--font-size-control);
-  color: var(--color-text-primary);
-  font-weight: 500;
-}
-.ask-dialog-option-desc {
-  font-size: var(--font-size-caption);
-  color: var(--color-text-tertiary);
-}
-.ask-dialog-close-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  margin-left: auto;
-  border: none;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--color-text-tertiary);
-  cursor: pointer;
-  transition: all 0.12s ease;
-}
-.ask-dialog-close-btn:hover {
-  background: var(--color-bg-muted);
-  color: var(--color-text-primary);
-}
-.ask-dialog-cancel-hint {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  padding: 10px 12px;
-  border-radius: var(--radius-sm);
-  background: color-mix(
-    in srgb,
-    var(--color-warning) 10%,
-    var(--color-bg-panel)
-  );
-  color: var(--color-warning);
-  font-size: var(--font-size-caption);
-  line-height: var(--line-height-text);
-}
-.ask-dialog-cancel-hint svg {
-  flex-shrink: 0;
-  margin-top: 2px;
-  color: var(--color-warning, #d97706);
-}
-.ask-dialog-waiting {
-  font-size: var(--font-size-caption);
-  color: var(--color-text-tertiary);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.ask-dialog-waiting::after {
-  content: "";
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--color-accent);
-  animation: ask-dialog-pulse 1.2s ease-in-out infinite;
-}
 @keyframes ask-dialog-pulse {
   0%,
   100% {
@@ -2602,75 +2350,6 @@ body.ask-dialog-open .ask-question-card.pending {
 }
 
 /* ask dialog 选项按钮 */
-.ask-dialog-option {
-  cursor: pointer;
-  text-align: left;
-  font: inherit;
-  transition: all 0.12s ease;
-}
-.ask-dialog-option:hover {
-  border-color: var(--color-accent);
-  background: var(--color-bg-active);
-}
-.ask-dialog-custom-input {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  margin-top: 4px;
-}
-.ask-dialog-custom-field {
-  flex: 1;
-  padding: 8px 12px;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-sm);
-  background: var(--color-bg-base);
-  color: var(--color-text-primary);
-  font-size: var(--font-size-control);
-  font-family: var(--font-family-base);
-  outline: none;
-}
-.ask-dialog-custom-field:focus {
-  border-color: var(--color-accent);
-  box-shadow: 0 0 0 2px var(--focus-ring);
-}
-.ask-dialog-input-area {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-.ask-dialog-submit-btn {
-  flex-shrink: 0;
-  height: var(--control-height-lg);
-  padding: 0 16px;
-  border: 1px solid var(--color-accent);
-  border-radius: var(--radius-sm);
-  background: var(--color-accent);
-  color: var(--color-text-on-accent, #fff);
-  font-size: var(--font-size-control);
-  cursor: pointer;
-  transition: opacity 0.12s;
-}
-.ask-dialog-submit-btn:hover {
-  opacity: 0.85;
-}
-.ask-dialog-input {
-  width: 100%;
-  height: var(--control-height-lg);
-  padding: 0 10px;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-sm);
-  background: var(--color-bg-panel);
-  color: var(--color-text-primary);
-  font-size: var(--font-size-control);
-  outline: none;
-  transition:
-    border-color 0.15s,
-    box-shadow 0.15s;
-}
-.ask-dialog-input:focus {
-  border-color: var(--color-accent);
-  box-shadow: var(--focus-ring);
-}
 
 /* 内联提问卡片（实时会话中 system 消息形式） */
 .ask-question-card {
@@ -2706,14 +2385,6 @@ body.ask-dialog-open .ask-question-card.pending {
 }
 .ask-question-card.cancelled .ask-question-card-status {
   color: var(--color-text-tertiary);
-}
-.ask-question-card-answer {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: 0 var(--space-3) var(--space-2);
-  font-size: var(--font-size-sm);
-  color: var(--color-accent);
 }
 .ask-question-card-body {
   padding: 0 var(--space-3) var(--space-3);
@@ -2757,10 +2428,6 @@ body.ask-dialog-open .ask-question-card.pending {
 .ask-question-card-option:focus-visible {
   outline: var(--focus-ring);
   outline-offset: 2px;
-}
-.ask-question-card-option-custom {
-  color: var(--color-text-tertiary);
-  font-size: var(--font-size-xs);
 }
 .ask-question-card-option-yes {
   border-color: var(--color-accent);
@@ -3463,7 +3130,6 @@ body.ask-dialog-open .ask-question-card.pending {
 }
 
 .session-ref-modal { width: min(700px, calc(100vw - 48px)); max-height: min(650px, calc(100vh - 48px)); }
-.session-ref-name { color: var(--color-accent); font-weight: 600; }
 .session-ref-message-list { flex: 1; overflow-y: auto; padding: 4px 0; }
 .session-ref-message-list .multi-select-tree-node.disabled { opacity: 0.5; cursor: default; }
 .session-ref-loading, .session-ref-error { display: flex; align-items: center; justify-content: center; padding: 40px 16px; color: var(--color-text-tertiary); }
@@ -4273,17 +3939,6 @@ body.ask-dialog-open .ask-question-card.pending {
   border-radius: var(--radius-pill);
   animation: spin 0.8s linear infinite;
 }
-
-.session-action-notice {
-  grid-column: 1 / -1;
-  justify-self: end;
-  padding: 3px 8px;
-  border-radius: var(--radius-pill);
-  background: var(--color-bg-active);
-  color: var(--color-accent);
-  font-size: var(--font-size-micro);
-  animation: picker-check-in 0.18s ease-out;
-}
 .skill-rename-inline {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
@@ -4342,56 +3997,6 @@ body.ask-dialog-open .ask-question-card.pending {
   background: var(--color-bg-hover);
   color: var(--color-accent);
 }
-
-.session-delete-confirm-backdrop {
-  position: absolute;
-  inset: 0;
-  z-index: 130;
-  display: grid;
-  place-items: center;
-  background: var(--overlay-backdrop-soft);
-}
-.session-delete-confirm {
-  width: min(360px, calc(100vw - 48px));
-  padding: 18px;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-lg);
-  background: var(--color-bg-panel);
-  box-shadow: var(--shadow-popover);
-  animation: picker-check-in 0.16s ease-out;
-}
-.session-delete-confirm strong {
-  display: block;
-  color: var(--color-text-primary);
-  font-size: var(--font-size-title);
-  line-height: var(--line-height-title);
-  margin-bottom: var(--space-2);
-}
-.session-delete-confirm p {
-  margin: 0;
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-control);
-  line-height: var(--line-height-control);
-}
-.session-delete-confirm-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--space-2);
-  margin-top: var(--space-4);
-}
-.session-delete-confirm-actions button {
-  height: var(--control-height-md);
-  padding: 0 var(--space-3);
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-sm);
-  background: var(--color-bg-panel);
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-caption);
-  cursor: pointer;
-}
-.session-delete-confirm-actions button:hover {
-  background: var(--color-bg-hover);
-}
 .session-delete-confirm-actions button.danger {
   border-color: color-mix(
     in srgb,
@@ -4426,22 +4031,6 @@ body.ask-dialog-open .ask-question-card.pending {
     opacity: 1;
     transform: translate(-50%, -50%);
   }
-}
-.session-history-header {
-  height: auto;
-  min-height: 58px;
-}
-.session-history-header > div {
-  min-width: 0;
-  display: grid;
-  gap: 3px;
-}
-.session-history-header span {
-  overflow: hidden;
-  color: var(--color-text-tertiary);
-  font-size: var(--font-size-caption);
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .session-history-path {
   padding: 10px 18px;

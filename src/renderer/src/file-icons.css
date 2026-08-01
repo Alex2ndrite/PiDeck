@@ -87,20 +87,6 @@
 }
 
 /* ── Git 状态小圆点 ── */
-.file-node-git-badge {
-  position: absolute;
-  top: -1px;
-  right: -2px;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  border: 1.5px solid var(--color-bg-panel);
-  pointer-events: none;
-}
-.file-node-git-badge.git-added    { background: var(--file-node-git-added); }
-.file-node-git-badge.git-modified { background: var(--file-node-git-modified); }
-.file-node-git-badge.git-deleted  { background: var(--file-node-git-deleted); }
-.file-node-git-badge.git-renamed  { background: var(--file-node-git-renamed); }
 
 /* ── 文件类型标签（hover 显示） ── */
 .file-node-type-label {

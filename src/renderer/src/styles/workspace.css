@@ -169,12 +169,6 @@
   color: var(--color-text-primary);
   font-weight: 600;
 }
-.project-resources-hint {
-  color: var(--color-text-tertiary);
-  font-size: var(--font-size-caption);
-  line-height: var(--line-height-caption);
-  margin: 0;
-}
 
 /* 创建表单卡片 */
 .project-skill-create {
@@ -394,72 +388,8 @@
   .rename-dialog-actions
 
 /* 项目资源内嵌编辑器 */
-.project-resources-editor-overlay .project-resources-editor-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 20px;
-  border-bottom: 1px solid var(--color-border-subtle);
-}
-.project-resources-editor-overlay .project-resources-editor-header strong {
-  font-size: var(--font-size-control);
-  color: var(--color-text-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.project-resources-editor-overlay .project-resources-editor-header button {
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  flex-shrink: 0;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--color-text-tertiary);
-  cursor: pointer;
-}
-.project-resources-editor-overlay
-  .project-resources-editor-header
-  button:hover {
-  background: var(--color-bg-active);
-  color: var(--color-text-primary);
-}
-.project-resources-editor-footer {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 20px;
-  border-top: 1px solid var(--color-border-subtle);
-}
-.project-resources-editor-footer .project-resources-editor-saved {
-  margin-left: auto;
-  color: var(--color-success);
-  font-size: var(--font-size-micro);
-}
 
 /* 设置页 Skills 内嵌编辑器 */
-.config-skills-editor {
-  display: grid;
-  grid-template-rows: auto 1fr auto;
-  height: 100%;
-  overflow: hidden;
-}
-.config-skills-editor-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--color-border-subtle);
-}
-.config-skills-editor-header strong {
-  font-size: var(--font-size-control);
-  color: var(--color-text-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 .config-skills-editor-header .config-icon-btn {
   display: grid;
   place-items: center;
@@ -476,27 +406,6 @@
 .config-skills-editor-header .config-icon-btn:hover {
   background: var(--color-bg-active);
   color: var(--color-text-primary);
-}
-.config-skills-editor textarea {
-  flex: 1;
-  width: 100%;
-  padding: 14px 16px;
-  border: 0;
-  background: var(--color-bg-panel);
-  color: var(--color-text-primary);
-  font-family: var(--font-family-mono);
-  font-size: var(--font-size-caption);
-  line-height: var(--line-height-body);
-  resize: none;
-  outline: none;
-}
-.config-skills-editor-footer {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  padding: 10px 16px;
-  border-top: 1px solid var(--color-border-subtle);
 }
 
 /* ── Prompt Templates ── */
@@ -526,11 +435,6 @@
 }
 .prompt-create-card > strong {
   color: var(--color-text-primary);
-}
-.prompt-create-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(200px, 1fr);
-  gap: 12px;
 }
 .prompt-create-label {
   display: grid;
@@ -614,14 +518,6 @@
   background: var(--color-danger-soft);
 }
 /* 内联编辑器卡片 */
-.prompts-editor-card {
-  display: grid;
-  grid-template-rows: auto 1fr auto;
-  height: 100%;
-  overflow: hidden;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-lg);
-}
 /* 编辑器弹框 */
 .prompts-editor-backdrop {
   position: absolute;
@@ -644,64 +540,11 @@
   box-shadow: var(--shadow-xl);
   overflow: hidden;
 }
-.prompts-editor-modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border-color);
-}
-.prompts-editor-modal-header strong {
-  font-family: var(--font-family-mono);
-  font-size: var(--font-size-control);
-  color: var(--color-accent);
-}
-.prompts-editor-modal-footer {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  padding: 12px 16px;
-  border-top: 1px solid var(--border-color);
-}
 .prompts-monaco-wrap {
   width: 100%;
   height: 100%;
   min-height: 300px;
   overflow: hidden;
-}
-.prompts-editor-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--color-border-subtle);
-}
-.prompts-editor-header strong {
-  font-family: var(--font-family-mono);
-  font-size: var(--font-size-control);
-  color: var(--color-text-primary);
-}
-.prompts-editor-textarea {
-  flex: 1;
-  width: 100%;
-  padding: 14px 16px;
-  border: 0;
-  background: var(--color-bg-panel);
-  color: var(--color-text-primary);
-  font-family: var(--font-family-mono);
-  font-size: var(--font-size-caption);
-  line-height: var(--line-height-body);
-  resize: none;
-  outline: none;
-}
-.prompts-editor-footer {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  padding: 10px 16px;
-  border-top: 1px solid var(--color-border-subtle);
 }
 
 /* ── Prompt 商店（prompts.chat） ── */
@@ -1034,15 +877,6 @@
   font-size: var(--font-size-micro);
   color: var(--color-text-tertiary);
   line-height: var(--line-height-caption);
-}
-.config-retry-subsection-header {
-  border: none;
-  border-radius: 0;
-  padding: 4px 16px 4px;
-  cursor: default;
-}
-.config-retry-subsection-header:hover {
-  border-color: transparent;
 }
 .config-retry-subsection-header .config-settings-key {
   font-size: var(--font-size-caption);
@@ -2705,8 +2539,6 @@ body.is-git-pane-resizing, body.is-git-pane-resizing * { cursor: row-resize !imp
   .git-pane-header-actions .git-compact-filter-btn { max-width: 100px; }
   .git-pane-header-actions .git-compact-filter-label { max-width: 60px; }
 }
-
-
 
 .app-notice:not(.app-notice-error):not(.app-notice-warning) {
   padding-right: var(--space-3);

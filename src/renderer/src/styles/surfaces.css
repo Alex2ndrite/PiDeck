@@ -5,17 +5,6 @@
 /* Content（弹框主体）*/
 
 /* 尺寸变体 */
-
-.feedback-modal {
-  width: min(1300px, calc(100vw - 48px));
-  height: min(850px, calc(100vh - 48px));
-  display: flex;
-  flex-direction: column;
-  border-radius: var(--radius-lg);
-  background: var(--color-bg-panel);
-  box-shadow: var(--shadow-xl);
-  overflow: hidden;
-}
 .modal-header.feedback-header {
   height: auto;
   min-height: 68px;
@@ -29,21 +18,6 @@
   color: var(--color-text-tertiary);
   font-size: var(--font-size-caption);
   font-weight: 400;
-}
-.feedback-email {
-  color: var(--color-text-primary);
-  font-weight: 800;
-}
-.feedback-qq {
-  margin-top: 6px;
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-caption);
-}
-.feedback-qq strong {
-  color: var(--color-accent);
-  font-weight: 600;
-  cursor: pointer;
-  user-select: all;
 }
 .feedback-body {
   display: grid;
@@ -160,38 +134,9 @@
   cursor: not-allowed;
 }
 /* Sidebar source filters use viewport coordinates from the triggering row. */
-.sidebar-filter-backdrop {
-  position: fixed;
-  inset: 0;
-}
 .filter-menu {
   padding: 6px 0;
   min-width: 160px;
-}
-.filter-menu-header {
-  padding: 4px 12px 8px;
-  font-size: var(--font-size-caption);
-  color: var(--color-text-tertiary);
-  font-weight: 500;
-  border-bottom: 1px solid var(--color-border-subtle);
-  margin-bottom: 4px;
-}
-.filter-menu-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 5px 12px;
-  cursor: pointer;
-  font-size: var(--font-size-control);
-  color: var(--color-text-secondary);
-  transition: background 0.1s;
-}
-.filter-menu-item:hover {
-  background: var(--color-bg-hover);
-}
-.filter-menu-item input[type="checkbox"] {
-  margin: 0;
-  accent-color: var(--color-accent);
 }
 .codex-import-modal {
   width: min(1300px, calc(100vw - 48px));
@@ -1194,19 +1139,6 @@
 }
 
 /* Agent 状态徽章 */
-.agent-status-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  height: 26px;
-  padding: 0 10px;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-pill);
-  font-size: var(--font-size-caption);
-  font-weight: 600;
-  line-height: var(--line-height-caption);
-  white-space: nowrap;
-}
 
 .agent-status-badge.status-running {
   background: color-mix(
@@ -1640,64 +1572,15 @@
   padding: 0 var(--space-3);
   color: var(--color-text-primary);
 }
-.setting-fontsize-group {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.setting-fontsize-header {
-  display: flex;
-  align-items: flex-start;
-  gap: 4px;
-}
 /* 整个行点击折叠，但仅在标签和图标区域显示为可点击光标 */
 .setting-fontsize-header .text-sm {
   cursor: pointer;
-}
-
-.setting-collapse-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  width: 24px;
-  height: 32px;
-  margin: 0;
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: var(--color-text-tertiary);
-  cursor: pointer;
-  border-radius: var(--radius-sm);
-  transition: color 0.15s;
-}
-.setting-collapse-btn:hover {
-  color: var(--color-text-primary);
-}
-.setting-collapse-btn:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: -2px;
 }
 .setting-collapse-btn .chevron {
   transition: transform 0.18s ease;
 }
 .setting-collapse-btn .chevron.rotated {
   transform: rotate(90deg);
-}
-
-.setting-fontsize-main {
-  flex: 1;
-  min-width: 0;
-}
-
-.setting-fontsize-body {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 4px 0 4px 28px;
-  border-left: 2px solid var(--color-border-subtle);
-  margin-left: 11px;
 }
 
 .setting-zoom-field {
@@ -1871,14 +1754,6 @@
   flex-shrink: 0;
 }
 /* 代理保存/取消操作栏 */
-.setting-proxy-actions {
-  display: flex;
-  gap: 8px;
-  justify-content: flex-end;
-  margin-top: 16px;
-  padding-top: 12px;
-  border-top: 1px solid var(--color-border-subtle);
-}
 
 /* 设置行保持紧凑：分区边框已经提供视觉分组，行内不再叠加卡片边框。 */
 .setting-row {
@@ -1972,9 +1847,6 @@
 .setting-error-detail {
   word-break: break-all;
 }
-.setting-error-detail {
-  line-height: 1.5;
-}
 
 /* pi 路径管理面板 */
 .setting-pi-path-panel {
@@ -1989,10 +1861,6 @@
   gap: 8px;
   margin-top: 8px;
 }
-.setting-pi-wsl-panel {
-  margin: 4px 0 8px;
-  padding: 0 12px 8px;
-}
 .setting-wsl-fields {
   display: flex;
   flex-wrap: wrap;
@@ -2002,31 +1870,6 @@
 .setting-wsl-fields .setting-field {
   flex: 1 1 160px;
   min-width: 160px;
-}
-.setting-wsl-hints {
-  margin-top: 8px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.setting-wsl-hint {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  font-size: var(--font-size-control);
-  color: var(--color-text-secondary);
-}
-.setting-wsl-hint strong {
-  color: var(--color-text-primary);
-}
-.setting-wsl-hint code {
-  font-family: var(--font-family-business);
-  padding: 2px 6px;
-  border-radius: var(--radius-sm);
-  background: var(--color-bg-inset);
-  border: 1px solid var(--color-border-subtle);
-  color: var(--color-accent);
 }
 /* WSL 用户验证行：输入框 + 验证按钮 */
 .setting-wsl-user-row {
@@ -2056,12 +1899,6 @@
   border: 1px solid var(--color-error-border, #fecaca);
 }
 /* WSL 面板操作按钮（应用/取消） */
-.setting-wsl-actions {
-  margin-top: 10px;
-  display: flex;
-  gap: 8px;
-  justify-content: flex-end;
-}
 
 /* Pi CLI 状态与来源选择：这些规则随设置组件拆分时遗漏，会导致状态内容失去横向布局。 */
 .setting-pi-status {
@@ -2245,10 +2082,6 @@
   background: var(--color-bg-panel);
 }
 
-
-
-
-
 .config-content {
   flex: 1;
   overflow-y: auto;
@@ -2304,15 +2137,6 @@
 }
 
 /* ── SkillHub 商店模态框 ─────────────────────────────── */
-.skillhub-modal {
-  width: min(900px, calc(100vw - 48px));
-  height: min(700px, calc(100vh - 48px));
-  display: flex;
-  flex-direction: column;
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-xl);
-  background: var(--color-bg-panel);
-}
 .skillhub-panel {
   flex: 1;
   display: flex;
@@ -2399,21 +2223,6 @@
 .skillhub-card:active {
   background: var(--color-bg-active);
 }
-.skillhub-card-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius-sm);
-  object-fit: contain;
-  flex-shrink: 0;
-}
-.skillhub-card-icon--fallback {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--color-bg-muted);
-  color: var(--color-text-tertiary);
-  border: 1px solid var(--color-border-subtle);
-}
 .skillhub-card-main {
   flex: 1;
   min-width: 0;
@@ -2425,26 +2234,12 @@
   font-size: var(--font-size-control);
   color: var(--color-text-primary);
 }
-.skillhub-card-desc {
-  font-size: var(--font-size-caption);
-  color: var(--color-text-tertiary);
-  line-height: 1.4;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 .skillhub-card-meta {
   display: flex;
   align-items: center;
   gap: 8px;
   font-size: var(--font-size-caption);
   color: var(--color-text-tertiary);
-}
-.skillhub-card-category {
-  padding: 0 6px;
-  border-radius: var(--radius-sm);
-  background: var(--color-bg-muted);
-  font-size: var(--font-size-caption);
 }
 .skillhub-card-stats {
   display: inline-flex;
@@ -2531,15 +2326,6 @@
   align-items: center;
   gap: 6px;
 }
-.skillhub-install-result {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  border-radius: var(--radius-md);
-  font-size: var(--font-size-control);
-  margin-bottom: var(--space-2);
-}
 .skillhub-install-result.success {
   background: var(--color-accent-soft);
   color: var(--color-accent-strong);
@@ -2550,119 +2336,6 @@
   color: var(--color-danger);
   border: 1px solid color-mix(in srgb, var(--color-danger) 30%, transparent);
 }
-.skillhub-detail {
-  flex: 1;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  padding-right: var(--space-2);
-}
-.skillhub-detail-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.skillhub-detail-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: var(--radius-sm);
-  object-fit: contain;
-  flex-shrink: 0;
-}
-.skillhub-detail-icon--fallback {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--color-bg-muted);
-  color: var(--color-text-tertiary);
-  border: 1px solid var(--color-border-subtle);
-}
-.skillhub-detail-header h2 {
-  margin: 0;
-  font-size: var(--font-size-lg);
-  color: var(--color-text-primary);
-}
-.skillhub-detail-meta {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: var(--font-size-control);
-  color: var(--color-text-secondary);
-  margin-top: 2px;
-}
-.skillhub-detail-badge {
-  padding: 0 6px;
-  border-radius: var(--radius-sm);
-  background: var(--color-accent-soft);
-  color: var(--color-accent);
-  font-size: var(--font-size-caption);
-}
-.skillhub-detail-stats {
-  display: flex;
-  gap: 16px;
-  font-size: var(--font-size-caption);
-}
-.skillhub-detail-stat {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  color: var(--color-text-secondary);
-}
-.skillhub-detail-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.skillhub-tag {
-  padding: 2px 8px;
-  border-radius: var(--radius-sm);
-  background: var(--color-bg-muted);
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-caption);
-}
-.skillhub-tag--sub {
-  background: color-mix(in srgb, var(--color-accent) 8%, transparent);
-  color: var(--color-accent);
-}
-.skillhub-detail-section h4 {
-  margin: 0 0 4px;
-  font-size: var(--font-size-control);
-  color: var(--color-text-secondary);
-}
-.skillhub-detail-section p {
-  margin: 0;
-  font-size: var(--font-size-body);
-  line-height: 1.6;
-  color: var(--color-text-primary);
-  white-space: pre-wrap;
-}
-.skillhub-detail-version {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.skillhub-detail-version code {
-  font-family: var(--font-family-mono);
-  font-size: var(--font-size-caption);
-  color: var(--color-text-primary);
-  background: var(--color-bg-muted);
-  padding: 1px 6px;
-  border-radius: var(--radius-sm);
-}
-.skillhub-detail-changelog {
-  font-size: var(--font-size-caption);
-  color: var(--color-text-tertiary);
-}
-.skillhub-security-report {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: var(--font-size-caption);
-}
-.skillhub-security-status {
-  color: var(--color-accent);
-}
 
 .config-empty-sm {
   text-align: center;
@@ -2670,7 +2343,6 @@
   padding: 20px 0;
   font-size: var(--font-size-caption);
 }
-
 
 @keyframes fadeInUp {
   from {
@@ -2684,43 +2356,6 @@
 }
 
 /* 确认对话框 */
-.config-modal-overlay {
-  position: absolute;
-  inset: 0;
-  z-index: 100;
-  background: color-mix(in srgb, var(--color-bg-app) 50%, transparent);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.config-modal-dialog {
-  background: var(--color-bg-panel);
-  border: 1px solid var(--color-border-default);
-  border-radius: var(--radius-lg);
-  padding: 24px;
-  min-width: 360px;
-  max-width: 480px;
-  box-shadow: 0 12px 40px
-    color-mix(in srgb, var(--color-text-primary) 15%, transparent);
-}
-.config-modal-dialog strong {
-  display: block;
-  font-size: var(--font-size-base);
-  font-weight: 600;
-  color: var(--color-text-primary);
-  margin-bottom: 10px;
-}
-.config-modal-dialog p {
-  font-size: var(--font-size-control);
-  color: var(--color-text-secondary);
-  line-height: 1.5;
-  margin-bottom: 18px;
-}
-.config-modal-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-}
 
 .config-toolbar {
   display: flex;
@@ -2750,11 +2385,6 @@
   color: var(--color-accent-strong);
 }
 
-
-
-
-
-
 /* 批量选择 checkbox */
 .config-batch-checkbox {
   display: inline-flex;
@@ -2773,12 +2403,7 @@
   margin: 0;
 }
 
-
 /* 确认对话框中的危险按钮（红色背景） */
-
-
-
-
 
 .config-toolbar-actions,
 .config-model-list-actions,
@@ -2855,25 +2480,6 @@
 /* 头部导出/导入按钮：完全覆盖 .modal-header button 的固定宽高，回归 config-btn 原始尺寸 */
 
 /* 配置弹窗关闭按钮 */
-.modal-close-btn {
-  width: 28px;
-  height: 28px;
-  border: 1px solid var(--color-border-subtle);
-  background: transparent;
-  color: var(--color-text-tertiary);
-  border-radius: var(--radius-xs);
-  cursor: pointer;
-  font-size: var(--font-size-title);
-  line-height: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.modal-close-btn:hover {
-  background: var(--color-bg-hover);
-  color: var(--color-text-primary);
-}
 .config-icon-btn {
   width: 28px;
   height: 28px;
@@ -3618,23 +3224,6 @@
 
 .config-card-details.empty {
   display: none;
-}
-
-.config-detail-row {
-  display: flex;
-  gap: 8px;
-  padding: 4px 0;
-}
-
-.config-detail-label {
-  color: var(--color-text-tertiary);
-  min-width: 100px;
-  flex-shrink: 0;
-}
-
-.config-detail-value {
-  color: var(--color-text-primary);
-  word-break: break-all;
 }
 
 .config-auth-card {
@@ -4416,7 +4005,6 @@
   border-top: 1px solid var(--color-border-subtle);
 }
 
-
 .config-model-chip-list {
   display: flex;
   flex-wrap: wrap;
@@ -4510,52 +4098,9 @@
   text-align: center;
 }
 
-
-.config-model-combobox-menu button:hover small,
-
-
-
-
-
-.config-model-combobox-option {
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.config-model-combobox-option:disabled {
-  opacity: 0.64;
-  cursor: not-allowed;
-}
-
-.config-model-combobox-check {
-  width: 16px;
-  height: 16px;
-  flex: 0 0 16px;
-  display: grid;
-  place-items: center;
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-xs);
-  color: var(--color-text-inverse);
-  background: var(--color-bg-panel);
-}
-
 .config-model-combobox-check.checked {
   border-color: var(--color-accent);
   background: var(--color-accent);
-}
-
-.config-model-combobox-text {
-  min-width: 0;
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.config-model-combobox-text > span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .config-model-combobox-badge {
@@ -5024,14 +4569,6 @@
   background: var(--rpc-log-surface);
   color: var(--rpc-log-strong);
 }
-.rpc-log-header {
-  gap: 12px;
-}
-.modal-header-actions {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-}
 .rpc-log-toolbar button,
 .rpc-log-entry-actions button {
   border: 1px solid var(--rpc-log-border);
@@ -5060,18 +4597,6 @@
   display: inline-flex;
   gap: 6px;
   flex-shrink: 0;
-}
-.rpc-log-autoscroll {
-  font-size: var(--font-size-xs);
-  white-space: nowrap;
-  color: var(--color-text-hint);
-  cursor: pointer;
-  border: 1px solid var(--rpc-log-border);
-  background: var(--rpc-log-input-bg);
-  color: var(--rpc-log-text);
-  border-radius: var(--radius-md);
-  padding: 4px 8px;
-  font-size: var(--font-size-caption);
 }
 .rpc-log-autoscroll.active {
   border-color: var(--color-info);
@@ -5150,15 +4675,6 @@
   white-space: pre-wrap;
   word-break: break-all;
 }
-.rpc-log-loading {
-  padding: 40px;
-  text-align: center;
-  color: var(--rpc-log-muted);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-}
 .rpc-log-empty {
   padding: 40px;
   text-align: center;
@@ -5177,18 +4693,6 @@
 }
 
 /* 调试按钮 */
-.debug-toggle {
-  border: 1px solid var(--color-border-subtle);
-  background: transparent;
-  color: var(--color-text-secondary);
-  padding: 3px 10px;
-  border-radius: var(--radius-md);
-  font-size: var(--font-size-caption);
-  cursor: pointer;
-}
-.debug-toggle:hover {
-  background: var(--color-bg-hover);
-}
 .debug-toggle.active {
   border-color: color-mix(
     in srgb,
@@ -5201,55 +4705,8 @@
 
 /* ── 本次会话修改文件区域 ─────────────────────── */
 
-.modified-files-section {
-  margin-bottom: 12px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--color-border-subtle);
-}
-
-.modified-files-header {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  font-size: var(--font-size-caption);
-  color: var(--color-text-secondary);
-  font-weight: 650;
-  padding: 4px 8px;
-  margin-bottom: 6px;
-}
-
-.modified-files-header small {
-  font-size: var(--font-size-caption);
-  font-weight: 400;
-  line-height: var(--line-height-tight);
-  color: var(--color-text-tertiary);
-}
-
-.modified-file-row {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 6px 8px;
-  border-radius: var(--radius-lg);
-  font-size: var(--font-size-control);
-  color: var(--color-text-primary);
-  overflow: hidden;
-  transition: background 0.12s;
-}
-
-.modified-file-row:hover {
-  background: var(--color-bg-hover);
-}
-
 .modified-file-row.running {
   color: var(--color-text-secondary);
-}
-
-.modified-file-icon {
-  flex: 0 0 16px;
-  width: 16px;
-  text-align: center;
-  font-size: var(--font-size-caption);
 }
 
 .modified-file-icon.done {
@@ -5259,31 +4716,6 @@
 .modified-file-row.running .modified-file-icon {
   color: var(--color-warning);
   animation: pulse-running 1.5s ease-in-out infinite;
-}
-
-.modified-file-name {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-weight: 600;
-}
-
-
-
-.modified-files-toggle {
-  margin: 6px 8px 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-micro);
-  line-height: 1.2;
-  cursor: pointer;
-}
-
-.modified-files-toggle:hover {
-  color: var(--color-accent);
 }
 
 /* 会话文件摘要卡片：位于输入框上方、扩展 widget 下方，默认可折叠。 */
@@ -5390,13 +4822,6 @@
   content: "•";
   margin-right: 5px;
   color: var(--color-text-tertiary);
-}
-
-.session-file-summary-lines {
-  flex: 0 0 auto;
-  color: var(--color-text-tertiary);
-  font-size: var(--font-size-micro);
-  white-space: nowrap;
 }
 
 .session-file-summary-toggle {
@@ -5540,10 +4965,6 @@
 }
 
 /* ── 应用更新提示 ───────────────────────────── */
-
-.update-backdrop {
-  z-index: 120;
-}
 
 .update-modal {
   width: min(620px, calc(100vw - 36px));
@@ -5909,13 +5330,6 @@
 }
 .skill-card-actions {
   align-items: center;
-}
-.skill-delete-confirm small {
-  display: block;
-  margin-top: -4px;
-  color: var(--color-text-tertiary);
-  font-size: var(--font-size-caption);
-  word-break: break-all;
 }
 @media (max-width: 820px) {
   .skill-create-grid {
