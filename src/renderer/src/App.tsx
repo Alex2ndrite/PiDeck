@@ -109,6 +109,10 @@ import { useScratchPad } from "./hooks/useScratchPad";
 import { useWorktreeActions } from "./hooks/useWorktreeActions";
 import { SessionRuntimeInjector } from "./components/session/SessionRuntimeInjector";
 import { SessionTabsBar } from "./components/session/SessionTabsBar";
+import {
+  togglePinSessionTab as togglePinSessionTabList,
+  reorderSessionTabs as reorderSessionTabList,
+} from "./utils/sessionTabs";
 import { ScratchPadOverlay } from "./components/overlays/ScratchPadOverlay";
 import { AppShell } from "./components/app/AppShell";
 import { WorkspaceDrawerRail } from "./components/workspace/WorkspaceDrawerRail";
@@ -1109,9 +1113,36 @@ export function App() {
 
   // ── 会话 Tab 栏状态（浏览器式多 Tab）──
   // 关闭 Tab 只移除列表项，不 kill Agent；再次打开同一会话时复用已绑定运行时。
+  const PINNED_TABS_STORAGE_KEY = "pideck.pinnedSessionTabIds";
   const sessionTabIds = useAtomValue(sessionTabIdsAtom);
   const setSessionTabIds = useSetAtom(sessionTabIdsAtom);
   const sessionRecordsForTabs = useAtomValue(sessionRecordsAtom);
+  // 固定 Tab 集合：localStorage 持久化（会话重开时自动恢复固定状态）
+  const [pinnedSessionTabIds, setPinnedSessionTabIds] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem(PINNED_TABS_STORAGE_KEY);
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed)
+        ? parsed.filter((id): id is string => typeof id === "string")
+        : [];
+    } catch {
+      return [];
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem(PINNED_TABS_STORAGE_KEY, JSON.stringify(pinnedSessionTabIds));
+    } catch {
+      // 持久化失败不影响功能
+    }
+  }, [pinnedSessionTabIds]);
+  // 固定集合随 Tab 清理：被删除会话的固定记录一并移除
+  useEffect(() => {
+    setPinnedSessionTabIds((current) => {
+      const next = current.filter((id) => Boolean(sessionRecordsForTabs[id]));
+      return next.length === current.length ? current : next;
+    });
+  }, [sessionRecordsForTabs]);
 
   /** 打开会话时在 Tab 栏登记（幂等）；首个会话自动登记后 Tab 栏才出现 */
   function openSessionTab(sessionId: string) {
@@ -1158,6 +1189,20 @@ export function App() {
     setSessionTabIds([]);
     // 全部关闭后回到项目空态；Agent 进程保持运行，会话仍可从侧栏重新打开
     if (activeProjectId) selectProjectCommand(activeProjectId);
+  }
+
+  /** 固定/取消固定 Tab：状态转换由纯函数维护（保持 pinned 前置不变量） */
+  function togglePinSessionTab(sessionId: string) {
+    const next = togglePinSessionTabList(sessionTabIds, pinnedSessionTabIds, sessionId);
+    setSessionTabIds(next.tabs);
+    setPinnedSessionTabIds(next.pinned);
+  }
+
+  /** 拖拽排序：区间内重排，交叉拖动自动转换固定状态 */
+  function reorderSessionTab(sourceId: string, targetId: string, position: "before" | "after") {
+    const next = reorderSessionTabList(sessionTabIds, pinnedSessionTabIds, sourceId, targetId, position);
+    setSessionTabIds(next.tabs);
+    setPinnedSessionTabIds(next.pinned);
   }
 
   useEffect(() => {
@@ -2414,6 +2459,7 @@ export function App() {
   const sessionTabsBarNode = (
     <SessionTabsBar
       tabs={sessionTabIds}
+      pinnedTabs={pinnedSessionTabIds}
       currentSessionId={currentSessionId}
       onSelect={(sessionId) => {
         // 点击 Tab 只切换会话，不启动/停止 Agent；记录缺失时忽略（即将被清理）
@@ -2424,6 +2470,8 @@ export function App() {
       onCloseOthers={closeOtherSessionTabs}
       onCloseAll={closeAllSessionTabs}
       onNewSession={() => void runCreateSessionDraft()}
+      onTogglePin={togglePinSessionTab}
+      onReorder={reorderSessionTab}
     />
   );
 

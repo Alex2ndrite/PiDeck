@@ -265,12 +265,7 @@ export function SessionStatus(props: {
 					)}
 				</span>
 			)}
-			{/* 会话平均命中率：主进程按会话文件全部 assistant 消息统计（真实平均） */}
-			{averageCacheHit != null && (
-				<span className="cache-chip" title={t("ctx.detail.hitAverageTitle")}>
-					{t("app.cacheHitAvg")}: {averageCacheHit.toFixed(0)}%
-				</span>
-			)}
+			{/* 平均命中率只在悬停明细中展示（ctx.detail.hitAverage），头部不再显示单独 chip */}
 			{state.cost != null && (
 				<span className="cost-chip" title={t("app.totalCostCny", {
 					usd: `$${state.cost.toFixed(3)}`,
