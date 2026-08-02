@@ -131,7 +131,8 @@ export function SessionTree(props: {
       onClick={(event) => { event.stopPropagation(); props.controller.toggleSubagentGroup(key); }}
     >
       <ChevronDown size={10} className={props.controller.expandedSubagentGroups.has(key) ? "expanded" : ""} />
-      <span className="subagent-inline-count">{count}</span>
+      {/* 子 Agent 数量：统一 pill 样式（与项目行会话数徽标同尺寸同圆角） */}
+      <span className="subagent-inline-count inline-flex h-4 shrink-0 items-center rounded-full px-1.5 text-micro font-medium tabular-nums">{count}</span>
     </span>
   ) : null;
 

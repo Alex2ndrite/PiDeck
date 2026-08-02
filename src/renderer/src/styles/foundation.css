@@ -2100,6 +2100,9 @@ select:focus-visible {
 .subagent-inline-count {
   font-family: var(--font-family-business);
   font-weight: 600;
+  color: var(--color-text-tertiary);
+  background: var(--color-bg-hover);
+  line-height: 1;
 }
 .session-row.active .conversation-title strong {
   color: var(--color-text-primary);

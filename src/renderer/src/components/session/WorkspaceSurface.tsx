@@ -261,7 +261,13 @@ function FilesPanel(props: {
 		>
 			{/* 工具行：min-w-0 允许收缩；计数 nowrap 不被压断；Select 限宽防窄抽屉换行/竖排 */}
 			<div className="panel-action-row flex h-9 min-w-0 shrink-0 items-center justify-between gap-2 border-b border-border px-3 text-xs text-muted-foreground">
-				<span className="shrink-0 whitespace-nowrap">{t("drawer.fileItems", { count: props.files.length })}</span>
+				{/* 项目/文件计数：只显数字，hover 展示完整详情（如「50 个文件和目录」） */}
+				<span
+					className="shrink-0 cursor-default whitespace-nowrap text-micro tabular-nums"
+					title={t("drawer.fileItems", { count: props.files.length })}
+				>
+					{props.files.length}
+				</span>
 				<div className="panel-action-buttons flex min-w-0 items-center gap-1">
 					{/* 文件树排序：维度 Select + 方向切换（asc/desc），方向跟随维度默认值可再手动翻转 */}
 					<Select value={sortMode} onValueChange={(value) => setSortMode(value as FileSortMode)}>
@@ -289,9 +295,8 @@ function FilesPanel(props: {
 						{sortDirection === "asc" ? <ArrowUp size={13} /> : <ArrowDown size={13} />}
 					</Button>
 					{props.onOpenFolder && (
-						<Button type="button" variant="ghost" size="sm" className="inline-flex h-7 shrink-0 items-center gap-1 whitespace-nowrap rounded-md px-2 text-xs text-muted-foreground hover:bg-accent hover:text-accent-foreground" onClick={props.onOpenFolder} title={t("drawer.openFolder")}>
+						<Button type="button" variant="ghost" size="icon-sm" className="icon-only inline-grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground" onClick={props.onOpenFolder} title={t("drawer.openFolder")} aria-label={t("drawer.openFolder")}>
 							<Folder size={14} />
-							<span className="open-folder-label">{t("drawer.openFolder")}</span>
 						</Button>
 					)}
 					{/* 刷新与全部收起：纯图标，密度对齐 shadcn icon button */}

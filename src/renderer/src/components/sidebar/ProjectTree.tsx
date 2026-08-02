@@ -101,8 +101,7 @@ export function ProjectTree(props: {
           <div className="conversation-body min-w-0 flex-1"><div className="conversation-title flex min-w-0 items-center gap-1.5">
             <strong className="min-w-0 flex-1 truncate font-medium" title={project.path}>{projectDirectoryName}</strong>
             {runningAgentCount > 0 && (
-              <span className="project-running-badge inline-flex h-4 shrink-0 items-center gap-1 rounded-full bg-primary/10 px-1.5 text-micro font-medium text-primary" title={t("app.projectRunningAgents", { count: runningAgentCount })}>
-                <span className="size-1 rounded-full bg-primary animate-pulse" aria-hidden="true" />
+              <span className="project-running-badge inline-flex h-4 shrink-0 items-center rounded-full bg-primary/10 px-1.5 text-micro font-medium tabular-nums text-primary" title={t("app.projectRunningAgents", { count: runningAgentCount })}>
                 {runningAgentCount}
               </span>
             )}

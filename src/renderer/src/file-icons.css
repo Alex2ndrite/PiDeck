@@ -56,10 +56,6 @@
   .file-node-type-label {
     display: none;
   }
-  /* 工具栏：隐藏「打开文件夹」文案只留图标（title 提示仍在），防止工具行溢出 */
-  .files-panel .panel-action-row .open-folder-label {
-    display: none;
-  }
 }
 
 /* ── 文件图标容器 ── */
