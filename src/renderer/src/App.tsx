@@ -792,12 +792,6 @@ export function App() {
     toggleListCollapsed,
   } = useResize();
   useEffect(() => {
-    if (!workspace.drawerPinnedPanel) return;
-    if (workspace.drawer !== workspace.drawerPinnedPanel) workspace.openDrawer(workspace.drawerPinnedPanel);
-    if (workspace.drawerCollapsed) workspace.expandDrawer();
-  }, [workspace.drawer, workspace.drawerCollapsed, workspace.drawerPinnedPanel]);
-
-  useEffect(() => {
     document.documentElement.lang = resolvedLocale;
   }, [resolvedLocale]);
 
@@ -2393,6 +2387,16 @@ export function App() {
     api, t,
   });
 
+
+  // 钉住面板恢复：编辑器占用抽屉（drawer=editor 或 modal 展开中）时强制恢复
+  // pinned 面板会与 toggleEditorMode 互相覆盖 → 最小化需点击两次/渲染循环。
+  // 放在 useFileEditor 之后（editorMode 可用）；编辑器模式优先于 pinned 恢复。
+  useEffect(() => {
+    if (!workspace.drawerPinnedPanel) return;
+    if (drawer === "editor" || editorMode === "modal") return;
+    if (workspace.drawer !== workspace.drawerPinnedPanel) workspace.openDrawer(workspace.drawerPinnedPanel);
+    if (workspace.drawerCollapsed) workspace.expandDrawer();
+  }, [workspace.drawer, workspace.drawerCollapsed, workspace.drawerPinnedPanel, drawer, editorMode]);
   return (
     <>
       <AppBootstrap {...bootstrapProps} />

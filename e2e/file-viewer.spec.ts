@@ -45,10 +45,18 @@ test("drawer file viewer: back button + modal minimize roundtrip", async ({ wind
 	await expect(fileRow).toBeVisible({ timeout: 15_000 });
 	await fileRow.click();
 
-	// 查看器出现（drawer 模式）+ 返回键存在（修复 2）
+	// 独立 Header（文件编辑标题 + 返回键）与内容区分离渲染（修复 2/3）
+	await expect(drawer.getByText("文件编辑")).toBeVisible({ timeout: 15_000 });
 	await expect(drawer.locator(".file-diff-title")).toHaveText("hello.ts", { timeout: 15_000 });
 	const backButton = drawer.getByRole("button", { name: "返回" });
 	await expect(backButton).toBeVisible();
+	// Header 返回键在内容加载期间也始终可点（独立渲染）——点击返回文件树
+	await backButton.click();
+	await expect(drawer.locator(".file-node-row", { hasText: "hello.ts" }).first()).toBeVisible({ timeout: 10_000 });
+
+	// 重新打开文件，进入查看器
+	await drawer.locator(".file-node-row", { hasText: "hello.ts" }).first().click();
+	await expect(drawer.locator(".file-diff-title")).toHaveText("hello.ts", { timeout: 15_000 });
 
 	// 展开到 modal（最大化）→ 最小化回抽屉必须重新出现（修复 1）
 	await drawer.getByRole("button", { name: "弹出窗口" }).click().catch(async () => {

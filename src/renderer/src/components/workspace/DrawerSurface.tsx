@@ -1,5 +1,5 @@
 import { lazy, Suspense } from "react";
-import { Minus, X } from "lucide-react";
+import { ArrowLeft, Minus, X } from "lucide-react";
 const FileDiffViewer = lazy(() => import("../app/FileDiffViewer").then((module) => ({ default: module.FileDiffViewer })));
 import { BrowserSurface } from "./BrowserSurface";
 import { GitPanel } from "../app/GitPanel";
@@ -104,25 +104,53 @@ export function DrawerSurface(props: DrawerSurfaceProps) {
   return (
     <>
       {editor.editorMode === "drawer" && drawer === "editor" && !drawerCollapsed && editor.activeTab ? (
-        <Suspense fallback={<div className="drawer-content-frame"><div className="file-diff-loading">{t("drawer.lazyLoading")}</div></div>}>
+        <>
+
+          {/* 文件编辑独立 Header：与内容区分离渲染，返回键不依赖文件内容加载（始终可点） */}
+          <div className="drawer-header flex h-12 shrink-0 items-center justify-between gap-3 border-b border-border bg-background px-3">
+            <div className="flex min-w-0 items-center gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                className="inline-grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                title={t("common.back")}
+                aria-label={t("common.back")}
+                onClick={
+                  editor.prevDrawerPanelRef.current && editor.prevDrawerPanelRef.current !== "editor"
+                    ? () => {
+                        const prev = editor.clearEditorBack();
+                        if (prev) chrome.onOpenDrawer(prev);
+                      }
+                    : () => {
+                        editor.closeEditor();
+                        chrome.onCloseDrawer();
+                      }
+                }
+              >
+                <ArrowLeft size={16} />
+              </Button>
+              <strong className="shrink-0 text-sm font-semibold text-foreground">{t("editor.fileEditor")}</strong>
+            </div>
+            <span className="min-w-0 flex-1 truncate text-right font-mono text-xs text-muted-foreground" title={editor.activeTab.filePath}>
+              {editor.activeTab.filePath.split(/[\\/]/).pop()}
+            </span>
+            <div className="drawer-header-actions flex shrink-0 items-center gap-1">
+              <Button type="button" variant="ghost" size="icon-sm" className="inline-grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground" onClick={chrome.onCollapseDrawer} title={t("drawer.collapsePanel")}>
+                <Minus size={15} />
+              </Button>
+              <Button type="button" variant="ghost" size="icon-sm" className="inline-grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground" onClick={() => { editor.closeEditor(); chrome.onCloseDrawer(); }} title={t("common.close")}>
+                <X size={15} />
+              </Button>
+            </div>
+          </div>
+<Suspense fallback={<div className="drawer-content-frame"><div className="file-diff-loading">{t("drawer.lazyLoading")}</div></div>}>
           <FileDiffViewer
             displayMode="drawer"
             filePath={editor.activeTab.filePath}
             mode={editor.activeTab.mode}
             onToggleMode={editor.activeTab.preserveDrawer ? undefined : editor.toggleEditorMode}
-            onBack={
-              editor.prevDrawerPanelRef.current && editor.prevDrawerPanelRef.current !== "editor"
-                ? () => {
-                    const prev = editor.clearEditorBack();
-                    if (prev) chrome.onOpenDrawer(prev);
-                  }
-                : () => {
-                    // 无来源面板（如从 modal 最小化且此前抽屉未开）：
-                    // 返回键兜底 = 关闭编辑器，回到抽屉默认状态
-                    editor.closeEditor();
-                    chrome.onCloseDrawer();
-                  }
-            }
+            onBack={undefined}
             originalContent={editor.activeTab.mode === "diff" ? editor.activeTab.originalContent : undefined}
             modifiedContent={editor.activeTab.modifiedContent}
             tabs={editor.editorTabs}
@@ -136,7 +164,8 @@ export function DrawerSurface(props: DrawerSurfaceProps) {
             theme={theme}
             maxFileSizeMB={editor.maxEditorFileSizeMB}
           />
-        </Suspense>
+          </Suspense>
+        </>
       ) : drawer === "browser" && !drawerCollapsed ? (
         <div className="drawer-content-frame flex min-h-0 flex-1 flex-col overflow-hidden">
           {/* 与 files/git 对齐的抽屉标题栏：浏览器面板此前缺 header，点叉无法关闭侧边栏 */}
