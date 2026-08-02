@@ -173,7 +173,13 @@ export function registerSystemIpc(deps: SystemIpcDeps): void {
 	ipcMain.handle(ipcChannels.projectsListModels, async (_event, _projectId?: string) => {
 		try {
 			// 读缓存；无缓存时后台 fork pi --list-models（含加速参数，auth 由 pi 处理）。
-			return await fetchModelList(piLocator, settingsStore);
+			const models = await fetchModelList(piLocator, settingsStore);
+			void appLogger.info("pi", "Model list resolved", {
+				count: models.length,
+				cached: getCachedModelList() === models,
+				providers: [...new Set(models.map((m) => m.provider))].slice(0, 8),
+			});
+			return models;
 		} catch (error) {
 			void appLogger.warn("pi", "Failed to list models via pi --list-models", {
 				error: error instanceof Error ? error.message : String(error),

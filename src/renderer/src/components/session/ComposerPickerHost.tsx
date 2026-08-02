@@ -60,10 +60,12 @@ export function ComposerPickerHost(props: ComposerPickerHostProps) {
   }, []);
 
   useEffect(() => {
-    if (props.picker !== "model" || !record) return;
+    // 打开模型选择器即加载（不依赖 record：欢迎页/未启动 Agent 时 record 为 undefined，
+    // 但模型列表是全量的，listModels 不依赖 projectId）。
+    if (props.picker !== "model") return;
     const sequence = ++modelLoadSequenceRef.current;
     // Always read models.json directly — same source as Agent RPC, no transition flicker
-    void desktopApi.projects.listModels(record.projectId).then((next) => {
+    void desktopApi.projects.listModels(record?.projectId).then((next) => {
       if (sequence === modelLoadSequenceRef.current) setModels(next);
     }).catch((error) => {
       if (sequence === modelLoadSequenceRef.current) {

@@ -96,3 +96,11 @@ test("renderer ComposerPickerHost shows restart confirm on needsRestart", () => 
   assert.match(pickerHost, /modelRestartTitle/);
   assert.match(pickerHost, /modelRestartBody/);
 });
+
+test("ComposerPickerHost loads models on welcome page (no record)", () => {
+  // 欢迎页/未启动 Agent 时 record 为 undefined，模型列表也必须加载：
+  // useEffect 不再被 `!record` 短路（listModels 是全量的，不依赖 projectId）。
+  assert.match(pickerHost, /if \(props\.picker !== "model"\) return/);
+  assert.doesNotMatch(pickerHost, /picker !== "model" \|\| !record/);
+  assert.match(pickerHost, /listModels\(record\?\.projectId\)/);
+});
