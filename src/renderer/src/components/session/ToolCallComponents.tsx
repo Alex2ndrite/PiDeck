@@ -31,7 +31,6 @@ import {
   getToolExitCode,
   getToolName,
   getToolStatus,
-	getToolDiffTarget,
 } from "./TimelineFormat";
 
 export type DiffFileHandler = (
@@ -176,7 +175,6 @@ function getToolKindLabel(toolName: string): string {
 export const ToolCard = memo(function ToolCard(props: {
 	message: ChatMessage;
 	defaultOpen?: boolean;
-	onDiffFile?: DiffFileHandler;
 }) {
 	const [expanded, setExpanded] = useState(props.defaultOpen ?? false);
 	const status = getToolStatus(props.message);
@@ -185,7 +183,6 @@ export const ToolCard = memo(function ToolCard(props: {
 	const tone = getToolTone(props.message);
 	const subtitle = getToolSubtitle(props.message);
 	const kindLabel = getToolKindLabel(toolName);
-	const diffTarget = getToolDiffTarget(props.message);
 	const durationMs =
 		typeof props.message.meta?.durationMs === "number"
 			? props.message.meta.durationMs
@@ -220,7 +217,7 @@ const statusLabel =
 			data-tool-kind={isSkillRead ? "skill" : getToolKind(toolName)}
 			data-message-id={props.message.id}
 		>
-			<div className={`flex min-h-8 items-center transition-colors duration-150 hover:bg-[color:color-mix(in_srgb,var(--color-bg-hover)_55%,var(--color-bg-panel))]${diffTarget ? " gap-2" : ""}`}>
+			<div className="flex min-h-8 items-center transition-colors duration-150 hover:bg-[color:color-mix(in_srgb,var(--color-bg-hover)_55%,var(--color-bg-panel))]">
 				<button
 					className="flex min-h-8 min-w-0 flex-[1_1_auto] cursor-pointer items-center gap-2 border-0 bg-transparent p-1.5 pl-2.5 text-left text-[13px] leading-5 text-text-secondary focus-visible:-outline-offset-2 focus-visible:outline-2"
 					onClick={() => setExpanded((v) => !v)}
@@ -258,16 +255,6 @@ const statusLabel =
 						</span>
 					) : null}
 				</button>
-				{diffTarget && props.onDiffFile && (
-					<button
-						className="mr-auto inline-flex h-[22px] shrink-0 cursor-pointer items-center self-center rounded-sm border border-[color-mix(in_srgb,var(--color-accent)_24%,var(--color-border-subtle))] bg-transparent px-2 font-mono text-[11px] leading-none text-[color:color-mix(in_srgb,var(--color-accent)_80%,var(--color-text-tertiary))] transition-[background-color,border-color,color] duration-150 hover:border-[var(--color-accent)] hover:bg-[color:color-mix(in_srgb,var(--color-accent)_6%,transparent)] hover:text-[var(--color-accent)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
-						type="button"
-						onClick={() => props.onDiffFile?.(diffTarget.path, diffTarget.originalContent, diffTarget.content)}
-						title={`${t("tool.viewDiff")} · ${diffTarget.path}`}
-					>
-						{t("tool.diff")}
-					</button>
-				)}
 			</div>
 			{expanded && (
 				<div className="relative rounded-b-sm border-t border-border-subtle bg-transparent">
@@ -340,13 +327,12 @@ const statusLabel =
 /** 工具组直接平铺为工具列表；每个 ToolCard 自己默认折叠，避免外层再占一行。 */
 export const ToolGroupCard = memo(function ToolGroupCard(props: {
 	group: ToolGroupItem;
-	onDiffFile?: DiffFileHandler;
 }) {
 	return (
 		<section className="w-full min-w-0 overflow-hidden rounded-none border-0 bg-transparent" data-message-id={props.group.id}>
 			<div className="flex flex-col gap-1 p-0">
 				{props.group.messages.map((message) => (
-					<ToolCard key={message.id} message={message} onDiffFile={props.onDiffFile} />
+					<ToolCard key={message.id} message={message} />
 				))}
 			</div>
 		</section>

@@ -714,7 +714,7 @@ export const TurnRow = memo(function TurnRow(props: {
 			);
 		}
 		if (item.kind === "tool-group") {
-			return <ToolGroupCard key={item.id} group={item} onDiffFile={props.onDiffFile} />;
+			return <ToolGroupCard key={item.id} group={item} />;
 		}
 		if (item.kind === "message" && item.message.role === "assistant") {
 			const txt = stripThinkingTags(stripAnsi(item.message.text)).trim();
