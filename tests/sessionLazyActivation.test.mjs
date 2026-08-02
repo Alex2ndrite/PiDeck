@@ -417,19 +417,17 @@ test("deriveSessionSurfaceRuntime hides loading for idle non-activating Session"
 // 6. Project toggle behavior
 // ════════════════════════════════════════════════════════════════════
 
-test("ProjectTree onClick toggles project and selects it separately", () => {
+test("ProjectTree selects and expands a project in one click while the arrow can still collapse it", () => {
   const projectTreeSource = readFileSync(
     "src/renderer/src/components/sidebar/ProjectTree.tsx",
     "utf8",
   );
 
-  // onClick should call toggleProject and select separately
-  assert.match(projectTreeSource, /toggleProject\(/);
-  assert.match(projectTreeSource, /\.projects\.select\(/);
-
-  // Must NOT "always expand" — toggle implies it can collapse too
-  // verify it's toggleProject not expandProject or always-open
-  assert.doesNotMatch(projectTreeSource, /alwaysExpand|forceExpand/);
+  // The project body is the primary navigation action: one click must reveal
+  // its inline content. The arrow keeps the independent persisted toggle.
+  assert.match(projectTreeSource, /setProjectExpanded\(project\.id, true\)/);
+  assert.match(projectTreeSource, /\.projects\.select\(project\.id\)/);
+  assert.match(projectTreeSource, /onClick=\{\(\) => props\.controller\.toggleProject\(project\.id\)\}/);
 });
 
 // ════════════════════════════════════════════════════════════════════

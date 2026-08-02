@@ -2,6 +2,11 @@ import { mainProcessZhCN } from "../../../shared/i18n/mainProcessCopy";
 
 export const zhCN = {
   "app.chatProject": "聊天",
+  "app.sidebarProjects": "项目",
+  "app.sidebarWorkspaces": "工作区",
+  "app.sidebarSessions": "会话",
+  "app.sidebarActiveSessions": "运行中",
+  "app.sidebarHistory": "历史会话",
   "app.chatBootstrapUnavailable": "聊天会话已不可用，请重新打开聊天后再试。",
   "app.confirm": "确认",
   "app.createAgent": "启动 Agent",

@@ -1,7 +1,7 @@
 import { Fragment, type ReactNode } from "react";
-import { ChevronDown, HatGlasses, Trash2 } from "lucide-react";
+import { ChevronDown, HatGlasses, History, Trash2 } from "lucide-react";
 import type { AgentTab, Project, SessionRecord, SessionSummary } from "../../../../shared/types";
-import { filterAgentsForSidebarDisplay, getProjectAgentSessionDisplay } from "../../agentListDisplay";
+import { filterAgentsForSidebarDisplay, getProjectAgentSessionDisplay, type ProjectChildItem } from "../../agentListDisplay";
 import { sessionRecordToSummary } from "../../atoms";
 import { t } from "../../i18n";
 import { filterSidebarSessions, getBoundSidebarRuntimeAgent, hasLiveSidebarRuntime, type SidebarController } from "../../hooks/useSidebarController";
@@ -34,6 +34,7 @@ export function SessionTree(props: {
   controller: SidebarController;
   actions: SidebarActions;
   nested?: boolean;
+  grouped?: boolean;
   visibleChildCount?: number;
   onShowMore?: () => void;
 }) {
@@ -136,8 +137,75 @@ export function SessionTree(props: {
     </span>
   ) : null;
 
+  const runningChildren = display.visibleChildren.filter((child) =>
+    child.type === "agent" || (child.type === "session" && Boolean(child.agent)),
+  );
+  const historyChildren = display.visibleChildren.filter((child) =>
+    child.type === "session" && !child.agent,
+  );
+  const renderGroupLabel = (label: string, icon: ReactNode) => (
+    <div className="flex items-center gap-1.5 px-2 pb-1 pt-2 text-micro font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+      {icon}
+      <span>{label}</span>
+    </div>
+  );
+  const renderChild = (child: ProjectChildItem) => {
+    const groupKey = `${props.project.id}:${child.key}`;
+    const childCount = child.codexSubagents.length + child.piSubagents.length;
+    if (child.type === "agent") {
+      const agentSession = props.sessions.find((session) => (
+        props.controller.catalog.runtimeBySessionId[session.id]?.agentId === child.agent.id
+      )) ?? summaries.find((session) => session.filePath === child.agent.sessionPath);
+      return <Fragment key={child.key}>
+        <button
+          type="button"
+          className={cn(
+            sessionRowClass,
+            agentSession?.id === props.currentSessionId && "active bg-accent text-accent-foreground",
+          )}
+          onContextMenu={(event) => { event.preventDefault(); void props.controller.openMenu({ kind: "agent", agentId: child.agent.id, x: event.clientX, y: event.clientY }); }}
+          onClick={() => { if (agentSession) void props.actions.sessions.open(props.project.id, agentSession.id); }}
+        >
+          <span className="agent-node-marker size-1.5 shrink-0 rounded-full bg-muted-foreground/50" aria-hidden="true" />
+          <div className="conversation-body min-w-0 flex-1"><div className="conversation-title flex min-w-0 items-center gap-1.5">
+            <span className={`agent-status-indicator status-${child.agent.status}`}>{child.agent.status}</span>
+            <strong className="min-w-0 flex-1 truncate font-medium">{child.agent.title}</strong>
+            {child.agent.noSession && <span className="anonymous-indicator" title={t("app.anonymousChat")}><HatGlasses size={11} aria-hidden="true" /></span>}
+            {renderToggle(groupKey, childCount)}
+          </div></div>
+        </button>
+        {renderSubagents(groupKey, child.codexSubagents, child.piSubagents)}
+      </Fragment>;
+    }
+    const runtime = getBoundSidebarRuntimeAgent(props.controller.catalog, child.session.id);
+    return <Fragment key={child.session.id}>
+      <button
+        type="button"
+        className={cn(
+          sessionRowClass,
+          "session-row",
+          child.session.id === props.currentSessionId && "active bg-accent text-accent-foreground",
+        )}
+        title={child.session.filePath}
+        onContextMenu={(event) => openContext(event, child.session)}
+        onClick={() => void props.actions.sessions.open(props.project.id, child.session.id)}
+      >
+        <span className="session-node-marker size-1.5 shrink-0 rounded-full bg-border" aria-hidden="true" />
+        <div className="conversation-body min-w-0 flex-1"><div className="conversation-title flex min-w-0 items-center gap-1.5">
+          {runtime && <span className={`agent-status-indicator status-${runtime.status}`}>{runtime.status}</span>}
+          {/* 历史会话（无运行态）文字降一级，与活跃 Agent/运行中会话形成层级差 */}
+          <strong className={cn("min-w-0 flex-1 truncate", runtime ? "font-medium" : "font-normal text-muted-foreground/90")}>{child.session.name || t("common.untitled")}</strong>
+          {child.session.source && child.session.source !== "pi" && <span className={`session-source-badge ${child.session.source}`}>{t(`sessionSource.${child.session.source}` as never)}</span>}
+          {renderToggle(groupKey, childCount)}
+        </div></div>
+      </button>
+      {renderSubagents(groupKey, child.codexSubagents, child.piSubagents)}
+    </Fragment>;
+  };
+
   return (
     <div className={cn(props.nested ? "worktree-children" : "session-card", "flex flex-col gap-0.5 py-0.5")}>
+      {props.grouped && (draftSessions.length > 0 || runningChildren.length > 0) && renderGroupLabel(t("app.sidebarActiveSessions"), <span className="size-1.5 rounded-full bg-primary" aria-hidden="true" />)}
       {draftSessions.map((session) => {
         const runtime = props.controller.catalog.runtimeBySessionId[session.id];
         const canDelete = !hasLiveSidebarRuntime(runtime);
@@ -175,59 +243,12 @@ export function SessionTree(props: {
         );
       })}
       {catalogLoading && <div className="project-session-loading"><div className="loader" /><span>{t("app.projectSessionsLoading")}</span></div>}
-      {display.visibleChildren.map((child) => {
-        const groupKey = `${props.project.id}:${child.key}`;
-        const childCount = child.codexSubagents.length + child.piSubagents.length;
-        if (child.type === "agent") {
-          const agentSession = props.sessions.find((session) => (
-            props.controller.catalog.runtimeBySessionId[session.id]?.agentId === child.agent.id
-          )) ?? summaries.find((session) => session.filePath === child.agent.sessionPath);
-          return <Fragment key={child.key}>
-            <button
-              type="button"
-              className={cn(
-                sessionRowClass,
-                agentSession?.id === props.currentSessionId && "active bg-accent text-accent-foreground",
-              )}
-              onContextMenu={(event) => { event.preventDefault(); void props.controller.openMenu({ kind: "agent", agentId: child.agent.id, x: event.clientX, y: event.clientY }); }}
-              onClick={() => { if (agentSession) void props.actions.sessions.open(props.project.id, agentSession.id); }}
-            >
-              <span className="agent-node-marker size-1.5 shrink-0 rounded-full bg-muted-foreground/50" aria-hidden="true" />
-              <div className="conversation-body min-w-0 flex-1"><div className="conversation-title flex min-w-0 items-center gap-1.5">
-                <span className={`agent-status-indicator status-${child.agent.status}`}>{child.agent.status}</span>
-                <strong className="min-w-0 flex-1 truncate font-medium">{child.agent.title}</strong>
-                {child.agent.noSession && <span className="anonymous-indicator" title={t("app.anonymousChat")}><HatGlasses size={11} aria-hidden="true" /></span>}
-                {renderToggle(groupKey, childCount)}
-              </div></div>
-            </button>
-            {renderSubagents(groupKey, child.codexSubagents, child.piSubagents)}
-          </Fragment>;
-        }
-        const runtime = getBoundSidebarRuntimeAgent(props.controller.catalog, child.session.id);
-        return <Fragment key={child.session.id}>
-          <button
-            type="button"
-            className={cn(
-              sessionRowClass,
-              "session-row",
-              child.session.id === props.currentSessionId && "active bg-accent text-accent-foreground",
-            )}
-            title={child.session.filePath}
-            onContextMenu={(event) => openContext(event, child.session)}
-            onClick={() => void props.actions.sessions.open(props.project.id, child.session.id)}
-          >
-            <span className="session-node-marker size-1.5 shrink-0 rounded-full bg-border" aria-hidden="true" />
-            <div className="conversation-body min-w-0 flex-1"><div className="conversation-title flex min-w-0 items-center gap-1.5">
-              {runtime && <span className={`agent-status-indicator status-${runtime.status}`}>{runtime.status}</span>}
-              {/* 历史会话（无运行态）文字降一级，与活跃 Agent/运行中会话形成层级差 */}
-              <strong className={cn("min-w-0 flex-1 truncate", runtime ? "font-medium" : "font-normal text-muted-foreground/90")}>{child.session.name || t("common.untitled")}</strong>
-              {child.session.source && child.session.source !== "pi" && <span className={`session-source-badge ${child.session.source}`}>{t(`sessionSource.${child.session.source}` as never)}</span>}
-              {renderToggle(groupKey, childCount)}
-            </div></div>
-          </button>
-          {renderSubagents(groupKey, child.codexSubagents, child.piSubagents)}
-        </Fragment>;
-      })}
+      {props.grouped
+        ? runningChildren.map(renderChild)
+        : display.visibleChildren.map(renderChild)}
+      {props.grouped && historyChildren.length > 0 && renderGroupLabel(t("app.sidebarHistory"), <History size={12} aria-hidden="true" />)}
+      {props.grouped && historyChildren.map(renderChild)}
+
       {display.hiddenChildCount > 0 && (
         <Button
           variant="ghost" size="sm" className={`h-auto w-full justify-start px-2 text-caption ${props.nested ? "worktree-sessions-more" : "session-more-row"}`}

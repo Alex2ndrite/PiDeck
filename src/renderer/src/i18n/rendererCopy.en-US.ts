@@ -3,6 +3,11 @@ import type { TranslationKey } from "./rendererCopy.zh-CN";
 
 export const enUS: Record<TranslationKey, string> = {
   "app.chatProject": "Chat",
+  "app.sidebarProjects": "Projects",
+  "app.sidebarWorkspaces": "Workspaces",
+  "app.sidebarSessions": "Sessions",
+  "app.sidebarActiveSessions": "Running",
+  "app.sidebarHistory": "History",
   "app.chatBootstrapUnavailable": "Chat is no longer available. Reopen Chat and try again.",
   "app.confirm": "Confirm",
   "app.createAgent": "Start Agent",

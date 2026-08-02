@@ -215,3 +215,31 @@ test("ProjectTree shows the project directory name like the dev reference", () =
   assert.match(projectTree, /title=\{project\.path\}/);
   assert.match(projectTree, /\{projectDirectoryName\}/);
 });
+
+test("sidebar uses one persisted project accordion without duplicating current project details", () => {
+  const content = readFileSync("src/renderer/src/components/sidebar/SidebarContent.tsx", "utf8");
+  const projectTree = readFileSync("src/renderer/src/components/sidebar/ProjectTree.tsx", "utf8");
+  const sessionTree = readFileSync("src/renderer/src/components/sidebar/SessionTree.tsx", "utf8");
+
+  // SidebarContent owns one scroll surface only; every project and its content
+  // are rendered together by ProjectTree instead of duplicating the selection below.
+  assert.match(content, /conversation-list min-h-0 flex-1 overflow-x-hidden overflow-y-auto/);
+  assert.match(content, /currentProjectId=\{currentRootProject\?\.id\}/);
+  assert.doesNotMatch(content, /max-h-\[38%\]|selectedProject|<WorktreeTree|<SessionTree/);
+
+  // One click selects and expands. Every persisted expanded project keeps the
+  // same grouped structure and page size, so selection changes do not resize it.
+  assert.match(projectTree, /setProjectExpanded\(project\.id, true\)/);
+  assert.match(projectTree, /project\.worktreeEnabled[\s\S]*<WorktreeTree/);
+  assert.match(projectTree, /<SessionTree[\s\S]*\n\s+grouped\n/);
+  assert.match(projectTree, /!collapsed && \(/);
+  assert.doesNotMatch(projectTree, /grouped=\{isCurrent\}|visibleChildCount=\{isCurrent|onShowMore=\{isCurrent/);
+
+  // A bound runtime belongs to the active group; durable sessions without a
+  // runtime stay in history, while child sessions remain nested under parents.
+  assert.match(sessionTree, /const runningChildren = display\.visibleChildren\.filter/);
+  assert.match(sessionTree, /const historyChildren = display\.visibleChildren\.filter/);
+  assert.match(sessionTree, /app\.sidebarActiveSessions/);
+  assert.match(sessionTree, /app\.sidebarHistory/);
+  assert.match(sessionTree, /renderSubagents\(groupKey, child\.codexSubagents, child\.piSubagents\)/);
+});

@@ -2,6 +2,7 @@ import React, { useRef } from "react";
 import { useSetAtom } from "jotai";
 import { PanelLeft } from "lucide-react";
 import { SidebarContent, type SidebarActions } from "./SidebarContent";
+import type { WorktreeEntry } from "../../../../shared/types";
 import { useSidebarController } from "../../hooks/useSidebarController";
 import { BrandLockup } from "../app/AppParts";
 import { settingsOpenAtom } from "../../atoms";
@@ -13,7 +14,7 @@ interface AppSidebarProps {
   actions: SidebarActions;
   currentProjectId: string | undefined;
   currentSessionId: string | undefined;
-  worktreesByProject: Record<string, any[]>;
+  worktreesByProject: Record<string, WorktreeEntry[]>;
   branchByProject: Record<string, string | null>;
   creatingWorktree: boolean;
   isLanWeb: boolean;

@@ -11,7 +11,7 @@ import { cn } from "../../lib/utils";
 
 /** pure official：项目/会话树行共享的 shadcn 风格底（hover=accent 面，active 同系） */
 const treeRowClass =
-	"group conversation relative w-full items-center gap-2 rounded-md border-0 bg-transparent px-2 py-1.5 text-left text-body text-foreground transition-colors hover:bg-accent hover:text-accent-foreground";
+  "group conversation relative flex w-full items-center gap-1 rounded-md border-0 bg-transparent px-1 py-0.5 text-body text-foreground transition-colors hover:bg-accent hover:text-accent-foreground";
 
 function isChatProject(project: Project) {
   return project.kind === "chat";
@@ -60,6 +60,7 @@ export function ProjectTree(props: {
   return <>
     {rootProjects.map((project) => {
       const collapsed = props.controller.isProjectCollapsed(project.id);
+      const isCurrent = props.currentProjectId === project.id;
       const chat = isChatProject(project);
       const projectDirectoryName = chat
         ? t("app.chatProject")
@@ -76,82 +77,110 @@ export function ProjectTree(props: {
           (agent.status === "running" || agent.status === "starting"),
       ).length;
       return <div key={project.id} className={cn("project-group mb-0.5", chat && "chat-project-group", project.worktreeEnabled && "worktree-enabled")}>
-        <button
-          type="button"
+        <div
           className={cn(
             treeRowClass,
-            "flex min-h-8",
             !chat && !props.controller.search.trim() && "project-draggable",
             chat && "chat-project",
             dragging && "dragging opacity-60",
             dragOver && "drag-over ring-1 ring-border",
-            props.currentProjectId === project.id && "active bg-accent text-accent-foreground",
+            isCurrent && "active bg-accent text-accent-foreground",
           )}
-          draggable={!chat && !props.controller.search.trim()}
-          onDragStart={(event) => dragStart(event, project.id)}
-          onDragOver={(event) => { if (props.controller.drag.sourceProjectId && props.controller.drag.sourceProjectId !== project.id) { event.preventDefault(); props.controller.setProjectDropTarget(project.id); } }}
-          onDragLeave={() => props.controller.setProjectDropTarget(undefined)}
-          onDrop={(event) => drop(event, project.id)}
-          onDragEnd={props.controller.finishProjectDrag}
+          data-active={isCurrent || undefined}
           onContextMenu={(event) => { event.preventDefault(); void props.controller.openMenu({ kind: "project", projectId: project.id, x: event.clientX, y: event.clientY }); }}
-          onClick={() => { props.controller.toggleProject(project.id); props.actions.projects.select(project.id); }}
         >
-          <span className={cn("project-fold grid size-5 place-items-center text-muted-foreground", collapsed && "folded")} title={collapsed ? t("app.projectExpand") : t("app.projectCollapse")}><Play size={12} className={cn("transition-transform", !collapsed && "rotate-90")} /></span>
-          <ProjectAvatar name={projectDirectoryName} kind={chat ? "chat" : "project"} />
-          <div className="conversation-body min-w-0 flex-1"><div className="conversation-title flex min-w-0 items-center gap-1.5">
-            <strong className="min-w-0 flex-1 truncate font-medium" title={project.path}>{projectDirectoryName}</strong>
+          <button
+            type="button"
+            className={cn("project-fold grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-background/70 hover:text-foreground", collapsed && "folded")}
+            title={collapsed ? t("app.projectExpand") : t("app.projectCollapse")}
+            aria-label={collapsed ? t("app.projectExpand") : t("app.projectCollapse")}
+            onClick={() => props.controller.toggleProject(project.id)}
+          >
+            <Play size={12} className={cn("transition-transform", !collapsed && "rotate-90")} />
+          </button>
+          <button
+            type="button"
+            className="flex min-w-0 flex-1 items-center gap-2 py-1 pr-1 text-left"
+            draggable={!chat && !props.controller.search.trim()}
+            onDragStart={(event) => dragStart(event, project.id)}
+            onDragOver={(event) => { if (props.controller.drag.sourceProjectId && props.controller.drag.sourceProjectId !== project.id) { event.preventDefault(); props.controller.setProjectDropTarget(project.id); } }}
+            onDragLeave={() => props.controller.setProjectDropTarget(undefined)}
+            onDrop={(event) => drop(event, project.id)}
+            onDragEnd={props.controller.finishProjectDrag}
+            onClick={() => {
+              // 项目选择必须一次完成“选中 + 展开”；箭头仍可独立折叠，持久化语义保持不变。
+              props.controller.setProjectExpanded(project.id, true);
+              props.actions.projects.select(project.id);
+            }}
+          >
+            <ProjectAvatar name={projectDirectoryName} kind={chat ? "chat" : "project"} />
+            <div className="conversation-body min-w-0 flex-1">
+              <div className="conversation-title flex min-w-0 items-center">
+                <strong className="min-w-0 flex-1 truncate font-medium" title={project.path}>{projectDirectoryName}</strong>
+              </div>
+              {chat && <p className="chat-project-guide mt-0.5 truncate text-micro text-muted-foreground">{t("app.projectChatGuide")}</p>}
+            </div>
+          </button>
+          <div className="flex shrink-0 items-center gap-1 pr-1">
             {runningAgentCount > 0 && (
-              <span className="project-running-badge inline-flex h-4 shrink-0 items-center rounded-full bg-primary/10 px-1.5 text-micro font-medium tabular-nums text-primary" title={t("app.projectRunningAgents", { count: runningAgentCount })}>
+              <span className="project-running-badge inline-flex h-4 items-center rounded-full bg-primary/10 px-1.5 text-micro font-medium tabular-nums text-primary" title={t("app.projectRunningAgents", { count: runningAgentCount })}>
                 {runningAgentCount}
               </span>
             )}
             {sessionCount > 0 && (
-              <span className="project-session-count inline-flex h-4 shrink-0 items-center rounded-full bg-muted px-1.5 text-micro tabular-nums text-muted-foreground" title={t("app.projectSessionCount", { count: sessionCount })}>
+              <span className="project-session-count inline-flex h-4 items-center rounded-full bg-muted px-1.5 text-micro tabular-nums text-muted-foreground" title={t("app.projectSessionCount", { count: sessionCount })}>
                 {sessionCount}
               </span>
             )}
             {sourceFilter !== null && (
-              <span
-                className="filter-indicator"
-                role="button"
-                tabIndex={0}
+              <button
+                type="button"
+                className="grid size-6 place-items-center rounded-md text-muted-foreground hover:bg-background/80 hover:text-foreground"
                 title={t("menu.filterSessions")}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  props.controller.openSourceFilter(project.id, event.clientX, event.clientY);
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    const rect = event.currentTarget.getBoundingClientRect();
-                    props.controller.openSourceFilter(project.id, rect.left, rect.bottom);
-                  }
-                }}
-              ><Filter size={12} /></span>
+                aria-label={t("menu.filterSessions")}
+                onClick={(event) => props.controller.openSourceFilter(project.id, event.clientX, event.clientY)}
+              >
+                <Filter size={12} />
+              </button>
             )}
-          </div>{chat && <p className="chat-project-guide mt-0.5 truncate text-micro text-muted-foreground">{t("app.projectChatGuide")}</p>}</div>
-          <span className="project-row-actions flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 [[data-active]_&]:opacity-100 [.conversation:hover_&]:opacity-100">
-            {chat && props.actions.projects.changeChatPath && <span className="project-action inline-flex size-6 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-background/80 hover:text-foreground" title={t("app.chatProjectSettings")} onClick={(event) => { event.stopPropagation(); void props.actions.projects.changeChatPath!(project); }}><FolderCog size={14} /></span>}
-            <span className="project-action inline-flex size-6 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-background/80 hover:text-foreground" title={t("app.projectNewAgent")} onClick={(event) => { event.stopPropagation(); void props.actions.sessions.createDraft(project.id); }}><Plus size={14} /></span>
-            <span className="project-action inline-flex size-6 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-background/80 hover:text-foreground" title={t("app.anonymousChat")} onClick={(event) => { event.stopPropagation(); void props.actions.sessions.createAnonymous(project.id); }}><HatGlasses size={14} /></span>
-          </span>
-        </button>
-        {!collapsed && project.worktreeEnabled && <WorktreeTree
-          project={project}
-          controller={props.controller}
-          actions={props.actions}
-          currentSessionId={props.currentSessionId}
-          entries={props.worktreesByProject[project.id] ?? []}
-          branch={props.branchByProject?.[project.id]}
-        />}
-        {!collapsed && <SessionTree
-          project={project}
-          sessions={props.controller.catalog.sessionsByProject[project.id] ?? []}
-          agents={props.controller.catalog.agents}
-          currentSessionId={props.currentSessionId}
-          controller={props.controller}
-          actions={props.actions}
-        />}
+            {isCurrent && (
+              <button type="button" className="grid size-6 place-items-center rounded-md text-muted-foreground hover:bg-background/80 hover:text-foreground" title={t("app.projectNewAgent")} aria-label={t("app.projectNewAgent")} onClick={() => void props.actions.sessions.createDraft(project.id)}><Plus size={14} /></button>
+            )}
+            <div className="hidden items-center gap-0.5 group-hover:flex group-focus-within:flex">
+              {chat && props.actions.projects.changeChatPath && (
+                <button type="button" className="grid size-6 place-items-center rounded-md text-muted-foreground hover:bg-background/80 hover:text-foreground" title={t("app.chatProjectSettings")} aria-label={t("app.chatProjectSettings")} onClick={() => void props.actions.projects.changeChatPath!(project)}><FolderCog size={14} /></button>
+              )}
+              {!isCurrent && (
+                <button type="button" className="grid size-6 place-items-center rounded-md text-muted-foreground hover:bg-background/80 hover:text-foreground" title={t("app.projectNewAgent")} aria-label={t("app.projectNewAgent")} onClick={() => void props.actions.sessions.createDraft(project.id)}><Plus size={14} /></button>
+              )}
+              <button type="button" className="grid size-6 place-items-center rounded-md text-muted-foreground hover:bg-background/80 hover:text-foreground" title={t("app.anonymousChat")} aria-label={t("app.anonymousChat")} onClick={() => void props.actions.sessions.createAnonymous(project.id)}><HatGlasses size={14} /></button>
+            </div>
+          </div>
+        </div>
+        {!collapsed && (
+          <div className="ml-5 border-l border-border/70 pb-1 pl-2">
+            {/* 展开内容不依赖当前选中项，项目切换只改变高亮，避免两棵会话树同时伸缩造成布局抖动。 */}
+            {project.worktreeEnabled && (
+              <WorktreeTree
+                project={project}
+                controller={props.controller}
+                actions={props.actions}
+                currentSessionId={props.currentSessionId}
+                entries={props.worktreesByProject[project.id] ?? []}
+                branch={props.branchByProject?.[project.id]}
+              />
+            )}
+            <SessionTree
+              project={project}
+              sessions={projectSessions}
+              agents={props.controller.catalog.agents}
+              currentSessionId={props.currentSessionId}
+              controller={props.controller}
+              actions={props.actions}
+              grouped
+            />
+          </div>
+        )}
       </div>;
     })}
   </>;

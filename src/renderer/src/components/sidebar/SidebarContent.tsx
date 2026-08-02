@@ -1,4 +1,4 @@
-import { Search, Plus, Settings, Sliders, MessageSquare, Globe } from "lucide-react";
+import { Search, Plus, Settings, Sliders, MessageSquare, Globe, FolderTree } from "lucide-react";
 import type { ReactNode } from "react";
 import type { AgentTab, Project, SessionRecord, SessionSummary, WorktreeEntry } from "../../../../shared/types";
 import {
@@ -106,15 +106,21 @@ export function SidebarContent(props: SidebarContentProps) {
   const managerProject = controller.sessionManagerProjectId
     ? controller.catalog.projects.find((project) => project.id === controller.sessionManagerProjectId)
     : undefined;
+  const currentProject = props.currentProjectId
+    ? controller.catalog.projects.find((project) => project.id === props.currentProjectId)
+    : undefined;
+  const currentRootProject = currentProject?.worktreeParentId
+    ? controller.catalog.projects.find((project) => project.id === currentProject.worktreeParentId) ?? currentProject
+    : currentProject;
 
   return (
     <aside
       className="chat-list-pane v3-braun flex h-full min-w-0 flex-col overflow-hidden border-r border-border bg-sidebar text-sidebar-foreground"
       aria-label={t("app.search")}
     >
-      <div className="sidebar-body flex min-h-0 flex-1 flex-col gap-2 p-2">
+      <div className="sidebar-body flex min-h-0 flex-1 flex-col gap-3 p-2">
         {props.chrome}
-        {/* pure official：搜索行用 shadcn Input + icon Button */}
+        {/* 搜索只过滤导航和当前项目内容；会话加载仍由 controller/App 的懒加载策略负责。 */}
         <div className="search-row grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
           <div className="search-box relative min-w-0">
             <Search
@@ -141,16 +147,22 @@ export function SidebarContent(props: SidebarContentProps) {
             <Plus className="size-4" />
           </Button>
         </div>
-        <div className="conversation-list min-h-0 flex-1 overflow-y-auto">
+
+        {/* 单一滚动区承载项目与展开内容，避免项目导航/详情双滚动和重复标题。 */}
+        <section className="conversation-list min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
+          <div className="sticky top-0 z-10 flex items-center gap-1.5 bg-sidebar/95 px-2 py-1.5 text-micro font-semibold uppercase tracking-[0.08em] text-muted-foreground backdrop-blur-sm">
+            <FolderTree size={12} aria-hidden="true" />
+            <span>{t("app.sidebarProjects")}</span>
+          </div>
           <ProjectTree
             controller={controller}
             actions={actions}
-            currentProjectId={props.currentProjectId}
+            currentProjectId={currentRootProject?.id}
             currentSessionId={props.currentSessionId}
             worktreesByProject={props.worktreesByProject}
             branchByProject={props.branchByProject}
           />
-        </div>
+        </section>
       </div>
       {/* 底栏在 sidebar-body 之外（aside 直接子）：body 的 p-2 / v3-braun space-4
           内边距不再把底栏从侧栏底边顶起，真正贴底 */}
