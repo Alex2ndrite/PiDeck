@@ -809,7 +809,8 @@
   gap: 2px;
   padding: var(--space-3);
   border-right: 1px solid var(--color-border-subtle);
-  background: var(--color-bg-panel);
+  /* 与 pi 管理弹窗（config-sidebar）统一：导航区灰、内容区白 */
+  background: var(--color-bg-muted);
 }
 .settings-tabs button {
   display: flex;
@@ -1226,7 +1227,8 @@
   flex: 1;
   padding: var(--space-4);
   color: var(--color-text-primary);
-  background: var(--color-bg-muted);
+  /* 与 config-main 统一：内容区用面板白 */
+  background: var(--color-bg-panel);
 }
 
 /* 设置分区卡片 */
@@ -2164,7 +2166,6 @@
 :root[data-theme="dark"] .session-card,
 :root[data-theme="dark"] .codex-session-row,
 :root[data-theme="dark"] .settings-layout,
-:root[data-theme="dark"] .settings-panel,
 :root[data-theme="dark"] .config-content,
 :root[data-theme="dark"] .feedback-body,
 :root[data-theme="dark"] .codex-import-toolbar,

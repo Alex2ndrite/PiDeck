@@ -1494,7 +1494,6 @@ export const enUS: Record<TranslationKey, string> = {
   "settings.backgroundImageOpacity": "Background opacity",
   "settings.accentDesc": "Global accent (buttons/links/selection/Logo). Custom themes: add a data-accent palette in foundation.css and sync themePresets.ts.",
   "settings.accent.default": "Default",
-  "settings.accent.green": "Fresh green",
   "settings.accent.blue": "Sky blue",
   "settings.accent.purple": "Lilac purple",
   "settings.accent.amber": "Amber",

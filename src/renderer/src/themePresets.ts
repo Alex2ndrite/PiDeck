@@ -17,8 +17,8 @@ export type AccentPreset = {
 };
 
 export const ACCENT_PRESETS: readonly AccentPreset[] = [
-	{ id: "default", labelKey: "settings.accent.default", preview: "#ffffff" },
-	{ id: "green", labelKey: "settings.accent.green", preview: "#238636" },
+	// 默认主题色即品牌绿（--color-accent: #238636），不再单列「清新绿」选项避免重复
+	{ id: "default", labelKey: "settings.accent.default", preview: "#238636" },
 	{ id: "blue", labelKey: "settings.accent.blue", preview: "#2563eb" },
 	{ id: "purple", labelKey: "settings.accent.purple", preview: "#7c3aed" },
 	{ id: "amber", labelKey: "settings.accent.amber", preview: "#b45309" },

@@ -1469,7 +1469,6 @@ export const zhCN = {
   "settings.backgroundImageOpacity": "背景图透明度",
   "settings.accentDesc": "全局主色（按钮/链接/选中态/Logo）。自定义主题：在 foundation.css 新增 data-accent 色板并同步 themePresets.ts 即可。",
   "settings.accent.default": "默认",
-  "settings.accent.green": "清新绿",
   "settings.accent.blue": "天空蓝",
   "settings.accent.purple": "丁香紫",
   "settings.accent.amber": "琥珀橙",
