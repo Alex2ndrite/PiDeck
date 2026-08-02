@@ -58,3 +58,4 @@ nul
 *.tsbuildinfo
 test-results/
 playwright-report/
+.tmp/
