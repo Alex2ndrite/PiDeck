@@ -867,6 +867,9 @@ export function App() {
       // 保证侧栏/会话区/抽屉透出的图片明暗完全一致
       const cs = getComputedStyle(root);
       const base = cs.getPropertyValue("--color-bg-app").trim();
+      // 供弹窗覆盖规则使用：纯色基色 + 面板不透明度（弹窗 = 面板 + 10% 更实）
+      if (base) root.style.setProperty("--wallpaper-base", base);
+      root.style.setProperty("--wallpaper-panel-alpha", String(panelMix));
       for (const k of BG_TOKENS) {
         const v = cs.getPropertyValue(k).trim();
         if (v) {
@@ -880,6 +883,8 @@ export function App() {
       // 只清本 effect 注入过的壁纸 token，绝不误清皮肤设置的 bg 键
       for (const k of injectedWallpaperTokens) root.style.removeProperty(k);
       injectedWallpaperTokens.clear();
+      root.style.removeProperty("--wallpaper-base");
+      root.style.removeProperty("--wallpaper-panel-alpha");
     }
   }, [settings.themeSkin, settings.theme, settings.customThemeOverrides, settings.backgroundImage, settings.backgroundImageOpacity]);
 

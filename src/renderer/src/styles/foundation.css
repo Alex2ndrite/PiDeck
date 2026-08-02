@@ -2205,6 +2205,15 @@ body.is-resizing .splitter::before {
 :root[data-bg-image="on"] .wechat-shell {
   background: transparent;
 }
+/* 壁纸模式下弹窗（shadcn Dialog）比普通面板再实 10%：统一各弹窗透明度，
+   与侧栏/会话区/抽屉同一基色，仅不透明度高一档保证内容可读 */
+:root[data-bg-image="on"] [data-slot="dialog-content"] {
+  background-color: color-mix(
+    in srgb,
+    var(--wallpaper-base, var(--color-bg-app)) calc(var(--wallpaper-panel-alpha, 30) + 10%),
+    transparent
+  );
+}
 
 .chat-pane {
   position: relative;

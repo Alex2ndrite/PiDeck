@@ -11,6 +11,11 @@ test("wallpaper mode: background image reveals through translucent panels", () =
     css,
     /:root\[data-bg-image="on"\] \.wechat-shell\s*\{\s*background:\s*transparent;/,
   );
+  // 弹窗比普通面板再实 10%（统一基色 + 面板 alpha 变量）
+  assert.match(
+    css,
+    /:root\[data-bg-image="on"\] \[data-slot="dialog-content"\][\s\S]*?--wallpaper-panel-alpha, 30\) \+ 10%\),/,
+  );
   // body 背景图变量接线
   assert.match(css, /--app-bg-image: none;/);
   assert.match(css, /background-image: var\(--app-bg-mask, none\), var\(--app-bg-image, none\);/);
