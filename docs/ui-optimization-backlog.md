@@ -22,7 +22,7 @@
 | P0 | 品牌 Logo 与品牌文字 | 🟡 部分完成 | `AppParts.tsx`、`AppSidebar.tsx`、`AppHeader.tsx` | Logo/文字尺寸、字重、间距、拖拽区和暗色主题一致 |
 | P0 | 设置、Pi 管理、反馈页面标题与 label 统一 | 🟡 第一批已完成，继续扩展 | `SettingsModal.tsx`、`config/*`、反馈 overlay、共享组件 | 标题层级、label 字号、字重、描述色、间距统一 |
 | P0 | Markdown 渲染后的工具调用展示 | ✅ Batch 2 已完成 | `MarkdownStream.tsx`、`ToolCallComponents.tsx`、`TimelineEventCards.tsx` | 工具 Logo、状态、展开/折叠、详情、错误和流式状态一致 |
-| P0 | 会话响应动画与空白页 | 🟡 部分完成 | `SurfaceComponents.tsx`、`timeline.css`、SessionView | 响应中、工具执行中、空会话、异常和加载状态不互相跳动 |
+| P0 | 会话响应动画与空白页 | ✅ Batch 3 已完成 | `SurfaceComponents.tsx`、`TimelineEventCards.tsx`、`timeline.css` | 响应中、工具执行中、空会话、异常和加载状态不互相跳动 |
 | P1 | Todo / Plan / Ask | 🟡 Ask 已有 | `TimelineEventCards.tsx`、overlay、pi RPC | Ask 的 pending/answered/cancelled；todo/plan 依赖 pi 扩展，不在 renderer 伪造 |
 | P1 | `/theming` 统一 | 🟡 基础已完成 | `themePresets.ts`、`tailwind.css`、`foundation.css` | token 单一来源；明暗、accent、皮肤、背景图和组件状态一致 |
 | P1 | Avatar 作为项目 Logo 与状态表达 | ⬜ 待开始 | `ProjectAvatar`、`AgentAvatar`、项目树 | 项目身份、运行态、错误态、worktree 状态一眼可辨 |
@@ -52,7 +52,7 @@
 - [x] 盘点工具类型与现有图标映射，补齐未知工具的统一 fallback。
 - [x] 统一工具卡 trigger、状态、详情、复制、错误和展开折叠。
 - [x] 统一 thinking、tool、compaction、diagnostic、ask 的 marker 轨道。
-- [ ] 收敛响应中动画和空白页，保证 reduced-motion 下不依赖动画表达状态。
+- [x] 收敛响应中动画和空白页，保证 reduced-motion 下不依赖动画表达状态。
 
 ### Batch 3：交互原语
 
@@ -89,6 +89,10 @@
 - 新增 `TimelineMarker`，统一 thinking、tool、compaction、diagnostic、ask 的类型标记、状态色和左侧连接轨道。
 - ToolCard 保留现有图标映射、状态、详情复制和展开折叠行为，只把运行/成功/警告/错误映射到统一 marker tone。
 - 新增 `tests/timelineMarker.test.mjs`，锁定 marker 类型、工具状态映射和折叠行为契约。
+- 响应指示器固定最小宽度，waiting 状态保留文案占位，避免流式/工具状态切换导致时间线重新排版。
+- 增加 `prefers-reduced-motion: reduce` 降级：状态仍通过颜色、图标和文案表达。
+- 空白页增加 `data-empty-state` 语义标记，区分“已有项目可创建会话”和“尚无项目”。
+- 新增 `tests/sessionVisualStates.test.mjs`，锁定响应状态尺寸、reduced-motion 和空白页契约。
 
 ## 门禁
 

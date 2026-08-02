@@ -355,8 +355,9 @@
     border-color 0.25s ease,
     background-color 0.25s ease,
     color 0.25s ease;
-  /* 固定最小高度，避免标签显隐导致布局跳动 */
+  /* 固定尺寸，状态文案切换时不让时间线重新排版。 */
   min-height: 36px;
+  min-width: 168px;
   box-sizing: border-box;
 }
 .responding-indicator-dots {
@@ -392,6 +393,8 @@
   }
 }
 .responding-indicator-label {
+  display: inline-flex;
+  min-width: 108px;
   font-family: var(--font-family-base);
   white-space: nowrap;
 }
@@ -420,6 +423,23 @@
 .responding-indicator[data-kind="waiting"] .responding-indicator-label {
   /* 标签在 DOM 中存在但视觉隐藏，保持容器宽度稳定 */
   visibility: hidden;
+}
+
+/* 用户偏好减少动态效果时，状态仍通过颜色、图标和文案表达，不能依赖动画才能识别。 */
+@media (prefers-reduced-motion: reduce) {
+  .responding-indicator,
+  .responding-indicator-dots span,
+  .tool-card,
+  .timeline-marker-row,
+  .empty-state button {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .responding-indicator-dots span {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 /* ---------- 用户消息：UserBubble（右对齐窄气泡） ---------- */

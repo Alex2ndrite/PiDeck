@@ -324,13 +324,12 @@ export function AgentAvatar(props: { status: string }) {
 
 export function EmptyState(props: { hasProject: boolean; onCreate: () => void }) {
 	return (
-		<div className="empty-state">
-			<div className="empty-logo">
+		<div className="empty-state" data-empty-state={props.hasProject ? "project" : "no-project"}>
+			<div className="empty-logo" aria-hidden="true">
 				<svg
 					viewBox="140 140 520 520"
 					width="66"
 					height="66"
-					aria-hidden="true"
 				>
 					<path
 						fill="#fff"
