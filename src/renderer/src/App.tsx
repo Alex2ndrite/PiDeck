@@ -869,7 +869,7 @@ export function App() {
       const base = cs.getPropertyValue("--color-bg-app").trim();
       // 供弹窗覆盖规则使用：纯色基色 + 面板不透明度（弹窗 = 面板 + 10% 更实）
       if (base) root.style.setProperty("--wallpaper-base", base);
-      root.style.setProperty("--wallpaper-panel-alpha", String(panelMix));
+      root.style.setProperty("--wallpaper-panel-alpha", `${panelMix}%`);
       for (const k of BG_TOKENS) {
         const v = cs.getPropertyValue(k).trim();
         if (v) {
