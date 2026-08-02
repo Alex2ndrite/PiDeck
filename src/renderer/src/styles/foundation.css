@@ -447,6 +447,38 @@ input {
 button {
   cursor: pointer;
 }
+
+/* 原生 range 统一样式（Chromium）：消除 UA 默认的两端渲染缺口——
+   thumb 与轨道贴合、无 margin/padding，滑块可真正拉满 0%/100% */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  margin: 0;
+  padding: 0;
+  height: 16px;
+  background: transparent;
+  cursor: pointer;
+}
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--color-text-tertiary) 28%, transparent);
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: -5px;
+  border-radius: 9999px;
+  background: var(--color-accent);
+  border: 2px solid var(--color-bg-panel);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+input[type="range"]:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
+}
 button:disabled {
   cursor: not-allowed;
   opacity: 0.45;

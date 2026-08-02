@@ -22,10 +22,15 @@ test("App.tsx toggles wallpaper mode marker with background image setting", () =
     appSource,
     /root\.dataset\.bgImage = settings\.backgroundImage \? "on" : "off"/,
   );
-  // token 半透明注入（静态色值 + color-mix，覆盖所有面板/输入框）
-  assert.match(
-    appSource,
-    /for \(const k of BG_TOKENS\)/,
-  );
-  assert.match(appSource, /80%, transparent/);
+  // 皮肤 + 背景图合并为单一 effect（修复互相清除：皮肤 effect 清 token 误清壁纸注入、
+  // 背景 else 分支误清皮肤 bg 键）
+  assert.match(appSource, /皮肤 \+ 换肤背景图统一管理/);
+  // token 半透明注入：面板不透明度跟随滑块（panelMix 与遮罩 alpha 同步，
+  // 100% 可见度 → 面板全透明，不再写死 80%）
+  assert.match(appSource, /const panelMix = Math\.round\(alpha \* 100\);/);
+  // 壁纸模式统一基色（--color-bg-app），侧栏/会话区/抽屉透出完全一致
+  assert.match(appSource, /const base = cs\.getPropertyValue\("--color-bg-app"\)\.trim\(\);/);
+  assert.match(appSource, /color-mix\(in srgb, \$\{base\} \$\{panelMix\}%, transparent\)/);
+  // 只清本 effect 注入过的壁纸 token（模块级记录，不误清皮肤键）
+  assert.match(appSource, /injectedWallpaperTokens/);
 });
