@@ -56,6 +56,9 @@ test("fetchModelList uses cache; refreshModelList forces reload", () => {
   assert.match(cacheSource, /export function refreshModelList/);
   // 加速参数传入 execFile
   assert.match(cacheSource, /MODEL_LIST_FAST_ARGS/);
+  // 空结果不写缓存（避免永久「没有匹配的模型」）+ 自动重试
+  assert.match(cacheSource, /models\.length > 0\) cachedListModels/);
+  assert.match(cacheSource, /重试一次|setTimeout\(resolve, 500\)/);
 });
 
 test("config save (models/auth) triggers background refresh", () => {

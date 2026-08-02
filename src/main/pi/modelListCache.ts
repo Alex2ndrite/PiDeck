@@ -90,8 +90,11 @@ async function runPiListModels(
 }
 
 /**
- * 获取模型列表（读缓存；无缓存时 fork 一次并缓存）。
- * 返回的数组会被缓存复用，调用方不应修改。
+ * 获取模型列表（读缓存；无缓存时 fork 一次）。
+ * 关键：空结果不写缓存——启动早期 pi 可能尚未就绪导致 fork 返回空，
+ * 若把空数组缓存下来会永久显示「没有匹配的模型」。
+ * 首次 fork 返回空时自动重试一次（间隔 500ms），覆盖 pi 冷启动慢的场景。
+ * 返回的数组由调用方消费，不应修改。
  */
 export function fetchModelList(
 	piLocator: PiLocator,
@@ -101,8 +104,14 @@ export function fetchModelList(
 	if (cachedListModelsPending) return cachedListModelsPending;
 
 	cachedListModelsPending = runPiListModels(piLocator, settingsStore)
-		.then((models) => {
-			cachedListModels = models;
+		.then(async (models) => {
+			// 空结果重试一次：启动早期 pi 冷启动/环境未就绪时可能返回空表头。
+			if (models.length === 0) {
+				await new Promise((resolve) => setTimeout(resolve, 500));
+				models = await runPiListModels(piLocator, settingsStore).catch(() => models);
+			}
+			// 仅非空结果入缓存；空结果（pi 未就绪/无可用模型）保持 null，下次重试。
+			if (models.length > 0) cachedListModels = models;
 			return models;
 		})
 		.finally(() => {
@@ -121,8 +130,12 @@ export function refreshModelList(
 ): Promise<AvailableModel[]> {
 	if (cachedListModelsPending) return cachedListModelsPending;
 	cachedListModelsPending = runPiListModels(piLocator, settingsStore)
-		.then((models) => {
-			cachedListModels = models;
+		.then(async (models) => {
+			if (models.length === 0) {
+				await new Promise((resolve) => setTimeout(resolve, 500));
+				models = await runPiListModels(piLocator, settingsStore).catch(() => models);
+			}
+			if (models.length > 0) cachedListModels = models;
 			return models;
 		})
 		.finally(() => {
