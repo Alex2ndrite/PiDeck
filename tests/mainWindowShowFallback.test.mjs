@@ -34,6 +34,6 @@ test("linux display workaround opens the main window without hidden pre-map", ()
 	assert.match(source, /show: showMainWindowImmediately/);
 	// 启动尺寸统一走 applyStartupWindowMode：隐藏态先 maximize 减少首帧跳动，
 	// XWayland 兼容层下 showMainWindowImmediately=true 则跳过预映射直接 show。
-	assert.match(source, /applyStartupWindowMode\(\s*mainWindow,\s*startupWindowMode,\s*showMainWindowImmediately,?\s*\)/s);
+	assert.match(source, /applyStartupWindowMode\(\s*mainWindow,\s*effectiveStartupMode,\s*showMainWindowImmediately,?\s*\)/s);
 	assert.match(source, /if \(showMainWindowImmediately\) \{\s*showMainWindowOnce\(\);\s*\}/s);
 });

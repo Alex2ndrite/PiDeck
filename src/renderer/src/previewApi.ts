@@ -85,7 +85,7 @@ let previewSettings: AppSettings = {
 	backgroundImage: "",
 	backgroundImageOpacity: 0.8,
 	language: "system",
-	startupWindowMode: "maximized",
+	startupWindowMode: "last",
 	piEnvironmentChecked: true,
 	enableGitManagement: true,
 	gitCommitMessagePrompt: "",

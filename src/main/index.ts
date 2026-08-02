@@ -180,6 +180,7 @@ import { SkillManager } from "./skills/SkillManager";
 import { ExtensionManager } from "./extensions/ExtensionManager";
 import { ProjectResourceManager } from "./projects/ProjectResourceManager";
 import { registerProjectsIpc } from "./ipc/projectsIpc";
+import { readLastWindowBounds, saveLastWindowBounds } from "./windowState";
 import {
 	registerBackgroundImageProtocol,
 	registerBackgroundsIpc,
@@ -1317,8 +1318,21 @@ async function createWindow() {
 	const backgroundColor = isDark ? "#121212" : "#f8f8f5";
 
 	// 按外观设置的启动预设调整初始尺寸；隐藏态先 maximize/fullscreen，减少首帧跳动。
-	const startupWindowMode = settingsStore.get().startupWindowMode ?? "maximized";
-	const startupBounds = resolveStartupWindowBounds(startupWindowMode);
+	// startupWindowMode="last"：读上次关闭时的窗口大小；读不到（首次启动/记录损坏）顺延默认 maximized
+	const requestedMode = settingsStore.get().startupWindowMode ?? "last";
+	let effectiveStartupMode = requestedMode;
+	let startupBounds: { width: number; height: number };
+	if (requestedMode === "last") {
+		const last = readLastWindowBounds(app.getPath("userData"));
+		if (last) {
+			startupBounds = last;
+		} else {
+			effectiveStartupMode = "maximized";
+			startupBounds = resolveStartupWindowBounds("maximized");
+		}
+	} else {
+		startupBounds = resolveStartupWindowBounds(requestedMode);
+	}
 
 	mainWindow = new BrowserWindow({
 		show: showMainWindowImmediately,
@@ -1356,7 +1370,7 @@ async function createWindow() {
 	// 避免 ready-to-show 后再调整造成首帧布局跳变。
 	applyStartupWindowMode(
 		mainWindow,
-		startupWindowMode,
+		effectiveStartupMode,
 		showMainWindowImmediately,
 	);
 
@@ -1443,6 +1457,19 @@ async function createWindow() {
 	if (showMainWindowImmediately) {
 		showMainWindowOnce();
 	}
+
+	// 窗口大小记忆：关闭/退出前保存 normal bounds（最大化/全屏时取恢复后的尺寸），
+	// 供下次 startupWindowMode="last" 启动使用；隐藏到托盘不记录（窗口未关闭）。
+	// 注意：mainWindow 为模块级可空变量，此处用创建后的局部引用确保非空
+	const windowForState = createdWindow;
+	windowForState.on("close", () => {
+		if (!windowForState.isDestroyed()) {
+			const normal = windowForState.isMaximized() || windowForState.isFullScreen()
+				? windowForState.getNormalBounds()
+				: windowForState.getBounds();
+			saveLastWindowBounds(app.getPath("userData"), { width: normal.width, height: normal.height });
+		}
+	});
 
 	// 关闭窗口时根据设置决定：隐藏到托盘还是正常退出
 	mainWindow.on("close", (event) => {

@@ -1519,6 +1519,7 @@ export const enUS: Record<TranslationKey, string> = {
   "settings.piRpcStartup": "Agent startup diagnostics",
   "settings.electronSandboxDesc": "Controls Electron renderer sandbox (unrelated to pi Agent). Off by default for Windows AV/GPU compatibility. Requires restarting PiDeck. Turn it back off if the app fails to start.",
   "settings.electronSandbox": "Enable Chromium sandbox",
+  "settings.startupWindow.last": "Last window size",
   "settings.startupWindow.compact": "Window · Compact (1100×720)",
   "settings.startupWindow.medium": "Window · Medium (1280×840)",
   "settings.startupWindow.large": "Window · Large (1480×960)",

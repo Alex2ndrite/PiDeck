@@ -467,6 +467,7 @@ function SettingsModalContent(props: SettingsModalProps) {
 		label: t(preset.labelKey),
 	}));
 	const startupWindowModeOptions = [
+		{ value: "last", label: t("settings.startupWindow.last") },
 		{ value: "maximized", label: t("settings.startupWindow.maximized") },
 		{ value: "normal-large", label: t("settings.startupWindow.large") },
 		{ value: "normal-medium", label: t("settings.startupWindow.medium") },

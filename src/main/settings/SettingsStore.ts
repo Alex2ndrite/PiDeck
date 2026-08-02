@@ -87,7 +87,7 @@ const defaultSettings: AppSettings = {
   language: "system",
   // 默认最大化：与历史 createWindow 在 ready-to-show 后 maximize() 的行为一致
   // （1480×960 只是最大化前的兜底尺寸，不是最终展示态）
-  startupWindowMode: "maximized",
+  startupWindowMode: "last",
   piEnvironmentChecked: false,
   enableGitManagement: true,
   gitCommitMessagePrompt: `请根据以下 git diff 生成一条中文 git commit message。

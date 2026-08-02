@@ -462,7 +462,7 @@ export function App() {
 	backgroundImage: "",
 	backgroundImageOpacity: 0.8,
     language: "system",
-    startupWindowMode: "maximized",
+    startupWindowMode: "last",
     piEnvironmentChecked: false,
     enableGitManagement: true,
     gitCommitMessagePrompt: "请根据以下 git diff 生成一条中文 git commit message。\n\n变更描述：\n{diff}\n\nGitmoji 对应关系：\n✨ feat - 新功能\n🐛 fix - Bug 修复\n📚 docs - 文档更新\n💎 style - 代码格式\n♻️ refactor - 重构\n🧪 test - 测试\n🔧 chore - 构建/工具",

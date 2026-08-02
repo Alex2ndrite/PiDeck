@@ -23,8 +23,9 @@ export type LinkOpenMode = "external" | "internal";
 export type AppFontSizeMode = "compact" | "default" | "medium" | "large" | "xlarge";
 export type AppFontBaseMode = "system" | "sans" | "serif" | "custom";
 export type AppFontMonoMode = "commit-mono" | "system-mono" | "custom";
-/** 主窗口启动尺寸预设：fullscreen 占满屏幕，maximized 最大化，其余为固定窗口 */
+/** 主窗口启动尺寸预设：last=上次关闭时的窗口大小（读不到时顺延默认）；fullscreen 占满屏幕，maximized 最大化，其余为固定窗口 */
 export type StartupWindowMode =
+	| "last"
 	| "fullscreen"
 	| "maximized"
 	| "normal-large"
@@ -49,7 +50,7 @@ export type AppSettings = {
 	backgroundImageOpacity: number;
 	/** 界面语言，system 跟随系统语言；pseudo 用于长文案布局压力测试 */
 	language: AppLanguageMode;
-	/** 启动时主窗口尺寸预设，默认 maximized（与历史 ready-to-show 后 maximize 一致） */
+	/** 启动时主窗口尺寸预设，默认 last（上次窗口大小，读不到时顺延 maximized） */
 	startupWindowMode: StartupWindowMode;
 	piEnvironmentChecked: boolean;
 	/** 是否启用会话右侧的 Git 源代码管理入口与面板，默认开启以保持升级前行为。 */
