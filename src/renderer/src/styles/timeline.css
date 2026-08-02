@@ -1407,81 +1407,10 @@ body.ask-dialog-open .ask-question-card.pending {
   outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
 }
-.markdown-body table {
-  display: block;
-  box-sizing: border-box;
-  width: 100%;
-  max-width: 100%;
-  min-width: 0;
-  margin: 10px 0;
-  overflow-x: auto;
-  border-collapse: collapse;
-  border-spacing: 0;
-}
-.markdown-body .table-wrap {
-  box-sizing: border-box;
-  width: 100%;
-  max-width: 100%;
-  min-width: 0;
-  margin: var(--space-3) 0;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: 14px;
-  background: var(--color-chat-table-bg);
-  overflow-x: auto;
-}
-.markdown-body .table-wrap > table {
-  display: table;
-  width: 100%;
-  max-width: none;
-  min-width: 0;
-  margin: 0;
-  overflow-x: visible;
-  border-collapse: separate;
-  border-spacing: 0;
-}
-.markdown-body .table-wrap th,
-.markdown-body .table-wrap td {
-  border-top: 1px solid var(--color-border-subtle);
-  border-left: 1px solid var(--color-border-subtle);
-  border-right: none;
-  border-bottom: none;
-}
-.markdown-body .table-wrap tr:first-child th,
-.markdown-body .table-wrap tr:first-child td {
-  border-top: none;
-}
-.markdown-body .table-wrap th:first-child,
-.markdown-body .table-wrap td:first-child {
-  border-left: none;
-}
-.markdown-body .table-wrap thead {
-  background: var(--color-chat-muted-bg);
-}
-.markdown-body .table-wrap tr td {
-  background: var(--color-chat-table-bg);
-}
-.markdown-body .table-wrap tr:nth-child(even) td {
-  background: var(--color-chat-table-bg);
-}
-.markdown-body thead {
-  background: var(--color-bg-muted);
-}
-.markdown-body th,
-.markdown-body td {
-  padding: 7px 10px;
-  border: 1px solid var(--color-border-subtle);
-  text-align: left;
-  vertical-align: top;
-  white-space: normal;
-  word-break: break-word;
-}
-.markdown-body th {
-  color: var(--color-text-primary);
-  font-weight: 650;
-}
-.markdown-body tr:nth-child(even) td {
-  background: var(--color-bg-muted);
-}
+/* 表格样式由 Streamdown 自带的 [data-streamdown="table"] 体系接管（见 surfaces.css
+   streamdown 覆盖段）。旧自研渲染器的 .table-wrap / display:block 规则已随迁移废弃——
+   尤其 .markdown-body table { display: block } 会把 streamdown 表格打回块级布局，
+   并叠加 10px 外边距制造表头上方的"空余横线"观感。 */
 .markdown-body code {
   font-family: var(--font-family-mono);
   font-size: 0.92em;

@@ -1,10 +1,11 @@
 import { memo } from "react";
-import { Streamdown, defaultRehypePlugins, defaultRemarkPlugins } from "streamdown";
+import { Streamdown, defaultRehypePlugins, defaultRemarkPlugins, type Components } from "streamdown";
 import { code } from "@streamdown/code";
 import { mermaid } from "@streamdown/mermaid";
 import { math } from "@streamdown/math";
 import { MarkdownLink, remarkLinkifyPaths } from "./MarkdownLink";
 import { markdownUrlTransform } from "./MarkdownLinkCore";
+import { MathBlockParagraph } from "./MarkdownComponents";
 
 /**
  * Streamdown 渲染管线（唯一 markdown 引擎）。
@@ -42,6 +43,25 @@ export const MarkdownStream = memo(function MarkdownStream(props: {
 }) {
 	const isDark = typeof document !== "undefined" &&
 		document.documentElement.dataset.theme === "dark";
+	// 显式 Components 标注：让 a/p 的 props 走上下文类型推断（streamdown 的
+	// Components 是「具名槽位 | 索引签名」联合，直接内联会触发索引签名分支的类型不兼容）
+	const components: Components = props.components ?? {
+		a: (linkProps) => (
+			<MarkdownLink
+				{...(linkProps as unknown as React.AnchorHTMLAttributes<HTMLAnchorElement>)}
+				onOpenExternal={props.onOpenExternal}
+				onOpenFile={props.onOpenFile}
+			/>
+		),
+		// 块级公式段落挂复制按钮（LaTeX 源码取自 katex annotation）
+		p: (pProps) => (
+			<MathBlockParagraph
+				{...(pProps as unknown as React.ComponentPropsWithoutRef<"p"> & {
+					children?: React.ReactNode;
+				})}
+			/>
+		),
+	};
 	return (
 		<Streamdown
 			mode={props.isStreaming ? "streaming" : "static"}
@@ -76,17 +96,7 @@ export const MarkdownStream = memo(function MarkdownStream(props: {
 					securityLevel: "strict",
 				},
 			}}
-			components={
-				props.components ?? {
-					a: (linkProps) => (
-						<MarkdownLink
-							{...(linkProps as unknown as React.AnchorHTMLAttributes<HTMLAnchorElement>)}
-							onOpenExternal={props.onOpenExternal}
-							onOpenFile={props.onOpenFile}
-						/>
-					),
-				}
-			}
+			components={components}
 		>
 			{props.text}
 		</Streamdown>

@@ -23,7 +23,9 @@ test("fixed light chat/table colors are tokenized for dark mode", () => {
 
   assert.match(block(".diagnostic-card"), /background:\s*var\(--color-chat-muted-bg\);/);
   assert.doesNotMatch(css, /\.user-turn-bubble\s*\{/);  // 迁移后无独立规则，背景由 bg-muted/60 utility 承担
-  assert.match(block(".markdown-body .table-wrap"), /background:\s*var\(--color-chat-table-bg\);/);
-  assert.match(block(".markdown-body .table-wrap thead"), /background:\s*var\(--color-chat-muted-bg\);/);
-  assert.match(block(".markdown-body .table-wrap tr td"), /background:\s*var\(--color-chat-table-bg\);/);
+  // 表格已迁移到 Streamdown 结构（data-streamdown=table-wrapper）；工具条/表头/表体
+  // 背景沿用 chat 系 token，暗色模式跟随主题（见 surfaces.css streamdown 覆盖段）
+  assert.match(block('[data-streamdown="table-wrapper"] > div:first-child'), /background:\s*var\(--color-chat-muted-bg\);/);
+  assert.match(block('[data-streamdown="table-wrapper"] > div:last-child'), /background:\s*var\(--color-chat-table-bg\);/);
+  assert.match(block('[data-streamdown="table-wrapper"] thead'), /background:\s*var\(--color-chat-muted-bg\);/);
 });

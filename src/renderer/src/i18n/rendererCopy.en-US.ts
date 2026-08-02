@@ -505,6 +505,8 @@ export const enUS: Record<TranslationKey, string> = {
   "copy.asImageCopied": "Copied as image",
   "copy.success": "Copied",
   "copy.failed": "Copy failed",
+  "copy.formula": "Copy formula",
+  "copy.formulaCopied": "Formula copied",
   "common.copyAll": "Copy All",
   "common.copyJson": "Copy JSON",
   "common.copyVisible": "Copy Visible",

@@ -3491,81 +3491,66 @@
   color: var(--color-accent);
 }
 
-.mermaid-block {
-  margin: 12px 0;
-  padding: 12px;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-md);
-  background: var(--color-bg-surface);
-}
+/* ── Streamdown 覆盖：mermaid / 表格 / 公式 ─────────────────────────
+ * 迁移到 streamdown 后接管其默认渲染的观感修正（旧自研 .mermaid-* 规则已废弃）。
+ * 核心问题与对策：
+ * 1. 图默认过小：mermaid svg 带内联 max-width（自然宽），图表容器 flex 无宽度
+ *    → shrink-to-fit 缩到内容宽。强制容器撑满 + svg max-width:100%，高度 auto 保宽高比。
+ * 2. 全屏遮罩被标题栏穿透：streamdown 全屏 overlay 是 fixed inset-0 z-50
+ *    （portal 到 body），低于自定义标题栏 900-930，品牌区/窗口控件盖在遮罩上、
+ *    X 按钮也被窗口控件挡住只能 ESC。抬到 --z-dialog（950）并改全不透明背景。
+ * 3. 表格工具条与表头空隙大：压缩 wrapper 内边距/间距，按钮区紧凑。 */
 
-.mermaid-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 6px;
-  margin-bottom: 8px;
-  font-size: var(--font-size-caption);
-  color: var(--color-text-secondary);
+/* 图表默认铺满容器宽（修复默认渲染过小） */
+[data-streamdown="mermaid"] [aria-label="Mermaid chart"] {
+  width: 100%;
 }
-
-.mermaid-toolbar button {
-  min-width: 28px;
-  height: 24px;
-  padding: 0 7px;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-sm);
-  background: var(--color-bg-panel);
-  color: var(--color-text-primary);
-  font-size: var(--font-size-caption);
-  cursor: pointer;
-}
-
-.mermaid-toolbar button:hover {
-  background: var(--color-bg-hover);
-}
-
-.mermaid-viewport {
-  overflow: auto;
-}
-
-.mermaid-diagram {
-  width: calc(100% * var(--mermaid-zoom, 1));
-  min-width: max-content;
-  text-align: center;
-  transform-origin: top left;
-}
-
-.mermaid-diagram svg {
-  max-width: none;
+[data-streamdown="mermaid"] svg {
+  width: 100%;
   height: auto;
+  max-width: 100% !important; /* 覆盖 mermaid 内联 style="max-width: <自然宽>px" */
 }
 
-.mermaid-fallback {
-  margin: 0;
+/* 全屏遮罩：mermaid 与表格共用 fixed inset-0 z-50 类；抬到标题栏之上 + 全不透明 */
+div.fixed.inset-0.z-50 {
+  z-index: var(--z-dialog);
+  background-color: var(--color-bg-panel);
 }
 
-.mermaid-error-message {
-  display: block;
-  margin-top: 6px;
-  color: var(--color-danger);
-  font-size: var(--font-size-caption);
+/* 表格：压缩工具条与表格之间的空隙，消除表头上方"空余横线"观感；
+   工具条/表头/表体背景沿用主题化的 chat 系 token，保证暗色模式对齐 */
+[data-streamdown="table-wrapper"] {
+  padding: 4px;
+  gap: 4px;
 }
-
-.katex-display {
-  overflow-x: auto;
-  overflow-y: hidden;
-  padding: 4px 0;
+[data-streamdown="table-wrapper"] > div:first-child {
+  padding: 2px 4px;
+  background: var(--color-chat-muted-bg);
+}
+[data-streamdown="table-wrapper"] > div:first-child button {
+  border-radius: 6px;
+}
+[data-streamdown="table-wrapper"] > div:last-child {
+  background: var(--color-chat-table-bg);
+}
+[data-streamdown="table-wrapper"] thead {
+  background: var(--color-chat-muted-bg);
+}
+/* 表体斑马纹，增强长表可读性 */
+[data-streamdown="table-body"] tr:nth-child(even) td {
+  background: var(--color-bg-muted);
 }
 
 .katex {
   font-size: 1.03em;
 }
 
+/* 块级公式包装：flex 居中，公式与复制按钮同排 */
 .math-copy-wrap {
   position: relative;
-  display: inline-flex;
+  display: flex;
   align-items: center;
+  justify-content: center;
   gap: 4px;
 }
 

@@ -497,6 +497,8 @@ export const zhCN = {
   "copy.asImageCopied": "已复制为图片",
   "copy.success": "已复制",
   "copy.failed": "复制失败",
+  "copy.formula": "复制公式",
+  "copy.formulaCopied": "已复制公式",
   "common.copyAll": "复制全部",
   "common.copyJson": "复制 JSON",
   "common.copyVisible": "复制可见",

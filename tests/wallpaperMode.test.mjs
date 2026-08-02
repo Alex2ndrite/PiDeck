@@ -12,10 +12,10 @@ test("wallpaper mode: background image reveals through translucent panels", () =
     /:root\[data-bg-image="on"\] \.wechat-shell\s*\{\s*background:\s*transparent;/,
   );
   // 弹窗比普通面板再实一档（+25%），并在弹窗内局部覆盖 bg 变量（变量继承）
-  // 消除 Header 透 / Body 实的多层叠加不一致
+  // 消除 Header 透 / Body 实的多层叠加不一致；90% 为保底不透明（#113 品牌 logo 透出修复）
   assert.match(
     css,
-    /:root\[data-bg-image="on"\] \[data-slot="dialog-content"\][\s\S]*?--wallpaper-dialog-alpha: calc\(var\(--wallpaper-panel-alpha, 30%\) \+ 25%\);/,
+    /:root\[data-bg-image="on"\] \[data-slot="dialog-content"\][\s\S]*?--wallpaper-dialog-alpha: max\(90%, calc\(var\(--wallpaper-panel-alpha, 30%\) \+ 25%\)\);/,
   );
   assert.match(css, /:root\[data-bg-image="on"\] \[data-slot="dialog-content"\][\s\S]*?--color-bg-muted: color-mix\(in srgb, var\(--wallpaper-base, var\(--color-bg-app\)\) var\(--wallpaper-dialog-alpha\), transparent\);/);
   // body 背景图变量接线

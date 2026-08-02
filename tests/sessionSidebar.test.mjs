@@ -149,7 +149,7 @@ test("worktree rows expose their child project context menu and loading projects
   const sessionTree = readFileSync("src/renderer/src/components/sidebar/SessionTree.tsx", "utf8");
   const controller = readFileSync("src/renderer/src/hooks/useSidebarController.ts", "utf8");
   assert.match(worktree, /kind: "project",\s*projectId: childProject\.id/);
-  assert.match(worktree, /className="conversation worktree-workspace-header"/);
+  assert.match(worktree, /className="conversation worktree-workspace-header[^"]*"/);
   assert.match(worktree, /className="conversation worktree-row"/);
   assert.doesNotMatch(worktree, /currentProjectId|toggleProjectExpanded/);
   assert.match(controller, /useAtomValue\(sessionCatalogLoadStateAtom\)/);

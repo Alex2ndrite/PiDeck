@@ -267,6 +267,18 @@ function startStream(userText, options = {}) {
 			"| --- | --- | --- |",
 			"| U2 | ✅ | Streamdown 渲染管线 |",
 			"| U5 | ✅ | 组件清扫 |",
+			"",
+			"```mermaid",
+			"graph LR",
+			"  A[启动] --> B{校验}",
+			"  B -->|通过| C[执行]",
+			"  B -->|失败| D[报错]",
+			"  C --> E[结束]",
+			"```",
+			"",
+			"行内公式 $x^2 + y^2 = z^2$ 与块级公式：",
+			"",
+			"$$\\int_0^1 x^2 \\, dx = \\frac{1}{3}$$",
 		].join("\n")
 		: `Mock 回复：「${userText.slice(0, 40)}」流式渲染验证完成。`;
 	const chunkCount = slow ? 18 : 12;
