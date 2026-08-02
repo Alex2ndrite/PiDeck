@@ -191,7 +191,7 @@ import { registerTerminalIpc } from "./ipc/terminalIpc";
 import { registerScratchPadIpc } from "./ipc/scratchPadIpc";
 import { registerSessionIpc } from "./ipc/sessionIpc";
 import { registerSystemIpc } from "./ipc/systemIpc";
-import { fetchModelList, getCachedModelList } from "./pi/modelListCache";
+import { fetchModelList, getCachedModelList, refreshModelList } from "./pi/modelListCache";
 import { registerFilesIpc } from "./ipc/filesIpc";
 import { registerBrowserViewIpc } from "./ipc/browserViewIpc";
 import {
@@ -2236,6 +2236,12 @@ app.whenReady().then(async () => {
 		appLogger,
 		undefined,
 		mainCopy,
+		// 每次 spawn Agent 前异步刷新模型列表缓存（防用户直接改 models.json/auth.json 不生效）。
+		() => {
+			if (piLocator && settingsStore) {
+				void refreshModelList(piLocator, settingsStore).catch(() => undefined);
+			}
+		},
 	);
 	webServiceManager = new WebServiceManager({
 		// 订阅 pi agent 事件流：供 Web SSE 端点转发给浏览器（与 FeishuBridge 同源机制）。

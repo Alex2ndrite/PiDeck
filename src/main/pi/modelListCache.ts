@@ -1,38 +1,32 @@
 /**
  * pi --list-models 全局缓存模块。
- * Phase 2.1: 从 index.ts 中提取，被 model IPC 和 config IPC 共享。
- * 首次调用 fork pi --list-models，之后直接读缓存。
+ *
+ * 数据源：pi --list-models（pi 内部处理 auth.json/models.json/内置目录，输出「可用模型」）。
+ * 加速参数：--offline --no-extensions --no-skills --no-themes（实测 2s → ~1.1s，输出一致）。
+ *
+ * 刷新策略：
+ * - 启动时异步预加载（应用 ready 后后台 fork 一次）；
+ * - 界面保存 models.json/auth.json 后失效并后台重取；
+ * - 每次启动 Agent 时强制重取（防用户直接改文件不生效）。
  */
 
 import type { AvailableModel } from "../../shared/types";
 import type { PiLocator } from "./PiLocator";
 import type { SettingsStore } from "../settings/SettingsStore";
-import type { PiModelsFile } from "../config/ConfigManager";
 
-/** 全局缓存：首次调用 fork pi --list-models，之后直接读缓存 */
+/** 全局缓存：模型列表（null = 未加载/已失效） */
 let cachedListModels: AvailableModel[] | null = null;
+/** 在途请求去重：并发调用只 fork 一次 */
 let cachedListModelsPending: Promise<AvailableModel[]> | null = null;
 
-/**
- * 把本地 models.json（嵌套 providers 结构）转换为 AvailableModel[]。
- * 相比 pi --list-models 表格解析，能保留 contextWindow/maxTokens/input 等完整字段。
- */
-export function parsePiModelsFile(modelsFile: PiModelsFile | undefined): AvailableModel[] {
-	const providers = modelsFile?.providers ?? {};
-	const models: AvailableModel[] = [];
-	for (const [provider, config] of Object.entries(providers)) {
-		for (const model of config?.models ?? []) {
-			models.push({
-				id: model.id,
-				name: model.name ?? `${provider}/${model.id}`,
-				provider,
-				contextWindow: model.contextWindow,
-				reasoning: model.reasoning,
-			});
-		}
-	}
-	return models;
-}
+/** pi --list-models 加速参数：offline 跳过网络目录刷新，no-ext/skills/themes 跳过发现加载。 */
+export const MODEL_LIST_FAST_ARGS = [
+	"--list-models",
+	"--offline",
+	"--no-extensions",
+	"--no-skills",
+	"--no-themes",
+];
 
 /**
  * 解析 pi --list-models 的文本表格输出。
@@ -61,70 +55,86 @@ export function parsePiListModels(stdout: string): AvailableModel[] {
 	return models;
 }
 
+/** fork pi --list-models 并解析（一次调用，带超时）。 */
+async function runPiListModels(
+	piLocator: PiLocator,
+	settingsStore: SettingsStore,
+): Promise<AvailableModel[]> {
+	const settings = settingsStore.get();
+	const command = piLocator.resolveCommand(
+		settings.customPiPath,
+		settings.wslEnabled,
+		settings.wslDistro,
+		settings.wslUser,
+	);
+	const invocation = piLocator.createInvocation(command, MODEL_LIST_FAST_ARGS);
+	const { execFile } = await import("node:child_process");
+	const result = await new Promise<{ stdout: string }>((resolve, reject) => {
+		execFile(invocation.command, invocation.args, {
+			env: piLocator.createProcessEnv(settings, invocation.pathPrefix, invocation.wsl),
+			shell: invocation.shell,
+			windowsHide: true,
+			timeout: 20_000,
+			encoding: "utf8",
+			windowsVerbatimArguments: invocation.windowsVerbatimArguments,
+		}, (error, stdout, stderr) => {
+			if (error) {
+				const message = (stderr || error.message).slice(0, 300);
+				reject(new Error(message));
+			} else {
+				resolve({ stdout });
+			}
+		});
+	});
+	return parsePiListModels(result.stdout);
+}
+
 /**
- * 执行一次模型列表获取：
- * - 优先使用本地 models.json（modelsFromConfig 提供，实时且字段完整）；
- * - models.json 缺失/解析失败/未提供时，回退 fork pi --list-models。
- * 已有缓存或在途请求时不会重复执行。
+ * 获取模型列表（读缓存；无缓存时 fork 一次并缓存）。
+ * 返回的数组会被缓存复用，调用方不应修改。
  */
 export function fetchModelList(
 	piLocator: PiLocator,
 	settingsStore: SettingsStore,
-	modelsFromConfig?: () => Promise<PiModelsFile | undefined>,
 ): Promise<AvailableModel[]> {
 	if (cachedListModels) return Promise.resolve(cachedListModels);
 	if (cachedListModelsPending) return cachedListModelsPending;
 
-	cachedListModelsPending = (async () => {
-		// 优先本地 models.json：实时反映用户编辑，字段更完整，且不依赖 fork 子进程。
-		if (modelsFromConfig) {
-			const parsed = await modelsFromConfig().catch(() => undefined);
-			const fromConfig = parsePiModelsFile(parsed);
-			if (fromConfig.length > 0) {
-				cachedListModels = fromConfig;
-				return fromConfig;
-			}
-			// models.json 为空时继续尝试 --list-models（可能是纯 builtin provider 场景）
-		}
-
-		const settings = settingsStore.get();
-		const command = piLocator.resolveCommand(
-			settings.customPiPath,
-			settings.wslEnabled,
-			settings.wslDistro,
-			settings.wslUser,
-		);
-		const invocation = piLocator.createInvocation(command, ["--list-models"]);
-		const { execFile } = await import("node:child_process");
-		const result = await new Promise<{ stdout: string }>((resolve, reject) => {
-			execFile(invocation.command, invocation.args, {
-				env: piLocator.createProcessEnv(settings, invocation.pathPrefix, invocation.wsl),
-				shell: invocation.shell,
-				windowsHide: true,
-				timeout: 15_000,
-				encoding: "utf8",
-				windowsVerbatimArguments: invocation.windowsVerbatimArguments,
-			}, (error, stdout, stderr) => {
-				if (error) {
-					const message = (stderr || error.message).slice(0, 300);
-					reject(new Error(message));
-				} else {
-					resolve({ stdout });
-				}
-			});
+	cachedListModelsPending = runPiListModels(piLocator, settingsStore)
+		.then((models) => {
+			cachedListModels = models;
+			return models;
+		})
+		.finally(() => {
+			cachedListModelsPending = null;
 		});
-		const models = parsePiListModels(result.stdout);
-		cachedListModels = models;
-		return models;
-	})();
-
 	return cachedListModelsPending;
 }
 
-/** 清空模型列表缓存（配置变更后调用）。 */
+/**
+ * 强制刷新模型列表（绕过缓存）：配置变更 / 启动 Agent 时调用。
+ * 并发去重：同一时刻只 fork 一次，返回最新结果。
+ */
+export function refreshModelList(
+	piLocator: PiLocator,
+	settingsStore: SettingsStore,
+): Promise<AvailableModel[]> {
+	if (cachedListModelsPending) return cachedListModelsPending;
+	cachedListModelsPending = runPiListModels(piLocator, settingsStore)
+		.then((models) => {
+			cachedListModels = models;
+			return models;
+		})
+		.finally(() => {
+			cachedListModelsPending = null;
+		});
+	return cachedListModelsPending;
+}
+
+/** 清空模型列表缓存（配置变更后调用；后续 fetch 会重新 fork）。 */
 export function invalidateModelListCache(): void {
 	cachedListModels = null;
-	cachedListModelsPending = null;
+	// 在途请求让其自然完成并覆盖缓存；不主动中断
 }
 
 /** 获取当前缓存的模型列表（不触发新的 fork）。 */

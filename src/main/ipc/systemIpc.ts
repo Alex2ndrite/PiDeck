@@ -24,7 +24,7 @@ import type { AppLogger } from "../logging/AppLogger";
 import type { RpcLogger } from "../logging/RpcLogger";
 import type { SessionRuntimeCoordinator } from "../sessions/SessionRuntimeCoordinator";
 import type { SkillManager } from "../skills/SkillManager";
-import { fetchModelList, invalidateModelListCache, getCachedModelList } from "../pi/modelListCache";
+import { fetchModelList, invalidateModelListCache, getCachedModelList, refreshModelList } from "../pi/modelListCache";
 import { getWslExe } from "../wsl/wslExe";
 
 export type SystemIpcDeps = {
@@ -172,10 +172,8 @@ export function registerSystemIpc(deps: SystemIpcDeps): void {
 
 	ipcMain.handle(ipcChannels.projectsListModels, async (_event, _projectId?: string) => {
 		try {
-			// 优先读本地 models.json（实时 + 字段完整）；缺失/为空时回退 pi --list-models。
-			return await fetchModelList(piLocator, settingsStore, () =>
-				configManager.getModelsConfig().then((result) => result.parsed),
-			);
+			// 读缓存；无缓存时后台 fork pi --list-models（含加速参数，auth 由 pi 处理）。
+			return await fetchModelList(piLocator, settingsStore);
 		} catch (error) {
 			void appLogger.warn("pi", "Failed to list models via pi --list-models", {
 				error: error instanceof Error ? error.message : String(error),
@@ -648,12 +646,16 @@ export function registerSystemIpc(deps: SystemIpcDeps): void {
 	ipcMain.handle(ipcChannels.configSaveModels, async (_event, data) => {
 		const result = await configManager.saveModelsConfig(data);
 		invalidateModelListCache();
+		// 配置保存后立即后台重取，下次打开选择器直接命中新缓存。
+		void refreshModelList(piLocator, settingsStore).catch(() => undefined);
 		void appLogger.info("config", "Models config saved", { providerCount: Object.keys(data?.providers ?? {}).length });
 		return result;
 	});
 	ipcMain.handle(ipcChannels.configSaveAuth, async (_event, data) => {
 		const result = await configManager.saveAuthConfig(data);
 		invalidateModelListCache();
+		// auth 影响「可用模型」过滤（pi 只列已认证 provider），保存后同样后台重取。
+		void refreshModelList(piLocator, settingsStore).catch(() => undefined);
 		void appLogger.info("config", "Auth config saved", { authCount: Object.keys(data ?? {}).length });
 		return result;
 	});

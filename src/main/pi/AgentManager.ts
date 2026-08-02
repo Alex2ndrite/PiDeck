@@ -192,6 +192,8 @@ export class AgentManager {
 			key: MainProcessTranslationKey,
 			params?: Record<string, string | number>,
 		) => string = () => "Agent operation failed.",
+		/** 每次 spawn pi 进程前回调（如刷新模型列表缓存）；异步但不等完成，避免阻塞 Agent 启动。 */
+		private readonly onBeforeAgentSpawn?: () => void,
 	) {
 		this.messageProjector = new AgentMessageProjector({
 			translate: this.translate,
@@ -568,6 +570,9 @@ export class AgentManager {
 		const t2 = Date.now();
 
 		void this.appLogger?.info("agent", "Agent pi process start", { agentId: id });
+		// 每次 spawn 前异步刷新模型列表缓存（不等完成，避免阻塞 Agent 启动）：
+		// 用户直接编辑 models.json/auth.json 后，下一次启动的 Agent 即能看到新模型。
+		this.onBeforeAgentSpawn?.();
 		const process = new PiProcess(project.path, this.settingsStore.get());
 		process.on("version-check", (payload) => {
 			void this.appLogger?.info("agent", "Pi version check completed", {
