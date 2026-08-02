@@ -440,12 +440,13 @@
 .outline-zone:hover .conversation-outline,
 .outline-hover.dragging .conversation-outline {
   opacity: 1;
-  pointer-events: none;
+  pointer-events: auto;
   transform: translateX(0);
 }
 .outline-zone:hover .outline-trigger:not(.is-disabled),
 .outline-hover.dragging .outline-trigger:not(.is-disabled) {
-  opacity: 0;
+  /* 大纲面板展开时按钮半透明保留：既让位给面板，也不至于「移入即消失」的割裂感 */
+  opacity: 0.4;
 }
 .outline-title {
   padding: 8px 8px 6px;
@@ -507,7 +508,6 @@
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
   border: 0;
-  border-left: 2px solid transparent;
   border-radius: var(--radius-lg);
   background: transparent;
   padding: 7px 8px;
@@ -515,7 +515,7 @@
   color: var(--color-text-secondary);
 }
 .conversation-outline button:hover {
-  border-left-color: var(--color-accent);
+  /* 目录项 hover 用柔和的背景色反馈；不用品牌绿左边框（视觉过重） */
   background: var(--color-bg-hover);
 }
 .conversation-outline strong {

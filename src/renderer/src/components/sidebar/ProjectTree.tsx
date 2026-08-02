@@ -11,7 +11,7 @@ import { cn } from "../../lib/utils";
 
 /** pure official：项目/会话树行共享的 shadcn 风格底（hover=accent 面，active 同系） */
 const treeRowClass =
-	"conversation relative w-full items-center gap-2 rounded-md border-0 bg-transparent px-2 py-1.5 text-left text-body text-foreground transition-colors hover:bg-accent hover:text-accent-foreground";
+	"group conversation relative w-full items-center gap-2 rounded-md border-0 bg-transparent px-2 py-1.5 text-left text-body text-foreground transition-colors hover:bg-accent hover:text-accent-foreground";
 
 function isChatProject(project: Project) {
   return project.kind === "chat";
