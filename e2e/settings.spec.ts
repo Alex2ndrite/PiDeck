@@ -37,6 +37,9 @@ test("accent switch applies data-accent immediately", async ({ window }) => {
 	// 外观设置 tab：主题 Select（移入）→ 皮肤 → 主题色
 	await modal.getByText("外观设置").click();
 	// 皮肤切到石墨灰：data-skin 立即更新
+	// 背景图字段渲染（选图/清除按钮存在；弹系统对话框不在 e2e 范围）
+	await expect(modal.getByText("背景图片")).toBeVisible();
+	await expect(modal.getByRole("button", { name: "选择图片…" })).toBeVisible();
 	await modal.getByRole("combobox").filter({ hasText: "经典绿（出厂）" }).click();
 	await window.getByRole("option", { name: "石墨灰" }).click();
 	// 主题色 Select（显示当前值「清新绿」）

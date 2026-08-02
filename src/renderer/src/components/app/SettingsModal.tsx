@@ -11,6 +11,7 @@ import {
 	Plus,
 } from "lucide-react";
 import { t } from "../../i18n";
+import { desktopApi } from "../../desktopApi";
 import { ACCENT_PRESETS, SKIN_PRESETS } from "../../themePresets";
 import { Button } from "../ui-shadcn/button";
 import {
