@@ -105,6 +105,15 @@
   --space-5: 20px;
   --space-6: 24px;
   --space-8: 32px;
+  /*
+   * 浮层层级语义 token（z-index）。自定义标题栏体系占 900–940：
+   * 拖拽条 900 / 窗口控件与折叠恢复钮 920 / 侧栏品牌区 930 / 旧 modal-backdrop 940。
+   * 迁移到 shadcn Dialog 后必须高于 940，否则侧栏品牌区会穿透盖在弹窗上（issue-113）。
+   * 弹窗内 Radix Select/Dropdown/Tooltip 会 portal 到 body，需再高一层（--z-popover），
+   * 否则被弹窗内容盖住；1000 为旧式浮层（worktree-create-dialog / image-preview-modal）保留。
+   */
+  --z-dialog: 950;
+  --z-popover: 960;
   /* shadcn new-york 默认 radius 约 0.5rem，整体略圆一点更接近官方 */
   --radius-xs: 4px;
   --radius-sm: 6px;
