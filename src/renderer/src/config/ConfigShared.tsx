@@ -67,15 +67,15 @@ export function SecretInput(props: {
 
 // ── Models Tab ──────────────────────────────────────────
 
+/** Radix Select 不允许空字符串 value，用哨兵值映射回 ""。 */
+const SENTINEL = "__none__";
+
 export function ConfigSelect(props: {
 	value: string;
 	options: Array<{ value: string; label: string }>;
 	onChange: (value: string) => void;
 	placeholder?: string;
 }) {
-	// #115：手写 combobox（focus/mouseDown 时序 hack）整体删除，换 shadcn Select。
-	// Radix 不允许空字符串 value，用哨兵值映射回 ""。
-	const SENTINEL = "__none__";
 	return (
 		<Select
 			value={props.value === "" ? SENTINEL : props.value}
@@ -200,66 +200,40 @@ export function ConfigComboboxInput(props: {
 	);
 }
 
-/** API 类型输入：自定义 combobox，避免原生 datalist 在 Electron 滚动容器中出现弹层错位或选项显示不完整。 */
+/** API 类型选择：shadcn Select（与全局下拉交互/动画一致）。
+ *  预定义选项 + 描述；当前值为自定义值时动态追加「自定义」选项保留可读性。 */
 export function ApiTypeInput(props: {
 	value: string;
 	onChange: (value: string) => void;
 }) {
-	const [open, setOpen] = useState(false);
-
+	const isCustom = Boolean(props.value) && !PROVIDER_API_OPTIONS.includes(props.value);
 	return (
-		<div
-			className="relative min-w-0"
-			onBlur={() => {
-				// 等待 option 的 mouseDown 先写入值，再关闭下拉，避免点击被 blur 截断。
-				window.setTimeout(() => setOpen(false), 80);
-			}}
+		<Select
+			value={props.value || SENTINEL}
+			onValueChange={(value) => props.onChange(value === SENTINEL ? "" : value)}
 		>
-			<Input
-				value={props.value}
-				onFocus={() => setOpen(true)}
-				onChange={(e) => {
-					props.onChange(e.target.value);
-					setOpen(true);
-				}}
-				placeholder={t("config.apiTypePlaceholder")}
-				className="h-9 w-full rounded-sm border border-border-subtle bg-bg-panel px-3 pr-[38px] text-[13px] text-text-primary outline-none focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]"
-			/>
-			<Button
-				type="button"
-				variant="ghost"
-				size="icon-sm"
-				className="absolute top-px right-px size-[34px] rounded-l-none border-l border-border-subtle text-text-tertiary hover:bg-bg-hover hover:text-text-primary"
-				onMouseDown={(e) => {
-					e.preventDefault();
-					setOpen((current) => !current);
-				}}
-				title={t("config.apiTypeExpand")}
-			>
-				<ChevronDown size={14} />
-			</Button>
-			{open && (
-				<div className="absolute top-[calc(100%+4px)] right-0 left-0 z-30 max-h-[320px] w-[1200px] max-w-[calc(100vw-40px)] overflow-y-auto rounded-lg border border-border-subtle bg-bg-panel p-[5px] shadow-[var(--shadow-popover)]">
-					{PROVIDER_API_OPTIONS.map((option) => (
-						<Button
-							key={option}
-							type="button"
-							variant="ghost"
-							size="sm"
-							className={`h-auto min-h-[30px] w-full justify-start rounded-sm px-[9px] py-1.5 text-xs${option === props.value ? " bg-bg-active text-[color:var(--color-accent)]" : ""}`}
-							onMouseDown={(e) => {
-								e.preventDefault();
-								props.onChange(option);
-								setOpen(false);
-							}}
-						>
+			<SelectTrigger className="config-select-trigger">
+				<SelectValue placeholder={t("config.apiTypePlaceholder")} />
+			</SelectTrigger>
+			<SelectContent>
+				{isCustom && (
+					<SelectItem value={props.value}>
+						<span className="flex flex-col items-start gap-0.5">
+							<span className="text-[13px] font-semibold">{t("config.apiTypeCustom")}: {props.value}</span>
+							<small className="text-[11px] leading-[1.4] text-text-tertiary">{props.value}</small>
+						</span>
+					</SelectItem>
+				)}
+				{PROVIDER_API_OPTIONS.map((option) => (
+					<SelectItem key={option} value={option}>
+						<span className="flex flex-col items-start gap-0.5">
 							<span className="text-[13px] font-semibold">{API_TYPE_LABELS[option] || option}</span>
 							<small className="text-[11px] leading-[1.4] text-text-tertiary">{getApiTypeDescription(option)}</small>
-						</Button>
-					))}
-				</div>
-			)}
-		</div>
+						</span>
+					</SelectItem>
+				))}
+			</SelectContent>
+		</Select>
 	);
 }
 

@@ -711,6 +711,7 @@ export const zhCN = {
   "config.advancedPreservedModel": "高级字段已保留：{fields}。",
   "config.apiTypeExpand": "展开 API 类型选项",
   "config.apiTypePlaceholder": "选择或输入 API 类型",
+  "config.apiTypeCustom": "自定义",
   "config.authAddSelected": "添加选中供应商",
   "config.authCustomPlaceholder": "输入供应商 ID",
   "config.authCustomHint": "不在列表中？输入其他供应商 ID：",

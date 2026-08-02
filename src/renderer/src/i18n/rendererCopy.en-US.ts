@@ -719,6 +719,7 @@ export const enUS: Record<TranslationKey, string> = {
   "config.advancedPreservedModel": "Advanced fields preserved: {fields}.",
   "config.apiTypeExpand": "Show API type options",
   "config.apiTypePlaceholder": "Choose or enter an API type",
+  "config.apiTypeCustom": "Custom",
   "config.authAddSelected": "Add selected provider",
   "config.authCustomPlaceholder": "Enter provider ID",
   "config.authCustomHint": "Not in the list? Enter other provider ID:",
