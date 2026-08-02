@@ -811,7 +811,8 @@ export function App() {
     if (settings.theme !== "system" || !media) return;
     media.addEventListener?.("change", applyTheme);
     return () => media.removeEventListener?.("change", applyTheme);
-  }, [settings.theme]);
+    // 依赖 theme 与 accent：只改主题色时也必须重新应用 data-accent（否则界面不变）
+  }, [settings.theme, settings.accent]);
 
   // 字号与命名字体预设由 data 属性选择 CSS token；只有 custom 字体需要注入用户输入。
   useEffect(() => {
