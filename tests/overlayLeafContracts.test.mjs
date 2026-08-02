@@ -59,8 +59,26 @@ function loadResponder() {
     react: {},
     "lucide-react": { MessageCircle: () => null, X: () => null },
     "../../i18n": { t: (key) => key },
+    "../../utils/askUi": askUiMock,
   });
 }
+
+// 与 src/renderer/src/utils/askUi.ts 行为一致的轻量替身（vm 沙箱不解析相对链）
+const askUiMock = {
+  pickActiveAskRequest: (entries) => {
+    const list = Object.values(entries ?? {});
+    const active = list.filter((entry) => entry.status === "pending" || entry.status === "responding");
+    return active[active.length - 1]?.request;
+  },
+  buildAskResponse: (method, value, options) => (
+    options?.cancelled
+      ? { cancelled: true }
+      : method === "confirm"
+        ? { confirmed: Boolean(value), value: Boolean(value) }
+        : { value: value ?? "" }
+  ),
+  serializeBatchAnswers: () => "{}",
+};
 
 test("runtime responder rejects old generation and sends cancelled response with binding", async () => {
   const { createSessionRuntimeUiResponder } = loadResponder();
@@ -310,6 +328,7 @@ test("allowOther renders a custom input and sends its value through the responde
     "react/jsx-runtime": { jsx, jsxs: jsx, Fragment: "fragment" },
     "lucide-react": { Info: () => null },
     "../../i18n": { t: (key) => key },
+    "../../utils/askUi": askUiMock,
   });
   const request = { agentId: "a1", requestId: "r-custom", method: "select", title: "Pick", options: ["one"], allowOther: true };
   const props = {

@@ -91,6 +91,7 @@ function SessionTab(props: {
       <div
         role="tab"
         aria-selected={active}
+        data-session-id={sessionId}
         title={title}
         className={cn(
           "session-tab group relative flex h-7 shrink-0 cursor-pointer select-none items-center gap-1.5 rounded-md border px-2.5 text-caption transition-colors",

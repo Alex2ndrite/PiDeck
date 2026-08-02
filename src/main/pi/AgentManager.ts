@@ -2747,12 +2747,6 @@ export class AgentManager {
 		if (["setStatus", "setTitle"].includes(method)) return;
 		if (!["select", "confirm", "input", "editor"].includes(method)) return;
 
-		// select 无选项时自动取消，不等用户响应
-		if (method === "select" && (!Array.isArray(typed.options) || typed.options.length === 0)) {
-			this.sendUIResponse(agentId, requestId, { cancelled: true });
-			return;
-		}
-
 		// Batch ask_question sends its form as an input title envelope. Decode it at
 		// the process boundary so no renderer can mistake the raw JSON for a prompt.
 		const rawTitle = String(typed.title ?? typed.question ?? "");
@@ -2764,6 +2758,16 @@ export class AgentManager {
 		// with the desktop's own inline field so selecting custom text never opens a
 		// second request above the composer.
 		const hasCustomOption = rawOptions?.some((option) => option.startsWith("✎")) ?? false;
+		const effectiveOptions = hasCustomOption
+			? rawOptions?.filter((option) => !option.startsWith("✎"))
+			: rawOptions;
+		// select 无有效选项时降级为 input 而不是静默取消：ask_question 的 options 是
+		// 可选的，模型经常只问问题不给选项——自动取消会让用户完全看不到提问 UI。
+		// 降级后问题文本保留为标题，用户仍可输入文字回答。
+		const effectiveMethod =
+			method === "select" && (!effectiveOptions || effectiveOptions.length === 0)
+				? "input"
+				: method;
 		const request = batchEnvelope
 			? {
 					agentId,
@@ -2776,11 +2780,9 @@ export class AgentManager {
 			: {
 					agentId,
 					requestId,
-					method,
+					method: effectiveMethod,
 					title: rawTitle,
-					options: hasCustomOption
-						? rawOptions?.filter((option) => !option.startsWith("✎"))
-						: rawOptions,
+					options: effectiveOptions,
 					placeholder: typed.placeholder as string | undefined,
 					prefill: typed.prefill as string | undefined,
 					allowOther: typed.allowOther === true || hasCustomOption,
@@ -2790,7 +2792,7 @@ export class AgentManager {
 		if (!this.pendingUIRequests.has(agentId)) {
 			this.pendingUIRequests.set(agentId, new Map());
 		}
-		this.pendingUIRequests.get(agentId)!.set(requestId, { method, title: request.title });
+		this.pendingUIRequests.get(agentId)!.set(requestId, { method: effectiveMethod, title: request.title });
 
 		// The session runtime owns pending UI. Do not write an additional system
 		// message, because that creates a second interactive card in the timeline.

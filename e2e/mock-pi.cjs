@@ -117,6 +117,50 @@ let streaming = false;
 // 桌面端排队用例依赖「先到的先答、后到的接着答」的顺序性。
 const pendingPrompts = [];
 
+// ── Ask 模拟（E2E：ask-ui.spec.ts）──
+// prompt 含 ASK_* 标记时，先发 extension_ui_request（桌面端渲染提问卡片），
+// 挂起等待 extension_ui_response 后再流式回复（回复包含用户答案，供断言结果正确）。
+const ASK_MARKERS = {
+	ASK_SELECT: { method: "select", title: "请选择操作", options: ["选项A", "选项B"], allowOther: false },
+	ASK_SELECT_CUSTOM: { method: "select", title: "请选择或输入", options: ["选项A", "选项B"], allowOther: true },
+	ASK_SELECT_NOOPTS: { method: "select", title: "无选项提问（应降级为输入）", options: [] },
+	ASK_CONFIRM: { method: "confirm", title: "确认继续吗？" },
+	ASK_INPUT: { method: "input", title: "请输入你的名字", placeholder: "例如：张三" },
+	ASK_EDITOR: { method: "editor", title: "请写下修改意见", placeholder: "多行内容" },
+	ASK_BATCH: { method: "input", title: JSON.stringify({ __piDeckBatchAsk: 1, questions: [
+		{ id: "b1", type: "select", question: "选择框架", options: ["React", "Vue"] },
+		{ id: "b2", type: "confirm", question: "使用 TypeScript？" },
+		{ id: "b3", type: "input", question: "项目名", placeholder: "my-app" },
+	] }) },
+};
+let pendingAsk = null; // { requestId, method, title, marker }
+let askAnswerLog = []; // 记录每次 ask 的答案，供 E2E 主进程侧断言
+
+function emitAsk(marker, markerConfig) {
+	const requestId = "ask-" + (nextEntrySeq++);
+	pendingAsk = { requestId, method: markerConfig.method, marker };
+	emit({
+		type: "extension_ui_request",
+		id: requestId,
+		method: markerConfig.method,
+		title: markerConfig.title,
+		...(markerConfig.options ? { options: markerConfig.options } : {}),
+		...(markerConfig.placeholder ? { placeholder: markerConfig.placeholder } : {}),
+		...(markerConfig.prefill ? { prefill: markerConfig.prefill } : {}),
+		...(markerConfig.allowOther !== undefined ? { allowOther: markerConfig.allowOther } : {}),
+	});
+}
+
+function handleAskResponse(payload) {
+	if (!pendingAsk || payload.id !== pendingAsk.requestId) return;
+	const { requestId, marker } = pendingAsk;
+	pendingAsk = null;
+	const answer = payload.value !== undefined ? String(payload.value) : payload.cancelled ? "[取消]" : "[空]";
+	askAnswerLog.push({ requestId, marker, answer, confirmed: payload.confirmed ?? undefined });
+	// 答案拼进回复（raw 模式不截断），E2E 通过会话文本断言「点击选项 → 结果正确」
+	startStream(`你选择了「${marker}」，答案：${answer}`, { raw: true });
+}
+
 function send(payload) {
 	log(">", payload);
 	process.stdout.write(JSON.stringify(payload) + "\n");
@@ -196,12 +240,15 @@ function stopStream(settled) {
 	}
 }
 
-function startStream(userText) {
+function startStream(userText, options = {}) {
 	streaming = true;
 	const slow = userText.includes("SLOW");
 	streamIntervalMs = slow ? 220 : 80;
 	// prompt 含 "MDEMO" 时回复富 markdown，用于截图巡检渲染元素（链接/代码/表格/引用）
-	const reply = userText.includes("MDEMO")
+	// raw 模式（Ask 回答回显）：不套模板、不截断，保证长 JSON 答案完整回传
+	const reply = options.raw
+		? userText
+		: userText.includes("MDEMO")
 		? [
 			"以下是渲染元素巡检：",
 			"",
@@ -314,6 +361,15 @@ function handleCommand(cmd) {
 			const text = typeof cmd.message === "string" ? cmd.message : "";
 			ensureSessionFile();
 			if (text) userPrompts.push(text);
+			// Ask 模拟：命中 ASK_* 标记 → 发提问卡片并挂起，等用户回答后再流式。
+			// 最长标记优先匹配（ASK_SELECT_NOOPTS 不能先命中前缀 ASK_SELECT）
+			const askMarker = Object.keys(ASK_MARKERS)
+				.filter((key) => text.includes(key))
+				.sort((left, right) => right.length - left.length)[0];
+			if (askMarker) {
+				emitAsk(askMarker, ASK_MARKERS[askMarker]);
+				return;
+			}
 			if (streaming) {
 				pendingPrompts.push(text);
 			} else {
@@ -376,8 +432,14 @@ rl.on("line", (line) => {
 		return; // 非 JSON 输入直接忽略（桌面端也只记录 protocol-error）
 	}
 	try {
+		const parsed = JSON.parse(trimmed);
+		// 桌面端发送的 Ask 回答（extension_ui_response 协议）
+		if (parsed && parsed.type === "extension_ui_response") {
+			handleAskResponse(parsed);
+			return;
+		}
 		log("<", cmd);
-		handleCommand(cmd);
+		handleCommand(parsed);
 	} catch (error) {
 		// 命令处理异常不能击穿进程：桌面端依赖进程存活性判断
 		send({
