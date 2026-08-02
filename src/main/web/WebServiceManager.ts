@@ -486,7 +486,7 @@ export class WebServiceManager {
 				return;
 			}
 
-			await this.serveRenderer(url.pathname, response);
+			await this.serveRenderer(url, response);
 	}
 
 	private async getState() {
@@ -1008,8 +1008,14 @@ export class WebServiceManager {
 </html>`;
 	}
 
-	private async serveRenderer(pathname: string, response: ServerResponse) {
-		const requestedPath = decodeURIComponent(pathname);
+	private async serveRenderer(url: URL, response: ServerResponse) {
+		const requestedPath = decodeURIComponent(url.pathname);
+		// ?view=legacy 强制回退到 A1 vanilla 内嵌页，便于对比新旧 Web 前端体验。
+		const forceLegacy = url.searchParams.get("view") === "legacy";
+		if (forceLegacy) {
+			this.sendHtml(response, this.renderPage());
+			return;
+		}
 		// Web 服务根路径：优先 serve React 版 web.html（A2）；
 		// 构建产物缺失时回退到内嵌 renderPage（A1 vanilla 页，保持兼容）。
 		const webEntry = join(this.rendererRoot, "web.html");

@@ -159,10 +159,12 @@ pi 事件流 → (适配层) → AI SDK UIMessageStream → 任意前端 useChat
 
 ---
 
-## 5. 建议路线图
+## 5. 建议路线图与落地状态
 
-1. **短期（1–2 周）**：做 A1 —— `WebServiceManager` 加流式端点，消费 pi 事件输出 AI SDK SSE 协议；web 前端 vanilla 消费实现打字机效果。顺带把现有轮询降频做兜底。
-2. **中期（产品确认后）**：做 A2 —— web 前端 React 化，引入 `@ai-sdk/react` 的 `useChat`，状态机/停止/重试/parts 展示一步到位。
+> 更新：A1、A2 已实现并提交（2026-08）。
+
+1. ✅ **A1（已落地，commit a304e9a）**：`WebServiceManager` 新增 `GET /api/sessions/:id/stream` SSE 端点，消费 pi 事件输出 AI SDK UIMessageStream 协议；vanilla 前端 SSE 消费实现打字机。配套 13 个单测 + SSE 端点端到端。
+2. ✅ **A2（已落地，commit f5a6046）**：web 前端 React 化（`src/renderer/web.html` + `WebChatApp.tsx`），`useChat` + `DefaultChatTransport` 接 `POST /api/chat` 端点；状态机/停止/parts 渲染一步到位；后端协议零改动复用。配套 e2e（选会话→发消息→流式→完整回复）。
 3. **决策点**：是否允许 PiDeck 侧直调 LLM（方案 B）。若允许，用 AI SDK Core + `openai-compatible` 在独立模块实现，且必须在设置中显式开启；若不允许，长期搁置。
 4. **远期**：语义检索（E）依赖 B 的边界决策，暂缓。
 
