@@ -172,6 +172,12 @@ type SessionModifiedFile = {
 };
 
 
+/**
+ * 美元→人民币估算汇率：仅用于费用提示的便捷换算（约合金额），非实时牌价。
+ * 如需跟随实时汇率或用户自定义，可升级为设置项（usdToCnyRate）。
+ */
+const USD_TO_CNY_RATE = 7.2;
+
 export function SessionStatus(props: {
 	state?: AgentRuntimeState;
 	duration?: number;
@@ -185,6 +191,11 @@ export function SessionStatus(props: {
 	const history = props.cacheHitHistory ?? [];
 	const averageCacheHit = history.length > 0
 		? history.reduce((sum, value) => sum + value, 0) / history.length
+		: undefined;
+	// 美元→人民币估算汇率（仅用于费用提示的便捷换算，非实时牌价；
+	// 如后续需要跟随实时汇率，可升级为设置项 usdToCnyRate）
+	const cnyAmount = state.cost != null
+		? `¥${(state.cost * USD_TO_CNY_RATE).toFixed(2)}`
 		: undefined;
 
 	const detailRows: Array<{ label: string; value: string }> = [];
@@ -220,6 +231,7 @@ export function SessionStatus(props: {
 	}
 	if (state.cost != null) {
 		detailRows.push({ label: t("ctx.detail.cost"), value: `$${state.cost.toFixed(3)}` });
+		detailRows.push({ label: t("ctx.detail.costCny"), value: cnyAmount ?? "-" });
 	}
 	const hasDetail = detailRows.length > 0;
 
@@ -257,7 +269,10 @@ export function SessionStatus(props: {
 				</span>
 			)}
 			{state.cost != null && (
-				<span className="cost-chip" title={t("app.totalCost")}>
+				<span className="cost-chip" title={t("app.totalCostCny", {
+					usd: `$${state.cost.toFixed(3)}`,
+					cny: cnyAmount ?? "-",
+				})}>
 					${state.cost.toFixed(3)}
 				</span>
 			)}
