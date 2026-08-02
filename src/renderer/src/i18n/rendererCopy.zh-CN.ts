@@ -1803,6 +1803,17 @@ export const zhCN = {
   "feishu.link.bindFailed": "绑定当前会话到飞书失败",
   "feishu.link.noActiveSession": "请先打开一个会话再连接飞书",
   "feishu.apiUnavailable": "飞书服务暂不可用",
+
+  // ── Web 端（外部服务页面）专用文案，桌面端不消费 ──
+  "web.chooseSession": "选择或创建会话",
+  "web.connected": "已连接",
+  "web.connecting": "连接中...",
+  "web.promptPlaceholder": "发送消息到当前会话",
+  "web.composerHint": "Enter 发送，Shift+Enter 换行",
+  "web.emptySelection": "从左侧选择项目创建会话，或选择现有会话。",
+  "web.noMessages": "暂无消息",
+  "web.noSessions": "该项目暂无会话，点 + 新建",
+  "web.streamFailed": "流式连接失败",
 } as const;
 
 export type TranslationKey = keyof typeof zhCN;

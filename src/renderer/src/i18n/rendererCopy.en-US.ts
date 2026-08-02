@@ -1840,4 +1840,15 @@ export const enUS: Record<TranslationKey, string> = {
   "feishu.link.bindFailed": "Failed to link this session to Feishu",
   "feishu.link.noActiveSession": "Open a session before linking Feishu",
   "feishu.apiUnavailable": "Feishu service is temporarily unavailable",
+
+  // ── Web (external service page) copy, not consumed by the desktop ──
+  "web.chooseSession": "Select or create a session",
+  "web.connected": "Connected",
+  "web.connecting": "Connecting...",
+  "web.promptPlaceholder": "Send a message to the current session",
+  "web.composerHint": "Enter to send, Shift+Enter for a new line",
+  "web.emptySelection": "Select a project to create a session, or select an existing session.",
+  "web.noMessages": "No messages",
+  "web.noSessions": "No sessions in this project yet, tap + to create one",
+  "web.streamFailed": "Stream failed",
 };

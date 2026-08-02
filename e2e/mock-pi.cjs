@@ -281,6 +281,29 @@ function startStream(userText, options = {}) {
 		message: { role: "assistant", content: [{ type: "text", text: "" }] },
 	});
 
+	// 思考/工具帧模拟（E2E：web-service.spec.ts 断言 reasoning/tool 卡片渲染）：
+	// - 含 "THINK" 的 prompt 先推 thinking_delta，WebEventStream 翻译为 reasoning 帧
+	// - 含 "TOOL" 的 prompt 推 tool_execution_start/end，翻译为 tool-input/output 帧
+	if (userText.includes("THINK")) {
+		const thoughts = ["推理：先分析文件结构...", "推理：再定位目标函数。"];
+		for (const delta of thoughts) {
+			emit({
+				type: "message_update",
+				message: { role: "assistant", content: [{ type: "text", text: "" }] },
+				assistantMessageEvent: { type: "thinking_delta", delta },
+			});
+		}
+	}
+	if (userText.includes("TOOL")) {
+		emit({
+			type: "tool_execution_start",
+			toolName: "bash",
+			toolCallId: "tool-e2e-1",
+			args: { command: "ls" },
+		});
+		emit({ type: "tool_execution_end", toolCallId: "tool-e2e-1" });
+	}
+
 	streamTimer = setInterval(() => {
 		if (streamStep >= streamChunks.length) {
 			clearInterval(streamTimer);

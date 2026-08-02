@@ -1,0 +1,26 @@
+/**
+ * web.css — Web 端专用布局覆盖。
+ *
+ * 基础布局在 WebChatApp 用 flex 完成（桌面三栏风格：侧栏 + 主区），
+ * 这里只补移动端（≤760px）断点：侧栏置顶并限高、主区占满剩余空间，
+ * 与旧 A1/A2 的 760px 断点语义保持一致。
+ */
+
+/* 窄屏：侧栏改顶部面板，项目树在面板内滚动 */
+@media (max-width: 760px) {
+  .app.wechat-shell {
+    flex-direction: column;
+  }
+  .app.wechat-shell > .chat-list-pane {
+    width: 100%;
+    height: auto;
+    max-height: 42vh;
+    flex: 0 0 auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--color-border);
+  }
+  .app.wechat-shell > .chat-pane {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+}
