@@ -842,6 +842,8 @@ export function App() {
   // 换肤背景图：pideck-bg:// 协议加载 userData/backgrounds/ 下图片，遮罩同色渐变（浅白/暗黑）
   useEffect(() => {
     const root = document.documentElement;
+    // 壁纸模式标记：启用背景图时主容器/面板转半透明（见 foundation.css [data-bg-image="on"] 规则）
+    root.dataset.bgImage = settings.backgroundImage ? "on" : "off";
     if (settings.backgroundImage) {
       root.style.setProperty(
         "--app-bg-image",

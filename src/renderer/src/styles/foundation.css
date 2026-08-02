@@ -2167,6 +2167,17 @@ body.is-resizing .splitter::before {
 }
 /* react-resizable-panels 拖拽期间自行管理全局 cursor（#115 U5），旧的 is-composer/is-terminal-resizing 类已随手写拖拽删除。 */
 
+/* 换肤壁纸模式：启用背景图（data-bg-image="on"）时主容器与主面板半透明，
+   让 body 的背景图（+遮罩渐变）透出；未启用时保持原不透明背景（零回归） */
+:root[data-bg-image="on"] .wechat-shell {
+  background: transparent;
+}
+:root[data-bg-image="on"] .chat-list-pane,
+:root[data-bg-image="on"] .chat-pane,
+:root[data-bg-image="on"] .detail-drawer {
+  background-color: color-mix(in srgb, var(--color-bg-app) 86%, transparent);
+}
+
 .chat-pane {
   position: relative;
   /* #115 U5：会话区纵向三段（timeline|composer|terminal）由 react-resizable-panels
