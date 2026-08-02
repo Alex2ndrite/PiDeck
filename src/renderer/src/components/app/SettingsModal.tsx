@@ -968,15 +968,15 @@ function SettingsModalContent(props: SettingsModalProps) {
 												type="range"
 												min={0}
 												max={100}
-												// 滑块语义=图片可见度（100%=图全显）；存储 backgroundImageOpacity=遮罩不透明度=1-可见度
-												value={Math.round((1 - (draftSettings.backgroundImageOpacity ?? 0.6)) * 100)}
+												// 滑块与存储同语义=图片可见度（100%=图全显，0%=全遮罩），不再反转
+												value={Math.round((draftSettings.backgroundImageOpacity ?? 0.8) * 100)}
 												onChange={(event) =>
-													updateDraft({ backgroundImageOpacity: 1 - Number(event.target.value) / 100 })
+													updateDraft({ backgroundImageOpacity: Number(event.target.value) / 100 })
 												}
 												className="m-0 h-4 flex-1 accent-[var(--color-accent)]"
 												aria-label={t("settings.backgroundImageOpacity")}
 											/>
-											<span className="w-10 text-right font-mono text-xs tabular-nums text-muted-foreground">{Math.round((1 - (draftSettings.backgroundImageOpacity ?? 0.6)) * 100)}%</span>
+											<span className="w-10 text-right font-mono text-xs tabular-nums text-muted-foreground">{Math.round((draftSettings.backgroundImageOpacity ?? 0.8) * 100)}%</span>
 										</div>
 										<small className="text-xs text-muted-foreground">{t("settings.backgroundImageDesc")}</small>
 									</div>

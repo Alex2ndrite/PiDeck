@@ -1456,7 +1456,7 @@ export const enUS: Record<TranslationKey, string> = {
   "settings.skin.custom": "Custom",
   "settings.skinDesc": "Skins adjust the background/border palette and combine freely with the accent color.",
   "settings.backgroundImage": "Background image",
-  "settings.backgroundImageDesc": "Pick a local image as the app background; 100% opacity shows the image fully (white mask in light, black in dark; translucent panels reveal it).",
+  "settings.backgroundImageDesc": "Pick a local image as the app background; opacity = image visibility (100% shows it fully, 0% pure panel color; white mask in light, black in dark; translucent panels reveal it).",
   "settings.backgroundImageChoose": "Choose image…",
   "settings.backgroundImageClear": "Clear",
   "settings.backgroundImageOpacity": "Background opacity",

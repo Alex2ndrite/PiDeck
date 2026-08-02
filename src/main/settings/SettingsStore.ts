@@ -83,7 +83,7 @@ const defaultSettings: AppSettings = {
 	themeSkin: "classic-green",
 	customThemeOverrides: {},
 	backgroundImage: "",
-	backgroundImageOpacity: 0.6,
+	backgroundImageOpacity: 0.8,
   language: "system",
   // 默认最大化：与历史 createWindow 在 ready-to-show 后 maximize() 的行为一致
   // （1480×960 只是最大化前的兜底尺寸，不是最终展示态）

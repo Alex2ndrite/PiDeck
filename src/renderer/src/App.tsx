@@ -458,7 +458,7 @@ export function App() {
 	themeSkin: "classic-green",
 	customThemeOverrides: {},
 	backgroundImage: "",
-	backgroundImageOpacity: 0.6,
+	backgroundImageOpacity: 0.8,
     language: "system",
     startupWindowMode: "maximized",
     piEnvironmentChecked: false,
@@ -852,8 +852,9 @@ export function App() {
         `url("pideck-bg://local/${encodeURIComponent(settings.backgroundImage)}")`,
       );
       const isDark = root.dataset.theme === "dark";
-      // 存储语义=遮罩不透明度（滑块 100% 可见度 → opacity=0 → 遮罩全透明=图全显）
-      const alpha = Math.min(1, Math.max(0, settings.backgroundImageOpacity));
+      // 存储语义=图片可见度（0=全遮，1=图全显）；遮罩不透明度=1-可见度。
+      // 滑块 80% → opacity 0.8 → 遮罩 0.2 → 图 80% 透出（默认半透明档）
+      const alpha = Math.min(1, Math.max(0, 1 - settings.backgroundImageOpacity));
       const rgb = isDark ? "0,0,0" : "255,255,255";
       root.style.setProperty(
         "--app-bg-mask",

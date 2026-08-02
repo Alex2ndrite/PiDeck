@@ -83,7 +83,7 @@ let previewSettings: AppSettings = {
 	themeSkin: "classic-green",
 	customThemeOverrides: {},
 	backgroundImage: "",
-	backgroundImageOpacity: 0.6,
+	backgroundImageOpacity: 0.8,
 	language: "system",
 	startupWindowMode: "maximized",
 	piEnvironmentChecked: true,
