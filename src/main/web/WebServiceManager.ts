@@ -28,6 +28,7 @@ import type {
 import { serializeWebClientDictionaries, webEnUS } from "./WebI18n";
 import {
 	WebEventStreamRouter,
+	serializeSseFrame,
 	type PiEvent,
 } from "./WebEventStream";
 
@@ -349,6 +350,57 @@ export class WebServiceManager {
 			if (streamMatch && request.method === "GET") {
 				const sessionId = decodeURIComponent(streamMatch[1]);
 				this.handleStream(sessionId, request, response);
+				return;
+			}
+
+			// AI SDK useChat 契约端点（A2）：POST body = { id: sessionId, messages, trigger, messageId }。
+			// 先建立该 session 的流式连接，再发 prompt；pi 事件到达后经翻译器流式返回，
+			// 前端 useChat 通过 x-vercel-ai-ui-message-stream: v1 头识别协议。
+			if (url.pathname === "/api/chat" && request.method === "POST") {
+				const body = await this.readJson<{
+					id?: string;
+					messages?: Array<{ role?: string; content?: unknown; parts?: Array<{ type?: string; text?: string }> }>;
+				}>(request);
+				const sessionId = body.id?.trim();
+				if (!sessionId) {
+					this.sendError(response, 400, "webError.requestIdRequired", "session id is required");
+					return;
+				}
+				// 取最后一条 user 消息的文本（useChat 的 parts 或 content 均可）
+				const lastUser = [...(body.messages ?? [])]
+					.reverse()
+					.find((message) => message.role === "user");
+				const partsText = (lastUser?.parts ?? [])
+					.filter((part) => part.type === "text" && typeof part.text === "string")
+					.map((part) => part.text ?? "")
+					.join("");
+				const contentText = typeof lastUser?.content === "string" ? lastUser.content : "";
+				const message = (partsText || contentText).trim();
+				if (!message) {
+					this.sendError(response, 400, "webError.messageRequired", "message is required");
+					return;
+				}
+
+				// 先开流（事件可能在 prompt 预检返回前就到达），再发 prompt。
+				this.handleStream(sessionId, request, response);
+				const result = await this.deps.sendSessionPrompt({
+					sessionId,
+					requestId: String(body.id ?? crypto.randomUUID()),
+					message,
+				}).catch((error: unknown) => ({
+					accepted: false as const,
+					error: error instanceof Error ? error.message : String(error),
+				}));
+				if (!result.accepted) {
+					// 预检拒绝：向已建立的流写入 error + finish + [DONE]，
+					// 前端 useChat 会进入 error 状态并可重试。
+					// 无法直接访问 router 的 entry，走响应流写协议帧。
+					const errText = typeof result.error === "string"
+						? result.error
+						: "Prompt was rejected";
+					this.writeStreamError(response, errText);
+					return;
+				}
 				return;
 			}
 			const sessionRuntimeMatch = url.pathname.match(
@@ -958,14 +1010,15 @@ export class WebServiceManager {
 
 	private async serveRenderer(pathname: string, response: ServerResponse) {
 		const requestedPath = decodeURIComponent(pathname);
+		// Web 服务根路径：优先 serve React 版 web.html（A2）；
+		// 构建产物缺失时回退到内嵌 renderPage（A1 vanilla 页，保持兼容）。
+		const webEntry = join(this.rendererRoot, "web.html");
 		const relativePath = requestedPath === "/" || !extname(requestedPath)
-			? "index.html"
+			? (existsSync(webEntry) ? "web.html" : "index.html")
 			: requestedPath.replace(/^\/+/, "");
 		const filePath = normalize(join(this.rendererRoot, relativePath));
+		// 路径逃逸检查 + 文件存在性；缺失时回退内嵌页
 		if (!filePath.startsWith(normalize(this.rendererRoot)) || !existsSync(filePath)) {
-			if (relativePath !== "index.html" && existsSync(join(this.rendererRoot, "index.html"))) {
-				return this.sendFile(join(this.rendererRoot, "index.html"), response);
-			}
 			this.sendHtml(response, this.renderPage());
 			return;
 		}
@@ -1085,6 +1138,21 @@ export class WebServiceManager {
 			response.removeListener("close", onClientClose);
 			request.removeListener("close", onClientClose);
 		});
+	}
+
+	/**
+	 * 向已打开的 SSE 响应写入 AI SDK 错误帧 + finish + [DONE]。
+	 * 用于 prompt 预检被拒时（useChat 收到 error 帧进入 error 状态）。
+	 */
+	private writeStreamError(response: ServerResponse, errorText: string): void {
+		if (response.writableEnded || response.destroyed) return;
+		try {
+			response.write(serializeSseFrame({ type: "error", errorText }));
+			response.write(serializeSseFrame({ type: "finish" }));
+			response.end("data: [DONE]\n\n");
+		} catch {
+			// 连接已失效则忽略
+		}
 	}
 
 	private sendError(

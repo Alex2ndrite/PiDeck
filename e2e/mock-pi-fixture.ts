@@ -16,11 +16,15 @@ export type MockPiFixture = {
 /** 测试文件可通过 test.use({ seedProjects }) 预置项目列表（写入 projects.json） */
 export type SeedProject = { id: string; name: string; path: string; pinned?: boolean };
 
+/** 测试文件可通过 test.use({ seedSettings }) 追加预置设置项（合并进 settings.json） */
+export type SeedSettings = Record<string, unknown>;
+
 const repoRoot = resolve(__dirname, "..");
 
-export const test = base.extend<MockPiFixture & { seedProjects: SeedProject[] | undefined }>({
+export const test = base.extend<MockPiFixture & { seedProjects: SeedProject[] | undefined; seedSettings: SeedSettings | undefined }>({
 	seedProjects: [undefined, { option: true }],
-	app: async ({ seedProjects }, use) => {
+	seedSettings: [undefined, { option: true }],
+	app: async ({ seedProjects, seedSettings }, use) => {
 		const userDataRoot = mkdtempSync(join(tmpdir(), "pideck-mockpi-"));
 		try {
 			// Windows 桌面端通过 cmd shim 调起自定义 pi（见 PiLocator.createInvocation），
@@ -38,7 +42,12 @@ export const test = base.extend<MockPiFixture & { seedProjects: SeedProject[] | 
 			mkdirSync(join(userDataRoot, "profile-dev"), { recursive: true });
 			writeFileSync(
 				join(userDataRoot, "profile-dev", "settings.json"),
-				JSON.stringify({ customPiPath: shimPath, piEnvironmentChecked: true, enableGitManagement: true }),
+				JSON.stringify({
+					customPiPath: shimPath,
+					piEnvironmentChecked: true,
+					enableGitManagement: true,
+					...(seedSettings ?? {}),
+				}),
 			);
 			// 可选：预置项目列表。ProjectStore.load 会保留种子项目并追加内置聊天项目。
 			if (seedProjects && seedProjects.length > 0) {

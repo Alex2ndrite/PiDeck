@@ -103,10 +103,11 @@ export default defineConfig({
       rollupOptions: {
         // 缓存模块解析结果，增量构建时跳过未变更模块，加速二次打包
         cache: true,
-        // 多入口：主窗口 index.html + 桌面宠物悬浮窗 pet.html
+        // 多入口：主窗口 index.html + 桌面宠物悬浮窗 pet.html + Web 服务聊天页 web.html
         input: {
           index: resolve("src/renderer/index.html"),
           pet: resolve("src/renderer/pet.html"),
+          web: resolve("src/renderer/web.html"),
         },
         output: {
           // 将大体积的第三方依赖拆分为独立 chunk，减少首屏需要加载和解析的 JS 体积。
