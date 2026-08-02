@@ -26,12 +26,12 @@ export function WorktreeTree(props: {
   return (
     <>
       <div className="worktree-children worktree-main-header-only">
-        <button className="conversation worktree-workspace-header" onClick={() => props.actions.projects.select(props.project.id)} title={t("app.worktreeMainWorkspace")}>
+        <Button variant="ghost" className="conversation worktree-workspace-header w-full justify-start" onClick={() => props.actions.projects.select(props.project.id)} title={t("app.worktreeMainWorkspace")}>
           <span className="worktree-main-branch-icon"><GitBranch size={12} /></span>
           <div className="conversation-body"><div className="conversation-title">
             <strong>{t("app.worktreeMainWorkspace")}</strong><span className="worktree-main-branch">{props.branch ?? t("app.worktreeBranchLoading")}</span>
           </div></div>
-        </button>
+        </Button>
       </div>
       <div className="worktree-children worktree-sandbox-list">
         <div className="worktree-sandbox-toolbar">

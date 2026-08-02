@@ -680,7 +680,7 @@ export function ImTab(_props: Props) {
 							<p><strong>{t("config.im.guideMethodA")}</strong></p>
 							<p style={{ fontSize: "var(--font-size-micro)", color: "var(--color-text-tertiary)" }}>{t("config.im.guideMethodADesc")}</p>
 							<ol>
-								<li>{t("config.im.guideMethodAStep1a")}<br /><button className="config-link-like" onClick={() => openExternal("https://open.feishu.cn/app", true)}>https://open.feishu.cn/app</button> → {t("config.im.guideMethodAStep1b")}</li>
+								<li>{t("config.im.guideMethodAStep1a")}<br /><Button variant="link" size="sm" className="config-link-like h-auto p-0" onClick={() => openExternal("https://open.feishu.cn/app", true)}>https://open.feishu.cn/app</Button> → {t("config.im.guideMethodAStep1b")}</li>
 								<li>{t("config.im.guideMethodAStep2")}</li>
 								<li>{t("config.im.guideMethodAStep3")}</li>
 								<li>{t("config.im.guideMethodAStep4")}</li>
@@ -690,7 +690,7 @@ export function ImTab(_props: Props) {
 							<p style={{ marginTop: 16 }}><strong>{t("config.im.guideMethodB")}</strong></p>
 							<p style={{ fontSize: "var(--font-size-micro)", color: "var(--color-text-tertiary)" }}>{t("config.im.guideMethodBDesc")}</p>
 							<ol>
-								<li>{t("config.im.guideMethodBStep1a")}<br /><button className="config-link-like" onClick={() => openExternal("https://open.feishu.cn/app", true)}>https://open.feishu.cn/app</button> → {t("config.im.guideMethodBStep1b")}</li>
+								<li>{t("config.im.guideMethodBStep1a")}<br /><Button variant="link" size="sm" className="config-link-like h-auto p-0" onClick={() => openExternal("https://open.feishu.cn/app", true)}>https://open.feishu.cn/app</Button> → {t("config.im.guideMethodBStep1b")}</li>
 								<li>{t("config.im.guideMethodBStep2")}</li>
 								<li>{t("config.im.guideMethodBStep3")}<br />
 									<ul className="config-im-guide-perms">

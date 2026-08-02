@@ -139,9 +139,9 @@ export function SkillStoreTab(props: {
 				{!result && !searching && (
 					<div className="prompt-store-suggestions">
 						{SUGGESTED_SEARCHES.map((s) => (
-							<button key={s} className="prompt-store-suggestion-chip" onClick={() => { setQuery(s); void handleSearch(s); }}>
+							<Button key={s} variant="ghost" size="sm" className="prompt-store-suggestion-chip" onClick={() => { setQuery(s); void handleSearch(s); }}>
 								{s}
-							</button>
+							</Button>
 						))}
 					</div>
 				)}

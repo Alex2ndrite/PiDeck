@@ -60,7 +60,11 @@ export function RenameModals({ fileRename, agentRename }: Props) {
             root?.querySelector("input")?.focus();
           }}
         >
-          <form onSubmit={(e) => { e.preventDefault(); agentRename.onSubmit(); }}>
+          <div
+            onKeyDown={(e) => {
+              if (e.key === "Enter") { e.preventDefault(); agentRename.onSubmit(); }
+            }}
+          >
             <DialogHeader>
               <DialogTitle>{t("app.renameSessionTitle")}</DialogTitle>
               <DialogDescription className="sr-only">{t("app.renameSessionPlaceholder")}</DialogDescription>
@@ -75,11 +79,11 @@ export function RenameModals({ fileRename, agentRename }: Props) {
               <Button type="button" variant="outline" disabled={agentRename.saving} onClick={agentRename.onClose}>
                 {t("common.cancel")}
               </Button>
-              <Button type="submit" disabled={agentRename.saving}>
+              <Button type="button" disabled={agentRename.saving} onClick={agentRename.onSubmit}>
                 {agentRename.saving ? t("common.saving") : t("common.save")}
               </Button>
             </DialogFooter>
-          </form>
+          </div>
         </DialogContent>
       </Dialog>
     )}
@@ -93,7 +97,11 @@ export function RenameModals({ fileRename, agentRename }: Props) {
             root?.querySelector("input")?.focus();
           }}
         >
-          <form onSubmit={(e) => { e.preventDefault(); submitFileRename(); }}>
+          <div
+            onKeyDown={(e) => {
+              if (e.key === "Enter") { e.preventDefault(); submitFileRename(); }
+            }}
+          >
             <DialogHeader>
               <DialogTitle>{t("drawer.renameTitle")}</DialogTitle>
               <DialogDescription className="sr-only">{fileRename.name}</DialogDescription>
@@ -106,9 +114,9 @@ export function RenameModals({ fileRename, agentRename }: Props) {
               <Button type="button" variant="outline" onClick={fileRename.onClose}>
                 {t("common.cancel")}
               </Button>
-              <Button type="submit">{t("common.confirm")}</Button>
+              <Button type="button" onClick={() => submitFileRename()}>{t("common.confirm")}</Button>
             </DialogFooter>
-          </form>
+          </div>
         </DialogContent>
       </Dialog>
     )}

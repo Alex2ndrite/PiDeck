@@ -356,7 +356,7 @@ export function EmptyState(props: { hasProject: boolean; onCreate: () => void })
 				))}
 			</p>
 			{props.hasProject ? (
-				<button onClick={props.onCreate}>{t("app.createAgent")}</button>
+				<Button variant="default" onClick={props.onCreate} className="empty-state-cta">{t("app.createAgent")}</Button>
 			) : (
 				<p className="empty-hint">{t("app.emptyNoProject")}</p>
 			)}
@@ -455,8 +455,10 @@ function CopyMenu(props: {
 			onPointerEnter={clearCloseTimer}
 			onPointerLeave={scheduleClose}
 		>
-			<button
+			<Button
 				ref={triggerRef}
+				variant="ghost"
+				size="icon-sm"
 				className="copy-menu-trigger"
 				type="button"
 				onClick={toggleOpen}
@@ -464,7 +466,7 @@ function CopyMenu(props: {
 				title={t("common.copy")}
 			>
 				{copied ? <Check size={14} /> : <Copy size={14} />}
-			</button>
+			</Button>
 			{open && (
 				<div className="copy-menu-popover" style={menuStyle}>
 					<button type="button" onClick={() => void copy("text")}>{t("copy.asText")}</button>

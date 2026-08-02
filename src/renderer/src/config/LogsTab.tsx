@@ -115,12 +115,12 @@ export function LogsTab() {
 						const expanded = expandedId === entry.id;
 						return (
 							<article key={entry.id} className={`log-row ${entry.level}`}>
-								<button className="log-row-main" onClick={() => setExpandedId(expanded ? null : entry.id)}>
+								<Button variant="ghost" className="log-row-main w-full justify-start" onClick={() => setExpandedId(expanded ? null : entry.id)}>
 									<span className="log-time">{formatTime(entry.time)}</span>
 									<span className={`log-level ${entry.level}`}>{entry.level}</span>
 									<span className="log-scope">{entry.scope}</span>
 									<span className="log-message">{entry.message}</span>
-								</button>
+								</Button>
 								{expanded && (
 									<pre className="log-detail">{formatDetail(entry.detail) || t("logs.noDetail")}</pre>
 								)}

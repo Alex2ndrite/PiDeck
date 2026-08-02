@@ -85,6 +85,9 @@ export function ConfigSelect(props: {
 				<SelectValue placeholder={props.placeholder ?? props.options.find((o) => o.value === props.value)?.label ?? props.value} />
 			</SelectTrigger>
 			<SelectContent>
+				{/* Radix Select 的 value 必须匹配某个 item 才能打开：空值走哨兵 value，
+				   补一个隐藏 item 保证下拉始终可展开（社区标准模式） */}
+				{props.value === "" && <SelectItem value={SENTINEL} className="hidden" aria-hidden="true" />}
 				{props.options.map((option) => (
 					<SelectItem key={option.value || "none"} value={option.value === "" ? SENTINEL : option.value}>
 						{option.label}
@@ -222,6 +225,8 @@ export function ApiTypeInput(props: {
 				</span>
 			</SelectTrigger>
 			<SelectContent>
+				{/* 空值（无 API 类型）时补隐藏哨兵 item，保证下拉可展开 */}
+				{!props.value && <SelectItem value={SENTINEL} className="hidden" aria-hidden="true" />}
 				{isCustom && (
 					<SelectItem value={props.value}>
 						<span className="flex flex-col items-start gap-0.5">

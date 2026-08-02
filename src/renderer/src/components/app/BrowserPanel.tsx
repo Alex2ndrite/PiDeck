@@ -498,9 +498,9 @@ export function BrowserPanel(props: {
 						onClick={() => switchTab(tab.id)}
 					>
 						<span className="min-w-0 truncate">{tab.title || tab.url}</span>
-						<button className="browser-tab-close" onClick={(event) => closeTab(tab.id, event)} title={t("browser.closeTab")}>
+						<Button variant="ghost" size="icon-sm" className="browser-tab-close" onClick={(event) => closeTab(tab.id, event)} title={t("browser.closeTab")}>
 							<X size={11} />
-						</button>
+						</Button>
 					</div>
 				))}
 <Button variant="ghost" size="icon-sm" className="size-[30px] text-text-tertiary hover:text-[color:var(--color-accent)]" onClick={addTab} title={t("browser.newTab")}>
