@@ -9,6 +9,14 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+/* Streamdown 及其可选插件（code/mermaid/math）的 Tailwind v4 源码扫描：
+   不声明则其内置控件（表格复制/下载、代码块、mermaid 工具栏）的类名不生成，
+   表现为控件缺背景/边框/hover 态（样式残缺）。路径相对本文件。 */
+@source "../../../../node_modules/streamdown/dist/*.js";
+@source "../../../../node_modules/@streamdown/code/dist/*.js";
+@source "../../../../node_modules/@streamdown/mermaid/dist/*.js";
+@source "../../../../node_modules/@streamdown/math/dist/*.js";
+
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
 @layer base {
@@ -63,6 +71,8 @@
   --color-muted-foreground: var(--color-text-secondary);
   --color-accent: var(--color-bg-active);
   --color-accent-foreground: var(--color-text-primary);
+  /* 主题色淡背景：随 data-accent 切换（绿/蓝/紫…），供下拉 hover/选中高亮统一使用 */
+  --color-accent-soft: var(--color-accent-soft);
   --color-destructive: var(--color-danger);
   --color-destructive-foreground: #fafafa;
   --color-border: var(--color-border-default);
