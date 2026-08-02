@@ -7,6 +7,7 @@ import { t } from "../i18n";
 import { Input } from "../components/ui-shadcn/input";
 import { Checkbox } from "../components/ui-shadcn/checkbox";
 import { Label } from "../components/ui-shadcn/label";
+import { SectionHeading } from "../components/ui-shadcn/section-heading";
 
 // ── 可用模型列表聚合（含供应商信息，供 enabledModels 多选用） ──
 
@@ -242,8 +243,11 @@ export function SettingsTab(props: {
 				{/* ── 全局会话目录（仅编辑 ~/.pi/agent/settings.json 的 sessionDir） ── */}
 				<div className="config-retry-group">
 					<div className="flex items-center gap-3.5 rounded-sm border border-border-subtle px-4 py-2 transition-colors hover:border-border-strong flex flex-col items-start gap-0.5 rounded-none border-none px-4 pb-1 pt-2.5 hover:border-transparent">
-						<span className="config-settings-section-title">{t("config.sessionDir.title")}</span>
-						<span className="config-settings-section-hint">{t("config.sessionDir.hint")}</span>
+						<SectionHeading
+						className="config-settings-section-heading"
+						title={t("config.sessionDir.title")}
+						description={t("config.sessionDir.hint")}
+					/>
 					</div>
 					<div className="flex items-center gap-3.5 rounded-sm border border-border-subtle px-4 py-2 transition-colors hover:border-border-strong">
 						<span className="min-w-[180px] text-[13px] font-medium text-text-primary">{t("config.label.sessionDir")}</span>
@@ -260,8 +264,11 @@ export function SettingsTab(props: {
 				{/* ── 重试配置 ── */}
 				<div className="config-retry-group">
 					<div className="flex items-center gap-3.5 rounded-sm border border-border-subtle px-4 py-2 transition-colors hover:border-border-strong flex flex-col items-start gap-0.5 rounded-none border-none px-4 pb-1 pt-2.5 hover:border-transparent">
-					<span className="config-settings-section-title">{t("config.retry.title")}</span>
-					<span className="config-settings-section-hint">{t("config.retry.hint")}</span>
+					<SectionHeading
+						className="config-settings-section-heading"
+						title={t("config.retry.title")}
+						description={t("config.retry.hint")}
+					/>
 				</div>
 				<div className="flex items-center gap-3.5 rounded-sm border border-border-subtle px-4 py-2 transition-colors hover:border-border-strong">
 					<span className="min-w-[180px] text-[13px] font-medium text-text-primary">{t("config.retry.maxRetries")}</span>
@@ -276,8 +283,11 @@ export function SettingsTab(props: {
 				{/* ── 会话压缩：拆成开关 + 两个 token 数，避免用户直接改 JSON 对象 ── */}
 				<div className="config-retry-group">
 					<div className="flex items-center gap-3.5 rounded-sm border border-border-subtle px-4 py-2 transition-colors hover:border-border-strong flex flex-col items-start gap-0.5 rounded-none border-none px-4 pb-1 pt-2.5 hover:border-transparent">
-						<span className="config-settings-section-title">{t("config.compaction.title")}</span>
-						<span className="config-settings-section-hint">{t("config.compaction.hint")}</span>
+						<SectionHeading
+						className="config-settings-section-heading"
+						title={t("config.compaction.title")}
+						description={t("config.compaction.hint")}
+					/>
 					</div>
 					<div className="flex items-center gap-3.5 rounded-sm border border-border-subtle px-4 py-2 transition-colors hover:border-border-strong">
 						<span className="min-w-[180px] text-[13px] font-medium text-text-primary">{t("config.compaction.enabled")}</span>

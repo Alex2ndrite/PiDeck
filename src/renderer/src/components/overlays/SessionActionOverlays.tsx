@@ -5,6 +5,7 @@ const SettingsModal = lazy(() => import("../app/SettingsModal").then((module) =>
 import { ConfirmDialog } from "./OverlayParts";
 import { TrustConfirmModal } from "../app/TrustConfirmModal";
 import { Button } from "../ui-shadcn/button";
+import { SectionHeading } from "../ui-shadcn/section-heading";
 import { X } from "lucide-react";
 import {
 	Dialog,
@@ -81,17 +82,37 @@ export function FeedbackOverlay({ open, project, appInfo, loadEnvironment, onClo
 		<Dialog open onOpenChange={ (next) => !next && onClose }>
 			<DialogContent showCloseButton={false} className={cn("flex flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(800px,calc(100vw-48px))]", "feedback-modal-shell")}>
 				<DialogHeader className="flex-row items-center justify-between px-4 py-3">
-					<DialogTitle></DialogTitle>
+					<DialogTitle className="sr-only">{t("feedback.title")}</DialogTitle>
+					<SectionHeading
+						className="feedback-section-header min-w-0 flex-1"
+						title={t("feedback.title")}
+						description={t("feedback.intro")}
+					/>
 					<DialogClose asChild>
 						<Button variant="ghost" size="icon" aria-label={t("common.close")} title={t("common.close")}>
 							<X size={18} strokeWidth={2.2} aria-hidden="true" />
 						</Button>
 					</DialogClose>
 				</DialogHeader>
-			<div className="modal-header feedback-header"><div><strong>{t("feedback.title")}</strong><small>{t("feedback.intro")}</small></div><Button variant="ghost" size="icon" aria-label={t("common.close")} title={t("common.close")} onClick={onClose}><X size={18} strokeWidth={2.2} aria-hidden="true" /></Button></div>
-			<div className="feedback-body">
-				<div className="feedback-form-section"><div className="feedback-section-header"><strong>{t("feedback.descriptionLabel")}</strong><small>{t("feedback.descriptionHint")}</small></div><Textarea className="feedback-textarea" value={description} onChange={(event) => setDescription(event.target.value)} placeholder={t("feedback.descriptionPlaceholder")} /><div className="feedback-section-header"><strong>{t("feedback.stepsLabel")}</strong><small>{t("feedback.stepsHint")}</small></div><Textarea className="feedback-textarea" value={steps} onChange={(event) => setSteps(event.target.value)} placeholder={t("feedback.stepsPlaceholder")} /></div>
-				<div className="feedback-environment-section"><div className="feedback-section-header"><strong>{t("feedback.environmentTitle")}</strong><small>{loading ? t("feedback.reportLoading") : t("feedback.environmentHint")}</small></div><pre className="feedback-environment-content">{report}</pre></div>
+				<div className="feedback-body">
+				<div className="feedback-form-section"><SectionHeading
+						className="feedback-section-header"
+						title={t("feedback.descriptionLabel")}
+						description={t("feedback.descriptionHint")}
+					/>
+					<Textarea className="feedback-textarea" value={description} onChange={(event) => setDescription(event.target.value)} placeholder={t("feedback.descriptionPlaceholder")} />
+					<SectionHeading
+						className="feedback-section-header"
+						title={t("feedback.stepsLabel")}
+						description={t("feedback.stepsHint")}
+					/>
+					<Textarea className="feedback-textarea" value={steps} onChange={(event) => setSteps(event.target.value)} placeholder={t("feedback.stepsPlaceholder")} /></div>
+				<div className="feedback-environment-section"><SectionHeading
+					className="feedback-section-header"
+					title={t("feedback.environmentTitle")}
+					description={loading ? t("feedback.reportLoading") : t("feedback.environmentHint")}
+				/>
+				<pre className="feedback-environment-content">{report}</pre></div>
 			</div>
 			<div className="feedback-actions"><Button variant="secondary" onClick={() => void copyReport()}>{t("feedback.copyReport")}</Button><Button variant="secondary" onClick={() => void onOpenExternal("https://github.com/ayuayue")}>{t("feedback.authorGithub")}</Button><Button variant="default" onClick={() => void onOpenExternal(issueUrl)}>{t("feedback.openIssue")}</Button></div>
 		

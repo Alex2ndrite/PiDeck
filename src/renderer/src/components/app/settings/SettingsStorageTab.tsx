@@ -2,6 +2,7 @@ import { ConfirmDialog } from "../../ui-shadcn/ConfirmDialog";
 import { useEffect, useState, type ReactNode } from "react";
 import { t } from "../../../i18n";
 import { Button } from "../../ui-shadcn/button";
+import { SectionHeading } from "../../ui-shadcn/section-heading";
 import type { AppSettings } from "../../../../../shared/types";
 
 export function SettingsSection(props: {
@@ -11,10 +12,11 @@ export function SettingsSection(props: {
 }) {
 	return (
 		<section className="settings-section">
-			<div className="settings-section-header">
-				<strong>{props.title}</strong>
-				{props.description && <small>{props.description}</small>}
-			</div>
+			<SectionHeading
+				className="settings-section-header"
+				title={props.title}
+				description={props.description}
+			/>
 			<div className="settings-section-body">{props.children}</div>
 		</section>
 	);
