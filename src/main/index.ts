@@ -2238,6 +2238,12 @@ app.whenReady().then(async () => {
 		mainCopy,
 	);
 	webServiceManager = new WebServiceManager({
+		// 订阅 pi agent 事件流：供 Web SSE 端点转发给浏览器（与 FeishuBridge 同源机制）。
+		subscribePiEvents: (handler) => agentManager.addLocalEventListener(
+			(agentId, event) => handler(agentId, event as never),
+		),
+		// agentId → sessionId 路由：pi 事件只有 agentId，SSE 连接按 session 订阅。
+		getSessionIdForAgent: (agentId) => sessionRuntimeCoordinator.getSessionId(agentId),
 		listProjects: () => projectStore.list(),
 		listSessions: (projectId) => {
 			const project = projectStore.get(projectId);

@@ -26,6 +26,10 @@ import type {
 	UpdateSessionRecordInput,
 } from "../../shared/types";
 import { serializeWebClientDictionaries, webEnUS } from "./WebI18n";
+import {
+	WebEventStreamRouter,
+	type PiEvent,
+} from "./WebEventStream";
 
 type WebServiceSettings = Pick<
 	AppSettings,
@@ -33,6 +37,10 @@ type WebServiceSettings = Pick<
 >;
 
 type WebServiceDependencies = {
+	/** 订阅主进程内部的 pi agent 事件流（agentId, event），返回退订函数。 */
+	subscribePiEvents: (handler: (agentId: string, event: PiEvent) => void) => () => void;
+	/** agentId → sessionId 路由，用于把 pi 事件导向对应 session 的 SSE 连接。 */
+	getSessionIdForAgent: (agentId: string) => string | undefined;
 	listProjects: () => Project[];
 	listSessions: (projectId: string) => Promise<SessionSummary[]>;
 	getSessionRuntimeMessages: (sessionId: string) => SessionTargetedValue<ChatMessage[]> | undefined;
@@ -120,7 +128,13 @@ export class WebServiceManager {
 	private current: { host: string; port: number } | null = null;
 	private readonly rendererRoot = join(__dirname, "../renderer");
 
-	constructor(private readonly deps: WebServiceDependencies) {}
+	private readonly eventStreamRouter: WebEventStreamRouter;
+
+	constructor(private readonly deps: WebServiceDependencies) {
+		this.eventStreamRouter = new WebEventStreamRouter(
+			(agentId) => this.deps.getSessionIdForAgent(agentId),
+		);
+	}
 
 	async applySettings(settings: WebServiceSettings) {
 		if (!settings.webServiceEnabled) {
@@ -136,16 +150,27 @@ export class WebServiceManager {
 	}
 
 	async stop() {
+		// 解绑 pi 事件源，避免服务关闭后仍在转发事件到已失效的 SSE 连接。
+		this.eventStreamRouter.unbindPiSource();
 		if (!this.server) return;
 		const server = this.server;
 		this.server = null;
 		this.current = null;
+		// SSE 长连接不会因 server.close() 自动断开（Node 需显式关闭活跃连接），
+		// 否则 stop() 会一直等待连接关闭导致卡死。
+		try {
+			server.closeAllConnections?.();
+		} catch {
+			// 旧版 Node 无该方法时忽略，退化为等待连接自然关闭
+		}
 		await new Promise<void>((resolve, reject) => {
 			server.close((error) => (error ? reject(error) : resolve()));
 		});
 	}
 
 	private async start(host: string, port: number) {
+		// 启动时绑定 pi 事件源；路由器只在存在活跃 SSE 连接时转发，空闲时零开销。
+		this.eventStreamRouter.bindPiSource(this.deps.subscribePiEvents);
 		const server = createServer(async (request, response) => {
 			try {
 				await this.handleRequest(request, response, host, port, server);
@@ -316,6 +341,16 @@ export class WebServiceManager {
 				this.sendJson(response, { result });
 				return;
 			}
+
+			// SSE 流式端点：按 AI SDK v5 UIMessageStream 协议输出 pi agent 事件，
+			// 前端提交 prompt 后订阅本端点实现打字机/思考/工具实时展示（A1）；
+			// 协议与 useChat 兼容，升级 A2 时前端换成 React hook 即可，后端零改动。
+			const streamMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/stream$/);
+			if (streamMatch && request.method === "GET") {
+				const sessionId = decodeURIComponent(streamMatch[1]);
+				this.handleStream(sessionId, request, response);
+				return;
+			}
 			const sessionRuntimeMatch = url.pathname.match(
 				/^\/api\/sessions\/([^/]+)\/runtime\/(stop|abort|restart|compact|state|commands|export-html|edit-message|delete-message|prepare-resend|model|thinking|clone)$/,
 			);
@@ -463,7 +498,14 @@ export class WebServiceManager {
 		.message { max-width: min(820px, 88%); border: 1px solid #dfe5ee; background: #fff; border-radius: 8px; padding: 10px 12px; white-space: pre-wrap; line-height: 1.55; }
 		.message.user { align-self: flex-end; background: #eaf8ee; border-color: #bee8c6; }
 		.message.error { border-color: #ffd0d0; background: #fff4f4; color: #b42318; }
+		.message.streaming { border-color: #c3d5f0; background: #f7fafd; }
 		.role { display: block; margin-bottom: 4px; font-size: 11px; font-weight: 700; color: #687280; }
+		.streaming-thinking { margin: 6px 0; padding: 6px 10px; border-left: 3px solid #b8c2d0; background: #f1f4f8; color: #687280; font-size: 12px; white-space: pre-wrap; line-height: 1.5; }
+		.streaming-tool { margin: 6px 0; padding: 6px 10px; border: 1px solid #dfe5ee; border-radius: 6px; background: #fbfcfe; font-size: 12px; color: #46505e; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+		.streaming-tool .tool-name { font-weight: 700; color: #14a514; }
+		.streaming-tool.error .tool-name { color: #d93025; }
+		.caret { display: inline-block; width: 7px; height: 14px; margin-left: 2px; vertical-align: -2px; background: #14a514; animation: blink 1s steps(2) infinite; }
+		@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
 		.composer { display: grid; gap: 8px; padding: 12px; border-top: 1px solid #dfe5ee; background: #fff; }
 		.composer-box { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: end; border: 1px solid #d7dce4; border-radius: 10px; padding: 8px; background: #fff; }
 		textarea { width: 100%; min-height: 44px; max-height: 160px; resize: vertical; border: 0; outline: 0; padding: 6px 8px; font: inherit; line-height: 1.5; }
@@ -581,7 +623,14 @@ export class WebServiceManager {
 					activeSessionId = state.sessions[0]?.id || "";
 				}
 				el("status").textContent = tr("web.connected");
-				render();
+				// 流式期间保留 #messages 的实时打字机内容；仅刷新侧栏/状态，
+				// 避免 600ms 轮询的全量 innerHTML 重绘清掉正在流式的块。
+				if (streamingSessionId) {
+					render();
+				} else {
+					render();
+					renderMessages();
+				}
 			} catch (error) {
 				el("status").textContent = error.message || String(error);
 			} finally {
@@ -611,14 +660,16 @@ export class WebServiceManager {
 			el("status").innerHTML = runtime?.status === "running"
 				? '<span class="pulse"></span>' + escapeHtml(tr("web.responding"))
 				: (session ? escapeHtml(displayStatus(session, runtime)) : escapeHtml(tr("web.connected")));
-			const messages = activeSessionId ? state.messagesBySession[activeSessionId] || [] : [];
-			el("messages").innerHTML = messages.length
-				? messages.map(message => \`<div class="message \${message.role}"><span class="role">\${escapeHtml(trOr("web.role." + message.role, message.role))}</span>\${escapeHtml(localizeMessage(message))}</div>\`).join("")
-				: '<div class="empty">' + escapeHtml(tr("web.noMessages")) + '</div>';
 			el("prompt").disabled = !session;
 			el("composer").querySelector("button[type=submit]").disabled = !session;
 			el("stop").disabled = !runtime || runtime.status === "closed";
 			el("stop").textContent = runtime?.status === "running" ? tr("web.stopResponse") : tr("web.closeSession");
+		}
+		function renderMessages() {
+			const messages = activeSessionId ? state.messagesBySession[activeSessionId] || [] : [];
+			el("messages").innerHTML = messages.length
+				? messages.map(message => \`<div class="message \${message.role}"><span class="role">\${escapeHtml(trOr("web.role." + message.role, message.role))}</span>\${escapeHtml(localizeMessage(message))}</div>\`).join("")
+				: '<div class="empty">' + escapeHtml(tr("web.noMessages")) + '</div>';
 		}
 		document.addEventListener("click", async (event) => {
 			const closeButton = event.target.closest("[data-close-session]");
@@ -657,13 +708,187 @@ export class WebServiceManager {
 			}
 			const sessionButton = event.target.closest("[data-session]");
 			if (sessionButton) {
+				// 切换会话：终止上一个 SSE 流，避免流式块串到别的会话
+				stopStream();
 				activeSessionId = sessionButton.dataset.session;
 				if (!Object.hasOwn(state.messagesBySession, activeSessionId)) {
 					await loadSessionMessages(activeSessionId);
 				}
 				render();
+				return;
 			}
 		});
+		// ── SSE 流式渲染：提交 prompt 后订阅 /stream，实时展示思考/工具/文本（A1） ──
+		let streamingSessionId = "";
+		let streamAbortController = null;
+		let streamBlocks = { message: null, thinking: null, text: null, tools: [] };
+
+		function ensureStreamingMessage() {
+			if (streamBlocks.message) return streamBlocks.message;
+			const messages = el("messages");
+			// 清空空态占位（"请选择会话/暂无消息"）后再追加流式块
+			const empty = messages.querySelector(".empty");
+			if (empty) empty.remove();
+			const div = document.createElement("div");
+			div.className = "message streaming";
+			div.innerHTML = '<span class="role">' + escapeHtml(tr("web.role.assistant")) + '</span>';
+			messages.appendChild(div);
+			streamBlocks.message = div;
+			return div;
+		}
+		function ensureStreamingThinking() {
+			if (streamBlocks.thinking) return streamBlocks.thinking;
+			const block = document.createElement("div");
+			block.className = "streaming-thinking";
+			ensureStreamingMessage().appendChild(block);
+			streamBlocks.thinking = block;
+			return block;
+		}
+		function ensureStreamingText() {
+			if (streamBlocks.text) return streamBlocks.text;
+			const block = document.createElement("div");
+			block.className = "streaming-text";
+			ensureStreamingMessage().appendChild(block);
+			streamBlocks.text = block;
+			return block;
+		}
+		function addToolBlock(name, isError) {
+			const block = document.createElement("div");
+			block.className = "streaming-tool" + (isError ? " error" : "");
+			block.innerHTML = '<span class="tool-name">' + escapeHtml(name) + '</span>' + escapeHtml(" 执行中…");
+			ensureStreamingMessage().appendChild(block);
+			streamBlocks.tools.push(block);
+			return block;
+		}
+		function scrollStreamToBottom() {
+			const messages = el("messages");
+			messages.scrollTop = messages.scrollHeight;
+		}
+		function applyStreamFrame(frame) {
+			const type = frame && frame.type;
+			if (!type) return;
+			if (type === "reasoning-start") {
+				ensureStreamingThinking();
+				scrollStreamToBottom();
+				return;
+			}
+			if (type === "reasoning-delta") {
+				const block = ensureStreamingThinking();
+				block.textContent += (frame.delta || "");
+				scrollStreamToBottom();
+				return;
+			}
+			if (type === "reasoning-end") {
+				scrollStreamToBottom();
+				return;
+			}
+			if (type === "text-start") {
+				ensureStreamingText();
+				scrollStreamToBottom();
+				return;
+			}
+			if (type === "text-delta") {
+				const block = ensureStreamingText();
+				block.textContent += (frame.delta || "");
+				scrollStreamToBottom();
+				return;
+			}
+			if (type === "text-end") {
+				scrollStreamToBottom();
+				return;
+			}
+			if (type === "tool-input-available") {
+				const tool = addToolBlock(frame.toolName || "tool", false);
+				// 记录工具名供 output 阶段回写（dataset 无法存 JSON 外的富文本，这里直接存）
+				tool.dataset.toolName = String(frame.toolName || "tool");
+				scrollStreamToBottom();
+				return;
+			}
+			if (type === "tool-output-available") {
+				const tool = streamBlocks.tools.pop();
+				if (tool) {
+					tool.className = "streaming-tool" + (frame.output && frame.output.error ? " error" : "");
+					tool.innerHTML = '<span class="tool-name">' + escapeHtml(tool.dataset.toolName || "tool") + '</span>' + escapeHtml(" 完成");
+				}
+				scrollStreamToBottom();
+				return;
+			}
+			if (type === "error") {
+				const block = ensureStreamingText();
+				block.textContent += "\n[错误] " + (frame.errorText || "");
+				scrollStreamToBottom();
+				return;
+			}
+			// finish / start 等由外部统一处理
+		}
+		async function startStream(sessionId) {
+			stopStream();
+			streamingSessionId = sessionId;
+			streamBlocks = { message: null, thinking: null, text: null, tools: [] };
+			streamAbortController = new AbortController();
+			try {
+				const res = await fetch(
+					\`/api/sessions/\${encodeURIComponent(sessionId)}/stream\`,
+					{ signal: streamAbortController.signal, headers: { accept: "text/event-stream" } },
+				);
+				if (!res.ok || !res.body) {
+					el("status").textContent = tr("web.streamFailed");
+					return;
+				}
+				const reader = res.body.getReader();
+				const decoder = new TextDecoder();
+				let buffer = "";
+				for (;;) {
+					const { done, value } = await reader.read();
+					if (done) break;
+					buffer += decoder.decode(value, { stream: true });
+					// SSE 帧以空行分隔；逐帧解析 data: 行
+					let sep;
+					while ((sep = buffer.indexOf("\n\n")) !== -1) {
+						const rawEvent = buffer.slice(0, sep);
+						buffer = buffer.slice(sep + 2);
+						const dataLine = rawEvent.split("\n").find(line => line.startsWith("data:"));
+						if (!dataLine) continue;
+						const payload = dataLine.slice(5).trim();
+						if (payload === "[DONE]") {
+							// 流结束：先停流（保留已渲染的打字机内容），再拉权威消息列表整体替换，
+							// 保证最终展示的是 pi 落盘的完整回复（含被流式块拆分的边界）。
+							setTimeout(() => { finishStream(sessionId); }, 0);
+							return;
+						}
+						if (!payload) continue;
+						try {
+							applyStreamFrame(JSON.parse(payload));
+						} catch { /* 忽略无法解析的帧 */ }
+					}
+				}
+				// 流正常结束（无 [DONE]）也同步一次
+				if (streamingSessionId === sessionId) { finishStream(sessionId); }
+			} catch (error) {
+				if (error && error.name === "AbortError") return;
+				el("status").textContent = tr("web.streamFailed");
+			} finally {
+				if (streamingSessionId === sessionId) streamingSessionId = "";
+			}
+		}
+		function stopStream() {
+			if (streamAbortController) {
+				try { streamAbortController.abort(); } catch {}
+				streamAbortController = null;
+			}
+			streamingSessionId = "";
+			streamBlocks = { message: null, thinking: null, text: null, tools: [] };
+		}
+		async function finishStream(sessionId) {
+			stopStream();
+			// 拉取权威消息列表（pi 已落盘完整回复）并整体重绘，替换流式时的增量块。
+			try {
+				await loadSessionMessages(sessionId);
+			} catch { /* 历史加载失败则保留流式内容 */ }
+			render();
+			renderMessages();
+		}
+		// 切换会话时终止上一个流，避免串台（在 click 委托中调用 stopStream）
 		el("composer").addEventListener("submit", async (event) => {
 			event.preventDefault();
 			const prompt = el("prompt");
@@ -683,7 +908,14 @@ export class WebServiceManager {
 					el("status").textContent = localizeDescriptor(response.result, response.result.error);
 					return;
 				}
-				await refresh();
+				// 已接受：立刻打开 SSE 订阅该会话的流式事件；
+				// 流结束后（agent_end → [DONE]）再 refresh() 同步权威消息列表。
+				if (activeSessionId === targetSessionId) {
+					void startStream(targetSessionId);
+				} else {
+					// 提交后切走了会话，仍要拉一次最新消息
+					await refresh();
+				}
 			} catch (error) {
 				// Transport errors are indeterminate after the request leaves the browser.
 				// Never restore automatically because the Session may already have accepted it.
@@ -783,6 +1015,76 @@ export class WebServiceManager {
 			"access-control-allow-origin": "*",
 		});
 		response.end(serializePublicWebPayload(body));
+	}
+
+	/**
+	 * SSE 流式响应：把 pi agent 事件以 AI SDK UIMessageStream 协议推送给指定 session 的订阅者。
+	 * 连接保持到 agent_end（或客户端断开）；断开时由 response close 事件清理路由注册。
+	 */
+	private handleStream(
+		sessionId: string,
+		request: IncomingMessage,
+		response: ServerResponse,
+	): void {
+		// 写入 SSE 响应头；AI SDK 前端（useChat）靠 x-vercel-ai-ui-message-stream: v1 识别协议。
+		response.writeHead(200, {
+			"content-type": "text/event-stream; charset=utf-8",
+			"cache-control": "no-cache, no-transform",
+			connection: "keep-alive",
+			"x-accel-buffering": "no",
+			"access-control-allow-origin": "*",
+			"x-vercel-ai-ui-message-stream": "v1",
+		});
+		response.flushHeaders?.();
+
+		// 写出原始 wire 文本（帧或 [DONE]）；返回 false 表示连接已断开。
+		const writeRaw = (wire: string): boolean => {
+			if (response.writableEnded || response.destroyed) return false;
+			try {
+				response.write(wire);
+				return true;
+			} catch {
+				return false;
+			}
+		};
+
+		// 注册连接；onClose 在客户端断开/服务停止时被调，确保不再向失效 socket 写数据。
+		const close = this.eventStreamRouter.add(sessionId, writeRaw, () => {
+			if (!response.writableEnded) {
+				try {
+					response.end();
+				} catch {
+					// 已销毁的连接 end() 抛错可忽略
+				}
+			}
+		});
+
+		// 客户端断开（页面刷新/关闭）时清理；对已结束的请求忽略重复事件。
+		const onClientClose = () => close();
+		response.once("close", onClientClose);
+		request.once("close", onClientClose);
+
+		// 心跳：部分代理/浏览器会因空闲断开长连接；每 15s 发一个注释帧保持活跃。
+		const heartbeat = setInterval(() => {
+			if (response.writableEnded || response.destroyed) {
+				clearInterval(heartbeat);
+				close();
+				return;
+			}
+			try {
+				response.write(": ping\n\n");
+			} catch {
+				clearInterval(heartbeat);
+				close();
+			}
+		}, 15_000);
+
+		// 连接关闭时清理心跳与监听器。
+		response.once("close", () => {
+			clearInterval(heartbeat);
+			response.removeListener("close", onClientClose);
+			request.removeListener("close", onClientClose);
+		});
 	}
 
 	private sendError(

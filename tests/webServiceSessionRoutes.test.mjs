@@ -78,6 +78,9 @@ function fixture(overrides = {}) {
 	const calls = { createDraft: 0, createAnonymous: 0, createAgent: 0, send: [], stateTargets: [], messageSessions: [] };
 	const targeted = (target, value) => ({ ok: true, value: { target, value } });
 	const deps = {
+		// SSE 流式依赖：测试环境不订阅真实 pi 事件，但必须提供可调用实现满足契约。
+		subscribePiEvents: () => () => undefined,
+		getSessionIdForAgent: () => "session-1",
 		listProjects: () => [{ id: "project-1", name: "Project", path: "C:/project" }],
 		listAgents: () => [agent],
 		listSessions: async () => [],
@@ -444,5 +447,69 @@ test("web responses strip desktop diagnostics and raw prompt errors recursively"
 				debugDetails: "SECRET_COMMAND_STACK",
 			},
 		}),
+	});
+});
+
+test("SSE /stream endpoint forwards pi agent events as AI SDK UI message frames", async () => {
+	// 捕获 subscribe 的 handler，模拟主进程 pi 事件派发
+	let emitPiEvent = null;
+	await withServer(async ({ baseUrl }) => {
+		const controller = new AbortController();
+		const response = await fetch(`${baseUrl}/api/sessions/session-1/stream`, {
+			signal: controller.signal,
+			headers: { accept: "text/event-stream" },
+		});
+		assert.equal(response.status, 200);
+		assert.equal(response.headers.get("x-vercel-ai-ui-message-stream"), "v1");
+		assert.match(response.headers.get("content-type") ?? "", /text\/event-stream/);
+
+		const reader = response.body.getReader();
+		const decoder = new TextDecoder();
+		let buffer = "";
+		const readUntil = async (marker) => {
+			for (;;) {
+				const at = buffer.indexOf(marker);
+				if (at !== -1) return buffer.slice(0, at + marker.length);
+				const { done, value } = await reader.read();
+				if (done) return buffer;
+				buffer += decoder.decode(value, { stream: true });
+			}
+		};
+
+		// 派发：消息开始 → 文本增量 → agent_end（应自动带 [DONE]）
+		emitPiEvent("agent-1", { type: "message_start", message: { role: "assistant", id: "m1" } });
+		emitPiEvent("agent-1", {
+			type: "message_update",
+			assistantMessageEvent: { type: "text_delta", delta: "Hello" },
+		});
+		emitPiEvent("agent-1", {
+			type: "message_update",
+			assistantMessageEvent: { type: "text_delta", delta: " world" },
+		});
+		emitPiEvent("agent-1", { type: "agent_end", stopReason: "done" });
+
+		const wire = await readUntil("data: [DONE]");
+		const frames = wire.split("\n\n")
+			.filter((line) => line.startsWith("data: ") && line.slice(6).trim() !== "[DONE]")
+			.map((line) => JSON.parse(line.slice(6)));
+		assert.equal(frames[0].type, "start");
+		assert.equal(frames[0].messageId, "m1");
+		assert.equal(frames[1].type, "text-start");
+		assert.equal(frames[2].type, "text-delta");
+		assert.equal(frames[2].delta, "Hello");
+		assert.equal(frames[3].type, "text-delta");
+		assert.equal(frames[3].delta, " world");
+		// 同一文本块：text-delta 复用 text-start 的 id
+		assert.equal(frames[2].id, frames[1].id);
+		assert.equal(frames[3].id, frames[1].id);
+		assert.equal(frames[4].type, "text-end");
+		assert.equal(frames[5].type, "finish");
+		controller.abort();
+	}, {
+		// 用可捕获的 subscribe 覆盖默认的 no-op
+		subscribePiEvents: (handler) => {
+			emitPiEvent = handler;
+			return () => { emitPiEvent = null; };
+		},
 	});
 });
