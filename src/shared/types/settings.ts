@@ -185,12 +185,6 @@ export type AppSettings = {
 
 	// ── 实验性渲染（UI 2.0 / issue #115） ──
 	/**
-	 * 助手消息使用 Streamdown 渲染引擎（灰度开关，默认 false 走旧 react-markdown 管线）。
-	 * 开启后获得流式半截 markdown 容错与 block 级 memo；组件覆盖（mermaid/链接）保持一致。
-	 */
-	useStreamdownRenderer?: boolean;
-
-	/**
 	 * 内置浏览器使用 WebContentsView 管线（灰度开关，默认 false 走 <webview>）。
 	 * 开启后页面由主进程持有的 WebContentsView 渲染，安全策略集中在主进程；
 	 * 已知限制：窗口缩放（zoomFactor ≠ 100%）时视图对齐可能有偏差。

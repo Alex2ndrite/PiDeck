@@ -1,7 +1,6 @@
 import { isValidElement, useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import type React from "react";
 import { Check, Copy } from "lucide-react";
-import { defaultUrlTransform } from "react-markdown";
 import { Button } from "../ui-shadcn/button";
 import { t } from "../../i18n";
 import { showNotice } from "../../utils/notice";

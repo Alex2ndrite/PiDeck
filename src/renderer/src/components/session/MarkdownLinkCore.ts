@@ -1,14 +1,33 @@
-import { defaultUrlTransform } from "react-markdown";
+/**
+ * 本地复刻 react-markdown 的 defaultUrlTransform（迁移 streamdown 后不再依赖 react-markdown 包）：
+ * 无协议/相对链接原样返回；非白名单协议清空（javascript:/data: 等危险协议被拦截）。
+ * 白名单与 react-markdown 一致：http/https/irc/ircs/mailto/xmpp。
+ */
+const SAFE_PROTOCOL = /^(https?|ircs?|mailto|xmpp)$/i;
+
+export function defaultUrlTransform(value: string): string {
+	const colon = value.indexOf(":");
+	const questionMark = value.indexOf("?");
+	const numberSign = value.indexOf("#");
+	const slash = value.indexOf("/");
+
+	if (
+		// 无协议：相对链接
+		colon === -1 ||
+		// 首个冒号在 ?/#// 之后：不是协议（如 ./a:b.ts、path?x=1:2）
+		(slash !== -1 && colon > slash) ||
+		(questionMark !== -1 && colon > questionMark) ||
+		(numberSign !== -1 && colon > numberSign) ||
+		// 是协议且在安全白名单内
+		SAFE_PROTOCOL.test(value.slice(0, colon))
+	) {
+		return value;
+	}
+	return "";
+}
 
 /**
- * Markdown 链接处理纯逻辑（与组件分离，供 node 单测直接加载）。
- *
- * - markdownUrlTransform：放行 file:// 本地文件链接，其余走默认安全过滤
- * - remarkLinkifyPaths：mdast 层把裸文件路径转成 file:// 链接
- * - isLocalPathRef：判断无协议 href 是否为本地路径引用（[text](path) 形式）
- */
-
-/** Markdown 内的链接默认会在 Electron 窗口内导航,这里拦截点击统一用系统浏览器打开。
+ * Markdown 内的链接默认会在 Electron 窗口内导航,这里拦截点击统一用系统浏览器打开。
  * 支持文件路径链接（file:// 协议）点击打开文件。
  */
 export function markdownUrlTransform(url: string): string {

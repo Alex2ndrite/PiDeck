@@ -5,10 +5,10 @@ import { t } from "../../i18n";
 import { ArrowLeft, Edit3, Maximize, Minimize2, SquareSplitHorizontal, X, Eye, FileCode } from "lucide-react";
 import { setupMonaco } from "../../utils/monacoSetup";
 import { Button } from "../ui-shadcn/button";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { MarkdownStream } from "../session/MarkdownStream";
+import { defaultUrlTransform } from "../session/MarkdownLinkCore";
+import { defaultRemarkPlugins, defaultRehypePlugins } from "streamdown";
 import rehypeKatex from "rehype-katex";
-import { defaultUrlTransform } from "react-markdown";
 
 import { isBinaryExtension } from "../../utils/isTextFile";
 
@@ -392,16 +392,16 @@ export function FileDiffViewer(props: {
 				{error && <div className="file-diff-error">{error}</div>}
 				{!loading && !error && (
 					<>
-						{/* Markdown 预览：仅 view 模式且 preview 启用 */}
+						{/* Markdown 预览：仅 view 模式且 preview 启用（静态渲染，与会话正文同一 Streamdown 引擎） */}
 						{!isDiffMode && preview && isMarkdown && (
 							<div className="file-diff-preview">
-								<ReactMarkdown
-									remarkPlugins={[remarkGfm]}
-									rehypePlugins={[rehypeKatex]}
+								<MarkdownStream
+									text={content}
+									onOpenExternal={() => undefined}
+									remarkPlugins={[defaultRemarkPlugins.gfm]}
+									rehypePlugins={[defaultRehypePlugins.raw, rehypeKatex]}
 									urlTransform={defaultUrlTransform}
-								>
-									{content}
-								</ReactMarkdown>
+								/>
 							</div>
 						)}
 						{!isDiffMode && preview && isHtml && (

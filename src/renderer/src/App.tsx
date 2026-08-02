@@ -75,7 +75,6 @@ import {
   sessionIdByRuntimeAgentIdAtomFamily,
   sessionRuntimeBySessionIdAtomFamily,
   sidebarExpandedProjectIdsAtom,
-  useStreamdownRendererAtom,
   useWebContentsViewBrowserAtom,
   sessionCatalogLoadStateAtom,
   sessionSummariesByProjectIdAtomFamily,
@@ -543,11 +542,6 @@ export function App() {
     piRpcNoSkills: false,
   });
 
-  // 实验渲染开关（#115 U2）：settings → atom 单向同步，AssistantText 读 atom 切换引擎
-  const setStreamdownRenderer = useSetAtom(useStreamdownRendererAtom);
-  useEffect(() => {
-    setStreamdownRenderer(Boolean(settings.useStreamdownRenderer));
-  }, [settings.useStreamdownRenderer, setStreamdownRenderer]);
   // 实验浏览器开关（#115 U4）：WebContentsView 灰度
   const setWebContentsViewBrowser = useSetAtom(useWebContentsViewBrowserAtom);
   useEffect(() => {

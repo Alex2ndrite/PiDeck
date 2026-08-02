@@ -13,18 +13,8 @@ import {
 	type ReactNode,
 } from "react";
 import { toBlob } from "html-to-image";
-import ReactMarkdown from "react-markdown";
-import {
-	markdownUrlTransform,
-	MarkdownLink,
-	remarkLinkifyPaths,
-} from "./MarkdownLink";
 import { MarkdownStream } from "./MarkdownStream";
 import { useAtomValue } from "jotai";
-import { useStreamdownRendererAtom } from "../../atoms/app-ui-atoms";
-import rehypeKatex from "rehype-katex";
-import remarkGfm from "remark-gfm";
-import remarkMath from "remark-math";
 import "katex/dist/katex.min.css";
 import {
 	summarizeMessage,
@@ -572,40 +562,6 @@ function PetChooserPreview(props: {
 
 /** 助手正文：扁平 markdown 渲染，无气泡包裹，全宽排版，支持内嵌图片。
  *  路径链接化用 remark 插件在 mdast 层处理（见底部 remarkLinkifyPaths），不再前置改写原始字符串。 */
-/** 表格容器：与 code-block-wrap 保持相同的宽度与圆角，内部 <table> 仍负责横向滚动。 */
-function TableWrapper(props: React.ComponentProps<"table">) {
-	return (
-		<div className="table-wrap">
-			<table {...props} />
-		</div>
-	);
-}
-
-/** 流式输出期间的轻量代码块：不加载 mermaid、不跑数学/语法高亮，只展示原始文本，
- *  避免未闭合的 ```mermaid 围栏触发 mermaid.initialize/render 挤占主线程。 */
-function StreamingCodeBlock(props: React.HTMLAttributes<HTMLPreElement>) {
-	const child = Array.isArray(props.children) ? props.children[0] : props.children;
-	const codeProps = isValidElement(child)
-		? (child.props as { className?: string; children?: ReactNode })
-		: undefined;
-	const text = extractText(codeProps?.children ?? props.children);
-	const [copied, setCopied] = useState(false);
-	const handleCopy = () => {
-		navigator.clipboard.writeText(text);
-		setCopied(true);
-		showNotice(t("app.codeCopied"), 1200);
-		setTimeout(() => setCopied(false), 1800);
-	};
-	return (
-		<div className="code-block-wrap">
-			<button className="code-copy" onClick={handleCopy} title={t("code.copy")}>
-				{copied ? <Check size={14} /> : <Copy size={14} />}
-			</button>
-			<pre {...props}>{props.children}</pre>
-		</div>
-	);
-}
-
 export const AssistantText = memo(
 	function AssistantText(props: {
 		text: string;
@@ -619,10 +575,8 @@ export const AssistantText = memo(
 	}) {
 		// 清理 ANSI 转义码与 <thinking> 标签，thinking 由调用方通过 ThinkingBlock 渲染
 		const cleanText = stripThinkingTags(stripAnsi(props.text));
-		// 流式期间用轻量管线（仅 GFM + 路径链接化），回答结束后切回含数学/图表的完整渲染。
-		const streaming = Boolean(props.isStreaming);
-		// 灰度开关（#115 U2）：开启后同一正文走 Streamdown 引擎，组件覆盖保持一致
-		const useStreamdown = useAtomValue(useStreamdownRendererAtom);
+		// 统一 Streamdown 引擎（迁移后唯一 markdown 管线）：流式由引擎按 block memo、
+		// 半截 markdown 由 remend 容错补全，不再需要旧管线的流式/静态双路径切换。
 		return (
 			<div className="assistant-text markdown-body">
 				{props.images && props.images.length > 0 && (
@@ -638,38 +592,12 @@ export const AssistantText = memo(
 						))}
 					</div>
 				)}
-				{useStreamdown ? (
-					<MarkdownStream
-						text={cleanText}
-						isStreaming={streaming}
-						onOpenExternal={props.onOpenExternal}
-						onOpenFile={props.onOpenFile}
-					/>
-				) : (
-				<ReactMarkdown
-					remarkPlugins={
-						streaming
-							? [remarkGfm, remarkLinkifyPaths]
-							: [remarkGfm, remarkMath, remarkLinkifyPaths]
-					}
-					rehypePlugins={streaming ? [] : [rehypeKatex]}
-					urlTransform={markdownUrlTransform}
-					components={{
-						pre: streaming ? StreamingCodeBlock : CodeBlock,
-						table: TableWrapper,
-						span: MathSpan,
-						a: (linkProps) => (
-							<MarkdownLink
-								{...linkProps}
-								onOpenExternal={props.onOpenExternal}
-								onOpenFile={props.onOpenFile}
-							/>
-						),
-					}}
-				>
-					{cleanText}
-				</ReactMarkdown>
-				)}
+				<MarkdownStream
+					text={cleanText}
+					isStreaming={Boolean(props.isStreaming)}
+					onOpenExternal={props.onOpenExternal}
+					onOpenFile={props.onOpenFile}
+				/>
 			</div>
 		);
 	},

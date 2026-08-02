@@ -1432,12 +1432,6 @@ function SettingsModalContent(props: SettingsModalProps) {
 										onChange={(checked) => updateDraft({ piRpcNoSkills: checked })}
 									/>
 									<SettingSwitch
-										title={t("settings.useStreamdownRenderer")}
-										description={t("settings.useStreamdownRendererDesc")}
-										checked={Boolean(draftSettings.useStreamdownRenderer)}
-										onChange={(checked) => updateDraft({ useStreamdownRenderer: checked })}
-									/>
-									<SettingSwitch
 										title={t("settings.useWebContentsViewBrowser")}
 										description={t("settings.useWebContentsViewBrowserDesc")}
 										checked={Boolean(draftSettings.useWebContentsViewBrowser)}

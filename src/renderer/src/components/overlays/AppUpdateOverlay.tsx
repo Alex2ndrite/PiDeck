@@ -1,5 +1,5 @@
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { MarkdownStream } from "../session/MarkdownStream";
+import { defaultRemarkPlugins } from "streamdown";
 import { t } from "../../i18n";
 import {
 	Dialog,
@@ -75,7 +75,13 @@ function UpdateDialog(props: {
 						</div>
 					)}
 					{props.error && <div className="update-error-detail" role="alert">{t("update.errorInfo", { message: props.error })}</div>}
-					<div className="update-notes markdown-body"><ReactMarkdown remarkPlugins={[remarkGfm]}>{props.info.releaseNotes.trim() || t("update.noReleaseNotes")}</ReactMarkdown></div>
+					<div className="update-notes markdown-body">
+						<MarkdownStream
+							text={props.info.releaseNotes.trim() || t("update.noReleaseNotes")}
+							onOpenExternal={() => undefined}
+							remarkPlugins={[defaultRemarkPlugins.gfm]}
+						/>
+					</div>
 				</div>
 				<div className="update-actions">
 					<Button variant="outline" size="sm" className="h-auto px-3 py-2 text-[13px] shadow-none" onClick={props.onOpenRelease}>{t("update.openRelease")}</Button>

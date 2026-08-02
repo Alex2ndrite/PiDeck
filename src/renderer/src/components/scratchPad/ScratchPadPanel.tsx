@@ -1,10 +1,10 @@
 import { memo, useCallback, useRef, useState, type ReactNode } from "react";
-import ReactMarkdown from "react-markdown";
 import rehypeKatex from "rehype-katex";
 import remarkBreaks from "remark-breaks";
-import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
+import { defaultRemarkPlugins } from "streamdown";
 import { Download, Eye, FilePlus, PanelRightOpen, Pencil, Trash2 } from "lucide-react";
+import { MarkdownStream } from "../session/MarkdownStream";
 import type { Plugin } from "unified";
 import type { Root, Element, Text } from "hast";
 import type { DraftMeta } from "../../../../shared/types";
@@ -304,8 +304,10 @@ export const ScratchPadPanel = memo(function ScratchPadPanel(props: ScratchPadPa
 								</div>
 							) : (
 								<div className="scratch-pad-md">
-									<ReactMarkdown
-										remarkPlugins={[remarkGfm, remarkMath, remarkBreaks]}
+									<MarkdownStream
+										text={content}
+										onOpenExternal={() => undefined}
+										remarkPlugins={[defaultRemarkPlugins.gfm, remarkMath, remarkBreaks]}
 										rehypePlugins={[rehypeKatex, rehypeHighlightMark]}
 										components={{
 											/* GFM task list：用 AST 节点行号直接定位源码行，避免 render-order 计数器漂移 */
@@ -346,9 +348,7 @@ export const ScratchPadPanel = memo(function ScratchPadPanel(props: ScratchPadPa
 												/>
 											),
 										}}
-									>
-										{content}
-									</ReactMarkdown>
+									/>
 								</div>
 							)}
 						</div>
