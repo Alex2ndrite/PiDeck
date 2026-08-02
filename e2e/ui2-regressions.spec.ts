@@ -12,7 +12,8 @@ test("settings select: option is clickable through dialog layers", async ({ wind
 	const modal = window.locator(".settings-modal");
 	await expect(modal).toBeVisible();
 
-	// 主题 Select（常用设置 tab 第一个）
+	// 主题 Select 已移入外观设置 tab（主题字段迁移后）
+	await modal.getByText("外观设置").click();
 	const trigger = modal.locator("[data-slot='select-trigger']").first();
 	await trigger.click();
 	const content = window.locator("[data-slot='select-content']");

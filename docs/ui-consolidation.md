@@ -191,6 +191,10 @@ collapsible/resizable/scroll-area/alert-dialog/sonner/input/textarea/confirm-dia
   git-resource-name/git-resource-open/git-status-msg）+ group-[.open]:flex 语义修复（group 类移到外层容器）
 - **教训（已固化）**：e2e 的类选择器是隐式锚点——迁移删类前必须  核对，
   锚点类保留（空类无视觉影响）；group 组合状态（）迁移时 group 类必须与状态类同元素
+- **换肤系统 ✅**：主题字段移入外观设置；主题色新增「默认」选项（出厂品牌绿）；
+  内置 4 套皮肤（经典绿/石墨灰/海盐蓝/暖阳米，SKIN_PRESETS light/dark 双色板）；
+  背景图支持（pideck-bg:// 协议服务 userData/backgrounds/ + 选图 IPC + 遮罩透明度）；
+  自定义主题口子：customThemeOverrides（CSS 变量覆盖）+ 文档指引
 - **仍开放（低优先）**：UI 2.0 全面目测验收一轮
 
 ## 7. 迁移终态统计

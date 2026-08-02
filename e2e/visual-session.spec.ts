@@ -83,6 +83,7 @@ test("visual tour: live session states", async ({ window }) => {
 	await window.locator(".settings-icon").click();
 	const modal = window.locator(".settings-modal");
 	await expect(modal).toBeVisible();
+	await modal.getByText("外观设置").click();
 	await modal.locator("[data-slot='select-trigger']").first().click();
 	await window.locator("[data-slot='select-content']").getByText("暗色").click();
 	await modal.getByRole("button", { name: "保存" }).click();

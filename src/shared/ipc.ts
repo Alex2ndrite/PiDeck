@@ -322,6 +322,10 @@ export const ipcChannels = {
 
 	// ===== 系统文件选择器 =====
 	dialogPickFiles: "dialog:pick-files",
+	/** 换肤背景图：选图复制到 userData/backgrounds/（返回文件名，空串=取消） */
+	pickBackgroundImage: "backgrounds:pick",
+	/** 删除背景图文件 */
+	removeBackgroundImage: "backgrounds:remove",
 
 	// ===== 内置浏览器 =====
 	browserOpenExternal: "browser:open-external",

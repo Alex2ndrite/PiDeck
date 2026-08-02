@@ -7,6 +7,7 @@ import {
 	nativeImage,
 	nativeTheme,
 	net,
+	protocol,
 	session,
 	shell,
 	Tray,
@@ -179,6 +180,10 @@ import { SkillManager } from "./skills/SkillManager";
 import { ExtensionManager } from "./extensions/ExtensionManager";
 import { ProjectResourceManager } from "./projects/ProjectResourceManager";
 import { registerProjectsIpc } from "./ipc/projectsIpc";
+import {
+	registerBackgroundImageProtocol,
+	registerBackgroundsIpc,
+} from "./ipc/backgroundsIpc";
 import { registerGitIpc } from "./ipc/gitIpc";
 import { registerStoreIpc } from "./ipc/storeIpc";
 import { registerTerminalIpc } from "./ipc/terminalIpc";
@@ -2009,6 +2014,9 @@ function registerIpc() {
 		getMainWindow: () => mainWindow,
 		appLogger,
 	});
+	// 换肤背景图：协议服务 userData/backgrounds/，IPC 负责选图复制与删除
+	registerBackgroundImageProtocol();
+	registerBackgroundsIpc();
 	registerProjectsIpc({
 		projectStore,
 		settingsStore,
@@ -2155,6 +2163,11 @@ async function detectExternalEditorsOnFirstLaunch() {
 	});
 	void appLogger.info("editor", "External editors detected on first launch", { count: detected.length });
 }
+
+// 换肤背景图协议：自定义 scheme 必须在 ready 前注册特权声明（secure 以便渲染层 CSS 引用）
+protocol.registerSchemesAsPrivileged([
+	{ scheme: "pideck-bg", privileges: { secure: true, standard: false, corsEnabled: false, supportFetchAPI: false, stream: false } },
+]);
 
 app.whenReady().then(async () => {
 	// 未拿到同版本主实例锁时不要继续初始化，避免第二进程短暂闪窗。

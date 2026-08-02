@@ -125,6 +125,9 @@
   --shadow-composer: 0 1px 2px 0 rgba(9, 9, 11, 0.05);
   --shadow-drawer: -4px 0 12px rgba(9, 9, 11, 0.06);
   --focus-ring: 0 0 0 3px rgba(24, 24, 27, 0.16);
+  /* 换肤背景图：none=不启用；mask 由 JS 注入（rgba 遮罩） */
+  --app-bg-image: none;
+  --app-bg-mask: none;
   --overlay-backdrop: rgba(9, 9, 11, 0.4);
   --overlay-backdrop-soft: rgba(15, 23, 42, 0.14);
   --overlay-backdrop-subtle: rgba(15, 23, 42, 0.08);
@@ -428,7 +431,13 @@
 body {
   margin: 0;
   overflow: hidden;
-  background: var(--color-bg-app);
+  /* 换肤背景图：--app-bg-image 由 App.tsx 按设置注入（pideck-bg:// 协议），
+     --app-bg-mask 为同色遮罩渐变（浅色白/暗色黑，透明度=1-opacity） */
+  background-color: var(--color-bg-app);
+  background-image: var(--app-bg-mask, none), var(--app-bg-image, none);
+  background-size: auto, cover;
+  background-position: center, center;
+  background-attachment: fixed, fixed;
 }
 button,
 textarea,

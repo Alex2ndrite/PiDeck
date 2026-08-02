@@ -79,7 +79,11 @@ let previewSettings: AppSettings = {
 	showNativeMenu: false,
 	sendShortcut: "enter-send",
 	theme: "system",
-	accent: "green",
+	accent: "default",
+	themeSkin: "classic-green",
+	customThemeOverrides: {},
+	backgroundImage: "",
+	backgroundImageOpacity: 0.6,
 	language: "system",
 	startupWindowMode: "maximized",
 	piEnvironmentChecked: true,
@@ -260,6 +264,8 @@ export function createPreviewApi(): PiDesktopApi {
 		},
 		dialog: {
 			pickFiles: async () => [],
+			pickBackgroundImage: async () => "",
+			removeBackgroundImage: async () => undefined,
 		},
 		sessions: {
 			list: async () => getSessions(),

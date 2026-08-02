@@ -11,7 +11,7 @@ import {
 	Plus,
 } from "lucide-react";
 import { t } from "../../i18n";
-import { ACCENT_PRESETS } from "../../themePresets";
+import { ACCENT_PRESETS, SKIN_PRESETS } from "../../themePresets";
 import { Button } from "../ui-shadcn/button";
 import {
 	Select,
@@ -461,6 +461,10 @@ function SettingsModalContent(props: SettingsModalProps) {
 		value: preset.id,
 		label: t(preset.labelKey),
 	}));
+	const skinOptions = SKIN_PRESETS.map((preset) => ({
+		value: preset.id,
+		label: t(preset.labelKey),
+	}));
 	const startupWindowModeOptions = [
 		{ value: "maximized", label: t("settings.startupWindow.maximized") },
 		{ value: "normal-large", label: t("settings.startupWindow.large") },
@@ -529,26 +533,6 @@ function SettingsModalContent(props: SettingsModalProps) {
 						{activeTab === "common" && (
 							<>
 								<SettingsSection title={t("settings.interface")}>
-									<div className="setting-field">
-										<span>
-											{t("settings.theme")}
-											<DirtyMarker dirty={isDirty("theme")} label={t("settings.theme")} />
-										</span>
-										<div className="grid gap-1.5">
-	<Select value={draftSettings.theme} onValueChange={(value) =>
-												updateDraft({ theme: value as AppSettings["theme"] })
-											}>
-		<SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-		<SelectContent>
-			{themeOptions.map((option) => (
-				<SelectItem key={option.value} value={option.value} disabled={option.disabled}>
-					{option.label}
-				</SelectItem>
-			))}
-		</SelectContent>
-	</Select>
-</div>
-									</div>
 									<div className="setting-field">
 										<span>
 											{t("settings.language")}
@@ -876,6 +860,26 @@ function SettingsModalContent(props: SettingsModalProps) {
 								<SettingsSection title={t("settings.interface")}>
 									<div className="setting-field">
 										<span>
+											{t("settings.theme")}
+											<DirtyMarker dirty={isDirty("theme")} label={t("settings.theme")} />
+										</span>
+										<div className="grid gap-1.5">
+	<Select value={draftSettings.theme} onValueChange={(value) =>
+												updateDraft({ theme: value as AppSettings["theme"] })
+											}>
+		<SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+		<SelectContent>
+			{themeOptions.map((option) => (
+				<SelectItem key={option.value} value={option.value} disabled={option.disabled}>
+					{option.label}
+				</SelectItem>
+			))}
+		</SelectContent>
+	</Select>
+</div>
+									</div>
+									<div className="setting-field">
+										<span>
 											{t("settings.accent")}
 											<DirtyMarker dirty={isDirty("accent")} label={t("settings.accent")} />
 										</span>
@@ -894,6 +898,85 @@ function SettingsModalContent(props: SettingsModalProps) {
 	</Select>
 </div>
 										<small className="text-xs text-muted-foreground">{t("settings.accentDesc")}</small>
+									</div>
+									{/* 皮肤（换肤）：内置色板，与主题色正交；custom 由 customThemeOverrides 驱动 */}
+									<div className="setting-field">
+										<span>
+											{t("settings.skin")}
+											<DirtyMarker dirty={isDirty("themeSkin")} label={t("settings.skin")} />
+										</span>
+										<div className="grid gap-1.5">
+	<Select value={draftSettings.themeSkin} onValueChange={(value) =>
+												updateDraft({ themeSkin: value as AppSettings["themeSkin"] })
+											}>
+		<SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+		<SelectContent>
+			{skinOptions.map((option) => (
+				<SelectItem key={option.value} value={option.value} disabled={option.disabled}>
+					{option.label}
+				</SelectItem>
+			))}
+		</SelectContent>
+	</Select>
+</div>
+										<small className="text-xs text-muted-foreground">{t("settings.skinDesc")}</small>
+									</div>
+									{/* 背景图片：pideck-bg:// 协议加载 userData/backgrounds/ 下文件 */}
+									<div className="setting-field">
+										<span>
+											{t("settings.backgroundImage")}
+											<DirtyMarker dirty={isDirty("backgroundImage") || isDirty("backgroundImageOpacity")} label={t("settings.backgroundImage")} />
+										</span>
+										<div className="flex items-center gap-2">
+											{draftSettings.backgroundImage ? (
+												<img
+													src={`pideck-bg://local/${encodeURIComponent(draftSettings.backgroundImage)}`}
+													alt=""
+													className="h-12 w-20 shrink-0 rounded-sm border border-border object-cover"
+												/>
+											) : (
+												<div className="flex h-12 w-20 shrink-0 items-center justify-center rounded-sm border border-dashed border-border text-[11px] text-muted-foreground">—</div>
+											)}
+											<Button
+												variant="outline"
+												size="sm"
+												onClick={async () => {
+													const name = await desktopApi.dialog.pickBackgroundImage();
+													if (name) updateDraft({ backgroundImage: name });
+												}}
+											>
+												{t("settings.backgroundImageChoose")}
+											</Button>
+											{draftSettings.backgroundImage ? (
+												<Button
+													variant="ghost"
+													size="sm"
+													onClick={() => {
+														const name = draftSettings.backgroundImage;
+														updateDraft({ backgroundImage: "" });
+														if (name) void desktopApi.dialog.removeBackgroundImage(name);
+													}}
+												>
+													{t("settings.backgroundImageClear")}
+												</Button>
+											) : null}
+										</div>
+										<div className="mt-1.5 flex items-center gap-2">
+											<span className="w-24 shrink-0 text-xs text-muted-foreground">{t("settings.backgroundImageOpacity")}</span>
+											<input
+												type="range"
+												min={0}
+												max={100}
+												value={Math.round((draftSettings.backgroundImageOpacity ?? 0.6) * 100)}
+												onChange={(event) =>
+													updateDraft({ backgroundImageOpacity: Number(event.target.value) / 100 })
+												}
+												className="h-4 flex-1 accent-[var(--color-accent)]"
+												aria-label={t("settings.backgroundImageOpacity")}
+											/>
+											<span className="w-10 text-right font-mono text-xs tabular-nums text-muted-foreground">{Math.round((draftSettings.backgroundImageOpacity ?? 0.6) * 100)}%</span>
+										</div>
+										<small className="text-xs text-muted-foreground">{t("settings.backgroundImageDesc")}</small>
 									</div>
 									<div className="setting-field">
 										<span>

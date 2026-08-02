@@ -28,20 +28,25 @@ test("settings modal opens with experimental UI 2.0 switches", async ({ window }
  */
 test("accent switch applies data-accent immediately", async ({ window }) => {
 	await expect(window.locator("#boot-overlay")).toHaveCount(0, { timeout: 20_000 });
-	await expect(window.locator("html")).toHaveAttribute("data-accent", "green");
+	await expect(window.locator("html")).toHaveAttribute("data-accent", "default");
 
 	await window.locator(".settings-icon").click();
 	const modal = window.locator(".settings-modal");
 	await expect(modal).toBeVisible();
 
-	// 主题色 Select 在外观设置 tab：先切换 tab，再点击 SelectTrigger（显示当前值「清新绿」）
+	// 外观设置 tab：主题 Select（移入）→ 皮肤 → 主题色
 	await modal.getByText("外观设置").click();
-	await modal.getByRole("combobox").filter({ hasText: "清新绿" }).click();
+	// 皮肤切到石墨灰：data-skin 立即更新
+	await modal.getByRole("combobox").filter({ hasText: "经典绿（出厂）" }).click();
+	await window.getByRole("option", { name: "石墨灰" }).click();
+	// 主题色 Select（显示当前值「清新绿」）
+	await modal.getByRole("combobox").filter({ hasText: "默认" }).click();
 	await window.getByRole("option", { name: "天空蓝" }).click();
 
 	// 保存后即时生效：html[data-accent] 变为 blue（修复前停留在 green）
 	await modal.getByRole("button", { name: "保存" }).click();
 	await expect(window.locator("html")).toHaveAttribute("data-accent", "blue");
+	await expect(window.locator("html")).toHaveAttribute("data-skin", "graphite");
 
 	// 关闭弹窗后保持
 	await modal.getByRole("button", { name: "关闭" }).first().click();

@@ -331,6 +331,12 @@ const api = {
 		 */
 		pickFiles: (options?: { title?: string }) =>
 			ipcRenderer.invoke(ipcChannels.dialogPickFiles, options) as Promise<string[]>,
+		/** 换肤背景图：选图并复制到 userData/backgrounds/，返回文件名（空串=取消） */
+		pickBackgroundImage: () =>
+			ipcRenderer.invoke(ipcChannels.pickBackgroundImage) as Promise<string>,
+		/** 删除背景图文件（清空背景设置时调用） */
+		removeBackgroundImage: (name: string) =>
+			ipcRenderer.invoke(ipcChannels.removeBackgroundImage, name) as Promise<void>,
 	},
 	sessions: {
 		list: (projectId?: string) =>

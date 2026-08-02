@@ -9,6 +9,7 @@ import {
   useCallback,
 } from "react";
 import { useAtomValue, useSetAtom, useStore } from "jotai";
+import { SKIN_PRESETS } from "./themePresets";
 import {
   Code,
   FolderOpen,
@@ -453,7 +454,11 @@ export function App() {
     showNativeMenu: false,
     sendShortcut: "enter-send",
     theme: "system",
-    accent: "green",
+    accent: "default",
+	themeSkin: "classic-green",
+	customThemeOverrides: {},
+	backgroundImage: "",
+	backgroundImageOpacity: 0.6,
     language: "system",
     startupWindowMode: "maximized",
     piEnvironmentChecked: false,
@@ -806,13 +811,54 @@ export function App() {
       document.documentElement.dataset.theme = resolvedTheme;
       // 主题色预设：data-accent 驱动 foundation.css 的 accent/logo 变量
       document.documentElement.dataset.accent = settings.accent;
+      // 皮肤（换肤）：data-skin 记录当前皮肤 id（变量覆盖在下方 effect 注入）
+      document.documentElement.dataset.skin = settings.themeSkin;
     };
     applyTheme();
     if (settings.theme !== "system" || !media) return;
     media.addEventListener?.("change", applyTheme);
     return () => media.removeEventListener?.("change", applyTheme);
     // 依赖 theme 与 accent：只改主题色时也必须重新应用 data-accent（否则界面不变）
-  }, [settings.theme, settings.accent]);
+  }, [settings.theme, settings.accent, settings.themeSkin]);
+
+  // 皮肤变量覆盖：内置皮肤（SKIN_PRESETS light/dark 色板）+ 自定义覆盖（customThemeOverrides）
+  useEffect(() => {
+    const root = document.documentElement;
+    const isDark = root.dataset.theme === "dark";
+    const preset = SKIN_PRESETS.find((p) => p.id === settings.themeSkin);
+    // 全部皮肤可能触及的变量键（内置 light/dark 并集 + 自定义键）——先清后设，保证切换无残留
+    const allKeys = new Set<string>();
+    for (const p of SKIN_PRESETS) {
+      Object.keys(p.light).forEach((k) => allKeys.add(k));
+      Object.keys(p.dark).forEach((k) => allKeys.add(k));
+    }
+    Object.keys(settings.customThemeOverrides ?? {}).forEach((k) => allKeys.add(k));
+    for (const k of allKeys) root.style.removeProperty(`--color-${k}`);
+    const base = preset ? (isDark ? preset.dark : preset.light) : {};
+    const merged = { ...base, ...(settings.customThemeOverrides ?? {}) };
+    for (const [k, v] of Object.entries(merged)) root.style.setProperty(`--color-${k}`, v);
+  }, [settings.themeSkin, settings.theme, settings.customThemeOverrides]);
+
+  // 换肤背景图：pideck-bg:// 协议加载 userData/backgrounds/ 下图片，遮罩同色渐变（浅白/暗黑）
+  useEffect(() => {
+    const root = document.documentElement;
+    if (settings.backgroundImage) {
+      root.style.setProperty(
+        "--app-bg-image",
+        `url("pideck-bg://local/${encodeURIComponent(settings.backgroundImage)}")`,
+      );
+      const isDark = root.dataset.theme === "dark";
+      const alpha = Math.min(1, Math.max(0, 1 - settings.backgroundImageOpacity));
+      const rgb = isDark ? "0,0,0" : "255,255,255";
+      root.style.setProperty(
+        "--app-bg-mask",
+        `linear-gradient(rgba(${rgb},${alpha}), rgba(${rgb},${alpha}))`,
+      );
+    } else {
+      root.style.removeProperty("--app-bg-image");
+      root.style.removeProperty("--app-bg-mask");
+    }
+  }, [settings.backgroundImage, settings.backgroundImageOpacity, settings.theme]);
 
   // 字号与命名字体预设由 data 属性选择 CSS token；只有 custom 字体需要注入用户输入。
   useEffect(() => {

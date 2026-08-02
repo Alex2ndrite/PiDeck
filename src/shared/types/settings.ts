@@ -7,7 +7,17 @@ export type SendShortcutMode =
 
 export type AppThemeMode = "system" | "light" | "dark";
 /** 主题色预设：data-accent 属性驱动 foundation.css 的 accent/logo 变量 */
-export type AppAccentMode = "green" | "blue" | "purple" | "amber" | "rose";
+export type AppAccentMode = "default" | "green" | "blue" | "purple" | "amber" | "rose";
+/**
+ * 皮肤（换肤）：覆盖背景/border 色板，与 accent（主题色）正交。
+ * 内置皮肤在 themePresets.ts SKIN_PRESETS 定义；custom 由 customThemeOverrides 驱动。
+ */
+export type AppSkinId =
+	| "classic-green"
+	| "graphite"
+	| "sea-blue"
+	| "warm-beige"
+	| "custom";
 export type AppLanguageMode = "system" | "zh-CN" | "en-US" | "pseudo";
 export type LinkOpenMode = "external" | "internal";
 export type AppFontSizeMode = "compact" | "default" | "medium" | "large" | "xlarge";
@@ -29,6 +39,14 @@ export type AppSettings = {
 	theme: AppThemeMode;
 	/** 主题色（accent）预设，data-accent 驱动；新增预设只需扩充 AppAccentMode 与色板 */
 	accent: AppAccentMode;
+	/** 皮肤（换肤）：内置预设见 themePresets.ts SKIN_PRESETS；custom 走 customThemeOverrides */
+	themeSkin: AppSkinId;
+	/** 自定义主题：CSS 变量名 → 值（键不含 -- 前缀），叠加在内置皮肤之上 */
+	customThemeOverrides: Record<string, string>;
+	/** 背景图文件名（userData/backgrounds/ 目录下），空串=不启用 */
+	backgroundImage: string;
+	/** 背景图遮罩不透明度 0-1：1=背景色完全遮住图片，0=图片全显 */
+	backgroundImageOpacity: number;
 	/** 界面语言，system 跟随系统语言；pseudo 用于长文案布局压力测试 */
 	language: AppLanguageMode;
 	/** 启动时主窗口尺寸预设，默认 maximized（与历史 ready-to-show 后 maximize 一致） */
