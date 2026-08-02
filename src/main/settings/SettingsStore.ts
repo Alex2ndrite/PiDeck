@@ -133,7 +133,7 @@ Gitmoji 对应关系：
   webServicePort: 8765,
   rpcTimeout: 600_000,
   linkOpenMode: "external",
-  contentMaxWidth: 1400,
+  contentMaxWidth: 1500,
   maxEditorFileSizeMB: 5,
   externalEditors: createDefaultExternalEditorSettings(),
 

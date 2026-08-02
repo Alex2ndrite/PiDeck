@@ -1431,7 +1431,7 @@ export const zhCN = {
   "settings.skin.custom": "自定义",
   "settings.skinDesc": "换肤：内置皮肤调整背景/边框色板；与主题色（accent）正交，可叠加使用。",
   "settings.backgroundImage": "背景图片",
-  "settings.backgroundImageDesc": "选择本地图片作为应用背景；透明度越大图片越清晰（浅色主题白遮罩，暗色黑遮罩）。",
+  "settings.backgroundImageDesc": "选择本地图片作为应用背景；透明度 100% 时图片完全显示（浅色主题白遮罩、暗色黑遮罩，所有面板半透明透出图片）。",
   "settings.backgroundImageChoose": "选择图片…",
   "settings.backgroundImageClear": "清除",
   "settings.backgroundImageOpacity": "背景图透明度",

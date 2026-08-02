@@ -488,7 +488,7 @@ export function App() {
     webServicePort: 8765,
     rpcTimeout: 600_000,
     linkOpenMode: "external",
-    contentMaxWidth: 1400,
+    contentMaxWidth: 1500,
     maxEditorFileSizeMB: 5,
     externalEditors: createDefaultExternalEditorSettings(),
 
@@ -839,10 +839,12 @@ export function App() {
     for (const [k, v] of Object.entries(merged)) root.style.setProperty(`--color-${k}`, v);
   }, [settings.themeSkin, settings.theme, settings.customThemeOverrides]);
 
-  // 换肤背景图：pideck-bg:// 协议加载 userData/backgrounds/ 下图片，遮罩同色渐变（浅白/暗黑）
+  // 换肤背景图：pideck-bg:// 协议加载 userData/backgrounds/ 下图片，遮罩同色渐变（浅白/暗黑）。
+  // 壁纸模式：同时把 bg 系列 token 注入 86% 半透明值（静态色值 + color-mix），
+  // 让背景图从所有面板/输入框透出；皮肤 effect 重跑（清 token）后本 effect 也重跑（依赖同源）。
   useEffect(() => {
     const root = document.documentElement;
-    // 壁纸模式标记：启用背景图时主容器/面板转半透明（见 foundation.css [data-bg-image="on"] 规则）
+    const BG_TOKENS = ["--color-bg-app", "--color-bg-sidebar", "--color-bg-panel", "--color-bg-muted", "--color-bg-hover", "--color-bg-active"];
     root.dataset.bgImage = settings.backgroundImage ? "on" : "off";
     if (settings.backgroundImage) {
       root.style.setProperty(
@@ -856,11 +858,19 @@ export function App() {
         "--app-bg-mask",
         `linear-gradient(rgba(${rgb},${alpha}), rgba(${rgb},${alpha}))`,
       );
+      // 半透明 token：getComputedStyle 取当前计算值（含皮肤覆盖）→ 静态 color-mix，无循环引用
+      const cs = getComputedStyle(root);
+      for (const k of BG_TOKENS) {
+        const v = cs.getPropertyValue(k).trim();
+        if (v) root.style.setProperty(k, `color-mix(in srgb, ${v} 86%, transparent)`);
+      }
     } else {
       root.style.removeProperty("--app-bg-image");
       root.style.removeProperty("--app-bg-mask");
+      for (const k of BG_TOKENS) root.style.removeProperty(k);
     }
-  }, [settings.backgroundImage, settings.backgroundImageOpacity, settings.theme]);
+    // 依赖皮肤/主题：皮肤 effect 先跑（清 token），本 effect 后跑重新注入半透明
+  }, [settings.backgroundImage, settings.backgroundImageOpacity, settings.theme, settings.themeSkin, settings.customThemeOverrides]);
 
   // 字号与命名字体预设由 data 属性选择 CSS token；只有 custom 字体需要注入用户输入。
   useEffect(() => {
