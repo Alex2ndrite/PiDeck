@@ -515,8 +515,9 @@
   color: var(--color-text-secondary);
 }
 .conversation-outline button:hover {
-  /* 目录项 hover 用柔和的背景色反馈；不用品牌绿左边框（视觉过重） */
-  background: var(--color-bg-hover);
+  /* 目录项 hover 用主题色淡背景（与下拉高亮一致，跟随 data-accent），不用品牌绿左边框 */
+  background: var(--color-accent-soft);
+  color: var(--color-text-primary);
 }
 .conversation-outline strong {
   overflow: hidden;
