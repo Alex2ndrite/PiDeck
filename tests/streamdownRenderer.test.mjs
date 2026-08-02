@@ -36,8 +36,12 @@ test("link handling is shared between legacy and streamdown pipelines", () => {
   assert.doesNotMatch(surface, /function MarkdownLink\(/);
   assert.doesNotMatch(surface, /const remarkLinkifyPaths = /);
   assert.match(link, /export function MarkdownLink/);
-  assert.match(link, /export const remarkLinkifyPaths/);
-  assert.match(link, /export function markdownUrlTransform/);
+  // 纯逻辑（remarkLinkifyPaths/FILE_PATH_RE/isLocalPathRef）在 MarkdownLinkCore.ts
+  const core = readFileSync("src/renderer/src/components/session/MarkdownLinkCore.ts", "utf8");
+  assert.match(core, /export const remarkLinkifyPaths/);
+  assert.match(core, /export function isLocalPathRef/);
+  assert.match(link, /from "\.\/MarkdownLinkCore"/);
+  assert.match(core, /export function markdownUrlTransform/);
 });
 
 test("streamdown flag defaults ON (graduated) and is wired settings → atom → AssistantText", () => {
