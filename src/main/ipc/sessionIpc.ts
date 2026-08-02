@@ -333,6 +333,17 @@ export function registerSessionIpc(deps: SessionIpcDeps): void {
 		ipcChannels.sessionsRuntimeList,
 		() => sessionRuntimeCoordinator.listRuntimes(),
 	);
+	// 渲染层切换会话时汇报聚焦会话；主进程据此判断 Ask 类请求是否需要桌面通知
+	ipcMain.handle(
+		ipcChannels.sessionsSetFocusedSession,
+		(_event, sessionId: unknown) => {
+			sessionRuntimeCoordinator.setFocusedSession(
+				typeof sessionId === "string" && sessionId.trim()
+					? sessionId.trim()
+					: undefined,
+			);
+		},
+	);
 	ipcMain.handle(
 		ipcChannels.sessionsRuntimeStop,
 		(_event, target: SessionRuntimeTarget) => stopSessionRuntime(target),

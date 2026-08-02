@@ -19,6 +19,7 @@ import {
 import { desktopApi } from "../../desktopApi";
 import { showNotice } from "../../utils/notice";
 import {
+  SessionCommandFailure,
   requireSessionCommand,
   toSessionRuntimeTarget,
 } from "../../utils/sessionCommands";
@@ -69,41 +70,63 @@ export function ComposerPickerHost(props: ComposerPickerHostProps) {
     return toSessionRuntimeTarget(sessionId, current);
   }
 
+  /**
+   * 运行时代理命令失败时，若错误是「运行时不可用/绑定已变化」（例如 Agent 已被关闭、
+   * 或历史会话尚未启动 Agent），降级为只更新会话记录。Agent 下次启动时
+   * SessionRuntimeCoordinator.applyPreferences 会把记录里的模型应用到新进程。
+   */
+  function isStaleRuntimeFailure(error: unknown): boolean {
+    return error instanceof SessionCommandFailure &&
+      (error.code === "SESSION_RUNTIME_UNAVAILABLE" ||
+        error.code === "SESSION_RUNTIME_CHANGED");
+  }
+
+  async function applyModelToRecord(model: AvailableModel) {
+    const updated = await desktopApi.sessions.updateRecord(sessionId, {
+      model: { provider: model.provider, modelId: model.id },
+    });
+    upsertSession(updated);
+  }
+
   async function pickModel(model: AvailableModel) {
     if (!record) return;
     const handle = currentHandle();
     try {
       if (handle) {
-        const result = requireSessionCommand(await desktopApi.sessions.setRuntimeModel(
-          handle,
-          model.provider,
-          model.id,
-        ));
-        upsertSession({
-          ...record,
-          model: { provider: model.provider, modelId: model.id },
-          updatedAt: Date.now(),
-        });
-        // 立即将返回的 AgentRuntimeState 合并到 runtime state atom，
-        // 使底部栏的模型名称、provider 即刻刷新，无需等待 emitState 事件
-        const agentState = result.value;
-        const current = store.get(sessionRuntimeByIdAtom)[sessionId];
-        if (current) {
-          store.set(sessionRuntimeByIdAtom, {
-            ...store.get(sessionRuntimeByIdAtom),
-            [sessionId]: {
-              ...current,
-              state: current.state
-                ? { ...current.state, ...agentState }
-                : agentState,
-            },
+        try {
+          const result = requireSessionCommand(await desktopApi.sessions.setRuntimeModel(
+            handle,
+            model.provider,
+            model.id,
+          ));
+          upsertSession({
+            ...record,
+            model: { provider: model.provider, modelId: model.id },
+            updatedAt: Date.now(),
           });
+          // 立即将返回的 AgentRuntimeState 合并到 runtime state atom，
+          // 使底部栏的模型名称、provider 即刻刷新，无需等待 emitState 事件
+          const agentState = result.value;
+          const current = store.get(sessionRuntimeByIdAtom)[sessionId];
+          if (current) {
+            store.set(sessionRuntimeByIdAtom, {
+              ...store.get(sessionRuntimeByIdAtom),
+              [sessionId]: {
+                ...current,
+                state: current.state
+                  ? { ...current.state, ...agentState }
+                  : agentState,
+              },
+            });
+          }
+        } catch (error) {
+          // 运行时代理不可用（Agent 已关/绑定已换）时降级写记录，
+          // 保证「先选模型、后启动 Agent」的流程始终可用。
+          if (!isStaleRuntimeFailure(error)) throw error;
+          await applyModelToRecord(model);
         }
       } else {
-        const updated = await desktopApi.sessions.updateRecord(sessionId, {
-          model: { provider: model.provider, modelId: model.id },
-        });
-        upsertSession(updated);
+        await applyModelToRecord(model);
       }
       props.onClose();
     } catch (error) {
@@ -116,22 +139,31 @@ export function ComposerPickerHost(props: ComposerPickerHostProps) {
     const handle = currentHandle();
     try {
       if (handle) {
-        const result = requireSessionCommand(await desktopApi.sessions.setRuntimeThinking(handle, level));
-        upsertSession({ ...record, thinkingLevel: level, updatedAt: Date.now() });
-        // 立即将返回的 AgentRuntimeState 合并到 runtime state atom，
-        // 使底部栏的思考强度即刻刷新
-        const agentState = result.value;
-        const current = store.get(sessionRuntimeByIdAtom)[sessionId];
-        if (current) {
-          store.set(sessionRuntimeByIdAtom, {
-            ...store.get(sessionRuntimeByIdAtom),
-            [sessionId]: {
-              ...current,
-              state: current.state
-                ? { ...current.state, ...agentState }
-                : agentState,
-            },
+        try {
+          const result = requireSessionCommand(await desktopApi.sessions.setRuntimeThinking(handle, level));
+          upsertSession({ ...record, thinkingLevel: level, updatedAt: Date.now() });
+          // 立即将返回的 AgentRuntimeState 合并到 runtime state atom，
+          // 使底部栏的思考强度即刻刷新
+          const agentState = result.value;
+          const current = store.get(sessionRuntimeByIdAtom)[sessionId];
+          if (current) {
+            store.set(sessionRuntimeByIdAtom, {
+              ...store.get(sessionRuntimeByIdAtom),
+              [sessionId]: {
+                ...current,
+                state: current.state
+                  ? { ...current.state, ...agentState }
+                  : agentState,
+              },
+            });
+          }
+        } catch (error) {
+          // 与模型选择同一策略：运行时不可用时降级为写记录，启动时生效
+          if (!isStaleRuntimeFailure(error)) throw error;
+          const updated = await desktopApi.sessions.updateRecord(sessionId, {
+            thinkingLevel: level,
           });
+          upsertSession(updated);
         }
       } else {
         const updated = await desktopApi.sessions.updateRecord(sessionId, {

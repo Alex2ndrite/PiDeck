@@ -3479,6 +3479,37 @@ export class AgentManager {
 	}
 
 	/**
+	 * 非聚焦会话收到 Ask 类 UI 请求时的桌面通知（SessionRuntimeCoordinator 调用）。
+	 * 与 notifySessionEnd 共用同一套设置门控：enableNotifications + Notification.isSupported。
+	 */
+	notifyAskPending(sessionTitle: string): void {
+		try {
+			const settings = this.settingsStore.get();
+			if (!settings.enableNotifications) return;
+			if (!Notification.isSupported()) return;
+
+			const appName = app.getName();
+			const notification = new Notification({
+				title: appName,
+				body: this.translate("mainNotification.askPending", { title: sessionTitle || appName }),
+				silent: false,
+			});
+			// 点击通知时把主窗口带到前台，让用户能立刻处理确认请求
+			notification.on("click", () => {
+				const win = this.getWindow();
+				if (win) {
+					if (win.isMinimized()) win.restore();
+					win.show();
+					win.focus();
+				}
+			});
+			notification.show();
+		} catch {
+			// 通知失败不影响主流程，静默处理
+		}
+	}
+
+	/**
 	 * 会话结束时发送系统通知。
 	 * 仅在设置中启用通知且 Electron Notification 可用时触发，
 	 * 通知用户 agent 已完成响应，可以查看结果或继续对话。

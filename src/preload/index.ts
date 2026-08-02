@@ -303,6 +303,12 @@ const api = {
 			ipcRenderer.invoke(ipcChannels.filesWriteContent, path, content) as Promise<void>,
 		delete: (path: string, recursive?: boolean) =>
 			ipcRenderer.invoke(ipcChannels.filesDelete, path, recursive) as Promise<void>,
+		/** 复制来源路径到目标目录（支持文件和目录递归），返回目标路径列表 */
+		copy: (sourcePaths: string[], targetDir: string) =>
+			ipcRenderer.invoke(ipcChannels.filesCopy, sourcePaths, targetDir) as Promise<string[]>,
+		/** 移动来源路径到目标目录（同设备 rename，跨设备 cp+rm） */
+		move: (sourcePaths: string[], targetDir: string) =>
+			ipcRenderer.invoke(ipcChannels.filesMove, sourcePaths, targetDir) as Promise<string[]>,
 		create: (parentDir: string, name: string, type: "file" | "directory") =>
 			ipcRenderer.invoke(ipcChannels.filesCreate, parentDir, name, type) as Promise<string>,
 		rename: (path: string, newName: string) =>
@@ -392,6 +398,9 @@ const api = {
 			subscribe(ipcChannels.sessionsRuntimeEvent, callback),
 		listRuntimes: () =>
 			ipcRenderer.invoke(ipcChannels.sessionsRuntimeList) as Promise<SessionRuntimeInfo[]>,
+		/** 汇报当前聚焦的会话（主进程据此决定非聚焦会话的 Ask 桌面通知） */
+		setFocusedSession: (sessionId?: string) =>
+			ipcRenderer.invoke(ipcChannels.sessionsSetFocusedSession, sessionId) as Promise<void>,
 		stopRuntime: (target: SessionRuntimeTarget) =>
 			ipcRenderer.invoke(ipcChannels.sessionsRuntimeStop, target) as Promise<
 				SessionCommandResult<SessionRuntimeTarget>

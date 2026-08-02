@@ -51,6 +51,8 @@ export interface UseSessionActionsOptions {
 
   // Other callbacks
   showToast: (message: string, duration?: number) => void;
+  /** 会话被选中（commitSessionSelection）时回调：用于 Tab 栏登记打开的会话 */
+  onSessionSelected?: (sessionId: string) => void;
 }
 
 export function useSessionActions(options: UseSessionActionsOptions) {
@@ -79,6 +81,7 @@ export function useSessionActions(options: UseSessionActionsOptions) {
   ) {
     setActiveProjectId(projectId);
     setCurrentSessionId(sessionId);
+    if (sessionId) options.onSessionSelected?.(sessionId);
     // useSessionTimelineController owns scroll restoration when the Session identity changes.
     void scrollToEnd;
   }

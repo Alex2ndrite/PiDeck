@@ -219,14 +219,14 @@ const statusLabel =
 		>
 			<div className="flex min-h-8 items-center transition-colors duration-150 hover:bg-[color:color-mix(in_srgb,var(--color-bg-hover)_55%,var(--color-bg-panel))]">
 				<button
-					className="flex min-h-8 min-w-0 flex-[1_1_auto] cursor-pointer items-center gap-2 border-0 bg-transparent p-1.5 pl-2.5 text-left text-[13px] leading-5 text-text-secondary focus-visible:-outline-offset-2 focus-visible:outline-2"
+					className="flex min-h-8 min-w-0 flex-[1_1_auto] cursor-pointer items-center gap-2 border-0 bg-transparent p-1.5 pl-2.5 text-left text-control leading-5 text-text-secondary focus-visible:-outline-offset-2 focus-visible:outline-2"
 					onClick={() => setExpanded((v) => !v)}
 					aria-expanded={expanded}
 				>
 					<span className="inline-flex shrink-0 items-center justify-center text-text-tertiary">
 						{isSkillRead ? <Brain size={15} /> : isAskCard ? <MessageCircle size={15} /> : toolIcon(toolName)}
 					</span>
-					<span className="shrink-0 text-sm font-[650] lowercase text-text-primary">
+					<span className="shrink-0 text-body font-[650] lowercase text-text-primary">
 						{isSkillRead ? `skill:${skillName}` : isAskCard ? t("ask.toolName") : toolName}
 					</span>
 					<ChevronDown
@@ -236,21 +236,21 @@ const statusLabel =
 					{!isSkillRead && kindLabel && (
 						<span className="tool-card-kind">{kindLabel}</span>
 					)}
-					<span className="inline-flex shrink-0 items-center gap-[5px] font-mono text-[11px] tabular-nums text-text-tertiary">
+					<span className="inline-flex shrink-0 items-center gap-[5px] font-mono text-micro tabular-nums text-text-tertiary">
 						{status === "running" && <span className="size-2.5 animate-spin rounded-full border-2 border-[color:color-mix(in_srgb,var(--color-warning)_30%,transparent)] border-t-[var(--color-warning)]" aria-hidden="true" />}
 						{askCard?.answered ? t("ask.answered") : (statusLabel)}
 					</span>
 					{showDuration && (
-						<span className="shrink-0 font-mono text-[11px] tabular-nums text-text-tertiary" title={t("tool.durationTitle")}>
+						<span className="shrink-0 font-mono text-micro tabular-nums text-text-tertiary" title={t("tool.durationTitle")}>
 							{formatDuration(durationMs)}
 						</span>
 					)}
 					{isAskCard && askCard?.question ? (
-						<span className="min-w-0 flex-[1_1_auto] truncate font-mono text-xs text-text-tertiary" title={askCard.question}>
+						<span className="min-w-0 flex-[1_1_auto] truncate font-mono text-caption text-text-tertiary" title={askCard.question}>
 							| {askCard.question}
 						</span>
 					) : subtitle ? (
-						<span className="min-w-0 flex-[1_1_auto] truncate font-mono text-xs text-text-tertiary" title={subtitle}>
+						<span className="min-w-0 flex-[1_1_auto] truncate font-mono text-caption text-text-tertiary" title={subtitle}>
 							| {subtitle}
 						</span>
 					) : null}
@@ -309,7 +309,7 @@ const statusLabel =
 							)}
 						</div>
 					) : (
-						<pre className="m-0 max-h-[320px] overflow-auto p-2 font-mono text-xs leading-relaxed break-words whitespace-pre-wrap text-text-tertiary">{detailText}</pre>
+						<pre className="m-0 max-h-[320px] overflow-auto p-2 font-mono text-caption leading-relaxed break-words whitespace-pre-wrap text-text-tertiary">{detailText}</pre>
 					)}
 					<Button
 						variant="ghost" size="icon-sm"

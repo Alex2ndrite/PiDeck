@@ -88,8 +88,14 @@ export function FileContextMenu(props: {
 	onCopyPath: () => void;
 	onDelete?: () => void;
 	onRename?: () => void;
+	/** 剪贴板中有文件路径时显示「粘贴」选项 */
+	hasClipboardFiles?: boolean;
+	onPaste?: (targetDir: string) => void;
 }) {
 	const isFile = props.menu.node.type === "file";
+	const targetDir = props.menu.node.type === "directory"
+		? props.menu.node.path
+		: props.menu.node.path.split(/[\\/]/).slice(0, -1).join("/") || ".";
 
 	// #115 U5：右键菜单换 Radix DropdownMenu。虚拟锚点把菜单钉在右键坐标上，
 	// 视口碰撞翻转/焦点圈定/ESC 关闭全由 Radix 负责，删掉手写的测高翻转与遮罩。
@@ -121,6 +127,11 @@ export function FileContextMenu(props: {
 				</DropdownMenuItem>
 				<DropdownMenuItem onSelect={props.onReveal}>{t("menu.revealFile")}</DropdownMenuItem>
 				<DropdownMenuItem onSelect={props.onCopyPath}>{t("menu.copyPath")}</DropdownMenuItem>
+				{props.hasClipboardFiles && props.onPaste && (
+					<DropdownMenuItem onSelect={() => props.onPaste?.(targetDir)}>
+						{t("drawer.pasteFiles")}
+					</DropdownMenuItem>
+				)}
 				{(props.onRename || props.onDelete) && <DropdownMenuSeparator />}
 				{props.onRename && (
 					<DropdownMenuItem onSelect={props.onRename}>{t("common.rename")}</DropdownMenuItem>

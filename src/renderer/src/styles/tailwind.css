@@ -75,4 +75,23 @@
 
   --font-sans: var(--font-family-base);
   --font-mono: var(--font-family-mono);
+
+  /* 字号 token → Tailwind text-* 工具类：默认值与旧版一致，
+     但随 data-ui-font-size / data-chat-font-size 设置缩放（全局统一字号规范） */
+  --text-micro: var(--font-size-micro);
+  --text-micro--line-height: var(--line-height-micro);
+  --text-caption: var(--font-size-caption);
+  --text-caption--line-height: var(--line-height-caption);
+  --text-control: var(--font-size-control);
+  --text-control--line-height: var(--line-height-control);
+  --text-body: var(--font-size-body);
+  --text-body--line-height: var(--line-height-body);
+  --text-chat: var(--font-size-chat);
+  --text-chat--line-height: var(--line-height-chat);
+  --text-input: var(--font-size-input);
+  --text-input--line-height: var(--line-height-input);
+  --text-title: var(--font-size-title);
+  --text-title--line-height: var(--line-height-title);
+  --text-brand: var(--font-size-brand);
+  --text-heading: var(--font-size-heading);
 }

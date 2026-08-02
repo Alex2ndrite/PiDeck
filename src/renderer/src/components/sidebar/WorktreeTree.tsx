@@ -36,7 +36,7 @@ export function WorktreeTree(props: {
       <div className="worktree-children worktree-sandbox-list">
         <div className="worktree-sandbox-toolbar">
           <span>{t("app.worktreeOtherWorkspaces")}</span>
-          <Button variant="ghost" size="sm" className="worktree-create-btn h-6 gap-[3px] px-[5px] text-xs rounded-[6px]" title={t("app.worktreeNew")} onClick={() => props.controller.openWorktreeCreate(props.project.id)}>
+          <Button variant="ghost" size="sm" className="worktree-create-btn h-6 gap-[3px] px-[5px] text-caption rounded-[6px]" title={t("app.worktreeNew")} onClick={() => props.controller.openWorktreeCreate(props.project.id)}>
             <GitBranch size={12} /><span>{t("app.worktreeNewShort")}</span>
           </Button>
         </div>

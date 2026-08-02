@@ -4,6 +4,7 @@ import { selectAtom } from "jotai/utils";
 import { useMemo, type RefObject } from "react";
 import type { AgentRuntimeState } from "../../../../shared/types";
 import {
+  sessionCacheStatsAtom,
   sessionRecordByIdAtomFamily,
   sessionRuntimeBySessionIdAtomFamily,
   sessionSendStateByIdAtom,
@@ -59,6 +60,9 @@ export function SessionHeader(props: SessionHeaderProps) {
   const legacyProps = props as LegacySessionHeaderProps;
   const session = useAtomValue(sessionRecordByIdAtomFamily(sessionId));
   const runtime = useAtomValue(sessionRuntimeBySessionIdAtomFamily(sessionId));
+  // 会话级缓存命中率历史（统计快照由 runtime 事件写入 atom），
+  // 供 SessionStatus 展示「最新 vs 会话平均」命中率
+  const cacheStats = useAtomValue(sessionCacheStatsAtom);
   const sendStateSelector = useMemo(
     () => selectAtom(
       sessionSendStateByIdAtom,
@@ -83,7 +87,7 @@ export function SessionHeader(props: SessionHeaderProps) {
     >
       <div className="chat-title-block flex min-w-0 flex-1 items-center">
         <div className="chat-title-row flex h-8 w-full min-w-0 items-center gap-2">
-          <strong className="block min-w-0 flex-1 truncate text-base font-semibold tracking-tight text-foreground" title={title}>{title}</strong>
+          <strong className="block min-w-0 flex-1 truncate text-title font-semibold tracking-tight text-foreground" title={title}>{title}</strong>
           {isAnonymous && (
             <span className="anonymous-badge" title={t("app.anonymousChat")} aria-label={t("app.anonymousChat")}>
               <HatGlasses size={14} aria-hidden="true" />
@@ -91,7 +95,7 @@ export function SessionHeader(props: SessionHeaderProps) {
           )}
           {props.compactionCount ? (
             <span
-              className="compaction-count-badge inline-flex h-5 min-w-5 items-center justify-center rounded-full border border-border bg-muted px-1.5 text-[11px] font-medium text-muted-foreground"
+              className="compaction-count-badge inline-flex h-5 min-w-5 items-center justify-center rounded-full border border-border bg-muted px-1.5 text-micro font-medium text-muted-foreground"
               title={t("app.compactionTooltip", {
                 count: props.compactionCount,
               })}
@@ -102,7 +106,7 @@ export function SessionHeader(props: SessionHeaderProps) {
         </div>
       </div>
       <div className={`chat-header-actions flex min-w-0 items-center justify-end gap-2${isStarting ? " loading" : ""}`}>
-        <SessionStatus state={runtimeState} duration={props.duration} />
+        <SessionStatus state={runtimeState} duration={props.duration} cacheHitHistory={cacheStats[sessionId]?.cacheHitHistory} />
         <div className="header-actions-right flex items-center gap-1.5">
           <div className="header-action-group session-group">
             <div className="session-combo relative" ref={props.comboRef}>
@@ -127,15 +131,15 @@ export function SessionHeader(props: SessionHeaderProps) {
               </Button>
               {props.menuOpen && hasSession && (
                 <div className="session-combo-menu absolute top-[calc(100%+6px)] right-0 z-50 min-w-40 overflow-hidden rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md">
-                  <Button type="button" variant="ghost" size="sm" className="h-auto w-full justify-start px-2 py-1.5 text-sm hover:bg-accent" onClick={props.onNewSession}>
+                  <Button type="button" variant="ghost" size="sm" className="h-auto w-full justify-start px-2 py-1.5 text-body hover:bg-accent" onClick={props.onNewSession}>
                     <span>{t("app.newSession")}</span>
                   </Button>
                   <div className="session-combo-divider my-1 h-px bg-border" />
-                  <Button type="button" variant="ghost" size="sm" className="h-auto w-full justify-start px-2 py-1.5 text-sm hover:bg-accent disabled:opacity-50" disabled={!props.canStop} onClick={props.onStop}>
+                  <Button type="button" variant="ghost" size="sm" className="h-auto w-full justify-start px-2 py-1.5 text-body hover:bg-accent disabled:opacity-50" disabled={!props.canStop} onClick={props.onStop}>
                     {t("app.stop")}
                   </Button>
                   {props.showRestart && (
-                    <Button type="button" variant="ghost" size="sm" className="h-auto w-full justify-start px-2 py-1.5 text-sm hover:bg-accent disabled:opacity-50" disabled={!props.canRestart} onClick={props.onRestart}>
+                    <Button type="button" variant="ghost" size="sm" className="h-auto w-full justify-start px-2 py-1.5 text-body hover:bg-accent disabled:opacity-50" disabled={!props.canRestart} onClick={props.onRestart}>
                       {props.isRestarting
                         ? t("app.restarting")
                         : t("app.restart")}

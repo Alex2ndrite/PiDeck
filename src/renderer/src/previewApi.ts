@@ -259,6 +259,8 @@ export function createPreviewApi(): PiDesktopApi {
 			writeContent: async () => undefined,
 			delete: async () => undefined,
 			rename: async () => "",
+			copy: async () => [],
+			move: async () => [],
 			getPathForFile: () => "",
 			getClipboardPaths: () => [],
 		},
@@ -403,6 +405,7 @@ export function createPreviewApi(): PiDesktopApi {
 				ok: true,
 				value: { cancelled: false, text: "" },
 			}),
+			setFocusedSession: async () => undefined,
 			getRuntimeState: async (target) => ({
 				ok: true,
 				value: { target, value: {} },

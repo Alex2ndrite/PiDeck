@@ -76,6 +76,9 @@ export const sessionRecordsAtom = atom<Record<string, SessionRecord>>({});
 export const discardedTransientSessionIdsAtom = atom<Set<string>>(new Set<string>());
 export const sessionIdsByProjectAtom = atom<Record<string, string[]>>({});
 export const currentSessionIdAtom = atom<string | undefined>(undefined);
+/** 会话 Tab 栏（浏览器式多 Tab）：按打开顺序排列的会话 id 列表。
+ *  关闭 Tab 只从列表移除，不 kill Agent；再次打开同一会话时复用已绑定运行时。 */
+export const sessionTabIdsAtom = atom<string[]>([]);
 export const sessionRuntimeByIdAtom = atom<Record<string, SessionRuntimeViewState>>({});
 export const sidebarRuntimeAtom = selectAtom(
   sessionRuntimeByIdAtom,
@@ -88,6 +91,12 @@ export const sidebarRuntimeAtom = selectAtom(
   },
 );
 export const sessionRuntimeUiByIdAtom = atom<Record<string, SessionRuntimeUiState>>({});
+/**
+ * 会话级缓存命中率快照历史（仅存数值，最多 50 条）：
+ * 用于展示「当前会话平均缓存命中率」，弥补只显示最新一次 assistant 命中率的不足。
+ */
+export const sessionCacheStatsAtom = atom<Record<string, { cacheHitHistory: number[] }>>({});
+export const SESSION_CACHE_STATS_LIMIT = 50;
 export const sessionMessagesCacheAtom = atom<Record<string, SessionMessageCacheEntry>>({});
 export const sessionMessageLruAtom = atom<string[]>([]);
 export const sessionMessageLoadStateAtom = atom<Record<string, SessionLoadState>>({});
@@ -572,6 +581,23 @@ export const applySessionRuntimeEventAtom = atom(
           payload.state as AgentRuntimeState,
         ),
       };
+      // 缓存命中率快照入列：供「会话平均命中率」展示。
+      // 只记有效百分比，避免把 undefined/瞬时抖动计入平均；
+      // 连续相同的快照值跳过（流式期间 get_state 轮询会重复返回同一统计）。
+      const hitPercent = (payload.state as AgentRuntimeState).cacheHitPercent;
+      if (typeof hitPercent === "number" && Number.isFinite(hitPercent)) {
+        const currentStats = get(sessionCacheStatsAtom)[event.sessionId] ?? { cacheHitHistory: [] };
+        const history = currentStats.cacheHitHistory;
+        if (history[history.length - 1] === hitPercent) {
+          // 值未变化：不写 atom，避免 SessionHeader 无谓重渲染
+        } else {
+          const nextHistory = [...history, hitPercent].slice(-SESSION_CACHE_STATS_LIMIT);
+          set(sessionCacheStatsAtom, {
+            ...get(sessionCacheStatsAtom),
+            [event.sessionId]: { cacheHitHistory: nextHistory },
+          });
+        }
+      }
     } else if (event.sourceChannel === "agents:thinking" && payload) {
       nextRuntime = {
         ...nextRuntime,
@@ -736,6 +762,9 @@ export const removeSessionStateAtom = atom(null, (get, set, sessionId: string) =
   const runtimeUi = { ...get(sessionRuntimeUiByIdAtom) };
   delete runtimeUi[sessionId];
   set(sessionRuntimeUiByIdAtom, runtimeUi);
+  const cacheStats = { ...get(sessionCacheStatsAtom) };
+  delete cacheStats[sessionId];
+  set(sessionCacheStatsAtom, cacheStats);
   const cache = { ...get(sessionMessagesCacheAtom) };
   delete cache[sessionId];
   set(sessionMessagesCacheAtom, cache);

@@ -71,6 +71,8 @@ export interface SessionAgentGateway {
 		requestId: string,
 		response: SessionUiResponseInput["response"],
 	): Promise<unknown> | unknown;
+	/** 非聚焦会话收到 Ask 类 UI 请求时触发桌面通知（由 AgentManager 实现） */
+	notifyAskPending(sessionTitle: string): void;
 }
 
 type DeliveryCacheEntry = {
@@ -147,12 +149,23 @@ export class SessionRuntimeCoordinator {
 	private readonly dispatchLeasesBySession = new Map<string, Set<DispatchLease>>();
 	private replacementSequence = 0;
 	private dispatchLeaseSequence = 0;
+	/** 渲染层当前聚焦的会话 id；为 undefined 时视为全部会话都需要通知 */
+	private focusedSessionId: string | undefined = undefined;
 
 	constructor(
 		private readonly catalog: SessionCatalogGateway,
 		private readonly agents: SessionAgentGateway,
 		private readonly sendAgentPrompt: (input: SendPromptInput) => Promise<SendPromptResult>,
 	) {}
+
+	/** 渲染层在 currentSessionId 变化时汇报聚焦会话（见 sessions:set-focused-session IPC）。 */
+	setFocusedSession(sessionId: string | undefined): void {
+		this.focusedSessionId = sessionId;
+	}
+
+	getFocusedSession(): string | undefined {
+		return this.focusedSessionId;
+	}
 
 	send(input: SendSessionPromptInput): Promise<SendSessionPromptResult> {
 		const sessionId = input.sessionId.trim();
@@ -524,6 +537,15 @@ export class SessionRuntimeCoordinator {
 			runtimeGeneration: event.runtimeGeneration,
 			requestId,
 		});
+
+		// 非聚焦会话收到 Ask 类请求时触发桌面通知：用户切到别的会话时
+		// 也能第一时间知道另一个会话需要确认，不用手动切回去才发现。
+		if (this.focusedSessionId !== event.sessionId) {
+			const title = this.catalog.get(event.sessionId)?.title
+				?? this.catalog.getRecord(event.sessionId)?.title
+				?? "";
+			this.agents.notifyAskPending(title);
+		}
 	}
 
 	async respondToUi(input: SessionUiResponseInput): Promise<void> {

@@ -149,7 +149,7 @@ export function MultiSelectModal(props: {
 								return (
 									<label
 										key={msg.id}
-										className={`flex cursor-pointer items-center gap-2 rounded-sm border border-transparent px-2.5 py-[7px] text-[13px] leading-relaxed transition-[background,border-color] duration-100 hover:border-border-subtle hover:bg-bg-hover${isChecked ? " selected" : ""}`}
+										className={`flex cursor-pointer items-center gap-2 rounded-sm border border-transparent px-2.5 py-[7px] text-control leading-relaxed transition-[background,border-color] duration-100 hover:border-border-subtle hover:bg-bg-hover${isChecked ? " selected" : ""}`}
 									>
 										<Checkbox
 											checked={isChecked}
@@ -189,17 +189,17 @@ export function MultiSelectModal(props: {
 							return (
 								<div key={item.id} className="my-1.5 overflow-hidden rounded-md border border-border-subtle bg-[color:color-mix(in_srgb,var(--color-bg-muted)_52%,transparent)]">
 									<div
-										className={`flex cursor-pointer items-center gap-2 rounded-sm border border-transparent px-2.5 py-[7px] text-[13px] leading-relaxed transition-[background,border-color] duration-100 hover:border-border-subtle hover:bg-bg-hover run-parent cursor-pointer rounded-none border-0 border-b border-border-subtle bg-[color:color-mix(in_srgb,var(--color-bg-muted)_78%,var(--color-bg-panel))] p-2.5 font-medium select-none${runAnyChecked ? " selected" : ""}`}
+										className={`flex cursor-pointer items-center gap-2 rounded-sm border border-transparent px-2.5 py-[7px] text-control leading-relaxed transition-[background,border-color] duration-100 hover:border-border-subtle hover:bg-bg-hover run-parent cursor-pointer rounded-none border-0 border-b border-border-subtle bg-[color:color-mix(in_srgb,var(--color-bg-muted)_78%,var(--color-bg-panel))] p-2.5 font-medium select-none${runAnyChecked ? " selected" : ""}`}
 										onClick={() => toggleRun(item)}
 									>
 										<Brain size={15} className="shrink-0 text-text-tertiary" />
 										<span className="flex min-w-0 flex-1 items-baseline gap-2">
-											<span className="font-mono text-xs font-semibold tracking-[0.4px] uppercase text-text-secondary">pi</span>
-											<span className="shrink-0 text-xs whitespace-nowrap text-text-tertiary">
+											<span className="font-mono text-caption font-semibold tracking-[0.4px] uppercase text-text-secondary">pi</span>
+											<span className="shrink-0 text-caption whitespace-nowrap text-text-tertiary">
 												{formatTime(item.endedAt)}
 											</span>
 										</span>
-										<span className="min-w-[18px] shrink-0 rounded-[10px] bg-bg-muted px-[7px] text-center font-mono text-[11px] leading-[18px] text-text-tertiary">
+										<span className="min-w-[18px] shrink-0 rounded-[10px] bg-bg-muted px-[7px] text-center font-mono text-micro leading-[18px] text-text-tertiary">
 											{assistantMsgs.length}
 										</span>
 									</div>
@@ -209,7 +209,7 @@ export function MultiSelectModal(props: {
 											return (
 												<label
 													key={sub.message.id}
-													className={`flex cursor-pointer items-center gap-2 rounded-sm border border-transparent px-2.5 py-[7px] text-[13px] leading-relaxed transition-[background,border-color] duration-100 hover:border-border-subtle hover:bg-bg-hover run-child rounded-sm p-1.5${subChecked ? " selected" : ""}`}
+													className={`flex cursor-pointer items-center gap-2 rounded-sm border border-transparent px-2.5 py-[7px] text-control leading-relaxed transition-[background,border-color] duration-100 hover:border-border-subtle hover:bg-bg-hover run-child rounded-sm p-1.5${subChecked ? " selected" : ""}`}
 												>
 													<Checkbox
 														checked={subChecked}
@@ -251,7 +251,7 @@ export function MultiSelectModal(props: {
 							<Button
 								variant="ghost"
 								size="sm"
-								className="multi-select-bulk-btn h-auto px-2 py-0.5 text-xs"
+								className="multi-select-bulk-btn h-auto px-2 py-0.5 text-caption"
 								onClick={selectAll}
 								disabled={!totalCount}
 							>
@@ -260,7 +260,7 @@ export function MultiSelectModal(props: {
 							<Button
 								variant="ghost"
 								size="sm"
-								className="multi-select-bulk-btn h-auto px-2 py-0.5 text-xs"
+								className="multi-select-bulk-btn h-auto px-2 py-0.5 text-caption"
 								onClick={deselectAll}
 								disabled={!selectedCount}
 							>
@@ -272,7 +272,7 @@ export function MultiSelectModal(props: {
 						<Button
 							variant="outline"
 							size="sm"
-							className={`multi-select-action-btn${copying === "text" ? " copying" : ""} h-auto px-4 py-1.5 text-xs shadow-none rounded-[6px]`}
+							className={`multi-select-action-btn${copying === "text" ? " copying" : ""} h-auto px-4 py-1.5 text-caption shadow-none rounded-[6px]`}
 							disabled={!selectedCount || !!copying}
 							onClick={() => handleCopy("text")}
 						>
@@ -285,7 +285,7 @@ export function MultiSelectModal(props: {
 						<Button
 							variant="outline"
 							size="sm"
-							className={`multi-select-action-btn${copying === "markdown" ? " copying" : ""} h-auto px-4 py-1.5 text-xs shadow-none rounded-[6px]`}
+							className={`multi-select-action-btn${copying === "markdown" ? " copying" : ""} h-auto px-4 py-1.5 text-caption shadow-none rounded-[6px]`}
 							disabled={!selectedCount || !!copying}
 							onClick={() => handleCopy("markdown")}
 						>
@@ -298,7 +298,7 @@ export function MultiSelectModal(props: {
 						<Button
 							variant="outline"
 							size="sm"
-							className={`multi-select-action-btn${copying === "image" ? " copying" : ""} h-auto px-4 py-1.5 text-xs shadow-none rounded-[6px]`}
+							className={`multi-select-action-btn${copying === "image" ? " copying" : ""} h-auto px-4 py-1.5 text-caption shadow-none rounded-[6px]`}
 							disabled={!selectedCount || !!copying}
 							onClick={() => handleCopy("image")}
 						>
@@ -311,7 +311,7 @@ export function MultiSelectModal(props: {
 						<Button
 							variant="default"
 							size="sm"
-							className="multi-select-action-btn primary h-auto px-4 py-1.5 text-xs shadow-none rounded-[6px]"
+							className="multi-select-action-btn primary h-auto px-4 py-1.5 text-caption shadow-none rounded-[6px]"
 							onClick={props.onClose}
 							disabled={!!copying}
 						>

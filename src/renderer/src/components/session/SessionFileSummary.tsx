@@ -40,17 +40,17 @@ export const SessionFileSummary = memo(function SessionFileSummary(props: {
 			{/* 汇总头：点击折叠/展开 */}
 			<button
 				type="button"
-				className="flex min-h-8 w-full cursor-pointer items-center gap-2 border-0 bg-transparent p-1.5 pl-2.5 text-left text-[13px] leading-5 text-text-secondary hover:bg-[color:color-mix(in_srgb,var(--color-bg-hover)_55%,var(--color-bg-panel))] focus-visible:-outline-offset-2 focus-visible:outline-2"
+				className="flex min-h-8 w-full cursor-pointer items-center gap-2 border-0 bg-transparent p-1.5 pl-2.5 text-left text-control leading-5 text-text-secondary hover:bg-[color:color-mix(in_srgb,var(--color-bg-hover)_55%,var(--color-bg-panel))] focus-visible:-outline-offset-2 focus-visible:outline-2"
 				onClick={() => setCollapsed((v) => !v)}
 				aria-expanded={!collapsed}
 			>
 				<span className="inline-flex shrink-0 items-center justify-center text-[var(--color-accent)]">
 					<FileCode2 size={15} />
 				</span>
-				<span className="shrink-0 text-sm font-[650] text-text-primary">
+				<span className="shrink-0 text-body font-[650] text-text-primary">
 					{t("session.fileSummaryTitle")}
 				</span>
-				<span className="inline-flex items-center gap-[5px] font-mono text-[11px] tabular-nums text-text-tertiary">
+				<span className="inline-flex items-center gap-[5px] font-mono text-micro tabular-nums text-text-tertiary">
 					{t("session.fileSummaryCount", {
 						count: files.length,
 						times: totalTimes,
@@ -66,7 +66,7 @@ export const SessionFileSummary = memo(function SessionFileSummary(props: {
 					{files.map((file) => (
 						<li
 							key={file.path}
-							className="flex min-h-8 items-center gap-2 border-b border-border-subtle px-2.5 py-1 text-xs last:border-b-0 hover:bg-[color:color-mix(in_srgb,var(--color-bg-hover)_55%,var(--color-bg-panel))]"
+							className="flex min-h-8 items-center gap-2 border-b border-border-subtle px-2.5 py-1 text-caption last:border-b-0 hover:bg-[color:color-mix(in_srgb,var(--color-bg-hover)_55%,var(--color-bg-panel))]"
 						>
 							<button
 								type="button"
@@ -83,13 +83,13 @@ export const SessionFileSummary = memo(function SessionFileSummary(props: {
 								{file.path}
 							</button>
 							{file.count > 1 && (
-								<span className="shrink-0 font-mono text-[11px] tabular-nums text-text-tertiary">
+								<span className="shrink-0 font-mono text-micro tabular-nums text-text-tertiary">
 									×{file.count}
 								</span>
 							)}
 							<button
 								type="button"
-								className="inline-flex h-[22px] shrink-0 cursor-pointer items-center self-center rounded-sm border border-[color:color-mix(in_srgb,var(--color-accent)_24%,var(--color-border-subtle))] bg-transparent px-2 font-mono text-[11px] leading-none text-[color:color-mix(in_srgb,var(--color-accent)_80%,var(--color-text-tertiary))] transition-[background-color,border-color,color] duration-150 hover:border-[var(--color-accent)] hover:bg-[color:color-mix(in_srgb,var(--color-accent)_6%,transparent)] hover:text-[var(--color-accent)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+								className="inline-flex h-[22px] shrink-0 cursor-pointer items-center self-center rounded-sm border border-[color:color-mix(in_srgb,var(--color-accent)_24%,var(--color-border-subtle))] bg-transparent px-2 font-mono text-micro leading-none text-[color:color-mix(in_srgb,var(--color-accent)_80%,var(--color-text-tertiary))] transition-[background-color,border-color,color] duration-150 hover:border-[var(--color-accent)] hover:bg-[color:color-mix(in_srgb,var(--color-accent)_6%,transparent)] hover:text-[var(--color-accent)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
 								title={`${t("tool.viewDiff")} · ${file.path}`}
 								onClick={() =>
 									props.onDiffFile?.(

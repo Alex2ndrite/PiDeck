@@ -1,7 +1,7 @@
 import { Wrench } from "lucide-react";
 import { useAtomValue } from "jotai";
 import { selectAtom } from "jotai/utils";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ComponentProps, RefObject } from "react";
 import type { ChatMessage, ImageContent } from "../../../../shared/types";
 import {
@@ -114,7 +114,59 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
   const isAgentBusy = modernSurfaceState.isBusy;
   const cancellingUi = false;
   const loadMoreMessages = controller.loadMoreMessages;
+  // ── 新消息入场动画跟踪 ──
+  // 只对「时间线尾部新增」的消息播放一次入场动画：历史加载/分页前插不算，
+  // 避免整屏消息同时闪烁。乐观上屏的用户消息与流式替换后的权威消息都会触发。
   const [multiSelectOpen, setMultiSelectOpen] = useState(false);
+  const [freshMessageIds, setFreshMessageIds] = useState<ReadonlySet<string>>(() => new Set());
+  const seenTailMessageIdRef = useRef<string | undefined>(undefined);
+  const freshTimersRef = useRef<Map<string, number>>(new Map());
+
+  useEffect(() => {
+    // 会话切换时重置：新会话的首帧（历史加载）不播动画
+    seenTailMessageIdRef.current = undefined;
+    setFreshMessageIds(new Set());
+    for (const timer of freshTimersRef.current.values()) window.clearTimeout(timer);
+    freshTimersRef.current.clear();
+  }, [sessionId]);
+
+  useEffect(() => {
+    const previousTail = seenTailMessageIdRef.current;
+    const lastMessage = activeMessages[activeMessages.length - 1];
+    const nextTail = lastMessage?.id;
+    seenTailMessageIdRef.current = nextTail;
+    if (!nextTail || !previousTail) return; // 首帧（历史加载完成前）只记录基线
+    if (nextTail === previousTail) return;
+    // 找到基线之后的新增消息（尾部追加，而非分页前插）
+    const baselineIndex = activeMessages.findIndex((message) => message.id === previousTail);
+    const fresh = baselineIndex < 0
+      ? [nextTail]
+      : activeMessages.slice(baselineIndex + 1).map((message) => message.id);
+    if (fresh.length === 0) return;
+    setFreshMessageIds((current) => {
+      const next = new Set(current);
+      for (const id of fresh) next.add(id);
+      return next;
+    });
+    for (const id of fresh) {
+      const timer = window.setTimeout(() => {
+        freshTimersRef.current.delete(id);
+        setFreshMessageIds((current) => {
+          if (!current.has(id)) return current;
+          const next = new Set(current);
+          next.delete(id);
+          return next;
+        });
+      }, 1200);
+      freshTimersRef.current.set(id, timer);
+    }
+  }, [activeMessages]);
+
+  useEffect(() => () => {
+    for (const timer of freshTimersRef.current.values()) window.clearTimeout(timer);
+    freshTimersRef.current.clear();
+  }, []);
+
   const renderedRuns = useMemo(
     () => groupToolMessages(paginatedMessages),
     [paginatedMessages],
@@ -174,7 +226,11 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
   const isAwaitingAssistant = Boolean(
     hasActiveConversation &&
       !cancellingUi &&
-      (activeConversationStatus === "running" || activeRuntimeState?.isStreaming) &&
+      (activeConversationStatus === "running" ||
+        // 新操作方式下 Agent 在发消息时才启动：激活期间也要给用户「正在响应」反馈，
+        // 避免消息上屏后长时间无任何指示造成「没反应」的错觉。
+        activeConversationStatus === "starting" ||
+        activeRuntimeState?.isStreaming) &&
       activeMessages.at(-1)?.role !== "assistant",
   );
   const streamingMessageId = useMemo(() => {
@@ -375,6 +431,7 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
                   <TurnRow
                     key={item.id}
                     run={item}
+                    fresh={freshMessageIds.has(item.id)}
                     onPreviewImage={props.onPreviewImage}
                     showThinking={props.showThinking}
                     isStreaming={isRunStreaming}
@@ -399,6 +456,7 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
                   <UserBubble
                     key={message.id}
                     message={message}
+                    fresh={freshMessageIds.has(message.id)}
                     onPreviewImage={props.onPreviewImage}
                     onOpenFile={props.onOpenFile}
                     onResendUserMessage={props.onResendUserMessage}
@@ -468,7 +526,9 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
 
             {hasActiveConversation &&
               !cancellingUi &&
-              (activeConversationStatus === "running" || activeRuntimeState?.isStreaming) && (
+              (activeConversationStatus === "running" ||
+                activeConversationStatus === "starting" ||
+                activeRuntimeState?.isStreaming) && (
                 <RespondingIndicator
                   thinking={activeThinking}
                   showThinking={props.showThinking}

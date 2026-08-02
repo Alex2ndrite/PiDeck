@@ -80,6 +80,14 @@ export interface DrawerFilesPort {
   openFilePath: any;
   api: any;
   t: any;
+  /** 当前项目根目录：文件面板空白处拖入/粘贴/右键菜单的落点 */
+  projectRoot: string | undefined;
+  /** 从 OS 拖入文件（复制到目标目录） */
+  onDropFiles: (targetDir: string, files: FileList) => void;
+  /** 粘贴剪贴板文件（Ctrl+V / 右键菜单） */
+  onPasteFiles: (targetDir: string) => void;
+  /** 文件树内部拖拽移动 */
+  onMoveFiles: (sourcePaths: string[], targetDir: string) => void;
 }
 
 export interface DrawerSurfaceProps {
@@ -130,9 +138,9 @@ export function DrawerSurface(props: DrawerSurfaceProps) {
               >
                 <ArrowLeft size={16} />
               </Button>
-              <strong className="shrink-0 text-sm font-semibold text-foreground">{t("editor.fileEditor")}</strong>
+              <strong className="shrink-0 text-body font-semibold text-foreground">{t("editor.fileEditor")}</strong>
             </div>
-            <span className="min-w-0 flex-1 truncate text-right font-mono text-xs text-muted-foreground" title={editor.activeTab.filePath}>
+            <span className="min-w-0 flex-1 truncate text-right font-mono text-caption text-muted-foreground" title={editor.activeTab.filePath}>
               {editor.activeTab.filePath.split(/[\\/]/).pop()}
             </span>
             <div className="drawer-header-actions flex shrink-0 items-center gap-1">
@@ -170,7 +178,7 @@ export function DrawerSurface(props: DrawerSurfaceProps) {
         <div className="drawer-content-frame flex min-h-0 flex-1 flex-col overflow-hidden">
           {/* 与 files/git 对齐的抽屉标题栏：浏览器面板此前缺 header，点叉无法关闭侧边栏 */}
           <div className="drawer-header flex h-12 shrink-0 items-center justify-between gap-3 border-b border-border bg-background px-3">
-            <strong className="truncate text-sm font-semibold text-foreground">{files.t("app.browser")}</strong>
+            <strong className="truncate text-body font-semibold text-foreground">{files.t("app.browser")}</strong>
             <div className="drawer-header-actions flex shrink-0 items-center gap-1">
               <Button type="button" variant="ghost" size="icon-sm" className="inline-grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground" onClick={chrome.onCollapseDrawer} title={files.t("drawer.collapsePanel")}>
                 <Minus size={15} />
@@ -190,7 +198,7 @@ export function DrawerSurface(props: DrawerSurfaceProps) {
       ) : git.enableGitManagement && drawer === "git" && !drawerCollapsed && git.activeProjectId ? (
         <div className="drawer-content-frame flex min-h-0 flex-1 flex-col overflow-hidden">
           <div className="drawer-header flex h-12 shrink-0 items-center justify-between gap-3 border-b border-border bg-background px-3">
-            <strong className="truncate text-sm font-semibold text-foreground">{files.t("drawer.sourceControl")}</strong>
+            <strong className="truncate text-body font-semibold text-foreground">{files.t("drawer.sourceControl")}</strong>
             <div className="drawer-header-actions flex shrink-0 items-center gap-1">
               <Button type="button" variant="ghost" size="icon-sm" className="inline-grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground" onClick={chrome.onCollapseDrawer} title={files.t("drawer.collapsePanel")}>
                 <Minus size={15} />
@@ -293,6 +301,10 @@ export function DrawerSurface(props: DrawerSurfaceProps) {
               const p = files.projects.find((p: any) => p.id === git.activeProjectId);
               if (p) void files.api.files.open(p.path);
             }}
+            projectRoot={files.projectRoot}
+            onDropFiles={files.onDropFiles}
+            onPasteFiles={files.onPasteFiles}
+            onMoveFiles={files.onMoveFiles}
             onRefreshSessions={() => {
               const projectId = files.sessionsProjectId ?? git.activeProjectId;
               if (projectId) void files.refreshProjectSessions(projectId, true);

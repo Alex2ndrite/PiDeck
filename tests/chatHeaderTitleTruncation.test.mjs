@@ -14,6 +14,6 @@ const header = readFileSync(
 test("chat header gives the agent title remaining width before ellipsis", () => {
   assert.match(header, /grid-cols-\[minmax\(0,1fr\)_auto\]/);
   assert.match(header, /chat-title-block flex min-w-0 flex-1/);
-  assert.match(header, /truncate text-base font-semibold/);
+  assert.match(header, /truncate text-title font-semibold/);
   assert.match(header, /chat-header-actions flex min-w-0 items-center justify-end/);
 });

@@ -45,29 +45,29 @@ export const CompactionCard = memo(function CompactionCard(props: {
 				disabled={!hasArchived}
 				aria-expanded={expanded}
 			>
-				<span className="shrink-0 text-sm leading-6" aria-hidden="true">
+				<span className="shrink-0 text-body leading-6" aria-hidden="true">
 					{hasArchived ? (expanded ? "📂" : "📁") : "🔁"}
 				</span>
 				<div className="flex min-w-0 flex-1 flex-col gap-0.5">
-					<span className="truncate text-xs leading-[1.4] text-text-secondary">{stripAnsi(summary)}</span>
+					<span className="truncate text-caption leading-[1.4] text-text-secondary">{stripAnsi(summary)}</span>
 					<div className="flex flex-wrap items-center gap-1">
 						{typeof compactionCount === "number" && compactionCount > 0 && (
-							<span className="inline-flex items-center rounded-full border border-[color-mix(in_srgb,var(--color-accent)_16%,transparent)] bg-[color:color-mix(in_srgb,var(--color-accent)_8%,transparent)] px-1.5 font-mono text-[11px] text-text-tertiary">
+							<span className="inline-flex items-center rounded-full border border-[color-mix(in_srgb,var(--color-accent)_16%,transparent)] bg-[color:color-mix(in_srgb,var(--color-accent)_8%,transparent)] px-1.5 font-mono text-micro text-text-tertiary">
 								{t("app.compactionCount", { count: compactionCount })}
 							</span>
 						)}
 						{typeof tokensBefore === "number" && (
-							<span className="font-mono text-[11px] text-text-tertiary">
+							<span className="font-mono text-micro text-text-tertiary">
 								{t("app.compactionTokensBefore", { count: Math.round(tokensBefore / 1000) })}
 							</span>
 						)}
 						{hasArchived && (
-							<span className="font-mono text-[11px] opacity-80 text-text-tertiary">
+							<span className="font-mono text-micro opacity-80 text-text-tertiary">
 								{expanded ? t("app.compactionCollapse") : t("app.compactionExpand")}
 							</span>
 						)}
 					</div>
-					<time className="text-[11px] opacity-70 text-text-tertiary">{time}</time>
+					<time className="text-micro opacity-70 text-text-tertiary">{time}</time>
 				</div>
 			</button>
 			{expanded && hasArchived && (
@@ -103,9 +103,9 @@ function ArchivedMessage({ message }: { message: ChatMessage }) {
 		message.role === "tool" ? "🔧" : "💬";
 
 	return (
-		<div className={`flex items-start gap-1 rounded-[2px] p-0.5 px-1 text-xs leading-[1.4] hover:bg-[color:color-mix(in_srgb,var(--color-accent)_4%,transparent)]${message.role === "user" ? "" : ""}`}>
-			<span className="w-5 shrink-0 text-center text-xs">{roleIcon}</span>
-			<span className={`min-w-0 flex-1 truncate${message.role === "user" ? " text-text-primary" : message.role === "tool" ? " font-mono text-[11px] text-text-tertiary" : " text-text-secondary"}`}>{preview || "(empty)"}</span>
+		<div className={`flex items-start gap-1 rounded-[2px] p-0.5 px-1 text-caption leading-[1.4] hover:bg-[color:color-mix(in_srgb,var(--color-accent)_4%,transparent)]${message.role === "user" ? "" : ""}`}>
+			<span className="w-5 shrink-0 text-center text-caption">{roleIcon}</span>
+			<span className={`min-w-0 flex-1 truncate${message.role === "user" ? " text-text-primary" : message.role === "tool" ? " font-mono text-micro text-text-tertiary" : " text-text-secondary"}`}>{preview || "(empty)"}</span>
 		</div>
 	);
 }
@@ -129,12 +129,12 @@ export const DiagnosticMessageCard = memo(function DiagnosticMessageCard(props: 
 			data-message-id={props.message.id}
 			data-role={props.message.role}
 		>
-			<div className="flex items-center gap-2 px-2 py-1.5 font-mono text-xs text-text-secondary">
+			<div className="flex items-center gap-2 px-2 py-1.5 font-mono text-caption text-text-secondary">
 				<AlertTriangle size={14} aria-hidden="true" />
 				<span className="font-semibold">{title}</span>
-				<time className="ml-auto text-[11px] tabular-nums text-text-tertiary">{formatTime(props.message.timestamp)}</time>
+				<time className="ml-auto text-micro tabular-nums text-text-tertiary">{formatTime(props.message.timestamp)}</time>
 			</div>
-			<pre className="m-0 p-2 font-mono text-xs leading-relaxed break-words whitespace-pre-wrap text-text-secondary">{stripAnsi(body)}</pre>
+			<pre className="m-0 p-2 font-mono text-caption leading-relaxed break-words whitespace-pre-wrap text-text-secondary">{stripAnsi(body)}</pre>
 		</article>
 	);
 });
@@ -333,24 +333,24 @@ export const ThinkingBlock = memo(function ThinkingBlock(props: {
 	return (
 		<section className="w-full min-w-0 overflow-hidden rounded-md border-0">
 			<button
-				className="flex min-h-8 w-full cursor-pointer items-center gap-2 border-0 bg-transparent p-1.5 pl-2.5 text-left text-[13px] leading-5 text-text-secondary transition-colors duration-150 hover:bg-[color:color-mix(in_srgb,var(--color-bg-hover)_50%,var(--color-bg))] focus-visible:-outline-offset-2 focus-visible:outline-2 [&_svg]:shrink-0 [&_svg]:text-[var(--color-info)]"
+				className="flex min-h-8 w-full cursor-pointer items-center gap-2 border-0 bg-transparent p-1.5 pl-2.5 text-left text-control leading-5 text-text-secondary transition-colors duration-150 hover:bg-[color:color-mix(in_srgb,var(--color-bg-hover)_50%,var(--color-bg))] focus-visible:-outline-offset-2 focus-visible:outline-2 [&_svg]:shrink-0 [&_svg]:text-[var(--color-info)]"
 				onClick={() => setExpanded((v) => !v)}
 				aria-expanded={expanded}
 			>
 				<Brain size={15} />
-				<span className="shrink-0 text-sm font-[650] text-text-primary">{t("thinking.title")}</span>
+				<span className="shrink-0 text-body font-[650] text-text-primary">{t("thinking.title")}</span>
 				<ChevronDown
 					size={15}
 					className={`shrink-0 text-text-tertiary transition-transform duration-150${expanded ? " rotate-180" : ""}`}
 				/>
 				{!expanded && props.text && (
-					<span className="min-w-0 flex-[1_1_auto] truncate font-mono text-xs text-text-tertiary" title={props.text}>
+					<span className="min-w-0 flex-[1_1_auto] truncate font-mono text-caption text-text-tertiary" title={props.text}>
 						{props.text.slice(0, 80)}{props.text.length > 80 ? "..." : ""}
 					</span>
 				)}
-				{durationText && <small className="shrink-0 font-mono text-[11px] tabular-nums text-text-tertiary">{durationText}</small>}
+				{durationText && <small className="shrink-0 font-mono text-micro tabular-nums text-text-tertiary">{durationText}</small>}
 			</button>
-			{expanded && <div className="border-t border-border-subtle px-3 pt-2 pb-3 text-xs text-text-tertiary">{previewText}</div>}
+			{expanded && <div className="border-t border-border-subtle px-3 pt-2 pb-3 text-caption text-text-tertiary">{previewText}</div>}
 		</section>
 	);
 });

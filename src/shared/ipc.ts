@@ -70,6 +70,8 @@ export const ipcChannels = {
 	// 从用户消息 fork 新会话（pi /fork）；与 clone 不同，会按 entryId 裁剪会话树
 	sessionsRuntimeGetForkMessages: "sessions:runtime-get-fork-messages",
 	sessionsRuntimeFork: "sessions:runtime-fork",
+	/** 渲染层汇报当前聚焦的会话（用于非聚焦会话 Ask 请求的桌面通知） */
+	sessionsSetFocusedSession: "sessions:set-focused-session",
 	codexSessionsScan: "codex-sessions:scan",
 	codexSessionsImport: "codex-sessions:import",
 	claudeSessionsScan: "claude-sessions:scan",

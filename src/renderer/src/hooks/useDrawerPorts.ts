@@ -74,6 +74,14 @@ interface UseDrawerPortsInput {
   openFilePath: any;
   api: any;
   t: any;
+  /** 当前项目根目录：文件面板空白处拖入/粘贴/右键菜单的落点 */
+  projectRoot: string | undefined;
+  /** 从 OS 拖入文件（复制到目标目录） */
+  onDropFiles: (targetDir: string, files: FileList) => void;
+  /** 粘贴剪贴板文件（Ctrl+V / 右键菜单） */
+  onPasteFiles: (targetDir: string) => void;
+  /** 文件树内部拖拽移动 */
+  onMoveFiles: (sourcePaths: string[], targetDir: string) => void;
 }
 
 export function useDrawerPorts(input: UseDrawerPortsInput) {
@@ -147,6 +155,10 @@ export function useDrawerPorts(input: UseDrawerPortsInput) {
       openFilePath: input.openFilePath,
       api: input.api,
       t: input.t,
+      projectRoot: input.projectRoot,
+      onDropFiles: input.onDropFiles,
+      onPasteFiles: input.onPasteFiles,
+      onMoveFiles: input.onMoveFiles,
     };
 
     return { editor, git, chrome, browser, files };
@@ -171,5 +183,6 @@ export function useDrawerPorts(input: UseDrawerPortsInput) {
     input.runOpenSidebarSession, input.isSameSessionPath,
     input.runCopySession, input.runExportHistorySession, input.runDeleteHistorySession,
     input.viewFilePath, input.openFilePath, input.api, input.t,
+    input.projectRoot, input.onDropFiles, input.onPasteFiles, input.onMoveFiles,
   ]);
 }

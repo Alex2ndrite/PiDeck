@@ -187,6 +187,9 @@ function createHarness(options = {}) {
     sendUIResponse: async () => {
       calls.uiResponse += 1;
     },
+    notifyAskPending: () => {
+      calls.askNotify += 1;
+    },
   };
   const sender = async (input) => {
     calls.send += 1;

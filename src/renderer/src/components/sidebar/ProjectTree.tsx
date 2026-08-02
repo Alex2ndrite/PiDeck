@@ -11,7 +11,7 @@ import { cn } from "../../lib/utils";
 
 /** pure official：项目/会话树行共享的 shadcn 风格底（hover=accent 面，active 同系） */
 const treeRowClass =
-	"conversation relative w-full items-center gap-2 rounded-md border-0 bg-transparent px-2 py-1.5 text-left text-sm text-foreground transition-colors hover:bg-accent hover:text-accent-foreground";
+	"conversation relative w-full items-center gap-2 rounded-md border-0 bg-transparent px-2 py-1.5 text-left text-body text-foreground transition-colors hover:bg-accent hover:text-accent-foreground";
 
 function isChatProject(project: Project) {
   return project.kind === "chat";
@@ -67,6 +67,14 @@ export function ProjectTree(props: {
       const sourceFilter = props.controller.sourceFilterFor(project.id);
       const dragging = props.controller.drag.sourceProjectId === project.id;
       const dragOver = props.controller.drag.overProjectId === project.id;
+      // 项目行统计徽标：会话总数（含子会话）与正在运行的 Agent 数，
+      // 项目多时不用逐个展开即可知道哪里有事发生
+      const projectSessions = props.controller.catalog.sessionsByProject[project.id] ?? [];
+      const sessionCount = projectSessions.length;
+      const runningAgentCount = props.controller.catalog.agents.filter(
+        (agent) => agent.projectId === project.id &&
+          (agent.status === "running" || agent.status === "starting"),
+      ).length;
       return <div key={project.id} className={cn("project-group mb-0.5", chat && "chat-project-group", project.worktreeEnabled && "worktree-enabled")}>
         <button
           type="button"
@@ -92,6 +100,17 @@ export function ProjectTree(props: {
           <ProjectAvatar name={projectDirectoryName} kind={chat ? "chat" : "project"} />
           <div className="conversation-body min-w-0 flex-1"><div className="conversation-title flex min-w-0 items-center gap-1.5">
             <strong className="min-w-0 flex-1 truncate font-medium" title={project.path}>{projectDirectoryName}</strong>
+            {runningAgentCount > 0 && (
+              <span className="project-running-badge inline-flex h-4 shrink-0 items-center gap-1 rounded-full bg-primary/10 px-1.5 text-micro font-medium text-primary" title={t("app.projectRunningAgents", { count: runningAgentCount })}>
+                <span className="size-1 rounded-full bg-primary animate-pulse" aria-hidden="true" />
+                {runningAgentCount}
+              </span>
+            )}
+            {sessionCount > 0 && (
+              <span className="project-session-count inline-flex h-4 shrink-0 items-center rounded-full bg-muted px-1.5 text-micro tabular-nums text-muted-foreground" title={t("app.projectSessionCount", { count: sessionCount })}>
+                {sessionCount}
+              </span>
+            )}
             {sourceFilter !== null && (
               <span
                 className="filter-indicator"
@@ -111,7 +130,7 @@ export function ProjectTree(props: {
                 }}
               ><Filter size={12} /></span>
             )}
-          </div>{chat && <p className="chat-project-guide mt-0.5 truncate text-[11px] text-muted-foreground">{t("app.projectChatGuide")}</p>}</div>
+          </div>{chat && <p className="chat-project-guide mt-0.5 truncate text-micro text-muted-foreground">{t("app.projectChatGuide")}</p>}</div>
           <span className="project-row-actions flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 [[data-active]_&]:opacity-100 [.conversation:hover_&]:opacity-100">
             {chat && props.actions.projects.changeChatPath && <span className="project-action inline-flex size-6 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-background/80 hover:text-foreground" title={t("app.chatProjectSettings")} onClick={(event) => { event.stopPropagation(); void props.actions.projects.changeChatPath!(project); }}><FolderCog size={14} /></span>}
             <span className="project-action inline-flex size-6 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-background/80 hover:text-foreground" title={t("app.projectNewAgent")} onClick={(event) => { event.stopPropagation(); void props.actions.sessions.createDraft(project.id); }}><Plus size={14} /></span>

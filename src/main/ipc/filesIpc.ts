@@ -1,5 +1,6 @@
 import { dialog, ipcMain, shell, type BrowserWindow } from "electron";
-import { readFile, writeFile } from "node:fs/promises";
+import { cp, readFile, rename as fsRename, rm, writeFile } from "node:fs/promises";
+import { basename, join } from "node:path";
 import { ipcChannels } from "../../shared/ipc";
 import type { FileSystemService } from "../fs/FileSystemService";
 import type { ProjectStore } from "../projects/ProjectStore";
@@ -103,9 +104,51 @@ export function registerFilesIpc({
 	});
 
 	ipcMain.handle(
-		ipcChannels.filesShowInFolder,
-		async (_event, path: string) => {
-			shell.showItemInFolder(toWindowsPath(path));
+		ipcChannels.filesCopy,
+		async (_event, sourcePaths: string[], targetDir: string) => {
+			const results: string[] = [];
+			for (const src of sourcePaths) {
+				try {
+					const name = basename(src);
+					const dest = join(targetDir, name);
+					// 递归复制目录/文件；同名已存在时跳过覆盖（errorOnExist: false 反而报错，
+					// 这里语义为「已存在则不重复复制」——与资源管理器粘贴行为一致）
+					await cp(src, dest, { recursive: true, errorOnExist: false });
+					results.push(dest);
+					void appLogger.info("file", "File/folder copied", { src, dest });
+				} catch (error) {
+					void appLogger.info("file", "File copy failed", { src, targetDir, error: error instanceof Error ? error.message : String(error) });
+					throw error;
+				}
+			}
+			return results;
 		},
 	);
+
+	ipcMain.handle(
+		ipcChannels.filesMove,
+		async (_event, sourcePaths: string[], targetDir: string) => {
+			const results: string[] = [];
+			for (const src of sourcePaths) {
+				try {
+					const name = basename(src);
+					const dest = join(targetDir, name);
+					// 同设备优先 rename（瞬时）；跨设备/跨盘 rename 会报 EXDEV，回退 cp + rm
+					try {
+						await fsRename(src, dest);
+					} catch {
+						await cp(src, dest, { recursive: true });
+						await rm(src, { recursive: true, force: true });
+					}
+					results.push(dest);
+					void appLogger.info("file", "File/folder moved", { src, dest });
+				} catch (error) {
+					void appLogger.info("file", "File move failed", { src, targetDir, error: error instanceof Error ? error.message : String(error) });
+					throw error;
+				}
+			}
+			return results;
+		},
+	);
+
 }

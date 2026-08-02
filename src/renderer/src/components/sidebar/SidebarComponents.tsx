@@ -104,7 +104,7 @@ export function SessionManagerModal(props: {
 			<div className="flex min-h-0 flex-1 flex-col overflow-hidden border-none bg-transparent shadow-none">
 				<div className="flex shrink-0 items-center justify-between border-b border-border-subtle bg-bg-muted px-5 py-2.5">
 					<div className="flex items-center gap-3.5">
-						<label className="flex cursor-pointer items-center gap-2 text-[13px] text-text-secondary select-none">
+						<label className="flex cursor-pointer items-center gap-2 text-control text-text-secondary select-none">
 							<Checkbox
 								checked={selectAll}
 								onChange={handleToggleAll}
@@ -117,7 +117,7 @@ export function SessionManagerModal(props: {
 									key={source}
 									variant="outline"
 									size="sm"
-									className={`h-auto rounded-full border border-border-subtle bg-transparent px-3 py-1 text-xs font-medium text-text-tertiary transition-all duration-150 hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]${activeSources.has(source) ? " border-[var(--color-accent)] bg-bg-active font-semibold text-[var(--color-accent)]" : ""}`}
+									className={`h-auto rounded-full border border-border-subtle bg-transparent px-3 py-1 text-caption font-medium text-text-tertiary transition-all duration-150 hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]${activeSources.has(source) ? " border-[var(--color-accent)] bg-bg-active font-semibold text-[var(--color-accent)]" : ""}`}
 									onClick={() => toggleSource(source)}
 								>
 									{t(`sessionSource.${source}` as any)}
@@ -127,7 +127,7 @@ export function SessionManagerModal(props: {
 					</div>
 					{selected.size > 0 && (
 						<Button
-							variant="outline" size="sm" className="h-auto gap-1 border border-[color-mix(in_srgb,var(--color-danger)_28%,transparent)] px-3 py-1 text-xs font-medium text-[var(--color-danger)] shadow-none transition-all duration-150 hover:border-[var(--color-danger)] hover:bg-[var(--color-danger-soft)]"
+							variant="outline" size="sm" className="h-auto gap-1 border border-[color-mix(in_srgb,var(--color-danger)_28%,transparent)] px-3 py-1 text-caption font-medium text-[var(--color-danger)] shadow-none transition-all duration-150 hover:border-[var(--color-danger)] hover:bg-[var(--color-danger-soft)]"
 							onClick={handleDeleteSelected}
 						>
 							{t("common.deleteSelected", { count: selected.size })}
@@ -153,7 +153,7 @@ export function SessionManagerModal(props: {
 									className="flex min-w-0 flex-1 cursor-pointer items-center gap-2"
 									onClick={() => handleToggle(session.filePath)}
 								>
-									<div className="truncate text-[13px] text-text-primary">
+									<div className="truncate text-control text-text-primary">
 										{session.name || session.preview?.slice(0, 60) || t("common.untitled")}
 									</div>
 									{session.source && session.source !== "pi" && (
@@ -164,21 +164,21 @@ export function SessionManagerModal(props: {
 								</div>
 								<div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
 									<Button
-										variant="ghost" size="sm" className="h-auto gap-[3px] rounded-[4px] px-2 text-xs text-text-tertiary transition-all duration-150 hover:bg-bg-hover hover:text-[var(--color-accent)]"
+										variant="ghost" size="sm" className="h-auto gap-[3px] rounded-[4px] px-2 text-caption text-text-tertiary transition-all duration-150 hover:bg-bg-hover hover:text-[var(--color-accent)]"
 										onClick={() => props.onRename(session)}
 										title={t("common.rename")}
 									>
 										{t("common.rename")}
 									</Button>
 									<Button
-										variant="ghost" size="sm" className="h-auto gap-[3px] rounded-[4px] px-2 text-xs text-text-tertiary transition-all duration-150 hover:bg-bg-hover hover:text-[var(--color-accent)]"
+										variant="ghost" size="sm" className="h-auto gap-[3px] rounded-[4px] px-2 text-caption text-text-tertiary transition-all duration-150 hover:bg-bg-hover hover:text-[var(--color-accent)]"
 										onClick={() => props.onExport(session)}
 										title={t("menu.exportHtml")}
 									>
 										{t("menu.exportHtml")}
 									</Button>
 									<Button
-										variant="ghost" size="sm" className="h-auto gap-[3px] rounded-[4px] px-2 text-xs text-text-tertiary transition-all duration-150 hover:bg-[var(--color-danger-soft)] hover:text-[var(--color-danger)]"
+										variant="ghost" size="sm" className="h-auto gap-[3px] rounded-[4px] px-2 text-caption text-text-tertiary transition-all duration-150 hover:bg-[var(--color-danger-soft)] hover:text-[var(--color-danger)]"
 										onClick={() => props.onDelete([session])}
 										title={t("common.delete")}
 									>
@@ -471,7 +471,7 @@ export function RpcLogModal(props: {
 						<Button
 							variant="outline"
 							size="sm"
-							className={`h-auto px-2 py-1 text-xs shadow-none${directionFilter === "all" ? " active" : ""}`}
+							className={`h-auto px-2 py-1 text-caption shadow-none${directionFilter === "all" ? " active" : ""}`}
 							onClick={() => setDirectionFilter("all")}
 						>
 							{t("rpc.filterAll")}
@@ -479,7 +479,7 @@ export function RpcLogModal(props: {
 						<Button
 							variant="outline"
 							size="sm"
-							className={`h-auto px-2 py-1 text-xs shadow-none${directionFilter === "send" ? " active" : ""}`}
+							className={`h-auto px-2 py-1 text-caption shadow-none${directionFilter === "send" ? " active" : ""}`}
 							onClick={() => setDirectionFilter("send")}
 						>
 							{t("rpc.filterSend")}
@@ -487,7 +487,7 @@ export function RpcLogModal(props: {
 						<Button
 							variant="outline"
 							size="sm"
-							className={`h-auto px-2 py-1 text-xs shadow-none${directionFilter === "recv" ? " active" : ""}`}
+							className={`h-auto px-2 py-1 text-caption shadow-none${directionFilter === "recv" ? " active" : ""}`}
 							onClick={() => setDirectionFilter("recv")}
 						>
 							{t("rpc.filterReceive")}
@@ -522,10 +522,10 @@ export function RpcLogModal(props: {
 									</span>
 									<span className="log-summary">{log.summary}</span>
 									<div className="rpc-log-entry-actions" onClick={(event) => event.stopPropagation()}>
-										<Button variant="outline" size="sm" className="h-auto px-2 py-1 text-xs shadow-none" onClick={() => navigator.clipboard.writeText(formatRpcLogForCopy(log))}>
+										<Button variant="outline" size="sm" className="h-auto px-2 py-1 text-caption shadow-none" onClick={() => navigator.clipboard.writeText(formatRpcLogForCopy(log))}>
 											{t("common.copy")}
 										</Button>
-										<Button variant="outline" size="sm" className="h-auto px-2 py-1 text-xs shadow-none" onClick={() => navigator.clipboard.writeText(jsonText)}>
+										<Button variant="outline" size="sm" className="h-auto px-2 py-1 text-caption shadow-none" onClick={() => navigator.clipboard.writeText(jsonText)}>
 											{t("rpc.copyJson")}
 										</Button>
 									</div>

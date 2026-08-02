@@ -99,7 +99,7 @@ export function QueuedPromptPanel(props: {
       aria-label={t("app.queuedMessagesLabel")}
     >
       <div className="flex min-w-0 w-[clamp(13.5rem,36%,22.5rem)] max-w-full flex-col gap-1 rounded-[9px] border border-[color-mix(in_srgb,var(--color-border-subtle)_82%,transparent)] bg-[color:color-mix(in_srgb,var(--color-bg-panel)_95%,var(--color-chat-card-bg))] p-[7px] pb-2 shadow-[var(--shadow-border),0_6px_18px_color-mix(in_srgb,#000_5%,transparent)]">
-        <div className="flex items-center justify-between gap-2 px-[3px] pb-[3px] font-mono text-[11px] font-semibold leading-4 tracking-[0.02em] text-text-tertiary">
+        <div className="flex items-center justify-between gap-2 px-[3px] pb-[3px] font-mono text-micro font-semibold leading-4 tracking-[0.02em] text-text-tertiary">
           <span>{t("app.queuedMessagesLabel")}</span>
           <span className="tabular-nums text-text-secondary">{props.prompts.length}</span>
         </div>
@@ -121,23 +121,23 @@ export function QueuedPromptPanel(props: {
                 className={`queued-row flex min-h-8 shrink-0 basis-8 items-center gap-1.5 rounded-[7px] border border-transparent px-[5px] py-1 pl-2 transition-[border-color,background-color] duration-100 ${status} queued-behavior-${prompt.behavior}`}
                 title={rowTitle}
               >
-                <span className="w-[1.1em] shrink-0 text-center font-mono text-[11px] leading-none tabular-nums text-text-tertiary" aria-hidden="true">
+                <span className="w-[1.1em] shrink-0 text-center font-mono text-micro leading-none tabular-nums text-text-tertiary" aria-hidden="true">
                   {index + 1}
                 </span>
-                <span className="min-w-0 flex-[1_1_auto] truncate text-xs leading-[18px] text-text-primary">{previewText}</span>
+                <span className="min-w-0 flex-[1_1_auto] truncate text-caption leading-[18px] text-text-primary">{previewText}</span>
                 {prompt.images?.length ? (
-                  <span className="shrink-0 font-mono text-[11px] leading-none text-text-tertiary">
+                  <span className="shrink-0 font-mono text-micro leading-none text-text-tertiary">
                     {t("app.queuedImageCount", {
                       count: String(prompt.images.length),
                     })}
                   </span>
                 ) : null}
                 {status === "sending" ? (
-                  <span className="shrink-0 font-mono text-[11px] leading-none text-text-tertiary">{t("app.queuedSending")}</span>
+                  <span className="shrink-0 font-mono text-micro leading-none text-text-tertiary">{t("app.queuedSending")}</span>
                 ) : status === "failed" ? (
-                  <span className="shrink-0 font-mono text-[11px] leading-none text-[var(--color-danger)]">{t("app.queuedFailed")}</span>
+                  <span className="shrink-0 font-mono text-micro leading-none text-[var(--color-danger)]">{t("app.queuedFailed")}</span>
                 ) : status === "unknown" ? (
-                  <span className="shrink-0 font-mono text-[11px] leading-none text-[var(--color-warning)]">
+                  <span className="shrink-0 font-mono text-micro leading-none text-[var(--color-warning)]">
                     {t("app.queuedUnknownShort")}
                   </span>
                 ) : null}

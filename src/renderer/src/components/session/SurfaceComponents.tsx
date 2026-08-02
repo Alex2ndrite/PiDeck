@@ -47,6 +47,11 @@ import {
 	flattenFiles,
 } from "../app/AppUtils";
 import { Textarea } from "../ui-shadcn/textarea";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "../ui-shadcn/tooltip";
 
 // Mermaid 库体积数 MB，仅在真正出现 mermaid 代码块时才动态加载，
 // 避免随渲染进程常驻、放大内存占用并在流式期间抢占主线程。
@@ -170,10 +175,55 @@ type SessionModifiedFile = {
 export function SessionStatus(props: {
 	state?: AgentRuntimeState;
 	duration?: number;
+	/** 本会话历史缓存命中率快照，用于展示会话平均命中率 */
+	cacheHitHistory?: number[];
 }) {
 	const state = props.state;
 	if (!state) return null;
-	return (
+	// 会话平均缓存命中率：与 pi CLI footer 的 latestCacheHitRate 口径不同，
+	// 这里统计的是本会话历次 runtime state 快照的均值，用户可对比「最新一次 vs 整体水平」
+	const history = props.cacheHitHistory ?? [];
+	const averageCacheHit = history.length > 0
+		? history.reduce((sum, value) => sum + value, 0) / history.length
+		: undefined;
+
+	const detailRows: Array<{ label: string; value: string }> = [];
+	if (state.contextPercent != null || state.contextTokens != null) {
+		detailRows.push({
+			label: t("ctx.detail.context"),
+			value: `${state.contextPercent != null ? `${state.contextPercent.toFixed(1)}%` : "-"} / ${formatCompact(state.contextTokens)} / ${formatCompact(state.contextWindow)}`,
+		});
+	}
+	if (state.inputTokens != null || state.outputTokens != null) {
+		detailRows.push({
+			label: t("ctx.detail.tokens"),
+			value: `↑ ${formatCompact(state.inputTokens)} / ↓ ${formatCompact(state.outputTokens)}`,
+		});
+	}
+	if (state.cacheRead != null || state.cacheWrite != null) {
+		detailRows.push({
+			label: t("ctx.detail.cacheIO"),
+			value: `${t("ctx.detail.cacheRead")} ${formatCompact(state.cacheRead)} / ${t("ctx.detail.cacheWrite")} ${formatCompact(state.cacheWrite)}`,
+		});
+	}
+	if (state.cacheHitPercent != null) {
+		detailRows.push({
+			label: t("ctx.detail.hitLatest"),
+			value: `${state.cacheHitPercent.toFixed(1)}%`,
+		});
+	}
+	if (averageCacheHit != null) {
+		detailRows.push({
+			label: t("ctx.detail.hitAverage"),
+			value: `${averageCacheHit.toFixed(1)}% (${history.length} ${t("ctx.detail.snapshots")})`,
+		});
+	}
+	if (state.cost != null) {
+		detailRows.push({ label: t("ctx.detail.cost"), value: `$${state.cost.toFixed(3)}` });
+	}
+	const hasDetail = detailRows.length > 0;
+
+	const statusInner = (
 		<div className="session-status">
 			{state.contextPercent != null && (
 				<span className="ctx-chip">
@@ -200,12 +250,36 @@ export function SessionStatus(props: {
 					)}
 				</span>
 			)}
+			{/* 会话平均命中率：单独一行小字，不改变现有布局 */}
+			{averageCacheHit != null && (
+				<span className="cache-chip" title={t("ctx.detail.hitAverageTitle")}>
+					{t("app.cacheHitAvg")}: {averageCacheHit.toFixed(0)}%
+				</span>
+			)}
 			{state.cost != null && (
 				<span className="cost-chip" title={t("app.totalCost")}>
 					${state.cost.toFixed(3)}
 				</span>
 			)}
 		</div>
+	);
+
+	if (!hasDetail) return statusInner;
+	// 悬停展示完整上下文明细：不改变现有 chips 外观，只增加信息深度
+	return (
+		<Tooltip>
+			<TooltipTrigger asChild>{statusInner}</TooltipTrigger>
+			<TooltipContent side="bottom" align="end" className="ctx-detail-tooltip">
+				<div className="flex flex-col gap-1">
+					{detailRows.map((row) => (
+						<div key={row.label} className="flex items-center justify-between gap-3 text-xs">
+							<span className="text-muted-foreground">{row.label}</span>
+							<span className="font-mono tabular-nums">{row.value}</span>
+						</div>
+					))}
+				</div>
+			</TooltipContent>
+		</Tooltip>
 	);
 }
 
@@ -599,6 +673,8 @@ export const AssistantText = memo(
  *  替代旧的 AgentRun + ChatBubble 助手分支 + RunActivity 三层结构。 */
 export const TurnRow = memo(function TurnRow(props: {
 	run: AgentRunItem;
+	/** 新消息入场动画：仅发送后尾部新增的消息播放一次 */
+	fresh?: boolean;
 	onPreviewImage: (image: ImageContent) => void;
 	showThinking?: boolean;
 	isStreaming?: boolean;
@@ -779,7 +855,7 @@ export const TurnRow = memo(function TurnRow(props: {
 	// 没有助手指令消息的情况：整轮只含工具/思考，用执行过程折叠渲染
 	if (lastAssistantIndex === -1) {
 		return (
-			<article ref={rowRef} className="turn-row mb-6 w-full min-w-0 max-w-full" data-message-id={run.id}>
+			<article ref={rowRef} className={`turn-row mb-6 w-full min-w-0 max-w-full ${props.fresh ? "animate-[message-enter_260ms_cubic-bezier(0.22,1,0.36,1)_both]" : ""}`} data-message-id={run.id}>
 				<div className="flex min-w-0 flex-col gap-3">
 					<div className="mb-1 inline-flex items-center gap-2 text-xs text-muted-foreground tabular-nums">
 						<span className="shrink-0 font-mono font-semibold text-foreground/80">pi</span>
@@ -985,6 +1061,8 @@ function extractSkillBlocks(text: string): { skills: string[]; text: string } {
  * 编辑分两种：原地编辑（修改 JSONL + 重载会话）和修改输入框（放回 composer 不自动发送）。 */
 export const UserBubble = memo(function UserBubble(props: {
 	message: ChatMessage;
+	/** 新消息入场动画：发送后乐观上屏的用户消息播放一次 */
+	fresh?: boolean;
 	onPreviewImage: (image: ImageContent) => void;
 	onOpenFile?: (path: string) => void;
 	onResendUserMessage?: (message: ChatMessage) => void;
@@ -1047,7 +1125,7 @@ export const UserBubble = memo(function UserBubble(props: {
 		);
 	};
 	return (
-		<article /* user-turn 为 e2e 选择器锚点 */ ref={rowRef} className="user-turn group/user mb-4 flex w-full min-w-0 max-w-full flex-col items-end" data-message-id={message.id}>
+		<article /* user-turn 为 e2e 选择器锚点 */ ref={rowRef} className={`user-turn group/user mb-4 flex w-full min-w-0 max-w-full flex-col items-end ${props.fresh ? "animate-[message-enter_260ms_cubic-bezier(0.22,1,0.36,1)_both]" : ""}`} data-message-id={message.id}>
 			{skills.length > 0 && (
 				<div className="mb-1.5 flex flex-wrap justify-end gap-1.5">
 					{skills.map((name) => (
@@ -1073,7 +1151,7 @@ export const UserBubble = memo(function UserBubble(props: {
 			)}
 			{cleanText && !editing && (
 				<div className="w-fit min-w-0 max-w-[min(82%,64ch)] rounded-[14px] border border-border bg-muted/60 px-3 py-2 text-sm text-foreground [overflow-wrap:anywhere] break-words">
-					<div className="text-[15px] leading-[1.6] text-text-primary whitespace-pre-wrap break-words">
+					<div className="text-chat leading-[1.6] text-text-primary whitespace-pre-wrap break-words">
 						{renderChipText(cleanText, props.onOpenFile, props.validCommandNames, props.validFilePaths)}
 					</div>
 				</div>

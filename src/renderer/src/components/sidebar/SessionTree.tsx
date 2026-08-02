@@ -11,7 +11,7 @@ import { cn } from "../../lib/utils";
 
 /** pure official：与 ProjectTree 对齐的会话/agent 行底色 */
 const sessionRowClass =
-	"conversation agent-row relative flex h-8 w-full items-center gap-2 rounded-md border-0 bg-transparent px-2 text-left text-sm text-foreground transition-colors hover:bg-accent hover:text-accent-foreground";
+	"conversation agent-row relative flex h-8 w-full items-center gap-2 rounded-md border-0 bg-transparent px-2 text-left text-body text-foreground transition-colors hover:bg-accent hover:text-accent-foreground";
 
 function matchesSearch(value: string, search: string) {
   return !search || value.toLowerCase().includes(search.toLowerCase());
@@ -218,7 +218,8 @@ export function SessionTree(props: {
             <span className="session-node-marker size-1.5 shrink-0 rounded-full bg-border" aria-hidden="true" />
             <div className="conversation-body min-w-0 flex-1"><div className="conversation-title flex min-w-0 items-center gap-1.5">
               {runtime && <span className={`agent-status-indicator status-${runtime.status}`}>{runtime.status}</span>}
-              <strong className="min-w-0 flex-1 truncate font-medium">{child.session.name || t("common.untitled")}</strong>
+              {/* 历史会话（无运行态）文字降一级，与活跃 Agent/运行中会话形成层级差 */}
+              <strong className={cn("min-w-0 flex-1 truncate", runtime ? "font-medium" : "font-normal text-muted-foreground/90")}>{child.session.name || t("common.untitled")}</strong>
               {child.session.source && child.session.source !== "pi" && <span className={`session-source-badge ${child.session.source}`}>{t(`sessionSource.${child.session.source}` as never)}</span>}
               {renderToggle(groupKey, childCount)}
             </div></div>
@@ -228,7 +229,7 @@ export function SessionTree(props: {
       })}
       {display.hiddenChildCount > 0 && (
         <Button
-          variant="ghost" size="sm" className={`h-auto w-full justify-start px-2 text-xs ${props.nested ? "worktree-sessions-more" : "session-more-row"}`}
+          variant="ghost" size="sm" className={`h-auto w-full justify-start px-2 text-caption ${props.nested ? "worktree-sessions-more" : "session-more-row"}`}
           onClick={props.onShowMore ?? (() => props.controller.showMoreChildren(props.project.id))}
         >
           <span>{props.nested

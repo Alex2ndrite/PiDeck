@@ -177,7 +177,7 @@ export function ComposerBottomBar(props: {
 					<Button
 						variant="ghost"
 						size="sm"
-						className={`composer-bar-btn h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground${isPlanMode ? " active" : ""}`}
+						className={`composer-bar-btn h-7 gap-1 px-2 text-caption text-muted-foreground hover:text-foreground${isPlanMode ? " active" : ""}`}
 						disabled={props.disabled}
 						onClick={props.onOpenComposerModePicker}
 						title={t("app.composerModeTitle")}
@@ -221,7 +221,7 @@ export function ComposerBottomBar(props: {
 					<Button
 						variant="ghost"
 						size="sm"
-						className="composer-bar-btn model h-7 max-w-[42ch] truncate px-2 text-xs text-muted-foreground hover:text-foreground"
+						className="composer-bar-btn model h-7 max-w-[42ch] truncate px-2 text-caption text-muted-foreground hover:text-foreground"
 						disabled={props.disabled}
 						onClick={props.onPickModel}
 						title={t("app.modelPickerTitle")}
@@ -231,7 +231,7 @@ export function ComposerBottomBar(props: {
 					<Button
 						variant="ghost"
 						size="sm"
-						className="composer-bar-btn thinking h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+						className="composer-bar-btn thinking h-7 px-2 text-caption text-muted-foreground hover:text-foreground"
 						disabled={props.disabled}
 						onClick={props.onPickThinking}
 						title={t("app.thinkingPickerTitle")}
@@ -247,7 +247,7 @@ export function ComposerBottomBar(props: {
 							<Button
 								variant="ghost"
 								size="sm"
-								className={`composer-bar-btn compact h-7 gap-1 px-2 text-xs${urgency}${isCompactingNow ? " compacting" : ""}`}
+								className={`composer-bar-btn compact h-7 gap-1 px-2 text-caption${urgency}${isCompactingNow ? " compacting" : ""}`}
 								disabled={
 									isCompactingNow ||
 									Boolean(props.state?.isStreaming)
@@ -269,7 +269,7 @@ export function ComposerBottomBar(props: {
 				<div className="composer-bottom-right ml-auto flex shrink-0 items-center gap-1.5">
 					{props.gitInfo?.current && (
 						<span
-							className="composer-bar-branch inline-flex max-w-[12rem] items-center gap-1 truncate text-[11px] text-muted-foreground"
+							className="composer-bar-branch inline-flex max-w-[12rem] items-center gap-1 truncate text-micro text-muted-foreground"
 							title={t("app.branchCurrent", {
 								branch: props.gitInfo.current,
 								count: props.gitInfo.branches.length,
@@ -312,7 +312,7 @@ function PickerDialog(props: {
 					<div className="grid gap-0.5">
 						<DialogTitle>{props.title}</DialogTitle>
 						{props.hint && (
-							<small className="text-muted-foreground text-xs">{props.hint}</small>
+							<small className="text-muted-foreground text-caption">{props.hint}</small>
 						)}
 					</div>
 					<DialogClose asChild>
@@ -558,7 +558,7 @@ export function PromptTemplatePicker(props: {
 				<div className="picker-preview-inline">
 					<Button
 						type="button"
-						className="picker-preview-back-btn h-auto gap-1 px-1 text-xs"
+						className="picker-preview-back-btn h-auto gap-1 px-1 text-caption"
 						onClick={() => setPreviewTemplate(null)}
 						title={t("app.promptTemplateBackToPicker")}
 					>
@@ -578,7 +578,7 @@ export function PromptTemplatePicker(props: {
 				<CommandList>
 					<CommandEmpty>{t("app.promptTemplateSearchEmpty")}</CommandEmpty>
 					{props.templates.length === 0 && (
-						<div className="py-6 text-center text-sm text-muted-foreground">{t("app.promptTemplateEmpty")}</div>
+						<div className="py-6 text-center text-body text-muted-foreground">{t("app.promptTemplateEmpty")}</div>
 					)}
 					{props.templates.map((template) => (
 						<CommandItem

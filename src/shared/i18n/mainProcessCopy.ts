@@ -165,6 +165,7 @@ export const mainProcessZhCN = {
 	"mainTool.details": "详情：\n{value}",
 	"mainTool.truncated": "…（已省略中间 {omitted} 字符，完整内容共 {total} 字符）",
 	"mainNotification.sessionDone": "{title} 已完成响应",
+	"mainNotification.askPending": "「{title}」需要你的确认",
 } as const;
 
 export type MainProcessTranslationKey = keyof typeof mainProcessZhCN;
@@ -336,6 +337,7 @@ export const mainProcessEnUS: Record<MainProcessTranslationKey, string> = {
 	"mainTool.details": "Details:\n{value}",
 	"mainTool.truncated": "… ({omitted} characters omitted from the middle; {total} characters total)",
 	"mainNotification.sessionDone": "{title} completed its response",
+	"mainNotification.askPending": "\u201c{title}\u201d is waiting for your confirmation",
 };
 
 export type MainProcessLocale = "zh-CN" | "en-US";

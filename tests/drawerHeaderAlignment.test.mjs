@@ -16,7 +16,7 @@ const drawerSurface = readFileSync(
 test("drawer header uses official compact chrome classes", () => {
   assert.match(drawerSurface, /drawer-header flex h-12/);
   assert.match(drawerSurface, /border-b border-border bg-background/);
-  assert.match(drawerSurface, /truncate text-sm font-semibold/);
+  assert.match(drawerSurface, /truncate text-body font-semibold/);
 });
 
 test("drawer does not cast a shadow over the adjacent white pane", () => {

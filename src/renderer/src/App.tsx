@@ -70,6 +70,7 @@ import {
   replaceProjectInventoryAtom,
   replaceProjectSessionsAtom,
   sessionRecordByIdAtomFamily,
+  sessionRecordsAtom,
   sessionRecordsByProjectIdAtomFamily,
   sessionIdByRuntimeAgentIdAtomFamily,
   sessionRuntimeBySessionIdAtomFamily,
@@ -78,6 +79,7 @@ import {
   useWebContentsViewBrowserAtom,
   sessionCatalogLoadStateAtom,
   sessionSummariesByProjectIdAtomFamily,
+  sessionTabIdsAtom,
   setSessionAttachmentsAtom,
   setSessionCatalogLoadStateAtom,
   setSessionDraftAtom,
@@ -106,6 +108,7 @@ import { useSessionActions } from "./hooks/useSessionActions";
 import { useScratchPad } from "./hooks/useScratchPad";
 import { useWorktreeActions } from "./hooks/useWorktreeActions";
 import { SessionRuntimeInjector } from "./components/session/SessionRuntimeInjector";
+import { SessionTabsBar } from "./components/session/SessionTabsBar";
 import { ScratchPadOverlay } from "./components/overlays/ScratchPadOverlay";
 import { AppShell } from "./components/app/AppShell";
 import { WorkspaceDrawerRail } from "./components/workspace/WorkspaceDrawerRail";
@@ -259,6 +262,8 @@ export function App() {
     y: number;
     node: FileTreeNode;
   } | null>(null);
+  /** 右键打开文件菜单时检查剪贴板是否有文件路径，决定是否显示「粘贴」项 */
+  const [hasClipboardFiles, setHasClipboardFiles] = useState(false);
   const [renamingFile, setRenamingFile] = useState<{
     path: string;
     name: string;
@@ -379,6 +384,18 @@ export function App() {
     setSessionCatalogLoadState,
     t,
   });
+
+  // 回答结束后的会话列表后台静默刷新：500ms 尾沿去抖。
+  // 多个 Agent 同时结束回答时只扫描一次，避免重复 IPC 与列表抖动。
+  const answerEndRefreshTimerRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const scheduleAnswerEndRefresh = useCallback((projectId: string) => {
+    const existing = answerEndRefreshTimerRef.current[projectId];
+    if (existing) clearTimeout(existing);
+    answerEndRefreshTimerRef.current[projectId] = setTimeout(() => {
+      delete answerEndRefreshTimerRef.current[projectId];
+      void refreshProjectSessions(projectId, true).catch(() => undefined);
+    }, 500);
+  }, [refreshProjectSessions]);
 
   // === import flow hook ===
   const {
@@ -704,6 +721,15 @@ export function App() {
         queue.isSessionRuntimeBusy(sessionId)
       ) {
         void queue.flushQueuedSteerPrompts(sessionId);
+      }
+      // 回答结束（流式停止）后后台静默刷新该会话所属项目的历史会话：
+      // 子 Agent 会话由扩展直接写盘，只在回答结束时刷新能保证列表最新且无手动刷新成本。
+      // refreshProjectSessions 内部会合并并发请求，多个 Agent 同时结束时不会重复扫描。
+      if (previous?.isStreaming && !current.isStreaming) {
+        const projectId = store.get(sessionRecordByIdAtomFamily(sessionId))?.projectId;
+        if (projectId) {
+          scheduleAnswerEndRefresh(projectId);
+        }
       }
     },
   });
@@ -1076,7 +1102,63 @@ export function App() {
     refreshProjectSessions,
     api,
     showToast,
+    // 任何路径打开会话（侧栏/标题栏/引导恢复）都在 Tab 栏登记，
+    // 用户可在 Tab 间快速切换而无需回侧栏找
+    onSessionSelected: openSessionTab,
   });
+
+  // ── 会话 Tab 栏状态（浏览器式多 Tab）──
+  // 关闭 Tab 只移除列表项，不 kill Agent；再次打开同一会话时复用已绑定运行时。
+  const sessionTabIds = useAtomValue(sessionTabIdsAtom);
+  const setSessionTabIds = useSetAtom(sessionTabIdsAtom);
+  const sessionRecordsForTabs = useAtomValue(sessionRecordsAtom);
+
+  /** 打开会话时在 Tab 栏登记（幂等）；首个会话自动登记后 Tab 栏才出现 */
+  function openSessionTab(sessionId: string) {
+    // 引导恢复/自动选中发生在 App 挂载早期，同样登记，保证 Tab 栏与会话视图一致
+    setSessionTabIds((current) =>
+      current.includes(sessionId) ? current : [...current, sessionId],
+    );
+  }
+
+  // 会话被删除（记录消失）时自动清理对应 Tab；currentSessionId 的清理由 removeSessionStateAtom 负责
+  useEffect(() => {
+    setSessionTabIds((current) => {
+      const next = current.filter((id) => Boolean(sessionRecordsForTabs[id]));
+      return next.length === current.length ? current : next;
+    });
+  }, [sessionRecordsForTabs, setSessionTabIds]);
+
+  /** 关闭单个 Tab：仅移除列表；若关闭的是当前会话，切到相邻 Tab（不 kill Agent） */
+  function closeSessionTab(sessionId: string) {
+    const remaining = sessionTabIds.filter((id) => id !== sessionId);
+    setSessionTabIds(remaining);
+    if (currentSessionId !== sessionId) return;
+    if (remaining.length > 0) {
+      // 优先切到右侧相邻 Tab，保持阅读位置连续；没有右侧才取左侧
+      const index = sessionTabIds.indexOf(sessionId);
+      const next = remaining[Math.min(index, remaining.length - 1)];
+      const record = store.get(sessionRecordByIdAtomFamily(next));
+      if (record) {
+        selectSessionCommand(record.projectId, next, true);
+      }
+    } else if (activeProjectId) {
+      // 无剩余 Tab 时回到项目空态（走命令路由，不直接改 currentSessionId）
+      selectProjectCommand(activeProjectId);
+    }
+  }
+
+  function closeOtherSessionTabs(sessionId: string) {
+    setSessionTabIds((current) =>
+      current.filter((id) => id === sessionId),
+    );
+  }
+
+  function closeAllSessionTabs() {
+    setSessionTabIds([]);
+    // 全部关闭后回到项目空态；Agent 进程保持运行，会话仍可从侧栏重新打开
+    if (activeProjectId) selectProjectCommand(activeProjectId);
+  }
 
   useEffect(() => {
     if (!activeProject) return;
@@ -1423,7 +1505,12 @@ export function App() {
     }
   }, [activeAgentId, displayAgents, modifiedFiles]);
 
-  /** 侧栏 π logo 业务反馈：新建/历史会话启动/关闭 agent 时重播拼装动画。 */
+  // 汇报聚焦会话给主进程：非聚焦会话收到 Ask 请求时触发桌面通知（Task 9）
+  useEffect(() => {
+    void api.sessions.setFocusedSession(currentSessionId).catch(() => undefined);
+  }, [currentSessionId]);
+
+  // 侧栏 π logo 业务反馈：新建/历史会话启动/关闭 agent 时重播拼装动画。
   const triggerBrandLogoReplay = useCallback(() => {
     setBrandLogoReplayToken((token) => token + 1);
   }, []);
@@ -2323,7 +2410,27 @@ export function App() {
       : activeProject?.name) ??
     "PiDeck";
 
-  const chatPaneContentNode = currentSessionId ? (
+  // 会话 Tab 栏：始终渲染（含空态），标题栏下方浏览器式多 Tab 切换
+  const sessionTabsBarNode = (
+    <SessionTabsBar
+      tabs={sessionTabIds}
+      currentSessionId={currentSessionId}
+      onSelect={(sessionId) => {
+        // 点击 Tab 只切换会话，不启动/停止 Agent；记录缺失时忽略（即将被清理）
+        const record = store.get(sessionRecordByIdAtomFamily(sessionId));
+        if (record) selectSessionCommand(record.projectId, sessionId, true);
+      }}
+      onClose={closeSessionTab}
+      onCloseOthers={closeOtherSessionTabs}
+      onCloseAll={closeAllSessionTabs}
+      onNewSession={() => void runCreateSessionDraft()}
+    />
+  );
+
+  const chatPaneContentNode = (
+    <>
+      {sessionTabsBarNode}
+      {currentSessionId ? (
     <SessionRuntimeInjector
       currentSessionId={currentSessionId}
       sessionTitle={sessionTitle}
@@ -2379,7 +2486,9 @@ export function App() {
       showNotice={showNotice}
       api={api}
     />
-  ) : null;
+      ) : null}
+    </>
+  );
 
   // ── DrawerSurface port objects (stable via useMemo) ──
   const drawerPorts = useDrawerPorts({
@@ -2408,13 +2517,65 @@ export function App() {
     expandedDirs,
     onToggleDirectory: toggleDirectory,
     onCollapseAllDirectories: collapseAllDirectories,
-    setFileMenu, refreshFiles,
+    setFileMenu: (menu: { x: number; y: number; node: FileTreeNode } | null) => {
+      setFileMenu(menu);
+      if (!menu) return;
+      try {
+        setHasClipboardFiles(api.files.getClipboardPaths().length > 0);
+      } catch {
+        setHasClipboardFiles(false);
+      }
+    },
+    refreshFiles,
     projects,
     refreshProjectSessions,
     runOpenSidebarSession, isSameSessionPath,
     runCopySession, runExportHistorySession, runDeleteHistorySession,
     viewFilePath, openFilePath,
     api, t,
+    projectRoot: activeProject?.path,
+    onDropFiles: (targetDir, fileList) => {
+      // 从 OS 拖入：解析本地路径后复制到目标目录（目录不支持跨源复制时跳过）
+      const paths: string[] = [];
+      for (let i = 0; i < fileList.length; i++) {
+        const file = fileList.item(i);
+        if (file) {
+          const path = api.files.getPathForFile(file);
+          if (path) paths.push(path);
+        }
+      }
+      if (paths.length > 0) {
+        void api.files.copy(paths, targetDir).then(() => {
+          void refreshFiles();
+          showToast(t("app.fileCopyDone", { count: paths.length }), 2000);
+        }).catch((error) => {
+          showToast(error instanceof Error ? error.message : String(error), 4000);
+        });
+      }
+    },
+    onPasteFiles: (targetDir) => {
+      // 粘贴：从系统剪贴板读取资源管理器复制的文件路径，复制到目标目录
+      try {
+        const paths = api.files.getClipboardPaths();
+        if (paths.length > 0) {
+          void api.files.copy(paths, targetDir).then(() => {
+            void refreshFiles();
+            showToast(t("app.fileCopyDone", { count: paths.length }), 2000);
+          }).catch((error) => {
+            showToast(t("app.filePasteFailed", { error: error instanceof Error ? error.message : String(error) }), 4000);
+          });
+        }
+      } catch { /* 剪贴板不可用 */ }
+    },
+    onMoveFiles: (sourcePaths, targetDir) => {
+      // 文件树内部拖拽移动：同设备 rename，跨设备 cp+rm
+      void api.files.move(sourcePaths, targetDir).then(() => {
+        void refreshFiles();
+        showToast(t("app.fileMoveDone", { count: sourcePaths.length }), 2000);
+      }).catch((error) => {
+        showToast(error instanceof Error ? error.message : String(error), 4000);
+      });
+    },
   });
 
 
@@ -2541,6 +2702,22 @@ export function App() {
     {fileMenu && (
       <FileContextMenu
         menu={fileMenu}
+        hasClipboardFiles={hasClipboardFiles}
+        onPaste={(targetDir) => {
+          // 右键菜单「粘贴文件到此处」：读剪贴板路径复制到目标目录
+          try {
+            const paths = api.files.getClipboardPaths();
+            if (paths.length > 0) {
+              void api.files.copy(paths, targetDir).then(() => {
+                void refreshFiles();
+                showToast(t("app.fileCopyDone", { count: paths.length }), 2000);
+              }).catch((error) => {
+                showToast(t("app.filePasteFailed", { error: error instanceof Error ? error.message : String(error) }), 4000);
+              });
+            }
+          } catch { /* 剪贴板不可用 */ }
+          setFileMenu(null);
+        }}
         onClose={() => setFileMenu(null)}
         onOpen={() => {
           void api.files.open(fileMenu.node.path);

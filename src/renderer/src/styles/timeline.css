@@ -2846,3 +2846,18 @@ body.ask-dialog-open .ask-question-card.pending {
   inset: 0;
   z-index: 45;
 }
+
+/* ── 新消息入场动画（Task 1）──
+ * 发送消息后乐观上屏的用户气泡 / 流式替换后的回答行播放一次轻量入场：
+ * 轻微上移 + 淡入，避免 Agent 启动期间「消息已上屏但毫无反馈」的呆滞感。
+ * 动画时长 260ms，与 1200ms 的 fresh 标记保留期匹配，不会重复播放。 */
+@keyframes message-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}

@@ -83,6 +83,14 @@ export function DrawerContent(props: {
 	onDeleteSession: (session: SessionSummary) => void | Promise<void>;
 	onOpenFile?: (path: string) => void;
 	onViewFile?: (path: string) => void;
+	/** 项目根目录：面板空白处拖入/粘贴/右键的落点 */
+	projectRoot?: string;
+	/** 从 OS 拖入文件到目录或面板空白区域（复制） */
+	onDropFiles?: (targetDir: string, files: FileList) => void;
+	/** 粘贴剪贴板文件到目标目录（Ctrl+V / 右键菜单） */
+	onPasteFiles?: (targetDir: string) => void;
+	/** 文件树内部拖拽移动文件/目录到目标目录 */
+	onMoveFiles?: (sourcePaths: string[], targetDir: string) => void;
 }) {
 	const title =
 		props.panel === "files"
@@ -132,6 +140,10 @@ export function DrawerContent(props: {
 					onOpenFolder={props.onOpenFolder}
 					onOpenFile={props.onOpenFile}
 					onViewFile={props.onViewFile}
+					projectRoot={props.projectRoot}
+					onDropFiles={props.onDropFiles}
+					onMoveFiles={props.onMoveFiles}
+					onPasteFiles={props.onPasteFiles}
 				/>
 			)}
 			{props.panel === "sessions" && (
@@ -160,6 +172,14 @@ function FilesPanel(props: {
 	onOpenFolder?: () => void;
 	onOpenFile?: (path: string) => void;
 	onViewFile?: (path: string) => void;
+	/** 项目根目录：面板空白处拖入/粘贴/右键的落点 */
+	projectRoot?: string;
+	/** 从 OS 拖入文件到目录或面板空白区域（复制） */
+	onDropFiles?: (targetDir: string, files: FileList) => void;
+	/** 粘贴剪贴板文件到目标目录（Ctrl+V / 右键菜单） */
+	onPasteFiles?: (targetDir: string) => void;
+	/** 文件树内部拖拽移动文件/目录到目标目录 */
+	onMoveFiles?: (sourcePaths: string[], targetDir: string) => void;
 }) {
 	// 排序维度/方向持久化到 localStorage：文件树排序是用户偏好，跨会话保留
 	const FILE_SORT_KEY = "pi-desktop:file-sort";
@@ -186,8 +206,59 @@ function FilesPanel(props: {
 		() => sortFileNodes(props.files, sortMode, sortDirection),
 		[props.files, sortMode, sortDirection],
 	);
+	/** 拖入高亮的目标目录路径（null = 拖在面板空白区域） */
+	const [dragOverDir, setDragOverDir] = useState<string | null>(null);
+	const dragCountRef = useRef(0);
+
+	// 面板自身接受拖入：落在空白区域视为复制到项目根目录
+	const handlePanelDragOver = (event: React.DragEvent) => {
+		event.preventDefault();
+		event.dataTransfer.dropEffect = "copy";
+	};
+	const handlePanelDrop = (event: React.DragEvent) => {
+		event.preventDefault();
+		setDragOverDir(null);
+		dragCountRef.current = 0;
+		if (event.dataTransfer.files.length > 0 && props.onDropFiles && props.projectRoot) {
+			props.onDropFiles(props.projectRoot, event.dataTransfer.files);
+		}
+	};
+	const handlePanelKeyDown = (event: React.KeyboardEvent) => {
+		// Ctrl+V / Cmd+V 粘贴到项目根目录
+		if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "v") {
+			if (props.onPasteFiles && props.projectRoot) {
+				props.onPasteFiles(props.projectRoot);
+			}
+		}
+	};
+	const handlePanelContextMenu = (event: React.MouseEvent) => {
+		// 仅面板背景本身被右键时触发（不拦截文件节点的右键事件）
+		if (event.target !== event.currentTarget) return;
+		event.preventDefault();
+		if (props.projectRoot) {
+			props.onFileContextMenu(
+				{
+					path: props.projectRoot,
+					name: "",
+					type: "directory",
+					relativePath: "",
+					children: undefined,
+				} as FileTreeNode,
+				event.clientX,
+				event.clientY,
+			);
+		}
+	};
 	return (
-		<div className="files-panel flex min-h-0 flex-1 flex-col overflow-hidden">
+		<div
+			className="files-panel flex min-h-0 flex-1 flex-col overflow-hidden"
+			tabIndex={-1}
+			onDragOver={handlePanelDragOver}
+			onDragLeave={() => { setDragOverDir(null); dragCountRef.current = 0; }}
+			onDrop={handlePanelDrop}
+			onKeyDown={handlePanelKeyDown}
+			onContextMenu={handlePanelContextMenu}
+		>
 			{/* 工具行：min-w-0 允许收缩；计数 nowrap 不被压断；Select 限宽防窄抽屉换行/竖排 */}
 			<div className="panel-action-row flex h-9 min-w-0 shrink-0 items-center justify-between gap-2 border-b border-border px-3 text-xs text-muted-foreground">
 				<span className="shrink-0 whitespace-nowrap">{t("drawer.fileItems", { count: props.files.length })}</span>
@@ -260,6 +331,10 @@ function FilesPanel(props: {
 					onFileContextMenu={props.onFileContextMenu}
 					onOpenFile={props.onOpenFile}
 					onViewFile={props.onViewFile}
+					onDropFiles={props.onDropFiles}
+					onMoveFiles={props.onMoveFiles}
+				dragOverDir={dragOverDir}
+					onDragOverDirChange={setDragOverDir}
 				/>
 			))}
 		</div>
@@ -426,6 +501,12 @@ function FileNode(props: {
 	onOpenFile?: (path: string) => void;
 	onViewFile?: (path: string) => void;
 	depth?: number;
+	/** 拖入文件（仅目录节点使用） */
+	onDropFiles?: (targetDir: string, files: FileList) => void;
+	/** 内部拖拽移动文件/目录 */
+	onMoveFiles?: (sourcePaths: string[], targetDir: string) => void;
+	dragOverDir?: string | null;
+	onDragOverDirChange?: (path: string | null) => void;
 }) {
 	const { node, expandedDirs, onToggleDirectory, depth = 0 } = props;
 	const expanded = expandedDirs.has(node.path);
@@ -435,6 +516,38 @@ function FileNode(props: {
 		event.preventDefault();
 		props.onFileContextMenu(node, event.clientX, event.clientY);
 	};
+	// 内部拖拽移动：dataTransfer 携带源路径，目录行是落点；OS 文件拖入则是复制
+	const handleDragStart = useCallback((event: React.DragEvent) => {
+		event.dataTransfer.effectAllowed = "move";
+		event.dataTransfer.setData("text/pi-file-path", node.path);
+	}, [node.path]);
+	const handleDragOver = useCallback((event: React.DragEvent) => {
+		event.preventDefault();
+		event.stopPropagation();
+		event.dataTransfer.dropEffect = "move";
+		props.onDragOverDirChange?.(node.path);
+	}, [node.path, props.onDragOverDirChange]);
+	const handleDragLeave = useCallback(() => {
+		props.onDragOverDirChange?.(null);
+	}, [props.onDragOverDirChange]);
+	const handleDrop = useCallback((event: React.DragEvent) => {
+		event.preventDefault();
+		event.stopPropagation();
+		props.onDragOverDirChange?.(null);
+		// 内部拖拽移动：优先检查 pi-file-path
+		const sourcePath = event.dataTransfer.getData("text/pi-file-path");
+		if (sourcePath) {
+			if (sourcePath !== node.path && props.onMoveFiles) {
+				props.onMoveFiles([sourcePath], node.path);
+			}
+			return;
+		}
+		// 外部 OS 文件拖入：复制到目标目录
+		if (event.dataTransfer.files.length > 0 && props.onDropFiles) {
+			props.onDropFiles(node.path, event.dataTransfer.files);
+		}
+	}, [node.path, props.onDropFiles, props.onMoveFiles, props.onDragOverDirChange]);
+	const isDragOver = props.dragOverDir === node.path;
 	// #115 U5：树行换 shadcn File Tree 模式（Collapsible + ghost Button + chevron 旋转），
 	// 懒加载/持久化展开态（expandedDirs）/拖拽/右键等业务行为不变；
 	// 既有 class 钩子（file-node-row 等）保留给样式 token 与测试断言。
@@ -443,6 +556,8 @@ function FileNode(props: {
 			<div className="file-node" style={rowStyle}>
 				<Button variant="ghost" className="file file-node-row w-full justify-start" style={rowStyle}
 					title={`${node.relativePath}\n${typeLabel}`}
+					draggable
+					onDragStart={handleDragStart}
 					onClick={() => props.onViewFile?.(node.path)}
 					onContextMenu={menu}>
 					<span className="file-node-icon">
@@ -457,8 +572,13 @@ function FileNode(props: {
 		<div className="file-node" style={rowStyle}>
 			<Collapsible open={expanded} onOpenChange={() => onToggleDirectory(node.path)}>
 				<CollapsibleTrigger asChild>
-					<Button variant="ghost" className="directory file-node-row group w-full justify-start" style={rowStyle}
+					<Button variant="ghost" className={cn("directory file-node-row group w-full justify-start", isDragOver && "bg-accent/60 ring-1 ring-border")} style={rowStyle}
 						title={node.relativePath}
+						draggable
+						onDragStart={handleDragStart}
+						onDragOver={handleDragOver}
+						onDragLeave={handleDragLeave}
+						onDrop={handleDrop}
 						onContextMenu={menu}>
 						<ChevronRight className="file-node-chevron transition-transform group-data-[state=open]:rotate-90" size={13} />
 						<span className="file-node-icon">
@@ -477,6 +597,10 @@ function FileNode(props: {
 									onFileContextMenu={props.onFileContextMenu}
 									onOpenFile={props.onOpenFile}
 									onViewFile={props.onViewFile}
+									onDropFiles={props.onDropFiles}
+									onMoveFiles={props.onMoveFiles}
+									dragOverDir={props.dragOverDir}
+									onDragOverDirChange={props.onDragOverDirChange}
 									depth={depth + 1} />
 							))}
 						</div>
