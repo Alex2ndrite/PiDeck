@@ -844,7 +844,7 @@ export function App() {
   // 让背景图从所有面板/输入框透出；皮肤 effect 重跑（清 token）后本 effect 也重跑（依赖同源）。
   useEffect(() => {
     const root = document.documentElement;
-    const BG_TOKENS = ["--color-bg-app", "--color-bg-sidebar", "--color-bg-panel", "--color-bg-muted", "--color-bg-hover", "--color-bg-active"];
+    const BG_TOKENS = ["--color-bg-app", "--color-bg-sidebar", "--color-bg-panel", "--color-bg-muted", "--color-bg-hover", "--color-bg-active", "--color-background", "--color-card"];
     root.dataset.bgImage = settings.backgroundImage ? "on" : "off";
     if (settings.backgroundImage) {
       root.style.setProperty(
@@ -852,7 +852,8 @@ export function App() {
         `url("pideck-bg://local/${encodeURIComponent(settings.backgroundImage)}")`,
       );
       const isDark = root.dataset.theme === "dark";
-      const alpha = Math.min(1, Math.max(0, 1 - settings.backgroundImageOpacity));
+      // 存储语义=遮罩不透明度（滑块 100% 可见度 → opacity=0 → 遮罩全透明=图全显）
+      const alpha = Math.min(1, Math.max(0, settings.backgroundImageOpacity));
       const rgb = isDark ? "0,0,0" : "255,255,255";
       root.style.setProperty(
         "--app-bg-mask",
@@ -862,7 +863,7 @@ export function App() {
       const cs = getComputedStyle(root);
       for (const k of BG_TOKENS) {
         const v = cs.getPropertyValue(k).trim();
-        if (v) root.style.setProperty(k, `color-mix(in srgb, ${v} 86%, transparent)`);
+        if (v) root.style.setProperty(k, `color-mix(in srgb, ${v} 80%, transparent)`);
       }
     } else {
       root.style.removeProperty("--app-bg-image");

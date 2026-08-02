@@ -27,5 +27,5 @@ test("App.tsx toggles wallpaper mode marker with background image setting", () =
     appSource,
     /for \(const k of BG_TOKENS\)/,
   );
-  assert.match(appSource, /86%, transparent/);
+  assert.match(appSource, /80%, transparent/);
 });
