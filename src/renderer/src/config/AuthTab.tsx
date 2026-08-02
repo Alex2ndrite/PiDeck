@@ -6,6 +6,7 @@ import type { AuthFile, ModelsFile } from "./configTypes";
 import { ConfigComboboxInput, SecretInput } from "./ConfigShared";
 import { Input } from "../components/ui-shadcn/input";
 import { Checkbox } from "../components/ui-shadcn/checkbox";
+import { Label } from "../components/ui-shadcn/label";
 
 // 根据 pi 官方文档支持的供应商列表 (https://pi.dev/docs/latest/providers#auth-file)
 const PRESET_PROVIDERS = [
@@ -240,7 +241,7 @@ export function AuthTab(props: {
 					</div>
 					{(selectedProvider || customProviderName.trim()) && (
 						<div className="mt-2.5 rounded-sm border border-border-subtle bg-bg-hover p-3">
-							<label className="mb-1.5 block text-xs font-medium text-text-secondary">{t("config.field.apiKey")}</label>
+							<Label className="mb-1.5 block text-xs font-medium text-text-secondary">{t("config.field.apiKey")}</Label>
 							<SecretInput
 								value={newAuthKey}
 								onChange={setNewAuthKey}
@@ -292,7 +293,7 @@ export function AuthTab(props: {
 								onClick={() => props.onToggleAuth(name)}
 							>
 						{batchMode && (
-							<label className="mr-2.5 inline-flex size-4 shrink-0 items-center justify-center" onClick={(e) => e.stopPropagation()}>
+							<Label className="mr-2.5 inline-flex size-4 shrink-0 items-center justify-center" onClick={(e) => e.stopPropagation()}>
 								<Checkbox
 									checked={selectedAuths.has(name)}
 									onClick={(e) => e.stopPropagation()}
@@ -305,7 +306,7 @@ export function AuthTab(props: {
 										});
 									}}
 								/>
-							</label>
+							</Label>
 						)}
 								<span className="text-[13px] font-semibold text-text-primary">{name}</span>
 								<span className="min-w-0 flex-1 truncate font-mono text-xs text-text-tertiary">
@@ -336,7 +337,7 @@ export function AuthTab(props: {
 							{isExpanded && (
 								<div className="mx-4 my-3.5 grid gap-2.5 rounded-lg border border-border-subtle bg-bg-panel p-3.5">
 									<div className="grid grid-cols-[90px_1fr] items-center gap-2.5">
-										<label className="pl-0.5 text-left text-xs font-medium text-text-secondary">{t("config.field.type")}</label>
+										<Label className="pl-0.5 text-left text-xs font-medium text-text-secondary">{t("config.field.type")}</Label>
 										<ConfigComboboxInput
 											value={auth.type ?? "api_key"}
 											options={AUTH_TYPE_OPTIONS}
@@ -346,7 +347,7 @@ export function AuthTab(props: {
 										/>
 									</div>
 									<div className="grid grid-cols-[90px_1fr] items-center gap-2.5">
-										<label className="mb-1.5 block text-xs font-medium text-text-secondary">{t("config.field.apiKey")}</label>
+										<Label className="mb-1.5 block text-xs font-medium text-text-secondary">{t("config.field.apiKey")}</Label>
 										<SecretInput
 											value={auth.key ?? ""}
 											onChange={(v) => props.onUpdate(name, "key", v)}

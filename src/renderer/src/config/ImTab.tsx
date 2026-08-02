@@ -18,6 +18,7 @@ import type {
 	FeishuTestResult,
 } from "../../../shared/types";
 import { formatI18nDateTime, t } from "../i18n";
+import { Label } from "../components/ui-shadcn/label";
 
 type Props = {
 	onSave?: () => void;
@@ -361,7 +362,7 @@ export function ImTab(_props: Props) {
 				{showAddForm && (
 					<div className="config-im-form">
 						<div className="config-field">
-							<label>{t("config.im.appId")}</label>
+							<Label>{t("config.im.appId")}</Label>
 							<Input
 								type="text"
 								value={appId}
@@ -372,7 +373,7 @@ export function ImTab(_props: Props) {
 							/>
 						</div>
 						<div className="config-field">
-							<label>{t("config.im.appSecret")}</label>
+							<Label>{t("config.im.appSecret")}</Label>
 							<Input
 								type="password"
 								value={appSecret}
@@ -383,7 +384,7 @@ export function ImTab(_props: Props) {
 							/>
 						</div>
 						<div className="config-field">
-							<label>{t("config.im.botName")} <span className="config-field-optional">({t("common.optional")})</span></label>
+							<Label>{t("config.im.botName")} <span className="config-field-optional">({t("common.optional")})</span></Label>
 							<Input
 								type="text"
 								value={botName}
@@ -398,7 +399,7 @@ export function ImTab(_props: Props) {
 						{addStep === "connected" && (
 							<div className="config-im-openid-section">
 								<div className="config-field">
-									<label>{t("config.im.openId")} <span className="config-field-required">*</span></label>
+									<Label>{t("config.im.openId")} <span className="config-field-required">*</span></Label>
 									<Input
 										type="text"
 										value={addFormOpenId}

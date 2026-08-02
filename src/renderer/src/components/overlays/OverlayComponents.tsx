@@ -12,6 +12,7 @@ import {
 } from "../ui-shadcn/dialog";
 import type { AppInfo, FeedbackEnvironment, Project, PiInstallStatus, PiInstallExecResult } from "../../../../shared/types";
 import { Input } from "../ui-shadcn/input";
+import { Label } from "../../components/ui-shadcn/label";
 
 
 export function EnvironmentDialog(props: {
@@ -175,9 +176,9 @@ export function EnvironmentDialog(props: {
 											</div>
 										)}
 										<div className="env-install-command-row">
-											<label className="env-install-command-label">
+											<Label className="env-install-command-label">
 												{t("environment.installCommandLabel")}
-											</label>
+											</Label>
 											<Input
 												type="text"
 												className="env-install-command-input"

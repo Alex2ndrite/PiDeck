@@ -6,6 +6,7 @@ import { ConfigComboboxInput } from "./ConfigShared";
 import { t } from "../i18n";
 import { Input } from "../components/ui-shadcn/input";
 import { Checkbox } from "../components/ui-shadcn/checkbox";
+import { Label } from "../components/ui-shadcn/label";
 
 // ── 可用模型列表聚合（含供应商信息，供 enabledModels 多选用） ──
 
@@ -280,7 +281,7 @@ export function SettingsTab(props: {
 					</div>
 					<div className="flex items-center gap-3.5 rounded-sm border border-border-subtle px-4 py-2 transition-colors hover:border-border-strong">
 						<span className="min-w-[180px] text-[13px] font-medium text-text-primary">{t("config.compaction.enabled")}</span>
-						<label className="config-checkbox-label">
+						<Label className="config-checkbox-label">
 							<Checkbox
 								checked={compactionConfig.enabled}
 								onCheckedChange={(checked) => updateCompaction({ enabled: checked === true })}
@@ -290,7 +291,7 @@ export function SettingsTab(props: {
 									? t("config.compaction.enabledOn")
 									: t("config.compaction.enabledOff")}
 							</span>
-						</label>
+						</Label>
 					</div>
 					<div className="flex items-center gap-3.5 rounded-sm border border-border-subtle px-4 py-2 transition-colors hover:border-border-strong">
 						<span className="min-w-[180px] text-[13px] font-medium text-text-primary" title={t("config.compaction.reserveTokensHint")}>
@@ -514,7 +515,7 @@ function EnabledModelsInput(props: {
 									<span className="font-mono text-[11px] text-text-tertiary">{grouped[provider].length}</span>
 								</button>
 								{!collapsed.has(provider) && grouped[provider].map((m) => (
-									<label
+									<Label
 										key={`${m.provider}/${m.id}`}
 										className={`group flex cursor-pointer items-center gap-2 py-[7px] pr-3 pl-7 transition-colors duration-100 hover:bg-bg-hover${selected.has(m.id) ? " bg-[color:color-mix(in_srgb,var(--color-accent)_6%,var(--color-bg-panel))]" : ""}`}
 										onClick={() => toggleModel(m.id)}
@@ -524,7 +525,7 @@ function EnabledModelsInput(props: {
 										</span>
 										<span className="text-[13px] text-text-primary">{m.name ?? m.id}</span>
 										<span className="ml-auto font-mono text-xs text-text-tertiary">{m.provider}/{m.id}</span>
-									</label>
+									</Label>
 								))}
 							</div>
 						))}
@@ -680,13 +681,13 @@ function SettingsValueInput(props: {
 
 	if (typeof value === "boolean") {
 		return (
-			<label className="config-checkbox-label">
+			<Label className="config-checkbox-label">
 				<Checkbox
 					checked={value}
 					onCheckedChange={(checked) => props.onChange(checked)}
 				/>
 				<span>{value ? t("common.true") : t("common.false")}</span>
-			</label>
+			</Label>
 		);
 	}
 	if (typeof value === "number") {

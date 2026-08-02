@@ -14,6 +14,7 @@ import { summarizeMessage } from "../app/AppUtils";
 import { t } from "../../i18n";
 import { formatTime, stripAnsi } from "./TimelineFormat";
 import { Checkbox } from "../ui-shadcn/checkbox";
+import { Label } from "../../components/ui-shadcn/label";
 
 function getSelectableMessageIds(
 	items: RenderMessage[],
@@ -147,7 +148,7 @@ export function MultiSelectModal(props: {
 							if (msg.role === "user" || msg.role === "assistant") {
 								const isChecked = selectedIds.has(msg.id);
 								return (
-									<label
+									<Label
 										key={msg.id}
 										className={`flex cursor-pointer items-center gap-2 rounded-sm border border-transparent px-2.5 py-[7px] text-control leading-relaxed transition-[background,border-color] duration-100 hover:border-border-subtle hover:bg-bg-hover${isChecked ? " selected" : ""}`}
 									>
@@ -165,7 +166,7 @@ export function MultiSelectModal(props: {
 												{summarizeMessage(stripAnsi(msg.text))}
 											</span>
 										</span>
-									</label>
+									</Label>
 								);
 							}
 							return null;
@@ -207,7 +208,7 @@ export function MultiSelectModal(props: {
 										{assistantMsgs.map((sub) => {
 											const subChecked = selectedIds.has(sub.message.id);
 											return (
-												<label
+												<Label
 													key={sub.message.id}
 													className={`flex cursor-pointer items-center gap-2 rounded-sm border border-transparent px-2.5 py-[7px] text-control leading-relaxed transition-[background,border-color] duration-100 hover:border-border-subtle hover:bg-bg-hover run-child rounded-sm p-1.5${subChecked ? " selected" : ""}`}
 												>
@@ -229,7 +230,7 @@ export function MultiSelectModal(props: {
 															)}
 														</span>
 													</span>
-												</label>
+												</Label>
 											);
 										})}
 									</div>

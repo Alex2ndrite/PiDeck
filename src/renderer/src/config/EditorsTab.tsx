@@ -9,6 +9,7 @@ import {
 import { t } from "../i18n";
 import { Checkbox } from "../components/ui-shadcn/checkbox";
 import { Input } from "../components/ui-shadcn/input";
+import { Label } from "../components/ui-shadcn/label";
 
 const api: PiDesktopApi = (window as unknown as { piDesktop: PiDesktopApi }).piDesktop;
 
@@ -119,7 +120,7 @@ export function EditorsTab() {
 										: t("editors.notConfigured")}
 								</small>
 							</div>
-							<label className="editor-config-enabled">
+							<Label className="editor-config-enabled">
 								<Checkbox
 									checked={configured.enabled}
 									onCheckedChange={(checked) =>
@@ -127,7 +128,7 @@ export function EditorsTab() {
 									}
 								/>
 								<span>{t("editors.enabled")}</span>
-							</label>
+							</Label>
 							<div className="editor-config-path-control">
 								<Input
 									className="editor-config-path"

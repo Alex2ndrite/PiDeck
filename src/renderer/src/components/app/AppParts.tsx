@@ -27,6 +27,7 @@ export type { WorkspaceDrawerPanel as DrawerPanel } from "../../hooks/useWorkspa
 
 // Re-exports from leaf modules (A12 migration in progress)
 import { PiLogoCanvas } from "./PiLogoCanvas";
+import { Label } from "../../components/ui-shadcn/label";
 export { WorktreeCreateDialog } from "../sidebar/SidebarComponents";
 export { ComposerBottomBar, ModelPicker, PromptTemplatePicker, ThinkingPicker, ComposerModePicker, ExtensionWidgetCard } from "../session/ComposerComponents";
 
@@ -204,9 +205,9 @@ export function EnvironmentDialog(props: {
 											</div>
 										)}
 										<div className="env-install-command-row">
-											<label className="env-install-command-label">
+											<Label className="env-install-command-label">
 												{t("environment.installCommandLabel")}
-											</label>
+											</Label>
 											<Input
 												type="text"
 												className="env-install-command-input"

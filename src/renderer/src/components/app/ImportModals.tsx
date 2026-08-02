@@ -22,6 +22,7 @@ import type {
 	Project,
 } from "../../../../shared/types";
 import { Checkbox } from "../ui-shadcn/checkbox";
+import { Label } from "../../components/ui-shadcn/label";
 
 function displayPath(path?: string) {
 	if (!path) return "";
@@ -111,7 +112,7 @@ export function CodexImportModal(props: {
 		});
 	};
 	const renderRow = (session: CodexSessionSummary, className = "codex-session-row") => (
-		<label key={session.sourcePath} className={className}>
+		<Label key={session.sourcePath} className={className}>
 			<Checkbox
 				checked={selected.has(session.sourcePath)}
 				onChange={() => props.onToggle(session.sourcePath)}
@@ -135,7 +136,7 @@ export function CodexImportModal(props: {
 					{formatBytes(session.sourceSize)}
 				</small>
 			</div>
-		</label>
+		</Label>
 	);
 	return (
 		<Dialog open onOpenChange={ (next) => !next && props.onClose }>
@@ -338,7 +339,7 @@ export function ClaudeImportModal(props: {
 					) : (
 						<div className="codex-session-list">
 							{props.sessions.map((session) => (
-								<label key={session.sourcePath} className="codex-session-row">
+								<Label key={session.sourcePath} className="codex-session-row">
 									<Checkbox
 										checked={selected.has(session.sourcePath)}
 										onChange={() => props.onToggle(session.sourcePath)}
@@ -359,7 +360,7 @@ export function ClaudeImportModal(props: {
 											{formatBytes(session.sourceSize)}
 										</small>
 									</div>
-								</label>
+								</Label>
 							))}
 						</div>
 					)}
@@ -468,7 +469,7 @@ export function OpenCodeImportModal(props: {
 					) : (
 						<div className="codex-session-list">
 							{props.sessions.map((session) => (
-								<label key={session.sourcePath} className="codex-session-row">
+								<Label key={session.sourcePath} className="codex-session-row">
 									<Checkbox
 										checked={selected.has(session.sourcePath)}
 										onChange={() => props.onToggle(session.sourcePath)}
@@ -489,7 +490,7 @@ export function OpenCodeImportModal(props: {
 											{formatBytes(session.sourceSize)}
 										</small>
 									</div>
-								</label>
+								</Label>
 							))}
 						</div>
 					)}

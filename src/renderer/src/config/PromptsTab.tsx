@@ -13,6 +13,7 @@ import { LazyMonacoEditor } from "../components/app/LazyMonacoEditor";
 import { PromptStoreTab } from "./PromptStoreTab";
 import { Input } from "../components/ui-shadcn/input";
 import { Textarea } from "../components/ui-shadcn/textarea";
+import { Label } from "../components/ui-shadcn/label";
 
 export function PromptsTab(props: {
 	data: PiPromptTemplateListResult;
@@ -139,15 +140,15 @@ export function PromptsTab(props: {
 
 			<section className="prompt-create-card">
 				<strong>{t("config.createPrompt")}</strong>
-				<label className="prompt-create-label">
+				<Label className="prompt-create-label">
 					<span>{t("config.name")}</span>
 					<Input
 						value={props.newName}
 						placeholder={t("config.promptNamePlaceholder")}
 						onChange={(e) => props.onChangeNewName(e.target.value)}
 					/>
-				</label>
-				<label className="prompt-create-label">
+				</Label>
+				<Label className="prompt-create-label">
 					<span>{t("config.description")}</span>
 					<Textarea
 						className="prompt-create-textarea"
@@ -156,7 +157,7 @@ export function PromptsTab(props: {
 						onChange={(e) => props.onChangeNewDescription(e.target.value)}
 						rows={3}
 					/>
-				</label>
+				</Label>
 				<Button
 					 variant="default"
 					disabled={!canCreate || props.creating}

@@ -4,6 +4,7 @@ import { Plus, Trash2 } from "lucide-react";
 import { t } from "../i18n";
 import { Input } from "../components/ui-shadcn/input";
 import { Checkbox } from "../components/ui-shadcn/checkbox";
+import { Label } from "../components/ui-shadcn/label";
 
 /**
  * trust.json 结构：{ "C:\\Users": true, "D:\\project": false }
@@ -84,7 +85,7 @@ export function TrustTab(props: {
 				<div className="config-trust-list">
 					{entries.map(([path, trusted]) => (
 						<div key={path} className="config-trust-row" data-trusted={trusted || undefined}>
-							<label className="config-trust-toggle">
+							<Label className="config-trust-toggle">
 								<Checkbox
 									checked={trusted}
 									onCheckedChange={(checked) => toggleEntry(path, checked === true)}
@@ -95,7 +96,7 @@ export function TrustTab(props: {
 								<span className="config-trust-status">
 									{trusted ? t("config.trust.statusTrusted") : t("config.trust.statusIgnored")}
 								</span>
-							</label>
+							</Label>
 							<Button
 								 variant="outline" size="sm" className="text-destructive"
 								title={t("common.delete")}

@@ -23,6 +23,7 @@ import type {
 import { t } from "../../i18n";
 import { Input } from "../ui-shadcn/input";
 import { Textarea } from "../ui-shadcn/textarea";
+import { Label } from "../../components/ui-shadcn/label";
 
 type ProjectResourcesApi = typeof window.piDesktop.projectResources;
 
@@ -416,14 +417,14 @@ export function ProjectResourcesModal(props: {
 						</div>
 						<section className="project-skill-create">
 							<p>{t("projectResources.createSkillHint")}</p>
-							<label className="project-resources-name-field">
+							<Label className="project-resources-name-field">
 								<span>{t("config.name")}</span>
 								<Input value={newName} placeholder="my-project-skill" onChange={(event) => setNewName(event.target.value)} />
-							</label>
-							<label className="project-resources-desc-field">
+							</Label>
+							<Label className="project-resources-desc-field">
 								<span>{t("config.description")}</span>
 								<Textarea value={newDescription} placeholder="Use when..." onChange={(event) => setNewDescription(event.target.value)} />
-							</label>
+							</Label>
 							<Button  variant="default" onClick={createSkill} disabled={!canCreateSkill || createBusy}>
 								{createBusy ? t("config.creatingSkill") : t("config.addSkill")}
 							</Button>
@@ -594,14 +595,14 @@ export function ProjectResourcesModal(props: {
 							<span>{prompts.length}</span>
 						</div>
 						<section className="project-skill-create">
-							<label className="project-resources-name-field">
+							<Label className="project-resources-name-field">
 								<span>{t("config.name")}</span>
 								<Input value={newPromptName} placeholder="my-project-prompt" onChange={(event) => setNewPromptName(event.target.value)} />
-							</label>
-							<label className="project-resources-desc-field">
+							</Label>
+							<Label className="project-resources-desc-field">
 								<span>{t("config.description")}</span>
 								<Textarea value={newPromptDescription} placeholder="Use when..." onChange={(event) => setNewPromptDescription(event.target.value)} />
-							</label>
+							</Label>
 							<Button  variant="default" onClick={createProjectPrompt} disabled={!canCreatePrompt || creatingPrompt}>
 								{creatingPrompt ? t("config.creatingSkill") : t("config.addSkill")}
 							</Button>

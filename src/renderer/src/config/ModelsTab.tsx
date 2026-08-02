@@ -13,6 +13,7 @@ import {
 import { buildModelsFromFetchedSelection } from "./modelsUtils";
 import { Checkbox } from "../components/ui-shadcn/checkbox";
 import { Input } from "../components/ui-shadcn/input";
+import { Label } from "../components/ui-shadcn/label";
 
 type FetchedModel = { id: string; name?: string };
 
@@ -426,7 +427,7 @@ export function ModelsTab(props: {
 								}}
 							>
 								{batchMode && (
-								<label className="mr-2.5 inline-flex size-4 shrink-0 items-center justify-center" onClick={(e) => e.stopPropagation()}>
+								<Label className="mr-2.5 inline-flex size-4 shrink-0 items-center justify-center" onClick={(e) => e.stopPropagation()}>
 									<Checkbox
 										checked={selectedProviders.has(name)}
 										onClick={(e) => e.stopPropagation()}
@@ -439,7 +440,7 @@ export function ModelsTab(props: {
 											});
 										}}
 									/>
-								</label>
+								</Label>
 							)}
 							<div className="flex min-w-0 flex-1 items-center gap-2.5">
 									{props.renamingProvider === name ? (
@@ -538,7 +539,7 @@ export function ModelsTab(props: {
 								<div className="border-t border-border-subtle bg-bg-muted pt-3">
 									<div className="mx-4 my-3.5 grid gap-2.5 rounded-lg border border-border-subtle bg-bg-panel p-3.5">
 										<div className="grid grid-cols-[90px_1fr] items-center gap-2.5">
-											<label className="pl-0.5 text-left text-xs font-medium text-text-secondary">{t("config.field.baseUrl")}</label>
+											<Label className="pl-0.5 text-left text-xs font-medium text-text-secondary">{t("config.field.baseUrl")}</Label>
 											<div className="config-base-url-field">
 												<Input
 													value={provider.baseUrl ?? ""} className="h-9 min-w-0 rounded-sm border border-border-subtle bg-bg-panel px-3 text-[13px] text-text-primary outline-none transition-[border-color,box-shadow,background-color] duration-150 focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]"
@@ -556,7 +557,7 @@ export function ModelsTab(props: {
 											</div>
 										</div>
 										<div className="grid grid-cols-[90px_1fr] items-center gap-2.5">
-											<label className="pl-0.5 text-left text-xs font-medium text-text-secondary">{t("config.field.apiType")}</label>
+											<Label className="pl-0.5 text-left text-xs font-medium text-text-secondary">{t("config.field.apiType")}</Label>
 											<ApiTypeInput
 												value={provider.api ?? ""}
 												onChange={(value) =>
@@ -565,7 +566,7 @@ export function ModelsTab(props: {
 											/>
 										</div>
 										<div className="grid grid-cols-[90px_1fr] items-center gap-2.5">
-											<label className="pl-0.5 text-left text-xs font-medium text-text-secondary">{t("config.field.apiKey")}</label>
+											<Label className="pl-0.5 text-left text-xs font-medium text-text-secondary">{t("config.field.apiKey")}</Label>
 											<SecretInput
 												value={provider.apiKey ?? ""}
 												onChange={(v) =>
@@ -574,7 +575,7 @@ export function ModelsTab(props: {
 											/>
 										</div>
 										<div className="grid grid-cols-[90px_1fr] items-center gap-2.5">
-											<label className="pl-0.5 text-left text-xs font-medium text-text-secondary">{t("config.field.userAgent")}</label>
+											<Label className="pl-0.5 text-left text-xs font-medium text-text-secondary">{t("config.field.userAgent")}</Label>
 											<div className="config-header-field">
 												<ConfigSelect
 													value={userAgentSelectValue}
@@ -617,7 +618,7 @@ export function ModelsTab(props: {
 
 										{/* 快速测试连接 */}
 										<div className="grid grid-cols-[90px_1fr] items-center gap-2.5">
-											<label className="pl-0.5 text-left text-xs font-medium text-text-secondary">{t("config.testModel")}</label>
+											<Label className="pl-0.5 text-left text-xs font-medium text-text-secondary">{t("config.testModel")}</Label>
 											<div className="config-test-controls">
 												<Input
 													value={props.testModelIdByProvider[name] ?? ""} className="h-9 min-w-0 rounded-sm border border-border-subtle bg-bg-panel px-3 text-[13px] text-text-primary outline-none transition-[border-color,box-shadow,background-color] duration-150 focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]"
@@ -753,10 +754,10 @@ export function ModelsTab(props: {
 								)}
 
 										<div className="grid grid-cols-[90px_1fr] items-center gap-2.5">
-											<label className="pl-0.5 text-left text-xs font-medium text-text-secondary">{t("config.compatibility")}</label>
+											<Label className="pl-0.5 text-left text-xs font-medium text-text-secondary">{t("config.compatibility")}</Label>
 											<div className="config-compat-group">
 												<div className="config-compat-item">
-													<label className="config-checkbox-label">
+													<Label className="config-checkbox-label">
 														<Checkbox
 															checked={getCompat(name).supportsDeveloperRole === true}
 															onCheckedChange={(checked) => {
@@ -768,11 +769,11 @@ export function ModelsTab(props: {
 															}}
 														/>
 														<span>{t("config.developerRole")}</span>
-													</label>
+													</Label>
 													<small className="config-compat-item-desc">{t("config.developerRoleDesc")}</small>
 												</div>
 												<div className="config-compat-item">
-													<label className="config-checkbox-label">
+													<Label className="config-checkbox-label">
 														<Checkbox
 															checked={getCompat(name).supportsReasoningEffort === true}
 															onCheckedChange={(checked) => {
@@ -784,7 +785,7 @@ export function ModelsTab(props: {
 															}}
 														/>
 														<span>{t("config.reasoningEffort")}</span>
-													</label>
+													</Label>
 													<small className="config-compat-item-desc">{t("config.reasoningEffortDesc")}</small>
 												</div>
 											</div>
@@ -956,7 +957,7 @@ export function ModelsTab(props: {
 													// 与 contextWindow 一样保持纯数字，避免提示值看起来能输入但实际被 number 控件拒绝。
 													placeholder="128000"
 												/>
-												<label className="config-checkbox-cell">
+												<Label className="config-checkbox-cell">
 													<Checkbox
 														checked={m.reasoning ?? false}
 														onCheckedChange={(checked) =>
@@ -968,7 +969,7 @@ export function ModelsTab(props: {
 															)
 														}
 													/>
-												</label>
+												</Label>
 												<div className="config-xhigh-cell" title={t("config.xhighDesc")}>
 													<ConfigSelect
 														value={xhighValue}
@@ -987,7 +988,7 @@ export function ModelsTab(props: {
 													/>
 												</div>
 													<div className="config-input-cell">
-														<label className="config-input-option">
+														<Label className="config-input-option">
 															<Checkbox
 																checked={(m.input ?? []).includes("image")}
 																onCheckedChange={(checked) => {
@@ -999,7 +1000,7 @@ export function ModelsTab(props: {
 																}}
 															/>
 															<span>{t("config.inputTypeImage")}</span>
-														</label>
+														</Label>
 													</div>
 													<Button
 														variant="ghost" size="icon-sm" className="size-7 text-destructive hover:bg-destructive/10 hover:text-destructive"

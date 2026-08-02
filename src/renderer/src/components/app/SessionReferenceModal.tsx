@@ -13,6 +13,7 @@ import { t } from "../../i18n";
 import type { SessionSummary } from "../../../../shared/types";
 import { summarizeMessage, stripAnsi, formatTime } from "./AppUtils";
 import { Checkbox } from "../ui-shadcn/checkbox";
+import { Label } from "../../components/ui-shadcn/label";
 
 type SessionMessage = { role: string; content: string; timestamp: number };
 
@@ -145,7 +146,7 @@ export function SessionReferenceModal(props: {
 						if (item.kind === "user") {
 							const isChecked = selectedIds.has(item.index);
 							return (
-								<label
+								<Label
 									key={item.index}
 									className={`flex cursor-pointer items-center gap-2 rounded-sm border border-transparent px-2.5 py-[7px] text-[13px] leading-relaxed transition-[background,border-color] duration-100 hover:border-border-subtle hover:bg-bg-hover${isChecked ? " selected" : ""}`}
 								>
@@ -156,7 +157,7 @@ export function SessionReferenceModal(props: {
 											{summarizeMessage(stripAnsi(item.msg.content))}
 										</span>
 									</span>
-								</label>
+								</Label>
 							);
 						}
 
@@ -188,7 +189,7 @@ export function SessionReferenceModal(props: {
 											const idx = item.indices[si];
 											const subChecked = selectedIds.has(idx);
 											return (
-												<label
+												<Label
 													key={idx}
 													className={`flex cursor-pointer items-center gap-2 rounded-sm border border-transparent px-2.5 py-[7px] text-[13px] leading-relaxed transition-[background,border-color] duration-100 hover:border-border-subtle hover:bg-bg-hover run-child rounded-sm p-1.5${subChecked ? " selected" : ""}`}
 												>
@@ -199,7 +200,7 @@ export function SessionReferenceModal(props: {
 															{summarizeMessage(stripAnsi(sub.content))}
 														</span>
 													</span>
-												</label>
+												</Label>
 											);
 										})}
 									</div>

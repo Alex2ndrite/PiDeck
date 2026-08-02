@@ -47,6 +47,7 @@ import {
 import { SettingsSection, StorageTab } from "./settings/SettingsStorageTab";
 import type { AppSettings, AppInfo, PiInstallStatus, PiUpdateCheckResult, PiCliUpdateResult, PetManifest } from "../../../shared/types";
 import { GRID_COLS, CELL_W, CELL_H, MODE_ROW, MODE_FRAMES } from "../../pet/PetSpriteSheet";
+import { Label } from "../../components/ui-shadcn/label";
 
 const ZOOM_FACTOR_MIN = 0.8;
 const ZOOM_FACTOR_MAX = 1.5;
@@ -73,7 +74,7 @@ function SettingSwitch(props: {
 }) {
 	// #115 U5：开关换 shadcn Switch（Radix），行布局与文案结构不变
 	return (
-		<label className="setting-switch-row">
+		<Label className="setting-switch-row">
 			<span>
 				<strong>{props.title}</strong>
 				{props.description && <small>{props.description}</small>}
@@ -83,7 +84,7 @@ function SettingSwitch(props: {
 				disabled={props.disabled}
 				onCheckedChange={props.onChange}
 			/>
-		</label>
+		</Label>
 	);
 }
 
@@ -702,11 +703,11 @@ function SettingsModalContent(props: SettingsModalProps) {
 </div>
 									</div>
 									{draftSettings.fontFamilyBase === "custom" && (
-										<label className="grid gap-1.5 setting-field">
+										<Label className="grid gap-1.5 setting-field">
 	<span className="text-sm font-medium leading-none text-foreground">{t("settings.fontFamilyBaseCustomField")}</span>
 	<Input type="text" value={draftSettings.fontFamilyBaseCustom} placeholder={t("settings.fontFamilyBaseCustomPlaceholder")} onChange={(event) => updateDraft({ fontFamilyBaseCustom: event.target.value })
 											} />
-</label>
+</Label>
 									)}
 									<hr className="setting-divider" />
 									<div className="setting-field">
@@ -730,11 +731,11 @@ function SettingsModalContent(props: SettingsModalProps) {
 </div>
 									</div>
 									{draftSettings.fontFamilyMono === "custom" && (
-										<label className="grid gap-1.5 setting-field">
+										<Label className="grid gap-1.5 setting-field">
 	<span className="text-sm font-medium leading-none text-foreground">{t("settings.fontFamilyMonoCustomField")}</span>
 	<Input type="text" value={draftSettings.fontFamilyMonoCustom} placeholder={t("settings.fontFamilyMonoCustomPlaceholder")} onChange={(event) => updateDraft({ fontFamilyMonoCustom: event.target.value })
 											} />
-</label>
+</Label>
 									)}
 								</SettingsSection>
 								<SettingsSection title={t("settings.notificationSection")}>
@@ -1076,17 +1077,17 @@ function SettingsModalContent(props: SettingsModalProps) {
 									/>
 									{draftSettings.piProxyEnabled && (
 										<div className="setting-proxy-panel">
-											<label className="grid gap-1.5 setting-field">
+											<Label className="grid gap-1.5 setting-field">
 	<span className="text-sm font-medium leading-none text-foreground">{t("settings.proxyUrl")}</span>
 	<Input type="text" value={draftSettings.piProxyUrl} placeholder={"http://127.0.0.1:7890"} onChange={(event) => updateDraft({ piProxyUrl: event.target.value })
 												} />
-</label>
-											<label className="grid gap-1.5 setting-field">
+</Label>
+											<Label className="grid gap-1.5 setting-field">
 	<span className="text-sm font-medium leading-none text-foreground">{t("settings.proxyBypass")}</span>
 	<Input type="text" value={draftSettings.piProxyBypass} placeholder={"localhost,127.0.0.1,::1"} onChange={(event) => updateDraft({ piProxyBypass: event.target.value })
 												} />
 	<small className="text-xs text-muted-foreground">{t("settings.noProxyHint")}</small>
-</label>
+</Label>
 											<div className="setting-row">
 												<div>
 													<strong>{t("settings.proxyTest")}</strong>
@@ -1123,17 +1124,17 @@ function SettingsModalContent(props: SettingsModalProps) {
 									/>
 									{draftSettings.desktopProxyEnabled && (
 										<div className="setting-proxy-panel">
-											<label className="grid gap-1.5 setting-field">
+											<Label className="grid gap-1.5 setting-field">
 	<span className="text-sm font-medium leading-none text-foreground">{t("settings.proxyUrl")}</span>
 	<Input type="text" value={draftSettings.desktopProxyUrl} placeholder={"http://127.0.0.1:7890"} onChange={(event) => updateDraft({ desktopProxyUrl: event.target.value })
 												} />
-</label>
-											<label className="grid gap-1.5 setting-field">
+</Label>
+											<Label className="grid gap-1.5 setting-field">
 	<span className="text-sm font-medium leading-none text-foreground">{t("settings.proxyBypass")}</span>
 	<Input type="text" value={draftSettings.desktopProxyBypass} placeholder={"localhost,127.0.0.1,::1"} onChange={(event) => updateDraft({ desktopProxyBypass: event.target.value })
 												} />
 	<small className="text-xs text-muted-foreground">{t("settings.electronProxyHint")}</small>
-</label>
+</Label>
 										</div>
 									)}
 								</SettingsSection>
@@ -1261,25 +1262,25 @@ function SettingsModalContent(props: SettingsModalProps) {
 	</Select>
 </div>
 													) : (
-														<label className="grid gap-1.5 setting-field">
+														<Label className="grid gap-1.5 setting-field">
 	<span className="text-sm font-medium leading-none text-foreground">{t("settings.wsl.distro")}</span>
 	<Input type="text" value={draftSettings.wslDistro} placeholder={"Ubuntu"} onChange={(event) => {
 																updateDraft({ wslDistro: event.target.value });
 																setWslValidation(null);
 															}} />
-</label>
+</Label>
 													)}
 													{wslDistrosLoading && (
 														<small className="setting-status info">{t("settings.wsl.detectingDistros")}</small>
 													)}
 													<div className="setting-wsl-user-row">
-														<label className="grid gap-1.5 setting-field">
+														<Label className="grid gap-1.5 setting-field">
 	<span className="text-sm font-medium leading-none text-foreground">{t("settings.wsl.user")}</span>
 	<Input type="text" value={wslUserInput} placeholder={"root"} onChange={(event) => {
 																setWslUserInput(event.target.value);
 																setWslValidation(null);
 															}} />
-</label>
+</Label>
 														<Button variant="secondary"
 															size="sm"
 															disabled={!wslUserInput.trim() || wslValidating}
@@ -1324,14 +1325,14 @@ function SettingsModalContent(props: SettingsModalProps) {
 
 									{/* 自定义 Pi 路径 */}
 									<div className="setting-pi-path-panel">
-										<label className="grid gap-1.5 setting-field">
+										<Label className="grid gap-1.5 setting-field">
 	<span className="text-sm font-medium leading-none text-foreground">{t("settings.customPiPath")}</span>
 	<Input type="text" value={props.customPiPath} placeholder={
 												piPath ||
 												"D:\\mise-data\\installs\\node\\24 13 0\\pi.cmd"
 											} disabled={props.customPathValidating} onChange={(event) => props.onCustomPathChange(event.target.value)} />
 	<small className="text-xs text-muted-foreground">{t("settings.customPiPathHint")}</small>
-</label>
+</Label>
 										<div className="setting-pi-path-actions">
 											<Button variant="secondary"
 												onClick={props.onValidateCustomPath}
@@ -1478,7 +1479,7 @@ function SettingsModalContent(props: SettingsModalProps) {
 												<span>{t("common.host")}</span>
 												<code>{draftSettings.webServiceHost}</code>
 											</div>
-											<label className="web-endpoint-metric editable">
+											<Label className="web-endpoint-metric editable">
 												<span>{t("common.port")}</span>
 												<Input
 													type="number"
@@ -1496,7 +1497,7 @@ function SettingsModalContent(props: SettingsModalProps) {
 														}
 													}}
 												/>
-											</label>
+											</Label>
 										</div>
 										<div className="web-endpoint-summary">
 											<span className={draftSettings.webServiceEnabled ? "online" : ""} />

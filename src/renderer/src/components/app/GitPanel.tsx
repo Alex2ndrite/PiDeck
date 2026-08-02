@@ -48,6 +48,7 @@ import { SourceControlGraph } from "./git/GitGraph";
 import { getViewportBoundMenuPlacement } from "./git/floatingMenuPosition";
 import { Input } from "../ui-shadcn/input";
 import { Textarea } from "../ui-shadcn/textarea";
+import { Label } from "../../components/ui-shadcn/label";
 
 type GitPanelProps = {
   projectId: string;
@@ -1485,7 +1486,7 @@ function CompareChanges(props: {
       {props.open && (
         <div className="flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto overscroll-contain">
           <div className="git-compare-controls">
-            <label>
+            <Label>
               <span>{t("git.base")}</span>
               <GitCompactFilter
                 value={base}
@@ -1499,11 +1500,11 @@ function CompareChanges(props: {
                 ]}
                 onChange={(value) => setBase(value)}
               />
-            </label>
+            </Label>
             <span className="flex items-center pb-px text-[var(--git-desc-fg)]" aria-hidden="true">
               →
             </span>
-            <label>
+            <Label>
               <span>{t("git.compare")}</span>
               <GitCompactFilter
                 value={target}
@@ -1517,7 +1518,7 @@ function CompareChanges(props: {
                 ]}
                 onChange={(value) => setTarget(value)}
               />
-            </label>
+            </Label>
             <Button
               type="button"
               variant="ghost" size="sm" className=" h-auto px-2.5 text-[13px]"

@@ -13,6 +13,7 @@ import { SkillStoreTab } from "./SkillStoreTab";
 import { SkillHubStorePanel } from "./SkillHubStorePanel";
 import { Input } from "../components/ui-shadcn/input";
 import { Textarea } from "../components/ui-shadcn/textarea";
+import { Label } from "../components/ui-shadcn/label";
 
 export function SkillsTab(props: {
 	data: PiSkillListResult;
@@ -115,15 +116,15 @@ export function SkillsTab(props: {
 			<section className="skill-create-card">
 				<strong>{t("config.createSkill")}</strong>
 				<div className="skill-create-grid">
-					<label>
+					<Label>
 						<span>{t("config.name")}</span>
 						<Input
 							value={props.newName}
 							placeholder={t("config.skillNamePlaceholder")}
 							onChange={(event) => props.onChangeNewName(event.target.value)}
 						/>
-					</label>
-					<label>
+					</Label>
+					<Label>
 						<span>{t("config.location")}</span>
 						<div
 							className="skill-location-picker"
@@ -164,16 +165,16 @@ export function SkillsTab(props: {
 								</div>
 							)}
 						</div>
-					</label>
+					</Label>
 				</div>
-				<label className="skill-description-field">
+				<Label className="skill-description-field">
 					<span>{t("config.description")}</span>
 					<Textarea
 						value={props.newDescription}
 						placeholder={t("config.skillUseWhenPlaceholder")}
 						onChange={(event) => props.onChangeNewDescription(event.target.value)}
 					/>
-				</label>
+				</Label>
 				<Button
 					 variant="default"
 					onClick={props.onCreate}
