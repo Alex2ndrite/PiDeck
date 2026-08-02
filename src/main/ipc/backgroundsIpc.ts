@@ -1,5 +1,5 @@
-import { app, dialog, ipcMain, net, protocol } from "electron";
-import { mkdir, copyFile, unlink, readdir } from "node:fs/promises";
+import { app, dialog, ipcMain, protocol } from "electron";
+import { mkdir, copyFile, unlink, readdir, readFile } from "node:fs/promises";
 import { join, resolve, sep } from "node:path";
 import { ipcChannels } from "../../shared/ipc";
 
@@ -72,7 +72,11 @@ export function registerBackgroundImageProtocol(): void {
 			if (!file.startsWith(root)) {
 				return new Response("forbidden", { status: 403 });
 			}
-			return net.fetch(`file://${file.replace(/\\/g, "/")}`);
+			// net.fetch 不支持 file://（Electron 限制），直接读文件返回 Response
+			const data = await readFile(file);
+			const ext = file.slice(file.lastIndexOf(".") + 1).toLowerCase();
+			const type = ext === "png" ? "image/png" : ext === "jpg" || ext === "jpeg" ? "image/jpeg" : ext === "webp" ? "image/webp" : ext === "gif" ? "image/gif" : ext === "avif" ? "image/avif" : "application/octet-stream";
+			return new Response(data, { headers: { "Content-Type": type } });
 		} catch {
 			return new Response("not found", { status: 404 });
 		}

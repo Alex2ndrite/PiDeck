@@ -2166,7 +2166,7 @@ async function detectExternalEditorsOnFirstLaunch() {
 
 // 换肤背景图协议：自定义 scheme 必须在 ready 前注册特权声明（secure 以便渲染层 CSS 引用）
 protocol.registerSchemesAsPrivileged([
-	{ scheme: "pideck-bg", privileges: { secure: true, standard: false, corsEnabled: false, supportFetchAPI: false, stream: false } },
+	{ scheme: "pideck-bg", privileges: { secure: true, standard: true, corsEnabled: false, supportFetchAPI: true, stream: false } },
 ]);
 
 app.whenReady().then(async () => {
