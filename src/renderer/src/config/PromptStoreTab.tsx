@@ -7,6 +7,7 @@ import type { PromptStoreItem, PromptStoreSearchResult, PiPromptTemplateSummary,
 import { t } from "../i18n";
 import { desktopApi } from "../desktopApi";
 import { YaoPromptTab } from "./YaoPromptTab";
+import { Input } from "../components/ui-shadcn/input";
 
 /**
  * 根据导入逻辑生成的文件名（与主进程 promptStoreImport 中一致）
@@ -207,7 +208,7 @@ export function PromptStoreTab(props: {
 					<div className="prompt-store-search-bar">
 				<div className="prompt-store-search-input-wrap">
 					<Search size={15} strokeWidth={1.8} className="prompt-store-search-icon" />
-					<input
+					<Input
 						ref={searchInputRef}
 						type="text"
 						value={query}

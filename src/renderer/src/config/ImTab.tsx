@@ -1,4 +1,5 @@
 import { Button } from "../components/ui-shadcn/button";
+import { Input } from "../components/ui-shadcn/input";
 /**
  * ImTab — 外部链接配置选项卡
  *
@@ -361,7 +362,7 @@ export function ImTab(_props: Props) {
 					<div className="config-im-form">
 						<div className="config-field">
 							<label>{t("config.im.appId")}</label>
-							<input
+							<Input
 								type="text"
 								value={appId}
 								onChange={(e) => { setAppId(e.target.value); setAddError(null); if (addStep !== "input") setAddStep("input"); }}
@@ -372,7 +373,7 @@ export function ImTab(_props: Props) {
 						</div>
 						<div className="config-field">
 							<label>{t("config.im.appSecret")}</label>
-							<input
+							<Input
 								type="password"
 								value={appSecret}
 								onChange={(e) => { setAppSecret(e.target.value); setAddError(null); if (addStep !== "input") setAddStep("input"); }}
@@ -383,7 +384,7 @@ export function ImTab(_props: Props) {
 						</div>
 						<div className="config-field">
 							<label>{t("config.im.botName")} <span className="config-field-optional">({t("common.optional")})</span></label>
-							<input
+							<Input
 								type="text"
 								value={botName}
 								onChange={(e) => setBotName(e.target.value)}
@@ -398,7 +399,7 @@ export function ImTab(_props: Props) {
 							<div className="config-im-openid-section">
 								<div className="config-field">
 									<label>{t("config.im.openId")} <span className="config-field-required">*</span></label>
-									<input
+									<Input
 										type="text"
 										value={addFormOpenId}
 										onChange={(e) => setAddFormOpenId(e.target.value)}
@@ -572,7 +573,7 @@ export function ImTab(_props: Props) {
 										<div className="config-im-section-title">{t("config.im.openId")}</div>
 										{isEditingOpenId ? (
 											<div className="config-im-openid-edit">
-												<input
+												<Input
 													type="text"
 													value={editOpenIdValue}
 													onChange={(e) => setEditOpenIdValue(e.target.value)}

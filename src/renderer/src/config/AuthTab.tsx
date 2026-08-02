@@ -4,6 +4,8 @@ import { ChevronDown, ChevronRight, Copy, ExternalLink, Trash2 } from "lucide-re
 import { t } from "../i18n";
 import type { AuthFile, ModelsFile } from "./configTypes";
 import { ConfigComboboxInput, SecretInput } from "./ConfigShared";
+import { Input } from "../components/ui-shadcn/input";
+import { Checkbox } from "../components/ui-shadcn/checkbox";
 
 // 根据 pi 官方文档支持的供应商列表 (https://pi.dev/docs/latest/providers#auth-file)
 const PRESET_PROVIDERS = [
@@ -225,7 +227,7 @@ export function AuthTab(props: {
 					<div className="mt-3 border-t border-border-subtle pt-3">
 						<p className="m-0 flex items-center gap-2 text-xs text-text-tertiary">
 							<span className="shrink-0 whitespace-nowrap">{t("config.authCustomHint")}</span>
-							<input
+							<Input
 								value={customProviderName}
 								onChange={(e) => {
 									setCustomProviderName(e.target.value);
@@ -291,11 +293,10 @@ export function AuthTab(props: {
 							>
 						{batchMode && (
 							<label className="mr-2.5 inline-flex size-4 shrink-0 items-center justify-center" onClick={(e) => e.stopPropagation()}>
-								<input
-									type="checkbox"
+								<Checkbox
 									checked={selectedAuths.has(name)}
-									onChange={(e) => {
-										e.stopPropagation();
+									onClick={(e) => e.stopPropagation()}
+								onCheckedChange={() => {
 										setSelectedAuths(prev => {
 											const next = new Set(prev);
 											if (next.has(name)) next.delete(name);

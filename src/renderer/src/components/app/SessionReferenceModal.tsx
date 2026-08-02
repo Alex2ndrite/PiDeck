@@ -12,6 +12,7 @@ import { cn } from "../../lib/utils";
 import { t } from "../../i18n";
 import type { SessionSummary } from "../../../../shared/types";
 import { summarizeMessage, stripAnsi, formatTime } from "./AppUtils";
+import { Checkbox } from "../ui-shadcn/checkbox";
 
 type SessionMessage = { role: string; content: string; timestamp: number };
 
@@ -148,7 +149,7 @@ export function SessionReferenceModal(props: {
 									key={item.index}
 									className={`flex cursor-pointer items-center gap-2 rounded-sm border border-transparent px-2.5 py-[7px] text-[13px] leading-relaxed transition-[background,border-color] duration-100 hover:border-border-subtle hover:bg-bg-hover${isChecked ? " selected" : ""}`}
 								>
-									<input type="checkbox" checked={isChecked} onChange={() => toggleMessage(item.index)} />
+									<Checkbox checked={isChecked} onChange={() => toggleMessage(item.index)} />
 									<MessageCircle size={14} className="shrink-0 text-text-tertiary" />
 									<span className="flex min-w-0 flex-1 items-baseline gap-2">
 										<span className="min-w-0 truncate font-sans text-text-primary">
@@ -191,7 +192,7 @@ export function SessionReferenceModal(props: {
 													key={idx}
 													className={`flex cursor-pointer items-center gap-2 rounded-sm border border-transparent px-2.5 py-[7px] text-[13px] leading-relaxed transition-[background,border-color] duration-100 hover:border-border-subtle hover:bg-bg-hover run-child rounded-sm p-1.5${subChecked ? " selected" : ""}`}
 												>
-													<input type="checkbox" checked={subChecked} onChange={() => toggleMessage(idx)} />
+													<Checkbox checked={subChecked} onChange={() => toggleMessage(idx)} />
 													<FileText size={14} className="shrink-0 text-text-tertiary" />
 													<span className="flex min-w-0 flex-1 items-baseline gap-2">
 														<span className="min-w-0 truncate font-sans text-text-primary">

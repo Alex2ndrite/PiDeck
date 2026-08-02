@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeft, Download, ExternalLink, Search, Sparkles } from "lucide-react";
 import type { PromptStoreItem, PromptStoreSearchResult, PiSkillSummary } from "../../../shared/types";
 import { t } from "../i18n";
+import { Input } from "../components/ui-shadcn/input";
 
 const api = (window as unknown as { piDesktop: { skillStore: { search: (q: string) => Promise<PromptStoreSearchResult>; import: (item: PromptStoreItem, locationId?: string) => Promise<PiSkillSummary> } } }).piDesktop;
 
@@ -118,7 +119,7 @@ export function SkillStoreTab(props: {
 			<div className="prompt-store-search-bar">
 				<div className="prompt-store-search-input-wrap">
 					<Search size={15} strokeWidth={1.8} className="prompt-store-search-icon" />
-					<input
+					<Input
 						ref={searchInputRef}
 						type="text"
 						value={query}

@@ -241,7 +241,7 @@ export function SkillHubStorePanel() {
 			<div className="skillhub-search-bar">
 				<div className="skillhub-search-input-wrap">
 					<Search size={15} strokeWidth={1.8} className="skillhub-search-icon" />
-					<input
+					<Input
 						ref={searchInputRef}
 						type="text"
 						value={query}

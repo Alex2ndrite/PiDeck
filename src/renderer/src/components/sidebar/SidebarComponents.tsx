@@ -20,9 +20,10 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "../ui-shadcn/dropdown-menu";
-import { Input } from "../ui-shadcn/input";
 import { Button } from "../ui-shadcn/button";
 import type { SessionSource, SessionSummary, Project, AgentTab } from "../../../../shared/types";
+import { Checkbox } from "../ui-shadcn/checkbox";
+import { Input } from "../ui-shadcn/input";
 
 export function SessionManagerModal(props: {
 	sessions: SessionSummary[];
@@ -104,8 +105,7 @@ export function SessionManagerModal(props: {
 				<div className="flex shrink-0 items-center justify-between border-b border-border-subtle bg-bg-muted px-5 py-2.5">
 					<div className="flex items-center gap-3.5">
 						<label className="flex cursor-pointer items-center gap-2 text-[13px] text-text-secondary select-none">
-							<input
-								type="checkbox"
+							<Checkbox
 								checked={selectAll}
 								onChange={handleToggleAll}
 							className="m-0 size-[15px] cursor-pointer accent-[var(--color-accent)]" />
@@ -144,8 +144,7 @@ export function SessionManagerModal(props: {
 								className={`group flex items-center gap-3 border-b border-border-subtle bg-bg-panel px-5 py-2.5 transition-colors duration-100 last:border-b-0 hover:bg-bg-hover${isChecked ? " bg-[color:color-mix(in_srgb,var(--color-accent)_6%,var(--color-bg-panel))]" : ""}`}
 							>
 								<label className="flex shrink-0 cursor-pointer items-center">
-									<input
-										type="checkbox"
+									<Checkbox
 										checked={isChecked}
 										onChange={() => handleToggle(session.filePath)}
 									className="m-0 size-[15px] cursor-pointer accent-[var(--color-accent)]" />
@@ -494,9 +493,9 @@ export function RpcLogModal(props: {
 							{t("rpc.filterReceive")}
 						</Button>
 					</div>
-					<input
+					<Input
 						value={keyword}
-						onChange={(event) => setKeyword(event.target.value)}
+						onChange={(e) => setKeyword(e.target.value)}
 						placeholder={t("rpc.searchPlaceholder")}
 					/>
 				</div>

@@ -4,6 +4,8 @@ import { X, Plus, Check } from "lucide-react";
 import type { AuthFile, SettingsFile, ModelsFile } from "./configTypes";
 import { ConfigComboboxInput } from "./ConfigShared";
 import { t } from "../i18n";
+import { Input } from "../components/ui-shadcn/input";
+import { Checkbox } from "../components/ui-shadcn/checkbox";
 
 // ── 可用模型列表聚合（含供应商信息，供 enabledModels 多选用） ──
 
@@ -244,7 +246,7 @@ export function SettingsTab(props: {
 					</div>
 					<div className="flex items-center gap-3.5 rounded-sm border border-border-subtle px-4 py-2 transition-colors hover:border-border-strong">
 						<span className="min-w-[180px] text-[13px] font-medium text-text-primary">{t("config.label.sessionDir")}</span>
-						<input
+						<Input
 							className="h-9 min-w-0 flex-1 rounded-sm border border-border-subtle bg-bg-panel px-3 text-[13px] text-text-primary outline-none focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]"
 							type="text"
 							value={sessionDirValue}
@@ -262,11 +264,11 @@ export function SettingsTab(props: {
 				</div>
 				<div className="flex items-center gap-3.5 rounded-sm border border-border-subtle px-4 py-2 transition-colors hover:border-border-strong">
 					<span className="min-w-[180px] text-[13px] font-medium text-text-primary">{t("config.retry.maxRetries")}</span>
-					<input className="h-9 min-w-0 flex-1 rounded-sm border border-border-subtle bg-bg-panel px-3 text-[13px] text-text-primary outline-none focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]" type="number" min={0} max={50} value={retryConfig.maxRetries} onChange={(e) => updateRetry({ maxRetries: Number(e.target.value) })} />
+					<Input className="h-9 min-w-0 flex-1 rounded-sm border border-border-subtle bg-bg-panel px-3 text-[13px] text-text-primary outline-none focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]" type="number" min={0} max={50} value={retryConfig.maxRetries} onChange={(e) => updateRetry({ maxRetries: Number(e.target.value) })} />
 				</div>
 				<div className="flex items-center gap-3.5 rounded-sm border border-border-subtle px-4 py-2 transition-colors hover:border-border-strong">
 					<span className="min-w-[180px] text-[13px] font-medium text-text-primary">{t("config.retry.baseDelayMs")}</span>
-					<input className="h-9 min-w-0 flex-1 rounded-sm border border-border-subtle bg-bg-panel px-3 text-[13px] text-text-primary outline-none focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]" type="number" min={100} step={100} value={retryConfig.baseDelayMs} onChange={(e) => updateRetry({ baseDelayMs: Number(e.target.value) })} />
+					<Input className="h-9 min-w-0 flex-1 rounded-sm border border-border-subtle bg-bg-panel px-3 text-[13px] text-text-primary outline-none focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]" type="number" min={100} step={100} value={retryConfig.baseDelayMs} onChange={(e) => updateRetry({ baseDelayMs: Number(e.target.value) })} />
 				</div>
 				</div>
 
@@ -279,10 +281,9 @@ export function SettingsTab(props: {
 					<div className="flex items-center gap-3.5 rounded-sm border border-border-subtle px-4 py-2 transition-colors hover:border-border-strong">
 						<span className="min-w-[180px] text-[13px] font-medium text-text-primary">{t("config.compaction.enabled")}</span>
 						<label className="config-checkbox-label">
-							<input
-								type="checkbox"
+							<Checkbox
 								checked={compactionConfig.enabled}
-								onChange={(e) => updateCompaction({ enabled: e.target.checked })}
+								onCheckedChange={(checked) => updateCompaction({ enabled: checked === true })}
 							/>
 							<span>
 								{compactionConfig.enabled
@@ -295,7 +296,7 @@ export function SettingsTab(props: {
 						<span className="min-w-[180px] text-[13px] font-medium text-text-primary" title={t("config.compaction.reserveTokensHint")}>
 							{t("config.compaction.reserveTokens")}
 						</span>
-						<input
+						<Input
 							className="h-9 min-w-0 flex-1 rounded-sm border border-border-subtle bg-bg-panel px-3 text-[13px] text-text-primary outline-none focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]"
 							type="number"
 							min={0}
@@ -312,7 +313,7 @@ export function SettingsTab(props: {
 						<span className="min-w-[180px] text-[13px] font-medium text-text-primary" title={t("config.compaction.keepRecentTokensHint")}>
 							{t("config.compaction.keepRecentTokens")}
 						</span>
-						<input
+						<Input
 							className="h-9 min-w-0 flex-1 rounded-sm border border-border-subtle bg-bg-panel px-3 text-[13px] text-text-primary outline-none focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]"
 							type="number"
 							min={0}
@@ -469,7 +470,7 @@ function EnabledModelsInput(props: {
 			{open && (
 				<div className="absolute top-[calc(100%+2px)] right-0 left-0 z-[100] overflow-hidden rounded-md border border-border-subtle bg-bg-panel shadow-[var(--shadow-popover)]">
 					<div className="border-b border-border-subtle p-2">
-						<input
+						<Input
 							autoFocus
 							value={filter}
 							onChange={(e) => setFilter(e.target.value)}
@@ -680,10 +681,9 @@ function SettingsValueInput(props: {
 	if (typeof value === "boolean") {
 		return (
 			<label className="config-checkbox-label">
-				<input
-					type="checkbox"
+				<Checkbox
 					checked={value}
-					onChange={(e) => props.onChange(e.target.checked)}
+					onCheckedChange={(checked) => props.onChange(checked)}
 				/>
 				<span>{value ? t("common.true") : t("common.false")}</span>
 			</label>
@@ -691,7 +691,7 @@ function SettingsValueInput(props: {
 	}
 	if (typeof value === "number") {
 		return (
-			<input
+			<Input
 				type="number"
 				value={value}
 				onChange={(e) => props.onChange(Number(e.target.value))}
@@ -701,7 +701,7 @@ function SettingsValueInput(props: {
 	}
 	if (typeof value === "string") {
 		return (
-			<input
+			<Input
 				value={value}
 				onChange={(e) => props.onChange(e.target.value)}
 				className="h-9 min-w-0 flex-1 rounded-sm border border-border-subtle bg-bg-panel px-3 text-[13px] text-text-primary outline-none focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]"
@@ -709,7 +709,7 @@ function SettingsValueInput(props: {
 		);
 	}
 	return (
-		<input
+		<Input
 			value={JSON.stringify(value)}
 			onChange={(e) => {
 				try {

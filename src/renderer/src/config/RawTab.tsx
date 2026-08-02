@@ -1,6 +1,7 @@
 import { Button } from "../components/ui-shadcn/button";
 import { t } from "../i18n";
 import { ConfigSelect } from "./ConfigShared";
+import { Textarea } from "../components/ui-shadcn/textarea";
 
 // ── Raw Tab ─────────────────────────────────────────────
 
@@ -35,7 +36,7 @@ export function RawTab(props: {
 					{props.saving ? t("common.saving") : t("common.save")}
 				</Button>
 			</div>
-			<textarea
+			<Textarea
 				className="config-raw-editor"
 				value={props.content}
 				onChange={(e) => props.onChangeContent(e.target.value)}

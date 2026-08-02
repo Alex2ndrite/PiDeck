@@ -10,6 +10,8 @@ import type { Root, Element, Text } from "hast";
 import type { DraftMeta } from "../../../../shared/types";
 import { t } from "../../i18n";
 import { Button } from "../ui-shadcn/button";
+import { Input } from "../ui-shadcn/input";
+import { Textarea } from "../ui-shadcn/textarea";
 
 type Mode = "edit" | "preview";
 
@@ -284,7 +286,7 @@ export const ScratchPadPanel = memo(function ScratchPadPanel(props: ScratchPadPa
 				{/* 编辑/预览区域 — 左 */}
 				<div className="scratch-pad-content">
 					{mode === "edit" ? (
-						<textarea
+						<Textarea
 							ref={editorRef}
 							className="scratch-pad-editor"
 							value={content}
@@ -336,7 +338,7 @@ export const ScratchPadPanel = memo(function ScratchPadPanel(props: ScratchPadPa
 												);
 											},
 											input: ({ ...inputProps }) => (
-												<input
+												<Input
 													{...inputProps}
 													disabled={inputProps.type === "checkbox" ? false : inputProps.disabled}
 													readOnly={inputProps.type === "checkbox" ? true : inputProps.readOnly}

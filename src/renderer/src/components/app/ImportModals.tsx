@@ -21,6 +21,7 @@ import type {
 	OpenCodeImportReport,
 	Project,
 } from "../../../../shared/types";
+import { Checkbox } from "../ui-shadcn/checkbox";
 
 function displayPath(path?: string) {
 	if (!path) return "";
@@ -111,8 +112,7 @@ export function CodexImportModal(props: {
 	};
 	const renderRow = (session: CodexSessionSummary, className = "codex-session-row") => (
 		<label key={session.sourcePath} className={className}>
-			<input
-				type="checkbox"
+			<Checkbox
 				checked={selected.has(session.sourcePath)}
 				onChange={() => props.onToggle(session.sourcePath)}
 			/>
@@ -339,8 +339,7 @@ export function ClaudeImportModal(props: {
 						<div className="codex-session-list">
 							{props.sessions.map((session) => (
 								<label key={session.sourcePath} className="codex-session-row">
-									<input
-										type="checkbox"
+									<Checkbox
 										checked={selected.has(session.sourcePath)}
 										onChange={() => props.onToggle(session.sourcePath)}
 									/>
@@ -470,8 +469,7 @@ export function OpenCodeImportModal(props: {
 						<div className="codex-session-list">
 							{props.sessions.map((session) => (
 								<label key={session.sourcePath} className="codex-session-row">
-									<input
-										type="checkbox"
+									<Checkbox
 										checked={selected.has(session.sourcePath)}
 										onChange={() => props.onToggle(session.sourcePath)}
 									/>

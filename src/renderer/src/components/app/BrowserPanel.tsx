@@ -15,6 +15,7 @@ import { t } from "../../i18n";
 import { useAtomValue } from "jotai";
 import { useWebContentsViewBrowserAtom } from "../../atoms/app-ui-atoms";
 import { Button } from "../ui-shadcn/button";
+import { Input } from "../ui-shadcn/input";
 
 // Button 收口状态（P0）：工具栏/导航/UA 菜单按钮已换 shadcn Button（ghost/outline + 原尺寸 class 保留）。
 // 保留原生：.browser-tab-close（16px 微型关闭钮，Button 最小档 icon-xs 24px 无法替代）。
@@ -534,7 +535,7 @@ export function BrowserPanel(props: {
 					<Home size={15} />
 				</Button>
 				<div className="min-w-0 flex-1">
-					<input
+					<Input
 						type="text"
 						className="h-[30px] w-full rounded-md border border-border-subtle bg-bg-input px-2.5 text-[13px] text-text-primary outline-none focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]"
 						value={inputValue}

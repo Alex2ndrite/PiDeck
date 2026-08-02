@@ -25,7 +25,6 @@ import {
 } from "lucide-react";
 import { normalizeSessionPathForCompare } from "../../agentListDisplay";
 import { Button } from "../ui-shadcn/button";
-import { Input } from "../ui-shadcn/input";
 import { ConfirmDialog } from "../ui-shadcn/ConfirmDialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../ui-shadcn/collapsible";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui-shadcn/select";
@@ -42,6 +41,7 @@ import {
 	DialogTitle,
 } from "../ui-shadcn/dialog";
 import type { FileTreeNode, Project, SessionSummary } from "../../../../shared/types";
+import { Input } from "../ui-shadcn/input";
 
 // Button 收口状态（P0 UI 统一）：抽屉头部/文件工具行图标按钮已换 shadcn Button（ghost + 原 tailwind class 保留）。
 // 保留原生 button（内容排版/折叠区块语义 + 自定义 CSS 驱动，P2 CSS 收口时迁移）：

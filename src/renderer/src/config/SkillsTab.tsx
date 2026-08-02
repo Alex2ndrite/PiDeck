@@ -11,6 +11,8 @@ import type {
 import { t } from "../i18n";
 import { SkillStoreTab } from "./SkillStoreTab";
 import { SkillHubStorePanel } from "./SkillHubStorePanel";
+import { Input } from "../components/ui-shadcn/input";
+import { Textarea } from "../components/ui-shadcn/textarea";
 
 export function SkillsTab(props: {
 	data: PiSkillListResult;
@@ -115,7 +117,7 @@ export function SkillsTab(props: {
 				<div className="skill-create-grid">
 					<label>
 						<span>{t("config.name")}</span>
-						<input
+						<Input
 							value={props.newName}
 							placeholder={t("config.skillNamePlaceholder")}
 							onChange={(event) => props.onChangeNewName(event.target.value)}
@@ -166,7 +168,7 @@ export function SkillsTab(props: {
 				</div>
 				<label className="skill-description-field">
 					<span>{t("config.description")}</span>
-					<textarea
+					<Textarea
 						value={props.newDescription}
 						placeholder={t("config.skillUseWhenPlaceholder")}
 						onChange={(event) => props.onChangeNewDescription(event.target.value)}
@@ -241,7 +243,7 @@ function SkillCard(props: {
 					<div className="session-card-title skill-title-row">
 						{renaming ? (
 							<div className="skill-rename-inline">
-								<input
+								<Input
 									value={renameValue}
 									onChange={(e) => setRenameValue(e.target.value)}
 									onKeyDown={(e) => { if (e.key === "Enter") void handleRename(); if (e.key === "Escape") setRenaming(false); }}

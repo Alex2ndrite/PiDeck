@@ -3,6 +3,7 @@ import { AlertTriangle, Brain, Check, ChevronDown, MessageCircle, X } from "luci
 import type { ChatMessage } from "../../../../shared/types";
 import { t, translateI18nDescriptor } from "../../i18n";
 import { formatDuration, formatTime, stripAnsi } from "./TimelineFormat";
+import { Textarea } from "../ui-shadcn/textarea";
 
 // Button 收口状态（P0）：本文件按钮全部保留原生——
 // compaction-card-header / thinking-card-trigger 是折叠触发器 + 内容排版容器（内部 span/small/em 结构）；
@@ -239,7 +240,7 @@ export const AskQuestionCard = memo(function AskQuestionCard(props: {
 				)}
 				{method === "input" && (
 					<div className="ask-question-card-input-row">
-						<textarea
+						<Textarea
 							ref={inputRef}
 							className="ask-question-card-input"
 							placeholder={placeholder || t("ask.inputPlaceholder")}
@@ -274,7 +275,7 @@ export const AskQuestionCard = memo(function AskQuestionCard(props: {
 				)}
 				{method === "editor" && (
 					<div className="ask-question-card-editor-area">
-						<textarea
+						<Textarea
 							ref={editorRef}
 							className="ask-question-card-editor"
 							placeholder={placeholder || t("ask.editorPlaceholder")}

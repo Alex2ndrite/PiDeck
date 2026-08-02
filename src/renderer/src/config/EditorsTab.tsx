@@ -7,6 +7,8 @@ import {
 	type ExternalEditorId,
 } from "../../../shared/types";
 import { t } from "../i18n";
+import { Checkbox } from "../components/ui-shadcn/checkbox";
+import { Input } from "../components/ui-shadcn/input";
 
 const api: PiDesktopApi = (window as unknown as { piDesktop: PiDesktopApi }).piDesktop;
 
@@ -118,17 +120,16 @@ export function EditorsTab() {
 								</small>
 							</div>
 							<label className="editor-config-enabled">
-								<input
-									type="checkbox"
+								<Checkbox
 									checked={configured.enabled}
-									onChange={(event) =>
-										void updateEditor(editor.id, { enabled: event.target.checked })
+									onCheckedChange={(checked) =>
+										void updateEditor(editor.id, { enabled: checked === true })
 									}
 								/>
 								<span>{t("editors.enabled")}</span>
 							</label>
 							<div className="editor-config-path-control">
-								<input
+								<Input
 									className="editor-config-path"
 									value={draft}
 									onChange={(event) =>

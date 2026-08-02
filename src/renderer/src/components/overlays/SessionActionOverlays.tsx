@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useState, type ComponentProps } from "react";
 import { cn } from "../../lib/utils";
+import { Textarea } from "../ui-shadcn/textarea";
 const SettingsModal = lazy(() => import("../app/SettingsModal").then((module) => ({ default: module.SettingsModal })));
 import { ConfirmDialog } from "./OverlayParts";
 import { TrustConfirmModal } from "../app/TrustConfirmModal";
@@ -12,7 +13,6 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "../ui-shadcn/dialog";
-import { Textarea } from "../ui-shadcn/textarea";
 import { t } from "../../i18n";
 import type { AppInfo, FeedbackEnvironment, Project } from "../../../../shared/types";
 

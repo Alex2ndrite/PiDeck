@@ -46,6 +46,7 @@ import {
 	displayPath,
 	flattenFiles,
 } from "../app/AppUtils";
+import { Textarea } from "../ui-shadcn/textarea";
 
 // Mermaid 库体积数 MB，仅在真正出现 mermaid 代码块时才动态加载，
 // 避免随渲染进程常驻、放大内存占用并在流式期间抢占主线程。
@@ -874,7 +875,7 @@ export const TurnRow = memo(function TurnRow(props: {
 						{editing ? (
 							<div className="flex flex-col gap-2 rounded-sm border-l-[3px] border-l-[var(--color-accent)] bg-[color:color-mix(in_srgb,var(--color-accent)_3%,var(--color-bg-panel))] pl-2" ref={editAreaRef}>
 								<div className="flex items-center gap-1 text-xs font-medium text-[var(--color-accent)] before:content-['✎'] before:text-sm">{t("common.edit")}</div>
-								<textarea
+								<Textarea
 									className="min-h-[100px] max-h-[400px] w-full resize-y rounded-sm border border-[var(--color-accent)] bg-bg-panel p-2 font-mono text-sm leading-relaxed text-text-primary outline-none focus:border-[var(--color-accent)] focus:shadow-[0_0_0_2px_var(--focus-ring)]"
 									value={editText}
 									onChange={(e) => setEditText(e.target.value)}
@@ -1080,7 +1081,7 @@ export const UserBubble = memo(function UserBubble(props: {
 			{editing && (
 				<div className="flex w-full min-w-0 flex-col gap-2 rounded-sm border-l-[3px] border-l-[var(--color-accent)] bg-[color:color-mix(in_srgb,var(--color-accent)_3%,var(--color-bg-panel))] pl-2" ref={editAreaRef}>
 					<div className="flex items-center gap-1 text-xs font-medium text-[var(--color-accent)] before:content-['✎'] before:text-sm">{t("common.edit")}</div>
-					<textarea
+					<Textarea
 						className="min-h-[100px] max-h-[400px] w-full resize-y rounded-sm border border-[var(--color-accent)] bg-bg-panel p-2 font-mono text-sm leading-relaxed text-text-primary outline-none focus:border-[var(--color-accent)] focus:shadow-[0_0_0_2px_var(--focus-ring)]"
 						value={editText}
 						onChange={(e) => setEditText(e.target.value)}

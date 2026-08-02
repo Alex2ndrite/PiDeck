@@ -195,6 +195,10 @@ collapsible/resizable/scroll-area/alert-dialog/sonner/input/textarea/confirm-dia
   内置 4 套皮肤（经典绿/石墨灰/海盐蓝/暖阳米，SKIN_PRESETS light/dark 双色板）；
   背景图支持（pideck-bg:// 协议服务 userData/backgrounds/ + 选图 IPC + 遮罩透明度）；
   自定义主题口子：customThemeOverrides（CSS 变量覆盖）+ 文档指引
+- **原生元素清零 ✅**：textarea 14 → Textarea、input 56 → Input、checkbox 19 → Checkbox
+  （新建 checkbox.tsx；onChange(e.target.checked) 适配 onCheckedChange；含 stopPropagation 拆分）；
+  仅剩 4 个 range（无 shadcn slider，已全局样式）+ 1 个 datetime-local（无对应组件）合理保留；
+  原生 button 96 个按 8 类归因保留
 - **仍开放（低优先）**：UI 2.0 全面目测验收一轮
 
 ## 7. 迁移终态统计

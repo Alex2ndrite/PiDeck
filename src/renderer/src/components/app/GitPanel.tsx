@@ -47,6 +47,7 @@ import { GitCompactFilter, PaneHeader } from "./git/GitPanelControls";
 import { SourceControlGraph } from "./git/GitGraph";
 import { getViewportBoundMenuPlacement } from "./git/floatingMenuPosition";
 import { Input } from "../ui-shadcn/input";
+import { Textarea } from "../ui-shadcn/textarea";
 
 type GitPanelProps = {
   projectId: string;
@@ -1138,7 +1139,7 @@ export function GitPanel(props: GitPanelProps) {
               </div>
             ) : (
             <div className="flex shrink-0 flex-col gap-2 border-b border-[var(--git-panel-border)] bg-[var(--git-panel-bg)] px-2.5 pt-2 pb-1.5">
-              <textarea
+              <Textarea
                 className="git-scm-input min-h-14 max-h-[100px] w-full resize-y rounded-sm border border-[var(--git-input-border)] bg-[var(--git-input-bg)] px-2 py-1 font-mono text-[13px] leading-[20px] text-[var(--git-panel-fg)] outline-none placeholder:text-[var(--git-desc-fg)]"
                 placeholder={t("git.commitPlaceholder", {
                   branch: props.currentBranch ?? "HEAD",

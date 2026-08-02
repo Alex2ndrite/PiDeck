@@ -7,8 +7,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "./ui-shadcn/dialog";
-import { Input } from "./ui-shadcn/input";
 import { Button } from "./ui-shadcn/button";
+import { Input } from "./ui-shadcn/input";
 
 /**
  * 重命名对话框（#115 U5）：统一为 shadcn Dialog + Input + Button。

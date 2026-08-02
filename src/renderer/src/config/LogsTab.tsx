@@ -4,6 +4,7 @@ import type { PiDesktopApi } from "../../../preload";
 import type { AppLogEntry, AppLogLevel } from "../../../shared/types";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui-shadcn/select";
 import { t } from "../i18n";
+import { Input } from "../components/ui-shadcn/input";
 
 const api: PiDesktopApi = (window as unknown as { piDesktop: PiDesktopApi }).piDesktop;
 const LEVELS: Array<AppLogLevel | "all"> = ["all", "debug", "info", "warn", "error"];
@@ -82,7 +83,7 @@ export function LogsTab() {
 							</SelectContent>
 						</Select>
 					</div>
-					<input
+					<Input
 						className="logs-search-input"
 						value={search}
 						onChange={(event) => setSearch(event.target.value)}

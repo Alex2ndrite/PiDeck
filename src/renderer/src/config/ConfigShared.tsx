@@ -5,8 +5,8 @@ import { t } from "../i18n";
 import { writeClipboard } from "../utils/clipboard";
 import { PROVIDER_API_OPTIONS, API_TYPE_LABELS, getApiTypeDescription } from "./providerHeaders";
 import { Button } from "../components/ui-shadcn/button";
-import { Input } from "../components/ui-shadcn/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui-shadcn/select";
+import { Input } from "../components/ui-shadcn/input";
 
 // ── 复制到剪贴板工具 ──────────────────────────────────
 
@@ -44,7 +44,7 @@ export function SecretInput(props: {
 	const [visible, setVisible] = useState(false);
 	return (
 		<div className="flex w-full items-center gap-1.5">
-			<input
+			<Input
 				type={visible ? "text" : "password"}
 				value={props.value}
 				onChange={(e) => props.onChange(e.target.value)}
@@ -145,7 +145,7 @@ export function ConfigComboboxInput(props: {
 
 	return (
 		<div ref={containerRef} className="relative min-w-0 flex-1">
-			<input
+			<Input
 				value={open ? filter : props.value}
 				onFocus={handleFocus}
 				onChange={(e) => {
@@ -215,7 +215,7 @@ export function ApiTypeInput(props: {
 				window.setTimeout(() => setOpen(false), 80);
 			}}
 		>
-			<input
+			<Input
 				value={props.value}
 				onFocus={() => setOpen(true)}
 				onChange={(e) => {

@@ -11,6 +11,8 @@ import type {
 import { t } from "../i18n";
 import { LazyMonacoEditor } from "../components/app/LazyMonacoEditor";
 import { PromptStoreTab } from "./PromptStoreTab";
+import { Input } from "../components/ui-shadcn/input";
+import { Textarea } from "../components/ui-shadcn/textarea";
 
 export function PromptsTab(props: {
 	data: PiPromptTemplateListResult;
@@ -139,7 +141,7 @@ export function PromptsTab(props: {
 				<strong>{t("config.createPrompt")}</strong>
 				<label className="prompt-create-label">
 					<span>{t("config.name")}</span>
-					<input
+					<Input
 						value={props.newName}
 						placeholder={t("config.promptNamePlaceholder")}
 						onChange={(e) => props.onChangeNewName(e.target.value)}
@@ -147,7 +149,7 @@ export function PromptsTab(props: {
 				</label>
 				<label className="prompt-create-label">
 					<span>{t("config.description")}</span>
-					<textarea
+					<Textarea
 						className="prompt-create-textarea"
 						value={props.newDescription}
 						placeholder={t("config.promptDescriptionPlaceholder")}
@@ -187,7 +189,7 @@ export function PromptsTab(props: {
 							<div key={template.path} className="prompts-list-item">
 								{isRenaming ? (
 									<div className="skill-rename-inline">
-										<input
+										<Input
 											value={renameValue}
 											onChange={(e) => setRenameValue(e.target.value)}
 											onKeyDown={(e) => { if (e.key === "Enter") void handleRename(); if (e.key === "Escape") setRenamingTemplate(null); }}

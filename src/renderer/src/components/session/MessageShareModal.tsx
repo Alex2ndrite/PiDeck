@@ -13,6 +13,7 @@ import type { AgentRunItem, MessageItem, RenderMessage } from "../app/AppUtils";
 import { summarizeMessage } from "../app/AppUtils";
 import { t } from "../../i18n";
 import { formatTime, stripAnsi } from "./TimelineFormat";
+import { Checkbox } from "../ui-shadcn/checkbox";
 
 function getSelectableMessageIds(
 	items: RenderMessage[],
@@ -150,8 +151,7 @@ export function MultiSelectModal(props: {
 										key={msg.id}
 										className={`flex cursor-pointer items-center gap-2 rounded-sm border border-transparent px-2.5 py-[7px] text-[13px] leading-relaxed transition-[background,border-color] duration-100 hover:border-border-subtle hover:bg-bg-hover${isChecked ? " selected" : ""}`}
 									>
-										<input
-											type="checkbox"
+										<Checkbox
 											checked={isChecked}
 											onChange={() => toggleMessage(msg.id)}
 											className="m-0 shrink-0 cursor-pointer accent-[var(--color-accent)]"
@@ -211,8 +211,7 @@ export function MultiSelectModal(props: {
 													key={sub.message.id}
 													className={`flex cursor-pointer items-center gap-2 rounded-sm border border-transparent px-2.5 py-[7px] text-[13px] leading-relaxed transition-[background,border-color] duration-100 hover:border-border-subtle hover:bg-bg-hover run-child rounded-sm p-1.5${subChecked ? " selected" : ""}`}
 												>
-													<input
-														type="checkbox"
+													<Checkbox
 														checked={subChecked}
 														onChange={() =>
 															toggleMessage(sub.message.id)

@@ -1,5 +1,7 @@
 // @ts-nocheck - extracted from AppParts, pre-existing type issues
 import { Component, useState, useEffect, useRef, useMemo, type ReactNode } from "react";
+import { Input } from "../ui-shadcn/input";
+import { Textarea } from "../ui-shadcn/textarea";
 import {
 	Settings2,
 	Network,
@@ -22,7 +24,6 @@ import {
 	SelectValue,
 } from "../ui-shadcn/select";
 import { Switch } from "../ui-shadcn/switch";
-import { Input } from "../ui-shadcn/input";
 import {
 	Dialog,
 	DialogClose,
@@ -105,7 +106,7 @@ function SettingTextarea(props: {
 					</small>
 				)}
 			</div>
-			<textarea
+			<Textarea
 				value={props.value}
 				rows={8}
 				onChange={(event) => props.onChange(event.target.value)}
@@ -806,7 +807,7 @@ function SettingsModalContent(props: SettingsModalProps) {
 											{t("settings.rpcTimeout")}
 											<DirtyMarker dirty={isDirty("rpcTimeout")} label={t("settings.rpcTimeout")} />
 										</span>
-										<input
+										<Input
 											type="number"
 											value={String(Math.round(draftSettings.rpcTimeout / 1000))}
 											onChange={(e) => {
@@ -823,7 +824,7 @@ function SettingsModalContent(props: SettingsModalProps) {
 											{t("settings.maxEditorFileSize")}
 											<DirtyMarker dirty={isDirty("maxEditorFileSizeMB")} label={t("settings.maxEditorFileSize")} />
 										</span>
-										<input
+										<Input
 											type="number"
 											value={String(draftSettings.maxEditorFileSizeMB)}
 											onChange={(e) => {
@@ -1485,7 +1486,7 @@ function SettingsModalContent(props: SettingsModalProps) {
 											</div>
 											<label className="web-endpoint-metric editable">
 												<span>{t("common.port")}</span>
-												<input
+												<Input
 													type="number"
 													min={1}
 													max={65535}

@@ -5,6 +5,7 @@ import { ArrowLeft, Check, ChevronLeft, ChevronRight, Download, Search } from "l
 import type { YaoPromptListResult, YaoPromptItem, YaoPromptDetailResult, PiPromptTemplateSummary, PiPromptTemplateListResult } from "../../../shared/types";
 import { t } from "../i18n";
 import { desktopApi } from "../desktopApi";
+import { Input } from "../components/ui-shadcn/input";
 const PAGE_SIZE = 20;
 
 async function getInstalledPromptNames(): Promise<Set<string>> {
@@ -178,7 +179,7 @@ export function YaoPromptTab(props: {
 			<div className="prompt-store-search-bar">
 				<div className="prompt-store-search-input-wrap">
 					<Search size={15} strokeWidth={1.8} className="prompt-store-search-icon" />
-					<input
+					<Input
 						type="text"
 					value={searchQuery}
 					onChange={(e) => handleSearchChange(e.target.value)}

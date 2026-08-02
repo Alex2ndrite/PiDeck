@@ -21,6 +21,8 @@ import type {
 	ProjectResourceListResult,
 } from "../../../../shared/types";
 import { t } from "../../i18n";
+import { Input } from "../ui-shadcn/input";
+import { Textarea } from "../ui-shadcn/textarea";
 
 type ProjectResourcesApi = typeof window.piDesktop.projectResources;
 
@@ -416,11 +418,11 @@ export function ProjectResourcesModal(props: {
 							<p>{t("projectResources.createSkillHint")}</p>
 							<label className="project-resources-name-field">
 								<span>{t("config.name")}</span>
-								<input value={newName} placeholder="my-project-skill" onChange={(event) => setNewName(event.target.value)} />
+								<Input value={newName} placeholder="my-project-skill" onChange={(event) => setNewName(event.target.value)} />
 							</label>
 							<label className="project-resources-desc-field">
 								<span>{t("config.description")}</span>
-								<textarea value={newDescription} placeholder="Use when..." onChange={(event) => setNewDescription(event.target.value)} />
+								<Textarea value={newDescription} placeholder="Use when..." onChange={(event) => setNewDescription(event.target.value)} />
 							</label>
 							<Button  variant="default" onClick={createSkill} disabled={!canCreateSkill || createBusy}>
 								{createBusy ? t("config.creatingSkill") : t("config.addSkill")}
@@ -439,7 +441,7 @@ export function ProjectResourcesModal(props: {
 									<div className="project-resource-title">
 										{renamingSkill === skill.id ? (
 											<div className="skill-rename-inline">
-												<input
+												<Input
 											value={renameSkillValue}
 											onChange={(e) => setRenameSkillValue(e.target.value)}
 													onKeyDown={(e) => { if (e.key === "Enter") void renameSkillConfirm(skill, renameSkillValue); if (e.key === "Escape") setRenamingSkill(null); }}
@@ -594,11 +596,11 @@ export function ProjectResourcesModal(props: {
 						<section className="project-skill-create">
 							<label className="project-resources-name-field">
 								<span>{t("config.name")}</span>
-								<input value={newPromptName} placeholder="my-project-prompt" onChange={(event) => setNewPromptName(event.target.value)} />
+								<Input value={newPromptName} placeholder="my-project-prompt" onChange={(event) => setNewPromptName(event.target.value)} />
 							</label>
 							<label className="project-resources-desc-field">
 								<span>{t("config.description")}</span>
-								<textarea value={newPromptDescription} placeholder="Use when..." onChange={(event) => setNewPromptDescription(event.target.value)} />
+								<Textarea value={newPromptDescription} placeholder="Use when..." onChange={(event) => setNewPromptDescription(event.target.value)} />
 							</label>
 							<Button  variant="default" onClick={createProjectPrompt} disabled={!canCreatePrompt || creatingPrompt}>
 								{creatingPrompt ? t("config.creatingSkill") : t("config.addSkill")}

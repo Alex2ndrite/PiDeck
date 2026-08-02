@@ -11,6 +11,8 @@ import {
 	setHeaderValue,
 } from "./providerHeaders";
 import { buildModelsFromFetchedSelection } from "./modelsUtils";
+import { Checkbox } from "../components/ui-shadcn/checkbox";
+import { Input } from "../components/ui-shadcn/input";
 
 type FetchedModel = { id: string; name?: string };
 
@@ -79,7 +81,7 @@ function FetchedModelCombobox(props: {
 	return (
 		<div className="min-w-0">
 			<div className="flex items-center gap-2">
-				<input
+				<Input
 					ref={inputRef}
 					value={filter}
 					onChange={(e) => setFilter(e.target.value)}
@@ -373,7 +375,7 @@ export function ModelsTab(props: {
 
 			{props.addingProvider && (
 				<div className="config-add-provider-row">
-					<input
+					<Input
 						value={props.newProviderName}
 						onChange={(e) => props.onChangeNewProviderName(e.target.value)}
 						placeholder={t("config.providerNamePlaceholder")}
@@ -425,11 +427,10 @@ export function ModelsTab(props: {
 							>
 								{batchMode && (
 								<label className="mr-2.5 inline-flex size-4 shrink-0 items-center justify-center" onClick={(e) => e.stopPropagation()}>
-									<input
-										type="checkbox"
+									<Checkbox
 										checked={selectedProviders.has(name)}
-										onChange={(e) => {
-											e.stopPropagation();
+										onClick={(e) => e.stopPropagation()}
+								onCheckedChange={() => {
 											setSelectedProviders(prev => {
 												const next = new Set(prev);
 												if (next.has(name)) next.delete(name);
@@ -442,7 +443,7 @@ export function ModelsTab(props: {
 							)}
 							<div className="flex min-w-0 flex-1 items-center gap-2.5">
 									{props.renamingProvider === name ? (
-										<input
+										<Input
 											className="h-[30px] min-w-[120px] rounded-sm border border-border-subtle bg-bg-panel px-2.5 text-sm font-semibold text-text-primary outline-none transition-colors duration-150 focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]"
 											value={props.renameValue}
 											onChange={(e) => props.onChangeRenameValue(e.target.value)}
@@ -539,7 +540,7 @@ export function ModelsTab(props: {
 										<div className="grid grid-cols-[90px_1fr] items-center gap-2.5">
 											<label className="pl-0.5 text-left text-xs font-medium text-text-secondary">{t("config.field.baseUrl")}</label>
 											<div className="config-base-url-field">
-												<input
+												<Input
 													value={provider.baseUrl ?? ""} className="h-9 min-w-0 rounded-sm border border-border-subtle bg-bg-panel px-3 text-[13px] text-text-primary outline-none transition-[border-color,box-shadow,background-color] duration-150 focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]"
 													onChange={(e) =>
 														props.onChangeProvider(
@@ -594,7 +595,7 @@ export function ModelsTab(props: {
 														);
 													}}
 												/>
-												<input
+												<Input
 													value={userAgentValue}
 													onChange={(e) =>
 														props.onChangeProvider(
@@ -618,7 +619,7 @@ export function ModelsTab(props: {
 										<div className="grid grid-cols-[90px_1fr] items-center gap-2.5">
 											<label className="pl-0.5 text-left text-xs font-medium text-text-secondary">{t("config.testModel")}</label>
 											<div className="config-test-controls">
-												<input
+												<Input
 													value={props.testModelIdByProvider[name] ?? ""} className="h-9 min-w-0 rounded-sm border border-border-subtle bg-bg-panel px-3 text-[13px] text-text-primary outline-none transition-[border-color,box-shadow,background-color] duration-150 focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]"
 													onChange={(e) =>
 														props.onChangeTestModelId(name, e.target.value)
@@ -756,12 +757,11 @@ export function ModelsTab(props: {
 											<div className="config-compat-group">
 												<div className="config-compat-item">
 													<label className="config-checkbox-label">
-														<input
-															type="checkbox"
+														<Checkbox
 															checked={getCompat(name).supportsDeveloperRole === true}
-															onChange={(e) => {
+															onCheckedChange={(checked) => {
 																const compat = { ...getCompat(name) };
-																compat.supportsDeveloperRole = e.target.checked;
+																compat.supportsDeveloperRole = checked === true;
 																// 确保两个兼容性字段都显式写入，避免序列化后 JSON 为空导致 pi 后端无法正确判断
 																compat.supportsReasoningEffort ??= false;
 																props.onChangeProvider(name, "compat", compat);
@@ -773,12 +773,11 @@ export function ModelsTab(props: {
 												</div>
 												<div className="config-compat-item">
 													<label className="config-checkbox-label">
-														<input
-															type="checkbox"
+														<Checkbox
 															checked={getCompat(name).supportsReasoningEffort === true}
-															onChange={(e) => {
+															onCheckedChange={(checked) => {
 																const compat = { ...getCompat(name) };
-																compat.supportsReasoningEffort = e.target.checked;
+																compat.supportsReasoningEffort = checked === true;
 																// 确保两个兼容性字段都显式写入，避免序列化后 JSON 为空导致 pi 后端无法正确判断
 																compat.supportsDeveloperRole ??= false;
 																props.onChangeProvider(name, "compat", compat);
@@ -907,7 +906,7 @@ export function ModelsTab(props: {
 												key={`${name}-${i}`}
 												className="config-models-grid-row"
 											>
-												<input
+												<Input
 													ref={(element) => {
 														modelIdInputRefs.current[getModelInputKey(name, i)] =
 															element;
@@ -918,14 +917,14 @@ export function ModelsTab(props: {
 													}
 													placeholder="model-id"
 												/>
-												<input
+												<Input
 													value={m.name ?? ""}
 													onChange={(e) =>
 														props.onUpdateModel(name, i, "name", e.target.value)
 													}
 													placeholder={t("config.modelDisplayName")}
 												/>
-												<input
+												<Input
 													type="number"
 													value={m.contextWindow ?? ""}
 													onChange={(e) =>
@@ -941,7 +940,7 @@ export function ModelsTab(props: {
 													// 数字输入框不能填写 200k 这类缩写，placeholder 使用真实可保存的 token 数值。
 													placeholder="1000000"
 												/>
-												<input
+												<Input
 													type="number"
 													value={m.maxTokens ?? ""}
 													onChange={(e) =>
@@ -958,15 +957,14 @@ export function ModelsTab(props: {
 													placeholder="128000"
 												/>
 												<label className="config-checkbox-cell">
-													<input
-														type="checkbox"
+													<Checkbox
 														checked={m.reasoning ?? false}
-														onChange={(e) =>
+														onCheckedChange={(checked) =>
 															props.onUpdateModel(
 																name,
 																i,
 																"reasoning",
-																e.target.checked,
+																checked,
 															)
 														}
 													/>
@@ -990,12 +988,11 @@ export function ModelsTab(props: {
 												</div>
 													<div className="config-input-cell">
 														<label className="config-input-option">
-															<input
-																type="checkbox"
+															<Checkbox
 																checked={(m.input ?? []).includes("image")}
-																onChange={(e) => {
+																onCheckedChange={(checked) => {
 																	const base = m.input ?? ["text", "image"];
-																	const next = e.target.checked
+																	const next = checked
 																		? [...new Set([...base, "text", "image"])]
 																		: ["text"];
 																	props.onUpdateModel(name, i, "input", next);

@@ -2,6 +2,8 @@ import { Button } from "../components/ui-shadcn/button";
 import { useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { t } from "../i18n";
+import { Input } from "../components/ui-shadcn/input";
+import { Checkbox } from "../components/ui-shadcn/checkbox";
 
 /**
  * trust.json 结构：{ "C:\\Users": true, "D:\\project": false }
@@ -53,7 +55,7 @@ export function TrustTab(props: {
 			</div>
 
 			<div className="config-trust-add">
-				<input
+				<Input
 					className="config-trust-input"
 					type="text"
 					value={addPath}
@@ -83,10 +85,9 @@ export function TrustTab(props: {
 					{entries.map(([path, trusted]) => (
 						<div key={path} className="config-trust-row" data-trusted={trusted || undefined}>
 							<label className="config-trust-toggle">
-								<input
-									type="checkbox"
+								<Checkbox
 									checked={trusted}
-									onChange={(e) => toggleEntry(path, e.target.checked)}
+									onCheckedChange={(checked) => toggleEntry(path, checked === true)}
 								/>
 								<span className="config-trust-path" title={path}>
 									{path}

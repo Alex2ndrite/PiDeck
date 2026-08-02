@@ -1,3 +1,4 @@
+import { Input } from "../ui-shadcn/input";
 // ============================================================
 // AppParts — 产品级顶层桥接文件
 // ============================================================
@@ -206,7 +207,7 @@ export function EnvironmentDialog(props: {
 											<label className="env-install-command-label">
 												{t("environment.installCommandLabel")}
 											</label>
-											<input
+											<Input
 												type="text"
 												className="env-install-command-input"
 												value={props.installCommand}
@@ -326,7 +327,7 @@ export function EnvironmentDialog(props: {
 
 								</div>
 								<div className="custom-path-input-row">
-									<input
+									<Input
 										type="text"
 										placeholder="D:\\mise-data\\installs\\node\\24 13 0\\pi.cmd"
 										value={props.customPath}
