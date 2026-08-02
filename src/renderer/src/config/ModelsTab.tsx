@@ -1,6 +1,6 @@
 import { Button } from "../components/ui-shadcn/button";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Check, ChevronDown, ChevronRight, Copy, ExternalLink, Trash2 } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Copy, ExternalLink, SquarePen, Trash2, X } from "lucide-react";
 import { t } from "../i18n";
 import type { ModelItem, ModelsFile } from "./configTypes";
 import { ApiTypeInput, ConfigSelect, SecretInput } from "./ConfigShared";
@@ -247,21 +247,21 @@ export function ModelsTab(props: {
 				</span>
 				<div className="flex min-w-0 items-center gap-2">
 					<Button
-						 variant="outline"
+						 size="sm" variant="outline"
 						onClick={props.onStartAddProvider}
 						disabled={saving}
 					>
 						{t("config.addProvider")}
 					</Button>
 					<Button
-						 variant="outline"
+						 size="sm" variant="outline"
 						onClick={() => setShowGuide(!showGuide)}
 						disabled={saving}
 					>
 						{t("config.providerGuide")}
 					</Button>
 					<Button
-						 variant="destructive"
+						 size="sm" variant="destructive"
 						onClick={() => {
 							if (batchMode) {
 								setBatchMode(false);
@@ -276,7 +276,7 @@ export function ModelsTab(props: {
 					</Button>
 					{batchMode && (
 						<Button
-							 variant="destructive"
+							 size="sm" variant="destructive"
 							onClick={() => {
 								if (selectedProviders.size > 0) {
 									props.onDeleteProviders([...selectedProviders] as string[]);
@@ -290,7 +290,7 @@ export function ModelsTab(props: {
 						</Button>
 					)}
 					<Button
-						 variant="default"
+						 size="sm" variant="default"
 						onClick={props.onSave}
 						disabled={saving}
 					>
@@ -304,7 +304,7 @@ export function ModelsTab(props: {
 				<div className="mb-4 rounded-md border border-border-subtle bg-bg-subtle p-4">
 					<div className="mb-2.5 flex items-center justify-between">
 						<strong className="text-sm text-text-primary">{t("config.providerGuideTitle")}</strong>
-						<Button variant="ghost" size="icon-sm" className="size-7" onClick={() => setShowGuide(false)}>×</Button>
+						<Button variant="ghost" size="icon-sm" className="size-7" onClick={() => setShowGuide(false)}><X size={14} /></Button>
 					</div>
 					<div className="text-xs leading-relaxed text-text-secondary">
 						<p>{t("config.providerGuideIntro")}</p>
@@ -383,13 +383,13 @@ export function ModelsTab(props: {
 						autoFocus
 					/>
 					<Button
-						 variant="default"
+						 size="sm" variant="default"
 						onClick={props.onConfirmAddProvider}
 						disabled={!props.newProviderName.trim()}
 					>
 						{t("common.confirm")}
 					</Button>
-					<Button  variant="outline" onClick={props.onCancelAddProvider}>
+					<Button  size="sm" variant="outline" onClick={props.onCancelAddProvider}>
 						{t("common.cancel")}
 					</Button>
 				</div>
@@ -489,7 +489,7 @@ export function ModelsTab(props: {
 												}}
 												title={t("config.renameCancel")}
 											>
-												×
+												<X size={14} />
 											</Button>
 										</>
 									) : (
@@ -501,7 +501,7 @@ export function ModelsTab(props: {
 											}}
 											title={t("config.renameProvider")}
 										>
-											✎
+											<SquarePen size={14} />
 										</Button>
 									)}
 									<Button
@@ -657,7 +657,7 @@ export function ModelsTab(props: {
 															onClick={props.onClearTestResult}
 															title={t("config.clearResult")}
 														>
-															×
+															<X size={14} />
 														</Button>
 													</div>
 													{props.testResult.success ? (

@@ -1870,6 +1870,13 @@
   min-height: 2rem;
 }
 
+/* 选中态与设置弹窗 tabs 对齐：更深底色 + 主文字 + 加粗 */
+.config-nav-btn.active {
+  background: var(--color-bg-active);
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+
 .config-main {
   min-width: 0;
   min-height: 0;
