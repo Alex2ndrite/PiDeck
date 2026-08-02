@@ -213,7 +213,13 @@ export function ApiTypeInput(props: {
 			onValueChange={(value) => props.onChange(value === SENTINEL ? "" : value)}
 		>
 			<SelectTrigger className="config-select-trigger">
-				<SelectValue placeholder={t("config.apiTypePlaceholder")} />
+				{/* 选中后只显示名称（title），描述仅在下拉选项里展示：
+				   不用 SelectValue 的自动文本（会连描述一起显示） */}
+				<span className="flex min-w-0 flex-1 items-center truncate">
+					{props.value
+						? (API_TYPE_LABELS[props.value] || props.value)
+						: <span className="text-muted-foreground">{t("config.apiTypePlaceholder")}</span>}
+				</span>
 			</SelectTrigger>
 			<SelectContent>
 				{isCustom && (
