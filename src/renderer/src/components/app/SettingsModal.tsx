@@ -1028,7 +1028,7 @@ function SettingsModalContent(props: SettingsModalProps) {
 										<input
 											type="range"
 											min="800"
-											max="1500"
+											max="1800"
 											step="25"
 											value={draftSettings.contentMaxWidth}
 											onChange={(event) => updateDraft({ contentMaxWidth: parseInt(event.target.value) })}
@@ -1041,7 +1041,7 @@ function SettingsModalContent(props: SettingsModalProps) {
 											minWidth: 80,
 											textAlign: "right",
 										}}>
-											{draftSettings.contentMaxWidth === 1500
+											{draftSettings.contentMaxWidth === 1800
 												? t("settings.contentMaxWidthUnlimited")
 												: `${draftSettings.contentMaxWidth}px`}
 										</span>

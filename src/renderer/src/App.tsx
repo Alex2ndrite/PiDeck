@@ -488,7 +488,7 @@ export function App() {
     webServicePort: 8765,
     rpcTimeout: 600_000,
     linkOpenMode: "external",
-    contentMaxWidth: 1500,
+    contentMaxWidth: 1800,
     maxEditorFileSizeMB: 5,
     externalEditors: createDefaultExternalEditorSettings(),
 
