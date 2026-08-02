@@ -2,34 +2,47 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-// UI 2.0（#115 U2）：Streamdown 转正为唯一 markdown 引擎（迁移 react-markdown 完成）。
-// 关键点：会话正文与静态场景（文件预览/更新日志/草稿本）共用 MarkdownStream；
-// 所有管线共享同一份链接/路径处理实现；react-markdown 依赖与灰度开关已移除。
+// UI 2.0（#115 U2）：Streamdown 为唯一 markdown 引擎，内置能力交给官方插件。
+// 关键点：code/mermaid/math 由 @streamdown/* 插件接管；a 仍走 MarkdownLink
+// （file:// 打开 + 系统浏览器）；Tailwind 已扫描 streamdown 类名保证控件样式完整。
 const stream = readFileSync("src/renderer/src/components/session/MarkdownStream.tsx", "utf8");
 const surface = readFileSync("src/renderer/src/components/session/SurfaceComponents.tsx", "utf8");
 const link = readFileSync("src/renderer/src/components/session/MarkdownLink.tsx", "utf8");
 const linkCore = readFileSync("src/renderer/src/components/session/MarkdownLinkCore.ts", "utf8");
-const settingsType = readFileSync("src/shared/types/settings.ts", "utf8");
-const atoms = readFileSync("src/renderer/src/atoms/app-ui-atoms.ts", "utf8");
-const app = readFileSync("src/renderer/src/App.tsx", "utf8");
+const tailwind = readFileSync("src/renderer/src/styles/tailwind.css", "utf8");
+const main = readFileSync("src/renderer/src/main.tsx", "utf8");
 const packageJson = readFileSync("package.json", "utf8");
 
-test("streamdown pipeline keeps project overrides (code blocks, file links, math)", () => {
-  // 自定义组件覆盖不得回退：mermaid 代码块、文件路径链接、数学 span
-  assert.match(stream, /pre: \(preProps\) => <CodeBlock/);
+test("streamdown pipeline delegates to official plugins (code/mermaid/math) and keeps link override", () => {
+  // 官方插件接管：代码高亮、mermaid、数学
+  assert.match(stream, /import \{ code \} from "@streamdown\/code"/);
+  assert.match(stream, /import \{ mermaid \} from "@streamdown\/mermaid"/);
+  assert.match(stream, /import \{ math \} from "@streamdown\/math"/);
+  assert.match(stream, /plugins=\{\s*\(props\.light/);
+  assert.match(stream, /\{ math \}/);
+  // 链接覆盖保留（file:// 打开 + 外链拦截是项目核心能力）
   assert.match(stream, /a: \(linkProps\) =>/);
   assert.match(stream, /MarkdownLink/);
-  assert.match(stream, /span: \(spanProps\) => <MathSpan/);
-  // 流式容错引擎开启 + 项目自定义插件保留
-  assert.match(stream, /mode=\{props\.isStreaming \? "streaming" : "static"\}/);
   assert.match(stream, /remarkLinkifyPaths/);
-  assert.match(stream, /remarkMath/);
-  assert.match(stream, /rehypeKatex/);
-  // file:// 链接放行（sanitize 被有意排除，见组件注释）
-  assert.doesNotMatch(stream, /defaultRehypePlugins\.sanitize/);
-  // harden 也必须排除：它把 file: 写死进 blockedProtocols（不可覆盖），
-  // 会杀死「文件路径可点击打开」核心能力（危险协议由 urlTransform 拦截）
-  assert.doesNotMatch(stream, /defaultRehypePlugins\.harden/);
+  // 自定义 pre/span 覆盖移除：mermaid 由插件渲染、代码由 shiki 插件、公式由 math 插件
+  assert.doesNotMatch(stream, /pre: \(preProps\) => <CodeBlock/);
+  assert.doesNotMatch(stream, /span: \(spanProps\) => <MathSpan/);
+  // 流式容错引擎开启
+  assert.match(stream, /mode=\{props\.isStreaming \? "streaming" : "static"\}/);
+  // mermaid 主题跟随明暗
+  assert.match(stream, /theme: isDark \? "dark" : "default"/);
+});
+
+test("Tailwind scans streamdown + plugin classes; styles.css imported (table/code control styling)", () => {
+  assert.match(tailwind, /@source "\.\.\/\.\.\/\.\.\/\.\.\/node_modules\/streamdown\/dist\/\*\.js"/);
+  assert.match(tailwind, /@source "\.\.\/\.\.\/\.\.\/\.\.\/node_modules\/@streamdown\/code/);
+  assert.match(tailwind, /@source "\.\.\/\.\.\/\.\.\/\.\.\/node_modules\/@streamdown\/mermaid/);
+  assert.match(tailwind, /@source "\.\.\/\.\.\/\.\.\/\.\.\/node_modules\/@streamdown\/math/);
+  assert.match(main, /import "streamdown\/styles\.css"/);
+  assert.match(packageJson, /"@streamdown\/code"/);
+  assert.match(packageJson, /"@streamdown\/mermaid"/);
+  assert.match(packageJson, /"@streamdown\/math"/);
+  assert.doesNotMatch(packageJson, /"react-markdown"/);
 });
 
 test("link handling is the single shared implementation (no react-markdown import)", () => {
@@ -54,12 +67,6 @@ test("Streamdown is the only markdown engine (switch, settings field, dependency
   assert.doesNotMatch(surface, /ReactMarkdown/);
   assert.doesNotMatch(surface, /from "react-markdown"/);
   assert.match(surface, /<MarkdownStream/);
-  // 灰度开关全链路移除：atom / App 同步 / 设置字段
-  assert.doesNotMatch(atoms, /useStreamdownRendererAtom = atom/);
-  assert.doesNotMatch(app, /setStreamdownRenderer/);
-  assert.doesNotMatch(settingsType, /useStreamdownRenderer/);
-  // 依赖已从 package.json 移除
-  assert.doesNotMatch(packageJson, /"react-markdown"/);
 });
 
 test("static markdown scenes share the Streamdown engine", () => {

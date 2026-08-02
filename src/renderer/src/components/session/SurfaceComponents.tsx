@@ -120,11 +120,6 @@ import removeMarkdown from "remove-markdown";
 import { GRID_COLS, CELL_W, CELL_H, MODE_ROW, MODE_FRAMES } from "../../pet/PetSpriteSheet";
 
 import type { WorkspaceDrawerPanel } from "../../hooks/useWorkspacePanels";
-import {
-	CodeBlock,
-	extractText,
-	MathSpan,
-} from "./MarkdownComponents";
 import { formatDuration, formatTime, stripAnsi } from "./TimelineFormat";
 import { ToolCard, ToolGroupCard, type DiffFileHandler } from "./ToolCallComponents";
 import {
@@ -1279,7 +1274,6 @@ function renderChipText(text: string, onOpenFile?: (path: string) => void, valid
 	return nodes;
 }
 
-export { CodeBlock, extractText, MathSpan } from "./MarkdownComponents";
 export { ToolCard, ToolGroupCard };
 export {
 	AskQuestionCard,

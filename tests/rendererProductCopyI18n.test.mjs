@@ -155,7 +155,6 @@ test("reachable renderer surfaces use i18n without changing their UI structure",
 	assert.match(settingsStorage, /t\("settings\.storage\.clearConfirm"/);
 	assert.match(surface, /t\("activity\.executionSummary", \{ summary:/);
 	assert.match(surface, /t\("app\.compactionTokensBefore", \{ count:/);
-	assert.match(surface, /aria-label=\{t\("mermaid\.controls"\)\}/);
 	assert.match(skillStore, /className="prompt-store-tab"[\s\S]*?t\("config\.skillStoreSearchPlaceholder"\)/);
 	assert.match(yaoStore, /className="store-sub-tab"[\s\S]*?t\("config\.yaoSearchPlaceholder"\)/);
 	assert.match(skillHub, /className="skillhub-installed-badge"[\s\S]*?t\("config\.installed"\)/);
@@ -194,7 +193,9 @@ test("renderer async failures log diagnostics and expose stable localized copy",
 	assert.match(extensions, /alert\(t\("settings\.extensionsUpdateFailedGeneric"\)\)/);
 	assert.doesNotMatch(extensions, /alert\([^\n]*(?:e instanceof Error|String\(e\))/);
 
-	assert.match(surface, /console\.error\("\[Mermaid\] Render failed", err\)/);
-	assert.match(surface, /className="mermaid-error-message">\{t\("mermaid\.renderFailed"\)\}/);
+	// mermaid 渲染已交给 @streamdown/mermaid 插件（errorComponent 兜底），
+	// 项目代码不再直接渲染图表；错误文案键仍保留供插件错误组件使用
+	assert.doesNotMatch(surface, /\[Mermaid\] Render failed/);
+	assert.doesNotMatch(surface, /mermaid-error-message/);
 	assert.doesNotMatch(surface, /Mermaid render failed: \{props\.error\}/);
 });

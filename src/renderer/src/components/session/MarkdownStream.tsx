@@ -1,27 +1,31 @@
 import { memo } from "react";
 import { Streamdown, defaultRehypePlugins, defaultRemarkPlugins } from "streamdown";
-import rehypeKatex from "rehype-katex";
-import remarkMath from "remark-math";
-import { CodeBlock, MathSpan } from "./MarkdownComponents";
-import { markdownUrlTransform, MarkdownLink, remarkLinkifyPaths } from "./MarkdownLink";
+import { code } from "@streamdown/code";
+import { mermaid } from "@streamdown/mermaid";
+import { math } from "@streamdown/math";
+import { MarkdownLink, remarkLinkifyPaths } from "./MarkdownLink";
+import { markdownUrlTransform } from "./MarkdownLinkCore";
 
 /**
- * Streamdown 渲染管线（UI 2.0 / issue #115 U2，已转正为唯一 markdown 引擎）。
+ * Streamdown 渲染管线（唯一 markdown 引擎）。
  *
- * 会话正文（AssistantText）使用默认配置：流式半截 markdown（未闭合代码围栏/表格/加粗）
- * 由 remend 容错补全、按 block 粒度 memo、表格复制等内建控件。
+ * 内置能力（由 streamdown 官方插件接管，不再自研）：
+ * - 代码高亮：@streamdown/code（shiki，github-light/github-dark 双主题，行号+复制/下载）
+ * - 数学公式：@streamdown/math（KaTeX，$...$/$$...$$）
+ * - mermaid 图表：@streamdown/mermaid（```mermaid 代码块 → 交互式 SVG + 全屏/缩放/下载控件）
+ * - 表格：GFM + 内建复制/下载（CSV/TSV/Markdown）控件
+ * - HTML 标签：默认 sanitize（未知标签剥属性保留文本）
  *
- * 静态场景（文件预览/更新日志/草稿本）通过可选 props 覆盖插件与组件：
- * - remarkPlugins/rehypePlugins：默认 gfm+codeMeta+math+路径链接 / raw+katex
- * - urlTransform：默认 markdownUrlTransform（放行 file://）
- * - components：默认 pre/span/a 项目覆盖（mermaid 代码块、数学 span、文件链接）
+ * 有意保留的项目能力（streamdown 无对应内置或桌面语义不同）：
+ * - a 仍走 MarkdownLink：file:// 本地路径可点击打开、外链经 onOpenExternal
+ *   走系统浏览器（linkSafety 内置的「打开」用 window.open，桌面端不可用）；
+ *   危险协议（javascript:/data:）由 urlTransform 拦截
+ * - cytoscape / wardley 图表：streamdown 只有 mermaid，经 plugins.renderers
+ *   注册自定义渲染器保留（见 MarkdownDiagramRenderers）
  *
- * 有意保留的项目行为（迁移后不回退这些能力）：
- * - pre/span/a 仍走自定义组件：mermaid/cytoscape/wardley 代码块、数学 span、
- *   文件路径链接（file:// → onOpenFile）与外链拦截（onOpenExternal）；
- * - rehype 不加 sanitize / harden：与旧管线同一信任模型（本地 AI 输出），
- *   sanitize 会剥高 file:// 链接、harden 把 file: 写死进 blockedProtocols，
- *   文件路径可点击打开是项目核心能力，两者都只能弃用（危险协议由 urlTransform 拦）。
+ * 注：@streamdown/* 插件与 streamdown 各自解析独立的 shiki 3.x 副本（根 shiki 2.x
+ * 被 vitepress 占用无法 hoist），TS 类型路径分裂但运行时协议一致（官方组合用法），
+ * plugins 传参处做了第三方边界类型收窄。
  */
 export const MarkdownStream = memo(function MarkdownStream(props: {
 	text: string;
@@ -33,7 +37,11 @@ export const MarkdownStream = memo(function MarkdownStream(props: {
 	rehypePlugins?: Parameters<typeof Streamdown>[0]["rehypePlugins"];
 	urlTransform?: (url: string) => string;
 	components?: Parameters<typeof Streamdown>[0]["components"];
+	/** 是否禁用图表/代码高亮等重型渲染（静态小场景如更新日志可关以省内存） */
+	light?: boolean;
 }) {
+	const isDark = typeof document !== "undefined" &&
+		document.documentElement.dataset.theme === "dark";
 	return (
 		<Streamdown
 			mode={props.isStreaming ? "streaming" : "static"}
@@ -42,29 +50,34 @@ export const MarkdownStream = memo(function MarkdownStream(props: {
 				props.remarkPlugins ?? [
 					defaultRemarkPlugins.gfm,
 					defaultRemarkPlugins.codeMeta,
-					remarkMath,
 					remarkLinkifyPaths,
 				]
 			}
 			rehypePlugins={
 				props.rehypePlugins ?? [
 					defaultRehypePlugins.raw,
-					rehypeKatex,
-					// 有意排除 sanitize 与 harden 两个 rehype 插件：
-					// 与旧管线同一信任模型（本地 AI 输出），sanitize 默认 schema 会剥高 file:// 链接；
-					// harden 则把 file: 写死进 blockedProtocols（不允许覆盖），
-					// 而「AI 回复中的文件路径可点击打开」是本项目核心能力，两插件都只能弃用。
-					// javascript:/data: 等危险协议由 urlTransform（defaultUrlTransform）拦截。
+					// sanitize/harden 由 streamdown 默认管线处理（未知标签剥属性、
+					// 危险链接改写）；file:// 放行由 urlTransform 保证
 				]
 			}
 			urlTransform={props.urlTransform ?? markdownUrlTransform}
-			// Streamdown 的 components 索引签名为 Record<string, unknown> & ExtraProps，
-			// 与 react-markdown 组件的 DOM props 类型不交集；运行时传入的就是 hast DOM 属性，
-			// 属第三方边界的类型收窄（AGENTS 例外条款），故经 unknown 转到具体 DOM props。
+			plugins={
+				(props.light
+					? { math }
+					: {
+							code,
+							mermaid,
+							math,
+						}) as Parameters<typeof Streamdown>[0]["plugins"]
+			}
+			mermaid={{
+				config: {
+					theme: isDark ? "dark" : "default",
+					securityLevel: "strict",
+				},
+			}}
 			components={
 				props.components ?? {
-					pre: (preProps) => <CodeBlock {...(preProps as unknown as React.HTMLAttributes<HTMLPreElement>)} />,
-					span: (spanProps) => <MathSpan {...(spanProps as unknown as React.HTMLAttributes<HTMLSpanElement>)} />,
 					a: (linkProps) => (
 						<MarkdownLink
 							{...(linkProps as unknown as React.AnchorHTMLAttributes<HTMLAnchorElement>)}
