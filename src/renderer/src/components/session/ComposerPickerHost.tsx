@@ -26,6 +26,7 @@ import {
 } from "../../utils/sessionCommands";
 import { ConfirmDialog } from "../app/AppParts";
 import type { ComposerPickerKind } from "../../hooks/useSessionComposerController";
+import { WELCOME_MODEL_KEY, WELCOME_THINKING_KEY, readWelcomeModelPreference, readWelcomeThinkingPreference } from "../../utils/chatSessionBootstrap";
 
 export type ComposerPickerHostProps = {
   sessionId: string;
@@ -99,7 +100,19 @@ export function ComposerPickerHost(props: ComposerPickerHostProps) {
   }
 
   async function pickModel(model: AvailableModel) {
-    if (!record) return;
+    // 欢迎页/未启动 Agent（无 record）：把选择存本地偏好，点「启动 Agent」创建会话时应用。
+    if (!record) {
+      try {
+        localStorage.setItem(WELCOME_MODEL_KEY, JSON.stringify({
+          provider: model.provider,
+          modelId: model.id,
+        }));
+      } catch {
+        // localStorage 不可用时静默；创建会话回退到 pi 默认模型
+      }
+      props.onClose();
+      return;
+    }
     const handle = currentHandle();
     try {
       if (handle) {
@@ -171,7 +184,16 @@ export function ComposerPickerHost(props: ComposerPickerHostProps) {
   }
 
   async function pickThinking(level: string) {
-    if (!record) return;
+    // 欢迎页/未启动 Agent（无 record）：把选择存本地偏好，点「启动 Agent」创建会话时应用。
+    if (!record) {
+      try {
+        localStorage.setItem(WELCOME_THINKING_KEY, level);
+      } catch {
+        // localStorage 不可用时静默
+      }
+      props.onClose();
+      return;
+    }
     const handle = currentHandle();
     try {
       if (handle) {
@@ -237,12 +259,13 @@ export function ComposerPickerHost(props: ComposerPickerHostProps) {
     );
   }
   if (props.picker === "model") {
+    const welcomeModel = readWelcomeModelPreference()?.model;
     return (
       <ModelPicker
         models={models}
         current={{
-          provider: runtime?.state?.provider ?? record?.model?.provider,
-          modelId: runtime?.state?.modelId ?? record?.model?.modelId,
+          provider: runtime?.state?.provider ?? record?.model?.provider ?? welcomeModel?.provider,
+          modelId: runtime?.state?.modelId ?? record?.model?.modelId ?? welcomeModel?.modelId,
           modelName: runtime?.state?.modelName,
         }}
         onClose={props.onClose}
@@ -267,7 +290,7 @@ export function ComposerPickerHost(props: ComposerPickerHostProps) {
   if (props.picker === "thinking") {
     return (
       <ThinkingPicker
-        current={runtime?.state?.thinkingLevel ?? record?.thinkingLevel}
+        current={runtime?.state?.thinkingLevel ?? record?.thinkingLevel ?? readWelcomeThinkingPreference()?.thinkingLevel}
         onClose={props.onClose}
         onPick={(level) => void pickThinking(level)}
       />

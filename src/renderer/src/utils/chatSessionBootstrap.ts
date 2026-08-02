@@ -6,6 +6,39 @@ export type ChatSessionBootstrapAction =
 
 export const CHAT_BOOTSTRAP_SESSION_ID = "renderer:chat-bootstrap";
 
+/** 欢迎页（未启动 Agent）选择的模型偏好存储 key。 */
+export const WELCOME_MODEL_KEY = "pideck:welcome-model";
+/** 欢迎页（未启动 Agent）选择的思考级别偏好存储 key。 */
+export const WELCOME_THINKING_KEY = "pideck:welcome-thinking";
+
+/** 读取欢迎页最后选择的模型偏好（无则 undefined）。 */
+export function readWelcomeModelPreference(): {
+  model: { provider: string; modelId: string };
+} | undefined {
+  try {
+    const raw = localStorage.getItem(WELCOME_MODEL_KEY);
+    if (!raw) return undefined;
+    const parsed = JSON.parse(raw) as { provider?: string; modelId?: string };
+    if (typeof parsed.provider === "string" && typeof parsed.modelId === "string") {
+      return { model: { provider: parsed.provider, modelId: parsed.modelId } };
+    }
+  } catch {
+    // 解析失败视为无偏好
+  }
+  return undefined;
+}
+
+/** 读取欢迎页最后选择的思考级别（无则 undefined）。 */
+export function readWelcomeThinkingPreference(): { thinkingLevel: string } | undefined {
+  try {
+    const level = localStorage.getItem(WELCOME_THINKING_KEY);
+    if (level) return { thinkingLevel: level };
+  } catch {
+    // 读取失败视为无偏好
+  }
+  return undefined;
+}
+
 /**
  * The built-in Chat view needs an identity before the composer renders, but
  * opening the app must not add an unrequested row to history. This renderer-

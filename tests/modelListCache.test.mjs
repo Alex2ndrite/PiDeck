@@ -104,3 +104,27 @@ test("ComposerPickerHost loads models on welcome page (no record)", () => {
   assert.doesNotMatch(pickerHost, /picker !== "model" \|\| !record/);
   assert.match(pickerHost, /listModels\(record\?\.projectId\)/);
 });
+
+test("welcome page model/thinking selection persists and applies to new session", () => {
+  const picker = readFileSync(
+    "src/renderer/src/components/session/ComposerPickerHost.tsx",
+    "utf8",
+  );
+  const actions = readFileSync(
+    "src/renderer/src/hooks/useSessionActions.ts",
+    "utf8",
+  );
+  const bootstrap = readFileSync(
+    "src/renderer/src/utils/chatSessionBootstrap.ts",
+    "utf8",
+  );
+  // 欢迎页（无 record）选模型：不再短路，写入 localStorage 偏好
+  assert.match(picker, /localStorage\.setItem\(WELCOME_MODEL_KEY/);
+  assert.match(picker, /localStorage\.setItem\(WELCOME_THINKING_KEY/);
+  // createDraft 应用偏好
+  assert.match(actions, /readWelcomeModelPreference\(\)/);
+  assert.match(actions, /readWelcomeThinkingPreference\(\)/);
+  // 共享偏好读取器
+  assert.match(bootstrap, /readWelcomeModelPreference/);
+  assert.match(bootstrap, /readWelcomeThinkingPreference/);
+});

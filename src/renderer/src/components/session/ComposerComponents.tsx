@@ -31,6 +31,7 @@ import {
 	DialogTitle,
 } from "../ui-shadcn/dialog";
 import { cn } from "../../lib/utils";
+import { readWelcomeModelPreference, readWelcomeThinkingPreference } from "../../utils/chatSessionBootstrap";
 import type {
 	AgentRuntimeState,
 	AvailableModel,
@@ -153,7 +154,7 @@ export function ComposerBottomBar(props: {
 	const ctxPercent = props.state?.contextPercent;
 	const showCompact = ctxPercent != null && ctxPercent > 30;
 	const contextPercent = ctxPercent ?? 0;
-	const currentThinkingLevel = props.state?.thinkingLevel ?? props.record?.thinkingLevel;
+	const currentThinkingLevel = props.state?.thinkingLevel ?? props.record?.thinkingLevel ?? readWelcomeThinkingPreference()?.thinkingLevel;
 	const thinkingLevelLabel = currentThinkingLevel
 		? THINKING_LEVELS.find((level) => level.value === currentThinkingLevel)?.labelKey
 		: undefined;
@@ -164,11 +165,14 @@ export function ComposerBottomBar(props: {
 	const modeLabel = isPlanMode
 		? t("app.composerModePlan")
 		: t("app.composerModeNormal");
+	const welcomeModel = readWelcomeModelPreference();
 	const modelLabel = props.state?.modelName
 		? `${props.state.provider ? `${props.state.provider}/` : ""}${props.state.modelName}`
 		: props.record?.model
 			? `${props.record.model.provider}/${props.record.model.modelId}`
-			: `${t("app.model")}: -`;
+			: welcomeModel?.model
+				? `${welcomeModel.model.provider}/${welcomeModel.model.modelId}`
+				: `${t("app.model")}: -`;
 
 	return (
 		<div className="composer-bottom-bar border-t border-border/80 px-2 py-1.5">

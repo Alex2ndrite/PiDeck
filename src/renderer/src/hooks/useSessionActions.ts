@@ -6,6 +6,7 @@ import type {
   SessionSummary,
 } from "../../../shared/types";
 import { isSameSessionPath } from "../agentListDisplay";
+import { readWelcomeModelPreference, readWelcomeThinkingPreference } from "../utils/chatSessionBootstrap";
 import { t } from "../i18n";
 
 export type RefreshProjectSessions = (
@@ -214,6 +215,9 @@ export function useSessionActions(options: UseSessionActionsOptions) {
       const session = await api.sessions.createDraft({
         projectId,
         title: `${project.name} agent`,
+        // 欢迎页/未启动 Agent 时选过模型/思考级别：作为新会话初始配置传给 pi。
+        ...readWelcomeModelPreference(),
+        ...readWelcomeThinkingPreference(),
       });
       upsertSession(session);
       commitSessionSelection(projectId, session.id, true);
