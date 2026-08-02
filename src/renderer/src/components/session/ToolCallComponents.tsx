@@ -31,6 +31,7 @@ import {
   getToolExitCode,
   getToolName,
   getToolStatus,
+	getToolDiffTarget,
 } from "./TimelineFormat";
 
 export type DiffFileHandler = (
@@ -95,36 +96,6 @@ function getToolSubtitle(message: ChatMessage): string {
 		}
 	}
 	return "";
-}
-
-function getToolArgFilePath(args: Record<string, unknown> | undefined): string | undefined {
-	return getToolFilePath(args);
-}
-
-function getToolDiffTarget(message: ChatMessage): { path: string; originalContent: string; content: string; changedLines: number } | undefined {
-	const toolName = getToolName(message);
-	if (!/write|edit|create|patch/i.test(toolName)) return undefined;
-	const args = parseToolArgs(message.meta?.args);
-	const path = getToolArgFilePath(args);
-	if (!args || !path) return undefined;
-	if (/write|create/i.test(toolName)) {
-		const content = typeof args.content === "string"
-			? args.content
-			: typeof args.text === "string"
-				? args.text
-				: undefined;
-		if (content === undefined) return undefined;
-		return { path, originalContent: "", content, changedLines: countTextLines(content) };
-	}
-	// edit/patch：不存储 full file originalContent，只展示变动区域
-	const diff = getToolEditDiff(args);
-	if (!diff) return undefined;
-	return {
-		path,
-		originalContent: diff.oldText,
-		content: diff.newText,
-		changedLines: Math.max(countTextLines(diff.oldText), countTextLines(diff.newText)),
-	};
 }
 
 /**

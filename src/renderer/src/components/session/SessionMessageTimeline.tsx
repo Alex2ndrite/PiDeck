@@ -32,6 +32,7 @@ import {
   type SessionTimelineController,
 } from "../../hooks/useSessionTimelineController";
 import { t } from "../../i18n";
+import { SessionFileSummary } from "./SessionFileSummary";
 
 type TurnRowProps = ComponentProps<typeof TurnRow>;
 type UserBubbleProps = ComponentProps<typeof UserBubble>;
@@ -458,6 +459,19 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
                   showThinking={props.showThinking}
                   isExecutingTool={activeRuntimeState?.isExecutingTool}
                   isStreaming={activeRuntimeState?.isStreaming}
+                />
+              )}
+
+            {/* 会话文件修改汇总：会话空闲（非运行/加载中）且有工具修改过文件时显示，
+                点击文件/DIFF 按钮直接打开差异查看器（复用单条工具卡片的 diff 链路） */}
+            {hasActiveConversation &&
+              !isAwaitingAssistant &&
+              !(activeConversationStatus === "running" || activeRuntimeState?.isStreaming) &&
+              !isConversationLoading &&
+              activeMessages.length > 0 && (
+                <SessionFileSummary
+                  messages={activeMessages}
+                  onDiffFile={props.onDiffFile}
                 />
               )}
           </div>

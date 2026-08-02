@@ -765,8 +765,8 @@ export function getToolEditDiff(args: Record<string, unknown>): { oldText: strin
 		const parts = edits.map((edit: unknown) => {
 			if (!edit || typeof edit !== "object") return null;
 			const e = edit as Record<string, unknown>;
-			const oldText = String(e.oldText ?? e.old_text ?? "");
-			const newText = String(e.newText ?? e.new_text ?? "");
+			const oldText = String(e.oldText ?? e.old_text ?? e.old_string ?? "");
+			const newText = String(e.newText ?? e.new_text ?? e.new_string ?? "");
 			return { oldText, newText };
 		}).filter((p): p is { oldText: string; newText: string } => p !== null);
 		if (parts.length === 0) return undefined;
@@ -775,8 +775,8 @@ export function getToolEditDiff(args: Record<string, unknown>): { oldText: strin
 			newText: parts.map(p => p.newText).join("\n"),
 		};
 	}
-	const oldText = typeof args.oldText === "string" ? args.oldText : typeof args.old_text === "string" ? args.old_text : undefined;
-	const newText = typeof args.newText === "string" ? args.newText : typeof args.new_text === "string" ? args.new_text : undefined;
+	const oldText = typeof args.oldText === "string" ? args.oldText : typeof args.old_text === "string" ? args.old_text : typeof args.old_string === "string" ? args.old_string : undefined;
+	const newText = typeof args.newText === "string" ? args.newText : typeof args.new_text === "string" ? args.new_text : typeof args.new_string === "string" ? args.new_string : undefined;
 	if (oldText === undefined || newText === undefined) return undefined;
 	return { oldText, newText };
 }

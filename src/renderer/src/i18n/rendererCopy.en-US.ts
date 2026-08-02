@@ -498,6 +498,8 @@ export const enUS: Record<TranslationKey, string> = {
   "app.multiSelectCopyMarkdown": "Copy as Markdown",
   "app.shareAsText": "Share as Text",
   "app.shareAsMarkdown": "Share as Markdown",
+  "session.fileSummaryTitle": "Files modified",
+  "session.fileSummaryCount": "{count} files · {times} changes",
   "sessionRef.title": "Reference Session",
   "sessionRef.messageCount": "{count} messages",
   "sessionRef.selectedCount": "{count}/{total} selected",

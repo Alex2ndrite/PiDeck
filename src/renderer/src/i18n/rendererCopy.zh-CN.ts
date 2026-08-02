@@ -490,6 +490,8 @@ export const zhCN = {
   "app.multiSelectCopyMarkdown": "复制为 Markdown",
   "app.shareAsText": "分享为文本",
   "app.shareAsMarkdown": "分享为 Markdown",
+  "session.fileSummaryTitle": "文件修改汇总",
+  "session.fileSummaryCount": "修改 {count} 个文件 · 共 {times} 次",
   "sessionRef.title": "引用会话",
   "sessionRef.messageCount": "共 {count} 条消息",
   "sessionRef.selectedCount": "已选 {count}/{total} 条",
