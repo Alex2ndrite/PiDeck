@@ -417,6 +417,9 @@ export function FileDiffViewer(props: {
 									options={editorOptions}
 									onMount={handleEditorMount}
 									onChange={handleEditorChange}
+									// 首次打开 Monaco chunk 异步加载中显示加载态，避免白屏
+									//（Dev 模式尤其明显：首帧空白 → 关闭重开才正常）
+									loading={<div className="file-diff-loading">{t("common.loading")}</div>}
 								/>
 							</div>
 						)}
@@ -433,6 +436,7 @@ export function FileDiffViewer(props: {
 									theme={props.theme === "dark" ? "vs-dark" : "vs"}
 									options={diffOptions}
 									onMount={handleDiffEditorMount}
+									loading={<div className="file-diff-loading">{t("common.loading")}</div>}
 								/>
 							</div>
 						)}

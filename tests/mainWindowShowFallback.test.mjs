@@ -37,3 +37,17 @@ test("linux display workaround opens the main window without hidden pre-map", ()
 	assert.match(source, /applyStartupWindowMode\(\s*mainWindow,\s*effectiveStartupMode,\s*showMainWindowImmediately,?\s*\)/s);
 	assert.match(source, /if \(showMainWindowImmediately\) \{\s*showMainWindowOnce\(\);\s*\}/s);
 });
+
+test("drawer viewer: toggleEditorMode closes drawer when expanding to modal (fix minimize)", () => {
+  const source = readFileSync("src/renderer/src/hooks/useFileEditor.ts", "utf8");
+  // 展开到 modal 必须收起抽屉（否则最小化时 openDrawer("editor") 命中 toggle 语义关闭抽屉）
+  assert.match(source, /展开到 modal：必须收起抽屉/);
+  assert.match(source, /setDrawer\(null\);/);
+  // updater 外执行副作用（StrictMode 双调用安全）
+  assert.match(source, /editorModeRef\.current = next;/);
+  // 文件树打开始终 drawer 模式 + 记录来源面板（返回键）
+  assert.match(source, /文件树打开始终进抽屉模式/);
+  // Monaco 首次加载 loading fallback（首帧空白修复）
+  const viewer = readFileSync("src/renderer/src/components/app/FileDiffViewer.tsx", "utf8");
+  assert.match(viewer, /loading=\{<div className="file-diff-loading">/);
+});

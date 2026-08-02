@@ -145,17 +145,29 @@ export function useFileEditor(input: UseFileEditorInput): UseFileEditorOutput {
     t,
   } = input;
 
+  // drawer 同步 ref：toggleEditorMode/最小化等回调需要读取当前抽屉面板（返回键来源）
+  const drawerRef = useRef(drawer);
+  drawerRef.current = drawer;
+
   // ---- editor mode ----
   const [editorMode, setEditorMode] = useState<"modal" | "drawer">("drawer");
+  // 修复：updater 必须是纯函数（StrictMode 双调用），抽屉展开副作用移到 updater 外——
+  // 否则 setDrawer 更新可能被丢弃，表现为"最小化到侧边栏没有效果"
+  const editorModeRef = useRef<"modal" | "drawer">("drawer");
   const toggleEditorMode = useCallback(() => {
-    setEditorMode((prev) => {
-      const next = prev === "modal" ? "drawer" : "modal";
-      if (next === "drawer") {
-        setDrawer("editor");
-        setDrawerCollapsed(false);
-      }
-      return next;
-    });
+    const next = editorModeRef.current === "modal" ? "drawer" : "modal";
+    editorModeRef.current = next;
+    setEditorMode(next);
+    if (next === "drawer") {
+      // 从 modal 最小化：来源面板为空时才记录（从文件树打开时 viewFilePath 已记录 files）
+      if (!prevDrawerPanelRef.current) prevDrawerPanelRef.current = drawerRef.current;
+      setDrawer("editor");
+      setDrawerCollapsed(false);
+    } else {
+      // 展开到 modal：必须收起抽屉——否则 drawer 面板仍是 "editor"，
+      // 最小化时 openDrawer("editor") 命中 toggle 语义（同面板）→ 关闭抽屉 = "最小化没效果"
+      setDrawer(null);
+    }
   }, [setDrawer, setDrawerCollapsed]);
 
   // ---- Git diff state ----
@@ -367,13 +379,15 @@ export function useFileEditor(input: UseFileEditorInput): UseFileEditorOutput {
   const viewFilePath = useCallback(
     (path: string) => {
       openEditorTab(path, "view");
-      if (editorMode === "drawer") {
-        prevDrawerPanelRef.current = drawer;
-        setDrawer("editor");
-        setDrawerCollapsed(false);
-      }
+      // 修复：文件树打开始终进抽屉模式（此前 editorMode=modal 时点文件会开 modal，
+      // 且不记录来源面板导致抽屉视图没有返回键）
+      editorModeRef.current = "drawer";
+      setEditorMode("drawer");
+      prevDrawerPanelRef.current = drawer;
+      setDrawer("editor");
+      setDrawerCollapsed(false);
     },
-    [editorMode, drawer, setDrawer, setDrawerCollapsed, openEditorTab],
+    [drawer, setDrawer, setDrawerCollapsed, openEditorTab],
   );
 
   const diffFilePath = useCallback(

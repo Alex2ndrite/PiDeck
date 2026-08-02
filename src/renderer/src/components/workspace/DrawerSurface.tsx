@@ -110,10 +110,19 @@ export function DrawerSurface(props: DrawerSurfaceProps) {
             filePath={editor.activeTab.filePath}
             mode={editor.activeTab.mode}
             onToggleMode={editor.activeTab.preserveDrawer ? undefined : editor.toggleEditorMode}
-            onBack={editor.prevDrawerPanelRef.current && editor.prevDrawerPanelRef.current !== "editor" ? () => {
-              const prev = editor.clearEditorBack();
-              if (prev) chrome.onOpenDrawer(prev);
-            } : undefined}
+            onBack={
+              editor.prevDrawerPanelRef.current && editor.prevDrawerPanelRef.current !== "editor"
+                ? () => {
+                    const prev = editor.clearEditorBack();
+                    if (prev) chrome.onOpenDrawer(prev);
+                  }
+                : () => {
+                    // 无来源面板（如从 modal 最小化且此前抽屉未开）：
+                    // 返回键兜底 = 关闭编辑器，回到抽屉默认状态
+                    editor.closeEditor();
+                    chrome.onCloseDrawer();
+                  }
+            }
             originalContent={editor.activeTab.mode === "diff" ? editor.activeTab.originalContent : undefined}
             modifiedContent={editor.activeTab.modifiedContent}
             tabs={editor.editorTabs}
