@@ -98,6 +98,76 @@ test("hitRateFromUsage: 口径为 cacheRead / (input + cacheRead + cacheWrite)",
 	assert.equal(hitRateFromUsage({ input: 100, cacheRead: 50, cacheWrite: 50 }), 25);
 });
 
+// ── 文件级缓存读取器（性能：避免高频 getRuntimeState 反复读文件+parse）──
+
+test("createCacheHitStatsReader: 文件未变化时命中缓存，不再读文件", async () => {
+	const { createCacheHitStatsReader } = loadCacheHitStats();
+	let readCount = 0;
+	let statCount = 0;
+	const meta = { size: 100, mtimeMs: 1000 };
+	const reader = createCacheHitStatsReader({
+		readFile: async () => { readCount += 1; return assistantLine(); },
+		stat: async () => { statCount += 1; return meta; },
+	});
+	const first = await reader("s1.jsonl");
+	assert.equal(readCount, 1);
+	assert.equal(first.average, 25);
+	// 再次读取：size/mtime 未变 → 缓存命中，不读文件
+	const second = await reader("s1.jsonl");
+	assert.equal(readCount, 1);
+	assert.equal(second.average, 25);
+});
+
+test("createCacheHitStatsReader: 文件变化后重新解析", async () => {
+	const { createCacheHitStatsReader } = loadCacheHitStats();
+	let size = 100;
+	let content = assistantLine();
+	const reader = createCacheHitStatsReader({
+		readFile: async () => content,
+		stat: async () => ({ size, mtimeMs: size }),
+	});
+	await reader("s1.jsonl");
+	// 会话新增一条消息：size/mtime 变化 → 重读重算
+	size = 200;
+	content = [
+		assistantLine({ id: 1, usage: { input: 100, cacheRead: 100, cacheWrite: 0 } }), // 50%
+		assistantLine({ id: 2, usage: { input: 100, cacheRead: 0, cacheWrite: 100 } }), // 0%
+	].join("\n");
+	const updated = await reader("s1.jsonl");
+	assert.equal(updated.sampleCount, 2);
+	assert.equal(updated.average, 25);
+	assert.equal(updated.latest, 0);
+});
+
+test("createCacheHitStatsReader: 不同会话各自缓存互不干扰", async () => {
+	const { createCacheHitStatsReader } = loadCacheHitStats();
+	const contents = new Map([
+		["a.jsonl", assistantLine({ id: 1, usage: { input: 100, cacheRead: 50, cacheWrite: 50 } })], // 25%
+		["b.jsonl", assistantLine({ id: 2, usage: { input: 100, cacheRead: 100, cacheWrite: 0 } })], // 50%
+	]);
+	const reader = createCacheHitStatsReader({
+		readFile: async (p) => contents.get(p) ?? "",
+		stat: async (p) => ({ size: contents.get(p)?.length ?? 0, mtimeMs: 1 }),
+	});
+	const a = await reader("a.jsonl");
+	const b = await reader("b.jsonl");
+	const a2 = await reader("a.jsonl"); // 命中缓存
+	assert.equal(a.average, 25);
+	assert.equal(b.average, 50);
+	assert.equal(a2.average, 25);
+});
+
+test("createCacheHitStatsReader: 文件不可读返回空统计且不缓存", async () => {
+	const { createCacheHitStatsReader } = loadCacheHitStats();
+	const reader = createCacheHitStatsReader({
+		readFile: async () => { throw new Error("ENOENT"); },
+		stat: async () => { throw new Error("ENOENT"); },
+	});
+	const result = await reader("missing.jsonl");
+	assert.equal(result.sampleCount, 0);
+	assert.equal(result.average, undefined);
+});
+
 // ── 类型与接线契约 ──
 
 test("AgentRuntimeState 携带平均命中率与样本数字段", () => {

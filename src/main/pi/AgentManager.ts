@@ -1,6 +1,6 @@
 import { app, type BrowserWindow, Notification } from "electron";
 import { randomUUID } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { existsSync, statSync } from "node:fs";
 import { join, dirname, basename } from "node:path";
 import { homedir } from "node:os";
@@ -48,7 +48,7 @@ import {
 	sealStreamGate,
 	type StreamGateState,
 } from "./streamGate";
-import { computeCacheHitStats, type CacheHitStats } from "./cacheHitStats";
+import { createCacheHitStatsReader, type CacheHitStats, type CacheHitStatsReader } from "./cacheHitStats";
 import {
 	stripAnsi,
 	pickNumber,
@@ -1322,30 +1322,38 @@ export class AgentManager {
 	}
 
 	/**
+	 * 会话缓存命中率读取器：按 (size, mtimeMs) 缓存文件解析结果，
+	 * 会话文件未变化时 O(1) 复用，避免高频 getRuntimeState 反复读文件+逐行 parse。
+	 */
+	private readonly cacheHitStatsReader: CacheHitStatsReader = createCacheHitStatsReader({
+		readFile: (path) => readFile(path, "utf8"),
+		stat,
+	});
+
+	/**
 	 * 读取 session 文件，统计缓存命中率：最后一条 assistant 消息（latest）与
 	 * 全部 assistant 消息的平均值（average，即「当前会话平均缓存率」）。
 	 * 口径与 pi CLI footer 的 latestCacheHitRate 一致：
 	 * cacheRead / (input + cacheRead + cacheWrite) * 100
 	 */
-	private async getSessionCacheHitStats(sessionPath: string): Promise<CacheHitStats> {
-		try {
-			const raw = await readFile(this.toSessionHostPath(sessionPath), "utf8");
-			return computeCacheHitStats(raw);
-		} catch {
-			// 文件不存在或无法读取，返回空统计
-			return { latest: undefined, average: undefined, sampleCount: 0 };
-		}
+	private getSessionCacheHitStats(sessionPath: string): Promise<CacheHitStats> {
+		return this.cacheHitStatsReader(this.toSessionHostPath(sessionPath));
 	}
 
 	async getRuntimeState(agentId: string): Promise<AgentRuntimeState> {
 		const runtime = this.requireRuntime(agentId);
-		const [stateResponse, statsResponse] = await Promise.all([
+		// 文件统计（读会话 + 逐行 parse）与两个 RPC 并行：总耗时 = max(RPC, 文件)，
+		// 且文件结果带 (size, mtimeMs) 缓存，会话未变化时零 IO 零 parse
+		const [stateResponse, statsResponse, fileHitStats] = await Promise.all([
 			runtime.process.client
 				.request({ type: "get_state" })
 				.catch(() => ({ data: undefined })),
 			runtime.process.client
 				.request({ type: "get_session_stats" })
 				.catch(() => ({ data: undefined })),
+			runtime.tab.sessionPath
+				? this.getSessionCacheHitStats(runtime.tab.sessionPath)
+				: Promise.resolve({ latest: undefined as number | undefined, average: undefined as number | undefined, sampleCount: 0 }),
 		]);
 		const state = stateResponse.data as any;
 		const stats = statsResponse.data as any;
@@ -1390,9 +1398,6 @@ export class AgentManager {
 	 * pi 的 get_session_stats RPC 不直接返回 cacheHitPercent，需读取 session 文件。
 	 * 同时统计全部 assistant 消息的平均命中率（当前会话平均缓存率）。
 	 */
-	const fileHitStats = runtime.tab.sessionPath
-		? await this.getSessionCacheHitStats(runtime.tab.sessionPath)
-		: { latest: undefined as number | undefined, average: undefined as number | undefined, sampleCount: 0 };
 	const cacheHitPercent = clampPercent(
 		directCacheHitPercent ?? fileHitStats.latest,
 	);

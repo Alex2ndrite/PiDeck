@@ -64,3 +64,42 @@ export function computeCacheHitStats(raw: string): CacheHitStats {
 	const average = rates.reduce((sum, rate) => sum + rate, 0) / rates.length;
 	return { latest, average, sampleCount: rates.length };
 }
+
+export type CacheHitStatsReader = (sessionPath: string) => Promise<CacheHitStats>;
+
+type FileMeta = { size: number; mtimeMs: number };
+
+type CacheHitStatsReaderInput = {
+	readFile: (path: string) => Promise<string>;
+	stat: (path: string) => Promise<FileMeta>;
+	/** 缓存条目上限，超出时整体清空（会话数远小于该值，防御性上限） */
+	maxEntries?: number;
+};
+
+/**
+ * 创建带文件级缓存的命中率读取器：按 (size, mtimeMs) 判断文件是否变化，
+ * 未变化直接复用上次解析结果（O(1)），避免 getRuntimeState 高频调用时
+ * 反复读文件 + 逐行 JSON.parse 阻塞主进程。
+ */
+export function createCacheHitStatsReader(input: CacheHitStatsReaderInput): CacheHitStatsReader {
+	const { readFile, stat, maxEntries = 100 } = input;
+	const cache = new Map<string, { meta: FileMeta; stats: CacheHitStats }>();
+
+	return async function readCacheHitStats(sessionPath: string): Promise<CacheHitStats> {
+		try {
+			const meta = await stat(sessionPath);
+			const cached = cache.get(sessionPath);
+			if (cached && cached.meta.size === meta.size && cached.meta.mtimeMs === meta.mtimeMs) {
+				return cached.stats;
+			}
+			const raw = await readFile(sessionPath);
+			const stats = computeCacheHitStats(raw);
+			if (cache.size >= maxEntries) cache.clear();
+			cache.set(sessionPath, { meta, stats });
+			return stats;
+		} catch {
+			// 文件不存在/无法读取：不缓存，返回空统计
+			return { latest: undefined, average: undefined, sampleCount: 0 };
+		}
+	};
+}
