@@ -11,12 +11,15 @@ const SESSION_COMMAND_ERROR_KEYS: Record<SessionCommandError["code"], Translatio
 	SESSION_RUNTIME_CHANGED: "sessionCommand.runtimeChanged",
 	SESSION_RUNTIME_BUSY: "sessionCommand.runtimeBusy",
 	SESSION_COMMAND_FAILED: "sessionCommand.commandFailed",
+	SESSION_MODEL_NOT_FOUND: "sessionCommand.modelNotFound",
 };
 
 export class SessionCommandFailure extends Error {
 	readonly code: SessionCommandError["code"];
 	readonly params?: SessionCommandError["params"];
 	readonly debugDetails?: string;
+	/** 模型在本地 models.json 存在但运行中 Agent 未加载：需重启 Agent 生效。 */
+	readonly needsRestart?: boolean;
 
 	constructor(error: SessionCommandError) {
 		super(t(SESSION_COMMAND_ERROR_KEYS[error.code], error.params));
@@ -24,6 +27,7 @@ export class SessionCommandFailure extends Error {
 		this.code = error.code;
 		this.params = error.params;
 		this.debugDetails = error.debugDetails;
+		this.needsRestart = error.needsRestart;
 	}
 }
 

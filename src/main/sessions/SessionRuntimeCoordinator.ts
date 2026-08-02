@@ -1151,6 +1151,18 @@ export class SessionRuntimeCoordinator {
 				error: { code: error.code, debugDetails: error.message },
 			};
 		}
+		// 模型在本地 models.json 存在但运行中 Agent 未加载：标记 needsRestart，
+		// 渲染层据此弹出「重启 Agent 生效」引导（而非误报会话不存在）。
+		if (error instanceof Error && (error as Error & { needsRestart?: boolean }).needsRestart) {
+			return {
+				ok: false,
+				error: {
+					code: "SESSION_MODEL_NOT_FOUND",
+					debugDetails: error.message,
+					needsRestart: true,
+				},
+			};
+		}
 		const message = errorMessage(error);
 		const lower = message.toLowerCase();
 		const code: SessionCommandErrorCode =

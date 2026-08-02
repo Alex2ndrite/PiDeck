@@ -201,12 +201,15 @@ export type SessionCommandErrorCode =
 	| "SESSION_RUNTIME_UNAVAILABLE"
 	| "SESSION_RUNTIME_CHANGED"
 	| "SESSION_RUNTIME_BUSY"
-	| "SESSION_COMMAND_FAILED";
+	| "SESSION_COMMAND_FAILED"
+	| "SESSION_MODEL_NOT_FOUND";
 
 export type SessionCommandError = {
 	code: SessionCommandErrorCode;
 	params?: Record<string, string | number>;
 	debugDetails?: string;
+	/** 模型在本地 models.json 存在但运行中 Agent 的快照未加载：需重启 Agent 生效。 */
+	needsRestart?: boolean;
 };
 
 export type SessionCommandResult<T> =

@@ -1,6 +1,6 @@
 import { useAtomValue, useSetAtom, useStore } from "jotai";
 import { useEffect, useRef, useState } from "react";
-import type { AvailableModel } from "../../../../shared/types";
+import type { AvailableModel, SessionRuntimeTarget } from "../../../../shared/types";
 import {
   sessionComposerModeByIdAtom,
   sessionRecordByIdAtomFamily,
@@ -18,11 +18,13 @@ import {
 } from "./ComposerParts";
 import { desktopApi } from "../../desktopApi";
 import { showNotice } from "../../utils/notice";
+import { t } from "../../i18n";
 import {
   SessionCommandFailure,
   requireSessionCommand,
   toSessionRuntimeTarget,
 } from "../../utils/sessionCommands";
+import { ConfirmDialog } from "../app/AppParts";
 import type { ComposerPickerKind } from "../../hooks/useSessionComposerController";
 
 export type ComposerPickerHostProps = {
@@ -44,6 +46,12 @@ export function ComposerPickerHost(props: ComposerPickerHostProps) {
   const composerModes = useAtomValue(sessionComposerModeByIdAtom);
   const [favoriteModels, setFavoriteModels] = useState<string[]>([]);
   const modelLoadSequenceRef = useRef(0);
+  /** 模型在本地 models.json 存在但运行中 Agent 未加载：待确认重启的目标。 */
+  const [restartTarget, setRestartTarget] = useState<{
+    handle: SessionRuntimeTarget;
+    model: string;
+  } | null>(null);
+  const [restarting, setRestarting] = useState(false);
 
   useEffect(() => {
     void desktopApi.settings.get().then((settings) => {
@@ -130,7 +138,33 @@ export function ComposerPickerHost(props: ComposerPickerHostProps) {
       }
       props.onClose();
     } catch (error) {
+      // 模型在本地 models.json 存在但运行中 Agent 快照未加载（pi set_model 校验失败）：
+      // 关闭选择器并提示用户重启 Agent 使新模型生效，而非直接报错。
+      if (error instanceof SessionCommandFailure && error.needsRestart && handle) {
+        props.onClose();
+        setRestartTarget({
+          handle,
+          model: `${model.provider}/${model.id}`,
+        });
+        return;
+      }
       showNotice(error instanceof Error ? error.message : String(error), 4000);
+    }
+  }
+
+  /** 重启 Agent 使新模型生效（新 pi 进程会重新加载 models.json）。 */
+  async function confirmRestart() {
+    if (!restartTarget || restarting) return;
+    setRestarting(true);
+    try {
+      await desktopApi.sessions.restartRuntime(restartTarget.handle);
+      showNotice(t("app.modelRestartDone"), 3000);
+      props.onClose();
+    } catch (error) {
+      showNotice(error instanceof Error ? error.message : String(error), 4000);
+    } finally {
+      setRestarting(false);
+      setRestartTarget(null);
     }
   }
 
@@ -237,5 +271,18 @@ export function ComposerPickerHost(props: ComposerPickerHostProps) {
       />
     );
   }
-  return null;
+  return (
+    <>
+      {null}
+      {restartTarget && (
+        <ConfirmDialog
+          title={t("app.modelRestartTitle")}
+          message={t("app.modelRestartBody", { model: restartTarget.model })}
+          confirmLabel={t("common.confirm")}
+          onConfirm={() => void confirmRestart()}
+          onCancel={() => setRestartTarget(null)}
+        />
+      )}
+    </>
+  );
 }

@@ -1501,12 +1501,41 @@ export class AgentManager {
 
 	async setModel(agentId: string, provider: string, modelId: string) {
 		const runtime = this.requireRuntime(agentId);
-		await runtime.process.client.request(
+		const response = await runtime.process.client.request(
 			{ type: "set_model", provider, modelId },
 			60_000,
 		);
+		if (!response.success) {
+			// pi 对 set_model 用启动时加载的模型快照校验；模型不在快照中返回
+			// "Model not found: provider/model"。若本地 models.json 确实有该模型，
+			// 说明是运行中 Agent 未加载新配置——抛带 needsRestart 标记的错误，
+			// 渲染层据此引导用户重启 Agent（新进程会重新加载 models.json）。
+			const errorText = response.error ?? "";
+			if (/model not found/i.test(errorText)) {
+				const localHasModel = await this.localModelsContains(provider, modelId);
+				if (localHasModel) {
+					const err = new Error(errorText) as Error & { needsRestart?: boolean };
+					err.needsRestart = true;
+					throw err;
+				}
+			}
+			throw new Error(errorText || "set_model failed");
+		}
 		this.emitState();
 		return this.getRuntimeState(agentId);
+	}
+
+	/** 本地 models.json 是否包含指定 provider/modelId。 */
+	private async localModelsContains(provider: string, modelId: string): Promise<boolean> {
+		try {
+			const result = await this.configManager.getModelsConfig();
+			const config = result.parsed;
+			return Boolean(
+				config?.providers?.[provider]?.models?.some((model) => model.id === modelId),
+			);
+		} catch {
+			return false;
+		}
 	}
 
 	/**

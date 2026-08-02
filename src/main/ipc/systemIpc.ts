@@ -172,7 +172,10 @@ export function registerSystemIpc(deps: SystemIpcDeps): void {
 
 	ipcMain.handle(ipcChannels.projectsListModels, async (_event, _projectId?: string) => {
 		try {
-			return await fetchModelList(piLocator, settingsStore);
+			// 优先读本地 models.json（实时 + 字段完整）；缺失/为空时回退 pi --list-models。
+			return await fetchModelList(piLocator, settingsStore, () =>
+				configManager.getModelsConfig().then((result) => result.parsed),
+			);
 		} catch (error) {
 			void appLogger.warn("pi", "Failed to list models via pi --list-models", {
 				error: error instanceof Error ? error.message : String(error),
