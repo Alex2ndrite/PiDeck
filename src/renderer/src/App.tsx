@@ -854,8 +854,9 @@ export function App() {
         `url("pideck-bg://local/${encodeURIComponent(settings.backgroundImage)}")`,
       );
       const alpha = Math.min(1, Math.max(0, 1 - settings.backgroundImageOpacity));
-      // 面板不透明度与遮罩同步（滑块 100% → 面板全透明=图完整显示，0% → 面板全不透明=纯色）
-      const panelMix = Math.round(alpha * 100);
+      // 面板不透明度与遮罩同步并加 10% 基础偏移（面板更实一点，可读性更好）：
+      // 滑块 80% → 面板 30%；100% → 10%（图完整显示）；0% → 100%（纯色）
+      const panelMix = Math.min(100, Math.round(alpha * 100) + 10);
       const rgb = isDark ? "0,0,0" : "255,255,255";
       root.style.setProperty(
         "--app-bg-mask",

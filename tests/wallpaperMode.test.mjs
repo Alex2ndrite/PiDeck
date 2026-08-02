@@ -27,7 +27,7 @@ test("App.tsx toggles wallpaper mode marker with background image setting", () =
   assert.match(appSource, /皮肤 \+ 换肤背景图统一管理/);
   // token 半透明注入：面板不透明度跟随滑块（panelMix 与遮罩 alpha 同步，
   // 100% 可见度 → 面板全透明，不再写死 80%）
-  assert.match(appSource, /const panelMix = Math\.round\(alpha \* 100\);/);
+  assert.match(appSource, /const panelMix = Math\.min\(100, Math\.round\(alpha \* 100\) \+ 10\);/);
   // 壁纸模式统一基色（--color-bg-app），侧栏/会话区/抽屉透出完全一致
   assert.match(appSource, /const base = cs\.getPropertyValue\("--color-bg-app"\)\.trim\(\);/);
   assert.match(appSource, /color-mix\(in srgb, \$\{base\} \$\{panelMix\}%, transparent\)/);
