@@ -25,7 +25,7 @@
 | P0 | 会话响应动画与空白页 | ✅ Batch 3 已完成 | `SurfaceComponents.tsx`、`TimelineEventCards.tsx`、`timeline.css` | 响应中、工具执行中、空会话、异常和加载状态不互相跳动 |
 | P1 | Todo / Plan / Ask | 🟡 Ask 已有 | `TimelineEventCards.tsx`、overlay、pi RPC | Ask 的 pending/answered/cancelled；todo/plan 依赖 pi 扩展，不在 renderer 伪造 |
 | P1 | `/theming` 统一 | 🟡 基础已完成 | `themePresets.ts`、`tailwind.css`、`foundation.css` | token 单一来源；明暗、accent、皮肤、背景图和组件状态一致 |
-| P1 | Avatar 作为项目 Logo 与状态表达 | ⬜ 待开始 | `ProjectAvatar`、`AgentAvatar`、项目树 | 项目身份、运行态、错误态、worktree 状态一眼可辨 |
+| P1 | Avatar 作为项目 Logo 与状态表达 | ✅ Batch 4 已完成 | `ProjectAvatar`、`AgentAvatar`、项目树 | 项目身份、运行态、错误态、worktree 状态一眼可辨 |
 | P1 | Command 用于模型、思考级别和模式选择 | ✅ 基础已完成 | `ComposerComponents.tsx`、`ui-shadcn/command.tsx` | 搜索、分组、键盘导航、当前值和空状态统一 |
 | P1 | Context Menu 统一右键菜单 | 🟡 部分完成 | `SidebarParts.tsx`、文件树、Git、会话 | 右键菜单统一焦点、碰撞定位、危险操作和关闭行为 |
 | P1 | Dropdown Menu 统一下拉菜单 | 🟡 部分完成 | `SessionTabsBar.tsx`、Config、Git、文件相关面板 | 删除自绘定位和重复的 ESC/外部点击逻辑 |
@@ -63,8 +63,8 @@
 
 ### Batch 4：身份与主题
 
-- [ ] Project Avatar：项目 Logo、worktree、运行态、错误态。
-- [ ] Agent Avatar：运行态和来源状态统一。
+- [x] Project Avatar：项目 Logo、worktree、运行态、错误态。
+- [x] Agent Avatar：运行态和来源状态统一。
 - [ ] `/theming` token 复核和组件状态色清理。
 - [ ] 明暗主题、accent、皮肤、背景图手测巡检。
 
@@ -93,6 +93,9 @@
 - 增加 `prefers-reduced-motion: reduce` 降级：状态仍通过颜色、图标和文案表达。
 - 空白页增加 `data-empty-state` 语义标记，区分“已有项目可创建会话”和“尚无项目”。
 - 新增 `tests/sessionVisualStates.test.mjs`，锁定响应状态尺寸、reduced-motion 和空白页契约。
+- ProjectAvatar 根据项目下 Agent 状态显示统一的 idle/running/starting/error 角标；点击尺寸不变。
+- AgentAvatar 复用同一状态集合和主题 token，未知状态安全降级为 idle。
+- 新增 `tests/avatarStatus.test.mjs`，锁定项目和 Agent Avatar 的状态契约。
 
 ## 门禁
 

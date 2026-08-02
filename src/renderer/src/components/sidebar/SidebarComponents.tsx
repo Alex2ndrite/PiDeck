@@ -1,5 +1,5 @@
 import { useState, useRef, useLayoutEffect, useEffect, useMemo, type ReactNode } from "react";
-import { MessageCircle, Folder } from "lucide-react";
+import { Check, CircleAlert, CircleDot, Folder, LoaderCircle, MessageCircle } from "lucide-react";
 import { t } from "../../i18n";
 import {
 	Dialog,
@@ -397,16 +397,37 @@ export function SessionContextMenu(props: {
 		</MenuShell>
 	);
 }
-export function ProjectAvatar(props: { name: string; kind?: "chat" | "project" }) {
+export function ProjectAvatar(props: {
+	name: string;
+	kind?: "chat" | "project";
+	status?: "idle" | "running" | "starting" | "error";
+}) {
+	const StatusIcon = props.status === "running"
+		? LoaderCircle
+		: props.status === "starting"
+			? CircleDot
+			: props.status === "error"
+				? CircleAlert
+				: null;
 	return (
 		<div
-			className={`conversation-avatar project-avatar${props.kind === "chat" ? " chat-avatar" : ""}`}
+			className={cn(
+				"conversation-avatar project-avatar relative",
+				props.kind === "chat" && "chat-avatar",
+				props.status && `avatar-status-${props.status}`,
+			)}
 			title={t("app.projectAvatarTitle", { name: props.name })}
+			data-avatar-status={props.status ?? "idle"}
 		>
 			{props.kind === "chat" ? (
 				<MessageCircle size={16} strokeWidth={1.9} />
 			) : (
 				<Folder size={16} strokeWidth={1.8} />
+			)}
+			{StatusIcon && (
+				<span className="avatar-status-indicator" aria-label={props.status}>
+					<StatusIcon size={8} strokeWidth={2.5} className={props.status === "running" ? "animate-spin" : undefined} />
+				</span>
 			)}
 		</div>
 	);

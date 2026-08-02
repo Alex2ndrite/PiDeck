@@ -1373,6 +1373,27 @@ select:focus-visible {
   color: var(--color-text-secondary);
   font-size: var(--font-size-caption);
 }
+
+/* Avatar 状态只作为身份角标，不改变项目行尺寸，避免状态切换造成列表抖动。 */
+.avatar-status-indicator {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  display: grid;
+  width: 11px;
+  height: 11px;
+  place-items: center;
+  border: 2px solid var(--color-bg-panel);
+  border-radius: var(--radius-pill);
+  background: var(--color-text-tertiary);
+  color: var(--color-text-inverse);
+}
+.avatar-status-running .avatar-status-indicator { background: var(--color-accent); }
+.avatar-status-starting .avatar-status-indicator { background: var(--color-warning); }
+.avatar-status-error .avatar-status-indicator { background: var(--color-danger); }
+.avatar-status-idle .avatar-status-indicator { background: var(--color-info); }
+.agent-avatar-mark { display: grid; place-items: center; }
+
 .project-group > .conversation.active:first-child .project-avatar {
   background: color-mix(
     in srgb,

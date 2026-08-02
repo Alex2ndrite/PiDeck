@@ -72,10 +72,17 @@ export function ProjectTree(props: {
       // 项目多时不用逐个展开即可知道哪里有事发生
       const projectSessions = props.controller.catalog.sessionsByProject[project.id] ?? [];
       const sessionCount = projectSessions.length;
-      const runningAgentCount = props.controller.catalog.agents.filter(
-        (agent) => agent.projectId === project.id &&
-          (agent.status === "running" || agent.status === "starting"),
+      const projectAgents = props.controller.catalog.agents.filter((agent) => agent.projectId === project.id);
+      const runningAgentCount = projectAgents.filter(
+        (agent) => agent.status === "running" || agent.status === "starting",
       ).length;
+      const projectStatus = projectAgents.some((agent) => agent.status === "error")
+        ? "error"
+        : projectAgents.some((agent) => agent.status === "running")
+          ? "running"
+          : projectAgents.some((agent) => agent.status === "starting")
+            ? "starting"
+            : "idle";
       return <div key={project.id} className={cn("project-group mb-0.5", chat && "chat-project-group", project.worktreeEnabled && "worktree-enabled")}>
         <div
           className={cn(
@@ -113,7 +120,7 @@ export function ProjectTree(props: {
               props.actions.projects.select(project.id);
             }}
           >
-            <ProjectAvatar name={projectDirectoryName} kind={chat ? "chat" : "project"} />
+            <ProjectAvatar name={projectDirectoryName} kind={chat ? "chat" : "project"} status={projectStatus} />
             <div className="conversation-body min-w-0 flex-1">
               <div className="conversation-title flex min-w-0 items-center">
                 <strong className="min-w-0 flex-1 truncate font-medium" title={project.path}>{projectDirectoryName}</strong>
