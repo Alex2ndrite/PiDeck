@@ -186,12 +186,15 @@ export function SessionStatus(props: {
 }) {
 	const state = props.state;
 	if (!state) return null;
-	// 会话平均缓存命中率：与 pi CLI footer 的 latestCacheHitRate 口径不同，
-	// 这里统计的是本会话历次 runtime state 快照的均值，用户可对比「最新一次 vs 整体水平」
+	// 会话平均缓存命中率：主进程基于会话文件全部 assistant 消息 usage 算出的
+	// 真实平均优先；渲染层快照历史均值仅作为无文件样本时的降级回退。
 	const history = props.cacheHitHistory ?? [];
-	const averageCacheHit = history.length > 0
-		? history.reduce((sum, value) => sum + value, 0) / history.length
-		: undefined;
+	const averageCacheHit = state.cacheHitAveragePercent ?? (
+		history.length > 0
+			? history.reduce((sum, value) => sum + value, 0) / history.length
+			: undefined
+	);
+	const averageCacheHitSampleCount = state.cacheHitSampleCount ?? history.length;
 	// 美元→人民币估算汇率（仅用于费用提示的便捷换算，非实时牌价；
 	// 如后续需要跟随实时汇率，可升级为设置项 usdToCnyRate）
 	const cnyAmount = state.cost != null
@@ -226,7 +229,7 @@ export function SessionStatus(props: {
 	if (averageCacheHit != null) {
 		detailRows.push({
 			label: t("ctx.detail.hitAverage"),
-			value: `${averageCacheHit.toFixed(1)}% (${history.length} ${t("ctx.detail.snapshots")})`,
+			value: `${averageCacheHit.toFixed(1)}% (${averageCacheHitSampleCount} ${t("ctx.detail.snapshots")})`,
 		});
 	}
 	if (state.cost != null) {
@@ -262,7 +265,7 @@ export function SessionStatus(props: {
 					)}
 				</span>
 			)}
-			{/* 会话平均命中率：单独一行小字，不改变现有布局 */}
+			{/* 会话平均命中率：主进程按会话文件全部 assistant 消息统计（真实平均） */}
 			{averageCacheHit != null && (
 				<span className="cache-chip" title={t("ctx.detail.hitAverageTitle")}>
 					{t("app.cacheHitAvg")}: {averageCacheHit.toFixed(0)}%

@@ -46,6 +46,10 @@ export type AgentRuntimeState = {
 	cacheWrite?: number;
 	cacheTotal?: number;
 	cacheHitPercent?: number | null;
+	/** 当前会话平均缓存命中率：会话文件全部 assistant 消息 usage 的算术平均 */
+	cacheHitAveragePercent?: number | null;
+	/** 参与平均统计的 assistant 消息条数（与 cacheHitAveragePercent 同源） */
+	cacheHitSampleCount?: number;
 	cost?: number;
 };
 

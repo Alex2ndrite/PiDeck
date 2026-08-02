@@ -31,6 +31,12 @@ function loadAgentManager() {
 		vm.runInNewContext(transpile("src/main/pi/streamGate.ts"), sandbox, { filename: "streamGate.ts" });
 		return sandbox.exports;
 	})();
+	// cacheHitStats：纯函数真实加载（getRuntimeState 读会话文件统计缓存命中率）
+	const cacheHitStats = (() => {
+		const sandbox = { exports: {}, require };
+		vm.runInNewContext(transpile("src/main/pi/cacheHitStats.ts"), sandbox, { filename: "cacheHitStats.ts" });
+		return sandbox.exports;
+	})();
 	const sessionEntryIds = (() => {
 		const sandbox = { exports: {}, require };
 		vm.runInNewContext(transpile("src/main/pi/sessionEntryIds.ts"), sandbox, {
@@ -137,6 +143,7 @@ function loadAgentManager() {
 			}
 			if (id === "./LatestByKeyEmitter") return { LatestByKeyEmitter };
 			if (id === "./streamGate") return streamGate;
+			if (id === "./cacheHitStats") return cacheHitStats;
 			if (id === "../../shared/toolRuntimeState") return { updateActiveToolCalls: () => new Map() };
 			if (id === "../wsl/WslPaths") return wslPaths;
 			return require(id);

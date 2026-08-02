@@ -62,6 +62,16 @@ function loadAgentManagerModule() {
 		{ module: streamGateModule, exports: streamGateModule.exports },
 		{ filename: "streamGate.ts" },
 	);
+	// cacheHitStats：纯函数真实加载（getRuntimeState 读会话文件统计缓存命中率）
+	const cacheHitStatsModule = { exports: {} };
+	vm.runInNewContext(
+		ts.transpileModule(readFileSync("src/main/pi/cacheHitStats.ts", "utf8"), {
+			compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+			fileName: "cacheHitStats.ts",
+		}).outputText,
+		{ module: cacheHitStatsModule, exports: cacheHitStatsModule.exports },
+		{ filename: "cacheHitStats.ts" },
+	);
 	const messageProjectorModule = loadAgentMessageProjectorModule();
 	const historyReaderModule = { exports: {} };
 	const historyReaderOutput = ts.transpileModule(
@@ -142,6 +152,7 @@ function loadAgentManagerModule() {
       }
       if (specifier === "./LatestByKeyEmitter") return { LatestByKeyEmitter };
       if (specifier === "./streamGate") return streamGateModule.exports;
+      if (specifier === "./cacheHitStats") return cacheHitStatsModule.exports;
       if (specifier === "../../shared/toolRuntimeState") return { updateActiveToolCalls: () => undefined };
       if (specifier === "../wsl/WslPaths") {
         return { toWindowsHostPath: (path) => path, toWslLinuxPath: (path) => path };

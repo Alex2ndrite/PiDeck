@@ -48,6 +48,7 @@ import {
 	sealStreamGate,
 	type StreamGateState,
 } from "./streamGate";
+import { computeCacheHitStats, type CacheHitStats } from "./cacheHitStats";
 import {
 	stripAnsi,
 	pickNumber,
@@ -1321,39 +1322,19 @@ export class AgentManager {
 	}
 
 	/**
-	 * 读取 session 文件，提取最后一条 assistant 消息的缓存命中率。
-	 * 与 pi CLI footer 的 latestCacheHitRate 逻辑一致：
-	 * latestCacheHitRate = cacheRead / (input + cacheRead + cacheWrite) * 100
+	 * 读取 session 文件，统计缓存命中率：最后一条 assistant 消息（latest）与
+	 * 全部 assistant 消息的平均值（average，即「当前会话平均缓存率」）。
+	 * 口径与 pi CLI footer 的 latestCacheHitRate 一致：
+	 * cacheRead / (input + cacheRead + cacheWrite) * 100
 	 */
-	private async getLatestCacheMessageHitRate(sessionPath: string): Promise<number | undefined> {
+	private async getSessionCacheHitStats(sessionPath: string): Promise<CacheHitStats> {
 		try {
 			const raw = await readFile(this.toSessionHostPath(sessionPath), "utf8");
-			const lines = raw.split(/\r?\n/);
-			// 从后往前遍历，找到最后一条 assistant 消息
-			for (let i = lines.length - 1; i >= 0; i--) {
-				const line = lines[i].trim();
-				if (!line) continue;
-				try {
-					const entry = JSON.parse(line) as Record<string, any>;
-					if (entry?.message?.role === "assistant" && entry.message?.usage) {
-						const usage = entry.message.usage;
-						const input = usage.input ?? 0;
-						const cacheRead = usage.cacheRead ?? 0;
-						const cacheWrite = usage.cacheWrite ?? 0;
-						const promptTokens = input + cacheRead + cacheWrite;
-						if (promptTokens > 0) {
-							return (cacheRead / promptTokens) * 100;
-						}
-						return undefined;
-					}
-				} catch {
-					// 单行解析失败忽略，继续往前找
-				}
-			}
+			return computeCacheHitStats(raw);
 		} catch {
-			// 文件不存在或无法读取，返回 undefined
+			// 文件不存在或无法读取，返回空统计
+			return { latest: undefined, average: undefined, sampleCount: 0 };
 		}
-		return undefined;
 	}
 
 	async getRuntimeState(agentId: string): Promise<AgentRuntimeState> {
@@ -1407,41 +1388,45 @@ export class AgentManager {
 	/**
 	 * 使用最新一条 assistant 消息的缓存命中率，与 pi CLI footer 保持一致。
 	 * pi 的 get_session_stats RPC 不直接返回 cacheHitPercent，需读取 session 文件。
+	 * 同时统计全部 assistant 消息的平均命中率（当前会话平均缓存率）。
 	 */
-		const computedCacheHitPercent = runtime.tab.sessionPath
-			? await this.getLatestCacheMessageHitRate(runtime.tab.sessionPath)
-			: undefined;
-		const cacheHitPercent = clampPercent(
-			directCacheHitPercent ?? computedCacheHitPercent,
-		);
-		return {
-			modelName: model?.name ?? model?.id,
-			provider: model?.provider,
-			modelId: model?.id,
-			thinkingLevel: state?.thinkingLevel,
-			isStreaming: state?.isStreaming,
-			isCompacting:
-				state?.isCompacting ||
-				this.rpcCompactingAgents.has(agentId) ||
-				this.compactingAgents.has(agentId),
-			/** 工具执行状态从本地追踪，无需 Pi 进程查询 */
-			isExecutingTool: !!(this.toolExecutingByAgent.get(agentId)),
-			executingToolName: this.toolExecutingByAgent.get(agentId) ?? undefined,
-			toolStateSequence: this.toolStateSequenceByAgent.get(agentId) ?? 0,
-			contextTokens: stats?.contextUsage?.tokens,
-			contextWindow: stats?.contextUsage?.contextWindow ?? model?.contextWindow,
-			contextPercent: stats?.contextUsage?.percent,
-			inputTokens,
-			outputTokens,
-			cacheRead,
-			cacheWrite,
-			cacheTotal:
-				cacheRead != null || cacheWrite != null
-					? (cacheRead ?? 0) + (cacheWrite ?? 0)
-					: undefined,
-			cacheHitPercent,
-			cost: stats?.cost,
-		};
+	const fileHitStats = runtime.tab.sessionPath
+		? await this.getSessionCacheHitStats(runtime.tab.sessionPath)
+		: { latest: undefined as number | undefined, average: undefined as number | undefined, sampleCount: 0 };
+	const cacheHitPercent = clampPercent(
+		directCacheHitPercent ?? fileHitStats.latest,
+	);
+	const cacheHitAveragePercent = clampPercent(fileHitStats.average);
+	return {
+		modelName: model?.name ?? model?.id,
+		provider: model?.provider,
+		modelId: model?.id,
+		thinkingLevel: state?.thinkingLevel,
+		isStreaming: state?.isStreaming,
+		isCompacting:
+			state?.isCompacting ||
+			this.rpcCompactingAgents.has(agentId) ||
+			this.compactingAgents.has(agentId),
+		/** 工具执行状态从本地追踪，无需 Pi 进程查询 */
+		isExecutingTool: !!(this.toolExecutingByAgent.get(agentId)),
+		executingToolName: this.toolExecutingByAgent.get(agentId) ?? undefined,
+		toolStateSequence: this.toolStateSequenceByAgent.get(agentId) ?? 0,
+		contextTokens: stats?.contextUsage?.tokens,
+		contextWindow: stats?.contextUsage?.contextWindow ?? model?.contextWindow,
+		contextPercent: stats?.contextUsage?.percent,
+		inputTokens,
+		outputTokens,
+		cacheRead,
+		cacheWrite,
+		cacheTotal:
+			cacheRead != null || cacheWrite != null
+				? (cacheRead ?? 0) + (cacheWrite ?? 0)
+				: undefined,
+		cacheHitPercent,
+		cacheHitAveragePercent,
+		cacheHitSampleCount: fileHitStats.sampleCount,
+		cost: stats?.cost,
+	};
 	}
 
 	private applyActiveToolCallState(agentId: string, state: ActiveToolCallState) {
