@@ -4,6 +4,7 @@ import type { ChatMessage } from "../../../../shared/types";
 import { t, translateI18nDescriptor } from "../../i18n";
 import { formatDuration, formatTime, stripAnsi } from "./TimelineFormat";
 import { Textarea } from "../ui-shadcn/textarea";
+import { TimelineMarker } from "./TimelineMarker";
 
 // Button 收口状态（P0）：本文件按钮全部保留原生——
 // compaction-card-header / thinking-card-trigger 是折叠触发器 + 内容排版容器（内部 span/small/em 结构）；
@@ -34,6 +35,7 @@ export const CompactionCard = memo(function CompactionCard(props: {
 	const hasArchived = Array.isArray(archivedMessages) && archivedMessages.length > 0;
 
 	return (
+		<TimelineMarker kind="compaction" tone="active">
 		<article
 			className={`my-px flex flex-col overflow-hidden rounded-sm border border-[color-mix(in_srgb,var(--color-accent)_8%,transparent)] bg-[color:color-mix(in_srgb,var(--color-accent)_4%,var(--color-bg-panel))]${expanded ? " compaction-card--expanded" : ""}`}
 			data-message-id={props.message.id}
@@ -77,6 +79,7 @@ export const CompactionCard = memo(function CompactionCard(props: {
 				</div>
 			)}
 		</article>
+		</TimelineMarker>
 	);
 });
 
@@ -124,6 +127,7 @@ export const DiagnosticMessageCard = memo(function DiagnosticMessageCard(props: 
 		? t("diagnostic.errorTitle")
 		: t("diagnostic.systemTitle");
 	return (
+		<TimelineMarker kind="diagnostic" tone={tone === "error" ? "error" : tone === "warning" ? "warning" : tone === "success" ? "success" : "neutral"}>
 		<article
 			className={`diagnostic-card w-full min-w-0 overflow-hidden rounded-md border border-border-subtle bg-[var(--color-chat-muted-bg)] tone-${tone}`}
 			data-message-id={props.message.id}
@@ -136,6 +140,7 @@ export const DiagnosticMessageCard = memo(function DiagnosticMessageCard(props: 
 			</div>
 			<pre className="m-0 p-2 font-mono text-caption leading-relaxed break-words whitespace-pre-wrap text-text-secondary">{stripAnsi(body)}</pre>
 		</article>
+		</TimelineMarker>
 	);
 });
 
@@ -198,6 +203,7 @@ export const AskQuestionCard = memo(function AskQuestionCard(props: {
 	const options = uiRequest?.options as string[] | undefined;
 
 	return (
+		<TimelineMarker kind="ask" tone="active">
 		<article className="ask-question-card pending" data-message-id={props.message.id}>
 			<div className="ask-question-card-header">
 				<MessageCircle size={14} />
@@ -305,6 +311,7 @@ export const AskQuestionCard = memo(function AskQuestionCard(props: {
 				)}
 			</div>
 		</article>
+		</TimelineMarker>
 	);
 });
 
@@ -331,6 +338,7 @@ export const ThinkingBlock = memo(function ThinkingBlock(props: {
 			: null;
 	const durationText = durationMs != null ? formatDuration(durationMs) : null;
 	return (
+		<TimelineMarker kind="thinking" tone={props.endedAt ? "neutral" : "active"}>
 		<section className="w-full min-w-0 overflow-hidden rounded-md border-0">
 			<button
 				className="flex min-h-8 w-full cursor-pointer items-center gap-2 border-0 bg-transparent p-1.5 pl-2.5 text-left text-control leading-5 text-text-secondary transition-colors duration-150 hover:bg-[color:color-mix(in_srgb,var(--color-bg-hover)_50%,var(--color-bg))] focus-visible:-outline-offset-2 focus-visible:outline-2 [&_svg]:shrink-0 [&_svg]:text-[var(--color-info)]"
@@ -352,6 +360,7 @@ export const ThinkingBlock = memo(function ThinkingBlock(props: {
 			</button>
 			{expanded && <div className="border-t border-border-subtle px-3 pt-2 pb-3 text-caption text-text-tertiary">{previewText}</div>}
 		</section>
+		</TimelineMarker>
 	);
 });
 

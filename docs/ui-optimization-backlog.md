@@ -21,7 +21,7 @@
 | P0 | 左侧项目列表改成 Sidebar | ✅ 已完成 | `components/sidebar/*` | 单一滚动区；项目只出现一次；点击一次切换并展开；展开状态持久化；切换不抖动 |
 | P0 | 品牌 Logo 与品牌文字 | 🟡 部分完成 | `AppParts.tsx`、`AppSidebar.tsx`、`AppHeader.tsx` | Logo/文字尺寸、字重、间距、拖拽区和暗色主题一致 |
 | P0 | 设置、Pi 管理、反馈页面标题与 label 统一 | 🟡 第一批已完成，继续扩展 | `SettingsModal.tsx`、`config/*`、反馈 overlay、共享组件 | 标题层级、label 字号、字重、描述色、间距统一 |
-| P0 | Markdown 渲染后的工具调用展示 | 🟡 部分完成 | `MarkdownStream.tsx`、`ToolCallComponents.tsx`、`TimelineEventCards.tsx` | 工具 Logo、状态、展开/折叠、详情、错误和流式状态一致 |
+| P0 | Markdown 渲染后的工具调用展示 | ✅ Batch 2 已完成 | `MarkdownStream.tsx`、`ToolCallComponents.tsx`、`TimelineEventCards.tsx` | 工具 Logo、状态、展开/折叠、详情、错误和流式状态一致 |
 | P0 | 会话响应动画与空白页 | 🟡 部分完成 | `SurfaceComponents.tsx`、`timeline.css`、SessionView | 响应中、工具执行中、空会话、异常和加载状态不互相跳动 |
 | P1 | Todo / Plan / Ask | 🟡 Ask 已有 | `TimelineEventCards.tsx`、overlay、pi RPC | Ask 的 pending/answered/cancelled；todo/plan 依赖 pi 扩展，不在 renderer 伪造 |
 | P1 | `/theming` 统一 | 🟡 基础已完成 | `themePresets.ts`、`tailwind.css`、`foundation.css` | token 单一来源；明暗、accent、皮肤、背景图和组件状态一致 |
@@ -30,7 +30,7 @@
 | P1 | Context Menu 统一右键菜单 | 🟡 部分完成 | `SidebarParts.tsx`、文件树、Git、会话 | 右键菜单统一焦点、碰撞定位、危险操作和关闭行为 |
 | P1 | Dropdown Menu 统一下拉菜单 | 🟡 部分完成 | `SessionTabsBar.tsx`、Config、Git、文件相关面板 | 删除自绘定位和重复的 ESC/外部点击逻辑 |
 | P1 | Tooltip / Hover Card | 🟡 Tooltip 已有 | `ui-shadcn/tooltip.tsx`、工具卡、项目行、设置项 | Tooltip 只解释图标；复杂详情使用 Hover Card，不滥用 title |
-| P1 | Marker 用于思考、工具调用和压缩方向 | ⬜ 待开始 | `TimelineEventCards.tsx`、`SurfaceComponents.tsx` | 时间线中系统事件、思考、工具、压缩有统一的 marker 轨道 |
+| P1 | Marker 用于思考、工具调用和压缩方向 | ✅ Batch 2 已完成 | `TimelineMarker.tsx`、`TimelineEventCards.tsx`、`ToolCallComponents.tsx` | 时间线中系统事件、思考、工具、压缩有统一的 marker 轨道 |
 | P2 | Data Table 会话管理 | ⬜ 待开始 | `SidebarComponents.tsx` 的 SessionManagerModal | 排序、来源、批量选择、删除、重命名和空状态 |
 | P2 | Pagination | 🟡 hook 已有 | `useMessagePagination.ts`、SessionManager、YaoPrompt | 分页只负责大列表，不替代时间线滚动和流式加载 |
 | P2 | Progress | 🟡 现有自定义进度 | 更新 overlay、环境安装、Ask batch | 下载、安装、批量 Ask 进度统一语义与无障碍属性 |
@@ -49,9 +49,9 @@
 
 ### Batch 2：工具调用与会话状态
 
-- [ ] 盘点工具类型与现有图标映射，补齐未知工具的统一 fallback。
-- [ ] 统一工具卡 trigger、状态、详情、复制、错误和展开折叠。
-- [ ] 统一 thinking、tool、compaction、diagnostic、ask 的 marker 轨道。
+- [x] 盘点工具类型与现有图标映射，补齐未知工具的统一 fallback。
+- [x] 统一工具卡 trigger、状态、详情、复制、错误和展开折叠。
+- [x] 统一 thinking、tool、compaction、diagnostic、ask 的 marker 轨道。
 - [ ] 收敛响应中动画和空白页，保证 reduced-motion 下不依赖动画表达状态。
 
 ### Batch 3：交互原语
@@ -86,6 +86,9 @@
 - 新增 `ui-shadcn/section-heading.tsx`，统一 Settings Storage、Pi 管理 SettingsTab、Feedback 弹窗的标题和描述层级。
 - Feedback 弹窗合并重复 header，补齐可访问的 `DialogTitle`，并统一描述、复现步骤、环境信息的区块标题。
 - 新增 `tests/uiSectionHeading.test.mjs`，锁定共享组件接入范围和标题层级契约。
+- 新增 `TimelineMarker`，统一 thinking、tool、compaction、diagnostic、ask 的类型标记、状态色和左侧连接轨道。
+- ToolCard 保留现有图标映射、状态、详情复制和展开折叠行为，只把运行/成功/警告/错误映射到统一 marker tone。
+- 新增 `tests/timelineMarker.test.mjs`，锁定 marker 类型、工具状态映射和折叠行为契约。
 
 ## 门禁
 

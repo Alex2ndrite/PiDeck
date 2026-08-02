@@ -25,6 +25,7 @@ import { t } from "../../i18n";
 import { Button } from "../ui-shadcn/button";
 import { showNotice } from "../../utils/notice";
 import type { ChatMessage } from "../../../../shared/types";
+import { TimelineMarker } from "./TimelineMarker";
 import {
   formatDuration,
   getToolDetailText,
@@ -211,6 +212,10 @@ const statusLabel =
 		setTimeout(() => setCopied(false), 2000);
 	};
 	return (
+		<TimelineMarker
+			kind="tool"
+			tone={tone === "error" ? "error" : tone === "warning" ? "warning" : tone === "running" ? "active" : "success"}
+		>
 		<section
 			className={`tool-card w-full min-w-0 overflow-hidden rounded-md border border-border-subtle bg-bg-panel transition-[border-color,background-color] duration-150 tone-${tone}${isSkillRead ? " tool-card--skill" : ""}${isAskCard ? " tool-card--ask" : ""}`}
 			data-status={status}
@@ -322,6 +327,7 @@ const statusLabel =
 				</div>
 			)}
 		</section>
+		</TimelineMarker>
 	);
 });
 /** 工具组直接平铺为工具列表；每个 ToolCard 自己默认折叠，避免外层再占一行。 */
