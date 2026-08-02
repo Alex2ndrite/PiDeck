@@ -209,6 +209,11 @@ export function useFileEditor(input: UseFileEditorInput): UseFileEditorOutput {
   const editorTabAccessSequenceRef = useRef(0);
   const [editorTabs, setEditorTabs] = useState<EditorTab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
+  // tabs 同步 ref：openEditorTab/closeEditorTab 需要在 updater 外计算 next——
+  // StrictMode 双调用 updater 内的 crypto.randomUUID/setActiveTabId 会产生两个
+  // 不同 id，导致 activeTabId 与 editorTabs 不一致 → 首次打开文件空白
+  const editorTabsRef = useRef<EditorTab[]>([]);
+  editorTabsRef.current = editorTabs;
   const activeTab = useMemo(
     () => editorTabs.find((t) => t.id === activeTabId) ?? null,
     [editorTabs, activeTabId],
@@ -265,31 +270,16 @@ export function useFileEditor(input: UseFileEditorInput): UseFileEditorOutput {
       label?: string,
       preserveDrawer = false,
     ) => {
-      setEditorTabs((prev) => {
-        const existing = prev.find(
-          (t) => t.filePath === path && t.tabKey === tabKey,
-        );
-        if (existing) {
-          const updated = {
-            ...existing,
-            mode,
-            originalContent: originalContent ?? "",
-            modifiedContent,
-            allowSave,
-            tabKey,
-            label,
-            preserveDrawer,
-            lastAccess: ++editorTabAccessSequenceRef.current,
-          };
-          setActiveTabId(existing.id);
-          return trimEditorTabs(
-            prev.map((tab) => (tab.id === existing.id ? updated : tab)),
-            existing.id,
-          );
-        }
-        const newTab: EditorTab = {
-          id: crypto.randomUUID(),
-          filePath: path,
+      // updater 纯化：StrictMode 双调用下，updater 内 crypto.randomUUID/嵌套
+      // setState 会产生两个不同 id → activeTabId 与 editorTabs 不一致 → 首次空白。
+      // 改为在闭包内读同步 ref 计算 next，setState 传值（幂等，双调用安全）
+      const prev = editorTabsRef.current;
+      const existing = prev.find(
+        (t) => t.filePath === path && t.tabKey === tabKey,
+      );
+      if (existing) {
+        const updated = {
+          ...existing,
           mode,
           originalContent: originalContent ?? "",
           modifiedContent,
@@ -299,28 +289,47 @@ export function useFileEditor(input: UseFileEditorInput): UseFileEditorOutput {
           preserveDrawer,
           lastAccess: ++editorTabAccessSequenceRef.current,
         };
-        const next = trimEditorTabs([...prev, newTab], newTab.id);
-        setActiveTabId(newTab.id);
-        return next;
-      });
+        setEditorTabs(
+          trimEditorTabs(
+            prev.map((tab) => (tab.id === existing.id ? updated : tab)),
+            existing.id,
+          ),
+        );
+        setActiveTabId(existing.id);
+        return;
+      }
+      const newTab: EditorTab = {
+        id: crypto.randomUUID(),
+        filePath: path,
+        mode,
+        originalContent: originalContent ?? "",
+        modifiedContent,
+        allowSave,
+        tabKey,
+        label,
+        preserveDrawer,
+        lastAccess: ++editorTabAccessSequenceRef.current,
+      };
+      setEditorTabs(trimEditorTabs([...prev, newTab], newTab.id));
+      setActiveTabId(newTab.id);
     },
     [],
   );
 
   const closeEditorTab = useCallback(
     (tabId: string) => {
-      setEditorTabs((prev) => {
-        const idx = prev.findIndex((t) => t.id === tabId);
-        if (idx < 0) return prev;
-        const next = prev.filter((t) => t.id !== tabId);
-        if (next.length === 0) {
-          setActiveTabId(null);
-        } else if (tabId === activeTabId) {
-          const neighborIdx = Math.min(idx, next.length - 1);
-          setActiveTabId(next[neighborIdx].id);
-        }
-        return next;
-      });
+      // updater 纯化（同上）：副作用移出
+      const prev = editorTabsRef.current;
+      const idx = prev.findIndex((t) => t.id === tabId);
+      if (idx < 0) return;
+      const next = prev.filter((t) => t.id !== tabId);
+      setEditorTabs(next);
+      if (next.length === 0) {
+        setActiveTabId(null);
+      } else if (tabId === activeTabId) {
+        const neighborIdx = Math.min(idx, next.length - 1);
+        setActiveTabId(next[neighborIdx].id);
+      }
     },
     [activeTabId],
   );
