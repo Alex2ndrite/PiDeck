@@ -3,7 +3,7 @@ import { useAtomValue } from "jotai";
 import { selectAtom } from "jotai/utils";
 import { useMemo, useState } from "react";
 import type { ComponentProps, RefObject } from "react";
-import type { ImageContent } from "../../../../shared/types";
+import type { ChatMessage, ImageContent } from "../../../../shared/types";
 import {
   CompactionCard,
   DiagnosticMessageCard,
@@ -119,6 +119,21 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
     () => groupToolMessages(paginatedMessages),
     [paginatedMessages],
   );
+  // 文件修改汇总只统计最后一次 agent 运行（run）内的工具调用：
+  // 每次会话（用户发送 → agent 执行 → 完成）清空重算，不累计历史运行的修改
+  const lastRunMessages = useMemo(() => {
+    const lastRun = renderedRuns.findLast((r) => r.kind === "agent-run");
+    if (!lastRun) return [];
+    const msgs: ChatMessage[] = [];
+    for (const item of lastRun.items) {
+      if (item.kind === "message") {
+        msgs.push(item.message);
+      } else if (item.kind === "tool-group" || item.kind === "thinking-group") {
+        msgs.push(...item.messages);
+      }
+    }
+    return msgs;
+  }, [renderedRuns]);
   const lastUserMessageId = useMemo(() => {
     for (let index = activeMessages.length - 1; index >= 0; index -= 1) {
       if (activeMessages[index].role === "user") {
@@ -470,7 +485,7 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
               !isConversationLoading &&
               activeMessages.length > 0 && (
                 <SessionFileSummary
-                  messages={activeMessages}
+                  messages={lastRunMessages}
                   onDiffFile={props.onDiffFile}
                 />
               )}

@@ -36,7 +36,7 @@ interface GitDrawerDiff {
   label: string;
 }
 
-function resolveFileLinkPath(path: string, basePath?: string) {
+export function resolveFileLinkPath(path: string, basePath?: string) {
   if (!path || isAbsoluteFilePath(path) || !basePath) return path;
   const separator = basePath.includes("\\") ? "\\" : "/";
   return `${basePath.replace(/[\\/]+$/, "")}${separator}${path.replace(/^[\\/]+/, "")}`;

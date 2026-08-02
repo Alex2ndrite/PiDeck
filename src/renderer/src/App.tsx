@@ -26,6 +26,8 @@ import {
   isLanWeb,
   missingElectronPreload,
 } from "./desktopApi";
+// 文件链接路由：图片类型走弹窗预览
+const IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "gif", "webp", "svg", "avif", "bmp", "ico"]);
 const ConfigModal = lazy(() => import("./ConfigModal").then((m) => ({ default: m.ConfigModal })));
 import { type SidebarActions } from "./components/sidebar/SidebarContent";
 import { AppSidebar } from "./components/sidebar/AppSidebar";
@@ -35,7 +37,7 @@ import { useRename } from "./hooks/useRename";
 import { useProjectRuntimeCapabilities } from "./hooks/useRuntimeCapabilities";
 import { useSessionRuntimeBridge } from "./hooks/useSessionRuntimeBridge";
 import { useSessionLayout } from "./hooks/useSessionLayout";
-import { useFileEditor } from "./hooks/useFileEditor";
+import { useFileEditor , resolveFileLinkPath } from "./hooks/useFileEditor";
 import { useOverlayActions } from "./hooks/useOverlayActions";
 import { useWorkspacePanels, type WorkspaceDrawerPanel, type WorkspaceExternalEditorAdapter } from "./hooks/useWorkspacePanels";
 import { useDrawerPorts } from "./hooks/useDrawerPorts";
@@ -1001,6 +1003,34 @@ export function App() {
     commitFileDiff: api.git.commitFileDiff,
     t,
   });
+
+  // 会话内文件链接打开路由：按扩展名分级——
+  // 图片 → 弹窗预览（readBase64 → ImagePreviewModal）；markdown/html → 抽屉查看
+  //（FileDiffViewer 对 .md 默认 preview、.html 用 HtmlPreview 内置渲染）；其他文件 → 编辑器打开。
+  // 替代原先的"系统默认应用打开"（.md 会被浏览器接管、体验割裂）
+  const handleOpenLinkedFile = useCallback(
+    (path: string) => {
+      const resolved = resolveFileLinkPath(
+        path,
+        activeAgent?.cwd ?? activeProject?.path,
+      );
+      const ext = resolved.split(".").pop()?.toLowerCase() ?? "";
+      if (IMAGE_EXTENSIONS.has(ext)) {
+        // 图片：读取二进制 → 弹窗预览
+        void api.files
+          .readBase64(resolved)
+          .then((dataUrl) => {
+            const m = dataUrl.match(/^data:(.*?);base64,(.*)$/s);
+            if (m) setPreviewImage({ type: "image", mimeType: m[1], data: m[2] });
+          })
+          .catch(() => showToast(t("app.openFileFailed", { error: ext })));
+        return;
+      }
+      // markdown / html / 其他文本文件：统一抽屉查看
+      viewFilePath(resolved);
+    },
+    [activeAgent?.cwd, activeProject?.path, viewFilePath, showToast],
+  );
 
   // 工具抽屉（files/git/browser）的统一切换语义：当前面板已展开 → 关闭；
   // 其余情况打开/切到目标面板。outline 浮动按钮与抽屉活动栏共用同一套语义，
@@ -2307,7 +2337,7 @@ export function App() {
       composerOffsetHeight={composerOffsetHeight}
       terminalRowHeight={terminalRowHeight}
       showToast={showToast}
-      onOpenFile={openFilePath}
+      onOpenFile={handleOpenLinkedFile}
       onDiffFile={diffFilePath}
       onPreviewImage={setPreviewImage}
       abortAgent={abortAgent}

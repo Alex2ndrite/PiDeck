@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { collectSessionFileChanges } from "../src/renderer/src/components/session/TimelineFormat.ts";
 
@@ -81,4 +82,14 @@ test("collectSessionFileChanges: different files are kept separately", () => {
 		files.map((f) => f.path).sort(),
 		["src/a.ts", "src/b.ts"],
 	);
+});
+
+test("file summary only counts the last agent run (per-session reset)", () => {
+  // 汇总按单次会话统计：时间线只把最后一次 run 的消息传给 SessionFileSummary，
+  // 新 run 开始后旧汇总不再累计（源码断言保护）
+  const source = readFileSync("src/renderer/src/components/session/SessionMessageTimeline.tsx", "utf8");
+  assert.match(source, /只统计最后一次 agent 运行/);
+  assert.match(source, /const lastRunMessages = useMemo/);
+  assert.match(source, /renderedRuns\.findLast\(\(r\) => r\.kind === "agent-run"\)/);
+  assert.match(source, /messages=\{lastRunMessages\}/);
 });
