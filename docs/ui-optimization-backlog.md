@@ -31,7 +31,7 @@
 | P1 | Dropdown Menu 统一下拉菜单 | ✅ Batch 5 已完成 | `GitPanelControls.tsx`、`SessionTabsBar.tsx`、Config、Git | 删除自绘定位和重复的 ESC/外部点击逻辑 |
 | P1 | Tooltip / Hover Card | 🟡 Tooltip 已有 | `ui-shadcn/tooltip.tsx`、工具卡、项目行、设置项 | Tooltip 只解释图标；复杂详情使用 Hover Card，不滥用 title |
 | P1 | Marker 用于思考、工具调用和压缩方向 | ✅ Batch 2 已完成 | `TimelineMarker.tsx`、`TimelineEventCards.tsx`、`ToolCallComponents.tsx` | 时间线中系统事件、思考、工具、压缩有统一的 marker 轨道 |
-| P2 | Data Table 会话管理 | ⬜ 待开始 | `SidebarComponents.tsx` 的 SessionManagerModal | 排序、来源、批量选择、删除、重命名和空状态 |
+| P2 | Data Table 会话管理 | ✅ Batch 7 已完成 | `ui-shadcn/table.tsx`、`SidebarComponents.tsx` 的 SessionManagerModal | 表头、来源、批量选择、删除、重命名和空状态 |
 | P2 | Pagination | 🟡 hook 已有 | `useMessagePagination.ts`、SessionManager、YaoPrompt | 分页只负责大列表，不替代时间线滚动和流式加载 |
 | P2 | Progress | 🟡 现有自定义进度 | 更新 overlay、环境安装、Ask batch | 下载、安装、批量 Ask 进度统一语义与无障碍属性 |
 | P2 | Scroll Area | 🟡 组件已安装 | Sidebar、会话管理、设置、抽屉面板 | 统一滚动条、键盘滚动和边界阴影，避免嵌套滚动 |
@@ -70,7 +70,8 @@
 
 ### Batch 5：大列表和迁移收尾
 
-- [ ] Session Manager 使用 Data Table。
+- [x] Session Manager 使用 Data Table（新增 `ui-shadcn/table.tsx`，列表体表格化并保留全部选择/批量操作）。
+- [x] 清理 SessionManager 迁移后孤儿化的 `.session-manager-*` 死 CSS。
 - [ ] 分页、进度、Scroll Area 统一。
 - [ ] 清理已迁移域的死 CSS。
 - [ ] 更新 E2E 视觉巡检和手测清单。
@@ -98,6 +99,9 @@
 - `GitCompactFilter` 自绘 listbox 迁移到 shadcn Select：删除 `getViewportBoundMenuPlacement` 手写定位、portal、scroll/resize 监听和 ESC/外部点击处理，交互由 Radix 接管；触发器和选中勾保持原样。
 - 新增 `tests/gitCompactFilterMenu.test.mjs`，锁定无手写定位、紧凑触发器和 aria-label 契约。
 - 清理 `GitCompactFilter` 迁移后孤儿化的死 CSS：`.git-compact-filter` / `.git-compact-filter-btn` / `.git-compact-filter-label` 规则（源码零引用）。
+- 新增 `ui-shadcn/table.tsx`（项目 token 语义化），`SessionManagerModal` 列表体表格化：表头（会话/操作）+ 行选择态，全部交互逻辑保留。
+- 清理 `.session-manager-*` / `.session-source-btn` 死 CSS；共享选择器拆分保留 `.rpc-log-modal--embedded` / `.update-modal--embedded`。
+- 新增 `tests/sessionManagerTable.test.mjs`，锁定表格结构、交互保留和死 CSS 清理契约。
 - 新增 `tests/avatarStatus.test.mjs`，锁定项目和 Agent Avatar 的状态契约。
 
 ## 门禁

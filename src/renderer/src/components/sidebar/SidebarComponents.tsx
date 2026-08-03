@@ -21,6 +21,7 @@ import {
 	DropdownMenuTrigger,
 } from "../ui-shadcn/dropdown-menu";
 import { Button } from "../ui-shadcn/button";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui-shadcn/table";
 import type { SessionSource, SessionSummary, Project, AgentTab } from "../../../../shared/types";
 import { Checkbox } from "../ui-shadcn/checkbox";
 import { Input } from "../ui-shadcn/input";
@@ -137,58 +138,77 @@ export function SessionManagerModal(props: {
 				</div>
 
 				<div className="flex-1 overflow-y-auto bg-bg-muted">
-					{filteredSessions.map((session) => {
-						const isChecked = selected.has(session.filePath);
-						return (
-							<div
-								key={session.filePath}
-								className={`group flex items-center gap-3 border-b border-border-subtle bg-bg-panel px-5 py-2.5 transition-colors duration-100 last:border-b-0 hover:bg-bg-hover${isChecked ? " bg-[color:color-mix(in_srgb,var(--color-accent)_6%,var(--color-bg-panel))]" : ""}`}
-							>
-								<Label className="flex shrink-0 cursor-pointer items-center">
-									<Checkbox
-										checked={isChecked}
-										onChange={() => handleToggle(session.filePath)}
-									className="m-0 size-[15px] cursor-pointer accent-[var(--color-accent)]" />
-								</Label>
-								<div
-									className="flex min-w-0 flex-1 cursor-pointer items-center gap-2"
-									onClick={() => handleToggle(session.filePath)}
-								>
-									<div className="truncate text-control text-text-primary">
-										{session.name || session.preview?.slice(0, 60) || t("common.untitled")}
-									</div>
-									{session.source && session.source !== "pi" && (
-										<span className={`session-source-badge ${session.source}`}>
-											{t(`sessionSource.${session.source}` as any)}
-										</span>
-									)}
-								</div>
-								<div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
-									<Button
-										variant="ghost" size="sm" className="h-auto gap-[3px] rounded-[4px] px-2 text-caption text-text-tertiary transition-all duration-150 hover:bg-bg-hover hover:text-[var(--color-accent)]"
-										onClick={() => props.onRename(session)}
-										title={t("common.rename")}
+					<Table>
+						<TableHeader>
+							<TableRow className="bg-bg-muted hover:bg-bg-muted">
+								<TableHead className="w-10" />
+								<TableHead className="w-full">{t("sessionManager.session")}</TableHead>
+								<TableHead className="w-40 text-right">{t("sessionManager.actions")}</TableHead>
+							</TableRow>
+						</TableHeader>
+						<TableBody>
+							{filteredSessions.map((session) => {
+								const isChecked = selected.has(session.filePath);
+								return (
+									<TableRow
+										key={session.filePath}
+										className="group bg-bg-panel"
+										data-state={isChecked ? "selected" : undefined}
 									>
-										{t("common.rename")}
-									</Button>
-									<Button
-										variant="ghost" size="sm" className="h-auto gap-[3px] rounded-[4px] px-2 text-caption text-text-tertiary transition-all duration-150 hover:bg-bg-hover hover:text-[var(--color-accent)]"
-										onClick={() => props.onExport(session)}
-										title={t("menu.exportHtml")}
-									>
-										{t("menu.exportHtml")}
-									</Button>
-									<Button
-										variant="ghost" size="sm" className="h-auto gap-[3px] rounded-[4px] px-2 text-caption text-text-tertiary transition-all duration-150 hover:bg-[var(--color-danger-soft)] hover:text-[var(--color-danger)]"
-										onClick={() => props.onDelete([session])}
-										title={t("common.delete")}
-									>
-										{t("common.delete")}
-									</Button>
-								</div>
-							</div>
-						);
-					})}
+										<TableCell className="w-10">
+											<Label className="flex shrink-0 cursor-pointer items-center">
+												<Checkbox
+													checked={isChecked}
+													onChange={() => handleToggle(session.filePath)}
+													className="m-0 size-[15px] cursor-pointer accent-[var(--color-accent)]"
+												/>
+											</Label>
+										</TableCell>
+										<TableCell className="w-full max-w-0">
+											<div
+												className="flex min-w-0 cursor-pointer items-center gap-2"
+												onClick={() => handleToggle(session.filePath)}
+											>
+												<span className="truncate text-control text-text-primary">
+													{session.name || session.preview?.slice(0, 60) || t("common.untitled")}
+												</span>
+												{session.source && session.source !== "pi" && (
+													<span className={`session-source-badge shrink-0 ${session.source}`}>
+														{t(`sessionSource.${session.source}` as any)}
+													</span>
+												)}
+											</div>
+										</TableCell>
+										<TableCell className="w-40 text-right">
+											<div className="flex items-center justify-end gap-0.5 opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
+												<Button
+													variant="ghost" size="sm" className="h-auto gap-[3px] rounded-[4px] px-2 text-caption text-text-tertiary transition-all duration-150 hover:bg-bg-hover hover:text-[var(--color-accent)]"
+													onClick={() => props.onRename(session)}
+													title={t("common.rename")}
+												>
+													{t("common.rename")}
+												</Button>
+												<Button
+													variant="ghost" size="sm" className="h-auto gap-[3px] rounded-[4px] px-2 text-caption text-text-tertiary transition-all duration-150 hover:bg-bg-hover hover:text-[var(--color-accent)]"
+													onClick={() => props.onExport(session)}
+													title={t("menu.exportHtml")}
+												>
+													{t("menu.exportHtml")}
+												</Button>
+												<Button
+													variant="ghost" size="sm" className="h-auto gap-[3px] rounded-[4px] px-2 text-caption text-text-tertiary transition-all duration-150 hover:bg-[var(--color-danger-soft)] hover:text-[var(--color-danger)]"
+													onClick={() => props.onDelete([session])}
+													title={t("common.delete")}
+												>
+													{t("common.delete")}
+												</Button>
+											</div>
+										</TableCell>
+									</TableRow>
+								);
+							})}
+						</TableBody>
+					</Table>
 				</div>
 			</div>
 			</DialogContent>

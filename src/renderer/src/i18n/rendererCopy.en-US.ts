@@ -3,6 +3,8 @@ import type { TranslationKey } from "./rendererCopy.zh-CN";
 
 export const enUS: Record<TranslationKey, string> = {
   "app.chatProject": "Chat",
+  "sessionManager.session": "Session",
+  "sessionManager.actions": "Actions",
   "app.sidebarProjects": "Projects",
   "app.sidebarWorkspaces": "Workspaces",
   "app.sidebarSessions": "Sessions",
