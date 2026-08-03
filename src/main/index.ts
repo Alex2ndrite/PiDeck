@@ -1923,7 +1923,7 @@ function registerFeishuIpc() {
 
 	// 设置稳定 Session 使用的飞书 Bot ID。主进程始终重新解析当前 runtime，避免旧 agentId 操作替换后的会话。
 	ipcMain.handle(ipcChannels.feishuSessionBotSet, async (_event, sessionId: string, botId: string | null) => {
-		const target = sessionRuntimeCoordinator.getTarget(sessionId);
+		let target = sessionRuntimeCoordinator.getTarget(sessionId);
 		if (!botId) {
 			setSessionBotId(sessionId, undefined);
 			if (target && target.agentId !== sessionId) setSessionBotId(target.agentId, undefined);
@@ -1939,6 +1939,19 @@ function registerFeishuIpc() {
 		}
 		if (status.botId !== botId) {
 			return { success: false, message: feishuT(currentFeishuLocale(), "session.botMismatch") };
+		}
+		// 会话尚未启动 runtime（仅浏览过历史会话）：先启动 Agent 再建立飞书镜像，
+		// 让「点会话连接飞书」在未启动 Agent 时也能成功；与桌面端启动走同一 activateRuntime 链路。
+		if (!target) {
+			try {
+				await feishuSessionRuntimeBindings.activateRuntime(sessionId);
+				target = sessionRuntimeCoordinator.getTarget(sessionId);
+			} catch (error) {
+				void appLogger.warn("feishu", "auto-start runtime for Feishu bind failed", {
+					sessionId,
+					error: error instanceof Error ? error.message : String(error),
+				});
+			}
 		}
 		if (!target) {
 			return { success: false, message: feishuT(currentFeishuLocale(), "session.runtimeUnavailable") };

@@ -70,31 +70,50 @@ test("select card renders option buttons, truncates long text but keeps original
 		request: { requestId: "req-2", method: "select", title: "选择模型？", options: ["A", longOption] },
 	});
 
+	// 完整选项列表（编号 + 完整 label）：按钮截断时列表保证用户能看到完整内容
+	const markdown = card.elements.find((e) => e.tag === "markdown").content;
+	assert.ok(markdown.includes("1. A"), "markdown list must number option 1");
+	assert.ok(markdown.includes(`2. ${longOption}`), "markdown list must show the full long option");
+
 	const values = actionValueFromButtons(card);
 	const optionValues = values.filter((v) => v.kind === "option");
 	assert.equal(optionValues.length, 2);
 	assert.equal(optionValues[1].option, longOption, "button value must keep the full original option");
 
-	// 按钮显示文本被截断，但答案值不受影响
+	// 按钮显示文本带编号前缀且被截断，但答案值不受影响
 	const buttons = [];
 	for (const element of card.elements) {
 		if (element.tag === "action") buttons.push(...element.actions);
 	}
 	const longButton = buttons.find((b) => b.value?.option === longOption);
+	assert.ok(longButton.text.content.startsWith("2. "), "button label should carry the option number");
 	assert.ok(longButton.text.content.length <= 18, "button label should be truncated to 18 chars");
 	// 取消按钮兜底存在
 	assert.ok(values.some((v) => v.kind === "cancel"), "cancel button missing");
 });
 
-test("input card shows reply-hint note and a cancel button", () => {
+test("input card embeds a card input component with a reply-hint note and cancel button", () => {
 	const { buildAskCard } = loadAskCardModule();
 	const card = buildAskCard({
 		request: { requestId: "req-3", method: "input", title: "请描述你的需求" },
 	});
 
+	// 卡片内嵌 input 组件：用户可直接在卡片上输入并提交（不再只能回复消息）
+	const input = card.elements.find((e) => e.tag === "input");
+	assert.ok(input, "input card must embed a card input component");
+	assert.equal(input.name, "pideck_ask_answer");
+	assert.equal(input.placeholder.tag, "plain_text");
 	const notes = card.elements.filter((e) => e.tag === "note");
-	assert.ok(notes.some((n) => n.elements[0].content.includes("直接回复本条消息即可回答")));
+	assert.ok(notes.some((n) => n.elements[0].content.includes("在上方输入框输入后点击提交")), "hint should mention the card input");
 	assert.ok(actionValueFromButtons(card).some((v) => v.kind === "cancel"));
+});
+
+test("editor method also embeds the card input component", () => {
+	const { buildAskCard } = loadAskCardModule();
+	const card = buildAskCard({
+		request: { requestId: "req-editor", method: "editor", title: "请描述问题" },
+	});
+	assert.ok(card.elements.some((e) => e.tag === "input"), "editor ask must embed a card input component");
 });
 
 test("batch card renders numbered questions and cancel-only actions", () => {
@@ -118,6 +137,17 @@ test("batch card renders numbered questions and cancel-only actions", () => {
 	const values = actionValueFromButtons(card);
 	assert.equal(values.filter((v) => v.kind === "option").length, 0, "batch card must not offer option buttons");
 	assert.ok(values.some((v) => v.kind === "cancel"));
+});
+
+test("parseAskInputValue extracts input_value from the raw card callback", () => {
+	const { parseAskInputValue } = loadAskCardModule();
+	assert.equal(parseAskInputValue({ action: { input_value: "  我的回答  " } }), "我的回答");
+	assert.equal(parseAskInputValue({ action: { input_value: "" } }), undefined);
+	assert.equal(parseAskInputValue({ action: { input_value: "   " } }), undefined);
+	assert.equal(parseAskInputValue({ action: {} }), undefined);
+	assert.equal(parseAskInputValue({}), undefined);
+	assert.equal(parseAskInputValue(null), undefined);
+	assert.equal(parseAskInputValue("junk"), undefined);
 });
 
 test("parseAskActionValue accepts option/confirm/cancel and rejects garbage", () => {

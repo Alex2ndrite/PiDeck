@@ -97,7 +97,24 @@ export function tryParseBatchAskEnvelope(title: string): {
 	}
 }
 
-/** 构建飞书提问卡片：select 给选项按钮、confirm 给确认/取消、input/editor 提示直接回复文本。 */
+/**
+ * 从 card.action.trigger 原始回调中提取 input 组件提交的文本。
+ * 飞书 input 组件未内嵌表单容器时，用户点击输入框自带提交按钮后，
+ * 回调 action.input_value 携带输入内容；SDK normalizeCardAction 只保留
+ * value/tag/name/option，该字段必须从 includeRaw 的原始事件中读取。
+ */
+export function parseAskInputValue(raw: unknown): string | undefined {
+	if (!raw || typeof raw !== "object") return undefined;
+	const event = raw as Record<string, unknown>;
+	const action = event.action as Record<string, unknown> | undefined;
+	if (!action || typeof action !== "object" || typeof action.input_value !== "string") {
+		return undefined;
+	}
+	const value = action.input_value.trim();
+	return value || undefined;
+}
+
+/** 构建飞书提问卡片：select 给选项按钮、confirm 给确认/取消、input/editor 给卡片输入框。 */
 export function buildAskCard(input: { request: AskUiRequest; locale?: FeishuLocale }): Record<string, unknown> {
 	const { request, locale = "zh-CN" } = input;
 	const elements: object[] = [];
@@ -110,20 +127,21 @@ export function buildAskCard(input: { request: AskUiRequest; locale?: FeishuLoca
 		elements.push({ tag: "markdown", content: lines });
 		elements.push({ tag: "note", elements: [{ tag: "plain_text", content: feishuT(locale, "ask.batchHint") }] });
 	} else if (request.method === "select" && request.options && request.options.length > 0) {
-		const descriptions = request.options
-			.filter((option): option is { label: string; description: string } => (
-				typeof option !== "string" && typeof option.description === "string" && option.description.trim().length > 0
-			))
-			.map((option) => `**${option.label}**：${option.description}`);
-		if (descriptions.length > 0) {
-			elements.push({ tag: "markdown", content: descriptions.join("\n") });
-		}
-		elements.push({ tag: "markdown", content: request.title });
-		for (const row of chunk(request.options.slice(0, MAX_OPTION_BUTTONS), BUTTONS_PER_ROW)) {
+		// 完整选项列表（编号 + 完整 label + description）：按钮文本有 18 字符上限会截断，
+		// 列表保证用户能看到完整内容；按钮带同序号前缀，点击仍回传选项原始 value。
+		const shownOptions = request.options.slice(0, MAX_OPTION_BUTTONS).map((option, index) => ({ option, index }));
+		const optionLines = shownOptions.map(({ option, index }) => {
+			const normalized = normalizeAskOption(option);
+			const label = typeof normalized === "string" ? normalized : normalized?.label ?? "";
+			const description = normalized && typeof normalized !== "string" ? normalized.description : undefined;
+			return `${index + 1}. ${label}${description ? `：${description}` : ""}`;
+		});
+		elements.push({ tag: "markdown", content: `${request.title}\n${optionLines.join("\n")}` });
+		for (const row of chunk(shownOptions, BUTTONS_PER_ROW)) {
 			elements.push({
 				tag: "action",
 				layout: "flow",
-				actions: row.map((option) => optionButton(option, request.requestId)),
+				actions: row.map(({ option, index }) => optionButton(option, request.requestId, index)),
 			});
 		}
 		if (request.options.length > MAX_OPTION_BUTTONS) {
@@ -135,9 +153,15 @@ export function buildAskCard(input: { request: AskUiRequest; locale?: FeishuLoca
 			elements.push({ tag: "note", elements: [{ tag: "plain_text", content: feishuT(locale, "ask.optionHint") }] });
 		}
 	} else {
-		// input / editor / 无选项 select：直接回复文本作答
+		// input / editor / 无选项 select：卡片内直接输入（飞书 input 组件自带提交按钮），
+		// 同时保留「直接回复本条消息」兜底（长文本 / 客户端不支持输入组件的场景）。
 		elements.push({ tag: "markdown", content: request.title || feishuT(locale, "ask.titleInput") });
-		elements.push({ tag: "note", elements: [{ tag: "plain_text", content: feishuT(locale, "ask.inputHint") }] });
+		elements.push({
+			tag: "input",
+			name: "pideck_ask_answer",
+			placeholder: { tag: "plain_text", content: feishuT(locale, "ask.inputPlaceholder") },
+		});
+		elements.push({ tag: "note", elements: [{ tag: "plain_text", content: feishuT(locale, "ask.inputCardHint") }] });
 	}
 
 	const cancelRow = {
@@ -195,7 +219,7 @@ function askTitle(request: AskUiRequest, locale: FeishuLocale): string {
 	}
 }
 
-function optionButton(option: AskOption, requestId: string) {
+function optionButton(option: AskOption, requestId: string, index: number) {
 	const normalized = normalizeAskOption(option);
 	const label = normalized
 		? typeof normalized === "string" ? normalized : normalized.label
@@ -205,7 +229,7 @@ function optionButton(option: AskOption, requestId: string) {
 		: "";
 	return {
 		tag: "button",
-		text: { tag: "plain_text", content: truncateButtonText(label) },
+		text: { tag: "plain_text", content: truncateButtonText(`${index + 1}. ${label}`) },
 		type: "primary" as const,
 		value: { action: ASK_ACTION, requestId, kind: "option", option: value } satisfies AskButtonValue,
 	};

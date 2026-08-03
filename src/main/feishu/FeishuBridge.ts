@@ -45,7 +45,7 @@ import { hasExplicitFeishuFileSendIntent } from "./fileIntent";
 import { createInitialState, reduceFromPiEvent, markInterrupted, markError, type RunState } from "./CardRunState";
 import { renderRunCard } from "./CardRenderer";
 import { buildModelPickerCard, parseModelActionValue } from "./ModelPickerCard";
-import { buildAskCard, normalizeAskOption, parseAskActionValue, tryParseBatchAskEnvelope, type AskUiRequest } from "./AskCard";
+import { buildAskCard, normalizeAskOption, parseAskActionValue, parseAskInputValue, tryParseBatchAskEnvelope, type AskOption, type AskUiRequest } from "./AskCard";
 import { feishuLanguage, feishuT, normalizeFeishuLocale, type FeishuLocale } from "./FeishuI18n";
 import type { AgentManager } from "../pi/AgentManager";
 
@@ -88,6 +88,8 @@ type PendingAsk = {
 	title: string;
 	chatId: string;
 	askedAt: number;
+	/** select 的选项列表（卡片编号与此一致），供纯数字文本回复映射选项值。 */
+	options?: AskOption[];
 };
 
 /** 类型守卫：extension_ui_request 的 method 是否属于可回答的对话类方法。 */
@@ -544,7 +546,15 @@ export class FeishuBridge {
 						await this.sendSmartMessage(chatId, feishuT(this.locale, "ask.batchUnsupportedHint"));
 						return;
 					}
-					const answer = text ?? "";
+					let answer = text ?? "";
+					// select 且回复纯数字：按卡片编号列表映射到选项原始值（用户可直接回复编号作答）
+					if (answer.trim() && pendingAsk.method === "select" && pendingAsk.options?.length) {
+						const index = Number(answer.trim()) - 1;
+						if (/^\d+$/.test(answer.trim()) && index >= 0 && index < pendingAsk.options.length) {
+							const mapped = normalizeAskOption(pendingAsk.options[index]);
+							answer = typeof mapped === "string" ? mapped : mapped?.value ?? mapped?.label ?? answer;
+						}
+					}
 					if (answer.trim()) {
 						this.runtimeBindings.sendUIResponse(pendingAsk.agentId, pendingAsk.requestId, { value: answer });
 						this.pendingAsks.delete(`${chatId}:${pendingAsk.requestId}`);
@@ -1418,6 +1428,13 @@ export class FeishuBridge {
 	// ===== 卡片交互回调 =====
 
 	private async handleCardAction(event: FeishuCardActionEvent): Promise<void> {
+		// 输入框提交：飞书 input 组件提交时回调携带 input_value（SDK normalize 会丢弃该字段，
+		// 必须从 includeRaw 的原始事件读取）；同一 chat 至多一个待答 ask，直接作为答案写回。
+		const inputAnswer = parseAskInputValue(event.raw);
+		if (inputAnswer !== undefined) {
+			await this.handleAskInputSubmit(event, inputAnswer);
+			return;
+		}
 		// ask/confirm 提问卡片按钮：优先处理，与模型切换卡片互不干扰
 		const askAction = parseAskActionValue(event.action.value);
 		if (askAction) {
@@ -1501,9 +1518,24 @@ export class FeishuBridge {
 			title: request.title,
 			chatId,
 			askedAt: Date.now(),
+			// 保存选项供「回复纯数字」映射选项值（与卡片编号列表一致）
+			options: request.method === "select" ? request.options : undefined,
 		});
 		void this.sendCardMessage(chatId, buildAskCard({ request, locale: this.locale })).catch((e) =>
 			logErr("[飞书 Bridge] ask 卡片发送失败:", e));
+	}
+
+	/** 飞书 input 组件提交回调：把输入文本作为待答 ask 的回答写回 pi。 */
+	private async handleAskInputSubmit(event: FeishuCardActionEvent, answer: string): Promise<void> {
+		const pending = this.getPendingAskForChat(event.chatId);
+		if (!pending || pending.method === "confirm" || pending.method === "batch_ask") {
+			// 无对应待答 ask（已超时/已处理）或 confirm/batch 不支持输入框，提示即可
+			await this.sendSmartMessage(event.chatId, feishuT(this.locale, "ask.expired"));
+			return;
+		}
+		this.runtimeBindings.sendUIResponse(pending.agentId, pending.requestId, { value: answer });
+		this.pendingAsks.delete(`${event.chatId}:${pending.requestId}`);
+		await this.sendSmartMessage(event.chatId, feishuT(this.locale, "ask.answeredInput", { answer }));
 	}
 
 	/** 查找某 chat 最早的待答 ask（同一 chat 同时至多一个，按时间取首个防异常态）。 */

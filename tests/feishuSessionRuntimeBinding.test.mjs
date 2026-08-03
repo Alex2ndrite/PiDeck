@@ -52,6 +52,24 @@ test("Feishu commands resolve a fresh Session target instead of persisting a gen
 	assert.doesNotMatch(bridgeSource, /runtimeGeneration/);
 });
 
+// 回归（用户点会话连接飞书时未启动 Agent）：feishuSessionBotSet 必须先自动启动 runtime，
+// 再建飞书镜像；否则无 runtime 的会话（仅浏览过历史）永远报 runtimeUnavailable。
+test("session bot bind auto-starts a missing runtime before mirroring", () => {
+	const bindBlock = mainSource.match(/feishuSessionBotSet, async[\s\S]*?session\.bindFailed"/)?.[0] ?? "";
+	assert.ok(bindBlock, "feishuSessionBotSet handler must exist");
+	// target 必须可重新赋值（const 无法在启动后更新）
+	assert.match(bindBlock, /let target = sessionRuntimeCoordinator\.getTarget\(sessionId\);/);
+	// 未启动时走与桌面端相同的 activateRuntime 链路
+	assert.match(bindBlock, /feishuSessionRuntimeBindings\.activateRuntime\(sessionId\)/);
+	assert.match(bindBlock, /target = sessionRuntimeCoordinator\.getTarget\(sessionId\);/);
+	// 启动失败仍要给出 runtimeUnavailable，不能静默继续
+	assert.match(bindBlock, /session\.runtimeUnavailable"/);
+	const activateIndex = bindBlock.indexOf("feishuSessionRuntimeBindings.activateRuntime(sessionId)");
+	// 激活后重新解析 target 的位置必须晚于激活调用（取最后一次出现，避开 let 声明行）
+	const targetRefreshIndex = bindBlock.lastIndexOf("target = sessionRuntimeCoordinator.getTarget(sessionId)");
+	assert.ok(activateIndex >= 0 && targetRefreshIndex > activateIndex, "target must be re-resolved after activation");
+});
+
 test("Feishu creation is Catalog-first and never owns Agent lifecycle", () => {
 	assert.doesNotMatch(bridgeSource, /this\.agentManager\.create\(/);
 	assert.match(bridgeSource, /this\.runtimeBindings\.ensureSession\(/);
@@ -561,7 +579,8 @@ test("Feishu select ask preserves object options and sends their values", async 
 	const card = JSON.parse(sent[0].data.content);
 	const optionButtons = card.elements.flatMap((e) => e.tag === "action" ? e.actions : []).filter((a) => a.value?.kind === "option");
 	assert.equal(optionButtons.length, 2);
-	assert.equal(optionButtons[0].text.content, "生产环境");
+	// 按钮带卡片列表同序号前缀（完整 label 在 markdown 列表里）
+	assert.equal(optionButtons[0].text.content, "1. 生产环境");
 	assert.equal(optionButtons[0].value.option, "prod");
 	assert.ok(card.elements.some((element) => element.tag === "markdown" && element.content.includes("线上")), "option description should remain visible");
 
@@ -678,4 +697,49 @@ test("Feishu agent_end clears stale pending asks", async () => {
 
 	bridge.handleAgentEvent("A", { type: "agent_end", stopReason: "done" });
 	assert.equal(bridge.getPendingAskForChat("chat"), undefined, "agent end must clear stale ask");
+});
+
+// 回归（飞书卡片 input 组件提交）：回调 raw.action.input_value 必须作为待答 ask 的答案写回 pi。
+test("Feishu card input submit answers the pending ask via input_value", async () => {
+	const uiResponses = [];
+	const { bridge } = makeBridge([makeAgent("A")], {
+		sendUIResponse: (agentId, requestId, response) => uiResponses.push([agentId, requestId, response]),
+	});
+	bindChatForAsk(bridge);
+	const sent = [];
+	bridge.connection.client = mockFeishuClient(sent);
+
+	bridge.handleAgentEvent("A", { type: "extension_ui_request", method: "input", id: "req-7", title: "请描述需求" });
+	// SDK normalize 后 action.value 无 ask 标识；input_value 只在 raw 里
+	await bridge.handleCardAction({
+		messageId: "m-7",
+		chatId: "chat",
+		operator: { openId: "user" },
+		action: { value: null, tag: "input" },
+		raw: { action: { input_value: "  卡片里输入的回答  " } },
+	});
+	assert.equal(JSON.stringify(uiResponses), JSON.stringify([["A", "req-7", { value: "卡片里输入的回答" }]]));
+	assert.equal(bridge.getPendingAskForChat("chat"), undefined, "pending ask must be consumed");
+	assert.ok(sent.some((s) => s.data.content.includes("已收到回答：卡片里输入的回答")));
+});
+
+// 回归（select 编号回复）：卡片列表带编号，纯数字文本回复必须映射到对应选项值。
+test("Feishu numeric text reply maps to the select option value", async () => {
+	const uiResponses = [];
+	const { bridge } = makeBridge([makeAgent("A")], {
+		sendUIResponse: (agentId, requestId, response) => uiResponses.push([agentId, requestId, response]),
+	});
+	bindChatForAsk(bridge);
+	bridge.connection.client = mockFeishuClient([]);
+
+	bridge.handleAgentEvent("A", {
+		type: "extension_ui_request", method: "select", id: "req-8", title: "选哪个？",
+		options: [{ label: "方案一", value: "plan-a" }, "方案二"],
+	});
+	await bridge.handleMessage({
+		event_id: "e-8",
+		message: { message_id: "m-8", chat_id: "chat", message_type: "text", chat_type: "p2p", content: JSON.stringify({ text: "2" }) },
+		sender: { sender_type: "user", sender_id: { open_id: "user" } },
+	});
+	assert.equal(JSON.stringify(uiResponses), JSON.stringify([["A", "req-8", { value: "方案二" }]]), "numeric reply must map to option value");
 });
