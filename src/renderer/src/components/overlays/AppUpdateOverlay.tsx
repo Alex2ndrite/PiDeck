@@ -9,6 +9,7 @@ import {
 	DialogTitle,
 } from "../ui-shadcn/dialog";
 import { Button } from "../ui-shadcn/button";
+import { Progress } from "../ui-shadcn/progress";
 import { X } from "lucide-react";
 import { cn } from "../../lib/utils";
 import type { AppUpdateInfo, AppUpdateDownloadProgress } from "../../../../shared/types";
@@ -69,7 +70,7 @@ function UpdateDialog(props: {
 					{props.progress && (
 						<div className="update-download-progress">
 							<div className="update-progress-header"><span>{props.progress.assetName}</span><span>{percent ? `${percent.toFixed(1)}%` : t("update.downloading")}</span></div>
-							<div className="update-progress-track"><div className="update-progress-bar" style={{ width: `${Math.max(0, Math.min(100, percent))}%` }} /></div>
+							<Progress value={percent} aria-label={t("update.downloadProgress")} className="my-2" />
 							<div className="update-progress-meta"><span>{formatBytes(props.progress.receivedBytes)} / {formatBytes(props.progress.totalBytes)}</span><span>{props.progress.bytesPerSecond ? `${formatBytes(props.progress.bytesPerSecond)}/s` : ""}</span></div>
 							{props.downloadedPath && <div className="update-downloaded-path">{props.downloadedPath}</div>}
 						</div>

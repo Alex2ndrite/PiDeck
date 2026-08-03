@@ -3674,21 +3674,6 @@ div.fixed.inset-0.z-50 {
   color: var(--color-text-primary);
 }
 
-.update-progress-track {
-  height: 6px;
-  margin: 8px 0;
-  overflow: hidden;
-  border-radius: var(--radius-pill);
-  background: var(--color-bg-muted);
-}
-
-.update-progress-bar {
-  height: 100%;
-  border-radius: inherit;
-  background: var(--color-accent);
-  transition: width 160ms ease;
-}
-
 .update-downloaded-path {
   margin-top: 8px;
   font-family: var(--font-family-mono);

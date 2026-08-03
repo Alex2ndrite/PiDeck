@@ -2,6 +2,7 @@ import { mainProcessZhCN } from "../../../shared/i18n/mainProcessCopy";
 
 export const zhCN = {
   "app.chatProject": "聊天",
+  "update.downloadProgress": "下载进度",
   "sessionManager.session": "会话",
   "sessionManager.actions": "操作",
   "app.sidebarProjects": "项目",

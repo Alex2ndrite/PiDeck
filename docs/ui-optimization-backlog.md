@@ -33,7 +33,7 @@
 | P1 | Marker 用于思考、工具调用和压缩方向 | ✅ Batch 2 已完成 | `TimelineMarker.tsx`、`TimelineEventCards.tsx`、`ToolCallComponents.tsx` | 时间线中系统事件、思考、工具、压缩有统一的 marker 轨道 |
 | P2 | Data Table 会话管理 | ✅ Batch 7 已完成 | `ui-shadcn/table.tsx`、`SidebarComponents.tsx` 的 SessionManagerModal | 表头、来源、批量选择、删除、重命名和空状态 |
 | P2 | Pagination | 🟡 hook 已有 | `useMessagePagination.ts`、SessionManager、YaoPrompt | 分页只负责大列表，不替代时间线滚动和流式加载 |
-| P2 | Progress | 🟡 现有自定义进度 | 更新 overlay、环境安装、Ask batch | 下载、安装、批量 Ask 进度统一语义与无障碍属性 |
+| P2 | Progress | ✅ Batch 8 已完成 | `ui-shadcn/progress.tsx`、更新 overlay | 下载、安装、批量 Ask 进度统一语义与无障碍属性 |
 | P2 | Scroll Area | 🟡 组件已安装 | Sidebar、会话管理、设置、抽屉面板 | 统一滚动条、键盘滚动和边界阴影，避免嵌套滚动 |
 | P2 | 其余 shadcn 替换 | 🟡 持续收口 | `components/ui-shadcn/*` 和各业务域 | 先替换有明显交互收益的控件，不替换语义为内容容器的原生 button |
 
@@ -72,7 +72,7 @@
 
 - [x] Session Manager 使用 Data Table（新增 `ui-shadcn/table.tsx`，列表体表格化并保留全部选择/批量操作）。
 - [x] 清理 SessionManager 迁移后孤儿化的 `.session-manager-*` 死 CSS。
-- [ ] 分页、进度、Scroll Area 统一。
+- [x] 分页、进度、Scroll Area 统一（进度已收口，见 Batch 8）。
 - [ ] 清理已迁移域的死 CSS。
 - [ ] 更新 E2E 视觉巡检和手测清单。
 
@@ -102,6 +102,9 @@
 - 新增 `ui-shadcn/table.tsx`（项目 token 语义化），`SessionManagerModal` 列表体表格化：表头（会话/操作）+ 行选择态，全部交互逻辑保留。
 - 清理 `.session-manager-*` / `.session-source-btn` 死 CSS；共享选择器拆分保留 `.rpc-log-modal--embedded` / `.update-modal--embedded`。
 - 新增 `tests/sessionManagerTable.test.mjs`，锁定表格结构、交互保留和死 CSS 清理契约。
+- 新增 `ui-shadcn/progress.tsx`（Radix 内核，aria-valuenow 语义，填充走主题绿 `bg-primary`）。
+- 更新下载进度改用 `Progress`，并删除 `.update-progress-track` / `.update-progress-bar` 死 CSS。
+- 新增 `tests/uiProgress.test.mjs`，锁定 aria 语义、更新 overlay 接入和死 CSS 清理契约。
 - 新增 `tests/avatarStatus.test.mjs`，锁定项目和 Agent Avatar 的状态契约。
 
 ## 门禁
