@@ -31,7 +31,6 @@ import {
 	DialogTitle,
 } from "../ui-shadcn/dialog";
 import { cn } from "../../lib/utils";
-import { readWelcomeModelPreference, readWelcomeThinkingPreference } from "../../utils/chatSessionBootstrap";
 import type {
 	AgentRuntimeState,
 	AvailableModel,
@@ -154,7 +153,9 @@ export function ComposerBottomBar(props: {
 	const ctxPercent = props.state?.contextPercent;
 	const showCompact = ctxPercent != null && ctxPercent > 30;
 	const contextPercent = ctxPercent ?? 0;
-	const currentThinkingLevel = props.state?.thinkingLevel ?? props.record?.thinkingLevel ?? readWelcomeThinkingPreference()?.thinkingLevel;
+	// 默认模型/思考级别来自主进程按 pi 配置自动填充进会话记录的默认值（props.record），
+	// 不读取渲染层 welcome localStorage 偏好，避免用户偏好覆盖 pi 配置。
+	const currentThinkingLevel = props.state?.thinkingLevel ?? props.record?.thinkingLevel;
 	const thinkingLevelLabel = currentThinkingLevel
 		? THINKING_LEVELS.find((level) => level.value === currentThinkingLevel)?.labelKey
 		: undefined;
@@ -165,14 +166,11 @@ export function ComposerBottomBar(props: {
 	const modeLabel = isPlanMode
 		? t("app.composerModePlan")
 		: t("app.composerModeNormal");
-	const welcomeModel = readWelcomeModelPreference();
 	const modelLabel = props.state?.modelName
 		? `${props.state.provider ? `${props.state.provider}/` : ""}${props.state.modelName}`
 		: props.record?.model
 			? `${props.record.model.provider}/${props.record.model.modelId}`
-			: welcomeModel?.model
-				? `${welcomeModel.model.provider}/${welcomeModel.model.modelId}`
-				: `${t("app.model")}: -`;
+			: `${t("app.model")}: -`;
 
 	return (
 		<div className="composer-bottom-bar border-t border-border/80 px-2 py-1.5">

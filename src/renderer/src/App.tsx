@@ -108,6 +108,7 @@ import { useScratchPad } from "./hooks/useScratchPad";
 import { useWorktreeActions } from "./hooks/useWorktreeActions";
 import { SessionRuntimeInjector } from "./components/session/SessionRuntimeInjector";
 import { SessionTabsBar } from "./components/session/SessionTabsBar";
+import { ProjectEmptyState } from "./components/session/ProjectEmptyState";
 import {
   togglePinSessionTab as togglePinSessionTabList,
   reorderSessionTabs as reorderSessionTabList,
@@ -2528,7 +2529,16 @@ export function App() {
       showNotice={showNotice}
       api={api}
     />
-      ) : null}
+      ) : (
+        // 无当前会话（普通项目点开 / 所有 Tab 关闭）时，普通项目与 Chat 项目
+        // 共享统一空态；快捷操作新建 Agent / 匿名聊天，无项目时引导添加项目。
+        <ProjectEmptyState
+          activeProject={activeProject}
+          onCreateAgent={() => void runCreateSessionDraft()}
+          onCreateAnonymous={() => void runCreateAnonymousSession()}
+          onAddProject={() => void addProject()}
+        />
+      )}
     </>
   );
 

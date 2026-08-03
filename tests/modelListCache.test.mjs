@@ -105,7 +105,7 @@ test("ComposerPickerHost loads models on welcome page (no record)", () => {
   assert.match(pickerHost, /listModels\(record\?\.projectId\)/);
 });
 
-test("welcome page model/thinking selection persists and applies to new session", () => {
+test("welcome page model/thinking selection persists; draft defaults come from pi config auto-fill", () => {
   const picker = readFileSync(
     "src/renderer/src/components/session/ComposerPickerHost.tsx",
     "utf8",
@@ -118,13 +118,13 @@ test("welcome page model/thinking selection persists and applies to new session"
     "src/renderer/src/utils/chatSessionBootstrap.ts",
     "utf8",
   );
-  // 欢迎页（无 record）选模型：不再短路，写入 localStorage 偏好
+  // 欢迎页（无 record）选模型：仍持久化到 localStorage（显式选择保留）。
   assert.match(picker, /localStorage\.setItem\(WELCOME_MODEL_KEY/);
   assert.match(picker, /localStorage\.setItem\(WELCOME_THINKING_KEY/);
-  // createDraft 应用偏好
-  assert.match(actions, /readWelcomeModelPreference\(\)/);
-  assert.match(actions, /readWelcomeThinkingPreference\(\)/);
-  // 共享偏好读取器
+  // createDraft 不再无条件 spread 欢迎页 localStorage 偏好：主进程已按 pi 配置
+  // （defaultProvider/defaultModel/defaultThinkingLevel）自动填充默认模型/思考级别。
+  assert.doesNotMatch(actions, /readWelcomeModelPreference\(\)|readWelcomeThinkingPreference\(\)/);
+  // 共享偏好读取器仅供 ComposerPickerHost 持久化显式选择，不影响 pi 默认值。
   assert.match(bootstrap, /readWelcomeModelPreference/);
   assert.match(bootstrap, /readWelcomeThinkingPreference/);
 });

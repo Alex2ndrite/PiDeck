@@ -1,6 +1,30 @@
 import { canonicalizeSessionPath, getSessionEnvironment } from "../../shared/sessionIdentity";
 import type { AgentTab, SessionEnvironment, SessionSummary } from "../../shared/types";
 
+/**
+ * 会话/Agent 行的状态点 Tailwind bg 类（跨 Sidebar SessionTree 与会话 Tab 复用）。
+ * 用户语义：idle=蓝、starting/运行中=黄、error=红；未启动（无 runtime）不显示点，
+ * 项目级运行态用绿色标记（见 ProjectTree）。返回 undefined 表示不渲染色点。
+ */
+export function sessionStatusDotClass(status?: string | null): string | undefined {
+	// detached 视为未真正运行：不渲染色点，与未启动会话一致
+	if (!status || status === "detached") return undefined;
+	switch (status) {
+		case "error":
+			return "bg-danger";
+		case "idle":
+			return "bg-info";
+		// running / starting / pending 均反映“正在工作/等待”，同一黄色点
+		case "running":
+		case "starting":
+		case "pending":
+		case "waiting":
+			return "bg-warning";
+		default:
+			return undefined;
+	}
+}
+
 const DEFAULT_VISIBLE_PROJECT_CHILD_LIMIT = 5;
 
 export type ProjectChildItem =

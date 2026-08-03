@@ -20,6 +20,7 @@ import { SessionMessageTimeline } from "./SessionMessageTimeline";
 import { ComposerArea } from "./ComposerArea";
 import { SessionRuntimeDock } from "./SessionRuntimeDock";
 import { QueuedPromptPanel } from "./ComposerPanels";
+import { COMPOSER_DEFAULT_HEIGHT, COMPOSER_MIN_HEIGHT } from "../../rendererUtils";
 import type { EnqueuePromptSnapshot } from "../../hooks/useSessionSend";
 
 export type SessionViewProps = {
@@ -176,7 +177,9 @@ export function SessionView({
   // #115 U5 垂直轴：timeline | composer | terminal 三段由 react-resizable-panels 接管。
   // composer 高度本地持有（px），终端高度/折叠仍由 useTerminalDock 的 per-agent
   // 状态持有，拖拽结果经 onResize 回写，外部状态经 imperative API 同步。
-  const [composerHeight, setComposerHeight] = useState(175);
+  // 默认高度由 175 提到 COMPOSER_DEFAULT_HEIGHT：ask 内容（问答 + 底部输入框）
+  // 需要比纯输入框更大的可视空间，面板仍可沿分隔条拖拽调整（react-resizable-panels）。
+  const [composerHeight, setComposerHeight] = useState(COMPOSER_DEFAULT_HEIGHT);
   const terminalPanelRef = useRef<PanelImperativeHandle | null>(null);
 
   // 终端 Panel 随 terminalOpen 动态挂载，约束注册有一帧延迟（与抽屉同款问题），
@@ -297,7 +300,7 @@ export function SessionView({
             <ResizableHandle className="v-splitter" />
             <ResizablePanel
               id="composer"
-              minSize={175}
+              minSize={COMPOSER_MIN_HEIGHT}
               maxSize={composerMaxHeight}
               defaultSize={composerHeight}
               onResize={handleComposerResize}

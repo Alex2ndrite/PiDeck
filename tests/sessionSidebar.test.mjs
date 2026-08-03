@@ -228,18 +228,25 @@ test("sidebar uses one persisted project accordion without duplicating current p
   assert.doesNotMatch(content, /max-h-\[38%\]|selectedProject|<WorktreeTree|<SessionTree/);
 
   // One click selects and expands. Every persisted expanded project keeps the
-  // same grouped structure and page size, so selection changes do not resize it.
+  // same unified list and page size, so selection changes do not resize it.
   assert.match(projectTree, /setProjectExpanded\(project\.id, true\)/);
   assert.match(projectTree, /project\.worktreeEnabled[\s\S]*<WorktreeTree/);
-  assert.match(projectTree, /<SessionTree[\s\S]*\n\s+grouped\n/);
+  assert.match(projectTree, /<SessionTree/);
   assert.match(projectTree, /!collapsed && \(/);
-  assert.doesNotMatch(projectTree, /grouped=\{isCurrent\}|visibleChildCount=\{isCurrent|onShowMore=\{isCurrent/);
+  assert.doesNotMatch(projectTree, /grouped=|grouped\n/);
 
-  // A bound runtime belongs to the active group; durable sessions without a
-  // runtime stay in history, while child sessions remain nested under parents.
-  assert.match(sessionTree, /const runningChildren = display\.visibleChildren\.filter/);
-  assert.match(sessionTree, /const historyChildren = display\.visibleChildren\.filter/);
-  assert.match(sessionTree, /app\.sidebarActiveSessions/);
-  assert.match(sessionTree, /app\.sidebarHistory/);
+  // main 简单语义：项目下统一列表，不再拆“运行中/历史会话”分组标题；
+  // 会话行以状态点（idle=蓝/starting、running=黄/error=红）示意，不显示文字徽标。
+  assert.doesNotMatch(sessionTree, /runningChildren|historyChildren|renderGroupLabel/);
+  assert.doesNotMatch(sessionTree, /app\.sidebarActiveSessions/);
+  assert.doesNotMatch(sessionTree, /app\.sidebarHistory/);
+  assert.match(sessionTree, /sessionStatusDotClass\(/);
+  // 易碎点：未启动的 catalog Agent/无 runtime 的会话行不得再回退渲染色点
+  // （旧实现用 ?? bg-muted-foreground/50 或 ?? bg-border 仍显示灰点）；应条件渲染，仅在有运行态时出点。
+  assert.doesNotMatch(sessionTree, /\?\? \"bg-muted-foreground\/50\"/);
+  assert.doesNotMatch(sessionTree, /\?\? \"bg-border\"/);
+  assert.match(sessionTree, /\{sessionStatusDotClass\(child\.agent\.status\) && <span/);
+  assert.match(sessionTree, /\{sessionStatusDotClass\(runtime\?\.status\) && <span/);
+  assert.match(sessionTree, /display\.visibleChildren\.map\(renderChild\)/);
   assert.match(sessionTree, /renderSubagents\(groupKey, child\.codexSubagents, child\.piSubagents\)/);
 });

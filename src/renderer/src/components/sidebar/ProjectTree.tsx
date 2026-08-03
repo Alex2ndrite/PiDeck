@@ -184,7 +184,6 @@ export function ProjectTree(props: {
               currentSessionId={props.currentSessionId}
               controller={props.controller}
               actions={props.actions}
-              grouped
             />
           </div>
         )}

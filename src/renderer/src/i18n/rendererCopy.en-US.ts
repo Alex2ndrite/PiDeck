@@ -96,6 +96,9 @@ export const enUS: Record<TranslationKey, string> = {
   "app.addProject": "Add Project",
   "app.selectProject": "Select a project and create an agent",
   "app.startAgent": "Start a pi agent",
+  "app.projectEmptyTitle": "Start working in {name}",
+  "app.projectEmptyDescription": "Create an agent or start an anonymous chat to begin. Default model and thinking level are read from your pi configuration.",
+  "app.emptyNoProjectTitle": "No agent project selected",
   "app.emptyTaglineLine1": "There are many agent harnesses",
   "app.emptyTaglineLine2Prefix": "but this one is ",
   "app.emptyTaglineYours": "yours",
@@ -411,6 +414,7 @@ export const enUS: Record<TranslationKey, string> = {
   "app.editAndResend": "Edit in input",
   "app.editAndResendTitle": "Edit in input box and send manually",
   "app.resizeComposer": "Drag to resize composer",
+  "app.askResizeLabel": "Drag or use arrow keys to resize the Ask area",
   "app.restartTitle":
     "Restart the Agent process and reload configuration files such as providers and API keys",
   "app.send": "Send",

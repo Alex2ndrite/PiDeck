@@ -17,11 +17,11 @@ import {
 } from "./ComposerPanels";
 import { ComposerPickerHost } from "./ComposerPickerHost";
 import { ComposerRuntimeIntegrations } from "./ComposerRuntimeIntegrations";
+import { AskRegionResizer } from "./AskRegionResizer";
 import { desktopApi } from "../../desktopApi";
-import type { EnqueuePromptSnapshot } from "../../hooks/useSessionSend";
+import { COMPOSER_DEFAULT_HEIGHT } from "../../rendererUtils";
 import type { GitBranchInfo } from "../../../../shared/types";
-
-const COMPOSER_MIN_HEIGHT = 175;
+import type { EnqueuePromptSnapshot } from "../../hooks/useSessionSend";
 
 export type ComposerAreaProps = {
   sessionId: string;
@@ -48,8 +48,8 @@ export const ComposerArea = forwardRef<HTMLElement, ComposerAreaProps>(function 
     ensureSessionId: props.ensureSessionId,
   });
   // 受控/非受控双模：SessionView 以面板分隔条控制高度时传 height；
-  // 其余场景（测试、嵌入）回退本地默认值。
-  const [localHeight, setLocalHeight] = useState(COMPOSER_MIN_HEIGHT);
+  // 其余场景（测试、嵌入）回退本地默认值，与全局默认高度保持一致。
+  const [localHeight, setLocalHeight] = useState(COMPOSER_DEFAULT_HEIGHT);
   const height = props.height ?? localHeight;
 
   return (
@@ -78,10 +78,9 @@ export const ComposerArea = forwardRef<HTMLElement, ComposerAreaProps>(function 
               onAcknowledge={composer.delivery.acknowledgeUnknown}
             />
             {props.runtimeUi ? (
-              // Ask 内容是 composer 的附加区域；它必须能在面板变小时独立滚动，不能把输入框推出面板。
-              <div className="composer-runtime-ui min-h-0 shrink overflow-y-auto">
-                {props.runtimeUi}
-              </div>
+              // Ask 内容是 composer 的附加区域；底部带垂直 resize 把手让用户独立拉高/收窄
+              // Ask 区间（受控 min/max），内容区在面板变小时独立滚动，不把输入框推出面板。
+              <AskRegionResizer child={props.runtimeUi} />
             ) : null}
             <div
               className={["composer-box relative flex min-h-0 min-w-0 flex-1 flex-col overflow-visible rounded-xl border border-border bg-card text-card-foreground shadow-sm transition-[border-color,box-shadow,background-color]",

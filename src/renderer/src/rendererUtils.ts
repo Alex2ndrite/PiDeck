@@ -6,8 +6,19 @@ import type {
 } from "../../shared/types";
 import { isSameSessionPath } from "./agentListDisplay";
 
+// ask 内容（问答 + 底部输入框）需要比纯输入框更大的可视空间；面板仍可沿分隔条拖拽。
+// 375=默认高度（尽可能一次看到问答与输入框），175=面板最小/最小时高度底线。
+export const COMPOSER_DEFAULT_HEIGHT = 375;
 const COMPOSER_MIN_HEIGHT = 175;
 export { COMPOSER_MIN_HEIGHT };
+
+// Ask 区域垂直 resize 手把的约束（AskRegionResizer 使用）：
+// 220=展开时默认高度上限，96=收窄下限，420=可在面板内拉高的最大值，
+// 16=键盘步进（PageUp/PageDown 为 4 倍）。上限不会强迫留白：Ask 折叠时只显示实际内容。
+export const ASK_DEFAULT_MAX_HEIGHT = 220;
+export const ASK_MIN_HEIGHT = 96;
+export const ASK_MAX_HEIGHT = 420;
+export const ASK_STEP_PX = 16;
 
 export function displayProjectDirectoryName(project: Project) {
   if (isChatProject(project)) return "Chat";

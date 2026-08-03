@@ -95,6 +95,9 @@ export const zhCN = {
   "app.addProject": "添加项目",
   "app.selectProject": "选择项目并创建 Agent",
   "app.startAgent": "开始一个 pi agent",
+  "app.projectEmptyTitle": "在 {name} 中开始工作",
+  "app.projectEmptyDescription": "创建一个 Agent 或开始匿名聊天即可上手。默认模型与思考级别读取自你的 pi 配置。",
+  "app.emptyNoProjectTitle": "尚未选择项目",
   "app.emptyTaglineLine1": "There are many agent harnesses",
   "app.emptyTaglineLine2Prefix": "but this one is ",
   "app.emptyTaglineYours": "yours",
@@ -406,6 +409,7 @@ export const zhCN = {
   "app.editAndResend": "在输入框中编辑",
   "app.editAndResendTitle": "放回输入框编辑，手动发送",
   "app.resizeComposer": "拖动调整输入框高度",
+  "app.askResizeLabel": "拖动或使用方向键调整 Ask 区域高度",
   "app.restartTitle":
     "重启 Agent 进程，重新加载配置文件（供应商、API key 等）",
   "app.send": "发送",

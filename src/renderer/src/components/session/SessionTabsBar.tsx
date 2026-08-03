@@ -5,6 +5,7 @@ import {
   sessionRecordByIdAtomFamily,
   sessionRuntimeBySessionIdAtomFamily,
 } from "../../atoms";
+import { sessionStatusDotClass } from "../../agentListDisplay";
 import { t } from "../../i18n";
 import { Button } from "../ui-shadcn/button";
 import {
@@ -152,8 +153,9 @@ function SessionTab(props: {
   const record = useAtomValue(sessionRecordByIdAtomFamily(sessionId));
   const runtime = useAtomValue(sessionRuntimeBySessionIdAtomFamily(sessionId));
   const status = runtime?.status;
-  // 运行/启动中的 Agent 在 Tab 上显示呼吸状态点，方便跨 Tab 感知后台活动
-  const busy = status === "running" || status === "starting";
+  // 状态点颜色语义与侧栏 SessionTree 一致（idle=蓝、running/starting=黄、error=红）；
+  // 未启动（无 runtime）不显示色点，避免把“未运行”误读成某种状态。
+  const dotClass = sessionStatusDotClass(status);
   const title = record?.title || t("common.untitled");
   // 右键菜单锚点（虚拟触发器模式，与 FileContextMenu 一致）：左键=切换，右键=菜单
   const [menuAnchor, setMenuAnchor] = useState<{ x: number; y: number } | null>(null);
@@ -192,17 +194,16 @@ function SessionTab(props: {
           setMenuAnchor({ x: event.clientX, y: event.clientY });
         }}
       >
-        <span
-          className={cn(
-            "size-1.5 shrink-0 rounded-full",
-            busy
-              ? "bg-primary animate-pulse"
-              : status === "error"
-                ? "bg-destructive"
-                : "bg-muted-foreground/40",
-          )}
-          aria-hidden="true"
-        />
+        {dotClass && (
+          <span
+            className={cn(
+              "size-1.5 shrink-0 rounded-full",
+              dotClass,
+              status === "error" ? "" : "animate-pulse",
+            )}
+            aria-hidden="true"
+          />
+        )}
         {pinned && <Pin className="size-3 shrink-0 text-muted-foreground/70" aria-hidden="true" />}
         <span className="min-w-0 flex-1 truncate">{title}</span>
         {/* 拖拽插入指示线：2px 主题色竖线，贴在目标 Tab 左/右缘 */}

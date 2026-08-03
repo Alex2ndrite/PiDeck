@@ -6,7 +6,6 @@ import type {
   SessionSummary,
 } from "../../../shared/types";
 import { isSameSessionPath } from "../agentListDisplay";
-import { readWelcomeModelPreference, readWelcomeThinkingPreference } from "../utils/chatSessionBootstrap";
 import { t } from "../i18n";
 
 export type RefreshProjectSessions = (
@@ -215,9 +214,9 @@ export function useSessionActions(options: UseSessionActionsOptions) {
       const session = await api.sessions.createDraft({
         projectId,
         title: `${project.name} agent`,
-        // 欢迎页/未启动 Agent 时选过模型/思考级别：作为新会话初始配置传给 pi。
-        ...readWelcomeModelPreference(),
-        ...readWelcomeThinkingPreference(),
+        // 主进程 createDraft(ipc) 已按 pi 配置（defaultProvider/defaultModel/
+        // defaultThinkingLevel）自动填充默认模型与思考级别；渲染层的欢迎页本地偏好
+        // 不再无条件 spread 覆盖 pi 配置，避免 localStorage 篡改 pi 默认值。
       });
       upsertSession(session);
       commitSessionSelection(projectId, session.id, true);

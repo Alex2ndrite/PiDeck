@@ -17,6 +17,14 @@ const projectTree = readFileSync(
   "src/renderer/src/components/sidebar/ProjectTree.tsx",
   "utf8",
 );
+const agentListDisplay = readFileSync(
+  "src/renderer/src/agentListDisplay.ts",
+  "utf8",
+);
+const tabBar = readFileSync(
+  "src/renderer/src/components/session/SessionTabsBar.tsx",
+  "utf8",
+);
 
 test("sidebar child rows use shared official hover/active classes", () => {
   assert.match(sessionTree, /hover:bg-accent hover:text-accent-foreground/);
@@ -41,25 +49,25 @@ test("sidebar child titles truncate via component classes", () => {
   assert.match(projectTree, /truncate font-medium/);
 });
 
-test("sidebar agent statuses use compact color-coded card badges", () => {
-  const indicator = styles.match(/\.agent-status-indicator \{([\s\S]*?)\n\}/)?.[1];
-  assert.ok(indicator, "sidebar status indicator styles must exist");
-  assert.match(indicator, /height:\s*var\(--space-5\);/);
-  assert.match(indicator, /padding:\s*0 var\(--space-1\);/);
-  assert.match(indicator, /font-size:\s*var\(--font-size-micro\);/);
-  assert.match(indicator, /border:\s*1px solid var\(--color-border-subtle\);/);
-
-  for (const [status, color] of [
-    ["idle", "info"],
-    ["running", "accent"],
-    ["starting", "warning"],
-    ["error", "danger"],
-  ]) {
-    const state = styles.match(
-      new RegExp(`\\.agent-status-indicator\\.status-${status} \\{([\\s\\S]*?)\\n\\}`),
-    )?.[1];
-    assert.ok(state, `${status} status styles must exist`);
-    assert.match(state, new RegExp(`color:\\s*var\\(--color-${color}\\);`));
-    assert.match(state, /border-color:/);
-  }
+test("session status dots reuse shared Tailwind colors and stay text-free", () => {
+  // 会话/Agent 行与 Tab 共享同一状态点语义：idle=蓝、starting/运行中=黄、error=红。
+  assert.match(agentListDisplay, /export function sessionStatusDotClass/);
+  assert.match(agentListDisplay, /case "idle"/);
+  assert.match(agentListDisplay, /return "bg-info"/);
+  assert.match(agentListDisplay, /case "error"/);
+  assert.match(agentListDisplay, /return "bg-danger"/);
+  assert.match(agentListDisplay, /case "running"/);
+  assert.match(agentListDisplay, /return "bg-warning"/);
+  // 未启动/无 runtime（含 detached）不渲染色点。
+  assert.match(agentListDisplay, /if \(!status \|\| status === "detached"\) return undefined/);
+  // SessionTree 不再渲染带文本的状态徽标，改用纯色点。
+  assert.doesNotMatch(sessionTree, /\/agent-status-indicator/);
+  assert.match(sessionTree, /sessionStatusDotClass\(/);
+  // 硺点：无 runtime 的行不回退渲染灰色点；仅当 helper 返回颜色时条件渲染。
+  assert.doesNotMatch(sessionTree, /\?\? \"bg-muted-foreground\/50\"|\?\? \"bg-border\"/);
+  assert.match(sessionTree, /\{sessionStatusDotClass\(child\.agent\.status\) && <span/);
+  assert.match(sessionTree, /\{sessionStatusDotClass\(runtime\?\.status\) && <span/);
+  // Tab 同样未启动不显示点，已启动按状态点渲染。
+  assert.match(tabBar, /sessionStatusDotClass\(status\)/);
+  assert.match(tabBar, /dotClass &&/);
 });

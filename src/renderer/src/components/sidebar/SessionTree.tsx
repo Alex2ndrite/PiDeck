@@ -1,7 +1,7 @@
 import { Fragment, type ReactNode } from "react";
-import { ChevronDown, HatGlasses, History, Trash2 } from "lucide-react";
+import { ChevronDown, HatGlasses, Trash2 } from "lucide-react";
 import type { AgentTab, Project, SessionRecord, SessionSummary } from "../../../../shared/types";
-import { filterAgentsForSidebarDisplay, getProjectAgentSessionDisplay, type ProjectChildItem } from "../../agentListDisplay";
+import { filterAgentsForSidebarDisplay, getProjectAgentSessionDisplay, sessionStatusDotClass, type ProjectChildItem } from "../../agentListDisplay";
 import { sessionRecordToSummary } from "../../atoms";
 import { t } from "../../i18n";
 import { filterSidebarSessions, getBoundSidebarRuntimeAgent, hasLiveSidebarRuntime, type SidebarController } from "../../hooks/useSidebarController";
@@ -34,7 +34,6 @@ export function SessionTree(props: {
   controller: SidebarController;
   actions: SidebarActions;
   nested?: boolean;
-  grouped?: boolean;
   visibleChildCount?: number;
   onShowMore?: () => void;
 }) {
@@ -137,18 +136,8 @@ export function SessionTree(props: {
     </span>
   ) : null;
 
-  const runningChildren = display.visibleChildren.filter((child) =>
-    child.type === "agent" || (child.type === "session" && Boolean(child.agent)),
-  );
-  const historyChildren = display.visibleChildren.filter((child) =>
-    child.type === "session" && !child.agent,
-  );
-  const renderGroupLabel = (label: string, icon: ReactNode) => (
-    <div className="flex items-center gap-1.5 px-2 pb-1 pt-2 text-micro font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-      {icon}
-      <span>{label}</span>
-    </div>
-  );
+  // main 语义：项目下直接展示统一列表（drafts + 会话/Agent 按时间混排），不分组标题、
+  // 不把“运行中/历史”拆成两组（用户语义见 sessionStatusDotClass 的状态点）。
   const renderChild = (child: ProjectChildItem) => {
     const groupKey = `${props.project.id}:${child.key}`;
     const childCount = child.codexSubagents.length + child.piSubagents.length;
@@ -166,9 +155,10 @@ export function SessionTree(props: {
           onContextMenu={(event) => { event.preventDefault(); void props.controller.openMenu({ kind: "agent", agentId: child.agent.id, x: event.clientX, y: event.clientY }); }}
           onClick={() => { if (agentSession) void props.actions.sessions.open(props.project.id, agentSession.id); }}
         >
-          <span className="agent-node-marker size-1.5 shrink-0 rounded-full bg-muted-foreground/50" aria-hidden="true" />
+          {/* 仅当该 Agent 有运行态才渲染色点（idle=蓝/running=黄/error=红，见 sessionStatusDotClass）；
+              未启动的 catalog Agent 无 runtime，按共享 helper 语义不渲染色点，避免灰点误示为“已运行”。 */}
+          {sessionStatusDotClass(child.agent.status) && <span className={`agent-node-marker size-1.5 shrink-0 rounded-full ${sessionStatusDotClass(child.agent.status)}`} aria-hidden="true" />}
           <div className="conversation-body min-w-0 flex-1"><div className="conversation-title flex min-w-0 items-center gap-1.5">
-            <span className={`agent-status-indicator status-${child.agent.status}`}>{child.agent.status}</span>
             <strong className="min-w-0 flex-1 truncate font-medium">{child.agent.title}</strong>
             {child.agent.noSession && <span className="anonymous-indicator" title={t("app.anonymousChat")}><HatGlasses size={11} aria-hidden="true" /></span>}
             {renderToggle(groupKey, childCount)}
@@ -190,9 +180,10 @@ export function SessionTree(props: {
         onContextMenu={(event) => openContext(event, child.session)}
         onClick={() => void props.actions.sessions.open(props.project.id, child.session.id)}
       >
-        <span className="session-node-marker size-1.5 shrink-0 rounded-full bg-border" aria-hidden="true" />
+        {/* 无 runtime 的历史会话不渲染色点（共享 helper 返回 undefined），与未启动 Agent 一致；
+            有 runtime 时按状态点（蓝/黄/红）示意，避免灰点误示为“已运行”。 */}
+        {sessionStatusDotClass(runtime?.status) && <span className={`session-node-marker size-1.5 shrink-0 rounded-full ${sessionStatusDotClass(runtime?.status)}`} aria-hidden="true" />}
         <div className="conversation-body min-w-0 flex-1"><div className="conversation-title flex min-w-0 items-center gap-1.5">
-          {runtime && <span className={`agent-status-indicator status-${runtime.status}`}>{runtime.status}</span>}
           {/* 历史会话（无运行态）文字降一级，与活跃 Agent/运行中会话形成层级差 */}
           <strong className={cn("min-w-0 flex-1 truncate", runtime ? "font-medium" : "font-normal text-muted-foreground/90")}>{child.session.name || t("common.untitled")}</strong>
           {child.session.source && child.session.source !== "pi" && <span className={`session-source-badge ${child.session.source}`}>{t(`sessionSource.${child.session.source}` as never)}</span>}
@@ -205,7 +196,6 @@ export function SessionTree(props: {
 
   return (
     <div className={cn(props.nested ? "worktree-children" : "session-card", "flex flex-col gap-0.5 py-0.5")}>
-      {props.grouped && (draftSessions.length > 0 || runningChildren.length > 0) && renderGroupLabel(t("app.sidebarActiveSessions"), <span className="size-1.5 rounded-full bg-primary" aria-hidden="true" />)}
       {draftSessions.map((session) => {
         const runtime = props.controller.catalog.runtimeBySessionId[session.id];
         const canDelete = !hasLiveSidebarRuntime(runtime);
@@ -226,7 +216,7 @@ export function SessionTree(props: {
               onClick={() => void props.actions.sessions.open(props.project.id, session.id)}
             >
               <div className="conversation-body min-w-0 flex-1"><div className="conversation-title flex min-w-0 items-center gap-1.5">
-                {runtime && runtime.status !== "detached" && <span className={`agent-status-indicator status-${runtime.status}`}>{runtime.status}</span>}
+                {sessionStatusDotClass(runtime?.status) && <span className={`session-node-marker size-1.5 shrink-0 rounded-full ${sessionStatusDotClass(runtime?.status)}`} aria-hidden="true" />}
                 <strong className="min-w-0 flex-1 truncate font-medium">{session.title}</strong>
               </div></div>
             </button>
@@ -243,11 +233,7 @@ export function SessionTree(props: {
         );
       })}
       {catalogLoading && <div className="project-session-loading"><div className="loader" /><span>{t("app.projectSessionsLoading")}</span></div>}
-      {props.grouped
-        ? runningChildren.map(renderChild)
-        : display.visibleChildren.map(renderChild)}
-      {props.grouped && historyChildren.length > 0 && renderGroupLabel(t("app.sidebarHistory"), <History size={12} aria-hidden="true" />)}
-      {props.grouped && historyChildren.map(renderChild)}
+      {display.visibleChildren.map(renderChild)}
 
       {display.hiddenChildCount > 0 && (
         <Button
