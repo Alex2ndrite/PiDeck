@@ -17,6 +17,22 @@ function compileFeishuI18n() {
 	return sandbox.exports;
 }
 
+/** 真实加载 AskCard（卡片构建/action 解析必须走真实现，mock 会丢断言）。 */
+function compileAskCard(feishuI18n) {
+	const output = ts.transpileModule(readFileSync("src/main/feishu/AskCard.ts", "utf8"), {
+		compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+	}).outputText;
+	const sandbox = {
+		exports: {},
+		require: (name) => {
+			if (name === "./FeishuI18n") return feishuI18n;
+			throw new Error(`unexpected require: ${name}`);
+		},
+	};
+	vm.runInNewContext(output, sandbox, { filename: "AskCard.ts" });
+	return sandbox.exports;
+}
+
 test("FeishuBridge receives a narrow Session runtime binding gateway", () => {
 	assert.match(bridgeSource, /export interface SessionRuntimeBindingGateway/);
 	assert.match(bridgeSource, /private runtimeBindings: SessionRuntimeBindingGateway/);
@@ -88,6 +104,7 @@ function compileBridge(loadBindings = [], options = {}) {
 	}).outputText;
 	const module = { exports: {} };
 	const feishuI18n = compileFeishuI18n();
+	const askCard = compileAskCard(feishuI18n);
 	const richText = { chooseMessageMode: () => "text", buildPostMessages: () => [], buildMarkdownCards: () => [] };
 	const cardState = {
 		createInitialState: () => ({ terminal: "running", outputText: "" }),
@@ -122,6 +139,7 @@ function compileBridge(loadBindings = [], options = {}) {
 		"./CardRunState": cardState,
 		"./CardRenderer": { renderRunCard: () => ({}) },
 		"./ModelPickerCard": { buildModelPickerCard: () => ({}), parseModelActionValue: () => undefined },
+		"./AskCard": askCard,
 		"./FeishuI18n": feishuI18n,
 	};
 	vm.runInNewContext(output, {
@@ -463,4 +481,165 @@ test("two persisted rows sharing a path stay unowned even with one runtime candi
 		{ sessionId: "old-two" },
 	]));
 	assert.equal(bindInputs.length, 0);
+});
+
+// ===== 飞书 ask/confirm 交互（extension_ui_request → 卡片 → 按钮/文本回答 → 写回 pi） =====
+
+function bindChatForAsk(bridge, agentId = "A") {
+	bridge.chatBindings.set("chat", {
+		chatId: "chat", botId: "bot", userId: "u", sessionId: "S", agentId,
+		workspaceId: "", source: "feishu", chatType: "p2p", createdAt: 1,
+	});
+	bridge.sessionToChat.set(agentId, "chat");
+}
+
+function mockFeishuClient(sent) {
+	return {
+		im: {
+			message: {
+				create: async (args) => {
+					sent.push(args);
+					return { data: { message_id: `m-${sent.length}` } };
+				},
+				reply: async () => ({ data: { message_id: "m-reply" } }),
+			},
+		},
+	};
+}
+
+test("Feishu select ask renders option card; button click answers via sendUIResponse", async () => {
+	const uiResponses = [];
+	const { bridge } = makeBridge([makeAgent("A")], {
+		sendUIResponse: (agentId, requestId, response) => uiResponses.push([agentId, requestId, response]),
+	});
+	bindChatForAsk(bridge);
+	const sent = [];
+	bridge.connection.client = mockFeishuClient(sent);
+
+	// pi 发出 select 提问 → 飞书应渲染一张带选项按钮的交互卡片
+	bridge.handleAgentEvent("A", { type: "extension_ui_request", method: "select", id: "req-1", title: "选择部署环境？", options: ["生产", "测试"] });
+	assert.equal(sent.length, 1, "ask card should be sent once");
+	const card = JSON.parse(sent[0].data.content);
+	assert.equal(card.header.template, "orange");
+	assert.equal(card.header.title.content, "❓ 请选择一个选项");
+	const optionButtons = card.elements.flatMap((e) => e.tag === "action" ? e.actions : []).filter((a) => a.value?.kind === "option");
+	assert.equal(optionButtons.length, 2);
+	assert.equal(optionButtons[0].value.option, "生产");
+
+	// 用户点击选项按钮 → 答案写回 pi，待答记录清除，用户收到确认
+	await bridge.handleCardAction({
+		chatId: "chat", messageId: "card-1",
+		operator: { openId: "u" },
+		action: { tag: "button", value: { action: "pideck.ask", requestId: "req-1", kind: "option", option: "生产" } },
+	});
+	assert.equal(JSON.stringify(uiResponses), JSON.stringify([["A", "req-1", { value: "生产" }]]));
+	assert.equal(bridge.getPendingAskForChat("chat"), undefined, "pending ask must be cleared");
+	assert.ok(sent.some((s) => s.data.content.includes("已选择：生产")), "user should get an answer confirmation");
+});
+
+test("Feishu confirm ask: confirm/reject buttons map to confirmed flags", async () => {
+	const uiResponses = [];
+	const { bridge } = makeBridge([makeAgent("A")], {
+		sendUIResponse: (agentId, requestId, response) => uiResponses.push([agentId, requestId, response]),
+	});
+	bindChatForAsk(bridge);
+	const sent = [];
+	bridge.connection.client = mockFeishuClient(sent);
+
+	bridge.handleAgentEvent("A", { type: "extension_ui_request", method: "confirm", id: "req-2", title: "允许执行 git push 吗？" });
+	assert.equal(sent.length, 1);
+	assert.equal(sent[0].data.content.includes("需要你的确认"), true);
+
+	// 点「拒绝」→ confirmed:false
+	await bridge.handleCardAction({
+		chatId: "chat", messageId: "card-2",
+		operator: { openId: "u" },
+		action: { tag: "button", value: { action: "pideck.ask", requestId: "req-2", kind: "confirm", confirmed: false } },
+	});
+	assert.equal(JSON.stringify(uiResponses), JSON.stringify([["A", "req-2", { confirmed: false }]]));
+});
+
+test("Feishu ask cancel button sends cancelled; expired ask shows hint without sending", async () => {
+	const uiResponses = [];
+	const { bridge } = makeBridge([makeAgent("A")], {
+		sendUIResponse: (agentId, requestId, response) => uiResponses.push([agentId, requestId, response]),
+	});
+	bindChatForAsk(bridge);
+	const sent = [];
+	bridge.connection.client = mockFeishuClient(sent);
+
+	bridge.handleAgentEvent("A", { type: "extension_ui_request", method: "input", id: "req-3", title: "请描述需求" });
+	await bridge.handleCardAction({
+		chatId: "chat", messageId: "card-3",
+		operator: { openId: "u" },
+		action: { tag: "button", value: { action: "pideck.ask", requestId: "req-3", kind: "cancel" } },
+	});
+	assert.equal(JSON.stringify(uiResponses), JSON.stringify([["A", "req-3", { cancelled: true }]]));
+
+	// 已清理后再点同一按钮 → 只提示已过期，不重复发送
+	await bridge.handleCardAction({
+		chatId: "chat", messageId: "card-3b",
+		operator: { openId: "u" },
+		action: { tag: "button", value: { action: "pideck.ask", requestId: "req-3", kind: "cancel" } },
+	});
+	assert.equal(uiResponses.length, 1, "expired ask must not send a second response");
+	assert.ok(sent.some((s) => s.data.content.includes("已超时")), "user should see the expired hint");
+});
+
+test("Feishu text reply answers a pending input ask instead of queuing a prompt", async () => {
+	const uiResponses = [];
+	const prompts = [];
+	const { bridge } = makeBridge([makeAgent("A")], {
+		sendUIResponse: (agentId, requestId, response) => uiResponses.push([agentId, requestId, response]),
+		sendPrompt: async (input) => prompts.push(input),
+	});
+	bindChatForAsk(bridge);
+	const sent = [];
+	bridge.connection.client = mockFeishuClient(sent);
+
+	bridge.handleAgentEvent("A", { type: "extension_ui_request", method: "input", id: "req-4", title: "请描述需求" });
+
+	// 用户直接回复文本 → 作为答案，不进入 runAgent/sendPrompt
+	await bridge.handleMessage({
+		event_id: "e-1",
+		message: { message_id: "m-1", chat_id: "chat", message_type: "text", chat_type: "p2p", content: JSON.stringify({ text: "帮我写一个脚本" }) },
+		sender: { sender_type: "user", sender_id: { open_id: "user" } },
+	});
+	assert.equal(JSON.stringify(uiResponses), JSON.stringify([["A", "req-4", { value: "帮我写一个脚本" }]]));
+	assert.equal(prompts.length, 0, "text reply must not be queued as a new prompt");
+	assert.ok(sent.some((s) => s.data.content.includes("已选择：帮我写一个脚本")));
+});
+
+test("Feishu confirm pending: text reply shows guidance instead of answering", async () => {
+	const uiResponses = [];
+	const { bridge } = makeBridge([makeAgent("A")], {
+		sendUIResponse: (agentId, requestId, response) => uiResponses.push([agentId, requestId, response]),
+	});
+	bindChatForAsk(bridge);
+	const sent = [];
+	bridge.connection.client = mockFeishuClient(sent);
+
+	bridge.handleAgentEvent("A", { type: "extension_ui_request", method: "confirm", id: "req-5", title: "允许吗？" });
+	await bridge.handleMessage({
+		event_id: "e-2",
+		message: { message_id: "m-2", chat_id: "chat", message_type: "text", chat_type: "p2p", content: JSON.stringify({ text: "好的" }) },
+		sender: { sender_type: "user", sender_id: { open_id: "user" } },
+	});
+	assert.equal(uiResponses.length, 0, "confirm must not be answered by free text");
+	assert.ok(sent.some((s) => s.data.content.includes("请点击上方卡片中的按钮")), "user should get button guidance");
+});
+
+test("Feishu agent_end clears stale pending asks", async () => {
+	const uiResponses = [];
+	const { bridge } = makeBridge([makeAgent("A")], {
+		sendUIResponse: (agentId, requestId, response) => uiResponses.push([agentId, requestId, response]),
+	});
+	bindChatForAsk(bridge);
+	bridge.connection.client = mockFeishuClient([]);
+
+	bridge.handleAgentEvent("A", { type: "extension_ui_request", method: "input", id: "req-6", title: "请描述需求" });
+	assert.ok(bridge.getPendingAskForChat("chat"), "ask pending before agent end");
+
+	bridge.handleAgentEvent("A", { type: "agent_end", stopReason: "done" });
+	assert.equal(bridge.getPendingAskForChat("chat"), undefined, "agent end must clear stale ask");
 });

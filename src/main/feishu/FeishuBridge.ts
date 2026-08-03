@@ -45,6 +45,7 @@ import { hasExplicitFeishuFileSendIntent } from "./fileIntent";
 import { createInitialState, reduceFromPiEvent, markInterrupted, markError, type RunState } from "./CardRunState";
 import { renderRunCard } from "./CardRenderer";
 import { buildModelPickerCard, parseModelActionValue } from "./ModelPickerCard";
+import { buildAskCard, parseAskActionValue, tryParseBatchAskEnvelope, type AskUiRequest } from "./AskCard";
 import { feishuLanguage, feishuT, normalizeFeishuLocale, type FeishuLocale } from "./FeishuI18n";
 import type { AgentManager } from "../pi/AgentManager";
 
@@ -71,11 +72,28 @@ export interface SessionRuntimeBindingGateway {
 	listRuntimeModels(sessionId: string): Promise<AvailableModel[]>;
 	getRuntimeState(sessionId: string): Promise<AgentRuntimeState | undefined>;
 	setRuntimeModel(sessionId: string, provider: string, modelId: string): Promise<void>;
+	/** 把 ask/confirm 等扩展 UI 的答案写回 pi（与桌面端弹窗回答同一条链路）。 */
+	sendUIResponse(agentId: string, requestId: string, response: { value?: string | boolean; confirmed?: boolean; cancelled?: boolean }): void;
 }
 
 // ===== 常量 =====
 const DEDUP_MAX = 200;
 const GROUP_CACHE_TTL = 3600_000;
+
+/** 飞书端待回答的 ask/confirm 请求（pi 发 extension_ui_request 后阻塞等待，必须有人回答）。 */
+type PendingAsk = {
+	requestId: string;
+	agentId: string;
+	method: "select" | "confirm" | "input" | "editor" | "batch_ask";
+	title: string;
+	chatId: string;
+	askedAt: number;
+};
+
+/** 类型守卫：extension_ui_request 的 method 是否属于可回答的对话类方法。 */
+function isAskMethod(value: string): value is "select" | "confirm" | "input" | "editor" {
+	return value === "select" || value === "confirm" || value === "input" || value === "editor";
+}
 
 // ===== 安全日志 =====
 function safeLog(level: "log" | "warn" | "error", ...args: unknown[]): void {
@@ -116,6 +134,8 @@ export class FeishuBridge {
 
 	// ===== 图片/文件即时处理（参考 Proma 思路：不做 pending 等待，收到即处理） =====
 	private imageConfirmTimers = new Map<string, ReturnType<typeof setTimeout>>();
+	/** 待回答的 ask/confirm 请求：key = `${chatId}:${requestId}`（同一 chat 同一时刻至多一个，pi 串行执行）。 */
+	private pendingAsks = new Map<string, PendingAsk>();
 
 	// 流式卡片：sessionId → CardStream
 	private streamingCards = new Map<string, CardStream>();
@@ -362,6 +382,7 @@ export class FeishuBridge {
 		this.pendingDocRequests.clear();
 		for (const [, timer] of this.imageConfirmTimers) { clearTimeout(timer); }
 		this.imageConfirmTimers.clear();
+		this.pendingAsks.clear();
 		this.pendingAttachments.clear();
 		this.updateStatus({ status: "disconnected", activeBindings: 0, botId: undefined, botName: undefined, botOpenId: undefined });
 		log("[Feishu Bridge] stopped");
@@ -507,6 +528,31 @@ export class FeishuBridge {
 			} else if (messageType === "file") {
 				const content = JSON.parse(message.content as string) as { file_key?: string; file_name?: string };
 				if (content.file_key) { try { const fileData = await this.downloadFile(messageId, content.file_key); if (fileData.length > 50 * 1024 * 1024) { await this.sendSmartMessage(chatId, feishuT(this.locale, "attachment.fileTooLarge50")); return; } fileAttachments.push({ fileKey: content.file_key, fileName: content.file_name || `feishu-${content.file_key}`, data: fileData }); } catch (e) { logErr("[飞书 Bridge] 下载文件失败:", e); await this.sendSmartMessage(chatId, feishuT(this.locale, "attachment.fileDownloadFailed")); return; } }
+			}
+
+			// 有待答 ask 时，纯文本回复优先作为回答（input/editor/select 自定义答案），
+			// 避免 pi 阻塞等待 extension_ui_response 时用户消息被排队、飞书侧“永远卡住”。
+			// confirm/batch_ask 不支持文本回答，给出操作指引而不是静默吞掉。
+			if (messageType === "text") {
+				const pendingAsk = this.getPendingAskForChat(chatId);
+				if (pendingAsk) {
+					if (pendingAsk.method === "confirm") {
+						await this.sendSmartMessage(chatId, feishuT(this.locale, "ask.confirmHint"));
+						return;
+					}
+					if (pendingAsk.method === "batch_ask") {
+						await this.sendSmartMessage(chatId, feishuT(this.locale, "ask.batchUnsupportedHint"));
+						return;
+					}
+					const answer = text ?? "";
+					if (answer.trim()) {
+						this.runtimeBindings.sendUIResponse(pendingAsk.agentId, pendingAsk.requestId, { value: answer });
+						this.pendingAsks.delete(`${chatId}:${pendingAsk.requestId}`);
+						await this.sendSmartMessage(chatId, feishuT(this.locale, "ask.answered", { answer }));
+						return;
+					}
+					// 空文本（仅附件）不走 ask 回答，落回正常流程
+				}
 			}
 
 			// ===== 文件/图片 + 文字 → 一起处理；仅文件/图片 → 暂存等指令 =====
@@ -792,6 +838,19 @@ export class FeishuBridge {
 		// 只有已连接状态才处理 agent 事件，防止断连后仍同步到飞书
 		if (this.status.status !== "connected") return;
 		const typed = event as Record<string, unknown>;
+
+		// ask/confirm 等扩展 UI 请求：渲染提问卡片并记录待答状态。
+		// 必须在卡片事件缓存之前拦截并返回——这些事件不进 runState，
+		// 进 pendingCardEvents 只会被 replay 白白回放一遍。
+		if (typed.type === "extension_ui_request") {
+			this.handleAskRequest(agentId, typed);
+			return;
+		}
+
+		// Agent 结束：清理该 agent 遗留的待答 ask（超时/已完成），防止旧卡片按钮变成幽灵操作
+		if (typed.type === "agent_end") {
+			this.clearPendingAsksForAgent(agentId);
+		}
 
 		const cardStream = this.streamingCards.get(agentId);
 
@@ -1359,6 +1418,13 @@ export class FeishuBridge {
 	// ===== 卡片交互回调 =====
 
 	private async handleCardAction(event: FeishuCardActionEvent): Promise<void> {
+		// ask/confirm 提问卡片按钮：优先处理，与模型切换卡片互不干扰
+		const askAction = parseAskActionValue(event.action.value);
+		if (askAction) {
+			await this.handleAskCardAction(event, askAction);
+			return;
+		}
+
 		const action = parseModelActionValue(event.action.value);
 		if (!action) return;
 		const binding = this.chatBindings.get(event.chatId);
@@ -1377,6 +1443,106 @@ export class FeishuBridge {
 			logErr("[飞书 Bridge] 模型切换失败:", e);
 			await this.sendSmartMessage(event.chatId, feishuT(this.locale, "model.switchFailed"));
 		}
+	}
+
+	// ===== ask/confirm 扩展 UI 请求（飞书端问答） =====
+
+	/**
+	 * pi 发出 extension_ui_request（ask_question/confirm 等）后阻塞等待回答：
+	 * 飞书端渲染提问卡片（选项按钮/确认按钮/回复文本提示），并登记 pendingAsks 供按钮回调与文本回复命中。
+	 * 未绑定飞书时直接忽略——桌面端弹窗会兜底回答。
+	 */
+	private handleAskRequest(agentId: string, typed: Record<string, unknown>): void {
+		const rawMethod = String(typed.method ?? "");
+		const requestId = String(typed.id ?? "");
+		// 边界校验：只处理需要用户回答的对话类方法，notify/setWidget 等纯通知不占飞书卡片
+		if (!requestId || !isAskMethod(rawMethod)) return;
+		const method = rawMethod;
+		const chatId = this.getBestChatId(agentId);
+		if (!chatId) return;
+
+		const rawTitle = String(typed.title ?? typed.question ?? "");
+		const batchEnvelope = tryParseBatchAskEnvelope(rawTitle);
+		// 兼容桌面端约定：✎ 开头的“自定义回答”选项只对桌面端生效，飞书端直接回复文本即可，剔除之
+		const rawOptions = Array.isArray(typed.options)
+			? typed.options.filter((option): option is string => typeof option === "string" && !option.startsWith("✎"))
+			: undefined;
+		// select 无有效选项时降级为 input（与桌面端 handleUIRequest 同一规则）：
+		// ask_question 的 options 可选，模型经常只问问题不给选项，降级后用户仍可回复文本作答
+		const effectiveMethod: AskUiRequest["method"] =
+			method === "select" && (!rawOptions || rawOptions.length === 0) ? "input" : method;
+
+		const request: AskUiRequest = batchEnvelope
+			? {
+					requestId,
+					method: "batch_ask",
+					title: "",
+					batchQuestions: batchEnvelope.questions,
+				}
+			: {
+					requestId,
+					method: effectiveMethod,
+					title: rawTitle,
+					options: rawOptions,
+				};
+
+		const key = `${chatId}:${requestId}`;
+		if (this.pendingAsks.has(key)) return;
+		this.pendingAsks.set(key, {
+			requestId,
+			agentId,
+			method: request.method,
+			title: request.title,
+			chatId,
+			askedAt: Date.now(),
+		});
+		void this.sendCardMessage(chatId, buildAskCard({ request, locale: this.locale })).catch((e) =>
+			logErr("[飞书 Bridge] ask 卡片发送失败:", e));
+	}
+
+	/** 查找某 chat 最早的待答 ask（同一 chat 同时至多一个，按时间取首个防异常态）。 */
+	private getPendingAskForChat(chatId: string): PendingAsk | undefined {
+		let earliest: PendingAsk | undefined;
+		for (const pending of this.pendingAsks.values()) {
+			if (pending.chatId !== chatId) continue;
+			if (!earliest || pending.askedAt < earliest.askedAt) earliest = pending;
+		}
+		return earliest;
+	}
+
+	/** 清理某 agent 的所有待答 ask（agent 结束/新任务开始时调用，避免幽灵按钮）。 */
+	private clearPendingAsksForAgent(agentId: string): void {
+		for (const [key, pending] of this.pendingAsks) {
+			if (pending.agentId === agentId) this.pendingAsks.delete(key);
+		}
+	}
+
+	/** 飞书卡片按钮回调：把选项/确认/取消写回 pi，并移除待答记录。 */
+	private async handleAskCardAction(event: FeishuCardActionEvent, action: NonNullable<ReturnType<typeof parseAskActionValue>>): Promise<void> {
+		const key = `${event.chatId}:${action.requestId}`;
+		const pending = this.pendingAsks.get(key);
+		if (!pending) {
+			// 超时/已处理：桌面端 sendUIResponse 已清理 pendingUIRequests，这里只提示不报错
+			await this.sendSmartMessage(event.chatId, feishuT(this.locale, "ask.expired"));
+			return;
+		}
+
+		let response: { value?: string; confirmed?: boolean; cancelled?: boolean };
+		let feedback: string;
+		if (action.kind === "confirm") {
+			response = { confirmed: action.confirmed };
+			feedback = action.confirmed ? feishuT(this.locale, "ask.confirmed") : feishuT(this.locale, "ask.rejected");
+		} else if (action.kind === "cancel") {
+			response = { cancelled: true };
+			feedback = feishuT(this.locale, "ask.cancelled");
+		} else {
+			response = { value: action.option };
+			feedback = feishuT(this.locale, "ask.answered", { answer: action.option });
+		}
+
+		this.runtimeBindings.sendUIResponse(pending.agentId, pending.requestId, response);
+		this.pendingAsks.delete(key);
+		await this.sendSmartMessage(event.chatId, feedback);
 	}
 
 	// ===== 共享逻辑 =====
