@@ -284,6 +284,11 @@ export function createBrowserApi(): PiDesktopApi {
 				);
 				return result.runtimes;
 			},
+			activateRuntime: async (sessionId) => {
+				// The web API intentionally keeps runtime activation lazy; desktop warm-up
+				// must never turn a browser session switch into an implicit server spawn.
+				return { ok: false, error: { code: "SESSION_NOT_FOUND", debugDetails: sessionId } };
+			},
 			stopRuntime: async (target) => {
 				const result = await sessionRuntimeCommand<SessionRuntimeTarget>(target, "stop");
 				void refreshState().catch(() => undefined);

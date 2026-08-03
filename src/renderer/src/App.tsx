@@ -1526,6 +1526,7 @@ export function App() {
     void api.sessions.setFocusedSession(currentSessionId).catch(() => undefined);
   }, [currentSessionId]);
 
+
   // 侧栏 π logo 业务反馈：新建/历史会话启动/关闭 agent 时重播拼装动画。
   const triggerBrandLogoReplay = useCallback(() => {
     setBrandLogoReplayToken((token) => token + 1);

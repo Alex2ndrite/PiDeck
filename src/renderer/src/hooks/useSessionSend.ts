@@ -167,6 +167,43 @@ export function useSessionSend(options: UseSessionSendOptions) {
     if (!hasComposerSubmission(message, imageSnapshot)) return;
 
     sendingSessionIdsRef.current.add(sourceSessionId);
+    const requestId = crypto.randomUUID();
+    const trimmedMessage = message.trim();
+    const isCompactCommand = /^\/compact(?:\s|$)/.test(trimmedMessage);
+    const usesLocalQueue = Boolean(
+      options.enqueue &&
+      (streamingBehavior === "steer" || streamingBehavior === "followUp"),
+    );
+
+    // 首次发送的运行时启动可能包含 spawn/get_state/会话绑定；先发布用户可见状态，
+    // 让输入反馈与后台准备解耦，避免用户把冷启动时间误判成点击无效。
+    // 队列和 /compact 保留原路径，因为它们分别需要排队快照或运行时命令语义。
+    const publishOptimisticSubmission = (targetSessionId: string) => {
+      setSendState({
+        sessionId: targetSessionId,
+        state: { status: "activating", requestId },
+      });
+      clearSnapshot(targetSessionId);
+      const cacheEntry = store.get(sessionMessagesCacheAtom)?.[targetSessionId];
+      const previousMessages = cacheEntry?.messages ?? [];
+      setCacheMessages({
+        sessionId: targetSessionId,
+        messages: [...previousMessages, {
+          id: requestId,
+          agentId: "",
+          role: "user" as const,
+          text: message,
+          timestamp: Date.now(),
+          images: imageSnapshot,
+        }],
+        source: "runtime" as const,
+      });
+      options.resetComposerUi?.();
+    };
+
+    const publishBeforeActivation = !usesLocalQueue && !isCompactCommand;
+    if (publishBeforeActivation) publishOptimisticSubmission(sourceSessionId);
+
     let sessionId = sourceSessionId;
     try {
       sessionId = options.ensureSessionId
@@ -192,8 +229,20 @@ export function useSessionSend(options: UseSessionSendOptions) {
         }
       : undefined;
     const runtimeAgentId = runtimeTarget?.agentId;
-    const trimmedMessage = message.trim();
-    if (/^\/compact(?:\s|$)/.test(trimmedMessage)) {
+    if (publishBeforeActivation && runtimeAgentId) {
+      setSendState({
+        sessionId,
+        state: { status: "sending", requestId },
+      });
+      setCacheMessages({
+        sessionId,
+        messages: (store.get(sessionMessagesCacheAtom)?.[sessionId]?.messages ?? []).map((item) =>
+          item.id === requestId ? { ...item, agentId: runtimeAgentId } : item,
+        ),
+        source: "runtime",
+      });
+    }
+    if (isCompactCommand) {
       if (!runtimeAgentId) {
         // No Agent yet — let normal send path start Agent first;
         // pi will handle /compact command once active.
@@ -232,36 +281,33 @@ export function useSessionSend(options: UseSessionSendOptions) {
       // Queue full: fall through to direct send.
     }
 
-    const requestId = crypto.randomUUID();
-    setSendState({
-      sessionId,
-      state: {
-        status: runtimeAgentId ? "sending" : "activating",
-        requestId,
-      },
-    });
-    clearSnapshot(sessionId);
+    if (!publishBeforeActivation) {
+      setSendState({
+        sessionId,
+        state: {
+          status: runtimeAgentId ? "sending" : "activating",
+          requestId,
+        },
+      });
+      clearSnapshot(sessionId);
 
-    // Optimistic: show user message immediately, appended to existing history.
-    // Agent's subsequent messages:event will replace this with the authoritative list.
-    // Appending (instead of replacing) avoids a flash where history disappears during the
-    // send→acknowledge gap, which is the root cause of perceived "jitter" on send.
-    const cacheEntry = store.get(sessionMessagesCacheAtom)?.[sessionId];
-    const previousMessages = cacheEntry?.messages ?? [];
-    setCacheMessages({
-      sessionId,
-      messages: [...previousMessages, {
-        id: requestId,
-        agentId: runtimeAgentId ?? "",
-        role: "user" as const,
-        text: message,
-        timestamp: Date.now(),
-        images: imageSnapshot,
-      }],
-      source: "runtime" as const,
-    });
-
-    options.resetComposerUi?.();
+      // Special paths publish only after their runtime/session target is known.
+      const cacheEntry = store.get(sessionMessagesCacheAtom)?.[sessionId];
+      const previousMessages = cacheEntry?.messages ?? [];
+      setCacheMessages({
+        sessionId,
+        messages: [...previousMessages, {
+          id: requestId,
+          agentId: runtimeAgentId ?? "",
+          role: "user" as const,
+          text: message,
+          timestamp: Date.now(),
+          images: imageSnapshot,
+        }],
+        source: "runtime" as const,
+      });
+      options.resetComposerUi?.();
+    }
 
     let preparedMessage = message;
     try {

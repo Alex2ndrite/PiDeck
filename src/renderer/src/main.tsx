@@ -26,6 +26,24 @@ function formatRuntimeError(error: unknown): string {
   }
 }
 
+// React 将更新深度异常写到 console.error，而不是抛出可带组件信息的 window error。
+// 仅捕获该明确错误并限频记录调用栈，便于定位具体 effect；不改写其他 console 行为。
+const originalConsoleError = console.error.bind(console);
+let lastUpdateDepthDiagnosticAt = 0;
+console.error = (...args: unknown[]) => {
+  originalConsoleError(...args);
+  const message = args.map((arg) => formatRuntimeError(arg)).join(" ");
+  if (!message.includes("Maximum update depth exceeded")) return;
+  const now = Date.now();
+  if (now - lastUpdateDepthDiagnosticAt < 5000) return;
+  lastUpdateDepthDiagnosticAt = now;
+  writeStartupLog("error", "Renderer React update depth diagnostic", {
+    message,
+    stack: new Error("React update depth diagnostic").stack,
+    url: window.location.href,
+  });
+};
+
 // 全局运行时异常：写日志 + toast，避免静默失败或整页无反馈。
 window.addEventListener("error", (event) => {
   // 资源加载失败（script/img）也会进 error 事件，但 event.error 通常为空；

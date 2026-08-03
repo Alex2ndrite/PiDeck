@@ -75,6 +75,10 @@ export interface SessionAgentGateway {
 	notifyAskPending(sessionTitle: string): void;
 }
 
+export interface SessionRuntimePerfLogger {
+	info(scope: string, message: string, detail?: unknown): unknown;
+}
+
 type DeliveryCacheEntry = {
 	createdAt: number;
 	settled: boolean;
@@ -156,6 +160,7 @@ export class SessionRuntimeCoordinator {
 		private readonly catalog: SessionCatalogGateway,
 		private readonly agents: SessionAgentGateway,
 		private readonly sendAgentPrompt: (input: SendPromptInput) => Promise<SendPromptResult>,
+		private readonly perfLogger?: SessionRuntimePerfLogger,
 	) {}
 
 	/** 渲染层在 currentSessionId 变化时汇报聚焦会话（见 sessions:set-focused-session IPC）。 */
@@ -699,9 +704,24 @@ export class SessionRuntimeCoordinator {
 	}
 
 	private async sendOnce(input: SendSessionPromptInput): Promise<SendSessionPromptResult> {
+		const pipelineStartedAt = Date.now();
+		void this.perfLogger?.info("session-perf", "Prompt pipeline started", {
+			sessionId: input.sessionId,
+			requestId: input.requestId,
+		});
 		let tab: AgentTab;
 		try {
+			void this.perfLogger?.info("session-perf", "Runtime activation started", {
+				sessionId: input.sessionId,
+				requestId: input.requestId,
+			});
 			tab = await this.ensureRuntime(input.sessionId);
+			void this.perfLogger?.info("session-perf", "Runtime activation completed", {
+				sessionId: input.sessionId,
+				requestId: input.requestId,
+				agentId: tab.id,
+				activationMs: Date.now() - pipelineStartedAt,
+			});
 		} catch (error) {
 			return this.rejected(input, errorMessage(error));
 		}
@@ -719,6 +739,12 @@ export class SessionRuntimeCoordinator {
 			}
 
 			let result: SendPromptResult;
+			const dispatchStartedAt = Date.now();
+			void this.perfLogger?.info("session-perf", "Prompt dispatch started", {
+				sessionId: input.sessionId,
+				requestId: input.requestId,
+				agentId: lease.agentId,
+			});
 			try {
 				result = await this.sendAgentPrompt({
 					agentId: lease.agentId,
@@ -727,6 +753,14 @@ export class SessionRuntimeCoordinator {
 					streamingBehavior: input.streamingBehavior,
 					agentMessage: input.agentMessage,
 					description: input.description,
+					requestId: input.requestId,
+				});
+				void this.perfLogger?.info("session-perf", "Prompt dispatch completed", {
+					sessionId: input.sessionId,
+					requestId: input.requestId,
+					agentId: lease.agentId,
+					accepted: result.accepted,
+					dispatchMs: Date.now() - dispatchStartedAt,
 				});
 			} catch (error) {
 				result = {
@@ -735,7 +769,6 @@ export class SessionRuntimeCoordinator {
 					delivery: "unknown",
 				};
 			}
-
 			if (!this.isCurrentDispatchLease(lease)) {
 				return this.unknownDelivery(input, "Session runtime binding changed during prompt dispatch");
 			}
@@ -746,7 +779,10 @@ export class SessionRuntimeCoordinator {
 				return this.unknownDelivery(input, "Session runtime stopped during prompt dispatch");
 			}
 			if (currentTab.sessionPath && !this.catalog.get(input.sessionId)?.noSession) {
-				await this.catalog.attachRuntime({
+				// Prompt acceptance is the latency-sensitive boundary. Catalog persistence is
+				// recovery metadata and must not keep the composer in a sending state; failures
+				// are intentionally isolated from the already accepted prompt.
+				void this.catalog.attachRuntime({
 					sessionId: input.sessionId,
 					filePath: currentTab.sessionPath,
 					piSessionId: currentTab.sessionId,

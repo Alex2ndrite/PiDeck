@@ -915,10 +915,21 @@ export class AgentManager {
 				requestPayload.streamingBehavior = promptDeliveryBehavior;
 			}
 			// 使用用户配置的 RPC 超时时间，因为用户提示词可能触发长时间运行的命令或复杂操作
+			const rpcStartedAt = Date.now();
+			void this.appLogger?.info("session-perf", "Prompt RPC request started", {
+				agentId: input.agentId,
+				requestId: input.requestId,
+			});
 			const response = await runtime.process.client.request(
 				requestPayload,
 				this.settingsStore.get().rpcTimeout,
 			);
+			void this.appLogger?.info("session-perf", "Prompt RPC response received", {
+				agentId: input.agentId,
+				requestId: input.requestId,
+				success: response.success,
+				rpcMs: Date.now() - rpcStartedAt,
+			});
 			if (!response.success) {
 				// pi RPC 会把不支持图片、忙碌队列参数缺失等前置错误作为 success:false 返回；
 				// 必须显式显示出来，否则 UI 会停在"已发送但无响应"的状态。

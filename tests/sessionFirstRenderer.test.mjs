@@ -89,6 +89,15 @@ test("the renderer-only Chat surface keeps the dev workspace toolbar before firs
   assert.match(appSource, /browserAction=\{undefined\}/);
 });
 
+
+test("typing in the current Composer prewarms its runtime once", () => {
+  assert.match(composerSource, /desktopApi\.sessions\.activateRuntime\(props\.sessionId\)/);
+  assert.match(composerSource, /prewarmStartedForSessionRef/);
+  assert.match(composerSource, /composer\.draft\.trim\(\)/);
+  assert.match(composerSource, /composer\.attachments\.length === 0/);
+});
+
+
 test("active Agent identity is derived from the selected Session runtime", () => {
   assert.match(
     appSource,

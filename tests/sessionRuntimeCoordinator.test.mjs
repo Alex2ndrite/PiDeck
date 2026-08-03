@@ -36,6 +36,17 @@ function loadCoordinator() {
   });
 }
 
+test("session performance instrumentation keeps activation and dispatch phase markers", () => {
+  const source = readFileSync("src/main/sessions/SessionRuntimeCoordinator.ts", "utf8");
+  assert.match(source, /Prompt pipeline started/);
+  assert.match(source, /Runtime activation started/);
+  assert.match(source, /Runtime activation completed/);
+  assert.match(source, /Prompt dispatch started/);
+  assert.match(source, /Prompt dispatch completed/);
+  assert.match(source, /activationMs/);
+  assert.match(source, /dispatchMs/);
+});
+
 function deferred() {
   let resolve;
   const promise = new Promise((resolvePromise) => {

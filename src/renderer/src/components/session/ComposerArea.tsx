@@ -1,4 +1,4 @@
-import { forwardRef, useState, type ReactNode } from "react";
+import { forwardRef, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   ComposerBottomBar,
   ImagePreviewModal,
@@ -47,6 +47,18 @@ export const ComposerArea = forwardRef<HTMLElement, ComposerAreaProps>(function 
     enqueue: props.enqueue,
     ensureSessionId: props.ensureSessionId,
   });
+  const prewarmStartedForSessionRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (!props.sessionId || !window.piDesktop) return;
+    if (!composer.draft.trim() && composer.attachments.length === 0) return;
+    if (prewarmStartedForSessionRef.current === props.sessionId) return;
+    prewarmStartedForSessionRef.current = props.sessionId;
+
+    // 输入是比“打开会话”更可靠的发送意图信号；只在首次输入后预热一次，
+    // 避免用户仅浏览历史时创建进程，也避免每个按键重复触发 IPC。
+    void desktopApi.sessions.activateRuntime(props.sessionId).catch(() => undefined);
+  }, [composer.attachments.length, composer.draft, props.sessionId]);
+
   // 受控/非受控双模：SessionView 以面板分隔条控制高度时传 height；
   // 其余场景（测试、嵌入）回退本地默认值，与全局默认高度保持一致。
   const [localHeight, setLocalHeight] = useState(COMPOSER_DEFAULT_HEIGHT);

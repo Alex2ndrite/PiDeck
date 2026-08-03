@@ -295,6 +295,7 @@ export function registerSessionIpc(deps: SessionIpcDeps): void {
 	ipcMain.handle(
 		ipcChannels.sessionsSendPrompt,
 		async (_event, input: SendSessionPromptInput) => {
+			const startedAt = Date.now();
 			void appLogger.info("session", "Session prompt IPC received", {
 				sessionId: input.sessionId,
 				requestId: input.requestId,
@@ -313,6 +314,7 @@ export function registerSessionIpc(deps: SessionIpcDeps): void {
 					agentId: result.agentId,
 					accepted: result.accepted,
 					delivery: "delivery" in result ? result.delivery : undefined,
+					totalMs: Date.now() - startedAt,
 				});
 				return result;
 			} catch (error) {
@@ -332,6 +334,20 @@ export function registerSessionIpc(deps: SessionIpcDeps): void {
 	ipcMain.handle(
 		ipcChannels.sessionsRuntimeList,
 		() => sessionRuntimeCoordinator.listRuntimes(),
+	);
+	ipcMain.handle(
+		ipcChannels.sessionsRuntimeActivate,
+		async (_event, sessionId: string) => {
+			const startedAt = Date.now();
+			void appLogger.info("session-perf", "Runtime activation IPC started", { sessionId });
+			const result = await sessionRuntimeCoordinator.activateRuntime(sessionId);
+			void appLogger.info("session-perf", "Runtime activation IPC completed", {
+				sessionId,
+				ok: result.ok,
+				activationMs: Date.now() - startedAt,
+			});
+			return result;
+		},
 	);
 	// 渲染层切换会话时汇报聚焦会话；主进程据此判断 Ask 类请求是否需要桌面通知
 	ipcMain.handle(

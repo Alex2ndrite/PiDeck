@@ -21,7 +21,9 @@ test("agent startup writes diagnostics across renderer IPC and pi launch boundar
 	assert.match(mainSource, /Agent ensure trusted directory completed/);
 	assert.match(mainSource, /Agent pi process start/);
 	assert.match(mainSource, /Agent get_state request start/);
-	assert.match(mainSource, /Agent get_state request completed/);
+	assert.match(mainSource, /Prompt RPC request started/);
+	assert.match(mainSource, /Prompt RPC response received/);
+	assert.match(mainSource, /rpcMs/);
 	assert.match(mainSource, /Agent create failed/);
 	assert.match(sessionIpcSource, /Session prompt IPC received/);
 	assert.match(sessionIpcSource, /sessionRuntimeCoordinator\.send\(input\)/);
@@ -35,7 +37,9 @@ test("renderer startup reports bootstrap mount and global errors", () => {
 	assert.match(rendererMainSource, /Renderer React tree mounted/);
 	// main.tsx 文案已从 "Renderer startup ..." 收敛为更通用的 runtime 前缀
 	assert.match(rendererMainSource, /Renderer uncaught error/);
-	assert.match(rendererMainSource, /Renderer unhandled rejection/);
+	assert.match(rendererMainSource, /Renderer React update depth diagnostic/);
+	assert.match(rendererMainSource, /Maximum update depth exceeded/);
+	assert.match(rendererMainSource, /lastUpdateDepthDiagnosticAt/);
 	assert.match(rendererMainSource, /Renderer root element missing/);
 	assert.match(rendererMainSource, /function dismissBootOverlay\(\)/);
 	assert.match(rendererMainSource, /window\.setTimeout\(dismissBootOverlay, 1500\)/);

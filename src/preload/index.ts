@@ -398,7 +398,10 @@ const api = {
 			subscribe(ipcChannels.sessionsRuntimeEvent, callback),
 		listRuntimes: () =>
 			ipcRenderer.invoke(ipcChannels.sessionsRuntimeList) as Promise<SessionRuntimeInfo[]>,
-		/** 汇报当前聚焦的会话（主进程据此决定非聚焦会话的 Ask 桌面通知） */
+		activateRuntime: (sessionId: string) =>
+			ipcRenderer.invoke(ipcChannels.sessionsRuntimeActivate, sessionId) as Promise<
+				SessionCommandResult<SessionRuntimeInfo>
+			>,		/** 汇报当前聚焦的会话（主进程据此决定非聚焦会话的 Ask 桌面通知） */
 		setFocusedSession: (sessionId?: string) =>
 			ipcRenderer.invoke(ipcChannels.sessionsSetFocusedSession, sessionId) as Promise<void>,
 		stopRuntime: (target: SessionRuntimeTarget) =>

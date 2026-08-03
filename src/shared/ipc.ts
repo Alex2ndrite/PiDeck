@@ -54,6 +54,7 @@ export const ipcChannels = {
 	sessionsRuntimeEvent: "sessions:runtime-event",
 	sessionsUiResponse: "sessions:ui-response",
 	sessionsRuntimeList: "sessions:runtime-list",
+	sessionsRuntimeActivate: "sessions:runtime-activate",
 	sessionsRuntimeStop: "sessions:runtime-stop",
 	sessionsRuntimeAbort: "sessions:runtime-abort",
 	sessionsRuntimeRestart: "sessions:runtime-restart",

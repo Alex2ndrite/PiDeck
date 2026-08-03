@@ -2440,6 +2440,7 @@ app.whenReady().then(async () => {
 		sessionCatalog,
 		agentManager,
 		sendAgentPromptWithIntegrations,
+		appLogger,
 	);
 	agentManager.onOutput((sourceChannel, payload) => {
 		if (sourceChannel === ipcChannels.agentsState && Array.isArray(payload)) {

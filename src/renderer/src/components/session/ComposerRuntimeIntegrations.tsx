@@ -142,12 +142,18 @@ export function ComposerRuntimeIntegrations(props: {
 
   async function setRuntimeBot(sessionId: string, botId: string | null) {
     const expected = runtimeHandleRef.current;
-    if (!expected) return;
+    // 不拦截无 runtime 的请求：历史会话未启动 Agent 时，主进程 feishuSessionBotSet
+    // 会先自动启动 runtime 再建飞书镜像（与桌面端启动同一链路）。此处拦截会导致
+    // 「打开历史会话点飞书连接」永远静默失败。
     const result = await feishu.setSessionBot(sessionId, botId);
-    if (result.success && sameRuntimeHandle(runtimeHandleRef.current, expected)) {
-      setSessionBotId(botId ?? undefined);
+    if (result.success) {
+      // 请求前无 runtime（expected 为空）时主进程已代为启动，绑定结果必须生效；
+      // 仅当请求期间 runtime 被替换（A→B）时才丢弃旧结果，避免 UI 与真实绑定不一致。
+      if (!expected || sameRuntimeHandle(runtimeHandleRef.current, expected)) {
+        setSessionBotId(botId ?? undefined);
+      }
     }
-		return result;
+    return result;
   }
 
   const widgetSlot = props.widgetsCollapsed || Object.keys(widgets).length === 0
@@ -167,8 +173,8 @@ export function ComposerRuntimeIntegrations(props: {
             ))}
         </div>
       );
-  // main 对齐：只要有已配置的 Bot 就显示飞书入口（agent 未启动时绑定会提示运行时不可用，
-  // 但不能因此让入口消失——用户需要先看到入口再启动会话）。
+  // main 对齐：只要有已配置的 Bot 就显示飞书入口。Agent 未启动时点连接会由主进程
+  // 自动启动 runtime 并绑定（feishuSessionBotSet 内 activateRuntime），不再需要先手动启动。
   const feishuSlot = feishu.bots.length > 0 ? (
     <FeishuLinkIndicator
       status={feishu.status}

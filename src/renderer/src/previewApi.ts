@@ -363,6 +363,10 @@ export function createPreviewApi(): PiDesktopApi {
 			sendUiResponse: async () => undefined,
 			onRuntimeEvent: noop,
 			listRuntimes: async () => [],
+			activateRuntime: async () => ({
+				ok: false,
+				error: { code: "SESSION_NOT_FOUND", debugDetails: "preview runtime activation is disabled" },
+			}),
 			stopRuntime: async (target) => ({ ok: true, value: target }),
 			abortRuntime: async (target) => ({
 				ok: true,
