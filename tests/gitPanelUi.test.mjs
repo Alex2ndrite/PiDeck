@@ -179,13 +179,13 @@ assert.doesNotMatch(twistie, /ChevronDown|ChevronRight|GitBranch|GitCommit|GitCo
     assert.doesNotMatch(graph, /git-commit-detail/);
     assert.match(styles, /grid-template-columns:\s*auto minmax\(0, 1fr\) auto/);
     assert.match(styles, /font-size:\s*var\(--font-size-body\)/);
-    const compactFilterMenu = cssRule("\.git-compact-filter-menu");
-    assert.match(panelControls, /className="fixed min-w-0 max-w-\[calc\(100vw-16px\)\] max-h-\[calc\(100vh-16px\)\]/);
-    assert.match(panelControls, /menuRef\.current\?\.contains\(target\)/);
+    // Git 紧凑筛选下拉已迁移到 shadcn Select（#115 U5 交互原语统一）；手写定位契约只保留在 GitPanel 分支下拉。
+    assert.match(panelControls, /<Select value=\{props\.value\} onValueChange=\{props\.onChange\}>/);
+    assert.doesNotMatch(panelControls, /className="fixed min-w-0 max-w-\[calc\(100vw-16px\)\]/);
+    assert.doesNotMatch(panelControls, /menuRef\.current\?\.contains\(target\)/);
     assert.match(panel, /getViewportBoundMenuPlacement/);
     assert.match(panel, /preferredWidth:\s*240/);
     assert.match(panel, /branchDropdownRef\.current\?\.contains\(target\)/);
-    const compactFilterButton = cssRule("\.git-compact-filter-btn");
     assert.match(panelControls, /min-w-0 gap-1 overflow-hidden/);
   });
 

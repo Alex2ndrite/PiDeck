@@ -27,8 +27,8 @@
 | P1 | `/theming` 统一 | 🟡 基础已完成 | `themePresets.ts`、`tailwind.css`、`foundation.css` | token 单一来源；明暗、accent、皮肤、背景图和组件状态一致 |
 | P1 | Avatar 作为项目 Logo 与状态表达 | ✅ Batch 4 已完成 | `ProjectAvatar`、`AgentAvatar`、项目树 | 项目身份、运行态、错误态、worktree 状态一眼可辨 |
 | P1 | Command 用于模型、思考级别和模式选择 | ✅ 基础已完成 | `ComposerComponents.tsx`、`ui-shadcn/command.tsx` | 搜索、分组、键盘导航、当前值和空状态统一 |
-| P1 | Context Menu 统一右键菜单 | 🟡 部分完成 | `SidebarParts.tsx`、文件树、Git、会话 | 右键菜单统一焦点、碰撞定位、危险操作和关闭行为 |
-| P1 | Dropdown Menu 统一下拉菜单 | 🟡 部分完成 | `SessionTabsBar.tsx`、Config、Git、文件相关面板 | 删除自绘定位和重复的 ESC/外部点击逻辑 |
+| P1 | Context Menu 统一右键菜单 | ✅ 已用 Radix 外壳 | `SidebarParts.tsx`、`SidebarComponents.tsx`、文件树、GitGraph | 右键菜单统一焦点、碰撞定位、危险操作和关闭行为 |
+| P1 | Dropdown Menu 统一下拉菜单 | ✅ Batch 5 已完成 | `GitPanelControls.tsx`、`SessionTabsBar.tsx`、Config、Git | 删除自绘定位和重复的 ESC/外部点击逻辑 |
 | P1 | Tooltip / Hover Card | 🟡 Tooltip 已有 | `ui-shadcn/tooltip.tsx`、工具卡、项目行、设置项 | Tooltip 只解释图标；复杂详情使用 Hover Card，不滥用 title |
 | P1 | Marker 用于思考、工具调用和压缩方向 | ✅ Batch 2 已完成 | `TimelineMarker.tsx`、`TimelineEventCards.tsx`、`ToolCallComponents.tsx` | 时间线中系统事件、思考、工具、压缩有统一的 marker 轨道 |
 | P2 | Data Table 会话管理 | ⬜ 待开始 | `SidebarComponents.tsx` 的 SessionManagerModal | 排序、来源、批量选择、删除、重命名和空状态 |
@@ -56,8 +56,8 @@
 
 ### Batch 3：交互原语
 
-- [ ] Context Menu：会话、项目、文件、Git 四类入口。
-- [ ] Dropdown Menu：标签页、模型配置、Git 和设置内自绘下拉。
+- [x] Context Menu：确认侧栏 `MenuShell`、文件树、GitGraph 提交菜单已用 Radix DropdownMenu 统一外壳。
+- [x] Dropdown Menu：Git 面板紧凑筛选下拉自绘 listbox 迁移到 shadcn Select（`GitCompactFilter`）。
 - [ ] Hover Card / Tooltip：区分短提示和复杂详情。
 - [ ] Todo / Plan / Ask：只接真实 pi 扩展状态，补齐错误和不可用状态。
 
@@ -95,6 +95,8 @@
 - 新增 `tests/sessionVisualStates.test.mjs`，锁定响应状态尺寸、reduced-motion 和空白页契约。
 - ProjectAvatar 根据项目下 Agent 状态显示统一的 idle/running/starting/error 角标；点击尺寸不变。
 - AgentAvatar 复用同一状态集合和主题 token，未知状态安全降级为 idle。
+- `GitCompactFilter` 自绘 listbox 迁移到 shadcn Select：删除 `getViewportBoundMenuPlacement` 手写定位、portal、scroll/resize 监听和 ESC/外部点击处理，交互由 Radix 接管；触发器和选中勾保持原样。
+- 新增 `tests/gitCompactFilterMenu.test.mjs`，锁定无手写定位、紧凑触发器和 aria-label 契约。
 - 新增 `tests/avatarStatus.test.mjs`，锁定项目和 Agent Avatar 的状态契约。
 
 ## 门禁

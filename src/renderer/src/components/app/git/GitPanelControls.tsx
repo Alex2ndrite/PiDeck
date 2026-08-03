@@ -1,16 +1,15 @@
 import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type CSSProperties,
   type ReactNode,
 } from "react";
-import { createPortal } from "react-dom";
-import { Check, ChevronDown } from "lucide-react";
-import { Button } from "../../ui-shadcn/button";
+import { Check } from "lucide-react";
 import { Twistie } from "./GitResourceTree";
-import { getViewportBoundMenuPlacement } from "./floatingMenuPosition";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+} from "../../ui-shadcn/select";
+import { cn } from "../../../lib/utils";
 
 export function PaneHeader(props: {
   id: string;
@@ -43,12 +42,8 @@ export function PaneHeader(props: {
 }
 
 /**
- * Compact Git pane filter with the app's listbox behavior instead of the
- * platform-native select, so pane headers render consistently on Windows.
- *
- * The dropdown menu is rendered via portal to document.body to avoid being
- * clipped by parent overflow containers (drawer-content-frame, git-drawer-stack,
- * git-drawer-source all have overflow:hidden/auto).
+ * Compact Git pane filter：自绘 listbox 已替换为 shadcn Select（#115 U5 统一交互原语）。
+ * Radix Select 负责 portal、视口碰撞、ESC、焦点圈定与 aria，删除手写定位和 scroll/resize 监听。
  */
 export function GitCompactFilter(props: {
   value: string;
@@ -57,136 +52,30 @@ export function GitCompactFilter(props: {
   ariaLabel: string;
   className?: string;
 }) {
-  const [open, setOpen] = useState(false);
-  const [menuStyle, setMenuStyle] = useState<CSSProperties>({});
-  const containerRef = useRef<HTMLDivElement>(null);
-  const buttonRef = useRef<HTMLButtonElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-
-  const closeMenu = useCallback(() => {
-    setOpen(false);
-  }, []);
-
-  const updateMenuPosition = useCallback(() => {
-    if (!buttonRef.current) return;
-    const rect = buttonRef.current.getBoundingClientRect();
-    const placement = getViewportBoundMenuPlacement(
-      rect,
-      { width: window.innerWidth, height: window.innerHeight },
-      { preferredWidth: 240, maxHeight: 240, gap: 2 },
-    );
-    setMenuStyle({
-      position: "fixed",
-      left: placement.left,
-      top: placement.top,
-      bottom: placement.bottom,
-      width: placement.width,
-      maxHeight: placement.maxHeight,
-      zIndex: 9999,
-    });
-  }, []);
-
-  useEffect(() => {
-    if (!open) return;
-    updateMenuPosition();
-
-    const handlePointerDown = (event: PointerEvent) => {
-      const target = event.target as Node;
-      // Portal 菜单不属于触发器的 DOM 子树，必须作为同一交互边界处理。
-      if (
-        containerRef.current?.contains(target) ||
-        menuRef.current?.contains(target)
-      ) {
-        return;
-      }
-      closeMenu();
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") closeMenu();
-    };
-    const handleScroll = () => updateMenuPosition();
-    const handleResize = () => updateMenuPosition();
-
-    document.addEventListener("pointerdown", handlePointerDown);
-    document.addEventListener("keydown", handleKeyDown);
-    window.addEventListener("scroll", handleScroll, true);
-    window.addEventListener("resize", handleResize);
-    return () => {
-      document.removeEventListener("pointerdown", handlePointerDown);
-      document.removeEventListener("keydown", handleKeyDown);
-      window.removeEventListener("scroll", handleScroll, true);
-      window.removeEventListener("resize", handleResize);
-    };
-  }, [open, closeMenu, updateMenuPosition]);
-
   const selected = props.options.find((option) => option.value === props.value);
-
-  const menuElement = open ? (
-    <div
-      ref={menuRef}
-      className="fixed min-w-0 max-w-[calc(100vw-16px)] max-h-[calc(100vh-16px)] overflow-auto border border-border-strong bg-bg-panel p-1 shadow-[var(--shadow-lg),0_0_0_1px_rgba(0,0,0,0.04)_inset] rounded-md"
-      role="listbox"
-      style={menuStyle}
-    >
-      {props.options.map((option) => (
-        <button
-          key={option.value}
-          type="button"
-          className={`flex min-h-7 w-full min-w-0 cursor-pointer items-center gap-1.5 rounded-sm border-none bg-transparent px-2 py-[5px] text-left text-xs leading-[18px] text-text-primary hover:bg-[color:color-mix(in_srgb,var(--color-text-primary)_8%,var(--color-bg-panel))]${option.value === props.value ? " font-semibold text-[color:var(--color-accent)]" : ""}`}
-          role="option"
-          aria-selected={option.value === props.value}
-          title={option.label}
-          onClick={() => {
-            props.onChange(option.value);
-            closeMenu();
-          }}
-        >
-          <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">
-            {option.label}
-          </span>
-          {option.value === props.value && (
-            <Check size={12} className="ml-auto shrink-0 text-[color:var(--color-accent)]" />
-          )}
-        </button>
-      ))}
-    </div>
-  ) : null;
-
   return (
-    <div
-      ref={containerRef}
-      className={`relative inline-flex${props.className ? ` ${props.className}` : ""}`}
-    >
-      <Button
-        ref={buttonRef}
-        type="button"
-        variant="ghost"
-        size="sm"
-        className="h-6 min-w-0 gap-1 overflow-hidden rounded-sm border border-transparent px-2 font-mono text-[13px] whitespace-nowrap text-text-primary transition-[border-color,background-color] duration-150 hover:border-border-subtle hover:bg-bg-hover focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+    <Select value={props.value} onValueChange={props.onChange}>
+      <SelectTrigger
         aria-label={props.ariaLabel}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        onClick={() => {
-          if (!open) updateMenuPosition();
-          setOpen((value) => !value);
-        }}
-        onKeyDown={(event) => {
-          if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-            event.preventDefault();
-            if (!open) updateMenuPosition();
-            setOpen(true);
-          }
-        }}
+        className={cn(
+          "h-6 min-w-0 gap-1 overflow-hidden rounded-sm border border-transparent px-2 font-mono text-[13px] whitespace-nowrap text-text-primary transition-[border-color,background-color] duration-150 hover:border-border-subtle hover:bg-bg-hover focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none [&>svg]:size-3",
+          props.className,
+        )}
       >
-        <span className="max-w-[80px] truncate">
-          {selected?.label ?? props.value}
-        </span>
-        <ChevronDown
-          size={12}
-          className={`shrink-0 text-text-tertiary transition-transform duration-150${open ? " rotate-180" : ""}`}
-        />
-      </Button>
-      {menuElement && createPortal(menuElement, document.body)}
-    </div>
+        <span className="max-w-[80px] truncate">{selected?.label ?? props.value}</span>
+      </SelectTrigger>
+      <SelectContent className="min-w-40">
+        {props.options.map((option) => (
+          <SelectItem key={option.value} value={option.value}>
+            <span className="flex min-w-0 items-center gap-1.5">
+              <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">{option.label}</span>
+              {option.value === props.value && (
+                <Check size={12} className="ml-auto shrink-0 text-[color:var(--color-accent)]" />
+              )}
+            </span>
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }
