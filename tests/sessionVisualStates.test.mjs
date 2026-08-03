@@ -22,6 +22,7 @@ test("reduced motion keeps response state readable without animation", () => {
 
 test("empty state exposes whether a project can be created", () => {
   assert.match(surface, /data-empty-state=\{props\.hasProject \? "project" : "no-project"\}/);
-  assert.match(surface, /empty-state-cta/);
+  assert.match(surface, /app\.emptyProjectTitle/);
   assert.match(surface, /app\.emptyNoProject/);
+  assert.doesNotMatch(surface, /empty-state-cta/);
 });

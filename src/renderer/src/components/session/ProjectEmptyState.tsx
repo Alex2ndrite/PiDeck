@@ -1,22 +1,30 @@
-import { useEffect, useState } from "react";
-import { HatGlasses, Plus } from "lucide-react";
-import type { Project } from "../../../../shared/types";
-import { t } from "../../i18n";
+import { Fragment, useEffect, useRef, useState } from "react";
+import { Brain, Check, HatGlasses, Plus, Sparkles } from "lucide-react";
+import type { AvailableModel, Project } from "../../../../shared/types";
+import { t, type TranslationKey } from "../../i18n";
 import { desktopApi } from "../../desktopApi";
 import { Button } from "../ui-shadcn/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui-shadcn/select";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from "../ui-shadcn/command";
+import { Popover, PopoverContent, PopoverTrigger } from "../ui-shadcn/popover";
+import { WELCOME_MODEL_KEY, WELCOME_THINKING_KEY } from "../../utils/chatSessionBootstrap";
 import { EmptyState } from "./SurfaceParts";
+import { THINKING_LEVELS, groupModelsByProvider } from "./sessionPickerOptions";
+
+const THINKING_LABEL_KEYS: Record<string, TranslationKey> = {};
+for (const level of THINKING_LEVELS) {
+  THINKING_LABEL_KEYS[level.value] = level.labelKey;
+}
+
+function thinkingLabel(level: string) {
+  return t(THINKING_LABEL_KEYS[level] ?? THINKING_LABEL_KEYS.medium);
+}
 
 /**
- * 项目统一空态：普通项目与 Chat 项目在「未打开任何会话」时共享同一视图，
- * 视觉与 pi 品牌 EmptyState 完全一致（logo + tagline + subtitle + CTA）。
+ * 项目启动面板：在用户还没有会话时提供明确的工程入口与启动前配置。
  *
- * - 有活动项目时提供“启动 Agent”“匿名聊天”两个快捷入口；
- * - 无项目时保留添加项目引导；
- * - 底部展示 pi 配置的默认模型与思考级别（defaultProvider/defaultModel/
- *   defaultThinkingLevel，经 renderer→preload→IPC 读取，不直接触 Node API），
- *   用户未显式选择时以 pi 配置为准，不让 welcome localStorage 覆盖。
- *
- * 复用 EmptyState 的可选 actions/footer 插槽注入业务内容，避免复制品牌结构。
+ * 有活动项目时展示持久会话、临时对话和模型/思考级别选择；无项目时只保留添加项目入口。
+ * 模型与思考级别沿用欢迎页偏好键，确保用户配置会被下一次创建会话使用。
  */
 export function ProjectEmptyState(props: {
   activeProject?: Project;
@@ -27,11 +35,21 @@ export function ProjectEmptyState(props: {
   // 通过 config IPC 读取 pi 的 models.json / settings.json 默认值；读失败时静默降级为空显示。
   // parsed 来自远端配置文件，取值一律先经 unknown 收窄（typeof 守卫）再用，
   // 边界不信任远端结构（AGENTS 输入校验在边界、禁止 as 强转绕过类型错误）。
-  const [defaults, setDefaults] = useState<{ model?: string; thinking?: string }>({});
+  const [models, setModels] = useState<AvailableModel[]>([]);
+  const [modelChoice, setModelChoice] = useState("");
+  const [thinkingChoice, setThinkingChoice] = useState("");
+  const [modelPickerOpen, setModelPickerOpen] = useState(false);
+  const selectedModelRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     let alive = true;
+    void desktopApi.projects.listModels(props.activeProject?.id).then((items) => {
+      if (alive) setModels(items);
+    }).catch(() => undefined);
     const apply = (model: string | undefined, thinking: string | undefined) => {
-      if (alive) setDefaults({ model, thinking });
+      if (alive) {
+        setModelChoice(model ?? "");
+        setThinkingChoice(thinking ?? "medium");
+      }
     };
 
     // 主进程 sessionsCatalogCreateDraft 的默认规则：优先 pi settings 的
@@ -98,6 +116,43 @@ export function ProjectEmptyState(props: {
 
   const hasProject = Boolean(props.activeProject);
 
+  const groupedModels = groupModelsByProvider(models);
+
+  useEffect(() => {
+    if (!modelPickerOpen || !modelChoice || !selectedModelRef.current) return;
+    // cmdk 会把当前项带入可视区，但默认位置可能贴着列表底边；按几何位置校正到视口中央，
+    // 让用户打开长列表时第一眼就能确认当前模型，不依赖浏览器的 scrollIntoView 对嵌套 Portal 的猜测。
+    const frame = requestAnimationFrame(() => {
+      const item = selectedModelRef.current;
+      const list = item?.closest<HTMLElement>("[data-slot=command-list]");
+      if (!item || !list) return;
+      const itemRect = item.getBoundingClientRect();
+      const listRect = list.getBoundingClientRect();
+      list.scrollTop += itemRect.top - (listRect.top + (listRect.height - itemRect.height) / 2);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [modelPickerOpen, modelChoice, models]);
+
+  const saveModelChoice = (value: string) => {
+    setModelChoice(value);
+    const model = models.find((item) => `${item.provider}/${item.id}` === value);
+    if (!model) return;
+    try {
+      localStorage.setItem(WELCOME_MODEL_KEY, JSON.stringify({ provider: model.provider, modelId: model.id }));
+    } catch {
+      // 选择仍保留在当前页面；存储不可用时启动流程会回退到 pi 默认值。
+    }
+  };
+
+  const saveThinkingChoice = (value: string) => {
+    setThinkingChoice(value);
+    try {
+      localStorage.setItem(WELCOME_THINKING_KEY, value);
+    } catch {
+      // 启动时仍会使用 pi 配置中的思考级别。
+    }
+  };
+
   return (
     // chat-pane 为 flex 列容器：EmptyState 的 .empty-state 自带 height:100%，
     // 外层保持纯 flex 子项（min-h-0 允许收缩），避免再包一层固定高度导致品牌区不居中。
@@ -107,39 +162,82 @@ export function ProjectEmptyState(props: {
         onCreate={props.onCreateAgent}
         actions={
           hasProject ? (
-            <div className="empty-state-actions flex flex-wrap items-center justify-center gap-2">
-              <Button variant="default" className="empty-state-cta" onClick={props.onCreateAgent}>
-                <Plus className="size-3.5" aria-hidden="true" /><span>{t("app.createAgent")}</span>
-              </Button>
-              <Button variant="outline" onClick={props.onCreateAnonymous}>
-                <HatGlasses className="size-3.5" aria-hidden="true" /><span>{t("app.anonymousChat")}</span>
-              </Button>
+            <div className="flex w-full max-w-xl flex-col gap-4">
+              <div className="flex flex-wrap items-center justify-center gap-2">
+                <Button variant="default" size="sm" onClick={props.onCreateAgent}>
+                  <Sparkles aria-hidden="true" />{t("app.createAgent")}
+                </Button>
+                <Button variant="outline" size="sm" onClick={props.onCreateAnonymous}>
+                  <HatGlasses aria-hidden="true" />{t("app.anonymousChatShort")}
+                </Button>
+              </div>
+              <div className="mt-2 flex flex-wrap items-center justify-center gap-2 rounded-md border bg-muted/40 p-1.5">
+                <span className="px-2 text-xs text-muted-foreground">{t("app.emptyStartWith")}</span>
+                <Popover open={modelPickerOpen} onOpenChange={setModelPickerOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-[min(320px,calc(100vw-180px))] bg-background font-normal"
+                      title={modelChoice || t("app.model")}
+                    >
+                      <span className="truncate">{modelChoice || t("app.model")}</span>
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent align="start" className="w-[min(380px,calc(100vw-48px))] p-0">
+                    <Command defaultValue={modelChoice}>
+                      <CommandInput placeholder={t("app.modelPickerSearch")} autoFocus />
+                      <CommandList>
+                        <CommandEmpty>{t("app.modelPickerEmpty")}</CommandEmpty>
+                        {Object.entries(groupedModels).map(([provider, providerModels], providerIndex) => (
+                          <Fragment key={provider}>
+                            <CommandGroup heading={`${provider} (${providerModels.length})`}>
+                              {providerModels.map((model) => {
+                              const value = `${model.provider}/${model.id}`;
+                              return (
+                                <CommandItem
+                                  key={value}
+                                  value={value}
+                                  onSelect={() => {
+                                    saveModelChoice(value);
+                                    setModelPickerOpen(false);
+                                  }}
+                                  ref={value === modelChoice ? selectedModelRef : undefined}
+                                  className="items-start py-2"
+                                >
+                                  <span className="min-w-0 flex-1 break-words">{value}</span>
+                                  <Check className={`mt-0.5 shrink-0 ${value === modelChoice ? "opacity-100" : "opacity-0"}`} aria-hidden="true" />
+                                </CommandItem>
+                              );
+                              })}
+                            </CommandGroup>
+                            {providerIndex < Object.keys(groupedModels).length - 1 && <CommandSeparator />}
+                          </Fragment>
+                        ))}
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+                <Select value={thinkingChoice} onValueChange={saveThinkingChoice}>
+                  <SelectTrigger size="sm" className="min-w-[116px] bg-background">
+                    <Brain aria-hidden="true" />
+                    <SelectValue placeholder={t("app.think")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                      {THINKING_LEVELS.map((level) => (
+                        <SelectItem key={level.value} value={level.value}>{thinkingLabel(level.value)}</SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           ) : (
-            <Button variant="default" className="empty-state-cta" onClick={props.onAddProject}>
+            <Button variant="default" onClick={props.onAddProject}>
               <Plus className="size-3.5" aria-hidden="true" /><span>{t("app.addProject")}</span>
             </Button>
           )
         }
-        footer={
-          // 底部 pi 配置默认值提示（仅在存在活动项目时展示）
-          (defaults.model || defaults.thinking) && hasProject ? (
-            <span className="inline-flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-              {defaults.model && (
-                <span className="inline-flex items-center gap-1">
-                  <span className="text-muted-foreground/70">{t("app.model")}:</span>
-                  <span className="font-mono">{defaults.model}</span>
-                </span>
-              )}
-              {defaults.thinking && (
-                <span className="inline-flex items-center gap-1">
-                  <span className="text-muted-foreground/70">{t("app.think")}:</span>
-                  <span className="font-mono">{defaults.thinking}</span>
-                </span>
-              )}
-            </span>
-          ) : null
-        }
+
       />
     </div>
   );

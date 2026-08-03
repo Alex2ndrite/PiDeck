@@ -2622,8 +2622,7 @@ body.is-resizing .splitter::before {
   color: var(--color-success);
 }
 .chat-header-actions button,
-.panel-action-row button,
-.empty-state .empty-state-cta {
+.panel-action-row button {
   flex: 0 0 auto;
   min-width: 60px;
   height: var(--control-height-md);

@@ -1,49 +1,30 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { readRendererStyles } from "./helpers/rendererStyles.mjs";
 
 const parts = readFileSync("src/renderer/src/components/session/SurfaceComponents.tsx", "utf8");
-const styles = readRendererStyles();
 const i18n = [
   readFileSync("src/renderer/src/i18n/rendererCopy.zh-CN.ts", "utf8"),
   readFileSync("src/renderer/src/i18n/rendererCopy.en-US.ts", "utf8"),
 ].join("\n");
 
-function cssRule(selector) {
-  const matches = [...styles.matchAll(new RegExp(`${selector} \\{([\\s\\S]*?)\\n\\}`, "g"))];
-  return matches.at(-1)?.[1] ?? "";
-}
+test("empty state is a compact, project-aware workspace entry point", () => {
+  assert.match(parts, /data-empty-state=\{props\.hasProject \? "project" : "no-project"\}/);
+  assert.match(parts, /t\("app\.emptyProjectTitle"\)/);
+  assert.match(parts, /t\("app\.emptyNoProjectTitle"\)/);
+  assert.match(parts, /bg-primary text-primary-foreground/);
+  assert.match(parts, /className="mt-4 text-lg font-semibold text-foreground"/);
+  assert.match(parts, /className="mt-1\.5 max-w-md text-sm leading-6 text-muted-foreground"/);
+  assert.doesNotMatch(parts, /empty-tagline|empty-logo|empty-subtitle|empty-state-cta/);
+  assert.doesNotMatch(parts, /There are many agent harnesses|Pi is a minimal agent harness/);
 
-test("empty state shows the pi agent ownership tagline with branded yours", () => {
-  assert.match(parts, /className="empty-tagline"/);
-  assert.match(parts, /t\("app\.emptyTaglineLine1"\)/);
-  assert.match(parts, /t\("app\.emptyTaglineLine2Prefix"\)/);
-  assert.match(parts, /className="empty-tagline-yours"/);
-  assert.match(parts, /t\("app\.emptyTaglineYours"\)/);
-  assert.doesNotMatch(parts, /<h2>\{t\("app\.startAgent"\)\}<\/h2>/);
-  assert.doesNotMatch(parts, /<p>\{t\("app\.emptyGuide"\)\}<\/p>/);
-  assert.match(parts, /width="66"[\s\S]*height="66"/);
-
-  assert.match(i18n, /"app\.emptyTaglineLine1": "There are many agent harnesses"/);
-  assert.match(i18n, /"app\.emptyTaglineLine2Prefix": "but this one is "/);
-  assert.match(i18n, /"app\.emptyTaglineYours": "yours"/);
-
-  const logo = cssRule("\\.empty-logo");
-  const button = cssRule("\\.empty-state .empty-state-cta");
-  const tagline = cssRule("\\.empty-tagline");
-  const yours = cssRule("\\.empty-tagline-yours");
-
-  assert.match(logo, /width:\s*118px;[\s\S]*height:\s*118px;/);
-  assert.match(button, /min-width:\s*148px;[\s\S]*height:\s*46px;/);
-  // 主题色回归品牌绿：accent-soft 为浅绿底，不再是 zinc 浅灰
-  assert.match(styles, /--color-accent-soft:\s*#eaf6ed;/i);
-  assert.match(button, /background:\s*var\(--color-accent-soft\);[\s\S]*font-size:\s*var\(--font-size-brand\);/);
-  assert.match(button, /color:\s*var\(--color-accent-strong\);/);
-  assert.match(button, /font-family:\s*var\(--font-family-base\);/);
-  assert.match(button, /font-weight:\s*650;/);
-  assert.match(button, /letter-spacing:\s*0\.01em;/);
-  assert.match(button, /border-radius:\s*var\(--radius-pill\);/);
-  assert.match(tagline, /font-family:\s*var\(--font-family-brand\)/);
-  assert.match(yours, /color:\s*var\(--color-brand-green\)/);
+  for (const key of [
+    "app.emptyProjectTitle",
+    "app.emptyNoProjectTitle",
+    "app.emptyHasProject",
+    "app.emptyNoProject",
+  ]) {
+    assert.ok(i18n.includes(`"${key}"`), `${key} must exist in both locales`);
+  }
+  assert.doesNotMatch(i18n, /app\.emptyTagline|app\.emptySubtitle/);
 });

@@ -40,21 +40,24 @@ test("project empty state reuses pi-branded EmptyState and offers quick actions"
   assert.match(emptyState, /onCreateAnonymous/);
   assert.match(emptyState, /onAddProject/);
   assert.match(emptyState, /t\("app\.createAgent"\)/);
-  assert.match(emptyState, /t\("app\.anonymousChat"\)/);
+  assert.match(emptyState, /t\("app\.anonymousChatShort"\)/);
+  assert.doesNotMatch(emptyState, /app\.anonymousChatHint/);
   assert.match(emptyState, /t\("app\.addProject"\)/);
   // 品牌 tagline/subtitle 来自 EmptyState 而非项目标题，普通/聊天项目无差异
   assert.doesNotMatch(emptyState, /t\("app\.projectEmptyTitle"/);
   assert.doesNotMatch(emptyState, /t\("app\.emptyNoProjectTitle"/);
   assert.match(emptyState, /actions=\{/);
-  assert.match(emptyState, /footer=\{/);
+  assert.doesNotMatch(emptyState, /footer=\{/);
 });
 
-test("brand empty state still carries tagline/subtitle slots for project view", () => {
-  // EmptyState 支持可选 actions/footer 插槽，不破坏既有 timeline 空态
-  assert.match(surfaceParts, /export function EmptyState\(props: \{[\s\S]*hasProject: boolean;[\s\S]*onCreate: \(\) => void;/);
-  assert.match(surfaceParts, /actions\?: ReactNode/);
-  assert.match(surfaceParts, /footer\?: ReactNode/);
-  assert.match(surfaceParts, /props\.actions \?\? \(/);
+test("empty state keeps compact configuration controls for first-run setup", () => {
+  assert.match(emptyState, /<Command defaultValue=\{modelChoice\}>/);
+  assert.match(emptyState, /<CommandInput/);
+  assert.match(emptyState, /<Check className=/);
+  assert.match(emptyState, /title=\{modelChoice/);
+  assert.match(emptyState, /<Select value=\{thinkingChoice\}/);
+  assert.match(emptyState, /WELCOME_MODEL_KEY/);
+  assert.match(emptyState, /WELCOME_THINKING_KEY/);
 });
 
 test("project empty state reads default model/thinking from pi config via IPC, not localStorage", () => {
@@ -64,7 +67,7 @@ test("project empty state reads default model/thinking from pi config via IPC, n
   assert.match(emptyState, /defaultModel/);
   assert.match(emptyState, /defaultThinkingLevel/);
   assert.doesNotMatch(emptyState, /readWelcomeModelPreference|readWelcomeThinkingPreference/);
-  assert.match(emptyState, /useState<\{ model\?: string; thinking\?: string \}>/);
+  assert.match(emptyState, /useState<AvailableModel\[\]>/);
   assert.doesNotMatch(emptyState, /require\(|node:|fs\.read|process\.env|ipcRenderer/);
 });
 
@@ -119,8 +122,12 @@ test("shadcn Empty primitive was removed in favor of pi-branded EmptyState", () 
 });
 
 test("new empty-state copy is bilingual", () => {
-  // 品牌 tagline/subtitle 沿用 EmptyState 既有双语 key
-  for (const key of ["app.emptyTaglineLine1", "app.emptyTaglineLine2Prefix", "app.emptyTaglineYours", "app.emptySubtitle"]) {
+  for (const key of [
+    "app.emptyProjectTitle",
+    "app.emptyNoProjectTitle",
+    "app.emptyHasProject",
+    "app.emptyNoProject",
+  ]) {
     assert.ok(zh.includes(`"${key}"`), `${key} zh-CN copy must exist`);
     assert.ok(en.includes(`"${key}"`), `${key} en-US copy must exist`);
   }

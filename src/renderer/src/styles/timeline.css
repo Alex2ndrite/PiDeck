@@ -430,8 +430,7 @@
   .responding-indicator,
   .responding-indicator-dots span,
   .tool-card,
-  .timeline-marker-row,
-  .empty-state .empty-state-cta {
+  .timeline-marker-row {
     animation: none !important;
     transition: none !important;
   }
@@ -1519,122 +1518,6 @@ body.ask-dialog-open .ask-question-card.pending {
 }
 .markdown-link-file-icon {
   flex-shrink: 0;
-}
-
-.empty-state {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  /* 视觉中心略偏上比数学居中更自然，底部留出补偿空间 */
-  padding-bottom: 12vh;
-  color: var(--color-text-tertiary);
-}
-.empty-logo {
-  width: 118px;
-  height: 118px;
-  border-radius: var(--radius-lg);
-  display: grid;
-  place-items: center;
-  background: linear-gradient(
-    145deg,
-    var(--color-accent-strong) 0%,
-    var(--color-accent) 100%
-  );
-  box-shadow:
-    0 18px 40px color-mix(in srgb, var(--color-accent) 28%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.18);
-  margin-bottom: var(--space-8);
-}
-.empty-tagline {
-  display: grid;
-  gap: var(--space-2);
-  margin: 0 0 var(--space-4);
-  color: var(--color-text-primary);
-  font-family: var(--font-family-brand);
-  font-size: clamp(28px, 3.8vw, 54px);
-  font-weight: 600;
-  /* 两行大字需要呼吸空间，0.98 会让上下行笔画相触 */
-  line-height: 1.08;
-  letter-spacing: -0.03em;
-  text-align: center;
-  text-wrap: balance;
-}
-.empty-tagline-yours {
-  color: var(--color-brand-green);
-  font-style: italic;
-}
-.empty-state .empty-subtitle {
-  margin: 0 0 var(--space-8);
-  color: var(--color-text-secondary);
-  /* 与主标题同族衬线，靠字号和灰度分层 */
-  font-family: var(--font-family-brand);
-  font-size: clamp(17px, 1.6vw, 21px);
-  font-weight: 500;
-  line-height: 1.6;
-  letter-spacing: 0;
-  text-align: center;
-}
-.empty-subtitle-line {
-  white-space: nowrap;
-}
-.empty-state h2 {
-  color: var(--color-text-primary);
-  margin: 0 0 var(--space-2);
-  font-size: var(--font-size-heading);
-  line-height: var(--line-height-heading);
-}
-.empty-state p {
-  margin: 0 0 var(--space-5);
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-body);
-  line-height: var(--line-height-body);
-}
-
-.empty-hint {
-  margin: 0 !important;
-  color: var(--color-text-tertiary) !important;
-  font-size: var(--font-size-caption) !important;
-}
-
-.empty-state .empty-state-cta {
-  min-width: 148px;
-  height: 46px;
-  border: none;
-  background: var(--color-accent-soft);
-  box-shadow: 0 6px 16px color-mix(in srgb, var(--color-accent) 18%, transparent);
-  color: var(--color-accent-strong);
-  font-family: var(--font-family-base);
-  font-size: var(--font-size-brand);
-  font-weight: 650;
-  letter-spacing: 0.01em;
-  border-radius: var(--radius-pill);
-  padding: 0 var(--space-6);
-  cursor: pointer;
-  transition:
-    background 0.15s,
-    transform 0.15s;
-}
-.empty-state .empty-state-cta:hover {
-  background: color-mix(
-    in srgb,
-    var(--color-accent-soft) 55%,
-    var(--color-accent)
-  );
-  transform: translateY(-1px);
-}
-.empty-state .empty-state-cta:active {
-  background: color-mix(
-    in srgb,
-    var(--color-accent-soft) 40%,
-    var(--color-accent)
-  );
-  transform: translateY(0);
-}
-.empty-state .empty-state-cta:focus-visible {
-  outline: none;
-  box-shadow: var(--focus-ring);
 }
 
 .composer {

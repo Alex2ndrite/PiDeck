@@ -339,45 +339,45 @@ export function EmptyState(props: {
 	/** 可选：操作区下方的附加信息（如默认模型/思考级别） */
 	footer?: ReactNode;
 }) {
+	const title = props.hasProject
+		? t("app.emptyProjectTitle")
+		: t("app.emptyNoProjectTitle");
+	const description = props.hasProject
+		? t("app.emptyHasProject")
+		: t("app.emptyNoProject");
+
 	return (
-		<div className="empty-state" data-empty-state={props.hasProject ? "project" : "no-project"}>
-			<div className="empty-logo" aria-hidden="true">
-				<svg
-					viewBox="140 140 520 520"
-					width="66"
-					height="66"
-				>
+		// 空态是工作流入口而不是品牌宣传位：保持与聊天面板相同的紧凑信息密度，
+		// 让用户一眼看到当前缺少的是会话还是项目。
+		<div
+			className="empty-state flex h-full flex-col items-center justify-center px-6 pb-[10vh] text-center"
+			data-empty-state={props.hasProject ? "project" : "no-project"}
+		>
+			<div
+				className="grid size-12 place-items-center rounded-lg border border-primary/20 bg-primary text-primary-foreground shadow-sm"
+				aria-hidden="true"
+			>
+				<svg viewBox="140 140 520 520" width="26" height="26">
 					<path
-						fill="#fff"
+						fill="currentColor"
 						fillRule="evenodd"
 						d="M165.29 165.29H517.36V400H400V517.36H282.65V634.72H165.29ZM282.65 282.65V400H400V282.65Z"
 					/>
-					<path fill="#fff" d="M517.36 400H634.72V634.72H517.36Z" />
+					<path fill="currentColor" d="M517.36 400H634.72V634.72H517.36Z" />
 				</svg>
 			</div>
-			<div className="empty-tagline" aria-label={`${t("app.emptyTaglineLine1")} ${t("app.emptyTaglineLine2Prefix")}${t("app.emptyTaglineYours")}`}>
-				<span>{t("app.emptyTaglineLine1")}</span>
-				<span>
-					{t("app.emptyTaglineLine2Prefix")}
-					<em className="empty-tagline-yours">{t("app.emptyTaglineYours")}</em>
-				</span>
-			</div>
-			<p className="empty-subtitle">
-				{t("app.emptySubtitle").split("\n").map((line, i) => (
-					<Fragment key={i}>
-						{i > 0 && <br />}
-						<span className="empty-subtitle-line">{line}</span>
-					</Fragment>
-				))}
-			</p>
-			{props.actions ?? (
-				props.hasProject ? (
-					<Button variant="default" onClick={props.onCreate} className="empty-state-cta">{t("app.createAgent")}</Button>
-				) : (
-					<p className="empty-hint">{t("app.emptyNoProject")}</p>
+			<h2 className="mt-4 text-lg font-semibold text-foreground">{title}</h2>
+			<p className="mt-1.5 max-w-md text-sm leading-6 text-muted-foreground">{description}</p>
+			<div className="mt-5">{
+				props.actions ?? (
+					props.hasProject ? (
+						<Button variant="default" onClick={props.onCreate}>{t("app.createAgent")}</Button>
+					) : (
+						<p className="text-sm text-muted-foreground">{t("app.emptyNoProject")}</p>
+					)
 				)
-			)}
-			{props.footer}
+			}</div>
+			{props.footer && <div className="mt-3">{props.footer}</div>}
 		</div>
 	);
 }
