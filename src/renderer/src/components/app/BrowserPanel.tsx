@@ -432,11 +432,15 @@ export function BrowserPanel(props: {
 			event.stopPropagation();
 			const current = moduleState.tabs;
 			if (current.length <= 1) {
-				// 关闭最后一个 tab 时从 moduleState 移除，避免下次 navigateTo 时旧 tab 还在
+				// 关闭最后一个 tab：清空 moduleState 与本地 tabs 状态，避免旧 tab 残留显示
+				// （onClose 触发的 state 更新可能是同值 no-op，React 会跳过重渲染，必须显式同步）。
+				// onClose 语义 = 关闭整个浏览器面板：抽屉模式收起侧边栏，全屏模式退出全屏并收起侧边栏。
 				moduleState.tabs = [];
 				moduleState.activeTabId = null;
 				moduleState.navigateKey = 0;
 				pendingNavigateUrl = null;
+				setTabs([]);
+				setActiveTabId(null);
 				onClose?.();
 				return;
 			}

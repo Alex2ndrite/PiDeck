@@ -326,7 +326,15 @@ export function useWorkspacePanels(options: WorkspacePanelOptions = {}) {
     setDrawerCollapsed(false);
   }, [invalidateGitDiff]);
   const enterBrowserFullscreen = useCallback(() => setBrowserFullscreen(true), []);
-  const closeBrowser = useCallback(() => setBrowserFullscreen(false), []);
+  /**
+   * 关闭浏览器面板（全屏 X / 关闭最后一个 tab 统一入口）：
+   * 退出全屏并收起浏览器抽屉。区别于 minimizeBrowser（仅退出全屏、保留抽屉）。
+   * 此前只 setBrowserFullscreen(false)，抽屉模式下是空操作，导致关最后一个 tab 时侧边栏无法收起。
+   */
+  const closeBrowser = useCallback(() => {
+    setBrowserFullscreen(false);
+    closeDrawer();
+  }, [closeDrawer]);
   const minimizeBrowser = useCallback(() => {
     setBrowserFullscreen(false);
     openBrowser();

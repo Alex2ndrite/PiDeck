@@ -160,3 +160,21 @@ test("project hydration does not clobber a user-opened drawer", () => {
   assert.match(hook, /isInitialHydration = prevProjectId === null/);
   assert.match(hook, /!isInitialHydration \|\| !drawerRef\.current/);
 });
+
+// 回归（点叉无法关闭 tab / 最后 tab 不收起侧边栏）：
+// 1) closeBrowser 是全屏 X 与关闭最后 tab 的统一入口，必须退出全屏并收起抽屉
+//    （仅 setBrowserFullscreen(false) 在抽屉模式下是空操作，侧边栏永远关不掉）；
+// 2) BrowserPanel 关闭最后 tab 时必须同步本地 tabs 状态，否则 React 因同值更新
+//    跳过重渲染，旧 tab 残留显示。
+test("closing the last browser tab syncs local state and collapses the sidebar", () => {
+  const panel = readFileSync("src/renderer/src/components/app/BrowserPanel.tsx", "utf8");
+  // closeBrowser 语义：关闭整个浏览器面板（退出全屏 + 关抽屉），区别于 minimizeBrowser
+  assert.match(hook, /const closeBrowser = useCallback\(\(\) => \{\s*setBrowserFullscreen\(false\);\s*closeDrawer\(\);\s*\}, \[closeDrawer\]\);/);
+  assert.match(hook, /const minimizeBrowser = useCallback/);
+  // closeTab 最后 tab 分支：moduleState 与本地 state 同时清空，再调用 onClose
+  assert.match(panel, /if \(current\.length <= 1\) \{/);
+  assert.match(panel, /moduleState\.tabs = \[\];/);
+  assert.match(panel, /setTabs\(\[\]\);/);
+  assert.match(panel, /setActiveTabId\(null\);/);
+  assert.match(panel, /onClose\?\.\(\);/);
+});
