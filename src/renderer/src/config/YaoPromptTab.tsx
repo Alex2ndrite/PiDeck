@@ -6,6 +6,7 @@ import type { YaoPromptListResult, YaoPromptItem, YaoPromptDetailResult, PiPromp
 import { t } from "../i18n";
 import { desktopApi } from "../desktopApi";
 import { Input } from "../components/ui-shadcn/input";
+import { Pagination } from "../components/ui-shadcn/pagination";
 const PAGE_SIZE = 20;
 
 async function getInstalledPromptNames(): Promise<Set<string>> {
@@ -266,27 +267,13 @@ export function YaoPromptTab(props: {
 						)}
 					</div>
 
-					{/* 分页控件 */}
+					{/* 分页控件：共享 Pagination 组件，带 aria-label 与禁用态 */}
 					{totalPages > 1 && (
-						<div className="yao-pagination">
-							<Button
-								 variant="outline"
-								disabled={page <= 1}
-								onClick={() => setPage((p) => Math.max(1, p - 1))}
-							>
-								<ChevronLeft size={14} />
-							</Button>
-							<span className="yao-pagination-info">
-								{page} / {totalPages}
-							</span>
-							<Button
-								 variant="outline"
-								disabled={page >= totalPages}
-								onClick={() => setPage((p) => p + 1)}
-							>
-								<ChevronRight size={14} />
-							</Button>
-						</div>
+						<Pagination
+							page={page}
+							totalPages={totalPages}
+							onPageChange={setPage}
+						/>
 					)}
 				</>
 			)}

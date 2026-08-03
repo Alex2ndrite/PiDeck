@@ -782,19 +782,6 @@
   gap: 4px;
   margin-top: 4px;
 }
-.yao-pagination {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 16px 0 8px;
-}
-.yao-pagination-info {
-  font-size: var(--font-size-caption);
-  color: var(--color-text-tertiary);
-  min-width: 60px;
-  text-align: center;
-}
 /* ── 重试配置 ── */
 .config-retry-group {
   border: 1px solid var(--color-border-subtle);
@@ -1626,14 +1613,7 @@ html[data-theme="dark"] .scratch-pad-md mark {
 .git-pane.collapsed { height: 26px; }
 .git-pane:last-child { border-bottom: 0; }
 
-.git-pane-header:hover { background: var(--git-panel-hover); }
-.git-pane-header-toggle:focus-visible { outline: none; box-shadow: inset var(--focus-ring); }
-.git-pane-header-actions { display: flex; min-width: 0; align-items: center; gap: 1px; overflow: hidden; }
-.git-pane-header-actions .git-action-btn { flex: 0 0 auto; }
-.git-pane-body { min-height: 0; flex: 1; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; }
-/* 变更区域：提交输入框固定不滚动，文件列表独立滚动（仿 VS Code SCM） */
-.git-changes-body { display: flex; flex-direction: column; overflow: hidden; }
-.git-resource-list { min-height: 0; flex: 1; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; }
+.git-pane-header:hover { background: var(--git-panel-hover); }.git-pane-body { min-height: 0; flex: 1; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; }.git-resource-list { min-height: 0; flex: 1; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; }
 .git-graph-body, .git-compare-body { display: flex; flex-direction: column; }
 
 .git-pane-sash {
@@ -1668,13 +1648,7 @@ body.is-git-pane-resizing, body.is-git-pane-resizing * { cursor: row-resize !imp
 .git-twistie::before { content: "\25B6"; display: block; transform: rotate(-90deg); }
 .git-twistie.open::before { transform: rotate(0deg); }
 /* pure official：git-action 默认中性 ghost 按钮感；具体色由 hover 状态提供 */
-.git-action-btn:hover, .git-action-btn.active { background: var(--git-panel-hover); color: var(--git-panel-fg); }
-.git-stage-action { width: 26px; height: 24px; }
-.git-action-btn:focus-visible, .git-compare-btn:focus-visible, .git-scm-input:focus-visible { outline: none; box-shadow: var(--focus-ring); }
-.git-action-btn:active:not(:disabled) { background: var(--git-panel-active); color: var(--git-panel-fg); }
-.git-action-btn:disabled { opacity: .45; cursor: default; }
-
-/* 提交输入区：固定不滚动，底部有分隔线 */
+.git-action-btn:hover, .git-action-btn.active { background: var(--git-panel-hover); color: var(--git-panel-fg); }.git-action-btn:focus-visible, .git-compare-btn:focus-visible, .git-scm-input:focus-visible { outline: none; box-shadow: var(--focus-ring); }/* 提交输入区：固定不滚动，底部有分隔线 */
 /* 文本框不要撑满侧边栏宽度，避免在窄侧边栏中显得臃肿 */
 .git-scm-input::placeholder { color: var(--git-desc-fg); }
 .git-compare-btn { min-width: 64px; min-height: 24px; padding: 0 7px; }
@@ -1691,17 +1665,9 @@ body.is-git-pane-resizing, body.is-git-pane-resizing * { cursor: row-resize !imp
 
 .git-resource-group { border-bottom: 1px solid var(--git-panel-border); }
 /* 最后一个分组不要底部边框，避免在列表末尾残留一条横线 */
-.git-resource-group:last-child { border-bottom: none; }
-.git-resource-group-header:hover { background: var(--git-panel-hover); }
-.git-resource-group-toggle:focus-visible { outline: none; box-shadow: inset var(--focus-ring); }
-.git-resource-group-actions { display: none; align-items: center; gap: 1px; }
-.git-resource-group-header:hover .git-resource-group-actions,
+.git-resource-group:last-child { border-bottom: none; }.git-resource-group-header:hover .git-resource-group-actions,
 .git-resource-group-header:focus-within .git-resource-group-actions,
-.git-resource-group.open .git-resource-group-actions { display: flex; }
-.git-resource-group-count { min-width: 14px; margin-left: var(--space-1); color: var(--git-desc-fg); font-family: var(--git-ui-font); font-size: var(--font-size-caption); text-align: right; }
-.git-resource-group-body { min-width: 0; }
-
-/* 变更文件树目录头 —— 点击折叠/展开 + 显示每个目录下的文件计数 */
+.git-resource-group.open .git-resource-group-actions { display: flex; }/* 变更文件树目录头 —— 点击折叠/展开 + 显示每个目录下的文件计数 */
 
 .git-resource-row {
   display: flex;
@@ -1716,14 +1682,8 @@ body.is-git-pane-resizing, body.is-git-pane-resizing * { cursor: row-resize !imp
 .git-resource-row:hover, .git-resource-row:focus-within { background: var(--git-panel-hover); }
 .git-resource-open.static { cursor: default; }
 .git-resource-open:disabled { cursor: progress; opacity: 0.72; }
-.git-resource-open:focus-visible { outline: none; box-shadow: inset var(--focus-ring); }
-.git-file-icon { display: inline-flex; width: 20px; height: 20px; flex: 0 0 20px; align-items: center; justify-content: center; margin-right: 6px; }
-.git-file-icon svg { width: 100%; height: 100%; fill: currentColor; }
-.git-file-fallback { box-sizing: border-box; width: 12px; height: 14px; border: 1px solid var(--git-desc-fg); border-radius: var(--radius-xs); }
-.git-resource-name { min-width: 0; flex: 0 1 auto; overflow: hidden; color: var(--git-panel-fg); text-overflow: ellipsis; white-space: nowrap; }
-.git-resource-actions { display: flex; flex: 0 0 auto; gap: 1px; margin-right: var(--space-1); visibility: hidden; }
-.git-discard-action:hover:not(:disabled), .git-discard-action:focus-visible { color: var(--color-danger); }
-.git-resource-row:hover .git-resource-actions, .git-resource-row:focus-within .git-resource-actions { visibility: visible; }
+.git-resource-open:focus-visible { outline: none; box-shadow: inset var(--focus-ring); }.git-resource-name { min-width: 0; flex: 0 1 auto; overflow: hidden; color: var(--git-panel-fg); text-overflow: ellipsis; white-space: nowrap; }
+.git-resource-actions { display: flex; flex: 0 0 auto; gap: 1px; margin-right: var(--space-1); visibility: hidden; }.git-resource-row:hover .git-resource-actions, .git-resource-row:focus-within .git-resource-actions { visibility: visible; }
 .git-decoration { width: 16px; flex: 0 0 16px; margin-left: 5px; color: var(--git-desc-fg); font-family: var(--git-ui-font); font-size: 12px; font-weight: 600; text-align: right; }
 .git-resource-row.status-modified .git-decoration { color: var(--git-modified); }
 .git-resource-row.status-added .git-decoration { color: var(--git-added); }
@@ -1740,10 +1700,7 @@ body.is-git-pane-resizing, body.is-git-pane-resizing * { cursor: row-resize !imp
 .git-history-label { display: flex; min-width: 0; align-items: baseline; gap: 10px; overflow: hidden; }
 .git-history-msg { display: flex; min-width: 0; flex: 1 1 auto; align-items: center; overflow: hidden; color: var(--git-panel-fg); font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
 .git-history-msg .git-twistie { width: 13px; height: 28px; flex: 0 0 13px; margin-left: -3px; }
-.git-ref { max-width: 108px; overflow: hidden; padding: 0 7px; border: 1px solid currentColor; border-radius: var(--radius-pill); font-family: var(--git-ui-font); font-size: var(--font-size-caption); font-weight: 500; line-height: 18px; text-overflow: ellipsis; white-space: nowrap; }
-.git-ref-branch { color: var(--git-modified); }
-.git-ref-tag { color: var(--git-conflict); }
-.git-history-author { min-width: 48px; flex: 0 1 78px; overflow: hidden; color: var(--git-desc-fg); font-family: var(--git-ui-font); font-size: var(--font-size-caption); font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
+.git-ref { max-width: 108px; overflow: hidden; padding: 0 7px; border: 1px solid currentColor; border-radius: var(--radius-pill); font-family: var(--git-ui-font); font-size: var(--font-size-caption); font-weight: 500; line-height: 18px; text-overflow: ellipsis; white-space: nowrap; }.git-history-author { min-width: 48px; flex: 0 1 78px; overflow: hidden; color: var(--git-desc-fg); font-family: var(--git-ui-font); font-size: var(--font-size-caption); font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
 .git-history-children { min-width: 0; }
 .git-history-file-row:disabled { cursor: progress; opacity: 0.72; }
 .git-history-file-row:hover:not(:disabled) { background: var(--git-panel-hover); }
@@ -1755,20 +1712,11 @@ body.is-git-pane-resizing, body.is-git-pane-resizing * { cursor: row-resize !imp
 .git-history-file-row.status-modified .git-decoration { color: var(--git-modified); }
 .git-history-file-row.status-added .git-decoration { color: var(--git-added); }
 .git-history-file-row.status-deleted .git-decoration { color: var(--git-deleted); }
-.git-history-file-row.status-renamed .git-decoration { color: var(--git-renamed); }
-.git-history-detail-status { color: var(--git-desc-fg); }
-.git-history-detail-status > span:last-child { display: flex; min-width: 0; align-items: center; gap: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.git-history-detail-status.error { color: var(--color-danger); }
+.git-history-file-row.status-renamed .git-decoration { color: var(--git-renamed); }.git-history-detail-status.error { color: var(--color-danger); }
 .git-graph-continuation { height: 26px; }
 
 .git-commit-hover-author { display: flex; min-width: 0; align-items: flex-start; gap: 8px; }
-.git-commit-hover-avatar { display: inline-flex; width: 24px; height: 24px; flex: 0 0 24px; align-items: center; justify-content: center; border-radius: var(--radius-sm); background: var(--color-bg-muted); color: var(--git-panel-fg); font-family: var(--font-family-business); font-size: var(--font-size-caption); font-weight: 600; }
-.git-commit-hover-author-text { display: flex; min-width: 0; flex: 1; flex-wrap: wrap; align-items: baseline; gap: 0 5px; }
-.git-commit-hover-author-text strong,
-.git-commit-hover-author-text span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.git-commit-hover-author-text span { color: var(--git-desc-fg); }
-.git-commit-hover-author-text small { width: 100%; color: var(--git-desc-fg); font-size: var(--font-size-caption); }
-.git-commit-hover-message { margin-top: 10px; padding: 9px 0; border-top: 1px solid var(--git-panel-border); border-bottom: 1px solid var(--git-panel-border); white-space: pre-wrap; word-break: break-word; }
+.git-commit-hover-avatar { display: inline-flex; width: 24px; height: 24px; flex: 0 0 24px; align-items: center; justify-content: center; border-radius: var(--radius-sm); background: var(--color-bg-muted); color: var(--git-panel-fg); font-family: var(--font-family-business); font-size: var(--font-size-caption); font-weight: 600; }.git-commit-hover-message { margin-top: 10px; padding: 9px 0; border-top: 1px solid var(--git-panel-border); border-bottom: 1px solid var(--git-panel-border); white-space: pre-wrap; word-break: break-word; }
 .git-commit-hover-identity { margin-top: 8px; }
 .git-commit-hover-identity code { display: block; overflow: hidden; color: var(--git-desc-fg); font-family: var(--font-family-mono); font-size: var(--font-size-caption); text-overflow: ellipsis; white-space: nowrap; }
 .git-commit-hover-refs { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }

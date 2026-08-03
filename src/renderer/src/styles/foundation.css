@@ -2354,40 +2354,7 @@ body.is-resizing .splitter::before {
   /* 徽标样式由 SessionHeader Tailwind 承担 */
   flex: 0 0 auto;
   cursor: default;
-}
-/* ── 压缩卡片（可展开查看归档消息） ── */
-
-
-
-
-
-
-
-
-
-
-
-
-/* ── 压缩卡片归档区 ── */
-
-
-/* ── 归档消息列表 ── */
-
-
-
-
-
-.archived-message--user .archived-message-text {
-  color: var(--color-text-primary);
-}
-
-.archived-message--tool .archived-message-text {
-  color: var(--color-text-tertiary);
-  font-family: var(--font-family-monospace);
-  font-size: 11px;
-}
-
-.chat-header-actions {
+}.chat-header-actions {
   /* flex/gap 由 SessionHeader Tailwind 承担 */
   overflow: visible;
   max-width: 100%;

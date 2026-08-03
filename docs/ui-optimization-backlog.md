@@ -32,9 +32,9 @@
 | P1 | Tooltip / Hover Card | 🟡 Tooltip 已有 | `ui-shadcn/tooltip.tsx`、工具卡、项目行、设置项 | Tooltip 只解释图标；复杂详情使用 Hover Card，不滥用 title |
 | P1 | Marker 用于思考、工具调用和压缩方向 | ✅ Batch 2 已完成 | `TimelineMarker.tsx`、`TimelineEventCards.tsx`、`ToolCallComponents.tsx` | 时间线中系统事件、思考、工具、压缩有统一的 marker 轨道 |
 | P2 | Data Table 会话管理 | ✅ Batch 7 已完成 | `ui-shadcn/table.tsx`、`SidebarComponents.tsx` 的 SessionManagerModal | 表头、来源、批量选择、删除、重命名和空状态 |
-| P2 | Pagination | 🟡 hook 已有 | `useMessagePagination.ts`、SessionManager、YaoPrompt | 分页只负责大列表，不替代时间线滚动和流式加载 |
+| P2 | Pagination | ✅ 已完成 | `ui-shadcn/pagination.tsx`、`YaoPromptTab.tsx` | 分页只负责大列表，不替代时间线滚动和流式加载 |
 | P2 | Progress | ✅ Batch 8 已完成 | `ui-shadcn/progress.tsx`、更新 overlay | 下载、安装、批量 Ask 进度统一语义与无障碍属性 |
-| P2 | Scroll Area | 🟡 组件已安装 | Sidebar、会话管理、设置、抽屉面板 | 统一滚动条、键盘滚动和边界阴影，避免嵌套滚动 |
+| P2 | Scroll Area | 🟡 已安装，按需使用 | `ui-shadcn/scroll-area.tsx` | 全局 thin scrollbar 已统一；Radix ScrollArea 会改变滚动条出现时机，仅按需用于新容器 |
 | P2 | 其余 shadcn 替换 | 🟡 持续收口 | `components/ui-shadcn/*` 和各业务域 | 先替换有明显交互收益的控件，不替换语义为内容容器的原生 button |
 
 ## 执行批次
@@ -72,8 +72,8 @@
 
 - [x] Session Manager 使用 Data Table（新增 `ui-shadcn/table.tsx`，列表体表格化并保留全部选择/批量操作）。
 - [x] 清理 SessionManager 迁移后孤儿化的 `.session-manager-*` 死 CSS。
-- [x] 分页、进度、Scroll Area 统一（进度已收口，见 Batch 8）。
-- [ ] 清理已迁移域的死 CSS。
+- [x] 分页、进度、Scroll Area 统一：新增共享 `Pagination` 接入 YaoPrompt；ScrollArea 原语已就绪，滚动容器保留全局统一样式（避免与 Radix 滚动条行为冲突）。
+- [x] 全量死 CSS 扫描：删除 30 条零引用规则（含 `:hover`/`:focus-visible` 变体），共享选择器列表保守保留。
 - [ ] 更新 E2E 视觉巡检和手测清单。
 
 ## 本次变更记录
@@ -105,6 +105,10 @@
 - 新增 `ui-shadcn/progress.tsx`（Radix 内核，aria-valuenow 语义，填充走主题绿 `bg-primary`）。
 - 更新下载进度改用 `Progress`，并删除 `.update-progress-track` / `.update-progress-bar` 死 CSS。
 - 新增 `tests/uiProgress.test.mjs`，锁定 aria 语义、更新 overlay 接入和死 CSS 清理契约。
+- 新增共享 `ui-shadcn/pagination.tsx`（带 aria-label 的上一页/页码·总页数/下一页），`YaoPromptTab` 内联分页替换为共享组件，删除 `.yao-pagination` 死 CSS。
+- 死 CSS 全量扫描（源码+测试零引用、模板前缀防护、共享选择器保守保留）：删除 30 条规则约 137 行，覆盖 archived-message、config-model-chip、math-copy、git 面板多组。
+- Scroll Area：原语已安装且全局 thin scrollbar 已统一；Radix ScrollArea 会改变滚动条出现时机并与全局滚动样式冲突，按需用于新容器，不盲转现有 `overflow-*` 容器。
+- 新增 `tests/uiPaginationAndDeadCss.test.mjs`，锁定共享分页接入与死类消失契约。
 - 新增 `tests/avatarStatus.test.mjs`，锁定项目和 Agent Avatar 的状态契约。
 
 ## 门禁

@@ -3,6 +3,9 @@ import type { TranslationKey } from "./rendererCopy.zh-CN";
 
 export const enUS: Record<TranslationKey, string> = {
   "app.chatProject": "Chat",
+  "pagination.label": "Pagination",
+  "pagination.previous": "Previous page",
+  "pagination.next": "Next page",
   "update.downloadProgress": "Download progress",
   "sessionManager.session": "Session",
   "sessionManager.actions": "Actions",

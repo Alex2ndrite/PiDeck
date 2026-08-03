@@ -2394,14 +2394,6 @@
   background: var(--color-bg-active);
   color: var(--color-accent);
 }
-
-/* API 类型下拉菜单 —— 宽菜单带描述 */
-
-/* SecretInput 在 form-row 内占满右侧列 */
-.config-form-row .config-secret-input {
-  grid-column: 2;
-}
-
 /* config-combobox 在 form-row 右侧列保持 padding-right 以避开切换按钮。
    只匹配直接子元素，避免误伤嵌套在 .config-header-field 内的 ConfigSelect。 */
 .config-form-row > .config-combobox {
@@ -2732,27 +2724,6 @@
   padding-left: 22px;
   max-width: 300px;
 }
-
-/* provider 重命名输入框 */
-
-/* 自动获取模型选择面板：内嵌在模型表格上方，保持列表配置页的纵向节奏，不再使用浮层式下拉。 */
-
-
-
-
-
-
-
-.config-model-chip-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-  max-height: 220px;
-  margin-top: var(--space-2);
-  overflow: auto;
-  padding: var(--space-1);
-}
-
 
 
 
@@ -3587,19 +3558,7 @@ div.fixed.inset-0.z-50 {
 .math-copy-btn:focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
-}
-
-/* 行内公式复制按钮：比块级公式更小巧，避免撑高行高 */
-.math-copy-btn--inline {
-  width: 16px;
-  height: 16px;
-  margin-left: 2px;
-}
-.math-copy-wrap--inline {
-  gap: 0;
-}
-
-/* ── 应用更新提示 ───────────────────────────── */
+}/* ── 应用更新提示 ───────────────────────────── */
 
 .update-modal {
   width: min(620px, calc(100vw - 36px));
