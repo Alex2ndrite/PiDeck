@@ -7,8 +7,8 @@ const emptyState = readFileSync(
   "src/renderer/src/components/session/ProjectEmptyState.tsx",
   "utf8",
 );
-const emptyPrimitive = readFileSync(
-  "src/renderer/src/components/ui-shadcn/empty.tsx",
+const surfaceParts = readFileSync(
+  "src/renderer/src/components/session/SurfaceComponents.tsx",
   "utf8",
 );
 const sessionActions = readFileSync(
@@ -32,15 +32,29 @@ test("project empty state is shared by normal and chat projects when no session 
   assert.match(app, /addProject/);
 });
 
-test("empty state offers New Agent and Anonymous chat quick actions, add project when none", () => {
+test("project empty state reuses pi-branded EmptyState and offers quick actions", () => {
+  // 视觉与 pi 品牌 EmptyState 完全一致（复用同一组件，而非复制结构）
+  assert.match(emptyState, /import \{ EmptyState \} from \"\.\/SurfaceParts\"/);
+  assert.match(emptyState, /<EmptyState/);
   assert.match(emptyState, /onCreateAgent/);
   assert.match(emptyState, /onCreateAnonymous/);
   assert.match(emptyState, /onAddProject/);
   assert.match(emptyState, /t\("app\.createAgent"\)/);
   assert.match(emptyState, /t\("app\.anonymousChat"\)/);
   assert.match(emptyState, /t\("app\.addProject"\)/);
-  assert.match(emptyState, /t\("app\.projectEmptyTitle"/);
-  assert.match(emptyState, /t\("app\.emptyNoProjectTitle"/);
+  // 品牌 tagline/subtitle 来自 EmptyState 而非项目标题，普通/聊天项目无差异
+  assert.doesNotMatch(emptyState, /t\("app\.projectEmptyTitle"/);
+  assert.doesNotMatch(emptyState, /t\("app\.emptyNoProjectTitle"/);
+  assert.match(emptyState, /actions=\{/);
+  assert.match(emptyState, /footer=\{/);
+});
+
+test("brand empty state still carries tagline/subtitle slots for project view", () => {
+  // EmptyState 支持可选 actions/footer 插槽，不破坏既有 timeline 空态
+  assert.match(surfaceParts, /export function EmptyState\(props: \{[\s\S]*hasProject: boolean;[\s\S]*onCreate: \(\) => void;/);
+  assert.match(surfaceParts, /actions\?: ReactNode/);
+  assert.match(surfaceParts, /footer\?: ReactNode/);
+  assert.match(surfaceParts, /props\.actions \?\? \(/);
 });
 
 test("project empty state reads default model/thinking from pi config via IPC, not localStorage", () => {
@@ -87,21 +101,32 @@ test("composer bottom bar default model/thinking prefer pi-config record over we
   assert.match(composerComponents, /props\.record\?\.model/);
 });
 
-test("shadcn Empty primitive exists and carries title/description/actions/footer slots", () => {
-  assert.match(emptyPrimitive, /function Empty\(/);
-  assert.match(emptyPrimitive, /title: ReactNode/);
-  assert.match(emptyPrimitive, /description\?: ReactNode/);
-  assert.match(emptyPrimitive, /actions\?: ReactNode/);
-  assert.match(emptyPrimitive, /footer\?: ReactNode/);
+test("shadcn Empty primitive was removed in favor of pi-branded EmptyState", () => {
+  // 项目空态与 timeline 空态统一走 EmptyState，原 ui-shadcn/empty 原语已删除
+  const emptyPrimitivePath = "src/renderer/src/components/ui-shadcn/empty.tsx";
+  assert.equal(
+    (() => {
+      try {
+        readFileSync(emptyPrimitivePath, "utf8");
+        return false;
+      } catch {
+        return true;
+      }
+    })(),
+    true,
+    "ui-shadcn/empty.tsx should be deleted",
+  );
 });
 
 test("new empty-state copy is bilingual", () => {
-  for (const key of ["app.projectEmptyTitle", "app.projectEmptyDescription", "app.emptyNoProjectTitle"]) {
+  // 品牌 tagline/subtitle 沿用 EmptyState 既有双语 key
+  for (const key of ["app.emptyTaglineLine1", "app.emptyTaglineLine2Prefix", "app.emptyTaglineYours", "app.emptySubtitle"]) {
     assert.ok(zh.includes(`"${key}"`), `${key} zh-CN copy must exist`);
     assert.ok(en.includes(`"${key}"`), `${key} en-US copy must exist`);
   }
-  assert.match(zh, /"app\.projectEmptyTitle": "[^"]*\{name\}[^"]*"/);
-  assert.match(en, /"app\.projectEmptyTitle": "[^"]*\{name\}[^"]*"/);
+  // 旧的项目标题/描述 key 已随 shadcn Empty 删除，JSX 不再引用
+  assert.doesNotMatch(zh, /"app\.projectEmptyTitle"/);
+  assert.doesNotMatch(en, /"app\.projectEmptyTitle"/);
   // JSX 不硬编码中英文可见文案
   assert.doesNotMatch(emptyState, />[^<]*(在|开始工作|Start working|尚未)</);
 });

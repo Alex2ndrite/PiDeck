@@ -50,10 +50,7 @@ import {
   requireSessionCommand,
   toSessionRuntimeTarget,
 } from "./utils/sessionCommands";
-import {
-  CHAT_BOOTSTRAP_SESSION_ID,
-  resolveChatSessionBootstrap,
-} from "./utils/chatSessionBootstrap";
+import { resolveChatSessionBootstrap } from "./utils/chatSessionBootstrap";
 
 import { usePiUpdate } from "./hooks/usePiUpdate";
 import { useAppUpdateController } from "./hooks/useAppUpdateController";
@@ -82,7 +79,6 @@ import {
   setSessionAttachmentsAtom,
   setSessionCatalogLoadStateAtom,
   setSessionDraftAtom,
-  promoteSessionComposerStateAtom,
   upsertSessionAtom,
 } from "./atoms";
 import {
@@ -196,7 +192,6 @@ export function App() {
   const setSessionDraft = useSetAtom(setSessionDraftAtom);
   const setSessionAttachments = useSetAtom(setSessionAttachmentsAtom);
   const setSessionCatalogLoadState = useSetAtom(setSessionCatalogLoadStateAtom);
-  const promoteSessionComposerState = useSetAtom(promoteSessionComposerStateAtom);
   const removeSessionState = useSetAtom(removeSessionStateAtom);
   const removeSessionComposerState = useSetAtom(removeSessionComposerStateAtom);
   const sessionTimeline = useSessionTimelineController({ sessionId: currentSessionId });
@@ -204,7 +199,6 @@ export function App() {
   currentSessionIdRef.current = currentSessionId;
   const openSessionRequestRef = useRef(0);
   const creatingSessionDraftRef = useRef<Set<string>>(new Set());
-  const chatBootstrapPromotionRef = useRef<Promise<string> | undefined>(undefined);
 
   // 项目的 git worktree 列表：{ parentId -> WorktreeEntry[] }
   const [pendingAgents, setPendingAgents] = useState<PendingAgentTab[]>([]);
@@ -1209,8 +1203,6 @@ export function App() {
     });
     if (action.kind === "load") {
       void refreshProjectSessions(activeProject.id).catch(() => undefined);
-    } else if (action.kind === "select") {
-      selectSessionCommand(activeProject.id, action.sessionId, false);
     }
   }, [
     activeProject,
@@ -1220,30 +1212,14 @@ export function App() {
     store,
   ]);
 
-  const ensureSessionForSend = useCallback(async (sessionId: string) => {
-    if (sessionId !== CHAT_BOOTSTRAP_SESSION_ID) return sessionId;
-    if (chatBootstrapPromotionRef.current) return chatBootstrapPromotionRef.current;
-    const project = projects.find((candidate) => candidate.id === activeProjectId);
-    if (!project || !isChatProject(project)) {
-      throw new Error(t("app.chatBootstrapUnavailable"));
-    }
-    const promotion = api.sessions.createDraft({
-      projectId: project.id,
-      title: t("app.chatProject"),
-    }).then((session) => {
-      upsertSession(session);
-      promoteSessionComposerState({
-        fromSessionId: CHAT_BOOTSTRAP_SESSION_ID,
-        toSessionId: session.id,
-      });
-      selectSessionCommand(project.id, session.id, false);
-      return session.id;
-    }).finally(() => {
-      chatBootstrapPromotionRef.current = undefined;
-    });
-    chatBootstrapPromotionRef.current = promotion;
-    return promotion;
-  }, [activeProjectId, projects, promoteSessionComposerState, selectSessionCommand, upsertSession]);
+  // 聊天项目点开后与普通项目一致，先进统一引导页；用户从引导页选择
+  // 「新建 Agent / 匿名聊天」时通过 createSessionDraft / createAnonymousSession
+  // 创建真实 Catalog 会话，因此发送钩子不再需要把 renderer-only 虚拟会话提升为真实会话，
+  // 直接透传传入的 sessionId（保持签名以兼容 composer 链路）。
+  const ensureSessionForSend = useCallback(
+    async (sessionId: string) => sessionId,
+    [],
+  );
 
   /** 有效命令名白名单：仅已知命令渲染为 chip */
   const mergedCommands = useMemo(

@@ -431,7 +431,7 @@
   .responding-indicator-dots span,
   .tool-card,
   .timeline-marker-row,
-  .empty-state button {
+  .empty-state .empty-state-cta {
     animation: none !important;
     transition: none !important;
   }
@@ -1598,7 +1598,7 @@ body.ask-dialog-open .ask-question-card.pending {
   font-size: var(--font-size-caption) !important;
 }
 
-.empty-state button {
+.empty-state .empty-state-cta {
   min-width: 148px;
   height: 46px;
   border: none;
@@ -1616,7 +1616,7 @@ body.ask-dialog-open .ask-question-card.pending {
     background 0.15s,
     transform 0.15s;
 }
-.empty-state button:hover {
+.empty-state .empty-state-cta:hover {
   background: color-mix(
     in srgb,
     var(--color-accent-soft) 55%,
@@ -1624,7 +1624,7 @@ body.ask-dialog-open .ask-question-card.pending {
   );
   transform: translateY(-1px);
 }
-.empty-state button:active {
+.empty-state .empty-state-cta:active {
   background: color-mix(
     in srgb,
     var(--color-accent-soft) 40%,
@@ -1632,7 +1632,7 @@ body.ask-dialog-open .ask-question-card.pending {
   );
   transform: translateY(0);
 }
-.empty-state button:focus-visible {
+.empty-state .empty-state-cta:focus-visible {
   outline: none;
   box-shadow: var(--focus-ring);
 }

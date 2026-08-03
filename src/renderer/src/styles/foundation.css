@@ -2623,7 +2623,7 @@ body.is-resizing .splitter::before {
 }
 .chat-header-actions button,
 .panel-action-row button,
-.empty-state button {
+.empty-state .empty-state-cta {
   flex: 0 0 auto;
   min-width: 60px;
   height: var(--control-height-md);

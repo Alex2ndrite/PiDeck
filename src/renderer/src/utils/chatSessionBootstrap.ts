@@ -1,10 +1,7 @@
 export type ChatSessionBootstrapAction =
   | { kind: "none" }
   | { kind: "load" }
-  | { kind: "wait" }
-  | { kind: "select"; sessionId: string };
-
-export const CHAT_BOOTSTRAP_SESSION_ID = "renderer:chat-bootstrap";
+  | { kind: "wait" };
 
 /** 欢迎页（未启动 Agent）选择的模型偏好存储 key。 */
 export const WELCOME_MODEL_KEY = "pideck:welcome-model";
@@ -52,11 +49,14 @@ export function resolveChatSessionBootstrap(input: {
   if (!input.isChatProject || input.currentSessionId) return { kind: "none" };
   // The Chat project can remain collapsed in the sidebar, so it cannot rely on
   // the normal expanded-project scan to reach `ready`. Loading its empty catalog
-  // gives the renderer-only surface a deterministic point to appear without
-  // creating a durable history entry or starting pi.
+  // gives the sidebar a deterministic point to list history without creating a
+  // durable entry or starting pi.
   if (input.catalogStatus === "idle" || input.catalogStatus === "error" || !input.catalogStatus) {
     return { kind: "load" };
   }
   if (input.catalogStatus !== "ready") return { kind: "wait" };
-  return { kind: "select", sessionId: CHAT_BOOTSTRAP_SESSION_ID };
+  // 不再自动选中 renderer-only 虚拟会话：聊天项目点开后与普通项目一致，
+  // 先显示统一引导页（新建 Agent / 匿名聊天），用户主动选择后才进入 composer。
+  // 避免“聊天项目直接落大输入框、普通项目落引导页”的行为分叉。
+  return { kind: "none" };
 }

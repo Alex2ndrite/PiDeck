@@ -1,19 +1,22 @@
 import { useEffect, useState } from "react";
-import { HatGlasses, MessageSquarePlus, Plus } from "lucide-react";
+import { HatGlasses, Plus } from "lucide-react";
 import type { Project } from "../../../../shared/types";
 import { t } from "../../i18n";
 import { desktopApi } from "../../desktopApi";
 import { Button } from "../ui-shadcn/button";
-import { Empty } from "../ui-shadcn/empty";
+import { EmptyState } from "./SurfaceParts";
 
 /**
- * 项目统一空态：普通项目与 Chat 项目在「未打开任何会话」时共享同一视图。
+ * 项目统一空态：普通项目与 Chat 项目在「未打开任何会话」时共享同一视图，
+ * 视觉与 pi 品牌 EmptyState 完全一致（logo + tagline + subtitle + CTA）。
  *
- * - 有活动项目时提供“新建 Agent”“匿名聊天”两个最快入口；
+ * - 有活动项目时提供“启动 Agent”“匿名聊天”两个快捷入口；
  * - 无项目时保留添加项目引导；
  * - 底部展示 pi 配置的默认模型与思考级别（defaultProvider/defaultModel/
  *   defaultThinkingLevel，经 renderer→preload→IPC 读取，不直接触 Node API），
  *   用户未显式选择时以 pi 配置为准，不让 welcome localStorage 覆盖。
+ *
+ * 复用 EmptyState 的可选 actions/footer 插槽注入业务内容，避免复制品牌结构。
  */
 export function ProjectEmptyState(props: {
   activeProject?: Project;
@@ -21,7 +24,6 @@ export function ProjectEmptyState(props: {
   onCreateAnonymous: () => void;
   onAddProject: () => void;
 }) {
-  const chat = props.activeProject?.kind === "chat";
   // 通过 config IPC 读取 pi 的 models.json / settings.json 默认值；读失败时静默降级为空显示。
   // parsed 来自远端配置文件，取值一律先经 unknown 收窄（typeof 守卫）再用，
   // 边界不信任远端结构（AGENTS 输入校验在边界、禁止 as 强转绕过类型错误）。
@@ -94,50 +96,51 @@ export function ProjectEmptyState(props: {
     };
   }, []);
 
+  const hasProject = Boolean(props.activeProject);
+
   return (
-    <Empty
-      icon={chat ? <MessageSquarePlus size={22} aria-hidden="true" /> : <HatGlasses size={22} aria-hidden="true" />}
-      title={props.activeProject
-        ? t("app.projectEmptyTitle", { name: chat ? t("app.chatProject") : props.activeProject.name })
-        : t("app.emptyNoProjectTitle")}
-      description={props.activeProject
-        ? t("app.projectEmptyDescription")
-        : t("app.emptyNoProject")}
-      actions={
-        props.activeProject ? (
-          <>
-            <Button size="sm" onClick={props.onCreateAgent}>
-              <Plus className="size-3.5" aria-hidden="true" /><span>{t("app.createAgent")}</span>
+    // chat-pane 为 flex 列容器：EmptyState 的 .empty-state 自带 height:100%，
+    // 外层保持纯 flex 子项（min-h-0 允许收缩），避免再包一层固定高度导致品牌区不居中。
+    <div className="flex min-h-0 flex-1 flex-col">
+      <EmptyState
+        hasProject={hasProject}
+        onCreate={props.onCreateAgent}
+        actions={
+          hasProject ? (
+            <div className="empty-state-actions flex flex-wrap items-center justify-center gap-2">
+              <Button variant="default" className="empty-state-cta" onClick={props.onCreateAgent}>
+                <Plus className="size-3.5" aria-hidden="true" /><span>{t("app.createAgent")}</span>
+              </Button>
+              <Button variant="outline" onClick={props.onCreateAnonymous}>
+                <HatGlasses className="size-3.5" aria-hidden="true" /><span>{t("app.anonymousChat")}</span>
+              </Button>
+            </div>
+          ) : (
+            <Button variant="default" className="empty-state-cta" onClick={props.onAddProject}>
+              <Plus className="size-3.5" aria-hidden="true" /><span>{t("app.addProject")}</span>
             </Button>
-            <Button size="sm" variant="outline" onClick={props.onCreateAnonymous}>
-              <HatGlasses className="size-3.5" aria-hidden="true" /><span>{t("app.anonymousChat")}</span>
-            </Button>
-          </>
-        ) : (
-          <Button size="sm" onClick={props.onAddProject}>
-            <Plus className="size-3.5" aria-hidden="true" /><span>{t("app.addProject")}</span>
-          </Button>
-        )
-      }
-      footer={
-        // 底部 pi 配置默认值提示（仅在存在活动项目时展示）
-        (defaults.model || defaults.thinking) && props.activeProject ? (
-          <span className="inline-flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-            {defaults.model && (
-              <span className="inline-flex items-center gap-1">
-                <span className="text-muted-foreground/70">{t("app.model")}:</span>
-                <span className="font-mono">{defaults.model}</span>
-              </span>
-            )}
-            {defaults.thinking && (
-              <span className="inline-flex items-center gap-1">
-                <span className="text-muted-foreground/70">{t("app.think")}:</span>
-                <span className="font-mono">{defaults.thinking}</span>
-              </span>
-            )}
-          </span>
-        ) : null
-      }
-    />
+          )
+        }
+        footer={
+          // 底部 pi 配置默认值提示（仅在存在活动项目时展示）
+          (defaults.model || defaults.thinking) && hasProject ? (
+            <span className="inline-flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+              {defaults.model && (
+                <span className="inline-flex items-center gap-1">
+                  <span className="text-muted-foreground/70">{t("app.model")}:</span>
+                  <span className="font-mono">{defaults.model}</span>
+                </span>
+              )}
+              {defaults.thinking && (
+                <span className="inline-flex items-center gap-1">
+                  <span className="text-muted-foreground/70">{t("app.think")}:</span>
+                  <span className="font-mono">{defaults.thinking}</span>
+                </span>
+              )}
+            </span>
+          ) : null
+        }
+      />
+    </div>
   );
 }

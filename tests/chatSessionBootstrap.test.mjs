@@ -1,13 +1,11 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { createStore } from "jotai/vanilla";
 import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
 
 const { resolveChatSessionBootstrap } = loadTsCommonJs(
   "src/renderer/src/utils/chatSessionBootstrap.ts",
 );
-const composerAtoms = loadTsCommonJs("src/renderer/src/atoms/composer-atoms.ts");
 const appSource = readFileSync("src/renderer/src/App.tsx", "utf8");
 
 function resolve(input) {
@@ -16,7 +14,7 @@ function resolve(input) {
   return JSON.parse(JSON.stringify(resolveChatSessionBootstrap(input)));
 }
 
-test("Chat bootstrap loads a collapsed catalog, then selects the renderer-only surface", () => {
+test("Chat bootstrap loads a collapsed catalog, then shows the unified guide page", () => {
 	assert.deepEqual(resolve({
 		isChatProject: true,
 		catalogStatus: "idle",
@@ -32,7 +30,7 @@ test("Chat bootstrap loads a collapsed catalog, then selects the renderer-only s
   assert.deepEqual(resolve({
     isChatProject: true,
     catalogStatus: "ready",
-  }), { kind: "select", sessionId: "renderer:chat-bootstrap" });
+  }), { kind: "none" });
 });
 
 test("Chat bootstrap never replaces an existing selection or non-Chat project", () => {
@@ -47,29 +45,7 @@ test("Chat bootstrap never replaces an existing selection or non-Chat project", 
   }), { kind: "none" });
 });
 
-test("Chat bootstrap loads its catalog before selecting the virtual surface", () => {
+test("Chat bootstrap loads its catalog before showing the unified guide page", () => {
 	assert.match(appSource, /action\.kind === "load"[\s\S]*refreshProjectSessions\(activeProject\.id\)/);
-	assert.match(appSource, /action\.kind === "select"[\s\S]*selectSessionCommand\(activeProject\.id, action\.sessionId, false\)/);
-});
-
-test("promoting the Chat surface moves all composer state without retaining the virtual ID", () => {
-  const store = createStore();
-  const bootstrapId = "renderer:chat-bootstrap";
-  const realId = "catalog-session";
-  store.set(composerAtoms.sessionDraftByIdAtom, { [bootstrapId]: "hello" });
-  store.set(composerAtoms.sessionAttachmentsByIdAtom, { [bootstrapId]: [{ name: "image.png" }] });
-  store.set(composerAtoms.sessionComposerModeByIdAtom, { [bootstrapId]: "plan" });
-  store.set(composerAtoms.sessionSendStateByIdAtom, { [bootstrapId]: { status: "activating" } });
-  store.set(composerAtoms.promoteSessionComposerStateAtom, {
-    fromSessionId: bootstrapId,
-    toSessionId: realId,
-  });
-  const promotedDrafts = store.get(composerAtoms.sessionDraftByIdAtom);
-  assert.equal(promotedDrafts[realId], "hello");
-  assert.equal(promotedDrafts[bootstrapId], undefined);
-  assert.equal(store.get(composerAtoms.sessionAttachmentsByIdAtom)[realId][0].name, "image.png");
-  const promotedModes = store.get(composerAtoms.sessionComposerModeByIdAtom);
-  assert.equal(promotedModes[realId], "plan");
-  assert.equal(promotedModes[bootstrapId], undefined);
-  assert.equal(store.get(composerAtoms.sessionSendStateByIdAtom)[realId].status, "activating");
+	assert.doesNotMatch(appSource, /selectSessionCommand\(activeProject\.id, action\.sessionId, false\)/);
 });

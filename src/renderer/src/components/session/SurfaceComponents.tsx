@@ -331,7 +331,14 @@ export function AgentAvatar(props: { status: string }) {
 	);
 }
 
-export function EmptyState(props: { hasProject: boolean; onCreate: () => void }) {
+export function EmptyState(props: {
+	hasProject: boolean;
+	onCreate: () => void;
+	/** 可选：自定义操作区（如项目空态的快捷按钮），默认提供“启动 Agent”/无项目提示 */
+	actions?: ReactNode;
+	/** 可选：操作区下方的附加信息（如默认模型/思考级别） */
+	footer?: ReactNode;
+}) {
 	return (
 		<div className="empty-state" data-empty-state={props.hasProject ? "project" : "no-project"}>
 			<div className="empty-logo" aria-hidden="true">
@@ -363,11 +370,14 @@ export function EmptyState(props: { hasProject: boolean; onCreate: () => void })
 					</Fragment>
 				))}
 			</p>
-			{props.hasProject ? (
-				<Button variant="default" onClick={props.onCreate} className="empty-state-cta">{t("app.createAgent")}</Button>
-			) : (
-				<p className="empty-hint">{t("app.emptyNoProject")}</p>
+			{props.actions ?? (
+				props.hasProject ? (
+					<Button variant="default" onClick={props.onCreate} className="empty-state-cta">{t("app.createAgent")}</Button>
+				) : (
+					<p className="empty-hint">{t("app.emptyNoProject")}</p>
+				)
 			)}
+			{props.footer}
 		</div>
 	);
 }

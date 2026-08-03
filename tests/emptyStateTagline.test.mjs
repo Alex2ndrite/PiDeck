@@ -30,7 +30,7 @@ test("empty state shows the pi agent ownership tagline with branded yours", () =
   assert.match(i18n, /"app\.emptyTaglineYours": "yours"/);
 
   const logo = cssRule("\\.empty-logo");
-  const button = cssRule("\\.empty-state button");
+  const button = cssRule("\\.empty-state .empty-state-cta");
   const tagline = cssRule("\\.empty-tagline");
   const yours = cssRule("\\.empty-tagline-yours");
 
