@@ -537,6 +537,42 @@ test("Feishu select ask renders option card; button click answers via sendUIResp
 	assert.ok(sent.some((s) => s.data.content.includes("已选择：生产")), "user should get an answer confirmation");
 });
 
+test("Feishu select ask preserves object options and sends their values", async () => {
+	const uiResponses = [];
+	const { bridge } = makeBridge([makeAgent("A")], {
+		sendUIResponse: (agentId, requestId, response) => uiResponses.push([agentId, requestId, response]),
+	});
+	bindChatForAsk(bridge);
+	const sent = [];
+	bridge.connection.client = mockFeishuClient(sent);
+
+	// ask_question 扩展协议允许对象选项；不能因为 Feishu 只识别 string 而降级成无选项输入卡。
+	bridge.handleAgentEvent("A", {
+		type: "extension_ui_request",
+		method: "select",
+		id: "req-object-1",
+		title: "选择环境？",
+		options: [
+			{ label: "生产环境", value: "prod", description: "线上" },
+			{ label: "测试环境", value: "staging", description: "预发布" },
+		],
+	});
+	assert.equal(sent.length, 1, "object-option ask card should be sent once");
+	const card = JSON.parse(sent[0].data.content);
+	const optionButtons = card.elements.flatMap((e) => e.tag === "action" ? e.actions : []).filter((a) => a.value?.kind === "option");
+	assert.equal(optionButtons.length, 2);
+	assert.equal(optionButtons[0].text.content, "生产环境");
+	assert.equal(optionButtons[0].value.option, "prod");
+	assert.ok(card.elements.some((element) => element.tag === "markdown" && element.content.includes("线上")), "option description should remain visible");
+
+	await bridge.handleCardAction({
+		chatId: "chat", messageId: "card-object-1",
+		operator: { openId: "u" },
+		action: { tag: "button", value: { action: "pideck.ask", requestId: "req-object-1", kind: "option", option: "prod" } },
+	});
+	assert.equal(JSON.stringify(uiResponses), JSON.stringify([["A", "req-object-1", { value: "prod" }]]));
+});
+
 test("Feishu confirm ask: confirm/reject buttons map to confirmed flags", async () => {
 	const uiResponses = [];
 	const { bridge } = makeBridge([makeAgent("A")], {

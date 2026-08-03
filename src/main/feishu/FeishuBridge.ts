@@ -45,7 +45,7 @@ import { hasExplicitFeishuFileSendIntent } from "./fileIntent";
 import { createInitialState, reduceFromPiEvent, markInterrupted, markError, type RunState } from "./CardRunState";
 import { renderRunCard } from "./CardRenderer";
 import { buildModelPickerCard, parseModelActionValue } from "./ModelPickerCard";
-import { buildAskCard, parseAskActionValue, tryParseBatchAskEnvelope, type AskUiRequest } from "./AskCard";
+import { buildAskCard, normalizeAskOption, parseAskActionValue, tryParseBatchAskEnvelope, type AskUiRequest } from "./AskCard";
 import { feishuLanguage, feishuT, normalizeFeishuLocale, type FeishuLocale } from "./FeishuI18n";
 import type { AgentManager } from "../pi/AgentManager";
 
@@ -1465,7 +1465,13 @@ export class FeishuBridge {
 		const batchEnvelope = tryParseBatchAskEnvelope(rawTitle);
 		// 兼容桌面端约定：✎ 开头的“自定义回答”选项只对桌面端生效，飞书端直接回复文本即可，剔除之
 		const rawOptions = Array.isArray(typed.options)
-			? typed.options.filter((option): option is string => typeof option === "string" && !option.startsWith("✎"))
+			? typed.options
+				.map(normalizeAskOption)
+				.filter((option): option is NonNullable<ReturnType<typeof normalizeAskOption>> => {
+					if (!option) return false;
+					const label = typeof option === "string" ? option : option.label;
+					return !label.startsWith("✎");
+				})
 			: undefined;
 		// select 无有效选项时降级为 input（与桌面端 handleUIRequest 同一规则）：
 		// ask_question 的 options 可选，模型经常只问问题不给选项，降级后用户仍可回复文本作答

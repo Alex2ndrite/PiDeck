@@ -21,8 +21,14 @@ export type AskUiRequest = {
 	requestId: string;
 	method: AskMethod;
 	title: string;
-	options?: string[];
+	options?: AskOption[];
 	batchQuestions?: Array<Record<string, unknown>>;
+};
+
+export type AskOption = string | {
+	label: string;
+	value?: string;
+	description?: string;
 };
 
 export type AskAction =
@@ -37,6 +43,28 @@ type AskButtonValue = {
 	confirmed?: boolean;
 	option?: string;
 };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+/**
+ * 归一化 pi 扩展传来的选项。扩展协议允许 string 或带 label/value 的对象；
+ * 飞书按钮展示 label，但必须把 value 原样带回，不能因对象选项被丢弃而降级成输入卡。
+ */
+export function normalizeAskOption(value: unknown): AskOption | undefined {
+	if (typeof value === "string") return value.trim() ? value : undefined;
+	if (!isRecord(value)) return undefined;
+	const record = value;
+	if (typeof record.label !== "string" || !record.label.trim()) return undefined;
+	const label = record.label;
+	return {
+		label,
+		value: typeof record.value === "string" && record.value ? record.value : label,
+		description: typeof record.description === "string" ? record.description : undefined,
+	};
+}
+
 
 /** 解码批量 ask 的 title envelope（与 AgentManager.tryParseBatchAskEnvelope 同构）。 */
 export function tryParseBatchAskEnvelope(title: string): {
@@ -82,6 +110,14 @@ export function buildAskCard(input: { request: AskUiRequest; locale?: FeishuLoca
 		elements.push({ tag: "markdown", content: lines });
 		elements.push({ tag: "note", elements: [{ tag: "plain_text", content: feishuT(locale, "ask.batchHint") }] });
 	} else if (request.method === "select" && request.options && request.options.length > 0) {
+		const descriptions = request.options
+			.filter((option): option is { label: string; description: string } => (
+				typeof option !== "string" && typeof option.description === "string" && option.description.trim().length > 0
+			))
+			.map((option) => `**${option.label}**：${option.description}`);
+		if (descriptions.length > 0) {
+			elements.push({ tag: "markdown", content: descriptions.join("\n") });
+		}
 		elements.push({ tag: "markdown", content: request.title });
 		for (const row of chunk(request.options.slice(0, MAX_OPTION_BUTTONS), BUTTONS_PER_ROW)) {
 			elements.push({
@@ -159,12 +195,19 @@ function askTitle(request: AskUiRequest, locale: FeishuLocale): string {
 	}
 }
 
-function optionButton(option: string, requestId: string) {
+function optionButton(option: AskOption, requestId: string) {
+	const normalized = normalizeAskOption(option);
+	const label = normalized
+		? typeof normalized === "string" ? normalized : normalized.label
+		: "";
+	const value = normalized
+		? typeof normalized === "string" ? normalized : normalized.value ?? normalized.label
+		: "";
 	return {
 		tag: "button",
-		text: { tag: "plain_text", content: truncateButtonText(option) },
+		text: { tag: "plain_text", content: truncateButtonText(label) },
 		type: "primary" as const,
-		value: { action: ASK_ACTION, requestId, kind: "option", option } satisfies AskButtonValue,
+		value: { action: ASK_ACTION, requestId, kind: "option", option: value } satisfies AskButtonValue,
 	};
 }
 

@@ -58,7 +58,8 @@ export const ComposerArea = forwardRef<HTMLElement, ComposerAreaProps>(function 
         <>
           <footer
             ref={footerRef}
-            className="composer flex w-full min-w-0 flex-col gap-2 bg-background px-3 pb-3"
+            className="composer flex min-h-0 w-full min-w-0 flex-col gap-2 overflow-hidden bg-background px-3 pb-3"
+            style={{ height: props.height != null ? "100%" : height }}
             data-session-id={props.sessionId}
           >
             <ComposerAttachmentBar
@@ -76,9 +77,14 @@ export const ComposerArea = forwardRef<HTMLElement, ComposerAreaProps>(function 
               error={composer.sendState.error}
               onAcknowledge={composer.delivery.acknowledgeUnknown}
             />
-            {props.runtimeUi}
+            {props.runtimeUi ? (
+              // Ask 内容是 composer 的附加区域；它必须能在面板变小时独立滚动，不能把输入框推出面板。
+              <div className="composer-runtime-ui min-h-0 shrink overflow-y-auto">
+                {props.runtimeUi}
+              </div>
+            ) : null}
             <div
-              className={["composer-box relative flex min-h-[7rem] min-w-0 flex-col overflow-visible rounded-xl border border-border bg-card text-card-foreground shadow-sm transition-[border-color,box-shadow,background-color]",
+              className={["composer-box relative flex min-h-0 min-w-0 flex-1 flex-col overflow-visible rounded-xl border border-border bg-card text-card-foreground shadow-sm transition-[border-color,box-shadow,background-color]",
                 composer.bangMode === "bang-bang"
                   ? "shell-silent-mode"
                   : composer.bangMode === "bang"
@@ -87,7 +93,6 @@ export const ComposerArea = forwardRef<HTMLElement, ComposerAreaProps>(function 
                       ? "plan-mode"
                       : "",
               ].filter(Boolean).join(" ")}
-              style={{ height: props.height != null ? "100%" : height }}
             >
               <RichInput
                 ref={composer.editor.ref}

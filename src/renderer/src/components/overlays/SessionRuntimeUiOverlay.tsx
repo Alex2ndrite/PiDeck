@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Check, ClipboardList, MessageCircle, X } from "lucide-react";
+import { Check, ChevronDown, ClipboardList, MessageCircle, X } from "lucide-react";
 import type {
 	AgentUiBatchQuestion,
 	AgentUiRequest,
@@ -16,6 +16,11 @@ import {
 import { Button } from "../ui-shadcn/button";
 import { Input } from "../ui-shadcn/input";
 import { Textarea } from "../ui-shadcn/textarea";
+import {
+	Collapsible,
+	CollapsibleContent,
+	CollapsibleTrigger,
+} from "../ui-shadcn/collapsible";
 
 export type RuntimeUiBinding = {
 	sessionId: string;
@@ -92,6 +97,7 @@ function BatchAskInlineBar(props: {
 	const [customAnswerIds, setCustomAnswerIds] = useState<Set<string>>(new Set());
 	const [inputValues, setInputValues] = useState<Record<string, string>>({});
 	const [currentTab, setCurrentTab] = useState(0);
+	const [expanded, setExpanded] = useState(true);
 	const requestKey = props.request.requestId;
 
 	useEffect(() => {
@@ -106,6 +112,7 @@ function BatchAskInlineBar(props: {
 			),
 		);
 		setCurrentTab(0);
+		setExpanded(true);
 	}, [requestKey]);
 
 	const answeredCount = questions.filter((question) => answers[question.id] !== undefined).length;
@@ -147,15 +154,24 @@ function BatchAskInlineBar(props: {
 	if (total === 0) return null;
 
 	return (
-		<div className="ask-inline-bar rounded-t-md border border-b-0 border-border-strong bg-[color:color-mix(in_srgb,var(--color-accent)_6%,var(--color-bg-panel))] p-3 max-h-[55vh] overflow-y-auto">
-			<div className="mb-2 flex items-center gap-1.5 text-caption font-semibold text-[var(--color-accent)]">
-				<MessageCircle size={14} aria-hidden="true" />
-				<span>{t("ask.batchTitle", { count: total })}</span>
-				<span className="ml-auto text-micro font-normal text-text-tertiary">
-					{t("ask.batchProgress", { done: answeredCount, total })}
-				</span>
+		<Collapsible
+			open={expanded}
+			onOpenChange={setExpanded}
+			className="ask-inline-bar rounded-t-md border border-b-0 border-border-strong bg-[color:color-mix(in_srgb,var(--color-accent)_6%,var(--color-bg-panel))] p-3 max-h-[55vh] overflow-hidden"
+		>
+			<div className="mb-2 flex min-w-0 items-center gap-1.5 text-caption font-semibold text-[var(--color-accent)]">
+				<CollapsibleTrigger asChild>
+					<Button variant="ghost" size="sm" aria-label={t("ask.toolName")} className="min-w-0 flex-1 justify-start gap-1.5 px-1 text-left font-semibold text-[var(--color-accent)]">
+						<ChevronDown className={`shrink-0 transition-transform duration-150${expanded ? " rotate-180" : ""}`} size={14} aria-hidden="true" />
+						<MessageCircle size={14} aria-hidden="true" />
+						<span className="truncate">{t("ask.batchTitle", { count: total })}</span>
+						<span className="shrink-0 text-micro font-normal text-text-tertiary">
+							{t("ask.batchProgress", { done: answeredCount, total })}
+						</span>
+					</Button>
+				</CollapsibleTrigger>
 				<Button variant="ghost" size="icon"
-										aria-label={t("common.close")} title={t("common.close")}
+					aria-label={t("common.close")} title={t("common.close")}
 					disabled={props.responding}
 					onClick={props.onCancel}
 				>
@@ -163,6 +179,7 @@ function BatchAskInlineBar(props: {
 				</Button>
 			</div>
 
+			<CollapsibleContent className="min-h-0 overflow-y-auto">
 			<div className="mb-2 flex gap-1 overflow-x-auto border-b border-border-subtle pb-2" role="tablist">
 				{questions.map((question, index) => {
 					const answered = answers[question.id] !== undefined;
@@ -258,7 +275,8 @@ function BatchAskInlineBar(props: {
 					/>
 				) : null}
 			</div>
-		</div>
+			</CollapsibleContent>
+		</Collapsible>
 	);
 }
 
@@ -426,10 +444,12 @@ export function SessionRuntimeUiOverlay({ sessionId, runtime, ui, responder }: S
 	const requestKey = request ? `${sessionId}:${request.agentId}:${ui?.runtimeGeneration}:${request.requestId}` : "";
 	const [value, setValue] = useState("");
 	const [busy, setBusy] = useState(false);
+	const [expanded, setExpanded] = useState(true);
 
 	useEffect(() => {
 		setValue(request?.prefill ?? (typeof request?.value === "string" ? request.value : ""));
 		setBusy(false);
+		setExpanded(true);
 	}, [requestKey, request?.prefill, request?.value]);
 
 	if (!active || !request || !requestState) return null;
@@ -456,21 +476,32 @@ export function SessionRuntimeUiOverlay({ sessionId, runtime, ui, responder }: S
 	}
 
 	return (
-		<div className="ask-inline-bar rounded-t-md border border-b-0 border-border-strong bg-[color:color-mix(in_srgb,var(--color-accent)_6%,var(--color-bg-panel))] p-3">
-			<div className="mb-2 flex items-center gap-1.5 text-caption font-semibold text-[var(--color-accent)]">
-				<MessageCircle size={14} aria-hidden="true" />
-				<span>{t("ask.toolName")}</span>
+		<Collapsible
+			open={expanded}
+			onOpenChange={setExpanded}
+			className="ask-inline-bar rounded-t-md border border-b-0 border-border-strong bg-[color:color-mix(in_srgb,var(--color-accent)_6%,var(--color-bg-panel))] p-3 max-h-[55vh] overflow-hidden"
+		>
+			<div className="mb-2 flex min-w-0 items-center gap-1.5 text-caption font-semibold text-[var(--color-accent)]">
+				<CollapsibleTrigger asChild>
+					<Button variant="ghost" size="sm" aria-label={t("ask.toolName")} className="min-w-0 flex-1 justify-start gap-1.5 px-1 text-left font-semibold text-[var(--color-accent)]">
+						<ChevronDown className={`shrink-0 transition-transform duration-150${expanded ? " rotate-180" : ""}`} size={14} aria-hidden="true" />
+						<MessageCircle size={14} aria-hidden="true" />
+						<span className="shrink-0">{t("ask.toolName")}</span>
+						<span className="min-w-0 truncate font-normal text-text-secondary">{request.title || t("ask.defaultTitle")}</span>
+					</Button>
+				</CollapsibleTrigger>
 				{request.method === "select" && request.options?.length ? (
-					<span className="ml-2 text-micro font-normal text-text-tertiary">{t("ask.cancelHint")}</span>
+					<span className="shrink-0 text-micro font-normal text-text-tertiary">{t("ask.cancelHint")}</span>
 				) : null}
 				<Button variant="ghost" size="icon"
-										aria-label={t("common.close")} title={t("common.close")}
+					aria-label={t("common.close")} title={t("common.close")}
 					disabled={responding}
 					onClick={cancel}
 				>
 					<X size={14} aria-hidden="true" />
 				</Button>
 			</div>
+			<CollapsibleContent className="min-h-0 overflow-y-auto">
 			<div className="mb-3 text-body font-medium leading-[1.6] break-words text-text-primary">{request.title || t("ask.defaultTitle")}</div>
 			<div>
 				{request.method === "select" && request.options?.length ? (
@@ -553,6 +584,7 @@ export function SessionRuntimeUiOverlay({ sessionId, runtime, ui, responder }: S
 					</div>
 				) : null}
 			</div>
-		</div>
+			</CollapsibleContent>
+		</Collapsible>
 	);
 }
