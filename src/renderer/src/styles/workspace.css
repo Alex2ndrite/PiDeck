@@ -1781,8 +1781,6 @@ body.is-git-pane-resizing, body.is-git-pane-resizing * { cursor: row-resize !imp
 
 .git-compare-controls { display: flex; flex: 0 0 auto; align-items: end; gap: 5px; padding: 7px 10px; }
 .git-compare-controls label { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 2px; color: var(--git-desc-fg); font-family: var(--git-ui-font); font-size: 11px; }
-.git-compare-controls label .git-compact-filter { display: flex; flex: 1; min-width: 0; }
-.git-compare-controls label .git-compact-filter-btn { flex: 1; min-width: 0; }
 
 /* Git 未安装时的提示 */
 
@@ -1790,8 +1788,6 @@ body.is-git-pane-resizing, body.is-git-pane-resizing * { cursor: row-resize !imp
 @media (max-width: 420px) {
   .git-history-label { gap: 6px; }
   .git-history-author, .git-resource-path { display: none; }
-  .git-pane-header-actions .git-compact-filter-btn { max-width: 100px; }
-  .git-pane-header-actions .git-compact-filter-label { max-width: 60px; }
 }
 
 /* accent 小圆点 */

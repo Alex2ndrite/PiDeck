@@ -23,7 +23,7 @@
 | P0 | 设置、Pi 管理、反馈页面标题与 label 统一 | 🟡 第一批已完成，继续扩展 | `SettingsModal.tsx`、`config/*`、反馈 overlay、共享组件 | 标题层级、label 字号、字重、描述色、间距统一 |
 | P0 | Markdown 渲染后的工具调用展示 | ✅ Batch 2 已完成 | `MarkdownStream.tsx`、`ToolCallComponents.tsx`、`TimelineEventCards.tsx` | 工具 Logo、状态、展开/折叠、详情、错误和流式状态一致 |
 | P0 | 会话响应动画与空白页 | ✅ Batch 3 已完成 | `SurfaceComponents.tsx`、`TimelineEventCards.tsx`、`timeline.css` | 响应中、工具执行中、空会话、异常和加载状态不互相跳动 |
-| P1 | Todo / Plan / Ask | 🟡 Ask 已有 | `TimelineEventCards.tsx`、overlay、pi RPC | Ask 的 pending/answered/cancelled；todo/plan 依赖 pi 扩展，不在 renderer 伪造 |
+| P1 | Todo / Plan / Ask | ✅ 已接通 | `ComposerComponents.tsx`（widget）、`ComposerRuntimeIntegrations.tsx`、`TimelineEventCards.tsx`（Ask） | Ask 的 pending/answered/cancelled；todo/plan 走真实 pi widget 事件 |
 | P1 | `/theming` 统一 | 🟡 基础已完成 | `themePresets.ts`、`tailwind.css`、`foundation.css` | token 单一来源；明暗、accent、皮肤、背景图和组件状态一致 |
 | P1 | Avatar 作为项目 Logo 与状态表达 | ✅ Batch 4 已完成 | `ProjectAvatar`、`AgentAvatar`、项目树 | 项目身份、运行态、错误态、worktree 状态一眼可辨 |
 | P1 | Command 用于模型、思考级别和模式选择 | ✅ 基础已完成 | `ComposerComponents.tsx`、`ui-shadcn/command.tsx` | 搜索、分组、键盘导航、当前值和空状态统一 |
@@ -59,7 +59,7 @@
 - [x] Context Menu：确认侧栏 `MenuShell`、文件树、GitGraph 提交菜单已用 Radix DropdownMenu 统一外壳。
 - [x] Dropdown Menu：Git 面板紧凑筛选下拉自绘 listbox 迁移到 shadcn Select（`GitCompactFilter`）。
 - [ ] Hover Card / Tooltip：区分短提示和复杂详情。
-- [ ] Todo / Plan / Ask：只接真实 pi 扩展状态，补齐错误和不可用状态。
+- [x] Todo / Plan / Ask：确认 todo/plan 由 pi widget 事件驱动 `ExtensionWidgetCard`（折叠/✓ 高亮/按会话持久化），Ask 由 `AskQuestionCard` 驱动，均在 renderer 边界内。
 
 ### Batch 4：身份与主题
 
@@ -97,6 +97,7 @@
 - AgentAvatar 复用同一状态集合和主题 token，未知状态安全降级为 idle。
 - `GitCompactFilter` 自绘 listbox 迁移到 shadcn Select：删除 `getViewportBoundMenuPlacement` 手写定位、portal、scroll/resize 监听和 ESC/外部点击处理，交互由 Radix 接管；触发器和选中勾保持原样。
 - 新增 `tests/gitCompactFilterMenu.test.mjs`，锁定无手写定位、紧凑触发器和 aria-label 契约。
+- 清理 `GitCompactFilter` 迁移后孤儿化的死 CSS：`.git-compact-filter` / `.git-compact-filter-btn` / `.git-compact-filter-label` 规则（源码零引用）。
 - 新增 `tests/avatarStatus.test.mjs`，锁定项目和 Agent Avatar 的状态契约。
 
 ## 门禁
