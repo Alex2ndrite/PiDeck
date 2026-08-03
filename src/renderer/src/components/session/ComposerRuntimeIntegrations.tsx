@@ -167,7 +167,9 @@ export function ComposerRuntimeIntegrations(props: {
             ))}
         </div>
       );
-  const feishuSlot = feishu.bots.length > 0 && runtimeHandle ? (
+  // main 对齐：只要有已配置的 Bot 就显示飞书入口（agent 未启动时绑定会提示运行时不可用，
+  // 但不能因此让入口消失——用户需要先看到入口再启动会话）。
+  const feishuSlot = feishu.bots.length > 0 ? (
     <FeishuLinkIndicator
       status={feishu.status}
       bots={feishu.bots}

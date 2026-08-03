@@ -80,7 +80,7 @@
 | 能力 | 落点 | 状态 |
 |------|------|------|
 | 宠物 #107 状态卡死修复 | `pet/PetStateBridge.ts` | ✅ 勿回退 |
-| 飞书连接/发消息 | `feishu/FeishuBridge` + `FeishuConnection` | 🟡 配置面板 e2e 已自动化（`e2e/config-tabs.spec.ts`）；**ask 卡死问题已修复**（`AskCard.ts`：选项/确认/取消按钮 + 文本回复作答，全链路单测）；真机收发 smoke 待做 |
+| 飞书连接/发消息 | `feishu/FeishuBridge` + `FeishuConnection` | 🟡 配置面板 e2e 已自动化（`e2e/config-tabs.spec.ts`）；**ask 卡死问题已修复**（`AskCard.ts`：选项/确认/取消按钮 + 文本回复作答，全链路单测）；**composer 飞书入口已回填**（`FeishuLinkIndicator` 恢复三色 Logo + 去掉 runtimeHandle 条件，`e2e/feishu-link.spec.ts` 覆盖项目会话与 chat-bootstrap）；真机收发 smoke 待做 |
 | 扩展管理（安装/卸载/内置移除） | `extensions/ExtensionManager` + `config/ExtensionsTab` | ✅ 推荐包/列表 UI 已 e2e（`e2e/config-tabs.spec.ts`），**真机安装/卸载 smoke 待做** |
 | 技能/提示词商店 | `skills/` + `prompts/` + `SkillStoreTab`/`PromptStoreTab`/`SkillHubStorePanel` | ✅ UI 已 e2e（`e2e/config-tabs.spec.ts`），**真机开关技能 smoke 待做** |
 | Git 面板（status/diff/commit/分支） | `git/GitService` + GitPanel | ✅ 已自动化（`e2e/git-panel.spec.ts`：真实临时仓库 + 提交复核） |

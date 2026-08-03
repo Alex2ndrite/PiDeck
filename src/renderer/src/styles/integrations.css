@@ -98,7 +98,7 @@
   position: relative;
 }
 
-/* 与 composer 底栏的紧凑控件保持同一高度。 */
+/* 与 composer 底栏的紧凑控件保持同一高度；透明底、无文字 label——入口用飞书三色 Logo（main 对齐项）。 */
 .composer-bottom-left .feishu-link-trigger {
   display: inline-flex;
   align-items: center;
@@ -108,19 +108,21 @@
   height: var(--control-height-xs);
   border: 0;
   border-radius: var(--radius-xs);
-  background: var(--color-bg-muted);
+  background: transparent;
   color: var(--color-text-secondary);
   padding: 0 8px;
   font-size: var(--font-size-caption);
+  font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
   transition:
     color 0.12s,
     background 0.12s;
 }
-.composer-bottom-left .feishu-link-trigger:hover {
-  color: var(--color-accent);
-  background: var(--color-bg-active);
+.composer-bottom-left .feishu-link-trigger:hover,
+.composer-bottom-left .feishu-link-trigger.open {
+  color: var(--color-text-primary);
+  background: var(--color-bg-hover);
 }
 .composer-bottom-left .feishu-link-trigger:focus-visible {
   outline: var(--focus-ring);
@@ -130,7 +132,7 @@
   background: var(--color-bg-active);
 }
 
-/* 底栏入口与模型/思考保持同样文字样式，连接状态只通过小圆点表达。 */
+/* 飞书 Logo 不缩放，保持官方三色；connected 完全显色，disconnected 降透明度 */
 .composer-bottom-left .feishu-link-trigger.connected,
 .composer-bottom-left .feishu-link-trigger.connecting {
   color: var(--color-text-secondary);
@@ -138,35 +140,31 @@
 .composer-bottom-left .feishu-link-trigger.connected:hover,
 .composer-bottom-left .feishu-link-trigger.connecting:hover {
   color: var(--color-accent);
-  background: var(--color-bg-active);
+  background: var(--color-bg-hover);
 }
 
-.feishu-link-dot {
+.feishu-link-logo {
   flex: 0 0 auto;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--color-text-tertiary);
+  display: inline-flex;
+  align-items: center;
+  width: 14px;
+  height: 14px;
+  line-height: 0;
+  opacity: 0.5;
+  transition: opacity 0.15s ease;
 }
-.feishu-link-dot.connected {
-  background: var(--color-accent);
+.feishu-link-logo.connected {
+  opacity: 1;
 }
-.feishu-link-dot.connecting {
-  background: var(--color-warning);
+.feishu-link-logo.connecting {
+  opacity: 0.7;
   animation: feishu-pulse 1.3s ease-in-out infinite;
 }
-.feishu-link-dot.disconnected {
-  background: var(--color-text-tertiary);
+.feishu-link-logo.disconnected {
+  opacity: 0.4;
 }
-.feishu-link-dot.error {
-  background: var(--color-danger);
-}
-
-.feishu-link-label {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.feishu-link-logo.error {
+  opacity: 0.5;
 }
 
 /* ── Popover ── */

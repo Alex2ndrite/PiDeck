@@ -16,15 +16,19 @@ export type MockPiFixture = {
 /** 测试文件可通过 test.use({ seedProjects }) 预置项目列表（写入 projects.json） */
 export type SeedProject = { id: string; name: string; path: string; pinned?: boolean };
 
+/** 测试文件可通过 test.use({ seedFeishuBots }) 预置飞书 Bot 配置（写入 pi-desktop/feishu.json） */
+export type SeedFeishuBot = { id: string; name: string; appId: string };
+
 /** 测试文件可通过 test.use({ seedSettings }) 追加预置设置项（合并进 settings.json） */
 export type SeedSettings = Record<string, unknown>;
 
 const repoRoot = resolve(__dirname, "..");
 
-export const test = base.extend<MockPiFixture & { seedProjects: SeedProject[] | undefined; seedSettings: SeedSettings | undefined }>({
+export const test = base.extend<MockPiFixture & { seedProjects: SeedProject[] | undefined; seedFeishuBots: SeedFeishuBot[] | undefined; seedSettings: SeedSettings | undefined }>({
 	seedProjects: [undefined, { option: true }],
+	seedFeishuBots: [undefined, { option: true }],
 	seedSettings: [undefined, { option: true }],
-	app: async ({ seedProjects, seedSettings }, use) => {
+	app: async ({ seedProjects, seedFeishuBots, seedSettings }, use) => {
 		const userDataRoot = mkdtempSync(join(tmpdir(), "pideck-mockpi-"));
 		try {
 			// Windows 桌面端通过 cmd shim 调起自定义 pi（见 PiLocator.createInvocation），
@@ -60,6 +64,25 @@ export const test = base.extend<MockPiFixture & { seedProjects: SeedProject[] | 
 							...project,
 						})),
 					),
+				);
+			}
+			// 可选：预置飞书 Bot 配置（FeishuConfig 读 userData/pi-desktop/feishu.json）。
+			// appSecret 用 base64（encryptSecret 的简化格式），空串即可——e2e 不真连飞书。
+			if (seedFeishuBots && seedFeishuBots.length > 0) {
+				mkdirSync(join(userDataRoot, "profile-dev", "pi-desktop"), { recursive: true });
+				writeFileSync(
+					join(userDataRoot, "profile-dev", "pi-desktop", "feishu.json"),
+					JSON.stringify({
+						version: 2,
+						bots: seedFeishuBots.map((bot) => ({
+							id: bot.id,
+							name: bot.name,
+							appId: bot.appId,
+							appSecret: "",
+							enabled: true,
+						})),
+						deletedBotIdsByAppId: {},
+					}),
 				);
 			}
 
