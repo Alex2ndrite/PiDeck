@@ -76,6 +76,8 @@ export type SessionRuntimeUiOverlayProps = {
 	runtime?: SessionRuntimeViewState;
 	ui?: SessionRuntimeUiState;
 	responder: SessionRuntimeUiResponder;
+	/** 展开阻塞式 Ask 后通知时间线 owner 重新定位，避免新高度落在视口下方。 */
+	onExpandedChange?: (expanded: boolean) => void;
 };
 
 type BatchAnswer = string | boolean | undefined;
@@ -84,11 +86,20 @@ function batchAnswerLabel(value: BatchAnswer): string {
 	if (typeof value === "boolean") return value ? t("common.true") : t("common.false");
 	return value ?? "";
 }
+
+/** Ask 展开后由时间线 owner 重新定位到底部，确保新展开的内容不会落在视口下方。 */
+function notifyAskExpanded(
+	onExpandedChange: ((expanded: boolean) => void) | undefined,
+	expanded: boolean,
+) {
+	onExpandedChange?.(expanded);
+}
 function BatchAskInlineBar(props: {
 	request: AgentUiRequest;
 	responding: boolean;
 	onCancel: () => void;
 	onSubmit: (answers: string) => void;
+	onExpandedChange?: (expanded: boolean) => void;
 }) {
 	const questions = props.request.batchQuestions ?? [];
 	const total = questions.length;
@@ -156,8 +167,11 @@ function BatchAskInlineBar(props: {
 	return (
 		<Collapsible
 			open={expanded}
-			onOpenChange={setExpanded}
-			className="ask-inline-bar rounded-t-md border border-b-0 border-border-strong bg-[color:color-mix(in_srgb,var(--color-accent)_6%,var(--color-bg-panel))] p-1.5"
+			onOpenChange={(next) => {
+				setExpanded(next);
+				notifyAskExpanded(props.onExpandedChange, next);
+			}}
+			className="ask-inline-bar ask-inline-bar--active rounded-md border border-border-strong bg-[color:color-mix(in_srgb,var(--color-accent)_6%,var(--color-bg-panel))] p-1.5"
 		>
 			<div className="mb-1 flex min-w-0 items-center gap-1 text-micro font-semibold text-[var(--color-accent)]">
 				<CollapsibleTrigger asChild>
@@ -427,7 +441,7 @@ function BatchQuestion(props: {
 	);
 }
 
-export function SessionRuntimeUiOverlay({ sessionId, runtime, ui, responder }: SessionRuntimeUiOverlayProps) {
+export function SessionRuntimeUiOverlay({ sessionId, runtime, ui, responder, onExpandedChange }: SessionRuntimeUiOverlayProps) {
 	const active = Boolean(
 		runtime &&
 		ui &&
@@ -472,6 +486,7 @@ export function SessionRuntimeUiOverlay({ sessionId, runtime, ui, responder }: S
 				responding={responding}
 				onCancel={cancel}
 				onSubmit={(answers) => submitValue(answers)}
+				onExpandedChange={onExpandedChange}
 			/>
 		);
 	}
@@ -479,8 +494,11 @@ export function SessionRuntimeUiOverlay({ sessionId, runtime, ui, responder }: S
 	return (
 		<Collapsible
 			open={expanded}
-			onOpenChange={setExpanded}
-			className="ask-inline-bar rounded-t-md border border-b-0 border-border-strong bg-[color:color-mix(in_srgb,var(--color-accent)_6%,var(--color-bg-panel))] p-1.5"
+			onOpenChange={(next) => {
+				setExpanded(next);
+				notifyAskExpanded(onExpandedChange, next);
+			}}
+			className="ask-inline-bar ask-inline-bar--active rounded-md border border-border-strong bg-[color:color-mix(in_srgb,var(--color-accent)_6%,var(--color-bg-panel))] p-1.5"
 		>
 			<div className="mb-1 flex min-w-0 items-center gap-1 text-micro font-semibold text-[var(--color-accent)]">
 				<CollapsibleTrigger asChild>

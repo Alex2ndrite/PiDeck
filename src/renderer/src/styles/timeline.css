@@ -32,6 +32,12 @@
 .timeline-marker-node-active {
   color: var(--color-accent);
   background: var(--color-accent);
+  animation: timeline-node-pulse 1.8s ease-in-out infinite;
+}
+@keyframes timeline-node-pulse {
+  0%,
+  100% { box-shadow: 0 0 0 1px color-mix(in srgb, currentColor 28%, transparent); }
+  50% { box-shadow: 0 0 0 4px color-mix(in srgb, currentColor 12%, transparent); }
 }
 .timeline-marker-node-success {
   color: var(--color-success);
@@ -49,6 +55,63 @@
   min-width: 0;
   padding-left: 26px;
 }
+
+/* 会话生命周期状态：节点与内容使用同一条节奏，运行中只保留轻微呼吸感，
+ * 避免每个工具都持续跳动导致用户无法判断真正发生了什么。 */
+.turn-row--running {
+  position: relative;
+}
+.turn-row--running::before {
+  content: "";
+  position: absolute;
+  inset: -6px -8px;
+  pointer-events: none;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-accent) 3%, transparent);
+  opacity: 0;
+  animation: turn-running-breathe 2.2s ease-in-out infinite;
+}
+.user-turn {
+  transition: opacity 180ms ease, transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.user-turn--fresh {
+  will-change: transform, opacity;
+}
+.user-turn-bubble {
+  border-color: color-mix(in srgb, var(--color-accent) 16%, var(--color-border));
+  background: color-mix(in srgb, var(--color-accent) 4%, var(--color-bg-muted));
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--color-text-primary) 5%, transparent);
+  transition: border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease;
+}
+.user-turn-bubble:hover {
+  border-color: color-mix(in srgb, var(--color-accent) 34%, var(--color-border));
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--color-text-primary) 8%, transparent);
+}
+.turn-row--fresh .assistant-text {
+  animation: assistant-answer-settle 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes assistant-answer-settle {
+  from { opacity: 0.35; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+  0%,
+  100% { opacity: 0; }
+  50% { opacity: 1; }
+}
+
+@keyframes timeline-step-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 
 /* ---------- 执行过程折叠区域 ---------- */
 .execution-summary {
@@ -315,6 +378,19 @@
     border-color 0.15s ease,
     background-color 0.15s ease;
 }
+.tool-card--running {
+  border-color: color-mix(in srgb, var(--color-warning) 42%, var(--color-border-subtle));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-warning) 10%, transparent);
+  animation: timeline-step-enter 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.tool-card--running .tool-card-icon {
+  color: var(--color-warning);
+  animation: tool-icon-breathe 1.6s ease-in-out infinite;
+}
+@keyframes tool-icon-breathe {
+  0%, 100% { opacity: 0.66; transform: scale(0.96); }
+  50% { opacity: 1; transform: scale(1.04); }
+}
 .tool-card-header.has-diff {
   gap: var(--space-2);
 }
@@ -343,6 +419,13 @@
 }
 
 /* ---------- 工具组卡片：ToolGroupCard（多工具聚合） ---------- */
+/* 工具组作为连续执行轨道，组内卡片之间不再重复绘制外框。 */
+.tool-group-card:has(.tool-card--running) {
+  animation: timeline-step-enter 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.tool-group-card > div {
+  min-width: 0;
+}
 .tool-group-card.tone-running .tool-group-card-dot {
   background: var(--color-warning);
   animation: toolGroupDotPulse 1.4s ease-in-out infinite;
@@ -443,6 +526,20 @@
 
 /* ── 三种状态变体：只差异颜色，容器尺寸不变，避免布局跳动 ── */
 
+/* Agent 启动中：与执行中使用同一状态位，但文案明确说明仍在预热；启动完成后该节点直接切换为回答/工具状态。 */
+.responding-indicator[data-kind="starting"] {
+  min-width: 196px;
+  border-color: var(--color-warning, #d97706);
+  background: color-mix(in srgb, var(--color-warning) 7%, var(--color-bg-muted));
+  color: var(--color-warning, #d97706);
+}
+.responding-indicator[data-kind="starting"] .responding-indicator-dots span {
+  background: var(--color-warning, #d97706);
+}
+.responding-indicator[data-kind="starting"] .responding-indicator-label {
+  min-width: 136px;
+}
+
 /* 工具执行中：琥珀色系 */
 .responding-indicator[data-kind="executing"] {
   border-color: var(--color-warning, #d97706);
@@ -472,12 +569,22 @@
   .responding-indicator,
   .responding-indicator-dots span,
   .tool-card,
-  .timeline-marker-row {
+  .tool-card--running,
+  .tool-group-card,
+  .ask-inline-bar,
+  .session-runtime-ui,
+  .turn-row--running::before,
+  .timeline-marker-node-active,
+  .timeline-marker-row,
+  .user-turn,
+  .turn-row--fresh .assistant-text,
+  .user-turn-bubble {
     animation: none !important;
     transition: none !important;
   }
 
-  .responding-indicator-dots span {
+  .responding-indicator-dots span,
+  .turn-row--running::before {
     opacity: 1;
     transform: none;
   }
@@ -1389,6 +1496,67 @@ body.ask-dialog-open .ask-question-card.pending {
 .ask-question-card-option:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* 阻塞式 Ask 是时间线的一步，而不是悬浮层：正常流布局会自动为展开内容预留高度，
+ * sticky 只适合导航/工具条，不适合会改变高度的表单。 */
+.session-runtime-ui {
+  position: relative;
+  margin-top: var(--space-5);
+  margin-bottom: var(--space-4);
+  padding-bottom: var(--space-1);
+  animation: timeline-step-enter 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.session-runtime-ui::before {
+  content: "";
+  position: absolute;
+  top: -8px;
+  bottom: 0;
+  left: 7px;
+  width: 2px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--color-accent) 45%, var(--color-border-subtle));
+  opacity: 0.75;
+}
+
+/* Ask 面板与工具卡片共用“步骤卡片”节奏：入场一次，展开内容只做尺寸过渡。 */
+.ask-inline-bar {
+  position: relative;
+  overflow: hidden;
+  margin-left: 18px;
+  width: calc(100% - 18px);
+  max-width: calc(100% - 18px);
+  border-left: 3px solid var(--color-accent);
+  border-radius: var(--radius-md);
+  box-shadow: 0 1px 2px color-mix(in srgb, #000 5%, transparent);
+  animation: ask-step-enter 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.ask-inline-bar--active {
+  background: color-mix(in srgb, var(--color-accent) 5%, var(--color-bg-panel));
+}
+.ask-inline-bar [data-state="open"] {
+  animation: ask-content-enter 180ms ease-out both;
+}
+.ask-inline-bar .ask-inline-bar-option {
+  transition: transform 150ms cubic-bezier(0.22, 1, 0.36, 1), border-color 150ms ease, background-color 150ms ease;
+}
+.ask-inline-bar .ask-inline-bar-option:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+@keyframes ask-step-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+@keyframes ask-content-enter {
+  from { opacity: 0; transform: translateY(-3px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 /* Ask 交互区统一使用紧凑密度：输入框自身负责 resize，外层 composer 不参与高度计算。 */

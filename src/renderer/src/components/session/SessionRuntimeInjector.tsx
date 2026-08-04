@@ -314,6 +314,11 @@ export const SessionRuntimeInjector = React.memo(function SessionRuntimeInjector
             runtime={currentSessionRuntime}
             ui={currentSessionRuntimeUi}
             responder={runtimeUiResponder}
+            onExpandedChange={(expanded) => {
+              if (!expanded) return;
+              // Radix 在下一帧才把内容高度恢复；延迟到底部滚动，避免 scrollHeight 仍是收起值。
+              requestAnimationFrame(() => sessionTimeline.scrollToBottom());
+            }}
           />
         ) : null
       }

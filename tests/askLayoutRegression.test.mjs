@@ -31,7 +31,8 @@ const foundation = readFileSync(
 test("ask stays out of composer sizing and uses the session timeline as its scroll owner", () => {
   assert.doesNotMatch(composerArea, /runtimeUi/);
   assert.match(sessionView, /<SessionMessageTimeline[\s\S]*runtimeUi=\{runtimeUi\}/);
-  assert.match(timeline, /className="session-runtime-ui sticky bottom-0/);
+  assert.match(timeline, /className="session-runtime-ui mx-auto w-full/);
+  assert.doesNotMatch(timeline, /session-runtime-ui sticky bottom-0/);
   assert.match(foundation, /\.chat-pane\[style\*="--content-max-width"\] \.session-runtime-ui/);
   assert.doesNotMatch(overlay, /CollapsibleContent className="min-h-0 overflow-y-auto"/);
   assert.doesNotMatch(overlay, /max-h-\[(?:55vh|180px|240px)\][^\n]*overflow-y-auto/);

@@ -217,7 +217,8 @@ test("ProjectTree shows the project directory name like the dev reference", () =
   assert.match(projectTree, /title=\{project\.path\}/);
   assert.match(projectTree, /\{projectDirectoryName\}/);
   assert.match(projectTree, /const relatedProjects = controller\.catalog\.projects\.filter/);
-  assert.match(projectTree, /const workspaceProjects = props\.controller\.catalog\.projects\.filter/);
+  assert.match(projectTree, /const rootProjectSessions = props\.controller\.catalog\.sessionsByProject\[project\.id\]/);
+  assert.doesNotMatch(projectTree, /project-running-badge|project-session-count/);
 });
 
 test("sidebar uses one persisted project accordion without duplicating current project details", () => {
@@ -242,17 +243,19 @@ test("sidebar uses one persisted project accordion without duplicating current p
   assert.doesNotMatch(projectTree, /grouped=|grouped\n/);
 
   // main 简单语义：项目下统一列表，不再拆“运行中/历史会话”分组标题；
-  // 会话行以状态点（idle=蓝/starting、running=黄/error=红）示意，不显示文字徽标。
+  // Tab 栏同款状态点绑定具体 Agent/历史会话行，不显示项目级数量徽标。
   assert.doesNotMatch(sessionTree, /runningChildren|historyChildren|renderGroupLabel/);
   assert.doesNotMatch(sessionTree, /app\.sidebarActiveSessions/);
   assert.doesNotMatch(sessionTree, /app\.sidebarHistory/);
-  assert.match(sessionTree, /sessionStatusDotClass\(/);
-  // 易碎点：未启动的 catalog Agent/无 runtime 的会话行不得再回退渲染色点
-  // （旧实现用 ?? bg-muted-foreground/50 或 ?? bg-border 仍显示灰点）；应条件渲染，仅在有运行态时出点。
+  // 易碎点：未启动的 catalog Agent/无 runtime 的会话行不得渲染状态点；
+  // 已启动的会话行复用 Tab 栏蓝/黄/红状态点，而不是回退到项目头像。
   assert.doesNotMatch(sessionTree, /\?\? \"bg-muted-foreground\/50\"/);
   assert.doesNotMatch(sessionTree, /\?\? \"bg-border\"/);
-  assert.match(sessionTree, /\{sessionStatusDotClass\(child\.agent\.status\) && <span/);
-  assert.match(sessionTree, /\{sessionStatusDotClass\(runtime\?\.status\) && <span/);
+  assert.match(sessionTree, /function renderRuntimeStatusDot/);
+  assert.match(sessionTree, /if \(!dotClass\) return null/);
+  assert.match(sessionTree, /sessionStatusDotClass\(status\)/);
+  assert.match(sessionTree, /renderRuntimeStatusDot\(child\.agent\.status\)/);
+  assert.match(sessionTree, /renderRuntimeStatusDot\(runtimeSnapshot\?\.status\)/);
   assert.match(sessionTree, /display\.visibleChildren\.map\(renderChild\)/);
   assert.match(sessionTree, /renderSubagents\(groupKey, child\.codexSubagents, child\.piSubagents\)/);
 });

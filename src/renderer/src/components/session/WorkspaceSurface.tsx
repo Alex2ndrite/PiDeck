@@ -937,7 +937,7 @@ export function SessionHistoryModal(props: {
 	onDelete: (session: SessionSummary) => void | Promise<void>;
 }) {
 	return (
-		<Dialog open onOpenChange={ (next) => !next && props.onClose }>
+		<Dialog open onOpenChange={(next) => !next && props.onClose()}>
 			<DialogContent showCloseButton={false} className={cn("flex flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(800px,calc(100vw-48px))]", "session-history-modal")}>
 				<DialogHeader className="flex-row items-center justify-between px-4 py-3">
 					<DialogTitle></DialogTitle>

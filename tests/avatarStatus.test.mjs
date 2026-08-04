@@ -3,14 +3,24 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const projectTree = readFileSync("src/renderer/src/components/sidebar/ProjectTree.tsx", "utf8");
+const worktreeTree = readFileSync("src/renderer/src/components/sidebar/WorktreeTree.tsx", "utf8");
+const webSidebar = readFileSync("src/renderer/src/web/WebSidebar.tsx", "utf8");
 const projectAvatar = readFileSync("src/renderer/src/components/sidebar/SidebarComponents.tsx", "utf8");
 const agentAvatar = readFileSync("src/renderer/src/components/session/SurfaceComponents.tsx", "utf8");
 const foundation = readFileSync("src/renderer/src/styles/foundation.css", "utf8");
 
-test("project Avatar derives one stable status from project agents", () => {
-  assert.match(projectTree, /const projectAgents = props\.controller\.catalog\.agents\.filter/);
-  assert.match(projectTree, /const projectStatus = projectAgents\.some/);
-  assert.match(projectTree, /<ProjectAvatar[\s\S]*status=\{projectStatus\}/);
+test("project Avatar does not aggregate session runtime state", () => {
+  assert.doesNotMatch(projectTree, /const projectAgents = props\.controller\.catalog\.agents\.filter/);
+  assert.doesNotMatch(projectTree, /const projectStatus =/);
+  assert.match(projectTree, /<ProjectAvatar name=\{projectDirectoryName\} kind=\{chat \? "chat" : "project"\} \/>/);
+  assert.doesNotMatch(projectTree, /project-running-badge|project-session-count/);
+});
+
+test("all project rows omit aggregate running and history counts", () => {
+  // 数量徽标会把项目容器伪装成运行实体；桌面、worktree、Web 三种入口都保持同一语义。
+  for (const source of [projectTree, worktreeTree, webSidebar]) {
+    assert.doesNotMatch(source, /project-running-badge|project-session-count|workspace-tree-count/);
+  }
 });
 
 test("ProjectAvatar exposes status as an accessible, theme-aware indicator", () => {

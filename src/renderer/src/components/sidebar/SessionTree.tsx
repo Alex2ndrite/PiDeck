@@ -12,7 +12,7 @@ import { cn } from "../../lib/utils";
 
 /** pure official：与 ProjectTree 对齐的会话/agent 行底色 */
 const sessionRowClass =
-	"conversation agent-row relative flex h-7 w-full items-center gap-1 rounded-md border-0 bg-transparent px-1 text-left text-body text-foreground transition-colors hover:bg-accent hover:text-accent-foreground";
+	"conversation agent-row relative flex min-h-9 w-full items-center gap-2 rounded-xl border border-border/70 bg-background/35 px-3 py-2 text-left text-body text-foreground shadow-sm shadow-black/[0.02] transition-[background-color,border-color,box-shadow] duration-200 hover:border-accent/30 hover:bg-accent/5 hover:text-accent-foreground";
 
 function matchesSearch(value: string, search: string) {
   return !search || value.toLowerCase().includes(search.toLowerCase());
@@ -25,6 +25,33 @@ function formatCodexSubagentName(session: SessionSummary) {
 
 function formatPiSubagentName(session: SessionSummary) {
   return session.name || t("app.piSubagent");
+}
+
+/**
+ * 复用 Tab 栏的状态点语义，并把点绑定到具体 Agent/历史会话行。
+ * 没有 runtime 的历史记录传入 undefined，因此纯打开记录不会被误标成已启动。
+ */
+function renderRuntimeStatusDot(status?: string | null) {
+  const dotClass = sessionStatusDotClass(status);
+  if (!dotClass) return null;
+  const label = status === "idle"
+    ? t("app.statusIdle")
+    : status === "error"
+      ? t("app.statusError")
+      : status === "running" || status === "starting" || status === "pending" || status === "waiting"
+        ? t("app.statusRunning")
+        : undefined;
+  return (
+    <span
+      className={cn(
+        "size-1.5 shrink-0 rounded-full",
+        dotClass,
+        status === "error" ? "" : "animate-pulse",
+      )}
+      aria-label={label}
+      title={label}
+    />
+  );
 }
 
 export function SessionTree(props: {
@@ -106,7 +133,7 @@ export function SessionTree(props: {
         className={cn(
           sessionRowClass,
           "session-row codex-subagent-sidebar-row pl-6",
-          session.id === props.currentSessionId && "active bg-accent text-accent-foreground",
+          session.id === props.currentSessionId && "active border-accent/35 bg-accent/10 text-accent-foreground shadow-sm shadow-accent/10",
         )}
         title={session.filePath}
         onContextMenu={(event) => openContext(event, session)}
@@ -137,8 +164,8 @@ export function SessionTree(props: {
     </span>
   ) : null;
 
-  // main 语义：项目下直接展示统一列表（drafts + 会话/Agent 按时间混排），不分组标题、
-  // 不把“运行中/历史”拆成两组（用户语义见 sessionStatusDotClass 的状态点）。
+  // main 语义：项目下直接展示统一列表（drafts + 会话/Agent 按时间混排），不分组标题；
+  // Tab 栏同款状态点跟随具体 Agent/历史会话行；没有 runtime 的纯历史记录保持无点。
   const renderChild = (child: ProjectChildItem) => {
     const groupKey = `${props.project.id}:${child.key}`;
     const childCount = child.codexSubagents.length + child.piSubagents.length;
@@ -151,14 +178,12 @@ export function SessionTree(props: {
           type="button"
           className={cn(
             sessionRowClass,
-            agentSession?.id === props.currentSessionId && "active bg-accent text-accent-foreground",
+            agentSession?.id === props.currentSessionId && "active border-accent/35 bg-accent/10 text-accent-foreground shadow-sm shadow-accent/10",
           )}
           onContextMenu={(event) => { event.preventDefault(); void props.controller.openMenu({ kind: "agent", agentId: child.agent.id, x: event.clientX, y: event.clientY }); }}
           onClick={() => { if (agentSession) void props.actions.sessions.open(props.project.id, agentSession.id); }}
         >
-          {/* 仅当该 Agent 有运行态才渲染色点（idle=蓝/running=黄/error=红，见 sessionStatusDotClass）；
-              未启动的 catalog Agent 无 runtime，按共享 helper 语义不渲染色点，避免灰点误示为“已运行”。 */}
-          {sessionStatusDotClass(child.agent.status) && <span className={`agent-node-marker size-1.5 shrink-0 rounded-full ${sessionStatusDotClass(child.agent.status)}`} aria-hidden="true" />}
+          {renderRuntimeStatusDot(child.agent.status)}
           <div className="conversation-body min-w-0 flex-1"><div className="conversation-title flex min-w-0 items-center gap-1.5">
             <strong className="min-w-0 flex-1 truncate font-medium">{child.agent.title}</strong>
             {child.agent.noSession && <span className="anonymous-indicator" title={t("app.anonymousChat")}><HatGlasses size={11} aria-hidden="true" /></span>}
@@ -169,6 +194,7 @@ export function SessionTree(props: {
       </Fragment>;
     }
     const runtime = getBoundSidebarRuntimeAgent(props.controller.catalog, child.session.id);
+    const runtimeSnapshot = props.controller.catalog.runtimeBySessionId[child.session.id];
     return <Fragment key={child.session.id}>
       <button
         type="button"
@@ -176,16 +202,14 @@ export function SessionTree(props: {
           sessionRowClass,
           // 历史会话不是运行中的 Agent：只给这一类内容增加层级缩进，避免项目标题与历史记录贴在同一列。
           // 历史会话需要比运行中 Agent 更松的点击区域和行间距，避免连续记录挤成一块。
-          "session-row history-session-row mb-1 last:mb-0 pl-5 pr-2 py-1",
-          child.session.id === props.currentSessionId && "active bg-accent text-accent-foreground",
+          "session-row history-session-row mx-1 mb-1 last:mb-0 pl-3 pr-3 py-2",
+          child.session.id === props.currentSessionId && "active border-accent/35 bg-accent/10 text-accent-foreground shadow-sm shadow-accent/10",
         )}
         title={child.session.filePath}
         onContextMenu={(event) => openContext(event, child.session)}
         onClick={() => void props.actions.sessions.open(props.project.id, child.session.id)}
       >
-        {/* 无 runtime 的历史会话不渲染色点（共享 helper 返回 undefined），与未启动 Agent 一致；
-            有 runtime 时按状态点（蓝/黄/红）示意，避免灰点误示为“已运行”。 */}
-        {sessionStatusDotClass(runtime?.status) && <span className={`session-node-marker size-1.5 shrink-0 rounded-full ${sessionStatusDotClass(runtime?.status)}`} aria-hidden="true" />}
+        {renderRuntimeStatusDot(runtimeSnapshot?.status)}
         <div className="conversation-body min-w-0 flex-1"><div className="conversation-title flex min-w-0 items-center gap-1.5">
           {/* 历史会话（无运行态）文字降一级，与活跃 Agent/运行中会话形成层级差 */}
           <strong className={cn("min-w-0 flex-1 truncate", runtime ? "font-medium" : "font-normal text-muted-foreground/90")}>{child.session.name || t("common.untitled")}</strong>
@@ -200,7 +224,7 @@ export function SessionTree(props: {
   return (
     <div className={cn(
       props.nested ? "worktree-children m-0 border-0 bg-transparent p-0" : "session-card",
-      "flex flex-col gap-0 py-0",
+      "flex flex-col gap-2 py-1",
     )}>
       {draftSessions.map((session) => {
         const runtime = props.controller.catalog.runtimeBySessionId[session.id];
@@ -216,13 +240,13 @@ export function SessionTree(props: {
               className={cn(
                 sessionRowClass,
                 "session-row draft-session-trigger",
-                session.id === props.currentSessionId && "active bg-accent text-accent-foreground",
+                session.id === props.currentSessionId && "active border-accent/35 bg-accent/10 text-accent-foreground shadow-sm shadow-accent/10",
               )}
               title={session.title}
               onClick={() => void props.actions.sessions.open(props.project.id, session.id)}
             >
               <div className="conversation-body min-w-0 flex-1"><div className="conversation-title flex min-w-0 items-center gap-1.5">
-                {sessionStatusDotClass(runtime?.status) && <span className={`session-node-marker size-1.5 shrink-0 rounded-full ${sessionStatusDotClass(runtime?.status)}`} aria-hidden="true" />}
+                {renderRuntimeStatusDot(runtime?.status)}
                 <strong className="min-w-0 flex-1 truncate font-medium">{session.title}</strong>
               </div></div>
             </button>

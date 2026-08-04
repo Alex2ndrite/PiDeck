@@ -13,6 +13,12 @@ test("responding indicator reserves stable space across status changes", () => {
   assert.match(timelineStyles, /data-kind="waiting"[\s\S]*visibility:\s*hidden/);
 });
 
+test("starting state has a distinct indicator before response states", () => {
+  assert.match(events, /isStarting\?: boolean/);
+  assert.match(events, /if \(isStarting\)[\s\S]*kind = "starting"/);
+  assert.match(timelineStyles, /\.responding-indicator\[data-kind="starting"\]/);
+  assert.match(timelineStyles, /data-kind="starting"[\s\S]*min-width: 196px/);
+});
 test("reduced motion keeps response state readable without animation", () => {
   assert.match(timelineStyles, /@media \(prefers-reduced-motion: reduce\)/);
   assert.match(timelineStyles, /responding-indicator-dots span[\s\S]*opacity:\s*1/);

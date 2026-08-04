@@ -1330,11 +1330,12 @@ select:focus-visible {
 }
 
 .conversation-list {
-  /* 只允许垂直滚动，禁止横向滚动条；目录树行更紧凑，留出底部折叠按钮空间。 */
+  /* 只允许垂直滚动，禁止横向滚动条；卡片式项目/会话需要稳定的外侧留白，
+     避免内容贴住侧栏边缘，也为展开后的层级关系保留呼吸感。 */
   overflow-x: hidden;
   overflow-y: auto;
   scrollbar-width: none;
-  padding: 8px 8px 48px;
+  padding: 12px 12px 56px;
 }
 .conversation-list::-webkit-scrollbar {
   width: 0;
@@ -1364,7 +1365,10 @@ select:focus-visible {
   overflow: hidden;
 }
 .project-avatar {
-  /* 项目节点保留文件夹图标，但加极轻的底色容器，让项目树根比会话行更有识别度。 */
+  /* 项目节点是树根卡片的视觉锚点，比历史会话略大一档，避免图标与文字挤在一起。 */
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-md);
   background: color-mix(
     in srgb,
     var(--color-bg-muted) 72%,
@@ -1499,9 +1503,9 @@ select:focus-visible {
 }
 .project-group > .conversation:first-child {
   grid-template-columns: 24px minmax(0, 1fr) max-content;
-  min-height: 32px;
+  min-height: 40px;
   font-weight: 500;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   color: var(--color-text-secondary);
   /* 点击即时反馈：按下时背景闪一下、微缩、弹回 */
   transition: background 0.12s ease, transform 0.1s ease;
@@ -1574,21 +1578,14 @@ select:focus-visible {
 
 /* ── Worktree 工作区 ── */
 .worktree-children {
-  /* 工作区是项目下的二级容器：用轻量左线 + 微弱底色表达归属，不再只靠缩进。 */
+  /* 工作区只通过缩进和柔和底色表达归属，移除容易被误读为分隔线的左侧连接线。 */
   margin: 2px 4px 4px 26px;
-  border-left: 1px solid
-    color-mix(in srgb, var(--color-accent) 18%, var(--color-border-subtle));
+  border-left: 0;
   padding: 2px 0 2px 6px;
-  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--color-bg-muted) 56%, transparent);
 }
 :root[data-theme="dark"] .worktree-children {
-  /* 暗色下 worktree 容器需要更低对比，只保留左线作为归属提示。 */
-  border-left-color: color-mix(
-    in srgb,
-    var(--color-accent) 16%,
-    var(--color-border-subtle)
-  );
   background: color-mix(in srgb, var(--color-bg-muted) 38%, transparent);
 }
 .worktree-main-header-only {
@@ -2673,6 +2670,8 @@ select:focus-visible {
   padding: 18px clamp(24px, 4vw, 48px) 24px;
   min-height: 0;
   scroll-padding-top: 18px;
+  /* Ask/工具完成卡片在时间线末端仍需留出可视缓冲，避免紧贴 composer。 */
+  scroll-padding-bottom: 20px;
 }
 .scroll-to-bottom-btn {
   position: absolute;

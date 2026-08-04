@@ -1,8 +1,8 @@
 /**
  * WebSidebar — Web 端左侧栏（与桌面端 SidebarContent 同风格）。
  *
- * 结构：品牌区（BrandLockup）→ 搜索框 → 项目树（项目可展开收起，行内显示
- * 运行 Agent 数/会话数徽章；展开后列出该项目的会话，会话行带运行状态指示器）
+ * 结构：品牌区（BrandLockup）→ 搜索框 → 项目树（项目可展开收起；展开后列出
+ * 该项目的会话，会话行带运行状态指示器）
  * → 底部连接状态。
  *
  * 交互：点击项目行 = 展开/收起；点击项目行内的 "+" = 新建会话（POST /api/sessions）；
@@ -14,13 +14,14 @@ import { Input } from "@/components/ui-shadcn/input";
 import { t } from "@/i18n";
 import { WebBrandLockup } from "./WebBrandLockup";
 import { cn } from "@/lib/utils";
+import { sessionStatusDotClass } from "@/agentListDisplay";
 import type { WebProject, WebRuntime, WebSession, WebState } from "./webTypes";
 
 const projectRowClass =
-	"conversation relative w-full items-center gap-2 rounded-md border-0 bg-transparent px-2 py-1.5 text-left text-body text-foreground transition-colors hover:bg-accent hover:text-accent-foreground";
+	"conversation relative w-full min-h-10 items-center gap-2 rounded-xl border border-border/70 bg-background/40 px-3 py-2 text-left text-body text-foreground shadow-sm shadow-black/[0.02] transition-[background-color,border-color,box-shadow] duration-200 hover:border-accent/30 hover:bg-accent/5 hover:text-accent-foreground";
 
 const sessionRowClass =
-	"conversation agent-row relative flex h-8 w-full items-center gap-2 rounded-md border-0 bg-transparent px-2 text-left text-body text-foreground transition-colors hover:bg-accent hover:text-accent-foreground";
+	"conversation agent-row relative flex min-h-9 w-full items-center gap-2 rounded-xl border border-border/70 bg-background/35 px-3 py-2 text-left text-body text-foreground shadow-sm shadow-black/[0.02] transition-[background-color,border-color,box-shadow] duration-200 hover:border-accent/30 hover:bg-accent/5 hover:text-accent-foreground";
 
 /** 与桌面 ProjectTree 相同的项目目录名展示：chat 项目显示「聊天」，其余取路径末段。 */
 function displayProjectName(project: WebProject): string {
@@ -31,6 +32,28 @@ function displayProjectName(project: WebProject): string {
 
 function matchesSearch(value: string, search: string): boolean {
 	return !search || value.toLowerCase().includes(search.toLowerCase());
+}
+
+/** Web 侧栏与桌面 Tab/侧栏复用同一组状态点，纯历史记录不显示状态。 */
+function renderRuntimeStatusDot(status?: string) {
+	const dotClass = sessionStatusDotClass(status);
+	if (!dotClass) return null;
+	const label = status === "idle"
+		? t("app.statusIdle")
+		: status === "error"
+			? t("app.statusError")
+			: t("app.statusRunning");
+	return (
+		<span
+			className={cn(
+				"size-1.5 shrink-0 rounded-full",
+				dotClass,
+				status === "error" ? "" : "animate-pulse",
+			)}
+			aria-label={label}
+			title={label}
+		/>
+	);
 }
 
 export function WebSidebar(props: {
@@ -97,15 +120,11 @@ export function WebSidebar(props: {
 						const projectSessions = state.sessions
 							.filter((session) => session.projectId === project.id)
 							.filter((session) => matchesSearch(session.title || session.id, search.trim()));
-						const runningCount = projectSessions.filter((session) =>
-							runtimeFor(session.id)?.status === "running" ||
-							runtimeFor(session.id)?.status === "starting",
-						).length;
 						const expanded = searching || expandedProjects.has(project.id) || project.id === activeSessionProjectId;
 						const projectName = displayProjectName(project);
 						const creating = creatingProjectId === project.id;
 						return (
-							<div key={project.id} className="project-group mb-0.5">
+							<div key={project.id} className="project-group mb-2">
 								<button
 									type="button"
 									className={cn(projectRowClass, "flex min-h-8")}
@@ -130,17 +149,6 @@ export function WebSidebar(props: {
 									<div className="conversation-body min-w-0 flex-1">
 										<div className="conversation-title flex min-w-0 items-center gap-1.5">
 											<strong className="min-w-0 flex-1 truncate font-medium" title={project.path}>{projectName}</strong>
-											{runningCount > 0 && (
-												<span className="project-running-badge inline-flex h-4 shrink-0 items-center gap-1 rounded-full bg-primary/10 px-1.5 text-micro font-medium text-primary">
-													<span className="size-1 rounded-full bg-primary animate-pulse" aria-hidden="true" />
-													{runningCount}
-												</span>
-											)}
-											{projectSessions.length > 0 && (
-												<span className="project-session-count inline-flex h-4 shrink-0 items-center rounded-full bg-muted px-1.5 text-micro tabular-nums text-muted-foreground">
-													{projectSessions.length}
-												</span>
-											)}
 										</div>
 									</div>
 									{/* 新建会话：桌面同款 row-action span（项目行是 <button>，内部不能再嵌 <button>） */}
@@ -172,7 +180,7 @@ export function WebSidebar(props: {
 									</span>
 								</button>
 								{expanded && (
-									<div className="project-children flex flex-col gap-0.5 py-0.5">
+									<div className="project-children mt-2 flex flex-col gap-2 px-1 pb-1">
 										{projectSessions.map((session) => {
 											const runtime = runtimeFor(session.id);
 											return (
@@ -182,19 +190,14 @@ export function WebSidebar(props: {
 													className={cn(
 														sessionRowClass,
 														"session-row",
-														session.id === activeSessionId && "active bg-accent text-accent-foreground",
+														session.id === activeSessionId && "active border-accent/35 bg-accent/10 text-accent-foreground shadow-sm shadow-accent/10",
 													)}
 													title={session.title}
 													onClick={() => props.onSelectSession(session.id)}
 												>
-													<span className="session-node-marker size-1.5 shrink-0 rounded-full bg-border" aria-hidden="true" />
+													{renderRuntimeStatusDot(runtime?.status)}
 													<div className="conversation-body min-w-0 flex-1">
 														<div className="conversation-title flex min-w-0 items-center gap-1.5">
-															{runtime && (
-																<span className={`agent-status-indicator status-${runtime.status}`}>
-																	{runtime.status}
-																</span>
-															)}
 															<strong className={cn("min-w-0 flex-1 truncate", runtime ? "font-medium" : "font-normal text-muted-foreground/90")}>
 																{session.title || t("common.untitled")}
 															</strong>

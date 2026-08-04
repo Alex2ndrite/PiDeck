@@ -35,11 +35,11 @@ const sourceBadge = readFileSync(
 );
 
 test("sidebar child rows use shared official hover/active classes", () => {
-  assert.match(sessionTree, /hover:bg-accent hover:text-accent-foreground/);
-  assert.match(sessionTree, /active bg-accent text-accent-foreground/);
+  assert.match(sessionTree, /hover:bg-accent\/5 hover:text-accent-foreground/);
+  assert.match(sessionTree, /active border-accent\/35 bg-accent\/10 text-accent-foreground/);
   assert.match(sessionTree, /sessionRowClass/);
   assert.match(projectTree, /treeRowClass/);
-  assert.match(projectTree, /hover:bg-accent hover:text-accent-foreground/);
+  assert.match(projectTree, /hover:bg-accent\/5 hover:text-accent-foreground/);
 });
 
 test("sidebar workspace wrapper stays transparent", () => {
@@ -57,8 +57,8 @@ test("sidebar child titles truncate via component classes", () => {
   assert.match(projectTree, /truncate font-medium/);
 });
 
-test("session status dots reuse shared Tailwind colors and stay text-free", () => {
-  // 会话/Agent 行与 Tab 共享同一状态点语义：idle=蓝、starting/运行中=黄、error=红。
+test("session status indicators stay on the concrete session row", () => {
+  // Tab 与侧栏会话行共享蓝/黄/红状态点语义。
   assert.match(agentListDisplay, /export function sessionStatusDotClass/);
   assert.match(agentListDisplay, /case "idle"/);
   assert.match(agentListDisplay, /return "bg-info"/);
@@ -68,20 +68,20 @@ test("session status dots reuse shared Tailwind colors and stay text-free", () =
   assert.match(agentListDisplay, /return "bg-warning"/);
   // 未启动/无 runtime（含 detached）不渲染色点。
   assert.match(agentListDisplay, /if \(!status \|\| status === "detached"\) return undefined/);
-  // SessionTree 不再渲染带文本的状态徽标，改用纯色点。
+  // SessionTree 不再渲染带文本的状态徽标；无 runtime 的历史记录不显示状态点。
   assert.doesNotMatch(sessionTree, /\/agent-status-indicator/);
-  assert.match(sessionTree, /sessionStatusDotClass\(/);
-  // 硺点：无 runtime 的行不回退渲染灰色点；仅当 helper 返回颜色时条件渲染。
-  assert.doesNotMatch(sessionTree, /\?\? \"bg-muted-foreground\/50\"|\?\? \"bg-border\"/);
-  assert.match(sessionTree, /\{sessionStatusDotClass\(child\.agent\.status\) && <span/);
-  assert.match(sessionTree, /\{sessionStatusDotClass\(runtime\?\.status\) && <span/);
+  assert.match(sessionTree, /function renderRuntimeStatusDot/);
+  assert.match(sessionTree, /sessionStatusDotClass\(status\)/);
+  assert.match(sessionTree, /renderRuntimeStatusDot\(child\.agent\.status\)/);
+  assert.match(sessionTree, /renderRuntimeStatusDot\(runtimeSnapshot\?\.status\)/);
   // Tab 同样未启动不显示点，已启动按状态点渲染。
   assert.match(tabBar, /sessionStatusDotClass\(status\)/);
   assert.match(tabBar, /dotClass &&/);
 });
 
-test("project children use indentation without a connector line and chat uses the shared row", () => {
+test("project children use spacing without connector lines and chat uses the shared row", () => {
   assert.doesNotMatch(projectTree, /border-l/);
+  assert.match(styles, /\.worktree-children \{[\s\S]*?border-left:\s*0;/);
   assert.doesNotMatch(projectTree, /chat-project-guide/);
   assert.doesNotMatch(styles, /\.project-group\.chat-project-group/);
 });
@@ -99,10 +99,10 @@ test("sidebar omits the redundant projects heading and tabs shrink to their titl
   assert.match(tabBar, /session-tabs-scroll flex min-w-0 flex-1/);
   assert.match(tabBar, /session-tabs-actions flex shrink-0/);
   assert.match(sidebarContent, /sidebar-body flex min-h-0 flex-1 flex-col gap-2 px-1\.5 py-1/);
-  assert.match(sessionTree, /h-7 w-full/);
-  assert.match(sessionTree, /history-session-row mb-1 last:mb-0 pl-5 pr-2 py-1/);
+  assert.match(sessionTree, /min-h-9 w-full/);
+  assert.match(sessionTree, /history-session-row mx-1 mb-1 last:mb-0 pl-3 pr-3 py-2/);
   assert.match(sessionTree, /历史会话不是运行中的 Agent/);
-  assert.match(sessionTree, /flex flex-col gap-0 py-0/);
+  assert.match(sessionTree, /flex flex-col gap-2 py-1/);
   assert.match(styles, /\.chat-list-pane\.v3-braun \.sidebar-body \.session-row[\s\S]*?margin: 0;/);
   const conversationTitleSpan = styles.match(
     /\.conversation-title span \{([\s\S]*?)\n\}/,

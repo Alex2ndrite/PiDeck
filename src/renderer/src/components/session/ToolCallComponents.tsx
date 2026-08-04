@@ -233,13 +233,14 @@ const statusLabel =
 			tone={tone === "error" ? "error" : tone === "warning" ? "warning" : tone === "running" ? "active" : "success"}
 		>
 		<section
-			className={`tool-card w-full min-w-0 overflow-hidden rounded-md border border-border-subtle bg-bg-panel transition-[border-color,background-color] duration-150 tone-${tone}${isSkillRead ? " tool-card--skill" : ""}${isAskCard ? " tool-card--ask" : ""}`}
+			className={`tool-card w-full min-w-0 overflow-hidden rounded-md border border-border-subtle bg-bg-panel transition-[border-color,background-color,box-shadow] duration-200 tone-${tone}${isSkillRead ? " tool-card--skill" : ""}${isAskCard ? " tool-card--ask" : ""}${status === "running" ? " tool-card--running" : ""}`}
 			data-status={status}
 			data-tool-kind={isSkillRead ? "skill" : getToolKind(toolName)}
 			data-message-id={props.message.id}
 		>
 			<div className="flex min-h-8 items-center transition-colors duration-150 hover:bg-[color:color-mix(in_srgb,var(--color-bg-hover)_55%,var(--color-bg-panel))]">
 				<button
+					type="button"
 					className="flex min-h-8 min-w-0 flex-[1_1_auto] cursor-pointer items-center gap-2 border-0 bg-transparent p-1.5 pl-2.5 text-left text-control leading-5 text-text-secondary focus-visible:-outline-offset-2 focus-visible:outline-2"
 					onClick={() => setExpanded((v) => !v)}
 					aria-expanded={expanded}
@@ -324,7 +325,7 @@ export const ToolGroupCard = memo(function ToolGroupCard(props: {
 	group: ToolGroupItem;
 }) {
 	return (
-		<section className="w-full min-w-0 overflow-hidden rounded-none border-0 bg-transparent" data-message-id={props.group.id}>
+		<section className="tool-group-card w-full min-w-0 overflow-hidden rounded-none border-0 bg-transparent" data-message-id={props.group.id}>
 			<div className="flex flex-col gap-0 p-0">
 				{props.group.messages.map((message) => (
 					<ToolCard key={message.id} message={message} />

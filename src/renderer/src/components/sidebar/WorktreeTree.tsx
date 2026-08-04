@@ -32,7 +32,7 @@ export function WorktreeTree(props: {
           variant="ghost"
           className={cn(
             "conversation worktree-workspace-header h-8 w-full justify-start gap-2 px-2 text-left",
-            props.currentProjectId === props.project.id && "active bg-accent text-accent-foreground",
+            props.currentProjectId === props.project.id && "active border-accent/35 bg-accent/10 text-accent-foreground shadow-sm shadow-accent/10",
           )}
           onClick={() => props.actions.projects.select(props.project.id)}
           title={t("app.worktreeMainWorkspace")}
@@ -106,9 +106,6 @@ function WorkspaceTreeRowView(props: {
   const { row } = props;
   const childProject = row.project;
   const expanded = Boolean(childProject && props.controller.expandedWorktreePaths.has(row.path));
-  const sessionCount = childProject
-    ? (props.controller.catalog.sessionsByProject[childProject.id]?.length ?? 0)
-    : 0;
   const rowId = `worktree-sessions-${row.key.replace(/[^a-z0-9]+/gi, "-")}`;
   const isActive = childProject?.id === props.currentProjectId;
 
@@ -150,11 +147,6 @@ function WorkspaceTreeRowView(props: {
         <span className="min-w-0 flex-1 truncate font-medium">{row.branch}</span>
         {row.directory !== row.branch && (
           <span className="workspace-tree-directory max-w-20 shrink-0 truncate text-micro text-muted-foreground">{row.directory}</span>
-        )}
-        {sessionCount > 0 && (
-          <span className="workspace-tree-count inline-flex h-4 shrink-0 items-center rounded-full bg-muted px-1.5 text-micro tabular-nums text-muted-foreground" title={t("app.projectSessionCount", { count: sessionCount })}>
-            {sessionCount}
-          </span>
         )}
       </button>
 

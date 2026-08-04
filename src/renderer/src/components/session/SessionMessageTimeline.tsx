@@ -543,6 +543,7 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
                 <RespondingIndicator
                   thinking={activeThinking}
                   showThinking={props.showThinking}
+                  isStarting={activeConversationStatus === "starting"}
                   isExecutingTool={activeRuntimeState?.isExecutingTool}
                   isStreaming={activeRuntimeState?.isStreaming}
                 />
@@ -563,9 +564,10 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
           </div>
         )}
 
-      {/* 吸收时间线原有的底部安全留白，让 Ask 与 composer 顶边保持紧凑但不遮挡内容。 */}
+      {/* Ask 是阻塞式会话步骤，必须参与时间线的正常布局；这样它展开时会推动正文高度，
+          而不是靠 sticky/z-index 覆盖最后一条工具调用或回答。 */}
       {props.runtimeUi ? (
-        <div className="session-runtime-ui sticky bottom-0 z-10 mx-auto -mb-6 w-full min-w-0 empty:hidden bg-[var(--color-bg-panel)] pt-1">
+        <div className="session-runtime-ui mx-auto w-full min-w-0 empty:hidden">
           {props.runtimeUi}
         </div>
       ) : null}

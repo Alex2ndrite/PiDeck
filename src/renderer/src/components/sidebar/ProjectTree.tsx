@@ -11,7 +11,7 @@ import { cn } from "../../lib/utils";
 
 /** pure official：项目/会话树行共享的 shadcn 风格底（hover=accent 面，active 同系） */
 const treeRowClass =
-  "group conversation relative flex w-full items-center gap-0.5 rounded-md border-0 bg-transparent px-1 py-0.5 text-body text-foreground transition-colors hover:bg-accent hover:text-accent-foreground";
+  "group conversation relative flex min-h-10 w-full items-center gap-2 rounded-xl border border-border/70 bg-background/40 px-2 py-1.5 text-body text-foreground shadow-sm shadow-black/[0.02] transition-[background-color,border-color,box-shadow] duration-200 hover:border-accent/30 hover:bg-accent/5 hover:text-accent-foreground";
 
 function isChatProject(project: Project) {
   return project.kind === "chat";
@@ -77,43 +77,24 @@ export function ProjectTree(props: {
       const sourceFilter = props.controller.sourceFilterFor(project.id);
       const dragging = props.controller.drag.sourceProjectId === project.id;
       const dragOver = props.controller.drag.overProjectId === project.id;
-      // 项目行统计徽标覆盖整棵工作区树（根项目 + 直属 worktree），避免徽标只统计
-      // 根目录而用户实际会话都在 worktree 中时产生错误认知。
-      const workspaceProjects = props.controller.catalog.projects.filter(
-        (candidate) => candidate.id === project.id || candidate.worktreeParentId === project.id,
-      );
-      const workspaceProjectIds = new Set(workspaceProjects.map((candidate) => candidate.id));
       const rootProjectSessions = props.controller.catalog.sessionsByProject[project.id] ?? [];
-      const projectSessions = workspaceProjects.flatMap(
-        (workspaceProject) => props.controller.catalog.sessionsByProject[workspaceProject.id] ?? [],
-      );
-      const sessionCount = projectSessions.length;
-      const projectAgents = props.controller.catalog.agents.filter((agent) => workspaceProjectIds.has(agent.projectId));
-      const runningAgentCount = projectAgents.filter(
-        (agent) => agent.status === "running" || agent.status === "starting",
-      ).length;
-      const projectStatus = projectAgents.some((agent) => agent.status === "error")
-        ? "error"
-        : projectAgents.some((agent) => agent.status === "running")
-          ? "running"
-          : projectAgents.some((agent) => agent.status === "starting")
-            ? "starting"
-            : "idle";
-      return <div key={project.id} className={cn("project-group mb-0.5", project.worktreeEnabled && "worktree-enabled")}>
+      // 运行态属于具体会话，而不是项目容器；项目行只负责导航，避免多个 Agent 同时运行时
+      // 项目头像出现无法指向目标会话的聚合动画。
+      return <div key={project.id} className={cn("project-group mb-2", project.worktreeEnabled && "worktree-enabled")}>
         <div
           className={cn(
             treeRowClass,
             !chat && !props.controller.search.trim() && "project-draggable",
             dragging && "dragging opacity-60",
             dragOver && "drag-over ring-1 ring-border",
-            isCurrent && "active bg-accent text-accent-foreground",
+            isCurrent && "active border-accent/35 bg-accent/10 text-accent-foreground shadow-sm shadow-accent/10",
           )}
           data-active={isCurrent || undefined}
           onContextMenu={(event) => { event.preventDefault(); void props.controller.openMenu({ kind: "project", projectId: project.id, x: event.clientX, y: event.clientY }); }}
         >
           <button
             type="button"
-            className={cn("project-fold grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-background/70 hover:text-foreground", collapsed && "folded")}
+            className={cn("project-fold grid size-8 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-background/70 hover:text-foreground", collapsed && "folded")}
             title={collapsed ? t("app.projectExpand") : t("app.projectCollapse")}
             aria-label={collapsed ? t("app.projectExpand") : t("app.projectCollapse")}
             onClick={() => props.controller.toggleProject(project.id)}
@@ -122,7 +103,7 @@ export function ProjectTree(props: {
           </button>
           <button
             type="button"
-            className="flex min-w-0 flex-1 items-center gap-1.5 py-0.5 pr-0.5 text-left"
+            className="flex min-w-0 flex-1 items-center gap-2 py-1 pr-1 text-left"
             draggable={!chat && !props.controller.search.trim()}
             onDragStart={(event) => dragStart(event, project.id)}
             onDragOver={(event) => { if (props.controller.drag.sourceProjectId && props.controller.drag.sourceProjectId !== project.id) { event.preventDefault(); props.controller.setProjectDropTarget(project.id); } }}
@@ -130,12 +111,12 @@ export function ProjectTree(props: {
             onDrop={(event) => drop(event, project.id)}
             onDragEnd={props.controller.finishProjectDrag}
             onClick={() => {
-              // 项目主行同时承担选择和手风琴切换，确保新项目即使只显示会话计数也能打开列表。
+              // 项目主行同时承担选择和手风琴切换，让项目卡片本身保持唯一且明确的导航入口。
               props.controller.toggleProject(project.id);
               props.actions.projects.select(project.id);
             }}
           >
-            <ProjectAvatar name={projectDirectoryName} kind={chat ? "chat" : "project"} status={projectStatus} />
+            <ProjectAvatar name={projectDirectoryName} kind={chat ? "chat" : "project"} />
             <div className="conversation-body min-w-0 flex-1">
               <div className="conversation-title flex min-w-0 items-center">
                 <strong className="min-w-0 flex-1 truncate font-medium" title={project.path}>{projectDirectoryName}</strong>
@@ -143,17 +124,7 @@ export function ProjectTree(props: {
               {/* 聊天项目与普通项目使用同一行高；说明文字不参与侧栏导航信息。 */}
             </div>
           </button>
-          <div className="flex shrink-0 items-center gap-0.5 pr-0.5">
-            {runningAgentCount > 0 && (
-              <span className="project-running-badge inline-flex h-4 items-center rounded-full bg-primary/10 px-1.5 text-micro font-medium tabular-nums text-primary" title={t("app.projectRunningAgents", { count: runningAgentCount })}>
-                {runningAgentCount}
-              </span>
-            )}
-            {sessionCount > 0 && (
-              <span className="project-session-count inline-flex h-4 items-center rounded-full bg-muted px-1.5 text-micro tabular-nums text-muted-foreground" title={t("app.projectSessionCount", { count: sessionCount })}>
-                {sessionCount}
-              </span>
-            )}
+          <div className="flex shrink-0 items-center gap-1 pr-1">
             {sourceFilter !== null && (
               <button
                 type="button"
@@ -168,7 +139,7 @@ export function ProjectTree(props: {
             {isCurrent && (
               <button type="button" className="grid size-6 place-items-center rounded-md text-muted-foreground hover:bg-background/80 hover:text-foreground" title={t("app.projectNewAgent")} aria-label={t("app.projectNewAgent")} onClick={() => void props.actions.sessions.createDraft(project.id)}><Plus size={14} /></button>
             )}
-            <div className="flex items-center gap-0.5">
+            <div className="flex items-center gap-1">
               {chat && props.actions.projects.changeChatPath && (
                 <button type="button" className="grid size-6 place-items-center rounded-md text-muted-foreground hover:bg-background/80 hover:text-foreground" title={t("app.chatProjectSettings")} aria-label={t("app.chatProjectSettings")} onClick={() => void props.actions.projects.changeChatPath!(project)}><FolderCog size={14} /></button>
               )}
@@ -180,7 +151,7 @@ export function ProjectTree(props: {
           </div>
         </div>
         {!collapsed && (
-          <div className="ml-1 pb-0.5">
+          <div className="ml-2 mt-2 mr-1 space-y-1 pb-1">
             {/* 展开内容不依赖当前选中项，项目切换只改变高亮，避免两棵会话树同时伸缩造成布局抖动。 */}
             {project.worktreeEnabled ? (
               <WorktreeTree

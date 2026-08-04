@@ -824,7 +824,7 @@ export const TurnRow = memo(function TurnRow(props: {
 	// 没有助手指令消息的情况：整轮只含工具/思考，用执行过程折叠渲染
 	if (lastAssistantIndex === -1) {
 		return (
-			<article ref={rowRef} className={`turn-row mb-6 w-full min-w-0 max-w-full ${props.fresh ? "animate-[message-enter_260ms_cubic-bezier(0.22,1,0.36,1)_both]" : ""}`} data-message-id={run.id}>
+			<article ref={rowRef} className={`turn-row mb-6 w-full min-w-0 max-w-full ${props.fresh ? "turn-row--fresh animate-[message-enter_260ms_cubic-bezier(0.22,1,0.36,1)_both]" : ""} ${props.agentRunning && !isComplete ? "turn-row--running" : isComplete ? "turn-row--complete" : "turn-row--pending"}`} data-message-id={run.id}>
 				<div className="flex min-w-0 flex-col gap-3">
 					<div className="mb-1 inline-flex items-center gap-2 text-xs text-muted-foreground tabular-nums">
 						<span className="shrink-0 font-mono font-semibold text-foreground/80">pi</span>
@@ -872,7 +872,7 @@ export const TurnRow = memo(function TurnRow(props: {
 	}
 
 	return (
-		<article ref={rowRef} className="turn-row mb-6 w-full min-w-0 max-w-full" data-message-id={run.id}>
+		<article ref={rowRef} className={`turn-row mb-6 w-full min-w-0 max-w-full ${props.agentRunning && !isComplete ? "turn-row--running" : isComplete ? "turn-row--complete" : "turn-row--pending"} ${props.fresh ? "turn-row--fresh" : ""}`} data-message-id={run.id}>
 			<div className="flex min-w-0 flex-col gap-3">
 				<div className="mb-1 inline-flex items-center gap-2 text-xs text-muted-foreground tabular-nums">
 					<span className="shrink-0 font-mono font-semibold text-foreground/80">pi</span>
@@ -1094,7 +1094,7 @@ export const UserBubble = memo(function UserBubble(props: {
 		);
 	};
 	return (
-		<article /* user-turn 为 e2e 选择器锚点 */ ref={rowRef} className={`user-turn group/user mb-4 flex w-full min-w-0 max-w-full flex-col items-end ${props.fresh ? "animate-[message-enter_260ms_cubic-bezier(0.22,1,0.36,1)_both]" : ""}`} data-message-id={message.id}>
+		<article /* user-turn 为 e2e 选择器锚点 */ ref={rowRef} className={`user-turn group/user mb-4 flex w-full min-w-0 max-w-full flex-col items-end ${props.fresh ? "user-turn--fresh animate-[message-enter_260ms_cubic-bezier(0.22,1,0.36,1)_both]" : ""}`} data-message-id={message.id}>
 			{skills.length > 0 && (
 				<div className="mb-1.5 flex flex-wrap justify-end gap-1.5">
 					{skills.map((name) => (
@@ -1119,7 +1119,7 @@ export const UserBubble = memo(function UserBubble(props: {
 				</div>
 			)}
 			{cleanText && !editing && (
-				<div className="w-fit min-w-0 max-w-[min(82%,64ch)] rounded-[14px] border border-border bg-muted/60 px-3 py-2 text-sm text-foreground [overflow-wrap:anywhere] break-words">
+				<div className="user-turn-bubble w-fit min-w-0 max-w-[min(82%,64ch)] rounded-[14px] border border-border bg-muted/60 px-3 py-2 text-sm text-foreground [overflow-wrap:anywhere] break-words">
 					<div className="text-chat leading-[1.6] text-text-primary whitespace-pre-wrap break-words">
 						{renderChipText(cleanText, props.onOpenFile, props.validCommandNames, props.validFilePaths)}
 					</div>

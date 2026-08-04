@@ -371,24 +371,29 @@ export const ThinkingBlock = memo(function ThinkingBlock(props: {
  * 流式响应指示器（三点脉动动画 + 状态文案），在 agent 运行/流式期间显示。
  *
  * 状态优先级：
- *  1. 工具执行中 → "正在工具调用"（琥珀色）
- *  2. 有思考文本 / 流式回答中 → "正在回应"
- *  3. 过渡等待 → 只显示三点动画，无标签
+ *  1. Agent 启动中 → "正在启动 Agent"（琥珀色）
+ *  2. 工具执行中 → "正在工具调用"（琥珀色）
+ *  3. 有思考文本 / 流式回答中 → "正在回应"
+ *  4. 过渡等待 → 只显示三点动画，无标签
  *
- * 注意：原来的 "正在思考" 状态已合并到 "正在回应"，不再单独展示。
+ * 启动状态单独展示，避免用户发消息后 Agent 尚未完成预热时看起来像“没有响应”。
  */
 export function RespondingIndicator(props: {
 	thinking?: string;
 	showThinking?: boolean;
+	isStarting?: boolean;
 	isExecutingTool?: boolean;
 	isStreaming?: boolean;
 }) {
-	const { isExecutingTool, isStreaming, thinking, showThinking } = props;
+	const { isStarting, isExecutingTool, isStreaming, thinking, showThinking } = props;
 
-	let kind: "executing" | "responding" | "waiting";
+	let kind: "starting" | "executing" | "responding" | "waiting";
 	let label: string;
 
-	if (isExecutingTool) {
+	if (isStarting) {
+		kind = "starting";
+		label = t("app.agentStarting");
+	} else if (isExecutingTool) {
 		kind = "executing";
 		label = t("thinking.executing");
 	} else if ((showThinking && thinking && thinking.length > 0) || isStreaming) {
