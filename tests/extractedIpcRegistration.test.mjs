@@ -20,3 +20,16 @@ test("catalog session loading remains owned by the registered session IPC module
   assert.match(sessionIpc, /ipcChannels\.sessionsCatalogList/);
   assert.match(sessionIpc, /sessionCatalog\.mergeScanned/);
 });
+
+const systemIpc = readFileSync("src/main/ipc/systemIpc.ts", "utf8");
+
+test("system IPC still registers pi update channels when extensionManager is provided", () => {
+  // 回归：Phase 3.7 拆分后若漏传 extensionManager，pi:update-check 会静默不注册。
+  assert.match(systemIpc, /ipcChannels\.piUpdateCheck/);
+  assert.match(systemIpc, /if \(extensionManager\)/);
+  assert.match(
+    entry,
+    /registerSystemIpc\(\{[\s\S]*extensionManager,[\s\S]*testPiProxy,[\s\S]*RELEASES_URL,[\s\S]*\}\)/,
+  );
+  assert.doesNotMatch(systemIpc, /from\s+["']\.\.\/index["']/);
+});

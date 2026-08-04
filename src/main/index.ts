@@ -2119,6 +2119,8 @@ function registerIpc() {
 		worktreeService,
 	});
 
+	// Phase 3.7 拆出 systemIpc 后这些可选依赖必须显式注入；
+	// 漏传 extensionManager 会导致 pi:update-check / pi:update 根本不注册。
 	registerSystemIpc({
 		piLocator,
 		settingsStore,
@@ -2134,6 +2136,50 @@ function registerIpc() {
 		downloadUpdateAsset,
 		installDownloadedUpdate,
 		openExternalUrl,
+		extensionManager,
+		// 设置变更副作用（代理 / 主题 / 飞书语言 / WSL / 宠物 / Web 服务）
+		applyDesktopProxy,
+		testPiProxy,
+		applyWebServiceSettings: (settings) => webServiceManager.applySettings(settings),
+		reactToPetSettings: async (prev, next) => {
+			await petSystem?.reactToSettings(prev, next);
+		},
+		applyNativeThemeSource,
+		refreshTrayContextMenu,
+		// 语言变更时按当前主进程 locale 重算，忽略 systemIpc 传入的占位参数
+		setFeishuLocale: () => {
+			feishuBridge?.setLocale(currentFeishuLocale());
+		},
+		setFeishuConfigDefaultBotName: (_name: string) => {
+			// systemIpc 传入空串只是触发点；实际默认名必须按当前主进程 locale 重算。
+			setFeishuConfigDefaultBotName(feishuT(currentFeishuLocale(), "bridge.defaultBotName"));
+		},
+		notifyTitleBarChange: (window) => settingsStore.notifyTitleBarChange(window),
+		setSessionCatalogIdentityContext: (ctx) => sessionCatalog.setIdentityContext(ctx),
+		resolveWslEnvironment: async (distro, user, logger) => {
+			const { resolveWslEnvironment: resolveWsl } = await import("./wsl/WslEnvironment");
+			return resolveWsl(distro, user, logger);
+		},
+		configureSessionScannerWsl: (env) => sessionScanner.configureWsl(env),
+		clearSessionScannerWsl: () => sessionScanner.clearWsl(),
+		configureSkillManagerWsl: (env) => skillManager.configureWsl(env),
+		configurePromptManagerWsl: (env) => promptManager.configureWsl(env),
+		configureExtensionManagerWsl: (env) => extensionManager.configureWsl(env),
+		configureConfigManagerWsl: (env) => configManager.configureWsl(env),
+		configureXuePromptManagerWsl: (env) => xuePromptManager.configureWsl(env),
+		sessionCommandIpcError,
+		// 重启路径需要同步 isQuitting / 停服务，避免 closeToTray 吞掉 relaunch
+		webServiceManager,
+		terminalManager,
+		isQuitting: {
+			get value() {
+				return isQuitting;
+			},
+			set value(next: boolean) {
+				isQuitting = next;
+			},
+		},
+		RELEASES_URL,
 	});
 
 	registerStoreIpc({

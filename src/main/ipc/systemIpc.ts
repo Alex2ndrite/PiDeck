@@ -46,16 +46,19 @@ export type SystemIpcDeps = {
 	installDownloadedUpdate: (filePath: string) => Promise<void>;
 	/** Open external URL */
 	openExternalUrl: (url: string, forceSystem?: boolean) => Promise<void>;
-	/** Resolve WSL environment (lazy import): used by settingsUpdate when WSL settings change */
-	resolveWslEnvironment?: (distro: string, user: string, logger: { warn: (msg: string, detail: unknown) => void }) => Promise<{
-		wslDistro: string;
-		wslUser: string;
-		wslPath: (linuxPath: string) => string;
-	}>;
+	/**
+	 * Resolve WSL environment (lazy import in index.ts).
+	 * 返回值直接喂给各 manager.configureWsl，形状必须是 WslEnvironment。
+	 */
+	resolveWslEnvironment?: (
+		distro: string,
+		user: string,
+		logger: { warn: (msg: string, detail: unknown) => void },
+	) => Promise<import("../wsl/WslPaths").WslEnvironment>;
 	/** React to settings changes for pet system */
 	reactToPetSettings?: (prev: AppSettings, next: AppSettings) => Promise<void>;
 	/** Session scanner WSL config */
-	configureSessionScannerWsl?: (env: unknown) => Promise<void>;
+	configureSessionScannerWsl?: (env: import("../wsl/WslPaths").WslEnvironment) => Promise<void>;
 	clearSessionScannerWsl?: () => void;
 	/** Set feishu locale */
 	setFeishuLocale?: (locale: unknown) => void;
@@ -75,12 +78,12 @@ export type SystemIpcDeps = {
 	applyWebServiceSettings?: (settings: AppSettings) => Promise<void>;
 	/** Session catalog set identity context */
 	setSessionCatalogIdentityContext?: (ctx: { wslDistro?: string; wslUser?: string }) => void;
-	/** Configure WSL for various services */
-	configureSkillManagerWsl?: (env: unknown) => void;
-	configurePromptManagerWsl?: (env: unknown) => void;
-	configureExtensionManagerWsl?: (env: unknown) => void;
-	configureConfigManagerWsl?: (env: unknown) => void;
-	configureXuePromptManagerWsl?: (env: unknown) => void;
+	/** Configure WSL for various services — null 表示切回本机路径 */
+	configureSkillManagerWsl?: (env: import("../wsl/WslPaths").WslEnvironment | null) => void;
+	configurePromptManagerWsl?: (env: import("../wsl/WslPaths").WslEnvironment | null) => void;
+	configureExtensionManagerWsl?: (env: import("../wsl/WslPaths").WslEnvironment | null) => void;
+	configureConfigManagerWsl?: (env: import("../wsl/WslPaths").WslEnvironment | null) => void;
+	configureXuePromptManagerWsl?: (env: import("../wsl/WslPaths").WslEnvironment | null) => void;
 	/** Session command IPC error converter */
 	sessionCommandIpcError?: (error: import("../../shared/types").SessionCommandError) => Error;
 	/** Extension manager for pi update */
