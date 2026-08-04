@@ -1848,6 +1848,37 @@
   background: var(--color-bg-panel);
   box-shadow: var(--shadow-xl);
   overflow: hidden;
+  /* Pi 管理页与会话侧栏共用 control 密度，避免 shadcn 默认 14/36px 控件显得偏大。 */
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-control);
+  line-height: var(--line-height-control);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+.config-modal [data-slot="button"] {
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-control);
+}
+.config-modal [data-slot="input"],
+.config-modal [data-slot="textarea"] {
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-control);
+  line-height: var(--line-height-control);
+}
+.config-modal [data-slot="input"] {
+  height: var(--control-height-md);
+}
+.config-modal [data-slot="button"][data-size="default"] {
+  min-height: var(--control-height-md);
+  height: var(--control-height-md);
+}
+.config-modal [data-slot="button"][data-size="sm"] {
+  min-height: var(--control-height-sm);
+  height: var(--control-height-sm);
+}
+.config-modal .config-content {
+  padding: var(--space-4);
 }
 
 .config-layout {
@@ -2471,7 +2502,7 @@
   padding: 0 10px 6px;
   font-size: var(--font-size-micro);
   color: var(--color-text-tertiary);
-  font-weight: 650;
+  font-weight: 600;
   letter-spacing: 0;
 }
 
@@ -2796,7 +2827,7 @@
   justify-content: space-between;
   padding: 10px 14px;
   font-size: var(--font-size-body);
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .config-test-result.success .config-test-result-header {
@@ -3744,7 +3775,7 @@ div.fixed.inset-0.z-50 {
 /* ── Skills Tab ─────────────────────────────────────── */
 .skills-tab {
   display: grid;
-  gap: 14px;
+  gap: var(--space-3);
 }
 .skills-tab .config-toolbar > div:first-child {
   display: grid;
@@ -3760,8 +3791,8 @@ div.fixed.inset-0.z-50 {
 }
 .skill-create-card {
   display: grid;
-  gap: 12px;
-  padding: 14px;
+  gap: var(--space-2);
+  padding: var(--space-3);
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-lg);
   background: var(--color-bg-muted);
@@ -3864,7 +3895,7 @@ div.fixed.inset-0.z-50 {
 }
 .skills-list {
   display: grid;
-  gap: 10px;
+  gap: var(--space-2);
 }
 .skill-card-main {
   gap: 5px;

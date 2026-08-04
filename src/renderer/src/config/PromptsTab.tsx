@@ -100,7 +100,7 @@ export function PromptsTab(props: {
 				onValueChange={(v) => { if (v === "local" || v === "store") setPromptTab(v); }}
 				className="gap-0"
 			>
-				<TabsList className="w-full">
+				<TabsList className="w-fit">
 					<TabsTrigger value="local" onClick={() => props.onRefresh()}>
 						{t("config.nav.prompts")}
 					</TabsTrigger>

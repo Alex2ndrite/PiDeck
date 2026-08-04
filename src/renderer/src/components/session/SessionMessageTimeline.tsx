@@ -33,6 +33,7 @@ import {
 } from "../../hooks/useSessionTimelineController";
 import { t } from "../../i18n";
 import { SessionFileSummary } from "./SessionFileSummary";
+import { SessionStartSurface } from "./SessionStartSurface";
 
 type TurnRowProps = ComponentProps<typeof TurnRow>;
 type UserBubbleProps = ComponentProps<typeof UserBubble>;
@@ -53,6 +54,8 @@ type TimelineInteractionProps = {
   onForkMessage?: UserBubbleProps["onForkMessage"];
   forkingMessageId?: string | null;
   onToast: (message: string) => void;
+  /** 新建 Agent 的空时间线快捷操作：只写入 composer，不自动投递。 */
+  onQuickPrompt?: (prompt: string) => void;
 };
 
 export type SessionMessageTimelineProps = TimelineInteractionProps & {
@@ -412,6 +415,12 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
           onCreate={props.onCreateSession}
         />
       )}
+
+      {hasActiveConversation &&
+        !isConversationLoading &&
+        activeMessages.length === 0 && (
+          <SessionStartSurface onQuickPrompt={props.onQuickPrompt} />
+        )}
 
       {hasActiveConversation &&
         !isConversationLoading &&

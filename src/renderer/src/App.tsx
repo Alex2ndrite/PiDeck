@@ -746,6 +746,14 @@ export function App() {
     });
   }, [store, queue.enqueueQueuedPrompt]);
 
+  /** 空会话快捷操作只负责填入当前 composer；用户仍可修改 prompt 后再点击发送。 */
+  const insertQuickPrompt = useCallback((sessionId: string, message: string) => {
+    setSessionDraft({ sessionId, value: message });
+    requestAnimationFrame(() => {
+      document.querySelector<HTMLElement>(".composer-box .rich-input")?.focus();
+    });
+  }, [setSessionDraft]);
+
   const activeMessages = sessionTimeline.messages;
   // activeConversationStatus / activeRuntimeState replaced by sync isAgentCurrentlyBusy().
   // The built-in Chat uses a renderer-only Session ID before its first send.
@@ -2475,6 +2483,7 @@ export function App() {
       drawerOpen={Boolean(drawer && !drawerCollapsed)}
       runCreateSessionDraft={runCreateSessionDraft}
       enqueueSessionPrompt={enqueueSessionPrompt}
+      insertQuickPrompt={insertQuickPrompt}
       ensureSessionId={ensureSessionForSend}
       resendUserMessage={resendUserMessage}
       editMessage={editMessage}

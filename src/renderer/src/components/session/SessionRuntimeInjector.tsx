@@ -52,6 +52,8 @@ export interface SessionRuntimeInjectorProps {
     sessionId: string,
     snapshot: { displayText: string; message: string; images?: ImageContent[]; agentMode: string; behavior?: "steer" | "followUp" },
   ) => boolean;
+  /** 新建 Agent 空态中的快捷 prompt 只写入 composer，发送由用户确认。 */
+  insertQuickPrompt: (sessionId: string, message: string) => void;
   ensureSessionId?: (sessionId: string) => Promise<string>;
 
   // Message handlers (match SessionView prop types)
@@ -140,6 +142,7 @@ export const SessionRuntimeInjector = React.memo(function SessionRuntimeInjector
     drawerOpen,
     runCreateSessionDraft,
     enqueueSessionPrompt,
+    insertQuickPrompt,
     ensureSessionId,
     resendUserMessage,
     editMessage,
@@ -298,6 +301,7 @@ export const SessionRuntimeInjector = React.memo(function SessionRuntimeInjector
       }
       forkingMessageId={forkingMessageId}
       onToast={(message: string) => showToast(message)}
+      onQuickPrompt={(message) => insertQuickPrompt(currentSessionId, message)}
       canMutateActiveMessages={canMutateActiveMessages}
       enqueueSessionPrompt={enqueueSessionPrompt}
       gitInfo={gitInfo}

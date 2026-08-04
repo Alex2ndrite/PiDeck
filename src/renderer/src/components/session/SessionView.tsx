@@ -80,6 +80,7 @@ export type SessionViewProps = {
   onForkMessage?: (message: any) => void;
   forkingMessageId?: string | null;
   onToast: (message: string) => void;
+  onQuickPrompt?: (prompt: string) => void;
   canMutateActiveMessages: boolean;
 
   // ── Composer ──
@@ -155,6 +156,7 @@ export function SessionView({
   onForkMessage,
   forkingMessageId,
   onToast,
+  onQuickPrompt,
   canMutateActiveMessages,
   enqueueSessionPrompt,
   gitInfo,
@@ -284,6 +286,7 @@ export function SessionView({
         }
         forkingMessageId={forkingMessageId}
         onToast={onToast}
+        onQuickPrompt={onQuickPrompt}
           />
 
           {sessionTimeline.showScrollToBottom && (

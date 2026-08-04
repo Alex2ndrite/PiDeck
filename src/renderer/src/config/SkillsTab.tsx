@@ -41,7 +41,8 @@ export function SkillsTab(props: {
 	const [locationPickerOpen, setLocationPickerOpen] = useState(false);
 	const canCreate = props.newName.trim() && props.newDescription.trim();
 	// 按选中的位置目录过滤 skill 列表
-	const filteredSkills = data.skills.filter((s) => s.sourceId === props.newLocationId);
+	// 新建技能的位置只影响保存目标，不应把其他目录已有的技能从列表中隐藏。
+	const visibleSkills = data.skills;
 	const selectedLocation =
 		data.locations.find((location) => location.id === props.newLocationId) ??
 		data.locations[0];
@@ -53,7 +54,7 @@ export function SkillsTab(props: {
 			onValueChange={(v) => { if (v === "local" || v === "store") setSkillTab(v); }}
 			className="gap-0"
 		>
-			<TabsList className="w-full">
+			<TabsList className="w-fit">
 				<TabsTrigger value="local" onClick={() => props.onRefresh()}>
 					{t("config.nav.skills")}
 				</TabsTrigger>
@@ -72,7 +73,7 @@ export function SkillsTab(props: {
 						onValueChange={(v) => { if (v === "skillhub" || v === "promptchat") setStoreSource(v); }}
 						className="gap-0"
 					>
-						<TabsList className="w-full">
+						<TabsList className="w-fit">
 							<TabsTrigger value="skillhub" className="px-3 py-1 text-xs">
 								<Store size={14} strokeWidth={1.8} />
 								{t("config.tabs.skillHub")}
@@ -97,7 +98,7 @@ export function SkillsTab(props: {
 					<div className="mb-3 flex items-center justify-between gap-3">
 				<div>
 					<span className="font-mono text-xs tabular-nums text-text-tertiary">
-						{t("config.count.skills", { count: filteredSkills.length })}
+						{t("config.count.skills", { count: visibleSkills.length })}
 					</span>
 					<small className="skills-restart-hint">
 						{t("config.restartHint")}
@@ -185,10 +186,10 @@ export function SkillsTab(props: {
 			</section>
 
 			<div className="skills-list">
-				{filteredSkills.length === 0 ? (
+				{visibleSkills.length === 0 ? (
 					<div className="py-12 text-center text-control text-text-tertiary">{t("config.emptySkills")}</div>
 				) : (
-					filteredSkills.map((skill) => (
+					visibleSkills.map((skill) => (
 						<SkillCard
 							key={skill.id}
 							skill={skill}
@@ -235,12 +236,7 @@ function SkillCard(props: {
 	return (
 		<article className="session-card skill-card">
 			<div className="session-card-display">
-				<button
-					type="button"
-					className="session-card-inner skill-card-main"
-					onClick={() => props.onEdit(skill)}
-					title={t("common.edit")}
-				>
+				<div className="session-card-inner skill-card-main">
 					<div className="session-card-title skill-title-row">
 						{renaming ? (
 							<div className="skill-rename-inline">
@@ -259,7 +255,7 @@ function SkillCard(props: {
 								</Button>
 							</div>
 						) : (
-							<strong>{skill.name}</strong>
+							<strong className="min-w-0 truncate">{skill.name}</strong>
 						)}
 						<div className="skill-badges">
 							<span className={`skill-state ${skill.enabled ? "enabled" : "disabled"}`}>
@@ -268,8 +264,8 @@ function SkillCard(props: {
 							{!skill.valid && <span className="skill-state invalid">{t("config.needsFix")}</span>}
 						</div>
 					</div>
-					<small>{skill.description || t("config.skillDescriptionMissing")}</small>
-					<small>{skill.sourceLabel} · {skill.path}</small>
+					<small className="min-w-0 truncate">{skill.description || t("config.skillDescriptionMissing")}</small>
+					<small className="min-w-0 truncate">{skill.sourceLabel} · {skill.path}</small>
 					{skill.warnings.length > 0 && (
 						<ul className="skill-warnings">
 							{skill.warnings.map((warning) => (
@@ -277,7 +273,7 @@ function SkillCard(props: {
 							))}
 						</ul>
 					)}
-				</button>
+				</div>
 				<div className="prompts-list-item-actions">
 					<Button variant="ghost" size="icon-sm" className="size-7"
 						onClick={() => props.onToggle(skill, !skill.enabled)}

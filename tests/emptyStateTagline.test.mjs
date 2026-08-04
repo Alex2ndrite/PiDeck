@@ -8,13 +8,14 @@ const i18n = [
   readFileSync("src/renderer/src/i18n/rendererCopy.en-US.ts", "utf8"),
 ].join("\n");
 
-test("empty state is a compact, project-aware workspace entry point", () => {
+test("empty state is a branded, project-aware workspace entry point", () => {
   assert.match(parts, /data-empty-state=\{props\.hasProject \? "project" : "no-project"\}/);
   assert.match(parts, /t\("app\.emptyProjectTitle"\)/);
   assert.match(parts, /t\("app\.emptyNoProjectTitle"\)/);
-  assert.match(parts, /bg-primary text-primary-foreground/);
-  assert.match(parts, /className="mt-4 text-lg font-semibold text-foreground"/);
-  assert.match(parts, /className="mt-1\.5 max-w-md text-sm leading-6 text-muted-foreground"/);
+  assert.match(parts, /bg-\[image:var\(--logo-mark-gradient\)\] text-primary-foreground/);
+  assert.match(parts, /font-brand text-\[clamp\(2\.25rem,5vw,3\.25rem\)\]/);
+  assert.match(parts, /text-balance/);
+  assert.match(parts, /font-brand text-\[clamp\(1\.05rem,2vw,1\.25rem\)\]/);
   assert.doesNotMatch(parts, /empty-tagline|empty-logo|empty-subtitle|empty-state-cta/);
   assert.doesNotMatch(parts, /There are many agent harnesses|Pi is a minimal agent harness/);
 
