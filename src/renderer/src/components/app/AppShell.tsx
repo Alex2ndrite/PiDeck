@@ -218,8 +218,6 @@ export function AppShell(props: AppShellProps) {
           </main>
         </ResizablePanel>
 
-        {outlineContent}
-
         {/* 抽屉面板常驻挂载：drawer=null 时折叠为 0 宽，避免动态挂载导致
             Group 布局时序错误（Invalid panel layout / constraints not found）。
             内容由 WorkspaceDrawerHost 的空态兜底。 */}
@@ -251,6 +249,9 @@ export function AppShell(props: AppShellProps) {
           />
         </ResizablePanel>
       </ResizablePanelGroup>
+      {/* 大纲浮层必须放在 Group 外：v4 只认 data-panel / data-separator 直系子节点，
+          夹在 panel 之间会污染分隔条命中区计算（absolute 也不算例外）。 */}
+      {outlineContent}
       {children}
     </div>
   );

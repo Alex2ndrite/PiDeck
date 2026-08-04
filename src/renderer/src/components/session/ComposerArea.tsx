@@ -68,6 +68,8 @@ export const ComposerArea = forwardRef<HTMLElement, ComposerAreaProps>(function 
     <ComposerRuntimeIntegrations sessionId={props.sessionId}>
       {({ widgets, feishuIndicator }) => (
         <>
+          {/* overflow-hidden：面板到 minSize 时禁止整块 footer 再出滚动条；
+              文本区自身仍可在 RichInput 内滚动，底栏 shrink-0 始终可见 */}
           <footer
             ref={footerRef}
             className="composer flex min-h-0 w-full min-w-0 flex-col gap-2 overflow-hidden bg-background px-3 pb-3"
@@ -95,6 +97,7 @@ export const ComposerArea = forwardRef<HTMLElement, ComposerAreaProps>(function 
               <AskRegionResizer child={props.runtimeUi} />
             ) : null}
             <div
+              // overflow-visible：保留命令面板/建议浮层；面板 minSize 已保证底栏不被裁切
               className={["composer-box relative flex min-h-0 min-w-0 flex-1 flex-col overflow-visible rounded-xl border border-border bg-card text-card-foreground shadow-sm transition-[border-color,box-shadow,background-color]",
                 composer.bangMode === "bang-bang"
                   ? "shell-silent-mode"

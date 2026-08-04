@@ -83,12 +83,11 @@ export function ProjectTree(props: {
           : projectAgents.some((agent) => agent.status === "starting")
             ? "starting"
             : "idle";
-      return <div key={project.id} className={cn("project-group mb-0.5", chat && "chat-project-group", project.worktreeEnabled && "worktree-enabled")}>
+      return <div key={project.id} className={cn("project-group mb-0.5", project.worktreeEnabled && "worktree-enabled")}>
         <div
           className={cn(
             treeRowClass,
             !chat && !props.controller.search.trim() && "project-draggable",
-            chat && "chat-project",
             dragging && "dragging opacity-60",
             dragOver && "drag-over ring-1 ring-border",
             isCurrent && "active bg-accent text-accent-foreground",
@@ -115,8 +114,8 @@ export function ProjectTree(props: {
             onDrop={(event) => drop(event, project.id)}
             onDragEnd={props.controller.finishProjectDrag}
             onClick={() => {
-              // 选择项目与目录展开解耦：文件夹箭头负责折叠/展开，点击名称只切换当前项目。
-              // 这样用户折叠后再次选择项目不会被隐式重新展开。
+              // 项目主行同时承担选择和手风琴切换，确保新项目即使只显示会话计数也能打开列表。
+              props.controller.toggleProject(project.id);
               props.actions.projects.select(project.id);
             }}
           >
@@ -125,7 +124,7 @@ export function ProjectTree(props: {
               <div className="conversation-title flex min-w-0 items-center">
                 <strong className="min-w-0 flex-1 truncate font-medium" title={project.path}>{projectDirectoryName}</strong>
               </div>
-              {chat && <p className="chat-project-guide mt-0.5 truncate text-micro text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">{t("app.projectChatGuide")}</p>}
+              {/* 聊天项目与普通项目使用同一行高；说明文字不参与侧栏导航信息。 */}
             </div>
           </button>
           <div className="flex shrink-0 items-center gap-1 pr-1">
@@ -165,7 +164,7 @@ export function ProjectTree(props: {
           </div>
         </div>
         {!collapsed && (
-          <div className="ml-5 border-l border-border/70 pb-1 pl-2">
+          <div className="ml-5 pb-1 pl-2">
             {/* 展开内容不依赖当前选中项，项目切换只改变高亮，避免两棵会话树同时伸缩造成布局抖动。 */}
             {project.worktreeEnabled && (
               <WorktreeTree

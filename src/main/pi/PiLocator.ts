@@ -112,18 +112,24 @@ export class PiLocator {
     if (wsl) {
       // WSL 模式：保留原始 PATH 以便找到 wsl.exe（在 System32 中），
       // 同时注入代理环境变量（wsl.exe 子进程通过 Windows 网络栈访问外网）。
+      const pathValue = pathPrefix || process.env.PATH || process.env.Path || "";
       const base = this.sanitizePiChildEnv({
         ...process.env,
-        PATH: pathPrefix || process.env.PATH || "",
+        // Windows cmd 读 Path；部分宿主只改 PATH 会导致 .cmd shim 找不到 node
+        PATH: pathValue,
+        ...(process.platform === "win32" ? { Path: pathValue } : {}),
       });
       return this.applyPiProxyEnv(base, settings);
     }
     const searchDirs = pathPrefix
       ? [pathPrefix, ...this.getSearchDirs().filter(dir => dir !== pathPrefix)]
       : this.getSearchDirs();
+    const pathValue = searchDirs.join(delimiter);
     const env = this.sanitizePiChildEnv({
       ...process.env,
-      PATH: searchDirs.join(delimiter),
+      PATH: pathValue,
+      // 同步 Path：Windows 下 Node 对 env 键大小写不敏感，但显式双写更稳
+      ...(process.platform === "win32" ? { Path: pathValue } : {}),
     });
 
     return this.applyPiProxyEnv(env, settings);
@@ -358,8 +364,24 @@ export class PiLocator {
         if (error) {
           // 优先使用 stderr 中的实际错误信息（如"系统找不到指定的文件"），
           // 并处理 Windows GBK 编码问题。兜底用 error.message 但去掉冗余的命令行前缀。
-          const raw = this.decodeBuffer(stderr) || this.cleanExecError(error.message);
-          console.error("[PiLocator] pi CLI check failed", { command, error: raw });
+          const stderrText = this.decodeBuffer(stderr);
+          const stdoutText = this.decodeBuffer(stdout);
+          const raw = stderrText || this.cleanExecError(error.message);
+          // 仅命令行本身没有诊断价值时，补上 exit code / timeout，方便区分 PATH 与真失败
+          const errObj = error as NodeJS.ErrnoException & { killed?: boolean; code?: string | number };
+          console.error("[PiLocator] pi CLI check failed", {
+            command,
+            error: raw,
+            stderr: stderrText || undefined,
+            stdout: stdoutText || undefined,
+            exitCode: errObj.code,
+            killed: errObj.killed,
+            invocation: {
+              command: invocation.command,
+              args: invocation.args,
+              pathPrefix: invocation.pathPrefix,
+            },
+          });
           resolve({ installed: false, command, searchedDirs, error: this.translate("mainPi.checkFailed") });
           return;
         }

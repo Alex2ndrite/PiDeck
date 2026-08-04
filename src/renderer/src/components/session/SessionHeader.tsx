@@ -83,11 +83,12 @@ export function SessionHeader(props: SessionHeaderProps) {
   return (
     <header
       ref={props.headerRef}
-      className="chat-header grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-border bg-background px-4 py-2.5"
+      /* 顶栏尽量矮：上方还有 tab，会话正文需要更多垂直空间 */
+      className="chat-header grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-b border-border bg-background px-3 py-1"
     >
       <div className="chat-title-block flex min-w-0 flex-1 items-center">
-        <div className="chat-title-row flex h-8 w-full min-w-0 items-center gap-2">
-          <strong className="block min-w-0 flex-1 truncate text-title font-semibold tracking-tight text-foreground" title={title}>{title}</strong>
+        <div className="chat-title-row flex h-7 w-full min-w-0 items-center gap-1.5">
+          <strong className="block min-w-0 flex-1 truncate text-sm font-semibold tracking-tight text-foreground" title={title}>{title}</strong>
           {isAnonymous && (
             <span className="anonymous-badge" title={t("app.anonymousChat")} aria-label={t("app.anonymousChat")}>
               <HatGlasses size={14} aria-hidden="true" />
@@ -105,21 +106,21 @@ export function SessionHeader(props: SessionHeaderProps) {
           ) : null}
         </div>
       </div>
-      <div className={`chat-header-actions flex min-w-0 items-center justify-end gap-2${isStarting ? " loading" : ""}`}>
+      <div className={`chat-header-actions flex min-w-0 items-center justify-end gap-1.5${isStarting ? " loading" : ""}`}>
         <SessionStatus state={runtimeState} duration={props.duration} cacheHitHistory={cacheStats[sessionId]?.cacheHitHistory} />
-        <div className="header-actions-right flex items-center gap-1.5">
+        <div className="header-actions-right flex items-center gap-1">
           <div className="header-action-group session-group">
             <div className="session-combo relative" ref={props.comboRef}>
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
-                className="session-combo-trigger h-8 gap-1 px-2.5"
+                className="session-combo-trigger h-7 gap-1 px-2"
                 disabled={!props.hasProject || isStarting}
                 title={t("app.newSession")}
                 onClick={props.onTrigger}
               >
-                <Plus className="size-3.5" strokeWidth={2} aria-hidden="true" />
+                <Plus className="size-3" strokeWidth={2} aria-hidden="true" />
                 <span className="session-combo-label">{t("app.new")}</span>
                 {hasSession && (
                   <span
@@ -152,10 +153,10 @@ export function SessionHeader(props: SessionHeaderProps) {
           {props.onToggleDrawer && (
             <Button variant="ghost" size="icon-sm"
               aria-label={props.drawerOpen ? t("app.collapseDrawer") : t("app.expandDrawer")} title={props.drawerOpen ? t("app.collapseDrawer") : t("app.expandDrawer")}
-              className={`header-drawer-toggle${props.drawerOpen ? " active" : ""}`}
+              className={`header-drawer-toggle size-7${props.drawerOpen ? " active" : ""}`}
               onClick={props.onToggleDrawer}
             >
-              <PanelRight size={14} strokeWidth={2} aria-hidden="true" />
+              <PanelRight size={13} strokeWidth={2} aria-hidden="true" />
             </Button>
           )}
         </div>

@@ -1,4 +1,4 @@
-import { Search, Plus, Settings, Sliders, MessageSquare, Globe, FolderTree } from "lucide-react";
+import { Search, Plus, Settings, Sliders, MessageSquare, Globe } from "lucide-react";
 import type { ReactNode } from "react";
 import type { AgentTab, Project, SessionRecord, SessionSummary, WorktreeEntry } from "../../../../shared/types";
 import {
@@ -150,10 +150,6 @@ export function SidebarContent(props: SidebarContentProps) {
 
         {/* 单一滚动区承载项目与展开内容，避免项目导航/详情双滚动和重复标题。 */}
         <section className="conversation-list min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
-          <div className="sticky top-0 z-10 flex items-center gap-1.5 bg-sidebar/95 px-2 py-1.5 text-micro font-semibold uppercase tracking-[0.08em] text-muted-foreground backdrop-blur-sm">
-            <FolderTree size={12} aria-hidden="true" />
-            <span>{t("app.sidebarProjects")}</span>
-          </div>
           <ProjectTree
             controller={controller}
             actions={actions}

@@ -71,3 +71,21 @@ test("session status dots reuse shared Tailwind colors and stay text-free", () =
   assert.match(tabBar, /sessionStatusDotClass\(status\)/);
   assert.match(tabBar, /dotClass &&/);
 });
+
+test("project children use indentation without a connector line and chat uses the shared row", () => {
+  assert.doesNotMatch(projectTree, /border-l/);
+  assert.doesNotMatch(projectTree, /chat-project-guide/);
+  assert.doesNotMatch(styles, /\.project-group\.chat-project-group/);
+});
+
+test("sidebar omits the redundant projects heading and tabs shrink to their titles", () => {
+  const sidebarContent = readFileSync(
+    "src/renderer/src/components/sidebar/SidebarContent.tsx",
+    "utf8",
+  );
+
+  assert.doesNotMatch(sidebarContent, /FolderTree/);
+  assert.doesNotMatch(sidebarContent, /app\.sidebarProjects/);
+  assert.match(tabBar, /pinned \? "w-20" : "w-fit max-w-32"/);
+  assert.doesNotMatch(tabBar, /pinned \? "w-20" : "w-32"/);
+});

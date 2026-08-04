@@ -176,9 +176,9 @@ function SessionTab(props: {
         onDrop={props.onDrop}
         onDragEnd={props.onDragEnd}
         className={cn(
-          // 固定 Tab 窄宽度（w-20 仅图标+短标题），普通 Tab 固定 w-32
           "session-tab group relative flex h-7 shrink-0 cursor-pointer select-none items-center gap-1.5 rounded-md border px-2 text-caption transition-colors",
-          pinned ? "w-20" : "w-32",
+          // 短标题按内容收缩，长标题限制在 128px 内；关闭按钮仍保留固定空间，避免 tab 在 hover 时跳动。
+          pinned ? "w-20" : "w-fit max-w-32",
           dragging && "opacity-50",
           active
             ? "border-border bg-accent/10 font-medium text-foreground"

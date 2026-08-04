@@ -28,12 +28,13 @@ test("ask inline bar uses shadcn Collapsible for its fold state", () => {
   assert.match(overlay, /<CollapsibleContent/);
 });
 
-test("composer default height is raised so ask question and input are both visible", () => {
-  // ask 问答 + 底部输入框需要比纯输入框更大的默认可视空间：
-  // 面板默认高度 375px，最小仍可缩到 175px（分隔条拖拽），保持原竖向调整能力。
+test("composer default height stays compact while remaining vertically resizable", () => {
+  // 默认高度压矮给 timeline 留正文；ask 出现时可拖分隔条或用 AskRegionResizer 拉高。
+  // min 必须盖住 composer-box(112)+footer pb，避免拖到最低裁切模式/模型栏。
   const rendererUtils = readFileSync("src/renderer/src/rendererUtils.ts", "utf8");
   const sessionView = readFileSync("src/renderer/src/components/session/SessionView.tsx", "utf8");
-  assert.match(rendererUtils, /COMPOSER_DEFAULT_HEIGHT = 375/);
+  assert.match(rendererUtils, /COMPOSER_DEFAULT_HEIGHT = 160/);
+  assert.match(rendererUtils, /COMPOSER_MIN_HEIGHT = 148/);
   assert.match(sessionView, /COMPOSER_DEFAULT_HEIGHT/);
   assert.match(sessionView, /minSize=\{COMPOSER_MIN_HEIGHT\}/);
   // 面板仍由 react-resizable-panels 接管，可沿分隔条拖拽，保留原有 resizable 能力

@@ -18,19 +18,20 @@ export function WebHeader(props: {
 	onStop: () => void;
 }) {
 	const { title, status, streaming, canStop, onStop } = props;
+	// 与桌面 SessionHeader 同款矮顶栏，给消息区多留垂直空间
 	return (
-		<header className="chat-header grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-border bg-background px-4 py-2.5">
+		<header className="chat-header grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-b border-border bg-background px-3 py-1">
 			<div className="chat-title-block flex min-w-0 flex-1 items-center">
-				<div className="chat-title-row flex h-8 w-full min-w-0 items-center gap-2">
+				<div className="chat-title-row flex h-7 w-full min-w-0 items-center gap-1.5">
 					<strong
-						className="block min-w-0 flex-1 truncate text-title font-semibold tracking-tight text-foreground"
+						className="block min-w-0 flex-1 truncate text-sm font-semibold tracking-tight text-foreground"
 						title={title}
 					>
 						{title}
 					</strong>
 				</div>
 			</div>
-			<div className="chat-header-actions flex min-w-0 items-center justify-end gap-2">
+			<div className="chat-header-actions flex min-w-0 items-center justify-end gap-1.5">
 				{/* 运行态指示：复用桌面 agent-status-indicator 视觉 */}
 				<span className="flex items-center gap-2">
 					<span

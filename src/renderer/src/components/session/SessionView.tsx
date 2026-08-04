@@ -177,8 +177,8 @@ export function SessionView({
   // #115 U5 垂直轴：timeline | composer | terminal 三段由 react-resizable-panels 接管。
   // composer 高度本地持有（px），终端高度/折叠仍由 useTerminalDock 的 per-agent
   // 状态持有，拖拽结果经 onResize 回写，外部状态经 imperative API 同步。
-  // 默认高度由 175 提到 COMPOSER_DEFAULT_HEIGHT：ask 内容（问答 + 底部输入框）
-  // 需要比纯输入框更大的可视空间，面板仍可沿分隔条拖拽调整（react-resizable-panels）。
+  // 默认高度走 COMPOSER_DEFAULT_HEIGHT（偏矮，给 timeline 留正文）；
+  // ask 区变高时用户可沿 timeline|composer 分隔条上拖，或用 AskRegionResizer 单独拉高问答区。
   const [composerHeight, setComposerHeight] = useState(COMPOSER_DEFAULT_HEIGHT);
   const terminalPanelRef = useRef<PanelImperativeHandle | null>(null);
 

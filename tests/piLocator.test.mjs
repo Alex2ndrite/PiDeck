@@ -71,13 +71,20 @@ test("uses the pi cmd shim bin directory as PATH prefix on Windows when node.exe
 
 	try {
 		const { PiLocator } = loadPiLocatorModule("win32");
-		const invocation = new PiLocator().createInvocation(piPath, ["--version"]);
+		const locator = new PiLocator();
+		const invocation = locator.createInvocation(piPath, ["--version"]);
 
 		assert.match(invocation.command.toLowerCase(), /cmd\.exe$/);
 		assert.equal(JSON.stringify(invocation.args.slice(0, 3)), JSON.stringify(["/d", "/s", "/c"]));
 		assert.equal(invocation.shell, false);
 		assert.equal(invocation.pathPrefix, binDir);
 		assert.equal(invocation.windowsVerbatimArguments, true);
+
+		// Windows cmd 读 Path；createProcessEnv 必须把 pathPrefix 同步进 PATH/Path
+		const env = locator.createProcessEnv(undefined, invocation.pathPrefix);
+		assert.equal(typeof env.PATH, "string");
+		assert.ok(String(env.PATH).startsWith(binDir));
+		assert.equal(env.Path, env.PATH);
 	} finally {
 		rmSync(root, { recursive: true, force: true });
 	}

@@ -6,9 +6,11 @@ import type {
 } from "../../shared/types";
 import { isSameSessionPath } from "./agentListDisplay";
 
-// 260=默认高度，保留问答区空间但避免首次打开时输入框占据过多视口；140=最小可用高度。
-export const COMPOSER_DEFAULT_HEIGHT = 260;
-const COMPOSER_MIN_HEIGHT = 140;
+// 默认高度偏矮，给 timeline 多留正文。
+// 最小高度必须 ≥ composer-box CSS min-height(112) + footer pb(12) + 边框余量，
+// 否则拖到最低会裁切模式/模型底栏并出现多余滚动条。
+export const COMPOSER_DEFAULT_HEIGHT = 160;
+const COMPOSER_MIN_HEIGHT = 148;
 export { COMPOSER_MIN_HEIGHT };
 
 // Ask 区域垂直 resize 手把的约束（AskRegionResizer 使用）：

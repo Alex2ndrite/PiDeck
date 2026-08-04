@@ -1295,7 +1295,7 @@ select:focus-visible {
   left: 20px;
   z-index: 920;
 }
-/* 折叠时标题让位：chat-header 默认 px-4(16px)，右移避开按钮占用的 20-52px 区域 */
+/* 折叠时标题让位：chat-header 默认 px-3(12px)，右移避开按钮占用的 20-52px 区域 */
 .wechat-shell.list-collapsed .chat-header {
   padding-left: 56px;
 }
@@ -1498,47 +1498,6 @@ select:focus-visible {
   /* 项目之间仅保留较小间距，避免目录树过于松散；行内 padding 已承担点击热区。 */
   margin-bottom: 2px;
 }
-.project-group.chat-project-group {
-  /* 内置聊天区不是普通项目目录，仅用下边线与下方真实项目树分隔，不再额外内缩。 */
-  margin: 0 0 6px;
-  border-bottom: 1px solid var(--color-border-subtle);
-}
-.project-group.chat-project-group > .conversation:first-child {
-  min-height: 42px;
-  padding: 6px 8px;
-  background: color-mix(in srgb, var(--color-bg-muted) 58%, transparent);
-  border-radius: var(--radius-lg);
-}
-.project-group.chat-project-group > .conversation:first-child:hover {
-  background: color-mix(in srgb, var(--color-bg-hover) 76%, transparent);
-}
-.project-group.chat-project-group > .conversation.active:first-child {
-  background: color-mix(
-    in srgb,
-    var(--color-accent-soft) 52%,
-    var(--color-bg-muted)
-  );
-}
-:root[data-theme="dark"]
-  .project-group.chat-project-group
-  > .conversation:first-child {
-  /* 内置聊天区在暗色下保持“面板入口”感，但不做高亮卡片。 */
-  background: color-mix(in srgb, var(--color-bg-panel) 48%, transparent);
-}
-:root[data-theme="dark"]
-  .project-group.chat-project-group
-  > .conversation:first-child:hover {
-  background: color-mix(in srgb, var(--color-bg-hover) 72%, transparent);
-}
-:root[data-theme="dark"]
-  .project-group.chat-project-group
-  > .conversation.active:first-child {
-  background: color-mix(
-    in srgb,
-    var(--color-accent-soft) 66%,
-    var(--color-bg-panel)
-  );
-}
 .project-group > .conversation:first-child {
   grid-template-columns: 24px minmax(0, 1fr) max-content;
   min-height: 32px;
@@ -1612,15 +1571,7 @@ select:focus-visible {
   box-shadow: inset 0 0 0 1px
     color-mix(in srgb, var(--color-accent) 32%, transparent);
 }
-.chat-project-guide {
-  margin-top: 2px;
-  color: color-mix(
-    in srgb,
-    var(--color-accent) 46%,
-    var(--color-text-secondary)
-  );
-  font-size: var(--font-size-micro);
-}
+/* 聊天项目说明已从树行移除，避免 hover/focus 时改变项目行高度。 */
 
 /* ── Worktree 工作区 ── */
 .worktree-children {
@@ -2176,6 +2127,9 @@ select:focus-visible {
   margin-left: 8px;
   margin-bottom: 6px;
 }
+/* 水平 Group 的竖线分隔条（AppShell 左右栏）。
+   v4：Separator aria-orientation=vertical；拖拽中 data-separator="active"。
+   旧 grid-column / body.is-resizing 已废弃，不再依赖。 */
 .splitter {
   position: relative;
   background: transparent;
@@ -2184,14 +2138,9 @@ select:focus-visible {
   transition: background 0.12s ease;
 }
 .splitter-left {
-  grid-column: 2;
   background: var(--color-bg-sidebar);
 }
-.splitter-right {
-  grid-column: 4;
-}
-/* 右侧分隔条宽度由 --drawer-splitter-w 驱动；关闭/折叠时宽度 0 且不响应交互。
-   常驻挂载下 drawer=null 时 data-active=false，宽度归零避免 1px 占位线。 */
+/* 右侧分隔条：关闭/折叠时 data-active=false，宽度归零避免 1px 占位线。 */
 .splitter-right:not([data-active="true"]) {
   pointer-events: none;
   width: 0 !important;
@@ -2210,8 +2159,9 @@ select:focus-visible {
   border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--color-border-strong) 58%, transparent);
   transition: width 0.12s ease, background 0.12s ease;
+  pointer-events: none;
 }
-/* 扩展命中区（±12px = 24px 宽）：官方 Resizable 同款更易抓取 */
+/* 视觉命中提示区（库本身还有 resizeTargetMinimumSize 放大） */
 .splitter::after {
   content: "";
   position: absolute;
@@ -2219,10 +2169,11 @@ select:focus-visible {
   bottom: 0;
   left: -12px;
   right: -12px;
+  pointer-events: none;
 }
 .splitter:hover::before,
 .splitter:active::before,
-body.is-resizing .splitter::before {
+.splitter[data-separator="active"]::before {
   width: 2px;
   background: color-mix(
     in srgb,
@@ -2230,7 +2181,6 @@ body.is-resizing .splitter::before {
     var(--color-border-strong)
   );
 }
-/* react-resizable-panels 拖拽期间自行管理全局 cursor（#115 U5），旧的 is-composer/is-terminal-resizing 类已随手写拖拽删除。 */
 
 /* 换肤壁纸模式：启用背景图（data-bg-image="on"）时主容器透明，
    bg 系列 token 的半透明由 App.tsx 注入（覆盖所有面板/输入框，整体协调）；
@@ -2291,18 +2241,52 @@ body.is-resizing .splitter::before {
   margin-bottom: 0;
   box-sizing: border-box;
 }
-/* 纵向分隔条（composer/terminal 拖拽手柄） */
+/* 纵向 Group 的横线分隔条（SessionView：timeline|composer|terminal）。
+   v4：Group vertical → Separator aria-orientation=horizontal（与 Group 相反）。
+   必须 w-full，否则命中区只剩左缘 1px 竖条，中间拖不动。 */
 .v-splitter {
+  position: relative;
   flex: 0 0 auto;
-  height: 6px;
+  width: 100% !important;
+  height: 1px !important;
   cursor: row-resize;
-  background: transparent;
-  transition: background 0.12s ease;
+  /* 覆盖 shadcn ResizableHandle 默认 bg-border，避免常驻粗线 */
+  background: transparent !important;
+  z-index: 3;
 }
-.v-splitter:hover,
-.v-splitter:active,
-.v-splitter[data-resizing] {
-  background: color-mix(in srgb, var(--color-accent) 14%, var(--color-border-subtle));
+/* 可见细线：居中 1px，与水平 .splitter::before 同一套 token */
+.v-splitter::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  transform: translateY(-50%);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--color-border-strong) 58%, transparent);
+  transition: height 0.12s ease, background 0.12s ease;
+  pointer-events: none;
+}
+/* 视觉命中提示区（库本身还有 coarse/fine 最小命中放大） */
+.v-splitter::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -8px;
+  bottom: -8px;
+  pointer-events: none;
+}
+.v-splitter:hover::before,
+.v-splitter:active::before,
+.v-splitter[data-separator="active"]::before {
+  height: 2px;
+  background: color-mix(
+    in srgb,
+    var(--color-accent) 32%,
+    var(--color-border-strong)
+  );
 }
 
 /* ── 内容行宽限制：仅在 --content-max-width 由 JS 注入时生效 ── */
@@ -2335,11 +2319,12 @@ body.is-resizing .splitter::before {
 .chat-title-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   width: 100%;
   min-width: 0;
   max-width: 100%;
-  height: 30px;
+  /* 与 SessionHeader Tailwind h-7 对齐，避免 CSS 再把行高撑回 30px */
+  height: 28px;
 }
 .chat-title-row > strong {
   min-width: 0;
@@ -2404,9 +2389,10 @@ body.is-resizing .splitter::before {
 .session-combo-trigger {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  height: 26px;
-  min-width: 90px;
+  gap: 4px;
+  /* 顶栏压缩后统一 28px 控件高，与 h-7 对齐 */
+  height: 28px;
+  min-width: 78px;
   border: 1px solid var(--color-border-subtle);
   background: var(--color-bg-panel);
   color: var(--color-text-primary);
@@ -2663,9 +2649,10 @@ body.is-resizing .splitter::before {
   min-width: 0;
 }
 .chat-header-actions .session-combo-trigger {
-  min-width: 102px;
-  height: 26px;
-  padding: 0 12px;
+  /* 与 SessionHeader h-7 对齐，避免 CSS 把按钮再撑回更高 */
+  min-width: 78px;
+  height: 28px;
+  padding: 0 8px;
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-pill);
   background: var(--color-bg-panel);
