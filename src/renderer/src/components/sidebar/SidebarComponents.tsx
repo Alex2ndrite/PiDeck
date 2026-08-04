@@ -23,6 +23,7 @@ import {
 import { Button } from "../ui-shadcn/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui-shadcn/table";
 import type { SessionSource, SessionSummary, Project, AgentTab } from "../../../../shared/types";
+import { SessionSourceBadge } from "../session/SessionSourceBadge";
 import { Checkbox } from "../ui-shadcn/checkbox";
 import { Input } from "../ui-shadcn/input";
 import { Label } from "../../components/ui-shadcn/label";
@@ -173,9 +174,7 @@ export function SessionManagerModal(props: {
 													{session.name || session.preview?.slice(0, 60) || t("common.untitled")}
 												</span>
 												{session.source && session.source !== "pi" && (
-													<span className={`session-source-badge shrink-0 ${session.source}`}>
-														{t(`sessionSource.${session.source}` as any)}
-													</span>
+													<SessionSourceBadge source={session.source} />
 												)}
 											</div>
 										</TableCell>
@@ -264,9 +263,7 @@ export function SessionSourceFilterMenu(props: {
 					onSelect={(event) => event.preventDefault()}
 					onCheckedChange={() => props.onToggleSource(source)}
 				>
-					<span className={`session-source-badge ${source}`}>
-						{t(`sessionSource.${source}` as never)}
-					</span>
+					<SessionSourceBadge source={source} />
 				</DropdownMenuCheckboxItem>
 			))}
 		</MenuShell>

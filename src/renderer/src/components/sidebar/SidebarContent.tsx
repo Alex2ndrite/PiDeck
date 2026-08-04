@@ -1,4 +1,4 @@
-import { Search, Plus, Settings, Sliders, MessageSquare, Globe } from "lucide-react";
+import { Search, Settings, Sliders, MessageSquare, Globe, FolderPlus } from "lucide-react";
 import type { ReactNode } from "react";
 import type { AgentTab, Project, SessionRecord, SessionSummary, WorktreeEntry } from "../../../../shared/types";
 import {
@@ -118,7 +118,7 @@ export function SidebarContent(props: SidebarContentProps) {
       className="chat-list-pane v3-braun flex h-full min-w-0 flex-col overflow-hidden border-r border-border bg-sidebar text-sidebar-foreground"
       aria-label={t("app.search")}
     >
-      <div className="sidebar-body flex min-h-0 flex-1 flex-col gap-3 p-2">
+      <div className="sidebar-body flex min-h-0 flex-1 flex-col gap-2 px-1.5 py-1">
         {props.chrome}
         {/* 搜索只过滤导航和当前项目内容；会话加载仍由 controller/App 的懒加载策略负责。 */}
         <div className="search-row grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
@@ -144,7 +144,7 @@ export function SidebarContent(props: SidebarContentProps) {
             title={t("app.addProject")}
             aria-label={t("app.addProject")}
           >
-            <Plus className="size-4" />
+            <FolderPlus className="size-4" />
           </Button>
         </div>
 

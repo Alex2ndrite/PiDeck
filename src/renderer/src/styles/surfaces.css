@@ -800,7 +800,8 @@
   display: grid;
   grid-template-columns: 196px minmax(0, 1fr);
   flex: 1;
-  background: var(--color-bg-muted);
+  /* 与右侧设置项同底：默认浅色整页 panel 白，不再给左侧单独叠灰 */
+  background: var(--color-bg-panel);
 }
 
 /* 侧边栏导航：紧凑设计，仅图标+标签 */
@@ -810,8 +811,8 @@
   gap: 2px;
   padding: var(--space-3);
   border-right: 1px solid var(--color-border-subtle);
-  /* 与 pi 管理弹窗（config-sidebar）统一：导航区灰、内容区白 */
-  background: var(--color-bg-muted);
+  /* 与内容区同底；选中态仍靠 bg-active 区分 */
+  background: var(--color-bg-panel);
 }
 .settings-tabs button {
   display: flex;
@@ -1854,22 +1855,25 @@
   flex: 1;
   display: grid;
   grid-template-columns: 160px minmax(0, 1fr);
-  background: var(--color-bg-muted);
+  /* 与 Dialog 顶栏同底：默认浅色为面板白，不再叠一层 muted 灰 */
+  background: var(--color-bg-panel);
 }
 
 .config-sidebar {
-  /* 布局由 ConfigModal Tailwind 承担 */
+  /* 布局由 ConfigModal Tailwind 承担；背景与内容区统一为 panel */
   min-height: 0;
   overflow: auto;
+  background: var(--color-bg-panel);
 }
 
 .config-sidebar-group > span {
   /* 分组标题由 Tailwind 承担 */
 }
 
-/* pure official：nav 按钮为 shadcn ghost/secondary，不再需要旧皮肤 */
+/* pure official：nav 按钮为 shadcn ghost/secondary size=sm，与系统控件高度对齐 */
 .config-nav-btn {
-  min-height: 2rem;
+  min-height: 2rem; /* 32px = h-8 */
+  height: 2rem;
 }
 
 /* 选中态与设置弹窗 tabs 对齐：更深底色 + 主文字 + 加粗 */
@@ -1893,7 +1897,8 @@
   padding: var(--space-5);
   position: relative;
   min-height: 320px;
-  background: var(--color-bg-muted);
+  /* 内容区与顶栏/侧栏同底，卡片自身再靠 border 分层 */
+  background: var(--color-bg-panel);
 }
 
 
@@ -2148,7 +2153,7 @@
 .config-test-controls {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: 6px;
   min-width: 0;
 }
 
@@ -2174,8 +2179,7 @@
 :root[data-theme="dark"] .config-field textarea,
 :root[data-theme="dark"] .session-card,
 :root[data-theme="dark"] .codex-session-row,
-:root[data-theme="dark"] .settings-layout,
-:root[data-theme="dark"] .config-content,
+/* settings-layout / config 侧栏与内容同底，暗色不再单独叠 muted 灰面 */
 :root[data-theme="dark"] .feedback-body,
 :root[data-theme="dark"] .codex-import-toolbar,
 :root[data-theme="dark"] .config-provider-body {
@@ -2233,7 +2237,8 @@
 
 .config-add-provider-row input {
   flex: 1;
-  height: 36px;
+  /* 与工具栏 sm 按钮同高，避免新增供应商行输入偏高 */
+  height: var(--control-height-md);
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-sm);
   padding: 0 12px;
@@ -2358,7 +2363,7 @@
 
 .config-select-trigger {
   width: 100%;
-  height: 36px;
+  height: var(--control-height-md);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -2410,7 +2415,7 @@
 
 
 .config-copy-btn {
-  height: 36px;
+  height: var(--control-height-md);
   padding: 0 10px;
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-sm);
@@ -2842,7 +2847,7 @@
 }
 
 .config-raw-tab select {
-  height: 36px;
+  height: var(--control-height-md);
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-sm);
   padding: 0 12px;
@@ -3793,7 +3798,7 @@ div.fixed.inset-0.z-50 {
 }
 .skill-location-picker > button {
   width: 100%;
-  height: 36px;
+  height: var(--control-height-md);
   display: flex;
   align-items: center;
   justify-content: space-between;

@@ -98,24 +98,24 @@ export function LogsTab() {
 					/>
 				</div>
 				<div className="skills-toolbar-actions">
-					<Button  variant="outline" onClick={refresh} disabled={loading}>{t("common.refresh")}</Button>
-					<Button  variant="outline" onClick={() => api.logs.openFolder()}>{t("logs.openFolder")}</Button>
-					<Button  variant="outline" className="text-destructive" onClick={clear}>{t("logs.clear")}</Button>
+					<Button variant="outline" size="sm" onClick={refresh} disabled={loading}>{t("common.refresh")}</Button>
+					<Button variant="outline" size="sm" onClick={() => api.logs.openFolder()}>{t("logs.openFolder")}</Button>
+					<Button variant="outline" size="sm" className="text-destructive" onClick={clear}>{t("logs.clear")}</Button>
 				</div>
 			</div>
 			<p className="config-im-form-hint">{t("logs.hint")}</p>
-			{error && <div className="mb-3.5 rounded-sm border border-danger/20 bg-danger-soft px-3.5 py-2.5 text-[13px] leading-relaxed text-danger whitespace-pre-line">{error}</div>}
+			{error && <div className="mb-3.5 rounded-sm border border-danger/20 bg-danger-soft px-3.5 py-2.5 text-control leading-relaxed text-danger whitespace-pre-line">{error}</div>}
 			{loading ? (
-				<div className="py-12 text-center text-[13px] text-text-tertiary">{t("common.loading")}</div>
+				<div className="py-12 text-center text-control text-text-tertiary">{t("common.loading")}</div>
 			) : entries.length === 0 ? (
-				<div className="py-12 text-center text-[13px] text-text-tertiary">{t("logs.empty")}</div>
+				<div className="py-12 text-center text-control text-text-tertiary">{t("logs.empty")}</div>
 			) : (
 				<div className="logs-list">
 					{entries.map((entry) => {
 						const expanded = expandedId === entry.id;
 						return (
 							<article key={entry.id} className={`log-row ${entry.level}`}>
-								<Button variant="ghost" className="log-row-main w-full justify-start" onClick={() => setExpandedId(expanded ? null : entry.id)}>
+								<Button size="sm" variant="ghost" className="log-row-main w-full justify-start" onClick={() => setExpandedId(expanded ? null : entry.id)}>
 									<span className="log-time">{formatTime(entry.time)}</span>
 									<span className={`log-level ${entry.level}`}>{entry.level}</span>
 									<span className="log-scope">{entry.scope}</span>

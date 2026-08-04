@@ -1341,7 +1341,7 @@ html[data-theme="dark"] .scratch-pad-md mark {
   border: none;
   border-radius: 0;
   border-bottom: 1px solid var(--color-border-subtle);
-  padding: 0.25rem 0;
+  padding: 0.125rem 0;
   margin-bottom: 0;
   box-shadow: none;
 }
@@ -1357,8 +1357,16 @@ html[data-theme="dark"] .scratch-pad-md mark {
   overflow: visible;
 }
 
-.chat-list-pane.v3-braun .sidebar-body .session-card:hover {
-  background: transparent;
+.chat-list-pane.v3-braun .sidebar-body .agent-row,
+.chat-list-pane.v3-braun .sidebar-body .session-row {
+  /* Tailwind 行高/缩进与旧 foundation 规则叠加会产生双重空白，v3 统一在此收口。 */
+  margin: 0;
+  min-height: 0;
+  padding: 2px 4px;
+}
+
+.chat-list-pane.v3-braun .sidebar-body .session-card {
+  padding: 0;
 }
 
 .chat-list-pane.v3-braun .sidebar-body .project-group > .conversation:first-child.active::before,

@@ -22,14 +22,13 @@ export function RawTab(props: {
 }) {
 	return (
 		<div className="config-raw-tab">
-			<div className="mb-3.5 flex items-center justify-between">
+			<div className="mb-3 flex items-center justify-between gap-3">
 				<ConfigSelect
 					value={props.fileName}
 					options={RAW_FILE_OPTIONS}
 					onChange={props.onChangeFileName}
 				/>
-				<Button
-					 variant="default"
+				<Button size="sm" variant="default"
 					onClick={props.onSave}
 					disabled={props.saving}
 				>

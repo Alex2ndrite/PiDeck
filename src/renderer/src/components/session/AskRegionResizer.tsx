@@ -1,6 +1,4 @@
 import { useCallback, useRef, useState, type ReactNode } from "react";
-import { GripHorizontal } from "lucide-react";
-import { cn } from "../../lib/utils";
 import { ASK_DEFAULT_MAX_HEIGHT, ASK_MAX_HEIGHT, ASK_MIN_HEIGHT, ASK_STEP_PX } from "../../rendererUtils";
 import { t } from "../../i18n";
 
@@ -47,14 +45,19 @@ export function AskRegionResizer(props: { child: ReactNode }) {
 
   return (
     <div
-      className="composer-runtime-ui flex min-h-0 shrink flex-col gap-1"
+      className="composer-runtime-ui flex min-h-0 w-full shrink-0 flex-col gap-1 overflow-hidden"
       style={{
         maxHeight,
         transition: dragging ? "none" : "max-height 120ms ease-out",
       }}
     >
-      {/* Ask 内容区独立滚动：面板变小时内容缩在自身区间内滚动，不挤输入框。 */}
-      <div className="min-h-0 flex-1 overflow-y-auto">{props.child}</div>
+      {/* 只在内容超过独立上限时滚动；不能使用 flex-1，否则短 Ask 会被撑满并制造大片空白。 */}
+      <div
+        className="min-h-0 w-full shrink-0 overflow-y-auto"
+        style={{ maxHeight: Math.max(0, maxHeight - 14) }}
+      >
+        {props.child}
+      </div>
       {/* 垂直拉伸把手：受控区间，端点收窄后仍可直接拖拽恢复，不破坏 Ask 折叠/取消/选项/输入。
           role=separator 的 aria-orientation=horizontal 表示这是一条水平分隔线，切分上/下内容，
           交互为上下拖动调整高度；min/max/current 用 aria-valuenow 暴露受控高度。 */}
@@ -68,11 +71,7 @@ export function AskRegionResizer(props: { child: ReactNode }) {
         aria-valuetext={`${maxHeight}px`}
         tabIndex={0}
         data-dragging={dragging || undefined}
-        className={cn(
-          "ask-resize-handle group/handle flex h-2.5 shrink-0 cursor-ns-resize touch-none items-center justify-center rounded-sm text-muted-foreground/60 outline-none",
-          "hover:bg-accent/60 focus-visible:bg-accent/60 focus-visible:text-accent-foreground",
-          dragging && "bg-accent/70 text-accent-foreground",
-        )}
+        className="ask-resize-handle sr-only after:h-px"
         onPointerDown={(event) => {
           // 只响应主键；按下即记录起点并捕获指针，后续 move/up/cancel 都回到本 handle。
           if (event.button !== 0) return;
@@ -121,7 +120,6 @@ export function AskRegionResizer(props: { child: ReactNode }) {
           }
         }}
       >
-        <GripHorizontal size={14} aria-hidden="true" />
       </div>
     </div>
   );

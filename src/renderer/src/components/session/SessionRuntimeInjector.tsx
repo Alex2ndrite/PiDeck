@@ -18,12 +18,14 @@ import type { QueuedPrompt } from "../../hooks/useQueuedPrompt";
 import type { SessionTimelineController } from "../../hooks/useSessionTimelineController";
 import { QueuedPromptPanel } from "./ComposerPanels";
 import { SessionView } from "./SessionView";
+import type { SessionTabsBarProps } from "./SessionTabsBar";
 
 // ── stable props (don't change on streaming) ──
 
 export interface SessionRuntimeInjectorProps {
   currentSessionId: string;
   sessionTitle: string;
+  sessionTabs: Omit<SessionTabsBarProps, "actions">;
   sessionTimeline: SessionTimelineController;
   sessionActionsOpen: boolean;
   setSessionActionsOpen: React.Dispatch<React.SetStateAction<boolean>>;
@@ -118,6 +120,7 @@ export const SessionRuntimeInjector = React.memo(function SessionRuntimeInjector
   const {
     currentSessionId,
     sessionTitle,
+    sessionTabs,
     sessionTimeline,
     sessionActionsOpen,
     setSessionActionsOpen,
@@ -236,6 +239,7 @@ export const SessionRuntimeInjector = React.memo(function SessionRuntimeInjector
     <SessionView
       sessionId={currentSessionId}
       sessionTitle={sessionTitle}
+      sessionTabs={sessionTabs}
       sessionTimeline={sessionTimeline}
       activeAgentId={runtime.activeAgentId ?? undefined}
       activeAgent={activeAgent}

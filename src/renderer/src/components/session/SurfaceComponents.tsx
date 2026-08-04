@@ -752,15 +752,16 @@ export const TurnRow = memo(function TurnRow(props: {
 			const txt = stripThinkingTags(stripAnsi(item.message.text)).trim();
 			if (!txt) return null;
 			return (
-				<AssistantText
-					key={item.message.id}
-					text={txt}
-					images={allImages}
-					onPreviewImage={props.onPreviewImage}
-					onOpenExternal={props.onOpenExternal}
-					onOpenFile={props.onOpenFile}
-					isStreaming={props.isStreaming ?? false}
-				/>
+				<div key={item.message.id} className="timeline-inline-text">
+					<AssistantText
+						text={txt}
+						images={allImages}
+						onPreviewImage={props.onPreviewImage}
+						onOpenExternal={props.onOpenExternal}
+						onOpenFile={props.onOpenFile}
+						isStreaming={props.isStreaming ?? false}
+					/>
+				</div>
 			);
 		}
 		return null;

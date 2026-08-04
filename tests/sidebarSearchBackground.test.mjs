@@ -24,4 +24,6 @@ test("sidebar add-project control is outline icon button", () => {
   assert.match(sidebar, /variant="outline"/);
   assert.match(sidebar, /aria-label=\{t\("app\.addProject"\)\}/);
   assert.match(sidebar, /className="round-add size-9 shrink-0"/);
+  assert.match(sidebar, /<FolderPlus className="size-4" \/>/);
+  assert.doesNotMatch(sidebar, /<Plus className="size-4" \/>/);
 });

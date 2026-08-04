@@ -226,8 +226,7 @@ export function ExtensionsTab(props: {
 					<div className="config-update-dialog">
 						<div className="config-update-dialog-header">
 							<strong>{t("settings.updateExtensionsAll")}</strong>
-							<Button
-								variant="ghost" size="icon-sm" className="size-7"
+							<Button variant="ghost" size="icon-sm" className="size-7"
 								onClick={() => {
 									setShowUpdateDialog(false);
 									props.onRefresh();
@@ -244,8 +243,8 @@ export function ExtensionsTab(props: {
 							{updateResult ? `${updateResult.command}\n${updateResult.output}` : t("settings.extensionsUpdating")}
 						</pre>
 						<div className="config-update-dialog-actions">
-							<Button
-								 variant="default"
+							<Button variant="default"
+								size="sm"
 								onClick={() => {
 									setShowUpdateDialog(false);
 									props.onRefresh();
@@ -259,11 +258,14 @@ export function ExtensionsTab(props: {
 				</div>
 			)}
 			{/* 预设推荐扩展 — 大列表简洁显示 */}
-			<div className="config-section" style={{ marginBottom: 20 }}>
-				<div className="mb-3.5 flex items-center justify-between">
-					<h3 className="extensions-installed-title">{t("config.recommendedPackages")}</h3>
+			<div className="config-section mb-5">
+				<div className="mb-3 flex items-center justify-between">
+					{/* 与设置弹窗分区标题同级：text-sm，避免 title 字号偏大 */}
+					<h3 className="extensions-installed-title text-sm font-semibold tracking-tight text-foreground">
+						{t("config.recommendedPackages")}
+					</h3>
 				</div>
-				<p className="config-im-form-hint" style={{ marginBottom: 12 }}>
+				<p className="config-im-form-hint mb-3 text-caption text-muted-foreground">
 					{t("config.recommendedPackagesHint")}
 				</p>
 				<div className="extensions-recommended-list">
@@ -300,8 +302,7 @@ export function ExtensionsTab(props: {
 							</div>
 							<div className="extensions-recommended-action" onClick={(e) => e.stopPropagation()}>
 								{/* 安装中保持与图标按钮同尺寸，避免 config-btn 文本把操作区撑开错位 */}
-								<Button
-									variant="ghost" size="icon-sm" className="size-7"
+								<Button variant="ghost" size="icon-sm" className="size-7"
 									title={installing ? t("config.installing") : alreadyInstalled ? t("config.installed") : t("config.install")}
 									onClick={() => handleInstall(pkg)}
 									disabled={alreadyInstalled || installing}
@@ -313,8 +314,7 @@ export function ExtensionsTab(props: {
 										<Download size={15} strokeWidth={1.8} aria-hidden="true" />
 									)}
 								</Button>
-								<Button
-									variant="ghost" size="icon-sm" className="size-7"
+								<Button variant="ghost" size="icon-sm" className="size-7"
 									title={t("common.copy")}
 									onClick={(e) => {
 										e.stopPropagation();
@@ -336,30 +336,33 @@ export function ExtensionsTab(props: {
 
 			{/* 已安装扩展列表 */}
 			<div className="config-section">
-				<h3 className="extensions-installed-title">{t("config.installedExtensions")}</h3>
-				<div className="mb-3.5 flex items-center justify-between" style={{ marginTop: 8 }}>
-					<div>
-						<span className="font-mono text-xs tabular-nums text-text-tertiary">
+				<h3 className="extensions-installed-title mb-2 text-sm font-semibold tracking-tight text-foreground">
+					{t("config.installedExtensions")}
+				</h3>
+				<div className="mb-3 mt-2 flex items-center justify-between gap-3">
+					<div className="min-w-0">
+						<span className="font-mono text-xs tabular-nums text-muted-foreground">
 							{t("config.count.extensions", { count: props.data.extensions.length })}
 						</span>
-						<small className="skills-restart-hint">
+						<small className="skills-restart-hint block text-caption text-muted-foreground">
 							{t("config.extensionRestartHint")}
 						</small>
 					</div>
-					<div className="skills-toolbar-actions">
-						<Button  variant="outline" onClick={handleUpdateExtensions} disabled={props.loading || Boolean(updating)}>
+					<div className="skills-toolbar-actions flex shrink-0 items-center gap-1.5">
+						{/* 工具栏统一 size=sm，与设置页/会话顶栏控件高度对齐 */}
+						<Button variant="outline" size="sm" onClick={handleUpdateExtensions} disabled={props.loading || Boolean(updating)}>
 							{updating ? t("settings.updating") : t("settings.updateExtensionsAll")}
 						</Button>
-						<Button  variant="outline" onClick={props.onRefresh} disabled={props.loading}>
+						<Button variant="outline" size="sm" onClick={props.onRefresh} disabled={props.loading}>
 							{t("common.refresh")}
 						</Button>
 					</div>
 				</div>
 				<div className="skills-list">
 					{props.loading ? (
-						<div className="py-12 text-center text-[13px] text-text-tertiary">{t("config.loadingExtensions")}</div>
+						<div className="py-12 text-center text-control text-muted-foreground">{t("config.loadingExtensions")}</div>
 					) : props.data.extensions.length === 0 ? (
-						<div className="py-12 text-center text-[13px] text-text-tertiary">{t("config.emptyExtensions")}</div>
+						<div className="py-12 text-center text-control text-muted-foreground">{t("config.emptyExtensions")}</div>
 					) : (
 						props.data.extensions.map((extension) => (
 							<ExtensionCard
@@ -399,7 +402,7 @@ function ExtensionCard(props: {
 			<div className="session-card-display">
 				<div className="session-card-inner skill-card-main">
 					<div className="session-card-title skill-title-row">
-						<strong>{name}</strong>
+						<strong className="text-sm font-semibold text-foreground">{name}</strong>
 						<div className="skill-badges">
 							{extension.builtIn && (
 								<span className="skill-state enabled">{t("common.builtIn")}</span>
@@ -430,8 +433,7 @@ function ExtensionCard(props: {
 				<div className="prompts-list-item-actions">
 					{/* 内置扩展：移除（禁止自动部署）或恢复 */}
 					{extension.builtIn && extension.enabled !== false && (
-						<Button
-							variant="ghost" size="icon-sm" className="size-7"
+						<Button variant="ghost" size="icon-sm" className="size-7"
 							disabled={props.removingBuiltIn}
 							onClick={() => props.onRemoveBuiltIn(extension)}
 							title={props.removingBuiltIn ? t("config.uninstalling") : t("config.uninstall")}
@@ -440,8 +442,7 @@ function ExtensionCard(props: {
 						</Button>
 					)}
 					{extension.builtIn && extension.enabled === false && (
-						<Button
-							variant="ghost" size="icon-sm" className="size-7"
+						<Button variant="ghost" size="icon-sm" className="size-7"
 							style={{ color: "var(--color-accent)" }}
 							disabled={props.restoringBuiltIn}
 							onClick={() => props.onRestoreBuiltIn(extension)}
@@ -452,8 +453,7 @@ function ExtensionCard(props: {
 					)}
 					{/* 三方扩展：卸载 */}
 					{!extension.builtIn && (
-						<Button
-							variant="ghost" size="icon-sm" className="size-7 text-destructive hover:bg-destructive/10 hover:text-destructive"
+						<Button variant="ghost" size="icon-sm" className="size-7 text-destructive hover:bg-destructive/10 hover:text-destructive"
 							disabled={props.uninstalling}
 							onClick={() => props.onUninstall(extension)}
 							title={props.uninstalling ? t("config.uninstalling") : t("config.uninstall")}

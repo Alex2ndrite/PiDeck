@@ -11,7 +11,7 @@ import { cn } from "../../lib/utils";
 
 /** pure official：项目/会话树行共享的 shadcn 风格底（hover=accent 面，active 同系） */
 const treeRowClass =
-  "group conversation relative flex w-full items-center gap-1 rounded-md border-0 bg-transparent px-1 py-0.5 text-body text-foreground transition-colors hover:bg-accent hover:text-accent-foreground";
+  "group conversation relative flex w-full items-center gap-0.5 rounded-md border-0 bg-transparent px-1 py-0.5 text-body text-foreground transition-colors hover:bg-accent hover:text-accent-foreground";
 
 function isChatProject(project: Project) {
   return project.kind === "chat";
@@ -106,7 +106,7 @@ export function ProjectTree(props: {
           </button>
           <button
             type="button"
-            className="flex min-w-0 flex-1 items-center gap-2 py-1 pr-1 text-left"
+            className="flex min-w-0 flex-1 items-center gap-1.5 py-0.5 pr-0.5 text-left"
             draggable={!chat && !props.controller.search.trim()}
             onDragStart={(event) => dragStart(event, project.id)}
             onDragOver={(event) => { if (props.controller.drag.sourceProjectId && props.controller.drag.sourceProjectId !== project.id) { event.preventDefault(); props.controller.setProjectDropTarget(project.id); } }}
@@ -127,7 +127,7 @@ export function ProjectTree(props: {
               {/* 聊天项目与普通项目使用同一行高；说明文字不参与侧栏导航信息。 */}
             </div>
           </button>
-          <div className="flex shrink-0 items-center gap-1 pr-1">
+          <div className="flex shrink-0 items-center gap-0.5 pr-0.5">
             {runningAgentCount > 0 && (
               <span className="project-running-badge inline-flex h-4 items-center rounded-full bg-primary/10 px-1.5 text-micro font-medium tabular-nums text-primary" title={t("app.projectRunningAgents", { count: runningAgentCount })}>
                 {runningAgentCount}
@@ -164,7 +164,7 @@ export function ProjectTree(props: {
           </div>
         </div>
         {!collapsed && (
-          <div className="ml-5 pb-1 pl-2">
+          <div className="ml-1 pb-0.5">
             {/* 展开内容不依赖当前选中项，项目切换只改变高亮，避免两棵会话树同时伸缩造成布局抖动。 */}
             {project.worktreeEnabled && (
               <WorktreeTree

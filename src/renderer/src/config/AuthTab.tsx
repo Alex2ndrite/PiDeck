@@ -83,13 +83,12 @@ export function AuthTab(props: {
 
 	return (
 		<div className="config-auth-tab">
-			<div className="mb-3.5 flex items-center justify-between">
+			<div className="mb-3 flex items-center justify-between gap-3">
 				<span className="font-mono text-xs tabular-nums text-text-tertiary">
 					{t("config.count.auth", { count: providers.length })}
 				</span>
-				<div className="flex min-w-0 items-center gap-2">
-					<Button
-						 variant="outline"
+				<div className="flex min-w-0 items-center gap-1.5">
+					<Button size="sm" variant="outline"
 						onClick={() => {
 							setSelectingProvider(true);
 							setSelectedProvider("");
@@ -100,15 +99,13 @@ export function AuthTab(props: {
 					>
 						{t("config.addAuth")}
 					</Button>
-					<Button
-						 variant="outline"
+					<Button size="sm" variant="outline"
 						onClick={() => setShowGuide(!showGuide)}
 						disabled={saving}
 					>
 						{t("config.authGuide")}
 					</Button>
-					<Button
-						 variant="destructive"
+					<Button size="sm" variant="destructive"
 						onClick={() => {
 							if (batchMode) {
 								setBatchMode(false);
@@ -122,8 +119,7 @@ export function AuthTab(props: {
 						{batchMode ? t("common.cancel") : t("common.deleteBatch")}
 					</Button>
 					{batchMode && (
-						<Button
-							 variant="destructive"
+						<Button size="sm" variant="destructive"
 							onClick={() => {
 								if (selectedAuths.size > 0) {
 									props.onDeleteAuths([...selectedAuths] as string[]);
@@ -136,8 +132,7 @@ export function AuthTab(props: {
 							{t("common.deleteSelected")} ({selectedAuths.size})
 						</Button>
 					)}
-					<Button
-						 variant="default"
+					<Button size="sm" variant="default"
 						onClick={props.onSave}
 						disabled={saving}
 					>
@@ -235,7 +230,7 @@ export function AuthTab(props: {
 									if (e.target.value) setSelectedProvider("");
 								}}
 								placeholder={t("config.authCustomPlaceholder")}
-								className="h-8 min-w-0 flex-1 rounded-sm border border-border-default bg-bg-muted px-2.5 text-[13px] text-text-primary outline-none focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]"
+								className="h-8 min-w-0 flex-1 rounded-sm border border-border-default bg-bg-muted px-2.5 text-control text-text-primary outline-none focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]"
 							/>
 						</p>
 					</div>
@@ -259,8 +254,7 @@ export function AuthTab(props: {
 								)}
 							</div>
 						)}
-						<Button
-							 variant="default"
+						<Button size="sm" variant="default"
 							onClick={() => {
 								const finalName = customProviderName.trim() || selectedProvider;
 								if (!finalName) return;
@@ -272,7 +266,7 @@ export function AuthTab(props: {
 						>
 							{t("config.authAddSelected")}
 						</Button>
-						<Button  variant="outline" onClick={() => setSelectingProvider(false)}>
+						<Button size="sm"  variant="outline" onClick={() => setSelectingProvider(false)}>
 							{t("common.cancel")}
 						</Button>
 					</div>
@@ -308,15 +302,14 @@ export function AuthTab(props: {
 								/>
 							</Label>
 						)}
-								<span className="text-[13px] font-semibold text-text-primary">{name}</span>
+								<span className="text-control font-semibold text-text-primary">{name}</span>
 								<span className="min-w-0 flex-1 truncate font-mono text-xs text-text-tertiary">
 									{auth.key
 										? `${auth.key.slice(0, 10)}••••••${auth.key.slice(-4)}`
 										: t("config.authKeyPreviewEmpty")}
 								</span>
 								<div className="flex items-center gap-1">
-									<Button
-										variant="ghost" size="icon-sm" className="size-7 text-destructive hover:bg-destructive/10 hover:text-destructive"
+									<Button variant="ghost" size="icon-sm" className="size-7 text-destructive hover:bg-destructive/10 hover:text-destructive"
 										onClick={(e) => {
 											e.stopPropagation();
 											props.onDeleteAuth(name);
@@ -325,7 +318,7 @@ export function AuthTab(props: {
 									>
 										<Trash2 size={14} />
 									</Button>
-									<span className="ml-1 text-[13px] text-text-tertiary">
+									<span className="ml-1 text-control text-text-tertiary">
 										{isExpanded ? (
 											<ChevronDown size={14} />
 										) : (
@@ -360,7 +353,7 @@ export function AuthTab(props: {
 					);
 				})}
 				{providers.length === 0 && (
-					<div className="py-12 text-center text-[13px] text-text-tertiary">{t("config.authEmpty")}</div>
+					<div className="py-12 text-center text-control text-text-tertiary">{t("config.authEmpty")}</div>
 				)}
 			</div>
 		</div>

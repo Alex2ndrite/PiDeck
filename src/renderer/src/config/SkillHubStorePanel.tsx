@@ -223,12 +223,12 @@ export function SkillHubStorePanel() {
 		return (
 			<div className="skillhub-panel">
 				<div className="skillhub-detail-toolbar">
-					<Button  variant="outline" onClick={() => { setPreviewSlug(null); setDetail(null); setInstallResult(null); }}>
+					<Button size="sm"  variant="outline" onClick={() => { setPreviewSlug(null); setDetail(null); setInstallResult(null); }}>
 						<ArrowLeft size={14} />
 						{t("config.promptStoreBack")}
 					</Button>
 				</div>
-				<div className="py-12 text-center text-[13px] text-text-tertiary" style={{ marginTop: 24 }}>
+				<div className="py-12 text-center text-control text-text-tertiary" style={{ marginTop: 24 }}>
 					<p>{t("config.skillHubDetailNotAvailable")}</p>
 				</div>
 			</div>
@@ -251,7 +251,7 @@ export function SkillHubStorePanel() {
 						disabled={searching}
 					/>
 					<Button
-						 variant="default"
+						 size="sm" variant="default"
 						onClick={() => void handleSearch(query)}
 						disabled={searching || !query.trim()}
 					>
@@ -273,11 +273,11 @@ export function SkillHubStorePanel() {
 				)}
 			</div>
 
-			{error && <div className="mb-3.5 rounded-sm border border-danger/20 bg-danger-soft px-3.5 py-2.5 text-[13px] leading-relaxed text-danger whitespace-pre-line">{error}</div>}
-			{searching && <div className="py-12 text-center text-[13px] text-text-tertiary">{t("common.searching")}…</div>}
+			{error && <div className="mb-3.5 rounded-sm border border-danger/20 bg-danger-soft px-3.5 py-2.5 text-control leading-relaxed text-danger whitespace-pre-line">{error}</div>}
+			{searching && <div className="py-12 text-center text-control text-text-tertiary">{t("common.searching")}…</div>}
 
 			{result && !searching && result.total === 0 && (
-				<div className="py-12 text-center text-[13px] text-text-tertiary">{t("config.noSearchResults")}</div>
+				<div className="py-12 text-center text-control text-text-tertiary">{t("config.noSearchResults")}</div>
 			)}
 
 			{result && result.total > 0 && (

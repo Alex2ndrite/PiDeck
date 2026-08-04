@@ -69,15 +69,15 @@ export function SkillStoreTab(props: {
 	if (previewItem) {
 		return (
 			<div className="prompt-store-tab">
-				{error && <div className="mb-3.5 rounded-sm border border-danger/20 bg-danger-soft px-3.5 py-2.5 text-[13px] leading-relaxed text-danger whitespace-pre-line">{error}</div>}
+				{error && <div className="mb-3.5 rounded-sm border border-danger/20 bg-danger-soft px-3.5 py-2.5 text-control leading-relaxed text-danger whitespace-pre-line">{error}</div>}
 				{/* toast 已改用 sonner */}
 				<div className="prompt-store-toolbar">
-					<Button  variant="outline" onClick={() => { setPreviewItem(null); }}>
+					<Button size="sm"  variant="outline" onClick={() => { setPreviewItem(null); }}>
 						<ArrowLeft size={14} strokeWidth={1.8} />
 						{t("config.promptStoreBack")}
 					</Button>
 					<Button
-						 variant="default"
+						 size="sm" variant="default"
 						onClick={() => void handleImport(previewItem)}
 						disabled={importingId === previewItem.id}
 					>
@@ -129,7 +129,7 @@ export function SkillStoreTab(props: {
 						disabled={searching}
 					/>
 					<Button
-						 variant="default"
+						 size="sm" variant="default"
 						onClick={() => void handleSearch(query)}
 						disabled={searching || !query.trim()}
 					>
@@ -147,12 +147,12 @@ export function SkillStoreTab(props: {
 				)}
 			</div>
 
-			{error && <div className="mb-3.5 rounded-sm border border-danger/20 bg-danger-soft px-3.5 py-2.5 text-[13px] leading-relaxed text-danger whitespace-pre-line">{error}</div>}
+			{error && <div className="mb-3.5 rounded-sm border border-danger/20 bg-danger-soft px-3.5 py-2.5 text-control leading-relaxed text-danger whitespace-pre-line">{error}</div>}
 			{/* toast 已改用 sonner */}
-		{searching && <div className="py-12 text-center text-[13px] text-text-tertiary">{t("config.promptStoreSearching")}</div>}
+		{searching && <div className="py-12 text-center text-control text-text-tertiary">{t("config.promptStoreSearching")}</div>}
 
 		{result && !searching && result.count === 0 && (
-			<div className="py-12 text-center text-[13px] text-text-tertiary">{t("config.skillStoreNoResults")}</div>
+			<div className="py-12 text-center text-control text-text-tertiary">{t("config.skillStoreNoResults")}</div>
 		)}
 
 			{result && result.count > 0 && (

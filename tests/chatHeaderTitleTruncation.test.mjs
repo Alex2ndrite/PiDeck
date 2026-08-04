@@ -11,9 +11,9 @@ const header = readFileSync(
   "utf8",
 );
 
-test("chat header gives the agent title remaining width before ellipsis", () => {
-  assert.match(header, /grid-cols-\[minmax\(0,1fr\)_auto\]/);
-  assert.match(header, /chat-title-block flex min-w-0 flex-1/);
-  assert.match(header, /truncate text-title font-semibold/);
+test("chat header leaves the session title to tabs and keeps the actions group", () => {
+  assert.doesNotMatch(header, /chat-title-block/);
+  assert.doesNotMatch(header, /<strong[^>]*title=\{title\}/);
   assert.match(header, /chat-header-actions flex min-w-0 items-center justify-end/);
+  assert.match(header, /header-actions-right flex items-center gap-1\.5/);
 });

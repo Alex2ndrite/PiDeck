@@ -49,7 +49,7 @@ export function SecretInput(props: {
 				value={props.value}
 				onChange={(e) => props.onChange(e.target.value)}
 				placeholder={props.placeholder ?? t("config.apiKeyPlaceholder")}
-				className="h-9 min-w-0 flex-1 rounded-sm border border-border-subtle bg-bg-panel px-3 font-mono text-[13px] text-text-primary outline-none transition-[border-color,box-shadow,background-color] duration-150 focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]"
+				className="h-8 min-w-0 flex-1 rounded-sm border border-border-subtle bg-bg-panel px-3 font-mono text-control text-text-primary outline-none transition-[border-color,box-shadow,background-color] duration-150 focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]"
 			/>
 			<Button
 				variant="outline"
@@ -157,7 +157,7 @@ export function ConfigComboboxInput(props: {
 					setOpen(true);
 				}}
 				placeholder={props.placeholder}
-				className="h-9 min-w-0 w-full flex-1 rounded-sm border border-border-subtle bg-bg-panel px-3 pr-[38px] text-[13px] text-text-primary outline-none focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]"
+				className="h-8 min-w-0 w-full flex-1 rounded-sm border border-border-subtle bg-bg-panel px-3 pr-[38px] text-control text-text-primary outline-none focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]"
 			/>
 			<Button
 				type="button"
@@ -230,7 +230,7 @@ export function ApiTypeInput(props: {
 				{isCustom && (
 					<SelectItem value={props.value}>
 						<span className="flex flex-col items-start gap-0.5">
-							<span className="text-[13px] font-semibold">{t("config.apiTypeCustom")}: {props.value}</span>
+							<span className="text-control font-semibold">{t("config.apiTypeCustom")}: {props.value}</span>
 							<small className="text-[11px] leading-[1.4] text-text-tertiary">{props.value}</small>
 						</span>
 					</SelectItem>
@@ -238,7 +238,7 @@ export function ApiTypeInput(props: {
 				{PROVIDER_API_OPTIONS.map((option) => (
 					<SelectItem key={option} value={option}>
 						<span className="flex flex-col items-start gap-0.5">
-							<span className="text-[13px] font-semibold">{API_TYPE_LABELS[option] || option}</span>
+							<span className="text-control font-semibold">{API_TYPE_LABELS[option] || option}</span>
 							<small className="text-[11px] leading-[1.4] text-text-tertiary">{getApiTypeDescription(option)}</small>
 						</span>
 					</SelectItem>

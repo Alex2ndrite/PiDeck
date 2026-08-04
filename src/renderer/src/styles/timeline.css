@@ -10,6 +10,45 @@
 
 /* ---------- 一轮 AI 回答：TurnRow ---------- */
 
+/*
+ * 执行轨道只表达“这里发生过一个事件”，不再把工具扳手/思考脑图标复制到左侧。
+ * 语义图标留在卡片标题内，轨道节点只用状态色区分完成、运行和异常，窄窗口下更稳。
+ */
+.timeline-marker-row {
+  gap: 10px;
+}
+.timeline-marker-line {
+  background: var(--color-border-subtle);
+}
+.timeline-marker-node {
+  box-sizing: border-box;
+  border: 2px solid var(--color-bg-panel);
+  box-shadow: 0 0 0 1px color-mix(in srgb, currentColor 28%, transparent);
+}
+.timeline-marker-node-neutral {
+  color: var(--color-text-tertiary);
+  background: var(--color-text-tertiary);
+}
+.timeline-marker-node-active {
+  color: var(--color-accent);
+  background: var(--color-accent);
+}
+.timeline-marker-node-success {
+  color: var(--color-success);
+  background: var(--color-success);
+}
+.timeline-marker-node-warning {
+  color: var(--color-warning);
+  background: var(--color-warning);
+}
+.timeline-marker-node-error {
+  color: var(--color-danger);
+  background: var(--color-danger);
+}
+.timeline-inline-text {
+  min-width: 0;
+  padding-left: 26px;
+}
 
 /* ---------- 执行过程折叠区域 ---------- */
 .execution-summary {
@@ -49,8 +88,11 @@
 .execution-summary-details {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: 0;
   margin-top: var(--space-3);
+}
+.execution-summary-details > .timeline-marker-row:last-child .timeline-marker-content {
+  padding-bottom: 0;
 }
 .execution-summary-collapse {
   display: flex;
@@ -1280,6 +1322,96 @@ body.ask-dialog-open .ask-question-card.pending {
 .ask-question-card-option:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* Ask 交互区统一使用紧凑密度：输入框自身负责 resize，外层 composer 不参与高度计算。 */
+.ask-inline-bar {
+  gap: 0;
+  border-bottom: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  box-shadow: 0 1px 2px color-mix(in srgb, #000 5%, transparent);
+}
+.ask-inline-bar .ask-inline-bar-option {
+  min-height: 26px;
+  padding: 4px 10px;
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-caption);
+}
+.ask-inline-bar input {
+  height: 32px;
+  min-height: 32px;
+  padding: 0 8px;
+  font-size: var(--font-size-caption);
+}
+.ask-inline-bar textarea {
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-caption);
+}
+.ask-inline-bar .ask-inline-bar-submit-btn {
+  min-height: 32px;
+  height: 32px;
+  padding: 0 10px;
+  font-size: var(--font-size-caption);
+}
+
+/* 内联提问卡片：与 composer 同一套紧凑信息密度，避免卡片挤占默认面板高度。 */
+.ask-question-card {
+  border-radius: var(--radius-md);
+}
+.ask-question-card-header {
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px 0;
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-caption);
+}
+.ask-question-card-header .ask-question-card-title {
+  font-weight: 600;
+}
+.ask-question-card-body {
+  padding: 0 10px 8px;
+}
+.ask-question-card-options {
+  gap: 5px;
+  margin-top: 6px;
+}
+.ask-question-card-option {
+  height: 26px;
+  padding: 0 10px;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-caption);
+}
+.ask-question-card-input-row {
+  gap: 6px;
+  margin-top: 5px;
+}
+.ask-question-card-input {
+  min-height: 32px !important;
+  max-height: 120px;
+  padding: 5px 8px;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-caption);
+  resize: none;
+}
+.ask-question-card-submit,
+.ask-question-card-cancel {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: var(--radius-sm);
+}
+.ask-question-card-editor-area {
+  gap: 6px;
+  margin-top: 5px;
+}
+.ask-question-card-editor {
+  min-height: 72px;
+  max-height: 240px;
+  padding: 8px;
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-caption);
 }
 
 /* 收起状态工具组里的 skill chip */

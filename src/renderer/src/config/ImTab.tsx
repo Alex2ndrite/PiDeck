@@ -294,7 +294,7 @@ export function ImTab(_props: Props) {
 	const statusLabel = t(`config.im.status.${status.status}` as any) || status.status;
 
 	if (loading) {
-		return <div className="py-12 text-center text-[13px] text-text-tertiary">{t("common.loading")}</div>;
+		return <div className="py-12 text-center text-control text-text-tertiary">{t("common.loading")}</div>;
 	}
 
 	return (
@@ -335,23 +335,20 @@ export function ImTab(_props: Props) {
 
 			{/* ── Bot 配置管理 ── */}
 			<div className="config-section">
-				<div className="mb-3.5 flex items-center justify-between">
+				<div className="mb-3 flex items-center justify-between gap-3">
 					<span className="font-mono text-xs tabular-nums text-text-tertiary">{t("config.im.botConfig", { count: bots.length })}</span>
-					<div className="flex min-w-0 items-center gap-2">
-						<Button
-							 variant="outline"
+					<div className="flex min-w-0 items-center gap-1.5">
+						<Button size="sm" variant="outline"
 							onClick={() => setGuideOpen(true)}
 						>
 							{t("config.im.guide")}
 						</Button>
-						<Button
-							 variant="outline"
+						<Button size="sm" variant="outline"
 							onClick={() => openExternal("https://xid01i1952l.feishu.cn/wiki/Yf8Gw5QW3is7xdkuG98cvRVen5d?from=from_copylink", true)}
 						>
 							{t("config.im.onlineGuide")}
 						</Button>
-						<Button
-							 variant="default"
+						<Button size="sm" variant="default"
 							onClick={() => { if (showAddForm && addStep === "connected") void api?.disconnect?.(); setShowAddForm((v) => !v); setAddStep("input"); setAddError(null); setAppId(""); setAppSecret(""); setBotName(""); setAddFormOpenId(""); }}
 						>
 							{showAddForm ? t("common.cancel") : t("config.im.addBot")}
@@ -424,8 +421,7 @@ export function ImTab(_props: Props) {
 
 						<div className="config-im-form-actions">
 							{addStep === "input" && (
-								<Button
-									 variant="default"
+								<Button size="sm" variant="default"
 									onClick={handleConnectTemp}
 									disabled={addConnecting || !appId.trim() || !appSecret.trim()}
 									style={{ flex: 1 }}
@@ -436,8 +432,7 @@ export function ImTab(_props: Props) {
 							{addStep === "connected" && (
 								<>
 									<div className="config-im-connected-info">✅ {t("config.im.connectedToFeishu")}</div>
-									<Button
-										 variant="default"
+									<Button size="sm" variant="default"
 										onClick={handleSaveBot}
 										disabled={adding || !addFormOpenId.trim()}
 										style={{ flex: 1 }}
@@ -452,7 +447,7 @@ export function ImTab(_props: Props) {
 				)}
 
 				{bots.length === 0 && !showAddForm && (
-					<div className="py-12 text-center text-[13px] text-text-tertiary">{t("config.im.noBotConfig")}</div>
+					<div className="py-12 text-center text-control text-text-tertiary">{t("config.im.noBotConfig")}</div>
 				)}
 
 				{bots.slice(0, visibleBots).map((bot) => {
@@ -476,7 +471,7 @@ export function ImTab(_props: Props) {
 								})}
 							>
 								<div className="min-w-0 flex-1">
-									<div className="truncate text-[13px] font-semibold text-text-primary">
+									<div className="truncate text-control font-semibold text-text-primary">
 										<span className="config-im-expand-caret">{isExpanded ? "▾" : "▸"}</span>
 										{bot.name}
 										{isThisConnected && <span className="config-im-connected-badge">{t("config.im.connected")}</span>}
@@ -487,8 +482,7 @@ export function ImTab(_props: Props) {
 								</div>
 								<div className="flex shrink-0 gap-1.5" onClick={(e) => e.stopPropagation()}>
 									{isThisConnected ? (
-										<Button
-											 variant="outline" size="sm" className="text-destructive"
+										<Button variant="outline" size="sm" className="text-destructive"
 											disabled={connecting}
 											onClick={async () => {
 												setConnecting(true);
@@ -503,8 +497,7 @@ export function ImTab(_props: Props) {
 											{connecting ? t("config.im.connecting") : t("config.im.disconnect")}
 										</Button>
 									) : (
-										<Button
-											 variant="default" size="sm"
+										<Button variant="default" size="sm"
 											disabled={connecting}
 											onClick={async () => {
 												setConnecting(true);
@@ -522,8 +515,7 @@ export function ImTab(_props: Props) {
 											{connecting ? t("config.im.connecting") : t("config.im.connect")}
 										</Button>
 									)}
-									<Button
-										 variant="outline"
+									<Button size="sm" variant="outline"
 										onClick={() => {
 											setExpandedBotIds((prev) => {
 												const next = new Set(prev);
@@ -535,7 +527,7 @@ export function ImTab(_props: Props) {
 									>
 										{isExpanded ? t("common.collapse") : t("common.details")}
 									</Button>
-									<Button  variant="destructive" onClick={() => setDeleteConfirmBotId(bot.id)}>
+									<Button size="sm"  variant="destructive" onClick={() => setDeleteConfirmBotId(bot.id)}>
 										{t("common.delete")}
 									</Button>
 								</div>
@@ -548,7 +540,7 @@ export function ImTab(_props: Props) {
 											<div className="config-im-credential-card">
 												<span>{t("config.im.appId")}</span>
 												<code>{bot.appId}</code>
-												<Button  variant="outline" size="sm" onClick={() => handleCopyValue(`appid:${bot.id}`, bot.appId)}>
+												<Button variant="outline" size="sm" onClick={() => handleCopyValue(`appid:${bot.id}`, bot.appId)}>
 													{copiedCredential === `appid:${bot.id}` ? t("common.copied") : t("common.copy")}
 												</Button>
 											</div>
@@ -556,11 +548,10 @@ export function ImTab(_props: Props) {
 												<span>{t("config.im.appSecret")}</span>
 												<code>{secretValue || t("config.im.secretHidden")}</code>
 												<div className="config-im-credential-actions">
-													<Button  variant="outline" size="sm" onClick={() => handleCopySecret(bot.id)}>
+													<Button variant="outline" size="sm" onClick={() => handleCopySecret(bot.id)}>
 														{copiedCredential === `secret:${bot.id}` ? t("common.copied") : t("common.copy")}
 													</Button>
-													<Button
-													 variant="outline" size="sm"
+													<Button variant="outline" size="sm"
 													onClick={() => { if (secretValue) { setRevealedSecrets((prev) => { const next = { ...prev }; delete next[bot.id]; return next; }); } else { void handleRevealSecret(bot.id); } }}
 												>
 													{secretValue ? t("config.im.hideSecret") : t("config.im.revealSecret")}
@@ -581,13 +572,13 @@ export function ImTab(_props: Props) {
 													placeholder="ou_xxxxxxxxxxxx"
 													className="config-input config-input-xs"
 												/>
-												<Button  variant="default" size="sm" onClick={() => handleEditOpenId(bot.id)}>{t("common.save")}</Button>
-												<Button  variant="outline" size="sm" onClick={() => setEditingOpenIdBotId(null)}>{t("common.cancel")}</Button>
+												<Button variant="default" size="sm" onClick={() => handleEditOpenId(bot.id)}>{t("common.save")}</Button>
+												<Button variant="outline" size="sm" onClick={() => setEditingOpenIdBotId(null)}>{t("common.cancel")}</Button>
 											</div>
 										) : (
 											<div className="config-im-openid-line">
 												{bot.defaultUserOpenId ? <code>{bot.defaultUserOpenId}</code> : <span className="config-im-openid-empty">{t("config.im.openIdEmpty")}</span>}
-												<Button  variant="outline" size="sm" onClick={() => { setEditingOpenIdBotId(bot.id); setEditOpenIdValue(bot.defaultUserOpenId || ""); }}>
+												<Button variant="outline" size="sm" onClick={() => { setEditingOpenIdBotId(bot.id); setEditOpenIdValue(bot.defaultUserOpenId || ""); }}>
 													{t("config.im.editOpenId")}
 												</Button>
 											</div>
@@ -597,7 +588,7 @@ export function ImTab(_props: Props) {
 									<div className="config-im-bot-detail-section">
 										<div className="config-im-section-title">{t("config.im.linkedAgents", { count: botBindings.length })}</div>
 										{botBindings.length === 0 ? (
-											<div className="py-12 text-center text-[13px] text-text-tertiary config-im-inline-empty">{t("config.im.noBotBindings")}</div>
+											<div className="py-12 text-center text-control text-text-tertiary config-im-inline-empty">{t("config.im.noBotBindings")}</div>
 										) : (
 											<div className="config-im-binding-list">
 												{visibleBotBindings.map((binding) => (
@@ -609,14 +600,13 @@ export function ImTab(_props: Props) {
 														{t("config.im.agentId")}: {binding.sessionId.slice(0, 8)} · {t("config.im.chat")}: {binding.chatId.slice(0, 10)} · {formatI18nDateTime(binding.createdAt)}
 															</div>
 														</div>
-														<Button  variant="destructive" size="sm" onClick={() => handleRemoveBinding(binding.chatId)}>
+														<Button variant="destructive" size="sm" onClick={() => handleRemoveBinding(binding.chatId)}>
 															{t("config.im.disconnect")}
 														</Button>
 													</div>
 												))}
 												{botBindings.length > visibleBindingCount && (
-													<Button
-														 variant="outline" size="sm" className="config-im-show-more"
+													<Button variant="outline" size="sm" className="config-im-show-more"
 														onClick={() => setVisibleBindingsByBot((prev) => ({ ...prev, [bot.id]: Math.min((prev[bot.id] ?? 10) + 10, botBindings.length) }))}
 													>
 														{t("config.im.showMoreAgents")} ({botBindings.length - visibleBindingCount})
@@ -631,7 +621,7 @@ export function ImTab(_props: Props) {
 					);
 				})}
 				{bots.length > visibleBots && (
-					<Button  variant="outline" size="sm" style={{ marginTop: 4 }} onClick={() => setVisibleBots((v) => Math.min(v + 5, bots.length))}>
+					<Button variant="outline" size="sm" style={{ marginTop: 4 }} onClick={() => setVisibleBots((v) => Math.min(v + 5, bots.length))}>
 						{t("common.showMore")} ({bots.length - visibleBots})
 					</Button>
 				)}
@@ -667,8 +657,7 @@ export function ImTab(_props: Props) {
 					<div className="config-im-guide-modal">
 						<div className="config-im-guide-modal-header">
 							<strong>{t("config.im.guide")}</strong>
-							<Button
-								variant="ghost" size="icon-sm" className="size-7"
+							<Button variant="ghost" size="icon-sm" className="size-7"
 								onClick={() => { setGuideAnimating(true); setTimeout(() => { setGuideAnimating(false); setGuideOpen(false); }, 150); }}
 							>
 								<X size={16} strokeWidth={2.2} />
@@ -716,21 +705,21 @@ export function ImTab(_props: Props) {
 							<p style={{ marginTop: 20, fontWeight: 600 }}>{t("config.im.guideScopeTitle")}</p>
 							<p style={{ fontSize: "var(--font-size-micro)", color: "var(--color-text-tertiary)" }}>{t("config.im.guideScopeDesc")}</p>
 							<pre className="config-im-code-block">{SCOPES_JSON}</pre>
-							<Button  variant="outline" size="sm" onClick={() => { writeClipboard(SCOPES_JSON); setCopiedScope(true); setTimeout(() => setCopiedScope(false), 2000); }}>
+							<Button variant="outline" size="sm" onClick={() => { writeClipboard(SCOPES_JSON); setCopiedScope(true); setTimeout(() => setCopiedScope(false), 2000); }}>
 								{copiedScope ? t("common.copied") : t("common.copy")}
 							</Button>
 
 							<p style={{ marginTop: 20, fontWeight: 600 }}>{t("config.im.guideEventsTitle")}</p>
 							<p style={{ fontSize: "var(--font-size-micro)", color: "var(--color-text-tertiary)" }}>{t("config.im.guideEventsDesc")}</p>
 							<pre className="config-im-code-block">{EVENTS_JSON}</pre>
-							<Button  variant="outline" size="sm" onClick={() => { writeClipboard(EVENTS_JSON); setCopiedEvents(true); setTimeout(() => setCopiedEvents(false), 2000); }}>
+							<Button variant="outline" size="sm" onClick={() => { writeClipboard(EVENTS_JSON); setCopiedEvents(true); setTimeout(() => setCopiedEvents(false), 2000); }}>
 								{copiedEvents ? t("common.copied") : t("common.copy")}
 							</Button>
 
 							<p style={{ marginTop: 20, fontWeight: 600 }}>{t("config.im.guideCallbacksTitle")}</p>
 							<p style={{ fontSize: "var(--font-size-micro)", color: "var(--color-text-tertiary)" }}>{t("config.im.guideCallbacksDesc")}</p>
 							<pre className="config-im-code-block">{CALLBACKS_JSON}</pre>
-							<Button  variant="outline" size="sm" onClick={() => { writeClipboard(CALLBACKS_JSON); setCopiedCallbacks(true); setTimeout(() => setCopiedCallbacks(false), 2000); }}>
+							<Button variant="outline" size="sm" onClick={() => { writeClipboard(CALLBACKS_JSON); setCopiedCallbacks(true); setTimeout(() => setCopiedCallbacks(false), 2000); }}>
 								{copiedCallbacks ? t("common.copied") : t("common.copy")}
 							</Button>
 						</div>

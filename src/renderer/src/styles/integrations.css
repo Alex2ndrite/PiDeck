@@ -512,8 +512,9 @@
 
 .config-input {
   width: 100%;
+  /* 与 shadcn size=sm（h-8=32px / control-height-md）对齐 */
   height: var(--control-height-md);
-  padding: 0 var(--space-3);
+  padding: 0 var(--space-2);
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-md);
   background: var(--color-bg-muted);
@@ -774,8 +775,9 @@
 .extensions-recommended-row {
   display: flex;
   align-items: flex-start;
-  gap: 12px;
-  padding: 12px 14px;
+  gap: 10px;
+  /* 行高/内边距贴近设置页列表密度，避免扩展页显得更“胖” */
+  padding: 10px 12px;
   border-bottom: 1px solid var(--color-border-subtle);
   transition: background 0.1s;
 }
@@ -816,10 +818,10 @@
   margin: 24px -8px 20px;
 }
 
-/* 已安装扩展标题 */
+/* 已安装扩展标题：默认跟随 text-sm 语义；保留类名兼容组件 Tailwind 覆盖 */
 .extensions-installed-title {
-  font-size: var(--font-size-title);
-  font-weight: 700;
+  font-size: var(--font-size-body);
+  font-weight: 600;
   color: var(--color-text-primary);
   margin: 0;
 }

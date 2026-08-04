@@ -14,12 +14,12 @@ const COMPOSER_MIN_HEIGHT = 148;
 export { COMPOSER_MIN_HEIGHT };
 
 // Ask 区域垂直 resize 手把的约束（AskRegionResizer 使用）：
-// 220=展开时默认高度上限，96=收窄下限，420=可在面板内拉高的最大值，
-// 16=键盘步进（PageUp/PageDown 为 4 倍）。上限不会强迫留白：Ask 折叠时只显示实际内容。
-export const ASK_DEFAULT_MAX_HEIGHT = 220;
-export const ASK_MIN_HEIGHT = 96;
-export const ASK_MAX_HEIGHT = 420;
-export const ASK_STEP_PX = 16;
+// 180=紧凑展开时默认高度上限，70=收窄下限，280=可在面板内拉高的最大值，
+// 8=键盘步进（PageUp/PageDown 为 4 倍）。上限不会强迫留白：Ask 折叠时只显示实际内容。
+export const ASK_DEFAULT_MAX_HEIGHT = 180;
+export const ASK_MIN_HEIGHT = 70;
+export const ASK_MAX_HEIGHT = 280;
+export const ASK_STEP_PX = 8;
 
 export function displayProjectDirectoryName(project: Project) {
   if (isChatProject(project)) return "Chat";

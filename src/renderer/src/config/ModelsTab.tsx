@@ -87,10 +87,9 @@ function FetchedModelCombobox(props: {
 					value={filter}
 					onChange={(e) => setFilter(e.target.value)}
 					placeholder={t("config.modelSearchPlaceholder")}
-					className="h-7 min-w-0 flex-1 rounded-sm border border-border-subtle bg-bg-panel px-2.5 text-[13px] text-text-primary outline-none transition-[border-color,box-shadow,background-color] duration-150 focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]"
+					className="h-7 min-w-0 flex-1 rounded-sm border border-border-subtle bg-bg-panel px-2.5 text-control text-text-primary outline-none transition-[border-color,box-shadow,background-color] duration-150 focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]"
 				/>
-				<Button
-					type="button"
+				<Button type="button"
 					 variant="outline" size="sm"
 					onClick={() => {
 						// 全选只作用于当前筛选结果，方便大列表按关键字批量选择，同时不会误选已配置模型。
@@ -242,27 +241,24 @@ export function ModelsTab(props: {
 
 	return (
 		<div>
-			<div className="mb-3.5 flex items-center justify-between">
+			<div className="mb-3 flex items-center justify-between gap-3">
 				<span className="font-mono text-xs tabular-nums text-text-tertiary">
 					{t("config.count.providers", { count: providerNames.length })}
 				</span>
-				<div className="flex min-w-0 items-center gap-2">
-					<Button
-						 size="sm" variant="outline"
+				<div className="flex min-w-0 items-center gap-1.5">
+					<Button size="sm" variant="outline"
 						onClick={props.onStartAddProvider}
 						disabled={saving}
 					>
 						{t("config.addProvider")}
 					</Button>
-					<Button
-						 size="sm" variant="outline"
+					<Button size="sm" variant="outline"
 						onClick={() => setShowGuide(!showGuide)}
 						disabled={saving}
 					>
 						{t("config.providerGuide")}
 					</Button>
-					<Button
-						 size="sm" variant="destructive"
+					<Button size="sm" variant="destructive"
 						onClick={() => {
 							if (batchMode) {
 								setBatchMode(false);
@@ -276,8 +272,7 @@ export function ModelsTab(props: {
 						{batchMode ? t("common.cancel") : t("common.deleteBatch")}
 					</Button>
 					{batchMode && (
-						<Button
-							 size="sm" variant="destructive"
+						<Button size="sm" variant="destructive"
 							onClick={() => {
 								if (selectedProviders.size > 0) {
 									props.onDeleteProviders([...selectedProviders] as string[]);
@@ -290,8 +285,7 @@ export function ModelsTab(props: {
 							{t("common.deleteSelected")} ({selectedProviders.size})
 						</Button>
 					)}
-					<Button
-						 size="sm" variant="default"
+					<Button size="sm" variant="default"
 						onClick={props.onSave}
 						disabled={saving}
 					>
@@ -383,14 +377,13 @@ export function ModelsTab(props: {
 						onKeyDown={(e) => e.key === "Enter" && props.onConfirmAddProvider()}
 						autoFocus
 					/>
-					<Button
-						 size="sm" variant="default"
+					<Button size="sm" variant="default"
 						onClick={props.onConfirmAddProvider}
 						disabled={!props.newProviderName.trim()}
 					>
 						{t("common.confirm")}
 					</Button>
-					<Button  size="sm" variant="outline" onClick={props.onCancelAddProvider}>
+					<Button size="sm" variant="outline" onClick={props.onCancelAddProvider}>
 						{t("common.cancel")}
 					</Button>
 				</div>
@@ -456,7 +449,7 @@ export function ModelsTab(props: {
 											autoFocus
 										/>
 									) : (
-										<span className="text-[13px] font-semibold text-text-primary">{name}</span>
+										<span className="text-control font-semibold text-text-primary">{name}</span>
 									)}
 									<span className="rounded-full bg-[var(--color-accent-soft)] px-2 py-0.5 font-mono text-[11px] font-medium tabular-nums text-[color:var(--color-accent)]">
 										{t("config.count.models", {
@@ -472,8 +465,7 @@ export function ModelsTab(props: {
 								<div className="flex items-center gap-1">
 									{props.renamingProvider === name ? (
 										<>
-											<Button
-												variant="ghost" size="icon-sm" className="size-7"
+											<Button variant="ghost" size="icon-sm" className="size-7"
 												onClick={(e) => {
 													e.stopPropagation();
 													props.onConfirmRename(name);
@@ -482,8 +474,7 @@ export function ModelsTab(props: {
 											>
 												<Check size={14} />
 											</Button>
-											<Button
-												variant="ghost" size="icon-sm" className="size-7"
+											<Button variant="ghost" size="icon-sm" className="size-7"
 												onClick={(e) => {
 													e.stopPropagation();
 													props.onCancelRename();
@@ -494,8 +485,7 @@ export function ModelsTab(props: {
 											</Button>
 										</>
 									) : (
-										<Button
-											variant="ghost" size="icon-sm" className="size-7"
+										<Button variant="ghost" size="icon-sm" className="size-7"
 											onClick={(e) => {
 												e.stopPropagation();
 												props.onStartRename(name);
@@ -505,8 +495,7 @@ export function ModelsTab(props: {
 											<SquarePen size={14} />
 										</Button>
 									)}
-									<Button
-										variant="ghost" size="icon-sm" className="size-7"
+									<Button variant="ghost" size="icon-sm" className="size-7"
 										onClick={(e) => {
 											e.stopPropagation();
 											props.onDuplicateProvider(name);
@@ -515,8 +504,7 @@ export function ModelsTab(props: {
 									>
 										<Copy size={14} />
 									</Button>
-									<Button
-										variant="ghost" size="icon-sm" className="size-7 text-destructive hover:bg-destructive/10 hover:text-destructive"
+									<Button variant="ghost" size="icon-sm" className="size-7 text-destructive hover:bg-destructive/10 hover:text-destructive"
 										onClick={(e) => {
 											e.stopPropagation();
 											props.onDeleteProvider(name);
@@ -525,7 +513,7 @@ export function ModelsTab(props: {
 									>
 										<Trash2 size={14} />
 									</Button>
-									<span className="ml-1 text-[13px] text-text-tertiary">
+									<span className="ml-1 text-control text-text-tertiary">
 										{isExpanded ? (
 											<ChevronDown size={14} />
 										) : (
@@ -542,7 +530,7 @@ export function ModelsTab(props: {
 											<Label className="pl-0.5 text-left text-xs font-medium text-text-secondary">{t("config.field.baseUrl")}</Label>
 											<div className="config-base-url-field">
 												<Input
-													value={provider.baseUrl ?? ""} className="h-9 min-w-0 rounded-sm border border-border-subtle bg-bg-panel px-3 text-[13px] text-text-primary outline-none transition-[border-color,box-shadow,background-color] duration-150 focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]"
+													value={provider.baseUrl ?? ""} className="h-8 min-w-0 rounded-sm border border-border-subtle bg-bg-panel px-3 text-control text-text-primary outline-none transition-[border-color,box-shadow,background-color] duration-150 focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]"
 													onChange={(e) =>
 														props.onChangeProvider(
 															name,
@@ -621,7 +609,7 @@ export function ModelsTab(props: {
 											<Label className="pl-0.5 text-left text-xs font-medium text-text-secondary">{t("config.testModel")}</Label>
 											<div className="config-test-controls">
 												<Input
-													value={props.testModelIdByProvider[name] ?? ""} className="h-9 min-w-0 rounded-sm border border-border-subtle bg-bg-panel px-3 text-[13px] text-text-primary outline-none transition-[border-color,box-shadow,background-color] duration-150 focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]"
+													value={props.testModelIdByProvider[name] ?? ""} className="h-8 min-w-0 rounded-sm border border-border-subtle bg-bg-panel px-3 text-control text-text-primary outline-none transition-[border-color,box-shadow,background-color] duration-150 focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]"
 													onChange={(e) =>
 														props.onChangeTestModelId(name, e.target.value)
 													}
@@ -629,8 +617,7 @@ export function ModelsTab(props: {
 														provider.models[0]?.id ?? t("config.testModelPlaceholder")
 													}
 												/>
-												<Button
-													 variant="default"
+												<Button size="sm" variant="default"
 													onClick={() => props.onTestProvider(name)}
 													disabled={props.testingProvider === name}
 												>
@@ -653,8 +640,7 @@ export function ModelsTab(props: {
 																? `✅ ${t("config.connectionOk")}`
 																: `❌ ${t("config.connectionFailed")}`}
 														</span>
-														<Button
-															variant="ghost" size="icon-sm" className="size-7"
+														<Button variant="ghost" size="icon-sm" className="size-7"
 															onClick={props.onClearTestResult}
 															title={t("config.clearResult")}
 														>
@@ -663,16 +649,16 @@ export function ModelsTab(props: {
 													</div>
 													{props.testResult.success ? (
 														<div className="config-test-result-body">
-															<div className="flex items-baseline gap-4 text-[13px]">
+															<div className="flex items-baseline gap-4 text-control">
 																<span className="basis-12 shrink-0 text-xs text-text-secondary">{t("config.model")}</span>
 																<strong className="break-all text-text-primary">{props.testResult.model}</strong>
 															</div>
-															<div className="flex items-baseline gap-4 text-[13px]">
+															<div className="flex items-baseline gap-4 text-control">
 																<span className="basis-12 shrink-0 text-xs text-text-secondary">{t("config.response")}</span>
 																<span className="break-all text-text-primary">{props.testResult.snippet}</span>
 															</div>
 															{props.testResult.requestUrl && (
-																<div className="flex items-baseline gap-4 text-[13px]">
+																<div className="flex items-baseline gap-4 text-control">
 																	<span className="basis-12 shrink-0 text-xs text-text-secondary">{t("config.request")}</span>
 																	<code className="config-test-request-url">
 																		POST{" "}
@@ -683,7 +669,7 @@ export function ModelsTab(props: {
 															{props.testResult.tokens &&
 																(props.testResult.tokens.input != null ||
 																	props.testResult.tokens.output != null) && (
-																<div className="flex items-baseline gap-4 text-[13px]">
+																<div className="flex items-baseline gap-4 text-control">
 																	<span className="basis-12 shrink-0 text-xs text-text-secondary">{t("config.tokens")}</span>
 																	<span className="break-all text-text-primary">
 																		{t("config.testInputTokens", {
@@ -697,7 +683,7 @@ export function ModelsTab(props: {
 																</div>
 															)}
 															{props.testResult.latencyMs != null && (
-																<div className="flex items-baseline gap-4 text-[13px]">
+																<div className="flex items-baseline gap-4 text-control">
 																	<span className="basis-12 shrink-0 text-xs text-text-secondary">{t("config.testLatency")}</span>
 																	<span className="break-all text-text-primary">
 																		{props.testResult.latencyMs < 1000
@@ -711,12 +697,12 @@ export function ModelsTab(props: {
 														<div className="config-test-result-body">
 															{/* 失败原因放在详情第一行，保证用户从折叠卡片展开后立刻看到核心错误，
 															   不会只看到请求/Body 等排障信息而误判测试结果。 */}
-															<div className="flex items-start gap-4 text-[13px]">
+															<div className="flex items-start gap-4 text-control">
 																<span className="basis-12 shrink-0 text-xs text-text-secondary">{t("config.reason")}</span>
 																<strong className="break-all leading-relaxed text-danger">{props.testResult.error}</strong>
 															</div>
 															{props.testResult.latencyMs != null && (
-																<div className="flex items-baseline gap-4 text-[13px]">
+																<div className="flex items-baseline gap-4 text-control">
 																	<span className="basis-12 shrink-0 text-xs text-text-secondary">{t("config.testElapsed")}</span>
 																	<span className="break-all text-text-primary">
 																		{props.testResult.latencyMs < 1000
@@ -726,7 +712,7 @@ export function ModelsTab(props: {
 																</div>
 															)}
 															{props.testResult.requestUrl && (
-																<div className="flex items-baseline gap-4 text-[13px]">
+																<div className="flex items-baseline gap-4 text-control">
 																	<span className="basis-12 shrink-0 text-xs text-text-secondary">{t("config.request")}</span>
 																	<code className="config-test-request-url">
 																		POST{" "}
@@ -735,7 +721,7 @@ export function ModelsTab(props: {
 																</div>
 															)}
 															{props.testResult.requestBody && (
-																<div className="flex items-baseline gap-4 text-[13px]">
+																<div className="flex items-baseline gap-4 text-control">
 																	<span className="basis-12 shrink-0 text-xs text-text-secondary">{t("config.requestBody")}</span>
 																	<code className="config-test-request-body">
 																		{props.testResult.requestBody}
@@ -814,9 +800,8 @@ export function ModelsTab(props: {
 									<div className="config-models-section">
 										<div className="config-models-header">
 											<span>{t("config.modelList")}</span>
-											<div className="flex min-w-0 items-center gap-2">
-												<Button
-													 variant="outline" size="sm"
+											<div className="flex min-w-0 items-center gap-1.5">
+												<Button variant="outline" size="sm"
 													onClick={() => props.onFetchModels(name)}
 													disabled={props.fetchingProvider === name}
 												>
@@ -824,8 +809,7 @@ export function ModelsTab(props: {
 														? t("config.fetchingModels")
 														: t("config.fetchModels")}
 												</Button>
-												<Button
-													 variant="outline" size="sm"
+												<Button variant="outline" size="sm"
 													onClick={() => {
 														setPendingModelFocusKey(
 															getModelInputKey(name, provider.models.length),
@@ -839,7 +823,7 @@ export function ModelsTab(props: {
 										</div>
 
 										{props.fetchModelsErrorByProvider[name] && (
-											<div className="mb-3.5 rounded-sm border border-danger/20 bg-danger-soft px-3.5 py-2.5 text-[13px] leading-relaxed text-danger whitespace-pre-line">{props.fetchModelsErrorByProvider[name]}</div>
+											<div className="mb-3.5 rounded-sm border border-danger/20 bg-danger-soft px-3.5 py-2.5 text-control leading-relaxed text-danger whitespace-pre-line">{props.fetchModelsErrorByProvider[name]}</div>
 										)}
 
 										{/* 自动获取后直接在同一区块勾选保存，保留手动添加作为兜底入口。 */}
@@ -852,8 +836,7 @@ export function ModelsTab(props: {
 													onChange={(modelIds) => setSelectedFetchedModels(name, modelIds)}
 												/>
 												<div className="flex justify-end border-t border-border-subtle pt-2">
-													<Button
-														 variant="default" size="sm"
+													<Button variant="default" size="sm"
 														onClick={() => {
 														const currentProvider = data.providers[name];
 														if (!currentProvider) return;
@@ -1002,8 +985,7 @@ export function ModelsTab(props: {
 															<span>{t("config.inputTypeImage")}</span>
 														</Label>
 													</div>
-													<Button
-														variant="ghost" size="icon-sm" className="size-7 text-destructive hover:bg-destructive/10 hover:text-destructive"
+													<Button variant="ghost" size="icon-sm" className="size-7 text-destructive hover:bg-destructive/10 hover:text-destructive"
 														onClick={() => props.onDeleteModel(name, i)}
 														title={t("config.deleteModel")}
 													>
@@ -1034,7 +1016,7 @@ export function ModelsTab(props: {
 					);
 				})}
 				{providerNames.length === 0 && (
-					<div className="py-12 text-center text-[13px] text-text-tertiary">{t("config.emptyProviders")}</div>
+					<div className="py-12 text-center text-control text-text-tertiary">{t("config.emptyProviders")}</div>
 				)}
 			</div>
 		</div>

@@ -89,20 +89,20 @@ export function EditorsTab() {
 		}));
 	};
 
-	if (!settings) return <div className="py-12 text-center text-[13px] text-text-tertiary">{t("common.loading")}</div>;
+	if (!settings) return <div className="py-12 text-center text-control text-text-tertiary">{t("common.loading")}</div>;
 
 	return (
 		<div className="editors-tab">
-			<div className="mb-3.5 flex items-center justify-between">
+			<div className="mb-3 flex items-center justify-between gap-3">
 				<div>
 					<strong>{t("editors.title")}</strong>
 					<p className="config-im-form-hint">{t("editors.hint")}</p>
 				</div>
-				<Button  variant="outline" onClick={redetect} disabled={detecting}>
+				<Button variant="outline" size="sm" onClick={redetect} disabled={detecting}>
 					{detecting ? t("editors.detecting") : t("editors.redetect")}
 				</Button>
 			</div>
-			{error && <div className="mb-3.5 rounded-sm border border-danger/20 bg-danger-soft px-3.5 py-2.5 text-[13px] leading-relaxed text-danger whitespace-pre-line">{error}</div>}
+			{error && <div className="mb-3.5 rounded-sm border border-danger/20 bg-danger-soft px-3.5 py-2.5 text-control leading-relaxed text-danger whitespace-pre-line">{error}</div>}
 			<div className="editors-list">
 				{SUPPORTED_EXTERNAL_EDITORS.map((editor) => {
 					const configured = settings.externalEditors[editor.id];
@@ -141,20 +141,20 @@ export function EditorsTab() {
 									}
 									placeholder={t("editors.pathPlaceholder")}
 								/>
-								<Button  variant="outline" onClick={() => void chooseExecutable(editor.id)}>
+								<Button size="sm"  variant="outline" onClick={() => void chooseExecutable(editor.id)}>
 									{t("editors.browse")}
 								</Button>
 							</div>
-							<div className="editor-config-actions">
-								<Button
-									 variant="default"
+							<div className="editor-config-actions flex items-center gap-1.5">
+								<Button variant="default"
+									size="sm"
 									onClick={() => void updateEditor(editor.id, { command: draft })}
 									disabled={saving || draft === configured.command}
 								>
 									{saving ? t("common.saving") : t("common.save")}
 								</Button>
-								<Button
-									 variant="outline"
+								<Button variant="outline"
+									size="sm"
 									onClick={() => void updateEditor(editor.id, { command: "", enabled: false })}
 									disabled={saving || (!configured.command && !configured.enabled)}
 								>

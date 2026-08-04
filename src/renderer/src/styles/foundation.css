@@ -1446,7 +1446,6 @@ select:focus-visible {
   letter-spacing: 0;
 }
 .conversation-title span {
-  color: var(--color-text-tertiary);
   font-size: var(--font-size-caption);
 }
 .conversation-title span.running {
@@ -1490,7 +1489,7 @@ select:focus-visible {
   background: color-mix(in srgb, var(--color-text-primary) 8%, transparent);
   color: var(--color-text-tertiary);
 }
-/* 标题后的压缩次数小徽标：只显示数字，带边框，与 session-source-badge 等状态徽标视觉一致；
+/* 标题后的压缩次数小徽标：只显示数字，带边框，与来源 Badge 视觉一致；
    hover 通过 title 提示“压缩了几次，仅显示压缩后的会话记录”。 */
 .project-group {
   position: relative;
@@ -2021,37 +2020,7 @@ select:focus-visible {
 .session-node-marker {
   display: none;
 }
-.session-source-badge {
-  margin-left: 6px;
-  padding: 1px 7px;
-  border-radius: var(--radius-pill);
-  font-size: var(--font-size-micro);
-  line-height: var(--line-height-micro);
-  font-family: var(--font-family-business);
-  font-weight: 600;
-  white-space: nowrap;
-  letter-spacing: 0.02em;
-}
-.session-source-badge.codex {
-  color: #fff;
-  background: #6366f1;
-}
-.session-source-badge.subagent {
-  color: #6366f1;
-  background: color-mix(in srgb, #6366f1 14%, var(--color-bg-panel));
-}
-.session-source-badge.claude {
-  color: #fff;
-  background: #d97706;
-}
-.session-source-badge.opencode {
-  color: #fff;
-  background: #059669;
-}
-.session-source-badge.pi {
-  color: #0891b2;
-  background: color-mix(in srgb, #0891b2 14%, var(--color-bg-panel));
-}
+/* 会话来源统一使用组件级 Badge，避免旧版来源胶囊样式在不同容器中重复维护。 */
 /* 父行内嵌的子会话折叠按钮：置于行尾，不单独占横条 */
 .subagent-inline-toggle {
   display: inline-flex;
@@ -2333,7 +2302,7 @@ select:focus-visible {
 .chat-header strong {
   /* 标题排版由 SessionHeader Tailwind 承担 */
 }
-/* 标题后的压缩次数小徽标：只显示数字，带边框，与 session-source-badge 等状态徽标视觉一致；
+/* 标题后的压缩次数小徽标：只显示数字，带边框，与来源 Badge 视觉一致；
    hover 通过 title 提示“压缩了几次，仅显示压缩后的会话记录”。 */
 .compaction-count-badge {
   /* 徽标样式由 SessionHeader Tailwind 承担 */

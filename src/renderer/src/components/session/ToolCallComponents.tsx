@@ -168,7 +168,7 @@ function getMcpServerName(toolName: string): string {
 function getToolKindLabel(toolName: string): string {
 	const kind = getToolKind(toolName);
 	if (kind === "mcp-proxy") return "MCP";
-	if (kind === "mcp-direct") return `MCP·${getMcpServerName(toolName)}`;
+	if (kind === "mcp-direct") return `MCP-${getMcpServerName(toolName).toUpperCase()}`;
 	return "";
 }
 
@@ -228,7 +228,7 @@ const statusLabel =
 					onClick={() => setExpanded((v) => !v)}
 					aria-expanded={expanded}
 				>
-					<span className="inline-flex shrink-0 items-center justify-center text-text-tertiary">
+					<span className="tool-card-icon inline-flex shrink-0 items-center justify-center text-text-tertiary">
 						{isSkillRead ? <Brain size={15} /> : isAskCard ? <MessageCircle size={15} /> : toolIcon(toolName)}
 					</span>
 					<span className="shrink-0 text-body font-[650] lowercase text-text-primary">
@@ -336,7 +336,7 @@ export const ToolGroupCard = memo(function ToolGroupCard(props: {
 }) {
 	return (
 		<section className="w-full min-w-0 overflow-hidden rounded-none border-0 bg-transparent" data-message-id={props.group.id}>
-			<div className="flex flex-col gap-1 p-0">
+			<div className="flex flex-col gap-0 p-0">
 				{props.group.messages.map((message) => (
 					<ToolCard key={message.id} message={message} />
 				))}

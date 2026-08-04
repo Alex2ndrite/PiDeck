@@ -7,11 +7,12 @@ import { t } from "../../i18n";
 import { filterSidebarSessions, getBoundSidebarRuntimeAgent, hasLiveSidebarRuntime, type SidebarController } from "../../hooks/useSidebarController";
 import { Button } from "../ui-shadcn/button";
 import type { SidebarActions } from "./SidebarContent";
+import { SessionSourceBadge } from "../session/SessionSourceBadge";
 import { cn } from "../../lib/utils";
 
 /** pure official：与 ProjectTree 对齐的会话/agent 行底色 */
 const sessionRowClass =
-	"conversation agent-row relative flex h-8 w-full items-center gap-2 rounded-md border-0 bg-transparent px-2 text-left text-body text-foreground transition-colors hover:bg-accent hover:text-accent-foreground";
+	"conversation agent-row relative flex h-7 w-full items-center gap-1 rounded-md border-0 bg-transparent px-1 text-left text-body text-foreground transition-colors hover:bg-accent hover:text-accent-foreground";
 
 function matchesSearch(value: string, search: string) {
   return !search || value.toLowerCase().includes(search.toLowerCase());
@@ -119,7 +120,7 @@ export function SessionTree(props: {
     if (codex.length + pi.length === 0 || !props.controller.expandedSubagentGroups.has(parentKey)) return null;
     return (
       <div className="codex-subagent-sidebar-group">
-        {codex.map((session) => renderSubagent(session, <><strong>{formatCodexSubagentName(session)}</strong><span className="session-source-badge codex subagent">{t("app.codexSubagent")}</span></>))}
+        {codex.map((session) => renderSubagent(session, <><strong>{formatCodexSubagentName(session)}</strong><SessionSourceBadge source="codex" label={t("app.codexSubagent")} /></>))}
         {pi.map((session) => renderSubagent(session, <strong>{formatPiSubagentName(session)}</strong>))}
       </div>
     );
@@ -186,7 +187,7 @@ export function SessionTree(props: {
         <div className="conversation-body min-w-0 flex-1"><div className="conversation-title flex min-w-0 items-center gap-1.5">
           {/* 历史会话（无运行态）文字降一级，与活跃 Agent/运行中会话形成层级差 */}
           <strong className={cn("min-w-0 flex-1 truncate", runtime ? "font-medium" : "font-normal text-muted-foreground/90")}>{child.session.name || t("common.untitled")}</strong>
-          {child.session.source && child.session.source !== "pi" && <span className={`session-source-badge ${child.session.source}`}>{t(`sessionSource.${child.session.source}` as never)}</span>}
+          {child.session.source && child.session.source !== "pi" && <SessionSourceBadge source={child.session.source} />}
           {renderToggle(groupKey, childCount)}
         </div></div>
       </button>
@@ -195,7 +196,7 @@ export function SessionTree(props: {
   };
 
   return (
-    <div className={cn(props.nested ? "worktree-children" : "session-card", "flex flex-col gap-0.5 py-0.5")}>
+    <div className={cn(props.nested ? "worktree-children" : "session-card", "flex flex-col gap-0 py-0")}>
       {draftSessions.map((session) => {
         const runtime = props.controller.catalog.runtimeBySessionId[session.id];
         const canDelete = !hasLiveSidebarRuntime(runtime);

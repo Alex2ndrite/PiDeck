@@ -157,13 +157,13 @@ function BatchAskInlineBar(props: {
 		<Collapsible
 			open={expanded}
 			onOpenChange={setExpanded}
-			className="ask-inline-bar rounded-t-md border border-b-0 border-border-strong bg-[color:color-mix(in_srgb,var(--color-accent)_6%,var(--color-bg-panel))] p-3 max-h-[55vh] overflow-hidden"
+			className="ask-inline-bar rounded-t-md border border-b-0 border-border-strong bg-[color:color-mix(in_srgb,var(--color-accent)_6%,var(--color-bg-panel))] p-2 max-h-[55vh] overflow-hidden"
 		>
-			<div className="mb-2 flex min-w-0 items-center gap-1.5 text-caption font-semibold text-[var(--color-accent)]">
+			<div className="mb-1.5 flex min-w-0 items-center gap-1 text-micro font-semibold text-[var(--color-accent)]">
 				<CollapsibleTrigger asChild>
-					<Button variant="ghost" size="sm" aria-label={t("ask.toolName")} className="min-w-0 flex-1 justify-start gap-1.5 px-1 text-left font-semibold text-[var(--color-accent)]">
-						<ChevronDown className={`shrink-0 transition-transform duration-150${expanded ? " rotate-180" : ""}`} size={14} aria-hidden="true" />
-						<MessageCircle size={14} aria-hidden="true" />
+					<Button variant="ghost" size="sm" aria-label={t("ask.toolName")} className="min-w-0 flex-1 justify-start gap-1 px-1 text-left font-semibold text-[var(--color-accent)]">
+						<ChevronDown className={`shrink-0 transition-transform duration-150${expanded ? " rotate-180" : ""}`} size={12} aria-hidden="true" />
+						<MessageCircle size={12} aria-hidden="true" />
 						<span className="truncate">{t("ask.batchTitle", { count: total })}</span>
 						<span className="shrink-0 text-micro font-normal text-text-tertiary">
 							{t("ask.batchProgress", { done: answeredCount, total })}
@@ -180,7 +180,7 @@ function BatchAskInlineBar(props: {
 			</div>
 
 			<CollapsibleContent className="min-h-0 overflow-y-auto">
-			<div className="mb-2 flex gap-1 overflow-x-auto border-b border-border-subtle pb-2" role="tablist">
+			<div className="mb-1.5 flex gap-1 overflow-x-auto border-b border-border-subtle pb-1.5" role="tablist">
 				{questions.map((question, index) => {
 					const answered = answers[question.id] !== undefined;
 					const active = index === currentTab;
@@ -332,12 +332,12 @@ function BatchQuestion(props: {
 								return (
 									<Button
 										key={`${question.id}:${index}`}
-										className={`ask-inline-bar-option min-h-[30px] flex-1 max-w-full items-start justify-start px-3.5 py-1.5 text-left break-words whitespace-normal${props.answer === value ? " selected" : ""}`}
+										className={`ask-inline-bar-option min-h-[26px] flex-1 max-w-full items-start justify-start px-2.5 py-1 text-left break-words whitespace-normal${props.answer === value ? " selected" : ""}`}
 										variant="outline"
 										disabled={props.responding}
 										onClick={() => props.onAnswer(value, label)}
 									>
-										<span className="text-control font-medium leading-[1.6] text-text-primary">{label}</span>
+										<span className="text-caption font-medium leading-[1.5] text-text-primary">{label}</span>
 										{description ? <span className="text-caption font-normal text-text-tertiary">{description}</span> : null}
 									</Button>
 								);
@@ -370,7 +370,7 @@ function BatchQuestion(props: {
 					</>
 				) : question.type === "editor" ? (
 					<Textarea
-						className="h-auto min-h-[80px] w-full flex-1 resize-y rounded-sm border border-border-subtle bg-bg-panel p-2 text-control leading-[1.6] text-text-primary outline-none transition-[border-color,box-shadow] duration-150 focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]"
+						className="h-auto min-h-[60px] w-full flex-1 resize-y rounded-sm border border-border-subtle bg-bg-panel p-2 text-caption leading-[1.5] text-text-primary outline-none transition-[border-color,box-shadow] duration-150 focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]"
 						value={props.inputValue}
 						placeholder={question.placeholder || t("ask.editorPlaceholder")}
 						disabled={props.responding}
@@ -479,13 +479,13 @@ export function SessionRuntimeUiOverlay({ sessionId, runtime, ui, responder }: S
 		<Collapsible
 			open={expanded}
 			onOpenChange={setExpanded}
-			className="ask-inline-bar rounded-t-md border border-b-0 border-border-strong bg-[color:color-mix(in_srgb,var(--color-accent)_6%,var(--color-bg-panel))] p-3 max-h-[55vh] overflow-hidden"
+			className="ask-inline-bar rounded-t-md border border-b-0 border-border-strong bg-[color:color-mix(in_srgb,var(--color-accent)_6%,var(--color-bg-panel))] p-2 max-h-[55vh] overflow-hidden"
 		>
-			<div className="mb-2 flex min-w-0 items-center gap-1.5 text-caption font-semibold text-[var(--color-accent)]">
+			<div className="mb-1.5 flex min-w-0 items-center gap-1 text-micro font-semibold text-[var(--color-accent)]">
 				<CollapsibleTrigger asChild>
-					<Button variant="ghost" size="sm" aria-label={t("ask.toolName")} className="min-w-0 flex-1 justify-start gap-1.5 px-1 text-left font-semibold text-[var(--color-accent)]">
-						<ChevronDown className={`shrink-0 transition-transform duration-150${expanded ? " rotate-180" : ""}`} size={14} aria-hidden="true" />
-						<MessageCircle size={14} aria-hidden="true" />
+					<Button variant="ghost" size="sm" aria-label={t("ask.toolName")} className="min-w-0 flex-1 justify-start gap-1 px-1 text-left font-semibold text-[var(--color-accent)]">
+						<ChevronDown className={`shrink-0 transition-transform duration-150${expanded ? " rotate-180" : ""}`} size={12} aria-hidden="true" />
+						<MessageCircle size={12} aria-hidden="true" />
 						<span className="shrink-0">{t("ask.toolName")}</span>
 						<span className="min-w-0 truncate font-normal text-text-secondary">{request.title || t("ask.defaultTitle")}</span>
 					</Button>
@@ -502,19 +502,18 @@ export function SessionRuntimeUiOverlay({ sessionId, runtime, ui, responder }: S
 				</Button>
 			</div>
 			<CollapsibleContent className="min-h-0 overflow-y-auto">
-			<div className="mb-3 text-body font-medium leading-[1.6] break-words text-text-primary">{request.title || t("ask.defaultTitle")}</div>
 			<div>
 				{request.method === "select" && request.options?.length ? (
 					<div className="flex max-h-[180px] flex-wrap gap-2 overflow-y-auto pr-1">
 						{request.options.map((option) => (
 							<Button
 								key={`${request.requestId}:${option}`}
-								className="ask-inline-bar-option min-h-[30px] flex-1 max-w-full items-start justify-start px-3.5 py-1.5 text-left break-words whitespace-normal"
+								className={`ask-inline-bar-option min-h-[26px] flex-1 max-w-full items-start justify-start px-2.5 py-1 text-left break-words whitespace-normal`}
 								variant="outline"
 								disabled={responding}
 								onClick={() => submitValue(option)}
 							>
-								<span className="text-control font-medium leading-[1.6] text-text-primary">{option}</span>
+								<span className="text-caption font-medium leading-[1.5] text-text-primary">{option}</span>
 							</Button>
 						))}
 						{request.allowOther ? (
@@ -571,7 +570,7 @@ export function SessionRuntimeUiOverlay({ sessionId, runtime, ui, responder }: S
 				{request.method === "editor" ? (
 					<div className="flex w-full items-center gap-2">
 						<Textarea
-							className="h-auto min-h-[80px] w-full flex-1 resize-y rounded-sm border border-border-subtle bg-bg-panel p-2 text-control leading-[1.6] text-text-primary outline-none transition-[border-color,box-shadow] duration-150 focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]"
+							className="h-auto min-h-[60px] w-full flex-1 resize-y rounded-sm border border-border-subtle bg-bg-panel p-2 text-caption leading-[1.5] text-text-primary outline-none transition-[border-color,box-shadow] duration-150 focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]"
 							autoFocus
 							value={value}
 							placeholder={request.placeholder || t("ask.editorPlaceholder")}

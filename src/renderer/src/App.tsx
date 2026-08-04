@@ -2427,33 +2427,35 @@ export function App() {
       : activeProject?.name) ??
     "PiDeck";
 
-  // 会话 Tab 栏：始终渲染（含空态），标题栏下方浏览器式多 Tab 切换
-  const sessionTabsBarNode = (
-    <SessionTabsBar
-      tabs={sessionTabIds}
-      pinnedTabs={pinnedSessionTabIds}
-      currentSessionId={currentSessionId}
-      onSelect={(sessionId) => {
-        // 点击 Tab 只切换会话，不启动/停止 Agent；记录缺失时忽略（即将被清理）
-        const record = store.get(sessionRecordByIdAtomFamily(sessionId));
-        if (record) selectSessionCommand(record.projectId, sessionId, true);
-      }}
-      onClose={closeSessionTab}
-      onCloseOthers={closeOtherSessionTabs}
-      onCloseAll={closeAllSessionTabs}
-      onNewSession={() => void runCreateSessionDraft()}
-      onTogglePin={togglePinSessionTab}
-      onReorder={reorderSessionTab}
-    />
-  );
+  // 会话 Tab 栏的交互端口由 App 持有；当前会话视图会把状态/操作区嵌入同一行。
+  const sessionTabsProps = {
+    tabs: sessionTabIds,
+    pinnedTabs: pinnedSessionTabIds,
+    currentSessionId,
+    onSelect: (sessionId: string) => {
+      // 点击 Tab 只切换会话，不启动/停止 Agent；记录缺失时忽略（即将被清理）
+      const record = store.get(sessionRecordByIdAtomFamily(sessionId));
+      if (record) selectSessionCommand(record.projectId, sessionId, true);
+    },
+    onClose: closeSessionTab,
+    onCloseOthers: closeOtherSessionTabs,
+    onCloseAll: closeAllSessionTabs,
+    onNewSession: () => void runCreateSessionDraft(),
+    onTogglePin: togglePinSessionTab,
+    onReorder: reorderSessionTab,
+    onToggleDrawer: toggleRightDrawer,
+    drawerOpen: Boolean(drawer && !drawerCollapsed),
+  };
+  const sessionTabsBarNode = <SessionTabsBar {...sessionTabsProps} />;
 
   const chatPaneContentNode = (
     <>
-      {sessionTabsBarNode}
+      {!currentSessionId && sessionTabsBarNode}
       {currentSessionId ? (
     <SessionRuntimeInjector
       currentSessionId={currentSessionId}
       sessionTitle={sessionTitle}
+      sessionTabs={sessionTabsProps}
       sessionTimeline={sessionTimeline}
       sessionActionsOpen={sessionActionsOpen}
       setSessionActionsOpen={setSessionActionsOpen}

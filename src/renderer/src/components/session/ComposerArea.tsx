@@ -92,8 +92,7 @@ export const ComposerArea = forwardRef<HTMLElement, ComposerAreaProps>(function 
               onAcknowledge={composer.delivery.acknowledgeUnknown}
             />
             {props.runtimeUi ? (
-              // Ask 内容是 composer 的附加区域；底部带垂直 resize 把手让用户独立拉高/收窄
-              // Ask 区间（受控 min/max），内容区在面板变小时独立滚动，不把输入框推出面板。
+              // Ask 是输入框的临时交互面板，脱离 composer 的 flex 高度分配，避免把输入框挤出视口。
               <AskRegionResizer child={props.runtimeUi} />
             ) : null}
             <div

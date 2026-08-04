@@ -94,7 +94,7 @@ export function SkillsTab(props: {
 				</div>
 			) : (
 				<>
-					<div className="mb-3.5 flex items-center justify-between">
+					<div className="mb-3 flex items-center justify-between gap-3">
 				<div>
 					<span className="font-mono text-xs tabular-nums text-text-tertiary">
 						{t("config.count.skills", { count: filteredSkills.length })}
@@ -103,11 +103,12 @@ export function SkillsTab(props: {
 						{t("config.restartHint")}
 					</small>
 				</div>
-				<div className="skills-toolbar-actions">
-					<Button  variant="outline" onClick={props.onRefresh} disabled={props.loading}>
+				<div className="skills-toolbar-actions flex items-center gap-1.5">
+					{/* 与扩展页/设置页统一为 sm 控件高度 */}
+					<Button variant="outline" size="sm" onClick={props.onRefresh} disabled={props.loading}>
 						{t("common.refresh")}
 					</Button>
-					<Button  variant="secondary" onClick={props.onOpenRoot}>
+					<Button variant="secondary" size="sm" onClick={props.onOpenRoot}>
 						{t("config.openFolder")}
 					</Button>
 				</div>
@@ -175,8 +176,7 @@ export function SkillsTab(props: {
 						onChange={(event) => props.onChangeNewDescription(event.target.value)}
 					/>
 				</Label>
-				<Button
-					 variant="default"
+				<Button size="sm" variant="default"
 					onClick={props.onCreate}
 					disabled={!canCreate || props.creating}
 				>
@@ -186,7 +186,7 @@ export function SkillsTab(props: {
 
 			<div className="skills-list">
 				{filteredSkills.length === 0 ? (
-					<div className="py-12 text-center text-[13px] text-text-tertiary">{t("config.emptySkills")}</div>
+					<div className="py-12 text-center text-control text-text-tertiary">{t("config.emptySkills")}</div>
 				) : (
 					filteredSkills.map((skill) => (
 						<SkillCard
@@ -279,30 +279,26 @@ function SkillCard(props: {
 					)}
 				</button>
 				<div className="prompts-list-item-actions">
-					<Button
-						variant="ghost" size="icon-sm" className="size-7"
+					<Button variant="ghost" size="icon-sm" className="size-7"
 						onClick={() => props.onToggle(skill, !skill.enabled)}
 						title={skill.enabled ? t("common.disable") : t("common.enabled")}
 						style={skill.enabled ? { color: "var(--color-accent)" } : undefined}
 					>
 						{skill.enabled ? <ToggleRight size={18} strokeWidth={1.8} /> : <ToggleLeft size={18} strokeWidth={1.8} />}
 					</Button>
-					<Button
-						variant="ghost" size="icon-sm" className="size-7"
+					<Button variant="ghost" size="icon-sm" className="size-7"
 						onClick={() => props.onEdit(skill)}
 						title={t("common.edit")}
 					>
 						<Pencil size={14} strokeWidth={1.8} />
 					</Button>
-					<Button
-						variant="ghost" size="icon-sm" className="size-7"
+					<Button variant="ghost" size="icon-sm" className="size-7"
 						onClick={() => { setRenaming(true); setRenameValue(skill.name); }}
 						title={t("common.rename")}
 					>
 						<FileEdit size={14} strokeWidth={1.8} />
 					</Button>
-					<Button
-						variant="ghost" size="icon-sm" className="size-7 text-destructive hover:bg-destructive/10 hover:text-destructive"
+					<Button variant="ghost" size="icon-sm" className="size-7 text-destructive hover:bg-destructive/10 hover:text-destructive"
 						onClick={() => props.onDelete(skill)}
 						title={t("common.delete")}
 					>

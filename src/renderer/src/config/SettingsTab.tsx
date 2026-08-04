@@ -215,12 +215,11 @@ export function SettingsTab(props: {
 
 	return (
 		<div className="config-settings-tab">
-			<div className="mb-3.5 flex items-center justify-between">
+			<div className="mb-3 flex items-center justify-between gap-3">
 				<span className="font-mono text-xs tabular-nums text-text-tertiary">
 					{t("config.count.configItems", { count: entries.length })}
 				</span>
-				<Button
-					 variant="default"
+				<Button size="sm" variant="default"
 					onClick={props.onSave}
 					disabled={saving}
 				>
@@ -230,7 +229,7 @@ export function SettingsTab(props: {
 			<div className="flex flex-col gap-2">
 				{/* enabledModels 始终显示在最前面 */}
 				<div className="flex items-center gap-3.5 rounded-sm border border-border-subtle px-4 py-2 transition-colors hover:border-border-strong">
-					<span className="min-w-[180px] text-[13px] font-medium text-text-primary">{configLabel("enabledModels")}</span>
+					<span className="min-w-[180px] text-control font-medium text-text-primary">{configLabel("enabledModels")}</span>
 					<EnabledModelsInput
 						value={
 							Array.isArray(data.enabledModels) ? data.enabledModels : undefined
@@ -250,9 +249,9 @@ export function SettingsTab(props: {
 					/>
 					</div>
 					<div className="flex items-center gap-3.5 rounded-sm border border-border-subtle px-4 py-2 transition-colors hover:border-border-strong">
-						<span className="min-w-[180px] text-[13px] font-medium text-text-primary">{t("config.label.sessionDir")}</span>
+						<span className="min-w-[180px] text-control font-medium text-text-primary">{t("config.label.sessionDir")}</span>
 						<Input
-							className="h-9 min-w-0 flex-1 rounded-sm border border-border-subtle bg-bg-panel px-3 text-[13px] text-text-primary outline-none focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]"
+							className="h-8 min-w-0 flex-1 rounded-sm border border-border-subtle bg-bg-panel px-3 text-control text-text-primary outline-none focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]"
 							type="text"
 							value={sessionDirValue}
 							placeholder={t("config.sessionDir.placeholder")}
@@ -271,12 +270,12 @@ export function SettingsTab(props: {
 					/>
 				</div>
 				<div className="flex items-center gap-3.5 rounded-sm border border-border-subtle px-4 py-2 transition-colors hover:border-border-strong">
-					<span className="min-w-[180px] text-[13px] font-medium text-text-primary">{t("config.retry.maxRetries")}</span>
-					<Input className="h-9 min-w-0 flex-1 rounded-sm border border-border-subtle bg-bg-panel px-3 text-[13px] text-text-primary outline-none focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]" type="number" min={0} max={50} value={retryConfig.maxRetries} onChange={(e) => updateRetry({ maxRetries: Number(e.target.value) })} />
+					<span className="min-w-[180px] text-control font-medium text-text-primary">{t("config.retry.maxRetries")}</span>
+					<Input className="h-8 min-w-0 flex-1 rounded-sm border border-border-subtle bg-bg-panel px-3 text-control text-text-primary outline-none focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]" type="number" min={0} max={50} value={retryConfig.maxRetries} onChange={(e) => updateRetry({ maxRetries: Number(e.target.value) })} />
 				</div>
 				<div className="flex items-center gap-3.5 rounded-sm border border-border-subtle px-4 py-2 transition-colors hover:border-border-strong">
-					<span className="min-w-[180px] text-[13px] font-medium text-text-primary">{t("config.retry.baseDelayMs")}</span>
-					<Input className="h-9 min-w-0 flex-1 rounded-sm border border-border-subtle bg-bg-panel px-3 text-[13px] text-text-primary outline-none focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]" type="number" min={100} step={100} value={retryConfig.baseDelayMs} onChange={(e) => updateRetry({ baseDelayMs: Number(e.target.value) })} />
+					<span className="min-w-[180px] text-control font-medium text-text-primary">{t("config.retry.baseDelayMs")}</span>
+					<Input className="h-8 min-w-0 flex-1 rounded-sm border border-border-subtle bg-bg-panel px-3 text-control text-text-primary outline-none focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]" type="number" min={100} step={100} value={retryConfig.baseDelayMs} onChange={(e) => updateRetry({ baseDelayMs: Number(e.target.value) })} />
 				</div>
 				</div>
 
@@ -290,7 +289,7 @@ export function SettingsTab(props: {
 					/>
 					</div>
 					<div className="flex items-center gap-3.5 rounded-sm border border-border-subtle px-4 py-2 transition-colors hover:border-border-strong">
-						<span className="min-w-[180px] text-[13px] font-medium text-text-primary">{t("config.compaction.enabled")}</span>
+						<span className="min-w-[180px] text-control font-medium text-text-primary">{t("config.compaction.enabled")}</span>
 						<Label className="config-checkbox-label">
 							<Checkbox
 								checked={compactionConfig.enabled}
@@ -304,11 +303,11 @@ export function SettingsTab(props: {
 						</Label>
 					</div>
 					<div className="flex items-center gap-3.5 rounded-sm border border-border-subtle px-4 py-2 transition-colors hover:border-border-strong">
-						<span className="min-w-[180px] text-[13px] font-medium text-text-primary" title={t("config.compaction.reserveTokensHint")}>
+						<span className="min-w-[180px] text-control font-medium text-text-primary" title={t("config.compaction.reserveTokensHint")}>
 							{t("config.compaction.reserveTokens")}
 						</span>
 						<Input
-							className="h-9 min-w-0 flex-1 rounded-sm border border-border-subtle bg-bg-panel px-3 text-[13px] text-text-primary outline-none focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]"
+							className="h-8 min-w-0 flex-1 rounded-sm border border-border-subtle bg-bg-panel px-3 text-control text-text-primary outline-none focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]"
 							type="number"
 							min={0}
 							step={1024}
@@ -321,11 +320,11 @@ export function SettingsTab(props: {
 						/>
 					</div>
 					<div className="flex items-center gap-3.5 rounded-sm border border-border-subtle px-4 py-2 transition-colors hover:border-border-strong">
-						<span className="min-w-[180px] text-[13px] font-medium text-text-primary" title={t("config.compaction.keepRecentTokensHint")}>
+						<span className="min-w-[180px] text-control font-medium text-text-primary" title={t("config.compaction.keepRecentTokensHint")}>
 							{t("config.compaction.keepRecentTokens")}
 						</span>
 						<Input
-							className="h-9 min-w-0 flex-1 rounded-sm border border-border-subtle bg-bg-panel px-3 text-[13px] text-text-primary outline-none focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]"
+							className="h-8 min-w-0 flex-1 rounded-sm border border-border-subtle bg-bg-panel px-3 text-control text-text-primary outline-none focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]"
 							type="number"
 							min={0}
 							step={1024}
@@ -347,7 +346,7 @@ export function SettingsTab(props: {
 					.filter(([key]) => key !== "enabledModels" && key !== "retry" && key !== "sessionDir")
 					.map(([key, value]) => (
 					<div key={key} className="flex items-center gap-3.5 rounded-sm border border-border-subtle px-4 py-2 transition-colors hover:border-border-strong">
-						<span className="min-w-[180px] text-[13px] font-medium text-text-primary">{configLabel(key)}</span>
+						<span className="min-w-[180px] text-control font-medium text-text-primary">{configLabel(key)}</span>
 						<SettingsValueInput
 							value={value}
 							fieldKey={key}
@@ -361,8 +360,7 @@ export function SettingsTab(props: {
 				))}
 				{!hasEnabledModels && (
 					<div className="flex items-center gap-3.5 rounded-sm border border-border-subtle px-4 py-2 transition-colors hover:border-border-strong justify-center border-dashed opacity-70 hover:opacity-100">
-						<Button
-							 variant="outline"
+						<Button size="sm" variant="outline"
 							onClick={() => props.onChange({ ...data, enabledModels: [] })}
 						>
 							<Plus size={14} />
@@ -370,7 +368,7 @@ export function SettingsTab(props: {
 						</Button>
 					</div>
 				)}
-				{entries.length === 0 && <div className="py-12 text-center text-[13px] text-text-tertiary">{t("config.emptyConfig")}</div>}
+				{entries.length === 0 && <div className="py-12 text-center text-control text-text-tertiary">{t("config.emptyConfig")}</div>}
 			</div>
 		</div>
 	);
@@ -457,8 +455,7 @@ function EnabledModelsInput(props: {
 				{[...selected].map((id) => (
 					<span key={id} className="inline-flex h-6 items-center gap-[3px] rounded-full border border-[color-mix(in_srgb,var(--color-accent)_24%,var(--color-border-subtle))] bg-[color:color-mix(in_srgb,var(--color-accent)_8%,var(--color-bg-panel))] pl-[9px] pr-[5px] font-mono text-xs leading-[18px] whitespace-nowrap text-text-primary">
 						<span>{id}</span>
-						<Button
-							type="button"
+						<Button type="button"
 							variant="ghost"
 							size="icon-xs"
 							className="rounded-full border-0 bg-transparent text-text-tertiary hover:bg-[color:color-mix(in_srgb,var(--color-danger)_16%,transparent)] hover:text-[color:var(--color-danger)]"
@@ -486,7 +483,7 @@ function EnabledModelsInput(props: {
 							value={filter}
 							onChange={(e) => setFilter(e.target.value)}
 							placeholder={t("config.settings.enabledModelsSearchPlaceholder")}
-							className="h-8 w-full rounded-sm border border-border-subtle bg-bg-panel px-2.5 text-[13px] text-text-primary outline-none placeholder:text-text-tertiary focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]"
+							className="h-8 w-full rounded-sm border border-border-subtle bg-bg-panel px-2.5 text-control text-text-primary outline-none placeholder:text-text-tertiary focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]"
 						/>
 					</div>
 					<div className="max-h-[240px] overflow-y-auto">
@@ -495,7 +492,7 @@ function EnabledModelsInput(props: {
 							<div className="px-2 py-0.5">
 								<button
 									type="button"
-									className={`flex w-full cursor-pointer items-center gap-2 rounded-sm border border-dashed border-[var(--color-accent)] bg-[color:color-mix(in_srgb,var(--color-accent)_6%,transparent)] px-2 py-[7px] text-[13px] text-text-primary transition-colors duration-100 hover:bg-[color:color-mix(in_srgb,var(--color-accent)_12%,transparent)]${selected.has(filter) ? " border-[var(--color-danger)] bg-[color:color-mix(in_srgb,var(--color-danger)_6%,transparent)]" : ""}`}
+									className={`flex w-full cursor-pointer items-center gap-2 rounded-sm border border-dashed border-[var(--color-accent)] bg-[color:color-mix(in_srgb,var(--color-accent)_6%,transparent)] px-2 py-[7px] text-control text-text-primary transition-colors duration-100 hover:bg-[color:color-mix(in_srgb,var(--color-accent)_12%,transparent)]${selected.has(filter) ? " border-[var(--color-danger)] bg-[color:color-mix(in_srgb,var(--color-danger)_6%,transparent)]" : ""}`}
 									onClick={() => toggleModel(filter)}
 								>
 									<span className="flex size-[18px] shrink-0 items-center justify-center rounded-[4px] border-[1.5px] border-border-strong text-[color:var(--color-accent)] transition-[border-color,background-color] duration-100 group-hover:border-[var(--color-accent)]">
@@ -511,7 +508,7 @@ function EnabledModelsInput(props: {
 								{/* 供应商分组头：点击折叠/展开 */}
 								<button
 									type="button"
-									className={`flex w-full cursor-pointer items-center gap-2 border-0 bg-bg-hover px-3 py-2 text-left text-[13px] font-medium text-text-primary transition-colors duration-100 before:mr-1 before:text-[9px] before:text-text-tertiary before:transition-transform before:duration-150 before:content-['▾'] hover:bg-bg-active${collapsed.has(provider) ? " before:rotate-[-90deg]" : ""}`}
+									className={`flex w-full cursor-pointer items-center gap-2 border-0 bg-bg-hover px-3 py-2 text-left text-control font-medium text-text-primary transition-colors duration-100 before:mr-1 before:text-[9px] before:text-text-tertiary before:transition-transform before:duration-150 before:content-['▾'] hover:bg-bg-active${collapsed.has(provider) ? " before:rotate-[-90deg]" : ""}`}
 									onClick={() => {
 										setCollapsed((prev) => {
 											const next = new Set(prev);
@@ -533,7 +530,7 @@ function EnabledModelsInput(props: {
 										<span className={`flex size-[18px] shrink-0 items-center justify-center rounded-[4px] border-[1.5px] border-border-strong text-[color:var(--color-accent)] transition-[border-color,background-color] duration-100 group-hover:border-[var(--color-accent)]${selected.has(m.id) ? " border-[var(--color-accent)] bg-[var(--color-accent)] text-white" : ""}`}>
 											{selected.has(m.id) && <Check size={12} />}
 										</span>
-										<span className="text-[13px] text-text-primary">{m.name ?? m.id}</span>
+										<span className="text-control text-text-primary">{m.name ?? m.id}</span>
 										<span className="ml-auto font-mono text-xs text-text-tertiary">{m.provider}/{m.id}</span>
 									</Label>
 								))}
@@ -706,7 +703,7 @@ function SettingsValueInput(props: {
 				type="number"
 				value={value}
 				onChange={(e) => props.onChange(Number(e.target.value))}
-				className="h-9 min-w-0 flex-1 rounded-sm border border-border-subtle bg-bg-panel px-3 text-[13px] text-text-primary outline-none focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]"
+				className="h-8 min-w-0 flex-1 rounded-sm border border-border-subtle bg-bg-panel px-3 text-control text-text-primary outline-none focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]"
 			/>
 		);
 	}
@@ -715,7 +712,7 @@ function SettingsValueInput(props: {
 			<Input
 				value={value}
 				onChange={(e) => props.onChange(e.target.value)}
-				className="h-9 min-w-0 flex-1 rounded-sm border border-border-subtle bg-bg-panel px-3 text-[13px] text-text-primary outline-none focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]"
+				className="h-8 min-w-0 flex-1 rounded-sm border border-border-subtle bg-bg-panel px-3 text-control text-text-primary outline-none focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]"
 			/>
 		);
 	}
@@ -729,7 +726,7 @@ function SettingsValueInput(props: {
 					/* 输入过程中 JSON 不合法时暂不更新 */
 				}
 			}}
-			className="h-9 min-w-0 flex-1 rounded-sm border border-border-subtle bg-bg-panel px-3 text-[13px] text-text-primary outline-none focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]"
+			className="h-8 min-w-0 flex-1 rounded-sm border border-border-subtle bg-bg-panel px-3 text-control text-text-primary outline-none focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]"
 		/>
 	);
 }

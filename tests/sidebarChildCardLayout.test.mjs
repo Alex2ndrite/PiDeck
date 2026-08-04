@@ -25,6 +25,14 @@ const tabBar = readFileSync(
   "src/renderer/src/components/session/SessionTabsBar.tsx",
   "utf8",
 );
+const sessionView = readFileSync(
+  "src/renderer/src/components/session/SessionView.tsx",
+  "utf8",
+);
+const sourceBadge = readFileSync(
+  "src/renderer/src/components/session/SessionSourceBadge.tsx",
+  "utf8",
+);
 
 test("sidebar child rows use shared official hover/active classes", () => {
   assert.match(sessionTree, /hover:bg-accent hover:text-accent-foreground/);
@@ -88,4 +96,29 @@ test("sidebar omits the redundant projects heading and tabs shrink to their titl
   assert.doesNotMatch(sidebarContent, /app\.sidebarProjects/);
   assert.match(tabBar, /pinned \? "w-20" : "w-fit max-w-32"/);
   assert.doesNotMatch(tabBar, /pinned \? "w-20" : "w-32"/);
+  assert.match(tabBar, /session-tabs-scroll flex min-w-0 flex-1/);
+  assert.match(tabBar, /session-tabs-actions flex shrink-0/);
+  assert.match(sidebarContent, /sidebar-body flex min-h-0 flex-1 flex-col gap-2 px-1\.5 py-1/);
+  assert.match(sessionTree, /h-7 w-full/);
+  assert.match(sessionTree, /flex flex-col gap-0 py-0/);
+  assert.match(styles, /\.chat-list-pane\.v3-braun \.sidebar-body \.session-row[\s\S]*?margin: 0;/);
+  const conversationTitleSpan = styles.match(
+    /\.conversation-title span \{([\s\S]*?)\n\}/,
+  )?.[1];
+  assert.ok(conversationTitleSpan, "conversation title span styles must exist");
+  assert.doesNotMatch(conversationTitleSpan, /color:/);
+  assert.match(styles, /\.conversation-title span\.running \{[\s\S]*color:/);
+  assert.match(sourceBadge, /<Badge[\s\S]*variant="outline"/);
+  assert.match(sourceBadge, /<SourceLogo source=\{props\.source\} \/>/);
+  assert.match(sourceBadge, /aria-label=\{label\}/);
+  assert.doesNotMatch(sourceBadge, />\{label\}<\//);
+  assert.doesNotMatch(sessionTree, /session-source-badge/);
+  assert.doesNotMatch(sourceBadge, /bg-(?:indigo|amber|emerald)-/);
+});
+
+test("session actions are embedded in the tab bar instead of a second header row", () => {
+  assert.match(tabBar, /actions\?: ReactNode/);
+  assert.match(tabBar, /\{props\.actions\}/);
+  assert.match(sessionView, /<SessionTabsBar[\s\S]*actions=\{[\s\S]*<SessionHeader[\s\S]*embedded/);
+  assert.doesNotMatch(sessionView, /<SessionHeader\s*\n\s*headerRef=/);
 });

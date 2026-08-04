@@ -117,22 +117,22 @@ export function PromptsTab(props: {
 				/>
 			) : (
 				<>
-					<div className="mb-3.5 flex items-center justify-between">
+					<div className="mb-3 flex items-center justify-between gap-3">
 				<div>
 					<span className="font-mono text-xs tabular-nums text-text-tertiary">
 						{t("config.count.prompts", { count: data.templates.length })}
 					</span>
 					<small className="prompts-restart-hint">{t("config.restartHint")}</small>
 				</div>
-				<div className="prompts-toolbar-actions">
-					<Button
-						 variant="outline"
+				<div className="prompts-toolbar-actions flex items-center gap-1.5">
+					<Button variant="outline"
+						size="sm"
 						onClick={props.onRefresh}
 						disabled={props.loading}
 					>
 						{t("common.refresh")}
 					</Button>
-					<Button  variant="secondary" onClick={props.onOpenRoot}>
+					<Button variant="secondary" size="sm" onClick={props.onOpenRoot}>
 						{t("config.openFolder")}
 					</Button>
 				</div>
@@ -158,8 +158,7 @@ export function PromptsTab(props: {
 						rows={3}
 					/>
 				</Label>
-				<Button
-					 variant="default"
+				<Button size="sm" variant="default"
 					disabled={!canCreate || props.creating}
 					onClick={props.onCreate}
 				>
@@ -169,7 +168,7 @@ export function PromptsTab(props: {
 
 			<section className="prompts-list">
 				{data.templates.length === 0 ? (
-					<div className="py-12 text-center text-[13px] text-text-tertiary">{t("config.noPrompts")}</div>
+					<div className="py-12 text-center text-control text-text-tertiary">{t("config.noPrompts")}</div>
 				) : (
 					data.templates.map((template) => {
 						const isRenaming = renamingTemplate === template.path;
@@ -216,22 +215,19 @@ export function PromptsTab(props: {
 									</button>
 								)}
 								<div className="prompts-list-item-actions">
-									<Button
-										variant="ghost" size="icon-sm" className="size-7"
+									<Button variant="ghost" size="icon-sm" className="size-7"
 										onClick={() => props.onEdit(template)}
 										title={t("common.edit")}
 									>
 										<Pencil size={14} strokeWidth={1.8} />
 									</Button>
-									<Button
-										variant="ghost" size="icon-sm" className="size-7"
+									<Button variant="ghost" size="icon-sm" className="size-7"
 										onClick={() => { setRenamingTemplate(template.path); setRenameValue(template.name); }}
 										title={t("common.rename")}
 									>
 										<FileEdit size={14} strokeWidth={1.8} />
 									</Button>
-									<Button
-										variant="ghost" size="icon-sm" className="size-7 text-destructive hover:bg-destructive/10 hover:text-destructive"
+									<Button variant="ghost" size="icon-sm" className="size-7 text-destructive hover:bg-destructive/10 hover:text-destructive"
 										onClick={() => props.onDelete(template)}
 										title={t("common.delete")}
 									>
@@ -266,7 +262,7 @@ export function PromptsTab(props: {
 							</div>
 						</div>
 						{props.editLoading ? (
-							<div className="py-12 text-center text-[13px] text-text-tertiary">{t("common.loading")}</div>
+							<div className="py-12 text-center text-control text-text-tertiary">{t("common.loading")}</div>
 						) : (
 							<div className="prompts-monaco-wrap">
 								<LazyMonacoEditor

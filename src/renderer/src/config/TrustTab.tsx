@@ -41,13 +41,12 @@ export function TrustTab(props: {
 
 	return (
 		<div className="config-trust-tab">
-			<div className="mb-3.5 flex items-center justify-between">
+			<div className="mb-3 flex items-center justify-between gap-3">
 				<div>
 					<strong>{t("config.nav.trust")}</strong>
 					<p>{t("config.trust.hint")}</p>
 				</div>
-				<Button
-					 variant="default"
+				<Button size="sm" variant="default"
 					onClick={props.onSave}
 					disabled={props.saving}
 				>
@@ -66,8 +65,7 @@ export function TrustTab(props: {
 					}}
 					placeholder={t("config.trust.addPlaceholder")}
 				/>
-				<Button
-					 variant="outline"
+				<Button size="sm" variant="outline"
 					onClick={addEntry}
 					disabled={!addPath.trim() || props.saving}
 				>
@@ -97,8 +95,7 @@ export function TrustTab(props: {
 									{trusted ? t("config.trust.statusTrusted") : t("config.trust.statusIgnored")}
 								</span>
 							</Label>
-							<Button
-								 variant="outline" size="sm" className="text-destructive"
+							<Button variant="outline" size="sm" className="text-destructive"
 								title={t("common.delete")}
 								onClick={() => removeEntry(path)}
 								disabled={props.saving}

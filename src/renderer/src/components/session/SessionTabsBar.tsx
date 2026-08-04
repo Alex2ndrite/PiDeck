@@ -1,6 +1,6 @@
 import { useAtomValue } from "jotai";
-import { Pin, PinOff, Plus, X } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { Pin, PinOff, Plus, PanelRight, X } from "lucide-react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import {
   sessionRecordByIdAtomFamily,
   sessionRuntimeBySessionIdAtomFamily,
@@ -34,7 +34,7 @@ import { cn } from "../../lib/utils";
 /** 拖拽中的源 Tab id；onDrop 时消费 */
 const TAB_DRAG_DATA_KEY = "text/pideck-session-tab";
 
-export function SessionTabsBar(props: {
+export type SessionTabsBarProps = {
   tabs: readonly string[];
   pinnedTabs: readonly string[];
   currentSessionId?: string;
@@ -45,7 +45,14 @@ export function SessionTabsBar(props: {
   onNewSession: () => void;
   onTogglePin: (sessionId: string) => void;
   onReorder: (sourceId: string, targetId: string, position: "before" | "after") => void;
-}) {
+  /** 无当前会话时仍显示右侧抽屉入口。 */
+  onToggleDrawer?: () => void;
+  drawerOpen?: boolean;
+  /** 当前会话的状态/操作区；嵌入 Tab 栏后不再单独占用标题行。 */
+  actions?: ReactNode;
+};
+
+export function SessionTabsBar(props: SessionTabsBarProps) {
   const { tabs, pinnedTabs, currentSessionId } = props;
   const tabItems = useMemo(() => tabs.map((sessionId) => ({ sessionId })), [tabs]);
   const dragSourceRef = useRef<string | null>(null);
@@ -89,8 +96,9 @@ export function SessionTabsBar(props: {
   };
 
   return (
-    <div className="session-tabs-bar flex h-9 shrink-0 items-center gap-1 overflow-x-auto overflow-y-hidden border-b border-border bg-background/80 px-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-      {tabItems.map(({ sessionId }) => (
+    <div className="session-tabs-bar flex h-9 shrink-0 items-center gap-1 overflow-hidden border-b border-border bg-background/80 px-2">
+      <div className="session-tabs-scroll flex min-w-0 flex-1 items-center gap-1 overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {tabItems.map(({ sessionId }) => (
         <SessionTab
           key={sessionId}
           sessionId={sessionId}
@@ -115,18 +123,39 @@ export function SessionTabsBar(props: {
           onDrop={handleDrop}
           onDragEnd={handleDragEnd}
         />
-      ))}
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon-sm"
-        className="session-tabs-new ml-0.5 inline-grid size-6 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-        title={t("tabs.new")}
-        aria-label={t("tabs.new")}
-        onClick={props.onNewSession}
-      >
-        <Plus className="size-3.5" />
-      </Button>
+        ))}
+      </div>
+      <div className="session-tabs-actions flex shrink-0 items-center gap-1 border-l border-border/60 pl-1">
+        {props.actions}
+        {!props.actions && (
+          <>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="session-tabs-new ml-0.5 inline-grid size-6 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+              title={t("tabs.new")}
+              aria-label={t("tabs.new")}
+              onClick={props.onNewSession}
+            >
+              <Plus className="size-3.5" />
+            </Button>
+            {props.onToggleDrawer && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                className={`header-drawer-toggle size-7${props.drawerOpen ? " active" : ""}`}
+                title={props.drawerOpen ? t("app.collapseDrawer") : t("app.expandDrawer")}
+                aria-label={props.drawerOpen ? t("app.collapseDrawer") : t("app.expandDrawer")}
+                onClick={props.onToggleDrawer}
+              >
+                <PanelRight className="size-3.5" aria-hidden="true" />
+              </Button>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }

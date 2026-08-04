@@ -62,7 +62,7 @@ export function calculateSessionLayout(input: SessionLayoutInput) {
 
 export function useSessionLayout(options: Omit<SessionLayoutInput, "chatPaneHeight" | "headerHeight" | "composerChromeHeight">) {
   const chatPaneRef = useRef<HTMLElement | null>(null);
-  const headerRef = useRef<HTMLElement | null>(null);
+  const headerRef = useRef<HTMLDivElement | null>(null);
   const composerRef = useRef<HTMLElement | null>(null);
   const composerBoxRef = useRef<HTMLElement | null>(null);
   const [measurements, setMeasurements] = useState<{
@@ -130,7 +130,7 @@ export function useSessionLayout(options: Omit<SessionLayoutInput, "chatPaneHeig
     clampTerminalHeight,
   } satisfies {
     chatPaneRef: RefObject<HTMLElement | null>;
-    headerRef: RefObject<HTMLElement | null>;
+    headerRef: RefObject<HTMLDivElement | null>;
     composerRef: RefObject<HTMLElement | null>;
     composerBoxRef: RefObject<HTMLElement | null>;
     measure: () => void;

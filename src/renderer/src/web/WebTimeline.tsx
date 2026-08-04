@@ -15,6 +15,7 @@ import { Button } from "@/components/ui-shadcn/button";
 import { t } from "@/i18n";
 import { cn } from "@/lib/utils";
 import { WebAssistantText } from "./WebAssistantText";
+import { TimelineMarker } from "../components/session/TimelineMarker";
 
 /** 用户消息右对齐气泡（结构与桌面 UserBubble 一致，去掉操作栏/附件能力）。 */
 export const WebUserBubble = memo(function WebUserBubble(props: { message: UIMessage }) {
@@ -39,6 +40,7 @@ export const WebThinkingBlock = memo(function WebThinkingBlock(props: { text: st
 	const [expanded, setExpanded] = useState(true);
 	if (!props.text.trim()) return null;
 	return (
+		<TimelineMarker kind="thinking" tone="neutral">
 		<section className="w-full min-w-0 overflow-hidden rounded-md border-0">
 			<button
 				className="flex min-h-8 w-full cursor-pointer items-center gap-2 border-0 bg-transparent p-1.5 pl-2.5 text-left text-control leading-5 text-text-secondary transition-colors duration-150 hover:bg-[color:color-mix(in_srgb,var(--color-bg-hover)_50%,var(--color-bg))] focus-visible:-outline-offset-2 focus-visible:outline-2 [&_svg]:shrink-0 [&_svg]:text-[var(--color-info)]"
@@ -66,6 +68,7 @@ export const WebThinkingBlock = memo(function WebThinkingBlock(props: { text: st
 				</div>
 			)}
 		</section>
+		</TimelineMarker>
 	);
 });
 
@@ -91,6 +94,7 @@ export const WebToolCard = memo(function WebToolCard(props: { part: WebToolPart 
 	const running = state === "input-streaming" || state === "input-available";
 	const error = state === "output-error" || state === "error" || Boolean(part.errorText);
 	return (
+		<TimelineMarker kind="tool" tone={error ? "error" : running ? "active" : "success"}>
 		<section
 			className={cn(
 				"tool-card w-full min-w-0 overflow-hidden rounded-md border border-border-subtle bg-bg-panel transition-[border-color,background-color] duration-150",
@@ -119,6 +123,7 @@ export const WebToolCard = memo(function WebToolCard(props: { part: WebToolPart 
 				</span>
 			</div>
 		</section>
+		</TimelineMarker>
 	);
 });
 
@@ -150,7 +155,9 @@ export const WebAssistantMessage = memo(function WebAssistantMessage(props: {
 					return (
 						<Fragment key={index}>
 							{part.text ? (
-								<WebAssistantText text={part.text} isStreaming={isStreaming} />
+								<div className="timeline-inline-text">
+									<WebAssistantText text={part.text} isStreaming={isStreaming} />
+								</div>
 							) : null}
 						</Fragment>
 					);

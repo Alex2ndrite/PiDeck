@@ -73,6 +73,10 @@ test("ask region has an accessible horizontal-separator resize handle with min/m
   assert.match(resizer, /aria-valuemin=\{ASK_MIN_HEIGHT\}/);
   assert.match(resizer, /aria-valuemax=\{ASK_MAX_HEIGHT\}/);
   assert.match(resizer, /aria-valuenow=\{maxHeight\}/);
+  // 视觉上只保留一条细线，热区仍保留在 handle 上，避免可访问拖拽目标变得过窄。
+  assert.doesNotMatch(resizer, /GripHorizontal/);
+  assert.match(resizer, /after:h-px/);
+  assert.doesNotMatch(resizer, /hover:bg-accent\/60|bg-accent\/70/);
   // 拖拽状态流转：move/up/cancel 直接绑在带 pointer capture 的 handle 上，随卸载自动清理。
   assert.match(resizer, /onPointerDown=\{\(event\) => \{/);
   assert.match(resizer, /setPointerCapture/);

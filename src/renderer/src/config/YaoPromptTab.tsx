@@ -136,15 +136,15 @@ export function YaoPromptTab(props: {
 	if (previewItem) {
 		return (
 			<div className="store-sub-tab">
-				{error && <div className="mb-3.5 rounded-sm border border-danger/20 bg-danger-soft px-3.5 py-2.5 text-[13px] leading-relaxed text-danger whitespace-pre-line">{error}</div>}
+				{error && <div className="mb-3.5 rounded-sm border border-danger/20 bg-danger-soft px-3.5 py-2.5 text-control leading-relaxed text-danger whitespace-pre-line">{error}</div>}
 				{/* toast 已改用 sonner */}
 				<div className="prompt-store-toolbar">
-					<Button  variant="outline" onClick={() => { setPreviewItem(null); setPreviewDetail(null); }}>
+					<Button size="sm"  variant="outline" onClick={() => { setPreviewItem(null); setPreviewDetail(null); }}>
 						<ArrowLeft size={14} strokeWidth={1.8} />
 						{t("config.promptStoreBack")}
 					</Button>
 					<Button
-						 variant="default"
+						 size="sm" variant="default"
 						onClick={() => void handleImport(previewItem)}
 						disabled={importingSlug === previewItem.slug}
 					>
@@ -156,7 +156,7 @@ export function YaoPromptTab(props: {
 					</Button>
 				</div>
 				{previewLoading ? (
-					<div className="py-12 text-center text-[13px] text-text-tertiary">{t("common.loading")}</div>
+					<div className="py-12 text-center text-control text-text-tertiary">{t("common.loading")}</div>
 				) : previewDetail ? (
 					<div className="prompt-store-preview">
 						<div className="prompt-store-preview-header">
@@ -189,12 +189,12 @@ export function YaoPromptTab(props: {
 				</div>
 			</div>
 
-			{error && <div className="mb-3.5 rounded-sm border border-danger/20 bg-danger-soft px-3.5 py-2.5 text-[13px] leading-relaxed text-danger whitespace-pre-line">{error}</div>}
+			{error && <div className="mb-3.5 rounded-sm border border-danger/20 bg-danger-soft px-3.5 py-2.5 text-control leading-relaxed text-danger whitespace-pre-line">{error}</div>}
 			{/* toast 已改用 sonner */}
 			{initialLoading ? (
-				<div className="py-12 text-center text-[13px] text-text-tertiary">{t("common.loading")}</div>
+				<div className="py-12 text-center text-control text-text-tertiary">{t("common.loading")}</div>
 			) : !data || data.categories.length === 0 ? (
-				<div className="py-12 text-center text-[13px] text-text-tertiary">{t("config.yaoNoData")}</div>
+				<div className="py-12 text-center text-control text-text-tertiary">{t("config.yaoNoData")}</div>
 			) : (
 				<>
 					{/* 分类导航 */}
@@ -221,9 +221,9 @@ export function YaoPromptTab(props: {
 					{/* 提示词列表 */}
 				<div className="prompt-store-results">
 					{loading ? (
-						<div className="py-12 text-center text-[13px] text-text-tertiary">{t("common.loading")}</div>
+						<div className="py-12 text-center text-control text-text-tertiary">{t("common.loading")}</div>
 					) : activePrompts.length === 0 ? (
-						<div className="py-12 text-center text-[13px] text-text-tertiary">{t("config.yaoNoMatches")}</div>
+						<div className="py-12 text-center text-control text-text-tertiary">{t("config.yaoNoMatches")}</div>
 						) : (
 							activePrompts.map((item) => (
 								<article

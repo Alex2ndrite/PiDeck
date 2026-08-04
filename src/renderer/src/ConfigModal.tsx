@@ -113,8 +113,8 @@ function ConfigDiagnosticCard(props: {
 			</div>
 			{diagnostic.snippet && <pre>{diagnostic.snippet}</pre>}
 			<div className="config-diagnostic-actions">
-				<Button  variant="default" onClick={props.onOpenRaw}>{t("config.openRawFile")}</Button>
-				<Button  variant="outline" onClick={props.onOpenDocs}>{t("config.openOfficialDocs")}</Button>
+				<Button size="sm"  variant="default" onClick={props.onOpenRaw}>{t("config.openRawFile")}</Button>
+				<Button size="sm"  variant="outline" onClick={props.onOpenDocs}>{t("config.openOfficialDocs")}</Button>
 			</div>
 		</div>
 	);
@@ -1365,9 +1365,10 @@ function ConfigModalContent(props: ConfigModalProps) {
 	return (
 		<Dialog open={open} onOpenChange={(next) => !next && onClose()}>
 			<DialogContent showCloseButton={false} className={cn("flex flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(1300px,calc(100vw-48px))] h-[min(850px,calc(100vh-48px))]", "config-modal")}>
-				<DialogHeader className="flex-row items-center justify-between px-4 py-3">
-					<DialogTitle>{t("config.title")}</DialogTitle>
-					<div className="flex items-center gap-2">
+				{/* 顶栏/侧栏控件与设置弹窗、会话顶栏统一到 sm / text-sm 密度 */}
+				<DialogHeader className="flex-row items-center justify-between px-4 py-2.5">
+					<DialogTitle className="text-sm font-semibold tracking-tight">{t("config.title")}</DialogTitle>
+					<div className="flex items-center gap-1.5">
 						{section === "config" ? (
 							<>
 								<Button variant="default" size="sm" onClick={handleExport}>
@@ -1379,22 +1380,24 @@ function ConfigModalContent(props: ConfigModalProps) {
 							</>
 						) : undefined}
 						<DialogClose asChild>
-							<Button variant="ghost" size="icon" aria-label={t("common.close")} title={t("common.close")}>
-								<X size={18} strokeWidth={2.2} aria-hidden="true" />
+							<Button variant="ghost" size="icon-sm" className="size-7" aria-label={t("common.close")} title={t("common.close")}>
+								<X size={16} strokeWidth={2.2} aria-hidden="true" />
 							</Button>
 						</DialogClose>
 					</div>
 				</DialogHeader>
-			<div className="config-layout grid min-h-0 flex-1 grid-cols-[160px_minmax(0,1fr)] bg-muted">
-					<aside className="config-sidebar flex min-h-0 flex-col gap-3 overflow-auto border-r border-border bg-sidebar p-3" aria-label={t("config.title")}>
-						<div className="config-sidebar-group grid gap-1">
+			{/* 默认浅色主题整页同底（bg-background），避免顶栏白 / 下方多层灰的割裂感 */}
+			<div className="config-layout grid min-h-0 flex-1 grid-cols-[148px_minmax(0,1fr)] bg-background">
+					<aside className="config-sidebar flex min-h-0 flex-col gap-2.5 overflow-auto border-r border-border bg-background p-2.5" aria-label={t("config.title")}>
+						<div className="config-sidebar-group grid gap-0.5">
 							<span className="px-2 pb-1 text-micro font-semibold text-muted-foreground">{t("config.group.config")}</span>
 							{configNavItems.map((item) => (
 								<Button
 									key={item.id}
 									type="button"
 									variant={section === "config" && tab === item.id ? "secondary" : "ghost"}
-									className={`config-nav-btn justify-start px-3 text-control font-medium${section === "config" && tab === item.id ? " active" : ""}`}
+									size="sm"
+									className={`config-nav-btn h-8 justify-start px-2.5 text-control font-medium${section === "config" && tab === item.id ? " active" : ""}`}
 									onClick={() => {
 										setSection("config");
 										setTab(item.id);
@@ -1404,12 +1407,13 @@ function ConfigModalContent(props: ConfigModalProps) {
 								</Button>
 							))}
 						</div>
-						<div className="config-sidebar-group grid gap-1">
+						<div className="config-sidebar-group grid gap-0.5">
 							<span className="px-2 pb-1 text-micro font-semibold text-muted-foreground">{t("config.group.agent")}</span>
 							<Button
 								type="button"
 								variant={section === "extensions" ? "secondary" : "ghost"}
-								className={`config-nav-btn justify-start px-3 text-control font-medium${section === "extensions" ? " active" : ""}`}
+								size="sm"
+								className={`config-nav-btn h-8 justify-start px-2.5 text-control font-medium${section === "extensions" ? " active" : ""}`}
 								onClick={() => setSection("extensions")}
 							>
 								{t("config.nav.extensions")}
@@ -1417,7 +1421,8 @@ function ConfigModalContent(props: ConfigModalProps) {
 							<Button
 								type="button"
 								variant={section === "skills" ? "secondary" : "ghost"}
-								className={`config-nav-btn justify-start px-3 text-control font-medium${section === "skills" ? " active" : ""}`}
+								size="sm"
+								className={`config-nav-btn h-8 justify-start px-2.5 text-control font-medium${section === "skills" ? " active" : ""}`}
 								onClick={() => setSection("skills")}
 							>
 								{t("config.nav.skills")}
@@ -1425,40 +1430,44 @@ function ConfigModalContent(props: ConfigModalProps) {
 							<Button
 								type="button"
 								variant={section === "prompts" ? "secondary" : "ghost"}
-								className={`config-nav-btn justify-start px-3 text-control font-medium${section === "prompts" ? " active" : ""}`}
+								size="sm"
+								className={`config-nav-btn h-8 justify-start px-2.5 text-control font-medium${section === "prompts" ? " active" : ""}`}
 								onClick={() => setSection("prompts")}
 							>
 								{t("config.nav.prompts")}
 							</Button>
 						</div>
-						<div className="config-sidebar-group grid gap-1">
+						<div className="config-sidebar-group grid gap-0.5">
 							<span className="px-2 pb-1 text-micro font-semibold text-muted-foreground">{t("config.group.im")}</span>
 							<Button
 								type="button"
 								variant={section === "im" ? "secondary" : "ghost"}
-								className={`config-nav-btn justify-start px-3 text-control font-medium${section === "im" ? " active" : ""}`}
+								size="sm"
+								className={`config-nav-btn h-8 justify-start px-2.5 text-control font-medium${section === "im" ? " active" : ""}`}
 								onClick={() => setSection("im")}
 							>
 								{t("config.nav.im")}
 							</Button>
 						</div>
-						<div className="config-sidebar-group grid gap-1">
+						<div className="config-sidebar-group grid gap-0.5">
 							<span className="px-2 pb-1 text-micro font-semibold text-muted-foreground">{t("config.group.other")}</span>
 							<Button
 								type="button"
 								variant={section === "editors" ? "secondary" : "ghost"}
-								className={`config-nav-btn justify-start px-3 text-control font-medium${section === "editors" ? " active" : ""}`}
+								size="sm"
+								className={`config-nav-btn h-8 justify-start px-2.5 text-control font-medium${section === "editors" ? " active" : ""}`}
 								onClick={() => setSection("editors")}
 							>
 								{t("config.nav.editors")}
 							</Button>
 						</div>
-						<div className="config-sidebar-group grid gap-1">
+						<div className="config-sidebar-group grid gap-0.5">
 							<span className="px-2 pb-1 text-micro font-semibold text-muted-foreground">{t("config.group.diagnostics")}</span>
 							<Button
 								type="button"
 								variant={section === "logs" ? "secondary" : "ghost"}
-								className={`config-nav-btn justify-start px-3 text-control font-medium${section === "logs" ? " active" : ""}`}
+								size="sm"
+								className={`config-nav-btn h-8 justify-start px-2.5 text-control font-medium${section === "logs" ? " active" : ""}`}
 								onClick={() => setSection("logs")}
 							>
 								{t("config.nav.logs")}
@@ -1468,8 +1477,8 @@ function ConfigModalContent(props: ConfigModalProps) {
 
 					<main className="config-main">
 						<div className="config-content">
-					{loading && <div className="py-12 text-center text-[13px] text-text-tertiary">{t("common.loading")}</div>}
-					{error && <div className="mb-3.5 rounded-sm border border-danger/20 bg-danger-soft px-3.5 py-2.5 text-[13px] leading-relaxed text-danger whitespace-pre-line">{error}</div>}
+					{loading && <div className="py-12 text-center text-control text-muted-foreground">{t("common.loading")}</div>}
+					{error && <div className="mb-3.5 rounded-sm border border-danger/20 bg-danger-soft px-3.5 py-2.5 text-control leading-relaxed text-danger whitespace-pre-line">{error}</div>}
 					{section === "config" && configDiagnostic && (
 						<ConfigDiagnosticCard
 							diagnostic={configDiagnostic}
@@ -1597,7 +1606,7 @@ function ConfigModalContent(props: ConfigModalProps) {
 										</div>
 									</div>
 									{editGlobalLoading ? (
-										<div className="py-12 text-center text-[13px] text-text-tertiary">{t("common.loading")}</div>
+										<div className="py-12 text-center text-control text-text-tertiary">{t("common.loading")}</div>
 									) : (
 										<div className="prompts-monaco-wrap">
 											<LazyMonacoEditor

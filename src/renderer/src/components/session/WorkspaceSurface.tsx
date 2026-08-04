@@ -24,6 +24,7 @@ import {
 	X,
 } from "lucide-react";
 import { normalizeSessionPathForCompare } from "../../agentListDisplay";
+import { SessionSourceBadge } from "./SessionSourceBadge";
 import { Button } from "../ui-shadcn/button";
 import { ConfirmDialog } from "../ui-shadcn/ConfirmDialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../ui-shadcn/collapsible";
@@ -766,9 +767,7 @@ function SessionsPanel(props: {
 								<div className="session-card-title">
 									<strong>{session.name || t("common.untitled")}</strong>
 									{session.source && session.source !== "pi" && (
-										<span className={`session-source-badge ${session.source}`}>
-											{t(`sessionSource.${session.source}` as any)}
-										</span>
+										<SessionSourceBadge source={session.source} />
 									)}
 									<small>
 										{new Date(session.updatedAt).toLocaleString()} ·{" "}
@@ -876,7 +875,7 @@ function SessionsPanel(props: {
 								>
 									<div className="session-card-title">
 										<strong>{child.name || t("common.untitled")}</strong>
-										<span className="session-source-badge subagent">{t("drawer.subagentSession")}</span>
+										<SessionSourceBadge label={t("drawer.subagentSession")} source="codex" />
 										<small>
 											{new Date(child.updatedAt).toLocaleString()} ·{" "}
 											{t("drawer.sessionMessages", {
