@@ -227,9 +227,9 @@ test("sidebar uses one persisted project accordion without duplicating current p
   assert.match(content, /currentProjectId=\{currentRootProject\?\.id\}/);
   assert.doesNotMatch(content, /max-h-\[38%\]|selectedProject|<WorktreeTree|<SessionTree/);
 
-  // One click selects and expands. Every persisted expanded project keeps the
-  // same unified list and page size, so selection changes do not resize it.
-  assert.match(projectTree, /setProjectExpanded\(project\.id, true\)/);
+  // 项目名称只选择，折叠状态由独立的文件夹按钮控制，避免选择动作强制展开。
+  assert.match(projectTree, /toggleProject\(project\.id\)/);
+  assert.doesNotMatch(projectTree, /setProjectExpanded\(project\.id, true\)/);
   assert.match(projectTree, /project\.worktreeEnabled[\s\S]*<WorktreeTree/);
   assert.match(projectTree, /<SessionTree/);
   assert.match(projectTree, /!collapsed && \(/);

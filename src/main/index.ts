@@ -28,7 +28,7 @@ import {
 	readSingleInstancePreference,
 } from "./settings/SettingsStore";
 import { acquireVersionSingleInstance } from "./singleInstance";
-import type { StartupWindowMode } from "../shared/types";
+import type { Project, StartupWindowMode } from "../shared/types";
 // 使用 ?asset 后缀导入图标，electron-vite 会在构建时将其复制到输出目录并提供正确的运行时路径
 // 这解决了打包后 build/ 目录不在 asar 中导致托盘图标丢失的问题
 import iconPath from "../../build/icon.png?asset";
@@ -390,6 +390,17 @@ async function createAnonymousSession(
 		model,
 		thinkingLevel,
 	});
+	// Agent 启动可能包含 spawn/get_state/历史准备；匿名会话先返回可选中的 Session，
+	// 再后台绑定 runtime。这样欢迎页点击后能立即进入输入框，启动失败仍通过 detach/日志收敛。
+	void activateAnonymousRuntime(session, project, input).catch(() => undefined);
+	return { session };
+}
+
+async function activateAnonymousRuntime(
+	session: SessionRecord,
+	project: Project,
+	input: CreateAnonymousSessionInput,
+): Promise<void> {
 	let agentId: string | undefined;
 	try {
 		const tab = await agentManager.create({
@@ -404,12 +415,11 @@ async function createAnonymousSession(
 		agentId = tab.id;
 		const runtime = sessionRuntimeCoordinator.bindAnonymousRuntime(session.id, tab.id);
 		emitReplacementState(runtime, true);
-		return { session, runtime };
 	} catch (error) {
 		if (agentId) await agentManager.stop(agentId).catch(() => undefined);
 		sessionCatalog.removeTransient(session.id);
 		// createUnlocked 内部已尽量把 pi 启动失败落到会话错误卡；这里兜底信任/项目查找等
-		// 前置异常，保证 IPC 层也有结构化日志，方便 Mac 闪退类反馈对照 userData/logs。
+		// 前置异常，保证异步匿名启动失败仍可诊断且不会留下不可用的临时行。
 		void appLogger.error("agent", "Agent create IPC failed", {
 			projectId: project.id,
 			title: input.title,
@@ -418,7 +428,6 @@ async function createAnonymousSession(
 			platform: process.platform,
 			arch: process.arch,
 		});
-		throw error;
 	}
 }
 

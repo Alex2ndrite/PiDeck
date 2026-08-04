@@ -115,8 +115,8 @@ export function ProjectTree(props: {
             onDrop={(event) => drop(event, project.id)}
             onDragEnd={props.controller.finishProjectDrag}
             onClick={() => {
-              // 项目选择必须一次完成“选中 + 展开”；箭头仍可独立折叠，持久化语义保持不变。
-              props.controller.setProjectExpanded(project.id, true);
+              // 选择项目与目录展开解耦：文件夹箭头负责折叠/展开，点击名称只切换当前项目。
+              // 这样用户折叠后再次选择项目不会被隐式重新展开。
               props.actions.projects.select(project.id);
             }}
           >
@@ -125,7 +125,7 @@ export function ProjectTree(props: {
               <div className="conversation-title flex min-w-0 items-center">
                 <strong className="min-w-0 flex-1 truncate font-medium" title={project.path}>{projectDirectoryName}</strong>
               </div>
-              {chat && <p className="chat-project-guide mt-0.5 truncate text-micro text-muted-foreground">{t("app.projectChatGuide")}</p>}
+              {chat && <p className="chat-project-guide mt-0.5 truncate text-micro text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">{t("app.projectChatGuide")}</p>}
             </div>
           </button>
           <div className="flex shrink-0 items-center gap-1 pr-1">
@@ -153,7 +153,7 @@ export function ProjectTree(props: {
             {isCurrent && (
               <button type="button" className="grid size-6 place-items-center rounded-md text-muted-foreground hover:bg-background/80 hover:text-foreground" title={t("app.projectNewAgent")} aria-label={t("app.projectNewAgent")} onClick={() => void props.actions.sessions.createDraft(project.id)}><Plus size={14} /></button>
             )}
-            <div className="hidden items-center gap-0.5 group-hover:flex group-focus-within:flex">
+            <div className="flex items-center gap-0.5">
               {chat && props.actions.projects.changeChatPath && (
                 <button type="button" className="grid size-6 place-items-center rounded-md text-muted-foreground hover:bg-background/80 hover:text-foreground" title={t("app.chatProjectSettings")} aria-label={t("app.chatProjectSettings")} onClick={() => void props.actions.projects.changeChatPath!(project)}><FolderCog size={14} /></button>
               )}

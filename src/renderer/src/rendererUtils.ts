@@ -6,10 +6,9 @@ import type {
 } from "../../shared/types";
 import { isSameSessionPath } from "./agentListDisplay";
 
-// ask 内容（问答 + 底部输入框）需要比纯输入框更大的可视空间；面板仍可沿分隔条拖拽。
-// 375=默认高度（尽可能一次看到问答与输入框），175=面板最小/最小时高度底线。
-export const COMPOSER_DEFAULT_HEIGHT = 375;
-const COMPOSER_MIN_HEIGHT = 175;
+// 260=默认高度，保留问答区空间但避免首次打开时输入框占据过多视口；140=最小可用高度。
+export const COMPOSER_DEFAULT_HEIGHT = 260;
+const COMPOSER_MIN_HEIGHT = 140;
 export { COMPOSER_MIN_HEIGHT };
 
 // Ask 区域垂直 resize 手把的约束（AskRegionResizer 使用）：

@@ -1,4 +1,4 @@
-import { GitBranch, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronRight, GitBranch, Plus, Trash2 } from "lucide-react";
 import type { Project, WorktreeEntry } from "../../../../shared/types";
 import type { SidebarController } from "../../hooks/useSidebarController";
 import { t } from "../../i18n";
@@ -61,6 +61,23 @@ export function WorktreeTree(props: {
                 });
               }}
             >
+              <span
+                className="grid size-6 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                role="button"
+                tabIndex={0}
+                aria-label={expanded ? t("app.projectCollapse") : t("app.projectExpand")}
+                title={expanded ? t("app.projectCollapse") : t("app.projectExpand")}
+                onClick={(event) => { event.stopPropagation(); props.controller.toggleWorktreeSessions(entry.path); }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    props.controller.toggleWorktreeSessions(entry.path);
+                  }
+                }}
+              >
+                {expanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
+              </span>
               <span className="worktree-branch-icon"><GitBranch size={12} /></span><span className="worktree-branch-name">{displayBranch}</span>
               {directory !== displayBranch && <span className="worktree-dir-meta">{directory}</span>}
               {childProject && <span className="project-action worktree-new-agent" title={t("app.projectNewAgent")} onClick={(event) => { event.stopPropagation(); void props.actions.sessions.createDraft(childProject.id); }}><Plus size={12} /></span>}

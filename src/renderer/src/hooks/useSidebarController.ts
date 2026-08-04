@@ -86,6 +86,7 @@ export type SidebarController = {
   expandedSubagentGroups: ReadonlySet<string>;
   toggleSubagentGroup: (groupId: string) => void;
   expandedWorktreePaths: ReadonlySet<string>;
+  toggleWorktreeSessions: (path: string) => void;
   expandWorktreeSessions: (path: string) => void;
   /**
    * 点选工作区（主工作区或 worktree）。
@@ -357,6 +358,14 @@ export function useSidebarController(options: {
       return next;
     });
   }, []);
+  const toggleWorktreeSessions = useCallback((path: string) => {
+    setExpandedWorktreePaths((current) => {
+      const next = new Set(current);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
+  }, []);
   const expandWorktreeSessions = useCallback((path: string) => {
     setExpandedWorktreePaths((current) => new Set(current).add(path));
   }, []);
@@ -400,6 +409,7 @@ export function useSidebarController(options: {
     expandedSubagentGroups,
     toggleSubagentGroup,
     expandedWorktreePaths,
+    toggleWorktreeSessions,
     expandWorktreeSessions,
     drag,
     startProjectDrag: (projectId) => setDrag({ sourceProjectId: projectId }),

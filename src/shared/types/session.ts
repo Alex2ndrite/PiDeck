@@ -117,7 +117,8 @@ export type CreateAnonymousSessionInput = {
 
 export type CreateAnonymousSessionResult = {
 	session: SessionRecord;
-	runtime: SessionRuntimeInfo;
+	/** Runtime creation continues in the background so the composer can open immediately. */
+	runtime?: SessionRuntimeInfo;
 };
 
 export type UpdateSessionRecordInput = {

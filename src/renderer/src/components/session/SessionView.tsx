@@ -217,7 +217,7 @@ export function SessionView({
   }
 
   // 与旧拖拽实现一致的上限公式（渲染期快照，与旧行为同为非响应式）
-  const composerMaxHeight = Math.max(175, Math.min(620, window.innerHeight - 260));
+  const composerMaxHeight = Math.max(COMPOSER_MIN_HEIGHT, Math.min(480, window.innerHeight - 260));
   const terminalPanelVisible =
     !isLanWeb && !settingsOpen && !configOpen && !environmentDialog &&
     terminalDockVisible && terminalOpen;
