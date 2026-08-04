@@ -162,23 +162,24 @@ export function ProjectEmptyState(props: {
         onCreate={props.onCreateAgent}
         actions={
           hasProject ? (
-            <div className="flex w-full max-w-xl flex-col gap-4">
-              <div className="flex flex-wrap items-center justify-center gap-2">
-                <Button variant="default" size="sm" onClick={props.onCreateAgent}>
+            <div className="flex w-full max-w-[600px] flex-col gap-5">
+              <div className="flex flex-wrap items-center justify-center gap-3">
+                <Button variant="default" size="lg" className="h-11 w-[180px] justify-center rounded-lg px-5 shadow-[0_8px_18px_color-mix(in_srgb,var(--color-accent)_15%,transparent)]" onClick={props.onCreateAgent}>
                   <Sparkles aria-hidden="true" />{t("app.createAgent")}
                 </Button>
-                <Button variant="outline" size="sm" onClick={props.onCreateAnonymous}>
+                <Button variant="outline" size="lg" className="h-11 w-[180px] justify-center rounded-lg bg-background/70 px-5" onClick={props.onCreateAnonymous}>
                   <HatGlasses aria-hidden="true" />{t("app.anonymousChatShort")}
                 </Button>
               </div>
-              <div className="mt-2 flex flex-wrap items-center justify-center gap-2 rounded-md border bg-muted/40 p-1.5">
-                <span className="px-2 text-xs text-muted-foreground">{t("app.emptyStartWith")}</span>
+              <div className="grid w-full grid-cols-1 items-center gap-2 rounded-xl border border-[color-mix(in_srgb,var(--color-border-default)_82%,transparent)] bg-[color-mix(in_srgb,var(--color-bg-panel)_78%,transparent)] p-2 shadow-[0_12px_30px_color-mix(in_srgb,#000_5%,transparent)] backdrop-blur-sm sm:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)]">
+                <span className="px-2 font-mono text-[12px] font-semibold tracking-[0.08em] text-text-secondary">{t("app.emptyStartWith")}</span>
+                {/* 两个控件必须共享固定外框；!h-11/!w-full 会覆盖 SelectTrigger 默认的 data-size 与 w-fit，避免仅看 grid 列宽却出现实际边界不一致。 */}
                 <Popover open={modelPickerOpen} onOpenChange={setModelPickerOpen}>
                   <PopoverTrigger asChild>
                     <Button
                       variant="outline"
-                      size="sm"
-                      className="w-[min(320px,calc(100vw-180px))] bg-background font-normal"
+                      size="lg"
+                      className="!h-11 !w-full rounded-md bg-background/85 px-3 font-normal shadow-none"
                       title={modelChoice || t("app.model")}
                     >
                       <span className="truncate">{modelChoice || t("app.model")}</span>
@@ -219,7 +220,7 @@ export function ProjectEmptyState(props: {
                   </PopoverContent>
                 </Popover>
                 <Select value={thinkingChoice} onValueChange={saveThinkingChoice}>
-                  <SelectTrigger size="sm" className="min-w-[116px] bg-background">
+                  <SelectTrigger size="sm" className="!h-11 !w-full min-w-0 rounded-md bg-background/85 px-3">
                     <Brain aria-hidden="true" />
                     <SelectValue placeholder={t("app.think")} />
                   </SelectTrigger>

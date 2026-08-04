@@ -9,7 +9,7 @@
  * - 流式期间底部显示响应指示器；出错显示诊断卡
  */
 import { Fragment, memo, useEffect, useRef, useState } from "react";
-import { Brain, ChevronDown, Wrench } from "lucide-react";
+import { Brain, ChevronDown, ChevronRight, Wrench } from "lucide-react";
 import type { UIMessage } from "ai";
 import { Button } from "@/components/ui-shadcn/button";
 import { t } from "@/i18n";
@@ -49,13 +49,11 @@ export const WebThinkingBlock = memo(function WebThinkingBlock(props: { text: st
 			>
 				<Brain size={15} />
 				<span className="shrink-0 text-body font-[650] text-text-primary">{t("thinking.title")}</span>
-				<ChevronDown
-					size={15}
-					className={cn(
-						"shrink-0 text-text-tertiary transition-transform duration-150",
-						expanded && "rotate-180",
-					)}
-				/>
+				{expanded ? (
+					<ChevronDown size={15} className="shrink-0 text-text-tertiary" aria-hidden="true" />
+				) : (
+					<ChevronRight size={15} className="shrink-0 text-text-tertiary" aria-hidden="true" />
+				)}
 				{!expanded && (
 					<span className="min-w-0 flex-[1_1_auto] truncate font-mono text-caption text-text-tertiary">
 						{props.text.slice(0, 80)}{props.text.length > 80 ? "..." : ""}

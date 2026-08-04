@@ -95,6 +95,7 @@ export const enUS: Record<TranslationKey, string> = {
   "app.addProject": "Add Project",
   "app.selectProject": "Select a project and create an agent",
   "app.startAgent": "Start a pi agent",
+  "app.brandName": "PiDeck",
   "app.emptyProjectTitle": "Start a new session",
   "app.emptyNoProjectTitle": "Add a project",
   "app.emptyHasProject": "Create an Agent for this project to analyze, write, or modify code.",

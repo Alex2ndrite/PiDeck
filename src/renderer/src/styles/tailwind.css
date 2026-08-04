@@ -84,6 +84,7 @@
   --radius-lg: var(--radius-lg);
 
   --font-sans: var(--font-family-base);
+  --font-brand: var(--font-family-brand);
   --font-mono: var(--font-family-mono);
 
   /* 字号 token → Tailwind text-* 工具类：默认值与旧版一致，

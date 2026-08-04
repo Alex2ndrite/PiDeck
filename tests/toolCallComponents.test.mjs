@@ -31,3 +31,7 @@ test("timeline tool rendering and message rows share formatting helpers", () => 
   assert.match(timelineFormat, /export function formatDuration/);
   assert.match(timelineFormat, /export function getToolStatus/);
 });
+
+test("tool and thinking disclosure icons use right-for-collapsed down-for-expanded semantics", () => {
+  assert.match(toolCalls, /\{expanded \? \([\s\S]*<ChevronDown[\s\S]*\) : \([\s\S]*<ChevronRight/);
+});

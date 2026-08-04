@@ -1,5 +1,5 @@
 import { memo, useEffect, useRef, useState } from "react";
-import { AlertTriangle, Brain, Check, ChevronDown, MessageCircle, X } from "lucide-react";
+import { AlertTriangle, Brain, Check, ChevronDown, ChevronRight, MessageCircle, X } from "lucide-react";
 import type { ChatMessage } from "../../../../shared/types";
 import { t, translateI18nDescriptor } from "../../i18n";
 import { formatDuration, formatTime, stripAnsi } from "./TimelineFormat";
@@ -347,10 +347,11 @@ export const ThinkingBlock = memo(function ThinkingBlock(props: {
 			>
 				<Brain size={15} />
 				<span className="shrink-0 text-body font-[650] text-text-primary">{t("thinking.title")}</span>
-				<ChevronDown
-					size={15}
-					className={`shrink-0 text-text-tertiary transition-transform duration-150${expanded ? " rotate-180" : ""}`}
-				/>
+				{expanded ? (
+					<ChevronDown size={15} className="shrink-0 text-text-tertiary" aria-hidden="true" />
+				) : (
+					<ChevronRight size={15} className="shrink-0 text-text-tertiary" aria-hidden="true" />
+				)}
 				{!expanded && props.text && (
 					<span className="min-w-0 flex-[1_1_auto] truncate font-mono text-caption text-text-tertiary" title={props.text}>
 						{props.text.slice(0, 80)}{props.text.length > 80 ? "..." : ""}

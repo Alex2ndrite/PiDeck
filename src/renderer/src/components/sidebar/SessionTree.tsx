@@ -175,7 +175,8 @@ export function SessionTree(props: {
         className={cn(
           sessionRowClass,
           // 历史会话不是运行中的 Agent：只给这一类内容增加层级缩进，避免项目标题与历史记录贴在同一列。
-          "session-row history-session-row pl-4",
+          // 历史会话需要比运行中 Agent 更松的点击区域和行间距，避免连续记录挤成一块。
+          "session-row history-session-row mb-1 last:mb-0 pl-5 pr-2 py-1",
           child.session.id === props.currentSessionId && "active bg-accent text-accent-foreground",
         )}
         title={child.session.filePath}

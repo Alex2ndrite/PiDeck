@@ -94,6 +94,7 @@ export const zhCN = {
   "app.addProject": "添加项目",
   "app.selectProject": "选择项目并创建 Agent",
   "app.startAgent": "开始一个 pi agent",
+  "app.brandName": "PiDeck",
   "app.emptyProjectTitle": "开始新的会话",
   "app.emptyNoProjectTitle": "添加一个项目",
   "app.emptyHasProject": "在当前项目中创建 Agent，开始分析、编写或修改代码。",

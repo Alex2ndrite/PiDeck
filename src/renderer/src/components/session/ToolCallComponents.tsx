@@ -3,6 +3,7 @@ import {
   Brain,
   Check,
   ChevronDown,
+  ChevronRight,
   Copy,
   FileText,
   Folder,
@@ -234,10 +235,11 @@ const statusLabel =
 					<span className="shrink-0 text-body font-[650] lowercase text-text-primary">
 						{isSkillRead ? `skill:${skillName}` : isAskCard ? t("ask.toolName") : toolName}
 					</span>
-					<ChevronDown
-						size={14}
-						className={`shrink-0 text-text-tertiary transition-transform duration-150${expanded ? " rotate-180" : ""}`}
-					/>
+					{expanded ? (
+						<ChevronDown size={14} className="shrink-0 text-text-tertiary" aria-hidden="true" />
+					) : (
+						<ChevronRight size={14} className="shrink-0 text-text-tertiary" aria-hidden="true" />
+					)}
 					{!isSkillRead && kindLabel && (
 						<span className="tool-card-kind">{kindLabel}</span>
 					)}
