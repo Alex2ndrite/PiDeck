@@ -157,7 +157,7 @@ function BatchAskInlineBar(props: {
 		<Collapsible
 			open={expanded}
 			onOpenChange={setExpanded}
-			className="ask-inline-bar rounded-t-md border border-b-0 border-border-strong bg-[color:color-mix(in_srgb,var(--color-accent)_6%,var(--color-bg-panel))] p-2 max-h-[55vh] overflow-hidden"
+			className="ask-inline-bar rounded-t-md border border-b-0 border-border-strong bg-[color:color-mix(in_srgb,var(--color-accent)_6%,var(--color-bg-panel))] p-1.5"
 		>
 			<div className="mb-1.5 flex min-w-0 items-center gap-1 text-micro font-semibold text-[var(--color-accent)]">
 				<CollapsibleTrigger asChild>
@@ -179,8 +179,8 @@ function BatchAskInlineBar(props: {
 				</Button>
 			</div>
 
-			<CollapsibleContent className="min-h-0 overflow-y-auto">
-			<div className="mb-1.5 flex gap-1 overflow-x-auto border-b border-border-subtle pb-1.5" role="tablist">
+			<CollapsibleContent className="min-h-0">
+			<div className="mb-1 flex min-w-0 gap-1 overflow-x-auto border-b border-border-subtle pb-1" role="tablist">
 				{questions.map((question, index) => {
 					const answered = answers[question.id] !== undefined;
 					const active = index === currentTab;
@@ -217,13 +217,13 @@ function BatchAskInlineBar(props: {
 
 			<div>
 				{reviewTab ? (
-					<div className="flex flex-col gap-2">
-						<div className="inline-flex items-center gap-1 text-sm font-semibold text-text-primary">
+					<div className="flex flex-col gap-1.5">
+						<div className="inline-flex items-center gap-1 text-control font-semibold text-text-primary">
 							<ClipboardList size={16} aria-hidden="true" />
 							<span>{t("ask.batchReviewTitle")}</span>
 						</div>
 						<div className="text-caption text-text-tertiary">{t("ask.batchReviewHint")}</div>
-						<div className="flex max-h-[240px] flex-col gap-1 overflow-y-auto rounded-sm bg-bg-muted p-2">
+						<div className="flex flex-col gap-1 rounded-sm bg-bg-muted p-2">
 							{questions.map((question, index) => {
 								const value = answers[question.id];
 								const answered = value !== undefined;
@@ -297,11 +297,11 @@ function BatchQuestion(props: {
 }) {
 	const { question } = props;
 	return (
-		<div className="flex flex-col gap-2">
-			<div className="font-mono text-caption font-semibold text-text-tertiary">
+		<div className="flex flex-col gap-1.5">
+			<div className="font-mono text-micro font-semibold text-text-tertiary">
 				{t("common.details")} {props.questionIndex + 1}/{props.total}
 			</div>
-			<div className="mb-3 text-body font-medium leading-[1.6] break-words text-text-primary">{question.question}</div>
+			<div className="mb-1 text-control font-medium leading-5 break-words text-text-primary">{question.question}</div>
 			<div className="ask-batch-question-body">
 				{question.type === "confirm" ? (
 					<div className="flex gap-2">
@@ -324,7 +324,8 @@ function BatchQuestion(props: {
 					</div>
 				) : question.type === "select" && question.options?.length ? (
 					<>
-						<div className="flex max-h-[180px] flex-wrap gap-2 overflow-y-auto pr-1">
+						{/* 选项使用固定轨道而不是 flex:1，避免长短文案把按钮基线和提交区撑乱。 */}
+						<div className="grid min-w-0 grid-cols-4 gap-1.5 max-[720px]:grid-cols-2 max-[480px]:grid-cols-1">
 							{question.options.map((option, index) => {
 								const label = typeof option === "string" ? option : option.label;
 								const value = typeof option === "string" ? option : option.value ?? label;
@@ -332,21 +333,21 @@ function BatchQuestion(props: {
 								return (
 									<Button
 										key={`${question.id}:${index}`}
-										className={`ask-inline-bar-option min-h-[26px] flex-1 max-w-full items-start justify-start px-2.5 py-1 text-left break-words whitespace-normal${props.answer === value ? " selected" : ""}`}
+										className={`ask-inline-bar-option min-h-[30px] w-full min-w-0 max-w-none flex-col items-start justify-center gap-0.5 px-2 py-1 text-left break-words whitespace-normal${props.answer === value ? " selected" : ""}`}
 										variant="outline"
 										disabled={props.responding}
 										onClick={() => props.onAnswer(value, label)}
 									>
-										<span className="text-caption font-medium leading-[1.5] text-text-primary">{label}</span>
-										{description ? <span className="text-caption font-normal text-text-tertiary">{description}</span> : null}
+										<span className="min-w-0 max-w-full truncate text-caption font-medium leading-4 text-text-primary">{label}</span>
+										{description ? <span className="min-w-0 max-w-full truncate text-micro font-normal leading-4 text-text-tertiary">{description}</span> : null}
 									</Button>
 								);
 							})}
 						</div>
 						{question.allowOther !== false ? (
-							<div className="flex w-full items-center gap-2">
+							<div className="mt-1 flex w-full min-w-0 items-center gap-1.5">
 								<Input
-									className="h-9 flex-1 rounded-sm border border-border-subtle bg-bg-panel px-2.5 text-control text-text-primary outline-none transition-[border-color,box-shadow] duration-150 focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]"
+									className="h-8 min-w-0 flex-1 rounded-sm border border-border-subtle bg-bg-panel px-2 text-caption text-text-primary outline-none transition-[border-color,box-shadow] duration-150 focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]"
 									value={props.inputValue}
 									placeholder={question.placeholder || t("ask.customPlaceholder")}
 									disabled={props.responding}
@@ -404,15 +405,15 @@ function BatchQuestion(props: {
 					</div>
 				)}
 			</div>
-			<div className="ask-batch-nav">
+			<div className="mt-1 flex min-h-7 items-center gap-2">
 				{props.onPrevious ? (
-					<Button className="ask-batch-nav-btn" variant="ghost" disabled={props.responding} onClick={props.onPrevious}>
+					<Button className="h-7 px-2 text-caption" variant="ghost" disabled={props.responding} onClick={props.onPrevious}>
 						{t("ask.batchPrev")}
 					</Button>
 				) : null}
-				<span className="ask-batch-nav-spacer" />
+				<span className="flex-1" />
 				<Button
-					className="ask-batch-nav-btn primary"
+					className="h-7 px-2 text-caption"
 					variant="ghost"
 					disabled={props.responding || props.nextDisabled}
 					onClick={props.onNext}
@@ -479,7 +480,7 @@ export function SessionRuntimeUiOverlay({ sessionId, runtime, ui, responder }: S
 		<Collapsible
 			open={expanded}
 			onOpenChange={setExpanded}
-			className="ask-inline-bar rounded-t-md border border-b-0 border-border-strong bg-[color:color-mix(in_srgb,var(--color-accent)_6%,var(--color-bg-panel))] p-2 max-h-[55vh] overflow-hidden"
+			className="ask-inline-bar rounded-t-md border border-b-0 border-border-strong bg-[color:color-mix(in_srgb,var(--color-accent)_6%,var(--color-bg-panel))] p-1.5"
 		>
 			<div className="mb-1.5 flex min-w-0 items-center gap-1 text-micro font-semibold text-[var(--color-accent)]">
 				<CollapsibleTrigger asChild>
@@ -501,14 +502,14 @@ export function SessionRuntimeUiOverlay({ sessionId, runtime, ui, responder }: S
 					<X size={14} aria-hidden="true" />
 				</Button>
 			</div>
-			<CollapsibleContent className="min-h-0 overflow-y-auto">
+			<CollapsibleContent className="min-h-0">
 			<div>
 				{request.method === "select" && request.options?.length ? (
-					<div className="flex max-h-[180px] flex-wrap gap-2 overflow-y-auto pr-1">
+					<div className="grid min-w-0 grid-cols-2 gap-1.5 max-[480px]:grid-cols-1">
 						{request.options.map((option) => (
 							<Button
 								key={`${request.requestId}:${option}`}
-								className={`ask-inline-bar-option min-h-[26px] flex-1 max-w-full items-start justify-start px-2.5 py-1 text-left break-words whitespace-normal`}
+								className="ask-inline-bar-option min-h-[30px] w-full min-w-0 max-w-none items-center justify-start px-2 py-1 text-left break-words whitespace-normal"
 								variant="outline"
 								disabled={responding}
 								onClick={() => submitValue(option)}
@@ -517,9 +518,9 @@ export function SessionRuntimeUiOverlay({ sessionId, runtime, ui, responder }: S
 							</Button>
 						))}
 						{request.allowOther ? (
-							<div className="flex w-full items-center gap-2">
+							<div className="mt-1 flex w-full min-w-0 items-center gap-1.5">
 								<Input
-									className="h-9 flex-1 rounded-sm border border-border-subtle bg-bg-panel px-2.5 text-control text-text-primary outline-none transition-[border-color,box-shadow] duration-150 focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]"
+									className="h-8 min-w-0 flex-1 rounded-sm border border-border-subtle bg-bg-panel px-2 text-caption text-text-primary outline-none transition-[border-color,box-shadow] duration-150 focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]"
 									value={value}
 									placeholder={t("ask.customPlaceholder")}
 									disabled={responding}

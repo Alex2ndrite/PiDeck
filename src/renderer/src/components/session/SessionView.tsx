@@ -183,7 +183,7 @@ export function SessionView({
   // composer 高度本地持有（px），终端高度/折叠仍由 useTerminalDock 的 per-agent
   // 状态持有，拖拽结果经 onResize 回写，外部状态经 imperative API 同步。
   // 默认高度走 COMPOSER_DEFAULT_HEIGHT（偏矮，给 timeline 留正文）；
-  // ask 区变高时用户可沿 timeline|composer 分隔条上拖，或用 AskRegionResizer 单独拉高问答区。
+  // Ask 属于会话交互状态，不再参与 composer 的高度分配；它固定在时间线底部，避免把输入框挤出面板。
   const [composerHeight, setComposerHeight] = useState(COMPOSER_DEFAULT_HEIGHT);
   const terminalPanelRef = useRef<PanelImperativeHandle | null>(null);
 
@@ -261,32 +261,33 @@ export function SessionView({
       <ResizablePanelGroup orientation="vertical" className="session-v-group">
         <ResizablePanel id="timeline" minSize={160} className="session-v-timeline">
           <SessionMessageTimeline
-        sessionId={sessionId}
-        controller={sessionTimeline}
-        hasProject={hasProject}
-        onCreateSession={runCreateSessionDraft}
-        showThinking={showThinking}
-        validCommandNames={validCommandNames}
-        validFilePaths={validFilePaths}
-        onPreviewImage={onPreviewImage}
-        onOpenExternal={(url: string) => api.app.openExternal(url)}
-        onOpenFile={onOpenFile}
-        onDiffFile={onDiffFile}
-        onResendUserMessage={
-          canMutateActiveMessages ? onResendUserMessage : undefined
-        }
-        onEditMessage={
-          canMutateActiveMessages ? onEditMessage : undefined
-        }
-        onDeleteMessage={
-          canMutateActiveMessages ? onDeleteMessage : undefined
-        }
-        onForkMessage={
-          canMutateActiveMessages ? onForkMessage : undefined
-        }
-        forkingMessageId={forkingMessageId}
-        onToast={onToast}
-        onQuickPrompt={onQuickPrompt}
+            sessionId={sessionId}
+            controller={sessionTimeline}
+            hasProject={hasProject}
+            onCreateSession={runCreateSessionDraft}
+            showThinking={showThinking}
+            validCommandNames={validCommandNames}
+            validFilePaths={validFilePaths}
+            onPreviewImage={onPreviewImage}
+            onOpenExternal={(url: string) => api.app.openExternal(url)}
+            onOpenFile={onOpenFile}
+            onDiffFile={onDiffFile}
+            onResendUserMessage={
+              canMutateActiveMessages ? onResendUserMessage : undefined
+            }
+            onEditMessage={
+              canMutateActiveMessages ? onEditMessage : undefined
+            }
+            onDeleteMessage={
+              canMutateActiveMessages ? onDeleteMessage : undefined
+            }
+            onForkMessage={
+              canMutateActiveMessages ? onForkMessage : undefined
+            }
+            forkingMessageId={forkingMessageId}
+            onToast={onToast}
+            onQuickPrompt={onQuickPrompt}
+            runtimeUi={runtimeUi}
           />
 
           {sessionTimeline.showScrollToBottom && (
@@ -326,7 +327,6 @@ export function SessionView({
                 enqueue={enqueueSessionPrompt}
                 ensureSessionId={ensureSessionId}
                 queuePanel={queuePanel}
-                runtimeUi={runtimeUi}
               />
             </ResizablePanel>
           </>

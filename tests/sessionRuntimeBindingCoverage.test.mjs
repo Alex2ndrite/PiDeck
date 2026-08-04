@@ -22,6 +22,10 @@ const composer = readFileSync(
   "src/renderer/src/components/session/ComposerArea.tsx",
   "utf8",
 );
+const timeline = readFileSync(
+  "src/renderer/src/components/session/SessionMessageTimeline.tsx",
+  "utf8",
+);
 
 test("catalog scans attach matching existing runtimes in the main process", () => {
   assert.match(coordinator, /attachCatalogRuntimes\(/);
@@ -44,14 +48,15 @@ test("Ask Question keeps normalized batch requests pending for the session respo
   assert.match(agentManager, /allowOther: typed\.allowOther === true \|\| hasCustomOption/);
 });
 
-test("session UI requests remain generation-bound but render above the composer", () => {
+test("session UI requests remain generation-bound and render in the timeline footer", () => {
   assert.match(runtimeInjector, /createSessionRuntimeUiResponder\(/);
   assert.match(runtimeInjector, /sessionId: currentSessionId/);
   assert.match(runtimeInjector, /runtimeGeneration: latest\.runtimeGeneration/);
   assert.match(runtimeInjector, /<SessionRuntimeUiOverlay/);
   assert.match(runtimeUi, /ask-inline-bar rounded-t-md/);  // 迁移后布局 utility 化，锚点类保留
   assert.doesNotMatch(runtimeUi, /className="modal-backdrop ask-dialog-backdrop"/);
-  assert.match(composer, /\{props\.runtimeUi\}/);
+  assert.doesNotMatch(composer, /runtimeUi/);
+  assert.match(timeline, /session-runtime-ui sticky bottom-0/);
 });
 
 test("Web wiring is Session-first and exposes no Agent compatibility creation", () => {

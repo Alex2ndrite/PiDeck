@@ -17,7 +17,6 @@ import {
 } from "./ComposerPanels";
 import { ComposerPickerHost } from "./ComposerPickerHost";
 import { ComposerRuntimeIntegrations } from "./ComposerRuntimeIntegrations";
-import { AskRegionResizer } from "./AskRegionResizer";
 import { desktopApi } from "../../desktopApi";
 import { COMPOSER_DEFAULT_HEIGHT } from "../../rendererUtils";
 import type { GitBranchInfo } from "../../../../shared/types";
@@ -27,7 +26,6 @@ export type ComposerAreaProps = {
   sessionId: string;
   gitInfo?: GitBranchInfo;
   queuePanel?: ReactNode;
-  runtimeUi?: ReactNode;
   onOpenFile?: (path: string) => void;
   /** 受控高度（px）。传入时由外层面板（react-resizable-panels）持有尺寸，
    *  本地 state 仅作非受控回退（#115 U5 布局换装）。 */
@@ -91,10 +89,6 @@ export const ComposerArea = forwardRef<HTMLElement, ComposerAreaProps>(function 
               error={composer.sendState.error}
               onAcknowledge={composer.delivery.acknowledgeUnknown}
             />
-            {props.runtimeUi ? (
-              // Ask 是输入框的临时交互面板，脱离 composer 的 flex 高度分配，避免把输入框挤出视口。
-              <AskRegionResizer child={props.runtimeUi} />
-            ) : null}
             <div
               // overflow-visible：保留命令面板/建议浮层；面板 minSize 已保证底栏不被裁切
               className={["composer-box relative flex min-h-0 min-w-0 flex-1 flex-col overflow-visible rounded-xl border border-border bg-card text-card-foreground shadow-sm transition-[border-color,box-shadow,background-color]",

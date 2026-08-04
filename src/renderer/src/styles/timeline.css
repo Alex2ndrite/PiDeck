@@ -1026,7 +1026,7 @@ body.ask-dialog-open .ask-question-card.pending {
   color: var(--color-success);
 }
 
-/* ask_question inline bar, directly above the current session composer. */
+/* ask_question inline bar, pinned to the bottom of the current session timeline. */
 .ask-inline-bar-options-confirm .ask-inline-bar-option {
   justify-content: center;
   align-items: center;
@@ -1087,7 +1087,7 @@ body.ask-dialog-open .ask-question-card.pending {
   opacity: 0.55;
 }
 
-/* Batch ask_question form, rendered once directly above the composer. */
+/* Batch ask_question form, rendered once in the timeline's bottom interaction slot. */
 .ask-batch-tab.active {
   border-color: var(--color-accent);
   background: color-mix(in srgb, var(--color-accent) 8%, transparent);

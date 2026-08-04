@@ -2,7 +2,7 @@ import { Wrench } from "lucide-react";
 import { useAtomValue } from "jotai";
 import { selectAtom } from "jotai/utils";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { ComponentProps, RefObject } from "react";
+import type { ComponentProps, ReactNode, RefObject } from "react";
 import type { ChatMessage, ImageContent } from "../../../../shared/types";
 import {
   CompactionCard,
@@ -56,6 +56,8 @@ type TimelineInteractionProps = {
   onToast: (message: string) => void;
   /** 新建 Agent 的空时间线快捷操作：只写入 composer，不自动投递。 */
   onQuickPrompt?: (prompt: string) => void;
+  /** 当前会话的阻塞式交互（如 ask_question），由时间线统一承载滚动与底部定位。 */
+  runtimeUi?: ReactNode;
 };
 
 export type SessionMessageTimelineProps = TimelineInteractionProps & {
@@ -560,6 +562,12 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
               )}
           </div>
         )}
+
+      {props.runtimeUi ? (
+        <div className="session-runtime-ui sticky bottom-0 z-10 mx-auto w-full empty:hidden bg-[var(--color-bg-panel)] pt-2">
+          {props.runtimeUi}
+        </div>
+      ) : null}
 
       {multiSelectOpen && (
         <MultiSelectModal

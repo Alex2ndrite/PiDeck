@@ -2268,7 +2268,8 @@ select:focus-visible {
 .chat-pane[style*="--content-max-width"] .image-preview-area,
 .chat-pane[style*="--content-max-width"] .extension-widgets-container,
 .chat-pane[style*="--content-max-width"] .queued-track,
-.chat-pane[style*="--content-max-width"] .composer .ask-inline-bar {
+.chat-pane[style*="--content-max-width"] .composer .ask-inline-bar,
+.chat-pane[style*="--content-max-width"] .session-runtime-ui {
   width: min(100%, var(--content-max-width));
   max-width: var(--content-max-width);
   margin-inline: auto;
