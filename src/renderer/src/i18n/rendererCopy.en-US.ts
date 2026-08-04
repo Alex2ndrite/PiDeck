@@ -503,6 +503,8 @@ export const enUS: Record<TranslationKey, string> = {
   "ask.submit": "Submit",
   "ask.toolName": "Ask",
   "ask.pending": "AI is asking…",
+  "ask.question": "Question",
+  "ask.answer": "Answer",
   "ask.cancelHint": "Cancel: defaults to first option",
   "ask.waitingForAnswer": "Waiting for answer…",
   "ask.unanswered": "Unanswered",

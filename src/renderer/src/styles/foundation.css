@@ -2223,19 +2223,9 @@ select:focus-visible {
   background: transparent !important;
   z-index: 3;
 }
-/* 可见细线：居中 1px，与水平 .splitter::before 同一套 token */
+/* 不再绘制独立分隔线：composer-box 顶部边框就是视觉边界，handle 只保留透明拖拽热区。 */
 .v-splitter::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 50%;
-  height: 1px;
-  transform: translateY(-50%);
-  border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--color-border-strong) 58%, transparent);
-  transition: height 0.12s ease, background 0.12s ease;
-  pointer-events: none;
+  content: none;
 }
 /* 视觉命中提示区（库本身还有 coarse/fine 最小命中放大） */
 .v-splitter::after {
@@ -2247,17 +2237,6 @@ select:focus-visible {
   bottom: -8px;
   pointer-events: none;
 }
-.v-splitter:hover::before,
-.v-splitter:active::before,
-.v-splitter[data-separator="active"]::before {
-  height: 2px;
-  background: color-mix(
-    in srgb,
-    var(--color-accent) 32%,
-    var(--color-border-strong)
-  );
-}
-
 /* ── 内容行宽限制：仅在 --content-max-width 由 JS 注入时生效 ── */
 .chat-pane[style*="--content-max-width"] .message-list {
   width: min(100%, var(--content-max-width));

@@ -490,7 +490,7 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
               if (message.role === "system") {
                 const meta = message.meta as any;
                 if (meta?.type === "askQuestion") {
-                  // Pending extension UI is rendered once above the composer.
+                  // Pending extension UI is rendered once in the timeline footer.
                   // Legacy in-memory messages may still contain this placeholder.
                   return null;
                 }
@@ -563,8 +563,9 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
           </div>
         )}
 
+      {/* 吸收时间线原有的底部安全留白，让 Ask 与 composer 顶边保持紧凑但不遮挡内容。 */}
       {props.runtimeUi ? (
-        <div className="session-runtime-ui sticky bottom-0 z-10 mx-auto w-full empty:hidden bg-[var(--color-bg-panel)] pt-2">
+        <div className="session-runtime-ui sticky bottom-0 z-10 mx-auto -mb-6 w-full min-w-0 empty:hidden bg-[var(--color-bg-panel)] pt-1">
           {props.runtimeUi}
         </div>
       ) : null}

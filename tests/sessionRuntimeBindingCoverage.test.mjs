@@ -26,6 +26,10 @@ const timeline = readFileSync(
   "src/renderer/src/components/session/SessionMessageTimeline.tsx",
   "utf8",
 );
+const toolCards = readFileSync(
+  "src/renderer/src/components/session/ToolCallComponents.tsx",
+  "utf8",
+);
 
 test("catalog scans attach matching existing runtimes in the main process", () => {
   assert.match(coordinator, /attachCatalogRuntimes\(/);
@@ -46,6 +50,7 @@ test("Ask Question keeps normalized batch requests pending for the session respo
   assert.match(agentManager, /hasCustomOption/);
   assert.match(agentManager, /option\.startsWith\("✎"\)/);
   assert.match(agentManager, /allowOther: typed\.allowOther === true \|\| hasCustomOption/);
+  assert.match(agentManager, /questions: batchQuestions/);
 });
 
 test("session UI requests remain generation-bound and render in the timeline footer", () => {
@@ -57,6 +62,8 @@ test("session UI requests remain generation-bound and render in the timeline foo
   assert.doesNotMatch(runtimeUi, /className="modal-backdrop ask-dialog-backdrop"/);
   assert.doesNotMatch(composer, /runtimeUi/);
   assert.match(timeline, /session-runtime-ui sticky bottom-0/);
+  assert.match(toolCards, /ask-question-card-result-list/);
+  assert.match(toolCards, /askCard\.questions/);
 });
 
 test("Web wiring is Session-first and exposes no Agent compatibility creation", () => {

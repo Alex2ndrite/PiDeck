@@ -159,7 +159,7 @@ function BatchAskInlineBar(props: {
 			onOpenChange={setExpanded}
 			className="ask-inline-bar rounded-t-md border border-b-0 border-border-strong bg-[color:color-mix(in_srgb,var(--color-accent)_6%,var(--color-bg-panel))] p-1.5"
 		>
-			<div className="mb-1.5 flex min-w-0 items-center gap-1 text-micro font-semibold text-[var(--color-accent)]">
+			<div className="mb-1 flex min-w-0 items-center gap-1 text-micro font-semibold text-[var(--color-accent)]">
 				<CollapsibleTrigger asChild>
 					<Button variant="ghost" size="sm" aria-label={t("ask.toolName")} className="min-w-0 flex-1 justify-start gap-1 px-1 text-left font-semibold text-[var(--color-accent)]">
 						<ChevronDown className={`shrink-0 transition-transform duration-150${expanded ? " rotate-180" : ""}`} size={12} aria-hidden="true" />
@@ -482,7 +482,7 @@ export function SessionRuntimeUiOverlay({ sessionId, runtime, ui, responder }: S
 			onOpenChange={setExpanded}
 			className="ask-inline-bar rounded-t-md border border-b-0 border-border-strong bg-[color:color-mix(in_srgb,var(--color-accent)_6%,var(--color-bg-panel))] p-1.5"
 		>
-			<div className="mb-1.5 flex min-w-0 items-center gap-1 text-micro font-semibold text-[var(--color-accent)]">
+			<div className="mb-1 flex min-w-0 items-center gap-1 text-micro font-semibold text-[var(--color-accent)]">
 				<CollapsibleTrigger asChild>
 					<Button variant="ghost" size="sm" aria-label={t("ask.toolName")} className="min-w-0 flex-1 justify-start gap-1 px-1 text-left font-semibold text-[var(--color-accent)]">
 						<ChevronDown className={`shrink-0 transition-transform duration-150${expanded ? " rotate-180" : ""}`} size={12} aria-hidden="true" />

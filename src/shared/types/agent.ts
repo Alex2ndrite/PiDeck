@@ -108,7 +108,7 @@ export type AgentUiRequest = {
 	widgetKey?: string;
 	widgetLines?: string[];
 	widgetPlacement?: "aboveEditor" | "belowEditor";
-	/** A batched ask_question envelope rendered as tabs above the composer. */
+	/** A batched ask_question envelope rendered as tabs in the session timeline footer. */
 	batchQuestions?: AgentUiBatchQuestion[];
 	batchReview?: boolean;
 };

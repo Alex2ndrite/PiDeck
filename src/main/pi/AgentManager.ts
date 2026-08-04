@@ -76,6 +76,12 @@ import {
 /** 项目信任确认弹窗的用户选择 */
 export type ProjectTrustChoice = "trust-remember" | "trust-session" | "deny";
 
+/** 从 RPC 返回的未知 ask 记录中安全读取字段，避免批量答案转换扩散 any 强转。 */
+function readAskField(input: unknown, key: string): unknown {
+	if (!input || typeof input !== "object" || Array.isArray(input)) return undefined;
+	return Reflect.get(input, key);
+}
+
 export class AgentManager {
 	private readonly agents = new Map<string, AgentRuntime>();
 	private readonly messages = new Map<string, ChatMessage[]>();
@@ -3231,17 +3237,30 @@ export class AgentManager {
 					options: askDetails.options,
 				};
 			}
-			// 批量格式：details.questions / details.answers 数组，取第一组问答展示
+			// 批量格式：保留完整问答列表，历史卡片才能同时展示每个问题与对应答案，
+			// 不再只取第一题导致用户无法回看其余回答。
 			if (Array.isArray(askDetails.answers) && askDetails.answers.length > 0) {
-				const firstQuestion = Array.isArray(askDetails.questions) ? askDetails.questions[0] : undefined;
-				const firstAnswer = askDetails.answers[0];
+				const questions = Array.isArray(askDetails.questions) ? askDetails.questions : [];
+				const batchQuestions = askDetails.answers.map((rawAnswer: unknown, index: number) => {
+					const rawQuestion = questions[index];
+					const questionText = typeof readAskField(rawQuestion, "question") === "string"
+						? String(readAskField(rawQuestion, "question"))
+						: String(readAskField(rawAnswer, "id") ?? "");
+					const rawType = readAskField(rawAnswer, "type") ?? readAskField(rawQuestion, "type");
+					const rawOptions = readAskField(rawQuestion, "options");
+					return {
+						question: questionText,
+						type: typeof rawType === "string" ? rawType : "input",
+						answered: !askDetails.cancelled && readAskField(rawAnswer, "value") !== null,
+						answer: readAskField(rawAnswer, "value"),
+						answerLabel: typeof readAskField(rawAnswer, "label") === "string" ? String(readAskField(rawAnswer, "label")) : undefined,
+						options: Array.isArray(rawOptions) ? rawOptions : undefined,
+					};
+				});
+				const firstQuestion = batchQuestions[0];
 				return {
-					question: firstQuestion?.question ?? String(firstAnswer.id ?? ""),
-					type: firstAnswer.type ?? firstQuestion?.type ?? "input",
-					answered: !askDetails.cancelled && firstAnswer.value !== null,
-					answer: firstAnswer.value,
-					answerLabel: firstAnswer.label,
-					options: firstQuestion?.options,
+					...firstQuestion,
+					questions: batchQuestions,
 				};
 			}
 			return undefined;

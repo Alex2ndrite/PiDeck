@@ -1026,6 +1026,73 @@ body.ask-dialog-open .ask-question-card.pending {
   color: var(--color-success);
 }
 
+/* 已完成 Ask 使用“问题 → 回答”双行摘要，批量问答按题号纵向排列，避免再渲染整套表单。 */
+.ask-question-card-result-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.ask-question-card-result-row {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 5px 7px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--color-chat-control-bg);
+}
+.ask-question-card-result-index {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  min-width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: var(--color-bg-muted);
+  color: var(--color-text-tertiary);
+  font: 11px/1 var(--font-family-business);
+}
+.ask-question-card-result-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+}
+.ask-question-card-result-question,
+.ask-question-card-result-answer {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.ask-question-card-result-question {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-caption);
+}
+.ask-question-card-result-answer {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-caption);
+}
+.ask-question-card-result-answer.answered {
+  color: var(--color-accent);
+  font-weight: 600;
+}
+.ask-question-card-result-answer.unanswered {
+  color: var(--color-text-tertiary);
+}
+.ask-question-card-tool-inner .ask-question-card-title .ask-question-card-status {
+  margin-left: auto;
+  color: var(--color-accent);
+  font: 11px/1 var(--font-family-business);
+  font-weight: 500;
+}
+
 /* ask_question inline bar, pinned to the bottom of the current session timeline. */
 .ask-inline-bar-options-confirm .ask-inline-bar-option {
   justify-content: center;

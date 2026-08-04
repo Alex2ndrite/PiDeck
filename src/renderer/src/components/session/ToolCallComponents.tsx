@@ -41,6 +41,23 @@ export type DiffFileHandler = (
   content?: string,
 ) => void;
 
+type AskCardSummary = {
+  question?: string;
+  type?: string;
+  answered?: boolean;
+  answer?: unknown;
+  answerLabel?: string;
+  options?: Array<string | { label?: string; value?: unknown; description?: string }>;
+  questions?: AskCardSummary[];
+};
+
+function askAnswerText(answer: unknown, label?: string): string {
+  if (label?.trim()) return label;
+  if (typeof answer === "string") return answer;
+  if (typeof answer === "boolean") return answer ? t("common.true") : t("common.false");
+  return t("ask.unanswered");
+}
+
 function toolIcon(toolName: string): ReactNode {
 	const key = toolName.toLowerCase();
 	if (key.includes("read") || key.includes("view")) return <FileText size={15} />;
@@ -194,9 +211,7 @@ export const ToolCard = memo(function ToolCard(props: {
 	const skillName = getReadSkillName(props.message);
 	const isSkillRead = Boolean(skillName);
 	// 历史会话中从 ask_question 工具结果反推的提问卡片数据
-	const askCard = props.message.meta?._askCard as
-		| { question?: string; type?: string; answered?: boolean; answer?: unknown; answerLabel?: string; options?: string[] }
-		| undefined;
+	const askCard = props.message.meta?._askCard as AskCardSummary | undefined;
 	const isAskCard = Boolean(askCard?.question);
 	// 运行中显示 "运行中"，出错显示 "错误"，完成后不显示状态文本
 const statusLabel =
@@ -267,53 +282,25 @@ const statusLabel =
 				<div className="relative rounded-b-sm border-t border-border-subtle bg-transparent">
 					{isAskCard && askCard ? (
 						<div className="ask-question-card-tool-inner">
-							<div className="ask-question-card-title"><MessageCircle size={13} />{askCard.question}</div>
-							{askCard.options && askCard.options.length > 0 && (
-								<div className="ask-question-card-options-list">
-									{askCard.options.map((opt, i) => {
-										const optLabel = typeof opt === "string" ? opt : (opt as any).label ?? String((opt as any).value ?? "");
-										const optValue = typeof opt === "string" ? opt : String((opt as any).value ?? optLabel);
-										const desc = typeof opt === "object" ? (opt as any).description : undefined;
-										const isSelected = askCard.answered && (optLabel === askCard.answerLabel || optValue === askCard.answer);
-										return (
-											<div key={i} className={`ask-question-card-option-item${isSelected ? " selected" : ""}`}>
-												<span className="ask-question-card-option-selector">{isSelected ? "✓" : ""}</span>
-												<div className="ask-question-card-option-text">
-													<span className="ask-question-card-option-label">{optLabel}</span>
-													{desc && <span className="ask-question-card-option-desc">{desc}</span>}
-												</div>
-											</div>
-										);
-									})}
-								</div>
-							)}
-							{askCard.answered && (!askCard.options || askCard.options.length === 0) ? (
-								<div className="ask-question-card-answered">
-									<Check size={14} className="ask-question-card-answered-ok" />
-									<span className="ask-question-card-answer-text">
-										{askCard.answerLabel ?? (
-											typeof askCard.answer === "string" ? askCard.answer :
-											typeof askCard.answer === "boolean" ? (askCard.answer ? t("common.true") : t("common.false")) :
-											t("ask.answered")
-										)}
-									</span>
-								</div>
-							) : askCard.answered ? (
-								<div className="ask-question-card-answered">
-									<Check size={14} className="ask-question-card-answered-ok" />
-									<span className="ask-question-card-answer-text">
-										{askCard.answerLabel ?? (
-											typeof askCard.answer === "string" ? askCard.answer :
-											typeof askCard.answer === "boolean" ? (askCard.answer ? t("common.true") : t("common.false")) :
-											t("ask.answered")
-										)}
-									</span>
-								</div>
-							) : (
-								<div className="ask-question-card-answered" style={{ color: "var(--color-text-tertiary)" }}>
-									{t("ask.unanswered")}
-								</div>
-							)}
+							<div className="ask-question-card-title">
+								<MessageCircle size={13} />
+								<span>{t("ask.question")}</span>
+								<span className="ask-question-card-status">{askCard.answered ? t("ask.answered") : t("ask.unanswered")}</span>
+							</div>
+							<div className="ask-question-card-result-list">
+								{(askCard.questions?.length ? askCard.questions : [askCard]).map((item, index) => (
+									<div key={`${item.question ?? "question"}:${index}`} className="ask-question-card-result-row">
+										<span className="ask-question-card-result-index">{(askCard.questions?.length ?? 0) > 1 ? index + 1 : "?"}</span>
+										<div className="ask-question-card-result-copy">
+											<span className="ask-question-card-result-question">{item.question || t("ask.defaultTitle")}</span>
+											<span className={`ask-question-card-result-answer${item.answered ? " answered" : " unanswered"}`}>
+												{item.answered ? <Check size={12} aria-hidden="true" /> : null}
+												{item.answered ? askAnswerText(item.answer, item.answerLabel) : t("ask.unanswered")}
+											</span>
+										</div>
+									</div>
+								))}
+							</div>
 						</div>
 					) : (
 						<pre className="m-0 max-h-[320px] overflow-auto p-2 font-mono text-caption leading-relaxed break-words whitespace-pre-wrap text-text-tertiary">{detailText}</pre>
