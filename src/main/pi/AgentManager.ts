@@ -21,6 +21,7 @@ import type {
 } from "../../shared/types";
 import { ipcChannels } from "../../shared/ipc";
 import { PiProcess } from "./PiProcess";
+import { listActiveBuiltInExtensionPaths } from "../extensions/builtInExtensions";
 import type { RpcResponse } from "./PiRpcClient";
 import { formatBashToolMessage } from "./bashResult";
 import type { MainProcessTranslationKey } from "../../shared/i18n/mainProcessCopy";
@@ -218,6 +219,25 @@ export class AgentManager {
 
 	configureWsl(environment: WslEnvironment | null): void {
 		this.wslEnvironment = environment;
+	}
+
+	/**
+	 * 统一构造 PiProcess：注入 PiDeck 内置扩展路径解析。
+	 * 内置扩展以 -e 从 app resources 加载，不再依赖用户扩展目录副本。
+	 */
+	private createPiProcess(cwd: string): PiProcess {
+		const settings = this.settingsStore.get();
+		return new PiProcess(cwd, settings, undefined, {
+			resolveBuiltInExtensionPaths: (processSettings) =>
+				listActiveBuiltInExtensionPaths(
+					{
+						appPath: app.getAppPath(),
+						resourcesPath: process.resourcesPath,
+						isDev: !app.isPackaged,
+					},
+					processSettings?.removedBuiltInExtensions ?? settings.removedBuiltInExtensions ?? [],
+				),
+		});
 	}
 
 	/** Windows 主进程文件操作必须使用可由 host 访问的路径。 */
@@ -573,7 +593,7 @@ export class AgentManager {
 		// 每次 spawn 前异步刷新模型列表缓存（不等完成，避免阻塞 Agent 启动）：
 		// 用户直接编辑 models.json/auth.json 后，下一次启动的 Agent 即能看到新模型。
 		this.onBeforeAgentSpawn?.();
-		const process = new PiProcess(project.path, this.settingsStore.get());
+		const process = this.createPiProcess(project.path);
 		process.on("version-check", (payload) => {
 			void this.appLogger?.info("agent", "Pi version check completed", {
 				agentId: id,
@@ -1285,7 +1305,7 @@ export class AgentManager {
 			sessionPath,
 		});
 
-		const process = new PiProcess(project.path, this.settingsStore.get());
+		const process = this.createPiProcess(project.path);
 		// 与 createUnlocked 同理：监听器必须在 start() 前挂上，
 		// 避免重连窗口期 spawn error 变成未捕获异常。
 		this.attachPiProcessLifecycle(agentId, process, {
@@ -1937,7 +1957,7 @@ export class AgentManager {
 	): Promise<T> {
 		const project = this.getProject(projectId);
 		if (!project) throw new Error(`Project not found: ${projectId}`);
-		const process = new PiProcess(project.path, this.settingsStore.get());
+		const process = this.createPiProcess(project.path);
 		await process.start(sessionPath);
 		try {
 			return await run(process);

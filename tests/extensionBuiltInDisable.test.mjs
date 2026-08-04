@@ -55,6 +55,17 @@ function loadExtensionManager({ homeDir, runPiOutput = "", fsOverrides = {} } = 
 			}
 			if (id === "../wsl/WslPaths") return wslPaths;
 			if (id === "../pi/PiLocator") return {};
+			if (id === "./builtInExtensions") {
+				// ExtensionManager 只需要内置名列表；避免 vm 沙箱解析相对 TS 路径失败。
+				return {
+					BUILT_IN_EXTENSIONS: [
+						"pi-deck-ask-question.ts",
+						"pi-deck-nul-redirect-fix.ts",
+						"pi-deck-plan-mode.ts",
+						"pi-deck-todo.ts",
+					],
+				};
+			}
 			return require(id);
 		},
 	};

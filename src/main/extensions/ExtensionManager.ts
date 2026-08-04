@@ -6,20 +6,15 @@ import type { AppSettings, PiCliUpdateResult, PiExtensionListResult, PiExtension
 import type { PiLocator } from "../pi/PiLocator";
 import { toWindowsHostPath, type WslEnvironment } from "../wsl/WslPaths";
 import type { MainProcessTranslationKey } from "../../shared/i18n/mainProcessCopy";
+import { BUILT_IN_EXTENSIONS } from "./builtInExtensions";
+
+export { BUILT_IN_EXTENSIONS } from "./builtInExtensions";
 
 type SettingsProvider = () => AppSettings;
 type ExtensionCopy = (
 	key: MainProcessTranslationKey,
 	params?: Record<string, string | number>,
 ) => string;
-
-/** PiDeck 内置扩展列表，用于在扫描不到时仍展示在扩展管理页中。 */
-export const BUILT_IN_EXTENSIONS = [
-	"pi-deck-ask-question.ts",
-	"pi-deck-nul-redirect-fix.ts",
-	"pi-deck-plan-mode.ts",
-	"pi-deck-todo.ts",
-] as const;
 
 /**
  * 通过 pi CLI 管理已安装扩展，避免桌面端直接改写 pi settings 导致和 CLI 行为不一致。
@@ -190,8 +185,7 @@ export class ExtensionManager {
 			if (conflicting) {
 				removedBuiltIn.add(builtInName);
 				removedChanged = true;
-				// 必须删掉磁盘文件：pi 会加载 ~/.pi/agent/extensions 下全部 .ts，
-				// 仅写 removedBuiltInExtensions 无法阻止 Tool 同名冲突导致 RPC 启动失败。
+				// 内置扩展已改走 -e；仍清理用户目录历史部署副本，避免与三方包双加载冲突。
 				await this.removeBuiltInFile(builtInName).catch(() => undefined);
 				conflicts.push({
 					builtIn: builtInName,
@@ -328,8 +322,8 @@ export class ExtensionManager {
 	}
 
 	/**
-	 * 禁用内置扩展的统一路径：记入 removedBuiltInExtensions + 删除磁盘文件。
-	 * 供手动移除与三方冲突自动让位共用，保证 pi 进程侧立即不再加载。
+	 * 禁用内置扩展：记入 removedBuiltInExtensions（RPC 启动时跳过 -e），
+	 * 并清理用户扩展目录中可能残留的历史部署副本。
 	 */
 	async disableBuiltIn(source: string): Promise<void> {
 		const normalized = source.trim();
@@ -340,7 +334,8 @@ export class ExtensionManager {
 		if (!current.includes(normalized)) {
 			await this.saveRemovedBuiltIn([...current, normalized]);
 		}
-		await this.removeBuiltInFile(normalized);
+		// 幂等清理旧部署；新路径不再依赖用户目录文件。
+		await this.removeBuiltInFile(normalized).catch(() => undefined);
 		this.invalidateListCache();
 	}
 
@@ -352,12 +347,18 @@ export class ExtensionManager {
 		await this.disableBuiltIn(normalized);
 	}
 
+	/**
+	 * 恢复内置扩展：仅从 removedBuiltInExtensions 移除标记。
+	 * 下次 Agent 启动会重新通过 -e 从 app resources 加载，无需再写用户扩展目录。
+	 */
 	async restoreBuiltIn(source: string): Promise<void> {
 		const normalized = source.trim();
 		const current = this.getPiDeckSettings().removedBuiltInExtensions ?? [];
 		const next = current.filter((s) => s !== normalized);
 		if (next.length === current.length) return;
 		await this.saveRemovedBuiltIn(next);
+		// 若用户目录仍有旧副本，一并删掉，避免与 -e 双加载。
+		await this.removeBuiltInFile(normalized).catch(() => undefined);
 		this.invalidateListCache();
 	}
 

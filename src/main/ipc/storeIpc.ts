@@ -26,7 +26,6 @@ export type StoreIpcDeps = {
 	extensionManager: ExtensionManager;
 	appLogger: AppLogger;
 	mainCopy: (key: string, params?: Record<string, string | number>) => string;
-	ensurePiDeckExtension: (extensionName: string, wslHome?: string) => Promise<void>;
 };
 
 export function registerStoreIpc({
@@ -36,7 +35,6 @@ export function registerStoreIpc({
 	extensionManager,
 	appLogger,
 	mainCopy,
-	ensurePiDeckExtension,
 }: StoreIpcDeps): void {
 	// ── Prompt Templates ──
 	ipcMain.handle(ipcChannels.promptsList, () => promptManager.list());
@@ -414,14 +412,13 @@ export function registerStoreIpc({
 		return result;
 	});
 	ipcMain.handle(ipcChannels.extensionsToggle, async (_event, source: string, enabled: boolean) => {
+		// 内置扩展走 removedBuiltInExtensions + RPC -e，不再写用户扩展目录 / pi disabledExtensions。
 		if (source.startsWith("pi-deck-") && source.endsWith(".ts")) {
-			if (enabled) {
-				// 启用：确保 .ts 文件存在（处理老版本误删文件的恢复场景）
-				await ensurePiDeckExtension(source);
-			}
-			// 禁用时不删除 .ts 文件：通过 settings.json 的 disabledExtensions 控制 pi 加载即可
+			if (enabled) await extensionManager.restoreBuiltIn(source);
+			else await extensionManager.disableBuiltIn(source);
+		} else {
+			await extensionManager.setEnabled(source, enabled);
 		}
-		await extensionManager.setEnabled(source, enabled);
 		void appLogger.info("extension", "Extension toggled", { source, enabled });
 	});
 	ipcMain.handle(ipcChannels.extensionsUpdate, async () => {

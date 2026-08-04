@@ -2189,7 +2189,6 @@ function registerIpc() {
 		extensionManager,
 		appLogger,
 		mainCopy: mainCopy as (key: string, params?: Record<string, string | number>) => string,
-		ensurePiDeckExtension,
 	});
 
 	registerTerminalIpc({
@@ -2541,46 +2540,15 @@ app.whenReady().then(async () => {
 	};
 	await syncWslConfig();
 
-	// 自动部署 PiDeck 内置扩展：这些扩展提供桌面端差异预览、提问卡片和 Plan Mode。
-	// Windows 和 WSL 环境各自部署一份，保证切换 pi 来源后扩展仍然可用。
-	const deployExtensionsTo = async (homeDir: string) => {
-		const extDisabledPath = join(homeDir, ".pi", "agent", "settings.json");
-		const disabledExtList: string[] = await readFile(extDisabledPath, "utf-8")
-			.then((raw: string) => JSON.parse(raw).disabledExtensions ?? [])
-			.catch(() => [] as string[]);
-		const disabledBuiltIn = new Set<string>(disabledExtList);
-		for (const extensionName of ["pi-deck-ask-question.ts", "pi-deck-nul-redirect-fix.ts", "pi-deck-plan-mode.ts", "pi-deck-todo.ts"]) {
-			if (disabledBuiltIn.has(extensionName)) continue;
-			await ensurePiDeckExtension(extensionName, homeDir).catch((error) => {
-				console.error(`Failed to install ${extensionName}:`, error);
-			});
-		}
-	};
-	// 始终部署到 Windows 本地 home
-	await deployExtensionsTo(app.getPath("home"));
-	// WSL 启用时额外部署到 WSL 目录（通过 \\wsl$ UNC）
-	const wslSettings = settingsStore.get();
-	if (wslSettings.wslEnabled && wslSettings.wslDistro && wslSettings.wslUser) {
-		const wslUncHome = `\\\\wsl$\\${wslSettings.wslDistro}\\home\\${wslSettings.wslUser}`;
-		await deployExtensionsTo(wslUncHome).catch(() => {
-			console.warn('[PiDeck] Failed to deploy extensions to WSL, skipping');
-		});
-	}
+	// 内置扩展改为 RPC -e 注入（见 PiProcess/AgentManager），不再复制到用户扩展目录。
+	// 启动时清理历史版本部署的 pi-deck-* 与已下线扩展，避免 CLI/RPC 双加载。
+	await migrateLegacyBuiltInExtensions().catch((error) => {
+		console.error("Failed to migrate legacy built-in extensions:", error);
+	});
 
 	// 补齐 pi settings.json 缺失的默认配置项，新安装或精简配置的用户无需手动添加。
 	await ensureAllPiSettingsDefaults().catch((error) => {
 		console.error("Failed to ensure pi settings defaults:", error);
-	});
-
-	// 清理已废弃的 pi-deck-project-trust 扩展：RPC 模式下 pi 的 project_trust 事件 hasUI 恒为 false，
-	// 该扩展无法弹窗，信任确认改由桌面端 AgentManager.ensureProjectTrust 自行处理，删除残留避免用户误解。
-	await removeStalePiDeckExtension("pi-deck-project-trust.ts").catch((error) => {
-		console.error("Failed to remove stale pi-deck-project-trust extension:", error);
-	});
-
-	// 清理已废弃的 pi-deck-file-capture 扩展：该扩展的功能已被 renderer 端的直接工具参数解析取代。
-	await removeStalePiDeckExtension("pi-deck-file-capture.ts").catch((error) => {
-		console.error("Failed to remove stale pi-deck-file-capture extension:", error);
 	});
 
 	await appLogger.info("app", "Application started", {
@@ -2657,44 +2625,37 @@ app.whenReady().then(async () => {
 });
 
 /**
- * 将 PiDeck 内置的 pi 扩展部署到用户扩展目录，使 pi 自动加载。
- * 仅在目标文件不存在或内容不一致时覆盖写入，避免不必要的磁盘操作。
+ * 删除用户扩展目录中的 PiDeck 扩展文件（历史部署或已下线扩展）。
+ * 内置扩展现改为 -e 从 app resources 加载，用户目录不应再有 pi-deck-* 副本。
  */
-async function ensurePiDeckExtension(extensionName: string, wslHome?: string): Promise<void> {
-	const home = wslHome ?? app.getPath("home");
-	const extensionsDir = join(home, ".pi", "agent", "extensions");
-	const targetPath = join(extensionsDir, extensionName);
-
-	// 获取源文件路径：开发模式下在 resources/ 目录，打包后通过 process.resourcesPath 访问
-	const sourcePath = is.dev
-		? join(app.getAppPath(), "resources", "extensions", extensionName)
-		: join(process.resourcesPath, "extensions", extensionName);
-
-	// 检查源文件是否存在
-	const sourceContent = await readFile(sourcePath, "utf-8").catch(() => null);
-	if (!sourceContent) {
-		console.warn(`[PiDeck] Extension source not found: ${sourcePath}`);
-		return;
-	}
-
-	// 读取目标文件，只在内容不一致时覆盖（兼顾首次安装和版本更新）
-	const existingContent = await readFile(targetPath, "utf-8").catch(() => null);
-	if (existingContent === sourceContent) return;
-
-	await mkdir(extensionsDir, { recursive: true });
-	await writeFile(targetPath, sourceContent, "utf-8");
-	console.log(`[PiDeck] Installed extension: ${targetPath}`);
+async function removeStalePiDeckExtension(extensionName: string, homeDir?: string): Promise<void> {
+	const home = homeDir ?? app.getPath("home");
+	const targetPath = join(home, ".pi", "agent", "extensions", extensionName);
+	await rm(targetPath, { force: true });
+	console.log(`[PiDeck] Removed legacy/stale extension: ${targetPath}`);
 }
 
 /**
- * 删除已下线的 PiDeck 内置扩展残留文件（如 pi-deck-project-trust.ts）。
- * 用于扩展废弃后清理用户扩展目录，避免 pi 仍加载无效扩展造成误解。
- * rm 的 force 选项会在文件不存在时静默忽略。
+ * 升级迁移：清掉历史版本复制到 ~/.pi/agent/extensions 的内置扩展与已下线扩展。
+ * 覆盖 Windows home；WSL 启用时同步清理 \\wsl$ 映射 home。
  */
-async function removeStalePiDeckExtension(extensionName: string): Promise<void> {
-	const targetPath = join(app.getPath("home"), ".pi", "agent", "extensions", extensionName);
-	await rm(targetPath, { force: true });
-	console.log(`[PiDeck] Removed stale extension: ${targetPath}`);
+async function migrateLegacyBuiltInExtensions(): Promise<void> {
+	const { BUILT_IN_EXTENSIONS } = await import("./extensions/builtInExtensions");
+	const legacyNames = [
+		...BUILT_IN_EXTENSIONS,
+		"pi-deck-project-trust.ts",
+		"pi-deck-file-capture.ts",
+	];
+	const homes = [app.getPath("home")];
+	const wslSettings = settingsStore.get();
+	if (wslSettings.wslEnabled && wslSettings.wslDistro && wslSettings.wslUser) {
+		homes.push(`\\\\wsl$\\${wslSettings.wslDistro}\\home\\${wslSettings.wslUser}`);
+	}
+	for (const home of homes) {
+		for (const name of legacyNames) {
+			await removeStalePiDeckExtension(name, home).catch(() => undefined);
+		}
+	}
 }
 
 /**

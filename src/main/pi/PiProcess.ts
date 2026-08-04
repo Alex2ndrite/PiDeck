@@ -11,6 +11,7 @@ import {
 } from "./piExtensionFilter";
 import type { AppSettings } from "../../shared/types";
 import { toWindowsHostPath, toWslLinuxPath } from "../wsl/WslPaths";
+import { appendBuiltInExtensionArgs } from "../extensions/builtInExtensions";
 
 type PiProcessSettings = Pick<
   AppSettings,
@@ -24,6 +25,7 @@ type PiProcessSettings = Pick<
   | "piRpcOffline"
   | "piRpcNoExtensions"
   | "piRpcNoSkills"
+  | "removedBuiltInExtensions"
 >;
 
 type PiProcessLocator = Pick<
@@ -34,6 +36,11 @@ type PiProcessLocator = Pick<
 /** 可选：覆盖扩展扫描用的用户 home（WSL 映射 Windows home 时传入）。 */
 type PiProcessOptions = {
   agentHomeDir?: string;
+  /**
+   * 解析当前应通过 -e 注入的 PiDeck 内置扩展绝对路径。
+   * 未提供时 RPC 不注入内置扩展（兼容测试/探针）。
+   */
+  resolveBuiltInExtensionPaths?: (settings?: PiProcessSettings) => string[];
 };
 
 type VersionCacheEntry =
@@ -179,8 +186,23 @@ export class PiProcess extends EventEmitter {
       );
     }
 
-    if (noSession) args.push("--no-session");
-    if (sessionPath) args.push("--session", sessionPath);
+    // PiDeck 内置扩展：从 app resources 以 -e 注入，不再复制到 ~/.pi/agent/extensions。
+    // piRpcNoExtensions 时连内置也不注入，保证诊断路径干净。
+    const builtInPaths = this.options.resolveBuiltInExtensionPaths?.(this.settings) ?? [];
+    const argsWithBuiltIns = appendBuiltInExtensionArgs(args, builtInPaths, {
+      noExtensions: Boolean(this.settings?.piRpcNoExtensions),
+    });
+    if (builtInPaths.length > 0 && !this.settings?.piRpcNoExtensions) {
+      console.log(
+        "[PiProcess] Loading PiDeck built-in extensions via -e:",
+        builtInPaths.map((path) => path.split(/[/\\]/).pop()).join(", "),
+      );
+    }
+
+    // 后续信任标志 / session / WSL 路径改写都基于已含 -e 的参数列表
+    let finalPiArgs = argsWithBuiltIns;
+    if (noSession) finalPiArgs.push("--no-session");
+    if (sessionPath) finalPiArgs.push("--session", sessionPath);
 
     // 用户手动指定的 pi 路径优先于自动检测，解决 npm global、nvm 等路径未在 PATH 中的问题
     const command = this.locator.resolveCommand(this.settings?.customPiPath, this.settings?.wslEnabled, this.settings?.wslDistro, this.settings?.wslUser);
@@ -193,15 +215,14 @@ export class PiProcess extends EventEmitter {
       await this.ensureVersionCheck(command);
       const cached = PiProcess.versionCache.get(command);
       if (cached?.status === "done" && PiProcess.versionSupportsTrustFlags(cached.minorVersion)) {
-        if (trustOverride === "approve") args.push("--approve");
-        else if (trustOverride === "no-approve") args.push("--no-approve");
+        if (trustOverride === "approve") finalPiArgs.push("--approve");
+        else if (trustOverride === "no-approve") finalPiArgs.push("--no-approve");
       }
       // 版本不支持信任标志时静默跳过：老版本 pi 无 trust 系统，自动加载所有资源。
     }
 
     let spawnCwd = this.cwd;
     let diagnosticCwd = this.cwd;
-    let finalPiArgs = args;
     let wslCwd: string | undefined;
     if (command.startsWith("wsl://")) {
       const distro = this.settings?.wslDistro;
@@ -211,12 +232,17 @@ export class PiProcess extends EventEmitter {
       spawnCwd = toWindowsHostPath(this.cwd, environment);
       diagnosticCwd = wslCwd;
 
-      const sessionIndex = args.indexOf("--session");
-      if (sessionIndex >= 0) {
-        finalPiArgs = args.map((arg, index) =>
-          index === sessionIndex + 1 ? toWslLinuxPath(arg, environment) : arg,
-        );
-      }
+      // WSL 下 session 路径与 -e 扩展路径都需转成 Linux 路径，否则 pi 在 distro 内打不开 Windows 路径。
+      finalPiArgs = finalPiArgs.map((arg, index) => {
+        const prev = finalPiArgs[index - 1];
+        if (prev === "--session" || prev === "--extension" || prev === "-e") {
+          // 仅转换看起来像 Windows 绝对路径的参数，避免误伤相对路径/选项值
+          if (/^[A-Za-z]:[\\/]/.test(arg) || arg.startsWith("\\\\")) {
+            return toWslLinuxPath(arg, environment);
+          }
+        }
+        return arg;
+      });
     }
     const invocation = this.locator.createInvocation(
       command,
