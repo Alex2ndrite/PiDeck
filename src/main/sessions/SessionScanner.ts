@@ -38,6 +38,15 @@ function defaultTranslate(
   ));
 }
 
+function isMissingFileError(error: unknown): boolean {
+  return Boolean(
+    error &&
+    typeof error === "object" &&
+    "code" in error &&
+    (error as { code?: unknown }).code === "ENOENT",
+  );
+}
+
 export class SessionScanner {
   private readonly root = join(app.getPath("home"), ".pi", "agent", "sessions");
   private readonly codexRoot = join(app.getPath("home"), ".codex", "sessions");
@@ -188,7 +197,7 @@ export class SessionScanner {
   /** 通过 wsl.exe 删除文件 */
   private deleteWslFile(wslPath: string): Promise<void> {
     return new Promise((resolve, reject) => {
-      execFile(this.wslExePath, ["-d", this.wslConfig!.distro, "-u", this.wslConfig!.user, "rm", wslPath], {
+      execFile(this.wslExePath, ["-d", this.wslConfig!.distro, "-u", this.wslConfig!.user, "rm", "-f", wslPath], {
         shell: this.wslShell,
         encoding: "utf8",
         timeout: 5_000,
@@ -543,14 +552,16 @@ export class SessionScanner {
    */
   async delete(filePath: string): Promise<void> {
     if (this.isWslPath(filePath)) {
-      // 先删除同级子会话目录（如果存在）
+      // rm -f 语义保证“文件已被外部清理”与成功删除等价，避免重启后删空草稿报错。
       await this.deleteWslSiblingDir(filePath);
       await this.deleteWslFile(filePath);
       return;
     }
 
-    // 先删除同级子会话目录（如果存在），再删除文件本身
+    // 先删除同级子会话目录（如果存在），再删除文件本身。
     await this.deleteSiblingDir(filePath);
+    // catalog 可能保留一个已被 pi/系统回收站移走的历史路径；删除接口必须幂等。
+    if (!existsSync(filePath)) return;
 
     // 优先使用系统回收站（Electron shell.trashItem），避免文件永久丢失。
     // 回收站不可用时（如 Linux 部分桌面环境），fallback 到 rename 到 .trash 子目录。
@@ -562,8 +573,13 @@ export class SessionScanner {
         await mkdir(trashDir, { recursive: true });
         const trashName = `${basename(filePath)}.${Date.now()}.deleted`;
         await rename(filePath, join(trashDir, trashName));
-      } catch {
-        await unlink(filePath);
+      } catch (error) {
+        if (isMissingFileError(error)) return;
+        try {
+          await unlink(filePath);
+        } catch (unlinkError) {
+          if (!isMissingFileError(unlinkError)) throw unlinkError;
+        }
       }
     }
   }

@@ -143,6 +143,17 @@ export class SessionCatalog {
 				}
 			}
 		}
+		// Draft 只代表当前进程中的“尚未发送”编辑面：没有用户消息就没有
+		// 可恢复的 Pi session。重启时清掉它们，避免空 Agent 在历史列表中永久残留。
+		const staleDrafts = this.entries.filter((entry) => entry.status === "draft");
+		if (staleDrafts.length > 0) {
+			this.entries = this.entries.filter((entry) => entry.status !== "draft");
+			try {
+				await this.writeSnapshot(this.entries);
+			} catch {
+				// 启动清理是 best-effort；内存已经不再暴露草稿，下一次启动仍会重试清理。
+			}
+		}
 		this.loaded = true;
 		if (this.skipNextBackup) {
 			await this.writeSnapshot(this.entries);

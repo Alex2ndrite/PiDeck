@@ -57,6 +57,27 @@ function summary(overrides = {}) {
   };
 }
 
+test("does not restore an unsubmitted draft after the catalog is reloaded", async () => {
+  const { SessionCatalog } = loadCatalog();
+  const dir = await mkdtemp(join(tmpdir(), "pideck-catalog-draft-cleanup-"));
+  const filePath = join(dir, "sessions.json");
+  try {
+    const catalog = new SessionCatalog(filePath);
+    await catalog.load();
+    await catalog.createDraft({
+      projectId: "project-1",
+      title: "Never submitted",
+      environment: "native",
+    });
+
+    const reloaded = new SessionCatalog(filePath);
+    await reloaded.load();
+    assert.equal(reloaded.listEntries().length, 0);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("keeps a draft desktop session ID after Pi assigns a file path", async () => {
   const { SessionCatalog } = loadCatalog();
   const dir = await mkdtemp(join(tmpdir(), "pideck-catalog-"));
@@ -194,10 +215,20 @@ test("recovers a damaged primary catalog from its atomic backup", async () => {
       title: "First",
       environment: "native",
     });
-    await catalog.createDraft({
+    await catalog.attachRuntime({
+      sessionId: first.id,
+      filePath: "C:/sessions/first.jsonl",
+      piSessionId: "pi-first",
+    });
+    const second = await catalog.createDraft({
       projectId: "project-1",
       title: "Second",
       environment: "native",
+    });
+    await catalog.attachRuntime({
+      sessionId: second.id,
+      filePath: "C:/sessions/second.jsonl",
+      piSessionId: "pi-second",
     });
     await writeFile(filePath, "{truncated", "utf8");
 
