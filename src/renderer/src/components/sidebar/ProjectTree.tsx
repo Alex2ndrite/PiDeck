@@ -26,17 +26,26 @@ function displayProjectDirectoryName(project: Project) {
 function matchesProject(project: Project, search: string, controller: SidebarController) {
   if (!search) return true;
   const query = search.toLowerCase();
-  if (`${project.name}${project.path}`.toLowerCase().includes(query)) return true;
-  if (controller.catalog.agents.some((agent) => agent.projectId === project.id &&
-    `${agent.title}${agent.cwd}${agent.sessionId ?? ""}`.toLowerCase().includes(query))) return true;
-  return (controller.catalog.sessionsByProject[project.id] ?? []).some((session) =>
-    `${session.title}${session.preview}${session.filePath ?? ""}`.toLowerCase().includes(query));
+  // 搜索项目时把直属 worktree 视为同一工作区树，否则用户搜到 worktree 分支/会话
+  // 后根项目会被过滤掉，导致结果实际存在却无法展开查看。
+  const relatedProjects = controller.catalog.projects.filter(
+    (candidate) => candidate.id === project.id || candidate.worktreeParentId === project.id,
+  );
+  return relatedProjects.some((related) => {
+    if (`${related.name}${related.path}`.toLowerCase().includes(query)) return true;
+    if (controller.catalog.agents.some((agent) => agent.projectId === related.id &&
+      `${agent.title}${agent.cwd}${agent.sessionId ?? ""}`.toLowerCase().includes(query))) return true;
+    return (controller.catalog.sessionsByProject[related.id] ?? []).some((session) =>
+      `${session.title}${session.preview}${session.filePath ?? ""}`.toLowerCase().includes(query));
+  });
 }
 
 export function ProjectTree(props: {
   controller: SidebarController;
   actions: SidebarActions;
   currentProjectId?: string;
+  /** 实际选中的项目（可能是 worktree 子项目），用于高亮工作区行。 */
+  selectedProjectId?: string;
   currentSessionId?: string;
   worktreesByProject: Readonly<Record<string, readonly WorktreeEntry[]>>;
   branchByProject?: Readonly<Record<string, string | null | undefined>>;
@@ -68,11 +77,18 @@ export function ProjectTree(props: {
       const sourceFilter = props.controller.sourceFilterFor(project.id);
       const dragging = props.controller.drag.sourceProjectId === project.id;
       const dragOver = props.controller.drag.overProjectId === project.id;
-      // 项目行统计徽标：会话总数（含子会话）与正在运行的 Agent 数，
-      // 项目多时不用逐个展开即可知道哪里有事发生
-      const projectSessions = props.controller.catalog.sessionsByProject[project.id] ?? [];
+      // 项目行统计徽标覆盖整棵工作区树（根项目 + 直属 worktree），避免徽标只统计
+      // 根目录而用户实际会话都在 worktree 中时产生错误认知。
+      const workspaceProjects = props.controller.catalog.projects.filter(
+        (candidate) => candidate.id === project.id || candidate.worktreeParentId === project.id,
+      );
+      const workspaceProjectIds = new Set(workspaceProjects.map((candidate) => candidate.id));
+      const rootProjectSessions = props.controller.catalog.sessionsByProject[project.id] ?? [];
+      const projectSessions = workspaceProjects.flatMap(
+        (workspaceProject) => props.controller.catalog.sessionsByProject[workspaceProject.id] ?? [],
+      );
       const sessionCount = projectSessions.length;
-      const projectAgents = props.controller.catalog.agents.filter((agent) => agent.projectId === project.id);
+      const projectAgents = props.controller.catalog.agents.filter((agent) => workspaceProjectIds.has(agent.projectId));
       const runningAgentCount = projectAgents.filter(
         (agent) => agent.status === "running" || agent.status === "starting",
       ).length;
@@ -166,24 +182,28 @@ export function ProjectTree(props: {
         {!collapsed && (
           <div className="ml-1 pb-0.5">
             {/* 展开内容不依赖当前选中项，项目切换只改变高亮，避免两棵会话树同时伸缩造成布局抖动。 */}
-            {project.worktreeEnabled && (
+            {project.worktreeEnabled ? (
               <WorktreeTree
                 project={project}
                 controller={props.controller}
                 actions={props.actions}
+                currentProjectId={props.selectedProjectId}
                 currentSessionId={props.currentSessionId}
+                sessions={rootProjectSessions}
+                agents={props.controller.catalog.agents}
                 entries={props.worktreesByProject[project.id] ?? []}
                 branch={props.branchByProject?.[project.id]}
               />
+            ) : (
+              <SessionTree
+                project={project}
+                sessions={rootProjectSessions}
+                agents={props.controller.catalog.agents}
+                currentSessionId={props.currentSessionId}
+                controller={props.controller}
+                actions={props.actions}
+              />
             )}
-            <SessionTree
-              project={project}
-              sessions={projectSessions}
-              agents={props.controller.catalog.agents}
-              currentSessionId={props.currentSessionId}
-              controller={props.controller}
-              actions={props.actions}
-            />
           </div>
         )}
       </div>;

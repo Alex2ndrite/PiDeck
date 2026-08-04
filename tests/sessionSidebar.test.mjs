@@ -149,9 +149,11 @@ test("worktree rows expose their child project context menu and loading projects
   const sessionTree = readFileSync("src/renderer/src/components/sidebar/SessionTree.tsx", "utf8");
   const controller = readFileSync("src/renderer/src/hooks/useSidebarController.ts", "utf8");
   assert.match(worktree, /kind: "project",\s*projectId: childProject\.id/);
-  assert.match(worktree, /className="conversation worktree-workspace-header[^"]*"/);
-  assert.match(worktree, /className="conversation worktree-row"/);
-  assert.doesNotMatch(worktree, /currentProjectId|toggleProjectExpanded/);
+  assert.match(worktree, /className=\{cn\([\s\S]*worktree-workspace-header/);
+  assert.match(worktree, /workspace-tree-row/);
+  assert.match(worktree, /workspace-tree-expand/);
+  assert.match(worktree, /workspace-tree-select/);
+  assert.doesNotMatch(worktree, /toggleProjectExpanded/);
   assert.match(controller, /useAtomValue\(sessionCatalogLoadStateAtom\)/);
   assert.match(sessionTree, /catalogLoadStateByProject\[props\.project\.id\]\?\.status === "loading"/);
   assert.match(sessionTree, /catalogLoading \|\| draftSessions\.length/);
@@ -214,6 +216,8 @@ test("ProjectTree shows the project directory name like the dev reference", () =
   assert.match(projectTree, /const projectDirectoryName = chat/);
   assert.match(projectTree, /title=\{project\.path\}/);
   assert.match(projectTree, /\{projectDirectoryName\}/);
+  assert.match(projectTree, /const relatedProjects = controller\.catalog\.projects\.filter/);
+  assert.match(projectTree, /const workspaceProjects = props\.controller\.catalog\.projects\.filter/);
 });
 
 test("sidebar uses one persisted project accordion without duplicating current project details", () => {
@@ -225,7 +229,8 @@ test("sidebar uses one persisted project accordion without duplicating current p
   // are rendered together by ProjectTree instead of duplicating the selection below.
   assert.match(content, /conversation-list min-h-0 flex-1 overflow-x-hidden overflow-y-auto/);
   assert.match(content, /currentProjectId=\{currentRootProject\?\.id\}/);
-  assert.doesNotMatch(content, /max-h-\[38%\]|selectedProject|<WorktreeTree|<SessionTree/);
+  assert.doesNotMatch(content, /max-h-\[38%\]|<WorktreeTree|<SessionTree/);
+  assert.match(content, /selectedProjectId=\{props\.currentProjectId\}/);
 
   // 项目主行与左侧箭头都可以展开/折叠；名称点击同时保持选择项目语义。
   assert.match(projectTree, /toggleProject\(project\.id\)/);

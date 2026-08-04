@@ -174,7 +174,8 @@ export function SessionTree(props: {
         type="button"
         className={cn(
           sessionRowClass,
-          "session-row",
+          // 历史会话不是运行中的 Agent：只给这一类内容增加层级缩进，避免项目标题与历史记录贴在同一列。
+          "session-row history-session-row pl-4",
           child.session.id === props.currentSessionId && "active bg-accent text-accent-foreground",
         )}
         title={child.session.filePath}
@@ -196,7 +197,10 @@ export function SessionTree(props: {
   };
 
   return (
-    <div className={cn(props.nested ? "worktree-children" : "session-card", "flex flex-col gap-0 py-0")}>
+    <div className={cn(
+      props.nested ? "worktree-children m-0 border-0 bg-transparent p-0" : "session-card",
+      "flex flex-col gap-0 py-0",
+    )}>
       {draftSessions.map((session) => {
         const runtime = props.controller.catalog.runtimeBySessionId[session.id];
         const canDelete = !hasLiveSidebarRuntime(runtime);
