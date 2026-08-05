@@ -12,9 +12,6 @@ import {
 import {
 	ChevronDown,
 	ChevronRight,
-	ArrowDown,
-	ArrowUp,
-	ArrowUpDown,
 	ChevronsDownUp,
 	FileText,
 	Folder,
@@ -28,7 +25,7 @@ import { SessionSourceBadge } from "./SessionSourceBadge";
 import { Button } from "../ui-shadcn/button";
 import { ConfirmDialog } from "../ui-shadcn/ConfirmDialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../ui-shadcn/collapsible";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui-shadcn/select";
+import { FileSortControl } from "./FileSortControl";
 import { getFileIconSeti, getFileIconColor, getFileTypeLabel } from "../../fileIcons";
 import { sortFileNodes, FILE_SORT_OPTIONS, FILE_SORT_DEFAULT_DIRECTION, type FileSortMode, type FileSortDirection } from "../../utils/fileTreeSort";
 import { t } from "../../i18n";
@@ -260,41 +257,16 @@ function FilesPanel(props: {
 			onKeyDown={handlePanelKeyDown}
 			onContextMenu={handlePanelContextMenu}
 		>
-			{/* 工具行：min-w-0 允许收缩；计数 nowrap 不被压断；Select 限宽防窄抽屉换行/竖排 */}
-			<div className="panel-action-row flex h-9 min-w-0 shrink-0 items-center justify-between gap-2 border-b border-border/40 px-3 text-xs text-muted-foreground">
-				{/* 项目/文件计数：只显数字，hover 展示完整详情（如「50 个文件和目录」） */}
-				<span
-					className="shrink-0 cursor-default whitespace-nowrap text-micro tabular-nums"
-					title={t("drawer.fileItems", { count: props.files.length })}
-				>
-					{props.files.length}
-				</span>
+			{/* 工具行：min-w-0 允许收缩；排序为单个图标（鼠标移入展开菜单），不占额外宽度 */}
+			<div className="panel-action-row flex h-9 min-w-0 shrink-0 items-center justify-end gap-2 border-b border-border/40 px-3 text-xs text-muted-foreground">
 				<div className="panel-action-buttons flex min-w-0 items-center gap-1">
-					{/* 文件树排序：维度 Select + 方向切换（asc/desc），方向跟随维度默认值可再手动翻转 */}
-					<Select value={sortMode} onValueChange={(value) => setSortMode(value as FileSortMode)}>
-						<SelectTrigger className="h-7 max-w-[7.5rem] gap-1 rounded-md px-2 text-xs text-muted-foreground [&_span]:truncate" aria-label={t("drawer.fileSort")} title={t("drawer.fileSort")}>
-							<ArrowUpDown size={13} />
-							<SelectValue />
-						</SelectTrigger>
-						<SelectContent>
-							{FILE_SORT_OPTIONS.map((option) => (
-								<SelectItem key={option.value} value={option.value}>
-									{t(option.labelKey)}
-								</SelectItem>
-							))}
-						</SelectContent>
-					</Select>
-					<Button
-						type="button"
-						variant="ghost"
-						size="icon-sm"
-						className="icon-only inline-grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-						onClick={() => setSortDirection((d) => (d === "asc" ? "desc" : "asc"))}
-						title={sortDirection === "asc" ? t("drawer.fileSortDesc") : t("drawer.fileSortAsc")}
-						aria-label={sortDirection === "asc" ? t("drawer.fileSortDesc") : t("drawer.fileSortAsc")}
-					>
-						{sortDirection === "asc" ? <ArrowUp size={13} /> : <ArrowDown size={13} />}
-					</Button>
+					{/* 文件树排序：方向切换与维度选择合并在一个图标菜单内（默认按名称·升序） */}
+					<FileSortControl
+						sortMode={sortMode}
+						sortDirection={sortDirection}
+						onSortModeChange={setSortMode}
+						onToggleDirection={() => setSortDirection((d) => (d === "asc" ? "desc" : "asc"))}
+					/>
 					{props.onOpenFolder && (
 						<Button type="button" variant="ghost" size="icon-sm" className="icon-only inline-grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground" onClick={props.onOpenFolder} title={t("drawer.openFolder")} aria-label={t("drawer.openFolder")}>
 							<Folder size={14} />

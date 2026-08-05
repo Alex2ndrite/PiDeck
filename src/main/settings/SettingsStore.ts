@@ -109,6 +109,9 @@ Gitmoji 对应关系：
 2. 第一行简要说明修改的模块和做了什么
 3. 后续用 - 列出具体变更点
 4. 直接输出 commit 消息，不要解释`,
+  // 默认不指定模型，避免升级后在用户尚未配置 provider 时隐式调用错误模型。
+  gitCommitMessageProvider: "",
+  gitCommitMessageModel: "",
   closeToTray: true,
   // 默认单实例：托盘隐藏后再次点击快捷方式会唤起原窗口，而不是再开一个进程
   singleInstance: true,

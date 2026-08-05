@@ -57,6 +57,10 @@ export type AppSettings = {
 	enableGitManagement: boolean;
 	/** Git 提交摘要生成提示词模板，{diff} 会被替换为实际 diff 内容 */
 	gitCommitMessagePrompt: string;
+	/** Git 提交摘要使用的 pi provider；为空时生成前提示用户配置 */
+	gitCommitMessageProvider: string;
+	/** Git 提交摘要使用的模型 ID；为空时生成前提示用户配置 */
+	gitCommitMessageModel: string;
 	/** 关闭窗口时隐藏到系统托盘而不是退出 */
 	closeToTray: boolean;
 	/**

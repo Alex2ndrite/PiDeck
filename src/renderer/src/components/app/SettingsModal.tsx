@@ -1,5 +1,5 @@
 // @ts-nocheck - extracted from AppParts, pre-existing type issues
-import { Component, useState, useEffect, useRef, useMemo, type ReactNode } from "react";
+import { Component, useState, useEffect, useRef, type ReactNode } from "react";
 import { Input } from "../ui-shadcn/input";
 import { Textarea } from "../ui-shadcn/textarea";
 import {
@@ -45,7 +45,8 @@ import {
 	AlertDialogTitle,
 } from "../ui-shadcn/alert-dialog";
 import { SettingsSection, StorageTab } from "./settings/SettingsStorageTab";
-import type { AppSettings, AppInfo, PiInstallStatus, PiUpdateCheckResult, PiCliUpdateResult, PetManifest } from "../../../shared/types";
+import { ModelPicker } from "../session/ComposerComponents";
+import type { AppSettings, AppInfo, AvailableModel, PiInstallStatus, PiUpdateCheckResult, PiCliUpdateResult, PetManifest } from "../../../shared/types";
 import { GRID_COLS, CELL_W, CELL_H, MODE_ROW, MODE_FRAMES } from "../../pet/PetSpriteSheet";
 import { Label } from "../../components/ui-shadcn/label";
 
@@ -391,6 +392,23 @@ function SettingsModalContent(props: SettingsModalProps) {
 			setWslValidating(false);
 		}
 	};
+
+	// Git 摘要模型列表与会话 Command 选择器共用 pi --list-models 数据源。
+	const [gitModels, setGitModels] = useState<AvailableModel[]>([]);
+	const [gitModelPickerOpen, setGitModelPickerOpen] = useState(false);
+	useEffect(() => {
+		let active = true;
+		void desktopApi.projects.listModels()
+			.then((models) => {
+				if (active) setGitModels(models);
+			})
+			.catch(() => {
+				if (active) setGitModels([]);
+			});
+		return () => {
+			active = false;
+		};
+	}, []);
 
 	// 宠物包列表
 	const [petOptions, setPetOptions] = useState<{ value: string; label: string }[]>([]);
@@ -844,12 +862,57 @@ function SettingsModalContent(props: SettingsModalProps) {
 										}
 									/>
 									{draftSettings.enableGitManagement && (
-										<SettingTextarea
-											title={t("settings.gitCommitMessagePrompt")}
-											description={t("settings.gitCommitMessagePromptDesc")}
-											value={draftSettings.gitCommitMessagePrompt}
-											onChange={(value) => updateDraft({ gitCommitMessagePrompt: value })}
-										/>
+										<>
+											<div className="setting-field">
+												<span>
+													{t("settings.gitCommitMessageModel")}
+													<DirtyMarker dirty={isDirty("gitCommitMessageProvider") || isDirty("gitCommitMessageModel")} label={t("settings.gitCommitMessageModel")} />
+												</span>
+												<Button
+													variant="outline"
+													className="w-full justify-start font-mono text-xs"
+													onClick={() => setGitModelPickerOpen(true)}
+												>
+													{draftSettings.gitCommitMessageProvider && draftSettings.gitCommitMessageModel
+														? `${draftSettings.gitCommitMessageProvider}/${draftSettings.gitCommitMessageModel}`
+														: t("settings.gitCommitMessageModelUnset")}
+												</Button>
+												<small>{t("settings.gitCommitMessageModelDesc")}</small>
+											</div>
+											<SettingTextarea
+												title={t("settings.gitCommitMessagePrompt")}
+												description={t("settings.gitCommitMessagePromptDesc")}
+												value={draftSettings.gitCommitMessagePrompt}
+												onChange={(value) => updateDraft({ gitCommitMessagePrompt: value })}
+											/>
+											{gitModelPickerOpen && (
+												<ModelPicker
+													models={gitModels}
+													current={{
+														provider: draftSettings.gitCommitMessageProvider,
+														modelId: draftSettings.gitCommitMessageModel,
+													}}
+													favoriteModels={draftSettings.favoriteModels ?? []}
+													onClose={() => setGitModelPickerOpen(false)}
+													onPick={(model) => {
+														updateDraft({
+															gitCommitMessageProvider: model.provider,
+															gitCommitMessageModel: model.id,
+														});
+														setGitModelPickerOpen(false);
+													}}
+													onToggleFavorite={(provider, modelId) => {
+														const key = `${provider}/${modelId}`;
+														const favorites = draftSettings.favoriteModels ?? [];
+														updateDraft({
+															favoriteModels: favorites.includes(key)
+																? favorites.filter((item) => item !== key)
+																: [...favorites, key],
+														});
+													}}
+												/>
+											)}
+										</>
 									)}
 								</SettingsSection>
 							</>

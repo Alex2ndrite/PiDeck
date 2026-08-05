@@ -13,6 +13,7 @@ import type { WorktreeService } from "../git/WorktreeService";
 
 export type GitIpcDeps = {
 	appLogger: Pick<AppLogger, "warn">;
+	mainCopy: (key: string, params?: Record<string, string | number>) => string;
 	gitService: GitService;
 	piLocator: PiLocator;
 	projectStore: ProjectStore;
@@ -26,6 +27,7 @@ export type GitIpcDeps = {
 let genProcess: ChildProcess | null = null;
 let genRpcClient: PiRpcClient | null = null;
 let genProcessCwd = "";
+let genModelKey = "";
 let genIdleTimer: NodeJS.Timeout | null = null;
 
 /** 清理快速生成进程 */
@@ -41,6 +43,7 @@ function stopGenProcess() {
 	}
 	genProcess = null;
 	genProcessCwd = "";
+	genModelKey = "";
 }
 
 /** 重置空闲定时器：30 分钟无请求自动杀掉进程释放内存 */
@@ -57,13 +60,18 @@ async function ensureGenProcess(
 	command: string,
 	piLocator: PiLocator,
 	settingsStore: SettingsStore,
+	model: { provider: string; modelId: string },
 	appLogger: Pick<AppLogger, "warn">,
 ): Promise<PiRpcClient> {
-	// 已有进程还在运行，直接复用
+	// provider/model 变化时必须重启轻量进程，避免旧进程继续持有上一组选中的模型。
+	const modelKey = `${model.provider}\0${model.modelId}`;
 	if (genProcess && genRpcClient && genProcess.exitCode === null) {
-		genProcessCwd = projectPath;
-		resetGenIdleTimer();
-		return genRpcClient;
+		if (genModelKey === modelKey) {
+			genProcessCwd = projectPath;
+			resetGenIdleTimer();
+			return genRpcClient;
+		}
+		stopGenProcess();
 	}
 
 	// 清理已死的旧进程
@@ -82,7 +90,7 @@ async function ensureGenProcess(
 		"--thinking", "off",
 	]);
 
-	genProcess = spawn(invocation.command, invocation.args, {
+	const childProcess = spawn(invocation.command, invocation.args, {
 		cwd: projectPath,
 		env: piLocator.createProcessEnv(settings, invocation.pathPrefix, invocation.wsl),
 		stdio: ["pipe", "pipe", "pipe"],
@@ -90,9 +98,25 @@ async function ensureGenProcess(
 		windowsHide: true,
 		windowsVerbatimArguments: invocation.windowsVerbatimArguments,
 	});
+	genProcess = childProcess;
 	genProcessCwd = projectPath;
 
-	genRpcClient = new PiRpcClient(genProcess.stdin!, genProcess.stdout!);
+	genRpcClient = new PiRpcClient(childProcess.stdin!, childProcess.stdout!);
+
+	try {
+		const modelResponse = await genRpcClient.request({
+			type: "set_model",
+			provider: model.provider,
+			modelId: model.modelId,
+		});
+		if (!modelResponse.success) {
+			throw new Error(modelResponse.error ?? `Unable to select model ${model.provider}/${model.modelId}`);
+		}
+		genModelKey = modelKey;
+	} catch (error) {
+		stopGenProcess();
+		throw error;
+	}
 
 	// stderr 仅用于调试日志
 	genProcess.stderr!.on("data", (chunk: Buffer) => {
@@ -101,7 +125,8 @@ async function ensureGenProcess(
 	});
 
 	genProcess.on("exit", () => {
-		stopGenProcess();
+		// 旧进程可能在模型切换后才发出 exit；只允许当前实例清理全局状态。
+		if (genProcess === childProcess) stopGenProcess();
 	});
 
 	resetGenIdleTimer();
@@ -114,6 +139,7 @@ async function quickGenerate(
 	prompt: string,
 	piLocator: PiLocator,
 	settingsStore: SettingsStore,
+	model: { provider: string; modelId: string },
 	appLogger: Pick<AppLogger, "warn">,
 ): Promise<string> {
 	const settings = settingsStore.get();
@@ -124,7 +150,7 @@ async function quickGenerate(
 		settings.wslUser,
 	);
 
-	const rpc = await ensureGenProcess(projectPath, command, piLocator, settingsStore, appLogger);
+	const rpc = await ensureGenProcess(projectPath, command, piLocator, settingsStore, model, appLogger);
 
 	return new Promise<string>((resolve, reject) => {
 		const collected: string[] = [];
@@ -172,6 +198,7 @@ async function quickGenerate(
 
 export function registerGitIpc({
 	appLogger,
+	mainCopy,
 	gitService,
 	piLocator,
 	projectStore,
@@ -437,8 +464,15 @@ export function registerGitIpc({
 			const diff = await gitService.getStagedDiff(project.path);
 			if (!diff.trim()) return "";
 
+			const settings = settingsStore.get();
+			const provider = settings.gitCommitMessageProvider.trim();
+			const modelId = settings.gitCommitMessageModel.trim();
+			if (!provider || !modelId) {
+				throw new Error(mainCopy("git.commitMessageModelRequired"));
+			}
+
 			// 从设置中读取提示词模板，替换 {diff} 为实际 diff 内容
-			const promptTemplate = settingsStore.get().gitCommitMessagePrompt ||
+			const promptTemplate = settings.gitCommitMessagePrompt ||
 				"请根据以下 git diff 生成一条中文 git commit message。\n\n{diff}\n\n直接输出 commit 消息。";
 			const prompt = promptTemplate.replace("{diff}", diff.slice(0, 8000));
 
@@ -448,6 +482,7 @@ export function registerGitIpc({
 					prompt,
 					piLocator,
 					settingsStore,
+					{ provider, modelId },
 					appLogger,
 				);
 				void appLogger.warn("git", "Generate commit message result", { length: result.length });

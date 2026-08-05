@@ -89,6 +89,8 @@ let previewSettings: AppSettings = {
 	piEnvironmentChecked: true,
 	enableGitManagement: true,
 	gitCommitMessagePrompt: "",
+	gitCommitMessageProvider: "",
+	gitCommitMessageModel: "",
 	closeToTray: true,
 	singleInstance: true,
 	enableNotifications: true,
