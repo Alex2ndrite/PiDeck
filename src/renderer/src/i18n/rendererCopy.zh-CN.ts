@@ -461,6 +461,8 @@ export const zhCN = {
   "app.sessionReadFailed": "会话消息读取失败",
   "app.settingsSaved": "设置已保存。",
   "app.widgetsToggle": "待办",
+  "app.widgetTitleTodo": "TODO",
+  "app.widgetTitlePlan": "PLAN",
   "app.shellProxyDisabled": "pi agent 代理已关闭。",
   "app.shellProxySaved": "pi agent 代理设置已保存；新建或重启 agent 后生效。",
   "app.stop": "停止",

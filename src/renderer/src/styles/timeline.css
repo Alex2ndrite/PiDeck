@@ -2148,6 +2148,9 @@ body.ask-dialog-open .ask-question-card.pending {
   border-radius: var(--radius-sm);
   background: transparent;
   overflow: hidden;
+  /* 禁止 flex 收缩：overflow:hidden 的 flex item 最小高度会塌为 0，
+     容器限高时卡片会被静默裁剪且不出滚动条；shrink:0 让溢出由容器滚动承担。 */
+  flex-shrink: 0;
 }
 .extension-widget-card-trigger {
   display: flex;

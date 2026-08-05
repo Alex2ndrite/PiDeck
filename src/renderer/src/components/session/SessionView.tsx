@@ -16,6 +16,7 @@ import type { PiDesktopApi } from "../../../../preload";
 import { t } from "../../i18n";
 import { isLanWeb, desktopApi as api } from "../../desktopApi";
 import { SessionHeader } from "./SessionHeader";
+import { SessionWidgetChips } from "./SessionWidgetChips";
 import { SessionTabsBar, type SessionTabsBarProps } from "./SessionTabsBar";
 import { SessionMessageTimeline } from "./SessionMessageTimeline";
 import { ComposerArea } from "./ComposerArea";
@@ -250,6 +251,7 @@ export function SessionView({
         onRestart={onRestart}
         onToggleDrawer={onToggleDrawer}
         drawerOpen={drawerOpen}
+        widgetChips={<SessionWidgetChips sessionId={sessionId} />}
       />
       <ResizablePanelGroup orientation="vertical" className="session-v-group">
         <ResizablePanel id="timeline" minSize={160} className="session-v-timeline">

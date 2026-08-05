@@ -64,7 +64,7 @@ export const ComposerArea = forwardRef<HTMLElement, ComposerAreaProps>(function 
 
   return (
     <ComposerRuntimeIntegrations sessionId={props.sessionId}>
-      {({ widgets, feishuIndicator }) => (
+      {({ feishuIndicator }) => (
         <>
           {/* overflow-hidden：面板到 minSize 时禁止整块 footer 再出滚动条；
               文本区自身仍可在 RichInput 内滚动，底栏 shrink-0 始终可见 */}
@@ -80,7 +80,6 @@ export const ComposerArea = forwardRef<HTMLElement, ComposerAreaProps>(function 
               onRemove={composer.images.remove}
               onClear={composer.images.clear}
             />
-            {widgets}
             {props.queuePanel}
             <SessionDeliveryNotice
               status={composer.sendState.status}
@@ -101,6 +100,7 @@ export const ComposerArea = forwardRef<HTMLElement, ComposerAreaProps>(function 
                       : "",
               ].filter(Boolean).join(" ")}
             >
+              {/* 扩展 widget（Todo/Plan）已迁至 chat-header 左侧 SessionWidgetChips。 */}
               <RichInput
                 ref={composer.editor.ref}
                 value={composer.draft}

@@ -465,6 +465,8 @@ export const enUS: Record<TranslationKey, string> = {
   "app.sessionReadFailed": "Failed to read session messages",
   "app.settingsSaved": "Settings saved.",
   "app.widgetsToggle": "Todo",
+  "app.widgetTitleTodo": "TODO",
+  "app.widgetTitlePlan": "PLAN",
   "app.shellProxyDisabled": "pi agent proxy disabled.",
   "app.shellProxySaved":
     "pi agent proxy saved. Create or restart agents for it to take effect.",
