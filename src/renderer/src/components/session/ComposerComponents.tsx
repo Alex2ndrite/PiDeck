@@ -175,7 +175,7 @@ export function ComposerBottomBar(props: {
 
 	// shrink-0：面板缩到最小时底栏不被输入区挤扁/挤出滚动条
 	return (
-		<div className="composer-bottom-bar shrink-0 border-t border-border/80 px-2 py-1.5">
+		<div className="composer-bottom-bar shrink-0 border-t border-border/40 px-2 py-1.5">
 			<div className="composer-bottom-layout flex min-w-0 items-center gap-2">
 				<div className="composer-bottom-left flex min-w-0 flex-wrap items-center gap-1">
 					<Button

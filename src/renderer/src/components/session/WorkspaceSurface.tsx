@@ -102,7 +102,7 @@ export function DrawerContent(props: {
 	return (
 		<>
 			{/* pure official：与 Git 抽屉共用 h-12 顶栏密度 */}
-			<div className="drawer-header flex h-12 shrink-0 items-center justify-between gap-3 border-b border-border bg-background px-3">
+			<div className="drawer-header flex h-12 shrink-0 items-center justify-between gap-3 border-b border-border/40 bg-background px-3">
 				<strong className="truncate text-sm font-semibold text-foreground">{title}</strong>
 				<div className="drawer-header-actions flex shrink-0 items-center gap-1">
 					<Button
@@ -261,7 +261,7 @@ function FilesPanel(props: {
 			onContextMenu={handlePanelContextMenu}
 		>
 			{/* 工具行：min-w-0 允许收缩；计数 nowrap 不被压断；Select 限宽防窄抽屉换行/竖排 */}
-			<div className="panel-action-row flex h-9 min-w-0 shrink-0 items-center justify-between gap-2 border-b border-border px-3 text-xs text-muted-foreground">
+			<div className="panel-action-row flex h-9 min-w-0 shrink-0 items-center justify-between gap-2 border-b border-border/40 px-3 text-xs text-muted-foreground">
 				{/* 项目/文件计数：只显数字，hover 展示完整详情（如「50 个文件和目录」） */}
 				<span
 					className="shrink-0 cursor-default whitespace-nowrap text-micro tabular-nums"

@@ -115,7 +115,7 @@ export function SidebarContent(props: SidebarContentProps) {
 
   return (
     <aside
-      className="chat-list-pane v3-braun flex h-full min-w-0 flex-col overflow-hidden border-r border-border bg-sidebar text-sidebar-foreground"
+      className="chat-list-pane v3-braun flex h-full min-w-0 flex-col overflow-hidden bg-sidebar text-sidebar-foreground"
       aria-label={t("app.search")}
     >
       <div className="sidebar-body flex min-h-0 flex-1 flex-col gap-2 px-1.5 py-1">
@@ -164,7 +164,7 @@ export function SidebarContent(props: SidebarContentProps) {
       {/* 底栏在 sidebar-body 之外（aside 直接子）：body 的 p-2 / v3-braun space-4
           内边距不再把底栏从侧栏底边顶起，真正贴底 */}
       {!props.isLanWeb && (
-        <div className="toolbar-actions sidebar-bottom-actions flex shrink-0 items-center gap-1 border-t border-border px-4 py-2">
+        <div className="toolbar-actions sidebar-bottom-actions flex shrink-0 items-center gap-1 border-t border-border/40 px-4 py-2">
           <div className="sidebar-bottom-primary-actions flex min-w-0 flex-1 items-center gap-1">
             <Button type="button" variant="ghost" size="icon" className="icon-button settings-icon size-8" title={t("settings.title")} aria-label={t("settings.title")} onClick={props.onOpenSettings}><Settings className="size-4" /></Button>
             <Button type="button" variant="ghost" size="icon" className="icon-button config-icon size-8" title={t("config.title")} aria-label={t("config.title")} onClick={props.onOpenConfig}><Sliders className="size-4" /></Button>

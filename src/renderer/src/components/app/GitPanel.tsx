@@ -881,7 +881,7 @@ export function GitPanel(props: GitPanelProps) {
       aria-label={t("git.sourceControl")}
     >
       {/* 当前分支 + 切换下拉（pure official：outline 触发器 + popover 菜单） */}
-      <div className="flex shrink-0 items-center gap-1 border-b border-border bg-background px-2 py-1.5" ref={branchBarRef}>
+      <div className="flex shrink-0 items-center gap-1 border-b border-border/40 bg-background px-2 py-1.5" ref={branchBarRef}>
         <Button
           ref={branchTriggerRef}
           type="button"

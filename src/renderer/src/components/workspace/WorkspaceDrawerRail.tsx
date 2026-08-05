@@ -22,7 +22,7 @@ export function WorkspaceDrawerRail(props: { actions: WorkspaceDrawerRailAction[
   if (props.actions.length === 0) return null;
   return (
     <div
-      className="drawer-activity-rail flex shrink-0 items-center gap-1 border-b border-border bg-background px-2 py-1"
+      className="drawer-activity-rail flex shrink-0 items-center gap-1 border-b border-border/40 bg-background px-2 py-1"
       role="tablist"
       aria-orientation="horizontal"
     >

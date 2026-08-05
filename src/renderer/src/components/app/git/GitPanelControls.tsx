@@ -20,7 +20,7 @@ export function PaneHeader(props: {
   children?: ReactNode;
 }) {
   return (
-    <div className="flex h-8 shrink-0 items-center gap-1 border-b border-border bg-background px-2">
+    <div className="flex h-8 shrink-0 items-center gap-1 border-b border-border/40 bg-background px-2">
       <button
         type="button"
         className="inline-flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-1 py-0.5 text-left text-xs font-medium text-foreground hover:bg-accent"

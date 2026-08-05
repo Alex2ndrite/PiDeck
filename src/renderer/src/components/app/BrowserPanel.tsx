@@ -494,11 +494,11 @@ export function BrowserPanel(props: {
 
 	return (
 		<div className={panelClass} onClick={(event) => event.stopPropagation()}>
-			<div className="flex shrink-0 items-stretch overflow-x-auto overflow-y-hidden border-b border-border-subtle bg-bg-subtle [scrollbar-width:thin] [&::-webkit-scrollbar]:h-0">
+			<div className="flex shrink-0 items-stretch overflow-x-auto overflow-y-hidden border-b border-border/40 bg-bg-subtle [scrollbar-width:thin] [&::-webkit-scrollbar]:h-0">
 				{tabs.map((tab) => (
 					<div
 						key={tab.id}
-						className={`flex max-w-[180px] shrink-0 cursor-pointer items-center gap-1 border-r border-border-subtle px-2.5 py-1 text-xs whitespace-nowrap select-none text-text-tertiary${tab.id === activeTabId ? " border-b-2 border-[var(--color-accent)] -mb-px bg-bg-panel text-text-primary" : ""}`}
+						className={`flex max-w-[180px] shrink-0 cursor-pointer items-center gap-1 border-r border-border/30 px-2.5 py-1 text-xs whitespace-nowrap select-none text-text-tertiary${tab.id === activeTabId ? " border-b-2 border-[var(--color-accent)] -mb-px bg-bg-panel text-text-primary" : ""}`}
 						onClick={() => switchTab(tab.id)}
 					>
 						<span className="min-w-0 truncate">{tab.title || tab.url}</span>
@@ -525,7 +525,7 @@ export function BrowserPanel(props: {
 				)}
 			</div>
 
-			<div className="flex shrink-0 items-center gap-1 border-b border-border-subtle px-2 py-1.5">
+			<div className="flex shrink-0 items-center gap-1 border-b border-border/40 px-2 py-1.5">
 <Button variant="ghost" size="icon-sm" className="size-[30px] rounded-sm text-text-secondary hover:bg-bg-hover hover:text-text-primary disabled:opacity-30" disabled={!canGoBack} onClick={() => useViewPipeline ? void window.piDesktop.browserView.action("back") : webviewRef.current?.goBack()} title={t("browser.back")}>
 					<ArrowLeft size={15} />
 				</Button>

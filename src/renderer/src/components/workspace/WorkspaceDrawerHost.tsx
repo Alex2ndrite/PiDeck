@@ -74,7 +74,7 @@ export function WorkspaceDrawerHost(props: WorkspaceDrawerHostProps) {
   return (
     <>
       <aside
-        className={props.className ?? "detail-drawer flex h-full min-h-0 min-w-0 flex-col overflow-hidden border-l border-border bg-background"}
+        className={props.className ?? "detail-drawer flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-background"}
         data-open={open}
         data-rendered={Boolean(visiblePanel)}
         data-pinned={Boolean(props.pinned)}

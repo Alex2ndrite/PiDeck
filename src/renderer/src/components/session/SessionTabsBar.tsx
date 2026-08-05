@@ -96,7 +96,7 @@ export function SessionTabsBar(props: SessionTabsBarProps) {
   };
 
   return (
-    <div className="session-tabs-bar flex h-9 shrink-0 items-center gap-1 overflow-hidden border-b border-border bg-background/80 px-2">
+    <div className="session-tabs-bar flex h-9 shrink-0 items-center gap-1 overflow-hidden border-b border-border/40 bg-background/80 px-2">
       <div className="session-tabs-scroll flex min-w-0 flex-1 items-center gap-1 overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {tabItems.map(({ sessionId }) => (
         <SessionTab
@@ -125,7 +125,7 @@ export function SessionTabsBar(props: SessionTabsBarProps) {
         />
         ))}
       </div>
-      <div className="session-tabs-actions flex shrink-0 items-center gap-1 border-l border-border/60 pl-1">
+      <div className="session-tabs-actions flex shrink-0 items-center gap-1 border-l border-border/30 pl-1">
         {props.actions}
         {!props.actions && (
           <>
