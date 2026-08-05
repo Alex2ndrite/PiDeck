@@ -31,6 +31,23 @@ test("typed toast icons carry semantic colors", () => {
   assert.match(surfaces, /\[data-sonner-toast\]\[data-type="warning"\] \[data-icon\]/);
 });
 
+test("dialogs ignore outside interactions coming from the toast region", () => {
+  // Radix DismissableLayer 会把点 toast 关闭按钮误判为「点击弹框外部」而连带关弹框，
+  // dialog 包装层必须组合 guard；AlertDialog 原生就不响应外部点击，无需处理
+  const dialog = readFileSync("src/renderer/src/components/ui-shadcn/dialog.tsx", "utf8");
+  const guard = readFileSync("src/renderer/src/components/ui-shadcn/toastOutsideGuard.ts", "utf8");
+  assert.match(dialog, /isOutsideInteractionFromToast/);
+  assert.match(dialog, /onPointerDownOutside=\{/);
+  assert.match(guard, /data-sonner-toaster/);
+  assert.match(guard, /#app-notice-fallback-host/);
+});
+
+test("toaster stays clickable while a Radix modal disables body pointer events", () => {
+  // Radix Dialog 模态打开时 body{pointer-events:none}，toast 必须显式恢复，
+  // 否则弹框期间关闭按钮与 hover 全部失效
+  assert.match(surfaces, /\[data-sonner-toaster\][\s\S]*?pointer-events:\s*auto/);
+});
+
 test("toaster is excluded from the window drag region and drag height is exposed at :root", () => {
   // Electron 自定义标题栏的 -webkit-app-region: drag 命中测试优先于 z-index，
   // toaster 必须显式 no-drag，否则首个 toast 的关闭按钮/hover 全部失效
