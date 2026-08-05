@@ -209,6 +209,21 @@ test("sidebar uses the dev-style source filter overlay and anonymous Session ent
   assert.match(header, /anonymous-badge/);
 });
 
+test("Chat section keeps an independent collapse control after the parent project row is hidden", () => {
+  const projectTree = readFileSync("src/renderer/src/components/sidebar/ProjectTree.tsx", "utf8");
+  const chatSection = projectTree.slice(
+    projectTree.indexOf("const chatProjects"),
+    projectTree.indexOf("    {workspaceProjects.length > 0"),
+  );
+
+  // 内置 Chat 没有可点击的父项目行，标题自身必须成为唯一的折叠入口。
+  assert.match(chatSection, /isProjectCollapsed\(project\.id\)/);
+  assert.match(chatSection, /onClick=\{\(\) => props\.controller\.toggleProject\(project\.id\)\}/);
+  assert.match(chatSection, /title=\{collapsed \? t\("app\.projectExpand"\) : t\("app\.projectCollapse"\)\}/);
+  assert.match(chatSection, /<ChevronsDownUp size=\{14\} aria-hidden="true" \/>/);
+  assert.match(chatSection, /!collapsed && \([\s\S]*?<SessionTree/);
+});
+
 test("ProjectTree shows the project directory name like the dev reference", () => {
   const projectTree = readFileSync("src/renderer/src/components/sidebar/ProjectTree.tsx", "utf8");
   assert.match(projectTree, /function displayProjectDirectoryName\(project: Project\)/);

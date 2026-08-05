@@ -1529,7 +1529,7 @@ select:focus-visible {
 }
 .project-group > .conversation:first-child {
   grid-template-columns: 24px minmax(0, 1fr) max-content;
-  min-height: 40px;
+  /* 行高由 ProjectTree 的 Tailwind 类控制，保证 24px 操作按钮与项目行保持一致。 */
   font-weight: 500;
   border-radius: var(--radius-lg);
   color: var(--color-text-secondary);
@@ -2149,8 +2149,9 @@ select:focus-visible {
   left: 0;
   width: 1px;
   border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--color-border-subtle) 72%, transparent);
-  transition: background 0.18s ease, opacity 0.18s ease;
+  background: color-mix(in srgb, var(--color-border-subtle) 42%, transparent);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--color-border-subtle) 24%, transparent);
+  transition: background 0.18s ease, box-shadow 0.18s ease, opacity 0.18s ease;
   pointer-events: none;
 }
 /* 视觉命中提示区（库本身还有 resizeTargetMinimumSize 放大） */
@@ -2167,8 +2168,9 @@ select:focus-visible {
 .splitter:active::before,
 .splitter[data-separator="active"]::before {
   width: 1px;
-  background: var(--color-border-strong);
-  opacity: 0.9;
+  background: color-mix(in srgb, var(--color-border-strong) 58%, transparent);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--color-border-strong) 20%, transparent);
+  opacity: 0.72;
 }
 
 /* 换肤壁纸模式：启用背景图（data-bg-image="on"）时主容器透明，

@@ -1,4 +1,4 @@
-import { Filter, HatGlasses, Play, Plus } from "lucide-react";
+import { ChevronsDownUp, Filter, HatGlasses, Play, Plus } from "lucide-react";
 import type { DragEvent } from "react";
 import type { Project, WorktreeEntry } from "../../../../shared/types";
 import type { SidebarController } from "../../hooks/useSidebarController";
@@ -10,7 +10,7 @@ import { cn } from "../../lib/utils";
 
 /** pure official：项目/会话树行共享的 shadcn 风格底（hover=accent 面，active 同系） */
 const treeRowClass =
-  "group conversation relative flex min-h-9 w-full items-center gap-1.5 rounded-lg border border-transparent bg-background px-2 py-1 text-body text-foreground shadow-none transition-[background-color,border-color] duration-200 hover:border-border-subtle hover:bg-muted/60 hover:text-foreground";
+  "group conversation relative flex min-h-7 w-full items-center gap-1.5 rounded-lg border border-transparent bg-background px-2 py-0 text-body text-foreground shadow-none transition-[background-color,border-color] duration-200 hover:border-border-subtle hover:bg-muted/60 hover:text-foreground";
 
 function isChatProject(project: Project) {
   return project.kind === "chat";
@@ -89,7 +89,7 @@ export function ProjectTree(props: {
         >
           <button
             type="button"
-            className={cn("project-fold grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground", collapsed && "folded")}
+            className={cn("project-fold grid size-6 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground", collapsed && "folded")}
             title={collapsed ? t("app.projectExpand") : t("app.projectCollapse")}
             aria-label={collapsed ? t("app.projectExpand") : t("app.projectCollapse")}
             onClick={() => props.controller.toggleProject(project.id)}
@@ -98,7 +98,7 @@ export function ProjectTree(props: {
           </button>
           <button
             type="button"
-            className="flex min-w-0 flex-1 items-center gap-2 py-1 pr-1 text-left"
+            className="flex min-w-0 flex-1 items-center gap-2 py-0 pr-1 text-left"
             draggable={!props.controller.search.trim()}
             onDragStart={(event) => dragStart(event, project.id)}
             onDragOver={(event) => { if (props.controller.drag.sourceProjectId && props.controller.drag.sourceProjectId !== project.id) { event.preventDefault(); props.controller.setProjectDropTarget(project.id); } }}
@@ -175,6 +175,7 @@ export function ProjectTree(props: {
   const workspaceProjects = rootProjects.filter((project) => !isChatProject(project));
   return <>
     {chatProjects.map((project) => {
+      const collapsed = props.controller.isProjectCollapsed(project.id);
       const sessions = props.controller.catalog.sessionsByProject[project.id] ?? [];
       return (
         <section key={project.id} className="mb-5" aria-label={t("app.chatProject")}>
@@ -187,6 +188,17 @@ export function ProjectTree(props: {
           >
             <span className="text-caption font-medium text-muted-foreground">{t("app.chatProject")}</span>
             <div className="flex items-center gap-0.5">
+              <button
+                type="button"
+                className="grid size-6 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                title={collapsed ? t("app.projectExpand") : t("app.projectCollapse")}
+                aria-label={collapsed ? t("app.projectExpand") : t("app.projectCollapse")}
+                aria-expanded={!collapsed}
+                onClick={() => props.controller.toggleProject(project.id)}
+              >
+                {/* Chat 没有可点击的父项目行，折叠入口固定放在标题栏，避免展开后无法恢复。 */}
+                <ChevronsDownUp size={14} aria-hidden="true" />
+              </button>
               <button
                 type="button"
                 className="grid size-6 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
@@ -207,16 +219,18 @@ export function ProjectTree(props: {
               </button>
             </div>
           </div>
-          <div className="space-y-1">
-            <SessionTree
-              project={project}
-              sessions={sessions}
-              agents={props.controller.catalog.agents}
-              currentSessionId={props.currentSessionId}
-              controller={props.controller}
-              actions={props.actions}
-            />
-          </div>
+          {!collapsed && (
+            <div className="space-y-1">
+              <SessionTree
+                project={project}
+                sessions={sessions}
+                agents={props.controller.catalog.agents}
+                currentSessionId={props.currentSessionId}
+                controller={props.controller}
+                actions={props.actions}
+              />
+            </div>
+          )}
         </section>
       );
     })}

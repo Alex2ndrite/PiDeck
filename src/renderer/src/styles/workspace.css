@@ -1322,16 +1322,6 @@ html[data-theme="dark"] .scratch-pad-md mark {
   padding-right: 0;
 }
 
-/* v3-braun 侧栏会话列表保持可见滚动条（基础 .conversation-list 为隐藏）；
-   只声明宽度压过 0 值，粗细颜色沿用全局统一滚动条。 */
-.chat-list-pane.v3-braun .sidebar-body .conversation-list {
-  scrollbar-width: thin;
-}
-.chat-list-pane.v3-braun .sidebar-body .conversation-list::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
 /*
  * pure official P2-2：项目/会话行 hover/active 由组件 Tailwind（bg-accent）承担。
  * 这里只保留透明容器，项目之间不再绘制横向分隔线，避免层级被一条线切断。

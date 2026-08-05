@@ -13,4 +13,6 @@ test("sidebar conversation list no longer compensates scrollbar with negative ma
   assert.doesNotMatch(rule[1], /margin-right:\s*calc\(-1 \* var\(--space-3\)\);/);
   assert.match(rule[1], /margin-right:\s*0;/);
   assert.match(rule[1], /padding-right:\s*0;/);
+  assert.doesNotMatch(css, new RegExp(`${selector.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&")}\\s*\\{[\\s\\S]*?scrollbar-width:\\s*thin;`));
+  assert.doesNotMatch(css, new RegExp(`${selector.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&")}::-webkit-scrollbar`));
 });

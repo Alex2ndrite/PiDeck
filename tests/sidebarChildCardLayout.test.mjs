@@ -39,6 +39,8 @@ test("sidebar child rows use shared official hover/active classes", () => {
   assert.match(sessionTree, /active border-border-strong bg-accent\/20 text-foreground/);
   assert.match(sessionTree, /sessionRowClass/);
   assert.match(projectTree, /treeRowClass/);
+  assert.match(projectTree, /flex min-h-7 w-full/);
+  assert.match(projectTree, /project-fold grid size-6/);
   assert.match(projectTree, /hover:border-border-subtle hover:bg-muted\/60 hover:text-foreground/);
 });
 
