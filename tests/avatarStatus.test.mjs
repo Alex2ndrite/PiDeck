@@ -8,11 +8,15 @@ const webSidebar = readFileSync("src/renderer/src/web/WebSidebar.tsx", "utf8");
 const projectAvatar = readFileSync("src/renderer/src/components/sidebar/SidebarComponents.tsx", "utf8");
 const agentAvatar = readFileSync("src/renderer/src/components/session/SurfaceComponents.tsx", "utf8");
 const foundation = readFileSync("src/renderer/src/styles/foundation.css", "utf8");
+const workspaceStyles = readFileSync("src/renderer/src/styles/workspace.css", "utf8");
+const themePresets = readFileSync("src/renderer/src/themePresets.ts", "utf8");
 
 test("project Avatar does not aggregate session runtime state", () => {
   assert.doesNotMatch(projectTree, /const projectAgents = props\.controller\.catalog\.agents\.filter/);
   assert.doesNotMatch(projectTree, /const projectStatus =/);
-  assert.match(projectTree, /<ProjectAvatar name=\{projectDirectoryName\} kind=\{chat \? "chat" : "project"\} \/>/);
+  assert.doesNotMatch(projectTree, /ProjectAvatar/);
+  assert.match(projectTree, /t\("app\.chatProject"\)/);
+  assert.match(projectTree, /t\("app\.sidebarProjects"\)/);
   assert.doesNotMatch(projectTree, /project-running-badge|project-session-count/);
 });
 
@@ -21,6 +25,22 @@ test("all project rows omit aggregate running and history counts", () => {
   for (const source of [projectTree, worktreeTree, webSidebar]) {
     assert.doesNotMatch(source, /project-running-badge|project-session-count|workspace-tree-count/);
   }
+});
+
+test("default theme is neutral while green remains an explicit option", () => {
+  assert.match(themePresets, /\{ id: "default", labelKey: "settings\.accent\.default", preview: "#6b7280" \}/);
+  assert.match(themePresets, /\{ id: "green", labelKey: "settings\.accent\.green", preview: "#238636" \}/);
+  assert.match(foundation, /--color-accent: #6b7280;/);
+  assert.match(foundation, /:root\[data-accent="green"\][\s\S]*--color-accent: #238636;/);
+});
+
+test("sidebar project groups and splitters use soft neutral boundaries", () => {
+  const projectGroupStyles = workspaceStyles.match(
+    /\.chat-list-pane\.v3-braun \.sidebar-body \.project-group \{([\s\S]*?)\n\}/,
+  )?.[1] ?? "";
+  assert.doesNotMatch(projectGroupStyles, /border-bottom:/);
+  assert.match(foundation, /\.splitter:hover::before,[\s\S]*width: 1px/);
+  assert.doesNotMatch(foundation, /\.splitter:hover::before,[\s\S]*--color-accent\) 32%/);
 });
 
 test("ProjectAvatar exposes status as an accessible, theme-aware indicator", () => {

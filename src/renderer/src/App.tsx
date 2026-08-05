@@ -861,9 +861,9 @@ export function App() {
     }
     Object.keys(settings.customThemeOverrides ?? {}).forEach((k) => skinKeys.add(k));
     for (const k of skinKeys) root.style.removeProperty(`--color-${k}`);
-    const preset = SKIN_PRESETS.find((p) => p.id === settings.themeSkin);
+    // 内置 skin 选项已合并进 accent 外观主题；只保留 custom override 的兼容读取，
+    // 避免用户同时面对两套互相叠加的背景/边框配置。
     const merged = {
-      ...(preset ? (isDark ? preset.dark : preset.light) : {}),
       ...(settings.customThemeOverrides ?? {}),
     };
     for (const [k, v] of Object.entries(merged)) root.style.setProperty(`--color-${k}`, v);
@@ -1465,7 +1465,7 @@ export function App() {
 
   // Composer sizing is owned by the composer panel (react-resizable-panels) since #115 U5.
   // 待发送轨道高度变化只影响面板可用空间，不再回写 composer 高度状态。
-  // composerOffsetHeight 仍由 ResizeObserver/布局效应测量，供「回到底部」按钮定位。 
+  // composerOffsetHeight 仍由 ResizeObserver/布局效应测量，供布局兼容与旧嵌入路径保留。
   useLayoutEffect(() => {
     setComposerOffsetHeight(composerRef.current?.offsetHeight ?? 0);
   }, [activeAgentId, activeQueuedPrompts.length, composerRef]);
@@ -1613,9 +1613,9 @@ export function App() {
     };
   }, [activeProjectId]);
 
-  /** 统一通知：所有非模态消息都走 sonner 全局 toast */
-  function showToast(message: string, duration = 3500) {
-    showNotice(message, duration);
+  /** 统一通知：普通消息默认 1.5 秒，异常由 kind 映射为 3 秒；Ask 使用持久 warning toast。 */
+  function showToast(message: string, duration?: number, kind?: "info" | "warning" | "error") {
+    showNotice(message, duration, kind);
   }
 
   async function cloneAgentSession(agentId: string) {

@@ -213,7 +213,7 @@ test("ProjectTree shows the project directory name like the dev reference", () =
   const projectTree = readFileSync("src/renderer/src/components/sidebar/ProjectTree.tsx", "utf8");
   assert.match(projectTree, /function displayProjectDirectoryName\(project: Project\)/);
   assert.match(projectTree, /project\.path\.replace\(/);
-  assert.match(projectTree, /const projectDirectoryName = chat/);
+  assert.match(projectTree, /const projectDirectoryName = displayProjectDirectoryName\(project\)/);
   assert.match(projectTree, /title=\{project\.path\}/);
   assert.match(projectTree, /\{projectDirectoryName\}/);
   assert.match(projectTree, /const relatedProjects = controller\.catalog\.projects\.filter/);

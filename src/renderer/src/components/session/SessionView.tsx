@@ -260,6 +260,7 @@ export function SessionView({
       />
       <ResizablePanelGroup orientation="vertical" className="session-v-group">
         <ResizablePanel id="timeline" minSize={160} className="session-v-timeline">
+          <div className="relative h-full min-h-0">
           <SessionMessageTimeline
             sessionId={sessionId}
             controller={sessionTimeline}
@@ -293,18 +294,14 @@ export function SessionView({
           {sessionTimeline.showScrollToBottom && (
             <button
               className="scroll-to-bottom-btn"
-              style={{
-                bottom: Math.max(
-                  24,
-                  terminalRowHeight + composerOffsetHeight + 18,
-                ),
-              }}
               onClick={sessionTimeline.scrollToBottom}
               title={t("app.scrollToBottom")}
+              aria-label={t("app.scrollToBottom")}
             >
               <ChevronDown size={18} />
             </button>
           )}
+          </div>
         </ResizablePanel>
 
         {hasActiveConversation && (

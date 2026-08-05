@@ -1317,9 +1317,9 @@ html[data-theme="dark"] .scratch-pad-md mark {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  /* 将滚动条移入侧栏右侧留白，等量内边距保持列表内容不贴边。 */
-  margin-right: calc(-1 * var(--space-3));
-  padding-right: var(--space-3);
+  /* 侧栏 body 已提供左右安全边距，滚动条不再通过负 margin 贴到分隔线上。 */
+  margin-right: 0;
+  padding-right: 0;
 }
 
 /* v3-braun 侧栏会话列表保持可见滚动条（基础 .conversation-list 为隐藏）；
@@ -1334,20 +1334,19 @@ html[data-theme="dark"] .scratch-pad-md mark {
 
 /*
  * pure official P2-2：项目/会话行 hover/active 由组件 Tailwind（bg-accent）承担。
- * 这里只保留结构性兼容与 draft 删除按钮交互，不再铺面板底色/左边线。
+ * 这里只保留透明容器，项目之间不再绘制横向分隔线，避免层级被一条线切断。
  */
 .chat-list-pane.v3-braun .sidebar-body .project-group {
   background: transparent;
   border: none;
   border-radius: 0;
-  border-bottom: 1px solid var(--color-border-subtle);
-  padding: 0.125rem 0;
-  margin-bottom: 0;
+  padding: 0;
+  margin-bottom: var(--space-2);
   box-shadow: none;
 }
 
 .chat-list-pane.v3-braun .sidebar-body .project-group:last-child {
-  border-bottom: none;
+  margin-bottom: 0;
 }
 
 .chat-list-pane.v3-braun .sidebar-body .session-card {
@@ -1355,14 +1354,6 @@ html[data-theme="dark"] .scratch-pad-md mark {
   border: 0;
   border-radius: 0;
   overflow: visible;
-}
-
-.chat-list-pane.v3-braun .sidebar-body .agent-row,
-.chat-list-pane.v3-braun .sidebar-body .session-row {
-  /* Tailwind 行高/缩进与旧 foundation 规则叠加会产生双重空白，v3 统一在此收口。 */
-  margin: 0;
-  min-height: 0;
-  padding: 2px 4px;
 }
 
 .chat-list-pane.v3-braun .sidebar-body .session-card {
@@ -1377,9 +1368,9 @@ html[data-theme="dark"] .scratch-pad-md mark {
 }
 
 .chat-list-pane.v3-braun .sidebar-body .project-avatar {
-  width: 1.25rem;
-  height: 1.25rem;
-  border-radius: var(--radius-sm);
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: var(--radius-md);
   font-size: var(--font-size-caption);
 }
 

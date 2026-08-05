@@ -42,27 +42,20 @@ export function SessionStartSurface(props: {
   };
 
   return (
-    <section className="session-start-surface flex min-h-full w-full items-center justify-center px-6 py-10">
-      <div className="w-full max-w-3xl">
-        <header className="mx-auto max-w-2xl text-center">
-          <div className="mx-auto mb-4 grid size-12 place-items-center rounded-2xl bg-primary text-primary-foreground shadow-[0_12px_28px_color-mix(in_srgb,var(--color-primary)_22%,transparent)]">
-            <Sparkles size={22} aria-hidden="true" />
-          </div>
-          <p className="mb-2 text-micro font-semibold uppercase tracking-[0.16em] text-primary">
-            {t("sessionStart.eyebrow")}
-          </p>
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+    <section className="session-start-surface flex min-h-full w-full items-center justify-center bg-background px-6 py-10">
+      <div className="w-full max-w-2xl">
+        <header className="mx-auto max-w-xl text-center">
+          <h1 className="text-[clamp(1.75rem,3vw,2.4rem)] font-semibold tracking-tight text-foreground">
             {t("sessionStart.title")}
           </h1>
-          <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-muted-foreground">
+          <p className="mx-auto mt-3 max-w-lg text-base leading-7 text-muted-foreground">
             {t("sessionStart.subtitle")}
           </p>
         </header>
 
-        <div className="mt-8">
-          <div className="mb-3 flex items-center gap-3 px-1">
-            <span className="text-xs font-semibold text-foreground">{t("sessionStart.quickActions")}</span>
-            <span className="h-px flex-1 bg-border" />
+        <div className="mt-7">
+          <div className="mb-2 px-1 text-caption font-medium text-muted-foreground">
+            {t("sessionStart.quickActions")}
           </div>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {QUICK_ACTIONS.map((action) => {
@@ -75,10 +68,10 @@ export function SessionStartSurface(props: {
                   variant="outline"
                   disabled={!props.onQuickPrompt}
                   aria-pressed={selected}
-                  className={`group h-auto min-h-[68px] justify-start gap-3 rounded-xl border-border bg-card px-3.5 py-3 text-left shadow-none transition-[border-color,background-color,box-shadow] hover:border-primary/45 hover:bg-primary/[0.04] hover:shadow-sm${selected ? " border-primary/50 bg-primary/[0.05]" : ""}`}
+                  className={`group h-auto min-h-14 justify-start gap-2.5 rounded-lg border-border-subtle bg-background px-3 py-2.5 text-left shadow-none transition-[border-color,background-color,box-shadow] hover:border-border-strong hover:bg-muted/60 hover:shadow-sm${selected ? " border-border-strong bg-bg-active" : ""}`}
                   onClick={() => insertPrompt(action.prompt)}
                 >
-                  <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground transition-colors group-hover:bg-primary/10 group-hover:text-primary">
+                  <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground transition-colors group-hover:bg-bg-active group-hover:text-foreground">
                     <Icon size={16} aria-hidden="true" />
                   </span>
                   <span className="min-w-0 flex-1">
@@ -91,7 +84,7 @@ export function SessionStartSurface(props: {
                   </span>
                   <ArrowUpRight
                     size={15}
-                    className={`shrink-0 text-muted-foreground transition-all group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-primary${selected ? " text-primary" : ""}`}
+                    className={`shrink-0 text-muted-foreground transition-all group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-foreground${selected ? " text-foreground" : ""}`}
                     aria-hidden="true"
                   />
                 </Button>

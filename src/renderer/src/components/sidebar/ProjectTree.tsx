@@ -1,7 +1,6 @@
-import { Filter, FolderCog, HatGlasses, Play, Plus } from "lucide-react";
+import { Filter, HatGlasses, Play, Plus } from "lucide-react";
 import type { DragEvent } from "react";
 import type { Project, WorktreeEntry } from "../../../../shared/types";
-import { ProjectAvatar } from "./SidebarParts";
 import type { SidebarController } from "../../hooks/useSidebarController";
 import { t } from "../../i18n";
 import type { SidebarActions } from "./SidebarContent";
@@ -11,7 +10,7 @@ import { cn } from "../../lib/utils";
 
 /** pure official：项目/会话树行共享的 shadcn 风格底（hover=accent 面，active 同系） */
 const treeRowClass =
-  "group conversation relative flex min-h-10 w-full items-center gap-2 rounded-xl border border-border/70 bg-background/40 px-2 py-1.5 text-body text-foreground shadow-sm shadow-black/[0.02] transition-[background-color,border-color,box-shadow] duration-200 hover:border-accent/30 hover:bg-accent/5 hover:text-accent-foreground";
+  "group conversation relative flex min-h-9 w-full items-center gap-1.5 rounded-lg border border-transparent bg-background px-2 py-1 text-body text-foreground shadow-none transition-[background-color,border-color] duration-200 hover:border-border-subtle hover:bg-muted/60 hover:text-foreground";
 
 function isChatProject(project: Project) {
   return project.kind === "chat";
@@ -66,14 +65,10 @@ export function ProjectTree(props: {
     if (props.controller.search.trim()) return;
     if (source && source !== projectId) void props.actions.projects.reorder(source, projectId);
   };
-  return <>
-    {rootProjects.map((project) => {
+  const renderProject = (project: Project) => {
       const collapsed = props.controller.isProjectCollapsed(project.id);
       const isCurrent = props.currentProjectId === project.id;
-      const chat = isChatProject(project);
-      const projectDirectoryName = chat
-        ? t("app.chatProject")
-        : displayProjectDirectoryName(project);
+      const projectDirectoryName = displayProjectDirectoryName(project);
       const sourceFilter = props.controller.sourceFilterFor(project.id);
       const dragging = props.controller.drag.sourceProjectId === project.id;
       const dragOver = props.controller.drag.overProjectId === project.id;
@@ -84,17 +79,17 @@ export function ProjectTree(props: {
         <div
           className={cn(
             treeRowClass,
-            !chat && !props.controller.search.trim() && "project-draggable",
+            !props.controller.search.trim() && "project-draggable",
             dragging && "dragging opacity-60",
             dragOver && "drag-over ring-1 ring-border",
-            isCurrent && "active border-accent/35 bg-accent/10 text-accent-foreground shadow-sm shadow-accent/10",
+            isCurrent && "active border-border-strong bg-accent/20 text-foreground shadow-sm",
           )}
           data-active={isCurrent || undefined}
           onContextMenu={(event) => { event.preventDefault(); void props.controller.openMenu({ kind: "project", projectId: project.id, x: event.clientX, y: event.clientY }); }}
         >
           <button
             type="button"
-            className={cn("project-fold grid size-8 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-background/70 hover:text-foreground", collapsed && "folded")}
+            className={cn("project-fold grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground", collapsed && "folded")}
             title={collapsed ? t("app.projectExpand") : t("app.projectCollapse")}
             aria-label={collapsed ? t("app.projectExpand") : t("app.projectCollapse")}
             onClick={() => props.controller.toggleProject(project.id)}
@@ -104,7 +99,7 @@ export function ProjectTree(props: {
           <button
             type="button"
             className="flex min-w-0 flex-1 items-center gap-2 py-1 pr-1 text-left"
-            draggable={!chat && !props.controller.search.trim()}
+            draggable={!props.controller.search.trim()}
             onDragStart={(event) => dragStart(event, project.id)}
             onDragOver={(event) => { if (props.controller.drag.sourceProjectId && props.controller.drag.sourceProjectId !== project.id) { event.preventDefault(); props.controller.setProjectDropTarget(project.id); } }}
             onDragLeave={() => props.controller.setProjectDropTarget(undefined)}
@@ -116,12 +111,11 @@ export function ProjectTree(props: {
               props.actions.projects.select(project.id);
             }}
           >
-            <ProjectAvatar name={projectDirectoryName} kind={chat ? "chat" : "project"} />
             <div className="conversation-body min-w-0 flex-1">
               <div className="conversation-title flex min-w-0 items-center">
                 <strong className="min-w-0 flex-1 truncate font-medium" title={project.path}>{projectDirectoryName}</strong>
               </div>
-              {/* 聊天项目与普通项目使用同一行高；说明文字不参与侧栏导航信息。 */}
+              {/* 项目名称只承担导航信息；详细会话状态由下方的 Agent/历史会话行承担。 */}
             </div>
           </button>
           <div className="flex shrink-0 items-center gap-1 pr-1">
@@ -140,9 +134,6 @@ export function ProjectTree(props: {
               <button type="button" className="grid size-6 place-items-center rounded-md text-muted-foreground hover:bg-background/80 hover:text-foreground" title={t("app.projectNewAgent")} aria-label={t("app.projectNewAgent")} onClick={() => void props.actions.sessions.createDraft(project.id)}><Plus size={14} /></button>
             )}
             <div className="flex items-center gap-1">
-              {chat && props.actions.projects.changeChatPath && (
-                <button type="button" className="grid size-6 place-items-center rounded-md text-muted-foreground hover:bg-background/80 hover:text-foreground" title={t("app.chatProjectSettings")} aria-label={t("app.chatProjectSettings")} onClick={() => void props.actions.projects.changeChatPath!(project)}><FolderCog size={14} /></button>
-              )}
               {!isCurrent && (
                 <button type="button" className="grid size-6 place-items-center rounded-md text-muted-foreground hover:bg-background/80 hover:text-foreground" title={t("app.projectNewAgent")} aria-label={t("app.projectNewAgent")} onClick={() => void props.actions.sessions.createDraft(project.id)}><Plus size={14} /></button>
               )}
@@ -178,6 +169,62 @@ export function ProjectTree(props: {
           </div>
         )}
       </div>;
+  };
+
+  const chatProjects = rootProjects.filter(isChatProject);
+  const workspaceProjects = rootProjects.filter((project) => !isChatProject(project));
+  return <>
+    {chatProjects.map((project) => {
+      const sessions = props.controller.catalog.sessionsByProject[project.id] ?? [];
+      return (
+        <section key={project.id} className="mb-5" aria-label={t("app.chatProject")}>
+          <div
+            className="flex items-center justify-between px-2 pb-1"
+            onContextMenu={(event) => {
+              event.preventDefault();
+              void props.controller.openMenu({ kind: "project", projectId: project.id, x: event.clientX, y: event.clientY });
+            }}
+          >
+            <span className="text-caption font-medium text-muted-foreground">{t("app.chatProject")}</span>
+            <div className="flex items-center gap-0.5">
+              <button
+                type="button"
+                className="grid size-6 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                title={t("app.newSession")}
+                aria-label={t("app.newSession")}
+                onClick={() => void props.actions.sessions.createDraft(project.id)}
+              >
+                <Plus size={13} aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                className="grid size-6 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                title={t("app.anonymousChat")}
+                aria-label={t("app.anonymousChat")}
+                onClick={() => void props.actions.sessions.createAnonymous(project.id)}
+              >
+                <HatGlasses size={13} aria-hidden="true" />
+              </button>
+            </div>
+          </div>
+          <div className="space-y-1">
+            <SessionTree
+              project={project}
+              sessions={sessions}
+              agents={props.controller.catalog.agents}
+              currentSessionId={props.currentSessionId}
+              controller={props.controller}
+              actions={props.actions}
+            />
+          </div>
+        </section>
+      );
     })}
+    {workspaceProjects.length > 0 && (
+      <section aria-label={t("app.sidebarProjects")}>
+        <div className="px-2 pb-1 text-caption font-medium text-muted-foreground">{t("app.sidebarProjects")}</div>
+        {workspaceProjects.map(renderProject)}
+      </section>
+    )}
   </>;
 }

@@ -350,45 +350,25 @@ export function EmptyState(props: {
 		// 空态既是工作流入口，也是用户第一次认识 PiDeck 的品牌时刻：
 		// 用足够大的视觉锚点建立层级，但把真实操作仍放在首屏中心，避免变成营销页。
 		<div
-			className="empty-state relative isolate flex h-full min-h-0 overflow-hidden flex-col items-center justify-center px-6 pb-[8vh] text-center"
+			className="empty-state relative flex h-full min-h-0 flex-col items-center justify-center overflow-hidden bg-background px-6 py-10 text-center"
 			data-empty-state={props.hasProject ? "project" : "no-project"}
 		>
-			{/* 柔和的主题光晕只负责托住中心内容；使用语义 token，确保换肤和暗色模式仍然自然。 */}
-			<div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden" aria-hidden="true">
-				<div className="absolute -top-32 left-1/2 size-[min(42rem,72vw)] -translate-x-1/2 rounded-full bg-[color-mix(in_srgb,var(--color-accent)_7%,transparent)] blur-3xl" />
-				<div className="absolute top-[42%] -left-24 size-64 rounded-full bg-[color-mix(in_srgb,var(--color-brand-blue)_5%,transparent)] blur-3xl" />
-				<div className="absolute right-[-8rem] bottom-[-10rem] size-80 rounded-full bg-[color-mix(in_srgb,var(--color-brand-amber)_4%,transparent)] blur-3xl" />
-			</div>
-
-			<div className="relative flex w-full max-w-3xl flex-col items-center">
-				<div className="mb-7 flex flex-col items-center gap-3">
-					<div className="relative grid size-[72px] place-items-center">
-						<div className="grid size-[62px] place-items-center rounded-[18px] bg-[image:var(--logo-mark-gradient)] text-primary-foreground shadow-[0_8px_18px_color-mix(in_srgb,var(--color-accent)_18%,transparent)]">
-							<svg viewBox="140 140 520 520" width="42" height="42" aria-hidden="true">
-								<path
-									fill="currentColor"
-									fillRule="evenodd"
-									d="M165.29 165.29H517.36V400H400V517.36H282.65V634.72H165.29ZM282.65 282.65V400H400V282.65Z"
-								/>
-								<path fill="currentColor" d="M517.36 400H634.72V634.72H517.36Z" />
-							</svg>
-						</div>
-					</div>
-					<span className="font-mono text-[11px] font-semibold tracking-[0.2em] text-text-tertiary">{t("app.brandName")}</span>
-				</div>
-				<h2 className="max-w-3xl font-brand text-[clamp(2.25rem,5vw,3.25rem)] font-semibold leading-[1.08] tracking-[-0.045em] text-foreground text-balance">{title}</h2>
-				<p className="mt-4 max-w-2xl font-brand text-[clamp(1.05rem,2vw,1.25rem)] font-medium leading-8 text-text-secondary text-pretty">{description}</p>
+			<div className="relative flex w-full max-w-2xl flex-col items-center">
+				<header className="w-full max-w-xl text-center">
+					<h2 className="font-brand text-[clamp(2rem,4vw,3rem)] font-semibold leading-[1.12] tracking-[-0.04em] text-foreground text-balance">{title}</h2>
+					<p className="mx-auto mt-3 max-w-lg font-brand text-[clamp(1rem,1.8vw,1.15rem)] font-medium leading-7 text-text-secondary text-pretty">{description}</p>
+				</header>
 				{/* actions 可能是带固定 max-width 的复合操作区，必须居中整个区块，而不只是居中其中的按钮内容。 */}
-				<div className="mt-8 flex w-full justify-center">{
+				<div className="mt-6 flex w-full justify-center">{
 					props.actions ?? (
 						props.hasProject ? (
-							<Button variant="default" size="lg" onClick={props.onCreate}>{t("app.createAgent")}</Button>
+							<Button variant="outline" size="lg" className="border-border-strong bg-muted/50 text-foreground shadow-none hover:bg-bg-active" onClick={props.onCreate}>{t("app.createAgent")}</Button>
 						) : (
 							<p className="text-sm text-muted-foreground">{t("app.emptyNoProject")}</p>
 						)
 					)
 				}</div>
-				{props.footer && <div className="mt-4">{props.footer}</div>}
+				{props.footer && <div className="mt-5">{props.footer}</div>}
 			</div>
 		</div>
 	);

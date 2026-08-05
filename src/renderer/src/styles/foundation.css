@@ -59,15 +59,16 @@
   --line-height-heading: 28px;
   /*
    * 主题色板：纯白基底（浅色下大面积背景为中性白/灰，不带色相），accent 为可切换主题色。
-   * 默认 accent=green（品牌绿）；其他预设色由 :root[data-accent="…"] 覆盖，
+   * 默认 accent=neutral（黑白灰）；绿色等主题由 :root[data-accent="…"] 覆盖，
    * 自定义主题=新增一个 data-accent 值 + 设置页色板预设条目（见 SettingsModal 的 ACCENT_PRESETS）。
    */
-  --color-bg-app: #fafafa;
-  --color-bg-sidebar: #f5f5f5;
+  /* 默认浅色外观以纯白为基底；灰色只用于控件表面、hover 和选中层级。 */
+  --color-bg-app: #ffffff;
+  --color-bg-sidebar: #ffffff;
   --color-bg-panel: #ffffff;
-  --color-bg-muted: #f3f3f3;
-  --color-bg-hover: #f3f3f3;
-  --color-bg-active: #ededed;
+  --color-bg-muted: #f4f4f5;
+  --color-bg-hover: #e5e7eb;
+  --color-bg-active: #dfe3e8;
   --color-text-primary: #202124;
   --color-text-secondary: #5f6368;
   --color-text-tertiary: #8b8f94;
@@ -75,18 +76,18 @@
   --color-border-subtle: #e5e5e5;
   --color-border-default: #dfdfdf;
   --color-border-strong: #d7d7d7;
-  /* 主题色（默认品牌绿）：primary 动作、链接、选中态、logo 共用 */
-  --color-accent: #238636;
-  --color-accent-strong: #1f7a32;
-  --color-accent-soft: #eaf6ed;
-  --color-brand-green: #0f766e;
-  --color-brand-blue: #2563eb;
-  --color-brand-purple: #7c3aed;
-  --color-brand-amber: #b45309;
-  --color-brand-rose: #e11d48;
-  --color-logo-green: #2cb35c;
-  --color-logo-green-mid: #27a452;
-  --color-logo-green-deep: #1f8f45;
+  /* 默认主题色：黑白灰；语义状态色（info/warning/danger）仍保留用于状态反馈。 */
+  --color-accent: #6b7280;
+  --color-accent-strong: #4b5563;
+  --color-accent-soft: #e5e7eb;
+  --color-brand-green: #4b5563;
+  --color-brand-blue: #6b7280;
+  --color-brand-purple: #9ca3af;
+  --color-brand-amber: #6b7280;
+  --color-brand-rose: #4b5563;
+  --color-logo-green: #6b7280;
+  --color-logo-green-mid: #4b5563;
+  --color-logo-green-deep: #374151;
   --color-danger: #b42318;
   --color-danger-soft: #fdecea;
   --color-warning: #b7791f;
@@ -97,7 +98,7 @@
   --color-chat-muted-bg: #f4f4f5;
   --color-chat-control-bg: #ffffff;
   --color-chat-table-bg: #ffffff;
-  --color-chat-link: #2762ea;
+  --color-chat-link: #4b5563;
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -175,9 +176,23 @@
 }
 
 /* ===== 主题色预设（data-accent） =====
- * 默认 green 已在 :root 定义；其余预设覆盖 accent/logo 系变量。
+ * 默认主题使用中性灰；绿色作为可选主题保留，不再承担出厂默认色。
  * 自定义主题：新增一个 data-accent 值 + SettingsModal 色板预设条目即可。
  */
+:root[data-accent="green"] {
+  --color-accent: #238636;
+  --color-accent-strong: #1f7a32;
+  --color-accent-soft: #eaf6ed;
+  --color-brand-green: #0f766e;
+  --color-brand-blue: #2563eb;
+  --color-brand-purple: #7c3aed;
+  --color-brand-amber: #b45309;
+  --color-brand-rose: #e11d48;
+  --color-logo-green: #2cb35c;
+  --color-logo-green-mid: #27a452;
+  --color-logo-green-deep: #1f8f45;
+  --color-chat-link: #2762ea;
+}
 :root[data-accent="blue"] {
   --color-accent: #2563eb;
   --color-accent-strong: #1d4ed8;
@@ -345,7 +360,7 @@
    由 JS 在 documentElement.dataset.fontSize 上保留。 */
 :root[data-theme="dark"] {
   color-scheme: dark;
-  /* 暗色暖黑基底 + 主题色（默认亮绿，data-accent 可切换） */
+  /* 暗色黑灰基底 + 中性灰默认主题；data-accent 可切换到彩色主题。 */
   --color-bg-app: #121212;
   --color-bg-sidebar: #171717;
   --color-bg-panel: #171717;
@@ -359,14 +374,14 @@
   --color-border-subtle: #262626;
   --color-border-default: #2e2e2e;
   --color-border-strong: #3a3a3a;
-  --color-accent: #4ade80;
-  --color-accent-strong: #22c55e;
-  --color-accent-soft: #1c2b22;
-  --color-brand-green: #34d399;
-  --color-brand-purple: #a78bfa;
-  --color-brand-blue: #60a5fa;
-  --color-brand-amber: #fbbf24;
-  --color-brand-rose: #fb7185;
+  --color-accent: #9ca3af;
+  --color-accent-strong: #d1d5db;
+  --color-accent-soft: #2a2a2a;
+  --color-brand-green: #9ca3af;
+  --color-brand-purple: #9ca3af;
+  --color-brand-blue: #9ca3af;
+  --color-brand-amber: #9ca3af;
+  --color-brand-rose: #9ca3af;
   --color-info: #60a5fa;
   --color-code-bg: #1a1a1a;
   --color-code-text: #d1d5db;
@@ -374,10 +389,10 @@
   --color-chat-muted-bg: #202020;
   --color-chat-control-bg: #171717;
   --color-chat-table-bg: #171717;
-  --color-chat-link: #4ade80;
-  --color-logo-green: #4ade80;
-  --color-logo-green-mid: #22c55e;
-  --color-logo-green-deep: #16a34a;
+  --color-chat-link: #d1d5db;
+  --color-logo-green: #9ca3af;
+  --color-logo-green-mid: #6b7280;
+  --color-logo-green-deep: #4b5563;
   --shadow-border: 0 0 0 1px rgba(255, 255, 255, 0.08);
   --shadow-popover: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -2px rgba(0, 0, 0, 0.3);
   --shadow-modal: 0 10px 15px -3px rgba(0, 0, 0, 0.45), 0 4px 6px -4px rgba(0, 0, 0, 0.35);
@@ -390,6 +405,17 @@
 }
 
 /* 暗色主题色预设（data-accent），亮色系保证可读性 */
+:root[data-theme="dark"][data-accent="green"] {
+  --color-accent: #4ade80;
+  --color-accent-strong: #22c55e;
+  --color-accent-soft: #1c2b22;
+  --color-brand-green: #34d399;
+  --color-logo-green: #4ade80;
+  --color-logo-green-mid: #22c55e;
+  --color-logo-green-deep: #16a34a;
+  --color-info: #60a5fa;
+  --color-chat-link: #4ade80;
+}
 :root[data-theme="dark"][data-accent="blue"] {
   --color-accent: #60a5fa;
   --color-accent-strong: #3b82f6;
@@ -1555,10 +1581,10 @@ select:focus-visible {
   );
 }
 .project-group > .conversation.active:first-child {
-  /* 项目行作为树根节点，active 只做轻量提示；避免整行大面积绿色抢走会话内容注意力。 */
-  background: color-mix(in srgb, var(--color-accent-soft) 62%, transparent);
+  /* 选中态用较深的主题浅面表达位置，不依赖高饱和色填满整行。 */
+  background: color-mix(in srgb, var(--color-accent-soft) 82%, var(--color-bg-panel));
   box-shadow: inset 0 0 0 1px
-    color-mix(in srgb, var(--color-accent) 12%, transparent);
+    color-mix(in srgb, var(--color-border-strong) 86%, transparent);
 }
 .project-group > .conversation.project-draggable:first-child {
   cursor: grab;
@@ -1930,9 +1956,9 @@ select:focus-visible {
   font-weight: 500;
 }
 .agent-row.active {
-  background: color-mix(in srgb, var(--color-accent-soft) 46%, transparent);
+  background: color-mix(in srgb, var(--color-accent-soft) 82%, var(--color-bg-panel));
   box-shadow: inset 0 0 0 1px
-    color-mix(in srgb, var(--color-accent) 10%, transparent);
+    color-mix(in srgb, var(--color-border-strong) 86%, transparent);
 }
 .agent-row.active .conversation-title strong {
   color: var(--color-text-primary);
@@ -1981,9 +2007,9 @@ select:focus-visible {
   background: var(--color-bg-hover);
 }
 .session-row.active {
-  background: color-mix(in srgb, var(--color-accent-soft) 46%, transparent);
+  background: color-mix(in srgb, var(--color-accent-soft) 82%, var(--color-bg-panel));
   box-shadow: inset 0 0 0 1px
-    color-mix(in srgb, var(--color-accent) 10%, transparent);
+    color-mix(in srgb, var(--color-border-strong) 86%, transparent);
 }
 .session-row .conversation-title {
   display: flex;
@@ -2101,10 +2127,10 @@ select:focus-visible {
   background: transparent;
   cursor: col-resize;
   z-index: 3;
-  transition: background 0.12s ease;
+  transition: background 0.18s ease;
 }
 .splitter-left {
-  background: var(--color-bg-sidebar);
+  background: transparent;
 }
 /* 右侧分隔条：关闭/折叠时 data-active=false，宽度归零避免 1px 占位线。 */
 .splitter-right:not([data-active="true"]) {
@@ -2120,11 +2146,11 @@ select:focus-visible {
   position: absolute;
   top: 0;
   bottom: 0;
-  left: 2px;
+  left: 0;
   width: 1px;
   border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--color-border-strong) 58%, transparent);
-  transition: width 0.12s ease, background 0.12s ease;
+  background: color-mix(in srgb, var(--color-border-subtle) 72%, transparent);
+  transition: background 0.18s ease, opacity 0.18s ease;
   pointer-events: none;
 }
 /* 视觉命中提示区（库本身还有 resizeTargetMinimumSize 放大） */
@@ -2133,19 +2159,16 @@ select:focus-visible {
   position: absolute;
   top: 0;
   bottom: 0;
-  left: -12px;
-  right: -12px;
+  left: -5px;
+  right: -5px;
   pointer-events: none;
 }
 .splitter:hover::before,
 .splitter:active::before,
 .splitter[data-separator="active"]::before {
-  width: 2px;
-  background: color-mix(
-    in srgb,
-    var(--color-accent) 32%,
-    var(--color-border-strong)
-  );
+  width: 1px;
+  background: var(--color-border-strong);
+  opacity: 0.9;
 }
 
 /* 换肤壁纸模式：启用背景图（data-bg-image="on"）时主容器透明，
@@ -2197,7 +2220,8 @@ select:focus-visible {
   min-height: 0;
 }
 .session-v-timeline > *,
-.session-v-terminal > * {
+.session-v-terminal > *,
+.session-v-timeline .message-timeline {
   height: 100%;
   min-height: 0;
 }
@@ -2673,12 +2697,16 @@ select:focus-visible {
   /* Ask/工具完成卡片在时间线末端仍需留出可视缓冲，避免紧贴 composer。 */
   scroll-padding-bottom: 20px;
 }
+/* Ask 卡片是时间线的一部分，但要始终停在 composer 上方；底部留白同时给滚动按钮预留安全区。 */
+.message-timeline:has(.session-runtime-ui:not(:empty)) {
+  padding-bottom: 88px;
+}
 .scroll-to-bottom-btn {
   position: absolute;
-  bottom: 76px;
+  bottom: 12px;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 10;
+  z-index: 30;
   width: 40px;
   height: 40px;
   display: flex;

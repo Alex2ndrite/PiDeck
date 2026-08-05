@@ -12,7 +12,7 @@ import { cn } from "../../lib/utils";
 
 /** pure official：与 ProjectTree 对齐的会话/agent 行底色 */
 const sessionRowClass =
-	"conversation agent-row relative flex min-h-9 w-full items-center gap-2 rounded-xl border border-border/70 bg-background/35 px-3 py-2 text-left text-body text-foreground shadow-sm shadow-black/[0.02] transition-[background-color,border-color,box-shadow] duration-200 hover:border-accent/30 hover:bg-accent/5 hover:text-accent-foreground";
+	"conversation agent-row relative flex min-h-11 w-full items-center gap-2 rounded-lg border border-transparent bg-background px-3 py-2 text-left text-body text-foreground shadow-none transition-[background-color,border-color] duration-200 hover:border-border-subtle hover:bg-muted/60 hover:text-foreground";
 
 function matchesSearch(value: string, search: string) {
   return !search || value.toLowerCase().includes(search.toLowerCase());
@@ -133,7 +133,7 @@ export function SessionTree(props: {
         className={cn(
           sessionRowClass,
           "session-row codex-subagent-sidebar-row pl-6",
-          session.id === props.currentSessionId && "active border-accent/35 bg-accent/10 text-accent-foreground shadow-sm shadow-accent/10",
+          session.id === props.currentSessionId && "active border-border-strong bg-accent/20 text-foreground shadow-sm",
         )}
         title={session.filePath}
         onContextMenu={(event) => openContext(event, session)}
@@ -178,7 +178,7 @@ export function SessionTree(props: {
           type="button"
           className={cn(
             sessionRowClass,
-            agentSession?.id === props.currentSessionId && "active border-accent/35 bg-accent/10 text-accent-foreground shadow-sm shadow-accent/10",
+            agentSession?.id === props.currentSessionId && "active border-border-strong bg-accent/20 text-foreground shadow-sm",
           )}
           onContextMenu={(event) => { event.preventDefault(); void props.controller.openMenu({ kind: "agent", agentId: child.agent.id, x: event.clientX, y: event.clientY }); }}
           onClick={() => { if (agentSession) void props.actions.sessions.open(props.project.id, agentSession.id); }}
@@ -202,8 +202,8 @@ export function SessionTree(props: {
           sessionRowClass,
           // 历史会话不是运行中的 Agent：只给这一类内容增加层级缩进，避免项目标题与历史记录贴在同一列。
           // 历史会话需要比运行中 Agent 更松的点击区域和行间距，避免连续记录挤成一块。
-          "session-row history-session-row mx-1 mb-1 last:mb-0 pl-3 pr-3 py-2",
-          child.session.id === props.currentSessionId && "active border-accent/35 bg-accent/10 text-accent-foreground shadow-sm shadow-accent/10",
+          "session-row history-session-row mx-0 mb-1 last:mb-0 min-h-11 pl-3 pr-3 py-2",
+          child.session.id === props.currentSessionId && "active border-border-strong bg-accent/20 text-foreground shadow-sm",
         )}
         title={child.session.filePath}
         onContextMenu={(event) => openContext(event, child.session)}
@@ -240,7 +240,7 @@ export function SessionTree(props: {
               className={cn(
                 sessionRowClass,
                 "session-row draft-session-trigger",
-                session.id === props.currentSessionId && "active border-accent/35 bg-accent/10 text-accent-foreground shadow-sm shadow-accent/10",
+                session.id === props.currentSessionId && "active border-border-strong bg-accent/20 text-foreground shadow-sm",
               )}
               title={session.title}
               onClick={() => void props.actions.sessions.open(props.project.id, session.id)}

@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { t } from "../../i18n";
 import { desktopApi } from "../../desktopApi";
-import { ACCENT_PRESETS, SKIN_PRESETS } from "../../themePresets";
+import { ACCENT_PRESETS } from "../../themePresets";
 import { Button } from "../ui-shadcn/button";
 import {
 	Select,
@@ -464,10 +464,6 @@ function SettingsModalContent(props: SettingsModalProps) {
 		value: preset.id,
 		label: t(preset.labelKey),
 	}));
-	const skinOptions = SKIN_PRESETS.map((preset) => ({
-		value: preset.id,
-		label: t(preset.labelKey),
-	}));
 	const startupWindowModeOptions = [
 		{ value: "last", label: t("settings.startupWindow.last") },
 		{ value: "maximized", label: t("settings.startupWindow.maximized") },
@@ -902,28 +898,6 @@ function SettingsModalContent(props: SettingsModalProps) {
 	</Select>
 </div>
 										<small className="text-xs text-muted-foreground">{t("settings.accentDesc")}</small>
-									</div>
-									{/* 皮肤（换肤）：内置色板，与主题色正交；custom 由 customThemeOverrides 驱动 */}
-									<div className="setting-field">
-										<span>
-											{t("settings.skin")}
-											<DirtyMarker dirty={isDirty("themeSkin")} label={t("settings.skin")} />
-										</span>
-										<div className="grid gap-1.5">
-	<Select value={draftSettings.themeSkin} onValueChange={(value) =>
-												updateDraft({ themeSkin: value as AppSettings["themeSkin"] })
-											}>
-		<SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-		<SelectContent>
-			{skinOptions.map((option) => (
-				<SelectItem key={option.value} value={option.value} disabled={option.disabled}>
-					{option.label}
-				</SelectItem>
-			))}
-		</SelectContent>
-	</Select>
-</div>
-										<small className="text-xs text-muted-foreground">{t("settings.skinDesc")}</small>
 									</div>
 									{/* 背景图片：pideck-bg:// 协议加载 userData/backgrounds/ 下文件 */}
 									<div className="setting-field">
