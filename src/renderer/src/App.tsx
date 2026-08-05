@@ -529,7 +529,7 @@ export function App() {
     chatFontSize: null,
     inputFontSize: null,
     zoomFactor: 1,
-    fontFamilyBase: "lxgw-wenkai",
+    fontFamilyBase: "system",
     fontFamilyBaseCustom: "",
     fontFamilyMono: "commit-mono",
     fontFamilyMonoCustom: "",
