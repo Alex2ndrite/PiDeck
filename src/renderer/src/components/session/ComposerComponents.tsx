@@ -293,7 +293,7 @@ export function ComposerBottomBar(props: {
 				<div className="composer-bottom-right ml-auto flex shrink-0 items-center gap-2">
 					{props.gitInfo?.current && (
 						<span
-							className="composer-bar-branch inline-flex max-w-[12rem] items-center gap-1.5 truncate px-1.5 font-brand text-sm font-semibold italic text-foreground/75"
+							className="composer-bar-branch inline-flex max-w-[12rem] items-center gap-1.5 truncate px-1.5 text-sm font-semibold text-foreground/75"
 							title={t("app.branchCurrent", {
 								branch: props.gitInfo.current,
 								count: props.gitInfo.branches.length,
