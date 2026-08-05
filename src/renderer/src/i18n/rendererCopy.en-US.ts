@@ -505,6 +505,7 @@ export const enUS: Record<TranslationKey, string> = {
   "ask.pending": "AI is asking…",
   "ask.question": "Question",
   "ask.answer": "Answer",
+  "ask.cancelHint": "Cancel: defaults to first option",
   "ask.backgroundPending": "Session \u201c{title}\u201d is waiting for your answer",
   "ask.waitingForAnswer": "Waiting for answer…",
   "ask.unanswered": "Unanswered",

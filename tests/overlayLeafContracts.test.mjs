@@ -348,7 +348,9 @@ test("allowOther renders a custom input and sends its value through the responde
   };
   cursor = 0;
   const firstTree = runtime.SessionRuntimeUiOverlay(props);
-  const input = walk(firstTree, (node) => node.props?.className?.split(" ")?.includes("h-9") && typeof node.props?.value === "string")[0];
+  // 按行为特征定位自定义输入框（受控 value + onChange），不断言具体尺寸 class，
+  // 避免紧凑布局调整行高（h-9→h-8）时产生假失败。
+  const input = walk(firstTree, (node) => typeof node.props?.value === "string" && typeof node.props?.onChange === "function")[0];
   assert.ok(input, "allowOther custom field must render");
   input.props.onChange({ target: { value: "custom answer" } });
   cursor = 0;

@@ -96,6 +96,8 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* turn-row--running::before 的呼吸背景（见上方会话生命周期注释） */
+@keyframes turn-running-breathe {
   0%,
   100% { opacity: 0; }
   50% { opacity: 1; }

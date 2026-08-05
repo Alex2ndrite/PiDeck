@@ -12,13 +12,13 @@ function block(selector) {
 }
 
 test("light theme background tokens are neutral (no green tint)", () => {
-  // 大面积背景必须是中性灰白（修复前 #f8f8f5/#f2f2ee/#f0f1ed 带黄绿调）
-  assert.match(block(":root"), /--color-bg-app:\s*#fafafa;/i);
-  assert.match(block(":root"), /--color-bg-sidebar:\s*#f5f5f5;/i);
+  // 大面积背景为纯白基底（#113 中性化改版：灰只用于控件表面/hover/选中层级，均不得带色相）
+  assert.match(block(":root"), /--color-bg-app:\s*#ffffff;/i);
+  assert.match(block(":root"), /--color-bg-sidebar:\s*#ffffff;/i);
   assert.match(block(":root"), /--color-bg-panel:\s*#ffffff;/i);
-  assert.match(block(":root"), /--color-bg-muted:\s*#f3f3f3;/i);
-  assert.match(block(":root"), /--color-bg-hover:\s*#f3f3f3;/i);
-  assert.match(block(":root"), /--color-bg-active:\s*#ededed;/i);
+  assert.match(block(":root"), /--color-bg-muted:\s*#f4f4f5;/i);
+  assert.match(block(":root"), /--color-bg-hover:\s*#e5e7eb;/i);
+  assert.match(block(":root"), /--color-bg-active:\s*#dfe3e8;/i);
   // 边框也中性化（修复前 #e5e5df 系带黄绿调）
   assert.match(block(":root"), /--color-border-subtle:\s*#e5e5e5;/i);
   assert.match(block(":root"), /--color-border-default:\s*#dfdfdf;/i);

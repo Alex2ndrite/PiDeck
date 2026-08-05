@@ -22,7 +22,17 @@ test("fixed light chat/table colors are tokenized for dark mode", () => {
   assert.match(block(":root[data-theme=\"dark\"]"), /--color-chat-table-bg:\s*#171717;/i);
 
   assert.match(block(".diagnostic-card"), /background:\s*var\(--color-chat-muted-bg\);/);
-  assert.doesNotMatch(css, /\.user-turn-bubble\s*\{/);  // 迁移后无独立规则，背景由 bg-muted/60 utility 承担
+  // 用户气泡规则在 #113 会话动画改版中重新引入；要求只使用语义 token（color-mix + var），
+  // 禁止写死 hex，保证暗色模式与主题色切换自然适配。
+  const bubbleBlocks = [...css.matchAll(/\.user-turn-bubble(?::hover)?\s*\{([^}]*)\}/g)]
+    .map((m) => m[1])
+    // 跳过 prefers-reduced-motion 里只关动画的覆写块，只检查真正着色的规则
+    .filter((body) => /background|border-color|box-shadow/.test(body));
+  assert.ok(bubbleBlocks.length > 0, "user-turn-bubble rules should exist");
+  for (const body of bubbleBlocks) {
+    assert.doesNotMatch(body, /#[0-9a-f]{3,8}\b/i, "user-turn-bubble must not hardcode hex colors");
+    assert.match(body, /var\(--color-/, "user-turn-bubble must use semantic tokens");
+  }
   // 表格已迁移到 Streamdown 结构（data-streamdown=table-wrapper）；工具条/表头/表体
   // 背景沿用 chat 系 token，暗色模式跟随主题（见 surfaces.css streamdown 覆盖段）
   assert.match(block('[data-streamdown="table-wrapper"] > div:first-child'), /background:\s*var\(--color-chat-muted-bg\);/);

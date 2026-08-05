@@ -497,6 +497,7 @@ export const zhCN = {
   "ask.pending": "AI 正在提问…",
   "ask.question": "问题",
   "ask.answer": "回答",
+  "ask.cancelHint": "取消后模型会按第一项处理",
   "ask.backgroundPending": "会话「{title}」正在等待你的回答",
   "ask.waitingForAnswer": "等待回答…",
   "ask.unanswered": "未回答",

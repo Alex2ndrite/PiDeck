@@ -56,10 +56,11 @@ test("session and shell use v4 Group orientation props only", () => {
 
 test("splitter CSS uses v4 data-separator active state, not legacy is-resizing", () => {
   assert.match(foundation, /\.splitter\[data-separator="active"\]::before/);
-  assert.match(foundation, /\.v-splitter\[data-separator="active"\]::before/);
   assert.doesNotMatch(foundation, /body\.is-resizing \.splitter/);
   assert.doesNotMatch(foundation, /body\.is-resizing \.v-splitter/);
   assert.doesNotMatch(foundation, /data-resizing/);
-  // 纵向分隔条必须强制铺满宽度，兜底 class 选择器写反时仍可拖
+  // 纵向分隔条不再绘制独立线条（composer-box 顶部边框即视觉边界），只保留透明拖拽热区；
+  // 宽度仍必须强制铺满，否则中间区域拖不动。
+  assert.match(foundation, /\.v-splitter::before \{[\s\S]*content:\s*none;/);
   assert.match(foundation, /\.v-splitter \{[\s\S]*width:\s*100%\s*!important/);
 });
