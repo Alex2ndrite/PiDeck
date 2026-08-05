@@ -334,41 +334,57 @@ export function AgentAvatar(props: { status: string }) {
 export function EmptyState(props: {
 	hasProject: boolean;
 	onCreate: () => void;
-	/** 可选：自定义操作区（如项目空态的快捷按钮），默认提供“启动 Agent”/无项目提示 */
+	/** 可选：自定义操作区（如项目空态的主从按钮），默认提供“启动 Agent”/无项目提示 */
 	actions?: ReactNode;
-	/** 可选：操作区下方的附加信息（如默认模型/思考级别） */
+	/** 可选：底部 meta 区（如模型/思考级别/路径），渲染在发丝线分隔的 dl 容器内 */
 	footer?: ReactNode;
+	/** 可选：章节页眉发丝线右侧的上下文（如当前项目名），帮助用户确认所在工作区 */
+	eyebrow?: ReactNode;
 }) {
-	const title = props.hasProject
-		? t("app.emptyProjectTitle")
-		: t("app.emptyNoProjectTitle");
 	const description = props.hasProject
 		? t("app.emptyHasProject")
 		: t("app.emptyNoProject");
 
 	return (
-		// 空态既是工作流入口，也是用户第一次认识 PiDeck 的品牌时刻：
-		// 用足够大的视觉锚点建立层级，但把真实操作仍放在首屏中心，避免变成营销页。
+		// Editorial 空态：左对齐章节式排版而非居中对话框，品牌感由衬线斜体的重音词承担。
+		// 重音词固定用拉丁词（zh「Session」/ en「session」）：内置艺术字 Plantin 仅有拉丁字形，
+		// 中文会回退系统宋体破坏质感，拉丁词才能保证 PiDeckPlantin 斜体真正生效。
+		// pb-[8vh]：几何居中在光学上偏低，内容整体上移后重心落在视觉中心。
 		<div
-			className="empty-state relative flex h-full min-h-0 flex-col items-center justify-center overflow-hidden bg-background px-6 py-10 text-center"
+			className="empty-state relative h-full min-h-0 overflow-hidden bg-background px-6 text-left"
 			data-empty-state={props.hasProject ? "project" : "no-project"}
 		>
-			<div className="relative flex w-full max-w-2xl flex-col items-center">
-				<header className="w-full max-w-xl text-center">
-					<h2 className="font-brand text-[clamp(2rem,4vw,3rem)] font-semibold leading-[1.12] tracking-[-0.04em] text-foreground text-balance">{title}</h2>
-					<p className="mx-auto mt-3 max-w-lg font-brand text-[clamp(1rem,1.8vw,1.15rem)] font-medium leading-7 text-text-secondary text-pretty">{description}</p>
-				</header>
-				{/* actions 可能是带固定 max-width 的复合操作区，必须居中整个区块，而不只是居中其中的按钮内容。 */}
-				<div className="mt-6 flex w-full justify-center">{
+			<div className="mx-auto flex h-full w-full max-w-2xl animate-in flex-col justify-center pb-[8vh] duration-500 fade-in">
+				{/* 章节页眉：发丝线 + 项目上下文，建立编辑排版的节奏起点 */}
+				<div className="flex items-center gap-4 text-[13px] text-text-secondary">
+					<span className="h-px flex-1 bg-border-subtle" aria-hidden="true"></span>
+					{props.eyebrow}
+				</div>
+				<h2 className="mt-10 animate-in text-[clamp(2.5rem,5vw,3.25rem)] font-semibold leading-[1.1] tracking-[-0.03em] delay-100 duration-500 fade-in fill-mode-backwards slide-in-from-bottom-2 text-foreground">
+					{props.hasProject ? (
+						<>
+							{t("app.emptyProjectTitleLead")}<br />
+							<span className="font-brand font-medium italic">{t("app.emptyProjectTitleAccent")}</span>
+							<span className="text-text-tertiary">{t("app.emptyProjectTitlePunct")}</span>
+						</>
+					) : (
+						t("app.emptyNoProjectTitle")
+					)}
+				</h2>
+				<p className="mt-6 max-w-md animate-in text-[15px] leading-7 delay-100 duration-500 fade-in fill-mode-backwards text-text-secondary">{description}</p>
+				{/* actions 是左对齐的主从按钮区，跟随阅读动线而不是居中悬浮 */}
+				<div className="mt-10 animate-in delay-200 duration-500 fade-in fill-mode-backwards slide-in-from-bottom-2">{
 					props.actions ?? (
 						props.hasProject ? (
-							<Button variant="outline" size="lg" className="border-border-strong bg-muted/50 text-foreground shadow-none hover:bg-bg-active" onClick={props.onCreate}>{t("app.createAgent")}</Button>
+							<Button size="lg" className="h-12 rounded-xl bg-foreground px-7 text-background shadow-sm hover:bg-foreground/85" onClick={props.onCreate}>{t("app.createAgent")}</Button>
 						) : (
 							<p className="text-sm text-muted-foreground">{t("app.emptyNoProject")}</p>
 						)
 					)
 				}</div>
-				{props.footer && <div className="mt-5">{props.footer}</div>}
+				{props.footer && (
+					<div className="mt-14 animate-in border-t border-border-subtle pt-5 delay-300 duration-500 fade-in fill-mode-backwards">{props.footer}</div>
+				)}
 			</div>
 		</div>
 	);

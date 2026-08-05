@@ -29,6 +29,17 @@ test("new session surface provides engineering quick prompts and inserts the sel
   assert.match(surface, /disabled=\{!props\.onQuickPrompt\}/);
 });
 
+test("start surface uses the split-magazine editorial layout aligned with the empty state", () => {
+  // 与项目空态（方案 B）同一语言：衬线拉丁重音词、竖发丝线双栏、发丝线分行清单
+  assert.match(surface, /font-brand font-medium italic/);
+  assert.match(surface, /t\("sessionStart\.titleAccent"\)/);
+  assert.match(surface, /md:grid-cols-\[1fr_1px_1fr\]/);
+  assert.match(surface, /divide-y divide-border-subtle/);
+  // 建议文案：桌面在左栏沉底卡片，窄屏在右栏列表下
+  assert.match(surface, /mt-auto hidden pt-10 md:block/);
+  assert.match(surface, /md:hidden/);
+});
+
 test("empty active sessions render the start surface and put prompts into the composer", () => {
   assert.match(timeline, /activeMessages\.length === 0/);
   assert.match(timeline, /<SessionStartSurface onQuickPrompt=\{props\.onQuickPrompt\}/);
@@ -40,8 +51,9 @@ test("empty active sessions render the start surface and put prompts into the co
 
 test("quick prompt copy is present in both locale dictionaries", () => {
   for (const key of [
-    "sessionStart.eyebrow",
-    "sessionStart.title",
+    "sessionStart.titleLead",
+    "sessionStart.titleAccent",
+    "sessionStart.titlePunct",
     "sessionStart.inspectPrompt",
     "sessionStart.planPrompt",
     "sessionStart.implementPrompt",

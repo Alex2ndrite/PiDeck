@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from "react";
-import { Brain, Check, HatGlasses, Plus, Sparkles } from "lucide-react";
+import { Check, FolderGit2, HatGlasses, Plus, Sparkles } from "lucide-react";
 import type { AvailableModel, Project } from "../../../../shared/types";
 import { t, type TranslationKey } from "../../i18n";
 import { desktopApi } from "../../desktopApi";
@@ -116,6 +116,11 @@ export function ProjectEmptyState(props: {
 
   const hasProject = Boolean(props.activeProject);
 
+  // 取路径末段作为页眉右侧的项目名，与侧栏项目行的命名口径一致。
+  const activeProjectName = props.activeProject
+    ? props.activeProject.path.split(/[\\/]/).filter(Boolean).pop() ?? props.activeProject.path
+    : "";
+
   const groupedModels = groupModelsByProvider(models);
 
   useEffect(() => {
@@ -160,83 +165,104 @@ export function ProjectEmptyState(props: {
       <EmptyState
         hasProject={hasProject}
         onCreate={props.onCreateAgent}
+        eyebrow={
+          hasProject ? (
+            <span className="inline-flex items-center gap-1.5 text-text-secondary">
+              <FolderGit2 size={14} aria-hidden="true" className="text-text-tertiary" />
+              <span className="max-w-48 truncate">{activeProjectName}</span>
+            </span>
+          ) : undefined
+        }
         actions={
           hasProject ? (
-            <div className="flex w-full max-w-[560px] flex-col gap-4">
-              <div className="flex flex-wrap items-center justify-center gap-2.5">
-                <Button variant="outline" size="lg" className="h-10 min-w-40 justify-center rounded-lg border-border-strong bg-muted/50 px-4 text-foreground shadow-none hover:bg-bg-active" onClick={props.onCreateAgent}>
-                  <Sparkles className="size-4" aria-hidden="true" />{t("app.createAgent")}
-                </Button>
-                <Button variant="outline" size="lg" className="h-10 min-w-40 justify-center rounded-lg bg-background px-4 text-foreground shadow-none hover:bg-bg-active" onClick={props.onCreateAnonymous}>
-                  <HatGlasses className="size-4" aria-hidden="true" />{t("app.anonymousChatShort")}
-                </Button>
-              </div>
-              <div className="grid w-full grid-cols-1 items-center gap-1.5 rounded-lg border border-border-subtle bg-muted/35 p-1.5 shadow-none sm:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)]">
-                <span className="px-2 text-caption font-medium text-text-secondary">{t("app.emptyStartWith")}</span>
-                {/* 两个控件必须共享固定外框；!h-11/!w-full 会覆盖 SelectTrigger 默认的 data-size 与 w-fit，避免仅看 grid 列宽却出现实际边界不一致。 */}
-                <Popover open={modelPickerOpen} onOpenChange={setModelPickerOpen}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      size="lg"
-                      className="!h-10 !w-full rounded-md border-border-subtle bg-background px-3 font-normal shadow-none hover:bg-bg-active"
-                      title={modelChoice || t("app.model")}
-                    >
-                      <span className="truncate">{modelChoice || t("app.model")}</span>
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent align="start" className="w-[min(380px,calc(100vw-48px))] p-0">
-                    <Command defaultValue={modelChoice}>
-                      <CommandInput placeholder={t("app.modelPickerSearch")} autoFocus />
-                      <CommandList>
-                        <CommandEmpty>{t("app.modelPickerEmpty")}</CommandEmpty>
-                        {Object.entries(groupedModels).map(([provider, providerModels], providerIndex) => (
-                          <Fragment key={provider}>
-                            <CommandGroup heading={`${provider} (${providerModels.length})`}>
-                              {providerModels.map((model) => {
-                              const value = `${model.provider}/${model.id}`;
-                              return (
-                                <CommandItem
-                                  key={value}
-                                  value={value}
-                                  onSelect={() => {
-                                    saveModelChoice(value);
-                                    setModelPickerOpen(false);
-                                  }}
-                                  ref={value === modelChoice ? selectedModelRef : undefined}
-                                  className="items-start py-2"
-                                >
-                                  <span className="min-w-0 flex-1 break-words">{value}</span>
-                                  <Check className={`mt-0.5 shrink-0 ${value === modelChoice ? "opacity-100" : "opacity-0"}`} aria-hidden="true" />
-                                </CommandItem>
-                              );
-                              })}
-                            </CommandGroup>
-                            {providerIndex < Object.keys(groupedModels).length - 1 && <CommandSeparator />}
-                          </Fragment>
-                        ))}
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
-                <Select value={thinkingChoice} onValueChange={saveThinkingChoice}>
-                  <SelectTrigger size="sm" className="!h-10 !w-full min-w-0 rounded-md border-border-subtle bg-background px-3 hover:bg-bg-active">
-                    <Brain aria-hidden="true" />
-                    <SelectValue placeholder={t("app.think")} />
-                  </SelectTrigger>
-                  <SelectContent>
-                      {THINKING_LEVELS.map((level) => (
-                        <SelectItem key={level.value} value={level.value}>{thinkingLabel(level.value)}</SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
-              </div>
+            /* 主从按钮左对齐跟随阅读动线：主按钮用前景/背景反色（浅色下纯黑、暗色下纯白），
+               比中性灰 accent 更亮更锐；次按钮降级为下划线文本，hover 一起加深。 */
+            <div className="flex flex-wrap items-center gap-6">
+              <Button size="lg" className="h-12 rounded-xl bg-foreground px-7 text-background shadow-[0_8px_24px_-8px_rgb(0_0_0/0.35)] transition-all duration-200 hover:-translate-y-px hover:bg-foreground/85 hover:shadow-[0_12px_32px_-8px_rgb(0_0_0/0.4)]" onClick={props.onCreateAgent}>
+                <Sparkles className="size-4" aria-hidden="true" />{t("app.createAgent")}
+              </Button>
+              <Button variant="ghost" size="lg" className="group h-auto px-0 text-sm font-normal text-text-secondary hover:bg-transparent hover:text-foreground" onClick={props.onCreateAnonymous}>
+                <HatGlasses className="size-4" aria-hidden="true" />
+                <span className="underline decoration-border-strong underline-offset-4 group-hover:decoration-foreground">{t("app.anonymousChatShort")}</span>
+              </Button>
             </div>
           ) : (
-            <Button variant="outline" className="border-border-strong bg-muted/50 text-foreground shadow-none hover:bg-bg-active" onClick={props.onAddProject}>
-              <Plus className="size-3.5" aria-hidden="true" /><span>{t("app.addProject")}</span>
+            <Button size="lg" className="h-12 rounded-xl bg-foreground px-7 text-background shadow-sm hover:bg-foreground/85" onClick={props.onAddProject}>
+              <Plus className="size-4" aria-hidden="true" /><span>{t("app.addProject")}</span>
             </Button>
           )
+        }
+        footer={
+          hasProject && props.activeProject ? (
+            /* 启动配置作为文档 meta 定义列表：等宽字体 + 浅下划线表达「可改的参数」，
+               不再是三个带框控件，与编辑排版同一语言。 */
+            <dl className="flex flex-wrap items-baseline gap-x-8 gap-y-2 text-[13px]">
+              <div className="flex items-baseline gap-2">
+                <dt className="text-text-tertiary">{t("app.model")}</dt>
+                <dd>
+                  <Popover open={modelPickerOpen} onOpenChange={setModelPickerOpen}>
+                    <PopoverTrigger asChild>
+                      <button
+                        type="button"
+                        className="max-w-72 truncate align-baseline font-mono font-medium text-text-primary underline decoration-border-subtle underline-offset-4 transition-colors hover:decoration-border-strong"
+                        title={modelChoice || t("app.model")}
+                      >
+                        {modelChoice || t("app.model")}
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent align="start" className="w-[min(380px,calc(100vw-48px))] p-0">
+                      <Command defaultValue={modelChoice}>
+                        <CommandInput placeholder={t("app.modelPickerSearch")} autoFocus />
+                        <CommandList>
+                          <CommandEmpty>{t("app.modelPickerEmpty")}</CommandEmpty>
+                          {Object.entries(groupedModels).map(([provider, providerModels], providerIndex) => (
+                            <Fragment key={provider}>
+                              <CommandGroup heading={`${provider} (${providerModels.length})`}>
+                                {providerModels.map((model) => {
+                                const value = `${model.provider}/${model.id}`;
+                                return (
+                                  <CommandItem
+                                    key={value}
+                                    value={value}
+                                    onSelect={() => {
+                                      saveModelChoice(value);
+                                      setModelPickerOpen(false);
+                                    }}
+                                    ref={value === modelChoice ? selectedModelRef : undefined}
+                                    className="items-start py-2"
+                                  >
+                                    <span className="min-w-0 flex-1 break-words">{value}</span>
+                                    <Check className={`mt-0.5 shrink-0 ${value === modelChoice ? "opacity-100" : "opacity-0"}`} aria-hidden="true" />
+                                  </CommandItem>
+                                );
+                                })}
+                              </CommandGroup>
+                              {providerIndex < Object.keys(groupedModels).length - 1 && <CommandSeparator />}
+                            </Fragment>
+                          ))}
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                </dd>
+              </div>
+              <div className="flex items-baseline gap-2">
+                <dt className="text-text-tertiary">{t("app.think")}</dt>
+                <dd>
+                  <Select value={thinkingChoice} onValueChange={saveThinkingChoice}>
+                    <SelectTrigger size="sm" className="!h-auto !w-auto gap-1 border-0 bg-transparent p-0 font-mono text-[13px] font-medium text-text-primary underline decoration-border-subtle underline-offset-4 shadow-none hover:decoration-border-strong focus:ring-0 [&_svg]:!size-3">
+                      <SelectValue placeholder={t("app.think")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {THINKING_LEVELS.map((level) => (
+                          <SelectItem key={level.value} value={level.value}>{thinkingLabel(level.value)}</SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </dd>
+              </div>
+            </dl>
+          ) : undefined
         }
 
       />

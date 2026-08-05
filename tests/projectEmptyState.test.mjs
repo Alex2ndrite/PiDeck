@@ -47,7 +47,10 @@ test("project empty state reuses pi-branded EmptyState and offers quick actions"
   assert.doesNotMatch(emptyState, /t\("app\.projectEmptyTitle"/);
   assert.doesNotMatch(emptyState, /t\("app\.emptyNoProjectTitle"/);
   assert.match(emptyState, /actions=\{/);
-  assert.doesNotMatch(emptyState, /footer=\{/);
+  // footer 为启动配置 meta 列表（模型/思考级别），等宽字体 + 浅下划线表达可改参数
+  assert.match(emptyState, /footer=\{/);
+  // 主按钮用前景/背景反色而非中性灰 accent，保证浅色下纯黑、暗色下纯白
+  assert.match(emptyState, /bg-foreground[\s\S]*text-background/);
 });
 
 test("empty state keeps compact configuration controls for first-run setup", () => {
@@ -123,7 +126,9 @@ test("shadcn Empty primitive was removed in favor of pi-branded EmptyState", () 
 
 test("new empty-state copy is bilingual", () => {
   for (const key of [
-    "app.emptyProjectTitle",
+    "app.emptyProjectTitleLead",
+    "app.emptyProjectTitleAccent",
+    "app.emptyProjectTitlePunct",
     "app.emptyNoProjectTitle",
     "app.emptyHasProject",
     "app.emptyNoProject",
