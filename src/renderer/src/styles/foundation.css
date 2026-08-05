@@ -1075,6 +1075,14 @@ select:focus-visible {
 .shell-panel-drawer .detail-drawer {
   height: 100%;
 }
+/* 拖拽区高度同时暴露在 :root：sonner toaster、兑底 toast 等浮层渲染在 #root 内、
+   并非 .wechat-shell 的后代，读不到 shell 作用域变量，会错误地按 0px 计算顶部 offset */
+:root {
+  --window-drag-height: 0px;
+}
+:root:has(.wechat-shell.custom-titlebar-enabled) {
+  --window-drag-height: 40px;
+}
 .wechat-shell.custom-titlebar-enabled {
   --window-drag-height: 40px;
   padding-top: var(--window-drag-height);
