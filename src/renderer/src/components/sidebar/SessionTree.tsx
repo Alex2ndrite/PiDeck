@@ -6,6 +6,7 @@ import { sessionRecordToSummary } from "../../atoms";
 import { t } from "../../i18n";
 import { filterSidebarSessions, getBoundSidebarRuntimeAgent, hasLiveSidebarRuntime, type SidebarController } from "../../hooks/useSidebarController";
 import { Button } from "../ui-shadcn/button";
+import { PathTooltip } from "../ui-shadcn/PathTooltip";
 import type { SidebarActions } from "./SidebarContent";
 import { SessionSourceBadge } from "../session/SessionSourceBadge";
 import { cn } from "../../lib/utils";
@@ -128,20 +129,20 @@ export function SessionTree(props: {
   };
   const renderSubagent = (session: SessionSummary, label: ReactNode) => {
     return (
-      <button
-        type="button"
-        key={session.id}
-        className={cn(
-          sessionRowClass,
-          "session-row codex-subagent-sidebar-row pl-6",
-          session.id === props.currentSessionId && "active border-border-strong bg-accent/20 text-foreground shadow-sm",
-        )}
-        title={session.filePath}
-        onContextMenu={(event) => openContext(event, session)}
-        onClick={() => void props.actions.sessions.open(props.project.id, session.id)}
-      >
-        <div className="conversation-body min-w-0 flex-1"><div className="conversation-title flex min-w-0 items-center gap-1.5">{label}</div></div>
-      </button>
+      <PathTooltip key={session.id} content={session.filePath}>
+        <button
+          type="button"
+          className={cn(
+            sessionRowClass,
+            "session-row codex-subagent-sidebar-row pl-6",
+            session.id === props.currentSessionId && "active border-border-strong bg-accent/20 text-foreground shadow-sm",
+          )}
+          onContextMenu={(event) => openContext(event, session)}
+          onClick={() => void props.actions.sessions.open(props.project.id, session.id)}
+        >
+          <div className="conversation-body min-w-0 flex-1"><div className="conversation-title flex min-w-0 items-center gap-1.5">{label}</div></div>
+        </button>
+      </PathTooltip>
     );
   };
   const renderSubagents = (parentKey: string, codex: SessionSummary[], pi: SessionSummary[]) => {
@@ -175,41 +176,45 @@ export function SessionTree(props: {
         props.controller.catalog.runtimeBySessionId[session.id]?.agentId === child.agent.id
       )) ?? summaries.find((session) => session.filePath === child.agent.sessionPath);
       return <Fragment key={child.key}>
-        <button
-          type="button"
-          className={cn(
-            sessionRowClass,
-            agentSession?.id === props.currentSessionId && "active border-border-strong bg-accent/20 text-foreground shadow-sm",
-          )}
-          onContextMenu={(event) => { event.preventDefault(); void props.controller.openMenu({ kind: "agent", agentId: child.agent.id, x: event.clientX, y: event.clientY }); }}
-          onClick={() => { if (agentSession) void props.actions.sessions.open(props.project.id, agentSession.id); }}
-        >
-          {renderRuntimeStatusDot(child.agent.status)}
-          <div className="conversation-body min-w-0 flex-1"><div className="conversation-title flex min-w-0 items-center gap-1.5">
-            <strong className="min-w-0 flex-1 truncate font-medium">{child.agent.title}</strong>
-            {child.agent.noSession && <span className="anonymous-indicator" title={t("app.anonymousChat")}><HatGlasses size={11} aria-hidden="true" /></span>}
-            {renderToggle(groupKey, childCount)}
-          </div></div>
-        </button>
+        {/* 运行中 Agent 行：标题常被 truncate（如 "JZSSC40..."），悬浮展示完整标题 */}
+        <PathTooltip content={child.agent.title}>
+          <button
+            type="button"
+            className={cn(
+              sessionRowClass,
+              agentSession?.id === props.currentSessionId && "active border-border-strong bg-accent/20 text-foreground shadow-sm",
+            )}
+            onContextMenu={(event) => { event.preventDefault(); void props.controller.openMenu({ kind: "agent", agentId: child.agent.id, x: event.clientX, y: event.clientY }); }}
+            onClick={() => { if (agentSession) void props.actions.sessions.open(props.project.id, agentSession.id); }}
+          >
+            {renderRuntimeStatusDot(child.agent.status)}
+            <div className="conversation-body min-w-0 flex-1"><div className="conversation-title flex min-w-0 items-center gap-1.5">
+              <strong className="min-w-0 flex-1 truncate font-medium">{child.agent.title}</strong>
+              {child.agent.noSession && <span className="anonymous-indicator" title={t("app.anonymousChat")}><HatGlasses size={11} aria-hidden="true" /></span>}
+              {renderToggle(groupKey, childCount)}
+            </div></div>
+          </button>
+        </PathTooltip>
         {renderSubagents(groupKey, child.codexSubagents, child.piSubagents)}
       </Fragment>;
     }
     const runtime = getBoundSidebarRuntimeAgent(props.controller.catalog, child.session.id);
     const runtimeSnapshot = props.controller.catalog.runtimeBySessionId[child.session.id];
     return <Fragment key={child.session.id}>
-      <button
-        type="button"
-        className={cn(
-          sessionRowClass,
-          // 历史会话不是运行中的 Agent：只给这一类内容增加层级缩进，避免项目标题与历史记录贴在同一列。
-          // 历史会话需要比运行中 Agent 更松的点击区域和行间距，避免连续记录挤成一块。
-          "session-row history-session-row mx-0 mb-1 last:mb-0 min-h-11 pl-3 pr-3 py-2",
-          child.session.id === props.currentSessionId && "active border-border-strong bg-accent/20 text-foreground shadow-sm",
-        )}
-        title={child.session.filePath}
-        onContextMenu={(event) => openContext(event, child.session)}
-        onClick={() => void props.actions.sessions.open(props.project.id, child.session.id)}
-      >
+      {/* 悬浮第一行展示完整会话名（行内常被 truncate），第二行展示文件路径 */}
+      <PathTooltip content={`${child.session.name || t("common.untitled")}\n${child.session.filePath}`}>
+        <button
+          type="button"
+          className={cn(
+            sessionRowClass,
+            // 历史会话不是运行中的 Agent：只给这一类内容增加层级缩进，避免项目标题与历史记录贴在同一列。
+            // 历史会话需要比运行中 Agent 更松的点击区域和行间距，避免连续记录挤成一块。
+            "session-row history-session-row mx-0 mb-1 last:mb-0 min-h-11 pl-3 pr-3 py-2",
+            child.session.id === props.currentSessionId && "active border-border-strong bg-accent/20 text-foreground shadow-sm",
+          )}
+          onContextMenu={(event) => openContext(event, child.session)}
+          onClick={() => void props.actions.sessions.open(props.project.id, child.session.id)}
+        >
         {renderRuntimeStatusDot(runtimeSnapshot?.status)}
         <div className="conversation-body min-w-0 flex-1"><div className="conversation-title flex min-w-0 items-center gap-1.5">
           {/* 历史会话（无运行态）文字降一级，与活跃 Agent/运行中会话形成层级差 */}
@@ -218,6 +223,7 @@ export function SessionTree(props: {
           {renderToggle(groupKey, childCount)}
         </div></div>
       </button>
+      </PathTooltip>
       {renderSubagents(groupKey, child.codexSubagents, child.piSubagents)}
     </Fragment>;
   };
@@ -236,6 +242,7 @@ export function SessionTree(props: {
             className={cn("draft-session-row group/draft grid items-center gap-1", canDelete ? "grid-cols-[minmax(0,1fr)_2rem]" : "grid-cols-1 has-runtime")}
             onContextMenu={(event) => openDraftContext(event, session)}
           >
+          <PathTooltip content={session.title}>
             <button
               type="button"
               className={cn(
@@ -243,7 +250,6 @@ export function SessionTree(props: {
                 "session-row draft-session-trigger",
                 session.id === props.currentSessionId && "active border-border-strong bg-accent/20 text-foreground shadow-sm",
               )}
-              title={session.title}
               onClick={() => void props.actions.sessions.open(props.project.id, session.id)}
             >
               <div className="conversation-body min-w-0 flex-1"><div className="conversation-title flex min-w-0 items-center gap-1.5">
@@ -251,6 +257,7 @@ export function SessionTree(props: {
                 <strong className="min-w-0 flex-1 truncate font-medium">{session.title}</strong>
               </div></div>
             </button>
+          </PathTooltip>
             {canDelete && (
               <Button variant="ghost" size="icon"
                 className="draft-session-delete"
@@ -268,7 +275,7 @@ export function SessionTree(props: {
 
       {display.hiddenChildCount > 0 && (
         <Button
-          variant="ghost" size="sm" className={`h-auto w-full justify-start px-2 text-caption ${props.nested ? "worktree-sessions-more" : "session-more-row"}`}
+          variant="ghost" size="sm" className={`h-auto justify-start px-2 text-caption ${props.nested ? "worktree-sessions-more" : "session-more-row"}`}
           onClick={props.onShowMore ?? (() => props.controller.showMoreChildren(props.project.id))}
         >
           <span>{props.nested

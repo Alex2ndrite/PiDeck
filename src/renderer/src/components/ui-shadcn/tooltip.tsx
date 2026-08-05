@@ -32,9 +32,9 @@ function TooltipTrigger({
 
 function TooltipContent({
   className,
+  arrowClassName,
   sideOffset = 0,
   children,
-  arrowClassName,
   ...props
 }: React.ComponentProps<typeof TooltipPrimitive.Content> & {
   /** 允许数据型 Tooltip 让箭头与自定义弹层表面保持同色。 */
