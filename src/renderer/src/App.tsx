@@ -17,6 +17,7 @@ import {
   FolderOpen,
   Globe,
   Pencil,
+  SquarePen,
   Terminal,
   GitBranch,
 } from "lucide-react";
@@ -2663,6 +2664,14 @@ export function App() {
               icon: <FolderOpen size={16} />,
               active: drawer === "files",
               onClick: () => handleToolDrawerAction("files"),
+            },
+            // 编辑器与文件互为独立面板：文件树负责浏览，编辑器承载所有已打开文件
+            {
+              id: "editor",
+              label: t("editor.fileEditor"),
+              icon: <SquarePen size={16} />,
+              active: drawer === "editor",
+              onClick: () => handleToolDrawerAction("editor"),
             },
             // Git 面板受设置开关与项目上下文双重门控，与 outline 入口保持一致
             ...(settings.enableGitManagement && activeProjectId ? [{
