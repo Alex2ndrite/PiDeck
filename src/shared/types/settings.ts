@@ -21,7 +21,7 @@ export type AppSkinId =
 export type AppLanguageMode = "system" | "zh-CN" | "en-US" | "pseudo";
 export type LinkOpenMode = "external" | "internal";
 export type AppFontSizeMode = "compact" | "default" | "medium" | "large" | "xlarge";
-export type AppFontBaseMode = "system" | "sans" | "serif" | "custom";
+export type AppFontBaseMode = "lxgw-wenkai" | "system" | "sans" | "serif" | "custom";
 export type AppFontMonoMode = "commit-mono" | "system-mono" | "custom";
 /** 主窗口启动尺寸预设：last=上次关闭时的窗口大小（读不到时顺延默认）；fullscreen 占满屏幕，maximized 最大化，其余为固定窗口 */
 export type StartupWindowMode =
@@ -156,7 +156,7 @@ export type AppSettings = {
 	inputFontSize: AppFontSizeMode | null;
 	/** 全局窗口缩放比例，1 为 100%；通过 webContents.setZoomFactor 生效 */
 	zoomFactor: number;
-	/** UI 基础字体预设，system 为跨平台系统栈；custom 时使用 fontFamilyBaseCustom */
+	/** UI 基础字体预设，默认使用内置霞鹜文楷；system 跟随系统字体栈；custom 时使用 fontFamilyBaseCustom */
 	fontFamilyBase: AppFontBaseMode;
 	/** fontFamilyBase=custom 时的自定义字体族栈，原样写入 CSS font-family */
 	fontFamilyBaseCustom: string;

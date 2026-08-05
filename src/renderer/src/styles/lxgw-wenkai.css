@@ -1,0 +1,15 @@
+/*
+ * 霞鹜文楷 v1.522：普通比例 TTF，完整中文覆盖，随 Electron 离线分发。
+ * 官方标准版最重只有 Medium（无 Bold），因此只打包这一个约 25MB 的文件。
+ * 字重策略：
+ * - 300-500（正文、按钮）直接使用 Medium，比 Regular 更实。
+ * - 600-700（标题、强调）故意不声明字体面，让 Chromium 在 Medium 基础上合成加粗，
+ *   不增加字体文件体积即可获得更黑的层级。
+ */
+@font-face {
+  font-family: "LXGW WenKai";
+  src: url("../../assets/fonts/lxgw-wenkai/LXGWWenKai-Medium.ttf") format("truetype");
+  font-style: normal;
+  font-weight: 300 500;
+  font-display: swap;
+}

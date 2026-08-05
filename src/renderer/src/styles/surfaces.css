@@ -911,7 +911,7 @@
   white-space: nowrap;
   padding: 0 8px;
   border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-md);
   font-family: var(--font-family-business);
   line-height: var(--line-height-caption);
   font-size: var(--font-size-caption);
@@ -1852,8 +1852,10 @@
   font-family: var(--font-family-base);
   font-size: var(--font-size-control);
   line-height: var(--line-height-control);
-  -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
+  /* Windows/Electron 下不要强制 grayscale antialiasing：13px CJK 会出现横竖笔画灰度不一致。
+     subpixel-antialiased 与文件编辑器的处理保持一致；text-rendering 回到浏览器默认，避免额外改变字形栅格化。 */
+  -webkit-font-smoothing: subpixel-antialiased;
+  text-rendering: auto;
 }
 
 .config-modal [data-slot="button"] {
@@ -1901,17 +1903,20 @@
   /* 分组标题由 Tailwind 承担 */
 }
 
-/* pure official：nav 按钮为 shadcn ghost/secondary size=sm，与系统控件高度对齐 */
+/* Pi 管理导航是高频小字号中文：14px 比 13px 更容易落在清晰的像素栅格上。
+   !important 用于压过按钮上的通用 text-control utility，避免组件改 class 后又退回 13px。 */
 .config-nav-btn {
   min-height: 2rem; /* 32px = h-8 */
   height: 2rem;
+  font-size: 14px !important;
+  font-weight: 500;
 }
 
-/* 选中态与设置弹窗 tabs 对齐：更深底色 + 主文字 + 加粗 */
+/* 选中态只用背景表达，不再切换到更粗字重，避免同一栏文字黑度跳变。 */
 .config-nav-btn.active {
   background: var(--color-bg-active);
   color: var(--color-text-primary);
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .config-main {
@@ -2871,7 +2876,8 @@
   padding: 8px 10px;
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--color-warning) 8%, transparent);
-  border-left: 3px solid var(--color-warning);
+  /* 整圈细边框取代左侧 3px 竖条：中性化后不再用单侧 accent bar 表达强调 */
+  border: 1px solid color-mix(in srgb, var(--color-warning) 28%, transparent);
   color: var(--color-warning);
   font-size: var(--font-size-caption);
   line-height: 1.5;
@@ -4105,7 +4111,6 @@ div.fixed.inset-0.z-50 {
   padding: 0 var(--space-4);
   padding-left: var(--space-6);
   border-bottom: 1px solid var(--color-border-subtle);
-  border-left: 3px solid var(--color-accent);
   background: var(--color-bg-muted);
   flex-shrink: 0;
   min-width: 0;

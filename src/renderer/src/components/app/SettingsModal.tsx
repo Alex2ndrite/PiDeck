@@ -331,6 +331,7 @@ function SettingsModalContent(props: SettingsModalProps) {
 		{ value: "xlarge", label: t("settings.fontSizeXlarge") },
 	];
 	const fontBaseOptions = [
+		{ value: "lxgw-wenkai", label: t("settings.fontFamilyBaseLxgwWenKai") },
 		{ value: "system", label: t("settings.fontFamilyBaseSystem") },
 		{ value: "sans", label: t("settings.fontFamilyBaseSans") },
 		{ value: "serif", label: t("settings.fontFamilyBaseSerif") },
