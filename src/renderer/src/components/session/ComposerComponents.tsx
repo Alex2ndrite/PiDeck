@@ -46,19 +46,26 @@ import type {
 const EXTENSION_WIDGET_COLLAPSED_KEY_PREFIX =
 	"pid:extension-widget-collapsed:";
 
-/** 渲染 widget 单行内容，将 ✓ 标记高亮为绿色，让 todo 等扩展的完成态更醒目。 */
-function renderWidgetLine(line: string): ReactNode {
-	const parts = line.split(/(✓)/g);
+/** 渲染 widget 单行内容，将 ✓/☑ 完成标记高亮为绿色，让 todo/plan 扩展的完成态更醒目。 */
+export function renderWidgetLine(line: string): ReactNode {
+	const parts = line.split(/(✓|☑)/g);
 	if (parts.length <= 1) return line;
 	return parts.map((part, i) =>
-		part === "✓" ? (
+		part === "✓" || part === "☑" ? (
 			<span key={i} className="widget-check-done">
-				✓
+				{part}
 			</span>
 		) : (
 			part
 		),
 	);
+}
+
+/** 内置扩展 widget 的展示标题：widgetKey 是扩展内部标识（如 pi-deck-todo），直接展示不友好，映射为固定短名。 */
+export function widgetDisplayTitle(widgetKey: string): string {
+	if (widgetKey === "pi-deck-todo") return t("app.widgetTitleTodo");
+	if (widgetKey === "pi-deck-plan-todos") return t("app.widgetTitlePlan");
+	return widgetKey;
 }
 
 export function ExtensionWidgetCard(props: {
@@ -106,7 +113,7 @@ export function ExtensionWidgetCard(props: {
 						size={14}
 						className={`extension-widget-card-chevron${expanded ? " open" : ""}`}
 					/>
-					<span className="extension-widget-card-title">{props.widgetKey}</span>
+					<span className="extension-widget-card-title">{widgetDisplayTitle(props.widgetKey)}</span>
 				</button>
 				<button
 					className="extension-widget-card-close"
@@ -286,13 +293,13 @@ export function ComposerBottomBar(props: {
 				<div className="composer-bottom-right ml-auto flex shrink-0 items-center gap-2">
 					{props.gitInfo?.current && (
 						<span
-							className="composer-bar-branch inline-flex max-w-[12rem] items-center gap-1 truncate px-1 font-brand text-micro italic text-foreground/75"
+							className="composer-bar-branch inline-flex max-w-[12rem] items-center gap-1.5 truncate px-1.5 font-brand text-control font-medium italic text-foreground/75"
 							title={t("app.branchCurrent", {
 								branch: props.gitInfo.current,
 								count: props.gitInfo.branches.length,
 							})}
 						>
-							<GitBranch size={12} strokeWidth={1.8} aria-hidden="true" />
+							<GitBranch size={14} strokeWidth={1.8} aria-hidden="true" />
 							<span className="composer-bar-branch-name truncate">{props.gitInfo.current}</span>
 						</span>
 					)}
