@@ -32,8 +32,9 @@ export function Toaster() {
 		<SonnerToaster
 			theme={theme}
 			position="top-right"
-			gap={8}
+			gap={10}
 			closeButton
+			visibleToasts={4}
 			offset={{
 				// 让开自定义标题栏拖拽区（--window-drag-height：frameless 下 40px，否则 0px）。
 				// 首个 toast 若贴顶，左上角关闭按钮会落在 -webkit-app-region: drag 层里，
@@ -42,6 +43,7 @@ export function Toaster() {
 				right: "16px",
 			}}
 			toastOptions={{
+				className: "app-sonner-toast",
 				style: {
 					// 中性面板卡片：与弹窗/抽屉同一套 token，类型语义只体现在图标色（见 surfaces.css）
 					background: "var(--color-bg-panel)",
@@ -51,6 +53,7 @@ export function Toaster() {
 					color: "var(--color-text-primary)",
 					fontSize: "13px",
 					fontFamily: "var(--font-family-base)",
+					padding: "12px 36px 12px 14px",
 				},
 			}}
 		/>

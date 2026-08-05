@@ -40,14 +40,24 @@ function ensureFallbackHost() {
 		"z-index:2147483000",
 		"display:flex",
 		"flex-direction:column",
+		"align-items:flex-end",
 		"gap:8px",
 		"pointer-events:none",
 		"max-width:min(520px, calc(100vw - 32px))",
-		"-webkit-app-region:no-drag",
+		"-webkit-app-region:no-drag"
 	].join(";");
 	document.body.appendChild(host);
 	fallbackHost = host;
 	return host;
+}
+
+/** 关闭兜底通知并回收宿主节点；持久 Ask 通知只能通过这个按钮结束。 */
+function dismissFallbackNotice(item: HTMLDivElement, host: HTMLDivElement) {
+	item.remove();
+	if (host.childElementCount === 0) {
+		host.remove();
+		if (fallbackHost === host) fallbackHost = null;
+	}
 }
 
 /** Toaster 未挂载时的 DOM 兜底 toast，避免全局异常完全静默。 */
@@ -56,11 +66,11 @@ function showFallbackNotice(message: string, duration: number, kind: NoticeData[
 	const host = ensureFallbackHost();
 	const item = document.createElement("div");
 	// 与 sonner 卡片同一套中性面板样式（走 CSS 变量，主题自动适配）；
-	// kind 仅保留语义入口，不叠加彩色竖条。
-	void kind;
+	// kind 只保留可访问性语义，不叠加高饱和色竖条，避免 fallback 与正式 toast 视觉分裂。
 	item.style.cssText = [
+		"position:relative",
 		"pointer-events:auto",
-		"padding:10px 14px",
+		"padding:12px 40px 12px 14px",
 		"border-radius:10px",
 		"background:var(--color-bg-panel, #ffffff)",
 		"color:var(--color-text-primary, #1f2328)",
@@ -69,19 +79,32 @@ function showFallbackNotice(message: string, duration: number, kind: NoticeData[
 		"font:500 13px/1.4 var(--font-family-base, system-ui,-apple-system,Segoe UI,sans-serif)",
 		"word-break:break-word",
 	].join(";");
-	item.textContent = message;
-	// 兑底 toast 没有 sonner 的 closeButton，点击卡片本身即关闭
-	item.style.cursor = "pointer";
-	item.title = t("common.close");
-	item.addEventListener("click", () => item.remove());
+	item.setAttribute("role", kind === "error" ? "alert" : "status");
+	const close = document.createElement("button");
+	close.type = "button";
+	close.textContent = "×";
+	close.setAttribute("aria-label", t("common.close"));
+	close.title = t("common.close");
+	close.style.cssText = [
+		"position:absolute",
+		"top:8px",
+		"right:8px",
+		"width:24px",
+		"height:24px",
+		"border:0",
+		"border-radius:6px",
+		"background:transparent",
+		"color:var(--color-text-tertiary,#8b8f94)",
+		"font:600 18px/1 system-ui,sans-serif",
+		"cursor:pointer",
+	].join(";");
+	close.addEventListener("click", () => dismissFallbackNotice(item, host));
+	item.appendChild(document.createTextNode(message));
+	item.appendChild(close);
 	host.appendChild(item);
-	window.setTimeout(() => {
-		item.remove();
-		if (host.childElementCount === 0) {
-			host.remove();
-			if (fallbackHost === host) fallbackHost = null;
-		}
-	}, Math.max(1200, duration));
+	if (Number.isFinite(duration)) {
+		window.setTimeout(() => dismissFallbackNotice(item, host), Math.max(1200, duration));
+	}
 }
 
 /**
@@ -92,14 +115,15 @@ function toasterMounted() {
 	return toasterReady;
 }
 
-export function showNotice(message: string, duration = 3500, kind?: NoticeData["kind"]) {
+export function showNotice(message: string, duration?: number, kind?: NoticeData["kind"]) {
+	const resolvedDuration = duration ?? (kind === "error" || kind === "warning" ? 3000 : 1500);
 	const text = String(message ?? "").trim();
 	if (!text) return;
 	if (!toasterMounted()) {
-		showFallbackNotice(text, duration, kind);
+		showFallbackNotice(text, resolvedDuration, kind);
 		return;
 	}
-	const options = { duration };
+	const options = { duration: resolvedDuration };
 	if (kind === "error") toast.error(text, options);
 	else if (kind === "warning") toast.warning(text, options);
 	else if (kind === "info") toast.info(text, options);
