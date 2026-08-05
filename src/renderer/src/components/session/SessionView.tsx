@@ -60,10 +60,9 @@ export type SessionViewProps = {
 
   // ── Header callbacks ──
   onHeaderTrigger: () => void;
-  onNewSession: () => void;
   onStop: () => void;
   onRestart: () => void;
-  /** 右侧抽屉开关（main 布局：新会话按钮右侧），不传则不渲染 */
+  /** 右侧抽屉开关（main 布局：会话操作菜单右侧），不传则不渲染 */
   onToggleDrawer?: () => void;
   drawerOpen?: boolean;
 
@@ -139,7 +138,6 @@ export function SessionView({
   showRestart,
   sessionDuration,
   onHeaderTrigger,
-  onNewSession,
   onStop,
   onRestart,
   onToggleDrawer,
@@ -229,34 +227,29 @@ export function SessionView({
 
   return (
     <>
-      <SessionTabsBar
-        {...sessionTabs}
-        actions={
-          <SessionHeader
-            embedded
-            headerRef={chatHeaderRef}
-            comboRef={sessionComboRef}
-            title={sessionTitle}
-            compactionCount={activeAgent?.compactionCount}
-            isAnonymous={activeAgent?.noSession}
-            runtimeState={activeRuntimeState}
-            duration={sessionDuration}
-            isStarting={isAgentStarting}
-            hasProject={hasProject}
-            hasSession={Boolean(activeAgentId || sessionId)}
-            menuOpen={sessionActionsOpen}
-            canStop={canStop}
-            canRestart={canRestart}
-            isRestarting={isRestarting}
-            showRestart={showRestart}
-            onTrigger={onHeaderTrigger}
-            onNewSession={onNewSession}
-            onStop={onStop}
-            onRestart={onRestart}
-            onToggleDrawer={onToggleDrawer}
-            drawerOpen={drawerOpen}
-          />
-        }
+      {/* 状态徽章与操作独立成下一行，Tab 栏只保留可横向滚动的会话标签。 */}
+      <SessionTabsBar {...sessionTabs} actions={null} />
+      <SessionHeader
+        headerRef={chatHeaderRef}
+        comboRef={sessionComboRef}
+        title={sessionTitle}
+        compactionCount={activeAgent?.compactionCount}
+        isAnonymous={activeAgent?.noSession}
+        runtimeState={activeRuntimeState}
+        duration={sessionDuration}
+        isStarting={isAgentStarting}
+        hasProject={hasProject}
+        hasSession={Boolean(activeAgentId || sessionId)}
+        menuOpen={sessionActionsOpen}
+        canStop={canStop}
+        canRestart={canRestart}
+        isRestarting={isRestarting}
+        showRestart={showRestart}
+        onTrigger={onHeaderTrigger}
+        onStop={onStop}
+        onRestart={onRestart}
+        onToggleDrawer={onToggleDrawer}
+        drawerOpen={drawerOpen}
       />
       <ResizablePanelGroup orientation="vertical" className="session-v-group">
         <ResizablePanel id="timeline" minSize={160} className="session-v-timeline">

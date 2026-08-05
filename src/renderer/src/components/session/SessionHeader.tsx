@@ -1,4 +1,4 @@
-import { ChevronDown, HatGlasses, PanelRight, Plus } from "lucide-react";
+import { ChevronDown, HatGlasses, PanelRight } from "lucide-react";
 import { useAtomValue } from "jotai";
 import { selectAtom } from "jotai/utils";
 import { useMemo, type RefObject } from "react";
@@ -26,10 +26,9 @@ type HeaderActions = {
   isRestarting: boolean;
   showRestart: boolean;
   onTrigger: () => void;
-  onNewSession: () => void;
   onStop: () => void;
   onRestart: () => void;
-  /** 右侧抽屉开关（main 布局：新会话按钮右侧），不传则不渲染 */
+  /** 右侧抽屉开关（main 布局：会话操作菜单右侧），不传则不渲染 */
   onToggleDrawer?: () => void;
   drawerOpen?: boolean;
   /** 将状态/操作区嵌入 Tab 栏，避免当前会话再单独占一行。 */
@@ -104,11 +103,11 @@ export function SessionHeader(props: SessionHeaderProps) {
               size="sm"
               className="session-combo-trigger h-7 gap-1 px-2"
               disabled={!props.hasProject || isStarting}
-              title={t("app.newSession")}
+              title={t("app.sessionActions")}
               onClick={props.onTrigger}
             >
-              <Plus className="size-3" strokeWidth={2} aria-hidden="true" />
-              <span className="session-combo-label">{t("app.new")}</span>
+              {/* 新建入口已迁到 Tab 栏的 “+” 下拉；此组合菜单只保留运行控制（停止/重启） */}
+              <span className="session-combo-label">{t("app.sessionActions")}</span>
               {hasSession && (
                 <span className={`session-combo-chevron${props.menuOpen ? " open" : ""}`}>
                   <ChevronDown className="size-3" />
@@ -117,10 +116,6 @@ export function SessionHeader(props: SessionHeaderProps) {
             </Button>
             {props.menuOpen && hasSession && (
               <div className="session-combo-menu absolute top-[calc(100%+6px)] right-0 z-50 min-w-40 overflow-hidden rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md">
-                <Button type="button" variant="ghost" size="sm" className="h-auto w-full justify-start px-2 py-1.5 text-body hover:bg-accent" onClick={props.onNewSession}>
-                  <span>{t("app.newSession")}</span>
-                </Button>
-                <div className="session-combo-divider my-1 h-px bg-border" />
                 <Button type="button" variant="ghost" size="sm" className="h-auto w-full justify-start px-2 py-1.5 text-body hover:bg-accent disabled:opacity-50" disabled={!props.canStop} onClick={props.onStop}>
                   {t("app.stop")}
                 </Button>

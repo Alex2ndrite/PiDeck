@@ -2450,7 +2450,15 @@ export function App() {
     onClose: closeSessionTab,
     onCloseOthers: closeOtherSessionTabs,
     onCloseAll: closeAllSessionTabs,
-    onNewSession: () => void runCreateSessionDraft(),
+    // Tab 栏 “+” 下拉的新建目标：聊天对话区置顶，其余按侧栏项目顺序
+    newSessionTargets: projects
+      .map((project) => ({
+        projectId: project.id,
+        label: isChatProject(project) ? t("app.chatProject") : project.name,
+        isChat: isChatProject(project),
+      }))
+      .sort((a, b) => Number(b.isChat) - Number(a.isChat)),
+    onNewSessionInProject: (projectId: string) => void runCreateSessionDraft(projectId),
     onTogglePin: togglePinSessionTab,
     onReorder: reorderSessionTab,
     onToggleDrawer: toggleRightDrawer,
