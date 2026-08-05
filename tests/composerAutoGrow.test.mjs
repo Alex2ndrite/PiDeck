@@ -96,7 +96,12 @@ test("session view grows and shrinks the composer panel with variable content", 
   assert.match(sessionView, /onContentHeightChange=\{handleComposerContentHeight\}/);
   // 目标高度 = max(用户手动高度, 默认输入区 + 额外内容)，受 maxSize 约束
   assert.match(sessionView, /Math\.max\(userPreferred, COMPOSER_DEFAULT_HEIGHT \+ extraHeight\)/);
-  assert.match(sessionView, /composerPanelRef\.current\?\.resize/);
+  // 程序化 resize 优先走 Group.setLayout：composer 增高只从 timeline 拿空间，
+  // 不再压到 terminal（库默认 panel.resize 会从相邻面板拿空间）；增高预算受
+  // timeline 保底线限制。group 未就绪时才回退旧 resize 路径。
+  assert.match(sessionView, /group\.setLayout\(next\)/);
+  assert.match(sessionView, /growComposerWithinTimelineBudget/);
+  assert.match(sessionView, /composerPanelRef\.current\?\.resize\(target\)/);
   // 内容减少时自动回缩：仅当当前高度由内容驱动（未超过内容所需）时回缩，
   // 用户手动拖高的高度不被内容变化回缩
   assert.match(sessionView, /target > current/);
@@ -108,8 +113,8 @@ test("session view grows and shrinks the composer panel with variable content", 
   assert.match(sessionView, /programResizeExpireRef\.current = Date\.now\(\) \+ 200/);
   assert.match(sessionView, /Math\.abs\(px - contentDrivenHeightRef\.current\) <= 2/);
   assert.match(sessionView, /applyComposerHeight\(px, true\)/);
-  // 面板未注册到 group 时 resize 抛错：try/catch 静默跳过，避免渲染崩溃
-  assert.match(sessionView, /try \{\n\s*composerPanelRef\.current\?\.resize/);
+  // 面板未注册到 group 时 setLayout/resize 抛错：try/catch 静默跳过，避免渲染崩溃
+  assert.match(sessionView, /try \{[\s\S]*group\.setLayout\(next\)/);
   assert.match(sessionView, /Group not found/);
 });
 
