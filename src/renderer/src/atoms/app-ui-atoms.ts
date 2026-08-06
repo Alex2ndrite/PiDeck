@@ -23,8 +23,3 @@ export const sidebarExpandedProjectIdsAtom = atom<ReadonlySet<string>>(
 
 // useStreamdownRendererAtom 已移除：Streamdown 转正为唯一 markdown 引擎（迁移 react-markdown 完成）。
 
-/**
- * 实验开关：内置浏览器走 WebContentsView 管线（UI 2.0 / issue #115 U4 灰度）。
- * 由 App 在 settings 加载/变更时同步；默认 false 走 <webview>。
- */
-export const useWebContentsViewBrowserAtom = atom(false);

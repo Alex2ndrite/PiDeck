@@ -75,7 +75,6 @@ import {
   sessionIdByRuntimeAgentIdAtomFamily,
   sessionRuntimeBySessionIdAtomFamily,
   sidebarExpandedProjectIdsAtom,
-  useWebContentsViewBrowserAtom,
   sessionCatalogLoadStateAtom,
   sessionSummariesByProjectIdAtomFamily,
   sessionTabIdsAtom,
@@ -548,12 +547,6 @@ export function App() {
     piRpcNoExtensions: false,
     piRpcNoSkills: false,
   });
-
-  // 实验浏览器开关（#115 U4）：WebContentsView 灰度
-  const setWebContentsViewBrowser = useSetAtom(useWebContentsViewBrowserAtom);
-  useEffect(() => {
-    setWebContentsViewBrowser(Boolean(settings.useWebContentsViewBrowser));
-  }, [settings.useWebContentsViewBrowser, setWebContentsViewBrowser]);
 
   // Guard: hide git drawer when git management is disabled.
   // Equivalent to: if (panel === "git" && !settings.enableGitManagement) return

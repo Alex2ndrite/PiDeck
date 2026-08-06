@@ -166,9 +166,6 @@ Gitmoji 对应关系：
   piRpcNoExtensions: false,
   piRpcNoSkills: false,
 
-  // ── 实验性渲染（#115）：Streamdown 已转正为唯一 markdown 引擎（迁移自 react-markdown） ──
-  useWebContentsViewBrowser: false,
-
   // 字体配置：默认使用系统字体；用户可通过自定义字体设置修改。
   fontSize: "medium",
   uiFontSize: null,

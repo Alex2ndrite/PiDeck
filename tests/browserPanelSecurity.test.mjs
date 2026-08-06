@@ -5,7 +5,7 @@ import test from "node:test";
 const browserPanel = readFileSync("src/renderer/src/components/app/BrowserPanel.tsx", "utf8");
 const rendererTypes = readFileSync("src/renderer/src/types.d.ts", "utf8");
 const main = readFileSync("src/main/index.ts", "utf8");
-// #115 U4：partition/白名单已收敛到共享模块，index.ts 与 BrowserViewManager 都从它导入
+// #115 U4：partition/白名单已收敛到共享模块，webview 管线主进程加固与浏览器安全模块都从它导入
 const browserSecurity = readFileSync("src/main/browser/browserSecurity.ts", "utf8");
 const filesIpc = readFileSync("src/main/ipc/filesIpc.ts", "utf8");
 
@@ -88,29 +88,4 @@ test("external browser IPC shares the HTTP(S) protocol gate and Chromium sandbox
 	// 但只能在用户未显式开启 electronChromiumSandbox 时才附带 no-sandbox；
 	// 用户开启沙箱后必须保持 Chromium 默认沙箱，不能无条件追加 no-sandbox。
 	assert.match(main, /if \(!electronChromiumSandboxEnabled\) \{\s*\/\/[^\n]*\n\s*app\.commandLine\.appendSwitch\("no-sandbox"\);/);
-});
-
-// #115 U4：WebContentsView 管线必须与 webview 管线同一安全模型
-test("WebContentsView pipeline reuses the shared security policy", () => {
-	const manager = readFileSync("src/main/browser/BrowserViewManager.ts", "utf8");
-	const ipc = readFileSync("src/main/ipc/browserViewIpc.ts", "utf8");
-	// 同一 partition、同一白名单（不允许第二份拷贝漂移）
-	assert.match(manager, /from "\.\/browserSecurity"/);
-	assert.match(manager, /partition: BROWSER_PANEL_PARTITION/);
-	// 视图 webPreferences 最小权限基线
-	assert.match(manager, /sandbox: true/);
-	assert.match(manager, /nodeIntegration: false/);
-	assert.match(manager, /webviewTag: false/);
-	// 导航两层拦截 + 新窗口一律 deny 转渲染层分发
-	assert.match(manager, /will-frame-navigate/);
-	assert.match(manager, /will-redirect/);
-	assert.match(manager, /setWindowOpenHandler/);
-	assert.match(manager, /action: "deny"/);
-	// IPC 边界：bounds 消毒 + navigate 白名单 + action 枚举
-	assert.match(manager, /sanitizeBounds/);
-	assert.match(ipc, /isAllowedBrowserPanelUrl/);
-	assert.match(ipc, /case "back"/);
-	assert.match(ipc, /Ignored unknown browser view action/);
-	// 主入口已注册该 IPC 域
-	assert.match(main, /registerBrowserViewIpc/);
 });

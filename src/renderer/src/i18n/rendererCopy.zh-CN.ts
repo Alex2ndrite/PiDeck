@@ -1574,8 +1574,6 @@ export const zhCN = {
   "settings.piRpcNoSkills": "禁用技能启动 (--no-skills)",
   "settings.useStreamdownRenderer": "Streamdown 渲染引擎",
   "settings.useStreamdownRendererDesc": "助手消息默认用 Streamdown 渲染：流式半截 Markdown 容错更好、按块缓存更流畅。遇异常可关回旧渲染。",
-  "settings.useWebContentsViewBrowser": "内置浏览器 WebContentsView 管线（实验）",
-  "settings.useWebContentsViewBrowserDesc": "浏览器面板改由主进程 WebContentsView 渲染，限制更少、安全策略更集中。已知限制：窗口缩放非 100% 时可能对不齐。遇异常可关回 webview。",
   "settings.piRpcNoExtensionsDesc": "启动时不加载任何扩展。用于排查坏扩展导致 RPC 起不来；开启后 todo/plan/ask 等扩展会失效。",
   "settings.piRpcNoExtensions": "禁用扩展启动 (--no-extensions)",
   "settings.piRpcOfflineDesc": "跳过 pi 启动时的模型目录网络刷新。桌面端模型列表来自本地 models.json，建议保持开启以加快冷启动。",

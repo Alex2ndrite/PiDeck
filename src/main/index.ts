@@ -193,7 +193,6 @@ import { registerSessionIpc, scheduleCatalogBackgroundScan } from "./ipc/session
 import { registerSystemIpc } from "./ipc/systemIpc";
 import { fetchModelList, getCachedModelList, refreshModelList } from "./pi/modelListCache";
 import { registerFilesIpc } from "./ipc/filesIpc";
-import { registerBrowserViewIpc } from "./ipc/browserViewIpc";
 import {
 	BROWSER_PANEL_PARTITION as BROWSER_PANEL_PARTITION_SHARED,
 	isAllowedBrowserPanelUrl as isAllowedBrowserPanelUrlShared,
@@ -2064,10 +2063,6 @@ function registerIpc() {
 		settingsStore,
 		appLogger,
 		getMainWindow: () => mainWindow,
-	});
-	registerBrowserViewIpc({
-		getMainWindow: () => mainWindow,
-		appLogger,
 	});
 	// 换肤背景图：协议服务 userData/backgrounds/，IPC 负责选图复制与删除
 	registerBackgroundImageProtocol();

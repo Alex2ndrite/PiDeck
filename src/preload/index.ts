@@ -1180,30 +1180,6 @@ const api = {
 			ipcRenderer.invoke(ipcChannels.browserOpenExternal, url) as Promise<void>,
 	},
 
-	// ===== 内置浏览器（WebContentsView 管线，#115 U4 灰度） =====
-	browserView: {
-		show: (bounds: { x: number; y: number; width: number; height: number }, url?: string) =>
-			ipcRenderer.invoke(ipcChannels.browserViewShow, bounds, url) as Promise<void>,
-		hide: () =>
-			ipcRenderer.invoke(ipcChannels.browserViewHide) as Promise<void>,
-		setBounds: (bounds: { x: number; y: number; width: number; height: number }) =>
-			ipcRenderer.invoke(ipcChannels.browserViewSetBounds, bounds) as Promise<void>,
-		navigate: (url: string, userAgent?: string | null) =>
-			ipcRenderer.invoke(ipcChannels.browserViewNavigate, url, userAgent ?? null) as Promise<boolean>,
-		action: (action: "back" | "forward" | "reload") =>
-			ipcRenderer.invoke(ipcChannels.browserViewAction, action) as Promise<void>,
-		onState: (listener: (state: { url: string; title: string; isLoading: boolean; canGoBack: boolean; canGoForward: boolean }) => void) => {
-			const handler = (_event: unknown, state: { url: string; title: string; isLoading: boolean; canGoBack: boolean; canGoForward: boolean }) => listener(state);
-			ipcRenderer.on(ipcChannels.browserViewState, handler);
-			return () => { ipcRenderer.removeListener(ipcChannels.browserViewState, handler); };
-		},
-		onNewWindow: (listener: (url: string) => void) => {
-			const handler = (_event: unknown, url: string) => listener(url);
-			ipcRenderer.on(ipcChannels.browserViewNewWindow, handler);
-			return () => { ipcRenderer.removeListener(ipcChannels.browserViewNewWindow, handler); };
-		},
-	},
-
 	scratchPad: {
 		list: () =>
 			ipcRenderer.invoke(ipcChannels.scratchPadList) as Promise<DraftMeta[]>,

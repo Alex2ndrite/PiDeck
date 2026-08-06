@@ -1483,12 +1483,6 @@ function SettingsModalContent(props: SettingsModalProps) {
 										checked={draftSettings.piRpcNoSkills}
 										onChange={(checked) => updateDraft({ piRpcNoSkills: checked })}
 									/>
-									<SettingSwitch
-										title={t("settings.useWebContentsViewBrowser")}
-										description={t("settings.useWebContentsViewBrowserDesc")}
-										checked={Boolean(draftSettings.useWebContentsViewBrowser)}
-										onChange={(checked) => updateDraft({ useWebContentsViewBrowser: checked })}
-									/>
 								</SettingsSection>
 								<SettingsSection title={t("settings.debug")}>
 									<div className="setting-row">
