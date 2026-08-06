@@ -500,6 +500,16 @@ export function SessionView({
               <ChevronDown size={18} />
             </button>
           )}
+          {/* 重启动画：opacity 过渡 + loader 旋转均为合成器驱动（transform/opacity），
+              不占用渲染主线程，不会导致窗口卡顿；始终挂载以支持重启结束时的平滑淡出。 */}
+          <div
+            className={`absolute inset-0 z-30 flex flex-col items-center justify-center gap-2.5 bg-bg-panel/70 transition-opacity duration-200 ${isRestarting ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"}`}
+            role={isRestarting ? "status" : undefined}
+            aria-hidden={!isRestarting}
+          >
+            <div className="loader" />
+            <span className="text-body text-text-secondary">{t("app.restarting")}</span>
+          </div>
           </div>
         </ResizablePanel>
 
