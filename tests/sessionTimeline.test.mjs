@@ -66,7 +66,8 @@ test("timeline owns paging, resize, mutation, and outline jump lifecycle", () =>
 	assert.match(source, /selectAtom\([\s\S]*sessionMessagesCacheAtom/);
 	assert.match(source, /readRecordMessagePage\(sessionId/);
 	assert.match(source, /prependMessagePage/);
-	assert.match(source, /totalMessageCount: diskPage \? diskPage\.total : messages\.length/);
+	// 激活分页（2026-08）：runtime 窗口会话的显示总数 = disk 前缀 + 窗口段的组合长度
+	assert.match(source, /totalMessageCount: diskPage \? diskPage\.total : combinedMessages\.length/);
 	assert.match(source, /new ResizeObserver\(stickToBottom\)/);
   assert.match(source, /new MutationObserver\(stickToBottom\)/);
   assert.match(source, /pagination\.loadUntilIncluded\(index\)/);

@@ -369,3 +369,164 @@ test("isolates composer state and only clears the submitted snapshot", () => {
   assert.equal(store.get(atoms.sessionDraftByIdAtom)["session-a"], "new edit");
   assert.equal(store.get(atoms.sessionDraftByIdAtom)["session-b"], "second");
 });
+
+test("windowed full snapshot stores segment with windowStart and merges later upserts by window offset", () => {
+  const atoms = loadAtoms();
+  const store = createStore();
+  const emit = (payload) =>
+    store.set(atoms.applySessionRuntimeEventAtom, {
+      sessionId: "session-a",
+      agentId: "agent-a",
+      runtimeGeneration: 1,
+      sourceChannel: "agents:message",
+      payload,
+    });
+  const entry = () => store.get(atoms.sessionMessagesCacheAtom)["session-a"];
+
+  // 窗口化全量：主进程数组 5 条，窗口起点 2 → 只下发 [2..5)
+  emit({ agentId: "agent-a", windowStart: 2, totalLength: 5, messages: [
+    { id: "m3", role: "user", text: "q3" },
+    { id: "m4", role: "assistant", text: "a3" },
+    { id: "m5", role: "assistant", text: "tail" },
+  ] });
+  assert.equal(entry().windowStart, 2);
+  assert.equal(entry().messages.length, 3);
+
+  // 流式增量：upsertFrom=4 是绝对下标 → 窗口偏移 2，尾部替换；W+len===T 校验
+  emit({ agentId: "agent-a", upsertFrom: 4, totalLength: 5, messages: [
+    { id: "m5", role: "assistant", text: "tail-longer" },
+  ] });
+  assert.equal(entry().messages[2].text, "tail-longer");
+  assert.equal(entry().messages.length, 3);
+
+  // append 新消息：upsertFrom=5（绝对）→ offset 3 → 追加
+  emit({ agentId: "agent-a", upsertFrom: 5, totalLength: 6, messages: [
+    { id: "m6", role: "tool", text: "tool" },
+  ] });
+  assert.deepEqual([...entry().messages.map((m) => m.id)], ["m3", "m4", "m5", "m6"]);
+
+  // 非法偏移（upsertFrom < windowStart）→ 丢弃，等窗口化全量校准
+  emit({ agentId: "agent-a", upsertFrom: 1, totalLength: 6, messages: [
+    { id: "m2", role: "assistant", text: "out-of-window" },
+  ] });
+  assert.equal(entry().messages.length, 4, "upsert before window start must be discarded");
+});
+
+test("windowed full reconciles disk history prefix: seam dedupe by entryId and version-drop on compaction", () => {
+  const atoms = loadAtoms();
+  const store = createStore();
+  const emit = (payload) =>
+    store.set(atoms.applySessionRuntimeEventAtom, {
+      sessionId: "session-a",
+      agentId: "agent-a",
+      runtimeGeneration: 1,
+      sourceChannel: "agents:message",
+      payload,
+    });
+  const entry = () => store.get(atoms.sessionMessagesCacheAtom)["session-a"];
+
+  // 基线：窗口段 + disk 前缀（前缀尾部 e3 与即将到达的窗口段首部重叠）
+  emit({ agentId: "agent-a", windowStart: 2, totalLength: 4, fileVersion: "100:2000", messages: [
+    { id: "r1", role: "user", text: "q", meta: { entryId: "e3" } },
+    { id: "r2", role: "assistant", text: "a", meta: { entryId: "e4" } },
+  ] });
+  store.set(atoms.prependSessionHistoryPageAtom, {
+    sessionId: "session-a",
+    expectedRevision: entry().revision,
+    before: undefined,
+    page: {
+      messages: [
+        { id: "h1", role: "user", text: "old-q", meta: { entryId: "e1" } },
+        { id: "h2", role: "assistant", text: "old-a", meta: { entryId: "e2" } },
+        { id: "h3", role: "user", text: "dup-q", meta: { entryId: "e3" } },
+      ],
+      total: 4,
+      nextBefore: 1,
+      indexVersion: "100:2000",
+    },
+  });
+  // 接缝去重：e3 在窗口段已存在（运行时权威）→ 前缀只剩 e1/e2
+  assert.deepEqual([...entry().history.messages.map((m) => m.meta.entryId)], ["e1", "e2"]);
+
+  // 窗口右移（新一轮对话后重载）：窗口段首部 e2 与前缀尾部重叠 → 前缀收缩为 e1
+  emit({ agentId: "agent-a", windowStart: 3, totalLength: 6, fileVersion: "100:2000", messages: [
+    { id: "r0", role: "assistant", text: "old-a", meta: { entryId: "e2" } },
+    { id: "r1", role: "user", text: "q", meta: { entryId: "e3" } },
+    { id: "r2", role: "assistant", text: "a", meta: { entryId: "e4" } },
+  ] });
+  assert.deepEqual([...entry().history.messages.map((m) => m.meta.entryId)], ["e1"]);
+
+  // 压缩改写 JSONL：fileVersion 变化 → 前缀整段失效
+  emit({ agentId: "agent-a", windowStart: 1, totalLength: 3, fileVersion: "200:800", messages: [
+    { id: "c1", role: "user", text: "after-compaction", meta: { entryId: "n1" } },
+    { id: "c2", role: "assistant", text: "a", meta: { entryId: "n2" } },
+  ] });
+  assert.equal(entry().history, undefined, "compaction version change must drop the prefix");
+  assert.equal(entry().windowStart, 1);
+});
+
+test("prependSessionHistoryPageAtom guards revision and cursor continuity, dedupes against segment", () => {
+  const atoms = loadAtoms();
+  const store = createStore();
+  const entry = () => store.get(atoms.sessionMessagesCacheAtom)["session-a"];
+  store.set(atoms.applySessionRuntimeEventAtom, {
+    sessionId: "session-a",
+    agentId: "agent-a",
+    runtimeGeneration: 1,
+    sourceChannel: "agents:message",
+    payload: { agentId: "agent-a", windowStart: 2, totalLength: 4, messages: [
+      { id: "r1", role: "user", text: "q", meta: { entryId: "e3" } },
+      { id: "r2", role: "assistant", text: "a", meta: { entryId: "e4" } },
+    ] },
+  });
+
+  // revision 不符 → 拒绝
+  assert.equal(store.set(atoms.prependSessionHistoryPageAtom, {
+    sessionId: "session-a",
+    expectedRevision: 999,
+    before: undefined,
+    page: { messages: [{ id: "x", role: "user", text: "x" }], total: 4, nextBefore: 0 },
+  }), false);
+  assert.equal(entry().history, undefined);
+
+  // 首次加载：建立前缀（与窗口段去重：e3 已在段内，不入前缀）
+  assert.equal(store.set(atoms.prependSessionHistoryPageAtom, {
+    sessionId: "session-a",
+    expectedRevision: entry().revision,
+    before: undefined,
+    page: {
+      messages: [
+        { id: "h1", role: "user", text: "q1", meta: { entryId: "e1" } },
+        { id: "h3", role: "user", text: "q3", meta: { entryId: "e3" } },
+      ],
+      total: 4,
+      nextBefore: 1,
+      indexVersion: "100:2000",
+    },
+  }), true);
+  assert.deepEqual([...entry().history.messages.map((m) => m.meta.entryId)], ["e1"]);
+  assert.equal(entry().history.nextBefore, 1);
+
+  // 游标不连续（before 与当前 nextBefore 不符）→ 拒绝
+  assert.equal(store.set(atoms.prependSessionHistoryPageAtom, {
+    sessionId: "session-a",
+    expectedRevision: entry().revision,
+    before: 0,
+    page: { messages: [{ id: "h0", role: "user", text: "q0" }], total: 4, nextBefore: null },
+  }), false);
+
+  // 续页：游标连续 → prepend
+  assert.equal(store.set(atoms.prependSessionHistoryPageAtom, {
+    sessionId: "session-a",
+    expectedRevision: entry().revision,
+    before: 1,
+    page: {
+      messages: [{ id: "h0", role: "user", text: "q0", meta: { entryId: "e0" } }],
+      total: 4,
+      nextBefore: null,
+      indexVersion: "100:2000",
+    },
+  }), true);
+  assert.deepEqual([...entry().history.messages.map((m) => m.meta.entryId)], ["e0", "e1"]);
+  assert.equal(entry().history.nextBefore, null);
+});

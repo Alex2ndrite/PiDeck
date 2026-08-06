@@ -377,12 +377,13 @@ const api = {
 			ipcRenderer.invoke(ipcChannels.sessionsCatalogReadMessages, sessionId) as Promise<
 				import("../shared/types").ChatMessage[]
 			>,
-		readRecordMessagePage: (sessionId: string, before?: number, pageSize?: number) =>
+		readRecordMessagePage: (sessionId: string, before?: number, pageSize?: number, options?: { unit?: "message" | "turn"; beforeEntryId?: string }) =>
 			ipcRenderer.invoke(
 				ipcChannels.sessionsCatalogReadMessagePage,
 				sessionId,
 				before,
 				pageSize,
+				options,
 			) as Promise<import("../shared/types").SessionMessagePage>,
 		readReferenceMessages: (sessionId: string) =>
 			ipcRenderer.invoke(

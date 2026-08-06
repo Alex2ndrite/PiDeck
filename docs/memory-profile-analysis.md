@@ -93,7 +93,7 @@ PiDeck 自身合计 ≈ 2.2GB（任务管理器按 WorkingSet 口径）。
 
 | 改动 | 位置 | 预期收益 |
 |---|---|---|
-| 会话激活 IPC 分页：激活只下发最近 50–100 条，历史按需经 `prependSessionMessagePageAtom` 拼接 | `main/index.ts` activateRuntime 链路 + `useSessionTimelineController` | 渲染进程降 300–600MB；切会话卡顿基本消除；数组不再整体重建 |
+| ~~会话激活 IPC 分页~~ ✅ 已完成（轮次维度，非消息条数：激活只下发最近 3 轮 `windowStart+totalLength+fileVersion` 窗口协议；「加载更多对话」经 disk 轮次分页 prepend——页边界对齐完整轮次，折叠永远完整；接缝按 `meta.entryId` 去重；压缩改写经 fileVersion 检测丢前缀；`findTurnPageStart` 与 `trimHistoryMessages`/agent-run 同一轮次约定） | `SessionHistoryReader.readSessionDisplayTurnPage` / `AgentManager` 窗口下发 / `session-atoms` 前缀合并 / `useSessionTimelineController` | 激活首屏 IPC 从 40 轮（≈521 条）降为 3 轮；40 轮前的历史从不可达变为可分页加载 |
 | tab keep-alive + 空闲回收：最近 2–3 个 tab visibility 保活，空闲/内存压力回收更老的 | `SessionTabsBar` / `SessionMessageTimeline` | 3 tab 全挂载 DOM 省掉 2/3（200–500MB）；且是切 tab 动画的前提 |
 | 消息 LRU 按内存水位动态回收（上限 5–8） | `session-atoms.ts` `SESSION_MESSAGE_CACHE_LIMIT` | 防长期累积 100–300MB；当前 3 会话场景收益有限 |
 | 空闲 agent 回收：无交互 N 分钟的 pi RPC 进程退出，重激活再拉起 | `AgentManager` 生命周期 | 每个省 170–203MB + context-mode server 73MB |
@@ -103,7 +103,7 @@ PiDeck 自身合计 ≈ 2.2GB（任务管理器按 WorkingSet 口径）。
 
 | 改动 | 位置 | 预期收益 |
 |---|---|---|
-| shiki 语言裁剪 + 懒加载：`@streamdown/code` 全语言 grammar 常驻裁为常用 20–30 种，冷门语言动态 import | streamdown 插件配置 / `MarkdownStream.tsx` | 常驻引擎内存降一半（原方案漏列） |
+| ~~shiki 语言裁剪 + 懒加载~~ ✅ 已完成（更激进：`@streamdown/code` 整体移除，代码块走默认 pre/code；shiki 双主题+全语言 grammar 不再常驻） | `MarkdownStream.tsx` / `tailwind.css` | 高亮引擎内存归零；asar 少 ~1700 文件 |
 | 静态消息 markdown 渲染产物按内容 hash 缓存，切回直接复用 | `MarkdownStream` / timeline | 降 50–150MB；切回秒开 |
 | 大工具输出（bash/diff）超阈值截断存储 | 主进程消息转换（`AgentMessageProjector` 附近） | 单会话内存降 60–80% |
 | GPU 进程对策：壁纸关闭时验证能否去掉 `EnableTransparentHwndEnlargement` | 主进程窗口创建 | GPU 进程 252MB 的回收路径（原方案只写“收益有限”，补验证项，见 §8） |
@@ -113,7 +113,7 @@ PiDeck 自身合计 ≈ 2.2GB（任务管理器按 WorkingSet 口径）。
 | 改动 | 位置 | 预期收益 |
 |---|---|---|
 | ~~流式渲染微批节流~~ ✅ 已完成（双管齐下：主进程增量 flush 协议——流式节流只发尾部增量 `upsertFrom+totalLength`，终态全量校准，IPC 载荷从全量数组/50ms 降为 1–2 条；渲染层 `useThrottledStreamingText` 120ms + Streamdown element memo，解析频率减半） | `AgentManager.ts` / `agentUtils.ts` / `session-atoms.ts` / `streamingTextThrottle.ts` | 流式主线程反序列化开销 ~99%↓，解析次数减半以上 |
-| 时间线长列表 `content-visibility: auto` + `contain-intrinsic-size` | `timeline.css` / 消息行组件 | 流式增长不再触发全局 layout（长会话掉帧主因） |
+| ~~时间线长列表 `content-visibility: auto` + `contain-intrinsic-size`~~ ✅ 已完成（message-list 非尾部行跳过 layout/paint；尾部 14 子元素排除保护 pin 测量路径；`auto` 关键字记住已渲染行高，scroll anchoring 收敛） | `SessionMessageTimeline.tsx`（Tailwind arbitrary） | 长会话流式增长不再触发全局 layout |
 | ~~`sessionScanner.list` 异步化 + 摘要缓存先回显、骨架屏先行~~ ✅ 已完成（两阶段：缓存先回显 + 后台扫描推送 `sessions:catalog-refreshed` + 启动预扫描；`BackgroundScanCoordinator` 去重/冷却防 3 秒轮询并发重扫） | `sessionIpc.ts` / `BackgroundScanCoordinator.ts` / `useProjectSync.ts` | 消除“加载项目卡几秒”；缓存项目首屏回显即时 |
 
 ### 主线 D：动画优雅（规范层）

@@ -11,6 +11,8 @@ type SessionDisplayEntry = {
 	offset: number;
 	byteLength: number;
 	hasMessage: boolean;
+	/** 消息角色（user/assistant/…）：轮次分页按 user 消息切轮次边界，建索引时顺手捕获 */
+	role?: string;
 	summary?: string;
 	firstKeptEntryId?: string;
 };
@@ -50,6 +52,55 @@ export type SessionHistoryReaderDeps = {
 };
 
 /**
+ * 轮次分页起点计算（纯函数，2026-08 激活分页）。
+ * 轮次起点 = user 消息——与 trimHistoryMessages、渲染层 agent-run 分组同一约定，
+ * 保证页边界永远对齐完整轮次（折叠不会被切成半个回答）。
+ *
+ * 字节预算是安全阀而非分页维度：超预算时从最旧侧整轮丢弃，
+ * 最新一轮无论多大都整轮保留（宁超预算不拆轮）。
+ */
+export function findTurnPageStart(
+	entries: ReadonlyArray<{ role?: string; byteLength: number }>,
+	before: number,
+	turnCount: number,
+	byteBudget: number,
+): number {
+	if (before <= 0 || turnCount < 1) return 0;
+	// 从 before-1 向前数第 turnCount 个轮次起点（user 消息）
+	let turnsSeen = 0;
+	let start = 0;
+	for (let i = before - 1; i >= 0; i -= 1) {
+		if (entries[i].role === "user") {
+			turnsSeen += 1;
+			if (turnsSeen === turnCount) {
+				start = i;
+				break;
+			}
+		}
+	}
+	// 不足 turnCount 轮：从会话头起（开头的 system/碎片消息归入首轮）
+	if (turnsSeen < turnCount) start = 0;
+	// 起点之前已无 user 消息（落在首个轮次起点）：开头碎片并入本页，避免碎片单独成页
+	else {
+		let hasEarlierUser = false;
+		for (let i = 0; i < start; i += 1) {
+			if (entries[i].role === "user") { hasEarlierUser = true; break; }
+		}
+		if (!hasEarlierUser) start = 0;
+	}
+	let bytes = 0;
+	for (let i = start; i < before; i += 1) bytes += entries[i].byteLength;
+	while (bytes > byteBudget) {
+		let next = start + 1;
+		while (next < before && entries[next].role !== "user") next += 1;
+		if (next >= before) break; // 只剩最新一轮：整轮保留，预算让位
+		for (let i = start; i < next; i += 1) bytes -= entries[i].byteLength;
+		start = next;
+	}
+	return start;
+}
+
+/**
  * Reads persisted Session JSONL without starting Pi. Runtime ownership remains in
  * AgentManager; this reader owns bounded display paging and compaction recovery.
  */
@@ -58,6 +109,9 @@ export class SessionHistoryReader {
 	private static readonly SESSION_DISPLAY_INDEX_LIMIT = 32;
 	private static readonly MAX_SESSION_DISPLAY_PAGE_SIZE = 100;
 	private static readonly MAX_SESSION_DISPLAY_PAGE_BYTES = 256 * 1024;
+	/** 轮次分页默认/上限：默认最近一次激活带 3 轮，单页最多 10 轮（防恶意参数撑爆 IPC） */
+	static readonly DEFAULT_TURN_PAGE_SIZE = 3;
+	private static readonly MAX_TURN_PAGE_SIZE = 10;
 
 	constructor(private readonly deps: SessionHistoryReaderDeps) {}
 
@@ -213,6 +267,62 @@ export class SessionHistoryReader {
 		};
 	}
 
+	/**
+	 * 轮次维度的显示分页（2026-08 激活分页）：与 readSessionDisplayMessagePage 同一游标协议
+	 * （before/nextBefore 都是绝对消息下标，与运行时 messages 数组同一下标空间），
+	 * 但页边界对齐完整轮次——渲染层「加载更多对话」不会切到半个回答。
+	 */
+	async readSessionDisplayTurnPage(
+		sessionPath: string,
+		agentId = "_viewer",
+		before?: number,
+		turnCount = SessionHistoryReader.DEFAULT_TURN_PAGE_SIZE,
+		beforeEntryId?: string,
+	): Promise<SessionMessagePage> {
+		const index = await this.getSessionDisplayIndex(sessionPath);
+		const total = index.activeMessageEntries.length;
+		// beforeEntryId：渲染层以「运行时窗口首条消息的 entryId」作为首次补历史的游标，
+		// 解析为该 entry 在活跃分支的绝对下标（运行时窗口与 JSONL 是两个下标空间，
+		// entryId 是唯一的对齐锚点）。解析失败回退为 undefined（= 从尾部起页）。
+		let resolvedBefore = before;
+		if (beforeEntryId) {
+			const position = index.activeMessageEntries.findIndex((entry) => entry.id === beforeEntryId);
+			if (position >= 0) resolvedBefore = position;
+		}
+		const boundedBefore = Number.isSafeInteger(resolvedBefore)
+			? Math.min(Math.max(0, resolvedBefore!), total)
+			: total;
+		const boundedTurnCount = Number.isFinite(turnCount)
+			? Math.min(Math.max(1, Math.floor(turnCount)), SessionHistoryReader.MAX_TURN_PAGE_SIZE)
+			: SessionHistoryReader.DEFAULT_TURN_PAGE_SIZE;
+		const start = findTurnPageStart(
+			index.activeMessageEntries,
+			boundedBefore,
+			boundedTurnCount,
+			SessionHistoryReader.MAX_SESSION_DISPLAY_PAGE_BYTES,
+		);
+
+		// 与消息分页一致：压缩会话的归档语义未游标化前走全量读取 + 切片
+		if (index.hasCompaction) {
+			const messages = await this.readSessionDisplayMessages(sessionPath, agentId);
+			return {
+				messages: messages.slice(start, boundedBefore),
+				total: messages.length,
+				nextBefore: start > 0 ? start : null,
+				indexVersion: `${index.mtimeMs}:${index.size}`,
+			};
+		}
+
+		const entries = index.activeMessageEntries.slice(start, boundedBefore);
+		const rawMessages = await this.readIndexedSessionMessages(index.hostPath, entries);
+		return {
+			messages: this.deps.convertMessages(agentId, rawMessages, entries.map((entry) => entry.id)),
+			total,
+			nextBefore: start > 0 ? start : null,
+			indexVersion: `${index.mtimeMs}:${index.size}`,
+		};
+	}
+
 	private async getSessionDisplayIndex(sessionPath: string): Promise<SessionDisplayIndex> {
 		const hostPath = this.deps.toHostPath(sessionPath);
 		const version = await stat(hostPath);
@@ -236,6 +346,7 @@ export class SessionHistoryReader {
 			try {
 				const entry = JSON.parse(jsonLine) as Record<string, unknown>;
 				if (typeof entry.id === "string") {
+					const message = entry.message as Record<string, unknown> | null | undefined;
 					entries.set(entry.id, {
 						id: entry.id,
 						parentId: typeof entry.parentId === "string" ? entry.parentId : null,
@@ -243,6 +354,7 @@ export class SessionHistoryReader {
 						offset: byteOffset,
 						byteLength,
 						hasMessage: entry.message !== undefined && entry.message !== null,
+						role: typeof message?.role === "string" ? message.role : undefined,
 						summary: typeof entry.summary === "string" ? entry.summary : undefined,
 						firstKeptEntryId: typeof entry.firstKeptEntryId === "string"
 							? entry.firstKeptEntryId

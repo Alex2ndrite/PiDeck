@@ -13,6 +13,7 @@ import { desktopApi } from "../desktopApi";
 import type { AgentRuntimeState, ChatMessage } from "../../../shared/types";
 import {
 	cacheSessionMessagesAtom,
+	prependSessionHistoryPageAtom,
 	prependSessionMessagePageAtom,
   sessionMessageLoadStateAtom,
   sessionMessagesCacheAtom,
@@ -28,6 +29,8 @@ const latestLoadBySession = new Map<string, number>();
 // 避免流式消息频繁触发 ResizeObserver/MutationObserver 把用户弹回底部造成"颤抖"。
 const BOTTOM_THRESHOLD = 16;
 const LEGACY_OWNER_KEY = "legacy";
+/** runtime 窗口会话「加载更多对话」的单页轮数（与主进程 DEFAULT_TURN_PAGE_SIZE 对齐） */
+const RUNTIME_HISTORY_TURN_PAGE_SIZE = 3;
 
 type Tagged<T> = { ownerKey: string; value: T };
 type TimelineAnchor = { height: number; top: number };
@@ -94,6 +97,8 @@ export type SessionTimelineController = {
 	visibleMessages: ChatMessage[];
 	totalMessageCount: number;
 	hasMoreMessages: boolean;
+  /** 下一次「加载更多」触发 disk 轮次分页（渲染窗口已耗尽且窗口前还有历史） */
+  nextLoadIsHistory: boolean;
   isLoadingMoreMessages: boolean;
   loadMoreMessages: () => void;
   jumpToMessage: (messageId: string) => void;
@@ -135,6 +140,7 @@ export function useSessionTimelineController(options: {
 	const cachedEntry = options.sessionId ? cacheEntry[options.sessionId] : undefined;
 	const cacheMessages = useSetAtom(cacheSessionMessagesAtom);
 	const prependMessagePage = useSetAtom(prependSessionMessagePageAtom);
+	const prependHistoryPage = useSetAtom(prependSessionHistoryPageAtom);
   const setLoadState = useSetAtom(setSessionMessageLoadStateAtom);
   const touchMessages = useSetAtom(touchSessionMessagesAtom);
   const loadStates = useAtomValue(sessionMessageLoadStateAtom);
@@ -182,12 +188,26 @@ export function useSessionTimelineController(options: {
 	const diskPage = controllerEnabled && cachedEntry?.source === "disk"
 		? cachedEntry.page
 		: undefined;
+	// ── 激活显示窗口（2026-08 激活分页）──
+	// runtime 窗口会话：显示数组 = disk 历史前缀（轮次页 prepend）+ 运行时窗口段。
+	// 前缀与窗口段是两个下标空间，仅在渲染层按顺序拼接，合并/去重由 atoms 保证。
+	const runtimeHistory = controllerEnabled && cachedEntry?.source === "runtime"
+		? cachedEntry.history
+		: undefined;
+	const combinedMessages = useMemo(
+		() => (runtimeHistory ? [...runtimeHistory.messages, ...messages] : messages),
+		[runtimeHistory, messages],
+	);
+	// 窗口前还有历史可加载：已加载前缀看游标，未加载看窗口起点（>0 说明激活时被截断）
+	const historyHasMore = controllerEnabled && cachedEntry?.source === "runtime"
+		? (runtimeHistory ? runtimeHistory.nextBefore !== null : (cachedEntry.windowStart ?? 0) > 0)
+		: false;
 	const pagination = useMessagePagination({
-    messages,
+    messages: combinedMessages,
     ownerKey,
     initialPageSize: options.initialPageSize ?? 100,
     pageSize: options.pageSize ?? 100,
-		enabled: controllerEnabled && !diskPage && messages.length > 100,
+		enabled: controllerEnabled && !diskPage && combinedMessages.length > 100,
 	});
 	const [isLoadingMessagePage, setIsLoadingMessagePage] = useState(false);
   const [autoScroll, setAutoScroll] = useState(true);
@@ -375,8 +395,40 @@ export function useSessionTimelineController(options: {
 				});
 			return;
 		}
+		// runtime 窗口会话：先耗尽内存渲染窗口，再按轮次从 disk 补历史（2026-08 激活分页）。
+		// 首次加载以运行时窗口段首条消息的 entryId 为锚点（两个下标空间唯一的对齐点），
+		// 续页用 disk 绝对游标 nextBefore。
+		if (pagination.hasMore) {
+			pagination.loadMore();
+			return;
+		}
+		if (historyHasMore) {
+			const sessionId = options.sessionId;
+			if (!sessionId || isLoadingMessagePage) return;
+			const before = runtimeHistory?.nextBefore;
+			const anchorMeta = !runtimeHistory ? messages[0]?.meta?.entryId : undefined;
+			const anchorEntryId = typeof anchorMeta === "string" && anchorMeta ? anchorMeta : undefined;
+			if (!runtimeHistory && !anchorEntryId) return; // 无 entryId 无法对齐，放弃补历史
+			const sequence = ++nextLoadSequence;
+			latestLoadBySession.set(sessionId, sequence);
+			const expectedRevision = cachedEntry?.revision ?? 0;
+			setIsLoadingMessagePage(true);
+			void desktopApi.sessions
+				.readRecordMessagePage(sessionId, before ?? undefined, RUNTIME_HISTORY_TURN_PAGE_SIZE, {
+					unit: "turn",
+					beforeEntryId: anchorEntryId,
+				})
+				.then((page) => {
+					if (latestLoadBySession.get(sessionId) !== sequence) return;
+					prependHistoryPage({ sessionId, expectedRevision, before, page });
+				})
+				.finally(() => {
+					if (latestLoadBySession.get(sessionId) === sequence) setIsLoadingMessagePage(false);
+				});
+			return;
+		}
 		pagination.loadMore();
-	}, [cachedEntry?.revision, diskPage, isLoadingMessagePage, options.pageSize, options.sessionId, ownerKey, pagination, prependMessagePage]);
+	}, [cachedEntry?.revision, diskPage, historyHasMore, isLoadingMessagePage, messages, options.pageSize, options.sessionId, ownerKey, pagination, prependHistoryPage, prependMessagePage, runtimeHistory]);
 
   const jumpToMessage = useCallback((messageId: string) => {
     const requestOwnerKey = ownerKey;
@@ -390,11 +442,11 @@ export function useSessionTimelineController(options: {
       highlightMessage(existing, requestOwnerKey);
       return;
     }
-    const index = messages.findIndex((message) => message.id === messageId);
+    const index = combinedMessages.findIndex((message) => message.id === messageId);
     if (index < 0) return;
     pendingJumpRef.current = { ownerKey: requestOwnerKey, value: messageId };
     pagination.loadUntilIncluded(index);
-  }, [highlightMessage, messages, ownerKey, pagination]);
+  }, [highlightMessage, combinedMessages, ownerKey, pagination]);
 
   useEffect(() => {
     loadMoreAnchorRef.current = undefined;
@@ -511,9 +563,12 @@ export function useSessionTimelineController(options: {
     timelineRef,
 		messages,
 		visibleMessages: diskPage ? messages : pagination.visibleMessages,
-		totalMessageCount: diskPage ? diskPage.total : messages.length,
-		hasMoreMessages: diskPage ? diskPage.nextBefore !== null : pagination.hasMore,
-		isLoadingMoreMessages: diskPage ? isLoadingMessagePage : pagination.isLoading,
+		totalMessageCount: diskPage ? diskPage.total : combinedMessages.length,
+		hasMoreMessages: diskPage ? diskPage.nextBefore !== null : (pagination.hasMore || historyHasMore),
+		// 下一次「加载更多」是否触发 disk 轮次分页（渲染窗口已耗尽且窗口前还有历史）：
+		// 供 UI 切换文案——内存扩窗按消息数，disk 补页按对话轮次
+		nextLoadIsHistory: controllerEnabled && !diskPage && !pagination.hasMore && historyHasMore,
+		isLoadingMoreMessages: diskPage || historyHasMore ? isLoadingMessagePage : pagination.isLoading,
     loadMoreMessages,
     jumpToMessage,
     scrollToBottom,

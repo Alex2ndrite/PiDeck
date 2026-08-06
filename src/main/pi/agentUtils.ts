@@ -61,16 +61,39 @@ export function buildMessageFlushPayload(
 	agentId: string,
 	all: ChatMessage[],
 	dirtyFrom: number | undefined,
-): { agentId: string; messages: ChatMessage[]; upsertFrom?: number; totalLength?: number } {
-	if (dirtyFrom !== undefined && dirtyFrom >= 0 && dirtyFrom < all.length) {
+	windowStart = 0,
+	fileVersion?: string,
+): {
+	agentId: string;
+	messages: ChatMessage[];
+	upsertFrom?: number;
+	totalLength?: number;
+	windowStart?: number;
+	fileVersion?: string;
+} {
+	// 激活显示窗口（2026-08 激活分页）：full 快照也只发窗口段 [windowStart..]，
+	// 窗口前历史由 disk 轮次分页按需 prepend；totalLength 恒为数组全长，
+	// 供渲染层做窗口偏移校验。fileVersion（会话文件 mtime:size）用于检测压缩改写：
+	// 版本变化时渲染层丢弃 disk 前缀（其绝对下标空间已失效）。
+	const boundedWindow = Math.min(Math.max(0, windowStart), all.length);
+	if (dirtyFrom !== undefined && dirtyFrom >= boundedWindow && dirtyFrom < all.length) {
 		return {
 			agentId,
 			messages: all.slice(dirtyFrom),
 			upsertFrom: dirtyFrom,
 			totalLength: all.length,
+			...(boundedWindow > 0 ? { windowStart: boundedWindow } : {}),
+			...(fileVersion ? { fileVersion } : {}),
 		};
 	}
-	return { agentId, messages: all };
+	// dirtyFrom 缺失或落到窗口之前（重载后窗口右移）：升级为窗口化全量
+	return {
+		agentId,
+		messages: all.slice(boundedWindow),
+		totalLength: all.length,
+		...(boundedWindow > 0 ? { windowStart: boundedWindow } : {}),
+		...(fileVersion ? { fileVersion } : {}),
+	};
 }
 
 /** 清洗会话标题文本。 */

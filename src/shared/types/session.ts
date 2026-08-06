@@ -27,6 +27,8 @@ export type SessionMessagePage = {
 	messages: ChatMessage[];
 	total: number;
 	nextBefore: number | null;
+	/** 会话文件版本（mtime:size）：渲染层比对检测压缩/外部改写，变化即丢弃已缓存的历史前缀。 */
+	indexVersion?: string;
 };
 
 export type FileTreeNode = {

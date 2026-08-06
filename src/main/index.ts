@@ -447,9 +447,11 @@ function emitReplacementState(binding: SessionRuntimeBinding, includeMessages: b
 	if (!tab) return;
 	emitSessionRuntimeEvent(binding.agentId, ipcChannels.agentsState, tab);
 	if (includeMessages) {
+		// 与 flush 同一窗口协议：只下发显示窗口段 + windowStart/totalLength/fileVersion，
+		// 渲染层合并逻辑一处生效（窗口前历史由 disk 轮次分页 prepend）
 		emitSessionRuntimeEvent(binding.agentId, ipcChannels.agentsMessage, {
 			agentId: binding.agentId,
-			messages: agentManager.getMessages(binding.agentId),
+			...agentManager.getMessageWindow(binding.agentId),
 		});
 	}
 }

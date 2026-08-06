@@ -1815,6 +1815,7 @@ export const zhCN = {
   "editor.unsavedMarker": " · 未保存",
   "timeline.loadingMore": "加载中...",
   "timeline.loadMoreHistory": "加载更多历史消息 ({count} 条)",
+  "timeline.loadMoreTurns": "加载更多对话",
   "drawer.lazyLoading": "加载中...",
   "diagnostic.errorTitle": "错误诊断",
   "diagnostic.systemTitle": "系统状态",

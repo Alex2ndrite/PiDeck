@@ -45,6 +45,17 @@ export type SessionMessageCacheEntry = {
 	updatedAt: number;
 	/** Present only for paged historical reads; runtime owns an authoritative full snapshot. */
 	page?: Pick<SessionMessagePage, "total" | "nextBefore">;
+	/** 激活显示窗口起点（runtime 数组下标空间，2026-08 激活分页）；>0 表示窗口前还有历史。 */
+	windowStart?: number;
+	/**
+	 * disk 历史前缀（仅 runtime 窗口会话）：prepend-only 轮次页，
+	 * 与运行时窗口段的接缝按 meta.entryId 去重；fileVersion 变化（压缩改写）即整段失效。
+	 */
+	history?: {
+		messages: ChatMessage[];
+		nextBefore: number | null;
+		version?: string;
+	};
 };
 
 export type SessionRuntimeUiRequestState = {
@@ -228,6 +239,9 @@ export const cacheSessionMessagesAtom = atom(
 		source: "disk" | "runtime";
 		expectedRevision?: number;
 		page?: Pick<SessionMessagePage, "total" | "nextBefore">;
+		/** runtime 窗口协议字段（2026-08 激活分页） */
+		windowStart?: number;
+		history?: SessionMessageCacheEntry["history"];
   }) => {
     const cache = get(sessionMessagesCacheAtom);
     const current = cache[input.sessionId];
@@ -248,6 +262,13 @@ export const cacheSessionMessagesAtom = atom(
 			source: input.source,
 			updatedAt: Date.now(),
 			...(input.source === "disk" && input.page ? { page: input.page } : {}),
+			// runtime 窗口语义（2026-08 激活分页）：entry 每次整体重建，
+			// 调用方必须显式给出 windowStart/history（undefined = 清除，如版本失效丢前缀）；
+			// disk 来源无窗口概念，两字段缺省即不存在
+			...(input.source === "runtime" ? {
+				windowStart: input.windowStart && input.windowStart > 0 ? input.windowStart : undefined,
+				history: input.history,
+			} : {}),
 		},
     };
     const lru = [
@@ -301,6 +322,87 @@ export const touchSessionMessagesAtom = atom(null, (get, set, sessionId: string)
     ...get(sessionMessageLruAtom).filter((id) => id !== sessionId),
   ].slice(0, SESSION_MESSAGE_CACHE_LIMIT));
 });
+
+/** 历史前缀/窗口段的去重键：优先 pi entryId（跨下标空间稳定），缺省回退消息 id。 */
+function messageEntryKey(message: ChatMessage): string {
+  const entryId = message.meta?.entryId;
+  return typeof entryId === "string" && entryId ? `e:${entryId}` : `m:${message.id}`;
+}
+
+/**
+ * 运行时窗口段更新时调和 disk 历史前缀（2026-08 激活分页）：
+ * - fileVersion 变化（压缩/外部改写 JSONL）→ 前缀绝对下标空间失效，整段丢弃；
+ * - 窗口右移与前缀尾部重叠 → 按 entryId 去重（重叠部分以运行时窗口段为权威）。
+ */
+function reconcileHistoryPrefix(
+  history: SessionMessageCacheEntry["history"],
+  segment: ChatMessage[],
+  fileVersion?: string,
+): SessionMessageCacheEntry["history"] {
+  if (!history) return undefined;
+  if (fileVersion && history.version && fileVersion !== history.version) return undefined;
+  const segmentKeys = new Set(segment.map(messageEntryKey));
+  const messages = history.messages.filter((message) => !segmentKeys.has(messageEntryKey(message)));
+  if (messages.length === history.messages.length) return history;
+  if (messages.length === 0) return undefined;
+  return { ...history, messages };
+}
+
+/**
+ * disk 轮次页 prepend（runtime 窗口会话的「加载更多对话」）。
+ * 守卫：来源/revision/游标连续；版本漂移（压缩）时旧前缀整段作废、以新页为最新前缀起点。
+ */
+export const prependSessionHistoryPageAtom = atom(
+  null,
+  (get, set, input: {
+    sessionId: string;
+    expectedRevision: number;
+    /** 续页游标（首次加载为 undefined，调用方以 beforeEntryId 锚定） */
+    before?: number | null;
+    page: SessionMessagePage;
+  }) => {
+    const current = get(sessionMessagesCacheAtom)[input.sessionId];
+    if (
+      !current ||
+      current.source !== "runtime" ||
+      current.revision !== input.expectedRevision
+    ) {
+      return false;
+    }
+    // 续页必须游标连续；首次加载（无 history）不要求
+    if (current.history && current.history.nextBefore !== input.before) return false;
+
+    const segmentKeys = new Set(current.messages.map(messageEntryKey));
+    const pageMessages = input.page.messages.filter((message) => !segmentKeys.has(messageEntryKey(message)));
+
+    const stalePrefix = Boolean(
+      current.history?.version &&
+      input.page.indexVersion &&
+      current.history.version !== input.page.indexVersion,
+    );
+    // 版本漂移：旧前缀下标空间失效，直接以新页重建前缀（仍然与窗口段去重）
+    const baseMessages = stalePrefix ? [] : (current.history?.messages ?? []);
+    const baseKeys = new Set(baseMessages.map(messageEntryKey));
+    const freshMessages = pageMessages.filter((message) => !baseKeys.has(messageEntryKey(message)));
+
+    const merged = [...freshMessages, ...baseMessages];
+    set(sessionMessagesCacheAtom, {
+      ...get(sessionMessagesCacheAtom),
+      [input.sessionId]: {
+        ...current,
+        history: merged.length > 0 || input.page.nextBefore !== null
+          ? {
+              messages: merged,
+              nextBefore: input.page.nextBefore,
+              version: input.page.indexVersion ?? current.history?.version,
+            }
+          : undefined,
+        updatedAt: Date.now(),
+      },
+    });
+    return true;
+  },
+);
 
 function toAgentUiRequest(
   payload: Record<string, unknown>,
@@ -610,32 +712,45 @@ export const applySessionRuntimeEventAtom = atom(
       const messages = payload.messages;
       // 增量 flush 协议（2026-08 渲染卡顿优化）：主进程节流 flush 只发尾部增量
       // （upsertFrom + totalLength），终态 immediate flush 永远全量。
+      // 激活显示窗口（2026-08 激活分页）：全量快照只含窗口段 [windowStart..]，
+      // 窗口前历史由 disk 轮次分页 prepend（history 字段）；下标运算一律换算窗口偏移。
       const upsertFrom = typeof payload.upsertFrom === "number" ? payload.upsertFrom : undefined;
       const totalLength = typeof payload.totalLength === "number" ? payload.totalLength : undefined;
+      const payloadWindowStart = typeof payload.windowStart === "number" ? payload.windowStart : undefined;
+      const fileVersion = typeof payload.fileVersion === "string" ? payload.fileVersion : undefined;
       if (Array.isArray(messages)) {
+        const current = get(sessionMessagesCacheAtom)[event.sessionId];
         if (upsertFrom !== undefined && totalLength !== undefined) {
-          const current = get(sessionMessagesCacheAtom)[event.sessionId];
-          // 增量合并：本地 runtime 缓存长度 >= upsertFrom 时从该处起替换尾部；
-          // 长度不连续（缓存缺失/磁盘来源/漏事件）则丢弃，等终态全量校准——
-          // 中间态滞后至多为本轮回答内的显示延迟，终态 full 到达后完全纠正。
-          if (current?.source === "runtime" && current.messages.length >= upsertFrom) {
+          // 增量合并：upsertFrom 为 runtime 数组绝对下标，换算为本地窗口偏移；
+          // 偏移无效（缓存缺失/磁盘来源/漏事件）则丢弃，等终态窗口化全量校准——
+          // 中间态滞后至多为本轮回答内的显示延迟，终态到达后完全纠正。
+          const W = current?.windowStart ?? 0;
+          const offset = upsertFrom - W;
+          if (current?.source === "runtime" && offset >= 0 && current.messages.length >= offset) {
             const merged = [
-              ...current.messages.slice(0, upsertFrom),
+              ...current.messages.slice(0, offset),
               ...(messages as ChatMessage[]),
             ];
-            if (merged.length === totalLength) {
+            if (W + merged.length === totalLength) {
               set(cacheSessionMessagesAtom, {
                 sessionId: event.sessionId,
                 messages: merged,
                 source: "runtime",
+                windowStart: W,
+                history: current.history,
               });
             }
           }
         } else {
+          // 窗口化全量 / 传统全量：替换运行时窗口段；
+          // disk 前缀经版本守卫（压缩改写即失效）+ 接缝去重（窗口右移与前缀重叠）后保留
+          const segment = messages as ChatMessage[];
           set(cacheSessionMessagesAtom, {
             sessionId: event.sessionId,
-            messages: messages as ChatMessage[],
+            messages: segment,
             source: "runtime",
+            windowStart: payloadWindowStart,
+            history: reconcileHistoryPrefix(current?.history, segment, fileVersion),
           });
         }
       }

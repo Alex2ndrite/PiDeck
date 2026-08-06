@@ -35,7 +35,7 @@ import {
 	type SessionEntryTarget,
 	type SessionFileRef,
 } from "./SessionFileEditor";
-import { SessionHistoryReader } from "./SessionHistoryReader";
+import { SessionHistoryReader, findTurnPageStart } from "./SessionHistoryReader";
 import {
 	AgentMessageProjector,
 	buildActiveBranchEntryIds as buildActiveBranchEntryIdsForDisplay,
@@ -112,12 +112,21 @@ export class AgentManager {
 	/** 增量消息 flush 的脏下标：自上次 flush 以来最早的变化位置（取多次标记的最小值）。
 	 *  只在流式 upsert/append 高频路径显式标记；编辑/删除/截断/重载不标记 → flush 回退全量。 */
 	private readonly messageDirtyFromByAgent = new Map<string, number>();
+	/**
+	 * 激活显示窗口起点（2026-08 激活分页）：loadMessages 后以「尾部 N 轮」算出，
+	 * flush 只下发窗口段；窗口前历史由渲染层走 disk 轮次分页 prepend。
+	 */
+	private readonly displayWindowStartByAgent = new Map<string, number>();
+	/** 会话文件版本（mtime:size）：随消息载荷下发，渲染层据此检测压缩改写并丢弃 disk 前缀。 */
+	private readonly sessionFileVersionByAgent = new Map<string, string>();
 	private readonly thinkingEmitter = new LatestByKeyEmitter<string, string>(
 		50,
 		(agentId, thinking) => this.emitThinkingNow(agentId, thinking),
 	);
 	/** 流式 emit 合并窗口（毫秒）。50ms 兼顾流畅度与传输量，肉眼几乎无延迟。 */
 	private static readonly MESSAGE_FLUSH_INTERVAL_MS = 50;
+	/** 激活显示窗口轮数（2026-08 激活分页）：loadMessages 后只下发尾部 N 轮，更早历史走 disk 轮次分页。 */
+	private static readonly DISPLAY_WINDOW_TURNS = 3;
 	/**
 	 * agent_end 后等待 agent_settled 的超时时间（毫秒）。
 	 * 如果 Pi 在此时间内未发送 agent_settled，桌面端将主动查询 get_state 并尝试恢复 idle。
@@ -286,6 +295,30 @@ export class AgentManager {
 	}
 
 	/**
+	 * 显示窗口视图（2026-08 激活分页）：替换/激活路径的下发与 flush 保持同一协议——
+	 * 窗口段消息 + windowStart + totalLength + fileVersion。
+	 */
+	getMessageWindow(agentId: string): {
+		messages: ChatMessage[];
+		windowStart?: number;
+		totalLength: number;
+		fileVersion?: string;
+	} {
+		const all = this.messages.get(agentId) ?? [];
+		const windowStart = Math.min(
+			Math.max(0, this.displayWindowStartByAgent.get(agentId) ?? 0),
+			all.length,
+		);
+		const fileVersion = this.sessionFileVersionByAgent.get(agentId);
+		return {
+			messages: all.slice(windowStart),
+			totalLength: all.length,
+			...(windowStart > 0 ? { windowStart } : {}),
+			...(fileVersion ? { fileVersion } : {}),
+		};
+	}
+
+	/**
 	 * The reader owns persisted JSONL parsing and paging. This facade keeps the
 	 * Session-first public contract on AgentManager while runtime remains inactive.
 	 */
@@ -312,6 +345,23 @@ export class AgentManager {
 			agentId,
 			before,
 			pageSize,
+		);
+	}
+
+	/** 轮次维度显示分页：pageSize 复用为轮次数（readSessionDisplayTurnPage 内部夹紧上限） */
+	async readSessionDisplayTurnPage(
+		sessionPath: string,
+		agentId = "_viewer",
+		before?: number,
+		turnCount?: number,
+		beforeEntryId?: string,
+	): Promise<SessionMessagePage> {
+		return this.sessionHistoryReader.readSessionDisplayTurnPage(
+			sessionPath,
+			agentId,
+			before,
+			turnCount,
+			beforeEntryId,
 		);
 	}
 
@@ -463,6 +513,26 @@ export class AgentManager {
 			options?.preserveMessagesAfter,
 		);
 		this.messages.set(agentId, nextMessages);
+		// 显示窗口 = 尾部 3 轮（轮次起点对齐 user 消息，与 disk 轮次分页同一约定；
+		// 字节预算不参与窗口计算——单轮再大也整轮显示，折叠完整性优先）
+		this.displayWindowStartByAgent.set(
+			agentId,
+			findTurnPageStart(
+				nextMessages.map((m) => ({ role: m.role, byteLength: 0 })),
+				nextMessages.length,
+				AgentManager.DISPLAY_WINDOW_TURNS,
+				Number.MAX_SAFE_INTEGER,
+			),
+		);
+		// 文件版本随本次加载快照：压缩/外部改写会改变 mtime:size，渲染层据此丢弃 disk 前缀
+		if (runtime.tab.sessionPath) {
+			try {
+				const version = await stat(this.toSessionHostPath(runtime.tab.sessionPath));
+				this.sessionFileVersionByAgent.set(agentId, `${version.mtimeMs}:${version.size}`);
+			} catch {
+				this.sessionFileVersionByAgent.delete(agentId);
+			}
+		}
 		this.refreshAutoTitle(agentId);
 		this.scheduleMessageEmit(agentId, true);
 		return nextMessages;
@@ -2083,6 +2153,8 @@ export class AgentManager {
 		this.clearStreamGate(agentId);
 		// agent 关闭时自动关闭 RPC 日志记录
 		this.rpcLoggingAgents.delete(agentId);
+		this.displayWindowStartByAgent.delete(agentId);
+		this.sessionFileVersionByAgent.delete(agentId);
 		process.stop();
 		this.emitState();
 	}
@@ -3730,7 +3802,13 @@ export class AgentManager {
 		const all = this.messages.get(agentId) ?? [];
 		const dirtyFrom = this.messageDirtyFromByAgent.get(agentId);
 		this.messageDirtyFromByAgent.delete(agentId);
-		this.emit(ipcChannels.agentsMessage, buildMessageFlushPayload(agentId, all, dirtyFrom));
+		this.emit(ipcChannels.agentsMessage, buildMessageFlushPayload(
+			agentId,
+			all,
+			dirtyFrom,
+			this.displayWindowStartByAgent.get(agentId) ?? 0,
+			this.sessionFileVersionByAgent.get(agentId),
+		));
 	}
 
 	/** 标记 agent 消息数组自 index 起变脏（多次标记取最小值），供增量 flush 使用。 */

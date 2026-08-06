@@ -387,7 +387,9 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
           >
             {isLoadingMoreMessages
               ? t("timeline.loadingMore")
-              : t("timeline.loadMoreHistory", {
+              : controller.nextLoadIsHistory
+                ? t("timeline.loadMoreTurns")
+                : t("timeline.loadMoreHistory", {
 					count: totalMessageCount - paginatedMessages.length,
                 })}
           </button>

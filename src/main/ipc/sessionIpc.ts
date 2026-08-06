@@ -332,9 +332,15 @@ export function registerSessionIpc(deps: SessionIpcDeps): void {
 	);
 	ipcMain.handle(
 		ipcChannels.sessionsCatalogReadMessagePage,
-		async (_event, sessionId: string, before?: number, pageSize?: number) => {
+		async (_event, sessionId: string, before?: number, pageSize?: number, options?: { unit?: "message" | "turn"; beforeEntryId?: string }) => {
 			const entry = sessionCatalog.get(sessionId);
 			if (!entry?.filePath) return { messages: [], total: 0, nextBefore: null };
+			// unit=turn（2026-08 激活分页）：页边界对齐完整轮次，pageSize 复用为轮次数（上限 10）；
+			// 游标协议不变（before/nextBefore 为绝对消息下标，与运行时数组同一下标空间）；
+			// beforeEntryId 供已激活会话以运行时窗口首条消息为锚点首次补历史。
+			if (options?.unit === "turn") {
+				return agentManager.readSessionDisplayTurnPage(entry.filePath, sessionId, before, pageSize, options.beforeEntryId);
+			}
 			return agentManager.readSessionDisplayMessagePage(entry.filePath, sessionId, before, pageSize);
 		},
 	);

@@ -1850,6 +1850,7 @@ export const enUS: Record<TranslationKey, string> = {
   "editor.unsavedMarker": " · Unsaved",
   "timeline.loadingMore": "Loading...",
   "timeline.loadMoreHistory": "Load more history messages ({count})",
+  "timeline.loadMoreTurns": "Load more conversations",
   "drawer.lazyLoading": "Loading...",
   "diagnostic.errorTitle": "Error diagnostics",
   "diagnostic.systemTitle": "System status",

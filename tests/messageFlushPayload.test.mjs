@@ -51,7 +51,10 @@ test("dirtyFrom undefined falls back to full payload (unmarked paths: edit/delet
   const all = [msg("a"), msg("b")];
   const payload = buildMessageFlushPayload("agent-1", all, undefined);
   assert.equal(payload.upsertFrom, undefined);
-  assert.equal(payload.totalLength, undefined);
+  // 窗口协议（2026-08 激活分页）：full 快照也恒带 totalLength（窗口偏移校验需要），
+  // windowStart=0 时省略 windowStart 字段
+  assert.equal(payload.totalLength, 2);
+  assert.equal(payload.windowStart, undefined);
   assert.equal(payload.messages.length, 2);
 });
 
@@ -62,6 +65,37 @@ test("out-of-range dirtyFrom falls back to full payload", () => {
     assert.equal(payload.upsertFrom, undefined, `dirtyFrom=${dirtyFrom} must be full`);
     assert.equal(payload.messages.length, 2);
   }
+});
+
+test("windowed full emits only the window segment with windowStart + totalLength", () => {
+  const all = [msg("a"), msg("b"), msg("c"), msg("d")];
+  const payload = buildMessageFlushPayload("agent-1", all, undefined, 2);
+  assert.equal(payload.upsertFrom, undefined);
+  assert.equal(payload.windowStart, 2);
+  assert.equal(payload.totalLength, 4);
+  assert.deepEqual(payload.messages.map((m) => m.text), ["text-c", "text-d"]);
+});
+
+test("dirtyFrom inside the window stays incremental; before the window escalates to windowed full", () => {
+  const all = [msg("a"), msg("b"), msg("c"), msg("d")];
+  const incremental = buildMessageFlushPayload("agent-1", all, 3, 2);
+  assert.equal(incremental.upsertFrom, 3);
+  assert.equal(incremental.totalLength, 4);
+  assert.deepEqual(incremental.messages.map((m) => m.text), ["text-d"]);
+
+  // dirtyFrom=1 < windowStart=2：渲染层窗口无法应用，升级为窗口化全量
+  const escalated = buildMessageFlushPayload("agent-1", all, 1, 2);
+  assert.equal(escalated.upsertFrom, undefined);
+  assert.equal(escalated.windowStart, 2);
+  assert.deepEqual(escalated.messages.map((m) => m.text), ["text-c", "text-d"]);
+});
+
+test("fileVersion is carried through when provided", () => {
+  const all = [msg("a")];
+  const payload = buildMessageFlushPayload("agent-1", all, undefined, 0, "123:456");
+  assert.equal(payload.fileVersion, "123:456");
+  const absent = buildMessageFlushPayload("agent-1", all, undefined, 0);
+  assert.equal(absent.fileVersion, undefined);
 });
 
 test("dirtyFrom 0 emits a full replacement in incremental form (renderer merges as full overwrite)", () => {
