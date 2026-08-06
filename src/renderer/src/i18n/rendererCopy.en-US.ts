@@ -1801,7 +1801,6 @@ export const enUS: Record<TranslationKey, string> = {
   "activity.executionSummary": "Execution: {summary}",
   "activity.executionToolCount": "{count} tools",
   "activity.executionThinkingCount": "{count} thinking steps",
-  "activity.executionAnswerCount": "{count} responses",
   "thinking.expandAll": "Expand all",
   "thinking.level.high": "Deeper reasoning for complex tasks",
   "thinking.levelLabel.high": "High",

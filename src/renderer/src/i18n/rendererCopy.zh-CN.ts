@@ -1766,7 +1766,6 @@ export const zhCN = {
   "activity.executionSummary": "执行过程: {summary}",
   "activity.executionToolCount": "{count}个工具",
   "activity.executionThinkingCount": "{count}次思考",
-  "activity.executionAnswerCount": "{count}次回答",
   "thinking.expandAll": "展开全部",
   "thinking.level.high": "更深推理，适合复杂任务",
   "thinking.levelLabel.high": "high",

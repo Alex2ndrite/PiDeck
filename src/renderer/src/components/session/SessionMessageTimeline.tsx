@@ -142,6 +142,17 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
     seenTailMessageIdRef.current = nextTail;
     if (!nextTail || !previousTail) return; // 首帧（历史加载完成前）只记录基线
     if (nextTail === previousTail) return;
+    // 发送置顶动画：尾部新增的是用户消息时，把它平滑滚动钉到视口顶部，
+    // 此前的消息整体被顶出屏幕（垫片逻辑见 controller.pinTurnToTop）。
+    // 乐观上屏的消息被权威消息换绑（id 变了但原 pin 目标已不存在）时只重定向不重播。
+    const tailMessage = activeMessages[activeMessages.length - 1];
+    if (tailMessage?.role === "user" && tailMessage.id !== controller.pinnedTurnId) {
+      const pinnedGone = Boolean(
+        controller.pinnedTurnId &&
+          !activeMessages.some((message) => message.id === controller.pinnedTurnId),
+      );
+      controller.pinTurnToTop?.(tailMessage.id, { animate: !pinnedGone });
+    }
     // 找到基线之后的新增消息（尾部追加，而非分页前插）
     const baselineIndex = activeMessages.findIndex((message) => message.id === previousTail);
     const fresh = baselineIndex < 0
@@ -561,6 +572,16 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
                   onDiffFile={props.onDiffFile}
                 />
               )}
+
+            {/* 发送置顶垫片：撑起滚动空间，让最新用户消息能钉到视口顶部；
+                高度由 controller 随回答流式增长动态收敛 */}
+            {(controller.pinSpacerHeight ?? 0) > 0 && (
+              <div
+                aria-hidden="true"
+                className="timeline-pin-spacer"
+                style={{ height: controller.pinSpacerHeight }}
+              />
+            )}
           </div>
         )}
 
