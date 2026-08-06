@@ -22,6 +22,17 @@ const TONE_STATUS_ICONS: Partial<Record<TimelineMarkerTone, ReactNode>> = {
   error: <X size={9} strokeWidth={3.5} color="#fff" />,
 };
 
+/** 状态图标是否显示：工具调用（kind="tool"）不放大、不带 ✓/✗——
+ *  工具节点统一 8px 空心描边圆（颜色表达状态），与思考的 8px 实心点同级，
+ *  避免 14px 大图标节点在工具行上喧宾夺主；诊断等其他事件保留 ✓/✗ 语义节点。 */
+function getStatusIcon(
+  kind: TimelineMarkerKind,
+  tone: TimelineMarkerTone,
+): ReactNode | undefined {
+  if (kind === "tool") return undefined;
+  return TONE_STATUS_ICONS[tone];
+}
+
 /**
  * 时间线事件的统一左侧标记轨道。
  *
@@ -33,8 +44,11 @@ export function TimelineMarker(props: {
   tone?: TimelineMarkerTone;
   children: ReactNode;
   className?: string;
+  /** 内容区（timeline-marker-content）追加类，供具体卡片覆盖默认底距等间距 */
+  contentClassName?: string;
 }) {
   const tone = props.tone ?? "neutral";
+  const statusIcon = getStatusIcon(props.kind, tone);
   return (
     <div
       className={cn("timeline-marker-row flex min-w-0 items-stretch gap-2.5", props.className)}
@@ -46,16 +60,19 @@ export function TimelineMarker(props: {
         {/* 轨道只保留状态节点；工具/思考的语义图标已经在内容卡片里，避免左侧重复一套 Logo。 */}
         <span
           className={cn(
-            "timeline-marker-node relative z-[1] mt-1.5 grid size-2 place-items-center rounded-full",
+            "timeline-marker-node relative z-[1] grid size-2 place-items-center rounded-full",
+            // 思考 trigger 行较高（min-h-8 + p-1.5），节点下移 3 对齐行内容中心；
+            // 工具行已收紧（20px）保持基线偏移即可；其他事件维持原偏移
+            props.kind === "thinking" ? "mt-3" : "mt-1.5",
             // ✓/✗ 节点放大为 14px 并微调基线，与首行文字视觉对齐
-            TONE_STATUS_ICONS[tone] && "mt-1 size-3.5",
+            statusIcon && "mt-1 size-3.5",
             TONE_CLASSES[tone],
           )}
         >
-          {TONE_STATUS_ICONS[tone]}
+          {statusIcon}
         </span>
       </div>
-      <div className="timeline-marker-content min-w-0 flex-1 pb-2">{props.children}</div>
+      <div className={cn("timeline-marker-content min-w-0 flex-1 pb-2", props.contentClassName)}>{props.children}</div>
     </div>
   );
 }

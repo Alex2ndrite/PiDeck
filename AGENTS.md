@@ -12,7 +12,18 @@ PiDeck 是一个面向本地开发工作的 Electron 桌面应用，用于在多
 - PiDeck 负责窗口管理、进程生命周期、会话浏览/导入、Git 面板、终端、设置 —— **UI 框架的事 pi 也不要做**。
 - 两者通过 stdio JSON-RPC 通信，禁止引入第二条通信通道（如直接 HTTP 到 pi 内部）。
 
-## 目录结构
+## 代码结构与跨层契约
+
+本项目只维护项目根目录这一份 `AGENTS.md`；除非用户明确要求，不要再在子目录生成同名规则文件。`docs/开发规范.md` 中仍有历史架构表述，若与本文件或实际类型/API 冲突，以本文件和代码为准。
+
+- `src/shared/` 是跨进程纯契约层：共享类型按 `shared/types/*.ts` 拆分，`shared/types.ts` 仅做兼容导出；IPC 名称只定义在 `shared/ipc.ts`。
+- `src/main/` 是唯一可访问 Node/Electron 主进程能力的业务层。`main/<domain>/` 拥有领域行为，`main/ipc/*Ipc.ts` 只做输入校验和适配，`main/index.ts` 只增装配，不新增业务。
+- `src/preload/index.ts` 通过 `contextBridge` 暴露最小 `PiDesktopApi`；新增 IPC 必须同步共享通道、main handler、preload 方法三处，订阅 API 必须返回 unsubscribe。
+- `src/renderer/` 只通过 `desktopApi`/preload 调用桌面能力。跨组件状态使用 Jotai atom，副作用放 hook，视图放 component；不得直接 import Node/Electron 或新增第二种全局状态方案。
+- `SessionRecord.id` 是跨重启的稳定会话身份，`agentId` 仅表示当前 pi 子进程。所有 runtime 命令和事件都必须带 `sessionId + agentId + runtimeGeneration`，拒绝旧 runtime 的迟到结果。
+- pi 只通过 stdio JSON-RPC 与 PiDeck 通信；PiDeck 不复刻 pi 的 Agent/工具/会话行为，也不为访问 pi 引入第二条通信通道。
+- 持久化结构、设置和 session catalog 变更必须兼容旧数据；listener、timer、子进程、terminal 和 watcher 必须在同一模块找到配对清理路径。
+
 
 ```
 src/
@@ -34,7 +45,7 @@ src/
 │   └── src/
 │       ├── atoms/         # Jotai 状态（session-first）
 │       ├── components/
-│       │   ├── ui/        # 共享 UI 组件（Button/IconButton/SelectField/TextField/Modal）
+│       │   ├── ui-shadcn/  # 共享 UI 原语（button/dialog/input/select 等）
 │       │   ├── session/   # 会话视图族（SessionView/Composer*/Timeline*）
 │       │   ├── sidebar/   # 左侧栏
 │       │   ├── workspace/ # 右侧抽屉（files/git/browser/editor）
@@ -51,7 +62,7 @@ src/
 2. **状态管理用 Jotai**：新增跨组件状态放 `atoms/`，按域建 atom；禁止再引入第二种全局状态方案。
 3. **IPC 按域注册**：主进程 handler 一律放 `src/main/ipc/*Ipc.ts`，`index.ts` 只做装配；通道名集中在 `shared/ipc.ts` 定义，禁止散落字符串字面量。
 4. **类型共享走 `shared/types/`**：按域拆文件；主进程、preload、渲染进程不得各自重复定义同一结构。
-5. **单向依赖**：`renderer → shared → main`；main 不得 import renderer 代码，renderer 不得直接碰 Node API（一律走 preload）。
+5. **单向依赖**：`main`、`preload`、`renderer` 只能依赖 `shared` 契约；`renderer` 通过 preload 暴露的 API 访问主进程，不能直接 import Node/Electron；main 不得 import renderer 代码；`shared` 不得反向依赖任何运行时层。
 6. **文件体量红线**：
    - 组件/模块单文件目标 ≤ 400 行，超过 600 行必须评估拆分。
    - `App.tsx`、`main/index.ts` 只增装配代码，不增业务逻辑；新业务先建新模块。
@@ -170,7 +181,7 @@ src/
 
 > UI 细节规范（组件用法、图标、弹框尺寸、字体、token）后续会单独整理，本节只保留底线。
 
-- 新增 UI 优先复用 `components/ui/` 共享组件（Button/IconButton/SelectField/TextField/Modal），不用原生 `<select>`、不裸写 `<input>`。
+- 新增 UI 优先复用 `components/ui-shadcn/` 共享原语（button/dialog/input/select 等），不用原生 `<select>`、不裸写 `<input>`。
 - 图标统一 `lucide-react`，不用 emoji 充当功能图标；品牌 Logo 用 `LogoMark`（`AppParts.tsx`），不用通用图标替代。
 - 颜色/圆角/字号优先复用 `styles/` 里的语义 token，不写死色值；暗色模式必须自然适配。
 - 布局保持桌面工作台结构（左列表 / 中会话 / 右抽屉 / 底终端），不引入营销页式大改版。

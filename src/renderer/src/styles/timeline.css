@@ -51,6 +51,17 @@
   color: var(--color-danger);
   background: var(--color-danger);
 }
+/* 工具调用节点：8px 空心描边圆（中性灰、1px 细描边、无色晕），
+   内孔以面板色填充遮挡时间线竖线；所有状态一致、无脉冲动画——
+   状态语义由右侧徽章承担，左侧轨道保持安静，不喧宾夺主 */
+.timeline-marker-row[data-marker-kind="tool"] .timeline-marker-node {
+  color: var(--color-text-tertiary);
+  background: var(--color-bg-panel);
+  border-width: 1px;
+  border-color: currentColor;
+  box-shadow: none;
+  animation: none;
+}
 .timeline-inline-text {
   min-width: 0;
   padding-left: 26px;
