@@ -6,6 +6,7 @@ import { formatDuration, formatTime, stripAnsi } from "./TimelineFormat";
 import { Textarea } from "../ui-shadcn/textarea";
 import { TimelineMarker } from "./TimelineMarker";
 import { MarkdownStream } from "./MarkdownStream";
+import { ShimmerText } from "./ShimmerText";
 
 // Button 收口状态（P0）：本文件按钮全部保留原生——
 // compaction-card-header / thinking-card-trigger 是折叠触发器 + 内容排版容器（内部 span/small/em 结构）；
@@ -362,7 +363,13 @@ export const ThinkingBlock = memo(
 						{props.text.slice(0, 80)}{props.text.length > 80 ? "..." : ""}
 					</span>
 				)}
-				{durationText && <small className="shrink-0 font-mono text-micro tabular-nums text-text-tertiary">{durationText}</small>}
+				{durationText && (
+				<small className="shrink-0 font-mono text-micro tabular-nums text-text-tertiary">
+					{/* 人性化耗时文案（借鉴 AI Elements Reasoning 的 "Thought for Xs"），
+					    不再裸显 3.2s 这类工程化数字 */}
+					{t("thinking.duration", { duration: durationText })}
+				</small>
+			)}
 			</button>
 			{expanded && (
 				<div className="markdown-body border-t border-border-subtle px-3 pt-2 pb-3 text-text-tertiary">
@@ -433,8 +440,17 @@ export function RespondingIndicator(props: {
 				<span />
 				<span />
 			</span>
-			{/* 标签始终渲染，waiting 态通过 CSS visibility:hidden 隐藏，保持容器宽度稳定 */}
-			<span className="responding-indicator-label">{label}</span>
+			{/* 标签始终渲染，waiting 态用静态文本并通过 CSS visibility:hidden 隐藏，保持容器宽度稳定；
+			    进行态（启动/工具调用/回应）用微光扫过提示活动进行中（AI Elements Shimmer 借鉴） */}
+			{kind === "waiting" ? (
+				<span className="responding-indicator-label">{label}</span>
+			) : (
+				<ShimmerText
+					text={label}
+					className="responding-indicator-label"
+					tone={kind === "responding" ? "muted" : "warning"}
+				/>
+			)}
 		</div>
 	);
 }

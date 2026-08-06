@@ -473,6 +473,18 @@
 /* 流式思考卡片：实时展示推理过程 */
 
 /* ---------- 流式响应指示器：RespondingIndicator ---------- */
+
+/* Shimmer 微光扫光：配合 ShimmerText 的 bg-[length:200%_100%]，
+   让渐变亮带从右向左扫过文字。仅定义 keyframes，应用走 Tailwind animate 工具类。 */
+@keyframes shimmer-sweep {
+	from {
+		background-position: 200% 0;
+	}
+	to {
+		background-position: -200% 0;
+	}
+}
+
 .responding-indicator {
   display: inline-flex;
   align-items: center;

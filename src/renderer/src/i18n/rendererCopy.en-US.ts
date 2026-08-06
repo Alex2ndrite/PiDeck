@@ -1841,6 +1841,7 @@ export const enUS: Record<TranslationKey, string> = {
   "message.busyTool": "Agent is executing a tool, please wait",
   "message.busyGeneric": "Agent is currently busy, please try again later",
   "thinking.title": "Think",
+  "thinking.duration": "Thought for {duration}",
   "tool.copyDetail": "Copy full tool call details",
   "tool.countSuffix": " tools",
   "tool.done": "Tool calls complete",

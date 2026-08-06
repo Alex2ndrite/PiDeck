@@ -1806,6 +1806,7 @@ export const zhCN = {
   "message.busyTool": "Agent 正在执行工具，请等待完成后重试",
   "message.busyGeneric": "Agent 当前忙碌，请稍后重试",
   "thinking.title": "思考",
+  "thinking.duration": "思考了 {duration}",
   "tool.copyDetail": "复制完整工具调用详情",
   "tool.countSuffix": " 个工具",
   "tool.done": "工具调用完成",
