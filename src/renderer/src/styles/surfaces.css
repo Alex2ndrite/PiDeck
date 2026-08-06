@@ -4368,3 +4368,161 @@ div.fixed.inset-0.z-50 {
 [data-sonner-toast][data-type="success"] [data-icon] {
   color: var(--color-logo-green-deep);
 }
+
+
+/* ── 渲染异常页（AppErrorBoundary）──────────────
+ * 与系统一致的 shadcn 卡片语言：品牌 Logo + 状态胶囊 + 主次按钮，
+ * 颜色全部走 token（明暗自适应），微动效只保留入场与状态点呼吸。
+ * 每个变量带中性 fallback，主题变量缺失时也能完整呈现。 */
+.app-error-boundary {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background-color: var(--color-bg-app, #ffffff);
+  background-image: radial-gradient(
+    900px 480px at 50% 0%,
+    color-mix(in srgb, var(--color-accent, #18181b) 5%, transparent),
+    transparent 65%
+  );
+}
+
+.app-error-boundary-card {
+  width: 100%;
+  max-width: 520px;
+  padding: 44px 40px 32px;
+  text-align: center;
+  border-radius: var(--radius-lg, 10px);
+  background: var(--color-bg-panel, #ffffff);
+  border: 1px solid var(--color-border-default, #dfdfdf);
+  box-shadow: var(--shadow-modal, 0 10px 15px -3px rgba(9, 9, 11, 0.1));
+  animation: error-boundary-rise 0.25s ease-out both;
+}
+
+.app-error-boundary-brand {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 18px;
+}
+
+/* 状态胶囊：danger 语义色淡底 + 呼吸状态点（错误态的统一语言，替代大图标块） */
+.app-error-boundary-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 12px;
+  margin-bottom: 14px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-danger, #b42318);
+  background: var(--color-danger-soft, #fdecea);
+  border: 1px solid color-mix(in srgb, var(--color-danger, #b42318) 18%, transparent);
+}
+.app-error-boundary-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: error-boundary-pulse 2s ease-in-out infinite;
+}
+
+.app-error-boundary-title {
+  margin: 0 0 8px;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: 0.2px;
+  color: var(--color-text-primary, #202124);
+}
+
+.app-error-boundary-message {
+  margin: 0 auto;
+  max-width: 420px;
+  font-size: 13.5px;
+  line-height: 1.7;
+  color: var(--color-text-secondary, #4b5563);
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  word-break: break-all;
+}
+
+.app-error-boundary-stack {
+  margin: 20px auto 0;
+  max-width: 440px;
+  text-align: left;
+  border-radius: var(--radius-sm, 6px);
+  background: var(--color-bg-muted, #f4f4f5);
+  border: 1px solid var(--color-border-subtle, #e5e5e5);
+}
+.app-error-boundary-stack summary {
+  padding: 10px 14px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-text-secondary, #4b5563);
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+}
+.app-error-boundary-stack summary::-webkit-details-marker {
+  display: none;
+}
+.app-error-boundary-stack summary::before {
+  content: "›";
+  display: inline-block;
+  margin-right: 6px;
+  transition: transform 0.15s ease;
+  color: var(--color-text-tertiary, #6b7280);
+}
+.app-error-boundary-stack[open] summary::before {
+  transform: rotate(90deg);
+}
+.app-error-boundary-stack summary:hover {
+  color: var(--color-text-primary, #202124);
+}
+.app-error-boundary-stack pre {
+  max-height: 220px;
+  margin: 0;
+  padding: 12px 14px;
+  overflow: auto;
+  border-top: 1px solid var(--color-border-subtle, #e5e5e5);
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--color-danger, #b42318);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.app-error-boundary-actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 26px;
+}
+
+.app-error-boundary-help {
+  display: block;
+  margin-top: 18px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--color-text-tertiary, #6b7280);
+}
+
+/* ── keyframes ── */
+@keyframes error-boundary-rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes error-boundary-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-error-boundary-card,
+  .app-error-boundary-dot {
+    animation: none;
+  }
+}

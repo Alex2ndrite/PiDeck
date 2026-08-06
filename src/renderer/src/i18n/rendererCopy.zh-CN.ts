@@ -21,6 +21,7 @@ export const zhCN = {
   "app.renderErrorRetry": "重试",
   "app.renderErrorReload": "刷新应用",
   "app.renderErrorToast": "界面异常",
+  "app.renderErrorStack": "错误详情",
   "app.runtimeErrorToast": "运行异常",
   "app.unhandledRejectionToast": "未处理异常",
   "app.worktreeCreate": "新建工作区",

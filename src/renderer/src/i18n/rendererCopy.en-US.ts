@@ -22,6 +22,7 @@ export const enUS: Record<TranslationKey, string> = {
   "app.renderErrorRetry": "Retry",
   "app.renderErrorReload": "Reload",
   "app.renderErrorToast": "Render error",
+  "app.renderErrorStack": "Error details",
   "app.runtimeErrorToast": "Runtime error",
   "app.unhandledRejectionToast": "Unhandled exception",
   "app.worktreeCreate": "New Workspace",

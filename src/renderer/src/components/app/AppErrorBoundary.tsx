@@ -1,5 +1,6 @@
 import { Button } from "../ui-shadcn/button";
 import { Component, type ErrorInfo, type ReactNode } from "react";
+import { LogoMark } from "../app/AppParts";
 import { t } from "../../i18n";
 import { showNotice } from "../../utils/notice";
 
@@ -63,30 +64,38 @@ export class AppErrorBoundary extends Component<
 		return (
 			<div className="app-error-boundary" role="alert">
 				<div className="app-error-boundary-card">
-					<strong className="app-error-boundary-title">{title}</strong>
+					<div className="app-error-boundary-brand">
+						<LogoMark />
+					</div>
+					<div className="app-error-boundary-badge">
+						<span className="app-error-boundary-dot" aria-hidden="true" />
+						{t("app.renderErrorToast")}
+					</div>
+					<h1 className="app-error-boundary-title">{title}</h1>
 					<p className="app-error-boundary-message">{message}</p>
-					<small className="app-error-boundary-help">
-						{t("app.renderErrorHelp")}
-					</small>
-					<pre className="app-error-boundary-stack">
-						{this.state.error.stack ?? this.state.error.message}
-					</pre>
+					<details className="app-error-boundary-stack">
+						<summary>{t("app.renderErrorStack")}</summary>
+						<pre>{this.state.error.stack ?? this.state.error.message}</pre>
+					</details>
 					<div className="app-error-boundary-actions">
 						<Button
 							type="button"
-							 variant="outline"
+							variant="outline"
 							onClick={this.handleReset}
 						>
 							{t("app.renderErrorRetry")}
 						</Button>
 						<Button
 							type="button"
-							 variant="default"
+							variant="default"
 							onClick={this.handleReload}
 						>
 							{t("app.renderErrorReload")}
 						</Button>
 					</div>
+					<small className="app-error-boundary-help">
+						{t("app.renderErrorHelp")}
+					</small>
 				</div>
 			</div>
 		);
