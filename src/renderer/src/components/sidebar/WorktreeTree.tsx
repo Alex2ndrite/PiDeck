@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight, GitBranch, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronRight, GitBranch, HatGlasses, Plus, Trash2 } from "lucide-react";
 import type { AgentTab, Project, SessionRecord, WorktreeEntry } from "../../../../shared/types";
 import type { SidebarController } from "../../hooks/useSidebarController";
 import { t } from "../../i18n";
@@ -24,40 +24,88 @@ export function WorktreeTree(props: {
     (project) => project.worktreeParentId === props.project.id,
   );
   const rows = mergeWorkspaceTreeRows(props.entries, childProjects);
+  // 主工作区折叠态复用 worktree 展开集合，key 用根项目路径（与任何 worktree 路径都不冲突）。
+  // 注意语义反转：集合里存在 = 已折叠（worktree 行是存在 = 展开），因为主工作区默认展开。
+  const mainSessionsKey = props.project.path;
+  const mainCollapsed = props.controller.expandedWorktreePaths.has(mainSessionsKey);
+  const mainRowId = `worktree-main-sessions-${props.project.id}`;
 
   return (
     <div className="workspace-tree min-w-0 bg-muted/20 py-1 pl-2">
       <section className="workspace-tree-main mb-0.5" aria-label={t("app.worktreeMainWorkspace")}>
-        <Button
-          type="button"
-          variant="ghost"
-          className={cn(
-            "conversation worktree-workspace-header h-8 w-full justify-start gap-2 px-2 text-left",
-            props.currentProjectId === props.project.id && "active border-accent/35 bg-accent/10 text-accent-foreground shadow-sm shadow-accent/10",
-          )}
-          onClick={() => props.actions.projects.select(props.project.id)}
-          title={t("app.worktreeMainWorkspace")}
-        >
-          <span className="worktree-main-branch-icon shrink-0"><GitBranch size={13} /></span>
-          <span className="conversation-body min-w-0 flex-1">
-            <span className="conversation-title flex min-w-0 items-center gap-1.5">
-              <strong className="min-w-0 truncate font-medium">{t("app.worktreeMainWorkspace")}</strong>
-              <span className="worktree-main-branch min-w-0 truncate">{props.branch ?? t("app.worktreeBranchLoading")}</span>
+        <div className="workspace-tree-row group flex min-w-0 items-center gap-0.5 rounded-lg p-0.5">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-xs"
+            className="workspace-tree-expand shrink-0 text-muted-foreground"
+            aria-expanded={!mainCollapsed}
+            aria-controls={mainRowId}
+            aria-label={mainCollapsed ? t("app.projectExpand") : t("app.projectCollapse")}
+            title={mainCollapsed ? t("app.projectExpand") : t("app.projectCollapse")}
+            onClick={() => props.controller.toggleWorktreeSessions(mainSessionsKey)}
+          >
+            {mainCollapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            className={cn(
+              "conversation worktree-workspace-header h-8 min-w-0 flex-1 justify-start gap-2 px-2 text-left",
+              props.currentProjectId === props.project.id && "active border-accent/35 bg-accent/10 text-accent-foreground shadow-sm shadow-accent/10",
+            )}
+            onClick={() => props.actions.projects.select(props.project.id)}
+            title={t("app.worktreeMainWorkspace")}
+          >
+            <span className="worktree-main-branch-icon shrink-0"><GitBranch size={13} /></span>
+            <span className="conversation-body min-w-0 flex-1">
+              <span className="conversation-title flex min-w-0 items-center gap-1.5">
+                <strong className="min-w-0 truncate font-medium">{t("app.worktreeMainWorkspace")}</strong>
+                <span className="worktree-main-branch min-w-0 truncate">{props.branch ?? t("app.worktreeBranchLoading")}</span>
+              </span>
             </span>
-          </span>
-        </Button>
+          </Button>
+          {/* 新建入口放在工作区行上（hover 显现，与其他工作区行一致）：
+              根项目行在 worktree 模式下不再承担 +/匿名，避免入口藏得深 */}
+          <div className="workspace-tree-actions pointer-events-none flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              className="text-muted-foreground hover:text-foreground"
+              title={t("app.projectNewAgent")}
+              aria-label={t("app.projectNewAgent")}
+              onClick={() => void props.actions.sessions.createDraft(props.project.id)}
+            >
+              <Plus size={13} />
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              className="text-muted-foreground hover:text-foreground"
+              title={t("app.anonymousChat")}
+              aria-label={t("app.anonymousChat")}
+              onClick={() => void props.actions.sessions.createAnonymous(props.project.id)}
+            >
+              <HatGlasses size={13} />
+            </Button>
+          </div>
+        </div>
         {/* Worktree 模式下主工作区是默认展开的第一项；根项目历史必须挂在这里，
             不能等 Worktree 列表渲染完再由 ProjectTree 追加到所有工作区之后。 */}
-        <div className="workspace-tree-main-sessions pl-4">
-          <SessionTree
-            project={props.project}
-            sessions={props.sessions}
-            agents={props.agents}
-            currentSessionId={props.currentSessionId}
-            controller={props.controller}
-            actions={props.actions}
-          />
-        </div>
+        {!mainCollapsed && (
+          <div id={mainRowId} className="workspace-tree-main-sessions pl-4">
+            <SessionTree
+              project={props.project}
+              sessions={props.sessions}
+              agents={props.agents}
+              currentSessionId={props.currentSessionId}
+              controller={props.controller}
+              actions={props.actions}
+            />
+          </div>
+        )}
       </section>
 
       <section className="workspace-tree-list" aria-label={t("app.worktreeOtherWorkspaces")}>
@@ -111,7 +159,9 @@ function WorkspaceTreeRowView(props: {
   const isActive = childProject?.id === props.currentProjectId;
 
   return (
-    <div className={cn("workspace-tree-row group flex min-w-0 flex-wrap items-center gap-0.5 rounded-lg p-0.5 text-muted-foreground transition-colors", isActive && "bg-accent/60 text-foreground")}>
+    // 选中态只高亮分支名行（select 按钮），不能把外层 wrapper 整行压暗——
+    // wrapper 还包着展开的会话列表，整行变色会让整个工作区区块发暗。
+    <div className={cn("workspace-tree-row group flex min-w-0 flex-wrap items-center gap-0.5 rounded-lg p-0.5 text-muted-foreground transition-colors")}>
       <Button
         type="button"
         variant="ghost"
@@ -131,7 +181,10 @@ function WorkspaceTreeRowView(props: {
       <PathTooltip content={`${row.branch}${row.directory !== row.branch ? ` (${row.directory})` : ""}\n${row.path}`}>
         <button
           type="button"
-          className="workspace-tree-select flex min-w-0 flex-1 items-center gap-1.5 rounded-lg px-1.5 py-1 text-left text-control text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:cursor-default disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
+          className={cn(
+            "workspace-tree-select flex min-w-0 flex-1 items-center gap-1.5 rounded-lg px-1.5 py-1 text-left text-control text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:cursor-default disabled:hover:bg-transparent disabled:hover:text-muted-foreground",
+            isActive && "bg-accent/60 text-foreground",
+          )}
           disabled={!childProject}
           onClick={() => childProject && props.actions.projects.select(childProject.id)}
           onContextMenu={(event) => {
@@ -165,6 +218,17 @@ function WorkspaceTreeRowView(props: {
             onClick={() => void props.actions.sessions.createDraft(childProject.id)}
           >
             <Plus size={13} />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-xs"
+            className="text-muted-foreground hover:text-foreground"
+            title={t("app.anonymousChat")}
+            aria-label={t("app.anonymousChat")}
+            onClick={() => void props.actions.sessions.createAnonymous(childProject.id)}
+          >
+            <HatGlasses size={13} />
           </Button>
           <Button
             type="button"

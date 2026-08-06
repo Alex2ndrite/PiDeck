@@ -135,15 +135,19 @@ export function ProjectTree(props: {
                 <Filter size={12} />
               </button>
             )}
-            {isCurrent && (
+            {/* worktree 模式下新建/匿名入口已挪到主工作区行（WorktreeTree），
+                项目行不再重复提供，避免入口分散 */}
+            {isCurrent && !project.worktreeEnabled && (
               <button type="button" className="grid size-6 place-items-center rounded-md text-muted-foreground hover:bg-background/80 hover:text-foreground" title={t("app.projectNewAgent")} aria-label={t("app.projectNewAgent")} onClick={() => void props.actions.sessions.createDraft(project.id)}><Plus size={14} /></button>
             )}
-            <div className="flex items-center gap-1">
-              {!isCurrent && (
-                <button type="button" className="grid size-6 place-items-center rounded-md text-muted-foreground hover:bg-background/80 hover:text-foreground" title={t("app.projectNewAgent")} aria-label={t("app.projectNewAgent")} onClick={() => void props.actions.sessions.createDraft(project.id)}><Plus size={14} /></button>
-              )}
-              <button type="button" className="grid size-6 place-items-center rounded-md text-muted-foreground hover:bg-background/80 hover:text-foreground" title={t("app.anonymousChat")} aria-label={t("app.anonymousChat")} onClick={() => void props.actions.sessions.createAnonymous(project.id)}><HatGlasses size={14} /></button>
-            </div>
+            {!project.worktreeEnabled && (
+              <div className="flex items-center gap-1">
+                {!isCurrent && (
+                  <button type="button" className="grid size-6 place-items-center rounded-md text-muted-foreground hover:bg-background/80 hover:text-foreground" title={t("app.projectNewAgent")} aria-label={t("app.projectNewAgent")} onClick={() => void props.actions.sessions.createDraft(project.id)}><Plus size={14} /></button>
+                )}
+                <button type="button" className="grid size-6 place-items-center rounded-md text-muted-foreground hover:bg-background/80 hover:text-foreground" title={t("app.anonymousChat")} aria-label={t("app.anonymousChat")} onClick={() => void props.actions.sessions.createAnonymous(project.id)}><HatGlasses size={14} /></button>
+              </div>
+            )}
           </div>
         </div>
         {!collapsed && (
