@@ -69,3 +69,23 @@ test("execution summary toggle radius matches other buttons", () => {
   assert.match(toggleRule, /border-radius: var\(--radius-md\)/);
   assert.doesNotMatch(toggleRule, /999px/);
 });
+
+// Chain of Thought 步骤化：执行过程折叠详情里，思考与工具同为「步骤」——
+// 思考默认收起为单步（标题+首句预览），点击才展开全文；概要行带步骤图标。
+test("execution fold renders thinking as collapsed CoT steps", () => {
+  const renderExecutionItem = turnRowSource.match(
+    /const renderExecutionItem = \([\s\S]*?\n\t\};/,
+  )?.[0] ?? "";
+  assert.match(renderExecutionItem, /defaultExpanded=\{false\}/);
+
+  // ThinkingBlock 支持 defaultExpanded 初始值（standalone 仍默认展开）
+  const cards = readFileSync(
+    "src/renderer/src/components/session/TimelineEventCards.tsx",
+    "utf8",
+  );
+  assert.match(cards, /defaultExpanded\?: boolean/);
+  assert.match(cards, /useState\(props\.defaultExpanded \?\? true\)/);
+
+  // 概要行带步骤图标（ListTree），呼应 Chain of Thought 头部
+  assert.match(turnRowSource, /<ListTree size=\{13\}/);
+});

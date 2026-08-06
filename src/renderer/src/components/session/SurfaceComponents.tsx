@@ -86,6 +86,7 @@ import {
 	UserPen,
 	GitFork,
 	LoaderCircle,
+	ListTree,
 } from "lucide-react";
 import { getFileIconSeti, getFileIconColor, getFileTypeLabel } from "../../fileIcons";
 import { normalizeSessionPathForCompare } from "../../agentListDisplay";
@@ -735,6 +736,9 @@ export const TurnRow = memo(function TurnRow(props: {
 					startedAt={item.startedAt}
 					endedAt={item.endedAt}
 					showThinking={props.showThinking}
+					// 折叠详情里思考以「单步」呈现（标题+首句预览），点击才展开全文：
+					// 与工具卡片同为 Chain of Thought 步骤，不再默认摊开 markdown
+					defaultExpanded={false}
 					onOpenExternal={props.onOpenExternal}
 					onOpenFile={props.onOpenFile}
 				/>
@@ -843,6 +847,7 @@ export const TurnRow = memo(function TurnRow(props: {
 					) : (
 						<ChevronRight size={14} aria-hidden="true" />
 					)}
+					<ListTree size={13} aria-hidden="true" className="text-text-tertiary" />
 					<span>{summary}</span>
 				</button>
 				{executionExpanded && (

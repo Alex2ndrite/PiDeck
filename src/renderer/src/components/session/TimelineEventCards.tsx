@@ -318,18 +318,22 @@ export const AskQuestionCard = memo(function AskQuestionCard(props: {
 });
 
 /** 思考过程折叠卡片：默认展开，展开后以 Markdown 结构渲染推理文本（标题/列表/代码块），
- * 超长时折叠态提供 220 字符截断预览。 */
+ * 超长时折叠态提供 220 字符截断预览。
+ * defaultExpanded=false 时以「单步」形态呈现（标题 + 首句预览），
+ * 用于执行过程折叠详情——思考作为 Chain of Thought 的一个步骤，不再默认摊开全文。 */
 export const ThinkingBlock = memo(
 	function ThinkingBlock(props: {
 		text: string;
 		startedAt?: number;
 		endedAt?: number;
 		showThinking?: boolean;
+		/** 初始展开状态（仅初始值）：standalone 思考卡默认 true，折叠详情内传 false */
+		defaultExpanded?: boolean;
 		onOpenExternal: (url: string) => void;
 		onOpenFile?: (path: string) => void;
 	}) {
 	// 默认展开，方便用户看到推理过程；可手动折叠
-	const [expanded, setExpanded] = useState(true);
+	const [expanded, setExpanded] = useState(props.defaultExpanded ?? true);
 	if (!props.showThinking || !props.text.trim()) return null;
 	const previewLen = 220;
 	const needsTruncate = props.text.length > previewLen;

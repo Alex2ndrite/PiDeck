@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Check } from "lucide-react";
+import { Check, X } from "lucide-react";
 import { cn } from "../../lib/utils";
 
 export type TimelineMarkerKind = "thinking" | "tool" | "compaction" | "diagnostic" | "ask";
@@ -11,6 +11,15 @@ const TONE_CLASSES: Record<TimelineMarkerTone, string> = {
   success: "timeline-marker-node-success",
   warning: "timeline-marker-node-warning",
   error: "timeline-marker-node-error",
+};
+
+/** 借鉴 AI Elements Chain of Thought 的步骤节点：完成/失败不再是同色小圆点，
+ *  轨道节点直接承载状态语义（✓/✗），扫一眼即可定位失败步骤。
+ *  图标用显式白色 stroke：tone 类同时设置了 color 与 background（供圆点用），
+ *  lucide 默认 currentColor 会和底色相同导致图标不可见，必须显式覆盖。 */
+const TONE_STATUS_ICONS: Partial<Record<TimelineMarkerTone, ReactNode>> = {
+  success: <Check size={9} strokeWidth={3.5} color="#fff" />,
+  error: <X size={9} strokeWidth={3.5} color="#fff" />,
 };
 
 /**
@@ -35,7 +44,16 @@ export function TimelineMarker(props: {
       <div className="timeline-marker-rail relative flex w-4 shrink-0 justify-center" aria-hidden="true">
         <span className="timeline-marker-line absolute top-0 bottom-0 w-px bg-border-subtle" />
         {/* 轨道只保留状态节点；工具/思考的语义图标已经在内容卡片里，避免左侧重复一套 Logo。 */}
-        <span className={cn("timeline-marker-node relative z-[1] mt-1.5 size-2 rounded-full", TONE_CLASSES[tone])} />
+        <span
+          className={cn(
+            "timeline-marker-node relative z-[1] mt-1.5 grid size-2 place-items-center rounded-full",
+            // ✓/✗ 节点放大为 14px 并微调基线，与首行文字视觉对齐
+            TONE_STATUS_ICONS[tone] && "mt-1 size-3.5",
+            TONE_CLASSES[tone],
+          )}
+        >
+          {TONE_STATUS_ICONS[tone]}
+        </span>
       </div>
       <div className="timeline-marker-content min-w-0 flex-1 pb-2">{props.children}</div>
     </div>
