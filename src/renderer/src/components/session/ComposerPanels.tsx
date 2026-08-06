@@ -237,7 +237,7 @@ export function ComposerSendControls(props: {
         )}
         {props.isAgentBusy ? (
           <Button variant="ghost" size="icon"
-            className="composer-bar-btn stop size-8 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground"
+            className="composer-bar-btn stop size-8 rounded-full bg-destructive text-destructive-foreground hover:bg-destructive/90"
             aria-label={t("app.stop")} title={t("app.stop")}
             onClick={props.onStop}
           >
