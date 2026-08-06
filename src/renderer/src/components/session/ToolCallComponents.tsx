@@ -4,6 +4,8 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
+  CircleCheck,
+  CircleX,
   Copy,
   FileText,
   Folder,
@@ -23,6 +25,7 @@ import {
   type ToolGroupItem,
 } from "../app/AppUtils";
 import { t } from "../../i18n";
+import { Badge } from "../ui-shadcn/badge";
 import { Button } from "../ui-shadcn/button";
 import { showNotice } from "../../utils/notice";
 import type { ChatMessage } from "../../../../shared/types";
@@ -213,13 +216,33 @@ export const ToolCard = memo(function ToolCard(props: {
 	// 历史会话中从 ask_question 工具结果反推的提问卡片数据
 	const askCard = props.message.meta?._askCard as AskCardSummary | undefined;
 	const isAskCard = Boolean(askCard?.question);
-	// 运行中显示 "运行中"，出错显示 "错误"，完成后不显示状态文本
-const statusLabel =
-	status === "running"
-		? t("tool.statusRunning")
-		: status === "error"
-			? t("tool.statusError")
-			: "";
+	// 状态徽章（借鉴 AI Elements Tool 的 getStatusBadge）：三态图标+文案 pill 一眼可辨。
+	// running 保留琥珀色警示位 + spinner；error 用 destructive 红；done 用 secondary
+	// 低强调确认（ask_question 已回答时文案替换为「已回答」）。
+	const statusBadge = (() => {
+		if (status === "running") {
+			return (
+				<Badge variant="outline" className="gap-1 border-warning/40 text-warning">
+					<span className="size-2.5 animate-spin rounded-full border-2 border-[color:color-mix(in_srgb,var(--color-warning)_30%,transparent)] border-t-[var(--color-warning)]" aria-hidden="true" />
+					{t("tool.statusRunning")}
+				</Badge>
+			);
+		}
+		if (status === "error") {
+			return (
+				<Badge variant="destructive" className="gap-1">
+					<CircleX size={11} aria-hidden="true" />
+					{t("tool.statusError")}
+				</Badge>
+			);
+		}
+		return (
+			<Badge variant="secondary" className="gap-1">
+				<CircleCheck size={11} aria-hidden="true" />
+				{askCard?.answered ? t("ask.answered") : t("tool.statusDone")}
+			</Badge>
+		);
+	})();
 	const [copied, setCopied] = useState(false);
 	const handleCopy = () => {
 		navigator.clipboard.writeText(detailText);
@@ -259,10 +282,7 @@ const statusLabel =
 					{!isSkillRead && kindLabel && (
 						<span className="tool-card-kind">{kindLabel}</span>
 					)}
-					<span className="inline-flex shrink-0 items-center gap-[5px] font-mono text-micro tabular-nums text-text-tertiary">
-						{status === "running" && <span className="size-2.5 animate-spin rounded-full border-2 border-[color:color-mix(in_srgb,var(--color-warning)_30%,transparent)] border-t-[var(--color-warning)]" aria-hidden="true" />}
-						{askCard?.answered ? t("ask.answered") : (statusLabel)}
-					</span>
+					{statusBadge}
 					{showDuration && (
 						<span className="shrink-0 font-mono text-micro tabular-nums text-text-tertiary" title={t("tool.durationTitle")}>
 							{formatDuration(durationMs)}
