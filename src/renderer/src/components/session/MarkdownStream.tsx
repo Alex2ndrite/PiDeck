@@ -1,24 +1,27 @@
 import { memo, useMemo } from "react";
 import { Streamdown, defaultRehypePlugins, defaultRemarkPlugins, type Components } from "streamdown";
+import { code } from "@streamdown/code";
 import { mermaid } from "@streamdown/mermaid";
 import { math } from "@streamdown/math";
 import { MarkdownLink, remarkLinkifyPaths } from "./MarkdownLink";
 import { markdownUrlTransform } from "./MarkdownLinkCore";
 import { MathBlockParagraph } from "./MarkdownComponents";
+import { collapseCodeBlocks } from "./collapseCodeBlocks";
 import { useThrottledStreamingText } from "../../utils/streamingTextThrottle";
 
 /**
  * Streamdown 渲染管线（唯一 markdown 引擎）。
  *
  * 内置能力（由 streamdown 官方插件接管，不再自研）：
+ * - 代码高亮：@streamdown/code（shiki 3.x JS 引擎 + 按语言懒加载，行号/复制/下载由
+ *   streamdown 内置外壳提供；2026-08 曾因全语言常驻移除，恢复时按 memory-profile 复测）
  * - 数学公式：@streamdown/math（KaTeX，$...$/$$...$$）
  * - mermaid 图表：@streamdown/mermaid（```mermaid 代码块 → 交互式 SVG + 全屏/缩放/下载控件）
  * - 表格：GFM + 内建复制/下载（CSV/TSV/Markdown）控件
  * - HTML 标签：默认 sanitize（未知标签剥属性保留文本）
  *
- * 代码高亮已移除（2026-08 内存优化）：原 shiki 高亮插件的双主题 + 全语言 grammar
- * 常驻是渲染进程内存大头（见 docs/memory-profile-analysis.md 主线 B），代码块降级为
- * streamdown 默认 pre/code 渲染（无高亮，保留基础样式）；如需恢复按 git 历史回退。
+ * 代码折叠：collapseCodeBlocks rehype 插件把块级代码包进 <details> 折叠容器，默认全部展开，
+ * 用户可点击 summary 手动折叠；mermaid 跳过。纯 rehype 变换，不碰组件槽。
  *
  * 有意保留的项目能力（streamdown 无对应内置或桌面语义不同）：
  * - a 仍走 MarkdownLink：file:// 本地路径可点击打开、外链经 onOpenExternal
@@ -89,8 +92,13 @@ export const MarkdownStream = memo(function MarkdownStream(props: {
 				rehypePlugins={
 					props.rehypePlugins ?? [
 						defaultRehypePlugins.raw,
-						// sanitize/harden 由 streamdown 默认管线处理（未知标签剥属性、
-						// 危险链接改写）；file:// 放行由 urlTransform 保证
+						[
+							collapseCodeBlocks,
+							{
+								foldThreshold: undefined,
+								excludeLanguages: ["mermaid"],
+							},
+						],
 					]
 				}
 				urlTransform={props.urlTransform ?? markdownUrlTransform}
@@ -98,6 +106,7 @@ export const MarkdownStream = memo(function MarkdownStream(props: {
 					(props.light
 						? { math }
 						: {
+								code,
 								mermaid,
 								math,
 							}) as Parameters<typeof Streamdown>[0]["plugins"]

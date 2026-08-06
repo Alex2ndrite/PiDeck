@@ -3531,24 +3531,88 @@ div.fixed.inset-0.z-50 {
   background-color: var(--color-bg-panel);
 }
 
-/* 表格：压缩工具条与表格之间的空隙，消除表头上方"空余横线"观感；
-   工具条/表头/表体背景沿用主题化的 chat 系 token，保证暗色模式对齐 */
+/* 表格：Streamdown 的 wrapper 只负责工具栏和窄窗口横向滚动，不再画成第二张卡片。
+   唯一的视觉表面留给实际表格，复制/下载功能及可访问按钮保持不变。 */
 [data-streamdown="table-wrapper"] {
-  padding: 4px;
-  gap: 4px;
+  padding: 0;
+  gap: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
 }
 [data-streamdown="table-wrapper"] > div:first-child {
-  padding: 2px 4px;
-  background: var(--color-chat-muted-bg);
+  padding: 2px 0;
+  background: transparent;
 }
 [data-streamdown="table-wrapper"] > div:first-child button {
   border-radius: 6px;
 }
 [data-streamdown="table-wrapper"] > div:last-child {
+  background: transparent;
+}
+[data-streamdown="table"] {
   background: var(--color-chat-table-bg);
 }
 [data-streamdown="table-wrapper"] thead {
   background: var(--color-chat-muted-bg);
+}
+
+/* 折叠只承担交互，不再额外绘制一张代码卡片；边框和底色由内部 pre 统一负责。 */
+.sd-code-collapse {
+  margin: var(--space-3) 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  overflow: visible;
+}
+.sd-code-collapse-summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  padding: 2px 0;
+  color: var(--color-text-tertiary);
+  font: 500 var(--text-caption) / 1.4 var(--font-family-sans);
+  cursor: pointer;
+  list-style: none;
+}
+.sd-code-collapse-summary::-webkit-details-marker {
+  display: none;
+}
+.sd-code-collapse-summary [data-sd-chevron] {
+  display: inline-flex;
+  width: 12px;
+  justify-content: center;
+  transition: transform 0.15s ease;
+}
+.sd-code-collapse[open] .sd-code-collapse-summary [data-sd-chevron] {
+  transform: rotate(90deg);
+}
+.sd-code-collapse > [data-streamdown="code-block"] {
+  margin: 0;
+  gap: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.sd-code-collapse [data-streamdown="code-block-header"] {
+  display: none;
+}
+.sd-code-collapse [data-streamdown="code-block-body"] {
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 10px;
+  background: var(--color-chat-muted-bg);
+  overflow: hidden;
+}
+.sd-code-collapse [data-streamdown="code-block-body"] > pre {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 /* 表体斑马纹，增强长表可读性 */
 [data-streamdown="table-body"] tr:nth-child(even) td {

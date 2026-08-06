@@ -3,8 +3,9 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 // UI 2.0（#115 U2）：Streamdown 为唯一 markdown 引擎，内置能力交给官方插件。
-// 2026-08 内存优化：@streamdown/code（shiki 双主题 + 全语言 grammar）已移除，
-// 代码块降级为默认 pre/code 渲染（见 docs/memory-profile-analysis.md 主线 B）。
+// 2026-08 曾因内存移除 @streamdown/code（shiki 双主题 + 全语言 grammar 常驻），
+// 2026-08 恢复：@streamdown/code 1.x 为 JS 引擎 + 按语言懒加载（不复现全语言常驻），
+// 代码块折叠由 collapseCodeBlocks rehype 插件提供（>20 行默认收折）。
 // 关键点：mermaid/math 由 @streamdown/* 插件接管；a 仍走 MarkdownLink
 // （file:// 打开 + 系统浏览器）；Tailwind 已扫描 streamdown 类名保证控件样式完整。
 const stream = readFileSync("src/renderer/src/components/session/MarkdownStream.tsx", "utf8");
@@ -15,15 +16,18 @@ const tailwind = readFileSync("src/renderer/src/styles/tailwind.css", "utf8");
 const main = readFileSync("src/renderer/src/main.tsx", "utf8");
 const packageJson = readFileSync("package.json", "utf8");
 
-test("streamdown pipeline delegates to official plugins (mermaid/math) and keeps link override", () => {
-  // 官方插件接管：mermaid、数学
+test("streamdown pipeline delegates to official plugins (code/mermaid/math) and keeps link override", () => {
+  // 官方插件接管：代码高亮、mermaid、数学
+  assert.match(stream, /import \{ code \} from "@streamdown\/code"/);
   assert.match(stream, /import \{ mermaid \} from "@streamdown\/mermaid"/);
   assert.match(stream, /import \{ math \} from "@streamdown\/math"/);
   assert.match(stream, /plugins=\{\s*\(props\.light/);
   assert.match(stream, /\{ math \}/);
-  // shiki 高亮已移除（内存优化）：不引入 @streamdown/code，代码块走默认 pre/code
-  assert.doesNotMatch(stream, /@streamdown\/code/);
-  assert.doesNotMatch(stream, /\bcode,\n/);
+  // 非 light 分支注册 code 插件；light（更新日志等轻场景）保持无高亮
+  assert.match(stream, /\bcode,\n/);
+  // 代码折叠：collapseCodeBlocks rehype 插件注册，默认全部展开（手动折叠）
+  assert.match(stream, /collapseCodeBlocks/);
+  assert.match(stream, /foldThreshold: undefined/);
   // 链接覆盖保留（file:// 打开 + 外链拦截是项目核心能力）
   assert.match(stream, /a: \(linkProps\) =>/);
   assert.match(stream, /MarkdownLink/);
@@ -39,15 +43,16 @@ test("streamdown pipeline delegates to official plugins (mermaid/math) and keeps
 
 test("Tailwind scans streamdown + plugin classes; styles.css imported (table/mermaid control styling)", () => {
   assert.match(tailwind, /@source "\.\.\/\.\.\/\.\.\/\.\.\/node_modules\/streamdown\/dist\/\*\.js"/);
-  // @streamdown/code 已随高亮移除，不再扫描也不再依赖
-  assert.doesNotMatch(tailwind, /@streamdown\/code/);
+  // @streamdown/code 已恢复（JS 引擎懒加载高亮），继续扫描其类名
+  assert.match(tailwind, /@source "\.\.\/\.\.\/\.\.\/\.\.\/node_modules\/@streamdown\/code\/dist\/\*\.js"/);
   assert.match(tailwind, /@source "\.\.\/\.\.\/\.\.\/\.\.\/node_modules\/@streamdown\/mermaid/);
   assert.match(tailwind, /@source "\.\.\/\.\.\/\.\.\/\.\.\/node_modules\/@streamdown\/math/);
   assert.match(main, /import "streamdown\/styles\.css"/);
-  assert.doesNotMatch(packageJson, /"@streamdown\/code"/);
+  // 高亮插件进 devDependencies（渲染层依赖随 vite 打包，与分支重构模式一致）
+  assert.match(packageJson, /"@streamdown\/code"/);
   assert.match(packageJson, /"@streamdown\/mermaid"/);
   assert.match(packageJson, /"@streamdown\/math"/);
-  // shiki 高亮链整体移除：运行时依赖树里不允许出现 shiki（vitepress 文档站的 devDependency 除外）
+  // shiki 不作为直接依赖出现（由 @streamdown/code 传递引入）；react-markdown 不可回归
   assert.doesNotMatch(packageJson, /"shiki"/);
   assert.doesNotMatch(packageJson, /"react-markdown"/);
 });

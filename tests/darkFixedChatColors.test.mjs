@@ -33,9 +33,9 @@ test("fixed light chat/table colors are tokenized for dark mode", () => {
     assert.doesNotMatch(body, /#[0-9a-f]{3,8}\b/i, "user-turn-bubble must not hardcode hex colors");
     assert.match(body, /var\(--color-/, "user-turn-bubble must use semantic tokens");
   }
-  // 表格已迁移到 Streamdown 结构（data-streamdown=table-wrapper）；工具条/表头/表体
-  // 背景沿用 chat 系 token，暗色模式跟随主题（见 surfaces.css streamdown 覆盖段）
-  assert.match(block('[data-streamdown="table-wrapper"] > div:first-child'), /background:\s*var\(--color-chat-muted-bg\);/);
-  assert.match(block('[data-streamdown="table-wrapper"] > div:last-child'), /background:\s*var\(--color-chat-table-bg\);/);
+  // 表格 wrapper 只负责工具栏和横向滚动，实际表格/表头承载唯一视觉表面。
+  assert.match(block('[data-streamdown="table-wrapper"] > div:first-child'), /background:\s*transparent;/);
+  assert.match(block('[data-streamdown="table-wrapper"] > div:last-child'), /background:\s*transparent;/);
+  assert.match(block('[data-streamdown="table"]'), /background:\s*var\(--color-chat-table-bg\);/);
   assert.match(block('[data-streamdown="table-wrapper"] thead'), /background:\s*var\(--color-chat-muted-bg\);/);
 });
