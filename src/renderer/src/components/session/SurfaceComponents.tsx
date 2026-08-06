@@ -123,7 +123,7 @@ import removeMarkdown from "remove-markdown";
 import { GRID_COLS, CELL_W, CELL_H, MODE_ROW, MODE_FRAMES } from "../../pet/PetSpriteSheet";
 
 import type { WorkspaceDrawerPanel } from "../../hooks/useWorkspacePanels";
-import { formatDuration, formatTime, stripAnsi } from "./TimelineFormat";
+import { buildTurnSegments, formatDuration, formatTime, stripAnsi, type TurnSegment } from "./TimelineFormat";
 import { ToolCard, ToolGroupCard, type DiffFileHandler } from "./ToolCallComponents";
 import {
 	AskQuestionCard,
@@ -648,14 +648,11 @@ export const AssistantText = memo(
 		prev.images === next.images,
 );
 
-/** 一轮回答内的展示段（issue #130）：
- *  process = 连续思考/工具组成的折叠段；text = 回答文本段（常驻平铺）。 */
-type TurnSegment =
-	| { kind: "process"; id: string; items: (ThinkingGroupItem | ToolGroupItem)[] }
-	| { kind: "text"; id: string; message: ChatMessage };
-
 /** 一轮 AI 回答的扁平容器：左侧竖线聚合，内含思考/工具/正文/文件摘要。
- *  替代旧的 AgentRun + ChatBubble 助手分支 + RunActivity 三层结构。 */
+ *  替代旧的 AgentRun + ChatBubble 助手分支 + RunActivity 三层结构。
+ *  展示段由 buildTurnSegments 严格按 run.items 时序构建（思考→回答→工具…），
+ *  最后一条回答仅以 isFinal 标记挂在原位（供编辑入口），不再抽离时序拽到底部——
+ *  流式/中断的 run 里它后面常还有工具/思考，拽底会导致顺序颠倒。 */
 export const TurnRow = memo(function TurnRow(props: {
 	run: AgentRunItem;
 	/** 新消息入场动画：仅发送后尾部新增的消息播放一次 */
@@ -703,25 +700,6 @@ export const TurnRow = memo(function TurnRow(props: {
 		.filter(Boolean)
 		.join("\n\n");
 
-	/** 找出 message 在 run.items 中的位置，分离「执行过程」（最后一条 assistant message 之前的所有条目）。
-	 *  执行过程包含 thinking-group、tool-group 以及中间穿插的 assistant 消息，
-	 *  默认折叠并以概要形式展示，用户可展开查看细节。最后一条 assistant 消息作为最终回答始终可见。 */
-	const lastAssistantIndex = (() => {
-		for (let i = run.items.length - 1; i >= 0; i--) {
-			if (run.items[i].kind === "message" && (run.items[i] as MessageItem).message.role === "assistant") {
-				return i;
-			}
-		}
-		return -1;
-	})();
-	const finalMessageItem = lastAssistantIndex >= 0 ? (run.items[lastAssistantIndex] as MessageItem) : null;
-
-	// 最终回答文本，用于判断自然完成 vs 手动中断。
-	// 提前定义以在 useEffect 中使用（auto-collapse 逻辑需要判断是否有最终文本回答）。
-	const finalTxt = finalMessageItem
-		? stripThinkingTags(stripAnsi(finalMessageItem.message.text)).trim()
-		: "";
-
 	// 执行过程默认展开（agent 处理中），输出完毕后自动折叠。
 	// 使用 agentRunning 而非 isStreaming：后者在多步工具调用之间会短暂 flicker 为 false，
 	// 导致过早折叠工具输出；agentRunning 在整个 agent 处理生命周期内始终为 true。
@@ -765,47 +743,12 @@ export const TurnRow = memo(function TurnRow(props: {
 		return <ToolGroupCard key={item.id} group={item} />;
 	};
 
-	const finalThinking = finalMessageItem?.message.thinking?.trim()
-		? stripAnsi(finalMessageItem.message.thinking)
-		: null;
-	const hasFinalThinking = Boolean(finalThinking && props.showThinking);
-
-	/** 把一轮回答按时序拆成「过程段（思考+工具，可折叠）」与「回答文本段（常驻平铺）」。
-	 *  issue #130：中间过渡回答是面向用户的正式内容，不再折进执行过程；
-	 *  连续的思考/工具合成一个折叠段，回答文本段原位平铺，保留真实调用时序。 */
-	const segments = useMemo<TurnSegment[]>(() => {
-		const result: TurnSegment[] = [];
-		const pushProcessItem = (item: ThinkingGroupItem | ToolGroupItem) => {
-			const last = result[result.length - 1];
-			if (last?.kind === "process") last.items.push(item);
-			else result.push({ kind: "process", id: item.id, items: [item] });
-		};
-		run.items.forEach((item, index) => {
-			// 最终回答单独渲染（支持编辑），不进任何段
-			if (index === lastAssistantIndex) return;
-			if (item.kind === "thinking-group" || item.kind === "tool-group") {
-				pushProcessItem(item);
-				return;
-			}
-			if (item.kind === "message" && item.message.role === "assistant") {
-				// 空文本消息不展示（与旧逻辑一致）
-				if (!stripThinkingTags(stripAnsi(item.message.text)).trim()) return;
-				result.push({ kind: "text", id: item.message.id, message: item.message });
-			}
-		});
-		// 最终回答的思考并入其前的过程段尾部，保持「思考→回答」时序
-		if (hasFinalThinking && finalThinking) {
-			pushProcessItem({
-				kind: "thinking-group",
-				id: `final-thinking-${finalMessageItem?.message.id ?? run.id}`,
-				messages: finalMessageItem?.message ? [finalMessageItem.message] : [],
-				text: finalThinking,
-				startedAt: run.startedAt,
-				endedAt: finalMessageItem?.message.timestamp ?? run.endedAt,
-			});
-		}
-		return result;
-	}, [run.items, lastAssistantIndex, hasFinalThinking, finalThinking, finalMessageItem, run.id, run.startedAt, run.endedAt]);
+	/** 一轮回答的展示段：由 buildTurnSegments 严格按时序构建，
+	 *  过程段（思考+工具）折叠、回答文本段常驻平铺（issue #130）。 */
+	const segments = useMemo<TurnSegment[]>(
+		() => buildTurnSegments(run, { showThinking: props.showThinking }),
+		[run, props.showThinking],
+	);
 
 	/** 单个过程段的概要文本：只统计思考/工具（回答不再计入折叠，issue #130）。 */
 	const segmentSummary = (items: (ThinkingGroupItem | ToolGroupItem)[]): string => {
@@ -819,20 +762,69 @@ export const TurnRow = memo(function TurnRow(props: {
 			: "";
 	};
 
-	/** 渲染一个段：过程段折叠（概要 + 可展开详情），回答文本段常驻平铺。 */
+	/** 渲染一个段：过程段折叠（概要 + 可展开详情），回答文本段常驻平铺。
+	 *  isFinal 段（本轮最后一条回答）位置仍在时序原位，仅额外挂载编辑入口。 */
 	const renderSegment = (segment: TurnSegment) => {
 		if (segment.kind === "text") {
+			const text = stripThinkingTags(stripAnsi(segment.message.text)).trim();
+			if (!segment.isFinal) {
+				return (
+					<div key={segment.id} className="timeline-inline-text">
+						<AssistantText
+							text={text}
+							images={allImages}
+							onPreviewImage={props.onPreviewImage}
+							onOpenExternal={props.onOpenExternal}
+							onOpenFile={props.onOpenFile}
+							isStreaming={props.isStreaming ?? false}
+						/>
+					</div>
+				);
+			}
 			return (
-				<div key={segment.id} className="timeline-inline-text">
-					<AssistantText
-						text={stripThinkingTags(stripAnsi(segment.message.text)).trim()}
-						images={allImages}
-						onPreviewImage={props.onPreviewImage}
-						onOpenExternal={props.onOpenExternal}
-						onOpenFile={props.onOpenFile}
-						isStreaming={props.isStreaming ?? false}
-					/>
-				</div>
+				<Fragment key={segment.id}>
+					{editing ? (
+						<div className="flex flex-col gap-2 rounded-md border border-border-subtle bg-[color:color-mix(in_srgb,var(--color-accent)_3%,var(--color-bg-panel))] pl-2" ref={editAreaRef}>
+							<div className="flex items-center gap-1 text-xs font-medium text-[var(--color-accent)] before:content-['✎'] before:text-sm">{t("common.edit")}</div>
+							<Textarea
+								className="min-h-[100px] max-h-[400px] w-full resize-y rounded-sm border border-[var(--color-accent)] bg-bg-panel p-2 font-mono text-sm leading-relaxed text-text-primary outline-none focus:border-[var(--color-accent)] focus:shadow-[0_0_0_2px_var(--focus-ring)]"
+								value={editText}
+								onChange={(e) => setEditText(e.target.value)}
+								onKeyDown={(e) => {
+									if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+										e.preventDefault();
+										const targetId = assistantMessages.at(-1)?.message.id;
+										if (targetId && props.onEditMessage) {
+											props.onEditMessage(targetId, editText);
+											setEditing(false);
+										}
+									}
+									if (e.key === "Escape") setEditing(false);
+								}}
+								autoFocus
+							/>
+							<div className="flex justify-end gap-2">
+								<Button variant="outline" size="sm" className="h-auto border-[var(--color-accent)] px-3 py-1 text-xs text-[var(--color-accent)] shadow-none hover:text-[var(--color-accent)]" onClick={() => {
+									const targetId = assistantMessages.at(-1)?.message.id;
+									if (targetId && props.onEditMessage) {
+										props.onEditMessage(targetId, editText);
+										setEditing(false);
+									}
+								}}>{t("common.save")}</Button>
+								<Button variant="outline" size="sm" className="h-auto px-3 py-1 text-xs shadow-none" onClick={() => setEditing(false)}>{t("common.cancel")}</Button>
+							</div>
+						</div>
+					) : (
+						<AssistantText
+							text={text}
+							images={allImages}
+							onPreviewImage={props.onPreviewImage}
+							onOpenExternal={props.onOpenExternal}
+							onOpenFile={props.onOpenFile}
+							isStreaming={props.isStreaming ?? false}
+						/>
+					)}
+				</Fragment>
 			);
 		}
 		const summary = segmentSummary(segment.items);
@@ -871,25 +863,6 @@ export const TurnRow = memo(function TurnRow(props: {
 		);
 	};
 
-	// 没有助手指令消息的情况：整轮只含工具/思考，用执行过程折叠渲染
-	if (lastAssistantIndex === -1) {
-		return (
-			<article ref={rowRef} className={`turn-row mb-6 w-full min-w-0 max-w-full ${props.fresh ? "turn-row--fresh animate-[message-enter_260ms_cubic-bezier(0.22,1,0.36,1)_both]" : ""} ${props.agentRunning && !isComplete ? "turn-row--running" : isComplete ? "turn-row--complete" : "turn-row--pending"}`} data-message-id={run.id}>
-				<div className="flex min-w-0 flex-col gap-3">
-					<div className="mb-1 inline-flex items-center gap-2 text-xs text-muted-foreground tabular-nums">
-						<span className="shrink-0 font-mono font-semibold text-foreground/80">pi</span>
-						<time className="shrink-0 font-mono text-[11px]">{formatTime(run.endedAt)}</time>
-						{showDuration && (
-							<span className="shrink-0 font-mono text-[11px] text-muted-foreground">{formatDuration(duration)}</span>
-						)}
-					</div>
-					{/* 过程段（思考+工具）折叠展示，回答文本段常驻平铺（issue #130） */}
-					{segments.map(renderSegment)}
-				</div>
-			</article>
-		);
-	}
-
 	return (
 		<article ref={rowRef} className={`turn-row mb-6 w-full min-w-0 max-w-full ${props.agentRunning && !isComplete ? "turn-row--running" : isComplete ? "turn-row--complete" : "turn-row--pending"} ${props.fresh ? "turn-row--fresh" : ""}`} data-message-id={run.id}>
 			<div className="flex min-w-0 flex-col gap-3">
@@ -900,55 +873,9 @@ export const TurnRow = memo(function TurnRow(props: {
 						<span className="shrink-0 font-mono text-[11px] text-muted-foreground">{formatDuration(duration)}</span>
 					)}
 				</div>
-				{/* 过程段（思考+工具）折叠展示，回答文本段常驻平铺（issue #130），
-				    段按真实调用时序排列，最终回答始终在最后单独渲染。 */}
+				{/* 展示段严格按真实调用时序排列：过程段（思考+工具）折叠、
+				    回答文本段常驻平铺（issue #130），最终回答以 isFinal 段挂在原位。 */}
 				{segments.map(renderSegment)}
-				{/* 最终回答（始终可见）；最终思考已融入执行过程折叠区 */}
-				{finalMessageItem && (
-					<Fragment key={finalMessageItem.message.id}>
-						{editing ? (
-							<div className="flex flex-col gap-2 rounded-md border border-border-subtle bg-[color:color-mix(in_srgb,var(--color-accent)_3%,var(--color-bg-panel))] pl-2" ref={editAreaRef}>
-								<div className="flex items-center gap-1 text-xs font-medium text-[var(--color-accent)] before:content-['✎'] before:text-sm">{t("common.edit")}</div>
-								<Textarea
-									className="min-h-[100px] max-h-[400px] w-full resize-y rounded-sm border border-[var(--color-accent)] bg-bg-panel p-2 font-mono text-sm leading-relaxed text-text-primary outline-none focus:border-[var(--color-accent)] focus:shadow-[0_0_0_2px_var(--focus-ring)]"
-									value={editText}
-									onChange={(e) => setEditText(e.target.value)}
-									onKeyDown={(e) => {
-										if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
-											e.preventDefault();
-											const targetId = assistantMessages.at(-1)?.message.id;
-											if (targetId && props.onEditMessage) {
-												props.onEditMessage(targetId, editText);
-												setEditing(false);
-											}
-										}
-										if (e.key === "Escape") setEditing(false);
-									}}
-									autoFocus
-								/>
-								<div className="flex justify-end gap-2">
-									<Button variant="outline" size="sm" className="h-auto border-[var(--color-accent)] px-3 py-1 text-xs text-[var(--color-accent)] shadow-none hover:text-[var(--color-accent)]" onClick={() => {
-										const targetId = assistantMessages.at(-1)?.message.id;
-										if (targetId && props.onEditMessage) {
-											props.onEditMessage(targetId, editText);
-											setEditing(false);
-										}
-									}}>{t("common.save")}</Button>
-									<Button variant="outline" size="sm" className="h-auto px-3 py-1 text-xs shadow-none" onClick={() => setEditing(false)}>{t("common.cancel")}</Button>
-								</div>
-							</div>
-						) : finalTxt ? (
-							<AssistantText
-								text={finalTxt}
-								images={allImages}
-								onPreviewImage={props.onPreviewImage}
-								onOpenExternal={props.onOpenExternal}
-								onOpenFile={props.onOpenFile}
-								isStreaming={props.isStreaming ?? false}
-							/>
-						) : null}
-					</Fragment>
-				)}
 				{/* 操作栏 */}
 				{mergedText && !editing && (
 					<div className="flex min-h-6 items-center gap-1 opacity-55 transition-opacity hover:opacity-100 focus-within:opacity-100">

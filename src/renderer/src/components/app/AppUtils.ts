@@ -322,35 +322,15 @@ export function groupToolMessages(messages: ChatMessage[]): RenderMessage[] {
 		flushThinking();
 		if (currentRun.length === 0) return;
 
-		// 合并连续的 assistant 文本消息，避免同一轮回答被拆成多个气泡。
-		// 合并时保留首个消息 ID 作为稳定 key，流式期间不变化。
-		const merged: Array<MessageItem | ToolGroupItem | ThinkingGroupItem> = [];
-		for (const item of currentRun) {
-			const prev = merged[merged.length - 1];
-			if (
-				item.kind === "message" &&
-				item.message.role === "assistant" &&
-				prev?.kind === "message" &&
-				prev.message.role === "assistant"
-			) {
-				prev.message = {
-					...prev.message,
-					text: prev.message.text + "\n\n" + item.message.text,
-					thinking: (prev.message.thinking || "") + (item.message.thinking ? "\n\n" + item.message.thinking : ""),
-				};
-			} else {
-				merged.push(item);
-			}
-		}
-
-		// run id 取首个条目的稳定 id，流式期间不会变，React key 保持稳定
-		const runStableId = merged[0]
-			? (merged[0].kind === "message" ? merged[0].message.id : merged[0].id)
+		// 不再合并连续 assistant 消息：issue #130 要求多段回答原位平铺，
+		// 合并会把后段的 thinking 串接到前段消息上，导致思考被上移到两段文本之前。
+		const runStableId = currentRun[0]
+			? (currentRun[0].kind === "message" ? currentRun[0].message.id : currentRun[0].id)
 			: "";
 		result.push({
 			kind: "agent-run",
 			id: runStableId,
-			items: merged,
+			items: currentRun,
 			// 回合起点优先用触发它的用户消息时间戳，无用户消息时回退到 run 内首条消息时间戳
 			startedAt: lastUserTimestamp || runStartedAt,
 			endedAt: runEndedAt || runStartedAt,

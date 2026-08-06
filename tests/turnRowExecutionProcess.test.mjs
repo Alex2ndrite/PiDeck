@@ -7,16 +7,19 @@ const turnRowSource = readFileSync(
   "utf8",
 );
 
-test("renders the execution process segments before the final assistant answer", () => {
+test("renders the run as time-ordered segments without pulling the last answer to the bottom", () => {
   assert.ok(
     turnRowSource.indexOf("{segments.map(renderSegment)}") > 0,
     "TurnRow must render segments",
   );
-  assert.ok(
-    turnRowSource.lastIndexOf("{segments.map(renderSegment)}") <
-      turnRowSource.indexOf("{/* 最终回答"),
-    "process/text segments must precede the final answer in TurnRow",
+  // 顺序修复：最终回答不再抽离时序、在 segments 之后单独渲染，
+  // 而是作为 isFinal 段挂在时序原位（流式/中断的 run 尾部可能还有工具/思考）。
+  assert.doesNotMatch(
+    turnRowSource.slice(turnRowSource.indexOf("{segments.map(renderSegment)}")),
+    /最终回答（始终可见）/,
   );
+  assert.match(turnRowSource, /buildTurnSegments/);
+  assert.match(turnRowSource, /segment\.isFinal/);
 });
 
 // issue #130：回答文本是面向用户的正式内容，不应折进「执行过程」，

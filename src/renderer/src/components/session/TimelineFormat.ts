@@ -1,4 +1,9 @@
 import type { ChatMessage } from "../../../../shared/types";
+import type {
+	AgentRunItem,
+	ThinkingGroupItem,
+	ToolGroupItem,
+} from "../app/AppUtils";
 
 /* ── 工具参数解析（与 AppUtils 同逻辑的内联副本：此文件被 node 单测直接加载，
    不能带 AppUtils 的运行时依赖链；改动时需与 AppUtils 同步） ── */
@@ -69,6 +74,11 @@ const ANSI_RE = /\x1b\[[0-9;]*[a-zA-Z]/g;
 
 export function stripAnsi(text: string): string {
   return text.replace(ANSI_RE, "");
+}
+
+/* stripThinkingTags 与 AppUtils 同逻辑的内联副本（此文件被 node 单测直接加载，改动需同步） */
+export function stripThinkingTags(text: string): string {
+	return text.replace(/<thinking>[\s\S]*?<\/thinking>/gi, "").trim();
 }
 
 export function getToolStatus(
@@ -180,4 +190,87 @@ export function formatTime(timestamp: number): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+/* ── 一轮回答的时序分段 ── */
+
+/** 过程段：连续的思考/工具组成，可折叠。 */
+export type TurnProcessSegment = {
+	kind: "process";
+	id: string;
+	items: (ThinkingGroupItem | ToolGroupItem)[];
+};
+
+/** 回答文本段：常驻平铺；isFinal 标记本轮最后一条回答（TurnRow 用它挂载编辑入口），位置仍在时序原位。 */
+export type TurnTextSegment = {
+	kind: "text";
+	id: string;
+	message: ChatMessage;
+	isFinal: boolean;
+};
+
+export type TurnSegment = TurnProcessSegment | TurnTextSegment;
+
+/**
+ * 把一轮回答（agent-run）严格按 run.items 时序拆成展示段：
+ * - 连续的思考/工具合成一个 process 折叠段；
+ * - 每条回答文本原位平铺为 text 段（issue #130 多段回答）；
+ * - assistant 消息自带的 thinking 作为过程条目插到该文本之前（思考→回答）。
+ *
+ * 修复：旧实现把「最后一条 assistant 消息」抽离时序固定渲染到底部、其思考
+ * append 到分段末尾。流式期间或中断的 run 里这条消息后往往还有工具/思考，
+ * 导致尾部条目被渲到回答上方、思考块上下颠倒。此处不允许任何重排。
+ */
+export function buildTurnSegments(
+	run: AgentRunItem,
+	options: { showThinking?: boolean } = {},
+): TurnSegment[] {
+	const showThinking = Boolean(options.showThinking);
+	// 本轮最后一条 assistant 消息的位置：仅用于 isFinal 标记，不影响排序
+	let lastAssistantIndex = -1;
+	run.items.forEach((item, index) => {
+		if (item.kind === "message" && item.message.role === "assistant") {
+			lastAssistantIndex = index;
+		}
+	});
+	const segments: TurnSegment[] = [];
+	const pushProcessItem = (item: ThinkingGroupItem | ToolGroupItem) => {
+		const last = segments[segments.length - 1];
+		if (last?.kind === "process") last.items.push(item);
+		else segments.push({ kind: "process", id: item.id, items: [item] });
+	};
+	run.items.forEach((item, index) => {
+		if (item.kind === "thinking-group" || item.kind === "tool-group") {
+			pushProcessItem(item);
+			return;
+		}
+		if (item.kind !== "message" || item.message.role !== "assistant") return;
+		// 消息自带的思考：插到该回答文本之前，保持「思考→回答」时序。
+		// thinking-only 消息在 groupToolMessages 阶段已归入 thinking-group，不会重复。
+		const thinking =
+			showThinking && item.message.thinking?.trim()
+				? stripAnsi(item.message.thinking)
+				: "";
+		if (thinking) {
+			pushProcessItem({
+				kind: "thinking-group",
+				// 稳定 id 由消息 id 派生：流式期间 thinking 持续增长但 key 不变，
+				// 避免 React 重建组件导致展开状态丢失。
+				id: `msg-thinking-${item.message.id}`,
+				messages: [item.message],
+				text: thinking,
+				startedAt: item.message.timestamp ?? run.startedAt,
+				endedAt: item.message.timestamp ?? run.endedAt,
+			});
+		}
+		// 空文本消息（纯思考已归入过程段）不再产生 text 段
+		if (!stripThinkingTags(stripAnsi(item.message.text)).trim()) return;
+		segments.push({
+			kind: "text",
+			id: item.message.id,
+			message: item.message,
+			isFinal: index === lastAssistantIndex,
+		});
+	});
+	return segments;
 }
