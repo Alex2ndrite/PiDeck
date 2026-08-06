@@ -759,9 +759,10 @@ function ConfigModalContent(props: ConfigModalProps) {
 		});
 	};
 
-	const handleUpdateModelXhigh = (
+	const handleUpdateModelThinkingLevel = (
 		providerName: string,
 		index: number,
+		key: "xhigh" | "max",
 		value: "" | "xhigh" | "max",
 	) => {
 		const provider = modelsData.providers[providerName];
@@ -771,11 +772,11 @@ function ConfigModalContent(props: ConfigModalProps) {
 		const nextThinkingLevelMap = {
 			...(currentModel.thinkingLevelMap ?? {}),
 		};
-		if (value) nextThinkingLevelMap.xhigh = value;
-		else delete nextThinkingLevelMap.xhigh;
+		if (value) nextThinkingLevelMap[key] = value;
+		else delete nextThinkingLevelMap[key];
 		const nextModel = {
 			...currentModel,
-			// xhigh 只有 reasoning 模型才有意义；打开映射时同步开启，避免保存后 UI 看似配置成功但 pi 仍不展示思考档位。
+			// xhigh/max 只有 reasoning 模型才有意义；打开映射时同步开启。
 			reasoning: value ? true : currentModel.reasoning,
 		};
 		if (Object.keys(nextThinkingLevelMap).length > 0) {
@@ -791,7 +792,6 @@ function ConfigModalContent(props: ConfigModalProps) {
 				compat: {
 					supportsDeveloperRole: false,
 					...(provider.compat ?? {}),
-					// xhigh 映射必须最终发送给上游；自动打开可减少用户遗漏 provider 兼容开关导致回退 high。
 					supportsReasoningEffort: true,
 				},
 			}
@@ -1521,7 +1521,7 @@ function ConfigModalContent(props: ConfigModalProps) {
 							onDeleteProviders={handleDeleteProviders}
 							onAddModel={handleAddModel}
 							onUpdateModel={handleUpdateModel}
-							onUpdateModelXhigh={handleUpdateModelXhigh}
+							onUpdateModelThinkingLevel={handleUpdateModelThinkingLevel}
 							onDeleteModel={handleDeleteModel}
 							onFetchModels={handleFetchModels}
 							onTestProvider={handleTestProvider}

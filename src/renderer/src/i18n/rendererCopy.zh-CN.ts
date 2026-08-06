@@ -1016,6 +1016,8 @@ export const zhCN = {
   "config.xhigh": "xhigh",
   "config.xhighOff": "关闭",
   "config.xhighDesc": "声明该模型支持 pi 的 xhigh 档位，并选择发送给上游的 reasoning_effort 值。选择后会自动开启推理和 provider 的 reasoning_effort。",
+  "config.thinkingLevels": "思考级别",
+  "config.thinkingLevelsDesc": "按 pi 内部 thinkingLevel（xhigh / max）映射到供应商实际发送值。每个级别独立配置，可映射到 xhigh 或 max。",
   "config.inputType": "输入",
   "config.inputTypeImage": "图片",
   "config.renameCancel": "取消重命名",

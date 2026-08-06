@@ -2501,7 +2501,7 @@
   /* 模型 id/name 容易很长，使用 minmax 防止输入框撑破 modal。 */
   grid-template-columns:
     minmax(100px, 1.2fr) minmax(80px, 0.8fr)
-    90px 90px 48px 76px 70px 32px;
+    90px 90px 48px 110px 70px 32px;
   gap: 8px;
   align-items: center;
   padding: 0 10px 6px;
@@ -2515,7 +2515,7 @@
   display: grid;
   grid-template-columns:
     minmax(100px, 1.2fr) minmax(80px, 0.8fr)
-    90px 90px 48px 76px 70px 32px;
+    90px 90px 48px 110px 70px 32px;
   gap: 8px;
   align-items: center;
   padding: 8px 10px;
@@ -4589,4 +4589,84 @@ div.fixed.inset-0.z-50 {
   .app-error-boundary-dot {
     animation: none;
   }
+}
+
+/* 思考级别映射：两个 ConfigSelect 垂直排列（xhigh + max） */
+.config-thinking-levels-cell {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.config-thinking-levels-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.config-thinking-levels-key {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--color-text-tertiary);
+  font-family: var(--font-mono);
+  flex-shrink: 0;
+  width: 26px;
+}
+
+.config-thinking-levels-row .config-select-trigger {
+  height: 26px;
+  padding: 0 5px;
+  gap: 2px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+}
+
+.config-thinking-levels-row .config-select-trigger > span {
+  font-size: 11px;
+}
+
+.config-thinking-levels-row .config-select-value {
+  font-size: 11px;
+}
+
+/* 模型计费字段：每百万 token 美元单价 */
+.config-cost-cell {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.config-cost-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.config-cost-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--color-text-tertiary);
+  font-family: var(--font-mono);
+  flex-shrink: 0;
+  width: 22px;
+}
+
+.config-cost-cell input {
+  height: 24px;
+  width: 100%;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  padding: 0 6px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-panel);
+  color: var(--color-text-primary);
+}
+
+.config-cost-cell input:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: var(--focus-ring);
 }

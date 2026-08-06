@@ -1,5 +1,5 @@
 import { Button } from "../components/ui-shadcn/button";
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, type ReactNode } from "react";
 import { X, Plus, Check } from "lucide-react";
 import type { AuthFile, SettingsFile, ModelsFile } from "./configTypes";
 import { ConfigComboboxInput } from "./ConfigShared";
@@ -15,6 +15,8 @@ interface ModelRecord {
 	id: string;
 	provider: string;
 	name?: string;
+	/** 唯一 key：provider/id 格式，避免同名模型不同供应商互相冲突 */
+	fullKey: string;
 }
 
 function collectModels(
@@ -27,7 +29,7 @@ function collectModels(
 			for (const m of cfg.models) {
 				const key = `${provider}/${m.id}`;
 				if (!map.has(key)) {
-					map.set(key, { id: m.id, provider, name: m.name });
+					map.set(key, { id: m.id, provider, name: m.name, fullKey: key });
 				}
 			}
 		}
@@ -37,7 +39,7 @@ function collectModels(
 			for (const m of models) {
 				const key = `${provider}/${m.id}`;
 				if (!map.has(key)) {
-					map.set(key, { id: m.id, provider, name: m.name });
+					map.set(key, { id: m.id, provider, name: m.name, fullKey: key });
 				}
 			}
 		}
@@ -452,16 +454,16 @@ function EnabledModelsInput(props: {
 	return (
 		<div ref={containerRef} className="relative min-w-0 flex-1">
 			<div className="flex min-h-[38px] cursor-pointer flex-wrap items-center gap-1.5 rounded-sm border border-border-subtle bg-bg-panel px-2.5 py-[5px] transition-colors duration-150 hover:border-border-strong" onClick={() => setOpen(true)}>
-				{[...selected].map((id) => (
-					<span key={id} className="inline-flex h-6 items-center gap-[3px] rounded-full border border-[color-mix(in_srgb,var(--color-accent)_24%,var(--color-border-subtle))] bg-[color:color-mix(in_srgb,var(--color-accent)_8%,var(--color-bg-panel))] pl-[9px] pr-[5px] font-mono text-xs leading-[18px] whitespace-nowrap text-text-primary">
-						<span>{id}</span>
+				{[...selected].map((fullKey) => (
+					<span key={fullKey} className="inline-flex h-6 items-center gap-[3px] rounded-full border border-[color-mix(in_srgb,var(--color-accent)_24%,var(--color-border-subtle))] bg-[color:color-mix(in_srgb,var(--color-accent)_8%,var(--color-bg-panel))] pl-[9px] pr-[5px] font-mono text-xs leading-[18px] whitespace-nowrap text-text-primary">
+						<span>{fullKey}</span>
 						<Button type="button"
 							variant="ghost"
 							size="icon-xs"
 							className="rounded-full border-0 bg-transparent text-text-tertiary hover:bg-[color:color-mix(in_srgb,var(--color-danger)_16%,transparent)] hover:text-[color:var(--color-danger)]"
 							onClick={(e) => {
 								e.stopPropagation();
-								removeSelected(id);
+								removeSelected(fullKey);
 							}}
 						>
 							<X size={12} />
@@ -523,12 +525,12 @@ function EnabledModelsInput(props: {
 								</button>
 								{!collapsed.has(provider) && grouped[provider].map((m) => (
 									<Label
-										key={`${m.provider}/${m.id}`}
-										className={`group flex cursor-pointer items-center gap-2 py-[7px] pr-3 pl-7 transition-colors duration-100 hover:bg-bg-hover${selected.has(m.id) ? " bg-[color:color-mix(in_srgb,var(--color-accent)_6%,var(--color-bg-panel))]" : ""}`}
-										onClick={() => toggleModel(m.id)}
+										key={m.fullKey}
+										className={`group flex cursor-pointer items-center gap-2 py-[7px] pr-3 pl-7 transition-colors duration-100 hover:bg-bg-hover${selected.has(m.fullKey) ? " bg-[color:color-mix(in_srgb,var(--color-accent)_6%,var(--color-bg-panel))]" : ""}`}
+										onClick={() => toggleModel(m.fullKey)}
 									>
-										<span className={`flex size-[18px] shrink-0 items-center justify-center rounded-[4px] border-[1.5px] border-border-strong text-[color:var(--color-accent)] transition-[border-color,background-color] duration-100 group-hover:border-[var(--color-accent)]${selected.has(m.id) ? " border-[var(--color-accent)] bg-[var(--color-accent)] text-white" : ""}`}>
-											{selected.has(m.id) && <Check size={12} />}
+										<span className={`flex size-[18px] shrink-0 items-center justify-center rounded-[4px] border-[1.5px] border-border-strong text-[color:var(--color-accent)] transition-[border-color,background-color] duration-100 group-hover:border-[var(--color-accent)]${selected.has(m.fullKey) ? " border-[var(--color-accent)] bg-[var(--color-accent)] text-white" : ""}`}>
+											{selected.has(m.fullKey) && <Check size={12} />}
 										</span>
 										<span className="text-control text-text-primary">{m.name ?? m.id}</span>
 										<span className="ml-auto font-mono text-xs text-text-tertiary">{m.provider}/{m.id}</span>
@@ -541,6 +543,34 @@ function EnabledModelsInput(props: {
 						)}
 					</div>
 				</div>
+			)}
+		</div>
+	);
+}
+
+/** 带清空按钮的输入包装器：鼠标悬停时显示清空按钮，默认隐藏以减少视觉噪音。 */
+function ClearableSettingsInput(props: { empty: boolean; onClear: () => void; children: ReactNode }) {
+	const [showClear, setShowClear] = useState(false);
+	return (
+		<div className="relative min-w-0 flex-1">
+			{props.children}
+			{!props.empty && (
+				<Button
+					type="button"
+					variant="ghost"
+					size="icon-xs"
+					className="absolute top-1/2 -translate-y-1/2 right-1 size-6 rounded-sm hover:bg-bg-hover"
+					onMouseDown={(e) => {
+						e.preventDefault();
+						e.stopPropagation();
+						props.onClear();
+					}}
+					onMouseEnter={() => setShowClear(true)}
+					onMouseLeave={() => setShowClear(false)}
+					title={t("common.clear")}
+				>
+					{showClear && <X size={12} className="text-text-tertiary" />}
+				</Button>
 			)}
 		</div>
 	);
@@ -571,13 +601,19 @@ function SettingsValueInput(props: {
 			}
 		}
 		const providerOptions = [...providerSet].map((name) => ({ value: name }));
+		const current = typeof value === "string" ? value : "";
 		return (
-			<ConfigComboboxInput
-				value={typeof value === "string" ? value : ""}
-				options={providerOptions}
-				onChange={(v) => props.onChange(v)}
-				placeholder={t("config.settings.selectProvider")}
-			/>
+			<ClearableSettingsInput
+				empty={!current}
+				onClear={() => props.onChange(undefined)}
+			>
+				<ConfigComboboxInput
+					value={current}
+					options={providerOptions}
+					onChange={(v) => props.onChange(v)}
+					placeholder={t("config.settings.selectProvider")}
+				/>
+			</ClearableSettingsInput>
 		);
 	}
 
@@ -674,15 +710,21 @@ function SettingsValueInput(props: {
 			}
 		}
 
+		const currentModelValue = typeof value === "string" ? value : "";
 		return (
-			<ConfigComboboxInput
-				value={typeof value === "string" ? value : ""}
-				options={modelOptions}
-				onChange={(v) => props.onChange(v)}
-				placeholder={selectedProviderName
-					? t("config.settings.selectModelFor", { provider: selectedProviderName })
-					: t("config.settings.selectModelFirst")}
-			/>
+			<ClearableSettingsInput
+				empty={!currentModelValue}
+				onClear={() => props.onChange(undefined)}
+			>
+				<ConfigComboboxInput
+					value={currentModelValue}
+					options={modelOptions}
+					onChange={(v) => props.onChange(v)}
+					placeholder={selectedProviderName
+						? t("config.settings.selectModelFor", { provider: selectedProviderName })
+						: t("config.settings.selectModelFirst")}
+				/>
+			</ClearableSettingsInput>
 		);
 	}
 

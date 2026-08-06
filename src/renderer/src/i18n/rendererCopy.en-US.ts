@@ -1032,6 +1032,8 @@ export const enUS: Record<TranslationKey, string> = {
   "config.xhigh": "xhigh",
   "config.xhighOff": "Off",
   "config.xhighDesc": "Declare that this model supports pi's xhigh level and choose the reasoning_effort value sent upstream. Selecting a value also enables reasoning and provider reasoning_effort.",
+  "config.thinkingLevels": "Thinking Levels",
+  "config.thinkingLevelsDesc": "Map pi thinking levels (xhigh / max) to provider values independently. Each level can be mapped to xhigh or max.",
   "config.inputType": "Input",
   "config.inputTypeImage": "Image",
   "config.renameCancel": "Cancel rename",

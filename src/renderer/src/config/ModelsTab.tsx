@@ -190,9 +190,10 @@ export function ModelsTab(props: {
 		field: string,
 		value: unknown,
 	) => void;
-	onUpdateModelXhigh: (
+	onUpdateModelThinkingLevel: (
 		providerName: string,
 		index: number,
+		key: "xhigh" | "max",
 		value: "" | "xhigh" | "max",
 	) => void;
 	onDeleteModel: (providerName: string, index: number) => void;
@@ -866,7 +867,7 @@ export function ModelsTab(props: {
 											<span>{t("config.contextWindow")}</span>
 											<span>{t("config.maxTokens")}</span>
 											<span>{t("config.reasoning")}</span>
-											<span>{t("config.xhigh")}</span>
+											<span>{t("config.thinkingLevels")}</span>
 											<span>{t("config.inputTypeImage")}</span>
 											<span></span>
 										</div>
@@ -878,9 +879,13 @@ export function ModelsTab(props: {
 												m.thinkingLevelMap?.xhigh === "xhigh" || m.thinkingLevelMap?.xhigh === "max"
 													? m.thinkingLevelMap.xhigh
 													: "";
+													const maxValue =
+												m.thinkingLevelMap?.max === "xhigh" || m.thinkingLevelMap?.max === "max"
+													? m.thinkingLevelMap.max
+													: "";
 											const hasOnlyManagedThinkingLevelMap =
 												m.thinkingLevelMap &&
-												Object.keys(m.thinkingLevelMap).every((key) => key === "xhigh");
+												Object.keys(m.thinkingLevelMap).every((key) => key === "xhigh" || key === "max");
 											const modelComplexFields = ["api", "baseUrl", "thinkingLevelMap", "cost", "headers", "compat"].filter(
 												(key) => m[key] !== undefined && (key !== "thinkingLevelMap" || !hasOnlyManagedThinkingLevelMap),
 											);
@@ -953,23 +958,46 @@ export function ModelsTab(props: {
 														}
 													/>
 												</Label>
-												<div className="config-xhigh-cell" title={t("config.xhighDesc")}>
-													<ConfigSelect
-														value={xhighValue}
-														options={[
-															{ value: "", label: t("config.xhighOff") },
-															{ value: "xhigh", label: "xhigh" },
-															{ value: "max", label: "max" },
-														]}
-														onChange={(value) =>
-															props.onUpdateModelXhigh(
-																name,
-																i,
-																value as "" | "xhigh" | "max",
-															)
-														}
-													/>
-												</div>
+<div className="config-thinking-levels-cell">
+														<div className="config-thinking-levels-row">
+															<span className="config-thinking-levels-key">xhigh</span>
+															<ConfigSelect
+																value={xhighValue}
+																options={[
+																	{ value: "", label: t("config.xhighOff") },
+																	{ value: "xhigh", label: "xhigh" },
+																	{ value: "max", label: "max" },
+																]}
+																onChange={(value) =>
+																	props.onUpdateModelThinkingLevel(
+																		name,
+																		i,
+																		"xhigh",
+																		value as "" | "xhigh" | "max",
+																	)
+																}
+															/>
+														</div>
+														<div className="config-thinking-levels-row">
+															<span className="config-thinking-levels-key">max</span>
+															<ConfigSelect
+																value={maxValue}
+																options={[
+																	{ value: "", label: t("config.xhighOff") },
+																	{ value: "xhigh", label: "xhigh" },
+																	{ value: "max", label: "max" },
+																]}
+																onChange={(value) =>
+																	props.onUpdateModelThinkingLevel(
+																		name,
+																		i,
+																		"max",
+																		value as "" | "xhigh" | "max",
+																	)
+																}
+															/>
+														</div>
+													</div>
 													<div className="config-input-cell">
 														<Label className="config-input-option">
 															<Checkbox
