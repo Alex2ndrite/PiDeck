@@ -1,5 +1,5 @@
 import { app } from "electron";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, stat, writeFile, readFile } from "node:fs/promises";
 import { basename, join } from "node:path";
@@ -218,7 +218,17 @@ export class OpenCodeSessionImporter {
 		const title = this.cleanTitle(String(session.meta.title ?? "")) || titleState.title ||
 			this.cleanTitle(basename(session.sourcePath)) ||
 			this.translate("session.importedTitle", { source: "OpenCode" });
-		lines.splice(1, 0, JSON.stringify({ sessionName: title, cwd: projectPath }));
+		// 使用 pi 原生 session_info 格式追加在末尾，避免旧版 sessionName 行（无 type 字段）
+		// 在文件头破坏 pi 的首行校验导致会话无法加载（见 #114）。
+		const sessionInfoId = randomUUID().slice(0, 8);
+		lines.push(JSON.stringify({
+			type: "session_info",
+			id: sessionInfoId,
+			parentId,
+			timestamp: new Date().toISOString(),
+			name: title,
+			cwd: projectPath,
+		}));
 		return {
 			raw: `${lines.join("\n")}\n`,
 			title,

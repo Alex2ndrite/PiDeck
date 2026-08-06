@@ -12,13 +12,6 @@
   font-weight: 300 900;
   font-display: swap;
 }
-@font-face {
-  font-family: "PiDeckCommitMono";
-  src: url("../assets/fonts/CommitMono-400-Regular.otf") format("opentype");
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-}
 /* 像素展示字体：仅用于侧栏品牌字标等少量展示位 */
 @font-face {
   font-family: "PiDeckDepartureMono";
@@ -30,15 +23,14 @@
 
 :root {
   color-scheme: light;
-  /* 默认使用系统字体栈；霞鹜文楷由 data-font-base="lxgw-wenkai" 选择器启用。 */
+  /* 默认使用系统字体栈；用户可通过自定义字体设置修改。 */
   --font-family-base:
     -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI",
     "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", "HarmonyOS Sans SC",
     "Hiragino Sans GB", "Noto Sans CJK SC", sans-serif;
   --font-family-brand: "PiDeckPlantin", Georgia, "Times New Roman", serif;
   --font-family-mono:
-    "PiDeckCommitMono", ui-monospace, SFMono-Regular, Menlo, Consolas,
-    "Liberation Mono", monospace;
+    ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
   --font-family-business: var(--font-family-mono);
   --font-size-micro: 11px;
   --font-size-caption: 12px;
@@ -253,13 +245,6 @@
   --color-brand-green: #be123c;
   --color-info: #e11d48;
   --color-chat-link: #e11d48;
-}
-
-:root[data-font-base="lxgw-wenkai"] {
-  --font-family-base:
-    "LXGW WenKai", -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text",
-    "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC",
-    "HarmonyOS Sans SC", "Hiragino Sans GB", "Noto Sans CJK SC", sans-serif;
 }
 
 :root[data-font-base="system"] {

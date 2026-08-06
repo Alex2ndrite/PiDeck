@@ -169,7 +169,7 @@ Gitmoji 对应关系：
   // ── 实验性渲染（#115）：Streamdown 已转正为唯一 markdown 引擎（迁移自 react-markdown） ──
   useWebContentsViewBrowser: false,
 
-  // 字体配置：默认使用系统字体；霞鹜文楷作为可选字体保留。
+  // 字体配置：默认使用系统字体；用户可通过自定义字体设置修改。
   fontSize: "medium",
   uiFontSize: null,
   chatFontSize: null,
@@ -177,7 +177,7 @@ Gitmoji 对应关系：
   zoomFactor: 1,
   fontFamilyBase: "system",
   fontFamilyBaseCustom: "",
-  fontFamilyMono: "commit-mono",
+  fontFamilyMono: "system-mono",
   fontFamilyMonoCustom: "",
 };
 
@@ -197,6 +197,13 @@ export class SettingsStore {
           ...(parsed.externalEditors ?? {}),
         },
       };
+      // 兼容迁移：内置 CommitMono 字体已移除（打包瘦身），旧设置里的 "commit-mono"
+      // 不再存在于 AppFontMonoMode 枚举，统一回退到系统等宽字体，避免类型漂移。
+      // 注意：磁盘 JSON 是无类型的，旧值可能是已删除的枚举项，先拓宽为 string 再比较。
+      const persistedMonoFont: string = this.settings.fontFamilyMono;
+      if (persistedMonoFont === "commit-mono") {
+        this.settings.fontFamilyMono = "system-mono";
+      }
     } catch {
       this.settings = { ...defaultSettings };
     }

@@ -299,7 +299,7 @@ export function TerminalDock(props: {
 
 		const terminal = new Terminal({
 			cursorBlink: true,
-			fontFamily: '"PiDeckCommitMono", "Cascadia Mono", Consolas, monospace',
+			fontFamily: '"Cascadia Mono", Consolas, monospace',
 			fontSize: 13,
 			scrollback: 5000,
 			theme: xtermTheme,

@@ -332,13 +332,11 @@ function SettingsModalContent(props: SettingsModalProps) {
 	];
 	const fontBaseOptions = [
 		{ value: "system", label: t("settings.fontFamilyBaseSystem") },
-		{ value: "lxgw-wenkai", label: t("settings.fontFamilyBaseLxgwWenKai") },
 		{ value: "sans", label: t("settings.fontFamilyBaseSans") },
 		{ value: "serif", label: t("settings.fontFamilyBaseSerif") },
 		{ value: "custom", label: t("settings.fontCustomOption") },
 	];
 	const fontMonoOptions = [
-		{ value: "commit-mono", label: t("settings.fontFamilyMonoCommitMono") },
 		{ value: "system-mono", label: t("settings.fontFamilyMonoSystemMono") },
 		{ value: "custom", label: t("settings.fontCustomOption") },
 	];

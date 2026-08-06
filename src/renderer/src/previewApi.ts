@@ -137,7 +137,7 @@ let previewSettings: AppSettings = {
 	zoomFactor: 1,
 	fontFamilyBase: "system",
 	fontFamilyBaseCustom: "",
-	fontFamilyMono: "commit-mono",
+	fontFamilyMono: "system-mono",
 	fontFamilyMonoCustom: "",
 	removedBuiltInExtensions: [],
 	disableUpdateCheck: false,
