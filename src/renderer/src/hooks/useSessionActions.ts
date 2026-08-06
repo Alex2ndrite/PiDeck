@@ -3,6 +3,7 @@ import type {
   CreateAnonymousSessionResult,
   Project,
   SessionRecord,
+  SessionLaunchPreferences,
   SessionSummary,
 } from "../../../shared/types";
 import { isSameSessionPath } from "../agentListDisplay";
@@ -44,8 +45,8 @@ export interface UseSessionActionsOptions {
       copyRecord: (sessionId: string) => Promise<{ cancelled?: boolean; targetSessionId?: string }>;
       exportRecordHtml: (sessionId: string) => Promise<{ path: string }>;
       deleteRecord: (sessionId: string) => Promise<boolean>;
-      createDraft: (input: { projectId: string; title: string }) => Promise<SessionRecord>;
-      createAnonymous: (input: { projectId: string; title: string }) => Promise<CreateAnonymousSessionResult>;
+      createDraft: (input: { projectId: string; title: string } & SessionLaunchPreferences) => Promise<SessionRecord>;
+      createAnonymous: (input: { projectId: string; title: string } & SessionLaunchPreferences) => Promise<CreateAnonymousSessionResult>;
     };
   };
 
@@ -205,7 +206,7 @@ export function useSessionActions(options: UseSessionActionsOptions) {
 
   // ── Session draft ──
 
-  async function createSessionDraft(projectId = activeProjectId) {
+  async function createSessionDraft(projectId = activeProjectId, preferences: SessionLaunchPreferences = {}) {
     if (!projectId || creatingSessionDraftRef.current.has(projectId)) return;
     const project = projects.find((item) => item.id === projectId);
     if (!project) return;
@@ -214,6 +215,7 @@ export function useSessionActions(options: UseSessionActionsOptions) {
       const session = await api.sessions.createDraft({
         projectId,
         title: `${project.name} agent`,
+        ...preferences,
         // 主进程 createDraft(ipc) 已按 pi 配置（defaultProvider/defaultModel/
         // defaultThinkingLevel）自动填充默认模型与思考级别；渲染层的欢迎页本地偏好
         // 不再无条件 spread 覆盖 pi 配置，避免 localStorage 篡改 pi 默认值。
@@ -227,7 +229,7 @@ export function useSessionActions(options: UseSessionActionsOptions) {
     }
   }
 
-  async function createAnonymousSession(projectId = activeProjectId) {
+  async function createAnonymousSession(projectId = activeProjectId, preferences: SessionLaunchPreferences = {}) {
     if (!projectId || creatingSessionDraftRef.current.has(projectId)) return;
     const project = projects.find((item) => item.id === projectId);
     if (!project) return;
@@ -236,6 +238,7 @@ export function useSessionActions(options: UseSessionActionsOptions) {
       const { session } = await api.sessions.createAnonymous({
         projectId,
         title: t("app.anonymousChatTitle", { name: project.name }),
+        ...preferences,
       });
       upsertSession(session);
       commitSessionSelection(projectId, session.id, true);

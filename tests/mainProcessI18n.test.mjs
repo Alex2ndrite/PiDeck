@@ -164,7 +164,7 @@ test("diagnostic renderer localizes copy while keeping raw details separate", ()
   );
   assert.match(diagnosticCard, /translateI18nDescriptor\(props\.message\.meta, props\.message\.text\)/);
   assert.match(diagnosticCard, /typeof props\.message\.meta\?\.debugDetails === "string"/);
-  assert.match(diagnosticCard, /debugDetails \? `\$\{localizedText\}\\n\\n\$\{debugDetails\}`/);
+  assert.match(diagnosticCard, /<StackTrace trace=\{stripAnsi\(debugDetails\)\}/);
 });
 
 test("AgentManager user-visible runtime diagnostics carry i18n descriptors", () => {

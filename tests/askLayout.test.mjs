@@ -30,11 +30,10 @@ test("composer keeps the editor inside the resizable panel", () => {
   assert.doesNotMatch(composerArea, /AskRegionResizer/);
 });
 
-test("ask inline bar uses shadcn Collapsible for its fold state", () => {
-  assert.match(overlay, /from "\.\.\/ui-shadcn\/collapsible"/);
-  assert.match(overlay, /<Collapsible[\s\S]*open=/);
-  assert.match(overlay, /<CollapsibleTrigger/);
-  assert.match(overlay, /<CollapsibleContent/);
+test("ask inline bar uses the reusable BEUI-style ApprovalCard shell", () => {
+  assert.match(overlay, /from "\.\.\/ui-shadcn\/approval-card"/);
+  assert.match(overlay, /<ApprovalCard[\s\S]*open=/);
+  assert.match(overlay, /BatchAskInlineBar/);
 });
 
 test("composer default height stays compact while remaining vertically resizable", () => {

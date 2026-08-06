@@ -4,6 +4,8 @@ import type { ChatMessage } from "../../../../shared/types";
 import { t, translateI18nDescriptor } from "../../i18n";
 import { formatDuration, formatTime, stripAnsi } from "./TimelineFormat";
 import { Textarea } from "../ui-shadcn/textarea";
+import { StackTrace } from "../ui-shadcn/stack-trace";
+import { ApprovalCard } from "../ui-shadcn/approval-card";
 import { TimelineMarker } from "./TimelineMarker";
 import { MarkdownStream } from "./MarkdownStream";
 import { ShimmerText } from "./ShimmerText";
@@ -124,7 +126,6 @@ export const DiagnosticMessageCard = memo(function DiagnosticMessageCard(props: 
 	const debugDetails = typeof props.message.meta?.debugDetails === "string"
 		? props.message.meta.debugDetails.trim()
 		: "";
-	const body = debugDetails ? `${localizedText}\n\n${debugDetails}` : localizedText;
 	const title = props.message.role === "error"
 		? t("diagnostic.errorTitle")
 		: t("diagnostic.systemTitle");
@@ -140,7 +141,10 @@ export const DiagnosticMessageCard = memo(function DiagnosticMessageCard(props: 
 				<span className="font-semibold">{title}</span>
 				<time className="ml-auto text-micro tabular-nums text-text-tertiary">{formatTime(props.message.timestamp)}</time>
 			</div>
-			<pre className="m-0 p-2 font-mono text-caption leading-relaxed break-words whitespace-pre-wrap text-text-secondary">{stripAnsi(body)}</pre>
+			<div className="p-2">
+				<p className="m-0 whitespace-pre-wrap break-words text-caption leading-relaxed text-text-secondary">{stripAnsi(localizedText)}</p>
+				{debugDetails ? <StackTrace trace={stripAnsi(debugDetails)} defaultOpen={tone === "error"} /> : null}
+			</div>
 		</article>
 		</TimelineMarker>
 	);
@@ -163,6 +167,7 @@ export const AskQuestionCard = memo(function AskQuestionCard(props: {
 
 	const [inputValue, setInputValue] = useState("");
 	const [cancelling, setCancelling] = useState(false);
+	const [expanded, setExpanded] = useState(true);
 	const inputRef = useRef<HTMLTextAreaElement>(null);
 
 	// 编辑器输入 ref
@@ -171,7 +176,8 @@ export const AskQuestionCard = memo(function AskQuestionCard(props: {
 	// 当 prefill 变化时同步到 inputValue
 	useEffect(() => {
 		if (uiRequest?.prefill) setInputValue(String(uiRequest.prefill));
-	}, [uiRequest?.prefill]);
+		setExpanded(true);
+	}, [uiRequest?.prefill, props.message.id]);
 
 	const handleSelect = (value: string) => {
 		props.onRespond?.({ value });
@@ -206,113 +212,100 @@ export const AskQuestionCard = memo(function AskQuestionCard(props: {
 
 	return (
 		<TimelineMarker kind="ask" tone="active">
-		<article className="ask-question-card pending" data-message-id={props.message.id}>
-			<div className="ask-question-card-header">
-				<MessageCircle size={14} />
-				<span className="ask-question-card-title">{title || t("ask.defaultTitle")}</span>
-				<span className="ask-question-card-status">{cancelling ? t("ask.cancelling") : t("ask.waiting")}</span>
-			</div>
-			<div className="ask-question-card-body">
-				{method === "select" && options && options.length > 0 && (
-					<div className="ask-question-card-options">
-						{/* 过滤掉 Pi 自带的 "✎ 自行输入..." 选项，用下方内联输入框替代 */}
-						{options.filter((opt) => !opt.startsWith("✎")).map((opt, i) => (
+			<ApprovalCard
+				open={expanded}
+				onOpenChange={setExpanded}
+				title={t("ask.toolName")}
+				description={title || t("ask.defaultTitle")}
+				status={cancelling ? t("ask.cancelling") : t("ask.waiting")}
+				onCancel={handleCancel}
+				cancelDisabled={cancelling}
+				cancelLabel={t("common.cancel")}
+				className="ask-question-card pending"
+			>
+				<div className="ask-question-card-body">
+					{method === "select" && options && options.length > 0 && (
+						<div className="ask-question-card-options">
+							{/* 过滤掉 Pi 自带的 "✎ 自行输入..." 选项，用下方内联输入框替代。 */}
+							{options.filter((opt) => !opt.startsWith("✎")).map((opt) => (
+								<button
+									key={opt}
+									className="ask-question-card-option"
+									onClick={() => handleSelect(opt)}
+									disabled={cancelling}
+								>
+									{opt}
+								</button>
+							))}
+						</div>
+					)}
+					{method === "confirm" && (
+						<div className="ask-question-card-options ask-question-card-options-confirm">
 							<button
-								key={i}
-								className="ask-question-card-option"
-								onClick={() => handleSelect(opt)}
+								className="ask-question-card-option ask-question-card-option-yes"
+								onClick={() => handleConfirm(true)}
 								disabled={cancelling}
 							>
-								{opt}
+								{t("common.true")}
 							</button>
-						))}
-					</div>
-				)}
-				{method === "confirm" && (
-					<div className="ask-question-card-options ask-question-card-options-confirm">
-						<button
-							className="ask-question-card-option ask-question-card-option-yes"
-							onClick={() => handleConfirm(true)}
-							disabled={cancelling}
-						>
-							{t("common.true")}
-						</button>
-						<button
-							className="ask-question-card-option ask-question-card-option-no"
-							onClick={() => handleConfirm(false)}
-							disabled={cancelling}
-						>
-							{t("common.false")}
-						</button>
-					</div>
-				)}
-				{method === "input" && (
-					<div className="ask-question-card-input-row">
-						<Textarea
-							ref={inputRef}
-							className="ask-question-card-input"
-							placeholder={placeholder || t("ask.inputPlaceholder")}
-							value={inputValue}
-							onChange={(e) => setInputValue(e.target.value)}
-							onKeyDown={(e) => {
-								if (e.key === "Enter" && !e.shiftKey) {
-									e.preventDefault();
-									handleInputSubmit();
-								}
-							}}
-							disabled={cancelling}
-						/>
-						<button
-							className="ask-question-card-submit"
-							onClick={handleInputSubmit}
-							disabled={!inputValue.trim() || cancelling}
-							title={t("ask.submit")}
-						>
-							<Check size={14} />
-						</button>
-						<button
-							className="ask-question-card-cancel"
-							onClick={handleCancel}
-							disabled={cancelling}
-							title={t("common.cancel")}
-							aria-label={t("common.cancel")}
-						>
-							<X size={14} />
-						</button>
-					</div>
-				)}
-				{method === "editor" && (
-					<div className="ask-question-card-editor-area">
-						<Textarea
-							ref={editorRef}
-							className="ask-question-card-editor"
-							placeholder={placeholder || t("ask.editorPlaceholder")}
-							value={inputValue}
-							onChange={(e) => setInputValue(e.target.value)}
-							disabled={cancelling}
-						/>
-						<div className="ask-question-card-editor-actions">
+							<button
+								className="ask-question-card-option ask-question-card-option-no"
+								onClick={() => handleConfirm(false)}
+								disabled={cancelling}
+							>
+								{t("common.false")}
+							</button>
+						</div>
+					)}
+					{method === "input" && (
+						<div className="ask-question-card-input-row">
+							<Textarea
+								ref={inputRef}
+								className="ask-question-card-input"
+								placeholder={placeholder || t("ask.inputPlaceholder")}
+								value={inputValue}
+								onChange={(e) => setInputValue(e.target.value)}
+								onKeyDown={(e) => {
+									if (e.key === "Enter" && !e.shiftKey) {
+										e.preventDefault();
+										handleInputSubmit();
+									}
+								}}
+								disabled={cancelling}
+							/>
 							<button
 								className="ask-question-card-submit"
 								onClick={handleInputSubmit}
 								disabled={!inputValue.trim() || cancelling}
+								title={t("ask.submit")}
 							>
-								{t("ask.submit")}
-							</button>
-							<button
-								className="ask-question-card-cancel"
-								onClick={handleCancel}
-								disabled={cancelling}
-								title={t("common.cancel")}
-								aria-label={t("common.cancel")}
-							>
-								<X size={14} />
+								<Check size={14} />
 							</button>
 						</div>
-					</div>
-				)}
-			</div>
-		</article>
+					)}
+					{method === "editor" && (
+						<div className="ask-question-card-editor-area">
+							<Textarea
+								ref={editorRef}
+								className="ask-question-card-editor"
+								placeholder={placeholder || t("ask.editorPlaceholder")}
+								value={inputValue}
+								onChange={(e) => setInputValue(e.target.value)}
+								disabled={cancelling}
+							/>
+							<div className="ask-question-card-editor-actions">
+								<button
+									className="ask-question-card-submit"
+									onClick={handleInputSubmit}
+									disabled={!inputValue.trim() || cancelling}
+								>
+									{t("ask.submit")}
+								</button>
+							</div>
+						</div>
+					)}
+				</div>
+			</ApprovalCard>
 		</TimelineMarker>
 	);
 });

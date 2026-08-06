@@ -2802,11 +2802,15 @@ select:focus-visible {
   overflow-anchor: none;
   padding: 18px clamp(24px, 4vw, 48px) 24px;
   min-height: 0;
-  scroll-padding-top: 18px;
+  scroll-padding-top: 28px;
   /* Ask/工具完成卡片在时间线末端仍需留出可视缓冲，避免紧贴 composer。 */
   scroll-padding-bottom: 20px;
 }
 /* Ask 卡片是时间线的一部分，但要始终停在 composer 上方；底部留白同时给滚动按钮预留安全区。 */
+.message-timeline [data-message-id] {
+  /* 所有可跳转消息共享顶部安全区，避免定位时文字贴到视口上沿。 */
+  scroll-margin-top: 28px;
+}
 .message-timeline:has(.session-runtime-ui:not(:empty)) {
   padding-bottom: 88px;
 }

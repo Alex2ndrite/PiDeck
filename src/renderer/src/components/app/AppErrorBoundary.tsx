@@ -3,6 +3,7 @@ import { Component, type ErrorInfo, type ReactNode } from "react";
 import { LogoMark } from "../app/AppParts";
 import { t } from "../../i18n";
 import { showNotice } from "../../utils/notice";
+import { StackTrace } from "../ui-shadcn/stack-trace";
 
 type AppErrorBoundaryProps = {
 	children: ReactNode;
@@ -73,10 +74,10 @@ export class AppErrorBoundary extends Component<
 					</div>
 					<h1 className="app-error-boundary-title">{title}</h1>
 					<p className="app-error-boundary-message">{message}</p>
-					<details className="app-error-boundary-stack">
-						<summary>{t("app.renderErrorStack")}</summary>
-						<pre>{this.state.error.stack ?? this.state.error.message}</pre>
-					</details>
+					<div className="app-error-boundary-stack">
+						<div className="mb-1 text-caption font-medium text-text-secondary">{t("app.renderErrorStack")}</div>
+						<StackTrace trace={this.state.error.stack ?? this.state.error.message} defaultOpen />
+					</div>
 					<div className="app-error-boundary-actions">
 						<Button
 							type="button"

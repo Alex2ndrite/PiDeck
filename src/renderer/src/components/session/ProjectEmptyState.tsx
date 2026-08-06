@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Check, FolderGit2, HatGlasses, Plus, Sparkles } from "lucide-react";
-import type { AvailableModel, Project } from "../../../../shared/types";
+import type { AvailableModel, Project, SessionLaunchPreferences } from "../../../../shared/types";
 import { t, type TranslationKey } from "../../i18n";
 import { desktopApi } from "../../desktopApi";
 import { Button } from "../ui-shadcn/button";
@@ -20,6 +20,17 @@ function thinkingLabel(level: string) {
   return t(THINKING_LABEL_KEYS[level] ?? THINKING_LABEL_KEYS.medium);
 }
 
+/** 将引导页当前选择转换为创建会话 IPC 的显式偏好，避免点击时回退到 pi 默认值。 */
+function readLaunchPreferences(modelChoice: string, thinkingChoice: string): SessionLaunchPreferences {
+  const slash = modelChoice.indexOf("/");
+  const provider = slash > 0 ? modelChoice.slice(0, slash) : "";
+  const modelId = slash > 0 ? modelChoice.slice(slash + 1) : "";
+  return {
+    ...(provider && modelId ? { model: { provider, modelId } } : {}),
+    ...(thinkingChoice ? { thinkingLevel: thinkingChoice } : {}),
+  };
+}
+
 /**
  * 项目启动面板：在用户还没有会话时提供明确的工程入口与启动前配置。
  *
@@ -28,8 +39,8 @@ function thinkingLabel(level: string) {
  */
 export function ProjectEmptyState(props: {
   activeProject?: Project;
-  onCreateAgent: () => void;
-  onCreateAnonymous: () => void;
+  onCreateAgent: (preferences: SessionLaunchPreferences) => void;
+  onCreateAnonymous: (preferences: SessionLaunchPreferences) => void;
   onAddProject: () => void;
 }) {
   // 通过 config IPC 读取 pi 的 models.json / settings.json 默认值；读失败时静默降级为空显示。
@@ -149,7 +160,7 @@ export function ProjectEmptyState(props: {
     <div className="flex min-h-0 flex-1 flex-col">
       <EmptyState
         hasProject={hasProject}
-        onCreate={props.onCreateAgent}
+        onCreate={() => props.onCreateAgent(readLaunchPreferences(modelChoice, thinkingChoice))}
         eyebrow={
           hasProject ? (
             <span className="inline-flex items-center gap-1.5 text-text-secondary">
@@ -163,10 +174,10 @@ export function ProjectEmptyState(props: {
             /* 主从按钮左对齐跟随阅读动线：主按钮用前景/背景反色（浅色下纯黑、暗色下纯白），
                比中性灰 accent 更亮更锐；次按钮降级为下划线文本，hover 一起加深。 */
             <div className="flex flex-wrap items-center gap-6">
-              <Button size="lg" className="h-12 rounded-xl bg-foreground px-7 text-background shadow-[0_8px_24px_-8px_rgb(0_0_0/0.35)] transition-all duration-200 hover:-translate-y-px hover:bg-foreground/85 hover:shadow-[0_12px_32px_-8px_rgb(0_0_0/0.4)]" onClick={props.onCreateAgent}>
+              <Button size="lg" className="h-12 rounded-xl bg-foreground px-7 text-background shadow-[0_8px_24px_-8px_rgb(0_0_0/0.35)] transition-all duration-200 hover:-translate-y-px hover:bg-foreground/85 hover:shadow-[0_12px_32px_-8px_rgb(0_0_0/0.4)]" onClick={() => props.onCreateAgent(readLaunchPreferences(modelChoice, thinkingChoice))}>
                 <Sparkles className="size-4" aria-hidden="true" />{t("app.createAgent")}
               </Button>
-              <Button variant="ghost" size="lg" className="group h-auto px-0 text-sm font-normal text-text-secondary hover:bg-transparent hover:text-foreground" onClick={props.onCreateAnonymous}>
+              <Button variant="ghost" size="lg" className="group h-auto px-0 text-sm font-normal text-text-secondary hover:bg-transparent hover:text-foreground" onClick={() => props.onCreateAnonymous(readLaunchPreferences(modelChoice, thinkingChoice))}>
                 <HatGlasses className="size-4" aria-hidden="true" />
                 <span className="underline decoration-border-strong underline-offset-4 group-hover:decoration-foreground">{t("app.anonymousChatShort")}</span>
               </Button>

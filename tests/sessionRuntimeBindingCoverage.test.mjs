@@ -58,7 +58,8 @@ test("session UI requests remain generation-bound and render in the timeline foo
   assert.match(runtimeInjector, /sessionId: currentSessionId/);
   assert.match(runtimeInjector, /runtimeGeneration: latest\.runtimeGeneration/);
   assert.match(runtimeInjector, /<SessionRuntimeUiOverlay/);
-  assert.match(runtimeUi, /ask-inline-bar(?:\s+ask-inline-bar--active)? rounded-md/);  // 迁移后布局 utility 化，锚点类保留
+  assert.match(runtimeUi, /ask-inline-bar(?:\s+ask-inline-bar--active)?/);  // Ask 继续使用稳定的布局锚点类
+  assert.match(runtimeUi, /ApprovalCard/);
   assert.doesNotMatch(runtimeUi, /className="modal-backdrop ask-dialog-backdrop"/);
   assert.doesNotMatch(composer, /runtimeUi/);
   assert.match(timeline, /className="session-runtime-ui mx-auto w-full/);

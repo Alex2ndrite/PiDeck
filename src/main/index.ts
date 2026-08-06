@@ -347,9 +347,10 @@ async function createAnonymousSession(
 
 	// Resolve pi-configured defaults so the composer bar shows the effective
 	// model / thinking level even before the anonymous Agent is fully started.
-	let model: { provider: string; modelId: string } | undefined;
-	let thinkingLevel: string | undefined;
+	let model = input.model;
+	let thinkingLevel = input.thinkingLevel;
 	try {
+		// 引导页显式选择优先于 pi 配置；下面只为缺失字段补默认值。
 		const [settingsResult, modelsResult] = await Promise.all([
 			configManager.getSettingsConfig(),
 			configManager.getModelsConfig(),
@@ -361,9 +362,9 @@ async function createAnonymousSession(
 		const defaultModelId = typeof settings.defaultModel === "string"
 			? settings.defaultModel
 			: undefined;
-		if (defaultProvider && defaultModelId) {
+		if (!model && defaultProvider && defaultModelId) {
 			model = { provider: defaultProvider, modelId: defaultModelId };
-		} else {
+		} else if (!model) {
 			const providers = modelsResult.parsed?.providers;
 			if (providers) {
 				const firstProviderName = Object.keys(providers)[0];
@@ -377,7 +378,7 @@ async function createAnonymousSession(
 		const level = typeof settings.defaultThinkingLevel === "string"
 			? settings.defaultThinkingLevel
 			: undefined;
-		thinkingLevel = level;
+		if (!thinkingLevel) thinkingLevel = level;
 	} catch {
 		// Config read is best-effort.
 	}
@@ -413,6 +414,16 @@ async function activateAnonymousRuntime(
 		});
 		agentId = tab.id;
 		const runtime = sessionRuntimeCoordinator.bindAnonymousRuntime(session.id, tab.id);
+		// Anonymous Agent 使用 --no-session 创建，不会经过普通 activateRuntime 的恢复流程；
+		// 因此在绑定后显式应用引导页选择，确保 pi 不再按自身默认优先级启动。
+		if (input.model) {
+			const result = await sessionRuntimeCoordinator.setRuntimeModel(runtime, input.model.provider, input.model.modelId);
+			if (!result.ok) throw new Error(result.error.code);
+		}
+		if (input.thinkingLevel) {
+			const result = await sessionRuntimeCoordinator.setRuntimeThinking(runtime, input.thinkingLevel);
+			if (!result.ok) throw new Error(result.error.code);
+		}
 		emitReplacementState(runtime, true);
 	} catch (error) {
 		if (agentId) await agentManager.stop(agentId).catch(() => undefined);

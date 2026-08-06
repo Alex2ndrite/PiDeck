@@ -111,11 +111,17 @@ export type CreateSessionDraftInput = {
 	thinkingLevel?: string;
 };
 
+/** 启动前选择的模型与思考级别；显式值优先于 pi 配置默认值。 */
+export type SessionLaunchPreferences = {
+	model?: { provider: string; modelId: string };
+	thinkingLevel?: string;
+};
+
 /** Creates a live `--no-session` runtime without writing a session file. */
 export type CreateAnonymousSessionInput = {
 	projectId: string;
 	title?: string;
-};
+} & SessionLaunchPreferences;
 
 export type CreateAnonymousSessionResult = {
 	session: SessionRecord;

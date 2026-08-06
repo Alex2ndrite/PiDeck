@@ -235,12 +235,6 @@ export function SessionStatus(props: {
 					{state.contextPercent?.toFixed?.(1) ??
 						state.contextPercent}
 					% / {formatCompact(state.contextWindow)}
-					{state.inputTokens != null && (
-						<>{" "}↑ {formatCompact(state.inputTokens)}</>
-					)}
-					{state.outputTokens != null && (
-						<>{" "}↓ {formatCompact(state.outputTokens)}</>
-					)}
 				</span>
 			)}
 			{(state.cacheHitPercent != null || state.cacheTotal != null) && (

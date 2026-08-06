@@ -16,7 +16,8 @@ import {
 	isCoherentComposerRuntimeUi,
 	type RuntimeHandle,
 } from "./ComposerRuntimeIntegrations";
-import { renderWidgetLine, widgetDisplayTitle } from "./ComposerComponents";
+import { widgetDisplayTitle } from "./ComposerComponents";
+import { AgentTodoList, parseAgentTodoItems } from "./AgentTodoList";
 
 /**
  * 会话头部左侧的扩展 widget 入口（Todo / Plan 进度）。
@@ -185,9 +186,8 @@ function WidgetChip(props: {
 					)}
 				</Button>
 			</PopoverTrigger>
-			<PopoverContent align="start" side="bottom" className="w-72 p-0">
-				<div className="flex items-center justify-between border-b border-border/50 px-2.5 py-1.5">
-					<span className="text-caption font-semibold text-foreground">{title}</span>
+			<PopoverContent align="start" side="bottom" className="w-80 p-1">
+				<div className="flex items-center justify-end px-1">
 					<Button
 						type="button"
 						variant="ghost"
@@ -200,15 +200,13 @@ function WidgetChip(props: {
 						<X size={12} strokeWidth={2.2} aria-hidden="true" />
 					</Button>
 				</div>
-				{/* 复用 extension-widget-card-line 排版；用任意属性补上它依赖的行高 CSS 变量，
-				    使该 class 脱离原卡片容器也能保持一致的行高。 */}
-				<div className="flex max-h-56 flex-col gap-0.5 overflow-y-auto overscroll-contain px-2.5 py-1.5 [--extension-widget-line-height:20px]">
-					{props.lines.map((line, index) => (
-						<div key={index} className="extension-widget-card-line">
-							{renderWidgetLine(line)}
-						</div>
-					))}
-				</div>
+				<AgentTodoList
+					title={title}
+					items={parseAgentTodoItems(props.lines)}
+					defaultOpen
+					collapseOnComplete
+					maxHeight={248}
+				/>
 			</PopoverContent>
 		</Popover>
 	);

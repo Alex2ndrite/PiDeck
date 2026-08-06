@@ -11,7 +11,8 @@ test("AppErrorBoundary renders a system-consistent error card", () => {
   assert.match(boundary, /app-error-boundary-brand/);
   assert.match(boundary, /app-error-boundary-badge/);
   assert.match(boundary, /app-error-boundary-dot/);
-  assert.match(boundary, /details className="app-error-boundary-stack"/);
+  assert.match(boundary, /<StackTrace/);
+  assert.match(boundary, /app-error-boundary-stack/);
   assert.match(boundary, /renderErrorStack/);
   assert.match(boundary, /handleReset/);
   assert.match(boundary, /handleReload/);

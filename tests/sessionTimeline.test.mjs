@@ -62,14 +62,14 @@ test("timeline auto-scroll only sticks while the reader remains near the bottom"
   assert.equal(isTimelineAtBottom(700, 1100, 120), false);
 });
 
-test("timeline owns paging, resize, mutation, and outline jump lifecycle", () => {
+test("timeline owns paging, delegated scroll follow, and outline jump lifecycle", () => {
 	assert.match(source, /selectAtom\([\s\S]*sessionMessagesCacheAtom/);
 	assert.match(source, /readRecordMessagePage\(sessionId/);
 	assert.match(source, /prependMessagePage/);
 	// 激活分页（2026-08）：runtime 窗口会话的显示总数 = disk 前缀 + 窗口段的组合长度
 	assert.match(source, /totalMessageCount: diskPage \? diskPage\.total : combinedMessages\.length/);
-	assert.match(source, /new ResizeObserver\(stickToBottom\)/);
-  assert.match(source, /new MutationObserver\(stickToBottom\)/);
+  // 流式跟随由 beUI MessageScroller 负责；controller 只接收跟随状态，避免重复写 scrollTop。
+  assert.match(source, /setAutoScrollFromScroller/);
   assert.match(source, /pagination\.loadUntilIncluded\(index\)/);
   assert.match(source, /restoreTimelineAnchor\(/);
 });

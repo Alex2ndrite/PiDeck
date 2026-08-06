@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Check, ChevronDown, ClipboardList, MessageCircle, X } from "lucide-react";
+import { Check, ClipboardList } from "lucide-react";
 import type {
 	AgentUiBatchQuestion,
 	AgentUiRequest,
@@ -16,11 +16,7 @@ import {
 import { Button } from "../ui-shadcn/button";
 import { Input } from "../ui-shadcn/input";
 import { Textarea } from "../ui-shadcn/textarea";
-import {
-	Collapsible,
-	CollapsibleContent,
-	CollapsibleTrigger,
-} from "../ui-shadcn/collapsible";
+import { ApprovalCard } from "../ui-shadcn/approval-card";
 
 export type RuntimeUiBinding = {
 	sessionId: string;
@@ -165,35 +161,19 @@ function BatchAskInlineBar(props: {
 	if (total === 0) return null;
 
 	return (
-		<Collapsible
+		<ApprovalCard
 			open={expanded}
 			onOpenChange={(next) => {
 				setExpanded(next);
 				notifyAskExpanded(props.onExpandedChange, next);
 			}}
-			className="ask-inline-bar ask-inline-bar--active rounded-md border border-border-strong bg-[color:color-mix(in_srgb,var(--color-accent)_6%,var(--color-bg-panel))] p-1.5"
+			title={t("ask.batchTitle", { count: total })}
+			description={t("ask.batchProgress", { done: answeredCount, total })}
+			onCancel={props.onCancel}
+			cancelDisabled={props.responding}
+			cancelLabel={t("common.close")}
+			className="ask-inline-bar ask-inline-bar--active"
 		>
-			<div className="mb-1 flex min-w-0 items-center gap-1 text-micro font-semibold text-[var(--color-accent)]">
-				<CollapsibleTrigger asChild>
-					<Button variant="ghost" size="sm" aria-label={t("ask.toolName")} className="min-w-0 flex-1 justify-start gap-1 px-1 text-left font-semibold text-[var(--color-accent)]">
-						<ChevronDown className={`shrink-0 transition-transform duration-150${expanded ? " rotate-180" : ""}`} size={12} aria-hidden="true" />
-						<MessageCircle size={12} aria-hidden="true" />
-						<span className="truncate">{t("ask.batchTitle", { count: total })}</span>
-						<span className="shrink-0 text-micro font-normal text-text-tertiary">
-							{t("ask.batchProgress", { done: answeredCount, total })}
-						</span>
-					</Button>
-				</CollapsibleTrigger>
-				<Button variant="ghost" size="icon"
-					aria-label={t("common.close")} title={t("common.close")}
-					disabled={props.responding}
-					onClick={props.onCancel}
-				>
-					<X size={14} aria-hidden="true" />
-				</Button>
-			</div>
-
-			<CollapsibleContent className="min-h-0">
 			<div className="mb-1 flex min-w-0 gap-1 overflow-x-auto border-b border-border-subtle pb-1" role="tablist">
 				{questions.map((question, index) => {
 					const answered = answers[question.id] !== undefined;
@@ -289,8 +269,7 @@ function BatchAskInlineBar(props: {
 					/>
 				) : null}
 			</div>
-			</CollapsibleContent>
-		</Collapsible>
+		</ApprovalCard>
 	);
 }
 
@@ -492,32 +471,19 @@ export function SessionRuntimeUiOverlay({ sessionId, runtime, ui, responder, onE
 	}
 
 	return (
-		<Collapsible
+		<ApprovalCard
 			open={expanded}
 			onOpenChange={(next) => {
 				setExpanded(next);
 				notifyAskExpanded(onExpandedChange, next);
 			}}
-			className="ask-inline-bar ask-inline-bar--active rounded-md border border-border-strong bg-[color:color-mix(in_srgb,var(--color-accent)_6%,var(--color-bg-panel))] p-1.5"
+			title={t("ask.toolName")}
+			description={request.title || t("ask.defaultTitle")}
+			onCancel={cancel}
+			cancelDisabled={responding}
+			cancelLabel={t("common.close")}
+			className="ask-inline-bar ask-inline-bar--active"
 		>
-			<div className="mb-1 flex min-w-0 items-center gap-1 text-micro font-semibold text-[var(--color-accent)]">
-				<CollapsibleTrigger asChild>
-					<Button variant="ghost" size="sm" aria-label={t("ask.toolName")} className="min-w-0 flex-1 justify-start gap-1 px-1 text-left font-semibold text-[var(--color-accent)]">
-						<ChevronDown className={`shrink-0 transition-transform duration-150${expanded ? " rotate-180" : ""}`} size={12} aria-hidden="true" />
-						<MessageCircle size={12} aria-hidden="true" />
-						<span className="shrink-0">{t("ask.toolName")}</span>
-						<span className="min-w-0 truncate font-normal text-text-secondary">{request.title || t("ask.defaultTitle")}</span>
-					</Button>
-				</CollapsibleTrigger>
-				<Button variant="ghost" size="icon"
-					aria-label={t("common.close")} title={t("common.close")}
-					disabled={responding}
-					onClick={cancel}
-				>
-					<X size={14} aria-hidden="true" />
-				</Button>
-			</div>
-			<CollapsibleContent className="min-h-0">
 			<div>
 				{request.method === "select" && request.options?.length ? (
 					<div className="grid min-w-0 grid-cols-2 gap-1.5 max-[480px]:grid-cols-1">
@@ -599,7 +565,6 @@ export function SessionRuntimeUiOverlay({ sessionId, runtime, ui, responder, onE
 					</div>
 				) : null}
 			</div>
-			</CollapsibleContent>
-		</Collapsible>
+		</ApprovalCard>
 	);
 }

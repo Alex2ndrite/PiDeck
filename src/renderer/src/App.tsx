@@ -2558,8 +2558,8 @@ export function App() {
         // 共享统一空态；快捷操作新建 Agent / 匿名聊天，无项目时引导添加项目。
         <ProjectEmptyState
           activeProject={activeProject}
-          onCreateAgent={() => void runCreateSessionDraft()}
-          onCreateAnonymous={() => void runCreateAnonymousSession()}
+          onCreateAgent={(preferences) => void runCreateSessionDraft(undefined, preferences)}
+          onCreateAnonymous={(preferences) => void runCreateAnonymousSession(undefined, preferences)}
           onAddProject={() => void addProject()}
         />
       )}

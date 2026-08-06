@@ -97,10 +97,12 @@ test("project empty state narrows remote config values with unknown guard, not a
   assert.match(emptyState, /typeof parsed\.defaultThinkingLevel === "string"/);
 });
 
-test("draft creation no longer spreads renderer welcome prefs over pi config", () => {
-  // 主进程 createDraft 已按 pi 配置 auto-fill；渲染层不再无条件覆盖。
-  assert.doesNotMatch(sessionActions, /readWelcomeModelPreference|readWelcomeThinkingPreference/);
-  assert.match(sessionActions, /api\.sessions\.createDraft/);
+test("draft and anonymous creation pass the explicit welcome selections", () => {
+  // 引导页选择必须作为创建参数传入；主进程只对缺失字段补 pi 默认值。
+  assert.match(emptyState, /readLaunchPreferences\(modelChoice, thinkingChoice\)/);
+  assert.match(sessionActions, /createSessionDraft\([^\n]*preferences/);
+  assert.match(sessionActions, /createAnonymousSession\([^\n]*preferences/);
+  assert.match(sessionActions, /\.\.\.preferences/);
 });
 
 test("composer bottom bar default model/thinking prefer pi-config record over welcome localStorage", () => {
