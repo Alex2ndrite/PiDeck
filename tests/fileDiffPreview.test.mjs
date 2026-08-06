@@ -9,7 +9,7 @@ const source = readFileSync(
 
 test("HTML files have an in-place preview without widening BrowserPanel access", () => {
   assert.match(source, /const isHtml = ext === "html" \|\| ext === "htm"/);
-  assert.match(source, /\(isMarkdown \|\| isHtml\) && !isDiffMode/);
+  assert.match(source, /\(isMarkdown \|\| isHtml \|\| isSvg\) && !isDiffMode/);
   assert.match(source, /<HtmlPreview content=\{content\} \/>/);
 });
 

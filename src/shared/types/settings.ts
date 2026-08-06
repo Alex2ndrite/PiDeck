@@ -53,6 +53,8 @@ export type AppSettings = {
 	/** 启动时主窗口尺寸预设，默认 last（上次窗口大小，读不到时顺延 maximized） */
 	startupWindowMode: StartupWindowMode;
 	piEnvironmentChecked: boolean;
+	/** 最近一次 pi 环境检测成功的结果缓存（命令路径 + 版本），打开设置直接显示，不重复检测 */
+	piInstall?: { command: string; version: string };
 	/** 是否启用会话右侧的 Git 源代码管理入口与面板，默认开启以保持升级前行为。 */
 	enableGitManagement: boolean;
 	/** Git 提交摘要生成提示词模板，{diff} 会被替换为实际 diff 内容 */

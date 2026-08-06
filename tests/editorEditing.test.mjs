@@ -43,23 +43,41 @@ test("editors bind Ctrl+/ comment toggle and JSON lint", () => {
   assert.match(editor, /resolvedLanguage\.language\.name === "json"/);
 });
 
-test("FileDiffViewer: image/PDF get inline preview instead of binary error", () => {
+test("FileDiffViewer: image/PDF get inline preview via base64 Blob URL", () => {
   const viewer = readFileSync("src/renderer/src/components/app/FileDiffViewer.tsx", "utf8");
   const textFile = readFileSync("src/renderer/src/utils/isTextFile.ts", "utf8");
+  const ipc = readFileSync("src/main/ipc/filesIpc.ts", "utf8");
   // 判定函数：图片/PDF 从二进制集合中单独识别
   assert.match(textFile, /export function isImageFile/);
   assert.match(textFile, /export function isPdfFile/);
   assert.match(textFile, /IMAGE_EXTENSIONS = new Set/);
-  // view 模式图片/PDF 跳过文本读取直接预览；diff 模式维持不支持提示
+  // view 模式图片/PDF 走二进制预览分支；diff 模式维持不支持提示
   assert.match(viewer, /!isDiffMode && \(isImageFile\(props\.filePath\) \|\| isPdfFile\(props\.filePath\)\)/);
-  // 图片：img + file:// URL（CSP img-src 已含 file:）；PDF：iframe + Chromium 内置 viewer
+  // 不用 file:// 直链：dev 模式 http 页面加载 file:// 子资源会被 Chromium webSecurity 拦截
+  // （"Not allowed to load local resource"）；改为主进程读 base64 → Blob URL
+  assert.doesNotMatch(viewer, /file:\/\/\//);
+  assert.match(viewer, /readBase64/);
+  assert.match(viewer, /URL\.createObjectURL/);
+  assert.match(viewer, /URL\.revokeObjectURL/);
+  assert.match(viewer, /mimeFromImageExt/);
   assert.match(viewer, /className="file-diff-media-preview"/);
-  assert.match(viewer, /toFileUrl\(props\.filePath\)/);
   assert.match(viewer, /className="file-diff-pdf-preview"/);
   assert.match(viewer, /editor\.pdfPreview/);
-  // file:// URL 构造：反斜杠转正斜杠 + encodeURI
-  assert.match(viewer, /encodeURI\(path\.replace/);
-  // CSP 允许 frame-src file:（PDF iframe 加载本地文件）
-  const html = readFileSync("src/renderer/index.html", "utf8");
-  assert.match(html, /frame-src 'self' file: blob:/);
+  // 主进程 handler：读文件转 base64，ENOENT 返回空串（渲染层走「不支持」提示）
+  assert.match(ipc, /filesReadBase64/);
+  assert.match(ipc, /buffer\.toString\("base64"\)/);
+  assert.match(ipc, /code === "ENOENT"/);
+});
+
+test("FileDiffViewer: SVG preview via content data URL, media fills the pane", () => {
+  const viewer = readFileSync("src/renderer/src/components/app/FileDiffViewer.tsx", "utf8");
+  const css = readFileSync("src/renderer/src/styles/surfaces.css", "utf8");
+  // SVG 是文本（可编辑），预览按钮与 md/html 同待遇；预览渲染为 data URL 图片
+  assert.match(viewer, /const isSvg = ext === "svg"/);
+  assert.match(viewer, /\(isMarkdown \|\| isHtml \|\| isSvg\) && !isDiffMode/);
+  assert.match(viewer, /data:image\/svg\+xml;charset=utf-8/);
+  assert.match(viewer, /encodeURIComponent\(content\)/);
+  // 图片占满预览区：width/height 100% + contain（小图放大、大图缩小、不变形）
+  assert.match(css, /\.file-diff-media-preview img \{\n\s*\/\* 占满预览区/);
+  assert.match(css, /width: 100%;\n\s*height: 100%;\n\s*object-fit: contain;/);
 });

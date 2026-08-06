@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useSetAtom } from "jotai";
 import { t } from "../i18n";
 import { settingsOpenAtom } from "../atoms";
@@ -32,6 +32,19 @@ export function usePiUpdate(options: UsePiUpdateOptions) {
   const [piStatus, setPiStatus] = useState<PiInstallStatus | null>(null);
   const [piChecking, setPiChecking] = useState(false);
   const [environmentDialog, setEnvironmentDialog] = useState(false);
+
+  // 恢复上次检测成功的缓存：打开开发设置直接显示（piInstall 来自 settings 持久化），
+  // 不重复 spawn 检测；仅当本会话尚未检测过（piStatus 为 null）时生效。
+  useEffect(() => {
+    if (settings.piInstall && piStatus === null) {
+      setPiStatus({
+        installed: true,
+        command: settings.piInstall.command,
+        version: settings.piInstall.version,
+        searchedDirs: [],
+      });
+    }
+  }, [settings.piInstall, piStatus]);
 
   // ---- Pi 更新相关 state ----
   const [piUpdating, setPiUpdating] = useState(false);
@@ -68,6 +81,16 @@ export function usePiUpdate(options: UsePiUpdateOptions) {
   const [installCompleted, setInstallCompleted] = useState(false);
 
   // ---- Pi 检测函数 ----
+  // 检测成功后把命令路径/版本写入 settings 缓存：打开开发设置直接显示缓存结果，
+  // 不重复 spawn 检测；手动点「检测环境」才重新探测。
+  const persistPiInstall = useCallback(async (status: PiInstallStatus) => {
+    if (status.installed && status.command && status.version) {
+      return api.settings.update({ piInstall: { command: status.command, version: status.version } });
+    }
+    // 未检测到：清除旧缓存，避免残留上一台机器/旧路径的结果
+    return api.settings.update({ piInstall: undefined });
+  }, [api]);
+
   const checkPiInstall = useCallback(
     async (source: "startup" | "manual" = "manual") => {
       setSettingsOpen(false);
@@ -76,11 +99,12 @@ export function usePiUpdate(options: UsePiUpdateOptions) {
       try {
         const next = await api.pi.check();
         setPiStatus(next);
+        // 检测结果缓存（含未检测到的清除）；startup 额外标记 piEnvironmentChecked
+        const saved = await persistPiInstall(next);
+        setSettings(saved);
         if (next.installed && source === "startup") {
-          const saved = await api.settings.update({
-            piEnvironmentChecked: true,
-          });
-          setSettings(saved);
+          const marked = await api.settings.update({ piEnvironmentChecked: true });
+          setSettings(marked);
           window.setTimeout(() => setEnvironmentDialog(false), 3000);
         }
         if (next.installed && source === "manual")
@@ -89,7 +113,7 @@ export function usePiUpdate(options: UsePiUpdateOptions) {
         setPiChecking(false);
       }
     },
-    [api, setPiStatus, setPiChecking, setSettings, setSettingsOpen, setEnvironmentDialog],
+    [api, setPiStatus, setPiChecking, setSettings, setSettingsOpen, setEnvironmentDialog, persistPiInstall],
   );
 
   const checkPiInstallInline = useCallback(async () => {
@@ -101,6 +125,9 @@ export function usePiUpdate(options: UsePiUpdateOptions) {
       if (next.installed) {
         const saved = await api.settings.update({
           piEnvironmentChecked: true,
+          piInstall: next.command && next.version
+            ? { command: next.command, version: next.version }
+            : undefined,
         });
         setSettings(saved);
         showToast(
@@ -112,6 +139,9 @@ export function usePiUpdate(options: UsePiUpdateOptions) {
         setSettingsOpen(false);
         setEnvironmentDialog(true);
         setPiStatus(next);
+        // 未检测到：清除旧缓存
+        const saved = await api.settings.update({ piInstall: undefined });
+        setSettings(saved);
       }
     } finally {
       setPiChecking(false);
@@ -133,6 +163,8 @@ export function usePiUpdate(options: UsePiUpdateOptions) {
           setSettings(updated);
           setCustomPiPath(updated.customPiPath ?? result.command ?? path);
           setPiStatus(result);
+          // 自定义路径检测成功同样写入缓存，打开设置直接显示
+          void persistPiInstall(result);
           showToast(
             t("app.piPathSaved", {
               path: result.command ?? updated.customPiPath ?? path,
@@ -152,7 +184,7 @@ export function usePiUpdate(options: UsePiUpdateOptions) {
         setCustomPathValidating(false);
       }
     },
-    [customPiPath, api, setPiStatus, setSettings, setEnvironmentDialog],
+    [customPiPath, api, setPiStatus, setSettings, setEnvironmentDialog, persistPiInstall],
   );
 
   const clearCustomPiPath = useCallback(async () => {
@@ -195,8 +227,14 @@ export function usePiUpdate(options: UsePiUpdateOptions) {
   }, [installCommand, api]);
 
   // ---- Pi CLI 更新 ----
+  // 启动检查只执行一次：StrictMode 下 useEffect([]) 在 dev 双执行、settings.get
+  // 的 .then 回调也会跑两遍，不加闸门会弹两次「Pi 不是最新版本」toast。
+  // ref 置位在函数开头同步完成，两个并发回调先后到达时第二个直接跳过。
+  const startupUpdateCheckDoneRef = useRef(false);
   const checkPiCliUpdateOnStartup = useCallback(async () => {
     if (settings.disableUpdateCheck) return;
+    if (startupUpdateCheckDoneRef.current) return;
+    startupUpdateCheckDoneRef.current = true;
     try {
       const result = await api.pi.checkUpdate();
       setPiUpdateCheck(result);

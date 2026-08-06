@@ -93,6 +93,21 @@ export function registerFilesIpc({
 		void appLogger.info("file", "File written", { path, bytes: Buffer.byteLength(content, "utf8") });
 	});
 
+	ipcMain.handle(ipcChannels.filesReadBase64, async (_event, path: string) => {
+		try {
+			// 二进制预览（图片/PDF 等）：读为 base64 由渲染层转 Blob URL 显示。
+			// 不设大小上限：媒体文件常大于文本编辑阈值（默认 5MB），dataURL 一次性
+			// 经 IPC 传输的内存峰值可控；渲染层对空串（ENOENT）走「不支持」提示。
+			const buffer = await readFile(toWindowsPath(path));
+			return buffer.toString("base64");
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+				return "";
+			}
+			throw error;
+		}
+	});
+
 	ipcMain.handle(
 		ipcChannels.filesCreate,
 		async (_event, parentDir: string, name: string, type: "file" | "directory") => {

@@ -60,12 +60,17 @@ export function FileDiffViewer(props: {
 	const [dirty, setDirty] = useState(false);
 	const [saving, setSaving] = useState(false);
 	const [showHint, setShowHint] = useState(false);
+	// 二进制预览（图片/PDF）的 Blob URL：切换文件/卸载时 revoke，防止内存泄漏
+	const [mediaUrl, setMediaUrl] = useState<string | null>(null);
+	const mediaUrlRef = useRef<string | null>(null);
 
 	const isDiffMode = props.mode === "diff";
 	const fileName = props.filePath.split(/[/\\]/).pop() ?? props.filePath;
 	const ext = fileName.split(".").pop()?.toLowerCase() ?? "";
 	const isMarkdown = ext === "md" || ext === "mdx";
 	const isHtml = ext === "html" || ext === "htm";
+	// SVG 是文本（可编辑），预览时用内容渲染为 data URL 图片（CSP img-src 已允许 data:）
+	const isSvg = ext === "svg";
 	// 图片/PDF 走内置预览（view 模式）：二进制内容不可文本读取，跳过编辑器直接渲染。
 	const isImage = isImageFile(props.filePath);
 	const isPdf = isPdfFile(props.filePath);
@@ -78,6 +83,9 @@ export function FileDiffViewer(props: {
 		setDirty(false);
 		setShowHint(false);
 		setPreview(false);
+		// 清掉上一个文件的 Blob URL（媒体预览随 tab 切换失效）
+		revokeMediaUrl();
+		setMediaUrl(null);
 	}, [isDiffMode, props.activeTabId, props.filePath]);
 
 	useEffect(() => {
@@ -87,11 +95,11 @@ export function FileDiffViewer(props: {
 			setError(null);
 			setDirty(false);
 			try {
-				// 图片/PDF：仅 view 模式直接进入预览（不文本读取）；
+				// 图片/PDF：仅 view 模式读取二进制转 Blob URL 预览（不文本读取）；
 				// diff 模式无法展示二进制差异，维持「不支持编辑」提示。
 				if (isBinaryExtension(props.filePath)) {
 					if (!isDiffMode && (isImageFile(props.filePath) || isPdfFile(props.filePath))) {
-						setLoading(false);
+						await loadMediaPreview(cancelled);
 						return;
 					}
 					setError(t("editor.binaryFileNotSupported", { ext }));
@@ -138,6 +146,32 @@ export function FileDiffViewer(props: {
 				if (!cancelled) setLoading(false);
 			}
 		}
+		// 二进制预览加载：主进程读 base64 → Blob URL。
+		// 为什么不用 file:// 直链：dev 模式页面走 http:// 加载，Chromium webSecurity
+		// 会以 "Not allowed to load local resource" 拦截 file:// 子资源；
+		// blob: 与 CSP（img-src/frame-src 均允许 blob:）匹配且 dev/prod 行为一致。
+		async function loadMediaPreview(isCancelled: boolean) {
+			const readBinary = window.piDesktop?.files?.readBase64;
+			if (!readBinary) {
+				if (!isCancelled) setError(t("editor.binaryFileNotSupported", { ext }));
+				return;
+			}
+			try {
+				const base64 = await readBinary(props.filePath);
+				if (isCancelled || !base64) {
+					if (!isCancelled) setError(t("editor.binaryFileNotSupported", { ext }));
+					return;
+				}
+				const mime = isPdf ? "application/pdf" : mimeFromImageExt(ext);
+				const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
+				revokeMediaUrl();
+				const url = URL.createObjectURL(new Blob([bytes], { type: mime }));
+				mediaUrlRef.current = url;
+				setMediaUrl(url);
+			} catch (e) {
+				if (!isCancelled) setError(e instanceof Error ? e.message : String(e));
+			}
+		}
 		void load();
 		return () => { cancelled = true; };
 	// readContent/readOriginalContent 是稳定的 API 回调（上层已 useCallback），
@@ -148,6 +182,14 @@ export function FileDiffViewer(props: {
 	const handleClose = useCallback(() => {
 		props.onClose();
 	}, [props.onClose]);
+
+	// 释放媒体预览 Blob URL（组件内声明：依赖 mediaUrlRef）
+	function revokeMediaUrl() {
+		if (mediaUrlRef.current) {
+			URL.revokeObjectURL(mediaUrlRef.current);
+			mediaUrlRef.current = null;
+		}
+	}
 
 	// 从当前内容 state 取最新值（编辑器 onChange 已实时同步；CM6 无 Monaco 的实例取值路径）
 	const getLatestContent = useCallback(() => content, [content]);
@@ -203,13 +245,14 @@ export function FileDiffViewer(props: {
 		}
 	}, [readOnly, handleKeyDown]);
 
-	// 卸载时取消挂起的自动保存 timer（生命周期配对）
+	// 卸载时取消挂起的自动保存 timer + 释放媒体 Blob URL（生命周期配对）
 	useEffect(() => {
 		return () => {
 			if (saveTimerRef.current) {
 				clearTimeout(saveTimerRef.current);
 				saveTimerRef.current = null;
 			}
+			revokeMediaUrl();
 		};
 	}, []);
 
@@ -294,7 +337,7 @@ export function FileDiffViewer(props: {
 					{showHint && <span className="file-diff-hint">{t("app.saveFileShortcut")}</span>}
 				</span>
 				<div className="file-diff-header-actions">
-					{(isMarkdown || isHtml) && !isDiffMode && !loading && !error && (
+					{(isMarkdown || isHtml || isSvg) && !isDiffMode && !loading && !error && (
 						<Button
 							variant="ghost"
 							size="icon-sm"
@@ -365,20 +408,29 @@ export function FileDiffViewer(props: {
 				{error && <div className="file-diff-error">{error}</div>}
 				{!loading && !error && (
 					<>
-						{/* 图片预览：Chromium img 原生解码（CSP img-src 已允许 file:） */}
-						{!isDiffMode && isImage && (
+						{/* 图片预览：Blob URL（base64 经主进程读取，dev/prod 一致） */}
+						{!isDiffMode && isImage && mediaUrl && (
 							<div className="file-diff-media-preview">
-								<img src={toFileUrl(props.filePath)} alt={fileName} />
+								<img src={mediaUrl} alt={fileName} />
 							</div>
 						)}
-						{/* PDF 预览：Chromium 内置 PDF viewer（iframe 无 sandbox，插件沙箱自身隔离） */}
-						{!isDiffMode && isPdf && (
+						{/* PDF 预览：Blob URL + Chromium 内置 PDF viewer */}
+						{!isDiffMode && isPdf && mediaUrl && (
 							<iframe
 								className="file-diff-pdf-preview"
-								src={toFileUrl(props.filePath)}
+								src={mediaUrl}
 								title={t("editor.pdfPreview")}
 								referrerPolicy="no-referrer"
 							/>
+						)}
+						{/* SVG 预览：文本内容直接编码为 data URL（无 Blob 生命周期管理） */}
+						{!isDiffMode && preview && isSvg && (
+							<div className="file-diff-media-preview">
+								<img
+									src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(content)}`}
+									alt={fileName}
+								/>
+							</div>
 						)}
 						{/* Markdown 预览：仅 view 模式且 preview 启用（静态渲染，与会话正文同一 Streamdown 引擎） */}
 						{!isDiffMode && preview && isMarkdown && (
@@ -450,9 +502,13 @@ export function FileDiffViewer(props: {
  * dev preview interaction without giving project HTML the renderer's origin,
  * Electron bridge, popups, or file-system navigation privileges.
  */
-function toFileUrl(path: string): string {
-	// file:// URL 构造：反斜杠转正斜杠 + encodeURI（#/? 在文件名里会破坏 URL 语义）
-	return "file:///" + encodeURI(path.replace(/\\/g, "/"));
+/** 图片扩展名 → MIME（Blob 类型；Chromium 按内容解码，类型仅作提示） */
+function mimeFromImageExt(ext: string): string {
+	const map: Record<string, string> = {
+		png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif",
+		webp: "image/webp", bmp: "image/bmp", ico: "image/x-icon",
+	};
+	return map[ext] ?? "application/octet-stream";
 }
 
 function HtmlPreview({ content }: { content: string }) {

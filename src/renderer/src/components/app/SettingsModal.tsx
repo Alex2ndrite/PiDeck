@@ -420,12 +420,8 @@ function SettingsModalContent(props: SettingsModalProps) {
 			.then((pets) => { setPetList(pets); setPetOptions(pets.map((p) => ({ value: p.id, label: p.displayName }))); })
 			.catch(() => undefined);
 	}, []);
-	// 进入开发设置 tab 时，若 piStatus 为空则自动检测（避免每次需手动点击「检测环境」）
-	useEffect(() => {
-		if (activeTab === "dev" && props.piStatus === null && !props.piChecking) {
-			props.onCheckPi();
-		}
-	}, [activeTab, props.piStatus, props.piChecking, props.onCheckPi]);
+	// 开发设置 tab 不自动检测 pi：检测结果缓存在 settings.piInstall（打开时直接显示），
+	// 只有用户手动点「检测环境」才重新 spawn 探测（曾因自动检测在打开设置时触发双弹窗）。
 	const [petPreviewMode, setPetPreviewMode] = useState("__auto");
 
 	const applyWebPortDraft = () => {
