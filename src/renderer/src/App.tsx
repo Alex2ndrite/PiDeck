@@ -137,7 +137,7 @@ import {
   getToolNewContent,
   getToolChangedLineCount,
 } from "./components/app/AppUtils";
-// 懒加载：Monaco Editor（~17.6MB Web Worker）仅在用户打开 diff 时才加载
+// 懒加载：文件查看器（含 CodeMirror 6 编辑器）仅在用户打开 diff 时才加载
 const FileDiffViewer = lazy(() => import("./components/app/FileDiffViewer").then((m) => ({ default: m.FileDiffViewer })));
 const ProjectResourcesModal = lazy(() => import("./components/app/ProjectResourcesModal").then((m) => ({ default: m.ProjectResourcesModal })));
 import { createDefaultExternalEditorSettings } from "../../shared/types";

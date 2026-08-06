@@ -1638,7 +1638,7 @@ export const zhCN = {
   "settings.linkOpenMode.external": "默认浏览器",
   "settings.linkOpenMode.internal": "应用内窗口",
   "settings.maxEditorFileSize": "编辑器最大文件大小 (MB)",
-  "settings.maxEditorFileSizeDesc": "超过此大小的文件不加载编辑器，防止 Monaco 卡死。默认 5MB",
+  "settings.maxEditorFileSizeDesc": "超过此大小的文件不加载编辑器，防止编辑器卡死。默认 5MB",
   "settings.localWebHint": "本机预览地址；局域网访问请替换为本机 IP",
   "settings.nativeMenu": "显示原生菜单",
   "settings.nativeTitleBar": "使用系统标题栏",
