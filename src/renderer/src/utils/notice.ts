@@ -7,13 +7,25 @@
  * 保证全局错误处理仍能给用户可见反馈。
  */
 
-import { toast } from "sonner";
+import { toast, type Action as SonnerAction, type ExternalToast } from "sonner";
 import { t } from "../i18n";
 
 type NoticeData = {
 	message: string;
 	duration: number;
 	kind?: "info" | "error" | "warning";
+};
+
+/** toast 上的可点击按钮（对应 sonner 的 action/cancel）。 */
+export type NoticeAction = {
+	label: string;
+	onClick?: () => void;
+};
+
+/** 提示的可选操作按钮：action 为主按钮、cancel 为次按钮（对应 sonner 语义）。 */
+export type NoticeActions = {
+	action?: NoticeAction;
+	cancel?: NoticeAction;
 };
 
 let fallbackHost: HTMLDivElement | null = null;
@@ -61,7 +73,7 @@ function dismissFallbackNotice(item: HTMLDivElement, host: HTMLDivElement) {
 }
 
 /** Toaster 未挂载时的 DOM 兜底 toast，避免全局异常完全静默。 */
-function showFallbackNotice(message: string, duration: number, kind: NoticeData["kind"] = "info") {
+function showFallbackNotice(message: string, duration: number, kind: NoticeData["kind"] = "info", title?: string, actions?: NoticeActions) {
 	if (typeof document === "undefined") return;
 	const host = ensureFallbackHost();
 	const item = document.createElement("div");
@@ -80,6 +92,13 @@ function showFallbackNotice(message: string, duration: number, kind: NoticeData[
 		"word-break:break-word",
 	].join(";");
 	item.setAttribute("role", kind === "error" ? "alert" : "status");
+	if (title) {
+		// 有标题时：加粗标题行、正文另起一段，与 sonner 的 title+description 结构对齐
+		const titleEl = document.createElement("div");
+		titleEl.style.cssText = "font-weight:600;margin-bottom:4px;color:var(--color-text-primary, #1f2328)";
+		titleEl.textContent = title;
+		item.appendChild(titleEl);
+	}
 	const close = document.createElement("button");
 	close.type = "button";
 	close.textContent = "×";
@@ -100,11 +119,37 @@ function showFallbackNotice(message: string, duration: number, kind: NoticeData[
 	].join(";");
 	close.addEventListener("click", () => dismissFallbackNotice(item, host));
 	item.appendChild(document.createTextNode(message));
+	if (actions) {
+		// 按钮区：次按钮（cancel）在左、主按钮（action）在右，点击后先执行回调再收起 toast
+		const buttons = document.createElement("div");
+		buttons.style.cssText = "display:flex;gap:8px;justify-content:flex-end;margin-top:10px";
+		for (const key of ["cancel", "action"] as const) {
+			const action = actions[key];
+			if (!action) continue;
+			const button = document.createElement("button");
+			button.type = "button";
+			button.textContent = action.label;
+			button.style.cssText = key === "action"
+				? "border:0;border-radius:6px;padding:4px 12px;font:600 12px/1.4 system-ui,sans-serif;background:var(--color-accent,#3b82f6);color:#fff;cursor:pointer"
+				: "border:1px solid var(--color-border-subtle,rgba(0,0,0,0.12));border-radius:6px;padding:4px 12px;font:500 12px/1.4 system-ui,sans-serif;background:transparent;color:var(--color-text-secondary,#57606a);cursor:pointer";
+			button.addEventListener("click", () => {
+				action.onClick?.();
+				dismissFallbackNotice(item, host);
+			});
+			buttons.appendChild(button);
+		}
+		item.appendChild(buttons);
+	}
 	item.appendChild(close);
 	host.appendChild(item);
 	if (Number.isFinite(duration)) {
 		window.setTimeout(() => dismissFallbackNotice(item, host), Math.max(1200, duration));
 	}
+}
+
+/** 将项目的可选 onClick 语义转换为 sonner 需要的必填 Action（未提供回调时传空函数）。 */
+function toSonnerAction(action: NoticeAction): SonnerAction {
+	return { label: action.label, onClick: () => action.onClick?.() };
 }
 
 /**
@@ -115,17 +160,36 @@ function toasterMounted() {
 	return toasterReady;
 }
 
-export function showNotice(message: string, duration?: number, kind?: NoticeData["kind"]) {
+export function showNotice(message: string, duration?: number, kind?: NoticeData["kind"], title?: string, actions?: NoticeActions) {
 	const resolvedDuration = duration ?? (kind === "error" || kind === "warning" ? 3000 : 1500);
 	const text = String(message ?? "").trim();
 	if (!text) return;
 	if (!toasterMounted()) {
-		showFallbackNotice(text, resolvedDuration, kind);
+		showFallbackNotice(text, resolvedDuration, kind, title, actions);
 		return;
 	}
-	const options = { duration: resolvedDuration };
-	if (kind === "error") toast.error(text, options);
-	else if (kind === "warning") toast.warning(text, options);
-	else if (kind === "info") toast.info(text, options);
-	else toast(text, options);
+	// 带标题/操作按钮的提示：sonner 以 title 为主文案、正文放 description，视觉层级更清晰
+	const options: ExternalToast = {
+		duration: resolvedDuration,
+		description: text,
+	};
+	if (actions?.action) options.action = toSonnerAction(actions.action);
+	if (actions?.cancel) options.cancel = toSonnerAction(actions.cancel);
+	if (title) {
+		if (kind === "error") toast.error(title, options);
+		else if (kind === "warning") toast.warning(title, options);
+		else if (kind === "info") toast.info(title, options);
+		else toast(title, options);
+		return;
+	}
+	// 无标题：保持历史行为，整段作为主文案
+	const plainOptions: ExternalToast = {
+		duration: resolvedDuration,
+	};
+	if (actions?.action) plainOptions.action = toSonnerAction(actions.action);
+	if (actions?.cancel) plainOptions.cancel = toSonnerAction(actions.cancel);
+	if (kind === "error") toast.error(text, plainOptions);
+	else if (kind === "warning") toast.warning(text, plainOptions);
+	else if (kind === "info") toast.info(text, plainOptions);
+	else toast(text, plainOptions);
 }

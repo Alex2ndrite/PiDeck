@@ -37,6 +37,8 @@ import { SettingsFeatureRoot } from "./components/app/SettingsFeatureRoot";
 import { useRename } from "./hooks/useRename";
 import { useProjectRuntimeCapabilities } from "./hooks/useRuntimeCapabilities";
 import { useSessionRuntimeBridge } from "./hooks/useSessionRuntimeBridge";
+import { useAgentLoadNotice } from "./hooks/useAgentLoadNotice";
+import { useWorkBreakReminder } from "./hooks/useWorkBreakReminder";
 import { useSessionLayout } from "./hooks/useSessionLayout";
 import { useFileEditor , resolveFileLinkPath } from "./hooks/useFileEditor";
 import { useOverlayActions } from "./hooks/useOverlayActions";
@@ -493,6 +495,9 @@ export function App() {
     closeToTray: true,
     singleInstance: true,
     enableNotifications: true,
+    // 人文关怀提醒默认开启：与主进程 SettingsStore 默认一致，首屏未拉到真实设置前不关闭提醒
+    agentCountReminderEnabled: true,
+    workBreakReminderEnabled: true,
     // showThinking 由 pi agent 的 hideThinkingBlock 控制，启动后从主进程加载的真实值会覆盖此处
     showThinking: true,
     showDevTools: false,
@@ -736,6 +741,10 @@ export function App() {
       }
     },
   });
+  // 激活 Agent 数量告警：受设置 agentCountReminderEnabled 控制（默认开启），每个启动周期提示一次
+  useAgentLoadNotice(settings.agentCountReminderEnabled);
+  // 人文关怀：受设置 workBreakReminderEnabled 控制（默认开启），从本次启动计时，每满 1 小时提醒休息
+  useWorkBreakReminder(settings.workBreakReminderEnabled);
   const activeQueuedPrompts = currentSessionId
     ? (queue.queuedPrompts[currentSessionId] ?? [])
     : [];

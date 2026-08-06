@@ -116,6 +116,9 @@ Gitmoji 对应关系：
   // 默认单实例：托盘隐藏后再次点击快捷方式会唤起原窗口，而不是再开一个进程
   singleInstance: true,
   enableNotifications: true,
+  // 人文关怀提醒默认开启：用户可在设置中随时关闭
+  agentCountReminderEnabled: true,
+  workBreakReminderEnabled: true,
   showThinking: readPiAgentShowThinking() ?? true,
   showDevTools: false,
   // 默认关闭 Chromium 沙箱：与历史 Windows no-sandbox 兼容策略一致
