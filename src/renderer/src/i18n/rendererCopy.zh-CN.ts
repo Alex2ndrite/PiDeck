@@ -92,6 +92,8 @@ export const zhCN = {
   "app.scrollToBottom": "移动到最新",
   "app.search": "搜索",
   "app.addProject": "添加项目",
+  "app.projectCollapseAll": "折叠全部项目",
+  "app.projectExpandAll": "展开全部项目",
   "app.selectProject": "选择项目并创建 Agent",
   "app.startAgent": "开始一个 pi agent",
   "app.brandName": "PiDeck",

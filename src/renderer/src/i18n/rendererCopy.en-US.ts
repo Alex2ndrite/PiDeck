@@ -93,6 +93,8 @@ export const enUS: Record<TranslationKey, string> = {
   "app.scrollToBottom": "Scroll to bottom",
   "app.search": "Search",
   "app.addProject": "Add Project",
+  "app.projectCollapseAll": "Collapse all projects",
+  "app.projectExpandAll": "Expand all projects",
   "app.selectProject": "Select a project and create an agent",
   "app.startAgent": "Start a pi agent",
   "app.brandName": "PiDeck",
