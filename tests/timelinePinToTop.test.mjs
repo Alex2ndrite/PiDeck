@@ -38,6 +38,23 @@ test("pin-to-top exposes controller API and guards the smooth animation", () => 
   assert.match(controllerSource, /setPinSpacerHeight\(0\)/);
 });
 
+test("pin animation yields to user scroll takeover (wheel/touchmove/keydown)", () => {
+  // 用户接管中断：动画窗口内 wheel/touchmove/滚动类按键必须取消动画保护与自动跟随，
+  // 否则 onScroll 判定被 pinAnimatingRef 吞掉后，650ms timer 会把用户压回底部（#滚动冲突）。
+  assert.match(controllerSource, /const cancelPinByUser = \(\) =>/);
+  assert.match(controllerSource, /addEventListener\("wheel", cancelPinByUser/);
+  assert.match(controllerSource, /addEventListener\("touchmove", cancelPinByUser/);
+  assert.match(controllerSource, /addEventListener\("keydown", cancelPinByKey/);
+  // 接管后关闭自动跟随，timer 里的补贴底依赖 autoScrollRef 自动放弃
+  const cancel = controllerSource.match(/const cancelPinByUser = \(\) => \{[\s\S]*?\n    \};/)?.[0] ?? "";
+  assert.match(cancel, /pinAnimatingRef\.current = false/);
+  assert.match(cancel, /autoScrollRef\.current = false/);
+  // 监听必须随 effect 清理，防止向卸载后的 timeline 残留监听
+  assert.match(controllerSource, /removeEventListener\("wheel", cancelPinByUser\)/);
+  assert.match(controllerSource, /removeEventListener\("touchmove", cancelPinByUser\)/);
+  assert.match(controllerSource, /removeEventListener\("keydown", cancelPinByKey\)/);
+});
+
 test("timeline pins the new tail user message and renders the spacer", () => {
   // 尾部新增用户消息触发 pin；乐观→权威换绑（pin 目标消失）只重定向不重播
   assert.match(timelineSource, /tailMessage\?\.role === "user"/);

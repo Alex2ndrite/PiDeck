@@ -9,11 +9,11 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-/* Streamdown 及其可选插件（code/mermaid/math）的 Tailwind v4 源码扫描：
-   不声明则其内置控件（表格复制/下载、代码块、mermaid 工具栏）的类名不生成，
-   表现为控件缺背景/边框/hover 态（样式残缺）。路径相对本文件。 */
+/* Streamdown 及其插件（mermaid/math）的 Tailwind v4 源码扫描：
+   不声明则其内置控件（表格复制/下载、mermaid 工具栏）的类名不生成，
+   表现为控件缺背景/边框/hover 态（样式残缺）。路径相对本文件。
+   代码高亮插件已移除（shiki 内存优化，见 MarkdownStream.tsx 注释）。 */
 @source "../../../../node_modules/streamdown/dist/*.js";
-@source "../../../../node_modules/@streamdown/code/dist/*.js";
 @source "../../../../node_modules/@streamdown/mermaid/dist/*.js";
 @source "../../../../node_modules/@streamdown/math/dist/*.js";
 

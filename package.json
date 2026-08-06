@@ -122,7 +122,7 @@
     "appId": "com.ayuayue.pi-desktop",
     "productName": "PiDeck",
     "asar": true,
-    "compression": "maximum",
+    "compression": "store",
     "afterPack": "./scripts/after-pack-cleanup.js",
     "npmRebuild": false,
     "asarUnpack": [

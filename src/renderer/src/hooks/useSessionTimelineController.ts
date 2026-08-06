@@ -305,16 +305,46 @@ export function useSessionTimelineController(options: {
     autoScrollRef.current = true;
     setAutoScroll(true);
     setShowScrollToBottom(false);
+    // 用户滚轮/触摸/键盘 = 明确接管滚动：取消动画保护与自动跟随。
+    // 程序化 smooth 滚动不产生 wheel/touchmove/keydown 事件，该信号天然区分用户与程序。
+    // 若缺少此中断：用户在 650ms 动画窗口内的上滚判定会被 pinAnimatingRef 吞掉
+    // （onScroll 直接 return），随后 timer 到点按 autoScroll=true 贴底，把用户压回底部。
+    const cancelPinByUser = () => {
+      if (!pinAnimatingRef.current) return;
+      pinAnimatingRef.current = false;
+      autoScrollRef.current = false;
+      setAutoScroll(false);
+      setShowScrollToBottom(true);
+    };
+    const cancelPinByKey = (event: KeyboardEvent) => {
+      // 仅滚动类按键视为接管；Tab/Enter 等焦点导航不打断动画
+      if (
+        event.key === "ArrowUp" || event.key === "ArrowDown" ||
+        event.key === "PageUp" || event.key === "PageDown" ||
+        event.key === "Home" || event.key === "End"
+      ) {
+        cancelPinByUser();
+      }
+    };
+    timeline.addEventListener("wheel", cancelPinByUser, { passive: true });
+    timeline.addEventListener("touchmove", cancelPinByUser, { passive: true });
+    timeline.addEventListener("keydown", cancelPinByKey);
     const timer = window.setTimeout(() => {
       pinAnimatingRef.current = false;
       if (ownerKeyRef.current !== requestOwnerKey) return;
-      // 动画期间流入的回答内容补一次即时贴底，恢复正常跟随
+      // 动画期间流入的回答内容补一次即时贴底，恢复正常跟随；
+      // 若用户已在动画窗口内接管滚动（cancelPinByUser），autoScrollRef=false，此处自动放弃贴底。
       if (autoScrollRef.current) {
         programmaticScrollRef.current = true;
         timeline.scrollTo({ top: timeline.scrollHeight, behavior: "instant" });
       }
     }, 650);
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(timer);
+      timeline.removeEventListener("wheel", cancelPinByUser);
+      timeline.removeEventListener("touchmove", cancelPinByUser);
+      timeline.removeEventListener("keydown", cancelPinByKey);
+    };
   }, [controllerEnabled, ownerKey, pinnedTurnId, refreshPinSpacer]);
 
 	const loadMoreMessages = useCallback(() => {
