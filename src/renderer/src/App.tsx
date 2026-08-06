@@ -2525,6 +2525,7 @@ export function App() {
       deleteMessage={deleteMessage}
       forkFromUserMessage={forkFromUserMessage}
       forkingMessageId={forkingMessageId}
+      openSidebarSessionById={runOpenSidebarSessionById}
       agents={displayAgents}
       activeQueuedPrompts={activeQueuedPrompts}
       visibleQueuedPrompts={visibleQueuedPrompts}

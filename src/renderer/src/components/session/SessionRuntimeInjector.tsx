@@ -62,6 +62,8 @@ export interface SessionRuntimeInjectorProps {
   deleteMessage?: (messageId: string) => void;
   forkFromUserMessage?: (message: any) => void;
   forkingMessageId?: string | null;
+  /** 分支导航条切换会话（App 装配 useSessionActions.openSidebarSessionById） */
+  openSidebarSessionById?: (projectId: string, sessionId: string) => Promise<void>;
 
   // Agents
   agents: AgentTab[];
@@ -149,6 +151,7 @@ export const SessionRuntimeInjector = React.memo(function SessionRuntimeInjector
     deleteMessage,
     forkFromUserMessage,
     forkingMessageId,
+    openSidebarSessionById,
     agents,
     activeQueuedPrompts,
     visibleQueuedPrompts,
@@ -300,6 +303,14 @@ export const SessionRuntimeInjector = React.memo(function SessionRuntimeInjector
       onToast={(message: string) => showToast(message)}
       onQuickPrompt={(message) => insertQuickPrompt(currentSessionId, message)}
       canMutateActiveMessages={canMutateActiveMessages}
+      onOpenBranchSession={
+        // 分支导航条切到父/兄弟/子分支会话；无项目上下文时不提供
+        activeProjectId && openSidebarSessionById
+          ? (sessionId: string) => {
+              void openSidebarSessionById(activeProjectId, sessionId);
+            }
+          : undefined
+      }
       enqueueSessionPrompt={enqueueSessionPrompt}
       gitInfo={gitInfo}
       ensureSessionId={ensureSessionId}

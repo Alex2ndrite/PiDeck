@@ -17,6 +17,7 @@ import type { PiDesktopApi } from "../../../../preload";
 import { t } from "../../i18n";
 import { isLanWeb, desktopApi as api } from "../../desktopApi";
 import { SessionHeader } from "./SessionHeader";
+import { SessionBranchBar } from "./SessionBranchBar";
 import { SessionWidgetChips } from "./SessionWidgetChips";
 import { SessionTabsBar, type SessionTabsBarProps } from "./SessionTabsBar";
 import { SessionMessageTimeline } from "./SessionMessageTimeline";
@@ -88,6 +89,8 @@ export type SessionViewProps = {
   onToast: (message: string) => void;
   onQuickPrompt?: (prompt: string) => void;
   canMutateActiveMessages: boolean;
+  /** 分支导航条：打开兄弟/父/子分支会话（SessionRuntimeInjector 装配 openSidebarSessionById） */
+  onOpenBranchSession?: (sessionId: string) => void;
 
   // ── Composer ──
   enqueueSessionPrompt: (sessionId: string, snapshot: EnqueuePromptSnapshot) => boolean;
@@ -163,6 +166,7 @@ export function SessionView({
   onToast,
   onQuickPrompt,
   canMutateActiveMessages,
+  onOpenBranchSession,
   enqueueSessionPrompt,
   gitInfo,
   openFilePath,
@@ -453,6 +457,8 @@ export function SessionView({
         drawerOpen={drawerOpen}
         widgetChips={<SessionWidgetChips sessionId={sessionId} />}
       />
+      {/* 分支导航条：仅当当前会话存在 fork 分支关系（父/兄弟/子分支）时显示 */}
+      <SessionBranchBar sessionId={sessionId} onOpenSession={onOpenBranchSession} />
       <ResizablePanelGroup
         orientation="vertical"
         className="session-v-group"
