@@ -160,6 +160,10 @@ export function baseEditorExtensions(opts: {
     syntaxHighlighting(editorHighlightStyle, { fallback: true }),
     ...(wordWrap ? [EditorView.lineWrapping] : []),
     ...(language ? [language] : []),
-    ...(readOnly ? [EditorState.readOnly.of(true), EditorView.editable.of(false)] : []),
+    // 只读只设 EditorState.readOnly，不设 EditorView.editable.of(false)：
+    // editable=false 会移除 contenteditable 属性，浏览器原生选择（双击选词、
+    // 三击选行、拖拽选块）全部失效；readOnly 在状态层拒绝一切变更事务，
+    // 已足以阻止编辑，同时保留完整的鼠标选择/复制能力。
+    ...(readOnly ? [EditorState.readOnly.of(true)] : []),
   ];
 }

@@ -60,9 +60,10 @@ test("resolveEditorLanguage falls back to plaintext for unknown/cold languages",
 
 test("baseEditorExtensions applies readOnly and wordWrap", () => {
   const { baseEditorExtensions, resolveEditorLanguage } = loadModule();
-  // readOnly 追加 EditorState.readOnly + EditorView.editable 两个扩展（Facet 不可序列化，用数量断言）
+  // readOnly 只追加 EditorState.readOnly 一个扩展：不设 editable.of(false)，
+  // 否则 contenteditable 被移除后双击选词/三击选行/拖拽选块全部失效（只读仍要能选中）
   const readOnly = baseEditorExtensions({ readOnly: true });
-  assert.equal(readOnly.length, baseEditorExtensions().length + 2);
+  assert.equal(readOnly.length, baseEditorExtensions().length + 1);
   // wordWrap 追加 lineWrapping 一个扩展
   const wrapped = baseEditorExtensions({ wordWrap: true });
   assert.equal(wrapped.length, baseEditorExtensions().length + 1);
@@ -71,5 +72,5 @@ test("baseEditorExtensions applies readOnly and wordWrap", () => {
   assert.equal(withLang.length, baseEditorExtensions().length + 1);
   // 组合叠加
   const all = baseEditorExtensions({ readOnly: true, wordWrap: true, language: resolveEditorLanguage("md") });
-  assert.equal(all.length, baseEditorExtensions().length + 4);
+  assert.equal(all.length, baseEditorExtensions().length + 3);
 });

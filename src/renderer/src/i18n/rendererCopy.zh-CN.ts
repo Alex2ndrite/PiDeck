@@ -894,6 +894,8 @@ export const zhCN = {
   "editor.fileTooLarge": "文件大小为 {size}MB，超过 {max}MB 限制，无法打开编辑",
   "editor.preview": "预览",
   "editor.source": "源码",
+  "editor.attachSelectionRange": "引用选中内容（第 {range} 行）",
+  "editor.pdfPreview": "PDF 预览",
   "editors.clear": "清除",
   "editors.browse": "浏览",
   "editors.detectedFrom": "来源：{source}",

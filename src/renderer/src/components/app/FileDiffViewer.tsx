@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { t } from "../../i18n";
 import { ArrowLeft, Edit3, Maximize, Minimize2, SquareSplitHorizontal, X, Eye, FileCode } from "lucide-react";
 import { Button } from "../ui-shadcn/button";
@@ -8,8 +8,9 @@ import { defaultRemarkPlugins, defaultRehypePlugins } from "streamdown";
 import rehypeKatex from "rehype-katex";
 import { CodeMirrorEditor } from "./CodeMirrorEditor";
 import { MergeDiffView } from "./MergeDiffView";
+import { formatFilePathRef } from "./RichInput";
 
-import { isBinaryExtension } from "../../utils/isTextFile";
+import { isBinaryExtension, isImageFile, isPdfFile } from "../../utils/isTextFile";
 
 type ViewMode = "view" | "diff";
 
@@ -53,7 +54,9 @@ export function FileDiffViewer(props: {
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 	const [sideBySide, setSideBySide] = useState(props.displayMode !== "drawer");
-	const [readOnly, setReadOnly] = useState(true);
+	// 默认编辑模式：view 模式打开即可编辑（不再需要先点「编辑」）；
+	// diff 模式保持只读（历史提交/工作区对比场景，避免误改，需要时仍可点编辑进入）。
+	const [readOnly, setReadOnly] = useState(() => props.mode === "diff");
 	const [dirty, setDirty] = useState(false);
 	const [saving, setSaving] = useState(false);
 	const [showHint, setShowHint] = useState(false);
@@ -63,16 +66,19 @@ export function FileDiffViewer(props: {
 	const ext = fileName.split(".").pop()?.toLowerCase() ?? "";
 	const isMarkdown = ext === "md" || ext === "mdx";
 	const isHtml = ext === "html" || ext === "htm";
-	// 只读视图下 markdown 文件默认启用预览；差异模式或编辑模式保持源码视图。
-	const [preview, setPreview] = useState(isMarkdown && !isDiffMode && readOnly);
+	// 图片/PDF 走内置预览（view 模式）：二进制内容不可文本读取，跳过编辑器直接渲染。
+	const isImage = isImageFile(props.filePath);
+	const isPdf = isPdfFile(props.filePath);
+	// 默认编辑模式：markdown 打开显示源码（可编辑），预览由用户点按钮切换。
+	const [preview, setPreview] = useState(false);
 
 	useEffect(() => {
-		// 每个 tab 都从只读模式开始，尤其不能把工作区文件的编辑状态带入历史提交 Diff。
-		setReadOnly(true);
+		// 每个 tab 重置编辑状态：view 默认可编辑，diff 只读（避免把编辑状态带入历史提交 Diff）。
+		setReadOnly(isDiffMode);
 		setDirty(false);
 		setShowHint(false);
-		setPreview(isMarkdown && !isDiffMode);
-	}, [isDiffMode, isMarkdown, props.activeTabId, props.filePath]);
+		setPreview(false);
+	}, [isDiffMode, props.activeTabId, props.filePath]);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -81,8 +87,13 @@ export function FileDiffViewer(props: {
 			setError(null);
 			setDirty(false);
 			try {
-				// 检查文件扩展名是否属于二进制/不可编辑类型
+				// 图片/PDF：仅 view 模式直接进入预览（不文本读取）；
+				// diff 模式无法展示二进制差异，维持「不支持编辑」提示。
 				if (isBinaryExtension(props.filePath)) {
+					if (!isDiffMode && (isImageFile(props.filePath) || isPdfFile(props.filePath))) {
+						setLoading(false);
+						return;
+					}
 					setError(t("editor.binaryFileNotSupported", { ext }));
 					setLoading(false);
 					return;
@@ -117,6 +128,8 @@ export function FileDiffViewer(props: {
 						return;
 					}
 					setContent(result);
+					// 自动保存基准快照：加载完成即视为「已落盘」状态，避免打开后无改动就触发写盘
+					lastSavedRef.current = result;
 					setOriginal(originalResult);
 				}
 			} catch (e) {
@@ -139,28 +152,49 @@ export function FileDiffViewer(props: {
 	// 从当前内容 state 取最新值（编辑器 onChange 已实时同步；CM6 无 Monaco 的实例取值路径）
 	const getLatestContent = useCallback(() => content, [content]);
 
-	const doSave = useCallback(async () => {
-		if (!props.saveContent || !dirty) return;
+	// 自动保存：编辑停止 500ms 后静默落盘（仅 allowSave 的文件），Ctrl+S 立即保存并取消挂起的自动保存。
+	const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+	// 最近一次落盘内容快照：内容未变时跳过保存，避免重复写盘
+	const lastSavedRef = useRef("");
+
+	const saveNow = useCallback(async () => {
+		if (saveTimerRef.current) {
+			clearTimeout(saveTimerRef.current);
+			saveTimerRef.current = null;
+		}
+		if (!props.saveContent) return;
 		const latest = getLatestContent();
+		if (latest === lastSavedRef.current) return;
 		setSaving(true);
 		try {
 			await props.saveContent(props.filePath, latest);
+			lastSavedRef.current = latest;
 			setContent(latest);
 			setDirty(false);
 		} catch (e) {
+			// 保存失败保留 dirty，用户可继续编辑后由下一次自动保存/Ctrl+S 重试
 			setError(e instanceof Error ? e.message : String(e));
 		} finally {
 			setSaving(false);
 		}
-	}, [dirty, getLatestContent, props.saveContent, props.filePath]);
+	}, [getLatestContent, props.saveContent, props.filePath]);
 
-	// Ctrl+S / Cmd+S 快捷键保存
+	const scheduleAutoSave = useCallback(() => {
+		if (!props.saveContent) return;
+		if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+		saveTimerRef.current = setTimeout(() => {
+			saveTimerRef.current = null;
+			void saveNow();
+		}, 500);
+	}, [props.saveContent, saveNow]);
+
+	// Ctrl+S / Cmd+S：立即保存（取消挂起的自动保存，避免重复写盘）
 	const handleKeyDown = useCallback((e: KeyboardEvent) => {
 		if ((e.ctrlKey || e.metaKey) && e.key === "s") {
 			e.preventDefault();
-			void doSave();
+			void saveNow();
 		}
-	}, [doSave]);
+	}, [saveNow]);
 
 	useEffect(() => {
 		if (!readOnly) {
@@ -168,6 +202,16 @@ export function FileDiffViewer(props: {
 			return () => window.removeEventListener("keydown", handleKeyDown);
 		}
 	}, [readOnly, handleKeyDown]);
+
+	// 卸载时取消挂起的自动保存 timer（生命周期配对）
+	useEffect(() => {
+		return () => {
+			if (saveTimerRef.current) {
+				clearTimeout(saveTimerRef.current);
+				saveTimerRef.current = null;
+			}
+		};
+	}, []);
 
 	// 进入编辑时显示快捷键提示，3 秒后自动消失
 	useEffect(() => {
@@ -189,7 +233,16 @@ export function FileDiffViewer(props: {
 	const handleEditorChange = useCallback((value: string) => {
 		setContent(value);
 		setDirty(true);
-	}, []);
+		scheduleAutoSave();
+	}, [scheduleAutoSave]);
+
+	// 编辑器选中文本 → 右键「引用选中内容」：以 pi 的 read 语法 @path:start-end 派发到输入框。
+	// 与文件树右键 onAttach 共用同一追加语义（composer-attach-refs 由 App 监听后插入 draft）。
+	const handleAttachSelection = useCallback((startLine: number, endLine: number) => {
+		const range = startLine === endLine ? String(startLine) : `${startLine}-${endLine}`;
+		const ref = `${formatFilePathRef(props.filePath)}:${range}`;
+		window.dispatchEvent(new CustomEvent("composer-attach-refs", { detail: { refs: [ref] } }));
+	}, [props.filePath]);
 
 	const language = ext;
 
@@ -269,7 +322,7 @@ export function FileDiffViewer(props: {
 							<SquareSplitHorizontal size={15} />
 						</Button>
 					)}
-					{props.saveContent && readOnly && (
+					{props.saveContent && readOnly && !preview && (
 						<Button
 							variant="ghost"
 							size="icon-sm"
@@ -280,7 +333,7 @@ export function FileDiffViewer(props: {
 							<Edit3 size={15} />
 						</Button>
 					)}
-					{!readOnly && props.saveContent && (
+					{!readOnly && props.saveContent && !preview && (
 						<Button
 							variant="ghost"
 							size="icon-sm"
@@ -312,6 +365,21 @@ export function FileDiffViewer(props: {
 				{error && <div className="file-diff-error">{error}</div>}
 				{!loading && !error && (
 					<>
+						{/* 图片预览：Chromium img 原生解码（CSP img-src 已允许 file:） */}
+						{!isDiffMode && isImage && (
+							<div className="file-diff-media-preview">
+								<img src={toFileUrl(props.filePath)} alt={fileName} />
+							</div>
+						)}
+						{/* PDF 预览：Chromium 内置 PDF viewer（iframe 无 sandbox，插件沙箱自身隔离） */}
+						{!isDiffMode && isPdf && (
+							<iframe
+								className="file-diff-pdf-preview"
+								src={toFileUrl(props.filePath)}
+								title={t("editor.pdfPreview")}
+								referrerPolicy="no-referrer"
+							/>
+						)}
 						{/* Markdown 预览：仅 view 模式且 preview 启用（静态渲染，与会话正文同一 Streamdown 引擎） */}
 						{!isDiffMode && preview && isMarkdown && (
 							<div className="file-diff-preview">
@@ -335,6 +403,7 @@ export function FileDiffViewer(props: {
 									language={language}
 									readOnly={readOnly}
 									onChange={handleEditorChange}
+									onAttachSelection={handleAttachSelection}
 								/>
 							</div>
 						)}
@@ -381,6 +450,11 @@ export function FileDiffViewer(props: {
  * dev preview interaction without giving project HTML the renderer's origin,
  * Electron bridge, popups, or file-system navigation privileges.
  */
+function toFileUrl(path: string): string {
+	// file:// URL 构造：反斜杠转正斜杠 + encodeURI（#/? 在文件名里会破坏 URL 语义）
+	return "file:///" + encodeURI(path.replace(/\\/g, "/"));
+}
+
 function HtmlPreview({ content }: { content: string }) {
 	return (
 		<iframe

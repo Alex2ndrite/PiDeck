@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { ChangeSet, EditorState, Text } from "@codemirror/state";
 import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter, drawSelection, dropCursor, rectangularSelection, crosshairCursor } from "@codemirror/view";
 import { foldGutter, foldKeymap, indentOnInput, bracketMatching, indentUnit } from "@codemirror/language";
-import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
+import { defaultKeymap, history, historyKeymap, indentWithTab, toggleComment } from "@codemirror/commands";
 import { autocompletion, completionKeymap, closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
 import { highlightSelectionMatches, searchKeymap } from "@codemirror/search";
 import { MergeView, unifiedMergeView, updateOriginalDoc } from "@codemirror/merge";
@@ -48,6 +48,8 @@ function editableExtensions(onChange: (value: string) => void) {
 			...foldKeymap,
 			...completionKeymap,
 			indentWithTab,
+			// Ctrl+/ 注释/取消注释（语言包支持时）
+			{ key: "Mod-/", run: toggleComment },
 		]),
 		EditorView.updateListener.of((update) => {
 			if (update.docChanged) onChange(update.state.doc.toString());
@@ -79,17 +81,17 @@ export function MergeDiffView(props: MergeDiffViewProps) {
 		const language = resolveEditorLanguage(props.language);
 		const base = baseEditorExtensions({ wordWrap: true, language });
 		if (props.sideBySide) {
-			// 分栏：a = 只读基准，b = 当前内容（可编辑）
+			// 分栏：a = 只读基准（只设 readOnly 保留鼠标选择/复制），b = 当前内容（可编辑）
 			const view = new MergeView({
 				a: {
 					doc: props.original,
-					extensions: [...base, EditorState.readOnly.of(true), EditorView.editable.of(false)],
+					extensions: [...base, EditorState.readOnly.of(true)],
 				},
 				b: {
 					doc: props.modified,
 					extensions: [
 						...base,
-						...(props.readOnly ? [EditorState.readOnly.of(true), EditorView.editable.of(false)] : []),
+						...(props.readOnly ? [EditorState.readOnly.of(true)] : []),
 						...editableExtensions((value) => onChangeRef.current(value)),
 					],
 				},
@@ -109,7 +111,7 @@ export function MergeDiffView(props: MergeDiffViewProps) {
 					doc: props.modified,
 					extensions: [
 						...base,
-						...(props.readOnly ? [EditorState.readOnly.of(true), EditorView.editable.of(false)] : []),
+						...(props.readOnly ? [EditorState.readOnly.of(true)] : []),
 						...editableExtensions((value) => onChangeRef.current(value)),
 						...unifiedMergeView({
 							original: props.original,

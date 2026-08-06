@@ -909,6 +909,8 @@ export const enUS: Record<TranslationKey, string> = {
   "editor.fileTooLarge": "File size {size}MB exceeds {max}MB limit, cannot open editor",
   "editor.preview": "Preview",
   "editor.source": "Source",
+  "editor.attachSelectionRange": "Attach selection (line {range})",
+  "editor.pdfPreview": "PDF preview",
   "editors.clear": "Clear",
   "editors.browse": "Browse",
   "editors.detectedFrom": "Source: {source}",
