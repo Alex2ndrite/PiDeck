@@ -349,10 +349,18 @@ const api = {
 			ipcRenderer.invoke(ipcChannels.sessionsList, projectId) as Promise<
 				SessionSummary[]
 			>,
-		listCatalog: (projectId: string) =>
-			ipcRenderer.invoke(ipcChannels.sessionsCatalogList, projectId) as Promise<
+		listCatalog: (projectId: string, options?: { scan?: boolean }) =>
+			ipcRenderer.invoke(ipcChannels.sessionsCatalogList, projectId, options) as Promise<
 				SessionRecord[]
 			>,
+		/** 后台扫描完成推送：目录缓存已合并，监听方应以 scan:false 重新拉取。返回退订函数。 */
+		onCatalogRefreshed: (listener: (input: { projectId: string }) => void) => {
+			const handler = (_event: unknown, payload: { projectId: string }) => listener(payload);
+			ipcRenderer.on(ipcChannels.sessionsCatalogRefreshed, handler);
+			return () => {
+				ipcRenderer.removeListener(ipcChannels.sessionsCatalogRefreshed, handler);
+			};
+		},
 		createDraft: (input: CreateSessionDraftInput) =>
 			ipcRenderer.invoke(ipcChannels.sessionsCatalogCreateDraft, input) as Promise<SessionRecord>,
 		createAnonymous: (input: CreateAnonymousSessionInput) =>

@@ -77,6 +77,7 @@ import {
   sessionCatalogLoadStateAtom,
   sessionSummariesByProjectIdAtomFamily,
   sessionTabIdsAtom,
+  sessionDraftByIdAtom,
   setSessionAttachmentsAtom,
   setSessionCatalogLoadStateAtom,
   setSessionDraftAtom,
@@ -376,7 +377,10 @@ export function App() {
     api: {
       projects: { list: api.projects.list },
       git: { worktreeList: api.git.worktreeList, branches: api.git.branches },
-      sessions: { listCatalog: api.sessions.listCatalog },
+      sessions: {
+        listCatalog: api.sessions.listCatalog,
+        onCatalogRefreshed: api.sessions.onCatalogRefreshed,
+      },
       files: { list: api.files.list },
     },
     showToast,
@@ -676,7 +680,10 @@ export function App() {
     value: string | ((current: string) => string),
   ) {
     const targetAgentId = agentId;
-    const previous = livePromptByAgentRef.current[targetAgentId] ?? "";
+    // previous 必须从 Session draft atom 读取（权威源）：输入框的编辑/删除都经 composer
+    // setDraft 写入 atom，livePromptByAgentRef 只在 setPromptForAgent 内更新，若用它当
+    // previous，「右键引用 → 删除 → 再右键引用」会把已删除的旧引用带回输入框。
+    const previous = store.get(sessionDraftByIdAtom)[targetAgentId] ?? "";
     const nextValue = typeof value === "function" ? value(previous) : value;
     if (nextValue) livePromptByAgentRef.current[targetAgentId] = nextValue;
     else delete livePromptByAgentRef.current[targetAgentId];
@@ -1560,6 +1567,21 @@ export function App() {
     };
     window.addEventListener("user-message-edit", handler);
     return () => window.removeEventListener("user-message-edit", handler);
+  }, []);
+
+  // 编辑器右键「引用选中内容」：@path:start-end 引用追加到输入框（与文件树右键 onAttach 同语义）
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<{ refs?: string[] }>).detail;
+      const refs = detail?.refs;
+      if (!refs?.length) return;
+      setPrompt(
+        (current) =>
+          `${current}${current.endsWith(" ") || current.length === 0 ? "" : " "}${refs.join(" ")} `,
+      );
+    };
+    window.addEventListener("composer-attach-refs", handler);
+    return () => window.removeEventListener("composer-attach-refs", handler);
   }, []);
 
   useEffect(() => {

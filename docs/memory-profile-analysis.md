@@ -112,9 +112,9 @@ PiDeck 自身合计 ≈ 2.2GB（任务管理器按 WorkingSet 口径）。
 
 | 改动 | 位置 | 预期收益 |
 |---|---|---|
-| 流式渲染微批节流：增量 append 按 50–100ms 聚合、rAF 对齐 | 渲染层流式事件消费处（`streamGate` / timeline controller） | streamdown streaming 每 token 重解析是主线程 CPU 密集源，流式输出不掉帧 |
+| ~~流式渲染微批节流~~ ✅ 已完成（双管齐下：主进程增量 flush 协议——流式节流只发尾部增量 `upsertFrom+totalLength`，终态全量校准，IPC 载荷从全量数组/50ms 降为 1–2 条；渲染层 `useThrottledStreamingText` 120ms + Streamdown element memo，解析频率减半） | `AgentManager.ts` / `agentUtils.ts` / `session-atoms.ts` / `streamingTextThrottle.ts` | 流式主线程反序列化开销 ~99%↓，解析次数减半以上 |
 | 时间线长列表 `content-visibility: auto` + `contain-intrinsic-size` | `timeline.css` / 消息行组件 | 流式增长不再触发全局 layout（长会话掉帧主因） |
-| `sessionScanner.list` 异步化 + 摘要缓存先回显、骨架屏先行 | `SessionScanner.ts` / `sessionIpc.ts` / 侧栏 | 消除“加载项目卡几秒”；首屏回显 ≤300ms |
+| ~~`sessionScanner.list` 异步化 + 摘要缓存先回显、骨架屏先行~~ ✅ 已完成（两阶段：缓存先回显 + 后台扫描推送 `sessions:catalog-refreshed` + 启动预扫描；`BackgroundScanCoordinator` 去重/冷却防 3 秒轮询并发重扫） | `sessionIpc.ts` / `BackgroundScanCoordinator.ts` / `useProjectSync.ts` | 消除“加载项目卡几秒”；缓存项目首屏回显即时 |
 
 ### 主线 D：动画优雅（规范层）
 
