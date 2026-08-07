@@ -2811,7 +2811,7 @@ select:focus-visible {
   scroll-margin-top: 28px;
 }
 .message-timeline:has(.session-runtime-ui:not(:empty)) {
-  padding-bottom: 88px;
+  padding-bottom: 8px;
 }
 .scroll-to-bottom-btn {
   position: absolute;

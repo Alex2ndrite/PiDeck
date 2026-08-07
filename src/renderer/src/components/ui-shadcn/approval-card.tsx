@@ -29,7 +29,6 @@ export function ApprovalCard(props: {
 			onOpenChange={props.onOpenChange}
 			className={cn(
 				"ask-inline-bar ask-inline-bar--active relative flex min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-card text-card-foreground shadow-sm",
-				"before:absolute before:inset-y-0 before:left-0 before:w-1 before:bg-primary",
 				props.className,
 			)}
 		>

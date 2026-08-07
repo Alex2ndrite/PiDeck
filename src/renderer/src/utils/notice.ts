@@ -29,6 +29,8 @@ export type NoticeActions = {
 };
 
 let fallbackHost: HTMLDivElement | null = null;
+let nextFallbackNoticeId = 0;
+export type NoticeId = string | number;
 
 // sonner 2.x 在没有可见 toast 时不会渲染任何 DOM（源码里 `if (!filteredToasts.length) return null`），
 // 因此不能用 DOM 查询该属性来探测挂载态——那会在每次首个 toast 前都误判为未挂载，
@@ -73,8 +75,9 @@ function dismissFallbackNotice(item: HTMLDivElement, host: HTMLDivElement) {
 }
 
 /** Toaster 未挂载时的 DOM 兜底 toast，避免全局异常完全静默。 */
-function showFallbackNotice(message: string, duration: number, kind: NoticeData["kind"] = "info", title?: string, actions?: NoticeActions) {
+function showFallbackNotice(message: string, duration: number, kind: NoticeData["kind"] = "info", title?: string, actions?: NoticeActions): NoticeId | undefined {
 	if (typeof document === "undefined") return;
+	const noticeId = `fallback-notice-${++nextFallbackNoticeId}`;
 	const host = ensureFallbackHost();
 	const item = document.createElement("div");
 	// 与 sonner 卡片同一套中性面板样式（走 CSS 变量，主题自动适配）；
@@ -92,6 +95,7 @@ function showFallbackNotice(message: string, duration: number, kind: NoticeData[
 		"word-break:break-word",
 	].join(";");
 	item.setAttribute("role", kind === "error" ? "alert" : "status");
+	item.dataset.noticeId = noticeId;
 	if (title) {
 		// 有标题时：加粗标题行、正文另起一段，与 sonner 的 title+description 结构对齐
 		const titleEl = document.createElement("div");
@@ -145,6 +149,7 @@ function showFallbackNotice(message: string, duration: number, kind: NoticeData[
 	if (Number.isFinite(duration)) {
 		window.setTimeout(() => dismissFallbackNotice(item, host), Math.max(1200, duration));
 	}
+	return noticeId;
 }
 
 /** 将项目的可选 onClick 语义转换为 sonner 需要的必填 Action（未提供回调时传空函数）。 */
@@ -160,13 +165,12 @@ function toasterMounted() {
 	return toasterReady;
 }
 
-export function showNotice(message: string, duration?: number, kind?: NoticeData["kind"], title?: string, actions?: NoticeActions) {
+export function showNotice(message: string, duration?: number, kind?: NoticeData["kind"], title?: string, actions?: NoticeActions): NoticeId | undefined {
 	const resolvedDuration = duration ?? (kind === "error" || kind === "warning" ? 3000 : 1500);
 	const text = String(message ?? "").trim();
 	if (!text) return;
 	if (!toasterMounted()) {
-		showFallbackNotice(text, resolvedDuration, kind, title, actions);
-		return;
+		return showFallbackNotice(text, resolvedDuration, kind, title, actions);
 	}
 	// 带标题/操作按钮的提示：sonner 以 title 为主文案、正文放 description，视觉层级更清晰
 	const options: ExternalToast = {
@@ -176,11 +180,10 @@ export function showNotice(message: string, duration?: number, kind?: NoticeData
 	if (actions?.action) options.action = toSonnerAction(actions.action);
 	if (actions?.cancel) options.cancel = toSonnerAction(actions.cancel);
 	if (title) {
-		if (kind === "error") toast.error(title, options);
-		else if (kind === "warning") toast.warning(title, options);
-		else if (kind === "info") toast.info(title, options);
-		else toast(title, options);
-		return;
+		if (kind === "error") return toast.error(title, options);
+		if (kind === "warning") return toast.warning(title, options);
+		if (kind === "info") return toast.info(title, options);
+		return toast(title, options);
 	}
 	// 无标题：保持历史行为，整段作为主文案
 	const plainOptions: ExternalToast = {
@@ -188,8 +191,19 @@ export function showNotice(message: string, duration?: number, kind?: NoticeData
 	};
 	if (actions?.action) plainOptions.action = toSonnerAction(actions.action);
 	if (actions?.cancel) plainOptions.cancel = toSonnerAction(actions.cancel);
-	if (kind === "error") toast.error(text, plainOptions);
-	else if (kind === "warning") toast.warning(text, plainOptions);
-	else if (kind === "info") toast.info(text, plainOptions);
-	else toast(text, plainOptions);
+	if (kind === "error") return toast.error(text, plainOptions);
+	if (kind === "warning") return toast.warning(text, plainOptions);
+	if (kind === "info") return toast.info(text, plainOptions);
+	return toast(text, plainOptions);
+}
+
+/** 精准关闭由 showNotice 返回的通知，不影响其他全局 toast。 */
+export function dismissNotice(id: NoticeId | undefined) {
+	if (id === undefined) return;
+	if (toasterMounted()) {
+		toast.dismiss(id);
+		return;
+	}
+	const item = fallbackHost?.querySelector<HTMLDivElement>(`[data-notice-id="${CSS.escape(String(id))}"]`);
+	if (item && fallbackHost) dismissFallbackNotice(item, fallbackHost);
 }

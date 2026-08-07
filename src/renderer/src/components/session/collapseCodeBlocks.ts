@@ -55,8 +55,22 @@ export function collapseCodeBlocks(options: CollapseCodeBlockOptions = {}) {
 			if (index < 0) return;
 			if (parents.some((ancestor) => ancestor.type === "element" && ancestor.properties?.["data-sd-collapse"] !== undefined)) return;
 
-			const language = getLanguage(node);
-			if (language && excludeLanguages.includes(language)) return;
+			const detectedLanguage = getLanguage(node);
+			if (detectedLanguage && excludeLanguages.includes(detectedLanguage)) return;
+			// 无语言标注的 fenced code 也必须交给 code 插件处理；text 是稳定的
+			// 纯文本 fallback，避免未知语言导致代码块内容不渲染。
+			const language = detectedLanguage ?? "text";
+			const code = node.children.find(
+				(child): child is Element => child.type === "element" && child.tagName === "code",
+			);
+			if (code) {
+				const classes = Array.isArray(code.properties?.className)
+					? code.properties.className.map(String)
+					: [];
+				if (!classes.some((value) => value.startsWith("language-"))) {
+					code.properties = { ...code.properties, className: [...classes, "language-text"] };
+				}
+			}
 			const lines = countLines(node);
 			const details: Element = {
 				type: "element",
@@ -68,19 +82,9 @@ export function collapseCodeBlocks(options: CollapseCodeBlockOptions = {}) {
 					...(foldThreshold === undefined || lines <= foldThreshold ? { open: true } : {}),
 					className: ["sd-code-collapse"],
 				},
-				children: [
-					{
-						type: "element",
-						tagName: "summary",
-						properties: { className: ["sd-code-collapse-summary"] },
-						children: [
-							chevron(),
-							...(language ? [{ type: "text" as const, value: `${language} · ` }] : []),
-							{ type: "text", value: String(lines) },
-						],
-					},
-					node,
-				],
+				// Streamdown 自带 header 已经承载语言、复制和下载操作；不再生成第二个
+				// summary 头部，避免同一代码块出现两个语言标题和两套按钮背景。
+				children: [node],
 			};
 			parent.children.splice(index, 1, details);
 			return SKIP;

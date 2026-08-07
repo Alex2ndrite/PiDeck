@@ -432,7 +432,7 @@ export function SessionView({
 
   return (
     <>
-      {/* Tab 栏同时承载会话状态与操作，消息视口从第一行开始，滚动不会再穿过一整块 header。 */}
+      {/* 会话状态/操作区以 embedded 模式嵌入 Tab 栏右侧，不再单独占一行 */}
       <SessionTabsBar
         {...sessionTabs}
         actions={

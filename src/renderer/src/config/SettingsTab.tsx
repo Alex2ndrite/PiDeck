@@ -101,17 +101,20 @@ export function SettingsTab(props: {
 	const retryInitializedRef = useRef(false);
 	useEffect(() => {
 		if (retryInitializedRef.current) return;
-		const existingRetry = (data as any).retry;
-		if (!existingRetry || Object.keys(existingRetry).some((key) => !(key in retryConfig))) {
+		// 先标记再回调，避免父组件更新 data 后再次触发初始化。
+		retryInitializedRef.current = true;
+		const existingRetry = data.retry;
+		if (!existingRetry || typeof existingRetry !== "object" || Object.keys(existingRetry).some((key) => !(key in retryConfig))) {
 			props.onChange({ ...data, retry: retryConfig });
 		}
-		retryInitializedRef.current = true;
-	}, []);
+	}, [data, props.onChange, retryConfig.maxRetries, retryConfig.baseDelayMs]);
 
 	// 首次进入时把 compaction 规范化成可编辑结构；保留用户已有的额外字段。
 	const compactionInitializedRef = useRef(false);
 	useEffect(() => {
 		if (compactionInitializedRef.current) return;
+		// 先标记再回调，避免规范化配置造成父子组件循环更新。
+		compactionInitializedRef.current = true;
 		const existing = data.compaction;
 		const next = {
 			...(existing && typeof existing === "object" && !Array.isArray(existing)
@@ -123,14 +126,13 @@ export function SettingsTab(props: {
 			!existing ||
 			typeof existing !== "object" ||
 			Array.isArray(existing) ||
-			typeof (existing as any).enabled !== "boolean" ||
-			typeof (existing as any).reserveTokens !== "number" ||
-			typeof (existing as any).keepRecentTokens !== "number";
+			typeof (existing as Record<string, unknown>).enabled !== "boolean" ||
+			typeof (existing as Record<string, unknown>).reserveTokens !== "number" ||
+			typeof (existing as Record<string, unknown>).keepRecentTokens !== "number";
 		if (needsNormalize) {
 			props.onChange({ ...data, compaction: next });
 		}
-		compactionInitializedRef.current = true;
-	}, []);
+	}, [data, props.onChange, compactionConfig.enabled, compactionConfig.reserveTokens, compactionConfig.keepRecentTokens]);
 
 	const updateRetry = (patch: Record<string, unknown>) => {
 		props.onChange({
@@ -356,7 +358,15 @@ export function SettingsTab(props: {
 							authData={props.authData}
 							discoveredModels={props.discoveredModels}
 							allSettings={data}
-							onChange={(v) => props.onChange({ ...data, [key]: v })}
+							onChange={(v) => {
+								if (v === undefined) {
+									// 清空必须删除 key，而不是写入 undefined；这样保存 JSON 和后续默认解析都会真正回到 Pi 默认行为。
+									const { [key]: _removed, ...rest } = data;
+									props.onChange(rest);
+									return;
+								}
+								props.onChange({ ...data, [key]: v });
+							}}
 						/>
 					</div>
 				))}
