@@ -10,7 +10,7 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from "../ui-shadcn/resizable";
-import type { AgentRuntimeState, GitBranchInfo, ImageContent, SessionRuntimeTarget } from "../../../../shared/types";
+import type { AgentRuntimeState, GitBranchInfo, ImageContent, TerminalTarget } from "../../../../shared/types";
 import type { SessionTimelineController } from "../../hooks/useSessionTimelineController";
 import type { QueuedPrompt } from "../../hooks/useQueuedPrompt";
 import type { PiDesktopApi } from "../../../../preload";
@@ -45,7 +45,6 @@ export type SessionViewProps = {
     status?: string;
   } | null;
   activeRuntimeState?: AgentRuntimeState;
-  runtimeTarget?: SessionRuntimeTarget;
   hasActiveConversation: boolean;
   hasProject: boolean;
 
@@ -100,9 +99,13 @@ export type SessionViewProps = {
   terminalDockClosing: boolean;
   terminalCollapsed: boolean;
   availableTerminalHeight: number;
-  setTerminalOpenForAgent: (agentId: string, open: boolean) => void;
-  setTerminalCollapsedForAgent: (agentId: string, collapsed: boolean) => void;
-  setTerminalHeightByAgent: (
+  /** 终端归属键（agent:<id> / project:<id>）：状态回写与 dock 实例隔离都按它 */
+  terminalOwnerKey?: string;
+  /** agent 或 project 终端目标；undefined 时不渲染 dock */
+  terminalTarget?: TerminalTarget;
+  setTerminalOpenForOwner: (open: boolean) => void;
+  setTerminalCollapsedForOwner: (collapsed: boolean) => void;
+  setTerminalHeightByOwner: (
     updater: (current: Record<string, number>) => Record<string, number>
   ) => void;
 
@@ -124,7 +127,6 @@ export function SessionView({
   activeAgentId,
   activeAgent,
   activeRuntimeState,
-  runtimeTarget,
   hasActiveConversation,
   hasProject,
   chatHeaderRef,
@@ -167,9 +169,11 @@ export function SessionView({
   terminalDockClosing,
   terminalCollapsed,
   availableTerminalHeight,
-  setTerminalOpenForAgent,
-  setTerminalCollapsedForAgent,
-  setTerminalHeightByAgent,
+  terminalOwnerKey,
+  terminalTarget,
+  setTerminalOpenForOwner,
+  setTerminalCollapsedForOwner,
+  setTerminalHeightByOwner,
   settingsOpen,
   configOpen,
   environmentDialog,
@@ -352,7 +356,7 @@ export function SessionView({
 
   function handleTerminalResize(size: PanelSize) {
     const px = Math.round(size.inPixels);
-    if (!activeAgentId) return;
+    if (!terminalOwnerKey) return;
     // 34px 为折叠条高度：拖到折叠阈值视为折叠，拖回展开。
     // 程序化 setLayout（composer 增高/回缩）触发的 onResize 不算用户折叠意图：
     // 布局挤压导致的面板变矮不应把 collapsed 状态写死，否则下次打开仍是收起的。
@@ -362,17 +366,17 @@ export function SessionView({
       Date.now() < terminalProgrammaticExpireRef.current;
     if (px <= 35) {
       if (!terminalCollapsed && !withinProgrammaticWindow) {
-        setTerminalCollapsedForAgent(activeAgentId, true);
+        setTerminalCollapsedForOwner(true);
       }
       return;
     }
     if (terminalCollapsed && !withinProgrammaticWindow) {
-      setTerminalCollapsedForAgent(activeAgentId, false);
+      setTerminalCollapsedForOwner(false);
     }
     const maxHeight = Math.max(120, availableTerminalHeight);
-    setTerminalHeightByAgent((current) => ({
+    setTerminalHeightByOwner((current) => ({
       ...current,
-      [activeAgentId]: Math.min(px, maxHeight),
+      [terminalOwnerKey]: Math.min(px, maxHeight),
     }));
   }
 
@@ -423,6 +427,7 @@ export function SessionView({
       {/* 会话状态徽章以 embedded 模式嵌入 Tab 栏右侧；停止/重启在 Tab 下拉
           （SessionTabsBar 的 canStopCurrent/canRestartCurrent 链路），右侧不再有操作按钮。 */}
       <SessionTabsBar
+        {...sessionTabs}
         canStopCurrent={canStop}
         // 关闭会话 = 停止 Agent 运行 + 移除会话 Tab（与“关闭标签页”仅移除 Tab 不同）
         onStopCurrent={() => {
@@ -434,7 +439,6 @@ export function SessionView({
         // 没有绑定运行时的草稿也有会话 ID，但重启只对已启动 Agent 有意义；
         // showRestart 为 false 时不提供回调，Tab 下拉自然不渲染重启项
         onRestartCurrent={showRestart ? onRestart : undefined}
-        {...sessionTabs}
         actions={
           <SessionHeader
             embedded
@@ -555,20 +559,16 @@ export function SessionView({
               className="session-v-terminal"
             >
               <SessionRuntimeDock
-                target={runtimeTarget}
+                key={terminalOwnerKey}
+                target={terminalTarget}
                 mounted={terminalDockVisible}
                 open={terminalOpen}
                 closing={terminalDockClosing}
                 collapsed={terminalCollapsed}
                 height={terminalRowHeight}
                 terminal={api.terminal}
-                onOpenChange={(open) => {
-                  if (activeAgentId) setTerminalOpenForAgent(activeAgentId, open);
-                }}
-                onCollapsedChange={(collapsed) => {
-                  if (activeAgentId)
-                    setTerminalCollapsedForAgent(activeAgentId, collapsed);
-                }}
+                onOpenChange={(open) => setTerminalOpenForOwner(open)}
+                onCollapsedChange={(collapsed) => setTerminalCollapsedForOwner(collapsed)}
                 onHeightChange={() => {
                   // 高度由面板 onResize 统一回写，此回调保留仅为兼容接口
                 }}

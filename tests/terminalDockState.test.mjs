@@ -49,7 +49,6 @@ test("remembers collapsed terminal dock state for each agent", () => {
   assert.equal(next.agentA.collapsed, true);
   assert.equal(next.agentA.open, true);
   assert.equal(next.agentB.collapsed, false);
-});
 
 test("preserves collapsed state when toggling terminal open state", () => {
   const { setTerminalDockOpen } = loadTerminalDockStateModule();
@@ -113,17 +112,25 @@ test("streaming prune preserves canonical agent state without allocating a new s
   assert.equal(normalized[ownerKey].collapsed, false);
 });
 
-test("terminal dock hook converts agent IDs into canonical owner keys", () => {
+test("terminal dock hook converts owners into canonical owner keys", () => {
   const hookSource = readFileSync(
     "src/renderer/src/hooks/useTerminalDock.ts",
     "utf8",
   );
 
-  // 终端状态 helper 的 prune 契约只识别 agent:<id>/project:<id>；hook 不能存裸 agentId。
-  assert.match(hookSource, /terminalOwnerKey\(\{ kind: "agent", id: activeAgentId \}\)/);
+  // 终端状态 helper 的 prune 契约只识别 agent:<id>/project:<id>；hook 必须
+  // 用 terminalOwnerKey 归一 owner，不能存裸 id。project owner（引导页/未激活
+  // agent/历史会话）与 agent owner 共用同一套键模型，保证不串台。
+  assert.match(hookSource, /terminalOwnerKey\(activeOwner\)/);
   assert.match(hookSource, /terminalDockStateByOwner\[activeOwnerKey\]/);
-  assert.match(hookSource, /setTerminalDockOpen\(current, terminalOwnerKey\(\{ kind: "agent", id: agentId \}\), open\)/);
-  assert.match(hookSource, /setTerminalDockCollapsed\(current, terminalOwnerKey\(\{ kind: "agent", id: agentId \}\), collapsed\)/);
+  assert.match(hookSource, /setTerminalDockOpen\(current, activeOwnerKey, open\)/);
+  assert.match(hookSource, /setTerminalDockCollapsed\(current, activeOwnerKey, collapsed\)/);
+  assert.match(hookSource, /activeOwner: TerminalDockOwner \| undefined/);
+  // 高度也按 owner key 分桶：项目终端高度不与 agent 终端互相覆盖
+  assert.match(hookSource, /terminalHeightByOwner\[activeOwnerKey\]/);
+});
+
+
 });
 
 test("rapid reopen cancels the closing state without a second timer owner", () => {

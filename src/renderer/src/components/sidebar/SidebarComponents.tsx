@@ -1,5 +1,5 @@
 import { useState, useRef, useLayoutEffect, useEffect, useMemo, type ReactNode } from "react";
-import { Check, CircleAlert, CircleDot, Folder, LoaderCircle, MessageCircle } from "lucide-react";
+import { Archive, Check, CircleAlert, CircleDot, Folder, LoaderCircle, MessageCircle } from "lucide-react";
 import { t } from "../../i18n";
 import {
 	Dialog,
@@ -34,11 +34,20 @@ export function SessionManagerModal(props: {
 	onRename: (session: SessionSummary) => void;
 	onExport: (session: SessionSummary) => void;
 	onDelete: (sessions: SessionSummary[]) => void;
+	/** 归档会话（可恢复）；运行中的会话由主进程拒绝并抛错 */
+	onArchive: (sessions: SessionSummary[]) => void;
+	/** 恢复归档会话 */
+	onUnarchive: (session: SessionSummary) => Promise<void>;
+	/** 列出已归档会话 */
+	listArchived: () => Promise<SessionSummary[]>;
 }) {
 	const SOURCES = ["pi", "codex", "claude", "opencode"] as const;
 	const [activeSources, setActiveSources] = useState<Set<string>>(new Set(SOURCES));
 	const [selected, setSelected] = useState<Set<string>>(new Set());
 	const [selectAll, setSelectAll] = useState(false);
+	// 已归档视图：true 时展示归档会话并提供恢复；数据打开弹窗时按需拉取。
+	const [showArchived, setShowArchived] = useState(false);
+	const [archivedSessions, setArchivedSessions] = useState<SessionSummary[] | null>(null);
 
 	// 按来源过滤
 	const filteredSessions = props.sessions.filter((s) =>
@@ -107,39 +116,120 @@ export function SessionManagerModal(props: {
 			<div className="flex min-h-0 flex-1 flex-col overflow-hidden border-none bg-transparent shadow-none">
 				<div className="flex shrink-0 items-center justify-between border-b border-border-subtle bg-bg-muted px-5 py-2.5">
 					<div className="flex items-center gap-3.5">
-						<Label className="flex cursor-pointer items-center gap-2 text-control text-text-secondary select-none">
-							<Checkbox
-								checked={selectAll}
-								onChange={handleToggleAll}
-							className="m-0 size-[15px] cursor-pointer accent-[var(--color-accent)]" />
-							{t("common.selectAll")}
-						</Label>
-						<div className="flex items-center gap-1">
-							{SOURCES.map((source) => (
-								<Button
-									key={source}
-									variant="outline"
-									size="sm"
-									className={`h-auto rounded-full border border-border-subtle bg-transparent px-3 py-1 text-caption font-medium text-text-tertiary transition-all duration-150 hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]${activeSources.has(source) ? " border-[var(--color-accent)] bg-bg-active font-semibold text-[var(--color-accent)]" : ""}`}
-									onClick={() => toggleSource(source)}
-								>
-									{t(`sessionSource.${source}` as any)}
-								</Button>
-							))}
-						</div>
+						{!showArchived && (
+							<>
+								<Label className="flex cursor-pointer items-center gap-2 text-control text-text-secondary select-none">
+									<Checkbox
+										checked={selectAll}
+										onChange={handleToggleAll}
+									className="m-0 size-[15px] cursor-pointer accent-[var(--color-accent)]" />
+									{t("common.selectAll")}
+								</Label>
+								<div className="flex items-center gap-1">
+									{SOURCES.map((source) => (
+										<Button
+											key={source}
+											variant="outline"
+											size="sm"
+											className={`h-auto rounded-full border border-border-subtle bg-transparent px-3 py-1 text-caption font-medium text-text-tertiary transition-all duration-150 hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]${activeSources.has(source) ? " border-[var(--color-accent)] bg-bg-active font-semibold text-[var(--color-accent)]" : ""}`}
+											onClick={() => toggleSource(source)}
+										>
+											{t(`sessionSource.${source}` as any)}
+										</Button>
+									))}
+								</div>
+							</>
+						)}
 					</div>
-					{selected.size > 0 && (
+					<div className="flex items-center gap-2">
+						{!showArchived && selected.size > 0 && (
+							<Button
+								variant="outline" size="sm" className="h-auto gap-1 border border-border-subtle px-3 py-1 text-caption font-medium text-text-tertiary transition-all duration-150 hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
+								onClick={() => {
+									// 批量归档选中行（与删除同粒度）；运行中会话由主进程拒绝并提示
+									const toArchive = props.sessions.filter((s) => selected.has(s.filePath));
+									if (toArchive.length > 0) props.onArchive(toArchive);
+								}}
+							>
+								{t("sessionManager.archiveSelected", { count: selected.size })}
+							</Button>
+						)}
+						{!showArchived && selected.size > 0 && (
+							<Button
+								variant="outline" size="sm" className="h-auto gap-1 border border-[color-mix(in_srgb,var(--color-danger)_28%,transparent)] px-3 py-1 text-caption font-medium text-[var(--color-danger)] shadow-none transition-all duration-150 hover:border-[var(--color-danger)] hover:bg-[var(--color-danger-soft)]"
+								onClick={handleDeleteSelected}
+							>
+								{t("common.deleteSelected", { count: selected.size })}
+							</Button>
+						)}
 						<Button
-							variant="outline" size="sm" className="h-auto gap-1 border border-[color-mix(in_srgb,var(--color-danger)_28%,transparent)] px-3 py-1 text-caption font-medium text-[var(--color-danger)] shadow-none transition-all duration-150 hover:border-[var(--color-danger)] hover:bg-[var(--color-danger-soft)]"
-							onClick={handleDeleteSelected}
+							variant="outline"
+							size="sm"
+							className={`h-auto gap-1 rounded-full border border-border-subtle bg-transparent px-3 py-1 text-caption font-medium transition-all duration-150 hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]${showArchived ? " border-[var(--color-accent)] bg-bg-active font-semibold text-[var(--color-accent)]" : " text-text-tertiary"}`}
+							onClick={() => {
+								if (showArchived) {
+									setShowArchived(false);
+								} else {
+									// 打开归档视图时懒加载归档列表
+									if (archivedSessions === null) {
+										void props.listArchived().then(setArchivedSessions).catch(() => setArchivedSessions([]));
+									}
+									setShowArchived(true);
+								}
+							}}
 						>
-							{t("common.deleteSelected", { count: selected.size })}
+							<Archive size={13} aria-hidden="true" />
+							{t("sessionManager.archived")}
 						</Button>
-					)}
+					</div>
 				</div>
 
 				<div className="flex-1 overflow-y-auto bg-bg-muted">
-					<Table>
+					{showArchived ? (
+						<Table>
+							<TableHeader>
+								<TableRow className="bg-bg-muted hover:bg-bg-muted">
+									<TableHead className="w-full">{t("sessionManager.session")}</TableHead>
+									<TableHead className="w-40 text-right">{t("sessionManager.actions")}</TableHead>
+								</TableRow>
+							</TableHeader>
+							<TableBody>
+								{archivedSessions === null ? (
+									<TableRow><TableCell colSpan={2} className="py-6 text-center text-caption text-muted-foreground">…</TableCell></TableRow>
+								) : archivedSessions.length === 0 ? (
+									<TableRow><TableCell colSpan={2} className="py-6 text-center text-caption text-muted-foreground">{t("sessionManager.archivedEmpty")}</TableCell></TableRow>
+								) : archivedSessions.map((session) => (
+									<TableRow key={session.filePath} className="bg-bg-panel">
+										<TableCell className="w-full max-w-0">
+											<div className="flex min-w-0 items-center gap-2">
+												<span className="truncate text-control text-text-primary">
+													{session.name || session.preview?.slice(0, 60) || t("common.untitled")}
+												</span>
+												{session.source && session.source !== "pi" && <SessionSourceBadge source={session.source} />}
+											</div>
+										</TableCell>
+										<TableCell className="w-40 text-right">
+											<div className="flex items-center justify-end gap-0.5">
+												<Button
+														variant="ghost" size="sm" className="h-auto gap-[3px] rounded-[4px] px-2 text-caption text-text-tertiary transition-all duration-150 hover:bg-bg-hover hover:text-[var(--color-accent)]"
+														onClick={() => {
+														// 恢复后重新拉取归档列表（主列表由 catalog refresh 自动更新）
+														void props.onUnarchive(session).then(() =>
+															props.listArchived().then(setArchivedSessions).catch(() => setArchivedSessions([]))
+														);
+													}}
+														title={t("sessionManager.restore")}
+													>
+														{t("sessionManager.restore")}
+													</Button>
+											</div>
+										</TableCell>
+									</TableRow>
+								))}
+							</TableBody>
+						</Table>
+					) : (
+						<Table>
 						<TableHeader>
 							<TableRow className="bg-bg-muted hover:bg-bg-muted">
 								<TableHead className="w-10" />
@@ -179,7 +269,7 @@ export function SessionManagerModal(props: {
 											</div>
 										</TableCell>
 										<TableCell className="w-40 text-right">
-											<div className="flex items-center justify-end gap-0.5 opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
+											<div className="flex items-center justify-end gap-0.5">
 												<Button
 													variant="ghost" size="sm" className="h-auto gap-[3px] rounded-[4px] px-2 text-caption text-text-tertiary transition-all duration-150 hover:bg-bg-hover hover:text-[var(--color-accent)]"
 													onClick={() => props.onRename(session)}
@@ -195,6 +285,14 @@ export function SessionManagerModal(props: {
 													{t("menu.exportHtml")}
 												</Button>
 												<Button
+													variant="ghost" size="sm" className="h-auto gap-[3px] rounded-[4px] px-2 text-caption text-text-tertiary transition-all duration-150 hover:bg-bg-hover hover:text-[var(--color-accent)]"
+													onClick={() => props.onArchive([session])}
+													title={t("sessionManager.archiveAction")}
+												>
+													<Archive size={12} aria-hidden="true" />
+													{t("sessionManager.archiveAction")}
+												</Button>
+												<Button
 													variant="ghost" size="sm" className="h-auto gap-[3px] rounded-[4px] px-2 text-caption text-text-tertiary transition-all duration-150 hover:bg-[var(--color-danger-soft)] hover:text-[var(--color-danger)]"
 													onClick={() => props.onDelete([session])}
 													title={t("common.delete")}
@@ -207,7 +305,8 @@ export function SessionManagerModal(props: {
 								);
 							})}
 						</TableBody>
-					</Table>
+						</Table>
+					)}
 				</div>
 			</div>
 			</DialogContent>

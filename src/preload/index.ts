@@ -86,6 +86,7 @@ import type {
 	TerminalDataEvent,
 	TerminalExitEvent,
 	TerminalTab,
+	TerminalTarget,
 } from "../shared/types";
 
 /**
@@ -373,6 +374,15 @@ const api = {
 			) as Promise<SessionRecord>,
 		deleteRecord: (sessionId: string) =>
 			ipcRenderer.invoke(ipcChannels.sessionsCatalogDelete, sessionId) as Promise<boolean>,
+		/** 归档会话（移入 .pideck-archive/ 并从目录移除）；运行中的会话会抛错 */
+		archiveRecord: (sessionId: string) =>
+			ipcRenderer.invoke(ipcChannels.sessionsCatalogArchive, sessionId) as Promise<boolean>,
+		/** 恢复归档会话（移回原路径并重新入目录） */
+		unarchiveRecord: (archivedPath: string) =>
+			ipcRenderer.invoke(ipcChannels.sessionsCatalogUnarchive, archivedPath) as Promise<boolean>,
+		/** 列出已归档会话摘要（恢复 UI 用） */
+		listArchived: () =>
+			ipcRenderer.invoke(ipcChannels.sessionsCatalogListArchived) as Promise<SessionSummary[]>,
 		readRecordMessages: (sessionId: string) =>
 			ipcRenderer.invoke(ipcChannels.sessionsCatalogReadMessages, sessionId) as Promise<
 				import("../shared/types").ChatMessage[]
@@ -1076,15 +1086,15 @@ const api = {
 		contextMenu: () => ipcRenderer.invoke(ipcChannels.petContextMenu) as Promise<void>,
 	},
 	terminal: {
-		list: (target: SessionRuntimeTarget) =>
+		list: (target: TerminalTarget) =>
 			ipcRenderer.invoke(ipcChannels.terminalList, target) as Promise<
 				TerminalTab[]
 			>,
-		ensure: (target: SessionRuntimeTarget) =>
+		ensure: (target: TerminalTarget) =>
 			ipcRenderer.invoke(ipcChannels.terminalEnsure, target) as Promise<
 				TerminalTab[]
 			>,
-		create: (target: SessionRuntimeTarget) =>
+		create: (target: TerminalTarget) =>
 			ipcRenderer.invoke(ipcChannels.terminalCreate, target) as Promise<
 				TerminalTab
 			>,

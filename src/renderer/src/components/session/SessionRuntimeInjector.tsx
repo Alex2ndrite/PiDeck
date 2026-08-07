@@ -1,6 +1,6 @@
 import React from "react";
 import { useAtomValue, useSetAtom } from "jotai";
-import type { AgentTab, AgentUiResponse, ChatMessage, GitBranchInfo } from "../../../../shared/types";
+import type { AgentTab, AgentUiResponse, ChatMessage, GitBranchInfo, TerminalTarget } from "../../../../shared/types";
 import type { ImageContent } from "../../../../shared/types";
 import { settingsOpenAtom } from "../../atoms";
 import {
@@ -90,9 +90,13 @@ export interface SessionRuntimeInjectorProps {
   terminalDockVisible: boolean;
   terminalCollapsed: boolean;
   availableTerminalHeight: number;
-  setTerminalOpenForAgent: (agentId: string, open: boolean) => void;
-  setTerminalCollapsedForAgent: (agentId: string, collapsed: boolean) => void;
-  setTerminalHeightByAgent: (updater: (cur: Record<string, number>) => Record<string, number>) => void;
+  /** 终端归属键（agent:<id> / project:<id>）：dock 实例与状态回写按它隔离 */
+  terminalOwnerKey?: string;
+  /** agent 或 project 终端目标（App 层按 owner 解析） */
+  terminalTarget?: TerminalTarget;
+  setTerminalOpenForOwner: (open: boolean) => void;
+  setTerminalCollapsedForOwner: (collapsed: boolean) => void;
+  setTerminalHeightByOwner: (updater: (cur: Record<string, number>) => Record<string, number>) => void;
 
   // Overlays
   configOpen: boolean;
@@ -165,9 +169,11 @@ export const SessionRuntimeInjector = React.memo(function SessionRuntimeInjector
     terminalDockVisible,
     terminalCollapsed,
     availableTerminalHeight,
-    setTerminalOpenForAgent,
-    setTerminalCollapsedForAgent,
-    setTerminalHeightByAgent,
+    terminalOwnerKey,
+    terminalTarget,
+    setTerminalOpenForOwner,
+    setTerminalCollapsedForOwner,
+    setTerminalHeightByOwner,
     configOpen,
     environmentDialog,
     showNotice,
@@ -244,7 +250,6 @@ export const SessionRuntimeInjector = React.memo(function SessionRuntimeInjector
       activeAgentId={runtime.activeAgentId ?? undefined}
       activeAgent={activeAgent}
       activeRuntimeState={runtime.activeRuntimeState}
-      runtimeTarget={runtime.runtimeTarget}
       hasActiveConversation={runtime.hasActiveConversation}
       hasProject={runtime.sessionHasProject}
       chatHeaderRef={chatHeaderRef}
@@ -328,9 +333,11 @@ export const SessionRuntimeInjector = React.memo(function SessionRuntimeInjector
       terminalDockClosing={terminalDockClosing}
       terminalCollapsed={terminalCollapsed}
       availableTerminalHeight={availableTerminalHeight ?? 120}
-      setTerminalOpenForAgent={setTerminalOpenForAgent}
-      setTerminalCollapsedForAgent={setTerminalCollapsedForAgent}
-      setTerminalHeightByAgent={setTerminalHeightByAgent}
+      terminalOwnerKey={terminalOwnerKey}
+      terminalTarget={terminalTarget}
+      setTerminalOpenForOwner={setTerminalOpenForOwner}
+      setTerminalCollapsedForOwner={setTerminalCollapsedForOwner}
+      setTerminalHeightByOwner={setTerminalHeightByOwner}
       settingsOpen={settingsOpen}
       configOpen={configOpen}
       environmentDialog={environmentDialog}

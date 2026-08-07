@@ -1,5 +1,5 @@
 import type { PiDesktopApi } from "../../../../preload";
-import type { SessionRuntimeTarget } from "../../../../shared/types";
+import type { TerminalTarget } from "../../../../shared/types";
 import { TerminalDock } from "../terminal/TerminalDock";
 
 export const SESSION_RUNTIME_DOCK_MOTION_MS = 180;
@@ -37,7 +37,8 @@ export function disposeSessionRuntimeDock(): SessionRuntimeDockMotionState {
 }
 
 export type SessionRuntimeDockProps = {
-  target?: SessionRuntimeTarget;
+  /** agent 或 project 终端目标；未解析出目标（无 owner）时不渲染 */
+  target?: TerminalTarget;
   mounted: boolean;
   open: boolean;
   closing: boolean;
@@ -51,11 +52,11 @@ export type SessionRuntimeDockProps = {
 
 // Motion state is owned by useTerminalDock. This leaf only forwards the already
 // computed mounted/open/closing signals to the expensive terminal surface.
+// key 由父级按 owner 传入（agent:<id> / project:<id>），切换 owner 时整体重建实例。
 export function SessionRuntimeDock(props: SessionRuntimeDockProps) {
   if (!props.mounted || !props.target) return null;
   return (
     <TerminalDock
-      key={`${props.target.agentId}:${props.target.runtimeGeneration}`}
       target={props.target}
       open={props.open}
       closing={props.closing}

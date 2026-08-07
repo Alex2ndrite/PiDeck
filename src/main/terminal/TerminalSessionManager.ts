@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { execSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { ipcChannels } from "../../shared/ipc";
-import type { TerminalShell, TerminalTab } from "../../shared/types";
+import type { TerminalShell, TerminalTab, TerminalTarget } from "../../shared/types";
 
 // 简单日志，不依赖 appLogger 以避免循环引用
 const log = (msg: string) => {
@@ -23,6 +23,25 @@ type TerminalShellCandidate = {
 	command: string;
 	args: string[];
 };
+
+/**
+ * 终端归属键：agent 用 `agent:<id>`，无 agent 的项目/历史会话终端用 `cwd:<normalized>`。
+ * 主进程的 PTY 实例、回放 buffer 都按归属键隔离，保证项目间/agent 间终端绝不串台。
+ */
+export function terminalOwnerKeyFor(target: TerminalTarget): string {
+	if (target.kind === "agent") return `agent:${target.agentId}`;
+	// Windows 路径大小写不敏感且分隔符可混用：归一化（统一分隔符 + 去首尾斜杠 +
+	// 小写）后做隔离键，避免同一目录因写法不同被当成两个终端桶。
+	const normalized = target.cwd
+		.replace(/[\\/]+/g, "/")
+		.replace(/^\/+|\/+$/g, "")
+		.toLowerCase();
+	return `cwd:${normalized}`;
+}
+
+export function isAgentOwnerKey(ownerKey: string): boolean {
+	return ownerKey.startsWith("agent:");
+}
 
 export function getTerminalShellCandidates(
 	platform: NodeJS.Platform,
@@ -109,8 +128,19 @@ export class TerminalSessionManager {
 		private readonly emit: Emit,
 	) {}
 
-	list(agentId: string) {
-		return [...(this.runtimes.get(agentId)?.values() ?? [])].map(
+	/** 目标所属终端桶；project 目标不存在运行中的 agent，不查 runtime */
+	private ownerKey(target: TerminalTarget): string {
+		return terminalOwnerKeyFor(target);
+	}
+
+	/** 目标的工作目录：agent 用 runtime cwd，project 直接用目标携带的 cwd */
+	private cwdFor(target: TerminalTarget): string {
+		if (target.kind === "project") return target.cwd;
+		return this.getCwd(target.agentId);
+	}
+
+	list(target: TerminalTarget) {
+		return [...(this.runtimes.get(this.ownerKey(target))?.values() ?? [])].map(
 			(runtime) => this.snapshot(runtime),
 		);
 	}
@@ -127,23 +157,25 @@ export class TerminalSessionManager {
 		}));
 	}
 
-	ensure(agentId: string, cwd?: string) {
-		const existing = this.list(agentId);
+	ensure(target: TerminalTarget) {
+		const existing = this.list(target);
 		if (existing.length > 0) return existing;
 		// Renderer 在 StrictMode 下会重复触发 mount effect；这里提供原子兜底，
 		// 避免 list -> create 两步之间的竞态导致“未点击却多出两个终端”。
-		return [this.create(agentId, undefined, cwd)];
+		return [this.create(target)];
 	}
 
-	create(agentId: string, shell?: TerminalShell, cwd?: string): TerminalTab {
-		const resolvedCwd = cwd ?? this.getCwd(agentId);
-		const runtimes = this.ensureAgent(agentId);
+	create(target: TerminalTarget, shell?: TerminalShell): TerminalTab {
+		const ownerKey = this.ownerKey(target);
+		const resolvedCwd = this.cwdFor(target);
+		const runtimes = this.ensureOwner(ownerKey);
 		const index = runtimes.size + 1;
 		const id = randomUUID();
 		const spawned = this.spawnShell(resolvedCwd, shell);
 		const tab: TerminalTab = {
 			id,
-			agentId,
+			agentId: target.kind === "agent" ? target.agentId : "",
+			ownerKey,
 			title: `${this.displayShell(spawned.shell)} ${index}`,
 			cwd: resolvedCwd,
 			shell: spawned.shell,
@@ -188,29 +220,39 @@ export class TerminalSessionManager {
 		if (!found) return;
 		found.runtime.pty.kill();
 		found.tabs.delete(tabId);
-		if (found.tabs.size === 0) this.runtimes.delete(found.runtime.tab.agentId);
+		if (found.tabs.size === 0) this.runtimes.delete(found.runtime.tab.ownerKey);
 	}
 
+	/** 关闭某个 agent 的全部终端（agent 退出/重启时调用） */
 	closeAgent(agentId: string) {
-		const tabs = this.runtimes.get(agentId);
+		const tabs = this.runtimes.get(`agent:${agentId}`);
 		if (!tabs) return;
 		for (const runtime of tabs.values()) {
 			runtime.pty.kill();
 		}
-		this.runtimes.delete(agentId);
+		this.runtimes.delete(`agent:${agentId}`);
 	}
 
 	closeAll() {
-		for (const agentId of this.runtimes.keys()) {
-			this.closeAgent(agentId);
+		for (const ownerKey of this.runtimes.keys()) {
+			this.closeOwner(ownerKey);
 		}
 	}
 
-	private ensureAgent(agentId: string) {
-		const existing = this.runtimes.get(agentId);
+	private closeOwner(ownerKey: string) {
+		const tabs = this.runtimes.get(ownerKey);
+		if (!tabs) return;
+		for (const runtime of tabs.values()) {
+			runtime.pty.kill();
+		}
+		this.runtimes.delete(ownerKey);
+	}
+
+	private ensureOwner(ownerKey: string) {
+		const existing = this.runtimes.get(ownerKey);
 		if (existing) return existing;
 		const next = new Map<string, TerminalRuntime>();
-		this.runtimes.set(agentId, next);
+		this.runtimes.set(ownerKey, next);
 		return next;
 	}
 

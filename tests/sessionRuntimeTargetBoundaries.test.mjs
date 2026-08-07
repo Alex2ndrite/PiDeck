@@ -27,24 +27,26 @@ const sessionReferenceModal = readFileSync(
 	"utf8",
 );
 
-test("terminal creation and listing cross IPC with a generation-validated Session target", () => {
-	assert.match(preload, /terminal: \{[\s\S]*list: \(target: SessionRuntimeTarget\)/);
-	assert.match(preload, /ensure: \(target: SessionRuntimeTarget\)/);
-	assert.match(preload, /create: \(target: SessionRuntimeTarget\)/);
-	assert.match(terminalDock, /target: SessionRuntimeTarget/);
+test("terminal creation and listing cross IPC with an owner-validated target", () => {
+	// 终端目标区分 agent（校验 runtime 绑定）与 project（引导页/未激活 agent/历史会话，
+	// 按 cwd 隔离）；preload/Dock/IPC 全链路统一 TerminalTarget。
+	assert.match(preload, /terminal: \{[\s\S]*list: \(target: TerminalTarget\)/);
+	assert.match(preload, /ensure: \(target: TerminalTarget\)/);
+	assert.match(preload, /create: \(target: TerminalTarget\)/);
+	assert.match(terminalDock, /target: TerminalTarget/);
 	assert.match(terminalDock, /props\.terminal\.ensure\(props\.target\)/);
 	assert.match(terminalDock, /props\.terminal\.create\(props\.target\)/);
 	assert.match(
 		mainIpcSource,
-		/const requireRuntimeTarget = \(target: SessionRuntimeTarget\)[\s\S]*validateTarget\(target\)/,
+		/const requireTerminalTarget = \(target: TerminalTarget\)[\s\S]*kind === "project"[\s\S]*validateTarget\(target\)/,
 	);
 	assert.match(
 		mainIpcSource,
-		/terminalList[\s\S]*requireRuntimeTarget\(target\)[\s\S]*terminalManager\.list\(target\.agentId\)/,
+		/terminalList[\s\S]*requireTerminalTarget\(target\)[\s\S]*terminalManager\.list\(target\)/,
 	);
 	assert.match(
 		mainIpcSource,
-		/terminalCreate[\s\S]*requireRuntimeTarget\(target\)[\s\S]*terminalManager\.create\(target\.agentId\)/,
+		/terminalCreate[\s\S]*requireTerminalTarget\(target\)[\s\S]*terminalManager\.create\(target\)/,
 	);
 	assert.doesNotMatch(main, /ipcMain\.handle\(ipcChannels\.terminal/);
 });
