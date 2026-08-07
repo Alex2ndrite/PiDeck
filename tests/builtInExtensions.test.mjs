@@ -73,6 +73,14 @@ test("listActiveBuiltInExtensionPaths respects removedBuiltIn and missing files"
 	}
 });
 
+test("built-in extension removal has a registered IPC handler", () => {
+	const storeIpc = readFileSync("src/main/ipc/storeIpc.ts", "utf8");
+	const extensionsTab = readFileSync("src/renderer/src/config/ExtensionsTab.tsx", "utf8");
+	assert.match(storeIpc, /ipcChannels\.extensionsRemoveBuiltIn[\s\S]*extensionManager\.removeBuiltIn\(source\)/);
+	assert.doesNotMatch(extensionsTab, /extension\.enabled === false \? "disabled"/);
+	assert.doesNotMatch(extensionsTab, /t\("common\.enabled"\)|t\("common\.disabled"\)/);
+});
+
 test("AgentManager no longer deploys built-ins via ensurePiDeckExtension", () => {
 	const index = readFileSync("src/main/index.ts", "utf8");
 	const storeIpc = readFileSync("src/main/ipc/storeIpc.ts", "utf8");

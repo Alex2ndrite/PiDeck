@@ -424,9 +424,6 @@ function ExtensionCard(props: {
 							{extension.builtIn && (
 								<span className="skill-state enabled">{t("common.builtIn")}</span>
 							)}
-							<span className={`skill-state ${extension.enabled === false ? "disabled" : "enabled"}`}>
-								{extension.enabled !== false ? t("common.enabled") : t("common.disabled")}
-							</span>
 							<span className="skill-state enabled">
 								{extension.scope === "project"
 									? t("common.project")
