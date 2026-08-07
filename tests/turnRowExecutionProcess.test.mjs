@@ -95,8 +95,8 @@ test("TurnRow uses custom memo compare so unchanged runs skip re-render", () => 
   assert.match(turnRowSource, /turnRowPropsEqual\(prev: TurnRowProps, next: TurnRowProps\)/);
   assert.match(turnRowSource, /memo\(\s*function TurnRow\(props: TurnRowProps\)/);
   assert.match(turnRowSource, /turnRowPropsEqual,\s*\);/);
-  // 标量 props 参与比较，回调忽略（行为稳定）
-  assert.match(turnRowSource, /prev\.isStreaming === next\.isStreaming/);
+  // 流式 run 总是重渲染（气泡随独立通道更新）；历史 run 走 memo 跳过
+  assert.match(turnRowSource, /if \(prev\.isStreaming \|\| next\.isStreaming\) return false;/);
   assert.match(turnRowSource, /prev\.streamingThinking === next\.streamingThinking/);
   // 深度比较入口来自 AppUtils
   assert.match(

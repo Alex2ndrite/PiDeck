@@ -63,10 +63,11 @@ test("stage2: TurnRow renders streaming bubble for last interim when streaming",
   );
   assert.match(turnRow, /sessionId\?: string/);
   assert.match(turnRow, /lastInterimId/);
-  assert.match(turnRow, /props\.isStreaming &&\s*\n\s*item\.id === lastInterimId/);
+  assert.match(turnRow, /sessionStreamingText\.trim\(\) &&/);
   assert.match(turnRow, /<StreamingAnswerBubble/);
   assert.match(turnRow, /import \{ StreamingAnswerBubble \}/);
-  assert.match(turnRow, /prev\.sessionId === next\.sessionId/);
+  // 流式 run 必须重渲染（气泡随独立通道更新）；历史 run 走 memo 跳过
+  assert.match(turnRow, /if \(prev\.isStreaming \|\| next\.isStreaming\) return false;/);
 
   const bubble = readFileSync(
     "src/renderer/src/components/session/turn/StreamingAnswerBubble.tsx",

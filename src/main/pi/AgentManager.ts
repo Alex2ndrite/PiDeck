@@ -3148,6 +3148,13 @@ export class AgentManager {
 			const nextText = this.extractStreamingText(agentId, partialMessage) ?? prevText + delta;
 			this.streamingText.set(agentId, nextText);
 			this.textEmitter.push(agentId, stripAnsi(nextText));
+			// 思考切正文：清空流式思考（正文已由气泡接管，思考卡由消息中的 thinking 承担）
+			if (this.streamingThinking.has(agentId)) {
+				this.streamingThinking.delete(agentId);
+				this.emitThinking(agentId, "");
+			}
+			// messages 数组仍随 delta 增长（保留既有 upsert + 50ms flush，避免双源复杂化）；
+			// 渲染层气泡优先消费独立通道，messages 里的增长文本不再主导逐字展示。
 			this.upsertAssistantMessage(
 				agentId,
 				partialMessage,
@@ -3902,9 +3909,12 @@ export class AgentManager {
 	}
 
 	/** 推送独立流式正文通道（agents:text-stream），渲染层写入 streamingTextByIdAtom。
-	 *  done=true 表示本轮回答结束（message_end），渲染层据此把 streaming 置 false。 */
+	 *  done=true 表示本轮回答结束（message_end），渲染层据此把 streaming 置 false。
+	 *  顺带同步 isStreaming 补丁：text_delta 走独立通道后不再触发 flushMessageEmit，
+	 *  若仍只在 flush 里推 patch，渲染层拿不到 isStreaming=true，气泡不会渲染。 */
 	private emitTextStreamNow(agentId: string, text: string, done = false) {
 		this.emit(ipcChannels.agentsTextStream, { agentId, text, done });
+		this.emitStreamingStatePatch(agentId);
 	}
 
 	private emitState() {

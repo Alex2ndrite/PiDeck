@@ -25,6 +25,7 @@ import {
   sessionRecordByIdAtomFamily,
   sessionRuntimeBySessionIdAtomFamily,
   sessionSendStateByIdAtom,
+  streamingTextByIdAtom,
 } from "../../atoms";
 import {
   canLoadSessionTimelineMore,
@@ -250,6 +251,11 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
         activeRuntimeState?.isStreaming) &&
       activeMessages.at(-1)?.role !== "assistant",
   );
+  // 阶段2b：独立流式正文通道（streamingTextByIdAtom）——messages 数组不再承载
+  // 流式正文，这里直接订阅独立通道判断当前会话是否在流式，替代 streamingMessageId
+  //（它依赖 messages 数组找最后一条 assistant，阶段2b 后找不到了）。
+  const streamingTextMap = useAtomValue(streamingTextByIdAtom);
+  const streamingContent = streamingTextMap[sessionId]?.content ?? "";
   const streamingMessageId = useMemo(() => {
     if (
       !hasActiveConversation ||
@@ -458,14 +464,13 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
           <div className="message-list">
             {reconciledRuns.map((item, index) => {
               if (item.kind === "agent-run") {
-                const isRunStreaming = Boolean(
-                  streamingMessageId &&
-                    item.items.some(
-                      (runItem) =>
-                        runItem.kind === "message" &&
-                        runItem.message.id === streamingMessageId,
-                    ),
-                );
+                // 阶段2b：流式判断基于独立通道（streamingContent 非空），不再依赖
+                // streamingMessageId（阶段2b 后 messages 数组不承载流式文本，找不到消息）。
+                // 只对最后一个 run 标记流式（历史 run 保持 isStreaming=false 走 memo 跳过）。
+                const isRunStreaming =
+                  Boolean(streamingContent.trim()) &&
+                  index === reconciledRuns.length - 1 &&
+                  item.kind === "agent-run";
                 return (
                   <TurnRow
                     key={item.id}

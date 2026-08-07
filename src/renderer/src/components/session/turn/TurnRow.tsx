@@ -1,6 +1,8 @@
 import { Fragment, memo, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useAtomValue } from "jotai";
 import { ChevronUp, Share, SquarePen, Trash } from "lucide-react";
 import type { ImageContent } from "../../../../../shared/types";
+import { streamingTextByIdAtom } from "../../../atoms/session-atoms";
 import { t } from "../../../i18n";
 import { Button } from "../../ui-shadcn/button";
 import { Collapsible, CollapsibleContent } from "../../ui-shadcn/collapsible";
@@ -66,6 +68,11 @@ export const TurnRow = memo(
 	const [editing, setEditing] = useState(false);
 	const [editText, setEditText] = useState("");
 	const editAreaRef = useRef<HTMLDivElement | null>(null);
+	// 独立流式正文通道（阶段2）：当前 session 是否有流式正文在推送
+	const streamingTextMap = useAtomValue(streamingTextByIdAtom);
+	const sessionStreamingText = props.sessionId
+		? streamingTextMap[props.sessionId]?.content ?? ""
+		: "";
 	// 激活编辑时自动滚动到编辑区（避免 textarea 超出可视区域）
 	useEffect(() => {
 		if (editing && editAreaRef.current) {
@@ -244,8 +251,10 @@ export const TurnRow = memo(
 									// 阶段2：流式 run 的最后一条中间回答走独立流式正文通道（气泡），
 									// 不再渲染 messages 数组里随 delta 增长的最后一条 assistant 文本，
 									// 避免 streamdown 全量解析增长文本（配合 16ms 细粒度节流提升逐字感）。
+									// 判断依据是独立通道是否有内容（sessionStreamingText），而非 props.isStreaming——
+									// 阶段2b 后 messages 数组不再承载流式文本，streamingMessageId 找不到消息。
 									if (
-										props.isStreaming &&
+										sessionStreamingText.trim() &&
 										item.id === lastInterimId &&
 										props.sessionId
 									) {
@@ -372,12 +381,13 @@ turnRowPropsEqual,
  *   onEnterMultiSelect）：行为稳定（读 ref/setState），引用变化不影响渲染结果，忽略（同 FinalAnswer 惯例）。
  */
 function turnRowPropsEqual(prev: TurnRowProps, next: TurnRowProps): boolean {
+	// 流式 run：独立通道内容持续更新，必须重渲染（气泡随 streamingContent 变化）
+	if (prev.isStreaming || next.isStreaming) return false;
 	if (!sameAgentRunForRender(prev.run, next.run)) return false;
 	return (
 		prev.sessionId === next.sessionId &&
 		prev.fresh === next.fresh &&
 		prev.showThinking === next.showThinking &&
-		prev.isStreaming === next.isStreaming &&
 		prev.streamingThinking === next.streamingThinking &&
 		prev.agentRunning === next.agentRunning
 	);
