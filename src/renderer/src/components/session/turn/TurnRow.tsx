@@ -13,8 +13,8 @@ import type {
 	ThinkingGroupItem,
 } from "../timeline/types";
 import { FinalAnswer } from "./FinalAnswer";
+import { InterimAnswer } from "./InterimAnswer";
 import { ProcessSummaryToggle } from "./ProcessSummaryToggle";
-import { AnswerText } from "./AnswerText";
 import { ThinkingStep } from "./ThinkingStep";
 import { ToolStep } from "./ToolStep";
 import { useTurnExecution } from "./useTurnExecution";
@@ -211,15 +211,12 @@ export const TurnRow = memo(function TurnRow(props: TurnRowProps) {
 						}
 					} else if (item.kind === "interim-answer") {
 						itemKey = item.id;
-						// 中间回答：执行过程条目样式（视觉归属折叠区），外面只留给最终回答
+						// 中间回答：与思考相同的 MarkdownStream 渲染 + execution-interim 过程样式
 						content = (
-							<AnswerText
-								message={item.message}
-								images={allImages}
+							<InterimAnswer
+								text={item.message.text}
 								hidden={!stepsVisible}
 								isStreaming={props.isStreaming ?? false}
-								className="execution-interim"
-								onPreviewImage={props.onPreviewImage}
 								onOpenExternal={props.onOpenExternal}
 								onOpenFile={props.onOpenFile}
 							/>

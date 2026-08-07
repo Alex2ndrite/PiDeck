@@ -6,5 +6,5 @@ export { useTurnExecution } from "./useTurnExecution";
 export { ProcessSummaryToggle } from "./ProcessSummaryToggle";
 export { ThinkingStep } from "./ThinkingStep";
 export { ToolStep } from "./ToolStep";
-export { AnswerText } from "./AnswerText";
 export { FinalAnswer } from "./FinalAnswer";
+export { InterimAnswer } from "./InterimAnswer";
