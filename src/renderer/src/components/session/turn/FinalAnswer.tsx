@@ -13,6 +13,8 @@ export const FinalAnswer = memo(function FinalAnswer(props: {
 	message: ChatMessage;
 	images?: ImageContent[];
 	isStreaming?: boolean;
+	/** live→settled 交接淡入 */
+	settle?: boolean;
 	/** 编辑态 */
 	editing: boolean;
 	editText: string;
@@ -76,6 +78,7 @@ export const FinalAnswer = memo(function FinalAnswer(props: {
 			onOpenExternal={props.onOpenExternal}
 			onOpenFile={props.onOpenFile}
 			isStreaming={props.isStreaming ?? false}
+			settle={props.settle}
 		/>
 	);
 });

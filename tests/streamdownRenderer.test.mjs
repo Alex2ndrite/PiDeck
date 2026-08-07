@@ -5,8 +5,8 @@ import test from "node:test";
 // UI 2.0（#115 U2）：Streamdown 为唯一 markdown 引擎，内置能力交给官方插件。
 // 2026-08 曾因内存移除 @streamdown/code（shiki 双主题 + 全语言 grammar 常驻），
 // 2026-08 恢复：@streamdown/code 1.x 为 JS 引擎 + 按语言懒加载（不复现全语言常驻），
-// 代码块折叠由 collapseCodeBlocks rehype 插件提供（>20 行默认收折）。
-// 关键点：mermaid/math 由 @streamdown/* 插件接管；a 仍走 MarkdownLink
+// 代码块不再包 details 折叠（Chrome 中文会露出默认「详情」disclosure）。
+// 锚点：mermaid/math 由 @streamdown/* 插件接管；a 仍走 MarkdownLink
 // （file:// 打开 + 系统浏览器）；Tailwind 已扫描 streamdown 类名保证控件样式完整。
 const stream = readFileSync("src/renderer/src/components/session/MarkdownStream.tsx", "utf8");
 const surface = readFileSync("src/renderer/src/components/session/SurfaceComponents.tsx", "utf8");
@@ -15,6 +15,7 @@ const linkCore = readFileSync("src/renderer/src/components/session/MarkdownLinkC
 const tailwind = readFileSync("src/renderer/src/styles/tailwind.css", "utf8");
 const main = readFileSync("src/renderer/src/main.tsx", "utf8");
 const packageJson = readFileSync("package.json", "utf8");
+const surfacesCss = readFileSync("src/renderer/src/styles/surfaces.css", "utf8");
 
 test("streamdown pipeline delegates to official plugins (code/mermaid/math) and keeps link override", () => {
   // 官方插件接管：代码高亮、mermaid、数学
@@ -25,9 +26,9 @@ test("streamdown pipeline delegates to official plugins (code/mermaid/math) and 
   assert.match(stream, /\{ math \}/);
   // 非 light 分支注册 code 插件；light（更新日志等轻场景）保持无高亮
   assert.match(stream, /\bcode,\n/);
-  // 代码折叠：collapseCodeBlocks rehype 插件注册，默认全部展开（手动折叠）
-  assert.match(stream, /collapseCodeBlocks/);
-  assert.match(stream, /foldThreshold: undefined/);
+  // 不再用 details 折叠代码块（会露出浏览器默认「详情」）；行号沿用 streamdown 默认开启
+  assert.doesNotMatch(stream, /collapseCodeBlocks/);
+  assert.doesNotMatch(stream, /lineNumbers=\{false\}/);
   // 链接覆盖保留（file:// 打开 + 外链拦截是项目核心能力）
   assert.match(stream, /a: \(linkProps\) =>/);
   assert.match(stream, /MarkdownLink/);
@@ -40,6 +41,20 @@ test("streamdown pipeline delegates to official plugins (code/mermaid/math) and 
   assert.doesNotMatch(stream, /mode=\{props\.isStreaming \? "streaming" : "static"\}/);
   // mermaid 主题跟随明暗
   assert.match(stream, /theme: isDark \? "dark" : "default"/);
+});
+
+test("streamdown code/table chrome uses faded action controls", () => {
+  // 右上角复制/下载：去掉白底胶囊，悬停显影（对齐 .code-copy）
+  assert.match(surfacesCss, /\[data-streamdown="code-block-actions"\]/);
+  assert.match(surfacesCss, /opacity:\s*0\.4/);
+  assert.match(surfacesCss, /\[data-streamdown="code-block"\]:hover \[data-streamdown="code-block-actions"\]/);
+  // 复制在左、下载在右（覆盖 streamdown 默认下载→复制）
+  assert.match(surfacesCss, /\[data-streamdown="code-block-copy-button"\][\s\S]*?order:\s*1/);
+  assert.match(surfacesCss, /\[data-streamdown="code-block-download-button"\][\s\S]*?order:\s*2/);
+  // 表格工具条同款淡化
+  assert.match(surfacesCss, /\[data-streamdown="table-wrapper"\]:hover > div:first-child/);
+  // 旧 details 折叠外壳已移除
+  assert.doesNotMatch(surfacesCss, /\.sd-code-collapse\b/);
 });
 
 test("Tailwind scans streamdown + plugin classes; styles.css imported (table/mermaid control styling)", () => {

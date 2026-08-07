@@ -596,13 +596,18 @@ export const AssistantText = memo(
 		/** 当前消息是否正在流式追加。为 true 时走轻量渲染路径，跳过 KaTeX 数学解析与
 		 *  mermaid 图渲染，避免每个 token 都对不断增长的全量正文调用重型插件导致主线程卡死。 */
 		isStreaming?: boolean;
+		/** live→settled 交接时播放一次淡入 */
+		settle?: boolean;
 	}) {
 		// 清理 ANSI 转义码与 <thinking> 标签，thinking 由调用方通过 ThinkingBlock 渲染
 		const cleanText = stripThinkingTags(stripAnsi(props.text));
 		// 统一 Streamdown 引擎（迁移后唯一 markdown 管线）：流式由引擎按 block memo、
 		// 半截 markdown 由 remend 容错补全，不再需要旧管线的流式/静态双路径切换。
 		return (
-			<div className="assistant-text markdown-body">
+			<div
+				className="assistant-text markdown-body"
+				data-settle={props.settle ? "1" : undefined}
+			>
 				{props.images && props.images.length > 0 && (
 					<div className="message-images">
 						{props.images.map((img, index) => (
@@ -631,6 +636,7 @@ export const AssistantText = memo(
 	(prev, next) =>
 		prev.text === next.text &&
 		prev.isStreaming === next.isStreaming &&
+		prev.settle === next.settle &&
 		prev.images === next.images,
 );
 

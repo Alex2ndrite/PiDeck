@@ -6,22 +6,19 @@ import { math } from "@streamdown/math";
 import { MarkdownLink, remarkLinkifyPaths } from "./MarkdownLink";
 import { markdownUrlTransform } from "./MarkdownLinkCore";
 import { MathBlockParagraph } from "./MarkdownComponents";
-import { collapseCodeBlocks } from "./collapseCodeBlocks";
 import { useSmoothStream } from "../../utils/useSmoothStream";
 
 /**
  * Streamdown 渲染管线（唯一 markdown 引擎）。
  *
  * 内置能力（由 streamdown 官方插件接管，不再自研）：
- * - 代码高亮：@streamdown/code（shiki 3.x JS 引擎 + 按语言懒加载，行号/复制/下载由
- *   streamdown 内置外壳提供；2026-08 曾因全语言常驻移除，恢复时按 memory-profile 复测）
+ * - 代码高亮：@streamdown/code（shiki 3.x JS 引擎 + 按语言懒加载；行号/复制/下载由
+ *   streamdown 内置外壳提供，观感由 surfaces.css 淡化对齐 .code-copy；
+ *   2026-08 曾因全语言常驻移除，恢复时按 memory-profile 复测）
  * - 数学公式：@streamdown/math（KaTeX，$...$/$$...$$）
  * - mermaid 图表：@streamdown/mermaid（```mermaid 代码块 → 交互式 SVG + 全屏/缩放/下载控件）
  * - 表格：GFM + 内建复制/下载（CSV/TSV/Markdown）控件
  * - HTML 标签：默认 sanitize（未知标签剥属性保留文本）
- *
- * 代码折叠：collapseCodeBlocks rehype 插件把块级代码包进 <details> 折叠容器，默认全部展开，
- * 用户可点击 summary 手动折叠；mermaid 跳过。纯 rehype 变换，不碰组件槽。
  *
  * 有意保留的项目能力（streamdown 无对应内置或桌面语义不同）：
  * - a 仍走 MarkdownLink：file:// 本地路径可点击打开、外链经 onOpenExternal
@@ -58,13 +55,13 @@ export const MarkdownStream = memo(function MarkdownStream(props: {
 		minDelay: 16,
 	});
 	const displayText = props.isStreaming ? displayedContent : props.text;
-	// 流式期间走轻量渲染：跳过代码高亮/mermaid/数学/折叠等重插件，只跑 marked 核心解析，
+	// 流式期间走轻量渲染：跳过代码高亮/mermaid/数学等重插件，只跑 marked 核心解析，
 	// 否则 30fps 逐字渲染会让插件管线（每帧全量树遍历）占满主线程，React concurrent
 	// 把多帧 setState 合并提交 → DOM 一帧蹦多字（学 Proma：流式期间 react-markdown 轻渲染）。
-	// 流结束 isStreaming 变 false 后自动切回全量（含高亮/mermaid/表格/折叠）。
+	// 流结束 isStreaming 变 false 后自动切回全量（含高亮/mermaid/表格）。
 	const effectiveLight = props.light || Boolean(props.isStreaming);
 	const isStreamingNow = Boolean(props.isStreaming);
-	// 流式中精简插件：gfm/codeMeta/linkifyPaths 与 collapse/math 等插件都留到静态渲染；
+	// 流式中精简插件：gfm/codeMeta/linkifyPaths 与 math 等插件都留到静态渲染；
 	// 外部显式传入的插件（FileDiffViewer 等场景）不受流式精简影响。
 	const resolvedRemarkPlugins = isStreamingNow
 		? []
@@ -75,16 +72,7 @@ export const MarkdownStream = memo(function MarkdownStream(props: {
 			]);
 	const resolvedRehypePlugins = isStreamingNow
 		? []
-		: (props.rehypePlugins ?? [
-				defaultRehypePlugins.raw,
-				[
-					collapseCodeBlocks,
-					{
-						foldThreshold: undefined,
-						excludeLanguages: ["mermaid"],
-					},
-				],
-			]);
+		: (props.rehypePlugins ?? [defaultRehypePlugins.raw]);
 	// 显式 Components 标注：让 a/p 的 props 走上下文类型推断（streamdown 的
 	// Components 是「具名槽位 | 索引签名」联合，直接内联会触发索引签名分支的类型不兼容）
 	// useMemo 依赖回调 props：回调引用变化时 components 重建，streamElement 随之重建，

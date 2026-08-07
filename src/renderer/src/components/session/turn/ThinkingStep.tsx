@@ -13,7 +13,6 @@ import type { ThinkingGroupItem } from "../timeline/types";
 export const ThinkingStep = memo(function ThinkingStep(props: {
 	group: ThinkingGroupItem;
 	hidden: boolean;
-	sessionId?: string;
 	isStreaming?: boolean;
 	showThinking?: boolean;
 	onOpenExternal: (url: string) => void;

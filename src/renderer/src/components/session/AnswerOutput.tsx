@@ -31,6 +31,8 @@ export const AnswerOutput = memo(function AnswerOutput(props: {
 	text?: string;
 	hidden?: boolean;
 	isStreaming?: boolean;
+	/** live→settled 交接时播放一次淡入（assistant-answer-settle） */
+	settle?: boolean;
 	onOpenExternal: (url: string) => void;
 	onOpenFile?: (path: string) => void;
 }) {
@@ -49,6 +51,7 @@ export const AnswerOutput = memo(function AnswerOutput(props: {
 		<div
 			className="execution-interim markdown-body"
 			data-is-streaming="0"
+			data-settle={props.settle ? "1" : undefined}
 			style={{ display: props.hidden ? "none" : undefined }}
 		>
 			<MarkdownStream

@@ -14,6 +14,8 @@ export const InterimAnswer = memo(function InterimAnswer(props: {
 	text?: string;
 	hidden?: boolean;
 	isStreaming?: boolean;
+	/** live→settled 交接淡入 */
+	settle?: boolean;
 	onOpenExternal: (url: string) => void;
 	onOpenFile?: (path: string) => void;
 }) {
@@ -25,6 +27,7 @@ export const InterimAnswer = memo(function InterimAnswer(props: {
 			text={props.text}
 			hidden={props.hidden}
 			isStreaming={props.isStreaming}
+			settle={props.settle}
 			onOpenExternal={props.onOpenExternal}
 			onOpenFile={props.onOpenFile}
 		/>

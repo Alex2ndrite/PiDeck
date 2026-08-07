@@ -120,3 +120,21 @@ test("UI: AnswerOutput live path; TurnRow does not subscribe streaming atom", ()
   assert.doesNotMatch(timeline, /streamingTextByIdAtom/);
   assert.doesNotMatch(timeline, /streamingMessageId/);
 });
+
+test("UI: settled AnswerOutput can play assistant-answer-settle fade", () => {
+  const answer = readFileSync(
+    "src/renderer/src/components/session/AnswerOutput.tsx",
+    "utf8",
+  );
+  const css = readFileSync("src/renderer/src/styles/timeline.css", "utf8");
+  const turnRow = readFileSync(
+    "src/renderer/src/components/session/turn/TurnRow.tsx",
+    "utf8",
+  );
+  assert.match(answer, /settle\?: boolean/);
+  assert.match(answer, /data-settle=\{props\.settle \? "1" : undefined\}/);
+  assert.match(css, /\.execution-interim\[data-settle="1"\]/);
+  assert.match(css, /assistant-answer-settle/);
+  assert.match(turnRow, /settleId === item\.id/);
+  assert.match(turnRow, /prevLiveIdRef/);
+});

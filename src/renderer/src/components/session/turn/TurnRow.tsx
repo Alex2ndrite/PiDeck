@@ -121,6 +121,22 @@ export const TurnRow = memo(
 		displayItems,
 	]);
 
+	// live plain 卸下 → settled Markdown 挂上：只给刚卸下的那条 id 打一次 settle 淡入。
+	const prevLiveIdRef = useRef<string | undefined>(undefined);
+	const [settleId, setSettleId] = useState<string | undefined>(undefined);
+	useEffect(() => {
+		const prev = prevLiveIdRef.current;
+		const next = liveInterimId;
+		if (prev && !next) {
+			setSettleId(prev);
+			const timer = window.setTimeout(() => setSettleId(undefined), 320);
+			prevLiveIdRef.current = next;
+			return () => window.clearTimeout(timer);
+		}
+		prevLiveIdRef.current = next;
+		return undefined;
+	}, [liveInterimId]);
+
 	// run 级折叠状态（一个开关控制全部思考/工具/中间回答步骤）
 	// hasFinalAnswer：无最终回答的 run 不自动收起（中间回答是唯一输出，不能被折叠隐藏）
 	const hasFinalAnswer = displayItems.some((item) => item.kind === "final-answer");
@@ -245,7 +261,6 @@ export const TurnRow = memo(
 											<ThinkingStep
 												group={item.entry.group}
 												hidden={!stepsVisible}
-												sessionId={props.sessionId}
 												isStreaming={props.isStreaming}
 												showThinking={props.showThinking}
 												onOpenExternal={props.onOpenExternal}
@@ -267,6 +282,7 @@ export const TurnRow = memo(
 											text={item.message.text}
 											hidden={!stepsVisible}
 											isStreaming={false}
+											settle={settleId === item.id}
 											onOpenExternal={props.onOpenExternal}
 											onOpenFile={props.onOpenFile}
 										/>
@@ -312,6 +328,7 @@ export const TurnRow = memo(
 							message={item.message}
 							images={allImages}
 							isStreaming={props.isStreaming ?? false}
+							settle={settleId === item.id}
 							editing={editing}
 							editText={editText}
 							editAreaRef={editAreaRef}

@@ -3579,7 +3579,7 @@ div.fixed.inset-0.z-50 {
 }
 
 /* 表格：Streamdown 的 wrapper 只负责工具栏和窄窗口横向滚动，不再画成第二张卡片。
-   唯一的视觉表面留给实际表格，复制/下载功能及可访问按钮保持不变。 */
+   唯一的视觉表面留给实际表格；工具按钮与代码块同款淡化（默认半透明，悬停显影）。 */
 [data-streamdown="table-wrapper"] {
   padding: 0;
   gap: 0;
@@ -3589,14 +3589,35 @@ div.fixed.inset-0.z-50 {
   box-shadow: none;
 }
 [data-streamdown="table-wrapper"] > div:first-child {
-  padding: 2px 0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 2px;
+  padding: 0 0 4px;
   background: transparent;
+  opacity: 0.4;
+  transition: opacity 0.15s ease;
+}
+[data-streamdown="table-wrapper"]:hover > div:first-child,
+[data-streamdown="table-wrapper"] > div:first-child:focus-within {
+  opacity: 1;
 }
 [data-streamdown="table-wrapper"] > div:first-child button {
-  border-radius: 6px;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  box-shadow: none;
+  color: var(--color-text-tertiary);
+}
+[data-streamdown="table-wrapper"] > div:first-child button:hover,
+[data-streamdown="table-wrapper"] > div:first-child button:focus-visible {
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
 }
 [data-streamdown="table-wrapper"] > div:last-child {
   background: transparent;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 10px;
+  overflow: hidden;
 }
 [data-streamdown="table"] {
   background: var(--color-chat-table-bg);
@@ -3605,97 +3626,111 @@ div.fixed.inset-0.z-50 {
   background: var(--color-chat-muted-bg);
 }
 
-/* 折叠只承担交互，不再额外绘制一张代码卡片；边框和底色由内部 pre 统一负责。 */
-.sd-code-collapse {
+/* 代码块：单一卡片表面；去掉 Streamdown 默认双层边框与右上角白底胶囊。
+   复制/下载对齐 .code-copy / .math-copy-btn：默认淡化，悬停显影。 */
+[data-streamdown="code-block"] {
+  position: relative;
   margin: var(--space-3) 0;
+  gap: 0;
+  padding: 0;
   border: 1px solid var(--color-border-subtle);
   border-radius: 10px;
   background: var(--color-chat-muted-bg);
   overflow: hidden;
+  box-shadow: none;
 }
-/* Streamdown header 是唯一代码工具栏；项目折叠摘要不再重复显示语言和行数。 */
-.sd-code-collapse-summary {
-  display: none;
-}
-.sd-code-collapse-summary {
+[data-streamdown="code-block-header"] {
   display: flex;
+  min-height: 28px;
   align-items: center;
-  gap: 6px;
-  min-height: 24px;
-  padding: 2px 0;
-  color: var(--color-text-tertiary);
-  font: 500 var(--text-caption) / 1.4 var(--font-family-sans);
-  cursor: pointer;
-  list-style: none;
-}
-.sd-code-collapse-summary::-webkit-details-marker {
-  display: none;
-}
-.sd-code-collapse-summary [data-sd-chevron] {
-  display: inline-flex;
-  width: 12px;
-  justify-content: center;
-  transition: transform 0.15s ease;
-}
-.sd-code-collapse[open] .sd-code-collapse-summary [data-sd-chevron] {
-  transform: rotate(90deg);
-}
-.sd-code-collapse > [data-streamdown="code-block"] {
-  margin: 0;
-  gap: 0;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-}
-.sd-code-collapse [data-streamdown="code-block-header"] {
-  display: flex;
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  min-height: 30px;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 8px;
+  padding: 4px 10px;
   border: 0;
   border-bottom: 1px solid var(--color-border-subtle);
   border-radius: 0;
-  background: var(--color-chat-muted-bg);
+  background: transparent;
   color: var(--color-text-tertiary);
   font: 500 var(--text-micro) / 1.4 var(--font-family-sans);
 }
-.sd-code-collapse [data-streamdown="code-block-header"] button {
+/* 动作条叠在语言行右侧：去掉 sticky 白底胶囊，改成透明图标组 */
+[data-streamdown="code-block"] > div:has([data-streamdown="code-block-actions"]) {
+  pointer-events: none;
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 1;
+  margin: 0;
+  display: flex;
+  height: 28px;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 6px;
+}
+[data-streamdown="code-block-actions"] {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  padding: 0;
+  border: 0 !important;
+  border-radius: 0;
+  background: transparent !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  opacity: 0.4;
+  transition: opacity 0.15s ease;
+}
+/* Streamdown 默认顺序是下载→复制；会话里更常用复制，放左边。 */
+[data-streamdown="code-block-copy-button"] {
+  order: 1;
+}
+[data-streamdown="code-block-download-button"] {
+  order: 2;
+}
+[data-streamdown="code-block"]:hover [data-streamdown="code-block-actions"],
+[data-streamdown="code-block-actions"]:focus-within {
+  opacity: 1;
+}
+[data-streamdown="code-block-actions"] button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--radius-xs);
   background: transparent;
   color: var(--color-text-tertiary);
   box-shadow: none;
+  cursor: pointer;
+  transition:
+    color 0.12s ease,
+    background-color 0.12s ease;
 }
-.sd-code-collapse [data-streamdown="code-block-header"] button:hover,
-.sd-code-collapse [data-streamdown="code-block-header"] button:focus-visible {
+[data-streamdown="code-block-actions"] button:hover,
+[data-streamdown="code-block-actions"] button:focus-visible {
   background: var(--color-bg-hover);
-  color: var(--color-text-primary);
+  color: var(--color-accent);
 }
-/* Streamdown 的代码行号只增加视觉噪声；复制按钮仍由官方 header 保留。 */
-.sd-code-collapse [data-streamdown="code-block-body"] [data-line-number],
-.sd-code-collapse [data-streamdown="code-block-body"] [data-line-numbers],
-.sd-code-collapse [data-streamdown="code-block-body"] .line-number {
-  display: none;
+[data-streamdown="code-block-actions"] button:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
 }
-.sd-code-collapse [data-streamdown="code-block-body"] {
+[data-streamdown="code-block-body"] {
   margin: 0;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  overflow: hidden;
-}
-.sd-code-collapse [data-streamdown="code-block-body"] > pre {
-  margin: 0;
+  padding: 10px 12px;
   border: 0;
   border-radius: 0;
   background: transparent;
   overflow: auto;
+  box-shadow: none;
+}
+[data-streamdown="code-block-body"] > pre {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  overflow: visible;
 }
 /* 表体斑马纹，增强长表可读性 */
 [data-streamdown="table-body"] tr:nth-child(even) td {
