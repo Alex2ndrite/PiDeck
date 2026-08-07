@@ -209,6 +209,12 @@ export function SessionStatus(props: {
 			value: `${t("ctx.detail.cacheRead")} ${formatCompact(state.cacheRead)} / ${t("ctx.detail.cacheWrite")} ${formatCompact(state.cacheWrite)}`,
 		});
 	}
+	if (state.cacheTotal != null) {
+		detailRows.push({
+			label: t("ctx.detail.cacheTotal"),
+			value: formatCompact(state.cacheTotal),
+		});
+	}
 	if (state.cacheHitPercent != null) {
 		detailRows.push({
 			label: t("ctx.detail.hitLatest"),
@@ -237,15 +243,9 @@ export function SessionStatus(props: {
 					% / {formatCompact(state.contextWindow)}
 				</span>
 			)}
-			{(state.cacheHitPercent != null || state.cacheTotal != null) && (
+			{(state.cacheHitPercent != null) && (
 				<span className="cache-chip">
-					{state.cacheHitPercent != null && (
-						<>{t("app.cacheHit")}: {state.cacheHitPercent?.toFixed?.(0) ?? state.cacheHitPercent}%</>
-					)}
-					{state.cacheHitPercent != null && state.cacheTotal != null && " "}
-					{state.cacheTotal != null && (
-						<>{t("app.cache")}: {formatCompact(state.cacheTotal)}</>
-					)}
+					{t("app.cacheHit")}: {state.cacheHitPercent?.toFixed?.(0) ?? state.cacheHitPercent}%
 				</span>
 			)}
 			{/* 平均命中率只在悬停明细中展示（ctx.detail.hitAverage），头部不再显示单独 chip */}

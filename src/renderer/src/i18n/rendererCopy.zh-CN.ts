@@ -157,6 +157,7 @@ export const zhCN = {
   "ctx.detail.cacheIO": "缓存读/写",
   "ctx.detail.cacheRead": "读",
   "ctx.detail.cacheWrite": "写",
+  "ctx.detail.cacheTotal": "缓存总量",
   "ctx.detail.hitLatest": "最新命中率",
   "ctx.detail.hitAverage": "会话平均命中率",
   "ctx.detail.hitAverageTitle": "本会话历次状态快照的平均缓存命中率",

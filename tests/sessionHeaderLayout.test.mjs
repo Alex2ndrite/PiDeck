@@ -13,21 +13,22 @@ const runtimeInjector = readFileSync(
 const surfaces = readFileSync("src/renderer/src/styles/surfaces.css", "utf8");
 const foundation = readFileSync("src/renderer/src/styles/foundation.css", "utf8");
 
-test("session tabs keep the full row and move status/actions below", () => {
-  const sessionTop = sessionView.indexOf("<SessionTabsBar {...sessionTabs}");
-  const contentStart = sessionView.indexOf("<ResizablePanel", sessionTop);
+test("session status and actions embed into the tab bar right slot", () => {
+  const sessionTop = sessionView.indexOf("<SessionTabsBar");
+  const contentStart = sessionView.indexOf("<ResizablePanelGroup", sessionTop);
   assert.notEqual(sessionTop, -1);
   assert.notEqual(contentStart, -1);
   const headerArea = sessionView.slice(sessionTop, contentStart);
 
-  // Tab 的横向空间只属于会话标签；状态徽章和新会话操作应在下一行独立布局。
-  assert.match(headerArea, /<SessionTabsBar\s+\{\.\.\.sessionTabs\}\s+actions=\{null\}\s*\/>/);
-  assert.doesNotMatch(headerArea, /actions=\{(?!null\})/);
-  assert.match(headerArea, /<SessionHeader[\s\S]*?\/>/);
+  // 状态徽章/会话操作/抽屉按钮以 embedded 模式嵌入 Tab 栏右侧，不再单独占一行；
+  // 只有无会话空态才保留 actions 为 undefined（Tab 栏自带抽屉快捷入口）。
+  assert.match(headerArea, /<SessionTabsBar\s+\{\.\.\.sessionTabs\}/);
+  assert.match(headerArea, /actions=\{\s*<SessionHeader/);
+  assert.match(headerArea, /<SessionHeader[\s\S]*?embedded[\s\S]*?\/>/);
 });
 
 test("session status and new-session controls use the shared medium radius", () => {
-  // Tab 栏只保留会话标签；状态徽章和操作下移到独立 header，避免多个徽章长期占用 Tab 的横向空间。
+  // Tab 栏右侧嵌入状态徽章与操作；chip 与 combo 用同一中号圆角保持一致视觉。
   const statusBlock = surfaces.slice(
     surfaces.indexOf(".session-status span"),
     surfaces.indexOf(".session-status .ctx-chip"),

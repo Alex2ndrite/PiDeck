@@ -158,6 +158,7 @@ export const enUS: Record<TranslationKey, string> = {
   "ctx.detail.cacheIO": "Cache read/write",
   "ctx.detail.cacheRead": "R",
   "ctx.detail.cacheWrite": "W",
+  "ctx.detail.cacheTotal": "Cache total",
   "ctx.detail.hitLatest": "Latest hit rate",
   "ctx.detail.hitAverage": "Session avg hit rate",
   "ctx.detail.hitAverageTitle": "Average cache hit rate across this session's state snapshots",

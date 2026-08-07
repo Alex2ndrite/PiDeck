@@ -120,10 +120,10 @@ test("sidebar omits the redundant projects heading and tabs shrink to their titl
   assert.doesNotMatch(sourceBadge, /bg-(?:indigo|amber|emerald)-/);
 });
 
-test("session actions render below the tab bar so tabs keep their full width", () => {
+test("session actions embed into the tab bar right slot", () => {
   assert.match(tabBar, /actions\?: ReactNode/);
   assert.match(tabBar, /props\.actions !== null/);
   assert.match(tabBar, /props\.actions \?\?/);
-  assert.match(sessionView, /<SessionTabsBar \{\.\.\.sessionTabs\} actions=\{null\} \/>[\s\S]*<SessionHeader\s*\n\s*headerRef=/);
-  assert.doesNotMatch(sessionView, /<SessionTabsBar[\s\S]*actions=\{[\s\S]*<SessionHeader[\s\S]*embedded/);
+  // 状态/操作区以 embedded 模式嵌入 Tab 栏右侧（actions 槽位），不再单独占一行
+  assert.match(sessionView, /<SessionTabsBar\s*\n\s*\{\.\.\.sessionTabs\}[\s\S]*?actions=\{\s*<SessionHeader[\s\S]*embedded/);
 });

@@ -432,30 +432,35 @@ export function SessionView({
 
   return (
     <>
-      {/* Tab 栏保持完整宽度；会话操作放在下一行，避免操作按钮挤压资源标签。 */}
-      <SessionTabsBar {...sessionTabs} actions={null} />
-      <SessionHeader
-        headerRef={chatHeaderRef}
-        comboRef={sessionComboRef}
-        title={sessionTitle}
-        compactionCount={activeAgent?.compactionCount}
-        isAnonymous={activeAgent?.noSession}
-        runtimeState={activeRuntimeState}
-        duration={sessionDuration}
-        isStarting={isAgentStarting}
-        hasProject={hasProject}
-        hasSession={Boolean(activeAgentId || sessionId)}
-        menuOpen={sessionActionsOpen}
-        canStop={canStop}
-        canRestart={canRestart}
-        isRestarting={isRestarting}
-        showRestart={showRestart}
-        onTrigger={onHeaderTrigger}
-        onStop={onStop}
-        onRestart={onRestart}
-        onToggleDrawer={onToggleDrawer}
-        drawerOpen={drawerOpen}
-        widgetChips={<SessionWidgetChips sessionId={sessionId} />}
+      {/* 会话状态/操作区以 embedded 模式嵌入 Tab 栏右侧，不再单独占一行 */}
+      <SessionTabsBar
+        {...sessionTabs}
+        actions={
+          <SessionHeader
+            embedded
+            headerRef={chatHeaderRef}
+            comboRef={sessionComboRef}
+            title={sessionTitle}
+            compactionCount={activeAgent?.compactionCount}
+            isAnonymous={activeAgent?.noSession}
+            runtimeState={activeRuntimeState}
+            duration={sessionDuration}
+            isStarting={isAgentStarting}
+            hasProject={hasProject}
+            hasSession={Boolean(activeAgentId || sessionId)}
+            menuOpen={sessionActionsOpen}
+            canStop={canStop}
+            canRestart={canRestart}
+            isRestarting={isRestarting}
+            showRestart={showRestart}
+            onTrigger={onHeaderTrigger}
+            onStop={onStop}
+            onRestart={onRestart}
+            onToggleDrawer={onToggleDrawer}
+            drawerOpen={drawerOpen}
+            widgetChips={<SessionWidgetChips sessionId={sessionId} />}
+          />
+        }
       />
       {/* 分支导航条：仅当当前会话存在 fork 分支关系（父/兄弟/子分支）时显示 */}
       <SessionBranchBar sessionId={sessionId} onOpenSession={onOpenBranchSession} />
