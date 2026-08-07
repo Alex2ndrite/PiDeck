@@ -1,4 +1,5 @@
 import { Button } from "../components/ui-shadcn/button";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui-shadcn/table";
 import { useEffect, useState } from "react";
 import { Copy, Download, RotateCcw, Trash2 } from "lucide-react";
 import type { PiCliUpdateResult, PiExtensionListResult, PiExtensionSummary, PiPackageInfo } from "../../../shared/types";
@@ -375,24 +376,36 @@ export function ExtensionsTab(props: {
 						</Button>
 					</div>
 				</div>
-				<div className="skills-list">
+				<div className="overflow-hidden rounded-lg border border-border-subtle bg-bg-panel">
 					{props.loading ? (
 						<div className="py-12 text-center text-control text-muted-foreground">{t("config.loadingExtensions")}</div>
 					) : props.data.extensions.length === 0 ? (
 						<div className="py-12 text-center text-control text-muted-foreground">{t("config.emptyExtensions")}</div>
 					) : (
-						props.data.extensions.map((extension) => (
-							<ExtensionCard
-								key={extension.id}
-								extension={extension}
-								uninstalling={props.uninstallingSource === extension.source}
-								onUninstall={props.onUninstall}
-								onRemoveBuiltIn={handleRemoveBuiltIn}
-								onRestoreBuiltIn={handleRestoreBuiltIn}
-								removingBuiltIn={removingBuiltIn === extension.source}
-								restoringBuiltIn={restoringBuiltIn === extension.source}
-							/>
-						))
+						<Table>
+							<TableHeader>
+								<TableRow>
+									<TableHead>{t("config.extension")}</TableHead>
+									<TableHead>{t("config.extensionVersion")}</TableHead>
+									<TableHead>{t("config.extensionPath")}</TableHead>
+									<TableHead className="w-20 text-right">{t("config.actions")}</TableHead>
+								</TableRow>
+							</TableHeader>
+							<TableBody>
+								{props.data.extensions.map((extension) => (
+									<ExtensionTableRow
+										key={extension.id}
+										extension={extension}
+										uninstalling={props.uninstallingSource === extension.source}
+										onUninstall={props.onUninstall}
+										onRemoveBuiltIn={handleRemoveBuiltIn}
+										onRestoreBuiltIn={handleRestoreBuiltIn}
+										removingBuiltIn={removingBuiltIn === extension.source}
+										restoringBuiltIn={restoringBuiltIn === extension.source}
+									/>
+								))}
+							</TableBody>
+						</Table>
 					)}
 				</div>
 			</div>
@@ -400,7 +413,7 @@ export function ExtensionsTab(props: {
 	);
 }
 
-function ExtensionCard(props: {
+function ExtensionTableRow(props: {
 	extension: PiExtensionSummary;
 	uninstalling: boolean;
 	onUninstall: (extension: PiExtensionSummary) => void;
@@ -412,71 +425,46 @@ function ExtensionCard(props: {
 	const { extension } = props;
 	const name = extension.source.replace(/^(?:npm|file|github|git):/i, "");
 	return (
-		<article
-			className={`session-card skill-card extension-card${props.uninstalling ? " extension-removing" : ""}`}
-			aria-busy={props.uninstalling}
-		>
-			<div className="session-card-display">
-				<div className="session-card-inner skill-card-main">
-					<div className="session-card-title skill-title-row">
-						<strong className="text-sm font-semibold text-foreground">{name}</strong>
-						<div className="skill-badges">
-							{extension.builtIn && (
-								<span className="skill-state enabled">{t("common.builtIn")}</span>
-							)}
-							<span className="skill-state enabled">
-								{extension.scope === "project"
-									? t("common.project")
-									: t("common.global")}
-							</span>
-						</div>
+		<TableRow aria-busy={props.uninstalling}>
+			<TableCell className="min-w-0">
+				<div className="flex min-w-0 flex-col gap-0.5">
+					<div className="flex min-w-0 items-center gap-2">
+						<strong className="truncate text-control font-medium text-foreground">{name}</strong>
+						{extension.builtIn && <span className="text-micro text-muted-foreground">{t("common.builtIn")}</span>}
 					</div>
-					<small>{extension.source}</small>
-					{!extension.builtIn && (
-						<small>
-							{t("config.extensionVersions", {
-								current: extension.currentVersion ?? "-",
-								latest: extension.latestVersion ?? "-",
-							})}
-							{extension.hasUpdate ? ` · ${t("config.extensionUpdateAvailable")}` : ""}
-						</small>
-					)}
-					{extension.updateError && <small className="setting-status error">{extension.updateError}</small>}
-					{extension.path && <small>{extension.path}</small>}
+					<span className="truncate font-mono text-caption text-muted-foreground">{extension.source}</span>
 				</div>
-				<div className="prompts-list-item-actions">
-					{/* 内置扩展：移除（禁止自动部署）或恢复 */}
+			</TableCell>
+			<TableCell className="whitespace-nowrap text-caption text-muted-foreground">
+				{extension.builtIn ? "-" : t("config.extensionVersions", {
+					current: extension.currentVersion ?? "-",
+					latest: extension.latestVersion ?? "-",
+				})}
+				{extension.hasUpdate && <span className="ml-1 text-text-primary">{t("config.extensionUpdateAvailable")}</span>}
+				{extension.updateError && <div className="text-destructive">{extension.updateError}</div>}
+			</TableCell>
+			<TableCell className="max-w-64 truncate font-mono text-caption text-muted-foreground" title={extension.path ?? undefined}>
+				{extension.path || "-"}
+			</TableCell>
+			<TableCell className="text-right">
+				<div className="flex justify-end gap-1">
 					{extension.builtIn && extension.enabled !== false && (
-						<Button variant="ghost" size="icon-sm" className="size-7"
-							disabled={props.removingBuiltIn}
-							onClick={() => props.onRemoveBuiltIn(extension)}
-							title={props.removingBuiltIn ? t("config.uninstalling") : t("config.uninstall")}
-						>
+						<Button variant="ghost" size="icon-sm" className="size-7" disabled={props.removingBuiltIn} onClick={() => props.onRemoveBuiltIn(extension)} title={props.removingBuiltIn ? t("config.uninstalling") : t("config.uninstall")}>
 							<Trash2 size={14} strokeWidth={1.8} />
 						</Button>
 					)}
 					{extension.builtIn && extension.enabled === false && (
-						<Button variant="ghost" size="icon-sm" className="size-7"
-							style={{ color: "var(--color-accent)" }}
-							disabled={props.restoringBuiltIn}
-							onClick={() => props.onRestoreBuiltIn(extension)}
-							title={t("config.restoreBuiltIn")}
-						>
+						<Button variant="ghost" size="icon-sm" className="size-7" disabled={props.restoringBuiltIn} onClick={() => props.onRestoreBuiltIn(extension)} title={t("config.restoreBuiltIn")}>
 							<RotateCcw size={14} strokeWidth={1.8} />
 						</Button>
 					)}
-					{/* 三方扩展：卸载 */}
 					{!extension.builtIn && (
-						<Button variant="ghost" size="icon-sm" className="size-7 text-destructive hover:bg-destructive/10 hover:text-destructive"
-							disabled={props.uninstalling}
-							onClick={() => props.onUninstall(extension)}
-							title={props.uninstalling ? t("config.uninstalling") : t("config.uninstall")}
-						>
+						<Button variant="ghost" size="icon-sm" className="size-7 text-destructive hover:bg-destructive/10 hover:text-destructive" disabled={props.uninstalling} onClick={() => props.onUninstall(extension)} title={props.uninstalling ? t("config.uninstalling") : t("config.uninstall")}>
 							<Trash2 size={14} strokeWidth={1.8} />
 						</Button>
 					)}
 				</div>
-			</div>
-		</article>
+			</TableCell>
+		</TableRow>
 	);
 }
