@@ -11,12 +11,18 @@ export const AnswerText = memo(function AnswerText(props: {
 	images?: ImageContent[];
 	isStreaming?: boolean;
 	hidden?: boolean;
+	/** 外层样式：默认回答样式（timeline-inline-text，最终回答用）；
+	 *  中间回答传 "execution-interim"（执行过程条目样式，视觉归属折叠区）。 */
+	className?: string;
 	onPreviewImage: (image: ImageContent) => void;
 	onOpenExternal: (url: string) => void;
 	onOpenFile?: (path: string) => void;
 }) {
 	return (
-		<div style={{ display: props.hidden ? "none" : undefined }} className="timeline-inline-text">
+		<div
+			style={{ display: props.hidden ? "none" : undefined }}
+			className={props.className ?? "timeline-inline-text"}
+		>
 			<AssistantText
 				text={props.message.text}
 				images={props.images}

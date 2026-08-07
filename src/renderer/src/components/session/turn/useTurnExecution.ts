@@ -17,10 +17,13 @@ export type TurnExecutionState = {
 export function useTurnExecution(opts: {
 	agentRunning?: boolean;
 	isComplete: boolean;
+	/** 本轮是否存在最终回答：无最终回答的 run（中断/异常/只出中间回答）
+	 *  不自动收起，保持内容可见——折叠后没有最终回答兜底，用户会看不到任何输出。 */
+	hasFinalAnswer?: boolean;
 }): TurnExecutionState {
-	// 已完成的 run（历史会话）默认折叠；进行中/刚挂载的 run 默认展开。
+	// 已完成的 run 默认折叠（有最终回答时）；无最终回答或进行中默认展开。
 	const [stepsVisible, setStepsVisible] = useState(
-		() => !(opts.isComplete && !opts.agentRunning),
+		() => !(opts.isComplete && !opts.agentRunning && opts.hasFinalAnswer),
 	);
 	// 用户手动 toggle 后本轮不再被自动逻辑覆盖。
 	const userOverrideRef = useRef(false);
@@ -32,15 +35,16 @@ export function useTurnExecution(opts: {
 		setStepsVisible(true);
 	}, [opts.agentRunning]);
 
-	// run 结束：1s 后自动收起（用户未 override 时）。
+	// run 结束：1s 后自动收起（用户未 override 且有最终回答时；无最终回答保持展开）。
 	useEffect(() => {
 		if (!opts.isComplete || userOverrideRef.current) return;
+		if (!opts.hasFinalAnswer) return;
 		const timer = window.setTimeout(() => {
 			if (userOverrideRef.current) return;
 			setStepsVisible(false);
 		}, 1000);
 		return () => window.clearTimeout(timer);
-	}, [opts.isComplete]);
+	}, [opts.isComplete, opts.hasFinalAnswer]);
 
 	const toggleSteps = useCallback(() => {
 		userOverrideRef.current = true;

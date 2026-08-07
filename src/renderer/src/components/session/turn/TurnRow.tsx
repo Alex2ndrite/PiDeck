@@ -93,12 +93,6 @@ export const TurnRow = memo(function TurnRow(props: TurnRowProps) {
 		return { ...run, items: [...run.items, virtualGroup] };
 	}, [run, props.streamingThinking]);
 
-	// run 级折叠状态（一个开关控制全部思考/工具/中间回答步骤）
-	const { stepsVisible, toggleSteps } = useTurnExecution({
-		agentRunning: props.agentRunning,
-		isComplete,
-	});
-
 	// 扁平展示序列（纯函数：思考/工具/中间回答/最终回答，严格按时序）
 	const displayItems = useMemo(
 		() => buildTurnDisplay(effectiveRun, { showThinking: props.showThinking }),
@@ -106,6 +100,15 @@ export const TurnRow = memo(function TurnRow(props: TurnRowProps) {
 	);
 	const processSummary = useMemo(() => buildProcessSummary(displayItems), [displayItems]);
 	const showProcessToggle = hasFoldableContent(displayItems);
+
+	// run 级折叠状态（一个开关控制全部思考/工具/中间回答步骤）
+	// hasFinalAnswer：无最终回答的 run 不自动收起（中间回答是唯一输出，不能被折叠隐藏）
+	const hasFinalAnswer = displayItems.some((item) => item.kind === "final-answer");
+	const { stepsVisible, toggleSteps } = useTurnExecution({
+		agentRunning: props.agentRunning,
+		isComplete,
+		hasFinalAnswer,
+	});
 	// 最后一个可折叠内容（思考/工具/中间回答）的下标：收起按钮动态紧跟其后。
 	// 流式过程中 displayItems 持续增长，按钮位置随之移动（始终在折叠区末尾），
 	// 不会因 final-answer 出现而跳到中间造成错位。
@@ -208,12 +211,14 @@ export const TurnRow = memo(function TurnRow(props: TurnRowProps) {
 						}
 					} else if (item.kind === "interim-answer") {
 						itemKey = item.id;
+						// 中间回答：执行过程条目样式（视觉归属折叠区），外面只留给最终回答
 						content = (
 							<AnswerText
 								message={item.message}
 								images={allImages}
 								hidden={!stepsVisible}
 								isStreaming={props.isStreaming ?? false}
+								className="execution-interim"
 								onPreviewImage={props.onPreviewImage}
 								onOpenExternal={props.onOpenExternal}
 								onOpenFile={props.onOpenFile}
