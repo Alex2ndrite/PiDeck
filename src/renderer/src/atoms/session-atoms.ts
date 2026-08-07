@@ -109,6 +109,15 @@ export const sessionRuntimeUiByIdAtom = atom<Record<string, SessionRuntimeUiStat
 export const sessionCacheStatsAtom = atom<Record<string, { cacheHitHistory: number[] }>>({});
 export const SESSION_CACHE_STATS_LIMIT = 50;
 export const sessionMessagesCacheAtom = atom<Record<string, SessionMessageCacheEntry>>({});
+/**
+ * 会话级独立流式正文（阶段1：学 Proma 独立存储）。
+ * key: sessionId，value: { content, streaming }。
+ * 流式期间 content 由 agents:text-stream 通道实时更新；
+ * message_end 后由历史消息（sessionMessagesCacheAtom）接管，此处清空。
+ */
+export const streamingTextByIdAtom = atom<
+	Record<string, { content: string; streaming: boolean }>
+>({});
 export const sessionMessageLruAtom = atom<string[]>([]);
 export const sessionMessageLoadStateAtom = atom<Record<string, SessionLoadState>>({});
 export const sessionCatalogLoadStateAtom = atom<Record<string, SessionLoadState>>({});
@@ -705,6 +714,27 @@ export const applySessionRuntimeEventAtom = atom(
         ...nextRuntime,
         thinking: typeof payload.thinking === "string" ? payload.thinking : "",
       };
+    } else if (event.sourceChannel === "agents:text-stream" && payload) {
+      // 阶段1：独立流式正文通道。只更新 streamingTextByIdAtom，不碰 messages 数组。
+      const text = typeof payload.text === "string" ? payload.text : "";
+      const done = payload.done === true;
+      const prev = get(streamingTextByIdAtom)[event.sessionId];
+      const streaming = !done && text.length > 0;
+      if (!prev || prev.content !== text || prev.streaming !== streaming) {
+        set(streamingTextByIdAtom, {
+          ...get(streamingTextByIdAtom),
+          [event.sessionId]: { content: text, streaming },
+        });
+      }
+      // 本轮回答结束（done）：独立通道内容已由 messages 数组接管，清空避免双源
+      if (done) {
+        set(streamingTextByIdAtom, (prevMap) => {
+          if (!(event.sessionId in prevMap)) return prevMap;
+          const nextMap = { ...prevMap };
+          delete nextMap[event.sessionId];
+          return nextMap;
+        });
+      }
     } else if (
       (event.sourceChannel === "agents:message" || event.sourceChannel === "sessions:messages") &&
       payload

@@ -19,6 +19,7 @@ import { InterimAnswer } from "./InterimAnswer";
 import { ProcessSummaryToggle } from "./ProcessSummaryToggle";
 import { ThinkingStep } from "./ThinkingStep";
 import { ToolStep } from "./ToolStep";
+import { StreamingAnswerBubble } from "./StreamingAnswerBubble";
 import { useTurnExecution } from "./useTurnExecution";
 import type { DiffFileHandler } from "../ToolCallComponents";
 
@@ -37,6 +38,8 @@ import type { DiffFileHandler } from "../ToolCallComponents";
  */
 export type TurnRowProps = {
 	run: AgentRunItem;
+	/** 所属会话 id（订阅独立流式正文通道 streamingTextByIdAtom） */
+	sessionId?: string;
 	/** 新消息入场动画：仅发送后尾部新增的消息播放一次 */
 	fresh?: boolean;
 	onPreviewImage: (image: ImageContent) => void;
@@ -129,6 +132,16 @@ export const TurnRow = memo(
 		() => displayItems.filter((item) => item.kind === "final-answer"),
 		[displayItems],
 	);
+
+	// 流式中最后一条中间回答：用独立流式正文通道渲染（阶段2），
+	// 替代 messages 数组里随 delta 增长的最后一条 assistant 文本。
+	const lastInterimId = useMemo(() => {
+		let last: string | undefined;
+		for (const item of displayItems) {
+			if (item.kind === "interim-answer") last = item.id;
+		}
+		return last;
+	}, [displayItems]);
 
 	// 收集本轮所有 assistant 消息（按 run.items 的时序保持原始顺序）
 	const assistantMessages = run.items.filter(
@@ -228,16 +241,34 @@ export const TurnRow = memo(
 									}
 								} else if (item.kind === "interim-answer") {
 									itemKey = item.id;
-									// 中间回答：与思考相同的 MarkdownStream 渲染 + execution-interim 过程样式
-									content = (
-										<InterimAnswer
-											text={item.message.text}
-											hidden={!stepsVisible}
-											isStreaming={props.isStreaming ?? false}
-											onOpenExternal={props.onOpenExternal}
-											onOpenFile={props.onOpenFile}
-										/>
-									);
+									// 阶段2：流式 run 的最后一条中间回答走独立流式正文通道（气泡），
+									// 不再渲染 messages 数组里随 delta 增长的最后一条 assistant 文本，
+									// 避免 streamdown 全量解析增长文本（配合 16ms 细粒度节流提升逐字感）。
+									if (
+										props.isStreaming &&
+										item.id === lastInterimId &&
+										props.sessionId
+									) {
+										content = (
+											<StreamingAnswerBubble
+												sessionId={props.sessionId}
+												hidden={!stepsVisible}
+												isStreaming={props.isStreaming ?? false}
+												onOpenExternal={props.onOpenExternal}
+												onOpenFile={props.onOpenFile}
+											/>
+										);
+									} else {
+										content = (
+											<InterimAnswer
+												text={item.message.text}
+												hidden={!stepsVisible}
+												isStreaming={props.isStreaming ?? false}
+												onOpenExternal={props.onOpenExternal}
+												onOpenFile={props.onOpenFile}
+											/>
+										);
+									}
 								} else {
 									// final-answer 不在此容器内（见下方常驻区），此处仅兜底跳过
 									return null;
@@ -343,6 +374,7 @@ turnRowPropsEqual,
 function turnRowPropsEqual(prev: TurnRowProps, next: TurnRowProps): boolean {
 	if (!sameAgentRunForRender(prev.run, next.run)) return false;
 	return (
+		prev.sessionId === next.sessionId &&
 		prev.fresh === next.fresh &&
 		prev.showThinking === next.showThinking &&
 		prev.isStreaming === next.isStreaming &&

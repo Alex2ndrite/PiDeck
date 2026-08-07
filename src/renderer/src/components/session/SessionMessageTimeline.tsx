@@ -470,6 +470,7 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
                   <TurnRow
                     key={item.id}
                     run={item}
+                    sessionId={sessionId}
                     fresh={freshMessageIds.has(item.id)}
                     onPreviewImage={props.onPreviewImage}
                     showThinking={props.showThinking}

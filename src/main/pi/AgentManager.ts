@@ -128,6 +128,14 @@ export class AgentManager {
 		50,
 		(agentId, thinking) => this.emitThinkingNow(agentId, thinking),
 	);
+	/** 当前流式正文的累积文本，独立于 messages 数组推送（阶段1：学 Proma 独立存储）。
+	 *  16ms 窗口比 messages 的 50ms 快，保证渲染层拿到更细的增量 → 打字机感。 */
+	private readonly textEmitter = new LatestByKeyEmitter<string, string>(
+		16,
+		(agentId, text) => this.emitTextStreamNow(agentId, text),
+	);
+	/** 流式正文累积缓冲：text_delta 时累加，message_end/agent_end/settled/abort 清除。 */
+	private readonly streamingText = new Map<string, string>();
 	/** 流式 emit 合并窗口（毫秒）。50ms 兼顾流畅度与传输量，肉眼几乎无延迟。 */
 	private static readonly MESSAGE_FLUSH_INTERVAL_MS = 50;
 	/** 激活显示窗口轮数（2026-08 激活分页）：loadMessages 后只下发尾部 N 轮，更早历史走 disk 轮次分页。 */
@@ -1255,6 +1263,8 @@ export class AgentManager {
 		this.activeAssistantMessageIds.delete(agentId);
 		this.streamingAgents.delete(agentId);
 		this.streamingThinking.delete(agentId);
+		this.textEmitter.cancel(agentId);
+		this.streamingText.delete(agentId);
 		this.toolMessageIds.delete(agentId);
 		this.activeToolCallsByAgent.delete(agentId);
 		this.toolExecutingByAgent.set(agentId, null);
@@ -2640,6 +2650,8 @@ export class AgentManager {
 				this.activeAssistantMessageIds.delete(agentId);
 				this.streamingAgents.delete(agentId);
 				this.toolMessageIds.delete(agentId);
+				this.textEmitter.cancel(agentId);
+				this.streamingText.delete(agentId);
 			}
 			// agent 异常结束时（如 API 返回 400、模型报错等），将错误提示写入会话，避免用户看到空白。
 			// 错误信息的存放位置因 pi 版本和错误类型不同而有多种可能：
@@ -2727,6 +2739,8 @@ export class AgentManager {
 				this.activeAssistantMessageIds.delete(agentId);
 				this.streamingAgents.delete(agentId);
 				this.toolMessageIds.delete(agentId);
+				this.textEmitter.cancel(agentId);
+				this.streamingText.delete(agentId);
 				this.activeToolCallsByAgent.delete(agentId);
 				this.toolExecutingByAgent.set(agentId, null);
 				this.rpcCompactingAgents.delete(agentId);
@@ -3128,10 +3142,16 @@ export class AgentManager {
 
 		if (eventType === "text_delta") {
 			this.streamingAgents.add(agentId);
+			const delta = String(assistantEvent.delta ?? "");
+			// 独立流式正文通道：累积文本实时推送（阶段1），不依赖 messages 数组增长
+			const prevText = this.streamingText.get(agentId) ?? "";
+			const nextText = this.extractStreamingText(agentId, partialMessage) ?? prevText + delta;
+			this.streamingText.set(agentId, nextText);
+			this.textEmitter.push(agentId, stripAnsi(nextText));
 			this.upsertAssistantMessage(
 				agentId,
 				partialMessage,
-				String(assistantEvent.delta ?? ""),
+				delta,
 			);
 			return;
 		}
@@ -3167,6 +3187,14 @@ export class AgentManager {
 			this.flushMessageEmit(agentId);
 			this.activeAssistantMessageIds.delete(agentId);
 			this.streamingAgents.delete(agentId);
+			// 独立流式正文通道终止：推一次最终累积文本后清缓冲（渲染层由历史消息接管）
+			const finalText = this.streamingText.get(agentId);
+			if (finalText !== undefined) {
+				this.textEmitter.flush(agentId);
+				this.emitTextStreamNow(agentId, finalText, true);
+			}
+			this.textEmitter.cancel(agentId);
+			this.streamingText.delete(agentId);
 		}
 	}
 
@@ -3641,6 +3669,8 @@ export class AgentManager {
 
 		runtime.tab.status = "idle";
 		this.streamingThinking.delete(agentId);
+		this.textEmitter.cancel(agentId);
+		this.streamingText.delete(agentId);
 		this.emitThinking(agentId, "");
 		this.emitState();
 		void this.emitRuntimeState(agentId);
@@ -3857,6 +3887,24 @@ export class AgentManager {
 	private emitThinkingNow(agentId: string, thinking: string) {
 		const update: ThinkingUpdate = { agentId, thinking };
 		this.emit(ipcChannels.agentsThinking, update);
+	}
+
+	/**
+	 * 从 message_update 的 partialMessage 提取累积正文；无法提取时返回 undefined，
+	 * 调用方回退到「旧累积 + delta」拼接（兼容仅带 delta 的事件格式）。
+	 */
+	private extractStreamingText(agentId: string, partialMessage?: unknown): string | undefined {
+		if (partialMessage && typeof partialMessage === "object") {
+			const text = this.messageProjector.extractText((partialMessage as any).content);
+			if (text) return text;
+		}
+		return undefined;
+	}
+
+	/** 推送独立流式正文通道（agents:text-stream），渲染层写入 streamingTextByIdAtom。
+	 *  done=true 表示本轮回答结束（message_end），渲染层据此把 streaming 置 false。 */
+	private emitTextStreamNow(agentId: string, text: string, done = false) {
+		this.emit(ipcChannels.agentsTextStream, { agentId, text, done });
 	}
 
 	private emitState() {
