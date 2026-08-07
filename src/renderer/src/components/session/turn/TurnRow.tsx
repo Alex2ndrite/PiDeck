@@ -1,8 +1,6 @@
 import { Fragment, memo, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useAtomValue } from "jotai";
 import { ChevronUp, Share, SquarePen, Trash } from "lucide-react";
 import type { ImageContent } from "../../../../../shared/types";
-import { streamingTextByIdAtom } from "../../../atoms/session-atoms";
 import { t } from "../../../i18n";
 import { Button } from "../../ui-shadcn/button";
 import { Collapsible, CollapsibleContent } from "../../ui-shadcn/collapsible";
@@ -21,7 +19,6 @@ import { InterimAnswer } from "./InterimAnswer";
 import { ProcessSummaryToggle } from "./ProcessSummaryToggle";
 import { ThinkingStep } from "./ThinkingStep";
 import { ToolStep } from "./ToolStep";
-import { StreamingAnswerBubble } from "./StreamingAnswerBubble";
 import { useTurnExecution } from "./useTurnExecution";
 import type { DiffFileHandler } from "../ToolCallComponents";
 
@@ -34,20 +31,18 @@ import type { DiffFileHandler } from "../ToolCallComponents";
  * - 最终回答常驻、永不折叠；
  * - 流式中自动展开（实时滚出），run 结束后 1s 自动收起。
  *
- * 模块化说明：旧 TurnRow 与 UserBubble/EmptyState 等共享一个 1462 行的
- * SurfaceComponents.tsx。此处拆为 turn/ 组合层 + timeline/ 纯函数，
- * 各子组件（ThinkingStep/ToolStep/AnswerText/FinalAnswer）props 驱动、可独立复用。
+ * Live 正文由 InterimAnswer(mode=live) → AnswerOutput 订阅 atom，本组件不订 streaming store。
  */
 export type TurnRowProps = {
 	run: AgentRunItem;
-	/** 所属会话 id（订阅独立流式正文通道 streamingTextByIdAtom） */
+	/** 所属会话 id（转交给 live InterimAnswer） */
 	sessionId?: string;
 	/** 新消息入场动画：仅发送后尾部新增的消息播放一次 */
 	fresh?: boolean;
 	onPreviewImage: (image: ImageContent) => void;
 	showThinking?: boolean;
 	isStreaming?: boolean;
-	/** 流式思考实时文本（runtime.thinking）：run 尚未落地 thinking-group 时注入执行区 */
+	/** 流式思考实时文本（runtime.thinking）：History 尚未有 thinking 时直接挂 ThinkingStep */
 	streamingThinking?: string;
 	onOpenExternal: (url: string) => void;
 	onOpenFile?: (path: string) => void;
@@ -68,11 +63,6 @@ export const TurnRow = memo(
 	const [editing, setEditing] = useState(false);
 	const [editText, setEditText] = useState("");
 	const editAreaRef = useRef<HTMLDivElement | null>(null);
-	// 独立流式正文通道（阶段2）：当前 session 是否有流式正文在推送
-	const streamingTextMap = useAtomValue(streamingTextByIdAtom);
-	const sessionStreamingText = props.sessionId
-		? streamingTextMap[props.sessionId]?.content ?? ""
-		: "";
 	// 激活编辑时自动滚动到编辑区（避免 textarea 超出可视区域）
 	useEffect(() => {
 		if (editing && editAreaRef.current) {
@@ -84,41 +74,71 @@ export const TurnRow = memo(
 	const duration = isComplete && run.startedAt > 0 ? run.endedAt - run.startedAt : 0;
 	const showDuration = isComplete && duration > 0;
 
-	// 流式思考注入：runtime 实时思考文本尚未落地为 thinking-group 时，
-	// 合成虚拟 thinking-group 追加到 run 末尾，让思考卡与工具卡同轨出现在执行区；
-	// 消息落地后（thinking-group 出现）自动退出，避免双份渲染。
-	const effectiveRun = useMemo<AgentRunItem>(() => {
-		if (
-			!props.streamingThinking ||
-			run.items.some((item) => item.kind === "thinking-group")
-		) {
-			return run;
-		}
-		const virtualGroup: ThinkingGroupItem = {
-			kind: "thinking-group",
-			id: `${run.id}:streaming-thinking`,
-			messages: [],
-			text: props.streamingThinking,
-			startedAt: run.startedAt,
-			// 未结束：endedAt 为 0，ThinkingBlock 保持 active tone、不触发完成收起
-			endedAt: 0,
-		};
-		return { ...run, items: [...run.items, virtualGroup] };
-	}, [run, props.streamingThinking]);
-
-	// 扁平展示序列（纯函数：思考/工具/中间回答/最终回答，严格按时序）
-	// isComplete：流式中（agent 忙碌）无法判断哪条是最后一条 assistant，
-	// 全部按中间回答处理收进折叠栏；run 结束后才把最后一条提升为常驻最终回答。
+	// 扁平展示序列：只用 History run，不注入虚拟 thinking-group（Live 思考单独挂载）。
 	const displayItems = useMemo(
 		() =>
-			buildTurnDisplay(effectiveRun, {
+			buildTurnDisplay(run, {
 				showThinking: props.showThinking,
 				isComplete: !props.agentRunning,
 			}),
-		[effectiveRun, props.showThinking, props.agentRunning],
+		[run, props.showThinking, props.agentRunning],
 	);
+
+	// Live 思考：History 尚无 thinking-group / 消息 thinking 时，直接挂一步 ThinkingStep。
+	const liveThinkingGroup = useMemo<ThinkingGroupItem | null>(() => {
+		const liveText = props.streamingThinking?.trim();
+		if (!liveText || props.showThinking === false) return null;
+		if (run.items.some((item) => item.kind === "thinking-group")) return null;
+		if (
+			run.items.some(
+				(item) =>
+					item.kind === "message" &&
+					item.message.role === "assistant" &&
+					Boolean(item.message.thinking?.trim()),
+			)
+		) {
+			return null;
+		}
+		return {
+			kind: "thinking-group",
+			id: `${run.id}:live-thinking`,
+			messages: [],
+			text: liveText,
+			startedAt: run.startedAt,
+			endedAt: 0,
+		};
+	}, [props.streamingThinking, props.showThinking, run]);
+
 	const processSummary = useMemo(() => buildProcessSummary(displayItems), [displayItems]);
-	const showProcessToggle = hasFoldableContent(displayItems);
+	const showProcessToggle =
+		hasFoldableContent(displayItems) || Boolean(liveThinkingGroup);
+
+	// 流式中最后一条中间回答 id（Live 挂载锚点）。
+	const lastInterimId = useMemo(() => {
+		let last: string | undefined;
+		for (const item of displayItems) {
+			if (item.kind === "interim-answer") last = item.id;
+		}
+		return last;
+	}, [displayItems]);
+
+	// 末条 Live 正文：挂在折叠容器外常显（避免 Radix Collapsible 卸载/收起导致无 DOM）。
+	const liveInterimId = useMemo(() => {
+		if (!props.sessionId || !lastInterimId) return undefined;
+		const last = displayItems.find(
+			(item) => item.kind === "interim-answer" && item.id === lastInterimId,
+		);
+		if (!last || last.kind !== "interim-answer") return undefined;
+		const emptySkeleton = !last.message.text.trim();
+		if (emptySkeleton || props.agentRunning || props.isStreaming) return lastInterimId;
+		return undefined;
+	}, [
+		props.sessionId,
+		props.agentRunning,
+		props.isStreaming,
+		lastInterimId,
+		displayItems,
+	]);
 
 	// run 级折叠状态（一个开关控制全部思考/工具/中间回答步骤）
 	// hasFinalAnswer：无最终回答的 run 不自动收起（中间回答是唯一输出，不能被折叠隐藏）
@@ -139,17 +159,6 @@ export const TurnRow = memo(
 		() => displayItems.filter((item) => item.kind === "final-answer"),
 		[displayItems],
 	);
-
-	// 流式中最后一条中间回答：用独立流式正文通道渲染（阶段2），
-	// 替代 messages 数组里随 delta 增长的最后一条 assistant 文本。
-	const lastInterimId = useMemo(() => {
-		let last: string | undefined;
-		for (const item of displayItems) {
-			if (item.kind === "interim-answer") last = item.id;
-		}
-		return last;
-	}, [displayItems]);
-
 	// 收集本轮所有 assistant 消息（按 run.items 的时序保持原始顺序）
 	const assistantMessages = run.items.filter(
 		(item): item is MessageItem =>
@@ -225,6 +234,17 @@ export const TurnRow = memo(
 							onToggle={toggleSteps}
 						/>
 						<CollapsibleContent className="execution-summary-details">
+							{liveThinkingGroup && (
+								<ThinkingStep
+									key={liveThinkingGroup.id}
+									group={liveThinkingGroup}
+									hidden={!stepsVisible}
+									isStreaming={props.isStreaming}
+									showThinking={props.showThinking}
+									onOpenExternal={props.onOpenExternal}
+									onOpenFile={props.onOpenFile}
+								/>
+							)}
 							{foldableItems.map((item) => {
 								let content: ReactNode;
 								let itemKey: string;
@@ -248,36 +268,18 @@ export const TurnRow = memo(
 									}
 								} else if (item.kind === "interim-answer") {
 									itemKey = item.id;
-									// 阶段2：流式 run 的最后一条中间回答走独立流式正文通道（气泡），
-									// 不再渲染 messages 数组里随 delta 增长的最后一条 assistant 文本，
-									// 避免 streamdown 全量解析增长文本（配合 16ms 细粒度节流提升逐字感）。
-									// 判断依据是独立通道是否有内容（sessionStreamingText），而非 props.isStreaming——
-									// 阶段2b 后 messages 数组不再承载流式文本，streamingMessageId 找不到消息。
-									if (
-										sessionStreamingText.trim() &&
-										item.id === lastInterimId &&
-										props.sessionId
-									) {
-										content = (
-											<StreamingAnswerBubble
-												sessionId={props.sessionId}
-												hidden={!stepsVisible}
-												isStreaming={props.isStreaming ?? false}
-												onOpenExternal={props.onOpenExternal}
-												onOpenFile={props.onOpenFile}
-											/>
-										);
-									} else {
-										content = (
-											<InterimAnswer
-												text={item.message.text}
-												hidden={!stepsVisible}
-												isStreaming={props.isStreaming ?? false}
-												onOpenExternal={props.onOpenExternal}
-												onOpenFile={props.onOpenFile}
-											/>
-										);
-									}
+									// Live 末条在折叠容器外渲染，此处跳过以免双份。
+									if (item.id === liveInterimId) return null;
+									content = (
+										<InterimAnswer
+											mode="settled"
+											text={item.message.text}
+											hidden={!stepsVisible}
+											isStreaming={false}
+											onOpenExternal={props.onOpenExternal}
+											onOpenFile={props.onOpenFile}
+										/>
+									);
 								} else {
 									// final-answer 不在此容器内（见下方常驻区），此处仅兜底跳过
 									return null;
@@ -298,6 +300,18 @@ export const TurnRow = memo(
 							)}
 						</CollapsibleContent>
 					</Collapsible>
+				)}
+
+				{/* Live 正文：折叠容器外常显，确保流式 DOM 可采样、不被 Collapsible 卸载 */}
+				{liveInterimId && props.sessionId && (
+					<InterimAnswer
+						mode="live"
+						sessionId={props.sessionId}
+						hidden={false}
+						isStreaming={Boolean(props.isStreaming || props.agentRunning || liveInterimId)}
+						onOpenExternal={props.onOpenExternal}
+						onOpenFile={props.onOpenFile}
+					/>
 				)}
 
 				{/* 最终回答：本轮最后一条 assistant 文本，常驻、永不折叠 */}
@@ -381,7 +395,7 @@ turnRowPropsEqual,
  *   onEnterMultiSelect）：行为稳定（读 ref/setState），引用变化不影响渲染结果，忽略（同 FinalAnswer 惯例）。
  */
 function turnRowPropsEqual(prev: TurnRowProps, next: TurnRowProps): boolean {
-	// 流式 run：独立通道内容持续更新，必须重渲染（气泡随 streamingContent 变化）
+	// 流式 run：Live AnswerOutput 随 atom 更新；父级仍需在 isStreaming 边沿重渲染折叠态。
 	if (prev.isStreaming || next.isStreaming) return false;
 	if (!sameAgentRunForRender(prev.run, next.run)) return false;
 	return (

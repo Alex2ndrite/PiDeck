@@ -29,7 +29,7 @@ test("renders the run as order-preserving flat display without pulling the last 
     turnRowSource.slice(turnRowSource.indexOf("foldableItems.map")),
     /最终回答（始终可见）/,
   );
-  assert.match(turnRowSource, /buildTurnDisplay\(effectiveRun/);
+  assert.match(turnRowSource, /buildTurnDisplay\(run/);
   // 最终回答走 FinalAnswer（常驻），容器外常驻区渲染
   assert.match(turnRowSource, /\/\/ final-answer/);
   assert.match(turnRowSource, /<FinalAnswer/);

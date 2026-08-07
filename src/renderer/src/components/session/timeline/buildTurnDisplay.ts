@@ -90,9 +90,14 @@ export function buildTurnDisplay(
 				true,
 			);
 		}
-		// 空文本消息（纯思考已归入过程步骤）不产生回答段。
+		// 空文本消息：始终保留 interim 挂载点（Live 正文走独立通道，骨架可为空）。
+		// 旧逻辑在 isComplete 时跳过空文本，会导致 agentRunning 判定滞后时整段无挂载、
+		// 只能等 message_end 才突然出现最终回答（打字机 E2E 采不到 .execution-interim）。
 		const text = stripThinkingTags(stripAnsi(item.message.text)).trim();
-		if (!text) return;
+		if (!text) {
+			items.push({ kind: "interim-answer", id: item.message.id, message: item.message });
+			return;
+		}
 		if (isComplete && index === lastAssistantIndex) {
 			items.push({ kind: "final-answer", id: item.message.id, message: item.message });
 		} else {

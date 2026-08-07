@@ -45,12 +45,12 @@ test("streaming signal: text_delta sets isStreaming locally, flush pushes lightw
 	assert.match(agentManager, /ipcChannels\.agentsRuntimeState/);
 });
 
-test("renderer streamingMessageId requires isStreaming, which now comes from the patch", () => {
+test("renderer uses Controls isStreaming for live run marking", () => {
 	const timeline = readFileSync(
 		"src/renderer/src/components/session/SessionMessageTimeline.tsx",
 		"utf8",
 	);
-	// 渲染层仍以 isStreaming 为门槛（现在由主进程本地标志驱动）
-	assert.match(timeline, /!activeRuntimeState\?\.isStreaming/);
-	assert.match(timeline, /streamingThinking=\{isRunStreaming \? activeThinking : undefined\}/);
+  assert.match(timeline, /isLatestTimelineRunBusy/);
+  assert.match(timeline, /streamingThinking=\{isRunStreaming \? activeThinking : undefined\}/);
+  assert.doesNotMatch(timeline, /streamingMessageId/);
 });

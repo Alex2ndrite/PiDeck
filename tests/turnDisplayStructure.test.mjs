@@ -26,7 +26,7 @@ const summaryToggleSource = readFileSync(
 // 单折叠汇总：整轮只出现一个「执行过程」汇总按钮，思考/工具/中间回答共用一个
 // run 级折叠开关（stepsVisible），最终回答常驻、永不折叠。
 test("TurnRow renders a single process summary toggle plus order-preserving flat display", () => {
-  assert.match(turnRowSource, /buildTurnDisplay\(effectiveRun/);
+  assert.match(turnRowSource, /buildTurnDisplay\(run/);
   // 唯一汇总按钮：只渲染一次（run 开头），不按 process 段循环
   assert.match(turnRowSource, /ProcessSummaryToggle\s*\n\s*summary=\{processSummary\}/);
   assert.match(turnRowSource, /showProcessToggle && \(/);
@@ -58,8 +58,9 @@ test("buildTurnDisplay keeps strict order and splits interim/final answers", () 
   assert.match(buildSource, /final-answer/);
   // 消息自带 thinking 作为思考步骤插到该回答之前
   assert.match(buildSource, /msg-thinking-/);
-  // 空文本消息不产生回答段
-  assert.match(buildSource, /if \(!text\) return/);
+  // 空文本消息仍产出 interim 挂载点（Live 通道骨架）
+  assert.match(buildSource, /interim-answer/);
+  assert.match(buildSource, /if \(!text\) \{/);
   // 工具步骤始终进序列（不依赖 showThinking）
   assert.match(buildSource, /tool-entry/);
   // 思考步骤：已有 thinking-group 始终保留；消息自带 thinking 受 showThinking 控制

@@ -3,29 +3,51 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 /**
- * 阶段1：独立流式正文通道（agents:text-stream）。
- *
- * 学 Proma：流式正文存在独立 atom（streamingTextByIdAtom），不再依赖
- * messages 数组里最后一条 assistant 消息增长（那会触发全量分组重渲染）。
- * 主进程 textEmitter（50ms，对齐 Proma PI_PARTIAL_UPDATE_INTERVAL_MS）+ agents:text-stream 通道 → 渲染层 atom。
+ * Live 正文通道契约：History / Live / Controls 三层。
+ * - text_delta 不增长 messages；message_start 建空骨架
+ * - agents:text-stream → streamingTextByIdAtom；不 bump runtime
+ * - UI 经 AnswerOutput(live) 消费，不再使用 StreamingAnswerBubble
  */
 
 test("main process: textEmitter tracks and pushes streaming text", () => {
   const agentManager = readFileSync("src/main/pi/AgentManager.ts", "utf8");
 
-  // textEmitter 存在，窗口 50ms（与 Proma 对齐：渲染层 20fps，防 burst 蹦字）
   assert.match(agentManager, /private readonly textEmitter = new LatestByKeyEmitter/);
   assert.match(agentManager, /private static readonly MESSAGE_FLUSH_INTERVAL_MS = 50/);
-
-  // text_delta 时：累积文本 + textEmitter.push
   assert.match(agentManager, /this\.streamingText\.set\(agentId, nextText\)/);
   assert.match(agentManager, /this\.textEmitter\.push\(agentId, stripAnsi\(nextText\)\)/);
 
-  // message_end / agent_end / agent_settled / abort 清除
   const cancelCount = agentManager.match(/this\.textEmitter\.cancel\(agentId\)/g)?.length ?? 0;
   assert.ok(cancelCount >= 4, "textEmitter must cancel on end/settled/abort paths");
   const deleteCount = agentManager.match(/this\.streamingText\.delete\(agentId\)/g)?.length ?? 0;
   assert.ok(deleteCount >= 4, "streamingText must clear on end/settled/abort paths");
+});
+
+test("main process: top-level message_start creates empty skeleton", () => {
+  const agentManager = readFileSync("src/main/pi/AgentManager.ts", "utf8");
+  assert.match(agentManager, /allowEmpty:\s*true/);
+  assert.match(agentManager, /options\?: \{ allowEmpty\?: boolean \}/);
+  // 顶层 message_start（非 assistantMessageEvent）必须 allowEmpty + flush
+  const topStart = agentManager.indexOf('typed.type === "message_start"');
+  const autoRetry = agentManager.indexOf('typed.type === "auto_retry_start"');
+  assert.ok(topStart >= 0 && autoRetry > topStart);
+  const block = agentManager.slice(topStart, autoRetry);
+  assert.match(block, /allowEmpty:\s*true/);
+  assert.match(block, /flushMessageEmit/);
+  assert.match(block, /streamingAgents\.add/);
+
+  // text_delta 分支内不得调用 upsertAssistantMessage
+  const textDeltaIdx = agentManager.indexOf('if (eventType === "text_delta")');
+  const thinkingDeltaIdx = agentManager.indexOf('if (eventType === "thinking_delta")');
+  assert.ok(textDeltaIdx >= 0 && thinkingDeltaIdx > textDeltaIdx);
+  const textDeltaBlock = agentManager.slice(textDeltaIdx, thinkingDeltaIdx);
+  assert.doesNotMatch(textDeltaBlock, /this\.upsertAssistantMessage\(/);
+  assert.match(textDeltaBlock, /this\.textEmitter\.push\(/);
+
+  const thinkingEndIdx = agentManager.indexOf('if (eventType === "thinking_end")');
+  const thinkingDeltaBlock = agentManager.slice(thinkingDeltaIdx, thinkingEndIdx);
+  assert.doesNotMatch(thinkingDeltaBlock, /this\.upsertAssistantMessage\(/);
+  assert.match(thinkingDeltaBlock, /this\.thinkingEmitter\.push\(/);
 });
 
 test("main process: message_end pushes final text with done flag", () => {
@@ -37,17 +59,23 @@ test("main process: message_end pushes final text with done flag", () => {
   assert.match(agentManager, /emitTextStreamNow\(agentId: string, text: string, done = false\)/);
 });
 
-test("renderer: streamingTextByIdAtom updates from agents:text-stream and clears on done", () => {
+test("renderer: streamingTextByIdAtom updates from agents:text-stream without runtime bump", () => {
   const atoms = readFileSync("src/renderer/src/atoms/session-atoms.ts", "utf8");
   assert.match(atoms, /export const streamingTextByIdAtom = atom/);
   assert.match(atoms, /Record<string, \{ content: string; streaming: boolean \}>/);
   assert.match(atoms, /event\.sourceChannel === "agents:text-stream"/);
   assert.match(atoms, /const streaming = !done && text\.length > 0/);
-  // done 后清空独立通道（由 messages 数组接管）
   assert.match(atoms, /delete nextMap\[event\.sessionId\]/);
+
+  // text-stream 分支必须 early return，避免无条件写 sessionRuntimeByIdAtom
+  const textStreamIdx = atoms.indexOf('event.sourceChannel === "agents:text-stream"');
+  const messagesIdx = atoms.indexOf('event.sourceChannel === "agents:message"');
+  assert.ok(textStreamIdx >= 0 && messagesIdx > textStreamIdx);
+  const textStreamBlock = atoms.slice(textStreamIdx, messagesIdx);
+  assert.match(textStreamBlock, /\breturn;/);
 });
 
-test("IPC channel and preload route wiring", () => {
+test("IPC channel wiring for agents:text-stream", () => {
   const ipc = readFileSync("src/shared/ipc.ts", "utf8");
   assert.match(ipc, /agentsTextStream: "agents:text-stream"/);
 
@@ -55,31 +83,40 @@ test("IPC channel and preload route wiring", () => {
   assert.match(agentManager, /ipcChannels\.agentsTextStream/);
 });
 
-// 阶段2：StreamingAnswerBubble 消费独立通道，最后一条流式中间回答走气泡
-test("stage2: TurnRow renders streaming bubble for last interim when streaming", () => {
+test("UI: AnswerOutput live path; TurnRow does not subscribe streaming atom", () => {
   const turnRow = readFileSync(
     "src/renderer/src/components/session/turn/TurnRow.tsx",
     "utf8",
   );
   assert.match(turnRow, /sessionId\?: string/);
   assert.match(turnRow, /lastInterimId/);
-  assert.match(turnRow, /sessionStreamingText\.trim\(\) &&/);
-  assert.match(turnRow, /<StreamingAnswerBubble/);
-  assert.match(turnRow, /import \{ StreamingAnswerBubble \}/);
-  // 流式 run 必须重渲染（气泡随独立通道更新）；历史 run 走 memo 跳过
+  assert.match(turnRow, /liveInterimId/);
+  assert.match(turnRow, /mode="live"/);
+  assert.doesNotMatch(turnRow, /StreamingAnswerBubble/);
+  assert.doesNotMatch(turnRow, /streamingTextByIdAtom/);
   assert.match(turnRow, /if \(prev\.isStreaming \|\| next\.isStreaming\) return false;/);
 
-  const bubble = readFileSync(
-    "src/renderer/src/components/session/turn/StreamingAnswerBubble.tsx",
+  const answer = readFileSync(
+    "src/renderer/src/components/session/AnswerOutput.tsx",
     "utf8",
   );
-  assert.match(bubble, /streamingTextByIdAtom/);
-  assert.match(bubble, /useAtomValue\(streamingTextByIdAtom\)/);
-  assert.match(bubble, /entry\?\.content \?\? ""/);
+  assert.match(answer, /streamingTextByIdAtom/);
+  assert.match(answer, /useSmoothStream/);
+  assert.match(answer, /mode: "live" \| "settled"/);
+  assert.match(answer, /execution-interim markdown-body/);
+
+  const interim = readFileSync(
+    "src/renderer/src/components/session/turn/InterimAnswer.tsx",
+    "utf8",
+  );
+  assert.match(interim, /AnswerOutput/);
 
   const timeline = readFileSync(
     "src/renderer/src/components/session/SessionMessageTimeline.tsx",
     "utf8",
   );
   assert.match(timeline, /sessionId=\{sessionId\}/);
+  assert.match(timeline, /isLatestTimelineRunBusy/);
+  assert.doesNotMatch(timeline, /streamingTextByIdAtom/);
+  assert.doesNotMatch(timeline, /streamingMessageId/);
 });

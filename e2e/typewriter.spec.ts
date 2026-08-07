@@ -81,7 +81,8 @@ test("typewriter: slow streaming stays per-char (maxDelta <= 3)", async ({ windo
 	await window.keyboard.press("Enter");
 
 	const samples = await sampleInterimGrowth(window, 7000);
-	const maxDelta = samples.length > 0 ? Math.max(...samples.map((s) => s.delta)) : 0;
+	expect(samples.length, "should observe live interim growth").toBeGreaterThan(0);
+	const maxDelta = Math.max(...samples.map((s) => s.delta));
 	console.log("[typewriter] slow maxDelta:", maxDelta, "frames:", samples.length);
 
 	await expect(window.locator(".message-timeline")).toContainText("流式渲染验证完成", {
@@ -100,7 +101,8 @@ test("typewriter: burst streaming must not jump (maxDelta <= 3)", async ({ windo
 	await window.keyboard.press("Enter");
 
 	const samples = await sampleInterimGrowth(window, 6000);
-	const maxDelta = samples.length > 0 ? Math.max(...samples.map((s) => s.delta)) : 0;
+	expect(samples.length, "should observe live interim growth").toBeGreaterThan(0);
+	const maxDelta = Math.max(...samples.map((s) => s.delta));
 	console.log("[typewriter] burst maxDelta:", maxDelta, ">3:", JSON.stringify(samples.filter((f) => f.delta > 3)));
 
 	await expect(window.locator(".message-timeline")).toContainText("密集输出段以极快速度连续推送", {

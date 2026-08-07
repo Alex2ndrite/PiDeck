@@ -1,44 +1,32 @@
 import { memo } from "react";
-import { MarkdownStream } from "../MarkdownStream";
-
-/** 与 TimelineFormat 同逻辑的内联副本（本文件被 node 测试断言，保持零外部运行时依赖）。 */
-const ANSI_RE = /\x1b\[[0-9;]*[a-zA-Z]/g;
-
-function stripAnsi(text: string): string {
-	return text.replace(ANSI_RE, "");
-}
-
-function stripThinkingTags(text: string): string {
-	return text.replace(/<thinking>[\s\S]*?<\/thinking>/gi, "").trim();
-}
+import { AnswerOutput } from "../AnswerOutput";
 
 /**
- * 中间回答：与思考（ThinkingBlock）相同的 markdown 渲染路径
- * （MarkdownStream + markdown-body 容器）。
+ * 中间回答：执行过程折叠区内的阶段性正文。
  *
- * 视觉归属：execution-interim（左缩进 + 次级色调），属于「执行过程」折叠内容——
- * 展开时可见、折叠时隐藏；外面（常驻主色调）只留给最终回答。
+ * - live：订阅独立流式通道（AnswerOutput），History 骨架可为空
+ * - settled：渲染 message.text 的全量 Markdown
  */
 export const InterimAnswer = memo(function InterimAnswer(props: {
-	text: string;
+	/** live 时读 streamingTextByIdAtom；settled 时用 text */
+	mode?: "live" | "settled";
+	sessionId?: string;
+	text?: string;
 	hidden?: boolean;
 	isStreaming?: boolean;
 	onOpenExternal: (url: string) => void;
 	onOpenFile?: (path: string) => void;
 }) {
-	const cleanText = stripThinkingTags(stripAnsi(props.text));
-	if (!cleanText.trim()) return null;
+	const mode = props.mode ?? "settled";
 	return (
-		<div
-			className="execution-interim markdown-body"
-			style={{ display: props.hidden ? "none" : undefined }}
-		>
-			<MarkdownStream
-				text={cleanText}
-				isStreaming={props.isStreaming ?? false}
-				onOpenExternal={props.onOpenExternal}
-				onOpenFile={props.onOpenFile}
-			/>
-		</div>
+		<AnswerOutput
+			mode={mode}
+			sessionId={props.sessionId}
+			text={props.text}
+			hidden={props.hidden}
+			isStreaming={props.isStreaming}
+			onOpenExternal={props.onOpenExternal}
+			onOpenFile={props.onOpenFile}
+		/>
 	);
 });

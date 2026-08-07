@@ -35,8 +35,9 @@ test("streamdown pipeline delegates to official plugins (code/mermaid/math) and 
   // 自定义 pre/span 覆盖移除：mermaid 由插件渲染、公式由 math 插件
   assert.doesNotMatch(stream, /pre: \(preProps\) => <CodeBlock/);
   assert.doesNotMatch(stream, /span: \(spanProps\) => <MathSpan/);
-  // 流式容错引擎开启
-  assert.match(stream, /mode=\{props\.isStreaming \? "streaming" : "static"\}/);
+  // 流式也走 static：streaming 模式的 useTransition 会合并帧导致蹦字
+  assert.match(stream, /mode="static"/);
+  assert.doesNotMatch(stream, /mode=\{props\.isStreaming \? "streaming" : "static"\}/);
   // mermaid 主题跟随明暗
   assert.match(stream, /theme: isDark \? "dark" : "default"/);
 });

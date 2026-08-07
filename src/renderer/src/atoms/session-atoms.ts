@@ -715,7 +715,8 @@ export const applySessionRuntimeEventAtom = atom(
         thinking: typeof payload.thinking === "string" ? payload.thinking : "",
       };
     } else if (event.sourceChannel === "agents:text-stream" && payload) {
-      // 阶段1：独立流式正文通道。只更新 streamingTextByIdAtom，不碰 messages 数组。
+      // Live 正文：只更新 streamingTextByIdAtom。
+      // 绑定未变时不写 sessionRuntimeByIdAtom，避免每帧戳醒 timeline/composer 订阅者。
       const text = typeof payload.text === "string" ? payload.text : "";
       const done = payload.done === true;
       const prev = get(streamingTextByIdAtom)[event.sessionId];
@@ -726,7 +727,6 @@ export const applySessionRuntimeEventAtom = atom(
           [event.sessionId]: { content: text, streaming },
         });
       }
-      // 本轮回答结束（done）：独立通道内容已由 messages 数组接管，清空避免双源
       if (done) {
         set(streamingTextByIdAtom, (prevMap) => {
           if (!(event.sessionId in prevMap)) return prevMap;
@@ -735,6 +735,13 @@ export const applySessionRuntimeEventAtom = atom(
           return nextMap;
         });
       }
+      if (bindingChanged) {
+        set(sessionRuntimeByIdAtom, {
+          ...get(sessionRuntimeByIdAtom),
+          [event.sessionId]: nextRuntime,
+        });
+      }
+      return;
     } else if (
       (event.sourceChannel === "agents:message" || event.sourceChannel === "sessions:messages") &&
       payload

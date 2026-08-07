@@ -25,7 +25,6 @@ import {
   sessionRecordByIdAtomFamily,
   sessionRuntimeBySessionIdAtomFamily,
   sessionSendStateByIdAtom,
-  streamingTextByIdAtom,
 } from "../../atoms";
 import {
   canLoadSessionTimelineMore,
@@ -251,31 +250,6 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
         activeRuntimeState?.isStreaming) &&
       activeMessages.at(-1)?.role !== "assistant",
   );
-  // 阶段2b：独立流式正文通道（streamingTextByIdAtom）——messages 数组不再承载
-  // 流式正文，这里直接订阅独立通道判断当前会话是否在流式，替代 streamingMessageId
-  //（它依赖 messages 数组找最后一条 assistant，阶段2b 后找不到了）。
-  const streamingTextMap = useAtomValue(streamingTextByIdAtom);
-  const streamingContent = streamingTextMap[sessionId]?.content ?? "";
-  const streamingMessageId = useMemo(() => {
-    if (
-      !hasActiveConversation ||
-      activeConversationStatus !== "running" ||
-      !activeRuntimeState?.isStreaming
-    ) {
-      return undefined;
-    }
-    for (let index = activeMessages.length - 1; index >= 0; index -= 1) {
-      const message = activeMessages[index];
-      if (message.role === "user") break;
-      if (message.role === "assistant" && message.text.trim()) return message.id;
-    }
-    return undefined;
-  }, [
-    activeConversationStatus,
-    activeMessages,
-    activeRuntimeState?.isStreaming,
-    hasActiveConversation,
-  ]);
 
   async function copySelectedMessages(
     selectedIds: Set<string>,
@@ -464,13 +438,12 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
           <div className="message-list">
             {reconciledRuns.map((item, index) => {
               if (item.kind === "agent-run") {
-                // 阶段2b：流式判断基于独立通道（streamingContent 非空），不再依赖
-                // streamingMessageId（阶段2b 后 messages 数组不承载流式文本，找不到消息）。
-                // 只对最后一个 run 标记流式（历史 run 保持 isStreaming=false 走 memo 跳过）。
-                const isRunStreaming =
-                  Boolean(streamingContent.trim()) &&
-                  index === reconciledRuns.length - 1 &&
-                  item.kind === "agent-run";
+                // Controls：忙碌中的末行 run 视为 live（isStreaming 补丁可能略滞后于正文 atom）。
+                const isRunStreaming = isLatestTimelineRunBusy(
+                  isAgentBusy,
+                  index,
+                  reconciledRuns.length,
+                );
                 return (
                   <TurnRow
                     key={item.id}
@@ -480,13 +453,9 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
                     onPreviewImage={props.onPreviewImage}
                     showThinking={props.showThinking}
                     isStreaming={isRunStreaming}
-                    // 流式思考实时文本注入当前 run 的执行区（run 落地 thinking-group 前由 TurnRow 虚拟组承载）
+                    // Live 思考：run 尚未落地 thinking-group 时由 TurnRow 直接挂 ThinkingStep
                     streamingThinking={isRunStreaming ? activeThinking : undefined}
-                    agentRunning={isLatestTimelineRunBusy(
-                      isAgentBusy,
-                      index,
-                      reconciledRuns.length,
-                    )}
+                    agentRunning={isRunStreaming}
                     onOpenExternal={props.onOpenExternal}
                     onOpenFile={props.onOpenFile}
                     onDiffFile={props.onDiffFile}

@@ -49,14 +49,13 @@ export const MarkdownStream = memo(function MarkdownStream(props: {
 		document.documentElement.dataset.theme === "dark";
 	// 逐字打字机渐显：把高频文本更新转为字符队列 + rAF 渐进渲染（参考 Cherry Studio 实现）。
 	// 只影响展示；权威文本在 atom 中不受影响（复制/导出仍拿全文）。
-	// minDelay 33ms：渲染频率 30fps。Proma 用 10ms（react-markdown 便宜），Pideck 的
-	// streamdown 全量解析更重，60fps 提交会让 React concurrent 把 2 帧 setState 合并提交
-	// （DOM 一帧跳 2 帧的步进，视觉蹦字）；33ms 把提交压力减半，稳态吐字速率不变。
-	// maxStepPerFrame 默认 3（queue 积压时每帧最多 3 字符，防 burst 蹦）。
+	// minDelay 16ms（60fps）：对齐 Proma（10ms 量级）的逐字手感。streamdown 用 static
+	// 模式同步渲染（无 useTransition 合并）后，60fps 提交每帧独立，DOM 增量 = 每帧步进。
+	// maxStepPerFrame 默认 3：极端 queue 积压时的防蹦兜底（queue 短时 count=1 逐字）。
 	const { displayedContent } = useSmoothStream({
 		content: props.text,
 		isStreaming: Boolean(props.isStreaming),
-		minDelay: 33,
+		minDelay: 16,
 	});
 	const displayText = props.isStreaming ? displayedContent : props.text;
 	// 流式期间走轻量渲染：跳过代码高亮/mermaid/数学/折叠等重插件，只跑 marked 核心解析，
@@ -116,7 +115,11 @@ export const MarkdownStream = memo(function MarkdownStream(props: {
 	const streamElement = useMemo(
 		() => (
 			<Streamdown
-				mode={props.isStreaming ? "streaming" : "static"}
+				// 学 Proma：流式期间也用 static 模式（同步渲染）。streamdown 的 streaming 模式
+				// 内部用 useTransition 低优先级更新块，React 会把多帧 transition 合并提交 →
+				// DOM 一帧跳多帧步进（视觉蹦字）；static 模式与 Proma 的 react-markdown 同为
+				// 同步提交，每帧独立渲染，DOM 增量 = useSmoothStream 每帧步进。
+				mode="static"
 				isAnimating={props.isStreaming}
 				remarkPlugins={resolvedRemarkPlugins}
 				rehypePlugins={resolvedRehypePlugins}
