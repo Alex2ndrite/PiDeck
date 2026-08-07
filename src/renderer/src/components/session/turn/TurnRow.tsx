@@ -167,11 +167,13 @@ export const TurnRow = memo(function TurnRow(props: TurnRowProps) {
 			data-message-id={run.id}
 		>
 			<div className="flex min-w-0 flex-col gap-3">
-				<div className="mb-1 inline-flex items-center gap-2 text-xs text-muted-foreground tabular-nums">
-					<span className="shrink-0 font-mono font-semibold text-foreground/80">pi</span>
-					<time className="shrink-0 font-mono text-[11px]">{formatTime(run.endedAt)}</time>
+				{/* 行头：logo 用字号 token（text-brand 18px），随 data-ui-font-size 整体缩放；
+				    日期/耗时用 text-body（14px），比思考字号（text-micro）大但小于 logo。 */}
+				<div className="mb-1 inline-flex items-center gap-2 text-muted-foreground tabular-nums">
+					<span className="shrink-0 font-mono text-brand font-semibold leading-none text-foreground/80">pi</span>
+					<time className="shrink-0 font-mono text-body leading-none">{formatTime(run.endedAt)}</time>
 					{showDuration && (
-						<span className="shrink-0 font-mono text-[11px] text-muted-foreground">
+						<span className="shrink-0 font-mono text-body leading-none text-muted-foreground">
 							{formatDuration(duration)}
 						</span>
 					)}

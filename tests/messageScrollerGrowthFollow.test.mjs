@@ -19,9 +19,13 @@ test("follow scroll only on content growth, not on shrink", () => {
   )?.[0] ?? "";
   assert.ok(observerCallback, "ResizeObserver callback must exist");
   assert.match(observerCallback, /if \(height > lastContentHeight\.current\) \{/);
-  assert.match(observerCallback, /scrollToEnd\(reduce \|\| !smooth \? "auto" : "smooth"\)/);
+  // 追底 behavior：流式结束过渡窗口（busyEndingRef）内用 instant，否则 smooth/auto
+  assert.match(observerCallback, /busyEndingRef\.current \? "auto" : \(reduce \|\| !smooth \? "auto" : "smooth"\)/);
   // 每次回调都同步更新基准高度（后续收缩不触发滚动）
   assert.match(observerCallback, /lastContentHeight\.current = height;/);
   // 跟随开关（followOutput + following）仍然生效
   assert.match(observerCallback, /!followOutput \|\| !followingRef\.current/);
+  // 流式结束过渡窗口：busy true→false 后 150ms 内追底用 instant（needsInstant）
+  assert.match(source, /busyEndingRef = useRef\(false\)/);
+  assert.match(source, /setTimeout\(\(\) => \{\s*busyEndingRef\.current = false;\s*\}, 150\)/);
 });

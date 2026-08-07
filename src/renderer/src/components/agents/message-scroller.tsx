@@ -130,6 +130,10 @@ export function MessageScroller({
   const followingRef = useRef(followOutput);
   const programmaticScrollRef = useRef(false);
   const scrollTimerRef = useRef<number | undefined>(undefined);
+  // 流式结束过渡（needsInstant）：busy（等待流式输出）true→false 后的窗口期内，
+  // 内容增长追底用 instant 而非 smooth，避免最终文本长高触发平滑滚动动画造成跳屏。
+  const busyEndingRef = useRef(false);
+  const busyEndingTimerRef = useRef<number | undefined>(undefined);
   const frameRef = useRef<number | undefined>(undefined);
   const railFrameRef = useRef<number | undefined>(undefined);
   const railIdRef = useRef(new WeakMap<HTMLElement, string>());
@@ -309,6 +313,19 @@ export function MessageScroller({
     };
   }, [followOutput, scrollToEnd]);
 
+  // 流式结束瞬间：busy true→false，开启 150ms 过渡窗口（期间追底用 instant）。
+  useEffect(() => {
+    if (busy) return;
+    if (busyEndingTimerRef.current) window.clearTimeout(busyEndingTimerRef.current);
+    busyEndingRef.current = true;
+    busyEndingTimerRef.current = window.setTimeout(() => {
+      busyEndingRef.current = false;
+    }, 150);
+    return () => {
+      if (busyEndingTimerRef.current) window.clearTimeout(busyEndingTimerRef.current);
+    };
+  }, [busy]);
+
   useEffect(() => {
     const content = contentRef.current;
     if (!content || typeof ResizeObserver === "undefined") return;
@@ -323,7 +340,10 @@ export function MessageScroller({
       if (!followOutput || !followingRef.current) return;
       const height = entries[0]?.contentRect.height ?? content.clientHeight;
       if (height > lastContentHeight.current) {
-        scrollToEnd(reduce || !smooth ? "auto" : "smooth");
+        // 流式结束过渡窗口内用 instant（needsInstant），避免最终文本长高触发 smooth 动画
+        const behavior =
+          busyEndingRef.current ? "auto" : (reduce || !smooth ? "auto" : "smooth");
+        scrollToEnd(behavior);
       }
       lastContentHeight.current = height;
     });
