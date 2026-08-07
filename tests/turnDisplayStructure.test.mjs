@@ -35,7 +35,7 @@ test("TurnRow renders a single process summary toggle plus order-preserving flat
   assert.match(turnRowSource, /item\.kind === "final-answer"/);
   // 思考/工具/中间回答共用一个折叠开关
   assert.match(turnRowSource, /hidden=\{!stepsVisible\}/);
-  // run 级展开态在末尾提供「收起」按钮（与顶部汇总对应，回到旧版交互）
+  // run 级展开态末尾提供「收起」按钮（与顶部汇总对应，回到旧版交互）
   assert.match(turnRowSource, /execution-summary-collapse/);
   assert.match(turnRowSource, /stepsVisible && showProcessToggle/);
   assert.match(summaryToggleSource, /execution-summary-toggle/);

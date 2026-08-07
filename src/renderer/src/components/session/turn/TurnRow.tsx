@@ -236,7 +236,7 @@ export const TurnRow = memo(function TurnRow(props: TurnRowProps) {
 					return null;
 				})}
 
-				{/* run 级底部收起按钮：展开态时出现，与顶部汇总按钮对应（回到旧版交互） */}
+				{/* run 级末尾收起按钮：展开态显示，与顶部汇总按钮对应（旧版交互） */}
 				{stepsVisible && showProcessToggle && (
 					<button
 						type="button"
