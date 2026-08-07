@@ -77,6 +77,7 @@ test("built-in extension removal has a registered IPC handler", () => {
 	const storeIpc = readFileSync("src/main/ipc/storeIpc.ts", "utf8");
 	const extensionsTab = readFileSync("src/renderer/src/config/ExtensionsTab.tsx", "utf8");
 	assert.match(storeIpc, /ipcChannels\.extensionsRemoveBuiltIn[\s\S]*extensionManager\.removeBuiltIn\(source\)/);
+	assert.match(storeIpc, /ipcChannels\.extensionsRestoreBuiltIn[\s\S]*extensionManager\.restoreBuiltIn\(source\)/);
 	assert.doesNotMatch(extensionsTab, /extension\.enabled === false \? "disabled"/);
 	assert.doesNotMatch(extensionsTab, /t\("common\.enabled"\)|t\("common\.disabled"\)/);
 });

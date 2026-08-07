@@ -275,7 +275,7 @@ export function ExtensionsTab(props: {
 					</div>
 				</div>
 			)}
-			{/* 预设推荐扩展 — 大列表简洁显示 */}
+			{false && (
 			<div className="config-section mb-5">
 				<div className="mb-3 flex items-center justify-between">
 					{/* 与设置弹窗分区标题同级：text-sm，避免 title 字号偏大 */}
@@ -349,6 +349,7 @@ export function ExtensionsTab(props: {
 					})}
 				</div>
 			</div>
+			)}
 
 			<hr className="extensions-divider" />
 
