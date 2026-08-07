@@ -276,31 +276,20 @@ export function groupToolMessages(messages: ChatMessage[]): RenderMessage[] {
 
 	function flushThinking() {
 		if (currentThinking.length === 0) return;
-		const previous = currentRun[currentRun.length - 1];
-		// 使用首个消息 ID 作为稳定 key：流式期间 thinking 文本持续增长并多次 flush，
-		// 若每次拼接 ID 会导致 React key 变化 → 组件卸载重建 → expanded 状态丢失。
-		const stableId = currentThinking[0]?.id ?? "";
-		const nextGroup: ThinkingGroupItem = {
-			kind: "thinking-group",
-			id: stableId,
-			messages: currentThinking,
-			text: currentThinking
-				.map((message) => stripAnsi(message.thinking ?? ""))
-				.filter(Boolean)
-				.join("\n\n"),
-			startedAt: currentThinking[0]?.timestamp ?? runStartedAt,
-			endedAt:
-				currentThinking[currentThinking.length - 1]?.timestamp ?? runEndedAt,
-		};
-		if (previous?.kind === "thinking-group") {
-			// 保留原有 stable id，仅合并内容和消息列表
-			previous.messages = [...previous.messages, ...nextGroup.messages];
-			previous.text = [previous.text, nextGroup.text].filter(Boolean).join("\n\n");
-			previous.endedAt = nextGroup.endedAt;
-		} else {
-			currentRun.push(nextGroup);
+		// 每条 thinking-only 各自成组：id 与主进程 msg-thinking-* 一一对应，禁止 join 合并。
+		for (const message of currentThinking) {
+			const rawId = message.id ?? "";
+			const group: ThinkingGroupItem = {
+				kind: "thinking-group",
+				id: rawId.startsWith("msg-thinking-") ? rawId : `msg-thinking-${rawId}`,
+				messages: [message],
+				text: stripAnsi(message.thinking ?? ""),
+				startedAt: message.thinkingStartedAt ?? message.timestamp ?? runStartedAt,
+				endedAt: message.thinkingEndedAt ?? message.timestamp ?? runEndedAt,
+			};
+			currentRun.push(group);
+			runEndedAt = group.endedAt;
 		}
-		runEndedAt = nextGroup.endedAt;
 		currentThinking = [];
 	}
 
@@ -364,6 +353,8 @@ export function groupToolMessages(messages: ChatMessage[]): RenderMessage[] {
 			}
 			currentThinking.push(message);
 			runEndedAt = message.timestamp;
+			// 立即成组：禁止多条 thinking-only 积压后 join 成一张卡。
+			flushThinking();
 		} else if (message.role === "assistant") {
 			// 有暂存 run 时先合并到当前 run
 			if (pendingRun) {

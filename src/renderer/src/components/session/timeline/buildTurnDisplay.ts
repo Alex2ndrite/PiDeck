@@ -30,9 +30,15 @@ function stripThinkingTags(text: string): string {
 
 export function buildTurnDisplay(
 	run: AgentRunItem,
-	options: { showThinking?: boolean; isComplete?: boolean } = {},
+	options: {
+		showThinking?: boolean;
+		isComplete?: boolean;
+		/** 当前 live 思考段 id（msg-thinking-*）；命中时即使 message.thinking 仍空也挂思考步 */
+		liveThinkingId?: string;
+	} = {},
 ): TurnDisplayItem[] {
 	const showThinking = Boolean(options.showThinking);
+	const liveThinkingId = options.liveThinkingId;
 	// run 是否已结束：只有结束时才能确定「最后一条 assistant 是最终回答」。
 	// 流式中（isComplete=false）无法预知哪条是最后一条，全部按中间回答处理、
 	// 收进执行过程折叠栏；run 结束后才把最后一条提升为常驻的最终回答。
@@ -70,22 +76,31 @@ export function buildTurnDisplay(
 			return;
 		}
 		if (item.kind !== "message" || item.message.role !== "assistant") return;
-		// 消息自带的思考：插到该回答之前（思考→回答时序）。
+		// 消息自带的思考 / live 同 id：插到该回答之前（思考→回答时序）。
+		// Live 时 text 可空，叶子 ThinkingStep 从 streamingThinkingByIdAtom 填。
+		const thinkingId = `msg-thinking-${item.message.id}`;
+		const isLive = Boolean(liveThinkingId && liveThinkingId === thinkingId);
 		const thinking =
 			showThinking && item.message.thinking?.trim()
 				? stripAnsi(item.message.thinking)
 				: "";
-		if (thinking) {
+		if (thinking || (showThinking && isLive)) {
 			pushThinking(
 				{
 					kind: "thinking-group",
-					// 稳定 id 由消息 id 派生：流式期间 thinking 持续增长但 key 不变，
-					// 避免 React 重建组件导致展开状态丢失。
-					id: `msg-thinking-${item.message.id}`,
+					// 稳定 id 与主进程 live 通道相同：Live→History 不 remount。
+					id: thinkingId,
 					messages: [item.message],
 					text: thinking,
-					startedAt: item.message.timestamp ?? run.startedAt,
-					endedAt: item.message.timestamp ?? run.endedAt,
+					startedAt:
+						item.message.thinkingStartedAt ??
+						item.message.timestamp ??
+						run.startedAt,
+					endedAt: isLive
+						? 0
+						: (item.message.thinkingEndedAt ??
+							item.message.timestamp ??
+							run.endedAt),
 				},
 				true,
 			);

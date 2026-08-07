@@ -21,6 +21,7 @@ import {
   touchSessionMessagesAtom,
 } from "../atoms";
 import { useMessagePagination } from "./useMessagePagination";
+import type { MessageScrollerScrollApi } from "../components/agents/message-scroller";
 
 let nextLoadSequence = 0;
 const latestLoadBySession = new Map<string, number>();
@@ -103,12 +104,22 @@ export type SessionTimelineController = {
   loadMoreMessages: () => void;
   jumpToMessage: (messageId: string) => void;
   scrollToBottom: () => void;
+  /**
+   * 自动收起执行过程后：若用户仍在跟随，把视口对准该 run 最终回答开头。
+   * 不打断已上滚阅读历史的用户。
+   */
+  scrollFinalAnswerIntoView: (runId: string) => void;
   autoScroll: boolean;
   showScrollToBottom: boolean;
   /** pin-to-top 动画期间冻结 MessageScroller 的流式跟随，避免高度变化打断动画。 */
   pinAnimating: boolean;
   /** 由 MessageScroller 汇报用户是否仍在实时尾部，避免两套滚动监听互相抢占。 */
   setAutoScrollFromScroller: (following: boolean) => void;
+  /**
+   * 挂到 MessageScroller 的 stick-to-bottom 引擎 API（回底弹簧）。
+   * 未挂上时 scrollToBottom 退化为原生 scrollTo。
+   */
+  scrollerScrollApiRef: RefObject<MessageScrollerScrollApi | null>;
   /** 发送置顶动画：最新用户消息 id（垫片锚点），未激活为 undefined。 */
   pinnedTurnId?: string;
   /** 垫片高度（px），由 controller 按「用户消息顶到视口顶部」目标动态收敛。 */
@@ -218,6 +229,7 @@ export function useSessionTimelineController(options: {
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const autoScrollRef = useRef(true);
   const programmaticScrollRef = useRef(false);
+  const scrollerScrollApiRef = useRef<MessageScrollerScrollApi | null>(null);
   const loadMoreAnchorRef = useRef<Tagged<TimelineAnchor> | undefined>(undefined);
   const pendingJumpRef = useRef<Tagged<string> | undefined>(undefined);
   const highlightTimersRef = useRef(new Map<number, number>());
@@ -257,13 +269,63 @@ export function useSessionTimelineController(options: {
 
   const scrollToBottom = useCallback(() => {
     const requestOwnerKey = ownerKey;
-    const timeline = timelineRef.current;
-    if (!timeline || ownerKeyRef.current !== requestOwnerKey) return;
+    if (ownerKeyRef.current !== requestOwnerKey) return;
     programmaticScrollRef.current = true;
-    timeline.scrollTo({ top: timeline.scrollHeight, behavior: "smooth" });
     autoScrollRef.current = true;
     setAutoScroll(true);
     setShowScrollToBottom(false);
+    const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    const animation = reduceMotion ? "instant" : "smooth";
+    const api = scrollerScrollApiRef.current;
+    if (api) {
+      // 走 stick-to-bottom 弹簧（mergeAnimations 修好后 "smooth" = 默认弹簧）
+      void api.scrollToBottom({ animation });
+      return;
+    }
+    // 引擎尚未挂上时的兜底（会话切换首帧等）
+    const timeline = timelineRef.current;
+    if (!timeline) return;
+    timeline.scrollTo({
+      top: timeline.scrollHeight,
+      behavior: reduceMotion ? "instant" : "smooth",
+    });
+  }, [ownerKey]);
+
+  /**
+   * 自动收起执行过程后，把最终回答开头放到视口中上部（约 35% 处），方便阅读。
+   * 仅当用户仍在跟随时执行；已上滚看历史则不拽回。
+   * 禁止贴顶（rowTop-20）：短会话里贴顶等于整页滚回最上，体感像「发送后又飞上天」。
+   * 若已有更新一轮的最终回答，也不要拽回旧回答。
+   * 注：引擎暂无任意 offset 弹簧 API，此处用浏览器 smooth；回底按钮仍走弹簧。
+   */
+  const scrollFinalAnswerIntoView = useCallback((runId: string) => {
+    if (!autoScrollRef.current) return;
+    const requestOwnerKey = ownerKey;
+    const timeline = timelineRef.current;
+    if (!timeline || ownerKeyRef.current !== requestOwnerKey) return;
+    const finals = timeline.querySelectorAll<HTMLElement>("[data-final-answer]");
+    const last = finals[finals.length - 1];
+    // 只对准时间线上最后一条最终回答；旧轮定时器迟到时直接忽略
+    if (!last || last.getAttribute("data-final-answer") !== runId) return;
+
+    // 先解除跟随，避免 stick 在负增高后锁底，把视口钉在回答末尾
+    autoScrollRef.current = false;
+    setAutoScroll(false);
+    setShowScrollToBottom(true);
+
+    const rowTop =
+      last.getBoundingClientRect().top -
+      timeline.getBoundingClientRect().top +
+      timeline.scrollTop;
+    // 最终回答开头落在视口中上部（约 35%），不要贴顶也不要贴底
+    const viewportAnchor = Math.round(timeline.clientHeight * 0.35);
+    const targetTop = Math.max(0, rowTop - viewportAnchor);
+    const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    programmaticScrollRef.current = true;
+    timeline.scrollTo({
+      top: targetTop,
+      behavior: reduceMotion ? "instant" : "smooth",
+    });
   }, [ownerKey]);
 
   const setAutoScrollFromScroller = useCallback((following: boolean) => {
@@ -543,10 +605,12 @@ export function useSessionTimelineController(options: {
     loadMoreMessages,
     jumpToMessage,
     scrollToBottom,
+    scrollFinalAnswerIntoView,
     autoScroll,
     showScrollToBottom,
     pinAnimating,
     setAutoScrollFromScroller,
+    scrollerScrollApiRef,
     pinnedTurnId,
     pinSpacerHeight,
     pinTurnToTop,

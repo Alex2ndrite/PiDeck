@@ -35,6 +35,8 @@ test("single-turn DOM stays light via default-collapsed process group", () => {
   );
   assert.match(turnExecution, /历史已完成 run 初始即折叠/);
   assert.match(turnExecution, /!\(opts\.isComplete && !opts\.agentRunning && opts\.hasFinalAnswer\)/);
+  // 完成后 1.5s 自动收起（落在 1~2s 体验区间）
+  assert.match(turnExecution, /}, 1500\)/);
 });
 
 test("process group uses CollapsibleContent height transition", () => {

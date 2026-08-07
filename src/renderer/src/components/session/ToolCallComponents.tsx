@@ -202,7 +202,7 @@ export const ToolActivityCard = memo(function ToolActivityCard(props: { name: st
 		<section className="tool-activity-card" data-status="running" aria-live="polite">
 			<span className="tool-activity-icon">{toolIcon(props.name)}</span>
 			<div className="tool-activity-copy">
-				<strong>{props.name}</strong>
+				<span className="tool-activity-name">{props.name}</span>
 				<span>{t("tool.statusRunning")}</span>
 			</div>
 			<span className="tool-activity-pulse" aria-hidden="true"><i /><i /><i /></span>
@@ -288,7 +288,7 @@ export const ToolCard = memo(function ToolCard(props: {
 					<span className="tool-card-icon inline-flex shrink-0 items-center justify-center text-text-tertiary">
 						{isSkillRead ? <Brain size={15} /> : isAskCard ? <MessageCircle size={15} /> : toolIcon(toolName)}
 					</span>
-					<span className="shrink-0 text-caption font-[650] lowercase text-text-primary">
+					<span className="shrink-0 text-caption font-medium lowercase text-text-secondary">
 						{isSkillRead ? `skill:${skillName}` : isAskCard ? t("ask.toolName") : toolName}
 					</span>
 					{expanded ? (

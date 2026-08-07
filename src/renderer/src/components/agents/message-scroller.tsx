@@ -17,10 +17,18 @@ import {
   type PreviewRailItem,
 } from "@/components/motion/preview-rail";
 import { cn } from "@/lib/utils";
-import { useStickToBottom } from "@/lib/stick-to-bottom";
+import {
+  useStickToBottom,
+  type ScrollToBottom,
+} from "@/lib/stick-to-bottom";
 
 const PREVIEW_TITLE_LENGTH = 56;
 const PREVIEW_DESCRIPTION_LENGTH = 88;
+
+/** 供时间线 controller 调用的引擎滚动 API（回底弹簧等）。 */
+export type MessageScrollerScrollApi = {
+  scrollToBottom: ScrollToBottom;
+};
 
 function truncateMessageText(text: string, limit: number) {
   if (text.length <= limit) return text;
@@ -97,6 +105,11 @@ export interface MessageScrollerProps extends ComponentPropsWithRef<"div"> {
   contentClassName?: string;
   railClassName?: string;
   viewportRef?: Ref<HTMLElement>;
+  /**
+   * 向时间线 controller 暴露 stick-to-bottom 引擎 API。
+   * 回底按钮应走弹簧 smooth，而不是原生 timeline.scrollTo。
+   */
+  scrollApiRef?: Ref<MessageScrollerScrollApi | null>;
   viewportProps?: Omit<
     ComponentPropsWithRef<"section">,
     "children" | "className" | "ref"
@@ -120,6 +133,7 @@ export function MessageScroller({
   contentClassName,
   railClassName,
   viewportRef: externalViewportRef,
+  scrollApiRef,
   viewportProps,
   contentProps,
   className,
@@ -152,16 +166,34 @@ export function MessageScroller({
 
   // ── 滚动引擎：use-stick-to-bottom（弹簧物理 + 锁底/逃逸 + 350ms 保留期）──
   // smooth=false 或 reduced-motion 时 resize 用 instant（与旧手写逻辑等价）。
-  // busyEnding 窗口内也强制 instant（needsInstant 语义保留）。
+  // busy / busyEnding 窗口内也强制 instant：工具卡与流式结构跳变期间避免弹簧滞后砰抖。
+  // 另：引擎对单次增高 >28px 也会强制 instant（见 instantResizeThreshold）。
   const stick = useStickToBottom({
     initial: "instant",
-    resize: busyEnding || reduce || !smooth ? "instant" : "smooth",
+    resize: busy || busyEnding || reduce || !smooth ? "instant" : "smooth",
+    instantResizeThreshold: 28,
   });
   // 解构出稳定引用：stick 每次渲染是新对象，effect 依赖不能直接用它。
   const engineScrollRef = stick.scrollRef;
   const engineContentRef = stick.contentRef;
   const engineScrollToBottom = stick.scrollToBottom;
   const engineIsAtBottom = stick.isAtBottom;
+
+  // 把引擎回底能力挂到外部 ref，供 SessionTimelineController 的回底按钮使用。
+  useEffect(() => {
+    if (!scrollApiRef) return;
+    const api: MessageScrollerScrollApi = { scrollToBottom: engineScrollToBottom };
+    if (typeof scrollApiRef === "function") {
+      scrollApiRef(api);
+      return () => {
+        scrollApiRef(null);
+      };
+    }
+    scrollApiRef.current = api;
+    return () => {
+      scrollApiRef.current = null;
+    };
+  }, [scrollApiRef, engineScrollToBottom]);
 
   const setViewportRef = useCallback(
     (node: HTMLElement | null) => {
@@ -294,10 +326,17 @@ export function MessageScroller({
 
   useLayoutEffect(() => {
     if (!followOutput) return;
-    engineScrollToBottom({ animation: "instant" });
-    // 注意：engineScrollToBottom 在 stick-to-bottom 内是稳定的 useCallback，
-    // 可直接作为依赖；不能依赖 stick 整体（每次渲染新对象导致死循环）。
-  }, [followOutput, engineScrollToBottom]);
+    // 回底按钮会先 setAutoScroll(true) 再发起弹簧；若这里无条件 instant，
+    // layout 阶段会抢跑把弹簧掐死，观感变成「唰」一下。
+    // 距底较远用弹簧滞空；已在近底则 instant 即可。
+    const scroll = viewportRef.current;
+    const distance = scroll
+      ? scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight
+      : 0;
+    const animation =
+      reduce || distance <= followThreshold ? "instant" : "smooth";
+    engineScrollToBottom({ animation });
+  }, [followOutput, followThreshold, reduce, engineScrollToBottom]);
 
   useEffect(() => {
     onFollowChange?.(isFollowing);

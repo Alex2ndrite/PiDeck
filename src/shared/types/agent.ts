@@ -113,11 +113,20 @@ export type AgentUiRequest = {
 	batchReview?: boolean;
 };
 
-/** 实时思考内容更新，用于流式展示模型推理过程 */
+/** 实时思考内容更新，用于流式展示模型推理过程。
+ *  id 与 History 的 thinking-group id 相同（msg-thinking-${assistantMessageId}），
+ *  保证 Live→History 不 remount。 */
 export type ThinkingUpdate = {
 	agentId: string;
+	/** 稳定段 id：与 buildTurnDisplay 的 msg-thinking-* 一致 */
+	id: string;
 	/** 累积的思考文本 */
-	thinking: string;
+	text: string;
+	startedAt: number;
+	/** 0 表示仍在流式思考中 */
+	endedAt: number;
+	/** true：本段结束，渲染层可清 live 通道并回退到 History */
+	done: boolean;
 };
 
 /** 输入框发送模式，决定消息直接执行还是以只读方式触发生成计划。 */

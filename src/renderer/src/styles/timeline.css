@@ -126,13 +126,12 @@
 }
 
 @keyframes timeline-step-enter {
+  /* 仅淡入：禁止 translateY，避免与 stick-to-bottom 追底叠加成「砰」一下 */
   from {
     opacity: 0;
-    transform: translateY(6px);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
   }
 }
 
@@ -454,11 +453,11 @@
   flex-direction: column;
   gap: 1px;
 }
-.tool-activity-copy strong {
+.tool-activity-copy .tool-activity-name {
   overflow: hidden;
-  color: var(--color-text-primary);
-  font-size: var(--font-size-control);
-  font-weight: 650;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-caption);
+  font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -483,8 +482,9 @@
 .tool-activity-pulse i:nth-child(2) { animation-delay: 140ms; }
 .tool-activity-pulse i:nth-child(3) { animation-delay: 280ms; }
 @keyframes tool-activity-enter {
-  from { opacity: 0; transform: translateY(5px) scale(0.985); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
+  /* 仅淡入，避免占位卡与真实 ToolCard 切换时再叠一层位移动画 */
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 @keyframes tool-activity-sheen {
   0%, 35% { transform: translateX(-100%); }
@@ -524,7 +524,8 @@
 .tool-card--running {
   border-color: color-mix(in srgb, var(--color-warning) 42%, var(--color-border-subtle));
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-warning) 10%, transparent);
-  animation: timeline-step-enter 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  /* 仅淡入：无 translateY，避免与 stick-to-bottom 打架；减轻工具卡「咔」一下出现 */
+  animation: timeline-step-enter 200ms ease-out both;
 }
 .tool-card--running .tool-card-icon {
   color: var(--color-warning);
@@ -562,10 +563,8 @@
 }
 
 /* ---------- 工具组卡片：ToolGroupCard（多工具聚合） ---------- */
-/* 工具组作为连续执行轨道，组内卡片之间不再重复绘制外框。 */
-.tool-group-card:has(.tool-card--running) {
-  animation: timeline-step-enter 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
-}
+/* 工具组作为连续执行轨道，组内卡片之间不再重复绘制外框。
+ * 不再对 :has(.tool-card--running) 播放 enter 动画——新工具出现时 :has 会反复触发，放大抖动。 */
 .tool-group-card > div {
   min-width: 0;
 }

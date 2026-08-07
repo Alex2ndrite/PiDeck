@@ -21,6 +21,7 @@ import {
   type RenderMessage,
 } from "../app/AppUtils";
 import {
+  liveThinkingIdBySessionIdAtomFamily,
   sessionMessageLoadStateAtom,
   sessionRecordByIdAtomFamily,
   sessionRuntimeBySessionIdAtomFamily,
@@ -36,7 +37,6 @@ import {
 import { t } from "../../i18n";
 import { SessionFileSummary } from "./SessionFileSummary";
 import { SessionStartSurface } from "./SessionStartSurface";
-import { ToolActivityCard } from "./ToolCallComponents";
 import { MessageScroller } from "../agents/message-scroller";
 
 type TurnRowProps = ComponentProps<typeof TurnRow>;
@@ -119,7 +119,8 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
   );
   const activeRuntimeState = runtime?.state;
   const activeConversationStatus = modernSurfaceState.status;
-  const activeThinking = runtime?.thinking;
+  // 只订 live id：思考正文由 ThinkingStep 叶子订阅，避免 50ms 戳醒整条 timeline。
+  const liveThinkingId = useAtomValue(liveThinkingIdBySessionIdAtomFamily(sessionId ?? ""));
   const isAgentBusy = modernSurfaceState.isBusy;
   const cancellingUi = false;
   const loadMoreMessages = controller.loadMoreMessages;
@@ -344,10 +345,12 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
       className="message-timeline-host h-full min-h-0"
       viewportClassName="message-timeline"
       viewportRef={timelineRef}
+      scrollApiRef={controller.scrollerScrollApiRef}
       followOutput={controller.autoScroll}
       followThreshold={56}
       smooth
-      busy={isAwaitingAssistant}
+      // 整段 agent 忙碌（含工具执行/流式）期间追底用 instant，避免工具卡弹出弹簧滞后砰抖。
+      busy={isAgentBusy || isAwaitingAssistant}
       onFollowChange={controller.setAutoScrollFromScroller}
     >
       {hasMoreMessages && canLoadMoreMessages && (
@@ -453,15 +456,18 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
                     onPreviewImage={props.onPreviewImage}
                     showThinking={props.showThinking}
                     isStreaming={isRunStreaming}
-                    // Live 思考：run 尚未落地 thinking-group 时由 TurnRow 直接挂 ThinkingStep
-                    streamingThinking={isRunStreaming ? activeThinking : undefined}
+                    // 始终下发 live id（按 message id 命中）；勿绑 isRunStreaming，
+                    // 否则流结束而 History 未到时会提前卸思考步导致 remount dump。
+                    liveThinkingId={liveThinkingId}
                     agentRunning={isRunStreaming}
+                    isLatestRun={index === reconciledRuns.length - 1}
                     onOpenExternal={props.onOpenExternal}
                     onOpenFile={props.onOpenFile}
                     onDiffFile={props.onDiffFile}
                     onEditMessage={props.onEditMessage}
                     onDeleteMessage={props.onDeleteMessage}
                     onEnterMultiSelect={() => setMultiSelectOpen(true)}
+                    onProcessAutoCollapsed={controller.scrollFinalAnswerIntoView}
                   />
                 );
               }
@@ -507,26 +513,14 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
               return null;
             })}
 
-            {isAwaitingAssistant && (
-              <>
-                {activeRuntimeState?.isExecutingTool &&
-                  !reconciledRuns.some(
-                    (run) =>
-                      run.kind === "agent-run" &&
-                      run.items.some((item) => item.kind === "tool-group"),
-                  ) && (
-                    <ToolActivityCard name={t("tool.pending")} />
-                  )}
-              </>
-            )}
-
             {hasActiveConversation &&
               !cancellingUi &&
               (activeConversationStatus === "running" ||
                 activeConversationStatus === "starting" ||
                 activeRuntimeState?.isStreaming) && (
                 <RespondingIndicator
-                  thinking={activeThinking}
+                  // 有 live 思考段即可；不订正文 atom，避免 50ms 重渲 timeline。
+                  thinking={liveThinkingId ? "." : undefined}
                   showThinking={props.showThinking}
                   isStarting={activeConversationStatus === "starting"}
                   isExecutingTool={activeRuntimeState?.isExecutingTool}

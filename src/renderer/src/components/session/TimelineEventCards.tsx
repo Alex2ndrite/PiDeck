@@ -9,6 +9,7 @@ import { ApprovalCard } from "../ui-shadcn/approval-card";
 import { TimelineMarker } from "./TimelineMarker";
 import { MarkdownStream } from "./MarkdownStream";
 import { ShimmerText } from "./ShimmerText";
+import { useSmoothStream } from "../../utils/useSmoothStream";
 
 // Button 收口状态（P0）：本文件按钮全部保留原生——
 // compaction-card-header / thinking-card-trigger 是折叠触发器 + 内容排版容器（内部 span/small/em 结构）；
@@ -329,23 +330,22 @@ export const ThinkingBlock = memo(
 		onOpenFile?: (path: string) => void;
 	}) {
 	const [expanded, setExpanded] = useState(props.defaultExpanded ?? true);
+	const contentRef = useRef<HTMLDivElement | null>(null);
+	const [overflowing, setOverflowing] = useState(false);
 	// agent 完成时强制收起：即使之前手动展开过，思考也随执行过程整体收起（回到折叠 4 行半态）
 	useEffect(() => {
 		if (props.endedAt) setExpanded(false);
 	}, [props.endedAt]);
-	if (!props.showThinking || !props.text.trim()) return null;
-	// 计算思考耗时（毫秒），有 endAt 且有 startAt 时才显示
-	const durationMs =
-		props.endedAt && props.startedAt && props.endedAt >= props.startedAt
-			? props.endedAt - props.startedAt
-			: null;
-	const durationText = durationMs != null ? formatDuration(durationMs) : null;
-
+	// 流式思考走打字机，避免大块 thinking_delta 一次糊上屏幕（「咔」一下）
+	const { displayedContent } = useSmoothStream({
+		content: props.text,
+		isStreaming: Boolean(props.isStreaming),
+		minDelay: 16,
+	});
+	// 始终走打字机输出：历史首挂时 hook 初始即全文；流式结束也不再绕过 displayedContent 造成整段蹦出。
 	// 折叠态内容溢出检测：超过 4 行半才显示「展开思考」按钮。
 	// 折叠时 clientHeight 被 max-height 锁死，ResizeObserver 收不到文本增长，
 	// 因此 text 变化时（流式追加）主动重查；ResizeObserver 兜底窗口/字号档位变化。
-	const contentRef = useRef<HTMLDivElement | null>(null);
-	const [overflowing, setOverflowing] = useState(false);
 	useEffect(() => {
 		const el = contentRef.current;
 		if (!el) return;
@@ -354,7 +354,15 @@ export const ThinkingBlock = memo(
 		const ro = new ResizeObserver(check);
 		ro.observe(el);
 		return () => ro.disconnect();
-	}, [props.text, expanded]);
+	}, [displayedContent, expanded]);
+
+	if (!props.showThinking || !props.text.trim()) return null;
+	// 计算思考耗时（毫秒），有 endAt 且有 startAt 时才显示
+	const durationMs =
+		props.endedAt && props.startedAt && props.endedAt >= props.startedAt
+			? props.endedAt - props.startedAt
+			: null;
+	const durationText = durationMs != null ? formatDuration(durationMs) : null;
 	// 展开/收起按钮：展开态常显（收起按钮），折叠态仅内容溢出时显示（展开按钮）
 	const showToggle = expanded || overflowing;
 	return (
@@ -378,7 +386,7 @@ export const ThinkingBlock = memo(
 					className={`markdown-body px-3 pt-2 pb-1 text-text-tertiary ${expanded ? "" : "max-h-[calc(var(--font-size-body)*7.425)] overflow-hidden"}`}
 				>
 					<MarkdownStream
-						text={props.text}
+						text={displayedContent}
 						isStreaming={props.isStreaming}
 						onOpenExternal={props.onOpenExternal}
 						onOpenFile={props.onOpenFile}

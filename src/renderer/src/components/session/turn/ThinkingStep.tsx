@@ -1,29 +1,40 @@
 import { memo } from "react";
+import { useAtomValue } from "jotai";
+import { streamingThinkingEntryByIdAtomFamily } from "../../../atoms/session-atoms";
 import { ThinkingBlock } from "../TimelineEventCards";
 import type { ThinkingGroupItem } from "../timeline/types";
 
 /**
  * 思考步骤（单步形态，原位穿插）。
  *
- * hidden 用 CSS display:none 而非卸载：保持 DOM 稳定、保留内部状态，
- * 后续做折叠/展开动画时可直接加 transition。
+ * 身份与 History 共用 msg-thinking-*：id 命中 live 通道时用 atom 文本/endedAt，
+ * 否则回退 group（终态落盘后）。hidden 用 CSS display:none 而非卸载，保留打字机状态。
  */
 export const ThinkingStep = memo(function ThinkingStep(props: {
 	group: ThinkingGroupItem;
 	hidden: boolean;
+	sessionId?: string;
 	isStreaming?: boolean;
 	showThinking?: boolean;
 	onOpenExternal: (url: string) => void;
 	onOpenFile?: (path: string) => void;
 }) {
+	const live = useAtomValue(streamingThinkingEntryByIdAtomFamily(props.group.id));
+	const text = live?.text ?? props.group.text;
+	const startedAt = live?.startedAt ?? props.group.startedAt;
+	const endedAt = live ? live.endedAt : props.group.endedAt;
+	const isStreaming = live
+		? live.streaming && live.endedAt <= 0
+		: Boolean(props.isStreaming);
+
 	return (
 		<div style={{ display: props.hidden ? "none" : undefined }}>
 			<ThinkingBlock
-				text={props.group.text}
-				startedAt={props.group.startedAt}
-				endedAt={props.group.endedAt}
+				text={text}
+				startedAt={startedAt}
+				endedAt={endedAt}
 				showThinking={props.showThinking}
-				isStreaming={props.isStreaming}
+				isStreaming={isStreaming}
 				// 执行过程折叠详情里思考以「单步」呈现（标题+折叠预览），
 				// 与工具卡片同为 Chain of Thought 步骤，不默认摊开 markdown。
 				defaultExpanded={false}

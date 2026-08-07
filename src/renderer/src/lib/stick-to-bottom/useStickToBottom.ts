@@ -7,40 +7,25 @@
  *
  * 依赖：仅 React（无其他运行时依赖），与官方包逻辑一致，补全 TypeScript 类型。
  * 用于 AI 聊天场景"锁底跟随 + 弹簧物理 + 逃逸/锁底"的滚动引擎。
- * 改动点：无逻辑变更，仅类型标注与模块内导出整理（官方 dist 编译产物 → 可读 TS）。
+ *
+ * 本地相对上游的关键改动：
+ * 1. mergeAnimations 缓存 key 含 instant（上游同参污染导致 smooth/instant 串味）
+ * 2. ResizeObserver 正增长且行为为 instant 时同步写 scrollTop（避免 rAF 晚一帧 paint 砰抖）
+ * 3. scrollGeneration 打断在途 rAF，避免与同步校正打架
+ * 4. instantResizeThreshold：大块离散增高强制 instant
  */
 import { useCallback, useMemo, useRef, useState } from "react";
+import {
+  type Animation,
+  type SpringAnimation,
+  mergeAnimations,
+} from "./mergeAnimations";
 
-const DEFAULT_SPRING_ANIMATION = {
-  /**
-   * A value from 0 to 1, on how much to damp the animation.
-   * 0 means no damping, 1 means full damping.
-   *
-   * @default 0.7
-   */
-  damping: 0.7,
-  /**
-   * The stiffness of how fast/slow the animation gets up to speed.
-   *
-   * @default 0.05
-   */
-  stiffness: 0.05,
-  /**
-   * The inertial mass associated with the animation.
-   * Higher numbers make the animation slower.
-   *
-   * @default 1.25
-   */
-  mass: 1.25,
-};
+export type { Animation, SpringAnimation } from "./mergeAnimations";
 
 const STICK_TO_BOTTOM_OFFSET_PX = 70;
 const SIXTY_FPS_INTERVAL_MS = 1000 / 60;
 const RETAIN_ANIMATION_DURATION_MS = 350;
-
-export interface SpringAnimation extends Partial<typeof DEFAULT_SPRING_ANIMATION> {}
-
-export type Animation = ScrollBehavior | SpringAnimation;
 
 export interface ScrollElements {
   scrollElement: HTMLElement;
@@ -56,6 +41,13 @@ export interface StickToBottomOptions extends SpringAnimation {
   resize?: Animation;
   initial?: Animation | boolean;
   targetScrollTop?: GetTargetScrollTop;
+  /**
+   * 内容高度单次增长超过该像素时，resize 强制 instant。
+   * 工具卡/折叠栏等离散跳变若仍走弹簧，会出现「先撑上去再弹回」的砰抖。
+   * 小幅增长（正文逐字）仍用 resize 弹簧。
+   * @default 28
+   */
+  instantResizeThreshold?: number;
 }
 
 export type ScrollToBottomOptions =
@@ -110,6 +102,8 @@ export interface StickToBottomState {
   calculatedTargetScrollTop: number;
   scrollDifference: number;
   resizeDifference: number;
+  /** 每次新开滚动会话递增；在途 rAF 发现代数过期则退出，避免与同步校正打架。 */
+  scrollGeneration: number;
   animation?: {
     behavior: "instant" | Required<SpringAnimation>;
     ignoreEscapes: boolean;
@@ -193,6 +187,7 @@ export const useStickToBottom = (options: StickToBottomOptions = {}): StickToBot
       escapedFromLock,
       isAtBottom,
       resizeDifference: 0,
+      scrollGeneration: 0,
       accumulated: 0,
       velocity: 0,
       get scrollTop() {
@@ -266,8 +261,19 @@ export const useStickToBottom = (options: StickToBottomOptions = {}): StickToBot
       } else {
         durationElapsed = waitElapsed + (scrollOptions.duration ?? 0);
       }
+      // instant 不复用在途动画：旧闭包的 startTarget 会把连续增高拖成多帧阶梯。
+      if (scrollOptions.wait !== true || behavior === "instant") {
+        state.animation = undefined;
+      }
+      if (state.animation?.behavior === behavior) {
+        return state.animation.promise;
+      }
+      const generation = ++state.scrollGeneration;
       const next = async (): Promise<boolean> => {
         const promise = new Promise(requestAnimationFrame).then(() => {
+          if (generation !== state.scrollGeneration) {
+            return false;
+          }
           if (!state.isAtBottom) {
             state.animation = undefined;
             return false;
@@ -332,12 +338,6 @@ export const useStickToBottom = (options: StickToBottomOptions = {}): StickToBot
           return isAtBottomResult;
         });
       };
-      if (scrollOptions.wait !== true) {
-        state.animation = undefined;
-      }
-      if (state.animation?.behavior === behavior) {
-        return state.animation.promise;
-      }
       return next();
     },
     [setIsAtBottom, isSelecting, state],
@@ -462,17 +462,39 @@ export const useStickToBottom = (options: StickToBottomOptions = {}): StickToBot
         /**
          * If it's a positive resize, scroll to the bottom when
          * we're already at the bottom.
+         * 大块离散增高（工具卡入场等）强制 instant，避免弹簧滞后造成砰抖；
+         * 小幅增长保留配置的 resize 动画（逐字跟底）。
+         *
+         * instant 必须在本 RO 回调内同步写 scrollTop：
+         * RO 在 paint 前触发，而 scrollToBottom 的 rAF 要等到下一帧——
+         * 中间那一帧旧 scrollTop 就是工具卡「砰」一下的根因。
          */
-        const animation = mergeAnimations(
+        const requested = mergeAnimations(
           optionsRef.current ?? {},
           previousHeight ? optionsRef.current?.resize : optionsRef.current?.initial,
         );
-        scrollToBottom({
-          animation,
-          wait: true,
-          preserveScrollPosition: true,
-          duration: animation === "instant" ? undefined : RETAIN_ANIMATION_DURATION_MS,
-        });
+        const threshold = optionsRef.current?.instantResizeThreshold ?? 28;
+        const animation =
+          previousHeight &&
+          difference > threshold &&
+          requested !== "instant"
+            ? "instant"
+            : requested;
+        if (animation === "instant") {
+          // preserveScrollPosition：仅已锁底时跟随，不把用户上滚强拽回来
+          if (state.isAtBottom) {
+            state.scrollGeneration += 1;
+            state.animation = undefined;
+            state.scrollTop = state.calculatedTargetScrollTop;
+          }
+        } else {
+          scrollToBottom({
+            animation,
+            wait: true,
+            preserveScrollPosition: true,
+            duration: RETAIN_ANIMATION_DURATION_MS,
+          });
+        }
       } else {
         /**
          * Else if it's a negative resize, check if we're near the bottom
@@ -532,29 +554,3 @@ function useRefCallback<T extends HTMLElement>(
   return result;
 }
 
-const animationCache = new Map<string, "instant" | Required<SpringAnimation>>();
-
-function mergeAnimations(
-  ...animations: Array<StickToBottomOptions | Animation | boolean | undefined>
-): "instant" | Required<SpringAnimation> {
-  const result: Required<SpringAnimation> = { ...DEFAULT_SPRING_ANIMATION };
-  let instant = false;
-  for (const animation of animations) {
-    if (animation === "instant") {
-      instant = true;
-      continue;
-    }
-    if (typeof animation !== "object") {
-      continue;
-    }
-    instant = false;
-    result.damping = animation.damping ?? result.damping;
-    result.stiffness = animation.stiffness ?? result.stiffness;
-    result.mass = animation.mass ?? result.mass;
-  }
-  const key = JSON.stringify(result);
-  if (!animationCache.has(key)) {
-    animationCache.set(key, instant ? "instant" : Object.freeze(result));
-  }
-  return animationCache.get(key)!;
-}

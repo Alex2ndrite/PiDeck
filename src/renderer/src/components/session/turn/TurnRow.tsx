@@ -1,4 +1,4 @@
-import { Fragment, memo, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ChevronUp, Share, SquarePen, Trash } from "lucide-react";
 import type { ImageContent } from "../../../../../shared/types";
 import { t } from "../../../i18n";
@@ -11,7 +11,6 @@ import { buildProcessSummary } from "../timeline/segmentSummary";
 import type {
 	AgentRunItem,
 	MessageItem,
-	ThinkingGroupItem,
 } from "../timeline/types";
 import { sameAgentRunForRender } from "../../app/AppUtils";
 import { FinalAnswer } from "./FinalAnswer";
@@ -29,7 +28,7 @@ import type { DiffFileHandler } from "../ToolCallComponents";
  * - 唯一「执行过程」折叠汇总按钮（run 开头，纯数字）；
  * - 思考/工具/中间回答原位穿插，共用一个 run 级折叠开关；
  * - 最终回答常驻、永不折叠；
- * - 流式中自动展开（实时滚出），run 结束后 1s 自动收起。
+ * - 流式中自动展开（实时滚出），run 结束后 1.5s 自动收起。
  *
  * Live 正文由 InterimAnswer(mode=live) → AnswerOutput 订阅 atom，本组件不订 streaming store。
  */
@@ -42,8 +41,8 @@ export type TurnRowProps = {
 	onPreviewImage: (image: ImageContent) => void;
 	showThinking?: boolean;
 	isStreaming?: boolean;
-	/** 流式思考实时文本（runtime.thinking）：History 尚未有 thinking 时直接挂 ThinkingStep */
-	streamingThinking?: string;
+	/** 当前 live 思考段稳定 id（msg-thinking-*），交给 buildTurnDisplay 同身份挂载 */
+	liveThinkingId?: string;
 	onOpenExternal: (url: string) => void;
 	onOpenFile?: (path: string) => void;
 	onDiffFile?: DiffFileHandler;
@@ -54,6 +53,13 @@ export type TurnRowProps = {
 	agentRunning?: boolean;
 	/** 打开多选分享弹框 */
 	onEnterMultiSelect?: () => void;
+	/**
+	 * 自动收起执行过程后回调（仅自动收起，不含用户手动折叠）。
+	 * 时间线用来把视口对准最终回答开头。
+	 */
+	onProcessAutoCollapsed?: (runId: string) => void;
+	/** 是否时间线最新一轮（非最新不自动收起对准） */
+	isLatestRun?: boolean;
 };
 
 export const TurnRow = memo(
@@ -74,44 +80,19 @@ export const TurnRow = memo(
 	const duration = isComplete && run.startedAt > 0 ? run.endedAt - run.startedAt : 0;
 	const showDuration = isComplete && duration > 0;
 
-	// 扁平展示序列：只用 History run，不注入虚拟 thinking-group（Live 思考单独挂载）。
+	// 扁平展示序列：Live 与 History 共用 msg-thinking-* 身份（liveThinkingId 命中即挂步）。
 	const displayItems = useMemo(
 		() =>
 			buildTurnDisplay(run, {
 				showThinking: props.showThinking,
 				isComplete: !props.agentRunning,
+				liveThinkingId: props.liveThinkingId,
 			}),
-		[run, props.showThinking, props.agentRunning],
+		[run, props.showThinking, props.agentRunning, props.liveThinkingId],
 	);
 
-	// Live 思考：History 尚无 thinking-group / 消息 thinking 时，直接挂一步 ThinkingStep。
-	const liveThinkingGroup = useMemo<ThinkingGroupItem | null>(() => {
-		const liveText = props.streamingThinking?.trim();
-		if (!liveText || props.showThinking === false) return null;
-		if (run.items.some((item) => item.kind === "thinking-group")) return null;
-		if (
-			run.items.some(
-				(item) =>
-					item.kind === "message" &&
-					item.message.role === "assistant" &&
-					Boolean(item.message.thinking?.trim()),
-			)
-		) {
-			return null;
-		}
-		return {
-			kind: "thinking-group",
-			id: `${run.id}:live-thinking`,
-			messages: [],
-			text: liveText,
-			startedAt: run.startedAt,
-			endedAt: 0,
-		};
-	}, [props.streamingThinking, props.showThinking, run]);
-
 	const processSummary = useMemo(() => buildProcessSummary(displayItems), [displayItems]);
-	const showProcessToggle =
-		hasFoldableContent(displayItems) || Boolean(liveThinkingGroup);
+	const showProcessToggle = hasFoldableContent(displayItems);
 
 	// 流式中最后一条中间回答 id（Live 挂载锚点）。
 	const lastInterimId = useMemo(() => {
@@ -143,11 +124,31 @@ export const TurnRow = memo(
 	// run 级折叠状态（一个开关控制全部思考/工具/中间回答步骤）
 	// hasFinalAnswer：无最终回答的 run 不自动收起（中间回答是唯一输出，不能被折叠隐藏）
 	const hasFinalAnswer = displayItems.some((item) => item.kind === "final-answer");
-	const { stepsVisible, toggleSteps } = useTurnExecution({
+	const { stepsVisible, toggleSteps, autoCollapseTick } = useTurnExecution({
 		agentRunning: props.agentRunning,
 		isComplete,
 		hasFinalAnswer,
+		isLatestRun: props.isLatestRun,
 	});
+
+	// 自动收起后：等折叠负增高 / stick 近底重锁完成，再对准最终回答开头。
+	useLayoutEffect(() => {
+		if (autoCollapseTick === 0) return;
+		const runId = run.id;
+		const onCollapsed = props.onProcessAutoCollapsed;
+		if (!onCollapsed) return;
+		let cancelled = false;
+		const outerId = requestAnimationFrame(() => {
+			requestAnimationFrame(() => {
+				if (!cancelled) onCollapsed(runId);
+			});
+		});
+		return () => {
+			cancelled = true;
+			cancelAnimationFrame(outerId);
+		};
+	}, [autoCollapseTick, run.id, props.onProcessAutoCollapsed]);
+
 	// 中间内容（思考/工具/中间回答）与最终回答分组：
 	// 中间内容统一收进执行过程折叠容器（stepsVisible 整体控制显隐），
 	// 最终回答留在容器外常驻、永不折叠。
@@ -234,17 +235,6 @@ export const TurnRow = memo(
 							onToggle={toggleSteps}
 						/>
 						<CollapsibleContent className="execution-summary-details">
-							{liveThinkingGroup && (
-								<ThinkingStep
-									key={liveThinkingGroup.id}
-									group={liveThinkingGroup}
-									hidden={!stepsVisible}
-									isStreaming={props.isStreaming}
-									showThinking={props.showThinking}
-									onOpenExternal={props.onOpenExternal}
-									onOpenFile={props.onOpenFile}
-								/>
-							)}
 							{foldableItems.map((item) => {
 								let content: ReactNode;
 								let itemKey: string;
@@ -255,6 +245,7 @@ export const TurnRow = memo(
 											<ThinkingStep
 												group={item.entry.group}
 												hidden={!stepsVisible}
+												sessionId={props.sessionId}
 												isStreaming={props.isStreaming}
 												showThinking={props.showThinking}
 												onOpenExternal={props.onOpenExternal}
@@ -316,22 +307,23 @@ export const TurnRow = memo(
 
 				{/* 最终回答：本轮最后一条 assistant 文本，常驻、永不折叠 */}
 				{finalItems.map((item) => (
-					<FinalAnswer
-						key={item.id}
-						message={item.message}
-						images={allImages}
-						isStreaming={props.isStreaming ?? false}
-						editing={editing}
-						editText={editText}
-						editAreaRef={editAreaRef}
-						onEditTextChange={setEditText}
-						onStartEdit={startEditing}
-						onCancelEdit={() => setEditing(false)}
-						onSaveEdit={saveEdit}
-						onPreviewImage={props.onPreviewImage}
-						onOpenExternal={props.onOpenExternal}
-						onOpenFile={props.onOpenFile}
-					/>
+					<div key={item.id} data-final-answer={run.id} data-message-id={item.id}>
+						<FinalAnswer
+							message={item.message}
+							images={allImages}
+							isStreaming={props.isStreaming ?? false}
+							editing={editing}
+							editText={editText}
+							editAreaRef={editAreaRef}
+							onEditTextChange={setEditText}
+							onStartEdit={startEditing}
+							onCancelEdit={() => setEditing(false)}
+							onSaveEdit={saveEdit}
+							onPreviewImage={props.onPreviewImage}
+							onOpenExternal={props.onOpenExternal}
+							onOpenFile={props.onOpenFile}
+						/>
+					</div>
 				))}
 
 				{/* 操作栏 */}
@@ -390,9 +382,9 @@ turnRowPropsEqual,
  *
  * 比较项：
  * - run：深度比较内容（sameAgentRunForRender），未变化的 run 不重渲染；
- * - 标量 props（fresh/showThinking/isStreaming/streamingThinking/agentRunning）：=== 比较；
+ * - 标量 props（fresh/showThinking/isStreaming/liveThinkingId/agentRunning）：=== 比较；
  * - 回调函数（onPreviewImage/onOpenExternal/onOpenFile/onDiffFile/onEditMessage/onDeleteMessage/
- *   onEnterMultiSelect）：行为稳定（读 ref/setState），引用变化不影响渲染结果，忽略（同 FinalAnswer 惯例）。
+ *   onEnterMultiSelect/onProcessAutoCollapsed）：行为稳定（读 ref/setState），引用变化不影响渲染结果，忽略（同 FinalAnswer 惯例）。
  */
 function turnRowPropsEqual(prev: TurnRowProps, next: TurnRowProps): boolean {
 	// 流式 run：Live AnswerOutput 随 atom 更新；父级仍需在 isStreaming 边沿重渲染折叠态。
@@ -402,7 +394,8 @@ function turnRowPropsEqual(prev: TurnRowProps, next: TurnRowProps): boolean {
 		prev.sessionId === next.sessionId &&
 		prev.fresh === next.fresh &&
 		prev.showThinking === next.showThinking &&
-		prev.streamingThinking === next.streamingThinking &&
-		prev.agentRunning === next.agentRunning
+		prev.liveThinkingId === next.liveThinkingId &&
+		prev.agentRunning === next.agentRunning &&
+		prev.isLatestRun === next.isLatestRun
 	);
 }
