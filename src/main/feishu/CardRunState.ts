@@ -1,7 +1,7 @@
 /**
  * CardRunState — 飞书流式卡片的运行时状态机 v2
  *
- * 参考 Proma 的 card-run-state.ts 实现。
+ * 参考上游 card-run-state.ts 实现。
  * 把 AgentManager 的事件累积成结构化的 RunState，
  * 便于渲染层无时序地把状态转成 CardKit 2.0 JSON。
  *

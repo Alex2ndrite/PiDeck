@@ -47,9 +47,9 @@ export const MarkdownStream = memo(function MarkdownStream(props: {
 }) {
 	const isDark = typeof document !== "undefined" &&
 		document.documentElement.dataset.theme === "dark";
-	// 逐字打字机渐显：把高频文本更新转为字符队列 + rAF 渐进渲染（参考 Cherry Studio/Proma）。
+	// 逐字打字机渐显：把高频文本更新转为字符队列 + rAF 渐进渲染（参考 Cherry Studio 实现）。
 	// 只影响展示；权威文本在 atom 中不受影响（复制/导出仍拿全文）。
-	// minDelay 10ms / divisor 8/4 与 Proma 一致（用户确认）；若卡顿可上调 minDelay。
+	// minDelay 10ms / divisor 8/4 为确认的手感参数；若卡顿可上调 minDelay。
 	const { displayedContent } = useSmoothStream({
 		content: props.text,
 		isStreaming: Boolean(props.isStreaming),

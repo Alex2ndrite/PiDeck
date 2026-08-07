@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 /**
  * useSmoothStream - 流式文本平滑渲染 Hook（逐字打字机）。
  *
- * 将高频推送的完整文本转化为平滑的逐字渲染效果（参考 Cherry Studio / Proma 实现）：
+ * 将高频推送的完整文本转化为平滑的逐字渲染效果（参考 Cherry Studio 实现）：
  *
  * 核心机制：
  * 1. 内容变化时用 startsWith 判断追加，增量经 Intl.Segmenter 拆为字符粒度入队
