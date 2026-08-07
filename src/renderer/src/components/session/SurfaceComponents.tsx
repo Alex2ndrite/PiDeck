@@ -655,6 +655,8 @@ export const TurnRow = memo(function TurnRow(props: {
 	onPreviewImage: (image: ImageContent) => void;
 	showThinking?: boolean;
 	isStreaming?: boolean;
+	/** 流式思考实时文本（runtime.thinking）：run 尚未落地 thinking-group 时注入执行区 */
+	streamingThinking?: string;
 	onOpenExternal: (url: string) => void;
 	onOpenFile?: (path: string) => void;
 	onDiffFile?: DiffFileHandler;
@@ -679,6 +681,28 @@ export const TurnRow = memo(function TurnRow(props: {
 	const isComplete = run.endedAt > 0;
 	const duration = isComplete && run.startedAt > 0 ? run.endedAt - run.startedAt : 0;
 	const showDuration = isComplete && duration > 0;
+
+	// 流式思考注入：runtime 实时思考文本尚未落地为 thinking-group 时，
+	// 合成虚拟 thinking-group 追加到 run 末尾，让思考卡与工具卡同轨出现在执行区；
+	// 消息落地后（thinking-group 出现）自动退出，避免双份渲染。
+	const effectiveRun = useMemo<AgentRunItem>(() => {
+		if (
+			!props.streamingThinking ||
+			run.items.some((item) => item.kind === "thinking-group")
+		) {
+			return run;
+		}
+		const virtualGroup: ThinkingGroupItem = {
+			kind: "thinking-group",
+			id: `${run.id}:streaming-thinking`,
+			messages: [],
+			text: props.streamingThinking,
+			startedAt: run.startedAt,
+			// 未结束：endedAt 为 0，ThinkingBlock 保持 active tone、不触发完成收起
+			endedAt: 0,
+		};
+		return { ...run, items: [...run.items, virtualGroup] };
+	}, [run, props.streamingThinking]);
 
 	// 收集本轮所有 assistant 消息（按 run.items 的时序保持原始顺序）
 	const assistantMessages = run.items.filter(
@@ -710,11 +734,11 @@ export const TurnRow = memo(function TurnRow(props: {
 	}, [isComplete, props.agentRunning]);
 
 	const rowRef = useRef<HTMLElement | null>(null);
-	// 本轮没有任何可渲染内容时不输出空容器
+	// 本轮没有任何可渲染内容时不输出空容器（effectiveRun 含流式思考虚拟组）
 	const hasContent =
 		assistantMessages.length > 0 ||
-		run.items.some(item => item.kind === "thinking-group") ||
-		run.items.some(item => item.kind === "tool-group") ||
+		effectiveRun.items.some(item => item.kind === "thinking-group") ||
+		effectiveRun.items.some(item => item.kind === "tool-group") ||
 		allImages.length > 0;
 	if (!hasContent) return null;
 
@@ -730,7 +754,8 @@ export const TurnRow = memo(function TurnRow(props: {
 					startedAt={item.startedAt}
 					endedAt={item.endedAt}
 					showThinking={props.showThinking}
-					// 折叠详情里思考以「单步」呈现（标题+首句预览），点击才展开全文：
+					isStreaming={props.isStreaming}
+					// 折叠详情里思考以「单步」呈现（标题+折叠预览），点击左下角按钮才展开：
 					// 与工具卡片同为 Chain of Thought 步骤，不再默认摊开 markdown
 					defaultExpanded={false}
 					onOpenExternal={props.onOpenExternal}
@@ -744,8 +769,8 @@ export const TurnRow = memo(function TurnRow(props: {
 	/** 一轮回答的展示段：由 buildTurnSegments 严格按时序构建，
 	 *  过程段（思考+工具）折叠、回答文本段常驻平铺（issue #130）。 */
 	const segments = useMemo<TurnSegment[]>(
-		() => buildTurnSegments(run, { showThinking: props.showThinking }),
-		[run, props.showThinking],
+		() => buildTurnSegments(effectiveRun, { showThinking: props.showThinking }),
+		[effectiveRun, props.showThinking],
 	);
 
 	/** 单个过程段的概要文本：只统计思考/工具（回答不再计入折叠，issue #130）。 */

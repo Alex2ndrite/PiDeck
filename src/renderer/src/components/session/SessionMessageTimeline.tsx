@@ -466,6 +466,8 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
                     onPreviewImage={props.onPreviewImage}
                     showThinking={props.showThinking}
                     isStreaming={isRunStreaming}
+                    // 流式思考实时文本注入当前 run 的执行区（run 落地 thinking-group 前由 TurnRow 虚拟组承载）
+                    streamingThinking={isRunStreaming ? activeThinking : undefined}
                     agentRunning={isLatestTimelineRunBusy(
                       isAgentBusy,
                       index,
@@ -524,18 +526,6 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
 
             {isAwaitingAssistant && (
               <>
-                {props.showThinking && activeThinking && (
-                  <section className="thinking-card markdown-body text-text-tertiary">
-                    <div className="thinking-card-content">
-                      <MarkdownStream
-                        text={activeThinking}
-                        isStreaming
-                        onOpenExternal={props.onOpenExternal}
-                        onOpenFile={props.onOpenFile}
-                      />
-                    </div>
-                  </section>
-                )}
                 {activeRuntimeState?.isExecutingTool &&
                   !renderedRuns.some(
                     (run) =>

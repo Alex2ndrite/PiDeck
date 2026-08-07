@@ -1809,6 +1809,8 @@ export const zhCN = {
   "message.busyGeneric": "Agent 当前忙碌，请稍后重试",
   "thinking.title": "思考",
   "thinking.duration": "思考了 {duration}",
+  "thinking.expand": "展开思考",
+  "thinking.collapse": "收起思考",
   "branch.parent": "来源：{title}",
   "branch.pager": "分支 {index}/{total}",
   "branch.prev": "上一个分支",

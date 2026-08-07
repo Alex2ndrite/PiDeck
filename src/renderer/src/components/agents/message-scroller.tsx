@@ -313,10 +313,19 @@ export function MessageScroller({
     const content = contentRef.current;
     if (!content || typeof ResizeObserver === "undefined") return;
 
-    const observer = new ResizeObserver(() => {
+    // 记录内容上次高度：只在内容「增长」时跟随滚动到底部。
+    // 折叠思考/工具等内容收缩同样会触发 ResizeObserver，若此时平滑滚到底，
+    // 会表现为点击「收起思考」后视口突兀弹到最底端（用户反馈 bug）。
+    const lastContentHeight = { current: content.clientHeight };
+
+    const observer = new ResizeObserver((entries) => {
       scheduleRailSync();
       if (!followOutput || !followingRef.current) return;
-      scrollToEnd(reduce || !smooth ? "auto" : "smooth");
+      const height = entries[0]?.contentRect.height ?? content.clientHeight;
+      if (height > lastContentHeight.current) {
+        scrollToEnd(reduce || !smooth ? "auto" : "smooth");
+      }
+      lastContentHeight.current = height;
     });
     observer.observe(content);
 
