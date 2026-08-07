@@ -172,11 +172,31 @@
   outline-offset: 1px;
 }
 .execution-summary-details {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 0;
   margin-top: var(--space-3);
+  /* 容器级贯穿竖线：思考/工具/中间回答共享一条连续轨道，
+     替代各子项（TimelineMarker）自带的独立短竖线，视觉不再断裂。 */
+  padding-left: 0;
 }
+/* 容器贯穿竖线：对齐 TimelineMarker rail 中心（rail 16px / 2 = 8px） */
+.execution-summary-details::before {
+  content: "";
+  position: absolute;
+  left: 8px;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--color-border-subtle);
+  pointer-events: none;
+}
+/* 子项隐藏各自竖线（避免重复/断裂），保留状态节点（节点自带 z-index 覆盖在容器线上） */
+.execution-summary-details .timeline-marker-line {
+  display: none;
+}
+/* 收起按钮对齐内容区（rail 16px + gap 10px = 26px），不被容器竖线穿过 */
 .execution-summary-details > .timeline-marker-row:last-child .timeline-marker-content {
   padding-bottom: 0;
 }
@@ -184,6 +204,7 @@
   display: flex;
   align-items: center;
   gap: 2px;
+  margin-left: 26px;
   padding: 0;
   border: 0;
   background: transparent;

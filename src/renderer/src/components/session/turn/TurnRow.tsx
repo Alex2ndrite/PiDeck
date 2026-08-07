@@ -109,16 +109,17 @@ export const TurnRow = memo(function TurnRow(props: TurnRowProps) {
 		isComplete,
 		hasFinalAnswer,
 	});
-	// 最后一个可折叠内容（思考/工具/中间回答）的下标：收起按钮动态紧跟其后。
-	// 流式过程中 displayItems 持续增长，按钮位置随之移动（始终在折叠区末尾），
-	// 不会因 final-answer 出现而跳到中间造成错位。
-	const lastFoldableIndex = useMemo(() => {
-		let last = -1;
-		displayItems.forEach((item, index) => {
-			if (item.kind !== "final-answer") last = index;
-		});
-		return last;
-	}, [displayItems]);
+	// 中间内容（思考/工具/中间回答）与最终回答分组：
+	// 中间内容统一收进执行过程折叠容器（stepsVisible 整体控制显隐），
+	// 最终回答留在容器外常驻、永不折叠。
+	const foldableItems = useMemo(
+		() => displayItems.filter((item) => item.kind !== "final-answer"),
+		[displayItems],
+	);
+	const finalItems = useMemo(
+		() => displayItems.filter((item) => item.kind === "final-answer"),
+		[displayItems],
+	);
 
 	// 收集本轮所有 assistant 消息（按 run.items 的时序保持原始顺序）
 	const assistantMessages = run.items.filter(
@@ -179,77 +180,60 @@ export const TurnRow = memo(function TurnRow(props: TurnRowProps) {
 					)}
 				</div>
 
-				{/* 唯一「执行过程」折叠汇总按钮（run 开头） */}
+				{/* 执行过程折叠栏：中间内容（思考/工具/中间回答）统一收进容器，
+				    由 stepsVisible 整体控制显隐；最终回答在容器外常驻。 */}
 				{showProcessToggle && (
-					<ProcessSummaryToggle
-						summary={processSummary}
-						expanded={stepsVisible}
-						onToggle={toggleSteps}
-					/>
-				)}
-
-				{/* 扁平展示序列：思考/工具/中间回答受折叠控制，最终回答常驻；
-				    收起按钮紧跟「最后一个可折叠内容」之后（动态跟随，流式中不跳动） */}
-				{displayItems.map((item, index) => {
-					let content: ReactNode;
-					let itemKey: string;
-					if (item.kind === "process-entry") {
-						itemKey = item.entry.id;
-						if (item.entry.kind === "thinking-entry") {
-							content = (
-								<ThinkingStep
-									group={item.entry.group}
-									hidden={!stepsVisible}
-									isStreaming={props.isStreaming}
-									showThinking={props.showThinking}
-									onOpenExternal={props.onOpenExternal}
-									onOpenFile={props.onOpenFile}
-								/>
-							);
-						} else {
-							content = (
-								<ToolStep group={item.entry.group} hidden={!stepsVisible} />
-							);
-						}
-					} else if (item.kind === "interim-answer") {
-						itemKey = item.id;
-						// 中间回答：与思考相同的 MarkdownStream 渲染 + execution-interim 过程样式
-						content = (
-							<InterimAnswer
-								text={item.message.text}
-								hidden={!stepsVisible}
-								isStreaming={props.isStreaming ?? false}
-								onOpenExternal={props.onOpenExternal}
-								onOpenFile={props.onOpenFile}
-							/>
-						);
-					} else {
-						// final-answer：本轮最后一条回答，常驻、永不折叠
-						itemKey = item.id;
-						content = (
-							<FinalAnswer
-								message={item.message}
-								images={allImages}
-								isStreaming={props.isStreaming ?? false}
-								editing={editing}
-								editText={editText}
-								editAreaRef={editAreaRef}
-								onEditTextChange={setEditText}
-								onStartEdit={startEditing}
-								onCancelEdit={() => setEditing(false)}
-								onSaveEdit={saveEdit}
-								onPreviewImage={props.onPreviewImage}
-								onOpenExternal={props.onOpenExternal}
-								onOpenFile={props.onOpenFile}
-							/>
-						);
-					}
-					const showCollapseAfter =
-						index === lastFoldableIndex && stepsVisible && showProcessToggle;
-					return (
-						<Fragment key={itemKey}>
-							{content}
-							{showCollapseAfter && (
+					<div className="execution-summary">
+						<ProcessSummaryToggle
+							summary={processSummary}
+							expanded={stepsVisible}
+							onToggle={toggleSteps}
+						/>
+						<div
+							className="execution-summary-details"
+							style={{ display: stepsVisible ? undefined : "none" }}
+						>
+							{foldableItems.map((item) => {
+								let content: ReactNode;
+								let itemKey: string;
+								if (item.kind === "process-entry") {
+									itemKey = item.entry.id;
+									if (item.entry.kind === "thinking-entry") {
+										content = (
+											<ThinkingStep
+												group={item.entry.group}
+												hidden={!stepsVisible}
+												isStreaming={props.isStreaming}
+												showThinking={props.showThinking}
+												onOpenExternal={props.onOpenExternal}
+												onOpenFile={props.onOpenFile}
+											/>
+										);
+									} else {
+										content = (
+											<ToolStep group={item.entry.group} hidden={!stepsVisible} />
+										);
+									}
+								} else if (item.kind === "interim-answer") {
+									itemKey = item.id;
+									// 中间回答：与思考相同的 MarkdownStream 渲染 + execution-interim 过程样式
+									content = (
+										<InterimAnswer
+											text={item.message.text}
+											hidden={!stepsVisible}
+											isStreaming={props.isStreaming ?? false}
+											onOpenExternal={props.onOpenExternal}
+											onOpenFile={props.onOpenFile}
+										/>
+									);
+								} else {
+									// final-answer 不在此容器内（见下方常驻区），此处仅兜底跳过
+									return null;
+								}
+								return <Fragment key={itemKey}>{content}</Fragment>;
+							})}
+							{/* 收起按钮：固定在折叠容器末尾（不再是动态跟随） */}
+							{stepsVisible && (
 								<button
 									type="button"
 									className="execution-summary-collapse"
@@ -260,9 +244,29 @@ export const TurnRow = memo(function TurnRow(props: TurnRowProps) {
 									<span>{t("common.collapse")}</span>
 								</button>
 							)}
-						</Fragment>
-					);
-				})}
+						</div>
+					</div>
+				)}
+
+				{/* 最终回答：本轮最后一条 assistant 文本，常驻、永不折叠 */}
+				{finalItems.map((item) => (
+					<FinalAnswer
+						key={item.id}
+						message={item.message}
+						images={allImages}
+						isStreaming={props.isStreaming ?? false}
+						editing={editing}
+						editText={editText}
+						editAreaRef={editAreaRef}
+						onEditTextChange={setEditText}
+						onStartEdit={startEditing}
+						onCancelEdit={() => setEditing(false)}
+						onSaveEdit={saveEdit}
+						onPreviewImage={props.onPreviewImage}
+						onOpenExternal={props.onOpenExternal}
+						onOpenFile={props.onOpenFile}
+					/>
+				))}
 
 				{/* 操作栏 */}
 				{mergedText && !editing && (

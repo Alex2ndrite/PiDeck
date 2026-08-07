@@ -21,16 +21,16 @@ const summaryToggleSource = readFileSync(
 
 test("renders the run as order-preserving flat display without pulling the last answer to the bottom", () => {
   assert.ok(
-    turnRowSource.indexOf("displayItems.map") > 0,
-    "TurnRow must render flat display items",
+    turnRowSource.indexOf("foldableItems.map") > 0,
+    "TurnRow must render foldable display items",
   );
   // 顺序忠实：不再抽离时序、不把回答拽到底部，final/interim 都在原位
   assert.doesNotMatch(
-    turnRowSource.slice(turnRowSource.indexOf("displayItems.map")),
+    turnRowSource.slice(turnRowSource.indexOf("foldableItems.map")),
     /最终回答（始终可见）/,
   );
   assert.match(turnRowSource, /buildTurnDisplay\(effectiveRun/);
-  // 最终回答走 FinalAnswer（常驻），通过 else 分支（final-answer 注释）渲染
+  // 最终回答走 FinalAnswer（常驻），容器外常驻区渲染
   assert.match(turnRowSource, /\/\/ final-answer/);
   assert.match(turnRowSource, /<FinalAnswer/);
 });

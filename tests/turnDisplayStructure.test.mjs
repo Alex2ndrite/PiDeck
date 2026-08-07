@@ -36,10 +36,12 @@ test("TurnRow renders a single process summary toggle plus order-preserving flat
   assert.match(turnRowSource, /\/\/ final-answer/);
   // 思考/工具/中间回答共用一个折叠开关
   assert.match(turnRowSource, /hidden=\{!stepsVisible\}/);
-  // 收起按钮：动态紧跟「最后一个可折叠内容」（lastFoldableIndex），流式中不跳动
+  // 中间内容收进执行过程折叠容器（foldableItems），最终回答常驻容器外（finalItems）
+  assert.match(turnRowSource, /foldableItems\.map/);
+  assert.match(turnRowSource, /finalItems\.map/);
+  assert.match(turnRowSource, /stepsVisible \? undefined : "none"/);
+  // 收起按钮：固定在折叠容器末尾
   assert.match(turnRowSource, /execution-summary-collapse/);
-  assert.match(turnRowSource, /lastFoldableIndex/);
-  assert.match(turnRowSource, /index === lastFoldableIndex && stepsVisible && showProcessToggle/);
   assert.match(summaryToggleSource, /execution-summary-toggle/);
   assert.match(summaryToggleSource, /activity\.executionToolCount/);
   assert.match(summaryToggleSource, /activity\.executionThinkingCount/);
