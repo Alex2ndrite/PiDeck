@@ -51,5 +51,15 @@ test("marker rail nodes carry status icons for success and error tones", () => {
   // 会导致图标与底色同色不可见
   assert.match(marker, /strokeWidth=\{3\.5\} color="#fff"/);
   // ✓/✗ 节点放大为 14px 并微调基线
-  assert.match(marker, /TONE_STATUS_ICONS\[tone\] && "mt-1 size-3\.5"/);
+  assert.match(marker, /statusIcon && "mt-1 size-3\.5"/);
+});
+
+// 工具调用节点不再放大 14px 图标：与思考同为 8px 一级（工具空心描边、思考实心），
+// 避免工具行左侧大圆球喧宾夺主；诊断等其他事件仍保留 ✓/✗ 语义节点。
+test("tool marker nodes skip the enlarged status icon", () => {
+  assert.match(marker, /if \(kind === "tool"\) return undefined/);
+  assert.match(marker, /kind: TimelineMarkerKind,/);
+  // 渲染路径通过 getStatusIcon 取图标，而非直接读 TONE_STATUS_ICONS
+  assert.match(marker, /const statusIcon = getStatusIcon\(props\.kind, tone\);/);
+  assert.match(marker, /\{statusIcon\}/);
 });

@@ -1,5 +1,6 @@
 import { atom } from "jotai";
-import { selectAtom } from "jotai/utils";
+import type { Getter, Setter } from "jotai";
+import { atomFamily, selectAtom } from "jotai/utils";
 import type {
   AgentRuntimeState,
 	AgentStatus,
@@ -21,7 +22,6 @@ export type SessionRuntimeViewState = {
   runtimeGeneration: number;
   status: AgentStatus | "detached";
   state?: AgentRuntimeState;
-  thinking: string;
   updatedAt: number;
   projectId?: string;
   cwd?: string;
@@ -31,6 +31,15 @@ export type SessionRuntimeViewState = {
   createdAt?: number;
   compactionCount?: number;
   noSession?: boolean;
+};
+
+/** Live 思考段（按稳定 id 索引，与 History msg-thinking-* 同一身份）。 */
+export type StreamingThinkingEntry = {
+  sessionId: string;
+  text: string;
+  startedAt: number;
+  endedAt: number;
+  streaming: boolean;
 };
 
 export type SessionLoadState = {
@@ -109,6 +118,62 @@ export const sessionRuntimeUiByIdAtom = atom<Record<string, SessionRuntimeUiStat
 export const sessionCacheStatsAtom = atom<Record<string, { cacheHitHistory: number[] }>>({});
 export const SESSION_CACHE_STATS_LIMIT = 50;
 export const sessionMessagesCacheAtom = atom<Record<string, SessionMessageCacheEntry>>({});
+/**
+ * 会话级独立流式正文（阶段1：学 Proma 独立存储）。
+ * key: sessionId，value: { content, streaming }。
+ * 流式期间 content 由 agents:text-stream 通道实时更新；
+ * message_end 后由历史消息（sessionMessagesCacheAtom）接管，此处清空。
+ */
+export const streamingTextByIdAtom = atom<
+	Record<string, { content: string; streaming: boolean }>
+>({});
+/**
+ * Live 思考正文通道（镜像 text-stream）：key = msg-thinking-${assistantMessageId}。
+ * ThinkingStep 叶子订阅；timeline 只订 liveThinkingIdBySessionAtom，避免 50ms 戳醒整树。
+ */
+export const streamingThinkingByIdAtom = atom<Record<string, StreamingThinkingEntry>>({});
+/** 会话当前 live 思考段 id；仅 id 变化时通知 timeline 挂载点。 */
+export const liveThinkingIdBySessionAtom = atom<Record<string, string>>({});
+
+function sameStreamingThinkingEntry(
+  a: StreamingThinkingEntry | undefined,
+  b: StreamingThinkingEntry | undefined,
+): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return (
+    a.sessionId === b.sessionId &&
+    a.text === b.text &&
+    a.startedAt === b.startedAt &&
+    a.endedAt === b.endedAt &&
+    a.streaming === b.streaming
+  );
+}
+
+/** ThinkingStep 叶子按稳定 id 订阅，避免整表 tick 戳醒所有思考卡。
+ *  jotai atomFamily 无自动 GC：释放数据条目时必须同步 .remove(id)，否则长跑泄漏。 */
+export const streamingThinkingEntryByIdAtomFamily = atomFamily((thinkingId: string) =>
+  selectAtom(
+    streamingThinkingByIdAtom,
+    (map) => map[thinkingId],
+    sameStreamingThinkingEntry,
+  ),
+);
+
+/** Timeline 只订本会话 live id，不订思考正文。 */
+export const liveThinkingIdBySessionIdAtomFamily = atomFamily((sessionId: string) =>
+  selectAtom(
+    liveThinkingIdBySessionAtom,
+    (map) => map[sessionId],
+    Object.is,
+  ),
+);
+
+/** 与 streamingThinkingByIdAtom 条目成对释放，避免 atomFamily Map 无限增长。 */
+function disposeStreamingThinkingFamily(thinkingId: string) {
+  streamingThinkingEntryByIdAtomFamily.remove(thinkingId);
+}
+
 export const sessionMessageLruAtom = atom<string[]>([]);
 export const sessionMessageLoadStateAtom = atom<Record<string, SessionLoadState>>({});
 export const sessionCatalogLoadStateAtom = atom<Record<string, SessionLoadState>>({});
@@ -151,7 +216,6 @@ export const replaceSessionRuntimesAtom = atom(
         runtimeGeneration: runtime.runtimeGeneration,
         status: runtime.status,
         state: bindingChanged ? undefined : existing?.state,
-        thinking: bindingChanged ? "" : (existing?.thinking ?? ""),
         updatedAt: Date.now(),
         projectId: runtime.projectId,
         cwd: runtime.cwd,
@@ -486,6 +550,73 @@ function toAgentUiRequest(
   };
 }
 
+/** 清除某会话的 live 思考通道（换绑 / 卸载 / detach）。 */
+function clearSessionLiveThinking(get: Getter, set: Setter, sessionId: string) {
+  const liveId = get(liveThinkingIdBySessionAtom)[sessionId];
+  const idsToDispose: string[] = [];
+  if (liveId) {
+    idsToDispose.push(liveId);
+    set(streamingThinkingByIdAtom, (prevMap) => {
+      if (!(liveId in prevMap)) return prevMap;
+      const nextMap = { ...prevMap };
+      delete nextMap[liveId];
+      return nextMap;
+    });
+  } else {
+    // 兜底：按 sessionId 扫一遍，防止 liveId 映射丢失后残留段。
+    const map = get(streamingThinkingByIdAtom);
+    const leftoverIds = Object.entries(map)
+      .filter(([, entry]) => entry.sessionId === sessionId)
+      .map(([id]) => id);
+    if (leftoverIds.length > 0) {
+      idsToDispose.push(...leftoverIds);
+      set(streamingThinkingByIdAtom, (prevMap) => {
+        const nextMap = { ...prevMap };
+        for (const id of leftoverIds) delete nextMap[id];
+        return nextMap;
+      });
+    }
+  }
+  set(liveThinkingIdBySessionAtom, (prevMap) => {
+    if (!(sessionId in prevMap)) return prevMap;
+    const nextMap = { ...prevMap };
+    delete nextMap[sessionId];
+    return nextMap;
+  });
+  for (const id of idsToDispose) disposeStreamingThinkingFamily(id);
+}
+
+/**
+ * History 已写入同段 thinking 后才卸 live 身份。
+ * done 与 agents:message 跨通道可能乱序；若 done 先清，会在 message.thinking 仍空时
+ * 拆掉 ThinkingStep，等 History 到达再 remount → 整段糊屏。
+ */
+function tryReleaseLiveThinkingAfterHistory(get: Getter, set: Setter, sessionId: string) {
+  const liveId = get(liveThinkingIdBySessionAtom)[sessionId];
+  if (!liveId?.startsWith("msg-thinking-")) return;
+  const messageId = liveId.slice("msg-thinking-".length);
+  if (!messageId) return;
+  const messages = get(sessionMessagesCacheAtom)[sessionId]?.messages ?? [];
+  const ready = messages.some(
+    (message) => message.id === messageId && Boolean(message.thinking?.trim()),
+  );
+  if (!ready) return;
+  set(streamingThinkingByIdAtom, (prevMap) => {
+    if (!(liveId in prevMap)) return prevMap;
+    const nextMap = { ...prevMap };
+    delete nextMap[liveId];
+    return nextMap;
+  });
+  set(liveThinkingIdBySessionAtom, (prevMap) => {
+    if (prevMap[sessionId] !== liveId) return prevMap;
+    const nextMap = { ...prevMap };
+    delete nextMap[sessionId];
+    return nextMap;
+  });
+  // 数据条目与 family 实例成对释放（uuid 段 id 不复用，不 remove 会永久堆在 Map 里）。
+  disposeStreamingThinkingFamily(liveId);
+}
+
 function applySessionRuntimeUiEvent(
   current: SessionRuntimeUiState | undefined,
   event: SessionRuntimeEvent,
@@ -585,7 +716,6 @@ export const applySessionRuntimeEventAtom = atom(
     const currentRuntime = get(sessionRuntimeByIdAtom)[event.sessionId] ?? {
       runtimeGeneration: 0,
       status: "detached" as const,
-      thinking: "",
       updatedAt: 0,
     };
     if (event.kind === "detach") {
@@ -609,12 +739,12 @@ export const applySessionRuntimeEventAtom = atom(
       const nextUiById = { ...get(sessionRuntimeUiByIdAtom) };
       delete nextUiById[event.sessionId];
       set(sessionRuntimeUiByIdAtom, nextUiById);
+      clearSessionLiveThinking(get, set, event.sessionId);
       set(sessionRuntimeByIdAtom, {
         ...get(sessionRuntimeByIdAtom),
         [event.sessionId]: {
           runtimeGeneration: event.runtimeGeneration,
           status: "detached",
-          thinking: "",
           updatedAt: Date.now(),
         },
       });
@@ -636,7 +766,6 @@ export const applySessionRuntimeEventAtom = atom(
         ? {
             runtimeGeneration: event.runtimeGeneration,
             status: "detached" as const,
-            thinking: "",
             updatedAt: 0,
           }
         : currentRuntime),
@@ -644,6 +773,9 @@ export const applySessionRuntimeEventAtom = atom(
       runtimeGeneration: event.runtimeGeneration,
       updatedAt: Date.now(),
     };
+    if (bindingChanged) {
+      clearSessionLiveThinking(get, set, event.sessionId);
+    }
     const payload = event.payload && typeof event.payload === "object"
       ? event.payload as Record<string, unknown>
       : undefined;
@@ -701,10 +833,114 @@ export const applySessionRuntimeEventAtom = atom(
         }
       }
     } else if (event.sourceChannel === "agents:thinking" && payload) {
-      nextRuntime = {
-        ...nextRuntime,
-        thinking: typeof payload.thinking === "string" ? payload.thinking : "",
-      };
+      // Live 思考：只更新 streamingThinkingByIdAtom / liveThinkingIdBySessionAtom。
+      // 绑定未变时不写 sessionRuntimeByIdAtom，避免每帧戳醒 timeline。
+      const id = typeof payload.id === "string" ? payload.id : "";
+      const text =
+        typeof payload.text === "string"
+          ? payload.text
+          : typeof payload.thinking === "string"
+            ? payload.thinking
+            : "";
+      const done = payload.done === true;
+      const startedAt = typeof payload.startedAt === "number" ? payload.startedAt : Date.now();
+      const endedAt = typeof payload.endedAt === "number" ? payload.endedAt : 0;
+      if (id) {
+        if (done) {
+          // 只标终态，保留 id/文本；等 History 同段 thinking 可见后再卸身份（防跨通道乱序 remount）。
+          const prev = get(streamingThinkingByIdAtom)[id];
+          const nextEntry: StreamingThinkingEntry = {
+            sessionId: event.sessionId,
+            text: text || prev?.text || "",
+            startedAt: prev?.startedAt ?? startedAt,
+            endedAt: endedAt > 0 ? endedAt : (prev?.endedAt && prev.endedAt > 0 ? prev.endedAt : Date.now()),
+            streaming: false,
+          };
+          if (
+            !prev ||
+            prev.text !== nextEntry.text ||
+            prev.startedAt !== nextEntry.startedAt ||
+            prev.endedAt !== nextEntry.endedAt ||
+            prev.streaming !== false ||
+            prev.sessionId !== event.sessionId
+          ) {
+            set(streamingThinkingByIdAtom, {
+              ...get(streamingThinkingByIdAtom),
+              [id]: nextEntry,
+            });
+          }
+          if (get(liveThinkingIdBySessionAtom)[event.sessionId] !== id) {
+            set(liveThinkingIdBySessionAtom, {
+              ...get(liveThinkingIdBySessionAtom),
+              [event.sessionId]: id,
+            });
+          }
+          tryReleaseLiveThinkingAfterHistory(get, set, event.sessionId);
+        } else {
+          const streaming = endedAt <= 0;
+          const prev = get(streamingThinkingByIdAtom)[id];
+          if (
+            !prev ||
+            prev.text !== text ||
+            prev.startedAt !== startedAt ||
+            prev.endedAt !== endedAt ||
+            prev.streaming !== streaming ||
+            prev.sessionId !== event.sessionId
+          ) {
+            set(streamingThinkingByIdAtom, {
+              ...get(streamingThinkingByIdAtom),
+              [id]: {
+                sessionId: event.sessionId,
+                text,
+                startedAt,
+                endedAt,
+                streaming,
+              },
+            });
+          }
+          if (get(liveThinkingIdBySessionAtom)[event.sessionId] !== id) {
+            set(liveThinkingIdBySessionAtom, {
+              ...get(liveThinkingIdBySessionAtom),
+              [event.sessionId]: id,
+            });
+          }
+        }
+      }
+      if (bindingChanged) {
+        set(sessionRuntimeByIdAtom, {
+          ...get(sessionRuntimeByIdAtom),
+          [event.sessionId]: nextRuntime,
+        });
+      }
+      return;
+    } else if (event.sourceChannel === "agents:text-stream" && payload) {
+      // Live 正文：只更新 streamingTextByIdAtom。
+      // 绑定未变时不写 sessionRuntimeByIdAtom，避免每帧戳醒 timeline/composer 订阅者。
+      const text = typeof payload.text === "string" ? payload.text : "";
+      const done = payload.done === true;
+      const prev = get(streamingTextByIdAtom)[event.sessionId];
+      const streaming = !done && text.length > 0;
+      if (!prev || prev.content !== text || prev.streaming !== streaming) {
+        set(streamingTextByIdAtom, {
+          ...get(streamingTextByIdAtom),
+          [event.sessionId]: { content: text, streaming },
+        });
+      }
+      if (done) {
+        set(streamingTextByIdAtom, (prevMap) => {
+          if (!(event.sessionId in prevMap)) return prevMap;
+          const nextMap = { ...prevMap };
+          delete nextMap[event.sessionId];
+          return nextMap;
+        });
+      }
+      if (bindingChanged) {
+        set(sessionRuntimeByIdAtom, {
+          ...get(sessionRuntimeByIdAtom),
+          [event.sessionId]: nextRuntime,
+        });
+      }
+      return;
     } else if (
       (event.sourceChannel === "agents:message" || event.sourceChannel === "sessions:messages") &&
       payload
@@ -753,6 +989,8 @@ export const applySessionRuntimeEventAtom = atom(
             history: reconcileHistoryPrefix(current?.history, segment, fileVersion),
           });
         }
+        // message 到达后若已含同段 thinking，安全卸 live（覆盖 done 先到的情况）。
+        tryReleaseLiveThinkingAfterHistory(get, set, event.sessionId);
       }
     }
 
@@ -876,10 +1114,12 @@ export const bindSessionRuntimeAtom = atom(
         runtimeGeneration: input.runtimeGeneration ?? currentGeneration,
         status: input.status ?? (bindingChanged ? "idle" : current?.status) ?? "idle",
         state: bindingChanged ? undefined : current?.state,
-        thinking: bindingChanged ? "" : (current?.thinking ?? ""),
         updatedAt: Date.now(),
       },
     });
+    if (bindingChanged) {
+      clearSessionLiveThinking(get, set, input.sessionId);
+    }
   },
 );
 
@@ -907,6 +1147,13 @@ export const removeSessionStateAtom = atom(null, (get, set, sessionId: string) =
   const cache = { ...get(sessionMessagesCacheAtom) };
   delete cache[sessionId];
   set(sessionMessagesCacheAtom, cache);
+  clearSessionLiveThinking(get, set, sessionId);
+  set(streamingTextByIdAtom, (prevMap) => {
+    if (!(sessionId in prevMap)) return prevMap;
+    const nextMap = { ...prevMap };
+    delete nextMap[sessionId];
+    return nextMap;
+  });
   set(sessionMessageLruAtom, get(sessionMessageLruAtom).filter((id) => id !== sessionId));
   const loadState = { ...get(sessionMessageLoadStateAtom) };
   delete loadState[sessionId];

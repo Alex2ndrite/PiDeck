@@ -89,6 +89,19 @@ export class AgentManager {
 
 	/** 当前流式思考的累积文本，用于实时推送给前端展示 */
 	private readonly streamingThinking = new Map<string, string>();
+	/**
+	 * 当前思考段身份：id = msg-thinking-${assistantMessageId}，与 History 一致。
+	 * 首 thinking_delta 铸造；message_end/abort 写入 messages 后清掉。
+	 */
+	private readonly thinkingSegmentByAgent = new Map<
+		string,
+		{ id: string; assistantMessageId: string; startedAt: number; endedAt: number }
+	>();
+	/** 当前正在流式更新文本的 agent（message_start/text_delta/thinking_delta 置位，
+	 *  message_end/done/error/agent_end/agent_settled/abort 清除）。
+	 *  isStreaming 不再只依赖 pi get_state 轮询：轮询在 text_delta 期间不触发，
+	 *  前端 streamingMessageId → MarkdownStream 逐字渐显依赖它，缺失会“整段蹦出”。 */
+	private readonly streamingAgents = new Set<string>();
 	/** 当前正在流式更新的 assistant 消息；tool 事件插入时仍要继续更新同一个回答块。 */
 	private readonly activeAssistantMessageIds = new Map<string, string>();
 	/** pi 的 toolCallId 贯穿 start/update/end，用它把同一次工具调用合并成一条 UI 记录。 */
@@ -123,6 +136,17 @@ export class AgentManager {
 		50,
 		(agentId, thinking) => this.emitThinkingNow(agentId, thinking),
 	);
+	/** 当前流式正文的累积文本，独立于 messages 数组推送（阶段1：学 Proma 独立存储）。
+	 *  50ms 窗口与 Proma PI_PARTIAL_UPDATE_INTERVAL_MS 对齐：渲染层 20fps 更新，
+	 *  避免 16ms 高频推送让 streamdown 解析（每 content 变更全量重解析）压满主线程、
+	 *  rAF 帧率下降后 queue 积压导致「burst 蹦字」；打字机感由渲染层 useSmoothStream
+	 *  （divisor=8 字符队列逐字吐）呈现，不依赖推送粒度。 */
+	private readonly textEmitter = new LatestByKeyEmitter<string, string>(
+		50,
+		(agentId, text) => this.emitTextStreamNow(agentId, text),
+	);
+	/** 流式正文累积缓冲：text_delta 时累加，message_end/agent_end/settled/abort 清除。 */
+	private readonly streamingText = new Map<string, string>();
 	/** 流式 emit 合并窗口（毫秒）。50ms 兼顾流畅度与传输量，肉眼几乎无延迟。 */
 	private static readonly MESSAGE_FLUSH_INTERVAL_MS = 50;
 	/** 激活显示窗口轮数（2026-08 激活分页）：loadMessages 后只下发尾部 N 轮，更早历史走 disk 轮次分页。 */
@@ -1247,14 +1271,18 @@ export class AgentManager {
 		}
 		// abort 时必须清除所有流式状态，防止后续 pi 的延迟事件（text_delta、thinking_delta、tool_execution_* 等）
 		// 修改上次会话的旧消息，导致新会话消息混入被中止的旧输出。
+		// 先把已累积思考落入当前 assistant 骨架（保留中断轮的推理），再清 live 通道。
+		this.finalizeThinkingIntoMessage(agentId);
+		this.flushMessageEmit(agentId);
+		this.finishThinkingChannel(agentId);
 		this.activeAssistantMessageIds.delete(agentId);
-		this.streamingThinking.delete(agentId);
+		this.streamingAgents.delete(agentId);
+		this.textEmitter.cancel(agentId);
+		this.streamingText.delete(agentId);
 		this.toolMessageIds.delete(agentId);
 		this.activeToolCallsByAgent.delete(agentId);
 		this.toolExecutingByAgent.set(agentId, null);
-		// 取消节流中的 thinking/message 推送，避免 abort 后还有 pending flush 把旧内容刷回 UI。
-		this.thinkingEmitter.cancel(agentId);
-		this.emitThinking(agentId, "");
+		// 取消节流中的 message 推送，避免 abort 后还有 pending flush 把旧内容刷回 UI。
 		this.cancelMessageEmit(agentId);
 
 		runtime.tab.status = "idle";
@@ -1523,7 +1551,7 @@ export class AgentManager {
 		provider: model?.provider,
 		modelId: model?.id,
 		thinkingLevel: state?.thinkingLevel,
-		isStreaming: state?.isStreaming,
+		isStreaming: state?.isStreaming || this.streamingAgents.has(agentId),
 		isCompacting:
 			state?.isCompacting ||
 			this.rpcCompactingAgents.has(agentId) ||
@@ -2555,7 +2583,11 @@ export class AgentManager {
 				return;
 			}
 			this.beginAssistantMessage(agentId);
-			this.upsertAssistantMessage(agentId, typed.message);
+			this.streamingAgents.add(agentId);
+			// 顶层 message_start（mock/pi 均走此路径）：必须允许空骨架，否则
+			// text_delta 不再 upsert 时 History 无挂载点，Live 正文无处渲染。
+			this.upsertAssistantMessage(agentId, typed.message, "", { allowEmpty: true });
+			this.flushMessageEmit(agentId);
 		}
 
 		if (typed.type === "auto_retry_start") {
@@ -2632,7 +2664,10 @@ export class AgentManager {
 			// 或压缩后继续 queued follow-up。最终空闲必须等 agent_settled，避免中途误判 idle。
 			if (runtime) {
 				this.activeAssistantMessageIds.delete(agentId);
+				this.streamingAgents.delete(agentId);
 				this.toolMessageIds.delete(agentId);
+				this.textEmitter.cancel(agentId);
+				this.streamingText.delete(agentId);
 			}
 			// agent 异常结束时（如 API 返回 400、模型报错等），将错误提示写入会话，避免用户看到空白。
 			// 错误信息的存放位置因 pi 版本和错误类型不同而有多种可能：
@@ -2716,14 +2751,18 @@ export class AgentManager {
 				// agent_settled 是 Pi 的最终稳定点：没有自动重试、自动压缩、压缩 retry
 				// 或 queued follow-up 会继续执行，此时才允许恢复 idle 并通知用户完成。
 				runtime.tab.status = "idle";
-				this.streamingThinking.delete(agentId);
+				// 若 message_end 未到（边缘路径），仍先落盘再清 live。
+				this.finalizeThinkingIntoMessage(agentId);
+				this.flushMessageEmit(agentId);
+				this.finishThinkingChannel(agentId);
 				this.activeAssistantMessageIds.delete(agentId);
+				this.streamingAgents.delete(agentId);
 				this.toolMessageIds.delete(agentId);
+				this.textEmitter.cancel(agentId);
+				this.streamingText.delete(agentId);
 				this.activeToolCallsByAgent.delete(agentId);
 				this.toolExecutingByAgent.set(agentId, null);
 				this.rpcCompactingAgents.delete(agentId);
-				this.thinkingEmitter.cancel(agentId);
-				this.emitThinking(agentId, "");
 				this.emitState();
 				void this.emitRuntimeState(agentId);
 
@@ -2754,11 +2793,23 @@ export class AgentManager {
 				return;
 			}
 			if (this.activeAssistantMessageIds.has(agentId)) {
+				// 先写入 History thinking 并 flush，再发 done 清 live（顺序写进测试）。
+				this.finalizeThinkingIntoMessage(agentId);
 				this.upsertAssistantMessage(agentId, typed.message);
-				this.activeAssistantMessageIds.delete(agentId);
-				// message_end 是本轮回答的最终状态，立即 flush 确保完整消息及时可见
 				this.flushMessageEmit(agentId);
+				this.finishThinkingChannel(agentId);
+				this.activeAssistantMessageIds.delete(agentId);
 			}
+			// 终结 Live 正文通道（顶层 message_end 不经 handleAssistantMessageEvent）
+			this.streamingAgents.delete(agentId);
+			const finalText = this.streamingText.get(agentId);
+			if (finalText !== undefined) {
+				this.textEmitter.flush(agentId);
+				this.emitTextStreamNow(agentId, finalText, true);
+			}
+			this.textEmitter.cancel(agentId);
+			this.streamingText.delete(agentId);
+			this.emitStreamingStatePatch(agentId);
 		}
 
 		if (typed.type === "tool_execution_start") {
@@ -3107,30 +3158,44 @@ export class AgentManager {
 
 		if (eventType === "start" || eventType === "message_start") {
 			this.beginAssistantMessage(agentId);
-			this.upsertAssistantMessage(agentId, partialMessage);
+			this.streamingAgents.add(agentId);
+			// 允许空正文骨架：Live 正文走独立通道，TurnRow 需要 History 挂载点。
+			this.upsertAssistantMessage(agentId, partialMessage, "", { allowEmpty: true });
+			this.flushMessageEmit(agentId);
 			return;
 		}
 
 		if (eventType === "text_start" || eventType === "text_end") {
+			this.streamingAgents.add(agentId);
+			// 仅在已有骨架上同步 partial；空文本不新建、不刷 timeline。
 			this.upsertAssistantMessage(agentId, partialMessage);
 			return;
 		}
 
 		if (eventType === "text_delta") {
-			this.upsertAssistantMessage(
-				agentId,
-				partialMessage,
-				String(assistantEvent.delta ?? ""),
-			);
+			this.streamingAgents.add(agentId);
+			const delta = String(assistantEvent.delta ?? "");
+			// Live 正文唯一热路径：累积后经 textEmitter（50ms）推送，不增长 messages。
+			const prevText = this.streamingText.get(agentId) ?? "";
+			const nextText = this.extractStreamingText(agentId, partialMessage) ?? prevText + delta;
+			this.streamingText.set(agentId, nextText);
+			this.textEmitter.push(agentId, stripAnsi(nextText));
+			// 思考切正文：只标 endedAt，不落盘、不清 live（message_end/abort 才写入）。
+			if (this.thinkingSegmentByAgent.has(agentId)) {
+				this.markThinkingSegmentEnded(agentId);
+			}
 			return;
 		}
 
 		if (eventType === "thinking_delta") {
+			this.ensureThinkingSegment(agentId);
 			const prev = this.streamingThinking.get(agentId) ?? "";
 			const delta = String(assistantEvent.delta ?? "");
-			this.streamingThinking.set(agentId, prev + delta);
-			this.thinkingEmitter.push(agentId, stripAnsi(prev + delta));
-			this.upsertAssistantMessage(agentId, partialMessage);
+			const next = prev + delta;
+			this.streamingThinking.set(agentId, next);
+			this.thinkingEmitter.push(agentId, stripAnsi(next));
+			this.streamingAgents.add(agentId);
+			// Live 思考唯一热路径：不 upsert messages，避免 50ms timeline 重组。
 			return;
 		}
 
@@ -3139,21 +3204,31 @@ export class AgentManager {
 				assistantEvent.content ?? this.streamingThinking.get(agentId) ?? "",
 			);
 			if (finalThinking) {
+				this.ensureThinkingSegment(agentId);
 				this.streamingThinking.set(agentId, finalThinking);
-				this.thinkingEmitter.push(agentId, stripAnsi(finalThinking));
-				this.thinkingEmitter.flush(agentId);
 			}
-			this.upsertAssistantMessage(agentId, partialMessage);
-			// thinking_end 是阶段性终态，立即 flush 让思考块完整落盘显示。
-			this.flushMessageEmit(agentId);
+			// 阶段性终态：只标 endedAt + flush live；不落盘（message_end/abort 才写 messages）。
+			this.markThinkingSegmentEnded(agentId);
 			return;
 		}
 
 		if (eventType === "message_end" || eventType === "done" || eventType === "error") {
+			// 先写入 History thinking 并 flush，再发 done 清 live。
+			this.finalizeThinkingIntoMessage(agentId, partialMessage);
 			this.upsertAssistantMessage(agentId, partialMessage);
 			// message_end/done/error 是本轮回答的最终状态，立即 flush 确保完整消息及时可见。
 			this.flushMessageEmit(agentId);
+			this.finishThinkingChannel(agentId);
 			this.activeAssistantMessageIds.delete(agentId);
+			this.streamingAgents.delete(agentId);
+			// 独立流式正文通道终止：推一次最终累积文本后清缓冲（渲染层由历史消息接管）
+			const finalText = this.streamingText.get(agentId);
+			if (finalText !== undefined) {
+				this.textEmitter.flush(agentId);
+				this.emitTextStreamNow(agentId, finalText, true);
+			}
+			this.textEmitter.cancel(agentId);
+			this.streamingText.delete(agentId);
 		}
 	}
 
@@ -3163,10 +3238,110 @@ export class AgentManager {
 		}
 	}
 
+	/** 首 thinking_delta：铸造与 History 相同的稳定段 id（msg-thinking-${assistantMessageId}）。 */
+	private ensureThinkingSegment(agentId: string) {
+		const existing = this.thinkingSegmentByAgent.get(agentId);
+		if (existing) return existing;
+		this.beginAssistantMessage(agentId);
+		const assistantMessageId = this.activeAssistantMessageIds.get(agentId);
+		if (!assistantMessageId) {
+			throw new Error(`ensureThinkingSegment: missing assistant message id for ${agentId}`);
+		}
+		const segment = {
+			id: `msg-thinking-${assistantMessageId}`,
+			assistantMessageId,
+			startedAt: Date.now(),
+			endedAt: 0,
+		};
+		this.thinkingSegmentByAgent.set(agentId, segment);
+		// 保证 History 有同 id 骨架，buildTurnDisplay 才能用 liveThinkingId 挂思考步。
+		this.upsertAssistantMessage(agentId, undefined, "", { allowEmpty: true });
+		this.flushMessageEmit(agentId);
+		return segment;
+	}
+
+	/** thinking_end / 转正文：标 endedAt 并 flush live，不写 messages。 */
+	private markThinkingSegmentEnded(agentId: string) {
+		const segment = this.thinkingSegmentByAgent.get(agentId);
+		if (!segment) return;
+		// 已结束后勿在每个 text_delta 上重复 flush/emit。
+		if (segment.endedAt > 0) return;
+		segment.endedAt = Date.now();
+		this.thinkingSegmentByAgent.set(agentId, segment);
+		const text = this.streamingThinking.get(agentId) ?? "";
+		this.thinkingEmitter.flush(agentId);
+		this.emitThinkingNow(agentId, stripAnsi(text));
+	}
+
+	/**
+	 * 终态：把累积思考写入当前 assistant 骨架一次。
+	 * 必须在 finishThinkingChannel（done）之前调用，并先 flush messages。
+	 */
+	private finalizeThinkingIntoMessage(agentId: string, partialMessage?: unknown) {
+		const segment = this.thinkingSegmentByAgent.get(agentId);
+		const fromStream = this.streamingThinking.get(agentId) ?? "";
+		const fromMessage =
+			partialMessage && typeof partialMessage === "object"
+				? this.messageProjector.extractThinking((partialMessage as any).content)
+				: "";
+		const nextThinking = stripAnsi(fromStream || fromMessage || "");
+		if (!nextThinking.trim()) return;
+
+		this.beginAssistantMessage(agentId);
+		const messageId =
+			segment?.assistantMessageId ?? this.activeAssistantMessageIds.get(agentId);
+		if (!messageId) return;
+
+		const list = this.messages.get(agentId) ?? [];
+		const existingIndex = list.findIndex((message) => message.id === messageId);
+		const startedAt = segment?.startedAt ?? Date.now();
+		const endedAt = segment?.endedAt && segment.endedAt > 0 ? segment.endedAt : Date.now();
+		if (existingIndex >= 0) {
+			list[existingIndex].thinking = nextThinking;
+			list[existingIndex].thinkingStartedAt = startedAt;
+			list[existingIndex].thinkingEndedAt = endedAt;
+			this.markMessagesDirtyFrom(agentId, existingIndex);
+		} else {
+			list.push({
+				id: messageId,
+				agentId,
+				role: "assistant",
+				text: "",
+				timestamp: Date.now(),
+				thinking: nextThinking,
+				thinkingStartedAt: startedAt,
+				thinkingEndedAt: endedAt,
+			});
+			this.markMessagesDirtyFrom(agentId, list.length - 1);
+		}
+		this.messages.set(agentId, list);
+	}
+
+	/** 发 done 并清 live 思考通道；须在 finalize + flushMessageEmit 之后调用。 */
+	private finishThinkingChannel(agentId: string) {
+		const segment = this.thinkingSegmentByAgent.get(agentId);
+		const text = stripAnsi(this.streamingThinking.get(agentId) ?? "");
+		this.thinkingEmitter.cancel(agentId);
+		if (segment) {
+			const update: ThinkingUpdate = {
+				agentId,
+				id: segment.id,
+				text,
+				startedAt: segment.startedAt,
+				endedAt: segment.endedAt > 0 ? segment.endedAt : Date.now(),
+				done: true,
+			};
+			this.emit(ipcChannels.agentsThinking, update);
+		}
+		this.streamingThinking.delete(agentId);
+		this.thinkingSegmentByAgent.delete(agentId);
+	}
+
 	private upsertAssistantMessage(
 		agentId: string,
 		partialMessage?: unknown,
 		fallbackDelta = "",
+		options?: { allowEmpty?: boolean },
 	) {
 		const list = this.messages.get(agentId) ?? [];
 		let messageId = this.activeAssistantMessageIds.get(agentId);
@@ -3181,54 +3356,35 @@ export class AgentManager {
 			partialMessage && typeof partialMessage === "object"
 				? this.messageProjector.extractText((partialMessage as any).content)
 				: "";
-		const extractedThinking =
-			partialMessage && typeof partialMessage === "object"
-				? this.messageProjector.extractThinking((partialMessage as any).content)
-				: "";
-		const pendingThinking = this.streamingThinking.get(agentId);
-		const nextThinking = stripAnsi(extractedThinking || pendingThinking || "");
 
 		if (existing) {
-			existing.text = extractedText || `${existing.text}${fallbackDelta}`;
-			if (nextThinking) existing.thinking = nextThinking;
-			// 保留原始时间戳，不随 delta 刷新。思考耗时依赖首条消息的时间戳与
-			// 最后一条消息的时间戳之差，每次刷新会导致思考耗时始终为 0ms。
+			// 已有骨架：有抽出文本才覆盖；fallbackDelta 仅作追加兜底（终态路径）。
+			// thinking 不在此写入——仅 finalizeThinkingIntoMessage 在终态写一次。
+			if (extractedText || fallbackDelta) {
+				existing.text = extractedText || `${existing.text}${fallbackDelta}`;
+			}
+			// 保留原始时间戳，不随 delta 刷新。
 			this.markMessagesDirtyFrom(agentId, existingIndex);
 		} else {
 			const text = extractedText || fallbackDelta;
-			if (!text) return;
+			// 默认拒绝空消息；message_start 传 allowEmpty 以建立 Live 挂载点。
+			if (!text && !options?.allowEmpty) return;
 			list.push({
 				id: messageId,
 				agentId,
 				role: "assistant",
-				text,
+				text: text || "",
 				timestamp: Date.now(),
-				...(nextThinking ? { thinking: nextThinking } : {}),
 			});
 			this.markMessagesDirtyFrom(agentId, list.length - 1);
 		}
 
-		// 思考切换到正文（text_delta）时，emitThinking("") 会立即清空渲染进程的
-		// runtime.thinking，若消息仍走 50ms 节流，思考内容会在底部卡片消失后、
-		// TurnRow 出现前短暂不可见，产生视觉闪烁。此时必须立即 flush，让消息中
-		// 的 thinking 与清空事件同时到达。用 fallbackDelta 区分 text_delta（有值）
-		// 和 thinking_delta（无值），避免思考阶段高频 delta 破坏节流。
-		const shouldClearThinking = nextThinking && (extractedText || fallbackDelta);
-		if (shouldClearThinking) {
-			this.streamingThinking.delete(agentId);
-			this.emitThinking(agentId, "");
-		}
-
 		this.messages.set(agentId, list);
-		if (shouldClearThinking && fallbackDelta) {
-			// text_delta 清空思考：立即 flush，消除闪烁间隙
-			this.flushMessageEmit(agentId);
-		} else {
-			// upsertAssistantMessage 被 text_delta/thinking_delta 高频调用，走节流合并；
-			// message_end/thinking_end 等终态调用方会在调用后显式 flush，保证最终状态及时。
-			this.scheduleMessageEmit(agentId);
-		}
+		// upsertAssistantMessage 被 text_start/end 等路径调用，走节流合并；
+		// message_end 等终态调用方会在调用后显式 flush，保证最终状态及时。
+		this.scheduleMessageEmit(agentId);
 	}
+
 
 	private upsertToolMessage(
 		agentId: string,
@@ -3627,8 +3783,11 @@ export class AgentManager {
 		if (state.isStreaming || state.isCompacting || (state.pendingMessageCount ?? 0) > 0) return;
 
 		runtime.tab.status = "idle";
-		this.streamingThinking.delete(agentId);
-		this.emitThinking(agentId, "");
+		this.finalizeThinkingIntoMessage(agentId);
+		this.flushMessageEmit(agentId);
+		this.finishThinkingChannel(agentId);
+		this.textEmitter.cancel(agentId);
+		this.streamingText.delete(agentId);
 		this.emitState();
 		void this.emitRuntimeState(agentId);
 	}
@@ -3809,6 +3968,23 @@ export class AgentManager {
 			this.displayWindowStartByAgent.get(agentId) ?? 0,
 			this.sessionFileVersionByAgent.get(agentId),
 		));
+		// 消息 flush 时顺带同步本地流式标志：text_delta 置位 streamingAgents 后，
+		// 渲染进程必须及时拿到 isStreaming=true 才会走逐字渐显；此路径 50ms 节流、
+		// 无 RPC（不发 get_state），不会像 emitRuntimeState 那样在高频 delta 下过重。
+		this.emitStreamingStatePatch(agentId);
+	}
+
+	/** 轻量 runtime 状态补丁：只同步本地流式标志与工具执行状态，不发 RPC。 */
+	private emitStreamingStatePatch(agentId: string) {
+		this.emit(ipcChannels.agentsRuntimeState, {
+			agentId,
+			state: {
+				isStreaming: this.streamingAgents.has(agentId),
+				isExecutingTool: !!this.toolExecutingByAgent.get(agentId),
+				executingToolName: this.toolExecutingByAgent.get(agentId) ?? undefined,
+				toolStateSequence: this.toolStateSequenceByAgent.get(agentId) ?? 0,
+			} as AgentRuntimeState,
+		});
 	}
 
 	/** 标记 agent 消息数组自 index 起变脏（多次标记取最小值），供增量 flush 使用。 */
@@ -3819,14 +3995,40 @@ export class AgentManager {
 		}
 	}
 
-	private emitThinking(agentId: string, thinking: string) {
-		if (!thinking) this.thinkingEmitter.cancel(agentId);
-		this.emitThinkingNow(agentId, thinking);
+	/** 节流推送 live 思考（done=false）；无段身份时丢弃。 */
+	private emitThinkingNow(agentId: string, text: string) {
+		const segment = this.thinkingSegmentByAgent.get(agentId);
+		if (!segment) return;
+		const update: ThinkingUpdate = {
+			agentId,
+			id: segment.id,
+			text,
+			startedAt: segment.startedAt,
+			endedAt: segment.endedAt,
+			done: false,
+		};
+		this.emit(ipcChannels.agentsThinking, update);
 	}
 
-	private emitThinkingNow(agentId: string, thinking: string) {
-		const update: ThinkingUpdate = { agentId, thinking };
-		this.emit(ipcChannels.agentsThinking, update);
+	/**
+	 * 从 message_update 的 partialMessage 提取累积正文；无法提取时返回 undefined，
+	 * 调用方回退到「旧累积 + delta」拼接（兼容仅带 delta 的事件格式）。
+	 */
+	private extractStreamingText(agentId: string, partialMessage?: unknown): string | undefined {
+		if (partialMessage && typeof partialMessage === "object") {
+			const text = this.messageProjector.extractText((partialMessage as any).content);
+			if (text) return text;
+		}
+		return undefined;
+	}
+
+	/** 推送独立流式正文通道（agents:text-stream），渲染层写入 streamingTextByIdAtom。
+	 *  done=true 表示本轮回答结束（message_end），渲染层据此把 streaming 置 false。
+	 *  顺带同步 isStreaming 补丁：text_delta 走独立通道后不再触发 flushMessageEmit，
+	 *  若仍只在 flush 里推 patch，渲染层拿不到 isStreaming=true，气泡不会渲染。 */
+	private emitTextStreamNow(agentId: string, text: string, done = false) {
+		this.emit(ipcChannels.agentsTextStream, { agentId, text, done });
+		this.emitStreamingStatePatch(agentId);
 	}
 
 	private emitState() {

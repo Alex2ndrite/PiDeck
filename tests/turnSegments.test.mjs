@@ -3,15 +3,17 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import ts from "typescript";
 import vm from "node:vm";
-import { buildTurnSegments } from "../src/renderer/src/components/session/TimelineFormat.ts";
+import { buildTurnDisplay } from "../src/renderer/src/components/session/timeline/buildTurnDisplay.ts";
 
 /**
- * 一轮回答（agent-run）时序分段测试。
+ * 一轮回答（agent-run）扁平展示序列测试。
  *
- * 修复背景：TurnRow 曾把「最后一条 assistant 消息」抽离时序、固定渲染到底部，
- * 并把它的思考 append 到分段末尾。流式期间或中断的 run 里，这条消息后往往还有
- * 工具/思考，导致尾部工具/思考被渲染到回答上方、思考块上下颠倒。
- * buildTurnSegments 必须严格按 run.items 时序拆段，不允许重排。
+ * 背景：旧 buildTurnSegments 把「不连续的思考/工具」拆成多个 process 折叠段，
+ * 一轮回答出现多个「执行过程」汇总。buildTurnDisplay 改为扁平展示序列：
+ * - process-entry（思考/工具）原位穿插，由 run 级折叠开关统一控制；
+ * - interim-answer（非最后一条 assistant 文本）；
+ * - final-answer（最后一条 assistant 文本，常驻）。
+ * 严格按 run.items 原始时序输出，不允许重排。
  */
 
 let seq = 0;
@@ -66,112 +68,141 @@ function runOf(items) {
 	};
 }
 
-/** 提取分段概要：[kind, 首条内容]，便于断言顺序 */
-function outline(segments) {
-	return segments.map((segment) => {
-		if (segment.kind === "text") return `text:${segment.message.text}`;
-		return `process:[${segment.items
-			.map((item) => (item.kind === "thinking-group" ? `think:${item.text}` : "tool"))
-			.join(",")}]`;
+/** 提取序列概要：[类型:内容]，便于断言顺序 */
+function outline(items) {
+	return items.map((item) => {
+		if (item.kind === "process-entry") {
+			const entry = item.entry;
+			return entry.kind === "thinking-entry"
+				? `think:${entry.group.text}`
+				: "tool";
+		}
+		if (item.kind === "interim-answer") return `interim:${item.message.text}`;
+		return `final:${item.message.text}`;
 	});
 }
 
-test("流式中间态：尾部工具/思考保持在回答之后，回答不被拽到底部", () => {
+test("流式中间态：扁平序列严格按真实时序，不重排", () => {
 	// 真实时序：思考T1 → 回答段1 → 工具 → 思考T2（还在进行，run 未结束）
 	const run = runOf([
 		{ kind: "message", message: assistantMessage("段1", "T1") },
 		toolGroup(),
 		thinkingGroup("T2"),
 	]);
-	const segments = buildTurnSegments(run, { showThinking: true });
-	assert.deepEqual(outline(segments), [
-		"process:[think:T1]",
-		"text:段1",
-		"process:[tool,think:T2]",
+	const items = buildTurnDisplay(run, { showThinking: true });
+	assert.deepEqual(outline(items), [
+		"think:T1",
+		"final:段1",
+		"tool",
+		"think:T2",
 	]);
-	// 段1 是本轮最后一条回答，标记 isFinal 但位置不动
-	assert.equal(segments[1].kind === "text" && segments[1].isFinal, true);
+	// 段1 是本轮唯一 assistant 文本 → final-answer（常驻）
+	assert.equal(items[1].kind, "final-answer");
 });
 
-test("中断的 run（回答后还有工具调用）：回答保持在原位", () => {
+test("中断的 run（回答后还有工具调用）：回答保持原位", () => {
 	const run = runOf([
 		{ kind: "message", message: assistantMessage("段1") },
 		toolGroup(),
 	]);
-	const segments = buildTurnSegments(run, { showThinking: true });
-	assert.deepEqual(outline(segments), ["text:段1", "process:[tool]"]);
+	const items = buildTurnDisplay(run, { showThinking: true });
+	assert.deepEqual(outline(items), ["final:段1", "tool"]);
 });
 
-test("多段回答：每条回答自带的思考插入到各自文本之前，不丢弃、不上移", () => {
+test("多段回答：中间回答与最终回答正确区分，各自思考插入到文本之前", () => {
 	// 真实时序：T1 → 段1 → 工具 → T2 → 段2
 	const run = runOf([
 		{ kind: "message", message: assistantMessage("段1", "T1") },
 		toolGroup(),
 		{ kind: "message", message: assistantMessage("段2", "T2") },
 	]);
-	const segments = buildTurnSegments(run, { showThinking: true });
-	assert.deepEqual(outline(segments), [
-		"process:[think:T1]",
-		"text:段1",
-		"process:[tool,think:T2]",
-		"text:段2",
+	const items = buildTurnDisplay(run, { showThinking: true });
+	assert.deepEqual(outline(items), [
+		"think:T1",
+		"interim:段1",
+		"tool",
+		"think:T2",
+		"final:段2",
 	]);
-	assert.equal(segments[1].kind === "text" && segments[1].isFinal, false);
-	assert.equal(segments[3].kind === "text" && segments[3].isFinal, true);
+	// 段1 不是最后一条 assistant → interim；段2 是最后一条 → final
+	assert.equal(items[1].kind, "interim-answer");
+	assert.equal(items[4].kind, "final-answer");
 });
 
-test("相邻多段回答（中间无工具）：分段平铺且各自思考保持「思考→回答」时序", () => {
+test("相邻多段回答（中间无工具）：各自思考保持「思考→回答」时序", () => {
 	const run = runOf([
 		{ kind: "message", message: assistantMessage("段1", "T1") },
 		{ kind: "message", message: assistantMessage("段2", "T2") },
 	]);
-	const segments = buildTurnSegments(run, { showThinking: true });
-	assert.deepEqual(outline(segments), [
-		"process:[think:T1]",
-		"text:段1",
-		"process:[think:T2]",
-		"text:段2",
+	const items = buildTurnDisplay(run, { showThinking: true });
+	assert.deepEqual(outline(items), [
+		"think:T1",
+		"interim:段1",
+		"think:T2",
+		"final:段2",
 	]);
 });
 
-test("完整轮次：最终回答的思考并入其前的过程段尾部", () => {
+test("流式中（isComplete=false）：所有 assistant 都归中间回答，不提前常驻", () => {
+	// 真实流式场景：run 尚未结束（agent 忙碌），当前最后一条 assistant
+	// 不能判定为最终回答——否则会常驻在折叠栏外（用户反馈的 bug）。
+	const run = runOf([
+		{ kind: "message", message: assistantMessage("段1", "T1") },
+		toolGroup(),
+		{ kind: "message", message: assistantMessage("段2", "T2") },
+	]);
+	const items = buildTurnDisplay(run, { showThinking: true, isComplete: false });
+	assert.deepEqual(outline(items), [
+		"think:T1",
+		"interim:段1",
+		"tool",
+		"think:T2",
+		"interim:段2",
+	]);
+	// 即使最后一条也不得标记为 final-answer（流式中无法判断）
+	assert.equal(items[4].kind, "interim-answer");
+});
+
+test("完整轮次：最终回答的思考插到其前，顺序保持", () => {
 	const run = runOf([
 		thinkingGroup("T1"),
 		toolGroup(),
 		{ kind: "message", message: assistantMessage("回答", "T2") },
 	]);
-	const segments = buildTurnSegments(run, { showThinking: true });
-	assert.deepEqual(outline(segments), [
-		"process:[think:T1,tool,think:T2]",
-		"text:回答",
+	const items = buildTurnDisplay(run, { showThinking: true });
+	assert.deepEqual(outline(items), [
+		"think:T1",
+		"tool",
+		"think:T2",
+		"final:回答",
 	]);
 });
 
-test("showThinking 关闭时不从消息展开思考块，但已有 thinking-group 仍保留在过程段", () => {
+test("showThinking 关闭时不展开消息自带思考，但已有 thinking-group 仍保留", () => {
 	const run = runOf([
 		thinkingGroup("T1"),
 		{ kind: "message", message: assistantMessage("段1", "T2") },
 	]);
-	const segments = buildTurnSegments(run, { showThinking: false });
-	assert.deepEqual(outline(segments), ["process:[think:T1]", "text:段1"]);
+	const items = buildTurnDisplay(run, { showThinking: false });
+	assert.deepEqual(outline(items), ["think:T1", "final:段1"]);
 });
 
-test("无 assistant 消息的 run：全部归入过程段", () => {
+test("无 assistant 消息的 run：全部归入过程步骤", () => {
 	const run = runOf([thinkingGroup("T1"), toolGroup()]);
-	const segments = buildTurnSegments(run, { showThinking: true });
-	assert.deepEqual(outline(segments), ["process:[think:T1,tool]"]);
+	const items = buildTurnDisplay(run, { showThinking: true });
+	assert.deepEqual(outline(items), ["think:T1", "tool"]);
 });
 
-test("分段的过程条目使用稳定 id（流式重渲染不重置展开状态）", () => {
+test("过程步骤使用稳定 id（流式重渲染不重置展开状态）", () => {
 	const message = assistantMessage("段1", "T1");
 	const run = runOf([{ kind: "message", message }]);
-	const first = buildTurnSegments(run, { showThinking: true });
-	const second = buildTurnSegments(run, { showThinking: true });
+	const first = buildTurnDisplay(run, { showThinking: true });
+	const second = buildTurnDisplay(run, { showThinking: true });
 	const firstThinking = first[0];
 	const secondThinking = second[0];
-	assert.equal(firstThinking.kind, "process");
-	assert.equal(secondThinking.kind, "process");
-	assert.equal(firstThinking.items[0].id, secondThinking.items[0].id);
+	assert.equal(firstThinking.kind, "process-entry");
+	assert.equal(secondThinking.kind, "process-entry");
+	assert.equal(firstThinking.entry.id, secondThinking.entry.id);
 });
 
 /* ── groupToolMessages：连续 assistant 消息不再合并（多段回答原位平铺，issue #130） ── */

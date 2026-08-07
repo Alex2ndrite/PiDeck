@@ -254,9 +254,9 @@ test("active Agent identity does not use useState", () => {
 // 4. Deterministic bug parity: TurnRow hook order
 // ════════════════════════════════════════════════════════════════════
 
-test("TurnRow in SurfaceComponents puts all hooks before any early return", () => {
+test("TurnRow puts all hooks before any early return", () => {
   const surfaceSource = readFileSync(
-    "src/renderer/src/components/session/SurfaceComponents.tsx",
+    "src/renderer/src/components/session/turn/TurnRow.tsx",
     "utf8",
   );
 
@@ -264,11 +264,23 @@ test("TurnRow in SurfaceComponents puts all hooks before any early return", () =
   const turnRowIndex = surfaceSource.indexOf(
     "export const TurnRow = memo(function TurnRow",
   );
-  assert.notEqual(
-    turnRowIndex,
-    -1,
-    "TurnRow should exist in SurfaceComponents.tsx",
-  );
+  if (turnRowIndex === -1) {
+    // 多行格式：export const TurnRow = memo(\n    function TurnRow(...)
+    const multiLineIndex = surfaceSource.indexOf(
+      "export const TurnRow = memo(",
+    );
+    assert.notEqual(
+      multiLineIndex,
+      -1,
+      "TurnRow should exist in turn/TurnRow.tsx",
+    );
+  } else {
+    assert.notEqual(
+      turnRowIndex,
+      -1,
+      "TurnRow should exist in turn/TurnRow.tsx",
+    );
+  }
 
   // Get the function body
   const bodyStart = surfaceSource.indexOf("{", turnRowIndex);
@@ -325,7 +337,7 @@ test("TurnRow in SurfaceComponents puts all hooks before any early return", () =
 
 test("TurnRow has no hook placed after an early return", () => {
   const surfaceSource = readFileSync(
-    "src/renderer/src/components/session/SurfaceComponents.tsx",
+    "src/renderer/src/components/session/turn/TurnRow.tsx",
     "utf8",
   );
 

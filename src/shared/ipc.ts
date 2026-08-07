@@ -209,6 +209,9 @@ export const ipcChannels = {
 	/** 流式思考内容更新，agent 忙碌时实时推送当前思考文本 */
 	agentsThinking: "agents:thinking",
 
+	/** 流式正文内容更新，agent 忙碌时实时推送累积正文（阶段1：独立于 messages 数组） */
+	agentsTextStream: "agents:text-stream",
+
 	/**
 	 * 主进程 → 渲染进程的轻量 toast 通知（如 abort 已请求停止）。
 	 * 避免把瞬时状态反馈写成会话时间线里的系统卡片。

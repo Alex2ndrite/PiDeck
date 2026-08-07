@@ -231,7 +231,7 @@ function emit(event) {
 
 function stopStream(settled) {
 	if (streamTimer) {
-		clearInterval(streamTimer);
+		clearTimeout(streamTimer);
 		streamTimer = null;
 	}
 	if (settled) {
@@ -244,13 +244,18 @@ function startStream(userText, options = {}) {
 	streaming = true;
 	const slow = userText.includes("SLOW");
 	streamIntervalMs = slow ? 220 : 80;
+	// BURST 模式：模拟真实 LLM 突发输出——前 6 个 chunk 慢速（250ms），
+	// 之后 15ms 密集推送（复现「开头吐字、后面蹦字」）。
+	const burst = userText.includes("BURST");
 	// prompt 含 "MDEMO" 时回复富 markdown，用于截图巡检渲染元素（链接/代码/表格/引用）
 	// raw 模式（Ask 回答回显）：不套模板、不截断，保证长 JSON 答案完整回传
 	const reply = options.raw
 		? userText
+		: userText.includes("BURST")
+		? "Mock 回复：「BURST」" +
+		  "第一段缓慢吐字节奏稳定，然后密集输出段以极快速度连续推送多字符用于复现真实模型突发输出导致的蹦字现象，这段文本会在一两百毫秒内一次性灌入渲染层。"
 		: userText.includes("MDEMO")
-		? [
-			"以下是渲染元素巡检：",
+		? [			"以下是渲染元素巡检：",
 			"",
 			"修改了 src/main/index.ts 和 ./docs/ui-2.0-revamp-plan.md，详见 https://github.com/miaojingang/pi-desktop 。",
 			"",
@@ -281,7 +286,7 @@ function startStream(userText, options = {}) {
 			"$$\\int_0^1 x^2 \\, dx = \\frac{1}{3}$$",
 		].join("\n")
 		: `Mock 回复：「${userText.slice(0, 40)}」流式渲染验证完成。`;
-	const chunkCount = slow ? 18 : 12;
+	const chunkCount = slow ? 18 : burst ? 24 : 12;
 	const per = Math.max(1, Math.ceil(reply.length / chunkCount));
 	streamChunks = [];
 	for (let i = 0; i < reply.length; i += per) streamChunks.push(reply.slice(i, i + per));
@@ -316,9 +321,11 @@ function startStream(userText, options = {}) {
 		emit({ type: "tool_execution_end", toolCallId: "tool-e2e-1" });
 	}
 
-	streamTimer = setInterval(() => {
+	// BURST 模式：模拟真实 LLM 突发输出——前 6 个 chunk 慢速（250ms），
+	// 之后 15ms 密集推送（复现「开头吐字、后面蹦字」）。
+	const chunkDelay = (step) => (burst ? (step < 6 ? 250 : 15) : streamIntervalMs);
+	const emitChunk = () => {
 		if (streamStep >= streamChunks.length) {
-			clearInterval(streamTimer);
 			streamTimer = null;
 			const full = {
 				role: "assistant",
@@ -347,7 +354,9 @@ function startStream(userText, options = {}) {
 			assistantMessageEvent: { type: "text_delta", delta: streamChunks[streamStep] },
 		});
 		streamStep += 1;
-	}, streamIntervalMs);
+		streamTimer = setTimeout(emitChunk, chunkDelay(streamStep));
+	};
+	streamTimer = setTimeout(emitChunk, chunkDelay(0));
 }
 
 function handleCommand(cmd) {

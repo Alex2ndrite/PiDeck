@@ -20,6 +20,10 @@ export type ChatMessage = {
 	images?: ImageContent[]; // 用户消息中附加的图片
 	/** 思考内容：来自 thinking 内容块，用于展示模型推理过程 */
 	thinking?: string;
+	/** 思考段开始时间（可选；缺省回退 message.timestamp） */
+	thinkingStartedAt?: number;
+	/** 思考段结束时间（可选；缺省回退 message.timestamp） */
+	thinkingEndedAt?: number;
 };
 
 /** A bounded historical timeline slice. `nextBefore` is the exclusive index for an older page. */

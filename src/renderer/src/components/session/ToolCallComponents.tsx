@@ -28,6 +28,7 @@ import { Badge } from "../ui-shadcn/badge";
 import { Button } from "../ui-shadcn/button";
 import type { ChatMessage } from "../../../../shared/types";
 import { TimelineMarker } from "./TimelineMarker";
+import { getToolPhraseFromArgs } from "./timeline/toolPhrase";
 import { ToolResult } from "../agents/tool-result";
 import {
   formatDuration,
@@ -201,7 +202,7 @@ export const ToolActivityCard = memo(function ToolActivityCard(props: { name: st
 		<section className="tool-activity-card" data-status="running" aria-live="polite">
 			<span className="tool-activity-icon">{toolIcon(props.name)}</span>
 			<div className="tool-activity-copy">
-				<strong>{props.name}</strong>
+				<span className="tool-activity-name">{props.name}</span>
 				<span>{t("tool.statusRunning")}</span>
 			</div>
 			<span className="tool-activity-pulse" aria-hidden="true"><i /><i /><i /></span>
@@ -221,6 +222,9 @@ export const ToolCard = memo(function ToolCard(props: {
 	const tone = getToolTone(props.message);
 	const subtitle = getToolSubtitle(props.message);
 	const kindLabel = getToolKindLabel(toolName);
+	// 学 Proma：折叠态显示语义短语（如「读取 foo.ts」）而非完整命令行
+	const phrase = getToolPhraseFromArgs(toolName, props.message.meta?.args);
+	const displayLabel = status === "running" ? phrase.loadingLabel : phrase.label;
 	const durationMs =
 		typeof props.message.meta?.durationMs === "number"
 			? props.message.meta.durationMs
@@ -235,26 +239,27 @@ export const ToolCard = memo(function ToolCard(props: {
 	// 状态徽章（借鉴 AI Elements Tool 的 getStatusBadge）：三态图标+文案 pill 一眼可辨。
 	// running 保留琥珀色警示位 + spinner；error 用 destructive 红；done 用 secondary
 	// 低强调确认（ask_question 已回答时文案替换为「已回答」）。
+	// 随 trigger 行紧凑化（24px）同步收紧：图标 11→9px、Badge 内边距 py-0.5→py-0、px-1.5→px-1。
 	const statusBadge = (() => {
 		if (status === "running") {
 			return (
-				<Badge variant="outline" className="gap-1 border-warning/40 text-warning">
-					<span className="size-2.5 animate-spin rounded-full border-2 border-[color:color-mix(in_srgb,var(--color-warning)_30%,transparent)] border-t-[var(--color-warning)]" aria-hidden="true" />
+				<Badge variant="outline" className="gap-1 border-warning/40 px-1 py-0 text-micro text-warning">
+					<span className="size-[9px] animate-spin rounded-full border-2 border-[color:color-mix(in_srgb,var(--color-warning)_30%,transparent)] border-t-[var(--color-warning)]" aria-hidden="true" />
 					{t("tool.statusRunning")}
 				</Badge>
 			);
 		}
 		if (status === "error") {
 			return (
-				<Badge variant="destructive" className="gap-1">
-					<CircleX size={11} aria-hidden="true" />
+				<Badge variant="destructive" className="gap-1 px-1 py-0 text-micro">
+					<CircleX size={9} aria-hidden="true" />
 					{t("tool.statusError")}
 				</Badge>
 			);
 		}
 		return (
-			<Badge variant="secondary" className="gap-1">
-				<CircleCheck size={11} aria-hidden="true" />
+			<Badge variant="secondary" className="gap-1 px-1 py-0 text-micro">
+				<CircleCheck size={9} aria-hidden="true" />
 				{askCard?.answered ? t("ask.answered") : t("tool.statusDone")}
 			</Badge>
 		);
@@ -263,6 +268,9 @@ export const ToolCard = memo(function ToolCard(props: {
 		<TimelineMarker
 			kind="tool"
 			tone={tone === "error" ? "error" : tone === "running" ? "active" : "success"}
+			// 工具行紧凑化：压扁 trigger 行后底距同步收紧（pb-2 → pb-1），
+			// 让工具调用在时间线上保持低调、不喧宾夺主，思考块仍用默认 pb-2
+			contentClassName="pb-1"
 		>
 		<section
 			className={`tool-card w-full min-w-0 overflow-hidden rounded-md border border-border-subtle bg-bg-panel transition-[border-color,background-color,box-shadow] duration-200 tone-${tone}${isSkillRead ? " tool-card--skill" : ""}${isAskCard ? " tool-card--ask" : ""}${status === "running" ? " tool-card--running" : ""}`}
@@ -270,17 +278,17 @@ export const ToolCard = memo(function ToolCard(props: {
 			data-tool-kind={isSkillRead ? "skill" : getToolKind(toolName)}
 			data-message-id={props.message.id}
 		>
-			<div className="flex min-h-8 items-center transition-colors duration-150 hover:bg-[color:color-mix(in_srgb,var(--color-bg-hover)_55%,var(--color-bg-panel))]">
+			<div className="flex min-h-5 items-center transition-colors duration-150 hover:bg-[color:color-mix(in_srgb,var(--color-bg-hover)_55%,var(--color-bg-panel))]">
 				<button
 					type="button"
-					className="flex min-h-8 min-w-0 flex-[1_1_auto] cursor-pointer items-center gap-2 border-0 bg-transparent p-1.5 pl-2.5 text-left text-control leading-5 text-text-secondary focus-visible:-outline-offset-2 focus-visible:outline-2"
+					className="flex min-h-5 min-w-0 flex-[1_1_auto] cursor-pointer items-center gap-2 border-0 bg-transparent py-0 pr-0.5 pl-1 text-left text-control leading-5 text-text-secondary focus-visible:-outline-offset-2 focus-visible:outline-2"
 					onClick={() => setExpanded((v) => !v)}
 					aria-expanded={expanded}
 				>
 					<span className="tool-card-icon inline-flex shrink-0 items-center justify-center text-text-tertiary">
 						{isSkillRead ? <Brain size={15} /> : isAskCard ? <MessageCircle size={15} /> : toolIcon(toolName)}
 					</span>
-					<span className="shrink-0 text-body font-[650] lowercase text-text-primary">
+					<span className="shrink-0 text-caption font-medium lowercase text-text-secondary">
 						{isSkillRead ? `skill:${skillName}` : isAskCard ? t("ask.toolName") : toolName}
 					</span>
 					{expanded ? (
@@ -298,18 +306,22 @@ export const ToolCard = memo(function ToolCard(props: {
 						</span>
 					)}
 					{isAskCard && askCard?.question ? (
-						<span className="min-w-0 flex-[1_1_auto] truncate font-mono text-caption text-text-tertiary" title={askCard.question}>
+						<span className="min-w-0 flex-[1_1_auto] truncate font-mono text-micro text-text-tertiary" title={askCard.question}>
 							| {askCard.question}
 						</span>
+					) : displayLabel ? (
+						<span className="min-w-0 flex-[1_1_auto] truncate font-mono text-micro text-text-secondary" title={subtitle || displayLabel}>
+							{displayLabel}
+						</span>
 					) : subtitle ? (
-						<span className="min-w-0 flex-[1_1_auto] truncate font-mono text-caption text-text-tertiary" title={subtitle}>
+						<span className="min-w-0 flex-[1_1_auto] truncate font-mono text-micro text-text-tertiary" title={subtitle}>
 							| {subtitle}
 						</span>
 					) : null}
 				</button>
 			</div>
 			{expanded && (
-				<div className="relative rounded-b-sm bg-transparent">
+				<div className="relative ml-5 mt-1 mb-2 rounded-b-sm border-l-2 border-border-subtle bg-transparent pl-3 animate-in fade-in slide-in-from-top-1 duration-150">
 					{isAskCard && askCard ? (
 						<div className="ask-question-card-tool-inner">
 							<div className="ask-question-card-title">

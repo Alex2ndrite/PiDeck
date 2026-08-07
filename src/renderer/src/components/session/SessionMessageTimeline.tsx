@@ -17,8 +17,11 @@ import {
 import {
   getMultiSelectImageCaptureIds,
   groupToolMessages,
+  reconcileRuns,
+  type RenderMessage,
 } from "../app/AppUtils";
 import {
+  liveThinkingIdBySessionIdAtomFamily,
   sessionMessageLoadStateAtom,
   sessionRecordByIdAtomFamily,
   sessionRuntimeBySessionIdAtomFamily,
@@ -34,7 +37,6 @@ import {
 import { t } from "../../i18n";
 import { SessionFileSummary } from "./SessionFileSummary";
 import { SessionStartSurface } from "./SessionStartSurface";
-import { ToolActivityCard } from "./ToolCallComponents";
 import { MessageScroller } from "../agents/message-scroller";
 
 type TurnRowProps = ComponentProps<typeof TurnRow>;
@@ -117,7 +119,8 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
   );
   const activeRuntimeState = runtime?.state;
   const activeConversationStatus = modernSurfaceState.status;
-  const activeThinking = runtime?.thinking;
+  // 只订 live id：思考正文由 ThinkingStep 叶子订阅，避免 50ms 戳醒整条 timeline。
+  const liveThinkingId = useAtomValue(liveThinkingIdBySessionIdAtomFamily(sessionId ?? ""));
   const isAgentBusy = modernSurfaceState.isBusy;
   const cancellingUi = false;
   const loadMoreMessages = controller.loadMoreMessages;
@@ -179,10 +182,17 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
     () => groupToolMessages(paginatedMessages),
     [paginatedMessages],
   );
+  // 阶段0补强：对未变化的 run 复用旧对象引用，历史 run 的 memo 比较退化为 O(1)
+  const prevRenderedRunsRef = useRef<RenderMessage[] | undefined>(undefined);
+  const reconciledRuns = useMemo(() => {
+    const next = reconcileRuns(prevRenderedRunsRef.current, renderedRuns);
+    prevRenderedRunsRef.current = next;
+    return next;
+  }, [renderedRuns]);
   // 文件修改汇总只统计最后一次 agent 运行（run）内的工具调用：
   // 每次会话（用户发送 → agent 执行 → 完成）清空重算，不累计历史运行的修改
   const lastRunMessages = useMemo(() => {
-    const lastRun = renderedRuns.findLast((r) => r.kind === "agent-run");
+    const lastRun = reconciledRuns.findLast((r) => r.kind === "agent-run");
     if (!lastRun) return [];
     const msgs: ChatMessage[] = [];
     for (const item of lastRun.items) {
@@ -193,7 +203,7 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
       }
     }
     return msgs;
-  }, [renderedRuns]);
+  }, [reconciledRuns]);
   const lastUserMessageId = useMemo(() => {
     for (let index = activeMessages.length - 1; index >= 0; index -= 1) {
       if (activeMessages[index].role === "user") {
@@ -241,26 +251,6 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
         activeRuntimeState?.isStreaming) &&
       activeMessages.at(-1)?.role !== "assistant",
   );
-  const streamingMessageId = useMemo(() => {
-    if (
-      !hasActiveConversation ||
-      activeConversationStatus !== "running" ||
-      !activeRuntimeState?.isStreaming
-    ) {
-      return undefined;
-    }
-    for (let index = activeMessages.length - 1; index >= 0; index -= 1) {
-      const message = activeMessages[index];
-      if (message.role === "user") break;
-      if (message.role === "assistant" && message.text.trim()) return message.id;
-    }
-    return undefined;
-  }, [
-    activeConversationStatus,
-    activeMessages,
-    activeRuntimeState?.isStreaming,
-    hasActiveConversation,
-  ]);
 
   async function copySelectedMessages(
     selectedIds: Set<string>,
@@ -274,7 +264,7 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
         ) as HTMLElement | null;
         if (!source) return;
 
-        const captureIds = getMultiSelectImageCaptureIds(renderedRuns, selectedIds);
+        const captureIds = getMultiSelectImageCaptureIds(reconciledRuns, selectedIds);
         const clone = source.cloneNode(true) as HTMLElement;
         for (const item of Array.from(clone.children)) {
           if (!(item instanceof HTMLElement)) continue;
@@ -355,10 +345,12 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
       className="message-timeline-host h-full min-h-0"
       viewportClassName="message-timeline"
       viewportRef={timelineRef}
+      scrollApiRef={controller.scrollerScrollApiRef}
       followOutput={controller.autoScroll}
       followThreshold={56}
       smooth
-      busy={isAwaitingAssistant}
+      // 整段 agent 忙碌（含工具执行/流式）期间追底用 instant，避免工具卡弹出弹簧滞后砰抖。
+      busy={isAgentBusy || isAwaitingAssistant}
       onFollowChange={controller.setAutoScrollFromScroller}
     >
       {hasMoreMessages && canLoadMoreMessages && (
@@ -438,45 +430,44 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
           <SessionStartSurface onQuickPrompt={props.onQuickPrompt} />
         )}
 
-      {/* 长会话渲染治理：message-list 对屏外行跳过 layout/paint（content-visibility:auto）。
-          - 尾部 14 个子元素（最新若干 run + 思考卡/指示器/文件汇总/pin 垫片）排除在外：
-            pin 测量（measurePinSpacer）与自动跟随只依赖尾部，排除后测量路径上无估算盒，
-            置顶精度不受上方估算影响（rowTop 与 scrollHeight 的估算误差同向抵消）。
-          - contain-intrinsic-size 的 auto 关键字让浏览器记住已渲染行的真实高度，
-            从未渲染的行用 240px 估算，滚动条位置由 Chromium scroll anchoring 收敛。 */}
+      {/* 长会话渲染治理（2026-08 调整）：不再使用 content-visibility 估算高度。
+          - 背景：content-visibility:auto + contain-intrinsic-size:240px 对屏外行用估算高度，
+            展开/折叠工具卡或思考卡时，浏览器按估算高度修正滚动位置，产生屏幕抖动。
+          - 替代：学 Proma 靠「总折叠 + 各自折叠」压缩单行 DOM 体积（分页仍在做窗口治理），
+            所有行真实高度参与 layout，滚动引擎与折叠动画收到准确信号。 */}
       {hasActiveConversation &&
         !isConversationLoading &&
         activeMessages.length > 0 && (
-          <div className="message-list [&>*:not(:nth-last-child(-n+14))]:[content-visibility:auto] [&>*:not(:nth-last-child(-n+14))]:[contain-intrinsic-size:auto_240px]">
-            {renderedRuns.map((item, index) => {
+          <div className="message-list">
+            {reconciledRuns.map((item, index) => {
               if (item.kind === "agent-run") {
-                const isRunStreaming = Boolean(
-                  streamingMessageId &&
-                    item.items.some(
-                      (runItem) =>
-                        runItem.kind === "message" &&
-                        runItem.message.id === streamingMessageId,
-                    ),
+                // Controls：忙碌中的末行 run 视为 live（isStreaming 补丁可能略滞后于正文 atom）。
+                const isRunStreaming = isLatestTimelineRunBusy(
+                  isAgentBusy,
+                  index,
+                  reconciledRuns.length,
                 );
                 return (
                   <TurnRow
                     key={item.id}
                     run={item}
+                    sessionId={sessionId}
                     fresh={freshMessageIds.has(item.id)}
                     onPreviewImage={props.onPreviewImage}
                     showThinking={props.showThinking}
                     isStreaming={isRunStreaming}
-                    agentRunning={isLatestTimelineRunBusy(
-                      isAgentBusy,
-                      index,
-                      renderedRuns.length,
-                    )}
+                    // 始终下发 live id（按 message id 命中）；勿绑 isRunStreaming，
+                    // 否则流结束而 History 未到时会提前卸思考步导致 remount dump。
+                    liveThinkingId={liveThinkingId}
+                    agentRunning={isRunStreaming}
+                    isLatestRun={index === reconciledRuns.length - 1}
                     onOpenExternal={props.onOpenExternal}
                     onOpenFile={props.onOpenFile}
                     onDiffFile={props.onDiffFile}
                     onEditMessage={props.onEditMessage}
                     onDeleteMessage={props.onDeleteMessage}
                     onEnterMultiSelect={() => setMultiSelectOpen(true)}
+                    onProcessAutoCollapsed={controller.scrollFinalAnswerIntoView}
                   />
                 );
               }
@@ -522,38 +513,14 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
               return null;
             })}
 
-            {isAwaitingAssistant && (
-              <>
-                {props.showThinking && activeThinking && (
-                  <section className="thinking-card markdown-body text-text-tertiary">
-                    <div className="thinking-card-content">
-                      <MarkdownStream
-                        text={activeThinking}
-                        isStreaming
-                        onOpenExternal={props.onOpenExternal}
-                        onOpenFile={props.onOpenFile}
-                      />
-                    </div>
-                  </section>
-                )}
-                {activeRuntimeState?.isExecutingTool &&
-                  !renderedRuns.some(
-                    (run) =>
-                      run.kind === "agent-run" &&
-                      run.items.some((item) => item.kind === "tool-group"),
-                  ) && (
-                    <ToolActivityCard name={t("tool.pending")} />
-                  )}
-              </>
-            )}
-
             {hasActiveConversation &&
               !cancellingUi &&
               (activeConversationStatus === "running" ||
                 activeConversationStatus === "starting" ||
                 activeRuntimeState?.isStreaming) && (
                 <RespondingIndicator
-                  thinking={activeThinking}
+                  // 有 live 思考段即可；不订正文 atom，避免 50ms 重渲 timeline。
+                  thinking={liveThinkingId ? "." : undefined}
                   showThinking={props.showThinking}
                   isStarting={activeConversationStatus === "starting"}
                   isExecutingTool={activeRuntimeState?.isExecutingTool}
@@ -587,7 +554,7 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
 
       {multiSelectOpen && (
         <MultiSelectModal
-          renderedRuns={renderedRuns}
+          renderedRuns={reconciledRuns}
           onClose={() => setMultiSelectOpen(false)}
           onCopy={copySelectedMessages}
         />

@@ -361,6 +361,5 @@ test("detach envelope clears the agent identity and all runtime UI", () => {
   assert.equal(runtime.status, "detached");
   assert.equal(runtime.agentId, undefined);
   assert.equal(runtime.state, undefined);
-  assert.equal(runtime.thinking, "");
   assert.equal(store.get(atoms.sessionRuntimeUiByIdAtom)["session-a"], undefined);
 });

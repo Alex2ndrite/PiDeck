@@ -51,9 +51,31 @@
   color: var(--color-danger);
   background: var(--color-danger);
 }
+/* 工具调用节点：8px 空心描边圆（中性灰、1px 细描边、无色晕），
+   内孔以面板色填充遮挡时间线竖线；所有状态一致、无脉冲动画——
+   状态语义由右侧徽章承担，左侧轨道保持安静，不喧宾夺主 */
+.timeline-marker-row[data-marker-kind="tool"] .timeline-marker-node {
+  color: var(--color-text-tertiary);
+  background: var(--color-bg-panel);
+  border-width: 1px;
+  border-color: currentColor;
+  box-shadow: none;
+  animation: none;
+}
 .timeline-inline-text {
   min-width: 0;
   padding-left: 26px;
+}
+
+/* 中间回答：执行过程条目样式（视觉归属折叠区）。
+ * 外面（无缩进、主色调）只留给最终回答；中间回答缩进但使用正文主色，
+ * 与最终回答同级可读（用户确认：过程内容正常显示、不弱化）。 */
+.execution-interim {
+  min-width: 0;
+  padding-left: 26px;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-chat);
+  line-height: 1.68;
 }
 
 /* 会话生命周期状态：节点与内容使用同一条节奏，运行中只保留轻微呼吸感，
@@ -91,6 +113,12 @@
   animation: assistant-answer-settle 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+/* Live plain → Settled Markdown 交接：挂载全量渲染时淡入，避免硬切闪一下。 */
+.execution-interim[data-settle="1"],
+.assistant-text[data-settle="1"] {
+  animation: assistant-answer-settle 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
 @keyframes assistant-answer-settle {
   from { opacity: 0.35; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }
@@ -104,13 +132,12 @@
 }
 
 @keyframes timeline-step-enter {
+  /* 仅淡入：禁止 translateY，避免与 stick-to-bottom 追底叠加成「砰」一下 */
   from {
     opacity: 0;
-    transform: translateY(6px);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
   }
 }
 
@@ -152,11 +179,31 @@
   outline-offset: 1px;
 }
 .execution-summary-details {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 0;
   margin-top: var(--space-3);
+  /* 容器级贯穿竖线：思考/工具/中间回答共享一条连续轨道，
+     替代各子项（TimelineMarker）自带的独立短竖线，视觉不再断裂。 */
+  padding-left: 0;
 }
+/* 容器贯穿竖线：对齐 TimelineMarker rail 中心（rail 16px / 2 = 8px） */
+.execution-summary-details::before {
+  content: "";
+  position: absolute;
+  left: 8px;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--color-border-subtle);
+  pointer-events: none;
+}
+/* 子项隐藏各自竖线（避免重复/断裂），保留状态节点（节点自带 z-index 覆盖在容器线上） */
+.execution-summary-details .timeline-marker-line {
+  display: none;
+}
+/* 收起按钮对齐内容区（rail 16px + gap 10px = 26px），不被容器竖线穿过 */
 .execution-summary-details > .timeline-marker-row:last-child .timeline-marker-content {
   padding-bottom: 0;
 }
@@ -164,6 +211,7 @@
   display: flex;
   align-items: center;
   gap: 2px;
+  margin-left: 26px;
   padding: 0;
   border: 0;
   background: transparent;
@@ -172,10 +220,12 @@
   line-height: var(--line-height-caption);
   cursor: pointer;
   align-self: flex-start;
-  transition: color 0.15s ease;
+  opacity: 0.55;
+  transition: color 0.15s ease, opacity 0.15s ease;
 }
 .execution-summary-collapse:hover {
-  color: var(--color-text-secondary);
+  color: var(--color-text-tertiary);
+  opacity: 0.9;
 }
 .execution-summary-collapse:focus-visible {
   outline: 2px solid var(--focus-ring);
@@ -409,11 +459,11 @@
   flex-direction: column;
   gap: 1px;
 }
-.tool-activity-copy strong {
+.tool-activity-copy .tool-activity-name {
   overflow: hidden;
-  color: var(--color-text-primary);
-  font-size: var(--font-size-control);
-  font-weight: 650;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-caption);
+  font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -438,8 +488,9 @@
 .tool-activity-pulse i:nth-child(2) { animation-delay: 140ms; }
 .tool-activity-pulse i:nth-child(3) { animation-delay: 280ms; }
 @keyframes tool-activity-enter {
-  from { opacity: 0; transform: translateY(5px) scale(0.985); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
+  /* 仅淡入，避免占位卡与真实 ToolCard 切换时再叠一层位移动画 */
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 @keyframes tool-activity-sheen {
   0%, 35% { transform: translateX(-100%); }
@@ -479,7 +530,8 @@
 .tool-card--running {
   border-color: color-mix(in srgb, var(--color-warning) 42%, var(--color-border-subtle));
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-warning) 10%, transparent);
-  animation: timeline-step-enter 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  /* 仅淡入：无 translateY，避免与 stick-to-bottom 打架；减轻工具卡「咔」一下出现 */
+  animation: timeline-step-enter 200ms ease-out both;
 }
 .tool-card--running .tool-card-icon {
   color: var(--color-warning);
@@ -517,10 +569,8 @@
 }
 
 /* ---------- 工具组卡片：ToolGroupCard（多工具聚合） ---------- */
-/* 工具组作为连续执行轨道，组内卡片之间不再重复绘制外框。 */
-.tool-group-card:has(.tool-card--running) {
-  animation: timeline-step-enter 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
-}
+/* 工具组作为连续执行轨道，组内卡片之间不再重复绘制外框。
+ * 不再对 :has(.tool-card--running) 播放 enter 动画——新工具出现时 :has 会反复触发，放大抖动。 */
 .tool-group-card > div {
   min-width: 0;
 }
@@ -694,6 +744,8 @@
   .timeline-marker-row,
   .user-turn,
   .turn-row--fresh .assistant-text,
+  .execution-interim[data-settle="1"],
+  .assistant-text[data-settle="1"],
   .user-turn-bubble {
     animation: none !important;
     transition: none !important;

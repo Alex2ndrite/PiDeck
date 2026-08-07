@@ -134,7 +134,7 @@ export class FeishuBridge {
 	private groupInfoCache = new Map<string, FeishuGroupInfo>();
 	private userNameCache = new Map<string, string>();
 
-	// ===== 图片/文件即时处理（参考 Proma 思路：不做 pending 等待，收到即处理） =====
+	// ===== 图片/文件即时处理（不做 pending 等待，收到即处理） =====
 	private imageConfirmTimers = new Map<string, ReturnType<typeof setTimeout>>();
 	/** 待回答的 ask/confirm 请求：key = `${chatId}:${requestId}`（同一 chat 同一时刻至多一个，pi 串行执行）。 */
 	private pendingAsks = new Map<string, PendingAsk>();
@@ -1053,7 +1053,7 @@ export class FeishuBridge {
 	/**
 	 * 绑定失效恢复：先用 stable Session ID 或 legacy sessionPath 确定 Catalog Session，
 	 * 再由 coordinator 激活 runtime。Bridge 不直接创建或停止 Agent。
-	 * 参考了 Proma 的 ConversationManager 思路：用 chatId 作为稳定 key，
+	 * 用 chatId 作为稳定 key（参考上游 ConversationManager 思路），
 	 * 会话文件持久化，重启后优先恢复而不是重建。
 	 */
 	private async resumeOrCreateAgent(binding: FeishuChatBinding): Promise<FeishuChatBinding | undefined> {

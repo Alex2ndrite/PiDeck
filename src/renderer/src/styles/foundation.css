@@ -508,11 +508,10 @@ body {
   background-position: center, center;
   background-attachment: fixed, fixed;
 }
-button,
-textarea,
-input {
-  font: inherit;
-}
+/* 注：不再重复声明 button/textarea/input 的 font: inherit——
+   Tailwind preflight 已在 @layer base 内提供同款规则。非 layer 重复声明会
+   在层叠中压过 @layer utilities 的 Tailwind 字号类（如 text-caption/text-xs），
+   导致按钮字体类静默失效（曾表现为思考卡按钮字号不生效）。 */
 button {
   cursor: pointer;
 }

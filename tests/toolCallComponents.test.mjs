@@ -41,16 +41,16 @@ test("tool and thinking disclosure icons use right-for-collapsed down-for-expand
 test("tool card renders tri-state status badges with icons and i18n labels", () => {
   // 三态共用 shadcn Badge 组件
   assert.match(toolCalls, /import \{ Badge \} from "\.\.\/ui-shadcn\/badge"/);
-  // running：outline + 琥珀色警示位 + spinner
-  assert.match(toolCalls, /variant="outline" className="gap-1 border-warning\/40 text-warning"/);
+  // running：outline + 琥珀色警示位 + spinner（随 trigger 行紧凑化收紧内边距）
+  assert.match(toolCalls, /variant="outline" className="gap-1 border-warning\/40 px-1 py-0 text-micro text-warning"/);
   assert.match(toolCalls, /t\("tool\.statusRunning"\)/);
-  // error：destructive + CircleX 图标
-  assert.match(toolCalls, /variant="destructive" className="gap-1"/);
-  assert.match(toolCalls, /<CircleX size=\{11\}/);
+  // error：destructive + CircleX 图标（9px，随 24px trigger 行同步缩小）
+  assert.match(toolCalls, /variant="destructive" className="gap-1 px-1 py-0 text-micro"/);
+  assert.match(toolCalls, /<CircleX size=\{9\}/);
   assert.match(toolCalls, /t\("tool\.statusError"\)/);
   // done：secondary 低强调 + CircleCheck 图标；ask_question 已回答时文案替换为「已回答」
-  assert.match(toolCalls, /variant="secondary" className="gap-1"/);
-  assert.match(toolCalls, /<CircleCheck size=\{11\}/);
+  assert.match(toolCalls, /variant="secondary" className="gap-1 px-1 py-0 text-micro"/);
+  assert.match(toolCalls, /<CircleCheck size=\{9\}/);
   assert.match(toolCalls, /askCard\?\.answered \? t\("ask\.answered"\) : t\("tool\.statusDone"\)/);
   // 旧实现「完成后不显示状态」的空文案分支已移除
   assert.doesNotMatch(toolCalls, /statusLabel/);

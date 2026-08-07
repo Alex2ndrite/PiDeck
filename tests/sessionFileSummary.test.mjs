@@ -90,6 +90,6 @@ test("file summary only counts the last agent run (per-session reset)", () => {
   const source = readFileSync("src/renderer/src/components/session/SessionMessageTimeline.tsx", "utf8");
   assert.match(source, /只统计最后一次 agent 运行/);
   assert.match(source, /const lastRunMessages = useMemo/);
-  assert.match(source, /renderedRuns\.findLast\(\(r\) => r\.kind === "agent-run"\)/);
+  assert.match(source, /reconciledRuns\.findLast\(\(r\) => r\.kind === "agent-run"\)/);
   assert.match(source, /messages=\{lastRunMessages\}/);
 });

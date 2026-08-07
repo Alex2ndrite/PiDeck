@@ -1,5 +1,5 @@
 import { memo, useEffect, useRef, useState } from "react";
-import { AlertTriangle, Brain, Check, ChevronDown, ChevronRight, MessageCircle, X } from "lucide-react";
+import { AlertTriangle, Brain, Check, ChevronDown, ChevronRight, ChevronUp, MessageCircle, X } from "lucide-react";
 import type { ChatMessage } from "../../../../shared/types";
 import { t, translateI18nDescriptor } from "../../i18n";
 import { formatDuration, formatTime, stripAnsi } from "./TimelineFormat";
@@ -9,6 +9,7 @@ import { ApprovalCard } from "../ui-shadcn/approval-card";
 import { TimelineMarker } from "./TimelineMarker";
 import { MarkdownStream } from "./MarkdownStream";
 import { ShimmerText } from "./ShimmerText";
+import { useSmoothStream } from "../../utils/useSmoothStream";
 
 // Button 收口状态（P0）：本文件按钮全部保留原生——
 // compaction-card-header / thinking-card-trigger 是折叠触发器 + 内容排版容器（内部 span/small/em 结构）；
@@ -310,10 +311,11 @@ export const AskQuestionCard = memo(function AskQuestionCard(props: {
 	);
 });
 
-/** 思考过程折叠卡片：默认展开，展开后以 Markdown 结构渲染推理文本（标题/列表/代码块），
- * 超长时折叠态提供 220 字符截断预览。
- * defaultExpanded=false 时以「单步」形态呈现（标题 + 首句预览），
- * 用于执行过程折叠详情——思考作为 Chain of Thought 的一个步骤，不再默认摊开全文。 */
+/** 思考过程折叠卡片：标签行（图标+标题+耗时，纯展示不可点击）与虚线框内容区分行；
+ * 折叠态最多显示 4 行半（第 5 行切半，提示下面还有内容），左下角「展开思考」按钮；
+ * 展开后 markdown 全文实时渲染（isStreaming 透传 MarkdownStream），按钮变「收起思考」；
+ * agent 完成（endedAt 出现）时强制回到折叠态，随执行过程整体收起。
+ * defaultExpanded=false 时以「单步」形态呈现，用于执行过程折叠详情。 */
 export const ThinkingBlock = memo(
 	function ThinkingBlock(props: {
 		text: string;
@@ -322,61 +324,88 @@ export const ThinkingBlock = memo(
 		showThinking?: boolean;
 		/** 初始展开状态（仅初始值）：standalone 思考卡默认 true，折叠详情内传 false */
 		defaultExpanded?: boolean;
+		/** 流式进行中：MarkdownStream 以 isStreaming 实时渲染 */
+		isStreaming?: boolean;
 		onOpenExternal: (url: string) => void;
 		onOpenFile?: (path: string) => void;
 	}) {
-	// 默认展开，方便用户看到推理过程；可手动折叠
 	const [expanded, setExpanded] = useState(props.defaultExpanded ?? true);
+	const contentRef = useRef<HTMLDivElement | null>(null);
+	const [overflowing, setOverflowing] = useState(false);
+	// agent 完成时强制收起：即使之前手动展开过，思考也随执行过程整体收起（回到折叠 4 行半态）
+	useEffect(() => {
+		if (props.endedAt) setExpanded(false);
+	}, [props.endedAt]);
+	// 流式思考走打字机，避免大块 thinking_delta 一次糊上屏幕（「咔」一下）
+	const { displayedContent } = useSmoothStream({
+		content: props.text,
+		isStreaming: Boolean(props.isStreaming),
+		minDelay: 16,
+	});
+	// 始终走打字机输出：历史首挂时 hook 初始即全文；流式结束也不再绕过 displayedContent 造成整段蹦出。
+	// 折叠态内容溢出检测：超过 4 行半才显示「展开思考」按钮。
+	// 折叠时 clientHeight 被 max-height 锁死，ResizeObserver 收不到文本增长，
+	// 因此 text 变化时（流式追加）主动重查；ResizeObserver 兜底窗口/字号档位变化。
+	useEffect(() => {
+		const el = contentRef.current;
+		if (!el) return;
+		const check = () => setOverflowing(el.scrollHeight > el.clientHeight + 1);
+		check();
+		const ro = new ResizeObserver(check);
+		ro.observe(el);
+		return () => ro.disconnect();
+	}, [displayedContent, expanded]);
+
 	if (!props.showThinking || !props.text.trim()) return null;
-	const previewLen = 220;
-	const needsTruncate = props.text.length > previewLen;
-	const previewText =
-		expanded || !needsTruncate
-			? props.text
-			: `${props.text.slice(0, previewLen)}...`;
 	// 计算思考耗时（毫秒），有 endAt 且有 startAt 时才显示
 	const durationMs =
 		props.endedAt && props.startedAt && props.endedAt >= props.startedAt
 			? props.endedAt - props.startedAt
 			: null;
 	const durationText = durationMs != null ? formatDuration(durationMs) : null;
+	// 展开/收起按钮：展开态常显（收起按钮），折叠态仅内容溢出时显示（展开按钮）
+	const showToggle = expanded || overflowing;
 	return (
 		<TimelineMarker kind="thinking" tone={props.endedAt ? "neutral" : "active"}>
 		<section className="w-full min-w-0 overflow-hidden rounded-md border-0">
-			<button
-				className="flex min-h-8 w-full cursor-pointer items-center gap-2 border-0 bg-transparent p-1.5 pl-2.5 text-left text-control leading-5 text-text-secondary transition-colors duration-150 hover:bg-[color:color-mix(in_srgb,var(--color-bg-hover)_50%,var(--color-bg))] focus-visible:-outline-offset-2 focus-visible:outline-2 [&_svg]:shrink-0 [&_svg]:text-[var(--color-info)]"
-				onClick={() => setExpanded((v) => !v)}
-				aria-expanded={expanded}
-			>
-				<Brain size={15} />
-				<span className="shrink-0 text-body font-[650] text-text-primary">{t("thinking.title")}</span>
-				{expanded ? (
-					<ChevronDown size={15} className="shrink-0 text-text-tertiary" aria-hidden="true" />
-				) : (
-					<ChevronRight size={15} className="shrink-0 text-text-tertiary" aria-hidden="true" />
-				)}
-				{!expanded && props.text && (
-					<span className="min-w-0 flex-[1_1_auto] truncate font-mono text-caption text-text-tertiary" title={props.text}>
-						{props.text.slice(0, 80)}{props.text.length > 80 ? "..." : ""}
-					</span>
-				)}
+			{/* 标签行：纯展示，不可点击；展开/收起走左下角按钮。不显示「思考」文字，
+			    只留图标+耗时，保持轨道安静（思考内容本身已有虚线框区分） */}
+			<div className="flex min-h-6 items-center gap-2 px-1">
+				<Brain size={15} className="shrink-0 text-text-secondary" aria-hidden="true" />
 				{durationText && (
-				<small className="shrink-0 font-mono text-micro tabular-nums text-text-tertiary">
-					{/* 人性化耗时文案（借鉴 AI Elements Reasoning 的 "Thought for Xs"），
-					    不再裸显 3.2s 这类工程化数字 */}
-					{t("thinking.duration", { duration: durationText })}
-				</small>
-			)}
-			</button>
-			{expanded && (
-				<div className="markdown-body border-t border-border-subtle px-3 pt-2 pb-3 text-text-tertiary">
+					<small className="shrink-0 font-mono text-micro tabular-nums text-text-tertiary">
+						{t("thinking.duration", { duration: durationText })}
+					</small>
+				)}
+			</div>
+			{/* 虚线框内容区：折叠态最多 4 行半（max-height=4.5×行高，第 5 行切半提示还有内容），
+			    行高按正文字号计算（1.65 × 14px × 4.5 ≈ 104px） */}
+			<div className="rounded-md border border-dashed border-border-subtle bg-[color:color-mix(in_srgb,var(--color-bg-muted)_45%,transparent)]">
+				<div
+					ref={contentRef}
+					className={`markdown-body px-3 pt-2 pb-1 text-text-tertiary ${expanded ? "" : "max-h-[calc(var(--font-size-body)*7.425)] overflow-hidden"}`}
+				>
 					<MarkdownStream
-						text={previewText}
+						text={displayedContent}
+						isStreaming={props.isStreaming}
 						onOpenExternal={props.onOpenExternal}
 						onOpenFile={props.onOpenFile}
 					/>
 				</div>
-			)}
+				{showToggle && (
+					<div className="flex px-1 pb-1">
+						<button
+							type="button"
+							className="inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-micro text-text-tertiary opacity-60 transition-colors duration-150 hover:opacity-100 focus-visible:outline-2 focus-visible:outline-[var(--focus-ring)]"
+							onClick={() => setExpanded((v) => !v)}
+							aria-expanded={expanded}
+						>
+							{expanded ? <ChevronUp size={10} aria-hidden="true" /> : <ChevronDown size={10} aria-hidden="true" />}
+							{expanded ? t("thinking.collapse") : t("thinking.expand")}
+						</button>
+					</div>
+				)}
+			</div>
 		</section>
 		</TimelineMarker>
 	);
@@ -386,7 +415,8 @@ export const ThinkingBlock = memo(
 		prev.text === next.text &&
 		prev.startedAt === next.startedAt &&
 		prev.endedAt === next.endedAt &&
-		prev.showThinking === next.showThinking,
+		prev.showThinking === next.showThinking &&
+		prev.isStreaming === next.isStreaming,
 );
 
 

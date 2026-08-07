@@ -2,162 +2,223 @@
 
 ## 项目简介
 
-PiDeck：Electron 38 + React 19 + TypeScript + Vite + Tailwind v4 + shadcn/ui + Jotai 的桌面工作台，用于管理多个 pi RPC Agent 会话（多项目工作区、会话时间线、文件/Git 面板、内置浏览器、终端、飞书、宠物、打包发布）。
+PiDeck 是一个面向本地开发工作的 Electron 桌面应用，用于在多个项目目录之间管理和运行 pi RPC Agent。应用提供多项目工作区、会话时间线、历史会话恢复、文件抽屉、Git 面板、模型选择、工具调用展示、内置浏览器、中文提示词精选、技能/扩展商店以及打包发布能力，目标是让用户可以在桌面端更稳定地管理多个 pi 编码助手会话。
+
+技术栈：Electron 38 + React 19 + TypeScript + Vite。
 
 **核心边界（不可逾越）：**
 
 - pi 负责 Agent 行为、工具调用、会话读写、模型调用 —— **pi 的事不要替它做**。
-- PiDeck 负责窗口/进程生命周期、会话浏览导入、Git、终端、设置 —— **UI 框架的事 pi 也不要做**。
-- 两者通过 stdio JSON-RPC 通信，禁止引入第二条通信通道。
+- PiDeck 负责窗口管理、进程生命周期、会话浏览/导入、Git 面板、终端、设置 —— **UI 框架的事 pi 也不要做**。
+- 两者通过 stdio JSON-RPC 通信，禁止引入第二条通信通道（如直接 HTTP 到 pi 内部）。
 
-## 目录结构（要点）
+## 代码结构与跨层契约
+
+本项目只维护项目根目录这一份 `AGENTS.md`；除非用户明确要求，不要再在子目录生成同名规则文件。`docs/开发规范.md` 中仍有历史架构表述，若与本文件或实际类型/API 冲突，以本文件和代码为准。
+
+- `src/shared/` 是跨进程纯契约层：共享类型按 `shared/types/*.ts` 拆分，`shared/types.ts` 仅做兼容导出；IPC 名称只定义在 `shared/ipc.ts`。
+- `src/main/` 是唯一可访问 Node/Electron 主进程能力的业务层。`main/<domain>/` 拥有领域行为，`main/ipc/*Ipc.ts` 只做输入校验和适配，`main/index.ts` 只增装配，不新增业务。
+- `src/preload/index.ts` 通过 `contextBridge` 暴露最小 `PiDesktopApi`；新增 IPC 必须同步共享通道、main handler、preload 方法三处，订阅 API 必须返回 unsubscribe。
+- `src/renderer/` 只通过 `desktopApi`/preload 调用桌面能力。跨组件状态使用 Jotai atom，副作用放 hook，视图放 component；不得直接 import Node/Electron 或新增第二种全局状态方案。
+- `SessionRecord.id` 是跨重启的稳定会话身份，`agentId` 仅表示当前 pi 子进程。所有 runtime 命令和事件都必须带 `sessionId + agentId + runtimeGeneration`，拒绝旧 runtime 的迟到结果。
+- pi 只通过 stdio JSON-RPC 与 PiDeck 通信；PiDeck 不复刻 pi 的 Agent/工具/会话行为，也不为访问 pi 引入第二条通信通道。
+- 持久化结构、设置和 session catalog 变更必须兼容旧数据；listener、timer、子进程、terminal 和 watcher 必须在同一模块找到配对清理路径。
+
 
 ```
-src/main/        # Electron 主进程
-  pi/ sessions/ projects/ git/ fs/ prompts/ skills/ extensions/ settings/
-  terminal/ editors/ browser/（浏览器安全白名单） pet/ feishu/ telemetry/
-  logging/（AppLogger） config/（ConfigManager） wsl/ web/ ipc/（★IPC 域注册）
-  index.ts（仅装配）
-src/preload/     # contextBridge 受限 IPC
-src/renderer/src/
-  atoms/（Jotai，session-first） components/（ui-shadcn/ session/ sidebar/ workspace/ terminal/ app/）
-  hooks/ i18n/（rendererCopy.zh-CN/en-US） styles/（语义 token） web/（WebChatApp）
-src/shared/      # 共享类型（types/ 按域拆分）+ IPC 通道定义（ipc.ts）
+src/
+├── main/              # Electron 主进程
+│   ├── pi/            # pi RPC 进程管理、消息解析
+│   ├── sessions/      # 会话扫描、导入、摘要缓存、SessionRuntimeCoordinator
+│   ├── git/           # GitService（status/diff/commit/cherry-pick 等）
+│   ├── prompts/       # PromptManager（本地模板）+ XuePromptManager（SQLite 中文精选）
+│   ├── skills/        # SkillManager
+│   ├── extensions/    # ExtensionManager
+│   ├── settings/      # SettingsStore + DesktopProxy
+│   ├── terminal/      # 终端会话管理（node-pty）
+│   ├── pet/           # 桌面宠物
+│   ├── feishu/        # 飞书集成（FeishuBridge + FeishuConnection）
+│   ├── ipc/           # ★ IPC 域注册（sessionIpc/systemIpc/gitIpc/storeIpc/...）
+│   └── web/           # Web 服务管理
+├── preload/           # preload 脚本，经 contextBridge 暴露受限 IPC API
+├── renderer/
+│   └── src/
+│       ├── atoms/         # Jotai 状态（session-first）
+│       ├── components/
+│       │   ├── ui-shadcn/  # 共享 UI 原语（button/dialog/input/select 等）
+│       │   ├── session/   # 会话视图族（SessionView/Composer*/Timeline*）
+│       │   ├── sidebar/   # 左侧栏
+│       │   ├── workspace/ # 右侧抽屉（files/git/browser/editor）
+│       │   └── app/       # 业务组件
+│       ├── hooks/         # 渲染层 hooks（useWorkspacePanels/useSessionComposerController 等）
+│       ├── i18n/          # 文案（zh-CN / en-US，rendererCopy.*.ts）
+│       └── styles/        # 按域拆分的样式 + 语义 token
+└── shared/            # 主/渲染共享类型（按域拆分）与 IPC 通道定义
 ```
 
 ## 架构规则（硬性）
 
-1. **session-first**：会话是一等公民，新功能优先挂 session/runtime 链路，不要退回"围绕 agent tab 堆全局 state"。
-2. **状态管理用 Jotai**：跨组件状态放 `atoms/` 按域建 atom；禁止引入第二种全局状态方案。
-3. **IPC 按域注册**：handler 放 `src/main/ipc/*Ipc.ts`；通道名集中在 `src/shared/ipc.ts`，禁止散落字符串。
-4. **类型共享走 `src/shared/types/`**：主进程、preload、renderer 不得各自重复定义同一结构。
-5. **单向依赖**：`renderer → shared → main`；main 不得 import renderer；renderer 不得直接碰 Node API（一律走 preload）。
-6. **文件体量红线**：单文件目标 ≤ 400 行，超 600 行必须评估拆分；`App.tsx`、`main/index.ts` 只增装配，不增业务逻辑。
+1. **session-first**：会话是一等公民。新功能优先挂在 session/runtime 链路上，不要退回“围绕 agent tab 堆全局 state”。
+2. **状态管理用 Jotai**：新增跨组件状态放 `atoms/`，按域建 atom；禁止再引入第二种全局状态方案。
+3. **IPC 按域注册**：主进程 handler 一律放 `src/main/ipc/*Ipc.ts`，`index.ts` 只做装配；通道名集中在 `shared/ipc.ts` 定义，禁止散落字符串字面量。
+4. **类型共享走 `shared/types/`**：按域拆文件；主进程、preload、渲染进程不得各自重复定义同一结构。
+5. **单向依赖**：`main`、`preload`、`renderer` 只能依赖 `shared` 契约；`renderer` 通过 preload 暴露的 API 访问主进程，不能直接 import Node/Electron；main 不得 import renderer 代码；`shared` 不得反向依赖任何运行时层。
+6. **文件体量红线**：
+   - 组件/模块单文件目标 ≤ 400 行，超过 600 行必须评估拆分。
+   - `App.tsx`、`main/index.ts` 只增装配代码，不增业务逻辑；新业务先建新模块。
+   - 为“省一次 import”把逻辑塞回大文件，视为架构倒退，评审应拒绝。
 
 ## 代码风格
 
-- TypeScript strict；禁止新增 `any`（万不得已用 `unknown` + 收窄并注释原因）；禁止 `as` 绕过类型错误。
-- 命名：类型 PascalCase / 函数变量 camelCase / 常量 UPPER_SNAKE；IPC 通道 `domain:action`。
-- React：函数组件 + hooks；副作用必须有清理函数；派生状态用 `useMemo`，不存 state。
-- 用户可见文案必须走 i18n（zh-CN/en-US 同步加 key）；JSX 禁止硬编码中英文。
-- 日志用 `logging/AppLogger.ts`，不散落 `console.log`。
+- TypeScript strict；禁止新增 `any`（与第三方交互不得不用时，用 `unknown` + 收窄，并注释原因）。
+- 禁止用 `as` 强转绕过类型错误；测试数据需要部分字段时用工厂函数构造完整对象。
+- 命名：类型/类 PascalCase，函数/变量 camelCase，常量 UPPER_SNAKE；IPC 通道用 `domain:action` 格式。
+- React：函数组件 + hooks；副作用必须有清理函数；派生状态用 `useMemo`，禁止把可计算值存进 state。
+- 文案：所有用户可见文本走 `i18n`（`i18n/rendererCopy.zh-CN.ts` + `en-US.ts` 同步加 key），JSX 中禁止硬编码中英文。
+- 日志/调试输出/内部标识符可硬编码，但日志用主进程 logging 模块，不散落 `console.log`（调试残留需删除）。
 
 ## 注释要求
 
-对核心逻辑、业务规则、状态流转、权限校验、异常处理、边界条件加注释，解释"为什么"，不逐行解释显而易见的代码；新函数/类/模块加简短功能说明；改旧代码时顺手补缺的上下文注释。
+- 对核心逻辑、复杂判断、业务规则、状态流转、权限校验、数据转换、异常处理添加必要注释。
+- 注释解释“为什么这样做”“对应什么业务规则”“边界条件是什么”，不要逐行解释显而易见的代码。
+- 新增函数、类、模块添加简短功能说明。
+- 修改旧代码时，相关逻辑缺上下文说明的应顺手补注释。
 
 ## 测试标准（硬性门禁）
 
-单测：`tests/*.test.mjs`（`npm test`，node --test）；e2e：`e2e/*.spec.ts`（Playwright）。
+测试位于 `tests/*.test.mjs`，运行 `npm test`（node --test）。
 
-1. **合并前 `npm run typecheck` + `npm test` 必须全绿**，不许"先合再修"。
-2. 修 bug 先写复现测试（红）再修到绿，回归测试永久保留；新增主进程业务逻辑 / 数据转换 / 状态机必须有单测。
-3. 测行为不测实现：从公开接口/IPC 边界断言，不依赖执行顺序、真实网络或真实 pi 进程。
-4. 禁止：放宽断言、注释掉失败测试、恒真测试。
+1. **必过门禁**：任何合并前 `npm run typecheck` 与 `npm test` 必须全绿；不许“先合再修”。
+2. **何时必须写测试**：
+   - 修复 bug：先写复现测试（红），再修到绿。回归测试永久保留。
+   - 新增主进程业务逻辑（sessions/git/settings/extensions/prompts 等）：必须有单测。
+   - 新增数据转换/解析/状态机逻辑：必须有单测。
+   - 纯 UI 布局调整可不强求，但涉及交互状态流转的 hook 应有测试。
+3. **测试写法**：
+   - 测行为不测实现：从公开接口/IPC 边界断言结果，不断言内部私有函数调用次数。
+   - 不依赖执行顺序、不依赖真实网络/真实 pi 进程；外部依赖用 mock/替身。
+   - 一个测试只验证一件事，命名即意图（如 `agentCreateTimeout.test.mjs`）。
+4. **禁止**：为通过测试而放宽断言、注释掉失败测试、把测试改成恒真。
 
 ## 安全约束
 
-1. preload 只暴露页面需要的 API，禁止 `ipcRenderer` 透传。
-2. IPC handler 第一行校验入参；渲染层数据一律不可信。
-3. 文件读写限制在项目/应用数据目录内；路径先规范化再拼接，禁止直接拼用户输入。
-4. spawn/exec 参数必须数组形式，禁止字符串拼 shell；子进程环境变量经 `sanitizePiChildEnv` 类函数清洗。
-5. 内置浏览器：禁止加载 `file://` 以外的本地内容；白名单/partition 单一事实源在 `src/main/browser/browserSecurity.ts`。
-6. Auth 配置只经 `config/ConfigManager.ts` 读写；日志/遥测禁止输出 token/key。
-7. 新增依赖需说明理由，禁止为小功能引重型库。
+1. **IPC 最小权限**：preload 只暴露当前页面需要的 API；新增通道必须加进类型定义，禁止 `ipcRenderer` 透传。
+2. **输入校验在边界**：所有 IPC handler 的第一行职责是校验入参（类型、路径合法性、枚举范围）；渲染层来的数据一律不可信。
+3. **路径安全**：文件读写必须限制在项目目录或应用数据目录内；拼接路径前做规范化与逃逸检查，禁止直接拼用户输入。
+4. **进程调用**：spawn/exec 的参数必须数组形式传递，禁止字符串插值拼 shell 命令；子进程环境变量经 `sanitizePiChildEnv` 类函数清洗。
+5. **Webview/浏览器面板**：禁止加载 `file://` 以外的任意本地内容；`allowpopups`、node integration 等属性保持最小化，新增 webview 属性需评审。
+6. **密钥与令牌**：Auth 配置只经 `config/` 模块读写；日志、错误上报、遥测中禁止输出 token/key。
+7. **依赖引入**：新增依赖需说明理由；优先用已有依赖能力，禁止为一个小功能引重型库。
 
-## Electron 经验（改动窗口/主进程/打包前必读）
+## Electron 开发规范与经验总结
 
-**启动**：`appendSwitch`/`setPath`/单实例判断必须在 `whenReady()` 前完成；关键节点写 appLogger（黑屏排查只靠日志）；窗口隐藏时先 `maximize()` 再加载，`zoomFactor` 在 `did-finish-load` 后应用。
-**单实例**：用 `singleInstance.ts` 的 `acquireVersionSingleInstance`（按版本互斥，不同版本可并行），不用 `requestSingleInstanceLock`；第二实例 `app.exit(0)`。
-**窗口**：主窗口基线 `contextIsolation:true` + `nodeIntegration:false` + `sandbox:false`（沙箱默认关是刻意的，Win 上安全软件/旧驱动会触发原生断点 0x80000003）+ `webviewTag:true`（仅主窗口）；`electronChromiumSandbox` 开关重启生效。
-**内置浏览器（webview）**：专属 partition + `sandbox:true` + 删外部 preload/allowpopups（`configureBrowserPanelWebviewHost`）；`did-attach-webview` 校验 session 否则 `close()`；`will-frame-navigate`/`will-redirect`/`setWindowOpenHandler` 三层过 `isAllowedBrowserPanelUrl` 白名单。
-**窗口链接**：主窗口与 guest 都要注册 `setWindowOpenHandler` → `openExternalUrl` + `deny`。
-**IPC**：新通道三处同步——`shared/ipc.ts` 常量、`ipc/*Ipc.ts` handler、preload 暴露；preload 不做业务；`webContents.send` 推送必须可退订。
-**打包**：node-pty 等原生模块必须 `asarUnpack` + postinstall 修权限；afterPack 清理要有对应测试；发版前跑目标平台完整安装包 smoke；资源路径用 `process.resourcesPath`/`app.getAppPath()`，preload 路径走 `preloadPath.ts`。
-**跨平台**：禁止硬编码路径分隔符，覆盖 win/mac/linux（含 WSL，见 `wsl/wslExe.ts`）；平台特判集中在专属模块（如 `linuxDisplayBackend.ts`）；Windows 偶发失败优先怀疑路径空格/杀软锁文件/长路径。
+> 本节沉淀本项目在 Electron 上的硬性规范与踩坑经验。改动 `main/index.ts`、窗口创建、preload、打包配置前必读。
 
-## 稳定性与可扩展性
+### 启动与进程生命周期
 
-1. 错误处理分层：主进程 catch → 日志 + 结构化错误返回；渲染层走 toast/i18n 文案；异步函数禁止无 catch 裸 promise。
-2. 生命周期配对：listener/timer/子进程/watcher 必须能在同一模块找到清理路径（unmount/quit/close）。
-3. 资源边界：大文件读取/扫描/diff 要有大小上限或流式处理。
-4. 向后兼容：设置项、会话文件、缓存格式变更必须有迁移或默认值兜底。
-5. 特性开关：高风险/实验性功能必须可从设置关闭，默认取保守项。
-6. 扩展点：新增能力优先"注册式"（IPC 域、面板注册），不在 switch/if 链上加分支。
+1. **app.ready 前的配置窗口**：`commandLine.appendSwitch`、`app.setPath("userData")`、单实例判断等必须在 `app.whenReady()` 之前完成；错过时机一律无效，不要试图在 ready 后补救。
+2. **启动失败要可诊断**：主进程关键节点（窗口创建、load 开始/结束、preload 路径、pi 启动）必须写 `appLogger`，黑屏/白屏排查只靠日志。
+3. **首帧体验**：窗口保持隐藏时先 `maximize()` 再加载页面，避免 `ready-to-show` 后再最大化造成布局跳变；`zoomFactor` 等用户设置在 `did-finish-load` 后应用，防止被加载过程覆盖。
+4. **单实例用自研按版本互斥，不用 `requestSingleInstanceLock`**：原生锁按 userData 全局互斥，会导致不同版本无法并行。本项目实现见 `acquireVersionSingleInstance`（同版本复用窗口、不同版本并存）；第二实例用 `app.exit(0)`（未 ready，比 `quit()` 快）。
+5. **开发/正式数据目录隔离**：dev 模式 userData 追加 `-dev` 后缀，防止开发调试污染正式数据；追加前判断已有后缀，避免重复拼接。
+6. **退出清理**：quit 路径必须覆盖 pi 子进程、node-pty、文件 watcher、单实例锁文件；新增常驻资源时在退出清单里同步登记。
 
-## UI 约定（底线 + 唯一真源）
+### 窗口与 webContents
 
-**组件（优先成熟组件库，不造轮子）**：
+7. **主窗口 webPreferences 基线**：`contextIsolation: true`、`nodeIntegration: false`、`sandbox` 跟随用户设置、`webviewTag: true`（仅主窗口，浏览器面板需要）。新增窗口以此为起点逐项评估，禁止默认全开。
+8. **Chromium 沙箱默认关闭是刻意的**：Windows 上部分安全软件/旧 GPU 驱动会在沙箱初始化时触发原生断点（0x80000003）。关闭时必须显式 `appendSwitch("no-sandbox")`；`electronChromiumSandbox` 开关改动需整应用重启生效，不要做成运行时热切换。
+9. **`setWindowOpenHandler` 统一收口**：主窗口与 webview guest 都必须注册，走 `openExternalUrl` 并 `deny`；漏注册 = 用户点击链接开出无管控新窗口。
+10. **自定义标题栏**：frame/titleBarStyle 相关改动要同时验证三平台窗口控制按钮、拖拽区、双击最大化；全屏式弹层内容不得被窗口控制区遮挡。
 
-- **AI Elements**（elements.ai-sdk.com.cn）：AI 聊天/工作流场景组件（思维链、工具卡、消息、计划、队列、微光、文件树、代码块、终端、stack-trace 等），copy-paste 使用。新增会话时间线/工具调用/聊天交互类 UI 先查这里。
-- **beUI**（beui.dev）：Motion + Tailwind 动画组件（102 个），copy-paste 使用。需要交互动效/加载态时先查这里。
-- **shadcn/ui**（已收录在 `components/ui-shadcn/`）：基础控件（button/dialog/select/switch/tooltip/dropdown-menu/command/tabs 等）。
-- 以上都没有时才允许自建；自建组件也要用 Tailwind utility + 语义 token，禁止写手写 CSS。
-- 原生 `<button>` 仅保留 shadcn 无法替代的场景(并且后续会考虑重新用shadcn替换)：内容排版容器（树行/整卡，无按钮语义）、折叠触发器（Collapsible 或原生+utility）、微型按钮 <24px（Button 最小档 icon-xs=24px 无法替代）、标题栏窗口控制、代码复制角标（28px ghost icon-sm）。保留处文件头部有注释。
-- 原生 input/textarea/checkbox 已全部换 shadcn Input/Textarea/Checkbox；仅剩 range（无 slider 组件）与 datetime-local 合理保留。
+### Webview（内置浏览器面板）
 
-**样式**：
+11. **独立 partition + 收敛 webPreferences**：webview 用专属 `partition`，强制 `sandbox: true`、`nodeIntegration: false`、`webSecurity: true`、`allowRunningInsecureContent: false`、`webviewTag: false`，并删除外部传入的 `preload`/`preloadURL`/`allowpopups` 等危险参数（见 `configureBrowserPanelWebviewHost`）。
+12. **session 校验**：`did-attach-webview` 时校验 guest.session 是否为预期 partition，不是立即 `close()` —— 防止页面注入意外 guest。
+13. **导航白名单**：`will-frame-navigate` / `will-redirect` / `setWindowOpenHandler` 三层都要过 `isAllowedBrowserPanelUrl` 白名单；只拦一层会被重定向绕过。
 
-- 一律 Tailwind utility + shadcn 组合，禁止新增手写 CSS class（token 定义与 keyframes 除外）；颜色/圆角/字号用语义 token（`styles/foundation.css` + `tailwind.css` `@theme` 映射），暗色自然适配。
-- **Tailwind v4 键名规则**：应用域 token 的 utility 名 = 前缀 + 完整后缀：`--color-bg-panel` → `bg-bg-panel`（不是 `bg-panel`）；`--color-text-primary` → `text-text-primary`（`text-primary` 是 shadcn accent 语义，注意撞名）。
-- **任意值颜色必须有类型提示**：`text-[var(--color-accent)]` 会被 tailwind-merge 推断为字号导致文字消失，必须写 `text-[color:var(--color-accent)]`；同理 `bg-[color:color-mix(...)]`。
-- 内容排版（markdown-body 的 p/code/table）用 CSS 是正确架构（react-markdown 库元素无法 utility 化，与 shadcn prose 同理），不迁移。
-- 删 CSS 类前核对 e2e 锚点类（`tests` 与 `e2e/*.spec.ts` 的类选择器是隐式锚点）；迁移 group 组合状态时 group 类必须与状态类同元素。
+### IPC 与 preload
 
-**动效（motion token）**：
+14. **handle/invoke 成对注册**：新增通道三处同步——`shared/ipc.ts` 通道常量、主进程 `ipc/*Ipc.ts` handler、preload 白名单暴露；漏任何一处就是运行时 undefined。
+15. **preload 不做业务**：preload 只做参数校验后的 `invoke` 转发与事件订阅封装，禁止在 preload 里写业务逻辑或缓存状态。
+16. **事件推送要可退订**：`webContents.send` 类推送，preload 侧返回 unsubscribe 函数；渲染层组件卸载必须退订，防止向已销毁页面推送导致泄漏。
 
-- 三档时长：120ms 微反馈 / 200ms 常规 / 320ms 面板级；统一缓动（ease-out-quint 进场、ease-in 离场），进 Tailwind `@theme`；全站禁止裸写 `transition: all`。
-- 布局动画只动 transform/opacity（合成器线程）；width/height 动画是掉帧主因，评审红线。
-- 列表 stagger 限流：只对前 8–12 个元素 stagger；加载态（会话激活、项目展开）用骨架屏。
+### 原生模块与打包
 
-**字号 token（唯一真源，`styles/foundation.css`）**：
+17. **node-pty 等原生模块**：必须 `asarUnpack` 并在 postinstall 修权限（`scripts/fix-pty-permissions.js`）；新增原生依赖时同步检查这两项，否则打包后运行时才炸。
+18. **afterPack 清理要谨慎**：删除 node_modules 冗余文件（如 `@larksuiteoapi/node-sdk` 的 lib/）必须有对应测试（`tests/afterPackCleanup.test.mjs`）；清理脚本误删运行时必需文件 = 打包能过、用户启动崩。
+19. **打包验证分层**：`npm run pack`（--dir 快速验证）→ `dist:win/mac/linux`；发版前至少跑过一次目标平台完整安装包的人工 smoke，不依赖 CI 构建成功即发布。
+20. **资源路径**：运行时资源用 `process.resourcesPath` / `app.getAppPath()` 推导，禁止写相对 `__dirname` 的裸路径假设 asar 内可直接读；preload 路径统一走 `preloadPath.ts` 解析。
 
-| Token | 默认 | Tailwind 类 | 用途 |
-|---|---|---|---|
-| `--font-size-micro` | 11px | `text-micro` | 徽标、时间戳、状态点 |
-| `--font-size-caption` | 12px | `text-caption` | 次要标签、Tab 栏、工具按钮 |
-| `--font-size-control` | 13px | `text-control` | 紧凑控件、菜单项 |
-| `--font-size-body` | 14px | `text-body` | 正文/UI 默认 |
-| `--font-size-chat` | 15px | `text-chat` | 会话消息正文 |
-| `--font-size-input` | 14px | `text-input` | composer 输入框 |
-| `--font-size-title` | 16px | `text-title` | 区块标题 |
-| `--font-size-brand` | 18px | `text-brand` | 品牌字标 |
-| `--font-size-heading` | 20px | `text-heading` | 弹窗/页面大标题 |
+### 跨平台
 
-禁止裸字号类（`text-sm`/`text-xs`/`text-[13px]`），一律语义类（`text-sm→text-body`、`text-xs→text-caption`、`text-[13px]→text-control`、`text-base→text-title`）。字号缩放由 `data-ui-font-size`/`data-chat-font-size`/`data-input-font-size`（compact/default/medium/large）整体控制，组件内禁止硬编码像素。
+21. **路径与命令**：禁止硬编码 `/` 或 `\`；shell 检测、外部编辑器、git 路径查找必须覆盖 win/mac/linux（含 WSL 场景，见 `wslExe.ts`）。
+22. **平台 workaround 集中管理**：如 `linuxDisplayBackend.ts`，平台特判写在专属模块并注明触发条件，不散落在业务代码里。
+23. **Windows 特有问题优先怀疑**：路径空格、杀毒软件锁文件、长路径、权限弹窗；Windows 上的"偶发失败"大多不是偶发，日志要带足上下文。
 
-**字重/字体族**：页面标题 `font-semibold`、区块/行内强调 `font-medium`、正文 `font-normal`、数值/代码 `font-mono`；禁止 `font-bold` 做正文强调。字体族：界面 `--font-family-base`、等宽 `--font-family-mono`（Commit Mono）、品牌 `--font-family-brand`（仅 Logo）。
+## 稳定性与可扩展性约束
 
-**其他**：图标统一 `lucide-react`；品牌 Logo 用 `LogoMark`（`AppParts.tsx`）；保持桌面工作台布局（左列表/中会话/右抽屉/底终端）。
-
-## 性能基线
-- 渲染进程私有内存目标 ≤ 800MB（基线曾 1.6GB）；切会话 P95 ≤ 150ms；首屏 ≤ 300ms。
-- 大文件读取、会话扫描、diff 计算要有大小上限或流式处理；激活会话按轮次分页下发，不做全量 IPC 传输。
+1. **错误处理分层**：
+   - 主进程：catch 后写日志 + 向渲染层返回结构化错误（不抛裸异常跨 IPC）。
+   - 渲染层：用户可感知错误走 toast/内联友好文案（i18n），不只 console。
+   - 异步函数禁止无 catch 的“裸 promise”。
+2. **生命周期配对**：注册 listener / timer / 子进程 / watcher 的地方，必须能在同一模块找到对应清理路径（unmount、quit、session close）。
+3. **资源边界**：大文件读取、会话扫描、diff 计算要有大小上限或流式处理；渲染进程不做全量日志/历史的主存。
+4. **向后兼容**：设置项、会话文件、缓存格式变更必须有迁移或默认值兜底；删除旧字段前先保留一个版本的读取兼容。
+5. **特性开关**：高风险或实验性功能（如 RPC 启动 flags、沙箱开关）必须可从设置关闭/回退，默认值取保守项。
+6. **扩展点**：新增能力优先做成“注册式”（如 IPC 域注册、面板注册），避免在既有 switch/if 链上继续加分支。
 
 ## 验证命令
 
 | 场景 | 命令 |
 |------|------|
-| 类型检查 | `npm run typecheck` |
+| 类型检查（每次改动后） | `npm run typecheck` |
 | 全量单测 | `npm test` |
 | 单测串行（排查并发干扰） | `npm run test:serial` |
-| e2e（Playwright） | `npm run test:e2e` |
-| 全量门禁 | `npm run verify` |
 
-改主进程/IPC/会话链路 → typecheck + 单测必跑；UI 改动至少 typecheck；主链路交互补 e2e。
+改动影响主进程/IPC/会话链路时，两个命令都必须跑；纯 UI 样式微调至少跑 typecheck。
+
+## UI 约定（简版）
+
+> UI 细节规范（组件用法、图标、弹框尺寸、字体、token）后续会单独整理，本节只保留底线。
+
+- 新增 UI 优先复用 `components/ui-shadcn/` 共享原语（button/dialog/input/select 等），不用原生 `<select>`、不裸写 `<input>`。
+- 图标统一 `lucide-react`，不用 emoji 充当功能图标；品牌 Logo 用 `LogoMark`（`AppParts.tsx`），不用通用图标替代。
+- 颜色/圆角/字号优先复用 `styles/` 里的语义 token，不写死色值；暗色模式必须自然适配。
+- 布局保持桌面工作台结构（左列表 / 中会话 / 右抽屉 / 底终端），不引入营销页式大改版。
+- **新样式一律走 Tailwind utility + shadcn 组合**：禁止新增手写 CSS class（token 定义与 keyframes 除外）；动态状态色通过保留锚点类（如 `tone-*`/`status-*`）+ 状态规则实现，不写新的状态 class。
+
+## Issue 修复流程
+
+1. 从最新 `main` 建短修复分支：`fix/issue-<number>-<short-description>`。
+2. 先定位根因，记录影响范围；涉及启动、环境检测、会话恢复等核心流程时，同步检查相邻路径同类问题。
+3. 修复聚焦单一问题，`fix:` 前缀提交，关联 issue。
+4. PR 描述包含：问题原因、修复摘要、验证命令、`Closes #<number>`。
+5. 建议 Squash and merge；合并后按用户影响决定是否发 patch。
 
 ## 发版要求
 
-1. README / CHANGELOG（中英文）核对更新；Release notes 写明主要变化。
-2. `package.json` 与 lock 版本号一致，提交用 `chore: release vX.Y.Z`。
-3. docs-site 官网同步更新；架构级变更先发 pre-release 观察。
+1. 核对 `README.md` / `README.en.md` 功能与安装说明仍准确。
+2. `CHANGELOG.md` / `CHANGELOG.zh-CN.md` 加版本号与日期，条目记录用户可感知变化，中英文一致。
+3. GitHub Release notes 写明主要变化，不接受只写版本号。
+4. `package.json` 与 `package-lock.json` 版本号一致；发版提交用 `chore: release vX.Y.Z`。
+5. docs-site 官网同步更新。
+6. 架构级变更（如 session-first 切换）先发 pre-release 观察，再标正式版。
 
 ## 提交 commit 规则
 
-> **只有用户明确要求时才执行 `git add`/`git commit`/`git push`。** 工作过程不自动提交；完成后总结并询问是否提交；一个功能/修复的全部变更放一个 commit。
+> **不要自以为是地提交代码。只有用户明确要求时，AI 助手才可以执行 `git add`、`git commit` 或 `git push`。**
 
-## 重构纪律
+1. 工作过程中不自动 commit；完成一步后也不提交。
+2. 只有用户明确说「提交吧」「commit」「push」等意图时才执行。
+3. 整个功能/修复完成后简要总结，并询问「需要我提交吗？」。
+4. 用户同意提交时，一个功能/修复的全部变更放在一个 commit，不拆多个小 commit（用户另有要求除外）。
 
-- 大重构必须先写对照计划（能力 parity 表 + 合并门禁），再动工。
-- 禁止无对照表的长期分叉分支；main 的用户可感知改动当周回填。
-- 重构期间禁止 `-X theirs`/`-X ours` 静默吞掉对方改动。
+### GitHub 协作说明
+
+详见 `docs/PiDeck-协作说明.md`。
+
+## 长期重构纪律
+
+- 大重构必须先写对照计划（参考 `docs/issue-113-main-parity-plan.md`），明确能力 parity 表与合并门禁。
+- 禁止无对照表的长期分叉分支；main 的用户可感知改动当周回填到进行中重构分支。
+- 重构期间禁止用 `-X theirs`/`-X ours` 静默吞掉对方改动；每个冲突都要确认能力归属。

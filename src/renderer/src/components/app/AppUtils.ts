@@ -194,6 +194,8 @@ export function sameChatMessageForRender(previous: ChatMessage, next: ChatMessag
 }
 
 export function sameAgentRunForRender(previous: AgentRunItem, next: AgentRunItem): boolean {
+	// 引用相同即内容相同（阶段0补强：历史 run 复用旧对象引用后，此处 O(1) 快速路径）
+	if (previous === next) return true;
 	if (
 		previous.id !== next.id ||
 		previous.startedAt !== next.startedAt ||
@@ -274,31 +276,20 @@ export function groupToolMessages(messages: ChatMessage[]): RenderMessage[] {
 
 	function flushThinking() {
 		if (currentThinking.length === 0) return;
-		const previous = currentRun[currentRun.length - 1];
-		// 使用首个消息 ID 作为稳定 key：流式期间 thinking 文本持续增长并多次 flush，
-		// 若每次拼接 ID 会导致 React key 变化 → 组件卸载重建 → expanded 状态丢失。
-		const stableId = currentThinking[0]?.id ?? "";
-		const nextGroup: ThinkingGroupItem = {
-			kind: "thinking-group",
-			id: stableId,
-			messages: currentThinking,
-			text: currentThinking
-				.map((message) => stripAnsi(message.thinking ?? ""))
-				.filter(Boolean)
-				.join("\n\n"),
-			startedAt: currentThinking[0]?.timestamp ?? runStartedAt,
-			endedAt:
-				currentThinking[currentThinking.length - 1]?.timestamp ?? runEndedAt,
-		};
-		if (previous?.kind === "thinking-group") {
-			// 保留原有 stable id，仅合并内容和消息列表
-			previous.messages = [...previous.messages, ...nextGroup.messages];
-			previous.text = [previous.text, nextGroup.text].filter(Boolean).join("\n\n");
-			previous.endedAt = nextGroup.endedAt;
-		} else {
-			currentRun.push(nextGroup);
+		// 每条 thinking-only 各自成组：id 与主进程 msg-thinking-* 一一对应，禁止 join 合并。
+		for (const message of currentThinking) {
+			const rawId = message.id ?? "";
+			const group: ThinkingGroupItem = {
+				kind: "thinking-group",
+				id: rawId.startsWith("msg-thinking-") ? rawId : `msg-thinking-${rawId}`,
+				messages: [message],
+				text: stripAnsi(message.thinking ?? ""),
+				startedAt: message.thinkingStartedAt ?? message.timestamp ?? runStartedAt,
+				endedAt: message.thinkingEndedAt ?? message.timestamp ?? runEndedAt,
+			};
+			currentRun.push(group);
+			runEndedAt = group.endedAt;
 		}
-		runEndedAt = nextGroup.endedAt;
 		currentThinking = [];
 	}
 
@@ -362,6 +353,8 @@ export function groupToolMessages(messages: ChatMessage[]): RenderMessage[] {
 			}
 			currentThinking.push(message);
 			runEndedAt = message.timestamp;
+			// 立即成组：禁止多条 thinking-only 积压后 join 成一张卡。
+			flushThinking();
 		} else if (message.role === "assistant") {
 			// 有暂存 run 时先合并到当前 run
 			if (pendingRun) {
@@ -424,6 +417,41 @@ export function groupToolMessages(messages: ChatMessage[]): RenderMessage[] {
 	flushRun();
 
 	return result;
+}
+
+/**
+ * 对比新旧渲染列表，对「内容未变化的 run」复用旧对象引用。
+ *
+ * 背景（阶段0补强）：groupToolMessages 每次全量重建所有 run，即使只有最后一条消息变化。
+ * 若每次都返回新对象，TurnRow 的 memo 比较（sameAgentRunForRender）会对每个历史 run
+ * 做深度遍历，长会话时成本不小。复用旧引用后，sameAgentRunForRender 的
+ * `previous === next` 快速路径直接命中，历史 run 比较退化为 O(1)。
+ *
+ * 规则：按 run.id 配对，内容相同（sameAgentRunForRender）则取旧引用；
+ * 新增/删除/内容变化的 run 用新对象。列表结构（顺序、条目数）以 next 为准。
+ */
+export function reconcileRuns(
+	previous: RenderMessage[] | undefined,
+	next: RenderMessage[],
+): RenderMessage[] {
+	if (!previous) return next;
+	// 只对 agent-run 做引用复用；message/tool-group/thinking-group 顶层条目按需更新
+	const prevRuns = new Map<string, AgentRunItem>();
+	for (const item of previous) {
+		if (item.kind === "agent-run") prevRuns.set(item.id, item);
+	}
+	let changed = false;
+	const reconciled = next.map((item) => {
+		if (item.kind !== "agent-run") return item;
+		const prev = prevRuns.get(item.id);
+		if (prev && sameAgentRunForRender(prev, item)) return prev;
+		changed = true;
+		return item;
+	});
+	// 只有「长度相同且全部未变化」才能整体复用 previous 数组本身；
+	// 否则（新增/删除/变化）必须返回 reconciled（其中未变化 run 已复用旧引用）。
+	if (!changed && previous.length === next.length) return previous;
+	return reconciled;
 }
 
 /* ── 会话大纲 ── */

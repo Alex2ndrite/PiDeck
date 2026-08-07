@@ -359,7 +359,7 @@ test("allowOther renders a custom input and sends its value through the responde
   const request = { agentId: "a1", requestId: "r-custom", method: "select", title: "Pick", options: ["one"], allowOther: true };
   const props = {
     sessionId: "s1",
-    runtime: { agentId: "a1", runtimeGeneration: 7, status: "idle", thinking: "", updatedAt: 1 },
+    runtime: { agentId: "a1", runtimeGeneration: 7, status: "idle", updatedAt: 1 },
     ui: { agentId: "a1", runtimeGeneration: 7, requests: { [request.requestId]: { request, status: "pending" } }, widgets: {}, revision: 1 },
     responder: { respond: async (nextRequest, response) => { sent.push({ nextRequest, response }); return true; } },
   };
