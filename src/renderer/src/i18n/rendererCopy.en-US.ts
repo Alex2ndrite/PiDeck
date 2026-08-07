@@ -850,6 +850,7 @@ export const enUS: Record<TranslationKey, string> = {
   "config.extensionUninstalledToast":
     "Extension uninstalled. Restart agents for it to take effect.",
   "config.extensionUninstallFailed": "Uninstall failed: {error}",
+  "config.extensionOperationFailed": "Extension operation failed: {error}",
   "config.count.configItems": "{count} settings",
   "config.count.auth": "{count} auth(s)",
   "config.retry.title": "Auto Retry",

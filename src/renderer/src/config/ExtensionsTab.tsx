@@ -23,6 +23,11 @@ function getExtensionsApi(): ExtensionsApi {
 	return api;
 }
 
+/** 把 IPC/主进程异常转成可读文本，避免内置扩展操作退回原生 alert。 */
+function formatExtensionError(error: unknown): string {
+	return error instanceof Error ? error.message : String(error);
+}
+
 /** PiDeck 内置扩展名 → source 文件名映射 */
 const PIDEK_BUILTIN_SOURCE: Record<string, string> = {
 	"pi-deck-todo": "pi-deck-todo.ts",
@@ -157,8 +162,11 @@ export function ExtensionsTab(props: {
 			await getExtensionsApi().removeBuiltIn(extension.source);
 			props.onRefresh();
 		} catch (e) {
-			console.error("[Extensions] Install/remove failed", e);
-			alert(t("config.installFailed"));
+			showNotice(
+				t("config.extensionOperationFailed", { error: formatExtensionError(e) }),
+				4500,
+				"error",
+			);
 		} finally {
 			setRemovingBuiltIn(null);
 		}
@@ -171,8 +179,11 @@ export function ExtensionsTab(props: {
 			await getExtensionsApi().restoreBuiltIn(extension.source);
 			props.onRefresh();
 		} catch (e) {
-			console.error("[Extensions] Install/remove failed", e);
-			alert(t("config.installFailed"));
+			showNotice(
+				t("config.extensionOperationFailed", { error: formatExtensionError(e) }),
+				4500,
+				"error",
+			);
 		} finally {
 			setRestoringBuiltIn(null);
 		}
@@ -193,8 +204,11 @@ export function ExtensionsTab(props: {
 			}
 			props.onRefresh();
 		} catch (e) {
-			console.error("[Extensions] Install/remove failed", e);
-			alert(t("config.installFailed"));
+			showNotice(
+				t("config.extensionOperationFailed", { error: formatExtensionError(e) }),
+				4500,
+				"error",
+			);
 		} finally {
 			setInstallingSources((current) => {
 				const next = new Set(current);
@@ -212,8 +226,11 @@ export function ExtensionsTab(props: {
 			const result = await getExtensionsApi().update();
 			setUpdateResult(result);
 		} catch (e) {
-			console.error("[Extensions] Update failed", e);
-			alert(t("settings.extensionsUpdateFailedGeneric"));
+			showNotice(
+				t("config.extensionOperationFailed", { error: formatExtensionError(e) }),
+				4500,
+				"error",
+			);
 		} finally {
 			setUpdating(null);
 		}

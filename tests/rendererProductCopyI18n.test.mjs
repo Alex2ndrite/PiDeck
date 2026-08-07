@@ -189,9 +189,8 @@ test("renderer async failures log diagnostics and expose stable localized copy",
 	assert.match(promptStore, /setError\(t\("config\.promptStoreImportError"\)\)/);
 	assert.doesNotMatch(promptStore, /setError\(err instanceof Error/);
 
-	assert.match(extensions, /console\.error\("\[Extensions\] Update failed", e\)/);
-	assert.match(extensions, /alert\(t\("settings\.extensionsUpdateFailedGeneric"\)\)/);
-	assert.doesNotMatch(extensions, /alert\([^\n]*(?:e instanceof Error|String\(e\))/);
+	assert.match(extensions, /showNotice\([\s\S]*config\.extensionOperationFailed[\s\S]*formatExtensionError\(e\)/);
+	assert.doesNotMatch(extensions, /\balert\(/);
 
 	// mermaid 渲染已交给 @streamdown/mermaid 插件（errorComponent 兜底），
 	// 项目代码不再直接渲染图表；错误文案键仍保留供插件错误组件使用

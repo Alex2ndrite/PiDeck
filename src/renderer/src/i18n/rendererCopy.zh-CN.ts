@@ -835,6 +835,7 @@ export const zhCN = {
   "config.skillEnabledToast": "Skill 已启用，重启 agent 后生效",
   "config.extensionUninstalledToast": "扩展已卸载，重启 agent 后生效",
   "config.extensionUninstallFailed": "卸载失败：{error}",
+  "config.extensionOperationFailed": "扩展操作失败：{error}",
   "config.count.configItems": "{count} 个配置项",
   "config.count.extensions": "{count} 个扩展",
   "config.count.auth": "{count} 个认证",
