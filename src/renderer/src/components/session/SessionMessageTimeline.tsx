@@ -103,7 +103,7 @@ type TimelineInteractionProps = {
   validCommandNames: Set<string>;
   validFilePaths: Set<string>;
   onPreviewImage: (image: ImageContent) => void;
-  onOpenExternal: (url: string) => void;
+  onOpenExternal: (url: string, forceSystem?: boolean) => void;
   onOpenFile?: (path: string) => void;
   onDiffFile?: TurnRowProps["onDiffFile"];
   onResendUserMessage?: UserBubbleProps["onResendUserMessage"];

@@ -469,7 +469,7 @@ export function SessionView({
             validCommandNames={validCommandNames}
             validFilePaths={validFilePaths}
             onPreviewImage={onPreviewImage}
-            onOpenExternal={(url: string) => api.app.openExternal(url)}
+            onOpenExternal={(url: string, forceSystem?: boolean) => api.app.openExternal(url, forceSystem)}
             onOpenFile={onOpenFile}
             onDiffFile={onDiffFile}
             onResendUserMessage={

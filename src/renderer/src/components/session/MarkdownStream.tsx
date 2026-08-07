@@ -43,7 +43,7 @@ export const STREAM_LIGHT_MAX_CHARS = 40_000;
 export const MarkdownStream = memo(function MarkdownStream(props: {
 	text: string;
 	isStreaming?: boolean;
-	onOpenExternal: (url: string) => void;
+	onOpenExternal: (url: string, forceSystem?: boolean) => void;
 	onOpenFile?: (path: string) => void;
 	/** 静态场景（FileDiffViewer/AppUpdateOverlay/ScratchPad）可覆盖默认插件 */
 	remarkPlugins?: Parameters<typeof Streamdown>[0]["remarkPlugins"];

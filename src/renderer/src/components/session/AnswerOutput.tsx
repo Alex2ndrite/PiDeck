@@ -33,7 +33,7 @@ export const AnswerOutput = memo(function AnswerOutput(props: {
 	isStreaming?: boolean;
 	/** live→settled 交接时播放一次淡入（assistant-answer-settle） */
 	settle?: boolean;
-	onOpenExternal: (url: string) => void;
+	onOpenExternal: (url: string, forceSystem?: boolean) => void;
 	onOpenFile?: (path: string) => void;
 }) {
 	if (props.mode === "live") {
@@ -74,7 +74,7 @@ const LiveAnswerBody = memo(function LiveAnswerBody(props: {
 	sessionId: string;
 	hidden?: boolean;
 	isStreaming?: boolean;
-	onOpenExternal: (url: string) => void;
+	onOpenExternal: (url: string, forceSystem?: boolean) => void;
 	onOpenFile?: (path: string) => void;
 }) {
 	const streaming = useAtomValue(streamingTextByIdAtom);
