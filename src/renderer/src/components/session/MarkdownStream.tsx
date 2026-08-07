@@ -7,7 +7,7 @@ import { MarkdownLink, remarkLinkifyPaths } from "./MarkdownLink";
 import { markdownUrlTransform } from "./MarkdownLinkCore";
 import { MathBlockParagraph } from "./MarkdownComponents";
 import { collapseCodeBlocks } from "./collapseCodeBlocks";
-import { useThrottledStreamingText } from "../../utils/streamingTextThrottle";
+import { useSmoothStream } from "../../utils/useSmoothStream";
 
 /**
  * Streamdown 渲染管线（唯一 markdown 引擎）。
@@ -47,9 +47,18 @@ export const MarkdownStream = memo(function MarkdownStream(props: {
 }) {
 	const isDark = typeof document !== "undefined" &&
 		document.documentElement.dataset.theme === "dark";
-	// 流式展示节流：主进程 50ms flush 合批到 ~120ms 一帧，降低长回答的 streamdown
-	// 全量解析频率（流式卡顿主因）；仅影响展示，权威文本在 atom 中不受影响。
-	const displayText = useThrottledStreamingText(props.text, props.isStreaming);
+	// 逐字打字机渐显：把高频文本更新转为字符队列 + rAF 渐进渲染（参考 Cherry Studio/Proma）。
+	// 只影响展示；权威文本在 atom 中不受影响（复制/导出仍拿全文）。
+	// minDelay 16ms：streamdown 解析较重，若卡顿可上调（详见 useSmoothStream 文档）。
+	const { displayedContent } = useSmoothStream({
+		content: props.text,
+		isStreaming: Boolean(props.isStreaming),
+		minDelay: 16,
+	});
+	const displayText = props.isStreaming ? displayedContent : props.text;
+	// 流式期间走轻量渲染（跳过代码高亮/mermaid），逐字渐显会把解析频率提到 rAF 级别，
+	// 重型插件会抢占主线程；流结束 isStreaming 变 false 后自动切回全量（含高亮）。
+	const effectiveLight = props.light || Boolean(props.isStreaming);
 	// 显式 Components 标注：让 a/p 的 props 走上下文类型推断（streamdown 的
 	// Components 是「具名槽位 | 索引签名」联合，直接内联会触发索引签名分支的类型不兼容）
 	// useMemo 依赖回调 props：回调引用变化时 components 重建，streamElement 随之重建，
@@ -103,7 +112,7 @@ export const MarkdownStream = memo(function MarkdownStream(props: {
 				}
 				urlTransform={props.urlTransform ?? markdownUrlTransform}
 				plugins={
-					(props.light
+					(effectiveLight
 						? { math }
 						: {
 								code,
@@ -127,7 +136,7 @@ export const MarkdownStream = memo(function MarkdownStream(props: {
 			displayText,
 			components,
 			props.isStreaming,
-			props.light,
+			effectiveLight,
 			props.remarkPlugins,
 			props.rehypePlugins,
 			props.urlTransform,

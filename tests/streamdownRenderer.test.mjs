@@ -21,7 +21,7 @@ test("streamdown pipeline delegates to official plugins (code/mermaid/math) and 
   assert.match(stream, /import \{ code \} from "@streamdown\/code"/);
   assert.match(stream, /import \{ mermaid \} from "@streamdown\/mermaid"/);
   assert.match(stream, /import \{ math \} from "@streamdown\/math"/);
-  assert.match(stream, /plugins=\{\s*\(props\.light/);
+  assert.match(stream, /plugins=\{\s*\(effectiveLight/);
   assert.match(stream, /\{ math \}/);
   // 非 light 分支注册 code 插件；light（更新日志等轻场景）保持无高亮
   assert.match(stream, /\bcode,\n/);
