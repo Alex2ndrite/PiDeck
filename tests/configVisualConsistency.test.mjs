@@ -35,11 +35,10 @@ test("config shell defines compact density and crisp system typography", () => {
   assert.match(configModal, /config-modal/);
 });
 
-test("skills and prompts use content-width secondary tabs", () => {
-  assert.match(skills, /<TabsList className="w-fit"/);
-  assert.match(prompts, /<TabsList className="w-fit"/);
-  assert.doesNotMatch(skills, /<TabsList className="w-full"/);
-  assert.doesNotMatch(prompts, /<TabsList className="w-full"/);
+test("skills and prompts render full-width visible tab lists", () => {
+  assert.match(skills, /<TabsList className="w-full"/);
+  assert.match(prompts, /<TabsList className="w-full"/);
+  assert.match(readFileSync("src/renderer/src/components/ui-shadcn/tabs.tsx", "utf8"), /w-full items-center/);
 });
 
 test("skill list is not accidentally filtered by the new-skill destination", () => {
