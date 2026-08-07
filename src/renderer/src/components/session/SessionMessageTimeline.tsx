@@ -1,4 +1,3 @@
-import { Wrench } from "lucide-react";
 import { useAtomValue } from "jotai";
 import { selectAtom } from "jotai/utils";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -35,6 +34,7 @@ import {
 import { t } from "../../i18n";
 import { SessionFileSummary } from "./SessionFileSummary";
 import { SessionStartSurface } from "./SessionStartSurface";
+import { ToolActivityCard } from "./ToolCallComponents";
 import { MessageScroller } from "../agents/message-scroller";
 
 type TurnRowProps = ComponentProps<typeof TurnRow>;
@@ -542,20 +542,7 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
                       run.kind === "agent-run" &&
                       run.items.some((item) => item.kind === "tool-group"),
                   ) && (
-                    <section className="tool-card tone-info" data-status="running">
-                      <div className="tool-card-header">
-                        <span className="tool-card-trigger">
-                          <span className="tool-card-icon">
-                            <Wrench size={14} />
-                          </span>
-                          <span className="tool-card-name">{t("tool.pending")}</span>
-                          <span className="tool-card-status">
-                            <span className="tool-card-spinner" aria-hidden="true" />
-                            {t("tool.statusRunning")}
-                          </span>
-                        </span>
-                      </div>
-                    </section>
+                    <ToolActivityCard name={t("tool.pending")} />
                   )}
               </>
             )}

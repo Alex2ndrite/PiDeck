@@ -3561,10 +3561,14 @@ div.fixed.inset-0.z-50 {
 /* 折叠只承担交互，不再额外绘制一张代码卡片；边框和底色由内部 pre 统一负责。 */
 .sd-code-collapse {
   margin: var(--space-3) 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  overflow: visible;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 10px;
+  background: var(--color-chat-muted-bg);
+  overflow: hidden;
+}
+/* Streamdown header 是唯一代码工具栏；项目折叠摘要不再重复显示语言和行数。 */
+.sd-code-collapse-summary {
+  display: none;
 }
 .sd-code-collapse-summary {
   display: flex;
@@ -3598,14 +3602,33 @@ div.fixed.inset-0.z-50 {
   background: transparent;
 }
 .sd-code-collapse [data-streamdown="code-block-header"] {
+  display: flex;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  min-height: 30px;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: 0;
+  border-bottom: 1px solid var(--color-border-subtle);
+  border-radius: 0;
+  background: var(--color-chat-muted-bg);
+  color: var(--color-text-tertiary);
+  font: 500 var(--text-micro) / 1.4 var(--font-family-sans);
+}
+/* Streamdown 的代码行号只增加视觉噪声；复制按钮仍由官方 header 保留。 */
+.sd-code-collapse [data-streamdown="code-block-body"] [data-line-number],
+.sd-code-collapse [data-streamdown="code-block-body"] [data-line-numbers],
+.sd-code-collapse [data-streamdown="code-block-body"] .line-number {
   display: none;
 }
 .sd-code-collapse [data-streamdown="code-block-body"] {
   margin: 0;
   padding: 0;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: 10px;
-  background: var(--color-chat-muted-bg);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   overflow: hidden;
 }
 .sd-code-collapse [data-streamdown="code-block-body"] > pre {
@@ -3613,6 +3636,7 @@ div.fixed.inset-0.z-50 {
   border: 0;
   border-radius: 0;
   background: transparent;
+  overflow: auto;
 }
 /* 表体斑马纹，增强长表可读性 */
 [data-streamdown="table-body"] tr:nth-child(even) td {

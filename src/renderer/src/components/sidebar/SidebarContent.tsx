@@ -121,7 +121,7 @@ export function SidebarContent(props: SidebarContentProps) {
       <div className="sidebar-body flex min-h-0 flex-1 flex-col gap-2 px-1.5 py-1">
         {props.chrome}
         {/* 搜索只过滤导航和当前项目内容；会话加载仍由 controller/App 的懒加载策略负责。 */}
-        <div className="search-row grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
+        <div className="search-row grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-xl border border-border/60 bg-muted/25 p-1">
           <div className="search-box relative min-w-0">
             <Search
               size={14}

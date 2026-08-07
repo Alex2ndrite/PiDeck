@@ -6,7 +6,6 @@ import {
   ChevronRight,
   CircleCheck,
   CircleX,
-  Copy,
   FileText,
   Folder,
   Globe2,
@@ -27,9 +26,9 @@ import {
 import { t } from "../../i18n";
 import { Badge } from "../ui-shadcn/badge";
 import { Button } from "../ui-shadcn/button";
-import { showNotice } from "../../utils/notice";
 import type { ChatMessage } from "../../../../shared/types";
 import { TimelineMarker } from "./TimelineMarker";
+import { ToolResult } from "../agents/tool-result";
 import {
   formatDuration,
   getToolDetailText,
@@ -193,6 +192,23 @@ function getToolKindLabel(toolName: string): string {
 	return "";
 }
 
+/**
+ * AI Elements Tool 风格的实时工具活动卡片：运行阶段使用轻量 shimmer 和状态轨道，
+ * 不依赖工具结果消息，避免 streaming 期间出现空白或跳变。
+ */
+export const ToolActivityCard = memo(function ToolActivityCard(props: { name: string }) {
+	return (
+		<section className="tool-activity-card" data-status="running" aria-live="polite">
+			<span className="tool-activity-icon">{toolIcon(props.name)}</span>
+			<div className="tool-activity-copy">
+				<strong>{props.name}</strong>
+				<span>{t("tool.statusRunning")}</span>
+			</div>
+			<span className="tool-activity-pulse" aria-hidden="true"><i /><i /><i /></span>
+		</section>
+	);
+});
+
 /** 单个工具调用卡片：trigger 行（图标+工具名+副标题+状态+耗时）+ 展开后详情。 */
 export const ToolCard = memo(function ToolCard(props: {
 	message: ChatMessage;
@@ -243,13 +259,6 @@ export const ToolCard = memo(function ToolCard(props: {
 			</Badge>
 		);
 	})();
-	const [copied, setCopied] = useState(false);
-	const handleCopy = () => {
-		navigator.clipboard.writeText(detailText);
-		setCopied(true);
-		showNotice(t("app.codeCopied"), 1200);
-		setTimeout(() => setCopied(false), 2000);
-	};
 	return (
 		<TimelineMarker
 			kind="tool"
@@ -300,7 +309,7 @@ export const ToolCard = memo(function ToolCard(props: {
 				</button>
 			</div>
 			{expanded && (
-				<div className="relative rounded-b-sm border-t border-border-subtle bg-transparent">
+				<div className="relative rounded-b-sm bg-transparent">
 					{isAskCard && askCard ? (
 						<div className="ask-question-card-tool-inner">
 							<div className="ask-question-card-title">
@@ -324,16 +333,20 @@ export const ToolCard = memo(function ToolCard(props: {
 							</div>
 						</div>
 					) : (
-						<pre className="m-0 max-h-[320px] overflow-auto p-2 font-mono text-caption leading-relaxed break-words whitespace-pre-wrap text-text-tertiary">{detailText}</pre>
+						<ToolResult
+							showHeader={false}
+							tool={toolIcon(toolName)}
+							title={toolName}
+							status={status === "running" ? "running" : status === "error" ? "error" : "success"}
+							kind={toolName.toLowerCase().includes("bash") || toolName.toLowerCase().includes("shell") ? "terminal" : "custom"}
+							maxHeight={320}
+							copyText={detailText}
+							copyClassName="tool-card-copy"
+							contentClassName="text-text-tertiary"
+						>
+							{detailText}
+						</ToolResult>
 					)}
-					<Button
-						variant="ghost" size="icon-sm"
-						className="tool-card-copy absolute top-1.5 right-1.5 size-7 rounded-[4px] p-0 text-text-tertiary opacity-55 hover:text-[var(--color-accent)]"
-						onClick={handleCopy}
-						title={t("tool.copyDetail")}
-					>
-						{copied ? <Check size={14} /> : <Copy size={14} />}
-					</Button>
 				</div>
 			)}
 		</section>

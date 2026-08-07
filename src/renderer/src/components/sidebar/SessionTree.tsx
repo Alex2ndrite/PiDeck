@@ -13,8 +13,10 @@ import { cn } from "../../lib/utils";
 
 /** pure official：与 ProjectTree 对齐的会话/agent 行底色
  * 默认透明背景，只有激活的行才显示背景色和阴影，避免所有行都像浮层卡片。 */
+// 与 Be UI AI Sidebar 的资源行保持一致：会话是可选中资源，使用 compact inset surface；
+// 运行状态仍由原有状态点表达，不把项目容器和会话资源混成同一种 active 语义。
 const sessionRowClass =
-	"conversation agent-row relative flex min-h-11 w-full items-center gap-2 rounded-lg border border-transparent px-3 py-2 text-left text-body text-foreground shadow-none transition-[background-color,border-color] duration-200 hover:border-border-subtle hover:bg-muted/60 hover:text-foreground";
+	"group/resource conversation agent-row relative flex min-h-11 w-full items-center gap-2 rounded-xl border border-transparent px-3 py-2 text-left text-body text-foreground shadow-none transition-[background-color,border-color,box-shadow] duration-200 hover:border-border-subtle hover:bg-muted/60 hover:text-foreground focus-visible:bg-muted/70 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset";
 
 function matchesSearch(value: string, search: string) {
   return !search || value.toLowerCase().includes(search.toLowerCase());

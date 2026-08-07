@@ -1,4 +1,4 @@
-import { ChevronsDownUp, Filter, FolderPlus, HatGlasses, Play, Plus } from "lucide-react";
+import { ChevronsDownUp, ChevronRight, Filter, Folder, FolderOpen, FolderPlus, HatGlasses, Plus } from "lucide-react";
 import type { DragEvent } from "react";
 import type { Project, WorktreeEntry } from "../../../../shared/types";
 import type { SidebarController } from "../../hooks/useSidebarController";
@@ -11,8 +11,10 @@ import { cn } from "../../lib/utils";
 
 /** pure official：项目/会话树行共享的 shadcn 风格底（hover=accent 面，active 同系）
  * 默认透明背景，只有激活的行才显示背景色和阴影，避免所有行都像浮层卡片。 */
+// Be UI AI Sidebar 的资源树强调“容器可展开、资源可选中”：项目行保持轻量，
+// 只有当前资源使用 inset surface，避免每个项目都变成独立卡片。
 const treeRowClass =
-  "group conversation relative flex min-h-7 w-full items-center gap-1.5 rounded-lg border border-transparent px-2 py-0 text-body text-foreground shadow-none transition-[background-color,border-color] duration-200 hover:border-border-subtle hover:bg-muted/60 hover:text-foreground";
+  "group conversation relative flex min-h-7 w-full items-center gap-1.5 rounded-md border border-transparent px-2 py-0 text-body text-foreground shadow-none transition-[background-color,border-color,box-shadow] duration-200 hover:border-border-subtle hover:bg-muted/60 hover:text-foreground";
 
 function isChatProject(project: Project) {
   return project.kind === "chat";
@@ -96,7 +98,7 @@ export function ProjectTree(props: {
             aria-label={collapsed ? t("app.projectExpand") : t("app.projectCollapse")}
             onClick={() => props.controller.toggleProject(project.id)}
           >
-            <Play size={12} className={cn("transition-transform", !collapsed && "rotate-90")} />
+            <ChevronRight size={14} className={cn("transition-transform", !collapsed && "rotate-90")} />
           </button>
           <button
             type="button"
@@ -113,6 +115,9 @@ export function ProjectTree(props: {
               props.actions.projects.select(project.id);
             }}
           >
+            <span className="grid size-5 shrink-0 place-items-center text-muted-foreground" aria-hidden="true">
+              {collapsed ? <Folder size={14} /> : <FolderOpen size={14} />}
+            </span>
             <div className="conversation-body min-w-0 flex-1">
               <div className="conversation-title flex min-w-0 items-center">
                 {/* 悬浮展示完整项目目录名 + 路径（目录名在行内常被 truncate） */}
@@ -151,7 +156,7 @@ export function ProjectTree(props: {
           </div>
         </div>
         {!collapsed && (
-          <div className="ml-2 mt-2 mr-1 space-y-1 pb-1">
+          <div className="relative ml-3 mt-1 mr-1 space-y-0.5 pl-2 pb-1">
             {/* 展开内容不依赖当前选中项，项目切换只改变高亮，避免两棵会话树同时伸缩造成布局抖动。 */}
             {project.worktreeEnabled ? (
               <WorktreeTree
@@ -192,7 +197,7 @@ export function ProjectTree(props: {
       const collapsed = props.controller.isProjectCollapsed(project.id);
       const sessions = props.controller.catalog.sessionsByProject[project.id] ?? [];
       return (
-        <section key={project.id} className="mb-5" aria-label={t("app.chatProject")}>
+        <section key={project.id} className="mb-4 rounded-xl p-1" aria-label={t("app.chatProject")} role="treeitem" aria-expanded={!collapsed}>
           <div
             className="flex items-center justify-between px-2 pb-1"
             onContextMenu={(event) => {
@@ -234,7 +239,7 @@ export function ProjectTree(props: {
             </div>
           </div>
           {!collapsed && (
-            <div className="space-y-1">
+            <div className="relative ml-3 space-y-0.5 pl-2">
               <SessionTree
                 project={project}
                 sessions={sessions}
@@ -249,11 +254,11 @@ export function ProjectTree(props: {
       );
     })}
     {workspaceProjects.length > 0 && (
-      <section aria-label={t("app.sidebarProjects")}>
+      <section aria-label={t("app.sidebarProjects")} role="tree">
         {/* 标题栏右侧提供添加项目与批量折叠入口，行为与搜索框旁的 FolderPlus 按钮一致；
             与 Chat 标题栏按钮（size-6 圆角悬浮层）同款视觉，避免层级混乱。 */}
         <div className="flex items-center justify-between px-2 pb-1">
-          <span className="text-caption font-medium text-muted-foreground">{t("app.sidebarProjects")}</span>
+          <span className="px-1 text-micro font-semibold uppercase tracking-wide text-muted-foreground">{t("app.sidebarProjects")}</span>
           <div className="flex items-center gap-0.5">
             <button
               type="button"
