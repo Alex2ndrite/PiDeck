@@ -85,6 +85,7 @@ const settingsStorage = read("src/renderer/src/components/app/settings/SettingsS
 const drawer = read("src/renderer/src/components/workspace/DrawerSurface.tsx");
 const surface = [
 	read("src/renderer/src/components/session/SurfaceComponents.tsx"),
+	read("src/renderer/src/components/session/turn/ProcessSummaryToggle.tsx"),
 	read("src/renderer/src/components/session/MarkdownComponents.tsx"),
 	read("src/renderer/src/components/session/ComposerOverlayComponents.tsx"),
 	read("src/renderer/src/components/session/ToolCallComponents.tsx"),

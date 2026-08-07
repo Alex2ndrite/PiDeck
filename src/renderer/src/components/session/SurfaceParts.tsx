@@ -1,5 +1,6 @@
 // Re-export Surface-owned symbols from SurfaceComponents.
-export { SessionStatus, TurnRow, UserBubble, stripMarkdown } from "./SurfaceComponents";
+export { SessionStatus, UserBubble, stripMarkdown } from "./SurfaceComponents";
+export { TurnRow } from "./turn";
 export { ConversationOutline, EmptyState } from "./SurfaceComponents";
 export { LogoMark, AgentAvatar } from "./SurfaceComponents";
 export { AskQuestionCard, CompactionCard, DiagnosticMessageCard } from "./SurfaceComponents";

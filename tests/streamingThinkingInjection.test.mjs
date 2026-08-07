@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const turnRowSource = readFileSync(
-  "src/renderer/src/components/session/SurfaceComponents.tsx",
+  "src/renderer/src/components/session/turn/TurnRow.tsx",
   "utf8",
 );
 const timelineSource = readFileSync(
@@ -24,9 +24,8 @@ test("TurnRow injects a virtual thinking group from streaming thinking", () => {
   assert.match(effectiveRun, /run\.items\.some\(\(item\) => item\.kind === "thinking-group"\)/);
   // 虚拟组保持未结束语义：endedAt 为 0 → ThinkingBlock 维持 active tone、不触发完成收起
   assert.match(effectiveRun, /endedAt: 0/);
-  // 注入后思考卡进入执行区：buildTurnSegments / renderExecutionItem 走 effectiveRun
-  assert.match(turnRowSource, /buildTurnSegments\(effectiveRun/);
-  assert.match(turnRowSource, /effectiveRun\.items\.some/);
+  // 注入后思考卡进入执行区：buildTurnDisplay 消费 effectiveRun
+  assert.match(turnRowSource, /buildTurnDisplay\(effectiveRun/);
 });
 
 test("streaming thinking flows into the execution area, not the timeline footer", () => {
@@ -35,6 +34,6 @@ test("streaming thinking flows into the execution area, not the timeline footer"
   assert.doesNotMatch(timelineSource, /thinking-card-content/);
   // 当前流式 run 接收 runtime 实时思考文本
   assert.match(timelineSource, /streamingThinking=\{isRunStreaming \? activeThinking : undefined\}/);
-  // ThinkingBlock 透传流式标记，展开后 MarkdownStream 实时增长
+  // ThinkingStep 透传流式标记，展开后 MarkdownStream 实时增长
   assert.match(turnRowSource, /isStreaming=\{props\.isStreaming\}/);
 });

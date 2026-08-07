@@ -3,61 +3,60 @@ import test from "node:test";
 import { readFileSync } from "node:fs";
 
 const turnRowSource = readFileSync(
-  "src/renderer/src/components/session/SurfaceComponents.tsx",
+  "src/renderer/src/components/session/turn/TurnRow.tsx",
+  "utf8",
+);
+const thinkingStepSource = readFileSync(
+  "src/renderer/src/components/session/turn/ThinkingStep.tsx",
+  "utf8",
+);
+const toolStepSource = readFileSync(
+  "src/renderer/src/components/session/turn/ToolStep.tsx",
+  "utf8",
+);
+const summaryToggleSource = readFileSync(
+  "src/renderer/src/components/session/turn/ProcessSummaryToggle.tsx",
   "utf8",
 );
 
-test("renders the run as time-ordered segments without pulling the last answer to the bottom", () => {
+test("renders the run as order-preserving flat display without pulling the last answer to the bottom", () => {
   assert.ok(
-    turnRowSource.indexOf("{segments.map(renderSegment)}") > 0,
-    "TurnRow must render segments",
+    turnRowSource.indexOf("displayItems.map") > 0,
+    "TurnRow must render flat display items",
   );
-  // 顺序修复：最终回答不再抽离时序、在 segments 之后单独渲染，
-  // 而是作为 isFinal 段挂在时序原位（流式/中断的 run 尾部可能还有工具/思考）。
+  // 顺序忠实：不再抽离时序、不把回答拽到底部，final/interim 都在原位
   assert.doesNotMatch(
-    turnRowSource.slice(turnRowSource.indexOf("{segments.map(renderSegment)}")),
+    turnRowSource.slice(turnRowSource.indexOf("displayItems.map")),
     /最终回答（始终可见）/,
   );
-  assert.match(turnRowSource, /buildTurnSegments/);
-  assert.match(turnRowSource, /segment\.isFinal/);
+  assert.match(turnRowSource, /buildTurnDisplay\(effectiveRun/);
+  // 最终回答是独立类型（常驻），通过显式 final-answer 分支渲染
+  assert.match(turnRowSource, /item\.kind === "final-answer"/);
 });
 
-// issue #130：回答文本是面向用户的正式内容，不应折进「执行过程」，
-// 折叠只针对思考块与工具调用；多段回答逐条平铺，不再摘要成「N次回答」。
-test("issue #130: fold contains only thinking and tools, answers stay inline", () => {
-  // 折叠详情的渲染函数不再接受 assistant message 分支
-  const renderExecutionItem = turnRowSource.match(
-    /const renderExecutionItem = \([\s\S]*?\n\t\};/,
-  )?.[0] ?? "";
-  assert.ok(renderExecutionItem, "renderExecutionItem must exist");
-  assert.doesNotMatch(renderExecutionItem, /item\.kind === "message"/);
-  assert.match(renderExecutionItem, /thinking-group/);
-  assert.match(renderExecutionItem, /ToolGroupCard/);
+// issue #130：回答文本是面向用户的正式内容，不应折进「执行过程」。
+// 新结构：中间回答受 run 级折叠控制（可折叠），最终回答常驻；思考/工具步骤
+// 原位穿插且只受一个折叠开关控制；概要只统计工具/思考/中间回复数，不显示正文预览。
+test("issue #130: fold concerns process steps and interim answers, final answer stays inline", () => {
+  // 思考/工具步骤组件独立：思考走 ThinkingBlock（CoT 单步），工具走 ToolGroupCard
+  assert.match(thinkingStepSource, /ThinkingBlock/);
+  assert.match(thinkingStepSource, /defaultExpanded=\{false\}/);
+  assert.match(toolStepSource, /ToolGroupCard/);
+  // 步骤原位渲染，不受「单个折叠容器」限制（避免折叠容器被回答文本打断）
+  assert.match(turnRowSource, /hidden=\{!stepsVisible\}/);
 
-  // 回答文本段在折叠区外平铺渲染
-  const renderSegment = turnRowSource.match(
-    /const renderSegment = \([\s\S]*?\n\t\};/,
-  )?.[0] ?? "";
-  assert.ok(renderSegment, "renderSegment must exist");
-  assert.match(renderSegment, /segment\.kind === "text"/);
-  assert.match(renderSegment, /timeline-inline-text/);
-
-  // 概要只统计工具/思考，不再计「N次回答」
-  const segmentSummary = turnRowSource.match(
-    /const segmentSummary = \([\s\S]*?\n\t\};/,
-  )?.[0] ?? "";
-  assert.ok(segmentSummary, "segmentSummary must exist");
-  assert.doesNotMatch(segmentSummary, /executionAnswerCount/);
+  // 概要只统计工具/思考/中间回复数，不再计「N次回答」预览
   assert.doesNotMatch(turnRowSource, /executionAnswerCount/);
+  assert.doesNotMatch(summaryToggleSource, /message\.text/);
 
-  // i18n key 同步移除
+  // i18n key 同步移除旧的回答计数；新增中间回复计数
   assert.doesNotMatch(
     readFileSync("src/renderer/src/i18n/rendererCopy.zh-CN.ts", "utf8"),
     /executionAnswerCount/,
   );
-  assert.doesNotMatch(
-    readFileSync("src/renderer/src/i18n/rendererCopy.en-US.ts", "utf8"),
-    /executionAnswerCount/,
+  assert.match(
+    readFileSync("src/renderer/src/i18n/rendererCopy.zh-CN.ts", "utf8"),
+    /executionInterimCount/,
   );
 });
 
@@ -73,10 +72,7 @@ test("execution summary toggle radius matches other buttons", () => {
 // Chain of Thought 步骤化：执行过程折叠详情里，思考与工具同为「步骤」——
 // 思考默认收起为单步（标题+首句预览），点击才展开全文；概要行带步骤图标。
 test("execution fold renders thinking as collapsed CoT steps", () => {
-  const renderExecutionItem = turnRowSource.match(
-    /const renderExecutionItem = \([\s\S]*?\n\t\};/,
-  )?.[0] ?? "";
-  assert.match(renderExecutionItem, /defaultExpanded=\{false\}/);
+  assert.match(thinkingStepSource, /defaultExpanded=\{false\}/);
 
   // ThinkingBlock 支持 defaultExpanded 初始值（standalone 仍默认展开）
   const cards = readFileSync(
@@ -86,6 +82,6 @@ test("execution fold renders thinking as collapsed CoT steps", () => {
   assert.match(cards, /defaultExpanded\?: boolean/);
   assert.match(cards, /useState\(props\.defaultExpanded \?\? true\)/);
 
-  // 概要行带步骤图标（ListTree），呼应 Chain of Thought 头部
-  assert.match(turnRowSource, /<ListTree size=\{13\}/);
+  // 汇总按钮带步骤图标（ListTree），呼应 Chain of Thought 头部
+  assert.match(summaryToggleSource, /<ListTree size=\{13\}/);
 });

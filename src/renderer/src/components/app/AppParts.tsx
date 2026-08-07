@@ -437,7 +437,6 @@ export {
   ThinkingBlock,
   RespondingIndicator,
   AssistantText,
-  TurnRow,
   UserBubble,
   ImagePreviewModal,
   stripMarkdown,
@@ -449,6 +448,7 @@ export {
   PromptSuggestions,
   FileContextMenu,
 } from "../session/SurfaceComponents";
+export { TurnRow } from "../session/turn";
 
 // PiLogoCanvas — canvas-based animated pi logo (from upstream dev)
 export { PiLogoCanvas } from "./PiLogoCanvas";

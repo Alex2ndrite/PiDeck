@@ -18,10 +18,6 @@ import { useAtomValue } from "jotai";
 import "katex/dist/katex.min.css";
 import {
 	summarizeMessage,
-	type ToolGroupItem,
-	type MessageItem,
-	type ThinkingGroupItem,
-	type AgentRunItem,
 	type RenderMessage,
 	type ComposerSuggestionResult,
 	type ComposerTrigger,
@@ -50,16 +46,12 @@ import {
 	Check,
 	CircleAlert,
 	CircleDot,
-	ChevronDown,
 	ChevronLeft,
-	ChevronRight,
 	ChevronsUpDown,
-	ChevronUp,
 	MoveDown,
 	MoveUp,
 	ChevronsDownUp,
 	GitBranch,
-	Brain,
 	Eye,
 	FileText,
 	Folder,
@@ -86,7 +78,6 @@ import {
 	UserPen,
 	GitFork,
 	LoaderCircle,
-	ListTree,
 } from "lucide-react";
 import { getFileIconSeti, getFileIconColor, getFileTypeLabel } from "../../fileIcons";
 import { normalizeSessionPathForCompare } from "../../agentListDisplay";
@@ -124,7 +115,7 @@ import removeMarkdown from "remove-markdown";
 import { GRID_COLS, CELL_W, CELL_H, MODE_ROW, MODE_FRAMES } from "../../pet/PetSpriteSheet";
 
 import type { WorkspaceDrawerPanel } from "../../hooks/useWorkspacePanels";
-import { buildTurnSegments, formatDuration, formatTime, stripAnsi, type TurnSegment } from "./TimelineFormat";
+import { formatDuration, formatTime, stripAnsi } from "./TimelineFormat";
 import { ToolCard, ToolGroupCard, type DiffFileHandler } from "./ToolCallComponents";
 import {
 	AskQuestionCard,
@@ -433,7 +424,7 @@ async function copyElementAsPng(element: HTMLElement) {
 	await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
 }
 
-function CopyMenu(props: {
+export function CopyMenu(props: {
 	text: string;
 	markdown: string;
 	targetRef: React.RefObject<HTMLElement | null>;
@@ -642,312 +633,6 @@ export const AssistantText = memo(
 		prev.isStreaming === next.isStreaming &&
 		prev.images === next.images,
 );
-
-/** 一轮 AI 回答的扁平容器：左侧竖线聚合，内含思考/工具/正文/文件摘要。
- *  替代旧的 AgentRun + ChatBubble 助手分支 + RunActivity 三层结构。
- *  展示段由 buildTurnSegments 严格按 run.items 时序构建（思考→回答→工具…），
- *  最后一条回答仅以 isFinal 标记挂在原位（供编辑入口），不再抽离时序拽到底部——
- *  流式/中断的 run 里它后面常还有工具/思考，拽底会导致顺序颠倒。 */
-export const TurnRow = memo(function TurnRow(props: {
-	run: AgentRunItem;
-	/** 新消息入场动画：仅发送后尾部新增的消息播放一次 */
-	fresh?: boolean;
-	onPreviewImage: (image: ImageContent) => void;
-	showThinking?: boolean;
-	isStreaming?: boolean;
-	/** 流式思考实时文本（runtime.thinking）：run 尚未落地 thinking-group 时注入执行区 */
-	streamingThinking?: string;
-	onOpenExternal: (url: string) => void;
-	onOpenFile?: (path: string) => void;
-	onDiffFile?: DiffFileHandler;
-	onResendUserMessage?: (message: ChatMessage) => void;
-	onDeleteMessage?: (messageId: string) => void;
-	onEditMessage?: (messageId: string, newText: string) => void;
-	/** Agent 正在处理请求或流式输出中时禁用编辑/删除等操作按钮 */
-	agentRunning?: boolean;
-	/** 打开多选分享弹框 */
-	onEnterMultiSelect?: () => void;
-}) {
-	const { run } = props;
-	const [editing, setEditing] = useState(false);
-	const [editText, setEditText] = useState("");
-	const editAreaRef = useRef<HTMLDivElement | null>(null);
-	// 激活编辑时自动滚动到编辑区（避免 textarea 超出可视区域）
-	useEffect(() => {
-		if (editing && editAreaRef.current) {
-			editAreaRef.current.scrollIntoView({ behavior: "smooth", block: "nearest" });
-		}
-	}, [editing]);
-	const isComplete = run.endedAt > 0;
-	const duration = isComplete && run.startedAt > 0 ? run.endedAt - run.startedAt : 0;
-	const showDuration = isComplete && duration > 0;
-
-	// 流式思考注入：runtime 实时思考文本尚未落地为 thinking-group 时，
-	// 合成虚拟 thinking-group 追加到 run 末尾，让思考卡与工具卡同轨出现在执行区；
-	// 消息落地后（thinking-group 出现）自动退出，避免双份渲染。
-	const effectiveRun = useMemo<AgentRunItem>(() => {
-		if (
-			!props.streamingThinking ||
-			run.items.some((item) => item.kind === "thinking-group")
-		) {
-			return run;
-		}
-		const virtualGroup: ThinkingGroupItem = {
-			kind: "thinking-group",
-			id: `${run.id}:streaming-thinking`,
-			messages: [],
-			text: props.streamingThinking,
-			startedAt: run.startedAt,
-			// 未结束：endedAt 为 0，ThinkingBlock 保持 active tone、不触发完成收起
-			endedAt: 0,
-		};
-		return { ...run, items: [...run.items, virtualGroup] };
-	}, [run, props.streamingThinking]);
-
-	// 收集本轮所有 assistant 消息（按 run.items 的时序保持原始顺序）
-	const assistantMessages = run.items.filter(
-		(item): item is MessageItem =>
-			item.kind === "message" && item.message.role === "assistant",
-	);
-	const allImages: ImageContent[] = [];
-	for (const item of assistantMessages) {
-		if (item.message.images) allImages.push(...item.message.images);
-	}
-	// 合并后的完整文本仅用于编辑/复制/删除等操作栏，不用于展示
-	const mergedText = assistantMessages
-		.map((item) => stripThinkingTags(stripAnsi(item.message.text)).trim())
-		.filter(Boolean)
-		.join("\n\n");
-
-	// 执行过程默认展开（agent 处理中），输出完毕后自动折叠。
-	// 使用 agentRunning 而非 isStreaming：后者在多步工具调用之间会短暂 flicker 为 false，
-	// 导致过早折叠工具输出；agentRunning 在整个 agent 处理生命周期内始终为 true。
-	const [executionExpanded, setExecutionExpanded] = useState(
-		!isComplete || Boolean(props.agentRunning),
-	);
-	useEffect(() => {
-		if (props.agentRunning) {
-			setExecutionExpanded(true);
-		} else if (isComplete) {
-			setExecutionExpanded(false);
-		}
-	}, [isComplete, props.agentRunning]);
-
-	const rowRef = useRef<HTMLElement | null>(null);
-	// 本轮没有任何可渲染内容时不输出空容器（effectiveRun 含流式思考虚拟组）
-	const hasContent =
-		assistantMessages.length > 0 ||
-		effectiveRun.items.some(item => item.kind === "thinking-group") ||
-		effectiveRun.items.some(item => item.kind === "tool-group") ||
-		allImages.length > 0;
-	if (!hasContent) return null;
-
-	/** 渲染执行过程折叠区里的一个条目（thinking-group / tool-group）。
-	 *  回答文本不再进入折叠区（issue #130），由 text 段常驻平铺渲染。 */
-	const renderExecutionItem = (item: ThinkingGroupItem | ToolGroupItem) => {
-		if (item.kind === "thinking-group") {
-			if (!props.showThinking) return null;
-			return (
-				<ThinkingBlock
-					key={item.id}
-					text={item.text}
-					startedAt={item.startedAt}
-					endedAt={item.endedAt}
-					showThinking={props.showThinking}
-					isStreaming={props.isStreaming}
-					// 折叠详情里思考以「单步」呈现（标题+折叠预览），点击左下角按钮才展开：
-					// 与工具卡片同为 Chain of Thought 步骤，不再默认摊开 markdown
-					defaultExpanded={false}
-					onOpenExternal={props.onOpenExternal}
-					onOpenFile={props.onOpenFile}
-				/>
-			);
-		}
-		return <ToolGroupCard key={item.id} group={item} />;
-	};
-
-	/** 一轮回答的展示段：由 buildTurnSegments 严格按时序构建，
-	 *  过程段（思考+工具）折叠、回答文本段常驻平铺（issue #130）。 */
-	const segments = useMemo<TurnSegment[]>(
-		() => buildTurnSegments(effectiveRun, { showThinking: props.showThinking }),
-		[effectiveRun, props.showThinking],
-	);
-
-	/** 单个过程段的概要文本：只统计思考/工具（回答不再计入折叠，issue #130）。 */
-	const segmentSummary = (items: (ThinkingGroupItem | ToolGroupItem)[]): string => {
-		const tools = items.filter((i) => i.kind === "tool-group").length;
-		const thinks = items.filter((i) => i.kind === "thinking-group").length;
-		const parts: string[] = [];
-		if (tools > 0) parts.push(t("activity.executionToolCount", { count: tools }));
-		if (thinks > 0) parts.push(t("activity.executionThinkingCount", { count: thinks }));
-		return parts.length > 0
-			? t("activity.executionSummary", { summary: parts.join(" ") })
-			: "";
-	};
-
-	/** 渲染一个段：过程段折叠（概要 + 可展开详情），回答文本段常驻平铺。
-	 *  isFinal 段（本轮最后一条回答）位置仍在时序原位，仅额外挂载编辑入口。 */
-	const renderSegment = (segment: TurnSegment) => {
-		if (segment.kind === "text") {
-			const text = stripThinkingTags(stripAnsi(segment.message.text)).trim();
-			if (!segment.isFinal) {
-				return (
-					<div key={segment.id} className="timeline-inline-text">
-						<AssistantText
-							text={text}
-							images={allImages}
-							onPreviewImage={props.onPreviewImage}
-							onOpenExternal={props.onOpenExternal}
-							onOpenFile={props.onOpenFile}
-							isStreaming={props.isStreaming ?? false}
-						/>
-					</div>
-				);
-			}
-			return (
-				<Fragment key={segment.id}>
-					{editing ? (
-						<div className="flex flex-col gap-2 rounded-md border border-border-subtle bg-[color:color-mix(in_srgb,var(--color-accent)_3%,var(--color-bg-panel))] pl-2" ref={editAreaRef}>
-							<div className="flex items-center gap-1 text-xs font-medium text-[var(--color-accent)] before:content-['✎'] before:text-sm">{t("common.edit")}</div>
-							<Textarea
-								className="min-h-[100px] max-h-[400px] w-full resize-y rounded-sm border border-[var(--color-accent)] bg-bg-panel p-2 font-mono text-sm leading-relaxed text-text-primary outline-none focus:border-[var(--color-accent)] focus:shadow-[0_0_0_2px_var(--focus-ring)]"
-								value={editText}
-								onChange={(e) => setEditText(e.target.value)}
-								onKeyDown={(e) => {
-									if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
-										e.preventDefault();
-										const targetId = assistantMessages.at(-1)?.message.id;
-										if (targetId && props.onEditMessage) {
-											props.onEditMessage(targetId, editText);
-											setEditing(false);
-										}
-									}
-									if (e.key === "Escape") setEditing(false);
-								}}
-								autoFocus
-							/>
-							<div className="flex justify-end gap-2">
-								<Button variant="outline" size="sm" className="h-auto border-[var(--color-accent)] px-3 py-1 text-xs text-[var(--color-accent)] shadow-none hover:text-[var(--color-accent)]" onClick={() => {
-									const targetId = assistantMessages.at(-1)?.message.id;
-									if (targetId && props.onEditMessage) {
-										props.onEditMessage(targetId, editText);
-										setEditing(false);
-									}
-								}}>{t("common.save")}</Button>
-								<Button variant="outline" size="sm" className="h-auto px-3 py-1 text-xs shadow-none" onClick={() => setEditing(false)}>{t("common.cancel")}</Button>
-							</div>
-						</div>
-					) : (
-						<AssistantText
-							text={text}
-							images={allImages}
-							onPreviewImage={props.onPreviewImage}
-							onOpenExternal={props.onOpenExternal}
-							onOpenFile={props.onOpenFile}
-							isStreaming={props.isStreaming ?? false}
-						/>
-					)}
-				</Fragment>
-			);
-		}
-		const summary = segmentSummary(segment.items);
-		if (!summary) return null;
-		return (
-			<div className="execution-summary" key={segment.id}>
-				<button
-					type="button"
-					className="execution-summary-toggle"
-					onClick={() => setExecutionExpanded((prev) => !prev)}
-					aria-expanded={executionExpanded}
-					title={executionExpanded ? t("common.collapse") : t("common.expand")}
-				>
-					{executionExpanded ? (
-						<ChevronDown size={14} aria-hidden="true" />
-					) : (
-						<ChevronRight size={14} aria-hidden="true" />
-					)}
-					<ListTree size={13} aria-hidden="true" className="text-text-tertiary" />
-					<span>{summary}</span>
-				</button>
-				{executionExpanded && (
-					<div className="execution-summary-details">
-						{segment.items.map(renderExecutionItem)}
-						<button
-							type="button"
-							className="execution-summary-collapse"
-							onClick={() => setExecutionExpanded(false)}
-							title={t("common.collapse")}
-						>
-							<ChevronUp size={12} aria-hidden="true" />
-							<span>{t("common.collapse")}</span>
-						</button>
-					</div>
-				)}
-			</div>
-		);
-	};
-
-	return (
-		<article ref={rowRef} className={`turn-row mb-6 w-full min-w-0 max-w-full ${props.agentRunning && !isComplete ? "turn-row--running" : isComplete ? "turn-row--complete" : "turn-row--pending"} ${props.fresh ? "turn-row--fresh" : ""}`} data-message-id={run.id}>
-			<div className="flex min-w-0 flex-col gap-3">
-				<div className="mb-1 inline-flex items-center gap-2 text-xs text-muted-foreground tabular-nums">
-					<span className="shrink-0 font-mono font-semibold text-foreground/80">pi</span>
-					<time className="shrink-0 font-mono text-[11px]">{formatTime(run.endedAt)}</time>
-					{showDuration && (
-						<span className="shrink-0 font-mono text-[11px] text-muted-foreground">{formatDuration(duration)}</span>
-					)}
-				</div>
-				{/* 展示段严格按真实调用时序排列：过程段（思考+工具）折叠、
-				    回答文本段常驻平铺（issue #130），最终回答以 isFinal 段挂在原位。 */}
-				{segments.map(renderSegment)}
-				{/* 操作栏 */}
-				{mergedText && !editing && (
-					<div className="flex min-h-6 items-center gap-1 opacity-55 transition-opacity hover:opacity-100 focus-within:opacity-100">
-						<CopyMenu text={stripMarkdown(mergedText)} markdown={mergedText} targetRef={rowRef} />
-						<Button
-							type="button"
-							className="turn-row-action-btn inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-							onClick={props.onEnterMultiSelect}
-						title={t("app.multiSelectEnter")}
-						>
-							<Share size={14} />
-						</Button>
-						{!props.isStreaming && !props.agentRunning && assistantMessages.at(-1)?.message.id && (
-							<>
-								{props.onEditMessage && (
-									<Button
-										type="button"
-										className="turn-row-action-btn inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-										onClick={() => {
-											setEditText(mergedText);
-											setEditing(true);
-										}}
-										title={t("common.edit")}
-									>
-										<SquarePen size={14} />
-									</Button>
-								)}
-								{props.onDeleteMessage && (
-									<Button
-										type="button"
-										className="turn-row-action-btn inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-										onClick={() => {
-											const targetId = assistantMessages.at(-1)?.message.id;
-											if (targetId) props.onDeleteMessage?.(targetId);
-										}}
-										title={t("common.delete")}
-									>
-										<Trash size={14} />
-									</Button>
-								)}
-							</>
-						)}
-					</div>
-				)}
-			</div>
-		</article>
-	);
-});
 
 /**
  * 从用户消息文本中提取 pi 展开后的 <skill name="..." location="...">...</skill> 块。
