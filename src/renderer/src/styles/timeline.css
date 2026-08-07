@@ -183,10 +183,12 @@
   line-height: var(--line-height-caption);
   cursor: pointer;
   align-self: flex-start;
-  transition: color 0.15s ease;
+  opacity: 0.55;
+  transition: color 0.15s ease, opacity 0.15s ease;
 }
 .execution-summary-collapse:hover {
-  color: var(--color-text-secondary);
+  color: var(--color-text-tertiary);
+  opacity: 0.9;
 }
 .execution-summary-collapse:focus-visible {
   outline: 2px solid var(--focus-ring);

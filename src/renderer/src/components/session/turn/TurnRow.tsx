@@ -1,5 +1,5 @@
 import { Fragment, memo, useEffect, useMemo, useRef, useState } from "react";
-import { Share, SquarePen, Trash } from "lucide-react";
+import { ChevronUp, Share, SquarePen, Trash } from "lucide-react";
 import type { ImageContent } from "../../../../../shared/types";
 import { t } from "../../../i18n";
 import { Button } from "../../ui-shadcn/button";
@@ -235,6 +235,19 @@ export const TurnRow = memo(function TurnRow(props: TurnRowProps) {
 					}
 					return null;
 				})}
+
+				{/* run 级底部收起按钮：展开态时出现，与顶部汇总按钮对应（回到旧版交互） */}
+				{stepsVisible && showProcessToggle && (
+					<button
+						type="button"
+						className="execution-summary-collapse"
+						onClick={toggleSteps}
+						title={t("common.collapse")}
+					>
+						<ChevronUp size={12} aria-hidden="true" />
+						<span>{t("common.collapse")}</span>
+					</button>
+				)}
 
 				{/* 操作栏 */}
 				{mergedText && !editing && (

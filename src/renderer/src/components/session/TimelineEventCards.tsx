@@ -388,7 +388,7 @@ export const ThinkingBlock = memo(
 					<div className="flex px-1 pb-1">
 						<button
 							type="button"
-							className="inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-caption text-text-tertiary transition-colors duration-150 hover:text-text-primary focus-visible:outline-2 focus-visible:outline-[var(--focus-ring)]"
+							className="inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-micro text-text-tertiary opacity-60 transition-colors duration-150 hover:opacity-100 focus-visible:outline-2 focus-visible:outline-[var(--focus-ring)]"
 							onClick={() => setExpanded((v) => !v)}
 							aria-expanded={expanded}
 						>
