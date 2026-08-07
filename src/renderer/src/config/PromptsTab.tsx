@@ -3,7 +3,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from ".
 import { Tabs, TabsList, TabsTrigger } from "../components/ui-shadcn/tabs";
 import { showNotice } from "../utils/notice";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Check, FileEdit, Pencil, ShoppingBag, Trash2, X } from "lucide-react";
+import { Check, FileEdit, FileText, Pencil, ShoppingBag, Trash2, X } from "lucide-react";
 import type {
 	CreatePiPromptTemplateInput,
 	PiPromptTemplateListResult,
@@ -101,7 +101,7 @@ export function PromptsTab(props: {
 				onValueChange={(v) => { if (v === "local" || v === "store") setPromptTab(v); }}
 				className="gap-0"
 			>
-				<TabsList className="w-fit">
+				<TabsList className="w-full">
 					<TabsTrigger value="local" onClick={() => props.onRefresh()}>
 						{t("config.nav.prompts")}
 					</TabsTrigger>
@@ -197,7 +197,7 @@ export function PromptsTab(props: {
 											<Button variant="ghost" size="icon-sm" className="size-7" onClick={() => setRenamingTemplate(null)} disabled={renameBusy} title={t("common.cancel")}><X size={14} strokeWidth={2} /></Button>
 										</div>
 									) : (
-										<button type="button" className="prompts-list-item-info" onClick={() => props.onEdit(template)} title={t("common.edit")}><strong>/{template.name}</strong></button>
+										<button type="button" className="prompts-list-item-info" onClick={() => props.onEdit(template)} title={t("common.edit")}><span className="flex min-w-0 items-center gap-2"><FileText size={14} strokeWidth={1.8} className="shrink-0 text-text-tertiary" /><strong className="truncate">/{template.name}</strong></span></button>
 									)}
 								</TableCell>
 								<TableCell className="whitespace-normal break-words text-caption leading-relaxed text-text-secondary" title={template.description}>{template.description}</TableCell>

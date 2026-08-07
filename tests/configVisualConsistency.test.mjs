@@ -35,11 +35,13 @@ test("config shell defines compact density and crisp system typography", () => {
   assert.match(configModal, /config-modal/);
 });
 
-test("skills and prompts use compact visible tab lists", () => {
-  assert.match(skills, /<TabsList className="w-fit"/);
-  assert.match(prompts, /<TabsList className="w-fit"/);
-  assert.match(readFileSync("src/renderer/src/components/ui-shadcn/tabs.tsx", "utf8"), /w-fit items-center/);
-  assert.match(readFileSync("src/renderer/src/components/ui-shadcn/tabs.tsx", "utf8"), /!text-\[color:var\(--color-text-secondary\)\]/);
+test("skills and prompts use full-width tab rails with compact selected tabs", () => {
+  assert.match(skills, /<TabsList className="w-full"/);
+  assert.match(prompts, /<TabsList className="w-full"/);
+  const tabs = readFileSync("src/renderer/src/components/ui-shadcn/tabs.tsx", "utf8");
+  assert.match(tabs, /w-full items-center/);
+  assert.match(tabs, /data-\[state=active\]:shadow-sm/);
+  assert.match(tabs, /!text-\[color:var\(--color-text-secondary\)\]/);
 });
 
 test("skill list is not accidentally filtered by the new-skill destination", () => {
