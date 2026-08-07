@@ -28,18 +28,14 @@ test("session status and actions embed into the tab bar right slot", () => {
 });
 
 test("session status and new-session controls use the shared medium radius", () => {
-  // Tab 栏右侧嵌入状态徽章与操作；chip 与 combo 用同一中号圆角保持一致视觉。
+  // Tab 栏右侧嵌入状态徽章；运行控制（停止/重启）在 Tab 下拉，combo 控件已移除。
   const statusBlock = surfaces.slice(
     surfaces.indexOf(".session-status span"),
     surfaces.indexOf(".session-status .ctx-chip"),
   );
-  const newSessionBlock = foundation.slice(
-    foundation.indexOf(".session-combo-trigger {"),
-    foundation.indexOf(".session-combo-trigger:hover"),
-  );
 
   assert.match(statusBlock, /border-radius:\s*var\(--radius-md\)/);
-  assert.match(newSessionBlock, /border-radius:\s*var\(--radius-md\)/);
+  assert.doesNotMatch(foundation, /\.session-combo-trigger/);
 });
 
 test("restart is offered only when the current session has a bound Agent", () => {

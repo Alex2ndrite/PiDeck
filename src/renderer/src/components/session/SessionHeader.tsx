@@ -1,4 +1,4 @@
-import { ChevronDown, HatGlasses, PanelRight } from "lucide-react";
+import { HatGlasses, PanelRight } from "lucide-react";
 import { useAtomValue } from "jotai";
 import { selectAtom } from "jotai/utils";
 import { useMemo, type ReactNode, type RefObject } from "react";
@@ -15,20 +15,10 @@ import { SessionStatus } from "./SurfaceParts";
 
 type HeaderActions = {
   headerRef: RefObject<HTMLDivElement | null>;
-  comboRef: RefObject<HTMLDivElement | null>;
   compactionCount?: number;
   isAnonymous?: boolean;
   duration?: number;
-  hasProject: boolean;
-  menuOpen: boolean;
-  canStop: boolean;
-  canRestart: boolean;
-  isRestarting: boolean;
-  showRestart: boolean;
-  onTrigger: () => void;
-  onStop: () => void;
-  onRestart: () => void;
-  /** 右侧抽屉开关（main 布局：会话操作菜单右侧），不传则不渲染 */
+  /** 右侧抽屉开关（main 布局：状态徽章右侧），不传则不渲染 */
   onToggleDrawer?: () => void;
   drawerOpen?: boolean;
   /** 将状态/操作区嵌入 Tab 栏，避免当前会话再单独占一行。 */
@@ -43,7 +33,6 @@ type LegacySessionHeaderProps = HeaderActions & {
   title: string;
   runtimeState?: AgentRuntimeState;
   isStarting: boolean;
-  hasSession: boolean;
 };
 
 type ModernSessionHeaderProps = HeaderActions & {
@@ -58,7 +47,8 @@ type ModernSessionHeaderProps = HeaderActions & {
 export type SessionHeaderProps = LegacySessionHeaderProps | ModernSessionHeaderProps;
 
 /**
- * 渲染会话状态和操作入口。
+ * 渲染会话状态徽章与抽屉入口。
+ * 会话运行控制（停止/重启）已迁入 Tab 下拉（SessionTabsBar），此组件不再承载操作菜单；
  * embedded 模式供 Tab 栏复用；普通模式保留旧 header 外壳，便于兼容其他调用方。
  */
 export function SessionHeader(props: SessionHeaderProps) {
@@ -82,7 +72,6 @@ export function SessionHeader(props: SessionHeaderProps) {
   const isStarting = sessionMode
     ? runtime?.status === "starting" || sendState?.status === "activating"
     : legacyProps.isStarting;
-  const hasSession = sessionMode ? Boolean(session) : legacyProps.hasSession;
   const isAnonymous = props.isAnonymous || (sessionMode && session?.noSession === true);
 
   const actions = (
@@ -98,39 +87,6 @@ export function SessionHeader(props: SessionHeaderProps) {
       )}
       <SessionStatus state={runtimeState} duration={props.duration} cacheHitHistory={cacheStats[sessionId]?.cacheHitHistory} />
       <div className="header-actions-right flex items-center gap-1.5">
-        <div className="header-action-group session-group">
-          <div className="session-combo relative" ref={props.comboRef}>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="session-combo-trigger h-7 gap-1 px-2"
-              disabled={!props.hasProject || isStarting}
-              title={t("app.sessionActions")}
-              onClick={props.onTrigger}
-            >
-              {/* 新建入口已迁到 Tab 栏的 “+” 下拉；此组合菜单只保留运行控制（停止/重启） */}
-              <span className="session-combo-label">{t("app.sessionActions")}</span>
-              {hasSession && (
-                <span className={`session-combo-chevron${props.menuOpen ? " open" : ""}`}>
-                  <ChevronDown className="size-3" />
-                </span>
-              )}
-            </Button>
-            {props.menuOpen && hasSession && (
-              <div className="session-combo-menu absolute top-[calc(100%+6px)] right-0 z-50 min-w-40 overflow-hidden rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md">
-                <Button type="button" variant="ghost" size="sm" className="h-auto w-full justify-start px-2 py-1.5 text-body hover:bg-accent disabled:opacity-50" disabled={!props.canStop} onClick={props.onStop}>
-                  {t("app.stop")}
-                </Button>
-                {props.showRestart && (
-                  <Button type="button" variant="ghost" size="sm" className="h-auto w-full justify-start px-2 py-1.5 text-body hover:bg-accent disabled:opacity-50" disabled={!props.canRestart} onClick={props.onRestart}>
-                    {props.isRestarting ? t("app.restarting") : t("app.restart")}
-                  </Button>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
         {props.onToggleDrawer && (
           <Button
             variant="ghost"

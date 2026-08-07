@@ -27,13 +27,10 @@ export interface SessionRuntimeInjectorProps {
   sessionTitle: string;
   sessionTabs: Omit<SessionTabsBarProps, "actions">;
   sessionTimeline: SessionTimelineController;
-  sessionActionsOpen: boolean;
-  setSessionActionsOpen: React.Dispatch<React.SetStateAction<boolean>>;
   isLanWeb: boolean;
 
   // Layout refs (typed loosely to match existing SessionView/App ref patterns)
   chatHeaderRef: any;
-  sessionComboRef: any;
   composerRef: any;
   composerOffsetHeight: number;
   terminalRowHeight: number;
@@ -126,11 +123,8 @@ export const SessionRuntimeInjector = React.memo(function SessionRuntimeInjector
     sessionTitle,
     sessionTabs,
     sessionTimeline,
-    sessionActionsOpen,
-    setSessionActionsOpen,
     isLanWeb,
     chatHeaderRef,
-    sessionComboRef,
     composerRef,
     composerOffsetHeight,
     terminalRowHeight,
@@ -254,12 +248,10 @@ export const SessionRuntimeInjector = React.memo(function SessionRuntimeInjector
       hasActiveConversation={runtime.hasActiveConversation}
       hasProject={runtime.sessionHasProject}
       chatHeaderRef={chatHeaderRef}
-      sessionComboRef={sessionComboRef}
       composerRef={composerRef}
       composerOffsetHeight={composerOffsetHeight}
       terminalRowHeight={terminalRowHeight}
       isAgentStarting={runtime.isAgentStarting}
-      sessionActionsOpen={sessionActionsOpen}
       canStop={runtime.canStopSession}
       canRestart={runtime.canRestartSession}
       restartingAgentId={restartingAgentId ?? undefined}
@@ -267,17 +259,6 @@ export const SessionRuntimeInjector = React.memo(function SessionRuntimeInjector
       // 没有绑定运行时的草稿也会有会话 ID，但重启只对已启动 Agent 有意义。
       showRestart={Boolean(runtime.activeAgentId) && !isLanWeb}
       sessionDuration={runtime.sessionDuration}
-      onHeaderTrigger={() => {
-        if (runtime.activeAgentId || currentSessionId) {
-          setSessionActionsOpen((open) => !open);
-        } else {
-          void runCreateSessionDraft();
-        }
-      }}
-      onStop={() => {
-        void abortAgent();
-        setSessionActionsOpen(false);
-      }}
       onRestart={() => void restartActiveAgent()}
       onToggleDrawer={onToggleDrawer}
       drawerOpen={drawerOpen}
@@ -355,7 +336,6 @@ export const SessionRuntimeInjector = React.memo(function SessionRuntimeInjector
       environmentDialog={environmentDialog}
       runCreateSessionDraft={runCreateSessionDraft}
       abortAgent={abortAgent}
-      restartActiveAgent={restartActiveAgent}
     />
   );
 });

@@ -227,7 +227,6 @@ export function App() {
   const [promptTemplateList] = useState<
     Array<{ name: string; path: string; description: string; content: string; argumentHint?: string }>
   >([]);
-  const [sessionActionsOpen, setSessionActionsOpen] = useState(false);
   // TECH DEBT (Phase 3): promptByAgent / attachedImagesByAgent legacy mirrors removed.
   // All drafts/attachments go through Session atoms (setSessionDraft / setSessionAttachments).
 
@@ -603,7 +602,6 @@ export function App() {
       // ignore
     }
   }
-  const sessionComboRef = useRef<HTMLDivElement | null>(null);
   const queuedTrackRef = useRef<HTMLDivElement | null>(null);
 
   const composerTextareaRef = useRef<HTMLDivElement | null>(null);
@@ -1508,18 +1506,6 @@ export function App() {
 
 
   // 追踪 agent 会话开始/结束时间,计算会话时长
-  // 点击外部区域自动关闭会话组合下拉
-  useEffect(() => {
-    if (!sessionActionsOpen) return;
-    const handler = (event: MouseEvent) => {
-      if (sessionComboRef.current && !sessionComboRef.current.contains(event.target as Node)) {
-        setSessionActionsOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [sessionActionsOpen]);
-
   useEffect(() => {
     for (const agent of displayAgents) {
       if (agent.id !== activeAgentId) continue;
@@ -1825,7 +1811,6 @@ export function App() {
     const target = getRuntimeTargetForAgent(restartingAgent.id);
     if (!target) return;
     setRestartingAgentId(restartingAgent.id);
-    setSessionActionsOpen(false);
     pendingAgentsRef.current = [
       ...pendingAgentsRef.current.filter(
         (agent) => agent.id !== restartingAgent.id,
@@ -2475,15 +2460,6 @@ export function App() {
     onClose: closeSessionTab,
     onCloseOthers: closeOtherSessionTabs,
     onCloseAll: closeAllSessionTabs,
-    // Tab 栏 “+” 下拉的新建目标：聊天对话区置顶，其余按侧栏项目顺序
-    newSessionTargets: projects
-      .map((project) => ({
-        projectId: project.id,
-        label: isChatProject(project) ? t("app.chatProject") : project.name,
-        isChat: isChatProject(project),
-      }))
-      .sort((a, b) => Number(b.isChat) - Number(a.isChat)),
-    onNewSessionInProject: (projectId: string) => void runCreateSessionDraft(projectId),
     onTogglePin: togglePinSessionTab,
     onReorder: reorderSessionTab,
     onToggleDrawer: toggleRightDrawer,
@@ -2500,11 +2476,8 @@ export function App() {
       sessionTitle={sessionTitle}
       sessionTabs={sessionTabsProps}
       sessionTimeline={sessionTimeline}
-      sessionActionsOpen={sessionActionsOpen}
-      setSessionActionsOpen={setSessionActionsOpen}
       isLanWeb={isLanWeb}
       chatHeaderRef={chatHeaderRef}
-      sessionComboRef={sessionComboRef}
       composerRef={composerRef}
       composerOffsetHeight={composerOffsetHeight}
       terminalRowHeight={terminalRowHeight}

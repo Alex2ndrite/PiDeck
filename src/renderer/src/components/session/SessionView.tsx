@@ -51,26 +51,20 @@ export type SessionViewProps = {
 
   // ── Layout refs ──
   chatHeaderRef: RefObject<HTMLDivElement | null>;
-  sessionComboRef: RefObject<HTMLDivElement | null>;
   composerRef: RefObject<HTMLElement | null>;
   composerOffsetHeight: number;
   terminalRowHeight: number;
 
-  // ── Header state ──
+  // ── Tab 下拉运行控制（停止/重启）──
   isAgentStarting: boolean;
-  sessionActionsOpen: boolean;
   canStop: boolean;
   canRestart: boolean;
   restartingAgentId?: string;
   isRestarting: boolean;
   showRestart: boolean;
   sessionDuration?: number;
-
-  // ── Header callbacks ──
-  onHeaderTrigger: () => void;
-  onStop: () => void;
   onRestart: () => void;
-  /** 右侧抽屉开关（main 布局：会话操作菜单右侧），不传则不渲染 */
+  /** 右侧抽屉开关（main 布局：状态徽章右侧），不传则不渲染 */
   onToggleDrawer?: () => void;
   drawerOpen?: boolean;
 
@@ -120,7 +114,6 @@ export type SessionViewProps = {
   // ── Session actions ──
   runCreateSessionDraft: () => void;
   abortAgent: () => void;
-  restartActiveAgent: () => void;
 };
 
 export function SessionView({
@@ -135,20 +128,16 @@ export function SessionView({
   hasActiveConversation,
   hasProject,
   chatHeaderRef,
-  sessionComboRef,
   composerRef,
   composerOffsetHeight,
   terminalRowHeight,
   isAgentStarting,
-  sessionActionsOpen,
   canStop,
   canRestart,
   restartingAgentId,
   isRestarting,
   showRestart,
   sessionDuration,
-  onHeaderTrigger,
-  onStop,
   onRestart,
   onToggleDrawer,
   drawerOpen,
@@ -186,7 +175,6 @@ export function SessionView({
   environmentDialog,
   runCreateSessionDraft,
   abortAgent,
-  restartActiveAgent,
 }: SessionViewProps) {
   // #115 U5 垂直轴：timeline | composer | terminal 三段由 react-resizable-panels 接管。
   // composer 高度本地持有（px），终端高度/折叠仍由 useTerminalDock 的 per-agent
@@ -432,30 +420,31 @@ export function SessionView({
 
   return (
     <>
-      {/* 会话状态/操作区以 embedded 模式嵌入 Tab 栏右侧，不再单独占一行 */}
+      {/* 会话状态徽章以 embedded 模式嵌入 Tab 栏右侧；停止/重启在 Tab 下拉
+          （SessionTabsBar 的 canStopCurrent/canRestartCurrent 链路），右侧不再有操作按钮。 */}
       <SessionTabsBar
+        canStopCurrent={canStop}
+        // 关闭会话 = 停止 Agent 运行 + 移除会话 Tab（与“关闭标签页”仅移除 Tab 不同）
+        onStopCurrent={() => {
+          void abortAgent();
+          sessionTabs.onClose(sessionId);
+        }}
+        canRestartCurrent={canRestart}
+        isRestartingCurrent={isRestarting}
+        // 没有绑定运行时的草稿也有会话 ID，但重启只对已启动 Agent 有意义；
+        // showRestart 为 false 时不提供回调，Tab 下拉自然不渲染重启项
+        onRestartCurrent={showRestart ? onRestart : undefined}
         {...sessionTabs}
         actions={
           <SessionHeader
             embedded
             headerRef={chatHeaderRef}
-            comboRef={sessionComboRef}
             title={sessionTitle}
             compactionCount={activeAgent?.compactionCount}
             isAnonymous={activeAgent?.noSession}
             runtimeState={activeRuntimeState}
             duration={sessionDuration}
             isStarting={isAgentStarting}
-            hasProject={hasProject}
-            hasSession={Boolean(activeAgentId || sessionId)}
-            menuOpen={sessionActionsOpen}
-            canStop={canStop}
-            canRestart={canRestart}
-            isRestarting={isRestarting}
-            showRestart={showRestart}
-            onTrigger={onHeaderTrigger}
-            onStop={onStop}
-            onRestart={onRestart}
             onToggleDrawer={onToggleDrawer}
             drawerOpen={drawerOpen}
             widgetChips={<SessionWidgetChips sessionId={sessionId} />}
