@@ -1062,7 +1062,7 @@ export const zhCN = {
   "config.promptSavedToast": "Prompt 模板已保存",
   "config.promptSaveHint": "保存 (Ctrl+S)",
   "config.promptSavedHint": "已保存",
-  "config.promptStoreTab": "商店",
+  "config.promptStoreTab": "提示词模板",
   "config.promptStoreSearchPlaceholder": "搜索公开 Prompt 模板…",
   "config.promptStoreSearchEmpty": "无搜索结果，试试其他关键词",
   "config.promptStoreResultCount": "{count} 个结果",

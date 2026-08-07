@@ -1079,7 +1079,7 @@ export const enUS: Record<TranslationKey, string> = {
   "config.promptSavedToast": "Prompt template saved",
   "config.promptSaveHint": "Save (Ctrl+S)",
   "config.promptSavedHint": "Saved",
-  "config.promptStoreTab": "Store",
+  "config.promptStoreTab": "Prompt Templates",
   "config.promptStoreSearchPlaceholder": "Search public prompts…",
   "config.promptStoreSearchEmpty": "No results. Try different keywords.",
   "config.promptStoreResultCount": "{count} results",

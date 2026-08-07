@@ -1,4 +1,5 @@
 import { Button } from "../components/ui-shadcn/button";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui-shadcn/table";
 import { Tabs, TabsList, TabsTrigger } from "../components/ui-shadcn/tabs";
 import { useState } from "react";
 import { Check, FileEdit, Pencil, ShoppingBag, ToggleLeft, ToggleRight, Trash2, X, Store, Globe } from "lucide-react";
@@ -185,20 +186,24 @@ export function SkillsTab(props: {
 				</Button>
 			</section>
 
-			<div className="skills-list">
+			<div className="overflow-hidden rounded-lg border border-border-subtle bg-bg-panel">
 				{visibleSkills.length === 0 ? (
 					<div className="py-12 text-center text-control text-text-tertiary">{t("config.emptySkills")}</div>
 				) : (
-					visibleSkills.map((skill) => (
-						<SkillCard
-							key={skill.id}
+					<Table>
+						<TableHeader><TableRow><TableHead>{t("config.name")}</TableHead><TableHead>{t("config.description")}</TableHead><TableHead>{t("config.extensionPath")}</TableHead><TableHead className="w-28 text-right">{t("config.actions")}</TableHead></TableRow></TableHeader>
+						<TableBody>
+						{visibleSkills.map((skill) => (
+						<TableRow key={skill.id}><TableCell colSpan={4} className="p-0"><SkillCard
 							skill={skill}
 							onToggle={props.onToggle}
 							onDelete={props.onDelete}
 							onEdit={props.onEdit}
 							onRename={props.onRename}
-						/>
-					))
+						/></TableCell></TableRow>
+						))}
+						</TableBody>
+					</Table>
 				)}
 			</div>
 		</>

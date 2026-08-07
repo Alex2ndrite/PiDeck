@@ -1,4 +1,5 @@
 import { Button } from "../components/ui-shadcn/button";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui-shadcn/table";
 import { Tabs, TabsList, TabsTrigger } from "../components/ui-shadcn/tabs";
 import { showNotice } from "../utils/notice";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -166,11 +167,12 @@ export function PromptsTab(props: {
 				</Button>
 			</section>
 
-			<section className="prompts-list">
+			<section className="overflow-hidden rounded-lg border border-border-subtle bg-bg-panel">
 				{data.templates.length === 0 ? (
 					<div className="py-12 text-center text-control text-text-tertiary">{t("config.noPrompts")}</div>
 				) : (
-					data.templates.map((template) => {
+					<Table><TableHeader><TableRow><TableHead>{t("config.name")}</TableHead><TableHead>{t("config.description")}</TableHead><TableHead className="w-28 text-right">{t("config.actions")}</TableHead></TableRow></TableHeader><TableBody>
+					{data.templates.map((template) => {
 						const isRenaming = renamingTemplate === template.path;
 						const handleRename = async () => {
 							if (renameBusy || !renameValue.trim() || renameValue.trim() === template.name) {
@@ -236,7 +238,8 @@ export function PromptsTab(props: {
 								</div>
 							</div>
 						);
-					})
+					})}
+					</TableBody></Table>
 				)}
 			</section>
 
