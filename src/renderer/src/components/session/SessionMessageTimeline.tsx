@@ -438,16 +438,15 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
           <SessionStartSurface onQuickPrompt={props.onQuickPrompt} />
         )}
 
-      {/* 长会话渲染治理：message-list 对屏外行跳过 layout/paint（content-visibility:auto）。
-          - 尾部 14 个子元素（最新若干 run + 思考卡/指示器/文件汇总/pin 垫片）排除在外：
-            pin 测量（measurePinSpacer）与自动跟随只依赖尾部，排除后测量路径上无估算盒，
-            置顶精度不受上方估算影响（rowTop 与 scrollHeight 的估算误差同向抵消）。
-          - contain-intrinsic-size 的 auto 关键字让浏览器记住已渲染行的真实高度，
-            从未渲染的行用 240px 估算，滚动条位置由 Chromium scroll anchoring 收敛。 */}
+      {/* 长会话渲染治理（2026-08 调整）：不再使用 content-visibility 估算高度。
+          - 背景：content-visibility:auto + contain-intrinsic-size:240px 对屏外行用估算高度，
+            展开/折叠工具卡或思考卡时，浏览器按估算高度修正滚动位置，产生屏幕抖动。
+          - 替代：学 Proma 靠「总折叠 + 各自折叠」压缩单行 DOM 体积（分页仍在做窗口治理），
+            所有行真实高度参与 layout，滚动引擎与折叠动画收到准确信号。 */}
       {hasActiveConversation &&
         !isConversationLoading &&
         activeMessages.length > 0 && (
-          <div className="message-list [&>*:not(:nth-last-child(-n+14))]:[content-visibility:auto] [&>*:not(:nth-last-child(-n+14))]:[contain-intrinsic-size:auto_240px]">
+          <div className="message-list">
             {renderedRuns.map((item, index) => {
               if (item.kind === "agent-run") {
                 const isRunStreaming = Boolean(

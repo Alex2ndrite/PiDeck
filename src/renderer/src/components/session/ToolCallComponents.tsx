@@ -28,6 +28,7 @@ import { Badge } from "../ui-shadcn/badge";
 import { Button } from "../ui-shadcn/button";
 import type { ChatMessage } from "../../../../shared/types";
 import { TimelineMarker } from "./TimelineMarker";
+import { getToolPhraseFromArgs } from "./timeline/toolPhrase";
 import { ToolResult } from "../agents/tool-result";
 import {
   formatDuration,
@@ -221,6 +222,9 @@ export const ToolCard = memo(function ToolCard(props: {
 	const tone = getToolTone(props.message);
 	const subtitle = getToolSubtitle(props.message);
 	const kindLabel = getToolKindLabel(toolName);
+	// 学 Proma：折叠态显示语义短语（如「读取 foo.ts」）而非完整命令行
+	const phrase = getToolPhraseFromArgs(toolName, props.message.meta?.args);
+	const displayLabel = status === "running" ? phrase.loadingLabel : phrase.label;
 	const durationMs =
 		typeof props.message.meta?.durationMs === "number"
 			? props.message.meta.durationMs
@@ -305,6 +309,10 @@ export const ToolCard = memo(function ToolCard(props: {
 						<span className="min-w-0 flex-[1_1_auto] truncate font-mono text-micro text-text-tertiary" title={askCard.question}>
 							| {askCard.question}
 						</span>
+					) : displayLabel ? (
+						<span className="min-w-0 flex-[1_1_auto] truncate font-mono text-micro text-text-secondary" title={subtitle || displayLabel}>
+							{displayLabel}
+						</span>
 					) : subtitle ? (
 						<span className="min-w-0 flex-[1_1_auto] truncate font-mono text-micro text-text-tertiary" title={subtitle}>
 							| {subtitle}
@@ -313,7 +321,7 @@ export const ToolCard = memo(function ToolCard(props: {
 				</button>
 			</div>
 			{expanded && (
-				<div className="relative rounded-b-sm bg-transparent">
+				<div className="relative ml-5 mt-1 mb-2 rounded-b-sm border-l-2 border-border-subtle bg-transparent pl-3 animate-in fade-in slide-in-from-top-1 duration-150">
 					{isAskCard && askCard ? (
 						<div className="ask-question-card-tool-inner">
 							<div className="ask-question-card-title">

@@ -39,7 +39,10 @@ test("TurnRow renders a single process summary toggle plus order-preserving flat
   // 中间内容收进执行过程折叠容器（foldableItems），最终回答常驻容器外（finalItems）
   assert.match(turnRowSource, /foldableItems\.map/);
   assert.match(turnRowSource, /finalItems\.map/);
-  assert.match(turnRowSource, /stepsVisible \? undefined : "none"/);
+  // 折叠容器用 Radix CollapsibleContent（高度过渡动画），不再 display:none 突变
+  assert.match(turnRowSource, /<Collapsible/);
+  assert.match(turnRowSource, /<CollapsibleContent/);
+  assert.doesNotMatch(turnRowSource, /stepsVisible \? undefined : "none"/);
   // 收起按钮：固定在折叠容器末尾
   assert.match(turnRowSource, /execution-summary-collapse/);
   assert.match(summaryToggleSource, /execution-summary-toggle/);

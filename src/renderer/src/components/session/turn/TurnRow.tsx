@@ -3,6 +3,7 @@ import { ChevronUp, Share, SquarePen, Trash } from "lucide-react";
 import type { ImageContent } from "../../../../../shared/types";
 import { t } from "../../../i18n";
 import { Button } from "../../ui-shadcn/button";
+import { Collapsible, CollapsibleContent } from "../../ui-shadcn/collapsible";
 import { formatDuration, formatTime, stripAnsi, stripThinkingTags } from "../TimelineFormat";
 import { CopyMenu, stripMarkdown } from "../SurfaceComponents";
 import { buildTurnDisplay, hasFoldableContent } from "../timeline/buildTurnDisplay";
@@ -187,18 +188,21 @@ export const TurnRow = memo(function TurnRow(props: TurnRowProps) {
 				</div>
 
 				{/* 执行过程折叠栏：中间内容（思考/工具/中间回答）统一收进容器，
-				    由 stepsVisible 整体控制显隐；最终回答在容器外常驻。 */}
+				    由 stepsVisible 整体控制显隐；最终回答在容器外常驻。
+				    学 Proma ProcessBlockGroup：CollapsibleContent 自带高度过渡动画，
+				    折叠/展开是 scrollHeight 高度渐变而非 display:none 突变。 */}
 				{showProcessToggle && (
-					<div className="execution-summary">
+					<Collapsible
+						className="execution-summary"
+						open={stepsVisible}
+						onOpenChange={toggleSteps}
+					>
 						<ProcessSummaryToggle
 							summary={processSummary}
 							expanded={stepsVisible}
 							onToggle={toggleSteps}
 						/>
-						<div
-							className="execution-summary-details"
-							style={{ display: stepsVisible ? undefined : "none" }}
-						>
+						<CollapsibleContent className="execution-summary-details">
 							{foldableItems.map((item) => {
 								let content: ReactNode;
 								let itemKey: string;
@@ -250,8 +254,8 @@ export const TurnRow = memo(function TurnRow(props: TurnRowProps) {
 									<span>{t("common.collapse")}</span>
 								</button>
 							)}
-						</div>
-					</div>
+						</CollapsibleContent>
+					</Collapsible>
 				)}
 
 				{/* 最终回答：本轮最后一条 assistant 文本，常驻、永不折叠 */}

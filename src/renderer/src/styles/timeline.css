@@ -68,12 +68,14 @@
 }
 
 /* 中间回答：执行过程条目样式（视觉归属折叠区）。
- * 外面（无缩进、主色调）只留给最终回答；中间回答缩进 + 次级色调，
- * 与思考/工具同属「执行过程」折叠内容（展开时可见、折叠时隐藏）。 */
+ * 外面（无缩进、主色调）只留给最终回答；中间回答缩进但使用正文主色，
+ * 与最终回答同级可读（用户确认：过程内容正常显示、不弱化）。 */
 .execution-interim {
   min-width: 0;
   padding-left: 26px;
-  color: var(--color-text-secondary);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-chat);
+  line-height: 1.68;
 }
 
 /* 会话生命周期状态：节点与内容使用同一条节奏，运行中只保留轻微呼吸感，
