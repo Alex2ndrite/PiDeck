@@ -94,9 +94,15 @@ export const TurnRow = memo(function TurnRow(props: TurnRowProps) {
 	}, [run, props.streamingThinking]);
 
 	// 扁平展示序列（纯函数：思考/工具/中间回答/最终回答，严格按时序）
+	// isComplete：流式中（agent 忙碌）无法判断哪条是最后一条 assistant，
+	// 全部按中间回答处理收进折叠栏；run 结束后才把最后一条提升为常驻最终回答。
 	const displayItems = useMemo(
-		() => buildTurnDisplay(effectiveRun, { showThinking: props.showThinking }),
-		[effectiveRun, props.showThinking],
+		() =>
+			buildTurnDisplay(effectiveRun, {
+				showThinking: props.showThinking,
+				isComplete: !props.agentRunning,
+			}),
+		[effectiveRun, props.showThinking, props.agentRunning],
 	);
 	const processSummary = useMemo(() => buildProcessSummary(displayItems), [displayItems]);
 	const showProcessToggle = hasFoldableContent(displayItems);

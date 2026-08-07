@@ -89,6 +89,11 @@ export class AgentManager {
 
 	/** 当前流式思考的累积文本，用于实时推送给前端展示 */
 	private readonly streamingThinking = new Map<string, string>();
+	/** 当前正在流式更新文本的 agent（message_start/text_delta/thinking_delta 置位，
+	 *  message_end/done/error/agent_end/agent_settled/abort 清除）。
+	 *  isStreaming 不再只依赖 pi get_state 轮询：轮询在 text_delta 期间不触发，
+	 *  前端 streamingMessageId → MarkdownStream 逐字渐显依赖它，缺失会“整段蹦出”。 */
+	private readonly streamingAgents = new Set<string>();
 	/** 当前正在流式更新的 assistant 消息；tool 事件插入时仍要继续更新同一个回答块。 */
 	private readonly activeAssistantMessageIds = new Map<string, string>();
 	/** pi 的 toolCallId 贯穿 start/update/end，用它把同一次工具调用合并成一条 UI 记录。 */
@@ -1248,6 +1253,7 @@ export class AgentManager {
 		// abort 时必须清除所有流式状态，防止后续 pi 的延迟事件（text_delta、thinking_delta、tool_execution_* 等）
 		// 修改上次会话的旧消息，导致新会话消息混入被中止的旧输出。
 		this.activeAssistantMessageIds.delete(agentId);
+		this.streamingAgents.delete(agentId);
 		this.streamingThinking.delete(agentId);
 		this.toolMessageIds.delete(agentId);
 		this.activeToolCallsByAgent.delete(agentId);
@@ -1523,7 +1529,7 @@ export class AgentManager {
 		provider: model?.provider,
 		modelId: model?.id,
 		thinkingLevel: state?.thinkingLevel,
-		isStreaming: state?.isStreaming,
+		isStreaming: state?.isStreaming || this.streamingAgents.has(agentId),
 		isCompacting:
 			state?.isCompacting ||
 			this.rpcCompactingAgents.has(agentId) ||
@@ -2632,6 +2638,7 @@ export class AgentManager {
 			// 或压缩后继续 queued follow-up。最终空闲必须等 agent_settled，避免中途误判 idle。
 			if (runtime) {
 				this.activeAssistantMessageIds.delete(agentId);
+				this.streamingAgents.delete(agentId);
 				this.toolMessageIds.delete(agentId);
 			}
 			// agent 异常结束时（如 API 返回 400、模型报错等），将错误提示写入会话，避免用户看到空白。
@@ -2718,6 +2725,7 @@ export class AgentManager {
 				runtime.tab.status = "idle";
 				this.streamingThinking.delete(agentId);
 				this.activeAssistantMessageIds.delete(agentId);
+				this.streamingAgents.delete(agentId);
 				this.toolMessageIds.delete(agentId);
 				this.activeToolCallsByAgent.delete(agentId);
 				this.toolExecutingByAgent.set(agentId, null);
@@ -3107,16 +3115,19 @@ export class AgentManager {
 
 		if (eventType === "start" || eventType === "message_start") {
 			this.beginAssistantMessage(agentId);
+			this.streamingAgents.add(agentId);
 			this.upsertAssistantMessage(agentId, partialMessage);
 			return;
 		}
 
 		if (eventType === "text_start" || eventType === "text_end") {
+			this.streamingAgents.add(agentId);
 			this.upsertAssistantMessage(agentId, partialMessage);
 			return;
 		}
 
 		if (eventType === "text_delta") {
+			this.streamingAgents.add(agentId);
 			this.upsertAssistantMessage(
 				agentId,
 				partialMessage,
@@ -3130,6 +3141,7 @@ export class AgentManager {
 			const delta = String(assistantEvent.delta ?? "");
 			this.streamingThinking.set(agentId, prev + delta);
 			this.thinkingEmitter.push(agentId, stripAnsi(prev + delta));
+			this.streamingAgents.add(agentId);
 			this.upsertAssistantMessage(agentId, partialMessage);
 			return;
 		}
@@ -3154,6 +3166,7 @@ export class AgentManager {
 			// message_end/done/error 是本轮回答的最终状态，立即 flush 确保完整消息及时可见。
 			this.flushMessageEmit(agentId);
 			this.activeAssistantMessageIds.delete(agentId);
+			this.streamingAgents.delete(agentId);
 		}
 	}
 
@@ -3809,6 +3822,23 @@ export class AgentManager {
 			this.displayWindowStartByAgent.get(agentId) ?? 0,
 			this.sessionFileVersionByAgent.get(agentId),
 		));
+		// 消息 flush 时顺带同步本地流式标志：text_delta 置位 streamingAgents 后，
+		// 渲染进程必须及时拿到 isStreaming=true 才会走逐字渐显；此路径 50ms 节流、
+		// 无 RPC（不发 get_state），不会像 emitRuntimeState 那样在高频 delta 下过重。
+		this.emitStreamingStatePatch(agentId);
+	}
+
+	/** 轻量 runtime 状态补丁：只同步本地流式标志与工具执行状态，不发 RPC。 */
+	private emitStreamingStatePatch(agentId: string) {
+		this.emit(ipcChannels.agentsRuntimeState, {
+			agentId,
+			state: {
+				isStreaming: this.streamingAgents.has(agentId),
+				isExecutingTool: !!this.toolExecutingByAgent.get(agentId),
+				executingToolName: this.toolExecutingByAgent.get(agentId) ?? undefined,
+				toolStateSequence: this.toolStateSequenceByAgent.get(agentId) ?? 0,
+			} as AgentRuntimeState,
+		});
 	}
 
 	/** 标记 agent 消息数组自 index 起变脏（多次标记取最小值），供增量 flush 使用。 */

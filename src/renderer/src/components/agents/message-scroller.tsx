@@ -1,5 +1,6 @@
 "use client";
-// beui.dev/components/agents/message-scroller
+// 基于 beui.dev/components/agents/message-scroller
+// 滚动引擎替换为 use-stick-to-bottom（MIT，StackBlitz，src/lib/stick-to-bottom 本地移植）
 
 import { useReducedMotion } from "motion/react";
 import {
@@ -16,6 +17,7 @@ import {
   type PreviewRailItem,
 } from "@/components/motion/preview-rail";
 import { cn } from "@/lib/utils";
+import { useStickToBottom } from "@/lib/stick-to-bottom";
 
 const PREVIEW_TITLE_LENGTH = 56;
 const PREVIEW_DESCRIPTION_LENGTH = 88;
@@ -127,14 +129,12 @@ export function MessageScroller({
   const reduce = useReducedMotion() ?? false;
   const viewportRef = useRef<HTMLElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
-  const followingRef = useRef(followOutput);
-  const programmaticScrollRef = useRef(false);
-  const scrollTimerRef = useRef<number | undefined>(undefined);
   // 流式结束过渡（needsInstant）：busy（等待流式输出）true→false 后的窗口期内，
   // 内容增长追底用 instant 而非 smooth，避免最终文本长高触发平滑滚动动画造成跳屏。
-  const busyEndingRef = useRef(false);
+  // 注意：busyEnding 必须是 state（不能用 ref）——useStickToBottom 每次渲染读 options，
+  // ref 变化不触发渲染，resize 不会随过渡窗口切换。
+  const [busyEnding, setBusyEnding] = useState(false);
   const busyEndingTimerRef = useRef<number | undefined>(undefined);
-  const frameRef = useRef<number | undefined>(undefined);
   const railFrameRef = useRef<number | undefined>(undefined);
   const railIdRef = useRef(new WeakMap<HTMLElement, string>());
   const railIdCounterRef = useRef(0);
@@ -150,25 +150,39 @@ export function MessageScroller({
     ...restViewportProps
   } = viewportProps ?? {};
 
+  // ── 滚动引擎：use-stick-to-bottom（弹簧物理 + 锁底/逃逸 + 350ms 保留期）──
+  // smooth=false 或 reduced-motion 时 resize 用 instant（与旧手写逻辑等价）。
+  // busyEnding 窗口内也强制 instant（needsInstant 语义保留）。
+  const stick = useStickToBottom({
+    initial: "instant",
+    resize: busyEnding || reduce || !smooth ? "instant" : "smooth",
+  });
+  // 解构出稳定引用：stick 每次渲染是新对象，effect 依赖不能直接用它。
+  const engineScrollRef = stick.scrollRef;
+  const engineContentRef = stick.contentRef;
+  const engineScrollToBottom = stick.scrollToBottom;
+  const engineIsAtBottom = stick.isAtBottom;
+
   const setViewportRef = useCallback(
     (node: HTMLElement | null) => {
       viewportRef.current = node;
+      // 桥接给 stick-to-bottom 引擎（内部会挂 scroll/wheel 监听并同步 scrollRef.current）
+      engineScrollRef(node);
       if (typeof externalViewportRef === "function") {
         externalViewportRef(node);
       } else if (externalViewportRef) {
         externalViewportRef.current = node;
       }
     },
-    [externalViewportRef],
+    [engineScrollRef, externalViewportRef],
   );
 
-  const setFollowing = useCallback(
-    (next: boolean) => {
-      if (followingRef.current === next) return;
-      followingRef.current = next;
-      onFollowChange?.(next);
+  const setContentRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      contentRef.current = node;
+      engineContentRef(node);
     },
-    [onFollowChange],
+    [engineContentRef],
   );
 
   const updateActiveRailItem = useCallback(() => {
@@ -273,84 +287,34 @@ export function MessageScroller({
     });
   }, [navigation, syncRailItems, updateActiveRailItem]);
 
-  const scrollToEnd = useCallback((behavior: ScrollBehavior) => {
-    const viewport = viewportRef.current;
-    if (!viewport) return;
-
-    programmaticScrollRef.current = true;
-    if (typeof viewport.scrollTo === "function") {
-      viewport.scrollTo({ top: viewport.scrollHeight, behavior });
-    } else {
-      viewport.scrollTop = viewport.scrollHeight;
-    }
-    if (scrollTimerRef.current) window.clearTimeout(scrollTimerRef.current);
-    scrollTimerRef.current = window.setTimeout(() => {
-      programmaticScrollRef.current = false;
-    }, behavior === "smooth" ? 320 : 0);
-  }, []);
-
-  const handleScroll = useCallback(() => {
-    const viewport = viewportRef.current;
-    if (!viewport || programmaticScrollRef.current) return;
-
-    const distance =
-      viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
-    setFollowing(distance <= followThreshold);
-    updateActiveRailItem();
-  }, [followThreshold, setFollowing, updateActiveRailItem]);
-
-  const leaveLiveEdge = useCallback(() => {
-    programmaticScrollRef.current = false;
-  }, []);
+  // ── followOutput / onFollowChange 桥接 ──
+  // engineIsAtBottom 即「用户仍在实时尾部」；跟随开关（followOutput）变化时
+  // 重新锁底或逃逸，向上兼容旧的 onFollowChange 语义。
+  const isFollowing = engineIsAtBottom;
 
   useLayoutEffect(() => {
-    followingRef.current = followOutput;
     if (!followOutput) return;
+    engineScrollToBottom({ animation: "instant" });
+    // 注意：engineScrollToBottom 在 stick-to-bottom 内是稳定的 useCallback，
+    // 可直接作为依赖；不能依赖 stick 整体（每次渲染新对象导致死循环）。
+  }, [followOutput, engineScrollToBottom]);
 
-    frameRef.current = requestAnimationFrame(() => scrollToEnd("auto"));
-    return () => {
-      if (frameRef.current) cancelAnimationFrame(frameRef.current);
-    };
-  }, [followOutput, scrollToEnd]);
+  useEffect(() => {
+    onFollowChange?.(isFollowing);
+  }, [isFollowing, onFollowChange]);
 
   // 流式结束瞬间：busy true→false，开启 150ms 过渡窗口（期间追底用 instant）。
   useEffect(() => {
     if (busy) return;
     if (busyEndingTimerRef.current) window.clearTimeout(busyEndingTimerRef.current);
-    busyEndingRef.current = true;
+    setBusyEnding(true);
     busyEndingTimerRef.current = window.setTimeout(() => {
-      busyEndingRef.current = false;
+      setBusyEnding(false);
     }, 150);
     return () => {
       if (busyEndingTimerRef.current) window.clearTimeout(busyEndingTimerRef.current);
     };
   }, [busy]);
-
-  useEffect(() => {
-    const content = contentRef.current;
-    if (!content || typeof ResizeObserver === "undefined") return;
-
-    // 记录内容上次高度：只在内容「增长」时跟随滚动到底部。
-    // 折叠思考/工具等内容收缩同样会触发 ResizeObserver，若此时平滑滚到底，
-    // 会表现为点击「收起思考」后视口突兀弹到最底端（用户反馈 bug）。
-    const lastContentHeight = { current: content.clientHeight };
-
-    const observer = new ResizeObserver((entries) => {
-      scheduleRailSync();
-      if (!followOutput || !followingRef.current) return;
-      const height = entries[0]?.contentRect.height ?? content.clientHeight;
-      if (height > lastContentHeight.current) {
-        // 流式结束过渡窗口内用 instant（needsInstant），避免最终文本长高触发 smooth 动画
-        const behavior =
-          busyEndingRef.current ? "auto" : (reduce || !smooth ? "auto" : "smooth");
-        scrollToEnd(behavior);
-      }
-      lastContentHeight.current = height;
-    });
-    observer.observe(content);
-
-    return () => observer.disconnect();
-  }, [followOutput, reduce, scheduleRailSync, scrollToEnd, smooth]);
 
   useEffect(() => {
     if (navigation !== "rail") {
@@ -390,8 +354,7 @@ export function MessageScroller({
 
   useEffect(
     () => () => {
-      if (scrollTimerRef.current) window.clearTimeout(scrollTimerRef.current);
-      if (frameRef.current) cancelAnimationFrame(frameRef.current);
+      if (busyEndingTimerRef.current) window.clearTimeout(busyEndingTimerRef.current);
       if (railFrameRef.current) cancelAnimationFrame(railFrameRef.current);
     },
     [],
@@ -406,13 +369,14 @@ export function MessageScroller({
       const lastItem = railItems.at(-1)?.id === item.id;
       setActiveRailId(item.id);
       if (lastItem) {
-        setFollowing(true);
-        scrollToEnd(reduce || !smooth ? "auto" : "smooth");
+        // 最后一条：交给引擎锁底（弹簧物理跟随），与旧 scrollToEnd 语义一致
+        engineScrollToBottom({
+          animation: reduce || !smooth ? "instant" : "smooth",
+        });
         return;
       }
 
-      setFollowing(false);
-      programmaticScrollRef.current = true;
+      // 非最后一条：直接定位到该消息（禁止引擎逃逸/锁底干扰）
       const viewportRect = viewport.getBoundingClientRect();
       const targetRect = target.getBoundingClientRect();
       const top =
@@ -427,12 +391,8 @@ export function MessageScroller({
       } else {
         viewport.scrollTop = top;
       }
-      if (scrollTimerRef.current) window.clearTimeout(scrollTimerRef.current);
-      scrollTimerRef.current = window.setTimeout(() => {
-        programmaticScrollRef.current = false;
-      }, behavior === "smooth" ? 320 : 0);
     },
-    [railItems, reduce, scrollToEnd, setFollowing, smooth],
+    [railItems, reduce, smooth, engineScrollToBottom],
   );
 
   const viewport = (
@@ -441,21 +401,15 @@ export function MessageScroller({
       aria-label={label}
       {...restViewportProps}
       onScroll={(event) => {
-        handleScroll();
         onViewportScroll?.(event);
       }}
       onWheel={(event) => {
-        leaveLiveEdge();
         onViewportWheel?.(event);
       }}
       onTouchStart={(event) => {
-        leaveLiveEdge();
         onViewportTouchStart?.(event);
       }}
       onKeyDown={(event) => {
-        if (["ArrowUp", "PageUp", "Home"].includes(event.key)) {
-          leaveLiveEdge();
-        }
         onViewportKeyDown?.(event);
       }}
       className={cn(
@@ -468,7 +422,7 @@ export function MessageScroller({
       )}
     >
       <div
-        ref={contentRef}
+        ref={setContentRef}
         role="log"
         aria-live="polite"
         aria-relevant="additions text"

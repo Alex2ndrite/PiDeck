@@ -143,6 +143,26 @@ test("相邻多段回答（中间无工具）：各自思考保持「思考→�
 	]);
 });
 
+test("流式中（isComplete=false）：所有 assistant 都归中间回答，不提前常驻", () => {
+	// 真实流式场景：run 尚未结束（agent 忙碌），当前最后一条 assistant
+	// 不能判定为最终回答——否则会常驻在折叠栏外（用户反馈的 bug）。
+	const run = runOf([
+		{ kind: "message", message: assistantMessage("段1", "T1") },
+		toolGroup(),
+		{ kind: "message", message: assistantMessage("段2", "T2") },
+	]);
+	const items = buildTurnDisplay(run, { showThinking: true, isComplete: false });
+	assert.deepEqual(outline(items), [
+		"think:T1",
+		"interim:段1",
+		"tool",
+		"think:T2",
+		"interim:段2",
+	]);
+	// 即使最后一条也不得标记为 final-answer（流式中无法判断）
+	assert.equal(items[4].kind, "interim-answer");
+});
+
 test("完整轮次：最终回答的思考插到其前，顺序保持", () => {
 	const run = runOf([
 		thinkingGroup("T1"),

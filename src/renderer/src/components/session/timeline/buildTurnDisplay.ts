@@ -30,16 +30,22 @@ function stripThinkingTags(text: string): string {
 
 export function buildTurnDisplay(
 	run: AgentRunItem,
-	options: { showThinking?: boolean } = {},
+	options: { showThinking?: boolean; isComplete?: boolean } = {},
 ): TurnDisplayItem[] {
 	const showThinking = Boolean(options.showThinking);
+	// run 是否已结束：只有结束时才能确定「最后一条 assistant 是最终回答」。
+	// 流式中（isComplete=false）无法预知哪条是最后一条，全部按中间回答处理、
+	// 收进执行过程折叠栏；run 结束后才把最后一条提升为常驻的最终回答。
+	const isComplete = options.isComplete ?? true;
 	// 本轮最后一条 assistant 消息的位置：唯一用于区分中间回答/最终回答的锚点。
 	let lastAssistantIndex = -1;
-	run.items.forEach((item, index) => {
-		if (item.kind === "message" && item.message.role === "assistant") {
-			lastAssistantIndex = index;
-		}
-	});
+	if (isComplete) {
+		run.items.forEach((item, index) => {
+			if (item.kind === "message" && item.message.role === "assistant") {
+				lastAssistantIndex = index;
+			}
+		});
+	}
 
 	const items: TurnDisplayItem[] = [];
 	// 已有 thinking-group 始终保留；消息自带 thinking 受 showThinking 控制。
@@ -87,7 +93,7 @@ export function buildTurnDisplay(
 		// 空文本消息（纯思考已归入过程步骤）不产生回答段。
 		const text = stripThinkingTags(stripAnsi(item.message.text)).trim();
 		if (!text) return;
-		if (index === lastAssistantIndex) {
+		if (isComplete && index === lastAssistantIndex) {
 			items.push({ kind: "final-answer", id: item.message.id, message: item.message });
 		} else {
 			items.push({ kind: "interim-answer", id: item.message.id, message: item.message });
