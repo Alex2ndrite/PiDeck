@@ -30,8 +30,9 @@ test("renders the run as order-preserving flat display without pulling the last 
     /最终回答（始终可见）/,
   );
   assert.match(turnRowSource, /buildTurnDisplay\(effectiveRun/);
-  // 最终回答是独立类型（常驻），通过显式 final-answer 分支渲染
-  assert.match(turnRowSource, /item\.kind === "final-answer"/);
+  // 最终回答走 FinalAnswer（常驻），通过 else 分支（final-answer 注释）渲染
+  assert.match(turnRowSource, /\/\/ final-answer/);
+  assert.match(turnRowSource, /<FinalAnswer/);
 });
 
 // issue #130：回答文本是面向用户的正式内容，不应折进「执行过程」。

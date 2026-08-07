@@ -1,4 +1,4 @@
-import { Fragment, memo, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, memo, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ChevronUp, Share, SquarePen, Trash } from "lucide-react";
 import type { ImageContent } from "../../../../../shared/types";
 import { t } from "../../../i18n";
@@ -106,8 +106,16 @@ export const TurnRow = memo(function TurnRow(props: TurnRowProps) {
 	);
 	const processSummary = useMemo(() => buildProcessSummary(displayItems), [displayItems]);
 	const showProcessToggle = hasFoldableContent(displayItems);
-	// 本轮是否存在最终回答（决定收起按钮插在最终回答之前还是 run 末尾兜底）
-	const hasFinalAnswer = displayItems.some((item) => item.kind === "final-answer");
+	// 最后一个可折叠内容（思考/工具/中间回答）的下标：收起按钮动态紧跟其后。
+	// 流式过程中 displayItems 持续增长，按钮位置随之移动（始终在折叠区末尾），
+	// 不会因 final-answer 出现而跳到中间造成错位。
+	const lastFoldableIndex = useMemo(() => {
+		let last = -1;
+		displayItems.forEach((item, index) => {
+			if (item.kind !== "final-answer") last = index;
+		});
+		return last;
+	}, [displayItems]);
 
 	// 收集本轮所有 assistant 消息（按 run.items 的时序保持原始顺序）
 	const assistantMessages = run.items.filter(
@@ -175,13 +183,16 @@ export const TurnRow = memo(function TurnRow(props: TurnRowProps) {
 					/>
 				)}
 
-				{/* 扁平展示序列：思考/工具/中间回答受折叠控制，最终回答常驻 */}
-				{displayItems.map((item) => {
+				{/* 扁平展示序列：思考/工具/中间回答受折叠控制，最终回答常驻；
+				    收起按钮紧跟「最后一个可折叠内容」之后（动态跟随，流式中不跳动） */}
+				{displayItems.map((item, index) => {
+					let content: ReactNode;
+					let itemKey: string;
 					if (item.kind === "process-entry") {
+						itemKey = item.entry.id;
 						if (item.entry.kind === "thinking-entry") {
-							return (
+							content = (
 								<ThinkingStep
-									key={item.entry.id}
 									group={item.entry.group}
 									hidden={!stepsVisible}
 									isStreaming={props.isStreaming}
@@ -190,19 +201,15 @@ export const TurnRow = memo(function TurnRow(props: TurnRowProps) {
 									onOpenFile={props.onOpenFile}
 								/>
 							);
+						} else {
+							content = (
+								<ToolStep group={item.entry.group} hidden={!stepsVisible} />
+							);
 						}
-						return (
-							<ToolStep
-								key={item.entry.id}
-								group={item.entry.group}
-								hidden={!stepsVisible}
-							/>
-						);
-					}
-					if (item.kind === "interim-answer") {
-						return (
+					} else if (item.kind === "interim-answer") {
+						itemKey = item.id;
+						content = (
 							<AnswerText
-								key={item.id}
 								message={item.message}
 								images={allImages}
 								hidden={!stepsVisible}
@@ -212,57 +219,46 @@ export const TurnRow = memo(function TurnRow(props: TurnRowProps) {
 								onOpenFile={props.onOpenFile}
 							/>
 						);
-					}
-					// final-answer：本轮最后一条回答，常驻、永不折叠
-					if (item.kind === "final-answer") {
-						return (
-							<Fragment key={item.id}>
-								{/* 收起按钮：紧跟折叠区内容（步骤/中间回答）之后、最终回答之前，
-								     与旧版「折叠区详情底部收起」一致，不被长回答推到页底 */}
-								{stepsVisible && showProcessToggle && (
-									<button
-										type="button"
-										className="execution-summary-collapse"
-										onClick={toggleSteps}
-										title={t("common.collapse")}
-									>
-										<ChevronUp size={12} aria-hidden="true" />
-										<span>{t("common.collapse")}</span>
-									</button>
-								)}
-								<FinalAnswer
-									message={item.message}
-									images={allImages}
-									isStreaming={props.isStreaming ?? false}
-									editing={editing}
-									editText={editText}
-									editAreaRef={editAreaRef}
-									onEditTextChange={setEditText}
-									onStartEdit={startEditing}
-									onCancelEdit={() => setEditing(false)}
-									onSaveEdit={saveEdit}
-									onPreviewImage={props.onPreviewImage}
-									onOpenExternal={props.onOpenExternal}
-									onOpenFile={props.onOpenFile}
-								/>
-							</Fragment>
+					} else {
+						// final-answer：本轮最后一条回答，常驻、永不折叠
+						itemKey = item.id;
+						content = (
+							<FinalAnswer
+								message={item.message}
+								images={allImages}
+								isStreaming={props.isStreaming ?? false}
+								editing={editing}
+								editText={editText}
+								editAreaRef={editAreaRef}
+								onEditTextChange={setEditText}
+								onStartEdit={startEditing}
+								onCancelEdit={() => setEditing(false)}
+								onSaveEdit={saveEdit}
+								onPreviewImage={props.onPreviewImage}
+								onOpenExternal={props.onOpenExternal}
+								onOpenFile={props.onOpenFile}
+							/>
 						);
 					}
-					return null;
+					const showCollapseAfter =
+						index === lastFoldableIndex && stepsVisible && showProcessToggle;
+					return (
+						<Fragment key={itemKey}>
+							{content}
+							{showCollapseAfter && (
+								<button
+									type="button"
+									className="execution-summary-collapse"
+									onClick={toggleSteps}
+									title={t("common.collapse")}
+								>
+									<ChevronUp size={12} aria-hidden="true" />
+									<span>{t("common.collapse")}</span>
+								</button>
+							)}
+						</Fragment>
+					);
 				})}
-
-				{/* 无最终回答的 run（纯步骤）：收起按钮放 run 末尾兜底 */}
-				{!hasFinalAnswer && stepsVisible && showProcessToggle && (
-					<button
-						type="button"
-						className="execution-summary-collapse"
-						onClick={toggleSteps}
-						title={t("common.collapse")}
-					>
-						<ChevronUp size={12} aria-hidden="true" />
-						<span>{t("common.collapse")}</span>
-					</button>
-				)}
 
 				{/* 操作栏 */}
 				{mergedText && !editing && (

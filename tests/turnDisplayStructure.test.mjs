@@ -32,13 +32,14 @@ test("TurnRow renders a single process summary toggle plus order-preserving flat
   assert.match(turnRowSource, /showProcessToggle && \(/);
   // 中间回答/最终回答区分渲染；最终回答走 FinalAnswer（常驻）
   assert.match(turnRowSource, /item\.kind === "interim-answer"/);
-  assert.match(turnRowSource, /item\.kind === "final-answer"/);
+  assert.match(turnRowSource, /<FinalAnswer/);
+  assert.match(turnRowSource, /\/\/ final-answer/);
   // 思考/工具/中间回答共用一个折叠开关
   assert.match(turnRowSource, /hidden=\{!stepsVisible\}/);
-  // run 级展开态提供「收起」按钮：紧贴折叠区内容、在最终回答之前；无最终回答时 run 末尾兜底
+  // 收起按钮：动态紧跟「最后一个可折叠内容」（lastFoldableIndex），流式中不跳动
   assert.match(turnRowSource, /execution-summary-collapse/);
-  assert.match(turnRowSource, /stepsVisible && showProcessToggle/);
-  assert.match(turnRowSource, /!hasFinalAnswer && stepsVisible && showProcessToggle/);
+  assert.match(turnRowSource, /lastFoldableIndex/);
+  assert.match(turnRowSource, /index === lastFoldableIndex && stepsVisible && showProcessToggle/);
   assert.match(summaryToggleSource, /execution-summary-toggle/);
   assert.match(summaryToggleSource, /activity\.executionToolCount/);
   assert.match(summaryToggleSource, /activity\.executionThinkingCount/);
