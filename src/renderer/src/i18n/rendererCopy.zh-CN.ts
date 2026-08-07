@@ -1050,7 +1050,7 @@ export const zhCN = {
   "config.skillDescriptionMissing": "缺少 description，pi 不会加载该 skill。",
   "config.builtin": "内置",
   "config.copyAndEdit": "复制并编辑",
-  "config.nav.prompts": "Prompt 模板",
+  "config.nav.prompts": "提示词模板",
   "config.count.prompts": "{count} 个模板",
   "config.createPrompt": "新建 Prompt 模板",
   "config.create": "创建",
