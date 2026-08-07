@@ -31,6 +31,13 @@ interface UseSmoothStreamOptions {
 	streamingDivisor?: number;
 	/** 流结束后的排空除数（加速但渐进，不 dump） */
 	drainDivisor?: number;
+	/** 流式中每帧最大渲染字符数（兜底上限）：主进程 50ms 合并（学 Proma 节奏）后，
+	 *  React 渲染滞后仍可能把多次 content 更新批处理合并成大 delta 一次入队；
+	 *  此上限保证 queue 大时 count 也不超过 3（≈187 字符/秒，Proma 稳态范围 1-3）。
+	 *  queue 短时 count=1 仍逐字跟随数据节奏，不是恒定频率。 */
+	maxStepPerFrame?: number;
+	/** 流结束后排空时每帧最大渲染字符数（默认 6 ≈ 375 字符/秒，快速但不瞬蹦） */
+	maxDrainStepPerFrame?: number;
 }
 
 interface UseSmoothStreamReturn {
@@ -53,6 +60,8 @@ export function useSmoothStream({
 	minDelay = 16,
 	streamingDivisor = 8,
 	drainDivisor = 4,
+	maxStepPerFrame = 3,
+	maxDrainStepPerFrame = 6,
 }: UseSmoothStreamOptions): UseSmoothStreamReturn {
 	const [displayedContent, setDisplayedContent] = useState(content);
 
@@ -133,9 +142,13 @@ export function useSmoothStream({
 			lastRenderTimeRef.current = currentTime;
 
 			// 动态计算本帧渲染字符数：流中 /streamingDivisor 保持深缓冲（丝滑），
-			// 结束后 /drainDivisor 加速排空
+			// 结束后 /drainDivisor 加速排空；两者都受 maxStep 兜底约束——
+			// 渲染层批处理合并大 delta 或真实 LLM 突发时 queue 积压，count 不会
+			// 随 queue 无限放大（queue/8 在积压 100+ 字符时每帧蹦 10+），
+			// 保证单帧增量 ≤ maxStep，视觉全程逐字。
 			const divisor = streamDoneRef.current ? drainDivisor : streamingDivisor;
-			const count = Math.max(1, Math.floor(queue.length / divisor));
+			const maxStep = streamDoneRef.current ? maxDrainStepPerFrame : maxStepPerFrame;
+			const count = Math.min(Math.max(1, Math.floor(queue.length / divisor)), maxStep);
 			const chars = queue.splice(0, count);
 			displayedRef.current += chars.join("");
 			setDisplayedContent(displayedRef.current);
@@ -151,7 +164,7 @@ export function useSmoothStream({
 				rafRef.current = null;
 			}
 		},
-		[minDelay, streamingDivisor, drainDivisor],
+		[minDelay, streamingDivisor, drainDivisor, maxStepPerFrame, maxDrainStepPerFrame],
 	);
 
 	// 启动/重启渲染循环（流结束后也继续运行直到队列排空）

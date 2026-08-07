@@ -49,16 +49,43 @@ export const MarkdownStream = memo(function MarkdownStream(props: {
 		document.documentElement.dataset.theme === "dark";
 	// 逐字打字机渐显：把高频文本更新转为字符队列 + rAF 渐进渲染（参考 Cherry Studio 实现）。
 	// 只影响展示；权威文本在 atom 中不受影响（复制/导出仍拿全文）。
-	// minDelay 10ms / divisor 8/4 为确认的手感参数；若卡顿可上调 minDelay。
+	// minDelay 33ms：渲染频率 30fps。Proma 用 10ms（react-markdown 便宜），Pideck 的
+	// streamdown 全量解析更重，60fps 提交会让 React concurrent 把 2 帧 setState 合并提交
+	// （DOM 一帧跳 2 帧的步进，视觉蹦字）；33ms 把提交压力减半，稳态吐字速率不变。
+	// maxStepPerFrame 默认 3（queue 积压时每帧最多 3 字符，防 burst 蹦）。
 	const { displayedContent } = useSmoothStream({
 		content: props.text,
 		isStreaming: Boolean(props.isStreaming),
-		minDelay: 10,
+		minDelay: 33,
 	});
 	const displayText = props.isStreaming ? displayedContent : props.text;
-	// 流式期间走轻量渲染（跳过代码高亮/mermaid），逐字渐显会把解析频率提到 rAF 级别，
-	// 重型插件会抢占主线程；流结束 isStreaming 变 false 后自动切回全量（含高亮）。
+	// 流式期间走轻量渲染：跳过代码高亮/mermaid/数学/折叠等重插件，只跑 marked 核心解析，
+	// 否则 30fps 逐字渲染会让插件管线（每帧全量树遍历）占满主线程，React concurrent
+	// 把多帧 setState 合并提交 → DOM 一帧蹦多字（学 Proma：流式期间 react-markdown 轻渲染）。
+	// 流结束 isStreaming 变 false 后自动切回全量（含高亮/mermaid/表格/折叠）。
 	const effectiveLight = props.light || Boolean(props.isStreaming);
+	const isStreamingNow = Boolean(props.isStreaming);
+	// 流式中精简插件：gfm/codeMeta/linkifyPaths 与 collapse/math 等插件都留到静态渲染；
+	// 外部显式传入的插件（FileDiffViewer 等场景）不受流式精简影响。
+	const resolvedRemarkPlugins = isStreamingNow
+		? []
+		: (props.remarkPlugins ?? [
+				defaultRemarkPlugins.gfm,
+				defaultRemarkPlugins.codeMeta,
+				remarkLinkifyPaths,
+			]);
+	const resolvedRehypePlugins = isStreamingNow
+		? []
+		: (props.rehypePlugins ?? [
+				defaultRehypePlugins.raw,
+				[
+					collapseCodeBlocks,
+					{
+						foldThreshold: undefined,
+						excludeLanguages: ["mermaid"],
+					},
+				],
+			]);
 	// 显式 Components 标注：让 a/p 的 props 走上下文类型推断（streamdown 的
 	// Components 是「具名槽位 | 索引签名」联合，直接内联会触发索引签名分支的类型不兼容）
 	// useMemo 依赖回调 props：回调引用变化时 components 重建，streamElement 随之重建，
@@ -91,25 +118,8 @@ export const MarkdownStream = memo(function MarkdownStream(props: {
 			<Streamdown
 				mode={props.isStreaming ? "streaming" : "static"}
 				isAnimating={props.isStreaming}
-				remarkPlugins={
-					props.remarkPlugins ?? [
-						defaultRemarkPlugins.gfm,
-						defaultRemarkPlugins.codeMeta,
-						remarkLinkifyPaths,
-					]
-				}
-				rehypePlugins={
-					props.rehypePlugins ?? [
-						defaultRehypePlugins.raw,
-						[
-							collapseCodeBlocks,
-							{
-								foldThreshold: undefined,
-								excludeLanguages: ["mermaid"],
-							},
-						],
-					]
-				}
+				remarkPlugins={resolvedRemarkPlugins}
+				rehypePlugins={resolvedRehypePlugins}
 				urlTransform={props.urlTransform ?? markdownUrlTransform}
 				plugins={
 					(effectiveLight
@@ -137,8 +147,8 @@ export const MarkdownStream = memo(function MarkdownStream(props: {
 			components,
 			props.isStreaming,
 			effectiveLight,
-			props.remarkPlugins,
-			props.rehypePlugins,
+			resolvedRemarkPlugins,
+			resolvedRehypePlugins,
 			props.urlTransform,
 			isDark,
 		],

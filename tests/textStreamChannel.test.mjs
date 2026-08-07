@@ -7,13 +7,13 @@ import test from "node:test";
  *
  * 学 Proma：流式正文存在独立 atom（streamingTextByIdAtom），不再依赖
  * messages 数组里最后一条 assistant 消息增长（那会触发全量分组重渲染）。
- * 主进程 textEmitter（16ms）+ agents:text-stream 通道 → 渲染层 atom。
+ * 主进程 textEmitter（50ms，对齐 Proma PI_PARTIAL_UPDATE_INTERVAL_MS）+ agents:text-stream 通道 → 渲染层 atom。
  */
 
 test("main process: textEmitter tracks and pushes streaming text", () => {
   const agentManager = readFileSync("src/main/pi/AgentManager.ts", "utf8");
 
-  // textEmitter 存在，窗口 16ms（比 messages 50ms 快，保证逐字感）
+  // textEmitter 存在，窗口 50ms（与 Proma 对齐：渲染层 20fps，防 burst 蹦字）
   assert.match(agentManager, /private readonly textEmitter = new LatestByKeyEmitter/);
   assert.match(agentManager, /private static readonly MESSAGE_FLUSH_INTERVAL_MS = 50/);
 

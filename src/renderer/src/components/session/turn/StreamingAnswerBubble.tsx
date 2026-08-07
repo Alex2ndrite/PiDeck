@@ -27,6 +27,7 @@ export const StreamingAnswerBubble = memo(function StreamingAnswerBubble(props: 
 	return (
 		<div
 			className="execution-interim markdown-body"
+			data-is-streaming={props.isStreaming ? "1" : "0"}
 			style={{ display: props.hidden ? "none" : undefined }}
 		>
 			<MarkdownStream

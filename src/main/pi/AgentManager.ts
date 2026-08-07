@@ -129,9 +129,12 @@ export class AgentManager {
 		(agentId, thinking) => this.emitThinkingNow(agentId, thinking),
 	);
 	/** 当前流式正文的累积文本，独立于 messages 数组推送（阶段1：学 Proma 独立存储）。
-	 *  16ms 窗口比 messages 的 50ms 快，保证渲染层拿到更细的增量 → 打字机感。 */
+	 *  50ms 窗口与 Proma PI_PARTIAL_UPDATE_INTERVAL_MS 对齐：渲染层 20fps 更新，
+	 *  避免 16ms 高频推送让 streamdown 解析（每 content 变更全量重解析）压满主线程、
+	 *  rAF 帧率下降后 queue 积压导致「burst 蹦字」；打字机感由渲染层 useSmoothStream
+	 *  （divisor=8 字符队列逐字吐）呈现，不依赖推送粒度。 */
 	private readonly textEmitter = new LatestByKeyEmitter<string, string>(
-		16,
+		50,
 		(agentId, text) => this.emitTextStreamNow(agentId, text),
 	);
 	/** 流式正文累积缓冲：text_delta 时累加，message_end/agent_end/settled/abort 清除。 */
