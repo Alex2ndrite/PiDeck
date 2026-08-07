@@ -106,6 +106,8 @@ export const TurnRow = memo(function TurnRow(props: TurnRowProps) {
 	);
 	const processSummary = useMemo(() => buildProcessSummary(displayItems), [displayItems]);
 	const showProcessToggle = hasFoldableContent(displayItems);
+	// 本轮是否存在最终回答（决定收起按钮插在最终回答之前还是 run 末尾兜底）
+	const hasFinalAnswer = displayItems.some((item) => item.kind === "final-answer");
 
 	// 收集本轮所有 assistant 消息（按 run.items 的时序保持原始顺序）
 	const assistantMessages = run.items.filter(
@@ -215,6 +217,19 @@ export const TurnRow = memo(function TurnRow(props: TurnRowProps) {
 					if (item.kind === "final-answer") {
 						return (
 							<Fragment key={item.id}>
+								{/* 收起按钮：紧跟折叠区内容（步骤/中间回答）之后、最终回答之前，
+								     与旧版「折叠区详情底部收起」一致，不被长回答推到页底 */}
+								{stepsVisible && showProcessToggle && (
+									<button
+										type="button"
+										className="execution-summary-collapse"
+										onClick={toggleSteps}
+										title={t("common.collapse")}
+									>
+										<ChevronUp size={12} aria-hidden="true" />
+										<span>{t("common.collapse")}</span>
+									</button>
+								)}
 								<FinalAnswer
 									message={item.message}
 									images={allImages}
@@ -236,8 +251,8 @@ export const TurnRow = memo(function TurnRow(props: TurnRowProps) {
 					return null;
 				})}
 
-				{/* run 级末尾收起按钮：展开态显示，与顶部汇总按钮对应（旧版交互） */}
-				{stepsVisible && showProcessToggle && (
+				{/* 无最终回答的 run（纯步骤）：收起按钮放 run 末尾兜底 */}
+				{!hasFinalAnswer && stepsVisible && showProcessToggle && (
 					<button
 						type="button"
 						className="execution-summary-collapse"
