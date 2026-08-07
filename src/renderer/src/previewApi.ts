@@ -500,7 +500,7 @@ export function createPreviewApi(): PiDesktopApi {
 				revert: async () => {},
 				reset: async () => {},
 				dropCommit: async () => {},
-				generateCommitMessage: async () => "",
+				generateCommitMessage: async () => ({ ok: true, message: "" }),
 				init: async () => {},
 			pull: async () => {},
 			push: async () => {},

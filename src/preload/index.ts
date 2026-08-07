@@ -702,7 +702,7 @@ const api = {
 			ipcRenderer.invoke(
 				ipcChannels.gitGenerateCommitMessage,
 				projectId,
-			) as Promise<string>,
+			) as Promise<import("../shared/types").GitGenerateCommitMessageResult>,
 		/** 初始化 Git 仓库 */
 		init: (projectId: string) =>
 			ipcRenderer.invoke(

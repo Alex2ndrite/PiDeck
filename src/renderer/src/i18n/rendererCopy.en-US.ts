@@ -327,6 +327,7 @@ export const enUS: Record<TranslationKey, string> = {
   "git.loadingMore": "Loading…",
   "git.generateCommitMessage": "Generate commit message with AI",
   "git.stageBeforeGenerateCommitMessage": "Stage your changes first before generating a commit message.",
+  "git.goSettings": "Open Settings",
   "git.generateCommitMessageFailed": "Failed to generate commit message",
   "git.notAGitRepo": "This project is not a Git repository",
   "git.initRepo": "Initialize repository",

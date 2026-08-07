@@ -9,6 +9,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import { createPortal } from "react-dom";
+import { useSetAtom } from "jotai";
 import {
   ArrowDownToLine,
   ArrowUpFromLine,
@@ -35,6 +36,7 @@ import type {
   GitResourceGroups,
 } from "../../../../shared/types";
 import { GitStatus } from "../../../../shared/types";
+import { settingsOpenAtom } from "../../atoms";
 import { t } from "../../i18n";
 import {
   fileNameOnly,
@@ -102,7 +104,7 @@ type GitPanelProps = {
   generateCommitMessage?: (
     projectId: string,
     stagedPaths?: string[],
-  ) => Promise<string>;
+  ) => Promise<import("../../../../shared/types").GitGenerateCommitMessageResult>;
   /** 初始化 Git 仓库 */
   gitInit?: (projectId: string) => Promise<void>;
   /** Push：将当前分支推送到远程 */
@@ -397,6 +399,8 @@ function PaneSash(props: {
 
 export function GitPanel(props: GitPanelProps) {
   const panelRef = useRef<HTMLDivElement>(null);
+  // “未配置模型”提示的“去设置”按钮：直接打开设置弹窗（Git 段在常用设置 tab）
+  const setSettingsOpen = useSetAtom(settingsOpenAtom);
   const projectIdRef = useRef(props.projectId);
   projectIdRef.current = props.projectId;
   const statusRequestRef = useRef(0);
@@ -1174,8 +1178,20 @@ export function GitPanel(props: GitPanelProps) {
                     }
                     setCommitGenLoading(true);
                     try {
-                      const message = await props.generateCommitMessage(props.projectId);
-                      if (message) setCommitMessage(message);
+                      const result = await props.generateCommitMessage(props.projectId);
+                      if (result.ok) {
+                        if (result.message) setCommitMessage(result.message);
+                      } else if (result.code === "GIT_COMMIT_MODEL_REQUIRED") {
+                        // 未配置：提示 + “去设置”按钮直达设置弹窗（Git 段在常用设置 tab）
+                        showNotice(result.message, 8000, "error", undefined, {
+                          action: {
+                            label: t("git.goSettings"),
+                            onClick: () => setSettingsOpen(true),
+                          },
+                        });
+                      } else {
+                        showNotice(result.message, 5000, "error");
+                      }
                       setCommitGenLoading(false);
                     } catch (err) {
                       showNotice(

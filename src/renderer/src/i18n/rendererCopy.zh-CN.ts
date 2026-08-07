@@ -327,6 +327,7 @@ export const zhCN = {
   "git.loadingMore": "正在加载…",
   "git.generateCommitMessage": "AI 生成提交摘要",
   "git.stageBeforeGenerateCommitMessage": "请先暂存更改后再生成提交摘要。",
+  "git.goSettings": "去设置",
   "git.generateCommitMessageFailed": "生成提交摘要失败",
   "git.notAGitRepo": "项目尚未初始化 Git 仓库",
   "git.initRepo": "初始化仓库",
