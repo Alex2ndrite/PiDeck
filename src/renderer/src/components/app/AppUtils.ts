@@ -194,6 +194,8 @@ export function sameChatMessageForRender(previous: ChatMessage, next: ChatMessag
 }
 
 export function sameAgentRunForRender(previous: AgentRunItem, next: AgentRunItem): boolean {
+	// 引用相同即内容相同（阶段0补强：历史 run 复用旧对象引用后，此处 O(1) 快速路径）
+	if (previous === next) return true;
 	if (
 		previous.id !== next.id ||
 		previous.startedAt !== next.startedAt ||
@@ -424,6 +426,41 @@ export function groupToolMessages(messages: ChatMessage[]): RenderMessage[] {
 	flushRun();
 
 	return result;
+}
+
+/**
+ * 对比新旧渲染列表，对「内容未变化的 run」复用旧对象引用。
+ *
+ * 背景（阶段0补强）：groupToolMessages 每次全量重建所有 run，即使只有最后一条消息变化。
+ * 若每次都返回新对象，TurnRow 的 memo 比较（sameAgentRunForRender）会对每个历史 run
+ * 做深度遍历，长会话时成本不小。复用旧引用后，sameAgentRunForRender 的
+ * `previous === next` 快速路径直接命中，历史 run 比较退化为 O(1)。
+ *
+ * 规则：按 run.id 配对，内容相同（sameAgentRunForRender）则取旧引用；
+ * 新增/删除/内容变化的 run 用新对象。列表结构（顺序、条目数）以 next 为准。
+ */
+export function reconcileRuns(
+	previous: RenderMessage[] | undefined,
+	next: RenderMessage[],
+): RenderMessage[] {
+	if (!previous) return next;
+	// 只对 agent-run 做引用复用；message/tool-group/thinking-group 顶层条目按需更新
+	const prevRuns = new Map<string, AgentRunItem>();
+	for (const item of previous) {
+		if (item.kind === "agent-run") prevRuns.set(item.id, item);
+	}
+	let changed = false;
+	const reconciled = next.map((item) => {
+		if (item.kind !== "agent-run") return item;
+		const prev = prevRuns.get(item.id);
+		if (prev && sameAgentRunForRender(prev, item)) return prev;
+		changed = true;
+		return item;
+	});
+	// 只有「长度相同且全部未变化」才能整体复用 previous 数组本身；
+	// 否则（新增/删除/变化）必须返回 reconciled（其中未变化 run 已复用旧引用）。
+	if (!changed && previous.length === next.length) return previous;
+	return reconciled;
 }
 
 /* ── 会话大纲 ── */

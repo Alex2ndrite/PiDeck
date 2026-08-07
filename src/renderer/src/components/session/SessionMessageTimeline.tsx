@@ -17,6 +17,8 @@ import {
 import {
   getMultiSelectImageCaptureIds,
   groupToolMessages,
+  reconcileRuns,
+  type RenderMessage,
 } from "../app/AppUtils";
 import {
   sessionMessageLoadStateAtom,
@@ -179,10 +181,17 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
     () => groupToolMessages(paginatedMessages),
     [paginatedMessages],
   );
+  // 阶段0补强：对未变化的 run 复用旧对象引用，历史 run 的 memo 比较退化为 O(1)
+  const prevRenderedRunsRef = useRef<RenderMessage[] | undefined>(undefined);
+  const reconciledRuns = useMemo(() => {
+    const next = reconcileRuns(prevRenderedRunsRef.current, renderedRuns);
+    prevRenderedRunsRef.current = next;
+    return next;
+  }, [renderedRuns]);
   // 文件修改汇总只统计最后一次 agent 运行（run）内的工具调用：
   // 每次会话（用户发送 → agent 执行 → 完成）清空重算，不累计历史运行的修改
   const lastRunMessages = useMemo(() => {
-    const lastRun = renderedRuns.findLast((r) => r.kind === "agent-run");
+    const lastRun = reconciledRuns.findLast((r) => r.kind === "agent-run");
     if (!lastRun) return [];
     const msgs: ChatMessage[] = [];
     for (const item of lastRun.items) {
@@ -193,7 +202,7 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
       }
     }
     return msgs;
-  }, [renderedRuns]);
+  }, [reconciledRuns]);
   const lastUserMessageId = useMemo(() => {
     for (let index = activeMessages.length - 1; index >= 0; index -= 1) {
       if (activeMessages[index].role === "user") {
@@ -274,7 +283,7 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
         ) as HTMLElement | null;
         if (!source) return;
 
-        const captureIds = getMultiSelectImageCaptureIds(renderedRuns, selectedIds);
+        const captureIds = getMultiSelectImageCaptureIds(reconciledRuns, selectedIds);
         const clone = source.cloneNode(true) as HTMLElement;
         for (const item of Array.from(clone.children)) {
           if (!(item instanceof HTMLElement)) continue;
@@ -447,7 +456,7 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
         !isConversationLoading &&
         activeMessages.length > 0 && (
           <div className="message-list">
-            {renderedRuns.map((item, index) => {
+            {reconciledRuns.map((item, index) => {
               if (item.kind === "agent-run") {
                 const isRunStreaming = Boolean(
                   streamingMessageId &&
@@ -470,7 +479,7 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
                     agentRunning={isLatestTimelineRunBusy(
                       isAgentBusy,
                       index,
-                      renderedRuns.length,
+                      reconciledRuns.length,
                     )}
                     onOpenExternal={props.onOpenExternal}
                     onOpenFile={props.onOpenFile}
@@ -526,7 +535,7 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
             {isAwaitingAssistant && (
               <>
                 {activeRuntimeState?.isExecutingTool &&
-                  !renderedRuns.some(
+                  !reconciledRuns.some(
                     (run) =>
                       run.kind === "agent-run" &&
                       run.items.some((item) => item.kind === "tool-group"),
@@ -576,7 +585,7 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
 
       {multiSelectOpen && (
         <MultiSelectModal
-          renderedRuns={renderedRuns}
+          renderedRuns={reconciledRuns}
           onClose={() => setMultiSelectOpen(false)}
           onCopy={copySelectedMessages}
         />
