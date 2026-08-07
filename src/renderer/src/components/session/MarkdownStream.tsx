@@ -49,11 +49,11 @@ export const MarkdownStream = memo(function MarkdownStream(props: {
 		document.documentElement.dataset.theme === "dark";
 	// 逐字打字机渐显：把高频文本更新转为字符队列 + rAF 渐进渲染（参考 Cherry Studio/Proma）。
 	// 只影响展示；权威文本在 atom 中不受影响（复制/导出仍拿全文）。
-	// minDelay 16ms：streamdown 解析较重，若卡顿可上调（详见 useSmoothStream 文档）。
+	// minDelay 10ms / divisor 8/4 与 Proma 一致（用户确认）；若卡顿可上调 minDelay。
 	const { displayedContent } = useSmoothStream({
 		content: props.text,
 		isStreaming: Boolean(props.isStreaming),
-		minDelay: 16,
+		minDelay: 10,
 	});
 	const displayText = props.isStreaming ? displayedContent : props.text;
 	// 流式期间走轻量渲染（跳过代码高亮/mermaid），逐字渐显会把解析频率提到 rAF 级别，
