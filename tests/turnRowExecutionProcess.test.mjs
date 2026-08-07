@@ -86,3 +86,21 @@ test("execution fold renders thinking as collapsed CoT steps", () => {
   // 汇总按钮带步骤图标（ListTree），呼应 Chain of Thought 头部
   assert.match(summaryToggleSource, /<ListTree size=\{13\}/);
 });
+
+// 阶段 0：历史 run 跳过重渲染。TurnRow 用自定义 memo 比较（sameAgentRunForRender
+// 深度比较 run 内容 + 标量 props），流式增量时未变化的 run 不重渲染，
+// 只有内容真正变化的 run（当前流式 run）才重渲染。
+test("TurnRow uses custom memo compare so unchanged runs skip re-render", () => {
+  assert.match(turnRowSource, /sameAgentRunForRender/);
+  assert.match(turnRowSource, /turnRowPropsEqual\(prev: TurnRowProps, next: TurnRowProps\)/);
+  assert.match(turnRowSource, /memo\(\s*function TurnRow\(props: TurnRowProps\)/);
+  assert.match(turnRowSource, /turnRowPropsEqual,\s*\);/);
+  // 标量 props 参与比较，回调忽略（行为稳定）
+  assert.match(turnRowSource, /prev\.isStreaming === next\.isStreaming/);
+  assert.match(turnRowSource, /prev\.streamingThinking === next\.streamingThinking/);
+  // 深度比较入口来自 AppUtils
+  assert.match(
+    readFileSync("src/renderer/src/components/app/AppUtils.ts", "utf8"),
+    /export function sameAgentRunForRender/,
+  );
+});

@@ -13,6 +13,7 @@ import type {
 	MessageItem,
 	ThinkingGroupItem,
 } from "../timeline/types";
+import { sameAgentRunForRender } from "../../app/AppUtils";
 import { FinalAnswer } from "./FinalAnswer";
 import { InterimAnswer } from "./InterimAnswer";
 import { ProcessSummaryToggle } from "./ProcessSummaryToggle";
@@ -55,7 +56,8 @@ export type TurnRowProps = {
 	onEnterMultiSelect?: () => void;
 };
 
-export const TurnRow = memo(function TurnRow(props: TurnRowProps) {
+export const TurnRow = memo(
+	function TurnRow(props: TurnRowProps) {
 	const { run } = props;
 	const rowRef = useRef<HTMLElement | null>(null);
 	const [editing, setEditing] = useState(false);
@@ -325,4 +327,26 @@ export const TurnRow = memo(function TurnRow(props: TurnRowProps) {
 			</div>
 		</article>
 	);
-});
+},
+turnRowPropsEqual,
+);
+
+/**
+ * TurnRow 自定义 memo 比较（阶段 0：历史 run 跳过重渲染）。
+ *
+ * 比较项：
+ * - run：深度比较内容（sameAgentRunForRender），未变化的 run 不重渲染；
+ * - 标量 props（fresh/showThinking/isStreaming/streamingThinking/agentRunning）：=== 比较；
+ * - 回调函数（onPreviewImage/onOpenExternal/onOpenFile/onDiffFile/onEditMessage/onDeleteMessage/
+ *   onEnterMultiSelect）：行为稳定（读 ref/setState），引用变化不影响渲染结果，忽略（同 FinalAnswer 惯例）。
+ */
+function turnRowPropsEqual(prev: TurnRowProps, next: TurnRowProps): boolean {
+	if (!sameAgentRunForRender(prev.run, next.run)) return false;
+	return (
+		prev.fresh === next.fresh &&
+		prev.showThinking === next.showThinking &&
+		prev.isStreaming === next.isStreaming &&
+		prev.streamingThinking === next.streamingThinking &&
+		prev.agentRunning === next.agentRunning
+	);
+}

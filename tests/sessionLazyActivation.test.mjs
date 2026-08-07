@@ -264,11 +264,23 @@ test("TurnRow puts all hooks before any early return", () => {
   const turnRowIndex = surfaceSource.indexOf(
     "export const TurnRow = memo(function TurnRow",
   );
-  assert.notEqual(
-    turnRowIndex,
-    -1,
-    "TurnRow should exist in turn/TurnRow.tsx",
-  );
+  if (turnRowIndex === -1) {
+    // 多行格式：export const TurnRow = memo(\n    function TurnRow(...)
+    const multiLineIndex = surfaceSource.indexOf(
+      "export const TurnRow = memo(",
+    );
+    assert.notEqual(
+      multiLineIndex,
+      -1,
+      "TurnRow should exist in turn/TurnRow.tsx",
+    );
+  } else {
+    assert.notEqual(
+      turnRowIndex,
+      -1,
+      "TurnRow should exist in turn/TurnRow.tsx",
+    );
+  }
 
   // Get the function body
   const bodyStart = surfaceSource.indexOf("{", turnRowIndex);
