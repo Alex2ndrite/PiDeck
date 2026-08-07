@@ -872,7 +872,17 @@ export function ModelsTab(props: {
 											<span></span>
 										</div>
 										{provider.models.map((m, i) => {
-											const modelAdvancedFields = Object.keys(m).filter(
+											const updateCost = (field: "input" | "output" | "cacheRead" | "cacheWrite", rawValue: string) => {
+								const nextCost = { ...(m.cost ?? {}) };
+								if (rawValue.trim() === "") delete nextCost[field];
+								else {
+									const value = Number(rawValue);
+									if (!Number.isFinite(value) || value < 0) return;
+									nextCost[field] = value;
+								}
+								props.onUpdateModel(name, i, "cost", Object.keys(nextCost).length > 0 ? nextCost : undefined);
+							};
+							const modelAdvancedFields = Object.keys(m).filter(
 												(key) => !KNOWN_MODEL_FIELDS.has(key),
 											);
 											const xhighValue =
@@ -959,46 +969,18 @@ export function ModelsTab(props: {
 													/>
 												</Label>
 <div className="config-thinking-levels-cell">
-														<div className="config-thinking-levels-row">
-															<span className="config-thinking-levels-key">xhigh</span>
-															<ConfigSelect
-																value={xhighValue}
-																options={[
-																	{ value: "", label: t("config.xhighOff") },
-																	{ value: "xhigh", label: "xhigh" },
-																	{ value: "max", label: "max" },
-																]}
-																onChange={(value) =>
-																	props.onUpdateModelThinkingLevel(
-																		name,
-																		i,
-																		"xhigh",
-																		value as "" | "xhigh" | "max",
-																	)
-																}
-															/>
-														</div>
-														<div className="config-thinking-levels-row">
-															<span className="config-thinking-levels-key">max</span>
-															<ConfigSelect
-																value={maxValue}
-																options={[
-																	{ value: "", label: t("config.xhighOff") },
-																	{ value: "xhigh", label: "xhigh" },
-																	{ value: "max", label: "max" },
-																]}
-																onChange={(value) =>
-																	props.onUpdateModelThinkingLevel(
-																		name,
-																		i,
-																		"max",
-																		value as "" | "xhigh" | "max",
-																	)
-																}
-															/>
-														</div>
-													</div>
-													<div className="config-input-cell">
+										{([["xhigh", xhighValue], ["max", maxValue]] as const).map(([key, value]) => (
+											<div key={key} className="config-thinking-levels-row">
+												<span className="config-thinking-levels-key">{key}</span>
+												<div className="config-thinking-levels-segmented" role="group" aria-label={key}>
+													{(["", "xhigh", "max"] as const).map((option) => (
+														<Button key={option || "off"} variant={value === option ? "secondary" : "ghost"} size="sm" className="config-thinking-level-option" onClick={() => props.onUpdateModelThinkingLevel(name, i, key, option)} aria-pressed={value === option} title={option === "" ? t("config.xhighOff") : option}>{option || "off"}</Button>
+													))}
+												</div>
+											</div>
+										))}
+									</div>
+									<div className="config-input-cell">
 														<Label className="config-input-option">
 															<Checkbox
 																checked={(m.input ?? []).includes("image")}
@@ -1013,6 +995,7 @@ export function ModelsTab(props: {
 															<span>{t("config.inputTypeImage")}</span>
 														</Label>
 													</div>
+													<div className="config-model-cost col-span-full"><span className="config-model-cost-title">{t("config.modelCost")}</span>{([["input", "config.costInput"], ["output", "config.costOutput"], ["cacheRead", "config.costCacheRead"], ["cacheWrite", "config.costCacheWrite"]] as const).map(([field, label]) => (<label key={field} className="config-model-cost-field"><span>{t(label)}</span><Input type="number" min="0" step="any" value={m.cost?.[field] ?? ""} onChange={(e) => updateCost(field, e.target.value)} placeholder="-" /></label>))}</div>
 													<Button variant="ghost" size="icon-sm" className="size-7 text-destructive hover:bg-destructive/10 hover:text-destructive"
 														onClick={() => props.onDeleteModel(name, i)}
 														title={t("config.deleteModel")}

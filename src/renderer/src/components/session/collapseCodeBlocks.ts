@@ -82,16 +82,9 @@ export function collapseCodeBlocks(options: CollapseCodeBlockOptions = {}) {
 					...(foldThreshold === undefined || lines <= foldThreshold ? { open: true } : {}),
 					className: ["sd-code-collapse"],
 				},
-				children: [
-					{
-						type: "element",
-						tagName: "summary",
-						properties: { className: ["sd-code-collapse-summary"] },
-						// 语言统一由 Streamdown code header 展示；折叠摘要只保留箭头，避免重复标题。
-						children: [chevron()],
-					},
-					node,
-				],
+				// Streamdown 自带 header 已经承载语言、复制和下载操作；不再生成第二个
+				// summary 头部，避免同一代码块出现两个语言标题和两套按钮背景。
+				children: [node],
 			};
 			parent.children.splice(index, 1, details);
 			return SKIP;

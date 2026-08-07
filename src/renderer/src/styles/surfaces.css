@@ -1899,6 +1899,14 @@
   background: var(--color-bg-panel);
 }
 
+/* Pi 管理导航与设置页保持同一垂直节奏：组间有明确分隔，组内按钮不互相粘连。 */
+.config-sidebar-group {
+  gap: 4px;
+}
+.config-sidebar-group + .config-sidebar-group {
+  margin-top: 6px;
+}
+
 .config-sidebar-group > span {
   /* 分组标题由 Tailwind 承担 */
 }
@@ -1908,15 +1916,24 @@
 .config-nav-btn {
   min-height: 2rem; /* 32px = h-8 */
   height: 2rem;
+  font-family: var(--font-family-sans, ui-sans-serif, system-ui, sans-serif) !important;
   font-size: 14px !important;
+  line-height: var(--line-height-control);
+  letter-spacing: 0;
   font-weight: 500;
+  transition: background-color 140ms ease, color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
 }
 
-/* 选中态只用背景表达，不再切换到更粗字重，避免同一栏文字黑度跳变。 */
+/* 选中态补上设置页同等级的面板阴影，默认首个 tab 也能明确显示当前位置。 */
 .config-nav-btn.active {
   background: var(--color-bg-active);
   color: var(--color-text-primary);
   font-weight: 500;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 18%, transparent), 0 1px 3px color-mix(in srgb, #000 8%, transparent);
+}
+.config-nav-btn:hover:not(.active) {
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
 }
 
 .config-main {
@@ -2527,6 +2544,36 @@
     border-color 0.15s,
     box-shadow 0.15s,
     background 0.15s;
+}
+
+.config-model-cost {
+  display: grid;
+  grid-template-columns: auto repeat(4, minmax(90px, 1fr));
+  align-items: center;
+  gap: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.config-model-cost-title {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-micro);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.config-model-cost-field {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-micro);
+}
+
+.config-model-cost-field input {
+  min-width: 0;
 }
 
 .config-models-grid-row:hover {
@@ -3617,6 +3664,18 @@ div.fixed.inset-0.z-50 {
   color: var(--color-text-tertiary);
   font: 500 var(--text-micro) / 1.4 var(--font-family-sans);
 }
+.sd-code-collapse [data-streamdown="code-block-header"] button {
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-tertiary);
+  box-shadow: none;
+}
+.sd-code-collapse [data-streamdown="code-block-header"] button:hover,
+.sd-code-collapse [data-streamdown="code-block-header"] button:focus-visible {
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
+}
 /* Streamdown 的代码行号只增加视觉噪声；复制按钮仍由官方 header 保留。 */
 .sd-code-collapse [data-streamdown="code-block-body"] [data-line-number],
 .sd-code-collapse [data-streamdown="code-block-body"] [data-line-numbers],
@@ -4638,12 +4697,34 @@ div.fixed.inset-0.z-50 {
   width: 26px;
 }
 
-.config-thinking-levels-row .config-select-trigger {
-  height: 26px;
+.config-thinking-levels-segmented {
+  display: inline-flex;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-panel);
+}
+
+.config-thinking-level-option {
+  min-width: 32px;
+  height: 24px;
   padding: 0 5px;
-  gap: 2px;
-  font-size: 11px;
+  border-radius: 0;
+  font-size: 10px;
   font-family: var(--font-mono);
+  color: var(--color-text-tertiary);
+}
+
+.config-thinking-level-option + .config-thinking-level-option {
+  border-left: 1px solid var(--color-border-subtle);
+}
+
+.config-thinking-level-option[data-state="on"],
+.config-thinking-level-option[aria-pressed="true"] {
+  background: var(--color-bg-active);
+  color: var(--color-text-primary);
+  font-weight: 600;
 }
 
 .config-thinking-levels-row .config-select-trigger > span {

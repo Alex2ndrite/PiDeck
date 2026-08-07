@@ -102,7 +102,7 @@ export interface SessionRuntimeInjectorProps {
   environmentDialog: boolean;
 
   // Runtime UI
-  showNotice: (msg: string, dur?: number) => void;
+  showNotice: (msg: string, dur?: number, kind?: "info" | "warning" | "error") => import("../../utils/notice").NoticeId | undefined;
   api: {
     sessions: {
       sendUiResponse: (input: {
