@@ -101,7 +101,7 @@ export function PromptsTab(props: {
 				onValueChange={(v) => { if (v === "local" || v === "store") setPromptTab(v); }}
 				className="gap-0"
 			>
-				<TabsList className="w-full">
+				<TabsList className="w-fit">
 					<TabsTrigger value="local" onClick={() => props.onRefresh()}>
 						{t("config.nav.prompts")}
 					</TabsTrigger>
@@ -171,7 +171,7 @@ export function PromptsTab(props: {
 				{data.templates.length === 0 ? (
 					<div className="py-12 text-center text-control text-text-tertiary">{t("config.noPrompts")}</div>
 				) : (
-					<Table><TableHeader><TableRow><TableHead>{t("config.name")}</TableHead><TableHead>{t("config.description")}</TableHead><TableHead className="w-28 text-right">{t("config.actions")}</TableHead></TableRow></TableHeader><TableBody>
+					<Table className="table-fixed"><TableHeader><TableRow><TableHead className="w-48">{t("config.name")}</TableHead><TableHead>{t("config.description")}</TableHead><TableHead className="w-28 text-right">{t("config.actions")}</TableHead></TableRow></TableHeader><TableBody>
 					{data.templates.map((template) => {
 						const isRenaming = renamingTemplate === template.path;
 						const handleRename = async () => {
@@ -189,7 +189,7 @@ export function PromptsTab(props: {
 						};
 						return (
 							<TableRow key={template.path}>
-								<TableCell className="min-w-48">
+								<TableCell className="w-48 max-w-48">
 									{isRenaming ? (
 										<div className="flex items-center gap-1">
 											<Input value={renameValue} onChange={(e) => setRenameValue(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void handleRename(); if (e.key === "Escape") setRenamingTemplate(null); }} autoFocus disabled={renameBusy} />
@@ -200,7 +200,7 @@ export function PromptsTab(props: {
 										<button type="button" className="prompts-list-item-info" onClick={() => props.onEdit(template)} title={t("common.edit")}><strong>/{template.name}</strong></button>
 									)}
 								</TableCell>
-								<TableCell className="max-w-0 truncate text-caption text-text-secondary" title={template.description}>{template.description}</TableCell>
+								<TableCell className="whitespace-normal break-words text-caption leading-relaxed text-text-secondary" title={template.description}>{template.description}</TableCell>
 								<TableCell className="text-right"><div className="flex justify-end gap-1">
 									<Button variant="ghost" size="icon-sm" className="size-7" onClick={() => props.onEdit(template)} title={t("common.edit")}><Pencil size={14} strokeWidth={1.8} /></Button>
 									<Button variant="ghost" size="icon-sm" className="size-7" onClick={() => { setRenamingTemplate(template.path); setRenameValue(template.name); }} title={t("common.rename")}><FileEdit size={14} strokeWidth={1.8} /></Button>

@@ -55,7 +55,7 @@ export function SkillsTab(props: {
 			onValueChange={(v) => { if (v === "local" || v === "store") setSkillTab(v); }}
 			className="gap-0"
 		>
-			<TabsList className="w-full">
+			<TabsList className="w-fit">
 				<TabsTrigger value="local" onClick={() => props.onRefresh()}>
 					{t("config.nav.skills")}
 				</TabsTrigger>
@@ -74,7 +74,7 @@ export function SkillsTab(props: {
 						onValueChange={(v) => { if (v === "skillhub" || v === "promptchat") setStoreSource(v); }}
 						className="gap-0"
 					>
-						<TabsList className="w-full">
+						<TabsList className="w-fit">
 							<TabsTrigger value="skillhub" className="px-3 py-1 text-xs">
 								<Store size={14} strokeWidth={1.8} />
 								{t("config.tabs.skillHub")}
