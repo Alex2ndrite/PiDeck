@@ -1390,6 +1390,7 @@ export const zhCN = {
   "menu.attachFile": "加入对话引用",
   "menu.closeAgent": "关闭 Agent",
   "menu.copySession": "复制会话",
+  "menu.archiveSession": "归档会话",
   "menu.copying": "复制中...",
   "menu.defaultOpen": "默认方式打开",
   "menu.exportHtml": "导出 HTML",

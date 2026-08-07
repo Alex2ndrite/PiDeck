@@ -1410,6 +1410,7 @@ export const enUS: Record<TranslationKey, string> = {
   "menu.attachFile": "Attach to conversation",
   "menu.closeAgent": "Close Agent",
   "menu.copySession": "Copy Session",
+  "menu.archiveSession": "Archive Session",
   "menu.copying": "Copying...",
   "menu.defaultOpen": "Open normally",
   "menu.exportHtml": "Export HTML",

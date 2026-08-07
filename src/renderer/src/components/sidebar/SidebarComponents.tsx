@@ -484,6 +484,7 @@ export function SessionContextMenu(props: {
 	onCopySessionFilePath: () => void;
 	onOpenSessionFile?: () => void;
 	onShowLogs?: () => void;
+	onArchiveSession: () => void;
 	onDeleteSession: () => void;
 }) {
 	const busy = Boolean(props.actionLoading);
@@ -507,6 +508,9 @@ export function SessionContextMenu(props: {
 			</DropdownMenuItem>
 			<DropdownMenuItem disabled={busy} onSelect={props.onShowLogs}>{t("menu.rpcLogs")}</DropdownMenuItem>
 			<DropdownMenuSeparator />
+			<DropdownMenuItem disabled={busy} onSelect={props.onArchiveSession}>
+				{t("menu.archiveSession")}
+			</DropdownMenuItem>
 			<DropdownMenuItem variant="destructive" disabled={busy} onSelect={props.onDeleteSession}>
 				{t("common.delete")}
 			</DropdownMenuItem>

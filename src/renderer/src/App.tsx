@@ -2306,10 +2306,10 @@ export function App() {
   }
 
   /** 恢复归档会话：文件移回原路径并重新扫描 */
-  async function unarchiveSidebarSession(archivedPath: string) {
+  async function unarchiveSidebarSession(archivedPath: string, projectId = activeProjectId) {
     await api.sessions.unarchiveRecord(archivedPath);
     showToast(t("app.sessionRestored"), 2200);
-    const projectId = activeProjectId;
+    // 归档管理弹窗可以从非当前项目打开；必须刷新弹窗所属项目，否则文件已恢复但侧栏仍沿用旧目录快照。
     if (projectId) await refreshProjectSessions(projectId);
   }
 
@@ -2422,8 +2422,8 @@ export function App() {
       archive: async (projectId, session) => {
         await archiveSidebarSession(projectId, session);
       },
-      unarchive: async (archived) => {
-        await unarchiveSidebarSession(archived.filePath);
+      unarchive: async (archived, projectId) => {
+        await unarchiveSidebarSession(archived.filePath, projectId);
       },
       listArchived: () => listArchivedSidebarSessions(),
     },
