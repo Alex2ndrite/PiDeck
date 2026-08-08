@@ -1948,6 +1948,8 @@ export const enUS: Record<TranslationKey, string> = {
   "drawer.lazyLoading": "Loading...",
   "diagnostic.errorTitle": "Error diagnostics",
   "diagnostic.systemTitle": "System status",
+  "diagnostic.failureToastTitle": "Session error",
+  "diagnostic.retryToastTitle": "Auto retry",
   ...mainProcessEnUS,
   "update.availableTitle": "New version v{version} available",
   "update.browserDownload": "Download in browser",

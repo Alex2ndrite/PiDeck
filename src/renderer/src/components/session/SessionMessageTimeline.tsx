@@ -34,14 +34,67 @@ import {
   useSessionTimelineController,
   type SessionTimelineController,
 } from "../../hooks/useSessionTimelineController";
-import { t } from "../../i18n";
+import { t, translateI18nDescriptor } from "../../i18n";
 import { cn } from "../../lib/utils";
+import { showNotice } from "../../utils/notice";
+import { stripAnsi } from "./TimelineFormat";
 import { SessionFileSummary } from "./SessionFileSummary";
 import { SessionStartSurface } from "./SessionStartSurface";
 import { MessageScroller } from "../agents/message-scroller";
 
 type TurnRowProps = ComponentProps<typeof TurnRow>;
 type UserBubbleProps = ComponentProps<typeof UserBubble>;
+
+// ── 失败/重试提示：时间线不再渲染卡片，改为 toast ──
+// 主进程以 role=error / role=system 消息携带这些 i18nKey（见 AgentManager 的
+// addLocalizedMessage / upsertRetryStatusMessage）。它们在时间线里的诊断卡片
+// 视觉过重且打断阅读流，改为首次出现时弹 toast；pi 启动失败
+// （diagnostic.agentStartFailed）与携带完整排查诊断的 runtimeError 保留卡片。
+const FLOATING_FAILURE_KEYS = new Set([
+	"diagnostic.requestFailed",
+	"diagnostic.requestFailedAfterRetries",
+	"diagnostic.requestFailedUnknown",
+	"diagnostic.requestFailedUnknownAfterRetries",
+	"diagnostic.agentStopped",
+	"diagnostic.promptRejected",
+	"diagnostic.promptDeliveryUnknown",
+	"diagnostic.commandFailed",
+	"diagnostic.commandDeliveryUnknown",
+	"diagnostic.commandCancelled",
+	"diagnostic.processReconnectFailed",
+	"diagnostic.historyLoadFailed",
+	"diagnostic.extensionError",
+	"diagnostic.retryScheduled",
+	"diagnostic.retryScheduledAfterDelay",
+	"diagnostic.retrySucceeded",
+	"diagnostic.retryFailed",
+]);
+
+// 已弹过 toast 的消息 id：模块级去重，分屏多栏同一条消息只弹一次，
+// 也避免消息重发（re-emit）或重新渲染时重复打扰。
+const toastedFailureIds = new Set<string>();
+
+/** 判断消息是否为「失败/重试类」提示（时间线不渲染、改 toast）。 */
+function isFloatingFailureMessage(message: ChatMessage): boolean {
+	const key = (message.meta as Record<string, unknown> | undefined)?.i18nKey;
+	return typeof key === "string" && FLOATING_FAILURE_KEYS.has(key);
+}
+
+/** 弹失败/重试 toast：重试类用中性标题，失败类用错误变体。 */
+function showFailureToast(message: ChatMessage): void {
+	const meta = message.meta as Record<string, unknown> | undefined;
+	const key = typeof meta?.i18nKey === "string" ? meta.i18nKey : "";
+	const isRetry = key.startsWith("diagnostic.retry");
+	// translateI18nDescriptor 优先取 meta.i18nKey 的本地化文案，
+	// 取不到时回退消息原文（主进程写的中文/占位文本）。
+	const text = translateI18nDescriptor(meta, message.text) || message.text;
+	showNotice(
+		stripAnsi(text),
+		isRetry ? 4000 : 6000,
+		isRetry ? "info" : "error",
+		t(isRetry ? "diagnostic.retryToastTitle" : "diagnostic.failureToastTitle"),
+	);
+}
 
 type TimelineInteractionProps = {
   hasProject: boolean;
@@ -153,6 +206,29 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
     for (const timer of freshTimersRef.current.values()) window.clearTimeout(timer);
     freshTimersRef.current.clear();
   }, [sessionId]);
+
+  // ── 失败/重试 toast：只对「加载完成后新增」的消息弹，历史回放不打扰 ──
+  // 加载中（loading=true）直接返回；加载完成瞬间把已存在的失败消息静默记为基线；
+  // 之后新增的失败/重试消息才弹 toast（模块级 Set 跨栏/跨渲染去重）。
+  const failureBaselineRef = useRef<string[] | null>(null);
+  useEffect(() => {
+    if (isConversationLoading) {
+      failureBaselineRef.current = null;
+      return;
+    }
+    const floating = activeMessages.filter(isFloatingFailureMessage);
+    if (failureBaselineRef.current === null) {
+      // 加载完成基线：本次会话已有的失败消息不弹（历史回放/attach 重连）
+      failureBaselineRef.current = floating.map((message) => message.id);
+      return;
+    }
+    for (const message of floating) {
+      if (failureBaselineRef.current.includes(message.id)) continue;
+      if (toastedFailureIds.has(message.id)) continue;
+      toastedFailureIds.add(message.id);
+      showFailureToast(message);
+    }
+  }, [activeMessages, isConversationLoading]);
 
   useEffect(() => {
     const previousTail = seenTailMessageIdRef.current;
@@ -513,6 +589,9 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
                 );
               }
               if (message.role === "error") {
+                // 失败/重试类提示已转 toast（见 FLOATING_FAILURE_KEYS），
+                // 时间线不再渲染卡片；pi 启动失败/运行时诊断仍走诊断卡片。
+                if (isFloatingFailureMessage(message)) return null;
                 return <DiagnosticMessageCard key={message.id} message={message} />;
               }
               if (message.role === "system") {
@@ -525,6 +604,9 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
                 if (meta?.type === "compaction") {
                   return <CompactionCard key={message.id} message={message} />;
                 }
+                // 自动重试状态（retryScheduled/retrySucceeded/retryFailed 等）
+                // 属于「重试提示」，与失败类一样转 toast、不占时间线。
+                if (isFloatingFailureMessage(message)) return null;
                 return <DiagnosticMessageCard key={message.id} message={message} />;
               }
               return null;
