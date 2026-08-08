@@ -1,4 +1,4 @@
-import { ChevronsDownUp, ChevronRight, Filter, Folder, FolderOpen, FolderPlus, HatGlasses, Plus } from "lucide-react";
+import { ChevronsDownUp, ChevronRight, Filter, Folder, FolderCog, FolderOpen, FolderPlus, HatGlasses, Plus } from "lucide-react";
 import type { DragEvent } from "react";
 import type { Project, WorktreeEntry } from "../../../../shared/types";
 import type { SidebarController } from "../../hooks/useSidebarController";
@@ -219,6 +219,18 @@ export function ProjectTree(props: {
                 {/* Chat 没有可点击的父项目行，折叠入口固定放在标题栏，避免展开后无法恢复。 */}
                 <ChevronsDownUp size={14} aria-hidden="true" />
               </button>
+              {props.actions.projects.changeChatPath && (
+                <button
+                  type="button"
+                  className="grid size-6 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  title={`${t("app.chatProjectSettings")}\n${project.path}`}
+                  aria-label={t("app.chatProjectSettings")}
+                  onClick={() => void props.actions.projects.changeChatPath?.(project)}
+                >
+                  {/* Chat 是固定父项目，设置入口必须挂在父标题栏，不能依赖当前是否已有会话。 */}
+                  <FolderCog size={13} aria-hidden="true" />
+                </button>
+              )}
               <button
                 type="button"
                 className="grid size-6 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"

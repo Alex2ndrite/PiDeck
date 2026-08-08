@@ -217,21 +217,23 @@ export function SessionStatus(props: {
 			value: `${averageCacheHit.toFixed(1)}% (${averageCacheHitSampleCount} ${t("ctx.detail.snapshots")})`,
 		});
 	}
-	// 最近一次回复的性能指标（主进程流式计时）：首 token 延迟 / 总耗时 / 生成速度
+	// 这些值来自 AgentManager 的 lastPerfByAgent，只代表最近一条 assistant 回复，
+	// 不能和上下文累计量混在同一组，否则用户会误以为是整段会话的平均性能。
+	const replyPerfRows: Array<{ label: string; value: string }> = [];
 	if (state.ttftMs != null) {
-		detailRows.push({ label: t("ctx.detail.ttft"), value: formatDuration(state.ttftMs) });
+		replyPerfRows.push({ label: t("ctx.detail.ttft"), value: formatDuration(state.ttftMs) });
 	}
 	if (state.totalMs != null) {
-		detailRows.push({ label: t("ctx.detail.total"), value: formatDuration(state.totalMs) });
+		replyPerfRows.push({ label: t("ctx.detail.total"), value: formatDuration(state.totalMs) });
 	}
 	if (state.tps != null) {
-		detailRows.push({ label: t("ctx.detail.tps"), value: `${state.tps.toFixed(0)} tok/s` });
+		replyPerfRows.push({ label: t("ctx.detail.tps"), value: `${state.tps.toFixed(0)} tok/s` });
 	}
 	if (state.cost != null) {
 		detailRows.push({ label: t("ctx.detail.cost"), value: `$${state.cost.toFixed(3)}`, emphasis: true });
 		detailRows.push({ label: t("ctx.detail.costCny"), value: cnyAmount ?? "-", emphasis: true });
 	}
-	const hasDetail = detailRows.length > 0;
+	const hasDetail = detailRows.length > 0 || replyPerfRows.length > 0;
 
 	const statusInner = (
 		<div className="session-status">
@@ -288,6 +290,19 @@ export function SessionStatus(props: {
 							</div>
 						))}
 					</div>
+					{replyPerfRows.length > 0 && (
+						<div className="mt-2.5 grid gap-1 border-t border-border/70 pt-2">
+							<div className="px-1 text-micro font-semibold uppercase tracking-wide text-muted-foreground">
+								{t("ctx.detail.lastReply")}
+							</div>
+							{replyPerfRows.map((row) => (
+								<div key={row.label} className="flex items-baseline justify-between gap-4 px-1 py-0.5 text-caption leading-5">
+									<span className="shrink-0 text-muted-foreground">{row.label}</span>
+									<span className="min-w-0 text-right font-mono font-semibold tabular-nums text-popover-foreground">{row.value}</span>
+								</div>
+							))}
+						</div>
+					)}
 				</div>
 			</TooltipContent>
 		</Tooltip>

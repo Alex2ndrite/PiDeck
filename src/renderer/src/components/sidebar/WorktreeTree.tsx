@@ -9,6 +9,15 @@ import { PathTooltip } from "../ui-shadcn/PathTooltip";
 import { cn } from "../../lib/utils";
 import { mergeWorkspaceTreeRows, type WorkspaceTreeRow } from "./workspaceTreeModel";
 
+// 工作区行是项目树下的第二层导航：它必须和项目/会话行共用同一套字号、行高和激活态，
+// 否则主工作区与其他 worktree 会看起来像两个独立组件，尤其在中文字体下更明显。
+const workspaceRowClass =
+  "workspace-tree-row group flex min-h-8 min-w-0 items-center gap-0.5 rounded-md p-0.5 text-body text-foreground transition-[background-color,border-color,box-shadow] duration-fast hover:bg-muted/60";
+const workspaceSelectClass =
+  "flex min-h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md px-1.5 py-0 text-left text-body text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:cursor-default disabled:hover:bg-transparent disabled:hover:text-muted-foreground";
+const workspaceActionClass = "text-muted-foreground hover:bg-muted hover:text-foreground";
+const workspaceSessionsClass = "min-w-0 basis-[calc(100%-24px)] ml-6 pl-2";
+
 export function WorktreeTree(props: {
   project: Project;
   controller: SidebarController;
@@ -31,9 +40,9 @@ export function WorktreeTree(props: {
   const mainRowId = `worktree-main-sessions-${props.project.id}`;
 
   return (
-    <div className="workspace-tree min-w-0 bg-muted/20 py-1 pl-2">
-      <section className="workspace-tree-main mb-0.5" aria-label={t("app.worktreeMainWorkspace")}>
-        <div className="workspace-tree-row group flex min-w-0 items-center gap-0.5 rounded-lg p-0.5">
+    <div className="workspace-tree min-w-0 py-1 pl-1">
+      <section className="workspace-tree-main" aria-label={t("app.worktreeMainWorkspace")}>
+        <div className={workspaceRowClass}>
           <Button
             type="button"
             variant="ghost"
@@ -50,18 +59,20 @@ export function WorktreeTree(props: {
           <Button
             type="button"
             variant="ghost"
+            size="sm"
             className={cn(
-              "conversation worktree-workspace-header h-8 min-w-0 flex-1 justify-start gap-2 px-2 text-left",
-              props.currentProjectId === props.project.id && "active border-accent/35 bg-accent/10 text-accent-foreground shadow-sm shadow-accent/10",
+              "conversation worktree-workspace-header h-7 justify-start text-left",
+              workspaceSelectClass,
+              props.currentProjectId === props.project.id && "active border border-border-strong bg-accent/60 text-foreground shadow-sm",
             )}
             onClick={() => props.actions.projects.select(props.project.id)}
             title={t("app.worktreeMainWorkspace")}
           >
-            <span className="worktree-main-branch-icon shrink-0"><GitBranch size={13} /></span>
+            <span className="worktree-main-branch-icon grid size-5 shrink-0 place-items-center text-muted-foreground"><GitBranch size={14} /></span>
             <span className="conversation-body min-w-0 flex-1">
               <span className="conversation-title flex min-w-0 items-center gap-1.5">
                 <strong className="min-w-0 truncate font-medium">{t("app.worktreeMainWorkspace")}</strong>
-                <span className="worktree-main-branch min-w-0 truncate">{props.branch ?? t("app.worktreeBranchLoading")}</span>
+                <span className="worktree-main-branch min-w-0 truncate text-control text-muted-foreground">{props.branch ?? t("app.worktreeBranchLoading")}</span>
               </span>
             </span>
           </Button>
@@ -72,7 +83,7 @@ export function WorktreeTree(props: {
               type="button"
               variant="ghost"
               size="icon-xs"
-              className="text-muted-foreground hover:text-foreground"
+              className={workspaceActionClass}
               title={t("app.projectNewAgent")}
               aria-label={t("app.projectNewAgent")}
               onClick={() => void props.actions.sessions.createDraft(props.project.id)}
@@ -83,7 +94,7 @@ export function WorktreeTree(props: {
               type="button"
               variant="ghost"
               size="icon-xs"
-              className="text-muted-foreground hover:text-foreground"
+              className={workspaceActionClass}
               title={t("app.anonymousChat")}
               aria-label={t("app.anonymousChat")}
               onClick={() => void props.actions.sessions.createAnonymous(props.project.id)}
@@ -95,7 +106,7 @@ export function WorktreeTree(props: {
         {/* Worktree 模式下主工作区是默认展开的第一项；根项目历史必须挂在这里，
             不能等 Worktree 列表渲染完再由 ProjectTree 追加到所有工作区之后。 */}
         {!mainCollapsed && (
-          <div id={mainRowId} className="workspace-tree-main-sessions pl-4">
+          <div id={mainRowId} className={cn("workspace-tree-main-sessions", workspaceSessionsClass)}>
             <SessionTree
               project={props.project}
               sessions={props.sessions}
@@ -109,7 +120,7 @@ export function WorktreeTree(props: {
       </section>
 
       <section className="workspace-tree-list" aria-label={t("app.worktreeOtherWorkspaces")}>
-        <header className="workspace-tree-section-header flex min-h-7 items-center justify-between gap-2 px-2 text-caption text-muted-foreground">
+        <header className="workspace-tree-section-header mt-2 flex min-h-7 items-center justify-between gap-2 border-t border-border/40 px-2 pt-1 text-caption text-muted-foreground">
           <span className="min-w-0 truncate">{t("app.worktreeOtherWorkspaces")}</span>
           <Button
             type="button"
@@ -161,7 +172,7 @@ function WorkspaceTreeRowView(props: {
   return (
     // 选中态只高亮分支名行（select 按钮），不能把外层 wrapper 整行压暗——
     // wrapper 还包着展开的会话列表，整行变色会让整个工作区区块发暗。
-    <div className={cn("workspace-tree-row group flex min-w-0 flex-wrap items-center gap-0.5 rounded-lg p-0.5 text-muted-foreground transition-colors")}>
+    <div className={cn(workspaceRowClass, "flex-wrap text-muted-foreground")}>
       <Button
         type="button"
         variant="ghost"
@@ -182,8 +193,9 @@ function WorkspaceTreeRowView(props: {
         <button
           type="button"
           className={cn(
-            "workspace-tree-select flex min-w-0 flex-1 items-center gap-1.5 rounded-lg px-1.5 py-1 text-left text-control text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:cursor-default disabled:hover:bg-transparent disabled:hover:text-muted-foreground",
-            isActive && "bg-accent/60 text-foreground",
+            "workspace-tree-select",
+            workspaceSelectClass,
+            isActive && "bg-accent/60 border border-border-strong text-foreground",
           )}
           disabled={!childProject}
           onClick={() => childProject && props.actions.projects.select(childProject.id)}
@@ -212,7 +224,7 @@ function WorkspaceTreeRowView(props: {
             type="button"
             variant="ghost"
             size="icon-xs"
-            className="text-muted-foreground hover:text-foreground"
+            className={workspaceActionClass}
             title={t("app.projectNewAgent")}
             aria-label={t("app.projectNewAgent")}
             onClick={() => void props.actions.sessions.createDraft(childProject.id)}
@@ -223,7 +235,7 @@ function WorkspaceTreeRowView(props: {
             type="button"
             variant="ghost"
             size="icon-xs"
-            className="text-muted-foreground hover:text-foreground"
+            className={workspaceActionClass}
             title={t("app.anonymousChat")}
             aria-label={t("app.anonymousChat")}
             onClick={() => void props.actions.sessions.createAnonymous(childProject.id)}
@@ -234,7 +246,7 @@ function WorkspaceTreeRowView(props: {
             type="button"
             variant="ghost"
             size="icon-xs"
-            className="text-muted-foreground hover:text-danger"
+            className="text-muted-foreground hover:bg-danger-soft hover:text-danger"
             title={t("menu.removeProject")}
             aria-label={t("menu.removeProject")}
             onClick={() => void props.actions.worktrees.remove(props.rootProject.id, {
@@ -248,7 +260,7 @@ function WorkspaceTreeRowView(props: {
       )}
 
       {expanded && childProject && (
-        <div id={rowId} className="workspace-tree-sessions ml-6 min-w-0 basis-[calc(100%-24px)] pl-2">
+        <div id={rowId} className={cn("workspace-tree-sessions", workspaceSessionsClass)}>
           <SessionTree
             project={childProject}
             sessions={props.controller.catalog.sessionsByProject[childProject.id] ?? []}

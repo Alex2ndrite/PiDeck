@@ -76,15 +76,18 @@ test("ctx.detail shows TTFT / total time / speed with i18n labels", () => {
 	assert.match(surface, /state\.ttftMs != null/);
 	assert.match(surface, /state\.totalMs != null/);
 	assert.match(surface, /state\.tps != null/);
+	assert.match(surface, /const replyPerfRows/);
 	assert.match(surface, /t\("ctx\.detail\.ttft"\), value: formatDuration\(state\.ttftMs\)/);
 	assert.match(surface, /t\("ctx\.detail\.total"\), value: formatDuration\(state\.totalMs\)/);
 	assert.match(surface, /t\("ctx\.detail\.tps"\), value: `\$\{state\.tps\.toFixed\(0\)\} tok\/s`/);
+	assert.match(surface, /t\("ctx\.detail\.lastReply"\)/);
+	assert.match(surface, /border-t border-border\/70 pt-2/);
 });
 
 test("perf i18n keys exist in zh-CN and en-US", () => {
 	const zh = readFileSync("src/renderer/src/i18n/rendererCopy.zh-CN.ts", "utf8");
 	const en = readFileSync("src/renderer/src/i18n/rendererCopy.en-US.ts", "utf8");
-	for (const key of ["ctx.detail.ttft", "ctx.detail.total", "ctx.detail.tps"]) {
+	for (const key of ["ctx.detail.ttft", "ctx.detail.total", "ctx.detail.tps", "ctx.detail.lastReply"]) {
 		assert.match(zh, new RegExp(`"${key}":`), `zh-CN missing ${key}`);
 		assert.match(en, new RegExp(`"${key}":`), `en-US missing ${key}`);
 	}

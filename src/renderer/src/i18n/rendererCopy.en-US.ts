@@ -171,6 +171,7 @@ export const enUS: Record<TranslationKey, string> = {
   "ctx.detail.ttft": "First token",
   "ctx.detail.total": "Reply time",
   "ctx.detail.tps": "Speed",
+  "ctx.detail.lastReply": "Last reply",
   "ctx.detail.hitAverageTitle": "Average cache hit rate across this session's state snapshots",
   "ctx.detail.snapshots": "snapshots",
   "ctx.detail.cost": "Total cost",

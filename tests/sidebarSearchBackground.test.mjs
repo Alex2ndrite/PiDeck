@@ -18,6 +18,8 @@ test("sidebar search uses shadcn Input with leading icon", () => {
   assert.match(sidebar, /<Input[\s\S]*placeholder=\{t\("app\.search"\)\}/);
   assert.match(sidebar, /className="h-9 pl-8"/);
   assert.match(sidebar, /<Search[\s\S]*absolute/);
+  assert.match(sidebar, /className="search-row grid[^\n]*rounded-xl bg-muted\/25 p-1"/);
+  assert.doesNotMatch(sidebar, /className="search-row grid[^\n]*border border-border\/60/);
 });
 
 test("sidebar add-project control is outline icon button", () => {

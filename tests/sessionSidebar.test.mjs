@@ -236,6 +236,9 @@ test("Chat section keeps an independent collapse control after the parent projec
   assert.match(chatSection, /onClick=\{\(\) => props\.controller\.toggleProject\(project\.id\)\}/);
   assert.match(chatSection, /title=\{collapsed \? t\("app\.projectExpand"\) : t\("app\.projectCollapse"\)\}/);
   assert.match(chatSection, /<ChevronsDownUp size=\{14\} aria-hidden="true" \/>/);
+  assert.match(chatSection, /changeChatPath/);
+  assert.match(chatSection, /FolderCog size=\{13\} aria-hidden="true" \/>/);
+  assert.match(chatSection, /t\("app\.chatProjectSettings"\)/);
   assert.match(chatSection, /!collapsed && \([\s\S]*?<SessionTree/);
 });
 

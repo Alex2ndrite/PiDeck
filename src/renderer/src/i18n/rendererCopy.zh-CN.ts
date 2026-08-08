@@ -170,6 +170,7 @@ export const zhCN = {
   "ctx.detail.ttft": "首 token 延迟",
   "ctx.detail.total": "回复总耗时",
   "ctx.detail.tps": "生成速度",
+  "ctx.detail.lastReply": "上次回复",
   "ctx.detail.hitAverageTitle": "本会话历次状态快照的平均缓存命中率",
   "ctx.detail.snapshots": "次快照",
   "ctx.detail.cost": "累计费用",
