@@ -2606,6 +2606,9 @@ export class AgentManager {
 			}
 			this.beginAssistantMessage(agentId);
 			this.streamingAgents.add(agentId);
+			// 性能计时起表（幂等：message_update start 先到则不重置）。
+			// 顶层 message_start 是 mock/pi 均走的确定路径，不能只依赖 delta 事件。
+			this.ensurePerfTimer(agentId);
 			// 顶层 message_start（mock/pi 均走此路径）：必须允许空骨架，否则
 			// text_delta 不再 upsert 时 History 无挂载点，Live 正文无处渲染。
 			this.upsertAssistantMessage(agentId, typed.message, "", { allowEmpty: true });
@@ -2822,6 +2825,8 @@ export class AgentManager {
 				this.finishThinkingChannel(agentId);
 				this.activeAssistantMessageIds.delete(agentId);
 			}
+			// 结算性能指标（幂等：message_update done 先结算则 map 已删，直接返回）
+			this.settleMessagePerf(agentId, typed.message);
 			// 终结 Live 正文通道（顶层 message_end 不经 handleAssistantMessageEvent）
 			this.streamingAgents.delete(agentId);
 			const finalText = this.streamingText.get(agentId);
@@ -3181,8 +3186,8 @@ export class AgentManager {
 		if (eventType === "start" || eventType === "message_start") {
 			this.beginAssistantMessage(agentId);
 			this.streamingAgents.add(agentId);
-			// 性能计时起表：message_start 代表本轮 LLM 回复开始生成
-			this.messagePerfByAgent.set(agentId, { startedAt: Date.now(), firstDeltaAt: 0 });
+			// 性能计时起表（幂等：顶层 message_start 先到则不重置）
+			this.ensurePerfTimer(agentId);
 			// 允许空正文骨架：Live 正文走独立通道，TurnRow 需要 History 挂载点。
 			this.upsertAssistantMessage(agentId, partialMessage, "", { allowEmpty: true });
 			this.flushMessageEmit(agentId);
@@ -3274,6 +3279,16 @@ export class AgentManager {
 		const perf = this.messagePerfByAgent.get(agentId);
 		if (perf && perf.firstDeltaAt === 0) {
 			perf.firstDeltaAt = Date.now();
+		}
+	}
+
+	/**
+	 * 幂等起表：顶层 message_start 与 message_update start 两条路径都可能先到，
+	 * 只在尚无计时器时创建，避免后者覆盖前者丢失 startedAt。
+	 */
+	private ensurePerfTimer(agentId: string) {
+		if (!this.messagePerfByAgent.has(agentId)) {
+			this.messagePerfByAgent.set(agentId, { startedAt: Date.now(), firstDeltaAt: 0 });
 		}
 	}
 
