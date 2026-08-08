@@ -14,6 +14,7 @@ import type {
 	AppUpdateAsset,
 	AvailableModel,
 	CreatePiSkillInput,
+	SessionCommandResult,
 	SessionRuntimeTarget,
 } from "../../shared/types";
 import type { PiLocator } from "../pi/PiLocator";
@@ -38,6 +39,10 @@ export type SystemIpcDeps = {
 	appLogger: AppLogger;
 	rpcLogger: RpcLogger;
 	sessionRuntimeCoordinator: SessionRuntimeCoordinator;
+	/** 进程监控停止 agent：按 agentId 走完整会话停止链路（含 detach 推送），装配层注入 */
+	stopAgentFromMonitor: (
+		agentId: string,
+	) => Promise<SessionCommandResult<SessionRuntimeTarget | undefined>>;
 	getMainWindow: () => Electron.BrowserWindow | null;
 	mainCopy: (key: string, params?: Record<string, string | number>) => string;
 	/** Check for app update; defined in index.ts */
@@ -419,9 +424,12 @@ export function registerSystemIpc(deps: SystemIpcDeps): void {
 		if (typeof agentId !== "string" || !agentId) {
 			throw new Error("invalid agentId");
 		}
-		// 走 AgentManager 正常停止（标记 userInitiatedStop + 清理运行时状态 + 优雅 kill），
-		// 跨平台由 Node ChildProcess.kill 统一处理，不直接调系统 kill
-		await deps.agentManager.stop(agentId);
+		// 走完整会话停止链路（coordinator 反查会话 + 解绑 + detach 推送），
+		// 不能只调 agentManager.stop——那会跳过会话状态收尾，渲染层运行标记不熄灭
+		const result = await deps.stopAgentFromMonitor(agentId);
+		if (!result.ok) {
+			throw new Error(result.error.debugDetails ?? `failed to stop agent ${agentId}`);
+		}
 	});
 
 	ipcMain.handle(ipcChannels.logsList, async (_event, query: AppLogQuery) =>

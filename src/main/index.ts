@@ -137,6 +137,7 @@ import type {
 	SendSessionPromptInput,
 	SessionRecord,
 	SessionCommandError,
+	SessionCommandResult,
 	SessionRuntimeEvent,
 	SessionRuntimeTarget,
 	SessionUiResponseInput,
@@ -450,6 +451,22 @@ async function stopSessionRuntime(target: SessionRuntimeTarget) {
 		if (anonymous) discardAnonymousSession(target);
 		else emitSessionRuntimeDetach(target);
 	}
+	return result;
+}
+
+/**
+ * 进程监控「停止 agent」入口：调用方只有 agentId，由 coordinator 反查会话并走
+ * 完整停止链路（保留/解绑 + 关终端 + detach 推送）。与 stopSessionRuntime 的
+ * 区别仅在于 target 的来源；不这么做的话渲染层收不到 detach，会话运行标记
+ * 会停留在 running（用户可见的「停止后蓝点不变」现象）。
+ */
+async function stopAgentFromMonitor(
+	agentId: string,
+): Promise<SessionCommandResult<SessionRuntimeTarget | undefined>> {
+	const result = await sessionRuntimeCoordinator.stopAgentById(agentId);
+	if (!result.ok) return result;
+	terminalManager.closeAgent(agentId);
+	if (result.value) emitSessionRuntimeDetach(result.value);
 	return result;
 }
 
@@ -2176,6 +2193,8 @@ function registerIpc() {
 		appLogger,
 		rpcLogger,
 		sessionRuntimeCoordinator,
+		// 进程监控停止 agent：按 agentId 走完整会话停止链路（含 detach 推送）
+		stopAgentFromMonitor,
 		getMainWindow: () => mainWindow,
 		mainCopy: mainCopy as (key: string, params?: Record<string, string | number>) => string,
 		checkForAppUpdate: checkForAppUpdate as (installationType?: string) => Promise<AppUpdateInfo | null>,

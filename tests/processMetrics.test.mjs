@@ -111,16 +111,30 @@ test("IPC channel + systemIpc handler + preload exposure", () => {
 	assert.match(preload, /ipcRenderer\.invoke\(ipcChannels\.processMetrics\)/);
 });
 
-test("stop-agent: channel, handler validation, preload, UI confirm", () => {
+test("stop-agent: full session stop chain (coordinator + detach)", () => {
 	const ipc = readFileSync("src/shared/ipc.ts", "utf8");
 	const systemIpc = readFileSync("src/main/ipc/systemIpc.ts", "utf8");
 	const preload = readFileSync("src/preload/index.ts", "utf8");
+	const coordinator = readFileSync("src/main/sessions/SessionRuntimeCoordinator.ts", "utf8");
+	const index = readFileSync("src/main/index.ts", "utf8");
 	const tab = readFileSync("src/renderer/src/config/ProcessMetricsTab.tsx", "utf8");
-	// 通道 + handler：agentId 输入校验（渲染层数据不可信），走 AgentManager 正常停止
+	// 通道 + handler：agentId 输入校验（渲染层数据不可信），走完整会话停止链路
 	assert.match(ipc, /stopAgent: "system:stop-agent"/);
 	assert.match(systemIpc, /ipcMain\.handle\(ipcChannels\.stopAgent/);
 	assert.match(systemIpc, /typeof agentId !== "string" \|\| !agentId/);
-	assert.match(systemIpc, /deps\.agentManager\.stop\(agentId\)/);
+	// 关键：不能只调 agentManager.stop（会跳过会话状态收尾 → 运行标记不熄灭）
+	assert.match(systemIpc, /deps\.stopAgentFromMonitor\(agentId\)/);
+	assert.doesNotMatch(systemIpc, /deps\.agentManager\.stop\(agentId\)/);
+	// coordinator 按 agentId 反查会话 → 走 stopRuntime 完整收尾（无绑定时幂等直停）
+	assert.match(coordinator, /async stopAgentById\(/);
+	assert.match(coordinator, /const binding = this\.getRuntimeBinding\(agentId\);/);
+	assert.match(coordinator, /await this\.stopRuntime\(target\);/);
+	// index.ts 装配：成功后关终端 + detach 推送（渲染层运行标记熄灭的关键）
+	assert.match(index, /async function stopAgentFromMonitor\(/);
+	assert.match(index, /sessionRuntimeCoordinator\.stopAgentById\(agentId\)/);
+	assert.match(index, /terminalManager\.closeAgent\(agentId\);/);
+	assert.match(index, /emitSessionRuntimeDetach\(result\.value\);/);
+	assert.match(index, /stopAgentFromMonitor,/);
 	// preload 暴露
 	assert.match(preload, /stopAgent: \(agentId: string\) =>/);
 	assert.match(preload, /ipcRenderer\.invoke\(ipcChannels\.stopAgent, agentId\)/);

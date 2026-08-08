@@ -436,6 +436,31 @@ export class SessionRuntimeCoordinator {
 		}
 	}
 
+	/**
+	 * 按 agentId 停止 agent（进程监控「停止」入口用，调用方只有 agentId）。
+	 * 通过 sessionIdByAgent 反查会话并构造完整 target，复用 stopRuntime 的
+	 * 保留/解绑收尾，确保会话运行时状态同步；无会话绑定（游离 agent）时幂等直停。
+	 */
+	async stopAgentById(
+		agentId: string,
+	): Promise<SessionCommandResult<SessionRuntimeTarget | undefined>> {
+		try {
+			const binding = this.getRuntimeBinding(agentId);
+			if (!binding) {
+				await this.agents.stop(agentId);
+				return { ok: true, value: undefined };
+			}
+			const target: SessionRuntimeTarget = {
+				sessionId: binding.sessionId,
+				agentId,
+				runtimeGeneration: binding.runtimeGeneration,
+			};
+			return await this.stopRuntime(target);
+		} catch (error) {
+			return this.commandFailure(error);
+		}
+	}
+
 	async restartRuntime(
 		target: SessionRuntimeTarget,
 	): Promise<SessionCommandResult<SessionRuntimeReplacement>> {
