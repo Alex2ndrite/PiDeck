@@ -15,6 +15,8 @@ import {
   X,
 } from "lucide-react";
 import {
+  useCallback,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -55,7 +57,9 @@ import { SESSION_TAB_DRAG_MIME } from "../../utils/sessionSplitEdge";
  * 操作入口（融合对方收敛方案）：
  * - 每个会话 Tab 的下拉按钮（或右键）打开操作菜单：切换到该会话、固定、
  *   停止（关闭会话，仅当前 Tab）、重启（仅当前 Tab）、关闭/关闭其他/关闭全部；
- * - 激活态由 Tab 内左侧状态点（dotClass）表达，不再需要激活指示条。
+ * - 激活指示条：贴 Tab 外框底边的弧形描边（两端圆角与 Tab 同半径 6px，
+ *   盖在底边框线上随切换滑动）；颜色与 Tab 内左侧状态点一致
+ *   （idle=蓝 / running=黄 / error=红），无状态时回退主题色 bg-primary。
  */
 
 /** @deprecated 请使用 SESSION_TAB_DRAG_MIME；保留导出供测试/旧引用。 */
@@ -124,11 +128,73 @@ export type SessionTabsBarProps = {
 export function SessionTabsBar(props: SessionTabsBarProps) {
   const { tabs, pinnedTabs, currentSessionId, previewTabId } = props;
   const tabItems = useMemo(() => tabs.map((sessionId) => ({ sessionId })), [tabs]);
+  // 当前会话 runtime 状态：激活指示条颜色与 Tab 内状态点（蓝/黄/红）保持一致
+  const activeRuntime = useAtomValue(sessionRuntimeBySessionIdAtomFamily(currentSessionId ?? ""));
+  // 指示条用 border 绘制 U 型包裹，颜色通过 CSS 变量设置（Tailwind bg 类无法直接用于 border）
+  const indicatorColorVar = (() => {
+    switch (activeRuntime?.status) {
+      case "error": return "var(--color-danger)";
+      case "idle": return "var(--color-info)";
+      case "running":
+      case "starting":
+        return "var(--color-warning)";
+      default:
+        return "var(--color-primary)";
+    }
+  })();
   const dragSourceRef = useRef<string | null>(null);
   const dragTargetRef = useRef<{ targetId: string; position: "before" | "after" } | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   // 拖拽插入指示：当前悬停的目标 Tab 与插入侧（before=左缘 / after=右缘）
   const [dragIndicator, setDragIndicator] = useState<{ targetId: string; position: "before" | "after" } | null>(null);
+
+  // —— 激活指示条（FLIP 风格滑动 + 贴框弧形）——
+  // 浏览器式 Tab 切换时，激活指示条从旧 Tab 滑到新 Tab：
+  // 只测位置/宽度后用 transform 过渡（translateX + scaleX 模拟任意宽度，
+  // 合成器属性，不触发布局）。指示条是滚动容器的子元素，随内容横向滚动天然跟随。
+  // 形状：盖在 Tab 外框底边线上（bottom-[5px] ≈ (容器高40−Tab高28)/2 − 条高一半），
+  // 两端圆角与 Tab 的 rounded-md（6px）同半径，视觉上是「沿外框底边自然收弧」的描边。
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [indicator, setIndicator] = useState<{ x: number; w: number } | null>(null);
+  // 首次定位时不带 transition（瞬间就位），之后更新才有滑动过渡
+  const hadPositionRef = useRef(false);
+  const INDICATOR_BASE_WIDTH = 200;
+
+  const measureIndicator = useCallback(() => {
+    const container = scrollRef.current;
+    if (!container || !currentSessionId) {
+      setIndicator(null);
+      return;
+    }
+    const el = container.querySelector<HTMLElement>(`[data-session-id="${CSS.escape(currentSessionId)}"]`);
+    if (!el) {
+      setIndicator(null);
+      return;
+    }
+    // 内容坐标系：视觉 x = 容器内偏移 + 已滚动距离（scrollLeft），
+    // 指示条 absolute 定位在滚动容器内，滚动时跟随内容。
+    const cRect = container.getBoundingClientRect();
+    const rect = el.getBoundingClientRect();
+    const x = rect.left - cRect.left + container.scrollLeft;
+    const w = rect.width;
+    setIndicator((prev) => (prev && prev.x === x && prev.w === w ? prev : { x, w }));
+  }, [currentSessionId]);
+
+  // Tab 列表/激活/固定变化时重测（固定与普通 Tab 宽度不同，pin 切换会改布局）
+  useLayoutEffect(() => {
+    measureIndicator();
+    if (indicator !== null) hadPositionRef.current = true;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [measureIndicator, tabs, pinnedTabs]);
+
+  // 标题长度变化等引起 Tab 宽度变化时，ResizeObserver 兜底重测（防抖：值不变不 set）
+  useLayoutEffect(() => {
+    const container = scrollRef.current;
+    if (!container) return;
+    const ro = new ResizeObserver(() => measureIndicator());
+    ro.observe(container);
+    return () => ro.disconnect();
+  }, [measureIndicator]);
 
   /** onDragOver 期间按鼠标位置相对目标 Tab 中点决定插入前后 */
   const handleDragOver = (event: React.DragEvent, targetId: string) => {
@@ -184,6 +250,7 @@ export function SessionTabsBar(props: SessionTabsBarProps) {
         </Button>
       ) : null}
       <div
+        ref={scrollRef}
         className="session-tabs-scroll relative flex min-w-0 flex-1 items-center gap-1 overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         {tabItems.map(({ sessionId }) => (
@@ -222,6 +289,30 @@ export function SessionTabsBar(props: SessionTabsBarProps) {
           onDragEnd={handleDragEnd}
         />
         ))}
+        {/* 激活指示条：贴 Tab 外框底边的弧形描边（两端圆角与 Tab 同半径，
+            颜色跟随状态点：idle=bg-info / running=bg-warning / error=bg-danger），
+            切换会话时沿底边滑到新 Tab。 */}
+        {indicator && currentSessionId && (
+          <span
+            aria-hidden="true"
+            className={cn(
+              "session-tabs-indicator pointer-events-none absolute bottom-0 left-0 h-[2px] rounded-full",
+              hadPositionRef.current
+                ? "transition-transform duration-base ease-out-quint"
+                : "transition-none",
+            )}
+            style={{
+              width: INDICATOR_BASE_WIDTH,
+              transform: `translateX(${indicator.x - (INDICATOR_BASE_WIDTH - indicator.w) / 2}px) scaleX(${indicator.w / INDICATOR_BASE_WIDTH})`,
+              height: "5px",
+              borderRadius: "0 0 6px 6px",
+              background: indicatorColorVar,
+              borderLeft: "1px solid transparent",
+              borderRight: "1px solid transparent",
+              borderBottom: "1px solid transparent",
+            }}
+          />
+        )}
         {/* 浏览器式新建入口：跟在最后一张标签后面，下拉选择新建到哪个项目 */}
         <NewSessionMenu
           targets={props.newSessionTargets}
