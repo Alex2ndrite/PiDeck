@@ -17,7 +17,7 @@ import { ChevronDown, ChevronUp, MoreHorizontal, Plus, X } from "lucide-react";
 import { ConfirmDialog } from "../ui-shadcn/ConfirmDialog";
 import { Button } from "../ui-shadcn/button";
 import type { PiDesktopApi } from "../../../../preload";
-import type { SessionRuntimeTarget, TerminalTab } from "../../../../shared/types";
+import type { TerminalTab, TerminalTarget } from "../../../../shared/types";
 import { t } from "../../i18n";
 
 const TERMINAL_THEMES = {
@@ -84,7 +84,7 @@ function stripReplayBuffer(tab: TerminalTab): TerminalTab {
 }
 
 export function TerminalDock(props: {
-	target: SessionRuntimeTarget;
+	target: TerminalTarget;
 	open: boolean;
 	closing: boolean;
 	collapsed: boolean;
@@ -93,19 +93,20 @@ export function TerminalDock(props: {
 	onCollapsedChange: (collapsed: boolean) => void;
 	onHeightChange: (height: number) => void;
 	onClose: () => void;
-	/** 可选：终端 owner 键；缺省时用 agentId */
+	/** 可选：终端归属键（agent:<id> / project:<id>）；缺省时按 target 推导 */
 	sessionKey?: string;
-	/** 无 agent 时作为 CWD 的项目路径 */
-	projectCwd?: string;
 }) {
 	const containerRef = useRef<HTMLDivElement>(null);
 	const xtermRef = useRef<Terminal | null>(null);
 	const fitRef = useRef<FitAddon | null>(null);
 	const activeTabIdRef = useRef("");
 	const buffersRef = useRef<Record<string, string>>({});
-	const sessionKey = props.sessionKey ?? props.target.agentId;
-	const effectiveCwd =
-		sessionKey && sessionKey.startsWith("cwd:") ? props.projectCwd : undefined;
+	// 归属键：决定加载 gate 与 pending 占位判断；project 终端由父级显式传入
+	const sessionKey =
+		props.sessionKey ??
+		(props.target.kind === "agent"
+			? `agent:${props.target.agentId}`
+			: `project:${props.target.projectId}`);
 	/* copyNotice 已改用 toast (sonner) 实现 */
 	const [tabs, setTabs] = useState<TerminalTab[]>([]);
 	const [activeTabId, setActiveTabId] = useState("");
@@ -239,9 +240,10 @@ export function TerminalDock(props: {
 			cancelled = true;
 		};
 	}, [
-		props.target.sessionId,
-		props.target.agentId,
-		props.target.runtimeGeneration,
+		// target 序列化键：agent 绑定变更（restart）或项目切换都会重建终端实例
+		props.target.kind === "agent"
+			? `agent:${props.target.agentId}:${props.target.runtimeGeneration}`
+			: `project:${props.target.projectId}`,
 		props.terminal,
 		open,
 		contentReady,

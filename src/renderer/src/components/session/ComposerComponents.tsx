@@ -482,6 +482,7 @@ export function ModelPicker(props: {
 
 export function ComposerModePicker(props: {
 	currentMode: ComposerAgentMode;
+	planModeAvailable: boolean;
 	onClose: () => void;
 	onPick: (mode: ComposerAgentMode) => void;
 }) {
@@ -491,11 +492,11 @@ export function ComposerModePicker(props: {
 			labelKey: "app.composerModeNormal" as const,
 			descriptionKey: "app.composerModeNormalDesc" as const,
 		},
-		{
+		...(props.planModeAvailable ? [{
 			value: "plan" as const,
 			labelKey: "app.composerModePlan" as const,
 			descriptionKey: "app.composerModePlanDesc" as const,
-		},
+		}] : []),
 	];
 
 	return (

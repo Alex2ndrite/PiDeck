@@ -3823,7 +3823,7 @@ div.fixed.inset-0.z-50 {
   display: flex;
   gap: 8px;
 }
-.skill-create-card {
+.config-create-card {
   display: grid;
   gap: var(--space-2);
   padding: var(--space-3);
@@ -3831,117 +3831,23 @@ div.fixed.inset-0.z-50 {
   border-radius: var(--radius-lg);
   background: var(--color-bg-muted);
 }
-.skill-create-card > strong {
+.config-create-card > strong {
   color: var(--color-text-primary);
 }
-.skill-create-grid {
+.config-create-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(180px, 240px);
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 260px);
   gap: 12px;
 }
-.skill-create-card label {
+.config-create-label {
   display: grid;
   gap: 6px;
   color: var(--color-text-secondary);
   font-size: var(--font-size-control);
 }
-.skill-create-card input,
-.skill-create-card select,
-.skill-create-card textarea {
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-sm);
-  background: var(--color-bg-panel);
-  padding: 8px 10px;
-  color: var(--color-text-primary);
-}
-.skill-create-card textarea {
-  min-height: 72px;
-  resize: vertical;
-}
-.skill-location-picker {
-  position: relative;
-}
-.skill-location-picker > button {
-  width: 100%;
-  height: var(--control-height-md);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-sm);
-  background: var(--color-bg-panel);
-  color: var(--color-text-primary);
-  padding: 0 10px;
-  text-align: left;
-}
-.skill-location-picker > button.open {
-  border-color: var(--color-accent);
-  box-shadow: var(--focus-ring);
-}
-.skill-location-picker > button span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.skill-location-picker > button b {
-  color: var(--color-text-tertiary);
-  font-size: var(--font-size-control);
-}
-.skill-location-menu {
-  position: absolute;
-  z-index: 20;
-  left: 0;
-  right: 0;
-  top: calc(100% + 6px);
-  padding: 6px;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-lg);
-  background: var(--color-bg-panel);
-  box-shadow: var(--shadow-popover);
-}
-.skill-location-menu button {
-  width: 100%;
-  display: grid;
-  gap: 2px;
-  padding: 8px 10px;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  text-align: left;
-  color: var(--color-text-primary);
-}
-.skill-location-menu button:hover,
-.skill-location-menu button.active {
-  background: var(--color-bg-active);
-}
-.skill-location-menu button strong {
-  font-size: var(--font-size-control);
-  font-weight: 600;
-}
-.skill-location-menu button small {
-  font-size: var(--font-size-micro);
-  color: var(--color-text-tertiary);
-  word-break: break-all;
-}
-.skill-create-card button {
-  justify-self: start;
-}
 .skills-list {
   display: grid;
   gap: var(--space-2);
-}
-.skill-card-main {
-  gap: 5px;
-}
-.skill-title-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-.skill-title-row strong {
-  flex: 0 1 auto;
 }
 .skill-badges {
   display: flex;
@@ -3968,21 +3874,11 @@ div.fixed.inset-0.z-50 {
   background: var(--color-danger-soft);
   color: var(--color-danger);
 }
-.skill-card small {
-  white-space: nowrap;
-  word-break: normal;
-}
-.skill-warnings {
-  margin: 2px 0 0;
-  padding-left: 18px;
-  color: var(--color-danger);
-  font-size: var(--font-size-caption);
-}
 .skill-card-actions {
   align-items: center;
 }
 @media (max-width: 820px) {
-  .skill-create-grid {
+  .config-create-grid {
     grid-template-columns: 1fr;
   }
 }
@@ -3995,8 +3891,7 @@ div.fixed.inset-0.z-50 {
 :root[data-theme="dark"] .config-advanced-preserved,
 :root[data-theme="dark"] .config-model-advanced-note,
 :root[data-theme="dark"] .config-diagnostic-card,
-:root[data-theme="dark"] .skill-card,
-:root[data-theme="dark"] .skill-create-card,
+:root[data-theme="dark"] .config-create-card,
 :root[data-theme="dark"] .extension-card,
 :root[data-theme="dark"] .session-delete-confirm,
 :root[data-theme="dark"] .rename-dialog,

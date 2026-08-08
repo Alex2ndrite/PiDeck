@@ -91,12 +91,12 @@ test("drawer visible-panel helper renders first opens and switches immediately b
 
 test("workspace panel hook exposes narrow drawer commands", () => {
   assert.match(hook, /export function useWorkspacePanels/);
-  for (const command of ["openDrawer", "closeDrawer", "collapseDrawer", "expandDrawer"]) {
+  for (const command of ["openDrawer", "closeDrawer", "collapseDrawer", "expandDrawer", "toggleDrawerPinned"]) {
     assert.match(hook, new RegExp(`const ${command} = useCallback`));
   }
-  assert.doesNotMatch(hook, /toggleDrawerPinned/);
-  assert.doesNotMatch(hook, /drawerPinned/);
-  assert.doesNotMatch(hook, /drawerStoragePrefix/);
+  // 钉住（pin）功能：合并对方抽屉重构后恢复——钉住面板禁折叠、可持久化
+  assert.match(hook, /drawerPinned/);
+  assert.match(hook, /drawerStoragePrefix/);
   assert.match(hook, /projectIdRef\.current/);
 });
 
@@ -161,11 +161,11 @@ test("project hydration does not clobber a user-opened drawer", () => {
   assert.match(hook, /!isInitialHydration \|\| !drawerRef\.current/);
 });
 
-test("drawer defaults closed on project load; no pin restore", () => {
-  // 换项目 / 水合默认关闭；无钉住恢复路径
+test("drawer defaults closed on project load; pin restores per project", () => {
+  // 换项目 / 水合默认关闭；钉住面板按项目持久化恢复（合并对方抽屉重构）
   assert.match(hook, /setDrawer\(null\)/);
-  assert.doesNotMatch(hook, /saved\?\.pinned/);
-  assert.doesNotMatch(hook, /toggleDrawerPinned/);
+  assert.match(hook, /saved\?\.pinned/);
+  assert.match(hook, /toggleDrawerPinned/);
   const tabs = readFileSync("src/renderer/src/components/session/SessionTabsBar.tsx", "utf8");
   assert.match(tabs, /header-drawer-toggle/);
   assert.match(tabs, /PanelRight/);

@@ -10,6 +10,12 @@ test("extensions settings tab does not read preload API at module load", () => {
 	assert.match(extensionsTabSource, /function getExtensionsApi\(/);
 });
 
+test("built-in extension failures use the in-app notice instead of native alerts", () => {
+	assert.doesNotMatch(extensionsTabSource, /\balert\(/);
+	assert.match(extensionsTabSource, /config\.extensionOperationFailed/);
+	assert.match(extensionsTabSource, /formatExtensionError/);
+});
+
 test("browser API validates web state before replacing renderer lists", () => {
 	assert.match(browserApiSource, /function isWebState\(/);
 	assert.match(browserApiSource, /Array\.isArray\(.*\.projects\)/);

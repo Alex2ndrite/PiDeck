@@ -46,6 +46,7 @@ export function ComposerPickerHost(props: ComposerPickerHostProps) {
   const [models, setModels] = useState<AvailableModel[]>([]);
   const composerModes = useAtomValue(sessionComposerModeByIdAtom);
   const [favoriteModels, setFavoriteModels] = useState<string[]>([]);
+  const [planModeAvailable, setPlanModeAvailable] = useState(true);
   const modelLoadSequenceRef = useRef(0);
   /** 模型在本地 models.json 存在但运行中 Agent 未加载：待确认重启的目标。 */
   const [restartTarget, setRestartTarget] = useState<{
@@ -59,6 +60,25 @@ export function ComposerPickerHost(props: ComposerPickerHostProps) {
       setFavoriteModels(settings.favoriteModels ?? []);
     }).catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    if (props.picker !== "mode") return;
+    // 计划模式由内置扩展提供；每次打开模式选择器读取最新状态，避免禁用扩展后仍显示过期选项。
+    const extensionsApi = (window as unknown as {
+      piDesktop?: { extensions?: { list: () => Promise<{ extensions: Array<{ source: string; enabled?: boolean; builtIn?: boolean }> }> } };
+    }).piDesktop?.extensions;
+    if (!extensionsApi) return;
+    void extensionsApi.list().then((result) => {
+      const plan = result.extensions.find((extension) => extension.source === "pi-deck-plan-mode.ts");
+      const available = plan?.enabled !== false;
+      setPlanModeAvailable(available);
+      // 扩展被禁用后清理残留的计划模式状态，避免下拉隐藏但编辑器仍保持计划模式。
+      if (!available && composerModes[sessionId] === "plan") setMode({ sessionId, mode: "normal" });
+    }).catch(() => {
+      setPlanModeAvailable(false);
+      if (composerModes[sessionId] === "plan") setMode({ sessionId, mode: "normal" });
+    });
+  }, [composerModes, props.picker, sessionId, setMode]);
 
   useEffect(() => {
     // 打开模型选择器即加载（不依赖 record：欢迎页/未启动 Agent 时 record 为 undefined，
@@ -280,6 +300,7 @@ export function ComposerPickerHost(props: ComposerPickerHostProps) {
       <ComposerModePicker
         currentMode={composerModes[sessionId] ?? "normal"}
         onClose={props.onClose}
+        planModeAvailable={planModeAvailable}
         onPick={(nextMode) => {
           setMode({ sessionId, mode: nextMode });
           props.onClose();

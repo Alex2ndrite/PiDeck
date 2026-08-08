@@ -98,7 +98,7 @@ test("sidebar omits the redundant projects heading and tabs shrink to their titl
   assert.doesNotMatch(sidebarContent, /app\.sidebarProjects/);
   assert.match(tabBar, /pinned \? "w-20" : "w-fit max-w-32"/);
   assert.doesNotMatch(tabBar, /pinned \? "w-20" : "w-32"/);
-  assert.match(tabBar, /session-tabs-scroll flex min-w-0 flex-1/);
+  assert.match(tabBar, /session-tabs-scroll (?:relative )?flex min-w-0 flex-1/);
   assert.match(tabBar, /session-tabs-actions flex shrink-0/);
   assert.match(sidebarContent, /sidebar-body flex min-h-0 flex-1 flex-col gap-2 px-2 pt-1 pb-1/);
   assert.match(sessionTree, /min-h-7 w-full/);
@@ -122,8 +122,7 @@ test("sidebar omits the redundant projects heading and tabs shrink to their titl
 
 test("session tabs stay outside SessionView; header is standalone in pane", () => {
   assert.match(tabBar, /actions\?: ReactNode/);
-  assert.match(tabBar, /props\.actions !== null/);
-  assert.match(tabBar, /props\.actions \?\?/);
+  assert.match(tabBar, /props\.onToggleDrawer \? \(/);
   // Tab 栏外置后，SessionView 只渲染独立 Header，不再把操作嵌入 Tab 的 actions 槽。
   assert.doesNotMatch(sessionView, /SessionTabsBar/);
   assert.match(sessionView, /<SessionHeader[\s\S]*?widgetChips=/);

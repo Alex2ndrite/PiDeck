@@ -5,6 +5,16 @@ export type GitBranchInfo = {
 	branches: string[];
 };
 
+/** AI 生成提交摘要的结果：结构化错误码供渲染层区分“未配置/忙碌/超时”，避免透传 pi 英文错误。 */
+export type GitGenerateCommitMessageResult =
+	| { ok: true; message: string }
+	| {
+			ok: false;
+			/** 渲染层据此决定提示形态（如未配置时带“去设置”按钮） */
+			code: "GIT_COMMIT_MODEL_REQUIRED" | "GIT_COMMIT_BUSY" | "GIT_COMMIT_TIMEOUT" | "GIT_COMMIT_GENERATE_FAILED";
+			message: string;
+	  };
+
 export type GitFileStatus = "modified" | "added" | "deleted" | "renamed";
 
 export type GitChangedFile = {

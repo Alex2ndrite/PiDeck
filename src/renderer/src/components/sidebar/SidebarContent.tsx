@@ -52,7 +52,12 @@ export type SidebarActions = {
     copyPath: (session: SessionSummary) => Promise<void>;
     openFile: (session: SessionSummary) => Promise<void>;
     delete: (projectId: string, session: SessionSummary) => Promise<void>;
-  };
+    /** 归档会话（可恢复） */
+    archive: (projectId: string, session: SessionSummary) => Promise<void>;
+    /** 恢复归档会话 */
+    unarchive: (session: SessionSummary, projectId?: string) => Promise<void>;
+    /** 列出已归档会话 */
+    listArchived: () => Promise<SessionSummary[]>;  };
   agents: {
     rename: (agent: AgentTab) => void;
     export: (agent: AgentTab) => Promise<void>;
@@ -248,6 +253,7 @@ export function SidebarContent(props: SidebarContentProps) {
           onShowLogs={() => {
             if (menuSessionRuntimeAgent) void controller.openRpcLogs(menuSessionRuntimeAgent.id, actions.rpc.listLogs);
           }}
+          onArchiveSession={() => { void actions.sessions.archive(menu.projectId, menuSession); controller.closeMenu(); }}
           onDeleteSession={() => { void actions.sessions.delete(menu.projectId, menuSession); controller.closeMenu(); }}
         />
       )}
@@ -261,6 +267,9 @@ export function SidebarContent(props: SidebarContentProps) {
           onRename={(session) => actions.sessions.rename(managerProject.id, session)}
           onExport={(session) => void actions.sessions.export(managerProject.id, session)}
           onDelete={(sessions) => Promise.all(sessions.map((session) => actions.sessions.delete(managerProject.id, session))).then(controller.closeSessionManager)}
+          onArchive={(sessions) => Promise.all(sessions.map((session) => actions.sessions.archive(managerProject.id, session))).then(controller.closeSessionManager)}
+          onUnarchive={(archived) => actions.sessions.unarchive(archived, managerProject.id)}
+          listArchived={actions.sessions.listArchived}
         />
       )}
       {controller.worktreeCreateProjectId && (

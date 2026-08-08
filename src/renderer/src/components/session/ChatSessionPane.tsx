@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef } from "react";
 import { useAtomValue } from "jotai";
 import { sessionRecordByIdAtomFamily } from "../../atoms";
 import { useSessionTimelineController } from "../../hooks/useSessionTimelineController";
@@ -26,16 +26,13 @@ export function ChatSessionPane(props: ChatSessionPaneProps) {
   const sessionTitle = record?.title?.trim() || t("app.chatProject");
 
   const sessionTimeline = useSessionTimelineController({ sessionId });
-  const [sessionActionsOpen, setSessionActionsOpen] = useState(false);
 
   const localHeaderRef = useRef<HTMLDivElement | null>(null);
-  const localComboRef = useRef<HTMLDivElement | null>(null);
   const localComposerRef = useRef<HTMLElement | null>(null);
   const localQueuedTrackRef = useRef<HTMLDivElement | null>(null);
 
   const layoutRefs = services.layoutRefs;
   const chatHeaderRef = focused ? layoutRefs.chatHeaderRef : localHeaderRef;
-  const sessionComboRef = focused ? layoutRefs.sessionComboRef : localComboRef;
   const composerRef = focused ? layoutRefs.composerRef : localComposerRef;
 
   const activeQueuedPrompts = services.queuedPromptsBySession[sessionId] ?? [];
@@ -50,25 +47,14 @@ export function ChatSessionPane(props: ChatSessionPaneProps) {
     };
   }, [focused, services.jumpToMessageRef, sessionTimeline.jumpToMessage]);
 
-  useEffect(() => {
-    if (!sessionActionsOpen) return;
-    const onPointerDown = (event: PointerEvent) => {
-      if (sessionComboRef.current?.contains(event.target as Node)) return;
-      setSessionActionsOpen(false);
-    };
-    document.addEventListener("pointerdown", onPointerDown, true);
-    return () => document.removeEventListener("pointerdown", onPointerDown, true);
-  }, [sessionActionsOpen, sessionComboRef]);
-
   const layout = useMemo(
     () => ({
       chatHeaderRef,
-      sessionComboRef,
       composerRef,
       composerOffsetHeight: focused ? layoutRefs.composerOffsetHeight : 0,
       terminalRowHeight: layoutRefs.terminalRowHeight,
     }),
-    [chatHeaderRef, composerRef, focused, layoutRefs, sessionComboRef],
+    [chatHeaderRef, composerRef, focused, layoutRefs],
   );
 
   return (
@@ -79,15 +65,17 @@ export function ChatSessionPane(props: ChatSessionPaneProps) {
       splitPane={splitPane}
       focused={focused}
       onFocusPane={onFocusPane}
-      sessionActionsOpen={sessionActionsOpen}
-      setSessionActionsOpen={setSessionActionsOpen}
       chatHeaderRef={layout.chatHeaderRef}
-      sessionComboRef={layout.sessionComboRef}
       composerRef={layout.composerRef}
       composerOffsetHeight={layout.composerOffsetHeight}
       terminalRowHeight={layout.terminalRowHeight}
       activeQueuedPrompts={activeQueuedPrompts}
       queuedTrackRef={localQueuedTrackRef}
+      terminalOwnerKey={services.terminalOwnerKey}
+      terminalTarget={services.terminalTarget}
+      setTerminalOpenForOwner={services.setTerminalOpenForOwner}
+      setTerminalCollapsedForOwner={services.setTerminalCollapsedForOwner}
+      setTerminalHeightByOwner={services.setTerminalHeightByOwner}
     />
   );
 }

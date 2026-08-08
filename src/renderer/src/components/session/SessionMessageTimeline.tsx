@@ -35,6 +35,7 @@ import {
   type SessionTimelineController,
 } from "../../hooks/useSessionTimelineController";
 import { t } from "../../i18n";
+import { cn } from "../../lib/utils";
 import { SessionFileSummary } from "./SessionFileSummary";
 import { SessionStartSurface } from "./SessionStartSurface";
 import { MessageScroller } from "../agents/message-scroller";
@@ -131,6 +132,19 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
   const [freshMessageIds, setFreshMessageIds] = useState<ReadonlySet<string>>(() => new Set());
   const seenTailMessageIdRef = useRef<string | undefined>(undefined);
   const freshTimersRef = useRef<Map<string, number>>(new Map());
+  // 会话内容就绪淡入：isConversationLoading true→false（切会话历史加载完成）时，
+  // 给 MessageScroller 挂一次 160ms 淡入动画类，与骨架屏消失衔接，避免整块瞬间出现
+  const [contentEntering, setContentEntering] = useState(false);
+  const prevConversationLoadingRef = useRef(isConversationLoading);
+  useEffect(() => {
+    if (prevConversationLoadingRef.current && !isConversationLoading) {
+      setContentEntering(true);
+      // 动画 160ms 播完即清状态（MessageScroller 不透传 animationend，用定时器）
+      const timer = window.setTimeout(() => setContentEntering(false), 180);
+      return () => window.clearTimeout(timer);
+    }
+    prevConversationLoadingRef.current = isConversationLoading;
+  }, [isConversationLoading]);
 
   useEffect(() => {
     // 会话切换时重置：新会话的首帧（历史加载）不播动画
@@ -342,7 +356,10 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
 
   return (
     <MessageScroller
-      className="message-timeline-host h-full min-h-0"
+      className={cn(
+        "message-timeline-host h-full min-h-0",
+        contentEntering && "timeline-content-enter",
+      )}
       viewportClassName="message-timeline"
       viewportRef={timelineRef}
       scrollApiRef={controller.scrollerScrollApiRef}

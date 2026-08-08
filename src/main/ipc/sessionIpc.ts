@@ -322,6 +322,40 @@ export function registerSessionIpc(deps: SessionIpcDeps): void {
 		},
 	);
 	ipcMain.handle(
+		ipcChannels.sessionsCatalogArchive,
+		async (_event, sessionId: string) => {
+			const entry = sessionCatalog.get(sessionId);
+			if (!entry?.filePath) return false;
+			// 运行中的会话不能归档（同删除）：移动文件会破坏 pi 对当前写入位置的引用。
+			if (
+				sessionRuntimeCoordinator.getTarget(sessionId) ||
+				sessionRuntimeCoordinator.isActivating(sessionId)
+			) {
+				throw new Error(mainCopy("session.stopBeforeDelete"));
+			}
+			const archivedPath = await sessionScanner.archive(entry.filePath);
+			await sessionCatalog.remove(sessionId);
+			void appLogger.info("session", "Session archived", { sessionId, archivedPath });
+			return true;
+		},
+	);
+	ipcMain.handle(
+		ipcChannels.sessionsCatalogUnarchive,
+		async (_event, archivedPath: string) => {
+			// 校验入参：归档路径必须是 .pideck-archive 目录内的 JSONL，防路径穿越。
+			if (typeof archivedPath !== "string" || !archivedPath.endsWith(".jsonl")) {
+				throw new Error(mainCopy("session.invalidArchivePath"));
+			}
+			const restoredPath = await sessionScanner.unarchive(archivedPath);
+			void appLogger.info("session", "Session restored from archive", { restoredPath });
+			return true;
+		},
+	);
+	ipcMain.handle(
+		ipcChannels.sessionsCatalogListArchived,
+		async () => sessionScanner.listArchived(),
+	);
+	ipcMain.handle(
 		ipcChannels.sessionsCatalogReadMessages,
 		async (_event, sessionId: string) => {
 			const entry = sessionCatalog.get(sessionId);

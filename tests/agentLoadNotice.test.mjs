@@ -108,9 +108,10 @@ test("reminder toggles are default-enabled and wired through App + SettingsStore
 	assert.match(store, /workBreakReminderEnabled: true/);
 	assert.match(app, /agentCountReminderEnabled: true/);
 	assert.match(app, /workBreakReminderEnabled: true/);
-	// 渲染层 hook 读取开关：开启才提醒
+	// 渲染层 hook 读取开关：开启才提醒；「永久不再提醒」按钮写回设置
 	assert.match(app, /useAgentLoadNotice\(settings\.agentCountReminderEnabled\)/);
-	assert.match(app, /useWorkBreakReminder\(settings\.workBreakReminderEnabled\)/);
+	assert.match(app, /useWorkBreakReminder\(settings\.workBreakReminderEnabled, disableWorkBreakReminderForever\)/);
+	assert.match(app, /api\.settings\s*\.update\(\{ workBreakReminderEnabled: false \}\)/);
 	// 设置面板提供两个开关（更新草稿对应字段）
 	assert.match(modal, /updateDraft\(\{ agentCountReminderEnabled: checked \}\)/);
 	assert.match(modal, /updateDraft\(\{ workBreakReminderEnabled: checked \}\)/);

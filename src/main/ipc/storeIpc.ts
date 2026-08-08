@@ -401,6 +401,14 @@ export function registerStoreIpc({
 
 	// ── Extensions ──────────────────────────────
 	ipcMain.handle(ipcChannels.extensionsList, () => extensionManager.list());
+	ipcMain.handle(ipcChannels.extensionsRemoveBuiltIn, async (_event, source: string) => {
+		await extensionManager.removeBuiltIn(source);
+		void appLogger.info("extension", "Built-in extension removed", { source });
+	});
+	ipcMain.handle(ipcChannels.extensionsRestoreBuiltIn, async (_event, source: string) => {
+		await extensionManager.restoreBuiltIn(source);
+		void appLogger.info("extension", "Built-in extension restored", { source });
+	});
 	ipcMain.handle(ipcChannels.extensionsUninstall, async (_event, source: string, scope?: "user" | "project" | "unknown") => {
 		const result = await extensionManager.uninstall(source, scope);
 		void appLogger.info("extension", "Extension uninstalled", { source, scope });

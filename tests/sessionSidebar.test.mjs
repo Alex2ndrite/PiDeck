@@ -144,6 +144,19 @@ test("unstarted drafts have an independent delete control and context menu", () 
   assert.match(styles, /\.draft-session-delete/);
 });
 
+test("session context menu exposes archive and restores refresh the manager project", () => {
+  const components = readFileSync("src/renderer/src/components/sidebar/SidebarComponents.tsx", "utf8");
+  const content = readFileSync("src/renderer/src/components/sidebar/SidebarContent.tsx", "utf8");
+  const app = readFileSync("src/renderer/src/App.tsx", "utf8");
+
+  assert.match(components, /onArchiveSession: \(\) => void/);
+  assert.match(components, /onSelect=\{props\.onArchiveSession\}/);
+  assert.match(content, /actions\.sessions\.archive\(menu\.projectId, menuSession\)/);
+  assert.match(content, /actions\.sessions\.unarchive\(archived, managerProject\.id\)/);
+  assert.match(app, /unarchiveSidebarSession\(archivedPath: string, projectId = activeProjectId\)/);
+  assert.match(app, /unarchiveSidebarSession\(archived\.filePath, projectId\)/);
+});
+
 test("worktree rows expose their child project context menu and loading projects keep a surface", () => {
   const worktree = readFileSync("src/renderer/src/components/sidebar/WorktreeTree.tsx", "utf8");
   const sessionTree = readFileSync("src/renderer/src/components/sidebar/SessionTree.tsx", "utf8");

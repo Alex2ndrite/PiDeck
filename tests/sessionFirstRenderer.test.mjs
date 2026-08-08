@@ -80,9 +80,12 @@ test("first Session send is request-addressed and restores rejected snapshots", 
   assert.match(sessionSendSource, /\.\.\.imageSnapshot, \.\.\.current/);
 });
 
-test("the renderer-only Chat surface keeps the dev workspace toolbar before first send", () => {
-  assert.match(appSource, /const hasActiveConversation = Boolean\(currentSessionId\)/);
-  assert.match(appSource, /terminalAction=\{activeAgentId \? \{/);
+test("the dev workspace toolbar persists for inactive agents and the empty state", () => {
+  // outline 悬浮条常驻：不再被 hasActiveConversation 条件挡住，引导页也有入口
+  assert.doesNotMatch(appSource, /outlineContent=\{hasActiveConversation/);
+  assert.match(appSource, /outlineContent=\{\s*\/\*/);
+  // 悬浮栏的终端入口绑定可用目标（agent 或项目），未激活 agent / 引导页同样可用
+  assert.match(appSource, /terminalAction=\{!isLanWeb && terminalTarget \? \{/);
   // 悬浮栏不再暴露 files/git/browser（入口收进抽屉活动栏，files 由标题栏抽屉开关打开）
   assert.match(appSource, /filesAction=\{undefined\}/);
   assert.match(appSource, /gitAction=\{undefined\}/);
@@ -111,7 +114,8 @@ test("active Agent identity is derived from the selected Session runtime", () =>
 });
 
 test("Session messages and composer render without an active Agent", () => {
-  assert.match(appSource, /const hasActiveConversation = Boolean\(currentSessionId\)/);
+  // 会话渲染由 currentSessionId 驱动（App 不再持有 hasActiveConversation 变量，
+  // 该语义下沉到 SessionView 的 prop），无 active agent 时 composer 仍渲染
   assert.match(
     sessionViewSource,
     /\{hasActiveConversation && \([\s\S]*<ComposerArea[\s\S]*sessionId=\{sessionId\}/,

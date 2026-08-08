@@ -2,7 +2,7 @@ import { ipcMain } from "electron";
 import { resolve } from "node:path";
 import { spawn, type ChildProcess } from "node:child_process";
 import { ipcChannels } from "../../shared/ipc";
-import type { GitWorkspaceDiffGroup } from "../../shared/types";
+import type { GitGenerateCommitMessageResult, GitWorkspaceDiffGroup } from "../../shared/types";
 import type { GitService } from "../git/GitService";
 import type { AppLogger } from "../logging/AppLogger";
 import type { PiLocator } from "../pi/PiLocator";
@@ -29,6 +29,8 @@ let genRpcClient: PiRpcClient | null = null;
 let genProcessCwd = "";
 let genModelKey = "";
 let genIdleTimer: NodeJS.Timeout | null = null;
+/** 生成互斥锁：同一时刻只允许一个摘要请求，避免并发打到复用进程触发 pi 的 busy 拒绝 */
+let genBusy = false;
 
 /** 清理快速生成进程 */
 function stopGenProcess() {
@@ -142,6 +144,12 @@ async function quickGenerate(
 	model: { provider: string; modelId: string },
 	appLogger: Pick<AppLogger, "warn">,
 ): Promise<string> {
+	// 复用进程同时只能跑一个生成；并发（连点/跨项目）直接拒绝，由 handler 转友好提示
+	if (genBusy) {
+		throw new Error("Agent is already processing");
+	}
+	genBusy = true;
+
 	const settings = settingsStore.get();
 	const command = piLocator.resolveCommand(
 		settings.customPiPath,
@@ -150,48 +158,55 @@ async function quickGenerate(
 		settings.wslUser,
 	);
 
-	const rpc = await ensureGenProcess(projectPath, command, piLocator, settingsStore, model, appLogger);
+	try {
+		const rpc = await ensureGenProcess(projectPath, command, piLocator, settingsStore, model, appLogger);
 
-	return new Promise<string>((resolve, reject) => {
-		const collected: string[] = [];
-		let settled = false;
-		const timeout = setTimeout(() => {
-			if (!settled) {
-				void appLogger.warn("git", "QuickGen timed out", {});
-				reject(new Error("Quick generate timed out"));
-			}
-		}, 60_000);
-
-		const onEvent = (event: Record<string, unknown>) => {
-			const eventType = event.type as string;
-			if (eventType === "message_update") {
-				const ae = (event as Record<string, unknown>).assistantMessageEvent as Record<string, unknown> | undefined;
-				if (ae?.type === "text_delta" && typeof ae.delta === "string") {
-					collected.push(ae.delta);
+		return await new Promise<string>((resolve, reject) => {
+			const collected: string[] = [];
+			let settled = false;
+			const timeout = setTimeout(() => {
+				if (!settled) {
+					void appLogger.warn("git", "QuickGen timed out", {});
+					// 超时后 pi 进程内的 agent 可能仍在处理旧请求（残留 busy 状态），
+					// 直接杀掉复用进程，下次请求重建干净的进程，避免后续请求被 busy 拒绝。
+					stopGenProcess();
+					reject(new Error("Quick generate timed out"));
 				}
-			}
-			if (eventType === "agent_settled" || eventType === "agent_end") {
-				settled = true;
+			}, 60_000);
+
+			const onEvent = (event: Record<string, unknown>) => {
+				const eventType = event.type as string;
+				if (eventType === "message_update") {
+					const ae = (event as Record<string, unknown>).assistantMessageEvent as Record<string, unknown> | undefined;
+					if (ae?.type === "text_delta" && typeof ae.delta === "string") {
+						collected.push(ae.delta);
+					}
+				}
+				if (eventType === "agent_settled" || eventType === "agent_end") {
+					settled = true;
+					clearTimeout(timeout);
+					rpc.off("event", onEvent);
+					resolve(collected.join(""));
+				}
+			};
+
+			rpc.on("event", onEvent);
+
+			rpc.request({ type: "prompt", message: prompt }).then((response) => {
+				if (!response.success) {
+					clearTimeout(timeout);
+					rpc.off("event", onEvent);
+					reject(new Error(response.error ?? "Prompt rejected"));
+				}
+			}).catch((err) => {
 				clearTimeout(timeout);
 				rpc.off("event", onEvent);
-				resolve(collected.join(""));
-			}
-		};
-
-		rpc.on("event", onEvent);
-
-		rpc.request({ type: "prompt", message: prompt }).then((response) => {
-			if (!response.success) {
-				clearTimeout(timeout);
-				rpc.off("event", onEvent);
-				reject(new Error(response.error ?? "Prompt rejected"));
-			}
-		}).catch((err) => {
-			clearTimeout(timeout);
-			rpc.off("event", onEvent);
-			reject(err);
+				reject(err);
+			});
 		});
-	});
+	} finally {
+		genBusy = false;
+	}
 }
 
 // ── IPC 注册 ────────────────────────────────────────────────────────
@@ -457,18 +472,23 @@ export function registerGitIpc({
 
 	ipcMain.handle(
 		ipcChannels.gitGenerateCommitMessage,
-		async (_event, projectId: string) => {
+		async (_event, projectId: string): Promise<GitGenerateCommitMessageResult> => {
 			const project = projectStore.get(projectId);
-			if (!project) return "";
+			if (!project) return { ok: true, message: "" };
 
 			const diff = await gitService.getStagedDiff(project.path);
-			if (!diff.trim()) return "";
+			if (!diff.trim()) return { ok: true, message: "" };
 
 			const settings = settingsStore.get();
 			const provider = settings.gitCommitMessageProvider.trim();
 			const modelId = settings.gitCommitMessageModel.trim();
 			if (!provider || !modelId) {
-				throw new Error(mainCopy("git.commitMessageModelRequired"));
+				// 结构化错误码：渲染层识别后提供“去设置”引导，而不是只显示一行文案
+				return {
+					ok: false,
+					code: "GIT_COMMIT_MODEL_REQUIRED",
+					message: mainCopy("git.commitMessageModelRequired"),
+				};
 			}
 
 			// 从设置中读取提示词模板，替换 {diff} 为实际 diff 内容
@@ -486,11 +506,18 @@ export function registerGitIpc({
 					appLogger,
 				);
 				void appLogger.warn("git", "Generate commit message result", { length: result.length });
-				return result.trim();
+				return { ok: true, message: result.trim() };
 			} catch (err) {
 				const msg = err instanceof Error ? err.message : String(err);
 				void appLogger.warn("git", "Generate commit message failed", { error: msg });
-				throw err;
+				// pi 的 busy 拒绝是技术性英文，统一转成本地化提示；其余错误保留原文便于排查
+				if (/Agent is already processing/i.test(msg)) {
+					return { ok: false, code: "GIT_COMMIT_BUSY", message: mainCopy("git.commitMessageBusy") };
+				}
+				if (/timed out/i.test(msg)) {
+					return { ok: false, code: "GIT_COMMIT_TIMEOUT", message: mainCopy("git.commitMessageTimeout") };
+				}
+				return { ok: false, code: "GIT_COMMIT_GENERATE_FAILED", message: msg };
 			}
 		},
 	);

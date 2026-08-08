@@ -238,7 +238,9 @@ export class SessionScanner {
     return new Promise((resolve, reject) => {
       execFile(this.wslExePath, [
         "-d", this.wslConfig!.distro, "-u", this.wslConfig!.user,
-        "find", sessionsDir, "-name", "*.jsonl", "-type", "f"
+        // 跳过归档目录（.pideck-archive）与回收目录（.trash）：归档会话不参与常规扫描。
+        "find", sessionsDir, "-name", "*.jsonl", "-type", "f",
+        "-not", "-path", `*/${SessionScanner.ARCHIVE_DIR_NAME}/*`
       ], {
         encoding: "utf8",
         timeout: 15_000,
@@ -584,6 +586,190 @@ export class SessionScanner {
     }
   }
 
+  // ── 会话归档：移动到 <扫描根>/.pideck-archive/ 并记录原路径 ──
+  // 归档与删除的区别：文件不销毁，随时可从归档恢复；归档目录内不再被扫描。
+
+  /** 归档目录名（各扫描根下的隐藏子目录） */
+  private static readonly ARCHIVE_DIR_NAME = ".pideck-archive";
+  /** 归档索引文件名：记录 归档路径 → 原始路径 映射，恢复时据此移回 */
+  private static readonly ARCHIVE_INDEX_NAME = "index.json";
+
+  /** 取 filePath 所在扫描根的归档目录；非扫描根内文件返回 undefined */
+  private archiveDirFor(filePath: string): string | undefined {
+    const root = this.findSessionsRootForFile(filePath);
+    if (!root) return undefined;
+    return join(root, SessionScanner.ARCHIVE_DIR_NAME);
+  }
+
+  /**
+   * 归档会话：把 JSONL（连同同级子会话目录）移入归档目录，并写入索引。
+   * 支持 WSL 路径；返回归档后的文件路径。
+   */
+  async archive(filePath: string): Promise<string> {
+    const wsl = this.isWslPath(filePath);
+    const archiveDir = this.archiveDirFor(filePath);
+    if (!archiveDir) throw new Error("会话不在可扫描目录内，无法归档");
+    // 归档目标 = 归档目录 + 原文件名；重名时追加时间戳避免覆盖已有归档。
+    const target = join(archiveDir, basename(filePath));
+    const finalTarget = existsSync(target) || (wsl && await this.existsWslFile(target))
+      ? join(archiveDir, `${basename(filePath, extname(filePath))}.${Date.now()}${extname(filePath)}`)
+      : target;
+
+    if (wsl) {
+      await this.moveWsl(filePath, finalTarget);
+    } else {
+      await mkdir(archiveDir, { recursive: true });
+      await rename(filePath, finalTarget);
+    }
+    // 同级子会话目录（<stem>/）一并移入归档，保持子会话归属。
+    const siblingDir = this.getSiblingDir(filePath);
+    if (siblingDir) {
+      const targetSibling = join(archiveDir, basename(siblingDir));
+      if (wsl) {
+        if (await this.existsWslDir(siblingDir)) await this.moveWsl(siblingDir, targetSibling);
+      } else if (existsSync(siblingDir)) {
+        await rename(siblingDir, targetSibling);
+      }
+    }
+    await this.recordArchiveEntry(finalTarget, filePath, wsl);
+    return finalTarget;
+  }
+
+  /**
+   * 从归档恢复会话：按索引把文件移回原路径。
+   * 原路径已存在（被新建会话占用）时抛错，避免覆盖。
+   */
+  async unarchive(archivedPath: string): Promise<string> {
+    const wsl = this.isWslPath(archivedPath);
+    const originalPath = await this.lookupArchiveOriginal(archivedPath, wsl);
+    if (!originalPath) throw new Error("归档索引中找不到该会话");
+    if (wsl ? await this.existsWslFile(originalPath) : existsSync(originalPath)) {
+      throw new Error("原路径已被占用，无法恢复");
+    }
+    if (wsl) {
+      await this.moveWsl(archivedPath, originalPath);
+    } else {
+      await rename(archivedPath, originalPath);
+    }
+    // 子会话目录一并移回
+    const siblingDir = this.getSiblingDir(archivedPath);
+    if (siblingDir) {
+      const originalSibling = this.getSiblingDir(originalPath);
+      if (originalSibling) {
+        if (wsl ? await this.existsWslDir(siblingDir) : existsSync(siblingDir)) {
+          if (wsl) await this.moveWsl(siblingDir, originalSibling);
+          else await rename(siblingDir, originalSibling);
+        }
+      }
+    }
+    await this.removeArchiveEntry(archivedPath, wsl);
+    return originalPath;
+  }
+
+  /** 列出当前环境全部已归档会话摘要（供恢复 UI 展示） */
+  async listArchived(): Promise<SessionSummary[]> {
+    // 归档目录可能分布在任意扫描根下（默认全局根 + 项目 sessionDir），
+    // 用最近一次 list() 记录的扫描根集合遍历；未扫描过时退回默认根。
+    const roots = this.activeScanRoots.length > 0
+      ? this.activeScanRoots
+      : this.wslConfig
+        ? [this.wslSessionsDir]
+        : [this.root];
+    const results: SessionSummary[] = [];
+    const seen = new Set<string>();
+    for (const root of roots) {
+      const archiveDir = join(root, SessionScanner.ARCHIVE_DIR_NAME);
+      const files = this.wslConfig
+        ? await this.collectJsonlFromDirWsl(archiveDir).catch(() => [] as string[])
+        : await this.collectJsonl(archiveDir).catch(() => [] as string[]);
+      for (const file of files) {
+        if (seen.has(this.normalize(file))) continue;
+        seen.add(this.normalize(file));
+        const summary = await this.readSummary(file).catch(() => null);
+        if (summary) results.push(summary);
+      }
+    }
+    return results.sort((a, b) => b.updatedAt - a.updatedAt);
+  }
+
+  /** 通过 wsl.exe 移动文件/目录 */
+  private moveWsl(srcPath: string, dstPath: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      execFile(this.wslExePath, ["-d", this.wslConfig!.distro, "-u", this.wslConfig!.user, "mv", "-f", srcPath, dstPath], {
+        shell: this.wslShell,
+        encoding: "utf8",
+        timeout: 5_000,
+        windowsHide: true,
+      }, (err) => { if (err) reject(err); else resolve(); });
+    });
+  }
+
+  /** 读归档索引（JSON：{ archivedPath: originalPath }） */
+  private async readArchiveIndex(wsl: boolean): Promise<Record<string, string>> {
+    const roots = wsl ? [this.wslSessionsDir] : [this.root];
+    const merged: Record<string, string> = {};
+    for (const root of roots) {
+      const indexPath = join(root, SessionScanner.ARCHIVE_DIR_NAME, SessionScanner.ARCHIVE_INDEX_NAME);
+      try {
+        const raw = wsl ? await this.readWslFile(indexPath) : await readFile(indexPath, "utf8");
+        Object.assign(merged, JSON.parse(raw) as Record<string, string>);
+      } catch {
+        // 索引缺失/损坏视为空归档；归档操作会重新写入。
+      }
+    }
+    return merged;
+  }
+
+  /** 写入归档索引（合并现有条目 + 新增/删除） */
+  private async writeArchiveIndex(entries: Record<string, string>, wsl: boolean): Promise<void> {
+    const archiveDir = wsl
+      ? join(this.wslSessionsDir, SessionScanner.ARCHIVE_DIR_NAME)
+      : join(this.root, SessionScanner.ARCHIVE_DIR_NAME);
+    const content = JSON.stringify(entries, null, 2);
+    if (wsl) {
+      await this.writeWslFile(join(archiveDir, SessionScanner.ARCHIVE_INDEX_NAME), content);
+    } else {
+      await mkdir(archiveDir, { recursive: true });
+      await writeFile(join(archiveDir, SessionScanner.ARCHIVE_INDEX_NAME), content, "utf8");
+    }
+  }
+
+  /** 新增归档索引条目 */
+  private async recordArchiveEntry(archivedPath: string, originalPath: string, wsl: boolean): Promise<void> {
+    const entries = await this.readArchiveIndex(wsl);
+    entries[archivedPath] = originalPath;
+    await this.writeArchiveIndex(entries, wsl);
+  }
+
+  /** 删除归档索引条目 */
+  private async removeArchiveEntry(archivedPath: string, wsl: boolean): Promise<void> {
+    const entries = await this.readArchiveIndex(wsl);
+    if (!(archivedPath in entries)) return;
+    delete entries[archivedPath];
+    await this.writeArchiveIndex(entries, wsl);
+  }
+
+  /** 按归档路径查原始路径 */
+  private async lookupArchiveOriginal(archivedPath: string, wsl: boolean): Promise<string | undefined> {
+    const entries = await this.readArchiveIndex(wsl);
+    return entries[archivedPath];
+  }
+
+  /** 通过 wsl.exe 递归列出目录下 *.jsonl（供归档目录扫描） */
+  private collectJsonlFromDirWsl(dir: string): Promise<string[]> {
+    return new Promise((resolve, reject) => {
+      execFile(this.wslExePath, ["-d", this.wslConfig!.distro, "-u", this.wslConfig!.user, "find", dir, "-name", "*.jsonl", "-type", "f"], {
+        encoding: "utf8",
+        timeout: 15_000,
+        windowsHide: true,
+        shell: this.wslShell,
+      }, (err, stdout) => {
+        if (err) { reject(err); return; }
+        resolve(stdout.trim().split(/\r?\n/).filter(Boolean));
+      });
+    });
+  }
+
   /**
    * 获取 JSONL 文件同级子会话目录路径。
    * 例如 /path/to/stem.jsonl → /path/to/stem/
@@ -646,8 +832,7 @@ export class SessionScanner {
    * 这不是 CLI 的 fork：不裁剪会话树，只生成一个可独立打开/继续的新历史会话文件。
    * 支持 WSL 路径。
    */
-  async copy(filePath: string): Promise<SessionSummary> {
-    const wsl = this.isWslPath(filePath);
+  async copy(filePath: string): Promise<SessionSummary> {    const wsl = this.isWslPath(filePath);
     const raw = wsl ? await this.readWslFile(filePath) : await readFile(filePath, "utf8");
     const current = await this.readSummary(filePath).catch(() => null);
     const copyName = this.translate("session.copyTitle", {
@@ -860,6 +1045,8 @@ export class SessionScanner {
 
     for (const entry of entries) {
       const path = join(dir, entry.name);
+      // 跳过归档目录：归档会话不参与常规扫描（.trash 同理不扫）。
+      if (entry.isDirectory() && entry.name === SessionScanner.ARCHIVE_DIR_NAME) continue;
       if (entry.isDirectory()) files.push(...await this.collectJsonl(path));
       else if (entry.isFile() && entry.name.endsWith(".jsonl")) files.push(path);
     }

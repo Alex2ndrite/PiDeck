@@ -1,8 +1,9 @@
 import { Button } from "../components/ui-shadcn/button";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui-shadcn/table";
 import { Tabs, TabsList, TabsTrigger } from "../components/ui-shadcn/tabs";
 import { showNotice } from "../utils/notice";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Check, FileEdit, Pencil, ShoppingBag, Trash2, X } from "lucide-react";
+import { Check, FileEdit, FileText, Pencil, ShoppingBag, Trash2, X } from "lucide-react";
 import type {
 	CreatePiPromptTemplateInput,
 	PiPromptTemplateListResult,
@@ -100,7 +101,7 @@ export function PromptsTab(props: {
 				onValueChange={(v) => { if (v === "local" || v === "store") setPromptTab(v); }}
 				className="gap-0"
 			>
-				<TabsList className="w-fit">
+				<TabsList className="w-full">
 					<TabsTrigger value="local" onClick={() => props.onRefresh()}>
 						{t("config.nav.prompts")}
 					</TabsTrigger>
@@ -138,9 +139,9 @@ export function PromptsTab(props: {
 				</div>
 			</div>
 
-			<section className="prompt-create-card">
+			<section className="config-create-card">
 				<strong>{t("config.createPrompt")}</strong>
-				<Label className="prompt-create-label">
+				<Label className="config-create-label">
 					<span>{t("config.name")}</span>
 					<Input
 						value={props.newName}
@@ -148,17 +149,17 @@ export function PromptsTab(props: {
 						onChange={(e) => props.onChangeNewName(e.target.value)}
 					/>
 				</Label>
-				<Label className="prompt-create-label">
+				<Label className="config-create-label">
 					<span>{t("config.description")}</span>
 					<Textarea
-						className="prompt-create-textarea"
+						className="min-h-[72px] resize-y"
 						value={props.newDescription}
 						placeholder={t("config.promptDescriptionPlaceholder")}
 						onChange={(e) => props.onChangeNewDescription(e.target.value)}
-						rows={3}
 					/>
 				</Label>
 				<Button size="sm" variant="default"
+					className="justify-self-start"
 					disabled={!canCreate || props.creating}
 					onClick={props.onCreate}
 				>
@@ -166,11 +167,12 @@ export function PromptsTab(props: {
 				</Button>
 			</section>
 
-			<section className="prompts-list">
+			<section className="overflow-hidden rounded-lg border border-border-subtle bg-bg-panel">
 				{data.templates.length === 0 ? (
 					<div className="py-12 text-center text-control text-text-tertiary">{t("config.noPrompts")}</div>
 				) : (
-					data.templates.map((template) => {
+					<Table className="table-fixed"><TableHeader><TableRow><TableHead className="w-48">{t("config.name")}</TableHead><TableHead>{t("config.description")}</TableHead><TableHead className="w-28 text-right">{t("config.actions")}</TableHead></TableRow></TableHeader><TableBody>
+					{data.templates.map((template) => {
 						const isRenaming = renamingTemplate === template.path;
 						const handleRename = async () => {
 							if (renameBusy || !renameValue.trim() || renameValue.trim() === template.name) {
@@ -186,57 +188,28 @@ export function PromptsTab(props: {
 							}
 						};
 						return (
-							<div key={template.path} className="prompts-list-item">
-								{isRenaming ? (
-									<div className="skill-rename-inline">
-										<Input
-											value={renameValue}
-											onChange={(e) => setRenameValue(e.target.value)}
-											onKeyDown={(e) => { if (e.key === "Enter") void handleRename(); if (e.key === "Escape") setRenamingTemplate(null); }}
-											autoFocus
-											disabled={renameBusy}
-										/>
-										<Button variant="ghost" size="icon-sm" className="size-7" onClick={handleRename} disabled={renameBusy} title={t("common.confirm")}>
-											<Check size={14} strokeWidth={2} />
-										</Button>
-										<Button variant="ghost" size="icon-sm" className="size-7" onClick={() => setRenamingTemplate(null)} disabled={renameBusy} title={t("common.cancel")}>
-											<X size={14} strokeWidth={2} />
-										</Button>
-									</div>
-								) : (
-									<button
-										type="button"
-										className="prompts-list-item-info"
-										onClick={() => props.onEdit(template)}
-										title={t("common.edit")}
-									>
-										<strong>/{template.name}</strong>
-										<span className="prompts-list-item-desc">{template.description}</span>
-									</button>
-								)}
-								<div className="prompts-list-item-actions">
-									<Button variant="ghost" size="icon-sm" className="size-7"
-										onClick={() => props.onEdit(template)}
-										title={t("common.edit")}
-									>
-										<Pencil size={14} strokeWidth={1.8} />
-									</Button>
-									<Button variant="ghost" size="icon-sm" className="size-7"
-										onClick={() => { setRenamingTemplate(template.path); setRenameValue(template.name); }}
-										title={t("common.rename")}
-									>
-										<FileEdit size={14} strokeWidth={1.8} />
-									</Button>
-									<Button variant="ghost" size="icon-sm" className="size-7 text-destructive hover:bg-destructive/10 hover:text-destructive"
-										onClick={() => props.onDelete(template)}
-										title={t("common.delete")}
-									>
-										<Trash2 size={14} strokeWidth={1.8} />
-									</Button>
-								</div>
-							</div>
+							<TableRow key={template.path}>
+								<TableCell className="w-48 max-w-48">
+									{isRenaming ? (
+										<div className="flex items-center gap-1">
+											<Input value={renameValue} onChange={(e) => setRenameValue(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void handleRename(); if (e.key === "Escape") setRenamingTemplate(null); }} autoFocus disabled={renameBusy} />
+											<Button variant="ghost" size="icon-sm" className="size-7" onClick={handleRename} disabled={renameBusy} title={t("common.confirm")}><Check size={14} strokeWidth={2} /></Button>
+											<Button variant="ghost" size="icon-sm" className="size-7" onClick={() => setRenamingTemplate(null)} disabled={renameBusy} title={t("common.cancel")}><X size={14} strokeWidth={2} /></Button>
+										</div>
+									) : (
+										<button type="button" className="prompts-list-item-info" onClick={() => props.onEdit(template)} title={t("common.edit")}><span className="flex min-w-0 items-center gap-2"><FileText size={14} strokeWidth={1.8} className="shrink-0 text-text-tertiary" /><strong className="truncate">/{template.name}</strong></span></button>
+									)}
+								</TableCell>
+								<TableCell className="whitespace-normal break-words text-caption leading-relaxed text-text-secondary" title={template.description}>{template.description}</TableCell>
+								<TableCell className="text-right"><div className="flex justify-end gap-1">
+									<Button variant="ghost" size="icon-sm" className="size-7" onClick={() => props.onEdit(template)} title={t("common.edit")}><Pencil size={14} strokeWidth={1.8} /></Button>
+									<Button variant="ghost" size="icon-sm" className="size-7" onClick={() => { setRenamingTemplate(template.path); setRenameValue(template.name); }} title={t("common.rename")}><FileEdit size={14} strokeWidth={1.8} /></Button>
+									<Button variant="ghost" size="icon-sm" className="size-7 text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => props.onDelete(template)} title={t("common.delete")}><Trash2 size={14} strokeWidth={1.8} /></Button>
+								</div></TableCell>
+							</TableRow>
 						);
-					})
+					})}
+					</TableBody></Table>
 				)}
 			</section>
 

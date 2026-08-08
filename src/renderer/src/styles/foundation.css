@@ -1105,6 +1105,32 @@ select:focus-visible {
   padding-top: var(--window-drag-height);
   box-sizing: border-box;
 }
+/* 抽屉/侧栏开合内容动画（AppShell）：面板库宽度即时变化，内容层补一次
+   进入动画制造“滑出/淡入”感。只动 transform/opacity；animation 播完自动
+   恢复默认样式（fill 默认 none），不留 transform——Windows 静止态 transform
+   会触发长期合成层 + ClearType 子像素抗锯齿降级。抽屉在右滑入、侧栏在左滑入。 */
+.drawer-content-enter {
+  animation: drawer-content-enter 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.list-content-enter {
+  animation: drawer-content-enter 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes drawer-content-enter {
+  from {
+    opacity: 0;
+    transform: translateX(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .drawer-content-enter,
+  .list-content-enter {
+    animation: none;
+  }
+}
 /* 拖拽区高度同时暴露在 :root：sonner toaster、兑底 toast 等浮层渲染在 #root 内、
    并非 .wechat-shell 的后代，读不到 shell 作用域变量，会错误地按 0px 计算顶部 offset */
 :root {
@@ -2336,6 +2362,54 @@ select:focus-visible {
   --wallpaper-dialog-alpha: 100%;
 }
 
+/* 大弹框内容级联入场（DialogContent stagger prop）：content 整体淡入的同时，
+   直接子元素（header/body/footer…）按序轻微浮起，延迟窗口控制在 content
+   入场 200ms 内，避免框内内容二次闪烁；关闭时动画不重播（类不变），
+   子元素保持结束态随 content 一起淡出。 */
+.dialog-stagger > * {
+  animation: dialog-stagger-in 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.dialog-stagger > *:nth-child(1) { animation-delay: 40ms; }
+.dialog-stagger > *:nth-child(2) { animation-delay: 70ms; }
+.dialog-stagger > *:nth-child(3) { animation-delay: 100ms; }
+.dialog-stagger > *:nth-child(4) { animation-delay: 130ms; }
+.dialog-stagger > *:nth-child(5) { animation-delay: 160ms; }
+.dialog-stagger > *:nth-child(6) { animation-delay: 190ms; }
+.dialog-stagger > *:nth-child(n + 7) { animation-delay: 220ms; }
+@keyframes dialog-stagger-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 下拉菜单项级联入场：容器 200ms 淡入的同时，菜单项按序轻微浮起（每项 +30ms，
+   上限 180ms，避免长菜单让底部项过晚可见）；动画只在挂载时播放一次，
+   键盘导航移动焦点不会重播，不影响快捷键操作。 */
+.dropdown-stagger > * {
+  animation: dropdown-stagger-in 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.dropdown-stagger > *:nth-child(1) { animation-delay: 30ms; }
+.dropdown-stagger > *:nth-child(2) { animation-delay: 60ms; }
+.dropdown-stagger > *:nth-child(3) { animation-delay: 90ms; }
+.dropdown-stagger > *:nth-child(4) { animation-delay: 120ms; }
+.dropdown-stagger > *:nth-child(5) { animation-delay: 150ms; }
+.dropdown-stagger > *:nth-child(n + 6) { animation-delay: 180ms; }
+@keyframes dropdown-stagger-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .chat-pane {
   position: relative;
   /* #115 U5：会话区纵向三段（timeline|composer|terminal）由 react-resizable-panels
@@ -2486,75 +2560,9 @@ select:focus-visible {
   margin-left: 0;
   flex: 0 0 auto;
 }
-.header-action-group.session-group {
-  padding: 0;
-  border: 0;
-  background: transparent;
-}
 
-/* ---- Session combo (合并新会话 + 下拉,类似 branch-select) ---- */
-.session-combo,
-.file-action-combo {
-  position: relative;
-  display: inline-flex;
-}
-.session-combo-trigger {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  /* 顶栏压缩后统一 28px 控件高，与 h-7 对齐 */
-  height: 28px;
-  min-width: 78px;
-  border: 1px solid var(--color-border-subtle);
-  background: var(--color-bg-panel);
-  color: var(--color-text-primary);
-  border-radius: var(--radius-md);
-  padding: 0 10px;
-  font-size: var(--font-size-control);
-  font-weight: 600;
-  cursor: pointer;
-  transition:
-    background 0.15s,
-    border-color 0.15s,
-    box-shadow 0.15s,
-    color 0.15s;
-  white-space: nowrap;
-}
-.session-combo-trigger:hover:not(:disabled) {
-  background: var(--color-bg-hover);
-  border-color: var(--color-border-strong);
-  color: var(--color-text-primary);
-  box-shadow: 0 1px 3px
-    color-mix(in srgb, var(--color-text-primary) 8%, transparent);
-}
-.session-combo-trigger:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 1px;
-}
-.session-combo-trigger:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-.session-combo-label {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.session-combo-chevron {
-  font-size: var(--font-size-micro);
-  color: var(--color-text-tertiary);
-  transition: transform 0.2s ease;
-  flex-shrink: 0;
-  margin-left: 2px;
-  display: flex;
-  align-items: center;
-}
-.session-combo-chevron.open {
-  transform: rotate(180deg);
-}
-/* Header 面板按钮统一按同一控件模型排版；带下拉箭头的“新会话/文件”和普通“终端”保持相同基线、字号和高度。 */
+/* Header 面板按钮统一按同一控件模型排版；带下拉箭头的“文件”和普通“终端”保持相同基线、字号和高度。 */
 .header-action-group > button,
-.header-action-group .session-combo-trigger,
 .header-action-group .file-action-trigger {
   display: inline-flex;
   align-items: center;
@@ -2605,7 +2613,6 @@ select:focus-visible {
   align-items: center;
   justify-content: center;
 }
-.header-action-group .session-combo-label,
 .header-action-group .file-action-trigger > span:first-child {
   display: inline-flex;
   align-items: center;
@@ -2614,8 +2621,6 @@ select:focus-visible {
   line-height: var(--line-height-control);
   color: inherit;
 }
-.header-action-group .session-combo-trigger > svg,
-.header-action-group .session-combo-chevron,
 .header-action-group .file-action-trigger > svg {
   display: inline-flex;
   align-items: center;
@@ -2626,8 +2631,7 @@ select:focus-visible {
   color: var(--color-text-secondary);
   flex: 0 0 14px;
 }
-.file-action-menu,
-.session-combo-menu {
+.file-action-menu {
   position: absolute;
   top: calc(100% + 4px);
   left: 50%;
@@ -2654,8 +2658,7 @@ select:focus-visible {
 }
 /* 文件树新建项弹层：输入框占满宽度，避免 label/input 挤在一行 */
 
-.file-action-menu button,
-.session-combo-menu button {
+.file-action-menu button {
   width: 100%;
   display: flex;
   align-items: center;
@@ -2671,19 +2674,12 @@ select:focus-visible {
   cursor: pointer;
   transition: background 0.1s;
 }
-.file-action-menu button:hover:not(:disabled),
-.session-combo-menu button:hover:not(:disabled) {
+.file-action-menu button:hover:not(:disabled) {
   background: var(--color-bg-hover);
 }
-.file-action-menu button:disabled,
-.session-combo-menu button:disabled {
+.file-action-menu button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-}
-.session-combo-divider {
-  height: 1px;
-  background: var(--color-border-subtle);
-  margin: var(--space-1) 0;
 }
 .editor-logo {
   display: inline-grid;
@@ -2759,25 +2755,6 @@ select:focus-visible {
    覆盖上方全局 min-width 60px，避免 icon 按钮被撑宽导致工具栏溢出。 */
 .files-panel .panel-action-row button {
   min-width: 0;
-}
-.chat-header-actions .session-combo-trigger {
-  /* 与 SessionHeader h-7 对齐，避免 CSS 把按钮再撑回更高 */
-  min-width: 78px;
-  height: 28px;
-  padding: 0 8px;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-md);
-  background: var(--color-bg-panel);
-  color: var(--color-text-primary);
-  box-shadow: 0 1px 2px
-    color-mix(in srgb, var(--color-text-primary) 5%, transparent);
-}
-.chat-header-actions .session-combo-trigger:hover:not(:disabled) {
-  border-color: var(--color-border-strong);
-  background: var(--color-bg-hover);
-  color: var(--color-text-primary);
-  box-shadow: 0 2px 5px
-    color-mix(in srgb, var(--color-text-primary) 8%, transparent);
 }
 .chat-header-actions .primary-action {
   min-width: 60px;

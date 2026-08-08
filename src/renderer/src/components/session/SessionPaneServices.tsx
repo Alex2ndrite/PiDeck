@@ -6,7 +6,7 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
-import type { AgentTab, AgentUiResponse, ChatMessage, GitBranchInfo, ImageContent } from "../../../../shared/types";
+import type { AgentTab, AgentUiResponse, ChatMessage, GitBranchInfo, ImageContent, TerminalTarget } from "../../../../shared/types";
 import type { QueuedPrompt } from "../../hooks/useQueuedPrompt";
 import type { NoticeId } from "../../utils/notice";
 
@@ -58,9 +58,13 @@ export type SessionPaneServices = {
   terminalDockVisible: boolean;
   terminalCollapsed: boolean;
   availableTerminalHeight: number;
-  setTerminalOpenForAgent: (agentId: string, open: boolean) => void;
-  setTerminalCollapsedForAgent: (agentId: string, collapsed: boolean) => void;
-  setTerminalHeightByAgent: (
+  /** 终端归属键（agent:<id> / project:<id>）：dock 实例与状态回写按它隔离 */
+  terminalOwnerKey?: string;
+  /** agent 或 project 终端目标（App 层按 owner 解析） */
+  terminalTarget?: TerminalTarget;
+  setTerminalOpenForOwner: (open: boolean) => void;
+  setTerminalCollapsedForOwner: (collapsed: boolean) => void;
+  setTerminalHeightByOwner: (
     updater: (cur: Record<string, number>) => Record<string, number>,
   ) => void;
   configOpen: boolean;
@@ -84,7 +88,6 @@ export type SessionPaneServices = {
   jumpToMessageRef: MutableRefObject<((messageId: string) => void) | null>;
   layoutRefs: {
     chatHeaderRef: RefObject<HTMLDivElement | null>;
-    sessionComboRef: RefObject<HTMLDivElement | null>;
     composerRef: RefObject<HTMLElement | null>;
     composerOffsetHeight: number;
     terminalRowHeight: number;

@@ -47,6 +47,12 @@ export const ipcChannels = {
 	sessionsCreateAnonymous: "sessions:create-anonymous",
 	sessionsCatalogUpdate: "sessions:catalog-update",
 	sessionsCatalogDelete: "sessions:catalog-delete",
+	/** 归档会话：文件移入 .pideck-archive/ 并从目录移除 */
+	sessionsCatalogArchive: "sessions:catalog-archive",
+	/** 恢复归档会话：移回原路径并重新入目录 */
+	sessionsCatalogUnarchive: "sessions:catalog-unarchive",
+	/** 列出已归档会话摘要（恢复 UI 用） */
+	sessionsCatalogListArchived: "sessions:catalog-list-archived",
 	sessionsCatalogReadMessages: "sessions:catalog-read-messages",
 	sessionsCatalogReadMessagePage: "sessions:catalog-read-message-page",
 	sessionsCatalogReadReferenceMessages: "sessions:catalog-read-reference-messages",

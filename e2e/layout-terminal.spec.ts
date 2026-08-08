@@ -2,8 +2,8 @@ import { test, expect } from "./mock-pi-fixture";
 
 /**
  * 终端 Dock（#113 3.3-12）：开合、xterm 就绪、shell 菜单。
- * 需要真实 agent（outline 的终端入口仅在 activeAgentId 时渲染），
- * 故使用 mock pi fixture；拖拽高度保留手动验证。
+ * 使用 mock pi fixture（真实 agent）；终端入口在 outline 悬浮条常驻，
+ * 未激活 agent / 引导页挂项目终端，激活 agent 挂 agent 终端，状态互不串台。
  */
 
 test("layout: terminal dock open/shell/collapse", async ({ window }) => {

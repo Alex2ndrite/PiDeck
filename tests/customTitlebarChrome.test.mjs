@@ -142,8 +142,8 @@ test("brand lockup is larger inside the 40px titlebar", () => {
   assert.doesNotMatch(sidebar, /list-toggle-native floating/);
 });
 
-test("collapsed left sidebar leaves no gutter; restore lives in tab bar", () => {
-  assert.match(shell, /LIST_COLLAPSED_SIZE = 0/);
+test("collapsed sidebar keeps 14px gutter; restore lives in tab bar", () => {
+  assert.match(shell, /LIST_COLLAPSED_SIZE = 14/);
   assert.match(foundation, /\.list-collapsed \.shell-panel-list/);
   assert.match(foundation, /\.list-collapsed \.chat-list-pane \{\s*display:\s*none;/);
   assert.doesNotMatch(foundation, /list-toggle-native\.floating/);

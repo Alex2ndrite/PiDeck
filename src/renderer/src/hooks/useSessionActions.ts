@@ -33,6 +33,9 @@ export interface UseSessionActionsOptions {
       copyRecord: (sessionId: string) => Promise<{ cancelled?: boolean; targetSessionId?: string }>;
       exportRecordHtml: (sessionId: string) => Promise<{ path: string }>;
       deleteRecord: (sessionId: string) => Promise<boolean>;
+      archiveRecord: (sessionId: string) => Promise<boolean>;
+      unarchiveRecord: (archivedPath: string) => Promise<boolean>;
+      listArchived: () => Promise<SessionSummary[]>;
       createDraft: (input: { projectId: string; title: string } & SessionLaunchPreferences) => Promise<SessionRecord>;
       createAnonymous: (input: { projectId: string; title: string } & SessionLaunchPreferences) => Promise<CreateAnonymousSessionResult>;
     };
@@ -115,6 +118,30 @@ export function useSessionActions(options: UseSessionActionsOptions) {
     if (projectId) await refreshProjectSessions(projectId);
   }
 
+  /** 归档历史会话：文件移入归档目录并从列表移除（可恢复，区别于删除） */
+  async function archiveHistorySession(session: SessionSummary) {
+    await api.sessions.archiveRecord(session.id);
+    removeSessionState(session.id);
+    removeSessionComposerState(session.id);
+    showToast(t("app.sessionArchived"), 2200);
+    const projectId = sessionsProjectId ?? activeProjectId;
+    if (projectId) await refreshProjectSessions(projectId);
+  }
+
+  /** 恢复归档会话：文件移回原路径并重新入目录 */
+  async function unarchiveHistorySession(archivedPath: string) {
+    await api.sessions.unarchiveRecord(archivedPath);
+    showToast(t("app.sessionRestored"), 2200);
+    const projectId = sessionsProjectId ?? activeProjectId;
+    if (projectId) await refreshProjectSessions(projectId);
+  }
+
+  /** 列出已归档会话（恢复管理 UI 用） */
+  async function listArchivedSessions() {
+    return api.sessions.listArchived();
+  }
+
+  // ── Sidebar session actions ──
   async function openSidebarSession(
     projectId: string,
     session: SessionSummary,
@@ -246,6 +273,9 @@ export function useSessionActions(options: UseSessionActionsOptions) {
     copySession,
     exportHistorySession,
     deleteHistorySession,
+    archiveHistorySession,
+    unarchiveHistorySession,
+    listArchivedSessions,
     openSidebarSession,
     openSidebarSessionById,
     copySidebarSession,

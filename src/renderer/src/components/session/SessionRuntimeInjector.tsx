@@ -1,5 +1,6 @@
 import React from "react";
 import { useAtomValue, useSetAtom } from "jotai";
+import type { TerminalTarget } from "../../../../shared/types";
 import { settingsOpenAtom } from "../../atoms";
 import {
   claimSessionRuntimeUiResponseAtom,
@@ -28,15 +29,20 @@ export type SessionRuntimeInjectorProps = {
   splitPane?: boolean;
   focused?: boolean;
   onFocusPane?: () => void;
-  sessionActionsOpen: boolean;
-  setSessionActionsOpen: React.Dispatch<React.SetStateAction<boolean>>;
   chatHeaderRef: React.RefObject<HTMLDivElement | null>;
-  sessionComboRef: React.RefObject<HTMLDivElement | null>;
   composerRef: React.RefObject<HTMLElement | null>;
   composerOffsetHeight: number;
   terminalRowHeight: number;
   activeQueuedPrompts: QueuedPrompt[];
   queuedTrackRef: React.MutableRefObject<HTMLDivElement | null>;
+
+  // 终端归属（owner 化：agent:<id> / project:<id>），由 App 层解析后传入
+  terminalOwnerKey?: string;
+  /** agent 或 project 终端目标（App 层按 owner 解析） */
+  terminalTarget?: TerminalTarget;
+  setTerminalOpenForOwner: (open: boolean) => void;
+  setTerminalCollapsedForOwner: (collapsed: boolean) => void;
+  setTerminalHeightByOwner: (updater: (cur: Record<string, number>) => Record<string, number>) => void;
 };
 
 /**
@@ -53,15 +59,17 @@ export const SessionRuntimeInjector = React.memo(function SessionRuntimeInjector
     splitPane = false,
     focused = true,
     onFocusPane,
-    sessionActionsOpen,
-    setSessionActionsOpen,
     chatHeaderRef,
-    sessionComboRef,
     composerRef,
     composerOffsetHeight,
     terminalRowHeight,
     activeQueuedPrompts,
     queuedTrackRef,
+    terminalOwnerKey,
+    terminalTarget,
+    setTerminalOpenForOwner,
+    setTerminalCollapsedForOwner,
+    setTerminalHeightByOwner,
   } = props;
 
   const services = useSessionPaneServices();
@@ -136,35 +144,15 @@ export const SessionRuntimeInjector = React.memo(function SessionRuntimeInjector
       activeAgentId={runtime.activeAgentId ?? undefined}
       activeAgent={activeAgent}
       activeRuntimeState={runtime.activeRuntimeState}
-      runtimeTarget={runtime.runtimeTarget}
       hasActiveConversation={runtime.hasActiveConversation}
       hasProject={runtime.sessionHasProject}
       chatHeaderRef={chatHeaderRef}
-      sessionComboRef={sessionComboRef}
       composerRef={composerRef}
       composerOffsetHeight={composerOffsetHeight}
       terminalRowHeight={terminalRowHeight}
       isAgentStarting={runtime.isAgentStarting}
-      sessionActionsOpen={sessionActionsOpen}
-      canStop={runtime.canStopSession}
-      canRestart={runtime.canRestartSession}
-      restartingAgentId={services.restartingAgentId ?? undefined}
       isRestarting={runtime.isRestartingThisAgent}
-      showRestart={Boolean(runtime.activeAgentId) && !services.isLanWeb}
       sessionDuration={runtime.sessionDuration}
-      onHeaderTrigger={() => {
-        onFocusPane?.();
-        if (runtime.activeAgentId || currentSessionId) {
-          setSessionActionsOpen((open) => !open);
-        } else {
-          void services.runCreateSessionDraft();
-        }
-      }}
-      onStop={() => {
-        void services.abortAgent(runtime.activeAgentId);
-        setSessionActionsOpen(false);
-      }}
-      onRestart={() => void services.restartActiveAgent(runtime.activeAgentId)}
       showThinking={services.showThinking}
       validCommandNames={services.validCommandNames}
       validFilePaths={services.validFilePaths}
@@ -221,15 +209,16 @@ export const SessionRuntimeInjector = React.memo(function SessionRuntimeInjector
       terminalDockClosing={focused && services.terminalDockClosing}
       terminalCollapsed={services.terminalCollapsed}
       availableTerminalHeight={services.availableTerminalHeight ?? 120}
-      setTerminalOpenForAgent={services.setTerminalOpenForAgent}
-      setTerminalCollapsedForAgent={services.setTerminalCollapsedForAgent}
-      setTerminalHeightByAgent={services.setTerminalHeightByAgent}
+      terminalOwnerKey={terminalOwnerKey}
+      terminalTarget={terminalTarget}
+      setTerminalOpenForOwner={setTerminalOpenForOwner}
+      setTerminalCollapsedForOwner={setTerminalCollapsedForOwner}
+      setTerminalHeightByOwner={setTerminalHeightByOwner}
       settingsOpen={settingsOpen}
       configOpen={services.configOpen}
       environmentDialog={services.environmentDialog}
       runCreateSessionDraft={services.runCreateSessionDraft}
       abortAgent={services.abortAgent}
-      restartActiveAgent={services.restartActiveAgent}
     />
   );
 });

@@ -265,9 +265,9 @@ test("agent flow: restart agent keeps session usable", async ({ window }) => {
 	await window.keyboard.press("Enter");
 	await expect(timeline).toContainText("Mock 回复：「重启前」流式渲染验证完成", { timeout: 20_000 });
 
-	// 会话头部 combo → 重启
-	await window.locator(".session-combo-trigger").click();
-	await window.getByRole("button", { name: "重启", exact: true }).click();
+	// 当前会话 Tab 的下拉按钮 → 重启（运行控制已从会话头部 combo 迁入 Tab 下拉）
+	await window.locator('.session-tab[aria-selected="true"] [role="tab-menu"]').click();
+	await window.getByRole("menuitem", { name: "重启", exact: true }).click();
 
 	// 等重启真正完成：完成 toast 是唯一可靠的完成信号；
 	// 过早发送会撞上 replacement reservation，被 coordinator 拒发（delivery:rejected）。

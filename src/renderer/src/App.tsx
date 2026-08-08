@@ -45,6 +45,7 @@ import { useOverlayActions } from "./hooks/useOverlayActions";
 import { useWorkspacePanels, type WorkspaceDrawerPanel, type WorkspaceExternalEditorAdapter } from "./hooks/useWorkspacePanels";
 import { useDrawerPorts } from "./hooks/useDrawerPorts";
 import { useTerminalDock } from "./hooks/useTerminalDock";
+import { resolveTerminalOwner, terminalOwnerKey } from "./terminalDockState";
 import { useImportFlow } from "./hooks/useImportFlow";
 import { useQueuedPrompt } from "./hooks/useQueuedPrompt";
 import { activeAgentIdAtom } from "./hooks/useSessionRuntimeController";
@@ -110,6 +111,7 @@ import { SessionPaneServicesProvider } from "./components/session/SessionPaneSer
 import { ProjectEmptyState } from "./components/session/ProjectEmptyState";
 import { useSessionWorkspaceChrome } from "./hooks/useSessionWorkspaceChrome";
 import { ScratchPadOverlay } from "./components/overlays/ScratchPadOverlay";
+import { SessionRuntimeDock } from "./components/session/SessionRuntimeDock";
 import { AppShell } from "./components/app/AppShell";
 import { WorkspaceDrawerRail } from "./components/workspace/WorkspaceDrawerRail";
 import { DrawerSurface } from "./components/workspace/DrawerSurface";
@@ -155,6 +157,7 @@ import type {
   SessionRecord,
   SessionSummary,
   ComposerAgentMode,
+  TerminalTarget,
 } from "../../shared/types";
 
 export function App() {
@@ -576,17 +579,33 @@ export function App() {
   const { piStatus, piChecking, environmentDialog, setPiStatus, setEnvironmentDialog } = piUpdate;
   const [drawerWidth, setDrawerWidth] = useState(320);
   const [composerOffsetHeight, setComposerOffsetHeight] = useState(0);
+  // 终端归属：有 activeAgent → agent owner；引导页/未激活 agent/历史会话 → project owner。
+  // 终端 open/collapsed/高度/PTY 实例都按 owner 隔离，切换项目或 agent 绝不串台。
+  const terminalOwner = resolveTerminalOwner(activeAgentId, activeProjectId);
   const {
     terminalOpen,
     terminalCollapsed,
     terminalDockVisible,
     terminalDockClosing,
     terminalRowHeight: activeTerminalHeight,
-    setTerminalOpenForAgent,
-    setTerminalCollapsedForAgent,
-    setTerminalHeightByAgent,
+    setTerminalOpenForOwner,
+    setTerminalCollapsedForOwner,
+    setTerminalHeightByOwner,
     prune: pruneTerminalDockState,
-  } = useTerminalDock(activeAgentId);
+  } = useTerminalDock(terminalOwner);
+  // 终端 IPC 目标：agent owner → 当前会话的 runtime target（须绑定已启动 Agent）；
+  // project owner（引导页/未激活 agent/历史会话）→ 项目 cwd，主进程按 cwd 隔离 PTY。
+  // Chat 项目没有可落地的 cwd，不提供项目终端。
+  const terminalTarget: TerminalTarget | undefined = useMemo(() => {
+    if (!terminalOwner) return undefined;
+    if (terminalOwner.kind === "agent") {
+      const runtimeTarget = getRuntimeTargetForSession(currentSessionId);
+      return runtimeTarget ? { kind: "agent", ...runtimeTarget } : undefined;
+    }
+    const project = projects.find((p) => p.id === terminalOwner.id);
+    if (!project || isChatProject(project)) return undefined;
+    return { kind: "project", projectId: project.id, cwd: project.path };
+  }, [terminalOwner, currentSessionId, projects]);
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set());
   const [, setBranchByProject] = useState<Record<string, string | null>>({});
   const [expandedSidebarProjects, setExpandedSidebarProjects] = useState<Set<string>>(new Set());
@@ -600,7 +619,7 @@ export function App() {
       // ignore
     }
   }
-  const sessionComboRef = useRef<HTMLDivElement | null>(null);
+  const queuedTrackRef = useRef<HTMLDivElement | null>(null);
 
   const composerTextareaRef = useRef<HTMLDivElement | null>(null);
   // RichInput 受控重渲染后,光标应恢复到的纯文本偏移(供建议选中/清除后恢复选区)。
@@ -732,8 +751,15 @@ export function App() {
   });
   // 激活 Agent 数量告警：受设置 agentCountReminderEnabled 控制（默认开启），每个启动周期提示一次
   useAgentLoadNotice(settings.agentCountReminderEnabled);
-  // 人文关怀：受设置 workBreakReminderEnabled 控制（默认开启），从本次启动计时，每满 1 小时提醒休息
-  useWorkBreakReminder(settings.workBreakReminderEnabled);
+  // 人文关怀：受设置 workBreakReminderEnabled 控制（默认开启），从本次启动计时，每满 2 小时提醒休息；
+  // 「永久不再提醒」按钮把该设置写回 false（可在设置中重新开启），保证设置持久化。
+  const disableWorkBreakReminderForever = useCallback(() => {
+    void api.settings
+      .update({ workBreakReminderEnabled: false })
+      .then((saved) => setSettings((current) => ({ ...current, ...saved })))
+      .catch(() => undefined);
+  }, []);
+  useWorkBreakReminder(settings.workBreakReminderEnabled, disableWorkBreakReminderForever);
   const activeQueuedPrompts = currentSessionId
     ? (queue.queuedPrompts[currentSessionId] ?? [])
     : [];
@@ -766,7 +792,6 @@ export function App() {
   // The built-in Chat uses a renderer-only Session ID before its first send.
   // Workspace chrome belongs to that visible conversation surface, not only to
   // persisted catalog records; otherwise Chat loses the dev-equivalent toolbar.
-  const hasActiveConversation = Boolean(currentSessionId);
 
   const activeProjectHasBusyAgent = Boolean(
     activeProjectId && displayAgents.some((agent) =>
@@ -1397,9 +1422,11 @@ export function App() {
   }, [activeAgentId]);
 
   useEffect(() => {
-    const activeIds = new Set(displayAgents.map((agent) => agent.id));
-    pruneTerminalDockState(activeIds);
-  }, [displayAgents]);
+    // 只按各自存活集合裁剪：流式事件仅更新 agent 集合，不能误删项目终端状态
+    const liveAgentIds = new Set(displayAgents.map((agent) => agent.id));
+    const liveProjectIds = new Set(projects.map((project) => project.id));
+    pruneTerminalDockState(liveAgentIds, liveProjectIds);
+  }, [displayAgents, projects]);
 
   useEffect(() => {
     // 折叠中的项目不跑周期扫描，避免后台无意义刷会话列表
@@ -2227,6 +2254,28 @@ export function App() {
     await refreshProjectSessions(projectId);
   }
 
+  /** 归档会话：从列表移除但不销毁文件，可在会话管理弹窗中恢复 */
+  async function archiveSidebarSession(projectId: string, session: SessionSummary) {
+    await api.sessions.archiveRecord(session.id);
+    removeSessionState(session.id);
+    removeSessionComposerState(session.id);
+    showToast(t("app.sessionArchived"), 2200);
+    await refreshProjectSessions(projectId);
+  }
+
+  /** 恢复归档会话：文件移回原路径并重新扫描 */
+  async function unarchiveSidebarSession(archivedPath: string, projectId = activeProjectId) {
+    await api.sessions.unarchiveRecord(archivedPath);
+    showToast(t("app.sessionRestored"), 2200);
+    // 归档管理弹窗可以从非当前项目打开；必须刷新弹窗所属项目，否则文件已恢复但侧栏仍沿用旧目录快照。
+    if (projectId) await refreshProjectSessions(projectId);
+  }
+
+  /** 列出已归档会话（会话管理弹窗恢复视图用） */
+  function listArchivedSidebarSessions() {
+    return api.sessions.listArchived();
+  }
+
   function requestDeleteSidebarSession(projectId: string, session: SessionSummary) {
     const childCount = getProjectSessionRecords(projectId).filter((candidate) =>
       isSameSessionPath(
@@ -2335,6 +2384,13 @@ export function App() {
       delete: async (projectId, session) => {
         requestDeleteSidebarSession(projectId, session);
       },
+      archive: async (projectId, session) => {
+        await archiveSidebarSession(projectId, session);
+      },
+      unarchive: async (archived, projectId) => {
+        await unarchiveSidebarSession(archived.filePath, projectId);
+      },
+      listArchived: () => listArchivedSidebarSessions(),
     },
     agents: {
       rename: rename.openAgentRename,
@@ -2405,6 +2461,26 @@ export function App() {
     if (record) selectSessionCommand(record.projectId, sessionId, true);
   }, [selectSessionCommand, store]);
 
+  // 切会话过渡：会话区整体做一次 160ms 淡入+微位移（Web Animations API，
+  // 不卸载树/不动布局，避免整树重建的卡顿与瞬间替换的生硬）；
+  // 首次挂载不播，prefers-reduced-motion 下跳过。
+  const chatPaneContentRef = useRef<HTMLDivElement>(null);
+  const prevSessionIdRef = useRef(currentSessionId);
+  useEffect(() => {
+    const el = chatPaneContentRef.current;
+    if (!el || prevSessionIdRef.current === currentSessionId) return;
+    prevSessionIdRef.current = currentSessionId;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const anim = el.animate(
+      [
+        { opacity: 0, transform: "translateY(4px)" },
+        { opacity: 1, transform: "none" },
+      ],
+      { duration: 160, easing: "cubic-bezier(0.22, 1, 0.36, 1)" },
+    );
+    return () => anim.cancel();
+  }, [currentSessionId]);
+
   const sessionTabsProps = {
     tabs: workspaceChrome.sessionTabIds,
     pinnedTabs: workspaceChrome.pinnedSessionTabIds,
@@ -2428,6 +2504,20 @@ export function App() {
     },
     onTogglePin: workspaceChrome.togglePin,
     onReorder: workspaceChrome.reorderTab,
+    // Tab 下拉运行控制（织入对方收敛方案）：只对当前会话 Tab 生效。
+    // 关闭会话 = 停止 Agent 运行 + 移除会话 Tab（与“关闭标签页”仅移除 Tab 不同）
+    canStopCurrent:
+      activeAgent?.status === "running" || activeAgent?.status === "idle",
+    onStopCurrent: () => {
+      if (activeAgentId) void abortAgent(activeAgentId);
+      if (currentSessionId) workspaceChrome.closeTab(currentSessionId);
+    },
+    canRestartCurrent: Boolean(activeAgentId),
+    isRestartingCurrent: restartingAgentId === activeAgentId,
+    // 没有绑定运行时的草稿也有会话 ID，但重启只对已启动 Agent 有意义
+    onRestartCurrent: activeAgentId
+      ? () => void restartActiveAgent(activeAgentId)
+      : undefined,
     onToggleDrawer: toggleRightDrawer,
     drawerOpen: Boolean(drawer && !drawerCollapsed),
     listCollapsed,
@@ -2441,7 +2531,6 @@ export function App() {
   const paneLayoutRefs = useMemo(
     () => ({
       chatHeaderRef,
-      sessionComboRef,
       composerRef,
       composerOffsetHeight,
       terminalRowHeight,
@@ -2488,9 +2577,13 @@ export function App() {
       terminalDockVisible,
       terminalCollapsed,
       availableTerminalHeight: availableTerminalHeight ?? 120,
-      setTerminalOpenForAgent,
-      setTerminalCollapsedForAgent,
-      setTerminalHeightByAgent,
+      terminalOwnerKey: terminalOwner
+        ? terminalOwnerKey(terminalOwner)
+        : undefined,
+      terminalTarget,
+      setTerminalOpenForOwner,
+      setTerminalCollapsedForOwner,
+      setTerminalHeightByOwner,
       configOpen,
       environmentDialog: Boolean(environmentDialog),
       showNotice,
@@ -2531,14 +2624,16 @@ export function App() {
       sessionDurationByAgent,
       settings.showThinking,
       setPreviewImage,
-      setTerminalCollapsedForAgent,
-      setTerminalHeightByAgent,
-      setTerminalOpenForAgent,
+      setTerminalCollapsedForOwner,
+      setTerminalHeightByOwner,
+      setTerminalOpenForOwner,
       showToast,
       terminalCollapsed,
       terminalDockClosing,
       terminalDockVisible,
       terminalOpen,
+      terminalOwnerKey,
+      terminalTarget,
       validCommandNames,
       validFilePaths,
       workspaceChrome.exitSplit,
@@ -2548,52 +2643,81 @@ export function App() {
   const chatPaneSessionNode = (
     <SessionPaneServicesProvider value={sessionPaneServices}>
       {currentSessionId ? (
-        <SessionSplitStage
-          layout={workspaceChrome.splitLayout}
-          draggingSessionId={workspaceChrome.draggingSessionId}
-          onDropSplit={workspaceChrome.dropSplit}
-          solo={
-            <ChatSessionPane
-              sessionId={currentSessionId}
-              focused
-              onFocusPane={() => focusSessionPane(currentSessionId)}
-              splitPane={false}
-            />
-          }
-          first={(() => {
-            const layout = workspaceChrome.splitLayout;
-            if (!layout) return null;
-            return (
+        <div ref={chatPaneContentRef} className="flex h-full min-h-0 min-w-0 flex-col">
+          <SessionSplitStage
+            layout={workspaceChrome.splitLayout}
+            draggingSessionId={workspaceChrome.draggingSessionId}
+            onDropSplit={workspaceChrome.dropSplit}
+            solo={
               <ChatSessionPane
-                sessionId={layout.firstSessionId}
-                focused={currentSessionId === layout.firstSessionId}
-                onFocusPane={() => focusSessionPane(layout.firstSessionId)}
-                splitPane
+                sessionId={currentSessionId}
+                focused
+                onFocusPane={() => focusSessionPane(currentSessionId)}
+                splitPane={false}
               />
-            );
-          })()}
-          second={(() => {
-            const layout = workspaceChrome.splitLayout;
-            if (!layout) return null;
-            return (
-              <ChatSessionPane
-                sessionId={layout.secondSessionId}
-                focused={currentSessionId === layout.secondSessionId}
-                onFocusPane={() => focusSessionPane(layout.secondSessionId)}
-                splitPane
-              />
-            );
-          })()}
-        />
+            }
+            first={(() => {
+              const layout = workspaceChrome.splitLayout;
+              if (!layout) return null;
+              return (
+                <ChatSessionPane
+                  sessionId={layout.firstSessionId}
+                  focused={currentSessionId === layout.firstSessionId}
+                  onFocusPane={() => focusSessionPane(layout.firstSessionId)}
+                  splitPane
+                />
+              );
+            })()}
+            second={(() => {
+              const layout = workspaceChrome.splitLayout;
+              if (!layout) return null;
+              return (
+                <ChatSessionPane
+                  sessionId={layout.secondSessionId}
+                  focused={currentSessionId === layout.secondSessionId}
+                  onFocusPane={() => focusSessionPane(layout.secondSessionId)}
+                  splitPane
+                />
+              );
+            })()}
+          />
+        </div>
       ) : (
         // 无当前会话（普通项目点开 / 所有 Tab 关闭）时，普通项目与 Chat 项目
         // 共享统一空态；快捷操作新建 Agent / 匿名聊天，无项目时引导添加项目。
-        <ProjectEmptyState
-          activeProject={activeProject}
-          onCreateAgent={(preferences) => void createSessionDraftWithTab(undefined, preferences)}
-          onCreateAnonymous={(preferences) => void createAnonymousSessionWithTab(undefined, preferences)}
-          onAddProject={() => void addProject()}
-        />
+        // 引导页同样可以打开项目级终端（owner=project），在空态下方渲染 dock。
+        <>
+          <div className="min-h-0 flex-1">
+            <ProjectEmptyState
+              activeProject={activeProject}
+              onCreateAgent={(preferences) => void createSessionDraftWithTab(undefined, preferences)}
+              onCreateAnonymous={(preferences) => void createAnonymousSessionWithTab(undefined, preferences)}
+              onAddProject={() => void addProject()}
+            />
+          </div>
+          {!isLanWeb && terminalDockVisible && terminalTarget && (
+            <div
+              className="shrink-0"
+              style={{ height: terminalCollapsed ? 34 : activeTerminalHeight }}
+            >
+              <SessionRuntimeDock
+                key={terminalOwner ? terminalOwnerKey(terminalOwner) : undefined}
+                target={terminalTarget}
+                mounted={terminalDockVisible}
+                open={terminalOpen}
+                closing={terminalDockClosing}
+                collapsed={terminalCollapsed}
+                height={activeTerminalHeight}
+                terminal={api.terminal}
+                onOpenChange={(open) => setTerminalOpenForOwner(open)}
+                onCollapsedChange={(collapsed) => setTerminalCollapsedForOwner(collapsed)}
+                onHeightChange={() => {
+                  // 引导页终端高度由外层固定容器持有，不需要回写
+                }}
+              />
+            </div>
+          )}
+        </>
       )}
     </SessionPaneServicesProvider>
   );
@@ -2836,52 +2960,61 @@ export function App() {
           files={drawerPorts.files}
         />
       )}
-      outlineContent={hasActiveConversation ? (
-<ConversationOutline
-        items={outlineItems}
-        onJump={(messageId) => jumpToMessageRef.current?.(messageId)}
-        extraAction={{
-          active: scratchPad.isOpen,
-          label: t("scratchPad.openTooltip"),
-          onClick: () => scratchPad.toggle(),
-          icon: <Pencil size={17} />,
-        }}
-        terminalAction={activeAgentId ? {
-          active: terminalOpen,
-          label: t("app.terminal"),
-          onClick: () => {
-            setTerminalOpenForAgent(activeAgentId, !terminalOpen);
-          },
-          icon: <Terminal size={17} />,
-        } : undefined}
-        filesAction={undefined}
-        gitAction={undefined}
-        editorsAction={{
-          active: editorsOpen,
-          label: t("app.openWithEditor"),
-          onClick: (e) => {
-            const projectPath =
-              activeAgent?.cwd ||
-              (activeProject && !isChatProject(activeProject)
-                ? activeProject.path
-                : null);
-            const btn = (e?.currentTarget as HTMLElement)?.closest("button");
-            const anchor = btn
-              ? adjustMenuPos(btn.getBoundingClientRect().left - 4, btn.getBoundingClientRect().top, 220, 280)
-              : undefined;
-            workspace.openExternalEditorChooser(projectPath || "", anchor);
-          },
-          icon: <Code size={17} />,
-        }}
-        browserAction={undefined}
-      />
-    ) : null}
+      outlineContent={
+        /* 悬浮工具条常驻：引导页（无会话）/未激活 agent 也保留草稿纸、终端、编辑器入口。
+           大纲导航列表在无消息时自动 disabled，不影响工具按钮使用。 */
+        <ConversationOutline
+          items={outlineItems}
+          // 分屏下由聚焦 pane 的 timeline 注入 jump 回调（ChatSessionPane 写入 services）
+          onJump={(messageId) => jumpToMessageRef.current?.(messageId)}
+          extraAction={{
+            active: scratchPad.isOpen,
+            label: t("scratchPad.openTooltip"),
+            onClick: () => scratchPad.toggle(),
+            icon: <Pencil size={17} />,
+          }}
+          // 终端按钮绑定 owner（agent 或项目），不再要求 agent 已激活；
+          // web 预览 / 无可用目标（纯聊天无项目）时隐藏，避免指向无处可开的终端
+          terminalAction={!isLanWeb && terminalTarget ? {
+            active: terminalOpen,
+            label: t("app.terminal"),
+            onClick: () => {
+              setTerminalOpenForOwner(!terminalOpen);
+            },
+            icon: <Terminal size={17} />,
+          } : undefined}
+          filesAction={undefined}
+          gitAction={undefined}
+          editorsAction={{
+            active: editorsOpen,
+            label: t("app.openWithEditor"),
+            onClick: (e) => {
+              const projectPath =
+                activeAgent?.cwd ||
+                (activeProject && !isChatProject(activeProject)
+                  ? activeProject.path
+                  : null);
+              const btn = (e?.currentTarget as HTMLElement)?.closest("button");
+              const anchor = btn
+                ? adjustMenuPos(btn.getBoundingClientRect().left - 4, btn.getBoundingClientRect().top, 220, 280)
+                : undefined;
+              workspace.openExternalEditorChooser(projectPath || "", anchor);
+            },
+            icon: <Code size={17} />,
+          }}
+          browserAction={undefined}
+        />
+      }
       setListCollapsed={setListCollapsed}
       setListWidth={setListWidth}
       setDrawerCollapsed={setDrawerCollapsed}
       setDrawerWidth={setDrawerWidth}
       onToggleListCollapsed={toggleListCollapsed}
+      drawerPinned={workspace.drawerPinned}
+      onDrawerCollapse={workspace.collapseDrawer}
       onDrawerClose={workspace.closeDrawer}
+      onDrawerRestore={() => workspace.expandDrawer()}
+      onToggleDrawerPin={workspace.toggleDrawerPinned}
       toggleAlwaysOnTop={api.app.toggleAlwaysOnTopWindow}
       minimizeWindow={api.app.minimizeWindow}
       toggleMaximizeWindow={api.app.toggleMaximizeWindow}

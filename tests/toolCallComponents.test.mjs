@@ -44,8 +44,8 @@ test("tool card renders tri-state status badges with icons and i18n labels", () 
   // running：outline + 琥珀色警示位 + spinner（随 trigger 行紧凑化收紧内边距）
   assert.match(toolCalls, /variant="outline" className="gap-1 border-warning\/40 px-1 py-0 text-micro text-warning"/);
   assert.match(toolCalls, /t\("tool\.statusRunning"\)/);
-  // error：destructive + CircleX 图标（9px，随 24px trigger 行同步缩小）
-  assert.match(toolCalls, /variant="destructive" className="gap-1 px-1 py-0 text-micro"/);
+  // error：soft 红 outline（danger-soft 底 + danger 字 + 描边，与 running 琥珀同构）
+  assert.match(toolCalls, /variant="outline" className="gap-1 border-danger\/40 bg-danger-soft px-1 py-0 text-micro text-danger"/);
   assert.match(toolCalls, /<CircleX size=\{9\}/);
   assert.match(toolCalls, /t\("tool\.statusError"\)/);
   // done：secondary 低强调 + CircleCheck 图标；ask_question 已回答时文案替换为「已回答」

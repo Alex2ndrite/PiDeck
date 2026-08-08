@@ -1,5 +1,6 @@
 // @ts-nocheck - SkillHub store panel, new feature
 import { Button } from "../components/ui-shadcn/button";
+import { Input } from "../components/ui-shadcn/input";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Search, Download, ArrowLeft, Check, AlertCircle, X, Trash2, BadgeCheck } from "lucide-react";
 import { t } from "../i18n";

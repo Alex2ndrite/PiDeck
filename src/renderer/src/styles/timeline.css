@@ -2837,3 +2837,24 @@ body.ask-dialog-open .ask-question-card.pending {
     transform: translateY(0) scale(1);
   }
 }
+
+/* ── 会话内容就绪淡入（Task：切会话过渡）──
+ * 切会话历史加载完成、骨架屏消失瞬间，消息列表整体淡入一次，
+ * 避免整块内容“砸”出来；与骨架屏淡出衔接。只动 opacity，
+ * 不影响 MessageScroller 的滚动/rail 逻辑。 */
+.timeline-content-enter {
+  animation: timeline-content-enter 160ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes timeline-content-enter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .timeline-content-enter {
+    animation: none;
+  }
+}

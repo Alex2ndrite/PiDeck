@@ -156,6 +156,7 @@ export function createPreviewApi(): PiDesktopApi {
 		const tab: TerminalTab = {
 			id: `preview-terminal-${terminalTabs.length + 1}`,
 			agentId,
+			ownerKey: `agent:${agentId}`,
 			title: `${displayName} ${terminalTabs.length + 1}`,
 			cwd: "C:/Users/14012/preview-project",
 			shell: "powershell",
@@ -350,6 +351,9 @@ export function createPreviewApi(): PiDesktopApi {
 				updatedAt: now,
 			}),
 			deleteRecord: async () => true,
+			archiveRecord: async () => true,
+			unarchiveRecord: async () => true,
+			listArchived: async () => [],
 			copyRecord: async (sessionId) => ({
 				cancelled: false,
 				targetSessionId: `${sessionId}:copy`,
@@ -502,7 +506,7 @@ export function createPreviewApi(): PiDesktopApi {
 				revert: async () => {},
 				reset: async () => {},
 				dropCommit: async () => {},
-				generateCommitMessage: async () => "",
+				generateCommitMessage: async () => ({ ok: true, message: "" }),
 				init: async () => {},
 			pull: async () => {},
 			push: async () => {},
@@ -852,14 +856,16 @@ export function createPreviewApi(): PiDesktopApi {
 			getCurrent: async () => ({ id: "clawd", displayName: "Clawd", source: "builtin", spritesheetUrl: "" }),
 		},
 		terminal: {
+			// 预览模式只按归属键过滤：agent 目标用 agentId，project 目标用项目 id
 			list: async (target) =>
-				terminalTabs.filter((tab) => tab.agentId === target.agentId),
+				terminalTabs.filter((tab) => tab.agentId === (target.kind === "agent" ? target.agentId : target.projectId)),
 			ensure: async (target) => {
-				const existing = terminalTabs.filter((tab) => tab.agentId === target.agentId);
+				const key = target.kind === "agent" ? target.agentId : target.projectId;
+				const existing = terminalTabs.filter((tab) => tab.agentId === key);
 				if (existing.length > 0) return existing;
-				return [await createTerminalTab(target.agentId)];
+				return [await createTerminalTab(key)];
 			},
-			create: (target) => createTerminalTab(target.agentId),
+			create: (target) => createTerminalTab(target.kind === "agent" ? target.agentId : target.projectId),
 			input: async (tabId, data) => {
 				for (const listener of terminalDataListeners) {
 					listener({ tabId, data });

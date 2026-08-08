@@ -161,7 +161,14 @@ export function useSessionRuntimeController(
       : undefined;
 
   const canMutateActiveMessages = Boolean(currentSessionLiveAgentId);
-  const canStopSession = activeAgent?.status === "running";
+
+  // ── SessionView shortcuts ──
+
+  // 停止对已启动的 Agent 始终可用：running=执行中 / idle=空闲待命（进程仍在，
+  // 停止可释放资源）；starting（启动中）、error、closed 不可停止；
+  // pending（重启中）由 App.abortAgent 内部的 isPendingAgentId 防护忽略。
+  const canStopSession =
+    activeAgent?.status === "running" || activeAgent?.status === "idle";
 
   const canRestartSession = Boolean(
     currentSessionId &&

@@ -1,5 +1,8 @@
-import { type CSSProperties, type ReactNode } from "react";
+import { ChevronLeft } from "lucide-react";
+import type { CSSProperties, ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
+import { t } from "../../i18n";
+import { Button } from "../ui-shadcn/button";
 import {
   DRAWER_ANIMATION_MS,
   type WorkspaceDrawerPanel,
@@ -16,9 +19,13 @@ export function getVisibleDrawerPanel<T>(
 export type WorkspaceDrawerHostProps = {
   panel: WorkspaceDrawerPanel | null;
   collapsed: boolean;
+  pinned?: boolean;
   className?: string;
   style?: CSSProperties;
+  onCollapse?: () => void;
   onClose?: () => void;
+  onRestore?: () => void;
+  onTogglePin?: () => void;
   /** 抽屉打开期间常驻的活动栏（面板切换入口），由 App 层组装后注入。 */
   rail?: ReactNode;
   renderPanel: (panel: WorkspaceDrawerPanel) => ReactNode;
@@ -65,19 +72,33 @@ export function WorkspaceDrawerHost(props: WorkspaceDrawerHostProps) {
   const visiblePanel = getVisibleDrawerPanel(open, props.panel, renderedDrawer);
   const rendered = visiblePanel ? props.renderPanel(visiblePanel) : null;
   return (
-    <aside
-      className={props.className ?? "detail-drawer flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-background"}
-      data-open={open}
-      data-rendered={Boolean(visiblePanel)}
-      style={props.style}
-    >
-      {visiblePanel && (
-        <div className="drawer-content-frame flex min-h-0 flex-1 flex-col overflow-hidden">
-          {open && props.rail}
-          {rendered}
-        </div>
+    <>
+      <aside
+        className={props.className ?? "detail-drawer flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-background"}
+        data-open={open}
+        data-rendered={Boolean(visiblePanel)}
+        data-pinned={Boolean(props.pinned)}
+        style={props.style}
+      >
+        {visiblePanel && (
+          <div className="drawer-content-frame flex min-h-0 flex-1 flex-col overflow-hidden">
+            {open && props.rail}
+            {rendered}
+          </div>
+        )}
+      </aside>
+      {props.panel && props.collapsed && props.onRestore && (
+        <Button
+          type="button"
+          variant="outline" size="icon" className="drawer-restore inline-flex size-8 items-center justify-center rounded-md border border-border bg-background text-muted-foreground shadow-sm hover:bg-accent hover:text-accent-foreground"
+          title={t("drawer.expandPanel")}
+          aria-label={t("drawer.expandPanel")}
+          onClick={props.onRestore}
+        >
+          <ChevronLeft size={16} />
+        </Button>
       )}
-    </aside>
+    </>
   );
 }
 

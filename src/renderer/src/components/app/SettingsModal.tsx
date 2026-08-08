@@ -515,7 +515,7 @@ function SettingsModalContent(props: SettingsModalProps) {
 
 		return (
 		<Dialog open onOpenChange={(next) => !next && handleClose()}>
-			<DialogContent showCloseButton={false} size="xl" className={cn("flex flex-col gap-0 overflow-hidden p-0", "settings-modal")}>
+			<DialogContent showCloseButton={false} size="xl" stagger className={cn("flex flex-col gap-0 overflow-hidden p-0", "settings-modal")}>
 				<DialogHeader className="flex-row items-center justify-between px-4 py-3">
 					<DialogTitle>{t("settings.title")}</DialogTitle>
 					<div className="flex items-center gap-2">
