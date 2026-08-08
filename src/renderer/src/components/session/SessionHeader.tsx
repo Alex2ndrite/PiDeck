@@ -59,7 +59,8 @@ export type SessionHeaderProps = LegacySessionHeaderProps | ModernSessionHeaderP
 
 /**
  * 渲染会话状态和操作入口。
- * embedded 模式供 Tab 栏复用；普通模式保留旧 header 外壳，便于兼容其他调用方。
+ * embedded 模式供需要把操作塞进 Tab 栏右侧的调用方；普通模式保留 header 外壳。
+ * 当前 SessionView 使用普通模式（Tab 已外置，抽屉开关在共享 Tab 栏）。
  */
 export function SessionHeader(props: SessionHeaderProps) {
   const sessionMode = props.mode === "session";
@@ -152,7 +153,7 @@ export function SessionHeader(props: SessionHeaderProps) {
     <div
       ref={props.headerRef}
       role="banner"
-      /* 仅作为旧调用方兼容壳；当前 SessionView 使用 embedded 模式。 */
+      /* 普通模式：独立会话操作行（Tab 已外置时由 SessionView 使用）。 */
       className="chat-header grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-b border-border/40 bg-background px-3 py-1"
     >
       {actions}

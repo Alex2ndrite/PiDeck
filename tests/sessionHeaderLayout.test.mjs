@@ -10,21 +10,25 @@ const runtimeInjector = readFileSync(
   "src/renderer/src/components/session/SessionRuntimeInjector.tsx",
   "utf8",
 );
+const app = readFileSync("src/renderer/src/App.tsx", "utf8");
 const surfaces = readFileSync("src/renderer/src/styles/surfaces.css", "utf8");
 const foundation = readFileSync("src/renderer/src/styles/foundation.css", "utf8");
 
-test("session status and actions embed into the tab bar right slot", () => {
-  const sessionTop = sessionView.indexOf("<SessionTabsBar");
-  const contentStart = sessionView.indexOf("<ResizablePanelGroup", sessionTop);
-  assert.notEqual(sessionTop, -1);
-  assert.notEqual(contentStart, -1);
-  const headerArea = sessionView.slice(sessionTop, contentStart);
+test("session tabs mount once outside SessionView; pane keeps standalone header", () => {
+  // Tab 栏统一外置；SessionView 只保留会话操作 Header（抽屉开关在共享 Tab 栏）。
+  assert.doesNotMatch(sessionView, /SessionTabsBar/);
+  assert.match(app, /sessionTabsBarNode/);
+  assert.match(app, /SessionPaneServicesProvider/);
+  assert.match(app, /\{sessionTabsBarNode\}/);
 
-  // 状态徽章/会话操作/抽屉按钮以 embedded 模式嵌入 Tab 栏右侧，不再单独占一行；
-  // 只有无会话空态才保留 actions 为 undefined（Tab 栏自带抽屉快捷入口）。
-  assert.match(headerArea, /<SessionTabsBar\s+\{\.\.\.sessionTabs\}/);
-  assert.match(headerArea, /actions=\{\s*<SessionHeader/);
-  assert.match(headerArea, /<SessionHeader[\s\S]*?embedded[\s\S]*?\/>/);
+  const headerStart = sessionView.indexOf("<SessionHeader");
+  const contentStart = sessionView.indexOf("<ResizablePanelGroup", headerStart);
+  assert.notEqual(headerStart, -1);
+  assert.notEqual(contentStart, -1);
+  const headerArea = sessionView.slice(headerStart, contentStart);
+  assert.match(headerArea, /<SessionHeader/);
+  assert.doesNotMatch(headerArea, /onToggleDrawer/);
+  assert.doesNotMatch(headerArea, /embedded/);
 });
 
 test("session status and new-session controls use the shared medium radius", () => {
@@ -45,6 +49,6 @@ test("session status and new-session controls use the shared medium radius", () 
 test("restart is offered only when the current session has a bound Agent", () => {
   assert.match(
     runtimeInjector,
-    /showRestart=\{Boolean\(runtime\.activeAgentId\) && !isLanWeb\}/,
+    /showRestart=\{Boolean\(runtime\.activeAgentId\) && !services\.isLanWeb\}/,
   );
 });

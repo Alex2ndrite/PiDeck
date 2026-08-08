@@ -118,9 +118,7 @@ test("Session messages and composer render without an active Agent", () => {
   );
   assert.match(composerSource, /useSessionComposerController\(/);
   assert.match(composerSource, /sessionId=\{props\.sessionId\}/);
-  assert.match(
-    appSource,
-    /const activeMessages = sessionTimeline\.messages/,
-  );
+  // 消息来自当前会话 atom / 栏内 timeline，不再依赖 activeAgent 兜底
+  assert.match(appSource, /currentSessionMessagesAtom/);
   assert.doesNotMatch(appSource, /currentSession \|\| activeAgent/);
 });

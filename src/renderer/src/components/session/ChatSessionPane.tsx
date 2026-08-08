@@ -2,67 +2,25 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useAtomValue } from "jotai";
 import { sessionRecordByIdAtomFamily } from "../../atoms";
 import { useSessionTimelineController } from "../../hooks/useSessionTimelineController";
-import type { QueuedPrompt } from "../../hooks/useQueuedPrompt";
-import {
-  SessionRuntimeInjector,
-  type SessionRuntimeInjectorProps,
-} from "./SessionRuntimeInjector";
+import { SessionRuntimeInjector } from "./SessionRuntimeInjector";
+import { useSessionPaneServices } from "./SessionPaneServices";
 import { t } from "../../i18n";
 
-type SharedInjectorProps = Omit<
-  SessionRuntimeInjectorProps,
-  | "currentSessionId"
-  | "sessionTitle"
-  | "sessionTimeline"
-  | "sessionActionsOpen"
-  | "setSessionActionsOpen"
-  | "chrome"
-  | "focused"
-  | "onFocusPane"
-  | "activeQueuedPrompts"
-  | "visibleQueuedPrompts"
-  | "queuedTrackRef"
-  | "chatHeaderRef"
-  | "sessionComboRef"
-  | "composerRef"
-  | "composerOffsetHeight"
-  | "terminalRowHeight"
->;
-
-export type ChatSessionPaneProps = SharedInjectorProps & {
+export type ChatSessionPaneProps = {
   sessionId: string;
   focused: boolean;
   onFocusPane: () => void;
-  chrome: "full" | "pane";
-  queuedPromptsBySession: Record<string, QueuedPrompt[]>;
-  /** 聚焦栏把 jumpToMessage 登记给大纲等外设 */
-  jumpToMessageRef?: React.MutableRefObject<((messageId: string) => void) | null>;
-  /** App 测量布局用的 refs；仅聚焦栏挂载，避免双栏抢同一 ref */
-  layoutRefs?: {
-    chatHeaderRef: React.RefObject<HTMLDivElement | null>;
-    sessionComboRef: React.RefObject<HTMLDivElement | null>;
-    composerRef: React.RefObject<HTMLElement | null>;
-    composerOffsetHeight: number;
-    terminalRowHeight: number;
-  };
+  /** 分屏双栏时为 true（边框高亮）；单栏 Tab 外置时为 false */
+  splitPane?: boolean;
 };
 
 /**
  * 单个会话聊天栏：自持 timeline + runtime 注入。
- * 分屏时挂两个实例；单栏时挂一个（chrome=full）。
+ * 共享服务来自 SessionPaneServices；Tab 栏由 App 外置统一挂载。
  */
 export function ChatSessionPane(props: ChatSessionPaneProps) {
-  const {
-    sessionId,
-    focused,
-    onFocusPane,
-    chrome,
-    queuedPromptsBySession,
-    jumpToMessageRef,
-    layoutRefs,
-    sessionTabs,
-    ...rest
-  } = props;
+  const { sessionId, focused, onFocusPane, splitPane = false } = props;
+  const services = useSessionPaneServices();
 
   const record = useAtomValue(sessionRecordByIdAtomFamily(sessionId));
   const sessionTitle = record?.title?.trim() || t("app.chatProject");
@@ -75,23 +33,23 @@ export function ChatSessionPane(props: ChatSessionPaneProps) {
   const localComposerRef = useRef<HTMLElement | null>(null);
   const localQueuedTrackRef = useRef<HTMLDivElement | null>(null);
 
-  const chatHeaderRef = focused && layoutRefs ? layoutRefs.chatHeaderRef : localHeaderRef;
-  const sessionComboRef = focused && layoutRefs ? layoutRefs.sessionComboRef : localComboRef;
-  const composerRef = focused && layoutRefs ? layoutRefs.composerRef : localComposerRef;
+  const layoutRefs = services.layoutRefs;
+  const chatHeaderRef = focused ? layoutRefs.chatHeaderRef : localHeaderRef;
+  const sessionComboRef = focused ? layoutRefs.sessionComboRef : localComboRef;
+  const composerRef = focused ? layoutRefs.composerRef : localComposerRef;
 
-  const activeQueuedPrompts = queuedPromptsBySession[sessionId] ?? [];
+  const activeQueuedPrompts = services.queuedPromptsBySession[sessionId] ?? [];
 
   useEffect(() => {
-    if (!focused || !jumpToMessageRef) return;
-    jumpToMessageRef.current = sessionTimeline.jumpToMessage;
+    if (!focused) return;
+    services.jumpToMessageRef.current = sessionTimeline.jumpToMessage;
     return () => {
-      if (jumpToMessageRef.current === sessionTimeline.jumpToMessage) {
-        jumpToMessageRef.current = null;
+      if (services.jumpToMessageRef.current === sessionTimeline.jumpToMessage) {
+        services.jumpToMessageRef.current = null;
       }
     };
-  }, [focused, jumpToMessageRef, sessionTimeline.jumpToMessage]);
+  }, [focused, services.jumpToMessageRef, sessionTimeline.jumpToMessage]);
 
-  // 点击 Header 下拉外部时收起（原 App 级逻辑下沉到本栏）
   useEffect(() => {
     if (!sessionActionsOpen) return;
     const onPointerDown = (event: PointerEvent) => {
@@ -107,8 +65,8 @@ export function ChatSessionPane(props: ChatSessionPaneProps) {
       chatHeaderRef,
       sessionComboRef,
       composerRef,
-      composerOffsetHeight: focused && layoutRefs ? layoutRefs.composerOffsetHeight : 0,
-      terminalRowHeight: layoutRefs?.terminalRowHeight ?? 160,
+      composerOffsetHeight: focused ? layoutRefs.composerOffsetHeight : 0,
+      terminalRowHeight: layoutRefs.terminalRowHeight,
     }),
     [chatHeaderRef, composerRef, focused, layoutRefs, sessionComboRef],
   );
@@ -117,9 +75,8 @@ export function ChatSessionPane(props: ChatSessionPaneProps) {
     <SessionRuntimeInjector
       currentSessionId={sessionId}
       sessionTitle={sessionTitle}
-      sessionTabs={sessionTabs}
       sessionTimeline={sessionTimeline}
-      chrome={chrome}
+      splitPane={splitPane}
       focused={focused}
       onFocusPane={onFocusPane}
       sessionActionsOpen={sessionActionsOpen}
@@ -130,9 +87,7 @@ export function ChatSessionPane(props: ChatSessionPaneProps) {
       composerOffsetHeight={layout.composerOffsetHeight}
       terminalRowHeight={layout.terminalRowHeight}
       activeQueuedPrompts={activeQueuedPrompts}
-      visibleQueuedPrompts={activeQueuedPrompts}
       queuedTrackRef={localQueuedTrackRef}
-      {...rest}
     />
   );
 }

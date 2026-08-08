@@ -106,6 +106,7 @@ import { useWorktreeActions } from "./hooks/useWorktreeActions";
 import { ChatSessionPane } from "./components/session/ChatSessionPane";
 import { SessionSplitStage } from "./components/session/SessionSplitStage";
 import { SessionTabsBar } from "./components/session/SessionTabsBar";
+import { SessionPaneServicesProvider } from "./components/session/SessionPaneServices";
 import { ProjectEmptyState } from "./components/session/ProjectEmptyState";
 import { useSessionWorkspaceChrome } from "./hooks/useSessionWorkspaceChrome";
 import { ScratchPadOverlay } from "./components/overlays/ScratchPadOverlay";
@@ -150,6 +151,7 @@ import type {
   ImageContent,
   PiCommand,
   Project,
+  SessionLaunchPreferences,
   SessionRecord,
   SessionSummary,
   ComposerAgentMode,
@@ -1117,21 +1119,51 @@ export function App() {
     refreshProjectSessions,
     api,
     showToast,
-    // Tab 登记交给 workspace chrome（preview / permanent）
-    onSessionSelected: workspaceChrome.registerOpenSession,
   });
 
-  // 关闭 Tab / 分屏退栏时的焦点切换回接到 session actions（写 ref，避免环依赖）
+  // 关闭 Tab / 分屏退栏时的焦点切换：只改 currentSession，不碰 Tab 登记
   useEffect(() => {
     workspaceChrome.bindFocusHandlers({
       focusSession: (projectId, sessionId) => {
-        selectSessionCommand(projectId, sessionId, true, "keep");
+        selectSessionCommand(projectId, sessionId, true);
       },
       focusProject: (projectId) => {
         selectProjectCommand(projectId);
       },
     });
   }, [workspaceChrome, selectSessionCommand, selectProjectCommand]);
+
+  /** 新建会话：选中 + 登记常驻 Tab（chrome 与 selection 在 App 边界组合） */
+  const createSessionDraftWithTab = useCallback(
+    async (projectId?: string, preferences: SessionLaunchPreferences = {}) => {
+      const session = await runCreateSessionDraft(projectId, preferences);
+      if (session) workspaceChrome.registerOpenSession(session.id, "permanent");
+      return session;
+    },
+    [runCreateSessionDraft, workspaceChrome],
+  );
+
+  const createAnonymousSessionWithTab = useCallback(
+    async (projectId?: string, preferences: SessionLaunchPreferences = {}) => {
+      const session = await runCreateAnonymousSession(projectId, preferences);
+      if (session) workspaceChrome.registerOpenSession(session.id, "permanent");
+      return session;
+    },
+    [runCreateAnonymousSession, workspaceChrome],
+  );
+
+  /** 侧栏/分支打开：选中成功后按 preview|permanent 登记 Tab */
+  const openSidebarSessionByIdWithTab = useCallback(
+    async (
+      projectId: string,
+      sessionId: string,
+      tabMode: "preview" | "permanent" = "permanent",
+    ) => {
+      const openedId = await runOpenSidebarSessionById(projectId, sessionId);
+      if (openedId) workspaceChrome.registerOpenSession(openedId, tabMode);
+    },
+    [runOpenSidebarSessionById, workspaceChrome],
+  );
 
   useEffect(() => {
     if (!activeProject) return;
@@ -2285,11 +2317,15 @@ export function App() {
     },
     sessions: {
       open: (projectId, sessionId, tabMode = "preview") =>
-        runOpenSidebarSessionById(projectId, sessionId, tabMode),
+        openSidebarSessionByIdWithTab(projectId, sessionId, tabMode),
       beginDrag: workspaceChrome.beginDrag,
       endDrag: workspaceChrome.endDrag,
-      createDraft: runCreateSessionDraft,
-      createAnonymous: runCreateAnonymousSession,
+      createDraft: async (projectId) => {
+        await createSessionDraftWithTab(projectId);
+      },
+      createAnonymous: async (projectId) => {
+        await createAnonymousSessionWithTab(projectId);
+      },
       deleteDraft: deleteDraftSession,
       rename: rename.openSessionRename,
       export: runExportSidebarSession,
@@ -2366,10 +2402,10 @@ export function App() {
 
   // Gate 4.6 — Session view wrapped in SessionRuntimeInjector / ChatSessionPane
 
-  // 会话 Tab 栏的交互端口由 App 持有；分屏时 Tab 在舞台外共享，单栏时仍嵌入会话视图。
+  // 会话 Tab 栏始终外置挂载；分屏双栏共享同一条 Tab，单栏也不再嵌入 SessionView。
   const focusSessionPane = useCallback((sessionId: string) => {
     const record = store.get(sessionRecordByIdAtomFamily(sessionId));
-    if (record) selectSessionCommand(record.projectId, sessionId, true, "keep");
+    if (record) selectSessionCommand(record.projectId, sessionId, true);
   }, [selectSessionCommand, store]);
 
   const sessionTabsProps = {
@@ -2390,7 +2426,9 @@ export function App() {
         isChat: isChatProject(project),
       }))
       .sort((a, b) => Number(b.isChat) - Number(a.isChat)),
-    onNewSessionInProject: (projectId: string) => void runCreateSessionDraft(projectId),
+    onNewSessionInProject: (projectId: string) => {
+      void createSessionDraftWithTab(projectId);
+    },
     onTogglePin: workspaceChrome.togglePin,
     onReorder: workspaceChrome.reorderTab,
     onToggleDrawer: toggleRightDrawer,
@@ -2402,66 +2440,114 @@ export function App() {
   };
   const sessionTabsBarNode = <SessionTabsBar {...sessionTabsProps} />;
 
-  const paneLayoutRefs = {
-    chatHeaderRef,
-    sessionComboRef,
-    composerRef,
-    composerOffsetHeight,
-    terminalRowHeight,
-  };
+  const paneLayoutRefs = useMemo(
+    () => ({
+      chatHeaderRef,
+      sessionComboRef,
+      composerRef,
+      composerOffsetHeight,
+      terminalRowHeight,
+    }),
+    [composerOffsetHeight, terminalRowHeight],
+  );
 
-  const chatPaneSharedProps = {
-    sessionTabs: sessionTabsProps,
-    isLanWeb,
-    showToast,
-    onOpenFile: handleOpenLinkedFile,
-    onDiffFile: diffFilePath,
-    onPreviewImage: setPreviewImage,
-    abortAgent,
-    restartActiveAgent,
-    onToggleDrawer: toggleRightDrawer,
-    drawerOpen: Boolean(drawer && !drawerCollapsed),
-    runCreateSessionDraft,
-    enqueueSessionPrompt,
-    insertQuickPrompt,
-    ensureSessionId: ensureSessionForSend,
-    resendUserMessage,
-    editMessage,
-    deleteMessage,
-    forkFromUserMessage,
-    forkingMessageId,
-    openSidebarSessionById: runOpenSidebarSessionById,
-    agents: displayAgents,
-    queuedPromptsBySession: queue.queuedPrompts,
-    queueRetract: queue.retractQueuedPromptForEdit,
-    queueDiscard: queue.discardQueuedPrompt,
-    queueFlushBySessionRef,
-    restartingAgentId,
-    sessionDurationByAgent,
-    activeProjectId,
-    gitInfo,
-    showThinking: settings.showThinking,
-    validCommandNames,
-    validFilePaths,
-    terminalOpen,
-    terminalDockClosing,
-    terminalDockVisible,
-    terminalCollapsed,
-    availableTerminalHeight: availableTerminalHeight ?? 120,
-    setTerminalOpenForAgent,
-    setTerminalCollapsedForAgent,
-    setTerminalHeightByAgent,
-    configOpen,
-    environmentDialog: Boolean(environmentDialog),
-    showNotice,
-    api,
-    jumpToMessageRef,
-    layoutRefs: paneLayoutRefs,
-  };
+  const sessionPaneServices = useMemo(
+    () => ({
+      isLanWeb,
+      showToast,
+      onOpenFile: handleOpenLinkedFile,
+      onDiffFile: diffFilePath,
+      onPreviewImage: setPreviewImage,
+      abortAgent,
+      restartActiveAgent,
+      runCreateSessionDraft: async () => {
+        await createSessionDraftWithTab();
+      },
+      enqueueSessionPrompt,
+      insertQuickPrompt,
+      ensureSessionId: ensureSessionForSend,
+      resendUserMessage,
+      editMessage,
+      deleteMessage,
+      forkFromUserMessage,
+      forkingMessageId,
+      openSidebarSessionById: (projectId: string, sessionId: string) =>
+        openSidebarSessionByIdWithTab(projectId, sessionId, "permanent"),
+      agents: displayAgents,
+      queuedPromptsBySession: queue.queuedPrompts,
+      queueRetract: queue.retractQueuedPromptForEdit,
+      queueDiscard: queue.discardQueuedPrompt,
+      queueFlushBySessionRef,
+      restartingAgentId,
+      sessionDurationByAgent,
+      activeProjectId,
+      gitInfo,
+      showThinking: settings.showThinking,
+      validCommandNames,
+      validFilePaths,
+      terminalOpen,
+      terminalDockClosing,
+      terminalDockVisible,
+      terminalCollapsed,
+      availableTerminalHeight: availableTerminalHeight ?? 120,
+      setTerminalOpenForAgent,
+      setTerminalCollapsedForAgent,
+      setTerminalHeightByAgent,
+      configOpen,
+      environmentDialog: Boolean(environmentDialog),
+      showNotice,
+      api,
+      jumpToMessageRef,
+      layoutRefs: paneLayoutRefs,
+    }),
+    [
+      abortAgent,
+      activeProjectId,
+      availableTerminalHeight,
+      configOpen,
+      createSessionDraftWithTab,
+      deleteMessage,
+      diffFilePath,
+      displayAgents,
+      editMessage,
+      enqueueSessionPrompt,
+      ensureSessionForSend,
+      environmentDialog,
+      forkFromUserMessage,
+      forkingMessageId,
+      gitInfo,
+      handleOpenLinkedFile,
+      insertQuickPrompt,
+      isLanWeb,
+      jumpToMessageRef,
+      openSidebarSessionByIdWithTab,
+      paneLayoutRefs,
+      queue.discardQueuedPrompt,
+      queue.queuedPrompts,
+      queue.retractQueuedPromptForEdit,
+      queueFlushBySessionRef,
+      restartActiveAgent,
+      restartingAgentId,
+      resendUserMessage,
+      sessionDurationByAgent,
+      settings.showThinking,
+      setPreviewImage,
+      setTerminalCollapsedForAgent,
+      setTerminalHeightByAgent,
+      setTerminalOpenForAgent,
+      showToast,
+      terminalCollapsed,
+      terminalDockClosing,
+      terminalDockVisible,
+      terminalOpen,
+      validCommandNames,
+      validFilePaths,
+    ],
+  );
 
   const chatPaneSessionNode = (
-    <>
-      {(!currentSessionId || workspaceChrome.splitLayout) && sessionTabsBarNode}
+    <SessionPaneServicesProvider value={sessionPaneServices}>
+      {sessionTabsBarNode}
       {currentSessionId ? (
         <SessionSplitStage
           layout={workspaceChrome.splitLayout}
@@ -2470,11 +2556,10 @@ export function App() {
           onDropSplit={workspaceChrome.dropSplit}
           solo={
             <ChatSessionPane
-              {...chatPaneSharedProps}
               sessionId={currentSessionId}
               focused
               onFocusPane={() => focusSessionPane(currentSessionId)}
-              chrome="full"
+              splitPane={false}
             />
           }
           first={(() => {
@@ -2482,11 +2567,10 @@ export function App() {
             if (!layout) return null;
             return (
               <ChatSessionPane
-                {...chatPaneSharedProps}
                 sessionId={layout.firstSessionId}
                 focused={currentSessionId === layout.firstSessionId}
                 onFocusPane={() => focusSessionPane(layout.firstSessionId)}
-                chrome="pane"
+                splitPane
               />
             );
           })()}
@@ -2495,11 +2579,10 @@ export function App() {
             if (!layout) return null;
             return (
               <ChatSessionPane
-                {...chatPaneSharedProps}
                 sessionId={layout.secondSessionId}
                 focused={currentSessionId === layout.secondSessionId}
                 onFocusPane={() => focusSessionPane(layout.secondSessionId)}
-                chrome="pane"
+                splitPane
               />
             );
           })()}
@@ -2509,12 +2592,12 @@ export function App() {
         // 共享统一空态；快捷操作新建 Agent / 匿名聊天，无项目时引导添加项目。
         <ProjectEmptyState
           activeProject={activeProject}
-          onCreateAgent={(preferences) => void runCreateSessionDraft(undefined, preferences)}
-          onCreateAnonymous={(preferences) => void runCreateAnonymousSession(undefined, preferences)}
+          onCreateAgent={(preferences) => void createSessionDraftWithTab(undefined, preferences)}
+          onCreateAnonymous={(preferences) => void createAnonymousSessionWithTab(undefined, preferences)}
           onAddProject={() => void addProject()}
         />
       )}
-    </>
+    </SessionPaneServicesProvider>
   );
 
   const workbenchTheme: "dark" | "light" =
@@ -2601,7 +2684,11 @@ export function App() {
     refreshFiles,
     projects,
     refreshProjectSessions,
-    runOpenSidebarSession, isSameSessionPath,
+    runOpenSidebarSession: async (projectId: string, session: SessionSummary) => {
+      const openedId = await runOpenSidebarSession(projectId, session);
+      if (openedId) workspaceChrome.registerOpenSession(openedId, "permanent");
+    },
+    isSameSessionPath,
     runCopySession, runExportHistorySession, runDeleteHistorySession,
     viewFilePath, openFilePath,
     api, t,

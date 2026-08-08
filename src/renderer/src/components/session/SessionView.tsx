@@ -19,7 +19,6 @@ import { isLanWeb, desktopApi as api } from "../../desktopApi";
 import { SessionHeader } from "./SessionHeader";
 import { SessionBranchBar } from "./SessionBranchBar";
 import { SessionWidgetChips } from "./SessionWidgetChips";
-import { SessionTabsBar, type SessionTabsBarProps } from "./SessionTabsBar";
 import { SessionMessageTimeline } from "./SessionMessageTimeline";
 import { ComposerArea } from "./ComposerArea";
 import { SessionRuntimeDock } from "./SessionRuntimeDock";
@@ -36,10 +35,9 @@ export type SessionViewProps = {
   // ── Session identity ──
   sessionId: string;
   sessionTitle: string;
-  sessionTabs: Omit<SessionTabsBarProps, "actions">;
   sessionTimeline: SessionTimelineController;
-  /** full=Tab+Header；pane=仅 Header（分屏栏） */
-  chrome?: "full" | "pane";
+  /** 分屏栏：加边框与点击聚焦；单栏 Tab 已外置，同样只渲染 Header */
+  splitPane?: boolean;
   focused?: boolean;
   onFocusPane?: () => void;
   activeAgentId?: string;
@@ -74,9 +72,6 @@ export type SessionViewProps = {
   onHeaderTrigger: () => void;
   onStop: () => void;
   onRestart: () => void;
-  /** 右侧抽屉开关（main 布局：会话操作菜单右侧），不传则不渲染 */
-  onToggleDrawer?: () => void;
-  drawerOpen?: boolean;
 
   // ── Timeline interaction ──
   showThinking: boolean;
@@ -130,9 +125,8 @@ export type SessionViewProps = {
 export function SessionView({
   sessionId,
   sessionTitle,
-  sessionTabs,
   sessionTimeline,
-  chrome = "full",
+  splitPane = false,
   focused = true,
   onFocusPane,
   activeAgentId,
@@ -157,8 +151,6 @@ export function SessionView({
   onHeaderTrigger,
   onStop,
   onRestart,
-  onToggleDrawer,
-  drawerOpen,
   showThinking,
   validCommandNames,
   validFilePaths,
@@ -440,43 +432,13 @@ export function SessionView({
   return (
     <div
       className={
-        chrome === "pane"
+        splitPane
           ? `session-split-pane flex h-full min-h-0 flex-col${focused ? " session-split-pane-focused" : ""}`
           : "contents"
       }
-      onMouseDown={chrome === "pane" ? () => onFocusPane?.() : undefined}
+      onMouseDown={splitPane ? () => onFocusPane?.() : undefined}
     >
-      {chrome === "full" ? (
-      <SessionTabsBar
-        {...sessionTabs}
-        actions={
-          <SessionHeader
-            embedded
-            headerRef={chatHeaderRef}
-            comboRef={sessionComboRef}
-            title={sessionTitle}
-            compactionCount={activeAgent?.compactionCount}
-            isAnonymous={activeAgent?.noSession}
-            runtimeState={activeRuntimeState}
-            duration={sessionDuration}
-            isStarting={isAgentStarting}
-            hasProject={hasProject}
-            hasSession={Boolean(activeAgentId || sessionId)}
-            menuOpen={sessionActionsOpen}
-            canStop={canStop}
-            canRestart={canRestart}
-            isRestarting={isRestarting}
-            showRestart={showRestart}
-            onTrigger={onHeaderTrigger}
-            onStop={onStop}
-            onRestart={onRestart}
-            onToggleDrawer={onToggleDrawer}
-            drawerOpen={drawerOpen}
-            widgetChips={<SessionWidgetChips sessionId={sessionId} />}
-          />
-        }
-      />
-      ) : (
+      {/* Tab 栏已统一外置；本栏只保留会话操作 Header（抽屉开关在共享 Tab 栏） */}
       <SessionHeader
         headerRef={chatHeaderRef}
         comboRef={sessionComboRef}
@@ -496,11 +458,8 @@ export function SessionView({
         onTrigger={onHeaderTrigger}
         onStop={onStop}
         onRestart={onRestart}
-        onToggleDrawer={onToggleDrawer}
-        drawerOpen={drawerOpen}
         widgetChips={<SessionWidgetChips sessionId={sessionId} />}
       />
-      )}
       {/* 分支导航条：仅当当前会话存在 fork 分支关系（父/兄弟/子分支）时显示 */}
       <SessionBranchBar sessionId={sessionId} onOpenSession={onOpenBranchSession} />
       <ResizablePanelGroup

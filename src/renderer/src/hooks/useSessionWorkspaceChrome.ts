@@ -120,7 +120,7 @@ export function useSessionWorkspaceChrome(options: {
     focusHandlersRef.current = handlers;
   }, []);
 
-  /** 供 useSessionActions.onSessionSelected：登记 Tab（preview / permanent） */
+  /** 在 App / 侧栏边界登记 Tab（preview / permanent）；与 selectSession 解耦 */
   const registerOpenSession = useCallback((
     sessionId: string,
     mode: SessionTabOpenMode = "permanent",

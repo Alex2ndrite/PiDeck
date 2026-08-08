@@ -147,16 +147,21 @@ describe("session split edge resolution", () => {
     const injector = readFileSync("src/renderer/src/components/session/SessionRuntimeInjector.tsx", "utf8");
     const chrome = readFileSync("src/renderer/src/hooks/useSessionWorkspaceChrome.ts", "utf8");
     const runtime = readFileSync("src/renderer/src/hooks/useSessionRuntimeController.ts", "utf8");
+    const actions = readFileSync("src/renderer/src/hooks/useSessionActions.ts", "utf8");
     assert.match(tree, /SESSION_TAB_DRAG_MIME/);
     assert.match(tree, /onDoubleClick/);
     assert.match(tree, /openSession\(session\.id, "permanent"\)/);
-    // chrome 域从 App 抽出，App 只装配
+    // chrome 域从 App 抽出，App 只装配；Tab 登记与 selectSession 解耦
     assert.match(app, /useSessionWorkspaceChrome/);
     assert.match(app, /workspaceChrome\.dropSplit/);
+    assert.match(app, /registerOpenSession/);
+    assert.match(app, /SessionPaneServicesProvider/);
     assert.match(chrome, /export function useSessionWorkspaceChrome/);
     assert.match(chrome, /registerOpenSession/);
-    // 分屏栏不再挂右侧抽屉按钮；runtime 按 session family 订阅本栏
-    assert.match(injector, /chrome === "full" \? onToggleDrawer/);
+    assert.doesNotMatch(actions, /tabMode|onSessionSelected|"keep"/);
+    // 分屏栏不再挂右侧抽屉按钮；共享服务走 context；runtime 按 session family 订阅
+    assert.match(injector, /useSessionPaneServices/);
+    assert.doesNotMatch(injector, /onToggleDrawer|chrome === "full"/);
     assert.match(runtime, /sessionRuntimeBySessionIdAtomFamily\(sessionKey\)/);
     assert.match(runtime, /始终按 sessionId 订阅 family/);
   });

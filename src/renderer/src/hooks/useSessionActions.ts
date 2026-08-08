@@ -15,31 +15,19 @@ export type RefreshProjectSessions = (
 ) => Promise<SessionSummary[] | SessionRecord[] | undefined>;
 
 export interface UseSessionActionsOptions {
-  // Refs
   openSessionRequestRef: MutableRefObject<number>;
   creatingSessionDraftRef: MutableRefObject<Set<string>>;
-  // State values
   activeProjectId: string | undefined;
   sessionsProjectId: string | undefined;
   projects: Project[];
-
-  // State setters
   setActiveProjectId: (value: React.SetStateAction<string | undefined>) => void;
   setCurrentSessionId: (value: React.SetStateAction<string | undefined>) => void;
-
-  // Getters
   getSessionRecord: (sessionId: string) => SessionRecord | undefined;
   getProjectSessionRecords: (projectId: string) => SessionRecord[];
-
-  // Atom setters
   upsertSession: (session: SessionRecord) => void;
   removeSessionState: (sessionId: string) => void;
   removeSessionComposerState: (sessionId: string) => void;
-
-  // Refresh callback. Callers own menu closing and foreground loading state.
   refreshProjectSessions: RefreshProjectSessions;
-
-  // API
   api: {
     sessions: {
       copyRecord: (sessionId: string) => Promise<{ cancelled?: boolean; targetSessionId?: string }>;
@@ -49,13 +37,13 @@ export interface UseSessionActionsOptions {
       createAnonymous: (input: { projectId: string; title: string } & SessionLaunchPreferences) => Promise<CreateAnonymousSessionResult>;
     };
   };
-
-  // Other callbacks
   showToast: (message: string, duration?: number) => void;
-  /** 会话被选中时回调：用于 Tab 栏登记（preview=临时斜体，permanent=常驻） */
-  onSessionSelected?: (sessionId: string, mode?: "preview" | "permanent") => void;
 }
 
+/**
+ * 会话选择与草稿创建。只负责「当前会话是谁」，不登记 Tab 预览/常驻——
+ * 那是 workspace chrome 的事，由 App / 侧栏在边界组合。
+ */
 export function useSessionActions(options: UseSessionActionsOptions) {
   const {
     openSessionRequestRef,
@@ -79,15 +67,9 @@ export function useSessionActions(options: UseSessionActionsOptions) {
     projectId: string,
     sessionId: string | undefined,
     scrollToEnd: boolean,
-    /** keep=只切焦点，不改 Tab 预览/常驻状态（顶栏已有 Tab 的单击） */
-    tabMode: "preview" | "permanent" | "keep" = "permanent",
   ) {
     setActiveProjectId(projectId);
     setCurrentSessionId(sessionId);
-    if (sessionId && tabMode !== "keep") {
-      options.onSessionSelected?.(sessionId, tabMode);
-    }
-    // useSessionTimelineController owns scroll restoration when the Session identity changes.
     void scrollToEnd;
   }
 
@@ -100,13 +82,10 @@ export function useSessionActions(options: UseSessionActionsOptions) {
     projectId: string,
     sessionId: string,
     scrollToEnd = true,
-    tabMode: "preview" | "permanent" | "keep" = "permanent",
   ) {
     ++openSessionRequestRef.current;
-    commitSessionSelection(projectId, sessionId, scrollToEnd, tabMode);
+    commitSessionSelection(projectId, sessionId, scrollToEnd);
   }
-
-  // ── Session copy/export/delete ──
 
   async function copySession(
     sessionId: string,
@@ -136,13 +115,10 @@ export function useSessionActions(options: UseSessionActionsOptions) {
     if (projectId) await refreshProjectSessions(projectId);
   }
 
-  // ── Sidebar session actions ──
-
   async function openSidebarSession(
     projectId: string,
     session: SessionSummary,
-    tabMode: "preview" | "permanent" = "preview",
-  ) {
+  ): Promise<string | undefined> {
     const requestSequence = ++openSessionRequestRef.current;
     const cachedRecord = getSessionRecord(session.id);
     let record: SessionRecord | undefined =
@@ -160,7 +136,7 @@ export function useSessionActions(options: UseSessionActionsOptions) {
     if (!record) {
       try {
         await refreshProjectSessions(projectId, true);
-        if (requestSequence !== openSessionRequestRef.current) return;
+        if (requestSequence !== openSessionRequestRef.current) return undefined;
         record = getProjectSessionRecords(projectId).find(
           (candidate) =>
             candidate.filePath &&
@@ -171,38 +147,38 @@ export function useSessionActions(options: UseSessionActionsOptions) {
             ),
         );
       } catch (error) {
-        if (requestSequence !== openSessionRequestRef.current) return;
+        if (requestSequence !== openSessionRequestRef.current) return undefined;
         showToast(error instanceof Error ? error.message : String(error), 4000);
-        return;
+        return undefined;
       }
     }
-    if (!record || requestSequence !== openSessionRequestRef.current) return;
-
-    commitSessionSelection(projectId, record.id, true, tabMode);
+    if (!record || requestSequence !== openSessionRequestRef.current) return undefined;
+    commitSessionSelection(projectId, record.id, true);
+    return record.id;
   }
 
   async function openSidebarSessionById(
     projectId: string,
     sessionId: string,
-    tabMode: "preview" | "permanent" = "preview",
-  ) {
+  ): Promise<string | undefined> {
     const requestSequence = ++openSessionRequestRef.current;
     let record: SessionRecord | undefined = getSessionRecord(sessionId);
     if (!record || record.projectId !== projectId) {
       try {
         await refreshProjectSessions(projectId, true);
-        if (requestSequence !== openSessionRequestRef.current) return;
+        if (requestSequence !== openSessionRequestRef.current) return undefined;
         record = getProjectSessionRecords(projectId).find(
           (candidate) => candidate.id === sessionId,
         );
       } catch (error) {
-        if (requestSequence !== openSessionRequestRef.current) return;
+        if (requestSequence !== openSessionRequestRef.current) return undefined;
         showToast(error instanceof Error ? error.message : String(error), 4000);
-        return;
+        return undefined;
       }
     }
-    if (!record || requestSequence !== openSessionRequestRef.current) return;
-    commitSessionSelection(projectId, record.id, true, tabMode);
+    if (!record || requestSequence !== openSessionRequestRef.current) return undefined;
+    commitSessionSelection(projectId, record.id, true);
+    return record.id;
   }
 
   async function copySidebarSession(projectId: string, session: SessionSummary) {
@@ -214,35 +190,38 @@ export function useSessionActions(options: UseSessionActionsOptions) {
     showToast(t("app.exportedPath", { path: result.path }), 3500);
   }
 
-  // ── Session draft ──
-
-  async function createSessionDraft(projectId = activeProjectId, preferences: SessionLaunchPreferences = {}) {
-    if (!projectId || creatingSessionDraftRef.current.has(projectId)) return;
+  async function createSessionDraft(
+    projectId = activeProjectId,
+    preferences: SessionLaunchPreferences = {},
+  ): Promise<SessionRecord | undefined> {
+    if (!projectId || creatingSessionDraftRef.current.has(projectId)) return undefined;
     const project = projects.find((item) => item.id === projectId);
-    if (!project) return;
+    if (!project) return undefined;
     creatingSessionDraftRef.current.add(projectId);
     try {
       const session = await api.sessions.createDraft({
         projectId,
         title: `${project.name} agent`,
         ...preferences,
-        // 主进程 createDraft(ipc) 已按 pi 配置（defaultProvider/defaultModel/
-        // defaultThinkingLevel）自动填充默认模型与思考级别；渲染层的欢迎页本地偏好
-        // 不再无条件 spread 覆盖 pi 配置，避免 localStorage 篡改 pi 默认值。
       });
       upsertSession(session);
       commitSessionSelection(projectId, session.id, true);
+      return session;
     } catch (error) {
       showToast(error instanceof Error ? error.message : String(error), 4000);
+      return undefined;
     } finally {
       creatingSessionDraftRef.current.delete(projectId);
     }
   }
 
-  async function createAnonymousSession(projectId = activeProjectId, preferences: SessionLaunchPreferences = {}) {
-    if (!projectId || creatingSessionDraftRef.current.has(projectId)) return;
+  async function createAnonymousSession(
+    projectId = activeProjectId,
+    preferences: SessionLaunchPreferences = {},
+  ): Promise<SessionRecord | undefined> {
+    if (!projectId || creatingSessionDraftRef.current.has(projectId)) return undefined;
     const project = projects.find((item) => item.id === projectId);
-    if (!project) return;
+    if (!project) return undefined;
     creatingSessionDraftRef.current.add(projectId);
     try {
       const { session } = await api.sessions.createAnonymous({
@@ -252,8 +231,10 @@ export function useSessionActions(options: UseSessionActionsOptions) {
       });
       upsertSession(session);
       commitSessionSelection(projectId, session.id, true);
+      return session;
     } catch (error) {
       showToast(error instanceof Error ? error.message : String(error), 4000);
+      return undefined;
     } finally {
       creatingSessionDraftRef.current.delete(projectId);
     }
