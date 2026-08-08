@@ -321,7 +321,9 @@ assert.doesNotMatch(twistie, /ChevronDown|ChevronRight|GitBranch|GitCommit|GitCo
     assert.match(app, /const gitDiffRequestSequenceRef = useRef\(0\)/);
     assert.match(app, /const request = \+\+gitDiffRequestSequenceRef\.current/g);
     assert.match(app, /request !== gitDiffRequestSequenceRef\.current/g);
-    assert.match(app, /const closeGitDiff = useCallback\(\(\) => \{[\s\S]*?gitDiffRequestSequenceRef\.current \+= 1;[\s\S]*?setGitDrawerDiff\(null\)/);
+    // 关闭 Git Diff 的 invalidate 逻辑已随重构收拢进 useFileEditor：
+    // dismissGitDiffOnly（仅关 Diff 保留文件 tab）先递增 sequence 使在途请求失效，再清 drawer
+    assert.match(app, /const dismissGitDiffOnly = useCallback\(\(\) => \{[\s\S]*?gitDiffRequestSequenceRef\.current \+= 1;[\s\S]*?setGitDrawerDiff\(null\)/);
     // Git 面板再次点击时优先关闭 diff 详情：该语义现收拢在共享的
     // handleToolDrawerAction 中（outline 与抽屉活动栏共用，见 workspaceDrawer 测试）。
     const toolDrawerAction = app.match(/handleToolDrawerAction = useCallback[\s\S]*?\}, \[workspace, gitDrawerDiff/)?.[0] ?? "";

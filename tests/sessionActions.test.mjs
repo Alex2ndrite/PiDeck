@@ -93,18 +93,18 @@ test("keeps request sequencing and stale-result gates around catalog fallback", 
       "const requestSequence = ++openSessionRequestRef.current;",
       "const cachedRecord = getSessionRecord(session.id);",
       "await refreshProjectSessions(projectId, true);",
-      "if (requestSequence !== openSessionRequestRef.current) return;",
+      "if (requestSequence !== openSessionRequestRef.current) return undefined;",
       "record = getProjectSessionRecords(projectId).find(",
     ],
     "catalog stale gate",
   );
   assert.match(
     block,
-    /catch \(error\) \{\s*if \(requestSequence !== openSessionRequestRef\.current\) return;\s*showToast/,
+    /catch \(error\) \{\s*if \(requestSequence !== openSessionRequestRef\.current\) return undefined;\s*showToast/,
   );
   assert.match(
     block,
-    /if \(!record \|\| requestSequence !== openSessionRequestRef\.current\) return;\s*commitSessionSelection/,
+    /if \(!record \|\| requestSequence !== openSessionRequestRef\.current\) return undefined;\s*commitSessionSelection/,
   );
 });
 
@@ -118,17 +118,17 @@ test("keeps by-ID fallback project-scoped after canonical refresh", () => {
       "let record: SessionRecord | undefined = getSessionRecord(sessionId);",
       "if (!record || record.projectId !== projectId)",
       "await refreshProjectSessions(projectId, true);",
-      "if (requestSequence !== openSessionRequestRef.current) return;",
+      "if (requestSequence !== openSessionRequestRef.current) return undefined;",
       "record = getProjectSessionRecords(projectId).find(",
       "(candidate) => candidate.id === sessionId",
-      "if (!record || requestSequence !== openSessionRequestRef.current) return;",
+      "if (!record || requestSequence !== openSessionRequestRef.current) return undefined;",
       "commitSessionSelection(projectId, record.id, true);",
     ],
     "by-ID catalog fallback",
   );
   assert.match(
     block,
-    /catch \(error\) \{\s*if \(requestSequence !== openSessionRequestRef\.current\) return;\s*showToast/,
+    /catch \(error\) \{\s*if \(requestSequence !== openSessionRequestRef\.current\) return undefined;\s*showToast/,
   );
 });
 
@@ -194,7 +194,7 @@ test("open paths commit after the stale gate without invalidating again", () => 
     assertInOrder(
       block,
       [
-        "if (!record || requestSequence !== openSessionRequestRef.current) return;",
+        "if (!record || requestSequence !== openSessionRequestRef.current) return undefined;",
         "commitSessionSelection(projectId, record.id, true);",
       ],
       `${name} stale gate and selection`,

@@ -6,6 +6,7 @@ const styleSources = [
   "src/renderer/src/styles/surfaces.css",
   "src/renderer/src/styles/integrations.css",
   "src/renderer/src/styles/workspace.css",
+  "src/renderer/src/styles/streamdownChrome.css",
 ];
 
 /**

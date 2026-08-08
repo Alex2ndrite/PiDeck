@@ -33,9 +33,10 @@ test("fixed light chat/table colors are tokenized for dark mode", () => {
     assert.doesNotMatch(body, /#[0-9a-f]{3,8}\b/i, "user-turn-bubble must not hardcode hex colors");
     assert.match(body, /var\(--color-/, "user-turn-bubble must use semantic tokens");
   }
-  // 表格 wrapper 只负责工具栏和横向滚动，实际表格/表头承载唯一视觉表面。
-  assert.match(block('[data-streamdown="table-wrapper"] > div:first-child'), /background:\s*transparent;/);
+  // 表格 wrapper 是「单卡片」皮（边框/圆角/底色）：工具栏（first-child）在卡片底色上
+  // 半透明浮现，滚动区（last-child）透明，表头承载唯一视觉表面；一律语义 token（color-mix + var）。
+  assert.match(block('[data-streamdown="table-wrapper"] > div:first-child'), /color-mix\(in srgb, var\(--color-/);
   assert.match(block('[data-streamdown="table-wrapper"] > div:last-child'), /background:\s*transparent;/);
-  assert.match(block('[data-streamdown="table"]'), /background:\s*var\(--color-chat-table-bg\);/);
-  assert.match(block('[data-streamdown="table-wrapper"] thead'), /background:\s*var\(--color-chat-muted-bg\);/);
+  assert.match(block('[data-streamdown="table"]'), /background:\s*var\(--color-chat-table-bg(?:,\s*var\(--color-bg-panel\))?\);/);
+  assert.match(block('[data-streamdown="table-wrapper"] thead'), /color-mix\(in srgb, var\(--color-/);
 });

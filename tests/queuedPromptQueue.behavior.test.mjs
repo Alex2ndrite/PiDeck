@@ -280,7 +280,7 @@ test("layout budget uses compact queue chrome and terminal still yields first", 
   // The root passes queue cardinality to the layout owner; queue constants stay with the queue state machine.
   assert.match(appSource, /queuedPromptCount: activeQueuedPrompts\.length/);
   assert.match(queueStateSource, /export const QUEUED_PROMPT_VISIBLE = 3/);
-  assert.match(appSource, /const visibleQueuedPrompts = activeQueuedPrompts/);
+  assert.match(appSource, /const activeQueuedPrompts = currentSessionId/);
   const composerPanelsSrc = readFileSync("src/renderer/src/components/session/ComposerPanels.tsx", "utf8");
   assert.match(composerPanelsSrc, /max-h-\[102px\]/);
 });

@@ -114,13 +114,13 @@ test("pending prompts share the native content width constraint without hiding c
 test("compact queue panel exposes retract-to-input and discard only", () => {
   const queuedPromptPanel = componentInvocation(sessionRuntimeInjectorSource, "QueuedPromptPanel");
 
-  assert.match(queuedPromptPanel, /onRetract=\{queueRetract\}/);
+  assert.match(queuedPromptPanel, /onRetract=\{services\.queueRetract\}/);
   assert.match(composerPanelsSource, /app\.retractToInput/);
   assert.match(composerPanelsSource, /app\.retractDiscard/);
-  assert.match(sessionRuntimeInjectorSource, /onDiscard=\{queueDiscard\}/);
+  assert.match(sessionRuntimeInjectorSource, /onDiscard=\{services\.queueDiscard\}/);
   assert.match(composerPanelsSource, /canRetractQueuedPromptToInput\(status\)/);
   assert.match(composerPanelsSource, /canDiscardQueuedPrompt\(status\)/);
-  assert.match(appSource, /const visibleQueuedPrompts = activeQueuedPrompts/);
+  assert.match(appSource, /const activeQueuedPrompts = currentSessionId/);
   assert.match(composerPanelsSource, /queued-behavior-\$\{prompt\.behavior\}/);
   assert.match(composerPanelsSource, /max-h-\[102px\]/);
   assert.match(stylesSource, /\.queued-row\.queued-behavior-steer \{/);

@@ -100,8 +100,8 @@ test("project empty state narrows remote config values with unknown guard, not a
 test("draft and anonymous creation pass the explicit welcome selections", () => {
   // 引导页选择必须作为创建参数传入；主进程只对缺失字段补 pi 默认值。
   assert.match(emptyState, /readLaunchPreferences\(modelChoice, thinkingChoice\)/);
-  assert.match(sessionActions, /createSessionDraft\([^\n]*preferences/);
-  assert.match(sessionActions, /createAnonymousSession\([^\n]*preferences/);
+  assert.match(sessionActions, /function createSessionDraft\([\s\S]*?preferences: SessionLaunchPreferences = \{\},/);
+  assert.match(sessionActions, /function createAnonymousSession\([\s\S]*?preferences: SessionLaunchPreferences = \{\},/);
   assert.match(sessionActions, /\.\.\.preferences/);
 });
 
