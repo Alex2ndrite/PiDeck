@@ -406,41 +406,6 @@
   display: flex;
   gap: 8px;
 }
-.prompt-create-card {
-  display: grid;
-  gap: var(--space-2);
-  padding: var(--space-3);
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-lg);
-  background: var(--color-bg-muted);
-}
-.prompt-create-card > strong {
-  color: var(--color-text-primary);
-}
-.prompt-create-label {
-  display: grid;
-  gap: 6px;
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-control);
-}
-.prompt-create-card input,
-.prompt-create-textarea {
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-sm);
-  background: var(--color-bg-panel);
-  padding: 8px 10px;
-  color: var(--color-text-primary);
-}
-.prompt-create-card button {
-  justify-self: start;
-}
-.prompt-create-textarea {
-  resize: vertical;
-  font-family: inherit;
-  font-size: inherit;
-  line-height: 1.5;
-  min-height: 60px;
-}
 .prompts-list {
   display: grid;
   gap: var(--space-2);

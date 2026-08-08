@@ -9,7 +9,7 @@ const surfaces = readFileSync("src/renderer/src/styles/surfaces.css", "utf8");
 const foundation = readFileSync("src/renderer/src/styles/foundation.css", "utf8");
 const rendererStyles = readFileSync("src/renderer/src/styles.css", "utf8");
 const settingsModal = readFileSync("src/renderer/src/components/app/SettingsModal.tsx", "utf8");
-const skillCard = skills.slice(skills.indexOf("function SkillCard"));
+const skillTableRow = skills.slice(skills.indexOf("function SkillTableRow"));
 
 test("config shell defines compact density and crisp system typography", () => {
   assert.match(surfaces, /\.config-modal \[data-slot="button"\]/);
@@ -49,7 +49,14 @@ test("skill list is not accidentally filtered by the new-skill destination", () 
   assert.doesNotMatch(skills, /const filteredSkills = data\.skills\.filter/);
 });
 
-test("skill editing does not nest action buttons inside a clickable card button", () => {
-  assert.match(skillCard, /skill-card-main/);
-  assert.doesNotMatch(skillCard, /<button[\s\S]*skill-rename-inline[\s\S]*<Button/);
+test("skill table uses real aligned columns, not a colSpan card", () => {
+  assert.match(skillTableRow, /<TableRow>/);
+  assert.match(skillTableRow, /<TableCell className="min-w-0">/);
+  assert.match(skillTableRow, /<TableCell className="whitespace-normal break-words/);
+  assert.match(skillTableRow, /<TableCell className="text-right">/);
+  // 操作按钮直接放在 TableCell 内，不再包一层可点击的卡片 button。
+  assert.doesNotMatch(skillTableRow, /<button[\s\S]*skill-rename-inline[\s\S]*<Button/);
+  // 位置选择改为 shadcn Select，不再使用自定义下拉弹层。
+  assert.match(skills, /<SelectTrigger className="w-full">/);
+  assert.doesNotMatch(skills, /skill-location-picker/);
 });

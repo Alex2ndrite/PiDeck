@@ -1,5 +1,6 @@
 import { Button } from "../components/ui-shadcn/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui-shadcn/table";
+import { Select, SelectContent, SelectItem, SelectTrigger } from "../components/ui-shadcn/select";
 import { Tabs, TabsList, TabsTrigger } from "../components/ui-shadcn/tabs";
 import { useState } from "react";
 import { Check, FileEdit, Pencil, ShoppingBag, Sparkles, ToggleLeft, ToggleRight, Trash2, X, Store, Globe } from "lucide-react";
@@ -39,7 +40,6 @@ export function SkillsTab(props: {
 	const [skillTab, setSkillTab] = useState<"local" | "store">("local");
 	// 二级 tab（商店内）：选择供应商
 	const [storeSource, setStoreSource] = useState<"promptchat" | "skillhub">("skillhub");
-	const [locationPickerOpen, setLocationPickerOpen] = useState(false);
 	const canCreate = props.newName.trim() && props.newDescription.trim();
 	// 按选中的位置目录过滤 skill 列表
 	// 新建技能的位置只影响保存目标，不应把其他目录已有的技能从列表中隐藏。
@@ -116,10 +116,10 @@ export function SkillsTab(props: {
 				</div>
 			</div>
 
-			<section className="skill-create-card">
+			<section className="config-create-card">
 				<strong>{t("config.createSkill")}</strong>
-				<div className="skill-create-grid">
-					<Label>
+				<div className="config-create-grid">
+					<Label className="config-create-label">
 						<span>{t("config.name")}</span>
 						<Input
 							value={props.newName}
@@ -127,58 +127,47 @@ export function SkillsTab(props: {
 							onChange={(event) => props.onChangeNewName(event.target.value)}
 						/>
 					</Label>
-					<Label>
+					<Label className="config-create-label">
 						<span>{t("config.location")}</span>
-						<div
-							className="skill-location-picker"
-							onBlur={() => {
-								// 先让菜单项的 mouseDown 完成选中，再关闭弹层；否则点击选项时可能只触发焦点切换，表现为不回填。
-								window.setTimeout(() => setLocationPickerOpen(false), 80);
+						<Select
+							value={props.newLocationId}
+							onValueChange={(v) => {
+								// 只接受已知位置 id，避免外部字符串注入；仅改变保存目标，不立即创建文件。
+								if (v === "pi-global" || v === "agents-global" || v === "project-pi" || v === "project-agents") {
+									props.onChangeNewLocation(v);
+								}
 							}}
 						>
-							<button
-								type="button"
-								className={locationPickerOpen ? "open" : ""}
-								onMouseDown={(event) => {
-									event.preventDefault();
-									setLocationPickerOpen((open) => !open);
-								}}
-							>
-								<span>{selectedLocation?.label ?? t("config.chooseFolder")}</span>
-								<b>⌄</b>
-							</button>
-							{locationPickerOpen && (
-								<div className="skill-location-menu">
-									{data.locations.map((location) => (
-										<button
-											key={location.id}
-											type="button"
-											className={location.id === props.newLocationId ? "active" : ""}
-											onMouseDown={(event) => {
-												event.preventDefault();
-												// 自定义下拉只改变保存位置，不立即创建，避免用户误触后写入文件。
-												props.onChangeNewLocation(location.id);
-												setLocationPickerOpen(false);
-											}}
-										>
-											<strong>{location.label}</strong>
-											<small>{location.path}</small>
-										</button>
-									))}
-								</div>
-							)}
-						</div>
+							<SelectTrigger className="w-full">
+								<span className="flex min-w-0 flex-col items-start gap-0.5">
+									<span className="truncate">{selectedLocation?.label ?? t("config.chooseFolder")}</span>
+									<span className="truncate font-mono text-micro text-muted-foreground">{selectedLocation?.path}</span>
+								</span>
+							</SelectTrigger>
+							<SelectContent>
+								{data.locations.map((location) => (
+									<SelectItem key={location.id} value={location.id}>
+										<span className="flex min-w-0 flex-col gap-0.5">
+											<span className="truncate">{location.label}</span>
+											<span className="truncate font-mono text-micro text-muted-foreground">{location.path}</span>
+										</span>
+									</SelectItem>
+								))}
+							</SelectContent>
+						</Select>
 					</Label>
 				</div>
-				<Label className="skill-description-field">
+				<Label className="config-create-label">
 					<span>{t("config.description")}</span>
 					<Textarea
 						value={props.newDescription}
 						placeholder={t("config.skillUseWhenPlaceholder")}
 						onChange={(event) => props.onChangeNewDescription(event.target.value)}
+						className="min-h-[72px] resize-y"
 					/>
 				</Label>
 				<Button size="sm" variant="default"
+					className="justify-self-start"
 					onClick={props.onCreate}
 					disabled={!canCreate || props.creating}
 				>
@@ -190,18 +179,26 @@ export function SkillsTab(props: {
 				{visibleSkills.length === 0 ? (
 					<div className="py-12 text-center text-control text-text-tertiary">{t("config.emptySkills")}</div>
 				) : (
-					<Table>
-						<TableHeader><TableRow><TableHead>{t("config.name")}</TableHead><TableHead>{t("config.description")}</TableHead><TableHead>{t("config.extensionPath")}</TableHead><TableHead className="w-28 text-right">{t("config.actions")}</TableHead></TableRow></TableHeader>
+					<Table className="table-fixed">
+						<TableHeader>
+							<TableRow>
+								<TableHead className="w-56">{t("config.name")}</TableHead>
+								<TableHead>{t("config.description")}</TableHead>
+								<TableHead className="w-44">{t("config.extensionPath")}</TableHead>
+								<TableHead className="w-36 text-right">{t("config.actions")}</TableHead>
+							</TableRow>
+						</TableHeader>
 						<TableBody>
-						{visibleSkills.map((skill) => (
-						<TableRow key={skill.id}><TableCell colSpan={4} className="p-0"><SkillCard
-							skill={skill}
-							onToggle={props.onToggle}
-							onDelete={props.onDelete}
-							onEdit={props.onEdit}
-							onRename={props.onRename}
-						/></TableCell></TableRow>
-						))}
+							{visibleSkills.map((skill) => (
+								<SkillTableRow
+									key={skill.id}
+									skill={skill}
+									onToggle={props.onToggle}
+									onDelete={props.onDelete}
+									onEdit={props.onEdit}
+									onRename={props.onRename}
+								/>
+							))}
 						</TableBody>
 					</Table>
 				)}
@@ -212,7 +209,7 @@ export function SkillsTab(props: {
 	);
 }
 
-function SkillCard(props: {
+function SkillTableRow(props: {
 	skill: PiSkillSummary;
 	onToggle: (skill: PiSkillSummary, enabled: boolean) => void;
 	onDelete: (skill: PiSkillSummary) => void;
@@ -239,47 +236,55 @@ function SkillCard(props: {
 	};
 
 	return (
-		<article className="session-card skill-card">
-			<div className="session-card-display">
-				<div className="session-card-inner skill-card-main">
-					<div className="session-card-title skill-title-row">
-						{renaming ? (
-							<div className="skill-rename-inline">
-								<Input
-									value={renameValue}
-									onChange={(e) => setRenameValue(e.target.value)}
-									onKeyDown={(e) => { if (e.key === "Enter") void handleRename(); if (e.key === "Escape") setRenaming(false); }}
-									autoFocus
-									disabled={renameBusy}
-								/>
-								<Button variant="ghost" size="icon-sm" className="size-7" onClick={handleRename} disabled={renameBusy} title={t("common.confirm")}>
-									<Check size={14} strokeWidth={2} />
-								</Button>
-								<Button variant="ghost" size="icon-sm" className="size-7" onClick={() => setRenaming(false)} disabled={renameBusy} title={t("common.cancel")}>
-									<X size={14} strokeWidth={2} />
-								</Button>
-							</div>
-						) : (
-							<span className="flex min-w-0 items-center gap-2"><Sparkles size={14} strokeWidth={1.8} className="shrink-0 text-text-tertiary" /><strong className="min-w-0 truncate">{skill.name}</strong></span>
-						)}
-						<div className="skill-badges">
-							<span className={`skill-state ${skill.enabled ? "enabled" : "disabled"}`}>
-								{skill.enabled ? t("common.enabled") : t("common.disabled")}
-							</span>
-							{!skill.valid && <span className="skill-state invalid">{t("config.needsFix")}</span>}
-						</div>
+		<TableRow>
+			<TableCell className="min-w-0">
+				{renaming ? (
+					<div className="flex items-center gap-1">
+						<Input
+							value={renameValue}
+							onChange={(e) => setRenameValue(e.target.value)}
+							onKeyDown={(e) => { if (e.key === "Enter") void handleRename(); if (e.key === "Escape") setRenaming(false); }}
+							autoFocus
+							disabled={renameBusy}
+						/>
+						<Button variant="ghost" size="icon-sm" className="size-7" onClick={handleRename} disabled={renameBusy} title={t("common.confirm")}>
+							<Check size={14} strokeWidth={2} />
+						</Button>
+						<Button variant="ghost" size="icon-sm" className="size-7" onClick={() => setRenaming(false)} disabled={renameBusy} title={t("common.cancel")}>
+							<X size={14} strokeWidth={2} />
+						</Button>
 					</div>
-					<small className="min-w-0 truncate">{skill.description || t("config.skillDescriptionMissing")}</small>
-					<small className="min-w-0 truncate">{skill.sourceLabel} · {skill.path}</small>
-					{skill.warnings.length > 0 && (
-						<ul className="skill-warnings">
-							{skill.warnings.map((warning) => (
-								<li key={warning}>{warning}</li>
-							))}
-						</ul>
-					)}
-				</div>
-				<div className="prompts-list-item-actions">
+				) : (
+					<div className="flex min-w-0 flex-col gap-0.5">
+						<div className="flex min-w-0 items-center gap-2">
+							<Sparkles size={14} strokeWidth={1.8} className="shrink-0 text-text-tertiary" />
+							<strong className="truncate text-control font-medium text-foreground">{skill.name}</strong>
+							<div className="skill-badges">
+								<span className={`skill-state ${skill.enabled ? "enabled" : "disabled"}`}>
+									{skill.enabled ? t("common.enabled") : t("common.disabled")}
+								</span>
+								{!skill.valid && <span className="skill-state invalid">{t("config.needsFix")}</span>}
+							</div>
+						</div>
+						<span className="truncate font-mono text-caption text-muted-foreground">{skill.sourceLabel}</span>
+						{skill.warnings.length > 0 && (
+							<div className="flex flex-col gap-0.5">
+								{skill.warnings.map((warning) => (
+									<span key={warning} className="truncate text-caption text-destructive">{warning}</span>
+								))}
+							</div>
+						)}
+					</div>
+				)}
+			</TableCell>
+			<TableCell className="whitespace-normal break-words text-caption leading-relaxed text-muted-foreground" title={skill.description}>
+				{skill.description || t("config.skillDescriptionMissing")}
+			</TableCell>
+			<TableCell className="truncate font-mono text-caption text-muted-foreground" title={skill.path}>
+				{skill.path}
+			</TableCell>
+			<TableCell className="text-right">
+				<div className="flex justify-end gap-1">
 					<Button variant="ghost" size="icon-sm" className="size-7"
 						onClick={() => props.onToggle(skill, !skill.enabled)}
 						title={skill.enabled ? t("common.disable") : t("common.enabled")}
@@ -306,8 +311,8 @@ function SkillCard(props: {
 						<Trash2 size={14} strokeWidth={1.8} />
 					</Button>
 				</div>
-			</div>
-		</article>
+			</TableCell>
+		</TableRow>
 	);
 }
 

@@ -139,9 +139,9 @@ export function PromptsTab(props: {
 				</div>
 			</div>
 
-			<section className="prompt-create-card">
+			<section className="config-create-card">
 				<strong>{t("config.createPrompt")}</strong>
-				<Label className="prompt-create-label">
+				<Label className="config-create-label">
 					<span>{t("config.name")}</span>
 					<Input
 						value={props.newName}
@@ -149,17 +149,17 @@ export function PromptsTab(props: {
 						onChange={(e) => props.onChangeNewName(e.target.value)}
 					/>
 				</Label>
-				<Label className="prompt-create-label">
+				<Label className="config-create-label">
 					<span>{t("config.description")}</span>
 					<Textarea
-						className="prompt-create-textarea"
+						className="min-h-[72px] resize-y"
 						value={props.newDescription}
 						placeholder={t("config.promptDescriptionPlaceholder")}
 						onChange={(e) => props.onChangeNewDescription(e.target.value)}
-						rows={3}
 					/>
 				</Label>
 				<Button size="sm" variant="default"
+					className="justify-self-start"
 					disabled={!canCreate || props.creating}
 					onClick={props.onCreate}
 				>
