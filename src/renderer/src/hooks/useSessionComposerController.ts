@@ -613,7 +613,7 @@ export function useSessionComposerController(
         return;
       }
       if (event.key === "Enter") {
-        if (event.nativeEvent.isComposing || event.keyCode === 229) return;
+        if (event.nativeEvent?.isComposing || event.keyCode === 229) return;
         event.preventDefault();
         const selected = suggestionItems[
           Math.min(selectedSuggestionIndex, suggestionItems.length - 1)
@@ -631,7 +631,9 @@ export function useSessionComposerController(
     const liveDraft = liveDomDraftRef.current.sessionId === sessionId
       ? liveDomDraftRef.current.value
       : draft;
-    const liveCursor = getComposerCaretOffset(event.currentTarget);
+    const liveCursor = editorRef.current
+      ? getComposerCaretOffset(editorRef.current)
+      : cursor;
     const firstLine = !liveDraft.slice(0, liveCursor).includes("\n");
     const lastLine = !liveDraft.slice(liveCursor).includes("\n");
     const history = promptHistoryRef.current[sessionId] ?? [];
@@ -872,7 +874,7 @@ export function useSessionComposerController(
       // No Agent yet: write /compact to draft and send → starts Agent + compacts
       setDraft("/compact");
       caretRef.current = "/compact".length;
-      send();
+      void send();
       return;
     }
     try {

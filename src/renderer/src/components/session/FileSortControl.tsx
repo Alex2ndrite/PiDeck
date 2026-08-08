@@ -52,11 +52,11 @@ export function FileSortControl(props: FileSortControlProps) {
 						type="button"
 						variant="ghost"
 						size="icon-sm"
-						className="icon-only inline-grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+						className="icon-only inline-grid size-6 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground"
 						title={`${currentLabel} · ${directionLabel}`}
 						aria-label={t("drawer.fileSort")}
 					>
-						<ArrowUpDown size={13} aria-hidden="true" />
+						<ArrowUpDown size={12} aria-hidden="true" />
 					</Button>
 				</DropdownMenuTrigger>
 				<DropdownMenuContent

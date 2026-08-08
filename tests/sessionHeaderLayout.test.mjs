@@ -19,7 +19,9 @@ test("session tabs mount once outside SessionView; pane keeps standalone header"
   assert.doesNotMatch(sessionView, /SessionTabsBar/);
   assert.match(app, /sessionTabsBarNode/);
   assert.match(app, /SessionPaneServicesProvider/);
-  assert.match(app, /\{sessionTabsBarNode\}/);
+  // Tab 栏挂在 WorkbenchStage chrome，分屏之上（与文件 Tab 同一条）
+  assert.match(app, /chrome=\{sessionTabsBarNode\}/);
+  assert.doesNotMatch(app, /\{sessionTabsBarNode\}\s*\n\s*\{currentSessionId/);
 
   const headerStart = sessionView.indexOf("<SessionHeader");
   const contentStart = sessionView.indexOf("<ResizablePanelGroup", headerStart);
@@ -51,4 +53,44 @@ test("restart is offered only when the current session has a bound Agent", () =>
     runtimeInjector,
     /showRestart=\{Boolean\(runtime\.activeAgentId\) && !services\.isLanWeb\}/,
   );
+});
+
+test("split panes show per-pane session title in SessionHeader", () => {
+  // 共享顶栏 Tab 时，分屏各栏靠 paneTitle 对上「这栏是谁」；单栏不重复标题。
+  const header = readFileSync(
+    "src/renderer/src/components/session/SessionHeader.tsx",
+    "utf8",
+  );
+  assert.match(header, /paneTitle\?:/);
+  assert.match(header, /session-pane-title/);
+  assert.match(sessionView, /paneTitle=\{splitPane \? sessionTitle : undefined\}/);
+});
+
+test("session header has no bottom border under pane identity row", () => {
+  const header = readFileSync(
+    "src/renderer/src/components/session/SessionHeader.tsx",
+    "utf8",
+  );
+  // 身份标题下不再叠 border-b，避免分屏/单栏碎线
+  assert.doesNotMatch(
+    header,
+    /chat-header[^"]*border-b/,
+  );
+});
+
+test("split panes expose exit-split expand control on the left", () => {
+  const header = readFileSync(
+    "src/renderer/src/components/session/SessionHeader.tsx",
+    "utf8",
+  );
+  assert.match(header, /onExitSplit\?:/);
+  assert.match(header, /Maximize2/);
+  assert.match(header, /session\.split\.exit/);
+  assert.match(sessionView, /onExitSplit=\{splitPane \? paneServices\.exitSessionSplit : undefined\}/);
+  assert.match(app, /exitSessionSplit:\s*workspaceChrome\.exitSplit/);
+  const chrome = readFileSync(
+    "src/renderer/src/hooks/useSessionWorkspaceChrome.ts",
+    "utf8",
+  );
+  assert.match(chrome, /const exitSplit = useCallback/);
 });

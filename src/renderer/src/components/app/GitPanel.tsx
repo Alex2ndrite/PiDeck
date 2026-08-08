@@ -829,10 +829,12 @@ export function GitPanel(props: GitPanelProps) {
   const updateBranchDropdownPosition = useCallback(() => {
     if (!branchTriggerRef.current) return;
     const rect = branchTriggerRef.current.getBoundingClientRect();
+    // 菜单宽度跟触发器走（随抽屉自适应），再由 placement 钳进视口；不再写死 240。
+    const preferredWidth = Math.max(Math.ceil(rect.width), 160);
     const placement = getViewportBoundMenuPlacement(
       rect,
       { width: window.innerWidth, height: window.innerHeight },
-      { preferredWidth: 240, maxHeight: 300, gap: 2 },
+      { preferredWidth, maxHeight: 300, gap: 2 },
     );
     setBranchDropdownStyle({
       position: "fixed",
@@ -901,11 +903,11 @@ export function GitPanel(props: GitPanelProps) {
           }
         >
           <GitBranch size={14} className="shrink-0 text-muted-foreground" />
-          <span className="git-branch-label min-w-0 max-w-[120px] flex-1 truncate">
+          <span className="git-branch-label min-w-0 flex-1 truncate">
             {props.currentBranch || t("app.branchNone")}
           </span>
           {props.branches.length > 0 && (
-            <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-muted px-1.5 font-mono text-[11px] font-medium tabular-nums text-muted-foreground">{props.branches.length}</span>
+            <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-muted px-1.5 text-[11px] font-medium tabular-nums text-muted-foreground">{props.branches.length}</span>
           )}
           <ChevronDown
             size={12}
@@ -942,7 +944,7 @@ export function GitPanel(props: GitPanelProps) {
           createPortal(
             <div
               ref={branchDropdownRef}
-              className="z-50 max-h-[calc(100vh-16px)] max-w-[calc(100vw-16px)] min-w-48 overflow-auto rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md"
+              className="z-50 max-h-[calc(100vh-16px)] max-w-[calc(100vw-16px)] overflow-auto rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md"
               style={branchDropdownStyle}
             >
             {props.branches.map((branch) => (
@@ -1141,7 +1143,7 @@ export function GitPanel(props: GitPanelProps) {
             ) : (
             <div className="flex shrink-0 flex-col gap-2 border-b border-[var(--git-panel-border)] bg-[var(--git-panel-bg)] px-2.5 pt-2 pb-1.5">
               <Textarea
-                className="git-scm-input min-h-14 max-h-[100px] w-full resize-y rounded-sm border border-[var(--git-input-border)] bg-[var(--git-input-bg)] px-2 py-1 font-mono text-[13px] leading-[20px] text-[var(--git-panel-fg)] outline-none placeholder:text-[var(--git-desc-fg)]"
+                className="git-scm-input min-h-14 max-h-[100px] w-full resize-y rounded-sm border border-[var(--git-input-border)] bg-[var(--git-input-bg)] px-2 py-1 text-[13px] leading-[20px] text-[var(--git-panel-fg)] outline-none placeholder:text-[var(--git-desc-fg)]"
                 placeholder={t("git.commitPlaceholder", {
                   branch: props.currentBranch ?? "HEAD",
                 })}
@@ -1195,7 +1197,7 @@ export function GitPanel(props: GitPanelProps) {
                 </Button>
                 <Button
                   variant="default"
-                  className="git-commit-btn min-w-0 flex-1 font-mono"
+                  className="git-commit-btn min-w-0 flex-1"
                   loading={committing}
                   disabled={!canCommit}
                   onClick={() => void doCommit()}
@@ -1535,7 +1537,7 @@ function CompareChanges(props: {
           {error && <div className="flex min-h-[22px] shrink-0 items-center gap-1 px-[9px] text-[13px] text-[var(--git-conflict)]">{error}</div>}
           {result && (
             <>
-              <div className="flex-[0_0_auto] border-t border-[var(--git-panel-border)] px-2.5 py-1 font-mono text-[11px] text-[var(--git-desc-fg)]">
+              <div className="flex-[0_0_auto] border-t border-[var(--git-panel-border)] px-2.5 py-1 text-[11px] text-[var(--git-desc-fg)]">
                 {t("git.compareSummary", {
                   ahead: result.ahead,
                   behind: result.behind,

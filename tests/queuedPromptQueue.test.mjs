@@ -147,7 +147,7 @@ test("busy composer keeps stop and queued-send controls separate", () => {
   assert.match(composerPanelsSource, /\) : !props\.keepBusyDraftControls \? \(/);
   assert.match(sendControls, /showBusySendControls=\{composer\.isBusy \|\| composer\.busyDraftLocked\}/);
   // pure official：toggle/menu 样式由 ComposerSendControls Tailwind 承担
-  assert.match(composerPanelsSource, /send-behavior-toggle inline-flex h-7[\s\S]*bg-primary/);
+  assert.match(composerPanelsSource, /send-behavior-toggle inline-flex h-8[\s\S]*bg-primary/);
   assert.match(composerPanelsSource, /send-behavior-menu absolute[\s\S]*bg-popover/);
   assert.match(composerPanelsSource, /send-behavior-primary[\s\S]*onClick=\{props\.onSend\}/);
   assert.match(composerPanelsSource, /send-behavior-chevron[\s\S]*onMouseEnter=\{props\.onKeepBehaviorMenuOpen\}[\s\S]*onClick=\{props\.onToggleBehaviorMenu\}/);

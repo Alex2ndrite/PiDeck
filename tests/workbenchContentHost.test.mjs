@@ -27,12 +27,17 @@ test("settings expose workspace content open mode and split orientation", () => 
   assert.match(en, /"settings\.workspaceContentOpenMode"/);
   assert.match(surfaces, /\.workbench-stage\s*\{/);
   assert.match(surfaces, /\.workbench-stage-split/);
-  assert.match(surfaces, /\.workbench-stage-solo\s*>\s*\.session-tabs-bar/);
-  assert.match(surfaces, /\.workbench-stage-solo\s*>\s\*:not\(\.session-tabs-bar\)/);
+  assert.match(surfaces, /\.workbench-stage\s*>\s*\.session-tabs-bar/);
+  assert.match(surfaces, /\.workbench-stage-body/);
   assert.doesNotMatch(
     surfaces,
     /\.workbench-stage-solo\s*>\s*\*\s*\{[^}]*height:\s*100%/,
     "solo must not force every Fragment child to height 100% (breaks empty-state layout)",
+  );
+  // 文件 Tab 不再用 accent 绿条顶边；并入 session-tabs-bar
+  assert.doesNotMatch(
+    surfaces,
+    /\.file-diff-tab-bar\s*\{[^}]*border-top:\s*2px solid var\(--color-accent\)/,
   );
 });
 
@@ -41,10 +46,12 @@ test("WorkbenchStage hosts session + content with collapse-safe maximize", () =>
   assert.match(stage, /layout === "maximize"/);
   assert.match(stage, /panel\.collapse\(\)/);
   assert.match(stage, /panel\.expand\(\)/);
+  assert.match(stage, /chrome\?:/);
   assert.match(stage, /from "\.\.\/\.\.\/\.\.\/\.\.\/shared\/types"/);
   assert.match(app, /<WorkbenchStage/);
   assert.match(app, /workbenchHasContent/);
   assert.match(app, /WorkbenchContent/);
+  assert.match(app, /chrome=\{sessionTabsBarNode\}/);
   // 阅读面静态引入 FileDiffViewer：避免 lazy 动态 import 在 Electron/Vite 下偶发失败且无法重试恢复
   assert.doesNotMatch(app, /lazy\(\(\) => import\("\.\/components\/app\/FileDiffViewer"/);
   assert.doesNotMatch(content, /lazy\(\(\) =>/);
@@ -70,4 +77,60 @@ test("file view and git diff open into workbench modes, not drawer overlays", ()
   assert.doesNotMatch(app, /gitDiffDisplayMode === "modal"/);
   assert.match(content, /displayMode=\{props\.gitDiffDisplayMode\}/);
   assert.match(content, /displayMode=\{props\.editorMode\}/);
+});
+
+test("closing git diff dismisses the whole workbench reading surface", () => {
+  // 关 Diff 时一并清文件 tab，避免优先渲染切回 editor 像「关不掉」
+  assert.match(fileEditor, /dismissWorkbenchContent/);
+  assert.match(fileEditor, /closeGitDiff:\s*dismissWorkbenchContent/);
+  const openWorkspace = fileEditor.slice(
+    fileEditor.indexOf("const openWorkspaceFileDiffFn"),
+    fileEditor.indexOf("const openCommitFileDiffFn"),
+  );
+  assert.match(openWorkspace, /setActiveTabId\(null\)/);
+  assert.match(openWorkspace, /setEditorTabs\(\[\]\)/);
+});
+
+test("file tabs use preview/permanent strategy owned by useFileEditor", () => {
+  // 策略在 utils/editorTabs；hook 拥有 previewEditorTabId；打开文件不清掉已有 tab
+  assert.match(fileEditor, /from "\.\.\/utils\/editorTabs"/);
+  assert.match(fileEditor, /previewEditorTabId/);
+  assert.match(fileEditor, /openMode: EditorTabOpenMode = "permanent"/);
+  const viewBlock = fileEditor.slice(
+    fileEditor.indexOf("const viewFilePath = useCallback"),
+    fileEditor.indexOf("const diffFilePath = useCallback"),
+  );
+  assert.match(viewBlock, /openMode: EditorTabOpenMode = "preview"/);
+  assert.match(viewBlock, /dismissGitDiffOnly/);
+  assert.doesNotMatch(viewBlock, /dismissWorkbenchContent/);
+
+  // 文件 Tab 并入 SessionTabsBar，内容区不再渲染第二套 Tab 栏
+  const tabsBar = readFileSync(
+    "src/renderer/src/components/session/SessionTabsBar.tsx",
+    "utf8",
+  );
+  assert.match(tabsBar, /editorTabs\?:/);
+  assert.match(tabsBar, /EditorWorkbenchTab/);
+  assert.match(content, /chromeTabsExternal/);
+  assert.match(app, /editorTabs=\{workbenchEditorTabs\}/);
+
+  const viewer = readFileSync(
+    "src/renderer/src/components/app/FileDiffViewer.tsx",
+    "utf8",
+  );
+  // 退出编辑用 PencilOff，禁止再拿 X 冒充（与关闭叉样式/语义撞车）
+  const exitEditBlock = viewer.slice(
+    viewer.indexOf('title={t("app.exitEdit")}'),
+    viewer.indexOf("props.onToggleMode"),
+  );
+  assert.match(exitEditBlock, /PencilOff/);
+  assert.doesNotMatch(exitEditBlock, /<X /);
+  // 外置 Tab 时内容区不再重复关闭钮
+  assert.match(viewer, /!props\.chromeTabsExternal && \(/);
+
+  const surface = readFileSync(
+    "src/renderer/src/components/session/WorkspaceSurface.tsx",
+    "utf8",
+  );
+  assert.match(surface, /onViewFile\?\.\(node\.path, "permanent"\)/);
 });

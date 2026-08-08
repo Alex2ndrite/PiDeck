@@ -10,6 +10,12 @@ import type {
   WorkspaceContentOpenMode,
 } from "../../../shared/types/settings";
 import type { DrawerPanel, SessionModifiedFile } from "../components/app/AppParts";
+import {
+  openPermanentEditorTab,
+  openPreviewEditorTab,
+  promotePreviewEditorTab as nextPreviewAfterPromote,
+  type EditorTabOpenMode,
+} from "../utils/editorTabs";
 
 function isAbsoluteFilePath(path: string) {
   return /^[A-Za-z]:[\\/]/.test(path) || path.startsWith("/");
@@ -110,11 +116,17 @@ export interface UseFileEditorOutput {
     tabKey?: string,
     label?: string,
     preserveDrawer?: boolean,
+    openMode?: EditorTabOpenMode,
   ) => void;
   closeEditorTab: (tabId: string) => void;
   selectEditorTab: (tabId: string) => void;
+  /** 双击预览 Tab → 常驻 */
+  promotePreviewEditorTab: (tabId: string) => void;
+  /** VS Code 式预览 Tab id（斜体）；至多一个 */
+  previewEditorTabId: string | null;
   openFilePath: (path: string) => void;
-  viewFilePath: (path: string) => void;
+  /** 单击默认 preview；双击传 permanent */
+  viewFilePath: (path: string, openMode?: EditorTabOpenMode) => void;
   diffFilePath: (path: string, originalContent?: string, content?: string) => void;
   openWorkspaceFileDiff: (group: GitResourceGroupType, path: string) => Promise<void>;
   openCommitFileDiff: (
@@ -171,12 +183,6 @@ export function useFileEditor(input: UseFileEditorInput): UseFileEditorOutput {
   const [gitDiffDisplayMode, setGitDiffDisplayMode] =
     useState<WorkspaceContentOpenMode>(contentOpenMode);
 
-  const closeGitDiff = useCallback(() => {
-    gitDiffRequestSequenceRef.current += 1;
-    setGitDrawerDiff(null);
-    setGitDiffDisplayMode(contentOpenModeRef.current);
-  }, []);
-
   const toggleGitDiffDisplayMode = useCallback(() => {
     setGitDiffDisplayMode((mode) => (mode === "maximize" ? "split" : "maximize"));
   }, []);
@@ -191,15 +197,40 @@ export function useFileEditor(input: UseFileEditorInput): UseFileEditorOutput {
   const editorTabAccessSequenceRef = useRef(0);
   const [editorTabs, setEditorTabs] = useState<EditorTab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
-  // tabs 同步 ref：openEditorTab/closeEditorTab 需要在 updater 外计算 next——
+  /** VS Code 式预览 Tab：至多一个；单击打开会替换它 */
+  const [previewEditorTabId, setPreviewEditorTabId] = useState<string | null>(
+    null,
+  );
+  // tabs / preview 同步 ref：openEditorTab/closeEditorTab 需要在 updater 外计算 next——
   // StrictMode 双调用 updater 内的 crypto.randomUUID/setActiveTabId 会产生两个
   // 不同 id，导致 activeTabId 与 editorTabs 不一致 → 首次打开文件空白
   const editorTabsRef = useRef<EditorTab[]>([]);
   editorTabsRef.current = editorTabs;
+  const previewEditorTabIdRef = useRef<string | null>(null);
+  previewEditorTabIdRef.current = previewEditorTabId;
   const activeTab = useMemo(
     () => editorTabs.find((t) => t.id === activeTabId) ?? null,
     [editorTabs, activeTabId],
   );
+
+  /** 仅关掉 Git Diff，保留文件 tab（打开文件时不应毁掉已有预览/常驻栏） */
+  const dismissGitDiffOnly = useCallback(() => {
+    gitDiffRequestSequenceRef.current += 1;
+    setGitDrawerDiff(null);
+    setGitDiffDisplayMode(contentOpenModeRef.current);
+  }, []);
+
+  /** 关掉中间栏阅读面：Git Diff + 文件 tab 一并清掉，避免关 Diff 后又露出文件面 */
+  const dismissWorkbenchContent = useCallback(() => {
+    gitDiffRequestSequenceRef.current += 1;
+    setGitDrawerDiff(null);
+    setGitDiffDisplayMode(contentOpenModeRef.current);
+    setActiveTabId(null);
+    setEditorTabs([]);
+    setPreviewEditorTabId(null);
+    editorModeRef.current = contentOpenModeRef.current;
+    setEditorMode(contentOpenModeRef.current);
+  }, []);
 
   // ---- IO callbacks ----
   const readEditorFileContent = useCallback(
@@ -251,36 +282,15 @@ export function useFileEditor(input: UseFileEditorInput): UseFileEditorOutput {
       tabKey?: string,
       label?: string,
       preserveDrawer = false,
+      openMode: EditorTabOpenMode = "permanent",
     ) => {
       // updater 纯化：StrictMode 双调用下，updater 内 crypto.randomUUID/嵌套
       // setState 会产生两个不同 id → activeTabId 与 editorTabs 不一致 → 首次空白。
       // 改为在闭包内读同步 ref 计算 next，setState 传值（幂等，双调用安全）
+      // 预览/常驻名单由 editorTabs 纯策略决定；内容字段再写回 active tab。
       const prev = editorTabsRef.current;
-      const existing = prev.find(
-        (t) => t.filePath === path && t.tabKey === tabKey,
-      );
-      if (existing) {
-        const updated = {
-          ...existing,
-          mode,
-          originalContent: originalContent ?? "",
-          modifiedContent,
-          allowSave,
-          tabKey,
-          label,
-          preserveDrawer,
-          lastAccess: ++editorTabAccessSequenceRef.current,
-        };
-        setEditorTabs(
-          trimEditorTabs(
-            prev.map((tab) => (tab.id === existing.id ? updated : tab)),
-            existing.id,
-          ),
-        );
-        setActiveTabId(existing.id);
-        return;
-      }
-      const newTab: EditorTab = {
+      const previewId = previewEditorTabIdRef.current;
+      const candidate: EditorTab = {
         id: crypto.randomUUID(),
         filePath: path,
         mode,
@@ -292,8 +302,37 @@ export function useFileEditor(input: UseFileEditorInput): UseFileEditorOutput {
         preserveDrawer,
         lastAccess: ++editorTabAccessSequenceRef.current,
       };
-      setEditorTabs(trimEditorTabs([...prev, newTab], newTab.id));
-      setActiveTabId(newTab.id);
+      const strategy =
+        openMode === "preview"
+          ? openPreviewEditorTab(prev, previewId, candidate)
+          : openPermanentEditorTab(prev, previewId, candidate);
+
+      let nextTabs = strategy.tabs.map((tab) =>
+        tab.id === strategy.activeId
+          ? {
+              ...tab,
+              mode,
+              originalContent: originalContent ?? "",
+              modifiedContent,
+              allowSave,
+              tabKey,
+              label,
+              preserveDrawer,
+              lastAccess: candidate.lastAccess,
+            }
+          : tab,
+      );
+      nextTabs = trimEditorTabs(nextTabs, strategy.activeId);
+      // trim 可能挤掉预览 Tab；预览 id 必须以仍在列表中的为准
+      const nextPreview =
+        strategy.previewId &&
+        nextTabs.some((tab) => tab.id === strategy.previewId)
+          ? strategy.previewId
+          : null;
+
+      setEditorTabs(nextTabs);
+      setActiveTabId(strategy.activeId);
+      setPreviewEditorTabId(nextPreview);
     },
     [],
   );
@@ -306,8 +345,10 @@ export function useFileEditor(input: UseFileEditorInput): UseFileEditorOutput {
       if (idx < 0) return;
       const next = prev.filter((t) => t.id !== tabId);
       setEditorTabs(next);
+      setPreviewEditorTabId((current) => (current === tabId ? null : current));
       if (next.length === 0) {
         setActiveTabId(null);
+        setPreviewEditorTabId(null);
         // 关闭最后一个 tab 后复位为设置默认布局，避免残留 maximize
         editorModeRef.current = contentOpenModeRef.current;
         setEditorMode(contentOpenModeRef.current);
@@ -330,6 +371,13 @@ export function useFileEditor(input: UseFileEditorInput): UseFileEditorOutput {
     setActiveTabId(tabId);
   }, []);
 
+  /** 双击预览 Tab → 常驻（清 preview 标记） */
+  const promotePreviewEditorTab = useCallback((tabId: string) => {
+    setPreviewEditorTabId((current) =>
+      nextPreviewAfterPromote(current, tabId),
+    );
+  }, []);
+
   // ---- drawer panel restore ref ----
   const prevDrawerPanelRef = useRef<DrawerPanel | null>(null);
 
@@ -338,12 +386,14 @@ export function useFileEditor(input: UseFileEditorInput): UseFileEditorOutput {
     prevDrawerPanelRef.current = null;
     setActiveTabId(null);
     setEditorTabs([]);
+    setPreviewEditorTabId(null);
     return prev;
   }, []);
 
   const closeEditor = useCallback(() => {
     setActiveTabId(null);
     setEditorTabs([]);
+    setPreviewEditorTabId(null);
     editorModeRef.current = contentOpenModeRef.current;
     setEditorMode(contentOpenModeRef.current);
   }, []);
@@ -370,16 +420,27 @@ export function useFileEditor(input: UseFileEditorInput): UseFileEditorOutput {
   );
 
   const viewFilePath = useCallback(
-    (path: string) => {
-      closeGitDiff();
-      openEditorTab(path, "view");
+    (path: string, openMode: EditorTabOpenMode = "preview") => {
+      // 只清 Git Diff，保留已有文件 tab——否则预览/多 tab 无法成立
+      dismissGitDiffOnly();
+      openEditorTab(
+        path,
+        "view",
+        undefined,
+        undefined,
+        true,
+        undefined,
+        undefined,
+        false,
+        openMode,
+      );
       const mode = contentOpenModeRef.current;
       editorModeRef.current = mode;
       setEditorMode(mode);
       // 阅读面进中间栏；抽屉保持文件树导航，不再切到 editor 面板
       prevDrawerPanelRef.current = drawer;
     },
-    [drawer, openEditorTab, closeGitDiff],
+    [drawer, openEditorTab, dismissGitDiffOnly],
   );
 
   const diffFilePath = useCallback(
@@ -388,13 +449,24 @@ export function useFileEditor(input: UseFileEditorInput): UseFileEditorOutput {
       const resolvedOriginal =
         originalContent ?? modified?.originalContent ?? "";
       const resolvedModified = content ?? modified?.content ?? undefined;
-      closeGitDiff();
+      dismissGitDiffOnly();
       const mode = contentOpenModeRef.current;
       editorModeRef.current = mode;
       setEditorMode(mode);
-      openEditorTab(path, "diff", resolvedOriginal, resolvedModified);
+      // Diff 来自明确意图（消息/工具），按常驻打开，避免被下次单击预览挤掉
+      openEditorTab(
+        path,
+        "diff",
+        resolvedOriginal,
+        resolvedModified,
+        true,
+        undefined,
+        undefined,
+        false,
+        "permanent",
+      );
     },
-    [modifiedFiles, closeGitDiff, openEditorTab],
+    [modifiedFiles, dismissGitDiffOnly, openEditorTab],
   );
 
   const openWorkspaceFileDiffFn = useCallback(
@@ -420,6 +492,12 @@ export function useFileEditor(input: UseFileEditorInput): UseFileEditorOutput {
               ? t("git.mergeChanges")
               : t("git.changes");
         const mode = contentOpenModeRef.current;
+        // Diff 独占阅读面：清掉文件 tab，避免关 Diff 后又弹回文件
+        setActiveTabId(null);
+        setEditorTabs([]);
+        setPreviewEditorTabId(null);
+        editorModeRef.current = mode;
+        setEditorMode(mode);
         setGitDiffDisplayMode(mode);
         setGitDrawerDiff({
           projectId,
@@ -470,6 +548,11 @@ export function useFileEditor(input: UseFileEditorInput): UseFileEditorOutput {
           return;
         }
         const mode = contentOpenModeRef.current;
+        setActiveTabId(null);
+        setEditorTabs([]);
+        setPreviewEditorTabId(null);
+        editorModeRef.current = mode;
+        setEditorMode(mode);
         setGitDiffDisplayMode(mode);
         setGitDrawerDiff({
           projectId,
@@ -511,12 +594,15 @@ export function useFileEditor(input: UseFileEditorInput): UseFileEditorOutput {
     openEditorTab,
     closeEditorTab,
     selectEditorTab,
+    promotePreviewEditorTab,
+    previewEditorTabId,
     openFilePath,
     viewFilePath,
     diffFilePath,
     openWorkspaceFileDiff: openWorkspaceFileDiffFn,
     openCommitFileDiff: openCommitFileDiffFn,
-    closeGitDiff,
+    // 阅读面关闭钮：清 Diff + 文件 tab，避免「关不完」
+    closeGitDiff: dismissWorkbenchContent,
     gitDiffDisplayMode,
     gitDrawerDiff,
     toggleGitDiffDisplayMode,

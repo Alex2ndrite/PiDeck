@@ -1,4 +1,4 @@
-import { SquarePen, X } from "lucide-react";
+import { SquarePen } from "lucide-react";
 import { BrowserSurface } from "./BrowserSurface";
 import { GitPanel } from "../app/GitPanel";
 import { DrawerContent } from "../app/AppParts";
@@ -102,44 +102,23 @@ export function DrawerSurface(props: DrawerSurfaceProps) {
 
   return (
     <>
-      {/* 编辑器 rail：阅读面已迁到中间栏；此处仅保留空状态引导 */}
+      {/* 各面板不再挂「标题 + ×」顶栏：关闭/切换改走会话 Tab 栏右侧活动图标。 */}
       {drawer === "editor" && !drawerCollapsed ? (
-        <>
-          <div className="drawer-header flex h-12 shrink-0 items-center justify-between gap-3 border-b border-border/40 bg-background px-3">
-            <div className="flex min-w-0 items-center gap-2">
-              <strong className="shrink-0 text-body font-semibold text-foreground">{t("editor.fileEditor")}</strong>
-            </div>
-            <div className="drawer-header-actions flex shrink-0 items-center gap-1">
-              <Button type="button" variant="ghost" size="icon-sm" className="inline-grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground" onClick={() => { editor.closeEditor(); chrome.onCloseDrawer(); }} title={t("common.close")}>
-                <X size={15} />
-              </Button>
-            </div>
-          </div>
-          <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
-            <SquarePen size={28} className="text-muted-foreground/50" aria-hidden="true" />
-            <div className="text-body font-medium text-foreground">{t("editor.emptyTitle")}</div>
-            <p className="max-w-60 text-caption text-muted-foreground">{t("editor.emptyHint")}</p>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => chrome.onOpenDrawer("files")}
-            >
-              {t("editor.emptyOpenFiles")}
-            </Button>
-          </div>
-        </>
+        <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
+          <SquarePen size={28} className="text-muted-foreground/50" aria-hidden="true" />
+          <div className="text-body font-medium text-foreground">{t("editor.emptyTitle")}</div>
+          <p className="max-w-60 text-caption text-muted-foreground">{t("editor.emptyHint")}</p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => chrome.onOpenDrawer("files")}
+          >
+            {t("editor.emptyOpenFiles")}
+          </Button>
+        </div>
       ) : drawer === "browser" && !drawerCollapsed ? (
         <div className="drawer-content-frame flex min-h-0 flex-1 flex-col overflow-hidden">
-          {/* 与 files/git 对齐的抽屉标题栏：浏览器面板此前缺 header，点叉无法关闭侧边栏 */}
-          <div className="drawer-header flex h-12 shrink-0 items-center justify-between gap-3 border-b border-border/40 bg-background px-3">
-            <strong className="truncate text-body font-semibold text-foreground">{files.t("app.browser")}</strong>
-            <div className="drawer-header-actions flex shrink-0 items-center gap-1">
-              <Button type="button" variant="ghost" size="icon-sm" className="inline-grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground" onClick={chrome.onCloseDrawer} title={files.t("common.close")}>
-                <X size={15} />
-              </Button>
-            </div>
-          </div>
           <BrowserSurface
             fullscreen={browser.browserFullscreen}
             onClose={browser.onCloseBrowser}
@@ -149,14 +128,6 @@ export function DrawerSurface(props: DrawerSurfaceProps) {
         </div>
       ) : git.enableGitManagement && drawer === "git" && !drawerCollapsed && git.activeProjectId ? (
         <div className="drawer-content-frame flex min-h-0 flex-1 flex-col overflow-hidden">
-          <div className="drawer-header flex h-12 shrink-0 items-center justify-between gap-3 border-b border-border/40 bg-background px-3">
-            <strong className="truncate text-body font-semibold text-foreground">{files.t("drawer.sourceControl")}</strong>
-            <div className="drawer-header-actions flex shrink-0 items-center gap-1">
-              <Button type="button" variant="ghost" size="icon-sm" className="inline-grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground" onClick={chrome.onCloseDrawer} title={files.t("common.close")}>
-                <X size={15} />
-              </Button>
-            </div>
-          </div>
           <div className="git-drawer-stack">
             <div className="git-drawer-source">
               <GitPanel

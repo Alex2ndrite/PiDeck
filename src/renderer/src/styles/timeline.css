@@ -2110,19 +2110,26 @@ body.ask-dialog-open .ask-question-card.pending {
   opacity: 0.82;
   pointer-events: none;
 }
-/* TipTap ProseMirror 空态不是 :empty（内部常有 <p>），用 is-editor-empty 对齐旧占位。 */
+/* TipTap：占位用绝对定位，避免旧 float:left 把光标「点子」挤飞/看不见。 */
+.composer .rich-input.is-editor-empty {
+  position: relative;
+}
 .composer .rich-input.is-editor-empty::before {
   content: attr(data-placeholder);
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  top: 10px;
   color: var(--color-text-secondary);
   font-size: var(--font-size-input);
   line-height: var(--line-height-input);
   opacity: 0.82;
-  float: left;
-  height: 0;
   pointer-events: none;
+  white-space: pre-wrap;
 }
 .composer .tiptap-composer-host .ProseMirror {
   outline: none;
+  caret-color: var(--color-text-primary);
 }
 .composer .tiptap-composer-host .ProseMirror p {
   margin: 0;
@@ -2724,7 +2731,8 @@ body.ask-dialog-open .ask-question-card.pending {
   /* 仅纵向滚动：工具行/树行 min-content 撑破时不再制造横向滚动条 */
   overflow-x: hidden;
   overflow-y: auto;
-  padding: var(--space-4);
+  /* 文件树收紧外圈 padding，避免再叠一层「假缩进」感 */
+  padding: var(--space-2);
 }
 .file-node-row {
   --file-depth-offset: 0px;
@@ -2746,7 +2754,7 @@ body.ask-dialog-open .ask-question-card.pending {
   line-height: var(--line-height-control);
   white-space: nowrap;
 }
-/* chevron 固定宽度不参与压缩；目录图标 22px 由 .file-node-icon 保证 */
+/* chevron 固定宽度不参与压缩；目录图标 24px 由 .file-node-icon 保证 */
 .file-node-chevron {
   flex-shrink: 0;
 }
@@ -2772,8 +2780,8 @@ body.ask-dialog-open .ask-question-card.pending {
   cursor: default;
 }
 .file-node-icon {
-  width: 22px;
-  /* 目录用 lucide 描边 Folder：颜色取 Seti 文件夹绿而非品牌 accent，
+  width: 24px;
+  /* 目录用 lucide 描边 Folder：颜色取 Seti 灰（--file-icon-folder → grey），
      避免整树目录被染成同一实心色块（文件行 Seti 图标由 inline style 覆盖此色）。 */
   color: var(--file-icon-folder);
   font-size: var(--font-size-caption);
@@ -2796,7 +2804,7 @@ body.ask-dialog-open .ask-question-card.pending {
   position: absolute;
   top: 0;
   bottom: 0;
-  left: calc(var(--space-2) + var(--file-depth-offset, 0px) + 11px);
+  left: calc(var(--space-1) + var(--file-depth-offset, 0px) + 10px);
   border-left: 1px solid var(--color-border-subtle);
   pointer-events: none;
 }
@@ -2808,6 +2816,11 @@ body.ask-dialog-open .ask-question-card.pending {
   color: var(--color-text-tertiary);
   font-size: var(--font-size-caption);
   margin-bottom: var(--space-3);
+}
+
+/* 文件抽屉工具行已自带 border-b；去掉 legacy 下边距，避免「显示区域」虚高 */
+.files-panel .panel-action-row {
+  margin-bottom: 0;
 }
 
 .panel-action-buttons {

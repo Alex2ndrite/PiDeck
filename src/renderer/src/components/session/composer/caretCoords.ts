@@ -1,5 +1,5 @@
 /**
- * Composer 建议菜单锚点 / 光标偏移：只依赖「编辑器 DOM + 纯文本偏移」。
+ * Composer 建议菜单锚点 / 光标偏移。
  * TipTap 走 ProseMirror；找不到编辑器时退回容器矩形 / 0。
  * 不依赖 RichInput，不向 controller 暴露 TipTap 类型。
  */

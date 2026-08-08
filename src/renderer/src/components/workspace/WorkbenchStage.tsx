@@ -15,6 +15,11 @@ export type WorkbenchStageProps = {
 	layout: WorkspaceContentOpenMode;
 	orientation: WorkspaceSplitOrientation;
 	hasContent: boolean;
+	/**
+	 * 顶栏 chrome（SessionTabsBar）。必须挂在分屏之上，才能与文件 Tab
+	 * 共用一条栏，且 maximize 收起会话面板时 Tab 仍可见。
+	 */
+	chrome?: ReactNode;
 	session: ReactNode;
 	content: ReactNode | null;
 };
@@ -22,6 +27,7 @@ export type WorkbenchStageProps = {
 /**
  * 中间栏工作台：会话与文件/Diff 内容宿主。
  *
+ * - 顶栏 chrome（会话 + 文件 Tab）始终在分屏外
  * - 无内容：会话独占（与改版前一致）
  * - split：可拖拽分屏（左右 / 上下）
  * - maximize：内容占满中间栏；会话面板 collapse(0) 但保持挂载，避免丢滚动/流式状态
@@ -43,48 +49,57 @@ export function WorkbenchStage(props: WorkbenchStageProps) {
 		}
 	}, [props.hasContent, props.layout, props.orientation]);
 
-	if (!props.hasContent || !props.content) {
-		// 与分屏态同一套高度契约：chat-pane 是 flex 列，solo 自身吃满；
-		// 子树可能是 Fragment（Tab + 空态），高度分配交给 .workbench-stage-solo CSS。
-		return <div className="workbench-stage workbench-stage-solo">{props.session}</div>;
-	}
-
-	const orientation =
-		props.orientation === "vertical" ? "vertical" : "horizontal";
+	const body =
+		!props.hasContent || !props.content ? (
+			props.session
+		) : (
+			<ResizablePanelGroup
+				orientation={
+					props.orientation === "vertical" ? "vertical" : "horizontal"
+				}
+				className="workbench-stage-split"
+			>
+				<ResizablePanel
+					id="workbench-session"
+					panelRef={sessionPanelRef}
+					collapsible
+					collapsedSize={0}
+					minSize={20}
+					defaultSize={props.layout === "maximize" ? 0 : 48}
+					className="workbench-session-pane"
+				>
+					{props.session}
+				</ResizablePanel>
+				<ResizableHandle withHandle className="workbench-stage-sash" />
+				<ResizablePanel
+					id="workbench-content"
+					minSize={25}
+					defaultSize={props.layout === "maximize" ? 100 : 52}
+					className="workbench-content-pane"
+				>
+					<div
+						className={
+							props.orientation === "vertical"
+								? "workbench-content-frame workbench-content-frame-vertical"
+								: "workbench-content-frame workbench-content-frame-horizontal"
+						}
+					>
+						{props.content}
+					</div>
+				</ResizablePanel>
+			</ResizablePanelGroup>
+		);
 
 	return (
-		<ResizablePanelGroup
-			orientation={orientation}
-			className="workbench-stage workbench-stage-split"
+		<div
+			className={
+				!props.hasContent || !props.content
+					? "workbench-stage workbench-stage-solo"
+					: "workbench-stage workbench-stage-with-content"
+			}
 		>
-			<ResizablePanel
-				id="workbench-session"
-				panelRef={sessionPanelRef}
-				collapsible
-				collapsedSize={0}
-				minSize={20}
-				defaultSize={props.layout === "maximize" ? 0 : 48}
-				className="workbench-session-pane"
-			>
-				{props.session}
-			</ResizablePanel>
-			<ResizableHandle withHandle className="workbench-stage-sash" />
-			<ResizablePanel
-				id="workbench-content"
-				minSize={25}
-				defaultSize={props.layout === "maximize" ? 100 : 52}
-				className="workbench-content-pane"
-			>
-				<div
-					className={
-						orientation === "vertical"
-							? "workbench-content-frame workbench-content-frame-vertical"
-							: "workbench-content-frame workbench-content-frame-horizontal"
-					}
-				>
-					{props.content}
-				</div>
-			</ResizablePanel>
-		</ResizablePanelGroup>
+			{props.chrome}
+			<div className="workbench-stage-body">{body}</div>
+		</div>
 	);
 }

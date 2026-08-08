@@ -1100,6 +1100,10 @@
 .composer-box.shell-silent-mode .rich-input {
   padding-left: 18px;
 }
+.composer-box.shell-mode .rich-input.is-editor-empty::before,
+.composer-box.shell-silent-mode .rich-input.is-editor-empty::before {
+  left: 18px;
+}
 
 .picker-palette-label {
   flex: 0 0 auto;
@@ -4048,7 +4052,7 @@ div.fixed.inset-0.z-50 {
   color: var(--color-text-primary);
 }
 
-/* ── Tab 栏 ──────────────────── */
+/* ── 遗留文件 Tab 样式（内容区已并入 session-tabs-bar；保留关闭按钮等极少引用兜底） ── */
 
 .file-diff-tab-bar {
   display: flex;
@@ -4057,8 +4061,6 @@ div.fixed.inset-0.z-50 {
   background: var(--color-border-subtle);
   flex-shrink: 0;
   min-width: 0;
-  /* 编辑器 tab bar 顶部加一条 accent 色细线，与 drawer header 区分 */
-  border-top: 2px solid var(--color-accent);
 }
 .file-diff-tab {
   display: flex;
@@ -4081,7 +4083,6 @@ div.fixed.inset-0.z-50 {
 .file-diff-tab.active {
   color: var(--color-text-primary);
   background: var(--color-bg-base);
-  box-shadow: inset 0 -2px 0 var(--color-accent);
 }
 .file-diff-tab-close {
   display: inline-flex;
@@ -4127,20 +4128,29 @@ div.fixed.inset-0.z-50 {
   min-height: 0;
   overflow: hidden;
 }
-/* solo：session 可能是 Fragment（Tab 栏 + 空态/会话），子节点会直接挂到本容器。
-   禁止给每个子项 height:100%——否则空 Tab 栏与 EmptyState 同时抢满高，中间栏整列错位。 */
-.workbench-stage-solo > .session-tabs-bar {
+/* Tab 栏挂在分屏外：与文件 Tab 同一条 chrome，maximize 时也不被会话面板收走 */
+.workbench-stage > .session-tabs-bar {
   flex: 0 0 auto;
-  /* 与 foundation 自定义标题栏让位配套：禁止 Tab 内容把栏宽撑进窗口控件 drag 重叠区 */
   min-width: 0;
 }
-.workbench-stage-solo > *:not(.session-tabs-bar) {
+.workbench-stage-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+/* solo：body 内是空态/会话；禁止给每个子项 height:100%——否则空态与会话抢满高 */
+.workbench-stage-solo > .workbench-stage-body > * {
   flex: 1 1 auto;
   min-height: 0;
 }
 .workbench-stage-split {
-  /* Group 本身吃满 chat-pane；方向由库 inline style 控制 */
+  /* Group 本身吃满 body；方向由库 inline style 控制 */
   flex: 1 1 auto !important;
+  min-height: 0;
+  min-width: 0;
 }
 .workbench-session-pane,
 .workbench-content-pane {
@@ -4162,6 +4172,8 @@ div.fixed.inset-0.z-50 {
   overflow: hidden;
   background: var(--color-bg-panel);
 }
+/* 自定义标题栏拖区由上方 session-tabs-bar 承担；阅读面已在 Tab 之下，
+   不再叠 padding-top，避免 Tab 与内容之间空出一条拖拽高度。 */
 .workbench-content-frame-horizontal {
   border-left: 1px solid var(--color-border-subtle);
 }

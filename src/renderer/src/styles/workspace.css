@@ -1719,7 +1719,7 @@ body.is-git-pane-resizing, body.is-git-pane-resizing * { cursor: row-resize !imp
 .git-graph-continuation { height: 26px; }
 
 .git-commit-hover-author { display: flex; min-width: 0; align-items: flex-start; gap: 8px; }
-.git-commit-hover-avatar { display: inline-flex; width: 24px; height: 24px; flex: 0 0 24px; align-items: center; justify-content: center; border-radius: var(--radius-sm); background: var(--color-bg-muted); color: var(--git-panel-fg); font-family: var(--font-family-business); font-size: var(--font-size-caption); font-weight: 600; }.git-commit-hover-message { margin-top: 10px; padding: 9px 0; border-top: 1px solid var(--git-panel-border); border-bottom: 1px solid var(--git-panel-border); white-space: pre-wrap; word-break: break-word; }
+.git-commit-hover-avatar { display: inline-flex; width: 24px; height: 24px; flex: 0 0 24px; align-items: center; justify-content: center; border-radius: var(--radius-sm); background: var(--color-bg-muted); color: var(--git-panel-fg); font-family: var(--git-ui-font); font-size: var(--font-size-caption); font-weight: 600; }.git-commit-hover-message { margin-top: 10px; padding: 9px 0; border-top: 1px solid var(--git-panel-border); border-bottom: 1px solid var(--git-panel-border); white-space: pre-wrap; word-break: break-word; }
 .git-commit-hover-identity { margin-top: 8px; }
 .git-commit-hover-identity code { display: block; overflow: hidden; color: var(--git-desc-fg); font-family: var(--font-family-mono); font-size: var(--font-size-caption); text-overflow: ellipsis; white-space: nowrap; }
 .git-commit-hover-refs { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }

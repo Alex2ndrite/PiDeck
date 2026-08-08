@@ -89,6 +89,8 @@ export type SessionPaneServices = {
     composerOffsetHeight: number;
     terminalRowHeight: number;
   };
+  /** 退出会话左右/上下分屏，回到单栏 */
+  exitSessionSplit: () => void;
 };
 
 const SessionPaneServicesContext = createContext<SessionPaneServices | null>(null);

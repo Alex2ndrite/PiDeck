@@ -289,7 +289,7 @@ export function App() {
   const workspace = useWorkspacePanels({ projectId: activeProjectId, editors: editorsAdapter });
   const drawer = workspace.drawer;
   const drawerCollapsed = workspace.drawerCollapsed;
-  // 右侧栏只做开/关：已打开则关闭，否则打开 files（默认关闭，手动打开）
+  // 右侧栏总开关：已打开则关闭，否则打开 files（默认关闭，手动打开）
   const toggleRightDrawer = useCallback(() => {
     if (workspace.drawer) {
       workspace.closeDrawer();
@@ -1005,6 +1005,8 @@ export function App() {
     saveEditorFileContent,
     closeEditorTab,
     selectEditorTab,
+    promotePreviewEditorTab,
+    previewEditorTabId,
     openFilePath,
     viewFilePath,
     diffFilePath,
@@ -2435,7 +2437,6 @@ export function App() {
       else workspaceChrome.endDrag();
     },
   };
-  const sessionTabsBarNode = <SessionTabsBar {...sessionTabsProps} />;
 
   const paneLayoutRefs = useMemo(
     () => ({
@@ -2496,6 +2497,7 @@ export function App() {
       api,
       jumpToMessageRef,
       layoutRefs: paneLayoutRefs,
+      exitSessionSplit: workspaceChrome.exitSplit,
     }),
     [
       abortAgent,
@@ -2539,12 +2541,12 @@ export function App() {
       terminalOpen,
       validCommandNames,
       validFilePaths,
+      workspaceChrome.exitSplit,
     ],
   );
 
   const chatPaneSessionNode = (
     <SessionPaneServicesProvider value={sessionPaneServices}>
-      {sessionTabsBarNode}
       {currentSessionId ? (
         <SessionSplitStage
           layout={workspaceChrome.splitLayout}
@@ -2609,6 +2611,48 @@ export function App() {
   const workbenchHasContent = workbenchHasGitDiff || workbenchHasEditor;
   const workbenchLayout = workbenchHasGitDiff ? gitDiffDisplayMode : editorMode;
 
+  // 文件/Diff Tab 挂进总 SessionTabsBar：与会话共用一条栏，内容区不再另起绿条 Tab
+  const workbenchEditorTabs = workbenchHasGitDiff && gitDrawerDiff
+    ? [
+        {
+          id: gitDrawerDiff.filePath,
+          label: gitDrawerDiff.label,
+          title: gitDrawerDiff.filePath,
+          active: true,
+        },
+      ]
+    : workbenchHasEditor
+      ? editorTabs.map((tab) => ({
+          id: tab.id,
+          label:
+            tab.label ??
+            tab.filePath.split(/[/\\]/).pop() ??
+            tab.filePath,
+          title: tab.filePath,
+          preview: tab.id === previewEditorTabId,
+          active: tab.id === activeTabId,
+        }))
+      : [];
+
+  const sessionTabsBarNode = (
+    <SessionTabsBar
+      {...sessionTabsProps}
+      editorTabs={workbenchEditorTabs}
+      onSelectEditorTab={(tabId) => {
+        if (workbenchHasGitDiff) return;
+        selectEditorTab(tabId);
+      }}
+      onCloseEditorTab={(tabId) => {
+        if (workbenchHasGitDiff) {
+          closeGitDiff();
+          return;
+        }
+        closeEditorTab(tabId);
+      }}
+      onPromoteEditorPreview={promotePreviewEditorTab}
+    />
+  );
+
   const workbenchContentNode = workbenchHasContent ? (
     <WorkbenchContent
       theme={workbenchTheme}
@@ -2618,12 +2662,8 @@ export function App() {
       onToggleGitDiffMode={toggleGitDiffDisplayMode}
       onCloseGitDiff={closeGitDiff}
       activeTab={workbenchHasEditor && activeTab ? activeTab : null}
-      editorTabs={editorTabs}
-      activeTabId={activeTabId}
       editorMode={editorMode}
       onToggleEditorMode={activeTab?.preserveDrawer ? undefined : toggleEditorMode}
-      onSelectTab={selectEditorTab}
-      onCloseTab={closeEditorTab}
       onCloseEditor={() => { closeEditor(); }}
       readContent={readEditorFileContent}
       readOriginalContent={readEditorOriginalContent}
@@ -2633,6 +2673,7 @@ export function App() {
 
   const chatPaneContentNode = (
     <WorkbenchStage
+      chrome={sessionTabsBarNode}
       layout={workbenchLayout}
       orientation={settings.workspaceSplitOrientation ?? "horizontal"}
       hasContent={workbenchHasContent}

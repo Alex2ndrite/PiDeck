@@ -1242,6 +1242,8 @@ select:focus-visible {
 .custom-titlebar-enabled .session-tabs-bar button,
 .custom-titlebar-enabled .session-tabs-bar [role="tab"],
 .custom-titlebar-enabled .session-tabs-bar a,
+.custom-titlebar-enabled .file-diff-header,
+.custom-titlebar-enabled .file-diff-header button,
 .custom-titlebar-enabled .composer,
 .custom-titlebar-enabled input,
 .custom-titlebar-enabled textarea,

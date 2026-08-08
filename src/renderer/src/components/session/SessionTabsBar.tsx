@@ -1,5 +1,5 @@
 import { useAtomValue } from "jotai";
-import { Folder, MessagesSquare, PanelLeft, Pin, PinOff, Plus, PanelRight, X } from "lucide-react";
+import { Folder, MessagesSquare, PanelLeft, PanelRight, Pin, PinOff, Plus, X } from "lucide-react";
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import {
   sessionRecordByIdAtomFamily,
@@ -44,6 +44,15 @@ export type NewSessionTarget = {
   isChat: boolean;
 };
 
+/** 工作台文件/Diff Tab：与会话 Tab 共用同一条栏、同一套视觉（不再单独绿条栏） */
+export type WorkbenchEditorTabItem = {
+  id: string;
+  label: string;
+  title?: string;
+  preview?: boolean;
+  active?: boolean;
+};
+
 export type SessionTabsBarProps = {
   tabs: readonly string[];
   pinnedTabs: readonly string[];
@@ -61,7 +70,7 @@ export type SessionTabsBarProps = {
   onNewSessionInProject: (projectId: string) => void;
   onTogglePin: (sessionId: string) => void;
   onReorder: (sourceId: string, targetId: string, position: "before" | "after") => void;
-  /** 无当前会话时仍显示右侧抽屉入口。 */
+  /** 右侧抽屉总开关：打开/关闭整块右侧面板（活动栏在抽屉内、系统按钮下方）。 */
   onToggleDrawer?: () => void;
   drawerOpen?: boolean;
   /** 左侧栏已收起时，在 Tab 栏左侧提供展开入口（替代浮动按钮）。 */
@@ -71,6 +80,14 @@ export type SessionTabsBarProps = {
   actions?: ReactNode;
   /** 开始/结束拖拽会话 Tab 时通知外层（用于分屏落点预览）。 */
   onDragSessionChange?: (sessionId: string | null) => void;
+  /**
+   * 中间栏打开的文件/Diff Tab。挂在同一条 session-tabs-bar 上，
+   * 避免内容区再开第二套「绿条」Tab 栏。
+   */
+  editorTabs?: readonly WorkbenchEditorTabItem[];
+  onSelectEditorTab?: (tabId: string) => void;
+  onCloseEditorTab?: (tabId: string) => void;
+  onPromoteEditorPreview?: (tabId: string) => void;
 };
 
 export function SessionTabsBar(props: SessionTabsBarProps) {
@@ -171,8 +188,26 @@ export function SessionTabsBar(props: SessionTabsBarProps) {
           targets={props.newSessionTargets}
           onSelect={props.onNewSessionInProject}
         />
+        {/* 文件/Diff 与会话共用本栏：同一套 session-tab 皮，不另开绿条栏 */}
+        {props.editorTabs && props.editorTabs.length > 0 ? (
+          <>
+            <span
+              className="mx-0.5 h-4 w-px shrink-0 bg-border/50"
+              aria-hidden="true"
+            />
+            {props.editorTabs.map((tab) => (
+              <EditorWorkbenchTab
+                key={tab.id}
+                tab={tab}
+                onSelect={props.onSelectEditorTab}
+                onClose={props.onCloseEditorTab}
+                onPromotePreview={props.onPromoteEditorPreview}
+              />
+            ))}
+          </>
+        ) : null}
       </div>
-      {/* 右侧抽屉开关：固定在会话 Tab 栏最右侧（不进右侧面板活动栏）。 */}
+      {/* 右侧抽屉总开关：固定在会话 Tab 栏最右侧；面板切换图标在抽屉内活动栏。 */}
       {props.onToggleDrawer ? (
         <div className="session-tabs-actions flex shrink-0 items-center gap-1 border-l border-border/30 pl-1">
           {props.actions}
@@ -193,6 +228,65 @@ export function SessionTabsBar(props: SessionTabsBarProps) {
           {props.actions}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * 工作台文件/Diff Tab：视觉复用 session-tab，不引入第二套绿条样式。
+ * 与会话 Tab 正交：不参与会话拖拽/固定，只转发选中/关闭/预览晋升。
+ */
+function EditorWorkbenchTab(props: {
+  tab: WorkbenchEditorTabItem;
+  onSelect?: (tabId: string) => void;
+  onClose?: (tabId: string) => void;
+  onPromotePreview?: (tabId: string) => void;
+}) {
+  const { tab } = props;
+  return (
+    <div
+      role="tab"
+      aria-selected={Boolean(tab.active)}
+      title={tab.title ?? tab.label}
+      className={cn(
+        "session-tab group relative flex h-7 shrink-0 cursor-pointer select-none items-center gap-1.5 rounded-md border px-2 text-caption transition-colors",
+        "w-fit max-w-40",
+        tab.active
+          ? "border-border bg-accent/10 font-medium text-foreground"
+          : "border-transparent text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+        tab.preview && "italic font-normal text-muted-foreground",
+      )}
+      onClick={() => props.onSelect?.(tab.id)}
+      onDoubleClick={() => {
+        if (tab.preview) props.onPromotePreview?.(tab.id);
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          props.onSelect?.(tab.id);
+        }
+      }}
+      tabIndex={0}
+    >
+      <span className={cn("min-w-0 flex-1 truncate", tab.preview && "italic")}>
+        {tab.label}
+      </span>
+      <button
+        type="button"
+        role="tab-close"
+        aria-label={t("tabs.close")}
+        title={t("tabs.close")}
+        className={cn(
+          "inline-grid size-4 shrink-0 place-items-center rounded-sm text-muted-foreground/70 hover:bg-accent hover:text-foreground",
+          tab.active ? "opacity-60 hover:opacity-100" : "opacity-0 group-hover:opacity-60",
+        )}
+        onClick={(event) => {
+          event.stopPropagation();
+          props.onClose?.(tab.id);
+        }}
+      >
+        <X className="size-3" />
+      </button>
     </div>
   );
 }

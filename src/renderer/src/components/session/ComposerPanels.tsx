@@ -214,16 +214,20 @@ export function ComposerSendControls(props: {
     >
       <div className="send-behavior-menu-wrap relative flex items-center gap-1.5">
         {props.showBusySendControls && props.hasComposerContent && (
-          <div className="send-behavior-toggle inline-flex h-7 overflow-hidden rounded-md bg-primary text-primary-foreground">
-            <Button variant="ghost" size="icon"
-              className="send-behavior-primary size-7 rounded-none text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground"
+          <div className="send-behavior-toggle inline-flex h-8 overflow-hidden rounded-md bg-primary text-primary-foreground">
+            <Button
+              variant="default"
+              size="icon-sm"
+              className="send-behavior-primary size-8 rounded-none shadow-none hover:bg-primary/90"
               aria-label={t("app.sendSteerTitle")} title={t("app.sendSteerTitle")}
               onClick={props.onSend}
             >
               <ArrowUp size={15} strokeWidth={2.4} aria-hidden="true" />
             </Button>
-            <Button variant="ghost" size="icon"
-              className="send-behavior-chevron size-5 rounded-none border-l border-primary-foreground/20 text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground"
+            <Button
+              variant="default"
+              size="icon"
+              className="send-behavior-chevron h-8 w-5 rounded-none border-l border-primary-foreground/20 p-0 shadow-none hover:bg-primary/90"
               aria-label={t("app.sendBehaviorTitle")} title={t("app.sendBehaviorTitle")}
               aria-haspopup="menu"
               aria-expanded={props.sendBehaviorMenuOpen}
@@ -236,16 +240,20 @@ export function ComposerSendControls(props: {
           </div>
         )}
         {props.isAgentBusy ? (
-          <Button variant="ghost" size="icon"
-            className="composer-bar-btn stop size-8 rounded-full bg-destructive text-destructive-foreground hover:bg-destructive/90"
+          <Button
+            variant="destructive"
+            size="icon-sm"
+            className="composer-bar-btn stop size-8 rounded-full"
             aria-label={t("app.stop")} title={t("app.stop")}
             onClick={props.onStop}
           >
             <Square size={15} strokeWidth={0} fill="currentColor" aria-hidden="true" />
           </Button>
         ) : !props.keepBusyDraftControls ? (
-          <Button variant="ghost" size="icon"
-            className="composer-bar-btn send size-8 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground disabled:opacity-40"
+          <Button
+            variant="default"
+            size="icon-sm"
+            className="composer-bar-btn send size-8 rounded-full disabled:opacity-40"
             aria-label={t("app.send")} title={t("app.send")}
             disabled={props.isAgentStarting || !props.canSend}
             onClick={props.onSend}

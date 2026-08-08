@@ -70,6 +70,24 @@ test("window controls stay above session tabs so close is never covered", () => 
   );
 });
 
+test("workbench content sits below shared tabs chrome (no double drag padding)", () => {
+  const surfaces = readFileSync("src/renderer/src/styles/surfaces.css", "utf8");
+  // Tab 栏已抬到 WorkbenchStage chrome；内容区再叠 window-drag padding 会空出一条缝
+  assert.doesNotMatch(
+    surfaces,
+    /\.custom-titlebar-enabled \.workbench-content-frame \{[\s\S]*?padding-top:\s*var\(--window-drag-height\);/,
+  );
+  // 关闭/动作钮仍须 no-drag（header 可能贴近顶栏）
+  assert.match(
+    foundation,
+    /\.custom-titlebar-enabled \.file-diff-header[\s\S]*?-webkit-app-region:\s*no-drag;/,
+  );
+  assert.match(
+    foundation,
+    /\.custom-titlebar-enabled \.file-diff-header button[\s\S]*?-webkit-app-region:\s*no-drag;/,
+  );
+});
+
 test("session tabs bar keeps trailing inset for drawer toggle (no px-* override)", () => {
   const tabs = readFileSync("src/renderer/src/components/session/SessionTabsBar.tsx", "utf8");
   // utility px-* 会冲掉 foundation 的右边距，导致开关钻进窗口控件下

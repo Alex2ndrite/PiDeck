@@ -78,7 +78,8 @@ export function DrawerContent(props: {
 	onExportSession: (session: SessionSummary) => void | Promise<void>;
 	onDeleteSession: (session: SessionSummary) => void | Promise<void>;
 	onOpenFile?: (path: string) => void;
-	onViewFile?: (path: string) => void;
+	/** 单击默认预览；第二参 permanent = 双击常驻 */
+	onViewFile?: (path: string, openMode?: "preview" | "permanent") => void;
 	/** 项目根目录：面板空白处拖入/粘贴/右键的落点 */
 	projectRoot?: string;
 	/** 从 OS 拖入文件到目录或面板空白区域（复制） */
@@ -90,29 +91,31 @@ export function DrawerContent(props: {
 }) {
 	const title =
 		props.panel === "files"
-			? t("drawer.files")
+			? null
 			: props.project
 				? t("drawer.projectSessions", { name: props.project.name })
 				: t("drawer.historyTitle");
 	return (
 		<>
-			{/* pure official：与 Git 抽屉共用 h-12 顶栏密度 */}
-			<div className="drawer-header flex h-12 shrink-0 items-center justify-between gap-3 border-b border-border/40 bg-background px-3">
-				<strong className="truncate text-sm font-semibold text-foreground">{title}</strong>
-				<div className="drawer-header-actions flex shrink-0 items-center gap-1">
-					<Button
-						type="button"
-						variant="ghost"
-						size="icon-sm"
-						className="inline-grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-						title={t("drawer.closePanel")}
-						aria-label={t("drawer.closePanel")}
-						onClick={props.onClose}
-					>
-						<X size={16} />
-					</Button>
+			{/* 文件抽屉：去掉「文件 + ×」顶栏，关闭改走右侧 rail；会话历史仍保留顶栏。 */}
+			{props.panel !== "files" && title && (
+				<div className="drawer-header flex h-12 shrink-0 items-center justify-between gap-3 border-b border-border/40 bg-background px-3">
+					<strong className="truncate text-sm font-semibold text-foreground">{title}</strong>
+					<div className="drawer-header-actions flex shrink-0 items-center gap-1">
+						<Button
+							type="button"
+							variant="ghost"
+							size="icon-sm"
+							className="inline-grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+							title={t("drawer.closePanel")}
+							aria-label={t("drawer.closePanel")}
+							onClick={props.onClose}
+						>
+							<X size={16} />
+						</Button>
+					</div>
 				</div>
-			</div>
+			)}
 			{props.panel === "files" && (
 				<FilesPanel
 					files={props.files}
@@ -155,7 +158,8 @@ function FilesPanel(props: {
 	onCollapseAll?: () => void;
 	onOpenFolder?: () => void;
 	onOpenFile?: (path: string) => void;
-	onViewFile?: (path: string) => void;
+	/** 单击默认预览；第二参 permanent = 双击常驻 */
+	onViewFile?: (path: string, openMode?: "preview" | "permanent") => void;
 	/** 项目根目录：面板空白处拖入/粘贴/右键的落点 */
 	projectRoot?: string;
 	/** 从 OS 拖入文件到目录或面板空白区域（复制） */
@@ -235,7 +239,7 @@ function FilesPanel(props: {
 	};
 	return (
 		<div
-			className="files-panel flex min-h-0 flex-1 flex-col overflow-hidden"
+			className="files-panel flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto"
 			tabIndex={-1}
 			onDragOver={handlePanelDragOver}
 			onDragLeave={() => { setDragOverDir(null); dragCountRef.current = 0; }}
@@ -243,9 +247,9 @@ function FilesPanel(props: {
 			onKeyDown={handlePanelKeyDown}
 			onContextMenu={handlePanelContextMenu}
 		>
-			{/* 工具行：min-w-0 允许收缩；排序为单个图标（鼠标移入展开菜单），不占额外宽度 */}
-			<div className="panel-action-row flex h-9 min-w-0 shrink-0 items-center justify-end gap-2 border-b border-border/40 px-3 text-xs text-muted-foreground">
-				<div className="panel-action-buttons flex min-w-0 items-center gap-1">
+			{/* 工具行压矮：去掉顶栏后这是文件抽屉唯一 chrome；h-7 + size-6 对齐侧栏密度 */}
+			<div className="panel-action-row flex h-7 min-w-0 shrink-0 items-center justify-end gap-1 border-b border-border/40 px-2 text-xs text-muted-foreground">
+				<div className="panel-action-buttons flex min-w-0 items-center gap-0.5">
 					{/* 文件树排序：方向切换与维度选择合并在一个图标菜单内（默认按名称·升序） */}
 					<FileSortControl
 						sortMode={sortMode}
@@ -254,8 +258,8 @@ function FilesPanel(props: {
 						onToggleDirection={() => setSortDirection((d) => (d === "asc" ? "desc" : "asc"))}
 					/>
 					{props.onOpenFolder && (
-						<Button type="button" variant="ghost" size="icon-sm" className="icon-only inline-grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground" onClick={props.onOpenFolder} title={t("drawer.openFolder")} aria-label={t("drawer.openFolder")}>
-							<Folder size={14} />
+						<Button type="button" variant="ghost" size="icon-sm" className="icon-only inline-grid size-6 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground" onClick={props.onOpenFolder} title={t("drawer.openFolder")} aria-label={t("drawer.openFolder")}>
+							<Folder size={13} />
 						</Button>
 					)}
 					{/* 刷新与全部收起：纯图标，密度对齐 shadcn icon button */}
@@ -263,25 +267,25 @@ function FilesPanel(props: {
 						type="button"
 						variant="ghost"
 						size="icon-sm"
-						className="icon-only inline-grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+						className="icon-only inline-grid size-6 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground"
 						onClick={props.onRefreshFiles}
 						title={t("common.refresh")}
 						aria-label={t("common.refresh")}
 					>
-						<RefreshCw size={14} />
+						<RefreshCw size={13} />
 					</Button>
 					{props.onCollapseAll && (
 						<Button
 							type="button"
 							variant="ghost"
 							size="icon-sm"
-							className="icon-only inline-grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground disabled:opacity-40"
+							className="icon-only inline-grid size-6 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground disabled:opacity-40"
 							onClick={props.onCollapseAll}
 							title={t("drawer.collapseAllDirs")}
 							aria-label={t("drawer.collapseAllDirs")}
 							disabled={props.expandedDirs.size === 0}
 						>
-							<ChevronsDownUp size={14} />
+							<ChevronsDownUp size={13} />
 						</Button>
 					)}
 				</div>
@@ -438,12 +442,13 @@ export function SessionFileSummary(props: {
 
 function fileIconElement(name: string, isDirectory: boolean, isExpanded: boolean) {
 	if (isDirectory) {
-		return isExpanded ? <FolderOpen size={16} /> : <Folder size={16} />;
+		return isExpanded ? <FolderOpen size={18} aria-hidden="true" /> : <Folder size={18} aria-hidden="true" />;
 	}
 	try {
 		const { svg, colorName } = getFileIconSeti(name);
 		const color = getFileIconColor(colorName);
 		// SVG 只来自仓库内附带许可证的只读 Seti 数据快照，不接收文件内容或用户输入。
+		// 尺寸由 .file-node-seti-icon → --file-type-icon-size 承担（树行不用 shadcn Button，避免其 [&_svg]:size-4 抢尺寸）。
 		return (
 			<span
 				aria-hidden="true"
@@ -453,7 +458,7 @@ function fileIconElement(name: string, isDirectory: boolean, isExpanded: boolean
 			/>
 		);
 	} catch {
-		return <FileText size={15} />;
+		return <FileText size={16} aria-hidden="true" />;
 	}
 }
 
@@ -463,7 +468,8 @@ function FileNode(props: {
 	onToggleDirectory: (path: string) => void;
 	onFileContextMenu: (node: FileTreeNode, x: number, y: number) => void;
 	onOpenFile?: (path: string) => void;
-	onViewFile?: (path: string) => void;
+	/** 单击默认预览；第二参 permanent = 双击常驻 */
+	onViewFile?: (path: string, openMode?: "preview" | "permanent") => void;
 	depth?: number;
 	/** 拖入文件（仅目录节点使用） */
 	onDropFiles?: (targetDir: string, files: FileList) => void;
@@ -476,10 +482,10 @@ function FileNode(props: {
 	const expanded = expandedDirs.has(node.path);
 	const typeLabel = node.type === "file" ? getFileTypeLabel(node.name) : "";
 	const rowStyle = {
-		"--file-depth-offset": `${depth * 16}px`,
-		/* inline 压过 Button size 自带的 px-*，保留树缩进（分层后 class 打不过 utility）。 */
-		paddingLeft: `calc(var(--space-2) + ${depth * 16}px)`,
-		paddingRight: "var(--space-2)",
+		/* 每层 8px：旧 16 在窄抽屉里空白过大（标注「缩进太大」）。 */
+		"--file-depth-offset": `${depth * 8}px`,
+		paddingLeft: `calc(var(--space-1) + ${depth * 8}px)`,
+		paddingRight: "var(--space-1)",
 	} as CSSProperties;
 	const menu = (event: ReactMouseEvent) => {
 		event.preventDefault();
@@ -518,45 +524,57 @@ function FileNode(props: {
 		}
 	}, [node.path, props.onDropFiles, props.onMoveFiles, props.onDragOverDirChange]);
 	const isDragOver = props.dragOverDir === node.path;
-	// #115：树行用 shadcn ghost Button，尺寸/圆角走 utility；左右 padding 仍由 legacy
-	// 用 --file-depth-offset 算缩进（utility 的 px-* 会盖掉 depth，不能迁）。
+	/* 树行用原生 button，不用 shadcn Button：后者基类强制子 SVG size-4，
+	   会压掉 Seti --file-type-icon-size 与 lucide size，靠 ! 反压是补丁。 */
 	const fileRowButtonClass =
-		"file-node-row h-[26px] min-h-0 w-full justify-start gap-2 rounded-sm py-0 text-body font-normal shadow-none hover:bg-muted hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-inset";
+		"file-node-row inline-flex h-[28px] min-h-0 w-full items-center justify-start gap-1.5 rounded-sm border-0 bg-transparent py-0 text-left text-body font-normal text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-inset";
 	if (node.type === "file")
 		return (
 			<div className="file-node" style={rowStyle}>
-				<Button variant="ghost" size="sm" className={cn("file", fileRowButtonClass)} style={rowStyle}
+				<button
+					type="button"
+					className={cn("file", fileRowButtonClass)}
+					style={rowStyle}
 					title={`${node.relativePath}\n${typeLabel}`}
 					draggable
 					onDragStart={handleDragStart}
 					onClick={() => props.onViewFile?.(node.path)}
-					onContextMenu={menu}>
+					onDoubleClick={(event) => {
+						event.preventDefault();
+						props.onViewFile?.(node.path, "permanent");
+					}}
+					onContextMenu={menu}
+				>
 					<span className="file-node-icon">
 						{fileIconElement(node.name, false, false)}
 					</span>
 					<span className="file-node-name">{node.name}</span>
 					<span className="file-node-type-label">{typeLabel}</span>
-				</Button>
+				</button>
 			</div>
 		);
 	return (
 		<div className="file-node" style={rowStyle}>
 			<Collapsible open={expanded} onOpenChange={() => onToggleDirectory(node.path)}>
 				<CollapsibleTrigger asChild>
-					<Button variant="ghost" size="sm" className={cn("directory group", fileRowButtonClass, isDragOver && "bg-muted ring-1 ring-border")} style={rowStyle}
+					<button
+						type="button"
+						className={cn("directory group", fileRowButtonClass, isDragOver && "bg-muted ring-1 ring-border")}
+						style={rowStyle}
 						title={node.relativePath}
 						draggable
 						onDragStart={handleDragStart}
 						onDragOver={handleDragOver}
 						onDragLeave={handleDragLeave}
 						onDrop={handleDrop}
-						onContextMenu={menu}>
-						<ChevronRight className="file-node-chevron transition-transform group-data-[state=open]:rotate-90" size={13} />
+						onContextMenu={menu}
+					>
+						<ChevronRight className="file-node-chevron size-3.5 shrink-0 transition-transform group-data-[state=open]:rotate-90" aria-hidden="true" />
 						<span className="file-node-icon">
 							{fileIconElement(node.name, true, expanded)}
 						</span>
 						<span className="file-node-name">{node.name}</span>
-					</Button>
+					</button>
 				</CollapsibleTrigger>
 				<CollapsibleContent>
 					{node.children && node.children.length > 0 && (

@@ -23,6 +23,7 @@ import { SessionMessageTimeline } from "./SessionMessageTimeline";
 import { ComposerArea } from "./ComposerArea";
 import { SessionRuntimeDock } from "./SessionRuntimeDock";
 import { QueuedPromptPanel } from "./ComposerPanels";
+import { useSessionPaneServices } from "./SessionPaneServices";
 import { COMPOSER_DEFAULT_HEIGHT, COMPOSER_MIN_HEIGHT, TIMELINE_MIN_HEIGHT, growComposerWithinTimelineBudget } from "../../rendererUtils";
 import type { EnqueuePromptSnapshot } from "../../hooks/useSessionSend";
 
@@ -187,6 +188,7 @@ export function SessionView({
   abortAgent,
   restartActiveAgent,
 }: SessionViewProps) {
+  const paneServices = useSessionPaneServices();
   // #115 U5 垂直轴：timeline | composer | terminal 三段由 react-resizable-panels 接管。
   // composer 高度本地持有（px），终端高度/折叠仍由 useTerminalDock 的 per-agent
   // 状态持有，拖拽结果经 onResize 回写，外部状态经 imperative API 同步。
@@ -443,6 +445,8 @@ export function SessionView({
         headerRef={chatHeaderRef}
         comboRef={sessionComboRef}
         title={sessionTitle}
+        paneTitle={splitPane ? sessionTitle : undefined}
+        onExitSplit={splitPane ? paneServices.exitSessionSplit : undefined}
         compactionCount={activeAgent?.compactionCount}
         isAnonymous={activeAgent?.noSession}
         runtimeState={activeRuntimeState}

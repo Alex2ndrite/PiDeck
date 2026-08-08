@@ -5,6 +5,7 @@
 
 import type { EditorProps } from "@tiptap/pm/view";
 import type { ComposerChip } from "../chips";
+import { toComposerDomKeyboardEvent } from "./domEventBridge";
 
 export type ComposerEditorDomHandlers = {
 	composingRef: { current: boolean };
@@ -41,7 +42,7 @@ export function buildComposerEditorProps(
 			...(options.disabled ? { "aria-disabled": "true" } : {}),
 		},
 		handleKeyDown: (_view, event) => {
-			handlers.onKeyDown?.(event);
+			handlers.onKeyDown?.(toComposerDomKeyboardEvent(event));
 			return event.defaultPrevented;
 		},
 		handlePaste: (_view, event) => {

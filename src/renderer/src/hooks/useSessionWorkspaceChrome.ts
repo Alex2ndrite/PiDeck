@@ -284,6 +284,11 @@ export function useSessionWorkspaceChrome(options: {
     setDraggingSessionId(null);
   }, []);
 
+  /** 退出会话分屏：保留当前聚焦会话为单栏 */
+  const exitSplit = useCallback(() => {
+    setSplitLayout(null);
+  }, []);
+
   return {
     // state
     sessionTabIds,
@@ -305,6 +310,7 @@ export function useSessionWorkspaceChrome(options: {
     dropSplit,
     beginDrag,
     endDrag,
+    exitSplit,
   };
 }
 

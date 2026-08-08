@@ -45,6 +45,10 @@ export type UseTipTapComposerEditorArgs = Pick<
 	hostRef: RefObject<HTMLDivElement | null>;
 };
 
+function syncEmptyClass(editor: Editor): void {
+	editor.view.dom.classList.toggle("is-editor-empty", editor.isEmpty);
+}
+
 export function useTipTapComposerEditor(
 	args: UseTipTapComposerEditorArgs,
 ): Editor | null {
@@ -90,7 +94,14 @@ export function useTipTapComposerEditor(
 	onChipClickRef.current = onChipClick;
 
 	const composingRef = useRef(false);
+	/** 最近一次由编辑器 onUpdate 推给父层的纯文本；用于区分「父层滞后」与「外部改草稿」。 */
 	const lastEmittedRef = useRef(value);
+
+	const emitPlainText = (editor: Editor) => {
+		const next = serializeComposerEditorJson(editor.getJSON());
+		lastEmittedRef.current = next;
+		onChangeRef.current(next, posToPlainOffset(editor, editor.state.selection.from));
+	};
 
 	const editor = useEditor({
 		immediatelyRender: false,
@@ -125,18 +136,16 @@ export function useTipTapComposerEditor(
 			{ className, placeholder, disabled },
 		),
 		onUpdate: ({ editor: ed }) => {
-			ed.view.dom.classList.toggle("is-editor-empty", ed.isEmpty);
+			syncEmptyClass(ed);
 			if (composingRef.current) return;
-			const next = serializeComposerEditorJson(ed.getJSON());
-			lastEmittedRef.current = next;
-			onChangeRef.current(next, posToPlainOffset(ed, ed.state.selection.from));
+			emitPlainText(ed);
 		},
 		onSelectionUpdate: ({ editor: ed }) => {
 			if (composingRef.current) return;
 			onCursorChangeRef.current(posToPlainOffset(ed, ed.state.selection.from));
 		},
 		onCreate: ({ editor: ed }) => {
-			ed.view.dom.classList.toggle("is-editor-empty", ed.isEmpty);
+			syncEmptyClass(ed);
 		},
 	});
 
@@ -186,17 +195,36 @@ export function useTipTapComposerEditor(
 		});
 	}, [editor, disabled, className, placeholder]);
 
+	// composition 结束后补一次同步：合成期间 onUpdate 被跳过，避免草稿 atom 一直为空导致无法发送。
+	useEffect(() => {
+		if (!editor) return;
+		const dom = editor.view.dom;
+		const onCompositionEnd = () => {
+			composingRef.current = false;
+			requestAnimationFrame(() => {
+				if (composingRef.current || editor.isDestroyed) return;
+				syncEmptyClass(editor);
+				emitPlainText(editor);
+			});
+		};
+		dom.addEventListener("compositionend", onCompositionEnd);
+		return () => dom.removeEventListener("compositionend", onCompositionEnd);
+	}, [editor]);
+
+	/**
+	 * 受控同步：只在父层 value 与「我们上次发出的文本」不一致时写回编辑器。
+	 * 禁止用 editorText !== value 当条件——打字后父层尚未 re-render 时会把新输入打回旧草稿。
+	 * 白名单变化只影响下次 setContent 解析，不作为同步触发依赖。
+	 */
 	useLayoutEffect(() => {
 		if (!editor || editor.isDestroyed) return;
-		const current = serializeComposerEditorJson(editor.getJSON());
 		const caret = caretRef?.current;
-		const needsContent = current !== value || lastEmittedRef.current !== value;
-		if (needsContent) {
+		if (value !== lastEmittedRef.current) {
 			editor.commands.setContent(plainTextToComposerDoc(value, whitelistRef.current), {
 				emitUpdate: false,
 			});
 			lastEmittedRef.current = value;
-			editor.view.dom.classList.toggle("is-editor-empty", editor.isEmpty);
+			syncEmptyClass(editor);
 		}
 		if (typeof caret === "number" && caretRef) {
 			editor.commands.setTextSelection(
@@ -204,7 +232,7 @@ export function useTipTapComposerEditor(
 			);
 			caretRef.current = null;
 		}
-	}, [value, editor, caretRef, validCommandNames, validFilePaths, validSessionRefs]);
+	}, [value, editor, caretRef]);
 
 	return editor;
 }

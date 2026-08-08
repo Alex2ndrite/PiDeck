@@ -28,12 +28,8 @@ export type WorkbenchContentProps = {
 	onToggleGitDiffMode: () => void;
 	onCloseGitDiff: () => void;
 	activeTab: EditorTabLike | null;
-	editorTabs: EditorTabLike[];
-	activeTabId: string | null;
 	editorMode: WorkspaceContentOpenMode;
 	onToggleEditorMode?: () => void;
-	onSelectTab: (id: string) => void;
-	onCloseTab: (id: string) => void;
 	onCloseEditor: () => void;
 	readContent: (path: string) => Promise<string>;
 	readOriginalContent: (path: string) => Promise<string>;
@@ -43,6 +39,7 @@ export type WorkbenchContentProps = {
 /**
  * 中间栏阅读面：Git Diff / 文件编辑共用 FileDiffViewer。
  *
+ * Tab 名单已上收到 SessionTabsBar（与会话 Tab 同一条栏）；这里只渲染内容与顶栏动作。
  * 不用 React.lazy：Vite/Electron 下动态 import 偶发
  * 「Failed to fetch dynamically imported module」，且 lazy 会缓存 rejected
  * promise，边界「重试」也无法恢复。打开文件是主路径，静态引入更稳。
@@ -57,18 +54,12 @@ export function WorkbenchContent(props: WorkbenchContentProps) {
 				onToggleMode={props.onToggleGitDiffMode}
 				originalContent={props.gitDiff.originalContent}
 				modifiedContent={props.gitDiff.modifiedContent}
-				tabs={[
-					{
-						id: props.gitDiff.filePath,
-						filePath: props.gitDiff.filePath,
-						label: props.gitDiff.label,
-					},
-				]}
-				activeTabId={props.gitDiff.filePath}
 				onClose={props.onCloseGitDiff}
 				readContent={props.readContent}
 				theme={props.theme}
 				maxFileSizeMB={props.maxFileSizeMB}
+				/* Tab 在总栏；内容区只留动作钮，避免第二套标题/绿条 */
+				chromeTabsExternal
 			/>
 		);
 	}
@@ -89,14 +80,6 @@ export function WorkbenchContent(props: WorkbenchContentProps) {
 					: undefined
 			}
 			modifiedContent={props.activeTab.modifiedContent}
-			tabs={props.editorTabs.map((tab) => ({
-				id: tab.id,
-				filePath: tab.filePath,
-				label: tab.label,
-			}))}
-			activeTabId={props.activeTabId}
-			onSelectTab={props.onSelectTab}
-			onCloseTab={props.onCloseTab}
 			onClose={props.onCloseEditor}
 			readContent={props.readContent}
 			readOriginalContent={props.readOriginalContent}
@@ -105,6 +88,7 @@ export function WorkbenchContent(props: WorkbenchContentProps) {
 			}
 			theme={props.theme}
 			maxFileSizeMB={props.maxFileSizeMB}
+			chromeTabsExternal
 		/>
 	);
 }
