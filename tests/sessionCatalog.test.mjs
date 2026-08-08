@@ -454,3 +454,124 @@ test("runtime replacement resolves a full-origin target without mutating the ori
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+
+// ── 相对 sessionFile 归一化（2026-08 侧栏重复会话回归）─────────────
+// 背景：pi 的 sessionDir 配置为相对路径（如 ".pi/sessions"）时，get_state 返回的
+// sessionFile 是相对 cwd 的；原样写入 catalog 会与扫描器绝对路径 originKey 不同，
+// 同一会话在侧栏出现两条记录（一条输入推断名 + 一条默认 "{项目名} agent"）。
+
+function absolutePathResolver(projectRoot) {
+  return (projectId, filePath, environment) => {
+    assert.equal(projectId, "project-1");
+    return filePath.startsWith(".")
+      ? `${projectRoot}\\${filePath.replace(/^[\\/]+/, "")}`
+      : filePath;
+  };
+}
+
+test("load repairs legacy relative filePaths via the injected resolver", async () => {
+  const { SessionCatalog } = loadCatalog();
+  const dir = await mkdtemp(join(tmpdir(), "pideck-catalog-"));
+  const filePath = join(dir, "sessions.json");
+  try {
+    // 模拟旧版本写入的相对路径条目（含按相对路径计算的旧 originKey）
+    const legacy = {
+      id: "rel-entry",
+      projectId: "project-1",
+      originKey: "pi:native:.pi/sessions/2026-08-08t10-47-19-239z_abc.jsonl",
+      title: "PiDeck agent",
+      source: "pi",
+      environment: "native",
+      filePath: ".pi\\sessions\\2026-08-08T10-47-19-239Z_abc.jsonl",
+      status: "active",
+      createdAt: 1000,
+      updatedAt: 1000,
+    };
+    await writeFile(filePath, JSON.stringify({ version: 1, sessions: [legacy] }), "utf8");
+
+    const catalog = new SessionCatalog(
+      filePath,
+      {},
+      absolutePathResolver("D:\\Project\\PiDeck"),
+    );
+    await catalog.load();
+
+    const [entry] = catalog.listEntries();
+    assert.equal(
+      entry.filePath,
+      "D:\\Project\\PiDeck\\.pi\\sessions\\2026-08-08T10-47-19-239Z_abc.jsonl",
+    );
+    // originKey 必须随路径重算，否则后续 mergeScanned 仍按旧 key 去重
+    assert.match(entry.originKey, /d:\/project\/pideck\/\.pi\/sessions/);
+
+    // 修复结果应落盘，重启后不需要再修
+    const onDisk = JSON.parse(await readFile(filePath, "utf8"));
+    assert.equal(onDisk.sessions[0].filePath, entry.filePath);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("attachRuntime absolutizes a relative pi sessionFile and folds the scanned absolute entry in", async () => {
+  const { SessionCatalog } = loadCatalog();
+  const dir = await mkdtemp(join(tmpdir(), "pideck-catalog-"));
+  try {
+    const catalog = new SessionCatalog(
+      join(dir, "sessions.json"),
+      {},
+      absolutePathResolver("D:\\Project\\PiDeck"),
+    );
+    await catalog.load();
+    const draft = await catalog.createDraft({
+      projectId: "project-1",
+      title: "PiDeck agent",
+      environment: "native",
+    });
+
+    // pi 返回相对 cwd 的 sessionFile（sessionDir 配置为 ".pi/sessions"）
+    await catalog.attachRuntime({
+      sessionId: draft.id,
+      filePath: ".pi\\sessions\\2026-08-08T10-47-19-239Z_abc.jsonl",
+      piSessionId: "pi-relative",
+    });
+
+    // 后台扫描发现同一文件的绝对路径（修复前这里会产生第二条记录）
+    const scanned = summary({
+      id: "D:\\Project\\PiDeck\\.pi\\sessions\\2026-08-08T10-47-19-239Z_abc.jsonl",
+      filePath: "D:\\Project\\PiDeck\\.pi\\sessions\\2026-08-08T10-47-19-239Z_abc.jsonl",
+      name: "从用户输入推断的会话名",
+    });
+    const records = await catalog.mergeScanned("project-1", [scanned]);
+
+    assert.equal(records.length, 1);
+    assert.equal(records[0].id, draft.id);
+    assert.equal(records[0].filePath, scanned.filePath);
+    assert.equal(records[0].title, "从用户输入推断的会话名");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("ensureRuntimeTarget absolutizes relative session paths", async () => {
+  const { SessionCatalog } = loadCatalog();
+  const dir = await mkdtemp(join(tmpdir(), "pideck-catalog-"));
+  try {
+    const catalog = new SessionCatalog(
+      join(dir, "sessions.json"),
+      {},
+      absolutePathResolver("D:\\Project\\PiDeck"),
+    );
+    await catalog.load();
+    const record = await catalog.ensureRuntimeTarget({
+      projectId: "project-1",
+      title: "Copied",
+      source: "pi",
+      environment: "native",
+      filePath: ".pi\\sessions\\copied.jsonl",
+    });
+    assert.equal(record.filePath, "D:\\Project\\PiDeck\\.pi\\sessions\\copied.jsonl");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

@@ -8,8 +8,6 @@ import { Toaster } from "./components/ui-shadcn/sonner";
 import { t } from "./i18n";
 import { showNotice } from "./utils/notice";
 import "./styles.css";
-import "streamdown/styles.css";
-import "./file-icons.css";
 
 function writeStartupLog(level: AppLogLevel, message: string, detail?: unknown) {
   window.piDesktop?.app.rendererLog(level, "renderer", message, detail).catch(() => undefined);

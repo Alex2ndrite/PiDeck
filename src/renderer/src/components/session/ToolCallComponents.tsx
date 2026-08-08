@@ -250,8 +250,11 @@ export const ToolCard = memo(function ToolCard(props: {
 			);
 		}
 		if (status === "error") {
+			// 失败用 soft 红（danger-soft 淡红底 + danger 红字 + 淡红描边），
+			// 不采用实心 destructive 红底白字——单条工具失败不需要最高警告级的视觉冲击，
+			// 与 running 的 outline 琥珀徽章同构，三态保持可扫读但整体克制。
 			return (
-				<Badge variant="destructive" className="gap-1 px-1 py-0 text-micro">
+				<Badge variant="outline" className="gap-1 border-danger/40 bg-danger-soft px-1 py-0 text-micro text-danger">
 					<CircleX size={9} aria-hidden="true" />
 					{t("tool.statusError")}
 				</Badge>

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Pin, Minus, Square, X } from "lucide-react";
 import { t } from "../i18n";
 
@@ -6,18 +6,49 @@ type Props = {
   useNativeTitleBar: boolean;
   toggleAlwaysOnTop: () => Promise<boolean>;
   minimizeWindow: () => void;
-  toggleMaximizeWindow: () => void;
+  /** 切换最大化并返回切换后是否最大化 */
+  toggleMaximizeWindow: () => Promise<boolean>;
+  isWindowMaximized: () => Promise<boolean>;
+  onWindowMaximizedChange: (callback: (maximized: boolean) => void) => () => void;
   closeWindow: () => void;
 };
+
+/** Windows 风格「还原」图标：前后错位的两个方框（最大化态显示）。 */
+function RestoreIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" fill="none">
+      <rect x="3.25" y="1.75" width="6.5" height="6.5" stroke="currentColor" strokeWidth="1.35" />
+      <rect x="1.75" y="3.75" width="6.5" height="6.5" stroke="currentColor" strokeWidth="1.35" fill="var(--color-bg-sidebar, #fff)" />
+    </svg>
+  );
+}
 
 export function AppHeader({
   useNativeTitleBar,
   toggleAlwaysOnTop,
   minimizeWindow,
   toggleMaximizeWindow,
+  isWindowMaximized,
+  onWindowMaximizedChange,
   closeWindow,
 }: Props) {
   const [windowAlwaysOnTop, setWindowAlwaysOnTop] = useState(false);
+  const [maximized, setMaximized] = useState(false);
+
+  useEffect(() => {
+    if (useNativeTitleBar) return;
+    let alive = true;
+    void isWindowMaximized().then((value) => {
+      if (alive) setMaximized(value);
+    });
+    const unsubscribe = onWindowMaximizedChange((value) => {
+      if (alive) setMaximized(value);
+    });
+    return () => {
+      alive = false;
+      unsubscribe();
+    };
+  }, [useNativeTitleBar, isWindowMaximized, onWindowMaximizedChange]);
 
   if (useNativeTitleBar) return null;
 
@@ -35,16 +66,26 @@ export function AppHeader({
             setWindowAlwaysOnTop(next);
           }}
         >
-          <Pin size={15} strokeWidth={2.2} aria-hidden="true" />
+          <Pin size={12} strokeWidth={2.2} aria-hidden="true" />
         </button>
         <button type="button" className="window-control" aria-label={t("app.windowMinimize")} title={t("app.windowMinimize")} onClick={() => minimizeWindow()}>
-          <Minus size={15} strokeWidth={2.2} aria-hidden="true" />
+          <Minus size={12} strokeWidth={2.2} aria-hidden="true" />
         </button>
-        <button type="button" className="window-control" aria-label={t("app.windowToggleMaximize")} title={t("app.windowToggleMaximize")} onClick={() => toggleMaximizeWindow()}>
-          <Square size={13} strokeWidth={2} aria-hidden="true" />
+        <button
+          type="button"
+          className="window-control"
+          aria-label={maximized ? t("app.windowRestore") : t("app.windowMaximize")}
+          title={maximized ? t("app.windowRestore") : t("app.windowMaximize")}
+          onClick={() => {
+            // 只采信主进程返回的意图态；maximize/unmaximize 事件用事件名推送，
+            // 不再乐观翻转（否则会与迟到/过期的 isMaximized 读数互踩成「要点两次」）。
+            void toggleMaximizeWindow().then((next) => setMaximized(next));
+          }}
+        >
+          {maximized ? <RestoreIcon /> : <Square size={11} strokeWidth={2} aria-hidden="true" />}
         </button>
         <button type="button" className="window-control close" aria-label={t("app.windowClose")} title={t("app.windowClose")} onClick={() => closeWindow()}>
-          <X size={16} strokeWidth={2.2} aria-hidden="true" />
+          <X size={13} strokeWidth={2.2} aria-hidden="true" />
         </button>
       </div>
     </>

@@ -20,6 +20,10 @@ export type AppSkinId =
 	| "custom";
 export type AppLanguageMode = "system" | "zh-CN" | "en-US" | "pseudo";
 export type LinkOpenMode = "external" | "internal";
+/** 文件/Git Diff 在中间栏的默认打开方式：分屏与会话并排，或占满中间栏 */
+export type WorkspaceContentOpenMode = "split" | "maximize";
+/** 中间栏分屏方向：horizontal=左右，vertical=上下 */
+export type WorkspaceSplitOrientation = "horizontal" | "vertical";
 export type AppFontSizeMode = "compact" | "default" | "medium" | "large" | "xlarge";
 export type AppFontBaseMode = "system" | "sans" | "serif" | "custom";
 export type AppFontMonoMode = "system-mono" | "custom";
@@ -119,6 +123,13 @@ export type AppSettings = {
 	rpcTimeout: number;
 	/** 外部链接打开方式：external 使用系统默认浏览器，internal 使用应用内独立窗口 */
 	linkOpenMode: LinkOpenMode;
+	/**
+	 * 从文件树 / Git 打开文件或 Diff 时，中间栏默认布局。
+	 * split=与会话分屏；maximize=占满中间栏（会话暂时收起，不进侧栏）。
+	 */
+	workspaceContentOpenMode: WorkspaceContentOpenMode;
+	/** 分屏时会话与内容区的排列方向 */
+	workspaceSplitOrientation: WorkspaceSplitOrientation;
 	/** 内容区最大宽度（px），0 表示不限制（填满 chat-pane）。用于限制消息行宽，左右留白。 */
 	contentMaxWidth: number;
 	/** 编辑器最大文件大小（MB），超过此大小的文件不加载编辑器。默认 5MB。 */

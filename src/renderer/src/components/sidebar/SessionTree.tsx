@@ -1,7 +1,7 @@
 import { Fragment, type ReactNode } from "react";
 import { ChevronDown, HatGlasses, Trash2 } from "lucide-react";
 import type { AgentTab, Project, SessionRecord, SessionSummary } from "../../../../shared/types";
-import { filterAgentsForSidebarDisplay, getProjectAgentSessionDisplay, sessionStatusDotClass, type ProjectChildItem } from "../../agentListDisplay";
+import { collectDisplayedSessionIds, filterAgentsForSidebarDisplay, getProjectAgentSessionDisplay, sessionStatusDotClass, type ProjectChildItem } from "../../agentListDisplay";
 import { sessionRecordToSummary } from "../../atoms";
 import { t } from "../../i18n";
 import { filterSidebarSessions, getBoundSidebarRuntimeAgent, hasLiveSidebarRuntime, type SidebarController } from "../../hooks/useSidebarController";
@@ -10,13 +10,12 @@ import { PathTooltip } from "../ui-shadcn/PathTooltip";
 import type { SidebarActions } from "./SidebarContent";
 import { SessionSourceBadge } from "../session/SessionSourceBadge";
 import { cn } from "../../lib/utils";
+import { SESSION_TAB_DRAG_MIME } from "../../utils/sessionSplitEdge";
 
-/** pure official：与 ProjectTree 对齐的会话/agent 行底色
- * 默认透明背景，只有激活的行才显示背景色和阴影，避免所有行都像浮层卡片。 */
-// 与 Be UI AI Sidebar 的资源行保持一致：会话是可选中资源，使用 compact inset surface；
-// 运行状态仍由原有状态点表达，不把项目容器和会话资源混成同一种 active 语义。
+/** 与 ProjectTree.treeRowClass 同尺寸同圆角：分层后 utility 生效，必须「新学旧」对齐项目行，
+ * 不能再用 min-h-11/rounded-xl（会明显高于/圆于项目行）。 */
 const sessionRowClass =
-	"group/resource conversation agent-row relative flex min-h-11 w-full items-center gap-2 rounded-xl border border-transparent px-3 py-2 text-left text-body text-foreground shadow-none transition-[background-color,border-color,box-shadow] duration-200 hover:border-border-subtle hover:bg-muted/60 hover:text-foreground focus-visible:bg-muted/70 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset";
+	"group/resource conversation agent-row relative flex min-h-7 w-full items-center gap-1.5 rounded-md border border-transparent px-2 py-0 text-left text-body text-foreground shadow-none transition-[background-color,border-color,box-shadow] duration-200 hover:border-border-subtle hover:bg-muted/60 hover:text-foreground focus-visible:bg-muted/70 focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-inset";
 
 function matchesSearch(value: string, search: string) {
   return !search || value.toLowerCase().includes(search.toLowerCase());
@@ -71,11 +70,6 @@ export function SessionTree(props: {
 }) {
   const filter = props.controller.sourceFilterFor(props.project.id);
   const search = props.controller.search.trim();
-  const draftSessions = props.sessions
-    .filter((session) => session.status === "draft")
-    .filter((session) => matchesSearch(session.title, search))
-    .filter((session) => filter === null || filter.has(session.source))
-    .sort((left, right) => right.updatedAt - left.updatedAt);
   const allSummaries = props.sessions.flatMap((session) => {
     const summary = sessionRecordToSummary(session);
     return summary ? [summary] : [];
@@ -94,9 +88,43 @@ export function SessionTree(props: {
     sessions: summaries,
     visibleChildCount: props.visibleChildCount ?? (props.nested ? Number.MAX_SAFE_INTEGER : props.controller.visibleChildCountFor(props.project.id)),
   });
+  const displayedSessionIds = collectDisplayedSessionIds(
+    display.visibleChildren,
+    (agent) => {
+      const linked = props.sessions.find(
+        (session) => props.controller.catalog.runtimeBySessionId[session.id]?.agentId === agent.id,
+      ) ?? summaries.find((session) => session.filePath === agent.sessionPath);
+      return linked?.id;
+    },
+  );
+  const draftSessions = props.sessions
+    .filter((session) => session.status === "draft")
+    .filter((session) => !displayedSessionIds.has(session.id))
+    .filter((session) => matchesSearch(session.title, search))
+    .filter((session) => filter === null || filter.has(session.source))
+    .sort((left, right) => right.updatedAt - left.updatedAt);
   const catalogLoading = props.controller.catalog.catalogLoadStateByProject[props.project.id]?.status === "loading";
   const hasRows = catalogLoading || draftSessions.length > 0 || display.visibleChildren.length > 0 || display.hiddenChildCount > 0;
   if (!hasRows) return null;
+
+  /** 单击预览打开；双击常驻打开 */
+  const openSession = (sessionId: string, tabMode: "preview" | "permanent" = "preview") => {
+    void props.actions.sessions.open(props.project.id, sessionId, tabMode);
+  };
+
+  const sessionDragProps = (sessionId: string) => ({
+    draggable: true,
+    onDragStart: (event: React.DragEvent) => {
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData(SESSION_TAB_DRAG_MIME, sessionId);
+      // 部分浏览器要求有 text/plain 才能跨区域 drop
+      event.dataTransfer.setData("text/plain", sessionId);
+      props.actions.sessions.beginDrag?.(sessionId);
+    },
+    onDragEnd: () => {
+      props.actions.sessions.endDrag?.();
+    },
+  });
 
   const openContext = (event: React.MouseEvent, session: SessionSummary) => {
     event.preventDefault();
@@ -140,7 +168,9 @@ export function SessionTree(props: {
             session.id === props.currentSessionId && "active border-border-strong bg-accent/20 text-foreground shadow-sm",
           )}
           onContextMenu={(event) => openContext(event, session)}
-          onClick={() => void props.actions.sessions.open(props.project.id, session.id)}
+          onClick={() => openSession(session.id, "preview")}
+          onDoubleClick={() => openSession(session.id, "permanent")}
+          {...sessionDragProps(session.id)}
         >
           <div className="conversation-body min-w-0 flex-1"><div className="conversation-title flex min-w-0 items-center gap-1.5">{label}</div></div>
         </button>
@@ -187,7 +217,9 @@ export function SessionTree(props: {
               agentSession?.id === props.currentSessionId && "active border-border-strong bg-accent/20 text-foreground shadow-sm",
             )}
             onContextMenu={(event) => { event.preventDefault(); void props.controller.openMenu({ kind: "agent", agentId: child.agent.id, x: event.clientX, y: event.clientY }); }}
-            onClick={() => { if (agentSession) void props.actions.sessions.open(props.project.id, agentSession.id); }}
+            onClick={() => { if (agentSession) openSession(agentSession.id, "preview"); }}
+            onDoubleClick={() => { if (agentSession) openSession(agentSession.id, "permanent"); }}
+            {...(agentSession ? sessionDragProps(agentSession.id) : {})}
           >
             {renderRuntimeStatusDot(child.agent.status)}
             <div className="conversation-body min-w-0 flex-1"><div className="conversation-title flex min-w-0 items-center gap-1.5">
@@ -211,11 +243,13 @@ export function SessionTree(props: {
             sessionRowClass,
             // 历史会话不是运行中的 Agent：只给这一类内容增加层级缩进，避免项目标题与历史记录贴在同一列。
             // 历史会话需要比运行中 Agent 更松的点击区域和行间距，避免连续记录挤成一块。
-            "session-row history-session-row mx-0 mb-1 last:mb-0 min-h-11 pl-3 pr-3 py-2",
+            "session-row history-session-row mx-0 min-h-7 pl-2 pr-2 py-0",
             child.session.id === props.currentSessionId && "active border-border-strong bg-accent/20 text-foreground shadow-sm",
           )}
           onContextMenu={(event) => openContext(event, child.session)}
-          onClick={() => void props.actions.sessions.open(props.project.id, child.session.id)}
+          onClick={() => openSession(child.session.id, "preview")}
+          onDoubleClick={() => openSession(child.session.id, "permanent")}
+          {...sessionDragProps(child.session.id)}
         >
         {renderRuntimeStatusDot(runtimeSnapshot?.status)}
         <div className="conversation-body min-w-0 flex-1"><div className="conversation-title flex min-w-0 items-center gap-1.5">
@@ -233,7 +267,7 @@ export function SessionTree(props: {
   return (
     <div className={cn(
       props.nested ? "worktree-children m-0 border-0 bg-transparent p-0" : "session-card",
-      "flex flex-col gap-2 py-1",
+      "flex flex-col gap-0",
     )}>
       {draftSessions.map((session) => {
         const runtime = props.controller.catalog.runtimeBySessionId[session.id];
@@ -252,7 +286,9 @@ export function SessionTree(props: {
                 "session-row draft-session-trigger",
                 session.id === props.currentSessionId && "active border-border-strong bg-accent/20 text-foreground shadow-sm",
               )}
-              onClick={() => void props.actions.sessions.open(props.project.id, session.id)}
+              onClick={() => openSession(session.id, "preview")}
+              onDoubleClick={() => openSession(session.id, "permanent")}
+              {...sessionDragProps(session.id)}
             >
               <div className="conversation-body min-w-0 flex-1"><div className="conversation-title flex min-w-0 items-center gap-1.5">
                 {renderRuntimeStatusDot(runtime?.status)}

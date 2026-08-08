@@ -38,10 +38,15 @@ test("tool card name uses medium weight like process summary, not bold 650", () 
   assert.match(toolCard, /tool-activity-name/);
 });
 
-test("auto-collapse process waits 1.5s after run completes", () => {
+test("auto-collapse process waits 1.5s after agent stops (not merely endedAt)", () => {
   assert.match(turnExecution, /}, 1500\)/);
   assert.match(turnExecution, /1\.5s 后自动收起/);
   assert.match(turnExecution, /autoCollapseTick/);
+  // 以 agentRunning 停转为准，避免流式中 endedAt>0 误触发收起
+  assert.match(turnExecution, /if \(opts\.agentRunning \|\| userOverrideRef\.current\) return;/);
+  // 上升沿才强制展开，避免用户收起后被 busy 抖动撑开
+  assert.match(turnExecution, /running && !wasRunningRef\.current/);
+  assert.match(turnExecution, /setStepsVisibleFromUser/);
 });
 
 test("scrollToBottom uses stick-to-bottom spring via scrollerScrollApiRef", () => {

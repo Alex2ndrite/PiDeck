@@ -49,6 +49,7 @@ test("remembers collapsed terminal dock state for each agent", () => {
   assert.equal(next.agentA.collapsed, true);
   assert.equal(next.agentA.open, true);
   assert.equal(next.agentB.collapsed, false);
+});
 
 test("preserves collapsed state when toggling terminal open state", () => {
   const { setTerminalDockOpen } = loadTerminalDockStateModule();
@@ -128,9 +129,6 @@ test("terminal dock hook converts owners into canonical owner keys", () => {
   assert.match(hookSource, /activeOwner: TerminalDockOwner \| undefined/);
   // 高度也按 owner key 分桶：项目终端高度不与 agent 终端互相覆盖
   assert.match(hookSource, /terminalHeightByOwner\[activeOwnerKey\]/);
-});
-
-
 });
 
 test("rapid reopen cancels the closing state without a second timer owner", () => {

@@ -17,28 +17,31 @@ test("drawer rail exposes the editor as a first-class panel entry", () => {
 });
 
 test("editor drawer renders an empty state instead of requiring an active tab", () => {
-  // 编辑器分支不得再以 activeTab 为整体渲染前提：空 tab 时由面板自身承载空状态
+  // 阅读面已迁中间栏：抽屉 editor 面板始终是空状态引导
   assert.match(drawerSurface, /drawer === "editor" && !drawerCollapsed\s*\?/);
-  assert.doesNotMatch(drawerSurface, /drawer === "editor" && !drawerCollapsed && editor\.activeTab/);
+  assert.doesNotMatch(drawerSurface, /FileDiffViewer/);
   assert.match(drawerSurface, /t\("editor\.emptyTitle"\)/);
   assert.match(drawerSurface, /t\("editor\.emptyHint"\)/);
   assert.match(drawerSurface, /t\("editor\.emptyOpenFiles"\)/);
-  // 空状态的引导按钮切到文件面板（文件是文件，编辑器是编辑器，经 rail 往返）
   assert.match(drawerSurface, /chrome\.onOpenDrawer\("files"\)/);
 });
 
-test("closing the last editor tab keeps the panel open and resets modal mode", () => {
-  // 旧行为：tab 清空即 setDrawer(null) 自动关抽屉——编辑器成为一等面板后必须移除
+test("closing the last editor tab resets workbench layout to settings default", () => {
   assert.doesNotMatch(
     fileEditorHook,
     /editorTabs\.length === 0 && drawer === "editor"[\s\S]{0,200}?setDrawer\(null\)/,
   );
-  // 残留 modal 模式会让抽屉分支（editorMode === "drawer" 才渲染）空白，关闭路径必须复位
-  const closeTabBlock = fileEditorHook.slice(fileEditorHook.indexOf("if (next.length === 0)"), fileEditorHook.indexOf("if (next.length === 0)") + 500);
-  assert.match(closeTabBlock, /editorModeRef\.current = "drawer"/);
-  assert.match(closeTabBlock, /setEditorMode\("drawer"\)/);
-  const closeEditorBlock = fileEditorHook.slice(fileEditorHook.indexOf("const closeEditor = useCallback"), fileEditorHook.indexOf("const closeEditor = useCallback") + 500);
-  assert.match(closeEditorBlock, /setEditorMode\("drawer"\)/);
+  const closeTabBlock = fileEditorHook.slice(
+    fileEditorHook.indexOf("if (next.length === 0)"),
+    fileEditorHook.indexOf("if (next.length === 0)") + 500,
+  );
+  assert.match(closeTabBlock, /contentOpenModeRef\.current/);
+  assert.match(closeTabBlock, /setEditorMode\(contentOpenModeRef\.current\)/);
+  const closeEditorBlock = fileEditorHook.slice(
+    fileEditorHook.indexOf("const closeEditor = useCallback"),
+    fileEditorHook.indexOf("const closeEditor = useCallback") + 500,
+  );
+  assert.match(closeEditorBlock, /setEditorMode\(contentOpenModeRef\.current\)/);
 });
 
 test("editor empty-state copy exists in both locales", () => {

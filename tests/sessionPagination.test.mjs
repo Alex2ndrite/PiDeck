@@ -36,6 +36,15 @@ test("A to B owner switch renders B's initial page without A visibleCount or loa
   assert.equal(current.isLoading, false);
 });
 
+test("append growth keeps the top message in the window (no lagged visibleCount)", () => {
+  // 旧逻辑：useEffect 追 visibleCount → 先 slice 掉顶部再补回 → 触底上跳
+  assert.equal(pagination.growVisibleCountForAppend(100, 250, 251, Infinity), 101);
+  assert.equal(pagination.growVisibleCountForAppend(100, 250, 260, Infinity), 110);
+  // 批量 ≥10 也必须跟进，否则窗口永久少条
+  assert.equal(pagination.growVisibleCountForAppend(100, 200, 215, Infinity), 115);
+  assert.equal(pagination.growVisibleCountForAppend(100, 250, 249, Infinity), 100);
+});
+
 test("old load completion, anchor, and jump owner tags cannot affect B", () => {
   const old = { ownerKey: "A", visibleCount: 100, isLoading: true };
   assert.equal(pagination.completeMessagePaginationLoad(old, "B", 400, 100, Infinity), old);

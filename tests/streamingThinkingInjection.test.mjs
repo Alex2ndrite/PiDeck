@@ -51,5 +51,5 @@ test("streaming thinking flows into the execution area, not the timeline footer"
   assert.doesNotMatch(timelineSource, /liveThinkingId=\{isRunStreaming \? liveThinkingId/);
   assert.match(timelineSource, /liveThinkingIdBySessionIdAtomFamily/);
   assert.doesNotMatch(timelineSource, /streamingThinkingByIdAtom/);
-  assert.match(turnRowSource, /isStreaming=\{props\.isStreaming\}/);
+  assert.match(turnRowSource, /isStreaming=\{props\.isStreaming \?\? false\}/);
 });

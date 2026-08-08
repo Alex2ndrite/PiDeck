@@ -5,8 +5,8 @@ import {
   PromptSuggestions,
 } from "./ComposerParts";
 import {
-  RichInput,
-} from "../app/RichInput";
+  TipTapComposer,
+} from "./composer";
 import { SessionReferenceModal } from "../app/SessionReferenceModal";
 import { t } from "../../i18n";
 import { useSessionComposerController } from "../../hooks/useSessionComposerController";
@@ -216,7 +216,7 @@ export const ComposerArea = forwardRef<HTMLElement, ComposerAreaProps>(function 
               ].filter(Boolean).join(" ")}
             >
               {/* 扩展 widget（Todo/Plan）已迁至 chat-header 左侧 SessionWidgetChips。 */}
-              <RichInput
+              <TipTapComposer
                 ref={composer.editor.ref}
                 value={composer.draft}
                 className={

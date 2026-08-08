@@ -108,6 +108,7 @@ import {
 import {
 	buildSessionOriginKey,
 	canonicalizeSessionPath,
+	toAbsoluteSessionPath,
 } from "../shared/sessionIdentity";
 import type {
 	AgentTab,
@@ -475,7 +476,7 @@ async function readCatalogSessionReferenceMessages(sessionId: string) {
 async function copyCatalogSession(sessionId: string) {
 	const entry = sessionCatalog.get(sessionId);
 	if (!entry?.filePath) throw new Error(mainCopy("session.fileNotFound"));
-	const result = await agentManager.cloneSessionFile(entry.projectId, entry.filePath) as {
+	const result = await agentManager.cloneSessionFile(entry.projectId, entry.filePath, entry.environment) as {
 		cancelled?: boolean;
 		sessionPath?: string;
 	};
@@ -2533,6 +2534,14 @@ app.whenReady().then(async () => {
 		initialSessionSettings.wslEnabled
 			? { wslDistro: initialSessionSettings.wslDistro, wslUser: initialSessionSettings.wslUser }
 			: {},
+		// 会话路径统一绝对化：pi 的 sessionDir 配置为相对路径（如 ".pi/sessions"）时，
+		// get_state 返回的 sessionFile 是相对 cwd 的；与扫描器绝对路径 originKey 不一致
+		// 会导致同一会话在侧栏出现两条记录。加载与写入边界都经此归一化。
+		(projectId, filePath, environment) => {
+			const project = projectStore.get(projectId);
+			if (!project) return filePath;
+			return toAbsoluteSessionPath(filePath, project.path, environment);
+		},
 	);
 	await sessionCatalog.load();
 	sessionRuntimeCoordinator = new SessionRuntimeCoordinator(

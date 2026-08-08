@@ -18,7 +18,10 @@ test("RichInput keeps native Enter handling without execCommand normalization", 
 
 test("the Session composer delegates newline and IME intent to the shared behavior helper", () => {
 	assert.match(controllerSource, /getComposerEnterIntent\(event, sendShortcut\)/);
-	assert.match(controllerSource, /if \(event\.nativeEvent\.isComposing \|\| event\.keyCode === 229\) return/);
+	// 建议列表的回车分支也必须走共享 IME 判定：TipTap 桥接的原生事件没有
+	// nativeEvent，手写 `event.nativeEvent?.isComposing` 会漏判合成态。
+	assert.match(controllerSource, /isComposingKeyboardEvent\(event\)/);
+	assert.doesNotMatch(controllerSource, /keyCode === 229/);
 	assert.doesNotMatch(controllerSource, /insertPlainTextAtSelection/);
 });
 

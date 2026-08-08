@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import { Brain, Check, FileText, MessageCircle, X } from "lucide-react";
+import { Check, X } from "lucide-react";
 import {
 	Dialog,
 	DialogClose,
@@ -9,35 +9,20 @@ import {
 } from "../ui-shadcn/dialog";
 import { Button } from "../ui-shadcn/button";
 import { cn } from "../../lib/utils";
-import type { AgentRunItem, MessageItem, RenderMessage } from "../app/AppUtils";
-import { summarizeMessage } from "../app/AppUtils";
+import type { AgentRunItem, RenderMessage } from "../app/AppUtils";
 import { t } from "../../i18n";
-import { formatTime, stripAnsi } from "./TimelineFormat";
-import { Checkbox } from "../ui-shadcn/checkbox";
-import { Label } from "../../components/ui-shadcn/label";
-
-function getSelectableMessageIds(
-	items: RenderMessage[],
-): string[] {
-	const ids: string[] = [];
-	for (const item of items) {
-		if (item.kind === "message" &&
-			(item.message.role === "user" || item.message.role === "assistant")) {
-			ids.push(item.message.id);
-		} else if (item.kind === "agent-run") {
-			for (const sub of item.items) {
-				if (sub.kind === "message" && sub.message.role === "assistant") {
-					ids.push(sub.message.id);
-				}
-			}
-		}
-	}
-	return ids;
-}
+import { MessageSelectionTree } from "./MessageSelectionTree";
+import {
+	getSelectableMessageIds,
+	toggleAll,
+	toggleMessage,
+	toggleRun,
+} from "../../utils/messageSelection";
 
 /**
- * 多选分享弹框：以会话树形式展示消息，用户勾选后复制分享。
- * 支持按 agent-run 层级全选或逐条选择。
+ * 多选分享弹框：勾选会话消息后复制为文本/Markdown/图片。
+ * 选择逻辑与树渲染由共享模块承担（utils/messageSelection + MessageSelectionTree），
+ * 本组件只负责弹框外壳、底部操作栏与复制动作。
  */
 export function MultiSelectModal(props: {
 	renderedRuns: RenderMessage[];
@@ -59,64 +44,24 @@ export function MultiSelectModal(props: {
 		[props.renderedRuns],
 	);
 
-	const toggleMessage = useCallback((id: string) => {
-		setSelectedIds((prev) => {
-			const next = new Set(prev);
-			if (next.has(id)) next.delete(id);
-			else next.add(id);
-			return next;
-		});
+	const handleToggleMessage = useCallback((id: string) => {
+		setSelectedIds((prev) => toggleMessage(prev, id));
 	}, []);
 
-	const isRunFullySelected = useCallback(
-		(run: AgentRunItem) => {
-			const ids = run.items
-				.filter(
-					(i): i is MessageItem =>
-						i.kind === "message" && i.message.role === "assistant",
-				)
-				.map((i) => i.message.id);
-			return ids.length > 0 && ids.every((id) => selectedIds.has(id));
-		},
-		[selectedIds],
-	);
+	const handleToggleRun = useCallback((run: AgentRunItem) => {
+		setSelectedIds((prev) => toggleRun(prev, run));
+	}, []);
 
-	const toggleRun = useCallback(
-		(run: AgentRunItem) => {
-			const ids = run.items
-				.filter(
-					(i): i is MessageItem =>
-						i.kind === "message" && i.message.role === "assistant",
-				)
-				.map((i) => i.message.id);
-			if (ids.length === 0) return;
-			const allSelected = ids.every((id) => selectedIds.has(id));
-			setSelectedIds((prev) => {
-				const next = new Set(prev);
-				for (const id of ids) {
-					if (allSelected) next.delete(id);
-					else next.add(id);
-				}
-				return next;
-			});
-		},
-		[selectedIds],
-	);
-
-	const selectAll = useCallback(() => {
-		setSelectedIds(new Set(allSelectableIds));
+	const handleSelectAll = useCallback(() => {
+		setSelectedIds((prev) => toggleAll(prev, allSelectableIds));
 	}, [allSelectableIds]);
 
-	const deselectAll = useCallback(() => {
-		setSelectedIds(new Set());
-	}, []);
-
-	/** 点击分享按钮：先显示脉冲动画，再执行复制关闭弹框 */
+	/** 点击分享按钮：先渲染一帧复制反馈，再执行复制并关闭弹框 */
 	const handleCopy = useCallback(
 		async (kind: "text" | "markdown" | "image") => {
 			setCopying(kind);
-			// 让按钮脉冲动画渲染一帧后再执行复制
-			await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 120)));
+			// 让按钮先渲染出复制反馈（Check 图标）再执行复制
+			await new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 120)));
 			setCopying(null);
 			props.onCopy(selectedIds, kind);
 		},
@@ -125,160 +70,82 @@ export function MultiSelectModal(props: {
 
 	const selectedCount = selectedIds.size;
 	const totalCount = allSelectableIds.length;
+	const busy = copying !== null;
 
 	return (
 		<Dialog open onOpenChange={(next) => !next && props.onClose()}>
 			<DialogContent
 				showCloseButton={false}
-				className={cn("flex flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(800px,calc(100vw-48px))]", "h-[min(850px,calc(100vh-48px))] w-[min(1300px,calc(100vw-48px))] max-w-[min(1300px,calc(100vw-48px))] flex flex-col overflow-hidden rounded-lg border border-border bg-bg-panel shadow-[var(--shadow-xl)] animate-in fade-in-0 slide-in-from-bottom-2 duration-150")}
+				className={cn(
+					"flex h-[min(720px,calc(100vh-48px))] w-[min(780px,calc(100vw-48px))] max-w-[min(780px,calc(100vw-48px))] flex-col gap-0 overflow-hidden rounded-lg border border-border bg-bg-panel p-0 shadow-[var(--shadow-xl)]",
+					"animate-in fade-in-0 slide-in-from-bottom-2 duration-150",
+				)}
 			>
 				<DialogHeader className="flex-row items-center justify-between px-4 py-3">
 					<DialogTitle>{t("app.multiSelectEnter")}</DialogTitle>
 					<DialogClose asChild>
-						<Button variant="ghost" size="icon" aria-label={t("common.close")} title={t("common.close")}>
+						<Button
+							variant="ghost"
+							size="icon"
+							aria-label={t("common.close")}
+							title={t("common.close")}
+						>
 							<X size={18} strokeWidth={2.2} aria-hidden="true" />
 						</Button>
 					</DialogClose>
 				</DialogHeader>
-				{/* 树状列表 */}
-				<div className="min-h-0 flex-1 overflow-y-auto px-3 py-2.5 [&>*]:my-0.5">
-					{props.renderedRuns.map((item) => {
-						if (item.kind === "message") {
-							const msg = item.message;
-							if (msg.role === "user" || msg.role === "assistant") {
-								const isChecked = selectedIds.has(msg.id);
-								return (
-									<Label
-										key={msg.id}
-										className={`flex cursor-pointer items-center gap-2 rounded-sm border border-transparent px-2.5 py-[7px] text-control leading-relaxed transition-[background,border-color] duration-100 hover:border-border-subtle hover:bg-bg-hover${isChecked ? " selected" : ""}`}
-									>
-										<Checkbox
-											checked={isChecked}
-											onChange={() => toggleMessage(msg.id)}
-											className="m-0 shrink-0 cursor-pointer accent-[var(--color-accent)]"
-										/>
-										<MessageCircle
-											size={14}
-											className="shrink-0 text-text-tertiary"
-										/>
-										<span className="flex min-w-0 flex-1 items-baseline gap-2">
-											<span className="min-w-0 truncate font-sans text-text-primary">
-												{summarizeMessage(stripAnsi(msg.text))}
-											</span>
-										</span>
-									</Label>
-								);
-							}
-							return null;
-						}
 
-						if (item.kind === "agent-run") {
-							const runChecked = isRunFullySelected(item);
-							const runHasSome = item.items.some(
-								(i) =>
-									i.kind === "message" &&
-									i.message.role === "assistant" &&
-									selectedIds.has(i.message.id),
-							);
-							const runAnyChecked = runChecked || runHasSome;
-							const assistantMsgs = item.items.filter(
-								(i): i is MessageItem =>
-									i.kind === "message" && i.message.role === "assistant",
-							);
-							if (assistantMsgs.length === 0) return null;
-
-							return (
-								<div key={item.id} className="my-1.5 overflow-hidden rounded-md border border-border-subtle bg-[color:color-mix(in_srgb,var(--color-bg-muted)_52%,transparent)]">
-									<div
-										className={`flex cursor-pointer items-center gap-2 rounded-sm border border-transparent px-2.5 py-[7px] text-control leading-relaxed transition-[background,border-color] duration-100 hover:border-border-subtle hover:bg-bg-hover run-parent cursor-pointer rounded-none border-0 border-b border-border-subtle bg-[color:color-mix(in_srgb,var(--color-bg-muted)_78%,var(--color-bg-panel))] p-2.5 font-medium select-none${runAnyChecked ? " selected" : ""}`}
-										onClick={() => toggleRun(item)}
-									>
-										<Brain size={15} className="shrink-0 text-text-tertiary" />
-										<span className="flex min-w-0 flex-1 items-baseline gap-2">
-											<span className="font-mono text-caption font-semibold tracking-[0.4px] uppercase text-text-secondary">pi</span>
-											<span className="shrink-0 text-caption whitespace-nowrap text-text-tertiary">
-												{formatTime(item.endedAt)}
-											</span>
-										</span>
-										<span className="min-w-[18px] shrink-0 rounded-[10px] bg-bg-muted px-[7px] text-center font-mono text-micro leading-[18px] text-text-tertiary">
-											{assistantMsgs.length}
-										</span>
-									</div>
-									<div className="flex flex-col gap-0.5 bg-bg-panel p-1 pl-7">
-										{assistantMsgs.map((sub) => {
-											const subChecked = selectedIds.has(sub.message.id);
-											return (
-												<Label
-													key={sub.message.id}
-													className={`flex cursor-pointer items-center gap-2 rounded-sm border border-transparent px-2.5 py-[7px] text-control leading-relaxed transition-[background,border-color] duration-100 hover:border-border-subtle hover:bg-bg-hover run-child rounded-sm p-1.5${subChecked ? " selected" : ""}`}
-												>
-													<Checkbox
-														checked={subChecked}
-														onChange={() =>
-															toggleMessage(sub.message.id)
-														}
-														className="m-0 shrink-0 cursor-pointer accent-[var(--color-accent)]"
-													/>
-													<FileText
-														size={14}
-														className="shrink-0 text-text-tertiary"
-													/>
-													<span className="flex min-w-0 flex-1 items-baseline gap-2">
-														<span className="min-w-0 truncate font-sans text-text-primary">
-															{summarizeMessage(
-																stripAnsi(sub.message.text),
-															)}
-														</span>
-													</span>
-												</Label>
-											);
-										})}
-									</div>
-								</div>
-							);
-						}
-
-						return null;
-					})}
+				{/* 消息树 */}
+				<div className="min-h-0 flex-1 overflow-y-auto px-3 py-2.5">
+					<MessageSelectionTree
+						items={props.renderedRuns}
+						selectedIds={selectedIds}
+						onToggleMessage={handleToggleMessage}
+						onToggleRun={handleToggleRun}
+					/>
 				</div>
 
-				{/* 底部操作栏 */}
-				<footer className="multi-select-modal-footer">
-					<div className="multi-select-modal-footer-top">
-						<span className="multi-select-count">
+				{/* 底部操作栏：计数 + 全选/清空 + 分享动作 */}
+				<footer className="flex shrink-0 flex-col gap-2.5 border-t border-border-subtle px-4 py-3">
+					<div className="flex items-center justify-between">
+						<span className="text-control font-medium text-text-secondary">
 							{t("app.multiSelectCount", { count: selectedCount })}
 						</span>
-						<div className="multi-select-bulk-actions">
+						<div className="flex gap-1">
 							<Button
 								variant="ghost"
 								size="sm"
-								className="multi-select-bulk-btn h-auto px-2 py-0.5 text-caption"
-								onClick={selectAll}
-								disabled={!totalCount}
+								className="h-auto px-2 py-1 text-caption"
+								onClick={handleSelectAll}
+								disabled={!totalCount || busy}
 							>
 								{t("common.selectAll")}
 							</Button>
 							<Button
 								variant="ghost"
 								size="sm"
-								className="multi-select-bulk-btn h-auto px-2 py-0.5 text-caption"
-								onClick={deselectAll}
-								disabled={!selectedCount}
+								className="h-auto px-2 py-1 text-caption"
+								onClick={() => setSelectedIds(new Set())}
+								disabled={!selectedCount || busy}
 							>
 								{t("common.deselectAll")}
 							</Button>
 						</div>
 					</div>
-					<div className="multi-select-modal-footer-bottom">
+					<div className="flex flex-wrap items-center gap-2">
 						<Button
-							variant="outline"
+							variant="default"
 							size="sm"
-							className={`multi-select-action-btn${copying === "text" ? " copying" : ""} h-auto px-4 py-1.5 text-caption shadow-none rounded-[6px]`}
-							disabled={!selectedCount || !!copying}
+							className={cn(
+								"h-auto px-4 py-1.5 shadow-none",
+								copying === "text" &&
+									"border-[var(--color-success)] bg-transparent text-[var(--color-success)] hover:bg-transparent",
+							)}
+							disabled={!selectedCount || busy}
 							onClick={() => handleCopy("text")}
 						>
 							{copying === "text" ? (
-								<Check size={14} strokeWidth={3} />
+								<Check size={14} strokeWidth={3} aria-hidden="true" />
 							) : (
 								t("app.shareAsText")
 							)}
@@ -286,12 +153,16 @@ export function MultiSelectModal(props: {
 						<Button
 							variant="outline"
 							size="sm"
-							className={`multi-select-action-btn${copying === "markdown" ? " copying" : ""} h-auto px-4 py-1.5 text-caption shadow-none rounded-[6px]`}
-							disabled={!selectedCount || !!copying}
+							className={cn(
+								"h-auto px-4 py-1.5 shadow-none",
+								copying === "markdown" &&
+									"border-[var(--color-success)] text-[var(--color-success)]",
+							)}
+							disabled={!selectedCount || busy}
 							onClick={() => handleCopy("markdown")}
 						>
 							{copying === "markdown" ? (
-								<Check size={14} strokeWidth={3} />
+								<Check size={14} strokeWidth={3} aria-hidden="true" />
 							) : (
 								t("app.shareAsMarkdown")
 							)}
@@ -299,22 +170,26 @@ export function MultiSelectModal(props: {
 						<Button
 							variant="outline"
 							size="sm"
-							className={`multi-select-action-btn${copying === "image" ? " copying" : ""} h-auto px-4 py-1.5 text-caption shadow-none rounded-[6px]`}
-							disabled={!selectedCount || !!copying}
+							className={cn(
+								"h-auto px-4 py-1.5 shadow-none",
+								copying === "image" &&
+									"border-[var(--color-success)] text-[var(--color-success)]",
+							)}
+							disabled={!selectedCount || busy}
 							onClick={() => handleCopy("image")}
 						>
 							{copying === "image" ? (
-								<Check size={14} strokeWidth={3} />
+								<Check size={14} strokeWidth={3} aria-hidden="true" />
 							) : (
 								t("app.shareAsImage")
 							)}
 						</Button>
 						<Button
-							variant="default"
+							variant="ghost"
 							size="sm"
-							className="multi-select-action-btn primary h-auto px-4 py-1.5 text-caption shadow-none rounded-[6px]"
+							className="ml-auto h-auto px-3 py-1.5 text-caption"
 							onClick={props.onClose}
-							disabled={!!copying}
+							disabled={busy}
 						>
 							{t("app.multiSelectCancel")}
 						</Button>

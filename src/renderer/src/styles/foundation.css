@@ -1085,11 +1085,25 @@ select:focus-visible {
 .shell-panel-drawer {
   height: 100%;
 }
+/* 右侧关闭时不占位：面板库偶发未折到 0 时，用 CSS 兜底吃掉缝。 */
+.wechat-shell:not(.drawer-open) .shell-panel-drawer {
+  overflow: hidden;
+  min-width: 0 !important;
+  max-width: 0 !important;
+  flex-grow: 0 !important;
+  flex-shrink: 0 !important;
+  flex-basis: 0 !important;
+}
 /* Panel 是库渲染的 flex item；内容需要明确撑满高度 */
 .shell-panel-list .chat-list-pane,
 .shell-panel-chat .chat-pane,
 .shell-panel-drawer .detail-drawer {
   height: 100%;
+}
+/* 自定义标题栏：抽屉内容从系统按钮下方开始，避免活动栏与 min/max/close 抢同一行。 */
+.custom-titlebar-enabled .shell-panel-drawer .detail-drawer {
+  padding-top: var(--window-drag-height);
+  box-sizing: border-box;
 }
 /* 抽屉/侧栏开合内容动画（AppShell）：面板库宽度即时变化，内容层补一次
    进入动画制造“滑出/淡入”感。只动 transform/opacity；animation 播完自动
@@ -1124,30 +1138,44 @@ select:focus-visible {
 }
 :root:has(.wechat-shell.custom-titlebar-enabled) {
   --window-drag-height: 40px;
+  /* 4 × 36px；拖拽层 / Tab 栏让位 / 控件条共用，避免各写 144 漂移 */
+  --window-controls-width: 144px;
 }
 .wechat-shell.custom-titlebar-enabled {
   --window-drag-height: 40px;
-  padding-top: var(--window-drag-height);
+  --window-controls-width: 144px;
+  /* 内容顶到窗口上沿：不再留空白标题条。拖拽/窗口按钮用 fixed 叠层。 */
+  padding-top: 0;
 }
 .window-drag-layer {
   position: fixed;
   top: 0;
   left: 0;
-  right: 200px;
+  right: var(--window-controls-width);
   height: var(--window-drag-height);
   z-index: 900;
-  background: var(--color-bg-sidebar);
+  /* 透明：让 Logo / Tab 露出来，只保留拖拽热区 */
+  background: transparent;
   -webkit-app-region: drag;
 }
 .window-controls {
   position: fixed;
   top: 0;
   right: 0;
-  z-index: 920;
+  width: var(--window-controls-width);
+  /* 必须高于 .session-tabs-bar(930)：否则抽屉开关会盖住关闭(X) */
+  z-index: 940;
   display: grid;
-  grid-template-columns: repeat(4, 50px);
+  /* 紧凑靠右上角：每键 36px（原 50px） */
+  grid-template-columns: repeat(4, 36px);
   height: var(--window-drag-height);
-  background: var(--color-bg-sidebar);
+  background: var(--color-bg-panel);
+  -webkit-app-region: no-drag;
+}
+/* app-region 不继承（见 toaster 注释）：后代必须显式 no-drag，
+   否则父级 exclusion 不完整时，下方 drag 矩形仍会吞掉点击。 */
+.window-controls,
+.window-controls * {
   -webkit-app-region: no-drag;
 }
 /* The sidebar restore control belongs to the titlebar, not the sidebar content. */
@@ -1167,11 +1195,13 @@ select:focus-visible {
   display: block;
 }
 .window-control:hover {
-  background: color-mix(in srgb, var(--color-text-primary) 9%, transparent);
+  /* 用实底悬停面，避免 9% 透明混色在浅色背景上几乎看不见 */
+  background: var(--color-bg-hover);
   color: var(--color-text-primary);
 }
 .window-control:active {
-  background: color-mix(in srgb, var(--color-text-primary) 14%, transparent);
+  background: var(--color-bg-active);
+  color: var(--color-text-primary);
 }
 .window-control.pin.active {
   color: var(--color-accent);
@@ -1189,23 +1219,57 @@ select:focus-visible {
   background: color-mix(in srgb, var(--color-danger) 86%, #000);
   color: var(--color-text-inverse);
 }
-.custom-titlebar-enabled .chat-list-pane {
-  margin-top: calc(-1 * var(--window-drag-height));
-  padding-top: var(--window-drag-height);
-  /* 上移了 --window-drag-height，高度同步补偿（100% + 拖拽区高），
-     否则侧栏底部悬空 40px——底栏（sidebar-bottom-actions）不贴底。 */
-  height: calc(100% + var(--window-drag-height));
-}
+/* 侧栏 Logo 行即标题栏热区；高度与窗口控件对齐。 */
 .custom-titlebar-enabled .list-toolbar {
   position: relative;
   z-index: 930;
+  height: var(--window-drag-height);
   -webkit-app-region: drag;
+}
+/* Tab 栏高于拖拽层(900)、低于窗口控件(940)。
+   Electron：drag 矩形命中优先于 z-index；任何与窗口控件重叠的 drag 都会吞掉
+   最小化/最大化点击（关闭键靠最右偶尔还能点到）。
+   根因不是「用 margin 代替 padding」这么简单——flex 子项默认 min-width:auto，
+   Tab 内容会把栏宽撑过「父宽 − margin」并画进控件区。必须同时：
+   1) margin 让位（padding 仍属本元素，整段仍是 drag）；
+   2) min-width:0 允许栏宽真正收进让位后的槽里。 */
+.custom-titlebar-enabled .session-tabs-bar {
+  position: relative;
+  z-index: 930;
+  min-height: var(--window-drag-height);
+  min-width: 0;
+  max-width: 100%;
+  padding-right: 8px;
+  overflow: hidden;
+  -webkit-app-region: drag;
+}
+/* 抽屉关闭时聊天区顶到窗口右缘，Tab 栏须给窗口控件让位；
+   抽屉打开后控件叠在抽屉顶上，会话 Tab 不再预留 144px（否则开关会与抽屉 tab 栏隔开）。 */
+.custom-titlebar-enabled:not(.drawer-open) .session-tabs-bar {
+  margin-right: var(--window-controls-width);
+}
+/* 抽屉开关：固定在会话 Tab 栏最右侧 */
+.session-tabs-bar .header-drawer-toggle {
+  color: var(--color-text-secondary);
+}
+.session-tabs-bar .header-drawer-toggle:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
+}
+.session-tabs-bar .header-drawer-toggle.active {
+  background: var(--color-bg-active);
+  color: var(--color-accent);
 }
 .custom-titlebar-enabled .list-toolbar button,
 .custom-titlebar-enabled .toolbar-actions,
 .custom-titlebar-enabled .app-badge,
 .custom-titlebar-enabled .search-row,
 .custom-titlebar-enabled .chat-header,
+.custom-titlebar-enabled .session-tabs-bar button,
+.custom-titlebar-enabled .session-tabs-bar [role="tab"],
+.custom-titlebar-enabled .session-tabs-bar a,
+.custom-titlebar-enabled .file-diff-header,
+.custom-titlebar-enabled .file-diff-header button,
 .custom-titlebar-enabled .composer,
 .custom-titlebar-enabled input,
 .custom-titlebar-enabled textarea,
@@ -1240,9 +1304,7 @@ select:focus-visible {
 }
 
 .toolbar-actions .icon-button {
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-sm);
+  /* 尺寸/圆角由 SidebarContent Button utility 承担 */
   transition:
     background-color 0.15s,
     color 0.15s;
@@ -1349,39 +1411,18 @@ select:focus-visible {
 }
 
 /*
- * The collapsed panel remains transparent; the floating restore button is the
- * only affordance, so the hidden panel must not leave a second vertical edge.
+ * 侧栏完全收起：不留 14px 竖缝；恢复入口改到会话 Tab 栏左侧。
  */
-.list-collapsed .chat-list-pane {
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  z-index: 12;
-  width: 14px;
-  border-right: 0;
-  box-shadow: none;
+.list-collapsed .shell-panel-list {
   overflow: hidden;
-  background: transparent;
-  transition: width 0.16s ease;
+  min-width: 0;
+  max-width: 0;
 }
-.list-collapsed .chat-list-pane > * {
+.list-collapsed .chat-list-pane {
   display: none;
 }
 .list-collapsed .splitter-left {
   display: none;
-}
-/* 折叠态浮动恢复按钮与会话 Tab 的 28px 行高对齐，避免按钮下沉或撑高首行。 */
-.list-toggle-native.floating {
-  position: fixed;
-  top: calc(var(--window-drag-height) + 4px);
-  left: 20px;
-  z-index: 920;
-}
-/* 折叠时标题让位：chat-header 和会话 Tab 栏都要避开恢复按钮，避免按钮覆盖当前会话标签。 */
-.wechat-shell.list-collapsed .chat-header,
-.wechat-shell.list-collapsed .session-tabs-bar {
-  padding-left: 56px;
 }
 
 /* ── 全局统一滚动条：细滑块、透明轨道，融入面板背景 ──
@@ -1985,14 +2026,10 @@ select:focus-visible {
 }
 .agent-row {
   grid-template-columns: minmax(0, 1fr);
-  min-height: 28px;
-  padding: 4px 6px 4px 28px;
+  /* 行高/内边距/圆角由 SessionTree sessionRowClass utility 承担（分层后须与项目行对齐）。 */
   margin: 1px 0 0 8px;
   background: transparent;
   color: var(--color-text-secondary);
-  /* 与项目行统一用 --radius-lg：此前 --radius-md 会覆盖 Tailwind rounded-lg，
-     导致 active 的 Agent 行与项目行圆角弧度不一致（8px vs 10px，行高差进一步放大视觉差）。 */
-  border-radius: var(--radius-lg);
   /* 会话/agent 行是 <button>：Chromium 中 button 的 width:auto 会 shrink-to-fit
      （宽度跟随内容），导致名字短的行过短、名字长的行超出被裁。
      fill-available/stretch 扣除 margin 后撑满，右边缘与项目行对齐、右圆角完整；
@@ -2063,12 +2100,9 @@ select:focus-visible {
 }
 .session-row {
   grid-template-columns: minmax(0, 1fr);
-  min-height: 28px;
+  /* 行高/内边距/圆角由 SessionTree utility 承担；此处只保留宽度与缩进 margin。 */
   margin: 2px 0 0 8px;
-  padding: 4px 6px 4px 28px;
   border: 0;
-  /* 与项目行统一用 --radius-lg，原因同 .agent-row。 */
-  border-radius: var(--radius-lg);
   /* 同 .agent-row：button 的 width:auto 是 shrink-to-fit，fill-available 扣除 margin 撑满。 */
   width: -webkit-fill-available;
   width: stretch;

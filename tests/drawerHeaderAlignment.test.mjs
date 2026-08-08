@@ -4,7 +4,7 @@ import test from "node:test";
 import { readRendererStyles } from "./helpers/rendererStyles.mjs";
 
 /**
- * pure official P2-4：drawer header 高度/背景改由 DrawerSurface Tailwind 承担。
+ * 抽屉面板不再挂「标题 + ×」顶栏；开合用 Tab 栏 PanelRight，面板切换用抽屉内活动栏。
  */
 
 const styles = readRendererStyles();
@@ -13,10 +13,11 @@ const drawerSurface = readFileSync(
   "utf8",
 );
 
-test("drawer header uses official compact chrome classes", () => {
-  assert.match(drawerSurface, /drawer-header flex h-12/);
-  assert.match(drawerSurface, /border-b border-border\/40 bg-background/);
-  assert.match(drawerSurface, /truncate text-body font-semibold/);
+test("drawer panels drop title chrome (no header + close X)", () => {
+  assert.doesNotMatch(drawerSurface, /drawer-header flex h-12/);
+  assert.doesNotMatch(drawerSurface, /drawer\.sourceControl/);
+  assert.doesNotMatch(drawerSurface, /app\.browser/);
+  assert.doesNotMatch(drawerSurface, /<X\b/);
 });
 
 test("drawer does not cast a shadow over the adjacent white pane", () => {

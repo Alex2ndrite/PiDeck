@@ -1,4 +1,4 @@
-import { HatGlasses, PanelRight } from "lucide-react";
+import { HatGlasses, Maximize2 } from "lucide-react";
 import { useAtomValue } from "jotai";
 import { selectAtom } from "jotai/utils";
 import { useMemo, type ReactNode, type RefObject } from "react";
@@ -18,13 +18,17 @@ type HeaderActions = {
   compactionCount?: number;
   isAnonymous?: boolean;
   duration?: number;
-  /** 右侧抽屉开关（main 布局：状态徽章右侧），不传则不渲染 */
-  onToggleDrawer?: () => void;
-  drawerOpen?: boolean;
   /** 将状态/操作区嵌入 Tab 栏，避免当前会话再单独占一行。 */
   embedded?: boolean;
   /** 头部左侧槽位（Todo/Plan 等扩展 widget chips）；会话标题迁走后左侧留空，widget 入口落在这里。 */
   widgetChips?: ReactNode;
+  /**
+   * 分屏栏内显示本栏会话标题，避免「共享顶栏 Tab ↔ 左右栏」对不上号。
+   * 单栏时标题已在外置 Tab 上，通常不传。
+   */
+  paneTitle?: string;
+  /** 退出会话分屏（扩大为单栏）；仅分屏时提供 */
+  onExitSplit?: () => void;
 };
 
 type LegacySessionHeaderProps = HeaderActions & {
@@ -47,9 +51,10 @@ type ModernSessionHeaderProps = HeaderActions & {
 export type SessionHeaderProps = LegacySessionHeaderProps | ModernSessionHeaderProps;
 
 /**
- * 渲染会话状态徽章与抽屉入口。
- * 会话运行控制（停止/重启）已迁入 Tab 下拉（SessionTabsBar），此组件不再承载操作菜单；
- * embedded 模式供 Tab 栏复用；普通模式保留旧 header 外壳，便于兼容其他调用方。
+ * 渲染会话状态徽章（+ 分屏身份标题）。
+ * 会话运行控制（停止/重启）已迁入 Tab 下拉（SessionTabsBar 的 canStopCurrent 链路），
+ * 此组件不再承载操作菜单；embedded 模式供 Tab 栏 actions 复用；普通模式保留
+ * 分屏 pane 外壳（paneTitle + 退出分屏）。
  */
 export function SessionHeader(props: SessionHeaderProps) {
   const sessionMode = props.mode === "session";
@@ -77,7 +82,7 @@ export function SessionHeader(props: SessionHeaderProps) {
   const actions = (
     <div
       ref={props.embedded ? props.headerRef : undefined}
-      className={`chat-header-actions flex min-w-0 items-center justify-end gap-1.5${props.embedded ? " h-7 w-auto shrink-0" : " w-full"}${isStarting ? " loading" : ""}`}
+      className={`chat-header-actions flex min-w-0 items-center justify-end gap-1.5${props.embedded ? " h-7 w-auto shrink-0" : ""}${isStarting ? " loading" : ""}`}
     >
       {props.widgetChips}
       {isAnonymous && (
@@ -86,20 +91,6 @@ export function SessionHeader(props: SessionHeaderProps) {
         </span>
       )}
       <SessionStatus state={runtimeState} duration={props.duration} cacheHitHistory={cacheStats[sessionId]?.cacheHitHistory} />
-      <div className="header-actions-right flex items-center gap-1.5">
-        {props.onToggleDrawer && (
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label={props.drawerOpen ? t("app.collapseDrawer") : t("app.expandDrawer")}
-            title={props.drawerOpen ? t("app.collapseDrawer") : t("app.expandDrawer")}
-            className={`header-drawer-toggle size-7${props.drawerOpen ? " active" : ""}`}
-            onClick={props.onToggleDrawer}
-          >
-            <PanelRight size={13} strokeWidth={2} aria-hidden="true" />
-          </Button>
-        )}
-      </div>
     </div>
   );
 
@@ -108,9 +99,38 @@ export function SessionHeader(props: SessionHeaderProps) {
     <div
       ref={props.headerRef}
       role="banner"
-      /* 仅作为旧调用方兼容壳；当前 SessionView 使用 embedded 模式。 */
-      className="chat-header grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-b border-border/40 bg-background px-3 py-1"
+      /* 普通模式：分屏 pane 的会话身份行（Tab 已外置）。
+         底部分隔线去掉：分屏身份标题下再叠一条线过于碎。 */
+      className="chat-header grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 bg-background px-3 py-1"
     >
+      <div className="flex min-w-0 items-center gap-1.5">
+        {props.onExitSplit ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            className="size-7 shrink-0 text-muted-foreground hover:text-foreground"
+            title={t("session.split.exit")}
+            aria-label={t("session.split.exit")}
+            onClick={(event) => {
+              event.stopPropagation();
+              props.onExitSplit?.();
+            }}
+          >
+            <Maximize2 className="size-3.5" aria-hidden="true" />
+          </Button>
+        ) : null}
+        {props.paneTitle ? (
+          <span
+            className="session-pane-title min-w-0 truncate text-caption font-medium text-foreground"
+            title={props.paneTitle}
+          >
+            {props.paneTitle}
+          </span>
+        ) : (
+          <span className="min-w-0" aria-hidden="true" />
+        )}
+      </div>
       {actions}
     </div>
   );

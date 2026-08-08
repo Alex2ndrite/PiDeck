@@ -3,7 +3,63 @@
  *
  * 不变量：tabs 数组始终为 [pinned...] + [normal...]（固定在前），
  * 由本模块的操作维护；渲染层直接按 tabs 顺序展示即可。
+ *
+ * 另有 VS Code 式「预览 Tab」：previewId 指向至多一个斜体临时 Tab；
+ * 单击打开会替换预览，双击（或显式永久打开）后变为常驻 Tab。
+ * 注意：pinned 是「钉在前面」；preview 是「临时预览」，二者正交。
  */
+
+export type SessionTabOpenMode = "preview" | "permanent";
+
+/**
+ * 以预览方式打开会话（VS Code 单击文件）：
+ * - 已是常驻 Tab：不改列表，也不降级为预览；
+ * - 已是当前预览：不变；
+ * - 否则：替换旧预览 Tab，并登记为新预览。
+ */
+export function openPreviewSessionTab(
+	tabs: readonly string[],
+	pinned: readonly string[],
+	previewId: string | null,
+	sessionId: string,
+): { tabs: string[]; previewId: string | null } {
+	if (!sessionId) return { tabs: [...tabs], previewId };
+	const isResident = tabs.includes(sessionId) && sessionId !== previewId;
+	if (isResident) return { tabs: [...tabs], previewId };
+	if (sessionId === previewId && tabs.includes(sessionId)) {
+		return { tabs: [...tabs], previewId };
+	}
+
+	let next = tabs.filter((id) => id !== previewId || id === sessionId);
+	if (!next.includes(sessionId)) {
+		const pinnedTabs = next.filter((id) => pinned.includes(id));
+		const normalTabs = next.filter((id) => !pinned.includes(id));
+		next = [...pinnedTabs, ...normalTabs, sessionId];
+	}
+	return { tabs: next, previewId: sessionId };
+}
+
+/**
+ * 以常驻方式打开会话（VS Code 双击 / 钉住预览）：
+ * - 不在列表则追加到普通区末尾；
+ * - 若正是预览 Tab，则清除 preview 标记（斜体 → 正体）。
+ */
+export function openPermanentSessionTab(
+	tabs: readonly string[],
+	pinned: readonly string[],
+	previewId: string | null,
+	sessionId: string,
+): { tabs: string[]; previewId: string | null } {
+	if (!sessionId) return { tabs: [...tabs], previewId };
+	let next = [...tabs];
+	if (!next.includes(sessionId)) {
+		const pinnedTabs = next.filter((id) => pinned.includes(id));
+		const normalTabs = next.filter((id) => !pinned.includes(id));
+		next = [...pinnedTabs, ...normalTabs, sessionId];
+	}
+	const nextPreview = previewId === sessionId ? null : previewId;
+	return { tabs: next, previewId: nextPreview };
+}
 
 /** 切换固定状态：pin 后移入固定区末尾；unpin 后移入普通区开头（紧跟固定区）。 */
 export function togglePinSessionTab(

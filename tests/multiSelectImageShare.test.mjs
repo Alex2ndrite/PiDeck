@@ -13,12 +13,12 @@ function loadAppUtils() {
       target: ts.ScriptTarget.ES2022,
     },
   });
-  // AppUtils 拆分后引用了 ./RichInput 的 formatFilePathRef；vm 沙箱不会解析相对模块，显式桩掉。
+  // AppUtils 引用 session/composer/chips；vm 沙箱不会解析相对模块，显式桩掉。
   const sandbox = {
     exports: {},
     location: { href: "file:///Users/test/app" },
     require: (id) => {
-      if (id === "./RichInput") return { formatFilePathRef: (p) => p };
+			if (id === "../session/composer/chips") return { formatFilePathRef: (p) => p };
       return {};
     },
   };

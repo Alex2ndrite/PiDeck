@@ -197,7 +197,8 @@ export function ProjectTree(props: {
       const collapsed = props.controller.isProjectCollapsed(project.id);
       const sessions = props.controller.catalog.sessionsByProject[project.id] ?? [];
       return (
-        <section key={project.id} className="mb-4 rounded-xl p-1" aria-label={t("app.chatProject")} role="treeitem" aria-expanded={!collapsed}>
+        <section key={project.id} className="mb-4" aria-label={t("app.chatProject")} role="treeitem" aria-expanded={!collapsed}>
+          {/* 与下方「项目」标题栏共用：同 px-2 + text-caption，避免 section p-1 / 标题 px-1 叠出明显错位。 */}
           <div
             className="flex items-center justify-between px-2 pb-1"
             onContextMenu={(event) => {
@@ -258,7 +259,7 @@ export function ProjectTree(props: {
         {/* 标题栏右侧提供添加项目与批量折叠入口，行为与搜索框旁的 FolderPlus 按钮一致；
             与 Chat 标题栏按钮（size-6 圆角悬浮层）同款视觉，避免层级混乱。 */}
         <div className="flex items-center justify-between px-2 pb-1">
-          <span className="px-1 text-micro font-semibold uppercase tracking-wide text-muted-foreground">{t("app.sidebarProjects")}</span>
+          <span className="text-caption font-medium text-muted-foreground">{t("app.sidebarProjects")}</span>
           <div className="flex items-center gap-0.5">
             <button
               type="button"

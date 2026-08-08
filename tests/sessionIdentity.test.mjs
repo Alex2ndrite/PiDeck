@@ -105,3 +105,59 @@ test("AgentManager keys preserve WSL case and identity at the process boundary",
   assert.match(agentManagerSource, /buildAgentSessionKey\(input/);
   assert.doesNotMatch(agentManagerSource, /normalizeSessionPathForCompare/);
 });
+
+// ── toAbsoluteSessionPath（相对 sessionFile 归一化）──────────────
+// 回归背景：pi 的 sessionDir 配置为 ".pi/sessions" 时，get_state 返回的
+// sessionFile 是相对 cwd 的；原样写入 catalog 会与扫描器绝对路径构成同文件双记录
+// （侧栏重复显示两个会话），且文件操作落到错误位置。
+
+test("resolves a native relative sessionFile against the project path", () => {
+  const { toAbsoluteSessionPath } = loadModule();
+  assert.equal(
+    toAbsoluteSessionPath(".pi\\sessions\\2026-08-08T10-47-19-239Z_abc.jsonl", "D:\\Project\\PiDeck", "native"),
+    "D:\\Project\\PiDeck\\.pi\\sessions\\2026-08-08T10-47-19-239Z_abc.jsonl",
+  );
+});
+
+test("resolves native relative paths with forward slashes and normalizes output to backslashes", () => {
+  const { toAbsoluteSessionPath } = loadModule();
+  assert.equal(
+    toAbsoluteSessionPath(".pi/sessions/session.jsonl", "D:/Project/PiDeck", "native"),
+    "D:\\Project\\PiDeck\\.pi\\sessions\\session.jsonl",
+  );
+});
+
+test("passes through already-absolute native and WSL paths", () => {
+  const { toAbsoluteSessionPath } = loadModule();
+  assert.equal(
+    toAbsoluteSessionPath("C:\\Users\\dev\\.pi\\sessions\\a.jsonl", "D:\\Project", "native"),
+    "C:\\Users\\dev\\.pi\\sessions\\a.jsonl",
+  );
+  assert.equal(
+    toAbsoluteSessionPath("/mnt/d/Project/.pi/sessions/a.jsonl", "D:\\Project", "wsl"),
+    "/mnt/d/Project/.pi/sessions/a.jsonl",
+  );
+});
+
+test("resolves a WSL relative sessionFile against the /mnt/<drive> project base", () => {
+  const { toAbsoluteSessionPath } = loadModule();
+  assert.equal(
+    toAbsoluteSessionPath(".pi/sessions/session.jsonl", "D:\\Project\\PiDeck", "wsl"),
+    "/mnt/d/Project/PiDeck/.pi/sessions/session.jsonl",
+  );
+});
+
+test("relative and absolute forms canonicalize to the same origin key", () => {
+  const { buildSessionOriginKey, toAbsoluteSessionPath } = loadModule();
+  const relative = buildSessionOriginKey({
+    source: "pi",
+    environment: "native",
+    filePath: toAbsoluteSessionPath(".pi/sessions/session.jsonl", "D:\\Project\\PiDeck", "native"),
+  });
+  const absolute = buildSessionOriginKey({
+    source: "pi",
+    environment: "native",
+    filePath: "D:\\Project\\PiDeck\\.pi\\sessions\\session.jsonl",
+  });
+  assert.equal(relative, absolute);
+});

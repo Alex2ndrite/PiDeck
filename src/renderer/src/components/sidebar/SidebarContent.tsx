@@ -34,7 +34,15 @@ export type SidebarActions = {
     changeChatPath?: (project: Project) => Promise<void>;
   };
   sessions: {
-    open: (projectId: string, sessionId: string) => Promise<void>;
+    /** 单击默认 preview；双击传 permanent。侧栏拖拽分屏也会走 open。 */
+    open: (
+      projectId: string,
+      sessionId: string,
+      tabMode?: "preview" | "permanent",
+    ) => Promise<void>;
+    /** 侧栏会话开始拖拽（与 Tab 栏共用 MIME，可拖到聊天区边缘分屏） */
+    beginDrag?: (sessionId: string) => void;
+    endDrag?: () => void;
     createDraft: (projectId: string) => Promise<void>;
     createAnonymous: (projectId: string) => Promise<void>;
     deleteDraft: (session: SessionRecord) => Promise<void>;
@@ -123,8 +131,9 @@ export function SidebarContent(props: SidebarContentProps) {
       className="chat-list-pane v3-braun flex h-full min-w-0 flex-col overflow-hidden bg-sidebar text-sidebar-foreground"
       aria-label={t("app.search")}
     >
-      <div className="sidebar-body flex min-h-0 flex-1 flex-col gap-2 px-1.5 py-1">
-        {props.chrome}
+      {/* 品牌区提到 body 外：贴侧栏顶边，不被 sidebar-body 的 px/py 顶开（logo 怼左上）。 */}
+      {props.chrome}
+      <div className="sidebar-body flex min-h-0 flex-1 flex-col gap-2 px-2 pt-1 pb-1">
         {/* 搜索只过滤导航和当前项目内容；会话加载仍由 controller/App 的懒加载策略负责。 */}
         <div className="search-row grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-xl border border-border/60 bg-muted/25 p-1">
           <div className="search-box relative min-w-0">
@@ -166,15 +175,14 @@ export function SidebarContent(props: SidebarContentProps) {
           />
         </section>
       </div>
-      {/* 底栏在 sidebar-body 之外（aside 直接子）：body 的 p-2 / v3-braun space-4
-          内边距不再把底栏从侧栏底边顶起，真正贴底 */}
+      {/* 底栏贴侧栏左下角：无垂直内边距，水平仅留 2px 防贴边裁切。 */}
       {!props.isLanWeb && (
-        <div className="toolbar-actions sidebar-bottom-actions flex shrink-0 items-center gap-1 border-t border-border/40 px-4 py-2">
-          <div className="sidebar-bottom-primary-actions flex min-w-0 flex-1 items-center gap-1">
-            <Button type="button" variant="ghost" size="icon" className="icon-button settings-icon size-8" title={t("settings.title")} aria-label={t("settings.title")} onClick={props.onOpenSettings}><Settings className="size-4" /></Button>
-            <Button type="button" variant="ghost" size="icon" className="icon-button config-icon size-8" title={t("config.title")} aria-label={t("config.title")} onClick={props.onOpenConfig}><Sliders className="size-4" /></Button>
-            <Button type="button" variant="ghost" size="icon" className="icon-button feedback-icon size-8" title={t("feedback.title")} aria-label={t("feedback.title")} onClick={props.onOpenFeedback}><MessageSquare className="size-4" /></Button>
-            <Button type="button" variant="ghost" size="icon" className="icon-button homepage-icon size-8" title={t("app.homepage")} aria-label={t("app.homepage")} onClick={props.onOpenHomepage}><Globe className="size-4" /></Button>
+        <div className="toolbar-actions sidebar-bottom-actions flex shrink-0 items-center gap-0 border-t border-border/40 px-0.5 py-0">
+          <div className="sidebar-bottom-primary-actions flex min-w-0 flex-1 items-center gap-0">
+            <Button type="button" variant="ghost" size="icon-sm" className="icon-button settings-icon size-8 rounded-none text-muted-foreground hover:bg-muted hover:text-foreground" title={t("settings.title")} aria-label={t("settings.title")} onClick={props.onOpenSettings}><Settings className="size-4" /></Button>
+            <Button type="button" variant="ghost" size="icon-sm" className="icon-button config-icon size-8 rounded-none text-muted-foreground hover:bg-muted hover:text-foreground" title={t("config.title")} aria-label={t("config.title")} onClick={props.onOpenConfig}><Sliders className="size-4" /></Button>
+            <Button type="button" variant="ghost" size="icon-sm" className="icon-button feedback-icon size-8 rounded-none text-muted-foreground hover:bg-muted hover:text-foreground" title={t("feedback.title")} aria-label={t("feedback.title")} onClick={props.onOpenFeedback}><MessageSquare className="size-4" /></Button>
+            <Button type="button" variant="ghost" size="icon-sm" className="icon-button homepage-icon size-8 rounded-none text-muted-foreground hover:bg-muted hover:text-foreground" title={t("app.homepage")} aria-label={t("app.homepage")} onClick={props.onOpenHomepage}><Globe className="size-4" /></Button>
           </div>
         </div>
       )}

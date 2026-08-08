@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { t } from "../../i18n";
-import { ArrowLeft, Edit3, Maximize, Minimize2, SquareSplitHorizontal, X, Eye, FileCode } from "lucide-react";
+import { ArrowLeft, Edit3, Maximize, Minimize2, PencilOff, SquareSplitHorizontal, X, Eye, FileCode } from "lucide-react";
 import { Button } from "../ui-shadcn/button";
+import { cn } from "../../lib/utils";
 import { MarkdownStream } from "../session/MarkdownStream";
 import { defaultUrlTransform } from "../session/MarkdownLinkCore";
 import { defaultRemarkPlugins, defaultRehypePlugins } from "streamdown";
 import rehypeKatex from "rehype-katex";
 import { CodeMirrorEditor } from "./CodeMirrorEditor";
 import { MergeDiffView } from "./MergeDiffView";
-import { formatFilePathRef } from "./RichInput";
+import { formatFilePathRef } from "../session/composer/chips";
 
 import { isBinaryExtension, isImageFile, isPdfFile } from "../../utils/isTextFile";
 
@@ -17,21 +18,23 @@ type ViewMode = "view" | "diff";
 export function FileDiffViewer(props: {
 	filePath: string;
 	mode?: ViewMode;
-	/** 展示模式：弹框（modal）或侧栏（drawer） */
-	displayMode?: "modal" | "drawer";
-	/** 在弹框/侧栏之间切换 */
+	/** 展示模式：drawer=窄抽屉；split/maximize=中间栏宿主；modal=遗留全屏弹层 */
+	displayMode?: "modal" | "drawer" | "split" | "maximize";
+	/** 在分屏 / 占满中间栏之间切换（中间栏宿主）；遗留 drawer↔modal 也走此回调 */
 	onToggleMode?: () => void;
 	/** 返回按钮回调（侧栏模式时提供，点击返回上一面板） */
 	onBack?: () => void;
 	onClose: () => void;
-	/** 多 tab 支持：全部 tab 列表 */
-	tabs?: { id: string; filePath: string; label?: string }[];
+	/** 多 tab 支持：全部 tab 列表（≥1 时顶栏始终展示，与 VS Code 一致） */
+	tabs?: { id: string; filePath: string; label?: string; preview?: boolean }[];
 	/** 当前活跃 tab ID */
 	activeTabId?: string | null;
 	/** 切换到指定 tab */
 	onSelectTab?: (id: string) => void;
 	/** 关闭指定 tab */
 	onCloseTab?: (id: string) => void;
+	/** 双击预览 Tab → 常驻 */
+	onPromotePreviewTab?: (id: string) => void;
 	readContent: (path: string) => Promise<string>;
 	/** 从会话消息 meta 中提取的工具执行前原始内容，优先于 Git HEAD。 */
 	originalContent?: string;
@@ -45,6 +48,11 @@ export function FileDiffViewer(props: {
 	theme?: "light" | "dark";
 	/** 单个文件超过此大小（MB）时不加载编辑器。默认 5MB。 */
 	maxFileSizeMB?: number;
+	/**
+	 * Tab 已上收到 SessionTabsBar 时为 true：不再渲染内容区内嵌 Tab 栏/重复文件名，
+	 * 只保留右侧动作钮（预览/分屏/关闭）。
+	 */
+	chromeTabsExternal?: boolean;
 }) {
 	const maxFileSize = (props.maxFileSizeMB ?? 5) * 1024 * 1024;
 	const [content, setContent] = useState("");
@@ -290,32 +298,59 @@ export function FileDiffViewer(props: {
 	const language = ext;
 
 	const displayMode = props.displayMode ?? "drawer";
+	const isWorkbenchPane = displayMode === "split" || displayMode === "maximize";
+	const showInlineTabs =
+		!props.chromeTabsExternal && Boolean(props.tabs && props.tabs.length > 0);
 	const headerContent = (
 		<>
-			{props.tabs && props.tabs.length > 1 && (
-				<div className="file-diff-tab-bar">
-					{props.tabs.map((tab) => (
-						<div
-							key={tab.id}
-							role="tab"
-							aria-selected={tab.id === props.activeTabId}
-							className={`file-diff-tab${tab.id === props.activeTabId ? " active" : ""}`}
-							onClick={() => props.onSelectTab?.(tab.id)}
-							onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); props.onSelectTab?.(tab.id); } }}
-							title={tab.label ?? tab.filePath}
-							tabIndex={0}
-						>
-							<span>{tab.label ?? tab.filePath.split(/[/\\]/).pop()}</span>
-							<button
-								type="button"
-								className="file-diff-tab-close"
-								onClick={(e) => { e.stopPropagation(); props.onCloseTab?.(tab.id); }}
-								aria-label={t("common.close")}
+			{showInlineTabs && props.tabs && (
+				<div className="file-diff-tab-bar" role="tablist">
+					{props.tabs.map((tab) => {
+						const tabLabel =
+							tab.label ?? tab.filePath.split(/[/\\]/).pop() ?? tab.filePath;
+						const showDirty =
+							tab.id === props.activeTabId && dirty
+								? t("editor.unsavedMarker")
+								: "";
+						return (
+							<div
+								key={tab.id}
+								role="tab"
+								aria-selected={tab.id === props.activeTabId}
+								className={cn(
+									"file-diff-tab",
+									tab.id === props.activeTabId && "active",
+									tab.preview && "italic text-muted-foreground",
+								)}
+								onClick={() => props.onSelectTab?.(tab.id)}
+								onDoubleClick={() => props.onPromotePreviewTab?.(tab.id)}
+								onKeyDown={(e) => {
+									if (e.key === "Enter" || e.key === " ") {
+										e.preventDefault();
+										props.onSelectTab?.(tab.id);
+									}
+								}}
+								title={tab.label ?? tab.filePath}
+								tabIndex={0}
 							>
-								<X size={11} />
-							</button>
-						</div>
-					))}
+								<span>
+									{tabLabel}
+									{showDirty}
+								</span>
+								<button
+									type="button"
+									className="file-diff-tab-close"
+									onClick={(e) => {
+										e.stopPropagation();
+										props.onCloseTab?.(tab.id);
+									}}
+									aria-label={t("common.close")}
+								>
+									<X size={11} />
+								</button>
+							</div>
+						);
+					})}
 				</div>
 			)}
 			<div className="file-diff-header">
@@ -331,11 +366,23 @@ export function FileDiffViewer(props: {
 						<ArrowLeft size={18} />
 					</Button>
 				)}
-				<span className="file-diff-title" title={props.filePath}>
-					{fileName}
-					{dirty && t("editor.unsavedMarker")}
-					{showHint && <span className="file-diff-hint">{t("app.saveFileShortcut")}</span>}
-				</span>
+				{/* 外置 chrome / 内嵌 Tab：文件名已在 Tab 上，标题槽只留脏标提示 */}
+				{props.chromeTabsExternal || showInlineTabs ? (
+					<span className="file-diff-title min-w-0 flex-1 truncate">
+						{dirty && !props.chromeTabsExternal && t("editor.unsavedMarker")}
+						{showHint && (
+							<span className="file-diff-hint">{t("app.saveFileShortcut")}</span>
+						)}
+					</span>
+				) : (
+					<span className="file-diff-title" title={props.filePath}>
+						{fileName}
+						{dirty && t("editor.unsavedMarker")}
+						{showHint && (
+							<span className="file-diff-hint">{t("app.saveFileShortcut")}</span>
+						)}
+					</span>
+				)}
 				<div className="file-diff-header-actions">
 					{(isMarkdown || isHtml || isSvg) && !isDiffMode && !loading && !error && (
 						<Button
@@ -384,7 +431,8 @@ export function FileDiffViewer(props: {
 							title={t("app.exitEdit")}
 							onClick={handleExitEdit}
 						>
-							<X size={15} />
+							{/* 退出编辑≠关闭文件：不用 X，避免与 Tab/阅读面关闭叉混淆 */}
+							<PencilOff size={15} />
 						</Button>
 					)}
 					{props.onToggleMode && (
@@ -392,15 +440,35 @@ export function FileDiffViewer(props: {
 							variant="ghost"
 							size="icon-sm"
 							className="file-diff-toggle-btn"
-							title={displayMode === "modal" ? t("app.minimizeToDrawer") : t("app.expandToModal")}
+							title={
+								isWorkbenchPane
+									? displayMode === "maximize"
+										? t("app.restoreSplit")
+										: t("app.maximizeInWorkbench")
+									: displayMode === "modal"
+										? t("app.minimizeToDrawer")
+										: t("app.expandToModal")
+							}
 							onClick={props.onToggleMode}
 						>
-							{displayMode === "modal" ? <Minimize2 size={15} /> : <Maximize size={15} />}
+							{(isWorkbenchPane ? displayMode === "maximize" : displayMode === "modal")
+								? <Minimize2 size={15} />
+								: <Maximize size={15} />}
 						</Button>
 					)}
-					<Button variant="ghost" size="icon-sm" className="file-diff-close" onClick={handleClose} aria-label={t("common.close")}>
-						<X size={18} />
-					</Button>
+					{/* 外置 chrome 时关闭归总 Tab 栏；内容区再放 X 会与退出编辑语义打架 */}
+					{!props.chromeTabsExternal && (
+						<Button
+							variant="ghost"
+							size="icon-sm"
+							className="file-diff-toggle-btn"
+							onClick={handleClose}
+							aria-label={t("common.close")}
+							title={t("common.close")}
+						>
+							<X size={15} />
+						</Button>
+					)}
 				</div>
 			</div>
 			<div className="file-diff-body">

@@ -101,7 +101,10 @@ test("UI: AnswerOutput live path; TurnRow does not subscribe streaming atom", ()
     "utf8",
   );
   assert.match(answer, /streamingTextByIdAtom/);
-  assert.match(answer, /useSmoothStream/);
+  // live 走 MarkdownStream（与思考同构）：打字机收进 MarkdownStream，
+  // 不得自持 useSmoothStream 造成双重打字机
+  assert.match(answer, /<MarkdownStream/);
+  assert.doesNotMatch(answer, /from "\.\.\/\.\.\/utils\/useSmoothStream"/);
   assert.match(answer, /mode: "live" \| "settled"/);
   assert.match(answer, /execution-interim markdown-body/);
 

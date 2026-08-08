@@ -37,16 +37,21 @@ const reactStub = {
   useRef: (value) => ({ current: value }),
 };
 
-function loadRichInput() {
+function loadChips() {
+  return compile("src/renderer/src/components/session/composer/chips.ts");
+}
+
+function loadRichInput(chips) {
   return compile("src/renderer/src/components/app/RichInput.tsx", {
     react: reactStub,
     "react/jsx-runtime": { jsx: () => null, jsxs: () => null, Fragment: {} },
+    "../session/composer/chips": chips,
   });
 }
 
-function loadAppUtils(richInput) {
+function loadAppUtils(chips) {
   return compile("src/renderer/src/components/app/AppUtils.ts", {
-    "./RichInput": richInput,
+    "../session/composer/chips": chips,
   });
 }
 
@@ -60,8 +65,9 @@ function createDataTransfer() {
   };
 }
 
-const richInput = loadRichInput();
-const appUtils = loadAppUtils(richInput);
+const chipsModule = loadChips();
+const richInput = loadRichInput(chipsModule);
+const appUtils = loadAppUtils(chipsModule);
 const {
   PI_FILE_NODE_DRAG_MIME,
   PI_FILE_PATH_DRAG_MIME,

@@ -103,10 +103,10 @@ export function FileTree(props: {
 								size={12}
 								className={`shrink-0 text-text-tertiary transition-transform duration-150${props.collapsedDirs.has(dir) ? " -rotate-90" : " rotate-0"}`}
 							/>
-							<span className="min-w-0 flex-1 truncate font-mono text-xs text-text-secondary" title={dir || "/"}>
+							<span className="min-w-0 flex-1 truncate text-xs text-text-secondary" title={dir || "/"}>
 								{shortenDir(dir) || "/"}
 							</span>
-							<span className="ml-auto px-1 font-mono text-[11px] text-text-tertiary">{resources.length}</span>
+							<span className="ml-auto px-1 text-[11px] tabular-nums text-text-tertiary">{resources.length}</span>
 						</div>
 					)}
 					{(!props.collapsedDirs.has(dir) || isSingleRoot) && resources.map((r) => {
@@ -259,7 +259,7 @@ export function ResourceRow(props: {
     ? compareStatusLetter(props.compareStatus)
     : props.letter;
   return (
-    <div className={`group git-resource-row flex h-[26px] items-center pr-[7px] font-mono text-sm leading-[26px] hover:bg-[var(--git-panel-hover)] focus-within:bg-[var(--git-panel-hover)] ${tone}`} title={props.path}>
+    <div className={`group git-resource-row flex h-[26px] items-center pr-[7px] text-sm leading-[26px] hover:bg-[var(--git-panel-hover)] focus-within:bg-[var(--git-panel-hover)] ${tone}`} title={props.path}>
       {props.onOpen ? (
         <button
           type="button"
@@ -304,7 +304,7 @@ export function ResourceRow(props: {
           ))}
         </div>
       )}
-      <span className="ml-[5px] flex w-4 shrink-0 justify-end font-mono text-xs font-semibold text-right text-[var(--git-desc-fg)]" aria-hidden="true">
+      <span className="ml-[5px] flex w-4 shrink-0 justify-end text-xs font-semibold text-right text-[var(--git-desc-fg)]" aria-hidden="true">
         {opening ? <Loader2 size={13} className="animate-spin" /> : letter}
       </span>
     </div>
@@ -331,7 +331,7 @@ export function ResourceGroup(props: {
           onClick={props.onToggle}
         >
           <Twistie open={props.open} />
-          <span className="ml-px min-w-0 flex-1 truncate font-mono text-[13px] font-semibold tracking-normal uppercase text-[var(--git-panel-fg)]">{props.title}</span>
+          <span className="ml-px min-w-0 flex-1 truncate text-[13px] font-semibold tracking-normal text-[var(--git-panel-fg)]">{props.title}</span>
         </button>
         {props.allAction && (
           <div className="hidden items-center gap-px group-hover:flex group-focus-within:flex group-[.open]:flex">
@@ -347,7 +347,7 @@ export function ResourceGroup(props: {
             </Button>
           </div>
         )}
-        <span className="ml-1 min-w-[14px] text-right font-mono text-xs text-[var(--git-desc-fg)]">{props.count}</span>
+        <span className="ml-1 min-w-[14px] text-right text-xs tabular-nums text-[var(--git-desc-fg)]">{props.count}</span>
       </div>
       {props.open && (
         <div className="min-w-0">{props.children}</div>
