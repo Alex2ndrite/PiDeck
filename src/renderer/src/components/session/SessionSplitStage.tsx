@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -17,8 +17,6 @@ export type SessionSplitStageProps = {
   layout: SessionSplitLayout | null;
   /** 正在拖拽的会话 Tab id；无拖拽时不显示落点预览 */
   draggingSessionId: string | null;
-  /** 单栏时的宿主会话（用于 drop 计算） */
-  hostSessionId: string | undefined;
   onDropSplit: (draggedSessionId: string, edge: SessionSplitEdge) => void;
   /** 单栏内容；分屏时忽略 */
   solo: ReactNode;
@@ -28,15 +26,23 @@ export type SessionSplitStageProps = {
   second: ReactNode;
 };
 
+function isSessionTabDrag(event: React.DragEvent, draggingSessionId: string | null): boolean {
+  if (draggingSessionId) return true;
+  // dragover 阶段自定义 MIME 可读 types（getData 在部分浏览器为空）
+  return event.dataTransfer.types.includes(SESSION_TAB_DRAG_MIME);
+}
+
 /**
  * 会话区分屏舞台：边缘落点预览 + 双栏可拖拽分隔。
  * 只负责几何与呈现；分屏策略由 onDropSplit（workspace chrome）决定。
+ *
+ * 用 capture 阶段拦截会话 Tab 拖拽，避免 composer / timeline 的 dragOver
+ * 抢走 drop（表现为边缘预览有了、松手却没反应）。
  */
 export function SessionSplitStage(props: SessionSplitStageProps) {
   const {
     layout,
     draggingSessionId,
-    hostSessionId,
     onDropSplit,
     solo,
     first,
@@ -47,12 +53,19 @@ export function SessionSplitStage(props: SessionSplitStageProps) {
 
   const clearHover = useCallback(() => setHoverEdge(null), []);
 
-  const handleDragOver = useCallback(
+  // Tab/侧栏的 dragend 发生在舞台外；chrome 清 draggingSessionId 时必须同步清预览，
+  // 否则取消拖拽后边缘遮罩可能残留。
+  useEffect(() => {
+    if (!draggingSessionId) clearHover();
+  }, [draggingSessionId, clearHover]);
+
+  const handleDragOverCapture = useCallback(
     (event: React.DragEvent) => {
-      if (!draggingSessionId) return;
+      if (!isSessionTabDrag(event, draggingSessionId)) return;
       const root = rootRef.current;
       if (!root) return;
       event.preventDefault();
+      event.stopPropagation();
       event.dataTransfer.dropEffect = "move";
       const edge = resolveSessionSplitEdge(
         event.clientX,
@@ -64,9 +77,11 @@ export function SessionSplitStage(props: SessionSplitStageProps) {
     [draggingSessionId],
   );
 
-  const handleDrop = useCallback(
+  const handleDropCapture = useCallback(
     (event: React.DragEvent) => {
+      if (!isSessionTabDrag(event, draggingSessionId)) return;
       event.preventDefault();
+      event.stopPropagation();
       const dragged =
         event.dataTransfer.getData(SESSION_TAB_DRAG_MIME) ||
         draggingSessionId ||
@@ -77,10 +92,9 @@ export function SessionSplitStage(props: SessionSplitStageProps) {
         : hoverEdge;
       setHoverEdge(null);
       if (!dragged || !edge) return;
-      if (!layout && dragged === hostSessionId) return;
       onDropSplit(dragged, edge);
     },
-    [draggingSessionId, hostSessionId, hoverEdge, layout, onDropSplit],
+    [draggingSessionId, hoverEdge, onDropSplit],
   );
 
   const showPreview = Boolean(draggingSessionId && hoverEdge);
@@ -89,12 +103,11 @@ export function SessionSplitStage(props: SessionSplitStageProps) {
     <div
       ref={rootRef}
       className="session-split-stage relative flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden"
-      onDragOver={handleDragOver}
+      onDragOverCapture={handleDragOverCapture}
+      onDropCapture={handleDropCapture}
       onDragLeave={(event) => {
         if (!rootRef.current?.contains(event.relatedTarget as Node)) clearHover();
       }}
-      onDrop={handleDrop}
-      onDragEnd={clearHover}
     >
       {layout ? (
         <ResizablePanelGroup

@@ -43,7 +43,6 @@ interface UseDrawerPortsInput {
   openDrawer: (panel: WorkspaceDrawerPanel) => void;
   closeDrawer: () => void;
   collapseDrawer: () => void;
-  toggleDrawerPinned: () => void;
   closeBrowser: () => void;
   minimizeBrowser: () => void;
   enterBrowserFullscreen: () => void;
@@ -121,8 +120,8 @@ export function useDrawerPorts(input: UseDrawerPortsInput) {
     const chrome: DrawerChromePort = {
       onOpenDrawer: input.openDrawer,
       onCloseDrawer: input.closeDrawer,
-      onCollapseDrawer: input.collapseDrawer,
-      onToggleDrawerPin: input.toggleDrawerPinned,
+      /* 右侧不再半折叠：历史 collapse 入口统一改为关闭 */
+      onCollapseDrawer: input.closeDrawer,
     };
 
     const browser: DrawerBrowserPort = {
@@ -173,7 +172,7 @@ export function useDrawerPorts(input: UseDrawerPortsInput) {
     input.openCommitFileDiff, input.openWorkspaceFileDiff,
     input.toggleGitDiffDisplayMode, input.closeGitDiff,
     input.gitApi, input.gitInfo, input.switchBranch, input.createBranch,
-    input.openDrawer, input.closeDrawer, input.collapseDrawer, input.toggleDrawerPinned,
+    input.openDrawer, input.closeDrawer, input.collapseDrawer,
     input.closeBrowser, input.minimizeBrowser, input.enterBrowserFullscreen,
     input.browserFullscreen,
     input.sessionsProject, input.sessionsProjectId,

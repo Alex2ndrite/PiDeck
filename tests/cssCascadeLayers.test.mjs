@@ -43,6 +43,11 @@ test("styles.css layer order: vendor < legacy < utilities", () => {
 
   assert.match(stylesEntry, /@import\s+"\.\/styles\/tailwind\.css"\s*;/);
   assert.doesNotMatch(stylesEntry, /tailwind\.css"\s+layer\(/);
+  // Streamdown 观感覆盖必须在 utilities 层（压过官方 p-2 / 双层 border）
+  assert.match(
+    stylesEntry,
+    /@import\s+"\.\/styles\/streamdownChrome\.css"\s+layer\(utilities\)\s*;/,
+  );
 });
 
 test("main.tsx does not import streamdown/file-icons unlayered after styles.css", () => {

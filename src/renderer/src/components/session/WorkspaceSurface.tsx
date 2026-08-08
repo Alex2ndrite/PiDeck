@@ -16,7 +16,6 @@ import {
 	FileText,
 	Folder,
 	FolderOpen,
-	Pin,
 	RefreshCw,
 	X,
 } from "lucide-react";
@@ -68,9 +67,6 @@ export function DrawerContent(props: {
 	expandedDirs: Set<string>;
 	onToggleDirectory: (path: string) => void;
 	onCollapseAllDirectories: () => void;
-	pinned: boolean;
-	onTogglePin: () => void;
-	onCollapse: () => void;
 	onClose: () => void;
 	onFileContextMenu: (node: FileTreeNode, x: number, y: number) => void;
 	onRefreshFiles: () => void;
@@ -108,20 +104,8 @@ export function DrawerContent(props: {
 						type="button"
 						variant="ghost"
 						size="icon-sm"
-						className={`inline-grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground${props.pinned ? " active bg-accent text-accent-foreground" : ""}`}
-						title={props.pinned ? t("drawer.unpin") : t("drawer.pin")}
-						aria-label={props.pinned ? t("drawer.unpin") : t("drawer.pin")}
-						onClick={props.onTogglePin}
-					>
-						<Pin size={15} />
-					</Button>
-					<Button
-						type="button"
-						variant="ghost"
-						size="icon-sm"
-						className="inline-grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground disabled:opacity-40"
-						disabled={props.pinned}
-						title={props.pinned ? t("drawer.pinnedCannotClose") : t("drawer.closePanel")}
+						className="inline-grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+						title={t("drawer.closePanel")}
 						aria-label={t("drawer.closePanel")}
 						onClick={props.onClose}
 					>

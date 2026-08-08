@@ -136,8 +136,8 @@ export function SessionHeader(props: SessionHeaderProps) {
           <Button
             variant="ghost"
             size="icon-sm"
-            aria-label={props.drawerOpen ? t("app.collapseDrawer") : t("app.expandDrawer")}
-            title={props.drawerOpen ? t("app.collapseDrawer") : t("app.expandDrawer")}
+            aria-label={props.drawerOpen ? t("app.closeDrawer") : t("app.openDrawer")}
+            title={props.drawerOpen ? t("app.closeDrawer") : t("app.openDrawer")}
             className={`header-drawer-toggle size-7${props.drawerOpen ? " active" : ""}`}
             onClick={props.onToggleDrawer}
           >

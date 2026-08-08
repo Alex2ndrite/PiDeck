@@ -44,17 +44,16 @@ test("streamdown pipeline delegates to official plugins (code/mermaid/math) and 
 });
 
 test("streamdown code/table chrome uses faded action controls", () => {
-  // 右上角复制/下载：去掉白底胶囊，悬停显影（对齐 .code-copy）
-  assert.match(surfacesCss, /\[data-streamdown="code-block-actions"\]/);
-  assert.match(surfacesCss, /opacity:\s*0\.4/);
-  assert.match(surfacesCss, /\[data-streamdown="code-block"\]:hover \[data-streamdown="code-block-actions"\]/);
-  // 复制在左、下载在右（覆盖 streamdown 默认下载→复制）
-  assert.match(surfacesCss, /\[data-streamdown="code-block-copy-button"\][\s\S]*?order:\s*1/);
-  assert.match(surfacesCss, /\[data-streamdown="code-block-download-button"\][\s\S]*?order:\s*2/);
-  // 表格工具条同款淡化
-  assert.match(surfacesCss, /\[data-streamdown="table-wrapper"\]:hover > div:first-child/);
-  // 旧 details 折叠外壳已移除
+  const streamdownChrome = readFileSync("src/renderer/src/styles/streamdownChrome.css", "utf8");
+  assert.match(streamdownChrome, /\[data-streamdown="code-block-actions"\]/);
+  assert.match(streamdownChrome, /opacity:\s*0\.5/);
+  assert.match(streamdownChrome, /\[data-streamdown="code-block"\]:hover \[data-streamdown="code-block-actions"\]/);
+  assert.match(streamdownChrome, /\[data-streamdown="code-block-copy-button"\][\s\S]*?order:\s*1/);
+  assert.match(streamdownChrome, /\[data-streamdown="code-block-download-button"\][\s\S]*?order:\s*2/);
+  // 表格与代码块同皮（utilities 层）
+  assert.match(streamdownChrome, /\[data-streamdown="table-wrapper"\]:hover > div:first-child/);
   assert.doesNotMatch(surfacesCss, /\.sd-code-collapse\b/);
+  assert.doesNotMatch(streamdownChrome, /\.sd-code-collapse\b/);
 });
 
 test("Tailwind scans streamdown + plugin classes; styles.css imports vendor streamdown layer", () => {

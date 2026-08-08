@@ -16,6 +16,7 @@ import {
   buildSplitLayoutFromDrop,
   replaceSplitPaneFromDrop,
   resolveSplitAfterClose,
+  resolveSplitHostSessionId,
   type SessionSplitEdge,
   type SessionSplitLayout,
 } from "../utils/sessionSplitEdge";
@@ -238,9 +239,8 @@ export function useSessionWorkspaceChrome(options: {
   const dropSplit = useCallback((draggedSessionId: string, edge: SessionSplitEdge) => {
     setDraggingSessionId(null);
     const snap = tabsSnapshotRef.current;
-    if (!snap.currentSessionId) return;
 
-    // 分屏拖入 → 常驻（用 snapshot，避免 stale tabs）
+    // 分屏拖入 → 常驻（用 snapshot，避免 stale tabs）；侧栏拖入尚未在 Tab 栏的会话也要先登记
     const permanent = openPermanentSessionTab(
       snap.tabs,
       snap.pinned,
@@ -259,8 +259,17 @@ export function useSessionWorkspaceChrome(options: {
       if (next) setSplitLayout(next);
       return;
     }
+
+    // 宿主不能等于被拖会话：拖当前 Tab 时改用 Tab 栏里的另一个会话
+    const hostSessionId = resolveSplitHostSessionId({
+      currentSessionId: snap.currentSessionId,
+      draggedSessionId,
+      tabIds: permanent.tabs,
+    });
+    if (!hostSessionId) return;
+
     const next = buildSplitLayoutFromDrop({
-      hostSessionId: snap.currentSessionId,
+      hostSessionId,
       draggedSessionId,
       edge,
     });

@@ -55,6 +55,26 @@ export function edgeToOrientation(edge: SessionSplitEdge): SessionSplitOrientati
 }
 
 /**
+ * 单栏分屏时的宿主会话：另一栏要保留谁。
+ * - 拖的不是当前焦点 → 宿主=当前焦点（常见：拖第二个 Tab / 侧栏其它会话）
+ * - 拖的就是当前焦点 → 宿主=Tab 栏里另一个会话（否则「当前 Tab 无法分屏」）
+ * - 只有自己一个 Tab 且拖的是自己 → 无法分屏，返回 null
+ */
+export function resolveSplitHostSessionId(input: {
+  currentSessionId: string | undefined;
+  draggedSessionId: string;
+  tabIds: readonly string[];
+}): string | null {
+  const { currentSessionId, draggedSessionId, tabIds } = input;
+  if (!draggedSessionId) return null;
+  if (currentSessionId && currentSessionId !== draggedSessionId) {
+    return currentSessionId;
+  }
+  const other = tabIds.find((id) => id && id !== draggedSessionId);
+  return other ?? null;
+}
+
+/**
  * 在「当前仅一个会话」时，用拖入会话 + 落点边生成双栏布局。
  * 拖入会话放在落点侧；宿主会话（host）占据另一侧。
  */

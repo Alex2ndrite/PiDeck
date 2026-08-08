@@ -1,5 +1,5 @@
 import { useAtomValue } from "jotai";
-import { Folder, MessagesSquare, Pin, PinOff, Plus, PanelRight, X } from "lucide-react";
+import { Folder, MessagesSquare, PanelLeft, Pin, PinOff, Plus, PanelRight, X } from "lucide-react";
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import {
   sessionRecordByIdAtomFamily,
@@ -64,6 +64,9 @@ export type SessionTabsBarProps = {
   /** 无当前会话时仍显示右侧抽屉入口。 */
   onToggleDrawer?: () => void;
   drawerOpen?: boolean;
+  /** 左侧栏已收起时，在 Tab 栏左侧提供展开入口（替代浮动按钮）。 */
+  listCollapsed?: boolean;
+  onToggleListCollapsed?: () => void;
   /** 当前会话的状态/操作区；嵌入 Tab 栏后不再单独占用标题行。 */
   actions?: ReactNode;
   /** 开始/结束拖拽会话 Tab 时通知外层（用于分屏落点预览）。 */
@@ -115,9 +118,23 @@ export function SessionTabsBar(props: SessionTabsBarProps) {
     props.onDragSessionChange?.(null);
   };
 
-  // overflow-visible：SessionHeader 的 session-combo 下拉菜单向下弹出，hidden 会把它裁掉导致“+新会话”看似无反应；Tab 滚动已由内部 .session-tabs-scroll 的 overflow-x-auto 承担。
+  // 下拉经 Portal 挂到 body；勿写 px-*（会盖掉自定义标题栏为窗口控件留的 padding-right）。
+  // 抽屉开关始终在本栏最右侧；打开抽屉后靠 CSS 取消窗口控件让位，避免按钮被空出一截。
   return (
-    <div className="session-tabs-bar flex h-9 shrink-0 items-center gap-1 overflow-visible border-b border-border/40 bg-background/80 px-2">
+    <div className="session-tabs-bar flex h-10 shrink-0 items-center gap-1 overflow-hidden border-b border-border/40 bg-background/80 pl-2">
+      {props.listCollapsed && props.onToggleListCollapsed ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          className="list-toggle-native size-7 shrink-0"
+          aria-label={t("app.expandList")}
+          title={t("app.expandList")}
+          onClick={props.onToggleListCollapsed}
+        >
+          <PanelLeft className="size-3.5" aria-hidden="true" />
+        </Button>
+      ) : null}
       <div className="session-tabs-scroll flex min-w-0 flex-1 items-center gap-1 overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {tabItems.map(({ sessionId }) => (
         <SessionTab
@@ -155,28 +172,27 @@ export function SessionTabsBar(props: SessionTabsBarProps) {
           onSelect={props.onNewSessionInProject}
         />
       </div>
-      {/* null 表示当前会话由下方 SessionHeader 承载操作；undefined 才保留无会话空态的快捷入口。 */}
-      {props.actions !== null && (
+      {/* 右侧抽屉开关：固定在会话 Tab 栏最右侧（不进右侧面板活动栏）。 */}
+      {props.onToggleDrawer ? (
         <div className="session-tabs-actions flex shrink-0 items-center gap-1 border-l border-border/30 pl-1">
-          {props.actions ?? (
-            <>
-              {props.onToggleDrawer && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  className={`header-drawer-toggle size-7${props.drawerOpen ? " active" : ""}`}
-                  title={props.drawerOpen ? t("app.collapseDrawer") : t("app.expandDrawer")}
-                  aria-label={props.drawerOpen ? t("app.collapseDrawer") : t("app.expandDrawer")}
-                  onClick={props.onToggleDrawer}
-                >
-                  <PanelRight className="size-3.5" aria-hidden="true" />
-                </Button>
-              )}
-            </>
-          )}
+          {props.actions}
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            className={`header-drawer-toggle size-7${props.drawerOpen ? " active" : ""}`}
+            title={props.drawerOpen ? t("app.closeDrawer") : t("app.openDrawer")}
+            aria-label={props.drawerOpen ? t("app.closeDrawer") : t("app.openDrawer")}
+            onClick={props.onToggleDrawer}
+          >
+            <PanelRight className="size-3.5" aria-hidden="true" />
+          </Button>
         </div>
-      )}
+      ) : props.actions != null ? (
+        <div className="session-tabs-actions flex shrink-0 items-center gap-1 border-l border-border/30 pl-1">
+          {props.actions}
+        </div>
+      ) : null}
     </div>
   );
 }

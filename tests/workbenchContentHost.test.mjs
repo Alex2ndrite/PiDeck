@@ -45,10 +45,10 @@ test("WorkbenchStage hosts session + content with collapse-safe maximize", () =>
   assert.match(app, /<WorkbenchStage/);
   assert.match(app, /workbenchHasContent/);
   assert.match(app, /WorkbenchContent/);
-  // 阅读面由 WorkbenchContent 内部 lazy（CodeMirror 按需），App 不再直连 lazy FileDiffViewer
+  // 阅读面静态引入 FileDiffViewer：避免 lazy 动态 import 在 Electron/Vite 下偶发失败且无法重试恢复
   assert.doesNotMatch(app, /lazy\(\(\) => import\("\.\/components\/app\/FileDiffViewer"/);
-  assert.match(content, /lazy\(\(\) =>/);
-  assert.match(content, /import\("\.\.\/app\/FileDiffViewer"\)/);
+  assert.doesNotMatch(content, /lazy\(\(\) =>/);
+  assert.match(content, /import \{ FileDiffViewer \} from "\.\.\/app\/FileDiffViewer"/);
 });
 
 test("file view and git diff open into workbench modes, not drawer overlays", () => {

@@ -289,19 +289,14 @@ export function App() {
   const workspace = useWorkspacePanels({ projectId: activeProjectId, editors: editorsAdapter });
   const drawer = workspace.drawer;
   const drawerCollapsed = workspace.drawerCollapsed;
-  // 与 main 一致：右侧栏开关优先折叠/展开当前抽屉；无抽屉时默认打开 files
+  // 右侧栏只做开/关：已打开则关闭，否则打开 files（默认关闭，手动打开）
   const toggleRightDrawer = useCallback(() => {
-    if (workspace.drawer && !workspace.drawerCollapsed) {
-      workspace.collapseDrawer();
-      return;
-    }
-    if (workspace.drawer && workspace.drawerCollapsed) {
-      workspace.expandDrawer();
+    if (workspace.drawer) {
+      workspace.closeDrawer();
       return;
     }
     workspace.openDrawer("files");
   }, [workspace]);
-  const drawerPinned = workspace.drawerPinned;
   const browserFullscreen = workspace.browserFullscreen;
   const externalEditors = workspace.externalEditors;
   const editorsOpen = workspace.externalEditorsOpen;
@@ -2433,6 +2428,8 @@ export function App() {
     onReorder: workspaceChrome.reorderTab,
     onToggleDrawer: toggleRightDrawer,
     drawerOpen: Boolean(drawer && !drawerCollapsed),
+    listCollapsed,
+    onToggleListCollapsed: toggleListCollapsed,
     onDragSessionChange: (sessionId: string | null) => {
       if (sessionId) workspaceChrome.beginDrag(sessionId);
       else workspaceChrome.endDrag();
@@ -2552,7 +2549,6 @@ export function App() {
         <SessionSplitStage
           layout={workspaceChrome.splitLayout}
           draggingSessionId={workspaceChrome.draggingSessionId}
-          hostSessionId={currentSessionId}
           onDropSplit={workspaceChrome.dropSplit}
           solo={
             <ChatSessionPane
@@ -2661,7 +2657,6 @@ export function App() {
     openDrawer: workspace.openDrawer,
     closeDrawer: workspace.closeDrawer,
     collapseDrawer: workspace.collapseDrawer,
-    toggleDrawerPinned: workspace.toggleDrawerPinned,
     closeBrowser: () => workspace.closeBrowser(),
     minimizeBrowser: () => workspace.minimizeBrowser(),
     enterBrowserFullscreen: () => workspace.enterBrowserFullscreen(),
@@ -2738,13 +2733,6 @@ export function App() {
   });
 
 
-  // 钉住面板恢复：编辑器阅读面已不占用抽屉，仅 drawer=editor 空状态时跳过即可。
-  useEffect(() => {
-    if (!workspace.drawerPinnedPanel) return;
-    if (drawer === "editor") return;
-    if (workspace.drawer !== workspace.drawerPinnedPanel) workspace.openDrawer(workspace.drawerPinnedPanel);
-    if (workspace.drawerCollapsed) workspace.expandDrawer();
-  }, [workspace.drawer, workspace.drawerCollapsed, workspace.drawerPinnedPanel, drawer]);
   return (
     <>
       <AppBootstrap {...bootstrapProps} />
@@ -2754,7 +2742,6 @@ export function App() {
       drawer={drawer}
       drawerCollapsed={drawerCollapsed}
       drawerWidth={drawerWidth}
-      drawerPinned={workspace.drawerPinned}
       useNativeTitleBar={settings.useNativeTitleBar}
       chatPaneRef={chatPaneRef}
       terminalRowHeight={terminalRowHeight}
@@ -2801,7 +2788,6 @@ export function App() {
         <DrawerSurface
           drawer={visibleDrawerPanel}
           drawerCollapsed={drawerCollapsed}
-          drawerPinned={drawerPinned}
           editor={drawerPorts.editor}
           git={drawerPorts.git}
           chrome={drawerPorts.chrome}
@@ -2854,10 +2840,7 @@ export function App() {
       setDrawerCollapsed={setDrawerCollapsed}
       setDrawerWidth={setDrawerWidth}
       onToggleListCollapsed={toggleListCollapsed}
-      onDrawerCollapse={workspace.collapseDrawer}
       onDrawerClose={workspace.closeDrawer}
-      onDrawerRestore={() => workspace.expandDrawer()}
-      onToggleDrawerPin={workspace.toggleDrawerPinned}
       toggleAlwaysOnTop={api.app.toggleAlwaysOnTopWindow}
       minimizeWindow={api.app.minimizeWindow}
       toggleMaximizeWindow={api.app.toggleMaximizeWindow}

@@ -45,6 +45,7 @@ import {
   PI_FILE_PATH_DRAG_MIME,
   readFileNodeDragPayload,
 } from "../components/app/AppUtils";
+import { SESSION_TAB_DRAG_MIME } from "../utils/sessionSplitEdge";
 import type { ComposerChip } from "../components/session/composer/chips";
 import {
   getComposerCaretCoords,
@@ -930,6 +931,8 @@ export function useSessionComposerController(
       onPaste,
       onDrop,
       onDragOver: (event: React.DragEvent<HTMLDivElement>) => {
+        // 会话 Tab / 侧栏分屏拖拽交给 SessionSplitStage（capture），composer 不抢落点
+        if (event.dataTransfer.types.includes(SESSION_TAB_DRAG_MIME)) return;
         event.preventDefault();
         // 文件树拖拽的 effectAllowed 含 move（内部移动语义），拖入 composer 时
         // 显式声明 copy，避免光标显示为“移动”，实际行为是插入引用

@@ -28,6 +28,13 @@ function resolveSessionSplitEdge(clientX, clientY, rect, thresholdRatio = 0.28) 
   return "bottom";
 }
 
+function resolveSplitHostSessionId({ currentSessionId, draggedSessionId, tabIds }) {
+  if (!draggedSessionId) return null;
+  if (currentSessionId && currentSessionId !== draggedSessionId) return currentSessionId;
+  const other = tabIds.find((id) => id && id !== draggedSessionId);
+  return other ?? null;
+}
+
 function buildSplitLayoutFromDrop({ hostSessionId, draggedSessionId, edge }) {
   if (!hostSessionId || !draggedSessionId || hostSessionId === draggedSessionId) return null;
   const orientation = edge === "left" || edge === "right" ? "horizontal" : "vertical";
@@ -75,6 +82,7 @@ describe("session split edge resolution", () => {
   it("exports shared MIME and helpers from source", () => {
     assert.match(edgeSrc, /SESSION_TAB_DRAG_MIME/);
     assert.match(edgeSrc, /export function resolveSessionSplitEdge/);
+    assert.match(edgeSrc, /export function resolveSplitHostSessionId/);
     assert.match(edgeSrc, /export function buildSplitLayoutFromDrop/);
     assert.match(edgeSrc, /export function replaceSplitPaneFromDrop/);
     assert.match(edgeSrc, /export function resolveSplitAfterClose/);
@@ -100,6 +108,45 @@ describe("session split edge resolution", () => {
     assert.equal(
       buildSplitLayoutFromDrop({ hostSessionId: "a", draggedSessionId: "a", edge: "right" }),
       null,
+    );
+  });
+
+  it("resolves host so every open tab can initiate split, including the focused one", () => {
+    // 拖非当前 → 宿主=当前（第一个 Tab 拖向已聚焦的第二个）
+    assert.equal(
+      resolveSplitHostSessionId({
+        currentSessionId: "b",
+        draggedSessionId: "a",
+        tabIds: ["a", "b"],
+      }),
+      "b",
+    );
+    // 拖当前 → 宿主=另一个 Tab（否则「第二个打开的 Tab」拖边缘无反应）
+    assert.equal(
+      resolveSplitHostSessionId({
+        currentSessionId: "b",
+        draggedSessionId: "b",
+        tabIds: ["a", "b"],
+      }),
+      "a",
+    );
+    // 只有自己 → 无法分屏
+    assert.equal(
+      resolveSplitHostSessionId({
+        currentSessionId: "a",
+        draggedSessionId: "a",
+        tabIds: ["a"],
+      }),
+      null,
+    );
+    // 侧栏拖入尚未在 Tab 栏、但当前已有会话
+    assert.equal(
+      resolveSplitHostSessionId({
+        currentSessionId: "a",
+        draggedSessionId: "c",
+        tabIds: ["a", "c"],
+      }),
+      "a",
     );
   });
 
@@ -132,6 +179,10 @@ describe("session split edge resolution", () => {
 
   it("wires SessionSplitStage, tab drag, i18n and styles", () => {
     assert.match(stage, /session-split-drop-preview/);
+    assert.match(stage, /onDragOverCapture/);
+    assert.match(stage, /onDropCapture/);
+    assert.match(stage, /draggingSessionId && hoverEdge/);
+    assert.doesNotMatch(stage, /hostSessionId/);
     assert.match(tabs, /SESSION_TAB_DRAG_MIME/);
     assert.match(tabs, /onDragSessionChange/);
     assert.match(app, /SessionSplitStage/);
@@ -157,6 +208,7 @@ describe("session split edge resolution", () => {
     assert.match(app, /registerOpenSession/);
     assert.match(app, /SessionPaneServicesProvider/);
     assert.match(chrome, /export function useSessionWorkspaceChrome/);
+    assert.match(chrome, /resolveSplitHostSessionId/);
     assert.match(chrome, /registerOpenSession/);
     assert.doesNotMatch(actions, /tabMode|onSessionSelected|"keep"/);
     // 分屏栏不再挂右侧抽屉按钮；共享服务走 context；runtime 按 session family 订阅

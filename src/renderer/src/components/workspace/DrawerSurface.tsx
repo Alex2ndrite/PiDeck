@@ -1,4 +1,4 @@
-import { Minus, SquarePen, X } from "lucide-react";
+import { SquarePen, X } from "lucide-react";
 import { BrowserSurface } from "./BrowserSurface";
 import { GitPanel } from "../app/GitPanel";
 import { DrawerContent } from "../app/AppParts";
@@ -45,7 +45,6 @@ export interface DrawerChromePort {
   onOpenDrawer: (panel: WorkspaceDrawerPanel) => void;
   onCloseDrawer: () => void;
   onCollapseDrawer: () => void;
-  onToggleDrawerPin: () => void;
 }
 
 export interface DrawerBrowserPort {
@@ -91,7 +90,6 @@ export interface DrawerFilesPort {
 export interface DrawerSurfaceProps {
   drawer: WorkspaceDrawerPanel | null;
   drawerCollapsed: boolean;
-  drawerPinned: boolean;
   editor: DrawerEditorPort;
   git: DrawerGitPort;
   chrome: DrawerChromePort;
@@ -100,7 +98,7 @@ export interface DrawerSurfaceProps {
 }
 
 export function DrawerSurface(props: DrawerSurfaceProps) {
-  const { drawer, drawerCollapsed, drawerPinned, editor, git, chrome, browser, files } = props;
+  const { drawer, drawerCollapsed, editor, git, chrome, browser, files } = props;
 
   return (
     <>
@@ -112,9 +110,6 @@ export function DrawerSurface(props: DrawerSurfaceProps) {
               <strong className="shrink-0 text-body font-semibold text-foreground">{t("editor.fileEditor")}</strong>
             </div>
             <div className="drawer-header-actions flex shrink-0 items-center gap-1">
-              <Button type="button" variant="ghost" size="icon-sm" className="inline-grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground" onClick={chrome.onCollapseDrawer} title={t("drawer.collapsePanel")}>
-                <Minus size={15} />
-              </Button>
               <Button type="button" variant="ghost" size="icon-sm" className="inline-grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground" onClick={() => { editor.closeEditor(); chrome.onCloseDrawer(); }} title={t("common.close")}>
                 <X size={15} />
               </Button>
@@ -140,9 +135,6 @@ export function DrawerSurface(props: DrawerSurfaceProps) {
           <div className="drawer-header flex h-12 shrink-0 items-center justify-between gap-3 border-b border-border/40 bg-background px-3">
             <strong className="truncate text-body font-semibold text-foreground">{files.t("app.browser")}</strong>
             <div className="drawer-header-actions flex shrink-0 items-center gap-1">
-              <Button type="button" variant="ghost" size="icon-sm" className="inline-grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground" onClick={chrome.onCollapseDrawer} title={files.t("drawer.collapsePanel")}>
-                <Minus size={15} />
-              </Button>
               <Button type="button" variant="ghost" size="icon-sm" className="inline-grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground" onClick={chrome.onCloseDrawer} title={files.t("common.close")}>
                 <X size={15} />
               </Button>
@@ -160,9 +152,6 @@ export function DrawerSurface(props: DrawerSurfaceProps) {
           <div className="drawer-header flex h-12 shrink-0 items-center justify-between gap-3 border-b border-border/40 bg-background px-3">
             <strong className="truncate text-body font-semibold text-foreground">{files.t("drawer.sourceControl")}</strong>
             <div className="drawer-header-actions flex shrink-0 items-center gap-1">
-              <Button type="button" variant="ghost" size="icon-sm" className="inline-grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground" onClick={chrome.onCollapseDrawer} title={files.t("drawer.collapsePanel")}>
-                <Minus size={15} />
-              </Button>
               <Button type="button" variant="ghost" size="icon-sm" className="inline-grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground" onClick={chrome.onCloseDrawer} title={files.t("common.close")}>
                 <X size={15} />
               </Button>
@@ -229,9 +218,6 @@ export function DrawerSurface(props: DrawerSurfaceProps) {
             expandedDirs={files.expandedDirs}
             onToggleDirectory={files.onToggleDirectory}
             onCollapseAllDirectories={files.onCollapseAllDirectories}
-            pinned={drawerPinned}
-            onTogglePin={chrome.onToggleDrawerPin}
-            onCollapse={chrome.onCollapseDrawer}
             onClose={chrome.onCloseDrawer}
             onFileContextMenu={(node: any, x: number, y: number) => files.setFileMenu({ node, x, y })}
             onRefreshFiles={() => {

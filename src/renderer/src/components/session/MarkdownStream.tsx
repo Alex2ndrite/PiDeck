@@ -13,7 +13,7 @@ import { useSmoothStream } from "../../utils/useSmoothStream";
  *
  * 内置能力（由 streamdown 官方插件接管，不再自研）：
  * - 代码高亮：@streamdown/code（shiki 3.x JS 引擎 + 按语言懒加载；行号/复制/下载由
- *   streamdown 内置外壳提供，观感由 surfaces.css 淡化对齐 .code-copy；
+ *   streamdown 内置外壳提供，观感由 streamdownChrome.css（utilities 层）压掉官方双层皮；
  *   2026-08 曾因全语言常驻移除，恢复时按 memory-profile 复测）
  * - 数学公式：@streamdown/math（KaTeX，$...$/$$...$$）
  * - mermaid 图表：@streamdown/mermaid（```mermaid 代码块 → 交互式 SVG + 全屏/缩放/下载控件）

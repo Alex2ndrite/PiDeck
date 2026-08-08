@@ -89,14 +89,15 @@ test("drawer visible-panel helper renders first opens and switches immediately b
   assert.equal(drawerState.getVisibleDrawerPanel(false, null, null), null);
 });
 
-test("workspace panel hook exposes narrow drawer commands and project persistence", () => {
+test("workspace panel hook exposes narrow drawer commands", () => {
   assert.match(hook, /export function useWorkspacePanels/);
-  for (const command of ["openDrawer", "closeDrawer", "collapseDrawer", "expandDrawer", "toggleDrawerPinned"]) {
+  for (const command of ["openDrawer", "closeDrawer", "collapseDrawer", "expandDrawer"]) {
     assert.match(hook, new RegExp(`const ${command} = useCallback`));
   }
-  assert.match(hook, /drawerStoragePrefix/);
+  assert.doesNotMatch(hook, /toggleDrawerPinned/);
+  assert.doesNotMatch(hook, /drawerPinned/);
+  assert.doesNotMatch(hook, /drawerStoragePrefix/);
   assert.match(hook, /projectIdRef\.current/);
-  assert.match(hook, /setDrawerPinnedByProject/);
 });
 
 test("editor tabs enforce both count and text-budget LRU while keeping IO callbacks stable", () => {
@@ -147,10 +148,9 @@ test("drawer host renders an injected activity rail while open", () => {
   // shell：drawerRail 透传
   assert.match(shell, /drawerRail\?: ReactNode/);
   assert.match(shell, /rail=\{drawerRail\}/);
-  // App 不再注入悬浮 rail（用户决策：去掉 git/文件/浏览器入口，由标题栏抽屉开关打开默认 files）；
-  // 切换语义仍由 handleToolDrawerAction 承载（供其他入口复用），rail 组件与 host 透传能力保留。
+  // App：右侧栏开关只做开/关（不再半折叠）；rail 切换语义仍由 handleToolDrawerAction 承载
   assert.match(app, /handleToolDrawerAction\s*=\s*useCallback\(\(panel: WorkspaceDrawerPanel\)\s*=>/);
-  assert.match(app, /const toggleRightDrawer = useCallback\(\(\) => \{\n\s*if \(workspace\.drawer && !workspace\.drawerCollapsed\) \{\n\s*workspace\.collapseDrawer\(\);/);
+  assert.match(app, /const toggleRightDrawer = useCallback\(\(\) => \{\n\s*if \(workspace\.drawer\) \{\n\s*workspace\.closeDrawer\(\);/);
 });
 
 // 回归：项目上下文水合（null → 首个 projectId）不得重置用户已打开的抽屉；
@@ -159,6 +159,22 @@ test("project hydration does not clobber a user-opened drawer", () => {
   assert.match(hook, /prevProjectIdRef/);
   assert.match(hook, /isInitialHydration = prevProjectId === null/);
   assert.match(hook, /!isInitialHydration \|\| !drawerRef\.current/);
+});
+
+test("drawer defaults closed on project load; no pin restore", () => {
+  // 换项目 / 水合默认关闭；无钉住恢复路径
+  assert.match(hook, /setDrawer\(null\)/);
+  assert.doesNotMatch(hook, /saved\?\.pinned/);
+  assert.doesNotMatch(hook, /toggleDrawerPinned/);
+  const tabs = readFileSync("src/renderer/src/components/session/SessionTabsBar.tsx", "utf8");
+  assert.match(tabs, /header-drawer-toggle/);
+  assert.match(tabs, /PanelRight/);
+  assert.doesNotMatch(tabs, /onToggleDrawer && !props\.drawerOpen/);
+  const rail = readFileSync("src/renderer/src/components/workspace/WorkspaceDrawerRail.tsx", "utf8");
+  assert.doesNotMatch(rail, /drawer-rail-close/);
+  const surface = readFileSync("src/renderer/src/components/session/WorkspaceSurface.tsx", "utf8");
+  assert.doesNotMatch(surface, /drawer\.pin/);
+  assert.doesNotMatch(surface, /onTogglePin/);
 });
 
 // 回归（点叉无法关闭 tab / 最后 tab 不收起侧边栏）：

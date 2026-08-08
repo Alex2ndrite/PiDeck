@@ -76,9 +76,10 @@ export function AppHeader({
           className="window-control"
           aria-label={maximized ? t("app.windowRestore") : t("app.windowMaximize")}
           title={maximized ? t("app.windowRestore") : t("app.windowMaximize")}
-          onClick={async () => {
-            const next = await toggleMaximizeWindow();
-            setMaximized(next);
+          onClick={() => {
+            // 只采信主进程返回的意图态；maximize/unmaximize 事件用事件名推送，
+            // 不再乐观翻转（否则会与迟到/过期的 isMaximized 读数互踩成「要点两次」）。
+            void toggleMaximizeWindow().then((next) => setMaximized(next));
           }}
         >
           {maximized ? <RestoreIcon /> : <Square size={11} strokeWidth={2} aria-hidden="true" />}

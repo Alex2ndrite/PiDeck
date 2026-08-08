@@ -1,10 +1,5 @@
-import { lazy, Suspense } from "react";
 import type { WorkspaceContentOpenMode } from "../../../../shared/types";
-import { t } from "../../i18n";
-
-const FileDiffViewer = lazy(() =>
-	import("../app/FileDiffViewer").then((m) => ({ default: m.FileDiffViewer })),
-);
+import { FileDiffViewer } from "../app/FileDiffViewer";
 
 type EditorTabLike = {
 	id: string;
@@ -45,81 +40,71 @@ export type WorkbenchContentProps = {
 	saveContent: (path: string, content: string) => Promise<void>;
 };
 
-function WorkbenchContentFallback() {
-	return (
-		<div className="file-diff-loading flex h-full items-center justify-center text-caption text-muted-foreground">
-			{t("drawer.lazyLoading")}
-		</div>
-	);
-}
-
 /**
  * 中间栏阅读面：Git Diff / 文件编辑共用 FileDiffViewer。
- * FileDiffViewer（含 CodeMirror）按需 lazy，首屏不背编辑器包；
- * 路径错误导致动态 import 失败的问题已在 WorkbenchStage 修好，可安全恢复 lazy。
+ *
+ * 不用 React.lazy：Vite/Electron 下动态 import 偶发
+ * 「Failed to fetch dynamically imported module」，且 lazy 会缓存 rejected
+ * promise，边界「重试」也无法恢复。打开文件是主路径，静态引入更稳。
  */
 export function WorkbenchContent(props: WorkbenchContentProps) {
 	if (props.gitDiff) {
 		return (
-			<Suspense fallback={<WorkbenchContentFallback />}>
-				<FileDiffViewer
-					displayMode={props.gitDiffDisplayMode}
-					filePath={props.gitDiff.filePath}
-					mode="diff"
-					onToggleMode={props.onToggleGitDiffMode}
-					originalContent={props.gitDiff.originalContent}
-					modifiedContent={props.gitDiff.modifiedContent}
-					tabs={[
-						{
-							id: props.gitDiff.filePath,
-							filePath: props.gitDiff.filePath,
-							label: props.gitDiff.label,
-						},
-					]}
-					activeTabId={props.gitDiff.filePath}
-					onClose={props.onCloseGitDiff}
-					readContent={props.readContent}
-					theme={props.theme}
-					maxFileSizeMB={props.maxFileSizeMB}
-				/>
-			</Suspense>
+			<FileDiffViewer
+				displayMode={props.gitDiffDisplayMode}
+				filePath={props.gitDiff.filePath}
+				mode="diff"
+				onToggleMode={props.onToggleGitDiffMode}
+				originalContent={props.gitDiff.originalContent}
+				modifiedContent={props.gitDiff.modifiedContent}
+				tabs={[
+					{
+						id: props.gitDiff.filePath,
+						filePath: props.gitDiff.filePath,
+						label: props.gitDiff.label,
+					},
+				]}
+				activeTabId={props.gitDiff.filePath}
+				onClose={props.onCloseGitDiff}
+				readContent={props.readContent}
+				theme={props.theme}
+				maxFileSizeMB={props.maxFileSizeMB}
+			/>
 		);
 	}
 
 	if (!props.activeTab) return null;
 
 	return (
-		<Suspense fallback={<WorkbenchContentFallback />}>
-			<FileDiffViewer
-				displayMode={props.editorMode}
-				filePath={props.activeTab.filePath}
-				mode={props.activeTab.mode}
-				onToggleMode={
-					props.activeTab.preserveDrawer ? undefined : props.onToggleEditorMode
-				}
-				originalContent={
-					props.activeTab.mode === "diff"
-						? props.activeTab.originalContent
-						: undefined
-				}
-				modifiedContent={props.activeTab.modifiedContent}
-				tabs={props.editorTabs.map((tab) => ({
-					id: tab.id,
-					filePath: tab.filePath,
-					label: tab.label,
-				}))}
-				activeTabId={props.activeTabId}
-				onSelectTab={props.onSelectTab}
-				onCloseTab={props.onCloseTab}
-				onClose={props.onCloseEditor}
-				readContent={props.readContent}
-				readOriginalContent={props.readOriginalContent}
-				saveContent={
-					props.activeTab.allowSave ? props.saveContent : undefined
-				}
-				theme={props.theme}
-				maxFileSizeMB={props.maxFileSizeMB}
-			/>
-		</Suspense>
+		<FileDiffViewer
+			displayMode={props.editorMode}
+			filePath={props.activeTab.filePath}
+			mode={props.activeTab.mode}
+			onToggleMode={
+				props.activeTab.preserveDrawer ? undefined : props.onToggleEditorMode
+			}
+			originalContent={
+				props.activeTab.mode === "diff"
+					? props.activeTab.originalContent
+					: undefined
+			}
+			modifiedContent={props.activeTab.modifiedContent}
+			tabs={props.editorTabs.map((tab) => ({
+				id: tab.id,
+				filePath: tab.filePath,
+				label: tab.label,
+			}))}
+			activeTabId={props.activeTabId}
+			onSelectTab={props.onSelectTab}
+			onCloseTab={props.onCloseTab}
+			onClose={props.onCloseEditor}
+			readContent={props.readContent}
+			readOriginalContent={props.readOriginalContent}
+			saveContent={
+				props.activeTab.allowSave ? props.saveContent : undefined
+			}
+			theme={props.theme}
+			maxFileSizeMB={props.maxFileSizeMB}
+		/>
 	);
 }

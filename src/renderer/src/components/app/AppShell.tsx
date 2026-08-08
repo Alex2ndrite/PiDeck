@@ -26,10 +26,9 @@ import type { WorkspaceDrawerPanel } from "../../hooks/useWorkspacePanels";
  *   经 imperative resize/collapse/expand 同步回面板。
  * - 宽度变化超过 1px 才回写/同步，避免 state → resize → layout 的反馈回路。
  *
- * 折叠语义对齐旧实现：
- * - 侧栏 collapsedSize=14（旧版收起后保留 14px 边缘提示条，恢复走标题栏按钮）；
- *   拖拽低于 minSize 自动折叠。
- * - 抽屉 collapsedSize=0；未钉住时可拖拽折叠，钉住（pinned）时禁止折叠且最小 220px。
+ * 折叠语义：
+ * - 侧栏 collapsedSize=0（完全收起，无残留竖条；恢复入口在会话 Tab 栏左侧）。
+ * - 抽屉只有开/关：打开时不可拖成「半折叠」；默认关闭，由用户手动打开。
  *
  * 已知变化：抽屉/侧栏开合不再有 120ms grid 过渡动画（面板布局为即时宽度），
  * 后续视觉收口阶段如需动画再补。
@@ -41,7 +40,6 @@ export interface AppShellProps {
   drawer: WorkspaceDrawerPanel | null;
   drawerCollapsed: boolean;
   drawerWidth: number;
-  drawerPinned: boolean;
   useNativeTitleBar: boolean;
 
   chatPaneRef: React.RefObject<HTMLElement | null>;
@@ -60,10 +58,8 @@ export interface AppShellProps {
   setDrawerCollapsed: (v: boolean) => void;
   setDrawerWidth: (v: number) => void;
   onToggleListCollapsed: () => void;
-  onDrawerCollapse: () => void;
   onDrawerClose: () => void;
-  onDrawerRestore: () => void;
-  onToggleDrawerPin: () => void;
+
 
   toggleAlwaysOnTop: () => Promise<boolean>;
   minimizeWindow: () => void;
@@ -75,24 +71,23 @@ export interface AppShellProps {
   children?: ReactNode;
 }
 
-/** 侧栏收起后保留的边缘提示条宽度（对齐旧 grid 实现） */
-const LIST_COLLAPSED_SIZE = 14;
+/** 侧栏完全收起：不再留 14px 提示条（会变成难看的空白缝） */
+const LIST_COLLAPSED_SIZE = 0;
 const LIST_MIN = 100;
 const LIST_MAX = 440;
 const DRAWER_MIN = 180;
-const DRAWER_MIN_PINNED = 220;
 const DRAWER_MAX = 560;
 
 export function AppShell(props: AppShellProps) {
   const {
     listCollapsed, listWidth,
-    drawer, drawerCollapsed, drawerWidth, drawerPinned,
+    drawer, drawerCollapsed, drawerWidth,
     useNativeTitleBar,
     chatPaneRef, terminalRowHeight, contentMaxWidth,
     sidebarContent, chatPaneContent, drawerContent, drawerRail, outlineContent,
     setListCollapsed, setListWidth, setDrawerCollapsed, setDrawerWidth,
     onToggleListCollapsed,
-    onDrawerCollapse, onDrawerClose, onDrawerRestore, onToggleDrawerPin,
+    onDrawerClose,
     toggleAlwaysOnTop, minimizeWindow, toggleMaximizeWindow, closeWindow,
     isWindowMaximized, onWindowMaximizedChange,
     children,
@@ -105,9 +100,16 @@ export function AppShell(props: AppShellProps) {
   useEffect(() => {
     const panel = listPanelRef.current;
     if (!panel) return;
-    if (listCollapsed) { if (!panel.isCollapsed()) panel.collapse(); }
-    else if (panel.isCollapsed()) panel.expand();
-  }, [listCollapsed]);
+    if (listCollapsed) {
+      if (!panel.isCollapsed()) panel.collapse();
+      return;
+    }
+    // collapsedSize=0 时仅 expand() 偶发不回弹；显式 resize 到记忆宽度更稳。
+    try {
+      if (panel.isCollapsed()) panel.expand();
+      if (Math.abs(panel.getSize().inPixels - listWidth) > 1) panel.resize(listWidth);
+    } catch { /* 约束未就绪 */ }
+  }, [listCollapsed, listWidth]);
 
   // 抽屉 Panel 常驻挂载（drawer=null 时折叠 0 宽），此 effect 统一同步折叠态；
   // 推迟一帧 + 容错：常驻挂载后约束始终就绪，保留 try/catch 仅为防御。
@@ -152,20 +154,18 @@ export function AppShell(props: AppShellProps) {
     const listPanel = listPanelRef.current;
     if (listPanel) {
       const px = Math.round(listPanel.getSize().inPixels);
-      const collapsed = listPanel.isCollapsed() || px <= LIST_COLLAPSED_SIZE + 1;
+      const collapsed = listPanel.isCollapsed() || px <= 1;
       if (collapsed !== listCollapsed) setListCollapsed(collapsed);
       if (!collapsed && Math.abs(px - listWidth) > 1) setListWidth(px);
     }
     const drawerPanel = drawerPanelRef.current;
     if (drawerPanel) {
       const px = Math.round(drawerPanel.getSize().inPixels);
-      const collapsed = drawerPanel.isCollapsed() || px <= 1;
-      if (collapsed) {
-        // 拖拽折叠仅允许未钉住场景（pinned 面板 collapsible=false，不会走到这）
-        if (!drawerCollapsed) setDrawerCollapsed(true);
-      } else {
-        if (drawerCollapsed) setDrawerCollapsed(false);
-        if (Math.abs(px - drawerWidth) > 1) setDrawerWidth(px);
+      // 右侧拖到接近 0 视为关闭抽屉
+      if (drawer && (drawerPanel.isCollapsed() || px <= 1)) {
+        onDrawerClose();
+      } else if (drawer && Math.abs(px - drawerWidth) > 1) {
+        setDrawerWidth(px);
       }
     }
   }
@@ -233,9 +233,8 @@ export function AppShell(props: AppShellProps) {
           </main>
         </ResizablePanel>
 
-        {/* 抽屉面板常驻挂载：drawer=null 时折叠为 0 宽，避免动态挂载导致
-            Group 布局时序错误（Invalid panel layout / constraints not found）。
-            内容由 WorkspaceDrawerHost 的空态兜底。 */}
+        {/* 抽屉面板常驻挂载：关闭时必须仍可 collapse→0，否则 collapsible=false
+            会卡在 minSize 留下右侧空白缝。 */}
         <ResizableHandle
           className="splitter splitter-right"
           data-active={Boolean(drawer) && !drawerCollapsed}
@@ -243,9 +242,9 @@ export function AppShell(props: AppShellProps) {
         <ResizablePanel
           id="drawer"
           panelRef={drawerPanelRef}
-          collapsible={!drawerPinned}
+          collapsible
           collapsedSize={0}
-          minSize={drawerPinned ? DRAWER_MIN_PINNED : DRAWER_MIN}
+          minSize={DRAWER_MIN}
           maxSize={DRAWER_MAX}
           defaultSize={0}
           className="shell-panel-drawer"
@@ -253,11 +252,7 @@ export function AppShell(props: AppShellProps) {
           <WorkspaceDrawerHost
             panel={drawer}
             collapsed={drawerCollapsed}
-            pinned={drawerPinned}
-            onCollapse={onDrawerCollapse}
             onClose={onDrawerClose}
-            onRestore={onDrawerRestore}
-            onTogglePin={onToggleDrawerPin}
             rail={drawerRail}
             renderPanel={(panel) => drawerContent(panel)}
           />
