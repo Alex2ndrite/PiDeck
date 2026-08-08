@@ -13,7 +13,21 @@ import {
 	DialogTitle,
 } from "./components/ui-shadcn/dialog";
 import { ConfirmDialog } from "./components/ui-shadcn/ConfirmDialog";
-import { X } from "lucide-react";
+import {
+	X,
+	Activity,
+	Code2,
+	Cpu,
+	FileCode2,
+	FileText,
+	KeyRound,
+	MessageSquare,
+	Puzzle,
+	ScrollText,
+	Settings2,
+	ShieldCheck,
+	Sparkles,
+} from "lucide-react";
 import { cn } from "./lib/utils";
 import { showNotice } from "./utils/notice";
 import { Component, useState, useEffect, useCallback, type ReactNode } from "react";
@@ -1399,12 +1413,12 @@ function ConfigModalContent(props: ConfigModalProps) {
 		input.click();
 	};
 
-	const configNavItems: Array<{ id: ConfigTab; label: string }> = [
-		{ id: "models", label: t("config.nav.models") },
-		{ id: "auth", label: t("config.nav.auth") },
-		{ id: "settings", label: t("config.nav.settings") },
-		{ id: "trust", label: t("config.nav.trust") },
-		{ id: "raw", label: t("config.nav.raw") },
+	const configNavItems: Array<{ id: ConfigTab; label: string; icon: ReactNode }> = [
+		{ id: "models", label: t("config.nav.models"), icon: <Cpu size={14} aria-hidden="true" /> },
+		{ id: "auth", label: t("config.nav.auth"), icon: <KeyRound size={14} aria-hidden="true" /> },
+		{ id: "settings", label: t("config.nav.settings"), icon: <Settings2 size={14} aria-hidden="true" /> },
+		{ id: "trust", label: t("config.nav.trust"), icon: <ShieldCheck size={14} aria-hidden="true" /> },
+		{ id: "raw", label: t("config.nav.raw"), icon: <FileCode2 size={14} aria-hidden="true" /> },
 	];
 
 	// 加载态/错误提示：每个 TabsContent 顶部共用（Tabs 会卸载非激活内容，不能只挂一处）。
@@ -1474,42 +1488,50 @@ function ConfigModalContent(props: ConfigModalProps) {
 							<TabsTrigger
 								key={item.id}
 								value={`config:${item.id}`}
-								className="config-nav-btn h-8 justify-start px-2.5 text-control font-medium"
+								className="config-nav-btn h-8 justify-start gap-1.5 px-2.5 text-control font-medium"
 							>
+								<span className="config-nav-icon">{item.icon}</span>
 								{item.label}
 							</TabsTrigger>
 						))}
 					</div>
 					<div className="config-sidebar-group grid gap-0.5">
 						<span className="px-2 pb-1 text-micro font-semibold text-muted-foreground">{t("config.group.agent")}</span>
-						<TabsTrigger value="extensions" className="config-nav-btn h-8 justify-start px-2.5 text-control font-medium">
+						<TabsTrigger value="extensions" className="config-nav-btn h-8 justify-start gap-1.5 px-2.5 text-control font-medium">
+							<span className="config-nav-icon"><Puzzle size={14} aria-hidden="true" /></span>
 							{t("config.nav.extensions")}
 						</TabsTrigger>
-						<TabsTrigger value="skills" className="config-nav-btn h-8 justify-start px-2.5 text-control font-medium">
+						<TabsTrigger value="skills" className="config-nav-btn h-8 justify-start gap-1.5 px-2.5 text-control font-medium">
+							<span className="config-nav-icon"><Sparkles size={14} aria-hidden="true" /></span>
 							{t("config.nav.skills")}
 						</TabsTrigger>
-						<TabsTrigger value="prompts" className="config-nav-btn h-8 justify-start px-2.5 text-control font-medium">
+						<TabsTrigger value="prompts" className="config-nav-btn h-8 justify-start gap-1.5 px-2.5 text-control font-medium">
+							<span className="config-nav-icon"><FileText size={14} aria-hidden="true" /></span>
 							{t("config.nav.prompts")}
 						</TabsTrigger>
 					</div>
 					<div className="config-sidebar-group grid gap-0.5">
 						<span className="px-2 pb-1 text-micro font-semibold text-muted-foreground">{t("config.group.im")}</span>
-						<TabsTrigger value="im" className="config-nav-btn h-8 justify-start px-2.5 text-control font-medium">
+						<TabsTrigger value="im" className="config-nav-btn h-8 justify-start gap-1.5 px-2.5 text-control font-medium">
+							<span className="config-nav-icon"><MessageSquare size={14} aria-hidden="true" /></span>
 							{t("config.nav.im")}
 						</TabsTrigger>
 					</div>
 					<div className="config-sidebar-group grid gap-0.5">
 						<span className="px-2 pb-1 text-micro font-semibold text-muted-foreground">{t("config.group.other")}</span>
-						<TabsTrigger value="editors" className="config-nav-btn h-8 justify-start px-2.5 text-control font-medium">
+						<TabsTrigger value="editors" className="config-nav-btn h-8 justify-start gap-1.5 px-2.5 text-control font-medium">
+							<span className="config-nav-icon"><Code2 size={14} aria-hidden="true" /></span>
 							{t("config.nav.editors")}
 						</TabsTrigger>
 					</div>
 					<div className="config-sidebar-group grid gap-0.5">
 						<span className="px-2 pb-1 text-micro font-semibold text-muted-foreground">{t("config.group.diagnostics")}</span>
-						<TabsTrigger value="process" className="config-nav-btn h-8 justify-start px-2.5 text-control font-medium">
+						<TabsTrigger value="process" className="config-nav-btn h-8 justify-start gap-1.5 px-2.5 text-control font-medium">
+							<span className="config-nav-icon"><Activity size={14} aria-hidden="true" /></span>
 							{t("config.nav.process")}
 						</TabsTrigger>
-						<TabsTrigger value="logs" className="config-nav-btn h-8 justify-start px-2.5 text-control font-medium">
+						<TabsTrigger value="logs" className="config-nav-btn h-8 justify-start gap-1.5 px-2.5 text-control font-medium">
+							<span className="config-nav-icon"><ScrollText size={14} aria-hidden="true" /></span>
 							{t("config.nav.logs")}
 						</TabsTrigger>
 					</div>

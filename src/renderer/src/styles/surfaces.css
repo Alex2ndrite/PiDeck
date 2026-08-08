@@ -1888,6 +1888,23 @@
 }
 .config-sidebar-group + .config-sidebar-group {
   margin-top: 6px;
+  /* 分组之间用分割线隔开（同设置页右侧的边框质感） */
+  padding-top: 6px;
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+/* 左侧导航图标：与设置页 settings-tab-icon 同风格，选中态转 accent */
+.config-nav-icon {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  color: var(--color-text-tertiary);
+  transition: color 120ms ease;
+}
+.config-sidebar [data-state="active"] .config-nav-icon {
+  color: var(--color-accent);
 }
 
 .config-sidebar-group > span {
