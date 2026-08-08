@@ -753,8 +753,15 @@ export function App() {
   });
   // 激活 Agent 数量告警：受设置 agentCountReminderEnabled 控制（默认开启），每个启动周期提示一次
   useAgentLoadNotice(settings.agentCountReminderEnabled);
-  // 人文关怀：受设置 workBreakReminderEnabled 控制（默认开启），从本次启动计时，每满 1 小时提醒休息
-  useWorkBreakReminder(settings.workBreakReminderEnabled);
+  // 人文关怀：受设置 workBreakReminderEnabled 控制（默认开启），从本次启动计时，每满 2 小时提醒休息；
+  // 「永久不再提醒」按钮把该设置写回 false（可在设置中重新开启），保证设置持久化。
+  const disableWorkBreakReminderForever = useCallback(() => {
+    void api.settings
+      .update({ workBreakReminderEnabled: false })
+      .then((saved) => setSettings((current) => ({ ...current, ...saved })))
+      .catch(() => undefined);
+  }, []);
+  useWorkBreakReminder(settings.workBreakReminderEnabled, disableWorkBreakReminderForever);
   const activeQueuedPrompts = currentSessionId
     ? (queue.queuedPrompts[currentSessionId] ?? [])
     : [];
