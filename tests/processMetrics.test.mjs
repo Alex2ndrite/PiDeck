@@ -138,10 +138,16 @@ test("stop-agent: full session stop chain (coordinator + detach)", () => {
 	// preload 暴露
 	assert.match(preload, /stopAgent: \(agentId: string\) =>/);
 	assert.match(preload, /ipcRenderer\.invoke\(ipcChannels\.stopAgent, agentId\)/);
-	// 渲染层：确认弹窗（showNotice 双按钮）+ 停止后刷新快照
+	// 渲染层：停止确认用 shadcn ConfirmDialog（AlertDialog），不用 toast 双按钮；
+	// 停止后刷新快照让该行消失
 	assert.match(tab, /window\.piDesktop\.system\.stopAgent\(agent\.agentId\)/);
-	assert.match(tab, /showNotice\(\s*t\("config\.process\.stopConfirm"/);
+	assert.match(tab, /setStoppingAgent\(agent\)/);
+	assert.match(tab, /<ConfirmDialog\n\s*title=\{t\("config\.process\.stop"\)\}/);
+	assert.match(tab, /t\("config\.process\.stopConfirm", \{ agent: stoppingAgent\.agentId \}\)/);
+	assert.match(tab, /danger\n/);
+	assert.match(tab, /void stopAgent\(agent\);/);
 	assert.match(tab, /await refresh\(\);/);
+	assert.doesNotMatch(tab, /stopConfirm.*showNotice/s);
 	// 操作列：红色（destructive）带文字按钮，紧跟 agentId 而非表格最右侧
 	assert.match(tab, /CircleStop/);
 	assert.match(tab, /text-destructive hover:bg-destructive\/10/);

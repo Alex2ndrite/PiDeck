@@ -13,6 +13,7 @@ import {
   TableRow,
 } from "../components/ui-shadcn/table";
 import { showNotice } from "../utils/notice";
+import { ConfirmDialog } from "../components/ui-shadcn/ConfirmDialog";
 
 /** Chromium 进程类型 → 本地化展示名；未知类型原样显示。 */
 function processTypeLabel(type: string): string {
@@ -27,44 +28,6 @@ function processTypeLabel(type: string): string {
 }
 
 /**
- * 停止某个 pi agent：showNotice 双按钮确认（action=停止 / cancel=取消）→
- * 调 system:stop-agent → 刷新快照让该行消失。
- * 多平台说明：停止走 AgentManager 正常停止流程（ChildProcess.kill），
- * Windows/Linux/macOS 由 Node 统一处理，不直接调系统 kill。
- */
-function confirmStopAgent(agent: AgentProcessMetric, refresh: () => Promise<void>) {
-  showNotice(
-    t("config.process.stopConfirm", { agent: agent.agentId }),
-    0,
-    "warning",
-    t("config.process.stop"),
-    {
-      action: {
-        label: t("config.process.stop"),
-        onClick: () => {
-          void (async () => {
-            try {
-              await window.piDesktop.system.stopAgent(agent.agentId);
-              showNotice(t("config.process.stopped", { agent: agent.agentId }), 2000, "info");
-              await refresh();
-            } catch (error) {
-              showNotice(
-                t("config.process.stopFailed", { agent: agent.agentId }) + (error instanceof Error ? `：${error.message}` : ""),
-                4000,
-                "error",
-              );
-            }
-          })();
-        },
-      },
-      cancel: {
-        label: t("common.cancel"),
-      },
-    },
-  );
-}
-
-/**
  * 进程与内存监控面板（配置弹窗 → 其他 → 进程监控）。
  * 仅手动刷新：点击「刷新」时经 IPC 拉取一次快照，不做轮询，避免 tasklist/ps
  * 系统调用对性能敏感场景（大量 agent 并发）造成不必要的开销。
@@ -74,6 +37,8 @@ export function ProcessMetricsTab() {
   const [snapshot, setSnapshot] = useState<ProcessMetricsSnapshot | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // 待停止确认的 agent：非 null 时弹出 ConfirmDialog（shadcn AlertDialog）
+  const [stoppingAgent, setStoppingAgent] = useState<AgentProcessMetric | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -91,6 +56,26 @@ export function ProcessMetricsTab() {
   // 挂载时先采一次，避免空面板（用户仍需点刷新才有最新值）
   useEffect(() => {
     void refresh();
+  }, [refresh]);
+
+  /**
+   * 执行停止：调 system:stop-agent → 成功提示 + 刷新快照让该行消失；
+   * 失败提示保留 toast（确认交互已由 ConfirmDialog 承担，结果通知用 toast）。
+   * 多平台说明：停止走 AgentManager 正常停止流程（ChildProcess.kill），
+   * Windows/Linux/macOS 由 Node 统一处理，不直接调系统 kill。
+   */
+  const stopAgent = useCallback(async (agent: AgentProcessMetric) => {
+    try {
+      await window.piDesktop.system.stopAgent(agent.agentId);
+      showNotice(t("config.process.stopped", { agent: agent.agentId }), 2000, "info");
+      await refresh();
+    } catch (error) {
+      showNotice(
+        t("config.process.stopFailed", { agent: agent.agentId }) + (error instanceof Error ? `：${error.message}` : ""),
+        4000,
+        "error",
+      );
+    }
   }, [refresh]);
 
   const electronTotal = snapshot?.totalElectronBytes ?? 0;
@@ -211,7 +196,7 @@ export function ProcessMetricsTab() {
                           className="gap-1 px-2 text-destructive hover:bg-destructive/10 hover:text-destructive"
                           title={t("config.process.stop", { agent: agent.agentId })}
                           aria-label={t("config.process.stop", { agent: agent.agentId })}
-                          onClick={() => confirmStopAgent(agent, refresh)}
+                          onClick={() => setStoppingAgent(agent)}
                         >
                           <CircleStop className="size-4" aria-hidden="true" />
                           {t("config.process.stop")}
@@ -227,6 +212,23 @@ export function ProcessMetricsTab() {
       ) : (
         <div className="py-12 text-center text-control text-text-tertiary">{t("common.loading")}</div>
       )}
+
+      {/* 停止确认：shadcn AlertDialog（ConfirmDialog 统一封装），danger 红底按钮。
+          停止是危险操作，用模态确认而非 toast 双按钮；ESC/遮罩关闭即取消。 */}
+      {stoppingAgent ? (
+        <ConfirmDialog
+          title={t("config.process.stop")}
+          message={t("config.process.stopConfirm", { agent: stoppingAgent.agentId })}
+          confirmLabel={t("config.process.stop")}
+          danger
+          onConfirm={() => {
+            const agent = stoppingAgent;
+            setStoppingAgent(null);
+            void stopAgent(agent);
+          }}
+          onCancel={() => setStoppingAgent(null)}
+        />
+      ) : null}
     </div>
   );
 }
