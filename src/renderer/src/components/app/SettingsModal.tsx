@@ -17,6 +17,12 @@ import { desktopApi } from "../../desktopApi";
 import { ACCENT_PRESETS } from "../../themePresets";
 import { Button } from "../ui-shadcn/button";
 import {
+	Tabs,
+	TabsContent,
+	TabsList,
+	TabsTrigger,
+} from "../ui-shadcn/tabs";
+import {
 	Select,
 	SelectContent,
 	SelectItem,
@@ -543,22 +549,17 @@ function SettingsModalContent(props: SettingsModalProps) {
 						</DialogClose>
 					</div>
 				</DialogHeader>
-			<div className="settings-layout">
-					<nav className="settings-tabs" aria-label={t("settings.title")}>
+			<Tabs orientation="vertical" value={activeTab} onValueChange={(v) => { const match = tabs.find((t) => t.id === v); if (match) setActiveTab(match.id); }} className="settings-layout flex min-h-0 flex-1 flex-row gap-0 bg-bg-panel">
+					<TabsList className="settings-tabs flex min-h-0 shrink-0 flex-col items-stretch gap-2.5 overflow-auto border-0 border-r border-border rounded-none bg-bg-panel p-2.5 data-[orientation=vertical]:w-[196px]" aria-label={t("settings.title")}>
 						{tabs.map((tab) => (
-							<button
-								key={tab.id}
-								className={activeTab === tab.id ? "active" : ""}
-								onClick={() => setActiveTab(tab.id)}
-							>
+							<TabsTrigger key={tab.id} value={tab.id} className="config-nav-btn h-8 justify-start gap-1.5 px-2.5 text-control font-medium">
 								<span className="settings-tab-icon">{tab.icon}</span>
 								<strong>{tab.label}</strong>
-							</button>
+							</TabsTrigger>
 						))}
-					</nav>
-					<div className="settings-panel">
-						{/* ── 常用设置 tab ── */}
-						{activeTab === "common" && (
+					</TabsList>
+					{/* ── 常用设置 tab ── */}
+						<TabsContent value="common" className="settings-panel min-w-0">
 							<>
 								<SettingsSection title={t("settings.interface")}>
 									<div className="setting-field">
@@ -998,9 +999,9 @@ function SettingsModalContent(props: SettingsModalProps) {
 									)}
 								</SettingsSection>
 							</>
-						)}
+						</TabsContent>
 						{/* ── 外观设置 tab ── */}
-						{activeTab === "appearance" && (
+						<TabsContent value="appearance" className="settings-panel min-w-0">
 							<>
 								<SettingsSection title={t("settings.interface")}>
 									<div className="setting-field">
@@ -1170,9 +1171,9 @@ function SettingsModalContent(props: SettingsModalProps) {
 									</div>
 								</SettingsSection>
 							</>
-						)}
+						</TabsContent>
 						{/* ── 代理设置 tab ── */}
-						{activeTab === "proxy" && (
+						<TabsContent value="proxy" className="settings-panel min-w-0">
 							<>
 								{/* 未保存更改的提示横幅 */}
 								{proxyDirty && (
@@ -1259,9 +1260,9 @@ function SettingsModalContent(props: SettingsModalProps) {
 								</SettingsSection>
 								{/* 代理变更走全局草稿：顶部统一保存/取消，不再在 tab 底部重复放按钮 */}
 							</>
-						)}
-						{/* ── 开发设置 tab（含 Web 服务） ── */}
-						{activeTab === "dev" && (
+						</TabsContent>
+							{/* ── 开发设置 tab（含 Web 服务） ── */}
+						<TabsContent value="dev" className="settings-panel min-w-0">
 							<>
 								<SettingsSection title={t("settings.environment")}>
 									{/* Pi CLI 状态：安装检测 + 路径信息 + 重新检测 */}
@@ -1643,9 +1644,9 @@ function SettingsModalContent(props: SettingsModalProps) {
 									/>
 								</SettingsSection>
 							</>
-						)}
+						</TabsContent>
 						{/* ── 桌面宠物 tab ── */}
-						{activeTab === "pet" && (
+						<TabsContent value="pet" className="settings-panel min-w-0">
 							<>
 								<SettingsSection title={t("settings.pet.title")} description={t("settings.pet.sectionDesc")}>
 									<SettingSwitch
@@ -1793,16 +1794,15 @@ function SettingsModalContent(props: SettingsModalProps) {
 									</div>
 								</SettingsSection>
 							</>
-						)}
+						</TabsContent>
 						{/* ── 存储与日志 tab ── */}
-						{activeTab === "storage" && (
+						<TabsContent value="storage" className="settings-panel min-w-0">
 							<StorageTab
 								settings={draftSettings}
 								onChange={updateDraft}
 							/>
-						)}
-					</div>
-				</div>
+						</TabsContent>
+					</Tabs>
 			{/* 未保存变更确认对话框 */}
 			{closeConfirmOpen && (
 				<AlertDialog open onOpenChange={(open) => { if (!open) setCloseConfirmOpen(false); }}>

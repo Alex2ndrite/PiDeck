@@ -804,7 +804,9 @@
   background: var(--color-bg-panel);
 }
 
-/* 侧边栏导航：紧凑设计，仅图标+标签 */
+/* 侧边栏导航：紧凑设计，仅图标+标签。
+   按钮本身已迁移为 shadcn TabsTrigger（选中态由 data-[state=active] utility 承担），
+   旧 .settings-tabs button 系列规则已删除，仅保留容器与图标样式。 */
 .settings-tabs {
   display: flex;
   flex-direction: column;
@@ -813,37 +815,6 @@
   border-right: 1px solid var(--color-border-subtle);
   /* 与内容区同底；选中态仍靠 bg-active 区分 */
   background: var(--color-bg-panel);
-}
-.settings-tabs button {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  min-height: 36px;
-  border: 0;
-  border-radius: var(--radius-md);
-  background: transparent;
-  color: var(--color-text-secondary);
-  padding: 6px 10px;
-  text-align: left;
-  font-size: var(--font-size-control);
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.12s ease;
-  position: relative;
-}
-.settings-tabs button:hover {
-  background: var(--color-bg-hover);
-  color: var(--color-text-primary);
-}
-.settings-tabs button.active {
-  background: var(--color-bg-active);
-  color: var(--color-text-primary);
-  font-weight: 600;
-}
-.settings-tabs button strong {
-  font-size: var(--font-size-control);
-  font-weight: inherit;
 }
 .settings-tab-icon {
   display: grid;
@@ -860,6 +831,12 @@
   color: var(--color-text-secondary);
 }
 .settings-tabs button.active .settings-tab-icon {
+  color: var(--color-accent);
+}
+.settings-tab-icon:hover {
+  color: var(--color-text-secondary);
+}
+.settings-tabs [data-state="active"] .settings-tab-icon {
   color: var(--color-accent);
 }
 .modal-header {
