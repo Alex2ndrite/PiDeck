@@ -3,7 +3,11 @@
  *
  * 语义（与用户确认）：
  * - 中间回答：本轮「不是最后一条」的 assistant 文本（思考/工具之间的阶段性输出）。
- * - 最终回答：本轮「最后一条」assistant 文本，常驻、永不折叠。
+ * - 最终回答：本轮「最后一条且为收尾条目」的 assistant 文本，常驻、永不折叠。
+ *   仅当 run 的最后一条条目就是该 assistant 时才提升：工具调用前的阶段性文本
+ *   （后随 tool/thinking 条目）即使暂时是最后一条 assistant，也只是中间回答，
+ *   防止 steer 打断/工具回合中「中间回复被提升为最终回答、随 run 追加又降级」。
+ *   真正的最终回答必然是 run 的收尾条目，因此一旦提升即稳定，不会反复。
  * - 思考/工具步骤：原位出现，不打包进同一 DOM 容器（避免折叠容器被回答文本打断），
  *   由外层 run 级折叠开关统一控制显隐。
  * - assistant 消息自带的 thinking 作为思考步骤插到该回答之前（保持「思考→回答」时序）。
@@ -43,7 +47,9 @@ export function buildTurnDisplay(
 	// 流式中（isComplete=false）无法预知哪条是最后一条，全部按中间回答处理、
 	// 收进执行过程折叠栏；run 结束后才把最后一条提升为常驻的最终回答。
 	const isComplete = options.isComplete ?? true;
-	// 本轮最后一条 assistant 消息的位置：唯一用于区分中间回答/最终回答的锚点。
+	// 本轮最后一条 assistant 消息的位置：用于区分中间回答/最终回答的锚点。
+	// 只有「最后一条 assistant 且是 run 收尾条目」（index === items.length - 1）
+	// 才具备最终回答资格；后随 tool/thinking 的 assistant 是工具调用前的阶段性文本。
 	let lastAssistantIndex = -1;
 	if (isComplete) {
 		run.items.forEach((item, index) => {
@@ -113,7 +119,7 @@ export function buildTurnDisplay(
 			items.push({ kind: "interim-answer", id: item.message.id, message: item.message });
 			return;
 		}
-		if (isComplete && index === lastAssistantIndex) {
+		if (isComplete && index === lastAssistantIndex && index === run.items.length - 1) {
 			items.push({ kind: "final-answer", id: item.message.id, message: item.message });
 		} else {
 			items.push({ kind: "interim-answer", id: item.message.id, message: item.message });
