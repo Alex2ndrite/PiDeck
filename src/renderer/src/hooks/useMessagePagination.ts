@@ -87,6 +87,22 @@ export function includeMessagePaginationIndex(
   };
 }
 
+/**
+ * 尾部追加消息时同步放大窗口。必须在「同一次渲染」内生效：
+ * 若等 useEffect，会先用旧 visibleCount slice 掉顶部一条再补回 → 触底上跳。
+ * 批量追加（含 ≥10）也要跟进，否则窗口永久少条、上方持续被吃掉。
+ */
+export function growVisibleCountForAppend(
+  visibleCount: number,
+  previousLength: number,
+  nextLength: number,
+  maxVisibleMessages: number,
+): number {
+  const delta = nextLength - previousLength;
+  if (delta <= 0) return Math.min(visibleCount, nextLength, maxVisibleMessages);
+  return Math.min(visibleCount + delta, nextLength, maxVisibleMessages);
+}
+
 export function useMessagePagination({
   messages,
   ownerKey = DEFAULT_OWNER_KEY,
@@ -104,7 +120,7 @@ export function useMessagePagination({
   const frameRef = useRef<number | undefined>(undefined);
   const fallbackTimerRef = useRef<number | undefined>(undefined);
   const frameOwnerRef = useRef<string | undefined>(undefined);
-  const previousRef = useRef({ ownerKey, count: messages.length });
+  const [trackedLength, setTrackedLength] = useState(messages.length);
   ownerKeyRef.current = ownerKey;
   messageCountRef.current = messages.length;
 
@@ -118,38 +134,35 @@ export function useMessagePagination({
 
   useEffect(() => {
     cancelPendingLoad();
-    previousRef.current = { ownerKey, count: messages.length };
+    setTrackedLength(messages.length);
     setStoredState(createMessagePaginationState(ownerKey, initialPageSize));
     return cancelPendingLoad;
+    // 仅会话切换时重置；messages.length 不进依赖，避免追加时整窗重置。
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- owner/pageSize only
   }, [cancelPendingLoad, initialPageSize, ownerKey]);
 
-  useEffect(() => {
-    if (!enabled) return;
-    const previous = previousRef.current;
-    if (previous.ownerKey !== ownerKey) {
-      previousRef.current = { ownerKey, count: messages.length };
-      return;
+  // 渲染期同步窗口：丢弃「旧 visibleCount」那一帧，避免顶部消息闪删。
+  if (enabled && storedState.ownerKey === ownerKey && messages.length !== trackedLength) {
+    const nextVisible = growVisibleCountForAppend(
+      state.visibleCount,
+      trackedLength,
+      messages.length,
+      maxVisibleMessages,
+    );
+    setTrackedLength(messages.length);
+    if (nextVisible !== state.visibleCount) {
+      setStoredState({
+        ...state,
+        visibleCount: nextVisible,
+      });
     }
-    const delta = messages.length - previous.count;
-    previousRef.current = { ownerKey, count: messages.length };
-    if (delta <= 0 || delta >= 10) return;
-    setStoredState((current) => {
-      if (current.ownerKey !== ownerKey) return current;
-      return {
-        ...current,
-        visibleCount: Math.min(
-          current.visibleCount + delta,
-          messages.length,
-          maxVisibleMessages,
-        ),
-      };
-    });
-  }, [enabled, maxVisibleMessages, messages.length, ownerKey]);
+  }
 
   const reset = useCallback(() => {
     cancelPendingLoad();
+    setTrackedLength(messages.length);
     setStoredState(createMessagePaginationState(ownerKey, initialPageSize));
-  }, [cancelPendingLoad, initialPageSize, ownerKey]);
+  }, [cancelPendingLoad, initialPageSize, messages.length, ownerKey]);
 
   const loadMore = useCallback(() => {
     if (!enabled || state.isLoading) return;

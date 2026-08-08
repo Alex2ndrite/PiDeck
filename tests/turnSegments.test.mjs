@@ -216,7 +216,7 @@ function loadAppUtils() {
 		exports: {},
 		location: { href: "file:///Users/test/app" },
 		require: (id) => {
-			if (id === "./RichInput") return { formatFilePathRef: (p) => p };
+			if (id === "../session/composer/chips") return { formatFilePathRef: (p) => p };
 			return {};
 		},
 	};

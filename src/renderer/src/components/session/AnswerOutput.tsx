@@ -1,7 +1,6 @@
 import { memo } from "react";
 import { useAtomValue } from "jotai";
 import { streamingTextByIdAtom } from "../../atoms/session-atoms";
-import { useSmoothStream } from "../../utils/useSmoothStream";
 import { MarkdownStream } from "./MarkdownStream";
 
 /** 与 TimelineFormat 同逻辑的内联副本（node 单测可直接加载，零外部依赖）。 */
@@ -18,7 +17,8 @@ function stripThinkingTags(text: string): string {
 /**
  * 助手正文唯一输出入口。
  *
- * - live：读 streamingTextByIdAtom，打字机喂轻量 plain DOM（不跑 Streamdown 全量 parse）
+ * - live：读 streamingTextByIdAtom，MarkdownStream 轻量渲染（与思考同构，
+ *   打字机/超长纯文本兜底都在 MarkdownStream 内部）
  * - settled：原文一次交给全量 Streamdown（高亮/mermaid/math）
  *
  * 视觉容器仍用 execution-interim.markdown-body，兼容 typewriter E2E 选择器。
@@ -42,6 +42,8 @@ export const AnswerOutput = memo(function AnswerOutput(props: {
 				sessionId={props.sessionId ?? ""}
 				hidden={props.hidden}
 				isStreaming={props.isStreaming}
+				onOpenExternal={props.onOpenExternal}
+				onOpenFile={props.onOpenFile}
 			/>
 		);
 	}
@@ -64,28 +66,33 @@ export const AnswerOutput = memo(function AnswerOutput(props: {
 	);
 });
 
-/** Live 正文：atom → useSmoothStream → plain 文本节点（主线程只做字符串切片）。 */
+/**
+ * Live 正文：atom → MarkdownStream（打字机在 MarkdownStream 内部，
+ * 不再自持打字机，避免双重逐字；流式轻量渲染与思考同构）。
+ */
 const LiveAnswerBody = memo(function LiveAnswerBody(props: {
 	sessionId: string;
 	hidden?: boolean;
 	isStreaming?: boolean;
+	onOpenExternal: (url: string) => void;
+	onOpenFile?: (path: string) => void;
 }) {
 	const streaming = useAtomValue(streamingTextByIdAtom);
 	const entry = props.sessionId ? streaming[props.sessionId] : undefined;
 	const sourceText = entry?.content ?? "";
-	const { displayedContent } = useSmoothStream({
-		content: sourceText,
-		isStreaming: Boolean(props.isStreaming),
-		minDelay: 16,
-	});
-	const text = stripThinkingTags(stripAnsi(displayedContent));
+	const text = stripThinkingTags(stripAnsi(sourceText));
 	return (
 		<div
-			className="execution-interim markdown-body whitespace-pre-wrap break-words"
+			className="execution-interim markdown-body"
 			data-is-streaming={props.isStreaming ? "1" : "0"}
 			style={{ display: props.hidden ? "none" : undefined }}
 		>
-			{text}
+			<MarkdownStream
+				text={text}
+				isStreaming={Boolean(props.isStreaming)}
+				onOpenExternal={props.onOpenExternal}
+				onOpenFile={props.onOpenFile}
+			/>
 		</div>
 	);
 });

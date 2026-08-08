@@ -10,21 +10,27 @@ const runtimeInjector = readFileSync(
   "src/renderer/src/components/session/SessionRuntimeInjector.tsx",
   "utf8",
 );
+const app = readFileSync("src/renderer/src/App.tsx", "utf8");
 const surfaces = readFileSync("src/renderer/src/styles/surfaces.css", "utf8");
 const foundation = readFileSync("src/renderer/src/styles/foundation.css", "utf8");
 
-test("session status and actions embed into the tab bar right slot", () => {
-  const sessionTop = sessionView.indexOf("<SessionTabsBar");
-  const contentStart = sessionView.indexOf("<ResizablePanelGroup", sessionTop);
-  assert.notEqual(sessionTop, -1);
-  assert.notEqual(contentStart, -1);
-  const headerArea = sessionView.slice(sessionTop, contentStart);
+test("session tabs mount once outside SessionView; pane keeps standalone header", () => {
+  // Tab 栏统一外置；SessionView 只保留会话操作 Header（抽屉开关在共享 Tab 栏）。
+  assert.doesNotMatch(sessionView, /SessionTabsBar/);
+  assert.match(app, /sessionTabsBarNode/);
+  assert.match(app, /SessionPaneServicesProvider/);
+  // Tab 栏挂在 WorkbenchStage chrome，分屏之上（与文件 Tab 同一条）
+  assert.match(app, /chrome=\{sessionTabsBarNode\}/);
+  assert.doesNotMatch(app, /\{sessionTabsBarNode\}\s*\n\s*\{currentSessionId/);
 
-  // 状态徽章/会话操作/抽屉按钮以 embedded 模式嵌入 Tab 栏右侧，不再单独占一行；
-  // 只有无会话空态才保留 actions 为 undefined（Tab 栏自带抽屉快捷入口）。
-  assert.match(headerArea, /<SessionTabsBar\s+\{\.\.\.sessionTabs\}/);
-  assert.match(headerArea, /actions=\{\s*<SessionHeader/);
-  assert.match(headerArea, /<SessionHeader[\s\S]*?embedded[\s\S]*?\/>/);
+  const headerStart = sessionView.indexOf("<SessionHeader");
+  const contentStart = sessionView.indexOf("<ResizablePanelGroup", headerStart);
+  assert.notEqual(headerStart, -1);
+  assert.notEqual(contentStart, -1);
+  const headerArea = sessionView.slice(headerStart, contentStart);
+  assert.match(headerArea, /<SessionHeader/);
+  assert.doesNotMatch(headerArea, /onToggleDrawer/);
+  assert.doesNotMatch(headerArea, /embedded/);
 });
 
 test("session status and new-session controls use the shared medium radius", () => {
@@ -39,8 +45,49 @@ test("session status and new-session controls use the shared medium radius", () 
 });
 
 test("restart is offered only when the current session has a bound Agent", () => {
+  // 运行控制已迁入外置 Tab 栏的 Tab 下拉：App 装配 canStopCurrent/canRestartCurrent
   assert.match(
-    runtimeInjector,
-    /showRestart=\{Boolean\(runtime\.activeAgentId\) && !isLanWeb\}/,
+    app,
+    /onRestartCurrent: activeAgentId\s*\n\s*\? \(\) => void restartActiveAgent\(activeAgentId\)/,
   );
+});
+
+test("split panes show per-pane session title in SessionHeader", () => {
+  // 共享顶栏 Tab 时，分屏各栏靠 paneTitle 对上「这栏是谁」；单栏不重复标题。
+  const header = readFileSync(
+    "src/renderer/src/components/session/SessionHeader.tsx",
+    "utf8",
+  );
+  assert.match(header, /paneTitle\?:/);
+  assert.match(header, /session-pane-title/);
+  assert.match(sessionView, /paneTitle=\{splitPane \? sessionTitle : undefined\}/);
+});
+
+test("session header has no bottom border under pane identity row", () => {
+  const header = readFileSync(
+    "src/renderer/src/components/session/SessionHeader.tsx",
+    "utf8",
+  );
+  // 身份标题下不再叠 border-b，避免分屏/单栏碎线
+  assert.doesNotMatch(
+    header,
+    /chat-header[^"]*border-b/,
+  );
+});
+
+test("split panes expose exit-split expand control on the left", () => {
+  const header = readFileSync(
+    "src/renderer/src/components/session/SessionHeader.tsx",
+    "utf8",
+  );
+  assert.match(header, /onExitSplit\?:/);
+  assert.match(header, /Maximize2/);
+  assert.match(header, /session\.split\.exit/);
+  assert.match(sessionView, /onExitSplit=\{splitPane \? paneServices\.exitSessionSplit : undefined\}/);
+  assert.match(app, /exitSessionSplit:\s*workspaceChrome\.exitSplit/);
+  const chrome = readFileSync(
+    "src/renderer/src/hooks/useSessionWorkspaceChrome.ts",
+    "utf8",
+  );
+  assert.match(chrome, /const exitSplit = useCallback/);
 });

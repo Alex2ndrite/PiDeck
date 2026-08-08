@@ -5,7 +5,7 @@
 
 import type { ReactNode } from "react";
 import type { ChatMessage, FileTreeNode, PiCommand } from "../../../../shared/types";
-import { formatFilePathRef } from "./RichInput";
+import { formatFilePathRef } from "../session/composer/chips";
 
 /* ── 文件树拖拽负载 ── */
 
@@ -497,8 +497,8 @@ export function detectTrigger(
 	if (char === "&") {
 		if (/[\n]/.test(segment)) return null;
 		const prev = start > 0 ? before[start - 1] : "";
-		// 只阻止 URL 查询参数场景（?foo=bar&），不拦 &&、&chip& 等正常场景
-		if (prev === "=" || prev === "?") return null;
+		// URL 查询（?a=b&）与 shell && 不成会话触发；单独 &name 仍可触发
+		if (prev === "=" || prev === "?" || prev === "&") return null;
 		return { start, char, query: segment };
 	}
 	if (char === "/") {

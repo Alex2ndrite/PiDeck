@@ -231,26 +231,8 @@
   outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
-/* 操作栏：默认隐藏，hover/focus-within 显现；保留 24px 占位避免布局跳动 */
-.turn-row-action-btn,
-.copy-menu-trigger {
-  border: 0;
-  background: transparent;
-  color: var(--color-text-tertiary);
-  padding: 2px 6px;
-  border-radius: var(--radius-xs);
-  font-size: var(--font-size-caption);
-  font-family: var(--font-family-base);
-  cursor: pointer;
-  transition:
-    color 0.12s ease,
-    background-color 0.12s ease;
-}
-.turn-row-action-btn:hover,
-.copy-menu-trigger:hover {
-  color: var(--color-accent);
-  background: var(--color-bg-hover);
-}
+/* 操作栏锚点：默认皮由 TurnRow/CopyMenu 的 ghost Button utility 承担；
+   此处只保留 copied 动效与 focus 兜底，避免与 hover:bg-muted 双源抢属性。 */
 .turn-row-action-btn:focus-visible,
 .copy-menu-trigger:focus-visible {
   outline: 2px solid var(--focus-ring);
@@ -885,154 +867,8 @@
 .user-turn:focus-within .user-turn-actions {
   opacity: 1;
 }
-.user-turn-action-btn {
-  border: 0;
-  background: transparent;
-  color: var(--color-text-tertiary);
-  padding: 2px 6px;
-  border-radius: var(--radius-xs);
-  font-size: var(--font-size-caption);
-  font-family: var(--font-family-base);
-  cursor: pointer;
-  transition:
-    color 0.12s ease,
-    background-color 0.12s ease;
-}
-.user-turn-action-btn:hover {
-  color: var(--color-accent);
-  background: var(--color-bg-hover);
-}
+/* 用户消息操作钮：默认皮由 SurfaceComponents ghost Button utility 承担 */
 .user-turn-action-btn:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 1px;
-}
-
-/* ── 多选模式复选框 ── */
-/* ── 多选分享弹框 ── */
-@keyframes multi-select-fade-in {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-@keyframes multi-select-slide-in {
-  from {
-    transform: translateY(12px);
-    opacity: 0;
-  }
-  to {
-    transform: translateY(0);
-    opacity: 1;
-  }
-}
-
-/* 标题栏 */
-
-/* 树状列表 */
-
-/* 通用节点行 */
-.multi-select-tree-node.selected {
-  /* 选中态只依赖复选框本身表达，避免整行底色或左侧色条干扰阅读。 */
-  background: transparent;
-  border-color: transparent;
-}
-
-/* 节点图标 */
-.multi-select-node-icon.user {
-  color: var(--color-text-tertiary);
-}
-.multi-select-node-icon.assistant {
-  color: var(--color-text-tertiary);
-}
-.multi-select-node-icon.child {
-  color: var(--color-text-tertiary);
-  margin-left: 0;
-}
-
-/* 节点标签 */
-
-/* agent-run 父节点 */
-.multi-select-tree-run .run-parent {
-  font-weight: 500;
-  padding: 8px 10px;
-  background: color-mix(
-    in srgb,
-    var(--color-bg-muted) 78%,
-    var(--color-bg-panel)
-  );
-  border: 0;
-  border-bottom: 1px solid var(--color-border-subtle);
-  border-radius: 0;
-  cursor: pointer;
-  user-select: none;
-}
-.multi-select-tree-run .run-parent:hover {
-  background: var(--color-bg-hover);
-}
-.multi-select-tree-run .run-parent.selected {
-  /* run 父节点本身已有 muted 底色，选中时不再叠加绿色背景或左侧色条。 */
-  background: color-mix(
-    in srgb,
-    var(--color-bg-muted) 78%,
-    var(--color-bg-panel)
-  );
-  border-color: transparent;
-  border-bottom-color: var(--color-border-subtle);
-}
-.multi-select-run-children .run-child {
-  padding: 6px 8px;
-  border-bottom: 0;
-  border-radius: var(--radius-sm);
-}
-.multi-select-run-children .run-child:last-child {
-  border-bottom: 0;
-}
-
-/* 底部操作栏 */
-.multi-select-modal-footer {
-  flex-shrink: 0;
-  border-top: 1px solid var(--color-border-subtle);
-  padding: 12px 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.multi-select-modal-footer-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-.multi-select-modal-footer-bottom {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-.multi-select-bulk-actions {
-  display: flex;
-  gap: 6px;
-}
-.multi-select-bulk-btn {
-  border: none;
-  background: transparent;
-  color: var(--color-accent);
-  font-size: var(--font-size-caption);
-  font-family: var(--font-family-base);
-  cursor: pointer;
-  padding: 2px 8px;
-  border-radius: var(--radius-sm);
-  transition: all 0.1s ease;
-}
-.multi-select-bulk-btn:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--color-accent) 8%, transparent);
-}
-.multi-select-bulk-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-.multi-select-bulk-btn:focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
 }
@@ -1053,88 +889,6 @@
   background: transparent;
 }
 
-/* 工具栏：全选 + 来源筛选 + 删除按钮 */
-
-/* 底部操作栏 */
-.multi-select-count {
-  font-size: var(--font-size-base);
-  font-weight: 500;
-  color: var(--color-text-secondary);
-  white-space: nowrap;
-}
-
-/* 分享按钮 */
-.multi-select-action-btn {
-  border: 1px solid var(--color-border);
-  background: var(--color-bg-panel);
-  color: var(--color-text-primary);
-  padding: 6px 16px;
-  border-radius: var(--radius-sm);
-  font-size: var(--font-size-caption);
-  font-family: var(--font-family-base);
-  cursor: pointer;
-  transition: all 0.15s ease;
-  white-space: nowrap;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  min-height: 32px;
-}
-.multi-select-action-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-.multi-select-action-btn:not(:disabled):hover {
-  border-color: var(--color-accent);
-  color: var(--color-accent);
-  background: color-mix(in srgb, var(--color-accent) 6%, var(--color-bg-panel));
-}
-.multi-select-action-btn:not(:disabled):active {
-  transform: scale(0.96);
-}
-.multi-select-action-btn:not(:disabled):focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 2px;
-}
-
-/* 复制脉冲动画 */
-.multi-select-action-btn.copying {
-  border-color: var(--color-success);
-  color: var(--color-success);
-  background: color-mix(
-    in srgb,
-    var(--color-success) 8%,
-    var(--color-bg-panel)
-  );
-  animation: multi-select-copy-pulse 0.3s ease;
-  pointer-events: none;
-}
-@keyframes multi-select-copy-pulse {
-  0% {
-    transform: scale(1);
-  }
-  40% {
-    transform: scale(1.08);
-  }
-  100% {
-    transform: scale(1);
-  }
-}
-
-/* 取消按钮 */
-.multi-select-action-btn.primary {
-  border-color: var(--color-border);
-  background: var(--color-bg-hover);
-  color: var(--color-text-secondary);
-}
-.multi-select-action-btn.primary:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--color-danger) 8%, var(--color-bg-hover));
-  color: var(--color-danger);
-  border-color: var(--color-danger);
-}
-
-/* 多选模式切换按钮 */
 /* 用户消息中的 skill 徽标：pi 展开后的 /skill:name 会以 <skill> 块注入消息文本，
    这里把它从正文剥除并单独渲染成轻量徽标，让用户知道这条消息用了哪些 skill。
    徽标仅作展示：取消内部 gap（斜杠与名字紧贴成一个整体，避免割裂），并禁用文本选中。 */
@@ -2144,6 +1898,53 @@ body.ask-dialog-open .ask-question-card.pending {
   opacity: 0.82;
   pointer-events: none;
 }
+/* TipTap：占位用绝对定位，避免旧 float:left 把光标「点子」挤飞/看不见。 */
+.composer .rich-input.is-editor-empty {
+  position: relative;
+}
+.composer .rich-input.is-editor-empty::before {
+  content: attr(data-placeholder);
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  top: 10px;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-input);
+  line-height: var(--line-height-input);
+  opacity: 0.82;
+  pointer-events: none;
+  white-space: pre-wrap;
+}
+/* TipTap 比 RichInput 多一层 EditorContent wrapper。必须把 flex 高度约束
+   传到 .ProseMirror，否则 overflow-y:auto 永不触发，继续输入会把正文「顶」出框外。 */
+.composer .tiptap-composer-host {
+  min-height: 0;
+  overflow: hidden;
+}
+.composer .tiptap-composer-host .tiptap-composer-surface {
+  min-height: 0;
+  min-width: 0;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.composer .tiptap-composer-host .ProseMirror,
+.composer .tiptap-composer-host .rich-input {
+  outline: none;
+  caret-color: var(--color-text-primary);
+  /* 占满 host 可用高度后再滚动；min-height:0 允许低于内容固有高度收缩。 */
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  max-height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+.composer .tiptap-composer-host .ProseMirror p {
+  margin: 0;
+}
 /* 行内 chip:文件=蓝、skill=淡紫。输入框 + 消息气泡通用。
    使用 display:inline + box-decoration-break:clone,长 chip 自动折行时
    背景/边框在折行处重复,视觉上像两个独立 chip;空间恢复后自动回到一个 chip。 */
@@ -2203,12 +2004,6 @@ body.ask-dialog-open .ask-question-card.pending {
 .composer .input-chip--session:hover {
   background: color-mix(in srgb, var(--color-brand-green) 24%, transparent);
 }
-
-.session-ref-modal { width: min(700px, calc(100vw - 48px)); max-height: min(650px, calc(100vh - 48px)); }
-.session-ref-message-list { flex: 1; overflow-y: auto; padding: 4px 0; }
-.session-ref-message-list .multi-select-tree-node.disabled { opacity: 0.5; cursor: default; }
-.session-ref-loading, .session-ref-error { display: flex; align-items: center; justify-content: center; padding: 40px 16px; color: var(--color-text-tertiary); }
-.session-ref-error { color: var(--color-error); }
 
 .composer-box:focus-within {
   /* 中性 focus：ring 走 foreground，不再品牌绿 */
@@ -2556,115 +2351,7 @@ body.ask-dialog-open .ask-question-card.pending {
   color: var(--color-warning);
   background: var(--color-warning);
 }
-/* ---- 命令面板弹框 ---- */
-.command-palette {
-  position: fixed;
-  left: 50%;
-  bottom: 160px;
-  transform: translateX(-50%);
-  width: min(520px, calc(100vw - 120px));
-  max-height: 380px;
-  display: flex;
-  flex-direction: column;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-lg);
-  background: var(--color-bg-panel);
-  box-shadow: var(--shadow-popover);
-  z-index: 100;
-  animation: palette-in 0.12s ease-out;
-  overflow: hidden;
-}
-@keyframes palette-in {
-  from {
-    opacity: 0;
-    transform: translateX(-50%) translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(-50%) translateY(0);
-  }
-}
-.command-palette-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--color-border-subtle);
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-caption);
-  font-weight: 500;
-}
-.command-palette-close {
-  width: 24px;
-  height: 24px;
-  border: 0;
-  border-radius: var(--radius-md);
-  background: transparent;
-  color: var(--color-text-tertiary);
-  font-size: var(--font-size-title);
-  cursor: pointer;
-  transition:
-    background-color 0.1s,
-    color 0.1s;
-}
-.command-palette-close:hover {
-  background: var(--color-bg-hover);
-  color: var(--color-text-secondary);
-}
-.command-palette-list {
-  flex: 1;
-  overflow-y: auto;
-  padding: 6px;
-}
-.command-palette-item {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  border: 0;
-  border-radius: var(--radius-lg);
-  background: transparent;
-  padding: 10px 12px;
-  text-align: left;
-  cursor: pointer;
-  transition: background 0.08s;
-}
-.command-palette-item:hover,
-.command-palette-item.selected {
-  background: var(--color-bg-active);
-}
-.command-palette-item.selected {
-  background: var(--color-accent-soft);
-}
-.command-palette-label {
-  flex: 0 0 auto;
-  min-width: 140px;
-  max-width: 200px;
-  color: var(--color-text-primary);
-  font-size: var(--font-size-control);
-  font-weight: 600;
-  font-family: var(--font-family-mono);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.command-palette-desc {
-  flex: 1;
-  min-width: 0;
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-caption);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.command-palette-footer {
-  display: flex;
-  gap: 16px;
-  padding: 8px 14px;
-  border-top: 1px solid var(--color-border-subtle);
-  color: var(--color-text-tertiary);
-  font-size: var(--font-size-micro);
-}
+/* ---- 命令面板弹框（已迁 Tailwind：PromptSuggestions / SessionHistoryModal）---- */
 
 .detail-drawer {
   position: relative;
@@ -2741,12 +2428,14 @@ body.ask-dialog-open .ask-question-card.pending {
   /* 仅纵向滚动：工具行/树行 min-content 撑破时不再制造横向滚动条 */
   overflow-x: hidden;
   overflow-y: auto;
-  padding: var(--space-4);
+  /* 文件树收紧外圈 padding，避免再叠一层「假缩进」感 */
+  padding: var(--space-2);
 }
 .file-node-row {
   --file-depth-offset: 0px;
   width: 100%;
-  height: 26px;
+  /* 高度/圆角由 WorkspaceSurface Button utility；水平 padding 由行上 inline style
+     （含 depth 缩进）承担，避免 Button 的 px-* 与 legacy padding 双源冲突。 */
   /* #115 shadcn 化：行改用 flex（与 Button 的 inline-flex 同构），
      目录行的 chevron 作为第一个 flex 子项，不再依赖旧 grid 列契约
      （grid 2/3 列无法容纳 chevron + 图标 + 名称 + 类型标签的变体）。 */
@@ -2756,16 +2445,13 @@ body.ask-dialog-open .ask-question-card.pending {
   border: 0;
   background: transparent;
   color: var(--color-text-primary);
-  padding: 0 var(--space-2) 0
-    calc(var(--space-2) + var(--file-depth-offset));
-  border-radius: var(--radius-sm);
   text-align: left;
   font-size: var(--font-size-body);
   font-weight: 400;
   line-height: var(--line-height-control);
   white-space: nowrap;
 }
-/* chevron 固定宽度不参与压缩；目录图标 22px 由 .file-node-icon 保证 */
+/* chevron 固定宽度不参与压缩；目录图标 24px 由 .file-node-icon 保证 */
 .file-node-chevron {
   flex-shrink: 0;
 }
@@ -2791,8 +2477,8 @@ body.ask-dialog-open .ask-question-card.pending {
   cursor: default;
 }
 .file-node-icon {
-  width: 22px;
-  /* 目录用 lucide 描边 Folder：颜色取 Seti 文件夹绿而非品牌 accent，
+  width: 24px;
+  /* 目录用 lucide 描边 Folder：颜色取 Seti 灰（--file-icon-folder → grey），
      避免整树目录被染成同一实心色块（文件行 Seti 图标由 inline style 覆盖此色）。 */
   color: var(--file-icon-folder);
   font-size: var(--font-size-caption);
@@ -2815,7 +2501,7 @@ body.ask-dialog-open .ask-question-card.pending {
   position: absolute;
   top: 0;
   bottom: 0;
-  left: calc(var(--space-2) + var(--file-depth-offset, 0px) + 11px);
+  left: calc(var(--space-1) + var(--file-depth-offset, 0px) + 10px);
   border-left: 1px solid var(--color-border-subtle);
   pointer-events: none;
 }
@@ -2827,6 +2513,11 @@ body.ask-dialog-open .ask-question-card.pending {
   color: var(--color-text-tertiary);
   font-size: var(--font-size-caption);
   margin-bottom: var(--space-3);
+}
+
+/* 文件抽屉工具行已自带 border-b；去掉 legacy 下边距，避免「显示区域」虚高 */
+.files-panel .panel-action-row {
+  margin-bottom: 0;
 }
 
 .panel-action-buttons {
@@ -3105,52 +2796,6 @@ body.ask-dialog-open .ask-question-card.pending {
     var(--color-danger-soft) 86%,
     var(--color-bg-panel)
   );
-}
-
-.session-history-modal.command-palette {
-  width: min(900px, calc(100vw - 80px));
-  max-height: min(680px, calc(100vh - 80px));
-  bottom: auto;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  animation: session-history-in 0.12s ease-out;
-}
-@keyframes session-history-in {
-  from {
-    opacity: 0;
-    transform: translate(-50%, calc(-50% + 8px));
-  }
-  to {
-    opacity: 1;
-    transform: translate(-50%, -50%);
-  }
-}
-.session-history-path {
-  padding: 10px 18px;
-  border-bottom: 1px solid var(--color-border-subtle);
-  background: var(--color-bg-muted);
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-caption);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.session-history-body {
-  min-height: 320px;
-  overflow: hidden;
-  position: relative;
-}
-.session-history-body .sessions-panel {
-  max-height: calc(min(680px, calc(100vh - 80px)) - 122px);
-}
-.session-history-loading {
-  min-height: 320px;
-  display: grid;
-  place-items: center;
-  align-content: center;
-  gap: var(--space-3);
-  color: var(--color-text-tertiary);
-  font-size: var(--font-size-body);
 }
 
 .modal-backdrop {

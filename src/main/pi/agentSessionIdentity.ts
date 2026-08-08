@@ -1,5 +1,9 @@
 import type { CreateAgentInput, SessionEnvironment } from "../../shared/types";
-import { buildSessionOriginKey } from "../../shared/sessionIdentity";
+import { buildSessionOriginKey, toAbsoluteSessionPath } from "../../shared/sessionIdentity";
+
+// pi 的 sessionFile 可能是相对 cwd 的路径（如 sessionDir 配置为 ".pi/sessions"）；
+// AgentManager 在 get_state 等入口统一归一化为绝对路径，保证 catalog 去重与文件操作安全。
+export { toAbsoluteSessionPath };
 
 export type AgentSessionIdentityDefaults = {
   environment: SessionEnvironment;

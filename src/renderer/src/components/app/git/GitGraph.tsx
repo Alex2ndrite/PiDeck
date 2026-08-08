@@ -351,7 +351,7 @@ function CommitFileRow(props: {
   return (
     <button
       type="button"
-      className={`git-history-file-row grid min-h-[26px] w-full cursor-pointer appearance-none grid-cols-[auto_minmax(0,1fr)_16px] items-center gap-2 border-0 bg-transparent p-0 pr-2.5 pl-0.5 font-mono text-[13px] leading-[26px] text-left text-inherit focus-visible:shadow-[inset_var(--focus-ring)] focus-visible:outline-none disabled:cursor-progress disabled:opacity-70 hover:bg-[var(--git-panel-hover)] active:bg-[var(--git-panel-selection)] ${statusTone(file.status, true)}`}
+      className={`git-history-file-row grid min-h-[26px] w-full cursor-pointer appearance-none grid-cols-[auto_minmax(0,1fr)_16px] items-center gap-2 border-0 bg-transparent p-0 pr-2.5 pl-0.5 text-[13px] leading-[26px] text-left text-inherit focus-visible:shadow-[inset_var(--focus-ring)] focus-visible:outline-none disabled:cursor-progress disabled:opacity-70 hover:bg-[var(--git-panel-hover)] active:bg-[var(--git-panel-selection)] ${statusTone(file.status, true)}`}
       title={
         file.originalPath ? `${file.originalPath} → ${file.path}` : file.path
       }
@@ -374,7 +374,7 @@ function CommitFileRow(props: {
         <span className="min-w-0 flex-[0_1_auto] truncate text-[var(--git-panel-fg)]">{name}</span>
         <span className="min-w-0 flex-1 truncate pl-[7px] text-right text-xs text-[var(--git-desc-fg)]">{description}</span>
       </span>
-      <span className="ml-[5px] flex w-4 shrink-0 justify-end font-mono text-xs font-semibold text-right text-[var(--git-desc-fg)]" aria-hidden="true">
+      <span className="ml-[5px] flex w-4 shrink-0 justify-end text-xs font-semibold text-right text-[var(--git-desc-fg)]" aria-hidden="true">
         {opening ? (
           <Loader2 size={13} className="animate-spin" />
         ) : (
@@ -451,14 +451,16 @@ function CommitHoverCard(props: {
   return createPortal(
     <div
       id="git-commit-hover"
-      className="pointer-events-none absolute z-[1800] box-border max-h-[min(420px,calc(100vh-16px))] overflow-auto rounded-md border border-[var(--git-panel-border)] bg-[var(--git-panel-bg)] p-3 text-[var(--git-panel-fg)] shadow-[var(--shadow-popover)] [--git-panel-bg:var(--color-bg-panel)] [--git-panel-fg:var(--color-text-primary)] [--git-panel-border:var(--color-border-subtle)] [--git-desc-fg:var(--color-text-tertiary)] [--git-added:var(--color-accent)] [--git-deleted:var(--color-danger)]"
-      role="tooltip"
+      /* 必须可命中：overflow-auto  alone 只画出滚动条，pointer-events-none 会让滚轮落到下层列表。 */
+      className="pointer-events-auto absolute z-[1800] box-border max-h-[min(420px,calc(100vh-16px))] overflow-auto rounded-md border border-[var(--git-panel-border)] bg-[var(--git-panel-bg)] p-3 text-[var(--git-panel-fg)] shadow-[var(--shadow-popover)] [--git-panel-bg:var(--color-bg-panel)] [--git-panel-fg:var(--color-text-primary)] [--git-panel-border:var(--color-border-subtle)] [--git-desc-fg:var(--color-text-tertiary)] [--git-added:var(--color-accent)] [--git-deleted:var(--color-danger)]"
+      role="dialog"
+      aria-label={commit.fullMessage || commit.message}
       style={{ left, top, width }}
       onMouseEnter={props.onMouseEnter}
       onMouseLeave={props.onMouseLeave}
     >
       <div className="flex min-w-0 items-start gap-2">
-        <span className="inline-flex size-6 shrink-0 items-center justify-center rounded-sm bg-bg-muted font-mono text-xs font-semibold text-[var(--git-panel-fg)]" aria-hidden="true">
+        <span className="inline-flex size-6 shrink-0 items-center justify-center rounded-sm bg-bg-muted text-xs font-semibold text-[var(--git-panel-fg)]" aria-hidden="true">
           {initial}
         </span>
         <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-[5px]">
@@ -909,7 +911,7 @@ export function SourceControlGraph(props: GitGraphProps) {
                   >
                     <button
                       type="button"
-                      className={`git-history-row grid h-7 w-full cursor-pointer appearance-none grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-0 bg-transparent p-0 pr-2.5 pl-0.5 font-mono text-sm leading-7 text-left text-inherit focus-visible:shadow-[inset_var(--focus-ring)] focus-visible:outline-none${isCurrent ? " current" : ""}${expanded ? " expanded" : ""}`}
+                      className={`git-history-row grid h-7 w-full cursor-pointer appearance-none grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-0 bg-transparent p-0 pr-2.5 pl-0.5 text-sm leading-7 text-left text-inherit focus-visible:shadow-[inset_var(--focus-ring)] focus-visible:outline-none${isCurrent ? " current" : ""}${expanded ? " expanded" : ""}`}
                       aria-expanded={expanded}
                       aria-describedby={
                         hover?.commit.hash === commit.hash
@@ -940,12 +942,12 @@ export function SourceControlGraph(props: GitGraphProps) {
                           <Twistie open={expanded} />
                           {commit.message}
                         </span>
-                        <span className="min-w-[48px] flex-[0_1_78px] truncate font-mono text-xs text-[var(--git-desc-fg)]">
+                        <span className="min-w-[48px] flex-[0_1_78px] truncate text-xs text-[var(--git-desc-fg)]">
                           {commit.authorName}
                         </span>
                       </span>
                       {ref && (
-                        <span className={`max-w-[108px] truncate rounded-full border border-current px-[7px] font-mono text-xs font-medium leading-[18px]${ref.kind === "branch" ? " text-[var(--git-modified)]" : " text-[var(--git-conflict)]"}`}>
+                        <span className={`max-w-[108px] truncate rounded-full border border-current px-[7px] text-xs font-medium leading-[18px]${ref.kind === "branch" ? " text-[var(--git-modified)]" : " text-[var(--git-conflict)]"}`}>
                           {ref.label}
                         </span>
                       )}
@@ -953,7 +955,7 @@ export function SourceControlGraph(props: GitGraphProps) {
                     {expanded && (
                       <div className="min-w-0">
                         {detailState?.loading && (
-                          <div className="grid min-h-[26px] grid-cols-[auto_minmax(0,1fr)_16px] items-center gap-2 px-2.5 pl-0.5 font-mono text-[13px] leading-[26px] text-[var(--git-desc-fg)]">
+                          <div className="grid min-h-[26px] grid-cols-[auto_minmax(0,1fr)_16px] items-center gap-2 px-2.5 pl-0.5 text-[13px] leading-[26px] text-[var(--git-desc-fg)]">
                             <GraphContinuation row={row} />
                             <span className="flex min-w-0 items-center gap-[5px] truncate">
                               <Loader2 size={13} className="animate-spin" />{" "}
@@ -962,13 +964,13 @@ export function SourceControlGraph(props: GitGraphProps) {
                           </div>
                         )}
                         {detailState?.error && !detailState.loading && (
-                          <div className="grid min-h-[26px] grid-cols-[auto_minmax(0,1fr)_16px] items-center gap-2 px-2.5 pl-0.5 font-mono text-[13px] leading-[26px] text-[var(--git-desc-fg)] text-[var(--color-danger)]">
+                          <div className="grid min-h-[26px] grid-cols-[auto_minmax(0,1fr)_16px] items-center gap-2 px-2.5 pl-0.5 text-[13px] leading-[26px] text-[var(--git-desc-fg)] text-[var(--color-danger)]">
                             <GraphContinuation row={row} />
                             <span className="flex min-w-0 items-center gap-[5px] truncate">{detailState.error}</span>
                           </div>
                         )}
                         {detailState?.detail && commitFiles.length === 0 && (
-                          <div className="grid min-h-[26px] grid-cols-[auto_minmax(0,1fr)_16px] items-center gap-2 px-2.5 pl-0.5 font-mono text-[13px] leading-[26px] text-[var(--git-desc-fg)]">
+                          <div className="grid min-h-[26px] grid-cols-[auto_minmax(0,1fr)_16px] items-center gap-2 px-2.5 pl-0.5 text-[13px] leading-[26px] text-[var(--git-desc-fg)]">
                             <GraphContinuation row={row} />
                             <span className="flex min-w-0 items-center gap-[5px] truncate">{t("git.noCommitFiles")}</span>
                           </div>

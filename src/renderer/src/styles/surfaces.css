@@ -1100,6 +1100,10 @@
 .composer-box.shell-silent-mode .rich-input {
   padding-left: 18px;
 }
+.composer-box.shell-mode .rich-input.is-editor-empty::before,
+.composer-box.shell-silent-mode .rich-input.is-editor-empty::before {
+  left: 18px;
+}
 
 .picker-palette-label {
   flex: 0 0 auto;
@@ -3578,165 +3582,7 @@ div.fixed.inset-0.z-50 {
   background-color: var(--color-bg-panel);
 }
 
-/* 表格：Streamdown 的 wrapper 只负责工具栏和窄窗口横向滚动，不再画成第二张卡片。
-   唯一的视觉表面留给实际表格；工具按钮与代码块同款淡化（默认半透明，悬停显影）。 */
-[data-streamdown="table-wrapper"] {
-  padding: 0;
-  gap: 0;
-  background: transparent;
-  border: 0;
-  border-radius: 0;
-  box-shadow: none;
-}
-[data-streamdown="table-wrapper"] > div:first-child {
-  display: flex;
-  justify-content: flex-end;
-  gap: 2px;
-  padding: 0 0 4px;
-  background: transparent;
-  opacity: 0.4;
-  transition: opacity 0.15s ease;
-}
-[data-streamdown="table-wrapper"]:hover > div:first-child,
-[data-streamdown="table-wrapper"] > div:first-child:focus-within {
-  opacity: 1;
-}
-[data-streamdown="table-wrapper"] > div:first-child button {
-  border: 0;
-  border-radius: var(--radius-xs);
-  background: transparent;
-  box-shadow: none;
-  color: var(--color-text-tertiary);
-}
-[data-streamdown="table-wrapper"] > div:first-child button:hover,
-[data-streamdown="table-wrapper"] > div:first-child button:focus-visible {
-  background: var(--color-bg-hover);
-  color: var(--color-text-primary);
-}
-[data-streamdown="table-wrapper"] > div:last-child {
-  background: transparent;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: 10px;
-  overflow: hidden;
-}
-[data-streamdown="table"] {
-  background: var(--color-chat-table-bg);
-}
-[data-streamdown="table-wrapper"] thead {
-  background: var(--color-chat-muted-bg);
-}
-
-/* 代码块：单一卡片表面；去掉 Streamdown 默认双层边框与右上角白底胶囊。
-   复制/下载对齐 .code-copy / .math-copy-btn：默认淡化，悬停显影。 */
-[data-streamdown="code-block"] {
-  position: relative;
-  margin: var(--space-3) 0;
-  gap: 0;
-  padding: 0;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: 10px;
-  background: var(--color-chat-muted-bg);
-  overflow: hidden;
-  box-shadow: none;
-}
-[data-streamdown="code-block-header"] {
-  display: flex;
-  min-height: 28px;
-  align-items: center;
-  padding: 4px 10px;
-  border: 0;
-  border-bottom: 1px solid var(--color-border-subtle);
-  border-radius: 0;
-  background: transparent;
-  color: var(--color-text-tertiary);
-  font: 500 var(--text-micro) / 1.4 var(--font-family-sans);
-}
-/* 动作条叠在语言行右侧：去掉 sticky 白底胶囊，改成透明图标组 */
-[data-streamdown="code-block"] > div:has([data-streamdown="code-block-actions"]) {
-  pointer-events: none;
-  position: absolute;
-  top: 0;
-  right: 0;
-  z-index: 1;
-  margin: 0;
-  display: flex;
-  height: 28px;
-  align-items: center;
-  justify-content: flex-end;
-  padding: 0 6px;
-}
-[data-streamdown="code-block-actions"] {
-  pointer-events: auto;
-  display: flex;
-  align-items: center;
-  gap: 1px;
-  padding: 0;
-  border: 0 !important;
-  border-radius: 0;
-  background: transparent !important;
-  box-shadow: none !important;
-  backdrop-filter: none !important;
-  opacity: 0.4;
-  transition: opacity 0.15s ease;
-}
-/* Streamdown 默认顺序是下载→复制；会话里更常用复制，放左边。 */
-[data-streamdown="code-block-copy-button"] {
-  order: 1;
-}
-[data-streamdown="code-block-download-button"] {
-  order: 2;
-}
-[data-streamdown="code-block"]:hover [data-streamdown="code-block-actions"],
-[data-streamdown="code-block-actions"]:focus-within {
-  opacity: 1;
-}
-[data-streamdown="code-block-actions"] button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  border: 0;
-  border-radius: var(--radius-xs);
-  background: transparent;
-  color: var(--color-text-tertiary);
-  box-shadow: none;
-  cursor: pointer;
-  transition:
-    color 0.12s ease,
-    background-color 0.12s ease;
-}
-[data-streamdown="code-block-actions"] button:hover,
-[data-streamdown="code-block-actions"] button:focus-visible {
-  background: var(--color-bg-hover);
-  color: var(--color-accent);
-}
-[data-streamdown="code-block-actions"] button:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 1px;
-}
-[data-streamdown="code-block-body"] {
-  margin: 0;
-  padding: 10px 12px;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  overflow: auto;
-  box-shadow: none;
-}
-[data-streamdown="code-block-body"] > pre {
-  margin: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  overflow: visible;
-}
-/* 表体斑马纹，增强长表可读性 */
-[data-streamdown="table-body"] tr:nth-child(even) td {
-  background: var(--color-bg-muted);
-}
-
+/* 表格 / 代码块观感：官方 utility 皮由 styles/streamdownChrome.css（utilities 层）统一覆盖。 */
 .katex {
   font-size: 1.03em;
 }
@@ -4101,7 +3947,7 @@ div.fixed.inset-0.z-50 {
   color: var(--color-text-primary);
 }
 
-/* ── Tab 栏 ──────────────────── */
+/* ── 遗留文件 Tab 样式（内容区已并入 session-tabs-bar；保留关闭按钮等极少引用兜底） ── */
 
 .file-diff-tab-bar {
   display: flex;
@@ -4110,8 +3956,6 @@ div.fixed.inset-0.z-50 {
   background: var(--color-border-subtle);
   flex-shrink: 0;
   min-width: 0;
-  /* 编辑器 tab bar 顶部加一条 accent 色细线，与 drawer header 区分 */
-  border-top: 2px solid var(--color-accent);
 }
 .file-diff-tab {
   display: flex;
@@ -4134,7 +3978,6 @@ div.fixed.inset-0.z-50 {
 .file-diff-tab.active {
   color: var(--color-text-primary);
   background: var(--color-bg-base);
-  box-shadow: inset 0 -2px 0 var(--color-accent);
 }
 .file-diff-tab-close {
   display: inline-flex;
@@ -4168,6 +4011,138 @@ div.fixed.inset-0.z-50 {
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-modal);
   overflow: hidden;
+}
+
+.workbench-stage {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+/* Tab 栏挂在分屏外：与文件 Tab 同一条 chrome，maximize 时也不被会话面板收走 */
+.workbench-stage > .session-tabs-bar {
+  flex: 0 0 auto;
+  min-width: 0;
+}
+.workbench-stage-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+/* solo：body 内是空态/会话；禁止给每个子项 height:100%——否则空态与会话抢满高 */
+.workbench-stage-solo > .workbench-stage-body > * {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.workbench-stage-split {
+  /* Group 本身吃满 body；方向由库 inline style 控制 */
+  flex: 1 1 auto !important;
+  min-height: 0;
+  min-width: 0;
+}
+.workbench-session-pane,
+.workbench-content-pane {
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+.workbench-session-pane > * {
+  height: 100%;
+  min-height: 0;
+}
+.workbench-content-frame {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  width: 100%;
+  overflow: hidden;
+  background: var(--color-bg-panel);
+}
+/* 自定义标题栏拖区由上方 session-tabs-bar 承担；阅读面已在 Tab 之下，
+   不再叠 padding-top，避免 Tab 与内容之间空出一条拖拽高度。 */
+.workbench-content-frame-horizontal {
+  border-left: 1px solid var(--color-border-subtle);
+}
+.workbench-content-frame-vertical {
+  border-top: 1px solid var(--color-border-subtle);
+}
+.workbench-content-frame > .file-diff-viewer {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.workbench-content-pane > div,
+.workbench-content-pane .file-diff-viewer {
+  height: 100%;
+  min-height: 0;
+}
+
+/* 会话 Tab 拖到边缘分屏：落点预览 + 双栏舞台 */
+.session-split-stage {
+  position: relative;
+}
+.session-split-group {
+  flex: 1 1 auto !important;
+  min-height: 0;
+}
+.session-split-panel > * {
+  height: 100%;
+  min-height: 0;
+}
+.session-split-pane {
+  border: 1px solid transparent;
+  background: var(--color-bg-panel);
+}
+.session-split-pane-focused {
+  border-color: color-mix(in srgb, var(--color-accent) 55%, transparent);
+}
+.session-split-drop-preview {
+  pointer-events: none;
+  position: absolute;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--color-accent) 22%, transparent);
+  border: 1px dashed color-mix(in srgb, var(--color-accent) 70%, transparent);
+  border-radius: var(--radius-md);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 35%, transparent);
+  transition: inset 80ms ease-out, opacity 80ms ease-out;
+}
+.session-split-drop-preview-left {
+  inset: 8px auto 8px 8px;
+  width: calc(50% - 12px);
+}
+.session-split-drop-preview-right {
+  inset: 8px 8px 8px auto;
+  width: calc(50% - 12px);
+}
+.session-split-drop-preview-top {
+  inset: 8px 8px auto 8px;
+  height: calc(50% - 12px);
+}
+.session-split-drop-preview-bottom {
+  inset: auto 8px 8px 8px;
+  height: calc(50% - 12px);
+}
+.session-split-drop-label {
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-bg-panel) 88%, transparent);
+  color: var(--color-text-primary);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  box-shadow: var(--shadow-sm);
 }
 
 .file-diff-viewer {

@@ -9,11 +9,13 @@ import type { ThinkingGroupItem } from "../timeline/types";
  *
  * 身份与 History 共用 msg-thinking-*：id 命中 live 通道时用 atom 文本/endedAt，
  * 否则回退 group（终态落盘后）。hidden 用 CSS display:none 而非卸载，保留打字机状态。
+ *
+ * 打字机只认 live.streaming：禁止用「整轮 isStreaming」回退，否则上一则已落盘的
+ * 思考会在下一则 live 思考期间被当成仍在流式，出现「两段一起打字」。
  */
 export const ThinkingStep = memo(function ThinkingStep(props: {
 	group: ThinkingGroupItem;
 	hidden: boolean;
-	isStreaming?: boolean;
 	showThinking?: boolean;
 	onOpenExternal: (url: string) => void;
 	onOpenFile?: (path: string) => void;
@@ -22,9 +24,7 @@ export const ThinkingStep = memo(function ThinkingStep(props: {
 	const text = live?.text ?? props.group.text;
 	const startedAt = live?.startedAt ?? props.group.startedAt;
 	const endedAt = live ? live.endedAt : props.group.endedAt;
-	const isStreaming = live
-		? live.streaming && live.endedAt <= 0
-		: Boolean(props.isStreaming);
+	const isStreaming = Boolean(live?.streaming && live.endedAt <= 0);
 
 	return (
 		<div style={{ display: props.hidden ? "none" : undefined }}>

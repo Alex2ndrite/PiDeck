@@ -497,12 +497,49 @@ export function registerSystemIpc(deps: SystemIpcDeps): void {
 		if (!win || win.isDestroyed()) return;
 		win.minimize();
 	});
+	/**
+	 * 最大化态以本进程跟踪为准，不用「调用后立刻 isMaximized()」。
+	 * Windows + 无边框上 maximize/unmaximize 后同步读 isMaximized() 常仍是旧值；
+	 * 若再把该旧值经 IPC/事件推回渲染层，会与按钮意图互踩 → 表现为要点两次。
+	 */
+	const wiredMaximizeWindows = new WeakSet<Electron.BrowserWindow>();
+	const maximizedByWindow = new WeakMap<Electron.BrowserWindow, boolean>();
+	const emitMaximizedState = (win: Electron.BrowserWindow, maximized: boolean) => {
+		if (win.isDestroyed()) return;
+		maximizedByWindow.set(win, maximized);
+		win.webContents.send(ipcChannels.appWindowMaximizedChanged, maximized);
+	};
+	const wireMaximizeEvents = (win: Electron.BrowserWindow) => {
+		if (wiredMaximizeWindows.has(win)) return;
+		wiredMaximizeWindows.add(win);
+		maximizedByWindow.set(win, win.isMaximized());
+		// 信事件名，不信事件回调里再读 isMaximized()（同一帧可能仍为旧值）。
+		win.on("maximize", () => emitMaximizedState(win, true));
+		win.on("unmaximize", () => emitMaximizedState(win, false));
+	};
+	const readMaximized = (win: Electron.BrowserWindow): boolean =>
+		maximizedByWindow.get(win) ?? win.isMaximized();
 	ipcMain.handle(ipcChannels.appWindowToggleMaximize, () => {
 		const win = getMainWindow();
-		if (!win || win.isDestroyed()) return;
-		if (win.isMaximized()) win.unmaximize();
-		else win.maximize();
+		if (!win || win.isDestroyed()) return false;
+		wireMaximizeEvents(win);
+		const nextMaximized = !readMaximized(win);
+		if (nextMaximized) win.maximize();
+		else win.unmaximize();
+		// 先写入意图态并推送：不依赖异步事件到达顺序，一次点击即可对齐图标。
+		emitMaximizedState(win, nextMaximized);
+		return nextMaximized;
 	});
+	ipcMain.handle(ipcChannels.appWindowIsMaximized, () => {
+		const win = getMainWindow();
+		if (!win || win.isDestroyed()) return false;
+		wireMaximizeEvents(win);
+		return readMaximized(win);
+	});
+	{
+		const win = getMainWindow();
+		if (win && !win.isDestroyed()) wireMaximizeEvents(win);
+	}
 	ipcMain.handle(ipcChannels.appWindowToggleAlwaysOnTop, () => {
 		const win = getMainWindow();
 		if (!win || win.isDestroyed()) return false;

@@ -71,7 +71,9 @@ export interface AppShellProps {
 
   toggleAlwaysOnTop: () => Promise<boolean>;
   minimizeWindow: () => void;
-  toggleMaximizeWindow: () => void;
+  toggleMaximizeWindow: () => Promise<boolean>;
+  isWindowMaximized: () => Promise<boolean>;
+  onWindowMaximizedChange: (callback: (maximized: boolean) => void) => () => void;
   closeWindow: () => void;
 
   children?: ReactNode;
@@ -95,7 +97,7 @@ export function AppShell(props: AppShellProps) {
     setListCollapsed, setListWidth, setDrawerCollapsed, setDrawerWidth,
     onToggleListCollapsed,
     onDrawerCollapse, onDrawerClose, onDrawerRestore, onToggleDrawerPin,
-    toggleAlwaysOnTop, minimizeWindow, toggleMaximizeWindow, closeWindow,
+    toggleAlwaysOnTop, minimizeWindow, toggleMaximizeWindow, isWindowMaximized, onWindowMaximizedChange, closeWindow,
     children,
   } = props;
 
@@ -216,6 +218,8 @@ export function AppShell(props: AppShellProps) {
         toggleAlwaysOnTop={toggleAlwaysOnTop}
         minimizeWindow={minimizeWindow}
         toggleMaximizeWindow={toggleMaximizeWindow}
+        isWindowMaximized={isWindowMaximized}
+        onWindowMaximizedChange={onWindowMaximizedChange}
         closeWindow={closeWindow}
       />
       <ResizablePanelGroup orientation="horizontal" className="shell-panel-group" onLayoutChanged={handleLayoutChanged}>

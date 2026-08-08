@@ -11,9 +11,10 @@ const header = readFileSync(
   "utf8",
 );
 
-test("chat header leaves the session title to tabs and keeps the actions group", () => {
+test("chat header leaves the session title to tabs and keeps the status actions", () => {
   assert.doesNotMatch(header, /chat-title-block/);
   assert.doesNotMatch(header, /<strong[^>]*title=\{title\}/);
   assert.match(header, /chat-header-actions flex min-w-0 items-center justify-end/);
-  assert.match(header, /header-actions-right flex items-center gap-1\.5/);
+  // 运行控制已迁入 Tab 下拉，不再有独立的 session-actions 按钮组
+  assert.doesNotMatch(header, /header-actions-right/);
 });

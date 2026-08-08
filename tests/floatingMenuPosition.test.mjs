@@ -53,4 +53,27 @@ describe("viewport-bound Git menu placement", () => {
     assert.equal(placement.width, 240);
     assert.equal(placement.maxHeight, 240);
   });
+
+  test("uses the trigger width as preferred width so drawer menus stay aligned", () => {
+    const placement = getViewportBoundMenuPlacement(
+      { left: 700, top: 80, bottom: 108 },
+      { width: 1024, height: 768 },
+      { preferredWidth: 280, maxHeight: 300, gap: 2 },
+    );
+
+    assert.equal(placement.width, 280);
+    assert.equal(placement.left, 700);
+    assert.equal(placement.top, 110);
+  });
+
+  test("clamps a wide trigger-based menu into a narrow viewport instead of overflowing", () => {
+    const placement = getViewportBoundMenuPlacement(
+      { left: 40, top: 40, bottom: 64 },
+      { width: 200, height: 500 },
+      { preferredWidth: 280, maxHeight: 300, gap: 2 },
+    );
+
+    assert.equal(placement.left, 8);
+    assert.equal(placement.width, 184);
+  });
 });

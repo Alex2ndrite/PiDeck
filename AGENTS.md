@@ -68,6 +68,24 @@ src/
    - `App.tsx`、`main/index.ts` 只增装配代码，不增业务逻辑；新业务先建新模块。
    - 为“省一次 import”把逻辑塞回大文件，视为架构倒退，评审应拒绝。
 
+## 模块内聚与低耦合（硬性）
+
+> 写代码的默认标准：**高内聚、低耦合、可单测、装配层不长胖**。功能能跑不等于结构合格。
+
+1. **一个模块一件事**：状态机/策略/几何/解析放纯函数（`utils/` 或同域 helper），UI 只负责呈现与事件转发，hook 拥有该域状态与命令。禁止把「Tab / 预览 / 分屏 / 拖拽落点」这类完整域逻辑散落在 `App.tsx` 匿名回调里。
+2. **装配层只装配**：`App.tsx` / `main/index.ts` 只做依赖注入与布局拼装。新增交互或状态流转时，优先抽 `hooks/useXxx`、组件宿主或 atoms；若改动让 `App.tsx` 再长出大段 `if/else` 业务，视为未完成拆分。
+3. **按域抽 hook，而不是按屏幕堆 props**：跨多个子树的同一域（例如会话工作区 chrome、composer、timeline）应有明确 owner（如 `useSessionWorkspaceChrome`）。禁止用 30+ 字段的「共享 props 袋」在 App → Pane → Injector → View 之间层层透传；稳定回调与服务用窄接口 / context / 工厂，视图 props 只留身份与 chrome 开关。
+4. **选中 ≠ 呈现**：`selectSession` / 打开会话记录只负责「当前会话是谁」；Tab 预览/常驻、分屏布局、拖拽 MIME 属于 chrome 域。不要把 `preview | permanent | keep` 之类 UI 模式长期渗进通用 selection API；chrome 应在边界组合「选中 + 登记」。
+5. **多实例必须按 session 订阅**：分屏/多栏挂载时，runtime / messages / sendState 只订本栏 `sessionId` 的 atom family。禁止非聚焦栏订阅 `currentSession*` 全局原子，以免一栏流式更新拖垮另一栏重渲染。
+6. **纯策略可单测**：落点边、预览替换、分屏关闭晋升等规则写成纯函数并配 `tests/*.test.mjs`；闭包回调里的产品策略（「第三个 Tab 替换聚焦栏」）应回到同一 chrome/reducer，禁止只活在 JSX lambda 中。
+7. **异步与拖放用快照/稳定入口**：`drop` / `close` / 定时器不要闭包过期的 `tabs`/`previewId`；用 ref 快照、`useCallback` 稳定命令，或单一 `dispatch`。组件依赖数组禁止写整个 `props` 对象。
+8. **同一 UI 能力一个挂载点**：如会话 Tab 栏、右侧抽屉开关，避免 solo/split 两套父级各挂一份导致「有的栏有、有的栏没有」。共享 chrome 放外层；栏内只保留本会话操作（停/重启等）。
+9. **改前自检（合并前过一遍）**：
+   - 这个改动是否让 `App.tsx` 更懂业务细节？若是，先抽出。
+   - 新状态是否有单一 owner？还是 App + 侧栏 + Tab 栏各写一份？
+   - 多会话场景下订阅是否按 `sessionId` 隔离？
+   - 核心规则能否离开 React 单独测绿？
+
 ## 代码风格
 
 - TypeScript strict；禁止新增 `any`（与第三方交互不得不用时，用 `unknown` + 收窄，并注释原因）。
@@ -186,6 +204,32 @@ src/
 - 颜色/圆角/字号优先复用 `styles/` 里的语义 token，不写死色值；暗色模式必须自然适配。
 - 布局保持桌面工作台结构（左列表 / 中会话 / 右抽屉 / 底终端），不引入营销页式大改版。
 - **新样式一律走 Tailwind utility + shadcn 组合**：禁止新增手写 CSS class（token 定义与 keyframes 除外）；动态状态色通过保留锚点类（如 `tone-*`/`status-*`）+ 状态规则实现，不写新的状态 class。
+
+### CSS 双轨与迁移规则（硬性）
+
+渲染层同时存在两套样式，**禁止 big-bang 全量重写**，也**禁止再开第二套视觉语言**。
+
+| 轨 | 是什么 | 落点 |
+|---|---|---|
+| 旧（legacy） | 手写语义 class | `styles/{foundation,timeline,surfaces,integrations,workspace}.css` |
+| 新（UI 2.0） | Tailwind v4 + shadcn | `styles/tailwind.css`、`components/ui-shadcn/` |
+
+**迁移口诀：视觉上「新学旧」；代码上「改到哪，旧迁新到哪」。**
+
+1. **Token / 长相以旧为准**：颜色、圆角、字号、间距继续用 `foundation` 语义变量；新栈通过 `@theme` 桥接同一套 token，不要另起 zinc/indigo 平行色板。
+2. **新改动只写 Tailwind + shadcn**：禁止新增手写 CSS class（token、keyframes、既有 `tone-*`/`status-*` 锚点除外）。
+3. **按触达面增量收口**：改某块 UI 时，把该块上抢同属性的旧规则删掉或收窄，再依赖 utility；不要开「删光旧 CSS」专项。
+4. **Cascade 层序不可改错**（入口 `styles.css`，契约测试 `tests/cssCascadeLayers.test.mjs`）：
+
+   `theme < base(preflight) < components < vendor < legacy < utilities`
+
+   - `legacy` **必须高于** `base`：否则 preflight 冲掉整站手写外观（表现为「CSS 全没了」）。
+   - `legacy` **必须低于** `utilities`：否则组件上改 Tailwind 不生效。
+   - `vendor`（`streamdown` / `file-icons`）**低于** `legacy`：应用内观感覆盖才能压过第三方默认皮。
+   - 旧 5 个域文件只在入口用 `layer(legacy)` 引入；vendor 只在入口用 `layer(vendor)`；**禁止**在文件内部再包 `@layer`（避免嵌套层）。
+5. **`!important` 会反转层优先级**：旧规则里的 `!important` 仍可能压住 utility；碰到时删掉 `!important` 或收窄旧规则，不要给 utility 堆 `!`。
+6. **半吊子 utility 比没写更糟**：组件上写了 `min-h-11`/`rounded-xl`/Button 默认 `h-9`，分层后会真生效并冲掉旧观感。改 UI 时 utility 必须「新学旧」对齐原视觉，再删掉同属性的冗余 legacy 声明。
+7. **排障**：utility「看不见」时用 DevTools 看胜出规则来自哪一层——unlayered / `!important` / 同属性旧选择器；先处理冲突源，再改 class。
 
 ## Issue 修复流程
 

@@ -498,6 +498,7 @@ export function PiLogoCanvas(props: PiLogoCanvasProps) {
 		<button
 			type="button"
 			className={props.className ?? "pi-logo-canvas-stage"}
+			style={{ width: size, height: size }}
 			aria-label="Play Pi logo animation"
 			onClick={handleActivate}
 			onKeyDown={(e) => {
@@ -507,7 +508,12 @@ export function PiLogoCanvas(props: PiLogoCanvasProps) {
 				}
 			}}
 		>
-			<canvas ref={canvasRef} className="pi-logo-canvas" aria-hidden="true" />
+			<canvas
+				ref={canvasRef}
+				className="pi-logo-canvas"
+				style={{ width: size, height: size }}
+				aria-hidden="true"
+			/>
 		</button>
 	);
 }

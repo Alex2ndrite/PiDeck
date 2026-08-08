@@ -51,9 +51,10 @@ describe("Seti file icon integration", () => {
     assert.match(readFileSync("src/renderer/src/vendor/seti-icons/LICENSE.md", "utf8"), /Copyright \(c\) 2014 Jesse Weed/);
   });
 
-  test("renderer imports the dedicated file icon stylesheet", () => {
-    const source = readFileSync("src/renderer/src/main.tsx", "utf8");
-    assert.match(source, /import "\.\/file-icons\.css";/);
+  test("renderer loads file icons via styles.css vendor layer", () => {
+    const stylesEntry = readFileSync("src/renderer/src/styles.css", "utf8");
+    assert.match(stylesEntry, /@import\s+"\.\/file-icons\.css"\s+layer\(vendor\)/);
+    assert.doesNotMatch(readFileSync("src/renderer/src/main.tsx", "utf8"), /import "\.\/file-icons\.css"/);
   });
 
   test("file tree renders trusted Seti SVG and file type labels", () => {
@@ -98,10 +99,24 @@ describe("Seti file icon integration", () => {
   test("stylesheet sizes and colors Seti SVG icons", () => {
     const source = readFileSync("src/renderer/src/file-icons.css", "utf8");
     assert.match(source, /\.file-node-seti-icon svg/);
-    assert.match(source, /--file-type-icon-size:\s*20px/);
+    assert.match(source, /--file-type-icon-size:\s*24px/);
+    assert.match(source, /--file-icon-folder:\s*var\(--file-icon-grey\)/);
     assert.match(source, /fill:\s*currentColor/);
     assert.match(source, /--file-icon-blue:/);
     assert.match(source, /:root\[data-theme="dark"\]/);
     assert.match(source, /@container \(max-width: 340px\)/);
+  });
+
+  test("files drawer drops title chrome and keeps a denser tree", () => {
+    // 文件抽屉：无顶栏；工具行压矮；缩进 8px/层；树行原生 button（不套 shadcn Button 抢 SVG 尺寸）
+    assert.match(workspaceSurface, /props\.panel !== "files" && title/);
+    assert.match(workspaceSurface, /panel-action-row flex h-7/);
+    assert.match(workspaceSurface, /depth \* 8/);
+    assert.match(workspaceSurface, /树行用原生 button/);
+    assert.doesNotMatch(workspaceSurface, /\[&_svg\]:!size-/);
+    assert.match(workspaceSurface, /FolderOpen size=\{18\}/);
+    // utilities 层的 overflow-hidden 会压掉 legacy overflow-y:auto，文件树就滚不动
+    assert.match(workspaceSurface, /files-panel[^"]*overflow-x-hidden overflow-y-auto/);
+    assert.doesNotMatch(workspaceSurface, /files-panel[^"]*overflow-hidden"/);
   });
 });

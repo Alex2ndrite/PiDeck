@@ -29,6 +29,7 @@ import {
 } from "../atoms";
 import {
   getComposerEnterIntent,
+  isComposingKeyboardEvent,
   parseArgumentHint,
   translateBuiltinPromptDescription,
   type PromptTemplateInfo,
@@ -45,11 +46,13 @@ import {
   PI_FILE_PATH_DRAG_MIME,
   readFileNodeDragPayload,
 } from "../components/app/AppUtils";
+import { SESSION_TAB_DRAG_MIME } from "../utils/sessionSplitEdge";
+import type { ComposerChip } from "../components/session/composer/chips";
+import type { ComposerCaretRequest } from "../components/session/composer/types";
 import {
-  getCaretOffset,
-  getRichInputCaretCoords,
-  type RichInputChip,
-} from "../components/app/RichInput";
+  getComposerCaretCoords,
+  getComposerCaretOffset,
+} from "../components/session/composer/caretCoords";
 import { desktopApi } from "../desktopApi";
 import { t } from "../i18n";
 import {
@@ -233,7 +236,9 @@ export function useSessionComposerController(
   const mode = modes[sessionId] ?? "normal";
   const sendState = sendStates[sessionId] ?? { status: "idle" as const };
   const editorRef = useRef<HTMLDivElement | null>(null);
-  const caretRef = useRef<number | null>(null);
+  // 程序化光标请求（带归属 forValue，见 composer/types.ts 的 ComposerCaretRequest）；
+  // 编辑器只在内容同步到 forValue 的同一趟 layout pass 配对消费，过期请求会被丢弃。
+  const caretRef = useRef<ComposerCaretRequest | null>(null);
   const liveDomDraftRef = useRef({ sessionId, value: draft });
   const draftGuardRef = useRef(createComposerDraftGuard({
     sessionId,
@@ -329,7 +334,10 @@ export function useSessionComposerController(
     setSavedDraft("");
     setBusyDraftLocked(false);
     setSendBehaviorMenuOpen(false);
-    caretRef.current = draft.length;
+    // 注意：这里不再写 caretRef。该写入发生在编辑器 layout effect 之后、且 layout
+    // effect 只在 value 变化时重跑，会留下一条过期待消费光标——首次输入（打字/
+    // 粘贴/语音）时把选区重置回 0。恢复光标到文末由编辑器在内容同步（setContent）
+    // 时兜底完成，见 useTipTapComposerEditor 同步 effect。
     draftGuardRef.current = createComposerDraftGuard({
       sessionId,
       agentId: runtime?.agentId,
@@ -384,7 +392,7 @@ export function useSessionComposerController(
     liveDomDraftRef.current = { sessionId, value: editorText.text };
     setDraft(editorText.text);
     setCursor(editorText.text.length);
-    caretRef.current = editorText.text.length;
+    caretRef.current = { pos: editorText.text.length, forValue: editorText.text };
   }, [runtime, runtimeUi, sessionId, setDraft, store]);
 
   useEffect(() => {
@@ -459,19 +467,28 @@ export function useSessionComposerController(
     [commands, cursor, draft, flatFiles, projectSessions, suggestionsOpen],
   );
   const suggestionAnchorStyle = useMemo<CSSProperties | undefined>(() => {
-    if (!suggestionsOpen || !editorRef.current) return undefined;
-    const coordinates = getRichInputCaretCoords(editorRef.current, cursor);
-    if (!coordinates) return undefined;
+    if (!suggestionsOpen) return undefined;
     const menuWidth = Math.min(520, window.innerWidth - 120);
     const menuHeight = 380;
     const gap = 8;
+    // 兜底定位（原 CSS .command-palette 的「默认居中 + 底部 160px」语义收进 JS）：
+    // 拿不到编辑器/光标坐标时，面板仍然有确定位置，CSS 不再承载任何定位假设。
+    const fallback: CSSProperties = {
+      top: "auto",
+      bottom: 160,
+      left: Math.max(16, (window.innerWidth - menuWidth) / 2),
+    };
+    const root = editorRef.current;
+    if (!root) return fallback;
+    const coordinates = getComposerCaretCoords(root, cursor);
+    if (!coordinates) return fallback;
     let left = coordinates.left;
     if (left + menuWidth > window.innerWidth - 16) {
       left = Math.max(16, window.innerWidth - menuWidth - 16);
     }
     const below = coordinates.top + gap;
     if (below + menuHeight <= window.innerHeight - 16) {
-      return { top: below, left, bottom: "auto", transform: "none" };
+      return { top: below, left, bottom: "auto" };
     }
     const above = coordinates.top - gap;
     if (above - menuHeight >= 0) {
@@ -479,10 +496,9 @@ export function useSessionComposerController(
         top: "auto",
         bottom: window.innerHeight - above,
         left,
-        transform: "none",
       };
     }
-    return { top: "auto", bottom: 16, left, transform: "none" };
+    return { top: "auto", bottom: 16, left };
   }, [cursor, suggestionsOpen]);
 
   const isBusy = runtime?.status === "running" || Boolean(runtime?.state?.isStreaming);
@@ -561,12 +577,12 @@ export function useSessionComposerController(
     const liveDraft = liveDomDraftRef.current.sessionId === sessionId
       ? liveDomDraftRef.current.value
       : draft;
-    const liveCursor = editorRef.current ? getCaretOffset(editorRef.current) : cursor;
+    const liveCursor = editorRef.current ? getComposerCaretOffset(editorRef.current) : cursor;
     const result = applySuggestion(liveDraft, liveCursor, value);
     liveDomDraftRef.current = { sessionId, value: result.text };
     setDraft(result.text);
     setCursor(result.cursor);
-    caretRef.current = result.cursor;
+    caretRef.current = { pos: result.cursor, forValue: result.text };
     setSuggestionsOpen(false);
     requestAnimationFrame(() => editorRef.current?.focus());
   }, [cursor, draft, sessionId, setDraft]);
@@ -575,12 +591,12 @@ export function useSessionComposerController(
     const liveDraft = liveDomDraftRef.current.sessionId === sessionId
       ? liveDomDraftRef.current.value
       : draft;
-    const liveCursor = editorRef.current ? getCaretOffset(editorRef.current) : cursor;
+    const liveCursor = editorRef.current ? getComposerCaretOffset(editorRef.current) : cursor;
     const result = clearSuggestionTrigger(liveDraft, liveCursor);
     liveDomDraftRef.current = { sessionId, value: result.text };
     setDraft(result.text);
     setCursor(result.cursor);
-    caretRef.current = result.cursor;
+    caretRef.current = { pos: result.cursor, forValue: result.text };
     setSuggestionsOpen(false);
     requestAnimationFrame(() => editorRef.current?.focus());
   }, [cursor, draft, sessionId, setDraft]);
@@ -612,7 +628,8 @@ export function useSessionComposerController(
         return;
       }
       if (event.key === "Enter") {
-        if (event.nativeEvent.isComposing || event.keyCode === 229) return;
+        // IME 合成中的回车属于输入法确认候选，不能拿去选建议项
+        if (isComposingKeyboardEvent(event)) return;
         event.preventDefault();
         const selected = suggestionItems[
           Math.min(selectedSuggestionIndex, suggestionItems.length - 1)
@@ -630,7 +647,9 @@ export function useSessionComposerController(
     const liveDraft = liveDomDraftRef.current.sessionId === sessionId
       ? liveDomDraftRef.current.value
       : draft;
-    const liveCursor = getCaretOffset(event.currentTarget);
+    const liveCursor = editorRef.current
+      ? getComposerCaretOffset(editorRef.current)
+      : cursor;
     const firstLine = !liveDraft.slice(0, liveCursor).includes("\n");
     const lastLine = !liveDraft.slice(liveCursor).includes("\n");
     const history = promptHistoryRef.current[sessionId] ?? [];
@@ -644,7 +663,7 @@ export function useSessionComposerController(
       setHistoryIndex(nextIndex);
       liveDomDraftRef.current = { sessionId, value: history[nextIndex] };
       setDraft(history[nextIndex]);
-      caretRef.current = history[nextIndex].length;
+      caretRef.current = { pos: history[nextIndex].length, forValue: history[nextIndex] };
       return;
     }
     if (event.key === "ArrowDown" && lastLine && historyIndex >= 0) {
@@ -655,7 +674,7 @@ export function useSessionComposerController(
       if (nextIndex < 0) setSavedDraft("");
       liveDomDraftRef.current = { sessionId, value: nextDraft };
       setDraft(nextDraft);
-      caretRef.current = nextDraft.length;
+      caretRef.current = { pos: nextDraft.length, forValue: nextDraft };
       return;
     }
     if (event.key === "Escape" && historyIndex >= 0) {
@@ -708,7 +727,7 @@ export function useSessionComposerController(
     const liveDraft = liveDomDraftRef.current.sessionId === sessionId
       ? liveDomDraftRef.current.value
       : draft;
-    const liveCursor = editorRef.current ? getCaretOffset(editorRef.current) : cursor;
+    const liveCursor = editorRef.current ? getComposerCaretOffset(editorRef.current) : cursor;
     const refText = refTexts.join(" ");
     const previous = liveDraft[liveCursor - 1];
     const spacer = liveCursor > 0 && previous !== " " && previous !== "\n" ? " " : "";
@@ -717,7 +736,7 @@ export function useSessionComposerController(
     liveDomDraftRef.current = { sessionId, value: next };
     setDraft(next);
     setCursor(nextCursor);
-    caretRef.current = nextCursor;
+    caretRef.current = { pos: nextCursor, forValue: next };
     requestAnimationFrame(() => editorRef.current?.focus());
   }, [cursor, draft, sessionId, setDraft]);
 
@@ -814,7 +833,7 @@ export function useSessionComposerController(
     }
   }, [insertFilePathRefs]);
 
-  const onChipClick = useCallback((chip: RichInputChip) => {
+  const onChipClick = useCallback((chip: ComposerChip) => {
     if (chip.kind === "file") {
       const path = chip.raw.slice(1);
       if (options.onOpenFile) options.onOpenFile(path);
@@ -870,8 +889,8 @@ export function useSessionComposerController(
     if (!target) {
       // No Agent yet: write /compact to draft and send → starts Agent + compacts
       setDraft("/compact");
-      caretRef.current = "/compact".length;
-      send();
+      caretRef.current = { pos: "/compact".length, forValue: "/compact" };
+      void send();
       return;
     }
     try {
@@ -892,7 +911,7 @@ export function useSessionComposerController(
       : `/${template.name} `;
     liveDomDraftRef.current = { sessionId, value: next };
     setDraft(next);
-    caretRef.current = next.length;
+    caretRef.current = { pos: next.length, forValue: next };
     setPicker(null);
     requestAnimationFrame(() => editorRef.current?.focus());
   }, [draft, sessionId, setDraft]);
@@ -930,6 +949,8 @@ export function useSessionComposerController(
       onPaste,
       onDrop,
       onDragOver: (event: React.DragEvent<HTMLDivElement>) => {
+        // 会话 Tab / 侧栏分屏拖拽交给 SessionSplitStage（capture），composer 不抢落点
+        if (event.dataTransfer.types.includes(SESSION_TAB_DRAG_MIME)) return;
         event.preventDefault();
         // 文件树拖拽的 effectAllowed 含 move（内部移动语义），拖入 composer 时
         // 显式声明 copy，避免光标显示为“移动”，实际行为是插入引用

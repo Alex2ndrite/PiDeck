@@ -16,6 +16,7 @@ import type {
 	Project,
 	SendPromptInput,
 	SendPromptResult,
+	SessionEnvironment,
 	SessionMessagePage,
 	ThinkingUpdate,
 } from "../../shared/types";
@@ -28,6 +29,7 @@ import type { MainProcessTranslationKey } from "../../shared/i18n/mainProcessCop
 import { mergeHistoryWithPreservedMessages } from "./historyMessages";
 import {
 	buildAgentSessionKey,
+	toAbsoluteSessionPath,
 	type AgentSessionIdentityDefaults,
 } from "./agentSessionIdentity";
 import {
@@ -311,6 +313,28 @@ export class AgentManager {
 		return this.wslEnvironment
 			? toWslLinuxPath(sessionPath, this.wslEnvironment)
 			: sessionPath;
+	}
+
+	/**
+	 * 归一化 pi 上报/传入的会话路径为绝对路径（含日志）。
+	 * pi 的 sessionDir 配置为相对路径（如 ".pi/sessions"）时，get_state 返回的
+	 * sessionFile 是相对 cwd 的；若原样写入 catalog，会与扫描器发现的绝对路径
+	 * 构成同文件双记录（侧栏重复显示），且文件操作会落到错误位置。
+	 */
+	private normalizeSessionPathFromPi(
+		sessionPath: string | undefined,
+		projectPath: string,
+		environment: SessionEnvironment,
+	): string | undefined {
+		if (!sessionPath) return undefined;
+		const resolved = toAbsoluteSessionPath(sessionPath, projectPath, environment);
+		if (resolved !== sessionPath) {
+			void this.appLogger?.warn("agent", "Session file path was relative; resolved to absolute", {
+				sessionPath,
+				resolved,
+			});
+		}
+		return resolved;
 	}
 
 	list() {
@@ -787,7 +811,11 @@ export class AgentManager {
 				| { sessionId?: string; sessionFile?: string; sessionName?: string }
 				| undefined;
 			tab.sessionId = data?.sessionId;
-			tab.sessionPath = data?.sessionFile ?? input.sessionPath;
+			tab.sessionPath = this.normalizeSessionPathFromPi(
+				data?.sessionFile ?? input.sessionPath,
+				project.path,
+				sessionEnvironment,
+			);
 			tab.title =
 				input.title ||
 				data?.sessionName ||
@@ -968,7 +996,11 @@ export class AgentManager {
 			| { sessionId?: string; sessionFile?: string; sessionName?: string }
 			| undefined;
 		runtime.tab.sessionId = data?.sessionId ?? runtime.tab.sessionId;
-		runtime.tab.sessionPath = data?.sessionFile ?? runtime.tab.sessionPath;
+		runtime.tab.sessionPath = this.normalizeSessionPathFromPi(
+			data?.sessionFile ?? runtime.tab.sessionPath,
+			this.getProject(runtime.tab.projectId)?.path ?? runtime.tab.cwd,
+			runtime.tab.sessionEnvironment ?? "native",
+		);
 		runtime.tab.title = data?.sessionName || runtime.tab.title;
 		this.emitState();
 		return runtime.tab;
@@ -1455,7 +1487,11 @@ export class AgentManager {
 				| { sessionId?: string; sessionFile?: string; sessionName?: string }
 				| undefined;
 			runtime.tab.sessionId = data?.sessionId ?? runtime.tab.sessionId;
-			runtime.tab.sessionPath = data?.sessionFile ?? sessionPath;
+			runtime.tab.sessionPath = this.normalizeSessionPathFromPi(
+				data?.sessionFile ?? sessionPath,
+				project.path,
+				runtime.tab.sessionEnvironment ?? "native",
+			);
 			runtime.tab.title = data?.sessionName ?? runtime.tab.title;
 			runtime.tab.status = "idle";
 			// 进程退出型压缩可能来不及发 compaction_end；重连成功即表示 Pi 已可继续接收消息。
@@ -2011,9 +2047,12 @@ export class AgentManager {
 				const state = await runtime.process.client.request({
 					type: "get_state",
 				});
-				sessionPath =
+				sessionPath = this.normalizeSessionPathFromPi(
 					(state.data as { sessionFile?: string } | undefined)?.sessionFile ??
-					undefined;
+						undefined,
+					this.getProject(runtime.tab.projectId)?.path ?? runtime.tab.cwd,
+					environment ?? "native",
+				);
 			} catch {
 				// 获取失败时继续用 undefined，create 会启动新 session
 			}
@@ -2070,13 +2109,22 @@ export class AgentManager {
 	 * 对未打开的历史会话执行官方 clone。
 	 * clone 会复制 active branch 到新 session；随后读取 get_state 拿到新 sessionFile 供历史列表刷新。
 	 */
-	async cloneSessionFile(projectId: string, sessionPath: string) {
+	async cloneSessionFile(
+		projectId: string,
+		sessionPath: string,
+		environment: SessionEnvironment = "native",
+	) {
+		const project = this.getProject(projectId);
 		return this.withTemporarySession(projectId, sessionPath, async (process) => {
 			const response = await process.client.request({ type: "clone" }, 120_000);
 			const state = await process.client.request({ type: "get_state" });
 			return {
 				...((response.data as object | undefined) ?? {}),
-				sessionPath: (state.data as { sessionFile?: string } | undefined)?.sessionFile,
+				sessionPath: this.normalizeSessionPathFromPi(
+					(state.data as { sessionFile?: string } | undefined)?.sessionFile,
+					project?.path ?? "",
+					environment,
+				),
 			};
 		});
 	}
@@ -2140,7 +2188,13 @@ export class AgentManager {
 			.request({ type: "get_state" })
 			.catch(() => ({ data: undefined }));
 		const state = stateResponse.data as { sessionFile?: string; sessionName?: string } | undefined;
-		if (state?.sessionFile) runtime.tab.sessionPath = state.sessionFile;
+		if (state?.sessionFile) {
+			runtime.tab.sessionPath = this.normalizeSessionPathFromPi(
+				state.sessionFile,
+				this.getProject(runtime.tab.projectId)?.path ?? runtime.tab.cwd,
+				runtime.tab.sessionEnvironment ?? "native",
+			) ?? runtime.tab.sessionPath;
+		}
 		if (state?.sessionName) runtime.tab.title = state.sessionName;
 		await this.loadMessages(agentId).catch(() => undefined);
 		this.emitState();

@@ -233,7 +233,7 @@ export function getComposerEnterIntent(
 	sendShortcut: SendShortcut,
 ): ComposerEnterIntent {
 	if (event.key !== "Enter") return "ignore";
-	if (isComposingInput(event)) return "ignore";
+	if (isComposingKeyboardEvent(event)) return "ignore";
 
 	const shouldSend =
 		sendShortcut === "enter-send"
@@ -246,7 +246,15 @@ export function getComposerEnterIntent(
 	return "newline";
 }
 
-function isComposingInput(event: ComposerKeyboardState) {
+/**
+ * 判断一次按键是否处于 IME 合成中，是所有 composer 输入路径唯一的 IME 判定口。
+ *
+ * 必须同时看 `event` 与 `event.nativeEvent`：TipTap 的 DOM 事件桥接会把原生
+ * KeyboardEvent 直接交给 React 风格的处理函数，此时没有 `nativeEvent`，
+ * 只查 `nativeEvent.isComposing` 会漏判，导致中文输入法确认候选时被当成
+ * 「发送」或「选中建议项」。
+ */
+export function isComposingKeyboardEvent(event: ComposerKeyboardState) {
 	// Shift+Enter 不可能是 IME 合成，直接跳过检测
 	if (event.shiftKey) return false;
 	// keyCode/which=229 是部分 Chromium/macOS 输入法在 composition 期间的兼容信号。

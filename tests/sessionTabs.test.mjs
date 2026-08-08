@@ -90,3 +90,25 @@ test("reorderSessionTabs: 拖到自身不做任何变化", () => {
 	assert.equal(json(next.tabs), json(["p1", "n1"]));
 	assert.equal(json(next.pinned), json(["p1"]));
 });
+
+test("openPreviewSessionTab: 单击替换预览，不降级常驻 Tab", () => {
+	const { openPreviewSessionTab } = loadSessionTabs();
+	const first = openPreviewSessionTab(["a"], [], null, "b");
+	assert.equal(json(first.tabs), json(["a", "b"]));
+	assert.equal(first.previewId, "b");
+
+	const replaced = openPreviewSessionTab(first.tabs, [], first.previewId, "c");
+	assert.equal(json(replaced.tabs), json(["a", "c"]));
+	assert.equal(replaced.previewId, "c");
+
+	const resident = openPreviewSessionTab(["a", "c"], [], "c", "a");
+	assert.equal(json(resident.tabs), json(["a", "c"]));
+	assert.equal(resident.previewId, "c");
+});
+
+test("openPermanentSessionTab: 双击升格预览为常驻", () => {
+	const { openPermanentSessionTab } = loadSessionTabs();
+	const next = openPermanentSessionTab(["a", "b"], [], "b", "b");
+	assert.equal(json(next.tabs), json(["a", "b"]));
+	assert.equal(next.previewId, null);
+});

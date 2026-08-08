@@ -530,7 +530,12 @@ export const useStickToBottom = (options: StickToBottomOptions = {}): StickToBot
     scrollRef,
     scrollToBottom,
     stopScroll,
-    isAtBottom: isAtBottom || isNearBottom,
+    /**
+     * 对外「是否锁底跟随」只用严格 isAtBottom。
+     * 旧实现 `isAtBottom || isNearBottom` 会在用户已上滚但距底 <70px 时仍报跟随，
+     * ResizeObserver 继续拽底 → 触底附近周期性上跳/回弹。
+     */
+    isAtBottom,
     isNearBottom,
     escapedFromLock,
     state,

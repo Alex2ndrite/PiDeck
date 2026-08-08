@@ -281,3 +281,36 @@ test("groups Pi child sessions under an agent whose linked session was filtered 
 	assert.equal(display.children[0].piSubagents.length, 1);
 	assert.equal(display.children[0].piSubagents[0].name, "Worker");
 });
+
+test("collectDisplayedSessionIds excludes drafts already shown as agent or session rows", () => {
+	const { collectDisplayedSessionIds } = loadModule();
+	const sessionRow = {
+		type: "session",
+		key: "session:history-1",
+		session: session({ filePath: "C:/sessions/history.jsonl", id: "history-1" }),
+		sortAt: 10,
+		codexSubagents: [],
+		piSubagents: [],
+	};
+	const agentRow = {
+		type: "agent",
+		key: "agent:live-1",
+		agent: {
+			id: "live-1",
+			projectId: "p1",
+			cwd: "C:/project",
+			title: "PiDeck agent",
+			status: "running",
+			sessionPath: "C:/sessions/draft.jsonl",
+			createdAt: 20,
+		},
+		sortAt: 20,
+		codexSubagents: [],
+		piSubagents: [],
+	};
+	const ids = collectDisplayedSessionIds(
+		[sessionRow, agentRow],
+		(agent) => (agent.id === "live-1" ? "draft-1" : undefined),
+	);
+	assert.deepEqual([...ids], ["history-1", "draft-1"]);
+});

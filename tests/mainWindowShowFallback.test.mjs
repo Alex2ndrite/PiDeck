@@ -55,15 +55,17 @@ test("file editor: openEditorTab updater is pure (StrictMode double-invoke safe)
   assert.match(mainSource, /<React\.StrictMode>/);
 });
 
-test("drawer viewer: toggleEditorMode closes drawer when expanding to modal (fix minimize)", () => {
+test("workbench viewer: editor mode toggles split/maximize; CodeMirror stays sync-loaded", () => {
   const source = readFileSync("src/renderer/src/hooks/useFileEditor.ts", "utf8");
-  // 展开到 modal 必须收起抽屉（否则最小化时 openDrawer("editor") 命中 toggle 语义关闭抽屉）
-  assert.match(source, /展开到 modal：必须收起抽屉/);
-  assert.match(source, /setDrawer\(null\);/);
-  // updater 外执行副作用（StrictMode 双调用安全）
+  // 阅读面已迁中间栏：toggle 只在 split ↔ maximize，不再有 drawer modal 收起抽屉逻辑
   assert.match(source, /editorModeRef\.current = next;/);
-  // 文件树打开始终 drawer 模式 + 记录来源面板（返回键）
-  assert.match(source, /文件树打开始终进抽屉模式/);
+  assert.match(
+    source,
+    /editorModeRef\.current === "maximize" \? "split" : "maximize"/,
+  );
+  assert.doesNotMatch(source, /展开到 modal：必须收起抽屉/);
+  // 打开文件进中间栏，抽屉保持文件树
+  assert.match(source, /阅读面进中间栏/);
   // 编辑器（CodeMirror 6）同步加载，无 Monaco 首帧空白问题；
   // 加载态仍保留给文件内容异步读取（loading state → file-diff-loading）
   const viewer = readFileSync("src/renderer/src/components/app/FileDiffViewer.tsx", "utf8");

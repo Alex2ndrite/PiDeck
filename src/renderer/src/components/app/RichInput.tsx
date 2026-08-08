@@ -5,231 +5,32 @@ import {
 	useMemo,
 	useRef,
 } from "react";
+import {
+	formatFilePathRef,
+	parseRichInputChips,
+	unwrapFileChipPath,
+	type ComposerChip,
+	type RichInputChip,
+} from "../session/composer/chips";
+import type { ComposerEditorProps } from "../session/composer/types";
 
 /**
- * RichInput —— contentEditable 输入区，替代 textarea。
- *
- * 架构原则（React Issue #2047 — contentEditable 不应做受控组件）：
- * - 浏览器通过 contentEditable 自主管理文本节点和光标，React 零干预。
- * - Chip（@file、/command、&session）是挂在文本节点之间的装饰层，由 React 局部维护。
- * - 仅在 chip 真正变化时，对受影响的文本节点做最小拆分/合并，其余文本节点和光标不受影响。
- * - 外部程序化变更（建议选择、历史恢复、发送清空）触发全量 DOM 重建，此时不处于用户打字状态。
- *
- * 已处理的边界：
- * 1. IME 中文：composition 期间锁定，不回写 value、不触发 onChange。
- * 2. Chip 同步：diff 新旧 chip，局部拆分文本节点插入/移除 span，不重建整个 DOM。
- * 3. 粘贴：优先交给上层（图片/文件引用）；上层未处理时只取纯文本，防止富文本污染。
- * 4. 换行：Enter 未被上层 consume 时让浏览器原生处理，随后 input 事件同步 value。
- * 5. 光标在 chip 内部：contenteditable=false 阻止浏览器进入，无需额外处理。
+ * RichInput —— 旧 contentEditable 实现（对照用，P0 验收后删除）。
+ * 契约见 ComposerEditorProps；chip 解析见 composer/chips.ts。
+ * 禁止反向依赖 TipTap。
  */
 
-// ── 类型 ──────────────────────────────────────────────────
+export type { RichInputChip, ComposerChip };
+export { formatFilePathRef, parseRichInputChips, unwrapFileChipPath };
 
-export type RichInputChip = {
-	start: number;
-	end: number;
-	raw: string;
-	kind: "file" | "skill" | "session";
-	label: string;
-};
-
-export type RichInputProps = {
-	value: string;
-	onChange: (value: string, cursor: number) => void;
-	onCursorChange: (cursor: number) => void;
-	onKeyDown: (event: React.KeyboardEvent<HTMLDivElement>) => void;
-	onPaste?: (event: React.ClipboardEvent<HTMLDivElement>) => void;
-	onDrop?: (event: React.DragEvent<HTMLDivElement>) => void;
-	onDragOver?: (event: React.DragEvent<HTMLDivElement>) => void;
-	onFocus?: (event: React.FocusEvent<HTMLDivElement>) => void;
-	onBlur?: (event: React.FocusEvent<HTMLDivElement>) => void;
-	disabled?: boolean;
-	placeholder?: string;
-	className?: string;
-	/** 受控重渲染后光标应恢复到的纯文本偏移（非 null 时优先于 DOM 当前光标） */
-	caretRef?: React.MutableRefObject<number | null>;
-	/** chip 点击回调，传递被点击 chip 的解析信息 */
-	onChipClick?: (chip: RichInputChip) => void;
-	/** 有效命令名集合，白名单：不在集合内的 / 命令不渲染 chip */
-	validCommandNames?: Set<string>;
-	/** 有效文件路径集合，白名单：不在集合内的 @ 引用不渲染 chip */
-	validFilePaths?: Set<string>;
-	validSessionRefs?: Set<string>;
-};
+/** @deprecated 使用 ComposerEditorProps */
+export type RichInputProps = ComposerEditorProps;
 
 type TextNodeRun = {
 	node: Text;
 	start: number;
 	end: number;
 };
-
-// ── Token 解析 ────────────────────────────────────────────
-
-/** 提取文本中所有 URL 区间，后续 chip 解析跳过这些区间。 */
-function findUrlSpans(text: string): { start: number; end: number }[] {
-	const urlRe = /https?:\/\/\S+/g;
-	const spans: { start: number; end: number }[] = [];
-	let m: RegExpExecArray | null;
-	while ((m = urlRe.exec(text)) !== null) {
-		spans.push({ start: m.index, end: m.index + m[0].length });
-	}
-	return spans;
-}
-
-/** 判断区间是否与任一 URL 区间重叠（含部分重叠）。 */
-function overlapsUrl(
-	start: number,
-	end: number,
-	urlSpans: { start: number; end: number }[],
-): boolean {
-	return urlSpans.some((s) => start < s.end && end > s.start);
-}
-
-/**
- * 将 prompt 字符串解析为 chip 列表（展示层，与 detectTrigger 规则对齐）。
- *
- * 规则：
- * - /skill 触发符 / 前一个字符不能是 : / 或字母/数字/下划线（\w），
- *   避免路径段（如 Agent/PiDeck、a/b）被误识别。
- * - @path 触发符 @ 前同样排除 : / 和 \w。
- * - /skill：skill 名只允许字母开头 + 字母数字/连字符（skill 命名规范），
- *   且 token 后一字符不能是 /（排除 /usr/bin 这类路径）。
- * - @path：无空格路径用 @C:\a\b.txt；含空格路径用 @"C:\Users\a b\c.txt"。
- *
- * URL 中的路径段（如 https://example.com/foo）不会被识别为 chip。
- */
-/**
- * 从 file chip 的 raw 取出真实路径。
- * 支持 @path、@path/、@"path with space" 三种写法。
- * 目录引用的尾斜杠会剥离，便于 open/showInFolder 使用真实路径。
- */
-export function unwrapFileChipPath(raw: string): string {
-	const body = raw.startsWith("@") ? raw.slice(1) : raw;
-	let path =
-		body.length >= 2 && body.startsWith('"') && body.endsWith('"')
-			? body.slice(1, -1)
-			: body;
-	// 统一去掉目录标记尾斜杠（含 Windows 反斜杠），避免 FS API 拿到 "src/"
-	path = path.replace(/[/\\]+$/, "");
-	return path;
-}
-
-/**
- * 将路径格式化为消息中的 @ 引用。
- * 目录必须带尾斜杠（@src/），否则 chip 规则要求路径含 /\. 时，
- * 裸名 @src 不会渲染为文件 chip，模型也容易当成「智能体/人」mention。
- */
-export function formatFilePathRef(
-	path: string,
-	options?: { isDirectory?: boolean },
-): string {
-	// 先规范化：去掉已有尾分隔符，再按 isDirectory 统一追加 /
-	let normalized = path.replace(/[/\\]+$/, "");
-	if (options?.isDirectory) {
-		normalized = `${normalized}/`;
-	}
-	const needsQuote = /[\s"]/.test(normalized);
-	if (!needsQuote) return `@${normalized}`;
-	// 路径内若已有双引号，做简单转义；Windows 路径通常不含 "。
-	const escaped = normalized.replace(/"/g, '\\"');
-	return `@"${escaped}"`;
-}
-
-export function parseRichInputChips(
-	text: string,
-	validCommandNames?: Set<string>,
-	validFilePaths?: Set<string>,
-	validSessionRefs?: Set<string>,
-): RichInputChip[] {
-	const chips: RichInputChip[] = [];
-	const urlSpans = findUrlSpans(text);
-
-	// /skill：前置排除 : / 和 \w（字母/数字/下划线），避免路径段误识别；slash 命令整体 = 命令名 + 可选的 :参数名（如 /skill:writing-plans、/template:doc）。
-	// 冒号后须字母开头 + 字母数字/连字符，避免匹配 /a:b:c 这种异常文本。
-	// 后一字符若为 /，说明是路径（如 /usr/bin），不当作 skill。
-	// 名称支持 Unicode 字母（中文、日文等），使用 \p{L} + u flag。
-	const slashRe = /(?<![:/.\w#!~])(\/[\p{L}][\p{L}\p{N}_-]*(?::[\p{L}][\p{L}\p{N}_-]*)?)/gu;
-	let m: RegExpExecArray | null;
-	while ((m = slashRe.exec(text)) !== null) {
-		const start = m.index;
-		const end = start + m[1].length;
-		if (text[end] === "/") continue;
-		if (!overlapsUrl(start, end, urlSpans)) {
-			const label = m[1].slice(1);
-			if (!validCommandNames || validCommandNames.has(label)) {
-				chips.push({ start, end, raw: m[1], kind: "skill", label });
-			}
-		}
-		if (m.index === slashRe.lastIndex) slashRe.lastIndex++;
-	}
-
-	// @path：支持三种写法
-	// 1) 无空格：@C:\foo\bar.txt / @src/a.ts
-	// 2) 含空格：@"C:\Users\a b\file.txt"（粘贴/拖拽自动加引号）
-	// 3) 目录：@src/ 或 @"my dir/"（尾斜杠是目录标记，避免被当成智能体 mention）
-	// 白名单：相对路径校验（去掉尾斜杠后比对）；绝对路径绕过白名单。
-	const atRe = /(?<![:/.\w#!~])(@(?:"[^"]+"|[^\s@"]+))/g;
-	while ((m = atRe.exec(text)) !== null) {
-		const start = m.index;
-		const end = start + m[1].length;
-		if (!overlapsUrl(start, end, urlSpans)) {
-			const rawToken = m[1];
-			// 保留 raw 中的尾斜杠用于展示；路径校验用剥离后的路径
-			const body = rawToken.startsWith("@") ? rawToken.slice(1) : rawToken;
-			const quoted = body.length >= 2 && body.startsWith('"') && body.endsWith('"');
-			const rawPath = quoted ? body.slice(1, -1) : body;
-			const isDirectoryRef = /[/\\]$/.test(rawPath);
-			// 无分隔符且非目录尾斜杠的裸名（@alice）不渲染为文件 chip，避免误伤
-			if (!isDirectoryRef && !/[\\/.]/.test(rawPath)) continue;
-			const seg = unwrapFileChipPath(rawToken);
-			const normalized = seg.replace(/\\/g, "/");
-			const pathKey = normalized.startsWith("./") ? normalized.slice(2) : normalized;
-			const isAbsPath = /^[a-zA-Z]:[\\/]/.test(pathKey) || /^\/[^/]+\//.test(pathKey);
-			if (!isAbsPath && validFilePaths && !validFilePaths.has(pathKey)) continue;
-			// 显示完整相对路径（含目录结构），不再只取 basename，避免选完只剩文件名看不出位置。
-			// 绝对路径同样展示完整路径；目录补尾斜杠。
-			const baseLabel = pathKey || normalized || seg;
-			const label = isDirectoryRef ? `${baseLabel.replace(/[/\\]+$/, "")}/` : baseLabel;
-			chips.push({ start, end, raw: rawToken, kind: "file", label });
-		}
-		if (m.index === atRe.lastIndex) atRe.lastIndex++;
-	}
-
-	// &session：捕获 & 后到换行/末尾的全部文本，再从白名单中按前缀匹配出会话名。
-	// 白名单优先（取最长匹配），无白名单时取第一个空格前的单词。会话名可包含 &
-	const ampRe = /(?<![:/.#!~?=&])(&[^\n]+)/gu;
-	while ((m = ampRe.exec(text)) !== null) {
-		const start = m.index;
-		const captured = m[1].slice(1);
-		let name = "";
-		if (validSessionRefs && validSessionRefs.size > 0) {
-			for (const ref of validSessionRefs) {
-				if (captured === ref || captured.startsWith(ref + " ")) {
-					if (ref.length > name.length) name = ref;
-				}
-			}
-		}
-		if (!name) {
-			name = captured.split(/\s/)[0] ?? "";
-		}
-		if (!name) { if (m.index === ampRe.lastIndex) ampRe.lastIndex++; continue; }
-		const raw = `&${name}`;
-		const end = start + raw.length;
-		if (!overlapsUrl(start, end, urlSpans)) {
-			chips.push({ start, end, raw, kind: "session", label: name });
-		}
-		if (m.index === ampRe.lastIndex) ampRe.lastIndex++;
-	}
-
-	// 去重叠：保留先出现的，剔除被包含的
-	chips.sort((a, b) => a.start - b.start || b.end - a.end);
-	const merged: RichInputChip[] = [];
-	let coverEnd = -1;
-	for (const c of chips) {
-		if (c.start >= coverEnd) { merged.push(c); coverEnd = c.end; }
-	}
-	return merged;
-}
 
 // ── DOM 扁平文本模型 ──────────────────────────────────────
 
@@ -746,8 +547,9 @@ export const RichInput = forwardRef<HTMLDivElement, RichInputProps>(
 			const root = rootRef.current;
 			if (!root) return;
 
-			// Path 1：程序化变更
-			const caretTarget = caretRef?.current;
+			// Path 1：程序化变更（ComposerCaretRequest 契约：只取 pos，
+			// 与 forValue 的配对校验由当前唯一使用者 TipTap composer 负责）
+			const caretTarget = caretRef?.current?.pos ?? null;
 			if (caretTarget != null) {
 				rebuildDom(caretTarget);
 				return;

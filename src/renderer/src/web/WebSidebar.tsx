@@ -21,7 +21,7 @@ const projectRowClass =
 	"conversation relative w-full min-h-9 items-center gap-1.5 rounded-lg border border-transparent bg-background px-3 py-1 text-left text-body text-foreground shadow-none transition-[background-color,border-color] duration-200 hover:border-border-subtle hover:bg-muted/60 hover:text-foreground";
 
 const sessionRowClass =
-	"conversation agent-row relative flex min-h-11 w-full items-center gap-2 rounded-lg border border-transparent bg-background px-3 py-2 text-left text-body text-foreground shadow-none transition-[background-color,border-color] duration-200 hover:border-border-subtle hover:bg-muted/60 hover:text-foreground";
+	"conversation agent-row relative flex min-h-7 w-full items-center gap-1.5 rounded-md border border-transparent px-2 py-0 text-left text-body text-foreground shadow-none transition-[background-color,border-color] duration-200 hover:border-border-subtle hover:bg-muted/60 hover:text-foreground";
 
 /** 与桌面 ProjectTree 相同的项目目录名展示：chat 项目显示「聊天」，其余取路径末段。 */
 function displayProjectName(project: WebProject): string {
@@ -87,17 +87,17 @@ export function WebSidebar(props: {
 	)?.projectId;
 
 	return (
-		<aside
+			<aside
 			className="chat-list-pane flex h-full min-w-0 flex-col overflow-hidden border-r border-border bg-sidebar text-sidebar-foreground"
 			aria-label={t("app.search")}
 		>
-			<div className="sidebar-body flex min-h-0 flex-1 flex-col gap-2 p-2">
-				{/* 品牌区：与桌面 AppSidebar 一致 */}
-				<div className="list-toolbar flex h-12 shrink-0 items-center gap-1 px-1">
-					<div className="app-badge flex min-w-0 flex-1 items-center">
-						<WebBrandLockup />
-					</div>
+			{/* 品牌区提到 body 外，与桌面侧栏一致贴顶 */}
+			<div className="list-toolbar flex h-10 shrink-0 items-center gap-1 px-0.5">
+				<div className="app-badge flex min-w-0 flex-1 items-center">
+					<WebBrandLockup />
 				</div>
+			</div>
+			<div className="sidebar-body flex min-h-0 flex-1 flex-col gap-2 px-2 py-1">
 				{/* 搜索行 */}
 				<div className="search-row grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
 					<div className="search-box relative min-w-0">
@@ -219,7 +219,7 @@ export function WebSidebar(props: {
 				</div>
 			</div>
 			{/* 底栏连接状态 */}
-			<div className="toolbar-actions sidebar-bottom-actions flex shrink-0 items-center gap-1 border-t border-border px-4 py-2">
+			<div className="toolbar-actions sidebar-bottom-actions flex shrink-0 items-center gap-0.5 border-t border-border px-1.5 py-1">
 				<div className="flex min-w-0 flex-1 items-center gap-2 text-caption text-muted-foreground">
 					<span
 						className={cn(

@@ -1,8 +1,9 @@
 /* ── 文件图标模块样式（独立注入，避免在超大 styles.css 中反复丢失） ── */
 
 :root {
-  /* 文件图标使用稳定的 CSS 像素尺寸；系统缩放会自动适配高 DPI，面板宽度变化只影响文件名区域。 */
-  --file-type-icon-size: 20px;
+  /* 文件图标使用稳定的 CSS 像素尺寸；系统缩放会自动适配高 DPI，面板宽度变化只影响文件名区域。
+     24px：相对旧 20 更易辨认；须配合树行 Button 解除 [&_svg]:size-4 才能真正生效。 */
+  --file-type-icon-size: 24px;
   --file-icon-blue: #519aba;
   --file-icon-cyan: #38a3a5;
   --file-icon-green: #80a665;
@@ -16,8 +17,9 @@
   --file-icon-yellow: #c9a63b;
   --file-icon-ignore: #8e9eab;
   --file-icon-default: #8e9eab;
-  --file-icon-folder: #80a665;
-  --file-icon-folder-open: #80a665;
+  /* 描边文件夹跟 Seti 灰：不抢彩色文件图标，亮/暗随 --file-icon-grey 走。 */
+  --file-icon-folder: var(--file-icon-grey);
+  --file-icon-folder-open: var(--file-icon-grey);
   --file-icon-folder-special: #519aba;
   --file-node-type-label-color: var(--color-text-tertiary);
   --file-node-git-added: #57ab5a;
@@ -40,8 +42,6 @@
   --file-icon-yellow: #d4b84c;
   --file-icon-ignore: #a0aab4;
   --file-icon-default: #a0aab4;
-  --file-icon-folder: #90c27d;
-  --file-icon-folder-open: #90c27d;
   --file-icon-folder-special: #7ac4e0;
 }
 
@@ -61,8 +61,8 @@
 /* ── 文件图标容器 ── */
 .file-node-icon {
   position: relative;
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   flex-shrink: 0;
 }
 

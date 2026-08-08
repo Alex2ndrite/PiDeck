@@ -44,26 +44,28 @@ test("streamdown pipeline delegates to official plugins (code/mermaid/math) and 
 });
 
 test("streamdown code/table chrome uses faded action controls", () => {
-  // 右上角复制/下载：去掉白底胶囊，悬停显影（对齐 .code-copy）
-  assert.match(surfacesCss, /\[data-streamdown="code-block-actions"\]/);
-  assert.match(surfacesCss, /opacity:\s*0\.4/);
-  assert.match(surfacesCss, /\[data-streamdown="code-block"\]:hover \[data-streamdown="code-block-actions"\]/);
-  // 复制在左、下载在右（覆盖 streamdown 默认下载→复制）
-  assert.match(surfacesCss, /\[data-streamdown="code-block-copy-button"\][\s\S]*?order:\s*1/);
-  assert.match(surfacesCss, /\[data-streamdown="code-block-download-button"\][\s\S]*?order:\s*2/);
-  // 表格工具条同款淡化
-  assert.match(surfacesCss, /\[data-streamdown="table-wrapper"\]:hover > div:first-child/);
-  // 旧 details 折叠外壳已移除
+  const streamdownChrome = readFileSync("src/renderer/src/styles/streamdownChrome.css", "utf8");
+  assert.match(streamdownChrome, /\[data-streamdown="code-block-actions"\]/);
+  assert.match(streamdownChrome, /opacity:\s*0\.5/);
+  assert.match(streamdownChrome, /\[data-streamdown="code-block"\]:hover \[data-streamdown="code-block-actions"\]/);
+  assert.match(streamdownChrome, /\[data-streamdown="code-block-copy-button"\][\s\S]*?order:\s*1/);
+  assert.match(streamdownChrome, /\[data-streamdown="code-block-download-button"\][\s\S]*?order:\s*2/);
+  // 表格与代码块同皮（utilities 层）
+  assert.match(streamdownChrome, /\[data-streamdown="table-wrapper"\]:hover > div:first-child/);
   assert.doesNotMatch(surfacesCss, /\.sd-code-collapse\b/);
+  assert.doesNotMatch(streamdownChrome, /\.sd-code-collapse\b/);
 });
 
-test("Tailwind scans streamdown + plugin classes; styles.css imported (table/mermaid control styling)", () => {
+test("Tailwind scans streamdown + plugin classes; styles.css imports vendor streamdown layer", () => {
   assert.match(tailwind, /@source "\.\.\/\.\.\/\.\.\/\.\.\/node_modules\/streamdown\/dist\/\*\.js"/);
   // @streamdown/code 已恢复（JS 引擎懒加载高亮），继续扫描其类名
   assert.match(tailwind, /@source "\.\.\/\.\.\/\.\.\/\.\.\/node_modules\/@streamdown\/code\/dist\/\*\.js"/);
   assert.match(tailwind, /@source "\.\.\/\.\.\/\.\.\/\.\.\/node_modules\/@streamdown\/mermaid/);
   assert.match(tailwind, /@source "\.\.\/\.\.\/\.\.\/\.\.\/node_modules\/@streamdown\/math/);
-  assert.match(main, /import "streamdown\/styles\.css"/);
+  // streamdown 经 styles.css layer(vendor) 引入，避免 unlayered 压过 surfaces 覆盖
+  const stylesEntry = readFileSync("src/renderer/src/styles.css", "utf8");
+  assert.match(stylesEntry, /@import\s+"streamdown\/styles\.css"\s+layer\(vendor\)/);
+  assert.doesNotMatch(main, /import "streamdown\/styles\.css"/);
   // 高亮插件进 devDependencies（渲染层依赖随 vite 打包，与分支重构模式一致）
   assert.match(packageJson, /"@streamdown\/code"/);
   assert.match(packageJson, /"@streamdown\/mermaid"/);
@@ -110,4 +112,32 @@ test("static markdown scenes share the Streamdown engine", () => {
   // 静态场景保留各自插件（草稿本的高亮 mark 与 GFM task list 覆盖）
   assert.match(scratchPad, /rehypeHighlightMark/);
   assert.match(scratchPad, /remarkBreaks/);
+});
+
+test("streaming overlong guard: plain-text fallback above STREAM_LIGHT_MAX_CHARS", () => {
+  const stream = readFileSync("src/renderer/src/components/session/MarkdownStream.tsx", "utf8");
+  // 阈值常量导出（字符数）：marked 解析随文本线性涨，超长时流式回退纯文本
+  assert.match(stream, /export const STREAM_LIGHT_MAX_CHARS = 40_000/);
+  assert.match(stream, /streamPlain =\s*\n?\s*isStreamingNow && displayText\.length > STREAM_LIGHT_MAX_CHARS/);
+  // 回退节点：纯文本 + pre-wrap（排版由容器 markdown-body 接管）
+  assert.match(stream, /whitespace-pre-wrap break-words/);
+  // 回退必须发生在 Streamdown 之外（不建解析树），且依赖链含 streamPlain
+  assert.match(stream, /streamPlain \? \(/);
+  assert.match(stream, /streamPlain,\n\s*components,/);
+  // 超长兜底对思考同样生效（ThinkingBlock 走同一 MarkdownStream），无需额外开关
+  const thinking = readFileSync("src/renderer/src/components/session/TimelineEventCards.tsx", "utf8");
+  assert.match(thinking, /<MarkdownStream/);
+  // 流式轻渲染契约不回退：static 模式 + 流式精简插件仍是默认
+  assert.match(stream, /mode="static"/);
+  assert.match(stream, /resolvedRemarkPlugins = isStreamingNow\s*\n\s*\?\s*\[\]/);
+});
+
+test("AnswerOutput live path renders through MarkdownStream (no dual typewriter)", () => {
+  const answer = readFileSync("src/renderer/src/components/session/AnswerOutput.tsx", "utf8");
+  // live 分支把打字机/超长兜底委托给 MarkdownStream，不自持 useSmoothStream
+  assert.match(answer, /<MarkdownStream/);
+  assert.doesNotMatch(answer, /from "\.\.\/\.\.\/utils\/useSmoothStream"/);
+  // live 容器保留 e2e typewriter 选择器锚点
+  assert.match(answer, /execution-interim markdown-body/);
+  assert.match(answer, /data-is-streaming=\{props\.isStreaming \? "1" : "0"\}/);
 });

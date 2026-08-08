@@ -60,8 +60,7 @@ export function AppSidebar(props: AppSidebarProps) {
       creatingWorktree={props.creatingWorktree}
       isLanWeb={props.isLanWeb}
       chrome={<>
-        {/* 品牌区（main 布局）：折叠按钮在品牌文字右侧 */}
-        <div className="list-toolbar flex h-12 shrink-0 items-center gap-1 px-1">
+        <div className="list-toolbar flex h-10 shrink-0 items-center gap-1 border-b border-border/40 px-2.5">
           <div className="app-badge flex min-w-0 flex-1 items-center">
             <BrandLockup />
           </div>
@@ -69,7 +68,7 @@ export function AppSidebar(props: AppSidebarProps) {
             type="button"
             variant="ghost"
             size="icon-sm"
-            className="icon-button list-toggle-native"
+            className="icon-button list-toggle-native size-7"
             aria-label={props.listCollapsed ? t("app.expandList") : t("app.collapseList")}
             title={props.listCollapsed ? t("app.expandList") : t("app.collapseList")}
             onClick={props.toggleListCollapsed}
@@ -83,20 +82,6 @@ export function AppSidebar(props: AppSidebarProps) {
       onOpenFeedback={props.onOpenFeedback}
       onOpenHomepage={props.onOpenHomepage}
     />
-    {/* 侧栏折叠后的浮动恢复入口（品牌区随折叠隐藏，按钮不能跟着消失） */}
-    {props.listCollapsed && (
-      <Button
-        type="button"
-        variant="outline"
-        size="icon-sm"
-        className="list-toggle-native floating !size-7"
-        aria-label={t("app.expandList")}
-        title={t("app.expandList")}
-        onClick={props.toggleListCollapsed}
-      >
-        <PanelLeft size={14} strokeWidth={2} aria-hidden="true" />
-      </Button>
-    )}
     </>
   );
 }

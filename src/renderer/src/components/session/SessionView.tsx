@@ -19,11 +19,11 @@ import { isLanWeb, desktopApi as api } from "../../desktopApi";
 import { SessionHeader } from "./SessionHeader";
 import { SessionBranchBar } from "./SessionBranchBar";
 import { SessionWidgetChips } from "./SessionWidgetChips";
-import { SessionTabsBar, type SessionTabsBarProps } from "./SessionTabsBar";
 import { SessionMessageTimeline } from "./SessionMessageTimeline";
 import { ComposerArea } from "./ComposerArea";
 import { SessionRuntimeDock } from "./SessionRuntimeDock";
 import { QueuedPromptPanel } from "./ComposerPanels";
+import { useSessionPaneServices } from "./SessionPaneServices";
 import { COMPOSER_DEFAULT_HEIGHT, COMPOSER_MIN_HEIGHT, TIMELINE_MIN_HEIGHT, growComposerWithinTimelineBudget } from "../../rendererUtils";
 import type { EnqueuePromptSnapshot } from "../../hooks/useSessionSend";
 
@@ -36,8 +36,11 @@ export type SessionViewProps = {
   // ── Session identity ──
   sessionId: string;
   sessionTitle: string;
-  sessionTabs: Omit<SessionTabsBarProps, "actions">;
   sessionTimeline: SessionTimelineController;
+  /** 分屏栏：加边框与点击聚焦；单栏 Tab 已外置，同样只渲染 Header */
+  splitPane?: boolean;
+  focused?: boolean;
+  onFocusPane?: () => void;
   activeAgentId?: string;
   activeAgent?: {
     compactionCount?: number;
@@ -54,18 +57,10 @@ export type SessionViewProps = {
   composerOffsetHeight: number;
   terminalRowHeight: number;
 
-  // ── Tab 下拉运行控制（停止/重启）──
+  // ── Header 状态 ──
   isAgentStarting: boolean;
-  canStop: boolean;
-  canRestart: boolean;
-  restartingAgentId?: string;
   isRestarting: boolean;
-  showRestart: boolean;
   sessionDuration?: number;
-  onRestart: () => void;
-  /** 右侧抽屉开关（main 布局：状态徽章右侧），不传则不渲染 */
-  onToggleDrawer?: () => void;
-  drawerOpen?: boolean;
 
   // ── Timeline interaction ──
   showThinking: boolean;
@@ -122,8 +117,10 @@ export type SessionViewProps = {
 export function SessionView({
   sessionId,
   sessionTitle,
-  sessionTabs,
   sessionTimeline,
+  splitPane = false,
+  focused = true,
+  onFocusPane,
   activeAgentId,
   activeAgent,
   activeRuntimeState,
@@ -134,15 +131,8 @@ export function SessionView({
   composerOffsetHeight,
   terminalRowHeight,
   isAgentStarting,
-  canStop,
-  canRestart,
-  restartingAgentId,
   isRestarting,
-  showRestart,
   sessionDuration,
-  onRestart,
-  onToggleDrawer,
-  drawerOpen,
   showThinking,
   validCommandNames,
   validFilePaths,
@@ -180,6 +170,7 @@ export function SessionView({
   runCreateSessionDraft,
   abortAgent,
 }: SessionViewProps) {
+  const paneServices = useSessionPaneServices();
   // #115 U5 垂直轴：timeline | composer | terminal 三段由 react-resizable-panels 接管。
   // composer 高度本地持有（px），终端高度/折叠仍由 useTerminalDock 的 per-agent
   // 状态持有，拖拽结果经 onResize 回写，外部状态经 imperative API 同步。
@@ -423,37 +414,27 @@ export function SessionView({
   }, [terminalPanelVisible, terminalOpen]);
 
   return (
-    <>
-      {/* 会话状态徽章以 embedded 模式嵌入 Tab 栏右侧；停止/重启在 Tab 下拉
-          （SessionTabsBar 的 canStopCurrent/canRestartCurrent 链路），右侧不再有操作按钮。 */}
-      <SessionTabsBar
-        {...sessionTabs}
-        canStopCurrent={canStop}
-        // 关闭会话 = 停止 Agent 运行 + 移除会话 Tab（与“关闭标签页”仅移除 Tab 不同）
-        onStopCurrent={() => {
-          void abortAgent();
-          sessionTabs.onClose(sessionId);
-        }}
-        canRestartCurrent={canRestart}
-        isRestartingCurrent={isRestarting}
-        // 没有绑定运行时的草稿也有会话 ID，但重启只对已启动 Agent 有意义；
-        // showRestart 为 false 时不提供回调，Tab 下拉自然不渲染重启项
-        onRestartCurrent={showRestart ? onRestart : undefined}
-        actions={
-          <SessionHeader
-            embedded
-            headerRef={chatHeaderRef}
-            title={sessionTitle}
-            compactionCount={activeAgent?.compactionCount}
-            isAnonymous={activeAgent?.noSession}
-            runtimeState={activeRuntimeState}
-            duration={sessionDuration}
-            isStarting={isAgentStarting}
-            onToggleDrawer={onToggleDrawer}
-            drawerOpen={drawerOpen}
-            widgetChips={<SessionWidgetChips sessionId={sessionId} />}
-          />
-        }
+    <div
+      className={
+        splitPane
+          ? `session-split-pane flex h-full min-h-0 flex-col${focused ? " session-split-pane-focused" : ""}`
+          : "contents"
+      }
+      onMouseDown={splitPane ? () => onFocusPane?.() : undefined}
+    >
+      {/* Tab 栏已统一外置；运行控制（停止/重启）在共享 Tab 栏的 Tab 下拉；
+          本栏只保留会话状态徽章与分屏身份标题（抽屉开关在共享 Tab 栏）。 */}
+      <SessionHeader
+        headerRef={chatHeaderRef}
+        title={sessionTitle}
+        paneTitle={splitPane ? sessionTitle : undefined}
+        onExitSplit={splitPane ? paneServices.exitSessionSplit : undefined}
+        compactionCount={activeAgent?.compactionCount}
+        isAnonymous={activeAgent?.noSession}
+        runtimeState={activeRuntimeState}
+        duration={sessionDuration}
+        isStarting={isAgentStarting}
+        widgetChips={<SessionWidgetChips sessionId={sessionId} />}
       />
       {/* 分支导航条：仅当当前会话存在 fork 分支关系（父/兄弟/子分支）时显示 */}
       <SessionBranchBar sessionId={sessionId} onOpenSession={onOpenBranchSession} />
@@ -577,6 +558,6 @@ export function SessionView({
           </>
         )}
       </ResizablePanelGroup>
-    </>
+    </div>
   );
 }

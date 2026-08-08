@@ -8,7 +8,7 @@ import type {
 export type EditorSurfaceProps = {
   tab: WorkspaceEditorTab;
   tabs: WorkspaceEditorTab[];
-  displayMode?: "drawer" | "modal";
+  displayMode?: "drawer" | "modal" | "split" | "maximize";
   theme?: "light" | "dark";
   maxFileSizeMB?: number;
   onToggleMode?: () => void;

@@ -1265,12 +1265,12 @@ html[data-theme="dark"] .scratch-pad-md mark {
   background: var(--color-bg-panel);
 }
 
+/* padding / gap 由 SidebarContent 的 Tailwind 承担；这里只保留布局骨架。
+   若继续写 padding，会在 unlayered 时代压死 utility；legacy 入层后也应避免双源抢同一属性。 */
 .chat-list-pane.v3-braun .sidebar-body {
   position: relative;
   flex: 1;
   flex-direction: column;
-  padding: var(--space-4);
-  gap: var(--space-3);
   overflow: hidden;
 }
 
@@ -1327,6 +1327,11 @@ html[data-theme="dark"] .scratch-pad-md mark {
 
 .chat-list-pane.v3-braun .sidebar-body .session-card {
   padding: 0;
+}
+
+.chat-list-pane.v3-braun .sidebar-body .agent-row,
+.chat-list-pane.v3-braun .sidebar-body .session-row {
+  margin: 0;
 }
 
 .chat-list-pane.v3-braun .sidebar-body .project-group > .conversation:first-child.active::before,
@@ -1452,10 +1457,10 @@ html[data-theme="dark"] .scratch-pad-md mark {
 }
 
 .chat-list-pane.v3-braun .sidebar-body .codex-subagent-sidebar-group {
-  margin: 2px 0 2px 28px;
+  margin: 0 0 0 28px;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 0;
 }
 
 .chat-list-pane.v3-braun .sidebar-body .codex-subagent-sidebar-toggle,
@@ -1684,7 +1689,7 @@ body.is-git-pane-resizing, body.is-git-pane-resizing * { cursor: row-resize !imp
 .git-graph-continuation { height: 26px; }
 
 .git-commit-hover-author { display: flex; min-width: 0; align-items: flex-start; gap: 8px; }
-.git-commit-hover-avatar { display: inline-flex; width: 24px; height: 24px; flex: 0 0 24px; align-items: center; justify-content: center; border-radius: var(--radius-sm); background: var(--color-bg-muted); color: var(--git-panel-fg); font-family: var(--font-family-business); font-size: var(--font-size-caption); font-weight: 600; }.git-commit-hover-message { margin-top: 10px; padding: 9px 0; border-top: 1px solid var(--git-panel-border); border-bottom: 1px solid var(--git-panel-border); white-space: pre-wrap; word-break: break-word; }
+.git-commit-hover-avatar { display: inline-flex; width: 24px; height: 24px; flex: 0 0 24px; align-items: center; justify-content: center; border-radius: var(--radius-sm); background: var(--color-bg-muted); color: var(--git-panel-fg); font-family: var(--git-ui-font); font-size: var(--font-size-caption); font-weight: 600; }.git-commit-hover-message { margin-top: 10px; padding: 9px 0; border-top: 1px solid var(--git-panel-border); border-bottom: 1px solid var(--git-panel-border); white-space: pre-wrap; word-break: break-word; }
 .git-commit-hover-identity { margin-top: 8px; }
 .git-commit-hover-identity code { display: block; overflow: hidden; color: var(--git-desc-fg); font-family: var(--font-family-mono); font-size: var(--font-size-caption); text-overflow: ellipsis; white-space: nowrap; }
 .git-commit-hover-refs { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }

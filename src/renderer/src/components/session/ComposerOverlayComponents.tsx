@@ -18,7 +18,9 @@ export function PromptSuggestions(props: {
 	onSelectedIndexChange: (index: number) => void;
 	onClose: () => void;
 	onPick: (value: string) => void;
-	/** 菜单锚定位置（屏幕坐标），未传则使用默认居中定位 */
+	/** 菜单锚定位置（屏幕坐标）。由 controller 统一计算（含无坐标时的居中兜底），
+	 *  定位只用 left/top/bottom，transform 不参与定位——入场动画只动 opacity/translateY，
+	 *  与锚点模式天然解耦，不会出现动画期间横跳。 */
 	anchorStyle?: React.CSSProperties;
 }) {
 	const listRef = useRef<HTMLDivElement>(null);
@@ -43,34 +45,34 @@ export function PromptSuggestions(props: {
 	// 但保留各按钮的 onClick 正常工作。
 	return (
 		<div
-			className="command-palette"
+			className="fixed z-[100] flex w-[min(520px,calc(100vw-120px))] max-h-[380px] animate-in flex-col overflow-hidden rounded-lg border border-border-subtle bg-bg-panel shadow-[var(--shadow-popover)] fade-in-0 slide-in-from-bottom-2 duration-150"
 			style={props.anchorStyle}
 			onMouseDown={(e) => e.preventDefault()}
 		>
-			<div className="command-palette-header">
+			<div className="flex items-center justify-between border-b border-border-subtle px-[14px] py-[10px] text-caption font-medium text-text-secondary">
 				<span>{headerLabel}</span>
 				<Button variant="ghost" size="icon"
-					className="command-palette-close"
+					className="h-6 w-6 text-text-tertiary hover:bg-bg-hover hover:text-text-secondary"
 					aria-label={t("common.close")} title={t("common.close")}
 					onClick={props.onClose}
 				>
 					<X size={16} strokeWidth={2.2} aria-hidden="true" />
 				</Button>
 			</div>
-			<div className="command-palette-list" ref={listRef}>
+			<div className="flex-1 overflow-y-auto p-1.5" ref={listRef}>
 				{props.items.map((item, index) => (
 					<button
 						key={item.key}
-						className={`command-palette-item${index === props.selectedIndex ? " selected" : ""}`}
+						className={`flex w-full cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors${index === props.selectedIndex ? " bg-accent-soft" : " hover:bg-bg-active"}`}
 						onMouseEnter={() => props.onSelectedIndexChange(index)}
 						onClick={() => props.onPick(item.value)}
 					>
-						<span className="command-palette-label">{item.label}</span>
-						<span className="command-palette-desc">{item.description}</span>
+						<span className="min-w-[140px] max-w-[200px] flex-none truncate font-mono text-control font-semibold text-text-primary">{item.label}</span>
+						<span className="min-w-0 flex-1 truncate text-caption text-text-secondary">{item.description}</span>
 					</button>
 				))}
 			</div>
-			<div className="command-palette-footer">
+			<div className="flex gap-4 border-t border-border-subtle px-[14px] py-2 text-micro text-text-tertiary">
 				<span>{t("prompt.selectHint")}</span>
 				<span>{t("prompt.confirmHint")}</span>
 				<span>{t("prompt.closeHint")}</span>

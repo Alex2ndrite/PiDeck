@@ -100,11 +100,11 @@ test("sidebar omits the redundant projects heading and tabs shrink to their titl
   assert.doesNotMatch(tabBar, /pinned \? "w-20" : "w-32"/);
   assert.match(tabBar, /session-tabs-scroll (?:relative )?flex min-w-0 flex-1/);
   assert.match(tabBar, /session-tabs-actions flex shrink-0/);
-  assert.match(sidebarContent, /sidebar-body flex min-h-0 flex-1 flex-col gap-2 px-1\.5 py-1/);
-  assert.match(sessionTree, /min-h-11 w-full/);
-  assert.match(sessionTree, /history-session-row mx-0 mb-1 last:mb-0 min-h-11 pl-3 pr-3 py-2/);
+  assert.match(sidebarContent, /sidebar-body flex min-h-0 flex-1 flex-col gap-2 px-2 pt-1 pb-1/);
+  assert.match(sessionTree, /min-h-7 w-full/);
+  assert.match(sessionTree, /history-session-row mx-0 min-h-7 pl-2 pr-2 py-0/);
   assert.match(sessionTree, /历史会话不是运行中的 Agent/);
-  assert.match(sessionTree, /flex flex-col gap-2 py-1/);
+  assert.match(sessionTree, /flex flex-col gap-0/);
   assert.match(styles, /\.chat-list-pane\.v3-braun \.sidebar-body \.session-row[\s\S]*?margin: 0;/);
   const conversationTitleSpan = styles.match(
     /\.conversation-title span \{([\s\S]*?)\n\}/,
@@ -120,10 +120,11 @@ test("sidebar omits the redundant projects heading and tabs shrink to their titl
   assert.doesNotMatch(sourceBadge, /bg-(?:indigo|amber|emerald)-/);
 });
 
-test("session actions embed into the tab bar right slot", () => {
+test("session tabs stay outside SessionView; header is standalone in pane", () => {
   assert.match(tabBar, /actions\?: ReactNode/);
-  assert.match(tabBar, /props\.actions !== null/);
-  assert.match(tabBar, /props\.actions \?\?/);
-  // 状态/操作区以 embedded 模式嵌入 Tab 栏右侧（actions 槽位），不再单独占一行
-  assert.match(sessionView, /<SessionTabsBar\s*\n\s*\{\.\.\.sessionTabs\}[\s\S]*?actions=\{\s*<SessionHeader[\s\S]*embedded/);
+  assert.match(tabBar, /props\.onToggleDrawer \? \(/);
+  // Tab 栏外置后，SessionView 只渲染独立 Header，不再把操作嵌入 Tab 的 actions 槽。
+  assert.doesNotMatch(sessionView, /SessionTabsBar/);
+  assert.match(sessionView, /<SessionHeader[\s\S]*?widgetChips=/);
+  assert.doesNotMatch(sessionView, /embedded/);
 });

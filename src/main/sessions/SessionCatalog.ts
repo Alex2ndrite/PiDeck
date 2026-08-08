@@ -54,6 +54,18 @@ type SessionCatalogContext = {
 	wslUser?: string;
 };
 
+/**
+ * 将 catalog 条目 filePath 归一化为绝对路径（可选注入）。
+ * pi 可能上报相对 cwd 的 sessionFile（如 sessionDir 配置为 ".pi/sessions"），
+ * 与扫描器发现的绝对路径 originKey 不同，会造成同文件双记录（侧栏重复显示）。
+ * 注入后 catalog 在加载与写入边界统一修正；实现见 main/index.ts。
+ */
+export type SessionFilePathResolver = (
+	projectId: string,
+	filePath: string,
+	environment: SessionEnvironment,
+) => string;
+
 function cloneEntry(entry: SessionCatalogEntry): SessionCatalogEntry {
 	return {
 		...entry,
@@ -115,6 +127,7 @@ export class SessionCatalog {
 	constructor(
 		private readonly filePath: string,
 		identityContext: SessionCatalogContext = {},
+		private readonly resolveFilePath?: SessionFilePathResolver,
 	) {
 		this.identityContext = { ...identityContext };
 	}
@@ -152,6 +165,20 @@ export class SessionCatalog {
 				await this.writeSnapshot(this.entries);
 			} catch {
 				// 启动清理是 best-effort；内存已经不再暴露草稿，下一次启动仍会重试清理。
+			}
+		}
+
+		// 兼容旧数据：早期版本可能存有相对 filePath（pi 返回相对 cwd 的 sessionFile，
+		// 如 sessionDir 配置为 ".pi/sessions"）。相对路径与扫描器绝对路径的 originKey
+		// 不同 → 同一文件出现两条记录（侧栏重复显示），且文件操作落到错误位置。
+		// 加载时用注入的 resolver 统一修正为绝对路径并重算 originKey。
+		const repaired = this.repairRelativeFilePaths(this.entries);
+		if (repaired) {
+			this.entries = repaired;
+			try {
+				await this.writeSnapshot(this.entries);
+			} catch {
+				// 修复是 best-effort；内存已生效，下一次启动仍会重试。
 			}
 		}
 		this.loaded = true;
@@ -238,11 +265,15 @@ export class SessionCatalog {
 		piSessionId?: string;
 	}): Promise<SessionCatalogEntry> {
 		this.assertLoaded();
+		// 与 attachRuntime 同口径：进入 catalog 前归一化为绝对路径，保证 originKey 去重一致。
+		const filePath = this.resolveFilePath
+			? this.resolveFilePath(input.projectId, input.filePath, input.environment)
+			: input.filePath;
 		return this.enqueueMutation((entries) => {
 			const originKey = buildSessionOriginKey({
 				source: input.source,
 				environment: input.environment,
-				filePath: input.filePath,
+				filePath,
 				wslDistro: input.wslDistro,
 				wslUser: input.wslUser,
 				importedSourceId: input.importedSourceId,
@@ -268,7 +299,7 @@ export class SessionCatalog {
 					title: input.title,
 					source: input.source,
 					environment: input.environment,
-					filePath: input.filePath,
+					filePath,
 					wslDistro: input.wslDistro,
 					wslUser: input.wslUser,
 					importedSourceId: input.importedSourceId,
@@ -284,7 +315,7 @@ export class SessionCatalog {
 				entry.title = input.title;
 				entry.source = input.source;
 				entry.environment = input.environment;
-				entry.filePath = input.filePath;
+				entry.filePath = filePath;
 				entry.wslDistro = input.wslDistro;
 				entry.wslUser = input.wslUser;
 				entry.importedSourceId = input.importedSourceId;
@@ -366,8 +397,18 @@ export class SessionCatalog {
 		this.assertLoaded();
 		return this.enqueueMutation((entries) => {
 			const entry = this.requireEntry(entries, input.sessionId);
+			// pi 可能上报相对 cwd 的 sessionFile：写入 catalog 前归一化为绝对路径，
+			// 否则与扫描器绝对路径 originKey 不一致，同一文件会出现两条记录。
+			const filePath =
+				input.filePath && this.resolveFilePath
+					? this.resolveFilePath(
+							entry.projectId,
+							input.filePath,
+							entry.environment,
+						)
+					: input.filePath;
 			const previousFilePath = entry.filePath;
-			if (input.filePath) entry.filePath = input.filePath;
+			if (filePath) entry.filePath = filePath;
 			if (input.piSessionId) entry.piSessionId = input.piSessionId;
 			if (entry.filePath) {
 				const pathUnchanged = Boolean(
@@ -586,6 +627,33 @@ export class SessionCatalog {
 			wslUser: entry.wslUser ?? this.identityContext.wslUser,
 			importedSourceId: entry.importedSourceId,
 		});
+	}
+
+	/**
+	 * 把条目中的相对 filePath 修正为绝对路径（通过注入的 resolver）。
+	 * 返回新数组表示有变更；未注入 resolver 或无需修正时返回 undefined。
+	 */
+	private repairRelativeFilePaths(
+		entries: SessionCatalogEntry[],
+	): SessionCatalogEntry[] | undefined {
+		const resolve = this.resolveFilePath;
+		if (!resolve) return undefined;
+		let changed = false;
+		const next = entries.map((entry) => {
+			if (!entry.filePath) return entry;
+			const resolved = resolve(
+				entry.projectId,
+				entry.filePath,
+				entry.environment,
+			);
+			if (!resolved || resolved === entry.filePath) return entry;
+			changed = true;
+			const repaired = { ...entry, filePath: resolved };
+			// originKey 随路径变化重算，否则后续 mergeScanned/attachRuntime 仍按旧 key 去重
+			if (repaired.originKey) repaired.originKey = this.originKeyForEntry(repaired);
+			return repaired;
+		});
+		return changed ? next : undefined;
 	}
 
 	private requireEntry(

@@ -1,5 +1,5 @@
-	import { useCallback, useEffect, useMemo, useState } from "react";
-import { MessageCircle, Brain, FileText, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { X } from "lucide-react";
 import {
 	Dialog,
 	DialogClose,
@@ -10,10 +10,15 @@ import {
 import { Button } from "../ui-shadcn/button";
 import { cn } from "../../lib/utils";
 import { t } from "../../i18n";
-import type { SessionSummary } from "../../../../shared/types";
-import { summarizeMessage, stripAnsi, formatTime } from "./AppUtils";
-import { Checkbox } from "../ui-shadcn/checkbox";
-import { Label } from "../../components/ui-shadcn/label";
+import type { ChatMessage, SessionSummary } from "../../../../shared/types";
+import type { AgentRunItem, RenderMessage } from "../app/AppUtils";
+import { MessageSelectionTree } from "../session/MessageSelectionTree";
+import {
+	getSelectableMessageIds,
+	toggleAll,
+	toggleMessage,
+	toggleRun,
+} from "../../utils/messageSelection";
 
 type SessionMessage = { role: string; content: string; timestamp: number };
 
@@ -23,6 +28,68 @@ export type SessionReferenceResult = {
 	fullContext: boolean;
 };
 
+/** 合成消息 id 前缀：id 需在树内唯一，索引为原始消息下标（恢复选择/回调都靠它）。 */
+const REF_ID_PREFIX = "ref-";
+
+/**
+ * 把会话原始消息构建成共享树结构（RenderMessage[]）。
+ * 显示顺序保持原行为：最新在前（倒序）；连续 assistant 归入同一 agent-run。
+ * 非 user/assistant 消息（tool/system）不展示也不可选 —— 旧实现会把它们
+ * 隐式选中且无法取消（行不渲染但 index 在 selectedIds 里），本次修复该口径。
+ */
+function buildReferenceTree(messages: SessionMessage[]): {
+	items: RenderMessage[];
+	idToIndex: Map<string, number>;
+} {
+	const items: RenderMessage[] = [];
+	const idToIndex = new Map<string, number>();
+	for (let i = messages.length - 1; i >= 0; i--) {
+		const msg = messages[i];
+		if (msg.role === "assistant") {
+			// 收集连续的 assistant 组成一个 run（顺序恢复为正序）
+			const subItems: Array<{ kind: "message"; message: ChatMessage }> = [];
+			let j = i;
+			while (j >= 0 && messages[j].role === "assistant") {
+				const id = `${REF_ID_PREFIX}${j}`;
+				idToIndex.set(id, j);
+				subItems.unshift({
+					kind: "message",
+					message: {
+						id,
+						agentId: "",
+						role: "assistant",
+						text: messages[j].content,
+						timestamp: messages[j].timestamp,
+					},
+				});
+				j--;
+			}
+			i = j + 1;
+			items.push({
+				kind: "agent-run",
+				id: `ref-run-${i}`,
+				items: subItems,
+				startedAt: subItems[0]?.message.timestamp ?? 0,
+				endedAt: subItems[subItems.length - 1]?.message.timestamp ?? 0,
+			});
+		} else if (msg.role === "user") {
+			const id = `${REF_ID_PREFIX}${i}`;
+			idToIndex.set(id, i);
+			items.push({
+				kind: "message",
+				message: {
+					id,
+					agentId: "",
+					role: "user",
+					text: msg.content,
+					timestamp: msg.timestamp,
+				},
+			});
+		}
+	}
+	return { items, idToIndex };
+}
+
 export function SessionReferenceModal(props: {
 	session: SessionSummary;
 	onClose: () => void;
@@ -30,214 +97,169 @@ export function SessionReferenceModal(props: {
 	loadMessages: (sessionId: string) => Promise<SessionMessage[]>;
 	initialSelected?: Set<number>;
 }) {
-	// 原始顺序存储，selectedIds 始终引用原始索引
 	const [messages, setMessages] = useState<SessionMessage[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
-	const [selectedIds, setSelectedIds] = useState<Set<number>>(() => props.initialSelected ?? new Set());
+	const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+	const tree = useMemo(() => buildReferenceTree(messages), [messages]);
+	const selectableIds = useMemo(
+		() => getSelectableMessageIds(tree.items),
+		[tree],
+	);
 
 	useEffect(() => {
 		let cancelled = false;
 		setLoading(true);
 		setError(null);
-		props.loadMessages(props.session.id).then((msgs) => {
-			if (!cancelled) {
+		props.loadMessages(props.session.id)
+			.then((msgs) => {
+				if (cancelled) return;
 				setMessages(msgs);
+				const built = buildReferenceTree(msgs);
+				// 恢复历史选择时只保留树内存在的 id：旧版本曾把 tool 消息隐式选中，
+				// 其索引在树中无对应行，恢复时应丢弃，避免「看不到也取消不掉」。
 				if (props.initialSelected && props.initialSelected.size > 0) {
-					setSelectedIds(props.initialSelected);
+					setSelectedIds(
+						new Set(
+							Array.from(props.initialSelected)
+								.map((index) => `${REF_ID_PREFIX}${index}`)
+								.filter((id) => built.idToIndex.has(id)),
+						),
+					);
 				} else {
-					setSelectedIds(new Set(msgs.map((_, i) => i)));
+					setSelectedIds(new Set(getSelectableMessageIds(built.items)));
 				}
 				setLoading(false);
-			}
-		}).catch((err) => {
-			if (!cancelled) { setError(String(err)); setLoading(false); }
-		});
-		return () => { cancelled = true; };
+			})
+			.catch((err) => {
+				if (!cancelled) {
+					setError(String(err));
+					setLoading(false);
+				}
+			});
+		return () => {
+			cancelled = true;
+		};
 	}, [props.session.id]);
 
-	// 倒序显示分组（最新的在前面），内部索引保持原始顺序不变
-	const items = useMemo(() => {
-		const result: Array<
-			| { kind: "user"; index: number; msg: SessionMessage }
-			| { kind: "assistant-run"; indices: number[]; msgs: SessionMessage[] }
-		> = [];
-		for (let i = messages.length - 1; i >= 0; i--) {
-			const msg = messages[i];
-			if (msg.role === "assistant") {
-				// 收集连续的 assistant
-				const runIndices: number[] = [];
-				const runMsgs: SessionMessage[] = [];
-				while (i >= 0 && messages[i].role === "assistant") {
-					runIndices.unshift(i);
-					runMsgs.unshift(messages[i]);
-					i--;
-				}
-				i++; // 回退一个位置
-				result.push({ kind: "assistant-run", indices: runIndices, msgs: runMsgs });
-			} else if (msg.role === "user") {
-				result.push({ kind: "user", index: i, msg });
-			} else {
-				result.push({ kind: "user", index: i, msg });
-			}
-		}
-		return result;
-	}, [messages]);
-
-	const toggleMessage = useCallback((index: number) => {
-		setSelectedIds((prev) => {
-			const next = new Set(prev);
-			next.has(index) ? next.delete(index) : next.add(index);
-			return next;
-		});
+	const handleToggleMessage = useCallback((id: string) => {
+		setSelectedIds((prev) => toggleMessage(prev, id));
 	}, []);
 
-	const toggleRun = useCallback((indices: number[]) => {
-		setSelectedIds((prev) => {
-			const next = new Set(prev);
-			const allSelected = indices.every((i) => next.has(i));
-			for (const i of indices) {
-				if (allSelected) next.delete(i);
-				else next.add(i);
-			}
-			return next;
-		});
+	const handleToggleRun = useCallback((run: AgentRunItem) => {
+		setSelectedIds((prev) => toggleRun(prev, run));
 	}, []);
 
-	const toggleAll = useCallback(() => {
-		setSelectedIds((prev) =>
-			prev.size === messages.length ? new Set() : new Set(messages.map((_, i) => i))
-		);
-	}, [messages.length]);
+	const handleToggleAll = useCallback(() => {
+		setSelectedIds((prev) => toggleAll(prev, selectableIds));
+	}, [selectableIds]);
 
 	const handleConfirm = useCallback(() => {
-		const indices = Array.from(selectedIds).sort((a, b) => a - b);
-		const selected = indices.map((i) => messages[i]);
-		props.onConfirm({
-			sessionName: props.session.name ?? props.session.filePath,
-			messages: selected,
-			fullContext: selectedIds.size === messages.length,
-		}, indices);
-	}, [messages, selectedIds, props]);
+		const indices = Array.from(selectedIds)
+			.map((id) => tree.idToIndex.get(id))
+			.filter((index): index is number => index !== undefined)
+			.sort((left, right) => left - right);
+		const selected = indices.map((index) => messages[index]);
+		props.onConfirm(
+			{
+				sessionName: props.session.name ?? props.session.filePath,
+				messages: selected,
+				fullContext: selectedIds.size === selectableIds.length,
+			},
+			indices,
+		);
+	}, [messages, selectedIds, tree, selectableIds, props]);
 
 	const selectedCount = selectedIds.size;
-	const allSelected = selectedCount === messages.length;
+	const allSelected = selectedCount > 0 && selectedCount === selectableIds.length;
+	const canConfirm = !loading && !error && selectedCount > 0;
 
 	return (
 		<Dialog open onOpenChange={(next) => !next && props.onClose()}>
 			<DialogContent
 				showCloseButton={false}
-				size="xl" className={cn("flex flex-col gap-0 overflow-hidden rounded-lg border border-border bg-bg-panel p-0 shadow-[var(--shadow-xl)] animate-in fade-in-0 slide-in-from-bottom-2 duration-150 session-ref-modal")}
+				className={cn(
+					"flex h-[min(650px,calc(100vh-48px))] w-[min(780px,calc(100vw-48px))] max-w-[min(780px,calc(100vw-48px))] flex-col gap-0 overflow-hidden rounded-lg border border-border bg-bg-panel p-0 shadow-[var(--shadow-xl)]",
+					"animate-in fade-in-0 slide-in-from-bottom-2 duration-150",
+				)}
 			>
 				<DialogHeader className="flex-row items-center justify-between px-4 py-3">
 					<DialogTitle>{`${t("sessionRef.title")}: ${props.session.name ?? props.session.filePath}`}</DialogTitle>
 					<DialogClose asChild>
-						<Button variant="ghost" size="icon" aria-label={t("common.close")} title={t("common.close")}>
+						<Button
+							variant="ghost"
+							size="icon"
+							aria-label={t("common.close")}
+							title={t("common.close")}
+						>
 							<X size={18} strokeWidth={2.2} aria-hidden="true" />
 						</Button>
 					</DialogClose>
 				</DialogHeader>
-				<div className="min-h-0 flex-1 overflow-y-auto px-3 py-2.5 [&>*]:my-0.5 session-ref-message-list">
-					{loading && <div className="session-ref-loading">{t("common.loading")}...</div>}
-					{error && <div className="session-ref-error">{t("sessionRef.loadError")}: {error}</div>}
 
-					{!loading && !error && items.map((item) => {
-						// 用户消息：独立行，完全对齐 MultiSelectModal user message
-						if (item.kind === "user") {
-							const isChecked = selectedIds.has(item.index);
-							return (
-								<Label
-									key={item.index}
-									className={`flex cursor-pointer items-center gap-2 rounded-sm border border-transparent px-2.5 py-[7px] text-[13px] leading-relaxed transition-[background,border-color] duration-100 hover:border-border-subtle hover:bg-bg-hover${isChecked ? " selected" : ""}`}
-								>
-									<Checkbox checked={isChecked} onChange={() => toggleMessage(item.index)} />
-									<MessageCircle size={14} className="shrink-0 text-text-tertiary" />
-									<span className="flex min-w-0 flex-1 items-baseline gap-2">
-										<span className="min-w-0 truncate font-sans text-text-primary">
-											{summarizeMessage(stripAnsi(item.msg.content))}
-										</span>
-									</span>
-								</Label>
-							);
-						}
-
-						// 助理消息：agent-run 结构，完全对齐 MultiSelectModal agent-run
-						if (item.kind === "assistant-run") {
-							const runChecked = item.indices.every((i) => selectedIds.has(i));
-							const runHasSome = item.indices.some((i) => selectedIds.has(i));
-							const runAnyChecked = runChecked || runHasSome;
-
-							return (
-								<div key={item.indices[0]} className="my-1.5 overflow-hidden rounded-md border border-border-subtle bg-[color:color-mix(in_srgb,var(--color-bg-muted)_52%,transparent)]">
-									<div
-										className={`flex cursor-pointer items-center gap-2 rounded-sm border border-transparent px-2.5 py-[7px] text-[13px] leading-relaxed transition-[background,border-color] duration-100 hover:border-border-subtle hover:bg-bg-hover run-parent cursor-pointer rounded-none border-0 border-b border-border-subtle bg-[color:color-mix(in_srgb,var(--color-bg-muted)_78%,var(--color-bg-panel))] p-2.5 font-medium select-none${runAnyChecked ? " selected" : ""}`}
-										onClick={() => toggleRun(item.indices)}
-									>
-										<Brain size={15} className="shrink-0 text-text-tertiary" />
-										<span className="flex min-w-0 flex-1 items-baseline gap-2">
-											<span className="font-mono text-xs font-semibold tracking-[0.4px] uppercase text-text-secondary">pi</span>
-											<span className="shrink-0 text-xs whitespace-nowrap text-text-tertiary">
-												{formatTime(item.msgs[item.msgs.length - 1]?.timestamp ?? 0)}
-											</span>
-										</span>
-										<span className="min-w-[18px] shrink-0 rounded-[10px] bg-bg-muted px-[7px] text-center font-mono text-[11px] leading-[18px] text-text-tertiary">
-											{item.msgs.length}
-										</span>
-									</div>
-									<div className="flex flex-col gap-0.5 bg-bg-panel p-1 pl-7">
-										{item.msgs.map((sub, si) => {
-											const idx = item.indices[si];
-											const subChecked = selectedIds.has(idx);
-											return (
-												<Label
-													key={idx}
-													className={`flex cursor-pointer items-center gap-2 rounded-sm border border-transparent px-2.5 py-[7px] text-[13px] leading-relaxed transition-[background,border-color] duration-100 hover:border-border-subtle hover:bg-bg-hover run-child rounded-sm p-1.5${subChecked ? " selected" : ""}`}
-												>
-													<Checkbox checked={subChecked} onChange={() => toggleMessage(idx)} />
-													<FileText size={14} className="shrink-0 text-text-tertiary" />
-													<span className="flex min-w-0 flex-1 items-baseline gap-2">
-														<span className="min-w-0 truncate font-sans text-text-primary">
-															{summarizeMessage(stripAnsi(sub.content))}
-														</span>
-													</span>
-												</Label>
-											);
-										})}
-									</div>
-								</div>
-							);
-						}
-
-						return null;
-					})}
+				<div className="min-h-0 flex-1 overflow-y-auto px-3 py-2.5">
+					{loading && (
+						<div className="flex items-center justify-center px-4 py-10 text-caption text-text-tertiary">
+							{t("common.loading")}...
+						</div>
+					)}
+					{error && (
+						<div className="flex items-center justify-center px-4 py-10 text-caption text-[var(--color-error)]">
+							{t("sessionRef.loadError")}: {error}
+						</div>
+					)}
+					{!loading && !error && (
+						<MessageSelectionTree
+							items={tree.items}
+							selectedIds={selectedIds}
+							onToggleMessage={handleToggleMessage}
+							onToggleRun={handleToggleRun}
+						/>
+					)}
 				</div>
 
-				<footer className="multi-select-modal-footer">
-					<div className="multi-select-modal-footer-top">
-						<span className="multi-select-count">
+				{/* 底部操作栏：与多选分享弹窗同一套视觉语言 */}
+				<footer className="flex shrink-0 flex-col gap-2.5 border-t border-border-subtle px-4 py-3">
+					<div className="flex items-center justify-between">
+						<span className="text-control font-medium text-text-secondary">
 							{allSelected
 								? t("sessionRef.messageCount", { count: messages.length })
-								: t("sessionRef.selectedCount", { count: selectedCount, total: messages.length })}
+								: t("sessionRef.selectedCount", { count: selectedCount, total: selectableIds.length })}
 						</span>
-						<div className="multi-select-bulk-actions">
-							<Button variant="ghost" size="sm" className="multi-select-bulk-btn h-auto px-2 py-0.5 text-xs" onClick={toggleAll} disabled={!messages.length}>
-								{allSelected ? t("common.deselectAll") : t("common.selectAll")}
-							</Button>
-						</div>
-					</div>
-					<div className="multi-select-modal-footer-bottom">
 						<Button
-							variant="outline" size="sm" className="multi-select-action-btn h-auto px-4 py-1.5 text-xs shadow-none rounded-[6px]"
-							disabled={loading || !!error || selectedCount === 0}
+							variant="ghost"
+							size="sm"
+							className="h-auto px-2 py-1 text-caption"
+							onClick={handleToggleAll}
+							disabled={!selectableIds.length}
+						>
+							{allSelected ? t("common.deselectAll") : t("common.selectAll")}
+						</Button>
+					</div>
+					<div className="flex flex-wrap items-center gap-2">
+						<Button
+							variant="default"
+							size="sm"
+							className="h-auto px-4 py-1.5 shadow-none"
+							disabled={!canConfirm}
 							onClick={handleConfirm}
 						>
 							{allSelected
 								? t("sessionRef.insertAll", { count: messages.length })
 								: t("sessionRef.insertSelected", { count: selectedCount })}
 						</Button>
+						<Button
+							variant="ghost"
+							size="sm"
+							className="ml-auto h-auto px-3 py-1.5 text-caption"
+							onClick={props.onClose}
+						>
+							{t("app.multiSelectCancel")}
+						</Button>
 					</div>
 				</footer>
-				</DialogContent>
+			</DialogContent>
 		</Dialog>
 	);
 }
