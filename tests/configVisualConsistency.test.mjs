@@ -32,7 +32,17 @@ test("config shell defines compact density and crisp system typography", () => {
   assert.equal(existsSync("src/renderer/src/styles/lxgw-wenkai.css"), false);
   assert.doesNotMatch(rendererStyles, /lxgw-wenkai/);
   assert.doesNotMatch(surfaces, /\.config-models-grid-header[\s\S]*font-weight: 650/);
-  assert.match(configModal, /config-modal/);
+  assert.match(configModal, /configModalSizeClass/);
+  assert.match(configModal, /w-\[80vw\]/);
+  assert.match(configModal, /max-w-\[80vw\]/);
+  assert.match(configModal, /h-\[80vh\]/);
+  assert.match(configModal, /sm:max-w-\[min\(1300px,80vw\)\]/);
+  assert.match(configModal, /max-\[820px\]:grid-cols-1/);
+  assert.match(configModal, /max-\[820px\]:flex-row/);
+  assert.match(settingsModal, /settingsModalSizeClass/);
+  assert.match(settingsModal, /w-\[80vw\]/);
+  assert.match(surfaces, /\.settings-modal \{[\s\S]*width: min\(1300px, 80vw\);[\s\S]*height: min\(850px, 80vh\);/);
+  assert.match(surfaces, /\.config-modal \{[\s\S]*width: min\(1300px, 80vw\);[\s\S]*height: min\(850px, 80vh\);/);
 });
 
 test("skills and prompts use full-width tab rails with compact selected tabs", () => {

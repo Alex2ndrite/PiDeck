@@ -115,10 +115,9 @@ test("widget chips render in the chat header left slot, not the composer", () =>
   assert.ok(header.indexOf("{props.widgetChips}") < header.indexOf("<SessionStatus"));
 
   const view = readFileSync("src/renderer/src/components/session/SessionView.tsx", "utf8");
-  // 槽位从「单个 chips 组件」扩展为 fragment（ChatDirectoryButton + chips），
-  // 两处入口仍同槽渲染，断言行级内容即可
-  assert.match(view, /<ChatDirectoryButton sessionId=\{sessionId\} \/>/);
-  assert.match(view, /<SessionWidgetChips sessionId=\{sessionId\} \/>/);
+  // 目录设置属于侧栏 Chat 父项目，不应混入会话徽章；会话槽位只保留运行状态 chips。
+  assert.doesNotMatch(view, /ChatDirectoryButton/);
+  assert.match(view, /widgetChips=\{<SessionWidgetChips sessionId=\{sessionId\} \/>\}/);
 
   // composer 不再渲染 widget：槽位类型与渲染点都已移除
   const runtime = readFileSync("src/renderer/src/components/session/ComposerRuntimeIntegrations.tsx", "utf8");

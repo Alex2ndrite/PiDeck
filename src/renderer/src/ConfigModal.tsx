@@ -23,6 +23,7 @@ import { ExtensionsTab } from "./config/ExtensionsTab";
 import { EditorsTab } from "./config/EditorsTab";
 import { ImTab } from "./config/ImTab";
 import { LogsTab } from "./config/LogsTab";
+import { ProcessMetricsTab } from "./config/ProcessMetricsTab";
 import { t } from "./i18n";
 import { CodeMirrorEditor } from "./components/app/CodeMirrorEditor";
 import { translateBuiltinPromptDescription } from "./composerBehavior";
@@ -126,6 +127,10 @@ type ConfigModalProps = {
 	onSaved: () => void;
 };
 
+// 小窗口保留外边距，避免 Pi 管理页完全压住工作区；821px 以上恢复桌面弹框尺寸。
+// DialogContent 默认带 sm:max-w-lg，必须显式覆盖它，否则小窗口会变成窄高条。
+const configModalSizeClass = "w-[80vw] max-w-[80vw] h-[80vh] max-h-[80vh] sm:max-w-[min(1300px,80vw)]";
+
 class ConfigModalErrorBoundary extends Component<
 	{ open: boolean; onClose: () => void; children: ReactNode },
 	{ error: Error | null }
@@ -148,7 +153,7 @@ class ConfigModalErrorBoundary extends Component<
 		// #115：错误兜底直接走 shadcn Dialog（components/ui/Modal 薄包装已退役）
 		return (
 			<Dialog open={this.props.open} onOpenChange={(next) => !next && this.props.onClose()}>
-			<DialogContent showCloseButton={false} className={cn("flex flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(1300px,calc(100vw-48px))] h-[min(850px,calc(100vh-48px))]", "config-modal")}>
+			<DialogContent showCloseButton={false} className={cn("flex flex-col gap-0 overflow-hidden p-0", configModalSizeClass, "config-modal")}>
 				<DialogHeader className="flex-row items-center justify-between px-4 py-3">
 					<DialogTitle>{t("config.loadFailed")}</DialogTitle>
 					<DialogClose asChild>
@@ -190,7 +195,7 @@ export function ConfigModal(props: ConfigModalProps) {
 
 function ConfigModalContent(props: ConfigModalProps) {
 	const { open, onClose, onSaved } = props;
-	const [section, setSection] = useState<"config" | "skills" | "prompts" | "extensions" | "editors" | "im" | "logs">("config");
+	const [section, setSection] = useState<"config" | "skills" | "prompts" | "extensions" | "editors" | "im" | "logs" | "process">("config");
 	const [tab, setTab] = useState<ConfigTab>("models");
 	const [loading, setLoading] = useState(false);
 	const [saving, setSaving] = useState(false);
@@ -453,6 +458,7 @@ function ConfigModalContent(props: ConfigModalProps) {
 		}
 		if (section === "editors") return;
 		if (section === "logs") return;
+		if (section === "process") return;
 		void loadConfig(tab);
 	}, [open, section, tab, loadConfig]);
 
@@ -1365,7 +1371,7 @@ function ConfigModalContent(props: ConfigModalProps) {
 
 	return (
 		<Dialog open={open} onOpenChange={(next) => !next && onClose()}>
-			<DialogContent showCloseButton={false} className={cn("flex flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(1300px,calc(100vw-48px))] h-[min(850px,calc(100vh-48px))]", "config-modal")}>
+			<DialogContent showCloseButton={false} className={cn("flex flex-col gap-0 overflow-hidden p-0", configModalSizeClass, "config-modal")}>
 				{/* 顶栏/侧栏控件与设置弹窗、会话顶栏统一到 sm / text-sm 密度 */}
 				<DialogHeader className="flex-row items-center justify-between px-4 py-2.5">
 					<DialogTitle className="text-sm font-semibold tracking-tight">{t("config.title")}</DialogTitle>
@@ -1388,8 +1394,8 @@ function ConfigModalContent(props: ConfigModalProps) {
 					</div>
 				</DialogHeader>
 			{/* 默认浅色主题整页同底（bg-background），避免顶栏白 / 下方多层灰的割裂感 */}
-			<div className="config-layout grid min-h-0 flex-1 grid-cols-[148px_minmax(0,1fr)] bg-background">
-					<aside className="config-sidebar flex min-h-0 flex-col gap-2.5 overflow-auto border-r border-border bg-background p-2.5" aria-label={t("config.title")}>
+			<div className="config-layout grid min-h-0 flex-1 grid-cols-[148px_minmax(0,1fr)] bg-background max-[820px]:grid-cols-1 max-[820px]:grid-rows-[auto_minmax(0,1fr)]">
+					<aside className="config-sidebar flex min-h-0 flex-col gap-2.5 overflow-auto border-r border-border bg-background p-2.5 max-[820px]:flex-row max-[820px]:gap-3 max-[820px]:overflow-x-auto max-[820px]:overflow-y-hidden max-[820px]:border-r-0 max-[820px]:border-b" aria-label={t("config.title")}>
 						<div className="config-sidebar-group grid gap-0.5">
 							<span className="px-2 pb-1 text-micro font-semibold text-muted-foreground">{t("config.group.config")}</span>
 							{configNavItems.map((item) => (
@@ -1464,6 +1470,15 @@ function ConfigModalContent(props: ConfigModalProps) {
 						</div>
 						<div className="config-sidebar-group grid gap-0.5">
 							<span className="px-2 pb-1 text-micro font-semibold text-muted-foreground">{t("config.group.diagnostics")}</span>
+							<Button
+								type="button"
+								variant={section === "process" ? "secondary" : "ghost"}
+								size="sm"
+								className={`config-nav-btn h-8 justify-start px-2.5 text-control font-medium${section === "process" ? " active" : ""}`}
+								onClick={() => setSection("process")}
+							>
+								{t("config.nav.process")}
+							</Button>
 							<Button
 								type="button"
 								variant={section === "logs" ? "secondary" : "ghost"}
@@ -1592,6 +1607,10 @@ function ConfigModalContent(props: ConfigModalProps) {
 
 					{section === "logs" && !loading && (
 						<LogsTab />
+					)}
+
+					{section === "process" && (
+						<ProcessMetricsTab />
 					)}
 
 					{section === "skills" && !loading && (

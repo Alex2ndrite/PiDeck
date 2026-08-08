@@ -176,6 +176,10 @@ type SettingsModalProps = {
 /**
  * 设置弹框错误边界：渲染异常时保留可关闭的错误面板，避免整页白屏无法退出。
  */
+// 小窗口保留外边距，避免设置页完全压住工作区；821px 以上恢复桌面弹框尺寸。
+// DialogContent 默认带 sm:max-w-lg，必须显式覆盖它，否则小窗口会变成窄高条。
+const settingsModalSizeClass = "w-[80vw] max-w-[80vw] h-[80vh] max-h-[80vh] sm:max-w-[min(1300px,80vw)]";
+
 class SettingsModalErrorBoundary extends Component<
 	{ onClose: () => void; children: ReactNode },
 	{ error: Error | null }
@@ -191,7 +195,7 @@ class SettingsModalErrorBoundary extends Component<
 		// #115：错误兜底直接走 shadcn Dialog 外壳
 		return (
 			<Dialog open onOpenChange={(next) => !next && this.props.onClose()}>
-			<DialogContent showCloseButton={false} size="xl" className={cn("flex flex-col gap-0 overflow-hidden p-0", "settings-modal")}>
+			<DialogContent showCloseButton={false} className={cn("flex flex-col gap-0 overflow-hidden p-0", settingsModalSizeClass, "settings-modal")}>
 				<DialogHeader className="flex-row items-center justify-between px-4 py-3">
 					<DialogTitle>{t("settings.loadFailed")}</DialogTitle>
 					<DialogClose asChild>
@@ -515,7 +519,7 @@ function SettingsModalContent(props: SettingsModalProps) {
 
 		return (
 		<Dialog open onOpenChange={(next) => !next && handleClose()}>
-			<DialogContent showCloseButton={false} size="xl" stagger className={cn("flex flex-col gap-0 overflow-hidden p-0", "settings-modal")}>
+			<DialogContent showCloseButton={false} stagger className={cn("flex flex-col gap-0 overflow-hidden p-0", settingsModalSizeClass, "settings-modal")}>
 				<DialogHeader className="flex-row items-center justify-between px-4 py-3">
 					<DialogTitle>{t("settings.title")}</DialogTitle>
 					<div className="flex items-center gap-2">

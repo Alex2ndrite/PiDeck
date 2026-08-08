@@ -784,8 +784,8 @@
   }
 }
 .settings-modal {
-  width: min(1300px, calc(100vw - 48px));
-  height: min(850px, calc(100vh - 48px));
+  width: min(1300px, 80vw);
+  height: min(850px, 80vh);
   display: flex;
   flex-direction: column;
   border-radius: var(--radius-lg);
@@ -1819,9 +1819,11 @@
   .config-sidebar-group {
     min-width: 180px;
   }
-  .settings-modal {
-    width: 100vw;
-    height: 100vh;
+  /* 小窗口也保留弹框外边距，避免设置与 Pi 管理页面贴满工作区。 */
+  .settings-modal,
+  .config-modal {
+    width: 80vw;
+    height: 80vh;
     min-height: 0;
   }
   .settings-layout {
@@ -1844,8 +1846,8 @@
 /* ── 配置管理弹窗 ─────────────────────────────────── */
 
 .config-modal {
-  width: min(1300px, calc(100vw - 48px));
-  height: min(850px, calc(100vh - 48px));
+  width: min(1300px, 80vw);
+  height: min(850px, 80vh);
   display: flex;
   flex-direction: column;
   border-radius: var(--radius-lg);
