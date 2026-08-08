@@ -1097,17 +1097,18 @@ select:focus-visible {
   --window-drag-height: 0px;
 }
 :root:has(.wechat-shell.custom-titlebar-enabled) {
-  --window-drag-height: 40px;
+  --window-drag-height: 32px;
 }
 .wechat-shell.custom-titlebar-enabled {
-  --window-drag-height: 40px;
+  --window-drag-height: 32px;
   padding-top: var(--window-drag-height);
 }
 .window-drag-layer {
   position: fixed;
   top: 0;
   left: 0;
-  right: 200px;
+  /* 与 .window-controls 总宽对齐：4 × 36px */
+  right: 144px;
   height: var(--window-drag-height);
   z-index: 900;
   background: var(--color-bg-sidebar);
@@ -1119,7 +1120,8 @@ select:focus-visible {
   right: 0;
   z-index: 920;
   display: grid;
-  grid-template-columns: repeat(4, 50px);
+  /* 紧凑靠右上角：每键 36px（原 50px） */
+  grid-template-columns: repeat(4, 36px);
   height: var(--window-drag-height);
   background: var(--color-bg-sidebar);
   -webkit-app-region: no-drag;
@@ -1167,7 +1169,14 @@ select:focus-visible {
   margin-top: calc(-1 * var(--window-drag-height));
   padding-top: var(--window-drag-height);
   /* 上移了 --window-drag-height，高度同步补偿（100% + 拖拽区高），
-     否则侧栏底部悬空 40px——底栏（sidebar-bottom-actions）不贴底。 */
+     否则侧栏底部悬空——底栏（sidebar-bottom-actions）不贴底。 */
+  height: calc(100% + var(--window-drag-height));
+}
+/* 中间栏 / 抽屉同样顶进标题栏高度，三栏顶边齐平（Logo、Tab、抽屉标题同一平面）。 */
+.custom-titlebar-enabled .chat-pane,
+.custom-titlebar-enabled .detail-drawer {
+  margin-top: calc(-1 * var(--window-drag-height));
+  padding-top: var(--window-drag-height);
   height: calc(100% + var(--window-drag-height));
 }
 .custom-titlebar-enabled .list-toolbar {
@@ -1214,9 +1223,7 @@ select:focus-visible {
 }
 
 .toolbar-actions .icon-button {
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-sm);
+  /* 尺寸/圆角由 SidebarContent Button utility 承担 */
   transition:
     background-color 0.15s,
     color 0.15s;
@@ -1959,14 +1966,10 @@ select:focus-visible {
 }
 .agent-row {
   grid-template-columns: minmax(0, 1fr);
-  min-height: 28px;
-  padding: 4px 6px 4px 28px;
+  /* 行高/内边距/圆角由 SessionTree sessionRowClass utility 承担（分层后须与项目行对齐）。 */
   margin: 1px 0 0 8px;
   background: transparent;
   color: var(--color-text-secondary);
-  /* 与项目行统一用 --radius-lg：此前 --radius-md 会覆盖 Tailwind rounded-lg，
-     导致 active 的 Agent 行与项目行圆角弧度不一致（8px vs 10px，行高差进一步放大视觉差）。 */
-  border-radius: var(--radius-lg);
   /* 会话/agent 行是 <button>：Chromium 中 button 的 width:auto 会 shrink-to-fit
      （宽度跟随内容），导致名字短的行过短、名字长的行超出被裁。
      fill-available/stretch 扣除 margin 后撑满，右边缘与项目行对齐、右圆角完整；
@@ -2037,12 +2040,9 @@ select:focus-visible {
 }
 .session-row {
   grid-template-columns: minmax(0, 1fr);
-  min-height: 28px;
+  /* 行高/内边距/圆角由 SessionTree utility 承担；此处只保留宽度与缩进 margin。 */
   margin: 2px 0 0 8px;
-  padding: 4px 6px 4px 28px;
   border: 0;
-  /* 与项目行统一用 --radius-lg，原因同 .agent-row。 */
-  border-radius: var(--radius-lg);
   /* 同 .agent-row：button 的 width:auto 是 shrink-to-fit，fill-available 扣除 margin 撑满。 */
   width: -webkit-fill-available;
   width: stretch;

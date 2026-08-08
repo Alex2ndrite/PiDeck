@@ -57,13 +57,16 @@ test("streamdown code/table chrome uses faded action controls", () => {
   assert.doesNotMatch(surfacesCss, /\.sd-code-collapse\b/);
 });
 
-test("Tailwind scans streamdown + plugin classes; styles.css imported (table/mermaid control styling)", () => {
+test("Tailwind scans streamdown + plugin classes; styles.css imports vendor streamdown layer", () => {
   assert.match(tailwind, /@source "\.\.\/\.\.\/\.\.\/\.\.\/node_modules\/streamdown\/dist\/\*\.js"/);
   // @streamdown/code 已恢复（JS 引擎懒加载高亮），继续扫描其类名
   assert.match(tailwind, /@source "\.\.\/\.\.\/\.\.\/\.\.\/node_modules\/@streamdown\/code\/dist\/\*\.js"/);
   assert.match(tailwind, /@source "\.\.\/\.\.\/\.\.\/\.\.\/node_modules\/@streamdown\/mermaid/);
   assert.match(tailwind, /@source "\.\.\/\.\.\/\.\.\/\.\.\/node_modules\/@streamdown\/math/);
-  assert.match(main, /import "streamdown\/styles\.css"/);
+  // streamdown 经 styles.css layer(vendor) 引入，避免 unlayered 压过 surfaces 覆盖
+  const stylesEntry = readFileSync("src/renderer/src/styles.css", "utf8");
+  assert.match(stylesEntry, /@import\s+"streamdown\/styles\.css"\s+layer\(vendor\)/);
+  assert.doesNotMatch(main, /import "streamdown\/styles\.css"/);
   // 高亮插件进 devDependencies（渲染层依赖随 vite 打包，与分支重构模式一致）
   assert.match(packageJson, /"@streamdown\/code"/);
   assert.match(packageJson, /"@streamdown\/mermaid"/);

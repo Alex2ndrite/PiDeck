@@ -63,6 +63,7 @@ import {
   applySessionRuntimeEventAtom,
   currentSessionAtom,
   currentSessionIdAtom,
+  currentSessionMessagesAtom,
   currentSessionRuntimeAtom,
   projectInventoryAtom,
   removeSessionComposerStateAtom,
@@ -70,14 +71,12 @@ import {
   replaceProjectInventoryAtom,
   replaceProjectSessionsAtom,
   sessionRecordByIdAtomFamily,
-  sessionRecordsAtom,
   sessionRecordsByProjectIdAtomFamily,
   sessionIdByRuntimeAgentIdAtomFamily,
   sessionRuntimeBySessionIdAtomFamily,
   sidebarExpandedProjectIdsAtom,
   sessionCatalogLoadStateAtom,
   sessionSummariesByProjectIdAtomFamily,
-  sessionTabIdsAtom,
   sessionDraftByIdAtom,
   setSessionAttachmentsAtom,
   setSessionCatalogLoadStateAtom,
@@ -101,21 +100,20 @@ import {
   type PendingAgentTab,
 } from "./rendererUtils";
 import { useResize } from "./hooks/useResize";
-import { useSessionTimelineController } from "./hooks/useSessionTimelineController";
 import { useSessionActions } from "./hooks/useSessionActions";
 import { useScratchPad } from "./hooks/useScratchPad";
 import { useWorktreeActions } from "./hooks/useWorktreeActions";
-import { SessionRuntimeInjector } from "./components/session/SessionRuntimeInjector";
+import { ChatSessionPane } from "./components/session/ChatSessionPane";
+import { SessionSplitStage } from "./components/session/SessionSplitStage";
 import { SessionTabsBar } from "./components/session/SessionTabsBar";
 import { ProjectEmptyState } from "./components/session/ProjectEmptyState";
-import {
-  togglePinSessionTab as togglePinSessionTabList,
-  reorderSessionTabs as reorderSessionTabList,
-} from "./utils/sessionTabs";
+import { useSessionWorkspaceChrome } from "./hooks/useSessionWorkspaceChrome";
 import { ScratchPadOverlay } from "./components/overlays/ScratchPadOverlay";
 import { AppShell } from "./components/app/AppShell";
 import { WorkspaceDrawerRail } from "./components/workspace/WorkspaceDrawerRail";
 import { DrawerSurface } from "./components/workspace/DrawerSurface";
+import { WorkbenchStage } from "./components/workspace/WorkbenchStage";
+import { WorkbenchContent } from "./components/workspace/WorkbenchContent";
 import { RenameModals } from "./components/RenameModals";
 import { SessionActionOverlays } from "./components/overlays/SessionActionOverlays";
 import { AppUpdateOverlay } from "./components/overlays/AppUpdateOverlay";
@@ -139,8 +137,7 @@ import {
   getToolNewContent,
   getToolChangedLineCount,
 } from "./components/app/AppUtils";
-// 懒加载：文件查看器（含 CodeMirror 6 编辑器）仅在用户打开 diff 时才加载
-const FileDiffViewer = lazy(() => import("./components/app/FileDiffViewer").then((m) => ({ default: m.FileDiffViewer })));
+// ProjectResourcesModal 仅在打开资源弹层时加载
 const ProjectResourcesModal = lazy(() => import("./components/app/ProjectResourcesModal").then((m) => ({ default: m.ProjectResourcesModal })));
 import { createDefaultExternalEditorSettings } from "../../shared/types";
 import type {
@@ -185,6 +182,8 @@ export function App() {
   const currentSession = useAtomValue(currentSessionAtom);
   // currentSessionRuntime / currentSessionRuntimeUi / currentSessionSendState: sync store.get() only.
   // Streaming subscriptions are in SessionRuntimeInjector.
+  // Timeline 由各 ChatSessionPane 自持；大纲只读当前聚焦会话的消息缓存。
+  const activeMessages = useAtomValue(currentSessionMessagesAtom);
   const projects = useAtomValue(projectInventoryAtom);
   const agents = useAtomValue(agentInventoryAtom);
   const setCurrentSessionId = useSetAtom(currentSessionIdAtom);
@@ -197,7 +196,6 @@ export function App() {
   const setSessionCatalogLoadState = useSetAtom(setSessionCatalogLoadStateAtom);
   const removeSessionState = useSetAtom(removeSessionStateAtom);
   const removeSessionComposerState = useSetAtom(removeSessionComposerStateAtom);
-  const sessionTimeline = useSessionTimelineController({ sessionId: currentSessionId });
   const currentSessionIdRef = useRef<string | undefined>(currentSessionId);
   currentSessionIdRef.current = currentSessionId;
   const openSessionRequestRef = useRef(0);
@@ -227,7 +225,7 @@ export function App() {
   const [promptTemplateList] = useState<
     Array<{ name: string; path: string; description: string; content: string; argumentHint?: string }>
   >([]);
-  const [sessionActionsOpen, setSessionActionsOpen] = useState(false);
+  const jumpToMessageRef = useRef<((messageId: string) => void) | null>(null);
   // TECH DEBT (Phase 3): promptByAgent / attachedImagesByAgent legacy mirrors removed.
   // All drafts/attachments go through Session atoms (setSessionDraft / setSessionAttachments).
 
@@ -518,6 +516,8 @@ export function App() {
     webServicePort: 8765,
     rpcTimeout: 600_000,
     linkOpenMode: "external",
+    workspaceContentOpenMode: "split",
+    workspaceSplitOrientation: "horizontal",
     contentMaxWidth: 1800,
     maxEditorFileSizeMB: 5,
     externalEditors: createDefaultExternalEditorSettings(),
@@ -604,7 +604,6 @@ export function App() {
     }
   }
   const sessionComboRef = useRef<HTMLDivElement | null>(null);
-  const queuedTrackRef = useRef<HTMLDivElement | null>(null);
 
   const composerTextareaRef = useRef<HTMLDivElement | null>(null);
   // RichInput 受控重渲染后,光标应恢复到的纯文本偏移(供建议选中/清除后恢复选区)。
@@ -766,14 +765,12 @@ export function App() {
     });
   }, [setSessionDraft]);
 
-  const activeMessages = sessionTimeline.messages;
   // activeConversationStatus / activeRuntimeState replaced by sync isAgentCurrentlyBusy().
   // The built-in Chat uses a renderer-only Session ID before its first send.
   // Workspace chrome belongs to that visible conversation surface, not only to
   // persisted catalog records; otherwise Chat loses the dev-equivalent toolbar.
   const hasActiveConversation = Boolean(currentSessionId);
 
-  // Timeline scroll, pagination and jump ownership lives in sessionTimeline.
   const activeProjectHasBusyAgent = Boolean(
     activeProjectId && displayAgents.some((agent) =>
       agent.projectId === activeProjectId && (
@@ -823,8 +820,7 @@ export function App() {
   const chatHeaderRef = sessionHeaderRef;
   const composerRef = sessionComposerRef;
 
-  const visibleQueuedPrompts = activeQueuedPrompts;
-
+  // Gate 4.5 — streaming signal / abort helpers
   const {
     listWidth,
     setListWidth,
@@ -1033,6 +1029,7 @@ export function App() {
     modifiedFiles,
     setDrawer,
     setDrawerCollapsed,
+    contentOpenMode: settings.workspaceContentOpenMode ?? "split",
     showToast,
     readFileContent: api.files.readContent,
     readGitOriginalContent: api.git.originalContent,
@@ -1044,7 +1041,7 @@ export function App() {
   });
 
   // 会话内文件链接打开路由：按扩展名分级——
-  // 图片 → 弹窗预览（readBase64 → ImagePreviewModal）；markdown/html → 抽屉查看
+  // 图片 → 弹窗预览（readBase64 → ImagePreviewModal）；markdown/html → 中间栏查看
   //（FileDiffViewer 对 .md 默认 preview、.html 用 HtmlPreview 内置渲染）；其他文件 → 编辑器打开。
   // 替代原先的"系统默认应用打开"（.md 会被浏览器接管、体验割裂）
   const handleOpenLinkedFile = useCallback(
@@ -1087,6 +1084,11 @@ export function App() {
     }
   }, [workspace, gitDrawerDiff, closeGitDiff, activeProjectId, refreshFiles]);
 
+  const workspaceChrome = useSessionWorkspaceChrome({
+    currentSessionId,
+    activeProjectId,
+  });
+
   const {
     selectProject: selectProjectCommand,
     selectSession: selectSessionCommand,
@@ -1115,104 +1117,21 @@ export function App() {
     refreshProjectSessions,
     api,
     showToast,
-    // 任何路径打开会话（侧栏/标题栏/引导恢复）都在 Tab 栏登记，
-    // 用户可在 Tab 间快速切换而无需回侧栏找
-    onSessionSelected: openSessionTab,
+    // Tab 登记交给 workspace chrome（preview / permanent）
+    onSessionSelected: workspaceChrome.registerOpenSession,
   });
 
-  // ── 会话 Tab 栏状态（浏览器式多 Tab）──
-  // 关闭 Tab 只移除列表项，不 kill Agent；再次打开同一会话时复用已绑定运行时。
-  const PINNED_TABS_STORAGE_KEY = "pideck.pinnedSessionTabIds";
-  const sessionTabIds = useAtomValue(sessionTabIdsAtom);
-  const setSessionTabIds = useSetAtom(sessionTabIdsAtom);
-  const sessionRecordsForTabs = useAtomValue(sessionRecordsAtom);
-  // 固定 Tab 集合：localStorage 持久化（会话重开时自动恢复固定状态）
-  const [pinnedSessionTabIds, setPinnedSessionTabIds] = useState<string[]>(() => {
-    try {
-      const raw = localStorage.getItem(PINNED_TABS_STORAGE_KEY);
-      const parsed = raw ? JSON.parse(raw) : [];
-      return Array.isArray(parsed)
-        ? parsed.filter((id): id is string => typeof id === "string")
-        : [];
-    } catch {
-      return [];
-    }
-  });
+  // 关闭 Tab / 分屏退栏时的焦点切换回接到 session actions（写 ref，避免环依赖）
   useEffect(() => {
-    try {
-      localStorage.setItem(PINNED_TABS_STORAGE_KEY, JSON.stringify(pinnedSessionTabIds));
-    } catch {
-      // 持久化失败不影响功能
-    }
-  }, [pinnedSessionTabIds]);
-  // 固定集合随 Tab 清理：被删除会话的固定记录一并移除
-  useEffect(() => {
-    setPinnedSessionTabIds((current) => {
-      const next = current.filter((id) => Boolean(sessionRecordsForTabs[id]));
-      return next.length === current.length ? current : next;
+    workspaceChrome.bindFocusHandlers({
+      focusSession: (projectId, sessionId) => {
+        selectSessionCommand(projectId, sessionId, true, "keep");
+      },
+      focusProject: (projectId) => {
+        selectProjectCommand(projectId);
+      },
     });
-  }, [sessionRecordsForTabs]);
-
-  /** 打开会话时在 Tab 栏登记（幂等）；首个会话自动登记后 Tab 栏才出现 */
-  function openSessionTab(sessionId: string) {
-    // 引导恢复/自动选中发生在 App 挂载早期，同样登记，保证 Tab 栏与会话视图一致
-    setSessionTabIds((current) =>
-      current.includes(sessionId) ? current : [...current, sessionId],
-    );
-  }
-
-  // 会话被删除（记录消失）时自动清理对应 Tab；currentSessionId 的清理由 removeSessionStateAtom 负责
-  useEffect(() => {
-    setSessionTabIds((current) => {
-      const next = current.filter((id) => Boolean(sessionRecordsForTabs[id]));
-      return next.length === current.length ? current : next;
-    });
-  }, [sessionRecordsForTabs, setSessionTabIds]);
-
-  /** 关闭单个 Tab：仅移除列表；若关闭的是当前会话，切到相邻 Tab（不 kill Agent） */
-  function closeSessionTab(sessionId: string) {
-    const remaining = sessionTabIds.filter((id) => id !== sessionId);
-    setSessionTabIds(remaining);
-    if (currentSessionId !== sessionId) return;
-    if (remaining.length > 0) {
-      // 优先切到右侧相邻 Tab，保持阅读位置连续；没有右侧才取左侧
-      const index = sessionTabIds.indexOf(sessionId);
-      const next = remaining[Math.min(index, remaining.length - 1)];
-      const record = store.get(sessionRecordByIdAtomFamily(next));
-      if (record) {
-        selectSessionCommand(record.projectId, next, true);
-      }
-    } else if (activeProjectId) {
-      // 无剩余 Tab 时回到项目空态（走命令路由，不直接改 currentSessionId）
-      selectProjectCommand(activeProjectId);
-    }
-  }
-
-  function closeOtherSessionTabs(sessionId: string) {
-    setSessionTabIds((current) =>
-      current.filter((id) => id === sessionId),
-    );
-  }
-
-  function closeAllSessionTabs() {
-    setSessionTabIds([]);
-    // 全部关闭后回到项目空态；Agent 进程保持运行，会话仍可从侧栏重新打开
-    if (activeProjectId) selectProjectCommand(activeProjectId);
-  }
-
-  /** 固定/取消固定 Tab：状态转换由纯函数维护（保持 pinned 前置不变量） */
-  function togglePinSessionTab(sessionId: string) {
-    const next = togglePinSessionTabList(sessionTabIds, pinnedSessionTabIds, sessionId);
-    setSessionTabIds(next.tabs);
-    setPinnedSessionTabIds(next.pinned);
-  }
-
-  /** 拖拽排序：区间内重排，交叉拖动自动转换固定状态 */
-  function reorderSessionTab(sourceId: string, targetId: string, position: "before" | "after") {
-    const next = reorderSessionTabList(sessionTabIds, pinnedSessionTabIds, sourceId, targetId, position);
-    setSessionTabIds(next.tabs);
-    setPinnedSessionTabIds(next.pinned);
-  }
+  }, [workspaceChrome, selectSessionCommand, selectProjectCommand]);
 
   useEffect(() => {
     if (!activeProject) return;
@@ -1508,18 +1427,6 @@ export function App() {
 
 
   // 追踪 agent 会话开始/结束时间,计算会话时长
-  // 点击外部区域自动关闭会话组合下拉
-  useEffect(() => {
-    if (!sessionActionsOpen) return;
-    const handler = (event: MouseEvent) => {
-      if (sessionComboRef.current && !sessionComboRef.current.contains(event.target as Node)) {
-        setSessionActionsOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [sessionActionsOpen]);
-
   useEffect(() => {
     for (const agent of displayAgents) {
       if (agent.id !== activeAgentId) continue;
@@ -1819,13 +1726,13 @@ export function App() {
     // 避免后端 get_state 返回过时的 isStreaming: true 覆盖前端立刻设的 false。
   }
 
-  async function restartActiveAgent() {
-    if (!activeAgentId || !activeAgent) return;
-    const restartingAgent = activeAgent;
+  async function restartActiveAgent(agentId = activeAgentId) {
+    if (!agentId) return;
+    const restartingAgent = agents.find((agent) => agent.id === agentId) ?? activeAgent;
+    if (!restartingAgent) return;
     const target = getRuntimeTargetForAgent(restartingAgent.id);
     if (!target) return;
     setRestartingAgentId(restartingAgent.id);
-    setSessionActionsOpen(false);
     pendingAgentsRef.current = [
       ...pendingAgentsRef.current.filter(
         (agent) => agent.id !== restartingAgent.id,
@@ -2377,7 +2284,10 @@ export function App() {
       },
     },
     sessions: {
-      open: runOpenSidebarSessionById,
+      open: (projectId, sessionId, tabMode = "preview") =>
+        runOpenSidebarSessionById(projectId, sessionId, tabMode),
+      beginDrag: workspaceChrome.beginDrag,
+      endDrag: workspaceChrome.endDrag,
       createDraft: runCreateSessionDraft,
       createAnonymous: runCreateAnonymousSession,
       deleteDraft: deleteDraftSession,
@@ -2454,27 +2364,24 @@ export function App() {
     />
   );
 
-  // Gate 4.6 — Session view wrapped in SessionRuntimeInjector
-  const sessionTitle =
-    currentSession?.title ??
-    (isChatProject(activeProject)
-      ? t("app.chatProject")
-      : activeProject?.name) ??
-    "PiDeck";
+  // Gate 4.6 — Session view wrapped in SessionRuntimeInjector / ChatSessionPane
 
-  // 会话 Tab 栏的交互端口由 App 持有；当前会话视图会把状态/操作区嵌入同一行。
+  // 会话 Tab 栏的交互端口由 App 持有；分屏时 Tab 在舞台外共享，单栏时仍嵌入会话视图。
+  const focusSessionPane = useCallback((sessionId: string) => {
+    const record = store.get(sessionRecordByIdAtomFamily(sessionId));
+    if (record) selectSessionCommand(record.projectId, sessionId, true, "keep");
+  }, [selectSessionCommand, store]);
+
   const sessionTabsProps = {
-    tabs: sessionTabIds,
-    pinnedTabs: pinnedSessionTabIds,
+    tabs: workspaceChrome.sessionTabIds,
+    pinnedTabs: workspaceChrome.pinnedSessionTabIds,
+    previewTabId: workspaceChrome.previewSessionTabId,
     currentSessionId,
-    onSelect: (sessionId: string) => {
-      // 点击 Tab 只切换会话，不启动/停止 Agent；记录缺失时忽略（即将被清理）
-      const record = store.get(sessionRecordByIdAtomFamily(sessionId));
-      if (record) selectSessionCommand(record.projectId, sessionId, true);
-    },
-    onClose: closeSessionTab,
-    onCloseOthers: closeOtherSessionTabs,
-    onCloseAll: closeAllSessionTabs,
+    onSelect: workspaceChrome.selectTab,
+    onPromotePreview: workspaceChrome.promotePreview,
+    onClose: workspaceChrome.closeTab,
+    onCloseOthers: workspaceChrome.closeOtherTabs,
+    onCloseAll: workspaceChrome.closeAllTabs,
     // Tab 栏 “+” 下拉的新建目标：聊天对话区置顶，其余按侧栏项目顺序
     newSessionTargets: projects
       .map((project) => ({
@@ -2484,75 +2391,119 @@ export function App() {
       }))
       .sort((a, b) => Number(b.isChat) - Number(a.isChat)),
     onNewSessionInProject: (projectId: string) => void runCreateSessionDraft(projectId),
-    onTogglePin: togglePinSessionTab,
-    onReorder: reorderSessionTab,
+    onTogglePin: workspaceChrome.togglePin,
+    onReorder: workspaceChrome.reorderTab,
     onToggleDrawer: toggleRightDrawer,
     drawerOpen: Boolean(drawer && !drawerCollapsed),
+    onDragSessionChange: (sessionId: string | null) => {
+      if (sessionId) workspaceChrome.beginDrag(sessionId);
+      else workspaceChrome.endDrag();
+    },
   };
   const sessionTabsBarNode = <SessionTabsBar {...sessionTabsProps} />;
 
-  const chatPaneContentNode = (
+  const paneLayoutRefs = {
+    chatHeaderRef,
+    sessionComboRef,
+    composerRef,
+    composerOffsetHeight,
+    terminalRowHeight,
+  };
+
+  const chatPaneSharedProps = {
+    sessionTabs: sessionTabsProps,
+    isLanWeb,
+    showToast,
+    onOpenFile: handleOpenLinkedFile,
+    onDiffFile: diffFilePath,
+    onPreviewImage: setPreviewImage,
+    abortAgent,
+    restartActiveAgent,
+    onToggleDrawer: toggleRightDrawer,
+    drawerOpen: Boolean(drawer && !drawerCollapsed),
+    runCreateSessionDraft,
+    enqueueSessionPrompt,
+    insertQuickPrompt,
+    ensureSessionId: ensureSessionForSend,
+    resendUserMessage,
+    editMessage,
+    deleteMessage,
+    forkFromUserMessage,
+    forkingMessageId,
+    openSidebarSessionById: runOpenSidebarSessionById,
+    agents: displayAgents,
+    queuedPromptsBySession: queue.queuedPrompts,
+    queueRetract: queue.retractQueuedPromptForEdit,
+    queueDiscard: queue.discardQueuedPrompt,
+    queueFlushBySessionRef,
+    restartingAgentId,
+    sessionDurationByAgent,
+    activeProjectId,
+    gitInfo,
+    showThinking: settings.showThinking,
+    validCommandNames,
+    validFilePaths,
+    terminalOpen,
+    terminalDockClosing,
+    terminalDockVisible,
+    terminalCollapsed,
+    availableTerminalHeight: availableTerminalHeight ?? 120,
+    setTerminalOpenForAgent,
+    setTerminalCollapsedForAgent,
+    setTerminalHeightByAgent,
+    configOpen,
+    environmentDialog: Boolean(environmentDialog),
+    showNotice,
+    api,
+    jumpToMessageRef,
+    layoutRefs: paneLayoutRefs,
+  };
+
+  const chatPaneSessionNode = (
     <>
-      {!currentSessionId && sessionTabsBarNode}
+      {(!currentSessionId || workspaceChrome.splitLayout) && sessionTabsBarNode}
       {currentSessionId ? (
-    <SessionRuntimeInjector
-      currentSessionId={currentSessionId}
-      sessionTitle={sessionTitle}
-      sessionTabs={sessionTabsProps}
-      sessionTimeline={sessionTimeline}
-      sessionActionsOpen={sessionActionsOpen}
-      setSessionActionsOpen={setSessionActionsOpen}
-      isLanWeb={isLanWeb}
-      chatHeaderRef={chatHeaderRef}
-      sessionComboRef={sessionComboRef}
-      composerRef={composerRef}
-      composerOffsetHeight={composerOffsetHeight}
-      terminalRowHeight={terminalRowHeight}
-      showToast={showToast}
-      onOpenFile={handleOpenLinkedFile}
-      onDiffFile={diffFilePath}
-      onPreviewImage={setPreviewImage}
-      abortAgent={abortAgent}
-      restartActiveAgent={restartActiveAgent}
-      onToggleDrawer={toggleRightDrawer}
-      drawerOpen={Boolean(drawer && !drawerCollapsed)}
-      runCreateSessionDraft={runCreateSessionDraft}
-      enqueueSessionPrompt={enqueueSessionPrompt}
-      insertQuickPrompt={insertQuickPrompt}
-      ensureSessionId={ensureSessionForSend}
-      resendUserMessage={resendUserMessage}
-      editMessage={editMessage}
-      deleteMessage={deleteMessage}
-      forkFromUserMessage={forkFromUserMessage}
-      forkingMessageId={forkingMessageId}
-      openSidebarSessionById={runOpenSidebarSessionById}
-      agents={displayAgents}
-      activeQueuedPrompts={activeQueuedPrompts}
-      visibleQueuedPrompts={visibleQueuedPrompts}
-      queueRetract={queue.retractQueuedPromptForEdit}
-      queueDiscard={queue.discardQueuedPrompt}
-      queuedTrackRef={queuedTrackRef}
-      queueFlushBySessionRef={queueFlushBySessionRef}
-      restartingAgentId={restartingAgentId}
-      sessionDurationByAgent={sessionDurationByAgent}
-      activeProjectId={activeProjectId}
-      gitInfo={gitInfo}
-      showThinking={settings.showThinking}
-      validCommandNames={validCommandNames}
-      validFilePaths={validFilePaths}
-      terminalOpen={terminalOpen}
-      terminalDockClosing={terminalDockClosing}
-      terminalDockVisible={terminalDockVisible}
-      terminalCollapsed={terminalCollapsed}
-      availableTerminalHeight={availableTerminalHeight ?? 120}
-      setTerminalOpenForAgent={setTerminalOpenForAgent}
-      setTerminalCollapsedForAgent={setTerminalCollapsedForAgent}
-      setTerminalHeightByAgent={setTerminalHeightByAgent}
-      configOpen={configOpen}
-      environmentDialog={Boolean(environmentDialog)}
-      showNotice={showNotice}
-      api={api}
-    />
+        <SessionSplitStage
+          layout={workspaceChrome.splitLayout}
+          draggingSessionId={workspaceChrome.draggingSessionId}
+          hostSessionId={currentSessionId}
+          onDropSplit={workspaceChrome.dropSplit}
+          solo={
+            <ChatSessionPane
+              {...chatPaneSharedProps}
+              sessionId={currentSessionId}
+              focused
+              onFocusPane={() => focusSessionPane(currentSessionId)}
+              chrome="full"
+            />
+          }
+          first={(() => {
+            const layout = workspaceChrome.splitLayout;
+            if (!layout) return null;
+            return (
+              <ChatSessionPane
+                {...chatPaneSharedProps}
+                sessionId={layout.firstSessionId}
+                focused={currentSessionId === layout.firstSessionId}
+                onFocusPane={() => focusSessionPane(layout.firstSessionId)}
+                chrome="pane"
+              />
+            );
+          })()}
+          second={(() => {
+            const layout = workspaceChrome.splitLayout;
+            if (!layout) return null;
+            return (
+              <ChatSessionPane
+                {...chatPaneSharedProps}
+                sessionId={layout.secondSessionId}
+                focused={currentSessionId === layout.secondSessionId}
+                onFocusPane={() => focusSessionPane(layout.secondSessionId)}
+                chrome="pane"
+              />
+            );
+          })()}
+        />
       ) : (
         // 无当前会话（普通项目点开 / 所有 Tab 关闭）时，普通项目与 Chat 项目
         // 共享统一空态；快捷操作新建 Agent / 匿名聊天，无项目时引导添加项目。
@@ -2564,6 +2515,51 @@ export function App() {
         />
       )}
     </>
+  );
+
+  const workbenchTheme: "dark" | "light" =
+    typeof document !== "undefined" && document.documentElement.dataset.theme === "dark"
+      ? "dark"
+      : "light";
+
+  // Git Diff 优先于文件编辑器（同一时刻只挂一份阅读面）
+  const workbenchHasGitDiff = Boolean(
+    gitDrawerDiff && gitDrawerDiff.projectId === activeProjectId,
+  );
+  const workbenchHasEditor = Boolean(activeTab) && !workbenchHasGitDiff;
+  const workbenchHasContent = workbenchHasGitDiff || workbenchHasEditor;
+  const workbenchLayout = workbenchHasGitDiff ? gitDiffDisplayMode : editorMode;
+
+  const workbenchContentNode = workbenchHasContent ? (
+    <WorkbenchContent
+      theme={workbenchTheme}
+      maxFileSizeMB={settings.maxEditorFileSizeMB}
+      gitDiff={workbenchHasGitDiff && gitDrawerDiff ? gitDrawerDiff : null}
+      gitDiffDisplayMode={gitDiffDisplayMode}
+      onToggleGitDiffMode={toggleGitDiffDisplayMode}
+      onCloseGitDiff={closeGitDiff}
+      activeTab={workbenchHasEditor && activeTab ? activeTab : null}
+      editorTabs={editorTabs}
+      activeTabId={activeTabId}
+      editorMode={editorMode}
+      onToggleEditorMode={activeTab?.preserveDrawer ? undefined : toggleEditorMode}
+      onSelectTab={selectEditorTab}
+      onCloseTab={closeEditorTab}
+      onCloseEditor={() => { closeEditor(); }}
+      readContent={readEditorFileContent}
+      readOriginalContent={readEditorOriginalContent}
+      saveContent={saveEditorFileContent}
+    />
+  ) : null;
+
+  const chatPaneContentNode = (
+    <WorkbenchStage
+      layout={workbenchLayout}
+      orientation={settings.workspaceSplitOrientation ?? "horizontal"}
+      hasContent={workbenchHasContent}
+      session={chatPaneSessionNode}
+      content={workbenchContentNode}
+    />
   );
 
   // ── DrawerSurface port objects (stable via useMemo) ──
@@ -2655,15 +2651,13 @@ export function App() {
   });
 
 
-  // 钉住面板恢复：编辑器占用抽屉（drawer=editor 或 modal 展开中）时强制恢复
-  // pinned 面板会与 toggleEditorMode 互相覆盖 → 最小化需点击两次/渲染循环。
-  // 放在 useFileEditor 之后（editorMode 可用）；编辑器模式优先于 pinned 恢复。
+  // 钉住面板恢复：编辑器阅读面已不占用抽屉，仅 drawer=editor 空状态时跳过即可。
   useEffect(() => {
     if (!workspace.drawerPinnedPanel) return;
-    if (drawer === "editor" || editorMode === "modal") return;
+    if (drawer === "editor") return;
     if (workspace.drawer !== workspace.drawerPinnedPanel) workspace.openDrawer(workspace.drawerPinnedPanel);
     if (workspace.drawerCollapsed) workspace.expandDrawer();
-  }, [workspace.drawer, workspace.drawerCollapsed, workspace.drawerPinnedPanel, drawer, editorMode]);
+  }, [workspace.drawer, workspace.drawerCollapsed, workspace.drawerPinnedPanel, drawer]);
   return (
     <>
       <AppBootstrap {...bootstrapProps} />
@@ -2731,7 +2725,7 @@ export function App() {
       outlineContent={hasActiveConversation ? (
 <ConversationOutline
         items={outlineItems}
-        onJump={sessionTimeline.jumpToMessage}
+        onJump={(messageId) => jumpToMessageRef.current?.(messageId)}
         extraAction={{
           active: scratchPad.isOpen,
           label: t("scratchPad.openTooltip"),
@@ -2780,6 +2774,8 @@ export function App() {
       toggleAlwaysOnTop={api.app.toggleAlwaysOnTopWindow}
       minimizeWindow={api.app.minimizeWindow}
       toggleMaximizeWindow={api.app.toggleMaximizeWindow}
+      isWindowMaximized={api.app.isWindowMaximized}
+      onWindowMaximizedChange={api.app.onWindowMaximizedChange}
       closeWindow={api.app.closeWindow}
     >
 
@@ -2977,46 +2973,6 @@ export function App() {
       upToDateVersion={upToDateVersion}
       onDismissUpToDate={() => setUpToDateVersion(null)}
     />
-    {editorMode === "modal" && activeTab && gitDiffDisplayMode !== "modal" && (
-      <Suspense fallback={<div className="modal-backdrop"><span className="file-diff-loading">Loading...</span></div>}>
-      <FileDiffViewer
-        displayMode="modal"
-        filePath={activeTab.filePath}
-        mode={activeTab.mode}
-        onToggleMode={activeTab.preserveDrawer ? undefined : toggleEditorMode}
-        originalContent={activeTab.mode === "diff" ? activeTab.originalContent : undefined}
-        modifiedContent={activeTab.modifiedContent}
-        tabs={editorTabs}
-        activeTabId={activeTabId}
-        onSelectTab={selectEditorTab}
-        onCloseTab={closeEditorTab}
-        onClose={() => { closeEditor(); }}
-        readContent={readEditorFileContent}
-        readOriginalContent={readEditorOriginalContent}
-        saveContent={activeTab.allowSave ? saveEditorFileContent : undefined}
-        theme={document.documentElement.dataset.theme === "dark" ? "dark" : "light"}
-        maxFileSizeMB={settings.maxEditorFileSizeMB}
-      />
-    </Suspense>
-    )}
-    {gitDiffDisplayMode === "modal" && gitDrawerDiff && gitDrawerDiff.projectId === activeProjectId && (
-      <Suspense fallback={<div className="modal-backdrop"><span className="file-diff-loading">Loading...</span></div>}>
-        <FileDiffViewer
-          displayMode="modal"
-          filePath={gitDrawerDiff.filePath}
-          mode="diff"
-          onToggleMode={toggleGitDiffDisplayMode}
-          originalContent={gitDrawerDiff.originalContent}
-          modifiedContent={gitDrawerDiff.modifiedContent}
-          tabs={[{ id: gitDrawerDiff.filePath, filePath: gitDrawerDiff.filePath, label: gitDrawerDiff.label }]}
-          activeTabId={gitDrawerDiff.filePath}
-          onClose={closeGitDiff}
-          readContent={readEditorFileContent}
-          theme={document.documentElement.dataset.theme === "dark" ? "dark" : "light"}
-          maxFileSizeMB={settings.maxEditorFileSizeMB}
-        />
-      </Suspense>
-    )}
     {previewImage && (
       <ImagePreviewModal
         image={previewImage}

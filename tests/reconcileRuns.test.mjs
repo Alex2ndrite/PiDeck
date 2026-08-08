@@ -13,7 +13,7 @@ import vm from "node:vm";
  * 比较退化为 O(1)，不再每次流式增量都深度遍历全部历史消息。
  */
 
-// AppUtils 依赖浏览器模块（RichInput 等），用 transpileModule + vm 沙箱加载
+// AppUtils 依赖 chips 模块，用 transpileModule + vm 沙箱加载
 //（与 tests/turnSegments.test.mjs 的 loadAppUtils 同套路）。
 function loadAppUtils() {
 	const source = readFileSync("src/renderer/src/components/app/AppUtils.ts", "utf8");
@@ -24,7 +24,7 @@ function loadAppUtils() {
 		exports: {},
 		location: { href: "file:///Users/test/app" },
 		require: (id) => {
-			if (id === "./RichInput") return { formatFilePathRef: (p) => p };
+			if (id === "../session/composer/chips") return { formatFilePathRef: (p) => p };
 			return {};
 		},
 	};

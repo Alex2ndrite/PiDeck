@@ -60,8 +60,8 @@ export function AppSidebar(props: AppSidebarProps) {
       creatingWorktree={props.creatingWorktree}
       isLanWeb={props.isLanWeb}
       chrome={<>
-        {/* 品牌区（main 布局）：折叠按钮在品牌文字右侧 */}
-        <div className="list-toolbar flex h-12 shrink-0 items-center gap-1 px-1">
+        {/* 品牌区贴顶：高度贴近自定义标题栏（32px），与窗口控件同一平面。 */}
+        <div className="list-toolbar flex h-8 shrink-0 items-center gap-1 px-0.5">
           <div className="app-badge flex min-w-0 flex-1 items-center">
             <BrandLockup />
           </div>

@@ -8,7 +8,7 @@ import { defaultRemarkPlugins, defaultRehypePlugins } from "streamdown";
 import rehypeKatex from "rehype-katex";
 import { CodeMirrorEditor } from "./CodeMirrorEditor";
 import { MergeDiffView } from "./MergeDiffView";
-import { formatFilePathRef } from "./RichInput";
+import { formatFilePathRef } from "../session/composer/chips";
 
 import { isBinaryExtension, isImageFile, isPdfFile } from "../../utils/isTextFile";
 
@@ -17,9 +17,9 @@ type ViewMode = "view" | "diff";
 export function FileDiffViewer(props: {
 	filePath: string;
 	mode?: ViewMode;
-	/** 展示模式：弹框（modal）或侧栏（drawer） */
-	displayMode?: "modal" | "drawer";
-	/** 在弹框/侧栏之间切换 */
+	/** 展示模式：drawer=窄抽屉；split/maximize=中间栏宿主；modal=遗留全屏弹层 */
+	displayMode?: "modal" | "drawer" | "split" | "maximize";
+	/** 在分屏 / 占满中间栏之间切换（中间栏宿主）；遗留 drawer↔modal 也走此回调 */
 	onToggleMode?: () => void;
 	/** 返回按钮回调（侧栏模式时提供，点击返回上一面板） */
 	onBack?: () => void;
@@ -290,6 +290,7 @@ export function FileDiffViewer(props: {
 	const language = ext;
 
 	const displayMode = props.displayMode ?? "drawer";
+	const isWorkbenchPane = displayMode === "split" || displayMode === "maximize";
 	const headerContent = (
 		<>
 			{props.tabs && props.tabs.length > 1 && (
@@ -392,10 +393,20 @@ export function FileDiffViewer(props: {
 							variant="ghost"
 							size="icon-sm"
 							className="file-diff-toggle-btn"
-							title={displayMode === "modal" ? t("app.minimizeToDrawer") : t("app.expandToModal")}
+							title={
+								isWorkbenchPane
+									? displayMode === "maximize"
+										? t("app.restoreSplit")
+										: t("app.maximizeInWorkbench")
+									: displayMode === "modal"
+										? t("app.minimizeToDrawer")
+										: t("app.expandToModal")
+							}
 							onClick={props.onToggleMode}
 						>
-							{displayMode === "modal" ? <Minimize2 size={15} /> : <Maximize size={15} />}
+							{(isWorkbenchPane ? displayMode === "maximize" : displayMode === "modal")
+								? <Minimize2 size={15} />
+								: <Maximize size={15} />}
 						</Button>
 					)}
 					<Button variant="ghost" size="icon-sm" className="file-diff-close" onClick={handleClose} aria-label={t("common.close")}>

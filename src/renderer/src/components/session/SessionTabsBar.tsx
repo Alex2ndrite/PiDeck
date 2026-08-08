@@ -17,6 +17,8 @@ import {
 } from "../ui-shadcn/dropdown-menu";
 import { cn } from "../../lib/utils";
 
+import { SESSION_TAB_DRAG_MIME } from "../../utils/sessionSplitEdge";
+
 /**
  * 会话 Tab 栏（浏览器式多 Tab）：标题栏下方展示当前打开的所有会话。
  *
@@ -28,11 +30,12 @@ import { cn } from "../../lib/utils";
  *
  * 固定（pin）与排序：
  * - 固定 Tab 前置、宽度更小、无关闭按钮，右键菜单可取消固定；
- * - 拖拽 Tab 可排序，固定/普通区间交叉拖动会自动转换固定状态。
+ * - 拖拽 Tab 可排序，固定/普通区间交叉拖动会自动转换固定状态；
+ * - 拖到聊天区边缘可分屏（见 SessionSplitStage）。
  */
 
-/** 拖拽中的源 Tab id；onDrop 时消费 */
-const TAB_DRAG_DATA_KEY = "text/pideck-session-tab";
+/** @deprecated 请使用 SESSION_TAB_DRAG_MIME；保留导出供测试/旧引用。 */
+export const TAB_DRAG_DATA_KEY = SESSION_TAB_DRAG_MIME;
 
 /** “+” 下拉里的新建目标：聊天对话区或已打开项目 */
 export type NewSessionTarget = {
@@ -44,8 +47,12 @@ export type NewSessionTarget = {
 export type SessionTabsBarProps = {
   tabs: readonly string[];
   pinnedTabs: readonly string[];
+  /** VS Code 式预览 Tab（斜体）；至多一个 */
+  previewTabId?: string | null;
   currentSessionId?: string;
   onSelect: (sessionId: string) => void;
+  /** 双击预览 Tab → 常驻（与侧栏双击同语义） */
+  onPromotePreview?: (sessionId: string) => void;
   onClose: (sessionId: string) => void;
   onCloseOthers: (sessionId: string) => void;
   onCloseAll: () => void;
@@ -59,10 +66,12 @@ export type SessionTabsBarProps = {
   drawerOpen?: boolean;
   /** 当前会话的状态/操作区；嵌入 Tab 栏后不再单独占用标题行。 */
   actions?: ReactNode;
+  /** 开始/结束拖拽会话 Tab 时通知外层（用于分屏落点预览）。 */
+  onDragSessionChange?: (sessionId: string | null) => void;
 };
 
 export function SessionTabsBar(props: SessionTabsBarProps) {
-  const { tabs, pinnedTabs, currentSessionId } = props;
+  const { tabs, pinnedTabs, currentSessionId, previewTabId } = props;
   const tabItems = useMemo(() => tabs.map((sessionId) => ({ sessionId })), [tabs]);
   const dragSourceRef = useRef<string | null>(null);
   const dragTargetRef = useRef<{ targetId: string; position: "before" | "after" } | null>(null);
@@ -92,6 +101,7 @@ export function SessionTabsBar(props: SessionTabsBarProps) {
     dragTargetRef.current = null;
     setDraggingId(null);
     setDragIndicator(null);
+    props.onDragSessionChange?.(null);
     if (sourceId && target) {
       props.onReorder(sourceId, target.targetId, target.position);
     }
@@ -102,6 +112,7 @@ export function SessionTabsBar(props: SessionTabsBarProps) {
     dragTargetRef.current = null;
     setDraggingId(null);
     setDragIndicator(null);
+    props.onDragSessionChange?.(null);
   };
 
   // overflow-visible：SessionHeader 的 session-combo 下拉菜单向下弹出，hidden 会把它裁掉导致“+新会话”看似无反应；Tab 滚动已由内部 .session-tabs-scroll 的 overflow-x-auto 承担。
@@ -114,10 +125,12 @@ export function SessionTabsBar(props: SessionTabsBarProps) {
           sessionId={sessionId}
           active={sessionId === currentSessionId}
           pinned={pinnedTabs.includes(sessionId)}
+          preview={sessionId === previewTabId}
           dragging={draggingId === sessionId}
           // 指示线插在目标 Tab 的边缘：before=左缘，after=右缘
           indicator={dragIndicator && dragIndicator.targetId === sessionId ? dragIndicator.position : null}
           onSelect={props.onSelect}
+          onPromotePreview={props.onPromotePreview}
           onClose={props.onClose}
           onCloseOthers={props.onCloseOthers}
           onCloseAll={props.onCloseAll}
@@ -126,8 +139,10 @@ export function SessionTabsBar(props: SessionTabsBarProps) {
             dragSourceRef.current = sessionId;
             dragTargetRef.current = null;
             setDraggingId(sessionId);
+            props.onDragSessionChange?.(sessionId);
             event.dataTransfer.effectAllowed = "move";
-            event.dataTransfer.setData(TAB_DRAG_DATA_KEY, sessionId);
+            event.dataTransfer.setData(SESSION_TAB_DRAG_MIME, sessionId);
+            event.dataTransfer.setData("text/plain", sessionId);
           }}
           onDragOver={(event) => handleDragOver(event, sessionId)}
           onDrop={handleDrop}
@@ -171,10 +186,13 @@ function SessionTab(props: {
   active: boolean;
   /** 固定 Tab：前置、窄宽度、无关闭按钮 */
   pinned: boolean;
+  /** VS Code 预览：斜体，双击后常驻 */
+  preview: boolean;
   dragging: boolean;
   /** 拖拽插入指示：before=左缘竖线，after=右缘竖线 */
   indicator?: "before" | "after" | null;
   onSelect: (sessionId: string) => void;
+  onPromotePreview?: (sessionId: string) => void;
   onClose: (sessionId: string) => void;
   onCloseOthers: (sessionId: string) => void;
   onCloseAll: () => void;
@@ -184,7 +202,7 @@ function SessionTab(props: {
   onDrop: (event: React.DragEvent) => void;
   onDragEnd: () => void;
 }) {
-  const { sessionId, active, pinned, dragging } = props;
+  const { sessionId, active, pinned, preview, dragging } = props;
   const record = useAtomValue(sessionRecordByIdAtomFamily(sessionId));
   const runtime = useAtomValue(sessionRuntimeBySessionIdAtomFamily(sessionId));
   const status = runtime?.status;
@@ -218,8 +236,13 @@ function SessionTab(props: {
           active
             ? "border-border bg-accent/10 font-medium text-foreground"
             : "border-transparent text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+          preview && "italic font-normal text-muted-foreground",
         )}
         onClick={select}
+        onDoubleClick={() => {
+          // 双击预览 Tab → 常驻（侧栏双击同语义）；已常驻则忽略
+          if (preview) props.onPromotePreview?.(sessionId);
+        }}
         onAuxClick={(event) => {
           // 中键关闭（固定 Tab 忽略，需先取消固定），与浏览器 Tab 行为一致
           if (event.button === 1 && !pinned) close();
@@ -240,7 +263,7 @@ function SessionTab(props: {
           />
         )}
         {pinned && <Pin className="size-3 shrink-0 text-muted-foreground/70" aria-hidden="true" />}
-        <span className="min-w-0 flex-1 truncate">{title}</span>
+        <span className={cn("min-w-0 flex-1 truncate", preview && "italic")}>{title}</span>
         {/* 拖拽插入指示线：2px 主题色竖线，贴在目标 Tab 左/右缘 */}
         {props.indicator && (
           <span

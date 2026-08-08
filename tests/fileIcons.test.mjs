@@ -51,9 +51,10 @@ describe("Seti file icon integration", () => {
     assert.match(readFileSync("src/renderer/src/vendor/seti-icons/LICENSE.md", "utf8"), /Copyright \(c\) 2014 Jesse Weed/);
   });
 
-  test("renderer imports the dedicated file icon stylesheet", () => {
-    const source = readFileSync("src/renderer/src/main.tsx", "utf8");
-    assert.match(source, /import "\.\/file-icons\.css";/);
+  test("renderer loads file icons via styles.css vendor layer", () => {
+    const stylesEntry = readFileSync("src/renderer/src/styles.css", "utf8");
+    assert.match(stylesEntry, /@import\s+"\.\/file-icons\.css"\s+layer\(vendor\)/);
+    assert.doesNotMatch(readFileSync("src/renderer/src/main.tsx", "utf8"), /import "\.\/file-icons\.css"/);
   });
 
   test("file tree renders trusted Seti SVG and file type labels", () => {

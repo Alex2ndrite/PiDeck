@@ -45,11 +45,11 @@ import {
   PI_FILE_PATH_DRAG_MIME,
   readFileNodeDragPayload,
 } from "../components/app/AppUtils";
+import type { ComposerChip } from "../components/session/composer/chips";
 import {
-  getCaretOffset,
-  getRichInputCaretCoords,
-  type RichInputChip,
-} from "../components/app/RichInput";
+  getComposerCaretCoords,
+  getComposerCaretOffset,
+} from "../components/session/composer/caretCoords";
 import { desktopApi } from "../desktopApi";
 import { t } from "../i18n";
 import {
@@ -460,7 +460,7 @@ export function useSessionComposerController(
   );
   const suggestionAnchorStyle = useMemo<CSSProperties | undefined>(() => {
     if (!suggestionsOpen || !editorRef.current) return undefined;
-    const coordinates = getRichInputCaretCoords(editorRef.current, cursor);
+    const coordinates = getComposerCaretCoords(editorRef.current, cursor);
     if (!coordinates) return undefined;
     const menuWidth = Math.min(520, window.innerWidth - 120);
     const menuHeight = 380;
@@ -561,7 +561,7 @@ export function useSessionComposerController(
     const liveDraft = liveDomDraftRef.current.sessionId === sessionId
       ? liveDomDraftRef.current.value
       : draft;
-    const liveCursor = editorRef.current ? getCaretOffset(editorRef.current) : cursor;
+    const liveCursor = editorRef.current ? getComposerCaretOffset(editorRef.current) : cursor;
     const result = applySuggestion(liveDraft, liveCursor, value);
     liveDomDraftRef.current = { sessionId, value: result.text };
     setDraft(result.text);
@@ -575,7 +575,7 @@ export function useSessionComposerController(
     const liveDraft = liveDomDraftRef.current.sessionId === sessionId
       ? liveDomDraftRef.current.value
       : draft;
-    const liveCursor = editorRef.current ? getCaretOffset(editorRef.current) : cursor;
+    const liveCursor = editorRef.current ? getComposerCaretOffset(editorRef.current) : cursor;
     const result = clearSuggestionTrigger(liveDraft, liveCursor);
     liveDomDraftRef.current = { sessionId, value: result.text };
     setDraft(result.text);
@@ -630,7 +630,7 @@ export function useSessionComposerController(
     const liveDraft = liveDomDraftRef.current.sessionId === sessionId
       ? liveDomDraftRef.current.value
       : draft;
-    const liveCursor = getCaretOffset(event.currentTarget);
+    const liveCursor = getComposerCaretOffset(event.currentTarget);
     const firstLine = !liveDraft.slice(0, liveCursor).includes("\n");
     const lastLine = !liveDraft.slice(liveCursor).includes("\n");
     const history = promptHistoryRef.current[sessionId] ?? [];
@@ -708,7 +708,7 @@ export function useSessionComposerController(
     const liveDraft = liveDomDraftRef.current.sessionId === sessionId
       ? liveDomDraftRef.current.value
       : draft;
-    const liveCursor = editorRef.current ? getCaretOffset(editorRef.current) : cursor;
+    const liveCursor = editorRef.current ? getComposerCaretOffset(editorRef.current) : cursor;
     const refText = refTexts.join(" ");
     const previous = liveDraft[liveCursor - 1];
     const spacer = liveCursor > 0 && previous !== " " && previous !== "\n" ? " " : "";
@@ -814,7 +814,7 @@ export function useSessionComposerController(
     }
   }, [insertFilePathRefs]);
 
-  const onChipClick = useCallback((chip: RichInputChip) => {
+  const onChipClick = useCallback((chip: ComposerChip) => {
     if (chip.kind === "file") {
       const path = chip.raw.slice(1);
       if (options.onOpenFile) options.onOpenFile(path);

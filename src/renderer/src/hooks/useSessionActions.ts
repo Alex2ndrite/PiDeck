@@ -52,8 +52,8 @@ export interface UseSessionActionsOptions {
 
   // Other callbacks
   showToast: (message: string, duration?: number) => void;
-  /** 会话被选中（commitSessionSelection）时回调：用于 Tab 栏登记打开的会话 */
-  onSessionSelected?: (sessionId: string) => void;
+  /** 会话被选中时回调：用于 Tab 栏登记（preview=临时斜体，permanent=常驻） */
+  onSessionSelected?: (sessionId: string, mode?: "preview" | "permanent") => void;
 }
 
 export function useSessionActions(options: UseSessionActionsOptions) {
@@ -79,10 +79,14 @@ export function useSessionActions(options: UseSessionActionsOptions) {
     projectId: string,
     sessionId: string | undefined,
     scrollToEnd: boolean,
+    /** keep=只切焦点，不改 Tab 预览/常驻状态（顶栏已有 Tab 的单击） */
+    tabMode: "preview" | "permanent" | "keep" = "permanent",
   ) {
     setActiveProjectId(projectId);
     setCurrentSessionId(sessionId);
-    if (sessionId) options.onSessionSelected?.(sessionId);
+    if (sessionId && tabMode !== "keep") {
+      options.onSessionSelected?.(sessionId, tabMode);
+    }
     // useSessionTimelineController owns scroll restoration when the Session identity changes.
     void scrollToEnd;
   }
@@ -96,9 +100,10 @@ export function useSessionActions(options: UseSessionActionsOptions) {
     projectId: string,
     sessionId: string,
     scrollToEnd = true,
+    tabMode: "preview" | "permanent" | "keep" = "permanent",
   ) {
     ++openSessionRequestRef.current;
-    commitSessionSelection(projectId, sessionId, scrollToEnd);
+    commitSessionSelection(projectId, sessionId, scrollToEnd, tabMode);
   }
 
   // ── Session copy/export/delete ──
@@ -136,6 +141,7 @@ export function useSessionActions(options: UseSessionActionsOptions) {
   async function openSidebarSession(
     projectId: string,
     session: SessionSummary,
+    tabMode: "preview" | "permanent" = "preview",
   ) {
     const requestSequence = ++openSessionRequestRef.current;
     const cachedRecord = getSessionRecord(session.id);
@@ -172,10 +178,14 @@ export function useSessionActions(options: UseSessionActionsOptions) {
     }
     if (!record || requestSequence !== openSessionRequestRef.current) return;
 
-    commitSessionSelection(projectId, record.id, true);
+    commitSessionSelection(projectId, record.id, true, tabMode);
   }
 
-  async function openSidebarSessionById(projectId: string, sessionId: string) {
+  async function openSidebarSessionById(
+    projectId: string,
+    sessionId: string,
+    tabMode: "preview" | "permanent" = "preview",
+  ) {
     const requestSequence = ++openSessionRequestRef.current;
     let record: SessionRecord | undefined = getSessionRecord(sessionId);
     if (!record || record.projectId !== projectId) {
@@ -192,7 +202,7 @@ export function useSessionActions(options: UseSessionActionsOptions) {
       }
     }
     if (!record || requestSequence !== openSessionRequestRef.current) return;
-    commitSessionSelection(projectId, record.id, true);
+    commitSessionSelection(projectId, record.id, true, tabMode);
   }
 
   async function copySidebarSession(projectId: string, session: SessionSummary) {

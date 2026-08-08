@@ -6,6 +6,9 @@ import type {
   GitResourceGroupType,
   Project,
 } from "../../../shared/types";
+import type {
+  WorkspaceContentOpenMode,
+} from "../../../shared/types/settings";
 import type { DrawerPanel, SessionModifiedFile } from "../components/app/AppParts";
 
 function isAbsoluteFilePath(path: string) {
@@ -51,6 +54,8 @@ export interface UseFileEditorInput {
   modifiedFiles: SessionModifiedFile[];
   setDrawer: (panel: DrawerPanel | null) => void;
   setDrawerCollapsed: (collapsed: boolean) => void;
+  /** 设置中的默认打开方式；每次新打开文件/Diff 时采用 */
+  contentOpenMode: WorkspaceContentOpenMode;
   showToast: (message: string, duration?: number) => void;
   /** 读取文件内容的 API；maxBytes 用于编辑器大文件前置拦截（主进程 stat 检查，不传输超限内容） */
   readFileContent: (path: string, maxBytes?: number) => Promise<string>;
@@ -86,7 +91,8 @@ export interface UseFileEditorInput {
 }
 
 export interface UseFileEditorOutput {
-  editorMode: "modal" | "drawer";
+  /** 中间栏内容布局：分屏或占满中间栏（不再进侧栏抽屉） */
+  editorMode: WorkspaceContentOpenMode;
   toggleEditorMode: () => void;
   editorTabs: EditorTab[];
   activeTabId: string | null;
@@ -116,13 +122,13 @@ export interface UseFileEditorOutput {
     file: GitChangedFile,
   ) => Promise<void>;
   closeGitDiff: () => void;
-  gitDiffDisplayMode: "modal" | "drawer";
+  gitDiffDisplayMode: WorkspaceContentOpenMode;
   gitDrawerDiff: GitDrawerDiff | null;
   toggleGitDiffDisplayMode: () => void;
-  gitDiffRequestSequenceRef: React.MutableRefObject<number>;
+  closeEditor: () => void;
   prevDrawerPanelRef: React.MutableRefObject<DrawerPanel | null>;
   clearEditorBack: () => DrawerPanel | null;
-  closeEditor: () => void;
+  gitDiffRequestSequenceRef: React.MutableRefObject<number>;
 }
 
 export function useFileEditor(input: UseFileEditorInput): UseFileEditorOutput {
@@ -135,6 +141,7 @@ export function useFileEditor(input: UseFileEditorInput): UseFileEditorOutput {
     modifiedFiles,
     setDrawer,
     setDrawerCollapsed,
+    contentOpenMode,
     showToast,
     readFileContent,
     readGitOriginalContent,
@@ -145,65 +152,40 @@ export function useFileEditor(input: UseFileEditorInput): UseFileEditorOutput {
     t,
   } = input;
 
-  // drawer 同步 ref：toggleEditorMode/最小化等回调需要读取当前抽屉面板（返回键来源）
-  const drawerRef = useRef(drawer);
-  drawerRef.current = drawer;
+  const contentOpenModeRef = useRef(contentOpenMode);
+  contentOpenModeRef.current = contentOpenMode;
 
-  // ---- editor mode ----
-  const [editorMode, setEditorMode] = useState<"modal" | "drawer">("drawer");
-  // 修复：updater 必须是纯函数（StrictMode 双调用），抽屉展开副作用移到 updater 外——
-  // 否则 setDrawer 更新可能被丢弃，表现为"最小化到侧边栏没有效果"
-  const editorModeRef = useRef<"modal" | "drawer">("drawer");
+  // ---- 中间栏内容布局（split | maximize）----
+  const [editorMode, setEditorMode] = useState<WorkspaceContentOpenMode>(contentOpenMode);
+  const editorModeRef = useRef<WorkspaceContentOpenMode>(contentOpenMode);
   const toggleEditorMode = useCallback(() => {
-    const next = editorModeRef.current === "modal" ? "drawer" : "modal";
+    const next: WorkspaceContentOpenMode =
+      editorModeRef.current === "maximize" ? "split" : "maximize";
     editorModeRef.current = next;
     setEditorMode(next);
-    if (next === "drawer") {
-      // 从 modal 最小化：来源面板为空时才记录（从文件树打开时 viewFilePath 已记录 files）
-      if (!prevDrawerPanelRef.current) prevDrawerPanelRef.current = drawerRef.current;
-      setDrawer("editor");
-      setDrawerCollapsed(false);
-    } else {
-      // 展开到 modal：必须收起抽屉——否则 drawer 面板仍是 "editor"，
-      // 最小化时 openDrawer("editor") 命中 toggle 语义（同面板）→ 关闭抽屉 = "最小化没效果"
-      setDrawer(null);
-    }
-  }, [setDrawer, setDrawerCollapsed]);
+  }, []);
 
-  // ---- Git diff state ----
+  // ---- Git diff state（展示在中间栏 ContentHost，不再叠在抽屉里）----
   const gitDiffRequestSequenceRef = useRef(0);
   const [gitDrawerDiff, setGitDrawerDiff] = useState<GitDrawerDiff | null>(null);
-  const [gitDiffDisplayMode, setGitDiffDisplayMode] = useState<"modal" | "drawer">("drawer");
+  const [gitDiffDisplayMode, setGitDiffDisplayMode] =
+    useState<WorkspaceContentOpenMode>(contentOpenMode);
 
   const closeGitDiff = useCallback(() => {
     gitDiffRequestSequenceRef.current += 1;
     setGitDrawerDiff(null);
-    setGitDiffDisplayMode("drawer");
+    setGitDiffDisplayMode(contentOpenModeRef.current);
   }, []);
 
   const toggleGitDiffDisplayMode = useCallback(() => {
-    if (gitDiffDisplayMode === "drawer") {
-      setEditorMode("drawer");
-      setGitDiffDisplayMode("modal");
-      return;
-    }
-    setDrawer("git");
-    setDrawerCollapsed(false);
-    setGitDiffDisplayMode("drawer");
-  }, [gitDiffDisplayMode, setDrawer, setDrawerCollapsed]);
+    setGitDiffDisplayMode((mode) => (mode === "maximize" ? "split" : "maximize"));
+  }, []);
 
   useEffect(() => {
     gitDiffRequestSequenceRef.current += 1;
     setGitDrawerDiff(null);
-    setGitDiffDisplayMode("drawer");
+    setGitDiffDisplayMode(contentOpenModeRef.current);
   }, [activeProjectId]);
-
-  useEffect(() => {
-    if (drawer !== "git" && gitDiffDisplayMode === "drawer") {
-      gitDiffRequestSequenceRef.current += 1;
-      if (gitDrawerDiff) setGitDrawerDiff(null);
-    }
-  }, [drawer, gitDiffDisplayMode, gitDrawerDiff]);
 
   // ---- editor tabs ----
   const editorTabAccessSequenceRef = useRef(0);
@@ -326,10 +308,9 @@ export function useFileEditor(input: UseFileEditorInput): UseFileEditorOutput {
       setEditorTabs(next);
       if (next.length === 0) {
         setActiveTabId(null);
-        // 编辑器是独立抽屉面板：关闭最后一个 tab 后停留在面板空状态，
-        // 并复位 modal 模式——残留 "modal" 会让抽屉分支（editorMode==="drawer" 才渲染）空白
-        editorModeRef.current = "drawer";
-        setEditorMode("drawer");
+        // 关闭最后一个 tab 后复位为设置默认布局，避免残留 maximize
+        editorModeRef.current = contentOpenModeRef.current;
+        setEditorMode(contentOpenModeRef.current);
       } else if (tabId === activeTabId) {
         const neighborIdx = Math.min(idx, next.length - 1);
         setActiveTabId(next[neighborIdx].id);
@@ -363,13 +344,12 @@ export function useFileEditor(input: UseFileEditorInput): UseFileEditorOutput {
   const closeEditor = useCallback(() => {
     setActiveTabId(null);
     setEditorTabs([]);
-    // 同 closeEditorTab：复位 modal 残留状态，保证回到抽屉时是正常的编辑器面板
-    editorModeRef.current = "drawer";
-    setEditorMode("drawer");
+    editorModeRef.current = contentOpenModeRef.current;
+    setEditorMode(contentOpenModeRef.current);
   }, []);
 
-  // 注意：不要在 tab 清空时自动 setDrawer(null)。编辑器是活动栏上的一等面板，
-  // 空 tab 时由 DrawerSurface 渲染空状态，面板去留交给用户通过 rail/关闭键控制。
+  // 注意：不要在 tab 清空时自动 setDrawer(null)。编辑器 rail 仍是活动栏入口，
+  // 空 tab 时由 DrawerSurface 渲染空状态引导；阅读面已迁到中间栏 ContentHost。
 
   // ---- file actions ----
   const openFilePath = useCallback(
@@ -391,16 +371,15 @@ export function useFileEditor(input: UseFileEditorInput): UseFileEditorOutput {
 
   const viewFilePath = useCallback(
     (path: string) => {
+      closeGitDiff();
       openEditorTab(path, "view");
-      // 修复：文件树打开始终进抽屉模式（此前 editorMode=modal 时点文件会开 modal，
-      // 且不记录来源面板导致抽屉视图没有返回键）
-      editorModeRef.current = "drawer";
-      setEditorMode("drawer");
+      const mode = contentOpenModeRef.current;
+      editorModeRef.current = mode;
+      setEditorMode(mode);
+      // 阅读面进中间栏；抽屉保持文件树导航，不再切到 editor 面板
       prevDrawerPanelRef.current = drawer;
-      setDrawer("editor");
-      setDrawerCollapsed(false);
     },
-    [drawer, setDrawer, setDrawerCollapsed, openEditorTab],
+    [drawer, openEditorTab, closeGitDiff],
   );
 
   const diffFilePath = useCallback(
@@ -410,11 +389,12 @@ export function useFileEditor(input: UseFileEditorInput): UseFileEditorOutput {
         originalContent ?? modified?.originalContent ?? "";
       const resolvedModified = content ?? modified?.content ?? undefined;
       closeGitDiff();
-      setEditorMode("modal");
-      setDrawer(null);
+      const mode = contentOpenModeRef.current;
+      editorModeRef.current = mode;
+      setEditorMode(mode);
       openEditorTab(path, "diff", resolvedOriginal, resolvedModified);
     },
-    [modifiedFiles, closeGitDiff, setDrawer, openEditorTab],
+    [modifiedFiles, closeGitDiff, openEditorTab],
   );
 
   const openWorkspaceFileDiffFn = useCallback(
@@ -439,8 +419,8 @@ export function useFileEditor(input: UseFileEditorInput): UseFileEditorOutput {
             : group === "merge"
               ? t("git.mergeChanges")
               : t("git.changes");
-        setEditorMode("drawer");
-        setGitDiffDisplayMode("drawer");
+        const mode = contentOpenModeRef.current;
+        setGitDiffDisplayMode(mode);
         setGitDrawerDiff({
           projectId,
           filePath: diff.path,
@@ -489,8 +469,8 @@ export function useFileEditor(input: UseFileEditorInput): UseFileEditorOutput {
           showToast(t("git.fileDiffUnavailable"));
           return;
         }
-        setEditorMode("drawer");
-        setGitDiffDisplayMode("drawer");
+        const mode = contentOpenModeRef.current;
+        setGitDiffDisplayMode(mode);
         setGitDrawerDiff({
           projectId,
           filePath: diff.path,

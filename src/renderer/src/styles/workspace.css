@@ -1300,12 +1300,12 @@ html[data-theme="dark"] .scratch-pad-md mark {
   background: var(--color-bg-panel);
 }
 
+/* padding / gap 由 SidebarContent 的 Tailwind 承担；这里只保留布局骨架。
+   若继续写 padding，会在 unlayered 时代压死 utility；legacy 入层后也应避免双源抢同一属性。 */
 .chat-list-pane.v3-braun .sidebar-body {
   position: relative;
   flex: 1;
   flex-direction: column;
-  padding: var(--space-4);
-  gap: var(--space-3);
   overflow: hidden;
 }
 

@@ -5,10 +5,12 @@ import type { ImageContent } from "../../../../shared/types";
 import { settingsOpenAtom } from "../../atoms";
 import {
   claimSessionRuntimeUiResponseAtom,
-  currentSessionRuntimeAtom,
-  currentSessionRuntimeUiAtom,
   rollbackSessionRuntimeUiResponseAtom,
 } from "../../atoms/session-atoms";
+import {
+  sessionRuntimeBySessionIdAtomFamily,
+  sessionRuntimeUiBySessionIdAtomFamily,
+} from "../../atoms/session-selectors";
 import { useSessionRuntimeController } from "../../hooks/useSessionRuntimeController";
 import {
   createSessionRuntimeUiResponder,
@@ -27,6 +29,14 @@ export interface SessionRuntimeInjectorProps {
   sessionTitle: string;
   sessionTabs: Omit<SessionTabsBarProps, "actions">;
   sessionTimeline: SessionTimelineController;
+  /**
+   * full：Tab 栏 + 嵌入 Header（单栏默认）；
+   * pane：仅本栏 Header（会话分屏时由外层共享 Tab 栏）。
+   */
+  chrome?: "full" | "pane";
+  /** 本栏是否为聚焦会话（影响终端挂载与点击聚焦）。缺省视为聚焦。 */
+  focused?: boolean;
+  onFocusPane?: () => void;
   sessionActionsOpen: boolean;
   setSessionActionsOpen: React.Dispatch<React.SetStateAction<boolean>>;
   isLanWeb: boolean;
@@ -44,7 +54,8 @@ export interface SessionRuntimeInjectorProps {
   onDiffFile: (path: string) => void;
   onPreviewImage: (img: ImageContent | null) => void;
   abortAgent: (agentId?: string) => Promise<void>;
-  restartActiveAgent: () => Promise<void>;
+  /** 重启指定 Agent；不传则由注入器使用本栏 runtime 的 agentId。 */
+  restartActiveAgent: (agentId?: string) => Promise<void>;
   onToggleDrawer?: () => void;
   drawerOpen?: boolean;
   runCreateSessionDraft: () => Promise<void>;
@@ -126,6 +137,9 @@ export const SessionRuntimeInjector = React.memo(function SessionRuntimeInjector
     sessionTitle,
     sessionTabs,
     sessionTimeline,
+    chrome = "full",
+    focused = true,
+    onFocusPane,
     sessionActionsOpen,
     setSessionActionsOpen,
     isLanWeb,
@@ -180,8 +194,9 @@ export const SessionRuntimeInjector = React.memo(function SessionRuntimeInjector
     api,
   } = props;
   const settingsOpen = useAtomValue(settingsOpenAtom);
-  const currentSessionRuntime = useAtomValue(currentSessionRuntimeAtom);
-  const currentSessionRuntimeUi = useAtomValue(currentSessionRuntimeUiAtom);
+  // 本栏只订本会话 family，与 runtime controller 同源，避免分屏串扰
+  const currentSessionRuntime = useAtomValue(sessionRuntimeBySessionIdAtomFamily(currentSessionId));
+  const currentSessionRuntimeUi = useAtomValue(sessionRuntimeUiBySessionIdAtomFamily(currentSessionId));
   const claimSessionUiResponse = useSetAtom(claimSessionRuntimeUiResponseAtom);
   const rollbackSessionUiResponse = useSetAtom(rollbackSessionRuntimeUiResponseAtom);
   const runtimeRef = React.useRef(currentSessionRuntime);
@@ -226,6 +241,7 @@ export const SessionRuntimeInjector = React.memo(function SessionRuntimeInjector
 
   // ── internal runtime subscriptions (the reason this component exists) ──
   const runtime = useSessionRuntimeController({
+    sessionId: currentSessionId,
     agents,
     queueFlushBySessionRef,
     activeQueuedPrompts,
@@ -247,6 +263,9 @@ export const SessionRuntimeInjector = React.memo(function SessionRuntimeInjector
       sessionTitle={sessionTitle}
       sessionTabs={sessionTabs}
       sessionTimeline={sessionTimeline}
+      chrome={chrome}
+      focused={focused}
+      onFocusPane={onFocusPane}
       activeAgentId={runtime.activeAgentId ?? undefined}
       activeAgent={activeAgent}
       activeRuntimeState={runtime.activeRuntimeState}
@@ -268,6 +287,7 @@ export const SessionRuntimeInjector = React.memo(function SessionRuntimeInjector
       showRestart={Boolean(runtime.activeAgentId) && !isLanWeb}
       sessionDuration={runtime.sessionDuration}
       onHeaderTrigger={() => {
+        onFocusPane?.();
         if (runtime.activeAgentId || currentSessionId) {
           setSessionActionsOpen((open) => !open);
         } else {
@@ -275,11 +295,13 @@ export const SessionRuntimeInjector = React.memo(function SessionRuntimeInjector
         }
       }}
       onStop={() => {
-        void abortAgent();
+        // 必须带本栏 agentId，避免分屏时误停聚焦栏 Agent
+        void abortAgent(runtime.activeAgentId);
         setSessionActionsOpen(false);
       }}
-      onRestart={() => void restartActiveAgent()}
-      onToggleDrawer={onToggleDrawer}
+      onRestart={() => void restartActiveAgent(runtime.activeAgentId)}
+      // 分屏栏（pane）不重复挂右侧抽屉按钮：统一由共享 Tab 栏提供一处入口
+      onToggleDrawer={chrome === "full" ? onToggleDrawer : undefined}
       drawerOpen={drawerOpen}
       showThinking={showThinking}
       validCommandNames={validCommandNames}
@@ -342,9 +364,9 @@ export const SessionRuntimeInjector = React.memo(function SessionRuntimeInjector
           />
         ) : undefined
       }
-      terminalDockVisible={terminalDockVisible}
-      terminalOpen={terminalOpen}
-      terminalDockClosing={terminalDockClosing}
+      terminalDockVisible={focused && terminalDockVisible}
+      terminalOpen={focused && terminalOpen}
+      terminalDockClosing={focused && terminalDockClosing}
       terminalCollapsed={terminalCollapsed}
       availableTerminalHeight={availableTerminalHeight ?? 120}
       setTerminalOpenForAgent={setTerminalOpenForAgent}

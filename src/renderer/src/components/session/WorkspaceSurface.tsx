@@ -491,7 +491,12 @@ function FileNode(props: {
 	const { node, expandedDirs, onToggleDirectory, depth = 0 } = props;
 	const expanded = expandedDirs.has(node.path);
 	const typeLabel = node.type === "file" ? getFileTypeLabel(node.name) : "";
-	const rowStyle = { "--file-depth-offset": `${depth * 16}px` } as CSSProperties;
+	const rowStyle = {
+		"--file-depth-offset": `${depth * 16}px`,
+		/* inline 压过 Button size 自带的 px-*，保留树缩进（分层后 class 打不过 utility）。 */
+		paddingLeft: `calc(var(--space-2) + ${depth * 16}px)`,
+		paddingRight: "var(--space-2)",
+	} as CSSProperties;
 	const menu = (event: ReactMouseEvent) => {
 		event.preventDefault();
 		props.onFileContextMenu(node, event.clientX, event.clientY);
@@ -529,13 +534,14 @@ function FileNode(props: {
 		}
 	}, [node.path, props.onDropFiles, props.onMoveFiles, props.onDragOverDirChange]);
 	const isDragOver = props.dragOverDir === node.path;
-	// #115 U5：树行换 shadcn File Tree 模式（Collapsible + ghost Button + chevron 旋转），
-	// 懒加载/持久化展开态（expandedDirs）/拖拽/右键等业务行为不变；
-	// 既有 class 钩子（file-node-row 等）保留给样式 token 与测试断言。
+	// #115：树行用 shadcn ghost Button，尺寸/圆角走 utility；左右 padding 仍由 legacy
+	// 用 --file-depth-offset 算缩进（utility 的 px-* 会盖掉 depth，不能迁）。
+	const fileRowButtonClass =
+		"file-node-row h-[26px] min-h-0 w-full justify-start gap-2 rounded-sm py-0 text-body font-normal shadow-none hover:bg-muted hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-inset";
 	if (node.type === "file")
 		return (
 			<div className="file-node" style={rowStyle}>
-				<Button variant="ghost" className="file file-node-row w-full justify-start" style={rowStyle}
+				<Button variant="ghost" size="sm" className={cn("file", fileRowButtonClass)} style={rowStyle}
 					title={`${node.relativePath}\n${typeLabel}`}
 					draggable
 					onDragStart={handleDragStart}
@@ -553,7 +559,7 @@ function FileNode(props: {
 		<div className="file-node" style={rowStyle}>
 			<Collapsible open={expanded} onOpenChange={() => onToggleDirectory(node.path)}>
 				<CollapsibleTrigger asChild>
-					<Button variant="ghost" className={cn("directory file-node-row group w-full justify-start", isDragOver && "bg-accent/60 ring-1 ring-border")} style={rowStyle}
+					<Button variant="ghost" size="sm" className={cn("directory group", fileRowButtonClass, isDragOver && "bg-muted ring-1 ring-border")} style={rowStyle}
 						title={node.relativePath}
 						draggable
 						onDragStart={handleDragStart}

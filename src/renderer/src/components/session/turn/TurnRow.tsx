@@ -353,7 +353,9 @@ export const TurnRow = memo(
 						/>
 						<Button
 							type="button"
-							className="turn-row-action-btn inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+							variant="ghost"
+							size="icon-sm"
+							className="turn-row-action-btn size-7 rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground"
 							onClick={props.onEnterMultiSelect}
 							title={t("app.multiSelectEnter")}
 						>
@@ -366,7 +368,9 @@ export const TurnRow = memo(
 									{props.onEditMessage && (
 										<Button
 											type="button"
-											className="turn-row-action-btn inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+											variant="ghost"
+											size="icon-sm"
+											className="turn-row-action-btn size-7 rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground"
 											onClick={startEditing}
 											title={t("common.edit")}
 										>
@@ -376,7 +380,9 @@ export const TurnRow = memo(
 									{props.onDeleteMessage && (
 										<Button
 											type="button"
-											className="turn-row-action-btn inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+											variant="ghost"
+											size="icon-sm"
+											className="turn-row-action-btn size-7 rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground"
 											onClick={deleteMessage}
 											title={t("common.delete")}
 										>

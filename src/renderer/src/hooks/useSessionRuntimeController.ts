@@ -1,21 +1,24 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useAtomValue } from "jotai";
 import { selectAtom } from "jotai/utils";
 import type { AgentTab, SessionRecord, SessionRuntimeTarget } from "../../../shared/types";
 import {
-  currentSessionAtom,
   currentSessionIdAtom,
   currentSessionRuntimeAtom,
-  currentSessionRuntimeUiAtom,
   sessionRecordsAtom,
   sessionRuntimeUiByIdAtom,
 } from "../atoms/session-atoms";
-import { currentSessionSendStateAtom } from "../atoms/composer-atoms";
+import {
+  sessionRecordByIdAtomFamily,
+  sessionRuntimeBySessionIdAtomFamily,
+  sessionRuntimeUiBySessionIdAtomFamily,
+} from "../atoms/session-selectors";
+import { sessionSendStateByIdAtom } from "../atoms/composer-atoms";
 import type { QueuedPrompt } from "./useQueuedPrompt";
 import { t } from "../i18n";
 import { dismissNotice, type NoticeId } from "../utils/notice";
 
-// ── narrow selector (stable unless agentId changes; streaming state updates do NOT change this) ──
+// ── narrow selector（供 App 等「当前聚焦会话 agentId」消费者）──
 
 export const activeAgentIdAtom = selectAtom(
   currentSessionRuntimeAtom,
@@ -49,6 +52,8 @@ export interface SessionRuntimeController {
 }
 
 export interface UseSessionRuntimeControllerOptions {
+  /** 绑定到指定会话；缺省则跟随 currentSessionIdAtom。 */
+  sessionId?: string;
   agents: AgentTab[];
   queueFlushBySessionRef: React.MutableRefObject<Set<string>>;
   activeQueuedPrompts: QueuedPrompt[];
@@ -58,10 +63,17 @@ export interface UseSessionRuntimeControllerOptions {
   showNotice: (message: string, duration?: number, kind?: "info" | "warning" | "error") => NoticeId | undefined;
 }
 
+const idleSendState = { status: "idle" as const };
+
+/**
+ * 会话 runtime 视图模型：始终按 sessionId 订阅 family，
+ * 避免分屏时非聚焦栏被「另一栏的 current* 流式更新」牵连重渲染。
+ */
 export function useSessionRuntimeController(
   options: UseSessionRuntimeControllerOptions,
 ): SessionRuntimeController {
   const {
+    sessionId: boundSessionIdOption,
     agents,
     queueFlushBySessionRef,
     activeQueuedPrompts,
@@ -71,30 +83,46 @@ export function useSessionRuntimeController(
     showNotice,
   } = options;
 
-  const currentSessionId = useAtomValue(currentSessionIdAtom);
-  const currentSession = useAtomValue(currentSessionAtom);
-  const currentSessionRuntime = useAtomValue(currentSessionRuntimeAtom);
-  const currentSessionRuntimeUi = useAtomValue(currentSessionRuntimeUiAtom);
+  const focusedSessionId = useAtomValue(currentSessionIdAtom);
+  const currentSessionId = boundSessionIdOption ?? focusedSessionId;
+  const isFocusedPane = currentSessionId === focusedSessionId;
+  const sessionKey = currentSessionId ?? "";
+
+  const recordAtom = useMemo(() => sessionRecordByIdAtomFamily(sessionKey), [sessionKey]);
+  const runtimeAtom = useMemo(() => sessionRuntimeBySessionIdAtomFamily(sessionKey), [sessionKey]);
+  const runtimeUiAtom = useMemo(() => sessionRuntimeUiBySessionIdAtomFamily(sessionKey), [sessionKey]);
+  const sendAtom = useMemo(
+    () =>
+      selectAtom(
+        sessionSendStateByIdAtom,
+        (states) => (sessionKey ? (states[sessionKey] ?? idleSendState) : idleSendState),
+        Object.is,
+      ),
+    [sessionKey],
+  );
+
+  const currentSession = useAtomValue(recordAtom);
+  const currentSessionRuntime = useAtomValue(runtimeAtom);
+  const currentSessionRuntimeUi = useAtomValue(runtimeUiAtom);
+  const currentSessionSendState = useAtomValue(sendAtom);
+
   const sessionRuntimeUiById = useAtomValue(sessionRuntimeUiByIdAtom);
   const sessionRecords = useAtomValue(sessionRecordsAtom);
-  const currentSessionSendState = useAtomValue(currentSessionSendStateAtom);
-  const activeAgentId = useAtomValue(activeAgentIdAtom);
-	const runtimeTarget = currentSessionId && currentSessionRuntime?.agentId
-		? {
-			sessionId: currentSessionId,
-			agentId: currentSessionRuntime.agentId,
-			runtimeGeneration: currentSessionRuntime.runtimeGeneration,
-		}
-		: undefined;
+
+  const activeAgentId = currentSessionRuntime?.agentId;
+  const runtimeTarget =
+    currentSessionId && currentSessionRuntime?.agentId
+      ? {
+          sessionId: currentSessionId,
+          agentId: currentSessionRuntime.agentId,
+          runtimeGeneration: currentSessionRuntime.runtimeGeneration,
+        }
+      : undefined;
   const activeAgent = activeAgentId
     ? agents.find((a) => a.id === activeAgentId)
     : undefined;
 
-  // The renderer-only Chat bootstrap ID has no Catalog record until first send,
-  // yet it must render the empty surface and composer without an Agent.
   const hasActiveConversation = Boolean(currentSessionId);
-
-  // ── runtime state (declared early, used by isAgentBusy) ──
 
   const activeRuntimeState: RuntimeStateLike | undefined = currentSessionId
     ? ((currentSessionRuntime?.state as RuntimeStateLike | undefined) ??
@@ -133,9 +161,6 @@ export function useSessionRuntimeController(
       : undefined;
 
   const canMutateActiveMessages = Boolean(currentSessionLiveAgentId);
-
-  // ── SessionView shortcuts ──
-
   const canStopSession = activeAgent?.status === "running";
 
   const canRestartSession = Boolean(
@@ -151,18 +176,15 @@ export function useSessionRuntimeController(
   );
 
   const isRestartingThisAgent = restartingAgentId === activeAgentId;
-
   const sessionDuration = activeAgentId
     ? sessionDurationByAgent[activeAgentId]
     : undefined;
-
   const sessionHasProject = Boolean(activeProjectId);
-
-  // ── UI notification effect ──
 
   const lastNoticeRef = useRef("");
   const notifiedBackgroundAskRef = useRef<Set<string>>(new Set());
   const backgroundAskNoticeIdsRef = useRef<Map<string, NoticeId>>(new Map());
+
   useEffect(() => {
     const notification = currentSessionRuntimeUi?.notification;
     if (!currentSessionId || !notification) return;
@@ -177,9 +199,10 @@ export function useSessionRuntimeController(
   }, [currentSessionId, currentSessionRuntimeUi, showNotice]);
 
   useEffect(() => {
+    if (!isFocusedPane) return;
     const activeBackgroundKeys = new Set<string>();
     for (const [sessionId, runtimeUi] of Object.entries(sessionRuntimeUiById)) {
-      if (sessionId === currentSessionId) continue;
+      if (sessionId === focusedSessionId) continue;
       const pendingAsk = Object.values(runtimeUi.requests).find(({ request, status }) =>
         (status === "pending" || status === "responding") &&
         ["select", "confirm", "input", "editor", "batch_ask"].includes(request.method),
@@ -190,7 +213,6 @@ export function useSessionRuntimeController(
       activeBackgroundKeys.add(key);
       if (notifiedBackgroundAskRef.current.has(key)) continue;
       notifiedBackgroundAskRef.current.add(key);
-      // Ask 属于阻塞式交互，只有请求完成或取消后才关闭对应的持久 toast。
       const title = sessionRecords[sessionId]?.title?.trim() || pendingAsk.request.title || t("ask.defaultTitle");
       const noticeId = showNotice(t("ask.backgroundPending", { title }), Number.POSITIVE_INFINITY, "warning");
       if (noticeId !== undefined) backgroundAskNoticeIdsRef.current.set(key, noticeId);
@@ -203,13 +225,12 @@ export function useSessionRuntimeController(
       notifiedBackgroundAskRef.current.delete(key);
     }
 
-    // 限制长期运行时的去重集合，避免大量历史会话累积内存。
     if (notifiedBackgroundAskRef.current.size > 200) {
       notifiedBackgroundAskRef.current = new Set(
         Array.from(notifiedBackgroundAskRef.current).slice(-100),
       );
     }
-  }, [currentSessionId, sessionRecords, sessionRuntimeUiById, showNotice]);
+  }, [focusedSessionId, isFocusedPane, sessionRecords, sessionRuntimeUiById, showNotice]);
 
   return {
     currentSessionId,

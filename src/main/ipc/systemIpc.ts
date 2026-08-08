@@ -497,12 +497,36 @@ export function registerSystemIpc(deps: SystemIpcDeps): void {
 		if (!win || win.isDestroyed()) return;
 		win.minimize();
 	});
+	/** 同一窗口只挂一次 maximize 监听，支持创建后/重建后首次查询时补绑。 */
+	const wiredMaximizeWindows = new WeakSet<Electron.BrowserWindow>();
+	const wireMaximizeEvents = (win: Electron.BrowserWindow) => {
+		if (wiredMaximizeWindows.has(win)) return;
+		wiredMaximizeWindows.add(win);
+		const emitMaximized = () => {
+			if (win.isDestroyed()) return;
+			win.webContents.send(ipcChannels.appWindowMaximizedChanged, win.isMaximized());
+		};
+		win.on("maximize", emitMaximized);
+		win.on("unmaximize", emitMaximized);
+	};
 	ipcMain.handle(ipcChannels.appWindowToggleMaximize, () => {
 		const win = getMainWindow();
-		if (!win || win.isDestroyed()) return;
+		if (!win || win.isDestroyed()) return false;
+		wireMaximizeEvents(win);
 		if (win.isMaximized()) win.unmaximize();
 		else win.maximize();
+		return win.isMaximized();
 	});
+	ipcMain.handle(ipcChannels.appWindowIsMaximized, () => {
+		const win = getMainWindow();
+		if (!win || win.isDestroyed()) return false;
+		wireMaximizeEvents(win);
+		return win.isMaximized();
+	});
+	{
+		const win = getMainWindow();
+		if (win && !win.isDestroyed()) wireMaximizeEvents(win);
+	}
 	ipcMain.handle(ipcChannels.appWindowToggleAlwaysOnTop, () => {
 		const win = getMainWindow();
 		if (!win || win.isDestroyed()) return false;

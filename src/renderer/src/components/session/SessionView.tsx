@@ -38,6 +38,10 @@ export type SessionViewProps = {
   sessionTitle: string;
   sessionTabs: Omit<SessionTabsBarProps, "actions">;
   sessionTimeline: SessionTimelineController;
+  /** full=Tab+Header；pane=仅 Header（分屏栏） */
+  chrome?: "full" | "pane";
+  focused?: boolean;
+  onFocusPane?: () => void;
   activeAgentId?: string;
   activeAgent?: {
     compactionCount?: number;
@@ -128,6 +132,9 @@ export function SessionView({
   sessionTitle,
   sessionTabs,
   sessionTimeline,
+  chrome = "full",
+  focused = true,
+  onFocusPane,
   activeAgentId,
   activeAgent,
   activeRuntimeState,
@@ -431,8 +438,15 @@ export function SessionView({
   }, [terminalPanelVisible, terminalOpen]);
 
   return (
-    <>
-      {/* 会话状态/操作区以 embedded 模式嵌入 Tab 栏右侧，不再单独占一行 */}
+    <div
+      className={
+        chrome === "pane"
+          ? `session-split-pane flex h-full min-h-0 flex-col${focused ? " session-split-pane-focused" : ""}`
+          : "contents"
+      }
+      onMouseDown={chrome === "pane" ? () => onFocusPane?.() : undefined}
+    >
+      {chrome === "full" ? (
       <SessionTabsBar
         {...sessionTabs}
         actions={
@@ -462,6 +476,31 @@ export function SessionView({
           />
         }
       />
+      ) : (
+      <SessionHeader
+        headerRef={chatHeaderRef}
+        comboRef={sessionComboRef}
+        title={sessionTitle}
+        compactionCount={activeAgent?.compactionCount}
+        isAnonymous={activeAgent?.noSession}
+        runtimeState={activeRuntimeState}
+        duration={sessionDuration}
+        isStarting={isAgentStarting}
+        hasProject={hasProject}
+        hasSession={Boolean(activeAgentId || sessionId)}
+        menuOpen={sessionActionsOpen}
+        canStop={canStop}
+        canRestart={canRestart}
+        isRestarting={isRestarting}
+        showRestart={showRestart}
+        onTrigger={onHeaderTrigger}
+        onStop={onStop}
+        onRestart={onRestart}
+        onToggleDrawer={onToggleDrawer}
+        drawerOpen={drawerOpen}
+        widgetChips={<SessionWidgetChips sessionId={sessionId} />}
+      />
+      )}
       {/* 分支导航条：仅当当前会话存在 fork 分支关系（父/兄弟/子分支）时显示 */}
       <SessionBranchBar sessionId={sessionId} onOpenSession={onOpenBranchSession} />
       <ResizablePanelGroup
@@ -588,6 +627,6 @@ export function SessionView({
           </>
         )}
       </ResizablePanelGroup>
-    </>
+    </div>
   );
 }

@@ -245,7 +245,7 @@ assert.doesNotMatch(twistie, /ChevronDown|ChevronRight|GitBranch|GitCommit|GitCo
     assert.match(app, /api\.git\.commitFileDiff/);
     assert.match(app, /setGitDrawerDiff\(\{/);
     assert.match(app, /label: `\$\{diff\.path\.split[\s\S]*?\$\{commit\.shortHash\}/);
-    assert.match(app, /<FileDiffViewer[\s\S]*?displayMode="drawer"[\s\S]*?gitDrawerDiff\.originalContent/);
+    assert.match(app, /WorkbenchContent/);
     assert.match(preload, /gitCommitFileDiff/);
     assert.match(gitIpc, /gitCommitFileDiff/);
     assert.match(gitService, /async getCommitFileDiff/);
@@ -256,7 +256,7 @@ assert.doesNotMatch(twistie, /ChevronDown|ChevronRight|GitBranch|GitCommit|GitCo
     assert.match(graph, /focus-visible:shadow-\[inset_var\(--focus-ring\)\]/);
   });
 
-  test("opens workspace resources lazily without replacing the Git drawer", () => {
+  test("opens workspace resources into the middle workbench without drawer overlays", () => {
     assert.match(resourceTree, /focus-visible:shadow-\[inset_var\(--focus-ring\)\]/);
     assert.match(resourceTree, /onOpenWorkspaceFileDiff\(props\.groupType, r\.path\)/);
     assert.match(panel, /groupType="merge"/);
@@ -268,10 +268,8 @@ assert.doesNotMatch(twistie, /ChevronDown|ChevronRight|GitBranch|GitCommit|GitCo
     assert.match(app, /setGitDrawerDiff\(\{[\s\S]*?projectId,[\s\S]*?filePath: diff\.path/);
     assert.match(app, /className="git-drawer-stack"/);
     assert.match(app, /className="git-drawer-source"/);
-    assert.match(app, /className="git-drawer-detail"/);
+    assert.doesNotMatch(app, /className="git-drawer-detail"/);
     assert.match(app, /setGitDrawerDiff\(null\)/);
-    const commitOpen = app.match(/async function openCommitFileDiff[\s\S]*?async function refreshSessionHistory/)?.[0] ?? "";
-    assert.doesNotMatch(commitOpen, /setDrawer\(null\)/);
     assert.match(preload, /workspaceFileDiff:/);
     assert.match(gitIpc, /gitWorkspaceFileDiff/);
     assert.match(gitService, /async getWorkspaceFileDiff/);
@@ -282,15 +280,19 @@ assert.doesNotMatch(twistie, /ChevronDown|ChevronRight|GitBranch|GitCommit|GitCo
     assert.match(i18n, /"git\.openWorkspaceDiff"/);
   });
 
-  test("fills the Git detail drawer and reuses FileDiffViewer for real modal expansion", () => {
+  test("hosts Git Diff in the middle workbench with split/maximize toggle", () => {
     assert.match(styles, /\.file-diff-viewer\s*\{[\s\S]*?flex:\s*1 1 auto;[\s\S]*?width:\s*100%/);
-    assert.match(styles, /\.git-drawer-detail > \.file-diff-viewer\s*\{[\s\S]*?flex:\s*1 1 100%;[\s\S]*?width:\s*100%/);
-    assert.match(app, /const \[gitDiffDisplayMode, setGitDiffDisplayMode\] = useState<"modal" \| "drawer">\("drawer"\)/);
+    assert.match(app, /useState<WorkspaceContentOpenMode>/);
     assert.match(app, /const toggleGitDiffDisplayMode = useCallback/);
-    assert.match(app, /setDrawer\("git"\);[\s\S]*?setDrawerCollapsed\(false\);[\s\S]*?setGitDiffDisplayMode\("drawer"\)/);
-    assert.match(app, /editorMode === "modal" && activeTab && gitDiffDisplayMode !== "modal"/);
-    assert.match(app, /gitDiffDisplayMode === "drawer"[\s\S]*?<FileDiffViewer[\s\S]*?displayMode="drawer"[\s\S]*?onToggleMode=\{git\.toggleGitDiffDisplayMode\}/);
-    assert.match(app, /gitDiffDisplayMode === "modal"[\s\S]*?<FileDiffViewer[\s\S]*?displayMode="modal"[\s\S]*?onToggleMode=\{toggleGitDiffDisplayMode\}/);
+    assert.match(app, /setGitDiffDisplayMode\(\(mode\) => \(mode === "maximize" \? "split" : "maximize"\)\)/);
+    const workbenchContent = readFileSync(
+      "src/renderer/src/components/workspace/WorkbenchContent.tsx",
+      "utf8",
+    );
+    assert.match(workbenchContent, /displayMode=\{props\.gitDiffDisplayMode\}/);
+    assert.match(workbenchContent, /onToggleMode=\{props\.onToggleGitDiffMode\}/);
+    assert.doesNotMatch(app, /gitDiffDisplayMode === "modal"/);
+    assert.doesNotMatch(app, /gitDiffDisplayMode === "drawer"/);
   });
 
   test("keeps only the newest Git diff request and invalidates pending work on every close", () => {

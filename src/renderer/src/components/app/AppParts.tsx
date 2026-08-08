@@ -456,9 +456,9 @@ export { PiLogoCanvas } from "./PiLogoCanvas";
 /** Brand lockup: PiLogoCanvas + wordmark（pure official 中性字重/间距） */
 export function BrandLockup(props: { replayToken?: number } = {}) {
 	return (
-		<div className="brand-lockup flex h-9 min-w-0 items-center gap-2.5" aria-label="PiDeck">
-			<PiLogoCanvas size={28} autoPlay playOnClick replayToken={props.replayToken} />
-			<span className="brand-wordmark truncate text-[15px] font-semibold tracking-tight text-foreground" aria-hidden="true">PiDeck</span>
+		<div className="brand-lockup flex h-8 min-w-0 items-center gap-2" aria-label="PiDeck">
+			<PiLogoCanvas size={24} autoPlay playOnClick replayToken={props.replayToken} />
+			<span className="brand-wordmark truncate text-[14px] font-semibold tracking-tight text-foreground" aria-hidden="true">PiDeck</span>
 		</div>
 	);
 }

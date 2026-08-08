@@ -109,7 +109,7 @@ import type {
 	Project,
 	SessionSummary,
 } from "../../../../shared/types";
-import { parseRichInputChips, type RichInputChip } from "../app/RichInput";
+import { parseRichInputChips } from "./composer/chips";
 import removeMarkdown from "remove-markdown";
 /** 复用 petdex 标准网格规格，在主设置面板里为宠物选择器渲染单格动画预览 */
 import { GRID_COLS, CELL_W, CELL_H, MODE_ROW, MODE_FRAMES } from "../../pet/PetSpriteSheet";
@@ -131,11 +131,10 @@ import { MultiSelectModal } from "./MessageShareModal";
 // 从 AppParts.tsx 提取，包含所有会话渲染组件
 //
 // Button 收口状态（P0 UI 统一）：
-// - 已换装 shadcn Button：turn-row-action-btn / user-turn-action-btn 9 个（ghost icon-sm，
-//   原 tailwind class 保留，tailwind-merge 合并后视觉零变化）；turn-row-edit-btn /
-//   message-edit-btn 4 个（outline sm + h-auto 反制默认高度，保留 .*-edit-btn class 作 CSS 兜底）。
+// - 已换装 shadcn Button：turn-row-action-btn / user-turn-action-btn / copy-menu-trigger
+//   （ghost + size-7 + hover:bg-muted，对齐旧透明小钮；避免 hover:bg-accent 绿底）。
 // - 保留原生 button（样式完全由自定义 CSS 驱动，直接换装会被 Tailwind utilities 覆盖默认尺寸
-//   导致回归，需先做 CSS→utility 迁移）：copy-menu-trigger、copy-menu-popover 菜单项、
+//   导致回归，需先做 CSS→utility 迁移）：copy-menu-popover 菜单项、
 //   code-copy、execution-summary-toggle/collapse、image-preview-close、outline-* 系列、
 //   scratch/terminal/files/git/editors/browser-entry、空状态创建按钮。迁移路径见 P2 CSS 收口。
 // ============================================================
@@ -486,7 +485,7 @@ export function CopyMenu(props: {
 				ref={triggerRef}
 				variant="ghost"
 				size="icon-sm"
-				className="copy-menu-trigger"
+				className="copy-menu-trigger size-7 rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground"
 				type="button"
 				onClick={toggleOpen}
 				aria-expanded={open}
@@ -802,18 +801,23 @@ export const UserBubble = memo(function UserBubble(props: {
 			<div className="user-turn-actions flex min-h-6 items-center gap-0.5 opacity-0 transition-opacity group-hover/user:opacity-100 focus-within:opacity-100">
 				<CopyMenu text={stripMarkdown(cleanText)} markdown={message.text} targetRef={rowRef} />
 				<Button
-					className="user-turn-action-btn inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+					type="button"
+					variant="ghost"
+					size="icon-sm"
+					className="user-turn-action-btn size-7 rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground"
 					onClick={props.onEnterMultiSelect}
 					title={t("app.multiSelectEnter")}
-						>
-							<Share size={14} />
-						</Button>
+				>
+					<Share size={14} />
+				</Button>
 				{!editing && !props.agentRunning && (
 					<>
 						{canFork && (
 							<Button
 								type="button"
-								className="user-turn-action-btn inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+								variant="ghost"
+								size="icon-sm"
+								className="user-turn-action-btn size-7 rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground"
 								disabled={props.forking}
 								onClick={() => props.onForkMessage?.(message)}
 								title={t("app.forkFromMessageTitle")}
@@ -823,15 +827,25 @@ export const UserBubble = memo(function UserBubble(props: {
 							</Button>
 						)}
 						{props.onEditMessage && (
-							<Button className="user-turn-action-btn inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground" onClick={() => {
-								setEditText(cleanText);
-								setEditing(true);
-							}} title={t("common.edit")}>
+							<Button
+								type="button"
+								variant="ghost"
+								size="icon-sm"
+								className="user-turn-action-btn size-7 rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+								onClick={() => {
+									setEditText(cleanText);
+									setEditing(true);
+								}}
+								title={t("common.edit")}
+							>
 								<SquarePen size={14} />
 							</Button>
 						)}
 						<Button
-							className="user-turn-action-btn inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+							type="button"
+							variant="ghost"
+							size="icon-sm"
+							className="user-turn-action-btn size-7 rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground"
 							onClick={handleEditAndResend}
 							title={t("app.editAndResendTitle")}
 						>
@@ -839,7 +853,10 @@ export const UserBubble = memo(function UserBubble(props: {
 						</Button>
 						{props.onDeleteMessage && (
 							<Button
-								className="user-turn-action-btn inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+								type="button"
+								variant="ghost"
+								size="icon-sm"
+								className="user-turn-action-btn size-7 rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground"
 								onClick={() => props.onDeleteMessage?.(message.id)}
 								title={t("common.delete")}
 							>
@@ -848,7 +865,10 @@ export const UserBubble = memo(function UserBubble(props: {
 						)}
 						{((props.isLastUserMessage || props.showResendButton) && props.onResendUserMessage) && (
 							<Button
-								className="user-turn-action-btn inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+								type="button"
+								variant="ghost"
+								size="icon-sm"
+								className="user-turn-action-btn size-7 rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground"
 								onClick={() => props.onResendUserMessage?.(message)}
 								title={t("app.resendTitle")}
 							>

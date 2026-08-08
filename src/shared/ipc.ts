@@ -191,6 +191,9 @@ export const ipcChannels = {
 
 	appWindowMinimize: "app:window-minimize",
 	appWindowToggleMaximize: "app:window-toggle-maximize",
+	appWindowIsMaximized: "app:window-is-maximized",
+	/** 主进程 → 渲染：最大化状态变化（含双击标题栏等非按钮路径） */
+	appWindowMaximizedChanged: "app:window-maximized-changed",
 	appWindowToggleAlwaysOnTop: "app:window-toggle-always-on-top",
 	appWindowClose: "app:window-close",
 	agentsRuntimeState: "agents:runtime-state",

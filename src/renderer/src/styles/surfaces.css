@@ -4275,6 +4275,125 @@ div.fixed.inset-0.z-50 {
   overflow: hidden;
 }
 
+.workbench-stage {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+/* solo：session 可能是 Fragment（Tab 栏 + 空态/会话），子节点会直接挂到本容器。
+   禁止给每个子项 height:100%——否则空 Tab 栏与 EmptyState 同时抢满高，中间栏整列错位。 */
+.workbench-stage-solo > .session-tabs-bar {
+  flex: 0 0 auto;
+}
+.workbench-stage-solo > *:not(.session-tabs-bar) {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.workbench-stage-split {
+  /* Group 本身吃满 chat-pane；方向由库 inline style 控制 */
+  flex: 1 1 auto !important;
+}
+.workbench-session-pane,
+.workbench-content-pane {
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+.workbench-session-pane > * {
+  height: 100%;
+  min-height: 0;
+}
+.workbench-content-frame {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  width: 100%;
+  overflow: hidden;
+  background: var(--color-bg-panel);
+}
+.workbench-content-frame-horizontal {
+  border-left: 1px solid var(--color-border-subtle);
+}
+.workbench-content-frame-vertical {
+  border-top: 1px solid var(--color-border-subtle);
+}
+.workbench-content-frame > .file-diff-viewer {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.workbench-content-pane > div,
+.workbench-content-pane .file-diff-viewer {
+  height: 100%;
+  min-height: 0;
+}
+
+/* 会话 Tab 拖到边缘分屏：落点预览 + 双栏舞台 */
+.session-split-stage {
+  position: relative;
+}
+.session-split-group {
+  flex: 1 1 auto !important;
+  min-height: 0;
+}
+.session-split-panel > * {
+  height: 100%;
+  min-height: 0;
+}
+.session-split-pane {
+  border: 1px solid transparent;
+  background: var(--color-bg-panel);
+}
+.session-split-pane-focused {
+  border-color: color-mix(in srgb, var(--color-accent) 55%, transparent);
+}
+.session-split-drop-preview {
+  pointer-events: none;
+  position: absolute;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--color-accent) 22%, transparent);
+  border: 1px dashed color-mix(in srgb, var(--color-accent) 70%, transparent);
+  border-radius: var(--radius-md);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 35%, transparent);
+  transition: inset 80ms ease-out, opacity 80ms ease-out;
+}
+.session-split-drop-preview-left {
+  inset: 8px auto 8px 8px;
+  width: calc(50% - 12px);
+}
+.session-split-drop-preview-right {
+  inset: 8px 8px 8px auto;
+  width: calc(50% - 12px);
+}
+.session-split-drop-preview-top {
+  inset: 8px 8px auto 8px;
+  height: calc(50% - 12px);
+}
+.session-split-drop-preview-bottom {
+  inset: auto 8px 8px 8px;
+  height: calc(50% - 12px);
+}
+.session-split-drop-label {
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-bg-panel) 88%, transparent);
+  color: var(--color-text-primary);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  box-shadow: var(--shadow-sm);
+}
+
 .file-diff-viewer {
   display: flex;
   flex: 1 1 auto;

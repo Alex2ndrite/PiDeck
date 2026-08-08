@@ -824,7 +824,11 @@ const api = {
 		minimizeWindow: () =>
 			ipcRenderer.invoke(ipcChannels.appWindowMinimize) as Promise<void>,
 		toggleMaximizeWindow: () =>
-			ipcRenderer.invoke(ipcChannels.appWindowToggleMaximize) as Promise<void>,
+			ipcRenderer.invoke(ipcChannels.appWindowToggleMaximize) as Promise<boolean>,
+		isWindowMaximized: () =>
+			ipcRenderer.invoke(ipcChannels.appWindowIsMaximized) as Promise<boolean>,
+		onWindowMaximizedChange: (callback: (maximized: boolean) => void) =>
+			subscribe(ipcChannels.appWindowMaximizedChanged, callback),
 		toggleAlwaysOnTopWindow: () =>
 			ipcRenderer.invoke(
 				ipcChannels.appWindowToggleAlwaysOnTop,
