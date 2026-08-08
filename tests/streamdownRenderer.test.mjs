@@ -113,3 +113,31 @@ test("static markdown scenes share the Streamdown engine", () => {
   assert.match(scratchPad, /rehypeHighlightMark/);
   assert.match(scratchPad, /remarkBreaks/);
 });
+
+test("streaming overlong guard: plain-text fallback above STREAM_LIGHT_MAX_CHARS", () => {
+  const stream = readFileSync("src/renderer/src/components/session/MarkdownStream.tsx", "utf8");
+  // 阈值常量导出（字符数）：marked 解析随文本线性涨，超长时流式回退纯文本
+  assert.match(stream, /export const STREAM_LIGHT_MAX_CHARS = 40_000/);
+  assert.match(stream, /streamPlain =\s*\n?\s*isStreamingNow && displayText\.length > STREAM_LIGHT_MAX_CHARS/);
+  // 回退节点：纯文本 + pre-wrap（排版由容器 markdown-body 接管）
+  assert.match(stream, /whitespace-pre-wrap break-words/);
+  // 回退必须发生在 Streamdown 之外（不建解析树），且依赖链含 streamPlain
+  assert.match(stream, /streamPlain \? \(/);
+  assert.match(stream, /streamPlain,\n\s*components,/);
+  // 超长兜底对思考同样生效（ThinkingBlock 走同一 MarkdownStream），无需额外开关
+  const thinking = readFileSync("src/renderer/src/components/session/TimelineEventCards.tsx", "utf8");
+  assert.match(thinking, /<MarkdownStream/);
+  // 流式轻渲染契约不回退：static 模式 + 流式精简插件仍是默认
+  assert.match(stream, /mode="static"/);
+  assert.match(stream, /resolvedRemarkPlugins = isStreamingNow\s*\n\s*\?\s*\[\]/);
+});
+
+test("AnswerOutput live path renders through MarkdownStream (no dual typewriter)", () => {
+  const answer = readFileSync("src/renderer/src/components/session/AnswerOutput.tsx", "utf8");
+  // live 分支把打字机/超长兜底委托给 MarkdownStream，不自持 useSmoothStream
+  assert.match(answer, /<MarkdownStream/);
+  assert.doesNotMatch(answer, /from "\.\.\/\.\.\/utils\/useSmoothStream"/);
+  // live 容器保留 e2e typewriter 选择器锚点
+  assert.match(answer, /execution-interim markdown-body/);
+  assert.match(answer, /data-is-streaming=\{props\.isStreaming \? "1" : "0"\}/);
+});
