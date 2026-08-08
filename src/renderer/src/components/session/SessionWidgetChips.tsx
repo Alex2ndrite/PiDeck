@@ -1,6 +1,6 @@
 import { useAtomValue } from "jotai";
 import { useState } from "react";
-import { ClipboardList, ListChecks } from "lucide-react";
+import { ClipboardList, ListChecks, X } from "lucide-react";
 import {
 	sessionRuntimeBySessionIdAtomFamily,
 	sessionRuntimeUiBySessionIdAtomFamily,
@@ -17,7 +17,8 @@ import {
 	type RuntimeHandle,
 } from "./ComposerRuntimeIntegrations";
 import { widgetDisplayTitle } from "./ComposerComponents";
-import { AgentTodoList, parseAgentTodoItems } from "./AgentTodoList";
+import { TodoList } from "../agents/todo-list";
+import { parseAgentTodoItems } from "./agentTodoParser";
 
 /**
  * 会话头部左侧的扩展 widget 入口（Todo / Plan 进度）。
@@ -187,13 +188,27 @@ function WidgetChip(props: {
 				</Button>
 			</PopoverTrigger>
 			<PopoverContent align="start" side="bottom" className="w-[min(40rem,calc(100vw-2rem))] p-0">
-				<AgentTodoList
+				{/* 官方 BeUI TodoList 不接受 dismiss 语义（避免改动官方结构），
+				    关闭按钮作为宿主层放在列表外部右上角，语义仍是「永久关闭该 widget」。 */}
+				<div className="flex h-8 shrink-0 items-center justify-end pr-1.5">
+					<Button
+						type="button"
+						variant="ghost"
+						size="icon-xs"
+						onClick={props.onDismiss}
+						title={t("common.close")}
+						aria-label={t("common.close")}
+						className="rounded-md text-muted-foreground hover:text-foreground"
+					>
+						<X className="size-3.5" aria-hidden="true" />
+					</Button>
+				</div>
+				<TodoList
 					title={title}
 					items={parseAgentTodoItems(props.lines)}
 					defaultOpen
 					collapseOnComplete
 					maxHeight={320}
-					onDismiss={props.onDismiss}
 				/>
 			</PopoverContent>
 		</Popover>

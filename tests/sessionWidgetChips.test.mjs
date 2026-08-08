@@ -30,6 +30,7 @@ function compile(filePath, stubs = {}) {
 
 const chipsPath = "src/renderer/src/components/session/SessionWidgetChips.tsx";
 const chipsSource = () => readFileSync(chipsPath, "utf8");
+const parserSource = () => readFileSync("src/renderer/src/components/session/agentTodoParser.ts", "utf8");
 
 function loadChipsHelpers() {
   return compile(chipsPath, {
@@ -125,4 +126,24 @@ test("widget chips render in the chat header left slot, not the composer", () =>
   assert.doesNotMatch(runtime, /widgets: ReactNode/);
   const area = readFileSync("src/renderer/src/components/session/ComposerArea.tsx", "utf8");
   assert.doesNotMatch(area, /\{widgets\}/);
+});
+
+test("chip popover uses the official BeUI TodoList with mapping, not a local imitation", () => {
+  // 官方组件从 agents/todo-list 引入，widget 行→TodoItem 映射走独立 parser 模块
+  assert.match(chipsSource(), /import \{ TodoList \} from "\.\.\/agents\/todo-list";/);
+  assert.match(chipsSource(), /import \{ parseAgentTodoItems \} from "\.\/agentTodoParser";/);
+  assert.match(parserSource(), /export function parseAgentTodoItems/);
+  // 官方行为开关照常传递
+  assert.match(chipsSource(), /collapseOnComplete/);
+  assert.match(chipsSource(), /maxHeight=\{320\}/);
+  assert.match(chipsSource(), /defaultOpen/);
+  assert.match(chipsSource(), /w-\[min\(40rem,calc\(100vw-2rem\)\)\]/);
+  // 官方 TodoList 不接受 onDismiss：关闭按钮作为宿主层放在列表外部，官方结构不被改动
+  assert.doesNotMatch(chipsSource(), /<TodoList[\s\S]*?onDismiss/);
+  assert.match(chipsSource(), /variant="ghost"/);
+  assert.match(chipsSource(), /t\("common\.close"\)/);
+  // 旧的本地仿制组件已删除，不再残留于 session 目录
+  assert.throws(() =>
+    readFileSync("src/renderer/src/components/session/AgentTodoList.tsx"),
+  );
 });

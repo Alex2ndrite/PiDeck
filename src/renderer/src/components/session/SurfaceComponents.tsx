@@ -373,13 +373,13 @@ export function EmptyState(props: {
 	return (
 		// Editorial 空态：左对齐章节式排版而非居中对话框，品牌感由衬线斜体的重音词承担。
 		// 重音词固定用拉丁词（zh「Session」/ en「session」）：内置艺术字 Plantin 仅有拉丁字形，
-		// 中文会回退系统宋体破坏质感，拉丁词才能保证 PiDeckPlantin 斜体真正生效。
-		// pb-[8vh]：几何居中在光学上偏低，内容整体上移后重心落在视觉中心。
+		// 居中策略：几何居中（justify-center）后用户反馈标题区仍略偏上——
+		// 补 pt-[10vh] 让内容块整体下移，标题重心落到窗口光学中心。
 		<div
 			className="empty-state relative h-full min-h-0 overflow-hidden bg-background px-6 text-left"
 			data-empty-state={props.hasProject ? "project" : "no-project"}
 		>
-			<div className="mx-auto flex h-full w-full max-w-2xl animate-in flex-col justify-center pb-[8vh] duration-500 fade-in">
+			<div className="mx-auto flex h-full w-full max-w-2xl animate-in flex-col justify-center pt-[10vh] duration-500 fade-in">
 				{/* 章节页眉：发丝线 + 项目上下文，建立编辑排版的节奏起点 */}
 				<div className="flex items-center gap-4 text-[13px] text-text-secondary">
 					<span className="h-px flex-1 bg-border-subtle" aria-hidden="true"></span>
@@ -390,7 +390,8 @@ export function EmptyState(props: {
 						<>
 							{t("app.emptyProjectTitleLead")}<br />
 							<span className="font-brand font-medium italic">{t("app.emptyProjectTitleAccent")}</span>
-							<span className="text-text-tertiary">{t("app.emptyProjectTitlePunct")}</span>
+							{/* 句号用前景色（黑/白实心）而非灰：作为标题的落点强调，视觉上更扎实 */}
+							<span className="text-foreground">{t("app.emptyProjectTitlePunct")}</span>
 						</>
 					) : (
 						t("app.emptyNoProjectTitle")
