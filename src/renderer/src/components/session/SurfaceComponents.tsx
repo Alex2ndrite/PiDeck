@@ -218,6 +218,16 @@ export function SessionStatus(props: {
 			value: `${averageCacheHit.toFixed(1)}% (${averageCacheHitSampleCount} ${t("ctx.detail.snapshots")})`,
 		});
 	}
+	// 最近一次回复的性能指标（主进程流式计时）：首 token 延迟 / 总耗时 / 生成速度
+	if (state.ttftMs != null) {
+		detailRows.push({ label: t("ctx.detail.ttft"), value: formatDuration(state.ttftMs) });
+	}
+	if (state.totalMs != null) {
+		detailRows.push({ label: t("ctx.detail.total"), value: formatDuration(state.totalMs) });
+	}
+	if (state.tps != null) {
+		detailRows.push({ label: t("ctx.detail.tps"), value: `${state.tps.toFixed(0)} tok/s` });
+	}
 	if (state.cost != null) {
 		detailRows.push({ label: t("ctx.detail.cost"), value: `$${state.cost.toFixed(3)}`, emphasis: true });
 		detailRows.push({ label: t("ctx.detail.costCny"), value: cnyAmount ?? "-", emphasis: true });

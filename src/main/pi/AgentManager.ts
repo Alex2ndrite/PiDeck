@@ -208,6 +208,22 @@ export class AgentManager {
 	 * 再由 agent_start 推进 generation 放行，防止残留 thinking/text delta 串台。
 	 */
 	private readonly streamGates = new Map<string, StreamGateState>();
+
+	/**
+	 * 流式性能计时：message_start/start 起表，首个 text/thinking delta 记 firstDeltaAt，
+	 * message_end/done/error 结算。用于计算首 token 延迟（TTFT）、总耗时与生成速度（TPS）。
+	 * pi 不暴露耗时字段，只能由本地事件时间戳推算。
+	 */
+	private readonly messagePerfByAgent = new Map<
+		string,
+		{ startedAt: number; firstDeltaAt: number }
+	>();
+
+	/** 最近一次 assistant 回复的性能指标（结算后保留，供 getRuntimeState 合并展示）。 */
+	private readonly lastPerfByAgent = new Map<
+		string,
+		{ ttftMs?: number; totalMs: number; tps?: number; at: number }
+	>();
 	/** abort 后等待 agent_settled 的超时定时器；避免 pi 漏发 settled 导致永久封印。 */
 	private readonly abortSettledFallbackTimers = new Map<string, NodeJS.Timeout>();
 	/** abort settled 兜底超时：覆盖多数管道残留，同时不让“立刻重发”永久卡死。 */
@@ -1546,6 +1562,7 @@ export class AgentManager {
 		directCacheHitPercent ?? fileHitStats.latest,
 	);
 	const cacheHitAveragePercent = clampPercent(fileHitStats.average);
+	const perf = this.lastPerfByAgent.get(agentId);
 	return {
 		modelName: model?.name ?? model?.id,
 		provider: model?.provider,
@@ -1575,6 +1592,11 @@ export class AgentManager {
 		cacheHitAveragePercent,
 		cacheHitSampleCount: fileHitStats.sampleCount,
 		cost: stats?.cost,
+		// 最近一次回复性能指标：本地结算缓存（不经 RPC），会话切换/轮询时保持可用
+		ttftMs: perf?.ttftMs,
+		totalMs: perf?.totalMs,
+		tps: perf?.tps,
+		perfAt: perf?.at,
 	};
 	}
 
@@ -3159,6 +3181,8 @@ export class AgentManager {
 		if (eventType === "start" || eventType === "message_start") {
 			this.beginAssistantMessage(agentId);
 			this.streamingAgents.add(agentId);
+			// 性能计时起表：message_start 代表本轮 LLM 回复开始生成
+			this.messagePerfByAgent.set(agentId, { startedAt: Date.now(), firstDeltaAt: 0 });
 			// 允许空正文骨架：Live 正文走独立通道，TurnRow 需要 History 挂载点。
 			this.upsertAssistantMessage(agentId, partialMessage, "", { allowEmpty: true });
 			this.flushMessageEmit(agentId);
@@ -3174,6 +3198,7 @@ export class AgentManager {
 
 		if (eventType === "text_delta") {
 			this.streamingAgents.add(agentId);
+			this.markFirstDelta(agentId);
 			const delta = String(assistantEvent.delta ?? "");
 			// Live 正文唯一热路径：累积后经 textEmitter（50ms）推送，不增长 messages。
 			const prevText = this.streamingText.get(agentId) ?? "";
@@ -3189,6 +3214,7 @@ export class AgentManager {
 
 		if (eventType === "thinking_delta") {
 			this.ensureThinkingSegment(agentId);
+			this.markFirstDelta(agentId);
 			const prev = this.streamingThinking.get(agentId) ?? "";
 			const delta = String(assistantEvent.delta ?? "");
 			const next = prev + delta;
@@ -3213,6 +3239,8 @@ export class AgentManager {
 		}
 
 		if (eventType === "message_end" || eventType === "done" || eventType === "error") {
+			// 结算性能指标（TTFT/总耗时/TPS）并边沿推送渲染层
+			this.settleMessagePerf(agentId, partialMessage);
 			// 先写入 History thinking 并 flush，再发 done 清 live。
 			this.finalizeThinkingIntoMessage(agentId, partialMessage);
 			this.upsertAssistantMessage(agentId, partialMessage);
@@ -3236,6 +3264,55 @@ export class AgentManager {
 		if (!this.activeAssistantMessageIds.has(agentId)) {
 			this.activeAssistantMessageIds.set(agentId, randomUUID());
 		}
+	}
+
+	/**
+	 * 记录首个内容 delta 时刻（text/thinking 均算首 token，用户最先感知到的是二者之一）。
+	 * 只记一次：思考切正文时 text_delta 不会覆盖已有的 firstDeltaAt。
+	 */
+	private markFirstDelta(agentId: string) {
+		const perf = this.messagePerfByAgent.get(agentId);
+		if (perf && perf.firstDeltaAt === 0) {
+			perf.firstDeltaAt = Date.now();
+		}
+	}
+
+	/**
+	 * message_end/done/error：结算本次回复的性能指标并边沿推送渲染层（不触发 RPC，
+	 * 避免流式热路径上叠加 get_state/get_session_stats 开销）。
+	 * - ttftMs = 首 delta − message_start（LLM 首 token 延迟，含流式传输）；
+	 * - totalMs = 终态 − message_start（本轮回复总耗时）；
+	 * - tps = output tokens ÷ 生成期时长（首 delta → 终态），分母排除 TTFT 更贴近真实生成速度。
+	 * 纯工具调用回合（无 text/thinking delta）只有 totalMs，ttft/tps 缺省。
+	 */
+	private settleMessagePerf(agentId: string, message?: Record<string, any>) {
+		const perf = this.messagePerfByAgent.get(agentId);
+		this.messagePerfByAgent.delete(agentId);
+		if (!perf) return;
+		const now = Date.now();
+		const totalMs = now - perf.startedAt;
+		const ttftMs =
+			perf.firstDeltaAt > 0 ? perf.firstDeltaAt - perf.startedAt : undefined;
+		// message_end 携带完整 assistant 消息，usage 兼容多种命名提取 output tokens
+		const usage = (message as any)?.usage;
+		const outputTokens = pickNumber(
+			usage?.output,
+			usage?.outputTokens,
+			usage?.completion,
+			usage?.completionTokens,
+		);
+		const tps =
+			outputTokens != null &&
+			outputTokens > 0 &&
+			perf.firstDeltaAt > 0 &&
+			now > perf.firstDeltaAt
+				? outputTokens / ((now - perf.firstDeltaAt) / 1000)
+				: undefined;
+		this.lastPerfByAgent.set(agentId, { ttftMs, totalMs, tps, at: now });
+		this.emit(ipcChannels.agentsRuntimeState, {
+			agentId,
+			state: { ttftMs, totalMs, tps, perfAt: now },
+		});
 	}
 
 	/** 首 thinking_delta：铸造与 History 相同的稳定段 id（msg-thinking-${assistantMessageId}）。 */
