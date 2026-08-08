@@ -6,7 +6,7 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
-import type { AgentTab, AgentUiResponse, ChatMessage, GitBranchInfo, ImageContent, TerminalTarget } from "../../../../shared/types";
+import type { AgentTab, AgentUiResponse, ChatMessage, GitBranchInfo, ImageContent, Project, TerminalTarget } from "../../../../shared/types";
 import type { QueuedPrompt } from "../../hooks/useQueuedPrompt";
 import type { NoticeId } from "../../utils/notice";
 
@@ -69,6 +69,8 @@ export type SessionPaneServices = {
   ) => void;
   configOpen: boolean;
   environmentDialog: boolean;
+  /** 修改内置对话区（Chat）的聊天记录保存目录（弹选择器 + 主进程写入 + 重扫会话） */
+  changeChatPath: (project: Project) => Promise<void>;
   showNotice: (
     msg: string,
     dur?: number,

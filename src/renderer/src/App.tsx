@@ -2321,6 +2321,19 @@ export function App() {
     }
   }
 
+  /**
+   * 修改内置对话区（Chat）的聊天记录保存目录：弹目录选择器 → 主进程写入
+   * chat-path.json 并广播 projects:changed → 重新扫描该项目会话列表 → toast 提示。
+   * 侧边栏菜单与聊天区头部按钮共用此实现，避免两处 IPC 调用逻辑漂移。
+   */
+  async function changeChatPath(project: Project) {
+    const picked = await api.projects.chooseChatPath();
+    if (!picked || picked === project.path) return;
+    await api.projects.setChatPath(picked);
+    await refreshProjectSessions(project.id);
+    showToast(t("app.chatProjectPathUpdated"), 1800);
+  }
+
   const sidebarActions: SidebarActions = {
     projects: {
       add: addProject,
@@ -2353,13 +2366,7 @@ export function App() {
         showToast(t("common.copied"));
       },
       remove: removeSidebarProject,
-      changeChatPath: async (project) => {
-        const picked = await api.projects.chooseChatPath();
-        if (!picked || picked === project.path) return;
-        await api.projects.setChatPath(picked);
-        await refreshProjectSessions(project.id);
-        showToast(t("app.chatProjectPathUpdated"), 1800);
-      },
+      changeChatPath,
     },
     sessions: {
       open: (projectId, sessionId, tabMode = "preview") =>
@@ -2588,6 +2595,7 @@ export function App() {
       environmentDialog: Boolean(environmentDialog),
       showNotice,
       api,
+      changeChatPath,
       jumpToMessageRef,
       layoutRefs: paneLayoutRefs,
       exitSessionSplit: workspaceChrome.exitSplit,
@@ -2598,6 +2606,7 @@ export function App() {
       availableTerminalHeight,
       configOpen,
       createSessionDraftWithTab,
+      changeChatPath,
       deleteMessage,
       diffFilePath,
       displayAgents,
