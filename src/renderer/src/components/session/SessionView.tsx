@@ -453,6 +453,10 @@ export function SessionView({
         orientation="vertical"
         className="session-v-group"
         groupRef={sessionGroupRef}
+        // 拖拽命中区放大：输入框（composer-box）顶部边框在 v-splitter 下方约
+        // 8px（footer gap-2），默认 fine 10px 覆盖不到——需在输入框框线上就能拖。
+        // fine 20 → 命中区上下各 ~9.5px，覆盖输入框上沿。
+        resizeTargetMinimumSize={{ fine: 20, coarse: 24 }}
       >
         <ResizablePanel id="timeline" minSize={TIMELINE_MIN_HEIGHT} className="session-v-timeline">
           <div className="relative h-full min-h-0">

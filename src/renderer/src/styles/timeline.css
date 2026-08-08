@@ -2255,16 +2255,25 @@ body.ask-dialog-open .ask-question-card.pending {
   }
 }
 @container (max-width: 620px) {
+  /* 底栏恒单行：left(模式/模板/附件) + center(模型/思考/compact) + right(发送)。
+     不再 wrap —— 旧规则在窄栏把 center 整行折到第二行（模型选型掉到发送按钮
+     下方），且 left 可 grow 会把 right 挤到换行（发送按钮从最右往左偏）。 */
   .composer-bottom-layout {
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
   }
   .composer-bottom-left {
-    flex: 1 1 auto;
-    max-width: calc(100% - 34px);
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+  /* 模式按钮文字先截断，极窄档再隐藏（见 440px 断点） */
+  .composer-bottom-left .composer-bar-btn span {
+    max-width: 6rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .composer-bottom-center {
-    order: 3;
-    flex: 1 1 100%;
+    flex: 1 1 auto;
+    min-width: 0;
     justify-content: flex-start;
     overflow-x: auto;
     padding-bottom: 1px;
@@ -2278,6 +2287,19 @@ body.ask-dialog-open .ask-question-card.pending {
 }
 @container (max-width: 440px) {
   .composer-bar-branch {
+    display: none;
+  }
+  /* 极窄档（分屏单栏）：模式按钮收成纯图标，left 不再挤压 center，
+     发送按钮稳占最右、永不因 flex-wrap 隐式换行掉到下一行。 */
+  .composer-bottom-left .composer-bar-btn span {
+    display: none;
+  }
+  .composer-bottom-left .composer-bar-btn {
+    width: 28px;
+    padding: 0;
+    justify-content: center;
+  }
+  .composer-bottom-left .feishu-link-indicator {
     display: none;
   }
 }

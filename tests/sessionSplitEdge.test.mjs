@@ -76,6 +76,22 @@ function resolveSplitAfterClose(layout, closedSessionId) {
   return { soloSessionId: layout.firstSessionId };
 }
 
+function replaceSplitPaneFromFocus({ layout, prevFocusedSessionId, nextFocusedSessionId }) {
+  if (
+    nextFocusedSessionId === layout.firstSessionId ||
+    nextFocusedSessionId === layout.secondSessionId
+  ) {
+    return null;
+  }
+  if (layout.firstSessionId === prevFocusedSessionId) {
+    return { ...layout, firstSessionId: nextFocusedSessionId };
+  }
+  if (layout.secondSessionId === prevFocusedSessionId) {
+    return { ...layout, secondSessionId: nextFocusedSessionId };
+  }
+  return { ...layout, firstSessionId: nextFocusedSessionId };
+}
+
 describe("session split edge resolution", () => {
   const rect = { left: 0, top: 0, width: 1000, height: 800 };
 
@@ -85,6 +101,7 @@ describe("session split edge resolution", () => {
     assert.match(edgeSrc, /export function resolveSplitHostSessionId/);
     assert.match(edgeSrc, /export function buildSplitLayoutFromDrop/);
     assert.match(edgeSrc, /export function replaceSplitPaneFromDrop/);
+    assert.match(edgeSrc, /export function replaceSplitPaneFromFocus/);
     assert.match(edgeSrc, /export function resolveSplitAfterClose/);
   });
 
@@ -166,6 +183,39 @@ describe("session split edge resolution", () => {
     );
   });
 
+  it("replaces the pane that held the previous focus when a new session is selected", () => {
+    const layout = {
+      firstSessionId: "a",
+      secondSessionId: "b",
+      orientation: "horizontal",
+    };
+    // 焦点在 a，新建 Agent c → 替换 first 栏（本次 bug 的主路径）
+    assert.deepEqual(
+      replaceSplitPaneFromFocus({ layout, prevFocusedSessionId: "a", nextFocusedSessionId: "c" }),
+      { firstSessionId: "c", secondSessionId: "b", orientation: "horizontal" },
+    );
+    // 焦点在 b → 替换 second 栏
+    assert.deepEqual(
+      replaceSplitPaneFromFocus({ layout, prevFocusedSessionId: "b", nextFocusedSessionId: "c" }),
+      { firstSessionId: "a", secondSessionId: "c", orientation: "horizontal" },
+    );
+    // 新会话已在分屏内 → 只切焦点，不改布局
+    assert.equal(
+      replaceSplitPaneFromFocus({ layout, prevFocusedSessionId: "a", nextFocusedSessionId: "b" }),
+      null,
+    );
+    // 焦点游离（prev 不在任何栏）→ 退化为替换 first 栏，保证新会话可见
+    assert.deepEqual(
+      replaceSplitPaneFromFocus({ layout, prevFocusedSessionId: "x", nextFocusedSessionId: "c" }),
+      { firstSessionId: "c", secondSessionId: "b", orientation: "horizontal" },
+    );
+    // prev 为 undefined（切项目后直接新建）→ 同样退化为 first 栏
+    assert.deepEqual(
+      replaceSplitPaneFromFocus({ layout, prevFocusedSessionId: undefined, nextFocusedSessionId: "c" }),
+      { firstSessionId: "c", secondSessionId: "b", orientation: "horizontal" },
+    );
+  });
+
   it("unsplits when a pane session is closed", () => {
     const layout = {
       firstSessionId: "a",
@@ -209,6 +259,7 @@ describe("session split edge resolution", () => {
     assert.match(app, /SessionPaneServicesProvider/);
     assert.match(chrome, /export function useSessionWorkspaceChrome/);
     assert.match(chrome, /resolveSplitHostSessionId/);
+    assert.match(chrome, /replaceSplitPaneFromFocus/);
     assert.match(chrome, /registerOpenSession/);
     assert.doesNotMatch(actions, /tabMode|onSessionSelected|"keep"/);
     // 分屏栏不再挂右侧抽屉按钮；共享服务走 context；runtime 按 session family 订阅

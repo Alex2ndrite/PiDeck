@@ -2476,7 +2476,22 @@ export function App() {
   useEffect(() => {
     const el = chatPaneContentRef.current;
     if (!el || prevSessionIdRef.current === currentSessionId) return;
+    const prev = prevSessionIdRef.current;
     prevSessionIdRef.current = currentSessionId;
+    // 分屏内左↔右聚焦切换：两栏都已渲染、内容未变，只有聚焦边框亮起；
+    // 整区重播淡入微位移会造成「抖/闪」，静默跳过（边框高亮由
+    // .session-split-pane-focused 类切换承担，无动画）。
+    const layout = workspaceChrome.splitLayout;
+    const prevInSplit = Boolean(
+      layout && prev && (layout.firstSessionId === prev || layout.secondSessionId === prev),
+    );
+    const nextInSplit = Boolean(
+      layout &&
+        currentSessionId &&
+        (layout.firstSessionId === currentSessionId ||
+          layout.secondSessionId === currentSessionId),
+    );
+    if (prevInSplit && nextInSplit) return;
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const anim = el.animate(
       [
@@ -2486,7 +2501,7 @@ export function App() {
       { duration: 160, easing: "cubic-bezier(0.22, 1, 0.36, 1)" },
     );
     return () => anim.cancel();
-  }, [currentSessionId]);
+  }, [currentSessionId, workspaceChrome.splitLayout]);
 
   const sessionTabsProps = {
     tabs: workspaceChrome.sessionTabIds,
