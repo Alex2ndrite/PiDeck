@@ -80,7 +80,7 @@ export interface AppShellProps {
 }
 
 /** 侧栏收起后保留的边缘提示条宽度（对齐旧 grid 实现） */
-const LIST_COLLAPSED_SIZE = 14;
+const LIST_COLLAPSED_SIZE = 0;
 const LIST_MIN = 100;
 const LIST_MAX = 440;
 const DRAWER_MIN = 180;
