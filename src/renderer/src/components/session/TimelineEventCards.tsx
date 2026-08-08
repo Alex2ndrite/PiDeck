@@ -131,7 +131,20 @@ export const DiagnosticMessageCard = memo(function DiagnosticMessageCard(props: 
 		? t("diagnostic.errorTitle")
 		: t("diagnostic.systemTitle");
 	return (
-		<TimelineMarker kind="diagnostic" tone={tone === "error" ? "error" : tone === "warning" ? "warning" : tone === "success" ? "success" : "neutral"}>
+		<TimelineMarker
+			kind="diagnostic"
+			tone={
+				tone === "error"
+					? "error"
+					: tone === "warning"
+						? "warning"
+						: tone === "success"
+							? "success"
+							: "neutral"
+			}
+			// 系统状态/自动重试/错误提示是独立卡片，不需要轨道归属关系
+			hideRail
+		>
 		<article
 			className={`diagnostic-card w-full min-w-0 overflow-hidden rounded-md border border-border-subtle bg-[var(--color-chat-muted-bg)] tone-${tone}`}
 			data-message-id={props.message.id}
