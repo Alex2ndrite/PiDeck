@@ -62,9 +62,6 @@ import { SESSION_TAB_DRAG_MIME } from "../../utils/sessionSplitEdge";
  *   （idle=蓝 / running=黄 / error=红），无状态时回退主题色 bg-primary。
  */
 
-/** @deprecated 请使用 SESSION_TAB_DRAG_MIME；保留导出供测试/旧引用。 */
-export const TAB_DRAG_DATA_KEY = SESSION_TAB_DRAG_MIME;
-
 /** “+” 下拉里的新建目标：聊天对话区或已打开项目 */
 export type NewSessionTarget = {
   projectId: string;

@@ -133,6 +133,33 @@ export function replaceSplitPaneFromDrop(input: {
   };
 }
 
+/**
+ * 焦点会话变更为分屏外会话时（新建 Agent / 侧栏打开第三会话 / 点分屏外 Tab），
+ * 把新会话替换进「变更前焦点所在的那一栏」，保持「聚焦栏展示当前会话」的语义。
+ * - 新会话已在分屏内 → 只切焦点，不改布局，返回 null
+ * - 变更前焦点不在任何栏（焦点游离，如切项目后直接新建）→ 退化为替换 first 栏，保证新会话可见
+ */
+export function replaceSplitPaneFromFocus(input: {
+  layout: SessionSplitLayout;
+  prevFocusedSessionId: string | undefined;
+  nextFocusedSessionId: string;
+}): SessionSplitLayout | null {
+  const { layout, prevFocusedSessionId, nextFocusedSessionId } = input;
+  if (
+    nextFocusedSessionId === layout.firstSessionId ||
+    nextFocusedSessionId === layout.secondSessionId
+  ) {
+    return null;
+  }
+  if (layout.firstSessionId === prevFocusedSessionId) {
+    return { ...layout, firstSessionId: nextFocusedSessionId };
+  }
+  if (layout.secondSessionId === prevFocusedSessionId) {
+    return { ...layout, secondSessionId: nextFocusedSessionId };
+  }
+  return { ...layout, firstSessionId: nextFocusedSessionId };
+}
+
 /** 关闭某一栏后：若还剩一栏则退回单栏（返回幸存 sessionId）；两栏都无效则 null。 */
 export function resolveSplitAfterClose(
   layout: SessionSplitLayout,

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useAtomValue, useSetAtom, useStore } from "jotai";
 import {
   sessionRecordByIdAtomFamily,
@@ -15,6 +15,7 @@ import {
 import {
   buildSplitLayoutFromDrop,
   replaceSplitPaneFromDrop,
+  replaceSplitPaneFromFocus,
   resolveSplitAfterClose,
   resolveSplitHostSessionId,
   type SessionSplitEdge,
@@ -106,13 +107,12 @@ export function useSessionWorkspaceChrome(options: {
       current && !sessionRecords[current] ? null : current,
     );
     setSplitLayout((layout) => {
+      // 任一分屏栏的会话记录消失则整个退出分屏（存活栏会话由 closeTab 的
+      // resolveSplitAfterClose 负责晋升单栏，这里只处理记录删除的场景）
       if (!layout) return layout;
       const firstOk = Boolean(sessionRecords[layout.firstSessionId]);
       const secondOk = Boolean(sessionRecords[layout.secondSessionId]);
-      if (firstOk && secondOk) return layout;
-      if (firstOk) return null;
-      if (secondOk) return null;
-      return null;
+      return firstOk && secondOk ? layout : null;
     });
   }, [sessionRecords, setSessionTabIds]);
 
@@ -209,30 +209,33 @@ export function useSessionWorkspaceChrome(options: {
     setPinnedSessionTabIds(next.pinned);
   }, [setSessionTabIds]);
 
+  // 上一次的焦点会话：分屏时「焦点切到分屏外会话」要用它定位替换哪个栏。
+  // 注意必须在焦点变更发生后读取变更前的值 —— 此刻 currentSessionId 已是新会话，
+  // 不能像旧 selectTab 那样用「当前焦点」找栏（新建 Agent 后点新 Tab 会找不到目标栏）。
+  const lastFocusedSessionIdRef = useRef(currentSessionId);
+  // 焦点会话变更为分屏外会话时（新建 Agent / 侧栏打开第三会话 / 点分屏外 Tab），
+  // 把新会话替换进原聚焦栏；用 useLayoutEffect 在绘制前完成，避免一帧焦点丢失闪烁。
+  useLayoutEffect(() => {
+    const prevFocusedSessionId = lastFocusedSessionIdRef.current;
+    lastFocusedSessionIdRef.current = currentSessionId;
+    if (!currentSessionId) return;
+    const layout = tabsSnapshotRef.current.split;
+    if (!layout) return;
+    const next = replaceSplitPaneFromFocus({
+      layout,
+      prevFocusedSessionId,
+      nextFocusedSessionId: currentSessionId,
+    });
+    if (next) setSplitLayout(next);
+  }, [currentSessionId, setSplitLayout]);
+
   /**
-   * 顶栏 Tab 单击：只切焦点；若点的是分屏外的第三个会话，替换聚焦栏。
+   * 顶栏 Tab 单击：只切焦点；若点的是分屏外的第三个会话，
+   * 分屏栏替换由上面的「焦点变更」useLayoutEffect 统一处理（replaceSplitPaneFromFocus）。
    */
   const selectTab = useCallback((sessionId: string) => {
     const record = store.get(sessionRecordByIdAtomFamily(sessionId));
     if (!record) return;
-    const snap = tabsSnapshotRef.current;
-    if (snap.split && snap.currentSessionId) {
-      const inSplit =
-        sessionId === snap.split.firstSessionId ||
-        sessionId === snap.split.secondSessionId;
-      if (!inSplit) {
-        setSplitLayout((layout) => {
-          if (!layout || !snap.currentSessionId) return layout;
-          if (layout.firstSessionId === snap.currentSessionId) {
-            return { ...layout, firstSessionId: sessionId };
-          }
-          if (layout.secondSessionId === snap.currentSessionId) {
-            return { ...layout, secondSessionId: sessionId };
-          }
-          return layout;
-        });
-      }
-    }
     focusHandlersRef.current.focusSession(record.projectId, sessionId);
   }, [store]);
 
