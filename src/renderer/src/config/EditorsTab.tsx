@@ -149,7 +149,9 @@ export function EditorsTab() {
 								<Button variant="default"
 									size="sm"
 									onClick={() => void updateEditor(editor.id, { command: draft })}
-									disabled={saving || draft === configured.command}
+									// 保存按钮保持激活（黑色）：未修改时点保存等于保存相同值，无害；
+									// 与 SettingsTab 的保存按钮行为统一，避免“值未变即禁用”导致按钮灰暗
+									disabled={saving}
 								>
 									{saving ? t("common.saving") : t("common.save")}
 								</Button>

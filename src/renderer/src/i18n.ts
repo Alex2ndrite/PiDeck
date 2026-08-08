@@ -55,6 +55,11 @@ export function setI18nLocale(locale: SupportedLocale) {
   currentLocale = locale;
 }
 
+/** 返回当前生效 locale（pseudo 按 en-US 处理），供第三方库（如日期组件 locale）取用。 */
+export function getI18nLocale(): SupportedLocale {
+  return currentLocale;
+}
+
 export function t(key: TranslationKey, params?: Params) {
   const dictionary = dictionaries[currentLocale] ?? dictionaries["en-US"];
   let text = dictionary[key] ?? dictionaries["en-US"][key] ?? key;

@@ -127,6 +127,7 @@ export const ipcChannels = {
 	extensionsRemoveBuiltIn: "extensions:remove-built-in",
 	extensionsRestoreBuiltIn: "extensions:restore-built-in",
 	extensionsUpdate: "extensions:update",
+	extensionsUpdateOne: "extensions:update-one",
 	gitBranches: "git:branches",
 	gitCheckout: "git:checkout",
 	gitCreateBranch: "git:create-branch",

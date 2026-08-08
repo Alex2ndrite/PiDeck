@@ -400,7 +400,8 @@ export function registerStoreIpc({
 	});
 
 	// ── Extensions ──────────────────────────────
-	ipcMain.handle(ipcChannels.extensionsList, () => extensionManager.list());
+	ipcMain.handle(ipcChannels.extensionsList, (_event, forceRefresh?: boolean) =>
+		extensionManager.list(Boolean(forceRefresh)));
 	ipcMain.handle(ipcChannels.extensionsRemoveBuiltIn, async (_event, source: string) => {
 		await extensionManager.removeBuiltIn(source);
 		void appLogger.info("extension", "Built-in extension removed", { source });
@@ -432,6 +433,11 @@ export function registerStoreIpc({
 	ipcMain.handle(ipcChannels.extensionsUpdate, async () => {
 		const result = await extensionManager.updateExtensions();
 		void appLogger.info("extension", "Extensions update command completed", { updated: result.updated, bytes: result.output.length });
+		return result;
+	});
+	ipcMain.handle(ipcChannels.extensionsUpdateOne, async (_event, source: string) => {
+		const result = await extensionManager.updateExtension(source);
+		void appLogger.info("extension", "Extension update-one command completed", { source, updated: result.updated, bytes: result.output.length });
 		return result;
 	});
 }

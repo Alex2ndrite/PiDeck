@@ -5,6 +5,7 @@ import type { AppLogEntry, AppLogLevel } from "../../../shared/types";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui-shadcn/select";
 import { t } from "../i18n";
 import { Input } from "../components/ui-shadcn/input";
+import { LogsDatePicker } from "./LogsDatePicker";
 
 const api: PiDesktopApi = (window as unknown as { piDesktop: PiDesktopApi }).piDesktop;
 const LEVELS: Array<AppLogLevel | "all"> = ["all", "debug", "info", "warn", "error"];
@@ -89,12 +90,11 @@ export function LogsTab() {
 						onChange={(event) => setSearch(event.target.value)}
 						placeholder={t("logs.searchPlaceholder")}
 					/>
-					<input
-						type="datetime-local"
+					<LogsDatePicker
 						value={from}
-						onChange={(event) => setFrom(event.target.value)}
-						title={t("logs.sinceFilter")}
-						aria-label={t("logs.sinceFilter")}
+						onChange={setFrom}
+						placeholder={t("logs.sinceFilter")}
+						clearLabel={t("logs.clearSinceFilter")}
 					/>
 				</div>
 				<div className="skills-toolbar-actions">

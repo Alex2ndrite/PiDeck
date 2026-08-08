@@ -15,6 +15,7 @@ type ExtensionsApi = {
 	removeBuiltIn: (source: string) => Promise<void>;
 	restoreBuiltIn: (source: string) => Promise<void>;
 	update: () => Promise<PiCliUpdateResult>;
+	updateOne: (source: string) => Promise<PiCliUpdateResult>;
 };
 
 function getExtensionsApi(): ExtensionsApi {
@@ -192,6 +193,8 @@ export function ExtensionsTab(props: {
 	const [updating, setUpdating] = useState<string | null>(null);
 	const [updateResult, setUpdateResult] = useState<PiCliUpdateResult | null>(null);
 	const [showUpdateDialog, setShowUpdateDialog] = useState(false);
+	// 单扩展更新进行中的 source（与批量更新互斥，同一时间只跑一个 pi update）
+	const [updatingOne, setUpdatingOne] = useState<string | null>(null);
 
 	const handleInstall = async (pkg: Pick<PiPackageInfo, "name" | "installCmd">) => {
 		setInstallingSources((current) => new Set(current).add(pkg.installCmd));
@@ -235,6 +238,32 @@ export function ExtensionsTab(props: {
 		} finally {
 			setUpdating(null);
 		}
+	};
+
+	/** 更新单个扩展（`pi update <source>`），完成后强制刷新列表拿新版本。 */
+	const handleUpdateOne = async (extension: PiExtensionSummary) => {
+		if (updatingOne) return;
+		setUpdatingOne(extension.source);
+		try {
+			await getExtensionsApi().updateOne(extension.source);
+			props.onRefresh();
+			showNotice(t("config.extensionUpdatedToast", { name: shortName(extension.source) }), 3000);
+		} catch (e) {
+			showNotice(
+				t("config.extensionOperationFailed", { error: formatExtensionError(e) }),
+				4500,
+				"error",
+			);
+		} finally {
+			setUpdatingOne(null);
+		}
+	};
+
+	/** 复制单扩展更新指令到剪贴板，用户可在终端手动执行。 */
+	const handleCopyUpdateCommand = (extension: PiExtensionSummary) => {
+		const command = `pi update ${extension.source}`;
+		void writeClipboard(command);
+		showNotice(t("config.extensionUpdateCommandCopied", { command }), 2500);
 	};
 
 	return (
@@ -403,6 +432,9 @@ export function ExtensionsTab(props: {
 										onRestoreBuiltIn={handleRestoreBuiltIn}
 										removingBuiltIn={removingBuiltIn === extension.source}
 										restoringBuiltIn={restoringBuiltIn === extension.source}
+										updatingOne={updatingOne === extension.source}
+										onUpdateOne={handleUpdateOne}
+										onCopyUpdateCommand={handleCopyUpdateCommand}
 									/>
 								))}
 							</TableBody>
@@ -422,6 +454,9 @@ function ExtensionTableRow(props: {
 	onRestoreBuiltIn: (extension: PiExtensionSummary) => void;
 	removingBuiltIn?: boolean;
 	restoringBuiltIn?: boolean;
+	updatingOne: boolean;
+	onUpdateOne: (extension: PiExtensionSummary) => void;
+	onCopyUpdateCommand: (extension: PiExtensionSummary) => void;
 }) {
 	const { extension } = props;
 	const name = extension.source.replace(/^(?:npm|file|github|git):/i, "");
@@ -442,6 +477,24 @@ function ExtensionTableRow(props: {
 					latest: extension.latestVersion ?? "-",
 				})}
 				{extension.hasUpdate && <span className="ml-1 text-text-primary">{t("config.extensionUpdateAvailable")}</span>}
+				{/* 有更新时提供单扩展更新与复制更新指令（npm 包专属；内置扩展无版本概念） */}
+				{extension.hasUpdate && !extension.builtIn && (
+					<div className="mt-1.5 flex items-center gap-1.5">
+						<Button
+							size="xs"
+							variant="outline"
+							onClick={() => props.onUpdateOne(extension)}
+							disabled={props.updatingOne}
+							aria-busy={props.updatingOne}
+						>
+							{props.updatingOne ? t("config.extensionUpdatingOne") : t("config.extensionUpdateOne")}
+						</Button>
+						<Button size="xs" variant="ghost" onClick={() => props.onCopyUpdateCommand(extension)}>
+							<Copy size={13} strokeWidth={1.8} className="mr-1" aria-hidden="true" />
+							{t("config.extensionCopyUpdateCommand")}
+						</Button>
+					</div>
+				)}
 				{extension.updateError && <div className="text-destructive">{extension.updateError}</div>}
 			</TableCell>
 			<TableCell className="max-w-64 truncate font-mono text-caption text-muted-foreground" title={extension.path ?? undefined}>

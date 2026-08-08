@@ -695,6 +695,11 @@ export function createPreviewApi(): PiDesktopApi {
 				output: "Preview mode: extensions update output",
 				updated: false,
 			}),
+			updateOne: async (_source: string) => ({
+				command: "pi update <source>",
+				output: "Preview mode: extension update-one output",
+				updated: false,
+			}),
 		},
 		prompts: {
 			list: async () => ({ templates: [], globalDir: "C:/Users/preview/.pi/agent/prompts" }),

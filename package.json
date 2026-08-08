@@ -80,6 +80,7 @@
     "@larksuiteoapi/node-sdk": "^1.67.0",
     "motion": "^13.0.0",
     "node-pty": "^1.1.0",
+    "react-day-picker": "^10.0.1",
     "sql.js": "^1.14.1"
   },
   "build": {

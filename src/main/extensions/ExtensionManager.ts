@@ -432,6 +432,14 @@ export class ExtensionManager {
 		return this.toUpdateResult("pi update --extensions", output, true);
 	}
 
+	/** 更新单个扩展：`pi update <source>`，source 与 list 输出一致（如 npm:context-mode）。 */
+	async updateExtension(source: string): Promise<PiCliUpdateResult> {
+		const output = await this.runPi(["update", source], 120_000, { offline: false });
+		// 更新后版本信息变化，强制下次 list 重新获取。
+		this.invalidateListCache();
+		return this.toUpdateResult(`pi update ${source}`, output, true);
+	}
+
 	private async enrichExtensionVersion(extension: PiExtensionSummary): Promise<PiExtensionSummary> {
 		if (!extension.source.toLowerCase().startsWith("npm:")) return extension;
 		const packageName = extension.source.replace(/^npm:/i, "");

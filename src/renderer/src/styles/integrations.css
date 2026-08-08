@@ -1008,8 +1008,6 @@
   min-width: 0;
 }
 
-.logs-filters input,
-
 .logs-level-select {
   position: relative;
   flex: 0 0 132px;
@@ -1030,11 +1028,10 @@
   min-width: 220px;
 }
 
-.logs-filters input:focus-visible,
-
-.logs-filters input[type="datetime-local"] {
-  flex: 0 0 210px;
-  min-width: 190px;
+.logs-since-input {
+  /* 日期按钮 + 时间输入 + 清除按钮的组合容器 */
+  flex: 0 0 280px;
+  min-width: 260px;
 }
 
 @media (max-width: 900px) {

@@ -446,8 +446,9 @@ function ConfigModalContent(props: ConfigModalProps) {
 			return;
 		}
 		if (section === "extensions") {
-			// 切到扩展页默认吃缓存；只有点刷新按钮才 forceRefresh。
-			void refreshExtensions(false);
+			// 扩展页需要显示当前/最新版本与可更新状态，首次进入强制查一次版本；
+			// 主进程 listCacheHasVersionInfo 会让后续进入直接吃带版本的缓存，不重复打 npm view。
+			void refreshExtensions(true);
 			return;
 		}
 		if (section === "editors") return;
