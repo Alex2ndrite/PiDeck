@@ -8,6 +8,7 @@ import type {
 	AppLogEntry,
 	AppLogLevel,
 	AppLogQuery,
+	ProcessMetricsSnapshot,
 	AppSettings,
 	AppUpdateDownloadProgress,
 	AppUpdateDownloadResult,
@@ -771,6 +772,14 @@ const api = {
 				piVersion: string;
 				error: string;
 			}>,
+	},
+	system: {
+		/** 进程监控：拉取 Electron 各进程 + pi agent 子进程内存/CPU 快照 */
+		getProcessMetrics: () =>
+			ipcRenderer.invoke(ipcChannels.processMetrics) as Promise<ProcessMetricsSnapshot>,
+		/** 停止指定 pi agent（按 agentId），成功后刷新进程快照即可看到消失 */
+		stopAgent: (agentId: string) =>
+			ipcRenderer.invoke(ipcChannels.stopAgent, agentId) as Promise<void>,
 	},
 	logs: {
 		list: (query?: AppLogQuery) =>

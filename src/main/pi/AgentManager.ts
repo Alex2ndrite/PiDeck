@@ -359,6 +359,21 @@ export class AgentManager {
 	}
 
 	/**
+	 * 枚举正在运行的 pi agent 子进程（agentId → pid）。
+	 * 供进程监控面板使用：仅返回存活进程，退出/未启动的不计入。
+	 */
+	listAgentPids(): Array<{ agentId: string; pid: number }> {
+		const result: Array<{ agentId: string; pid: number }> = [];
+		for (const [agentId, runtime] of this.agents) {
+			const pid = runtime.process.pid;
+			if (pid != null && runtime.process.isRunning()) {
+				result.push({ agentId, pid });
+			}
+		}
+		return result;
+	}
+
+	/**
 	 * 显示窗口视图（2026-08 激活分页）：替换/激活路径的下发与 flush 保持同一协议——
 	 * 窗口段消息 + windowStart + totalLength + fileVersion。
 	 */

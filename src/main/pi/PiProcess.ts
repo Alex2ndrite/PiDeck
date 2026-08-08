@@ -350,6 +350,14 @@ export class PiProcess extends EventEmitter {
     return this.rpc;
   }
 
+  /**
+   * 子进程 pid；尚未 start 或已退出时为 undefined。
+   * 供进程监控（内存查询/指标展示）使用，不持有引用之外的生命周期语义。
+   */
+  get pid(): number | undefined {
+    return this.proc?.pid;
+  }
+
   isRunning(): boolean {
     return this.proc !== undefined && this.rpc !== undefined;
   }

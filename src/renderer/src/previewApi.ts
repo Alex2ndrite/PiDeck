@@ -174,6 +174,17 @@ export function createPreviewApi(): PiDesktopApi {
 		return tab;
 	};
 	return {
+		// 进程监控预览桩：返回空快照，仅供预览模式不崩溃
+		system: {
+			getProcessMetrics: async () => ({
+				electron: [],
+				agents: [],
+				totalElectronBytes: 0,
+				totalAgentBytes: 0,
+				sampledAt: Date.now(),
+			}),
+			stopAgent: async () => undefined,
+		},
 		editors: {
 			list: async () => [],
 			redetect: async () => ({ ...previewSettings }),

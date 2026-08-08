@@ -178,6 +178,10 @@ export const ipcChannels = {
 	appOpenExternal: "app:open-external",
 	appOpenInBrowser: "app:open-in-browser",
 	appRestart: "app:restart",
+	/** 进程监控：拉取 Electron 各进程 + pi agent 子进程的内存/CPU 快照 */
+	processMetrics: "system:process-metrics",
+	/** 进程监控里手动停止某个 pi agent（按 agentId 走 AgentManager 正常停止流程） */
+	stopAgent: "system:stop-agent",
 	preloadReady: "preload:ready",
 	preloadError: "preload:error",
 	rendererLog: "renderer:log",

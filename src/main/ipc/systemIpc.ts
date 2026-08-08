@@ -25,6 +25,8 @@ import type { RpcLogger } from "../logging/RpcLogger";
 import type { SessionRuntimeCoordinator } from "../sessions/SessionRuntimeCoordinator";
 import type { SkillManager } from "../skills/SkillManager";
 import { fetchModelList, invalidateModelListCache, getCachedModelList, refreshModelList } from "../pi/modelListCache";
+import { getProcessSnapshot } from "../process/ProcessMonitor";
+import type { ProcessMetricsSnapshot } from "../../shared/types";
 import { getWslExe } from "../wsl/wslExe";
 
 export type SystemIpcDeps = {
@@ -406,6 +408,21 @@ export function registerSystemIpc(deps: SystemIpcDeps): void {
 	);
 
 	// ── 应用日志 ─────────────────────────────────────────────────────
+
+	// 进程监控：Electron 各进程 + pi agent 子进程内存/CPU 快照（手动刷新，不做高频轮询）
+	ipcMain.handle(ipcChannels.processMetrics, async (): Promise<ProcessMetricsSnapshot> => {
+		return getProcessSnapshot(deps.agentManager.listAgentPids());
+	});
+
+	ipcMain.handle(ipcChannels.stopAgent, async (_event, agentId: unknown) => {
+		// 输入校验：agentId 必须是字符串，否则拒绝（渲染层数据不可信）
+		if (typeof agentId !== "string" || !agentId) {
+			throw new Error("invalid agentId");
+		}
+		// 走 AgentManager 正常停止（标记 userInitiatedStop + 清理运行时状态 + 优雅 kill），
+		// 跨平台由 Node ChildProcess.kill 统一处理，不直接调系统 kill
+		await deps.agentManager.stop(agentId);
+	});
 
 	ipcMain.handle(ipcChannels.logsList, async (_event, query: AppLogQuery) =>
 		appLogger.list(query),
