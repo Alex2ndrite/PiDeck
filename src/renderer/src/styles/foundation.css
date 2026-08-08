@@ -2464,15 +2464,17 @@ select:focus-visible {
 .v-splitter::before {
   content: none;
 }
-/* 视觉命中提示区（库本身还有 coarse/fine 最小命中放大） */
+/* 命中区（上下各 8px 扩展，覆盖输入框上沿边框线位置）：
+   可交互 → 鼠标放输入框上沿那条线时，光标变上下箭头（row-resize，系统光标），
+   用户能感知可拖；按住即可调整输入框高度。 */
 .v-splitter::after {
   content: "";
   position: absolute;
   left: 0;
   right: 0;
   top: -8px;
-  bottom: -8px;
-  pointer-events: none;
+  bottom: -16px;
+  cursor: row-resize;
 }
 /* ── 内容行宽限制：仅在 --content-max-width 由 JS 注入时生效 ── */
 .chat-pane[style*="--content-max-width"] .message-list {
