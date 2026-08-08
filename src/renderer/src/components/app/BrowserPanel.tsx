@@ -55,6 +55,12 @@ function genTabId(): string {
 	return `tab-${nextTabId++}`;
 }
 
+/** Chromium 用 -3 表示旧导航被新导航替换，这是 webview 正常生命周期，不应冒泡成全局异常。 */
+export function isExpectedNavigationAbort(error: unknown): boolean {
+	const message = error instanceof Error ? error.message : String(error);
+	return /ERR_ABORTED|error code:?\s*-3|\(-3\)/i.test(message);
+}
+
 /**
  * 浏览器状态要跨"抽屉模式/弹框模式"保留。
  * 这里用模块级状态保存轻量 tab 元数据，避免切换容器时丢 URL/标题/设备模式。
@@ -104,7 +110,9 @@ export function navigateTo(url: string) {
 	pendingNavigateUrl = url;
 }
 
-type WebviewEvent<T extends string> = T extends "did-navigate"
+type WebviewEvent<T extends string> = T extends "did-fail-load"
+	? { errorCode: number; errorDescription: string; validatedURL: string; isMainFrame: boolean }
+	: T extends "did-navigate"
 	? { url: string }
 	: T extends "did-navigate-in-page"
 		? { url: string; isMainFrame: boolean }
@@ -178,7 +186,13 @@ export function BrowserPanel(props: {
 			applyDeviceUserAgent(wv, nextDevice);
 			setUrl(targetUrl);
 			setInputValue(targetUrl);
-			wv.loadURL(targetUrl);
+			// loadURL 返回 Promise；切 tab、刷新或连续跳转会让旧请求以 ERR_ABORTED reject。
+			// 这里必须在 webview 边界消费该可预期取消，否则会触发 renderer unhandledrejection。
+			void wv.loadURL(targetUrl).catch((error: unknown) => {
+				if (!isExpectedNavigationAbort(error)) {
+					setIsLoading(false);
+				}
+			});
 		},
 		[applyDeviceUserAgent],
 	);
@@ -223,6 +237,15 @@ export function BrowserPanel(props: {
 			setCanGoBack(wv.canGoBack());
 			setCanGoForward(wv.canGoForward());
 		};
+		const onDidFailLoad = (event: Event) => {
+			const failure = event as unknown as WebviewEvent<"did-fail-load">;
+			if (!failure.isMainFrame) return;
+			// -3 是导航被替换/取消，不展示错误页，也不向全局异常处理器传播。
+			if (failure.errorCode === -3) {
+				setIsLoading(false);
+				setLoadProgress(0);
+			}
+		};
 		const onProgress = (event: Event) => {
 			const progress = (event as unknown as WebviewEvent<"load-progress">).progress;
 			setLoadProgress(progress);
@@ -252,6 +275,7 @@ export function BrowserPanel(props: {
 		wv.addEventListener("did-navigate-in-page", onDidNavigateInPage);
 		wv.addEventListener("did-start-loading", onDidStartLoading);
 		wv.addEventListener("did-stop-loading", onDidStopLoading);
+		wv.addEventListener("did-fail-load", onDidFailLoad);
 		wv.addEventListener("load-progress", onProgress);
 		wv.addEventListener("page-title-updated", onPageTitleUpdated);
 		wv.addEventListener("new-window", onNewWindow);
@@ -262,6 +286,7 @@ export function BrowserPanel(props: {
 			wv.removeEventListener("did-navigate-in-page", onDidNavigateInPage);
 			wv.removeEventListener("did-start-loading", onDidStartLoading);
 			wv.removeEventListener("did-stop-loading", onDidStopLoading);
+			wv.removeEventListener("did-fail-load", onDidFailLoad);
 			wv.removeEventListener("load-progress", onProgress);
 			wv.removeEventListener("page-title-updated", onPageTitleUpdated);
 			wv.removeEventListener("new-window", onNewWindow);

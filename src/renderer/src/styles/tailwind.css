@@ -87,6 +87,16 @@
   --font-brand: var(--font-family-brand);
   --font-mono: var(--font-family-mono);
 
+  /* 动效 token（AGENTS.md 三档时长 + 统一缓动）：
+     duration-fast=120ms 微反馈（hover/active）、duration-base=200ms 常规（弹层/展开）、
+     duration-slow=320ms 面板级（切会话/抽屉）；ease-out-quint 进场、ease-in 离场（内置）。
+     注意：时长 token 不用 --duration-* 命名空间——Tailwind v4 的 duration utility 只接受
+     数字 bare value（duration-<n>），命名 token 不生成 utility，改用下方 @utility 显式定义；
+     ease token 为普通对象映射，@theme 正常生成。新动画一律引用这些 utility，
+     禁止散落裸时长/裸缓动；布局动画只动 transform/opacity。 */
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-standard: cubic-bezier(0.25, 0.1, 0.25, 1);
+
   /* 字号 token → Tailwind text-* 工具类：默认值与旧版一致，
      但随 data-ui-font-size / data-chat-font-size 设置缩放（全局统一字号规范） */
   --text-micro: var(--font-size-micro);
@@ -105,4 +115,19 @@
   --text-title--line-height: var(--line-height-title);
   --text-brand: var(--font-size-brand);
   --text-heading: var(--font-size-heading);
+}
+
+/* 动效时长 utility（唯一真源，对应 AGENTS.md 三档时长）：
+   duration-fast=120ms 微反馈（hover/active）、duration-base=200ms 常规（弹层/展开）、
+   duration-slow=320ms 面板级（切会话/抽屉）。
+   不用 --duration-* 主题 token：v4 的 duration utility 只接受数字 bare value，
+   命名值不会生成类；@utility 显式注册让类名稳定且值集中一处。 */
+@utility duration-fast {
+  transition-duration: 120ms;
+}
+@utility duration-base {
+  transition-duration: 200ms;
+}
+@utility duration-slow {
+  transition-duration: 320ms;
 }

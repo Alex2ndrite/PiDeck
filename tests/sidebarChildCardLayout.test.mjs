@@ -98,7 +98,7 @@ test("sidebar omits the redundant projects heading and tabs shrink to their titl
   assert.doesNotMatch(sidebarContent, /app\.sidebarProjects/);
   assert.match(tabBar, /pinned \? "w-20" : "w-fit max-w-32"/);
   assert.doesNotMatch(tabBar, /pinned \? "w-20" : "w-32"/);
-  assert.match(tabBar, /session-tabs-scroll flex min-w-0 flex-1/);
+  assert.match(tabBar, /session-tabs-scroll (?:relative )?flex min-w-0 flex-1/);
   assert.match(tabBar, /session-tabs-actions flex shrink-0/);
   assert.match(sidebarContent, /sidebar-body flex min-h-0 flex-1 flex-col gap-2 px-1\.5 py-1/);
   assert.match(sessionTree, /min-h-11 w-full/);

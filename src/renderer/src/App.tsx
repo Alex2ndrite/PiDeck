@@ -2489,6 +2489,26 @@ export function App() {
   );
 
   // Gate 4.6 — Session view wrapped in SessionRuntimeInjector
+  // 切会话过渡：会话区整体做一次 160ms 淡入+微位移（Web Animations API，
+  // 不卸载树/不动布局，避免整树重建的卡顿与瞬间替换的生硬）；
+  // 首次挂载不播，prefers-reduced-motion 下跳过。
+  const chatPaneContentRef = useRef<HTMLDivElement>(null);
+  const prevSessionIdRef = useRef(currentSessionId);
+  useEffect(() => {
+    const el = chatPaneContentRef.current;
+    if (!el || prevSessionIdRef.current === currentSessionId) return;
+    prevSessionIdRef.current = currentSessionId;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const anim = el.animate(
+      [
+        { opacity: 0, transform: "translateY(4px)" },
+        { opacity: 1, transform: "none" },
+      ],
+      { duration: 160, easing: "cubic-bezier(0.22, 1, 0.36, 1)" },
+    );
+    return () => anim.cancel();
+  }, [currentSessionId]);
+
   const sessionTitle =
     currentSession?.title ??
     (isChatProject(activeProject)
@@ -2520,6 +2540,7 @@ export function App() {
     <>
       {!currentSessionId && sessionTabsBarNode}
       {currentSessionId ? (
+      <div ref={chatPaneContentRef} className="flex h-full min-h-0 min-w-0 flex-col">
     <SessionRuntimeInjector
       currentSessionId={currentSessionId}
       sessionTitle={sessionTitle}
@@ -2577,6 +2598,7 @@ export function App() {
       showNotice={showNotice}
       api={api}
     />
+      </div>
       ) : (
         // 无当前会话（普通项目点开 / 所有 Tab 关闭）时，普通项目与 Chat 项目
         // 共享统一空态；快捷操作新建 Agent / 匿名聊天，无项目时引导添加项目。

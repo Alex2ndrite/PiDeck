@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type ReactNode, type CSSProperties } from "react";
 import {
   type Layout,
   type LayoutChangedMeta,
@@ -12,6 +12,7 @@ import {
 import { AppHeader } from "../AppHeader";
 import { WorkspaceDrawerHost } from "../workspace/WorkspaceDrawerHost";
 import type { WorkspaceDrawerPanel } from "../../hooks/useWorkspacePanels";
+import { cn } from "../../lib/utils";
 
 /**
  * 工作台外壳（#115 U5 布局换装）：三栏水平布局由 react-resizable-panels 接管。
@@ -32,7 +33,10 @@ import type { WorkspaceDrawerPanel } from "../../hooks/useWorkspacePanels";
  * - 抽屉 collapsedSize=0；未钉住时可拖拽折叠，钉住（pinned）时禁止折叠且最小 220px。
  *
  * 已知变化：抽屉/侧栏开合不再有 120ms grid 过渡动画（面板布局为即时宽度），
- * 后续视觉收口阶段如需动画再补。
+ * 由下方 drawer-content-enter / list-content-enter 内容动画替代：
+ * 面板宽度即时变化（避免 width 动画掉帧），内容层补一次 transform+opacity
+ * 进入动画制造“滑出/淡入”感；CSS animation 播完自动恢复默认样式，不留
+ * transform（Windows 静止态 transform 会降级 ClearType）。关闭保持即时。
  */
 
 export interface AppShellProps {
@@ -97,6 +101,24 @@ export function AppShell(props: AppShellProps) {
 
   const listPanelRef = useRef<PanelImperativeHandle | null>(null);
   const drawerPanelRef = useRef<PanelImperativeHandle | null>(null);
+
+  // 抽屉/侧栏“刚打开”标志：closed→open 时给内容容器挂一次进入动画类；
+  // 动画结束（onAnimationEnd）移除。面板库 collapse/expand 是即时宽度，
+  // 内容动画只动 transform/opacity，且播完无残留。
+  const [drawerEntering, setDrawerEntering] = useState(false);
+  const [listEntering, setListEntering] = useState(false);
+  const prevDrawerOpenRef = useRef(false);
+  const prevListOpenRef = useRef(false);
+  useEffect(() => {
+    const open = Boolean(drawer) && !drawerCollapsed;
+    if (open && !prevDrawerOpenRef.current) setDrawerEntering(true);
+    prevDrawerOpenRef.current = open;
+  }, [drawer, drawerCollapsed]);
+  useEffect(() => {
+    const open = !listCollapsed;
+    if (open && !prevListOpenRef.current) setListEntering(true);
+    prevListOpenRef.current = open;
+  }, [listCollapsed]);
 
   // ── 折叠状态 → 面板（标题栏按钮、抽屉头部按钮等外部来源） ──
   useEffect(() => {
@@ -207,7 +229,14 @@ export function AppShell(props: AppShellProps) {
           defaultSize={listCollapsed ? LIST_COLLAPSED_SIZE : listWidth}
           className="shell-panel-list"
         >
-          {sidebarContent}
+          <div
+            className={cn("h-full min-w-0", listEntering && "list-content-enter")}
+            onAnimationEnd={(event) => {
+              if (event.target === event.currentTarget) setListEntering(false);
+            }}
+          >
+            {sidebarContent}
+          </div>
         </ResizablePanel>
         <ResizableHandle className="splitter splitter-left" />
 
@@ -245,17 +274,24 @@ export function AppShell(props: AppShellProps) {
           defaultSize={0}
           className="shell-panel-drawer"
         >
-          <WorkspaceDrawerHost
-            panel={drawer}
-            collapsed={drawerCollapsed}
-            pinned={drawerPinned}
-            onCollapse={onDrawerCollapse}
-            onClose={onDrawerClose}
-            onRestore={onDrawerRestore}
-            onTogglePin={onToggleDrawerPin}
-            rail={drawerRail}
-            renderPanel={(panel) => drawerContent(panel)}
-          />
+          <div
+            className={cn("h-full min-w-0", drawerEntering && "drawer-content-enter")}
+            onAnimationEnd={(event) => {
+              if (event.target === event.currentTarget) setDrawerEntering(false);
+            }}
+          >
+            <WorkspaceDrawerHost
+              panel={drawer}
+              collapsed={drawerCollapsed}
+              pinned={drawerPinned}
+              onCollapse={onDrawerCollapse}
+              onClose={onDrawerClose}
+              onRestore={onDrawerRestore}
+              onTogglePin={onToggleDrawerPin}
+              rail={drawerRail}
+              renderPanel={(panel) => drawerContent(panel)}
+            />
+          </div>
         </ResizablePanel>
       </ResizablePanelGroup>
       {/* 大纲浮层必须放在 Group 外：v4 只认 data-panel / data-separator 直系子节点，

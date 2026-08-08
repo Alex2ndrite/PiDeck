@@ -1091,6 +1091,32 @@ select:focus-visible {
 .shell-panel-drawer .detail-drawer {
   height: 100%;
 }
+/* 抽屉/侧栏开合内容动画（AppShell）：面板库宽度即时变化，内容层补一次
+   进入动画制造“滑出/淡入”感。只动 transform/opacity；animation 播完自动
+   恢复默认样式（fill 默认 none），不留 transform——Windows 静止态 transform
+   会触发长期合成层 + ClearType 子像素抗锯齿降级。抽屉在右滑入、侧栏在左滑入。 */
+.drawer-content-enter {
+  animation: drawer-content-enter 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.list-content-enter {
+  animation: drawer-content-enter 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes drawer-content-enter {
+  from {
+    opacity: 0;
+    transform: translateX(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .drawer-content-enter,
+  .list-content-enter {
+    animation: none;
+  }
+}
 /* 拖拽区高度同时暴露在 :root：sonner toaster、兑底 toast 等浮层渲染在 #root 内、
    并非 .wechat-shell 的后代，读不到 shell 作用域变量，会错误地按 0px 计算顶部 offset */
 :root {
@@ -2300,6 +2326,54 @@ select:focus-visible {
 }
 :root[data-bg-image="on"] .scratch-pad-panel {
   --wallpaper-dialog-alpha: 100%;
+}
+
+/* 大弹框内容级联入场（DialogContent stagger prop）：content 整体淡入的同时，
+   直接子元素（header/body/footer…）按序轻微浮起，延迟窗口控制在 content
+   入场 200ms 内，避免框内内容二次闪烁；关闭时动画不重播（类不变），
+   子元素保持结束态随 content 一起淡出。 */
+.dialog-stagger > * {
+  animation: dialog-stagger-in 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.dialog-stagger > *:nth-child(1) { animation-delay: 40ms; }
+.dialog-stagger > *:nth-child(2) { animation-delay: 70ms; }
+.dialog-stagger > *:nth-child(3) { animation-delay: 100ms; }
+.dialog-stagger > *:nth-child(4) { animation-delay: 130ms; }
+.dialog-stagger > *:nth-child(5) { animation-delay: 160ms; }
+.dialog-stagger > *:nth-child(6) { animation-delay: 190ms; }
+.dialog-stagger > *:nth-child(n + 7) { animation-delay: 220ms; }
+@keyframes dialog-stagger-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 下拉菜单项级联入场：容器 200ms 淡入的同时，菜单项按序轻微浮起（每项 +30ms，
+   上限 180ms，避免长菜单让底部项过晚可见）；动画只在挂载时播放一次，
+   键盘导航移动焦点不会重播，不影响快捷键操作。 */
+.dropdown-stagger > * {
+  animation: dropdown-stagger-in 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.dropdown-stagger > *:nth-child(1) { animation-delay: 30ms; }
+.dropdown-stagger > *:nth-child(2) { animation-delay: 60ms; }
+.dropdown-stagger > *:nth-child(3) { animation-delay: 90ms; }
+.dropdown-stagger > *:nth-child(4) { animation-delay: 120ms; }
+.dropdown-stagger > *:nth-child(5) { animation-delay: 150ms; }
+.dropdown-stagger > *:nth-child(n + 6) { animation-delay: 180ms; }
+@keyframes dropdown-stagger-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .chat-pane {

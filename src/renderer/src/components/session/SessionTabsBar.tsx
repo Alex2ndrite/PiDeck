@@ -11,7 +11,7 @@ import {
   SquareX,
   X,
 } from "lucide-react";
-import { useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   sessionRecordByIdAtomFamily,
   sessionRuntimeBySessionIdAtomFamily,
@@ -81,6 +81,54 @@ export function SessionTabsBar(props: SessionTabsBarProps) {
   // 拖拽插入指示：当前悬停的目标 Tab 与插入侧（before=左缘 / after=右缘）
   const [dragIndicator, setDragIndicator] = useState<{ targetId: string; position: "before" | "after" } | null>(null);
 
+  // —— 激活指示条（FLIP 风格滑动）——
+  // 浏览器式 Tab 切换时，激活下划线从旧 Tab 滑到新 Tab：
+  // 只测位置/宽度后用 transform 过渡（translateX + scaleX 模拟任意宽度，
+  // 合成器属性，不触发布局；scaleX 拉伸 2px 高的圆角线视觉无感）。
+  // 指示条是滚动容器的子元素，随内容横向滚动天然跟随，无需额外同步。
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [indicator, setIndicator] = useState<{ x: number; w: number } | null>(null);
+  // 首次定位时不带 transition（瞬间就位），之后更新才有滑动过渡
+  const hadPositionRef = useRef(false);
+  // 固定宽度基准，scaleX = w/INDICATOR_BASE_WIDTH；需覆盖 max-w-32(128px)+padding 的最大 Tab 宽
+  const INDICATOR_BASE_WIDTH = 200;
+
+  const measureIndicator = useCallback(() => {
+    const container = scrollRef.current;
+    if (!container || !currentSessionId) {
+      setIndicator(null);
+      return;
+    }
+    const el = container.querySelector<HTMLElement>(`[data-session-id="${CSS.escape(currentSessionId)}"]`);
+    if (!el) {
+      setIndicator(null);
+      return;
+    }
+    // 内容坐标系：视觉 x = 容器内偏移 + 已滚动距离（scrollLeft），
+    // 指示条 absolute 定位在滚动容器内，滚动时跟随内容。
+    const cRect = container.getBoundingClientRect();
+    const rect = el.getBoundingClientRect();
+    const x = rect.left - cRect.left + container.scrollLeft;
+    const w = rect.width;
+    setIndicator((prev) => (prev && prev.x === x && prev.w === w ? prev : { x, w }));
+  }, [currentSessionId]);
+
+  // Tab 列表/激活/固定变化时重测（固定与普通 Tab 宽度不同，pin 切换会改布局）
+  useLayoutEffect(() => {
+    measureIndicator();
+    if (indicator !== null) hadPositionRef.current = true;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [measureIndicator, tabs, pinnedTabs]);
+
+  // 标题长度变化等引起 Tab 宽度变化时，ResizeObserver 兜底重测（防抖：值不变不 set）
+  useLayoutEffect(() => {
+    const container = scrollRef.current;
+    if (!container) return;
+    const ro = new ResizeObserver(() => measureIndicator());
+    ro.observe(container);
+    return () => ro.disconnect();
+  }, [measureIndicator]);
+
   /** onDragOver 期间按鼠标位置相对目标 Tab 中点决定插入前后 */
   const handleDragOver = (event: React.DragEvent, targetId: string) => {
     if (!dragSourceRef.current || dragSourceRef.current === targetId) return;
@@ -119,7 +167,10 @@ export function SessionTabsBar(props: SessionTabsBarProps) {
   // Radix Portal 渲染不受裁剪，保留该值以防其他兄弟节点依赖。
   return (
     <div className="session-tabs-bar flex h-9 shrink-0 items-center gap-1 overflow-visible border-b border-border/40 bg-background/80 px-2">
-      <div className="session-tabs-scroll flex min-w-0 flex-1 items-center gap-1 overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div
+        ref={scrollRef}
+        className="session-tabs-scroll relative flex min-w-0 flex-1 items-center gap-1 overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      >
         {tabItems.map(({ sessionId }) => (
         <SessionTab
           key={sessionId}
@@ -152,6 +203,23 @@ export function SessionTabsBar(props: SessionTabsBarProps) {
           onDragEnd={handleDragEnd}
         />
         ))}
+        {/* 激活指示条：贴在激活 Tab 底部，切换会话时滑动（见上方 measureIndicator 说明） */}
+        {indicator && currentSessionId && (
+          <span
+            aria-hidden="true"
+            className={cn(
+              "session-tabs-indicator pointer-events-none absolute bottom-[3px] left-0 h-0.5 rounded-full bg-primary",
+              hadPositionRef.current
+                ? "transition-transform duration-base ease-out-quint"
+                : "transition-none",
+            )}
+            style={{
+              width: INDICATOR_BASE_WIDTH,
+              // scaleX 以元素中心为锚点，需用 translateX 补偿：左缘 = tx - (W-w)/2
+              transform: `translateX(${indicator.x - (INDICATOR_BASE_WIDTH - indicator.w) / 2}px) scaleX(${indicator.w / INDICATOR_BASE_WIDTH})`,
+            }}
+          />
+        )}
       </div>
       {/* null 表示当前会话由下方 SessionHeader 承载操作；undefined 才保留无会话空态的快捷入口。 */}
       {props.actions !== null && (
