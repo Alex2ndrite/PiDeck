@@ -1,5 +1,11 @@
 import { Button } from "./components/ui-shadcn/button";
 import {
+	Tabs,
+	TabsContent,
+	TabsList,
+	TabsTrigger,
+} from "./components/ui-shadcn/tabs";
+import {
 	Dialog,
 	DialogClose,
 	DialogContent,
@@ -48,6 +54,40 @@ const DEFAULT_MODEL_CONFIG: Pick<
 	reasoning: true,
 	input: ["text", "image"],
 };
+
+// ── 配置弹窗左侧导航 = shadcn Vertical Tabs ──
+// config 组 5 个子页（模型/认证/设置/信任/原始文件）用 "config:<tab>" 复合值，
+// 其余组直接以 section 名作 value；Tabs 受控 value 由此编码，业务仍走 section/tab 双 state，
+// loadConfig 等既有依赖零改动。
+type ConfigSection =
+	| "config"
+	| "skills"
+	| "prompts"
+	| "extensions"
+	| "editors"
+	| "im"
+	| "logs"
+	| "process";
+
+/** section+tab → Tabs value（config 组子页编码为 "config:<tab>"）。 */
+function sectionTabValue(section: ConfigSection, tab: ConfigTab): string {
+	return section === "config" ? `config:${tab}` : section;
+}
+
+/** Tabs value → section/tab；非 config 组无子 tab。 */
+function parseSectionTabValue(value: string): {
+	section: ConfigSection;
+	tab?: ConfigTab;
+} {
+	const idx = value.indexOf(":");
+	if (idx > 0) {
+		return {
+			section: value.slice(0, idx) as ConfigSection,
+			tab: value.slice(idx + 1) as ConfigTab,
+		};
+	}
+	return { section: value as ConfigSection };
+}
 
 /**
  * 配置页必须能打开用户手写/旧版本生成的非标准 models.json。
@@ -195,7 +235,7 @@ export function ConfigModal(props: ConfigModalProps) {
 
 function ConfigModalContent(props: ConfigModalProps) {
 	const { open, onClose, onSaved } = props;
-	const [section, setSection] = useState<"config" | "skills" | "prompts" | "extensions" | "editors" | "im" | "logs" | "process">("config");
+	const [section, setSection] = useState<ConfigSection>("config");
 	const [tab, setTab] = useState<ConfigTab>("models");
 	const [loading, setLoading] = useState(false);
 	const [saving, setSaving] = useState(false);
@@ -1367,6 +1407,24 @@ function ConfigModalContent(props: ConfigModalProps) {
 		{ id: "raw", label: t("config.nav.raw") },
 	];
 
+	// 加载态/错误提示：每个 TabsContent 顶部共用（Tabs 会卸载非激活内容，不能只挂一处）。
+	// 同一 JSX element 可在多处渲染，不会造成重复副作用。
+	const statusBlock = (
+		<>
+			{loading && <div className="py-12 text-center text-control text-muted-foreground">{t("common.loading")}</div>}
+			{error && <div className="mb-3.5 rounded-sm border border-danger/20 bg-danger-soft px-3.5 py-2.5 text-control leading-relaxed text-danger whitespace-pre-line">{error}</div>}
+		</>
+	);
+
+	// 配置诊断卡：config 组 5 个子页顶部共用（任意子页打开时都显示）。
+	const configDiagnosticBlock = configDiagnostic ? (
+		<ConfigDiagnosticCard
+			diagnostic={configDiagnostic}
+			onOpenDocs={() => api.app.openExternal(configDiagnostic.docsUrl)}
+			onOpenRaw={() => setTab("raw")}
+		/>
+	) : null;
+
 	if (!open) return null;
 
 	return (
@@ -1393,117 +1451,75 @@ function ConfigModalContent(props: ConfigModalProps) {
 						</DialogClose>
 					</div>
 				</DialogHeader>
-			{/* 默认浅色主题整页同底（bg-background），避免顶栏白 / 下方多层灰的割裂感 */}
-			<div className="config-layout grid min-h-0 flex-1 grid-cols-[148px_minmax(0,1fr)] bg-background max-[820px]:grid-cols-1 max-[820px]:grid-rows-[auto_minmax(0,1fr)]">
-					<aside className="config-sidebar flex min-h-0 flex-col gap-2.5 overflow-auto border-r border-border bg-background p-2.5 max-[820px]:flex-row max-[820px]:gap-3 max-[820px]:overflow-x-auto max-[820px]:overflow-y-hidden max-[820px]:border-r-0 max-[820px]:border-b" aria-label={t("config.title")}>
-						<div className="config-sidebar-group grid gap-0.5">
-							<span className="px-2 pb-1 text-micro font-semibold text-muted-foreground">{t("config.group.config")}</span>
-							{configNavItems.map((item) => (
-								<Button
-									key={item.id}
-									type="button"
-									variant={section === "config" && tab === item.id ? "secondary" : "ghost"}
-									size="sm"
-									className={`config-nav-btn h-8 justify-start px-2.5 text-control font-medium${section === "config" && tab === item.id ? " active" : ""}`}
-									onClick={() => {
-										setSection("config");
-										setTab(item.id);
-									}}
-								>
-									{item.label}
-								</Button>
-							))}
-						</div>
-						<div className="config-sidebar-group grid gap-0.5">
-							<span className="px-2 pb-1 text-micro font-semibold text-muted-foreground">{t("config.group.agent")}</span>
-							<Button
-								type="button"
-								variant={section === "extensions" ? "secondary" : "ghost"}
-								size="sm"
-								className={`config-nav-btn h-8 justify-start px-2.5 text-control font-medium${section === "extensions" ? " active" : ""}`}
-								onClick={() => setSection("extensions")}
+			{/* 默认浅色主题整页同底（bg-background），避免顶栏白 / 下方多层灰的割裂感。
+			  左侧导航 = shadcn Vertical Tabs：TabsList 竖排（orientation=vertical），
+			  组标题是非 trigger 的普通 div；窄屏（<820px）回退为横向导航。 */}
+			<Tabs
+				orientation="vertical"
+				value={sectionTabValue(section, tab)}
+				onValueChange={(value) => {
+					const parsed = parseSectionTabValue(value);
+					setSection(parsed.section);
+					if (parsed.tab) setTab(parsed.tab);
+				}}
+				className="config-layout flex min-h-0 flex-1 flex-row gap-0 bg-background max-[820px]:flex-col"
+			>
+				<TabsList
+					className="config-sidebar flex min-h-0 shrink-0 flex-col items-stretch gap-2.5 overflow-auto border-0 border-r border-border rounded-none bg-background p-2.5 data-[orientation=vertical]:w-[160px] max-[820px]:flex-row max-[820px]:gap-3 max-[820px]:overflow-x-auto max-[820px]:overflow-y-hidden max-[820px]:border-r-0 max-[820px]:border-b"
+					aria-label={t("config.title")}
+				>
+					<div className="config-sidebar-group grid gap-0.5">
+						<span className="px-2 pb-1 text-micro font-semibold text-muted-foreground">{t("config.group.config")}</span>
+						{configNavItems.map((item) => (
+							<TabsTrigger
+								key={item.id}
+								value={`config:${item.id}`}
+								className="config-nav-btn h-8 justify-start px-2.5 text-control font-medium"
 							>
-								{t("config.nav.extensions")}
-							</Button>
-							<Button
-								type="button"
-								variant={section === "skills" ? "secondary" : "ghost"}
-								size="sm"
-								className={`config-nav-btn h-8 justify-start px-2.5 text-control font-medium${section === "skills" ? " active" : ""}`}
-								onClick={() => setSection("skills")}
-							>
-								{t("config.nav.skills")}
-							</Button>
-							<Button
-								type="button"
-								variant={section === "prompts" ? "secondary" : "ghost"}
-								size="sm"
-								className={`config-nav-btn h-8 justify-start px-2.5 text-control font-medium${section === "prompts" ? " active" : ""}`}
-								onClick={() => setSection("prompts")}
-							>
-								{t("config.nav.prompts")}
-							</Button>
-						</div>
-						<div className="config-sidebar-group grid gap-0.5">
-							<span className="px-2 pb-1 text-micro font-semibold text-muted-foreground">{t("config.group.im")}</span>
-							<Button
-								type="button"
-								variant={section === "im" ? "secondary" : "ghost"}
-								size="sm"
-								className={`config-nav-btn h-8 justify-start px-2.5 text-control font-medium${section === "im" ? " active" : ""}`}
-								onClick={() => setSection("im")}
-							>
-								{t("config.nav.im")}
-							</Button>
-						</div>
-						<div className="config-sidebar-group grid gap-0.5">
-							<span className="px-2 pb-1 text-micro font-semibold text-muted-foreground">{t("config.group.other")}</span>
-							<Button
-								type="button"
-								variant={section === "editors" ? "secondary" : "ghost"}
-								size="sm"
-								className={`config-nav-btn h-8 justify-start px-2.5 text-control font-medium${section === "editors" ? " active" : ""}`}
-								onClick={() => setSection("editors")}
-							>
-								{t("config.nav.editors")}
-							</Button>
-						</div>
-						<div className="config-sidebar-group grid gap-0.5">
-							<span className="px-2 pb-1 text-micro font-semibold text-muted-foreground">{t("config.group.diagnostics")}</span>
-							<Button
-								type="button"
-								variant={section === "process" ? "secondary" : "ghost"}
-								size="sm"
-								className={`config-nav-btn h-8 justify-start px-2.5 text-control font-medium${section === "process" ? " active" : ""}`}
-								onClick={() => setSection("process")}
-							>
-								{t("config.nav.process")}
-							</Button>
-							<Button
-								type="button"
-								variant={section === "logs" ? "secondary" : "ghost"}
-								size="sm"
-								className={`config-nav-btn h-8 justify-start px-2.5 text-control font-medium${section === "logs" ? " active" : ""}`}
-								onClick={() => setSection("logs")}
-							>
-								{t("config.nav.logs")}
-							</Button>
-						</div>
-					</aside>
+								{item.label}
+							</TabsTrigger>
+						))}
+					</div>
+					<div className="config-sidebar-group grid gap-0.5">
+						<span className="px-2 pb-1 text-micro font-semibold text-muted-foreground">{t("config.group.agent")}</span>
+						<TabsTrigger value="extensions" className="config-nav-btn h-8 justify-start px-2.5 text-control font-medium">
+							{t("config.nav.extensions")}
+						</TabsTrigger>
+						<TabsTrigger value="skills" className="config-nav-btn h-8 justify-start px-2.5 text-control font-medium">
+							{t("config.nav.skills")}
+						</TabsTrigger>
+						<TabsTrigger value="prompts" className="config-nav-btn h-8 justify-start px-2.5 text-control font-medium">
+							{t("config.nav.prompts")}
+						</TabsTrigger>
+					</div>
+					<div className="config-sidebar-group grid gap-0.5">
+						<span className="px-2 pb-1 text-micro font-semibold text-muted-foreground">{t("config.group.im")}</span>
+						<TabsTrigger value="im" className="config-nav-btn h-8 justify-start px-2.5 text-control font-medium">
+							{t("config.nav.im")}
+						</TabsTrigger>
+					</div>
+					<div className="config-sidebar-group grid gap-0.5">
+						<span className="px-2 pb-1 text-micro font-semibold text-muted-foreground">{t("config.group.other")}</span>
+						<TabsTrigger value="editors" className="config-nav-btn h-8 justify-start px-2.5 text-control font-medium">
+							{t("config.nav.editors")}
+						</TabsTrigger>
+					</div>
+					<div className="config-sidebar-group grid gap-0.5">
+						<span className="px-2 pb-1 text-micro font-semibold text-muted-foreground">{t("config.group.diagnostics")}</span>
+						<TabsTrigger value="process" className="config-nav-btn h-8 justify-start px-2.5 text-control font-medium">
+							{t("config.nav.process")}
+						</TabsTrigger>
+						<TabsTrigger value="logs" className="config-nav-btn h-8 justify-start px-2.5 text-control font-medium">
+							{t("config.nav.logs")}
+						</TabsTrigger>
+					</div>
+				</TabsList>
 
-					<main className="config-main">
+					<TabsContent value="config:models" className="config-main min-w-0">
 						<div className="config-content">
-					{loading && <div className="py-12 text-center text-control text-muted-foreground">{t("common.loading")}</div>}
-					{error && <div className="mb-3.5 rounded-sm border border-danger/20 bg-danger-soft px-3.5 py-2.5 text-control leading-relaxed text-danger whitespace-pre-line">{error}</div>}
-					{section === "config" && configDiagnostic && (
-						<ConfigDiagnosticCard
-							diagnostic={configDiagnostic}
-							onOpenDocs={() => api.app.openExternal(configDiagnostic.docsUrl)}
-							onOpenRaw={() => setTab("raw")}
-						/>
-					)}
-
-					{section === "config" && !loading && tab === "models" && (
+					{statusBlock}
+					{configDiagnosticBlock}
+					{!loading && (
 						<ModelsTab
 							data={modelsData}
 							expandedProvider={expandedProvider}
@@ -1562,8 +1578,14 @@ function ConfigModalContent(props: ConfigModalProps) {
 							}}
 						/>
 					)}
+						</div>
+					</TabsContent>
 
-					{section === "config" && !loading && tab === "auth" && (
+					<TabsContent value="config:auth" className="config-main min-w-0">
+						<div className="config-content">
+					{statusBlock}
+					{configDiagnosticBlock}
+					{!loading && (
 						<AuthTab
 							data={authData}
 							expandedAuth={expandedAuth}
@@ -1588,8 +1610,14 @@ function ConfigModalContent(props: ConfigModalProps) {
 							onSave={handleSaveAuth}
 						/>
 					)}
+						</div>
+					</TabsContent>
 
-					{section === "config" && !loading && tab === "settings" && (
+					<TabsContent value="config:settings" className="config-main min-w-0">
+						<div className="config-content">
+					{statusBlock}
+					{configDiagnosticBlock}
+					{!loading && (
 						<SettingsTab
 							data={settingsData}
 							saving={saving}
@@ -1600,20 +1628,38 @@ function ConfigModalContent(props: ConfigModalProps) {
 							onSave={handleSaveSettings}
 						/>
 					)}
+						</div>
+					</TabsContent>
 
-					{section === "im" && !loading && (
+					<TabsContent value="im" className="config-main min-w-0">
+						<div className="config-content">
+					{statusBlock}
+					{!loading && (
 						<ImTab />
 					)}
+						</div>
+					</TabsContent>
 
-					{section === "logs" && !loading && (
+					<TabsContent value="logs" className="config-main min-w-0">
+						<div className="config-content">
+					{statusBlock}
+					{!loading && (
 						<LogsTab />
 					)}
+						</div>
+					</TabsContent>
 
-					{section === "process" && (
-						<ProcessMetricsTab />
-					)}
+					<TabsContent value="process" className="config-main min-w-0">
+						<div className="config-content">
+					{statusBlock}
+					<ProcessMetricsTab />
+						</div>
+					</TabsContent>
 
-					{section === "skills" && !loading && (
+					<TabsContent value="skills" className="config-main min-w-0">
+						<div className="config-content">
+					{statusBlock}
+					{!loading && (
 						editingGlobalSkill ? (
 							<div className="prompts-editor-backdrop" onClick={() => setEditingGlobalSkill(null)}>
 								<div className="prompts-editor-modal" onClick={(e) => e.stopPropagation()}>
@@ -1659,8 +1705,13 @@ function ConfigModalContent(props: ConfigModalProps) {
 						/>
 						)
 					)}
+						</div>
+					</TabsContent>
 
-					{section === "prompts" && !loading && (
+					<TabsContent value="prompts" className="config-main min-w-0">
+						<div className="config-content">
+					{statusBlock}
+					{!loading && (
 						<PromptsTab
 							data={promptsData}
 							loading={loading}
@@ -1685,22 +1736,36 @@ function ConfigModalContent(props: ConfigModalProps) {
 							onSaveEdit={handleSaveEditPrompt}
 						/>
 					)}
+						</div>
+					</TabsContent>
 
-					{section === "extensions" && (
-						<ExtensionsTab
+					<TabsContent value="extensions" className="config-main min-w-0">
+						<div className="config-content">
+					{statusBlock}
+					<ExtensionsTab
 							data={extensionsData}
 							loading={extensionsLoading}
 							uninstallingSource={uninstallingExtensionSource}
 							onRefresh={() => void refreshExtensions(true)}
 							onUninstall={setUninstallExtensionConfirm}
 						/>
-					)}
+						</div>
+					</TabsContent>
 
-					{section === "editors" && !loading && (
+					<TabsContent value="editors" className="config-main min-w-0">
+						<div className="config-content">
+					{statusBlock}
+					{!loading && (
 						<EditorsTab />
 					)}
+						</div>
+					</TabsContent>
 
-					{section === "config" && !loading && tab === "trust" && (
+					<TabsContent value="config:trust" className="config-main min-w-0">
+						<div className="config-content">
+					{statusBlock}
+					{configDiagnosticBlock}
+					{!loading && (
 						<TrustTab
 							data={trustData}
 							saving={saving}
@@ -1708,8 +1773,14 @@ function ConfigModalContent(props: ConfigModalProps) {
 							onSave={handleSaveTrust}
 						/>
 					)}
+						</div>
+					</TabsContent>
 
-					{section === "config" && !loading && tab === "raw" && (
+					<TabsContent value="config:raw" className="config-main min-w-0">
+						<div className="config-content">
+					{statusBlock}
+					{configDiagnosticBlock}
+					{!loading && (
 						<RawTab
 							fileName={rawFileName}
 							content={rawContent}
@@ -1720,8 +1791,8 @@ function ConfigModalContent(props: ConfigModalProps) {
 						/>
 					)}
 						</div>
-					</main>
-				</div>
+					</TabsContent>
+				</Tabs>
 
 				{deleteSkillConfirm && (
 					<ConfirmDialog

@@ -9,6 +9,7 @@ const surfaces = readFileSync("src/renderer/src/styles/surfaces.css", "utf8");
 const foundation = readFileSync("src/renderer/src/styles/foundation.css", "utf8");
 const rendererStyles = readFileSync("src/renderer/src/styles.css", "utf8");
 const settingsModal = readFileSync("src/renderer/src/components/app/SettingsModal.tsx", "utf8");
+const tabs = readFileSync("src/renderer/src/components/ui-shadcn/tabs.tsx", "utf8");
 const skillTableRow = skills.slice(skills.indexOf("function SkillTableRow"));
 
 test("config shell defines compact density and crisp system typography", () => {
@@ -19,7 +20,9 @@ test("config shell defines compact density and crisp system typography", () => {
   assert.match(surfaces, /\.config-modal \{[\s\S]*text-rendering: auto/);
   assert.doesNotMatch(surfaces, /\.config-modal \{[\s\S]*-webkit-font-smoothing: antialiased;/);
   assert.match(surfaces, /\.config-nav-btn \{[\s\S]*font-size:\s*14px/);
-  assert.match(surfaces, /\.config-nav-btn\.active \{[\s\S]*font-weight:\s*500/);
+  // 选中态随 Vertical Tabs 迁移：由 TabsTrigger data-[state=active] utility 承担
+  assert.match(tabs, /data-\[state=active\]:bg-bg-panel/);
+  assert.doesNotMatch(surfaces, /\.config-nav-btn\.active \{/);
   assert.match(foundation, /Segoe UI Variable Text/);
   assert.match(foundation, /Microsoft YaHei UI/);
   assert.doesNotMatch(foundation, /MiSans/);
@@ -37,7 +40,7 @@ test("config shell defines compact density and crisp system typography", () => {
   assert.match(configModal, /max-w-\[80vw\]/);
   assert.match(configModal, /h-\[80vh\]/);
   assert.match(configModal, /sm:max-w-\[min\(1300px,80vw\)\]/);
-  assert.match(configModal, /max-\[820px\]:grid-cols-1/);
+  assert.match(configModal, /max-\[820px\]:flex-col/);
   assert.match(configModal, /max-\[820px\]:flex-row/);
   assert.match(settingsModal, /settingsModalSizeClass/);
   assert.match(settingsModal, /w-\[80vw\]/);

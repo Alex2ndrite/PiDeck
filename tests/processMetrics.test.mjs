@@ -173,8 +173,10 @@ test("ProcessMetricsTab wires table columns and refresh", () => {
 
 test("ConfigModal registers process section nav and rendering", () => {
 	const source = readFileSync("src/renderer/src/ConfigModal.tsx", "utf8");
-	assert.match(source, /\| "logs" \| "process">/);
-	assert.match(source, /setSection\("process"\)/);
+	// 左侧导航已迁移为 Vertical Tabs：ConfigSection 类型含 process，TabsTrigger/TabsContent 成对注册
+	assert.match(source, /type ConfigSection =[\s\S]*\| "process";/);
+	assert.match(source, /<TabsTrigger[^>]*value="process"/);
+	assert.match(source, /<TabsContent value="process"/);
 	assert.match(source, /t\("config\.nav\.process"\)/);
 	assert.match(source, /<ProcessMetricsTab \/>/);
 });

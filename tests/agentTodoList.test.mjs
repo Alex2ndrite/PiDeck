@@ -12,6 +12,11 @@ test("plan and todo widgets use the reusable BEUI-style TodoList", () => {
   assert.match(list, /export function parseAgentTodoItems/);
   assert.match(list, /in-progress/);
   assert.match(list, /collapseOnComplete/);
+  assert.match(list, /rounded-\[20px\]/);
+  assert.match(list, /CheckCircle2/);
+  assert.match(list, /line-through/);
+  assert.match(list, /const visible = props\.items/);
+  assert.match(widget, /w-\[min\(40rem,calc\(100vw-2rem\)\)\]/);
 });
 
 test("todo parser supports plan numbering and completion markers", () => {

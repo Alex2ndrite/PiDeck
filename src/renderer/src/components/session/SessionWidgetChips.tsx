@@ -1,6 +1,6 @@
 import { useAtomValue } from "jotai";
 import { useState } from "react";
-import { ClipboardList, ListChecks, X } from "lucide-react";
+import { ClipboardList, ListChecks } from "lucide-react";
 import {
 	sessionRuntimeBySessionIdAtomFamily,
 	sessionRuntimeUiBySessionIdAtomFamily,
@@ -186,26 +186,14 @@ function WidgetChip(props: {
 					)}
 				</Button>
 			</PopoverTrigger>
-			<PopoverContent align="start" side="bottom" className="w-80 p-1">
-				<div className="flex items-center justify-end px-1">
-					<Button
-						type="button"
-						variant="ghost"
-						size="icon"
-						className="size-5 text-muted-foreground hover:text-foreground"
-						onClick={props.onDismiss}
-						title={t("common.close")}
-						aria-label={t("common.close")}
-					>
-						<X size={12} strokeWidth={2.2} aria-hidden="true" />
-					</Button>
-				</div>
+			<PopoverContent align="start" side="bottom" className="w-[min(40rem,calc(100vw-2rem))] p-0">
 				<AgentTodoList
 					title={title}
 					items={parseAgentTodoItems(props.lines)}
 					defaultOpen
 					collapseOnComplete
-					maxHeight={248}
+					maxHeight={320}
+					onDismiss={props.onDismiss}
 				/>
 			</PopoverContent>
 		</Popover>
