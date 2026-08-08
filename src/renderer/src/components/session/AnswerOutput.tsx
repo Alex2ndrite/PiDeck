@@ -76,7 +76,6 @@ const LiveAnswerBody = memo(function LiveAnswerBody(props: {
 	const { displayedContent } = useSmoothStream({
 		content: sourceText,
 		isStreaming: Boolean(props.isStreaming),
-		minDelay: 16,
 	});
 	const text = stripThinkingTags(stripAnsi(displayedContent));
 	return (

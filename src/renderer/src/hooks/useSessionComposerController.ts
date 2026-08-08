@@ -29,6 +29,7 @@ import {
 } from "../atoms";
 import {
   getComposerEnterIntent,
+  isComposingKeyboardEvent,
   parseArgumentHint,
   translateBuiltinPromptDescription,
   type PromptTemplateInfo,
@@ -619,7 +620,8 @@ export function useSessionComposerController(
         return;
       }
       if (event.key === "Enter") {
-        if (event.nativeEvent?.isComposing || event.keyCode === 229) return;
+        // IME 合成中的回车属于输入法确认候选，不能拿去选建议项
+        if (isComposingKeyboardEvent(event)) return;
         event.preventDefault();
         const selected = suggestionItems[
           Math.min(selectedSuggestionIndex, suggestionItems.length - 1)

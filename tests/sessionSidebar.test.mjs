@@ -156,6 +156,8 @@ test("worktree rows expose their child project context menu and loading projects
   assert.doesNotMatch(worktree, /toggleProjectExpanded/);
   assert.match(controller, /useAtomValue\(sessionCatalogLoadStateAtom\)/);
   assert.match(sessionTree, /catalogLoadStateByProject\[props\.project\.id\]\?\.status === "loading"/);
+  assert.match(sessionTree, /displayedSessionIds\.has\(session\.id\)/);
+  assert.match(sessionTree, /collectDisplayedSessionIds/);
   assert.match(sessionTree, /catalogLoading \|\| draftSessions\.length/);
   assert.match(sessionTree, /project-session-loading/);
 });

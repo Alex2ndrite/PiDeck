@@ -44,15 +44,10 @@ export const MarkdownStream = memo(function MarkdownStream(props: {
 }) {
 	const isDark = typeof document !== "undefined" &&
 		document.documentElement.dataset.theme === "dark";
-	// 逐字打字机渐显：把高频文本更新转为字符队列 + rAF 渐进渲染（参考 Cherry Studio 实现）。
-	// 只影响展示；权威文本在 atom 中不受影响（复制/导出仍拿全文）。
-	// minDelay 16ms（60fps）：对齐 Proma（10ms 量级）的逐字手感。streamdown 用 static
-	// 模式同步渲染（无 useTransition 合并）后，60fps 提交每帧独立，DOM 增量 = 每帧步进。
-	// maxStepPerFrame 默认 3：极端 queue 积压时的防蹦兜底（queue 短时 count=1 逐字）。
+	// 逐字打字机：默认参数见 useSmoothStream（约 8ms / 每帧最多 6 字）。
 	const { displayedContent } = useSmoothStream({
 		content: props.text,
 		isStreaming: Boolean(props.isStreaming),
-		minDelay: 16,
 	});
 	const displayText = props.isStreaming ? displayedContent : props.text;
 	// 流式期间走轻量渲染：跳过代码高亮/mermaid/数学等重插件，只跑 marked 核心解析，

@@ -102,9 +102,9 @@ test("sidebar omits the redundant projects heading and tabs shrink to their titl
   assert.match(tabBar, /session-tabs-actions flex shrink-0/);
   assert.match(sidebarContent, /sidebar-body flex min-h-0 flex-1 flex-col gap-2 px-2 pt-1 pb-1/);
   assert.match(sessionTree, /min-h-7 w-full/);
-  assert.match(sessionTree, /history-session-row mx-0 mb-0\.5 last:mb-0 min-h-7 pl-2 pr-2 py-0/);
+  assert.match(sessionTree, /history-session-row mx-0 min-h-7 pl-2 pr-2 py-0/);
   assert.match(sessionTree, /历史会话不是运行中的 Agent/);
-  assert.match(sessionTree, /flex flex-col gap-2 py-1/);
+  assert.match(sessionTree, /flex flex-col gap-0/);
   assert.match(styles, /\.chat-list-pane\.v3-braun \.sidebar-body \.session-row[\s\S]*?margin: 0;/);
   const conversationTitleSpan = styles.match(
     /\.conversation-title span \{([\s\S]*?)\n\}/,

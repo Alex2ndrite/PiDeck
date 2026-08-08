@@ -1,7 +1,7 @@
 import { Fragment, type ReactNode } from "react";
 import { ChevronDown, HatGlasses, Trash2 } from "lucide-react";
 import type { AgentTab, Project, SessionRecord, SessionSummary } from "../../../../shared/types";
-import { filterAgentsForSidebarDisplay, getProjectAgentSessionDisplay, sessionStatusDotClass, type ProjectChildItem } from "../../agentListDisplay";
+import { collectDisplayedSessionIds, filterAgentsForSidebarDisplay, getProjectAgentSessionDisplay, sessionStatusDotClass, type ProjectChildItem } from "../../agentListDisplay";
 import { sessionRecordToSummary } from "../../atoms";
 import { t } from "../../i18n";
 import { filterSidebarSessions, getBoundSidebarRuntimeAgent, hasLiveSidebarRuntime, type SidebarController } from "../../hooks/useSidebarController";
@@ -70,11 +70,6 @@ export function SessionTree(props: {
 }) {
   const filter = props.controller.sourceFilterFor(props.project.id);
   const search = props.controller.search.trim();
-  const draftSessions = props.sessions
-    .filter((session) => session.status === "draft")
-    .filter((session) => matchesSearch(session.title, search))
-    .filter((session) => filter === null || filter.has(session.source))
-    .sort((left, right) => right.updatedAt - left.updatedAt);
   const allSummaries = props.sessions.flatMap((session) => {
     const summary = sessionRecordToSummary(session);
     return summary ? [summary] : [];
@@ -93,6 +88,21 @@ export function SessionTree(props: {
     sessions: summaries,
     visibleChildCount: props.visibleChildCount ?? (props.nested ? Number.MAX_SAFE_INTEGER : props.controller.visibleChildCountFor(props.project.id)),
   });
+  const displayedSessionIds = collectDisplayedSessionIds(
+    display.visibleChildren,
+    (agent) => {
+      const linked = props.sessions.find(
+        (session) => props.controller.catalog.runtimeBySessionId[session.id]?.agentId === agent.id,
+      ) ?? summaries.find((session) => session.filePath === agent.sessionPath);
+      return linked?.id;
+    },
+  );
+  const draftSessions = props.sessions
+    .filter((session) => session.status === "draft")
+    .filter((session) => !displayedSessionIds.has(session.id))
+    .filter((session) => matchesSearch(session.title, search))
+    .filter((session) => filter === null || filter.has(session.source))
+    .sort((left, right) => right.updatedAt - left.updatedAt);
   const catalogLoading = props.controller.catalog.catalogLoadStateByProject[props.project.id]?.status === "loading";
   const hasRows = catalogLoading || draftSessions.length > 0 || display.visibleChildren.length > 0 || display.hiddenChildCount > 0;
   if (!hasRows) return null;
@@ -233,7 +243,7 @@ export function SessionTree(props: {
             sessionRowClass,
             // 历史会话不是运行中的 Agent：只给这一类内容增加层级缩进，避免项目标题与历史记录贴在同一列。
             // 历史会话需要比运行中 Agent 更松的点击区域和行间距，避免连续记录挤成一块。
-            "session-row history-session-row mx-0 mb-0.5 last:mb-0 min-h-7 pl-2 pr-2 py-0",
+            "session-row history-session-row mx-0 min-h-7 pl-2 pr-2 py-0",
             child.session.id === props.currentSessionId && "active border-border-strong bg-accent/20 text-foreground shadow-sm",
           )}
           onContextMenu={(event) => openContext(event, child.session)}
@@ -257,7 +267,7 @@ export function SessionTree(props: {
   return (
     <div className={cn(
       props.nested ? "worktree-children m-0 border-0 bg-transparent p-0" : "session-card",
-      "flex flex-col gap-2 py-1",
+      "flex flex-col gap-0",
     )}>
       {draftSessions.map((session) => {
         const runtime = props.controller.catalog.runtimeBySessionId[session.id];

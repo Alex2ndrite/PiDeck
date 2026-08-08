@@ -140,12 +140,13 @@ export const TurnRow = memo(
 	// run 级折叠状态（一个开关控制全部思考/工具/中间回答步骤）
 	// hasFinalAnswer：无最终回答的 run 不自动收起（中间回答是唯一输出，不能被折叠隐藏）
 	const hasFinalAnswer = displayItems.some((item) => item.kind === "final-answer");
-	const { stepsVisible, toggleSteps, autoCollapseTick } = useTurnExecution({
-		agentRunning: props.agentRunning,
-		isComplete,
-		hasFinalAnswer,
-		isLatestRun: props.isLatestRun,
-	});
+	const { stepsVisible, setStepsVisibleFromUser, toggleSteps, autoCollapseTick } =
+		useTurnExecution({
+			agentRunning: props.agentRunning,
+			isComplete,
+			hasFinalAnswer,
+			isLatestRun: props.isLatestRun,
+		});
 
 	// 自动收起后：等折叠负增高 / stick 近底重锁完成，再对准最终回答开头。
 	useLayoutEffect(() => {
@@ -243,7 +244,8 @@ export const TurnRow = memo(
 					<Collapsible
 						className="execution-summary"
 						open={stepsVisible}
-						onOpenChange={toggleSteps}
+						// Radix 传入目标 open；必须 set 而非 toggle，否则受控更新会把状态打反。
+						onOpenChange={setStepsVisibleFromUser}
 					>
 						<ProcessSummaryToggle
 							summary={processSummary}
@@ -261,7 +263,6 @@ export const TurnRow = memo(
 											<ThinkingStep
 												group={item.entry.group}
 												hidden={!stepsVisible}
-												isStreaming={props.isStreaming}
 												showThinking={props.showThinking}
 												onOpenExternal={props.onOpenExternal}
 												onOpenFile={props.onOpenFile}

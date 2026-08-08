@@ -340,7 +340,6 @@ export const ThinkingBlock = memo(
 	const { displayedContent } = useSmoothStream({
 		content: props.text,
 		isStreaming: Boolean(props.isStreaming),
-		minDelay: 16,
 	});
 	// 始终走打字机输出：历史首挂时 hook 初始即全文；流式结束也不再绕过 displayedContent 造成整段蹦出。
 	// 折叠态内容溢出检测：超过 4 行半才显示「展开思考」按钮。

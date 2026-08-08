@@ -59,6 +59,26 @@ export type ProjectAgentSessionDisplay = {
 	hiddenChildCount: number;
 };
 
+/**
+ * 统一列表（Agent/历史会话行）已占用的 catalog Session ID。
+ * draft 区块必须排除这些 ID，否则启动后会出现「draft 标题行 + Agent 行」重复入口。
+ */
+export function collectDisplayedSessionIds(
+	visibleChildren: readonly ProjectChildItem[],
+	resolveAgentSessionId: (agent: AgentTab) => string | undefined,
+): Set<string> {
+	const ids = new Set<string>();
+	for (const child of visibleChildren) {
+		if (child.type === "session") {
+			ids.add(child.session.id);
+			continue;
+		}
+		const sessionId = resolveAgentSessionId(child.agent);
+		if (sessionId) ids.add(sessionId);
+	}
+	return ids;
+}
+
 // native 路径不区分大小写；WSL 路径保留大小写，并使用环境前缀防止跨来源碰撞。
 export function normalizeSessionPathForCompare(
 	sessionPath?: string,

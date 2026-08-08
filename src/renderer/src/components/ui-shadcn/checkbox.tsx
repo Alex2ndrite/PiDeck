@@ -22,10 +22,10 @@ function Checkbox({
     >
       <CheckboxPrimitive.Indicator
         data-slot="checkbox-indicator"
-        className="flex items-center justify-center text-current transition-none"
+        className="group flex items-center justify-center text-current transition-none"
       >
-        <CheckIcon className="size-3.5 data-[state=indeterminate]:hidden" />
-        <MinusIcon className="hidden size-3.5 data-[state=indeterminate]:block" />
+        <CheckIcon className="size-3.5 group-data-[state=indeterminate]:hidden" />
+        <MinusIcon className="hidden size-3.5 group-data-[state=indeterminate]:block" />
       </CheckboxPrimitive.Indicator>
     </CheckboxPrimitive.Root>
   )

@@ -1364,6 +1364,11 @@ html[data-theme="dark"] .scratch-pad-md mark {
   padding: 0;
 }
 
+.chat-list-pane.v3-braun .sidebar-body .agent-row,
+.chat-list-pane.v3-braun .sidebar-body .session-row {
+  margin: 0;
+}
+
 .chat-list-pane.v3-braun .sidebar-body .project-group > .conversation:first-child.active::before,
 .chat-list-pane.v3-braun .sidebar-body .agent-row.active::before,
 .chat-list-pane.v3-braun .sidebar-body .session-row.active::before,
@@ -1487,10 +1492,10 @@ html[data-theme="dark"] .scratch-pad-md mark {
 }
 
 .chat-list-pane.v3-braun .sidebar-body .codex-subagent-sidebar-group {
-  margin: 2px 0 2px 28px;
+  margin: 0 0 0 28px;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 0;
 }
 
 .chat-list-pane.v3-braun .sidebar-body .codex-subagent-sidebar-toggle,
