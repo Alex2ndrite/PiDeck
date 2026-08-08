@@ -467,19 +467,28 @@ export function useSessionComposerController(
     [commands, cursor, draft, flatFiles, projectSessions, suggestionsOpen],
   );
   const suggestionAnchorStyle = useMemo<CSSProperties | undefined>(() => {
-    if (!suggestionsOpen || !editorRef.current) return undefined;
-    const coordinates = getComposerCaretCoords(editorRef.current, cursor);
-    if (!coordinates) return undefined;
+    if (!suggestionsOpen) return undefined;
     const menuWidth = Math.min(520, window.innerWidth - 120);
     const menuHeight = 380;
     const gap = 8;
+    // 兜底定位（原 CSS .command-palette 的「默认居中 + 底部 160px」语义收进 JS）：
+    // 拿不到编辑器/光标坐标时，面板仍然有确定位置，CSS 不再承载任何定位假设。
+    const fallback: CSSProperties = {
+      top: "auto",
+      bottom: 160,
+      left: Math.max(16, (window.innerWidth - menuWidth) / 2),
+    };
+    const root = editorRef.current;
+    if (!root) return fallback;
+    const coordinates = getComposerCaretCoords(root, cursor);
+    if (!coordinates) return fallback;
     let left = coordinates.left;
     if (left + menuWidth > window.innerWidth - 16) {
       left = Math.max(16, window.innerWidth - menuWidth - 16);
     }
     const below = coordinates.top + gap;
     if (below + menuHeight <= window.innerHeight - 16) {
-      return { top: below, left, bottom: "auto", transform: "none" };
+      return { top: below, left, bottom: "auto" };
     }
     const above = coordinates.top - gap;
     if (above - menuHeight >= 0) {
@@ -487,10 +496,9 @@ export function useSessionComposerController(
         top: "auto",
         bottom: window.innerHeight - above,
         left,
-        transform: "none",
       };
     }
-    return { top: "auto", bottom: 16, left, transform: "none" };
+    return { top: "auto", bottom: 16, left };
   }, [cursor, suggestionsOpen]);
 
   const isBusy = runtime?.status === "running" || Boolean(runtime?.state?.isStreaming);

@@ -923,7 +923,7 @@ export function SessionHistoryModal(props: {
 }) {
 	return (
 		<Dialog open onOpenChange={(next) => !next && props.onClose()}>
-			<DialogContent showCloseButton={false} className={cn("flex flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(800px,calc(100vw-48px))]", "session-history-modal")}>
+			<DialogContent showCloseButton={false} className={cn("flex max-h-[min(680px,calc(100vh-80px))] flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(800px,calc(100vw-48px))]")}>
 				<DialogHeader className="flex-row items-center justify-between px-4 py-3">
 					<DialogTitle></DialogTitle>
 					<DialogClose asChild>
@@ -932,12 +932,12 @@ export function SessionHistoryModal(props: {
 						</Button>
 					</DialogClose>
 				</DialogHeader>
-				<div className="session-history-path" title={props.project.path}>
+				<div className="truncate border-b border-border-subtle bg-bg-muted px-[18px] py-[10px] text-caption text-text-secondary" title={props.project.path}>
 					{props.project.path}
 				</div>
-				<div className="session-history-body">
+				<div className="relative flex min-h-[320px] flex-1 flex-col overflow-hidden">
 					{props.loading ? (
-						<div className="session-history-loading">
+						<div className="grid min-h-[320px] place-items-center content-center gap-3 text-body text-text-tertiary">
 							<div className="loader" />
 							<span>{t("drawer.historyLoading")}</span>
 						</div>
