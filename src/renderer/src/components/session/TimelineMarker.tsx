@@ -46,15 +46,19 @@ export function TimelineMarker(props: {
   className?: string;
   /** 内容区（timeline-marker-content）追加类，供具体卡片覆盖默认底距等间距 */
   contentClassName?: string;
+  /** 不渲染左侧轨道（竖线+节点），直接展示内容——用于系统状态/自动重试等
+   *  临时提示，它们不是需要轨道归属关系的步骤节点 */
+  hideRail?: boolean;
 }) {
   const tone = props.tone ?? "neutral";
   const statusIcon = getStatusIcon(props.kind, tone);
   return (
     <div
-      className={cn("timeline-marker-row flex min-w-0 items-stretch gap-2.5", props.className)}
+      className={cn("timeline-marker-row flex min-w-0 items-stretch", !props.hideRail && "gap-2.5", props.className)}
       data-marker-kind={props.kind}
       data-marker-tone={tone}
     >
+      {!props.hideRail && (
       <div className="timeline-marker-rail relative flex w-4 shrink-0 justify-center" aria-hidden="true">
         <span className="timeline-marker-line absolute top-0 bottom-0 w-px bg-border-subtle" />
         {/* 轨道只保留状态节点；工具/思考的语义图标已经在内容卡片里，避免左侧重复一套 Logo。 */}
@@ -72,6 +76,7 @@ export function TimelineMarker(props: {
           {statusIcon}
         </span>
       </div>
+      )}
       <div className={cn("timeline-marker-content min-w-0 flex-1 pb-2", props.contentClassName)}>{props.children}</div>
     </div>
   );

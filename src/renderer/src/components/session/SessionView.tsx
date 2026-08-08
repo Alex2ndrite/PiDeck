@@ -393,8 +393,14 @@ export function SessionView({
   // 的三面板布局」主动恢复：composer 保持关闭前高度，timeline 吸收 terminal
   // 释放的空间；setLayout 同时填充 "timeline,composer" 缓存，重开终端时
   // 三面板缓存恢复原布局。程序化标记避免恢复触发的 onResize 污染用户手动高度。
+  //
+  // 条件只按 terminalPanelVisible（面板渲染条件）判断，不叠加 terminalOpen：
+  // 打开设置/配置弹窗时 settingsOpen=true → terminal 面板卸载（组变 2 面板），
+  // 但 terminalOpen 仍为 true；若此时 return 不转换布局，缓存仍是 3 值，
+  // react-resizable-panels 的 ResizeObserver 用 3 值校验 2 面板会抛
+  // 「Invalid 2 panel layout」导致 SessionView 崩溃（0.7.0-beta 线上反馈）。
   useLayoutEffect(() => {
-    if (terminalPanelVisible || terminalOpen) return;
+    if (terminalPanelVisible) return;
     const prev = lastThreePanelLayoutRef.current;
     const group = sessionGroupRef.current;
     const panel = composerPanelRef.current;
@@ -445,6 +451,11 @@ export function SessionView({
       {/* 分支导航条：仅当当前会话存在 fork 分支关系（父/兄弟/子分支）时显示 */}
       <SessionBranchBar sessionId={sessionId} onOpenSession={onOpenBranchSession} />
       <ResizablePanelGroup
+        // 面板数变化（terminal 卸载/挂载）时强制重建：旧 Group 的 3 值布局缓存
+        // 不复用，避免 react-resizable-panels 内部 K() 校验「Invalid N panel layout」
+        // 抛错导致 SessionView 崩溃（0.7.0-beta 线上反馈）；重建后由下方
+        // useLayoutEffect 在 paint 前 setLayout 恢复 composer 高度。
+        key={terminalPanelVisible ? "session-group-3p" : "session-group-2p"}
         orientation="vertical"
         className="session-v-group"
         groupRef={sessionGroupRef}

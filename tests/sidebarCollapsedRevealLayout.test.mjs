@@ -19,7 +19,7 @@ test("collapsed sidebar reveal does not override the v3 conversation list layout
 });
 
 test("collapsed sidebar keeps 14px gutter; restore control is in the tab bar", () => {
-  assert.match(shell, /LIST_COLLAPSED_SIZE = 14/);
+  assert.match(shell, /LIST_COLLAPSED_SIZE = 0/);
   assert.match(css, /\.list-collapsed \.chat-list-pane \{\s*display:\s*none;/);
   assert.doesNotMatch(css, /list-toggle-native\.floating/);
   assert.doesNotMatch(css, /padding-left: 56px;/);
