@@ -216,20 +216,44 @@ export function useTipTapComposerEditor(
 	 * 禁止用 editorText !== value 当条件——打字后父层尚未 re-render 时会把新输入打回旧草稿。
 	 * 白名单变化只影响下次 setContent 解析，不作为同步触发依赖。
 	 */
+	/**
+	 * 受控同步：只在父层 value 与「我们上次发出的文本」不一致时写回编辑器。
+	 * 禁止用 editorText !== value 当条件——打字后父层尚未 re-render 时会把新输入打回旧草稿。
+	 * 白名单变化只影响下次 setContent 解析，不作为同步触发依赖。
+	 *
+	 * 光标恢复是配对消费：写入方在事件处理器里同步 setDraft + 写 caretRef，
+	 * 本 effect 只在 value 变化时重跑，因此同一趟 layout pass 里 value 就是请求
+	 * 的 forValue。不匹配的请求 = 过期（要么其 value 从未渲染就被覆盖，要么写入
+	 * 发生在 layout pass 之后），必须丢弃而非保留——否则会被下一次输入误用
+	 * （旧实现：切换会话后第一次输入光标被重置回 draft.length）。
+	 */
 	useLayoutEffect(() => {
 		if (!editor || editor.isDestroyed) return;
-		const caret = caretRef?.current;
-		if (value !== lastEmittedRef.current) {
+		const pending = caretRef?.current;
+		const needsContentSync = value !== lastEmittedRef.current;
+		if (needsContentSync) {
 			editor.commands.setContent(plainTextToComposerDoc(value, whitelistRef.current), {
 				emitUpdate: false,
 			});
 			lastEmittedRef.current = value;
 			syncEmptyClass(editor);
 		}
+		const caret = pending && pending.forValue === value ? pending.pos : null;
 		if (typeof caret === "number" && caretRef) {
+			// 程序化改动（引用插入/历史回填/运行时 editorText 恢复等）配对消费。
 			editor.commands.setTextSelection(
 				plainOffsetToPos(editor, Math.min(caret, value.length)),
 			);
+			caretRef.current = null;
+		} else if (needsContentSync) {
+			// 外部同步（切换会话/草稿回填/发送清空）没有配对光标请求时，
+			// setContent 会把选区映射到旧文档的任意位置；兜底恢复到文末。
+			editor.commands.setTextSelection(
+				plainOffsetToPos(editor, value.length),
+			);
+		}
+		if (pending && caretRef && pending.forValue !== value) {
+			// 过期请求：随它所属的 value 已不可能再渲染，丢弃而非保留。
 			caretRef.current = null;
 		}
 	}, [value, editor, caretRef]);

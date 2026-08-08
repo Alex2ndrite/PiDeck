@@ -47,6 +47,7 @@ import {
 } from "../components/app/AppUtils";
 import { SESSION_TAB_DRAG_MIME } from "../utils/sessionSplitEdge";
 import type { ComposerChip } from "../components/session/composer/chips";
+import type { ComposerCaretRequest } from "../components/session/composer/types";
 import {
   getComposerCaretCoords,
   getComposerCaretOffset,
@@ -234,7 +235,9 @@ export function useSessionComposerController(
   const mode = modes[sessionId] ?? "normal";
   const sendState = sendStates[sessionId] ?? { status: "idle" as const };
   const editorRef = useRef<HTMLDivElement | null>(null);
-  const caretRef = useRef<number | null>(null);
+  // 程序化光标请求（带归属 forValue，见 composer/types.ts 的 ComposerCaretRequest）；
+  // 编辑器只在内容同步到 forValue 的同一趟 layout pass 配对消费，过期请求会被丢弃。
+  const caretRef = useRef<ComposerCaretRequest | null>(null);
   const liveDomDraftRef = useRef({ sessionId, value: draft });
   const draftGuardRef = useRef(createComposerDraftGuard({
     sessionId,
@@ -330,7 +333,10 @@ export function useSessionComposerController(
     setSavedDraft("");
     setBusyDraftLocked(false);
     setSendBehaviorMenuOpen(false);
-    caretRef.current = draft.length;
+    // 注意：这里不再写 caretRef。该写入发生在编辑器 layout effect 之后、且 layout
+    // effect 只在 value 变化时重跑，会留下一条过期待消费光标——首次输入（打字/
+    // 粘贴/语音）时把选区重置回 0。恢复光标到文末由编辑器在内容同步（setContent）
+    // 时兜底完成，见 useTipTapComposerEditor 同步 effect。
     draftGuardRef.current = createComposerDraftGuard({
       sessionId,
       agentId: runtime?.agentId,
@@ -385,7 +391,7 @@ export function useSessionComposerController(
     liveDomDraftRef.current = { sessionId, value: editorText.text };
     setDraft(editorText.text);
     setCursor(editorText.text.length);
-    caretRef.current = editorText.text.length;
+    caretRef.current = { pos: editorText.text.length, forValue: editorText.text };
   }, [runtime, runtimeUi, sessionId, setDraft, store]);
 
   useEffect(() => {
@@ -567,7 +573,7 @@ export function useSessionComposerController(
     liveDomDraftRef.current = { sessionId, value: result.text };
     setDraft(result.text);
     setCursor(result.cursor);
-    caretRef.current = result.cursor;
+    caretRef.current = { pos: result.cursor, forValue: result.text };
     setSuggestionsOpen(false);
     requestAnimationFrame(() => editorRef.current?.focus());
   }, [cursor, draft, sessionId, setDraft]);
@@ -581,7 +587,7 @@ export function useSessionComposerController(
     liveDomDraftRef.current = { sessionId, value: result.text };
     setDraft(result.text);
     setCursor(result.cursor);
-    caretRef.current = result.cursor;
+    caretRef.current = { pos: result.cursor, forValue: result.text };
     setSuggestionsOpen(false);
     requestAnimationFrame(() => editorRef.current?.focus());
   }, [cursor, draft, sessionId, setDraft]);
@@ -647,7 +653,7 @@ export function useSessionComposerController(
       setHistoryIndex(nextIndex);
       liveDomDraftRef.current = { sessionId, value: history[nextIndex] };
       setDraft(history[nextIndex]);
-      caretRef.current = history[nextIndex].length;
+      caretRef.current = { pos: history[nextIndex].length, forValue: history[nextIndex] };
       return;
     }
     if (event.key === "ArrowDown" && lastLine && historyIndex >= 0) {
@@ -658,7 +664,7 @@ export function useSessionComposerController(
       if (nextIndex < 0) setSavedDraft("");
       liveDomDraftRef.current = { sessionId, value: nextDraft };
       setDraft(nextDraft);
-      caretRef.current = nextDraft.length;
+      caretRef.current = { pos: nextDraft.length, forValue: nextDraft };
       return;
     }
     if (event.key === "Escape" && historyIndex >= 0) {
@@ -720,7 +726,7 @@ export function useSessionComposerController(
     liveDomDraftRef.current = { sessionId, value: next };
     setDraft(next);
     setCursor(nextCursor);
-    caretRef.current = nextCursor;
+    caretRef.current = { pos: nextCursor, forValue: next };
     requestAnimationFrame(() => editorRef.current?.focus());
   }, [cursor, draft, sessionId, setDraft]);
 
@@ -873,7 +879,7 @@ export function useSessionComposerController(
     if (!target) {
       // No Agent yet: write /compact to draft and send → starts Agent + compacts
       setDraft("/compact");
-      caretRef.current = "/compact".length;
+      caretRef.current = { pos: "/compact".length, forValue: "/compact" };
       void send();
       return;
     }
@@ -895,7 +901,7 @@ export function useSessionComposerController(
       : `/${template.name} `;
     liveDomDraftRef.current = { sessionId, value: next };
     setDraft(next);
-    caretRef.current = next.length;
+    caretRef.current = { pos: next.length, forValue: next };
     setPicker(null);
     requestAnimationFrame(() => editorRef.current?.focus());
   }, [draft, sessionId, setDraft]);

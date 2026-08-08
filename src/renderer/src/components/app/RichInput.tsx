@@ -547,8 +547,9 @@ export const RichInput = forwardRef<HTMLDivElement, RichInputProps>(
 			const root = rootRef.current;
 			if (!root) return;
 
-			// Path 1：程序化变更
-			const caretTarget = caretRef?.current;
+			// Path 1：程序化变更（ComposerCaretRequest 契约：只取 pos，
+			// 与 forValue 的配对校验由当前唯一使用者 TipTap composer 负责）
+			const caretTarget = caretRef?.current?.pos ?? null;
 			if (caretTarget != null) {
 				rebuildDom(caretTarget);
 				return;
