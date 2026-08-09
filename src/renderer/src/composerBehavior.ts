@@ -330,3 +330,52 @@ export function isYesNoConfirmOptions(
 	);
 	return kinds.includes("yes") && kinds.includes("no") && !kinds.includes("other");
 }
+
+/**
+ * 从会话消息里提取可导航的用户输入历史（最新在前）。
+ *
+ * 业务背景：未启动的 Agent（纯历史会话）没有本次运行发送记录，上下键历史为空；
+ * 旧版在激活后读取全部消息填充，重构版改为从会话消息缓存（disk/runtime 同源）提取，
+ * 激活前后行为一致。
+ * 规则：只取 user 角色且有实质文本的消息；跳过空文本与 "!" 开头命令（与
+ * recordPromptHistory 的过滤一致）；截断到 limit 条（默认 50，与发送历史一致）。
+ */
+export function extractUserPrompts(
+	messages: ReadonlyArray<{ role: string; text: string }>,
+	limit = 50,
+): string[] {
+	const prompts: string[] = [];
+	// 消息按时间正序，从后往前取保证最新在前
+	for (let i = messages.length - 1; i >= 0 && prompts.length < limit; i--) {
+		const text = messages[i].text.trim();
+		if (messages[i].role !== "user" || !text || text.startsWith("!")) continue;
+		prompts.push(text);
+	}
+	return prompts;
+}
+
+/**
+ * 合并「本次运行发送的」与「会话历史已有的」用户输入，供上下键历史导航。
+ *
+ * 规则：
+ * - runtimePrompts 最新在前（recordPromptHistory 的存储顺序）；
+ *   sessionPrompts 按时间正序传入，内部反转成最新在前；
+ * - 全局去重：runtime 优先保留，session 中与已出现条目重复的跳过
+ *   （激活前后重复发送同一条时不出现两条）；
+ * - 截断到 limit 条（默认 50，与 recordPromptHistory 一致）。
+ */
+export function mergePromptHistory(
+	runtimePrompts: readonly string[],
+	sessionPrompts: readonly string[],
+	limit = 50,
+): string[] {
+	const seen = new Set<string>();
+	const merged: string[] = [];
+	for (const prompt of [...runtimePrompts, ...[...sessionPrompts].reverse()]) {
+		if (seen.has(prompt)) continue;
+		seen.add(prompt);
+		merged.push(prompt);
+		if (merged.length >= limit) break;
+	}
+	return merged;
+}

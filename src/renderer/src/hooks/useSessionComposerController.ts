@@ -17,6 +17,7 @@ import {
   sessionAttachmentsByIdAtom,
   sessionComposerModeByIdAtom,
   sessionDraftByIdAtom,
+  sessionMessagesCacheAtom,
   sessionRecordByIdAtomFamily,
   sessionRuntimeBySessionIdAtomFamily,
   sessionRuntimeUiBySessionIdAtomFamily,
@@ -32,6 +33,8 @@ import {
   isComposingKeyboardEvent,
   parseArgumentHint,
   translateBuiltinPromptDescription,
+  extractUserPrompts,
+  mergePromptHistory,
   type PromptTemplateInfo,
 } from "../composerBehavior";
 import {
@@ -250,6 +253,19 @@ export function useSessionComposerController(
   }));
   const templateRequestGateRef = useRef(createLatestRequestGate());
   const promptHistoryRef = useRef<Record<string, string[]>>({});
+  /**
+   * 当前会话可导航的输入历史 = 本次运行发送记录（promptHistoryRef，最新在前）
+   * + 会话已有消息里的用户输入（从 sessionMessagesCacheAtom 懒读取，零订阅零重渲染）。
+   * 未启动的 Agent 没有发送记录，但 timeline 加载会话时已把 disk 消息写入缓存，
+   * 因此激活前后上下键历史行为一致（issue-139）。
+   */
+  const getPromptHistory = useCallback(() => {
+    const runtimeHistory = promptHistoryRef.current[sessionId] ?? [];
+    const sessionHistory = extractUserPrompts(
+      store.get(sessionMessagesCacheAtom)[sessionId]?.messages ?? [],
+    );
+    return mergePromptHistory(runtimeHistory, sessionHistory);
+  }, [sessionId, store]);
   const sendBehaviorCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastEditorTextEnvelopeRef = useRef("");
   const [cursor, setCursor] = useState(0);
@@ -609,13 +625,13 @@ export function useSessionComposerController(
     setCursor(nextCursor);
     setSuggestionsOpen(detectTrigger(value, nextCursor) !== null);
     if (historyIndex >= 0) {
-      const history = promptHistoryRef.current[sessionId] ?? [];
+      const history = getPromptHistory();
       if (value !== history[historyIndex]) {
         setHistoryIndex(-1);
         setSavedDraft("");
       }
     }
-  }, [historyIndex, sessionId, setDraft]);
+  }, [getPromptHistory, historyIndex, sessionId, setDraft]);
 
   const onKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
     if (suggestionsOpen && suggestionItems.length > 0) {
@@ -654,7 +670,7 @@ export function useSessionComposerController(
       : cursor;
     const firstLine = !liveDraft.slice(0, liveCursor).includes("\n");
     const lastLine = !liveDraft.slice(liveCursor).includes("\n");
-    const history = promptHistoryRef.current[sessionId] ?? [];
+    const history = getPromptHistory();
 
     if (event.key === "ArrowUp" && firstLine && history.length > 0) {
       event.preventDefault();
@@ -695,6 +711,7 @@ export function useSessionComposerController(
   }, [
     closeSuggestions,
     draft,
+    getPromptHistory,
     historyIndex,
     isBusy,
     savedDraft,
