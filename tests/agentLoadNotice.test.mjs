@@ -103,18 +103,12 @@ test("reminder toggles are default-enabled and wired through App + SettingsStore
 	const modal = readFileSync("src/renderer/src/components/app/SettingsModal.tsx", "utf8");
 	// 类型、主进程默认值、渲染层首屏默认值三处同步为开启
 	assert.match(settingsType, /agentCountReminderEnabled: boolean/);
-	assert.match(settingsType, /workBreakReminderEnabled: boolean/);
 	assert.match(store, /agentCountReminderEnabled: true/);
-	assert.match(store, /workBreakReminderEnabled: true/);
 	assert.match(app, /agentCountReminderEnabled: true/);
-	assert.match(app, /workBreakReminderEnabled: true/);
-	// 渲染层 hook 读取开关：开启才提醒；「永久不再提醒」按钮写回设置
+	// 渲染层 hook 读取开关：开启才提醒
 	assert.match(app, /useAgentLoadNotice\(settings\.agentCountReminderEnabled\)/);
-	assert.match(app, /useWorkBreakReminder\(settings\.workBreakReminderEnabled, disableWorkBreakReminderForever\)/);
-	assert.match(app, /api\.settings\s*\.update\(\{ workBreakReminderEnabled: false \}\)/);
-	// 设置面板提供两个开关（更新草稿对应字段）
+	// 设置面板提供开关（更新草稿对应字段）
 	assert.match(modal, /updateDraft\(\{ agentCountReminderEnabled: checked \}\)/);
-	assert.match(modal, /updateDraft\(\{ workBreakReminderEnabled: checked \}\)/);
 });
 
 test("i18n copy covers zh-CN and en-US with count placeholder", () => {

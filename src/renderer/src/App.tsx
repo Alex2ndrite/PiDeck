@@ -38,7 +38,6 @@ import { useRename } from "./hooks/useRename";
 import { useProjectRuntimeCapabilities } from "./hooks/useRuntimeCapabilities";
 import { useSessionRuntimeBridge } from "./hooks/useSessionRuntimeBridge";
 import { useAgentLoadNotice } from "./hooks/useAgentLoadNotice";
-import { useWorkBreakReminder } from "./hooks/useWorkBreakReminder";
 import { useSessionLayout } from "./hooks/useSessionLayout";
 import { useFileEditor , resolveFileLinkPath } from "./hooks/useFileEditor";
 import { useOverlayActions } from "./hooks/useOverlayActions";
@@ -496,7 +495,6 @@ export function App() {
     enableNotifications: true,
     // 人文关怀提醒默认开启：与主进程 SettingsStore 默认一致，首屏未拉到真实设置前不关闭提醒
     agentCountReminderEnabled: true,
-    workBreakReminderEnabled: true,
     // showThinking 由 pi agent 的 hideThinkingBlock 控制，启动后从主进程加载的真实值会覆盖此处
     showThinking: true,
     showDevTools: false,
@@ -753,15 +751,6 @@ export function App() {
   });
   // 激活 Agent 数量告警：受设置 agentCountReminderEnabled 控制（默认开启），每个启动周期提示一次
   useAgentLoadNotice(settings.agentCountReminderEnabled);
-  // 人文关怀：受设置 workBreakReminderEnabled 控制（默认开启），从本次启动计时，每满 2 小时提醒休息；
-  // 「永久不再提醒」按钮把该设置写回 false（可在设置中重新开启），保证设置持久化。
-  const disableWorkBreakReminderForever = useCallback(() => {
-    void api.settings
-      .update({ workBreakReminderEnabled: false })
-      .then((saved) => setSettings((current) => ({ ...current, ...saved })))
-      .catch(() => undefined);
-  }, []);
-  useWorkBreakReminder(settings.workBreakReminderEnabled, disableWorkBreakReminderForever);
   const activeQueuedPrompts = currentSessionId
     ? (queue.queuedPrompts[currentSessionId] ?? [])
     : [];
@@ -2530,10 +2519,13 @@ export function App() {
     // 关闭会话 = 停止 Agent 运行 + 移除会话 Tab（与“关闭标签页”仅移除 Tab 不同）
     canStopCurrent:
       activeAgent?.status === "running" || activeAgent?.status === "idle",
-    onStopCurrent: () => {
-      if (activeAgentId) void abortAgent(activeAgentId);
-      if (currentSessionId) workspaceChrome.closeTab(currentSessionId);
-    },
+    // 会话从未启动（无绑定 agent）时隐藏“关闭会话”：停止无意义，关闭走“关闭标签页”
+    onStopCurrent: activeAgentId
+      ? () => {
+          void abortAgent(activeAgentId);
+          if (currentSessionId) workspaceChrome.closeTab(currentSessionId);
+        }
+      : undefined,
     canRestartCurrent: Boolean(activeAgentId),
     isRestartingCurrent: restartingAgentId === activeAgentId,
     // 没有绑定运行时的草稿也有会话 ID，但重启只对已启动 Agent 有意义

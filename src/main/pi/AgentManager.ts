@@ -238,6 +238,8 @@ export class AgentManager {
 	private readonly pendingUIRequests = new Map<string, Map<string, { method: string; title: string }>>();
 	/** abort 时正在等待 ask_question 响应的 agent，用于在工具结果中覆写 answer 为 null。 */
 	private readonly abortedDuringAsk = new Set<string>();
+	/** 成功空闲（settled）回调：供 PetStateBridge 等主进程内部模块订阅，携带完成 Agent 身份。 */
+	private readonly settledListeners = new Set<(info: { agentId: string; title: string }) => void>();
 	/** 待处理的项目信任确认请求。key 为 requestId，用于在 Agent 启动前等待用户的信任决策。 */
 	private readonly pendingTrustRequests = new Map<string, { resolve: (choice: ProjectTrustChoice) => void }>();
 	private wslEnvironment: WslEnvironment | null = null;
@@ -2295,6 +2297,22 @@ export class AgentManager {
 		return () => { this.stateListeners.delete(listener); };
 	}
 
+	/**
+	 * 注册「Agent 成功空闲」监听器（供 PetStateBridge 等主进程内部模块使用）。
+	 * 仅在 agent_settled 成功路径或 get_state 兜底确认无工作后触发，
+	 * abort / 自动重试 / 压缩 / agent_end 都不会触发 —— 这些都不是可靠的完成点。
+	 */
+	onAgentSettled(listener: (info: { agentId: string; title: string }) => void): () => void {
+		this.settledListeners.add(listener);
+		return () => { this.settledListeners.delete(listener); };
+	}
+
+	private notifyAgentSettled(agentId: string, title: string) {
+		for (const listener of this.settledListeners) {
+			try { listener({ agentId, title }); } catch {}
+		}
+	}
+
 	private notifyStateListeners(tabs: AgentTab[]) {
 		for (const listener of this.stateListeners) {
 			try { listener(tabs); } catch {}
@@ -2839,6 +2857,11 @@ export class AgentManager {
 			// 通知 stream gate：abort 对应的 settled 已到。
 			// 若 settled 前已有 agent_start（用户立刻重发），此处才真正解封；
 			// 若还没有新 start，则保持封印，防止 settled 后残留 delta 复活旧气泡。
+			// abort 的 settled（或 abort 后重发时迟到的旧 settled）不算成功完成：
+			// recentlyAborted 被 agent_start 清除，但 abortSettledFallbackTimers 保留到 settled，
+			// 两者任一命中都说明本轮被用户中止，不得触发「已完成」提醒。
+			const isAbortSettled =
+				this.recentlyAborted.has(agentId) || this.abortSettledFallbackTimers.has(agentId);
 			this.noteAgentAbortSettled(agentId);
 			this.recentlyAborted.delete(agentId);
 			if (runtime && runtime.tab.status !== "error" && runtime.tab.status !== "closed") {
@@ -2865,6 +2888,8 @@ export class AgentManager {
 				if (lastMessage?.role === "assistant") {
 					this.notifySessionEnd(runtime.tab.title);
 				}
+				// 成功空闲（settled）后才算完成：通知宠物等内部模块携带标题，供「{title} 已完成」气泡使用。
+				if (!isAbortSettled) this.notifyAgentSettled(agentId, runtime.tab.title);
 			}
 		}
 
@@ -3968,6 +3993,8 @@ export class AgentManager {
 		this.streamingText.delete(agentId);
 		this.emitState();
 		void this.emitRuntimeState(agentId);
+		// 兜底确认无工作也算成功空闲：与 agent_settled 一样通知完成（PetStateBridge 侧有去重冷却）。
+		this.notifyAgentSettled(agentId, runtime.tab.title);
 	}
 
 	private requireRuntime(agentId: string) {

@@ -2511,61 +2511,8 @@
   color: var(--color-text-primary);
 }
 
-.config-models-grid-header {
-  display: grid;
-  /* 模型 id/name 容易很长，使用 minmax 防止输入框撑破 modal。
-     列宽按内容校准：思考级别（xhigh/max 两组三态按钮）160px、图片 84px，
-     总固定列 + 弹性列下限约 780px，窄屏时由 .config-models-section 横向滚动兜底。 */
-  grid-template-columns:
-    minmax(100px, 1.2fr) minmax(80px, 0.8fr)
-    90px 90px 48px 160px 84px 32px;
-  min-width: 780px;
-  gap: 8px;
-  align-items: center;
-  padding: 0 10px 6px;
-  font-size: var(--font-size-micro);
-  color: var(--color-text-tertiary);
-  font-weight: 600;
-  letter-spacing: 0;
-}
-
-.config-models-grid-row {
-  display: grid;
-  grid-template-columns:
-    minmax(100px, 1.2fr) minmax(80px, 0.8fr)
-    90px 90px 48px 160px 84px 32px;
-  min-width: 780px;
-  gap: 8px;
-  align-items: center;
-  padding: 8px 10px;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-lg);
-  margin-bottom: 7px;
-  background: var(--color-bg-panel);
-  transition:
-    border-color 0.15s,
-    box-shadow 0.15s,
-    background 0.15s;
-}
-
-.config-model-cost {
-  display: grid;
-  grid-template-columns: auto repeat(4, minmax(90px, 1fr));
-  align-items: center;
-  gap: 8px;
-  padding-top: 6px;
-  border-top: 1px solid var(--color-border-subtle);
-}
-
-.config-model-cost-title {
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-micro);
-  font-weight: 600;
-  white-space: nowrap;
-}
-
+/* 模型计费弹框内字段：标签 + 输入框一行排布 */
 .config-model-cost-field {
-  display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
   gap: 5px;
@@ -2576,55 +2523,6 @@
 
 .config-model-cost-field input {
   min-width: 0;
-}
-
-.config-models-grid-row:hover {
-  border-color: var(--color-border-strong);
-  background: var(--color-bg-hover);
-  box-shadow: var(--shadow-border);
-}
-
-.config-models-grid-row input:not([type]),
-.config-models-grid-row input[type="text"],
-.config-models-grid-row input[type="number"] {
-  min-width: 0;
-  height: 30px;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-sm);
-  padding: 0 8px;
-  font-size: var(--font-size-caption);
-  background: var(--color-bg-panel);
-  color: var(--color-text-primary);
-  width: 100%;
-  transition:
-    border-color 0.15s,
-    box-shadow 0.15s,
-    background 0.15s;
-}
-
-.config-models-grid-row input:focus {
-  outline: none;
-  border-color: var(--color-accent);
-  background: var(--color-bg-panel);
-  box-shadow: var(--focus-ring);
-}
-
-.config-checkbox-cell {
-  display: flex;
-  justify-content: center;
-}
-
-.config-checkbox-cell input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
-  accent-color: var(--color-accent);
-}
-
-/* 输入类型列：两个复选框垂直堆叠 */
-.config-input-cell {
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 
 .config-input-option {
@@ -2648,27 +2546,6 @@
   color: var(--color-text-secondary);
   white-space: nowrap;
 }
-
-.config-xhigh-cell {
-  min-width: 0;
-}
-
-.config-xhigh-cell .config-select-trigger {
-  height: 30px;
-  padding: 0 7px;
-  gap: 4px;
-  font-size: var(--font-size-caption);
-}
-
-.config-xhigh-cell .config-combobox-menu {
-  min-width: 92px;
-}
-
-.config-xhigh-cell .config-combobox-menu button {
-  font-size: var(--font-size-caption);
-}
-
-
 
 
 
@@ -4455,35 +4332,6 @@ div.fixed.inset-0.z-50 {
   width: 26px;
 }
 
-.config-thinking-levels-segmented {
-  display: inline-flex;
-  min-width: 0;
-  overflow: hidden;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-sm);
-  background: var(--color-bg-panel);
-}
-
-.config-thinking-level-option {
-  min-width: 32px;
-  height: 24px;
-  padding: 0 5px;
-  border-radius: 0;
-  font-size: 10px;
-  font-family: var(--font-mono);
-  color: var(--color-text-tertiary);
-}
-
-.config-thinking-level-option + .config-thinking-level-option {
-  border-left: 1px solid var(--color-border-subtle);
-}
-
-.config-thinking-level-option[data-state="on"],
-.config-thinking-level-option[aria-pressed="true"] {
-  background: var(--color-bg-active);
-  color: var(--color-text-primary);
-  font-weight: 600;
-}
 
 .config-thinking-levels-row .config-select-trigger > span {
   font-size: 11px;
@@ -4494,42 +4342,3 @@ div.fixed.inset-0.z-50 {
 }
 
 /* 模型计费字段：每百万 token 美元单价 */
-.config-cost-cell {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.config-cost-row {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.config-cost-label {
-  font-size: 10px;
-  font-weight: 600;
-  color: var(--color-text-tertiary);
-  font-family: var(--font-mono);
-  flex-shrink: 0;
-  width: 22px;
-}
-
-.config-cost-cell input {
-  height: 24px;
-  width: 100%;
-  font-size: 11px;
-  font-family: var(--font-mono);
-  padding: 0 6px;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-sm);
-  background: var(--color-bg-panel);
-  color: var(--color-text-primary);
-}
-
-.config-cost-cell input:focus {
-  outline: none;
-  border-color: var(--color-accent);
-  box-shadow: var(--focus-ring);
-}

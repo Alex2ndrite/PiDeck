@@ -82,8 +82,6 @@ export type StartupWindowMode =
 	enableNotifications: boolean;
 	/** 激活 Agent 数量提醒（人文关怀）：激活数达到阈值时，启动时提示关闭空闲会话释放内存。默认开启。 */
 	agentCountReminderEnabled: boolean;
-	/** 连续使用时长提醒（人文关怀）：从本次启动计时，每满 1 小时提醒休息。默认开启。 */
-	workBreakReminderEnabled: boolean;
 	/** 是否在会话中显示模型思考过程，默认开启 */
 	showThinking: boolean;
 	/** 是否开启开发者控制台（DevTools） */
@@ -277,11 +275,20 @@ export type PetWindowCaps = {
 	freePosition: boolean;
 };
 
-/** 宠物通知气泡：出错/完成时在宠物头顶弹出 */
+/** 宠物通知气泡：出错/完成/等待操作时在宠物头顶弹出。
+ *  waiting 为持久化提醒（等待用户回应），直到主进程推送 null 才消失；
+ *  error/done 由主进程计时 4 秒后推送 null 自动消失。
+ *  text 为完整文案（兼容），title/status 供 renderer 分段着色：标题黑色 + 状态词状态色。 */
 export type PetNotification = {
-	type: "error" | "done";
+	type: "error" | "done" | "waiting";
 	text: string;
-	/** 出错时关联的 Agent id */
+	/** 关联的 Agent id（waiting/error 必有，done 尽量带） */
 	agentId?: string;
 	timestamp: number;
+	/** true：不自动消失，直到主进程推送 null 清理（等待操作类） */
+	persistent?: boolean;
+	/** Agent 标题（黑色段）；缺省时 renderer 退化为整行单色绘制 */
+	title?: string;
+	/** 已翻译的状态词，如「已完成」（状态色段）；缺省时退化为整行单色绘制 */
+	status?: string;
 };
