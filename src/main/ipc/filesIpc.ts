@@ -61,6 +61,12 @@ export function registerFilesIpc({
 		if (error) throw new Error(error);
 	});
 
+	ipcMain.handle(ipcChannels.filesShowInFolder, async (_event, path: string) => {
+		// 回归修复（30b6954b 误删）：渲染层「在文件夹中显示」依赖此通道，
+		// 缺失时 invoke 会抛 No handler registered。WSL 路径先转 Windows 再定位。
+		shell.showItemInFolder(toWindowsPath(path));
+	});
+
 	ipcMain.handle(ipcChannels.browserOpenExternal, async (_event, url: string) => {
 		// This IPC is renderer-callable, so it must share the protocol gate used by
 		// every other external-link path instead of passing arbitrary schemes to the OS.
