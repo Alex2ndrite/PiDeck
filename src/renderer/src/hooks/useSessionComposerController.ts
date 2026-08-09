@@ -50,7 +50,12 @@ import {
   readFileNodeDragPayload,
 } from "../components/app/AppUtils";
 import { SESSION_TAB_DRAG_MIME } from "../utils/sessionSplitEdge";
-import type { ComposerChip } from "../components/session/composer/chips";
+import {
+  extractPastedPath,
+  formatFilePathRef,
+  unwrapFileChipPath,
+  type ComposerChip,
+} from "../components/session/composer/chips";
 import type { ComposerCaretRequest } from "../components/session/composer/types";
 import {
   getComposerCaretCoords,
@@ -759,10 +764,41 @@ export function useSessionComposerController(
     requestAnimationFrame(() => editorRef.current?.focus());
   }, [cursor, draft, sessionId, setDraft]);
 
-  /** 本地路径以 @path 引用插入（OS 文件拖入/粘贴/文件选择器共用） */
+  /** 本地路径以 @path 引用插入（OS 文件拖入/粘贴/文件选择器共用）；含空格路径自动加引号 */
   const insertFilePathRefs = useCallback((paths: string[]) => {
-    insertRefTexts(paths.map((path) => `@${path}`));
+    insertRefTexts(
+      paths.map((path) =>
+        formatFilePathRef(path, { isDirectory: /[\\/]$/.test(path) }),
+      ),
+    );
   }, [insertRefTexts]);
+
+  /**
+   * 纯文本路径粘贴：把路径规范化为 @"…" 引用并插入。
+   * 若光标前有未完成的 @ 触发（用户先打了 @ 再粘贴路径），替换触发符，
+   * 避免残留孤立的 @；否则与拖拽/选择器插入走同一规则。
+   */
+  const insertPastedPathRef = useCallback((path: string) => {
+    const liveDraft = liveDomDraftRef.current.sessionId === sessionId
+      ? liveDomDraftRef.current.value
+      : draft;
+    const liveCursor = editorRef.current
+      ? getComposerCaretOffset(editorRef.current)
+      : cursor;
+    const refText = formatFilePathRef(path);
+    const trigger = detectTrigger(liveDraft, liveCursor);
+    if (trigger && trigger.char === "@") {
+      const result = applySuggestion(liveDraft, liveCursor, refText);
+      liveDomDraftRef.current = { sessionId, value: result.text };
+      setDraft(result.text);
+      setCursor(result.cursor);
+      caretRef.current = { pos: result.cursor, forValue: result.text };
+    } else {
+      insertRefTexts([refText]);
+    }
+    setSuggestionsOpen(false);
+    requestAnimationFrame(() => editorRef.current?.focus());
+  }, [cursor, draft, insertRefTexts, sessionId, setDraft]);
 
   /** 从 File 列表解析本地路径（Electron 32+ 必须走 webUtils，不能用已移除的 File.path） */
   const resolveLocalPathsFromFiles = useCallback((files: File[]) => {
@@ -812,12 +848,23 @@ export function useSessionComposerController(
       }
     }
 
-    // 3) 图片粘贴（截图等位图数据，无本地文件路径）：读取并附加到消息
+    // 3) 纯文本绝对路径粘贴（QQ「复制路径」/ 资源管理器地址栏 / Windows「复制为路径」）：
+    //    规范化为 @"path" 引用插入，而不是留下带拼写波浪线的裸路径文本。
+    const pastedPath = extractPastedPath(
+      event.clipboardData.getData("text/plain"),
+    );
+    if (pastedPath) {
+      event.preventDefault();
+      insertPastedPathRef(pastedPath);
+      return;
+    }
+
+    // 4) 图片粘贴（截图等位图数据，无本地文件路径）：读取并附加到消息
     const imageFiles = getClipboardImageFiles(event.clipboardData);
     if (!imageFiles.length) return;
     event.preventDefault();
     void addImageFiles(imageFiles);
-  }, [addImageFiles, insertFilePathRefs, resolveLocalPathsFromFiles]);
+  }, [addImageFiles, insertFilePathRefs, insertPastedPathRef, resolveLocalPathsFromFiles]);
 
   /**
    * 拖拽：
@@ -854,7 +901,8 @@ export function useSessionComposerController(
 
   const onChipClick = useCallback((chip: ComposerChip) => {
     if (chip.kind === "file") {
-      const path = chip.raw.slice(1);
+      // 引用可能带引号（@"path with space"），统一解包出真实路径
+      const path = unwrapFileChipPath(chip.raw);
       if (options.onOpenFile) options.onOpenFile(path);
       else void desktopApi.files.open(path);
       return;

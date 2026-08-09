@@ -72,6 +72,27 @@ export function formatFilePathRef(
 }
 
 /**
+ * 从粘贴文本中识别「单条本地绝对路径」：trim 后整段即为一条绝对路径
+ * （允许前缀 @、外层成对引号——兼容 Windows 资源管理器「复制为路径」）。
+ * 用于 onPaste 拦截：把 QQ「复制路径」等复制的路径文本转成 @"…" 引用插入，
+ * 而不是让裸路径留在输入框里（带拼写波浪线且无法形成 chip）。
+ * 非纯路径（多行 / 夹杂正文）返回 null，不拦截普通文本粘贴。
+ */
+export function extractPastedPath(text: string): string | null {
+	if (!text) return null;
+	let body = text.trim();
+	if (!body || body.includes("\n") || body.includes("\r")) return null;
+	if (body.startsWith("@")) body = body.slice(1).trimStart();
+	if (body.length >= 2 && body.startsWith('"') && body.endsWith('"')) {
+		body = body.slice(1, -1).trim();
+	}
+	if (!body) return null;
+	// 只拦截绝对路径：Windows 盘符（C:\… / C:/…）或 POSIX 根路径（/…）
+	if (!/^[a-zA-Z]:[\\/]/.test(body) && !/^\//.test(body)) return null;
+	return body;
+}
+
+/**
  * 将 prompt 字符串解析为 chip 列表（展示层，与 detectTrigger 规则对齐）。
  *
  * 规则：
@@ -113,13 +134,31 @@ export function parseRichInputChips(
 		if (m.index === slashRe.lastIndex) slashRe.lastIndex++;
 	}
 
-	// @path：无空格 / 引号含空格 / 目录尾斜杠；相对路径走白名单，绝对路径绕过。
+	// @path：无空格 / 引号含空格 / 目录尾斜杠；未加引号的绝对路径可含空格（逐段延伸）；
+	// 相对路径走白名单，绝对路径绕过。
 	const atRe = /(?<![:/.\w#!~])(@(?:"[^"]+"|[^\s@"]+))/g;
 	while ((m = atRe.exec(text)) !== null) {
 		const start = m.index;
-		const end = start + m[1].length;
+		let rawToken = m[1];
+		let end = start + rawToken.length;
+		// 未加引号的绝对路径：空格可能属于路径本身（@C:/Users/…/Tencent Files/…）。
+		// 只有「下一段含 / 或 \ 」才并入，避免把后续正文/URL 吞进路径；
+		// 引号形式（@"…"）有明确边界，不需要延伸。
+		if (!rawToken.includes('"')) {
+			const body = rawToken.slice(1);
+			const isAbsPrefix = /^[a-zA-Z]:[\\/]/.test(body) || /^\//.test(body);
+			if (isAbsPrefix) {
+				while (end < text.length) {
+					const segMatch = /^ ([^\s]+)/.exec(text.slice(end));
+					if (!segMatch) break;
+					const seg = segMatch[1];
+					if (!/[\\/]/.test(seg) || /^https?:\/\//i.test(seg)) break;
+					rawToken += ` ${seg}`;
+					end += segMatch[0].length;
+				}
+			}
+		}
 		if (!overlapsUrl(start, end, urlSpans)) {
-			const rawToken = m[1];
 			const body = rawToken.startsWith("@") ? rawToken.slice(1) : rawToken;
 			const quoted = body.length >= 2 && body.startsWith('"') && body.endsWith('"');
 			const rawPath = quoted ? body.slice(1, -1) : body;
@@ -136,7 +175,13 @@ export function parseRichInputChips(
 			const label = isDirectoryRef
 				? `${baseLabel.replace(/[/\\]+$/, "")}/`
 				: baseLabel;
-			chips.push({ start, end, raw: rawToken, kind: "file", label });
+			// 被延伸过的未加引号路径（含空格）规范化为 @"…" 形式：
+			// 保证发送/回显（序列化）后仍是完整可解析的引用，与选择器插入的格式一致。
+			const raw =
+				rawToken !== m[1]
+					? formatFilePathRef(rawPath, { isDirectory: isDirectoryRef })
+					: rawToken;
+			chips.push({ start, end, raw, kind: "file", label });
 		}
 		if (m.index === atRe.lastIndex) atRe.lastIndex++;
 	}

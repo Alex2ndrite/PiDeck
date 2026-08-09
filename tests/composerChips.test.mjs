@@ -35,6 +35,7 @@ const {
 	parseRichInputChips,
 	formatFilePathRef,
 	unwrapFileChipPath,
+	extractPastedPath,
 } = loadChips();
 
 test("formatFilePathRef quotes spaced paths and marks directories", () => {
@@ -103,4 +104,87 @@ test("URL path segments are not parsed as chips", () => {
 		chips.map((c) => c.raw),
 		["@src/a.ts"],
 	);
+});
+
+test("unquoted absolute path with spaces is extended into one file chip", () => {
+	const chips = parseRichInputChips(
+		"@C:/Users/528/Documents/Tencent Files/473812916/nt_qq/nt_data/Pic/2026-08/Ori/455f949b57b937a5491cbb0a6f7bd07a.png",
+	);
+	assertJsonEqual(
+		chips.map((c) => ({ kind: c.kind, raw: c.raw, label: c.label })),
+		[
+			{
+				kind: "file",
+				raw: '@"C:/Users/528/Documents/Tencent Files/473812916/nt_qq/nt_data/Pic/2026-08/Ori/455f949b57b937a5491cbb0a6f7bd07a.png"',
+				label: "C:/Users/528/Documents/Tencent Files/473812916/nt_qq/nt_data/Pic/2026-08/Ori/455f949b57b937a5491cbb0a6f7bd07a.png",
+			},
+		],
+	);
+});
+
+test("unquoted spaced absolute path stops before following text and URLs", () => {
+	const withText = parseRichInputChips("@C:/Program Files/nodejs 帮我看看");
+	assertJsonEqual(
+		withText.map((c) => ({ raw: c.raw, label: c.label })),
+		[{ raw: '@"C:/Program Files/nodejs"', label: "C:/Program Files/nodejs" }],
+	);
+	// 延伸不跨过 URL：https:// 是正文，不是路径的一部分
+	const withUrl = parseRichInputChips("@C:/foo https://x.com/a");
+	assertJsonEqual(
+		withUrl.map((c) => ({ raw: c.raw, label: c.label })),
+		[{ raw: "@C:/foo", label: "C:/foo" }],
+	);
+});
+
+test("unquoted spaced absolute path supports backslashes and dir suffix", () => {
+	const backslash = parseRichInputChips("@C:\\Users\\Tencent Files\\a.png");
+	assertJsonEqual(
+		backslash.map((c) => ({ raw: c.raw, label: c.label })),
+		[
+			{
+				raw: '@"C:\\Users\\Tencent Files\\a.png"',
+				label: "C:/Users/Tencent Files/a.png",
+			},
+		],
+	);
+	const dir = parseRichInputChips("@C:/Program Files/");
+	assertJsonEqual(
+		dir.map((c) => ({ raw: c.raw, label: c.label })),
+		[{ raw: '@"C:/Program Files/"', label: "C:/Program Files/" }],
+	);
+});
+
+test("POSIX absolute path with spaces is extended", () => {
+	const chips = parseRichInputChips("@/Users/me/My Documents/a.txt");
+	assertJsonEqual(
+		chips.map((c) => ({ raw: c.raw, label: c.label })),
+		[{ raw: '@"/Users/me/My Documents/a.txt"', label: "/Users/me/My Documents/a.txt" }],
+	);
+});
+
+test("space-free absolute path keeps raw unquoted", () => {
+	const chips = parseRichInputChips("@C:/foo/bar.txt");
+	assertJsonEqual(
+		chips.map((c) => ({ raw: c.raw, label: c.label })),
+		[{ raw: "@C:/foo/bar.txt", label: "C:/foo/bar.txt" }],
+	);
+});
+
+test("extractPastedPath recognizes single absolute path pastes", () => {
+	assert.equal(
+		extractPastedPath("C:/Users/528/Documents/Tencent Files/455f949b57b937a5491cbb0a6f7bd07a.png"),
+		"C:/Users/528/Documents/Tencent Files/455f949b57b937a5491cbb0a6f7bd07a.png",
+	);
+	assert.equal(extractPastedPath("@C:/Users/x.png"), "C:/Users/x.png");
+	assert.equal(extractPastedPath('"C:\\Users\\Tencent Files\\x.png"'), "C:\\Users\\Tencent Files\\x.png");
+	assert.equal(extractPastedPath('@"C:/a b.txt"'), "C:/a b.txt");
+	assert.equal(extractPastedPath("/Users/me/a.txt"), "/Users/me/a.txt");
+});
+
+test("extractPastedPath rejects non-path text and relative paths", () => {
+	assert.equal(extractPastedPath("看下 C:/foo.txt 这个文件"), null);
+	assert.equal(extractPastedPath("src/foo bar/a.ts"), null);
+	assert.equal(extractPastedPath("C:/foo.txt\nC:/bar.txt"), null);
+	assert.equal(extractPastedPath(""), null);
+	assert.equal(extractPastedPath("C:"), null);
 });

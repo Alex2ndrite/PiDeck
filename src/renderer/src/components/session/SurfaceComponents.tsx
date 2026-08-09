@@ -109,7 +109,7 @@ import type {
 	Project,
 	SessionSummary,
 } from "../../../../shared/types";
-import { parseRichInputChips } from "./composer/chips";
+import { parseRichInputChips, unwrapFileChipPath } from "./composer/chips";
 import removeMarkdown from "remove-markdown";
 /** 复用 petdex 标准网格规格，在主设置面板里为宠物选择器渲染单格动画预览 */
 import { GRID_COLS, CELL_W, CELL_H, MODE_ROW, MODE_FRAMES } from "../../pet/PetSpriteSheet";
@@ -968,7 +968,7 @@ function renderChipText(text: string, onOpenFile?: (path: string) => void, valid
 				data-type={chip.kind}
 				data-raw={chip.raw}
 				title={chip.raw}
-				onClick={clickable ? () => onOpenFile(chip.raw.slice(1)) : undefined}
+				onClick={clickable ? () => onOpenFile(unwrapFileChipPath(chip.raw)) : undefined}
 			>
 				<span className="input-chip__icon">
 					{chip.kind === "file" ? "@" : "/"}
