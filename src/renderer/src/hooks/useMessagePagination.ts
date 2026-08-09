@@ -21,6 +21,9 @@ type MessagePaginationResult = {
   hasMore: boolean;
   loadMore: () => void;
   loadUntilIncluded: (index: number) => void;
+  /** 受控恢复窗口大小（会话切换恢复历史查看位置用）。
+   *  与 loadMore 的差异：直接设为目标值（而非增量），并先 clamp 到当前消息数。 */
+  setVisibleCount: (count: number) => void;
   isLoading: boolean;
   reset: () => void;
   totalCount: number;
@@ -210,6 +213,22 @@ export function useMessagePagination({
     ));
   }, [enabled, initialPageSize, maxVisibleMessages, ownerKey]);
 
+  /** 受控恢复窗口：会话切换回历史查看位置时，把窗口恢复到切走时的大小。 */
+  const setVisibleCount = useCallback((count: number) => {
+    if (!enabled) return;
+    const requestOwnerKey = ownerKey;
+    setStoredState((current) => {
+      const active = currentMessagePaginationState(current, requestOwnerKey, initialPageSize);
+      const next = Math.min(
+        Math.max(1, Math.round(count)),
+        messageCountRef.current,
+        maxVisibleMessages,
+      );
+      if (next === active.visibleCount) return active;
+      return { ...active, visibleCount: next, isLoading: false };
+    });
+  }, [enabled, initialPageSize, maxVisibleMessages, ownerKey]);
+
   const visibleMessages = useMemo(() => {
     if (!enabled) return messages;
     return messages.slice(Math.max(0, messages.length - state.visibleCount));
@@ -223,6 +242,7 @@ export function useMessagePagination({
     hasMore,
     loadMore,
     loadUntilIncluded,
+    setVisibleCount,
     isLoading: state.isLoading,
     reset,
     totalCount: messages.length,

@@ -369,6 +369,10 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
       // 整段 agent 忙碌（含工具执行/流式）期间追底用 instant，避免工具卡弹出弹簧滞后砰抖。
       busy={isAgentBusy || isAwaitingAssistant}
       onFollowChange={controller.setAutoScrollFromScroller}
+      viewportProps={{
+        // 会话切换滚动位置保持：滚动时维护 per-session 锚点（rAF 合并，不触发渲染）
+        onScroll: controller.handleTimelineScroll,
+      }}
     >
       {hasMoreMessages && canLoadMoreMessages && (
         <div
