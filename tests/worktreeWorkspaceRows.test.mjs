@@ -43,6 +43,11 @@ test("child worktree labels use a smaller hierarchy than their parent project", 
   assert.match(childRow, /workspace-tree-select",[\s\S]{0,200}"text-control"/);
 });
 
+test("active child worktree keeps the secondary text weight", () => {
+  const childRow = worktreeTree.slice(worktreeTree.indexOf("WorkspaceTreeRowView"));
+  assert.match(childRow, /isActive \? "font-normal" : "font-medium"/);
+});
+
 test("project row hides create/anonymous buttons in worktree mode", () => {
   // worktree 模式下入口挪到主工作区行，项目行不再重复提供
   assert.match(projectTree, /isCurrent && !project\.worktreeEnabled/);

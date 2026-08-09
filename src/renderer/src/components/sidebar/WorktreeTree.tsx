@@ -213,7 +213,7 @@ function WorkspaceTreeRowView(props: {
           }}
         >
           <GitBranch className="size-3.5 shrink-0" aria-hidden="true" />
-          <span className="min-w-0 flex-1 truncate font-medium">{row.branch}</span>
+          <span className={cn("min-w-0 flex-1 truncate", isActive ? "font-normal" : "font-medium")}>{row.branch}</span>
           {row.directory !== row.branch && (
             <span className="workspace-tree-directory max-w-20 shrink-0 truncate text-micro text-muted-foreground">{row.directory}</span>
           )}
