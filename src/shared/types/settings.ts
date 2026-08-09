@@ -82,8 +82,6 @@ export type StartupWindowMode =
 	enableNotifications: boolean;
 	/** 激活 Agent 数量提醒（人文关怀）：激活数达到阈值时，启动时提示关闭空闲会话释放内存。默认开启。 */
 	agentCountReminderEnabled: boolean;
-	/** 连续使用时长提醒（人文关怀）：从本次启动计时，每满 1 小时提醒休息。默认开启。 */
-	workBreakReminderEnabled: boolean;
 	/** 是否在会话中显示模型思考过程，默认开启 */
 	showThinking: boolean;
 	/** 是否开启开发者控制台（DevTools） */

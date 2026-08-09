@@ -922,14 +922,6 @@ function SettingsModalContent(props: SettingsModalProps) {
 											updateDraft({ agentCountReminderEnabled: checked })
 										}
 									/>
-									<SettingSwitch
-										title={t("settings.workBreakReminder")}
-										description={t("settings.workBreakReminderDesc")}
-										checked={draftSettings.workBreakReminderEnabled}
-										onChange={(checked) =>
-											updateDraft({ workBreakReminderEnabled: checked })
-										}
-									/>
 								</SettingsSection>
 								<SettingsSection title={t("settings.advanced")}>
 									<div className="setting-field">

@@ -119,7 +119,6 @@ Gitmoji 对应关系：
   enableNotifications: true,
   // 人文关怀提醒默认开启：用户可在设置中随时关闭
   agentCountReminderEnabled: true,
-  workBreakReminderEnabled: true,
   showThinking: readPiAgentShowThinking() ?? true,
   showDevTools: false,
   // 默认关闭 Chromium 沙箱：与历史 Windows no-sandbox 兼容策略一致
