@@ -133,11 +133,29 @@ test("chip popover uses the official BeUI TodoList with mapping, not a local imi
   assert.match(chipsSource(), /import \{ TodoList \} from "\.\.\/agents\/todo-list";/);
   assert.match(chipsSource(), /import \{ parseAgentTodoItems \} from "\.\/agentTodoParser";/);
   assert.match(parserSource(), /export function parseAgentTodoItems/);
-  // 官方行为开关照常传递
+  // 官方行为开关照常传递，PiDeck 宿主以 compact 模式适配（默认仍是官方类/行为）
   assert.match(chipsSource(), /collapseOnComplete/);
   assert.match(chipsSource(), /maxHeight=\{320\}/);
   assert.match(chipsSource(), /defaultOpen/);
-  assert.match(chipsSource(), /w-\[min\(40rem,calc\(100vw-2rem\)\)\]/);
+  assert.match(chipsSource(), /compact/);
+  // 桌面紧凑宽度：28rem 上限 + Radix 实际可用宽度约束（留 12px 边界余量），
+  // 不再依赖 100vw 推算，窄窗口时内容收敛而不是整体左移
+  assert.match(
+    chipsSource(),
+    /w-\[min\(28rem,calc\(var\(--radix-popover-content-available-width\)_-_12px\)\)\]/,
+  );
+  // 只禁止实际 class 使用旧的 viewport 宽度规则，注释可以解释为什么移除它。
+  assert.doesNotMatch(chipsSource(), /className="[^"]*100vw/);
+  assert.doesNotMatch(chipsSource(), /className="[^"]*40rem/);
+  // 与触发器保持可见间距（默认 sideOffset=4，此处显式 8）
+  assert.match(chipsSource(), /sideOffset=\{8\}/);
+  // 独立 h-8 关闭行已移除：不再产生顶部空白，关闭按钮改为宿主层非布局叠放
+  assert.doesNotMatch(chipsSource(), /flex h-8 shrink-0 items-center justify-end/);
+  assert.doesNotMatch(chipsSource(), /h-8 shrink-0/);
+  assert.match(
+    chipsSource(),
+    /className="absolute right-1\.5 top-1\.5 z-10 rounded-md text-muted-foreground hover:text-foreground"/,
+  );
   // 官方 TodoList 不接受 onDismiss：关闭按钮作为宿主层放在列表外部，官方结构不被改动
   assert.doesNotMatch(chipsSource(), /<TodoList[\s\S]*?onDismiss/);
   assert.match(chipsSource(), /variant="ghost"/);

@@ -72,6 +72,44 @@ test("official BeUI TodoList source is placed in agents/ with official structure
 	assert.doesNotMatch(src, />To-dos</);
 });
 
+test("compact variant is optional, defaults to official classes, and uses PiDeck tokens", () => {
+	const src = todoListSource();
+	// compact 是可选开关：接口声明 + 默认 false → 不传时官方类/行为完全不变
+	assert.match(src, /compact\?: boolean/);
+	assert.match(src, /compact = false/);
+
+	// 抽出所有 `compact ? "紧凑类" : "官方类"` 变体对，逐一校验
+	const pairs = [...src.matchAll(/compact \? "([^"]*)" : "([^"]*)"/g)];
+	assert.ok(pairs.length >= 7, `expected >= 7 compact ternaries, got ${pairs.length}`);
+
+	// 官方默认分支保留官方原始类（h-11 / text-sm / text-xs / min-h-9 等）
+	const official = pairs.map(([, , o]) => o).join(" ");
+	assert.match(official, /h-11 gap-2\.5 px-3\.5/);
+	assert.match(official, /text-sm/);
+	assert.match(official, /text-xs/);
+	assert.match(official, /min-h-9 gap-2\.5/);
+	assert.match(official, /size-3\.5/);
+
+	// compact 分支禁止使用 raw text-sm/text-xs，必须走 PiDeck 语义字号 token
+	for (const [, compactCls] of pairs) {
+		assert.ok(
+			!/text-(sm|xs)/.test(compactCls),
+			`compact variant must not use raw text-sm/text-xs: "${compactCls}"`,
+		);
+	}
+	const compact = pairs.map(([c]) => c).join(" ");
+	assert.match(compact, /text-control/); // 标题/条目正文
+	assert.match(compact, /text-caption/); // 计数/详情/空态
+	assert.match(compact, /h-9 gap-2 pl-3 pr-8/); // 头部收紧 + 宿主关闭按钮预留角
+	assert.match(compact, /min-h-8 gap-2/); // 行距收紧
+
+	// 动画 / 自动折叠 / 无障碍语义不受 compact 影响
+	assert.match(src, /useReducedMotion/);
+	assert.match(src, /previousComplete\.current && !allComplete/);
+	assert.match(src, /aria-expanded=\{currentOpen\}/);
+	assert.match(src, /scaleX: status === "completed" \? 1 : 0/);
+});
+
 test("official sibling helpers exist with required exports", () => {
 	const disclosure = source("src/renderer/src/components/agents/agent-disclosure.tsx");
 	assert.match(disclosure, /export function AgentDisclosure/);

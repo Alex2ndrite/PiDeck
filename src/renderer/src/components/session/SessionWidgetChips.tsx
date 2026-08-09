@@ -187,10 +187,20 @@ function WidgetChip(props: {
 					)}
 				</Button>
 			</PopoverTrigger>
-			<PopoverContent align="start" side="bottom" className="w-[min(40rem,calc(100vw-2rem))] p-0">
+			<PopoverContent
+				align="start"
+				side="bottom"
+				// 与触发器保持可见间距（弹层紧贴会显得是 chip 的一部分）
+				sideOffset={8}
+				// 桌面紧凑宽度：28rem 上限，再受 Radix 实际可用宽度（--radix-popover-content-available-width）
+				// 约束并保留 12px 边界余量；不再用视口宽度推算，窄窗口时内容收敛而非整体左移
+				className="w-[min(28rem,calc(var(--radix-popover-content-available-width)_-_12px))] p-0"
+			>
 				{/* 官方 BeUI TodoList 不接受 dismiss 语义（避免改动官方结构），
-				    关闭按钮作为宿主层放在列表外部右上角，语义仍是「永久关闭该 widget」。 */}
-				<div className="flex h-8 shrink-0 items-center justify-end pr-1.5">
+				    关闭按钮作为宿主层绝对定位叠放在右上角：不占布局空间（移除独立的 h-8 关闭行），
+				    compact 头部右侧的 pr-8 预留区保证它不盖住折叠 chevron；
+				    语义仍是「永久关闭该 widget」（按内容指纹记录）。 */}
+				<div className="relative">
 					<Button
 						type="button"
 						variant="ghost"
@@ -198,18 +208,19 @@ function WidgetChip(props: {
 						onClick={props.onDismiss}
 						title={t("common.close")}
 						aria-label={t("common.close")}
-						className="rounded-md text-muted-foreground hover:text-foreground"
+						className="absolute right-1.5 top-1.5 z-10 rounded-md text-muted-foreground hover:text-foreground"
 					>
 						<X className="size-3.5" aria-hidden="true" />
 					</Button>
+					<TodoList
+						title={title}
+						items={parseAgentTodoItems(props.lines)}
+						defaultOpen
+						collapseOnComplete
+						compact
+						maxHeight={320}
+					/>
 				</div>
-				<TodoList
-					title={title}
-					items={parseAgentTodoItems(props.lines)}
-					defaultOpen
-					collapseOnComplete
-					maxHeight={320}
-				/>
 			</PopoverContent>
 		</Popover>
 	);

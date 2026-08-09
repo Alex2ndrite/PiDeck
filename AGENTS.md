@@ -231,6 +231,15 @@ src/
 6. **半吊子 utility 比没写更糟**：组件上写了 `min-h-11`/`rounded-xl`/Button 默认 `h-9`，分层后会真生效并冲掉旧观感。改 UI 时 utility 必须「新学旧」对齐原视觉，再删掉同属性的冗余 legacy 声明。
 7. **排障**：utility「看不见」时用 DevTools 看胜出规则来自哪一层——unlayered / `!important` / 同属性旧选择器；先处理冲突源，再改 class。
 
+### beUI 组件迁移（硬性）
+
+> 项目从 beui.dev 迁移动效组件（`components/motion/`、`components/agents/` 等）。
+
+1. **安装走 CLI，不手动复制源码**：`npx shadcn add @beui/<name>` 即可（`components.json` 已配置 `"registries": {"@beui": "https://beui.dev/r/{name}.json"}`）；文件已存在时加 `--overwrite`。手动复制源码是下策（易漏依赖、注释标记不一致）。
+2. **⚠️ CLI 会连坐覆盖 `lib/ease.ts` 和 `lib/utils.ts`**：CLI 把这两个共享模块覆盖成官方版——`EASE_OUT` 曲线值从项目基线 `[0.22, 1, 0.36, 1]` 改成官方 `[0.16, 1, 0.3, 1]`、`SPRING_LAYOUT` 等常量同步被改。这会**静默改变 preview-rail 等所有已迁移组件的动画**。安装后必须 `git diff src/renderer/src/lib/ease.ts src/renderer/src/lib/utils.ts`：与本任务无关的改动一律 `git checkout --` 恢复（组件自身能正常工作，`EASE_OUT` 等常量名不变，只是曲线值回到项目基线）。
+3. **共享运动常量统一从 `@/lib/ease` 取**，禁止在组件里另写曲线值；新组件缺常量时先补进 `lib/ease.ts`（保留既有值，按官方补齐缺项），不要改既有导出值。
+4. 迁移惯例：文件放 `src/renderer/src/components/<域>/`，头部保留官方 `// beui.dev/components/<path>` 注释，用户可见文案走 i18n。
+
 ## Issue 修复流程
 
 1. 从最新 `main` 建短修复分支：`fix/issue-<number>-<short-description>`。

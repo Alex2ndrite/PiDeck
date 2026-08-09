@@ -26,8 +26,8 @@ import {
   sessionRecordByIdAtomFamily,
   sessionRuntimeBySessionIdAtomFamily,
 } from "../../atoms";
-import { sessionStatusDotClass } from "../../agentListDisplay";
 import { t } from "../../i18n";
+import { AnimatedBadge, type AnimatedBadgeStatus } from "../motion/animated-badge";
 import { Button } from "../ui-shadcn/button";
 import {
   DropdownMenu,
@@ -61,6 +61,38 @@ import { SESSION_TAB_DRAG_MIME } from "../../utils/sessionSplitEdge";
  *   盖在底边框线上随切换滑动）；颜色与 Tab 内左侧状态点一致
  *   （idle=蓝 / running=黄 / error=红），无状态时回退主题色 bg-primary。
  */
+
+/**
+ * 会话状态 → AnimatedBadge 状态映射（颜色语义与用户约定一致）：
+ * - starting=loading（启动中：蓝色旋转徽章）
+ * - running/pending/waiting=loading + 黄色覆盖（运行/等待中：黄色旋转徽章）
+ * - idle=neutral（未启动：白色/灰色图标）
+ * - error=danger（失败：红色图标）
+ * detached/closed/未启动返回 undefined，不渲染徽章（避免把“未运行”误读成某种状态）。
+ */
+function sessionStatusBadge(
+	status?: string | null,
+): { status: AnimatedBadgeStatus; colorClass?: string } | undefined {
+	if (!status || status === "detached") return undefined;
+	switch (status) {
+		case "error":
+			return { status: "danger" };
+		case "idle":
+			return { status: "neutral" };
+		// 启动中：官方 loading（primary 蓝）旋转；运行/等待：同 loading 旋转但覆盖为黄色
+		case "starting":
+			return { status: "loading" };
+		case "running":
+		case "pending":
+		case "waiting":
+			return {
+				status: "loading",
+				colorClass: "text-amber-500 dark:text-amber-400",
+			};
+		default:
+			return undefined;
+	}
+}
 
 /** “+” 下拉里的新建目标：聊天对话区或已打开项目 */
 export type NewSessionTarget = {
@@ -125,73 +157,14 @@ export type SessionTabsBarProps = {
 export function SessionTabsBar(props: SessionTabsBarProps) {
   const { tabs, pinnedTabs, currentSessionId, previewTabId } = props;
   const tabItems = useMemo(() => tabs.map((sessionId) => ({ sessionId })), [tabs]);
-  // 当前会话 runtime 状态：激活指示条颜色与 Tab 内状态点（蓝/黄/红）保持一致
-  const activeRuntime = useAtomValue(sessionRuntimeBySessionIdAtomFamily(currentSessionId ?? ""));
-  // 指示条用 border 绘制 U 型包裹，颜色通过 CSS 变量设置（Tailwind bg 类无法直接用于 border）
-  const indicatorColorVar = (() => {
-    switch (activeRuntime?.status) {
-      case "error": return "var(--color-danger)";
-      case "idle": return "var(--color-info)";
-      case "running":
-      case "starting":
-        return "var(--color-warning)";
-      default:
-        return "var(--color-primary)";
-    }
-  })();
   const dragSourceRef = useRef<string | null>(null);
   const dragTargetRef = useRef<{ targetId: string; position: "before" | "after" } | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   // 拖拽插入指示：当前悬停的目标 Tab 与插入侧（before=左缘 / after=右缘）
   const [dragIndicator, setDragIndicator] = useState<{ targetId: string; position: "before" | "after" } | null>(null);
 
-  // —— 激活指示条（FLIP 风格滑动 + 贴框弧形）——
-  // 浏览器式 Tab 切换时，激活指示条从旧 Tab 滑到新 Tab：
-  // 只测位置/宽度后用 transform 过渡（translateX + scaleX 模拟任意宽度，
-  // 合成器属性，不触发布局）。指示条是滚动容器的子元素，随内容横向滚动天然跟随。
-  // 形状：盖在 Tab 外框底边线上（bottom-[5px] ≈ (容器高40−Tab高28)/2 − 条高一半），
-  // 两端圆角与 Tab 的 rounded-md（6px）同半径，视觉上是「沿外框底边自然收弧」的描边。
+  // —— 滚动容器 ref（拖拽排序与新建菜单共用）——
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [indicator, setIndicator] = useState<{ x: number; w: number } | null>(null);
-  // 首次定位时不带 transition（瞬间就位），之后更新才有滑动过渡
-  const hadPositionRef = useRef(false);
-  const INDICATOR_BASE_WIDTH = 200;
-
-  const measureIndicator = useCallback(() => {
-    const container = scrollRef.current;
-    if (!container || !currentSessionId) {
-      setIndicator(null);
-      return;
-    }
-    const el = container.querySelector<HTMLElement>(`[data-session-id="${CSS.escape(currentSessionId)}"]`);
-    if (!el) {
-      setIndicator(null);
-      return;
-    }
-    // 内容坐标系：视觉 x = 容器内偏移 + 已滚动距离（scrollLeft），
-    // 指示条 absolute 定位在滚动容器内，滚动时跟随内容。
-    const cRect = container.getBoundingClientRect();
-    const rect = el.getBoundingClientRect();
-    const x = rect.left - cRect.left + container.scrollLeft;
-    const w = rect.width;
-    setIndicator((prev) => (prev && prev.x === x && prev.w === w ? prev : { x, w }));
-  }, [currentSessionId]);
-
-  // Tab 列表/激活/固定变化时重测（固定与普通 Tab 宽度不同，pin 切换会改布局）
-  useLayoutEffect(() => {
-    measureIndicator();
-    if (indicator !== null) hadPositionRef.current = true;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [measureIndicator, tabs, pinnedTabs]);
-
-  // 标题长度变化等引起 Tab 宽度变化时，ResizeObserver 兜底重测（防抖：值不变不 set）
-  useLayoutEffect(() => {
-    const container = scrollRef.current;
-    if (!container) return;
-    const ro = new ResizeObserver(() => measureIndicator());
-    ro.observe(container);
-    return () => ro.disconnect();
-  }, [measureIndicator]);
 
   /** onDragOver 期间按鼠标位置相对目标 Tab 中点决定插入前后 */
   const handleDragOver = (event: React.DragEvent, targetId: string) => {
@@ -286,30 +259,6 @@ export function SessionTabsBar(props: SessionTabsBarProps) {
           onDragEnd={handleDragEnd}
         />
         ))}
-        {/* 激活指示条：贴 Tab 外框底边的弧形描边（两端圆角与 Tab 同半径，
-            颜色跟随状态点：idle=bg-info / running=bg-warning / error=bg-danger），
-            切换会话时沿底边滑到新 Tab。 */}
-        {indicator && currentSessionId && (
-          <span
-            aria-hidden="true"
-            className={cn(
-              "session-tabs-indicator pointer-events-none absolute bottom-0 left-0 h-[2px] rounded-full",
-              hadPositionRef.current
-                ? "transition-transform duration-base ease-out-quint"
-                : "transition-none",
-            )}
-            style={{
-              width: INDICATOR_BASE_WIDTH,
-              transform: `translateX(${indicator.x - (INDICATOR_BASE_WIDTH - indicator.w) / 2}px) scaleX(${indicator.w / INDICATOR_BASE_WIDTH})`,
-              height: "5px",
-              borderRadius: "0 0 6px 6px",
-              background: indicatorColorVar,
-              borderLeft: "1px solid transparent",
-              borderRight: "1px solid transparent",
-              borderBottom: "1px solid transparent",
-            }}
-          />
-        )}
         {/* 浏览器式新建入口：跟在最后一张标签后面，下拉选择新建到哪个项目 */}
         <NewSessionMenu
           targets={props.newSessionTargets}
@@ -450,9 +399,9 @@ function SessionTab(props: {
   const record = useAtomValue(sessionRecordByIdAtomFamily(sessionId));
   const runtime = useAtomValue(sessionRuntimeBySessionIdAtomFamily(sessionId));
   const status = runtime?.status;
-  // 状态点颜色语义与侧栏 SessionTree 一致（idle=蓝、running/starting=黄、error=红）；
-  // 未启动（无 runtime）不显示色点，避免把“未运行”误读成某种状态。
-  const dotClass = sessionStatusDotClass(status);
+  // 状态徽章语义与侧栏 SessionTree 状态点一致（idle=蓝、running/starting=黄、error=红）；
+  // 未启动（无 runtime）不显示徽章，避免把“未运行”误读成某种状态。
+  const badge = sessionStatusBadge(status);
   const title = record?.title || t("common.untitled");
   // 操作菜单（受控）：下拉按钮点击或右键 Tab 打开；Tab 本体点击仍是切换，
   // 拖拽排序与中键关闭与菜单互不干扰（drag/auxclick 不触发 click）。
@@ -498,13 +447,15 @@ function SessionTab(props: {
           preview && "italic font-normal text-muted-foreground",
         )}
       >
-        {dotClass && (
-          <span
-            className={cn(
-              "size-1.5 shrink-0 rounded-full",
-              dotClass,
-              status === "error" ? "" : "animate-pulse",
-            )}
+        {badge && (
+          // beui AnimatedBadge bare 模式：去掉胶囊边框/背景，仅保留图标滚动/旋转动画；
+          // 图标经 [&_svg] 稳定选择器缩到 10px；运行中通过 colorClass 覆盖成黄色旋转。
+          <AnimatedBadge
+            status={badge.status}
+            size="sm"
+            bare
+            pulse={false}
+            className={cn("[&_svg]:h-2.5 [&_svg]:w-2.5", badge.colorClass)}
             aria-hidden="true"
           />
         )}

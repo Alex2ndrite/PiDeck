@@ -3,8 +3,13 @@
 // 官方 registry 源（https://beui.dev/r/todo-list.json）的忠实本地拷贝：
 // - 结构、API、动画（TodoHeaderIcon / TodoStatusIcon / AgentDisclosure / ActionSwapRollText /
 //   collapseOnComplete 自动折叠与 reopen）保持官方原样；
-// - 与仓库约定唯一的两处适配：用户可见文案走 i18n（AGENTS.md 硬性要求），
+// - 与仓库约定的适配：用户可见文案走 i18n（AGENTS.md 硬性要求）、
 //   scrollbar-hide 换成 Tailwind 任意属性（仓库不引入第三方 scrollbar 工具类）；
+// - 额外的 `compact` 可选密度开关（默认 false = 官方类/行为原样）：仅由 PiDeck
+//   宿主（Header Popover）传入，把官方 text-sm/text-xs 换成 PiDeck 语义字号 token
+//   （text-control/text-caption，跟随全局 UI 字号设置）并收紧垂直度量（h-11→h-9、
+//   min-h-9→min-h-8）；compact 头部 pr-8 为宿主层关闭按钮预留右上角空间，
+//   保证叠放的关闭控件不盖住官方折叠 chevron。
 // - 共享运动常量来自 @/lib/ease（官方值 SPRING_SWAP/SPRING_PRESS 已并入）。
 
 import { ChevronDown, ListTodo } from "lucide-react";
@@ -50,6 +55,8 @@ export interface TodoListProps {
   onOpenChange?: (open: boolean) => void;
   collapseOnComplete?: boolean;
   maxHeight?: number;
+  /** PiDeck 桌面紧凑密度开关；默认 false 保持官方类与行为，仅宿主（Header Popover）传入。 */
+  compact?: boolean;
   className?: string;
 }
 
@@ -213,6 +220,7 @@ export function TodoList({
   onOpenChange,
   collapseOnComplete = true,
   maxHeight = 248,
+  compact = false,
   className,
 }: TodoListProps) {
   const reduce = useReducedMotion() ?? false;
@@ -279,15 +287,26 @@ export function TodoList({
         aria-expanded={currentOpen}
         aria-controls={contentId}
         onClick={() => setOpen(!currentOpen)}
-        className="group flex h-11 w-full items-center gap-2.5 rounded-2xl px-3.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className={cn(
+          "group flex w-full items-center rounded-2xl text-left outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          // 官方默认 h-11/gap-2.5/px-3.5；compact 收紧为 h-9，其中 pr-8 为宿主层
+          // 关闭按钮预留右上角空间（叠放的 X 不盖住折叠 chevron），默认分支不生效
+          compact ? "h-9 gap-2 pl-3 pr-8" : "h-11 gap-2.5 px-3.5",
+        )}
       >
         <TodoHeaderIcon complete={allComplete} />
-        <h3 className="min-w-0 flex-1 truncate text-sm font-medium text-foreground/90">
+        <h3
+          className={cn(
+            "min-w-0 flex-1 truncate font-medium text-foreground/90",
+            compact ? "text-control" : "text-sm",
+          )}
+        >
           {title}
         </h3>
         <span
           className={cn(
-            "shrink-0 text-xs font-medium tabular-nums text-muted-foreground",
+            "shrink-0 font-medium tabular-nums text-muted-foreground",
+            compact ? "text-caption" : "text-xs",
             allComplete && "text-emerald-600 dark:text-emerald-400",
           )}
         >
@@ -311,7 +330,7 @@ export function TodoList({
           transition={reduce ? { duration: 0 } : SPRING_SWAP}
           className="text-muted-foreground/50 transition-colors group-hover:text-muted-foreground"
         >
-          <ChevronDown className="size-3.5" />
+          <ChevronDown className={compact ? "size-3" : "size-3.5"} />
         </motion.span>
       </button>
 
@@ -347,13 +366,18 @@ export function TodoList({
                             layout: SPRING_LAYOUT,
                           }
                     }
-                    className="flex min-h-9 items-center gap-2.5 rounded-xl px-1.5 py-1"
+                    className={cn(
+                      "flex items-center rounded-xl px-1.5 py-1",
+                      // 官方 min-h-9/gap-2.5；compact 收紧垂直与横向间距（不破坏动画/可访问性）
+                      compact ? "min-h-8 gap-2" : "min-h-9 gap-2.5",
+                    )}
                   >
                     <TodoStatusIcon status={status} progress={item.progress} />
                     <span className="sr-only">{statusLabel(status)}: </span>
                     <span
                       className={cn(
-                        "min-w-0 flex-1 truncate text-sm leading-5",
+                        "min-w-0 flex-1 truncate",
+                        compact ? "text-control" : "text-sm leading-5",
                         status === "pending" && "text-muted-foreground/65",
                         status === "in-progress" && "text-foreground",
                         status === "completed" && "text-muted-foreground/60",
@@ -379,7 +403,12 @@ export function TodoList({
                       </span>
                     </span>
                     {item.detail ? (
-                      <span className="shrink-0 text-sm text-muted-foreground/55">
+                      <span
+                        className={cn(
+                          "shrink-0 text-muted-foreground/55",
+                          compact ? "text-caption" : "text-sm",
+                        )}
+                      >
                         {item.detail}
                       </span>
                     ) : null}
@@ -389,7 +418,12 @@ export function TodoList({
             </AnimatePresence>
             </ol>
           ) : (
-            <p className="px-1.5 py-2 text-sm text-muted-foreground">
+            <p
+              className={cn(
+                "px-1.5 py-2 text-muted-foreground",
+                compact ? "text-caption" : "text-sm",
+              )}
+            >
               {t("app.todoListEmpty")}
             </p>
           )}
