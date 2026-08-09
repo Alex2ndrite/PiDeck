@@ -287,6 +287,7 @@ function SettingsModalContent(props: SettingsModalProps) {
 		setDraftSettings({ ...baseSnapshotRef.current });
 		setDirtyFields(new Set());
 		setPetPreviewMode("__auto");
+		void window.piDesktop.pet.setPreviewMode("");
 		setWslValidation(null);
 		setWslUserInput(baseSnapshotRef.current.wslUser);
 		setPerAreaFontSize(
@@ -436,6 +437,10 @@ function SettingsModalContent(props: SettingsModalProps) {
 	// 开发设置 tab 不自动检测 pi：检测结果缓存在 settings.piInstall（打开时直接显示），
 	// 只有用户手动点「检测环境」才重新 spawn 探测（曾因自动检测在打开设置时触发双弹窗）。
 	const [petPreviewMode, setPetPreviewMode] = useState("__auto");
+	// 预览只属于设置弹框生命周期；关闭后必须让真实 Agent 状态重新接管宠物。
+	useEffect(() => () => {
+		void window.piDesktop.pet.setPreviewMode("");
+	}, []);
 
 	const applyWebPortDraft = () => {
 		const port = Number(webPortDraft);
@@ -1719,6 +1724,7 @@ function SettingsModalContent(props: SettingsModalProps) {
 	<span className="text-sm font-medium leading-none text-foreground">{t("settings.pet.choose")}</span>
 	<Select value={draftSettings.petId} onValueChange={(value) => {
 											setPetPreviewMode("__auto");
+											void window.piDesktop.pet.setPreviewMode("");
 											updateDraft({ petId: value });
 										}}>
 		<SelectTrigger className="w-full"><SelectValue /></SelectTrigger>

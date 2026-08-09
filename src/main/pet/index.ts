@@ -1,8 +1,10 @@
 import { ipcMain, Menu, type BrowserWindow, type MenuItemConstructorOptions } from "electron";
 import type { AgentManager } from "../pi/AgentManager";
 import type { SettingsStore } from "../settings/SettingsStore";
-import type { AgentTab, AppSettings, PetManifest } from "../../shared/types";
+import type { AgentTab, AgentUiRequest, AppSettings, PetManifest, PetNotification } from "../../shared/types";
 import { ipcChannels } from "../../shared/ipc";
+import { NOTIFICATION_DURATION_MS, effectiveUIFontSize } from "../../shared/petNotificationLayout";
+import { EMPTY_NOTIFICATION_QUEUE, nextNotificationQueueState, onNotificationTimerElapse, type NotificationQueueState } from "./notificationQueue";
 import { PetWindow, detectPetWindowCaps } from "./PetWindow";
 import { PetStateBridge, type PetStateCopyKey } from "./PetStateBridge";
 import { PetPackageManager } from "./PetPackageManager";
@@ -22,8 +24,12 @@ type PetCopyKey = PetStateCopyKey | "pet.switch" | "pet.close";
 const defaultPetCopy: Record<PetCopyKey, string> = {
 	"pet.switch": "Switch pet",
 	"pet.close": "Close pet",
-	"pet.doneNotification": "Task complete. Remember to review it.",
-	"pet.agentError": "{title} encountered an error",
+	"pet.doneNotification": "{title} completed",
+	"pet.agentError": "{title} encountered a problem",
+	"pet.waitingNotification": "{title} needs your input",
+	"pet.doneSuffix": "completed",
+	"pet.errorSuffix": "encountered a problem",
+	"pet.waitingSuffix": "needs your input",
 };
 
 export class PetSystem {
@@ -32,6 +38,12 @@ export class PetSystem {
 	readonly patrol: PetPatrol;
 	private bridge: PetStateBridge;
 	private registered = false;
+	private offOutput: (() => void) | null = null;
+	private offSettled: (() => void) | null = null;
+	/** 非持久化提醒（error/done）展示计时器：到点收缩窗口并推送 null */
+	private notifTimer: NodeJS.Timeout | null = null;
+	/** 提醒队列状态：当前展示 + 排队的 persistent waiting（见 notificationQueue） */
+	private notifQueue: NotificationQueueState = EMPTY_NOTIFICATION_QUEUE;
 
 	constructor(private readonly deps: PetSystemDeps) {
 		this.patrol = new PetPatrol(
@@ -42,9 +54,15 @@ export class PetSystem {
 		this.bridge = new PetStateBridge(
 			() => this.petWindow.window,
 			this.patrol,
-			() => this.deps.settingsStore.get().petPatrolEnabled ?? true,
+			() => this.isPatrolEnabled(),
 			(key, params) => this.translate(key, params),
+			(n) => this.handleNotification(n),
 		);
+	}
+
+	private isPatrolEnabled() {
+		return (this.deps.settingsStore.get().petPatrolEnabled ?? true)
+			&& detectPetWindowCaps().freePosition;
 	}
 
 	private translate(key: PetCopyKey, params: Record<string, string | number> = {}): string {
@@ -57,24 +75,94 @@ export class PetSystem {
 	async start() {
 		this.registerIpc();
 		this.bridge.attach(this.deps.agentManager);
+		// 等待操作：复用主进程输出订阅，只消费已规范化的 agents:ui-request（set/delete pending 由 AgentManager 保证）
+		this.offOutput = this.deps.agentManager.onOutput((channel, payload) => {
+			if (channel !== ipcChannels.agentsUiRequest || !payload || typeof payload !== "object") return;
+			this.bridge.updateUIRequest(payload as AgentUiRequest);
+		});
+		// 已完成：AgentManager 确认成功 settled 后回调（abort/重试/压缩不触发）
+		this.offSettled = this.deps.agentManager.onAgentSettled((info) => this.bridge.onAgentSettled(info));
 
 		const s = this.deps.settingsStore.get();
 		if (s.petEnabled) {
-			await this.petWindow.create(s.petScale ?? 1);
+			await this.petWindow.create(s.petScale ?? 1, effectiveUIFontSize(s.uiFontSize, s.fontSize));
 			// 延迟 600ms 兜底推送初始数据，等待宠物窗 React 挂载并注册 IPC 监听器。
 			// 立即发送会被新窗口丢弃（监听器尚未就绪）。React 初始态为 idle + null sprite，
 			// 即使首次推送丢失也显示降级绘制。主动 petReady 信号到后会再推一次以覆盖兜底。
 			setTimeout(() => {
 				this.pushCaps();
 				this.bridge.pushNow(this.deps.agentManager.list());
+				// 窗口重建期间若已有 pending 交互请求，恢复 waiting 气泡（pushNow 只推聚合状态）
+				this.bridge.pushWaitingNow();
 				void this.pushCurrentSprite();
 			}, 600);
 		}
 	}
 
 	stop() {
+		this.clearNotifTimer();
+		this.notifQueue = EMPTY_NOTIFICATION_QUEUE;
+		this.offOutput?.(); this.offOutput = null;
+		this.offSettled?.(); this.offSettled = null;
 		this.bridge.detach();
 		this.petWindow.destroy();
+	}
+
+	// ── 提醒展示与窗口 reflow ──
+
+	/**
+	 * 通知出口：窗口扩展 + 推送 + 计时。waiting 为持久化提醒（不自动消失）；
+	 * error/done 展示 NOTIFICATION_DURATION_MS 后收缩窗口并推送 null；
+	 * waiting 在非持久化提醒展示期间到达时排队，非持久化覆盖 waiting 时保存并恢复。
+	 */
+	private handleNotification(n: PetNotification | null) {
+		const prevActive = this.notifQueue.active;
+		const next = nextNotificationQueueState(this.notifQueue, n);
+		this.notifQueue = next;
+		const active = next.active;
+
+		if (active && active === n) {
+			// incoming 成为当前展示（未排队）：扩展窗口 + 推送
+			this.petWindow.setNotificationVisible(true);
+			const win = this.petWindow.window;
+			if (win && !win.isDestroyed()) win.webContents.send(ipcChannels.petNotify, n);
+		}
+
+		// waiting 清空信号且正展示 persistent → 立即收起（waiting 无计时器）
+		if (!n && prevActive?.persistent) {
+			this.clearNotification();
+			return;
+		}
+
+		// 计时管理：仅当非持久化 active 发生变化（新 error/done 展示）时启动/重置；
+		// 排队 waiting 不重置计时器，非持久化覆盖 waiting 时计时器正常启动
+		if (active && !active.persistent && active !== prevActive) {
+			this.clearNotifTimer();
+			this.notifTimer = setTimeout(() => {
+				this.notifTimer = null;
+				const afterElapse = onNotificationTimerElapse(this.notifQueue);
+				this.notifQueue = afterElapse;
+				if (afterElapse.active) {
+					// 恢复排队中的 waiting
+					this.petWindow.setNotificationVisible(true);
+					const win = this.petWindow.window;
+					if (win && !win.isDestroyed()) win.webContents.send(ipcChannels.petNotify, afterElapse.active);
+				} else {
+					this.clearNotification();
+				}
+			}, NOTIFICATION_DURATION_MS);
+		}
+	}
+
+	private clearNotification() {
+		this.clearNotifTimer();
+		this.petWindow.setNotificationVisible(false);
+		const win = this.petWindow.window;
+		if (win && !win.isDestroyed()) win.webContents.send(ipcChannels.petNotify, null);
+	}
+
+	private clearNotifTimer() {
+		if (this.notifTimer) { clearTimeout(this.notifTimer); this.notifTimer = null; }
 	}
 
 	// ── IPC ──
@@ -127,13 +215,25 @@ export class PetSystem {
 			const ts = Date.now();
 			if (type === "error") {
 				win.webContents.send(C.petState, { mode: "failed", runningCount: 0, errorCount: 1, activeAgentId: null, timestamp: ts });
-				win.webContents.send(C.petNotify, { type: "error", text: this.translate("pet.agentError", { title: "Agent" }), timestamp: performance.now() });
+				this.handleNotification({
+					type: "error",
+					text: this.translate("pet.agentError", { title: "Agent" }),
+					timestamp: ts,
+					title: "Agent",
+					status: this.translate("pet.errorSuffix"),
+				});
 				setTimeout(() => {
 					if (win && !win.isDestroyed()) win.webContents.send(C.petState, { mode: "idle", runningCount: 0, errorCount: 0, activeAgentId: null, timestamp: Date.now() });
 				}, 4000);
 			} else {
 				win.webContents.send(C.petState, { mode: "review", runningCount: 0, errorCount: 0, activeAgentId: null, timestamp: ts });
-				win.webContents.send(C.petNotify, { type: "done", text: this.translate("pet.doneNotification"), timestamp: performance.now() });
+				this.handleNotification({
+					type: "done",
+					text: this.translate("pet.doneNotification", { title: "Agent" }),
+					timestamp: ts,
+					title: "Agent",
+					status: this.translate("pet.doneSuffix"),
+				});
 				setTimeout(() => {
 					if (win && !win.isDestroyed()) win.webContents.send(C.petState, { mode: "idle", runningCount: 0, errorCount: 0, activeAgentId: null, timestamp: Date.now() });
 				}, 4000);
@@ -154,6 +254,8 @@ export class PetSystem {
 			if (!win || win.isDestroyed()) return;
 			this.pushCaps();
 			this.bridge.pushNow(this.deps.agentManager.list());
+			// 挂载前可能已有 pending 交互请求（等待操作），补推 waiting 气泡
+			this.bridge.pushWaitingNow();
 			void this.pushCurrentSprite();
 		});
 
@@ -207,15 +309,18 @@ export class PetSystem {
 		// petEnabled 翻转
 		if (next.petEnabled !== prev.petEnabled) {
 			if (next.petEnabled) {
-				await this.petWindow.create(next.petScale ?? 1);
+				await this.petWindow.create(next.petScale ?? 1, effectiveUIFontSize(next.uiFontSize, next.fontSize));
 				// 延迟 600ms 兜底推送，petReady 信号到后会再推一次覆盖兜底值
 				setTimeout(() => {
 					this.pushCaps();
 					this.bridge.pushNow(this.deps.agentManager.list());
+					this.bridge.pushWaitingNow();
 					void this.pushCurrentSprite();
 				}, 600);
 			} else {
 				this.patrol.stop();
+				this.clearNotifTimer();
+				this.notifQueue = EMPTY_NOTIFICATION_QUEUE;
 				this.petWindow.destroy();
 			}
 			return;
@@ -225,8 +330,14 @@ export class PetSystem {
 		if (next.petId !== prev.petId) await this.pushCurrentSprite();
 		if (next.petAlwaysOnTop !== prev.petAlwaysOnTop) this.petWindow.setAlwaysOnTop(next.petAlwaysOnTop);
 		if (next.petScale !== prev.petScale && next.petScale) this.petWindow.resize(next.petScale);
+		// 有效 UI 字号变化：气泡槽位高度随字号变化；同时把设置推送给宠物窗（renderer 订阅 settings.onApplyWindow）
+		if (next.fontSize !== prev.fontSize || next.uiFontSize !== prev.uiFontSize) {
+			this.petWindow.setFontMode(effectiveUIFontSize(next.uiFontSize, next.fontSize));
+			const win = this.petWindow.window;
+			if (win && !win.isDestroyed()) win.webContents.send(ipcChannels.settingsApplyWindow, next);
+		}
 		if (next.petPatrolEnabled !== prev.petPatrolEnabled) {
-			(next.petPatrolEnabled && this.bridge.currentState?.mode === "idle") ? this.patrol.start() : this.patrol.stop();
+			(this.isPatrolEnabled() && this.bridge.currentState?.mode === "idle") ? this.patrol.start() : this.patrol.stop();
 		}
 	}
 

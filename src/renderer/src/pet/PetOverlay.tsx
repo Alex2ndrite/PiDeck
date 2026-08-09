@@ -1,29 +1,65 @@
 import { useEffect, useRef } from "react";
-import type { PetAggregateState, PetManifest, PetMode, PetNotification } from "@shared/types";
+import type { AppFontSizeMode, PetAggregateState, PetManifest, PetMode, PetNotification } from "@shared/types";
+import {
+	NOTIFICATION_GAP,
+	NOTIFICATION_MAX_LINES,
+	NOTIFICATION_MAX_WIDTH,
+	NOTIFICATION_PAD_X,
+	NOTIFICATION_PAD_Y,
+	NOTIFICATION_STROKE,
+	NOTIFICATION_FONT_SIZE_PX,
+	PET_BASE_H,
+	PET_BASE_W,
+	layoutNotificationSegments,
+} from "@shared/petNotificationLayout";
 import { type SpriteSheet, MODE_ROW, MODE_FRAMES, CELL_W, CELL_H } from "./PetSpriteSheet";
 
 /**
  * Canvas + requestAnimationFrame 精灵动画，GPU 绘制零 React re-render 开销。
- * 统一帧率 12fps / 8fps(idle)，通知气泡直接在 Canvas 顶部绘制。
+ * 统一帧率 12fps / 8fps(idle)。
+ *
+ * 布局约定（与主进程 PetWindow 共享同一套几何）：
+ * - 精灵按 160×scale × 176×scale 绘制在窗口底部居中，不再拉伸铺满窗口。
+ * - 通知气泡锚定在精灵头顶：底边 = 精灵顶边 - gap，横向居中。
+ * - 气泡字号用有效 UI 字号（uiFontSize ?? fontSize），只乘 DPR，绝不随 petScale 缩放。
  */
 
 const DEFAULT_FPS = 12;
 const IDLE_FPS = 8;
 const PAUSE_MS: Record<string, number> = { idle: 3000, failed: 4000 };
+/** 非持久化提醒淡出窗口（主进程 4s 后推 null 清除） */
+const TOTAL_MS = 4000;
+const FADE_IN_MS = 250;
+const FADE_OUT_MS = 500;
+
+/** 状态色（700 档，避免过亮）：已完成绿 / 出现问题红 / 等待操作黄 */
+const NOTIF_COLOR: Record<PetNotification["type"], string> = {
+	done: "#15803d",
+	error: "#b91c1c",
+	waiting: "#a16207",
+};
+
+/** 标题黑色（PiDeck --color-text-primary） */
+const TITLE_COLOR = "#202124";
+/** 气泡文字字重：统一加粗 */
+const NOTIF_FONT_WEIGHT = 700;
 
 type Props = {
 	sprite: SpriteSheet | null;
 	manifest: PetManifest | null;
 	state: PetAggregateState;
-	dragging?: boolean;
 	notification?: PetNotification | null;
+	/** 宠物缩放：只影响精灵尺寸，不影响气泡字号 */
+	scale: number;
+	/** 有效 UI 字号档位：气泡字号由此推导 */
+	fontMode: AppFontSizeMode;
+	/** 气泡字体栈（跟随 PiDeck 字体设置：system/sans/serif/custom） */
+	fontStack: string;
 };
 
-export function PetOverlay({ sprite, state, dragging, notification }: Props) {
+export function PetOverlay({ sprite, state, notification, scale, fontMode, fontStack }: Props) {
 	const mode = state.mode;
 	const canvasRef = useRef<HTMLCanvasElement>(null);
-	const dragRef = useRef(dragging);
-	dragRef.current = dragging;
 	const notifRef = useRef(notification);
 	notifRef.current = notification;
 
@@ -51,6 +87,17 @@ export function PetOverlay({ sprite, state, dragging, notification }: Props) {
 
 		syncCanvasSize();
 
+		// 精灵几何（只随 scale 与窗口尺寸变化，与通知可见性无关）
+		const spriteW = Math.round(PET_BASE_W * scale);
+		const spriteH = Math.round(PET_BASE_H * scale);
+		// 气泡几何：固定 CSS 尺寸，仅乘 DPR
+		const fontSizeCss = NOTIFICATION_FONT_SIZE_PX[fontMode];
+		const bubbleMaxW = NOTIFICATION_MAX_WIDTH;
+		const padX = NOTIFICATION_PAD_X;
+		const padY = NOTIFICATION_PAD_Y;
+		const gap = NOTIFICATION_GAP;
+		const stroke = NOTIFICATION_STROKE;
+
 		const row = MODE_ROW[mode] ?? 0;
 		const totalFrames = MODE_FRAMES[mode] ?? 8;
 		const fps = mode === "idle" ? IDLE_FPS : DEFAULT_FPS;
@@ -65,8 +112,11 @@ export function PetOverlay({ sprite, state, dragging, notification }: Props) {
 		let rafId = 0;
 
 		const draw = (c: number) => {
+			const { dpr } = syncCanvasSize();
 			ctx.clearRect(0, 0, canvas.width, canvas.height);
-			ctx.drawImage(sprite.image, c * CELL_W, row * CELL_H, CELL_W, CELL_H, 0, 0, canvas.width, canvas.height);
+			const sx = (canvas.width - spriteW * dpr) / 2;
+			const sy = canvas.height - spriteH * dpr;
+			ctx.drawImage(sprite.image, c * CELL_W, row * CELL_H, CELL_W, CELL_H, sx, sy, spriteW * dpr, spriteH * dpr);
 		};
 
 		const drawNotif = () => {
@@ -74,47 +124,66 @@ export function PetOverlay({ sprite, state, dragging, notification }: Props) {
 			if (!n) return;
 			const elapsed = performance.now() - n.timestamp;
 			if (elapsed < 0) return;
-			const FADE_IN = 250, FADE_OUT = 500, TOTAL = 4000;
 			let alpha = 1;
-			if (elapsed < FADE_IN) alpha = elapsed / FADE_IN;
-			else if (elapsed > TOTAL - FADE_OUT) alpha = Math.max(0, (TOTAL - elapsed) / FADE_OUT);
-			if (alpha <= 0) return;
+			if (!n.persistent) {
+				if (elapsed < FADE_IN_MS) alpha = elapsed / FADE_IN_MS;
+				else if (elapsed > TOTAL_MS - FADE_OUT_MS) alpha = Math.max(0, (TOTAL_MS - elapsed) / FADE_OUT_MS);
+				if (alpha <= 0) return;
+			}
 
-			const isErr = n.type === "error";
-			const textColor = isErr ? "#dc2626" : "#22c55e";
-			const { dpr, cssWidth: dw, cssHeight: dh } = syncCanvasSize();
-			const ps = dw / 160; // petScale
-			const fontSize = Math.round(14 * dpr * ps);
+			const { dpr } = syncCanvasSize();
+			const fontSize = Math.round(fontSizeCss * dpr);
+			const maxW = bubbleMaxW * dpr;
 			ctx.save();
 			ctx.globalAlpha = alpha;
-			ctx.font = `600 ${fontSize}px -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif`;
+			ctx.font = `${NOTIF_FONT_WEIGHT} ${fontSize}px ${fontStack}`;
+			const measure = (t: string) => ctx.measureText(t).width;
 
-			const maxW = dw * dpr - 24 * dpr * ps;
-			const px = 14 * dpr * ps, py = 8 * dpr * ps;
-			const lines = wrapText(ctx, n.text, maxW - px * 2);
+			// 分段着色：标题加中文引号（黑色）+ 状态词状态色；缺省 title/status 时退化为整行状态色
+			const displayTitle = n.title?.trim() ? `“${n.title}”` : (n.title ?? "");
+			const rows = n.title && n.status
+				? layoutNotificationSegments(measure, displayTitle, n.status, maxW - padX * 2 * dpr - stroke * 2 * dpr, NOTIFICATION_MAX_LINES)
+				: [[{ text: n.text, kind: "status" as const }]];
 			const lineH = fontSize * 1.5;
-			const textH = lines.length * lineH;
-			const bw = Math.max(...lines.map(l => ctx.measureText(l).width)) + px * 2;
-			const bh = textH + py * 2;
-			const bx = (dw * dpr - bw) / 2;
-			const by = dh * dpr - bh - 6 * dpr * ps;
-			const rad = 10 * dpr * ps;
+			const lineMaxW = Math.max(...rows.map((segments) => segments.reduce((w, s) => w + measure(s.text), 0)));
+			const bw = Math.min(lineMaxW, maxW) + padX * 2 * dpr + stroke * 2 * dpr;
+			const bh = rows.length * lineH + padY * 2 * dpr + stroke * 2 * dpr;
+			// 气泡底边锚定精灵顶边，横向居中
+			const spriteTop = canvas.height - spriteH * dpr;
+			const by = spriteTop - gap * dpr - bh;
+			const bx = (canvas.width - bw) / 2;
+			const rad = 10 * dpr;
 
 			ctx.fillStyle = "rgba(255,255,255,0.95)";
 			ctx.beginPath();
 			rndRect(ctx, bx, by, bw, bh, rad);
 			ctx.fill();
 			ctx.strokeStyle = "#1a1d24";
-			ctx.lineWidth = 1.5 * dpr * ps;
-			ctx.setLineDash([3 * dpr * ps, 3 * dpr * ps]);
+			ctx.lineWidth = 1.5 * dpr;
+			ctx.setLineDash([3 * dpr, 3 * dpr]);
 			ctx.stroke();
 			ctx.setLineDash([]);
 
-			ctx.fillStyle = textColor;
+			// 底部小三角指向精灵头顶（高度留余量，不越过 NOTIFICATION_GAP）
+			const tailX = canvas.width / 2;
+			ctx.beginPath();
+			ctx.moveTo(tailX - 5 * dpr, by + bh);
+			ctx.lineTo(tailX + 5 * dpr, by + bh);
+			ctx.lineTo(tailX, by + bh + 5 * dpr);
+			ctx.closePath();
+			ctx.fill();
+
 			ctx.textAlign = "center";
 			ctx.textBaseline = "middle";
-			for (let i = 0; i < lines.length; i++) {
-				ctx.fillText(lines[i], bx + bw / 2, by + py + lineH * i + lineH / 2);
+			for (let i = 0; i < rows.length; i++) {
+				const y = by + padY * dpr + stroke * dpr + lineH * i + lineH / 2;
+				const rowW = rows[i].reduce((w, s) => w + measure(s.text), 0);
+				let x = bx + bw / 2 - rowW / 2;
+				for (const segment of rows[i]) {
+					ctx.fillStyle = segment.kind === "status" ? NOTIF_COLOR[n.type] : TITLE_COLOR;
+					ctx.fillText(segment.text, x + measure(segment.text) / 2, y);
+					x += measure(segment.text);
+				}
 			}
 			ctx.restore();
 		};
@@ -127,10 +196,8 @@ export function PetOverlay({ sprite, state, dragging, notification }: Props) {
 		const loop = (now: number) => {
 			if (!alive) return;
 			rafId = requestAnimationFrame(loop);
-			// 每帧都先同步真实 CSS 尺寸；拖拽只冻结动画时间推进，不冻结 canvas 尺寸。
-			// 否则点击/拖拽期间窗口或 DPI 尺寸变化会让 buffer 留在旧比例，出现越拖越大的错觉。
+			// 每帧同步真实 CSS 尺寸，避免窗口或 DPI 变化后 buffer 留在旧比例。
 			syncCanvasSize();
-			if (dragRef.current) { lastT = now; tick(); return; }
 			const delta = now - lastT;
 			lastT = now;
 
@@ -156,7 +223,7 @@ export function PetOverlay({ sprite, state, dragging, notification }: Props) {
 		tick();
 		rafId = requestAnimationFrame(loop);
 		return () => { alive = false; cancelAnimationFrame(rafId); };
-	}, [sprite, mode]);
+	}, [sprite, mode, scale, fontMode, fontStack]);
 
 	if (mode === "hidden") return <div style={{ width: "100%", height: "100%", background: "transparent" }} />;
 
@@ -175,27 +242,6 @@ function rndRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number,
 	ctx.arcTo(x + w, y + h, x + w - r, y + h, r); ctx.lineTo(x + r, y + h);
 	ctx.arcTo(x, y + h, x, y + h - r, r); ctx.lineTo(x, y + r);
 	ctx.arcTo(x, y, x + r, y, r); ctx.closePath();
-}
-
-function wrapText(ctx: CanvasRenderingContext2D, text: string, maxW: number): string[] {
-	if (maxW <= 0 || ctx.measureText(text).width <= maxW) return [text];
-	const lines: string[] = [];
-	const words = text.split(" ");
-	let cur = "";
-	for (const word of words) {
-		const trial = cur ? cur + " " + word : word;
-		if (ctx.measureText(trial).width <= maxW) { cur = trial; continue; }
-		if (cur) { lines.push(cur); cur = ""; }
-		if (ctx.measureText(word).width <= maxW) { cur = word; continue; }
-		let chunk = "";
-		for (const ch of word) {
-			if (ctx.measureText(chunk + ch).width > maxW && chunk) { lines.push(chunk); chunk = ch; }
-			else chunk += ch;
-		}
-		cur = chunk;
-	}
-	if (cur) lines.push(cur);
-	return lines;
 }
 
 // ═══ 降级（无素材时） ═══
