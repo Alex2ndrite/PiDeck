@@ -25,9 +25,11 @@ import {
 const PREVIEW_TITLE_LENGTH = 56;
 const PREVIEW_DESCRIPTION_LENGTH = 88;
 
-/** 供时间线 controller 调用的引擎滚动 API（回底弹簧等）。 */
+/** 供时间线 controller 调用的引擎滚动 API（回底弹簧 / 原子恢复位置）。 */
 export type MessageScrollerScrollApi = {
   scrollToBottom: ScrollToBottom;
+  /** 原子恢复历史位置：定位 + 解锁锁底 + 取消在途动画（见引擎 restoreAt）。 */
+  restoreAt: (scrollTop: number) => void;
 };
 
 function truncateMessageText(text: string, limit: number) {
@@ -178,11 +180,15 @@ export function MessageScroller({
   const engineContentRef = stick.contentRef;
   const engineScrollToBottom = stick.scrollToBottom;
   const engineIsAtBottom = stick.isAtBottom;
+  const engineRestoreAt = stick.restoreAt;
 
-  // 把引擎回底能力挂到外部 ref，供 SessionTimelineController 的回底按钮使用。
+  // 把引擎能力挂到外部 ref，供 SessionTimelineController 的回底按钮/历史位置恢复使用。
   useEffect(() => {
     if (!scrollApiRef) return;
-    const api: MessageScrollerScrollApi = { scrollToBottom: engineScrollToBottom };
+    const api: MessageScrollerScrollApi = {
+      scrollToBottom: engineScrollToBottom,
+      restoreAt: engineRestoreAt,
+    };
     if (typeof scrollApiRef === "function") {
       scrollApiRef(api);
       return () => {
@@ -193,7 +199,7 @@ export function MessageScroller({
     return () => {
       scrollApiRef.current = null;
     };
-  }, [scrollApiRef, engineScrollToBottom]);
+  }, [scrollApiRef, engineScrollToBottom, engineRestoreAt]);
 
   const setViewportRef = useCallback(
     (node: HTMLElement | null) => {
