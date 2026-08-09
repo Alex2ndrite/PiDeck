@@ -71,5 +71,5 @@ test("workbench viewer: editor mode toggles split/maximize; CodeMirror stays syn
   const viewer = readFileSync("src/renderer/src/components/app/FileDiffViewer.tsx", "utf8");
   assert.match(viewer, /\{loading && <div className="file-diff-loading">/);
   assert.match(viewer, /<CodeMirrorEditor/);
-  assert.match(viewer, /<MergeDiffView/);
+  assert.match(viewer, /<CodeDiffView/);
 });

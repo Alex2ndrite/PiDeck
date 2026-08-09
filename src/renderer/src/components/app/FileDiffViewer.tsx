@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { t } from "../../i18n";
-import { ArrowLeft, Edit3, Maximize, Minimize2, PencilOff, SquareSplitHorizontal, X, Eye, FileCode } from "lucide-react";
+import { ArrowLeft, Maximize, Minimize2, Rows2, SquareSplitHorizontal, X, Eye, FileCode } from "lucide-react";
 import { Button } from "../ui-shadcn/button";
 import { cn } from "../../lib/utils";
 import { MarkdownStream } from "../session/MarkdownStream";
@@ -8,10 +8,11 @@ import { defaultUrlTransform } from "../session/MarkdownLinkCore";
 import { defaultRemarkPlugins, defaultRehypePlugins } from "streamdown";
 import rehypeKatex from "rehype-katex";
 import { CodeMirrorEditor } from "./CodeMirrorEditor";
-import { MergeDiffView } from "./MergeDiffView";
+import { CodeDiffView } from "./CodeDiffView";
 import { formatFilePathRef } from "../session/composer/chips";
 
 import { isBinaryExtension, isImageFile, isPdfFile } from "../../utils/isTextFile";
+import { getFileIconColor, getFileIconSeti } from "../../fileIcons";
 
 type ViewMode = "view" | "diff";
 
@@ -62,12 +63,9 @@ export function FileDiffViewer(props: {
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 	const [sideBySide, setSideBySide] = useState(props.displayMode !== "drawer");
-	// 默认编辑模式：view 模式打开即可编辑（不再需要先点「编辑」）；
-	// diff 模式保持只读（历史提交/工作区对比场景，避免误改，需要时仍可点编辑进入）。
-	const [readOnly, setReadOnly] = useState(() => props.mode === "diff");
+	// diff 模式为只读对比视图（第三方渲染库），无需编辑态切换
 	const [dirty, setDirty] = useState(false);
 	const [saving, setSaving] = useState(false);
-	const [showHint, setShowHint] = useState(false);
 	// 二进制预览（图片/PDF）的 Blob URL：切换文件/卸载时 revoke，防止内存泄漏
 	const [mediaUrl, setMediaUrl] = useState<string | null>(null);
 	const mediaUrlRef = useRef<string | null>(null);
@@ -88,10 +86,8 @@ export function FileDiffViewer(props: {
 	const [preview, setPreview] = useState(defaultPreview);
 
 	useEffect(() => {
-		// 每个 tab 重置编辑状态：view 默认可编辑，diff 只读（避免把编辑状态带入历史提交 Diff）。
-		setReadOnly(isDiffMode);
+		// 每个 tab 重置编辑状态：view 可编辑（源码即编辑），diff 只读对比无编辑态。
 		setDirty(false);
-		setShowHint(false);
 		setPreview(defaultPreview);
 		// 清掉上一个文件的 Blob URL（媒体预览随 tab 切换失效）
 		revokeMediaUrl();
@@ -240,7 +236,8 @@ export function FileDiffViewer(props: {
 		}, 500);
 	}, [props.saveContent, saveNow]);
 
-	// Ctrl+S / Cmd+S：立即保存（取消挂起的自动保存，避免重复写盘）
+	// Ctrl+S / Cmd+S：立即保存（取消挂起的自动保存，避免重复写盘）。
+	// 仅 view 模式生效：diff 是只读对比，不存在保存。
 	const handleKeyDown = useCallback((e: KeyboardEvent) => {
 		if ((e.ctrlKey || e.metaKey) && e.key === "s") {
 			e.preventDefault();
@@ -249,11 +246,11 @@ export function FileDiffViewer(props: {
 	}, [saveNow]);
 
 	useEffect(() => {
-		if (!readOnly) {
+		if (!isDiffMode) {
 			window.addEventListener("keydown", handleKeyDown);
 			return () => window.removeEventListener("keydown", handleKeyDown);
 		}
-	}, [readOnly, handleKeyDown]);
+	}, [isDiffMode, handleKeyDown]);
 
 	// 卸载时取消挂起的自动保存 timer + 释放媒体 Blob URL（生命周期配对）
 	useEffect(() => {
@@ -264,23 +261,6 @@ export function FileDiffViewer(props: {
 			}
 			revokeMediaUrl();
 		};
-	}, []);
-
-	// 进入编辑时显示快捷键提示，3 秒后自动消失
-	useEffect(() => {
-		if (showHint) {
-			const timer = setTimeout(() => setShowHint(false), 3000);
-			return () => clearTimeout(timer);
-		}
-	}, [showHint]);
-
-	const handleEditToggle = useCallback(() => {
-		setReadOnly(false);
-		setShowHint(true);
-	}, []);
-
-	const handleExitEdit = useCallback(() => {
-		setReadOnly(true);
 	}, []);
 
 	const handleEditorChange = useCallback((value: string) => {
@@ -360,7 +340,6 @@ export function FileDiffViewer(props: {
 					<Button
 						variant="ghost"
 						size="icon-sm"
-						className="file-diff-close"
 						onClick={props.onBack}
 						title={t("common.back")}
 						aria-label={t("common.back")}
@@ -372,17 +351,13 @@ export function FileDiffViewer(props: {
 				{props.chromeTabsExternal || showInlineTabs ? (
 					<span className="file-diff-title min-w-0 flex-1 truncate">
 						{dirty && !props.chromeTabsExternal && t("editor.unsavedMarker")}
-						{showHint && (
-							<span className="file-diff-hint">{t("app.saveFileShortcut")}</span>
-						)}
 					</span>
 				) : (
 					<span className="file-diff-title" title={props.filePath}>
+						{/* 文件类型图标：与 Git 资源树同一 Seti 图标源（内联 svg + fill-current 着色） */}
+						<FileTypeIcon filePath={props.filePath} />
 						{fileName}
 						{dirty && t("editor.unsavedMarker")}
-						{showHint && (
-							<span className="file-diff-hint">{t("app.saveFileShortcut")}</span>
-						)}
 					</span>
 				)}
 				<div className="file-diff-header-actions">
@@ -390,7 +365,6 @@ export function FileDiffViewer(props: {
 						<Button
 							variant="ghost"
 							size="icon-sm"
-							className="file-diff-toggle-btn"
 							title={preview ? t("editor.source") : t("editor.preview")}
 							onClick={() => {
 								if (isHtml && props.onPreviewHtml) {
@@ -407,43 +381,20 @@ export function FileDiffViewer(props: {
 						<Button
 							variant="ghost"
 							size="icon-sm"
-							className="file-diff-toggle-btn"
 							title={sideBySide ? t("app.showSingle") : t("app.showSplit")}
 							onClick={() => setSideBySide(!sideBySide)}
 						>
-							<SquareSplitHorizontal size={15} />
+							{/* 图标随模式变化：分栏时显示「单栏」图标（点击合并），单栏时显示「分栏」图标（点击分栏），
+							   与 title 的目标状态一致，两种模式按钮一眼可辨 */}
+							{sideBySide ? <Rows2 size={15} /> : <SquareSplitHorizontal size={15} />}
 						</Button>
 					)}
-					{/* 编辑/退出编辑按钮仅保留给 diff 模式（历史对比默认只读，需要时点编辑进入）；
-					   view 模式源码即编辑：切到源码即可改，无需独立的编辑按钮。 */}
-					{isDiffMode && props.saveContent && readOnly && !preview && (
-						<Button
-							variant="ghost"
-							size="icon-sm"
-							className="file-diff-toggle-btn"
-							title={t("app.editFile")}
-							onClick={handleEditToggle}
-						>
-							<Edit3 size={15} />
-						</Button>
-					)}
-					{isDiffMode && !readOnly && props.saveContent && !preview && (
-						<Button
-							variant="ghost"
-							size="icon-sm"
-							className="file-diff-toggle-btn"
-							title={t("app.exitEdit")}
-							onClick={handleExitEdit}
-						>
-							{/* 退出编辑≠关闭文件：不用 X，避免与 Tab/阅读面关闭叉混淆 */}
-							<PencilOff size={15} />
-						</Button>
-					)}
+					{/* 编辑/退出编辑按钮已移除：diff 为只读对比（第三方渲染库），
+					   view 模式源码即编辑（切到源码即可改），均无需独立的编辑按钮。 */}
 					{props.onToggleMode && (
 						<Button
 							variant="ghost"
 							size="icon-sm"
-							className="file-diff-toggle-btn"
 							title={
 								isWorkbenchPane
 									? displayMode === "maximize"
@@ -461,13 +412,11 @@ export function FileDiffViewer(props: {
 						</Button>
 					)}
 					{/* 关闭按钮：无论 Tab 是否上收总栏都保留，保证 DIFF/文件预览右上角
-					   始终有关闭入口（Tab 栏小叉在窄栏下不易点中）。与「退出编辑」（PencilOff）
-					   语义不同：X 关闭整个阅读面，PencilOff 仅退出编辑态。 */}
+					   始终有关闭入口（Tab 栏小叉在窄栏下不易点中）。 */}
 					<Button
 						variant="ghost"
-						size="icon-sm"
-						className="file-diff-toggle-btn"
-						onClick={handleClose}
+							size="icon-sm"
+							onClick={handleClose}
 						aria-label={t("common.close")}
 						title={t("common.close")}
 					>
@@ -504,9 +453,11 @@ export function FileDiffViewer(props: {
 								/>
 							</div>
 						)}
-						{/* Markdown 预览：仅 view 模式且 preview 启用（静态渲染，与会话正文同一 Streamdown 引擎） */}
+						{/* Markdown 预览：仅 view 模式且 preview 启用（静态渲染，与会话正文同一 Streamdown 引擎）。
+						   排版复用会话正文的 .markdown-body 体系，预览专属增量（阅读宽度/任务列表/kbd 等）
+						   由 markdown-preview-chrome utility 提供（tailwind.css @utility，不再自建 parallel 样式）。 */}
 						{!isDiffMode && preview && isMarkdown && (
-							<div className="file-diff-preview">
+							<div className="markdown-body markdown-preview-chrome h-full overflow-y-auto px-6 py-6 text-body text-text-primary font-sans">
 								<MarkdownStream
 									text={content}
 									onOpenExternal={() => undefined}
@@ -525,24 +476,23 @@ export function FileDiffViewer(props: {
 								<CodeMirrorEditor
 									value={content}
 									language={language}
-									readOnly={readOnly}
+									readOnly={false}
 									onChange={handleEditorChange}
 									onAttachSelection={handleAttachSelection}
 								/>
 							</div>
 						)}
-						{/* diff 模式：MergeView（分栏）/ unifiedMergeView（单栏），
-							与 Editor 不同时渲染，key 切换强制重建避免状态串台 */}
+						{/* diff 模式：只读差异对比（分栏 / 单栏由 sideBySide 切换），
+						   与编辑器不同时渲染，key 切换强制重建避免状态串台 */}
 						{isDiffMode && (
 							<div style={{ height: "100%", flexDirection: "column" }}>
-								<MergeDiffView
+								<CodeDiffView
 									key={sideBySide ? "split" : "unified"}
-									original={original}
-									modified={content}
-									language={language}
-									readOnly={readOnly}
-									sideBySide={sideBySide}
-									onChange={handleEditorChange}
+									oldContent={original}
+									newContent={content}
+									filePath={props.filePath}
+									viewMode={sideBySide ? "split" : "unified"}
+									theme={props.theme}
 								/>
 							</div>
 						)}
@@ -554,7 +504,7 @@ export function FileDiffViewer(props: {
 
 	if (displayMode === "modal") {
 		return (
-			<div className="modal-backdrop" onClick={readOnly ? handleClose : undefined}>
+			<div className="modal-backdrop" onClick={isDiffMode ? handleClose : undefined}>
 				<div className="file-diff-modal" onClick={(e) => e.stopPropagation()}>
 					{headerContent}
 				</div>
@@ -583,10 +533,31 @@ function mimeFromImageExt(ext: string): string {
 	return map[ext] ?? "application/octet-stream";
 }
 
+/**
+ * 文件类型图标（Seti，与 Git 资源树同一来源）：svg 内联 + fill-current 按扩展名着色。
+ * 图标映射失败时静默降级为空（标题只剩文件名，不影响阅读）。
+ */
+function FileTypeIcon({ filePath }: { filePath: string }) {
+	try {
+		const fileName = filePath.split(/[/\\]/).pop() ?? filePath;
+		const { svg, colorName } = getFileIconSeti(fileName);
+		return (
+			<span
+				aria-hidden="true"
+				className="inline-flex size-4 shrink-0 items-center justify-center [&_svg]:size-full [&_svg]:fill-current"
+				style={{ color: getFileIconColor(colorName) }}
+				dangerouslySetInnerHTML={{ __html: svg }}
+			/>
+		);
+	} catch {
+		return null;
+	}
+}
+
 function HtmlPreview({ content }: { content: string }) {
 	return (
 		<iframe
-			className="file-diff-preview"
+			className="h-full w-full border-0 bg-[var(--color-bg-panel)]"
 			srcDoc={content}
 			title={t("editor.htmlPreview")}
 			sandbox="allow-scripts allow-forms"

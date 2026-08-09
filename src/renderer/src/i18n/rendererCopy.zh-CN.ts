@@ -965,6 +965,8 @@ export const zhCN = {
   "editor.preview": "预览",
   "editor.source": "源码",
   "editor.attachSelectionRange": "引用选中内容（第 {range} 行）",
+  "editor.diffTooLarge": "文件过大，无法显示差异对比",
+  "editor.diffTooLargeDetail": "旧文件 {old} 行，新文件 {new} 行，请使用 git diff 查看",
   "editor.pdfPreview": "PDF 预览",
   "editors.clear": "清除",
   "editors.browse": "浏览",

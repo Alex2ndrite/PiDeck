@@ -980,6 +980,8 @@ export const enUS: Record<TranslationKey, string> = {
   "editor.preview": "Preview",
   "editor.source": "Source",
   "editor.attachSelectionRange": "Attach selection (line {range})",
+  "editor.diffTooLarge": "File too large to render diff",
+  "editor.diffTooLargeDetail": "{old} old lines, {new} new lines \u2014 use git diff instead",
   "editor.pdfPreview": "PDF preview",
   "editors.clear": "Clear",
   "editors.browse": "Browse",

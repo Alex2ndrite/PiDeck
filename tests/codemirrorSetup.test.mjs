@@ -74,3 +74,18 @@ test("baseEditorExtensions applies readOnly and wordWrap", () => {
   const all = baseEditorExtensions({ readOnly: true, wordWrap: true, language: resolveEditorLanguage("md") });
   assert.equal(all.length, baseEditorExtensions().length + 3);
 });
+
+test("editorTheme is a valid theme extension without legacy merge classes", () => {
+  const { editorTheme } = loadModule();
+  // editorTheme 是合法主题扩展（theme() 构建不抛 Unsupported selector）
+  assert.ok(editorTheme);
+  const src = readFileSync("src/renderer/src/utils/codemirrorSetup.ts", "utf8");
+  // diff 渲染已迁移到独立渲染库（CodeDiffView），编辑器主题不再残留 merge 类名
+  assert.doesNotMatch(src, /cm-merge-pane/);
+  assert.doesNotMatch(src, /cm-merge-gap/);
+  assert.doesNotMatch(src, /cm-merge-chunk/);
+  assert.doesNotMatch(src, /cm-merge-collapsed/);
+  assert.doesNotMatch(src, /cm-collapsedLines/);
+  // theme() 不支持 &light/&dark 选择器（仅 baseTheme 支持），出现会抛 "Unsupported selector"
+  assert.doesNotMatch(src, /"&light|"&dark/);
+});

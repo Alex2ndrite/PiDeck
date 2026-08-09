@@ -2,19 +2,20 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-test("FileDiffViewer: view mode defaults to editable, diff mode stays read-only", () => {
+test("FileDiffViewer: view mode is editable, diff mode is read-only render", () => {
   const viewer = readFileSync("src/renderer/src/components/app/FileDiffViewer.tsx", "utf8");
-  // 默认编辑模式：view 打开即可编辑，无需先点「编辑」按钮
-  assert.match(viewer, /useState\(\(\) => props\.mode === "diff"\)/);
-  // tab 切换重置：view 可编辑、diff 只读（历史提交 Diff 不能误带编辑状态）
-  assert.match(viewer, /setReadOnly\(isDiffMode\)/);
+  // view 模式：CodeMirror 编辑器可编辑（readOnly=false），源码即编辑，无独立编辑按钮
+  assert.match(viewer, /<CodeMirrorEditor/);
+  assert.match(viewer, /readOnly=\{false\}/);
+  // diff 模式：只读差异对比视图（CodeDiffView），不再有编辑态切换/编辑按钮
+  assert.match(viewer, /<CodeDiffView/);
+  assert.doesNotMatch(viewer, /Edit3/);
+  assert.doesNotMatch(viewer, /PencilOff/);
+  assert.doesNotMatch(viewer, /setReadOnly/);
   // markdown/html/svg 打开默认预览模式，点「源码」切换才进入编辑态；tab 切换同样重置为默认预览
   assert.match(viewer, /const defaultPreview = !isDiffMode && \(isMarkdown \|\| isHtml \|\| isSvg\)/);
   assert.match(viewer, /useState\(defaultPreview\)/);
   assert.match(viewer, /setPreview\(defaultPreview\)/);
-  // 编辑/退出按钮仅保留给 diff 模式（历史对比默认只读）：view 模式源码即编辑，不混入独立编辑控件
-  assert.match(viewer, /isDiffMode && props\.saveContent && readOnly && !preview/);
-  assert.match(viewer, /isDiffMode && !readOnly && props\.saveContent && !preview/);
 });
 
 test("FileDiffViewer: debounced auto-save with Ctrl+S immediate save", () => {
@@ -34,14 +35,25 @@ test("FileDiffViewer: debounced auto-save with Ctrl+S immediate save", () => {
 
 test("editors bind Ctrl+/ comment toggle and JSON lint", () => {
   const editor = readFileSync("src/renderer/src/components/app/CodeMirrorEditor.tsx", "utf8");
-  const merge = readFileSync("src/renderer/src/components/app/MergeDiffView.tsx", "utf8");
   // Ctrl+/ 注释/取消注释（@codemirror/commands 的 toggleComment）
   assert.match(editor, /import \{[^}]*toggleComment/);
   assert.match(editor, /Mod-\//);
-  assert.match(merge, /Mod-\//);
   // JSON 语法错误即时提示（lintGutter + jsonParseLinter，仅 json/jsonc）
   assert.match(editor, /lintGutter\(\), linter\(jsonParseLinter\(\)\)/);
   assert.match(editor, /resolvedLanguage\.language\.name === "json"/);
+});
+
+test("FileDiffViewer: markdown preview reuses .markdown-body + markdown-preview-chrome, no parallel legacy classes", () => {
+  const viewer = readFileSync("src/renderer/src/components/app/FileDiffViewer.tsx", "utf8");
+  const surfaces = readFileSync("src/renderer/src/styles/surfaces.css", "utf8");
+  const tailwind = readFileSync("src/renderer/src/styles/tailwind.css", "utf8");
+  // 预览容器挂 markdown-body（与会话正文同一排版体系）+ markdown-preview-chrome（预览增量）
+  assert.match(viewer, /markdown-body markdown-preview-chrome/);
+  // 预览专属增量注册在 tailwind.css 的 @utility（新架构），不允许回落到 legacy surfaces.css 手写类
+  assert.match(tailwind, /@utility markdown-preview-chrome/);
+  assert.doesNotMatch(surfaces, /\.file-diff-preview/);
+  // HTML 预览 iframe 改用 Tailwind 类，不再依赖 legacy 类
+  assert.doesNotMatch(viewer, /className="file-diff-preview"/);
 });
 
 test("FileDiffViewer: image/PDF get inline preview via base64 Blob URL", () => {

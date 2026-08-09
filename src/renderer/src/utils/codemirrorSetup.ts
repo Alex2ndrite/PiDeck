@@ -91,16 +91,19 @@ const editorThemeSpec = {
   },
   "&.cm-focused": { outline: "none" },
   ".cm-scroller": { fontFamily: "var(--font-family-mono)", lineHeight: "1.6" },
-  ".cm-content": { caretColor: "var(--color-accent)", padding: "10px 0" },
+  ".cm-content": { caretColor: "var(--color-accent)", padding: "12px" },
   ".cm-cursor, .cm-dropCursor": { borderLeftColor: "var(--color-accent)" },
   "&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionBackground, ::selection": {
     backgroundColor: "var(--color-accent-soft)",
   },
-  ".cm-gutters": { backgroundColor: "transparent", color: "var(--color-text-tertiary)", border: "none" },
+  ".cm-gutters": { backgroundColor: "transparent", color: "var(--color-text-tertiary)", border: "none", borderRight: "1px solid var(--color-border-subtle)", paddingRight: "2px" },
   ".cm-activeLine": { backgroundColor: "var(--color-bg-active)" },
   ".cm-activeLineGutter": { backgroundColor: "var(--color-bg-active)", color: "var(--color-text-primary)" },
-  ".cm-foldGutter .cm-gutterElement": { cursor: "pointer" },
-  ".cm-foldPlaceholder": { backgroundColor: "var(--color-bg-muted)", border: "none", color: "var(--color-text-tertiary)" },
+  // 折叠箭头：加粗 + 放大 + 透明度渐现（hover 时全显）；折叠列宽度由 CM6 自动测量
+  ".cm-foldGutter .cm-gutterElement span": { fontWeight: "700", fontSize: "15px", lineHeight: "1" },
+  ".cm-foldGutter .cm-gutterElement": { cursor: "pointer", opacity: 0.35, transition: "opacity 0.12s, color 0.12s", textAlign: "center", display: "flex", alignItems: "center", justifyContent: "center" },
+  ".cm-foldGutter .cm-gutterElement:hover": { opacity: 1, color: "var(--color-accent)" },
+  ".cm-foldPlaceholder": { backgroundColor: "color-mix(in srgb, #4C8BF5 10%, transparent)", border: "1px solid color-mix(in srgb, #4C8BF5 20%, transparent)", color: "var(--color-accent)", borderRadius: "3px", padding: "0 4px", cursor: "pointer" },
   ".cm-tooltip": { backgroundColor: "var(--color-bg-panel)", border: "1px solid var(--color-border-subtle)", borderRadius: "var(--radius-sm)" },
   ".cm-tooltip-autocomplete ul li[aria-selected]": { backgroundColor: "var(--color-bg-active)", color: "var(--color-text-primary)" },
   ".cm-tooltip.cm-tooltip-autocomplete > ul > li": { color: "var(--color-text-secondary)" },
@@ -112,14 +115,6 @@ const editorThemeSpec = {
   ".cm-button": { backgroundImage: "none", background: "var(--color-bg-muted)", border: "1px solid var(--color-border-default)", borderRadius: "var(--radius-sm)", color: "var(--color-text-primary)" },
   ".cm-textfield": { background: "var(--color-bg-input)", border: "1px solid var(--color-border-default)", borderRadius: "var(--radius-sm)", color: "var(--color-text-primary)" },
   ".cm-selectionMatch": { backgroundColor: "var(--color-accent-soft)" },
-  ".cm-mergeView": { height: "100%", overflow: "auto", backgroundColor: "var(--color-bg-panel)" },
-  ".cm-mergeView .cm-merge-pane": { backgroundColor: "var(--color-bg-panel)" },
-  ".cm-mergeView .cm-merge-gap": { backgroundColor: "var(--color-bg-muted)" },
-  ".cm-mergeView .cm-merge-chunk": { backgroundColor: "var(--color-accent-soft)" },
-  ".cm-mergeView .cm-merge-chunk.cm-merge-chunk-start, .cm-mergeView .cm-merge-chunk.cm-merge-chunk-end": { backgroundColor: "var(--color-bg-active)" },
-  ".cm-mergeView .cm-merge-chunk-vertical": { background: "var(--color-bg-active)" },
-  ".cm-mergeView .cm-merge-collapsed": { background: "var(--color-bg-muted)", color: "var(--color-text-tertiary)", cursor: "pointer" },
-  ".cm-mergeView .cm-merge-collapsed-widget": { background: "var(--color-bg-muted)", color: "var(--color-text-tertiary)", border: "1px dashed var(--color-border-strong)", borderRadius: "var(--radius-sm)", cursor: "pointer" },
 } as const;
 
 export const editorTheme = EditorView.theme(editorThemeSpec, {

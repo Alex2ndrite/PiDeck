@@ -99,6 +99,10 @@
   --color-logo-green-deep: #374151;
   --color-danger: #b42318;
   --color-danger-soft: #fdecea;
+  /* 成功色（diff 添加侧 / 完成态）：与 danger 同构，strong 为更深的强调档 */
+  --color-success: #15803d;
+  --color-success-soft: #dcfce7;
+  --color-success-strong: #166534;
   --color-warning: #b7791f;
   --color-info: #2563eb;
   --color-code-bg: #111418;
@@ -411,6 +415,10 @@
      soft 同步换成深红底（直接沿用浅色 #fdecea 会在暗色界面出现粉底徽章）。 */
   --color-danger: #ef4444;
   --color-danger-soft: #3a1d1d;
+  /* 成功色暗色提亮：同 danger 策略，soft 用深绿底（沿用浅绿会在暗色界面出现荧光底） */
+  --color-success: #4ade80;
+  --color-success-soft: #14291c;
+  --color-success-strong: #86efac;
   --color-brand-green: #9ca3af;
   --color-brand-purple: #9ca3af;
   --color-brand-blue: #9ca3af;

@@ -125,13 +125,10 @@ test("file tabs use preview/permanent strategy owned by useFileEditor", () => {
     "src/renderer/src/components/app/FileDiffViewer.tsx",
     "utf8",
   );
-  // 退出编辑用 PencilOff，禁止再拿 X 冒充（与关闭叉样式/语义撞车）
-  const exitEditBlock = viewer.slice(
-    viewer.indexOf('title={t("app.exitEdit")}'),
-    viewer.indexOf("props.onToggleMode"),
-  );
-  assert.match(exitEditBlock, /PencilOff/);
-  assert.doesNotMatch(exitEditBlock, /<X /);
+  // 编辑/退出编辑按钮已移除（diff 只读、view 源码即编辑），不存在退出编辑与关闭叉撞车问题
+  assert.doesNotMatch(viewer, /PencilOff/);
+  assert.doesNotMatch(viewer, /Edit3/);
+  assert.doesNotMatch(viewer, /title=\{t\("app.exitEdit"\)\}/);
   // 关闭按钮始终渲染：即使 Tab 上收总栏（chromeTabsExternal），右上角也要有
   // 明确的关闭入口（需求：DIFF/文件预览右上角关闭按钮）。
   assert.doesNotMatch(viewer, /!props\.chromeTabsExternal && \(/);

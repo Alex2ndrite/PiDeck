@@ -4164,7 +4164,7 @@ div.fixed.inset-0.z-50 {
   white-space: nowrap;
   display: inline-flex;
   align-items: center;
-  gap: var(--space-4);
+  gap: var(--space-2);
 }
 
 .file-diff-hint {
@@ -4196,46 +4196,6 @@ div.fixed.inset-0.z-50 {
   flex-shrink: 0;
 }
 
-.file-diff-toggle-btn {
-  border: 0;
-  background: transparent;
-  color: var(--color-text-tertiary);
-  border-radius: var(--radius-sm);
-  width: 32px;
-  height: 32px;
-  display: inline-grid;
-  place-items: center;
-  line-height: 1;
-  cursor: pointer;
-  transition: background 0.12s, color 0.12s, border-color 0.12s;
-}
-
-.file-diff-toggle-btn:hover {
-  background: var(--color-accent-soft);
-  color: var(--color-accent);
-}
-
-.file-diff-close {
-  border: 0;
-  background: transparent;
-  color: var(--color-text-tertiary);
-  border-radius: var(--radius-sm);
-  width: 32px;
-  height: 32px;
-  display: inline-grid;
-  place-items: center;
-  line-height: 1;
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: background 0.12s, color 0.12s;
-}
-
-.file-diff-close:hover {
-  background: var(--color-bg-hover);
-  color: var(--color-text-primary);
-  border-radius: var(--radius-sm);
-}
-
 .file-diff-body {
   flex: 1;
   min-height: 0;
@@ -4261,17 +4221,6 @@ div.fixed.inset-0.z-50 {
   color: var(--color-danger);
 }
 
-/* ── Markdown 预览区 ──────────────────────────── */
-.file-diff-preview {
-  height: 100%;
-  overflow-y: auto;
-  padding: 16px 24px;
-  color: var(--color-text-primary);
-  font-family: var(--font-family-base);
-  font-size: var(--font-size-body);
-  line-height: var(--line-height-body);
-}
-
 /* 图片/PDF 预览：图片 contain 居中缩放，PDF iframe 铺满（Chromium 内置 viewer） */
 .file-diff-media-preview {
   height: 100%;
@@ -4288,95 +4237,13 @@ div.fixed.inset-0.z-50 {
   height: 100%;
   object-fit: contain;
   box-shadow: var(--shadow-lg);
+  border-radius: var(--radius-md);
 }
 .file-diff-pdf-preview {
   width: 100%;
   height: 100%;
   border: none;
   background: var(--color-bg-panel);
-}
-.file-diff-preview h1,
-.file-diff-preview h2,
-.file-diff-preview h3,
-.file-diff-preview h4 {
-  margin: 1.2em 0 0.6em;
-  font-weight: 600;
-  line-height: 1.3;
-}
-.file-diff-preview h1 {
-  font-size: 1.6em;
-  border-bottom: 1px solid var(--color-border-subtle);
-  padding-bottom: 0.3em;
-}
-.file-diff-preview h2 {
-  font-size: 1.3em;
-}
-.file-diff-preview h3 {
-  font-size: 1.1em;
-}
-.file-diff-preview p {
-  margin: 0.6em 0;
-}
-.file-diff-preview ul,
-.file-diff-preview ol {
-  padding-left: 1.5em;
-  margin: 0.6em 0;
-}
-.file-diff-preview li {
-  margin: 0.3em 0;
-}
-.file-diff-preview code {
-  font-family: var(--font-family-mono);
-  font-size: 0.88em;
-  background: var(--color-bg-muted);
-  padding: 0.2em 0.4em;
-  border-radius: var(--radius-xs);
-}
-.file-diff-preview pre {
-  background: var(--color-bg-muted);
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-md);
-  padding: 12px 16px;
-  overflow-x: auto;
-}
-.file-diff-preview pre code {
-  background: none;
-  padding: 0;
-  font-size: 0.85em;
-}
-.file-diff-preview blockquote {
-  margin: 0.6em 0;
-  padding: 0 1em;
-  border-left: 3px solid var(--color-accent);
-  color: var(--color-text-secondary);
-}
-.file-diff-preview table {
-  border-collapse: collapse;
-  width: 100%;
-  margin: 0.6em 0;
-}
-.file-diff-preview th,
-.file-diff-preview td {
-  border: 1px solid var(--color-border-subtle);
-  padding: 6px 10px;
-  text-align: left;
-}
-.file-diff-preview th {
-  background: var(--color-bg-muted);
-  font-weight: 600;
-}
-.file-diff-preview img {
-  max-width: 100%;
-  border-radius: var(--radius-sm);
-}
-.file-diff-preview a {
-  color: var(--color-accent);
-  text-decoration: underline;
-}
-.file-diff-preview hr {
-  border: none;
-  border-top: 1px solid var(--color-border-subtle);
-  margin: 1.2em 0;
 }
 
 /* sonner 全局 toast：卡片本体保持中性面板色（见 ui-shadcn/sonner.tsx），
