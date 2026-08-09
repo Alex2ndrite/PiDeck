@@ -1076,6 +1076,7 @@ export const zhCN = {
   "config.providerNamePlaceholder": "供应商名称，如 openai",
   "config.reason": "原因",
   "config.reasoning": "推理",
+  "config.capabilities": "能力",
   "config.reasoningEffort": "推理强度",
   "config.reasoningEffortDesc": "API 不支持 reasoning_effort 参数时关闭，避免请求被拒绝。",
   "config.xhigh": "xhigh",

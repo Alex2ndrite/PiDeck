@@ -1092,6 +1092,7 @@ export const enUS: Record<TranslationKey, string> = {
   "config.providerNamePlaceholder": "Provider name, for example openai",
   "config.reason": "Reason",
   "config.reasoning": "Reasoning",
+  "config.capabilities": "Capabilities",
   "config.reasoningEffort": "Reasoning effort",
   "config.reasoningEffortDesc": "Disable when the API does not support the reasoning_effort parameter.",
   "config.xhigh": "xhigh",
