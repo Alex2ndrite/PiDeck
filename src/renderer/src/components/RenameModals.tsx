@@ -1,4 +1,5 @@
 import { t } from "../i18n";
+import { isComposingKeyboardEvent } from "../composerBehavior";
 import {
   Dialog,
   DialogContent,
@@ -59,31 +60,32 @@ export function RenameModals({ fileRename, agentRename }: Props) {
             const root = event.currentTarget as HTMLElement | null;
             root?.querySelector("input")?.focus();
           }}
+          onKeyDown={(e) => {
+            // Enter 提交（与旧 form 语义一致）；IME 合成中（中文选词）与 saving 中不响应
+            if (e.key === "Enter" && !isComposingKeyboardEvent(e) && !agentRename.saving) {
+              e.preventDefault();
+              agentRename.onSubmit();
+            }
+          }}
         >
-          <div
-            onKeyDown={(e) => {
-              if (e.key === "Enter") { e.preventDefault(); agentRename.onSubmit(); }
-            }}
-          >
-            <DialogHeader>
-              <DialogTitle>{t("app.renameSessionTitle")}</DialogTitle>
-              <DialogDescription className="sr-only">{t("app.renameSessionPlaceholder")}</DialogDescription>
-            </DialogHeader>
-            <Input
-              value={agentRename.value}
-              onChange={(e) => agentRename.onValueChange(e.target.value)}
-              placeholder={t("app.renameSessionPlaceholder")}
-              disabled={agentRename.saving}
-            />
-            <DialogFooter>
-              <Button type="button" variant="outline" disabled={agentRename.saving} onClick={agentRename.onClose}>
-                {t("common.cancel")}
-              </Button>
-              <Button type="button" disabled={agentRename.saving} onClick={agentRename.onSubmit}>
-                {agentRename.saving ? t("common.saving") : t("common.save")}
-              </Button>
-            </DialogFooter>
-          </div>
+          <DialogHeader>
+            <DialogTitle>{t("app.renameSessionTitle")}</DialogTitle>
+            <DialogDescription className="sr-only">{t("app.renameSessionPlaceholder")}</DialogDescription>
+          </DialogHeader>
+          <Input
+            value={agentRename.value}
+            onChange={(e) => agentRename.onValueChange(e.target.value)}
+            placeholder={t("app.renameSessionPlaceholder")}
+            disabled={agentRename.saving}
+          />
+          <DialogFooter>
+            <Button type="button" variant="outline" disabled={agentRename.saving} onClick={agentRename.onClose}>
+              {t("common.cancel")}
+            </Button>
+            <Button type="button" disabled={agentRename.saving} onClick={agentRename.onSubmit}>
+              {agentRename.saving ? t("common.saving") : t("common.save")}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     )}
@@ -96,27 +98,27 @@ export function RenameModals({ fileRename, agentRename }: Props) {
             const root = event.currentTarget as HTMLElement | null;
             root?.querySelector("input")?.focus();
           }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !isComposingKeyboardEvent(e)) {
+              e.preventDefault();
+              submitFileRename();
+            }
+          }}
         >
-          <div
-            onKeyDown={(e) => {
-              if (e.key === "Enter") { e.preventDefault(); submitFileRename(); }
-            }}
-          >
-            <DialogHeader>
-              <DialogTitle>{t("drawer.renameTitle")}</DialogTitle>
-              <DialogDescription className="sr-only">{fileRename.name}</DialogDescription>
-            </DialogHeader>
-            <Input
-              value={fileRename.inputValue}
-              onChange={(e) => fileRename.onInputChange(e.target.value)}
-            />
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={fileRename.onClose}>
-                {t("common.cancel")}
-              </Button>
-              <Button type="button" onClick={() => submitFileRename()}>{t("common.confirm")}</Button>
-            </DialogFooter>
-          </div>
+          <DialogHeader>
+            <DialogTitle>{t("drawer.renameTitle")}</DialogTitle>
+            <DialogDescription className="sr-only">{fileRename.name}</DialogDescription>
+          </DialogHeader>
+          <Input
+            value={fileRename.inputValue}
+            onChange={(e) => fileRename.onInputChange(e.target.value)}
+          />
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={fileRename.onClose}>
+              {t("common.cancel")}
+            </Button>
+            <Button type="button" onClick={() => submitFileRename()}>{t("common.confirm")}</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     )}

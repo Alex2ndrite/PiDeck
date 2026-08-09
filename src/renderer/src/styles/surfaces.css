@@ -3770,7 +3770,6 @@ div.fixed.inset-0.z-50 {
 :root[data-theme="dark"] .config-create-card,
 :root[data-theme="dark"] .extension-card,
 :root[data-theme="dark"] .session-delete-confirm,
-:root[data-theme="dark"] .rename-dialog,
 :root[data-theme="dark"] .conversation-outline,
 :root[data-theme="dark"] .toast {
   background: var(--color-bg-panel);
