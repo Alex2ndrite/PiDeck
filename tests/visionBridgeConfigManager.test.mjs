@@ -44,7 +44,7 @@ function compile(filePath) {
 }
 
 const mod = compile(MODULE_PATH);
-const { VisionBridgeConfigManager } = mod;
+const { VisionBridgeConfigManager, VISION_DEFAULT_PROMPT } = mod;
 
 /** 在临时目录下创建 manager（PIDECK_VISION_CONFIG_DIR 指向该目录）。 */
 function makeManager(modelsProviders = {}) {
@@ -81,6 +81,40 @@ test("saveConfig: writes sanitized config to file", async () => {
 	assert.equal(saved.maxTokens, 2048);
 	assert.equal(saved.concurrency, 3);
 	assert.equal(saved.enabled, true);
+	rmSync(dir, { recursive: true, force: true });
+});
+
+test("saveConfig: writes default prompt template when none provided", async () => {
+	const { dir, manager } = makeManager();
+	const result = await manager.saveConfig({
+		enabled: true,
+		provider: "glm",
+		model: "glm-4v-flash",
+		baseUrl: "https://open.bigmodel.cn/api/paas/v4",
+		apiKey: "sk-test",
+	});
+	assert.equal(result.ok, true);
+	const saved = JSON.parse(readFileSync(join(dir, "pi-deck-vision.json"), "utf8"));
+	// 模板永远落盘：未提供时写入默认模板，用户可直接编辑配置文件改提示词（不依赖扩展代码）
+	assert.equal(saved.promptTemplate, VISION_DEFAULT_PROMPT);
+	rmSync(dir, { recursive: true, force: true });
+});
+
+// 自定义模板原样保存（去首尾空白后截断到 4000 字符）
+test("saveConfig: keeps custom prompt template trimmed", async () => {
+	const { dir, manager } = makeManager();
+	const custom = "  describe in english  ";
+	const result = await manager.saveConfig({
+		enabled: true,
+		provider: "glm",
+		model: "glm-4v-flash",
+		baseUrl: "https://open.bigmodel.cn/api/paas/v4",
+		apiKey: "sk-test",
+		promptTemplate: custom,
+	});
+	assert.equal(result.ok, true);
+	const saved = JSON.parse(readFileSync(join(dir, "pi-deck-vision.json"), "utf8"));
+	assert.equal(saved.promptTemplate, "describe in english");
 	rmSync(dir, { recursive: true, force: true });
 });
 

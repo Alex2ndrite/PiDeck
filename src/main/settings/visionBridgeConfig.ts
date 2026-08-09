@@ -30,6 +30,11 @@ export const KNOWN_PROVIDER_BASE_URLS: Record<string, string> = {
 };
 
 /** 视觉桥默认值（与扩展 DEFAULT_CONFIG 保持一致）。 */
+/** 与扩展 pi-deck-vision.ts 的 DEFAULT_PROMPT 完全一致；
+ *  保存配置时若无自定义模板则写入此默认值，保证配置文件里永远有模板（用户可直接改文件）。 */
+export const VISION_DEFAULT_PROMPT =
+	"请详细描述这张图片的内容。如果图片中有文字（代码、报错、UI 文案、文档等），请完整准确地转录所有可见文字；如果是图表，请说明类型、坐标轴含义和关键数值；如果涉及界面，请描述布局与元素。输出使用中文。";
+
 export const VISION_DEFAULT_CONFIG: VisionBridgeConfig = {
 	enabled: true,
 	provider: "",
@@ -37,6 +42,7 @@ export const VISION_DEFAULT_CONFIG: VisionBridgeConfig = {
 	maxTokens: 1024,
 	timeoutMs: 30_000,
 	concurrency: 2,
+	promptTemplate: VISION_DEFAULT_PROMPT,
 };
 
 /** 配置文件所在目录：环境变量覆盖优先（测试/自定义），否则 ~/.pi/agent/。 */
@@ -87,8 +93,11 @@ function sanitizeConfig(input: unknown): VisionBridgeConfig | null {
 	if (concurrency !== undefined) next.concurrency = concurrency;
 
 	if (typeof raw.promptTemplate === "string" && raw.promptTemplate.trim()) {
-		next.promptTemplate = raw.promptTemplate.slice(0, 4_000);
+		// 去首尾空白后截断，避免误存换行噪音/超长模板
+		next.promptTemplate = raw.promptTemplate.trim().slice(0, 4_000);
 	}
+	// 模板永远落盘：用户没填时写默认模板，之后直接编辑配置文件即可生效（不依赖扩展代码）
+	next.promptTemplate = next.promptTemplate ?? VISION_DEFAULT_PROMPT;
 	return next;
 }
 
