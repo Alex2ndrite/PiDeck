@@ -37,6 +37,12 @@ test("active worktree selection only highlights the branch row, not the whole bl
   assert.match(worktreeTree, /workspace-tree-select[\s\S]{0,300}isActive && "bg-accent\/60/);
 });
 
+test("child worktree labels use a smaller hierarchy than their parent project", () => {
+  const childRow = worktreeTree.slice(worktreeTree.indexOf("WorkspaceTreeRowView"));
+  // 父项目和主工作区保持 text-body；只有其他 worktree 降为辅助导航字号。
+  assert.match(childRow, /workspace-tree-select",[\s\S]{0,200}"text-control"/);
+});
+
 test("project row hides create/anonymous buttons in worktree mode", () => {
   // worktree 模式下入口挪到主工作区行，项目行不再重复提供
   assert.match(projectTree, /isCurrent && !project\.worktreeEnabled/);

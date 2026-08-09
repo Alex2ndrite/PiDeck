@@ -138,27 +138,27 @@ export function SidebarContent(props: SidebarContentProps) {
         <div className="search-row grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-xl bg-muted/25 p-1">
           <div className="search-box relative min-w-0">
             <Search
-              size={14}
-              className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"
+              size={12}
+              className="pointer-events-none absolute top-1/2 left-2 -translate-y-1/2 text-muted-foreground"
               aria-hidden="true"
             />
             <Input
               value={controller.search}
               onChange={(event) => controller.setSearch(event.target.value)}
               placeholder={t("app.search")}
-              className="h-9 pl-8"
+              className="h-6 pl-7 text-caption"
             />
           </div>
           <Button
             type="button"
             variant="outline"
             size="icon"
-            className="round-add size-9 shrink-0"
+            className="round-add size-6 shrink-0"
             onClick={() => void actions.projects.add()}
             title={t("app.addProject")}
             aria-label={t("app.addProject")}
           >
-            <FolderPlus className="size-4" />
+            <FolderPlus className="size-3.5" />
           </Button>
         </div>
 

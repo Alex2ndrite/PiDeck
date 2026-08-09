@@ -9,8 +9,8 @@ import { PathTooltip } from "../ui-shadcn/PathTooltip";
 import { cn } from "../../lib/utils";
 import { mergeWorkspaceTreeRows, type WorkspaceTreeRow } from "./workspaceTreeModel";
 
-// 工作区行是项目树下的第二层导航：它必须和项目/会话行共用同一套字号、行高和激活态，
-// 否则主工作区与其他 worktree 会看起来像两个独立组件，尤其在中文字体下更明显。
+// 主工作区是根项目展开后的首个导航项，字号需要与父项目保持一致；
+// 其他 worktree 只是该项目的分支入口，渲染时会覆写为较小的 text-control，避免子项抢占层级。
 const workspaceRowClass =
   "workspace-tree-row group flex min-h-8 min-w-0 items-center gap-0.5 rounded-md p-0.5 text-body text-foreground transition-[background-color,border-color,box-shadow] duration-fast hover:bg-muted/60";
 const workspaceSelectClass =
@@ -195,6 +195,8 @@ function WorkspaceTreeRowView(props: {
           className={cn(
             "workspace-tree-select",
             workspaceSelectClass,
+            // 子 worktree 是父项目下的分支入口，不应与父项目/主工作区争夺视觉层级。
+            "text-control",
             isActive && "bg-accent/60 border border-border-strong text-foreground",
           )}
           disabled={!childProject}

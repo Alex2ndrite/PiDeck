@@ -16,7 +16,7 @@ test("sidebar search uses shadcn Input with leading icon", () => {
   assert.match(sidebar, /from "\.\.\/ui-shadcn\/input"/);
   assert.match(sidebar, /from "\.\.\/ui-shadcn\/button"/);
   assert.match(sidebar, /<Input[\s\S]*placeholder=\{t\("app\.search"\)\}/);
-  assert.match(sidebar, /className="h-9 pl-8"/);
+  assert.match(sidebar, /className="h-6 pl-7 text-caption"/);
   assert.match(sidebar, /<Search[\s\S]*absolute/);
   assert.match(sidebar, /className="search-row grid[^\n]*rounded-xl bg-muted\/25 p-1"/);
   assert.doesNotMatch(sidebar, /className="search-row grid[^\n]*border border-border\/60/);
@@ -25,7 +25,7 @@ test("sidebar search uses shadcn Input with leading icon", () => {
 test("sidebar add-project control is outline icon button", () => {
   assert.match(sidebar, /variant="outline"/);
   assert.match(sidebar, /aria-label=\{t\("app\.addProject"\)\}/);
-  assert.match(sidebar, /className="round-add size-9 shrink-0"/);
-  assert.match(sidebar, /<FolderPlus className="size-4" \/>/);
+  assert.match(sidebar, /className="round-add size-6 shrink-0"/);
+  assert.match(sidebar, /<FolderPlus className="size-3\.5" \/>/);
   assert.doesNotMatch(sidebar, /<Plus className="size-4" \/>/);
 });
