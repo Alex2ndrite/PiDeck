@@ -219,6 +219,7 @@ function WidgetChip(props: {
 						collapseOnComplete
 						compact
 						maxHeight={320}
+					className="rounded-none border-0"
 					/>
 				</div>
 			</PopoverContent>

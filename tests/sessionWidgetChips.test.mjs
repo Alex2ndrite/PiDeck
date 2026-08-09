@@ -137,6 +137,10 @@ test("chip popover uses the official BeUI TodoList with mapping, not a local imi
   assert.match(chipsSource(), /collapseOnComplete/);
   assert.match(chipsSource(), /maxHeight=\{320\}/);
   assert.match(chipsSource(), /defaultOpen/);
+  assert.match(chipsSource(), /className="rounded-none border-0"/);
+  // 外层 Popover 负责唯一的边框和圆角，避免出现两层不重合的角
+  assert.match(chipsSource(), /PopoverContent[\s\S]*className="w-\[min\(28rem/);
+
   assert.match(chipsSource(), /compact/);
   // 桌面紧凑宽度：28rem 上限 + Radix 实际可用宽度约束（留 12px 边界余量），
   // 不再依赖 100vw 推算，窄窗口时内容收敛而不是整体左移
