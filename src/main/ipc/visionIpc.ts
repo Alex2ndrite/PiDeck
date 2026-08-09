@@ -1,0 +1,27 @@
+/**
+ * 视觉桥 IPC 域：只做输入校验与装配，业务在 VisionBridgeConfigManager。
+ * 通道：vision:get-config / vision:save-config（shared/ipc.ts 定义）。
+ */
+import { ipcMain } from "electron";
+import { ipcChannels } from "../../shared/ipc";
+import type { VisionBridgeConfigManager } from "../settings/visionBridgeConfig";
+
+export function registerVisionIpc(deps: {
+	visionBridge: VisionBridgeConfigManager;
+	log: (message: string, ...args: unknown[]) => void;
+}) {
+	const { visionBridge, log } = deps;
+
+	ipcMain.handle(ipcChannels.visionGetConfig, () => visionBridge.getState());
+
+	ipcMain.handle(ipcChannels.visionSaveConfig, async (_event, input: unknown) => {
+		// 渲染层数据不可信：manager 内部逐字段白名单校验
+		const result = await visionBridge.saveConfig(input);
+		log("vision", "Vision bridge config saved", {
+			ok: result.ok,
+			// 不记录 apiKey 等敏感字段
+			provider: typeof input === "object" && input !== null ? (input as { provider?: unknown }).provider : undefined,
+		});
+		return result;
+	});
+}

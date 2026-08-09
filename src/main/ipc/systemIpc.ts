@@ -14,6 +14,7 @@ import type {
 	AppUpdateAsset,
 	AvailableModel,
 	CreatePiSkillInput,
+	SessionCommandResult,
 	SessionRuntimeTarget,
 } from "../../shared/types";
 import type { PiLocator } from "../pi/PiLocator";
@@ -25,6 +26,8 @@ import type { RpcLogger } from "../logging/RpcLogger";
 import type { SessionRuntimeCoordinator } from "../sessions/SessionRuntimeCoordinator";
 import type { SkillManager } from "../skills/SkillManager";
 import { fetchModelList, invalidateModelListCache, getCachedModelList, refreshModelList } from "../pi/modelListCache";
+import { getProcessSnapshot } from "../process/ProcessMonitor";
+import type { ProcessMetricsSnapshot } from "../../shared/types";
 import { getWslExe } from "../wsl/wslExe";
 
 export type SystemIpcDeps = {
@@ -36,6 +39,10 @@ export type SystemIpcDeps = {
 	appLogger: AppLogger;
 	rpcLogger: RpcLogger;
 	sessionRuntimeCoordinator: SessionRuntimeCoordinator;
+	/** 进程监控停止 agent：按 agentId 走完整会话停止链路（含 detach 推送），装配层注入 */
+	stopAgentFromMonitor: (
+		agentId: string,
+	) => Promise<SessionCommandResult<SessionRuntimeTarget | undefined>>;
 	getMainWindow: () => Electron.BrowserWindow | null;
 	mainCopy: (key: string, params?: Record<string, string | number>) => string;
 	/** Check for app update; defined in index.ts */
@@ -406,6 +413,24 @@ export function registerSystemIpc(deps: SystemIpcDeps): void {
 	);
 
 	// ── 应用日志 ─────────────────────────────────────────────────────
+
+	// 进程监控：Electron 各进程 + pi agent 子进程内存/CPU 快照（手动刷新，不做高频轮询）
+	ipcMain.handle(ipcChannels.processMetrics, async (): Promise<ProcessMetricsSnapshot> => {
+		return getProcessSnapshot(deps.agentManager.listAgentPids());
+	});
+
+	ipcMain.handle(ipcChannels.stopAgent, async (_event, agentId: unknown) => {
+		// 输入校验：agentId 必须是字符串，否则拒绝（渲染层数据不可信）
+		if (typeof agentId !== "string" || !agentId) {
+			throw new Error("invalid agentId");
+		}
+		// 走完整会话停止链路（coordinator 反查会话 + 解绑 + detach 推送），
+		// 不能只调 agentManager.stop——那会跳过会话状态收尾，渲染层运行标记不熄灭
+		const result = await deps.stopAgentFromMonitor(agentId);
+		if (!result.ok) {
+			throw new Error(result.error.debugDetails ?? `failed to stop agent ${agentId}`);
+		}
+	});
 
 	ipcMain.handle(ipcChannels.logsList, async (_event, query: AppLogQuery) =>
 		appLogger.list(query),

@@ -8,6 +8,7 @@ import type {
 	AppLogEntry,
 	AppLogLevel,
 	AppLogQuery,
+	ProcessMetricsSnapshot,
 	AppSettings,
 	AppUpdateDownloadProgress,
 	AppUpdateDownloadResult,
@@ -27,6 +28,7 @@ import type {
 	CreateAnonymousSessionResult,
 	UpdateSessionRecordInput,
 	SessionRecord,
+	VisionBridgeConfig,
 	CreatePiSkillInput,
 	CreateProjectSkillInput,
 	ProjectResourceListResult,
@@ -786,6 +788,14 @@ const api = {
 				error: string;
 			}>,
 	},
+	system: {
+		/** 进程监控：拉取 Electron 各进程 + pi agent 子进程内存/CPU 快照 */
+		getProcessMetrics: () =>
+			ipcRenderer.invoke(ipcChannels.processMetrics) as Promise<ProcessMetricsSnapshot>,
+		/** 停止指定 pi agent（按 agentId），成功后刷新进程快照即可看到消失 */
+		stopAgent: (agentId: string) =>
+			ipcRenderer.invoke(ipcChannels.stopAgent, agentId) as Promise<void>,
+	},
 	logs: {
 		list: (query?: AppLogQuery) =>
 			ipcRenderer.invoke(ipcChannels.logsList, query ?? {}) as Promise<AppLogEntry[]>,
@@ -1028,6 +1038,18 @@ const api = {
 				models?: Array<{ id: string; name?: string }>;
 				error?: string;
 				suggestedBaseUrl?: string;
+			}>,
+		/** 视觉桥：读取当前配置（模型列表由渲染层经 listModels 拉全量） */
+		visionGetConfig: () =>
+			ipcRenderer.invoke(ipcChannels.visionGetConfig) as Promise<{
+				config: VisionBridgeConfig | null;
+				configDir: string;
+			}>,
+		/** 视觉桥：保存配置（主进程白名单校验后写 ~/.pi/agent/pi-deck-vision.json） */
+		visionSaveConfig: (config: VisionBridgeConfig) =>
+			ipcRenderer.invoke(ipcChannels.visionSaveConfig, config) as Promise<{
+				ok: boolean;
+				error?: string;
 			}>,
 		/** 快速测试 provider 连接：发送一条最小请求验证配置是否正常 */
 		testProvider: (

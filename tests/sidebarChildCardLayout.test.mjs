@@ -76,9 +76,11 @@ test("session status indicators stay on the concrete session row", () => {
   assert.match(sessionTree, /sessionStatusDotClass\(status\)/);
   assert.match(sessionTree, /renderRuntimeStatusDot\(child\.agent\.status\)/);
   assert.match(sessionTree, /renderRuntimeStatusDot\(runtimeSnapshot\?\.status\)/);
-  // Tab 同样未启动不显示点，已启动按状态点渲染。
-  assert.match(tabBar, /sessionStatusDotClass\(status\)/);
-  assert.match(tabBar, /dotClass &&/);
+  // Tab 同样未启动不显示徽章，已启动按状态映射渲染（beui AnimatedBadge 替换裸圆点）。
+  assert.match(tabBar, /function sessionStatusBadge\(/);
+  assert.match(tabBar, /AnimatedBadge/);
+  assert.match(tabBar, /badge &&/);
+  assert.doesNotMatch(tabBar, /dotClass &&/);
 });
 
 test("project children use spacing without connector lines and chat uses the shared row", () => {

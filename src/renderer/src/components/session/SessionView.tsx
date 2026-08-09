@@ -19,7 +19,6 @@ import { isLanWeb, desktopApi as api } from "../../desktopApi";
 import { SessionHeader } from "./SessionHeader";
 import { SessionBranchBar } from "./SessionBranchBar";
 import { SessionWidgetChips } from "./SessionWidgetChips";
-import { ChatDirectoryButton } from "./ChatDirectoryButton";
 import { SessionMessageTimeline } from "./SessionMessageTimeline";
 import { ComposerArea } from "./ComposerArea";
 import { SessionRuntimeDock } from "./SessionRuntimeDock";
@@ -441,12 +440,7 @@ export function SessionView({
         runtimeState={activeRuntimeState}
         duration={sessionDuration}
         isStarting={isAgentStarting}
-        widgetChips={
-          <>
-            <ChatDirectoryButton sessionId={sessionId} />
-            <SessionWidgetChips sessionId={sessionId} />
-          </>
-        }
+        widgetChips={<SessionWidgetChips sessionId={sessionId} />}
       />
       {/* 分支导航条：仅当当前会话存在 fork 分支关系（父/兄弟/子分支）时显示 */}
       <SessionBranchBar sessionId={sessionId} onOpenSession={onOpenBranchSession} />

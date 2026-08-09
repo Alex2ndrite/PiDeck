@@ -9,6 +9,7 @@ import {
 	PawPrint,
 	Trash2,
 	Brush,
+	Eye,
 	Minus,
 	Plus,
 	ChartColumnBig,
@@ -18,6 +19,12 @@ import { desktopApi } from "../../desktopApi";
 import { ACCENT_PRESETS } from "../../themePresets";
 import { Button } from "../ui-shadcn/button";
 import { UsageStatsTab } from "./settings/UsageStatsTab";
+import {
+	Tabs,
+	TabsContent,
+	TabsList,
+	TabsTrigger,
+} from "../ui-shadcn/tabs";
 import {
 	Select,
 	SelectContent,
@@ -47,6 +54,7 @@ import {
 	AlertDialogTitle,
 } from "../ui-shadcn/alert-dialog";
 import { SettingsSection, StorageTab } from "./settings/SettingsStorageTab";
+import { VisionBridgeSettingsTab } from "./settings/VisionBridgeSettingsTab";
 import { ModelPicker } from "../session/ComposerComponents";
 import type { AppSettings, AppInfo, AvailableModel, PiInstallStatus, PiUpdateCheckResult, PiCliUpdateResult, PetManifest } from "../../../shared/types";
 import { GRID_COLS, CELL_W, CELL_H, MODE_ROW, MODE_FRAMES } from "../../pet/PetSpriteSheet";
@@ -56,7 +64,8 @@ const ZOOM_FACTOR_MIN = 0.8;
 const ZOOM_FACTOR_MAX = 1.5;
 const ZOOM_FACTOR_STEP = 0.05;
 
-type SettingsTabId = "common" | "appearance" | "proxy" | "dev" | "pet" | "storage" | "usage";
+
+type SettingsTabId = "common" | "appearance" | "proxy" | "dev" | "pet" | "storage" | "usage" | "vision";
 
 /** 代理相关字段：用于判断代理 tab 是否有未保存变更。 */
 const PROXY_FIELDS: (keyof AppSettings)[] = [
@@ -178,6 +187,10 @@ type SettingsModalProps = {
 /**
  * 设置弹框错误边界：渲染异常时保留可关闭的错误面板，避免整页白屏无法退出。
  */
+// 小窗口保留外边距，避免设置页完全压住工作区；821px 以上恢复桌面弹框尺寸。
+// DialogContent 默认带 sm:max-w-lg，必须显式覆盖它，否则小窗口会变成窄高条。
+const settingsModalSizeClass = "w-[80vw] max-w-[80vw] h-[80vh] max-h-[80vh] sm:max-w-[min(1300px,80vw)]";
+
 class SettingsModalErrorBoundary extends Component<
 	{ onClose: () => void; children: ReactNode },
 	{ error: Error | null }
@@ -193,7 +206,7 @@ class SettingsModalErrorBoundary extends Component<
 		// #115：错误兜底直接走 shadcn Dialog 外壳
 		return (
 			<Dialog open onOpenChange={(next) => !next && this.props.onClose()}>
-			<DialogContent showCloseButton={false} size="xl" className={cn("flex flex-col gap-0 overflow-hidden p-0", "settings-modal")}>
+			<DialogContent showCloseButton={false} className={cn("flex flex-col gap-0 overflow-hidden p-0", settingsModalSizeClass, "settings-modal")}>
 				<DialogHeader className="flex-row items-center justify-between px-4 py-3">
 					<DialogTitle>{t("settings.loadFailed")}</DialogTitle>
 					<DialogClose asChild>
@@ -473,6 +486,11 @@ function SettingsModalContent(props: SettingsModalProps) {
 			label: t("settings.tabs.usage"),
 			icon: <ChartColumnBig size={16} />,
 		},
+		{
+			id: "vision",
+			label: t("settings.tabs.vision"),
+			icon: <Eye size={16} />,
+		},
 	];
 	const themeOptions = [
 		{ value: "system", label: t("settings.themeSystem") },
@@ -522,7 +540,7 @@ function SettingsModalContent(props: SettingsModalProps) {
 
 		return (
 		<Dialog open onOpenChange={(next) => !next && handleClose()}>
-			<DialogContent showCloseButton={false} size="xl" stagger className={cn("flex flex-col gap-0 overflow-hidden p-0", "settings-modal")}>
+			<DialogContent showCloseButton={false} stagger className={cn("flex flex-col gap-0 overflow-hidden p-0", settingsModalSizeClass, "settings-modal")}>
 				<DialogHeader className="flex-row items-center justify-between px-4 py-3">
 					<DialogTitle>{t("settings.title")}</DialogTitle>
 					<div className="flex items-center gap-2">
@@ -546,29 +564,41 @@ function SettingsModalContent(props: SettingsModalProps) {
 						</DialogClose>
 					</div>
 				</DialogHeader>
-			<div className="settings-layout">
-					<nav className="settings-tabs" aria-label={t("settings.title")}>
+			<Tabs orientation="vertical" value={activeTab} onValueChange={(v) => { const match = tabs.find((t) => t.id === v); if (match) setActiveTab(match.id); }} className="settings-layout flex min-h-0 flex-1 flex-row gap-0 bg-bg-panel">
+					<TabsList className="settings-tabs flex min-h-0 shrink-0 flex-col items-stretch gap-2.5 overflow-auto border-0 border-r border-border rounded-none bg-bg-panel p-2.5 data-[orientation=vertical]:w-[196px]" aria-label={t("settings.title")}>
 						{tabs.map((tab) => (
-							<button
-								key={tab.id}
-								className={activeTab === tab.id ? "active" : ""}
-								onClick={() => setActiveTab(tab.id)}
-							>
+							<TabsTrigger key={tab.id} value={tab.id} className="config-nav-btn h-8 justify-start gap-1.5 px-2.5 text-control font-medium">
 								<span className="settings-tab-icon">{tab.icon}</span>
 								<strong>{tab.label}</strong>
-							</button>
+							</TabsTrigger>
 						))}
-					</nav>
-					<div className="settings-panel">
-						{/* ── 常用设置 tab ── */}
-						{activeTab === "common" && (
+					</TabsList>
+					{/* ── 常用设置 tab ── */}
+						<TabsContent value="common" className="settings-panel min-w-0">
 							<>
 								<SettingsSection title={t("settings.interface")}>
-									<div className="setting-field">
-										<span>
-											{t("settings.language")}
-											<DirtyMarker dirty={isDirty("language")} label={t("settings.language")} />
-										</span>
+								<div className="setting-field">
+									<span>
+										{t("settings.sessionTabOpenMode")}
+										<DirtyMarker dirty={isDirty("sessionTabOpenMode")} label={t("settings.sessionTabOpenMode")} />
+									</span>
+									<div className="grid gap-1.5">
+	<Select value={draftSettings.sessionTabOpenMode} onValueChange={(value) =>
+												updateDraft({ sessionTabOpenMode: value as AppSettings["sessionTabOpenMode"] })
+											}>
+		<SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+		<SelectContent>
+			<SelectItem value="preview">{t("settings.sessionTabOpenModePreview")}</SelectItem>
+			<SelectItem value="permanent">{t("settings.sessionTabOpenModePermanent")}</SelectItem>
+		</SelectContent>
+	</Select>
+</div>
+								</div>
+								<div className="setting-field">
+									<span>
+										{t("settings.language")}
+										<DirtyMarker dirty={isDirty("language")} label={t("settings.language")} />
+									</span>
 										<div className="grid gap-1.5">
 	<Select value={draftSettings.language} onValueChange={(value) =>
 												updateDraft({ language: value as AppSettings["language"] })
@@ -1001,9 +1031,9 @@ function SettingsModalContent(props: SettingsModalProps) {
 									)}
 								</SettingsSection>
 							</>
-						)}
+						</TabsContent>
 						{/* ── 外观设置 tab ── */}
-						{activeTab === "appearance" && (
+						<TabsContent value="appearance" className="settings-panel min-w-0">
 							<>
 								<SettingsSection title={t("settings.interface")}>
 									<div className="setting-field">
@@ -1173,9 +1203,9 @@ function SettingsModalContent(props: SettingsModalProps) {
 									</div>
 								</SettingsSection>
 							</>
-						)}
+						</TabsContent>
 						{/* ── 代理设置 tab ── */}
-						{activeTab === "proxy" && (
+						<TabsContent value="proxy" className="settings-panel min-w-0">
 							<>
 								{/* 未保存更改的提示横幅 */}
 								{proxyDirty && (
@@ -1262,9 +1292,9 @@ function SettingsModalContent(props: SettingsModalProps) {
 								</SettingsSection>
 								{/* 代理变更走全局草稿：顶部统一保存/取消，不再在 tab 底部重复放按钮 */}
 							</>
-						)}
-						{/* ── 开发设置 tab（含 Web 服务） ── */}
-						{activeTab === "dev" && (
+						</TabsContent>
+							{/* ── 开发设置 tab（含 Web 服务） ── */}
+						<TabsContent value="dev" className="settings-panel min-w-0">
 							<>
 								<SettingsSection title={t("settings.environment")}>
 									{/* Pi CLI 状态：安装检测 + 路径信息 + 重新检测 */}
@@ -1646,9 +1676,9 @@ function SettingsModalContent(props: SettingsModalProps) {
 									/>
 								</SettingsSection>
 							</>
-						)}
+						</TabsContent>
 						{/* ── 桌面宠物 tab ── */}
-						{activeTab === "pet" && (
+						<TabsContent value="pet" className="settings-panel min-w-0">
 							<>
 								<SettingsSection title={t("settings.pet.title")} description={t("settings.pet.sectionDesc")}>
 									<SettingSwitch
@@ -1796,19 +1826,23 @@ function SettingsModalContent(props: SettingsModalProps) {
 									</div>
 								</SettingsSection>
 							</>
-						)}
+						</TabsContent>
 						{/* ── 存储与日志 tab ── */}
-						{activeTab === "storage" && (
+						<TabsContent value="storage" className="settings-panel min-w-0">
 							<StorageTab
 								settings={draftSettings}
 								onChange={updateDraft}
 							/>
-						)}
-						{activeTab === "usage" && (
+						</TabsContent>
+						{/* ── 用量统计 tab ── */}
+						<TabsContent value="usage" className="settings-panel min-w-0">
 							<UsageStatsTab />
-						)}
-					</div>
-				</div>
+						</TabsContent>
+						{/* ── 视觉桥 tab ── */}
+						<TabsContent value="vision" className="settings-panel min-w-0">
+							<VisionBridgeSettingsTab />
+						</TabsContent>
+					</Tabs>
 			{/* 未保存变更确认对话框 */}
 			{closeConfirmOpen && (
 				<AlertDialog open onOpenChange={(open) => { if (!open) setCloseConfirmOpen(false); }}>

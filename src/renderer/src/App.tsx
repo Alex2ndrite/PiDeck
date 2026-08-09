@@ -485,6 +485,7 @@ export function App() {
     language: "system",
     startupWindowMode: "last",
     piEnvironmentChecked: false,
+    sessionTabOpenMode: "preview",
     enableGitManagement: true,
     gitCommitMessagePrompt: "请根据以下 git diff 生成一条中文 git commit message。\n\n变更描述：\n{diff}\n\nGitmoji 对应关系：\n✨ feat - 新功能\n🐛 fix - Bug 修复\n📚 docs - 文档更新\n💎 style - 代码格式\n♻️ refactor - 重构\n🧪 test - 测试\n🔧 chore - 构建/工具",
     gitCommitMessageProvider: "",
@@ -2369,8 +2370,10 @@ export function App() {
       changeChatPath,
     },
     sessions: {
-      open: (projectId, sessionId, tabMode = "preview") =>
-        openSidebarSessionByIdWithTab(projectId, sessionId, tabMode),
+      // 侧栏单击模式由设置 sessionTabOpenMode 控制（默认 preview=临时预览，发消息自动晋升常驻）；
+      // 双击仍是显式常驻。tabMode 为 undefined 时用当前设置值。
+      open: (projectId, sessionId, tabMode) =>
+        openSidebarSessionByIdWithTab(projectId, sessionId, tabMode ?? settings.sessionTabOpenMode),
       beginDrag: workspaceChrome.beginDrag,
       endDrag: workspaceChrome.endDrag,
       createDraft: async (projectId) => {
@@ -2563,6 +2566,7 @@ export function App() {
   const sessionPaneServices = useMemo(
     () => ({
       isLanWeb,
+      promoteSessionToPermanent: workspaceChrome.promotePreview,
       showToast,
       onOpenFile: handleOpenLinkedFile,
       onDiffFile: diffFilePath,
@@ -2661,6 +2665,7 @@ export function App() {
       validCommandNames,
       validFilePaths,
       workspaceChrome.exitSplit,
+      workspaceChrome.promotePreview,
     ],
   );
 

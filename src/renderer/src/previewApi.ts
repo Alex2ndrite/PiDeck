@@ -87,6 +87,7 @@ let previewSettings: AppSettings = {
 	language: "system",
 	startupWindowMode: "last",
 	piEnvironmentChecked: true,
+	sessionTabOpenMode: "preview",
 	enableGitManagement: true,
 	gitCommitMessagePrompt: "",
 	gitCommitMessageProvider: "",
@@ -174,6 +175,17 @@ export function createPreviewApi(): PiDesktopApi {
 		return tab;
 	};
 	return {
+		// 进程监控预览桩：返回空快照，仅供预览模式不崩溃
+		system: {
+			getProcessMetrics: async () => ({
+				electron: [],
+				agents: [],
+				totalElectronBytes: 0,
+				totalAgentBytes: 0,
+				sampledAt: Date.now(),
+			}),
+			stopAgent: async () => undefined,
+		},
 		editors: {
 			list: async () => [],
 			redetect: async () => ({ ...previewSettings }),
@@ -851,6 +863,11 @@ export function createPreviewApi(): PiDesktopApi {
 				requestUrl: "https://api.openai.com/v1/chat/completions",
 				requestBody: '{"model":"gpt-4o-mini","messages":[{"role":"user","content":"Hi"}],"max_tokens":10}',
 			}),
+			visionGetConfig: async () => ({
+				config: null,
+				configDir: "/tmp/preview/.pi/agent",
+			}),
+			visionSaveConfig: async () => ({ ok: true }),
 		},
 		pet: {
 			onState: noop,

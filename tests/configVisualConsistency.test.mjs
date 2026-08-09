@@ -9,6 +9,7 @@ const surfaces = readFileSync("src/renderer/src/styles/surfaces.css", "utf8");
 const foundation = readFileSync("src/renderer/src/styles/foundation.css", "utf8");
 const rendererStyles = readFileSync("src/renderer/src/styles.css", "utf8");
 const settingsModal = readFileSync("src/renderer/src/components/app/SettingsModal.tsx", "utf8");
+const tabs = readFileSync("src/renderer/src/components/ui-shadcn/tabs.tsx", "utf8");
 const skillTableRow = skills.slice(skills.indexOf("function SkillTableRow"));
 
 test("config shell defines compact density and crisp system typography", () => {
@@ -19,7 +20,9 @@ test("config shell defines compact density and crisp system typography", () => {
   assert.match(surfaces, /\.config-modal \{[\s\S]*text-rendering: auto/);
   assert.doesNotMatch(surfaces, /\.config-modal \{[\s\S]*-webkit-font-smoothing: antialiased;/);
   assert.match(surfaces, /\.config-nav-btn \{[\s\S]*font-size:\s*14px/);
-  assert.match(surfaces, /\.config-nav-btn\.active \{[\s\S]*font-weight:\s*500/);
+  // 选中态随 Vertical Tabs 迁移：由 TabsTrigger data-[state=active] utility 承担
+  assert.match(tabs, /data-\[state=active\]:bg-bg-panel/);
+  assert.doesNotMatch(surfaces, /\.config-nav-btn\.active \{/);
   assert.match(foundation, /Segoe UI Variable Text/);
   assert.match(foundation, /Microsoft YaHei UI/);
   assert.doesNotMatch(foundation, /MiSans/);
@@ -32,7 +35,17 @@ test("config shell defines compact density and crisp system typography", () => {
   assert.equal(existsSync("src/renderer/src/styles/lxgw-wenkai.css"), false);
   assert.doesNotMatch(rendererStyles, /lxgw-wenkai/);
   assert.doesNotMatch(surfaces, /\.config-models-grid-header[\s\S]*font-weight: 650/);
-  assert.match(configModal, /config-modal/);
+  assert.match(configModal, /configModalSizeClass/);
+  assert.match(configModal, /w-\[80vw\]/);
+  assert.match(configModal, /max-w-\[80vw\]/);
+  assert.match(configModal, /h-\[80vh\]/);
+  assert.match(configModal, /sm:max-w-\[min\(1300px,80vw\)\]/);
+  assert.match(configModal, /max-\[820px\]:flex-col/);
+  assert.match(configModal, /max-\[820px\]:flex-row/);
+  assert.match(settingsModal, /settingsModalSizeClass/);
+  assert.match(settingsModal, /w-\[80vw\]/);
+  assert.match(surfaces, /\.settings-modal \{[\s\S]*width: min\(1300px, 80vw\);[\s\S]*height: min\(850px, 80vh\);/);
+  assert.match(surfaces, /\.config-modal \{[\s\S]*width: min\(1300px, 80vw\);[\s\S]*height: min\(850px, 80vh\);/);
 });
 
 test("skills and prompts use full-width tab rails with compact selected tabs", () => {

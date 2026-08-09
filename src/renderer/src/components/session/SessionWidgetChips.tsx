@@ -17,7 +17,8 @@ import {
 	type RuntimeHandle,
 } from "./ComposerRuntimeIntegrations";
 import { widgetDisplayTitle } from "./ComposerComponents";
-import { AgentTodoList, parseAgentTodoItems } from "./AgentTodoList";
+import { TodoList } from "../agents/todo-list";
+import { parseAgentTodoItems } from "./agentTodoParser";
 
 /**
  * 会话头部左侧的扩展 widget 入口（Todo / Plan 进度）。
@@ -186,27 +187,40 @@ function WidgetChip(props: {
 					)}
 				</Button>
 			</PopoverTrigger>
-			<PopoverContent align="start" side="bottom" className="w-80 p-1">
-				<div className="flex items-center justify-end px-1">
+			<PopoverContent
+				align="start"
+				side="bottom"
+				// 与触发器保持可见间距（弹层紧贴会显得是 chip 的一部分）
+				sideOffset={8}
+				// 桌面紧凑宽度：28rem 上限，再受 Radix 实际可用宽度（--radix-popover-content-available-width）
+				// 约束并保留 12px 边界余量；不再用视口宽度推算，窄窗口时内容收敛而非整体左移
+				className="w-[min(28rem,calc(var(--radix-popover-content-available-width)_-_12px))] p-0"
+			>
+				{/* 官方 BeUI TodoList 不接受 dismiss 语义（避免改动官方结构），
+				    关闭按钮作为宿主层绝对定位叠放在右上角：不占布局空间（移除独立的 h-8 关闭行），
+				    compact 头部右侧的 pr-8 预留区保证它不盖住折叠 chevron；
+				    语义仍是「永久关闭该 widget」（按内容指纹记录）。 */}
+				<div className="relative">
 					<Button
 						type="button"
 						variant="ghost"
-						size="icon"
-						className="size-5 text-muted-foreground hover:text-foreground"
+						size="icon-xs"
 						onClick={props.onDismiss}
 						title={t("common.close")}
 						aria-label={t("common.close")}
+						className="absolute right-1.5 top-1.5 z-10 rounded-md text-muted-foreground hover:text-foreground"
 					>
-						<X size={12} strokeWidth={2.2} aria-hidden="true" />
+						<X className="size-3.5" aria-hidden="true" />
 					</Button>
+					<TodoList
+						title={title}
+						items={parseAgentTodoItems(props.lines)}
+						defaultOpen
+						collapseOnComplete
+						compact
+						maxHeight={320}
+					/>
 				</div>
-				<AgentTodoList
-					title={title}
-					items={parseAgentTodoItems(props.lines)}
-					defaultOpen
-					collapseOnComplete
-					maxHeight={248}
-				/>
 			</PopoverContent>
 		</Popover>
 	);

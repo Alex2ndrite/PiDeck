@@ -17,6 +17,7 @@ import {
 } from "./ComposerPanels";
 import { ComposerPickerHost } from "./ComposerPickerHost";
 import { ComposerRuntimeIntegrations } from "./ComposerRuntimeIntegrations";
+import { useSessionPaneServices } from "./SessionPaneServices";
 import { desktopApi } from "../../desktopApi";
 import { COMPOSER_DEFAULT_HEIGHT } from "../../rendererUtils";
 import type { GitBranchInfo } from "../../../../shared/types";
@@ -139,6 +140,8 @@ export const ComposerArea = forwardRef<HTMLElement, ComposerAreaProps>(function 
     onOpenFile: props.onOpenFile,
     enqueue: props.enqueue,
     ensureSessionId: props.ensureSessionId,
+    // 预览 Tab 里发消息 → 自动晋升常驻（由 App 装配的 SessionPaneServices 提供）
+    onPromoteSession: useSessionPaneServices().promoteSessionToPermanent,
   });
   const prewarmStartedForSessionRef = useRef<string | undefined>(undefined);
   useEffect(() => {

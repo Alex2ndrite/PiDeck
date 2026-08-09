@@ -178,6 +178,10 @@ export const ipcChannels = {
 	appOpenExternal: "app:open-external",
 	appOpenInBrowser: "app:open-in-browser",
 	appRestart: "app:restart",
+	/** 进程监控：拉取 Electron 各进程 + pi agent 子进程的内存/CPU 快照 */
+	processMetrics: "system:process-metrics",
+	/** 进程监控里手动停止某个 pi agent（按 agentId 走 AgentManager 正常停止流程） */
+	stopAgent: "system:stop-agent",
 	preloadReady: "preload:ready",
 	preloadError: "preload:error",
 	rendererLog: "renderer:log",
@@ -243,6 +247,11 @@ export const ipcChannels = {
 	configFetchModels: "config:fetch-models",
 	/** 快速测试 provider 连接：发送一条最小请求验证 baseUrl/apiKey/模型 是否正常 */
 	configTestProvider: "config:test-provider",
+
+	/** 视觉桥：读取当前配置 + 可选模型列表 */
+	visionGetConfig: "vision:get-config",
+	/** 视觉桥：保存配置到 ~/.pi/agent/pi-deck-vision.json */
+	visionSaveConfig: "vision:save-config",
 
 	/** 切换开发者控制台 */
 	appToggleDevTools: "app:toggle-devtools",

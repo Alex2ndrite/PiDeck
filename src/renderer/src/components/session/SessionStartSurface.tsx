@@ -50,13 +50,16 @@ export function SessionStartSurface(props: {
 
   return (
     <section className="session-start-surface flex min-h-full w-full items-center bg-background px-6 py-10">
-      <div className="mx-auto grid w-full max-w-4xl animate-in grid-cols-1 gap-10 pb-[6vh] duration-500 fade-in md:grid-cols-[1fr_1px_1fr]">
+      {/* 居中策略：items-center 几何居中后与空态页一样补 pt-[10vh] 下移，
+          让标题/操作列表重心落到窗口光学中心（与 ProjectEmptyState 一致）。 */}
+      <div className="mx-auto grid w-full max-w-4xl animate-in grid-cols-1 gap-10 pt-[10vh] duration-500 fade-in md:grid-cols-[1fr_1px_1fr]">
         {/* 左栏：品牌叙述；重音词固定拉丁词，保证内置 Plantin 斜体生效（同空态方案 B） */}
         <div className="flex animate-in flex-col duration-500 fade-in fill-mode-backwards slide-in-from-bottom-2">
           <h1 className="text-[clamp(2rem,3.5vw,2.75rem)] font-semibold leading-[1.12] tracking-[-0.03em] text-foreground">
             {t("sessionStart.titleLead")}<br />
             <span className="font-brand font-medium italic">{t("sessionStart.titleAccent")}</span>
-            <span className="text-text-tertiary">{t("sessionStart.titlePunct")}</span>
+            {/* 句号与空态页一致用前景色（黑/白实心）作为标题落点强调 */}
+            <span className="text-foreground">{t("sessionStart.titlePunct")}</span>
           </h1>
           <p className="mt-5 max-w-sm text-[15px] leading-7 text-text-secondary">
             {t("sessionStart.subtitle")}
