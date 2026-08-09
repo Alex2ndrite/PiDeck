@@ -165,7 +165,7 @@ export function SessionTree(props: {
           type="button"
           className={cn(
             sessionRowClass,
-            "session-row codex-subagent-sidebar-row pl-6",
+            "session-row codex-subagent-sidebar-row pl-4",
             session.id === props.currentSessionId && "active border-border-strong bg-accent/20 text-foreground shadow-sm",
           )}
           onContextMenu={(event) => openContext(event, session)}

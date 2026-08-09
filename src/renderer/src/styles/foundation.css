@@ -2190,7 +2190,7 @@ select:focus-visible {
 .codex-subagent-sidebar-group {
   display: grid;
   gap: 1px;
-  margin: 0 0 2px 28px;
+  margin: 0 0 2px 12px;
 }
 .codex-subagent-sidebar-toggle,
 .codex-subagent-sidebar-row {

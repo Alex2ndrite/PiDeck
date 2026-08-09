@@ -575,3 +575,39 @@ test("ensureRuntimeTarget absolutizes relative session paths", async () => {
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("parentSessionPath survives reload: getRecord/listEntries rebuild keeps the subagent tree link", async () => {
+  const { SessionCatalog } = loadCatalog();
+  const dir = await mkdtemp(join(tmpdir(), "pideck-catalog-parent-path-"));
+  const filePath = join(dir, "sessions.json");
+  try {
+    const catalog = new SessionCatalog(filePath);
+    await catalog.load();
+    await catalog.mergeScanned("project-1", [
+      summary({ filePath: "C:/sessions/parent.jsonl", id: "C:/sessions/parent.jsonl", name: "Parent" }),
+      summary({
+        filePath: "C:/sessions/parent/child.jsonl",
+        id: "C:/sessions/parent/child.jsonl",
+        name: "Child",
+        parentSessionPath: "c:/sessions/parent.jsonl",
+      }),
+    ]);
+
+    // 重载：模拟重启后从磁盘恢复 entry，再走 getRecord（缓存先回显路径）
+    const reloaded = new SessionCatalog(filePath);
+    await reloaded.load();
+    const entries = reloaded.listEntries().filter((entry) => entry.projectId === "project-1");
+    const childEntry = entries.find((entry) => entry.title === "Child");
+    assert.ok(childEntry, "child entry restored from disk");
+    const record = childEntry ? reloaded.getRecord(childEntry.id) : undefined;
+    // 回归：entry 必须持久化 parentSessionPath，否则缓存回显时子会话降级为顶层孤儿
+    // 大小写不敏感断言：渲染层 normalizeSessionPathForCompare 比较，功能不受大小写影响
+    assert.ok(record?.parentSessionPath);
+    assert.equal(
+      record?.parentSessionPath?.toLowerCase().replace(/\\/g, "/"),
+      "c:/sessions/parent.jsonl",
+    );
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
