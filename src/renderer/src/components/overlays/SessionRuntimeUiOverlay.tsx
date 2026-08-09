@@ -289,6 +289,7 @@ function BatchQuestion(props: {
 	finalLabel?: string;
 }) {
 	const { question } = props;
+	const hasOptionDescriptions = question.type === "select" && question.options?.some((option) => typeof option !== "string" && Boolean(option.description));
 	return (
 		<div className="flex flex-col gap-1.5">
 			<div className="font-mono text-micro font-semibold text-text-tertiary">
@@ -317,8 +318,8 @@ function BatchQuestion(props: {
 					</div>
 				) : question.type === "select" && question.options?.length ? (
 					<>
-						{/* 选项使用固定轨道而不是 flex:1，避免长短文案把按钮基线和提交区撑乱。 */}
-						<div className="grid min-w-0 grid-cols-4 gap-1.5 max-[720px]:grid-cols-2 max-[480px]:grid-cols-1">
+						{/* 有说明时给文字更宽的阅读轨道；无说明时保持四列紧凑布局。 */}
+						<div className={`grid min-w-0 gap-1.5 ${hasOptionDescriptions ? "grid-cols-2 max-[560px]:grid-cols-1" : "grid-cols-4 max-[720px]:grid-cols-2 max-[480px]:grid-cols-1"}`}>
 							{question.options.map((option, index) => {
 								const label = typeof option === "string" ? option : option.label;
 								const value = typeof option === "string" ? option : option.value ?? label;
@@ -326,13 +327,13 @@ function BatchQuestion(props: {
 								return (
 									<Button
 										key={`${question.id}:${index}`}
-										className={`ask-inline-bar-option min-h-[30px] w-full min-w-0 max-w-none flex-col items-start justify-center gap-0.5 px-2 py-1 text-left break-words whitespace-normal${props.answer === value ? " selected" : ""}`}
+										className={`ask-inline-bar-option min-h-[30px] w-full min-w-0 max-w-none flex-col items-start justify-center gap-0.5 px-2 py-1 text-left break-words whitespace-normal${hasOptionDescriptions ? " min-h-[52px]" : ""}${props.answer === value ? " selected" : ""}`}
 										variant="outline"
 										disabled={props.responding}
 										onClick={() => props.onAnswer(value, label)}
 									>
-										<span className="min-w-0 max-w-full truncate text-caption font-medium leading-4 text-text-primary">{label}</span>
-										{description ? <span className="min-w-0 max-w-full truncate text-micro font-normal leading-4 text-text-tertiary">{description}</span> : null}
+										<span className="min-w-0 max-w-full break-words whitespace-normal text-caption font-medium leading-4 text-text-primary" title={label}>{label}</span>
+										{description ? <span className="min-w-0 max-w-full line-clamp-2 break-words whitespace-normal text-micro font-normal leading-4 text-text-tertiary" title={description}>{description}</span> : null}
 									</Button>
 								);
 							})}
