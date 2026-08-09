@@ -137,7 +137,23 @@ export type SessionScrollAnchor = {
 
 export const sessionScrollAnchorByIdAtom = atom<Record<string, SessionScrollAnchor>>({});
 
-/** 保存/清除某会话的滚动锚点。anchor 为 null 时清除（如回到底部或会话关闭）。 */
+/** 锚点内容比较：messageId/offsetTop/visibleCount 相同视为未变化（savedAt 不计入）。
+ *  滚动节流写入时，内容不变则跳过——引用稳定，订阅者不会因无效写入重渲染。 */
+export function sameSessionScrollAnchor(
+	a: SessionScrollAnchor | undefined,
+	b: SessionScrollAnchor | undefined,
+): boolean {
+	if (a === b) return true;
+	if (!a || !b) return false;
+	return (
+		a.messageId === b.messageId &&
+		a.offsetTop === b.offsetTop &&
+		a.visibleCount === b.visibleCount
+	);
+}
+
+/** 保存/清除某会话的滚动锚点。anchor 为 null 时清除（如回到底部或会话关闭）。
+ *  内容未变化时不写（保持引用稳定，避免订阅者无谓重渲染）；savedAt 乱序保护防陈旧覆盖。 */
 export const saveSessionScrollAnchorAtom = atom(
 	null,
 	(get, set, input: { sessionId: string; anchor: SessionScrollAnchor | null }) => {
@@ -149,8 +165,10 @@ export const saveSessionScrollAnchorAtom = atom(
 				delete nextMap[sessionId];
 				return nextMap;
 			}
-			// 乱序写入保护：只有更新（时间戳更新）才覆盖，防止陈旧滚动事件覆盖新保存。
 			const prev = prevMap[sessionId];
+			// 内容未变化：跳过写入（引用稳定，订阅者零重渲染）
+			if (prev && sameSessionScrollAnchor(prev, anchor)) return prevMap;
+			// 乱序写入保护：只有更新（时间戳更新）才覆盖，防止陈旧滚动事件覆盖新保存。
 			if (prev && prev.savedAt > anchor.savedAt) return prevMap;
 			return { ...prevMap, [sessionId]: anchor };
 		});

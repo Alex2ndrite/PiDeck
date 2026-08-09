@@ -7,7 +7,7 @@ import {
   useState,
   type RefObject,
 } from "react";
-import { useAtomValue, useSetAtom } from "jotai";
+import { useAtomValue, useSetAtom, useStore } from "jotai";
 import { selectAtom } from "jotai/utils";
 import { desktopApi } from "../desktopApi";
 import type { AgentRuntimeState, ChatMessage } from "../../../shared/types";
@@ -143,6 +143,8 @@ export function useSessionTimelineController(options: {
   const timelineRef = useRef<HTMLElement | null>(null);
   const ownerKeyRef = useRef(ownerKey);
   ownerKeyRef.current = ownerKey;
+  // 切换恢复时读滚动锚点快照用（不订阅：恢复后滚动写 atom 不打扰已恢复的视口）
+  const store = useStore();
   const cacheSliceAtom = useMemo(
     () => selectAtom(
       sessionMessagesCacheAtom,
@@ -155,30 +157,20 @@ export function useSessionTimelineController(options: {
   const messages = options.messages ?? cachedMessages ?? [];
   const controllerEnabled = options.sessionId !== undefined && options.messages === undefined;
 
-  // ── 会话切换滚动位置保持 ──
-  // 只订阅当前 session 的锚点（selectAtom + Object.is，其他会话保存不影响本会话）。
-  const scrollAnchorAtom = useMemo(
-    () => selectAtom(
-      sessionScrollAnchorByIdAtom,
-      (map) => options.sessionId ? map[options.sessionId] : undefined,
-      Object.is,
-    ),
-    [options.sessionId],
-  );
-  const savedScrollAnchor = useAtomValue(scrollAnchorAtom);
+  // ── 会话切换滚动位置保持（状态即真相）──
+  // 滚动节流直接写 per-session atom（内容不变跳过 → 引用稳定 → 零订阅重渲染）；
+  // 恢复 = 切换时从 atom 读一次快照执行，不订阅（后续滚动写 atom 不打扰已恢复的视口）。
   const saveScrollAnchor = useSetAtom(saveSessionScrollAnchorAtom);
-  // 已恢复的锚点 savedAt：同锚点只恢复一次（visibleCount 等变化会触发 effect 重跑，
-  // 但用户恢复后可能已滚动/跟流，不能重复拽回）。切走再切回时 savedAt 更新 → 重新恢复。
-  const restoredAnchorSavedAtRef = useRef<number | undefined>(undefined);
-  // 滚动时实时维护的锚点：写 ref 不触发渲染；切走瞬间由 cleanup 把它落盘到 atom。
+  // 最后已知锚点缓存：供 cleanup 兜底落盘（250ms 节流窗口内切走不丢）。
   // 不能用 cleanup 读 DOM——会话切换复用同一组件实例（无 key），cleanup 执行时
   // timeline 的 children 可能已替换为新会话消息，读 DOM 会串数据。
   const currentAnchorRef = useRef<SessionScrollAnchor | null>(null);
   const scrollAnchorFrameRef = useRef<number | undefined>(undefined);
+  const scrollSaveTimerRef = useRef<number | undefined>(undefined);
   const paginationVisibleCountRef = useRef(0);
 
   /**
-   * 计算当前视口锚点（不写 atom，调用方负责落盘）。
+   * 计算当前视口锚点（纯读取，不落盘）。
    * 规则：在底部跟流 → null（切回继续跟底）；查看历史 → 记录
    * 「视口顶部的第一条消息行 + 距视口顶偏移 + 分页窗口」。
    * 锚点行用 data-message-id（run 或消息行都带），恢复时无需关心具体类型。
@@ -208,8 +200,14 @@ export function useSessionTimelineController(options: {
     return null;
   }, []);
 
+  /** 把当前锚点写入 atom（节流）。内容未变化由 atom 侧跳过，引用保持稳定。 */
+  const persistCurrentAnchor = useCallback((sessionId: string) => {
+    scrollSaveTimerRef.current = undefined;
+    saveScrollAnchor({ sessionId, anchor: currentAnchorRef.current });
+  }, [saveScrollAnchor]);
+
   /** 透传给 MessageScroller viewport 的滚动回调（SessionMessageTimeline 接线）。
-   *  rAF 合并高频滚动，只更新 ref；落盘留给切换 cleanup 或节流保存。 */
+   *  rAF 合并高频滚动计算锚点（不每帧 getBoundingClientRect），再节流 250ms 落盘 atom。 */
   const handleTimelineScroll = useCallback(() => {
     const sessionId = ownerKeyRef.current;
     if (!sessionId || sessionId === LEGACY_OWNER_KEY) return;
@@ -219,8 +217,14 @@ export function useSessionTimelineController(options: {
       // 回调执行时若已切走（ownerKeyRef 已更新），丢弃——旧会话状态由 cleanup 落盘。
       if (ownerKeyRef.current !== sessionId) return;
       currentAnchorRef.current = computeCurrentAnchor();
+      // 节流写 atom：只排一个 timer，期间连续滚动不重复写；
+      // 内容未变时 atom 侧跳过（引用稳定，订阅者零重渲染）。
+      if (scrollSaveTimerRef.current != null) return;
+      scrollSaveTimerRef.current = window.setTimeout(() => {
+        persistCurrentAnchor(sessionId);
+      }, 250);
     });
-  }, [computeCurrentAnchor]);
+  }, [computeCurrentAnchor, persistCurrentAnchor]);
 
   // ── Load messages from disk when sessionId changes ──
 	const cacheEntry = useAtomValue(sessionMessagesCacheAtom);
@@ -624,7 +628,7 @@ export function useSessionTimelineController(options: {
     return clearHighlightTimers;
   }, [clearHighlightTimers, ownerKey]);
 
-  // 切走落盘：cleanup 只把滚动时已算好的 ref 锚点写入 atom，不读 DOM
+  // 切走落盘：cleanup 把滚动时已算好的 ref 锚点写入 atom，不读 DOM
   // （会话切换复用同一组件实例，cleanup 时 timeline children 可能已是新会话）。
   // 在底部跟流时 ref 为 null → 清除锚点，切回继续跟底。
   useLayoutEffect(() => {
@@ -633,6 +637,10 @@ export function useSessionTimelineController(options: {
       if (scrollAnchorFrameRef.current != null) {
         cancelAnimationFrame(scrollAnchorFrameRef.current);
         scrollAnchorFrameRef.current = undefined;
+      }
+      if (scrollSaveTimerRef.current != null) {
+        window.clearTimeout(scrollSaveTimerRef.current);
+        scrollSaveTimerRef.current = undefined;
       }
       if (sessionId && sessionId !== LEGACY_OWNER_KEY) {
         saveScrollAnchor({ sessionId, anchor: currentAnchorRef.current });
@@ -643,11 +651,12 @@ export function useSessionTimelineController(options: {
 
   useEffect(() => {
     if (!controllerEnabled) return;
-    const anchor = savedScrollAnchor;
+    // 切换时从 atom 读一次快照（不订阅：恢复后滚动写 atom 不应打扰已恢复的视口）。
+    const sessionId = options.sessionId;
+    const anchor = sessionId
+      ? store.get(sessionScrollAnchorByIdAtom)[sessionId]
+      : undefined;
     if (anchor) {
-      // 同锚点已恢复过（本次会话内）→ 不重复执行，避免打断用户后续滚动/跟流
-      if (restoredAnchorSavedAtRef.current === anchor.savedAt) return;
-      restoredAnchorSavedAtRef.current = anchor.savedAt;
       // 恢复历史查看位置：先展开分页窗口（保证锚点行在窗口内），
       // 再把视口对齐到锚点行；期间禁止自动跟底，新消息到达不拽走用户，
       // 只让「回到底部」按钮保持亮起（stay 语义）。
@@ -677,7 +686,6 @@ export function useSessionTimelineController(options: {
           return;
         }
         // 锚点行不存在（期间被压缩清理 / 窗口被新消息挤掉）：回到底部并恢复跟流
-        restoredAnchorSavedAtRef.current = undefined;
         autoScrollRef.current = true;
         setAutoScroll(true);
         setShowScrollToBottom(false);
@@ -687,7 +695,6 @@ export function useSessionTimelineController(options: {
       return () => cancelAnimationFrame(frame);
     }
     // 无锚点（切走时在底部或从未保存）：默认滚到底、恢复跟底
-    restoredAnchorSavedAtRef.current = undefined;
     autoScrollRef.current = true;
     setAutoScroll(true);
     setShowScrollToBottom(false);
@@ -699,7 +706,7 @@ export function useSessionTimelineController(options: {
       timeline.scrollTo({ top: timeline.scrollHeight, behavior: "instant" });
     });
     return () => cancelAnimationFrame(frame);
-  }, [controllerEnabled, ownerKey, savedScrollAnchor, pagination.setVisibleCount]);
+  }, [controllerEnabled, ownerKey, pagination.setVisibleCount]);
 
 
   useLayoutEffect(() => {
