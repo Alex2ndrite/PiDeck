@@ -53,7 +53,10 @@ function SelectTrigger({
 function SelectContent({
   className,
   children,
-  position = "item-aligned",
+  // 默认 popper 而非 shadcn 新版默认的 item-aligned：
+  // item-aligned 在 overflow:auto/hidden 容器内（Dialog/滚动内容区）定位错乱，
+  // 下拉会渲染到内容后面"打不开"（shadcn-ui/ui#9589）；popper 用 floating-ui 浮动定位不受影响。
+  position = "popper",
   align = "center",
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Content>) {
