@@ -70,7 +70,8 @@ test("cost config opens in a Dialog per model", () => {
   assert.match(source, /costDialogKey === `\$\{name\}-\$\{i\}`/);
   assert.match(source, /<Coins className="size-3\.5" aria-hidden="true" \/>/);
   assert.match(source, /<Dialog open=\{costDialogKey ===/);
-  assert.match(source, /<DialogContent className="sm:max-w-md">/);
+  // 计费弹窗加宽（sm:max-w-2xl）以容纳梯度计费表格，Dialog 内两列排布
+  assert.match(source, /<DialogContent className="sm:max-w-3xl">/);
   assert.match(source, /config\.modelCost/);
   assert.match(source, /config\.advancedPreservedModel/);
   // 计费输入框保持原 field 布局 class（CSS 保留），Dialog 内两列排布

@@ -1,9 +1,10 @@
 import { Button } from "../components/ui-shadcn/button";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Brain, Check, ChevronDown, ChevronRight, Coins, Copy, ExternalLink, SquarePen, Trash2, X } from "lucide-react";
+import { Brain, Check, ChevronDown, ChevronRight, Coins, Copy, ExternalLink, Plus, SquarePen, Trash2, X } from "lucide-react";
 import { t } from "../i18n";
 import type { ModelItem, ModelsFile } from "./configTypes";
 import { ApiTypeInput, ConfigSelect, SecretInput } from "./ConfigShared";
+import { emptyTierDraft, normalizeTiers, toTierDrafts, type CostTierDraft } from "./modelCostTiers";
 import {
 	CUSTOM_USER_AGENT_VALUE,
 	getUserAgentOptions,
@@ -213,6 +214,20 @@ export function ModelsTab(props: {
 	const [selectedFetchedModelIds, setSelectedFetchedModelIds] = useState<Record<string, string[]>>({});
 	// 当前正在弹计费对话框的模型键（`${providerName}-${index}`），null 表示关闭
 	const [costDialogKey, setCostDialogKey] = useState<string | null>(null);
+	// 梯度计费编辑草稿：弹窗打开时从 cost.tiers 初始化；输入即规整落盘（与基础费率行为一致）
+	const [tierEditor, setTierEditor] = useState<{ key: string; drafts: CostTierDraft[] } | null>(null);
+	useEffect(() => {
+		if (!costDialogKey) {
+			setTierEditor(null);
+			return;
+		}
+		// provider 名可能含 "-"，用最后一个 "-" 切分还原 providerName/index
+		const dashIndex = costDialogKey.lastIndexOf("-");
+		const providerName = costDialogKey.slice(0, dashIndex);
+		const index = Number(costDialogKey.slice(dashIndex + 1));
+		const model = data.providers[providerName]?.models[index];
+		setTierEditor({ key: costDialogKey, drafts: toTierDrafts(model?.cost?.tiers) });
+	}, [costDialogKey]);
 	const [pendingModelFocusKey, setPendingModelFocusKey] = useState<string | null>(null);
 	const [showGuide, setShowGuide] = useState(false);
 	const [batchMode, setBatchMode] = useState(false);
@@ -891,6 +906,15 @@ export function ModelsTab(props: {
 								}
 								props.onUpdateModel(name, i, "cost", Object.keys(nextCost).length > 0 ? nextCost : undefined);
 							};
+							// 梯度计费：草稿规整后写回 cost.tiers；无有效梯度则删字段（与 updateCost 相同的"输入即保存"语义）
+							const applyTiers = (drafts: CostTierDraft[]) => {
+								setTierEditor((prev) => (prev ? { ...prev, drafts } : prev));
+								const nextCost = { ...(m.cost ?? {}) };
+								const tiers = normalizeTiers(drafts);
+								if (tiers.length > 0) nextCost.tiers = tiers;
+								else delete nextCost.tiers;
+								props.onUpdateModel(name, i, "cost", Object.keys(nextCost).length > 0 ? nextCost : undefined);
+							};
 							const modelAdvancedFields = Object.keys(m).filter(
 												(key) => !KNOWN_MODEL_FIELDS.has(key),
 											);
@@ -1057,11 +1081,60 @@ export function ModelsTab(props: {
 											</TableRow>
 											{/* 计费弹框：每行一个受控 Dialog，输入即保存（与表格内编辑行为一致） */}
 											<Dialog open={costDialogKey === `${name}-${i}`} onOpenChange={(open) => { if (!open) setCostDialogKey(null); }}>
-												<DialogContent className="sm:max-w-md">
+												<DialogContent className="sm:max-w-3xl">
 													<DialogHeader>
 														<DialogTitle>{t("config.modelCost")}</DialogTitle>
 													</DialogHeader>
 													<div className="grid grid-cols-2 gap-2">{([["input", "config.costInput"], ["output", "config.costOutput"], ["cacheRead", "config.costCacheRead"], ["cacheWrite", "config.costCacheWrite"]] as const).map(([field, label]) => (<label key={field} className="config-model-cost-field"><span>{t(label)}</span><Input type="number" min="0" step="any" value={m.cost?.[field] ?? ""} onChange={(e) => updateCost(field, e.target.value)} placeholder="-" /></label>))}</div>
+													<div className="mt-3 border-t pt-3">
+														<div className="mb-1.5 flex items-start justify-between gap-2">
+															<div>
+																<div className="text-xs font-medium text-text-primary">{t("config.costTiersTitle")}</div>
+																<div className="text-[11px] leading-relaxed text-text-tertiary">{t("config.costTiersHint")}</div>
+															</div>
+															<Button variant="outline" size="sm" onClick={() => applyTiers([...(tierEditor?.drafts ?? []), emptyTierDraft()])}>
+																<Plus className="size-3.5" />{t("config.costTiersAdd")}
+															</Button>
+														</div>
+														{(tierEditor?.drafts.length ?? 0) > 0 ? (
+															<Table>
+																<TableHeader>
+																	<TableRow>
+																		<TableHead className="w-28">{t("config.costTierThreshold")}</TableHead>
+																		<TableHead>{t("config.costInput")}</TableHead>
+																		<TableHead>{t("config.costOutput")}</TableHead>
+																		<TableHead>{t("config.costCacheRead")}</TableHead>
+																		<TableHead>{t("config.costCacheWrite")}</TableHead>
+																		<TableHead className="w-10" />
+																	</TableRow>
+																</TableHeader>
+																<TableBody>
+																	{tierEditor?.drafts.map((draft, tierIndex) => (
+																		<TableRow key={tierIndex}>
+																			<TableCell>
+																				<div className="flex items-center gap-1">
+																					<span className="text-text-tertiary">&gt;</span>
+																					<Input type="number" min="0" step="any" className="h-7" placeholder="272000" value={draft.inputTokensAbove} onChange={(e) => applyTiers(tierEditor.drafts.map((d, j) => (j === tierIndex ? { ...d, inputTokensAbove: e.target.value } : d)))} />
+																				</div>
+																			</TableCell>
+																			{(["input", "output", "cacheRead", "cacheWrite"] as const).map((field) => (
+																				<TableCell key={field}>
+																					<Input type="number" min="0" step="any" className="h-7" placeholder="-" value={draft[field]} onChange={(e) => applyTiers(tierEditor.drafts.map((d, j) => (j === tierIndex ? { ...d, [field]: e.target.value } : d)))} />
+																				</TableCell>
+																			))}
+																			<TableCell>
+																				<Button variant="ghost" size="icon-sm" className="size-7 text-text-tertiary hover:text-destructive" onClick={() => applyTiers(tierEditor.drafts.filter((_, j) => j !== tierIndex))}>
+																					<Trash2 className="size-3.5" />
+																				</Button>
+																			</TableCell>
+																		</TableRow>
+																	))}
+																</TableBody>
+															</Table>
+														) : (
+															<div className="rounded-sm bg-bg-muted px-2 py-1.5 text-[11px] text-text-secondary">{t("config.costTiersEmpty")}</div>
+														)}
+													</div>
 													{(modelComplexFields.length > 0 || modelAdvancedFields.length > 0) && (
 														<div className="mt-1 rounded-sm bg-bg-muted px-2 py-1.5 text-[11px] leading-relaxed text-text-secondary">
 															{t("config.advancedPreservedModel", {

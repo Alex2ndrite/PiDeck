@@ -1,5 +1,7 @@
 export type ConfigTab = "models" | "auth" | "settings" | "trust" | "raw";
 
+import type { ModelCostTier } from "./modelCostTiers";
+
 // ── 匹配 pi 实际文件格式的类型 ────────────────────────
 
 export type ThinkingLevelMap = Partial<Record<"off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max", string | null>>;
@@ -14,6 +16,8 @@ export type ModelCost = {
 	cacheRead?: number;
 	/** 缓存写 token 单价（$/M tokens） */
 	cacheWrite?: number;
+	/** 分档计费：输入 token 超过阈值后整次请求按该档费率（pi cost.tiers） */
+	tiers?: ModelCostTier[];
 };
 
 export type ProviderCompat = {
