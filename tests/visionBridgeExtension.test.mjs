@@ -34,6 +34,11 @@ function compile(filePath) {
 	const module = { exports: {} };
 	const localRequire = (specifier) => {
 		if (specifier.startsWith("node:")) return require(specifier);
+		// undici 的 fetch 由测试注入（describeImage 测试前必须替换 fetchStub），
+		// 与全局 fetch 注入等价，但验证的是扩展走显式 dispatcher 的路径
+		if (specifier === "undici") {
+			return { Agent: class {}, fetch: (...args) => fetchStub(...args) };
+		}
 		return {};
 	};
 	// fetch 由测试注入，describeImage 测试前必须替换 fetchStub
@@ -347,7 +352,8 @@ const endpointOpenAI = {
 	api: "openai-completions",
 };
 
-/** 构造响应对象：content 为空（思维链网关行为）时返回 reasoning，否则返回 content。 */
+/** 构造响应对象：content 为空（思维链网关行为）时返回 reasoning，否则返回 content。
+ * finishReason 可选（缺省不发 finish_reason 字段，模拟普通网关）。 */
 function makeFetchStub(sequence) {
 	const calls = [];
 	fetchStub = async (url, opts) => {
@@ -358,9 +364,12 @@ function makeFetchStub(sequence) {
 			status: 200,
 			statusText: "OK",
 			json: async () => ({
-				choices: [{ message: next.includeReasoning
-					? { content: "", reasoning: next.reasoning }
-					: { content: next.content } }],
+				choices: [{
+					message: next.includeReasoning
+						? { content: "", reasoning: next.reasoning }
+						: { content: next.content },
+					...(next.finishReason ? { finish_reason: next.finishReason } : {}),
+				}],
 			}),
 		};
 	};
@@ -400,9 +409,60 @@ test("describeImage: retry falls back to reasoning when still no content", async
 	assert.equal(calls.length, 2);
 });
 
+test("describeImage: retries when answer truncated by length (thinking model)", async () => {
+	// 思维链模型：max_tokens 被思考吃掉，回答被 length 截断（描述不完整）
+	const calls = makeFetchStub([
+		{ content: "1. 主体：沙发…", finishReason: "length" },
+		{ content: "1. 主体：沙发。2. 窗户：落地窗。3. 窗外：城市景观。", finishReason: "stop" },
+	]);
+	const result = await ext.describeImage(endpointOpenAI, imageA, "描述", { maxTokens: 1024, timeoutMs: 5000 });
+	assert.equal(result.ok, true);
+	assert.equal(result.text, "1. 主体：沙发。2. 窗户：落地窗。3. 窗外：城市景观。");
+	assert.equal(calls.length, 2, "length 截断触发一次重试");
+	assert.equal(calls[0].body.reasoning_effort, undefined);
+	assert.equal(calls[1].body.reasoning_effort, "none", "重试关闭思考");
+});
+
+test("describeImage: stops after one retry even if still truncated", async () => {
+	// 防无限重试：重试后仍 length 截断时返回重试结果，不再发第三次请求
+	const calls = makeFetchStub([
+		{ content: "开头…", finishReason: "length" },
+		{ content: "更完整的开头…", finishReason: "length" },
+	]);
+	const result = await ext.describeImage(endpointOpenAI, imageA, "描述", { maxTokens: 1024, timeoutMs: 5000 });
+	assert.equal(result.ok, true);
+	assert.equal(result.text, "更完整的开头…");
+	assert.equal(calls.length, 2, "只重试一次");
+});
+
 test("describeImage: http error returns failure without throw", async () => {
 	fetchStub = async () => ({ ok: false, status: 429, statusText: "Too Many Requests" });
 	const result = await ext.describeImage(endpointOpenAI, imageA, "描述", { maxTokens: 1024, timeoutMs: 5000 });
 	assert.equal(result.ok, false);
 	assert.match(result.text, /429/);
+});
+
+test("describeImage: retries without max_tokens on 400 (low max_tokens limit gateway)", async () => {
+	// 智谱 glm-4v-flash 类网关：max_tokens 上限低（[1,1024]），配置值超限返回 400。
+	// 扩展应去掉 max_tokens 重试一次，成功后记住该端点。
+	const calls = [];
+	fetchStub = async (url, opts) => {
+		const body = JSON.parse(opts.body);
+		calls.push({ body });
+		if (calls.length === 1) {
+			return { ok: false, status: 400, statusText: "Bad Request", json: async () => ({}) };
+		}
+		return {
+			ok: true,
+			status: 200,
+			statusText: "OK",
+			json: async () => ({ choices: [{ message: { content: "沙发图" } }] }),
+		};
+	};
+	const result = await ext.describeImage(endpointOpenAI, imageA, "描述", { maxTokens: 2048, timeoutMs: 5000 });
+	assert.equal(result.ok, true);
+	assert.equal(result.text, "沙发图");
+	assert.equal(calls.length, 2, "400 触发一次去 max_tokens 重试");
+	assert.equal(calls[0].body.max_tokens, 2048, "首次带配置的 max_tokens");
+	assert.equal(calls[1].body.max_tokens, undefined, "重试去掉 max_tokens");
 });

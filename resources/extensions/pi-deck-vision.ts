@@ -32,6 +32,10 @@ import { createHash } from "node:crypto";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { readFile } from "node:fs/promises";
+// 视觉请求直连：不用全局 fetch。pi 的 http-dispatcher 会把全局 dispatcher 换成
+// EnvHttpProxyAgent（读 HTTPS_PROXY 环境变量），用户翻墙代理对商汤/GLM/Qwen
+// 这类国内视觉 API 反而导致连接失败；undici 显式 dispatcher 不受影响。
+import { Agent, fetch as undiciFetch } from "undici";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { ImageContent } from "@earendil-works/pi-ai";
 
@@ -256,6 +260,11 @@ export async function resolveEndpoint(
 /**
  * 调用视觉模型描述单张图片（OpenAI 兼容 / Anthropic / Gemini 三种格式）。
  * 返回 { ok, text }；任何异常都折叠为失败结果，不向外抛。
+ *
+ * 重试策略：部分 openai 兼容网关的思维链模型（如商汤 6.7）非流式请求里
+ * max_tokens 是「思考 + 回答」的总预算，思考会吃掉大部分额度导致回答被
+ * length 截断（描述不完整，结构都没写完）。此时用 reasoning_effort:"none"
+ * 重试一次强制直接给答案；content 完全为空（纯思考输出）同理。
  */
 export async function describeImage(
 	endpoint: ResolvedEndpoint,
@@ -263,28 +272,57 @@ export async function describeImage(
 	prompt: string,
 	options: { maxTokens: number; timeoutMs: number; signal?: AbortSignal },
 ): Promise<{ ok: boolean; text: string }> {
-	// 第一次：标准请求。部分 openai 兼容网关的思维链模型（如商汤 6.7）
-	// 非流式响应 content 为空、只返回 reasoning——用 reasoning_effort:none 重试一次
 	const first = await doVisionRequest(endpoint, image, prompt, options, { reasoningEffortNone: false });
-	if (
+	const needsRetry =
+		endpoint.api === "openai-completions" &&
 		first.ok &&
-		first.text === EMPTY_RESPONSE_PLACEHOLDER &&
-		endpoint.api === "openai-completions"
-	) {
+		(first.text === EMPTY_RESPONSE_PLACEHOLDER || first.finishReason === "length");
+	if (needsRetry) {
 		const retry = await doVisionRequest(endpoint, image, prompt, options, { reasoningEffortNone: true });
 		if (retry.ok) return retry;
 	}
 	return first;
 }
 
-/** 单次视觉请求（可指定关闭思考模式重试）。 */
+/** 直连 dispatcher（进程级单例）：避免走全局代理，国内视觉 API 才能稳定连通。 */
+let directDispatcher: Agent | undefined;
+function getDirectDispatcher(): Agent {
+	if (!directDispatcher) {
+		directDispatcher = new Agent({ connect: { timeout: 15_000 } });
+	}
+	return directDispatcher;
+}
+
+/** 已知 max_tokens 上限低的端点（如智谱 glm-4v-flash 只允许 [1,1024]），
+ * 400 自愈成功后记录，后续请求直接不带 max_tokens 字段。 */
+const noMaxTokensEndpoints = new Set<string>();
+function endpointKey(endpoint: ResolvedEndpoint): string {
+	return `${endpoint.baseUrl}|${endpoint.model}`;
+}
+
+/** 去掉 body 里的 max_tokens 字段（openai 兼容格式）。force=true 强制去掉，
+ * 否则仅当该端点已被标记为低上限时去掉。其他格式（anthropic/google）不动。 */
+function trimMaxTokens(endpoint: ResolvedEndpoint, body: unknown, force = false): unknown {
+	if (endpoint.api !== "openai-completions" || typeof body !== "object" || body === null) {
+		return body;
+	}
+	if (!force && !noMaxTokensEndpoints.has(endpointKey(endpoint))) {
+		return body;
+	}
+	const next = { ...(body as Record<string, unknown>) };
+	delete next.max_tokens;
+	return next;
+}
+
+/** 单次视觉请求（可指定关闭思考模式重试）。返回结果附 finishReason（openai 格式），
+ * 供调用方判断是否被 max_tokens 截断。 */
 async function doVisionRequest(
 	endpoint: ResolvedEndpoint,
 	image: ImageContent,
 	prompt: string,
 	options: { maxTokens: number; timeoutMs: number; signal?: AbortSignal },
 	flags: { reasoningEffortNone: boolean },
-): Promise<{ ok: boolean; text: string }> {
+): Promise<{ ok: boolean; text: string; finishReason?: string }> {
 	const controller = new AbortController();
 	const timeout = setTimeout(() => controller.abort(), options.timeoutMs);
 	const onOuterAbort = () => controller.abort();
@@ -292,20 +330,42 @@ async function doVisionRequest(
 
 	try {
 		const { url, headers, body } = buildVisionRequest(endpoint, image, prompt, options.maxTokens, flags);
-		const res = await fetch(url, {
+		// 已知低上限端点：直接不带 max_tokens（避免每次先吃一次 400）
+		const trimmedBody = trimMaxTokens(endpoint, body);
+		let res = await undiciFetch(url, {
 			method: "POST",
 			headers,
-			body: JSON.stringify(body),
+			body: JSON.stringify(trimmedBody),
 			signal: controller.signal,
+			dispatcher: getDirectDispatcher(),
 		});
+		if (res.status === 400 && endpoint.api === "openai-completions" && !noMaxTokensEndpoints.has(endpointKey(endpoint))) {
+			// 兼容性自愈：部分网关（如智谱 glm-4v-flash）max_tokens 上限远低于
+			// 配置值，去掉该字段重试一次；成功则记录该端点后续不再传
+			const retryBody = trimMaxTokens(endpoint, body, true);
+			const retry = await undiciFetch(url, {
+				method: "POST",
+				headers,
+				body: JSON.stringify(retryBody),
+				signal: controller.signal,
+				dispatcher: getDirectDispatcher(),
+			});
+			if (retry.ok) {
+				noMaxTokensEndpoints.add(endpointKey(endpoint));
+				res = retry;
+			}
+		}
 		if (!res.ok) {
 			// 不打印响应体（可能回显请求中的图片或 key）；只带状态码
 			return { ok: false, text: `HTTP ${res.status} ${res.statusText}` };
 		}
 		const payload = (await res.json()) as Record<string, unknown>;
+		const finishReason = (payload.choices as Array<{ finish_reason?: unknown }> | undefined)?.[0]
+			?.finish_reason as string | undefined;
 		return {
 			ok: true,
 			text: extractVisionText(endpoint.api, payload, { fallbackToReasoning: flags.reasoningEffortNone }),
+			...(finishReason ? { finishReason } : {}),
 		};
 	} catch (e) {
 		const isTimeout = e instanceof Error && e.name === "AbortError";
