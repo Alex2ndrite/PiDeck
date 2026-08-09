@@ -5,7 +5,6 @@ import {
   CircleX,
   Folder,
   MessagesSquare,
-  MousePointerClick,
   PanelLeft,
   PanelRight,
   Pin,
@@ -510,12 +509,9 @@ function SessionTab(props: {
         )}
       </div>
       <DropdownMenuContent align="start" side="bottom" className="min-w-40">
-        <DropdownMenuItem disabled={active} onSelect={select}>
-          <span className="inline-flex items-center gap-2">
-            <MousePointerClick className="size-3.5" aria-hidden="true" />
-            {t("tabs.switchTo")}
-          </span>
-        </DropdownMenuItem>
+        {/* 停止/重启按 agent 状态置灰：用内联 style 而非 className——
+            shadcn 默认 data-[disabled]:opacity-50 在部分主题/层序下不显眼，
+            内联样式特异性最高，任何 CSS 都覆盖不了，保证灰化可见。 */}
         <DropdownMenuItem onSelect={() => props.onTogglePin(sessionId)}>
           <span className="inline-flex items-center gap-2">
             {pinned ? <PinOff className="size-3.5" aria-hidden="true" /> : <Pin className="size-3.5" aria-hidden="true" />}
@@ -523,7 +519,11 @@ function SessionTab(props: {
           </span>
         </DropdownMenuItem>
         {active && props.onStop && (
-          <DropdownMenuItem disabled={!props.canStop} onSelect={props.onStop}>
+          <DropdownMenuItem
+            disabled={!props.canStop}
+            style={!props.canStop ? { opacity: 0.4 } : undefined}
+            onSelect={props.onStop}
+          >
             <span className="inline-flex items-center gap-2">
               <CircleStop className="size-3.5" aria-hidden="true" />
               {t("tabs.closeSession")}
@@ -532,7 +532,8 @@ function SessionTab(props: {
         )}
         {active && props.onRestart && (
           <DropdownMenuItem
-            disabled={!props.canRestart}
+            disabled={!props.canRestart || props.isRestarting}
+            style={!props.canRestart || props.isRestarting ? { opacity: 0.4 } : undefined}
             onSelect={props.onRestart}
           >
             <span className="inline-flex items-center gap-2">
