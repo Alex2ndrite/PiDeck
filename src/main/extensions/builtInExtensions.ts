@@ -10,6 +10,7 @@ export const BUILT_IN_EXTENSIONS = [
 	"pi-deck-nul-redirect-fix.ts",
 	"pi-deck-plan-mode.ts",
 	"pi-deck-todo.ts",
+	"pi-deck-vision.ts",
 ] as const;
 
 export type BuiltInExtensionName = (typeof BUILT_IN_EXTENSIONS)[number];

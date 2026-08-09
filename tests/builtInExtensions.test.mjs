@@ -67,7 +67,7 @@ test("listActiveBuiltInExtensionPaths respects removedBuiltIn and missing files"
 		);
 		assert.equal(paths.length, 1);
 		assert.ok(String(paths[0]).endsWith("pi-deck-ask-question.ts"));
-		assert.equal(BUILT_IN_EXTENSIONS.length, 4);
+		assert.equal(BUILT_IN_EXTENSIONS.length, 5);
 	} finally {
 		rmSync(root, { recursive: true, force: true });
 	}

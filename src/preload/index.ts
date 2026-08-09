@@ -28,6 +28,7 @@ import type {
 	CreateAnonymousSessionResult,
 	UpdateSessionRecordInput,
 	SessionRecord,
+	VisionBridgeConfig,
 	CreatePiSkillInput,
 	CreateProjectSkillInput,
 	ProjectResourceListResult,
@@ -1023,6 +1024,18 @@ const api = {
 				models?: Array<{ id: string; name?: string }>;
 				error?: string;
 				suggestedBaseUrl?: string;
+			}>,
+		/** 视觉桥：读取当前配置（模型列表由渲染层经 listModels 拉全量） */
+		visionGetConfig: () =>
+			ipcRenderer.invoke(ipcChannels.visionGetConfig) as Promise<{
+				config: VisionBridgeConfig | null;
+				configDir: string;
+			}>,
+		/** 视觉桥：保存配置（主进程白名单校验后写 ~/.pi/agent/pi-deck-vision.json） */
+		visionSaveConfig: (config: VisionBridgeConfig) =>
+			ipcRenderer.invoke(ipcChannels.visionSaveConfig, config) as Promise<{
+				ok: boolean;
+				error?: string;
 			}>,
 		/** 快速测试 provider 连接：发送一条最小请求验证配置是否正常 */
 		testProvider: (

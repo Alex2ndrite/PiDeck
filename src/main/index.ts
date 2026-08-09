@@ -191,6 +191,8 @@ import { registerGitIpc } from "./ipc/gitIpc";
 import { registerStoreIpc } from "./ipc/storeIpc";
 import { registerTerminalIpc } from "./ipc/terminalIpc";
 import { registerScratchPadIpc } from "./ipc/scratchPadIpc";
+import { registerVisionIpc } from "./ipc/visionIpc";
+import { VisionBridgeConfigManager } from "./settings/visionBridgeConfig";
 import { registerSessionIpc, scheduleCatalogBackgroundScan } from "./ipc/sessionIpc";
 import { registerSystemIpc } from "./ipc/systemIpc";
 import { fetchModelList, getCachedModelList, refreshModelList } from "./pi/modelListCache";
@@ -2109,6 +2111,12 @@ function registerIpc() {
 	});
 
 	registerScratchPadIpc({ appLogger });
+
+	// 视觉桥配置（~/.pi/agent/pi-deck-vision.json）界面化编辑；运行时由 pi-deck-vision 扩展消费
+	registerVisionIpc({
+		visionBridge: new VisionBridgeConfigManager(configManager),
+		log: (message, ...args) => appLogger.info("vision", message, ...args),
+	});
 
 	registerSessionIpc({
 		projectStore,

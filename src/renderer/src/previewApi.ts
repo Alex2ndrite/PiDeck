@@ -847,6 +847,11 @@ export function createPreviewApi(): PiDesktopApi {
 				requestUrl: "https://api.openai.com/v1/chat/completions",
 				requestBody: '{"model":"gpt-4o-mini","messages":[{"role":"user","content":"Hi"}],"max_tokens":10}',
 			}),
+			visionGetConfig: async () => ({
+				config: null,
+				configDir: "/tmp/preview/.pi/agent",
+			}),
+			visionSaveConfig: async () => ({ ok: true }),
 		},
 		pet: {
 			onState: noop,

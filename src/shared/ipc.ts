@@ -248,6 +248,11 @@ export const ipcChannels = {
 	/** 快速测试 provider 连接：发送一条最小请求验证 baseUrl/apiKey/模型 是否正常 */
 	configTestProvider: "config:test-provider",
 
+	/** 视觉桥：读取当前配置 + 可选模型列表 */
+	visionGetConfig: "vision:get-config",
+	/** 视觉桥：保存配置到 ~/.pi/agent/pi-deck-vision.json */
+	visionSaveConfig: "vision:save-config",
+
 	/** 切换开发者控制台 */
 	appToggleDevTools: "app:toggle-devtools",
 

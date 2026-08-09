@@ -9,6 +9,7 @@ import {
 	PawPrint,
 	Trash2,
 	Brush,
+	Eye,
 	Minus,
 	Plus,
 } from "lucide-react";
@@ -51,6 +52,7 @@ import {
 	AlertDialogTitle,
 } from "../ui-shadcn/alert-dialog";
 import { SettingsSection, StorageTab } from "./settings/SettingsStorageTab";
+import { VisionBridgeSettingsTab } from "./settings/VisionBridgeSettingsTab";
 import { ModelPicker } from "../session/ComposerComponents";
 import type { AppSettings, AppInfo, AvailableModel, PiInstallStatus, PiUpdateCheckResult, PiCliUpdateResult, PetManifest } from "../../../shared/types";
 import { GRID_COLS, CELL_W, CELL_H, MODE_ROW, MODE_FRAMES } from "../../pet/PetSpriteSheet";
@@ -60,7 +62,7 @@ const ZOOM_FACTOR_MIN = 0.8;
 const ZOOM_FACTOR_MAX = 1.5;
 const ZOOM_FACTOR_STEP = 0.05;
 
-type SettingsTabId = "common" | "appearance" | "proxy" | "dev" | "pet" | "storage";
+type SettingsTabId = "common" | "appearance" | "proxy" | "dev" | "pet" | "storage" | "vision";
 
 /** 代理相关字段：用于判断代理 tab 是否有未保存变更。 */
 const PROXY_FIELDS: (keyof AppSettings)[] = [
@@ -475,6 +477,11 @@ function SettingsModalContent(props: SettingsModalProps) {
 			id: "storage",
 			label: t("settings.tabs.storage"),
 			icon: <Trash2 size={16} />,
+		},
+		{
+			id: "vision",
+			label: t("settings.tabs.vision"),
+			icon: <Eye size={16} />,
 		},
 	];
 	const themeOptions = [
@@ -1801,6 +1808,10 @@ function SettingsModalContent(props: SettingsModalProps) {
 								settings={draftSettings}
 								onChange={updateDraft}
 							/>
+						</TabsContent>
+						{/* ── 视觉桥 tab ── */}
+						<TabsContent value="vision" className="settings-panel min-w-0">
+							<VisionBridgeSettingsTab />
 						</TabsContent>
 					</Tabs>
 			{/* 未保存变更确认对话框 */}
