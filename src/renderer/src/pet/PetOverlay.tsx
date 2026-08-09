@@ -15,15 +15,12 @@ type Props = {
 	sprite: SpriteSheet | null;
 	manifest: PetManifest | null;
 	state: PetAggregateState;
-	dragging?: boolean;
 	notification?: PetNotification | null;
 };
 
-export function PetOverlay({ sprite, state, dragging, notification }: Props) {
+export function PetOverlay({ sprite, state, notification }: Props) {
 	const mode = state.mode;
 	const canvasRef = useRef<HTMLCanvasElement>(null);
-	const dragRef = useRef(dragging);
-	dragRef.current = dragging;
 	const notifRef = useRef(notification);
 	notifRef.current = notification;
 
@@ -127,10 +124,8 @@ export function PetOverlay({ sprite, state, dragging, notification }: Props) {
 		const loop = (now: number) => {
 			if (!alive) return;
 			rafId = requestAnimationFrame(loop);
-			// 每帧都先同步真实 CSS 尺寸；拖拽只冻结动画时间推进，不冻结 canvas 尺寸。
-			// 否则点击/拖拽期间窗口或 DPI 尺寸变化会让 buffer 留在旧比例，出现越拖越大的错觉。
+			// 每帧同步真实 CSS 尺寸，避免窗口或 DPI 变化后 buffer 留在旧比例。
 			syncCanvasSize();
-			if (dragRef.current) { lastT = now; tick(); return; }
 			const delta = now - lastT;
 			lastT = now;
 

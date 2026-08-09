@@ -42,9 +42,14 @@ export class PetSystem {
 		this.bridge = new PetStateBridge(
 			() => this.petWindow.window,
 			this.patrol,
-			() => this.deps.settingsStore.get().petPatrolEnabled ?? true,
+			() => this.isPatrolEnabled(),
 			(key, params) => this.translate(key, params),
 		);
+	}
+
+	private isPatrolEnabled() {
+		return (this.deps.settingsStore.get().petPatrolEnabled ?? true)
+			&& detectPetWindowCaps().freePosition;
 	}
 
 	private translate(key: PetCopyKey, params: Record<string, string | number> = {}): string {
@@ -226,7 +231,7 @@ export class PetSystem {
 		if (next.petAlwaysOnTop !== prev.petAlwaysOnTop) this.petWindow.setAlwaysOnTop(next.petAlwaysOnTop);
 		if (next.petScale !== prev.petScale && next.petScale) this.petWindow.resize(next.petScale);
 		if (next.petPatrolEnabled !== prev.petPatrolEnabled) {
-			(next.petPatrolEnabled && this.bridge.currentState?.mode === "idle") ? this.patrol.start() : this.patrol.stop();
+			(this.isPatrolEnabled() && this.bridge.currentState?.mode === "idle") ? this.patrol.start() : this.patrol.stop();
 		}
 	}
 

@@ -6,14 +6,21 @@ import type { PetWindowCaps } from "../../shared/types";
 import { preparePreloadPath } from "../preloadPath";
 import { readElectronChromiumSandboxPreference } from "../settings/SettingsStore";
 
-/** 三端宠物窗能力探测；Wayland 降级 */
+/** 三端宠物窗能力探测；Linux 只有明确 X11 时启用透明与绝对定位。 */
 export function detectPetWindowCaps(): PetWindowCaps {
 	if (process.platform === "darwin" || process.platform === "win32") {
 		return { transparent: true, clickThrough: true, freePosition: true };
 	}
 	const ozonePlatform = getOzonePlatform();
-	const wayland = ozonePlatform === "wayland" || (!ozonePlatform && !!process.env.WAYLAND_DISPLAY);
-	return { transparent: !wayland, clickThrough: true, freePosition: !wayland };
+	if (ozonePlatform === "x11") {
+		return { transparent: true, clickThrough: true, freePosition: true };
+	}
+	if (ozonePlatform === "wayland") {
+		return { transparent: false, clickThrough: true, freePosition: false };
+	}
+	const sessionType = process.env.XDG_SESSION_TYPE?.trim().toLowerCase();
+	const x11 = sessionType === "x11" || (!process.env.WAYLAND_DISPLAY && !!process.env.DISPLAY);
+	return { transparent: x11, clickThrough: true, freePosition: x11 };
 }
 
 const BASE_W = 160, BASE_H = 176;
@@ -66,7 +73,7 @@ export class PetWindow {
 		const caps = detectPetWindowCaps();
 		const isMac = process.platform === "darwin";
 
-		const persisted = await loadPos();
+		const persisted = caps.freePosition ? await loadPos() : null;
 		// 若保存位置匹配某个显示器，以该显示器计算落点；否则（多屏热插拔/位置越界）用主显示器
 		const display = screen.getDisplayMatching(persisted ? { x: persisted.x, y: persisted.y, width: w, height: h } : { x: 0, y: 0, width: w, height: h });
 		const wa = display.workArea;
@@ -81,11 +88,13 @@ export class PetWindow {
 		const preloadPath = await preparePreloadPath(sourcePreloadPath, "pet-preload.js");
 
 		this.win = new BrowserWindow({
-			width: w, height: h, x, y,
+			width: w, height: h,
+			...(caps.freePosition ? { x, y } : {}),
 			...(isMac ? { type: "panel" as const } : {}),
 			frame: false, transparent: caps.transparent, resizable: false,
 			maximizable: false, fullscreenable: false, hasShadow: false,
-			skipTaskbar: true, alwaysOnTop: true, backgroundColor: "#00000000",
+			skipTaskbar: true, alwaysOnTop: true,
+			backgroundColor: caps.transparent ? "#00000000" : "#eef0f3",
 			webPreferences: {
 				preload: preloadPath,
 				partition: "persist:pet",
@@ -105,18 +114,20 @@ export class PetWindow {
 		});
 
 		this.win.setAlwaysOnTop(true, "floating");
-		// moved 高频触发（巡游每 50ms 一次、拖拽每次 pointermove 一次），
-		// 直接落盘会拖慢主进程、间接放大 tick 抖动。这里防抖 400ms 合并写盘。
-		this.win.on("moved", () => {
-			if (!this.exists) return;
-			const b = this.win!.getBounds();
-			this.pendingPos = { x: b.x, y: b.y };
-			if (this.saveTimer) return;
-			this.saveTimer = setTimeout(() => {
-				this.saveTimer = null;
-				if (this.pendingPos) { const p = this.pendingPos; this.pendingPos = null; void savePos(p); }
-			}, 400);
-		});
+		if (caps.freePosition) {
+			// moved 高频触发（巡游每 50ms 一次、拖拽每次 pointermove 一次），
+			// 直接落盘会拖慢主进程、间接放大 tick 抖动。这里防抖 400ms 合并写盘。
+			this.win.on("moved", () => {
+				if (!this.exists) return;
+				const b = this.win!.getBounds();
+				this.pendingPos = { x: b.x, y: b.y };
+				if (this.saveTimer) return;
+				this.saveTimer = setTimeout(() => {
+					this.saveTimer = null;
+					if (this.pendingPos) { const p = this.pendingPos; this.pendingPos = null; void savePos(p); }
+				}, 400);
+			});
+		}
 
 		if (!is.dev) {
 			this.win.webContents.session.webRequest.onHeadersReceived((details, cb) => {
@@ -130,8 +141,8 @@ export class PetWindow {
 		const url = devRendererUrl ? `${devRendererUrl}/pet.html` : join(__dirname, "../renderer/pet.html");
 		await (devRendererUrl ? this.win.loadURL(url) : this.win.loadFile(url));
 
-		// 启动尺寸校正守护（每 5 秒检查），解决透明窗口在部分平台拖拽后尺寸漂移
-		this.startSizeGuard();
+		// 绝对定位可用时才校正尺寸；Wayland 的位置和大小由合成器管理。
+		if (caps.freePosition) this.startSizeGuard();
 
 		if (isMac) this.win.showInactive();
 		return this.win;
@@ -150,7 +161,7 @@ export class PetWindow {
 	}
 
 	moveTo(x: number, y: number) {
-		if (!this.exists) return;
+		if (!this.exists || !detectPetWindowCaps().freePosition) return;
 		// 透明/无边框窗口在高频移动时，当前 bounds 可能已经被系统拖拽/合成器误放大。
 		// 因此移动时永远使用业务目标尺寸，而不是 this.win.getSize() 读到的漂移尺寸。
 		this.win!.setBounds({
@@ -164,7 +175,7 @@ export class PetWindow {
 
 	/** 将当前窗口拉回业务目标尺寸，用于拖拽结束后纠正系统合成器造成的尺寸漂移。 */
 	ensureTargetSize() {
-		if (!this.exists) return;
+		if (!this.exists || !detectPetWindowCaps().freePosition) return;
 		const [x, y] = this.win!.getPosition();
 		this.win!.setBounds({
 			x,
@@ -178,6 +189,7 @@ export class PetWindow {
 	 *  解决某些平台透明窗口拖拽后尺寸漂移问题。 */
 	startSizeGuard() {
 		this.stopSizeGuard();
+		if (!detectPetWindowCaps().freePosition) return;
 		this.sizeGuardTimer = setInterval(() => {
 			if (!this.exists) { this.stopSizeGuard(); return; }
 			const [w, h] = this.win!.getSize();
@@ -200,6 +212,10 @@ export class PetWindow {
 		if (!this.exists) return;
 		const w = Math.round(BASE_W * scale), h = Math.round(BASE_H * scale);
 		this.targetSize = { width: Math.max(w, 1), height: Math.max(h, 1) };
+		if (!detectPetWindowCaps().freePosition) {
+			this.win!.setSize(this.targetSize.width, this.targetSize.height);
+			return;
+		}
 		const [cx, cy] = this.win!.getPosition();
 		const wa = screen.getDisplayMatching({ x: cx, y: cy, width: w, height: h }).workArea;
 		// 使用 setBounds（含当前位置）替代 setSize，避免缩小尺寸时在 resizable:false 窗口上失效
