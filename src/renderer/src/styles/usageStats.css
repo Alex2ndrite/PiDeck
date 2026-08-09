@@ -93,3 +93,12 @@
 .usage-heatmap-l2 { fill: color-mix(in srgb, var(--color-accent) 50%, transparent); }
 .usage-heatmap-l3 { fill: color-mix(in srgb, var(--color-accent) 72%, transparent); }
 .usage-heatmap-l4 { fill: color-mix(in srgb, var(--color-accent) 95%, transparent); }
+
+/* 引导卡：安装按钮 + 命令 + 复制按钮一行 */
+.usage-stats-install-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0;
+  flex-wrap: wrap;
+}

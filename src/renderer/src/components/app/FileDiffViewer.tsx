@@ -456,19 +456,19 @@ export function FileDiffViewer(props: {
 								: <Maximize size={15} />}
 						</Button>
 					)}
-					{/* 外置 chrome 时关闭归总 Tab 栏；内容区再放 X 会与退出编辑语义打架 */}
-					{!props.chromeTabsExternal && (
-						<Button
-							variant="ghost"
-							size="icon-sm"
-							className="file-diff-toggle-btn"
-							onClick={handleClose}
-							aria-label={t("common.close")}
-							title={t("common.close")}
-						>
-							<X size={15} />
-						</Button>
-					)}
+					{/* 关闭按钮：无论 Tab 是否上收总栏都保留，保证 DIFF/文件预览右上角
+					   始终有关闭入口（Tab 栏小叉在窄栏下不易点中）。与「退出编辑」（PencilOff）
+					   语义不同：X 关闭整个阅读面，PencilOff 仅退出编辑态。 */}
+					<Button
+						variant="ghost"
+						size="icon-sm"
+						className="file-diff-toggle-btn"
+						onClick={handleClose}
+						aria-label={t("common.close")}
+						title={t("common.close")}
+					>
+						<X size={15} />
+					</Button>
 				</div>
 			</div>
 			<div className="file-diff-body">

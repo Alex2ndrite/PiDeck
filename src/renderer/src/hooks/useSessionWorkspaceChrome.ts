@@ -14,11 +14,15 @@ import {
 } from "../utils/sessionTabs";
 import {
   buildSplitLayoutFromDrop,
+  edgeToOrientation,
+  insertRootPaneFromDrop,
+  nestSplitPaneFromDrop,
   replaceSplitPaneFromDrop,
   replaceSplitPaneFromFocus,
   resolveSplitAfterClose,
   resolveSplitHostSessionId,
-  type SessionSplitEdge,
+  splitLayoutSessionIds,
+  type SessionSplitDropTarget,
   type SessionSplitLayout,
 } from "../utils/sessionSplitEdge";
 
@@ -107,12 +111,11 @@ export function useSessionWorkspaceChrome(options: {
       current && !sessionRecords[current] ? null : current,
     );
     setSplitLayout((layout) => {
-      // 任一分屏栏的会话记录消失则整个退出分屏（存活栏会话由 closeTab 的
+      // 任一栏会话记录消失则整个退出分屏（存活栏会话由 closeTab 的
       // resolveSplitAfterClose 负责晋升单栏，这里只处理记录删除的场景）
       if (!layout) return layout;
-      const firstOk = Boolean(sessionRecords[layout.firstSessionId]);
-      const secondOk = Boolean(sessionRecords[layout.secondSessionId]);
-      return firstOk && secondOk ? layout : null;
+      const ids = splitLayoutSessionIds(layout);
+      return ids.every((id) => Boolean(sessionRecords[id])) ? layout : null;
     });
   }, [sessionRecords, setSessionTabIds]);
 
@@ -161,6 +164,20 @@ export function useSessionWorkspaceChrome(options: {
         return;
       } else {
         setSplitLayout(resolved.layout);
+        // 分屏仍存在且关闭的是当前聚焦会话：焦点优先留在分屏内幸存会话，
+        // 避免回退到 Tab 邻居后触发 replaceSplitPaneFromFocus 把另一栏也换掉
+        if (snap.currentSessionId === sessionId && remaining.length > 0) {
+          const splitSurvivors = splitLayoutSessionIds(resolved.layout).filter((id) =>
+            remaining.includes(id),
+          );
+          if (splitSurvivors.length > 0) {
+            const record = store.get(sessionRecordByIdAtomFamily(splitSurvivors[0]));
+            if (record) {
+              focusHandlersRef.current.focusSession(record.projectId, splitSurvivors[0]);
+              return;
+            }
+          }
+        }
       }
     }
 
@@ -239,7 +256,7 @@ export function useSessionWorkspaceChrome(options: {
     focusHandlersRef.current.focusSession(record.projectId, sessionId);
   }, [store]);
 
-  const dropSplit = useCallback((draggedSessionId: string, edge: SessionSplitEdge) => {
+  const dropSplit = useCallback((draggedSessionId: string, target: SessionSplitDropTarget) => {
     setDraggingSessionId(null);
     const snap = tabsSnapshotRef.current;
 
@@ -253,31 +270,63 @@ export function useSessionWorkspaceChrome(options: {
     setSessionTabIds(permanent.tabs);
     setPreviewSessionTabId(permanent.previewId);
 
-    if (snap.split) {
-      const next = replaceSplitPaneFromDrop({
-        layout: snap.split,
+    const layout = snap.split;
+    if (!layout) {
+      // 单栏：拖到唯一会话面板边缘 → 根层双栏。
+      // 宿主 = 被拖命中的面板；拖当前会话自己时退化为 Tab 栏另一会话（否则当前 Tab 无法分屏）
+      if (target.kind !== "session-edge") return;
+      const hostSessionId = resolveSplitHostSessionId({
         draggedSessionId,
-        edge,
+        hitSessionId: target.sessionId,
+        tabIds: permanent.tabs,
+      });
+      if (!hostSessionId) return;
+      const next = buildSplitLayoutFromDrop({
+        hostSessionId,
+        draggedSessionId,
+        edge: target.edge,
       });
       if (next) setSplitLayout(next);
       return;
     }
 
-    // 宿主不能等于被拖会话：拖当前 Tab 时改用 Tab 栏里的另一个会话
-    const hostSessionId = resolveSplitHostSessionId({
-      currentSessionId: snap.currentSessionId,
-      draggedSessionId,
-      tabIds: permanent.tabs,
-    });
-    if (!hostSessionId) return;
-
-    const next = buildSplitLayoutFromDrop({
-      hostSessionId,
-      draggedSessionId,
-      edge,
-    });
-    if (next) setSplitLayout(next);
-  }, [setSessionTabIds]);
+    // 已分屏：中心 → 替换命中会话；边缘按方向分派——
+    // 与根层同向 → 根层插入（真三栏）；与根层垂直 → 切分该面板（终端式）
+    const next =
+      target.kind === "session-center"
+        ? replaceSplitPaneFromDrop({
+            layout,
+            draggedSessionId,
+            sessionId: target.sessionId,
+          })
+        : edgeToOrientation(target.edge) === layout.orientation
+          ? insertRootPaneFromDrop({
+              layout,
+              draggedSessionId,
+              sessionId: target.sessionId,
+              edge: target.edge,
+            })
+          : nestSplitPaneFromDrop({
+              layout,
+              draggedSessionId,
+              sessionId: target.sessionId,
+              edge: target.edge,
+            });
+    if (next) {
+      setSplitLayout(next);
+      // 中心替换了当前聚焦会话：焦点迁到拖入会话，避免「替换聚焦面板后焦点悬空」——
+      // 悬空会导致无栏聚焦、且下次新建会话时按 prev 游离退化为替换第一栏（顶掉刚拖入的会话）
+      if (
+        target.kind === "session-center" &&
+        target.sessionId === snap.currentSessionId
+      ) {
+        const record = store.get(sessionRecordByIdAtomFamily(draggedSessionId));
+        if (record) {
+          focusHandlersRef.current.focusSession(record.projectId, draggedSessionId);
+        }
+      }
+    }
+  }, [setSessionTabIds, store]);
 
   const beginDrag = useCallback((sessionId: string) => {
     setDraggingSessionId(sessionId);

@@ -52,6 +52,13 @@ test("WorkbenchStage hosts session + content with collapse-safe maximize", () =>
   assert.match(app, /workbenchHasContent/);
   assert.match(app, /WorkbenchContent/);
   assert.match(app, /chrome=\{sessionTabsBarNode\}/);
+  // 尺寸必须字符串百分比 + defaultSize 恒定：react-resizable-panels v4 约束派生把
+  // 数字按 px 解析（minSize={20} → 2%），且 defaultSize 随 layout 切换会触发 Panel
+  // 重注册、丢失 expandToSize，导致 maximize→split 恢复成窄缝（回归点）。
+  assert.match(stage, /collapsedSize="0%"/);
+  assert.match(stage, /minSize="20%"/);
+  assert.match(stage, /defaultSize="48%"/);
+  assert.doesNotMatch(stage, /defaultSize=\{props\.layout === "maximize" \? 0 : 48\}/);
   // 阅读面静态引入 FileDiffViewer：避免 lazy 动态 import 在 Electron/Vite 下偶发失败且无法重试恢复
   assert.doesNotMatch(app, /lazy\(\(\) => import\("\.\/components\/app\/FileDiffViewer"/);
   assert.doesNotMatch(content, /lazy\(\(\) =>/);
@@ -125,8 +132,11 @@ test("file tabs use preview/permanent strategy owned by useFileEditor", () => {
   );
   assert.match(exitEditBlock, /PencilOff/);
   assert.doesNotMatch(exitEditBlock, /<X /);
-  // 外置 Tab 时内容区不再重复关闭钮
-  assert.match(viewer, /!props\.chromeTabsExternal && \(/);
+  // 关闭按钮始终渲染：即使 Tab 上收总栏（chromeTabsExternal），右上角也要有
+  // 明确的关闭入口（需求：DIFF/文件预览右上角关闭按钮）。
+  assert.doesNotMatch(viewer, /!props\.chromeTabsExternal && \(/);
+  assert.match(viewer, /onClick=\{handleClose\}/);
+  assert.match(viewer, /aria-label=\{t\("common.close"\)\}/);
 
   const surface = readFileSync(
     "src/renderer/src/components/session/WorkspaceSurface.tsx",
