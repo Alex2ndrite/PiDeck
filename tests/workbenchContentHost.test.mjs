@@ -14,17 +14,21 @@ const zh = readFileSync("src/renderer/src/i18n/rendererCopy.zh-CN.ts", "utf8");
 const en = readFileSync("src/renderer/src/i18n/rendererCopy.en-US.ts", "utf8");
 const surfaces = readFileSync("src/renderer/src/styles/surfaces.css", "utf8");
 
-test("settings expose workspace content open mode and split orientation", () => {
+test("settings expose workspace content open mode; split orientation removed", () => {
   assert.match(settings, /WorkspaceContentOpenMode = "split" \| "maximize"/);
-  assert.match(settings, /WorkspaceSplitOrientation = "horizontal" \| "vertical"/);
   assert.match(settings, /workspaceContentOpenMode: WorkspaceContentOpenMode/);
-  assert.match(settings, /workspaceSplitOrientation: WorkspaceSplitOrientation/);
   assert.match(store, /workspaceContentOpenMode: "split"/);
-  assert.match(store, /workspaceSplitOrientation: "horizontal"/);
   assert.match(settingsModal, /workspaceContentOpenMode/);
-  assert.match(settingsModal, /workspaceSplitOrientation/);
   assert.match(zh, /"settings\.workspaceContentOpenMode"/);
   assert.match(en, /"settings\.workspaceContentOpenMode"/);
+  // 分屏方向设置已移除：中间栏固定左右分屏，不允许上下分屏
+  assert.doesNotMatch(settings, /WorkspaceSplitOrientation/);
+  assert.doesNotMatch(settings, /workspaceSplitOrientation/);
+  assert.doesNotMatch(store, /workspaceSplitOrientation/);
+  assert.doesNotMatch(settingsModal, /workspaceSplitOrientation/);
+  assert.doesNotMatch(app, /workspaceSplitOrientation/);
+  assert.doesNotMatch(zh, /workspaceSplitOrientation/);
+  assert.doesNotMatch(en, /workspaceSplitOrientation/);
   assert.match(surfaces, /\.workbench-stage\s*\{/);
   assert.match(surfaces, /\.workbench-stage-split/);
   assert.match(surfaces, /\.workbench-stage\s*>\s*\.session-tabs-bar/);
@@ -48,6 +52,9 @@ test("WorkbenchStage hosts session + content with collapse-safe maximize", () =>
   assert.match(stage, /panel\.expand\(\)/);
   assert.match(stage, /chrome\?:/);
   assert.match(stage, /from "\.\.\/\.\.\/\.\.\/\.\.\/shared\/types"/);
+  // 分屏固定左右：不接受 props.orientation，面板组硬编码 horizontal，无 vertical 分支
+  assert.doesNotMatch(stage, /props\.orientation/);
+  assert.match(stage, /orientation="horizontal"/);
   assert.match(app, /<WorkbenchStage/);
   assert.match(app, /workbenchHasContent/);
   assert.match(app, /WorkbenchContent/);

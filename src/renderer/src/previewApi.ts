@@ -118,7 +118,6 @@ let previewSettings: AppSettings = {
 	rpcTimeout: 600_000,
 	linkOpenMode: "external",
 	workspaceContentOpenMode: "split",
-	workspaceSplitOrientation: "horizontal",
 	contentMaxWidth: 1800,
 	maxEditorFileSizeMB: 5,
 	externalEditors: createDefaultExternalEditorSettings(),

@@ -517,7 +517,6 @@ export function App() {
     rpcTimeout: 600_000,
     linkOpenMode: "external",
     workspaceContentOpenMode: "split",
-    workspaceSplitOrientation: "horizontal",
     contentMaxWidth: 1800,
     maxEditorFileSizeMB: 5,
     externalEditors: createDefaultExternalEditorSettings(),
@@ -2814,7 +2813,6 @@ export function App() {
     <WorkbenchStage
       chrome={sessionTabsBarNode}
       layout={workbenchLayout}
-      orientation={settings.workspaceSplitOrientation ?? "horizontal"}
       hasContent={workbenchHasContent}
       session={chatPaneSessionNode}
       content={workbenchContentNode}

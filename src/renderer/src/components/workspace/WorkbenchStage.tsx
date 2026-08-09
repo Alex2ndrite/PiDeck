@@ -5,15 +5,11 @@ import {
 	ResizablePanel,
 	ResizablePanelGroup,
 } from "../ui-shadcn/resizable";
-import type {
-	WorkspaceContentOpenMode,
-	WorkspaceSplitOrientation,
-} from "../../../../shared/types";
+import type { WorkspaceContentOpenMode } from "../../../../shared/types";
 
 export type WorkbenchStageProps = {
 	/** 无内容时只渲染 session；有内容时按 layout 分屏或占满中间栏 */
 	layout: WorkspaceContentOpenMode;
-	orientation: WorkspaceSplitOrientation;
 	hasContent: boolean;
 	/**
 	 * 顶栏 chrome（SessionTabsBar）。必须挂在分屏之上，才能与文件 Tab
@@ -29,7 +25,7 @@ export type WorkbenchStageProps = {
  *
  * - 顶栏 chrome（会话 + 文件 Tab）始终在分屏外
  * - 无内容：会话独占（与改版前一致）
- * - split：可拖拽分屏（左右 / 上下）
+ * - split：可拖拽分屏（固定左右，不做上下分屏）
  * - maximize：内容占满中间栏；会话面板 collapse(0) 但保持挂载，避免丢滚动/流式状态
  *
  * 浏览器仍在右侧抽屉，不进入本宿主。
@@ -47,16 +43,14 @@ export function WorkbenchStage(props: WorkbenchStageProps) {
 		} catch {
 			// 面板尚未注册到 Group 时 resize API 可能抛错，下一帧布局会自愈
 		}
-	}, [props.hasContent, props.layout, props.orientation]);
+	}, [props.hasContent, props.layout]);
 
 	const body =
 		!props.hasContent || !props.content ? (
 			props.session
 		) : (
 			<ResizablePanelGroup
-				orientation={
-					props.orientation === "vertical" ? "vertical" : "horizontal"
-				}
+				orientation="horizontal"
 				className="workbench-stage-split"
 			>
 				{/* 尺寸统一用字符串百分比（"48%"）而非数字：react-resizable-panels v4 的
@@ -83,13 +77,7 @@ export function WorkbenchStage(props: WorkbenchStageProps) {
 					defaultSize="52%"
 					className="workbench-content-pane"
 				>
-					<div
-						className={
-							props.orientation === "vertical"
-								? "workbench-content-frame workbench-content-frame-vertical"
-								: "workbench-content-frame workbench-content-frame-horizontal"
-						}
-					>
+					<div className="workbench-content-frame">
 						{props.content}
 					</div>
 				</ResizablePanel>

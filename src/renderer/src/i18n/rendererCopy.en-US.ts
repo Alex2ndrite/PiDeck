@@ -1852,10 +1852,6 @@ export const enUS: Record<TranslationKey, string> = {
   "settings.workspaceContentOpenModeDesc": "When opening from the file tree or Git, default to a middle-pane split or fill the middle pane.",
   "settings.workspaceContentOpenMode.split": "Split by default",
   "settings.workspaceContentOpenMode.maximize": "Fill middle pane by default",
-  "settings.workspaceSplitOrientation": "Split orientation",
-  "settings.workspaceSplitOrientationDesc": "How the session and content panes are arranged when split.",
-  "settings.workspaceSplitOrientation.horizontal": "Side by side",
-  "settings.workspaceSplitOrientation.vertical": "Stacked",
   "settings.maxEditorFileSize": "Max editor file size (MB)",
   "settings.maxEditorFileSizeDesc": "Files larger than this won't load the editor. Default 5MB",
   "settings.localWebHint":

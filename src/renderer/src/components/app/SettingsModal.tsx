@@ -534,10 +534,6 @@ function SettingsModalContent(props: SettingsModalProps) {
 		{ value: "split", label: t("settings.workspaceContentOpenMode.split") },
 		{ value: "maximize", label: t("settings.workspaceContentOpenMode.maximize") },
 	];
-	const workspaceSplitOrientationOptions = [
-		{ value: "horizontal", label: t("settings.workspaceSplitOrientation.horizontal") },
-		{ value: "vertical", label: t("settings.workspaceSplitOrientation.vertical") },
-	];
 
 	const hasDirtyChanges = dirtyFields.size > 0;
 	// 代理 tab 仍展示未保存提示；实际保存/取消统一走全局草稿，避免旧 proxyDirty 局部状态残留。
@@ -866,34 +862,6 @@ function SettingsModalContent(props: SettingsModalProps) {
 											</Select>
 											<p className="text-caption text-muted-foreground">
 												{t("settings.workspaceContentOpenModeDesc")}
-											</p>
-										</div>
-									</div>
-									<div className="setting-field">
-										<span>
-											{t("settings.workspaceSplitOrientation")}
-											<DirtyMarker dirty={isDirty("workspaceSplitOrientation")} label={t("settings.workspaceSplitOrientation")} />
-										</span>
-										<div className="grid gap-1.5">
-											<Select
-												value={draftSettings.workspaceSplitOrientation ?? "horizontal"}
-												onValueChange={(value) =>
-													updateDraft({
-														workspaceSplitOrientation: value as AppSettings["workspaceSplitOrientation"],
-													})
-												}
-											>
-												<SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-												<SelectContent>
-													{workspaceSplitOrientationOptions.map((option) => (
-														<SelectItem key={option.value} value={option.value}>
-															{option.label}
-														</SelectItem>
-													))}
-												</SelectContent>
-											</Select>
-											<p className="text-caption text-muted-foreground">
-												{t("settings.workspaceSplitOrientationDesc")}
 											</p>
 										</div>
 									</div>

@@ -3942,14 +3942,10 @@ div.fixed.inset-0.z-50 {
   width: 100%;
   overflow: hidden;
   background: var(--color-bg-panel);
-}
-/* 自定义标题栏拖区由上方 session-tabs-bar 承担；阅读面已在 Tab 之下，
-   不再叠 padding-top，避免 Tab 与内容之间空出一条拖拽高度。 */
-.workbench-content-frame-horizontal {
+  /* 自定义标题栏拖区由上方 session-tabs-bar 承担；阅读面已在 Tab 之下，
+     不再叠 padding-top，避免 Tab 与内容之间空出一条拖拽高度。
+     分屏固定左右（不做上下分屏），内容区左侧贴会话面板加分隔线。 */
   border-left: 1px solid var(--color-border-subtle);
-}
-.workbench-content-frame-vertical {
-  border-top: 1px solid var(--color-border-subtle);
 }
 .workbench-content-frame > .file-diff-viewer {
   flex: 1 1 auto;

@@ -5,6 +5,7 @@ node_modules/
 out/
 dist/
 release/
+release-test/
 docs-site/.vitepress/cache/
 docs-site/.vitepress/dist/
 *.asar
