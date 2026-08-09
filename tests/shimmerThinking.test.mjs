@@ -60,8 +60,8 @@ test("ThinkingBlock 耗时改人性化 i18n 文案，不再裸显数字", () => 
 	)?.[0] ?? "";
 	assert.ok(block, "ThinkingBlock must exist");
 	assert.match(block, /thinking\.duration/);
-	// 耗时仍由 startedAt/endedAt 计算
-	assert.match(block, /formatDuration\(durationMs\)/);
+	// 耗时仍由 startedAt/endedAt 计算（c73f05c7 重构后变量名 durationMs → durationText）
+	assert.match(block, /formatDuration\(props\.endedAt - props\.startedAt\)/);
 });
 
 test("thinking.duration 文案中英同步", () => {

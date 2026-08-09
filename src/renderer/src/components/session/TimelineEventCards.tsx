@@ -391,8 +391,12 @@ export const ThinkingBlock = memo(
 						{hasEnded ? (
 							t("thinking.duration", { duration: durationText })
 						) : (
-							// 流式中：思考未结束，LiveDuration 实时计时
-							<LiveDuration startedAt={props.startedAt} isStreaming />
+							// 流式中：思考未结束，用同一「思考了 Xs」文案 + LiveDuration 实时跳动，
+							// 思考结束只是数字冻结，不会出现前缀/文案整体蹦出。
+							<>
+								{t("thinking.durationPrefix")}
+								<LiveDuration startedAt={props.startedAt} isStreaming />
+							</>
 						)}
 					</small>
 				)}

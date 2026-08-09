@@ -78,10 +78,14 @@ export const TurnRow = memo(
 	}, [editing]);
 
 	const isComplete = run.endedAt > 0;
+	// 结束判定不能依赖 isComplete：groupToolMessages 里 endedAt 永远是最后一条消息时间戳，
+	// 流式 run 也有空骨架消息（message_start/thinking 时创建），因此流式中 isComplete 恒为 true。
+	// 真实语义：agentRunning 期间（仅末轮）由 LiveDuration 实时计时，agent 空闲后才显示固定值。
+	const isRunLive = Boolean(props.agentRunning);
 	const duration = isComplete && run.startedAt > 0 ? run.endedAt - run.startedAt : 0;
-	// 耗时：结束后固定（endedAt - startedAt）；流式中（agentRunning）由 LiveDuration 实时增长
+	// 耗时：结束后固定（endedAt - startedAt）；流式中（isRunLive）由 LiveDuration 实时增长
 	const showDuration =
-		(isComplete && duration > 0) || (Boolean(props.agentRunning) && run.startedAt > 0);
+		(isComplete && !isRunLive && duration > 0) || (isRunLive && run.startedAt > 0);
 
 	// 扁平展示序列：Live 与 History 共用 msg-thinking-* 身份（liveThinkingId 命中即挂步）。
 	const displayItems = useMemo(
@@ -234,11 +238,11 @@ export const TurnRow = memo(
 					<time className="shrink-0 font-mono text-body leading-none">{formatTime(run.endedAt)}</time>
 					{showDuration && (
 						<span className="shrink-0 font-mono text-body leading-none text-muted-foreground">
-							{isComplete ? (
-								formatDuration(duration)
+							{isRunLive ? (
+								// 流式中：run 未结束，LiveDuration 实时计时（100ms 连续跳动）
+								<LiveDuration startedAt={run.startedAt} isStreaming />
 							) : (
-								// 流式中：run 未结束，LiveDuration 实时计时
-								<LiveDuration startedAt={run.startedAt} isStreaming={Boolean(props.agentRunning)} />
+								formatDuration(duration)
 							)}
 						</span>
 					)}

@@ -35,8 +35,8 @@ test("LiveDuration: live tick only while streaming, fixed after end", () => {
     "src/renderer/src/components/session/LiveDuration.tsx",
     "utf8",
   );
-  // 1s tick：仅 isStreaming 时启动 interval，结束/卸载清理
-  assert.match(source, /setInterval\(\(\) => setNow\(Date\.now\(\)\), 1000\)/);
+  // 100ms tick：仅 isStreaming 时启动 interval，结束/卸载清理
+  assert.match(source, /setInterval\(\(\) => setNow\(Date\.now\(\)\), 100\)/);
   assert.match(source, /if \(!props\.isStreaming\) return;/);
   assert.match(source, /clearInterval\(timer\)/);
   // 结束截止：endedAt > 0 时用固定差值，不再依赖 now
@@ -49,11 +49,13 @@ test("three duration call sites reuse LiveDuration", () => {
   const turnRow = readFileSync("src/renderer/src/components/session/turn/TurnRow.tsx", "utf8");
   const toolCard = readFileSync("src/renderer/src/components/session/ToolCallComponents.tsx", "utf8");
   const thinking = readFileSync("src/renderer/src/components/session/TimelineEventCards.tsx", "utf8");
-  // TurnRow run 耗时：流式中实时、结束截止
+  // TurnRow run 耗时：流式中实时（agentRunning 驱动，不依赖 endedAt）、结束截止
   assert.match(turnRow, /<LiveDuration[\s\S]*?startedAt=\{run\.startedAt\}/);
-  assert.match(turnRow, /isStreaming=\{Boolean\(props\.agentRunning\)\}/);
+  assert.match(turnRow, /isRunLive \?/);
   // ThinkingBlock 思考耗时（新架构在 TimelineEventCards.tsx）
   assert.match(thinking, /<LiveDuration[\s\S]*?startedAt=\{props\.startedAt\}/);
+  // 思考流式中即带「思考了」前缀（结束时不蹦文案）
+  assert.match(thinking, /thinking\.durationPrefix/);
   // ToolCard 工具耗时：running 时从消息时间戳实时计时
   assert.match(toolCard, /<LiveDuration[\s\S]*?startedAt=\{props\.message\.timestamp\}/);
 });

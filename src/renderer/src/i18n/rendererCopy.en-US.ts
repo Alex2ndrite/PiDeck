@@ -1933,6 +1933,7 @@ export const enUS: Record<TranslationKey, string> = {
   "message.busyGeneric": "Agent is currently busy, please try again later",
   "thinking.title": "Think",
   "thinking.duration": "Thought for {duration}",
+  "thinking.durationPrefix": "Thought for ",
   "thinking.expand": "Expand thinking",
   "thinking.collapse": "Collapse thinking",
   "branch.parent": "From: {title}",
