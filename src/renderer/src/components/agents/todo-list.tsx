@@ -367,24 +367,29 @@ export function TodoList({
                           }
                     }
                     className={cn(
-                      "flex items-center rounded-xl px-1.5 py-1",
+                      // items-start：标题允许多行换行后，状态图标与 detail 顶部对齐首行（items-center
+                      // 会把图标/摘要垂直居中在整块多行文字上，视觉会偏下）。
+                      "flex items-start rounded-xl px-1.5 py-1",
                       // 官方 min-h-9/gap-2.5；compact 收紧垂直与横向间距（不破坏动画/可访问性）
                       compact ? "min-h-8 gap-2" : "min-h-9 gap-2.5",
                     )}
                   >
                     <TodoStatusIcon status={status} progress={item.progress} />
                     <span className="sr-only">{statusLabel(status)}: </span>
+                    {/* 标题允许多行换行显示全文：去掉官方单行 truncate，长文案（尤其 plan 步骤的完整描述）
+                        不再被省略号截断；flex-1 + min-w-0 保证行内可分配宽度并参与换行，
+                        break-words 兜底超长未断字符（如 URL）也能断行。 */}
                     <span
                       className={cn(
-                        "min-w-0 flex-1 truncate",
-                        compact ? "text-control" : "text-sm leading-5",
+                        "min-w-0 flex-1 break-words",
+                        compact ? "text-control leading-normal" : "text-sm leading-5",
                         status === "pending" && "text-muted-foreground/65",
                         status === "in-progress" && "text-foreground",
                         status === "completed" && "text-muted-foreground/60",
                         status === "cancelled" && "text-muted-foreground/55",
                       )}
                     >
-                      <span className="relative inline-block max-w-full">
+                      <span className="relative block min-w-0">
                         {item.title}
                         <motion.span
                           aria-hidden="true"
