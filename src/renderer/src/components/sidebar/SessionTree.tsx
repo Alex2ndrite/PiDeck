@@ -107,8 +107,9 @@ export function SessionTree(props: {
   const hasRows = catalogLoading || draftSessions.length > 0 || display.visibleChildren.length > 0 || display.hiddenChildCount > 0;
   if (!hasRows) return null;
 
-  /** 单击预览打开；双击常驻打开 */
-  const openSession = (sessionId: string, tabMode: "preview" | "permanent" = "preview") => {
+  /** 单击走设置默认模式（App 层读 sessionTabOpenMode）；双击显式常驻。
+   *  不设本地默认值：undefined 透传后由 App 的 sessions.open 用设置值兜底 */
+  const openSession = (sessionId: string, tabMode?: "preview" | "permanent") => {
     void props.actions.sessions.open(props.project.id, sessionId, tabMode);
   };
 
@@ -168,7 +169,7 @@ export function SessionTree(props: {
             session.id === props.currentSessionId && "active border-border-strong bg-accent/20 text-foreground shadow-sm",
           )}
           onContextMenu={(event) => openContext(event, session)}
-          onClick={() => openSession(session.id, "preview")}
+          onClick={() => openSession(session.id)}
           onDoubleClick={() => openSession(session.id, "permanent")}
           {...sessionDragProps(session.id)}
         >
@@ -217,7 +218,7 @@ export function SessionTree(props: {
               agentSession?.id === props.currentSessionId && "active border-border-strong bg-accent/20 text-foreground shadow-sm",
             )}
             onContextMenu={(event) => { event.preventDefault(); void props.controller.openMenu({ kind: "agent", agentId: child.agent.id, x: event.clientX, y: event.clientY }); }}
-            onClick={() => { if (agentSession) openSession(agentSession.id, "preview"); }}
+            onClick={() => { if (agentSession) openSession(agentSession.id); }}
             onDoubleClick={() => { if (agentSession) openSession(agentSession.id, "permanent"); }}
             {...(agentSession ? sessionDragProps(agentSession.id) : {})}
           >
@@ -247,7 +248,7 @@ export function SessionTree(props: {
             child.session.id === props.currentSessionId && "active border-border-strong bg-accent/20 text-foreground shadow-sm",
           )}
           onContextMenu={(event) => openContext(event, child.session)}
-          onClick={() => openSession(child.session.id, "preview")}
+          onClick={() => openSession(child.session.id)}
           onDoubleClick={() => openSession(child.session.id, "permanent")}
           {...sessionDragProps(child.session.id)}
         >
@@ -286,7 +287,7 @@ export function SessionTree(props: {
                 "session-row draft-session-trigger",
                 session.id === props.currentSessionId && "active border-border-strong bg-accent/20 text-foreground shadow-sm",
               )}
-              onClick={() => openSession(session.id, "preview")}
+              onClick={() => openSession(session.id)}
               onDoubleClick={() => openSession(session.id, "permanent")}
               {...sessionDragProps(session.id)}
             >

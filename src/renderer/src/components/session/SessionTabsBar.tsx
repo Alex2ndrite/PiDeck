@@ -57,10 +57,8 @@ import { SESSION_TAB_DRAG_MIME } from "../../utils/sessionSplitEdge";
  * 操作入口（融合对方收敛方案）：
  * - 每个会话 Tab 的下拉按钮（或右键）打开操作菜单：切换到该会话、固定、
  *   停止（关闭会话，仅当前 Tab）、重启（仅当前 Tab）、关闭/关闭其他/关闭全部；
- * - 激活指示条：贴 Tab 外框底边的弧形描边（两端圆角与 Tab 同半径 6px，
- *   盖在底边框线上随切换滑动）；颜色与 Tab 内左侧状态点一致
- *   （idle=蓝 / running=黄 / error=红），无状态时回退主题色 bg-primary。
- */
+ * - 当前 Tab 识别：背景浮起（bg-accent/20 + shadow-sm + 强边框），
+ *   与左侧 SessionTree 选中态同一套语义，不再画底部横条（曾因过粗被弃用）。
 
 /**
  * 会话状态 → AnimatedBadge 状态映射（颜色语义与用户约定一致）：
@@ -327,8 +325,9 @@ function EditorWorkbenchTab(props: {
       className={cn(
         "session-tab group relative flex h-7 shrink-0 cursor-pointer select-none items-center gap-1.5 rounded-md border px-2 text-caption transition-colors",
         "w-fit max-w-40",
+        // 选中态与侧栏 SessionTree 一致：背景浮起 + 强边框 + 轻阴影（浏览器 Tab 惯例）
         tab.active
-          ? "border-border bg-accent/10 font-medium text-foreground"
+          ? "border-border-strong bg-accent/20 font-medium text-foreground shadow-sm"
           : "border-transparent text-muted-foreground hover:bg-accent/50 hover:text-foreground",
         tab.preview && "italic font-normal text-muted-foreground",
       )}
@@ -441,8 +440,9 @@ function SessionTab(props: {
           // 短标题按内容收缩，长标题限制在 128px 内；关闭按钮仍保留固定空间，避免 tab 在 hover 时跳动。
           pinned ? "w-20" : "w-fit max-w-32",
           dragging && "opacity-50",
+          // 选中态与侧栏 SessionTree 一致：背景浮起 + 强边框 + 轻阴影
           active
-            ? "border-border bg-accent/10 font-medium text-foreground"
+            ? "border-border-strong bg-accent/20 font-medium text-foreground shadow-sm"
             : "border-transparent text-muted-foreground hover:bg-accent/50 hover:text-foreground",
           preview && "italic font-normal text-muted-foreground",
         )}

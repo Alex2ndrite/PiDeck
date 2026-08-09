@@ -97,6 +97,8 @@ export type UseSessionComposerControllerOptions = {
   sessionId: string;
   onOpenFile?: (path: string) => void;
   ensureSessionId?: (sessionId: string) => Promise<string>;
+  /** 用户主动发消息时回调（预览 Tab 晋升常驻）；来自 SessionPaneServices 装配。 */
+  onPromoteSession?: (sessionId: string) => void;
   /** Passed through to useSessionSend.enqueue. */
   enqueue?: (sessionId: string, snapshot: EnqueuePromptSnapshot) => boolean;
 };
@@ -981,8 +983,15 @@ export function useSessionComposerController(
       clear: () => setAttachments([]),
     },
     delivery: {
-      send: () => void send(isBusy ? "steer" : undefined),
-      followUp: () => void send("followUp"),
+      // 发送/追问都算主动交互：先把预览 Tab 晋升常驻，再投递（幂等，非预览无副作用）
+      send: () => {
+        options.onPromoteSession?.(sessionId);
+        void send(isBusy ? "steer" : undefined);
+      },
+      followUp: () => {
+        options.onPromoteSession?.(sessionId);
+        void send("followUp");
+      },
       abort: () => void abort(),
       compact: () => void compact(),
       unknown: sendState.status === "unknown",

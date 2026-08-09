@@ -24,6 +24,8 @@ export type LinkOpenMode = "external" | "internal";
 export type WorkspaceContentOpenMode = "split" | "maximize";
 /** 中间栏分屏方向：horizontal=左右，vertical=上下 */
 export type WorkspaceSplitOrientation = "horizontal" | "vertical";
+/** 会话 Tab 打开模式：preview=单击为临时预览（发消息后自动晋升常驻），permanent=单击即常驻共存 */
+export type SessionTabOpenMode = "preview" | "permanent";
 export type AppFontSizeMode = "compact" | "default" | "medium" | "large" | "xlarge";
 export type AppFontBaseMode = "system" | "sans" | "serif" | "custom";
 export type AppFontMonoMode = "system-mono" | "custom";
@@ -36,7 +38,7 @@ export type StartupWindowMode =
 	| "normal-medium"
 	| "normal-compact";
 
-export type AppSettings = {
+	export type AppSettings = {
 	useNativeTitleBar: boolean;
 	showNativeMenu: boolean;
 	sendShortcut: SendShortcutMode;
@@ -59,6 +61,8 @@ export type AppSettings = {
 	piEnvironmentChecked: boolean;
 	/** 最近一次 pi 环境检测成功的结果缓存（命令路径 + 版本），打开设置直接显示，不重复检测 */
 	piInstall?: { command: string; version: string };
+	/** 会话 Tab 打开模式：preview=单击为临时预览（发消息后自动晋升常驻），permanent=单击即常驻共存 */
+	sessionTabOpenMode: SessionTabOpenMode;
 	/** 是否启用会话右侧的 Git 源代码管理入口与面板，默认开启以保持升级前行为。 */
 	enableGitManagement: boolean;
 	/** Git 提交摘要生成提示词模板，{diff} 会被替换为实际 diff 内容 */

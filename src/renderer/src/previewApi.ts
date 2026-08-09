@@ -87,6 +87,7 @@ let previewSettings: AppSettings = {
 	language: "system",
 	startupWindowMode: "last",
 	piEnvironmentChecked: true,
+	sessionTabOpenMode: "preview",
 	enableGitManagement: true,
 	gitCommitMessagePrompt: "",
 	gitCommitMessageProvider: "",

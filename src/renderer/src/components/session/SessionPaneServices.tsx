@@ -15,6 +15,8 @@ import type { NoticeId } from "../../utils/notice";
  * 身份（sessionId / focused）不进这里，避免大 props 袋透传。
  */
 export type SessionPaneServices = {
+  /** 把某会话从预览 Tab 晋升为常驻 Tab（发消息等主动交互时调用；非预览时幂等） */
+  promoteSessionToPermanent: (sessionId: string) => void;
   isLanWeb: boolean;
   showToast: (msg: string, dur?: number) => void;
   onOpenFile: (path: string) => void;

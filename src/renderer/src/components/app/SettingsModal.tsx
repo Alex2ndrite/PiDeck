@@ -569,11 +569,28 @@ function SettingsModalContent(props: SettingsModalProps) {
 						<TabsContent value="common" className="settings-panel min-w-0">
 							<>
 								<SettingsSection title={t("settings.interface")}>
-									<div className="setting-field">
-										<span>
-											{t("settings.language")}
-											<DirtyMarker dirty={isDirty("language")} label={t("settings.language")} />
-										</span>
+								<div className="setting-field">
+									<span>
+										{t("settings.sessionTabOpenMode")}
+										<DirtyMarker dirty={isDirty("sessionTabOpenMode")} label={t("settings.sessionTabOpenMode")} />
+									</span>
+									<div className="grid gap-1.5">
+	<Select value={draftSettings.sessionTabOpenMode} onValueChange={(value) =>
+												updateDraft({ sessionTabOpenMode: value as AppSettings["sessionTabOpenMode"] })
+											}>
+		<SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+		<SelectContent>
+			<SelectItem value="preview">{t("settings.sessionTabOpenModePreview")}</SelectItem>
+			<SelectItem value="permanent">{t("settings.sessionTabOpenModePermanent")}</SelectItem>
+		</SelectContent>
+	</Select>
+</div>
+								</div>
+								<div className="setting-field">
+									<span>
+										{t("settings.language")}
+										<DirtyMarker dirty={isDirty("language")} label={t("settings.language")} />
+									</span>
 										<div className="grid gap-1.5">
 	<Select value={draftSettings.language} onValueChange={(value) =>
 												updateDraft({ language: value as AppSettings["language"] })
