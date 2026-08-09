@@ -3517,12 +3517,22 @@ export class AgentManager {
 			partialMessage && typeof partialMessage === "object"
 				? this.messageProjector.extractText((partialMessage as any).content)
 				: "";
+		// stopReason（provider 归一化）：message_start 骨架为 pending，message_end 更新为
+		// 真实值（stop/toolUse/aborted/error/length）。渲染层据此精确区分中间/最终回复。
+		const extractedStopReason =
+			partialMessage && typeof partialMessage === "object"
+				? String((partialMessage as any).stopReason ?? "") || undefined
+				: undefined;
 
 		if (existing) {
 			// 已有骨架：有抽出文本才覆盖；fallbackDelta 仅作追加兜底（终态路径）。
 			// thinking 不在此写入——仅 finalizeThinkingIntoMessage 在终态写一次。
 			if (extractedText || fallbackDelta) {
 				existing.text = extractedText || `${existing.text}${fallbackDelta}`;
+			}
+			// 终态（message_end）带真实 stopReason 时更新；骨架阶段（pending）不覆盖旧值。
+			if (extractedStopReason) {
+				existing.stopReason = extractedStopReason;
 			}
 			// 保留原始时间戳，不随 delta 刷新。
 			this.markMessagesDirtyFrom(agentId, existingIndex);
@@ -3536,6 +3546,7 @@ export class AgentManager {
 				role: "assistant",
 				text: text || "",
 				timestamp: Date.now(),
+				...(extractedStopReason ? { stopReason: extractedStopReason } : {}),
 			});
 			this.markMessagesDirtyFrom(agentId, list.length - 1);
 		}

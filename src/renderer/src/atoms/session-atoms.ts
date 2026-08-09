@@ -15,7 +15,13 @@ import type {
 import { mergeAgentRuntimeState } from "../utils/agentRuntimeState";
 import { sameProjectSessionList } from "../utils/sessionRecordIdentity";
 
-export const SESSION_MESSAGE_CACHE_LIMIT = 20;
+/**
+ * 渲染层会话消息缓存上限（LRU）。
+ * 20 → 8：日常场景（3 个分屏常驻 + 2 个预览 + 3 个切换缓冲）即可覆盖；
+ * 淘汰的会话切回时走激活分页（尾部 3 轮）重新拉取，成本可控，
+ * 而每条消息对象（含工具输出文本）常驻渲染层是内存大头。
+ */
+export const SESSION_MESSAGE_CACHE_LIMIT = 8;
 
 export type SessionRuntimeViewState = {
   agentId?: string;
@@ -221,6 +227,21 @@ export const liveThinkingIdBySessionIdAtomFamily = atomFamily((sessionId: string
   selectAtom(
     liveThinkingIdBySessionAtom,
     (map) => map[sessionId],
+    Object.is,
+  ),
+);
+
+/**
+ * 本会话「是否存在活动正文流」（streamingTextByIdAtom 单槽 streaming 位）。
+ * 输出稳定 boolean：流式期间 content 每 50ms 变化但 streaming 不变 → 引用不变 →
+ * TurnRow 零额外重渲染；仅在流开始/结束时触发订阅者。
+ * 用途：liveInterimId 要求活动流才挂 live——中间回复 message_end 后槽删（streaming=false）
+ * 立即落回容器内 settled，消除「双失明消失窗口」（live 读空 + 容器内被跳过）。
+ */
+export const liveTextStreamingBySessionAtom = atomFamily((sessionId: string) =>
+  selectAtom(
+    streamingTextByIdAtom,
+    (map) => map[sessionId]?.streaming === true,
     Object.is,
   ),
 );
@@ -1204,6 +1225,7 @@ export const removeSessionStateAtom = atom(null, (get, set, sessionId: string) =
   delete cache[sessionId];
   set(sessionMessagesCacheAtom, cache);
   clearSessionLiveThinking(get, set, sessionId);
+  liveTextStreamingBySessionAtom.remove(sessionId);
   set(streamingTextByIdAtom, (prevMap) => {
     if (!(sessionId in prevMap)) return prevMap;
     const nextMap = { ...prevMap };

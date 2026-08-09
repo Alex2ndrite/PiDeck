@@ -108,6 +108,12 @@ export class AgentMessageProjector {
 					const thinking = this.extractThinking(typed.content);
 					// 无文本且无 thinking 时才是真正的空消息，跳过。
 					if (!text.trim() && !thinking?.trim()) return [];
+					// stopReason（provider 归一化）：历史 JSONL 已持久化，
+					// 渲染层据此精确区分中间/最终回复（与 live 路径同源）。
+					const stopReason =
+						typeof typed.stopReason === "string" && typed.stopReason
+							? typed.stopReason
+							: undefined;
 					return [{
 						id: `${agentId}-history-${currentEntryId ?? index}`,
 						agentId,
@@ -119,6 +125,7 @@ export class AgentMessageProjector {
 							_piDeckMsgSeq: index,
 						},
 						...(thinking ? { thinking } : {}),
+						...(stopReason ? { stopReason } : {}),
 					}];
 				}
 				if (typed.role === "toolResult") {

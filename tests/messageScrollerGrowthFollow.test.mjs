@@ -157,3 +157,46 @@ test("timeline controller restores via engine restoreAt and keeps negative offse
   // autoScroll 初始值按锚点决定：有锚点不跟底，避免第一帧滚底再纠正
   assert.match(source, /return !store\.get\(sessionScrollAnchorByIdAtom\)\[sessionId\];/);
 });
+
+// 中间回复「消失→回来」循环的根因修复：live 挂载点必须要求「活动正文流」。
+// 中间回复 message_end 后槽删（streaming=false）→ 不再挂 live → 落回容器内 settled，
+// 消除双失明窗口（live 读空 + 容器内被跳过）；下一条 assistant 出现前不会空白。
+test("TurnRow liveInterimId requires an active text stream", () => {
+  const turnSource = readFileSync(
+    "src/renderer/src/components/session/turn/TurnRow.tsx",
+    "utf8",
+  );
+  // 订阅「活动流」派生 atom（稳定 boolean：流式期间 content 变化不触发重渲染）
+  assert.match(turnSource, /liveTextStreamingBySessionAtom\(props\.sessionId\)/);
+  assert.match(turnSource, /if \(!liveTextActive\) return undefined;/);
+  // 派生 atom 输出 streaming 位（session 级单槽），false 时立即落回 settled
+  const atomsSource = readFileSync(
+    "src/renderer/src/atoms/session-atoms.ts",
+    "utf8",
+  );
+  assert.match(atomsSource, /liveTextStreamingBySessionAtom = atomFamily/);
+  assert.match(atomsSource, /map\[sessionId\]\?\.streaming === true/);
+  // 会话移除时成对清理 family（防 atomFamily Map 泄漏）
+  assert.match(atomsSource, /liveTextStreamingBySessionAtom\.remove\(sessionId\)/);
+});
+
+// stopReason 协议信号：主进程两处提取（live upsert + 历史回放），渲染层按
+// stop/toolUse 精确区分中间回复与最终回复（message_end 即确定，永不反复）。
+test("stopReason flows from RPC message_end into ChatMessage", () => {
+  const agentSource = readFileSync("src/main/pi/AgentManager.ts", "utf8");
+  // live 路径：message_end 更新真实 stopReason，骨架阶段不覆盖旧值
+  assert.match(agentSource, /extractedStopReason/);
+  assert.match(agentSource, /partialMessage as any\)\.stopReason/);
+  assert.match(agentSource, /existing\.stopReason = extractedStopReason/);
+  // 历史回放路径：JSONL 持久化的 stopReason 透传
+  const projectorSource = readFileSync("src/main/pi/AgentMessageProjector.ts", "utf8");
+  assert.match(projectorSource, /typeof typed\.stopReason === "string"/);
+  assert.match(projectorSource, /stopReason \? \{ stopReason \} : \{\}\)/);
+  // 渲染层判定：stop=final（协议优先），无字段回退启发式
+  const buildSource = readFileSync(
+    "src/renderer/src/components/session/timeline/buildTurnDisplay.ts",
+    "utf8",
+  );
+  assert.match(buildSource, /item\.message\.stopReason === "stop"/);
+  assert.match(buildSource, /!item\.message\.stopReason/);
+});

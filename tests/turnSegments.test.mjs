@@ -287,3 +287,87 @@ test("groupToolMessages 不合并连续 assistant 消息：多段回答各自独
 	assert.equal(run.items[0].message.thinking, "T1");
 	assert.equal(run.items[1].message.thinking, "T2");
 });
+
+/* ── stopReason 协议信号判定（2026-08 升级）──
+ * pi RPC message_end 携带 provider 归一化 stopReason：
+ * stop=最终回复 / toolUse=中间回复（工具调用回合）/ pending=message_start 占位。
+ * 渲染层优先用协议信号（message_end 即确定、永不反复），无字段时回退启发式。 */
+
+function messageWithStopReason(text, stopReason) {
+	seq += 1;
+	return {
+		id: `a-${seq}`,
+		agentId: "agent",
+		role: "assistant",
+		text,
+		timestamp: seq,
+		stopReason,
+	};
+}
+
+test("stopReason=stop：即使 run 以工具收尾（steer 排队后模型回应），该条也是最终回答", () => {
+	// 真实 steer 场景（抓取验证）：中间回复(toolUse) → 工具 → 用户 steer → stop 回应
+	const run = runOf([
+		{ kind: "message", message: messageWithStopReason("中间回复", "toolUse") },
+		toolGroup(),
+		{ kind: "message", message: messageWithStopReason("最终总结", "stop") },
+	]);
+	const items = buildTurnDisplay(run, { showThinking: true });
+	assert.deepEqual(outline(items), ["interim:中间回复", "tool", "final:最终总结"]);
+	assert.equal(items[0].kind, "interim-answer");
+	assert.equal(items[2].kind, "final-answer");
+});
+
+test("stopReason=toolUse：即使它是 run 最后一条 assistant，也永不提升为最终回答", () => {
+	// 关键新行为：协议信号优先于「最后一条 + 收尾条目」启发式。
+	// 纯工具回合（空文本）与带文本中间回复的 stopReason 都是 toolUse。
+	const runWithText = runOf([
+		{ kind: "message", message: messageWithStopReason("我查一下", "toolUse") },
+	]);
+	const items = buildTurnDisplay(runWithText, { showThinking: true });
+	assert.equal(items[0].kind, "interim-answer");
+
+	// 空文本纯工具回合：同样不提升（旧启发式会把空骨架提升为空 final）
+	const runEmpty = runOf([
+		{ kind: "message", message: messageWithStopReason("", "toolUse") },
+	]);
+	const itemsEmpty = buildTurnDisplay(runEmpty, { showThinking: true });
+	assert.equal(itemsEmpty[0].kind, "interim-answer");
+});
+
+test("stopReason=pending/aborted/error：一律中间回答，不常驻", () => {
+	for (const reason of ["pending", "aborted", "error", "length"]) {
+		const run = runOf([
+			{ kind: "message", message: messageWithStopReason("被打断的文本", reason) },
+		]);
+		const items = buildTurnDisplay(run, { showThinking: true });
+		assert.equal(
+			items[0].kind,
+			"interim-answer",
+			`stopReason=${reason} 不应提升为 final-answer`,
+		);
+	}
+});
+
+test("stopReason 缺失（旧数据）：回退「最后一条 assistant 且收尾」启发式", () => {
+	// 无字段消息保持旧行为：收尾提升、后随工具不提升
+	const runTail = runOf([{ kind: "message", message: assistantMessage("旧总结") }]);
+	assert.equal(buildTurnDisplay(runTail, { showThinking: true })[0].kind, "final-answer");
+	const runMid = runOf([
+		{ kind: "message", message: assistantMessage("旧中间回复") },
+		toolGroup(),
+	]);
+	assert.equal(buildTurnDisplay(runMid, { showThinking: true })[0].kind, "interim-answer");
+});
+
+test("流式中（isComplete=false）：stopReason=stop 的消息也暂不提升（run 未结束不可定论）", () => {
+	// 流式中 run 未收尾：即使某条消息 stopReason=stop（如工具回合的临时结束），
+	// 也不能提前常驻——最终回答资格必须等 run 结束确认。
+	const run = runOf([
+		{ kind: "message", message: messageWithStopReason("中间回复", "toolUse") },
+		{ kind: "message", message: messageWithStopReason("暂时结尾", "stop") },
+	]);
+	const items = buildTurnDisplay(run, { isComplete: false, showThinking: true });
+	assert.equal(items[0].kind, "interim-answer");
+	assert.equal(items[1].kind, "interim-answer");
+});

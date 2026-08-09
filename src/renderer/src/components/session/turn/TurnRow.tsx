@@ -1,6 +1,8 @@
 import { Fragment, memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ChevronUp, Share, SquarePen, Trash } from "lucide-react";
+import { atom, useAtomValue } from "jotai";
 import type { ImageContent } from "../../../../../shared/types";
+import { liveTextStreamingBySessionAtom } from "../../../atoms/session-atoms";
 import { t } from "../../../i18n";
 import { Button } from "../../ui-shadcn/button";
 import { Collapsible, CollapsibleContent } from "../../ui-shadcn/collapsible";
@@ -21,6 +23,9 @@ import { ThinkingStep } from "./ThinkingStep";
 import { ToolStep } from "./ToolStep";
 import { useTurnExecution } from "./useTurnExecution";
 import type { DiffFileHandler } from "../ToolCallComponents";
+
+/** sessionId 为空时的占位 atom：恒 false（无会话不挂 live）。 */
+const NO_LIVE_TEXT_ATOM = atom(false);
 
 /**
  * 一轮 AI 回答的扁平容器：左侧竖线聚合，内含思考/工具/回答。
@@ -111,8 +116,15 @@ export const TurnRow = memo(
 	}, [displayItems]);
 
 	// 末条 Live 正文：挂在折叠容器外常显（避免 Radix Collapsible 卸载/收起导致无 DOM）。
+	// 要求「存在活动正文流」才挂 live：中间回复 message_end 后槽删（streaming=false）
+	// 立即落回容器内 settled，消除双失明消失窗口（live 读空 + 容器内被跳过）；
+	// 流式期间 content 每 50ms 变化但 streaming 不变 → 派生 boolean 引用稳定 → 零额外重渲染。
+	const liveTextActive = useAtomValue(
+		props.sessionId ? liveTextStreamingBySessionAtom(props.sessionId) : NO_LIVE_TEXT_ATOM,
+	);
 	const liveInterimId = useMemo(() => {
 		if (!props.sessionId || !lastInterimId) return undefined;
+		if (!liveTextActive) return undefined;
 		const last = displayItems.find(
 			(item) => item.kind === "interim-answer" && item.id === lastInterimId,
 		);
@@ -126,6 +138,7 @@ export const TurnRow = memo(
 		props.isStreaming,
 		lastInterimId,
 		displayItems,
+		liveTextActive,
 	]);
 
 	// live plain 卸下 → settled Markdown 挂上：只给刚卸下的那条 id 打一次 settle 淡入。

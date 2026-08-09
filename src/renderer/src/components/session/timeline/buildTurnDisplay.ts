@@ -119,7 +119,18 @@ export function buildTurnDisplay(
 			items.push({ kind: "interim-answer", id: item.message.id, message: item.message });
 			return;
 		}
-		if (isComplete && index === lastAssistantIndex && index === run.items.length - 1) {
+		// 最终回答判定（优先协议信号，回退启发式）：
+		// - message.stopReason === "stop"：pi RPC message_end 的 provider 归一化枚举，
+		//   message_end 时即确定、永不反复（steer 排队的中间回复恒为 toolUse，不会误提升）；
+		// - 无 stopReason（历史旧数据/旧版本）：回退「最后一条 assistant 且为 run 收尾条目」启发式。
+		const isProtocolFinal =
+			isComplete && item.message.stopReason === "stop";
+		const isFallbackFinal =
+			isComplete &&
+			!item.message.stopReason &&
+			index === lastAssistantIndex &&
+			index === run.items.length - 1;
+		if (isProtocolFinal || isFallbackFinal) {
 			items.push({ kind: "final-answer", id: item.message.id, message: item.message });
 		} else {
 			items.push({ kind: "interim-answer", id: item.message.id, message: item.message });

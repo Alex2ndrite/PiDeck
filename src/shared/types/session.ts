@@ -24,6 +24,13 @@ export type ChatMessage = {
 	thinkingStartedAt?: number;
 	/** 思考段结束时间（可选；缺省回退 message.timestamp） */
 	thinkingEndedAt?: number;
+	/**
+	 * pi RPC message_end 的 stopReason（provider 归一化枚举）：
+	 * stop=最终回复 / toolUse=中间回复（工具调用回合）/ aborted=被打断 /
+	 * error|length=异常截断 / pending=message_start 占位（结束时更新为真实值）。
+	 * 历史会话/旧版本数据可能缺失，渲染层需回退启发式判定。
+	 */
+	stopReason?: string;
 };
 
 /** A bounded historical timeline slice. `nextBefore` is the exclusive index for an older page. */
