@@ -325,6 +325,8 @@ export function UsageStatsTab() {
             {t("usageStats.empty.title")}
             <br />
             <small>{t("usageStats.empty.desc")}</small>
+            <br />
+            <small>{t("usageStats.empty.backfill")}</small>
           </div>
         )}
         {(phase === "ready" || phase === "missing") && (
