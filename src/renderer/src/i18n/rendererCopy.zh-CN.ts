@@ -1496,6 +1496,7 @@ export const zhCN = {
   "settings.tabs.pet": "桌面宠物",
   "settings.tabs.petDesc": "在桌面悬浮显示 Agent 状态",
   "settings.tabs.storage": "缓存与日志",
+  "settings.tabs.usage": "用量统计",
   "settings.tabs.storageDesc": "管理应用和 RPC 日志文件",
   "settings.pet.title": "桌面宠物",
   "settings.petSection": "桌面宠物",

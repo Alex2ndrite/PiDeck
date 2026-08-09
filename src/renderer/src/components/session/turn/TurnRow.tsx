@@ -5,6 +5,7 @@ import { t } from "../../../i18n";
 import { Button } from "../../ui-shadcn/button";
 import { Collapsible, CollapsibleContent } from "../../ui-shadcn/collapsible";
 import { formatDuration, formatTime, stripAnsi, stripThinkingTags } from "../TimelineFormat";
+import { LiveDuration } from "../LiveDuration";
 import { CopyMenu, stripMarkdown } from "../SurfaceComponents";
 import { buildTurnDisplay, hasFoldableContent } from "../timeline/buildTurnDisplay";
 import { buildProcessSummary } from "../timeline/segmentSummary";
@@ -78,7 +79,9 @@ export const TurnRow = memo(
 
 	const isComplete = run.endedAt > 0;
 	const duration = isComplete && run.startedAt > 0 ? run.endedAt - run.startedAt : 0;
-	const showDuration = isComplete && duration > 0;
+	// 耗时：结束后固定（endedAt - startedAt）；流式中（agentRunning）由 LiveDuration 实时增长
+	const showDuration =
+		(isComplete && duration > 0) || (Boolean(props.agentRunning) && run.startedAt > 0);
 
 	// 扁平展示序列：Live 与 History 共用 msg-thinking-* 身份（liveThinkingId 命中即挂步）。
 	const displayItems = useMemo(
@@ -231,7 +234,12 @@ export const TurnRow = memo(
 					<time className="shrink-0 font-mono text-body leading-none">{formatTime(run.endedAt)}</time>
 					{showDuration && (
 						<span className="shrink-0 font-mono text-body leading-none text-muted-foreground">
-							{formatDuration(duration)}
+							{isComplete ? (
+								formatDuration(duration)
+							) : (
+								// 流式中：run 未结束，LiveDuration 实时计时
+								<LiveDuration startedAt={run.startedAt} isStreaming={Boolean(props.agentRunning)} />
+							)}
 						</span>
 					)}
 				</div>

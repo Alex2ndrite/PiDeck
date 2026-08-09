@@ -1522,6 +1522,7 @@ export const enUS: Record<TranslationKey, string> = {
   "settings.tabs.pet": "Desktop Pet",
   "settings.tabs.petDesc": "Show Agent status as a floating pet",
   "settings.tabs.storage": "Storage & Logs",
+  "settings.tabs.usage": "Usage Stats",
   "settings.tabs.storageDesc": "Manage app and RPC log files",
   "settings.pet.title": "Desktop Pet",
   "settings.petSection": "Desktop Pet",

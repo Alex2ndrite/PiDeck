@@ -11,11 +11,13 @@ import {
 	Brush,
 	Minus,
 	Plus,
+	ChartColumnBig,
 } from "lucide-react";
 import { t } from "../../i18n";
 import { desktopApi } from "../../desktopApi";
 import { ACCENT_PRESETS } from "../../themePresets";
 import { Button } from "../ui-shadcn/button";
+import { UsageStatsTab } from "./settings/UsageStatsTab";
 import {
 	Select,
 	SelectContent,
@@ -54,7 +56,7 @@ const ZOOM_FACTOR_MIN = 0.8;
 const ZOOM_FACTOR_MAX = 1.5;
 const ZOOM_FACTOR_STEP = 0.05;
 
-type SettingsTabId = "common" | "appearance" | "proxy" | "dev" | "pet" | "storage";
+type SettingsTabId = "common" | "appearance" | "proxy" | "dev" | "pet" | "storage" | "usage";
 
 /** 代理相关字段：用于判断代理 tab 是否有未保存变更。 */
 const PROXY_FIELDS: (keyof AppSettings)[] = [
@@ -465,6 +467,11 @@ function SettingsModalContent(props: SettingsModalProps) {
 			id: "storage",
 			label: t("settings.tabs.storage"),
 			icon: <Trash2 size={16} />,
+		},
+		{
+			id: "usage",
+			label: t("settings.tabs.usage"),
+			icon: <ChartColumnBig size={16} />,
 		},
 	];
 	const themeOptions = [
@@ -1796,6 +1803,9 @@ function SettingsModalContent(props: SettingsModalProps) {
 								settings={draftSettings}
 								onChange={updateDraft}
 							/>
+						)}
+						{activeTab === "usage" && (
+							<UsageStatsTab />
 						)}
 					</div>
 				</div>
