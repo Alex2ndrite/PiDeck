@@ -357,4 +357,9 @@ export const ipcChannels = {
 	// ===== 内置浏览器 =====
 	browserOpenExternal: "browser:open-external",
 
+	// ===== 用量统计（usage-stats） =====
+	usageStatsDetect: "usage-stats:detect",
+	usageStatsRefresh: "usage-stats:refresh",
+	usageStatsGet: "usage-stats:get",
+
 } as const;

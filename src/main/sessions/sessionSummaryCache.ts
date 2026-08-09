@@ -40,8 +40,8 @@ export class SessionSummaryCache<V> {
   private loaded = false;
   private saving: Promise<void> | null = null;
 
-  constructor(fileName = "session-summary-cache.json") {
-    this.filePath = join(app.getPath("userData"), fileName);
+  constructor(fileName = "session-summary-cache.json", userDataDir?: string) {
+    this.filePath = join(userDataDir ?? app.getPath("userData"), fileName);
   }
 
   /** 启动时加载磁盘缓存；可重复调用，只执行一次 */

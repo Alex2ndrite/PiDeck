@@ -12,5 +12,6 @@ export * from "./types/prompts";
 export * from "./types/skills";
 export * from "./types/imports";
 export * from "./types/app";
+export * from "./types/usageStats";
 export * from "./types/processMetrics";
 export * from "./types/vision";

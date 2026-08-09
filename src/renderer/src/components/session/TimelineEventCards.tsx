@@ -7,6 +7,7 @@ import { Textarea } from "../ui-shadcn/textarea";
 import { StackTrace } from "../ui-shadcn/stack-trace";
 import { ApprovalCard } from "../ui-shadcn/approval-card";
 import { TimelineMarker } from "./TimelineMarker";
+import { LiveDuration } from "./LiveDuration";
 import { MarkdownStream } from "./MarkdownStream";
 import { ShimmerText } from "./ShimmerText";
 import { useSmoothStream } from "../../utils/useSmoothStream";
@@ -369,12 +370,13 @@ export const ThinkingBlock = memo(
 	}, [displayedContent, expanded]);
 
 	if (!props.showThinking || !props.text.trim()) return null;
-	// 计算思考耗时（毫秒），有 endAt 且有 startAt 时才显示
-	const durationMs =
-		props.endedAt && props.startedAt && props.endedAt >= props.startedAt
-			? props.endedAt - props.startedAt
+	// 思考耗时：结束固定（endedAt - startedAt）；流式中（isStreaming）由 LiveDuration 实时增长
+	const hasEnded =
+		props.endedAt && props.startedAt && props.endedAt >= props.startedAt;
+	const durationText =
+		hasEnded && props.endedAt != null && props.startedAt != null
+			? formatDuration(props.endedAt - props.startedAt)
 			: null;
-	const durationText = durationMs != null ? formatDuration(durationMs) : null;
 	// 展开/收起按钮：展开态常显（收起按钮），折叠态仅内容溢出时显示（展开按钮）
 	const showToggle = expanded || overflowing;
 	return (
@@ -384,9 +386,18 @@ export const ThinkingBlock = memo(
 			    只留图标+耗时，保持轨道安静（思考内容本身已有虚线框区分） */}
 			<div className="flex min-h-6 items-center gap-2 px-1">
 				<Brain size={15} className="shrink-0 text-text-secondary" aria-hidden="true" />
-				{durationText && (
+				{(hasEnded || props.isStreaming) && props.startedAt && (
 					<small className="shrink-0 font-mono text-micro tabular-nums text-text-tertiary">
-						{t("thinking.duration", { duration: durationText })}
+						{hasEnded ? (
+							t("thinking.duration", { duration: durationText })
+						) : (
+							// 流式中：思考未结束，用同一「思考了 Xs」文案 + LiveDuration 实时跳动，
+							// 思考结束只是数字冻结，不会出现前缀/文案整体蹦出。
+							<>
+								{t("thinking.durationPrefix")}
+								<LiveDuration startedAt={props.startedAt} isStreaming />
+							</>
+						)}
 					</small>
 				)}
 			</div>

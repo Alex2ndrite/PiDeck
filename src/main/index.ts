@@ -182,6 +182,8 @@ import { SkillManager } from "./skills/SkillManager";
 import { ExtensionManager } from "./extensions/ExtensionManager";
 import { ProjectResourceManager } from "./projects/ProjectResourceManager";
 import { registerProjectsIpc } from "./ipc/projectsIpc";
+import { registerUsageStatsIpc } from "./ipc/usageStatsIpc";
+import { UsageStatsService } from "./usageStats/UsageStatsService";
 import { readLastWindowBounds, saveLastWindowBounds } from "./windowState";
 import {
 	registerBackgroundImageProtocol,
@@ -266,6 +268,7 @@ let petSystem: PetSystem | null = null;
 let appLogger: AppLogger;
 let rpcLogger: RpcLogger;
 let feishuBridge: FeishuBridge | null = null;
+let usageStatsService: UsageStatsService | null = null;
 
 
 function sendSessionRuntimeEnvelope(event: SessionRuntimeEvent): void {
@@ -2085,6 +2088,9 @@ async function sendAgentPromptWithIntegrations(
 }
 
 function registerIpc() {
+	// 用量统计：业务在 UsageStatsService，handler 薄层只校验/适配
+	registerUsageStatsIpc(ipcMain, usageStatsService);
+
 	const catalogIdentityContext = () => {
 		const { wslEnabled, wslDistro, wslUser } = settingsStore.get();
 		return wslEnabled ? { wslDistro, wslUser } : {};
@@ -2353,6 +2359,15 @@ app.whenReady().then(async () => {
 	settingsStore = new SettingsStore();
 	appLogger = new AppLogger();
 	rpcLogger = new RpcLogger();
+	// 用量统计：数据源 = pi-tracker 写入的 <agentDir>/analytics/usage.jsonl
+	// （默认宿主 ~/.pi/agent；WSL 场景的目录同步暂按默认宿主处理）
+	usageStatsService = new UsageStatsService({
+		agentDir: join(app.getPath("home"), ".pi", "agent"),
+		logger: {
+			info: (message) => void appLogger?.info("usage-stats", message),
+			warn: (message) => void appLogger?.warn("usage-stats", message),
+		},
+	});
 	gitService = new GitService();
 	worktreeService = new WorktreeService(mainCopy);
 	piLocator = new PiLocator(mainCopy);

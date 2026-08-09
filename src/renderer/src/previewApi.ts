@@ -472,6 +472,21 @@ export function createPreviewApi(): PiDesktopApi {
 				value: { targetSessionId: `${target.sessionId}:copy` },
 			}),
 		},
+		usageStats: {
+			detect: async () => ({
+				installed: false,
+				logPath: null,
+				recordCount: null,
+				firstRecordAt: null,
+				lastRecordAt: null,
+			}),
+			refresh: async () => ({
+				fullRescan: false,
+				parsedRecords: 0,
+				skippedLines: 0,
+			}),
+			get: async () => null as unknown as import("../../shared/types").UsageAggregated,
+		},
 		codexSessions: {
 			scan: async () => [],
 			import: async () => ({ results: [], imported: 0, failed: 0 }),

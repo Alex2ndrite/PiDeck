@@ -515,6 +515,20 @@ const api = {
 				>
 			>,
 	},
+	usageStats: {
+		detect: () =>
+			ipcRenderer.invoke(ipcChannels.usageStatsDetect) as Promise<
+				import("../shared/types").UsageStatsDetectResult
+			>,
+		refresh: () =>
+			ipcRenderer.invoke(ipcChannels.usageStatsRefresh) as Promise<
+				import("../shared/types").UsageStatsRefreshResult
+			>,
+		get: () =>
+			ipcRenderer.invoke(ipcChannels.usageStatsGet) as Promise<
+				import("../shared/types").UsageAggregated
+			>,
+	},
 	codexSessions: {
 		scan: (projectId: string) =>
 			ipcRenderer.invoke(ipcChannels.codexSessionsScan, projectId) as Promise<

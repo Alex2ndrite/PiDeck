@@ -530,3 +530,67 @@ test("prependSessionHistoryPageAtom guards revision and cursor continuity, dedup
   assert.deepEqual([...entry().history.messages.map((m) => m.meta.entryId)], ["e0", "e1"]);
   assert.equal(entry().history.nextBefore, null);
 });
+
+test("saveSessionScrollAnchorAtom: per-session anchor save/clear with out-of-order protection", () => {
+  const store = createStore();
+  const atoms = loadAtoms();
+  const anchor = (savedAt, messageId = "m1") => ({
+    messageId,
+    offsetTop: 120,
+    visibleCount: 240,
+    savedAt,
+  });
+
+  // 初始无锚点
+  assert.equal(store.get(atoms.sessionScrollAnchorByIdAtom)["session-a"], undefined);
+
+  // 保存锚点
+  store.set(atoms.saveSessionScrollAnchorAtom, { sessionId: "session-a", anchor: anchor(100) });
+  assert.equal(store.get(atoms.sessionScrollAnchorByIdAtom)["session-a"].messageId, "m1");
+
+  // 更早的保存（savedAt 更小）不得覆盖更新的锚点（乱序滚动事件保护）
+  store.set(atoms.saveSessionScrollAnchorAtom, { sessionId: "session-a", anchor: anchor(50, "m-stale") });
+  assert.equal(store.get(atoms.sessionScrollAnchorByIdAtom)["session-a"].messageId, "m1");
+
+  // 更新的保存正常覆盖
+  store.set(atoms.saveSessionScrollAnchorAtom, { sessionId: "session-a", anchor: anchor(150, "m2") });
+  assert.equal(store.get(atoms.sessionScrollAnchorByIdAtom)["session-a"].messageId, "m2");
+
+  // 不同会话互不干扰
+  store.set(atoms.saveSessionScrollAnchorAtom, { sessionId: "session-b", anchor: anchor(80, "mb") });
+  assert.equal(store.get(atoms.sessionScrollAnchorByIdAtom)["session-a"].messageId, "m2");
+  assert.equal(store.get(atoms.sessionScrollAnchorByIdAtom)["session-b"].messageId, "mb");
+
+  // 传 null 清除（在底部跟流切走 → 切回继续跟底）
+  store.set(atoms.saveSessionScrollAnchorAtom, { sessionId: "session-a", anchor: null });
+  assert.equal(store.get(atoms.sessionScrollAnchorByIdAtom)["session-a"], undefined);
+  // 清除不误伤其他会话
+  assert.equal(store.get(atoms.sessionScrollAnchorByIdAtom)["session-b"].messageId, "mb");
+});
+
+test("saveSessionScrollAnchorAtom: identical content skips write (stable reference for subscribers)", () => {
+  const store = createStore();
+  const atoms = loadAtoms();
+  const anchor = (savedAt) => ({
+    messageId: "m1",
+    offsetTop: 120,
+    visibleCount: 240,
+    savedAt,
+  });
+
+  store.set(atoms.saveSessionScrollAnchorAtom, { sessionId: "session-a", anchor: anchor(100) });
+  const first = store.get(atoms.sessionScrollAnchorByIdAtom)["session-a"];
+  assert.equal(first.messageId, "m1");
+
+  // 内容相同（仅 savedAt 不同）：引用必须保持稳定，订阅者零重渲染
+  store.set(atoms.saveSessionScrollAnchorAtom, { sessionId: "session-a", anchor: anchor(200) });
+  assert.equal(store.get(atoms.sessionScrollAnchorByIdAtom)["session-a"], first);
+
+  // 内容变化（offsetTop 不同）：正常覆盖
+  store.set(atoms.saveSessionScrollAnchorAtom, {
+    sessionId: "session-a",
+    anchor: { messageId: "m1", offsetTop: 300, visibleCount: 240, savedAt: 300 },
+  });
+  assert.notEqual(store.get(atoms.sessionScrollAnchorByIdAtom)["session-a"], first);
+  assert.equal(store.get(atoms.sessionScrollAnchorByIdAtom)["session-a"].offsetTop, 300);
+});

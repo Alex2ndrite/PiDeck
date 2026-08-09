@@ -28,6 +28,7 @@ import { Badge } from "../ui-shadcn/badge";
 import { Button } from "../ui-shadcn/button";
 import type { ChatMessage } from "../../../../shared/types";
 import { TimelineMarker } from "./TimelineMarker";
+import { LiveDuration } from "./LiveDuration";
 import { getToolPhraseFromArgs } from "./timeline/toolPhrase";
 import { ToolResult } from "../agents/tool-result";
 import {
@@ -229,7 +230,7 @@ export const ToolCard = memo(function ToolCard(props: {
 		typeof props.message.meta?.durationMs === "number"
 			? props.message.meta.durationMs
 			: undefined;
-	const showDuration = status !== "running" && durationMs !== undefined;
+	const showDuration = durationMs !== undefined || status === "running";
 	// 模型用 read 工具读取 SKILL.md 来加载 skill：识别后以 skill 徽标样式渲染
 	const skillName = getReadSkillName(props.message);
 	const isSkillRead = Boolean(skillName);
@@ -305,7 +306,12 @@ export const ToolCard = memo(function ToolCard(props: {
 					{statusBadge}
 					{showDuration && (
 						<span className="shrink-0 font-mono text-micro tabular-nums text-text-tertiary" title={t("tool.durationTitle")}>
-							{formatDuration(durationMs)}
+							{status === "running" ? (
+								// 工具执行中：从消息时间戳起实时计时（LiveDuration 每秒刷新）
+								<LiveDuration startedAt={props.message.timestamp} isStreaming />
+							) : (
+								formatDuration(durationMs ?? 0)
+							)}
 						</span>
 					)}
 					{isAskCard && askCard?.question ? (

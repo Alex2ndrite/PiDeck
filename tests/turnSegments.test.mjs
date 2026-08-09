@@ -92,21 +92,67 @@ test("流式中间态：扁平序列严格按真实时序，不重排", () => {
 	const items = buildTurnDisplay(run, { showThinking: true });
 	assert.deepEqual(outline(items), [
 		"think:T1",
-		"final:段1",
+		"interim:段1",
 		"tool",
 		"think:T2",
 	]);
-	// 段1 是本轮唯一 assistant 文本 → final-answer（常驻）
-	assert.equal(items[1].kind, "final-answer");
+	// 段1 后随工具/思考条目（run 未收尾）→ 中间回复，不得提升为 final-answer
+	assert.equal(items[1].kind, "interim-answer");
 });
 
-test("中断的 run（回答后还有工具调用）：回答保持原位", () => {
+test("中断的 run（回答后还有工具调用）：回答是工具前的阶段性文本，不收尾不提升", () => {
 	const run = runOf([
 		{ kind: "message", message: assistantMessage("段1") },
 		toolGroup(),
 	]);
 	const items = buildTurnDisplay(run, { showThinking: true });
-	assert.deepEqual(outline(items), ["final:段1", "tool"]);
+	assert.deepEqual(outline(items), ["interim:段1", "tool"]);
+	// 段1 后随工具条目 → 中间回复，不能常驻折叠栏外
+	assert.equal(items[0].kind, "interim-answer");
+});
+
+test("steer 打断场景：中间回复（正文+工具）永不提升为最终回答", () => {
+	// 真实 steer 场景：模型先输出阶段性文本（如「两个问题：…」）再调工具，
+	// 用户消息打断后该 run 以工具条目收尾——文本只是工具调用前的说明。
+	const run = runOf([
+		{ kind: "message", message: assistantMessage("两个问题：缓存逻辑有设计缺陷…", "T1") },
+		toolGroup(),
+	]);
+	const items = buildTurnDisplay(run, { showThinking: true });
+	assert.deepEqual(outline(items), ["think:T1", "interim:两个问题：缓存逻辑有设计缺陷…", "tool"]);
+	assert.equal(items.some((item) => item.kind === "final-answer"), false);
+});
+
+test("run 收尾条目是 assistant 才提升：工具执行后的总结照常常驻", () => {
+	// 正常完成轮：工具先跑完，最后一条 assistant 是收尾条目 → 最终回答
+	const run = runOf([
+		toolGroup(),
+		{ kind: "message", message: assistantMessage("总结", "T2") },
+	]);
+	const items = buildTurnDisplay(run, { showThinking: true });
+	assert.deepEqual(outline(items), ["tool", "think:T2", "final:总结"]);
+	assert.equal(items[2].kind, "final-answer");
+});
+
+test("提升稳定性：收尾判定随 run 结构变化，不会提升后又反复", () => {
+	// [M1]：M1 收尾 → 提升
+	const run1 = runOf([{ kind: "message", message: assistantMessage("段1") }]);
+	assert.equal(buildTurnDisplay(run1, { showThinking: true })[0].kind, "final-answer");
+	// [M1, T1]：M1 后随工具 → 不提升
+	const run2 = runOf([
+		{ kind: "message", message: assistantMessage("段1") },
+		toolGroup(),
+	]);
+	assert.equal(buildTurnDisplay(run2, { showThinking: true })[0].kind, "interim-answer");
+	// [M1, T1, M2]：M2 收尾 → 提升；M1 始终是中间回复
+	const run3 = runOf([
+		{ kind: "message", message: assistantMessage("段1") },
+		toolGroup(),
+		{ kind: "message", message: assistantMessage("段2") },
+	]);
+	const items3 = buildTurnDisplay(run3, { showThinking: true });
+	assert.equal(items3[0].kind, "interim-answer");
+	assert.equal(items3[2].kind, "final-answer");
 });
 
 test("多段回答：中间回答与最终回答正确区分，各自思考插入到文本之前", () => {

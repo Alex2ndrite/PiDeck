@@ -118,6 +118,62 @@ export const sessionRuntimeUiByIdAtom = atom<Record<string, SessionRuntimeUiStat
 export const sessionCacheStatsAtom = atom<Record<string, { cacheHitHistory: number[] }>>({});
 export const SESSION_CACHE_STATS_LIMIT = 50;
 export const sessionMessagesCacheAtom = atom<Record<string, SessionMessageCacheEntry>>({});
+
+/**
+ * 会话切换时的滚动位置锚点（per-session，切走保存、切回恢复）。
+ * 只保存「非跟底」状态：用户正在查看历史时切走，回来时停留在原位置；
+ * 在底部跟流切走的会话不存锚点，切回继续跟底。
+ */
+export type SessionScrollAnchor = {
+	/** 锚点行 id（timeline 内 [data-message-id] 的值：可能是 run id 或消息 id） */
+	messageId: string;
+	/** 锚点行顶边相对视口顶部的偏移（px），恢复时按此对齐 */
+	offsetTop: number;
+	/** 切走时分页窗口大小（visibleCount），恢复历史窗口避免锚点被裁剪 */
+	visibleCount: number;
+	/** 保存时间戳，防止乱序事件用陈旧状态覆盖新状态 */
+	savedAt: number;
+};
+
+export const sessionScrollAnchorByIdAtom = atom<Record<string, SessionScrollAnchor>>({});
+
+/** 锚点内容比较：messageId/offsetTop/visibleCount 相同视为未变化（savedAt 不计入）。
+ *  滚动节流写入时，内容不变则跳过——引用稳定，订阅者不会因无效写入重渲染。 */
+export function sameSessionScrollAnchor(
+	a: SessionScrollAnchor | undefined,
+	b: SessionScrollAnchor | undefined,
+): boolean {
+	if (a === b) return true;
+	if (!a || !b) return false;
+	return (
+		a.messageId === b.messageId &&
+		a.offsetTop === b.offsetTop &&
+		a.visibleCount === b.visibleCount
+	);
+}
+
+/** 保存/清除某会话的滚动锚点。anchor 为 null 时清除（如回到底部或会话关闭）。
+ *  内容未变化时不写（保持引用稳定，避免订阅者无谓重渲染）；savedAt 乱序保护防陈旧覆盖。 */
+export const saveSessionScrollAnchorAtom = atom(
+	null,
+	(get, set, input: { sessionId: string; anchor: SessionScrollAnchor | null }) => {
+		const { sessionId, anchor } = input;
+		set(sessionScrollAnchorByIdAtom, (prevMap) => {
+			if (anchor === null) {
+				if (!(sessionId in prevMap)) return prevMap;
+				const nextMap = { ...prevMap };
+				delete nextMap[sessionId];
+				return nextMap;
+			}
+			const prev = prevMap[sessionId];
+			// 内容未变化：跳过写入（引用稳定，订阅者零重渲染）
+			if (prev && sameSessionScrollAnchor(prev, anchor)) return prevMap;
+			// 乱序写入保护：只有更新（时间戳更新）才覆盖，防止陈旧滚动事件覆盖新保存。
+			if (prev && prev.savedAt > anchor.savedAt) return prevMap;
+			return { ...prevMap, [sessionId]: anchor };
+		});
+	},
+);
 /**
  * 会话级独立流式正文（阶段1：学 Proma 独立存储）。
  * key: sessionId，value: { content, streaming }。
@@ -1149,6 +1205,12 @@ export const removeSessionStateAtom = atom(null, (get, set, sessionId: string) =
   set(sessionMessagesCacheAtom, cache);
   clearSessionLiveThinking(get, set, sessionId);
   set(streamingTextByIdAtom, (prevMap) => {
+    if (!(sessionId in prevMap)) return prevMap;
+    const nextMap = { ...prevMap };
+    delete nextMap[sessionId];
+    return nextMap;
+  });
+  set(sessionScrollAnchorByIdAtom, (prevMap) => {
     if (!(sessionId in prevMap)) return prevMap;
     const nextMap = { ...prevMap };
     delete nextMap[sessionId];
