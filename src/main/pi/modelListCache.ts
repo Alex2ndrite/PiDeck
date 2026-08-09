@@ -31,6 +31,8 @@ export const MODEL_LIST_FAST_ARGS = [
 /**
  * 解析 pi --list-models 的文本表格输出。
  * 表格格式：provider  model  context  max-out  thinking  images
+ * context/max-out 为人类可读 token 数（如 1M / 65.5K / 272K），解析为数字；
+ * thinking/images 为 yes/no。从右往左取后 4 列，避免 provider/model 列含空格时错位。
  */
 export function parsePiListModels(stdout: string): AvailableModel[] {
 	const lines = stdout.split(/\r?\n/).filter(Boolean);
@@ -39,20 +41,47 @@ export function parsePiListModels(stdout: string): AvailableModel[] {
 	const dataLines = lines.slice(1);
 	const models: AvailableModel[] = [];
 	for (const line of dataLines) {
-		const parts = line.trim().split(/\s+/);
+		const parts = line.trim().split(/\s+/).filter(Boolean);
 		if (parts.length < 3) continue;
-		const provider = parts[0];
-		const modelId = parts[1];
-		// thinking 和 images 在倒数第二列和最后一列
-		const thinking = parts[parts.length - 2]?.toLowerCase() === "yes";
-		models.push({
-			provider,
-			id: modelId,
-			name: `${provider}/${modelId}`,
-			reasoning: thinking,
-		});
+		if (parts.length >= 6) {
+			// 完整 6 列表格：后 4 列固定为 context/max-out/thinking/images
+			const tail = parts.slice(-4);
+			const provider = parts[0];
+			const modelId = parts[1];
+			models.push({
+				provider,
+				id: modelId,
+				name: `${provider}/${modelId}`,
+				contextWindow: parseTokenSize(tail[0] ?? ""),
+				maxTokens: parseTokenSize(tail[1] ?? ""),
+				reasoning: tail[2]?.toLowerCase() === "yes",
+				images: tail[3]?.toLowerCase() === "yes",
+			});
+		} else {
+			// 兼容旧格式（provider/model/thinking），仅解析可确认字段
+			models.push({
+				provider: parts[0],
+				id: parts[1],
+				name: `${parts[0]}/${parts[1]}`,
+				reasoning: parts[parts.length - 1]?.toLowerCase() === "yes",
+			});
+		}
 	}
 	return models;
+}
+
+/** 解析 pi 表格里的 token 数："1M"→1048576，"65.5K"→67109，"200K"→204800；解析失败返回 undefined。 */
+export function parseTokenSize(value: string): number | undefined {
+	const trimmed = value.trim();
+	if (!trimmed) return undefined;
+	const match = /^([\d.]+)([KkMm])?$/.exec(trimmed);
+	if (!match) return undefined;
+	const num = Number(match[1]);
+	if (!Number.isFinite(num) || num <= 0) return undefined;
+	const unit = match[2]?.toLowerCase();
+	if (unit === "k") return Math.round(num * 1024);
+	if (unit === "m") return Math.round(num * 1024 * 1024);
+	return Math.round(num);
 }
 
 /** fork pi --list-models 并解析（一次调用，带超时）。 */

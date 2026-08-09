@@ -51,3 +51,15 @@ export type VisionBridgeState = {
 	/** 配置文件所在目录（~/.pi/agent/ 或环境变量覆盖），UI 展示用 */
 	configDir: string;
 };
+
+/** 视觉桥运行日志（扩展 pi-deck-vision.ts 写入 pi-deck-vision.log，设置页诊断用）。
+ * 日志内容只含事件名/图片数/状态码/耗时，绝不含 apiKey/baseUrl。 */
+export type VisionLogInfo = {
+	/** 日志文件是否存在（从未转换过图片时可能不存在） */
+	exists: boolean;
+	/** 文件字节数 */
+	size: number;
+	/** 日志文本；过大时只返回尾部并标记 truncated */
+	content: string;
+	truncated: boolean;
+};

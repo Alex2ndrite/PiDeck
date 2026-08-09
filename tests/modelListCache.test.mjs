@@ -41,6 +41,47 @@ test("parsePiListModels parses table with provider/model/thinking", () => {
   assert.equal(models[1].reasoning, true);
 });
 
+test("parsePiListModels captures context/maxTokens/images columns", () => {
+  const stdout = [
+    "provider                  model                         context  max-out  thinking  images",
+    "商汤                        deepseek-v4-flash             1M       65.5K    yes       no",
+    "智谱                        glm-4v-flash                  128K     4.1K     no        yes",
+    "https://open.mwy.asia     gpt-5.6-luna                  272K     128K     yes       yes",
+  ].join("\n");
+  const models = parsePiListModels(stdout);
+  assert.equal(models.length, 3);
+  // 中文 provider 与 1M context
+  assert.equal(models[0].provider, "商汤");
+  assert.equal(models[0].id, "deepseek-v4-flash");
+  assert.equal(models[0].contextWindow, 1024 * 1024);
+  assert.equal(models[0].maxTokens, Math.round(65.5 * 1024));
+  assert.equal(models[0].reasoning, true);
+  assert.equal(models[0].images, false);
+  // 4.1K max-out 与 images=yes
+  assert.equal(models[1].provider, "智谱");
+  assert.equal(models[1].id, "glm-4v-flash");
+  assert.equal(models[1].contextWindow, 128 * 1024);
+  assert.equal(models[1].maxTokens, Math.round(4.1 * 1024));
+  assert.equal(models[1].images, true);
+  assert.equal(models[1].reasoning, false);
+  // URL provider（自定义网关）不受影响
+  assert.equal(models[2].provider, "https://open.mwy.asia");
+  assert.equal(models[2].id, "gpt-5.6-luna");
+  assert.equal(models[2].contextWindow, 272 * 1024);
+  assert.equal(models[2].images, true);
+});
+
+test("parseTokenSize handles M/K/plain and rejects garbage", () => {
+  const { parseTokenSize } = loadTsCommonJs("src/main/pi/modelListCache.ts");
+  assert.equal(parseTokenSize("1M"), 1024 * 1024);
+  assert.equal(parseTokenSize("65.5K"), Math.round(65.5 * 1024));
+  assert.equal(parseTokenSize("200K"), 200 * 1024);
+  assert.equal(parseTokenSize("4096"), 4096);
+  assert.equal(parseTokenSize(""), undefined);
+  assert.equal(parseTokenSize("abc"), undefined);
+  assert.equal(parseTokenSize("-"), undefined);
+});
+
 test("MODEL_LIST_FAST_ARGS includes speed flags", () => {
   assert.ok(MODEL_LIST_FAST_ARGS.includes("--list-models"));
   assert.ok(MODEL_LIST_FAST_ARGS.includes("--offline"));

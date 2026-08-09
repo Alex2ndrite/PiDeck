@@ -6,8 +6,8 @@
  * 支持/不支持视觉由用户自行判断，不做能力过滤）；保存时经 vision:save-config
  * 白名单校验后写回 ~/.pi/agent/pi-deck-vision.json（pi-deck-vision 扩展运行时读取同一文件）。
  */
-import { useEffect, useMemo, useState } from "react";
-import { Check, ChevronsUpDown } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Check, ChevronsUpDown, RefreshCw, Trash2 } from "lucide-react";
 import { t } from "../../../i18n";
 import { desktopApi } from "../../../desktopApi";
 import { Button } from "../../ui-shadcn/button";
@@ -23,7 +23,12 @@ import {
 } from "../../ui-shadcn/select";
 import { Switch } from "../../ui-shadcn/switch";
 import { ModelPicker } from "../../session/ComposerComponents";
-import type { AvailableModel, VisionBridgeConfig, VisionBridgeState } from "../../../../../shared/types";
+import type {
+	AvailableModel,
+	VisionBridgeConfig,
+	VisionBridgeState,
+	VisionLogInfo,
+} from "../../../../../shared/types";
 import { SettingsSection } from "./SettingsStorageTab";
 
 /** 与扩展 DEFAULT_PROMPT 保持一致（恢复默认按钮用）。 */
@@ -42,6 +47,27 @@ export function VisionBridgeSettingsTab() {
 	const [saving, setSaving] = useState(false);
 	const [notice, setNotice] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
 	const [pickerOpen, setPickerOpen] = useState(false);
+	// 运行日志（诊断“视觉桥走没走”）：挂载时拉一次，用户可手动刷新
+	const [logInfo, setLogInfo] = useState<VisionLogInfo | null>(null);
+
+	const loadLog = useCallback(async () => {
+		try {
+			setLogInfo(await desktopApi.config.visionGetLog());
+		} catch {
+			setLogInfo(null);
+		}
+	}, []);
+
+	// 打开模型选择器时拉取全量模型（复用现有 ModelPicker 的数据源）；
+	// 挂载时也拉一次（模型列表有全局缓存，开销小），用于展示当前已选模型的能力
+	const [models, setModels] = useState<AvailableModel[]>([]);
+	const loadModels = useCallback(async () => {
+		try {
+			setModels(await desktopApi.projects.listModels(undefined));
+		} catch {
+			setModels([]);
+		}
+	}, []);
 
 	// 挂载时拉取配置；模型列表由 ModelPicker 打开时按需加载（与会话模型选择器同源）
 	useEffect(() => {
@@ -57,32 +83,38 @@ export function VisionBridgeSettingsTab() {
 			.catch(() => {
 				if (mounted) setLoading(false);
 			});
+		loadLog();
+		loadModels();
 		return () => {
 			mounted = false;
 		};
-	}, []);
+	}, [loadLog, loadModels]);
 
 	const updateDraft = (patch: Partial<VisionBridgeConfig>) => {
 		setDraft((prev) => (prev ? { ...prev, ...patch } : prev));
 		setNotice(null);
 	};
 
-	// 打开模型选择器时拉取全量模型（复用现有 ModelPicker 的数据源）
-	const [models, setModels] = useState<AvailableModel[]>([]);
 	const openPicker = async () => {
-		try {
-			const list = await desktopApi.projects.listModels(undefined);
-			setModels(list);
-			setPickerOpen(true);
-		} catch {
-			// 列表加载失败不阻断：仍可打开（空列表由 ModelPicker 的 empty 文案兜底）
-			setModels([]);
-			setPickerOpen(true);
-		}
+		await loadModels();
+		setPickerOpen(true);
 	};
 
 	const onPickModel = (model: AvailableModel) => {
-		updateDraft({ provider: model.provider, model: model.id });
+		const patch: Partial<VisionBridgeConfig> = { provider: model.provider, model: model.id };
+		// 按模型能力自动填充：maxTokens 建议 min(单次输出上限, 4096)（描述图片一般 4K 足够），
+		// 只在用户未手动改过（默认 1024 或未设）时写入，避免覆盖用户自定义值
+		if (typeof model.maxTokens === "number" && model.maxTokens > 0) {
+			const suggested = Math.min(model.maxTokens, 4096);
+			if (draft?.maxTokens === undefined || draft.maxTokens === 1024) {
+				patch.maxTokens = suggested;
+			}
+		}
+		// provider 本身是 URL（自定义网关）时自动作为 baseUrl，用户无需手动填
+		if (!draft?.baseUrl && /^https?:\/\/[^\s]+$/i.test(model.provider)) {
+			patch.baseUrl = model.provider.replace(/\/+$/, "");
+		}
+		updateDraft(patch);
 		setPickerOpen(false);
 	};
 
@@ -90,6 +122,19 @@ export function VisionBridgeSettingsTab() {
 		if (!draft?.provider || !draft?.model) return "";
 		return `${draft.provider}/${draft.model}`;
 	}, [draft?.provider, draft?.model]);
+
+	/** 当前配置对应的模型能力（模型列表来自 pi --list-models 全量输出） */
+	const selectedModel = useMemo(
+		() => models.find((m) => m.provider === draft?.provider && m.id === draft?.model),
+		[models, draft?.provider, draft?.model],
+	);
+
+	/** token 数转人类可读：1048576→"1M"，67109→"65.5K"，204800→"200K" */
+	const formatTokens = (n: number): string => {
+		if (n >= 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(n % (1024 * 1024) === 0 ? 0 : 1)}M`;
+		if (n >= 1024) return `${Math.round(n / 1024)}K`;
+		return String(n);
+	};
 
 	const onSave = async () => {
 		if (!draft) return;
@@ -144,12 +189,52 @@ export function VisionBridgeSettingsTab() {
 						</span>
 						<ChevronsUpDown size={14} className="opacity-60" aria-hidden />
 					</Button>
-					{selectedModelLabel && (
-						<small className="flex items-center gap-1" style={{ color: "var(--color-text-tertiary)" }}>
-							<Check size={12} aria-hidden />
-							{t("settings.vision.modelSelectedHint")}
-						</small>
-					)}
+				{selectedModelLabel && (
+					<div className="setting-field" style={{ marginTop: "var(--space-2)" }}>
+						{selectedModel?.images === false ? (
+							<small style={{ color: "var(--color-danger, #dc2626)", fontWeight: 600 }}>
+								{t("settings.vision.noImagesWarning")}
+							</small>
+						) : (
+							<small className="flex items-center gap-1" style={{ color: "var(--color-text-tertiary)" }}>
+								<Check size={12} aria-hidden />
+								{t("settings.vision.modelSelectedHint")}
+							</small>
+						)}
+						{/* 模型能力：来自 pi --list-models 的 context/max-out/thinking/images 列 */}
+						<div
+							style={{
+								display: "flex",
+								flexWrap: "wrap",
+								gap: "var(--space-1) var(--space-3)",
+								marginTop: "var(--space-1)",
+								fontSize: "var(--font-size-caption)",
+								color: "var(--color-text-tertiary)",
+							}}
+						>
+							{selectedModel ? (
+								<>
+									<span>
+										{selectedModel.images === true
+											? t("settings.vision.supportsImages")
+											: selectedModel.images === false
+												? t("settings.vision.unsupportedImages")
+												: t("settings.vision.capabilityUnknown")}
+									</span>
+									{selectedModel.contextWindow !== undefined && (
+										<span>{t("settings.vision.contextWindow", { size: formatTokens(selectedModel.contextWindow) })}</span>
+									)}
+									{selectedModel.maxTokens !== undefined && (
+										<span>{t("settings.vision.outputCap", { size: formatTokens(selectedModel.maxTokens) })}</span>
+									)}
+									{selectedModel.reasoning && <span>{t("settings.vision.thinking")}</span>}
+								</>
+							) : (
+								<span>{t("settings.vision.capabilityUnknown")}</span>
+							)}
+						</div>
+					</div>
+				)}
 				</div>
 
 				{/* API 格式（一般自动推断） */}
@@ -248,6 +333,52 @@ export function VisionBridgeSettingsTab() {
 					<code style={{ fontSize: "var(--font-size-caption)", color: "var(--color-text-tertiary)" }}>
 						{state ? configFilePath(state.configDir) : ""}
 					</code>
+				</div>
+			</SettingsSection>
+
+			{/* 运行记录诊断区：发一张图 → 回来刷新，即可确认视觉桥是否真的生效 */}
+			<SettingsSection title={t("settings.vision.logSection")} description={t("settings.vision.logSectionDesc")}>
+				<div className="setting-field">
+					<div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", marginBottom: "var(--space-2)" }}>
+						<Button variant="outline" size="sm" onClick={loadLog}>
+							<RefreshCw size={12} aria-hidden />
+							{t("settings.vision.logRefresh")}
+						</Button>
+						<Button
+							variant="outline"
+							size="sm"
+							onClick={async () => {
+								await desktopApi.config.visionClearLog();
+								loadLog();
+							}}
+						>
+							<Trash2 size={12} aria-hidden />
+							{t("settings.vision.logClear")}
+						</Button>
+						{logInfo?.exists && logInfo.size > 0 && (
+							<small style={{ color: "var(--color-text-tertiary)" }}>
+								{t("settings.vision.logSize", { size: Math.max(1, Math.round(logInfo.size / 1024)) })}
+								{logInfo.truncated ? ` ${t("settings.vision.logTruncated")}` : ""}
+							</small>
+						)}
+					</div>
+					<pre
+						style={{
+							maxHeight: 220,
+							overflow: "auto",
+							whiteSpace: "pre-wrap",
+							wordBreak: "break-all",
+							fontSize: "var(--font-size-caption)",
+							lineHeight: 1.5,
+							color: "var(--color-text-secondary)",
+							background: "var(--color-surface-subtle, rgba(127,127,127,0.08))",
+							borderRadius: "var(--radius-sm)",
+							padding: "var(--space-3)",
+							margin: 0,
+						}}
+					>
+						{logInfo?.exists && logInfo.content ? logInfo.content : t("settings.vision.logEmpty")}
+					</pre>
 				</div>
 			</SettingsSection>
 

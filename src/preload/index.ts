@@ -1051,6 +1051,17 @@ const api = {
 				ok: boolean;
 				error?: string;
 			}>,
+		/** 视觉桥：读取运行日志（诊断“走没走”，不含敏感字段） */
+		visionGetLog: () =>
+			ipcRenderer.invoke(ipcChannels.visionGetLog) as Promise<{
+				exists: boolean;
+				size: number;
+				content: string;
+				truncated: boolean;
+			}>,
+		/** 视觉桥：清空运行日志 */
+		visionClearLog: () =>
+			ipcRenderer.invoke(ipcChannels.visionClearLog) as Promise<{ ok: boolean }>,
 		/** 快速测试 provider 连接：发送一条最小请求验证配置是否正常 */
 		testProvider: (
 			baseUrl: string,

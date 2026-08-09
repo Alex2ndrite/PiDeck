@@ -173,6 +173,56 @@ test("getConfig: missing file returns null, invalid json returns null", async ()
 	rmSync(dir, { recursive: true, force: true });
 });
 
+test("saveConfig: provider that is a URL fills baseUrl automatically", async () => {
+	const { dir, manager } = makeManager();
+	const result = await manager.saveConfig({
+		enabled: true,
+		provider: "https://open.mwy.asia",
+		model: "gpt-5.6-luna",
+		apiKey: "sk-gateway",
+	});
+	assert.equal(result.ok, true);
+	const saved = JSON.parse(readFileSync(join(dir, "pi-deck-vision.json"), "utf8"));
+	assert.equal(saved.baseUrl, "https://open.mwy.asia");
+	// 带尾部斜杠的 URL provider 应去掉斜杠
+	await manager.saveConfig({
+		enabled: true,
+		provider: "https://open.mwy.asia/",
+		model: "gpt-5.6-luna",
+		apiKey: "sk-gateway",
+	});
+	const saved2 = JSON.parse(readFileSync(join(dir, "pi-deck-vision.json"), "utf8"));
+	assert.equal(saved2.baseUrl, "https://open.mwy.asia");
+});
+
+test("saveConfig: explicit baseUrl wins over provider URL", async () => {
+	const { dir, manager } = makeManager();
+	await manager.saveConfig({
+		enabled: true,
+		provider: "https://open.mwy.asia",
+		model: "gpt-5.6-luna",
+		apiKey: "sk-gateway",
+		baseUrl: "https://custom.example.com/v1",
+	});
+	const saved = JSON.parse(readFileSync(join(dir, "pi-deck-vision.json"), "utf8"));
+	assert.equal(saved.baseUrl, "https://custom.example.com/v1");
+});
+
+test("saveConfig: fills missing apiKey/baseUrl from models.json provider", async () => {
+	const { dir, manager } = makeManager({
+		"my-gw": { apiKey: "sk-from-models", baseUrl: "https://gw.example.com/v1" },
+	});
+	const result = await manager.saveConfig({
+		enabled: true,
+		provider: "my-gw",
+		model: "some-vl-model",
+	});
+	assert.equal(result.ok, true);
+	const saved = JSON.parse(readFileSync(join(dir, "pi-deck-vision.json"), "utf8"));
+	assert.equal(saved.apiKey, "sk-from-models");
+	assert.equal(saved.baseUrl, "https://gw.example.com/v1");
+});
+
 test("getConfig: reads back what saveConfig wrote", async () => {
 	const { dir, manager } = makeManager();
 	await manager.saveConfig({ provider: "openai", model: "gpt-4o-mini", apiKey: "sk-1" });
@@ -190,5 +240,33 @@ test("getState: returns config + configDir (models list comes from listModels in
 	assert.equal(state.config, null);
 	assert.equal(state.providers, undefined, "providers 字段已移除，模型列表由 UI 经 listModels 拉全量");
 	assert.equal("providers" in state, false);
+	rmSync(dir, { recursive: true, force: true });
+});
+
+test("getLog: missing log file returns empty record", async () => {
+	const { dir, manager } = makeManager();
+	const log = await manager.getLog();
+	assert.equal(log.exists, false);
+	assert.equal(log.content, "");
+	rmSync(dir, { recursive: true, force: true });
+});
+
+test("getLog: reads extension log file (same dir as config)", async () => {
+	const { dir, manager } = makeManager();
+	writeFileSync(join(dir, "pi-deck-vision.log"), "[2025-01-01T00:00:00Z] [info] converted 1 image(s)\n");
+	const log = await manager.getLog();
+	assert.equal(log.exists, true);
+	assert.ok(log.content.includes("converted 1 image(s)"));
+	assert.equal(log.size, log.content.length);
+	rmSync(dir, { recursive: true, force: true });
+});
+
+test("clearLog: removes log file, next getLog reports missing", async () => {
+	const { dir, manager } = makeManager();
+	writeFileSync(join(dir, "pi-deck-vision.log"), "some entries");
+	const result = await manager.clearLog();
+	assert.equal(result.ok, true);
+	const log = await manager.getLog();
+	assert.equal(log.exists, false, "清空后日志文件不存在");
 	rmSync(dir, { recursive: true, force: true });
 });

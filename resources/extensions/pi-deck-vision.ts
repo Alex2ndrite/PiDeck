@@ -4,16 +4,11 @@
  * 给 DeepSeek 等无视觉模型"装上眼睛"：
  * - 用户粘贴/上传的图片：input 事件里直接转成文字描述（否则 pi 会在 provider 层
  *   替换成 "(image omitted...)" 占位符，模型什么都看不到）；
- * - 工具结果（如 read 读图）中的图片：tool_result 事件缓存后，在最终请求体里
- *   把"图片省略"note 替换为视觉模型描述（before_provider_request 事件）。
+ * - 工具结果（如 read 读图）中的图片：tool_result 事件直接转成文字并写回工具结果；
+ *   before_provider_payload 只负责旧会话/其他扩展残留图片的最后兜底。
  *
- * 为什么不用 context 事件改消息？
- * - context 事件的返回值可能被其他扩展（如 ACP 类上下文管理扩展）基于
- *   会话文件重建覆盖；而 before_provider_request 是请求发出前的最后一环，
- *   修改的 payload 一定生效。
- * - pi 对无视觉模型本就会丢弃图片（openai-completions 只发 text 部分），
- *   本扩展在图片被丢弃前（tool_result 事件）先缓存图片，再在请求体里
- *   把"图片省略"note 替换为视觉模型描述。
+ * - 工具图片先在 tool_result 阶段转换，避免模型看到图片省略占位符后再调用 read
+ *   搜索临时文件；payload 阶段只处理无法提前改写的历史内容。
  *
  * 设计要点：
  * - 自包含单文件：脱离 PiDeck 也能用（复制到 ~/.pi/agent/extensions/ 或 `pi -e` 加载），
@@ -22,8 +17,8 @@
  *   可用 PIDECK_VISION_CONFIG_DIR 环境变量覆盖目录（PiDeck 注入 / 测试用）。
  * - 复用已配置供应商：apiKey/baseUrl 优先从 pi 的模型注册表解析
  *   （ctx.modelRegistry.getProviderAuth），不重复填 key；配置文件里也可显式指定。
- * - 不做能力检测：是否支持视觉由用户自行判断（设置页选择视觉模型），
- *   开启后所有图片统一走视觉桥转换。
+ * - 能力优先：当前会话模型明确支持 image 时完全放行原图；只有不支持图片时才启用视觉桥。
+ * - 配置容错：视觉桥配置缺失或端点解析失败时不伪造成功，保留 pi 原始图片并写明原因。
  * - 失败降级：视觉调用失败时替换为错误占位文本，绝不阻断 agent 主流程；
  *   同一图片（base64 哈希）在进程生命周期内只调用一次。
  */
@@ -31,7 +26,7 @@
 import { createHash } from "node:crypto";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { readFile } from "node:fs/promises";
+import { appendFile, readFile, stat, writeFile } from "node:fs/promises";
 // 视觉请求直连：不用全局 fetch。pi 的 http-dispatcher 会把全局 dispatcher 换成
 // EnvHttpProxyAgent（读 HTTPS_PROXY 环境变量），用户翻墙代理对商汤/GLM/Qwen
 // 这类国内视觉 API 反而导致连接失败；undici 显式 dispatcher 不受影响。
@@ -41,14 +36,95 @@ import type { ImageContent } from "@earendil-works/pi-ai";
 
 /** 配置文件：~/.pi/agent/pi-deck-vision.json */
 const CONFIG_FILE_NAME = "pi-deck-vision.json";
+/** 运行日志文件（与配置同目录），PiDeck 设置页读取做诊断；绝不写 apiKey */
+const LOG_FILE_NAME = "pi-deck-vision.log";
+/** 日志文件超过该大小后轮转（保留尾部 64KB），防止长期运行撑爆磁盘 */
+const MAX_LOG_BYTES = 512 * 1024;
+const KEEP_LOG_TAIL_BYTES = 64 * 1024;
+
+/** 当前模型明确支持图片时，视觉桥必须让路，避免重复调用和质量下降。 */
+function currentModelSupportsImages(ctx: ExtensionContext): boolean {
+	return ctx.model?.input.includes("image") === true;
+}
+
+/**
+ * 视觉桥是否应接管当前图片。
+ * `undefined` 不作为支持图片处理：只有 pi 明确声明支持 image 才绕过桥，
+ * 这样模型目录缺字段时仍能通过视觉桥兜底。
+ */
+function shouldUseVisionBridge(ctx: ExtensionContext): boolean {
+	return !currentModelSupportsImages(ctx);
+}
+
+/**
+export function formatVisionLogTimestamp(date = new Date()): string {
+	const pad = (value: number, width = 2) => String(value).padStart(width, "0");
+	const offsetMinutes = -date.getTimezoneOffset();
+	const sign = offsetMinutes >= 0 ? "+" : "-";
+	const absoluteOffset = Math.abs(offsetMinutes);
+	return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}.${pad(date.getMilliseconds(), 3)}${sign}${pad(Math.floor(absoluteOffset / 60))}:${pad(absoluteOffset % 60)}`;
+}
+
+/**
+ * 追加一行运行日志（文件日志，失败静默——日志本身绝不能影响主流程）。
+ * 内容只允许：事件名、图片数、HTTP 状态码、耗时、解析失败原因；禁止 apiKey/baseUrl。
+ */
+export async function writeVisionLog(configDir: string, level: "info" | "warn" | "error", message: string): Promise<void> {
+	try {
+		const filePath = join(configDir, LOG_FILE_NAME);
+		try {
+			const info = await stat(filePath);
+			if (info.size > MAX_LOG_BYTES) {
+				// 简单轮转：只保留尾部，避免日志文件无限膨胀
+				const data = await readFile(filePath, "utf8");
+				await writeFile(filePath, data.slice(-KEEP_LOG_TAIL_BYTES), "utf8");
+			}
+		} catch {
+			// 文件不存在属正常（首次写入），继续追加
+		}
+		const now = new Date();
+		const pad = (value: number, width = 2) => String(value).padStart(width, "0");
+		const offsetMinutes = -now.getTimezoneOffset();
+		const absoluteOffset = Math.abs(offsetMinutes);
+		const timestamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}.${pad(now.getMilliseconds(), 3)}${offsetMinutes >= 0 ? "+" : "-"}${pad(Math.floor(absoluteOffset / 60))}:${pad(absoluteOffset % 60)}`;
+		await writeFile(filePath, `[${timestamp}] [${level}] ${message}\n`, { encoding: "utf8", flag: "a" });
+	} catch {
+		// 日志写入失败（权限/磁盘满）不阻断扩展主流程
+	}
+}
 /** 单轮最多转换的图片数（防止一次读图风暴拖垮响应） */
 const MAX_IMAGES_PER_TURN = 12;
 /** 单张图片 base64 长度上限（≈15MB），超出跳过并提示，避免请求体过大 */
 const MAX_IMAGE_BASE64_LENGTH = 15 * 1024 * 1024;
 /** 图片哈希 → 描述结果缓存（含失败，避免同一张图反复调用视觉模型） */
 const descriptionCache = new Map<string, { ok: boolean; text: string }>();
-/** toolCallId → 该工具结果里的图片（before_provider_request 阶段消费后删除） */
+/** toolCallId → 未能在 tool_result 阶段改写的图片，供 payload 兜底消费 */
 const pendingToolImages = new Map<string, ImageContent[]>();
+/** 未消费缓存的硬上限：请求被中断/裁剪时缓存会滞留，超过上限时丢弃最旧的，防止内存膨胀 */
+const MAX_PENDING_TOOL_IMAGES = 128;
+
+/** 将工具结果中的图片替换为视觉桥文字，直接写回 pi 会话和 UI。 */
+function replaceToolImagesWithDescription(
+	content: Array<{ type?: string; text?: string } | ImageContent>,
+	description: string,
+): Array<{ type: "text"; text: string }> {
+	const textContent = content
+		.filter((part): part is { type: "text"; text: string } => part.type === "text" && typeof part.text === "string")
+		.map((part) => part.text);
+	return [...textContent, description]
+		.filter((text) => text.trim())
+		.map((text) => ({ type: "text", text }));
+}
+
+/** 登记一条工具结果缓存；超上限时丢最旧的一条（Map 保持插入序）。 */
+function cacheToolImages(toolCallId: string, images: ImageContent[]): void {
+	while (pendingToolImages.size >= MAX_PENDING_TOOL_IMAGES) {
+		const oldest = pendingToolImages.keys().next().value;
+		if (oldest === undefined) break;
+		pendingToolImages.delete(oldest);
+	}
+	pendingToolImages.set(toolCallId, images);
+}
 
 /** 视觉调用支持的 API 格式；默认 OpenAI 兼容（覆盖 GLM/Qwen/OpenRouter/DeepSeek 等） */
 export type VisionApiKind = "openai-completions" | "anthropic-messages" | "google-generative-ai";
@@ -90,8 +166,11 @@ type ResolvedEndpoint = {
 	api: VisionApiKind;
 };
 
+const VISION_GUARDRAIL =
+	"只分析当前传入的图片数据，不要调用 read、bash、find 或搜索本地文件来寻找图片，也不要臆测图片来源。鉴伪、识人或判断新闻真伪时，明确区分画面可见证据与无法仅凭图片确认的推测，不要把不确定身份当成事实。";
+
 const DEFAULT_PROMPT =
-	"请详细描述这张图片的内容。如果图片中有文字（代码、报错、UI 文案、文档等），请完整准确地转录所有可见文字；如果是图表，请说明类型、坐标轴含义和关键数值；如果涉及界面，请描述布局与元素。输出使用中文。";
+	"请分析这张图片本身，不要调用 read、bash、find 或搜索本地文件来寻找图片，也不要臆测图片来源。先客观描述可见内容；如果用户要求鉴伪、识人或判断新闻真伪，请明确区分‘画面可见证据’与‘无法仅凭图片确认的推测’，不要把不确定身份当成事实。图片中有文字（代码、报错、UI 文案、文档等）时完整准确转录；如果是图表，说明类型、坐标轴含义和关键数值。输出使用中文。";
 
 const DEFAULT_CONFIG: VisionBridgeConfig = {
 	enabled: true,
@@ -105,8 +184,9 @@ const DEFAULT_CONFIG: VisionBridgeConfig = {
 
 /**
  * pi 内置 provider 的默认端点（auth.json 里通常只有 key，没有 baseUrl）。
- * 覆盖 OpenAI / OpenRouter / Anthropic / Gemini；GLM、Qwen 等国内供应商
- * 需要用户在配置文件显式填 baseUrl。
+ * 覆盖 OpenAI / OpenRouter / Anthropic / Gemini / DeepSeek / GLM 等；
+ * 其余 provider（如 opencode-go、xiaomi、qwen-token-plan）的 baseUrl 挂在模型目录的
+ * 每个模型上（model.baseUrl），由 resolveEndpoint 经 modelRegistry.find 解析，无需在此登记。
  */
 const DEFAULT_BASE_URLS: Record<string, string> = {
 	openai: "https://api.openai.com/v1",
@@ -114,6 +194,18 @@ const DEFAULT_BASE_URLS: Record<string, string> = {
 	anthropic: "https://api.anthropic.com",
 	"google-generative-ai": "https://generativelanguage.googleapis.com",
 	gemini: "https://generativelanguage.googleapis.com",
+	deepseek: "https://api.deepseek.com/v1",
+	zai: "https://open.bigmodel.cn/api/paas/v4",
+	"zai-coding-cn": "https://open.bigmodel.cn/api/paas/v4",
+	"vercel-ai-gateway": "https://open.bigmodel.cn/api/paas/v4",
+	moonshotai: "https://api.moonshot.cn/v1",
+	"moonshotai-cn": "https://api.moonshot.cn/v1",
+	nvidia: "https://integrate.api.nvidia.com/v1",
+	mistral: "https://api.mistral.ai/v1",
+	groq: "https://api.groq.com/openai/v1",
+	xai: "https://api.x.ai/v1",
+	fireworks: "https://api.fireworks.ai/inference/v1",
+	together: "https://api.together.xyz/v1",
 };
 
 /** 内置 provider 的已知 API 格式（用于自动推断，避免依赖运行时注册表查询）。 */
@@ -175,21 +267,26 @@ export function extractImageFromDataUrl(url: string): ImageContent | null {
 
 /**
  * 替换 tool 消息 content（字符串）里的"图片省略"note。
- * 原格式："Read image file [image/png]\n[Current model does not support images. ...]\n\n<acp ...>"
- * 替换后："Read image file [image/png]\n[图片 #N（视觉桥已查看，以下为图片实际内容）]\n<描述>\n\n<acp ...>"
+ *
+ * pi 各版本的省略 note 格式不同，全部要兼容：
+ * - 新版（0.7x+）："(tool image omitted: model does not support images)"（圆括号）
+ * - 旧版方括号："[Current model does not support images. The image will be omitted...]"
+ * - 旧版裸文本："Current model does not support images..."
+ *
+ * 替换后："Read image file [image/png]\n[图片 #N（视觉桥已查看，以下为图片实际内容）]\n<描述>"
  * note 之后的附加内容（如 ACP 标签）原样保留。无 note 时原样返回。
  */
 export function replaceNoteInToolContent(content: string, description: string): string {
-	// 只处理带省略声明的 note（随 read 工具输出）；没有则不动
-	if (!/does not support images|will be omitted from this request/i.test(content)) {
-		return content;
-	}
-	return content
-		.replace(
-			/\n\[Current model does not support images[^\]]*\][\s\S]*$/i,
-			(match) => `\n${description}${match.replace(/^\n\[Current model does not support images[^\]]*\]/, "").replace(/^\n/, "\n")}`,
-		)
-		.replace(/\nCurrent model does not support images[\s\S]*$/i, `\n${description}`);
+	// 新版/旧版占位符统一匹配（行内文本，不含跨行）
+	const notePattern =
+		/(?:\(tool image omitted:[^\n]*\)|\(image omitted:[^\n]*\)|\[Current model does not support images[^\]]*\]|Current model does not support images[^\n]*)/i;
+	if (!notePattern.test(content)) return content;
+	const match = content.match(notePattern);
+	if (!match || match.index === undefined) return content;
+	const head = content.slice(0, match.index).replace(/\n$/, "");
+	// note 之后的尾部（通常是空行 + ACP 标签等），只保留一个换行分隔
+	const tail = content.slice(match.index + match[0].length).replace(/^\n+/, "\n");
+	return `${head}\n${description}${tail}`;
 }
 
 /**
@@ -209,14 +306,19 @@ export async function resolveEndpoint(
 	let baseUrl: string | undefined = config.baseUrl;
 	let headers: Record<string, string> | undefined;
 
-	// 从 pi 模型注册表解析供应商已配置的 auth（key 不落日志、不落配置）
+	// 从 pi 模型注册表解析供应商已配置的 auth（key 不落日志、不落配置）。
+	// 注意：pi 0.8x 起 getProviderAuth 返回 AuthResult = { auth: ModelAuth, env?, source? }，
+	// key/endpoint 都在 auth 子对象里；按旧扁平结构取值会全部落空导致“配置了没走”。
 	try {
 		const auth = await ctx.modelRegistry.getProviderAuth(config.provider);
-		if (auth) {
-			apiKey = apiKey ?? auth.apiKey;
-			baseUrl = baseUrl ?? auth.baseUrl;
-			if (auth.headers && Object.keys(auth.headers).length > 0) {
-				headers = { ...auth.headers };
+		if (auth?.auth) {
+			apiKey = apiKey ?? auth.auth.apiKey;
+			baseUrl = baseUrl ?? auth.auth.baseUrl;
+			if (auth.auth.headers && Object.keys(auth.auth.headers).length > 0) {
+				// ProviderHeaders 允许 null 值（显式清除），只保留字符串值
+				headers = Object.fromEntries(
+					Object.entries(auth.auth.headers).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
+				);
 			}
 		}
 		if (!apiKey) {
@@ -248,7 +350,17 @@ export async function resolveEndpoint(
 	}
 
 	if (!baseUrl) {
-		// 内置 provider 已知端点；GLM/Qwen 等需要在配置文件显式填写 baseUrl
+		// 关键兜底：pi 内置目录模型（opencode-go/xiaomi/qwen 等）的端点挂在模型上
+		// （model.baseUrl），不在 auth.json/models.json。查不到就默认放行会"配置了没走"。
+		try {
+			const model = ctx.modelRegistry.find(config.provider, config.model);
+			baseUrl = (model as { baseUrl?: string } | undefined)?.baseUrl;
+		} catch {
+			// 注册表查询失败不致命
+		}
+	}
+	if (!baseUrl) {
+		// 内置 provider 已知端点；其余需要在配置文件显式填写 baseUrl
 		baseUrl = DEFAULT_BASE_URLS[config.provider];
 		if (!baseUrl) return null;
 	}
@@ -279,7 +391,13 @@ export async function describeImage(
 		(first.text === EMPTY_RESPONSE_PLACEHOLDER || first.finishReason === "length");
 	if (needsRetry) {
 		const retry = await doVisionRequest(endpoint, image, prompt, options, { reasoningEffortNone: true });
-		if (retry.ok) return retry;
+		// 重试也可能仍返回空 content：同样要降级，不能把占位文本当成功描述
+		if (retry.ok && retry.text !== EMPTY_RESPONSE_PLACEHOLDER) return retry;
+	}
+	// 空响应降级为失败：HTTP 200 但 content 为空（或重试后仍空）时，
+	// 绝不能把 "[empty response]" 占位文本当作成功描述喂给主模型（用户看到的就是"空响应"）
+	if (first.ok && first.text === EMPTY_RESPONSE_PLACEHOLDER) {
+		return { ok: false, text: "视觉模型返回空响应（可能不支持图片或该模型/Key 无权限），请检查配置或换一个视觉模型" };
 	}
 	return first;
 }
@@ -541,6 +659,7 @@ function truncateText(text: string, max: number): string {
 /**
  * 描述一组图片（带哈希缓存 + 并发），返回拼好的描述文本块。
  * 全部失败或没有图片时返回 null。单轮图片超过上限时只处理前 N 张。
+ * log 可选：转换统计回调（写文件日志用，绝不传图片内容）。
  */
 async function describeImages(
 	endpoint: ResolvedEndpoint,
@@ -548,9 +667,12 @@ async function describeImages(
 	prompt: string,
 	config: VisionBridgeConfig,
 	signal: AbortSignal | undefined,
+	log?: (level: "info" | "warn" | "error", message: string) => void,
 ): Promise<string | null> {
 	const selected = images.slice(0, MAX_IMAGES_PER_TURN);
 	if (selected.length === 0) return null;
+
+	const requestPrompt = `${prompt}\n\n${VISION_GUARDRAIL}`;
 
 	// 第一遍：去重 + 跳过超大图（结果按出现顺序编号，保证多图时模型能对号入座）
 	const jobs: Array<{ hash: string; image: ImageContent }> = [];
@@ -573,7 +695,7 @@ async function describeImages(
 				results.set(hash, cached);
 				return;
 			}
-			const outcome = await describeImage(endpoint, image, prompt, {
+			const outcome = await describeImage(endpoint, image, requestPrompt, {
 				maxTokens: config.maxTokens ?? 1024,
 				timeoutMs: config.timeoutMs ?? 30_000,
 				signal,
@@ -588,6 +710,8 @@ async function describeImages(
 	let counter = 0;
 	const parts: string[] = [];
 	const seen = new Set<string>();
+	let successCount = 0;
+	let failCount = 0;
 	for (const image of selected) {
 		const hash = imageHash(image.data);
 		if (results.get(hash) === undefined) continue;
@@ -596,13 +720,18 @@ async function describeImages(
 		counter++;
 		const result = results.get(hash);
 		if (result?.ok) {
+			successCount++;
 			parts.push(`[图片 #${counter}（视觉桥已查看，以下为图片实际内容）]\n${result.text}`);
 		} else {
+			failCount++;
+			// 失败占位带原因 + 修复方向，让主模型和用户都能定位问题
+			const reason = result ? truncateText(result.text, 200) : "未配置视觉模型";
 			parts.push(
-				`[图片 #${counter} 视觉桥转换失败${result ? `：${truncateText(result.text, 200)}` : "（未配置视觉模型）"}，此图片内容不可见]`,
+				`[图片 #${counter} 视觉桥转换失败：${reason}。请检查视觉桥设置（模型/接口地址/API Key）后重试，此图片内容不可见]`,
 			);
 		}
 	}
+	log?.(failCount > 0 ? "warn" : "info", `converted ${successCount} image(s)${failCount > 0 ? `, ${failCount} failed` : ""}`);
 	return parts.length > 0 ? parts.join("\n\n") : null;
 }
 
@@ -611,47 +740,106 @@ export default function (pi: ExtensionAPI) {
 	// 不这么做的话，pi 会在 provider 层把图片替换成
 	// "(image omitted: model does not support images)" 占位符，模型什么都看不到。
 	pi.on("input", async (event, ctx) => {
+		const configDir = resolveConfigDir();
+		const log = (level: "info" | "warn" | "error", message: string) =>
+			writeVisionLog(configDir, level, `input: ${message}`);
 		try {
 			const config = await loadVisionBridgeConfig();
-			if (!config?.enabled || !config.provider || !config.model) return undefined;
 			const typed = event as { text?: string; images?: ImageContent[] };
 			const images = typed.images;
 			if (!images || images.length === 0) return undefined;
+			if (!shouldUseVisionBridge(ctx)) {
+				log("info", `${images.length} image(s) bypassed: current model declares image input support`);
+				return undefined;
+			}
+			if (!config?.enabled || !config.provider || !config.model) {
+				// 有图片但桥未就绪：这是“配置了没走”最常见的表现，必须留痕
+				log("warn", `${images.length} image(s) but vision bridge not configured（enabled/provider/model 不完整），已放行原图`);
+				return undefined;
+			}
 			const endpoint = await resolveEndpoint(config, ctx);
-			if (!endpoint) return undefined;
-			const desc = await describeImages(endpoint, images, config.promptTemplate ?? DEFAULT_PROMPT, config, ctx.signal);
+			if (!endpoint) {
+				log("error", `endpoint resolve failed for ${config.provider}/${config.model}：解析不到接口地址，请在设置页填写“接口地址”或改用 pi 内置供应商`);
+				return undefined;
+			}
+			const desc = await describeImages(
+				endpoint,
+				images,
+				config.promptTemplate ?? DEFAULT_PROMPT,
+				config,
+				ctx.signal,
+				log,
+			);
 			if (!desc) return undefined;
 			// 描述文本附到消息文本后，图片清空（已转为文字）
 			const text = typed.text ? `${typed.text}\n\n${desc}` : desc;
 			return { action: "transform", text, images: [] };
-		} catch {
+		} catch (error) {
+			log("error", `unhandled: ${error instanceof Error ? error.message : String(error)}`);
 			return undefined; // 保持原样，不阻断
 		}
 	});
 
-	// 工具结果事件：先缓存图片（此时 pi 还没丢弃），供 before_provider_request 消费
-	pi.on("tool_result", (event) => {
+	// 工具结果事件：在 pi 把结果写入会话前直接转成文字。
+	// 这样 UI 与模型拿到同一份描述，也避免后续 read 再去寻找临时图片文件。
+	pi.on("tool_result", async (event, ctx) => {
+		const configDir = resolveConfigDir();
+		const log = (level: "info" | "warn" | "error", message: string) =>
+			writeVisionLog(configDir, level, `tool_result: ${message}`);
 		try {
 			const typed = event as { toolCallId?: string; content?: unknown };
-			if (!typed.toolCallId || !Array.isArray(typed.content)) return;
+			if (!typed.toolCallId || !Array.isArray(typed.content)) return undefined;
 			const images = typed.content.filter(
 				(part): part is ImageContent =>
 					!!part && typeof part === "object" && (part as { type?: unknown }).type === "image" &&
 					typeof (part as ImageContent).data === "string",
 			);
-			if (images.length > 0) {
-				pendingToolImages.set(typed.toolCallId, images);
+			if (images.length === 0) return undefined;
+			if (!shouldUseVisionBridge(ctx)) {
+				log("info", `${images.length} image(s) bypassed: current model declares image input support`);
+				return undefined;
 			}
-		} catch {
-			// 缓存失败不影响主流程
+
+			const config = await loadVisionBridgeConfig();
+			if (!config?.enabled || !config.provider || !config.model) {
+				log("warn", `${images.length} image(s) but vision bridge not configured; tool result kept unchanged`);
+				cacheToolImages(typed.toolCallId, images);
+				return undefined;
+			}
+			const endpoint = await resolveEndpoint(config, ctx);
+			if (!endpoint) {
+				log("error", `endpoint resolve failed for ${config.provider}/${config.model}`);
+				cacheToolImages(typed.toolCallId, images);
+				return undefined;
+			}
+			const description = await describeImages(
+				endpoint,
+				images,
+				config.promptTemplate ?? DEFAULT_PROMPT,
+				config,
+				ctx.signal,
+				log,
+			);
+			if (!description) return undefined;
+			pendingToolImages.delete(typed.toolCallId);
+			return { content: replaceToolImagesWithDescription(typed.content, description) };
+		} catch (error) {
+			log("error", `unhandled: ${error instanceof Error ? error.message : String(error)}`);
+			return undefined;
 		}
 	});
 
-	// 最终请求体事件：把图片替换为视觉模型描述。
-	// 这是请求发出前的最后一环，修改必然生效（context 事件的结果可能被
-	// 其他扩展基于会话文件重建覆盖，因此不在这里做转换）。
-	pi.on("before_provider_request", async (event, ctx) => {
+	// 旧会话/其他扩展仍可能把图片带到 provider payload；这里做最后兜底。
+	// 使用 before_provider_payload，而不是 before_provider_request：只有前者携带真正的 payload。
+	pi.on("before_provider_payload", async (event, ctx) => {
+		const configDir = resolveConfigDir();
+		const log = (level: "info" | "warn" | "error", message: string) =>
+			writeVisionLog(configDir, level, `request: ${message}`);
 		try {
+			// 当前模型能原生接收图片时，不能再改写 payload；原生视觉通常比
+			// 二次转述保留更多细节，也避免用户配置了桥后仍被重复调用。
+			if (!shouldUseVisionBridge(ctx)) return undefined;
+
 			// 任何配置缺失都直接放行，保持 pi 原行为
 			const config = await loadVisionBridgeConfig();
 			if (!config?.enabled || !config.provider || !config.model) return undefined;
@@ -659,14 +847,12 @@ export default function (pi: ExtensionAPI) {
 			const payload = (event as { payload?: { messages?: unknown[] } }).payload;
 			if (!payload || !Array.isArray(payload.messages)) return undefined;
 
-			const endpoint = await resolveEndpoint(config, ctx);
-			if (!endpoint) return undefined;
-
 			const prompt = config.promptTemplate ?? DEFAULT_PROMPT;
 			let changed = false;
 
 			// 第一遍：收集需要替换的位置（tool 消息按 toolCallId 匹配缓存的图片，
-			// user 消息就地提取 data URL 图片）
+			// user 消息就地提取 data URL 图片；无视觉模型下 pi 已把图片换成占位符，
+			// 所以这里的 user 图片通常来自支持视觉的会话，仍按原路径处理）
 			const replacements: Array<{
 				msgIndex: number;
 				kind: "tool" | "user";
@@ -696,9 +882,16 @@ export default function (pi: ExtensionAPI) {
 			});
 			if (replacements.length === 0) return undefined;
 
+			const endpoint = await resolveEndpoint(config, ctx);
+			if (!endpoint) {
+				// 有图片要处理但端点解析失败：留痕（“配置了没走”的直接原因）
+				log("error", `endpoint resolve failed for ${config.provider}/${config.model}：解析不到接口地址，请在设置页填写“接口地址”或改用 pi 内置供应商`);
+				return undefined;
+			}
+
 			// 第二遍：并发描述（不同消息的图片可并行）
 			const descriptions = await Promise.all(
-				replacements.map(({ images }) => describeImages(endpoint, images, prompt, config, ctx.signal)),
+				replacements.map(({ images }) => describeImages(endpoint, images, prompt, config, ctx.signal, log)),
 			);
 
 			// 第三遍：写回 payload（浅拷贝消息对象，避免污染原 payload）
@@ -712,25 +905,34 @@ export default function (pi: ExtensionAPI) {
 					const typed = msg as { content?: unknown };
 					return { ...(msg as object), content: replaceNoteInToolContent(String(typed.content), desc) };
 				}
-				// user 消息：image_url part 全部替换为描述文本
+				// user 消息：image_url part 全部替换为描述文本。
+				// 配对规则：同一张图（base64 相同）共享同一描述块，按去重后的出现顺序取块，
+				// 避免“描述块数 < part 数”时错位或产生 text:undefined 的坏 part。
 				const typed = msg as { content?: Array<{ type?: string; image_url?: { url?: string } }> };
-				let used = 0;
+				// 第一遍收集时已确认 Array.isArray，这里再防御一次让 TS 收窄
+				if (!typed.content) return msg;
+				const texts = desc.split("\n\n");
+				const uniqueImages: ImageContent[] = [];
+				for (const part of typed.content) {
+					if (part?.type !== "image_url") continue;
+					const image = extractImageFromDataUrl(part.image_url?.url ?? "");
+					if (image && !uniqueImages.some((im) => im.data === image.data)) uniqueImages.push(image);
+				}
 				const nextContent = typed.content.map((part) => {
-					if (part?.type === "image_url") {
-						const texts = desc.split("\n\n");
-						if (used < texts.length) {
-							const text = texts[used++];
-							return { type: "text", text };
-						}
-					}
-					return part;
+					if (part?.type !== "image_url") return part;
+					const image = extractImageFromDataUrl(part.image_url?.url ?? "");
+					if (!image) return part;
+					const idx = uniqueImages.findIndex((im) => im.data === image.data);
+					if (idx === -1 || idx >= texts.length) return part;
+					return { type: "text", text: texts[idx] };
 				});
 				return { ...(msg as object), content: nextContent };
 			});
 
 			return changed ? { ...payload, messages } : undefined;
-		} catch {
+		} catch (error) {
 			// 任何异常都不能阻断请求：返回 undefined 保持原 payload
+			log("error", `unhandled: ${error instanceof Error ? error.message : String(error)}`);
 			return undefined;
 		}
 	});

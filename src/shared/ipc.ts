@@ -252,6 +252,10 @@ export const ipcChannels = {
 	visionGetConfig: "vision:get-config",
 	/** 视觉桥：保存配置到 ~/.pi/agent/pi-deck-vision.json */
 	visionSaveConfig: "vision:save-config",
+	/** 视觉桥：读取运行日志（扩展写的 pi-deck-vision.log，诊断用） */
+	visionGetLog: "vision:get-log",
+	/** 视觉桥：清空运行日志 */
+	visionClearLog: "vision:clear-log",
 
 	/** 切换开发者控制台 */
 	appToggleDevTools: "app:toggle-devtools",

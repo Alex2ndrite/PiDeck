@@ -8,17 +8,22 @@
  * 安全约束：IPC 入参不可信，saveConfig 逐字段白名单校验后再落盘；
  * apiKey 允许写入配置文件（与 auth.json 同级信任域），但不进日志。
  */
-import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { readFile, writeFile, mkdir, rm, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type {
 	VisionBridgeConfig,
 	VisionBridgeState,
+	VisionLogInfo,
 	VisionSaveResult,
 } from "../../shared/types";
 import type { ConfigManager } from "../config/ConfigManager";
 
 const CONFIG_FILE_NAME = "pi-deck-vision.json";
+/** 运行日志文件名（与扩展 LOG_FILE_NAME 保持一致） */
+const LOG_FILE_NAME = "pi-deck-vision.log";
+/** 单次 IPC 返回的日志上限：超过只返回尾部（扩展已做 512KB 轮转，这里双保险） */
+const MAX_LOG_RETURN_BYTES = 256 * 1024;
 
 /** 与扩展 DEFAULT_BASE_URLS 对应的已知端点提示（仅 UI 展示用，解析以扩展为准）。 */
 export const KNOWN_PROVIDER_BASE_URLS: Record<string, string> = {
@@ -128,7 +133,9 @@ export class VisionBridgeConfigManager {
 		if (!next) {
 			return { ok: false, error: "provider/model 必填，或字段非法" };
 		}
-		// 未显式填写的 key/baseUrl 从 models.json 的 provider 配置补齐（仅当缺失时）
+		// 未显式填写的 key/baseUrl 从 models.json 的 provider 配置补齐（仅当缺失时）；
+		// provider 本身是 URL（如 https://open.mwy.asia 这类网关）时直接作为 baseUrl，
+		// 保证扩展脱离 PiDeck 单独跑也能解析端点。
 		if (!next.apiKey || !next.baseUrl) {
 			try {
 				const modelsResult = await this.configManager.getModelsConfig();
@@ -140,6 +147,9 @@ export class VisionBridgeConfigManager {
 				}
 			} catch {
 				// models.json 解析失败不影响保存：用户手动填的字段仍会写入
+			}
+			if (!next.baseUrl && /^https?:\/\/[^\s]+$/i.test(next.provider)) {
+				next.baseUrl = next.provider.replace(/\/+$/, "");
 			}
 		}
 		try {
@@ -158,5 +168,34 @@ export class VisionBridgeConfigManager {
 			config: await this.getConfig(),
 			configDir: visionConfigDir(),
 		};
+	}
+
+	/** 读取扩展运行日志（诊断用）：文件不存在返回空记录，超限只取尾部。 */
+	async getLog(): Promise<VisionLogInfo> {
+		const filePath = join(visionConfigDir(), LOG_FILE_NAME);
+		try {
+			const info = await stat(filePath);
+			const data = await readFile(filePath, "utf8");
+			const truncated = data.length > MAX_LOG_RETURN_BYTES;
+			return {
+				exists: true,
+				size: info.size,
+				content: truncated ? data.slice(-MAX_LOG_RETURN_BYTES) : data,
+				truncated,
+			};
+		} catch {
+			// 文件不存在或不可读：返回空记录，UI 显示“暂无运行记录”
+			return { exists: false, size: 0, content: "", truncated: false };
+		}
+	}
+
+	/** 清空运行日志（删除文件，下次写入自动重建）。 */
+	async clearLog(): Promise<{ ok: boolean }> {
+		try {
+			await rm(join(visionConfigDir(), LOG_FILE_NAME), { force: true });
+			return { ok: true };
+		} catch {
+			return { ok: false };
+		}
 	}
 }

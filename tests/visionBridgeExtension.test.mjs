@@ -6,7 +6,7 @@
  * 测行为不测实现：只断言配置解析、图片收集、替换、端点解析、请求构造、响应解析。
  */
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { createRequire } from "node:module";
 import { join } from "node:path";
@@ -181,6 +181,7 @@ test("replaceNoteInToolContent: bare note form also replaced", () => {
 // ── 端点解析 ─────────────────────────────────────────────
 
 function mockRegistry({ auth = {}, keys = {}, providers = {} } = {}) {
+	// auth 值按 pi 0.8x 的 AuthResult 结构传：{ auth: ModelAuth, env?, source? }
 	return {
 		modelRegistry: {
 			getProviderAuth: async (p) => auth[p],
@@ -208,8 +209,9 @@ test("resolveEndpoint: explicit config wins without registry", async () => {
 
 test("resolveEndpoint: falls back to registry auth", async () => {
 	const config = { provider: "openai", model: "gpt-4o-mini" };
+	// pi 0.8x AuthResult 结构：key/baseUrl 在 auth 子对象（旧扁平结构会导致取值落空）
 	const ctx = mockRegistry({
-		auth: { openai: { apiKey: "sk-registry", baseUrl: "https://registry.example.com/v1" } },
+		auth: { openai: { auth: { apiKey: "sk-registry", baseUrl: "https://registry.example.com/v1" } } },
 	});
 	const endpoint = await ext.resolveEndpoint(config, ctx);
 	assert.equal(endpoint.apiKey, "sk-registry");
@@ -465,4 +467,84 @@ test("describeImage: retries without max_tokens on 400 (low max_tokens limit gat
 	assert.equal(calls.length, 2, "400 触发一次去 max_tokens 重试");
 	assert.equal(calls[0].body.max_tokens, 2048, "首次带配置的 max_tokens");
 	assert.equal(calls[1].body.max_tokens, undefined, "重试去掉 max_tokens");
+});
+
+// ── 0.8x 兼容 & 兜底 & 空响应 & 日志 ───────────────────────
+
+test("replaceNoteInToolContent: new paren placeholder form (pi 0.8x)", () => {
+	// pi 0.8x 的 tool 消息占位符是圆括号形式，旧正则不匹配会"走了但没换"
+	const content =
+		'Read image file [image/png]\n(tool image omitted: model does not support images)\n\n<acp tokens="29" type="read">m00003</acp>';
+	const next = ext.replaceNoteInToolContent(content, "一只猫");
+	assert.ok(next.startsWith("Read image file [image/png]"), "保留 read 前缀");
+	assert.ok(next.includes("一只猫"));
+	assert.ok(!next.includes("image omitted"), "新版占位符已删除");
+	assert.ok(next.includes("<acp tokens"), "note 之后的 ACP 标签保留");
+});
+
+test("replaceNoteInToolContent: paren form without trailing content", () => {
+	const content = "Read image file [image/png]\n(tool image omitted: model does not support images)";
+	assert.equal(ext.replaceNoteInToolContent(content, "一只猫"), "Read image file [image/png]\n一只猫");
+});
+
+test("resolveEndpoint: falls back to model.baseUrl (builtin catalog model)", async () => {
+	// pi 内置目录模型（opencode-go/mimo-v2.5 等）：baseUrl 挂在模型上，auth.json 里没有
+	const config = { provider: "opencode-go", model: "mimo-v2.5" };
+	const ctx = {
+		modelRegistry: {
+			getProviderAuth: async () => undefined,
+			getApiKeyForProvider: async () => "sk-catalog",
+			getProvider: () => undefined,
+			find: (_p, m) => ({ id: m, provider: _p, baseUrl: "https://opencode.ai/zen/go/v1" }),
+		},
+	};
+	const endpoint = await ext.resolveEndpoint(config, ctx);
+	assert.equal(endpoint.baseUrl, "https://opencode.ai/zen/go/v1");
+	assert.equal(endpoint.apiKey, "sk-catalog");
+});
+
+test("describeImage: empty response degrades to failure (not silent success)", async () => {
+	// HTTP 200 但 content 空（重试后仍空）：必须降级为失败，不能把 "[empty response]"
+	// 占位文本当成功描述喂给主模型（用户看到的就是"空响应"）
+	const calls = [];
+	fetchStub = async (_url, opts) => {
+		const body = JSON.parse(opts.body);
+		calls.push({ body });
+		return {
+			ok: true,
+			status: 200,
+			statusText: "OK",
+			json: async () => ({ choices: [{ message: { content: "" } }] }),
+		};
+	};
+	const result = await ext.describeImage(endpointOpenAI, imageA, "描述", { maxTokens: 1024, timeoutMs: 5000 });
+	assert.equal(result.ok, false, "两次都空响应必须降级为失败");
+	assert.match(result.text, /空响应/);
+	assert.equal(calls.length, 2, "空响应触发一次 reasoning_effort:none 重试");
+	assert.equal(calls[1].body.reasoning_effort, "none");
+});
+
+test("writeVisionLog: uses local offset instead of UTC Z", async () => {
+	const dir = makeConfigDir({ enabled: true });
+	await ext.writeVisionLog(dir, "info", "time check");
+	const content = readFileSync(join(dir, "pi-deck-vision.log"), "utf8");
+	assert.match(content, /T\d{2}:\d{2}:\d{2}\.\d{3}[+-]\d{2}:\d{2}\]/);
+	assert.doesNotMatch(content, /Z\]/);
+});
+
+test("writeVisionLog: appends entry to config dir", async () => {
+	const dir = makeConfigDir({ enabled: true });
+	await ext.writeVisionLog(dir, "warn", "input: 1 image(s) but vision bridge not configured");
+	const content = readFileSync(join(dir, "pi-deck-vision.log"), "utf8");
+	assert.match(content, /\[warn\] input: 1 image\(s\)/);
+});
+
+test("writeVisionLog: rotates oversized log keeping tail", async () => {
+	const dir = makeConfigDir({ enabled: true });
+	const big = "x".repeat(600 * 1024); // > 512KB 上限
+	writeFileSync(join(dir, "pi-deck-vision.log"), big);
+	await ext.writeVisionLog(dir, "info", "after rotate");
+	const info = statSync(join(dir, "pi-deck-vision.log"));
+	assert.ok(info.size <= 64 * 1024 + 200, "轮转后只保留尾部 64KB + 新行");
+	assert.ok(readFileSync(join(dir, "pi-deck-vision.log"), "utf8").includes("after rotate"));
 });

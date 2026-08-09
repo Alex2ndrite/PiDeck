@@ -65,8 +65,13 @@ export type AvailableModel = {
 	id: string;
 	name?: string;
 	provider: string;
+	/** 上下文窗口（token 数，来自 pi --list-models context 列） */
 	contextWindow?: number;
+	/** 单次输出上限（token 数，来自 max-out 列） */
+	maxTokens?: number;
 	reasoning?: boolean;
+	/** 是否支持图片输入（来自 images 列；undefined = pi 未提供该列） */
+	images?: boolean;
 };
 
 export type CreateAgentInput = {

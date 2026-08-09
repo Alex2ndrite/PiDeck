@@ -867,6 +867,8 @@ export function createPreviewApi(): PiDesktopApi {
 				configDir: "/tmp/preview/.pi/agent",
 			}),
 			visionSaveConfig: async () => ({ ok: true }),
+			visionGetLog: async () => ({ exists: false, size: 0, content: "", truncated: false }),
+			visionClearLog: async () => ({ ok: true }),
 		},
 		pet: {
 			onState: noop,
