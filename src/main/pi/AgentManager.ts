@@ -3519,9 +3519,15 @@ export class AgentManager {
 				: "";
 		// stopReason（provider 归一化）：message_start 骨架为 pending，message_end 更新为
 		// 真实值（stop/toolUse/aborted/error/length）。渲染层据此精确区分中间/最终回复。
+		// pending 是骨架占位值：不持久化（new 分支）也不覆盖既有值（existing 分支），
+		// 否则 message_end 缺 stopReason 时消息永远停 in pending，渲染层回退启发式失效。
 		const extractedStopReason =
 			partialMessage && typeof partialMessage === "object"
 				? String((partialMessage as any).stopReason ?? "") || undefined
+				: undefined;
+		const finalStopReason =
+			extractedStopReason && extractedStopReason !== "pending"
+				? extractedStopReason
 				: undefined;
 
 		if (existing) {
@@ -3530,9 +3536,9 @@ export class AgentManager {
 			if (extractedText || fallbackDelta) {
 				existing.text = extractedText || `${existing.text}${fallbackDelta}`;
 			}
-			// 终态（message_end）带真实 stopReason 时更新；骨架阶段（pending）不覆盖旧值。
-			if (extractedStopReason) {
-				existing.stopReason = extractedStopReason;
+			// 终态（message_end）带真实 stopReason 时更新；骨架占位值（pending）不覆盖旧值。
+			if (finalStopReason) {
+				existing.stopReason = finalStopReason;
 			}
 			// 保留原始时间戳，不随 delta 刷新。
 			this.markMessagesDirtyFrom(agentId, existingIndex);
@@ -3546,7 +3552,7 @@ export class AgentManager {
 				role: "assistant",
 				text: text || "",
 				timestamp: Date.now(),
-				...(extractedStopReason ? { stopReason: extractedStopReason } : {}),
+				...(finalStopReason ? { stopReason: finalStopReason } : {}),
 			});
 			this.markMessagesDirtyFrom(agentId, list.length - 1);
 		}

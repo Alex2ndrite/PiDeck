@@ -53,7 +53,10 @@ test("TurnRow renders a single process summary toggle plus order-preserving flat
 
 // 扁平展示序列：严格按 run.items 时序，不重排；中间回答 = 非最后一条 assistant 文本。
 test("buildTurnDisplay keeps strict order and splits interim/final answers", () => {
-  assert.match(buildSource, /lastAssistantIndex/);
+  // 最终回答判定：run 收尾条目 + stopReason 协议信号/回退启发式（2026-08 升级，
+  // 取代旧的 lastAssistantIndex 锚点——判定矩阵行为由 tests/turnSegments.test.mjs 覆盖）
+  assert.match(buildSource, /isRunTail/);
+  assert.match(buildSource, /isFinal/);
   assert.match(buildSource, /interim-answer/);
   assert.match(buildSource, /final-answer/);
   // 消息自带 thinking 作为思考步骤插到该回答之前

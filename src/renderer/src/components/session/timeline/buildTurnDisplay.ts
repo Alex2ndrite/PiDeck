@@ -47,17 +47,6 @@ export function buildTurnDisplay(
 	// 流式中（isComplete=false）无法预知哪条是最后一条，全部按中间回答处理、
 	// 收进执行过程折叠栏；run 结束后才把最后一条提升为常驻的最终回答。
 	const isComplete = options.isComplete ?? true;
-	// 本轮最后一条 assistant 消息的位置：用于区分中间回答/最终回答的锚点。
-	// 只有「最后一条 assistant 且是 run 收尾条目」（index === items.length - 1）
-	// 才具备最终回答资格；后随 tool/thinking 的 assistant 是工具调用前的阶段性文本。
-	let lastAssistantIndex = -1;
-	if (isComplete) {
-		run.items.forEach((item, index) => {
-			if (item.kind === "message" && item.message.role === "assistant") {
-				lastAssistantIndex = index;
-			}
-		});
-	}
 
 	const items: TurnDisplayItem[] = [];
 	// 已有 thinking-group 始终保留；消息自带 thinking 受 showThinking 控制。
@@ -119,18 +108,19 @@ export function buildTurnDisplay(
 			items.push({ kind: "interim-answer", id: item.message.id, message: item.message });
 			return;
 		}
-		// 最终回答判定（优先协议信号，回退启发式）：
-		// - message.stopReason === "stop"：pi RPC message_end 的 provider 归一化枚举，
+		// 最终回答判定（run 收尾条目 + 协议信号/回退启发式）：
+		// - 收尾条目必须是 assistant（后随 tool/thinking 的阶段性文本不具备资格）；
+		// - stopReason === "stop"：pi RPC message_end 的 provider 归一化枚举，
 		//   message_end 时即确定、永不反复（steer 排队的中间回复恒为 toolUse，不会误提升）；
-		// - 无 stopReason（历史旧数据/旧版本）：回退「最后一条 assistant 且为 run 收尾条目」启发式。
-		const isProtocolFinal =
-			isComplete && item.message.stopReason === "stop";
-		const isFallbackFinal =
-			isComplete &&
-			!item.message.stopReason &&
-			index === lastAssistantIndex &&
-			index === run.items.length - 1;
-		if (isProtocolFinal || isFallbackFinal) {
+		// - 无 stopReason / pending（骨架占位残留）：回退启发式（历史旧数据兼容）。
+		// 位置守卫防御异常数据（stop 消息后仍有条目）：保证每 run 至多一个 final-answer。
+		const isRunTail = isComplete && index === run.items.length - 1;
+		const isFinal =
+			isRunTail &&
+			(item.message.stopReason === "stop" ||
+				!item.message.stopReason ||
+				item.message.stopReason === "pending");
+		if (isFinal) {
 			items.push({ kind: "final-answer", id: item.message.id, message: item.message });
 		} else {
 			items.push({ kind: "interim-answer", id: item.message.id, message: item.message });

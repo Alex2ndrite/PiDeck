@@ -188,11 +188,13 @@
      替代各子项（TimelineMarker）自带的独立短竖线，视觉不再断裂。 */
   padding-left: 0;
 }
-/* 容器贯穿竖线：对齐 TimelineMarker rail 中心（rail 16px / 2 = 8px） */
+/* 容器贯穿竖线：对齐 TimelineMarker rail 中心（rail 16px / 2 = 8px）。
+ * 注意 left 取 7.5px 而非 8px：竖线宽 1px，left:8 时占据 [8,9]、中心 8.5，
+ * 与节点中心（8px）产生 0.5px 错位，视觉上圆球整体偏左。 */
 .execution-summary-details::before {
   content: "";
   position: absolute;
-  left: 8px;
+  left: 7.5px;
   top: 0;
   bottom: 0;
   width: 1px;
