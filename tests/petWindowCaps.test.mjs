@@ -39,10 +39,12 @@ function loadModule(mockProcess = {}) {
 		getBounds() { return this.bounds; }
 		getPosition() { return [this.bounds.x, this.bounds.y]; }
 		getSize() { return [this.bounds.width, this.bounds.height]; }
+		setSize(width, height) { this.bounds = { ...this.bounds, width, height }; }
 		setBounds(bounds) { this.setBoundsCalls += 1; this.bounds = { ...this.bounds, ...bounds }; }
 		destroy() {}
 	}
 	let intervalCalls = 0;
+	const fsWrites = [];
 	const sandbox = {
 		exports: {},
 		__dirname: "/tmp/pi-desktop-test/out/main/pet",
@@ -81,6 +83,23 @@ function loadModule(mockProcess = {}) {
 			if (id === "../settings/SettingsStore") {
 				return { readElectronChromiumSandboxPreference: () => false };
 			}
+			// 共享布局纯函数：用真实源码转译加载，避免 mock 与实现漂移
+			if (id.endsWith("shared/petNotificationLayout")) {
+				const src = readFileSync("src/shared/petNotificationLayout.ts", "utf8");
+				const { outputText: layoutJs } = ts.transpileModule(src, {
+					compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+				});
+				const layoutModule = { exports: {} };
+				vm.runInNewContext(layoutJs, { module: layoutModule, exports: layoutModule.exports });
+				return layoutModule.exports;
+			}
+			if (id === "node:fs/promises") {
+				return {
+					mkdir: async () => {},
+					readFile: async () => { throw new Error("no position file"); },
+					writeFile: async (_path, content) => { fsWrites.push(String(content)); },
+				};
+			}
 			return require(id);
 		},
 	};
@@ -90,6 +109,7 @@ function loadModule(mockProcess = {}) {
 	return {
 		...sandbox.exports,
 		MockBrowserWindow,
+		fsWrites,
 		getIntervalCalls: () => intervalCalls,
 	};
 }
@@ -190,4 +210,106 @@ test("patrol is disabled when free positioning is unavailable", () => {
 		source,
 		/petPatrolEnabled[\s\S]{0,160}detectPetWindowCaps\(\)\.freePosition/,
 	);
+});
+
+const x11Env = {
+	platform: "linux",
+	env: { XDG_SESSION_TYPE: "x11", DISPLAY: ":0" },
+	argv: [],
+};
+
+function feetCenter(win) {
+	const b = win.getBounds();
+	return { x: b.x + b.width / 2, y: b.y + b.height };
+}
+
+function approx(a, b, label) {
+	assert.ok(Math.abs(a - b) <= 1, `${label}: ${a} vs ${b}`);
+}
+
+test("create uses the normal layout size and notification expands the window around the feet anchor", async () => {
+	const { PetWindow, MockBrowserWindow } = loadModule(x11Env);
+	const petWindow = new PetWindow();
+
+	await petWindow.create(1, "large");
+	const win = MockBrowserWindow.last;
+	assert.equal(win.options.width, 160);
+	assert.equal(win.options.height, 176);
+	// 移到屏幕中部，避免扩展时被 workArea 钳制干扰锚点验证
+	petWindow.moveTo(500, 700);
+
+	const before = feetCenter(win);
+	petWindow.setNotificationVisible(true);
+	const expanded = feetCenter(win);
+	assert.ok(win.getBounds().width > 160);
+	assert.ok(win.getBounds().height > 176);
+	approx(expanded.x, before.x, "feet x while expanded");
+	approx(expanded.y, before.y, "feet y while expanded");
+
+	petWindow.setNotificationVisible(false);
+	const restored = feetCenter(win);
+	approx(restored.x, before.x, "feet x after restore");
+	approx(restored.y, before.y, "feet y after restore");
+	assert.equal(win.getBounds().width, 160);
+	assert.equal(win.getBounds().height, 176);
+});
+
+test("resize keeps the feet anchor and clamps inside the work area", async () => {
+	const { PetWindow, MockBrowserWindow } = loadModule(x11Env);
+	const petWindow = new PetWindow();
+
+	await petWindow.create(1, "medium");
+	const win = MockBrowserWindow.last;
+	const before = feetCenter(win);
+
+	petWindow.resize(0.5);
+	const after = feetCenter(win);
+	approx(after.x, before.x, "feet x after resize");
+	approx(after.y, before.y, "feet y after resize");
+	assert.equal(win.getBounds().width, 80);
+	assert.equal(win.getBounds().height, 88);
+
+	// 靠近屏幕底部时重新放大，窗口整体被钳制在 workArea 内
+	win.setBounds({ x: 1700, y: 1000, width: 80, height: 88 });
+	petWindow.resize(2);
+	const b = win.getBounds();
+	assert.ok(b.x + b.width <= 1920);
+	assert.ok(b.y + b.height <= 1080);
+});
+
+test("font mode changes reflow the notification slot without moving the feet", async () => {
+	const { PetWindow, MockBrowserWindow } = loadModule(x11Env);
+	const petWindow = new PetWindow();
+
+	await petWindow.create(0.5, "compact");
+	const win = MockBrowserWindow.last;
+	petWindow.moveTo(500, 700);
+	petWindow.setNotificationVisible(true);
+	const before = feetCenter(win);
+	const heightBefore = win.getBounds().height;
+
+	petWindow.setFontMode("xlarge");
+	const after = feetCenter(win);
+	approx(after.x, before.x, "feet x after font change");
+	approx(after.y, before.y, "feet y after font change");
+	assert.ok(win.getBounds().height > heightBefore, "notification slot grows with font mode");
+});
+
+test("moveTo persists positions converted back to the normal layout", async () => {
+	const { PetWindow, MockBrowserWindow, fsWrites } = loadModule(x11Env);
+	const petWindow = new PetWindow();
+
+	await petWindow.create(1, "medium");
+	const win = MockBrowserWindow.last;
+	petWindow.setNotificationVisible(true);
+	const expanded = { ...win.getBounds() };
+	// 通知布局下拖到 (100, 300)，脚底中心 = (100 + w/2, 300 + h)
+	petWindow.moveTo(100, 300);
+	await new Promise((r) => setTimeout(r, 10));
+	const saved = JSON.parse(fsWrites.at(-1));
+	// 换算回普通布局（160x176）：脚底中心不变
+	const feetX = 100 + expanded.width / 2;
+	const feetY = 300 + expanded.height;
+	approx(saved.x + 80, feetX, "persisted feet x");
+	approx(saved.y + 176, feetY, "persisted feet y");
 });

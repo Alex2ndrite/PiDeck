@@ -1101,8 +1101,8 @@ const api = {
 		/** 挂载时主动拉取当前选中宠物 manifest（避免推送竞态） */
 		getCurrent: () =>
 			ipcRenderer.invoke(ipcChannels.petGetCurrent) as Promise<PetManifest | null>,
-		/** 主进程推送通知气泡（出错/完成） */
-		onNotify: (callback: (n: PetNotification) => void) =>
+		/** 主进程推送通知气泡（出错/完成/等待操作；null 表示清空当前提醒） */
+		onNotify: (callback: (n: PetNotification | null) => void) =>
 			subscribe(ipcChannels.petNotify, callback),
 		setPreviewMode: (mode: string) =>
 			ipcRenderer.invoke(ipcChannels.petPreviewMode, mode) as Promise<void>,

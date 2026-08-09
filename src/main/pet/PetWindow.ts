@@ -2,7 +2,16 @@ import { app, BrowserWindow, screen } from "electron";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { is } from "@electron-toolkit/utils";
-import type { PetWindowCaps } from "../../shared/types";
+import type { AppFontSizeMode, PetWindowCaps } from "../../shared/types";
+import {
+	PET_BASE_H,
+	PET_BASE_W,
+	clampToWorkArea,
+	keepFeetCenter,
+	petLayout,
+	toNormalLayoutPosition,
+	type Size2D,
+} from "../../shared/petNotificationLayout";
 import { preparePreloadPath } from "../preloadPath";
 import { readElectronChromiumSandboxPreference } from "../settings/SettingsStore";
 
@@ -22,8 +31,6 @@ export function detectPetWindowCaps(): PetWindowCaps {
 	const x11 = sessionType === "x11" || (!process.env.WAYLAND_DISPLAY && !!process.env.DISPLAY);
 	return { transparent: x11, clickThrough: true, freePosition: x11 };
 }
-
-const BASE_W = 160, BASE_H = 176;
 
 function posPath() { return join(app.getPath("userData"), "pet-position.json"); }
 
@@ -53,22 +60,41 @@ async function savePos(bounds: { x: number; y: number }) {
 	} catch { /* 保存失败不影响宠物运行 */ }
 }
 
+/**
+ * PetWindow —— 宠物悬浮窗。
+ * 窗口几何由 shared/petNotificationLayout 统一推导：普通布局只有精灵区域，
+ * 通知可见时扩展出头顶气泡槽位；尺寸切换以「精灵脚底中心」为稳定锚点。
+ * pet-position.json 始终保存普通布局坐标，保证旧位置文件语义不变。
+ */
 export class PetWindow {
 	private win: BrowserWindow | null = null;
 	/** 宠物窗口的业务目标尺寸；移动时不能信任当前 bounds，避免透明窗拖动后尺寸漂移被继续保留。 */
-	private targetSize = { width: BASE_W, height: BASE_H };
+	private targetSize = { width: PET_BASE_W, height: PET_BASE_H };
 	/** 位置持久化防抖：巡游每 50ms 移动一次，避免高频写盘拖慢主进程 */
 	private sizeGuardTimer: NodeJS.Timeout | null = null;
 	private saveTimer: NodeJS.Timeout | null = null;
 	private pendingPos: { x: number; y: number } | null = null;
 
+	private scale = 1;
+	private fontMode: AppFontSizeMode = "medium";
+	private notificationVisible = false;
+
 	get window(): BrowserWindow | null { return this.win; }
 	get exists(): boolean { return !!this.win && !this.win.isDestroyed(); }
 
-	async create(scale = 1) {
+	/** 当前布局（含通知槽位状态） */
+	private get layout() {
+		return petLayout({ scale: this.scale, fontMode: this.fontMode, notificationVisible: this.notificationVisible });
+	}
+
+	async create(scale = 1, fontMode: AppFontSizeMode = "medium") {
 		if (this.exists) return this.win!;
 
-		const w = Math.round(BASE_W * scale), h = Math.round(BASE_H * scale);
+		this.scale = Math.max(0.1, scale);
+		this.fontMode = fontMode;
+		this.notificationVisible = false;
+		const layout = this.layout;
+		const w = layout.windowW, h = layout.windowH;
 		this.targetSize = { width: Math.max(w, 1), height: Math.max(h, 1) };
 		const caps = detectPetWindowCaps();
 		const isMac = process.platform === "darwin";
@@ -115,12 +141,13 @@ export class PetWindow {
 
 		this.win.setAlwaysOnTop(true, "floating");
 		if (caps.freePosition) {
-			// moved 高频触发（巡游每 50ms 一次、拖拽每次 pointermove 一次），
+			// moved 高频触发（巡游每 50ms 一次、拖拽每次 pointermove 一次、reflow 一次），
 			// 直接落盘会拖慢主进程、间接放大 tick 抖动。这里防抖 400ms 合并写盘。
+			// reflow 的 setBounds 也会触发 moved：保存的是换算回普通布局后的实际位置，语义一致，无需特判。
 			this.win.on("moved", () => {
 				if (!this.exists) return;
 				const b = this.win!.getBounds();
-				this.pendingPos = { x: b.x, y: b.y };
+				this.pendingPos = this.toNormalPos(b);
 				if (this.saveTimer) return;
 				this.saveTimer = setTimeout(() => {
 					this.saveTimer = null;
@@ -160,6 +187,59 @@ export class PetWindow {
 		this.win = null;
 	}
 
+	/** 把任意布局的窗口 bounds 换算成普通布局左上角（持久化格式） */
+	private toNormalPos(b: { x: number; y: number; width: number; height: number }): { x: number; y: number } {
+		const normal = petLayout({ scale: this.scale, fontMode: this.fontMode, notificationVisible: false });
+		return toNormalLayoutPosition(
+			{ x: b.x, y: b.y },
+			{ width: b.width, height: b.height },
+			{ width: normal.windowW, height: normal.windowH },
+		);
+	}
+
+	/**
+	 * 按当前布局状态重算窗口尺寸与位置：保持精灵脚底中心不变，并整体钳制到 workArea。
+	 * 自由定位平台用 setBounds；Wayland 等受限平台由合成器管理位置，只 setSize。
+	 */
+	private reflow() {
+		if (!this.exists) return;
+		const layout = this.layout;
+		this.targetSize = { width: Math.max(layout.windowW, 1), height: Math.max(layout.windowH, 1) };
+		if (!detectPetWindowCaps().freePosition) {
+			this.win!.setSize(this.targetSize.width, this.targetSize.height);
+			return;
+		}
+		const [x, y] = this.win!.getPosition();
+		const [w, h] = this.win!.getSize();
+		const next = keepFeetCenter({ x, y, width: w, height: h }, { width: layout.windowW, height: layout.windowH });
+		const wa = screen.getDisplayMatching({ x: next.x, y: next.y, width: layout.windowW, height: layout.windowH }).workArea;
+		const clamped = clampToWorkArea({ ...next, width: layout.windowW, height: layout.windowH }, wa);
+		this.win!.setBounds({ x: clamped.x, y: clamped.y, width: layout.windowW, height: layout.windowH });
+	}
+
+	/** 宠物缩放变化（保持脚底锚点） */
+	resize(scale: number) {
+		if (!this.exists) return;
+		const next = Math.max(0.1, scale);
+		if (next === this.scale) return;
+		this.scale = next;
+		this.reflow();
+	}
+
+	/** 有效 UI 字号档位变化（气泡槽位高度随字号变化） */
+	setFontMode(fontMode: AppFontSizeMode) {
+		if (!this.exists || fontMode === this.fontMode) return;
+		this.fontMode = fontMode;
+		this.reflow();
+	}
+
+	/** 提醒可见性变化：进入提醒扩展出头顶气泡槽位，退出恢复普通布局 */
+	setNotificationVisible(visible: boolean) {
+		if (!this.exists || visible === this.notificationVisible) return;
+		this.notificationVisible = visible;
+		this.reflow();
+	}
+
 	moveTo(x: number, y: number) {
 		if (!this.exists || !detectPetWindowCaps().freePosition) return;
 		// 透明/无边框窗口在高频移动时，当前 bounds 可能已经被系统拖拽/合成器误放大。
@@ -170,7 +250,9 @@ export class PetWindow {
 			width: this.targetSize.width,
 			height: this.targetSize.height,
 		});
-		void savePos({ x, y });
+		// 持久化统一换算为普通布局位置：通知展示期间拖拽不会污染位置文件语义
+		const [w, h] = this.win!.getSize();
+		void savePos(this.toNormalPos({ x, y, width: w, height: h }));
 	}
 
 	/** 将当前窗口拉回业务目标尺寸，用于拖拽结束后纠正系统合成器造成的尺寸漂移。 */
@@ -207,24 +289,6 @@ export class PetWindow {
 	}
 
 	setAlwaysOnTop(v: boolean) { if (this.exists) this.win!.setAlwaysOnTop(v, "floating"); }
-
-	resize(scale: number) {
-		if (!this.exists) return;
-		const w = Math.round(BASE_W * scale), h = Math.round(BASE_H * scale);
-		this.targetSize = { width: Math.max(w, 1), height: Math.max(h, 1) };
-		if (!detectPetWindowCaps().freePosition) {
-			this.win!.setSize(this.targetSize.width, this.targetSize.height);
-			return;
-		}
-		const [cx, cy] = this.win!.getPosition();
-		const wa = screen.getDisplayMatching({ x: cx, y: cy, width: w, height: h }).workArea;
-		// 使用 setBounds（含当前位置）替代 setSize，避免缩小尺寸时在 resizable:false 窗口上失效
-		this.win!.setBounds({ x: cx, y: cy, width: this.targetSize.width, height: this.targetSize.height });
-		// 缩小后需要调整位置，确保窗口不超出屏幕边界
-		const nx = Math.min(cx, wa.x + wa.width - w - 8);
-		const ny = Math.min(cy, wa.y + wa.height - h - 8);
-		if (nx !== cx || ny !== cy) this.moveTo(nx, ny);
-	}
 
 	show() { if (this.exists) process.platform === "darwin" ? this.win!.showInactive() : this.win!.show(); }
 	hide() { if (this.exists) this.win!.hide(); }
