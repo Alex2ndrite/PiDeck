@@ -403,17 +403,34 @@ export function registerStoreIpc({
 	ipcMain.handle(ipcChannels.extensionsList, (_event, forceRefresh?: boolean) =>
 		extensionManager.list(Boolean(forceRefresh)));
 	ipcMain.handle(ipcChannels.extensionsRemoveBuiltIn, async (_event, source: string) => {
-		await extensionManager.removeBuiltIn(source);
-		void appLogger.info("extension", "Built-in extension removed", { source });
+		try {
+			await extensionManager.removeBuiltIn(source);
+			void appLogger.info("extension", "Built-in extension removed", { source });
+		} catch (error) {
+			void appLogger.error("extension", "Built-in extension remove failed", {
+				source,
+				error: error instanceof Error ? error.message : String(error),
+			});
+			throw error;
+		}
 	});
 	ipcMain.handle(ipcChannels.extensionsRestoreBuiltIn, async (_event, source: string) => {
 		await extensionManager.restoreBuiltIn(source);
 		void appLogger.info("extension", "Built-in extension restored", { source });
 	});
 	ipcMain.handle(ipcChannels.extensionsUninstall, async (_event, source: string, scope?: "user" | "project" | "unknown") => {
-		const result = await extensionManager.uninstall(source, scope);
-		void appLogger.info("extension", "Extension uninstalled", { source, scope });
-		return result;
+		try {
+			const result = await extensionManager.uninstall(source, scope);
+			void appLogger.info("extension", "Extension uninstalled", { source, scope });
+			return result;
+		} catch (error) {
+			void appLogger.error("extension", "Extension uninstall failed", {
+				source,
+				scope,
+				error: error instanceof Error ? error.message : String(error),
+			});
+			throw error;
+		}
 	});
 	ipcMain.handle(ipcChannels.extensionsInstall, async (_event, source: string) => {
 		const result = await extensionManager.install(source);

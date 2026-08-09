@@ -11,7 +11,7 @@ export type FilesIpcDeps = {
 	fileSystemService: FileSystemService;
 	projectStore: ProjectStore;
 	settingsStore: SettingsStore;
-	appLogger: Pick<AppLogger, "info">;
+	appLogger: Pick<AppLogger, "info" | "error">;
 	getMainWindow: () => BrowserWindow | null;
 	openExternalUrl: (url: string, forceSystem?: boolean) => Promise<void>;
 };
@@ -124,8 +124,19 @@ export function registerFilesIpc({
 	);
 
 	ipcMain.handle(ipcChannels.filesDelete, async (_event, path: string, recursive?: boolean) => {
-		await fileSystemService.delete(path, recursive);
-		void appLogger.info("file", "File deleted", { path, recursive: Boolean(recursive) });
+		try {
+			await fileSystemService.delete(path, recursive);
+			void appLogger.info("file", "File deleted", { path, recursive: Boolean(recursive) });
+		} catch (error) {
+			// 删除失败同样留痕（回收站不可用/权限不足/路径不存在等），
+			// 保证"谁发起的删除、为什么没删掉"可事后审计。
+			void appLogger.error("file", "File delete failed", {
+				path,
+				recursive: Boolean(recursive),
+				error: error instanceof Error ? error.message : String(error),
+			});
+			throw error;
+		}
 	});
 
 	ipcMain.handle(ipcChannels.filesRename, async (_event, path: string, newName: string) => {

@@ -4,11 +4,12 @@ import { join, basename } from "node:path";
 import { copyFile, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 
 import { ipcChannels } from "../../shared/ipc";
+import { trashPath } from "../fs/trash";
 import type { DraftMeta, ScratchPadData } from "../../shared/types";
 import type { AppLogger } from "../logging/AppLogger";
 
 export type ScratchPadIpcDeps = {
-	appLogger: Pick<AppLogger, "info">;
+	appLogger: Pick<AppLogger, "info" | "error">;
 };
 
 export function registerScratchPadIpc({ appLogger }: ScratchPadIpcDeps): void {
@@ -88,8 +89,17 @@ export function registerScratchPadIpc({ appLogger }: ScratchPadIpcDeps): void {
 
 	/** 删除指定草稿 */
 	ipcMain.handle(ipcChannels.scratchPadDelete, async (_event, draftPath: string): Promise<void> => {
-		await rm(draftPath);
-		void appLogger.info("scratchPad", "draft deleted", { path: draftPath });
+		try {
+			// 草稿是用户内容：删除走系统回收站（可恢复）；回收站不可用时抛错，拒绝硬删。
+			await trashPath(draftPath);
+			void appLogger.info("scratchPad", "draft deleted", { path: draftPath });
+		} catch (error) {
+			void appLogger.error("scratchPad", "Draft delete failed", {
+				path: draftPath,
+				error: error instanceof Error ? error.message : String(error),
+			});
+			throw error;
+		}
 	});
 
 	/** 加载指定草稿内容，path 为空时返回空内容 */

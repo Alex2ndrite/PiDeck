@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
-import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
+import { trashPath } from "../fs/trash";
 import type {
 	CreateProjectSkillInput,
 	PiExtensionSummary,
@@ -81,8 +82,8 @@ export class ProjectResourceManager {
 		const skill = await this.findSkill(project, skillPath);
 		const target = skill.type === "directory" ? skill.dir : skill.path;
 		this.assertInsideProject(project, target);
-		// 目录型 skill 代表一个完整能力包；删除时移除整个包目录，根 markdown 只删除单文件。
-		await rm(target, { recursive: true, force: true });
+		// 目录型 skill 代表一个完整能力包；删除走系统回收站（可恢复），拒绝硬删。
+		await trashPath(target);
 	}
 
 	async toggleSkill(projectId: string, skillPath: string, enabled: boolean): Promise<PiSkillSummary> {
@@ -122,7 +123,8 @@ export class ProjectResourceManager {
 		const extension = (await this.listExtensions(project)).find((item) => item.path === extensionPath);
 		if (!extension?.path) throw new Error(this.translate("mainProjectResource.extensionNotFound"));
 		this.assertInsideProject(project, extension.path);
-		await rm(extension.path, { recursive: true, force: true });
+		// 扩展目录删除走系统回收站（可恢复），拒绝硬删。
+		await trashPath(extension.path);
 	}
 
 	private async listSkills(project: Project): Promise<PiSkillSummary[]> {

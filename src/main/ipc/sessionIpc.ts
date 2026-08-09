@@ -297,28 +297,38 @@ export function registerSessionIpc(deps: SessionIpcDeps): void {
 			) {
 				throw new Error(mainCopy("session.stopBeforeDelete"));
 			}
-			if (entry.filePath) {
-				const normalizedTarget = canonicalizeSessionPath(
-					entry.filePath,
-					entry.environment,
-				);
-				const usingAgent = agentManager.list().find((agent) => (
-					agent.sessionPath &&
-					agent.sessionEnvironment === entry.environment &&
-					(entry.environment !== "wsl" || (
-						agent.wslDistro === entry.wslDistro &&
-						agent.wslUser === entry.wslUser
-					)) &&
-					canonicalizeSessionPath(agent.sessionPath, entry.environment) === normalizedTarget
-				));
-				if (usingAgent) {
-					throw new Error(mainCopy("session.inUseDeleteBlocked", { title: usingAgent.title }));
+			try {
+				if (entry.filePath) {
+					const normalizedTarget = canonicalizeSessionPath(
+						entry.filePath,
+						entry.environment,
+					);
+					const usingAgent = agentManager.list().find((agent) => (
+						agent.sessionPath &&
+						agent.sessionEnvironment === entry.environment &&
+						(entry.environment !== "wsl" || (
+							agent.wslDistro === entry.wslDistro &&
+							agent.wslUser === entry.wslUser
+						)) &&
+						canonicalizeSessionPath(agent.sessionPath, entry.environment) === normalizedTarget
+					));
+					if (usingAgent) {
+						throw new Error(mainCopy("session.inUseDeleteBlocked", { title: usingAgent.title }));
+					}
+					await sessionScanner.delete(entry.filePath);
 				}
-				await sessionScanner.delete(entry.filePath);
+				await sessionCatalog.remove(sessionId);
+				void appLogger.info("session", "Catalog session deleted", { sessionId, filePath: entry.filePath });
+				return true;
+			} catch (error) {
+				// 会话删除失败（文件删除失败/记录移除失败/会话使用中拦截）也要留痕，便于事后追踪。
+				void appLogger.error("session", "Catalog session delete failed", {
+					sessionId,
+					filePath: entry.filePath,
+					error: error instanceof Error ? error.message : String(error),
+				});
+				throw error;
 			}
-			await sessionCatalog.remove(sessionId);
-			void appLogger.info("session", "Catalog session deleted", { sessionId, filePath: entry.filePath });
-			return true;
 		},
 	);
 	ipcMain.handle(

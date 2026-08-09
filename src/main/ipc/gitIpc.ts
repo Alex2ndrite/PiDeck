@@ -12,7 +12,7 @@ import type { SettingsStore } from "../settings/SettingsStore";
 import type { WorktreeService } from "../git/WorktreeService";
 
 export type GitIpcDeps = {
-	appLogger: Pick<AppLogger, "warn">;
+	appLogger: Pick<AppLogger, "warn" | "info" | "error">;
 	mainCopy: (key: string, params?: Record<string, string | number>) => string;
 	gitService: GitService;
 	piLocator: PiLocator;
@@ -283,23 +283,43 @@ export function registerGitIpc({
 		async (_event, projectId: string, worktreePath: string) => {
 			const project = projectStore.get(projectId);
 			if (!project) throw new Error(`Project not found: ${projectId}`);
-			const ok = await worktreeService.remove(worktreePath, project.path);
-			const normalizeForCompare = (value: string) => {
-				const resolved = resolve(value);
-				return process.platform === "win32" ? resolved.toLowerCase() : resolved;
-			};
-			const normalizedTarget = normalizeForCompare(worktreePath);
-			const stillInGit = (await worktreeService.list(project.path)).some(
-				(entry) => normalizeForCompare(entry.path) === normalizedTarget,
-			);
-			// 如果 git 已经没有该 worktree（包括用户在外部删过导致 remove 返回 false），
-			// 也要清理 PiDeck 项目记录，否则重启后会从 projects.json 恢复成"删不掉"。
-			if (ok || !stillInGit) {
-				const child = projectStore.findByPath(worktreePath);
-				if (child) await projectStore.remove(child.id);
-				return true;
+			try {
+				const ok = await worktreeService.remove(worktreePath, project.path);
+				const normalizeForCompare = (value: string) => {
+					const resolved = resolve(value);
+					return process.platform === "win32" ? resolved.toLowerCase() : resolved;
+				};
+				const normalizedTarget = normalizeForCompare(worktreePath);
+				const stillInGit = (await worktreeService.list(project.path)).some(
+					(entry) => normalizeForCompare(entry.path) === normalizedTarget,
+				);
+				// 如果 git 已经没有该 worktree（包括用户在外部删过导致 remove 返回 false），
+				// 也要清理 PiDeck 项目记录，否则重启后会从 projects.json 恢复成"删不掉"。
+				if (ok || !stillInGit) {
+					const child = projectStore.findByPath(worktreePath);
+					if (child) await projectStore.remove(child.id);
+					// worktree 删除 = 物理目录删除（走回收站），记审计日志便于追踪。
+					void appLogger.info("git", "Worktree removed", {
+						projectId,
+						worktreePath,
+						projectRecordRemoved: Boolean(child),
+					});
+					return true;
+				}
+				void appLogger.info("git", "Worktree removal skipped", {
+					projectId,
+					worktreePath,
+					reason: "worktree still tracked by git",
+				});
+				return false;
+			} catch (error) {
+				void appLogger.error("git", "Worktree remove failed", {
+					projectId,
+					worktreePath,
+					error: error instanceof Error ? error.message : String(error),
+				});
+				throw error;
 			}
-			return false;
 		},
 	);
 
@@ -403,7 +423,19 @@ export function registerGitIpc({
 		async (_event, projectId: string, group: "workingTree" | "untracked", filePath: string) => {
 			const project = projectStore.get(projectId);
 			if (!project) throw new Error(`Project not found: ${projectId}`);
-			await gitService.discardFile(project.path, group, filePath);
+			try {
+				await gitService.discardFile(project.path, group, filePath);
+				// untracked 丢弃 = 删除用户文件（走回收站），记审计日志便于追踪。
+				void appLogger.info("git", "Changes discarded", { projectId, group, filePath });
+			} catch (error) {
+				void appLogger.error("git", "Discard changes failed", {
+					projectId,
+					group,
+					filePath,
+					error: error instanceof Error ? error.message : String(error),
+				});
+				throw error;
+			}
 		},
 	);
 

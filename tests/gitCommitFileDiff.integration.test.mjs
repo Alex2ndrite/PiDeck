@@ -45,6 +45,16 @@ before(() => {
     ],
     { cwd: resolve("."), stdio: "pipe" },
   );
+  // GitService 依赖 ../fs/trash（懒加载 electron.shell.trashItem）。
+  // 纯 Node 集成测试环境没有 electron，注入 stub：模拟回收站 = 删除源文件，
+  // 使 discard untracked 的真实删除语义在测试中成立。
+  const stubElectronDir = join(buildDir, "node_modules", "electron");
+  mkdirSync(stubElectronDir, { recursive: true });
+  writeFileSync(join(stubElectronDir, "package.json"), JSON.stringify({ name: "electron", main: "index.js" }));
+  writeFileSync(
+    join(stubElectronDir, "index.js"),
+    `exports.shell = { trashItem: async (p) => { await require("node:fs/promises").rm(p, { recursive: true, force: true }); } };`,
+  );
   ({ GitService } = require(join(buildDir, "main/git/GitService.js")));
 
   git("init");

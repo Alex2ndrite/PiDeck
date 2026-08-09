@@ -1,7 +1,8 @@
 import { app, dialog, ipcMain, protocol } from "electron";
-import { mkdir, copyFile, unlink, readdir, readFile } from "node:fs/promises";
+import { mkdir, copyFile, readdir, readFile } from "node:fs/promises";
 import { join, resolve, sep } from "node:path";
 import { ipcChannels } from "../../shared/ipc";
+import { trashPath } from "../fs/trash";
 
 /** 背景图存放目录（userData/backgrounds/），协议只服务该目录，杜绝任意本地文件读取 */
 export function backgroundsDir(): string {
@@ -32,10 +33,10 @@ export async function pickBackgroundImage(win?: Electron.BrowserWindow): Promise
 		const ext = picked.includes(".") ? picked.slice(picked.lastIndexOf(".")) : "";
 		const name = `bg-${Date.now()}${ext.toLowerCase()}`;
 		await copyFile(picked, join(dir, name));
-		// 清理旧背景图（仅本目录，文件名前缀 bg-）
+		// 清理旧背景图（仅本目录，文件名前缀 bg-）；替换场景失败不阻塞新图生效。
 		for (const f of await readdir(dir)) {
 			if (f !== name && f.startsWith("bg-")) {
-				await unlink(join(dir, f)).catch(() => undefined);
+				await trashPath(join(dir, f)).catch(() => undefined);
 			}
 		}
 		return name;
@@ -48,11 +49,8 @@ export async function pickBackgroundImage(win?: Electron.BrowserWindow): Promise
 /** 删除指定背景图文件（设置清空时调用），文件名仅允许 bg- 前缀白名单 */
 export async function removeBackgroundImage(name: string): Promise<void> {
 	if (!/^bg-[a-zA-Z0-9.]+$/.test(name)) return;
-	try {
-		await unlink(join(backgroundsDir(), name));
-	} catch {
-		// 文件不存在等场景视为已清理
-	}
+	// 用户主动删除背景图：走系统回收站（可恢复）；失败抛错由调用方呈现。
+	await trashPath(join(backgroundsDir(), name));
 }
 
 /**

@@ -3,6 +3,7 @@ import { constants } from "node:fs";
 import { lstat, open, readlink, realpath, unlink } from "node:fs/promises";
 import { promisify } from "node:util";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { trashPath } from "../fs/trash";
 import type { GitBranchInfo, CommitDetail, CommitEntry, GitRef, BranchDiffResult, GitChangedFile, GitFileStatus, GitCommitFileDiff, GitResourceGroupType, GitWorkspaceFileDiff } from "../../shared/types";
 import { GitStatus } from "../../shared/types";
 import type { GitResource, GitResourceGroups } from "../../shared/types";
@@ -693,8 +694,13 @@ export class GitService {
 			if (!metadata.isFile() && !metadata.isSymbolicLink()) {
 				throw new Error("Only individual untracked files can be discarded");
 			}
-			// unlink 对符号链接只删除链接自身，不会跟随到项目外目标；若文件在校验后被替换为目录，unlink 会安全失败。
-			await unlink(resource.path);
+			// 符号链接：unlink 只删链接自身（不跟随目标），无用户数据风险，保持轻量删除；
+			// 普通文件：丢弃未跟踪 = 删除用户内容，走系统回收站（可恢复）；回收站不可用时抛错。
+			if (metadata.isSymbolicLink()) {
+				await unlink(resource.path);
+				return;
+			}
+			await trashPath(resource.path);
 			return;
 		}
 

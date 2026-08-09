@@ -1,5 +1,6 @@
-import { readdir, unlink, rename as fsRename, rm, mkdir, writeFile, stat } from "node:fs/promises";
+import { readdir, rename as fsRename, mkdir, writeFile, stat } from "node:fs/promises";
 import { join, relative, dirname } from "node:path";
+import { trashPath } from "./trash";
 import type { FileTreeNode } from "../../shared/types";
 
 const ignoredNames = new Set([".git", "node_modules", "dist", "build", ".next", "coverage", ".venv", "__pycache__"]);
@@ -69,12 +70,9 @@ export class FileSystemService {
 
   /** 删除文件或空目录；非空目录需要递归删除 */
   async delete(targetPath: string, recursive = false): Promise<void> {
-    const stat = await import("node:fs/promises").then((m) => m.stat(targetPath));
-    if (stat.isDirectory()) {
-      await rm(targetPath, { recursive: true, force: true });
-    } else {
-      await unlink(targetPath);
-    }
+    // 统一走系统回收站：文件抽屉的删除是用户主动操作，必须可恢复；
+    // 回收站不可用时 trashPath 直接抛错（拒绝静默硬删），错误由 IPC 层呈现给用户。
+    await trashPath(targetPath);
   }
 
   /** 重命名文件或目录 */

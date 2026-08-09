@@ -1,8 +1,9 @@
 import { shell } from "electron";
 import { existsSync } from "node:fs";
-import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join, basename } from "node:path";
 import { homedir } from "node:os";
+import { trashPath } from "../fs/trash";
 import type {
 	CreatePiPromptTemplateInput,
 	PiPromptTemplateListResult,
@@ -263,7 +264,8 @@ export class PromptManager {
 		if (!existsSync(filePath)) {
 			throw new Error(this.translate("mainPrompt.fileNotFound"));
 		}
-		await rm(filePath, { force: true });
+		// 提示词模板是用户内容：删除走系统回收站（可恢复）；回收站不可用时抛错，拒绝硬删。
+		await trashPath(filePath);
 	}
 
 	/** 扫描项目 .pi/prompts/ 目录下的模板 */
@@ -324,7 +326,8 @@ export class PromptManager {
 	async deleteFromProject(projectPath: string, fileName: string): Promise<void> {
 		const filePath = join(projectPath, ".pi", "prompts", fileName);
 		if (!existsSync(filePath)) throw new Error(this.translate("mainPrompt.fileNotFound"));
-		await rm(filePath, { force: true });
+		// 项目内模板同样走回收站，避免误删后无法恢复。
+		await trashPath(filePath);
 	}
 
 	async openFolder(): Promise<void> {

@@ -1,8 +1,9 @@
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
-import { rm, realpath } from "node:fs/promises";
-import { basename, join, resolve } from "node:path";
+import { realpath } from "node:fs/promises";
+import { basename, dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
+import { trashPath } from "../fs/trash";
 import type { WorktreeEntry } from "../../shared/types";
 import type { MainProcessTranslationKey } from "../../shared/i18n/mainProcessCopy";
 
@@ -27,6 +28,11 @@ export class WorktreeService {
 	/**
 	 * 获取指定项目仓库的所有 worktree（排除主工作区）。
 	 * 使用 git worktree list --porcelain 解析。
+	 *
+	 * 主工作区 = git 仓库根 checkout（由 --git-common-dir 推导），而非当前 projectPath：
+	 * 当 PiDeck 从某个子 worktree 打开时，projectPath 是 worktree 目录，主工作区
+	 * 会作为普通条目出现在列表中；若不排除，用户误点删除会整目录 rm -rf（曾导致
+	 * 主工作区 40G 数据丢失）。
 	 */
 	async list(projectPath: string): Promise<WorktreeEntry[]> {
 		try {
@@ -35,7 +41,8 @@ export class WorktreeService {
 				["worktree", "list", "--porcelain"],
 				{ cwd: projectPath },
 			);
-			return this.parseWorktreeList(stdout, projectPath);
+			const mainWorktree = await this.getMainWorktree(projectPath);
+			return this.parseWorktreeList(stdout, mainWorktree ?? projectPath);
 		} catch {
 			// 非 git 目录或 git 未安装
 			return [];
@@ -85,31 +92,45 @@ export class WorktreeService {
 	/**
 	 * 删除指定 worktree。
 	 * 先 git worktree remove --force，再清理目录，最后删除对应的分支。
+	 *
+	 * 安全约束（防止误删主工作区/非 worktree 目录）：
+	 * 1. 目标必须出现在 list() 中（list 已排除主工作区）；
+	 * 2. 目标与仓库主工作区 realpath 相等时直接拒绝（硬性兜底，即使 list 过滤被绕过）；
+	 * 3. git worktree remove 失败时：目录仍存在则拒绝物理删除——旧实现 catch 后
+	 *    无条件 rm -rf，若 git 因“不能移除主工作区”等拒绝，会把主项目目录整个删掉；
+	 *    目录已不存在（外部删过的残留记录）则继续清理，rm 无物理内容可删。
 	 */
 	async remove(worktreePath: string, projectPath: string): Promise<boolean> {
 		const entries = await this.list(projectPath);
 		const normalizedTarget = await this.canonical(worktreePath);
 		const entry = entries.find(asyncEntry => this.samePath(asyncEntry.path, normalizedTarget));
 		if (!entry) return false;
-		const branch = entry.branch;
+
+		// 硬性防护：目标与仓库主工作区相同时拒绝删除（realpath 比较，兼容 junction/8.3 短路径）。
+		const mainWorktree = await this.getMainWorktree(projectPath);
+		if (mainWorktree && this.samePath(await this.canonical(mainWorktree), normalizedTarget)) {
+			return false;
+		}
 
 		try {
 			await execFileAsync("git", ["worktree", "remove", "--force", worktreePath], { cwd: projectPath });
 		} catch {
-			// git 的记录可能已损坏；后续仍尝试清理目录，但不吞掉路径保护。
+			// git 拒绝移除：目录仍存在 → 拒绝物理删除（安全优先，删不掉也比删错强）；
+			// 目录已不存在 → 残留记录清理场景，无需回收站（无内容可删），继续视为成功。
+			if (existsSync(worktreePath)) return false;
 		}
 
-		try {
-			await rm(worktreePath, { recursive: true, force: true });
-		} catch {
-			return false;
-		}
+		// git 已确认移除后，把物理目录移入系统回收站（可恢复删除）。
+		// 目录已被外部删除时无需回收站，直接返回成功（残留记录清理路径）。
+		if (!existsSync(worktreePath)) return true;
+		// 回收站不可用时 trashPath 抛错：删除失败比永久丢失安全（历史教训：误删 40G）。
+		await trashPath(worktreePath);
 
 		// 删除 PiDeck 创建的分支：旧版本使用 pideck/{slug}，新版本使用与目录名一致的 {slug}。
 		// 对外部 worktree 尽量保守，只在“分支名等于目录名”时认为是 PiDeck 创建的同名工作区。
 		const worktreeDirName = basename(worktreePath);
-		if (branch?.startsWith("pideck/") || branch === worktreeDirName) {
-			await execFileAsync("git", ["branch", "-D", branch], { cwd: projectPath }).catch(() => undefined);
+		if (entry.branch?.startsWith("pideck/") || entry.branch === worktreeDirName) {
+			await execFileAsync("git", ["branch", "-D", entry.branch], { cwd: projectPath }).catch(() => undefined);
 		}
 
 		return true;
@@ -152,13 +173,34 @@ export class WorktreeService {
 
 
 	/**
-	 * 解析 git worktree list --porcelain 输出。
-	 * 过滤掉主工作区（projectPath），只返回其他 worktree。
+	 * 推导仓库主工作区目录（git 仓库根 checkout）。
+	 * 通过 git rev-parse --git-common-dir 拿到共享 .git 目录（主仓库的 .git），
+	 * 其父目录即主工作区；相对路径基于 cwd（= projectPath）解析。
+	 * 非 git 目录或命令失败返回 null。
 	 */
-	private parseWorktreeList(stdout: string, projectPath: string): WorktreeEntry[] {
+	private async getMainWorktree(projectPath: string): Promise<string | null> {
+		try {
+			const { stdout } = await execFileAsync(
+				"git",
+				["rev-parse", "--git-common-dir"],
+				{ cwd: projectPath },
+			);
+			const commonDir = stdout.trim();
+			if (!commonDir) return null;
+			return dirname(resolve(projectPath, commonDir));
+		} catch {
+			return null;
+		}
+	}
+
+	/**
+	 * 解析 git worktree list --porcelain 输出。
+	 * 过滤掉主工作区（rootPath，由 getMainWorktree 推导的仓库根），只返回其他 worktree。
+	 */
+	private parseWorktreeList(stdout: string, rootPath: string): WorktreeEntry[] {
 		const entries: WorktreeEntry[] = [];
 		// 规范化路径用于比较（Windows 忽略大小写）
-		const normalizedRoot = this.canonicalSync(projectPath);
+		const normalizedRoot = this.canonicalSync(rootPath);
 
 		const lines = stdout.split(/\r?\n/);
 		let current: Partial<WorktreeEntry> | null = null;

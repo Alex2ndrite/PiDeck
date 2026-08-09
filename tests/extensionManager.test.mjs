@@ -32,6 +32,10 @@ function loadExtensionManagerModule() {
       if (specifier === "./builtInExtensions") {
         return nodeRequire("../src/main/extensions/builtInExtensions.ts");
       }
+      // 删除走系统回收站统一入口；测试环境没有回收站，模拟为真实删除（rm 已在测试 import 中）。
+      if (specifier === "../fs/trash") {
+        return { trashPath: async (p) => { await rm(p, { recursive: true, force: true }); } };
+      }
       return nodeRequire(specifier);
     },
     Promise,

@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { app, shell } from "electron";
 import { closeSync, existsSync, openSync, readFileSync, readSync } from "node:fs";
-import { mkdir, readdir, readFile, rename, rm, stat, unlink, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, extname, isAbsolute, join, resolve } from "node:path";
 import { basename as posixBasename, dirname as posixDirname, isAbsolute as posixIsAbsolute, join as posixJoin } from "node:path/posix";
 import type { ChatMessage, ChatRole, SessionSummary } from "../../shared/types";
@@ -36,15 +36,6 @@ function defaultTranslate(
   return defaultSessionScannerCopy[key].replace(/\{([A-Za-z0-9_]+)\}/g, (match, name) => (
     Object.prototype.hasOwnProperty.call(params, name) ? String(params[name]) : match
   ));
-}
-
-function isMissingFileError(error: unknown): boolean {
-  return Boolean(
-    error &&
-    typeof error === "object" &&
-    "code" in error &&
-    (error as { code?: unknown }).code === "ENOENT",
-  );
 }
 
 export class SessionScanner {
@@ -565,25 +556,9 @@ export class SessionScanner {
     // catalog 可能保留一个已被 pi/系统回收站移走的历史路径；删除接口必须幂等。
     if (!existsSync(filePath)) return;
 
-    // 优先使用系统回收站（Electron shell.trashItem），避免文件永久丢失。
-    // 回收站不可用时（如 Linux 部分桌面环境），fallback 到 rename 到 .trash 子目录。
-    try {
-      await shell.trashItem(filePath);
-    } catch {
-      const trashDir = join(this.root, ".trash");
-      try {
-        await mkdir(trashDir, { recursive: true });
-        const trashName = `${basename(filePath)}.${Date.now()}.deleted`;
-        await rename(filePath, join(trashDir, trashName));
-      } catch (error) {
-        if (isMissingFileError(error)) return;
-        try {
-          await unlink(filePath);
-        } catch (unlinkError) {
-          if (!isMissingFileError(unlinkError)) throw unlinkError;
-        }
-      }
-    }
+    // 删除会话是用户主动操作：统一移入系统回收站（可恢复）。
+    // 回收站不可用时直接抛错——拒绝静默硬删，错误由 IPC 层呈现给用户。
+    await shell.trashItem(filePath);
   }
 
   // ── 会话归档：移动到 <扫描根>/.pideck-archive/ 并记录原路径 ──
@@ -787,17 +762,8 @@ export class SessionScanner {
   private async deleteSiblingDir(filePath: string): Promise<void> {
     const siblingDir = this.getSiblingDir(filePath);
     if (!siblingDir || !existsSync(siblingDir)) return;
-    try {
-      // 优先使用回收站
-      await shell.trashItem(siblingDir);
-    } catch {
-      // 回收站不可用时直接递归删除
-      try {
-        await rm(siblingDir, { recursive: true, force: true });
-      } catch {
-        // 目录删除失败不阻塞文件删除
-      }
-    }
+    // 同级子会话目录同样走系统回收站；失败抛错（拒绝静默硬删）。
+    await shell.trashItem(siblingDir);
   }
 
   /** 删除 WSL 同级子会话目录（如果存在） */
