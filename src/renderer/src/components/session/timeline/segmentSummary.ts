@@ -21,7 +21,10 @@ export function buildProcessSummary(items: TurnDisplayItem[]): ProcessSummary {
 			if (item.entry.kind === "tool-entry") toolCount += 1;
 			else thinkingCount += 1;
 		} else if (item.kind === "interim-answer") {
-			interimCount += 1;
+			// 只数有文本的中间回复：空文本骨架是 live 挂载点 / 模型 error 占位
+			// （如连续多条 stopReason=error 的空消息），不是真实中间回复，
+			// 计入会虚增「N 段中间回复」计数（用户反馈：5 条 error 空消息显示成 5 段）。
+			if (item.message.text.trim()) interimCount += 1;
 		}
 	}
 	return { toolCount, thinkingCount, interimCount };

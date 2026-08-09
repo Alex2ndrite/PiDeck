@@ -3,7 +3,8 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import ts from "typescript";
 import vm from "node:vm";
-import { buildTurnDisplay } from "../src/renderer/src/components/session/timeline/buildTurnDisplay.ts";
+import { buildTurnDisplay, hasFoldableContent } from "../src/renderer/src/components/session/timeline/buildTurnDisplay.ts";
+import { buildProcessSummary } from "../src/renderer/src/components/session/timeline/segmentSummary.ts";
 
 /**
  * 一轮回答（agent-run）扁平展示序列测试。
@@ -394,4 +395,32 @@ test("stopReason=stop 但非最后一条 assistant：不提升（位置守卫，
 	const itemsDouble = buildTurnDisplay(runDouble, { showThinking: true });
 	assert.equal(itemsDouble[0].kind, "interim-answer");
 	assert.equal(itemsDouble[1].kind, "final-answer");
+});
+
+test("空文本中间回复（error 占位/live 挂载点）不计入折叠汇总", () => {
+	// 真实场景（用户反馈截图）：连续 error 空消息 + 1 段有文本中间回复 + 工具 + 最终回答。
+	// 修复前 5 条 error 空消息被计成「5段中间回复」，实际只有 1 段。
+	const run = runOf([
+		{ kind: "message", message: assistantMessage("", undefined, "error") },
+		{ kind: "message", message: assistantMessage("", undefined, "error") },
+		{ kind: "message", message: assistantMessage("好问题，先核实数据能力再答。", undefined, "toolUse") },
+		toolGroup(),
+		{ kind: "message", message: assistantMessage("核实完毕", undefined, "stop") },
+	]);
+	const items = buildTurnDisplay(run, { showThinking: true });
+	const summary = buildProcessSummary(items);
+	assert.equal(summary.interimCount, 1, "空文本骨架不应计入中间回复数");
+	assert.equal(summary.toolCount, 1);
+	assert.equal(summary.thinkingCount, 0);
+	assert.equal(hasFoldableContent(items), true);
+});
+
+test("全空 run（连续 error 空消息）：无可折叠内容，不渲染汇总按钮", () => {
+	const run = runOf([
+		{ kind: "message", message: assistantMessage("", undefined, "error") },
+		{ kind: "message", message: assistantMessage("", undefined, "error") },
+	]);
+	const items = buildTurnDisplay(run, { showThinking: true });
+	assert.equal(hasFoldableContent(items), false);
+	assert.equal(buildProcessSummary(items).interimCount, 0);
 });

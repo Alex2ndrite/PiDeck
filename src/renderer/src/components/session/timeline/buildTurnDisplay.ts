@@ -130,7 +130,13 @@ export function buildTurnDisplay(
 	return items;
 }
 
-/** 本轮是否存在「可折叠」内容（思考/工具/中间回答之一），决定是否渲染汇总按钮。 */
+/** 本轮是否存在「可折叠」内容（思考/工具/有文本的中间回答之一），决定是否渲染汇总按钮。 */
 export function hasFoldableContent(items: TurnDisplayItem[]): boolean {
-	return items.some((item) => item.kind !== "final-answer");
+	return items.some((item) => {
+		if (item.kind === "final-answer") return false;
+		// 空文本 interim（live 挂载点/错误占位）不是可折叠内容：
+		// 全空 run（如连续 error 空消息）不应出现「0 段中间回复」的按钮。
+		if (item.kind === "interim-answer") return !!item.message.text.trim();
+		return true;
+	});
 }
