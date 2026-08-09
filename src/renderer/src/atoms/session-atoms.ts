@@ -386,9 +386,30 @@ export const cacheSessionMessagesAtom = atom(
   }) => {
     const cache = get(sessionMessagesCacheAtom);
     const current = cache[input.sessionId];
+    // Revision 守卫仅在「上一次与本次均为 disk 来源」时生效——
+    // 防止慢一拍的历史分页响应覆盖后续新快照。
+    //
+    // 为什么不能把此守卫扩大到 runtime 来源：
+    // - runtime 写会递增 revision，disk 写不递增 revision
+    // - 匿名会话（无 filePath）runtime 消息只从 runtime 事件进 cache，disk 读取永远返回 []
+    // - 切走→切回时 disk 空响应会因 revision 相等直接覆盖掉 runtime 已写入的消息，
+    //   导致切回显示空引导页
     if (
       input.expectedRevision !== undefined &&
-      (current?.revision ?? 0) !== input.expectedRevision
+      input.source === "disk" &&
+      current?.source === "disk" &&
+      (current.revision ?? 0) !== input.expectedRevision
+    ) {
+      return false;
+    }
+
+    // 防止空/较少 disk 响应清空或退化已有 runtime 缓存（匿名会话切回场景）：
+    // 当 disk 来源的消息数 ≤ cache 中已有消息数时，视为 stale 空读或退化读，直接跳过；
+    // 仅当 disk 携带严格更多的消息（如补齐窗口前的历史）时才允许写入。
+    if (
+      input.source === "disk" &&
+      current?.source !== "disk" &&
+      current?.messages?.length >= input.messages.length
     ) {
       return false;
     }

@@ -115,13 +115,17 @@ test("keeps only the 8 most recently written session message caches", () => {
   assert.equal(cache["session-8"].messages[0].text, "8");
 });
 
-test("does not let a late disk response overwrite newer runtime messages", () => {
+test("does not let a stale disk write clobber a live runtime cache", () => {
+  // A runtime→disk overwrite with fewer messages than currently cached is
+  // treated as stale (e.g. anonymous sessions where disk always returns []).
+  // This prevents the switch-back-empty-disk bug from wiping runtime messages.
   const atoms = loadAtoms();
   const store = createStore();
   store.set(atoms.cacheSessionMessagesAtom, {
     sessionId: "session-a",
     messages: [{ id: "runtime", role: "assistant", text: "live" }],
     source: "runtime",
+    pageState: { hasMoreOld: false, hasMoreNew: false, loaded: "all" },
   });
   const applied = store.set(atoms.cacheSessionMessagesAtom, {
     sessionId: "session-a",
@@ -133,6 +137,77 @@ test("does not let a late disk response overwrite newer runtime messages", () =>
   assert.equal(
     store.get(atoms.sessionMessagesCacheAtom)["session-a"].messages[0].text,
     "live",
+  );
+});
+
+test("allows a richer disk write to replace a leaner runtime cache", () => {
+  // If disk has strictly more messages than the runtime cache, the overwrite is
+  // real progress (e.g. runtime missed early windowed messages), so allow it.
+  const atoms = loadAtoms();
+  const store = createStore();
+  store.set(atoms.cacheSessionMessagesAtom, {
+    sessionId: "session-b",
+    messages: [{ id: "r1", role: "assistant", text: "live" }],
+    source: "runtime",
+  });
+  const applied = store.set(atoms.cacheSessionMessagesAtom, {
+    sessionId: "session-b",
+    messages: [
+      { id: "d1", role: "user", text: "old" },
+      { id: "r1", role: "assistant", text: "live" },
+    ],
+    source: "disk",
+    expectedRevision: 0,
+  });
+  assert.equal(applied, true);
+  assert.equal(
+    store.get(atoms.sessionMessagesCacheAtom)["session-b"].messages.length,
+    2,
+  );
+});
+
+test("rejects a late disk page continuation whose revision does not match", () => {
+  const atoms = loadAtoms();
+  const store = createStore();
+  store.set(atoms.cacheSessionMessagesAtom, {
+    sessionId: "session-c",
+    messages: [{ id: "m1", role: "user", text: "v1" }],
+    source: "disk",
+    revision: 2,
+  });
+  const applied = store.set(atoms.cacheSessionMessagesAtom, {
+    sessionId: "session-c",
+    messages: [{ id: "m1", role: "user", text: "v0" }],
+    source: "disk",
+    expectedRevision: 1,
+  });
+  assert.equal(applied, false);
+  assert.equal(
+    store.get(atoms.sessionMessagesCacheAtom)["session-c"].messages[0].text,
+    "v1",
+  );
+});
+
+test("anonymous session switch-back does not wipe runtime messages via empty disk write", () => {
+  const atoms = loadAtoms();
+  const store = createStore();
+  store.set(atoms.cacheSessionMessagesAtom, {
+    sessionId: "anon-42",
+    messages: [{ id: "m1", role: "user", text: "hi" }],
+    source: "runtime",
+    revision: 1,
+    pageState: { hasMoreOld: false, hasMoreNew: false, loaded: "all" },
+  });
+  const applied = store.set(atoms.cacheSessionMessagesAtom, {
+    sessionId: "anon-42",
+    messages: [],
+    source: "disk",
+    expectedRevision: 1,
+  });
+  assert.equal(applied, false);
+  assert.deepEqual(
+    store.get(atoms.sessionMessagesCacheAtom)["anon-42"].messages,
+    [{ id: "m1", role: "user", text: "hi" }],
   );
 });
 
