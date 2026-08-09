@@ -12,7 +12,6 @@ import { t } from "../../../i18n";
 import { desktopApi } from "../../../desktopApi";
 import { Button } from "../../ui-shadcn/button";
 import { Input } from "../../ui-shadcn/input";
-import { Label } from "../../ui-shadcn/label";
 import { Textarea } from "../../ui-shadcn/textarea";
 import {
 	Select,
@@ -21,7 +20,6 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "../../ui-shadcn/select";
-import { Switch } from "../../ui-shadcn/switch";
 import { ModelPicker } from "../../session/ComposerComponents";
 import type {
 	AvailableModel,
@@ -30,6 +28,7 @@ import type {
 	VisionLogInfo,
 } from "../../../../../shared/types";
 import { SettingsSection } from "./SettingsStorageTab";
+import { SettingRow, SettingSwitchRow } from "./SettingRows";
 
 /** 与扩展 DEFAULT_PROMPT 保持一致（恢复默认按钮用）。 */
 const DEFAULT_PROMPT =
@@ -90,6 +89,8 @@ export function VisionBridgeSettingsTab() {
 		};
 	}, [loadLog, loadModels]);
 
+	// 注意：提前 return 必须在所有 hooks（useState/useCallback/useEffect/useMemo）之后，
+	// 否则 loading 从 true→false 时 hooks 数量变化会触发 React 崩溃。
 	const updateDraft = (patch: Partial<VisionBridgeConfig>) => {
 		setDraft((prev) => (prev ? { ...prev, ...patch } : prev));
 		setNotice(null);
@@ -160,24 +161,55 @@ export function VisionBridgeSettingsTab() {
 		<div className="min-w-0">
 			<SettingsSection title={t("settings.vision.section")} description={t("settings.vision.sectionDesc")}>
 				{/* 总开关 */}
-				<Label className="setting-switch-row">
-					<span>
-						<strong>{t("settings.vision.enabled")}</strong>
-						<small>{t("settings.vision.enabledDesc")}</small>
-					</span>
-					<Switch
-						checked={draft?.enabled ?? true}
-						onCheckedChange={(checked) => updateDraft({ enabled: checked })}
-					/>
-				</Label>
+				<SettingSwitchRow
+					title={t("settings.vision.enabled")}
+					description={t("settings.vision.enabledDesc")}
+					checked={draft?.enabled ?? true}
+					onChange={(checked) => updateDraft({ enabled: checked })}
+				/>
 
 				{/* 视觉模型选择：复用会话的 ModelPicker（全量模型，含 auth.json），
 				    是否支持视觉由用户自行判断，不做能力标注/过滤 */}
-				<div className="setting-field">
-					<span>
-						<strong>{t("settings.vision.model")}</strong>
-						<small>{t("settings.vision.modelDesc")}</small>
-					</span>
+				<SettingRow
+					title={<span>{t("settings.vision.model")}</span>}
+					description={
+						selectedModelLabel ? (
+							<>
+								{selectedModel?.images === false ? (
+									<span className="font-semibold text-destructive">{t("settings.vision.noImagesWarning")}</span>
+								) : (
+									<span className="inline-flex items-center gap-1">
+										<Check size={12} aria-hidden />
+										{t("settings.vision.modelSelectedHint")}
+									</span>
+								)}
+								{/* 模型能力：来自 pi --list-models 的 context/max-out/thinking/images 列 */}
+								<span className="flex flex-wrap gap-x-3 gap-y-1">
+									{selectedModel ? (
+										<>
+											<span>
+												{selectedModel.images === true
+													? t("settings.vision.supportsImages")
+													: selectedModel.images === false
+														? t("settings.vision.unsupportedImages")
+														: t("settings.vision.capabilityUnknown")}
+											</span>
+											{selectedModel.contextWindow !== undefined && (
+												<span>{t("settings.vision.contextWindow", { size: formatTokens(selectedModel.contextWindow) })}</span>
+											)}
+											{selectedModel.maxTokens !== undefined && (
+												<span>{t("settings.vision.outputCap", { size: formatTokens(selectedModel.maxTokens) })}</span>
+											)}
+											{selectedModel.reasoning && <span>{t("settings.vision.thinking")}</span>}
+										</>
+									) : (
+										<span>{t("settings.vision.capabilityUnknown")}</span>
+									)}
+								</span>
+							</>
+						) : undefined
+					}
+				>
 					<Button
 						type="button"
 						variant="outline"
@@ -189,60 +221,14 @@ export function VisionBridgeSettingsTab() {
 						</span>
 						<ChevronsUpDown size={14} className="opacity-60" aria-hidden />
 					</Button>
-				{selectedModelLabel && (
-					<div className="setting-field" style={{ marginTop: "var(--space-2)" }}>
-						{selectedModel?.images === false ? (
-							<small style={{ color: "var(--color-danger, #dc2626)", fontWeight: 600 }}>
-								{t("settings.vision.noImagesWarning")}
-							</small>
-						) : (
-							<small className="flex items-center gap-1" style={{ color: "var(--color-text-tertiary)" }}>
-								<Check size={12} aria-hidden />
-								{t("settings.vision.modelSelectedHint")}
-							</small>
-						)}
-						{/* 模型能力：来自 pi --list-models 的 context/max-out/thinking/images 列 */}
-						<div
-							style={{
-								display: "flex",
-								flexWrap: "wrap",
-								gap: "var(--space-1) var(--space-3)",
-								marginTop: "var(--space-1)",
-								fontSize: "var(--font-size-caption)",
-								color: "var(--color-text-tertiary)",
-							}}
-						>
-							{selectedModel ? (
-								<>
-									<span>
-										{selectedModel.images === true
-											? t("settings.vision.supportsImages")
-											: selectedModel.images === false
-												? t("settings.vision.unsupportedImages")
-												: t("settings.vision.capabilityUnknown")}
-									</span>
-									{selectedModel.contextWindow !== undefined && (
-										<span>{t("settings.vision.contextWindow", { size: formatTokens(selectedModel.contextWindow) })}</span>
-									)}
-									{selectedModel.maxTokens !== undefined && (
-										<span>{t("settings.vision.outputCap", { size: formatTokens(selectedModel.maxTokens) })}</span>
-									)}
-									{selectedModel.reasoning && <span>{t("settings.vision.thinking")}</span>}
-								</>
-							) : (
-								<span>{t("settings.vision.capabilityUnknown")}</span>
-							)}
-						</div>
-					</div>
-				)}
-				</div>
+				</SettingRow>
 
 				{/* API 格式（一般自动推断） */}
-				<div className="setting-field">
-					<span>
-						<strong>{t("settings.vision.api")}</strong>
-						<small>{t("settings.vision.apiDesc")}</small>
-					</span>
+				<SettingRow
+					title={<span>{t("settings.vision.api")}</span>}
+					description={t("settings.vision.apiDesc")}
+					alignEnd={false}
+				>
 					<Select
 						value={draft?.api ?? "auto"}
 						onValueChange={(api) => updateDraft({ api: api === "auto" ? undefined : (api as VisionBridgeConfig["api"]) })}
@@ -257,133 +243,120 @@ export function VisionBridgeSettingsTab() {
 							<SelectItem value="google-generative-ai">{t("settings.vision.apiGoogle")}</SelectItem>
 						</SelectContent>
 					</Select>
-				</div>
+				</SettingRow>
 
 				{/* 可选覆盖项 */}
-				<div className="setting-field">
-					<span>
-						<strong>{t("settings.vision.baseUrl")}</strong>
-						<small>{t("settings.vision.baseUrlDesc")}</small>
-					</span>
+				<SettingRow
+					title={<span>{t("settings.vision.baseUrl")}</span>}
+					description={t("settings.vision.baseUrlDesc")}
+					stacked
+				>
 					<Input
 						value={draft?.baseUrl ?? ""}
 						placeholder="https://open.bigmodel.cn/api/paas/v4"
 						onChange={(event) => updateDraft({ baseUrl: event.target.value || undefined })}
 					/>
-				</div>
+				</SettingRow>
 
-				<div className="setting-field">
-					<span>
-						<strong>{t("settings.vision.apiKey")}</strong>
-						<small>{t("settings.vision.apiKeyDesc")}</small>
-					</span>
+				<SettingRow
+					title={<span>{t("settings.vision.apiKey")}</span>}
+					description={t("settings.vision.apiKeyDesc")}
+					stacked
+				>
 					<Input
 						type="password"
 						value={draft?.apiKey ?? ""}
 						onChange={(event) => updateDraft({ apiKey: event.target.value || undefined })}
 					/>
-				</div>
+				</SettingRow>
 
 				{/* 数值参数 */}
-				<div className="setting-field" style={{ display: "flex", gap: "var(--space-4)" }}>
-					<div style={{ flex: 1, minWidth: 0 }}>
-						<strong>{t("settings.vision.maxTokens")}</strong>
-						<Input
-							type="number"
-							min={1}
-							max={32768}
-							value={draft?.maxTokens ?? 1024}
-							onChange={(event) => updateDraft({ maxTokens: Number(event.target.value) || undefined })}
-						/>
-					</div>
-					<div style={{ flex: 1, minWidth: 0 }}>
-						<strong>{t("settings.vision.concurrency")}</strong>
-						<Input
-							type="number"
-							min={1}
-							max={16}
-							value={draft?.concurrency ?? 2}
-							onChange={(event) => updateDraft({ concurrency: Number(event.target.value) || undefined })}
-						/>
-					</div>
-				</div>
+				<SettingRow
+					title={<span>{t("settings.vision.maxTokens")}</span>}
+					alignEnd={false}
+				>
+					<Input
+						type="number"
+						min={1}
+						max={32768}
+						value={draft?.maxTokens ?? 1024}
+						onChange={(event) => updateDraft({ maxTokens: Number(event.target.value) || undefined })}
+					/>
+				</SettingRow>
+				<SettingRow
+					title={<span>{t("settings.vision.concurrency")}</span>}
+					alignEnd={false}
+				>
+					<Input
+						type="number"
+						min={1}
+						max={16}
+						value={draft?.concurrency ?? 2}
+						onChange={(event) => updateDraft({ concurrency: Number(event.target.value) || undefined })}
+					/>
+				</SettingRow>
 
 				{/* 提示词模板 + 恢复默认 */}
-				<div className="setting-field">
-					<span>
-						<strong>{t("settings.vision.promptTemplate")}</strong>
-						<small>{t("settings.vision.promptTemplateDesc")}</small>
-					</span>
+				<SettingRow
+					title={<span>{t("settings.vision.promptTemplate")}</span>}
+					description={t("settings.vision.promptTemplateDesc")}
+					stacked
+				>
 					<Textarea
 						rows={6}
 						value={draft?.promptTemplate ?? DEFAULT_PROMPT}
 						onChange={(event) => updateDraft({ promptTemplate: event.target.value })}
 					/>
-					<div>
+					<div className="pt-2">
 						<Button variant="outline" size="sm" onClick={() => updateDraft({ promptTemplate: DEFAULT_PROMPT })}>
 							{t("settings.vision.promptDefault")}
 						</Button>
 					</div>
-				</div>
+				</SettingRow>
 			</SettingsSection>
 
 			{/* 配置文件位置说明：扩展与 PiDeck 共享 */}
-			<SettingsSection title={t("settings.vision.configFile")} description={t("settings.vision.configFileDesc")}>
-				<div className="setting-field">
-					<code style={{ fontSize: "var(--font-size-caption)", color: "var(--color-text-tertiary)" }}>
+			<SettingsSection
+				title={t("settings.vision.configFile")}
+				description={
+					<code className="break-all text-caption text-muted-foreground">
 						{state ? configFilePath(state.configDir) : ""}
 					</code>
-				</div>
-			</SettingsSection>
+				}
+			/>
 
 			{/* 运行记录诊断区：发一张图 → 回来刷新，即可确认视觉桥是否真的生效 */}
 			<SettingsSection title={t("settings.vision.logSection")} description={t("settings.vision.logSectionDesc")}>
-				<div className="setting-field">
-					<div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", marginBottom: "var(--space-2)" }}>
-						<Button variant="outline" size="sm" onClick={loadLog}>
-							<RefreshCw size={12} aria-hidden />
-							{t("settings.vision.logRefresh")}
-						</Button>
-						<Button
-							variant="outline"
-							size="sm"
-							onClick={async () => {
-								await desktopApi.config.visionClearLog();
-								loadLog();
-							}}
-						>
-							<Trash2 size={12} aria-hidden />
-							{t("settings.vision.logClear")}
-						</Button>
-						{logInfo?.exists && logInfo.size > 0 && (
-							<small style={{ color: "var(--color-text-tertiary)" }}>
-								{t("settings.vision.logSize", { size: Math.max(1, Math.round(logInfo.size / 1024)) })}
-								{logInfo.truncated ? ` ${t("settings.vision.logTruncated")}` : ""}
-							</small>
-						)}
-					</div>
-					<pre
-						style={{
-							maxHeight: 220,
-							overflow: "auto",
-							whiteSpace: "pre-wrap",
-							wordBreak: "break-all",
-							fontSize: "var(--font-size-caption)",
-							lineHeight: 1.5,
-							color: "var(--color-text-secondary)",
-							background: "var(--color-surface-subtle, rgba(127,127,127,0.08))",
-							borderRadius: "var(--radius-sm)",
-							padding: "var(--space-3)",
-							margin: 0,
+				<div className="flex items-center gap-2 px-0.5 pb-2">
+					<Button variant="outline" size="sm" onClick={loadLog}>
+						<RefreshCw size={12} aria-hidden />
+						{t("settings.vision.logRefresh")}
+					</Button>
+					<Button
+						variant="outline"
+						size="sm"
+						onClick={async () => {
+							await desktopApi.config.visionClearLog();
+							loadLog();
 						}}
 					>
-						{logInfo?.exists && logInfo.content ? logInfo.content : t("settings.vision.logEmpty")}
-					</pre>
+						<Trash2 size={12} aria-hidden />
+						{t("settings.vision.logClear")}
+					</Button>
+					{logInfo?.exists && logInfo.size > 0 && (
+						<small className="text-muted-foreground">
+							{t("settings.vision.logSize", { size: Math.max(1, Math.round(logInfo.size / 1024)) })}
+							{logInfo.truncated ? ` ${t("settings.vision.logTruncated")}` : ""}
+						</small>
+					)}
 				</div>
+				<pre className="m-0 max-h-[220px] overflow-auto whitespace-pre-wrap break-all rounded-md bg-bg-muted p-3 text-caption leading-relaxed text-text-secondary">
+					{logInfo?.exists && logInfo.content ? logInfo.content : t("settings.vision.logEmpty")}
+				</pre>
 			</SettingsSection>
 
 			{/* 保存区 */}
-			<div className="settings-footer-actions" style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
+			<div className="flex items-center gap-3 px-0.5 pt-4">
 				<Button onClick={onSave} disabled={saving || !draft?.provider || !draft?.model}>
 					{saving ? "…" : t("settings.vision.save")}
 				</Button>

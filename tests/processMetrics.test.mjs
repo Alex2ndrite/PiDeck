@@ -117,7 +117,7 @@ test("stop-agent: full session stop chain (coordinator + detach)", () => {
 	const preload = readFileSync("src/preload/index.ts", "utf8");
 	const coordinator = readFileSync("src/main/sessions/SessionRuntimeCoordinator.ts", "utf8");
 	const index = readFileSync("src/main/index.ts", "utf8");
-	const tab = readFileSync("src/renderer/src/config/ProcessMetricsTab.tsx", "utf8");
+	const tab = readFileSync("src/renderer/src/components/app/settings/ProcessMetricsTab.tsx", "utf8");
 	// 通道 + handler：agentId 输入校验（渲染层数据不可信），走完整会话停止链路
 	assert.match(ipc, /stopAgent: "system:stop-agent"/);
 	assert.match(systemIpc, /ipcMain\.handle\(ipcChannels\.stopAgent/);
@@ -160,7 +160,7 @@ test("stop-agent: full session stop chain (coordinator + detach)", () => {
 });
 
 test("ProcessMetricsTab wires table columns and refresh", () => {
-	const source = readFileSync("src/renderer/src/config/ProcessMetricsTab.tsx", "utf8");
+	const source = readFileSync("src/renderer/src/components/app/settings/ProcessMetricsTab.tsx", "utf8");
 	assert.match(source, /window\.piDesktop\.system\.getProcessMetrics\(\)/);
 	assert.match(source, /processTypeLabel\(metric\.type\)/);
 	assert.match(source, /formatMb\(metric\.memoryBytes\)/);
@@ -171,22 +171,23 @@ test("ProcessMetricsTab wires table columns and refresh", () => {
 	assert.match(source, /t\("config\.process\.empty"\)/);
 });
 
-test("ConfigModal registers process section nav and rendering", () => {
-	const source = readFileSync("src/renderer/src/ConfigModal.tsx", "utf8");
-	// 左侧导航已迁移为 Vertical Tabs：ConfigSection 类型含 process，TabsTrigger/TabsContent 成对注册
-	assert.match(source, /type ConfigSection =[\s\S]*\| "process";/);
-	assert.match(source, /<TabsTrigger[^>]*value="process"/);
-	assert.match(source, /<TabsContent value="process"/);
-	assert.match(source, /t\("config\.nav\.process"\)/);
-	assert.match(source, /<ProcessMetricsTab \/>/);
+test("SettingsModal registers process tab; ConfigModal no longer hosts it", () => {
+	const settings = readFileSync("src/renderer/src/components/app/SettingsModal.tsx", "utf8");
+	const config = readFileSync("src/renderer/src/ConfigModal.tsx", "utf8");
+	// 进程监控已从 Pi 管理界面迁入设置：SettingsModal 注册 tab，ConfigModal 移除
+	assert.match(settings, /id: "process"/);
+	assert.match(settings, /<TabsContent value="process"/);
+	assert.match(settings, /t\("settings\.tabs\.process"\)/);
+	assert.match(settings, /<ProcessMetricsTab \/>/);
+	assert.doesNotMatch(config, /value="process"/);
+	assert.doesNotMatch(config, /ProcessMetricsTab/);
 });
 
 test("process monitor i18n keys exist in zh-CN and en-US", () => {
 	const zh = readFileSync("src/renderer/src/i18n/rendererCopy.zh-CN.ts", "utf8");
 	const en = readFileSync("src/renderer/src/i18n/rendererCopy.en-US.ts", "utf8");
 	const keys = [
-		"config.nav.process",
-		"config.process.title",
+		"settings.tabs.process",
 		"config.process.refresh",
 		"config.process.electronTotal",
 		"config.process.agentCount",

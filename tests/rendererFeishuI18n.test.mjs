@@ -5,7 +5,7 @@ import test from "node:test";
 import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
 
 const i18n = loadTsCommonJs("src/renderer/src/i18n.ts");
-const imTab = readFileSync("src/renderer/src/config/ImTab.tsx", "utf8");
+const imTab = readFileSync("src/renderer/src/components/app/settings/ImTab.tsx", "utf8");
 const hook = readFileSync("src/renderer/src/hooks/useFeishuBridge.ts", "utf8");
 const hookModule = loadTsCommonJs("src/renderer/src/hooks/useFeishuBridge.ts", {
 	stubs: {

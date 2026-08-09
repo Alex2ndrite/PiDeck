@@ -15,15 +15,11 @@ import {
 import { ConfirmDialog } from "./components/ui-shadcn/ConfirmDialog";
 import {
 	X,
-	Activity,
-	Code2,
 	Cpu,
 	FileCode2,
 	FileText,
 	KeyRound,
-	MessageSquare,
 	Puzzle,
-	ScrollText,
 	Settings2,
 	ShieldCheck,
 	Sparkles,
@@ -40,10 +36,6 @@ import { SettingsTab } from "./config/SettingsTab";
 import { PromptsTab } from "./config/PromptsTab";
 import { SkillsTab } from "./config/SkillsTab";
 import { ExtensionsTab } from "./config/ExtensionsTab";
-import { EditorsTab } from "./config/EditorsTab";
-import { ImTab } from "./config/ImTab";
-import { LogsTab } from "./config/LogsTab";
-import { ProcessMetricsTab } from "./config/ProcessMetricsTab";
 import { t } from "./i18n";
 import { CodeMirrorEditor } from "./components/app/CodeMirrorEditor";
 import { translateBuiltinPromptDescription } from "./composerBehavior";
@@ -77,11 +69,7 @@ type ConfigSection =
 	| "config"
 	| "skills"
 	| "prompts"
-	| "extensions"
-	| "editors"
-	| "im"
-	| "logs"
-	| "process";
+	| "extensions";
 
 /** section+tab → Tabs value（config 组子页编码为 "config:<tab>"）。 */
 function sectionTabValue(section: ConfigSection, tab: ConfigTab): string {
@@ -510,9 +498,6 @@ function ConfigModalContent(props: ConfigModalProps) {
 			void refreshExtensions(true);
 			return;
 		}
-		if (section === "editors") return;
-		if (section === "logs") return;
-		if (section === "process") return;
 		void loadConfig(tab);
 	}, [open, section, tab, loadConfig]);
 
@@ -1510,31 +1495,6 @@ function ConfigModalContent(props: ConfigModalProps) {
 							{t("config.nav.prompts")}
 						</TabsTrigger>
 					</div>
-					<div className="config-sidebar-group grid gap-0.5">
-						<span className="px-2 pb-1 text-micro font-semibold text-muted-foreground">{t("config.group.im")}</span>
-						<TabsTrigger value="im" className="config-nav-btn h-8 justify-start gap-1.5 px-2.5 text-control font-medium">
-							<span className="config-nav-icon"><MessageSquare size={14} aria-hidden="true" /></span>
-							{t("config.nav.im")}
-						</TabsTrigger>
-					</div>
-					<div className="config-sidebar-group grid gap-0.5">
-						<span className="px-2 pb-1 text-micro font-semibold text-muted-foreground">{t("config.group.other")}</span>
-						<TabsTrigger value="editors" className="config-nav-btn h-8 justify-start gap-1.5 px-2.5 text-control font-medium">
-							<span className="config-nav-icon"><Code2 size={14} aria-hidden="true" /></span>
-							{t("config.nav.editors")}
-						</TabsTrigger>
-					</div>
-					<div className="config-sidebar-group grid gap-0.5">
-						<span className="px-2 pb-1 text-micro font-semibold text-muted-foreground">{t("config.group.diagnostics")}</span>
-						<TabsTrigger value="process" className="config-nav-btn h-8 justify-start gap-1.5 px-2.5 text-control font-medium">
-							<span className="config-nav-icon"><Activity size={14} aria-hidden="true" /></span>
-							{t("config.nav.process")}
-						</TabsTrigger>
-						<TabsTrigger value="logs" className="config-nav-btn h-8 justify-start gap-1.5 px-2.5 text-control font-medium">
-							<span className="config-nav-icon"><ScrollText size={14} aria-hidden="true" /></span>
-							{t("config.nav.logs")}
-						</TabsTrigger>
-					</div>
 				</TabsList>
 
 					<TabsContent value="config:models" className="config-main min-w-0">
@@ -1653,31 +1613,6 @@ function ConfigModalContent(props: ConfigModalProps) {
 						</div>
 					</TabsContent>
 
-					<TabsContent value="im" className="config-main min-w-0">
-						<div className="config-content">
-					{statusBlock}
-					{!loading && (
-						<ImTab />
-					)}
-						</div>
-					</TabsContent>
-
-					<TabsContent value="logs" className="config-main min-w-0">
-						<div className="config-content">
-					{statusBlock}
-					{!loading && (
-						<LogsTab />
-					)}
-						</div>
-					</TabsContent>
-
-					<TabsContent value="process" className="config-main min-w-0">
-						<div className="config-content">
-					{statusBlock}
-					<ProcessMetricsTab />
-						</div>
-					</TabsContent>
-
 					<TabsContent value="skills" className="config-main min-w-0">
 						<div className="config-content">
 					{statusBlock}
@@ -1771,15 +1706,6 @@ function ConfigModalContent(props: ConfigModalProps) {
 							onRefresh={() => void refreshExtensions(true)}
 							onUninstall={setUninstallExtensionConfirm}
 						/>
-						</div>
-					</TabsContent>
-
-					<TabsContent value="editors" className="config-main min-w-0">
-						<div className="config-content">
-					{statusBlock}
-					{!loading && (
-						<EditorsTab />
-					)}
 						</div>
 					</TabsContent>
 

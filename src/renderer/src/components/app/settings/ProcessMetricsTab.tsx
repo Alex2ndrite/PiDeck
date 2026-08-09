@@ -1,9 +1,9 @@
 import { Activity, CircleStop, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import type { AgentProcessMetric, ElectronProcessMetric, ProcessMetricsSnapshot } from "../../../shared/types";
-import { formatMb } from "../../../shared/formatBytes";
-import { t } from "../i18n";
-import { Button } from "../components/ui-shadcn/button";
+import type { AgentProcessMetric, ElectronProcessMetric, ProcessMetricsSnapshot } from "../../../../../shared/types";
+import { formatMb } from "../../../../../shared/formatBytes";
+import { t } from "../../../i18n";
+import { Button } from "../../ui-shadcn/button";
 import {
   Table,
   TableBody,
@@ -11,9 +11,9 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "../components/ui-shadcn/table";
-import { showNotice } from "../utils/notice";
-import { ConfirmDialog } from "../components/ui-shadcn/ConfirmDialog";
+} from "../../ui-shadcn/table";
+import { showNotice } from "../../../utils/notice";
+import { ConfirmDialog } from "../../ui-shadcn/ConfirmDialog";
 
 /** Chromium 进程类型 → 本地化展示名；未知类型原样显示。 */
 function processTypeLabel(type: string): string {
@@ -28,7 +28,7 @@ function processTypeLabel(type: string): string {
 }
 
 /**
- * 进程与内存监控面板（配置弹窗 → 其他 → 进程监控）。
+ * 进程与内存监控面板（由 Pi 管理界面迁入设置，独立 tab）。
  * 仅手动刷新：点击「刷新」时经 IPC 拉取一次快照，不做轮询，避免 tasklist/ps
  * 系统调用对性能敏感场景（大量 agent 并发）造成不必要的开销。
  * 内存统一以 MB 展示（formatMb），便于多进程横向对比。
@@ -83,11 +83,8 @@ export function ProcessMetricsTab() {
   const agentTotal = snapshot?.totalAgentBytes ?? 0;
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3 overflow-auto p-4">
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-sm font-semibold text-foreground">
-          {t("config.process.title")}
-        </span>
+    <div className="flex min-h-0 flex-col gap-3">
+      <div className="flex items-center justify-end gap-2">
         <Button
           type="button"
           variant="secondary"

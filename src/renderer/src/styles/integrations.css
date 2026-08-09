@@ -994,55 +994,7 @@
     flex-direction: column;
   }
 }
-.logs-toolbar {
-  align-items: flex-start;
-  gap: var(--space-3);
-}
-
-.logs-filters {
-  display: flex;
-  flex-wrap: nowrap;
-  align-items: flex-start;
-  gap: var(--space-2);
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.logs-level-select {
-  position: relative;
-  flex: 0 0 132px;
-  min-width: 0;
-}
-
-.logs-level-select .text-sm {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
-}
-
-.logs-search-input {
-  flex: 1 1 320px;
-  min-width: 220px;
-}
-
-.logs-since-input {
-  /* 日期按钮 + 时间输入 + 清除按钮的组合容器 */
-  flex: 0 0 280px;
-  min-width: 260px;
-}
-
-@media (max-width: 900px) {
-  .logs-toolbar {
-    flex-direction: column;
-  }
-
-  .logs-filters {
-    width: 100%;
-  }
-}
+/* 日志工具栏已迁移 UI 2.0（LogViewer 内纯 Tailwind），旧规则删除 */
 
 .logs-list {
   display: flex;

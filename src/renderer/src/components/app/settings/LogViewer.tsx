@@ -1,13 +1,18 @@
-import { Button } from "../components/ui-shadcn/button";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { PiDesktopApi } from "../../../preload";
-import type { AppLogEntry, AppLogLevel } from "../../../shared/types";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui-shadcn/select";
-import { t } from "../i18n";
-import { Input } from "../components/ui-shadcn/input";
+import type { AppLogEntry, AppLogLevel } from "../../../../../shared/types";
+import { t } from "../../../i18n";
+import { desktopApi } from "../../../desktopApi";
+import { Button } from "../../ui-shadcn/button";
+import { Input } from "../../ui-shadcn/input";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "../../ui-shadcn/select";
 import { LogsDatePicker } from "./LogsDatePicker";
 
-const api: PiDesktopApi = (window as unknown as { piDesktop: PiDesktopApi }).piDesktop;
 const LEVELS: Array<AppLogLevel | "all"> = ["all", "debug", "info", "warn", "error"];
 
 function formatTime(time: number) {
@@ -23,8 +28,12 @@ function formatDetail(detail: unknown) {
 	}
 }
 
-/** 设置页日志面板：从主进程日志文件读取最近行为,用于用户反馈和故障排查。 */
-export function LogsTab() {
+/**
+ * 应用日志查看器（由 Pi 管理界面「日志」tab 迁入设置）。
+ * 只负责查看（级别/关键词/日期筛选 + 列表展开详情）；清除/打开文件夹
+ * 由「缓存与日志」tab 的应用日志管理行承担，避免两处重复入口。
+ */
+export function LogViewer() {
 	const [entries, setEntries] = useState<AppLogEntry[]>([]);
 	const [loading, setLoading] = useState(false);
 	const [level, setLevel] = useState<AppLogLevel | "all">("all");
@@ -44,7 +53,7 @@ export function LogsTab() {
 		setLoading(true);
 		setError(null);
 		try {
-			setEntries(await api.logs.list(query));
+			setEntries(await desktopApi.logs.list(query));
 		} catch (e) {
 			setError(e instanceof Error ? e.message : String(e));
 		} finally {
@@ -59,51 +68,38 @@ export function LogsTab() {
 		return () => window.clearTimeout(timer);
 	}, [refresh]);
 
-	const clear = async () => {
-		if (!window.confirm(t("logs.clearConfirm"))) return;
-		await api.logs.clear();
-		await refresh();
-	};
-
 	return (
 		<div className="logs-tab">
-			<div className="mb-3.5 flex items-center justify-between logs-toolbar">
-				<div className="logs-filters">
-					<div className="logs-level-select grid gap-1.5">
-						<span className="text-sm font-medium leading-none text-foreground">{t("logs.levelFilter")}</span>
-						<Select value={level} onValueChange={(value) => setLevel(value as AppLogLevel | "all")}>
-							<SelectTrigger className="w-full">
-								<SelectValue />
-							</SelectTrigger>
-							<SelectContent>
-								{LEVELS.map((item) => (
-									<SelectItem key={item} value={item}>
-										{t(`logs.level.${item}`)}
-									</SelectItem>
-								))}
-							</SelectContent>
-						</Select>
-					</div>
-					<Input
-						className="logs-search-input"
-						value={search}
-						onChange={(event) => setSearch(event.target.value)}
-						placeholder={t("logs.searchPlaceholder")}
-					/>
-					<LogsDatePicker
-						value={from}
-						onChange={setFrom}
-						placeholder={t("logs.sinceFilter")}
-						clearLabel={t("logs.clearSinceFilter")}
-					/>
-				</div>
-				<div className="skills-toolbar-actions">
-					<Button variant="outline" size="sm" onClick={refresh} disabled={loading}>{t("common.refresh")}</Button>
-					<Button variant="outline" size="sm" onClick={() => api.logs.openFolder()}>{t("logs.openFolder")}</Button>
-					<Button variant="outline" size="sm" className="text-destructive" onClick={clear}>{t("logs.clear")}</Button>
-				</div>
+			{/* 工具栏（UI 2.0）：级别 + 搜索 + 日期 + 刷新，一行左对齐，窄时自动换行 */}
+			<div className="mb-3.5 flex flex-wrap items-center gap-2">
+				<Select value={level} onValueChange={(value) => setLevel(value as AppLogLevel | "all")}>
+					<SelectTrigger className="w-28" aria-label={t("logs.levelFilter")}>
+						<SelectValue />
+					</SelectTrigger>
+					<SelectContent>
+						{LEVELS.map((item) => (
+							<SelectItem key={item} value={item}>
+								{t(`logs.level.${item}`)}
+							</SelectItem>
+						))}
+					</SelectContent>
+				</Select>
+				<Input
+					className="w-72 max-w-full"
+					value={search}
+					onChange={(event) => setSearch(event.target.value)}
+					placeholder={t("logs.searchPlaceholder")}
+				/>
+				<LogsDatePicker
+					value={from}
+					onChange={setFrom}
+					placeholder={t("logs.sinceFilter")}
+					clearLabel={t("logs.clearSinceFilter")}
+				/>
+				<Button variant="outline" size="sm" onClick={() => void refresh()} disabled={loading}>
+					{t("common.refresh")}
+				</Button>
 			</div>
-			<p className="config-im-form-hint">{t("logs.hint")}</p>
 			{error && <div className="mb-3.5 rounded-sm border border-danger/20 bg-danger-soft px-3.5 py-2.5 text-control leading-relaxed text-danger whitespace-pre-line">{error}</div>}
 			{loading ? (
 				<div className="py-12 text-center text-control text-text-tertiary">{t("common.loading")}</div>

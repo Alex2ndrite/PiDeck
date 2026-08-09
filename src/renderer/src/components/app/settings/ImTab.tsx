@@ -1,24 +1,24 @@
-import { Button } from "../components/ui-shadcn/button";
-import { Input } from "../components/ui-shadcn/input";
+import { Button } from "../../ui-shadcn/button";
+import { Input } from "../../ui-shadcn/input";
 /**
  * ImTab — 外部链接配置选项卡
  *
- * 在配置弹窗中集中管理外部 IM/Bot 连接（当前支持飞书/Lark）。
+ * 在 PiDeck 设置中集中管理外部 IM/Bot 连接（由 Pi 管理界面迁入）（当前支持飞书/Lark）。
  * 样式统一使用配置页的设计 tokens。
  */
 
 import { useState, useEffect, useCallback } from "react";
 import { X } from "lucide-react";
-import { ConfirmDialog } from "../components/app/AppParts";
-import { writeClipboard } from "../utils/clipboard";
+import { ConfirmDialog } from "../../app/AppParts";
+import { writeClipboard } from "../../../utils/clipboard";
 import type {
 	FeishuBotConfig,
 	FeishuBridgeStatus,
 	FeishuChatBinding,
 	FeishuTestResult,
-} from "../../../shared/types";
-import { formatI18nDateTime, t } from "../i18n";
-import { Label } from "../components/ui-shadcn/label";
+} from "../../../../../shared/types";
+import { formatI18nDateTime, t } from "../../../i18n";
+import { Label } from "../../ui-shadcn/label";
 
 type Props = {
 	onSave?: () => void;

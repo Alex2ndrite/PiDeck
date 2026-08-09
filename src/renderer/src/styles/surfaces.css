@@ -1215,200 +1215,8 @@
   background: var(--color-bg-panel);
 }
 
-/* 设置分区卡片 */
-.settings-section {
-  position: relative;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-lg);
-  background: var(--color-bg-panel);
-  overflow: visible;
-}
-.settings-section + .settings-section {
-  margin-top: 12px;
-}
-.settings-section-header {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 14px 16px 10px;
-  border-bottom: 1px solid var(--color-border-subtle);
-}
-.settings-section-header strong {
-  color: var(--color-text-primary);
-  font-size: var(--font-size-body);
-  font-weight: 600;
-  letter-spacing: -0.01em;
-}
-.settings-section-header small {
-  color: var(--color-text-tertiary);
-  font-size: var(--font-size-caption);
-  line-height: var(--line-height-caption);
-}
-.settings-section-body {
-  padding: 4px 16px 8px;
-}
-
-/* 开关行：左文右 toggle，自定义滑块开关 */
-.setting-switch-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 16px;
-  align-items: center;
-  min-height: 44px;
-  border-bottom: 1px solid var(--color-border-subtle);
-}
-.setting-switch-row:last-child {
-  border-bottom: 0;
-}
-.setting-switch-row span {
-  min-width: 0;
-  display: grid;
-  gap: 2px;
-}
-.setting-switch-row strong {
-  color: var(--color-text-primary);
-  font-size: var(--font-size-control);
-  font-weight: 500;
-}
-.setting-switch-row small {
-  color: var(--color-text-tertiary);
-  font-size: var(--font-size-caption);
-  line-height: 1.4;
-}
-
-/* 自定义滑块开关 */
-.setting-switch-row input[type="checkbox"] {
-  appearance: none;
-  -webkit-appearance: none;
-  width: 36px;
-  height: 20px;
-  margin: 0;
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-pill);
-  background: var(--color-bg-muted);
-  cursor: pointer;
-  position: relative;
-  transition: all 0.2s ease;
-  flex-shrink: 0;
-}
-.setting-switch-row input[type="checkbox"]::after {
-  content: "";
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 14px;
-  height: 14px;
-  border-radius: var(--radius-pill);
-  background: var(--color-text-tertiary);
-  transition: all 0.2s ease;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
-}
-.setting-switch-row input[type="checkbox"]:checked {
-  border-color: var(--color-accent);
-  background: var(--color-accent);
-}
-.setting-switch-row input[type="checkbox"]:checked::after {
-  left: 18px;
-  background: white;
-}
-.setting-switch-row input[type="checkbox"]:focus-visible {
-  box-shadow: var(--focus-ring);
-  outline: 0;
-}
-.setting-switch-row input[type="checkbox"]:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-.setting-switch-row input[type="checkbox"]:disabled:checked {
-  border-color: var(--color-border-strong);
-  background: var(--color-bg-muted);
-}
-.setting-switch-row input[type="checkbox"]:disabled:checked::after {
-  background: var(--color-text-tertiary);
-}
-
-/* 设置字段容器 */
-.setting-field {
-  position: relative;
-  display: grid;
-  gap: var(--space-2);
-  margin: var(--space-2) 0;
-}
-.setting-divider {
-  margin: var(--space-2) 0;
-  border: 0;
-  border-top: 1px solid var(--color-border-subtle);
-}
-.setting-field > span,
-.setting-field .text-sm {
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-control);
-}
-.setting-field input {
-  height: var(--control-height-lg);
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-sm);
-  background: var(--color-bg-panel);
-  padding: 0 var(--space-3);
-  color: var(--color-text-primary);
-}
-/* 整个行点击折叠，但仅在标签和图标区域显示为可点击光标 */
-.setting-fontsize-header .text-sm {
-  cursor: pointer;
-}
-.setting-collapse-btn .chevron {
-  transition: transform 0.18s ease;
-}
-.setting-collapse-btn .chevron.rotated {
-  transform: rotate(90deg);
-}
-
-.setting-zoom-field {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  min-height: 44px;
-}
-.setting-zoom-control {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-.setting-zoom-button {
-  width: var(--control-height-lg);
-  height: var(--control-height-lg);
-  border: 1px solid var(--color-border-subtle);
-  background: var(--color-bg-panel);
-  border-radius: var(--radius-sm);
-  display: grid;
-  place-items: center;
-  cursor: pointer;
-  color: var(--color-text-secondary);
-  transition: all 0.12s ease;
-}
-.setting-zoom-button:hover:not(:disabled) {
-  border-color: var(--color-accent);
-  background: var(--color-bg-active);
-  color: var(--color-accent);
-}
-.setting-zoom-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.4;
-}
-.setting-zoom-value {
-  min-width: 4ch;
-  color: var(--color-text-primary);
-  font-family: var(--font-family-business);
-  font-size: var(--font-size-control);
-  text-align: center;
-  font-weight: 600;
-}
-.setting-field input:disabled {
-  background: var(--color-bg-muted);
-  color: var(--color-text-tertiary);
-}
+/* 设置分区与设置行已迁移 UI 2.0（Tailwind + shadcn，见 settings/SettingRows.tsx）：
+   去卡片化 + 行式布局，旧手写规则全部删除，不再在此维护。 */
 
 /* Web 服务面板 */
 .web-endpoint-panel {
@@ -1535,23 +1343,7 @@
 }
 /* 代理保存/取消操作栏 */
 
-/* 设置行保持紧凑：分区边框已经提供视觉分组，行内不再叠加卡片边框。 */
-.setting-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 12px;
-  align-items: center;
-  min-height: 44px;
-  margin: 6px 0;
-  padding: 0;
-}
-.setting-row div {
-  display: grid;
-  gap: 3px;
-}
-.setting-row small {
-  color: var(--color-text-tertiary);
-}
+/* 设置行已迁移 UI 2.0（SettingRows.tsx），旧规则随设置页改造移除 */
 
 /* 状态文本 */
 .setting-status {
@@ -1632,9 +1424,7 @@
 .setting-pi-path-panel {
   margin: 4px 0 8px;
 }
-.setting-pi-path-panel .setting-field {
-  margin-top: 0;
-}
+/* pi 路径 / WSL 字段的旧 setting-field 布局规则已随 UI 2.0 迁移删除 */
 .setting-pi-path-actions {
   display: flex;
   flex-wrap: wrap;
@@ -1647,19 +1437,11 @@
   gap: 8px;
   margin-top: 8px;
 }
-.setting-wsl-fields .setting-field {
-  flex: 1 1 160px;
-  min-width: 160px;
-}
 /* WSL 用户验证行：输入框 + 验证按钮 */
 .setting-wsl-user-row {
   display: flex;
   align-items: flex-end;
   gap: 8px;
-}
-.setting-wsl-user-row .setting-field {
-  flex: 1 1 200px;
-  min-width: 160px;
 }
 /* WSL 验证结果反馈 */
 .setting-wsl-validation {
@@ -2235,7 +2017,6 @@
   color: var(--color-text-primary);
 }
 
-:root[data-theme="dark"] .settings-section,
 :root[data-theme="dark"] .setting-proxy-panel,
 :root[data-theme="dark"] .setting-pi-path-panel,
 :root[data-theme="dark"] .web-endpoint-panel,
@@ -3276,12 +3057,6 @@
   gap: 8px;
   align-items: center;
 }
-/* .setting-row div 是纵向文本容器；操作区必须显式覆写为横向布局。 */
-.setting-row .setting-inline-actions {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
 
 /* 调试按钮 */
 .debug-toggle.active {
@@ -3815,10 +3590,7 @@ div.fixed.inset-0.z-50 {
 :root[data-theme="dark"] .conversation-title strong,
 :root[data-theme="dark"] .config-provider-name,
 :root[data-theme="dark"] .session-card strong,
-:root[data-theme="dark"] .codex-session-title strong,
-:root[data-theme="dark"] .settings-section-header strong,
-:root[data-theme="dark"] .setting-row strong,
-:root[data-theme="dark"] .setting-switch-row strong {
+:root[data-theme="dark"] .codex-session-title strong {
   color: var(--color-text-primary);
 }
 

@@ -12,6 +12,7 @@ import type {
   UsageStatsDetectResult,
 } from "../../../../../shared/types";
 import { t } from "../../../i18n";
+import { SettingsSection } from "./SettingsStorageTab";
 import { Button } from "../../ui-shadcn/button";
 import { UsageHeatmap } from "../usageStats/UsageHeatmap";
 import { UsageDailyChart } from "../usageStats/UsageDailyChart";
@@ -135,27 +136,15 @@ function UsageRows(props: { data: UsageAggregated }) {
           sub={t("usageStats.window", { since: dateKey(data.window.since), days })}
         />
       </div>
-      <section className="settings-section">
-        <div className="settings-section-header">
-          <strong>{t("usageStats.heatmap.title")}</strong>
-        </div>
-        <div className="settings-section-body">
+      {/* 卡片总览与首个图表区块之间仅保留一条横线（由 heatmap 分区的 divided 提供），
+         图表区块均不套框，靠横线 + 标题分层 */}
+      <SettingsSection divided boxed={false} title={t("usageStats.heatmap.title")}>
           <UsageHeatmap data={data} />
-        </div>
-      </section>
-      <section className="settings-section">
-        <div className="settings-section-header">
-          <strong>{t("usageStats.daily.title")}</strong>
-        </div>
-        <div className="settings-section-body">
+        </SettingsSection>
+      <SettingsSection divided boxed={false} title={t("usageStats.daily.title")}>
           <UsageDailyChart data={data} />
-        </div>
-      </section>
-      <section className="settings-section">
-        <div className="settings-section-header">
-          <strong>{t("usageStats.models.title")}</strong>
-        </div>
-        <div className="settings-section-body">
+        </SettingsSection>
+      <SettingsSection divided boxed={false} title={t("usageStats.models.title")}>
           <UsageTable
             headers={[
               t("usageStats.models.col.model"),
@@ -172,13 +161,8 @@ function UsageRows(props: { data: UsageAggregated }) {
               String(m.sessions),
             ])}
           />
-        </div>
-      </section>
-      <section className="settings-section">
-        <div className="settings-section-header">
-          <strong>{t("usageStats.projects.title")}</strong>
-        </div>
-        <div className="settings-section-body">
+        </SettingsSection>
+      <SettingsSection divided boxed={false} title={t("usageStats.projects.title")}>
           <UsageTable
             headers={[
               t("usageStats.projects.col.project"),
@@ -193,8 +177,7 @@ function UsageRows(props: { data: UsageAggregated }) {
               String(p.turns),
             ])}
           />
-        </div>
-      </section>
+        </SettingsSection>
     </>
   );
 }
@@ -304,12 +287,13 @@ export function UsageStatsTab() {
   }, [probePluginInstalled]);
 
   return (
-    <div className="settings-section">
-      <div className="settings-section-header">
-        <strong>{t("settings.tabs.usage")}</strong>
-        {detect?.logPath && <small className="usage-stats-path">{detect.logPath}</small>}
-      </div>
-      <div className="settings-section-body">
+    <>
+      {/* pi-tracker 日志位置提示：不套框，与 tab 名同级 */}
+      {detect?.logPath && (
+        <p className="break-all px-0.5 pb-3 text-caption text-muted-foreground">
+          {detect.logPath}
+        </p>
+      )}
         {phase === "loading" && <div className="usage-stats-hint">{t("usageStats.loading")}</div>}
         {phase === "missing" && <NotInstalledCard onRefresh={refresh} />}
         {phase === "error" && (
@@ -341,7 +325,6 @@ export function UsageStatsTab() {
             {refreshing ? t("usageStats.refreshing") : t("usageStats.refresh")}
           </Button>
         )}
-      </div>
-    </div>
+    </>
   );
 }

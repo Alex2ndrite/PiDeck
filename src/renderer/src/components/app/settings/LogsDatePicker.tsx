@@ -1,17 +1,19 @@
 import { useState } from "react";
-import { CalendarIcon, X } from "lucide-react";
+import { CalendarIcon } from "lucide-react";
 import { zhCN } from "date-fns/locale/zh-CN";
 import { enUS } from "date-fns/locale/en-US";
-import { Calendar } from "../components/ui-shadcn/calendar";
-import { Button } from "../components/ui-shadcn/button";
-import { Input } from "../components/ui-shadcn/input";
-import { Popover, PopoverContent, PopoverTrigger } from "../components/ui-shadcn/popover";
-import { getI18nLocale } from "../i18n";
+import { Calendar } from "../../ui-shadcn/calendar";
+import { Button } from "../../ui-shadcn/button";
+import { Input } from "../../ui-shadcn/input";
+import { Popover, PopoverContent, PopoverTrigger } from "../../ui-shadcn/popover";
+import { getI18nLocale, t } from "../../../i18n";
 
 /**
- * 日志页"筛选时间"选择器：shadcn Calendar 选日期 + 时间输入，替代原生 datetime-local。
- * value 格式与 datetime-local 保持一致（"YYYY-MM-DDTHH:mm"），
- * 上层 query.from = new Date(from).getTime() 无需改动。
+ * 日志"筛选时间"选择器：shadcn Calendar 选日期 + 时间输入，替代原生 datetime-local。
+ * - 未选日期：按钮只显示短占位（"筛选时间"），不会用整句说明撑宽按钮；
+ * - 已选日期：按钮显示 "2026/8/9 00:00"，时间输入与清除按钮才出现（避免空框误看为多余控件）；
+ * - value 格式与 datetime-local 保持一致（"YYYY-MM-DDTHH:mm"），
+ *   上层 query.from = new Date(from).getTime() 无需改动。
  */
 
 /** 解析日期部分为本地时区 Date（不能用 new Date("YYYY-MM-DD")——按 UTC 零点解析会偏移一天）。 */
@@ -40,28 +42,32 @@ export function LogsDatePicker(props: {
 	const time = props.value.includes("T") ? props.value.slice(11, 16) : "";
 	// pseudo locale 走 en-US，与 formatI18nDateTime 的处理一致
 	const locale = getI18nLocale() === "zh-CN" ? zhCN : enUS;
+	const dateLabel = date
+		? `${date.toLocaleDateString(locale.code === "zh-CN" ? "zh-CN" : "en-US")} ${time || "00:00"}`
+		: t("logs.sinceShort");
 
 	return (
-		<div className="logs-since-input flex items-center gap-1.5">
+		<div className="flex items-center gap-1.5">
 			<Popover open={open} onOpenChange={setOpen}>
 				<PopoverTrigger asChild>
 					<Button
 						variant="outline"
 						size="sm"
-						className="w-full min-w-0 justify-start font-normal"
+						className="justify-start font-normal"
+						title={props.placeholder}
 						aria-label={props.placeholder}
 					>
 						<CalendarIcon className="size-3.5 shrink-0" aria-hidden="true" />
-						<span className="truncate">
-							{date ? date.toLocaleDateString(locale.code === "zh-CN" ? "zh-CN" : "en-US") : props.placeholder}
-						</span>
+						<span className="truncate">{dateLabel}</span>
 					</Button>
 				</PopoverTrigger>
-				<PopoverContent className="w-auto p-0" align="start">
+				<PopoverContent className="w-[288px] p-0" align="start">
 					<Calendar
 						mode="single"
 						locale={locale}
 						selected={date}
+						// 固定宽度：默认 w-fit 在窄弹层下表头前后翻月按钮会与内容重叠
+						classNames={{ root: "w-full" }}
 						// 选中日期后保留已填时间，未填默认 00:00；保持弹出层开启便于连续调整
 						onSelect={(next) => {
 							if (next) props.onChange(formatValue(next, time));
@@ -69,27 +75,30 @@ export function LogsDatePicker(props: {
 					/>
 				</PopoverContent>
 			</Popover>
-			<Input
-				type="time"
-				className="w-[110px] shrink-0"
-				value={time}
-				onChange={(event) => {
-					// 尚未选日期时以今天为基准
-					const base = date ?? new Date();
-					props.onChange(formatValue(base, event.target.value));
-				}}
-				aria-label={props.placeholder}
-			/>
+			{/* 时间输入仅在已选日期后显示：无日期时留一个空框会误看为多余控件 */}
+			{date && (
+				<Input
+					type="time"
+					className="w-[110px] shrink-0"
+					value={time}
+					onChange={(event) => {
+						// 尚未选日期时以今天为基准
+						const base = date ?? new Date();
+						props.onChange(formatValue(base, event.target.value));
+					}}
+					aria-label={props.placeholder}
+				/>
+			)}
 			{props.value && (
 				<Button
 					variant="ghost"
-					size="icon-xs"
-					className="size-5 shrink-0"
+					size="sm"
+					className="shrink-0"
 					onClick={() => props.onChange("")}
 					title={props.clearLabel}
 					aria-label={props.clearLabel}
 				>
-					<X className="size-3" aria-hidden="true" />
+					{t("common.clear")}
 				</Button>
 			)}
 		</div>

@@ -1,7 +1,6 @@
 // @ts-nocheck - extracted from AppParts, pre-existing type issues
 import { Component, useState, useEffect, useRef, type ReactNode } from "react";
 import { Input } from "../ui-shadcn/input";
-import { Textarea } from "../ui-shadcn/textarea";
 import {
 	Settings2,
 	Network,
@@ -13,6 +12,8 @@ import {
 	Minus,
 	Plus,
 	ChartColumnBig,
+	Activity,
+	MessageSquare,
 } from "lucide-react";
 import { t } from "../../i18n";
 import { desktopApi } from "../../desktopApi";
@@ -32,7 +33,6 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "../ui-shadcn/select";
-import { Switch } from "../ui-shadcn/switch";
 import {
 	Dialog,
 	DialogClose,
@@ -54,6 +54,10 @@ import {
 	AlertDialogTitle,
 } from "../ui-shadcn/alert-dialog";
 import { SettingsSection, StorageTab } from "./settings/SettingsStorageTab";
+import { SettingBox, SettingRow, SettingSwitchRow, SettingTextarea } from "./settings/SettingRows";
+import { ExternalEditorsSection } from "./settings/ExternalEditorsSection";
+import { ProcessMetricsTab } from "./settings/ProcessMetricsTab";
+import { ImTab } from "./settings/ImTab";
 import { VisionBridgeSettingsTab } from "./settings/VisionBridgeSettingsTab";
 import { ModelPicker } from "../session/ComposerComponents";
 import type { AppSettings, AppInfo, AvailableModel, PiInstallStatus, PiUpdateCheckResult, PiCliUpdateResult, PetManifest } from "../../../shared/types";
@@ -65,7 +69,7 @@ const ZOOM_FACTOR_MAX = 1.5;
 const ZOOM_FACTOR_STEP = 0.05;
 
 
-type SettingsTabId = "common" | "appearance" | "proxy" | "dev" | "pet" | "storage" | "usage" | "vision";
+type SettingsTabId = "common" | "appearance" | "proxy" | "dev" | "im" | "pet" | "storage" | "usage" | "process" | "vision";
 
 /** 代理相关字段：用于判断代理 tab 是否有未保存变更。 */
 const PROXY_FIELDS: (keyof AppSettings)[] = [
@@ -77,69 +81,7 @@ const PROXY_FIELDS: (keyof AppSettings)[] = [
 	"desktopProxyBypass",
 ];
 
-function SettingSwitch(props: {
-	title: string;
-	description?: string;
-	checked: boolean;
-	disabled?: boolean;
-	onChange: (checked: boolean) => void;
-}) {
-	// #115 U5：开关换 shadcn Switch（Radix），行布局与文案结构不变
-	return (
-		<Label className="setting-switch-row">
-			<span>
-				<strong>{props.title}</strong>
-				{props.description && <small>{props.description}</small>}
-			</span>
-			<Switch
-				checked={props.checked}
-				disabled={props.disabled}
-				onCheckedChange={props.onChange}
-			/>
-		</Label>
-	);
-}
-
 /** 已修改但未保存的字段标记：在标签右侧显示一个黄色圆点 */
-function SettingTextarea(props: {
-	title: string;
-	description?: string;
-	value: string;
-	onChange: (value: string) => void;
-}) {
-	return (
-		<div className="setting-field">
-			<div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-				<strong style={{ color: "var(--color-text-primary)", fontSize: "var(--font-size-control)", fontWeight: 500 }}>
-					{props.title}
-				</strong>
-				{props.description && (
-					<small style={{ color: "var(--color-text-tertiary)", fontSize: "var(--font-size-caption)", lineHeight: 1.4 }}>
-						{props.description}
-					</small>
-				)}
-			</div>
-			<Textarea
-				value={props.value}
-				rows={8}
-				onChange={(event) => props.onChange(event.target.value)}
-				style={{
-					width: "100%",
-					fontFamily: "var(--font-family-mono)",
-					fontSize: "var(--font-size-sm)",
-					padding: "var(--space-2) var(--space-3)",
-					border: "1px solid var(--color-border-subtle)",
-					borderRadius: "var(--radius-sm)",
-					background: "var(--color-bg-input)",
-					color: "var(--color-text-primary)",
-					resize: "vertical",
-					lineHeight: "var(--line-height-body)",
-				}}
-			/>
-		</div>
-	);
-}
-
 function DirtyMarker(props: { dirty: boolean; label: string }) {
 	if (!props.dirty) return null;
 	return (
@@ -477,6 +419,11 @@ function SettingsModalContent(props: SettingsModalProps) {
 			icon: <Wrench size={16} />,
 		},
 		{
+			id: "im",
+			label: t("settings.tabs.im"),
+			icon: <MessageSquare size={16} />,
+		},
+		{
 			id: "pet",
 			label: t("settings.tabs.pet"),
 			icon: <PawPrint size={16} />,
@@ -490,6 +437,11 @@ function SettingsModalContent(props: SettingsModalProps) {
 			id: "usage",
 			label: t("settings.tabs.usage"),
 			icon: <ChartColumnBig size={16} />,
+		},
+		{
+			id: "process",
+			label: t("settings.tabs.process"),
+			icon: <Activity size={16} />,
 		},
 		{
 			id: "vision",
@@ -575,319 +527,140 @@ function SettingsModalContent(props: SettingsModalProps) {
 						))}
 					</TabsList>
 					{/* ── 常用设置 tab ── */}
-						<TabsContent value="common" className="settings-panel min-w-0">
+												<TabsContent value="common" className="settings-panel min-w-0">
 							<>
-								<SettingsSection title={t("settings.interface")}>
-								<div className="setting-field">
-									<span>
-										{t("settings.sessionTabOpenMode")}
-										<DirtyMarker dirty={isDirty("sessionTabOpenMode")} label={t("settings.sessionTabOpenMode")} />
-									</span>
-									<div className="grid gap-1.5">
-	<Select value={draftSettings.sessionTabOpenMode} onValueChange={(value) =>
+								{/* 语言（单行分区：行标题即一级标题，内容行入淡色框） */}
+								<SettingBox>
+								<SettingRow
+									level={1}
+									title={
+										<>
+											<span>{t("settings.language")}</span>
+											<DirtyMarker dirty={isDirty("language")} label={t("settings.language")} />
+										</>
+									}
+									alignEnd={false}
+								>
+									<Select value={draftSettings.language} onValueChange={(value) =>
+											updateDraft({ language: value as AppSettings["language"] })
+										}>
+										<SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+										<SelectContent>
+											{languageOptions.map((option) => (
+												<SelectItem key={option.value} value={option.value} disabled={option.disabled}>
+													{option.label}
+												</SelectItem>
+											))}
+										</SelectContent>
+									</Select>
+								</SettingRow>
+								</SettingBox>
+
+								{/* 会话 */}
+								<SettingsSection title={t("settings.sectionSession")}>
+									<SettingRow
+										title={
+											<>
+												<span>{t("settings.sessionTabOpenMode")}</span>
+												<DirtyMarker dirty={isDirty("sessionTabOpenMode")} label={t("settings.sessionTabOpenMode")} />
+											</>
+										}
+										alignEnd={false}
+									>
+										<Select value={draftSettings.sessionTabOpenMode} onValueChange={(value) =>
 												updateDraft({ sessionTabOpenMode: value as AppSettings["sessionTabOpenMode"] })
 											}>
-		<SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-		<SelectContent>
-			<SelectItem value="preview">{t("settings.sessionTabOpenModePreview")}</SelectItem>
-			<SelectItem value="permanent">{t("settings.sessionTabOpenModePermanent")}</SelectItem>
-		</SelectContent>
-	</Select>
-</div>
-								</div>
-								<div className="setting-field">
-									<span>
-										{t("settings.language")}
-										<DirtyMarker dirty={isDirty("language")} label={t("settings.language")} />
-									</span>
-										<div className="grid gap-1.5">
-	<Select value={draftSettings.language} onValueChange={(value) =>
-												updateDraft({ language: value as AppSettings["language"] })
-											}>
-		<SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-		<SelectContent>
-			{languageOptions.map((option) => (
-				<SelectItem key={option.value} value={option.value} disabled={option.disabled}>
-					{option.label}
-				</SelectItem>
-			))}
-		</SelectContent>
-	</Select>
-</div>
-									</div>
-									<div className="setting-field setting-zoom-field">
-										<span>
-											{t("settings.zoomFactor")}
-											<DirtyMarker dirty={isDirty("zoomFactor")} label={t("settings.zoomFactor")} />
-										</span>
-										<div className="setting-zoom-control">
-											<Button variant="ghost" size="icon"
-												className="icon-button setting-zoom-button"
-												
-												disabled={draftSettings.zoomFactor <= ZOOM_FACTOR_MIN}
-												onClick={() => changeZoomFactor(-ZOOM_FACTOR_STEP)} aria-label={t("settings.zoomOut")} title={t("settings.zoomOut")}>
-												<Minus size={16} strokeWidth={2.2} aria-hidden="true" />
-											</Button>
-											<output className="setting-zoom-value" aria-live="polite">
-												{Math.round(draftSettings.zoomFactor * 100)}%
-											</output>
-											<Button variant="ghost" size="icon"
-												className="icon-button setting-zoom-button"
-												
-												disabled={draftSettings.zoomFactor >= ZOOM_FACTOR_MAX}
-																aria-label={t("settings.zoomIn")} title={t("settings.zoomIn")}
-												onClick={() => changeZoomFactor(ZOOM_FACTOR_STEP)}
-											>
-												<Plus size={16} strokeWidth={2.2} aria-hidden="true" />
-											</Button>
-										</div>
-									</div>
-								</SettingsSection>
-								<SettingsSection title={t("settings.typography")}>
-									<div className="setting-field">
-										<span>
-											{t("settings.fontSize")}
-											<DirtyMarker dirty={isDirty("fontSize")} label={t("settings.fontSize")} />
-										</span>
-										<div className="grid gap-1.5">
-	<Select value={draftSettings.fontSize} onValueChange={(value) =>
-												updateDraft({ fontSize: value as AppSettings["fontSize"] })
-											}>
-		<SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-		<SelectContent>
-			{fontSizeOptions.map((option) => (
-				<SelectItem key={option.value} value={option.value} disabled={option.disabled}>
-					{option.label}
-				</SelectItem>
-			))}
-		</SelectContent>
-	</Select>
-</div>
-									</div>
-									<SettingSwitch
-										title={t("settings.fontSizePerArea")}
-										description={t("settings.fontSizePerAreaDesc")}
-										checked={perAreaFontSize}
-										onChange={(checked) => {
-											setPerAreaFontSize(checked);
-											if (!checked) {
-												updateDraft({ uiFontSize: null, chatFontSize: null, inputFontSize: null });
-											}
-										}}
-									/>
-									{perAreaFontSize && (
-										<>
-											<div className="setting-field">
-												<span>
-													{t("settings.uiFontSize")}
-													<DirtyMarker dirty={isDirty("uiFontSize")} label={t("settings.uiFontSize")} />
-												</span>
-												<div className="grid gap-1.5">
-	<Select value={draftSettings.uiFontSize ?? draftSettings.fontSize} onValueChange={(value) =>
-														updateDraft({ uiFontSize: value as AppSettings["uiFontSize"] })
-													}>
-		<SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-		<SelectContent>
-			{fontSizeOptions.map((option) => (
-				<SelectItem key={option.value} value={option.value} disabled={option.disabled}>
-					{option.label}
-				</SelectItem>
-			))}
-		</SelectContent>
-	</Select>
-</div>
-											</div>
-											<div className="setting-field">
-												<span>
-													{t("settings.chatFontSize")}
-													<DirtyMarker dirty={isDirty("chatFontSize")} label={t("settings.chatFontSize")} />
-												</span>
-												<div className="grid gap-1.5">
-	<Select value={draftSettings.chatFontSize ?? draftSettings.fontSize} onValueChange={(value) =>
-														updateDraft({ chatFontSize: value as AppSettings["chatFontSize"] })
-													}>
-		<SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-		<SelectContent>
-			{fontSizeOptions.map((option) => (
-				<SelectItem key={option.value} value={option.value} disabled={option.disabled}>
-					{option.label}
-				</SelectItem>
-			))}
-		</SelectContent>
-	</Select>
-</div>
-											</div>
-											<div className="setting-field">
-												<span>
-													{t("settings.inputFontSize")}
-													<DirtyMarker dirty={isDirty("inputFontSize")} label={t("settings.inputFontSize")} />
-												</span>
-												<div className="grid gap-1.5">
-	<Select value={draftSettings.inputFontSize ?? draftSettings.fontSize} onValueChange={(value) =>
-														updateDraft({ inputFontSize: value as AppSettings["inputFontSize"] })
-													}>
-		<SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-		<SelectContent>
-			{fontSizeOptions.map((option) => (
-				<SelectItem key={option.value} value={option.value} disabled={option.disabled}>
-					{option.label}
-				</SelectItem>
-			))}
-		</SelectContent>
-	</Select>
-</div>
-											</div>
-										</>
-									)}
-									<hr className="setting-divider" />
-									<div className="setting-field">
-										<span>
-											{t("settings.fontFamilyBase")}
-											<DirtyMarker dirty={isDirty("fontFamilyBase")} label={t("settings.fontFamilyBase")} />
-										</span>
-										<div className="grid gap-1.5">
-	<Select value={draftSettings.fontFamilyBase} onValueChange={(value) =>
-												updateDraft({ fontFamilyBase: value as AppSettings["fontFamilyBase"] })
-											}>
-		<SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-		<SelectContent>
-			{fontBaseOptions.map((option) => (
-				<SelectItem key={option.value} value={option.value} disabled={option.disabled}>
-					{option.label}
-				</SelectItem>
-			))}
-		</SelectContent>
-	</Select>
-</div>
-									</div>
-									{draftSettings.fontFamilyBase === "custom" && (
-										<Label className="grid gap-1.5 setting-field">
-	<span className="text-sm font-medium leading-none text-foreground">{t("settings.fontFamilyBaseCustomField")}</span>
-	<Input type="text" value={draftSettings.fontFamilyBaseCustom} placeholder={t("settings.fontFamilyBaseCustomPlaceholder")} onChange={(event) => updateDraft({ fontFamilyBaseCustom: event.target.value })
-											} />
-</Label>
-									)}
-									<hr className="setting-divider" />
-									<div className="setting-field">
-										<span>
-											{t("settings.fontFamilyMono")}
-											<DirtyMarker dirty={isDirty("fontFamilyMono")} label={t("settings.fontFamilyMono")} />
-										</span>
-										<div className="grid gap-1.5">
-	<Select value={draftSettings.fontFamilyMono} onValueChange={(value) =>
-												updateDraft({ fontFamilyMono: value as AppSettings["fontFamilyMono"] })
-											}>
-		<SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-		<SelectContent>
-			{fontMonoOptions.map((option) => (
-				<SelectItem key={option.value} value={option.value} disabled={option.disabled}>
-					{option.label}
-				</SelectItem>
-			))}
-		</SelectContent>
-	</Select>
-</div>
-									</div>
-									{draftSettings.fontFamilyMono === "custom" && (
-										<Label className="grid gap-1.5 setting-field">
-	<span className="text-sm font-medium leading-none text-foreground">{t("settings.fontFamilyMonoCustomField")}</span>
-	<Input type="text" value={draftSettings.fontFamilyMonoCustom} placeholder={t("settings.fontFamilyMonoCustomPlaceholder")} onChange={(event) => updateDraft({ fontFamilyMonoCustom: event.target.value })
-											} />
-</Label>
-									)}
-								</SettingsSection>
-								<SettingsSection title={t("settings.notificationSection")}>
-									<div className="setting-field">
-										<span>
-											{t("settings.inputShortcut")}
-											<DirtyMarker dirty={isDirty("sendShortcut")} label={t("settings.inputShortcut")} />
-										</span>
-										<div className="grid gap-1.5">
-	<Select value={draftSettings.sendShortcut} onValueChange={(value) =>
+											<SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+											<SelectContent>
+												<SelectItem value="preview">{t("settings.sessionTabOpenModePreview")}</SelectItem>
+												<SelectItem value="permanent">{t("settings.sessionTabOpenModePermanent")}</SelectItem>
+											</SelectContent>
+										</Select>
+									</SettingRow>
+									<SettingRow
+										title={
+											<>
+												<span>{t("settings.inputShortcut")}</span>
+												<DirtyMarker dirty={isDirty("sendShortcut")} label={t("settings.inputShortcut")} />
+											</>
+										}
+										alignEnd={false}
+									>
+										<Select value={draftSettings.sendShortcut} onValueChange={(value) =>
 												updateDraft({ sendShortcut: value as AppSettings["sendShortcut"] })
 											}>
-		<SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-		<SelectContent>
-			{sendShortcutOptions.map((option) => (
-				<SelectItem key={option.value} value={option.value} disabled={option.disabled}>
-					{option.label}
-				</SelectItem>
-			))}
-		</SelectContent>
-	</Select>
-</div>
-									</div>
-									<div className="setting-field">
-										<span>
-											{t("settings.linkOpenMode")}
-											<DirtyMarker dirty={isDirty("linkOpenMode")} label={t("settings.linkOpenMode")} />
-										</span>
-										<div className="grid gap-1.5">
-	<Select value={draftSettings.linkOpenMode} onValueChange={(value) =>
+											<SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+											<SelectContent>
+												{sendShortcutOptions.map((option) => (
+													<SelectItem key={option.value} value={option.value} disabled={option.disabled}>
+														{option.label}
+													</SelectItem>
+												))}
+											</SelectContent>
+										</Select>
+									</SettingRow>
+									<SettingRow
+										title={
+											<>
+												<span>{t("settings.linkOpenMode")}</span>
+												<DirtyMarker dirty={isDirty("linkOpenMode")} label={t("settings.linkOpenMode")} />
+											</>
+										}
+										alignEnd={false}
+									>
+										<Select value={draftSettings.linkOpenMode} onValueChange={(value) =>
 												updateDraft({ linkOpenMode: value as AppSettings["linkOpenMode"] })
 											}>
-		<SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-		<SelectContent>
-			{linkOpenModeOptions.map((option) => (
-				<SelectItem key={option.value} value={option.value} disabled={option.disabled}>
-					{option.label}
-				</SelectItem>
-			))}
-		</SelectContent>
-	</Select>
-</div>
-									</div>
-									<div className="setting-field">
-										<span>
-											{t("settings.workspaceContentOpenMode")}
-											<DirtyMarker dirty={isDirty("workspaceContentOpenMode")} label={t("settings.workspaceContentOpenMode")} />
-										</span>
-										<div className="grid gap-1.5">
-											<Select
-												value={draftSettings.workspaceContentOpenMode ?? "split"}
-												onValueChange={(value) =>
-													updateDraft({
-														workspaceContentOpenMode: value as AppSettings["workspaceContentOpenMode"],
-													})
-												}
-											>
-												<SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-												<SelectContent>
-													{workspaceContentOpenModeOptions.map((option) => (
-														<SelectItem key={option.value} value={option.value}>
-															{option.label}
-														</SelectItem>
-													))}
-												</SelectContent>
-											</Select>
-											<p className="text-caption text-muted-foreground">
-												{t("settings.workspaceContentOpenModeDesc")}
-											</p>
-										</div>
-									</div>
-									<SettingSwitch
-										title={t("settings.closeToTray")}
-										checked={draftSettings.closeToTray}
-										onChange={(checked) =>
-											updateDraft({ closeToTray: checked })
+											<SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+											<SelectContent>
+												{linkOpenModeOptions.map((option) => (
+													<SelectItem key={option.value} value={option.value} disabled={option.disabled}>
+														{option.label}
+													</SelectItem>
+												))}
+											</SelectContent>
+										</Select>
+									</SettingRow>
+									<SettingRow
+										title={
+											<>
+												<span>{t("settings.workspaceContentOpenMode")}</span>
+												<DirtyMarker dirty={isDirty("workspaceContentOpenMode")} label={t("settings.workspaceContentOpenMode")} />
+											</>
 										}
-									/>
-									<SettingSwitch
-										title={t("settings.singleInstance")}
-										description={t("settings.singleInstanceDesc")}
-										checked={draftSettings.singleInstance}
-										onChange={(checked) =>
-											updateDraft({ singleInstance: checked })
-										}
-									/>
-									<SettingSwitch
+										description={t("settings.workspaceContentOpenModeDesc")}
+										alignEnd={false}
+									>
+										<Select
+											value={draftSettings.workspaceContentOpenMode ?? "split"}
+											onValueChange={(value) =>
+												updateDraft({
+													workspaceContentOpenMode: value as AppSettings["workspaceContentOpenMode"],
+												})
+											}
+										>
+											<SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+											<SelectContent>
+												{workspaceContentOpenModeOptions.map((option) => (
+													<SelectItem key={option.value} value={option.value}>
+														{option.label}
+													</SelectItem>
+												))}
+											</SelectContent>
+										</Select>
+									</SettingRow>
+								</SettingsSection>
+
+								{/* 通知 */}
+								<SettingsSection title={t("settings.notificationSection")}>
+									<SettingSwitchRow
 										title={t("settings.enableNotifications")}
 										checked={draftSettings.enableNotifications}
 										onChange={(checked) =>
 											updateDraft({ enableNotifications: checked })
 										}
 									/>
-									<SettingSwitch
+									<SettingSwitchRow
 										title={t("settings.agentCountReminder")}
 										description={t("settings.agentCountReminderDesc")}
 										checked={draftSettings.agentCountReminderEnabled}
@@ -896,44 +669,57 @@ function SettingsModalContent(props: SettingsModalProps) {
 										}
 									/>
 								</SettingsSection>
-								<SettingsSection title={t("settings.advanced")}>
-									<div className="setting-field">
-										<span>
-											{t("settings.rpcTimeout")}
-											<DirtyMarker dirty={isDirty("rpcTimeout")} label={t("settings.rpcTimeout")} />
-										</span>
-										<Input
-											type="number"
-											value={String(Math.round(draftSettings.rpcTimeout / 1000))}
-											onChange={(e) => {
-												const seconds = Math.max(600, parseInt(e.target.value) || 600);
-												updateDraft({ rpcTimeout: seconds * 1000 });
-											}}
-										/>
-										<small style={{ color: "var(--color-text-tertiary)", fontSize: "var(--font-size-caption)" }}>
-											{t("settings.rpcTimeoutDesc")}
-										</small>
-									</div>
-									<div className="setting-field">
-										<span>
-											{t("settings.maxEditorFileSize")}
-											<DirtyMarker dirty={isDirty("maxEditorFileSizeMB")} label={t("settings.maxEditorFileSize")} />
-										</span>
-										<Input
-											type="number"
-											value={String(draftSettings.maxEditorFileSizeMB)}
-											onChange={(e) => {
-												const mb = Math.max(1, parseInt(e.target.value) || 5);
-												updateDraft({ maxEditorFileSizeMB: mb });
-											}}
-										/>
-										<small style={{ color: "var(--color-text-tertiary)", fontSize: "var(--font-size-caption)" }}>
-											{t("settings.maxEditorFileSizeDesc")}
-										</small>
-									</div>
+
+								{/* 窗口 */}
+								<SettingsSection title={t("settings.sectionWindow")}>
+									<SettingRow
+										title={
+											<>
+												<span>{t("settings.startupWindowMode")}</span>
+												<DirtyMarker
+													dirty={isDirty("startupWindowMode")}
+													label={t("settings.startupWindowMode")}
+												/>
+											</>
+										}
+										description={t("settings.startupWindowModeDesc")}
+										alignEnd={false}
+									>
+										<Select value={draftSettings.startupWindowMode} onValueChange={(value) =>
+												updateDraft({
+													startupWindowMode: value as AppSettings["startupWindowMode"],
+												})
+											}>
+											<SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+											<SelectContent>
+												{startupWindowModeOptions.map((option) => (
+													<SelectItem key={option.value} value={option.value} disabled={option.disabled}>
+														{option.label}
+													</SelectItem>
+												))}
+											</SelectContent>
+										</Select>
+									</SettingRow>
+									<SettingSwitchRow
+										title={t("settings.closeToTray")}
+										checked={draftSettings.closeToTray}
+										onChange={(checked) =>
+											updateDraft({ closeToTray: checked })
+										}
+									/>
+									<SettingSwitchRow
+										title={t("settings.singleInstance")}
+										description={t("settings.singleInstanceDesc")}
+										checked={draftSettings.singleInstance}
+										onChange={(checked) =>
+											updateDraft({ singleInstance: checked })
+										}
+									/>
 								</SettingsSection>
+
+								{/* Git */}
 								<SettingsSection title={t("settings.git")}>
-									<SettingSwitch
+									<SettingSwitchRow
 										title={t("settings.gitManagement")}
 										description={t("settings.gitManagementDesc")}
 										checked={draftSettings.enableGitManagement}
@@ -943,11 +729,15 @@ function SettingsModalContent(props: SettingsModalProps) {
 									/>
 									{draftSettings.enableGitManagement && (
 										<>
-											<div className="setting-field">
-												<span>
-													{t("settings.gitCommitMessageModel")}
-													<DirtyMarker dirty={isDirty("gitCommitMessageProvider") || isDirty("gitCommitMessageModel")} label={t("settings.gitCommitMessageModel")} />
-												</span>
+											<SettingRow
+												title={
+													<>
+														<span>{t("settings.gitCommitMessageModel")}</span>
+														<DirtyMarker dirty={isDirty("gitCommitMessageProvider") || isDirty("gitCommitMessageModel")} label={t("settings.gitCommitMessageModel")} />
+													</>
+												}
+												description={t("settings.gitCommitMessageModelDesc")}
+											>
 												<Button
 													variant="outline"
 													className="w-full justify-start font-mono text-xs"
@@ -957,8 +747,7 @@ function SettingsModalContent(props: SettingsModalProps) {
 														? `${draftSettings.gitCommitMessageProvider}/${draftSettings.gitCommitMessageModel}`
 														: t("settings.gitCommitMessageModelUnset")}
 												</Button>
-												<small>{t("settings.gitCommitMessageModelDesc")}</small>
-											</div>
+											</SettingRow>
 											<SettingTextarea
 												title={t("settings.gitCommitMessagePrompt")}
 												description={t("settings.gitCommitMessagePromptDesc")}
@@ -997,57 +786,67 @@ function SettingsModalContent(props: SettingsModalProps) {
 								</SettingsSection>
 							</>
 						</TabsContent>
+
 						{/* ── 外观设置 tab ── */}
-						<TabsContent value="appearance" className="settings-panel min-w-0">
+												<TabsContent value="appearance" className="settings-panel min-w-0">
 							<>
-								<SettingsSection title={t("settings.interface")}>
-									<div className="setting-field">
-										<span>
-											{t("settings.theme")}
-											<DirtyMarker dirty={isDirty("theme")} label={t("settings.theme")} />
-										</span>
-										<div className="grid gap-1.5">
-	<Select value={draftSettings.theme} onValueChange={(value) =>
+								{/* 主题与背景 */}
+								<SettingsSection title={t("settings.sectionThemeBackground")}>
+									<SettingRow
+										title={
+											<>
+												<span>{t("settings.theme")}</span>
+												<DirtyMarker dirty={isDirty("theme")} label={t("settings.theme")} />
+											</>
+										}
+										alignEnd={false}
+									>
+										<Select value={draftSettings.theme} onValueChange={(value) =>
 												updateDraft({ theme: value as AppSettings["theme"] })
 											}>
-		<SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-		<SelectContent>
-			{themeOptions.map((option) => (
-				<SelectItem key={option.value} value={option.value} disabled={option.disabled}>
-					{option.label}
-				</SelectItem>
-			))}
-		</SelectContent>
-	</Select>
-</div>
-									</div>
-									<div className="setting-field">
-										<span>
-											{t("settings.accent")}
-											<DirtyMarker dirty={isDirty("accent")} label={t("settings.accent")} />
-										</span>
-										<div className="grid gap-1.5">
-	<Select value={draftSettings.accent} onValueChange={(value) =>
+											<SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+											<SelectContent>
+												{themeOptions.map((option) => (
+													<SelectItem key={option.value} value={option.value} disabled={option.disabled}>
+														{option.label}
+													</SelectItem>
+												))}
+											</SelectContent>
+										</Select>
+									</SettingRow>
+									<SettingRow
+										title={
+											<>
+												<span>{t("settings.accent")}</span>
+												<DirtyMarker dirty={isDirty("accent")} label={t("settings.accent")} />
+											</>
+										}
+										description={t("settings.accentDesc")}
+										alignEnd={false}
+									>
+										<Select value={draftSettings.accent} onValueChange={(value) =>
 												updateDraft({ accent: value as AppSettings["accent"] })
 											}>
-		<SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-		<SelectContent>
-			{accentOptions.map((option) => (
-				<SelectItem key={option.value} value={option.value} disabled={option.disabled}>
-					{option.label}
-				</SelectItem>
-			))}
-		</SelectContent>
-	</Select>
-</div>
-										<small className="text-xs text-muted-foreground">{t("settings.accentDesc")}</small>
-									</div>
+											<SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+											<SelectContent>
+												{accentOptions.map((option) => (
+													<SelectItem key={option.value} value={option.value} disabled={option.disabled}>
+														{option.label}
+													</SelectItem>
+												))}
+											</SelectContent>
+										</Select>
+									</SettingRow>
 									{/* 背景图片：pideck-bg:// 协议加载 userData/backgrounds/ 下文件 */}
-									<div className="setting-field">
-										<span>
-											{t("settings.backgroundImage")}
-											<DirtyMarker dirty={isDirty("backgroundImage") || isDirty("backgroundImageOpacity")} label={t("settings.backgroundImage")} />
-										</span>
+									<SettingRow
+										title={
+											<>
+												<span>{t("settings.backgroundImage")}</span>
+												<DirtyMarker dirty={isDirty("backgroundImage") || isDirty("backgroundImageOpacity")} label={t("settings.backgroundImage")} />
+											</>
+										}
+										description={t("settings.backgroundImageDesc")}
+									>
 										<div className="flex items-center gap-2">
 											{draftSettings.backgroundImage ? (
 												<img
@@ -1082,8 +881,11 @@ function SettingsModalContent(props: SettingsModalProps) {
 												</Button>
 											) : null}
 										</div>
-										<div className="mt-1.5 flex items-center gap-2">
-											<span className="w-24 shrink-0 text-xs text-muted-foreground">{t("settings.backgroundImageOpacity")}</span>
+									</SettingRow>
+									<SettingRow
+										title={<span>{t("settings.backgroundImageOpacity")}</span>}
+									>
+										<div className="flex w-full items-center gap-2">
 											<input
 												type="range"
 												min={0}
@@ -1093,49 +895,260 @@ function SettingsModalContent(props: SettingsModalProps) {
 												onChange={(event) =>
 													updateDraft({ backgroundImageOpacity: Number(event.target.value) / 100 })
 												}
-												className="m-0 h-4 flex-1 accent-[var(--color-accent)]"
+												className="h-4 min-w-0 flex-1 accent-[var(--color-accent)]"
 												aria-label={t("settings.backgroundImageOpacity")}
 											/>
-											<span className="w-10 text-right font-mono text-xs tabular-nums text-muted-foreground">{Math.round((draftSettings.backgroundImageOpacity ?? 0.8) * 100)}%</span>
+											<span className="w-10 shrink-0 text-right font-mono text-xs tabular-nums text-muted-foreground">{Math.round((draftSettings.backgroundImageOpacity ?? 0.8) * 100)}%</span>
 										</div>
-										<small className="text-xs text-muted-foreground">{t("settings.backgroundImageDesc")}</small>
-									</div>
-									<div className="setting-field">
-										<span>
-											{t("settings.startupWindowMode")}
-											<DirtyMarker
-												dirty={isDirty("startupWindowMode")}
-												label={t("settings.startupWindowMode")}
-											/>
-										</span>
-										<div className="grid gap-1.5">
-	<Select value={draftSettings.startupWindowMode} onValueChange={(value) =>
-												updateDraft({
-													startupWindowMode: value as AppSettings["startupWindowMode"],
-												})
+									</SettingRow>
+								</SettingsSection>
+
+								{/* 界面 */}
+								<SettingsSection title={t("settings.interface")}>
+									<SettingRow
+										title={
+											<>
+												<span>{t("settings.zoomFactor")}</span>
+												<DirtyMarker dirty={isDirty("zoomFactor")} label={t("settings.zoomFactor")} />
+											</>
+										}
+									>
+										<div className="flex items-center gap-2">
+											<Button
+												variant="ghost"
+												size="icon"
+												className="size-8 rounded-[6px] border border-border-subtle bg-bg-panel text-text-secondary hover:border-[var(--color-accent)] hover:bg-bg-active hover:text-[var(--color-accent)] disabled:cursor-not-allowed disabled:opacity-40"
+												disabled={draftSettings.zoomFactor <= ZOOM_FACTOR_MIN}
+												onClick={() => changeZoomFactor(-ZOOM_FACTOR_STEP)}
+												aria-label={t("settings.zoomOut")}
+												title={t("settings.zoomOut")}
+											>
+												<Minus size={16} strokeWidth={2.2} aria-hidden="true" />
+											</Button>
+											<output
+												className="min-w-8 text-center font-brand text-control font-semibold text-foreground"
+												aria-live="polite"
+											>
+												{Math.round(draftSettings.zoomFactor * 100)}%
+											</output>
+											<Button
+												variant="ghost"
+												size="icon"
+												className="size-8 rounded-[6px] border border-border-subtle bg-bg-panel text-text-secondary hover:border-[var(--color-accent)] hover:bg-bg-active hover:text-[var(--color-accent)] disabled:cursor-not-allowed disabled:opacity-40"
+												disabled={draftSettings.zoomFactor >= ZOOM_FACTOR_MAX}
+												aria-label={t("settings.zoomIn")}
+												title={t("settings.zoomIn")}
+												onClick={() => changeZoomFactor(ZOOM_FACTOR_STEP)}
+											>
+												<Plus size={16} strokeWidth={2.2} aria-hidden="true" />
+											</Button>
+										</div>
+									</SettingRow>
+								</SettingsSection>
+
+								{/* 字体 */}
+								<SettingsSection title={t("settings.sectionFonts")}>
+									<SettingRow
+										title={
+											<>
+												<span>{t("settings.fontSize")}</span>
+												<DirtyMarker dirty={isDirty("fontSize")} label={t("settings.fontSize")} />
+											</>
+										}
+										alignEnd={false}
+									>
+										<Select value={draftSettings.fontSize} onValueChange={(value) =>
+												updateDraft({ fontSize: value as AppSettings["fontSize"] })
 											}>
-		<SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-		<SelectContent>
-			{startupWindowModeOptions.map((option) => (
-				<SelectItem key={option.value} value={option.value} disabled={option.disabled}>
-					{option.label}
-				</SelectItem>
-			))}
-		</SelectContent>
-	</Select>
-</div>
-										<small style={{ color: "var(--color-text-tertiary)", fontSize: "var(--font-size-caption)" }}>
-											{t("settings.startupWindowModeDesc")}
-										</small>
-									</div>
-									<SettingSwitch
+											<SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+											<SelectContent>
+												{fontSizeOptions.map((option) => (
+													<SelectItem key={option.value} value={option.value} disabled={option.disabled}>
+														{option.label}
+													</SelectItem>
+												))}
+											</SelectContent>
+										</Select>
+									</SettingRow>
+									<SettingSwitchRow
+										title={t("settings.fontSizePerArea")}
+										description={t("settings.fontSizePerAreaDesc")}
+										checked={perAreaFontSize}
+										onChange={(checked) => {
+											setPerAreaFontSize(checked);
+											if (!checked) {
+												updateDraft({ uiFontSize: null, chatFontSize: null, inputFontSize: null });
+											}
+										}}
+									/>
+									{perAreaFontSize && (
+										<>
+											<SettingRow
+												title={
+													<>
+														<span>{t("settings.uiFontSize")}</span>
+														<DirtyMarker dirty={isDirty("uiFontSize")} label={t("settings.uiFontSize")} />
+													</>
+												}
+												alignEnd={false}
+											>
+												<Select value={draftSettings.uiFontSize ?? draftSettings.fontSize} onValueChange={(value) =>
+														updateDraft({ uiFontSize: value as AppSettings["uiFontSize"] })
+													}>
+													<SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+													<SelectContent>
+														{fontSizeOptions.map((option) => (
+															<SelectItem key={option.value} value={option.value} disabled={option.disabled}>
+																{option.label}
+															</SelectItem>
+														))}
+													</SelectContent>
+												</Select>
+											</SettingRow>
+											<SettingRow
+												title={
+													<>
+														<span>{t("settings.chatFontSize")}</span>
+														<DirtyMarker dirty={isDirty("chatFontSize")} label={t("settings.chatFontSize")} />
+													</>
+												}
+												alignEnd={false}
+											>
+												<Select value={draftSettings.chatFontSize ?? draftSettings.fontSize} onValueChange={(value) =>
+														updateDraft({ chatFontSize: value as AppSettings["chatFontSize"] })
+													}>
+													<SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+													<SelectContent>
+														{fontSizeOptions.map((option) => (
+															<SelectItem key={option.value} value={option.value} disabled={option.disabled}>
+																{option.label}
+															</SelectItem>
+														))}
+													</SelectContent>
+												</Select>
+											</SettingRow>
+											<SettingRow
+												title={
+													<>
+														<span>{t("settings.inputFontSize")}</span>
+														<DirtyMarker dirty={isDirty("inputFontSize")} label={t("settings.inputFontSize")} />
+													</>
+												}
+												alignEnd={false}
+											>
+												<Select value={draftSettings.inputFontSize ?? draftSettings.fontSize} onValueChange={(value) =>
+														updateDraft({ inputFontSize: value as AppSettings["inputFontSize"] })
+													}>
+													<SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+													<SelectContent>
+														{fontSizeOptions.map((option) => (
+															<SelectItem key={option.value} value={option.value} disabled={option.disabled}>
+																{option.label}
+															</SelectItem>
+														))}
+													</SelectContent>
+												</Select>
+											</SettingRow>
+										</>
+									)}
+									<SettingRow
+										title={
+											<>
+												<span>{t("settings.fontFamilyBase")}</span>
+												<DirtyMarker dirty={isDirty("fontFamilyBase")} label={t("settings.fontFamilyBase")} />
+											</>
+										}
+										alignEnd={false}
+									>
+										<Select value={draftSettings.fontFamilyBase} onValueChange={(value) =>
+												updateDraft({ fontFamilyBase: value as AppSettings["fontFamilyBase"] })
+											}>
+											<SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+											<SelectContent>
+												{fontBaseOptions.map((option) => (
+													<SelectItem key={option.value} value={option.value} disabled={option.disabled}>
+														{option.label}
+													</SelectItem>
+												))}
+											</SelectContent>
+										</Select>
+									</SettingRow>
+									{draftSettings.fontFamilyBase === "custom" && (
+										<SettingRow
+											title={<span>{t("settings.fontFamilyBaseCustomField")}</span>}
+											stacked
+										>
+											<Input type="text" value={draftSettings.fontFamilyBaseCustom} placeholder={t("settings.fontFamilyBaseCustomPlaceholder")} onChange={(event) => updateDraft({ fontFamilyBaseCustom: event.target.value })} />
+										</SettingRow>
+									)}
+									<SettingRow
+										title={
+											<>
+												<span>{t("settings.fontFamilyMono")}</span>
+												<DirtyMarker dirty={isDirty("fontFamilyMono")} label={t("settings.fontFamilyMono")} />
+											</>
+										}
+										alignEnd={false}
+									>
+										<Select value={draftSettings.fontFamilyMono} onValueChange={(value) =>
+												updateDraft({ fontFamilyMono: value as AppSettings["fontFamilyMono"] })
+											}>
+											<SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+											<SelectContent>
+												{fontMonoOptions.map((option) => (
+													<SelectItem key={option.value} value={option.value} disabled={option.disabled}>
+														{option.label}
+													</SelectItem>
+												))}
+											</SelectContent>
+										</Select>
+									</SettingRow>
+									{draftSettings.fontFamilyMono === "custom" && (
+										<SettingRow
+											title={<span>{t("settings.fontFamilyMonoCustomField")}</span>}
+											stacked
+										>
+											<Input type="text" value={draftSettings.fontFamilyMonoCustom} placeholder={t("settings.fontFamilyMonoCustomPlaceholder")} onChange={(event) => updateDraft({ fontFamilyMonoCustom: event.target.value })} />
+										</SettingRow>
+									)}
+								</SettingsSection>
+
+								{/* 聊天排版 */}
+								<SettingsSection title={t("settings.sectionChatLayout")}>
+									<SettingRow
+										title={<span>{t("settings.contentMaxWidth")}</span>}
+										description={t("settings.contentMaxWidthDesc")}
+									>
+										<div className="flex w-full items-center gap-3">
+											<input
+												type="range"
+												min="800"
+												max="1800"
+												step="25"
+												value={draftSettings.contentMaxWidth}
+												onChange={(event) => updateDraft({ contentMaxWidth: parseInt(event.target.value) })}
+												className="min-w-0 flex-1 accent-[var(--color-accent)]"
+												aria-label={t("settings.contentMaxWidth")}
+											/>
+											<span className="min-w-20 shrink-0 text-right font-brand text-sm text-muted-foreground tabular-nums">
+												{draftSettings.contentMaxWidth === 1800
+													? t("settings.contentMaxWidthUnlimited")
+													: `${draftSettings.contentMaxWidth}px`}
+											</span>
+										</div>
+									</SettingRow>
+								</SettingsSection>
+
+								{/* 窗口样式 */}
+								<SettingsSection title={t("settings.sectionWindowStyle")}>
+									<SettingSwitchRow
 										title={t("settings.nativeTitleBar")}
 										checked={draftSettings.useNativeTitleBar}
 										onChange={(checked) =>
 											updateDraft({ useNativeTitleBar: checked })
 										}
 									/>
-									<SettingSwitch
+									<SettingSwitchRow
 										title={t("settings.nativeMenu")}
 										checked={draftSettings.showNativeMenu}
 										onChange={(checked) =>
@@ -1143,34 +1156,11 @@ function SettingsModalContent(props: SettingsModalProps) {
 										}
 									/>
 								</SettingsSection>
-								<SettingsSection title={t("settings.contentMaxWidth")} description={t("settings.contentMaxWidthDesc")}>
-									<div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)", maxWidth: 480 }}>
-										<input
-											type="range"
-											min="800"
-											max="1800"
-											step="25"
-											value={draftSettings.contentMaxWidth}
-											onChange={(event) => updateDraft({ contentMaxWidth: parseInt(event.target.value) })}
-											style={{ flex: 1, accentColor: "var(--color-accent)", direction: "rtl" }}
-										/>
-										<span style={{
-											fontFamily: "var(--font-family-business)",
-											fontSize: "var(--font-size-sm)",
-											color: "var(--color-text-muted)",
-											minWidth: 80,
-											textAlign: "right",
-										}}>
-											{draftSettings.contentMaxWidth === 1800
-												? t("settings.contentMaxWidthUnlimited")
-												: `${draftSettings.contentMaxWidth}px`}
-										</span>
-									</div>
-								</SettingsSection>
 							</>
 						</TabsContent>
+
 						{/* ── 代理设置 tab ── */}
-						<TabsContent value="proxy" className="settings-panel min-w-0">
+												<TabsContent value="proxy" className="settings-panel min-w-0">
 							<>
 								{/* 未保存更改的提示横幅 */}
 								{proxyDirty && (
@@ -1184,7 +1174,7 @@ function SettingsModalContent(props: SettingsModalProps) {
 									title={t("settings.piProxy")}
 									description={t("settings.piProxyDesc")}
 								>
-									<SettingSwitch
+									<SettingSwitchRow
 										title={t("settings.enablePiProxy")}
 										description={t("settings.settingTakesEffectAfterRestart")}
 										checked={draftSettings.piProxyEnabled}
@@ -1194,27 +1184,32 @@ function SettingsModalContent(props: SettingsModalProps) {
 									/>
 									{draftSettings.piProxyEnabled && (
 										<div className="setting-proxy-panel">
-											<Label className="grid gap-1.5 setting-field">
-	<span className="text-sm font-medium leading-none text-foreground">{t("settings.proxyUrl")}</span>
-	<Input type="text" value={draftSettings.piProxyUrl} placeholder={"http://127.0.0.1:7890"} onChange={(event) => updateDraft({ piProxyUrl: event.target.value })
-												} />
-</Label>
-											<Label className="grid gap-1.5 setting-field">
-	<span className="text-sm font-medium leading-none text-foreground">{t("settings.proxyBypass")}</span>
-	<Input type="text" value={draftSettings.piProxyBypass} placeholder={"localhost,127.0.0.1,::1"} onChange={(event) => updateDraft({ piProxyBypass: event.target.value })
-												} />
-	<small className="text-xs text-muted-foreground">{t("settings.noProxyHint")}</small>
-</Label>
-											<div className="setting-row">
-												<div>
-													<strong>{t("settings.proxyTest")}</strong>
-													<small>{t("settings.proxyNoApiKey")}</small>
-													{props.piProxyNotice && (
-														<small className={`setting-status ${props.piProxyNoticeTone}`}>
-															{props.piProxyNotice}
-														</small>
-													)}
-												</div>
+											<SettingRow
+												title={<span>{t("settings.proxyUrl")}</span>}
+												stacked
+											>
+												<Input type="text" value={draftSettings.piProxyUrl} placeholder={"http://127.0.0.1:7890"} onChange={(event) => updateDraft({ piProxyUrl: event.target.value })} />
+											</SettingRow>
+											<SettingRow
+												title={<span>{t("settings.proxyBypass")}</span>}
+												description={t("settings.noProxyHint")}
+												stacked
+											>
+												<Input type="text" value={draftSettings.piProxyBypass} placeholder={"localhost,127.0.0.1,::1"} onChange={(event) => updateDraft({ piProxyBypass: event.target.value })} />
+											</SettingRow>
+											<SettingRow
+												title={<span>{t("settings.proxyTest")}</span>}
+												description={
+													<>
+														{t("settings.proxyNoApiKey")}
+														{props.piProxyNotice && (
+															<span className={`setting-status ${props.piProxyNoticeTone}`}>
+																{props.piProxyNotice}
+															</span>
+														)}
+													</>
+												}
+											>
 												<Button variant="secondary"
 													onClick={props.onTestPiProxy}
 													disabled={props.piProxyChecking}
@@ -1223,7 +1218,7 @@ function SettingsModalContent(props: SettingsModalProps) {
 														? t("settings.testingProxy")
 														: t("settings.testProxy")}
 												</Button>
-											</div>
+											</SettingRow>
 										</div>
 									)}
 								</SettingsSection>
@@ -1231,7 +1226,7 @@ function SettingsModalContent(props: SettingsModalProps) {
 									title={t("settings.desktopProxy")}
 									description={t("settings.desktopProxyDesc")}
 								>
-									<SettingSwitch
+									<SettingSwitchRow
 										title={t("settings.enableDesktopProxy")}
 										description={t("settings.desktopProxyDesc")}
 										checked={draftSettings.desktopProxyEnabled}
@@ -1241,26 +1236,30 @@ function SettingsModalContent(props: SettingsModalProps) {
 									/>
 									{draftSettings.desktopProxyEnabled && (
 										<div className="setting-proxy-panel">
-											<Label className="grid gap-1.5 setting-field">
-	<span className="text-sm font-medium leading-none text-foreground">{t("settings.proxyUrl")}</span>
-	<Input type="text" value={draftSettings.desktopProxyUrl} placeholder={"http://127.0.0.1:7890"} onChange={(event) => updateDraft({ desktopProxyUrl: event.target.value })
-												} />
-</Label>
-											<Label className="grid gap-1.5 setting-field">
-	<span className="text-sm font-medium leading-none text-foreground">{t("settings.proxyBypass")}</span>
-	<Input type="text" value={draftSettings.desktopProxyBypass} placeholder={"localhost,127.0.0.1,::1"} onChange={(event) => updateDraft({ desktopProxyBypass: event.target.value })
-												} />
-	<small className="text-xs text-muted-foreground">{t("settings.electronProxyHint")}</small>
-</Label>
+											<SettingRow
+												title={<span>{t("settings.proxyUrl")}</span>}
+												stacked
+											>
+												<Input type="text" value={draftSettings.desktopProxyUrl} placeholder={"http://127.0.0.1:7890"} onChange={(event) => updateDraft({ desktopProxyUrl: event.target.value })} />
+											</SettingRow>
+											<SettingRow
+												title={<span>{t("settings.proxyBypass")}</span>}
+												description={t("settings.electronProxyHint")}
+												stacked
+											>
+												<Input type="text" value={draftSettings.desktopProxyBypass} placeholder={"localhost,127.0.0.1,::1"} onChange={(event) => updateDraft({ desktopProxyBypass: event.target.value })} />
+											</SettingRow>
 										</div>
 									)}
 								</SettingsSection>
 								{/* 代理变更走全局草稿：顶部统一保存/取消，不再在 tab 底部重复放按钮 */}
 							</>
 						</TabsContent>
+
 							{/* ── 开发设置 tab（含 Web 服务） ── */}
-						<TabsContent value="dev" className="settings-panel min-w-0">
+												<TabsContent value="dev" className="settings-panel min-w-0">
 							<>
+								{/* 环境 */}
 								<SettingsSection title={t("settings.environment")}>
 									{/* Pi CLI 状态：安装检测 + 路径信息 + 重新检测 */}
 									<div className="setting-pi-status">
@@ -1299,7 +1298,6 @@ function SettingsModalContent(props: SettingsModalProps) {
 											</Button>
 											{props.onClearCheckFlag && (
 												<Button variant="secondary"
-													className="setting-btn-secondary"
 													onClick={props.onClearCheckFlag}
 												>
 													{t("environment.clearCheckFlag")}
@@ -1332,7 +1330,7 @@ function SettingsModalContent(props: SettingsModalProps) {
 										</pre>
 									)}
 
-									<hr className="setting-divider" />
+									<div className="my-3 border-0 border-t border-border-subtle" />
 
 									{/* Pi 来源：Windows 原生 / WSL（仅 Windows 可见） */}
 									{props.appInfo.platform === "win32" && (
@@ -1340,64 +1338,64 @@ function SettingsModalContent(props: SettingsModalProps) {
 										<div className="setting-pi-source-row">
 											<span>{t("settings.piSource.label")}</span>
 											<div className="grid gap-1.5">
-	<Select value={draftSettings.wslEnabled ? "wsl" : "windows"} onValueChange={(value) => {
+												<Select value={draftSettings.wslEnabled ? "wsl" : "windows"} onValueChange={(value) => {
 													updateDraft({ wslEnabled: value === "wsl" });
 													setWslValidation(null);
 												}}>
-		<SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-		<SelectContent>
-			{[
-													{ value: "windows", label: t("settings.piSource.windows") },
-													{ value: "wsl", label: t("settings.piSource.wsl") },
-												].map((option) => (
-				<SelectItem key={option.value} value={option.value} disabled={option.disabled}>
-					{option.label}
-				</SelectItem>
-			))}
-		</SelectContent>
-	</Select>
-</div>
+													<SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+													<SelectContent>
+														{[
+															{ value: "windows", label: t("settings.piSource.windows") },
+															{ value: "wsl", label: t("settings.piSource.wsl") },
+														].map((option) => (
+															<SelectItem key={option.value} value={option.value} disabled={option.disabled}>
+																{option.label}
+															</SelectItem>
+														))}
+													</SelectContent>
+												</Select>
+											</div>
 										</div>
 										{draftSettings.wslEnabled && (
 											<div className="setting-pi-wsl-config">
 												<div className="setting-wsl-fields">
 													{wslDistros.length > 0 ? (
-														<div className="grid gap-1.5 setting-field">
-	<span className="text-sm font-medium leading-none text-foreground">{t("settings.wsl.distro")}</span>
-	<Select value={draftSettings.wslDistro} onValueChange={(value) => {
+														<div className="grid min-w-[160px] flex-1 gap-1.5">
+															<span className="text-control font-medium text-foreground">{t("settings.wsl.distro")}</span>
+															<Select value={draftSettings.wslDistro} onValueChange={(value) => {
 																updateDraft({ wslDistro: value });
 																setWslValidation(null);
 															}}>
-		<SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-		<SelectContent>
-			{distroOptions.map((option) => (
-				<SelectItem key={option.value} value={option.value} disabled={option.disabled}>
-					{option.label}
-				</SelectItem>
-			))}
-		</SelectContent>
-	</Select>
-</div>
+																<SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+																<SelectContent>
+																	{distroOptions.map((option) => (
+																		<SelectItem key={option.value} value={option.value} disabled={option.disabled}>
+																			{option.label}
+																		</SelectItem>
+																	))}
+																</SelectContent>
+															</Select>
+														</div>
 													) : (
-														<Label className="grid gap-1.5 setting-field">
-	<span className="text-sm font-medium leading-none text-foreground">{t("settings.wsl.distro")}</span>
-	<Input type="text" value={draftSettings.wslDistro} placeholder={"Ubuntu"} onChange={(event) => {
+														<div className="grid min-w-[160px] flex-1 gap-1.5">
+															<span className="text-control font-medium text-foreground">{t("settings.wsl.distro")}</span>
+															<Input type="text" value={draftSettings.wslDistro} placeholder={"Ubuntu"} onChange={(event) => {
 																updateDraft({ wslDistro: event.target.value });
 																setWslValidation(null);
 															}} />
-</Label>
+														</div>
 													)}
 													{wslDistrosLoading && (
 														<small className="setting-status info">{t("settings.wsl.detectingDistros")}</small>
 													)}
 													<div className="setting-wsl-user-row">
-														<Label className="grid gap-1.5 setting-field">
-	<span className="text-sm font-medium leading-none text-foreground">{t("settings.wsl.user")}</span>
-	<Input type="text" value={wslUserInput} placeholder={"root"} onChange={(event) => {
+														<div className="grid min-w-[160px] flex-1 gap-1.5">
+															<span className="text-control font-medium text-foreground">{t("settings.wsl.user")}</span>
+															<Input type="text" value={wslUserInput} placeholder={"root"} onChange={(event) => {
 																setWslUserInput(event.target.value);
 																setWslValidation(null);
 															}} />
-</Label>
+														</div>
 														<Button variant="secondary"
 															size="sm"
 															disabled={!wslUserInput.trim() || wslValidating}
@@ -1438,18 +1436,20 @@ function SettingsModalContent(props: SettingsModalProps) {
 									</div>
 									)}
 
-									<hr className="setting-divider" />
+									<div className="my-3 border-0 border-t border-border-subtle" />
 
 									{/* 自定义 Pi 路径 */}
 									<div className="setting-pi-path-panel">
-										<Label className="grid gap-1.5 setting-field">
-	<span className="text-sm font-medium leading-none text-foreground">{t("settings.customPiPath")}</span>
-	<Input type="text" value={props.customPiPath} placeholder={
+										<SettingRow
+											title={<span>{t("settings.customPiPath")}</span>}
+											description={t("settings.customPiPathHint")}
+											stacked
+										>
+											<Input type="text" value={props.customPiPath} placeholder={
 												piPath ||
 												"D:\\mise-data\\installs\\node\\24 13 0\\pi.cmd"
 											} disabled={props.customPathValidating} onChange={(event) => props.onCustomPathChange(event.target.value)} />
-	<small className="text-xs text-muted-foreground">{t("settings.customPiPathHint")}</small>
-</Label>
+										</SettingRow>
 										<div className="setting-pi-path-actions">
 											<Button variant="secondary"
 												onClick={props.onValidateCustomPath}
@@ -1483,33 +1483,29 @@ function SettingsModalContent(props: SettingsModalProps) {
 											</small>
 										)}
 									</div>
+								</SettingsSection>
 
-									<hr className="setting-divider" />
-
-									{/* 版本与更新 */}
-									<div className="setting-row">
-										<div>
-											<strong>PiDeck</strong>
-											<span style={{ color: "var(--color-text-tertiary)", fontSize: "var(--font-size-caption)" }}>
-												v{props.appInfo.version}
-											</span>
-										</div>
-										<div className="setting-inline-actions">
-											<Button variant="secondary"
-												onClick={draftSettings.disableUpdateCheck ? undefined : props.onCheckUpdate}
-												loading={props.updateChecking}
-												disabled={draftSettings.disableUpdateCheck}
-											>
-												{draftSettings.disableUpdateCheck
-													? t("settings.updateCheckDisabled")
-													: t("settings.checkUpdate")}
-											</Button>
-										</div>
-									</div>
-									<hr className="setting-divider" />
-
-									{/* 禁用版本检测 */}
-									<SettingSwitch
+								{/* 版本与更新 */}
+								<SettingsSection title={t("settings.sectionUpdates")}>
+									<SettingRow
+										title={
+											<>
+												<span>PiDeck</span>
+												<span className="text-caption font-normal text-muted-foreground">v{props.appInfo.version}</span>
+											</>
+										}
+									>
+										<Button variant="secondary"
+											onClick={draftSettings.disableUpdateCheck ? undefined : props.onCheckUpdate}
+											loading={props.updateChecking}
+											disabled={draftSettings.disableUpdateCheck}
+										>
+											{draftSettings.disableUpdateCheck
+												? t("settings.updateCheckDisabled")
+												: t("settings.checkUpdate")}
+										</Button>
+									</SettingRow>
+									<SettingSwitchRow
 										title={t("settings.disableUpdateCheck")}
 										description={t("settings.disableUpdateCheckDesc")}
 										checked={draftSettings.disableUpdateCheck}
@@ -1517,7 +1513,51 @@ function SettingsModalContent(props: SettingsModalProps) {
 											updateDraft({ disableUpdateCheck: checked })
 										}
 									/>
-																	<SettingSwitch
+								</SettingsSection>
+
+								{/* 运行 */}
+								<SettingsSection title={t("settings.sectionRuntime")}>
+									<SettingRow
+										title={
+											<>
+												<span>{t("settings.rpcTimeout")}</span>
+												<DirtyMarker dirty={isDirty("rpcTimeout")} label={t("settings.rpcTimeout")} />
+											</>
+										}
+										description={t("settings.rpcTimeoutDesc")}
+										stacked
+									>
+										<Input
+											type="number"
+											className="max-w-80"
+											value={String(Math.round(draftSettings.rpcTimeout / 1000))}
+											onChange={(e) => {
+												const seconds = Math.max(600, parseInt(e.target.value) || 600);
+												updateDraft({ rpcTimeout: seconds * 1000 });
+											}}
+										/>
+									</SettingRow>
+									<SettingRow
+										title={
+											<>
+												<span>{t("settings.maxEditorFileSize")}</span>
+												<DirtyMarker dirty={isDirty("maxEditorFileSizeMB")} label={t("settings.maxEditorFileSize")} />
+											</>
+										}
+										description={t("settings.maxEditorFileSizeDesc")}
+										stacked
+									>
+										<Input
+											type="number"
+											className="max-w-80"
+											value={String(draftSettings.maxEditorFileSizeMB)}
+											onChange={(e) => {
+												const mb = Math.max(1, parseInt(e.target.value) || 5);
+												updateDraft({ maxEditorFileSizeMB: mb });
+											}}
+										/>
+									</SettingRow>
+									<SettingSwitchRow
 										title={t("settings.electronSandbox")}
 										description={t("settings.electronSandboxDesc")}
 										checked={draftSettings.electronChromiumSandbox}
@@ -1525,53 +1565,33 @@ function SettingsModalContent(props: SettingsModalProps) {
 											updateDraft({ electronChromiumSandbox: checked })
 										}
 									/>
-									<div className="setting-row setting-row--section-label">
-										<div>
-											<strong>{t("settings.piRpcStartup")}</strong>
-											<small>{t("settings.piRpcStartupDesc")}</small>
-										</div>
+									<div className="px-0.5 pb-1 pt-3">
+										<span className="text-caption font-semibold tracking-[0.06em] text-muted-foreground">{t("settings.piRpcStartup")}</span>
+										<p className="mt-0.5 text-caption text-muted-foreground">{t("settings.piRpcStartupDesc")}</p>
 									</div>
-									<SettingSwitch
+									<SettingSwitchRow
 										title={t("settings.piRpcOffline")}
 										description={t("settings.piRpcOfflineDesc")}
 										checked={draftSettings.piRpcOffline}
 										onChange={(checked) => updateDraft({ piRpcOffline: checked })}
 									/>
-									<SettingSwitch
+									<SettingSwitchRow
 										title={t("settings.piRpcNoExtensions")}
 										description={t("settings.piRpcNoExtensionsDesc")}
 										checked={draftSettings.piRpcNoExtensions}
 										onChange={(checked) => updateDraft({ piRpcNoExtensions: checked })}
 									/>
-									<SettingSwitch
+									<SettingSwitchRow
 										title={t("settings.piRpcNoSkills")}
 										description={t("settings.piRpcNoSkillsDesc")}
 										checked={draftSettings.piRpcNoSkills}
 										onChange={(checked) => updateDraft({ piRpcNoSkills: checked })}
 									/>
 								</SettingsSection>
-								<SettingsSection title={t("settings.debug")}>
-									<div className="setting-row">
-										<div>
-											<strong>{t("settings.restartApp")}</strong>
-											<small>{t("settings.restartAppDesc")}</small>
-										</div>
-										<Button variant="secondary" onClick={props.onRestartApp}>
-											{t("settings.restartAppButton")}
-										</Button>
-									</div>
-									<div className="setting-row">
-										<div>
-											<strong>{t("settings.devTools")}</strong>
-											<small>{t("settings.devToolsDesc")}</small>
-										</div>
-										<Button variant="secondary" onClick={props.onToggleDevTools}>
-											{t("settings.toggle")}
-										</Button>
-									</div>
-								</SettingsSection>
+
+								{/* Web 本地服务 */}
 								<SettingsSection title={t("settings.webLocalService")} description={t("settings.webLocalServiceDesc")}>
-									<SettingSwitch
+									<SettingSwitchRow
 										title={t("settings.enableWebService")}
 										description={
 											props.webServiceChanging
@@ -1630,8 +1650,45 @@ function SettingsModalContent(props: SettingsModalProps) {
 										</div>
 									</div>
 								</SettingsSection>
+
+								{/* 外部编辑器（由 Pi 管理界面迁入） */}
+								<SettingsSection
+									title={
+										<>
+											<span>{t("settings.sectionEditors")}</span>
+											<DirtyMarker dirty={isDirty("externalEditors")} label={t("settings.sectionEditors")} />
+										</>
+									}
+								>
+									<ExternalEditorsSection
+										editors={draftSettings.externalEditors}
+										onChange={updateDraft}
+									/>
+								</SettingsSection>
+
+								{/* 调试 */}
+								<SettingsSection title={t("settings.debug")}>
+									<SettingRow
+										title={<span>{t("settings.restartApp")}</span>}
+										description={t("settings.restartAppDesc")}
+									>
+										<Button variant="secondary" onClick={props.onRestartApp}>
+											{t("settings.restartAppButton")}
+										</Button>
+									</SettingRow>
+									<SettingRow
+										title={<span>{t("settings.devTools")}</span>}
+										description={t("settings.devToolsDesc")}
+									>
+										<Button variant="secondary" onClick={props.onToggleDevTools}>
+											{t("settings.toggle")}
+										</Button>
+									</SettingRow>
+								</SettingsSection>
+
+								{/* 隐私 */}
 								<SettingsSection title={t("settings.privacy")}>
-									<SettingSwitch
+									<SettingSwitchRow
 										title={t("settings.telemetry")}
 										description={t("settings.telemetryDesc")}
 										checked={draftSettings.telemetryEnabled}
@@ -1642,140 +1699,147 @@ function SettingsModalContent(props: SettingsModalProps) {
 								</SettingsSection>
 							</>
 						</TabsContent>
+
+						{/* ── 外部连接 tab（飞书机器人，由 Pi 管理界面迁入） ── */}
+						<TabsContent value="im" className="settings-panel min-w-0">
+							<ImTab />
+						</TabsContent>
 						{/* ── 桌面宠物 tab ── */}
-						<TabsContent value="pet" className="settings-panel min-w-0">
+																		<TabsContent value="pet" className="settings-panel min-w-0">
 							<>
 								<SettingsSection title={t("settings.pet.title")} description={t("settings.pet.sectionDesc")}>
-									<SettingSwitch
+									<SettingSwitchRow
 										title={t("settings.pet.enable")}
 										description={t("settings.pet.enableDesc")}
 										checked={draftSettings.petEnabled}
 										onChange={(value) => updateDraft({ petEnabled: value })}
 									/>
-									<SettingSwitch
+									<SettingSwitchRow
 										title={t("settings.pet.alwaysOnTop")}
 										description={t("settings.pet.alwaysOnTopDesc")}
 										checked={draftSettings.petAlwaysOnTop}
 										onChange={(value) => updateDraft({ petAlwaysOnTop: value })}
 									/>
-									<SettingSwitch
+									<SettingSwitchRow
 										title={t("settings.pet.patrol")}
 										description={t("settings.pet.patrolDesc")}
 										checked={draftSettings.petPatrolEnabled ?? true}
 										onChange={(value) => updateDraft({ petPatrolEnabled: value })}
 									/>
+									<SettingRow
+										title={<span>{t("settings.pet.patrolPause")}</span>}
+										description={t("settings.pet.patrolPauseDesc")}
+									>
+										<div className="flex w-full items-center gap-3">
+											<input
+												type="range"
+												min="1"
+												max="30"
+												step="1"
+												value={draftSettings.petPatrolPauseMin ?? 5}
+												onChange={(event) => updateDraft({ petPatrolPauseMin: parseInt(event.target.value) })}
+												className="min-w-0 flex-1 accent-[var(--color-accent)]"
+												aria-label={t("settings.pet.patrolPause")}
+											/>
+											<span className="min-w-12 shrink-0 text-right font-brand text-sm text-muted-foreground tabular-nums">
+												{draftSettings.petPatrolPauseMin ?? 5} min
+											</span>
+										</div>
+									</SettingRow>
+									<SettingRow
+										title={<span>{t("settings.pet.scale")}</span>}
+										description={t("settings.pet.scaleDesc")}
+									>
+										<div className="flex w-full items-center gap-3">
+											<input
+												type="range"
+												min="0.3"
+												max="2.0"
+												step="0.05"
+												value={draftSettings.petScale ?? 1}
+												onChange={(event) => updateDraft({ petScale: parseFloat(event.target.value) })}
+												className="min-w-0 flex-1 accent-[var(--color-accent)]"
+												aria-label={t("settings.pet.scale")}
+											/>
+											<span className="min-w-12 shrink-0 text-right font-brand text-sm text-muted-foreground tabular-nums">
+												{((draftSettings.petScale ?? 1) * 100).toFixed(0)}%
+											</span>
+										</div>
+									</SettingRow>
 								</SettingsSection>
-								<SettingsSection title={t("settings.pet.patrolPause")} description={t("settings.pet.patrolPauseDesc")}>
-									<div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)", maxWidth: 320 }}>
-										<input
-											type="range"
-											min="1"
-											max="30"
-											step="1"
-											value={draftSettings.petPatrolPauseMin ?? 5}
-											onChange={(event) => updateDraft({ petPatrolPauseMin: parseInt(event.target.value) })}
-											style={{ flex: 1, accentColor: "var(--color-accent)", direction: "rtl" }}
-										/>
-										<span style={{
-											fontFamily: "var(--font-family-business)",
-											fontSize: "var(--font-size-sm)",
-											color: "var(--color-text-muted)",
-											minWidth: 60,
-											textAlign: "right",
-										}}>
-											{draftSettings.petPatrolPauseMin ?? 5} min
-										</span>
-									</div>
-								</SettingsSection>
-								<SettingsSection title={t("settings.pet.choose")}>
-									<div className="grid gap-1.5 setting-field">
-	<span className="text-sm font-medium leading-none text-foreground">{t("settings.pet.choose")}</span>
-	<Select value={draftSettings.petId} onValueChange={(value) => {
-											setPetPreviewMode("__auto");
-											void window.piDesktop.pet.setPreviewMode("");
-											updateDraft({ petId: value });
-										}}>
-		<SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-		<SelectContent>
-			{petOptions.map((option) => (
-				<SelectItem key={option.value} value={option.value} disabled={option.disabled}>
-					{option.label}
-				</SelectItem>
-			))}
-		</SelectContent>
-	</Select>
-</div>
-									<small className="setting-status">{t("settings.pet.petdexHint")}</small>
-									{(() => {
-										const selected = petList.find((pet) => pet.id === draftSettings.petId);
-										return (
-											<>
-												{selected && (
-													<div className="pet-chooser-preview-row" style={{ display: "flex", alignItems: "center", gap: "var(--space-3)", marginTop: 8 }}>
-														<PetChooserPreview pet={selected} mode={petPreviewMode} />
-														<div style={{ minWidth: 0, flex: 1 }}>
-															<strong style={{ display: "block", fontSize: "var(--font-size-control)", color: "var(--color-text-primary)" }}>{selected.displayName}</strong>
-															{selected.description && (
-																<small className="setting-status" style={{ display: "block", marginTop: 2 }}>{selected.description}</small>
-															)}
-														</div>
+								{/* 选择宠物（单行分区：行标题即一级标题，内容行入淡色框） */}
+								<SettingBox>
+								<SettingRow
+									level={1}
+									title={<span>{t("settings.pet.choose")}</span>}
+									alignEnd={false}
+								>
+									<Select value={draftSettings.petId} onValueChange={(value) => {
+										setPetPreviewMode("__auto");
+										void window.piDesktop.pet.setPreviewMode("");
+										updateDraft({ petId: value });
+									}}>
+										<SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+										<SelectContent>
+											{petOptions.map((option) => (
+												<SelectItem key={option.value} value={option.value} disabled={option.disabled}>
+													{option.label}
+												</SelectItem>
+											))}
+										</SelectContent>
+									</Select>
+								</SettingRow>
+								<small className="setting-status">{t("settings.pet.petdexHint")}</small>
+								{(() => {
+									const selected = petList.find((pet) => pet.id === draftSettings.petId);
+									return (
+										<>
+											{selected && (
+												<div className="pet-chooser-preview-row" style={{ display: "flex", alignItems: "center", gap: "var(--space-3)", marginTop: 8 }}>
+													<PetChooserPreview pet={selected} mode={petPreviewMode} />
+													<div style={{ minWidth: 0, flex: 1 }}>
+														<strong style={{ display: "block", fontSize: "var(--font-size-control)", color: "var(--color-text-primary)" }}>{selected.displayName}</strong>
+														{selected.description && (
+															<small className="setting-status" style={{ display: "block", marginTop: 2 }}>{selected.description}</small>
+														)}
 													</div>
-												)}
-											</>
-										);
-									})()}
-								</SettingsSection>
-								<SettingsSection title={t("settings.pet.scale")} description={t("settings.pet.scaleDesc")}>
-									<div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)", maxWidth: 320 }}>
-										<input
-											type="range"
-											min="0.3"
-											max="2.0"
-											step="0.05"
-											value={draftSettings.petScale ?? 1}
-											onChange={(event) => updateDraft({ petScale: parseFloat(event.target.value) })}
-											style={{ flex: 1, accentColor: "var(--color-accent)", direction: "rtl" }}
-										/>
-										<span style={{
-											fontFamily: "var(--font-family-business)",
-											fontSize: "var(--font-size-sm)",
-											color: "var(--color-text-muted)",
-											minWidth: 36,
-											textAlign: "right",
-										}}>
-											{((draftSettings.petScale ?? 1) * 100).toFixed(0)}%
-										</span>
-									</div>
-								</SettingsSection>
+												</div>
+											)}
+										</>
+									);
+								})()}
+								</SettingBox>
 								<SettingsSection title={t("settings.pet.preview")} description={t("settings.pet.previewDesc")}>
-									<div className="grid gap-1.5 setting-field">
-	<span className="text-sm font-medium leading-none text-foreground">{t("settings.pet.previewMode")}</span>
-	<Select value={petPreviewMode} onValueChange={(value) => {
+									<SettingRow
+										title={<span>{t("settings.pet.previewMode")}</span>}
+										alignEnd={false}
+									>
+										<Select value={petPreviewMode} onValueChange={(value) => {
 											setPetPreviewMode(value);
 											void window.piDesktop.pet.setPreviewMode(value === "__auto" ? "" : value);
 										}}>
-		<SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-		<SelectContent>
-			{[
-											{ value: "__auto", label: t("settings.pet.previewAuto") },
-											{ value: "idle", label: "idle (row 0)" },
-											{ value: "running", label: "running (row 7)" },
-											{ value: "failed", label: "failed (row 5)" },
-											{ value: "waiting", label: "waiting (row 6)" },
-											{ value: "waving", label: "waving (row 3)" },
-											{ value: "running-right", label: "running-right (row 1)" },
-											{ value: "running-left", label: "running-left (row 2)" },
-											{ value: "jumping", label: "jumping (row 4)" },
-											{ value: "review", label: "review (row 8)" },
-										].map((option) => (
-				<SelectItem key={option.value} value={option.value} disabled={option.disabled}>
-					{option.label}
-				</SelectItem>
-			))}
-		</SelectContent>
-	</Select>
-</div>
-									<div className="setting-inline-actions pet-test-actions">
+											<SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+											<SelectContent>
+												{[
+													{ value: "__auto", label: t("settings.pet.previewAuto") },
+													{ value: "idle", label: "idle (row 0)" },
+													{ value: "running", label: "running (row 7)" },
+													{ value: "failed", label: "failed (row 5)" },
+													{ value: "waiting", label: "waiting (row 6)" },
+													{ value: "waving", label: "waving (row 3)" },
+													{ value: "running-right", label: "running-right (row 1)" },
+													{ value: "running-left", label: "running-left (row 2)" },
+													{ value: "jumping", label: "jumping (row 4)" },
+													{ value: "review", label: "review (row 8)" },
+												].map((option) => (
+													<SelectItem key={option.value} value={option.value} disabled={option.disabled}>
+														{option.label}
+													</SelectItem>
+												))}
+											</SelectContent>
+										</Select>
+									</SettingRow>
+									<div className="flex justify-end gap-2 px-0.5 py-1.5">
 										<Button
 											size="sm"
 											variant="destructive"
@@ -1792,6 +1856,12 @@ function SettingsModalContent(props: SettingsModalProps) {
 									</div>
 								</SettingsSection>
 							</>
+						</TabsContent>
+
+
+						{/* ── 进程监控 tab（由 Pi 管理界面迁入） ── */}
+						<TabsContent value="process" className="settings-panel min-w-0">
+							<ProcessMetricsTab />
 						</TabsContent>
 						{/* ── 存储与日志 tab ── */}
 						<TabsContent value="storage" className="settings-panel min-w-0">

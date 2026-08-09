@@ -57,7 +57,7 @@ test("every static renderer translation key exists in both locale dictionaries",
 });
 
 test("settings error and unsaved-change copy matches the dev baseline", () => {
-	assert.equal(zhCN["settings.advanced"], "\u9ad8\u7ea7");
+	assert.equal(zhCN["settings.sectionRuntime"], "\u8fd0\u884c");
 	assert.equal(zhCN["settings.loadFailed"], "\u8bbe\u7f6e\u52a0\u8f7d\u5931\u8d25");
 	assert.equal(zhCN["settings.renderCrashed"], "\u8bbe\u7f6e\u9875\u9762\u6e32\u67d3\u5f02\u5e38");
 	assert.equal(zhCN["settings.renderCrashedHelp"], "\u53ef\u4ee5\u5148\u5173\u95ed\u8bbe\u7f6e\u5f39\u6846\u7ee7\u7eed\u4f7f\u7528\u3002\u8bf7\u628a\u63a7\u5236\u53f0\u9519\u8bef\u53cd\u9988\u7ed9\u6211\u4eec\uff0c\u4fbf\u4e8e\u5b9a\u4f4d\u3002");
@@ -67,7 +67,7 @@ test("settings error and unsaved-change copy matches the dev baseline", () => {
 	assert.equal(zhCN["settings.discardChanges"], "\u653e\u5f03\u66f4\u6539");
 	assert.equal(zhCN["settings.dirtyTooltip"], "\u6b64\u9879\u5df2\u4fee\u6539\uff0c\u5c1a\u672a\u4fdd\u5b58");
 
-	assert.equal(enUS["settings.advanced"], "Advanced");
+	assert.equal(enUS["settings.sectionRuntime"], "Runtime");
 	assert.equal(enUS["settings.loadFailed"], "Settings failed to load");
 	assert.equal(enUS["settings.renderCrashed"], "Settings page render error");
 	assert.equal(enUS["settings.renderCrashedHelp"], "You can close this dialog and continue. Please share the console error so we can fix it.");
@@ -105,7 +105,7 @@ test("remaining renderer product copy is available in Chinese and English", () =
 	i18n.setI18nLocale("zh-CN");
 	assert.equal(i18n.t("settings.tabs.common"), "\u5e38\u7528\u8bbe\u7f6e");
 	assert.equal(i18n.t("settings.tabs.appearance"), "\u5916\u89c2\u8bbe\u7f6e");
-	assert.equal(i18n.t("settings.advanced"), "\u9ad8\u7ea7");
+	assert.equal(i18n.t("settings.sectionRuntime"), "\u8fd0\u884c");
 	assert.equal(i18n.t("settings.unsavedTitle"), "\u672a\u4fdd\u5b58\u7684\u66f4\u6539");
 	assert.equal(i18n.t("settings.unsavedMessage"), "\u60a8\u6709\u672a\u4fdd\u5b58\u7684\u66f4\u6539\uff0c\u662f\u5426\u5728\u5173\u95ed\u524d\u4fdd\u5b58\uff1f");
 	assert.equal(i18n.t("settings.saveAndClose"), "\u4fdd\u5b58\u5e76\u5173\u95ed");
@@ -125,7 +125,7 @@ test("remaining renderer product copy is available in Chinese and English", () =
 	i18n.setI18nLocale("en-US");
 	assert.equal(i18n.t("settings.tabs.common"), "General");
 	assert.equal(i18n.t("settings.tabs.appearance"), "Appearance");
-	assert.equal(i18n.t("settings.advanced"), "Advanced");
+	assert.equal(i18n.t("settings.sectionRuntime"), "Runtime");
 	assert.equal(i18n.t("settings.unsavedTitle"), "Unsaved Changes");
 	assert.equal(i18n.t("settings.unsavedMessage"), "You have unsaved changes. Do you want to save before closing?");
 	assert.equal(i18n.t("settings.saveAndClose"), "Save & Close");
@@ -149,7 +149,7 @@ test("reachable renderer surfaces use i18n without changing their UI structure",
 	assert.match(drawer, /className="drawer-content-frame"[\s\S]*?\{t\("drawer\.lazyLoading"\)\}/);
 	assert.match(settings, /import \{ SettingsSection, StorageTab \} from "\.\/settings\/SettingsStorageTab"/);
 	assert.match(settings, /t\("settings\.dirtyTooltip"\)/);
-	assert.match(settings, /t\("settings\.advanced"\)/);
+	assert.match(settings, /t\("settings\.sectionRuntime"\)/);
 	assert.match(settings, /t\("settings\.unsavedTitle"\)/);
 	assert.match(settings, /t\("settings\.discardChanges"\)/);
 	assert.match(settings, /t\("settings\.saveAndClose"\)/);
