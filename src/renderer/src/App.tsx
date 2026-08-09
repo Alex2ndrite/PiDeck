@@ -1762,13 +1762,22 @@ export function App() {
   async function abortAgent(agentId = activeAgentId) {
     if (!agentId || isPendingAgentId(agentId)) return;
     const target = getRuntimeTargetForAgent(agentId);
-    if (!target) return;
+    if (!target) {
+      showToast(t("sessionCommand.runtimeUnavailable"), 4000);
+      return;
+    }
     // 立即清除流式状态，让思考气泡和 loading 立刻消失，不等后端 RPC 返回
     const previous = store.get(sessionRuntimeBySessionIdAtomFamily(target.sessionId))?.state;
     if (previous) {
       applyAgentRuntimeState(agentId, { ...previous, isStreaming: false });
     }
-    requireSessionCommand(await api.sessions.abortRuntime(target));
+    try {
+      requireSessionCommand(await api.sessions.abortRuntime(target));
+    } catch (error) {
+      // abort 失败必须可见：之前此处直接 throw 变成未处理 rejection，
+      // 用户点停止后毫无反馈、agent 继续运行，表现为「停止不了」。
+      showToast(error instanceof Error ? error.message : String(error), 5000);
+    }
     // 不调用 refreshRuntimeState：AgentManager.abort() 会通过 emitState 推送正确状态，
     // 避免后端 get_state 返回过时的 isStreaming: true 覆盖前端立刻设的 false。
   }

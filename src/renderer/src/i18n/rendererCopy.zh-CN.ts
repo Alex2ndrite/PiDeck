@@ -212,6 +212,7 @@ export const zhCN = {
   "app.agentStarting": "正在启动 Agent…",
   "app.agentStartingPlaceholder": "Agent 正在启动…",
   "app.abortRequested": "已请求停止当前响应",
+  "app.abortSlow": "停止响应较慢，如仍无法停止可尝试重启会话",
   "app.branchCurrent": "当前分支：{branch}，共 {count} 个分支",
   "app.branchOnlyOne": "仅此一个分支",
   "app.branchNone": "无分支",

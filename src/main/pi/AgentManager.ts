@@ -230,6 +230,8 @@ export class AgentManager {
 	private readonly abortSettledFallbackTimers = new Map<string, NodeJS.Timeout>();
 	/** abort settled 兜底超时：覆盖多数管道残留，同时不让“立刻重发”永久卡死。 */
 	private static readonly ABORT_SETTLED_FALLBACK_MS = 1500;
+	/** abort 升级验证窗口：abort_bash + 二次 abort 后仍 running 则提示用户。 */
+	private static readonly ABORT_ESCALATION_VERIFY_MS = 4000;
 
 	/**
 	 * 待处理的 Extension UI 请求。key 为 agentId，value 为 Map<requestId, { method, title, options }>。
@@ -4094,6 +4096,7 @@ export class AgentManager {
 	/**
 	 * pi 偶发不发 agent_settled 时的兜底：超时后按 settled 处理，
 	 * 避免用户立刻重发时新一轮永远无法接收流式事件。
+	 * 同时触发 abort 升级检查：若 pi 仍未停稳，补发 abort_bash / 二次 abort。
 	 */
 	private scheduleAbortSettledFallback(agentId: string) {
 		this.clearAbortSettledFallback(agentId);
@@ -4103,9 +4106,57 @@ export class AgentManager {
 			if (this.getStreamGate(agentId).waitingForAbortSettled) {
 				this.noteAgentAbortSettled(agentId);
 			}
+			// 工具执行中 abort 偶发不被 pi 及时处理（长 bash/扩展工具阻塞），
+			// 若不升级，agent 会继续跑到工具结束，用户看到“停止不了”。
+			void this.escalateAbortIfStillRunning(agentId);
 		}, AgentManager.ABORT_SETTLED_FALLBACK_MS);
 		timer.unref?.();
 		this.abortSettledFallbackTimers.set(agentId, timer);
+	}
+
+	/**
+	 * abort 升级：兜底窗口已过但 pi 仍在流式/执行，补发专用命令并验证。
+	 * - abort_bash：pi 提供的杀 bash 进程树命令（RPC abort 不覆盖 bash 阻塞场景）
+	 * - 二次 abort：覆盖 abort 事件与工具事件交错时被丢弃的竞态
+	 * - 仍未停止则通过 notice 明确告知用户（stop 慢是可见问题，不能只写日志）
+	 */
+	private async escalateAbortIfStillRunning(agentId: string) {
+		const runtime = this.agents.get(agentId);
+		if (!runtime) return;
+		try {
+			const response = await runtime.process.client
+				.request({ type: "get_state" }, 5_000)
+				.catch(() => undefined);
+			const isStreaming =
+				response?.success &&
+				Boolean((response.data as { isStreaming?: boolean } | undefined)?.isStreaming);
+			if (!isStreaming) return; // pi 已停，无需升级
+			void this.appLogger?.warn("agent", "Abort escalation: pi still streaming after abort", {
+				agentId,
+			});
+			await runtime.process.client
+				.request({ type: "abort_bash" }, 5_000)
+				.catch(() => undefined);
+			await runtime.process.client
+				.request({ type: "abort" }, 5_000)
+				.catch(() => undefined);
+			// 第二轮验证：仍未停则通知用户，提示可重启会话。
+			const verifyTimer = setTimeout(() => {
+				void this.appLogger?.warn("agent", "Abort escalation: still running after second attempt", {
+					agentId,
+				});
+				this.emit(ipcChannels.agentsNotice, {
+					agentId,
+					message: "停止响应较慢，可尝试重启会话",
+					i18nKey: "app.abortSlow",
+					kind: "warning",
+					duration: 6000,
+				});
+			}, AgentManager.ABORT_ESCALATION_VERIFY_MS);
+			verifyTimer.unref?.();
+		} catch {
+			// RPC 失败（进程退出等）不再升级；agent 生命周期由 exit 路径接管。
+		}
 	}
 
 	private clearAbortSettledFallback(agentId: string) {

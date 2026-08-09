@@ -211,6 +211,7 @@ export const enUS: Record<TranslationKey, string> = {
   "app.agentStarting": "Starting Agent...",
   "app.agentStartingPlaceholder": "Agent is starting...",
   "app.abortRequested": "Stop requested",
+  "app.abortSlow": "Stop is slow; if it still won't stop, try restarting the session",
   "app.branchCurrent": "Current branch: {branch}; {count} branches total",
   "app.branchOnlyOne": "Only one branch",
   "app.branchNone": "No branch",

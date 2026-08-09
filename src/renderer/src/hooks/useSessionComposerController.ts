@@ -878,8 +878,19 @@ export function useSessionComposerController(
 
   const abort = useCallback(async () => {
     const target = toSessionRuntimeTarget(sessionId, runtime);
-    if (!target) return;
-    requireSessionCommand(await desktopApi.sessions.abortRuntime(target));
+    if (!target) {
+      // 运行时信息缺失（如 agent 尚未绑定）：停止无意义，但不应静默——
+      // 提示用户当前会话没有可停止的 Agent，避免「点了停止没反应」的困惑。
+      showNotice(t("sessionCommand.runtimeUnavailable"), 4000);
+      return;
+    }
+    try {
+      requireSessionCommand(await desktopApi.sessions.abortRuntime(target));
+    } catch (error) {
+      // abort 失败必须可见：之前这里直接 throw 变成未处理 rejection，
+      // 用户点停止后毫无反馈、agent 继续运行，表现为「停止不了」。
+      showNotice(error instanceof Error ? error.message : String(error), 5000);
+    }
   }, [runtime?.agentId, runtime?.runtimeGeneration, sessionId]);
 
   const acknowledgeUnknownDelivery = useCallback(() => {

@@ -57,3 +57,32 @@ test("abort feedback is toast-only and seals stream generation", () => {
 	assert.match(atoms, /agents:thinking/);
 	assert.match(atoms, /streamingThinkingByIdAtom/);
 });
+
+test("abort failures surface to the user and escalate when pi keeps running", () => {
+	const agentManager = readFileSync("src/main/pi/AgentManager.ts", "utf8");
+	const composer = readFileSync("src/renderer/src/hooks/useSessionComposerController.ts", "utf8");
+	const app = readFileSync("src/renderer/src/App.tsx", "utf8");
+	const zh = readFileSync("src/renderer/src/i18n/rendererCopy.zh-CN.ts", "utf8");
+	const en = readFileSync("src/renderer/src/i18n/rendererCopy.en-US.ts", "utf8");
+
+	// 1) 工具执行中 abort 未被 pi 及时处理时，主进程升级：abort_bash + 二次 abort
+	assert.match(agentManager, /escalateAbortIfStillRunning/);
+	assert.match(agentManager, /request\(\{ type: "abort_bash"/);
+	assert.match(agentManager, /request\(\{ type: "abort"/);
+	assert.match(agentManager, /ABORT_ESCALATION_VERIFY_MS/);
+
+	// 2) 升级后仍未停止必须通知用户（不能只写日志）
+	assert.match(agentManager, /i18nKey: "app\.abortSlow"/);
+	assert.match(zh, /"app\.abortSlow":/);
+	assert.match(en, /"app\.abortSlow":/);
+
+	// 3) 渲染层 abort 失败必须可见：try/catch + toast，禁止未处理 rejection 静默吞错
+	assert.match(composer, /catch \(error\)/);
+	assert.match(composer, /showNotice\(error instanceof Error \? error\.message : String\(error\)/);
+	assert.match(app, /catch \(error\)/);
+	assert.match(app, /showToast\(error instanceof Error \? error\.message : String\(error\)/);
+
+	// 4) 无运行时目标时也不得静默：给出 runtimeUnavailable 提示
+	assert.match(composer, /sessionCommand\.runtimeUnavailable/);
+	assert.match(app, /sessionCommand\.runtimeUnavailable/);
+});
