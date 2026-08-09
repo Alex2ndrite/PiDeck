@@ -82,15 +82,17 @@ export function FileDiffViewer(props: {
 	// 图片/PDF 走内置预览（view 模式）：二进制内容不可文本读取，跳过编辑器直接渲染。
 	const isImage = isImageFile(props.filePath);
 	const isPdf = isPdfFile(props.filePath);
-	// 默认编辑模式：markdown 打开显示源码（可编辑），预览由用户点按钮切换。
-	const [preview, setPreview] = useState(false);
+	// 默认预览模式：markdown/html/svg 打开直接渲染预览（干净阅读），
+	// 点「源码」切换按钮才进入源码模式；源码模式即编辑模式，不再需要独立的编辑按钮。
+	const defaultPreview = !isDiffMode && (isMarkdown || isHtml || isSvg);
+	const [preview, setPreview] = useState(defaultPreview);
 
 	useEffect(() => {
 		// 每个 tab 重置编辑状态：view 默认可编辑，diff 只读（避免把编辑状态带入历史提交 Diff）。
 		setReadOnly(isDiffMode);
 		setDirty(false);
 		setShowHint(false);
-		setPreview(false);
+		setPreview(defaultPreview);
 		// 清掉上一个文件的 Blob URL（媒体预览随 tab 切换失效）
 		revokeMediaUrl();
 		setMediaUrl(null);
@@ -412,7 +414,9 @@ export function FileDiffViewer(props: {
 							<SquareSplitHorizontal size={15} />
 						</Button>
 					)}
-					{props.saveContent && readOnly && !preview && (
+					{/* 编辑/退出编辑按钮仅保留给 diff 模式（历史对比默认只读，需要时点编辑进入）；
+					   view 模式源码即编辑：切到源码即可改，无需独立的编辑按钮。 */}
+					{isDiffMode && props.saveContent && readOnly && !preview && (
 						<Button
 							variant="ghost"
 							size="icon-sm"
@@ -423,7 +427,7 @@ export function FileDiffViewer(props: {
 							<Edit3 size={15} />
 						</Button>
 					)}
-					{!readOnly && props.saveContent && !preview && (
+					{isDiffMode && !readOnly && props.saveContent && !preview && (
 						<Button
 							variant="ghost"
 							size="icon-sm"

@@ -8,12 +8,13 @@ test("FileDiffViewer: view mode defaults to editable, diff mode stays read-only"
   assert.match(viewer, /useState\(\(\) => props\.mode === "diff"\)/);
   // tab 切换重置：view 可编辑、diff 只读（历史提交 Diff 不能误带编辑状态）
   assert.match(viewer, /setReadOnly\(isDiffMode\)/);
-  // markdown 默认显示源码（可编辑），预览改为手动切换
-  assert.match(viewer, /const \[preview, setPreview\] = useState\(false\)/);
-  assert.match(viewer, /setPreview\(false\)/);
-  // 编辑/退出按钮在预览态隐藏（预览是只读展示，不混入编辑控件）
-  assert.match(viewer, /props\.saveContent && readOnly && !preview/);
-  assert.match(viewer, /!readOnly && props\.saveContent && !preview/);
+  // markdown/html/svg 打开默认预览模式，点「源码」切换才进入编辑态；tab 切换同样重置为默认预览
+  assert.match(viewer, /const defaultPreview = !isDiffMode && \(isMarkdown \|\| isHtml \|\| isSvg\)/);
+  assert.match(viewer, /useState\(defaultPreview\)/);
+  assert.match(viewer, /setPreview\(defaultPreview\)/);
+  // 编辑/退出按钮仅保留给 diff 模式（历史对比默认只读）：view 模式源码即编辑，不混入独立编辑控件
+  assert.match(viewer, /isDiffMode && props\.saveContent && readOnly && !preview/);
+  assert.match(viewer, /isDiffMode && !readOnly && props\.saveContent && !preview/);
 });
 
 test("FileDiffViewer: debounced auto-save with Ctrl+S immediate save", () => {
