@@ -119,6 +119,29 @@ export function useSessionWorkspaceChrome(options: {
     });
   }, [sessionRecords, setSessionTabIds]);
 
+  // 主进程「跳转到某会话」推送（系统通知点击 / 桌面宠物点击）：解析 record 后交给
+  // App 注入的 focus handler 切换焦点。冷启动点击通知时 catalog 可能尚未加载完，
+  // 小间隔重试（最长约 3 秒）直到能解析到会话记录，避免首帧竞态丢目标。
+  useEffect(() => {
+    let disposed = false;
+    const unsubscribe = window.piDesktop.pet.onFocusTarget(({ sessionId }) => {
+      const tryFocus = (attempt: number) => {
+        if (disposed) return;
+        const record = store.get(sessionRecordByIdAtomFamily(sessionId));
+        if (record) {
+          focusHandlersRef.current.focusSession(record.projectId, sessionId);
+          return;
+        }
+        if (attempt < 6) window.setTimeout(() => tryFocus(attempt + 1), 500);
+      };
+      tryFocus(0);
+    });
+    return () => {
+      disposed = true;
+      unsubscribe();
+    };
+  }, [store]);
+
   /** 由 App 在 session actions 就绪后注入；写 ref 避免与 actions 形成 hook 环依赖 */
   const bindFocusHandlers = useCallback((handlers: SessionWorkspaceFocusHandlers) => {
     focusHandlersRef.current = handlers;

@@ -242,6 +242,8 @@ export class AgentManager {
 	private readonly abortedDuringAsk = new Set<string>();
 	/** 成功空闲（settled）回调：供 PetStateBridge 等主进程内部模块订阅，携带完成 Agent 身份。 */
 	private readonly settledListeners = new Set<(info: { agentId: string; title: string }) => void>();
+	/** 已发送 ask 系统通知的 agent；新一轮 run（agent_start）时清除，避免同一轮多次提问刷屏。 */
+	private readonly notifiedAskAgents = new Set<string>();
 	/** 待处理的项目信任确认请求。key 为 requestId，用于在 Agent 启动前等待用户的信任决策。 */
 	private readonly pendingTrustRequests = new Map<string, { resolve: (choice: ProjectTrustChoice) => void }>();
 	private wslEnvironment: WslEnvironment | null = null;
@@ -2688,6 +2690,7 @@ export class AgentManager {
 			// 1) 清理 recentlyAborted，允许状态机恢复 running
 			// 2) 推进 stream generation，解封流式闸门（唯一合法解封点）
 			this.recentlyAborted.delete(agentId);
+			this.notifiedAskAgents.delete(agentId);
 			this.openAgentStream(agentId);
 			runtime.tab.status = "running";
 			this.activeAssistantMessageIds.delete(agentId);
@@ -2897,7 +2900,7 @@ export class AgentManager {
 				const messages = this.messages.get(agentId) ?? [];
 				const lastMessage = messages[messages.length - 1];
 				if (lastMessage?.role === "assistant") {
-					this.notifySessionEnd(runtime.tab.title);
+					this.notifySessionEnd(agentId, runtime.tab.title);
 				}
 				// 成功空闲（settled）后才算完成：通知宠物等内部模块携带标题，供「{title} 已完成」气泡使用。
 				if (!isAbortSettled) this.notifyAgentSettled(agentId, runtime.tab.title);
@@ -3120,6 +3123,8 @@ export class AgentManager {
 		// message, because that creates a second interactive card in the timeline.
 		this.emit(ipcChannels.agentsUiRequest, request);
 		this.scheduleUIRequestTimeout(agentId, requestId, typed.timeout);
+		// 桌面通知由 SessionRuntimeCoordinator 统一触发（非聚焦会话才提醒，避免打扰正在看当前会话的用户）；
+		// 此处不重复发，防止一条提问出现两条通知。
 	}
 
 	/**
@@ -4017,27 +4022,37 @@ export class AgentManager {
 	/**
 	 * 非聚焦会话收到 Ask 类 UI 请求时的桌面通知（SessionRuntimeCoordinator 调用）。
 	 * 与 notifySessionEnd 共用同一套设置门控：enableNotifications + Notification.isSupported。
+	 * 每轮 run 只通知一次（去重标记在 agent_start 时清除），避免同一轮多次提问刷屏。
 	 */
-	notifyAskPending(sessionTitle: string): void {
+	notifyAskPending(agentId: string, sessionId: string, sessionTitle: string, question: string): void {
 		try {
 			const settings = this.settingsStore.get();
 			if (!settings.enableNotifications) return;
 			if (!Notification.isSupported()) return;
+			if (this.notifiedAskAgents.has(agentId)) return;
+			this.notifiedAskAgents.add(agentId);
 
 			const appName = app.getName();
+			const title = sessionTitle || appName;
+			// 有具体提问内容时展示问题，否则退回通用文案（批量提问等无 title 场景）
+			const questionText = question.length > 60 ? `${question.slice(0, 60)}…` : question;
+			const body = questionText
+				? this.translate("mainNotification.askQuestion", { title, question: questionText })
+				: this.translate("mainNotification.askPending", { title });
 			const notification = new Notification({
 				title: appName,
-				body: this.translate("mainNotification.askPending", { title: sessionTitle || appName }),
+				body,
 				silent: false,
+				// 自定义 toast XML：launch 携带 sessionId，点击后经 pideck:// 协议唤起应用并跳转对应会话
+				toastXml: this.buildToastXml(appName, body, sessionId),
 			});
-			// 点击通知时把主窗口带到前台，让用户能立刻处理确认请求
+			// 点击通知：聚焦主窗口并切换到对应会话（session-first，跳转按 SessionRecord.id）
 			notification.on("click", () => {
-				const win = this.getWindow();
-				if (win) {
-					if (win.isMinimized()) win.restore();
-					win.show();
-					win.focus();
-				}
+				this.focusMainWindowForSession(sessionId);
+			});
+			notification.on("failed", (_event, error) => {
+				// Windows 拒绝显示 toast 时触发（show() 本身不抛异常），记 warn 便于排查
+				void this.appLogger?.warn("agent", "Ask notification failed to show", { agentId, error: String(error) });
 			});
 			notification.show();
 		} catch {
@@ -4048,9 +4063,10 @@ export class AgentManager {
 	/**
 	 * 会话结束时发送系统通知。
 	 * 仅在设置中启用通知且 Electron Notification 可用时触发，
-	 * 通知用户 agent 已完成响应，可以查看结果或继续对话。
+	 * 通知用户 agent 已完成响应，可以查看结果或继续对话；
+	 * 点击通知会聚焦主窗口并切换到对应会话。
 	 */
-	private notifySessionEnd(sessionTitle: string) {
+	private notifySessionEnd(agentId: string, sessionTitle: string) {
 		try {
 			const settings = this.settingsStore.get();
 			if (!settings.enableNotifications) return;
@@ -4058,15 +4074,72 @@ export class AgentManager {
 
 			// 使用应用名称作为通知标题，在 Windows/macOS 通知中心中显示为应用标识
 			const appName = app.getName();
+			const body = this.translate("mainNotification.sessionDone", { title: sessionTitle });
+			// 会话结束时 runtime 一定已绑定会话，取 sessionId 作为点击跳转目标（跨重启稳定）
+			const sessionId = this.agents.get(agentId)?.tab.sessionId;
 			const notification = new Notification({
 				title: appName,
-				body: this.translate("mainNotification.sessionDone", { title: sessionTitle }),
+				body,
 				silent: false,
+				// 自定义 toast XML：launch 携带 sessionId，点击后经 pideck:// 协议唤起应用并跳转对应会话
+				toastXml: this.buildToastXml(appName, body, sessionId),
+			});
+			notification.on("click", () => {
+				this.focusMainWindowForSession(sessionId);
+			});
+			notification.on("failed", (_event, error) => {
+				// Windows 拒绝显示 toast 时触发（show() 本身不抛异常），记 warn 便于排查
+				void this.appLogger?.warn("agent", "Session notification failed to show", { agentId, error: String(error) });
 			});
 			notification.show();
 		} catch {
 			// 通知失败不影响主流程，静默处理
 		}
+	}
+
+	/**
+	 * 聚焦主窗口并让渲染进程切换到指定会话。
+	 * 复用 pet:focus-agent-target 通道（renderer 的 workspace chrome 监听后切到对应 project + session tab）；
+	 * sessionId 缺省（运行时尚未绑定会话）时只聚焦窗口，不做跳转。
+	 */
+	private focusMainWindowForSession(sessionId?: string) {
+		try {
+			const win = this.getWindow();
+			if (!win || win.isDestroyed()) {
+				void this.appLogger?.warn("agent", "Notification focus skipped: no main window", { sessionId });
+				return;
+			}
+			if (win.isMinimized()) win.restore();
+			if (!win.isVisible()) win.show();
+			win.focus();
+			if (sessionId) {
+				win.webContents.send(ipcChannels.petFocusAgentTarget, { sessionId });
+			}
+		} catch (error) {
+			// 聚焦失败不影响主流程，静默处理
+			void this.appLogger?.warn("agent", "Notification focus failed", { sessionId, error });
+		}
+	}
+
+	/**
+	 * 生成带会话跳转参数的 Windows toast XML。
+	 * 使用 activationType="protocol" + pideck:// 协议 URL：点击通知时 Windows 通过
+	 * 注册表协议关联唤起应用（不依赖 ToastActivatorCLSID / 快捷方式匹配，更可靠），
+	 * 被唤起实例的 argv 携带协议 URL，主实例据此识别要跳转的会话。
+	 * sessionId 缺省时 launch 回退为 pideck:// 根地址（点击仅聚焦窗口）。
+	 */
+	private buildToastXml(title: string, body: string, sessionId?: string): string {
+		const esc = (s: string) =>
+			s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+		const launch = sessionId ? `pideck://session/${sessionId}` : "pideck://";
+		return `<toast activationType="protocol" launch="${launch}">
+  <visual>
+    <binding template="ToastGeneric">
+      <text>${esc(title)}</text>
+      <text>${esc(body)}</text>
+    </binding>
+  </visual>
+</toast>`;
 	}
 
 	/**

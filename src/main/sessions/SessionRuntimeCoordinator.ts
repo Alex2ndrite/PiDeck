@@ -71,8 +71,14 @@ export interface SessionAgentGateway {
 		requestId: string,
 		response: SessionUiResponseInput["response"],
 	): Promise<unknown> | unknown;
-	/** 非聚焦会话收到 Ask 类 UI 请求时触发桌面通知（由 AgentManager 实现） */
-	notifyAskPending(sessionTitle: string): void;
+	/** 非聚焦会话收到 Ask 类 UI 请求时触发桌面通知（由 AgentManager 实现）
+	 * 参数：agentId（去重/日志）、sessionId（点击跳转目标）、sessionTitle、question（提问内容，可空） */
+	notifyAskPending(
+		agentId: string,
+		sessionId: string,
+		sessionTitle: string,
+		question: string,
+	): void;
 }
 
 export interface SessionRuntimePerfLogger {
@@ -574,7 +580,9 @@ export class SessionRuntimeCoordinator {
 			const title = this.catalog.get(event.sessionId)?.title
 				?? this.catalog.getRecord(event.sessionId)?.title
 				?? "";
-			this.agents.notifyAskPending(title);
+			// 带 agentId（每轮去重）、sessionId（点击跳转）与提问内容（展示在通知气泡里）
+			const question = typeof event.payload.title === "string" ? event.payload.title : "";
+			this.agents.notifyAskPending(event.agentId, event.sessionId, title, question);
 		}
 	}
 
