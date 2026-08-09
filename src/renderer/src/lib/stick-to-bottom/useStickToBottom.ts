@@ -94,6 +94,12 @@ export type ScrollToBottom = (
 
 export type StopScroll = () => void;
 
+/** 原子恢复任意滚动位置（会话切换回历史查看位置用）。
+ *  与原生 scrollTop 赋值的区别：定位 + 解锁锁底 + 取消在途动画一次完成，
+ *  不依赖异步 scroll 事件让引擎「猜」意图——busy 场景 ResizeObserver 高频贴底
+ *  会抢先于解锁事件，导致恢复位置被立刻拽回底部（双真相源竞态）。 */
+export type RestoreAt = (scrollTop: number) => void;
+
 export interface StickToBottomState {
   scrollTop: number;
   lastScrollTop?: number;
@@ -123,6 +129,8 @@ export interface StickToBottomInstance {
   scrollRef: React.MutableRefObject<HTMLElement | null> & React.RefCallback<HTMLElement>;
   scrollToBottom: ScrollToBottom;
   stopScroll: StopScroll;
+  /** 原子恢复位置：写 scrollTop 的同时解除锁底并取消在途弹簧动画。 */
+  restoreAt: RestoreAt;
   isAtBottom: boolean;
   isNearBottom: boolean;
   escapedFromLock: boolean;
@@ -348,6 +356,25 @@ export const useStickToBottom = (options: StickToBottomOptions = {}): StickToBot
     setIsAtBottom(false);
   }, [setEscapedFromLock, setIsAtBottom]);
 
+  /**
+   * 原子恢复位置（会话切换回历史查看位置）。
+   * 与「原生赋值 scrollTop + 依赖 scroll 事件被动解锁」的区别：
+   * - scrollGeneration += 1：在途弹簧动画的 next() 会因代数过期直接退出，
+   *   避免下一帧把刚恢复的位置又写回底部；
+   * - animation = undefined：清理动画状态，防止保留期内的重复滚底；
+   * - setEscapedFromLock(true) + setIsAtBottom(false)：立即解锁锁底，
+   *   busy 会话的 ResizeObserver（instant 贴底）看到 isAtBottom=false 不再拽回。
+   * - state.scrollTop 写入会设置 ignoreScrollToTop，后续 scroll 事件被引擎忽略，
+   *   不会误判为「用户滚动」重新锁底。
+   */
+  const restoreAt = useCallback((scrollTop: number) => {
+    state.scrollGeneration += 1;
+    state.animation = undefined;
+    setEscapedFromLock(true);
+    setIsAtBottom(false);
+    state.scrollTop = Math.max(0, scrollTop);
+  }, [setEscapedFromLock, setIsAtBottom, state]);
+
   const handleScroll = useCallback(
     ({ target }: Event) => {
       if (target !== scrollRef.current) {
@@ -530,6 +557,7 @@ export const useStickToBottom = (options: StickToBottomOptions = {}): StickToBot
     scrollRef,
     scrollToBottom,
     stopScroll,
+    restoreAt,
     /**
      * 对外「是否锁底跟随」只用严格 isAtBottom。
      * 旧实现 `isAtBottom || isNearBottom` 会在用户已上滚但距底 <70px 时仍报跟随，

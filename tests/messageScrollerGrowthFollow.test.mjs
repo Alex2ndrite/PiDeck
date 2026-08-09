@@ -118,3 +118,42 @@ test("followOutput and onFollowChange bridge to the stick engine", () => {
   assert.match(engineSource, /deltaY < 0/);
   assert.match(engineSource, /setEscapedFromLock\(true\)/);
 });
+
+// 会话切换恢复历史位置：引擎必须提供「原子恢复」——定位 + 解锁锁底 + 取消在途动画
+// 一次完成。若只做原生 scrollTop 赋值，busy 会话的 ResizeObserver（instant 贴底）
+// 会抢先于异步 scroll 解锁事件，把恢复的位置立刻拽回底部（双真相源竞态）。
+test("engine exposes atomic restoreAt: position + unlock + cancel in-flight animation", () => {
+  // 引擎 API：restoreAt 在返回的实例上（controller 通过 scrollApiRef 调用）
+  assert.match(engineSource, /export type RestoreAt = \(scrollTop: number\) => void;/);
+  assert.match(engineSource, /const restoreAt = useCallback\(\(scrollTop: number\) => \{/);
+  // 原子三件事：取消在途动画（generation++ / animation 清空）→ 解锁（escapedFromLock/isAtBottom）
+  assert.match(engineSource, /state\.scrollGeneration \+= 1;/);
+  assert.match(engineSource, /state\.animation = undefined;/);
+  assert.match(engineSource, /setEscapedFromLock\(true\);/);
+  assert.match(engineSource, /setIsAtBottom\(false\);/);
+  // 定位走 state.scrollTop setter（写 DOM 并设置 ignoreScrollToTop，后续 scroll 事件被忽略）
+  assert.match(engineSource, /state\.scrollTop = Math\.max\(0, scrollTop\);/);
+  assert.match(engineSource, /restoreAt,/);
+});
+
+test("MessageScroller forwards restoreAt to timeline controller scroll api", () => {
+  // MessageScrollerScrollApi 类型与 api 挂载都要包含 restoreAt
+  assert.match(scrollerSource, /restoreAt: \(scrollTop: number\) => void;/);
+  assert.match(scrollerSource, /const engineRestoreAt = stick\.restoreAt;/);
+  assert.match(scrollerSource, /restoreAt: engineRestoreAt,/);
+});
+
+test("timeline controller restores via engine restoreAt and keeps negative offset", () => {
+  const source = readFileSync(
+    "src/renderer/src/hooks/useSessionTimelineController.ts",
+    "utf8",
+  );
+  // 保存锚点保留负偏移（视口顶部常被上一行底部占据，截断会导致恢复位置偏下）
+  assert.match(source, /offsetTop: rect\.top - viewportRect\.top,/);
+  assert.doesNotMatch(source, /offsetTop: Math\.max\(0, rect\.top - viewportRect\.top\)/);
+  // 恢复走引擎原子 API（引擎未挂上时回退原生定位）
+  assert.match(source, /api\?\.restoreAt/);
+  assert.match(source, /api\.restoreAt\(targetTop\)/);
+  // autoScroll 初始值按锚点决定：有锚点不跟底，避免第一帧滚底再纠正
+  assert.match(source, /return !store\.get\(sessionScrollAnchorByIdAtom\)\[sessionId\];/);
+});

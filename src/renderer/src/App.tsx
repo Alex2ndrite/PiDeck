@@ -106,6 +106,7 @@ import { useScratchPad } from "./hooks/useScratchPad";
 import { useWorktreeActions } from "./hooks/useWorktreeActions";
 import { ChatSessionPane } from "./components/session/ChatSessionPane";
 import { SessionSplitStage } from "./components/session/SessionSplitStage";
+import { splitLayoutSessionIds } from "./utils/sessionSplitEdge";
 import { SessionTabsBar } from "./components/session/SessionTabsBar";
 import { SessionPaneServicesProvider } from "./components/session/SessionPaneServices";
 import { ProjectEmptyState } from "./components/session/ProjectEmptyState";
@@ -2481,18 +2482,14 @@ export function App() {
     if (!el || prevSessionIdRef.current === currentSessionId) return;
     const prev = prevSessionIdRef.current;
     prevSessionIdRef.current = currentSessionId;
-    // 分屏内左↔右聚焦切换：两栏都已渲染、内容未变，只有聚焦边框亮起；
+    // 分屏内面板间聚焦切换：各栏都已渲染、内容未变，只有聚焦边框亮起；
     // 整区重播淡入微位移会造成「抖/闪」，静默跳过（边框高亮由
     // .session-split-pane-focused 类切换承担，无动画）。
     const layout = workspaceChrome.splitLayout;
-    const prevInSplit = Boolean(
-      layout && prev && (layout.firstSessionId === prev || layout.secondSessionId === prev),
-    );
+    const splitIds = layout ? splitLayoutSessionIds(layout) : [];
+    const prevInSplit = Boolean(layout && prev && splitIds.includes(prev));
     const nextInSplit = Boolean(
-      layout &&
-        currentSessionId &&
-        (layout.firstSessionId === currentSessionId ||
-          layout.secondSessionId === currentSessionId),
+      layout && currentSessionId && splitIds.includes(currentSessionId),
     );
     if (prevInSplit && nextInSplit) return;
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
@@ -2679,36 +2676,24 @@ export function App() {
             onDropSplit={workspaceChrome.dropSplit}
             solo={
               <ChatSessionPane
+                key={currentSessionId}
                 sessionId={currentSessionId}
                 focused
                 onFocusPane={() => focusSessionPane(currentSessionId)}
                 splitPane={false}
               />
             }
-            first={(() => {
-              const layout = workspaceChrome.splitLayout;
-              if (!layout) return null;
-              return (
-                <ChatSessionPane
-                  sessionId={layout.firstSessionId}
-                  focused={currentSessionId === layout.firstSessionId}
-                  onFocusPane={() => focusSessionPane(layout.firstSessionId)}
-                  splitPane
-                />
-              );
-            })()}
-            second={(() => {
-              const layout = workspaceChrome.splitLayout;
-              if (!layout) return null;
-              return (
-                <ChatSessionPane
-                  sessionId={layout.secondSessionId}
-                  focused={currentSessionId === layout.secondSessionId}
-                  onFocusPane={() => focusSessionPane(layout.secondSessionId)}
-                  splitPane
-                />
-              );
-            })()}
+            soloSessionId={currentSessionId}
+            tabCount={workspaceChrome.sessionTabIds.length}
+            renderSession={(sessionId) => (
+              <ChatSessionPane
+                key={sessionId}
+                sessionId={sessionId}
+                focused={currentSessionId === sessionId}
+                onFocusPane={() => focusSessionPane(sessionId)}
+                splitPane
+              />
+            )}
           />
         </div>
       ) : (

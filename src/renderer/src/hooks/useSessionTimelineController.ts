@@ -190,7 +190,10 @@ export function useSessionTimelineController(options: {
         if (!messageId) continue;
         return {
           messageId,
-          offsetTop: Math.max(0, rect.top - viewportRect.top),
+          // 保留负偏移：视口顶部常被上一行底部占据（行顶在视口上方），
+          // 截断为 0 会导致恢复时把行顶对齐视口顶、整体位置偏下（高大行偏差明显）。
+          // 恢复侧 scrollTop = max(0, elTop - offsetTop) 已兜底负值。
+          offsetTop: rect.top - viewportRect.top,
           visibleCount: paginationVisibleCountRef.current,
           savedAt: Date.now(),
         };
@@ -303,9 +306,17 @@ export function useSessionTimelineController(options: {
 	// 同步分页窗口到 ref（computeCurrentAnchor 在滚动回调里读，避免依赖闭包重建）
 	paginationVisibleCountRef.current = pagination.visibleCount;
 	const [isLoadingMessagePage, setIsLoadingMessagePage] = useState(false);
-  const [autoScroll, setAutoScroll] = useState(true);
+  const [autoScroll, setAutoScroll] = useState(() => {
+    // 会话切换滚动位置保持：切回有锚点的会话时，初始就不跟底（不在底部）。
+    // 若初始 true，MessageScroller 的 followOutput layout effect 会在恢复前滚底，
+    // 造成「先滚到底再纠正」的闪跳（引擎在途动画由 restoreAt 取消，但初始值仍应正确）。
+    const sessionId = options.sessionId;
+    if (!sessionId) return true;
+    return !store.get(sessionScrollAnchorByIdAtom)[sessionId];
+  });
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
-  const autoScrollRef = useRef(true);
+  // 与 autoScroll 初始值保持一致（有锚点的会话首帧即不跟底），避免首帧 ref/state 不一致
+  const autoScrollRef = useRef(autoScroll);
   const programmaticScrollRef = useRef(false);
   const scrollerScrollApiRef = useRef<MessageScrollerScrollApi | null>(null);
   const loadMoreAnchorRef = useRef<Tagged<TimelineAnchor> | undefined>(undefined);
@@ -679,7 +690,16 @@ export function useSessionTimelineController(options: {
             timeline.getBoundingClientRect().top +
             timeline.scrollTop;
           programmaticScrollRef.current = true;
-          timeline.scrollTop = Math.max(0, elTop - anchor.offsetTop);
+          // 原子恢复：定位 + 解锁锁底 + 取消在途动画一次完成。
+          // busy 会话的 ResizeObserver（instant 贴底）看到 isAtBottom=false 不再拽回。
+          const api = scrollerScrollApiRef.current;
+          const targetTop = Math.max(0, elTop - anchor.offsetTop);
+          if (api?.restoreAt) {
+            api.restoreAt(targetTop);
+          } else {
+            // 引擎未挂上（会话切换首帧等）时回退原生定位
+            timeline.scrollTop = targetTop;
+          }
           // 恢复后的位置即当前锚点：即使恢复后用户未滚动就切走，
           // cleanup 落盘的也是这份锚点（而不是误判为底部/空）。
           currentAnchorRef.current = anchor;

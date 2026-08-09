@@ -165,7 +165,7 @@ export function SessionTree(props: {
           type="button"
           className={cn(
             sessionRowClass,
-            "session-row codex-subagent-sidebar-row pl-6",
+            "session-row codex-subagent-sidebar-row pl-2",
             session.id === props.currentSessionId && "active border-border-strong bg-accent/20 text-foreground shadow-sm",
           )}
           onContextMenu={(event) => openContext(event, session)}
@@ -180,8 +180,10 @@ export function SessionTree(props: {
   };
   const renderSubagents = (parentKey: string, codex: SessionSummary[], pi: SessionSummary[]) => {
     if (codex.length + pi.length === 0 || !props.controller.expandedSubagentGroups.has(parentKey)) return null;
+    // 主侧栏子会话组缩进走 tailwind utility（ml-3），避免 legacy 层 v3-braun 规则覆盖；
+    // worktree（nested）子树保留其自身布局规则
     return (
-      <div className="codex-subagent-sidebar-group">
+      <div className={cn("codex-subagent-sidebar-group", !props.nested && "ml-3")}>
         {codex.map((session) => renderSubagent(session, <><strong>{formatCodexSubagentName(session)}</strong><SessionSourceBadge source="codex" label={t("app.codexSubagent")} /></>))}
         {pi.map((session) => renderSubagent(session, <strong>{formatPiSubagentName(session)}</strong>))}
       </div>

@@ -47,21 +47,61 @@ function CostValue(props: { cost: number; costKnown: boolean }) {
 }
 
 function NotInstalledCard(props: { onRefresh: () => void }) {
+  const [installing, setInstalling] = useState(false);
+  const [installed, setInstalled] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const installCmd = "pi install npm:pi-tracker";
+
+  const install = async () => {
+    setInstalling(true);
+    try {
+      await window.piDesktop.extensions.install("npm:pi-tracker");
+      setInstalled(true);
+      // 装完触发一次重扫：日志可能已存在（用户此前手动装过）
+      await props.onRefresh();
+    } catch (error) {
+      console.error("[UsageStats] install pi-tracker failed", error);
+    } finally {
+      setInstalling(false);
+    }
+  };
+
+  const copyCommand = async () => {
+    try {
+      await navigator.clipboard.writeText(installCmd);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // 剪贴板不可用时静默失败（命令仍可手选复制）
+    }
+  };
+
   return (
-    <section className="settings-section">
-      <div className="settings-section-header">
-        <strong>{t("usageStats.notInstalled.title")}</strong>
-      </div>
-      <div className="settings-section-body usage-stats-not-installed">
-        <p>{t("usageStats.notInstalled.desc")}</p>
-        <code className="usage-stats-code">pi install npm:pi-tracker</code>
-        <p className="usage-stats-hint">{t("usageStats.notInstalled.installHint")}</p>
-        <p className="usage-stats-hint">{t("usageStats.notInstalled.backfill")}</p>
-        <Button variant="secondary" size="sm" onClick={props.onRefresh}>
-          {t("usageStats.refresh")}
+    <div className="usage-stats-not-installed">
+      <p>{t("usageStats.notInstalled.desc")}</p>
+      <div className="usage-stats-install-row">
+        <Button
+          variant="default"
+          size="sm"
+          onClick={install}
+          disabled={installing || installed}
+          loading={installing}
+        >
+          {installing
+            ? t("usageStats.notInstalled.installing")
+            : installed
+              ? "✓"
+              : t("usageStats.notInstalled.install")}
+        </Button>
+        <code className="usage-stats-code">{installCmd}</code>
+        <Button variant="ghost" size="sm" onClick={copyCommand}>
+          {copied ? t("usageStats.notInstalled.copied") : t("usageStats.notInstalled.copyCmd")}
         </Button>
       </div>
-    </section>
+      {installed && <p className="usage-stats-hint">{t("usageStats.notInstalled.installDone")}</p>}
+      <p className="usage-stats-hint">{t("usageStats.notInstalled.restartHint")}</p>
+      <p className="usage-stats-hint">{t("usageStats.notInstalled.backfill")}</p>
+    </div>
   );
 }
 
@@ -194,11 +234,33 @@ export function UsageStatsTab() {
   const [error, setError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
 
+  /** pi-tracker 是否已安装（扩展列表探测；失败时按日志存在性兜底）。 */
+  const [pluginInstalled, setPluginInstalled] = useState<boolean | null>(null);
+
+  const probePluginInstalled = useCallback(async (): Promise<boolean | null> => {
+    try {
+      const list = await window.piDesktop.extensions.list();
+      const found = list.extensions.some((ext) => {
+        const source = ext.source ?? "";
+        const id = ext.id ?? "";
+        return id === "pi-tracker" || source.includes("pi-tracker");
+      });
+      setPluginInstalled(found);
+      return found;
+    } catch {
+      // 扩展 API 不可用时（如预览环境）不阻塞：返回 null 由日志存在性兜底
+      setPluginInstalled(null);
+      return null;
+    }
+  }, []);
+
   const load = useCallback(async () => {
     try {
       const detectResult = await window.piDesktop.usageStats.detect();
       setDetect(detectResult);
-      if (!detectResult.installed) {
+      const installed = await probePluginInstalled();
+      if (!detectResult.installed && installed === false) {
+        // 无日志且未安装 → 引导安装
         setPhase("missing");
         return;
       }
@@ -212,7 +274,7 @@ export function UsageStatsTab() {
     } finally {
       setRefreshing(false);
     }
-  }, []);
+  }, [probePluginInstalled]);
 
   useEffect(() => {
     void load();
@@ -228,7 +290,8 @@ export function UsageStatsTab() {
       // 重试探测：可能刚装上插件
       const detectResult = await window.piDesktop.usageStats.detect();
       setDetect(detectResult);
-      if (!aggregated && detectResult.installed) {
+      const installedNow = await probePluginInstalled();
+      if (!aggregated && (detectResult.installed || installedNow === true)) {
         // 已安装但没数据：切到 ready 显示空态
         setPhase("ready");
       }
@@ -238,7 +301,7 @@ export function UsageStatsTab() {
     } finally {
       setRefreshing(false);
     }
-  }, []);
+  }, [probePluginInstalled]);
 
   return (
     <div className="settings-section">

@@ -37,6 +37,8 @@ export type SessionCatalogEntry = {
 	wslUser?: string;
 	importedSourceId?: string;
 	status: "draft" | "active";
+	/** 子会话标记：扫描时从 SessionSummary 继承，持久化供 getRecord/listEntries 重建（不丢树形） */
+	parentSessionPath?: string;
 	model?: { provider: string; modelId: string };
 	thinkingLevel?: string;
 	piSessionId?: string;
@@ -516,6 +518,7 @@ export class SessionCatalog {
 						wslUser: summary.wsl ? context.wslUser : undefined,
 						importedSourceId,
 						status: "active",
+						parentSessionPath: summary.parentSessionPath,
 						createdAt: now,
 						updatedAt: now,
 					};
@@ -534,6 +537,7 @@ export class SessionCatalog {
 						entry.wslUser !== (summary.wsl ? context.wslUser : undefined) ||
 						entry.importedSourceId !== importedSourceId ||
 						entry.status !== "active" ||
+						entry.parentSessionPath !== summary.parentSessionPath ||
 						entry.updatedAt !== summary.updatedAt
 					) {
 						entry.projectId = projectId;
@@ -545,6 +549,9 @@ export class SessionCatalog {
 						entry.wslUser = summary.wsl ? context.wslUser : undefined;
 						entry.importedSourceId = importedSourceId;
 						entry.status = "active";
+						// 子会话的父子关系可能随后续扫描才被识别（parent 文件出现/路径推断补全），
+						// 变化必须计入 changed 才会落盘，否则重拉后仍以孤儿平铺。
+						entry.parentSessionPath = summary.parentSessionPath;
 						entry.updatedAt = summary.updatedAt;
 						changed = true;
 					}
@@ -599,7 +606,7 @@ export class SessionCatalog {
 			importedSourceId: summary
 				? getImportedSessionSourceId(summary)
 				: entry.importedSourceId,
-			parentSessionPath: summary?.parentSessionPath,
+			parentSessionPath: summary?.parentSessionPath ?? entry.parentSessionPath,
 			projectPath: summary?.projectPath,
 			preview: summary?.preview ?? "",
 			messageCount: summary?.messageCount ?? 0,

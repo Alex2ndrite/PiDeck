@@ -1457,7 +1457,8 @@ html[data-theme="dark"] .scratch-pad-md mark {
 }
 
 .chat-list-pane.v3-braun .sidebar-body .codex-subagent-sidebar-group {
-  margin: 0 0 0 28px;
+  /* 缩进由 SessionTree 的 tailwind utility（ml-3）控制，此处不再写 margin */
+  margin: 0;
   display: flex;
   flex-direction: column;
   gap: 0;

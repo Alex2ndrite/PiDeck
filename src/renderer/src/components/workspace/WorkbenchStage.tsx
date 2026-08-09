@@ -59,13 +59,19 @@ export function WorkbenchStage(props: WorkbenchStageProps) {
 				}
 				className="workbench-stage-split"
 			>
+				{/* 尺寸统一用字符串百分比（"48%"）而非数字：react-resizable-panels v4 的
+				   约束派生把数字按 px 解析（minSize={20} → 20px → 占 2%），而初始化布局
+				   把数字当 %（defaultSize={48} → 48%），同值两处解析不一致；
+				   maximize↔split 切换后 expand() 恢复宽度依赖该约束，数字会缩成一条窄缝。
+				   defaultSize 固定不变（挂载时生效一次），避免 Panel 重注册丢失 expandToSize
+				   （折叠前宽度），后续展开/收起全由下方 effect 的 collapse()/expand() 驱动。 */}
 				<ResizablePanel
 					id="workbench-session"
 					panelRef={sessionPanelRef}
 					collapsible
-					collapsedSize={0}
-					minSize={20}
-					defaultSize={props.layout === "maximize" ? 0 : 48}
+					collapsedSize="0%"
+					minSize="20%"
+					defaultSize="48%"
 					className="workbench-session-pane"
 				>
 					{props.session}
@@ -73,8 +79,8 @@ export function WorkbenchStage(props: WorkbenchStageProps) {
 				<ResizableHandle withHandle className="workbench-stage-sash" />
 				<ResizablePanel
 					id="workbench-content"
-					minSize={25}
-					defaultSize={props.layout === "maximize" ? 100 : 52}
+					minSize="25%"
+					defaultSize="52%"
 					className="workbench-content-pane"
 				>
 					<div

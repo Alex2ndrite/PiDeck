@@ -2190,7 +2190,8 @@ select:focus-visible {
 .codex-subagent-sidebar-group {
   display: grid;
   gap: 1px;
-  margin: 0 0 2px 28px;
+  /* 缩进由 SessionTree 的 tailwind utility（ml-3）控制，避免 legacy 层覆盖 */
+  margin: 0 0 2px 0;
 }
 .codex-subagent-sidebar-toggle,
 .codex-subagent-sidebar-row {
