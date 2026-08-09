@@ -12,6 +12,7 @@ import {
   MessageCircle,
   Network,
   Search,
+  Square,
   SquarePen,
   Terminal,
   Wrench,
@@ -215,12 +216,15 @@ export const ToolActivityCard = memo(function ToolActivityCard(props: { name: st
 export const ToolCard = memo(function ToolCard(props: {
 	message: ChatMessage;
 	defaultOpen?: boolean;
+	/** 停止时 tool end 可能永远不会到达，避免遗留 running 状态继续播放动画。 */
+	stopped?: boolean;
 }) {
 	const [expanded, setExpanded] = useState(props.defaultOpen ?? false);
-	const status = getToolStatus(props.message);
+	const messageStatus = getToolStatus(props.message);
+	const status = props.stopped && messageStatus === "running" ? "stopped" : messageStatus;
 	const toolName = getToolName(props.message);
 	const detailText = getToolDetailText(props.message);
-	const tone = getToolTone(props.message);
+	const tone = status === "stopped" ? "ok" : getToolTone(props.message);
 	const subtitle = getToolSubtitle(props.message);
 	const kindLabel = getToolKindLabel(toolName);
 	// 学 Proma：折叠态显示语义短语（如「读取 foo.ts」）而非完整命令行
@@ -247,6 +251,14 @@ export const ToolCard = memo(function ToolCard(props: {
 				<Badge variant="outline" className="gap-1 border-warning/40 px-1 py-0 text-micro text-warning">
 					<span className="size-[9px] animate-spin rounded-full border-2 border-[color:color-mix(in_srgb,var(--color-warning)_30%,transparent)] border-t-[var(--color-warning)]" aria-hidden="true" />
 					{t("tool.statusRunning")}
+				</Badge>
+			);
+		}
+		if (status === "stopped") {
+			return (
+				<Badge variant="outline" className="gap-1 border-border-subtle px-1 py-0 text-micro text-text-tertiary">
+					<Square size={8} aria-hidden="true" />
+					{t("tool.statusStopped")}
 				</Badge>
 			);
 		}
@@ -377,12 +389,13 @@ export const ToolCard = memo(function ToolCard(props: {
 /** 工具组直接平铺为工具列表；每个 ToolCard 自己默认折叠，避免外层再占一行。 */
 export const ToolGroupCard = memo(function ToolGroupCard(props: {
 	group: ToolGroupItem;
+	stopped?: boolean;
 }) {
 	return (
 		<section className="tool-group-card w-full min-w-0 overflow-hidden rounded-none border-0 bg-transparent" data-message-id={props.group.id}>
 			<div className="flex flex-col gap-0 p-0">
 				{props.group.messages.map((message) => (
-					<ToolCard key={message.id} message={message} />
+					<ToolCard key={message.id} message={message} stopped={props.stopped} />
 				))}
 			</div>
 		</section>

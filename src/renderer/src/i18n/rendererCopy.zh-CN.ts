@@ -2003,6 +2003,7 @@ export const zhCN = {
   "tool.statusDone": "完成",
   "tool.statusError": "失败",
   "tool.statusRunning": "运行中",
+  "tool.statusStopped": "已停止",
   "tool.pending": "等待工具执行...",
   "tool.durationTitle": "工具调用耗时",
   "tool.diff": "diff",

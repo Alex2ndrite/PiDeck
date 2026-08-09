@@ -62,6 +62,9 @@ export function isSessionRuntimeBusy(
   status: string | undefined,
   state: AgentRuntimeState | undefined,
 ): boolean {
+  // idle/error/closed 是停止的权威边沿；旧 runtime-state 可能稍后到达，
+  // 不能让滞后的 isStreaming/isExecutingTool 把页面继续显示为运行中。
+  if (status === "idle" || status === "error" || status === "closed" || status === "detached") return false;
   return Boolean(status === "running" || state?.isStreaming || state?.isExecutingTool);
 }
 

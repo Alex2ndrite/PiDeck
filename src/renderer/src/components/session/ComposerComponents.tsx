@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback, type ReactNode } from "react";
 import {
+	Brain,
 	Check,
 	ChevronDown,
 	ChevronLeft,
@@ -199,7 +200,17 @@ export function ComposerBottomBar(props: {
 						) : (
 							<Wrench size={15} strokeWidth={2} aria-hidden="true" />
 						)}
-						<span>{modeLabel}</span>
+						{/* 模式按钮文案：普通/计划模式均不加粗（font-normal 覆盖父按钮继承的 font-semibold）；
+						    普通模式另用小一号字号 + 斜体做弱化艺术字。 */}
+						<span
+							className={cn(
+								isPlanMode
+									? "text-control font-normal"
+									: "text-micro italic font-normal text-muted-foreground",
+							)}
+						>
+							{modeLabel}
+						</span>
 					</Button>
 					{isPlanMode && (
 						<Button variant="ghost" size="icon"
@@ -356,6 +367,7 @@ function CommandPickerDialog(props: {
 	className?: string;
 	searchPlaceholder?: string;
 	emptyLabel?: ReactNode;
+	value?: string;
 	showGroupActions?: boolean;
 	children: ReactNode;
 }) {
@@ -373,6 +385,7 @@ function CommandPickerDialog(props: {
 					hint={props.hint}
 					searchPlaceholder={props.searchPlaceholder ?? t("app.commandPickerSearch")}
 					emptyLabel={props.emptyLabel ?? t("app.commandPickerEmpty")}
+					value={props.value}
 					showGroupActions={props.showGroupActions}
 					onClose={props.onClose}
 				>
@@ -389,9 +402,9 @@ export function ModelPicker(props: {
 	onClose: () => void;
 	onPick: (model: AvailableModel) => void;
 	/** 收藏的模型 ID 列表（格式：provider/modelId），收藏的模型独立置顶显示但仍保留在原供应商分组 */
-	favoriteModels: string[];
-	/** 切换收藏状态 */
-	onToggleFavorite: (provider: string, modelId: string) => void;
+	favoriteModels?: string[];
+	/** 切换收藏状态；引导页不提供收藏操作，因此允许省略。 */
+	onToggleFavorite?: (provider: string, modelId: string) => void;
 }) {
 	const currentModelKey = props.current?.provider && props.current?.modelId
 		? `${props.current.provider}/${props.current.modelId}`
@@ -433,26 +446,27 @@ export function ModelPicker(props: {
 				data-picker-value={modelKey}
 				keywords={[model.name ?? "", model.id, model.provider, modelKey]}
 				onSelect={() => props.onPick(model)}
-				className="picker-model-item"
+				className="group min-h-9 items-center gap-2 rounded-md px-2.5 py-1"
 			>
 				{/* 收藏/取消收藏按钮：填充星为收藏，空心为未收藏 */}
-				<span
-					className={`model-favorite-star${favorited ? ' favorited' : ''}`}
-					title={favorited ? t("app.modelUnfavorite") : t("app.modelFavorite")}
-					onClick={(e) => {
-						e.stopPropagation();
-						props.onToggleFavorite(model.provider, model.id);
-					}}
-				>
-					<Star size={14} strokeWidth={1.8} fill={favorited ? 'currentColor' : 'none'} />
-				</span>
-				<span
-					className="min-w-0 flex-1 truncate font-mono text-control text-foreground"
-					title={model.name ? `${model.name} · ${modelKey}` : modelKey}
-				>
+				{props.onToggleFavorite && (
+					<button
+						type="button"
+						className={`grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground${favorited ? " text-amber-500" : ""}`}
+						title={favorited ? t("app.modelUnfavorite") : t("app.modelFavorite")}
+						aria-label={favorited ? t("app.modelUnfavorite") : t("app.modelFavorite")}
+						onClick={(e) => {
+							e.stopPropagation();
+							props.onToggleFavorite?.(model.provider, model.id);
+						}}
+					>
+						<Star size={14} strokeWidth={1.8} fill={favorited ? "currentColor" : "none"} />
+					</button>
+				)}
+				<span className="min-w-0 flex-1 truncate font-mono text-control font-medium text-foreground" title={model.name ? `${model.name} · ${modelKey}` : modelKey}>
 					{modelKey}
 				</span>
-				{selected && <Check size={14} className="ml-auto text-primary" aria-hidden="true" />}
+				{selected ? <Check size={15} className="ml-auto shrink-0 text-primary" aria-hidden="true" /> : null}
 			</CommandItem>
 		);
 	};
@@ -461,9 +475,10 @@ export function ModelPicker(props: {
 		<CommandPickerDialog
 			title={t("app.modelPickerTitle")}
 			onClose={props.onClose}
-			className="model-picker"
+			className="model-picker sm:max-w-[min(720px,calc(100vw-32px))]"
 			searchPlaceholder={t("app.modelPickerSearch")}
 			emptyLabel={t("app.modelPickerEmpty")}
+			value={currentModelKey}
 			showGroupActions
 		>
 			{favorites.length > 0 && (
@@ -504,6 +519,7 @@ export function ComposerModePicker(props: {
 			title={t("app.composerModeTitle")}
 			onClose={props.onClose}
 			className="composer-mode-picker"
+			value={props.currentMode}
 		>
 			{items.map((item) => {
 				const selected = item.value === props.currentMode;
@@ -513,12 +529,14 @@ export function ComposerModePicker(props: {
 						value={item.value}
 						data-picker-value={item.value}
 						onSelect={() => props.onPick(item.value)}
+						className="min-h-9 items-center gap-2 rounded-md px-2.5 py-1"
 					>
-						<span className="min-w-0 flex-1">
-							<span className="block text-control font-medium">{t(item.labelKey)}</span>
-							<span className="block text-caption text-muted-foreground">{t(item.descriptionKey)}</span>
+						<span className={`grid size-6 shrink-0 place-items-center rounded-md ${selected ? "bg-primary/12 text-primary" : "bg-muted text-muted-foreground"}`}>
+							{item.value === "plan" ? <ListChecks size={14} aria-hidden="true" /> : <Wrench size={14} aria-hidden="true" />}
 						</span>
-						{selected && <Check size={14} className="ml-auto text-primary" aria-hidden="true" />}
+						{/* 弹窗项文案：普通/计划模式均不加粗，plan 用图标/选中态作为区分。 */}
+						<span className="min-w-0 flex-1 truncate text-control font-normal text-foreground" title={t(item.descriptionKey)}>{t(item.labelKey)}</span>
+						{selected ? <Check size={15} className="ml-auto shrink-0 text-primary" aria-hidden="true" /> : null}
 					</CommandItem>
 				);
 			})}
@@ -537,6 +555,7 @@ export function ThinkingPicker(props: {
 			hint={t("app.thinkingPickerHint")}
 			onClose={props.onClose}
 			className="thinking-picker"
+			value={props.current}
 		>
 			{THINKING_LEVELS.map((level) => {
 				const selected = level.value === props.current;
@@ -546,12 +565,13 @@ export function ThinkingPicker(props: {
 						value={level.value}
 						data-picker-value={level.value}
 						onSelect={() => props.onPick(level.value)}
+						className="min-h-9 items-center gap-2 rounded-md px-2.5 py-1"
 					>
-						<span className="min-w-0 flex-1">
-							<span className="block text-control font-medium">{t(level.labelKey)}</span>
-							<span className="block text-caption text-muted-foreground">{t(level.descriptionKey)}</span>
+						<span className={`grid size-6 shrink-0 place-items-center rounded-md ${selected ? "bg-primary/12 text-primary" : "bg-muted text-muted-foreground"}`}>
+							<Brain size={14} aria-hidden="true" />
 						</span>
-						{selected && <Check size={14} className="ml-auto text-primary" aria-hidden="true" />}
+						<span className="min-w-0 flex-1 truncate text-control font-semibold text-foreground" title={t(level.descriptionKey)}>{t(level.labelKey)}</span>
+						{selected ? <Check size={15} className="ml-auto shrink-0 text-primary" aria-hidden="true" /> : null}
 					</CommandItem>
 				);
 			})}

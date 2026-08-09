@@ -55,10 +55,11 @@ test("project empty state reuses pi-branded EmptyState and offers quick actions"
 
 test("empty state keeps compact configuration controls for first-run setup", () => {
   // 模型/思考选择器统一走共享 CommandPicker 面板（与 Git 面板等同一套选择器组件）
-  assert.match(emptyState, /<CommandPickerPanel/);
-  assert.match(emptyState, /<CommandPickerGroup/);
-  assert.match(emptyState, /<CommandItem/);
-  assert.match(emptyState, /<Check className=/);
+  assert.match(emptyState, /import \{ ModelPicker, ThinkingPicker \} from "\.\/ComposerComponents"/);
+  assert.match(emptyState, /<ModelPicker/);
+  assert.match(emptyState, /<ThinkingPicker/);
+  assert.match(emptyState, /current=\{currentModel\}/);
+  assert.match(emptyState, /current=\{thinkingChoice\}/);
   assert.match(emptyState, /title=\{modelChoice/);
   assert.match(emptyState, /thinkingPickerOpen/);
   assert.match(emptyState, /WELCOME_MODEL_KEY/);

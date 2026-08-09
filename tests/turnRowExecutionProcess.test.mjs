@@ -61,6 +61,12 @@ test("issue #130: fold concerns process steps and interim answers, final answer 
   );
 });
 
+test("stale running tools stay stopped when a newer run starts", () => {
+  // stopped 只由当前回合是否 live 决定；不能再绑定 isLatestRun，否则新回合开始后旧回合会复活 spinner。
+  assert.match(turnRowSource, /stopped=\{props\.agentRunning !== true\}/);
+  assert.doesNotMatch(turnRowSource, /stopped=\{Boolean\(props\.isLatestRun && !props\.agentRunning\)\}/);
+});
+
 test("execution summary toggle radius matches other buttons", () => {
   const css = readFileSync("src/renderer/src/styles/timeline.css", "utf8");
   const toggleRule = css.match(/\.execution-summary-toggle \{[\s\S]*?\n\}/)?.[0] ?? "";

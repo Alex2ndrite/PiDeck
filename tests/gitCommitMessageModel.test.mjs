@@ -55,10 +55,15 @@ test("Shared model picker keeps one model line and supports collapse and selecte
   assert.match(composerComponents, /<CommandPickerGroup id=\"favorites\"/);
   assert.doesNotMatch(composerComponents, /picker-palette-label.*model\.name/);
   assert.match(commandPicker, /showGroupActions/);
+  assert.match(commandPicker, /allCollapsed \? expandedGroups\.has\(props\.id\)/);
+  assert.match(commandPicker, /if \(allCollapsed\)/);
+  assert.match(composerComponents, /value=\{currentModelKey\}/);
+  assert.match(composerComponents, /value=\{props\.currentMode\}/);
+  assert.match(composerComponents, /value=\{props\.current\}/);
   assert.match(commandPicker, /search\.trim\(\) \? <CommandEmpty/);
   assert.match(commandPicker, /scrollIntoView\(\{ block: \"center\" \}\)/);
-  assert.match(projectEmptyState, /<CommandPickerPanel/);
-  assert.match(projectEmptyState, /showGroupActions/);
+  assert.match(projectEmptyState, /<ModelPicker/);
+  assert.match(projectEmptyState, /<ThinkingPicker/);
 });
 
 

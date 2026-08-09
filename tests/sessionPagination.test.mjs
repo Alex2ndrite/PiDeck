@@ -52,8 +52,9 @@ test("old load completion, anchor, and jump owner tags cannot affect B", () => {
   assert.equal(timeline.matchesTimelineOwner("B", "B"), true);
 });
 
-test("Session runtime busy state is authoritative and only the latest run is busy", () => {
-  assert.equal(timeline.isSessionRuntimeBusy("idle", { isStreaming: true }), true);
+test("Session runtime busy state is authoritative and stop status wins over stale flags", () => {
+  // abort 先切 idle、后到 runtime-state；旧 streaming 标记不能继续驱动加载动画。
+  assert.equal(timeline.isSessionRuntimeBusy("idle", { isStreaming: true, isExecutingTool: true }), false);
   assert.equal(timeline.isSessionRuntimeBusy("running", undefined), true);
   assert.equal(timeline.isSessionRuntimeBusy("idle", undefined), false);
   assert.equal(timeline.isLatestTimelineRunBusy(true, 1, 2), true);

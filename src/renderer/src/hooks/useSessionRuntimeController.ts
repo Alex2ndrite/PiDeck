@@ -17,6 +17,13 @@ import { sessionSendStateByIdAtom } from "../atoms/composer-atoms";
 import type { QueuedPrompt } from "./useQueuedPrompt";
 import { t } from "../i18n";
 import { dismissNotice, type NoticeId } from "../utils/notice";
+import {
+  forgetBackgroundAsk,
+  getRememberedBackgroundAskKeys,
+  getRuntimeNotificationKey,
+  rememberBackgroundAsk,
+  rememberRuntimeNotification,
+} from "../utils/runtimeNotification";
 
 // ── narrow selector（供 App 等「当前聚焦会话 agentId」消费者）──
 
@@ -24,6 +31,9 @@ export const activeAgentIdAtom = selectAtom(
   currentSessionRuntimeAtom,
   (rt) => rt?.agentId,
 );
+
+// 后台 Ask 的 Toast 句柄跨 Tab 生命周期存在，不能放在单个 hook 实例的 ref 中。
+const backgroundAskNoticeIdMap = new Map<string, NoticeId>();
 
 // ── types ──
 
@@ -188,16 +198,17 @@ export function useSessionRuntimeController(
     : undefined;
   const sessionHasProject = Boolean(activeProjectId);
 
-  const lastNoticeRef = useRef("");
-  const notifiedBackgroundAskRef = useRef<Set<string>>(new Set());
-  const backgroundAskNoticeIdsRef = useRef<Map<string, NoticeId>>(new Map());
+  // 后台 Ask 会跨 Tab 等待；去重 key 与 toast 句柄都由 renderer 进程级模块持有。
 
   useEffect(() => {
     const notification = currentSessionRuntimeUi?.notification;
     if (!currentSessionId || !notification) return;
-    const key = `${currentSessionId}:${currentSessionRuntimeUi.runtimeGeneration}:${notification.revision}`;
-    if (lastNoticeRef.current === key) return;
-    lastNoticeRef.current = key;
+    const key = getRuntimeNotificationKey(
+      currentSessionId,
+      currentSessionRuntimeUi.runtimeGeneration,
+      notification.requestId,
+    );
+    if (!rememberRuntimeNotification(key)) return;
     showNotice(
       notification.message,
       notification.notifyType === "error" || notification.notifyType === "warning" ? 3000 : 1500,
@@ -208,8 +219,8 @@ export function useSessionRuntimeController(
   useEffect(() => {
     if (!isFocusedPane) return;
     const activeBackgroundKeys = new Set<string>();
+    const pendingAskKeys = new Set<string>();
     for (const [sessionId, runtimeUi] of Object.entries(sessionRuntimeUiById)) {
-      if (sessionId === focusedSessionId) continue;
       const pendingAsk = Object.values(runtimeUi.requests).find(({ request, status }) =>
         (status === "pending" || status === "responding") &&
         ["select", "confirm", "input", "editor", "batch_ask"].includes(request.method),
@@ -217,25 +228,25 @@ export function useSessionRuntimeController(
       if (!pendingAsk) continue;
 
       const key = `${sessionId}:${runtimeUi.runtimeGeneration}:${pendingAsk.request.requestId}`;
+      pendingAskKeys.add(key);
+      if (sessionId === focusedSessionId) continue;
       activeBackgroundKeys.add(key);
-      if (notifiedBackgroundAskRef.current.has(key)) continue;
-      notifiedBackgroundAskRef.current.add(key);
+      if (!rememberBackgroundAsk(key)) continue;
       const title = sessionRecords[sessionId]?.title?.trim() || pendingAsk.request.title || t("ask.defaultTitle");
       const noticeId = showNotice(t("ask.backgroundPending", { title }), Number.POSITIVE_INFINITY, "warning");
-      if (noticeId !== undefined) backgroundAskNoticeIdsRef.current.set(key, noticeId);
+      if (noticeId !== undefined) backgroundAskNoticeIdMap.set(key, noticeId);
     }
 
-    for (const [key, noticeId] of backgroundAskNoticeIdsRef.current) {
+    // 焦点切回原会话时只撤掉当前浮层；通知 key 保留到 Ask 真正完成，避免来回切换反复弹出。
+    for (const [key, noticeId] of backgroundAskNoticeIdMap) {
       if (activeBackgroundKeys.has(key)) continue;
       dismissNotice(noticeId);
-      backgroundAskNoticeIdsRef.current.delete(key);
-      notifiedBackgroundAskRef.current.delete(key);
+      backgroundAskNoticeIdMap.delete(key);
     }
 
-    if (notifiedBackgroundAskRef.current.size > 200) {
-      notifiedBackgroundAskRef.current = new Set(
-        Array.from(notifiedBackgroundAskRef.current).slice(-100),
-      );
+    // 只有请求已经回答/取消，才回收去重 key；切换焦点不算 Ask 生命周期结束。
+    for (const key of getRememberedBackgroundAskKeys()) {
+      if (!pendingAskKeys.has(key)) forgetBackgroundAsk(key);
     }
   }, [focusedSessionId, isFocusedPane, sessionRecords, sessionRuntimeUiById, showNotice]);
 

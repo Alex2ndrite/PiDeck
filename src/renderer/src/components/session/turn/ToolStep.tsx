@@ -9,10 +9,12 @@ import type { ToolGroupItem } from "../timeline/types";
 export const ToolStep = memo(function ToolStep(props: {
 	group: ToolGroupItem;
 	hidden: boolean;
+	/** 最新回合停止后没有 tool end 结果时，清除卡片的运行中动画。 */
+	stopped: boolean;
 }) {
 	return (
 		<div style={{ display: props.hidden ? "none" : undefined }}>
-			<ToolGroupCard group={props.group} />
+			<ToolGroupCard group={props.group} stopped={props.stopped} />
 		</div>
 	);
 });

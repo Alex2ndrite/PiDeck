@@ -15,6 +15,7 @@ type CommandPickerContextValue = {
 	searchActive: boolean;
 	allCollapsed: boolean;
 	collapsedGroups: Set<string>;
+	expandedGroups: Set<string>;
 	toggleGroup: (id: string) => void;
 };
 
@@ -22,6 +23,7 @@ const CommandPickerContext = createContext<CommandPickerContextValue>({
 	searchActive: false,
 	allCollapsed: false,
 	collapsedGroups: new Set(),
+	expandedGroups: new Set(),
 	toggleGroup: () => undefined,
 });
 
@@ -37,14 +39,14 @@ export function CommandPickerGroup(props: {
 	children: ReactNode;
 	className?: string;
 }) {
-	const { searchActive, allCollapsed, collapsedGroups, toggleGroup } = useContext(CommandPickerContext);
-	const expanded = searchActive || (!allCollapsed && !collapsedGroups.has(props.id));
+	const { searchActive, allCollapsed, collapsedGroups, expandedGroups, toggleGroup } = useContext(CommandPickerContext);
+	const expanded = searchActive || (allCollapsed ? expandedGroups.has(props.id) : !collapsedGroups.has(props.id));
 
 	return (
 		<div className={cn("border-b border-border/45 last:border-b-0", props.className)}>
 			<button
 				type="button"
-				className="flex w-full cursor-pointer items-center gap-1.5 px-3 py-2 text-left text-control font-medium text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+				className="flex w-full cursor-pointer items-center gap-1.5 px-3 py-1.5 text-left text-control font-medium text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
 				aria-expanded={expanded}
 				onClick={() => toggleGroup(props.id)}
 			>
@@ -76,10 +78,20 @@ export function CommandPickerPanel(props: {
 	const [search, setSearch] = useState("");
 	const [allCollapsed, setAllCollapsed] = useState(false);
 	const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+	const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 	const listHostRef = useRef<HTMLDivElement | null>(null);
 
 	const toggleGroup = (id: string) => {
-		setAllCollapsed(false);
+		if (allCollapsed) {
+			// 全部折叠后点击单组只展开这一组；保持 allCollapsed 语义，避免其他分组一起展开。
+			setExpandedGroups((current) => {
+				const next = new Set(current);
+				if (next.has(id)) next.delete(id);
+				else next.add(id);
+				return next;
+			});
+			return;
+		}
 		setCollapsedGroups((current) => {
 			const next = new Set(current);
 			if (next.has(id)) next.delete(id);
@@ -121,6 +133,7 @@ export function CommandPickerPanel(props: {
 								onClick={() => {
 									setAllCollapsed(false);
 									setCollapsedGroups(new Set());
+									setExpandedGroups(new Set());
 								}}
 							>
 								<ChevronsUpDown size={14} aria-hidden="true" />
@@ -134,6 +147,7 @@ export function CommandPickerPanel(props: {
 								onClick={() => {
 									setAllCollapsed(true);
 									setCollapsedGroups(new Set());
+									setExpandedGroups(new Set());
 								}}
 							>
 								<ChevronsDownUp size={14} aria-hidden="true" />
@@ -163,7 +177,7 @@ export function CommandPickerPanel(props: {
 				<div ref={listHostRef} className="min-h-0">
 					<CommandList className="max-h-[min(440px,55vh)] min-h-0">
 						{search.trim() ? <CommandEmpty>{props.emptyLabel}</CommandEmpty> : null}
-						<CommandPickerContext.Provider value={{ searchActive: search.trim().length > 0, allCollapsed, collapsedGroups, toggleGroup }}>
+						<CommandPickerContext.Provider value={{ searchActive: search.trim().length > 0, allCollapsed, collapsedGroups, expandedGroups, toggleGroup }}>
 							{props.children}
 						</CommandPickerContext.Provider>
 					</CommandList>

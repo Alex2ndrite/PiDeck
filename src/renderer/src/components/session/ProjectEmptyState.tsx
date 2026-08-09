@@ -1,15 +1,13 @@
 import { useEffect, useState } from "react";
-import { Check, FolderGit2, HatGlasses, Plus, Sparkles } from "lucide-react";
+import { FolderGit2, HatGlasses, Plus, Sparkles } from "lucide-react";
 import type { AvailableModel, Project, SessionLaunchPreferences } from "../../../../shared/types";
 import { t, type TranslationKey } from "../../i18n";
 import { desktopApi } from "../../desktopApi";
 import { Button } from "../ui-shadcn/button";
-import { Popover, PopoverContent, PopoverTrigger } from "../ui-shadcn/popover";
-import { CommandItem } from "../ui-shadcn/command";
-import { CommandPickerGroup, CommandPickerPanel } from "../ui-shadcn/command-picker";
+import { ModelPicker, ThinkingPicker } from "./ComposerComponents";
 import { WELCOME_MODEL_KEY, WELCOME_THINKING_KEY } from "../../utils/chatSessionBootstrap";
 import { EmptyState } from "./SurfaceParts";
-import { THINKING_LEVELS, groupModelsByProvider } from "./sessionPickerOptions";
+import { THINKING_LEVELS } from "./sessionPickerOptions";
 
 const THINKING_LABEL_KEYS: Record<string, TranslationKey> = {};
 for (const level of THINKING_LEVELS) {
@@ -126,13 +124,15 @@ export function ProjectEmptyState(props: {
   }, []);
 
   const hasProject = Boolean(props.activeProject);
+  const modelSeparator = modelChoice.indexOf("/");
+  const currentModel = modelSeparator > 0
+    ? { provider: modelChoice.slice(0, modelSeparator), modelId: modelChoice.slice(modelSeparator + 1) }
+    : undefined;
 
   // 取路径末段作为页眉右侧的项目名，与侧栏项目行的命名口径一致。
   const activeProjectName = props.activeProject
     ? props.activeProject.path.split(/[\\/]/).filter(Boolean).pop() ?? props.activeProject.path
     : "";
-
-  const groupedModels = groupModelsByProvider(models);
 
   const saveModelChoice = (value: string) => {
     setModelChoice(value);
@@ -196,94 +196,49 @@ export function ProjectEmptyState(props: {
               <div className="flex items-baseline gap-2">
                 <dt className="text-text-tertiary">{t("app.model")}</dt>
                 <dd>
-                  <Popover open={modelPickerOpen} onOpenChange={setModelPickerOpen}>
-                    <PopoverTrigger asChild>
-                      <button
-                        type="button"
-                        className="max-w-72 truncate align-baseline font-mono font-medium text-text-primary underline decoration-border-subtle underline-offset-4 transition-colors hover:decoration-border-strong"
-                        title={modelChoice || t("app.model")}
-                      >
-                        {modelChoice || t("app.model")}
-                      </button>
-                    </PopoverTrigger>
-                    <PopoverContent align="start" className="w-[min(430px,calc(100vw-48px))] p-0">
-                      <CommandPickerPanel
-                        title={t("app.modelPickerTitle")}
-                        searchPlaceholder={t("app.modelPickerSearch")}
-                        emptyLabel={t("app.modelPickerEmpty")}
-                        showGroupActions
-                        value={modelChoice}
-                        onClose={() => setModelPickerOpen(false)}
-                      >
-                        {Object.entries(groupedModels).map(([provider, providerModels]) => (
-                          <CommandPickerGroup id={`provider:${provider}`} key={provider} label={provider} count={providerModels.length}>
-                            {providerModels.map((model) => {
-                              const value = `${model.provider}/${model.id}`;
-                              return (
-                                <CommandItem
-                                  key={value}
-                                  value={value}
-                                  data-picker-value={value}
-                                  onSelect={() => {
-                                    saveModelChoice(value);
-                                    setModelPickerOpen(false);
-                                  }}
-                                  className="items-start py-2"
-                                >
-                                  <span className="min-w-0 flex-1 break-words">{value}</span>
-                                  <Check className={`mt-0.5 shrink-0 ${value === modelChoice ? "opacity-100" : "opacity-0"}`} aria-hidden="true" />
-                                </CommandItem>
-                              );
-                            })}
-                          </CommandPickerGroup>
-                        ))}
-                      </CommandPickerPanel>
-                    </PopoverContent>
-                  </Popover>
+                  <button
+                    type="button"
+                    className="max-w-72 truncate align-baseline font-mono font-medium text-text-primary underline decoration-border-subtle underline-offset-4 transition-colors hover:decoration-border-strong"
+                    title={modelChoice || t("app.model")}
+                    onClick={() => setModelPickerOpen(true)}
+                  >
+                    {modelChoice || t("app.model")}
+                  </button>
+                  {modelPickerOpen && (
+                    <ModelPicker
+                      models={models}
+                      current={currentModel}
+                      favoriteModels={[]}
+                      onClose={() => setModelPickerOpen(false)}
+                      onPick={(model) => {
+                        saveModelChoice(`${model.provider}/${model.id}`);
+                        setModelPickerOpen(false);
+                      }}
+                    />
+                  )}
                 </dd>
               </div>
               <div className="flex items-baseline gap-2">
                 <dt className="text-text-tertiary">{t("app.think")}</dt>
                 <dd>
-                  <Popover open={thinkingPickerOpen} onOpenChange={setThinkingPickerOpen}>
-                    <PopoverTrigger asChild>
-                      <button
-                        type="button"
-                        className="align-baseline font-mono font-medium text-text-primary underline decoration-border-subtle underline-offset-4 transition-colors hover:decoration-border-strong"
-                        title={thinkingLabel(thinkingChoice)}
-                      >
-                        {thinkingLabel(thinkingChoice)}
-                      </button>
-                    </PopoverTrigger>
-                    <PopoverContent align="start" className="w-[min(360px,calc(100vw-48px))] p-0">
-                      <CommandPickerPanel
-                        title={t("app.thinkingPickerTitle")}
-                        hint={t("app.thinkingPickerHint")}
-                        searchPlaceholder={t("app.commandPickerSearch")}
-                        emptyLabel={t("app.commandPickerEmpty")}
-                        value={thinkingChoice}
-                        onClose={() => setThinkingPickerOpen(false)}
-                      >
-                        {THINKING_LEVELS.map((level) => (
-                          <CommandItem
-                            key={level.value}
-                            value={level.value}
-                            data-picker-value={level.value}
-                            onSelect={() => {
-                              saveThinkingChoice(level.value);
-                              setThinkingPickerOpen(false);
-                            }}
-                          >
-                            <span className="min-w-0 flex-1">
-                              <span className="block text-control font-medium">{thinkingLabel(level.value)}</span>
-                              <span className="block text-caption text-muted-foreground">{t(level.descriptionKey)}</span>
-                            </span>
-                            <Check className={`shrink-0 ${level.value === thinkingChoice ? "opacity-100" : "opacity-0"}`} aria-hidden="true" />
-                          </CommandItem>
-                        ))}
-                      </CommandPickerPanel>
-                    </PopoverContent>
-                  </Popover>
+                  <button
+                    type="button"
+                    className="align-baseline font-mono font-medium text-text-primary underline decoration-border-subtle underline-offset-4 transition-colors hover:decoration-border-strong"
+                    title={thinkingLabel(thinkingChoice)}
+                    onClick={() => setThinkingPickerOpen(true)}
+                  >
+                    {thinkingLabel(thinkingChoice)}
+                  </button>
+                  {thinkingPickerOpen && (
+                    <ThinkingPicker
+                      current={thinkingChoice}
+                      onClose={() => setThinkingPickerOpen(false)}
+                      onPick={(level) => {
+                        saveThinkingChoice(level);
+                        setThinkingPickerOpen(false);
+                      }}
+                    />
+                  )}
                 </dd>
               </div>
             </dl>

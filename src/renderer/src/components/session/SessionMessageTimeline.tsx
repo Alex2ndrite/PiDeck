@@ -334,11 +334,7 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
   const isAwaitingAssistant = Boolean(
     hasActiveConversation &&
       !cancellingUi &&
-      (activeConversationStatus === "running" ||
-        // 新操作方式下 Agent 在发消息时才启动：激活期间也要给用户「正在响应」反馈，
-        // 避免消息上屏后长时间无任何指示造成「没反应」的错觉。
-        activeConversationStatus === "starting" ||
-        activeRuntimeState?.isStreaming) &&
+      isAgentBusy &&
       activeMessages.at(-1)?.role !== "assistant",
   );
 
@@ -618,9 +614,7 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
 
             {hasActiveConversation &&
               !cancellingUi &&
-              (activeConversationStatus === "running" ||
-                activeConversationStatus === "starting" ||
-                activeRuntimeState?.isStreaming) && (
+              isAgentBusy && (
                 <RespondingIndicator
                   // 有 live 思考段即可；不订正文 atom，避免 50ms 重渲 timeline。
                   thinking={liveThinkingId ? "." : undefined}
@@ -635,7 +629,7 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
                 点击文件/DIFF 按钮直接打开差异查看器（复用单条工具卡片的 diff 链路） */}
             {hasActiveConversation &&
               !isAwaitingAssistant &&
-              !(activeConversationStatus === "running" || activeRuntimeState?.isStreaming) &&
+              !isAgentBusy &&
               !isConversationLoading &&
               activeMessages.length > 0 && (
                 <SessionFileSummary

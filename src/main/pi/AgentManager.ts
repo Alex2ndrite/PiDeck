@@ -1346,9 +1346,18 @@ export class AgentManager {
 		this.streamingAgents.delete(agentId);
 		this.textEmitter.cancel(agentId);
 		this.streamingText.delete(agentId);
+		const hadActiveTool = Boolean(
+			this.toolExecutingByAgent.get(agentId) ||
+			(this.activeToolCallsByAgent.get(agentId)?.size ?? 0) > 0,
+		);
 		this.toolMessageIds.delete(agentId);
 		this.activeToolCallsByAgent.delete(agentId);
 		this.toolExecutingByAgent.set(agentId, null);
+		// abort 直接清本地工具状态时必须同步发送 false 边沿，
+		// 否则 renderer 可能只收到 idle，却继续保留旧的工具 spinner。
+		if (hadActiveTool) this.emitToolRuntimeTransition(agentId, false);
+		// 同步清除 streaming 标志，避免停止后“正在工具调用/正在回应”延迟到 settled 才消失。
+		this.emitStreamingStatePatch(agentId);
 		// 取消节流中的 message 推送，避免 abort 后还有 pending flush 把旧内容刷回 UI。
 		this.cancelMessageEmit(agentId);
 

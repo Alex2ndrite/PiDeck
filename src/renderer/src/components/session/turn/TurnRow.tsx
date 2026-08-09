@@ -295,7 +295,11 @@ export const TurnRow = memo(
 										);
 									} else {
 										content = (
-											<ToolStep group={item.entry.group} hidden={!stepsVisible} />
+											<ToolStep
+												group={item.entry.group}
+												hidden={!stepsVisible}
+												stopped={props.agentRunning !== true}
+											/>
 										);
 									}
 								} else if (item.kind === "interim-answer") {

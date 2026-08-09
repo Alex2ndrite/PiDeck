@@ -2038,6 +2038,7 @@ export const enUS: Record<TranslationKey, string> = {
   "tool.statusDone": "Done",
   "tool.statusError": "Failed",
   "tool.statusRunning": "Running",
+  "tool.statusStopped": "Stopped",
   "tool.pending": "Waiting for tool...",
   "tool.durationTitle": "Tool call duration",
   "tool.diff": "diff",
