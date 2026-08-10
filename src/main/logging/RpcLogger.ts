@@ -89,11 +89,12 @@ export class RpcLogger {
   }
 
   /**
-   * 把弹窗保存的条目合并追加到对应 agent 的当日自动文件（按 id 去重），返回实际写入条数。
+   * 把弹窗保存的条目合并追加到对应 agent 的当日自动文件（按 id 去重），
+   * 返回实际写入的文件路径列表（空数组 = 全部重复、没有新条目）。
    * 弹窗内容与自动落盘同源（开启记录后推送即落盘），去重避免重复行；
    * 竞态说明：读取去重集合与排队写入之间若有并发 push 同 id 条目，可能写入少量重复行，幂等无害。
    */
-  async appendEntries(entries: RpcLogEntry[]): Promise<number> {
+  async appendEntries(entries: RpcLogEntry[]): Promise<string[]> {
     // 按目标文件分组：同 agent 同日条目共享一次去重读取
     const byFile = new Map<string, RpcLogEntry[]>();
     for (const entry of entries) {
@@ -102,7 +103,7 @@ export class RpcLogger {
       list.push(entry);
       byFile.set(filePath, list);
     }
-    let written = 0;
+    const writtenFiles: string[] = [];
     for (const [filePath, group] of byFile) {
       const existingIds = await this.readEntryIds(filePath);
       const fresh = group.filter((entry) => !existingIds.has(entry.id));
@@ -116,9 +117,9 @@ export class RpcLogger {
           })
           .catch((error) => reject(error));
       });
-      written += fresh.length;
+      writtenFiles.push(filePath);
     }
-    return written;
+    return writtenFiles;
   }
 
   /** 条目对应的自动保存文件路径：rpc-<agentId>-YYYY-MM-DD.jsonl */

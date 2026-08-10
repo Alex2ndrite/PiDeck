@@ -52,12 +52,17 @@ test("viewer gives MessageScroller a full-height chain so the list can scroll", 
   assert.match(viewer, /<MessageScroller\s+className="h-full"/);
 });
 
-test("viewer can save logs to the auto log file", () => {
-  assert.match(viewer, /window\.piDesktop\.rpcLogs\.save\(\{ entries: saveEntries \}\)/);
-  // 保存语义：有筛选存筛选结果，无筛选存缓冲全量
-  assert.match(viewer, /hasActiveFilter\s*\?\s*visibleEntries\.slice\(0, SAVE_ENTRY_CAP\)\s*:\s*entries\.slice\(-SAVE_ENTRY_CAP\)/);
-  // 保存后提示已写入日志文件
-  assert.match(viewer, /rpc\.saved/);
+test("viewer gives toast feedback for save/copy/enable-logging operations", () => {
+  // 保存：主进程返回写入的文件路径，toast 提示保存位置（单文件直接给路径，多文件给首个 + 数量）
+  assert.match(viewer, /const paths = await window\.piDesktop\.rpcLogs\.save\(\{ entries: saveEntries \}\);/);
+  assert.match(viewer, /rpc\.savedToFile/);
+  assert.match(viewer, /rpc\.savedToFiles/);
+  // 全部重复时明确告知无需保存
+  assert.match(viewer, /rpc\.saveNoNew/);
+  // 复制类操作（行内复制 / 复制全部 / 复制可见）统一 toast 已复制
+  assert.match(viewer, /showNotice\(t\("common\.copied"\), 2000\)/);
+  // 开启记录异步生效，成功/失败都 toast
+  assert.match(viewer, /showNotice\(enabled \? t\("rpc\.loggingEnabled"\) : t\("rpc\.loggingEnableFailed"\), 2500\)/);
 });
 
 test("agent context menu exposes a live log entry point next to the toggle", () => {
@@ -95,8 +100,8 @@ test("RpcLogger keeps a larger live ring buffer with filtered getLive and data t
   // 实时缓冲副本截断大 data，文件仍写原始内容
   assert.match(rpcLogger, /private truncateForLive\(entry: RpcLogEntry\)/);
   assert.match(rpcLogger, /this\.writeEntry\(entry\)/);
-  // 弹窗保存：按目标文件分组 → 读文件去重 → 队列串行追加（幂等合并）
-  assert.match(rpcLogger, /async appendEntries\(entries: RpcLogEntry\[\]\): Promise<number>/);
+  // 弹窗保存：按目标文件分组 → 读文件去重 → 队列串行追加，返回写入的文件路径列表
+  assert.match(rpcLogger, /async appendEntries\(entries: RpcLogEntry\[\]\): Promise<string\[\]>/);
   assert.match(rpcLogger, /private filePathFor\(entry: RpcLogEntry\)/);
   assert.match(rpcLogger, /private async readEntryIds\(filePath: string\)/);
 });
@@ -108,8 +113,8 @@ test("systemIpc validates save payloads and merges into the auto file", () => {
   // 渲染层数据不可信：条数上限 + 字段校验后才写盘
   assert.match(systemIpc, /\.slice\(0, 10_000\)/);
   assert.match(systemIpc, /\.filter\(\(value\): value is RpcLogEntry => isRpcLogEntry\(value\)\)/);
-  // 保存不再弹目录选择：直接合并写入该 agent 的自动日志文件（按 id 去重）
-  assert.match(systemIpc, /rpcLogger\.appendEntries\(entries\)/);
+  // 保存不再弹目录选择：直接合并写入该 agent 的自动日志文件，返回路径供渲染层 toast
+  assert.match(systemIpc, /return rpcLogger\.appendEntries\(entries\);/);
   // “打开日志文件夹”入口与保存目录选择均已从主进程移除
   assert.doesNotMatch(systemIpc, /rpcLogsOpenFile/);
   assert.doesNotMatch(systemIpc, /showSaveDialog/);
@@ -121,6 +126,7 @@ test("preload exposes getLive/save/onLog with unsubscribe", () => {
   assert.match(preload, /onLog: \(callback: \(batch: RpcLogBatch\) => void\) =>/);
   assert.match(ipc, /rpcLogsGetLive: "rpc-logs:get-live"/);
   assert.match(ipc, /rpcLogsSave: "rpc-logs:save"/);
-  // 保存接口只传条目（agentId 在条目内），主进程按条目归属自动文件
-  assert.match(preload, /save: \(options: \{ entries: RpcLogEntry\[\] \}\)/);
+  // 保存接口只传条目（agentId 在条目内），返回写入的文件路径列表
+  assert.match(preload, /save: \(options: \{ entries: RpcLogEntry\[\] \}\) =>/);
+  assert.match(preload, /as Promise<string\[\]>/);
 });

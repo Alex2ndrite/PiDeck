@@ -13,6 +13,7 @@ import {
 import { RpcLogViewer } from "./RpcLogViewer";
 import { sessionRecordToSummary } from "../../atoms";
 import { t } from "../../i18n";
+import { showNotice } from "../../utils/notice";
 import { getBoundSidebarRuntimeAgent, hasLiveSidebarRuntime, type SidebarController, type SidebarRpcLog } from "../../hooks/useSidebarController";
 import { ProjectTree } from "./ProjectTree";
 import { Button } from "../ui-shadcn/button";
@@ -226,6 +227,8 @@ export function SidebarContent(props: SidebarContentProps) {
           onOpenSessionFile={() => { void actions.agents.openSessionFile(menuAgent); controller.closeMenu(); }}
           onToggleRpcLogging={() => void actions.rpc.setLogging(menuAgent.id, !controller.isAgentRpcLogging(menuAgent.id)).then((enabled) => {
             controller.setAgentRpcLogging(menuAgent.id, enabled);
+            // 菜单开关是异步生效，成功/失败都给出 toast 反馈
+            showNotice(enabled ? t("rpc.loggingEnabled") : t("rpc.loggingEnableFailed"), 2500);
             controller.closeMenu();
           })}
           isRpcLogging={controller.isAgentRpcLogging(menuAgent.id)}

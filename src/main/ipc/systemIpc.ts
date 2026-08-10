@@ -489,15 +489,15 @@ export function registerSystemIpc(deps: SystemIpcDeps): void {
 	);
 	// 实时查看弹窗“保存到文件”：直接合并写入该 agent 的自动日志文件（按 id 去重），
 	// 不再弹目录选择——开启记录后日志本就自动落盘，保存只是把弹窗内容对齐到文件。
+	// 返回实际写入的文件路径列表，供渲染层 toast 提示用户保存位置。
 	// 渲染层传来的条目不可信，数量与字段都要校验。
 	ipcMain.handle(ipcChannels.rpcLogsSave, async (_event, options?: { entries?: unknown }) => {
 		const rawEntries = Array.isArray(options?.entries) ? options.entries : [];
 		const entries = rawEntries
 			.slice(0, 10_000) // 上限：防止一次 IPC 携带超大批次
 			.filter((value): value is RpcLogEntry => isRpcLogEntry(value));
-		if (entries.length === 0) return false;
-		await rpcLogger.appendEntries(entries);
-		return true;
+		if (entries.length === 0) return [];
+		return rpcLogger.appendEntries(entries);
 	});
 	ipcMain.handle(ipcChannels.rpcLogsClear, async (_event, target?: SessionRuntimeTarget) =>
 		rpcLogger.clear(resolveRpcRuntimeAgent(target)),
