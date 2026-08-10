@@ -204,6 +204,12 @@ function readClipboardFilePaths(): string[] {
 }
 
 const api = {
+	clipboard: {
+		// 同步读取剪贴板（主进程 clipboard 模块），供输入框右键“粘贴”菜单使用：
+		// readText 读纯文本；readHtml 读富文本（无 HTML 时返回空串，调用方降级纯文本）
+		readText: () => clipboard.readText(),
+		readHtml: () => clipboard.readHTML(),
+	},
 	editors: {
 		list: () => ipcRenderer.invoke(ipcChannels.editorsList) as Promise<ExternalEditor[]>,
 		redetect: () =>

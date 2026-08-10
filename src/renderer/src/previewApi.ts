@@ -153,6 +153,12 @@ let previewSettings: AppSettings = {
 
 export function createPreviewApi(): PiDesktopApi {
 	const noop = (() => () => undefined) as any;
+	const clipboardStub: PiDesktopApi["clipboard"] = {
+		// preview 模式无真实剪贴板；浏览器下 navigator.clipboard 为异步 API，
+		// 与同步接口不匹配，因此返回空串，右键粘贴菜单静默无操作
+		readText: () => "",
+		readHtml: () => "",
+	};
 	const createTerminalTab = async (agentId: string, shell?: string, cwd?: string) => {
 		const shellName = shell ?? "powershell";
 		const displayName = shellName === "git-bash" ? "Git Bash" : shellName === "bash" ? "bash" : shellName === "cmd" ? "cmd" : "PowerShell";
@@ -177,6 +183,7 @@ export function createPreviewApi(): PiDesktopApi {
 		return tab;
 	};
 	return {
+		clipboard: clipboardStub,
 		// 进程监控预览桩：返回空快照，仅供预览模式不崩溃
 		system: {
 			getProcessMetrics: async () => ({

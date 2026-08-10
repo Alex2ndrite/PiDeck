@@ -353,6 +353,21 @@ assert.doesNotMatch(twistie, /ChevronDown|ChevronRight|GitBranch|GitCommit|GitCo
     assert.match(i18n, /"git\.discardConfirmMessage"/);
     assert.match(i18n, /"git\.discardUntrackedConfirmMessage"/);
   });
+  test("provides a right-click paste menu on the commit input", () => {
+    // textarea 外包 ContextMenu，单一“粘贴”项走 i18n
+    assert.match(panel, /<ContextMenu>/);
+    assert.match(panel, /<ContextMenuTrigger asChild>/);
+    assert.match(panel, /t\("common\.paste"\)/);
+    assert.match(panel, /pasteCommitClipboard/);
+    // 粘贴：有 HTML 时先转纯文本（textarea 只能纯文本），无 HTML 降级纯文本
+    assert.match(panel, /htmlToPlainText\(html\)/);
+    assert.doesNotMatch(panel, /pasteAsPlainText|pasteAsIs/);
+    // 剪贴板读取走 preload 同步 API，不依赖 document focus
+    assert.match(preload, /clipboard: \{[\s\S]*?readText: \(\) => clipboard\.readText\(\)/);
+    assert.match(preload, /readHtml: \(\) => clipboard\.readHTML\(\)/);
+    assert.match(i18n, /"common\.paste"/);
+    assert.doesNotMatch(i18n, /"common\.pasteAsPlainText"|"common\.pasteAsIs"/);
+  });
 
   test("bounds Git diff memory and validates renderer-controlled Git inputs", () => {
     assert.match(gitService, /commitDetailCacheLimit = 16/);

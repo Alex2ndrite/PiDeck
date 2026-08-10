@@ -17,6 +17,8 @@ import {
   ChevronDown,
   ChevronsDownUp,
   ChevronsUpDown,
+  ClipboardPaste,
+  FileCode2,
   GitBranch,
   Loader2,
   Plus,
@@ -25,8 +27,15 @@ import {
   Sparkles,
 } from "lucide-react";
 import { Button } from "../ui-shadcn/button";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "../ui-shadcn/context-menu";
 import { ConfirmDialog } from "./AppParts";
 import { dismissNotice, showNotice, type NoticeId } from "../../utils/notice";
+import { htmlToPlainText, readClipboardHtmlConsistent, readClipboardText } from "../../utils/clipboard";
 import type {
   BranchDiffResult,
   CommitDetail,
@@ -425,6 +434,28 @@ export function GitPanel(props: GitPanelProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [commitMessage, setCommitMessage] = useState("");
+  const commitInputRef = useRef<HTMLTextAreaElement | null>(null);
+  /** 右键“粘贴”在光标处插入文本：受控组件用 setRangeText 不触发 onChange，
+   *  手动拼 next 值 + 恢复光标位置（rAF 等重渲染后再定位） */
+  const pasteIntoCommitInput = (text: string) => {
+    if (!text) return;
+    const el = commitInputRef.current;
+    const start = el?.selectionStart ?? commitMessage.length;
+    const end = el?.selectionEnd ?? commitMessage.length;
+    const next = commitMessage.slice(0, start) + text + commitMessage.slice(end);
+    setCommitMessage(next);
+    requestAnimationFrame(() => {
+      el?.focus();
+      el?.setSelectionRange(start + text.length, start + text.length);
+    });
+  };
+  /** 原样粘贴：剪贴板有 HTML 时保留段落/换行结构转纯文本，否则直接读纯文本 */
+  /** 粘贴：剪贴板有 HTML 时保留段落/换行结构转纯文本（textarea 只能纯文本），否则直接读纯文本 */
+  const pasteCommitClipboard = () => {
+    // 只接受与当前纯文本同源的 HTML（剪贴板残留问题见 readClipboardHtmlConsistent）
+    const html = readClipboardHtmlConsistent();
+    pasteIntoCommitInput(html ? htmlToPlainText(html) : readClipboardText());
+  };
   const [committing, setCommitting] = useState(false);
   const [pushing, setPushing] = useState(false);
   const [pulling, setPulling] = useState(false);
@@ -1312,8 +1343,11 @@ export function GitPanel(props: GitPanelProps) {
               </div>
             ) : (
             <div className="flex shrink-0 flex-col gap-2 border-b border-[var(--git-panel-border)] bg-[var(--git-panel-bg)] px-2.5 pt-2 pb-1.5">
-              <Textarea
-                className="git-scm-input min-h-14 max-h-[100px] w-full resize-y rounded-sm border border-[var(--git-input-border)] bg-[var(--git-input-bg)] px-2 py-1 text-[13px] leading-[20px] text-[var(--git-panel-fg)] outline-none placeholder:text-[var(--git-desc-fg)]"
+              <ContextMenu>
+                <ContextMenuTrigger asChild>
+                  <Textarea
+                    ref={commitInputRef}
+                    className="git-scm-input min-h-14 max-h-[100px] w-full resize-y rounded-sm border border-[var(--git-input-border)] bg-[var(--git-input-bg)] px-2 py-1 text-[13px] leading-[20px] text-[var(--git-panel-fg)] outline-none placeholder:text-[var(--git-desc-fg)]"
                 placeholder={t("git.commitPlaceholder", {
                   branch: props.currentBranch ?? "HEAD",
                 })}
@@ -1330,6 +1364,14 @@ export function GitPanel(props: GitPanelProps) {
                 }}
                 rows={3}
               />
+                </ContextMenuTrigger>
+                <ContextMenuContent alignOffset={-6}>
+                  <ContextMenuItem onSelect={pasteCommitClipboard}>
+                    <ClipboardPaste size={13} strokeWidth={2} aria-hidden="true" />
+                    {t("common.paste")}
+                  </ContextMenuItem>
+                </ContextMenuContent>
+              </ContextMenu>
               <div className="flex items-stretch gap-2">
                 <Button
                   type="button"

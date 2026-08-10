@@ -1,4 +1,86 @@
 /**
+ * 读取剪贴板纯文本。
+ * 优先走 preload 暴露的主进程 clipboard 同步 API（不依赖 document focus）；
+ * preview/降级环境返回空串。
+ */
+export function readClipboardText(): string {
+  // window.piDesktop 类型来自 preload 的 typeof api；此处仅做能力探测，走 unknown 中转
+  const pd = (window as unknown as { piDesktop?: { clipboard?: { readText?: () => string } } })
+    .piDesktop;
+  if (pd?.clipboard?.readText) {
+    try {
+      return pd.clipboard.readText();
+    } catch {
+      return "";
+    }
+  }
+  return "";
+}
+
+/**
+ * 读取剪贴板富文本 HTML；剪贴板无 HTML 内容时返回 null，调用方应降级纯文本。
+ */
+export function readClipboardHtml(): string | null {
+  // 同上：能力探测走 unknown 中转，避免与 PiDesktopApi 精确类型冲突
+  const pd = (window as unknown as { piDesktop?: { clipboard?: { readHtml?: () => string } } })
+    .piDesktop;
+  if (pd?.clipboard?.readHtml) {
+    try {
+      const html = pd.clipboard.readHtml();
+      return html && html.trim() ? html : null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+/**
+ * 归一化空白后比较剪贴板 HTML 的纯文本形态与纯文本槽是否同源（纯函数，供单测）。
+ * 允许富文本/纯文本复制源的细微空白差异（如 &nbsp;、行尾空格、多空格）。
+ */
+export function isClipboardHtmlConsistent(htmlPlain: string, text: string): boolean {
+  return htmlPlain.replace(/\s+/g, " ") === text.replace(/\s+/g, " ");
+}
+
+/**
+ * 一致性读取剪贴板 HTML：仅当 HTML 的纯文本形态与当前剪贴板纯文本同源时返回，否则返回 null。
+ *
+ * 背景：Windows 剪贴板按格式分槽存储——复制富文本（网页/Word）会同时写入 text 与 HTML 槽；
+ * 之后再复制纯文本（记事本/终端只更新 text 槽）时 HTML 槽残留上一次富文本内容，
+ * 直接 readClipboardHtml() 会粘出“旧内容”。调用方拿到 null 应降级为纯文本粘贴。
+ */
+export function readClipboardHtmlConsistent(): string | null {
+  const html = readClipboardHtml();
+  if (!html) return null;
+  const text = readClipboardText();
+  // 无纯文本槽时无从校验，信任 HTML（保持原行为，如剪贴板仅有 HTML 格式的场景）
+  if (!text) return html;
+  return isClipboardHtmlConsistent(htmlToPlainText(html), text) ? html : null;
+}
+
+/**
+ * 将富文本 HTML 转为纯文本：块级标签/换行标签转 \n、剥除其余标签、还原常用实体。
+ * 用于 textarea 的“原样粘贴”——保留复制源的段落/换行结构。
+ */
+export function htmlToPlainText(html: string): string {
+  return html
+    .replace(/<br\s*\/?>/gi, "\n")
+    // 标题开标签也产生换行（块级语义：标题前后都应断开）
+    .replace(/<h[1-6]\s*>/gi, "\n")
+    .replace(/<\/(p|div|li|h[1-6]|tr|blockquote|pre)>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+/**
  * 剪贴板写入工具函数。
  *
  * 优先使用 Electron 主进程 clipboard API（通过 preload 暴露），
@@ -10,7 +92,8 @@
 
 export async function writeClipboard(text: string): Promise<void> {
   // 1. Electron 环境：通过 preload bridge 直接调用主进程 clipboard
-  const pd = (window as { piDesktop?: { clipboard?: { writeText: (t: string) => void } } }).piDesktop;
+  // （能力探测走 unknown 中转；preload 未暴露 writeText 时自然落到 Web API）
+  const pd = (window as unknown as { piDesktop?: { clipboard?: { writeText: (t: string) => void } } }).piDesktop;
   if (pd?.clipboard?.writeText) {
     try {
       pd.clipboard.writeText(text);
