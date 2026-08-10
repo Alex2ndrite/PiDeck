@@ -230,8 +230,12 @@ export function canAcceptSplitDrop(input: {
     return ids.includes(sessionId);
   }
   if (edgeToOrientation(edge) === layout.orientation) {
-    // 同向边缘 = 根层插入（真多栏）：根层 <3 栏；嵌套面板外缘也可插入（按所属面板定位）
-    return layout.panels.length < SESSION_SPLIT_ROOT_MAX_PANELS;
+    // 同向边缘 = 根层插入（真多栏）：根层 <3 栏且总屏 <4
+    // （2×2 满员时拒绝，避免「预览承诺、落空收场」）
+    return (
+      layout.panels.length < SESSION_SPLIT_ROOT_MAX_PANELS &&
+      countSplitSessions(layout) < SESSION_SPLIT_MAX_SESSIONS
+    );
   }
   // 垂直边缘 = 终端式切分：目标必须是根层面板，且总屏未满
   return (
@@ -310,30 +314,6 @@ export function replaceSplitPaneFromDrop(input: {
   if (splitLayoutSessionIds(layout).includes(draggedSessionId)) return null;
   if (!splitLayoutSessionIds(layout).includes(sessionId)) return null;
   return replaceSessionInLayout(layout, sessionId, draggedSessionId);
-}
-
-/**
- * 焦点会话变更为分屏外会话时（新建 Agent / 侧栏打开第三会话 / 点分屏外 Tab），
- * 把新会话替换进「变更前焦点所在位置」（根层面板或嵌套内），
- * 保持「聚焦栏展示当前会话」的语义。
- * - 新会话已在分屏内 → 只切焦点，不改布局，返回 null
- * - 变更前焦点不在任何面板（焦点游离）→ 退化为替换第一个会话，保证新会话可见
- */
-export function replaceSplitPaneFromFocus(input: {
-  layout: SessionSplitLayout;
-  prevFocusedSessionId: string | undefined;
-  nextFocusedSessionId: string;
-}): SessionSplitLayout | null {
-  const { layout, prevFocusedSessionId, nextFocusedSessionId } = input;
-  if (!nextFocusedSessionId) return null;
-  const ids = splitLayoutSessionIds(layout);
-  if (ids.includes(nextFocusedSessionId)) return null;
-  const target =
-    prevFocusedSessionId && ids.includes(prevFocusedSessionId)
-      ? prevFocusedSessionId
-      : ids[0];
-  if (!target) return null;
-  return replaceSessionInLayout(layout, target, nextFocusedSessionId);
 }
 
 /**

@@ -2523,6 +2523,19 @@ export function App() {
     },
     onTogglePin: workspaceChrome.togglePin,
     onReorder: workspaceChrome.reorderTab,
+    // 分屏组胶囊：分屏内会话聚合为组（颜色标记 + 展开/收起）
+    splitGroupIds: workspaceChrome.splitLayout
+      ? splitLayoutSessionIds(workspaceChrome.splitLayout)
+      : [],
+    splitGroupCollapsed: workspaceChrome.splitGroupCollapsed,
+    onToggleSplitGroup: workspaceChrome.toggleSplitGroupCollapsed,
+    splitGroupName: workspaceChrome.splitGroupConfig.name,
+    splitGroupColor: workspaceChrome.splitGroupConfig.color,
+    onSplitGroupRename: (name: string) =>
+      workspaceChrome.setSplitGroupConfig((config) => ({ ...config, name })),
+    onSplitGroupColorChange: (color: string) =>
+      workspaceChrome.setSplitGroupConfig((config) => ({ ...config, color })),
+    onExitAllSplit: workspaceChrome.exitAllSplit,
     // Tab 下拉运行控制（织入对方收敛方案）：只对当前会话 Tab 生效。
     // 关闭会话 = 停止 Agent 运行 + 移除会话 Tab（与“关闭标签页”仅移除 Tab 不同）
     canStopCurrent:
@@ -2671,7 +2684,14 @@ export function App() {
       {currentSessionId ? (
         <div ref={chatPaneContentRef} className="flex h-full min-h-0 min-w-0 flex-col">
           <SessionSplitStage
-            layout={workspaceChrome.splitLayout}
+            layout={
+              // 视图投影：焦点会话在布局中 → 显示分屏；不在（新建/打开/退出分屏）→ 全屏 solo，
+              // 布局状态保留，点布局内会话即恢复分屏视图
+              workspaceChrome.splitLayout &&
+              splitLayoutSessionIds(workspaceChrome.splitLayout).includes(currentSessionId)
+                ? workspaceChrome.splitLayout
+                : null
+            }
             draggingSessionId={workspaceChrome.draggingSessionId}
             onDropSplit={workspaceChrome.dropSplit}
             solo={

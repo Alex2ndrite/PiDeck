@@ -434,7 +434,9 @@ export function SessionView({
         headerRef={chatHeaderRef}
         title={sessionTitle}
         paneTitle={splitPane ? sessionTitle : undefined}
-        onExitSplit={splitPane ? paneServices.exitSessionSplit : undefined}
+        onExitSplit={
+          splitPane ? () => paneServices.exitSessionSplit(sessionId) : undefined
+        }
         compactionCount={activeAgent?.compactionCount}
         isAnonymous={activeAgent?.noSession}
         runtimeState={activeRuntimeState}

@@ -1,6 +1,7 @@
 import { useAtomValue } from "jotai";
 import {
   ChevronDown,
+  ChevronRight,
   CircleStop,
   CircleX,
   Folder,
@@ -14,6 +15,7 @@ import {
   X,
 } from "lucide-react";
 import {
+  Fragment,
   useCallback,
   useLayoutEffect,
   useMemo,
@@ -35,9 +37,30 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "../ui-shadcn/dropdown-menu";
+import {
+  Popover,
+  PopoverAnchor,
+  PopoverContent,
+  PopoverTrigger,
+} from "../ui-shadcn/popover";
 import { cn } from "../../lib/utils";
 
 import { SESSION_TAB_DRAG_MIME } from "../../utils/sessionSplitEdge";
+
+/**
+ * 分屏组预设色板（浏览器标签组风格）。
+ * 第一个为默认色，与 SPLIT_GROUP_DEFAULT_COLOR 保持一致；labelKey 走 i18n。
+ */
+export const SPLIT_GROUP_COLOR_PALETTE = [
+  { name: "blue", value: "#0091ff", labelKey: "session.splitGroup.color.blue" },
+  { name: "green", value: "#30a46c", labelKey: "session.splitGroup.color.green" },
+  { name: "yellow", value: "#f5d90a", labelKey: "session.splitGroup.color.yellow" },
+  { name: "orange", value: "#f76b15", labelKey: "session.splitGroup.color.orange" },
+  { name: "red", value: "#e5484d", labelKey: "session.splitGroup.color.red" },
+  { name: "purple", value: "#8e4ec6", labelKey: "session.splitGroup.color.purple" },
+  { name: "pink", value: "#d6409f", labelKey: "session.splitGroup.color.pink" },
+  { name: "gray", value: "#8d8d8d", labelKey: "session.splitGroup.color.gray" },
+] as const;
 
 /**
  * 会话 Tab 栏（浏览器式多 Tab）：标题栏下方展示当前打开的所有会话。
@@ -134,6 +157,19 @@ export type SessionTabsBarProps = {
   actions?: ReactNode;
   /** 开始/结束拖拽会话 Tab 时通知外层（用于分屏落点预览）。 */
   onDragSessionChange?: (sessionId: string | null) => void;
+  /** 分屏组：分屏内会话聚合为组（浏览器标签组风格：颜色标记 + 展开/收起）。 */
+  splitGroupIds?: readonly string[];
+  /** 分屏组胶囊收起状态（收起时组内 Tab 隐藏，只显示组头） */
+  splitGroupCollapsed?: boolean;
+  onToggleSplitGroup?: () => void;
+  /** 分屏组自定义名称（空则用默认文案） */
+  splitGroupName?: string;
+  /** 分屏组颜色（组色条 + 组内 Tab 竖条） */
+  splitGroupColor?: string;
+  onSplitGroupRename?: (name: string) => void;
+  onSplitGroupColorChange?: (color: string) => void;
+  /** 取消分屏：全部会话退出分屏布局 */
+  onExitAllSplit?: () => void;
   /**
    * 中间栏打开的文件/Diff Tab。挂在同一条 session-tabs-bar 上，
    * 避免内容区再开第二套「绿条」Tab 栏。
@@ -159,6 +195,9 @@ export function SessionTabsBar(props: SessionTabsBarProps) {
   const [draggingId, setDraggingId] = useState<string | null>(null);
   // 拖拽插入指示：当前悬停的目标 Tab 与插入侧（before=左缘 / after=右缘）
   const [dragIndicator, setDragIndicator] = useState<{ targetId: string; position: "before" | "after" } | null>(null);
+  // 分屏组管理菜单（右键胶囊打开）：重命名草稿
+  const [splitGroupMenuOpen, setSplitGroupMenuOpen] = useState(false);
+  const [splitGroupNameDraft, setSplitGroupNameDraft] = useState("");
 
   // —— 滚动容器 ref（拖拽排序与新建菜单共用）——
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -220,42 +259,212 @@ export function SessionTabsBar(props: SessionTabsBarProps) {
         ref={scrollRef}
         className="session-tabs-scroll relative flex min-w-0 flex-1 items-center gap-1 overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
-        {tabItems.map(({ sessionId }) => (
-        <SessionTab
-          key={sessionId}
-          sessionId={sessionId}
-          active={sessionId === currentSessionId}
-          pinned={pinnedTabs.includes(sessionId)}
-          preview={sessionId === previewTabId}
-          dragging={draggingId === sessionId}
-          // 指示线插在目标 Tab 的边缘：before=左缘，after=右缘
-          indicator={dragIndicator && dragIndicator.targetId === sessionId ? dragIndicator.position : null}
-          // 停止/重启只对当前会话有意义（作用于其绑定的 Agent 运行时），非当前 Tab 不显示
-          canStop={sessionId === currentSessionId ? props.canStopCurrent : undefined}
-          onStop={sessionId === currentSessionId ? props.onStopCurrent : undefined}
-          canRestart={sessionId === currentSessionId ? props.canRestartCurrent : undefined}
-          isRestarting={sessionId === currentSessionId ? props.isRestartingCurrent : undefined}
-          onRestart={sessionId === currentSessionId ? props.onRestartCurrent : undefined}
-          onSelect={props.onSelect}
-          onPromotePreview={props.onPromotePreview}
-          onClose={props.onClose}
-          onCloseOthers={props.onCloseOthers}
-          onCloseAll={props.onCloseAll}
-          onTogglePin={props.onTogglePin}
-          onDragStart={(event) => {
-            dragSourceRef.current = sessionId;
-            dragTargetRef.current = null;
-            setDraggingId(sessionId);
-            props.onDragSessionChange?.(sessionId);
-            event.dataTransfer.effectAllowed = "move";
-            event.dataTransfer.setData(SESSION_TAB_DRAG_MIME, sessionId);
-            event.dataTransfer.setData("text/plain", sessionId);
-          }}
-          onDragOver={(event) => handleDragOver(event, sessionId)}
-          onDrop={handleDrop}
-          onDragEnd={handleDragEnd}
-        />
-        ))}
+        {(() => {
+          // 分屏组：组内会话聚合渲染（组头胶囊 + 颜色标记）；收起时组内 Tab 隐藏
+          const splitGroupIds = props.splitGroupIds ?? [];
+          const splitGroupSet = new Set(splitGroupIds);
+          const hasSplitGroup = splitGroupIds.length > 1;
+          const groupCollapsed = hasSplitGroup && Boolean(props.splitGroupCollapsed);
+          const renderTab = (sessionId: string, grouped: boolean, groupColor?: string) => (
+            <SessionTab
+              key={sessionId}
+              sessionId={sessionId}
+              grouped={grouped}
+              groupColor={groupColor}
+              active={sessionId === currentSessionId}
+              pinned={pinnedTabs.includes(sessionId)}
+              preview={sessionId === previewTabId}
+              dragging={draggingId === sessionId}
+              // 指示线插在目标 Tab 的边缘：before=左缘，after=右缘
+              indicator={
+                dragIndicator && dragIndicator.targetId === sessionId
+                  ? dragIndicator.position
+                  : null
+              }
+              // 停止/重启只对当前会话有意义（作用于其绑定的 Agent 运行时），非当前 Tab 不显示
+              canStop={sessionId === currentSessionId ? props.canStopCurrent : undefined}
+              onStop={sessionId === currentSessionId ? props.onStopCurrent : undefined}
+              canRestart={sessionId === currentSessionId ? props.canRestartCurrent : undefined}
+              isRestarting={
+                sessionId === currentSessionId ? props.isRestartingCurrent : undefined
+              }
+              onRestart={sessionId === currentSessionId ? props.onRestartCurrent : undefined}
+              onSelect={props.onSelect}
+              onPromotePreview={props.onPromotePreview}
+              onClose={props.onClose}
+              onCloseOthers={props.onCloseOthers}
+              onCloseAll={props.onCloseAll}
+              onTogglePin={props.onTogglePin}
+              onDragStart={(event) => {
+                dragSourceRef.current = sessionId;
+                dragTargetRef.current = null;
+                setDraggingId(sessionId);
+                props.onDragSessionChange?.(sessionId);
+                event.dataTransfer.effectAllowed = "move";
+                event.dataTransfer.setData(SESSION_TAB_DRAG_MIME, sessionId);
+                event.dataTransfer.setData("text/plain", sessionId);
+              }}
+              onDragOver={(event) => handleDragOver(event, sessionId)}
+              onDrop={handleDrop}
+              onDragEnd={handleDragEnd}
+            />
+          );
+          return tabItems.map(({ sessionId }) => {
+            if (!hasSplitGroup || !splitGroupSet.has(sessionId)) {
+              return renderTab(sessionId, false);
+            }
+            // 组内会话：只在组内第一个位置渲染「组头胶囊 +（展开时）组内全部 Tab」
+            if (sessionId !== splitGroupIds[0]) return null;
+            const groupHasFocus =
+              currentSessionId != null && splitGroupSet.has(currentSessionId);
+            const groupName =
+              props.splitGroupName?.trim() || t("session.splitGroup.label");
+            const groupColor =
+              props.splitGroupColor || SPLIT_GROUP_COLOR_PALETTE[0].value;
+            // role="group" 挂在外层容器（容纳胶囊 + 组内 Tab），按钮保持原生 button 语义；
+            // aria-expanded/aria-controls 挂在按钮上；右键打开组管理菜单（Popover），
+            // 左键点击仍是展开/收起（与浏览器标签组一致）
+            return (
+              <Popover
+                open={splitGroupMenuOpen}
+                onOpenChange={setSplitGroupMenuOpen}
+                key={`split-group:${sessionId}`}
+              >
+                <PopoverAnchor asChild>
+                  <div
+                    role="group"
+                    aria-label={groupName}
+                    className="flex min-w-0 items-center gap-1"
+                  >
+                    <button
+                      type="button"
+                      aria-expanded={!groupCollapsed}
+                      aria-controls="session-split-group-tabs"
+                      aria-label={
+                        groupCollapsed
+                          ? t("session.splitGroup.expand")
+                          : t("session.splitGroup.collapse")
+                      }
+                      title={
+                        groupCollapsed
+                          ? t("session.splitGroup.expand")
+                          : t("session.splitGroup.collapse")
+                      }
+                      onClick={props.onToggleSplitGroup}
+                      onContextMenu={(event) => {
+                        // 右键：打开组管理菜单（重命名/颜色/取消分屏）
+                        event.preventDefault();
+                        setSplitGroupNameDraft(groupName);
+                        setSplitGroupMenuOpen(true);
+                      }}
+                      className={cn(
+                        "flex h-7 shrink-0 cursor-pointer select-none items-center gap-1.5 rounded-md border border-dashed px-2 text-caption transition-colors",
+                        groupHasFocus
+                          ? "border-accent/60 bg-accent/15 text-foreground"
+                          : "border-border-strong/60 bg-accent/5 text-muted-foreground hover:bg-accent/15 hover:text-foreground",
+                      )}
+                    >
+                      {/* 组颜色标记：左侧色条（浏览器标签组同款，颜色可自定义） */}
+                      <span
+                        className="h-3 w-1 shrink-0 rounded-full"
+                        style={{ backgroundColor: groupColor }}
+                        aria-hidden="true"
+                      />
+                      <span className="max-w-40 truncate whitespace-nowrap">
+                        {groupName} {splitGroupIds.length}
+                      </span>
+                      {groupCollapsed ? (
+                        <ChevronRight className="size-3" aria-hidden="true" />
+                      ) : (
+                        <ChevronDown className="size-3" aria-hidden="true" />
+                      )}
+                    </button>
+                    {!groupCollapsed && (
+                      <div
+                        id="session-split-group-tabs"
+                        className="flex min-w-0 items-center gap-1"
+                      >
+                        {splitGroupIds.map((id) =>
+                          renderTab(id, true, groupColor),
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </PopoverAnchor>
+                {/* 组管理菜单：重命名 + 颜色选择 + 取消分屏（其余按钮不要） */}
+                <PopoverContent
+                  align="start"
+                  sideOffset={6}
+                  className="w-64 p-3"
+                >
+                  <div className="flex flex-col gap-3">
+                    <input
+                      type="text"
+                      value={splitGroupNameDraft}
+                      placeholder={t("session.splitGroup.renamePlaceholder")}
+                      maxLength={24}
+                      aria-label={t("session.splitGroup.rename")}
+                      onChange={(event) => setSplitGroupNameDraft(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.currentTarget.blur();
+                        }
+                      }}
+                      onBlur={() => {
+                        const next = splitGroupNameDraft.trim();
+                        if (next && next !== (props.splitGroupName ?? "")) {
+                          props.onSplitGroupRename?.(next);
+                        }
+                      }}
+                      className="h-8 w-full rounded-md border border-border-strong bg-background px-2 text-caption text-foreground outline-none placeholder:text-muted-foreground/60 focus:border-accent focus:ring-1 focus:ring-accent/40"
+                    />
+                    {/* 颜色选择排（浏览器标签组同款：预设色板） */}
+                    <div
+                      className="flex items-center gap-2"
+                      role="radiogroup"
+                      aria-label={t("session.splitGroup.color")}
+                    >
+                      {SPLIT_GROUP_COLOR_PALETTE.map((c) => (
+                        <button
+                          key={c.name}
+                          type="button"
+                          role="radio"
+                          aria-checked={groupColor === c.value}
+                          aria-label={t(c.labelKey)}
+                          title={t(c.labelKey)}
+                          onClick={() => props.onSplitGroupColorChange?.(c.value)}
+                          className={cn(
+                            "size-5 rounded-full transition-transform hover:scale-110",
+                            groupColor === c.value &&
+                              "ring-2 ring-offset-2 ring-offset-popover",
+                          )}
+                          style={{
+                            backgroundColor: c.value,
+                            ...(groupColor === c.value
+                              ? { boxShadow: `0 0 0 1px ${c.value}` }
+                              : {}),
+                          }}
+                        />
+                      ))}
+                    </div>
+                    {/* 取消分屏：全部会话退出分屏布局 */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSplitGroupMenuOpen(false);
+                        props.onExitAllSplit?.();
+                      }}
+                      className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-caption text-muted-foreground transition-colors hover:bg-accent/10 hover:text-foreground"
+                    >
+                      <CircleX className="size-3.5" aria-hidden="true" />
+                      {t("session.splitGroup.exitAll")}
+                    </button>
+                  </div>
+                </PopoverContent>
+              </Popover>
+            );
+          });
+        })()}
         {/* 浏览器式新建入口：跟在最后一张标签后面，下拉选择新建到哪个项目 */}
         <NewSessionMenu
           targets={props.newSessionTargets}
@@ -372,6 +581,10 @@ function SessionTab(props: {
   pinned: boolean;
   /** VS Code 预览：斜体，双击后常驻 */
   preview: boolean;
+  /** 分屏组内 Tab：左侧显示组颜色标记 */
+  grouped?: boolean;
+  /** 分屏组颜色（组内 Tab 左侧竖条；与胶囊色条一致） */
+  groupColor?: string;
   dragging: boolean;
   /** 拖拽插入指示：before=左缘竖线，after=右缘竖线 */
   indicator?: "before" | "after" | null;
@@ -455,6 +668,16 @@ function SessionTab(props: {
             bare
             pulse={false}
             className={cn("[&_svg]:h-2.5 [&_svg]:w-2.5", badge.colorClass)}
+            aria-hidden="true"
+          />
+        )}
+        {props.grouped && (
+          // 分屏组颜色标记：左侧竖条（与组头胶囊同色，颜色可自定义）
+          <span
+            className="h-3 w-0.5 shrink-0 rounded-full"
+            style={{
+              backgroundColor: props.groupColor || "var(--color-accent)",
+            }}
             aria-hidden="true"
           />
         )}

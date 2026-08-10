@@ -145,7 +145,11 @@ function canAcceptSplitDrop({ layout, draggedSessionId, sessionId, edge, tabCoun
   }
   if (edge === "left" || edge === "right") {
     if (layout.orientation !== "horizontal") return false;
-    return layout.panels.length < SESSION_SPLIT_ROOT_MAX_PANELS;
+    // 根层 <3 栏且总屏 <4（2×2 满员时同向边缘拒绝，避免预览承诺落空）
+    return (
+      layout.panels.length < SESSION_SPLIT_ROOT_MAX_PANELS &&
+      countSplitSessions(layout) < SESSION_SPLIT_MAX_SESSIONS
+    );
   }
   if (layout.orientation !== "vertical") return false;
   return (
@@ -159,16 +163,6 @@ function replaceSplitPaneFromDrop({ layout, draggedSessionId, sessionId }) {
   if (splitLayoutSessionIds(layout).includes(draggedSessionId)) return null;
   if (!splitLayoutSessionIds(layout).includes(sessionId)) return null;
   return replaceSessionInLayout(layout, sessionId, draggedSessionId);
-}
-
-function replaceSplitPaneFromFocus({ layout, prevFocusedSessionId, nextFocusedSessionId }) {
-  if (!nextFocusedSessionId) return null;
-  const ids = splitLayoutSessionIds(layout);
-  if (ids.includes(nextFocusedSessionId)) return null;
-  const target =
-    prevFocusedSessionId && ids.includes(prevFocusedSessionId) ? prevFocusedSessionId : ids[0];
-  if (!target) return null;
-  return replaceSessionInLayout(layout, target, nextFocusedSessionId);
 }
 
 function resolveSplitAfterClose(layout, closedSessionId) {
@@ -230,13 +224,14 @@ describe("session split edge resolution", () => {
     assert.match(edgeSrc, /export function insertRootPaneFromDrop/);
     assert.match(edgeSrc, /export function nestSplitPaneFromDrop/);
     assert.match(edgeSrc, /export function replaceSplitPaneFromDrop/);
-    assert.match(edgeSrc, /export function replaceSplitPaneFromFocus/);
     assert.match(edgeSrc, /export function resolveSplitAfterClose/);
     assert.match(edgeSrc, /export function resolveSplitHostSessionId/);
     assert.match(edgeSrc, /export function findRootPaneIndexForSession/);
     assert.match(edgeSrc, /export function canAcceptSplitDrop/);
     assert.match(edgeSrc, /export function splitLayoutSessionIds/);
     assert.match(edgeSrc, /export function isRootSplitPane/);
+    // 焦点驱动视图：不再自动替换分屏面板（replaceSplitPaneFromFocus 已移除）
+    assert.doesNotMatch(edgeSrc, /replaceSplitPaneFromFocus/);
     assert.match(edgeSrc, /SESSION_SPLIT_MAX_SESSIONS/);
     assert.match(edgeSrc, /SESSION_SPLIT_ROOT_MAX_PANELS/);
     assert.match(edgeSrc, /SessionSplitDropTarget/);
@@ -610,6 +605,17 @@ describe("session split edge resolution", () => {
       }),
       false,
     );
+    // 四屏同向边缘（2×2 满员，根层 <3 栏但总屏已满）→ 拒绝（预览承诺落空修复）
+    assert.equal(
+      canAcceptSplitDrop({
+        layout: gridLayout(),
+        draggedSessionId: "e",
+        sessionId: "a",
+        edge: "left",
+        tabCount: 5,
+      }),
+      false,
+    );
     // 切分面板内会话的同向边缘 → 接受（根层插入，按所属面板定位）
     assert.equal(
       canAcceptSplitDrop({
@@ -773,31 +779,6 @@ describe("session split edge resolution", () => {
     );
   });
 
-  it("replaces focus in the second root pane and in nested panes", () => {
-    // 焦点在第二栏 → 替换 index 1
-    assert.deepEqual(
-      replaceSplitPaneFromFocus({ layout: twoPanes(), prevFocusedSessionId: "b", nextFocusedSessionId: "c" }),
-      {
-        orientation: "horizontal",
-        panels: [
-          { kind: "session", sessionId: "a" },
-          { kind: "session", sessionId: "c" },
-        ],
-      },
-    );
-    // 2×2 四宫格：焦点在 d（第二个嵌套面板内）→ 替换嵌套内 d
-    assert.deepEqual(
-      replaceSplitPaneFromFocus({ layout: gridLayout(), prevFocusedSessionId: "d", nextFocusedSessionId: "e" }),
-      {
-        orientation: "horizontal",
-        panels: [
-          { kind: "nested", orientation: "vertical", first: "a", second: "b" },
-          { kind: "nested", orientation: "vertical", first: "e", second: "c" },
-        ],
-      },
-    );
-  });
-
   it("replaces any level session when dropping on pane center", () => {
     // 2×2 四宫格中心替换嵌套内会话
     assert.deepEqual(
@@ -873,63 +854,6 @@ describe("session split edge resolution", () => {
     );
   });
 
-  it("replaces the pane that held the previous focus when a new session is selected", () => {
-    const layout = twoPanes();
-    // 焦点在 a，新建 Agent c → 替换 a 栏（本次 bug 的主路径）
-    assert.deepEqual(
-      replaceSplitPaneFromFocus({ layout, prevFocusedSessionId: "a", nextFocusedSessionId: "c" }),
-      {
-        orientation: "horizontal",
-        panels: [
-          { kind: "session", sessionId: "c" },
-          { kind: "session", sessionId: "b" },
-        ],
-      },
-    );
-    // 焦点在嵌套层内会话（b）→ 替换嵌套内的 b
-    assert.deepEqual(
-      replaceSplitPaneFromFocus({
-        layout: nestedLayout(),
-        prevFocusedSessionId: "b",
-        nextFocusedSessionId: "d",
-      }),
-      {
-        orientation: "horizontal",
-        panels: [
-          { kind: "nested", orientation: "vertical", first: "a", second: "d" },
-          { kind: "session", sessionId: "c" },
-        ],
-      },
-    );
-    // 新会话已在分屏内 → 只切焦点，不改布局
-    assert.equal(
-      replaceSplitPaneFromFocus({ layout, prevFocusedSessionId: "a", nextFocusedSessionId: "b" }),
-      null,
-    );
-    // 焦点游离（prev 不在任何栏）→ 退化为替换第一个会话，保证新会话可见
-    assert.deepEqual(
-      replaceSplitPaneFromFocus({ layout, prevFocusedSessionId: "x", nextFocusedSessionId: "c" }),
-      {
-        orientation: "horizontal",
-        panels: [
-          { kind: "session", sessionId: "c" },
-          { kind: "session", sessionId: "b" },
-        ],
-      },
-    );
-    // prev 为 undefined（切项目后直接新建）→ 同样退化为第一个会话
-    assert.deepEqual(
-      replaceSplitPaneFromFocus({ layout, prevFocusedSessionId: undefined, nextFocusedSessionId: "c" }),
-      {
-        orientation: "horizontal",
-        panels: [
-          { kind: "session", sessionId: "c" },
-          { kind: "session", sessionId: "b" },
-        ],
-      },
-    );
-  });
-
   it("collapses panes after close: solo / degrade nested / flatten nested-only", () => {
     // 关根层会话 → 退回单栏
     assert.deepEqual(resolveSplitAfterClose(twoPanes(), "a"), { soloSessionId: "b" });
@@ -993,9 +917,28 @@ describe("session split edge resolution", () => {
     assert.match(app, /SessionPaneServicesProvider/);
     assert.match(chrome, /export function useSessionWorkspaceChrome/);
     assert.match(chrome, /nestSplitPaneFromDrop/);
-    assert.match(chrome, /replaceSplitPaneFromFocus/);
     assert.match(chrome, /registerOpenSession/);
     assert.match(chrome, /splitLayoutSessionIds/);
+    // 焦点驱动视图：焦点会话不在布局时全屏 solo（不再自动替换进分屏面板）
+    assert.doesNotMatch(chrome, /replaceSplitPaneFromFocus/);
+    assert.match(chrome, /splitGroupCollapsed/);
+    // 视图投影表达式本身（不只是注释）：焦点在布局才渲染分屏
+    assert.match(
+      app,
+      /splitLayoutSessionIds\(workspaceChrome\.splitLayout\)\.includes\(currentSessionId\)/,
+    );
+    // 分屏组胶囊接线：props、i18n、持久化 key
+    assert.match(app, /splitGroupIds:/);
+    assert.match(tabs, /splitGroupCollapsed\?:/);
+    assert.match(zh, /"session\.splitGroup\.label"/);
+    assert.match(en, /"session\.splitGroup\.label"/);
+    assert.match(chrome, /SPLIT_GROUP_COLLAPSED_KEY = "pideck\.splitGroupCollapsed"/);
+    // 分屏组增强：自定义名称/颜色/取消分屏
+    assert.match(chrome, /exitAllSplit/);
+    assert.match(chrome, /SPLIT_GROUP_CONFIG_KEY = "pideck\.splitGroupConfig"/);
+    assert.match(tabs, /SPLIT_GROUP_COLOR_PALETTE/);
+    assert.match(zh, /"session\.splitGroup\.exitAll"/);
+    assert.match(en, /"session\.splitGroup\.exitAll"/);
     assert.doesNotMatch(actions, /tabMode|onSessionSelected|"keep"/);
     // 分屏栏不再挂右侧抽屉按钮；共享服务走 context；runtime 按 session family 订阅
     assert.match(injector, /useSessionPaneServices/);

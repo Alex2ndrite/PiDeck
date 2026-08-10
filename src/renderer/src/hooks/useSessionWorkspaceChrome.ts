@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAtomValue, useSetAtom, useStore } from "jotai";
 import {
   sessionRecordByIdAtomFamily,
@@ -18,7 +18,6 @@ import {
   insertRootPaneFromDrop,
   nestSplitPaneFromDrop,
   replaceSplitPaneFromDrop,
-  replaceSplitPaneFromFocus,
   resolveSplitAfterClose,
   resolveSplitHostSessionId,
   splitLayoutSessionIds,
@@ -27,6 +26,10 @@ import {
 } from "../utils/sessionSplitEdge";
 
 const PINNED_TABS_STORAGE_KEY = "pideck.pinnedSessionTabIds";
+const SPLIT_GROUP_COLLAPSED_KEY = "pideck.splitGroupCollapsed";
+const SPLIT_GROUP_CONFIG_KEY = "pideck.splitGroupConfig";
+/** 分屏组默认颜色（色板第一个，蓝色） */
+export const SPLIT_GROUP_DEFAULT_COLOR = "#0091ff";
 
 export type SessionWorkspaceFocusHandlers = {
   /** 切换当前会话焦点（不改 Tab 预览/常驻状态） */
@@ -70,6 +73,34 @@ export function useSessionWorkspaceChrome(options: {
   const [previewSessionTabId, setPreviewSessionTabId] = useState<string | null>(null);
   const [splitLayout, setSplitLayout] = useState<SessionSplitLayout | null>(null);
   const [draggingSessionId, setDraggingSessionId] = useState<string | null>(null);
+  /** 分屏组胶囊在 Tab 栏的收起状态（持久化） */
+  const [splitGroupCollapsed, setSplitGroupCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(SPLIT_GROUP_COLLAPSED_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  /** 分屏组自定义配置（名称/颜色，持久化；重启后重新分屏时沿用） */
+  const [splitGroupConfig, setSplitGroupConfig] = useState<{
+    name: string;
+    color: string;
+  }>(() => {
+    try {
+      const raw = localStorage.getItem(SPLIT_GROUP_CONFIG_KEY);
+      const parsed = raw ? JSON.parse(raw) : null;
+      if (
+        parsed &&
+        typeof parsed.name === "string" &&
+        typeof parsed.color === "string"
+      ) {
+        return { name: parsed.name, color: parsed.color };
+      }
+    } catch {
+      // 配置损坏时回退默认
+    }
+    return { name: "", color: SPLIT_GROUP_DEFAULT_COLOR };
+  });
 
   // 最新快照：供 drop/close 回调避免闭包陈旧
   const tabsSnapshotRef = useRef({
@@ -97,7 +128,7 @@ export function useSessionWorkspaceChrome(options: {
     }
   }, [pinnedSessionTabIds]);
 
-  // 会话记录消失时清理 Tab / pin / preview
+  // 会话记录消失时清理 Tab / pin / preview / 分屏
   useEffect(() => {
     setSessionTabIds((current) => {
       const next = current.filter((id) => Boolean(sessionRecords[id]));
@@ -188,7 +219,7 @@ export function useSessionWorkspaceChrome(options: {
       } else {
         setSplitLayout(resolved.layout);
         // 分屏仍存在且关闭的是当前聚焦会话：焦点优先留在分屏内幸存会话，
-        // 避免回退到 Tab 邻居后触发 replaceSplitPaneFromFocus 把另一栏也换掉
+        // 避免焦点游离到 Tab 邻居导致分屏视图隐藏
         if (snap.currentSessionId === sessionId && remaining.length > 0) {
           const splitSurvivors = splitLayoutSessionIds(resolved.layout).filter((id) =>
             remaining.includes(id),
@@ -249,29 +280,25 @@ export function useSessionWorkspaceChrome(options: {
     setPinnedSessionTabIds(next.pinned);
   }, [setSessionTabIds]);
 
-  // 上一次的焦点会话：分屏时「焦点切到分屏外会话」要用它定位替换哪个栏。
-  // 注意必须在焦点变更发生后读取变更前的值 —— 此刻 currentSessionId 已是新会话，
-  // 不能像旧 selectTab 那样用「当前焦点」找栏（新建 Agent 后点新 Tab 会找不到目标栏）。
-  const lastFocusedSessionIdRef = useRef(currentSessionId);
-  // 焦点会话变更为分屏外会话时（新建 Agent / 侧栏打开第三会话 / 点分屏外 Tab），
-  // 把新会话替换进原聚焦栏；用 useLayoutEffect 在绘制前完成，避免一帧焦点丢失闪烁。
-  useLayoutEffect(() => {
-    const prevFocusedSessionId = lastFocusedSessionIdRef.current;
-    lastFocusedSessionIdRef.current = currentSessionId;
-    if (!currentSessionId) return;
-    const layout = tabsSnapshotRef.current.split;
-    if (!layout) return;
-    const next = replaceSplitPaneFromFocus({
-      layout,
-      prevFocusedSessionId,
-      nextFocusedSessionId: currentSessionId,
-    });
-    if (next) setSplitLayout(next);
-  }, [currentSessionId, setSplitLayout]);
+  useEffect(() => {
+    try {
+      localStorage.setItem(SPLIT_GROUP_COLLAPSED_KEY, splitGroupCollapsed ? "1" : "0");
+    } catch {
+      // 持久化失败不影响功能
+    }
+  }, [splitGroupCollapsed]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(SPLIT_GROUP_CONFIG_KEY, JSON.stringify(splitGroupConfig));
+    } catch {
+      // 持久化失败不影响功能
+    }
+  }, [splitGroupConfig]);
 
   /**
-   * 顶栏 Tab 单击：只切焦点；若点的是分屏外的第三个会话，
-   * 分屏栏替换由上面的「焦点变更」useLayoutEffect 统一处理（replaceSplitPaneFromFocus）。
+   * 顶栏 Tab 单击：只切焦点。分屏外会话聚焦时由视图投影决定呈现——
+   * 焦点会话不在布局中 → 全屏 solo 显示，分屏布局保留（不再自动替换进分屏）。
    */
   const selectTab = useCallback((sessionId: string) => {
     const record = store.get(sessionRecordByIdAtomFamily(sessionId));
@@ -294,7 +321,11 @@ export function useSessionWorkspaceChrome(options: {
     setPreviewSessionTabId(permanent.previewId);
 
     const layout = snap.split;
-    if (!layout) {
+    // 视图 solo（无布局，或布局存在但焦点会话不在布局中）→ 根层双栏（旧布局随拖拽重组丢弃）
+    const inLayout = layout
+      ? splitLayoutSessionIds(layout).includes(target.sessionId)
+      : false;
+    if (!layout || !inLayout) {
       // 单栏：拖到唯一会话面板边缘 → 根层双栏。
       // 宿主 = 被拖命中的面板；拖当前会话自己时退化为 Tab 栏另一会话（否则当前 Tab 无法分屏）
       if (target.kind !== "session-edge") return;
@@ -309,7 +340,9 @@ export function useSessionWorkspaceChrome(options: {
         draggedSessionId,
         edge: target.edge,
       });
-      if (next) setSplitLayout(next);
+      if (next) {
+        setSplitLayout(next);
+      }
       return;
     }
 
@@ -337,8 +370,7 @@ export function useSessionWorkspaceChrome(options: {
             });
     if (next) {
       setSplitLayout(next);
-      // 中心替换了当前聚焦会话：焦点迁到拖入会话，避免「替换聚焦面板后焦点悬空」——
-      // 悬空会导致无栏聚焦、且下次新建会话时按 prev 游离退化为替换第一栏（顶掉刚拖入的会话）
+      // 中心替换了当前聚焦会话：焦点迁到拖入会话，避免「替换聚焦面板后焦点悬空」
       if (
         target.kind === "session-center" &&
         target.sessionId === snap.currentSessionId
@@ -359,9 +391,23 @@ export function useSessionWorkspaceChrome(options: {
     setDraggingSessionId(null);
   }, []);
 
-  /** 退出会话分屏：保留当前聚焦会话为单栏 */
-  const exitSplit = useCallback(() => {
-    setSplitLayout(null);
+  /**
+   * 面板级退出分屏（全屏按钮）：把指定会话从布局中永久移除，
+   * 同组兄弟会话合并占据其位置，其他根层面板不受影响。
+   * 焦点保持在退出会话（若当前焦点是它）→ 视图投影自动全屏显示；
+   * 点其 Tab 只聚焦（不再自动回归分屏），想重新分屏时拖拽即可。
+   */
+  const exitSplit = useCallback((sessionId: string) => {
+    const layout = tabsSnapshotRef.current.split;
+    if (!layout || !splitLayoutSessionIds(layout).includes(sessionId)) return;
+    const resolved = resolveSplitAfterClose(layout, sessionId);
+    if (!resolved) {
+      setSplitLayout(null);
+    } else if ("soloSessionId" in resolved) {
+      setSplitLayout(null);
+    } else {
+      setSplitLayout(resolved.layout);
+    }
   }, []);
 
   return {
@@ -371,6 +417,7 @@ export function useSessionWorkspaceChrome(options: {
     previewSessionTabId,
     splitLayout,
     draggingSessionId,
+    splitGroupCollapsed,
     // wiring
     bindFocusHandlers,
     registerOpenSession,
@@ -386,6 +433,11 @@ export function useSessionWorkspaceChrome(options: {
     beginDrag,
     endDrag,
     exitSplit,
+    /** 取消分屏：全部会话退出分屏布局（会话保留为普通 Tab） */
+    exitAllSplit: () => setSplitLayout(null),
+    toggleSplitGroupCollapsed: () => setSplitGroupCollapsed((v) => !v),
+    setSplitGroupConfig,
+    splitGroupConfig,
   };
 }
 

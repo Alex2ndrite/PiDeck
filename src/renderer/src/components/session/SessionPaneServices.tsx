@@ -96,8 +96,8 @@ export type SessionPaneServices = {
     composerOffsetHeight: number;
     terminalRowHeight: number;
   };
-  /** 退出会话左右/上下分屏，回到单栏 */
-  exitSessionSplit: () => void;
+  /** 面板级退出分屏（全屏按钮）：该会话从布局移除，同组兄弟合并占据其位置 */
+  exitSessionSplit: (sessionId: string) => void;
 };
 
 const SessionPaneServicesContext = createContext<SessionPaneServices | null>(null);

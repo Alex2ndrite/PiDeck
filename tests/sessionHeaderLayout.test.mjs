@@ -83,7 +83,11 @@ test("split panes expose exit-split expand control on the left", () => {
   assert.match(header, /onExitSplit\?:/);
   assert.match(header, /Maximize2/);
   assert.match(header, /session\.split\.exit/);
-  assert.match(sessionView, /onExitSplit=\{splitPane \? paneServices\.exitSessionSplit : undefined\}/);
+  // 面板级退出：SessionView 把本栏 sessionId 传给 exitSessionSplit（移除该会话出布局）
+  assert.match(
+    sessionView,
+    /onExitSplit=\{\s*splitPane \? \(\) => paneServices\.exitSessionSplit\(sessionId\) : undefined\s*\}/,
+  );
   assert.match(app, /exitSessionSplit:\s*workspaceChrome\.exitSplit/);
   const chrome = readFileSync(
     "src/renderer/src/hooks/useSessionWorkspaceChrome.ts",
