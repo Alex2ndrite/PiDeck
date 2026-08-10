@@ -595,7 +595,10 @@ export function App() {
     api,
   });
   const { piStatus, piChecking, environmentDialog, setPiStatus, setEnvironmentDialog } = piUpdate;
-  const [drawerWidth, setDrawerWidth] = useState(320);
+  // 抽屉宽度状态由 useWorkspacePanels 统一管理（全局 localStorage 持久化，键 pid:drawer-width），
+  // AppShell 拖拽提交经 setDrawerWidth 回写；此处不再持有独立 useState，避免双份状态漂移。
+  const drawerWidth = workspace.drawerWidth;
+  const setDrawerWidth = workspace.setDrawerWidth;
   const [composerOffsetHeight, setComposerOffsetHeight] = useState(0);
   // 终端归属：有 activeAgent → agent owner；引导页/未激活 agent/历史会话 → project owner。
   // 终端 open/collapsed/高度/PTY 实例都按 owner 隔离，切换项目或 agent 绝不串台。

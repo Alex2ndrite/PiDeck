@@ -11,7 +11,13 @@ import {
 } from "../ui-shadcn/resizable";
 import { AppHeader } from "../AppHeader";
 import { WorkspaceDrawerHost } from "../workspace/WorkspaceDrawerHost";
-import type { WorkspaceDrawerPanel } from "../../hooks/useWorkspacePanels";
+import { LIST_WIDTH_MIN, LIST_WIDTH_MAX } from "../../hooks/useResize";
+import {
+  DRAWER_WIDTH_MIN,
+  DRAWER_WIDTH_MIN_PINNED,
+  DRAWER_WIDTH_MAX,
+  type WorkspaceDrawerPanel,
+} from "../../hooks/useWorkspacePanels";
 import { cn } from "../../lib/utils";
 
 /**
@@ -82,11 +88,8 @@ export interface AppShellProps {
 
 /** 侧栏收起后保留的边缘提示条宽度（对齐旧 grid 实现） */
 const LIST_COLLAPSED_SIZE = 0;
-const LIST_MIN = 100;
-const LIST_MAX = 440;
-const DRAWER_MIN = 180;
-const DRAWER_MIN_PINNED = 220;
-const DRAWER_MAX = 560;
+// 侧栏宽度上下限由 useResize 统一导出（LIST_WIDTH_MIN/MAX），
+// 与 localStorage 持久化读取时的 clamp 范围同源，避免两处漂移。
 
 export function AppShell(props: AppShellProps) {
   const {
@@ -229,8 +232,8 @@ export function AppShell(props: AppShellProps) {
           panelRef={listPanelRef}
           collapsible
           collapsedSize={LIST_COLLAPSED_SIZE}
-          minSize={LIST_MIN}
-          maxSize={LIST_MAX}
+          minSize={LIST_WIDTH_MIN}
+          maxSize={LIST_WIDTH_MAX}
           defaultSize={listCollapsed ? LIST_COLLAPSED_SIZE : listWidth}
           className="shell-panel-list"
         >
@@ -274,8 +277,8 @@ export function AppShell(props: AppShellProps) {
           panelRef={drawerPanelRef}
           collapsible={!drawerPinned}
           collapsedSize={0}
-          minSize={drawerPinned ? DRAWER_MIN_PINNED : DRAWER_MIN}
-          maxSize={DRAWER_MAX}
+          minSize={drawerPinned ? DRAWER_WIDTH_MIN_PINNED : DRAWER_WIDTH_MIN}
+          maxSize={DRAWER_WIDTH_MAX}
           defaultSize={0}
           className="shell-panel-drawer"
         >
