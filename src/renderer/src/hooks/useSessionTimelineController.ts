@@ -32,7 +32,7 @@ let nextLoadSequence = 0;
 const latestLoadBySession = new Map<string, number>();
 const LATEST_LOAD_LRU_LIMIT = 20;
 function trackLatestLoad(sessionId: string, sequence: number) {
-	trackLatestLoad(sessionId, sequence);
+	latestLoadBySession.set(sessionId, sequence);
 	if (latestLoadBySession.size <= LATEST_LOAD_LRU_LIMIT) return;
 	// 超限：删最早 set 的键（Map 迭代序 = 插入序）
 	const oldest = latestLoadBySession.keys().next().value;
@@ -645,6 +645,10 @@ export function useSessionTimelineController(options: {
     }
     const index = combinedMessages.findIndex((message) => message.id === messageId);
     if (index < 0) return;
+    // 目标可能在贴底 turn 窗口外：先取消跟随以展开挂载，再等布局后滚动。
+    autoScrollRef.current = false;
+    setAutoScroll(false);
+    setShowScrollToBottom(true);
     pendingJumpRef.current = { ownerKey: requestOwnerKey, value: messageId };
     pagination.loadUntilIncluded(index);
   }, [highlightMessage, combinedMessages, ownerKey, pagination]);
@@ -777,7 +781,8 @@ export function useSessionTimelineController(options: {
     pendingJumpRef.current = undefined;
     element.scrollIntoView({ behavior: "smooth", block: "start" });
     highlightMessage(element, ownerKey);
-  }, [controllerEnabled, highlightMessage, ownerKey, pagination.visibleMessages.length]);
+    // autoScroll：贴底 turn 窗口展开后 DOM 才出现目标行，需再跑一轮。
+  }, [autoScroll, controllerEnabled, highlightMessage, ownerKey, pagination.visibleMessages.length]);
 
   return {
     timelineRef,

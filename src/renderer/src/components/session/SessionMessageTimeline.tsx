@@ -1,6 +1,6 @@
 import { useAtomValue } from "jotai";
 import { selectAtom } from "jotai/utils";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ComponentProps, ReactNode, RefObject } from "react";
 import type { ChatMessage, ImageContent } from "../../../../shared/types";
 import { MarkdownStream } from "./MarkdownStream";
@@ -441,7 +441,12 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
         "message-timeline-host h-full min-h-0",
         contentEntering && "timeline-content-enter",
       )}
-      viewportClassName="message-timeline"
+      viewportClassName={cn(
+        "message-timeline",
+        // 内容宽度留白（UI 2.0）：左右内边距 = 统一留白变量；
+        // 分屏/窄栏（≤1100px 容器）收敛为 24px 最小边距，过渡平滑。
+        "[padding-inline:var(--chat-inline-pad)] transition-[padding-inline] duration-150 ease-out @max-[1100px]:px-6",
+      )}
       viewportRef={timelineRef}
       scrollApiRef={controller.scrollerScrollApiRef}
       followOutput={controller.autoScroll}
@@ -540,7 +545,7 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
       {hasActiveConversation &&
         !isConversationLoading &&
         activeMessages.length > 0 && (
-          <div className="message-list">
+          <div className="message-list min-w-0 w-full mx-auto transition-opacity duration-150">
             {reconciledRuns.map((item, index) => {
               if (item.kind === "agent-run") {
                 // Controls：忙碌中的末行 run 视为 live（isStreaming 补丁可能略滞后于正文 atom）。

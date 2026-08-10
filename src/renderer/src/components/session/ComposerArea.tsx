@@ -209,6 +209,9 @@ export const ComposerArea = forwardRef<HTMLElement, ComposerAreaProps>(function 
             <div
               // overflow-visible：保留命令面板/建议浮层；面板 minSize 已保证底栏不被裁切
               className={["composer-box relative flex min-h-0 min-w-0 flex-1 flex-col overflow-visible rounded-xl border border-border bg-card text-card-foreground shadow-sm transition-[border-color,box-shadow,background-color]",
+                // 内容宽度留白（UI 2.0）：与消息区共享同一留白变量；分屏窄栏收敛 24px
+                // 分屏/窄栏（≤1100px 容器）收敛为 24px 最小边距。
+                "[padding-inline:var(--chat-inline-pad)] transition-[padding-inline] duration-150 ease-out @max-[1100px]:px-6",
                 composer.bangMode === "bang-bang"
                   ? "shell-silent-mode"
                   : composer.bangMode === "bang"

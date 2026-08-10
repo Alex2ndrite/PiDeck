@@ -93,17 +93,12 @@ test("pending prompts render inside the composer before composer-box", () => {
     queuePanelIndex >= 0,
     "QueuedPromptPanel should exist in SessionRuntimeInjector",
   );
-  assert.match(composerPanelsSource, /className="queued-track flex min-w-0 w-full justify-end p-0 pb-2"/);
+  assert.match(composerPanelsSource, /className="queued-track mx-auto flex min-w-0 w-\[calc\(100%-2\*var\(--chat-inline-pad\)\)\] justify-end p-0 pb-2"/);
 });
 
 test("pending prompts share the native content width constraint without hiding composer", () => {
-  // The rule uses a comma-separated selector list; queued-track may be followed by
-  // additional selectors before the opening brace.
-  // 内容宽度体系（容器查询百分比）：queued-track 与 composer 共享 --chat-inline-pad 留白对齐。
-  assert.match(
-    stylesSource,
-    /\.queued-track[\s\S]*?width: calc\(100% - 2 \* var\(--chat-inline-pad\)\)/,
-  );
+  // queued-track 与 composer 共享 --chat-inline-pad 留白对齐（UI 2.0：组件 utility 承担）
+  assert.match(composerPanelsSource, /queued-track mx-auto flex min-w-0 w-\[calc\(100%-2\*var\(--chat-inline-pad\)\)\]/);
   // Outer track is a full-width anchor; the compact panel sits on the right with proportional width.
   assert.match(composerPanelsSource, /justify-end p-0 pb-2/);
   assert.match(composerPanelsSource, /w-\[clamp\(13\.5rem,36%,22\.5rem\)\]/);

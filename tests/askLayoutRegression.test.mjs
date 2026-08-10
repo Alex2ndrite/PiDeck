@@ -22,6 +22,10 @@ const foundation = readFileSync(
   "src/renderer/src/styles/foundation.css",
   "utf8",
 );
+const tailwind = readFileSync(
+  "src/renderer/src/styles/tailwind.css",
+  "utf8",
+);
 
 /**
  * Ask 是会话级阻塞交互，不应参与 composer 的 flex 高度分配；否则 Ask 展开时会和
@@ -33,10 +37,12 @@ test("ask stays out of composer sizing and uses the session timeline as its scro
   assert.match(sessionView, /<SessionMessageTimeline[\s\S]*runtimeUi=\{runtimeUi\}/);
   assert.match(timeline, /className="session-runtime-ui mx-auto w-full/);
   assert.doesNotMatch(timeline, /session-runtime-ui sticky bottom-0/);
-  // 内容宽度体系（容器查询百分比）：.chat-pane 注入 --chat-content-pct-set，
-  // 消息与 ask（session-runtime-ui）共享 --chat-inline-pad 留白，保证两者永远对齐。
-  assert.match(foundation, /\.chat-pane[\s\S]*?--chat-content-pct: var\(--chat-content-pct-set, 80%\)/);
-  assert.match(foundation, /\.message-timeline[\s\S]*?padding-inline: var\(--chat-inline-pad\)/);
+  // 内容宽度体系（百分比留白，UI 2.0）：变量链由每个会话栏的 utility 持有，
+  // solo/split 各自按栏宽计算；消息与 ask 共享 --chat-inline-pad 留白。
+  assert.match(tailwind, /@utility chat-content-width[\s\S]*?--chat-side-gap/);
+  assert.match(tailwind, /--chat-inline-pad: max\(var\(--chat-side-gap\), 24px\)/);
+  assert.match(timeline, /\[padding-inline:var\(--chat-inline-pad\)\]/);
+  assert.doesNotMatch(foundation, /--chat-inline-pad|--chat-side-gap/);
   assert.doesNotMatch(overlay, /CollapsibleContent className="min-h-0 overflow-y-auto"/);
   assert.doesNotMatch(overlay, /max-h-\[(?:55vh|180px|240px)\][^\n]*overflow-y-auto/);
 });

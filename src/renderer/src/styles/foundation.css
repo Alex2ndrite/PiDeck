@@ -2485,58 +2485,6 @@ select:focus-visible {
   bottom: -16px;
   cursor: row-resize;
 }
-/* ── 内容宽度（百分比留白体系）──────────────────────────────
- * 语义：聊天内容区（消息 + 输入框）占面板内容区的百分比，留白左右各半。
- * 变量链：
- *   --chat-content-pct-set  AppShell 注入的用户设置值（60–100%，始终注入）
- *   --chat-content-pct     实际生效值：分屏/窄栏时由容器查询收敛（见下）
- *   --chat-side-gap        单侧留白 = (100% − pct) / 2
- *   --chat-inline-pad      实际内边距 = max(留白, 24px)，100% 时保住最小呼吸空间
- * 消息与输入框共享同一留白 → 两者永远对齐，避免“输入框宽、消息窄”的错位。
- * 容器查询（分屏自适应）：面板 ≤1100px（分屏栏/窄窗口）→ 内容 100% 只留最小边距；
- * 1100–1600px → 线性收敛到设置值；≥1600px → 完全按设置值留白。 */
-.chat-pane {
-  container-type: inline-size;
-  --chat-content-pct: var(--chat-content-pct-set, 80%);
-  --chat-side-gap: calc((100% - var(--chat-content-pct)) / 2);
-  --chat-inline-pad: max(var(--chat-side-gap), 24px);
-}
-/* 窄栏（分屏常见宽度）：内容占满，仅保留最小边距 */
-@container (max-width: 1100px) {
-  .chat-pane {
-    --chat-content-pct: 100%;
-  }
-}
-/* 中宽栏：从 100% 线性过渡到设置值（100cqw = 容器宽度，Electron 38 Chromium 支持） */
-@container (min-width: 1101px) and (max-width: 1600px) {
-  .chat-pane {
-    --chat-content-pct: calc(
-      var(--chat-content-pct-set, 80%) + (100% - var(--chat-content-pct-set, 80%)) * (1600px - 100cqw) / 500px
-    );
-  }
-}
-.message-timeline {
-  /* 实际左右内边距在 .message-timeline 主规则（padding: 18px var(--chat-inline-pad) 24px）
-     中取用，这里只挂过渡动画：容器查询切档/设置变更时平滑过渡 */
-  transition: padding-inline 0.15s ease-out;
-}
-/* 输入框：左右内边距 = 内容区留白（自带无横向 padding，直接缩进） */
-.composer-box {
-  padding-inline: var(--chat-inline-pad);
-}
-/* 图片附件条 / 扩展区 / 排队条 / ask 内联条：与输入框同宽对齐，
-   但保留各自内部 padding（如 image-preview-area 的 8px 10px），故用宽度缩进而非 padding */
-.image-preview-area,
-.extension-widgets-container,
-.composer .ask-inline-bar {
-  width: calc(100% - 2 * var(--chat-inline-pad));
-  margin-inline: auto;
-}
-/* 排队条右对齐小面板：宽度同 composer（内部 .queued-panel 自缩成右上角面板） */
-.queued-track {
-  width: calc(100% - 2 * var(--chat-inline-pad));
-  margin-inline: auto;
-}
 /* queued-track 与 composer 同宽容器；内部 .queued-panel 再缩成右上角小面板 */
 .chat-header {
   /* 布局/边框/背景由 SessionHeader Tailwind 承担；保留 overflow 兼容下拉菜单 */
@@ -2857,9 +2805,9 @@ select:focus-visible {
   overflow-y: auto;
   overflow-x: hidden;
   overflow-anchor: none;
-  /* 左右内边距 = 内容区留白（--chat-inline-pad，随设置/分屏自适应）；
-     底部 24px 与顶部 18px 为固定呼吸空间 */
-  padding: 18px var(--chat-inline-pad) 24px;
+  /* 左右内边距由组件 utility 的留白变量接管（UI 2.0），
+     这里只留固定上下呼吸空间；无 utility 兜底为 24px */
+  padding: 18px 24px 24px;
   min-height: 0;
   scroll-padding-top: 28px;
   /* Ask/工具完成卡片在时间线末端仍需留出可视缓冲，避免紧贴 composer。 */
@@ -2911,11 +2859,7 @@ select:focus-visible {
   transform: translate(-50%, 0);
   box-shadow: 0 2px 6px color-mix(in srgb, var(--color-accent) 16%, transparent);
 }
-.message-list {
-  min-width: 0;
-  margin: 0 auto;
-  transition: opacity 0.12s ease-out;
-}
+
 .multi-select-image-export {
   position: absolute;
   left: 0;
