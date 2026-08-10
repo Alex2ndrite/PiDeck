@@ -126,6 +126,17 @@ export const SESSION_CACHE_STATS_LIMIT = 50;
 export const sessionMessagesCacheAtom = atom<Record<string, SessionMessageCacheEntry>>({});
 
 /**
+ * 单会话消息缓存条目（selectAtom 隔离）：其它会话的消息到达/分页/失效
+ * 都整体重建 cache 对象，但本会话条目引用不变 → Object.is 相等 → 订阅者不重渲染。
+ * 2026-10 性能修复：此前 controller 直接订全局缓存，分屏/多开时
+ * 任一会话的流式消息或分页都会拖着重渲染所有分屏栏。
+ */
+export const sessionMessageCacheBySessionIdAtomFamily = atomFamily(
+  (sessionId: string) =>
+    selectAtom(sessionMessagesCacheAtom, (cache) => cache[sessionId], Object.is),
+);
+
+/**
  * 会话切换时的滚动位置锚点（per-session，切走保存、切回恢复）。
  * 只保存「非跟底」状态：用户正在查看历史时切走，回来时停留在原位置；
  * 在底部跟流切走的会话不存锚点，切回继续跟底。
@@ -246,10 +257,56 @@ export const liveTextStreamingBySessionAtom = atomFamily((sessionId: string) =>
   ),
 );
 
+/** 正文流条目同值比较：content 与 streaming 位都相等才算同值。 */
+function sameStreamingTextEntry(
+  a: { content: string; streaming: boolean } | undefined,
+  b: { content: string; streaming: boolean } | undefined,
+): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return a.content === b.content && a.streaming === b.streaming;
+}
+
+/**
+ * 单会话正文流内容（selectAtom 隔离）：其它会话的 token 更新不触发本订阅者。
+ * 2026-10 性能修复：此前 LiveAnswerBody 直接订全局 streamingTextByIdAtom，
+ * 分屏/多开时任一会话的流式 token 会拖着重渲染所有会话的正文实例。
+ */
+export const streamingTextBySessionIdAtomFamily = atomFamily((sessionId: string) =>
+  selectAtom(
+    streamingTextByIdAtom,
+    (map) => map[sessionId],
+    sameStreamingTextEntry,
+  ),
+);
+
 /** 与 streamingThinkingByIdAtom 条目成对释放，避免 atomFamily Map 无限增长。 */
 function disposeStreamingThinkingFamily(thinkingId: string) {
   streamingThinkingEntryByIdAtomFamily.remove(thinkingId);
 }
+
+/**
+ * 「新一轮开始」信号：composer 发送成功后 +1（sessionId 键）。
+ * TurnRow 订阅本会话 tick：变化时非最新轮强制收起（设置② collapsePrevRunsOnNewTurn 开启时），
+ * 含用户手动展开的轮次。tick 低频（每轮一次），跨会话订阅经 family selectAtom 隔离。
+ */
+export const newTurnCollapseTickByIdAtom = atom<Record<string, number>>({});
+
+export const bumpNewTurnCollapseTickAtom = atom(null, (_get, set, sessionId: string) => {
+  set(newTurnCollapseTickByIdAtom, (prev) => ({
+    ...prev,
+    [sessionId]: (prev[sessionId] ?? 0) + 1,
+  }));
+});
+
+/** 单会话 tick 订阅（selectAtom 隔离：其它会话 bump 不触发本订阅者）。 */
+export const newTurnCollapseTickBySessionIdAtomFamily = atomFamily((sessionId: string) =>
+  selectAtom(
+    newTurnCollapseTickByIdAtom,
+    (map) => map[sessionId] ?? 0,
+    Object.is,
+  ),
+);
 
 export const sessionMessageLruAtom = atom<string[]>([]);
 export const sessionMessageLoadStateAtom = atom<Record<string, SessionLoadState>>({});
@@ -1247,6 +1304,11 @@ export const removeSessionStateAtom = atom(null, (get, set, sessionId: string) =
   set(sessionMessagesCacheAtom, cache);
   clearSessionLiveThinking(get, set, sessionId);
   liveTextStreamingBySessionAtom.remove(sessionId);
+  // atomFamily 无自动 GC：会话删除时必须同步 remove 各 family 实例，否则长期泄漏（2026-10）。
+  liveThinkingIdBySessionIdAtomFamily.remove(sessionId);
+  newTurnCollapseTickBySessionIdAtomFamily.remove(sessionId);
+  streamingTextBySessionIdAtomFamily.remove(sessionId);
+  sessionMessageCacheBySessionIdAtomFamily.remove(sessionId);
   set(streamingTextByIdAtom, (prevMap) => {
     if (!(sessionId in prevMap)) return prevMap;
     const nextMap = { ...prevMap };

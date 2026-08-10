@@ -398,6 +398,19 @@ const api = {
 				pageSize,
 				options,
 			) as Promise<import("../shared/types").SessionMessagePage>,
+		/** 按需读取压缩卡片的归档消息（展开时调用，不常驻内存）。 */
+		readRecordArchivedMessages: (sessionId: string, compactionId: string) =>
+			ipcRenderer.invoke(ipcChannels.sessionsCatalogReadArchivedMessages, sessionId, compactionId) as Promise<
+				import("../shared/types").ChatMessage[]
+			>,
+		/** 按需读取单条消息完整文本（工具结果截断后的「查看完整输出」）。 */
+		readMessageFullText: (agentId: string, messageId: string, entryId?: string) =>
+			ipcRenderer.invoke(
+				ipcChannels.sessionsCatalogReadMessageFullText,
+				agentId,
+				messageId,
+				entryId,
+			) as Promise<{ text: string }>,
 		readReferenceMessages: (sessionId: string) =>
 			ipcRenderer.invoke(
 				ipcChannels.sessionsCatalogReadReferenceMessages,

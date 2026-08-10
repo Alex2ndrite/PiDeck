@@ -2,6 +2,7 @@ import { memo, useEffect, useRef, useState } from "react";
 import { AlertTriangle, Brain, Check, ChevronDown, ChevronRight, ChevronUp, MessageCircle, X } from "lucide-react";
 import type { ChatMessage } from "../../../../shared/types";
 import { t, translateI18nDescriptor } from "../../i18n";
+import { desktopApi } from "../../desktopApi";
 import { formatDuration, formatTime, stripAnsi } from "./TimelineFormat";
 import { Textarea } from "../ui-shadcn/textarea";
 import { StackTrace } from "../ui-shadcn/stack-trace";
@@ -28,17 +29,40 @@ function getDiagnosticTone(message: ChatMessage): "error" | "warning" | "success
 }
 
 /** 压缩事件卡片：在时间线上标记会话被压缩过，展示摘要和节约的 token 数。
- * 支持展开查看压缩前的归档消息。 */
+ * 展开时按需读取压缩前的归档消息（经 IPC 读 JSONL，不常驻内存）。 */
 export const CompactionCard = memo(function CompactionCard(props: {
 	message: ChatMessage;
+	sessionId: string;
 }) {
 	const [expanded, setExpanded] = useState(false);
+	const [archived, setArchived] = useState<ChatMessage[] | null>(null);
+	const [loadState, setLoadState] = useState<"idle" | "loading" | "loaded" | "error">("idle");
 	const summary = props.message.text;
 	const tokensBefore = (props.message.meta as any)?.tokensBefore;
 	const compactionCount = (props.message.meta as any)?.compactionCount;
-	const archivedMessages = (props.message.meta as any)?.archivedMessages as ChatMessage[] | undefined;
+	const compactionId = (props.message.meta as any)?.compactionId as string | undefined;
 	const time = formatTime(props.message.timestamp);
-	const hasArchived = Array.isArray(archivedMessages) && archivedMessages.length > 0;
+	const canExpand = typeof compactionId === "string" && compactionId.length > 0;
+
+	// 展开时按需读取归档消息：只在展开瞬间发起一次，结果存本地 state（收起即释放引用）
+	useEffect(() => {
+		if (!expanded || !canExpand || loadState !== "idle") return;
+		let cancelled = false;
+		setLoadState("loading");
+		desktopApi.sessions.readRecordArchivedMessages(props.sessionId, compactionId!)
+			.then((messages) => {
+				if (cancelled) return;
+				setArchived(messages);
+				setLoadState("loaded");
+			})
+			.catch(() => {
+				if (cancelled) return;
+				setLoadState("error");
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [expanded, canExpand, loadState, compactionId, props.sessionId]);
 
 	return (
 		<TimelineMarker kind="compaction" tone="active">
@@ -49,12 +73,12 @@ export const CompactionCard = memo(function CompactionCard(props: {
 			<button
 				type="button"
 				className="flex w-full cursor-pointer items-start gap-2 rounded-[inherit] border-none bg-none p-1 px-3 text-left text-inherit select-none hover:bg-[color:color-mix(in_srgb,var(--color-accent)_6%,transparent)] focus-visible:-outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
-				onClick={() => hasArchived && setExpanded(!expanded)}
-				disabled={!hasArchived}
+				onClick={() => canExpand && setExpanded(!expanded)}
+				disabled={!canExpand}
 				aria-expanded={expanded}
 			>
 				<span className="shrink-0 text-body leading-6" aria-hidden="true">
-					{hasArchived ? (expanded ? "📂" : "📁") : "🔁"}
+					{canExpand ? (expanded ? "📂" : "📁") : "🔁"}
 				</span>
 				<div className="flex min-w-0 flex-1 flex-col gap-0.5">
 					<span className="truncate text-caption leading-[1.4] text-text-secondary">{stripAnsi(summary)}</span>
@@ -69,7 +93,7 @@ export const CompactionCard = memo(function CompactionCard(props: {
 								{t("app.compactionTokensBefore", { count: Math.round(tokensBefore / 1000) })}
 							</span>
 						)}
-						{hasArchived && (
+						{canExpand && (
 							<span className="font-mono text-micro opacity-80 text-text-tertiary">
 								{expanded ? t("app.compactionCollapse") : t("app.compactionExpand")}
 							</span>
@@ -78,10 +102,20 @@ export const CompactionCard = memo(function CompactionCard(props: {
 					<time className="text-micro opacity-70 text-text-tertiary">{time}</time>
 				</div>
 			</button>
-			{expanded && hasArchived && (
+			{expanded && canExpand && (
 				<div className="border-t border-[color-mix(in_srgb,var(--color-accent)_8%,transparent)]">
 					<div />
-					<ArchivedMessageList messages={archivedMessages} />
+					{loadState === "loading" && (
+						<div className="p-1 px-3 text-caption text-text-tertiary">{t("app.compactionLoading")}</div>
+					)}
+					{loadState === "error" && (
+						<div className="p-1 px-3 text-caption text-text-tertiary">{t("app.compactionLoadFailed")}</div>
+					)}
+					{loadState === "loaded" && (
+						archived && archived.length > 0
+							? <ArchivedMessageList messages={archived} />
+							: <div className="p-1 px-3 text-caption text-text-tertiary">{t("app.compactionEmpty")}</div>
+					)}
 				</div>
 			)}
 		</article>
@@ -344,30 +378,21 @@ export const ThinkingBlock = memo(
 		onOpenFile?: (path: string) => void;
 	}) {
 	const [expanded, setExpanded] = useState(props.defaultExpanded ?? true);
-	const contentRef = useRef<HTMLDivElement | null>(null);
-	const [overflowing, setOverflowing] = useState(false);
 	// agent 完成时强制收起：即使之前手动展开过，思考也随执行过程整体收起（回到折叠 4 行半态）
 	useEffect(() => {
 		if (props.endedAt) setExpanded(false);
 	}, [props.endedAt]);
 	// 流式思考走打字机，避免大块 thinking_delta 一次糊上屏幕（「咔」一下）
+	// 折叠态 disabled：内容不可见，不启动 rAF 打字机、不订阅流式增量，展开时全文立现。
 	const { displayedContent } = useSmoothStream({
 		content: props.text,
 		isStreaming: Boolean(props.isStreaming),
+		disabled: !expanded,
 	});
-	// 始终走打字机输出：历史首挂时 hook 初始即全文；流式结束也不再绕过 displayedContent 造成整段蹦出。
-	// 折叠态内容溢出检测：超过 4 行半才显示「展开思考」按钮。
-	// 折叠时 clientHeight 被 max-height 锁死，ResizeObserver 收不到文本增长，
-	// 因此 text 变化时（流式追加）主动重查；ResizeObserver 兜底窗口/字号档位变化。
-	useEffect(() => {
-		const el = contentRef.current;
-		if (!el) return;
-		const check = () => setOverflowing(el.scrollHeight > el.clientHeight + 1);
-		check();
-		const ro = new ResizeObserver(check);
-		ro.observe(el);
-		return () => ro.disconnect();
-	}, [displayedContent, expanded]);
+	// 折叠态溢出判断：字符阈值替代 scrollHeight 检测（折叠轻渲染后无全文 DOM 可量）。
+	// 200 字符 ≈ 4.5 行 × ~45 字/行的宽松上限；流式期间 text 增长天然触发重渲染 → 按钮实时出现。
+	const PREVIEW_CHARS = 200;
+	const overflowing = props.text.length > PREVIEW_CHARS;
 
 	if (!props.showThinking || !props.text.trim()) return null;
 	// 思考耗时：结束固定（endedAt - startedAt）；流式中（isStreaming）由 LiveDuration 实时增长
@@ -405,17 +430,24 @@ export const ThinkingBlock = memo(
 			    行高按正文字号计算（1.68 × 15px × 4.5 ≈ 113px），字号随 --font-size-chat 联动
 			    （与思考正文改挂对话字号轨保持一致） */}
 			<div className="rounded-md border border-dashed border-border-subtle bg-[color:color-mix(in_srgb,var(--color-bg-muted)_45%,transparent)]">
-				<div
-					ref={contentRef}
-					className={`markdown-body px-3 pt-2 pb-1 text-text-tertiary ${expanded ? "" : "max-h-[calc(var(--font-size-chat)*7.56)] overflow-hidden"}`}
-				>
-					<MarkdownStream
-						text={displayedContent}
-						isStreaming={props.isStreaming}
-						onOpenExternal={props.onOpenExternal}
-						onOpenFile={props.onOpenFile}
-					/>
-				</div>
+				{expanded ? (
+					<div
+						className={`markdown-body px-3 pt-2 pb-1 text-text-tertiary ${expanded ? "" : "max-h-[calc(var(--font-size-chat)*7.56)] overflow-hidden"}`}
+					>
+						<MarkdownStream
+							text={displayedContent}
+							isStreaming={props.isStreaming}
+							onOpenExternal={props.onOpenExternal}
+							onOpenFile={props.onOpenFile}
+						/>
+					</div>
+				) : (
+					// 折叠态轻渲染：只显示截断纯文本预览，不跑 streamdown、不建全文 DOM。
+					// 长思考（几千字+代码）折叠时 DOM 只有一行预览，是时间线内存最大单项的根治。
+					<div className="max-h-[calc(var(--font-size-chat)*7.56)] overflow-hidden whitespace-pre-wrap break-words px-3 pt-2 pb-1 text-text-tertiary">
+						{overflowing ? props.text.slice(0, PREVIEW_CHARS) + "…" : props.text}
+					</div>
+				)}
 				{showToggle && (
 					<div className="flex px-1 pb-1">
 						<button

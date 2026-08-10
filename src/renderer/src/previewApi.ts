@@ -99,6 +99,9 @@ let previewSettings: AppSettings = {
 	agentCountReminderEnabled: true,
 	// showThinking 由 pi agent 的 hideThinkingBlock 控制，运行时从主进程加载
 	showThinking: true,
+	// 流式对话行为：与主进程 SettingsStore 默认一致（预览窗口保持相同观感）
+	expandInterimDuringStream: false,
+	collapsePrevRunsOnNewTurn: true,
 	showDevTools: false,
 	electronChromiumSandbox: false,
 	piProxyEnabled: false,
@@ -371,6 +374,8 @@ export function createPreviewApi(): PiDesktopApi {
 			exportRecordHtml: async () => ({ path: "preview-session.html" }),
 			readRecordMessages: async () => [],
 			readRecordMessagePage: async () => ({ messages: [], total: 0, nextBefore: null }),
+			readMessageFullText: async () => ({ text: "" }),
+			readRecordArchivedMessages: async () => [],
 			readReferenceMessages: async () => [
 				{ role: "user", content: "Preview user message", timestamp: Date.now() - 60000 },
 				{ role: "assistant", content: "Preview assistant response", timestamp: Date.now() - 30000 },

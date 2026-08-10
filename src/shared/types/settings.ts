@@ -82,6 +82,17 @@ export type StartupWindowMode =
 	agentCountReminderEnabled: boolean;
 	/** 是否在会话中显示模型思考过程，默认开启 */
 	showThinking: boolean;
+	/**
+	 * 流式对话时是否自动展开中间过程（思考/工具详情）。
+	 * false（默认）：对话过程中保持折叠（历史轮与最新轮都不自动撑开），手动展开的仍可查看；
+	 * true：最新轮流式输出时自动展开。手动开合状态始终优先于本设置。
+	 */
+	expandInterimDuringStream: boolean;
+	/**
+	 * 新一轮（用户发送新消息）开始时自动收起上一轮展开的中间过程，节省渲染资源。
+	 * true（默认）：发送新消息后收起所有非最新轮（含手动展开的）；false：保持现状。
+	 */
+	collapsePrevRunsOnNewTurn: boolean;
 	/** 是否开启开发者控制台（DevTools） */
 	showDevTools: boolean;
 	/**

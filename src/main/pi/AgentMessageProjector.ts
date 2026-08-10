@@ -163,6 +163,9 @@ export class AgentMessageProjector {
 						result,
 						isError,
 					);
+					// detailText 整体截断（拼接后可能超单段上限）并标记 truncated/fullLength，
+					// 渲染层据此提供「查看完整输出」按需加载（sessionsCatalogReadMessageFullText）。
+					const detailDelivery = this.truncateDetailWithMeta(detailText);
 					// 从历史工具结果中提取 ask_question 详情，用于渲染提问卡片（支持单问题和批量格式）。
 					const askCard = (() => {
 						if (toolName !== "ask_question" || !typed.details) return undefined;
@@ -213,7 +216,10 @@ export class AgentMessageProjector {
 							args: this.truncateForDetail(this.safeJson(historicalCall?.args)),
 							result: this.truncateForDetail(this.extractToolResultText(result) || this.safeJson(result)),
 							isError,
-							detailText,
+							detailText: detailDelivery.text,
+							...(detailDelivery.truncated
+								? { truncated: true, fullLength: detailDelivery.fullLength }
+								: {}),
 							// 历史会话不保存 originalContent（full file），diff 使用工具参数
 							//（oldText/newText）展示变动区域，避免会话文件体积膨胀。
 							...(askCard ? { _askCard: askCard } : {}),
@@ -364,6 +370,27 @@ export class AgentMessageProjector {
 			`${this.deps.translate("mainTool.truncated", { omitted, total: str.length })}\n` +
 			str.slice(-keep)
 		);
+	}
+
+	/**
+	 * 与 truncateForDetail 同规则的整体截断，但额外返回是否截断与原始长度，
+	 * 供下发 meta 标记 truncated/fullLength（渲染层据此提供「查看完整输出」按需加载入口）。
+	 * 用于 detailText 的整体上限：formatToolDetail 拼接 args/result/details 三段后可能超过单段上限。
+	 */
+	truncateDetailWithMeta(text: string): { text: string; truncated: boolean; fullLength: number } {
+		if (text.length <= AgentMessageProjector.MAX_TOOL_RESULT_CHARS) {
+			return { text, truncated: false, fullLength: text.length };
+		}
+		const keep = Math.floor(AgentMessageProjector.MAX_TOOL_RESULT_CHARS / 2);
+		const omitted = text.length - keep * 2;
+		return {
+			text:
+				`${text.slice(0, keep)}\n` +
+				`${this.deps.translate("mainTool.truncated", { omitted, total: text.length })}\n` +
+				text.slice(-keep),
+			truncated: true,
+			fullLength: text.length,
+		};
 	}
 
 

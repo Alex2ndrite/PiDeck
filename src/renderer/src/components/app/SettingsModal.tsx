@@ -649,6 +649,19 @@ function SettingsModalContent(props: SettingsModalProps) {
 											</SelectContent>
 										</Select>
 									</SettingRow>
+									{/* 流式对话设置：省渲染资源的两个行为开关（默认值见 SettingsStore）。 */}
+									<SettingSwitchRow
+										title={t("settings.expandInterimDuringStream")}
+										description={t("settings.expandInterimDuringStreamDesc")}
+										checked={draftSettings.expandInterimDuringStream}
+										onChange={(checked) => updateDraft({ expandInterimDuringStream: checked })}
+									/>
+									<SettingSwitchRow
+										title={t("settings.collapsePrevRunsOnNewTurn")}
+										description={t("settings.collapsePrevRunsOnNewTurnDesc")}
+										checked={draftSettings.collapsePrevRunsOnNewTurn}
+										onChange={(checked) => updateDraft({ collapsePrevRunsOnNewTurn: checked })}
+									/>
 								</SettingsSection>
 
 								{/* 通知 */}

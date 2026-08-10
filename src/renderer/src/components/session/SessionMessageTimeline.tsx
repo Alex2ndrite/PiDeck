@@ -72,7 +72,16 @@ const FLOATING_FAILURE_KEYS = new Set([
 
 // 已弹过 toast 的消息 id：模块级去重，分屏多栏同一条消息只弹一次，
 // 也避免消息重发（re-emit）或重新渲染时重复打扰。
+// 上限裁剪：失败类消息 id 全局唯一且无删除路径，长期运行会无界增长（2026-10）。
 const toastedFailureIds = new Set<string>();
+const TOASTED_FAILURE_IDS_LIMIT = 500;
+function markFailureToastShown(messageId: string) {
+	toastedFailureIds.add(messageId);
+	if (toastedFailureIds.size <= TOASTED_FAILURE_IDS_LIMIT) return;
+	// 超限：清空重建（Set 无 FIFO；失败 toast 是低频事件，偶发重复提醒可接受）
+	toastedFailureIds.clear();
+	toastedFailureIds.add(messageId);
+}
 
 /** 判断消息是否为「失败/重试类」提示（时间线不渲染、改 toast）。 */
 function isFloatingFailureMessage(message: ChatMessage): boolean {
@@ -225,7 +234,7 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
     for (const message of floating) {
       if (failureBaselineRef.current.includes(message.id)) continue;
       if (toastedFailureIds.has(message.id)) continue;
-      toastedFailureIds.add(message.id);
+      markFailureToastShown(message.id);
       showFailureToast(message);
     }
   }, [activeMessages, isConversationLoading]);
@@ -602,7 +611,7 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
                   return null;
                 }
                 if (meta?.type === "compaction") {
-                  return <CompactionCard key={message.id} message={message} />;
+                  return <CompactionCard key={message.id} message={message} sessionId={sessionId} />;
                 }
                 // 自动重试状态（retryScheduled/retrySucceeded/retryFailed 等）
                 // 属于「重试提示」，与失败类一样转 toast、不占时间线。

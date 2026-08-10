@@ -149,6 +149,8 @@ function loadAgentManagerModule() {
           pickNumber: (...values) => { for (const v of values) if (typeof v === "number") return v; },
           clampPercent: (v) => v,
           trimHistoryMessages: (msgs) => msgs,
+          stripToolResultForDelivery: (messages) => messages,
+          leadingSummaryCards: () => [],
           cleanTitle: (t) => t,
           inferTitleFromMessages: () => undefined,
           isDefaultAgentTitle: () => false,

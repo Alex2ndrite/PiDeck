@@ -25,6 +25,11 @@ interface UseSmoothStreamOptions {
 	content: string;
 	/** ????????? */
 	isStreaming: boolean;
+	/**
+	 * 禁用平滑（折叠态用）：直接同步返回 content，不启动 rAF 打字机。
+	 * 折叠态内容不可见，逐字推进是纯浪费；展开瞬间以全文呈现（与打字机追平后的观感一致）。
+	 */
+	disabled?: boolean;
 	/** ???????ms???? 8ms?~120Hz ??????? 16ms ??? */
 	minDelay?: number;
 	/** ??????????? / divisor = ???????????? */
@@ -54,6 +59,7 @@ function segmentText(text: string): string[] {
 export function useSmoothStream({
 	content,
 	isStreaming,
+	disabled = false,
 	minDelay = 8,
 	streamingDivisor = 5,
 	drainDivisor = 3,
@@ -82,6 +88,14 @@ export function useSmoothStream({
 		const newContent = content;
 		if (newContent === prevContent) return;
 
+		// 折叠态（disabled）：只追平 prevContent 引用，不 push chunk 不 setState，
+		// 内容不可见时连「增量入队 + 重渲染」都省掉。
+		if (disabled) {
+			prevContentRef.current = newContent;
+			displayedRef.current = newContent;
+			return;
+		}
+
 		const isAppend = newContent.startsWith(prevContent);
 		if (isAppend) {
 			// ??????????????
@@ -97,7 +111,7 @@ export function useSmoothStream({
 			setDisplayedContent(newContent);
 		}
 		prevContentRef.current = newContent;
-	}, [content]);
+	}, [content, disabled]);
 
 	// ?????????????????????? dump ???? rAF ?????
 	useEffect(() => {
@@ -165,6 +179,7 @@ export function useSmoothStream({
 
 	// ??/???????????????????????
 	useEffect(() => {
+		if (disabled) return; // 折叠态：不启动 rAF，避免不可见内容逐字推进
 		if ((isStreaming || chunkQueueRef.current.length > 0) && !rafRef.current) {
 			rafRef.current = requestAnimationFrame(renderLoop);
 		}
@@ -174,7 +189,10 @@ export function useSmoothStream({
 				rafRef.current = null;
 			}
 		};
-	}, [isStreaming, renderLoop]);
+	}, [isStreaming, renderLoop, disabled]);
+
+	// disabled：同步返回最新内容（展开瞬间全文立现，与打字机追平后观感一致）
+	if (disabled) return { displayedContent: content };
 
 	return { displayedContent };
 }
