@@ -1226,9 +1226,11 @@
 }
 .web-endpoint-grid {
   display: grid;
-  /* 主机列必须可收缩（minmax(0,1fr) 而非 1fr）：1fr 的隐式最小宽度是内容宽度，
-     主机名/域名较长时会把固定 112px 的端口列挤出可视区，导致端口显示不全 */
-  grid-template-columns: minmax(0, 1fr) 112px;
+  /* 主机列 fit-content(220px)：短主机名（如 127.0.0.1）按内容收缩不撑满，
+     长域名 220px 封顶 + 省略号（code 截断），端口列永远完整显示。
+     不要用 1fr/minmax(0,1fr)：1fr 会把剩余空间全吃给主机列，视觉过宽；
+     隐式最小宽是内容宽，长主机名又会把端口列挤出可视区。 */
+  grid-template-columns: fit-content(220px) 112px;
   gap: 10px;
 }
 .web-endpoint-metric {

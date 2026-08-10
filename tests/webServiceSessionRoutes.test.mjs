@@ -535,6 +535,12 @@ async function startMockDevServer() {
 		} else if (request.url === "/assets/web.js") {
 			response.writeHead(200, { "content-type": "text/javascript; charset=utf-8" });
 			response.end("console.log(\"dev asset\");");
+		} else if (request.url === "/@vite/client") {
+			response.writeHead(200, { "content-type": "text/javascript; charset=utf-8" });
+			response.end("console.log(\"vite client\");");
+		} else if (request.url?.startsWith("/src/web-main.tsx")) {
+			response.writeHead(200, { "content-type": "text/javascript; charset=utf-8" });
+			response.end(`console.log("entry with query: ${request.url}");`);
 		} else {
 			response.writeHead(404, { "content-type": "text/plain" });
 			response.end("not found");
@@ -564,7 +570,21 @@ test("web service dev mode proxies static assets to the renderer dev server", as
 			assert.equal(asset.status, 200);
 			assert.match(asset.headers.get("content-type") ?? "", /text\/javascript/);
 			assert.equal(await asset.text(), 'console.log("dev asset");');
-			assert.deepEqual(devServer.hits, ["/web.html", "/assets/web.js"]);
+			// vite 内部模块（无扩展名）必须原样转发，不能被映射成 /web.html 的 HTML
+			const viteClient = await fetch(baseUrl + "/@vite/client");
+			assert.equal(viteClient.status, 200);
+			assert.match(viteClient.headers.get("content-type") ?? "", /text\/javascript/);
+			assert.equal(await viteClient.text(), 'console.log("vite client");');
+			// query 参数必须保留（vite 依赖预构建/HMR 依赖 ?v= ?t= ?import）
+			const withQuery = await fetch(baseUrl + "/src/web-main.tsx?v=abc&import");
+			assert.equal(withQuery.status, 200);
+			assert.match(await withQuery.text(), /entry with query: \/src\/web-main\.tsx\?v=abc&import/);
+			assert.deepEqual(devServer.hits, [
+				"/web.html",
+				"/assets/web.js",
+				"/@vite/client",
+				"/src/web-main.tsx?v=abc&import",
+			]);
 		}, { devRendererUrl: devServer.baseUrl });
 	} finally {
 		await devServer.close();
