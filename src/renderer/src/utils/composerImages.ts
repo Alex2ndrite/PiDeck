@@ -40,6 +40,40 @@ export function getClipboardImageFiles(data: DataTransfer): File[] {
     .filter((file): file is File => Boolean(file));
 }
 
+/** 粘贴/附件场景支持的图片扩展名（与 COMPOSER_IMAGE_MIME_TYPES 对齐，bmp 不支持故排除） */
+const IMAGE_PATH_RE = /\.(png|jpe?g|gif|webp)$/i;
+
+/** 判断本地路径是否为受支持的图片文件（大小写不敏感，允许带空格/多段扩展名） */
+export function isImageFilePath(path: string): boolean {
+  return IMAGE_PATH_RE.test(path);
+}
+
+/** 按扩展名推导图片 MIME（未知扩展名默认 image/png） */
+export function imageMimeTypeFromPath(path: string): string {
+  const ext = (path.match(/\.([^.]+)$/)?.[1] ?? "").toLowerCase();
+  switch (ext) {
+    case "jpg":
+    case "jpeg":
+      return "image/jpeg";
+    case "gif":
+      return "image/gif";
+    case "webp":
+      return "image/webp";
+    default:
+      return "image/png";
+  }
+}
+
+/** dataURL → File（粘贴资源管理器图片文件时，把主进程读回的原图字节包装成 File 走统一附件流程） */
+export function dataUrlToFile(dataUrl: string, mimeType: string, fileName: string): File {
+  const comma = dataUrl.indexOf(",");
+  const base64 = comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl;
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+  return new File([bytes], fileName, { type: mimeType });
+}
+
 export function getDroppedImageFiles(data: DataTransfer): File[] {
   return Array.from(data.files).filter((file) => file.type.startsWith("image/"));
 }
