@@ -219,18 +219,10 @@ export class SessionHistoryReader {
 
 		const lastCompactionIndex = activeBranch.findLastIndex((entry) => entry.type === "compaction");
 		const lastCompaction = lastCompactionIndex >= 0 ? activeBranch[lastCompactionIndex] : undefined;
-		const firstKeptIndex = lastCompaction?.firstKeptEntryId
-			? activeBranch.findIndex((entry) => entry.id === lastCompaction.firstKeptEntryId)
-			: -1;
-		// pi 压缩后上下文由 summary + firstKeptEntryId 起的保留消息 + 后续消息组成；
-		// 不能只取 compaction entry 之后，否则会漏掉压缩时明确保留的尾部消息。
-		const currentStartIndex = firstKeptIndex >= 0
-			? firstKeptIndex
-			: lastCompactionIndex >= 0
-				? lastCompactionIndex + 1
-				: 0;
+		// 活动分支包含压缩点之前的全部消息（JSONL 保留完整历史）：
+		// 压缩前历史直接作为正常对话流的一部分，由渲染层分页（往上翻）逐条可见；
+		// 压缩卡片单独 prepend 在最前，翻页补前缀时自然落在归档消息之后（压缩点位置）。
 		const currentEntries = activeBranch
-			.slice(currentStartIndex)
 			.filter((entry) => entry.type === "message" && entry.message);
 		const rawMessages = currentEntries.map((entry) => entry.message);
 		// Offline Session viewers must expose the complete active branch. The runtime
@@ -241,9 +233,9 @@ export class SessionHistoryReader {
 		let finalRaw: unknown[] = rawMessages;
 		if (lastCompaction) {
 			const compactionEntry = lastCompaction;
-			// 压缩卡片只带元信息；归档消息全文按需读取（readArchivedMessages），不注入内存
+			// 压缩卡片只带元信息（摘要/次数/tokens）；归档消息全文由分页翻出，不注入内存
 			const archiveData = await this.scanCompactions(sessionPath, content);
-			finalRaw = [{
+			const card = {
 				role: "compactionSummary",
 				summary: compactionEntry.summary || this.deps.translate("session.summaryPlaceholder"),
 				timestamp: compactionEntry.timestamp ? Date.parse(compactionEntry.timestamp) : Date.now(),
@@ -253,7 +245,18 @@ export class SessionHistoryReader {
 					firstKeptEntryId: compactionEntry.firstKeptEntryId,
 					tokensBefore: compactionEntry.tokensBefore,
 				},
-			}, ...rawMessages];
+			};
+			// 卡片插在压缩点：firstKeptEntryId（保留起点）之前，即归档消息之后、保留消息之前；
+			// 找不到锚点则插到压缩条目之后（activeBranch 中紧随其后的消息）。
+			const firstKeptPos = compactionEntry.firstKeptEntryId
+				? currentEntries.findIndex((entry) => entry.id === compactionEntry.firstKeptEntryId)
+				: -1;
+			const insertAt = firstKeptPos >= 0
+				? firstKeptPos
+				: lastCompactionIndex >= 0 && lastCompactionIndex < activeBranch.length
+					? activeBranch.slice(0, lastCompactionIndex + 1).filter((entry) => entry.type === "message" && entry.message).length
+					: rawMessages.length;
+			finalRaw = [...rawMessages.slice(0, insertAt), card, ...rawMessages.slice(insertAt)];
 		}
 
 		return this.deps.convertMessages(agentId, finalRaw, activeEntryIds);
@@ -424,21 +427,14 @@ export class SessionHistoryReader {
 			current = current.parentId ? entries.get(current.parentId) : undefined;
 		}
 		activeBranch.reverse();
-		const lastCompactionIndex = activeBranch.findLastIndex((entry) => entry.type === "compaction");
-		const lastCompaction = lastCompactionIndex >= 0 ? activeBranch[lastCompactionIndex] : undefined;
-		const firstKeptIndex = lastCompaction?.firstKeptEntryId
-			? activeBranch.findIndex((entry) => entry.id === lastCompaction.firstKeptEntryId)
-			: -1;
-		const currentStartIndex = firstKeptIndex >= 0
-			? firstKeptIndex
-			: lastCompactionIndex >= 0 ? lastCompactionIndex + 1 : 0;
+		// 分页索引包含压缩点之前的全部消息（JSONL 保留完整历史）：
+		// 压缩前历史由翻页像正常对话流一样逐条可见（用户需求），不再从 firstKeptEntryId 截断。
 		const index: SessionDisplayIndex = {
 			hostPath,
 			size: version.size,
 			mtimeMs: version.mtimeMs,
-			hasCompaction: lastCompactionIndex >= 0,
+			hasCompaction: activeBranch.some((entry) => entry.type === "compaction"),
 			activeMessageEntries: activeBranch
-				.slice(currentStartIndex)
 				.filter((entry) => entry.type === "message" && entry.hasMessage),
 		};
 		this.sessionDisplayIndexes.delete(hostPath);
@@ -567,89 +563,6 @@ export class SessionHistoryReader {
 			}
 		}
 		return { compactions };
-	}
-
-	/**
-	 * 按需读取指定压缩条目的归档消息（JSONL 中该条目 parentId 链上、firstKeptEntryId 之前的消息）。
-	 * 压缩卡片展开时才调用，读取结果只存在于那一份 DOM 里，不常驻主/渲染进程内存。
-	 */
-	async readArchivedMessages(
-		sessionPath: string,
-		compactionId: string,
-		agentId = "_viewer",
-	): Promise<ChatMessage[]> {
-		let content: string;
-		try {
-			content = await readFile(this.deps.toHostPath(sessionPath), "utf8");
-		} catch (error) {
-			void this.deps.logger?.warn("agent", "Failed to read session file for archived messages", {
-				sessionPath,
-				compactionId,
-				error: error instanceof Error ? error.message : String(error),
-			});
-			return [];
-		}
-
-		// 单次遍历：收集 compaction 条目索引 + 消息型 entry 的原始 message
-		const entries: Array<{ id: string; parentId: string | null; type: string; message?: unknown; firstKeptEntryId?: string }> = [];
-		const rawMessagesByEntryId = new Map<string, unknown>();
-		for (const line of content.split("\n")) {
-			if (!line.trim()) continue;
-			try {
-				const entry = JSON.parse(line);
-				if (!entry || typeof entry !== "object") continue;
-				entries.push({
-					id: typeof entry.id === "string" ? entry.id : "",
-					parentId: typeof entry.parentId === "string" ? entry.parentId : null,
-					type: typeof entry.type === "string" ? entry.type : "",
-					message: entry.message,
-					firstKeptEntryId: typeof entry.firstKeptEntryId === "string" ? entry.firstKeptEntryId : undefined,
-				});
-				if (entry.type === "message" && entry.message && typeof entry.message === "object" && entry.id) {
-					rawMessagesByEntryId.set(entry.id, entry.message);
-				}
-			} catch {
-				// 跳过单行解析失败
-			}
-		}
-
-		const compEntry = entries.find((e) => e.type === "compaction" && e.id === compactionId);
-		if (!compEntry) return [];
-
-		// 从压缩条目的 parentId 沿链向上回溯，收集消息型条目直到 firstKeptEntryId（含循环防护）
-		const byId = new Map(entries.map((e) => [e.id, e]));
-		const rawMessages: unknown[] = [];
-		const seenIds = new Set<string>();
-		let currentId: string | null = compEntry.parentId;
-		while (currentId) {
-			if (seenIds.has(currentId)) break; // 防止循环
-			seenIds.add(currentId);
-
-			const entry = byId.get(currentId);
-			if (!entry) break;
-			if (currentId === compEntry.firstKeptEntryId) break;
-
-			if (entry.type === "message") {
-				const rawMsg = rawMessagesByEntryId.get(currentId);
-				if (rawMsg) rawMessages.push(rawMsg);
-			}
-			currentId = entry.parentId;
-		}
-
-		if (rawMessages.length === 0) return [];
-		// 反转消息顺序（回溯得到的是从新到旧，需反转为从旧到新）
-		rawMessages.reverse();
-		try {
-			return this.deps.convertMessages(agentId, rawMessages);
-		} catch (err) {
-			void this.deps.logger?.warn("agent", "Failed to convert archived messages", {
-				agentId,
-				compactionId,
-				rawCount: rawMessages.length,
-				error: err instanceof Error ? err.message : String(err),
-			});
-			return [];
-		}
 	}
 
 }

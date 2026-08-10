@@ -716,19 +716,6 @@ export class AgentManager {
 		);
 	}
 
-	/** 按需读取指定压缩条目的归档消息（卡片展开时经 IPC 调用）。 */
-	async readArchivedMessages(
-		sessionPath: string,
-		agentId: string,
-		compactionId: string,
-	): Promise<ChatMessage[]> {
-		return this.sessionHistoryReader.readArchivedMessages(
-			sessionPath,
-			compactionId,
-			agentId,
-		);
-	}
-
 	private findRuntimeBySessionKey(sessionKey: string) {
 		const defaults = this.getAgentSessionIdentityDefaults();
 		return [...this.agents.values()].find(

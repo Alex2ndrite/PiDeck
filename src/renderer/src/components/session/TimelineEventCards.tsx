@@ -2,7 +2,6 @@ import { memo, useEffect, useRef, useState } from "react";
 import { AlertTriangle, Brain, Check, ChevronDown, ChevronRight, ChevronUp, MessageCircle, X } from "lucide-react";
 import type { ChatMessage } from "../../../../shared/types";
 import { t, translateI18nDescriptor } from "../../i18n";
-import { desktopApi } from "../../desktopApi";
 import { formatDuration, formatTime, stripAnsi } from "./TimelineFormat";
 import { Textarea } from "../ui-shadcn/textarea";
 import { StackTrace } from "../ui-shadcn/stack-trace";
@@ -28,41 +27,24 @@ function getDiagnosticTone(message: ChatMessage): "error" | "warning" | "success
 	return "info";
 }
 
-/** 压缩事件卡片：在时间线上标记会话被压缩过，展示摘要和节约的 token 数。
- * 展开时按需读取压缩前的归档消息（经 IPC 读 JSONL，不常驻内存）。 */
+/** 压缩事件卡片：对话流中的一条普通消息，标记会话被压缩过。
+ * 折叠显示摘要一行；展开显示 summary 全文（Markdown 渲染，与 pi TUI 一致）。
+ * 压缩前的归档消息由翻页像正常对话流一样逐条可见（磁盘分页包含归档历史）。 */
 export const CompactionCard = memo(function CompactionCard(props: {
 	message: ChatMessage;
 	sessionId: string;
+	onOpenExternal: (url: string, forceSystem?: boolean) => void;
+	onOpenFile?: (path: string) => void;
 }) {
 	const [expanded, setExpanded] = useState(false);
-	const [archived, setArchived] = useState<ChatMessage[] | null>(null);
-	const [loadState, setLoadState] = useState<"idle" | "loading" | "loaded" | "error">("idle");
-	const summary = props.message.text;
+	// 学 ThinkingBlock 折叠轻渲染：折叠态只挂 200 字符截断预览，
+	// 全文（Markdown DOM）仅在展开时挂载、收起即卸载；溢出判断用字符阈值替代 DOM 测量。
+	const summaryText = stripAnsi(props.message.text);
+	const PREVIEW_CHARS = 200;
+	const overflowing = summaryText.length > PREVIEW_CHARS;
 	const tokensBefore = (props.message.meta as any)?.tokensBefore;
 	const compactionCount = (props.message.meta as any)?.compactionCount;
-	const compactionId = (props.message.meta as any)?.compactionId as string | undefined;
 	const time = formatTime(props.message.timestamp);
-	const canExpand = typeof compactionId === "string" && compactionId.length > 0;
-
-	// 展开时按需读取归档消息：只在展开瞬间发起一次，结果存本地 state（收起即释放引用）
-	useEffect(() => {
-		if (!expanded || !canExpand || loadState !== "idle") return;
-		let cancelled = false;
-		setLoadState("loading");
-		desktopApi.sessions.readRecordArchivedMessages(props.sessionId, compactionId!)
-			.then((messages) => {
-				if (cancelled) return;
-				setArchived(messages);
-				setLoadState("loaded");
-			})
-			.catch(() => {
-				if (cancelled) return;
-				setLoadState("error");
-			});
-		return () => {
-			cancelled = true;
-		};
-	}, [expanded, canExpand, loadState, compactionId, props.sessionId]);
 
 	return (
 		<TimelineMarker kind="compaction" tone="active">
@@ -73,15 +55,16 @@ export const CompactionCard = memo(function CompactionCard(props: {
 			<button
 				type="button"
 				className="flex w-full cursor-pointer items-start gap-2 rounded-[inherit] border-none bg-none p-1 px-3 text-left text-inherit select-none hover:bg-[color:color-mix(in_srgb,var(--color-accent)_6%,transparent)] focus-visible:-outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
-				onClick={() => canExpand && setExpanded(!expanded)}
-				disabled={!canExpand}
+				onClick={() => setExpanded(!expanded)}
 				aria-expanded={expanded}
 			>
 				<span className="shrink-0 text-body leading-6" aria-hidden="true">
-					{canExpand ? (expanded ? "📂" : "📁") : "🔁"}
+					{expanded ? "📂" : "📁"}
 				</span>
 				<div className="flex min-w-0 flex-1 flex-col gap-0.5">
-					<span className="truncate text-caption leading-[1.4] text-text-secondary">{stripAnsi(summary)}</span>
+					<span className="truncate text-caption leading-[1.4] text-text-secondary">
+						{overflowing ? summaryText.slice(0, PREVIEW_CHARS) + "…" : summaryText}
+					</span>
 					<div className="flex flex-wrap items-center gap-1">
 						{typeof compactionCount === "number" && compactionCount > 0 && (
 							<span className="inline-flex items-center rounded-full border border-[color-mix(in_srgb,var(--color-accent)_16%,transparent)] bg-[color:color-mix(in_srgb,var(--color-accent)_8%,transparent)] px-1.5 font-mono text-micro text-text-tertiary">
@@ -93,65 +76,28 @@ export const CompactionCard = memo(function CompactionCard(props: {
 								{t("app.compactionTokensBefore", { count: Math.round(tokensBefore / 1000) })}
 							</span>
 						)}
-						{canExpand && (
-							<span className="font-mono text-micro opacity-80 text-text-tertiary">
-								{expanded ? t("app.compactionCollapse") : t("app.compactionExpand")}
-							</span>
+						{expanded ? (
+							<span className="font-mono text-micro opacity-80 text-text-tertiary">{t("app.compactionCollapse")}</span>
+						) : (
+							overflowing && <span className="font-mono text-micro opacity-80 text-text-tertiary">{t("app.compactionExpand")}</span>
 						)}
 					</div>
 					<time className="text-micro opacity-70 text-text-tertiary">{time}</time>
 				</div>
 			</button>
-			{expanded && canExpand && (
-				<div className="border-t border-[color-mix(in_srgb,var(--color-accent)_8%,transparent)]">
-					<div />
-					{loadState === "loading" && (
-						<div className="p-1 px-3 text-caption text-text-tertiary">{t("app.compactionLoading")}</div>
-					)}
-					{loadState === "error" && (
-						<div className="p-1 px-3 text-caption text-text-tertiary">{t("app.compactionLoadFailed")}</div>
-					)}
-					{loadState === "loaded" && (
-						archived && archived.length > 0
-							? <ArchivedMessageList messages={archived} />
-							: <div className="p-1 px-3 text-caption text-text-tertiary">{t("app.compactionEmpty")}</div>
-					)}
+			{expanded && (
+				<div className="markdown-body border-t border-[color-mix(in_srgb,var(--color-accent)_8%,transparent)] px-3 pt-2 pb-1 text-text-secondary">
+					<MarkdownStream
+						text={summaryText}
+						onOpenExternal={props.onOpenExternal}
+						onOpenFile={props.onOpenFile}
+					/>
 				</div>
 			)}
 		</article>
 		</TimelineMarker>
 	);
 });
-
-/** 归档消息列表：压缩卡片展开时，以简略格式渲染压缩前的消息历史。 */
-function ArchivedMessageList({ messages }: { messages: ChatMessage[] }) {
-	return (
-		<div className="flex max-h-[360px] flex-col overflow-y-auto p-1 px-2">
-			{messages.map((msg) => (
-				<ArchivedMessage key={msg.id} message={msg} />
-			))}
-		</div>
-	);
-}
-
-/** 单条归档消息：根据角色显示对应的图标和内容预览。
- * 只展示纯文本内容，不渲染 Markdown / 代码高亮 / 工具详情，保持归档区视觉干净。 */
-function ArchivedMessage({ message }: { message: ChatMessage }) {
-	const text = stripAnsi(message.text).trim();
-	// 截断过长的消息以减少展开区体积
-	const preview = text.length > 300 ? text.slice(0, 300) + "…" : text;
-	const roleIcon =
-		message.role === "user" ? "👤" :
-		message.role === "assistant" ? "🤖" :
-		message.role === "tool" ? "🔧" : "💬";
-
-	return (
-		<div className={`flex items-start gap-1 rounded-[2px] p-0.5 px-1 text-caption leading-[1.4] hover:bg-[color:color-mix(in_srgb,var(--color-accent)_4%,transparent)]${message.role === "user" ? "" : ""}`}>
-			<span className="w-5 shrink-0 text-center text-caption">{roleIcon}</span>
-			<span className={`min-w-0 flex-1 truncate${message.role === "user" ? " text-text-primary" : message.role === "tool" ? " font-mono text-micro text-text-tertiary" : " text-text-secondary"}`}>{preview || "(empty)"}</span>
-		</div>
-	);
-}
 
 /** 错误/RPC/系统诊断消息使用独立卡片，避免和普通 AI 正文混在一起难以扫读。 */
 export const DiagnosticMessageCard = memo(function DiagnosticMessageCard(props: {

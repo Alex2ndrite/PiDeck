@@ -392,19 +392,6 @@ export function registerSessionIpc(deps: SessionIpcDeps): void {
 		ipcChannels.sessionsCatalogReadReferenceMessages,
 		(_event, sessionId: string) => readCatalogSessionReferenceMessages(sessionId),
 	);
-	// 按需读取压缩卡片的归档消息（展开时调用，不常驻内存）：
-	// 入参校验在边界（渲染层数据不可信），sessionId/compactionId 必须为非空字符串。
-	ipcMain.handle(
-		ipcChannels.sessionsCatalogReadArchivedMessages,
-		async (_event, sessionId: unknown, compactionId: unknown) => {
-			if (typeof sessionId !== "string" || !sessionId.trim() || typeof compactionId !== "string" || !compactionId.trim()) {
-				return [];
-			}
-			const entry = sessionCatalog.get(sessionId);
-			if (!entry?.filePath) return [];
-			return agentManager.readArchivedMessages(entry.filePath, sessionId, compactionId);
-		},
-	);
 	// 按需读取消息完整文本（工具结果截断后的「查看完整输出」）：
 	// 入参校验在边界（渲染层数据不可信），agentId/messageId 必须为非空字符串。
 	ipcMain.handle(

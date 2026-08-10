@@ -611,7 +611,7 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
                   return null;
                 }
                 if (meta?.type === "compaction") {
-                  return <CompactionCard key={message.id} message={message} sessionId={sessionId} />;
+                  return <CompactionCard key={message.id} message={message} sessionId={sessionId} onOpenExternal={props.onOpenExternal} onOpenFile={props.onOpenFile} />;
                 }
                 // 自动重试状态（retryScheduled/retrySucceeded/retryFailed 等）
                 // 属于「重试提示」，与失败类一样转 toast、不占时间线。

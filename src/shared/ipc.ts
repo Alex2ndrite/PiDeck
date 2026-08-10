@@ -56,8 +56,6 @@ export const ipcChannels = {
 	sessionsCatalogReadMessages: "sessions:catalog-read-messages",
 	sessionsCatalogReadMessagePage: "sessions:catalog-read-message-page",
 	sessionsCatalogReadReferenceMessages: "sessions:catalog-read-reference-messages",
-	/** 按需读取压缩卡片的归档消息（展开时调用，不常驻内存）。 */
-	sessionsCatalogReadArchivedMessages: "sessions:catalog-read-archived-messages",
 	/** 按需读取单条消息完整文本（工具结果截断后的「查看完整输出」入口）。 */
 	sessionsCatalogReadMessageFullText: "sessions:catalog-read-message-full-text",
 	sessionsCatalogCopy: "sessions:catalog-copy",

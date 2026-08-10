@@ -33,7 +33,10 @@ test("ask stays out of composer sizing and uses the session timeline as its scro
   assert.match(sessionView, /<SessionMessageTimeline[\s\S]*runtimeUi=\{runtimeUi\}/);
   assert.match(timeline, /className="session-runtime-ui mx-auto w-full/);
   assert.doesNotMatch(timeline, /session-runtime-ui sticky bottom-0/);
-  assert.match(foundation, /\.chat-pane\[style\*="--content-max-width"\] \.session-runtime-ui/);
+  // 内容宽度体系（容器查询百分比）：.chat-pane 注入 --chat-content-pct-set，
+  // 消息与 ask（session-runtime-ui）共享 --chat-inline-pad 留白，保证两者永远对齐。
+  assert.match(foundation, /\.chat-pane[\s\S]*?--chat-content-pct: var\(--chat-content-pct-set, 80%\)/);
+  assert.match(foundation, /\.message-timeline[\s\S]*?padding-inline: var\(--chat-inline-pad\)/);
   assert.doesNotMatch(overlay, /CollapsibleContent className="min-h-0 overflow-y-auto"/);
   assert.doesNotMatch(overlay, /max-h-\[(?:55vh|180px|240px)\][^\n]*overflow-y-auto/);
 });

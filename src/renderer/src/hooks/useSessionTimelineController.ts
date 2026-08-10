@@ -602,8 +602,13 @@ export function useSessionTimelineController(options: {
 			const sessionId = options.sessionId;
 			if (!sessionId || isLoadingMessagePage) return;
 			const before = runtimeHistory?.nextBefore;
-			const anchorMeta = !runtimeHistory ? messages[0]?.meta?.entryId : undefined;
-			const anchorEntryId = typeof anchorMeta === "string" && anchorMeta ? anchorMeta : undefined;
+			// 首次补历史锚点：窗口首条可能是无 entryId 的系统摘要卡片（compaction/branchSummary），
+			// 必须取第一条有 entryId 的消息，否则锚点解析失败导致首次上翻静默放弃。
+			const anchorMessage = !runtimeHistory
+				? messages.find((m) => typeof m.meta?.entryId === "string")
+				: undefined;
+			const anchorEntryId =
+				typeof anchorMessage?.meta?.entryId === "string" ? anchorMessage.meta.entryId : undefined;
 			if (!runtimeHistory && !anchorEntryId) return; // 无 entryId 无法对齐，放弃补历史
 			const sequence = ++nextLoadSequence;
 			trackLatestLoad(sessionId, sequence);

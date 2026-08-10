@@ -50,7 +50,8 @@ export interface AppShellProps {
 
   chatPaneRef: React.RefObject<HTMLElement | null>;
   terminalRowHeight: number;
-  contentMaxWidth: number;
+  /** 聊天内容区占面板百分比（60–100），注入 --chat-content-pct-set，由 CSS 容器查询自适应分屏 */
+  chatContentWidthPct: number;
 
   sidebarContent: ReactNode;
   chatPaneContent: ReactNode;
@@ -92,7 +93,7 @@ export function AppShell(props: AppShellProps) {
     listCollapsed, listWidth,
     drawer, drawerCollapsed, drawerWidth, drawerPinned,
     useNativeTitleBar,
-    chatPaneRef, terminalRowHeight, contentMaxWidth,
+    chatPaneRef, terminalRowHeight, chatContentWidthPct,
     sidebarContent, chatPaneContent, drawerContent, drawerRail, outlineContent,
     setListCollapsed, setListWidth, setDrawerCollapsed, setDrawerWidth,
     onToggleListCollapsed,
@@ -251,9 +252,9 @@ export function AppShell(props: AppShellProps) {
             style={
               {
                 "--terminal-row-h": `${terminalRowHeight}px`,
-                ...(contentMaxWidth > 0 && contentMaxWidth < 1800
-                  ? { "--content-max-width": `${contentMaxWidth}px` }
-                  : undefined),
+                // 内容宽度百分比（60–100）：始终注入，由 CSS 统一计算留白；
+                // 100% 时 --chat-inline-pad 自动回退最小边距，无需条件分支。
+                "--chat-content-pct-set": `${chatContentWidthPct}%`,
               } as CSSProperties
             }
           >

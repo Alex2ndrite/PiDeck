@@ -188,6 +188,10 @@ function SettingsModalContent(props: SettingsModalProps) {
 	const [activeTab, setActiveTab] = useState<SettingsTabId>("common");
 	// ── 全局设置草稿：进入弹框时快照 props.settings，所有修改在 draft 上操作，保存时统一提交 ──
 	const [draftSettings, setDraftSettings] = useState<AppSettings>(() => ({ ...props.settings }));
+	// 内容宽度留白：单侧 = (100 − pct) / 2，可能是小数（如 62.5% 宽 → 18.75%）；
+	// sideGapLabel 用于显示（去尾 0），数值本身用于示意图宽度。
+	const sideGapPct = (100 - draftSettings.chatContentWidthPct) / 2;
+	const sideGapLabel = Number.isInteger(sideGapPct) ? String(sideGapPct) : sideGapPct.toFixed(1);
 	const [dirtyFields, setDirtyFields] = useState<Set<string>>(new Set());
 	/** 打开弹框时的原始设置快照，用于取消时回退 */
 	const baseSnapshotRef = useRef<AppSettings>({ ...props.settings });
@@ -497,18 +501,17 @@ function SettingsModalContent(props: SettingsModalProps) {
 				<DialogHeader className="flex-row items-center justify-between px-4 py-3">
 					<DialogTitle>{t("settings.title")}</DialogTitle>
 					<div className="flex items-center gap-2">
+						{/* 保存按钮常驻：无未保存改动时禁用，避免用户改完直接关窗丢改动 */}
+						<Button variant="default" size="sm" onClick={saveAll} disabled={!hasDirtyChanges}>
+							{t("common.save")}
+						</Button>
 						{hasDirtyChanges ? (
-							<>
-								<Button variant="default" size="sm" onClick={saveAll}>
-									{t("common.save")}
-								</Button>
-								{/* 放弃更改用 outline（白底描边）而非灰底 secondary：与黑色主按钮形成
-								    清晰的主次层级（shadcn dialog 的 confirm/cancel 惯例），避免一对按钮
-								    都是灰色填充分不出哪个是提交。 */}
-								<Button variant="outline" size="sm" onClick={cancelAll}>
-									{t("common.cancel")}
-								</Button>
-							</>
+							/* 放弃更改用 outline（白底描边）而非灰底 secondary：与黑色主按钮形成
+							    清晰的主次层级（shadcn dialog 的 confirm/cancel 惯例），避免一对按钮
+							    都是灰色填充分不出哪个是提交。 */
+							<Button variant="outline" size="sm" onClick={cancelAll}>
+								{t("common.cancel")}
+							</Button>
 						) : undefined}
 						<DialogClose asChild>
 							<Button variant="ghost" size="icon" aria-label={t("common.close")} title={t("common.close")}>
@@ -1128,26 +1131,52 @@ function SettingsModalContent(props: SettingsModalProps) {
 								{/* 聊天排版 */}
 								<SettingsSection title={t("settings.sectionChatLayout")}>
 									<SettingRow
-										title={<span>{t("settings.contentMaxWidth")}</span>}
-										description={t("settings.contentMaxWidthDesc")}
+										title={<span>{t("settings.contentWidthPct")}</span>}
+										description={t("settings.contentWidthPctDesc")}
+										stacked
 									>
+										{/* 示意图：中间内容区(accent) + 两侧留白，随滑块实时联动 */}
+										<div className="flex h-9 w-full items-stretch overflow-hidden rounded-md border border-border-subtle">
+											<div
+												className="flex shrink-0 items-center justify-center bg-border/60 text-[10px] text-muted-foreground tabular-nums"
+												style={{ width: `${sideGapPct}%` }}
+											>
+												{sideGapPct >= 6 ? `${sideGapLabel}%` : ""}
+											</div>
+											<div
+												className="flex flex-1 items-center justify-center text-xs font-semibold text-white tabular-nums"
+												style={{ backgroundColor: "var(--color-accent)" }}
+											>
+												{draftSettings.chatContentWidthPct}%
+											</div>
+											<div
+												className="flex shrink-0 items-center justify-center bg-border/60 text-[10px] text-muted-foreground tabular-nums"
+												style={{ width: `${sideGapPct}%` }}
+											>
+												{sideGapPct >= 6 ? `${sideGapLabel}%` : ""}
+											</div>
+										</div>
 										<div className="flex w-full items-center gap-3">
 											<input
 												type="range"
-												min="800"
-												max="1800"
-												step="25"
-												value={draftSettings.contentMaxWidth}
-												onChange={(event) => updateDraft({ contentMaxWidth: parseInt(event.target.value) })}
+												min="60"
+												max="100"
+												step="1"
+												value={draftSettings.chatContentWidthPct}
+												onChange={(event) => updateDraft({ chatContentWidthPct: parseInt(event.target.value) })}
 												className="min-w-0 flex-1 accent-[var(--color-accent)]"
-												aria-label={t("settings.contentMaxWidth")}
+												aria-label={t("settings.contentWidthPct")}
 											/>
-											<span className="min-w-20 shrink-0 text-right font-brand text-sm text-muted-foreground tabular-nums">
-												{draftSettings.contentMaxWidth === 1800
-													? t("settings.contentMaxWidthUnlimited")
-													: `${draftSettings.contentMaxWidth}px`}
+											<span
+												className="min-w-14 shrink-0 text-right font-brand text-sm font-semibold tabular-nums"
+												style={{ color: "var(--color-accent)" }}
+											>
+												{draftSettings.chatContentWidthPct}%
 											</span>
 										</div>
+										<p className="text-xs text-muted-foreground">
+											{t("settings.contentWidthGap", { pct: sideGapLabel })}
+										</p>
 									</SettingRow>
 								</SettingsSection>
 

@@ -122,6 +122,7 @@ let previewSettings: AppSettings = {
 	linkOpenMode: "external",
 	workspaceContentOpenMode: "split",
 	contentMaxWidth: 1800,
+	chatContentWidthPct: 80,
 	maxEditorFileSizeMB: 5,
 	externalEditors: createDefaultExternalEditorSettings(),
 
@@ -375,7 +376,6 @@ export function createPreviewApi(): PiDesktopApi {
 			readRecordMessages: async () => [],
 			readRecordMessagePage: async () => ({ messages: [], total: 0, nextBefore: null }),
 			readMessageFullText: async () => ({ text: "" }),
-			readRecordArchivedMessages: async () => [],
 			readReferenceMessages: async () => [
 				{ role: "user", content: "Preview user message", timestamp: Date.now() - 60000 },
 				{ role: "assistant", content: "Preview assistant response", timestamp: Date.now() - 30000 },

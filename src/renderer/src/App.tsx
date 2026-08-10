@@ -522,6 +522,7 @@ export function App() {
     linkOpenMode: "external",
     workspaceContentOpenMode: "split",
     contentMaxWidth: 1800,
+    chatContentWidthPct: 80,
     maxEditorFileSizeMB: 5,
     externalEditors: createDefaultExternalEditorSettings(),
 
@@ -2975,7 +2976,7 @@ export function App() {
       useNativeTitleBar={settings.useNativeTitleBar}
       chatPaneRef={chatPaneRef}
       terminalRowHeight={terminalRowHeight}
-      contentMaxWidth={settings.contentMaxWidth}
+      chatContentWidthPct={settings.chatContentWidthPct}
       sidebarContent={sidebarContentNode}
       chatPaneContent={chatPaneContentNode}
       drawerRail={
