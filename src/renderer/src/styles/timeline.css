@@ -593,11 +593,12 @@
 .thinking-card-chevron.open {
   transform: rotate(180deg);
 }
-/* 思考正文显式锁定为会话正文字号：比工具卡片 bash 输出（caption 档）大一档，
-   随 data-ui-font-size 档位联动，不依赖 body 继承避免被外层容器意外覆盖。 */
+/* 思考正文与回答同字号（--font-size-chat），随 data-chat-font-size 档位联动：
+   思考是「回答的草稿」，同一对话区不应出现两个字号轨道；
+   层级靠灰色（text-text-tertiary）+ 虚线框 + 折叠预览表达，不靠缩小字号。 */
 [data-marker-kind="thinking"] .markdown-body,
 .thinking-card.markdown-body {
-  font-size: var(--font-size-body);
+  font-size: var(--font-size-chat);
 }
 /* 流式思考卡片：实时展示推理过程 */
 
@@ -1589,7 +1590,9 @@ body.ask-dialog-open .ask-question-card.pending {
 }
 .markdown-body p {
   margin: 0 0 11px;
-  line-height: 1.65;
+  /* 与 .assistant-text 容器声明（1.68）统一：此前容器 1.68 被 p 的 1.65 覆盖，
+     实际段落行高与声明不一致；统一后思考/回答/中间回复行距完全一致。 */
+  line-height: 1.68;
   white-space: pre-wrap;
 }
 .markdown-body ul,

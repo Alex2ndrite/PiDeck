@@ -1771,6 +1771,7 @@ export const enUS: Record<TranslationKey, string> = {
   "settings.fontSizePerAreaDesc": "Set font sizes for sidebar, chat content, and input box separately",
   "settings.fontSizeExpand": "Expand per-area font size settings",
   "settings.fontSizeCollapse": "Collapse per-area font size settings",
+  "settings.zoomFactorHint": "Scales the whole window (icons and spacing included). Use the font size settings below to change text size only.",
   "settings.uiFontSize": "UI Font Size",
   "settings.chatFontSize": "Chat Font Size",
   "settings.inputFontSize": "Input Font Size",

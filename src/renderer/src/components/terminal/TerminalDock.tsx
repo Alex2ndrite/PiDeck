@@ -299,10 +299,21 @@ export function TerminalDock(props: {
 		fitRef.current = null;
 		if (collapsed || !contentReady || !activeTab || !containerRef.current) return;
 
+		// 终端字体接入设置 token：字体族跟随 --font-family-mono（设置中「代码字体」），
+		// 字号跟随 --font-size-control（UI 字号轨，默认 13px 与历史硬编码一致）。
+		// xterm.js 需要具体字体串（canvas 测量用），不能用 var()，故挂载时展开一次；
+		// 设置变更后新开的终端生效，已开终端保持本次会话字体（xterm 无热更新入口）。
+		const rootStyle = getComputedStyle(document.documentElement);
+		const fontFamily =
+			rootStyle.getPropertyValue("--font-family-mono").trim() ||
+			'"Cascadia Mono", Consolas, monospace';
+		const fontSize =
+			parseFloat(rootStyle.getPropertyValue("--font-size-control")) || 13;
+
 		const terminal = new Terminal({
 			cursorBlink: true,
-			fontFamily: '"Cascadia Mono", Consolas, monospace',
-			fontSize: 13,
+			fontFamily,
+			fontSize,
 			scrollback: 5000,
 			theme: xtermTheme,
 		});

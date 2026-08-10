@@ -131,7 +131,7 @@ let previewSettings: AppSettings = {
 	petPatrolPauseMin: 5,
 	favoriteModels: [],
 
-	fontSize: "medium",
+	fontSize: "default",
 	uiFontSize: null,
 	chatFontSize: null,
 	inputFontSize: null,

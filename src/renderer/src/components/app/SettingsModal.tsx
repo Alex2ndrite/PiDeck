@@ -903,8 +903,10 @@ function SettingsModalContent(props: SettingsModalProps) {
 									</SettingRow>
 								</SettingsSection>
 
-								{/* 界面 */}
-								<SettingsSection title={t("settings.interface")}>
+								{/* 字体 */}
+								<SettingsSection title={t("settings.sectionFonts")}>
+									{/* 窗口缩放：与字号设置同分组，避免「字变大」两个入口分散在不同分组；
+									   提示文案说明其与字号档位的区别（缩放=整体，字号=仅文字）。 */}
 									<SettingRow
 										title={
 											<>
@@ -912,6 +914,7 @@ function SettingsModalContent(props: SettingsModalProps) {
 												<DirtyMarker dirty={isDirty("zoomFactor")} label={t("settings.zoomFactor")} />
 											</>
 										}
+										description={t("settings.zoomFactorHint")}
 									>
 										<div className="flex items-center gap-2">
 											<Button
@@ -944,10 +947,6 @@ function SettingsModalContent(props: SettingsModalProps) {
 											</Button>
 										</div>
 									</SettingRow>
-								</SettingsSection>
-
-								{/* 字体 */}
-								<SettingsSection title={t("settings.sectionFonts")}>
 									<SettingRow
 										title={
 											<>

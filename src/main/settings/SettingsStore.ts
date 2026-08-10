@@ -168,7 +168,9 @@ Gitmoji 对应关系：
   piRpcNoSkills: false,
 
   // 字体配置：默认使用系统字体；用户可通过自定义字体设置修改。
-  fontSize: "medium",
+  // 出厂默认取 "default" 档：与 CSS token 基线（:root 无覆盖时）一致，
+  // 避免「默认」档位名与实际出厂外观错位（旧默认 medium 比 default 大一档）。
+  fontSize: "default",
   uiFontSize: null,
   chatFontSize: null,
   inputFontSize: null,

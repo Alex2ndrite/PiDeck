@@ -402,11 +402,12 @@ export const ThinkingBlock = memo(
 				)}
 			</div>
 			{/* 虚线框内容区：折叠态最多 4 行半（max-height=4.5×行高，第 5 行切半提示还有内容），
-			    行高按正文字号计算（1.65 × 14px × 4.5 ≈ 104px） */}
+			    行高按正文字号计算（1.68 × 15px × 4.5 ≈ 113px），字号随 --font-size-chat 联动
+			    （与思考正文改挂对话字号轨保持一致） */}
 			<div className="rounded-md border border-dashed border-border-subtle bg-[color:color-mix(in_srgb,var(--color-bg-muted)_45%,transparent)]">
 				<div
 					ref={contentRef}
-					className={`markdown-body px-3 pt-2 pb-1 text-text-tertiary ${expanded ? "" : "max-h-[calc(var(--font-size-body)*7.425)] overflow-hidden"}`}
+					className={`markdown-body px-3 pt-2 pb-1 text-text-tertiary ${expanded ? "" : "max-h-[calc(var(--font-size-chat)*7.56)] overflow-hidden"}`}
 				>
 					<MarkdownStream
 						text={displayedContent}
