@@ -1,4 +1,4 @@
-import { useState, useRef, useLayoutEffect, useEffect, useMemo, type ReactNode } from "react";
+import { useState, useRef, useEffect, useMemo, type ReactNode } from "react";
 import { Archive, Check, CircleAlert, CircleDot, Folder, LoaderCircle, MessageCircle } from "lucide-react";
 import { t } from "../../i18n";
 import {
@@ -421,6 +421,8 @@ export function AgentContextMenu(props: {
 	onCopySessionFilePath: () => void;
 	onToggleRpcLogging?: () => void;
 	isRpcLogging?: boolean;
+	/** 打开实时日志查看弹窗（仅开启记录后可用） */
+	onOpenLogs?: () => void;
 	onOpenLogFile?: () => void;
 	onOpenSessionFile?: () => void;
 	onCloseAgent: () => void;
@@ -452,9 +454,14 @@ export function AgentContextMenu(props: {
 				{props.isRpcLogging ? `✓ ${t("menu.rpcLoggingOn")}` : t("menu.rpcLogging")}
 			</DropdownMenuItem>
 			{props.isRpcLogging && (
-				<DropdownMenuItem disabled={busy} onSelect={props.onOpenLogFile}>
-					{t("menu.rpcLogFile")}
-				</DropdownMenuItem>
+				<>
+					<DropdownMenuItem disabled={busy} onSelect={props.onOpenLogs}>
+						{t("menu.rpcLogView")}
+					</DropdownMenuItem>
+					<DropdownMenuItem disabled={busy} onSelect={props.onOpenLogFile}>
+						{t("menu.rpcLogFile")}
+					</DropdownMenuItem>
+				</>
 			)}
 			<DropdownMenuSeparator />
 			<DropdownMenuItem variant="destructive" onSelect={props.onCloseAgent}>{t("menu.closeAgent")}</DropdownMenuItem>
@@ -551,159 +558,6 @@ export function ProjectAvatar(props: {
 			)}
 		</div>
 	);
-}
-export function RpcLogModal(props: {
-	logs: Array<{
-		id: string;
-		agentId: string;
-		direction: string;
-		summary: string;
-		time: number;
-		data?: unknown;
-	}>;
-	onClose: () => void;
-}) {
-	const panelRef = useRef<HTMLDivElement>(null);
-	const [expandedId, setExpandedId] = useState<string | null>(null);
-	const [directionFilter, setDirectionFilter] = useState<"all" | "send" | "recv">("all");
-	const [keyword, setKeyword] = useState("");
-	const normalizedKeyword = keyword.trim().toLowerCase();
-	const visibleLogs = props.logs
-		.filter((log) => directionFilter === "all" || log.direction === directionFilter)
-		.filter((log) => {
-			if (!normalizedKeyword) return true;
-			// 搜索同时覆盖摘要和完整 JSON,方便直接查 502、terminated、auto_retry 等排障关键词。
-			return formatRpcLogForCopy(log).toLowerCase().includes(normalizedKeyword);
-		})
-		.slice(-2000);
-
-	useEffect(() => {
-		const el = panelRef.current;
-		if (el) el.scrollTop = el.scrollHeight;
-	}, [props.logs.length, visibleLogs.length]);
-
-	const copyLogs = (logs: typeof visibleLogs) =>
-		navigator.clipboard.writeText(logs.map(formatRpcLogForCopy).join("\n"));
-
-	return (
-		<Dialog open onOpenChange={(next) => !next && props.onClose()}>
-			<DialogContent showCloseButton={false} className={cn("flex flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(1300px,calc(100vw-48px))] h-[min(850px,calc(100vh-48px))]", "sm:max-w-[min(1000px,92vw)] h-[min(720px,82vh)]")}>
-				<DialogHeader className="flex-row items-center justify-between px-4 py-3">
-					<DialogTitle>{t("rpc.title", {
-						visible: visibleLogs.length,
-						total: props.logs.length,
-					})}</DialogTitle>
-					<div className="flex items-center gap-2">
-						<Button variant="default" onClick={() => copyLogs(props.logs)}>
-							{t("common.copyAll")}
-						</Button>
-						<Button variant="secondary" onClick={() => copyLogs(visibleLogs)}>
-							{t("common.copyVisible")}
-						</Button>
-						<DialogClose asChild>
-							<Button variant="ghost" size="icon" aria-label={t("common.close")} title={t("common.close")}>
-								<X size={18} strokeWidth={2.2} aria-hidden="true" />
-							</Button>
-						</DialogClose>
-					</div>
-				</DialogHeader>
-			<div className="rpc-log-modal rpc-log-modal--embedded">
-				<div className="rpc-log-toolbar">
-					<div className="rpc-log-filter-tabs">
-						<Button
-							variant="outline"
-							size="sm"
-							className={`h-auto px-2 py-1 text-caption shadow-none${directionFilter === "all" ? " active" : ""}`}
-							onClick={() => setDirectionFilter("all")}
-						>
-							{t("rpc.filterAll")}
-						</Button>
-						<Button
-							variant="outline"
-							size="sm"
-							className={`h-auto px-2 py-1 text-caption shadow-none${directionFilter === "send" ? " active" : ""}`}
-							onClick={() => setDirectionFilter("send")}
-						>
-							{t("rpc.filterSend")}
-						</Button>
-						<Button
-							variant="outline"
-							size="sm"
-							className={`h-auto px-2 py-1 text-caption shadow-none${directionFilter === "recv" ? " active" : ""}`}
-							onClick={() => setDirectionFilter("recv")}
-						>
-							{t("rpc.filterReceive")}
-						</Button>
-					</div>
-					<Input
-						value={keyword}
-						onChange={(e) => setKeyword(e.target.value)}
-						placeholder={t("rpc.searchPlaceholder")}
-					/>
-				</div>
-				<div className="rpc-log-list" ref={panelRef}>
-					{visibleLogs.map((log) => {
-						const jsonText = JSON.stringify(log.data ?? {}, null, 2);
-						return (
-							<div key={log.id} className="rpc-log-entry-wrap">
-								<div
-									className={`rpc-log-entry ${log.direction === "send" ? "log-send" : "log-recv"}`}
-									onClick={() =>
-										setExpandedId(expandedId === log.id ? null : log.id)
-									}
-								>
-									<time>
-										{new Date(log.time).toLocaleTimeString(undefined, {
-											hour: "2-digit",
-											minute: "2-digit",
-											second: "2-digit",
-										})}
-									</time>
-									<span className="log-direction">
-										{log.direction === "send" ? "→" : "←"}
-									</span>
-									<span className="log-summary">{log.summary}</span>
-									<div className="rpc-log-entry-actions" onClick={(event) => event.stopPropagation()}>
-										<Button variant="outline" size="sm" className="h-auto px-2 py-1 text-caption shadow-none" onClick={() => navigator.clipboard.writeText(formatRpcLogForCopy(log))}>
-											{t("common.copy")}
-										</Button>
-										<Button variant="outline" size="sm" className="h-auto px-2 py-1 text-caption shadow-none" onClick={() => navigator.clipboard.writeText(jsonText)}>
-											{t("rpc.copyJson")}
-										</Button>
-									</div>
-								</div>
-								{expandedId === log.id && log.data != null && (
-									<pre className="rpc-log-detail">{jsonText}</pre>
-								)}
-							</div>
-						);
-					})}
-					{visibleLogs.length === 0 && (
-						<div className="rpc-log-empty">
-							{t("rpc.empty")}
-						</div>
-					)}
-				</div>
-			</div>
-			</DialogContent>
-		</Dialog>
-	);
-}
-
-function formatRpcLogForCopy(log: {
-	agentId: string;
-	direction: string;
-	summary: string;
-	time: number;
-	data?: unknown;
-}) {
-	return JSON.stringify({
-		time: new Date(log.time).toISOString(),
-		agentId: log.agentId,
-		direction: log.direction,
-		summary: log.summary,
-		data: log.data,
-	});
 }
 
 type EntryAction = {

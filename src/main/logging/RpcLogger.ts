@@ -1,3 +1,4 @@
+import type { RpcLogEntry } from "../../shared/types/rpcLog";
 import { app } from "electron";
 import { appendFile, mkdir, readFile, readdir, rename, stat, unlink } from "node:fs/promises";
 import { join } from "node:path";
@@ -5,9 +6,14 @@ import { createGzip, createGunzip } from "node:zlib";
 import { pipeline } from "node:stream/promises";
 import { createReadStream, createWriteStream } from "node:fs";
 
-const MAX_LIVE = 200;
+const MAX_LIVE = 1000;
 /** 写入文件时 data 字段 JSON 序列化后的最大字节数，超过则截断 */
 const MAX_DATA_BYTES = 2_048;
+/**
+ * 实时环形缓冲中单条 data 的最大字节数（仅影响内存中的缓冲副本，文件仍按原始数据落盘）。
+ * 防止高频大 payload（如 prompt 全文）在缓冲里堆积把主进程内存打爆。
+ */
+const MAX_LIVE_DATA_BYTES = 4_096;
 /** 日志文件保留天数，超过自动删除 */
 const RETENTION_DAYS = 30;
 
@@ -18,22 +24,13 @@ function formatDate(value: Date) {
   return `${year}-${month}-${day}`;
 }
 
-export interface RpcLogEntry {
-  id: string;
-  agentId: string;
-  direction: string;
-  summary: string;
-  time: number;
-  data?: unknown;
-}
-
 /**
  * RPC 日志服务。
  * - 按 Agent 分文件：userData/logs/rpc/rpc-<agentId>-YYYY-MM-DD.jsonl
  * - 写入时截断大 data（超过 2KB 脱敏保存），大幅减少文件体积
  * - 次日自动 gzip 前一天文件，进一步压缩历史日志
  * - 超过 30 天自动清理
- * - 保持小型环形缓冲区（200 条）供实时展示
+ * - 保持环形缓冲区（1000 条）供实时查看弹窗拉取初始历史
  */
 export class RpcLogger {
   /** RPC 日志独立子目录，不和 app 日志混在一起 */
@@ -45,11 +42,13 @@ export class RpcLogger {
 
   /** 写入一条 RPC 日志，同时追加到文件与环形缓冲区 */
   push(entry: RpcLogEntry) {
-    // 环形缓冲区：保留最近 MAX_LIVE 条
+    // 环形缓冲区：保留最近 MAX_LIVE 条。缓冲里只存截断 data 的副本（见 truncateForLive），
+    // 文件写入仍用原始 entry，保证完整内容可回查。
+    const liveEntry = this.truncateForLive(entry);
     if (this.live.length >= MAX_LIVE) {
       this.live.splice(0, this.live.length - MAX_LIVE + 1);
     }
-    this.live.push(entry);
+    this.live.push(liveEntry);
 
     // 异步写入文件，串行化避免并发写冲突
     this.writeQueue = this.writeQueue
@@ -59,9 +58,34 @@ export class RpcLogger {
       });
   }
 
-  /** 获取实时缓冲区（最近 MAX_LIVE 条） */
-  getLive(): RpcLogEntry[] {
-    return [...this.live];
+  /** 获取实时缓冲区（最近 MAX_LIVE 条），可选按 agentId 过滤 */
+  getLive(agentId?: string): RpcLogEntry[] {
+    if (!agentId) return [...this.live];
+    return this.live.filter((entry) => entry.agentId === agentId);
+  }
+
+  /**
+   * 供实时查看的内存副本：data JSON 超过 MAX_LIVE_DATA_BYTES 时替换为脱敏摘要。
+   * 只影响内存缓冲，不改变落盘内容。
+   */
+  private truncateForLive(entry: RpcLogEntry): RpcLogEntry {
+    if (entry.data === undefined) return entry;
+    let json = "";
+    try {
+      json = JSON.stringify(entry.data);
+    } catch {
+      // data 不可序列化（如循环引用）时丢弃内容，仅保留类型占位
+      return { ...entry, data: { unserializable: true } };
+    }
+    if (json.length <= MAX_LIVE_DATA_BYTES) return entry;
+    return {
+      ...entry,
+      data: {
+        truncated: true,
+        size: json.length,
+        preview: json.slice(0, 200),
+      },
+    };
   }
 
   /**

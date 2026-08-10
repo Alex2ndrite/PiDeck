@@ -111,8 +111,8 @@ export type SidebarController = {
   openWorktreeCreate: (projectId: string) => void;
   closeWorktreeCreate: () => void;
   rpcLogAgentId?: string;
-  rpcLogs: readonly SidebarRpcLog[];
-  openRpcLogs: (agentId: string, load: (agentId: string) => Promise<SidebarRpcLog[]>) => Promise<void>;
+  /** 打开实时 RPC 日志查看弹窗（数据订阅由弹窗自己管理） */
+  openRpcLogs: (agentId: string) => void;
   closeRpcLogs: () => void;
 };
 
@@ -132,14 +132,10 @@ export function getBoundSidebarRuntimeAgent(
 
 export function createSidebarRequestGate() {
   let menuRequest = 0;
-  let rpcLogRequest = 0;
   return {
     beginMenu: () => ++menuRequest,
     isCurrentMenu: (request: number) => request === menuRequest,
     cancelMenu: () => { menuRequest += 1; },
-    beginRpcLogs: () => ++rpcLogRequest,
-    isCurrentRpcLogs: (request: number) => request === rpcLogRequest,
-    cancelRpcLogs: () => { rpcLogRequest += 1; },
   };
 }
 
@@ -215,7 +211,6 @@ export function useSidebarController(options: {
   const [sessionManagerProjectId, setSessionManagerProjectId] = useState<string>();
   const [worktreeCreateProjectId, setWorktreeCreateProjectId] = useState<string>();
   const [rpcLogAgentId, setRpcLogAgentId] = useState<string>();
-  const [rpcLogs, setRpcLogs] = useState<SidebarRpcLog[]>([]);
   const requestGateRef = useRef(createSidebarRequestGate());
 
   useEffect(() => {
@@ -399,14 +394,8 @@ export function useSidebarController(options: {
     }
     if (requestGateRef.current.isCurrentMenu(request)) setMenu(target);
   }, [options.getRpcLogging]);
-  const openRpcLogs = useCallback(async (
-    agentId: string,
-    load: (agentId: string) => Promise<SidebarRpcLog[]>,
-  ) => {
-    const request = requestGateRef.current.beginRpcLogs();
-    const logs = await load(agentId);
-    if (!requestGateRef.current.isCurrentRpcLogs(request)) return;
-    setRpcLogs(logs);
+  const openRpcLogs = useCallback((agentId: string) => {
+    // 弹窗自持数据（初始历史 + 实时订阅），这里只负责开关
     setRpcLogAgentId(agentId);
   }, []);
 
@@ -452,12 +441,10 @@ export function useSidebarController(options: {
     openWorktreeCreate: setWorktreeCreateProjectId,
     closeWorktreeCreate: () => setWorktreeCreateProjectId(undefined),
     rpcLogAgentId,
-    rpcLogs,
     openRpcLogs,
     closeRpcLogs: () => {
-      requestGateRef.current.cancelRpcLogs();
+      // 弹窗卸载即退订实时日志，无需额外请求门
       setRpcLogAgentId(undefined);
-      setRpcLogs([]);
     },
   };
 }

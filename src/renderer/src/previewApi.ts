@@ -546,6 +546,9 @@ export function createPreviewApi(): PiDesktopApi {
 		rpcLogs: {
 			getSize: async () => 0,
 			get: async () => [],
+			getLive: async () => [],
+			save: async () => false,
+			onLog: (_callback: unknown) => () => {},
 			clear: async () => undefined,
 			setLogging: async () => false,
 			getLogging: async () => false,

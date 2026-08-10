@@ -5,12 +5,12 @@ import {
   AgentContextMenu,
   DraftSessionContextMenu,
   ProjectContextMenu,
-  RpcLogModal,
   SessionContextMenu,
   SessionManagerModal,
   SessionSourceFilterMenu,
   WorktreeCreateDialog,
 } from "./SidebarParts";
+import { RpcLogViewer } from "./RpcLogViewer";
 import { sessionRecordToSummary } from "../../atoms";
 import { t } from "../../i18n";
 import { getBoundSidebarRuntimeAgent, hasLiveSidebarRuntime, type SidebarController, type SidebarRpcLog } from "../../hooks/useSidebarController";
@@ -230,6 +230,7 @@ export function SidebarContent(props: SidebarContentProps) {
             controller.closeMenu();
           })}
           isRpcLogging={controller.isAgentRpcLogging(menuAgent.id)}
+          onOpenLogs={() => { controller.openRpcLogs(menuAgent.id); controller.closeMenu(); }}
           onOpenLogFile={() => { void actions.rpc.openLogFile(menuAgent.id); controller.closeMenu(); }}
           onCloseAgent={() => { void actions.agents.close(menuAgent); controller.closeMenu(); }}
         />
@@ -251,7 +252,7 @@ export function SidebarContent(props: SidebarContentProps) {
           onCopySessionFilePath={() => { void actions.sessions.copyPath(menuSession); controller.closeMenu(); }}
           onOpenSessionFile={() => { void actions.sessions.openFile(menuSession); controller.closeMenu(); }}
           onShowLogs={() => {
-            if (menuSessionRuntimeAgent) void controller.openRpcLogs(menuSessionRuntimeAgent.id, actions.rpc.listLogs);
+            if (menuSessionRuntimeAgent) controller.openRpcLogs(menuSessionRuntimeAgent.id);
           }}
           onArchiveSession={() => { void actions.sessions.archive(menu.projectId, menuSession); controller.closeMenu(); }}
           onDeleteSession={() => { void actions.sessions.delete(menu.projectId, menuSession); controller.closeMenu(); }}
@@ -280,7 +281,15 @@ export function SidebarContent(props: SidebarContentProps) {
           onClose={controller.closeWorktreeCreate}
         />
       )}
-      {controller.rpcLogAgentId && <RpcLogModal logs={[...controller.rpcLogs]} onClose={controller.closeRpcLogs} />}
+      {controller.rpcLogAgentId && (
+        <RpcLogViewer
+          agentId={controller.rpcLogAgentId}
+          loadHistory={actions.rpc.listLogs}
+          getLogging={actions.rpc.getLogging}
+          setLogging={actions.rpc.setLogging}
+          onClose={controller.closeRpcLogs}
+        />
+      )}
     </aside>
   );
 }

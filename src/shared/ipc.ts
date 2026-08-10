@@ -194,6 +194,10 @@ export const ipcChannels = {
 	rpcLogsGetSize: "rpc-logs:get-size",
 	/** 从文件读取 RPC 日志 */
 	rpcLogsGet: "rpc-logs:get",
+	/** 读取主进程实时环形缓冲（最近 N 条） */
+	rpcLogsGetLive: "rpc-logs:get-live",
+	/** 将渲染层传入的日志条目保存为用户选择的文件 */
+	rpcLogsSave: "rpc-logs:save",
 	/** 清空 RPC 日志 */
 	rpcLogsClear: "rpc-logs:clear",
 	rpcLoggingSet: "rpc-logs:logging-set",

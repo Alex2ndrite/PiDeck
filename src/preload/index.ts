@@ -1,5 +1,6 @@
 import { clipboard, contextBridge, ipcRenderer, webUtils } from "electron";
 import { ipcChannels } from "../shared/ipc";
+import type { RpcLogBatch, RpcLogEntry } from "../shared/types/rpcLog";
 import type {
 	YaoPromptListResult,
 	YaoPromptDetailResult,
@@ -808,7 +809,16 @@ const api = {
 		getSize: (target?: SessionRuntimeTarget) =>
 			ipcRenderer.invoke(ipcChannels.rpcLogsGetSize, target) as Promise<number>,
 		get: (options?: { target?: SessionRuntimeTarget; days?: number; limit?: number }) =>
-			ipcRenderer.invoke(ipcChannels.rpcLogsGet, options) as Promise<Array<{ id: string; agentId: string; direction: string; summary: string; time: number; data?: unknown }>>,
+			ipcRenderer.invoke(ipcChannels.rpcLogsGet, options) as Promise<RpcLogEntry[]>,
+		/** 实时查看弹窗初始历史：主进程环形缓冲（按 agentId 过滤） */
+		getLive: (agentId?: string) =>
+			ipcRenderer.invoke(ipcChannels.rpcLogsGetLive, agentId) as Promise<RpcLogEntry[]>,
+		/** 把当前弹窗中的日志条目保存为用户选择的 JSONL 文件 */
+		save: (options: { agentId?: string; entries: RpcLogEntry[] }) =>
+			ipcRenderer.invoke(ipcChannels.rpcLogsSave, options) as Promise<boolean>,
+		/** 订阅主进程批量推送的实时日志（按 agent 聚合，~80ms 一次），返回退订函数 */
+		onLog: (callback: (batch: RpcLogBatch) => void) =>
+			subscribe<{ agentId: string; entries: RpcLogEntry[] }>(ipcChannels.agentsRpcLog, callback),
 		clear: (target?: SessionRuntimeTarget) =>
 			ipcRenderer.invoke(ipcChannels.rpcLogsClear, target) as Promise<void>,
 		setLogging: (target: SessionRuntimeTarget, enabled: boolean) =>
