@@ -1489,7 +1489,6 @@ export const zhCN = {
   "menu.copyPath": "复制路径",
   "menu.copyProjectPath": "复制项目路径",
   "menu.copySessionFilePath": "复制会话文件路径",
-  "menu.rpcLogs": "RPC 日志",
   "menu.rpcLogView": "查看 RPC 日志",
   "menu.rpcLogging": "RPC 日志记录(默认关闭)",
   "menu.rpcLoggingRequiresRuntime": "Agent 运行中才可开启 RPC 日志记录",

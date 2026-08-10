@@ -1509,7 +1509,6 @@ export const enUS: Record<TranslationKey, string> = {
   "menu.copyPath": "Copy path",
   "menu.copyProjectPath": "Copy project path",
   "menu.copySessionFilePath": "Copy session file path",
-  "menu.rpcLogs": "RPC Logs",
   "menu.rpcLogView": "View RPC Logs",
   "menu.rpcLogging": "RPC Logging (off)",
   "menu.rpcLoggingRequiresRuntime": "RPC logging requires a running agent",
