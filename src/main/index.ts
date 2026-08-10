@@ -47,7 +47,12 @@ const isDevBuild = !app.isPackaged || __PIDECK_DEV_BUILD__;
 if (isDevBuild) {
 	// 显式固定为 pi-desktop-dev：dev 构建的 productName 是 PiDeckDev，
 	// 默认 userData 会落在 %APPDATA%\PiDeckDev，必须指回 dev 配置目录以复用现有配置。
-	app.setPath("userData", join(app.getPath("appData"), "pi-desktop-dev"));
+	// 例外：命令行显式传入 --user-data-dir（e2e 隔离、多实例调试）时尊重该路径，
+	// 否则 e2e 会读到本机真实开发数据（settings/projects 全部污染测试断言）。
+	const explicitUserDataDir = process.argv.find((arg) => arg.startsWith("--user-data-dir="));
+	if (!explicitUserDataDir) {
+		app.setPath("userData", join(app.getPath("appData"), "pi-desktop-dev"));
+	}
 }
 
 // Linux XWayland 兼容层：仅当桌面宠物启用时才强制 ozone-platform=x11（#108，
@@ -2444,6 +2449,12 @@ app.whenReady().then(async () => {
 		},
 	);
 	webServiceManager = new WebServiceManager({
+		// dev 模式（electron-vite dev 不产出 out/renderer 构建物）下，静态资源
+		// 代理到 vite dev server，外部 Web 端加载重构后的 React 版页面并支持热更新；
+		// 打包/正式构建走 out/renderer 构建产物，此值为空。
+		devRendererUrl: shouldUseDevRendererUrl()
+			? process.env.ELECTRON_RENDERER_URL
+			: undefined,
 		// 订阅 pi agent 事件流：供 Web SSE 端点转发给浏览器（与 FeishuBridge 同源机制）。
 		subscribePiEvents: (handler) => agentManager.addLocalEventListener(
 			(agentId, event) => handler(agentId, event as never),

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { createServer as createHttpServer } from "node:http";
 import test from "node:test";
 import ts from "typescript";
 import vm from "node:vm";
@@ -7,7 +8,14 @@ import vm from "node:vm";
 import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
 
 function loadWebServiceManager() {
-	return loadTsCommonJs("src/main/web/WebServiceManager.ts").WebServiceManager;
+	return loadTsCommonJs("src/main/web/WebServiceManager.ts", {
+		// VM 沙箱默认没有 fetch（Node 18+ 全局），dev 代理与回退测试需要它
+		globals: {
+			fetch: globalThis.fetch,
+			Response: globalThis.Response,
+			ReadableStream: globalThis.ReadableStream,
+		},
+	}).WebServiceManager;
 }
 
 function loadBrowserApi(fetchImpl) {
@@ -512,4 +520,63 @@ test("SSE /stream endpoint forwards pi agent events as AI SDK UI message frames"
 			return () => { emitPiEvent = null; };
 		},
 	});
+});
+
+// ── dev 模式静态资源代理：外部 Web 端必须加载重构后的 React 版（A2） ──
+
+/** 起一个 mock vite dev server，记录请求路径并返回固定资源内容。 */
+async function startMockDevServer() {
+	const hits = [];
+	const server = createHttpServer((request, response) => {
+		hits.push(request.url ?? "");
+		if (request.url === "/web.html") {
+			response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+			response.end("<div id=\"dev-web\">A2 React page</div>");
+		} else if (request.url === "/assets/web.js") {
+			response.writeHead(200, { "content-type": "text/javascript; charset=utf-8" });
+			response.end("console.log(\"dev asset\");");
+		} else {
+			response.writeHead(404, { "content-type": "text/plain" });
+			response.end("not found");
+		}
+	});
+	await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+	const address = server.address();
+	return {
+		hits,
+		baseUrl: `http://127.0.0.1:${address.port}`,
+		close: () => new Promise((resolve) => server.close(resolve)),
+	};
+}
+
+/** dev 模式（devRendererUrl 已注入）下，静态请求全部代理到 vite dev server。 */
+test("web service dev mode proxies static assets to the renderer dev server", async () => {
+	const devServer = await startMockDevServer();
+	try {
+		await withServer(async ({ baseUrl }) => {
+			// 根路径 → 代理到 /web.html（外部端入口，而非桌面端 index.html）
+			const page = await fetch(baseUrl + "/");
+			assert.equal(page.status, 200);
+			assert.match(page.headers.get("content-type") ?? "", /text\/html/);
+			assert.match(await page.text(), /A2 React page/);
+			// 带扩展名资源 → 原样转发
+			const asset = await fetch(baseUrl + "/assets/web.js");
+			assert.equal(asset.status, 200);
+			assert.match(asset.headers.get("content-type") ?? "", /text\/javascript/);
+			assert.equal(await asset.text(), 'console.log("dev asset");');
+			assert.deepEqual(devServer.hits, ["/web.html", "/assets/web.js"]);
+		}, { devRendererUrl: devServer.baseUrl });
+	} finally {
+		await devServer.close();
+	}
+});
+
+/** dev server 不可用（如只启动了主进程）时，回退 A1 内嵌页保证服务不白屏。 */
+test("web service dev mode falls back to the legacy page when dev server is down", async () => {
+	// 端口 1 通常无服务监听；fetch 连接拒绝后应回退内嵌页而非 500。
+	await withServer(async ({ baseUrl }) => {
+		const page = await fetch(baseUrl + "/");
+		assert.equal(page.status, 200);
+		assert.match(await page.text(), /PiDeck Web Service/);
+	}, { devRendererUrl: "http://127.0.0.1:1" });
 });

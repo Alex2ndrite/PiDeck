@@ -1,4 +1,5 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import { Readable } from "node:stream";
 import type { AddressInfo } from "node:net";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
@@ -38,6 +39,13 @@ type WebServiceSettings = Pick<
 >;
 
 type WebServiceDependencies = {
+	/**
+	 * dev 模式渲染层 dev server 基址（如 http://127.0.0.1:5181）。
+	 * 设置后静态资源请求全部代理到该地址，保证外部 Web 端在开发模式下
+	 * 也加载重构后的 React 版（A2）页面并支持热更新；未设置时回退到
+	 * out/renderer 构建产物（打包/正式构建场景）。
+	 */
+	devRendererUrl?: string;
 	/** 订阅主进程内部的 pi agent 事件流（agentId, event），返回退订函数。 */
 	subscribePiEvents: (handler: (agentId: string, event: PiEvent) => void) => () => void;
 	/** agentId → sessionId 路由，用于把 pi 事件导向对应 session 的 SSE 连接。 */
@@ -127,11 +135,14 @@ function serializePublicWebPayload(body: unknown): string {
 export class WebServiceManager {
 	private server: Server | null = null;
 	private current: { host: string; port: number } | null = null;
+	/** dev 模式渲染层 dev server 基址（无尾斜杠）；空串表示走构建产物。 */
+	private readonly devRendererUrl: string;
 	private readonly rendererRoot = join(__dirname, "../renderer");
 
 	private readonly eventStreamRouter: WebEventStreamRouter;
 
 	constructor(private readonly deps: WebServiceDependencies) {
+		this.devRendererUrl = deps.devRendererUrl?.trim() ? deps.devRendererUrl.trim().replace(/\/$/, "") : "";
 		this.eventStreamRouter = new WebEventStreamRouter(
 			(agentId) => this.deps.getSessionIdForAgent(agentId),
 		);
@@ -1016,6 +1027,13 @@ export class WebServiceManager {
 			this.sendHtml(response, this.renderPage());
 			return;
 		}
+		// dev 模式：静态资源一律代理到 vite dev server。
+		// 否则 electron-vite dev 不产出 out/renderer 构建物，WebServiceManager 会
+		// 回退到 A1 vanilla 内嵌页——外部端永远看不到重构后的 React 版（A2）。
+		if (this.devRendererUrl) {
+			await this.proxyDevRenderer(requestedPath, response);
+			return;
+		}
 		// Web 服务根路径：优先 serve React 版 web.html（A2）；
 		// 构建产物缺失时回退到内嵌 renderPage（A1 vanilla 页，保持兼容）。
 		const webEntry = join(this.rendererRoot, "web.html");
@@ -1029,6 +1047,43 @@ export class WebServiceManager {
 			return;
 		}
 		await this.sendFile(filePath, response);
+	}
+
+	/**
+	 * dev 模式静态资源代理：把请求转发到 vite dev server 对应路径，响应流式回传。
+	 * 根路径/无扩展名路径映射到 /web.html（外部端入口，而非桌面端 index.html）。
+	 */
+	private async proxyDevRenderer(requestedPath: string, response: ServerResponse) {
+		// 路径安全：仅允许站内相对路径，禁止 .. 逃逸与绝对路径之外的形式。
+		if (!requestedPath.startsWith("/") || requestedPath.includes("..")) {
+			this.sendError(response, 400, "webError.apiNotFound", "Invalid path");
+			return;
+		}
+		const targetPath =
+			requestedPath === "/" || !extname(requestedPath)
+				? "/web.html"
+				: requestedPath;
+		let upstream: Response;
+		try {
+			upstream = await fetch(`${this.devRendererUrl}${targetPath}`);
+		} catch {
+			// dev server 未就绪（如只启动了主进程）：回退内嵌页，保证服务不白屏。
+			this.sendHtml(response, this.renderPage());
+			return;
+		}
+		const status = upstream.status;
+		const contentType =
+			upstream.headers.get("content-type") ?? "application/octet-stream";
+		if (status !== 200 || !upstream.body) {
+			this.sendHtml(response, this.renderPage());
+			return;
+		}
+		response.writeHead(status, {
+			"content-type": contentType,
+			"cache-control": "no-store",
+		});
+		// 流式转发 body，避免整包缓冲大体积 vendor chunk。
+		await Readable.fromWeb(upstream.body as import("node:stream/web").ReadableStream).pipe(response);
 	}
 
 	private async sendFile(filePath: string, response: ServerResponse) {

@@ -1226,7 +1226,9 @@
 }
 .web-endpoint-grid {
   display: grid;
-  grid-template-columns: 1fr 112px;
+  /* 主机列必须可收缩（minmax(0,1fr) 而非 1fr）：1fr 的隐式最小宽度是内容宽度，
+     主机名/域名较长时会把固定 112px 的端口列挤出可视区，导致端口显示不全 */
+  grid-template-columns: minmax(0, 1fr) 112px;
   gap: 10px;
 }
 .web-endpoint-metric {
@@ -1257,6 +1259,13 @@
   font-weight: 500;
   line-height: 1.2;
   font-variant-numeric: tabular-nums;
+}
+/* 主机地址过长（如局域网域名）时省略号截断，避免把端口列挤出卡片 */
+.web-endpoint-metric code {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .web-endpoint-metric input:focus {
   outline: none;

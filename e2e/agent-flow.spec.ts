@@ -18,7 +18,7 @@ async function startAgent(window: Page) {
 			.catch(() => false);
 		if (gone) break;
 	}
-	await expect(composer).toHaveAttribute("aria-disabled", "false", { timeout: 30_000 });
+	await expect(composer).toHaveAttribute("contenteditable", "true", { timeout: 30_000 });
 	return composer;
 }
 
@@ -272,7 +272,9 @@ test("agent flow: restart agent keeps session usable", async ({ window }) => {
 	// 等重启真正完成：完成 toast 是唯一可靠的完成信号；
 	// 过早发送会撞上 replacement reservation，被 coordinator 拒发（delivery:rejected）。
 	await expect(window.getByText("Agent 已重启")).toBeVisible({ timeout: 30_000 });
-	await expect(composer).toHaveAttribute("aria-disabled", "false", { timeout: 30_000 });
+	// composer 可用信号：TipTap 可用时不渲染 aria-disabled（只在 disabled 时输出
+	// aria-disabled="true"），可编辑状态用 contenteditable="true" 表示
+	await expect(composer).toHaveAttribute("contenteditable", "true", { timeout: 30_000 });
 	await expect(window.locator(".composer-bar-btn.send")).toBeVisible({ timeout: 30_000 });
 
 	// 续聊正常
