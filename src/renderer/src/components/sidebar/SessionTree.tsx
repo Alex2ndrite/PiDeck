@@ -356,7 +356,7 @@ export function SessionTree(props: {
         return (
           <div
             key={`draft:${session.id}`}
-            className={cn("draft-session-row group/row relative grid min-h-7 items-center gap-1", canDelete ? "grid-cols-[minmax(0,1fr)_2rem]" : "grid-cols-1 has-runtime")}
+            className={cn("draft-session-row group/draft grid items-center gap-1", canDelete ? "grid-cols-[minmax(0,1fr)_2rem]" : "grid-cols-1 has-runtime")}
             onContextMenu={(event) => openDraftContext(event, session)}
           >
           <PathTooltip content={session.title}>
@@ -386,26 +386,6 @@ export function SessionTree(props: {
                 <Trash2 size={14} aria-hidden="true" />
               </Button>
             )}
-            {/* 三个点浮层避开常显的删除按钮，hover 时出现在其左侧 */}
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-xs"
-              className={cn(
-                rowMoreMenuActiveClass(
-                  props.controller.menu?.kind === "draft" && props.controller.menu.sessionId === session.id,
-                ),
-                canDelete && "right-8",
-              )}
-              aria-label={t("sidebar.moreActions")}
-              title={t("sidebar.moreActions")}
-              onClick={(event) => {
-                event.stopPropagation();
-                openDraftContext(event, session);
-              }}
-            >
-              <Ellipsis size={14} aria-hidden="true" />
-            </Button>
           </div>
         );
       })}
