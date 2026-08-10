@@ -99,10 +99,11 @@ assert.doesNotMatch(twistie, /ChevronDown|ChevronRight|GitBranch|GitCommit|GitCo
   });
 
   test("keeps resource groups inside Changes and retains VS Code decorations", () => {
-    assert.match(panel, /\[\.\.\.groups\.workingTree, \.\.\.groups\.untracked\]/);
+    // Changes 组始终显示全部变更（含已暂存），暂存后文件不会从 Changes 消失（VS Code 语义）
+    assert.match(panel, /\.\.\.groups\.workingTree, \.\.\.groups\.untracked, \.\.\.groups\.index/);
     assert.match(panel, /groups\.merge\.length \+ stagedCount \+ workingChanges\.length/);
     assert.match(resourceTree, /function GitStageGlyph/);
-    assert.match(resourceTree, /size-7\$/);
+    assert.match(resourceTree, /className=\{`size-6 rounded/);
     assert.match(resourceTree, /text-xl font-medium/);
     assert.match(resourceTree, /w-4 shrink-0/);
     assert.match(resourceTree, /ml-\[5px\]/);
@@ -332,7 +333,7 @@ assert.doesNotMatch(twistie, /ChevronDown|ChevronRight|GitBranch|GitCommit|GitCo
     assert.match(app, /\.\.\.\(settings\.enableGitManagement && activeProjectId \? \[\{[\s\S]*?id: "git"[\s\S]*?onClick: \(\) => handleToolDrawerAction\("git"\)/);
   });
 
-  test("keeps single-file discard internal rather than adding a dev-divergent row action", () => {
+  test("discard flows through literal-pathspec restore and trash for untracked files", () => {
     assert.match(preload, /discard: \(projectId: string, group: "workingTree" \| "untracked", filePath: string\)/);
     assert.match(gitIpc, /ipcChannels\.gitDiscard/);
     assert.match(gitService, /async discardFile/);
@@ -340,7 +341,13 @@ assert.doesNotMatch(twistie, /ChevronDown|ChevronRight|GitBranch|GitCommit|GitCo
     assert.match(gitService, /"--literal-pathspecs", "restore", "--staged"/);
     assert.match(gitService, /"--literal-pathspecs", "restore", "--worktree"/);
     assert.match(gitService, /await unlink\(resource\.path\)/);
+    // 回滚是行内 hover 按钮（label 用 discardChanges，避开 dev-divergent 的 discard label）
     assert.doesNotMatch(resourceTree, /label: t\("git\.discard"\)/);
+    assert.match(resourceTree, /label: t\("git\.discardChanges"\)/);
+    assert.match(resourceTree, /kind: "discard"/);
+    // Changes 组始终显示全部变更（含已暂存），已暂存文件不再出现 stage/rollback 按钮
+    assert.match(panel, /\.\.\.groups\.workingTree, \.\.\.groups\.untracked, \.\.\.groups\.index/);
+    assert.match(resourceTree, /props\.stagedPaths\?\.has\(r\.path\)/);
     assert.match(panel, /from "\.\/git\/GitResourceTree"/);
     assert.match(panel, /<ConfirmDialog/);
     assert.match(i18n, /"git\.discardConfirmMessage"/);

@@ -3,10 +3,7 @@
  * Phase 3.7: extracted from src/main/index.ts registerIpc().
  */
 
-import { app, dialog, ipcMain, shell } from "electron";
-import { writeFile } from "node:fs/promises";
-import { join } from "node:path";
-import { existsSync } from "node:fs";
+import { app, ipcMain } from "electron";
 import { ipcChannels } from "../../shared/ipc";
 import type { RpcLogEntry } from "../../shared/types/rpcLog";
 import type {
@@ -490,27 +487,17 @@ export function registerSystemIpc(deps: SystemIpcDeps): void {
 	ipcMain.handle(ipcChannels.rpcLogsGetLive, async (_event, agentId?: string) =>
 		rpcLogger.getLive(typeof agentId === "string" ? agentId : undefined),
 	);
-	// 实时查看弹窗“保存到文件”：写入用户选择的路径。渲染层传来的条目不可信，数量与字段都要校验。
-	ipcMain.handle(ipcChannels.rpcLogsSave, async (_event, options?: { agentId?: string; entries?: unknown }) => {
+	// 实时查看弹窗“保存到文件”：直接合并写入该 agent 的自动日志文件（按 id 去重），
+	// 不再弹目录选择——开启记录后日志本就自动落盘，保存只是把弹窗内容对齐到文件。
+	// 返回实际写入的文件路径列表，供渲染层 toast 提示用户保存位置。
+	// 渲染层传来的条目不可信，数量与字段都要校验。
+	ipcMain.handle(ipcChannels.rpcLogsSave, async (_event, options?: { entries?: unknown }) => {
 		const rawEntries = Array.isArray(options?.entries) ? options.entries : [];
 		const entries = rawEntries
 			.slice(0, 10_000) // 上限：防止一次 IPC 携带超大批次
 			.filter((value): value is RpcLogEntry => isRpcLogEntry(value));
-		if (entries.length === 0) return false;
-		const agentId =
-			typeof options?.agentId === "string" && options.agentId
-				? options.agentId
-				: entries[0].agentId;
-		const dateStr = new Date().toISOString().slice(0, 10);
-		// 文件名里的 agentId 需脱敏，防止写入任意路径
-		const suggestedName = `rpc-${agentId.replace(/[^\w-.~]/g, "_")}-${dateStr}.jsonl`;
-		const { canceled, filePath } = await dialog.showSaveDialog({
-			defaultPath: suggestedName,
-			filters: [{ name: "RPC Log", extensions: ["jsonl"] }],
-		});
-		if (canceled || !filePath) return false;
-		await writeFile(filePath, entries.map((entry) => JSON.stringify(entry)).join("\n"), "utf8");
-		return true;
+		if (entries.length === 0) return [];
+		return rpcLogger.appendEntries(entries);
 	});
 	ipcMain.handle(ipcChannels.rpcLogsClear, async (_event, target?: SessionRuntimeTarget) =>
 		rpcLogger.clear(resolveRpcRuntimeAgent(target)),
@@ -522,11 +509,6 @@ export function registerSystemIpc(deps: SystemIpcDeps): void {
 	ipcMain.handle(ipcChannels.rpcLoggingGet, async (_event, target: SessionRuntimeTarget) =>
 		agentManager.isRpcLogging(resolveRpcRuntimeAgent(target)!),
 	);
-	ipcMain.handle(ipcChannels.rpcLogsOpenFile, async (_event, target: SessionRuntimeTarget) => {
-		resolveRpcRuntimeAgent(target);
-		const dir = join(app.getPath("userData"), "logs", "rpc");
-		await shell.openPath(dir);
-	});
 
 	// ── 反馈环境 ─────────────────────────────────────────────────────
 

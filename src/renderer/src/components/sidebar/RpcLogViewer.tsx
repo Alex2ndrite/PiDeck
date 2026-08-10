@@ -12,6 +12,7 @@ import { Button } from "../ui-shadcn/button";
 import { Input } from "../ui-shadcn/input";
 import { X } from "lucide-react";
 import { cn } from "../../lib/utils";
+import { showNotice } from "../../utils/notice";
 import {
 	MessageScroller,
 	type MessageScrollerScrollApi,
@@ -104,7 +105,10 @@ const RpcLogRow = memo(function RpcLogRow(props: {
 						variant="outline"
 						size="sm"
 						className="h-auto px-2 py-1 text-caption shadow-none"
-						onClick={() => void navigator.clipboard.writeText(formatRpcLogForCopy(log))}
+						onClick={() => {
+							void navigator.clipboard.writeText(formatRpcLogForCopy(log));
+							showNotice(t("common.copied"), 2000);
+						}}
 					>
 						{t("common.copy")}
 					</Button>
@@ -113,7 +117,10 @@ const RpcLogRow = memo(function RpcLogRow(props: {
 							variant="outline"
 							size="sm"
 							className="h-auto px-2 py-1 text-caption shadow-none"
-							onClick={() => void navigator.clipboard.writeText(jsonText)}
+							onClick={() => {
+								void navigator.clipboard.writeText(jsonText);
+								showNotice(t("common.copied"), 2000);
+							}}
 						>
 							{t("rpc.copyJson")}
 						</Button>
@@ -137,9 +144,7 @@ export function RpcLogViewer(props: RpcLogViewerProps) {
 	const [following, setFollowing] = useState(true);
 	const [loggingOn, setLoggingOn] = useState<boolean | null>(null);
 	const [saving, setSaving] = useState(false);
-	const [savedFlash, setSavedFlash] = useState(false);
 	const scrollApiRef = useRef<MessageScrollerScrollApi | null>(null);
-	const savedFlashTimerRef = useRef<number | undefined>(undefined);
 
 	// ── 数据流：初始历史 + 实时订阅 ──
 	useEffect(() => {
@@ -171,11 +176,6 @@ export function RpcLogViewer(props: RpcLogViewerProps) {
 		};
 	}, [agentId, props.loadHistory, props.getLogging]);
 
-	// 卸载时清理保存成功提示的定时器
-	useEffect(() => () => {
-		if (savedFlashTimerRef.current !== undefined) window.clearTimeout(savedFlashTimerRef.current);
-	}, []);
-
 	// ── 筛选与窗口化 ──
 	const hasActiveFilter = keyword.trim() !== "" || directionFilter !== "all";
 	const visibleEntries = useMemo(() => {
@@ -193,6 +193,8 @@ export function RpcLogViewer(props: RpcLogViewerProps) {
 
 	const copyLogs = useCallback((logs: RpcLogEntry[]) => {
 		void navigator.clipboard.writeText(logs.map(formatRpcLogForCopy).join("\n"));
+		// 复制完成给全局 toast 反馈（剪贴板操作无视觉落点，避免用户以为没点中）
+		showNotice(t("common.copied"), 2000);
 	}, []);
 
 	const handleSave = useCallback(async () => {
@@ -202,21 +204,26 @@ export function RpcLogViewer(props: RpcLogViewerProps) {
 			const saveEntries = hasActiveFilter
 				? visibleEntries.slice(0, SAVE_ENTRY_CAP)
 				: entries.slice(-SAVE_ENTRY_CAP);
-			const ok = await window.piDesktop.rpcLogs.save({ agentId, entries: saveEntries });
-			if (ok) {
-				setSavedFlash(true);
-				if (savedFlashTimerRef.current !== undefined) window.clearTimeout(savedFlashTimerRef.current);
-				savedFlashTimerRef.current = window.setTimeout(() => setSavedFlash(false), 1600);
+			const paths = await window.piDesktop.rpcLogs.save({ entries: saveEntries });
+			// 主进程返回实际写入的文件路径：单文件直接提示路径，跨日多文件提示首个 + 数量
+			if (paths.length === 0) {
+				showNotice(t("rpc.saveNoNew"), 2500);
+			} else if (paths.length === 1) {
+				showNotice(t("rpc.savedToFile", { path: paths[0] }), 4000);
+			} else {
+				showNotice(t("rpc.savedToFiles", { count: paths.length, path: paths[0] }), 4000);
 			}
 		} finally {
 			setSaving(false);
 		}
-	}, [agentId, entries, visibleEntries, hasActiveFilter]);
+	}, [entries, visibleEntries, hasActiveFilter]);
 
 	const handleEnableLogging = useCallback(async () => {
 		if (!props.setLogging) return;
 		const enabled = await props.setLogging(agentId, true);
 		setLoggingOn(enabled);
+		// 开启记录是异步生效，成功后给 toast 反馈，失败也明确告知
+		showNotice(enabled ? t("rpc.loggingEnabled") : t("rpc.loggingEnableFailed"), 2500);
 	}, [agentId, props.setLogging]);
 
 	const handleScrollToBottom = useCallback(() => {
@@ -249,7 +256,7 @@ export function RpcLogViewer(props: RpcLogViewerProps) {
 					</DialogTitle>
 					<div className="flex items-center gap-2">
 						<Button variant="default" size="sm" disabled={saving || entries.length === 0} onClick={() => void handleSave()}>
-							{savedFlash ? t("rpc.saved") : t("rpc.saveFile")}
+							{t("rpc.saveFile")}
 						</Button>
 						<Button variant="secondary" size="sm" disabled={entries.length === 0} onClick={() => copyLogs(entries)}>
 							{t("common.copyAll")}
@@ -327,6 +334,7 @@ export function RpcLogViewer(props: RpcLogViewerProps) {
 
 				<div className="relative min-h-0 flex-1">
 					<MessageScroller
+						className="h-full"
 						followOutput={autoScroll}
 						followThreshold={56}
 						onFollowChange={setFollowing}

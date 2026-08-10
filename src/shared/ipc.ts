@@ -200,13 +200,12 @@ export const ipcChannels = {
 	rpcLogsGet: "rpc-logs:get",
 	/** 读取主进程实时环形缓冲（最近 N 条） */
 	rpcLogsGetLive: "rpc-logs:get-live",
-	/** 将渲染层传入的日志条目保存为用户选择的文件 */
+	/** 将弹窗条目合并写入自动日志文件（按 id 去重） */
 	rpcLogsSave: "rpc-logs:save",
 	/** 清空 RPC 日志 */
 	rpcLogsClear: "rpc-logs:clear",
 	rpcLoggingSet: "rpc-logs:logging-set",
 	rpcLoggingGet: "rpc-logs:logging-get",
-	rpcLogsOpenFile: "rpc-logs:open-file",
 
 	appWindowMinimize: "app:window-minimize",
 	appWindowToggleMaximize: "app:window-toggle-maximize",

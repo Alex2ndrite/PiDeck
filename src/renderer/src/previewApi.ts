@@ -550,12 +550,11 @@ export function createPreviewApi(): PiDesktopApi {
 			getSize: async () => 0,
 			get: async () => [],
 			getLive: async () => [],
-			save: async () => false,
+			save: async () => [],
 			onLog: (_callback: unknown) => () => {},
 			clear: async () => undefined,
 			setLogging: async () => false,
 			getLogging: async () => false,
-			openFile: async () => undefined,
 		},
 		pi: {
 			check: async () => ({

@@ -15,183 +15,41 @@
   image-rendering: pixelated;
 }
 
-/* ── 项目资源管理弹框（元素页面）─────────────── */
+/* ── 项目资源管理弹框 ────────────────────────────
+ * 尺寸由 DialogContent 的响应式 utility 统一控制；这里仅保留内容容器的背景，
+ * 避免旧 CSS 与 shadcn Dialog 的 max-width/height 变体互相争抢。 */
 .project-resources-dialog {
-  display: grid;
-  grid-template-rows: auto auto 1fr;
-  width: min(1300px, calc(100vw - 48px));
-  height: min(850px, calc(100vh - 48px));
-  border-radius: var(--radius-lg);
   background: var(--color-bg-panel);
   box-shadow: var(--shadow-xl);
-  overflow: hidden;
-}
-
-/* 头部：品牌标题 + 项目路径 */
-.project-resources-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  min-height: 60px;
-  padding: 0 20px;
-  border-bottom: 1px solid var(--color-border-subtle);
-  background: var(--color-bg-panel);
-}
-.project-resources-header > div {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-}
-.project-resources-header > div strong {
-  font-size: var(--font-size-title);
-  color: var(--color-text-primary);
-  font-weight: 600;
-  white-space: nowrap;
-}
-.project-resources-header > div small {
-  font-size: var(--font-size-caption);
-  color: var(--color-text-tertiary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-family: var(--font-family-mono);
-  padding: 2px 8px;
-  border-radius: var(--radius-sm);
-  background: var(--color-bg-muted);
-}
-.project-resources-header > button {
-  display: grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  flex-shrink: 0;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--color-text-tertiary);
-  cursor: pointer;
-  transition: all 0.12s ease;
-}
-.project-resources-header > button:hover {
-  background: var(--color-bg-hover);
-  color: var(--color-text-primary);
-}
-
-/* 工具栏：Tab + 操作按钮 */
-.project-resources-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  min-height: 48px;
-  padding: 0 20px;
-  border-bottom: 1px solid var(--color-border-subtle);
-  background: var(--color-bg-panel);
-}
-.project-resources-tabs {
-  display: flex;
-  align-items: stretch;
-  gap: 0;
-}
-.project-resources-tabs button {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 14px;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  background: transparent;
-  color: var(--color-text-tertiary);
-  font-size: var(--font-size-control);
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.12s ease;
-}
-.project-resources-tabs button.active {
-  color: var(--color-accent);
-  border-bottom-color: var(--color-accent);
-  font-weight: 600;
-}
-.project-resources-tabs button:hover:not(.active) {
-  color: var(--color-text-primary);
-}
-
-/* 错误提示 */
-.project-resources-error {
-  margin: 8px 16px 0;
-  padding: 8px 12px;
-  border-radius: var(--radius-sm);
-  background: var(--color-danger-soft);
-  color: var(--color-danger);
-  font-size: var(--font-size-caption);
-  word-break: break-word;
 }
 
 /* 内容区：两列栅格，左表单右列表 */
 .project-resources-body {
-  overflow-y: auto;
-  padding: 20px 24px 24px;
+  min-height: 100%;
+  padding: 24px;
   display: grid;
-  grid-template-columns: 380px minmax(0, 1fr);
+  grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr);
-  gap: 8px 20px;
+  gap: 12px 24px;
+  align-content: start;
   background: var(--color-bg-muted);
-}
-
-/* 左栏标题 */
-.project-resources-col-header {
-  display: flex;
-  align-items: center;
-  min-height: 28px;
-  padding: 0 2px;
-}
-.project-resources-col-header strong {
-  font-size: var(--font-size-body);
-  color: var(--color-text-primary);
-  font-weight: 600;
 }
 
 /* 创建表单卡片 */
 .project-skill-create {
   display: grid;
   gap: 14px;
-  padding: 22px;
-  min-height: 240px;
+  padding: 20px;
+  min-height: 0;
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-lg);
   background: var(--color-bg-panel);
   align-content: start;
-  align-self: stretch;
-  position: sticky;
-  top: 0;
+  align-self: start;
+  grid-row: 1 / span 2;
 }
-.project-skill-create > strong {
-  font-size: var(--font-size-body);
-  color: var(--color-text-primary);
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.project-skill-create > strong::before {
-  content: "";
-  display: block;
-  width: 3px;
-  height: 16px;
-  border-radius: 2px;
-  background: var(--color-accent);
-}
-.project-skill-create p {
-  margin: -8px 0 2px;
-  color: var(--color-text-tertiary);
-  font-size: var(--font-size-caption);
-  line-height: var(--line-height-caption);
-}
-
 /* 创建表单字段 */
 .project-resources-name-field {
-  display: grid;
-  gap: 6px;
   color: var(--color-text-secondary);
   font-size: var(--font-size-caption);
   font-weight: 500;
@@ -215,8 +73,6 @@
   box-shadow: var(--focus-ring);
 }
 .project-resources-desc-field {
-  display: grid;
-  gap: 6px;
   color: var(--color-text-secondary);
   font-size: var(--font-size-caption);
   font-weight: 500;
@@ -246,8 +102,25 @@
 /* 资源列表区 */
 .project-resources-list-section {
   display: grid;
+  grid-column: 2;
+  grid-row: 2;
   gap: 8px;
   align-content: start;
+}
+
+/* 窄窗口时创建区和资源列表上下排列，避免第二列被压缩到不可读。 */
+@media (max-width: 820px) {
+  .project-resources-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .project-skill-create {
+    grid-row: auto;
+  }
+  .project-resources-list-header.col-span-2,
+  .project-resources-list-section {
+    grid-column: 1;
+    grid-row: auto;
+  }
 }
 .project-resources-list-header {
   display: flex;
@@ -269,10 +142,11 @@
 /* 资源卡片 */
 .project-resource-card {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 8px;
-  padding: 5px 10px;
+  gap: 12px;
+  min-height: 64px;
+  padding: 10px 12px;
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-sm);
   background: var(--color-bg-panel);
@@ -282,9 +156,10 @@
   border-color: var(--color-border-strong);
 }
 .project-resource-card > .project-resource-info {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+  /* 名称、状态、描述和路径是同一资源的层级信息，必须纵向排列；
+   * 横向 flex 会在窄列表中把所有内容压成一行。 */
+  display: grid;
+  gap: 4px;
   min-width: 0;
   flex: 1;
   border: 0;
@@ -298,8 +173,9 @@
 .project-resource-title {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 4px;
-  flex-shrink: 0;
+  min-width: 0;
 }
 .project-resource-title strong {
   font-size: var(--font-size-control);
@@ -318,29 +194,24 @@
   white-space: nowrap;
 }
 .project-resource-card small {
-  font-size: var(--font-size-caption);
-  color: var(--color-text-tertiary);
+  max-width: 100%;
+  min-width: 0;
   overflow: hidden;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-caption);
   text-overflow: ellipsis;
   white-space: nowrap;
-  flex-shrink: 1;
-  min-width: 0;
-  max-width: 35%;
 }
 .project-resource-card small + small {
-  max-width: 30%;
+  max-width: 100%;
 }
 
-/* 操作按钮组 */
+/* 操作按钮组：删除和编辑必须在静止状态可发现，不能依赖 hover 才出现。 */
 .project-resource-actions {
   display: flex;
+  flex-shrink: 0;
   gap: 2px;
   align-items: center;
-  opacity: 0;
-  transition: opacity 0.12s ease;
-}
-.project-resource-card:hover .project-resource-actions,
-.project-resource-card:focus-within .project-resource-actions {
   opacity: 1;
 }
 .project-resource-actions .config-icon-btn {

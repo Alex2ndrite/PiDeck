@@ -9,6 +9,10 @@ const surfaces = readFileSync("src/renderer/src/styles/surfaces.css", "utf8");
 const foundation = readFileSync("src/renderer/src/styles/foundation.css", "utf8");
 const rendererStyles = readFileSync("src/renderer/src/styles.css", "utf8");
 const settingsModal = readFileSync("src/renderer/src/components/app/SettingsModal.tsx", "utf8");
+const projectResources = readFileSync("src/renderer/src/components/app/ProjectResourcesModal.tsx", "utf8");
+const workspaceStyles = readFileSync("src/renderer/src/styles/workspace.css", "utf8");
+const zhCopy = readFileSync("src/renderer/src/i18n/rendererCopy.zh-CN.ts", "utf8");
+const enCopy = readFileSync("src/renderer/src/i18n/rendererCopy.en-US.ts", "utf8");
 const tabs = readFileSync("src/renderer/src/components/ui-shadcn/tabs.tsx", "utf8");
 const skillTableRow = skills.slice(skills.indexOf("function SkillTableRow"));
 
@@ -46,6 +50,56 @@ test("config shell defines compact density and crisp system typography", () => {
   assert.match(settingsModal, /w-\[80vw\]/);
   assert.match(surfaces, /\.settings-modal \{[\s\S]*width: min\(1300px, 80vw\);[\s\S]*height: min\(850px, 80vh\);/);
   assert.match(surfaces, /\.config-modal \{[\s\S]*width: min\(1300px, 80vw\);[\s\S]*height: min\(850px, 80vh\);/);
+});
+
+test("project resources use one consistent shadcn management shell", () => {
+  // 弹窗必须只有一套标题栏和一套 tab rail；重复 header 会造成截图中的空白与关闭按钮错位。
+  assert.match(projectResources, /<DialogHeader className="[^"]*border-b/);
+  assert.doesNotMatch(projectResources, /<header className="project-resources-header"/);
+  assert.match(projectResources, /<Tabs\n\s+value=\{activeTab\}/);
+  assert.match(projectResources, /<TabsList className="[^"]*w-full/);
+  assert.match(projectResources, /from "\.\.\/ui-shadcn\/(?:card|alert|scroll-area)"/);
+  assert.match(projectResources, /<Card(?:\s|>)/);
+  assert.match(projectResources, /<Alert variant="destructive"/);
+  assert.match(projectResources, /<ScrollArea className=/);
+
+  // 视觉重排只能换容器；项目资源的创建、切换、编辑、启停、删除和刷新流程必须仍在页面中。
+  for (const contract of [
+    "createSkill",
+    "createProjectPrompt",
+    "toggleSkill",
+    "toggleExtension",
+    "confirmDelete",
+    "openEditor",
+    "openProjectPromptEditor",
+    "refresh",
+    "loadPrompts",
+  ]) {
+    assert.match(projectResources, new RegExp(`\\b${contract}\\b`));
+  }
+});
+
+test("project resource cards stack metadata and keep destructive actions discoverable", () => {
+  // 卡片内容必须垂直排布；横向 flex 会把名称、状态和路径挤成截图中的一条线。
+  assert.match(workspaceStyles, /\.project-resource-card > \.project-resource-info \{[^}]*display: grid/);
+  assert.match(workspaceStyles, /\.project-skill-create \{[^}]*grid-row: 1 \/ span 2/);
+  // 删除/编辑不能只依赖 hover，否则鼠标离开卡片或触屏设备上不可发现。
+  assert.match(workspaceStyles, /\.project-resource-actions \{[^}]*opacity: 1/);
+  assert.match(projectResources, /setDeleteTarget\(\{ kind: "skill"/);
+  assert.match(projectResources, /setDeleteTarget\(\{ kind: "extension"/);
+  assert.match(projectResources, /setDeleteTarget\(\{ kind: "prompt"/);
+});
+
+test("resource forms reserve label width and distinguish skill/prompt actions", () => {
+  // 固定标签列避免中文字段名被压成竖排；按钮文案必须按资源类型区分。
+  assert.match(projectResources, /grid-cols-\[4rem_minmax\(0,1fr\)\]/);
+  assert.match(projectResources, /t\("projectResources\.createSkillAction"\)/);
+  assert.match(projectResources, /t\("projectResources\.createPromptAction"\)/);
+  assert.match(zhCopy, /"projectResources\.createSkillAction": "创建技能"/);
+  assert.match(zhCopy, /"projectResources\.createPromptAction": "创建提示词"/);
+  assert.match(enCopy, /"projectResources\.createSkillAction": "Create Skill"/);
+  assert.match(enCopy, /"projectResources\.createPromptAction": "Create Prompt"/);
+  assert.doesNotMatch(projectResources, /creatingPrompt \? t\("config\.creatingSkill"\)/);
 });
 
 test("skills and prompts use full-width tab rails with compact selected tabs", () => {

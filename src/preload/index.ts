@@ -826,9 +826,9 @@ const api = {
 		/** 实时查看弹窗初始历史：主进程环形缓冲（按 agentId 过滤） */
 		getLive: (agentId?: string) =>
 			ipcRenderer.invoke(ipcChannels.rpcLogsGetLive, agentId) as Promise<RpcLogEntry[]>,
-		/** 把当前弹窗中的日志条目保存为用户选择的 JSONL 文件 */
-		save: (options: { agentId?: string; entries: RpcLogEntry[] }) =>
-			ipcRenderer.invoke(ipcChannels.rpcLogsSave, options) as Promise<boolean>,
+		/** 把弹窗中的日志条目合并写入该 agent 的自动日志文件（按 id 去重），返回写入的文件路径列表 */
+		save: (options: { entries: RpcLogEntry[] }) =>
+			ipcRenderer.invoke(ipcChannels.rpcLogsSave, options) as Promise<string[]>,
 		/** 订阅主进程批量推送的实时日志（按 agent 聚合，~80ms 一次），返回退订函数 */
 		onLog: (callback: (batch: RpcLogBatch) => void) =>
 			subscribe<{ agentId: string; entries: RpcLogEntry[] }>(ipcChannels.agentsRpcLog, callback),
@@ -838,8 +838,6 @@ const api = {
 			ipcRenderer.invoke(ipcChannels.rpcLoggingSet, target, enabled) as Promise<boolean>,
 		getLogging: (target: SessionRuntimeTarget) =>
 			ipcRenderer.invoke(ipcChannels.rpcLoggingGet, target) as Promise<boolean>,
-		openFile: (target: SessionRuntimeTarget) =>
-			ipcRenderer.invoke(ipcChannels.rpcLogsOpenFile, target) as Promise<void>,
 	},
 	app: {
 		info: () => ipcRenderer.invoke(ipcChannels.appInfo) as Promise<AppInfo>,

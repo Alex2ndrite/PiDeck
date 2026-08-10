@@ -420,10 +420,11 @@ export function AgentContextMenu(props: {
 	onCopySession: () => void;
 	onCopySessionFilePath: () => void;
 	onToggleRpcLogging?: () => void;
+	/** 未启动（无 live runtime）的 agent 不能开启记录：菜单项置灰并给出说明 */
+	rpcToggleDisabled?: boolean;
 	isRpcLogging?: boolean;
 	/** 打开实时日志查看弹窗（仅开启记录后可用） */
 	onOpenLogs?: () => void;
-	onOpenLogFile?: () => void;
 	onOpenSessionFile?: () => void;
 	onCloseAgent: () => void;
 }) {
@@ -450,16 +451,18 @@ export function AgentContextMenu(props: {
 				</>
 			)}
 			<DropdownMenuSeparator />
-			<DropdownMenuItem disabled={busy} onSelect={props.onToggleRpcLogging}>
+			<DropdownMenuItem
+				disabled={busy || props.rpcToggleDisabled}
+				// 置灰时仍给出原因提示，避免用户以为功能坏了
+				title={props.rpcToggleDisabled ? t("menu.rpcLoggingRequiresRuntime") : undefined}
+				onSelect={props.onToggleRpcLogging}
+			>
 				{props.isRpcLogging ? `✓ ${t("menu.rpcLoggingOn")}` : t("menu.rpcLogging")}
 			</DropdownMenuItem>
 			{props.isRpcLogging && (
 				<>
 					<DropdownMenuItem disabled={busy} onSelect={props.onOpenLogs}>
 						{t("menu.rpcLogView")}
-					</DropdownMenuItem>
-					<DropdownMenuItem disabled={busy} onSelect={props.onOpenLogFile}>
-						{t("menu.rpcLogFile")}
 					</DropdownMenuItem>
 				</>
 			)}

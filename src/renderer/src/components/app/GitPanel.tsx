@@ -33,6 +33,7 @@ import type {
   CommitEntry,
   GitAheadBehind,
   GitChangedFile,
+  GitResource,
   GitResourceGroupType,
   GitResourceGroups,
 } from "../../../../shared/types";
@@ -73,6 +74,8 @@ type GitPanelProps = {
     group: GitResourceGroupType,
     path: string,
   ) => void | Promise<void>;
+  /** 行内“打开文件”按钮：在编辑器面板打开该文件 */
+  onOpenFile?: (path: string) => void;
   branchCompare: (
     projectId: string,
     base: string,
@@ -645,9 +648,22 @@ export function GitPanel(props: GitPanelProps) {
     );
   };
 
-  const workingChanges = useMemo(
-    () => [...groups.workingTree, ...groups.untracked],
-    [groups.workingTree, groups.untracked],
+  const workingChanges = useMemo(() => {
+    // VS Code 语义：Changes 组始终显示全部变更（含已暂存），Staged 组单独列已暂存；
+    // 同一文件同时在 index 与 workingTree（暂存后又改）时只列一次，避免重复行
+    const seen = new Set<string>();
+    const result: GitResource[] = [];
+    for (const r of [...groups.workingTree, ...groups.untracked, ...groups.index]) {
+      if (seen.has(r.path)) continue;
+      seen.add(r.path);
+      result.push(r);
+    }
+    return result;
+  }, [groups.workingTree, groups.untracked, groups.index]);
+  /** 已暂存路径集合：Changes 组中这些文件不再显示 stage/rollback 行内按钮 */
+  const stagedPathSet = useMemo(
+    () => new Set(groups.index.map((r) => r.path)),
+    [groups.index],
   );
   const stagedCount = groups.index.length;
   const hasUnresolvedConflicts = groups.merge.length > 0;
@@ -1218,7 +1234,7 @@ export function GitPanel(props: GitPanelProps) {
               {/* 领先角标：本地上游提交数，提示需要推送 */}
               {!pushing && aheadBehind && aheadBehind.ahead > 0 && (
                 <span
-                  className="pointer-events-none absolute -top-1 -right-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--color-accent)] px-1 text-[10px] leading-none font-semibold text-white tabular-nums"
+                  className="pointer-events-none absolute -top-1 -right-1 inline-flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-[var(--color-accent)] px-0.5 text-[9px] leading-none font-semibold text-white tabular-nums"
                   aria-label={t("git.pushAhead", { count: aheadBehind.ahead })}
                 >
                   {aheadBehind.ahead}
@@ -1249,7 +1265,7 @@ export function GitPanel(props: GitPanelProps) {
               {/* 落后角标：远程领先本地的提交数，提示需要拉取 */}
               {!pulling && aheadBehind && aheadBehind.behind > 0 && (
                 <span
-                  className="pointer-events-none absolute -top-1 -right-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--color-accent)] px-1 text-[10px] leading-none font-semibold text-white tabular-nums"
+                  className="pointer-events-none absolute -top-1 -right-1 inline-flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-[var(--color-accent)] px-0.5 text-[9px] leading-none font-semibold text-white tabular-nums"
                   aria-label={t("git.pullBehind", { count: aheadBehind.behind })}
                 >
                   {aheadBehind.behind}
@@ -1396,6 +1412,7 @@ export function GitPanel(props: GitPanelProps) {
                     mutating={mutating || committing}
                     unstageFile={(path) => act(() => props.unstageFiles(props.projectId, [path]))}
                     deleteFile={props.deleteFiles ? (path) => setDeleteTarget(path) : undefined}
+                    onOpenFile={props.onOpenFile}
                     projectRoot={props.projectRoot}
                     collapsedDirs={collapsedChangeDirs}
                     onToggleDir={toggleChangeDir}
@@ -1427,6 +1444,8 @@ export function GitPanel(props: GitPanelProps) {
                     stageFile={(path) => act(() => props.stageFiles(props.projectId, [path]))}
                     discardFile={(path, group) => setDiscardTarget({ group, path })}
                     deleteFile={props.deleteFiles ? (path) => setDeleteTarget(path) : undefined}
+                    onOpenFile={props.onOpenFile}
+                    stagedPaths={stagedPathSet}
                     projectRoot={props.projectRoot}
                     collapsedDirs={collapsedChangeDirs}
                     onToggleDir={toggleChangeDir}

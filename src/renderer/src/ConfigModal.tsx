@@ -30,6 +30,7 @@ import { Component, useState, useEffect, useCallback, type ReactNode } from "rea
 import type { PiDesktopApi } from "../../preload";
 import { AuthTab } from "./config/AuthTab";
 import { ModelsTab } from "./config/ModelsTab";
+import { openDocsInSystemBrowser } from "./config/ConfigShared";
 import { RawTab } from "./config/RawTab";
 import { TrustTab } from "./config/TrustTab";
 import { SettingsTab } from "./config/SettingsTab";
@@ -149,7 +150,7 @@ function ConfigDiagnosticCard(props: {
 				</span>
 				<small>
 					{t("config.diagnosticHelp")}{" "}
-					<a href={diagnostic.docsUrl} target="_blank" rel="noreferrer">
+					<a href={diagnostic.docsUrl} onClick={openDocsInSystemBrowser(diagnostic.docsUrl)}>
 						{t("config.openOfficialDocs")}
 					</a>
 				</small>
@@ -211,9 +212,15 @@ class ConfigModalErrorBoundary extends Component<
 								<span>{this.state.error.message}</span>
 								<small>
 									{t("config.renderCrashedHelpPrefix")}
-									<a href="https://pi.dev/docs/latest/models" target="_blank" rel="noreferrer">{t("config.docsModels")}</a>
+									<a
+										href="https://pi.dev/docs/latest/models"
+										onClick={openDocsInSystemBrowser("https://pi.dev/docs/latest/models")}
+									>{t("config.docsModels")}</a>
 									{" / "}
-									<a href="https://pi.dev/docs/latest/settings" target="_blank" rel="noreferrer">{t("config.docsSettings")}</a>
+									<a
+										href="https://pi.dev/docs/latest/settings"
+										onClick={openDocsInSystemBrowser("https://pi.dev/docs/latest/settings")}
+									>{t("config.docsSettings")}</a>
 									{t("config.renderCrashedHelpSuffix")}
 								</small>
 							</div>

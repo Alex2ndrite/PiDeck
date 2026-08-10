@@ -1,5 +1,5 @@
 import { Fragment, useState, type ReactNode } from "react";
-import { ChevronDown, Loader2, RotateCcw, Trash2 } from "lucide-react";
+import { ChevronDown, FileText, Loader2, Minus, Plus, RotateCcw, Trash2 } from "lucide-react";
 import { Button } from "../../ui-shadcn/button";
 import {
 	ContextMenu,
@@ -78,6 +78,10 @@ export function FileTree(props: {
 	discardFile?: (path: string, group: "workingTree" | "untracked") => void;
 	/** 右键菜单“删除文件”入口；未提供时不启用右键菜单 */
 	deleteFile?: (path: string) => void;
+	/** 行内“打开文件”按钮：打开编辑器而非 diff 视图 */
+	onOpenFile?: (path: string) => void;
+	/** 已暂存文件路径集合：Changes 组中这些文件不再显示 stage/rollback 按钮（VS Code 语义） */
+	stagedPaths?: ReadonlySet<string>;
 	mutating: boolean;
 	onOpenWorkspaceFileDiff: (group: GitResourceGroupType, path: string) => void;
 	/** 项目根目录路径，用于显示相对路径 */
@@ -120,7 +124,7 @@ export function FileTree(props: {
 					{(!props.collapsedDirs.has(dir) || isSingleRoot) && resources.map((r) => {
 						const actions: Array<{
 							label: string;
-							kind: "stage" | "unstage" | "discard";
+							kind: "stage" | "unstage" | "discard" | "open";
 							disabled?: boolean;
 							run: () => void;
 						}> = [];
@@ -132,11 +136,32 @@ export function FileTree(props: {
 								run: () => props.unstageFile?.(r.path),
 							});
 						} else if (props.groupType === "workingTree" || props.groupType === "untracked") {
+							// 已暂存文件在 Changes 组仅保留打开按钮，暂存/回滚归 Staged 组（VS Code 语义）
+							if (!props.stagedPaths?.has(r.path)) {
+								actions.push({
+									label: t("git.stage"),
+									kind: "stage",
+									disabled: props.mutating,
+									run: () => props.stageFile?.(r.path),
+								});
+								// 回滚：tracked 走 git restore，untracked 走回收站删除
+								actions.push({
+									label: t("git.discardChanges"),
+									kind: "discard",
+									disabled: props.mutating,
+									run: () =>
+										props.discardFile?.(
+											r.path,
+											r.status === GitStatus.UNTRACKED ? "untracked" : "workingTree",
+										),
+								});
+							}
+						}
+						if (props.onOpenFile) {
 							actions.push({
-								label: t("git.stage"),
-								kind: "stage",
-								disabled: props.mutating,
-								run: () => props.stageFile?.(r.path),
+								label: t("common.open"),
+								kind: "open",
+								run: () => props.onOpenFile?.(r.path),
 							});
 						}
 						return (
@@ -253,7 +278,7 @@ export function ResourceRow(props: {
   compareStatus?: GitFileStatus;
   actions?: Array<{
     label: string;
-    kind: "stage" | "unstage" | "discard";
+    kind: "stage" | "unstage" | "discard" | "open";
     disabled?: boolean;
     run: () => void;
   }>;
@@ -297,19 +322,24 @@ export function ResourceRow(props: {
         </div>
       )}
       {props.actions && props.actions.length > 0 && (
-        <div className="invisible mr-1 flex flex-[0_0_auto] gap-px group-hover:visible group-focus-within:visible">
+        <div className="invisible mr-1 flex flex-[0_0_auto] items-center gap-0.5 group-hover:visible group-focus-within:visible">
           {props.actions.map((action) => (
-            <Button variant="ghost" size="icon"
+            <Button
+              variant="ghost" size="icon-sm"
               key={action.kind}
-              className={`size-7${action.kind === "discard" ? " hover:text-[var(--color-danger)]" : ""}`}
+              className={`size-6 rounded-[4px] text-text-tertiary hover:bg-[var(--git-panel-hover)] hover:text-text-primary${action.kind === "discard" ? " hover:text-[var(--color-danger)]" : ""}`}
               aria-label={action.label} title={action.label}
               disabled={action.disabled}
               onClick={action.run}
             >
               {action.kind === "discard" ? (
-                <RotateCcw size={14} strokeWidth={2} aria-hidden="true" />
+                <RotateCcw size={13} strokeWidth={2} aria-hidden="true" />
+              ) : action.kind === "open" ? (
+                <FileText size={13} strokeWidth={2} aria-hidden="true" />
+              ) : action.kind === "unstage" ? (
+                <Minus size={13} strokeWidth={2} aria-hidden="true" />
               ) : (
-                <GitStageGlyph unstage={action.kind === "unstage"} />
+                <Plus size={13} strokeWidth={2} aria-hidden="true" />
               )}
             </Button>
           ))}
@@ -320,20 +350,23 @@ export function ResourceRow(props: {
       </span>
     </div>
   );
-  // 右键删除仅对变更列表启用：包一层 ContextMenu，菜单项删除后由父级弹确认框
+  // 右键删除仅对变更列表启用：包一层 ContextMenu，删除后由父级弹确认框；
+  // 回滚已移到行内按钮（add/rollback/openfile），compare 只读列表不启用右键
   if (!props.deleteFile) return row;
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>{row}</ContextMenuTrigger>
       <ContextMenuContent alignOffset={-4}>
-        <ContextMenuItem
-          variant="destructive"
-          className="gap-2 text-[13px]"
-          onSelect={() => props.deleteFile?.(props.path)}
-        >
-          <Trash2 size={14} aria-hidden="true" />
-          {t("git.deleteFile")}
-        </ContextMenuItem>
+        {props.deleteFile && (
+          <ContextMenuItem
+            variant="destructive"
+            className="gap-2 text-[13px]"
+            onSelect={() => props.deleteFile?.(props.path)}
+          >
+            <Trash2 size={14} aria-hidden="true" />
+            {t("git.deleteFile")}
+          </ContextMenuItem>
+        )}
       </ContextMenuContent>
     </ContextMenu>
   );

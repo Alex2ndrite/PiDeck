@@ -75,6 +75,8 @@ export interface DrawerFilesPort {
   runDeleteHistorySession: any;
   viewFilePath: any;
   openFilePath: any;
+  /** 在中间栏编辑器打开（可编辑 tab）；Git 变更行内“打开”按钮使用 */
+  openEditorTab: any;
   api: any;
   t: any;
   /** 当前项目根目录：文件面板空白处拖入/粘贴/右键菜单的落点 */
@@ -137,6 +139,7 @@ export function DrawerSurface(props: DrawerSurfaceProps) {
                 commitDetail={git.gitApi.commitDetail}
                 onOpenCommitFileDiff={git.openCommitFileDiff}
                 onOpenWorkspaceFileDiff={git.openWorkspaceFileDiff}
+                onOpenFile={files.openEditorTab}
                 branchCompare={git.gitApi.branchCompare}
                 getStatus={git.gitApi.status}
                 stageFiles={git.gitApi.stage}

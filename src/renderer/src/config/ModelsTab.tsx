@@ -3,7 +3,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Brain, Check, ChevronDown, ChevronRight, Coins, Copy, ExternalLink, Plus, SquarePen, Trash2, X } from "lucide-react";
 import { t } from "../i18n";
 import type { ModelItem, ModelsFile } from "./configTypes";
-import { ApiTypeInput, ConfigSelect, SecretInput } from "./ConfigShared";
+import { ApiTypeInput, ConfigSelect, openDocsInSystemBrowser, SecretInput } from "./ConfigShared";
 import { emptyTierDraft, normalizeTiers, toTierDrafts, type CostTierDraft } from "./modelCostTiers";
 import {
 	CUSTOM_USER_AGENT_VALUE,
@@ -377,11 +377,19 @@ export function ModelsTab(props: {
 
 						<p className="mt-3 border-t border-border-subtle pt-2.5 text-text-tertiary">
 							{t("config.providerGuideNote")}{" "}
-							<a href="https://pi.dev/docs/latest/models" target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 text-[color:var(--color-accent)] no-underline">
+							<a
+								href="https://pi.dev/docs/latest/models"
+								onClick={openDocsInSystemBrowser("https://pi.dev/docs/latest/models")}
+								className="inline-flex items-center gap-0.5 text-[color:var(--color-accent)] no-underline"
+							>
 								{t("config.modelsDocs")} <ExternalLink size={12} />
 							</a>
 							{" · "}
-							<a href="https://pi.dev/docs/latest/providers" target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 text-[color:var(--color-accent)] no-underline">
+							<a
+								href="https://pi.dev/docs/latest/providers"
+								onClick={openDocsInSystemBrowser("https://pi.dev/docs/latest/providers")}
+								className="inline-flex items-center gap-0.5 text-[color:var(--color-accent)] no-underline"
+							>
 								{t("config.providersDocs")} <ExternalLink size={12} />
 							</a>
 						</p>
@@ -806,11 +814,19 @@ export function ModelsTab(props: {
 														fields: [...providerComplexFields, ...providerAdvancedFields].join(", "),
 													})}
 													{" "}
-													<a href="https://pi.dev/docs/latest/models" target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 text-[color:var(--color-accent)] no-underline">
+													<a
+														href="https://pi.dev/docs/latest/models"
+														onClick={openDocsInSystemBrowser("https://pi.dev/docs/latest/models")}
+														className="inline-flex items-center gap-0.5 text-[color:var(--color-accent)] no-underline"
+													>
 														pi {t("config.docsModels")}
 													</a>
 													{" / "}
-													<a href="https://pi.dev/docs/latest/custom-provider" target="_blank" rel="noreferrer" className="font-medium text-[color:var(--color-accent)] no-underline hover:underline">
+													<a
+														href="https://pi.dev/docs/latest/custom-provider"
+														onClick={openDocsInSystemBrowser("https://pi.dev/docs/latest/custom-provider")}
+														className="font-medium text-[color:var(--color-accent)] no-underline hover:underline"
+													>
 														{t("config.docsCustomProvider")}
 													</a>
 												</span>
@@ -1140,7 +1156,11 @@ export function ModelsTab(props: {
 															{t("config.advancedPreservedModel", {
 																fields: [...modelComplexFields, ...modelAdvancedFields].join(", "),
 															})}
-															<a href="https://pi.dev/docs/latest/models" target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 text-[color:var(--color-accent)] no-underline">
+															<a
+																href="https://pi.dev/docs/latest/models"
+																onClick={openDocsInSystemBrowser("https://pi.dev/docs/latest/models")}
+																className="inline-flex items-center gap-0.5 text-[color:var(--color-accent)] no-underline"
+															>
 																{t("config.docsModels")}
 															</a>
 														</div>

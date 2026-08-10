@@ -89,7 +89,63 @@ export class RpcLogger {
   }
 
   /**
-   * 从文件读取日志。
+   * 把弹窗保存的条目合并追加到对应 agent 的当日自动文件（按 id 去重），
+   * 返回实际写入的文件路径列表（空数组 = 全部重复、没有新条目）。
+   * 弹窗内容与自动落盘同源（开启记录后推送即落盘），去重避免重复行；
+   * 竞态说明：读取去重集合与排队写入之间若有并发 push 同 id 条目，可能写入少量重复行，幂等无害。
+   */
+  async appendEntries(entries: RpcLogEntry[]): Promise<string[]> {
+    // 按目标文件分组：同 agent 同日条目共享一次去重读取
+    const byFile = new Map<string, RpcLogEntry[]>();
+    for (const entry of entries) {
+      const filePath = this.filePathFor(entry);
+      const list = byFile.get(filePath) ?? [];
+      list.push(entry);
+      byFile.set(filePath, list);
+    }
+    const writtenFiles: string[] = [];
+    for (const [filePath, group] of byFile) {
+      const existingIds = await this.readEntryIds(filePath);
+      const fresh = group.filter((entry) => !existingIds.has(entry.id));
+      if (fresh.length === 0) continue;
+      // 与 push 共用写入队列：串行追加，跨日 gzip / 截断逻辑一致
+      await new Promise<void>((resolve, reject) => {
+        this.writeQueue = this.writeQueue
+          .then(async () => {
+            for (const entry of fresh) await this.writeEntry(entry);
+            resolve();
+          })
+          .catch((error) => reject(error));
+      });
+      writtenFiles.push(filePath);
+    }
+    return writtenFiles;
+  }
+
+  /** 条目对应的自动保存文件路径：rpc-<agentId>-YYYY-MM-DD.jsonl */
+  private filePathFor(entry: RpcLogEntry): string {
+    const safeAgentId = this.sanitizeAgentId(entry.agentId);
+    const dateStr = formatDate(new Date(entry.time));
+    return join(this.dir, `rpc-${safeAgentId}-${dateStr}.jsonl`);
+  }
+
+  /** 读取文件已有条目 id 集合；文件不存在时返回空集（视为首次写入） */
+  private async readEntryIds(filePath: string): Promise<Set<string>> {
+    const raw = await readFile(filePath, "utf8").catch(() => "");
+    if (!raw) return new Set();
+    const ids = new Set<string>();
+    for (const line of raw.split(/\r?\n/)) {
+      if (!line.trim()) continue;
+      try {
+        ids.add((JSON.parse(line) as RpcLogEntry).id);
+      } catch {
+        // 跳过损坏行，不阻断去重
+      }
+    }
+    return ids;
+  }
+
+  /** 从文件读取日志。
    * 按 agentId 和日期范围过滤，倒序返回最近 limit 条。
    * 只读取未压缩的 .jsonl 文件（当天和近期尚未 gzip 的），
    * 跨日文件已被 gzip，不影响最近 7 天查询。
@@ -216,9 +272,8 @@ export class RpcLogger {
 
   private async writeEntry(entry: RpcLogEntry) {
     await mkdir(this.dir, { recursive: true });
-    const safeAgentId = this.sanitizeAgentId(entry.agentId);
+    const filePath = this.filePathFor(entry);
     const dateStr = formatDate(new Date(entry.time));
-    const filePath = join(this.dir, `rpc-${safeAgentId}-${dateStr}.jsonl`);
 
     // 跨日 gzip：如果上次写入是昨天，把昨天的文件 gzip
     if (this.lastWriteDate && this.lastWriteDate !== dateStr) {
