@@ -40,7 +40,7 @@ test("ask stays out of composer sizing and uses the session timeline as its scro
   // 内容宽度体系（百分比留白，UI 2.0）：变量链由每个会话栏的 utility 持有，
   // solo/split 各自按栏宽计算；消息与 ask 共享 --chat-inline-pad 留白。
   assert.match(tailwind, /@utility chat-content-width[\s\S]*?--chat-side-gap/);
-  assert.match(tailwind, /--chat-inline-pad: max\(var\(--chat-side-gap\), 24px\)/);
+  assert.match(tailwind, /--chat-inline-pad: max\(24px, var\(--chat-side-gap\)\)/);
   assert.match(timeline, /\[padding-inline:var\(--chat-inline-pad\)\]/);
   assert.doesNotMatch(foundation, /--chat-inline-pad|--chat-side-gap/);
   assert.doesNotMatch(overlay, /CollapsibleContent className="min-h-0 overflow-y-auto"/);

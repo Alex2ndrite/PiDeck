@@ -41,6 +41,12 @@ import { stripAnsi } from "./TimelineFormat";
 import { SessionFileSummary } from "./SessionFileSummary";
 import { SessionStartSurface } from "./SessionStartSurface";
 import { MessageScroller } from "../agents/message-scroller";
+import {
+  selectTimelineTurnWindow,
+  shouldWindowTimelineTurns,
+  TIMELINE_MOUNTED_TURN_LIMIT,
+  countAgentRunItems,
+} from "./timeline/turnRenderWindow";
 
 type TurnRowProps = ComponentProps<typeof TurnRow>;
 type UserBubbleProps = ComponentProps<typeof UserBubble>;
@@ -288,6 +294,38 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
     prevRenderedRunsRef.current = next;
     return next;
   }, [renderedRuns]);
+  // 贴底长会话：只挂尾部 N 个 agent-run；上滚/恢复历史位置时放开（autoScroll=false）。
+  // 数据仍在 atoms；这里只减少 TurnRow / Streamdown 挂载。
+  const followingForTurnWindow = controller.autoScroll;
+  const displayRuns = useMemo(
+    () => selectTimelineTurnWindow(
+      reconciledRuns,
+      followingForTurnWindow,
+      TIMELINE_MOUNTED_TURN_LIMIT,
+    ),
+    [followingForTurnWindow, reconciledRuns],
+  );
+  const turnWindowActive = shouldWindowTimelineTurns(
+    countAgentRunItems(reconciledRuns),
+    followingForTurnWindow,
+    TIMELINE_MOUNTED_TURN_LIMIT,
+  );
+  // 从「窗口裁剪」扩到「全量挂载」时内容加在上方，需补偿 scrollTop，避免视口跳到错误位置。
+  const turnWindowStateRef = useRef<{ windowed: boolean; height: number }>({
+    windowed: false,
+    height: 0,
+  });
+  useLayoutEffect(() => {
+    const timeline = timelineRef.current;
+    if (!timeline) return;
+    const prev = turnWindowStateRef.current;
+    const nextHeight = timeline.scrollHeight;
+    if (prev.windowed && !turnWindowActive) {
+      const delta = nextHeight - prev.height;
+      if (delta > 0) timeline.scrollTop += delta;
+    }
+    turnWindowStateRef.current = { windowed: turnWindowActive, height: timeline.scrollHeight };
+  }, [displayRuns, timelineRef, turnWindowActive]);
   // 文件修改汇总只统计最后一次 agent 运行（run）内的工具调用：
   // 每次会话（用户发送 → agent 执行 → 完成）清空重算，不累计历史运行的修改
   const lastRunMessages = useMemo(() => {
@@ -444,7 +482,8 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
       viewportClassName={cn(
         "message-timeline",
         // 内容宽度留白（UI 2.0）：左右内边距 = 统一留白变量；
-        // 分屏/窄栏（≤1100px 容器）收敛为 24px 最小边距，过渡平滑。
+        // 分屏/窄栏（≤1100px 栏宽）才收敛为 24px——阈值不可抬到典型 solo 栏宽之上，
+        // 否则日常窗口永远命中收敛，百分比设置无效。
         "[padding-inline:var(--chat-inline-pad)] transition-[padding-inline] duration-150 ease-out @max-[1100px]:px-6",
       )}
       viewportRef={timelineRef}
@@ -537,22 +576,21 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
           <SessionStartSurface onQuickPrompt={props.onQuickPrompt} />
         )}
 
-      {/* 长会话渲染治理（2026-08 调整）：不再使用 content-visibility 估算高度。
-          - 背景：content-visibility:auto + contain-intrinsic-size:240px 对屏外行用估算高度，
-            展开/折叠工具卡或思考卡时，浏览器按估算高度修正滚动位置，产生屏幕抖动。
-          - 替代：学 Proma 靠「总折叠 + 各自折叠」压缩单行 DOM 体积（分页仍在做窗口治理），
-            所有行真实高度参与 layout，滚动引擎与折叠动画收到准确信号。 */}
+      {/* 长会话渲染治理：
+          - 不再使用 content-visibility 估算高度（展开工具会抖）。
+          - 学 Proma：总折叠压缩单行 DOM；另在贴底时只挂尾部 N 个 agent-run
+            （见 turnRenderWindow），上滚放开。分页仍做数据窗口治理。 */}
       {hasActiveConversation &&
         !isConversationLoading &&
         activeMessages.length > 0 && (
           <div className="message-list min-w-0 w-full mx-auto transition-opacity duration-150">
-            {reconciledRuns.map((item, index) => {
+            {displayRuns.map((item, index) => {
               if (item.kind === "agent-run") {
                 // Controls：忙碌中的末行 run 视为 live（isStreaming 补丁可能略滞后于正文 atom）。
                 const isRunStreaming = isLatestTimelineRunBusy(
                   isAgentBusy,
                   index,
-                  reconciledRuns.length,
+                  displayRuns.length,
                 );
                 return (
                   <TurnRow
@@ -567,7 +605,7 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
                     // 否则流结束而 History 未到时会提前卸思考步导致 remount dump。
                     liveThinkingId={liveThinkingId}
                     agentRunning={isRunStreaming}
-                    isLatestRun={index === reconciledRuns.length - 1}
+                    isLatestRun={index === displayRuns.length - 1}
                     onOpenExternal={props.onOpenExternal}
                     onOpenFile={props.onOpenFile}
                     onDiffFile={props.onDiffFile}

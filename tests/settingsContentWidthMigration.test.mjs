@@ -65,11 +65,12 @@ test("UI 2.0: shared-margin variables live in tailwind.css, not legacy foundatio
   // 变量链是 UI 2.0 自定义 utility：每个 solo/split 会话栏各自按栏宽求值。
   assert.match(
     tailwind,
-    /@utility chat-content-width \{\s*--chat-side-gap: calc\(\(100% - var\(--chat-content-pct-set, 80%\)\) \/ 2\)/,
+    /@utility chat-content-width \{[\s\S]*?100cqi \* \(1 - \(var\(--chat-content-pct-set, 80%\) \/ 100%\)\) \/ 2/,
   );
-  assert.match(tailwind, /--chat-inline-pad: max\(var\(--chat-side-gap\), 24px\)/);
-  // 旧架构（foundation.css）不得再持有宽度体系规则
+  assert.match(tailwind, /--chat-inline-pad: max\(24px, var\(--chat-side-gap\)\)/);
+  // 旧架构（foundation.css）不得再持有宽度体系规则；左右 padding 也不能写死盖住变量
   assert.doesNotMatch(foundation, /--chat-inline-pad|--chat-side-gap|--content-max-width|@container/);
+  assert.match(foundation, /\.message-timeline \{[\s\S]*?padding-block: 18px 24px;[\s\S]*?padding-inline: 0;/);
   // 组件侧（UI 2.0 utility）：消息区与输入框共享同一留白 + 分屏窄栏容器查询收敛
   assert.match(
     timeline,
@@ -77,6 +78,8 @@ test("UI 2.0: shared-margin variables live in tailwind.css, not legacy foundatio
   );
   assert.match(composerArea, /\[padding-inline:var\(--chat-inline-pad\)\]/);
   assert.match(composerArea, /@max-\[1100px\]:px-6/);
+  // 外层 composer 不得再 px-3，否则与消息区左右错位、百分比观感被额外 12px 干扰
+  assert.match(composerArea, /className="composer[^"]*px-0 pb-3"/);
   // 消息列表必须撑满（flex 容器内不被内容收缩），并随留白缩进
   assert.match(timeline, /className="message-list min-w-0 w-full mx-auto transition-opacity duration-150"/);
   // 附件条/扩展区/排队条/ask 条与输入框同宽对齐
