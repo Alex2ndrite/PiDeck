@@ -1,14 +1,14 @@
 import { Button } from "../ui-shadcn/button";
-import { cn } from "../../lib/utils";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { showNotice } from "../../utils/notice";
 
-import { Check, FileEdit, Pencil, ToggleLeft, ToggleRight, Trash2, X } from "lucide-react";
+import { Check, Code2, FileEdit, FolderOpen, MessageSquareText, Pencil, Puzzle, RefreshCw, ToggleLeft, ToggleRight, Trash2, X } from "lucide-react";
 import { CodeMirrorEditor } from "../app/CodeMirrorEditor";
 import {
 	Dialog,
 	DialogClose,
 	DialogContent,
+	DialogDescription,
 	DialogHeader,
 	DialogTitle,
 } from "../ui-shadcn/dialog";
@@ -24,6 +24,11 @@ import { t } from "../../i18n";
 import { Input } from "../ui-shadcn/input";
 import { Textarea } from "../ui-shadcn/textarea";
 import { Label } from "../../components/ui-shadcn/label";
+import { Alert, AlertDescription } from "../ui-shadcn/alert";
+import { Badge } from "../ui-shadcn/badge";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui-shadcn/card";
+import { ScrollArea } from "../ui-shadcn/scroll-area";
+import { Tabs, TabsList, TabsTrigger } from "../ui-shadcn/tabs";
 
 type ProjectResourcesApi = typeof window.piDesktop.projectResources;
 
@@ -329,59 +334,70 @@ export function ProjectResourcesModal(props: {
 	return (
 		<>
 		<Dialog open onOpenChange={(next) => !next && props.onClose()}>
-			<DialogContent showCloseButton={false} stagger className={cn("flex flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(800px,calc(100vw-48px))]", "project-resources-dialog")}>
-				<DialogHeader className="flex-row items-center justify-between px-4 py-3">
-					<DialogTitle></DialogTitle>
-					<DialogClose asChild>
-						<Button variant="ghost" size="icon" aria-label={t("common.close")} title={t("common.close")}>
-							<X size={18} strokeWidth={2.2} aria-hidden="true" />
-						</Button>
-					</DialogClose>
+			<DialogContent
+				showCloseButton={false}
+				stagger
+				className="project-resources-dialog flex h-[min(760px,calc(100vh-32px))] flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(1120px,calc(100vw-32px))]"
+			>
+				<DialogHeader className="shrink-0 gap-1 border-b border-border-subtle px-6 py-4 text-left">
+					<div className="flex items-start justify-between gap-4">
+						<div className="min-w-0">
+							<DialogTitle className="flex items-center gap-2 text-base">
+								<span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+									<FolderOpen data-icon="inline-start" aria-hidden="true" />
+								</span>
+								{t("projectResources.title")}
+							</DialogTitle>
+							<DialogDescription className="mt-1 truncate font-mono text-micro" title={props.project.path}>
+								{props.project.path}
+							</DialogDescription>
+						</div>
+						<DialogClose asChild>
+							<Button variant="ghost" size="icon" aria-label={t("common.close")} title={t("common.close")}>
+								<X data-icon="inline-start" aria-hidden="true" />
+							</Button>
+						</DialogClose>
+					</div>
 				</DialogHeader>
-				<header className="project-resources-header">
-					<div>
-						<strong>{t("projectResources.title")}</strong>
-						<small>{props.project.path}</small>
+
+				<Tabs
+					value={activeTab}
+					onValueChange={(value) => {
+						if (value === "skills" || value === "extensions" || value === "prompts") {
+							setActiveTab(value);
+							if (value === "skills") setEditingSkill(null);
+						}
+					}}
+					className="min-h-0 flex-1 gap-0"
+				>
+					<div className="flex shrink-0 items-center justify-between gap-4 border-b border-border-subtle px-6 py-2">
+						<TabsList className="h-auto w-full min-w-0 flex-1 border-0 bg-transparent p-0">
+							<TabsTrigger value="skills" className="gap-1.5 px-3 py-2 text-control">
+								<Code2 data-icon="inline-start" aria-hidden="true" />
+								{t("projectResources.skillsTab", { count: data.skills.length })}
+							</TabsTrigger>
+							<TabsTrigger value="extensions" className="gap-1.5 px-3 py-2 text-control">
+								<Puzzle data-icon="inline-start" aria-hidden="true" />
+								{t("projectResources.extensionsTab", { count: data.extensions.length })}
+							</TabsTrigger>
+							<TabsTrigger value="prompts" className="gap-1.5 px-3 py-2 text-control">
+								<MessageSquareText data-icon="inline-start" aria-hidden="true" />
+								{t("projectResources.promptsTab", { count: prompts.length })}
+							</TabsTrigger>
+						</TabsList>
+						<Button variant="outline" size="sm" onClick={() => void refresh(true)} disabled={loading}>
+							<RefreshCw data-icon="inline-start" aria-hidden="true" className={loading ? "animate-spin" : undefined} />
+							{t("common.refresh")}
+						</Button>
 					</div>
-					<Button variant="ghost" size="icon" aria-label={t("common.close")} title={t("common.close")} onClick={props.onClose}>
-						<X size={18} strokeWidth={2.2} aria-hidden="true" />
-					</Button>
-				</header>
 
-				<div className="project-resources-toolbar">
-					<div className="project-resources-tabs">
-						{/* 分段 tab 保留原生：下划线式 active 指示是自定义语义，shadcn Tabs 未引入，
-							强行套 Button 会与 .project-resources-tabs 的 border-bottom 样式冲突，
-							待 P1 弹窗体系收口时统一引入 shadcn Tabs 迁移。 */}
-						<button
-							type="button"
-							className={activeTab === "skills" ? "active" : ""}
-							onClick={() => { setActiveTab("skills"); setEditingSkill(null); }}
-						>
-							{t("projectResources.skillsTab", { count: data.skills.length })}
-						</button>
-						<button
-							type="button"
-							className={activeTab === "extensions" ? "active" : ""}
-							onClick={() => setActiveTab("extensions")}
-						>
-							{t("projectResources.extensionsTab", { count: data.extensions.length })}
-						</button>
-						<button
-							type="button"
-							className={activeTab === "prompts" ? "active" : ""}
-							onClick={() => setActiveTab("prompts")}
-						>
-							{t("projectResources.promptsTab", { count: prompts.length })}
-						</button>
-					</div>
-					<Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => void refresh(true)} disabled={loading}>
-						{loading ? t("common.loading") : t("common.refresh")}
-					</Button>
-				</div>
+					{error && (
+						<Alert variant="destructive" className="mx-6 mt-3 shrink-0">
+							<AlertDescription className="break-words">{error}</AlertDescription>
+						</Alert>
+					)}
 
-				{error && <div className="project-resources-error">{error}</div>}
-
+				<ScrollArea className="min-h-0 flex-1">
 				{editingSkill ? (
 					<div className="prompts-editor-backdrop" onClick={() => setEditingSkill(null)}>
 						<div className="prompts-editor-modal" onClick={(e) => e.stopPropagation()}>
@@ -408,27 +424,31 @@ export function ProjectResourcesModal(props: {
 					</div>
 				) : activeTab === "skills" ? (
 					<div className="project-resources-body">
-						<div className="project-resources-col-header">
-							<strong>{t("projectResources.createSkill")}</strong>
-						</div>
+						<Card className="project-skill-create">
+							<CardHeader className="gap-1 px-0 py-0">
+								<CardTitle className="text-sm">{t("projectResources.createSkill")}</CardTitle>
+								<CardDescription>{t("projectResources.createSkillHint")}</CardDescription>
+							</CardHeader>
+							<CardContent className="grid gap-3 px-0 pb-0">
+								{/* 两列宽度保证中文字段名完整显示，同时把输入控件的剩余空间固定留给内容。 */}
+								<Label className="project-resources-name-field grid w-full grid-cols-[4rem_minmax(0,1fr)] items-center gap-2">
+									<span>{t("config.name")}</span>
+									<Input value={newName} placeholder="my-project-skill" onChange={(event) => setNewName(event.target.value)} />
+								</Label>
+								<Label className="project-resources-desc-field grid w-full grid-cols-[4rem_minmax(0,1fr)] items-start gap-2">
+									<span className="pt-2">{t("config.description")}</span>
+									<Textarea value={newDescription} placeholder="Use when..." onChange={(event) => setNewDescription(event.target.value)} />
+								</Label>
+								<Button variant="default" onClick={createSkill} disabled={!canCreateSkill || createBusy}>
+									<Code2 data-icon="inline-start" aria-hidden="true" />
+									{createBusy ? t("projectResources.creatingSkillAction") : t("projectResources.createSkillAction")}
+								</Button>
+							</CardContent>
+						</Card>
 						<div className="project-resources-list-header">
 							<strong>{t("projectResources.skillsTab", { count: data.skills.length })}</strong>
-							<span>{data.skills.length}</span>
+							<Badge variant="secondary">{data.skills.length}</Badge>
 						</div>
-						<section className="project-skill-create">
-							<p>{t("projectResources.createSkillHint")}</p>
-							<Label className="project-resources-name-field">
-								<span>{t("config.name")}</span>
-								<Input value={newName} placeholder="my-project-skill" onChange={(event) => setNewName(event.target.value)} />
-							</Label>
-							<Label className="project-resources-desc-field">
-								<span>{t("config.description")}</span>
-								<Textarea value={newDescription} placeholder="Use when..." onChange={(event) => setNewDescription(event.target.value)} />
-							</Label>
-							<Button  variant="default" onClick={createSkill} disabled={!canCreateSkill || createBusy}>
-								{createBusy ? t("config.creatingSkill") : t("config.addSkill")}
-							</Button>
-						</section>
 						<div className="project-resources-list-section">
 						<ResourceListEmpty loading={loading} empty={data.skills.length === 0} label={t("projectResources.emptySkills")} />
 						{data.skills.map((skill) => (
@@ -460,18 +480,18 @@ export function ProjectResourcesModal(props: {
 										) : (
 											<strong>{skill.name}</strong>
 										)}
-										<span className="skill-badges">
-											<span className={`skill-state ${skill.enabled ? "enabled" : "disabled"}`}>
+										<span className="flex items-center gap-1">
+											<Badge variant={skill.enabled ? "secondary" : "outline"}>
 												{skill.enabled ? t("common.enabled") : t("common.disabled")}
-											</span>
-											{!skill.valid && <span className="skill-state invalid">{t("config.needsFix")}</span>}
+											</Badge>
+											{!skill.valid && <Badge variant="destructive">{t("config.needsFix")}</Badge>}
 										</span>
 									</div>
 									<small>{skill.description || t("config.skillDescriptionMissing")}</small>
 								<small>{skill.sourceLabel} · {skill.path}</small>
 								</button>
 								<div className="skill-card-actions project-resource-actions">
-									{/* hover 显隐由 .project-resource-actions 控制；换 shadcn ghost 图标按钮统一尺寸 */}
+									{/* 操作入口保持常驻，删除/编辑不依赖 hover；shadcn ghost 图标按钮统一尺寸 */}
 									<Button
 										variant="ghost"
 										size="icon-sm"
@@ -513,15 +533,10 @@ export function ProjectResourcesModal(props: {
 					</div>
 				) : activeTab === "extensions" ? (
 					<div className="project-resources-body">
-						<div className="project-resources-col-header">
+						<div className="project-resources-list-header col-span-2">
 							<strong>{t("projectResources.extensionsTab", { count: data.extensions.length })}</strong>
+							<Badge variant="secondary">{data.extensions.length}</Badge>
 						</div>
-						<div className="project-resources-list-header">
-							<strong>{t("projectResources.extensionsTab", { count: data.extensions.length })}</strong>
-							<span>{data.extensions.length}</span>
-						</div>
-						<section className="project-skill-create">
-						</section>
 						<div className="project-resources-list-section">
 							<ResourceListEmpty loading={loading} empty={data.extensions.length === 0} label={t("projectResources.emptyExtensions")} />
 						{data.extensions.map((extension) => (
@@ -529,10 +544,10 @@ export function ProjectResourcesModal(props: {
 								<div className="project-resource-info">
 									<div className="project-resource-title">
 										<strong>{extension.source}</strong>
-										<span className={`skill-state ${extension.enabled === false ? "disabled" : "enabled"}`}>
+										<Badge variant={extension.enabled === false ? "outline" : "secondary"}>
 											{extension.enabled !== false ? t("common.enabled") : t("common.disabled")}
-										</span>
-										<span className="skill-state enabled">{t("projectResources.projectScope")}</span>
+										</Badge>
+										<Badge variant="outline">{t("projectResources.projectScope")}</Badge>
 									</div>
 									<small>{extension.path}</small>
 								</div>
@@ -587,26 +602,30 @@ export function ProjectResourcesModal(props: {
 					</div>
 				) : (
 					<div className="project-resources-body">
-						<div className="project-resources-col-header">
-							<strong>{t("projectResources.createPrompt")}</strong>
-						</div>
+						<Card className="project-skill-create">
+							<CardHeader className="gap-1 px-0 py-0">
+								<CardTitle className="text-sm">{t("projectResources.createPrompt")}</CardTitle>
+								<CardDescription>{t("projectResources.projectScope")}</CardDescription>
+							</CardHeader>
+							<CardContent className="grid gap-3 px-0 pb-0">
+								<Label className="project-resources-name-field grid w-full grid-cols-[4rem_minmax(0,1fr)] items-center gap-2">
+									<span>{t("config.name")}</span>
+									<Input value={newPromptName} placeholder="my-project-prompt" onChange={(event) => setNewPromptName(event.target.value)} />
+								</Label>
+								<Label className="project-resources-desc-field grid w-full grid-cols-[4rem_minmax(0,1fr)] items-start gap-2">
+									<span className="pt-2">{t("config.description")}</span>
+									<Textarea value={newPromptDescription} placeholder="Use when..." onChange={(event) => setNewPromptDescription(event.target.value)} />
+								</Label>
+								<Button variant="default" onClick={createProjectPrompt} disabled={!canCreatePrompt || creatingPrompt}>
+									<MessageSquareText data-icon="inline-start" aria-hidden="true" />
+									{creatingPrompt ? t("projectResources.creatingPromptAction") : t("projectResources.createPromptAction")}
+								</Button>
+							</CardContent>
+						</Card>
 						<div className="project-resources-list-header">
 							<strong>{t("projectResources.promptsTab", { count: prompts.length })}</strong>
-							<span>{prompts.length}</span>
+							<Badge variant="secondary">{prompts.length}</Badge>
 						</div>
-						<section className="project-skill-create">
-							<Label className="project-resources-name-field">
-								<span>{t("config.name")}</span>
-								<Input value={newPromptName} placeholder="my-project-prompt" onChange={(event) => setNewPromptName(event.target.value)} />
-							</Label>
-							<Label className="project-resources-desc-field">
-								<span>{t("config.description")}</span>
-								<Textarea value={newPromptDescription} placeholder="Use when..." onChange={(event) => setNewPromptDescription(event.target.value)} />
-							</Label>
-							<Button  variant="default" onClick={createProjectPrompt} disabled={!canCreatePrompt || creatingPrompt}>
-								{creatingPrompt ? t("config.creatingSkill") : t("config.addSkill")}
-							</Button>
-						</section>
 						<div className="project-resources-list-section">
 						<ResourceListEmpty loading={promptsLoading} empty={prompts.length === 0} label={t("projectResources.emptyPrompts")} />
 						{prompts.map((prompt) => (
@@ -648,7 +667,8 @@ export function ProjectResourcesModal(props: {
 						</div>
 					</div>
 				)}
-			
+				</ScrollArea>
+				</Tabs>
 			</DialogContent>
 		</Dialog>
 
