@@ -10,6 +10,18 @@ import { Input } from "../components/ui-shadcn/input";
 
 // ── 复制到剪贴板工具 ──────────────────────────────────
 
+/**
+ * 弹框内文档链接统一强制系统浏览器打开：
+ * 内置浏览器面板位于 Dialog 下层不可见（linkOpenMode=internal 时会被遮挡），
+ * forceSystem 绕过该设置直接 shell.openExternal；保留 href 语义供中键/辅助功能使用。
+ */
+export function openDocsInSystemBrowser(url: string) {
+	return (event: MouseEvent) => {
+		event.preventDefault();
+		void window.piDesktop.app.openExternal(url, true);
+	};
+}
+
 export function CopyButton(props: { text: string }) {
 	const [copied, setCopied] = useState(false);
 	const handleCopy = async (e: MouseEvent) => {

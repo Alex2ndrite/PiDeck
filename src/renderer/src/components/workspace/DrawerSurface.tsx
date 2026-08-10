@@ -137,6 +137,7 @@ export function DrawerSurface(props: DrawerSurfaceProps) {
                 commitDetail={git.gitApi.commitDetail}
                 onOpenCommitFileDiff={git.openCommitFileDiff}
                 onOpenWorkspaceFileDiff={git.openWorkspaceFileDiff}
+                onOpenFile={files.openFilePath}
                 branchCompare={git.gitApi.branchCompare}
                 getStatus={git.gitApi.status}
                 stageFiles={git.gitApi.stage}

@@ -287,6 +287,7 @@ export const zhCN = {
   "git.unstage": "取消暂存",
   "git.unstageAll": "全部取消暂存",
   "git.discard": "丢弃未暂存更改",
+  "git.discardChanges": "回滚更改",
   "git.discardUntracked": "删除未跟踪文件",
   "git.discardConfirmTitle": "丢弃文件更改？",
   "git.discardConfirmMessage": "将丢弃“{path}”的未暂存更改。已暂存的内容会保留，此操作无法撤销。",

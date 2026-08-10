@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { ChevronDown, ChevronRight, Copy, ExternalLink, Trash2 } from "lucide-react";
 import { t } from "../i18n";
 import type { AuthFile, ModelsFile } from "./configTypes";
-import { ConfigComboboxInput, SecretInput } from "./ConfigShared";
+import { ConfigComboboxInput, openDocsInSystemBrowser, SecretInput } from "./ConfigShared";
 import { Input } from "../components/ui-shadcn/input";
 import { Checkbox } from "../components/ui-shadcn/checkbox";
 import { Label } from "../components/ui-shadcn/label";
@@ -157,7 +157,11 @@ export function AuthTab(props: {
 						</ul>
 						<p className="mt-3 border-t border-border-subtle pt-2.5 text-text-tertiary">
 							{t("config.authGuideNote")}{" "}
-							<a href="https://pi.dev/docs/latest/providers#auth-file" target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 text-[color:var(--color-accent)] no-underline">
+							<a
+								href="https://pi.dev/docs/latest/providers#auth-file"
+								onClick={openDocsInSystemBrowser("https://pi.dev/docs/latest/providers#auth-file")}
+								className="inline-flex items-center gap-0.5 text-[color:var(--color-accent)] no-underline"
+							>
 								pi docs <ExternalLink size={12} />
 							</a>
 						</p>
@@ -248,7 +252,11 @@ export function AuthTab(props: {
 							<div className="flex flex-1 items-center gap-1.5 text-xs text-text-tertiary">
 								{t("config.authEnvVar")}: <code className="rounded-[4px] bg-bg-hover px-1.5 py-px font-mono text-[11px]">{presetProvider.env}</code>
 								{presetProvider.url && (
-									<a href={presetProvider.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 text-[11px] text-[color:var(--color-accent)] no-underline">
+									<a
+										href={presetProvider.url}
+										onClick={openDocsInSystemBrowser(presetProvider.url)}
+										className="inline-flex items-center gap-0.5 text-[11px] text-[color:var(--color-accent)] no-underline"
+									>
 										{t("config.authGetKey")} <ExternalLink size={10} />
 									</a>
 								)}

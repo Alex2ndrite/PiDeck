@@ -287,6 +287,7 @@ export const enUS: Record<TranslationKey, string> = {
   "git.unstage": "Unstage",
   "git.unstageAll": "Unstage All",
   "git.discard": "Discard Unstaged Changes",
+  "git.discardChanges": "Discard Changes",
   "git.discardUntracked": "Delete Untracked File",
   "git.discardConfirmTitle": "Discard file changes?",
   "git.discardConfirmMessage": "Discard unstaged changes in “{path}”? Staged content will be kept. This cannot be undone.",
