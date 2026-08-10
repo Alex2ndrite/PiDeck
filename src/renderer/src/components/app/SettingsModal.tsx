@@ -1121,18 +1121,18 @@ function SettingsModalContent(props: SettingsModalProps) {
 										<div className="flex w-full items-center gap-3">
 											<input
 												type="range"
-												min="800"
-												max="1800"
-												step="25"
+												min="50"
+												max="100"
+												step="5"
 												value={draftSettings.contentMaxWidth}
 												onChange={(event) => updateDraft({ contentMaxWidth: parseInt(event.target.value) })}
 												className="min-w-0 flex-1 accent-[var(--color-accent)]"
 												aria-label={t("settings.contentMaxWidth")}
 											/>
 											<span className="min-w-20 shrink-0 text-right font-brand text-sm text-muted-foreground tabular-nums">
-												{draftSettings.contentMaxWidth === 1800
+												{draftSettings.contentMaxWidth >= 100
 													? t("settings.contentMaxWidthUnlimited")
-													: `${draftSettings.contentMaxWidth}px`}
+													: `${draftSettings.contentMaxWidth}%`}
 											</span>
 										</div>
 									</SettingRow>

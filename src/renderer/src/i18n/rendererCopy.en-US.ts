@@ -1744,7 +1744,7 @@ export const enUS: Record<TranslationKey, string> = {
   "settings.sectionRuntime": "Runtime",
   "settings.sectionEditors": "External Editors",
   "settings.contentMaxWidth": "Max Content Width",
-  "settings.contentMaxWidthDesc": "Limit the maximum width of messages and the composer, leaving margins on both sides. Rightmost = Unlimited (default).",
+  "settings.contentMaxWidthDesc": "Limit the maximum width of messages and the composer as a percentage of the session panel width, leaving margins on both sides; the margin ratio stays consistent at any window size. Rightmost = Unlimited (default).",
   "settings.contentMaxWidthUnlimited": "Unlimited",
   "settings.theme": "Theme",
   "settings.themeSystem": "System",

@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createDefaultExternalEditorSettings, type AppSettings } from "../../shared/types";
+import { migrateContentMaxWidth } from "./contentMaxWidthMigration";
 
 /** 桌面端 settings.json（userData），与 pi agent settings 分离 */
 function desktopSettingsPath() {
@@ -140,7 +141,8 @@ Gitmoji 对应关系：
   rpcTimeout: 600_000,
   linkOpenMode: "external",
   workspaceContentOpenMode: "split",
-  contentMaxWidth: 1800,
+  // 内容区最大宽度默认不限制（100 = 填满会话面板；50–99 为百分比）
+  contentMaxWidth: 100,
   maxEditorFileSizeMB: 5,
   externalEditors: createDefaultExternalEditorSettings(),
 
@@ -204,6 +206,10 @@ export class SettingsStore {
       if (persistedMonoFont === "commit-mono") {
         this.settings.fontFamilyMono = "system-mono";
       }
+
+      // 兼容迁移：contentMaxWidth 由「px 最大宽度」改为「占会话面板的百分比」，
+      // 旧磁盘值（800–1800px，0 也代表不限）由纯函数统一折算，见 contentMaxWidthMigration.ts。
+      this.settings.contentMaxWidth = migrateContentMaxWidth(this.settings.contentMaxWidth);
     } catch {
       this.settings = { ...defaultSettings };
     }

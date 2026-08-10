@@ -1718,7 +1718,7 @@ export const zhCN = {
   "settings.sectionRuntime": "运行",
   "settings.sectionEditors": "外部编辑器",
   "settings.contentMaxWidth": "内容最大宽度",
-  "settings.contentMaxWidthDesc": "限制消息和输入框的最大宽度，左右留白。最右侧为「不限」（默认）。",
+  "settings.contentMaxWidthDesc": "按会话面板宽度的百分比限制消息和输入框的最大宽度，左右留白；不同窗口宽度下留白比例保持一致。最右侧为「不限」（默认）。",
   "settings.contentMaxWidthUnlimited": "不限",
   "settings.theme": "主题",
   "settings.themeSystem": "跟随系统",

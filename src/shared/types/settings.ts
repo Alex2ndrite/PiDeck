@@ -128,7 +128,8 @@ export type StartupWindowMode =
 	 * split=与会话分屏；maximize=占满中间栏（会话暂时收起，不进侧栏）。
 	 */
 	workspaceContentOpenMode: WorkspaceContentOpenMode;
-	/** 内容区最大宽度（px），0 表示不限制（填满 chat-pane）。用于限制消息行宽，左右留白。 */
+	/** 内容区最大宽度：占会话面板宽度的百分比（50–100），100 表示不限制（填满 chat-pane）。
+	 * 旧版本为 px（800–1800，1800=不限），已由 SettingsStore 加载时迁移为百分比。 */
 	contentMaxWidth: number;
 	/** 编辑器最大文件大小（MB），超过此大小的文件不加载编辑器。默认 5MB。 */
 	maxEditorFileSizeMB: number;

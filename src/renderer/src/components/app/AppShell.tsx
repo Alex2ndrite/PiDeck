@@ -251,8 +251,8 @@ export function AppShell(props: AppShellProps) {
             style={
               {
                 "--terminal-row-h": `${terminalRowHeight}px`,
-                ...(contentMaxWidth > 0 && contentMaxWidth < 1800
-                  ? { "--content-max-width": `${contentMaxWidth}px` }
+                ...(contentMaxWidth > 0 && contentMaxWidth < 100
+                  ? { "--content-max-width": `${contentMaxWidth}%` }
                   : undefined),
               } as CSSProperties
             }
