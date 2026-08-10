@@ -1603,20 +1603,27 @@ function SettingsModalContent(props: SettingsModalProps) {
 											updateDraft({ webServiceEnabled: checked })
 										}
 									/>
-									<div className="web-endpoint-panel">
-										<div className="web-endpoint-grid">
-											<div className="web-endpoint-metric">
-												<span>{t("common.host")}</span>
-												<code>{draftSettings.webServiceHost}</code>
+									<div className="mt-2.5 grid gap-2.5">
+										{/* Web 服务地址：主机（只读）+ 端口（可编辑）；shadcn Input + Label，
+										    两列均分不再有主机列挤压/过宽问题，主机超长时 Input 内滚动 */}
+										<div className="grid grid-cols-2 gap-2">
+											<div className="min-w-0">
+												<Label className="text-xs font-bold text-text-tertiary">{t("common.host")}</Label>
+												<Input
+													value={draftSettings.webServiceHost}
+													readOnly
+													className="mt-1 font-mono text-sm tabular-nums"
+												/>
 											</div>
-											<Label className="web-endpoint-metric editable">
-												<span>{t("common.port")}</span>
+											<div className="min-w-0">
+												<Label className="text-xs font-bold text-text-tertiary">{t("common.port")}</Label>
 												<Input
 													type="number"
 													min={1}
 													max={65535}
 													value={webPortDraft}
 													disabled={props.webServiceChanging}
+													className="mt-1 font-mono text-sm tabular-nums"
 													onChange={(event) => setWebPortDraft(event.target.value)}
 													onBlur={applyWebPortDraft}
 													onKeyDown={(event) => {
@@ -1627,15 +1634,23 @@ function SettingsModalContent(props: SettingsModalProps) {
 														}
 													}}
 												/>
-											</Label>
+											</div>
 										</div>
-										<div className="web-endpoint-summary">
-											<span className={draftSettings.webServiceEnabled ? "online" : ""} />
-											<div>
-												<strong>
+										<div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2.5 rounded-lg border border-border-subtle/70 bg-bg-muted/30 px-3 py-2.5">
+											{/* 服务状态点：开启时 accent 色 + 光晕，关闭时灰 */}
+											<span
+												className={cn(
+													"size-2 shrink-0 rounded-full",
+													draftSettings.webServiceEnabled
+														? "bg-[var(--color-accent)] shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-accent)_12%,transparent)]"
+														: "bg-text-tertiary shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-text-tertiary)_12%,transparent)]",
+												)}
+											/>
+											<div className="min-w-0">
+												<strong className="block truncate text-caption font-semibold text-text-primary">
 													http://127.0.0.1:{webPortDraft || draftSettings.webServicePort}
 												</strong>
-												<small>{t("settings.localWebHint")}</small>
+												<small className="mt-0.5 block text-micro text-text-tertiary">{t("settings.localWebHint")}</small>
 											</div>
 											<Button variant="secondary"
 												size="sm"

@@ -1218,105 +1218,6 @@
 /* 设置分区与设置行已迁移 UI 2.0（Tailwind + shadcn，见 settings/SettingRows.tsx）：
    去卡片化 + 行式布局，旧手写规则全部删除，不再在此维护。 */
 
-/* Web 服务面板 */
-.web-endpoint-panel {
-  margin-top: 10px;
-  display: grid;
-  gap: 10px;
-}
-.web-endpoint-grid {
-  display: grid;
-  /* 主机列 fit-content(220px)：短主机名（如 127.0.0.1）按内容收缩不撑满，
-     长域名 220px 封顶 + 省略号（code 截断），端口列永远完整显示。
-     不要用 1fr/minmax(0,1fr)：1fr 会把剩余空间全吃给主机列，视觉过宽；
-     隐式最小宽是内容宽，长主机名又会把端口列挤出可视区。 */
-  grid-template-columns: fit-content(220px) 112px;
-  gap: 10px;
-}
-.web-endpoint-metric {
-  height: 52px;
-  display: grid;
-  align-content: center;
-  gap: 4px;
-  padding: 0 12px;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-sm);
-  background: var(--color-bg-panel);
-}
-.web-endpoint-metric span {
-  color: var(--color-text-tertiary);
-  font-size: var(--font-size-micro);
-  font-weight: 700;
-  letter-spacing: 0.03em;
-}
-.web-endpoint-metric code,
-.web-endpoint-metric input {
-  width: 100%;
-  border: 0;
-  background: transparent;
-  padding: 0;
-  color: var(--color-text-primary);
-  font-family: var(--font-family-business);
-  font-size: var(--font-size-title);
-  font-weight: 500;
-  line-height: 1.2;
-  font-variant-numeric: tabular-nums;
-}
-/* 主机地址过长（如局域网域名）时省略号截断，避免把端口列挤出卡片 */
-.web-endpoint-metric code {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.web-endpoint-metric input:focus {
-  outline: none;
-}
-.web-endpoint-metric.editable:focus-within {
-  border-color: var(--color-accent);
-  box-shadow: var(--focus-ring);
-}
-.web-endpoint-summary {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: 10px;
-  align-items: center;
-  padding: 10px 12px;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-sm);
-  background: var(--color-bg-panel);
-}
-.web-endpoint-summary > span {
-  width: 8px;
-  height: 8px;
-  border-radius: var(--radius-md);
-  background: var(--color-text-tertiary);
-  box-shadow: 0 0 0 3px
-    color-mix(in srgb, var(--color-text-tertiary) 12%, transparent);
-}
-.web-endpoint-summary > span.online {
-  background: var(--color-accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 12%, transparent);
-}
-.web-endpoint-summary strong {
-  display: block;
-  color: var(--color-text-primary);
-  font-size: var(--font-size-caption);
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.web-endpoint-summary small {
-  display: block;
-  margin-top: 2px;
-  color: var(--color-text-tertiary);
-  font-size: var(--font-size-micro);
-}
-.web-endpoint-summary > button {
-  justify-self: end;
-}
-
 /* 代理面板 */
 .setting-proxy-panel {
   margin: 2px 0 6px;
@@ -2030,7 +1931,6 @@
 
 :root[data-theme="dark"] .setting-proxy-panel,
 :root[data-theme="dark"] .setting-pi-path-panel,
-:root[data-theme="dark"] .web-endpoint-panel,
 :root[data-theme="dark"] .feedback-report-block,
 :root[data-theme="dark"] .codex-import-modal,
 :root[data-theme="dark"] .context-menu,
