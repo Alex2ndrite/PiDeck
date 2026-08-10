@@ -1652,6 +1652,10 @@ export const zhCN = {
   "settings.storage.clearAll": "清理全部",
   "settings.storage.clearAllDesc": "同时清理应用日志和 RPC 日志文件",
   "settings.storage.clearAllButton": "清理全部日志",
+  "settings.storage.clearLocalStorage": "清理界面本地缓存",
+  "settings.storage.clearLocalStorageDesc": "重置侧栏/抽屉宽度、折叠状态、文件排序等界面偏好，不影响设置、会话与日志",
+  "settings.storage.clearLocalStorageButton": "清理界面缓存",
+  "settings.storage.clearLocalStorageConfirm": "确认清理界面本地缓存吗？布局、折叠状态等界面偏好将重置，页面会自动刷新。设置与会话数据不受影响。",
   "settings.storage.openFolder": "打开日志文件夹",
   "settings.storage.openFolderDesc": "在文件管理器中查看日志文件",
   // ===== 用量统计（usage-stats） =====
