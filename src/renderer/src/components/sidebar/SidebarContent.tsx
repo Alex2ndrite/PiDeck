@@ -103,6 +103,10 @@ export function SidebarContent(props: SidebarContentProps) {
   const menuAgent = menu?.kind === "agent"
     ? controller.catalog.agents.find((agent) => agent.id === menu.agentId)
     : undefined;
+  // agent 是否有 live runtime：没有运行中的 pi 子进程时，RPC 日志记录无法开启
+  // （记录靠主进程旁路拦截子进程通信，进程不存在则无日志可记）
+  const menuAgentCanRpcLog = menuAgent?.sessionId !== undefined
+    && getBoundSidebarRuntimeAgent(controller.catalog, menuAgent.sessionId) !== undefined;
   const menuSessionRecord = menu?.kind === "session"
     ? controller.catalog.sessionsByProject[menu.projectId]?.find((session) => session.id === menu.sessionId)
     : undefined;
@@ -225,13 +229,22 @@ export function SidebarContent(props: SidebarContentProps) {
           onCopySession={() => { void actions.agents.copySession(menuAgent); controller.closeMenu(); }}
           onCopySessionFilePath={() => { void actions.agents.copyPath(menuAgent); controller.closeMenu(); }}
           onOpenSessionFile={() => { void actions.agents.openSessionFile(menuAgent); controller.closeMenu(); }}
-          onToggleRpcLogging={() => void actions.rpc.setLogging(menuAgent.id, !controller.isAgentRpcLogging(menuAgent.id)).then((enabled) => {
-            controller.setAgentRpcLogging(menuAgent.id, enabled);
-            // 菜单开关是异步生效，成功/失败都给出 toast 反馈
-            showNotice(enabled ? t("rpc.loggingEnabled") : t("rpc.loggingEnableFailed"), 2500);
-            controller.closeMenu();
-          })}
+          onToggleRpcLogging={() => {
+            // 兜底：置灰的菜单项点击不触发 onSelect，这里防御 agent 状态在菜单打开期间变化的情况
+            if (!menuAgentCanRpcLog) {
+              showNotice(t("menu.rpcLoggingRequiresRuntime"), 2500);
+              controller.closeMenu();
+              return;
+            }
+            void actions.rpc.setLogging(menuAgent.id, !controller.isAgentRpcLogging(menuAgent.id)).then((enabled) => {
+              controller.setAgentRpcLogging(menuAgent.id, enabled);
+              // 菜单开关是异步生效，成功/失败都给出 toast 反馈
+              showNotice(enabled ? t("rpc.loggingEnabled") : t("rpc.loggingEnableFailed"), 2500);
+              controller.closeMenu();
+            });
+          }}
           isRpcLogging={controller.isAgentRpcLogging(menuAgent.id)}
+          rpcToggleDisabled={!menuAgentCanRpcLog}
           onOpenLogs={() => { controller.openRpcLogs(menuAgent.id); controller.closeMenu(); }}
           onCloseAgent={() => { void actions.agents.close(menuAgent); controller.closeMenu(); }}
         />

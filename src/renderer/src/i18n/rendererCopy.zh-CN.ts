@@ -1469,6 +1469,7 @@ export const zhCN = {
   "menu.rpcLogs": "RPC 日志",
   "menu.rpcLogView": "查看 RPC 日志",
   "menu.rpcLogging": "RPC 日志记录(默认关闭)",
+  "menu.rpcLoggingRequiresRuntime": "Agent 运行中才可开启 RPC 日志记录",
   "menu.rpcLoggingOn": "关闭RPC日志",
   "menu.openSessionFile": "打开会话文件",
   "menu.openAgentSessionFile": "打开会话 JSONL 文件",

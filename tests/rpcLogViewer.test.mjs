@@ -69,6 +69,9 @@ test("agent context menu exposes a live log entry point next to the toggle", () 
   const menu = readFileSync("src/renderer/src/components/sidebar/SidebarComponents.tsx", "utf8");
   assert.match(menu, /onOpenLogs\?: \(\) => void;/);
   assert.match(menu, /menu\.rpcLogView/);
+  // 未启动（无 live runtime）的 agent：开启记录菜单项置灰并带原因 title
+  assert.match(menu, /rpcToggleDisabled\?: boolean;/);
+  assert.match(menu, /title=\{props\.rpcToggleDisabled \? t\("menu\.rpcLoggingRequiresRuntime"\) : undefined\}/);
   // 右键菜单已移除“打开日志文件夹”（日志自动落盘，弹窗内即可查看/保存）
   assert.doesNotMatch(menu, /rpcLogFile/);
   assert.doesNotMatch(menu, /openLogFile/);
@@ -76,6 +79,16 @@ test("agent context menu exposes a live log entry point next to the toggle", () 
   assert.doesNotMatch(sidebarParts, /RpcLogModal/);
   assert.match(sidebarContent, /<RpcLogViewer/);
   assert.match(sidebarContent, /controller\.openRpcLogs\(menuAgent\.id\)/);
+});
+
+test("sidebar gates rpc logging toggle on a live runtime", () => {
+  // 未启动的 agent 无 runtime：菜单置灰 + 点击兜底 toast 提示需运行中
+  assert.match(sidebarContent, /menuAgentCanRpcLog/);
+  assert.match(sidebarContent, /getBoundSidebarRuntimeAgent\(controller\.catalog, menuAgent\.sessionId\)/);
+  assert.match(sidebarContent, /rpcToggleDisabled=\{!menuAgentCanRpcLog\}/);
+  assert.match(sidebarContent, /menu\.rpcLoggingRequiresRuntime/);
+  // 兜底分支：置灰点击不触发 onSelect，这里防御状态在菜单打开期间变化
+  assert.match(sidebarContent, /if \(!menuAgentCanRpcLog\) \{\n\s+showNotice\(t\("menu\.rpcLoggingRequiresRuntime"\), 2500\);/);
 });
 
 test("AgentManager batches live log broadcast and cleans up on exit", () => {

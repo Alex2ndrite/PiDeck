@@ -1489,6 +1489,7 @@ export const enUS: Record<TranslationKey, string> = {
   "menu.rpcLogs": "RPC Logs",
   "menu.rpcLogView": "View RPC Logs",
   "menu.rpcLogging": "RPC Logging (off)",
+  "menu.rpcLoggingRequiresRuntime": "RPC logging requires a running agent",
   "menu.rpcLoggingOn": "Disable RPC Logging",
   "menu.openSessionFile": "Open Session File",
   "menu.openAgentSessionFile": "Open Session JSONL File",
