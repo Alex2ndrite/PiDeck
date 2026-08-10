@@ -50,7 +50,7 @@ export type StartupWindowMode =
 	customThemeOverrides: Record<string, string>;
 	/** 背景图文件名（userData/backgrounds/ 目录下），空串=不启用 */
 	backgroundImage: string;
-	/** 背景图遮罩不透明度 0-1：1=背景色完全遮住图片，0=图片全显 */
+	/** 背景图可见度 0-1：0=背景色完全遮住图片，1=图片全显；面板/弹层会按语义分档透出 */
 	backgroundImageOpacity: number;
 	/** 界面语言，system 跟随系统语言；pseudo 用于长文案布局压力测试 */
 	language: AppLanguageMode;

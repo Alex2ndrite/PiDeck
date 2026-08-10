@@ -41,7 +41,8 @@
   --color-sidebar-foreground: var(--color-text-primary);
   --color-bg-muted: var(--color-bg-muted);
   --color-bg-subtle: var(--color-bg-muted);
-  --color-bg-input: var(--color-bg-panel);
+  --color-bg-input: var(--color-bg-input);
+  --color-bg-popover: var(--color-bg-popover);
   --color-bg-hover: var(--color-bg-hover);
   --color-bg-active: var(--color-bg-active);
   --color-text-primary: var(--color-text-primary);
@@ -64,7 +65,7 @@
   --color-foreground: var(--color-text-primary);
   --color-card: var(--color-bg-panel);
   --color-card-foreground: var(--color-text-primary);
-  --color-popover: var(--color-bg-panel);
+  --color-popover: var(--color-bg-popover);
   --color-popover-foreground: var(--color-text-primary);
   --color-primary: var(--color-accent);
   --color-primary-foreground: var(--color-text-inverse);

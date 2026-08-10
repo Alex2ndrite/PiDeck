@@ -4019,4 +4019,34 @@ div.fixed.inset-0.z-50 {
   font-size: 11px;
 }
 
+/* 壁纸模式下业务弹框只保留 DialogContent 这一层底色；布局容器透明，
+   否则 header 是一层、body 又叠一层同色面板，最终看起来像两个透明度。 */
+:root[data-bg-image="on"] .config-modal .config-layout,
+:root[data-bg-image="on"] .config-modal .config-sidebar,
+:root[data-bg-image="on"] .config-modal .config-main,
+:root[data-bg-image="on"] .config-modal .config-content,
+:root[data-bg-image="on"] .config-modal .config-provider-card,
+:root[data-bg-image="on"] .config-modal .config-provider-body,
+:root[data-bg-image="on"] .config-modal .config-provider-form,
+:root[data-bg-image="on"] .config-modal .config-models-section,
+:root[data-bg-image="on"] .config-modal .config-model-table,
+:root[data-bg-image="on"] .settings-modal .settings-layout,
+:root[data-bg-image="on"] .settings-modal .settings-tabs,
+:root[data-bg-image="on"] .settings-modal .settings-panel,
+:root[data-bg-image="on"] .project-resources-dialog .project-resources-body,
+:root[data-bg-image="on"] .feedback-modal-shell .feedback-body,
+:root[data-bg-image="on"] .feedback-modal-shell .feedback-environment-section,
+:root[data-bg-image="on"] .feedback-modal-shell .feedback-environment-content,
+:root[data-bg-image="on"] .feedback-modal-shell .feedback-actions,
+:root[data-bg-image="on"] .feedback-modal-shell .feedback-actions [data-slot="button"][data-variant="secondary"],
+:root[data-bg-image="on"] .environment-dialog .environment-body {
+  background: transparent;
+}
+
+/* 反馈报告在普通主题下是代码块，壁纸模式下不再用固定黑/白色；
+   直接继承弹框内容层，否则它会成为反馈弹框中唯一不透明的区域。 */
+:root[data-bg-image="on"] .feedback-modal-shell .feedback-environment-content {
+  color: var(--color-text-secondary);
+}
+
 /* 模型计费字段：每百万 token 美元单价 */

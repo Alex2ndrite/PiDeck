@@ -871,7 +871,22 @@ export function App() {
   useEffect(() => {
     const root = document.documentElement;
     const isDark = root.dataset.theme === "dark";
-    const BG_TOKENS = ["--color-bg-app", "--color-bg-sidebar", "--color-bg-panel", "--color-bg-muted", "--color-bg-hover", "--color-bg-active", "--color-background", "--color-card"];
+    const BG_TOKENS = [
+      "--color-bg-app",
+      "--color-bg-sidebar",
+      "--color-bg-panel",
+      "--color-bg-input",
+      "--color-bg-muted",
+      "--color-bg-hover",
+      "--color-bg-active",
+      "--color-background",
+      "--color-card",
+      // Markdown/表格使用 chat 专属 token；未注入时会继续显示固定白色代码块。
+      "--color-chat-card-bg",
+      "--color-chat-muted-bg",
+      "--color-chat-control-bg",
+      "--color-chat-table-bg",
+    ];
 
     // 1. 皮肤变量：先清所有皮肤预设可能触及的键，再应用当前皮肤（light/dark 色板）+ 自定义覆盖
     const skinKeys = new Set<string>();
@@ -920,6 +935,15 @@ export function App() {
           injectedWallpaperTokens.add(k);
         }
       }
+      // Select/Dropdown/Popover 会 portal 到 body，不能继承 DialogContent 的局部变量。
+      // 单独给浮层保留 92% 以上的底色，避免半透明面板 token 让菜单内容透出并误读为“透明坏了”。
+      const floatingMix = Math.max(92, Math.min(100, panelMix + 40));
+      root.style.setProperty(
+        "--color-bg-popover",
+        `color-mix(in srgb, ${base} ${floatingMix}%, transparent)`,
+      );
+      root.style.setProperty("--wallpaper-floating-alpha", `${floatingMix}%`);
+      injectedWallpaperTokens.add("--color-bg-popover");
     } else {
       root.style.removeProperty("--app-bg-image");
       root.style.removeProperty("--app-bg-mask");
@@ -928,6 +952,7 @@ export function App() {
       injectedWallpaperTokens.clear();
       root.style.removeProperty("--wallpaper-base");
       root.style.removeProperty("--wallpaper-panel-alpha");
+      root.style.removeProperty("--wallpaper-floating-alpha");
     }
   }, [settings.themeSkin, settings.theme, settings.customThemeOverrides, settings.backgroundImage, settings.backgroundImageOpacity]);
 

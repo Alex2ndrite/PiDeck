@@ -376,7 +376,7 @@ export function EmptyState(props: {
 		// 居中策略：几何居中（justify-center）后用户反馈标题区仍略偏上——
 		// 补 pt-[10vh] 让内容块整体下移，标题重心落到窗口光学中心。
 		<div
-			className="empty-state relative h-full min-h-0 overflow-hidden bg-background px-6 text-left"
+			className="empty-state relative h-full min-h-0 overflow-hidden bg-transparent px-6 text-left"
 			data-empty-state={props.hasProject ? "project" : "no-project"}
 		>
 			<div className="mx-auto flex h-full w-full max-w-2xl animate-in flex-col justify-center pt-[10vh] duration-500 fade-in">

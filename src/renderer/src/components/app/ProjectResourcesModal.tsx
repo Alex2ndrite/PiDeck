@@ -337,7 +337,7 @@ export function ProjectResourcesModal(props: {
 			<DialogContent
 				showCloseButton={false}
 				stagger
-				className="project-resources-dialog flex h-[min(760px,calc(100vh-32px))] flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(1120px,calc(100vw-32px))]"
+				className="project-resources-dialog flex h-[min(760px,calc(100vh-32px))] flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(1120px,calc(100vw-32px))] [--wallpaper-dialog-alpha:var(--wallpaper-panel-alpha,30%)]"
 			>
 				<DialogHeader className="shrink-0 gap-1 border-b border-border-subtle px-6 py-4 text-left">
 					<div className="flex items-start justify-between gap-4">

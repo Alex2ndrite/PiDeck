@@ -177,7 +177,7 @@ export const ComposerArea = forwardRef<HTMLElement, ComposerAreaProps>(function 
               文本区自身仍可在 RichInput 内滚动，底栏 shrink-0 始终可见 */}
           <footer
             ref={footerRef}
-            className="composer flex min-h-0 w-full min-w-0 flex-col gap-2 overflow-hidden bg-background px-3 pb-3"
+            className="composer flex min-h-0 w-full min-w-0 flex-col gap-2 overflow-hidden bg-transparent px-3 pb-3"
             style={{ height: props.height != null ? "100%" : height }}
             data-session-id={props.sessionId}
           >
