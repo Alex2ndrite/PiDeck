@@ -313,3 +313,24 @@ test("sidebar uses one persisted project accordion without duplicating current p
   assert.match(sessionTree, /display\.visibleChildren\.map\(renderChild\)/);
   assert.match(sessionTree, /renderSubagents\(groupKey, child\.codexSubagents, child\.piSubagents\)/);
 });
+
+test("expanded children can be collapsed back via sidebar controller", () => {
+  const controller = readFileSync("src/renderer/src/hooks/useSidebarController.ts", "utf8");
+  const sessionTree = readFileSync("src/renderer/src/components/sidebar/SessionTree.tsx", "utf8");
+  const zh = readFileSync("src/renderer/src/i18n/rendererCopy.zh-CN.ts", "utf8");
+  const en = readFileSync("src/renderer/src/i18n/rendererCopy.en-US.ts", "utf8");
+
+  // 收起 = 删除该项目的显式计数（回落到默认页大小），与 showMoreChildren 配对。
+  assert.match(controller, /collapseChildren/);
+  assert.match(controller, /delete next\[projectId\]/);
+  // 展开过「查看更多」（存在显式计数）才显示收起入口，避免无谓的收起按钮。
+  assert.match(controller, /hasExpandedChildren/);
+  assert.match(controller, /visibleChildCountByProject\[projectId\] !== undefined/);
+  // SessionTree 在展开满后渲染收起按钮，点击走 controller.collapseChildren。
+  assert.match(sessionTree, /hasExpandedChildren\(props\.project\.id\)/);
+  assert.match(sessionTree, /collapseChildren\(props\.project\.id\)/);
+  assert.match(sessionTree, /app\.projectCollapseChildren/);
+  // 双语文案同步。
+  assert.match(zh, /"app\.projectCollapseChildren": "收起"/);
+  assert.match(en, /"app\.projectCollapseChildren": "Collapse"/);
+});

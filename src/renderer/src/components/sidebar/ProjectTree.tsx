@@ -1,4 +1,4 @@
-import { ChevronsDownUp, ChevronRight, Filter, Folder, FolderCog, FolderOpen, FolderPlus, HatGlasses, Plus } from "lucide-react";
+import { ChevronsDownUp, ChevronRight, Ellipsis, Filter, Folder, FolderCog, FolderOpen, FolderPlus, HatGlasses, Plus } from "lucide-react";
 import type { DragEvent } from "react";
 import type { Project, WorktreeEntry } from "../../../../shared/types";
 import type { SidebarController } from "../../hooks/useSidebarController";
@@ -7,6 +7,7 @@ import type { SidebarActions } from "./SidebarContent";
 import { SessionTree } from "./SessionTree";
 import { WorktreeTree } from "./WorktreeTree";
 import { PathTooltip } from "../ui-shadcn/PathTooltip";
+import { Button } from "../ui-shadcn/button";
 import { cn } from "../../lib/utils";
 
 /** pure official：项目/会话树行共享的 shadcn 风格底（hover=accent 面，active 同系）
@@ -16,6 +17,11 @@ import { cn } from "../../lib/utils";
 // 根项目行保留折叠层级，但收窄左右留白，给窄侧栏中的目录名多留出可用宽度。
 const treeRowClass =
   "group conversation relative flex min-h-7 w-full items-center gap-1.5 rounded-md border border-transparent px-1 py-0 text-body text-foreground shadow-none transition-[background-color,border-color,box-shadow] duration-200 hover:border-border-subtle hover:bg-muted/60 hover:text-foreground";
+
+/** 项目行右侧操作按钮的虚化模式：absolute 浮层，不参与布局（不挤压项目名文字），
+ * 默认隐藏（pointer-events 一并关闭防误触），行 hover / 行内聚焦时显现。 */
+const dimmedActionsClass =
+	"pointer-events-none absolute top-1/2 right-1 flex -translate-y-1/2 items-center gap-1 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100";
 
 function isChatProject(project: Project) {
   return project.kind === "chat";
@@ -129,7 +135,7 @@ export function ProjectTree(props: {
               {/* 项目名称只承担导航信息；详细会话状态由下方的 Agent/历史会话行承担。 */}
             </div>
           </button>
-          <div className="flex shrink-0 items-center gap-1 pr-1">
+          <div className={cn(dimmedActionsClass, "pr-1", props.controller.menu?.kind === "project" && props.controller.menu.projectId === project.id && "pointer-events-auto opacity-100")}>
             {sourceFilter !== null && (
               <button
                 type="button"
@@ -154,6 +160,21 @@ export function ProjectTree(props: {
                 <button type="button" className="grid size-6 place-items-center rounded-md text-muted-foreground hover:bg-background/80 hover:text-foreground" title={t("app.anonymousChat")} aria-label={t("app.anonymousChat")} onClick={() => void props.actions.sessions.createAnonymous(project.id)}><HatGlasses size={14} /></button>
               </div>
             )}
+            {/* 三个点：把项目右键菜单变成可见入口，让用户知道项目行还有更多操作 */}
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              aria-label={t("sidebar.moreActions")}
+              title={t("sidebar.moreActions")}
+              onClick={(event) => {
+                event.stopPropagation();
+                const rect = event.currentTarget.getBoundingClientRect();
+                void props.controller.openMenu({ kind: "project", projectId: project.id, x: rect.right, y: rect.bottom });
+              }}
+            >
+              <Ellipsis size={14} aria-hidden="true" />
+            </Button>
           </div>
         </div>
         {!collapsed && (

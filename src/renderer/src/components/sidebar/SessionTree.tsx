@@ -1,5 +1,5 @@
 import { Fragment, type ReactNode } from "react";
-import { ChevronDown, HatGlasses, Trash2 } from "lucide-react";
+import { ChevronDown, Ellipsis, HatGlasses, Trash2 } from "lucide-react";
 import type { AgentTab, Project, SessionRecord, SessionSummary } from "../../../../shared/types";
 import { collectDisplayedSessionIds, filterAgentsForSidebarDisplay, getProjectAgentSessionDisplay, sessionStatusDotClass, type ProjectChildItem } from "../../agentListDisplay";
 import { sessionRecordToSummary } from "../../atoms";
@@ -16,6 +16,22 @@ import { SESSION_TAB_DRAG_MIME } from "../../utils/sessionSplitEdge";
  * 不能再用 min-h-11/rounded-xl（会明显高于/圆于项目行）。 */
 const sessionRowClass =
 	"group/resource conversation agent-row relative flex min-h-7 w-full items-center gap-1.5 rounded-md border border-transparent px-2 py-0 text-left text-body text-foreground shadow-none transition-[background-color,border-color,box-shadow] duration-200 hover:border-border-subtle hover:bg-muted/60 hover:text-foreground focus-visible:bg-muted/70 focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-inset";
+
+/** 行右侧「更多操作（三个点）」按钮：absolute 浮层，不参与布局（不挤压标题文字），
+ * 默认隐藏（pointer-events 一并关闭防误触），行 hover / 行内聚焦时显现——
+ * 与 WorktreeTree 的 workspace-tree-actions 同一套虚化模式。 */
+const rowMoreActionsClass =
+	"row-more-actions pointer-events-none absolute top-1/2 right-1 -translate-y-1/2 opacity-0 transition-opacity group-hover/row:pointer-events-auto group-hover/row:opacity-100 group-focus-within/row:pointer-events-auto group-focus-within/row:opacity-100";
+
+/** 菜单打开期间保持点亮：菜单弹出后行 hover 会丢失（鼠标移向菜单），
+ * 若不加此态按钮会瞬间熄灭，用户会误以为菜单与按钮无关。 */
+function rowMoreMenuActiveClass(menuOpen: boolean) {
+	return cn(rowMoreActionsClass, menuOpen && "pointer-events-auto opacity-100");
+}
+
+/** 会话/Agent 行容器：内容行占满 + 三个点按钮浮层（button 不能嵌 button，
+ * 且浮层不占位——窄侧栏时标题文字不会被按钮挤窄）。 */
+const rowContainerClass = "group/row relative flex min-h-7 items-center";
 
 function matchesSearch(value: string, search: string) {
   return !search || value.toLowerCase().includes(search.toLowerCase());
@@ -160,22 +176,43 @@ export function SessionTree(props: {
   };
   const renderSubagent = (session: SessionSummary, label: ReactNode) => {
     return (
-      <PathTooltip key={session.id} content={session.filePath}>
-        <button
+      <div
+        key={session.id}
+        className={rowContainerClass}
+        onContextMenu={(event) => openContext(event, session)}
+      >
+        <PathTooltip content={session.filePath}>
+          <button
+            type="button"
+            className={cn(
+              sessionRowClass,
+              "session-row codex-subagent-sidebar-row pl-2",
+              session.id === props.currentSessionId && "active border-border-strong bg-accent/20 text-foreground shadow-sm",
+            )}
+            onClick={() => openSession(session.id)}
+            onDoubleClick={() => openSession(session.id, "permanent")}
+            {...sessionDragProps(session.id)}
+          >
+            <div className="conversation-body min-w-0 flex-1"><div className="conversation-title flex min-w-0 items-center gap-1.5">{label}</div></div>
+          </button>
+        </PathTooltip>
+        <Button
           type="button"
-          className={cn(
-            sessionRowClass,
-            "session-row codex-subagent-sidebar-row pl-2",
-            session.id === props.currentSessionId && "active border-border-strong bg-accent/20 text-foreground shadow-sm",
+          variant="ghost"
+          size="icon-xs"
+          className={rowMoreMenuActiveClass(
+            props.controller.menu?.kind === "session" && props.controller.menu.sessionId === session.id,
           )}
-          onContextMenu={(event) => openContext(event, session)}
-          onClick={() => openSession(session.id)}
-          onDoubleClick={() => openSession(session.id, "permanent")}
-          {...sessionDragProps(session.id)}
+          aria-label={t("sidebar.moreActions")}
+          title={t("sidebar.moreActions")}
+          onClick={(event) => {
+            event.stopPropagation();
+            openContext(event, session);
+          }}
         >
-          <div className="conversation-body min-w-0 flex-1"><div className="conversation-title flex min-w-0 items-center gap-1.5">{label}</div></div>
-        </button>
-      </PathTooltip>
+          <Ellipsis size={14} aria-hidden="true" />
+        </Button>
+      </div>
     );
   };
   const renderSubagents = (parentKey: string, codex: SessionSummary[], pi: SessionSummary[]) => {
@@ -191,13 +228,13 @@ export function SessionTree(props: {
   };
   const renderToggle = (key: string, count: number) => count > 0 ? (
     <span
-      className="subagent-inline-toggle"
+      className={cn("subagent-inline-toggle px-1 py-0.5 mr-7")}
       title={t("app.piSubagentCount", { count })}
       onClick={(event) => { event.stopPropagation(); props.controller.toggleSubagentGroup(key); }}
     >
-      <ChevronDown size={10} className={props.controller.expandedSubagentGroups.has(key) ? "expanded" : ""} />
-      {/* 子 Agent 数量：统一 pill 样式（与项目行会话数徽标同尺寸同圆角） */}
-      <span className="subagent-inline-count inline-flex h-4 shrink-0 items-center rounded-full px-1.5 text-micro font-medium tabular-nums">{count}</span>
+      <ChevronDown size={8} className={props.controller.expandedSubagentGroups.has(key) ? "expanded" : ""} />
+      {/* 子 Agent 数量：统一 pill 样式（与项目行会话数徽标同尺寸同圆角），紧凑档 */}
+      <span className="subagent-inline-count inline-flex h-3.5 shrink-0 items-center rounded-full px-1 text-[10px] font-medium tabular-nums">{count}</span>
     </span>
   ) : null;
 
@@ -212,26 +249,47 @@ export function SessionTree(props: {
       )) ?? summaries.find((session) => session.filePath === child.agent.sessionPath);
       return <Fragment key={child.key}>
         {/* 运行中 Agent 行：标题常被 truncate（如 "JZSSC40..."），悬浮展示完整标题 */}
-        <PathTooltip content={child.agent.title}>
-          <button
+        <div
+          className={rowContainerClass}
+          onContextMenu={(event) => { event.preventDefault(); void props.controller.openMenu({ kind: "agent", agentId: child.agent.id, x: event.clientX, y: event.clientY }); }}
+        >
+          <PathTooltip content={child.agent.title}>
+            <button
+              type="button"
+              className={cn(
+                sessionRowClass,
+                agentSession?.id === props.currentSessionId && "active border-border-strong bg-accent/20 text-foreground shadow-sm",
+              )}
+              onClick={() => { if (agentSession) openSession(agentSession.id); }}
+              onDoubleClick={() => { if (agentSession) openSession(agentSession.id, "permanent"); }}
+              {...(agentSession ? sessionDragProps(agentSession.id) : {})}
+            >
+              {renderRuntimeStatusDot(child.agent.status)}
+              <div className="conversation-body min-w-0 flex-1"><div className="conversation-title flex min-w-0 items-center gap-1.5">
+                <strong className="min-w-0 flex-1 truncate font-medium">{child.agent.title}</strong>
+                {child.agent.noSession && <span className="anonymous-indicator" title={t("app.anonymousChat")}><HatGlasses size={11} aria-hidden="true" /></span>}
+                {renderToggle(groupKey, childCount)}
+              </div></div>
+            </button>
+          </PathTooltip>
+          <Button
             type="button"
-            className={cn(
-              sessionRowClass,
-              agentSession?.id === props.currentSessionId && "active border-border-strong bg-accent/20 text-foreground shadow-sm",
+            variant="ghost"
+            size="icon-xs"
+            className={rowMoreMenuActiveClass(
+              props.controller.menu?.kind === "agent" && props.controller.menu.agentId === child.agent.id,
             )}
-            onContextMenu={(event) => { event.preventDefault(); void props.controller.openMenu({ kind: "agent", agentId: child.agent.id, x: event.clientX, y: event.clientY }); }}
-            onClick={() => { if (agentSession) openSession(agentSession.id); }}
-            onDoubleClick={() => { if (agentSession) openSession(agentSession.id, "permanent"); }}
-            {...(agentSession ? sessionDragProps(agentSession.id) : {})}
+            aria-label={t("sidebar.moreActions")}
+            title={t("sidebar.moreActions")}
+            onClick={(event) => {
+              event.stopPropagation();
+              const rect = event.currentTarget.getBoundingClientRect();
+              void props.controller.openMenu({ kind: "agent", agentId: child.agent.id, x: rect.right, y: rect.bottom });
+            }}
           >
-            {renderRuntimeStatusDot(child.agent.status)}
-            <div className="conversation-body min-w-0 flex-1"><div className="conversation-title flex min-w-0 items-center gap-1.5">
-              <strong className="min-w-0 flex-1 truncate font-medium">{child.agent.title}</strong>
-              {child.agent.noSession && <span className="anonymous-indicator" title={t("app.anonymousChat")}><HatGlasses size={11} aria-hidden="true" /></span>}
-              {renderToggle(groupKey, childCount)}
-            </div></div>
-          </button>
-        </PathTooltip>
+            <Ellipsis size={14} aria-hidden="true" />
+          </Button>
+        </div>
         {renderSubagents(groupKey, child.codexSubagents, child.piSubagents)}
       </Fragment>;
     }
@@ -239,30 +297,50 @@ export function SessionTree(props: {
     const runtimeSnapshot = props.controller.catalog.runtimeBySessionId[child.session.id];
     return <Fragment key={child.session.id}>
       {/* 悬浮第一行展示完整会话名（行内常被 truncate），第二行展示文件路径 */}
-      <PathTooltip content={`${child.session.name || t("common.untitled")}\n${child.session.filePath}`}>
-        <button
+      <div
+        className={rowContainerClass}
+        onContextMenu={(event) => openContext(event, child.session)}
+      >
+        <PathTooltip content={`${child.session.name || t("common.untitled")}\n${child.session.filePath}`}>
+          <button
+            type="button"
+            className={cn(
+              sessionRowClass,
+              // 历史会话不是运行中的 Agent：只给这一类内容增加层级缩进，避免项目标题与历史记录贴在同一列。
+              // 历史会话需要比运行中 Agent 更松的点击区域和行间距，避免连续记录挤成一块。
+              "session-row history-session-row mx-0 min-h-7 pl-2 pr-2 py-0",
+              child.session.id === props.currentSessionId && "active border-border-strong bg-accent/20 text-foreground shadow-sm",
+            )}
+            onClick={() => openSession(child.session.id)}
+            onDoubleClick={() => openSession(child.session.id, "permanent")}
+            {...sessionDragProps(child.session.id)}
+          >
+          {renderRuntimeStatusDot(runtimeSnapshot?.status)}
+          <div className="conversation-body min-w-0 flex-1"><div className="conversation-title flex min-w-0 items-center gap-1.5">
+            {/* 历史会话（无运行态）文字降一级，与活跃 Agent/运行中会话形成层级差 */}
+            <strong className={cn("min-w-0 flex-1 truncate", runtime ? "font-medium" : "font-normal text-muted-foreground/90")}>{child.session.name || t("common.untitled")}</strong>
+            {child.session.source && child.session.source !== "pi" && <SessionSourceBadge source={child.session.source} />}
+            {renderToggle(groupKey, childCount)}
+          </div></div>
+        </button>
+        </PathTooltip>
+        <Button
           type="button"
-          className={cn(
-            sessionRowClass,
-            // 历史会话不是运行中的 Agent：只给这一类内容增加层级缩进，避免项目标题与历史记录贴在同一列。
-            // 历史会话需要比运行中 Agent 更松的点击区域和行间距，避免连续记录挤成一块。
-            "session-row history-session-row mx-0 min-h-7 pl-2 pr-2 py-0",
-            child.session.id === props.currentSessionId && "active border-border-strong bg-accent/20 text-foreground shadow-sm",
+          variant="ghost"
+          size="icon-xs"
+          className={rowMoreMenuActiveClass(
+            props.controller.menu?.kind === "session" && props.controller.menu.sessionId === child.session.id,
           )}
-          onContextMenu={(event) => openContext(event, child.session)}
-          onClick={() => openSession(child.session.id)}
-          onDoubleClick={() => openSession(child.session.id, "permanent")}
-          {...sessionDragProps(child.session.id)}
+          aria-label={t("sidebar.moreActions")}
+          title={t("sidebar.moreActions")}
+          onClick={(event) => {
+            event.stopPropagation();
+            openContext(event, child.session);
+          }}
         >
-        {renderRuntimeStatusDot(runtimeSnapshot?.status)}
-        <div className="conversation-body min-w-0 flex-1"><div className="conversation-title flex min-w-0 items-center gap-1.5">
-          {/* 历史会话（无运行态）文字降一级，与活跃 Agent/运行中会话形成层级差 */}
-          <strong className={cn("min-w-0 flex-1 truncate", runtime ? "font-medium" : "font-normal text-muted-foreground/90")}>{child.session.name || t("common.untitled")}</strong>
-          {child.session.source && child.session.source !== "pi" && <SessionSourceBadge source={child.session.source} />}
-          {renderToggle(groupKey, childCount)}
-        </div></div>
-      </button>
-      </PathTooltip>
+          <Ellipsis size={14} aria-hidden="true" />
+        </Button>
+      </div>
       {renderSubagents(groupKey, child.codexSubagents, child.piSubagents)}
     </Fragment>;
   };
@@ -278,7 +356,7 @@ export function SessionTree(props: {
         return (
           <div
             key={`draft:${session.id}`}
-            className={cn("draft-session-row group/draft grid items-center gap-1", canDelete ? "grid-cols-[minmax(0,1fr)_2rem]" : "grid-cols-1 has-runtime")}
+            className={cn("draft-session-row group/row relative grid min-h-7 items-center gap-1", canDelete ? "grid-cols-[minmax(0,1fr)_2rem]" : "grid-cols-1 has-runtime")}
             onContextMenu={(event) => openDraftContext(event, session)}
           >
           <PathTooltip content={session.title}>
@@ -308,15 +386,35 @@ export function SessionTree(props: {
                 <Trash2 size={14} aria-hidden="true" />
               </Button>
             )}
+            {/* 三个点浮层避开常显的删除按钮，hover 时出现在其左侧 */}
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              className={cn(
+                rowMoreMenuActiveClass(
+                  props.controller.menu?.kind === "draft" && props.controller.menu.sessionId === session.id,
+                ),
+                canDelete && "right-8",
+              )}
+              aria-label={t("sidebar.moreActions")}
+              title={t("sidebar.moreActions")}
+              onClick={(event) => {
+                event.stopPropagation();
+                openDraftContext(event, session);
+              }}
+            >
+              <Ellipsis size={14} aria-hidden="true" />
+            </Button>
           </div>
         );
       })}
       {catalogLoading && <div className="project-session-loading"><div className="loader" /><span>{t("app.projectSessionsLoading")}</span></div>}
       {display.visibleChildren.map(renderChild)}
 
-      {display.hiddenChildCount > 0 && (
+      {display.hiddenChildCount > 0 ? (
         <Button
-          variant="ghost" size="sm" className={`h-auto justify-start px-2 text-micro ${props.nested ? "worktree-sessions-more" : "session-more-row"}`}
+          variant="ghost" size="sm" className={`h-auto justify-start px-2 text-[10px] opacity-60 transition-opacity hover:opacity-100 ${props.nested ? "worktree-sessions-more" : "session-more-row"}`}
           onClick={props.onShowMore ?? (() => props.controller.showMoreChildren(props.project.id))}
         >
           <span>{props.nested
@@ -324,7 +422,15 @@ export function SessionTree(props: {
             : t("app.projectShowMoreChildren", { count: display.hiddenChildCount })}
           </span>
         </Button>
-      )}
+      ) : props.controller.hasExpandedChildren(props.project.id) ? (
+        /* 展开过「查看更多」后提供收起入口，与展开按钮同款样式 */
+        <Button
+          variant="ghost" size="sm" className={`h-auto justify-start px-2 text-[10px] opacity-60 transition-opacity hover:opacity-100 ${props.nested ? "worktree-sessions-more" : "session-more-row"}`}
+          onClick={() => props.controller.collapseChildren(props.project.id)}
+        >
+          <span>{t("app.projectCollapseChildren")}</span>
+        </Button>
+      ) : null}
     </div>
   );
 }

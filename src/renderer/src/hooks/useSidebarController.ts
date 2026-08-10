@@ -85,6 +85,10 @@ export type SidebarController = {
   closeSourceFilter: () => void;
   visibleChildCountFor: (projectId: string) => number;
   showMoreChildren: (projectId: string) => void;
+  /** 把项目子项列表收回到默认页大小（与 showMoreChildren 配对）。 */
+  collapseChildren: (projectId: string) => void;
+  /** 该项目是否展开过「查看更多」（存在显式计数即视为展开过）。 */
+  hasExpandedChildren: (projectId: string) => boolean;
   expandedSubagentGroups: ReadonlySet<string>;
   toggleSubagentGroup: (groupId: string) => void;
   expandedWorktreePaths: ReadonlySet<string>;
@@ -366,6 +370,17 @@ export function useSidebarController(options: {
       [projectId]: (current[projectId] ?? pageSize) + pageSize,
     }));
   }, [pageSize]);
+  const collapseChildren = useCallback((projectId: string) => {
+    setVisibleChildCountByProject((current) => {
+      const next = { ...current };
+      delete next[projectId];
+      return next;
+    });
+  }, []);
+  const hasExpandedChildren = useCallback(
+    (projectId: string) => visibleChildCountByProject[projectId] !== undefined,
+    [visibleChildCountByProject],
+  );
   const toggleSubagentGroup = useCallback((groupId: string) => {
     setExpandedSubagentGroups((current) => {
       const next = new Set(current);
@@ -417,6 +432,8 @@ export function useSidebarController(options: {
     closeSourceFilter: () => setSourceFilterMenu(undefined),
     visibleChildCountFor: (projectId) => visibleChildCountByProject[projectId] ?? pageSize,
     showMoreChildren,
+    collapseChildren,
+    hasExpandedChildren,
     expandedSubagentGroups,
     toggleSubagentGroup,
     expandedWorktreePaths,

@@ -12,7 +12,7 @@ import { mergeWorkspaceTreeRows, type WorkspaceTreeRow } from "./workspaceTreeMo
 // 主工作区是根项目展开后的首个导航项，字号需要与父项目保持一致；
 // 其他 worktree 只是该项目的分支入口，渲染时会覆写为较小的 text-control，避免子项抢占层级。
 const workspaceRowClass =
-  "workspace-tree-row group flex min-h-8 min-w-0 items-center gap-0.5 rounded-md p-0.5 text-body text-foreground transition-[background-color,border-color,box-shadow] duration-fast hover:bg-muted/60";
+  "workspace-tree-row group relative flex min-h-8 min-w-0 items-center gap-0.5 rounded-md p-0.5 text-body text-foreground transition-[background-color,border-color,box-shadow] duration-fast hover:bg-muted/60";
 const workspaceSelectClass =
   "flex min-h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md px-1.5 py-0 text-left text-body text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:cursor-default disabled:hover:bg-transparent disabled:hover:text-muted-foreground";
 const workspaceActionClass = "text-muted-foreground hover:bg-muted hover:text-foreground";
@@ -78,7 +78,7 @@ export function WorktreeTree(props: {
           </Button>
           {/* 新建入口放在工作区行上（hover 显现，与其他工作区行一致）：
               根项目行在 worktree 模式下不再承担 +/匿名，避免入口藏得深 */}
-          <div className="workspace-tree-actions pointer-events-none flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
+          <div className="workspace-tree-actions pointer-events-none absolute top-1/2 right-0.5 flex -translate-y-1/2 items-center gap-0.5 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
             <Button
               type="button"
               variant="ghost"
@@ -221,7 +221,7 @@ function WorkspaceTreeRowView(props: {
       </PathTooltip>
 
       {childProject && (
-        <div className="workspace-tree-actions pointer-events-none flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
+        <div className="workspace-tree-actions pointer-events-none absolute top-1/2 right-0.5 flex -translate-y-1/2 items-center gap-0.5 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
           <Button
             type="button"
             variant="ghost"
