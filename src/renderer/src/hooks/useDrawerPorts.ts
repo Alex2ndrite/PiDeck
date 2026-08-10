@@ -71,6 +71,8 @@ interface UseDrawerPortsInput {
   runDeleteHistorySession: any;
   viewFilePath: any;
   openFilePath: any;
+  /** 在中间栏编辑器打开（可编辑 tab）；Git 变更行内“打开”按钮使用 */
+  openEditorTab: any;
   api: any;
   t: any;
   /** 当前项目根目录：文件面板空白处拖入/粘贴/右键菜单的落点 */
@@ -152,6 +154,9 @@ export function useDrawerPorts(input: UseDrawerPortsInput) {
       runDeleteHistorySession: input.runDeleteHistorySession,
       viewFilePath: input.viewFilePath,
       openFilePath: input.openFilePath,
+      // 包装为单参：以可编辑模式在中间栏打开文件（Git 行内“打开文件”按钮）
+      openEditorTab: (path: string) =>
+        input.openEditorTab(path, "view", undefined, undefined, true, undefined, undefined, undefined, "permanent"),
       api: input.api,
       t: input.t,
       projectRoot: input.projectRoot,
@@ -181,7 +186,7 @@ export function useDrawerPorts(input: UseDrawerPortsInput) {
     input.setFileMenu, input.refreshFiles, input.projects, input.refreshProjectSessions,
     input.runOpenSidebarSession, input.isSameSessionPath,
     input.runCopySession, input.runExportHistorySession, input.runDeleteHistorySession,
-    input.viewFilePath, input.openFilePath, input.api, input.t,
+    input.viewFilePath, input.openFilePath, input.openEditorTab, input.api, input.t,
     input.projectRoot, input.onDropFiles, input.onPasteFiles, input.onMoveFiles,
   ]);
 }

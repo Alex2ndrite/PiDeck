@@ -103,7 +103,7 @@ assert.doesNotMatch(twistie, /ChevronDown|ChevronRight|GitBranch|GitCommit|GitCo
     assert.match(panel, /\.\.\.groups\.workingTree, \.\.\.groups\.untracked, \.\.\.groups\.index/);
     assert.match(panel, /groups\.merge\.length \+ stagedCount \+ workingChanges\.length/);
     assert.match(resourceTree, /function GitStageGlyph/);
-    assert.match(resourceTree, /size-7\$/);
+    assert.match(resourceTree, /className=\{`size-6 rounded/);
     assert.match(resourceTree, /text-xl font-medium/);
     assert.match(resourceTree, /w-4 shrink-0/);
     assert.match(resourceTree, /ml-\[5px\]/);

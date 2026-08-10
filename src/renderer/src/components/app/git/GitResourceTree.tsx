@@ -1,5 +1,5 @@
 import { Fragment, useState, type ReactNode } from "react";
-import { ChevronDown, FileText, Loader2, RotateCcw, Trash2 } from "lucide-react";
+import { ChevronDown, FileText, Loader2, Minus, Plus, RotateCcw, Trash2 } from "lucide-react";
 import { Button } from "../../ui-shadcn/button";
 import {
 	ContextMenu,
@@ -322,21 +322,24 @@ export function ResourceRow(props: {
         </div>
       )}
       {props.actions && props.actions.length > 0 && (
-        <div className="invisible mr-1 flex flex-[0_0_auto] gap-px group-hover:visible group-focus-within:visible">
+        <div className="invisible mr-1 flex flex-[0_0_auto] items-center gap-0.5 group-hover:visible group-focus-within:visible">
           {props.actions.map((action) => (
-            <Button variant="ghost" size="icon"
+            <Button
+              variant="ghost" size="icon-sm"
               key={action.kind}
-              className={`size-7${action.kind === "discard" ? " hover:text-[var(--color-danger)]" : ""}`}
+              className={`size-6 rounded-[4px] text-text-tertiary hover:bg-[var(--git-panel-hover)] hover:text-text-primary${action.kind === "discard" ? " hover:text-[var(--color-danger)]" : ""}`}
               aria-label={action.label} title={action.label}
               disabled={action.disabled}
               onClick={action.run}
             >
               {action.kind === "discard" ? (
-                <RotateCcw size={14} strokeWidth={2} aria-hidden="true" />
+                <RotateCcw size={13} strokeWidth={2} aria-hidden="true" />
               ) : action.kind === "open" ? (
-                <FileText size={14} strokeWidth={2} aria-hidden="true" />
+                <FileText size={13} strokeWidth={2} aria-hidden="true" />
+              ) : action.kind === "unstage" ? (
+                <Minus size={13} strokeWidth={2} aria-hidden="true" />
               ) : (
-                <GitStageGlyph unstage={action.kind === "unstage"} />
+                <Plus size={13} strokeWidth={2} aria-hidden="true" />
               )}
             </Button>
           ))}

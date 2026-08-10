@@ -1024,6 +1024,7 @@ export function App() {
     previewEditorTabId,
     openFilePath,
     viewFilePath,
+    openEditorTab,
     diffFilePath,
     openWorkspaceFileDiff,
     openCommitFileDiff,
@@ -2859,7 +2860,7 @@ export function App() {
     },
     isSameSessionPath,
     runCopySession, runExportHistorySession, runDeleteHistorySession,
-    viewFilePath, openFilePath,
+    viewFilePath, openFilePath, openEditorTab,
     api, t,
     projectRoot: activeProject?.path,
     onDropFiles: (targetDir, fileList) => {
