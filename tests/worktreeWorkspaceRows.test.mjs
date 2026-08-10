@@ -8,6 +8,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 const worktreeTree = readFileSync("src/renderer/src/components/sidebar/WorktreeTree.tsx", "utf8");
+const sessionTree = readFileSync("src/renderer/src/components/sidebar/SessionTree.tsx", "utf8");
+const workspaceStyles = readFileSync("src/renderer/src/styles/workspace.css", "utf8");
 const projectTree = readFileSync("src/renderer/src/components/sidebar/ProjectTree.tsx", "utf8");
 
 test("main workspace is collapsible via the shared worktree expand set", () => {
@@ -41,6 +43,16 @@ test("child worktree labels use a smaller hierarchy than their parent project", 
   const childRow = worktreeTree.slice(worktreeTree.indexOf("WorkspaceTreeRowView"));
   // 父项目和主工作区保持 text-body；只有其他 worktree 降为辅助导航字号。
   assert.match(childRow, /workspace-tree-select",[\s\S]{0,200}"text-control"/);
+});
+
+test("worktree auxiliary labels stay at the compact micro size", () => {
+  // 这些是层级提示而非主要导航项；使用 caption 会随 medium 档位放大到 13px，
+  // 导致“其他工作区”和“还有 N 个会话/查看更多子项”抢过会话行的视觉层级。
+  assert.match(worktreeTree, /workspace-tree-section-header[^\n]*text-micro/);
+  assert.match(sessionTree, /className=\{`h-auto justify-start px-2 text-micro /);
+  assert.match(sessionTree, /worktree-sessions-more/);
+  assert.match(workspaceStyles, /\.session-more-row,[\s\S]*?font-size: var\(--font-size-micro\)/);
+  assert.match(workspaceStyles, /\.worktree-sessions-more[\s\S]*?font-size: var\(--font-size-micro\)/);
 });
 
 test("active child worktree keeps the secondary text weight", () => {

@@ -99,7 +99,7 @@ test("runtime context authorization uses the record binding instead of a same-pa
   assert.doesNotMatch(source, /getAgentForSessionPath/);
 });
 
-test("request gate rejects stale menu and RPC results after a newer request or close", () => {
+test("request gate rejects stale menu results after a newer request or close", () => {
   const { createSidebarRequestGate } = loadControllerModule();
   const gate = createSidebarRequestGate();
   const menuA = gate.beginMenu();
@@ -108,12 +108,8 @@ test("request gate rejects stale menu and RPC results after a newer request or c
   assert.equal(gate.isCurrentMenu(menuB), true);
   gate.cancelMenu();
   assert.equal(gate.isCurrentMenu(menuB), false);
-  const rpcA = gate.beginRpcLogs();
-  const rpcB = gate.beginRpcLogs();
-  assert.equal(gate.isCurrentRpcLogs(rpcA), false);
-  assert.equal(gate.isCurrentRpcLogs(rpcB), true);
-  gate.cancelRpcLogs();
-  assert.equal(gate.isCurrentRpcLogs(rpcB), false);
+  // RPC 日志弹窗自持数据订阅（打开/关闭只切换 agentId），不再需要独立请求门
+  assert.equal(typeof gate.beginRpcLogs, "undefined");
 });
 
 test("unstarted drafts have an independent delete control and context menu", () => {
@@ -188,7 +184,7 @@ test("Sidebar leaf remains independent from App and keeps RPC logging query loca
   assert.doesNotMatch(content, /from "\.\.\/\.\.\/App"/);
   assert.match(controller, /getRpcLogging/);
   assert.match(controller, /setAgentRpcLoggingById/);
-  assert.match(content, /RpcLogModal/);
+  assert.match(content, /RpcLogViewer/);
   assert.match(content, /SessionManagerModal/);
   assert.match(content, /WorktreeCreateDialog/);
 });
@@ -254,6 +250,16 @@ test("Projects section header provides batch collapse wired to the controller", 
   // controller 批量切换只作用于根工作区项目（排除 chat 与 worktree 子项目）。
   assert.match(controller, /toggleCollapseAllProjects/);
   assert.match(controller, /project\.kind !== "chat" && !project\.worktreeParentId/);
+});
+
+test("narrow project tree keeps root names from losing avoidable width", () => {
+  const projectTree = readFileSync("src/renderer/src/components/sidebar/ProjectTree.tsx", "utf8");
+
+  // 工作区根节点需要保留折叠层级，但不应把标题栏和名称再向右推一档；
+  // 展开后的 SessionTree 不在这里断言，避免改变会话层级的视觉语义。
+  assert.match(projectTree, /treeRowClass =\n  "[^"]*items-center[^\"]*px-1 /);
+  assert.match(projectTree, /className="flex min-w-0 flex-1 items-center gap-1 py-0 pr-1 text-left"/);
+  assert.match(projectTree, /<div className="flex items-center justify-between px-1 pb-1">/);
 });
 
 test("ProjectTree shows the project directory name like the dev reference", () => {

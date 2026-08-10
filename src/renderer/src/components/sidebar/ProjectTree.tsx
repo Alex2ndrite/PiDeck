@@ -13,8 +13,9 @@ import { cn } from "../../lib/utils";
  * 默认透明背景，只有激活的行才显示背景色和阴影，避免所有行都像浮层卡片。 */
 // Be UI AI Sidebar 的资源树强调“容器可展开、资源可选中”：项目行保持轻量，
 // 只有当前资源使用 inset surface，避免每个项目都变成独立卡片。
+// 根项目行保留折叠层级，但收窄左右留白，给窄侧栏中的目录名多留出可用宽度。
 const treeRowClass =
-  "group conversation relative flex min-h-7 w-full items-center gap-1.5 rounded-md border border-transparent px-2 py-0 text-body text-foreground shadow-none transition-[background-color,border-color,box-shadow] duration-200 hover:border-border-subtle hover:bg-muted/60 hover:text-foreground";
+  "group conversation relative flex min-h-7 w-full items-center gap-1.5 rounded-md border border-transparent px-1 py-0 text-body text-foreground shadow-none transition-[background-color,border-color,box-shadow] duration-200 hover:border-border-subtle hover:bg-muted/60 hover:text-foreground";
 
 function isChatProject(project: Project) {
   return project.kind === "chat";
@@ -102,7 +103,7 @@ export function ProjectTree(props: {
           </button>
           <button
             type="button"
-            className="flex min-w-0 flex-1 items-center gap-2 py-0 pr-1 text-left"
+            className="flex min-w-0 flex-1 items-center gap-1 py-0 pr-1 text-left"
             draggable={!props.controller.search.trim()}
             onDragStart={(event) => dragStart(event, project.id)}
             onDragOver={(event) => { if (props.controller.drag.sourceProjectId && props.controller.drag.sourceProjectId !== project.id) { event.preventDefault(); props.controller.setProjectDropTarget(project.id); } }}
@@ -270,7 +271,7 @@ export function ProjectTree(props: {
       <section aria-label={t("app.sidebarProjects")} role="tree">
         {/* 标题栏右侧提供添加项目与批量折叠入口，行为与搜索框旁的 FolderPlus 按钮一致；
             与 Chat 标题栏按钮（size-6 圆角悬浮层）同款视觉，避免层级混乱。 */}
-        <div className="flex items-center justify-between px-2 pb-1">
+        <div className="flex items-center justify-between px-1 pb-1">
           <span className="text-caption font-medium text-muted-foreground">{t("app.sidebarProjects")}</span>
           <div className="flex items-center gap-0.5">
             <button

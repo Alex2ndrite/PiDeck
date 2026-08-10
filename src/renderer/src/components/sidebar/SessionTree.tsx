@@ -316,7 +316,7 @@ export function SessionTree(props: {
 
       {display.hiddenChildCount > 0 && (
         <Button
-          variant="ghost" size="sm" className={`h-auto justify-start px-2 text-caption ${props.nested ? "worktree-sessions-more" : "session-more-row"}`}
+          variant="ghost" size="sm" className={`h-auto justify-start px-2 text-micro ${props.nested ? "worktree-sessions-more" : "session-more-row"}`}
           onClick={props.onShowMore ?? (() => props.controller.showMoreChildren(props.project.id))}
         >
           <span>{props.nested

@@ -1434,7 +1434,8 @@ html[data-theme="dark"] .scratch-pad-md mark {
   justify-content: center;
   text-align: center;
   color: var(--color-text-tertiary);
-  font-size: var(--font-size-caption);
+  /* 辅助分页入口不应与会话行同级；同步 JSX 的 text-micro，避免 legacy 回退为 caption。 */
+  font-size: var(--font-size-micro);
   background: var(--color-bg-panel);
 }
 
@@ -1444,7 +1445,7 @@ html[data-theme="dark"] .scratch-pad-md mark {
   justify-content: center;
   text-align: center;
   color: var(--color-text-tertiary);
-  font-size: var(--font-size-caption);
+  font-size: var(--font-size-micro);
   background: var(--color-bg-panel);
 }
 

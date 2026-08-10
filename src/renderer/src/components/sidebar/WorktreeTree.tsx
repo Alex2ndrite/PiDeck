@@ -120,7 +120,7 @@ export function WorktreeTree(props: {
       </section>
 
       <section className="workspace-tree-list" aria-label={t("app.worktreeOtherWorkspaces")}>
-        <header className="workspace-tree-section-header mt-2 flex min-h-7 items-center justify-between gap-2 border-t border-border/40 px-2 pt-1 text-caption text-muted-foreground">
+        <header className="workspace-tree-section-header mt-2 flex min-h-7 items-center justify-between gap-2 border-t border-border/40 px-2 pt-1 text-micro text-muted-foreground">
           <span className="min-w-0 truncate">{t("app.worktreeOtherWorkspaces")}</span>
           <Button
             type="button"
