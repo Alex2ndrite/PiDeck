@@ -156,6 +156,10 @@ export const ipcChannels = {
 	gitGenerateCommitMessage: "git:generate-commit-message",
 	gitInit: "git:init",
 	gitFetch: "git:fetch",
+	/** 当前分支相对上游的提交差距（ahead/behind），驱动 push/pull 角标 */
+	gitAheadBehind: "git:ahead-behind",
+	/** 从磁盘删除变更文件（移入回收站，可恢复） */
+	gitDeleteFiles: "git:delete-files",
 	piCheck: "pi:check",
 	piCheckCustom: "pi:check-custom",
 	/** 获取已安装的 WSL 发行版列表（仅 Windows） */

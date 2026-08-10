@@ -564,4 +564,38 @@ export function registerGitIpc({
 		},
 	);
 
+	// Fetch：刷新远程跟踪引用（定时轮询 ahead/behind 的前置步骤）
+	ipcMain.handle(
+		ipcChannels.gitFetch,
+		async (_event, projectId: string) => {
+			const project = projectStore.get(projectId);
+			if (!project) throw new Error(`Project not found: ${projectId}`);
+			await gitService.fetch(project.path);
+		},
+	);
+
+	// ahead/behind：驱动 push/pull 角标；无上游返回 null（不显示角标）
+	ipcMain.handle(
+		ipcChannels.gitAheadBehind,
+		async (_event, projectId: string) => {
+			const project = projectStore.get(projectId);
+			if (!project) throw new Error(`Project not found: ${projectId}`);
+			return gitService.getAheadBehind(project.path);
+		},
+	);
+
+	// 删除变更文件（移入回收站）：路径由 GitService 按 status 白名单校验
+	ipcMain.handle(
+		ipcChannels.gitDeleteFiles,
+		async (_event, projectId: string, paths: string[]) => {
+			const project = projectStore.get(projectId);
+			if (!project) throw new Error(`Project not found: ${projectId}`);
+			// 入参不可信：必须是非空字符串数组，防注入
+			if (!Array.isArray(paths) || paths.length === 0 || paths.some((p) => typeof p !== "string" || !p)) {
+				throw new Error("Invalid paths");
+			}
+			await gitService.deleteFiles(project.path, paths);
+		},
+	);
+
 }

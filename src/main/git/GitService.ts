@@ -4,7 +4,7 @@ import { lstat, open, readlink, realpath, unlink } from "node:fs/promises";
 import { promisify } from "node:util";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { trashPath } from "../fs/trash";
-import type { GitBranchInfo, CommitDetail, CommitEntry, GitRef, BranchDiffResult, GitChangedFile, GitFileStatus, GitCommitFileDiff, GitResourceGroupType, GitWorkspaceFileDiff } from "../../shared/types";
+import type { GitBranchInfo, CommitDetail, CommitEntry, GitRef, BranchDiffResult, GitChangedFile, GitFileStatus, GitCommitFileDiff, GitResourceGroupType, GitWorkspaceFileDiff, GitAheadBehind } from "../../shared/types";
 import { GitStatus } from "../../shared/types";
 import type { GitResource, GitResourceGroups } from "../../shared/types";
 
@@ -753,6 +753,69 @@ export class GitService {
 	/** Fetch：从远程获取最新数据但不合并 */
 	async fetch(cwd: string): Promise<void> {
 		await execFileAsync("git", ["fetch"], { cwd, timeout: GIT_MUTATION_TIMEOUT_MS * 4 });
+	}
+
+	/**
+	 * 计算当前分支相对上游（@{upstream}）的提交差距，驱动 push/pull 角标。
+	 * 无上游（未 push 过/本地分支）、非仓库或命令失败时返回 null，UI 不显示角标。
+	 * 调用方应先行 fetch，使 behind 反映远程最新状态。
+	 */
+	async getAheadBehind(cwd: string): Promise<GitAheadBehind | null> {
+		try {
+			// 无上游时该命令失败（exit 128），直接视为无角标
+			const { stdout: upstreamRaw } = await execFileAsync(
+				"git", ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"],
+				{ cwd, timeout: GIT_MUTATION_TIMEOUT_MS },
+			);
+			const upstream = upstreamRaw.trim();
+			if (!upstream) return null;
+			// --left-right --count 输出 "<left> <right>"：左=HEAD 独有（ahead），右=上游独有（behind）
+			const { stdout: countRaw } = await execFileAsync(
+				"git", ["rev-list", "--left-right", "--count", `HEAD...${upstream}`],
+				{ cwd, timeout: GIT_MUTATION_TIMEOUT_MS },
+			);
+			const [left, right] = countRaw.trim().split(/\s+/);
+			return {
+				ahead: parseInt(left ?? "0", 10) || 0,
+				behind: parseInt(right ?? "0", 10) || 0,
+			};
+		} catch {
+			return null;
+		}
+	}
+
+	/**
+	 * 从磁盘删除变更文件（移入系统回收站，可恢复）。
+	 * 仅允许删除 status 明确列出的单个文件/符号链接，目录必须由用户在文件管理器中处理；
+	 * 删除后 tracked 文件在 status 中变为 deleted，由用户决定是否提交该删除。
+	 */
+	async deleteFiles(cwd: string, paths: string[]): Promise<void> {
+		if (paths.length === 0) return;
+		const { groups } = await this.getStatusContext(cwd);
+		const all = [...groups.merge, ...groups.index, ...groups.workingTree, ...groups.untracked];
+		const normalize = (p: string) => {
+			const resolved = resolve(p);
+			// Windows 文件系统大小写不敏感：统一小写做键，避免大小写差异导致匹配失败
+			return process.platform === "win32" ? resolved.toLocaleLowerCase() : resolved;
+		};
+		const requested = new Set(paths.map(normalize));
+		// 只匹配 status 中的路径：防路径穿越与过期资源（已删除/移动的文件）；
+		// 同一文件可能同时出现在 index 与 workingTree（暂存后又修改），按归一化路径去重再比对
+		const matchedResources = all.filter((resource) => requested.has(normalize(resource.path)));
+		const matchedPaths = new Set(matchedResources.map((resource) => normalize(resource.path)));
+		if (matchedPaths.size !== requested.size) throw new Error("Git resource is stale or outside the project");
+		const deleted = new Set<string>();
+		for (const resource of matchedResources) {
+			const key = normalize(resource.path);
+			if (deleted.has(key)) continue;
+			deleted.add(key);
+			const metadata = await lstat(resource.path);
+			if (!metadata.isFile() && !metadata.isSymbolicLink()) {
+				throw new Error("Only individual files can be deleted");
+			}
+			// 统一走回收站：删除可恢复，避免误删用户内容（与 discard untracked 同一策略）
+			await trashPath(resource.path);
+		}
 	}
 }
 

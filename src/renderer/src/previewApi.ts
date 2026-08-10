@@ -536,6 +536,9 @@ export function createPreviewApi(): PiDesktopApi {
 			pull: async () => {},
 			push: async () => {},
 			fetch: async () => undefined,
+			// 预览环境无真实远程：恒返回 null（不显示 push/pull 角标）
+			aheadBehind: async () => null,
+			deleteFiles: async () => {},
 		},
 		logs: {
 			list: async () => [],

@@ -754,6 +754,19 @@ const api = {
 				ipcChannels.gitFetch,
 				projectId,
 			) as Promise<void>,
+		/** 当前分支相对上游的提交差距（ahead/behind），驱动 push/pull 角标 */
+		aheadBehind: (projectId: string) =>
+			ipcRenderer.invoke(
+				ipcChannels.gitAheadBehind,
+				projectId,
+			) as Promise<import("../shared/types").GitAheadBehind | null>,
+		/** 从磁盘删除变更文件（移入回收站，可恢复） */
+		deleteFiles: (projectId: string, paths: string[]) =>
+			ipcRenderer.invoke(
+				ipcChannels.gitDeleteFiles,
+				projectId,
+				paths,
+			) as Promise<void>,
 	},
 	pi: {
 		check: () =>

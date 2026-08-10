@@ -40,6 +40,9 @@ test("Git IPC keeps project lookup, bounded diffs, and stale-worktree cleanup", 
     "gitDropCommit",
     "gitGenerateCommitMessage",
     "gitInit",
+    "gitFetch",
+    "gitAheadBehind",
+    "gitDeleteFiles",
   ]) {
     assert.match(gitIpc, new RegExp(`ipcChannels\\.${channel}`));
   }

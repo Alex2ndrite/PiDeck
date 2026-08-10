@@ -155,6 +155,9 @@ export function DrawerSurface(props: DrawerSurfaceProps) {
                 gitInit={git.gitApi.init}
                 push={git.gitApi.push}
                 pull={git.gitApi.pull}
+                fetch={git.gitApi.fetch}
+                aheadBehind={git.gitApi.aheadBehind}
+                deleteFiles={git.gitApi.deleteFiles}
               />
             </div>
           </div>

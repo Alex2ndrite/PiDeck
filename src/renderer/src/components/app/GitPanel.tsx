@@ -26,11 +26,12 @@ import {
 } from "lucide-react";
 import { Button } from "../ui-shadcn/button";
 import { ConfirmDialog } from "./AppParts";
-import { showNotice } from "../../utils/notice";
+import { dismissNotice, showNotice, type NoticeId } from "../../utils/notice";
 import type {
   BranchDiffResult,
   CommitDetail,
   CommitEntry,
+  GitAheadBehind,
   GitChangedFile,
   GitResourceGroupType,
   GitResourceGroups,
@@ -111,6 +112,12 @@ type GitPanelProps = {
   push?: (projectId: string) => Promise<void>;
   /** Pull：从远程拉取并合并到当前分支 */
   pull?: (projectId: string) => Promise<void>;
+  /** Fetch：刷新远程跟踪引用，供定时轮询 ahead/behind 角标 */
+  fetch?: (projectId: string) => Promise<void>;
+  /** 当前分支相对上游的提交差距；无上游返回 null（不显示角标） */
+  aheadBehind?: (projectId: string) => Promise<GitAheadBehind | null>;
+  /** 从磁盘删除变更文件（移入回收站） */
+  deleteFiles?: (projectId: string, paths: string[]) => Promise<void>;
 };
 
 type PaneId = "changes" | "graph" | "compare";
@@ -431,6 +438,14 @@ export function GitPanel(props: GitPanelProps) {
     group: "workingTree" | "untracked";
     path: string;
   } | null>(null);
+  /** 右键“删除文件”确认目标 */
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  /** 当前分支相对上游的提交差距：ahead 显示在 push、behind 显示在 pull */
+  const [aheadBehind, setAheadBehind] = useState<GitAheadBehind | null>(null);
+  /** 提交摘要生成互斥：ref 同步防抖，连点不发出第二个请求（主进程另有 genBusy 兜底） */
+  const commitGenRequestRef = useRef(false);
+  /** 进行中的“正在生成提交信息”进度 toast id，结束时收起 */
+  const commitGenProgressRef = useRef<NoticeId | undefined>(undefined);
   const [resourceOpen, setResourceOpen] = useState({
     merge: true,
     staged: true,
@@ -476,6 +491,13 @@ export function GitPanel(props: GitPanelProps) {
     setSmartCommitPreference(readSmartCommitPreference(props.projectId));
     setShowSmartCommitPrompt(false);
     setDiscardTarget(null);
+    setDeleteTarget(null);
+    setAheadBehind(null);
+    // 项目切换：复位摘要生成状态；进行中的旧请求结果带 projectId 校验，不会写入新项目
+    setCommitGenLoading(false);
+    commitGenRequestRef.current = false;
+    dismissNotice(commitGenProgressRef.current);
+    commitGenProgressRef.current = undefined;
     setNotAGitRepo(false);
   }, [props.projectId]);
 
@@ -574,6 +596,33 @@ export function GitPanel(props: GitPanelProps) {
     }, 5000);
     return () => window.clearInterval(timer);
   }, [refresh]);
+
+  /**
+   * 刷新 push/pull 角标：先 fetch 远程跟踪引用，再对比本地差距。
+   * 静默失败（无远程/离线/非仓库）时保持上次角标，不打扰用户。
+   */
+  const refreshAheadBehind = useCallback(async () => {
+    if (!props.fetch || !props.aheadBehind) return;
+    const projectId = props.projectId;
+    try {
+      await props.fetch(projectId);
+      if (projectId !== projectIdRef.current) return;
+      const result = await props.aheadBehind(projectId);
+      if (projectId === projectIdRef.current) setAheadBehind(result);
+    } catch {
+      // 静默失败：离线/无远程时角标保持上次已知值，不弹错误
+    }
+  }, [props.fetch, props.aheadBehind, props.projectId]);
+
+  // 定时 fetch 远程：每 5 分钟刷新一次 ahead/behind 角标；首次挂载也立即刷一次。
+  useEffect(() => {
+    if (!props.fetch || !props.aheadBehind) return;
+    void refreshAheadBehind();
+    const timer = window.setInterval(() => {
+      void refreshAheadBehind();
+    }, 5 * 60_000);
+    return () => window.clearInterval(timer);
+  }, [refreshAheadBehind, props.fetch, props.aheadBehind]);
 
   const toggleResource = (key: keyof typeof resourceOpen) => {
     setResourceOpen((current) => ({ ...current, [key]: !current[key] }));
@@ -747,6 +796,76 @@ export function GitPanel(props: GitPanelProps) {
     );
   };
 
+  /** 右键菜单“删除文件”确认：移入回收站，可恢复 */
+  const confirmDelete = () => {
+    const path = deleteTarget;
+    // 先取局部引用再收窄：TS 不保留对 props 属性在闭包内的收窄
+    const deleteFiles = props.deleteFiles;
+    if (!path || !deleteFiles) return;
+    setDeleteTarget(null);
+    void act(() => deleteFiles(props.projectId, [path]));
+  };
+
+  /**
+   * 生成提交摘要（AI）。
+   * - 防抖：ref 互斥，进行中/连点直接忽略，杜绝启动第二个 agent 导致内存暴涨
+   * - 进度：生成期间展示持久 toast，结束统一收起
+   * - 超时：主进程 60s 上限返回 GIT_COMMIT_TIMEOUT，提示更久并带“重试”入口
+   * - 项目保护：切项目后旧请求结果不写入新项目的提交框
+   */
+  const runGenerateCommitMessage = useCallback(async () => {
+    if (!props.generateCommitMessage) return;
+    if (groups.index.length === 0) {
+      showNotice(t("git.stageBeforeGenerateCommitMessage"), 3000);
+      return;
+    }
+    if (commitGenRequestRef.current) return;
+    commitGenRequestRef.current = true;
+    setCommitGenLoading(true);
+    commitGenProgressRef.current = showNotice(
+      t("git.generateCommitMessageProgress"),
+      0,
+    );
+    const projectId = props.projectId;
+    try {
+      const result = await props.generateCommitMessage(projectId);
+      if (projectId !== projectIdRef.current) return;
+      if (result.ok) {
+        if (result.message) setCommitMessage(result.message);
+      } else if (result.code === "GIT_COMMIT_MODEL_REQUIRED") {
+        // 未配置：提示 + “去设置”按钮直达设置弹窗（Git 段在常用设置 tab）
+        showNotice(result.message, 8000, "error", undefined, {
+          action: {
+            label: t("git.goSettings"),
+            onClick: () => setSettingsOpen(true),
+          },
+        });
+      } else if (result.code === "GIT_COMMIT_TIMEOUT") {
+        // 生成超时（主进程 60s 上限）：提示更久并给重试入口；重试复用同一防抖锁
+        showNotice(result.message, 10000, "error", undefined, {
+          action: {
+            label: t("git.retryGenerate"),
+            onClick: () => void runGenerateCommitMessage(),
+          },
+        });
+      } else {
+        showNotice(result.message, 5000, "error");
+      }
+    } catch (err) {
+      if (projectId !== projectIdRef.current) return;
+      showNotice(
+        err instanceof Error ? err.message : t("git.generateCommitMessageFailed"),
+        5000,
+        "error",
+      );
+    } finally {
+      commitGenRequestRef.current = false;
+      setCommitGenLoading(false);
+      dismissNotice(commitGenProgressRef.current);
+      commitGenProgressRef.current = undefined;
+    }
+  }, [props.generateCommitMessage, props.projectId, groups.index.length]);
+
   const doPush = async () => {
     if (!props.push || mutationRunningRef.current) return;
     const projectId = props.projectId;
@@ -758,6 +877,7 @@ export function GitPanel(props: GitPanelProps) {
       await props.push(projectId);
       if (projectId !== projectIdRef.current) return;
       await refresh();
+      await refreshAheadBehind();
     } catch (caught) {
       if (projectId === projectIdRef.current) {
         const msg = errorMessage(caught);
@@ -783,6 +903,7 @@ export function GitPanel(props: GitPanelProps) {
       await props.pull(projectId);
       if (projectId !== projectIdRef.current) return;
       await refresh();
+      await refreshAheadBehind();
     } catch (caught) {
       if (projectId === projectIdRef.current) {
         const msg = errorMessage(caught);
@@ -1034,7 +1155,6 @@ export function GitPanel(props: GitPanelProps) {
         <PaneHeader
           id="changes"
           title={t("git.changes")}
-          count={total}
           open={paneState.open.changes}
           onToggle={() => togglePane("changes")}
         >
@@ -1076,36 +1196,66 @@ export function GitPanel(props: GitPanelProps) {
             <RefreshCw size={14} />
           </Button>
           {props.push && (
-            <Button
-              type="button"
-              variant="ghost" size="icon-sm" className="size-7"
-              title={t("git.push")}
-              aria-label={t("git.push")}
-              disabled={pushing || mutationRunningRef.current}
-              onClick={() => void doPush()}
-            >
-              {pushing ? (
-                <Loader2 size={14} className="animate-spin" />
-              ) : (
-                <ArrowUpFromLine size={14} />
+            <div className="relative inline-flex items-center">
+              <Button
+                type="button"
+                variant="ghost" size="icon-sm" className="size-7"
+                title={
+                  aheadBehind && aheadBehind.ahead > 0
+                    ? t("git.pushAhead", { count: aheadBehind.ahead })
+                    : t("git.push")
+                }
+                aria-label={t("git.push")}
+                disabled={pushing || mutationRunningRef.current}
+                onClick={() => void doPush()}
+              >
+                {pushing ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <ArrowUpFromLine size={14} />
+                )}
+              </Button>
+              {/* 领先角标：本地上游提交数，提示需要推送 */}
+              {!pushing && aheadBehind && aheadBehind.ahead > 0 && (
+                <span
+                  className="pointer-events-none absolute -top-1 -right-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--color-accent)] px-1 text-[10px] leading-none font-semibold text-white tabular-nums"
+                  aria-label={t("git.pushAhead", { count: aheadBehind.ahead })}
+                >
+                  {aheadBehind.ahead}
+                </span>
               )}
-            </Button>
+            </div>
           )}
           {props.pull && (
-            <Button
-              type="button"
-              variant="ghost" size="icon-sm" className="size-7"
-              title={t("git.pull")}
-              aria-label={t("git.pull")}
-              disabled={pulling || mutationRunningRef.current}
-              onClick={() => void doPull()}
-            >
-              {pulling ? (
-                <Loader2 size={14} className="animate-spin" />
-              ) : (
-                <ArrowDownToLine size={14} />
+            <div className="relative inline-flex items-center">
+              <Button
+                type="button"
+                variant="ghost" size="icon-sm" className="size-7"
+                title={
+                  aheadBehind && aheadBehind.behind > 0
+                    ? t("git.pullBehind", { count: aheadBehind.behind })
+                    : t("git.pull")
+                }
+                aria-label={t("git.pull")}
+                disabled={pulling || mutationRunningRef.current}
+                onClick={() => void doPull()}
+              >
+                {pulling ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <ArrowDownToLine size={14} />
+                )}
+              </Button>
+              {/* 落后角标：远程领先本地的提交数，提示需要拉取 */}
+              {!pulling && aheadBehind && aheadBehind.behind > 0 && (
+                <span
+                  className="pointer-events-none absolute -top-1 -right-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--color-accent)] px-1 text-[10px] leading-none font-semibold text-white tabular-nums"
+                  aria-label={t("git.pullBehind", { count: aheadBehind.behind })}
+                >
+                  {aheadBehind.behind}
+                </span>
               )}
-            </Button>
+            </div>
           )}
         </PaneHeader>
         {paneState.open.changes && (
@@ -1170,40 +1320,14 @@ export function GitPanel(props: GitPanelProps) {
                   variant="ghost"
                   size="icon-sm"
                   className="min-w-8 border border-border-subtle bg-bg-panel text-text-secondary hover:bg-bg-hover hover:text-text-primary"
-                  title={t("git.generateCommitMessage")}
+                  title={
+                    commitGenLoading
+                      ? t("git.generateCommitMessageProgress")
+                      : t("git.generateCommitMessage")
+                  }
+                  aria-label={t("git.generateCommitMessage")}
                   disabled={commitGenLoading || mutating}
-                  onClick={async () => {
-                    if (!props.generateCommitMessage) return;
-                    if (groups.index.length === 0) {
-                      showNotice(t("git.stageBeforeGenerateCommitMessage"), 3000);
-                      return;
-                    }
-                    setCommitGenLoading(true);
-                    try {
-                      const result = await props.generateCommitMessage(props.projectId);
-                      if (result.ok) {
-                        if (result.message) setCommitMessage(result.message);
-                      } else if (result.code === "GIT_COMMIT_MODEL_REQUIRED") {
-                        // 未配置：提示 + “去设置”按钮直达设置弹窗（Git 段在常用设置 tab）
-                        showNotice(result.message, 8000, "error", undefined, {
-                          action: {
-                            label: t("git.goSettings"),
-                            onClick: () => setSettingsOpen(true),
-                          },
-                        });
-                      } else {
-                        showNotice(result.message, 5000, "error");
-                      }
-                      setCommitGenLoading(false);
-                    } catch (err) {
-                      showNotice(
-                        err instanceof Error ? err.message : t("git.generateCommitMessageFailed"),
-                        5000,
-                        "error",
-                      );
-                      setCommitGenLoading(false);
-                    }
-                  }}
+                  onClick={() => void runGenerateCommitMessage()}
                 >
                   {commitGenLoading ? (
                     <Loader2 size={14} className="animate-spin" />
@@ -1271,6 +1395,7 @@ export function GitPanel(props: GitPanelProps) {
                     onOpenWorkspaceFileDiff={props.onOpenWorkspaceFileDiff}
                     mutating={mutating || committing}
                     unstageFile={(path) => act(() => props.unstageFiles(props.projectId, [path]))}
+                    deleteFile={props.deleteFiles ? (path) => setDeleteTarget(path) : undefined}
                     projectRoot={props.projectRoot}
                     collapsedDirs={collapsedChangeDirs}
                     onToggleDir={toggleChangeDir}
@@ -1301,6 +1426,7 @@ export function GitPanel(props: GitPanelProps) {
                     mutating={mutating || committing}
                     stageFile={(path) => act(() => props.stageFiles(props.projectId, [path]))}
                     discardFile={(path, group) => setDiscardTarget({ group, path })}
+                    deleteFile={props.deleteFiles ? (path) => setDeleteTarget(path) : undefined}
                     projectRoot={props.projectRoot}
                     collapsedDirs={collapsedChangeDirs}
                     onToggleDir={toggleChangeDir}
@@ -1369,6 +1495,22 @@ export function GitPanel(props: GitPanelProps) {
             }
             onConfirm={confirmDiscard}
             onCancel={() => setDiscardTarget(null)}
+          />,
+          document.body,
+        )}
+
+      {/* 右键“删除文件”确认：文件移入回收站（可恢复），danger 提示 */}
+      {deleteTarget &&
+        createPortal(
+          <ConfirmDialog
+            title={t("git.deleteFileConfirmTitle")}
+            message={t("git.deleteFileConfirmMessage", {
+              path: fileNameOnly(deleteTarget),
+            })}
+            danger
+            confirmLabel={t("common.delete")}
+            onConfirm={confirmDelete}
+            onCancel={() => setDeleteTarget(null)}
           />,
           document.body,
         )}

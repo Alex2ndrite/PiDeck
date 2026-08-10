@@ -1,6 +1,12 @@
 import { Fragment, useState, type ReactNode } from "react";
-import { ChevronDown, Loader2, RotateCcw } from "lucide-react";
+import { ChevronDown, Loader2, RotateCcw, Trash2 } from "lucide-react";
 import { Button } from "../../ui-shadcn/button";
+import {
+	ContextMenu,
+	ContextMenuContent,
+	ContextMenuItem,
+	ContextMenuTrigger,
+} from "../../ui-shadcn/context-menu";
 import { getFileIconColor, getFileIconSeti } from "../../../fileIcons";
 import { t } from "../../../i18n";
 import {
@@ -70,6 +76,8 @@ export function FileTree(props: {
 	stageFile?: (path: string) => void;
 	unstageFile?: (path: string) => void;
 	discardFile?: (path: string, group: "workingTree" | "untracked") => void;
+	/** 右键菜单“删除文件”入口；未提供时不启用右键菜单 */
+	deleteFile?: (path: string) => void;
 	mutating: boolean;
 	onOpenWorkspaceFileDiff: (group: GitResourceGroupType, path: string) => void;
 	/** 项目根目录路径，用于显示相对路径 */
@@ -139,6 +147,7 @@ export function FileTree(props: {
 								path={r.path}
 								onOpen={() => props.onOpenWorkspaceFileDiff(props.groupType, r.path)}
 								actions={actions}
+								deleteFile={props.deleteFile ? (path) => props.deleteFile?.(path) : undefined}
 							/>
 						);
 					})}
@@ -248,6 +257,8 @@ export function ResourceRow(props: {
     disabled?: boolean;
     run: () => void;
   }>;
+  /** 右键菜单“删除文件”入口；未提供时不启用右键菜单（compare 只读列表） */
+  deleteFile?: (path: string) => void;
   onOpen?: () => void | Promise<void>;
 }) {
   const [opening, setOpening] = useState(false);
@@ -258,7 +269,7 @@ export function ResourceRow(props: {
   const letter = props.compareStatus
     ? compareStatusLetter(props.compareStatus)
     : props.letter;
-  return (
+  const row = (
     <div className={`group git-resource-row flex h-[26px] items-center pr-[7px] text-sm leading-[26px] hover:bg-[var(--git-panel-hover)] focus-within:bg-[var(--git-panel-hover)] ${tone}`} title={props.path}>
       {props.onOpen ? (
         <button
@@ -308,6 +319,23 @@ export function ResourceRow(props: {
         {opening ? <Loader2 size={13} className="animate-spin" /> : letter}
       </span>
     </div>
+  );
+  // 右键删除仅对变更列表启用：包一层 ContextMenu，菜单项删除后由父级弹确认框
+  if (!props.deleteFile) return row;
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>{row}</ContextMenuTrigger>
+      <ContextMenuContent alignOffset={-4}>
+        <ContextMenuItem
+          variant="destructive"
+          className="gap-2 text-[13px]"
+          onSelect={() => props.deleteFile?.(props.path)}
+        >
+          <Trash2 size={14} aria-hidden="true" />
+          {t("git.deleteFile")}
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }
 

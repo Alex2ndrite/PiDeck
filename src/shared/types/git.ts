@@ -137,6 +137,14 @@ export type GitRef = {
 };
 
 /** 两个分支之间的差异概要 */
+/** 当前分支相对其上游（@{upstream}）的提交差距；无上游/非仓库时为 null。 */
+export type GitAheadBehind = {
+	/** 本地领先上游的提交数（push 可送出） */
+	ahead: number;
+	/** 本地落后上游的提交数（pull 可拉入） */
+	behind: number;
+};
+
 export type BranchDiffResult = {
 	/** 变更的文件列表（base...target 三点语法 symmetric difference） */
 	files: GitChangedFile[];
