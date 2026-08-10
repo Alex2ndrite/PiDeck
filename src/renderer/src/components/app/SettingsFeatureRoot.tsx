@@ -78,7 +78,7 @@ export function SettingsFeatureRoot(props: SettingsFeatureRootProps) {
           await api.settings.update({ piEnvironmentChecked: false });
           showNotice(t("environment.checkFlagCleared"));
         }}
-        onOpenWebService={(port) => api.app.openExternal(`http://127.0.0.1:${port}`)}
+        onOpenWebService={(port) => api.app.openExternal(`http://127.0.0.1:${port}`, true)}
         onClose={() => setOpen(false)}
         onChange={props.onChange}
       />

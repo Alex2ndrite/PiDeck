@@ -276,8 +276,10 @@ export function EnvironmentDialog(props: {
 											size="sm"
 											className="env-card-btn env-card-btn h-auto rounded-[6px] px-4 py-[7px] text-xs shadow-none"
 											onClick={() =>
+												// 环境引导是弹框（Dialog），链接强制系统浏览器：内置浏览器面板在 Dialog 下层不可见
 												window.piDesktop.app.openExternal(
-													"https://nodejs.org/zh-cn/download/"
+													"https://nodejs.org/zh-cn/download/",
+													true
 												)
 											}
 										>
