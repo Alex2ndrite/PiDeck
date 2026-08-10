@@ -2430,10 +2430,6 @@ export function App() {
         const target = getRuntimeTargetForAgent(agentId);
         return target ? api.rpcLogs.setLogging(target, enabled) : Promise.resolve(false);
       },
-      openLogFile: (agentId) => {
-        const target = getRuntimeTargetForAgent(agentId);
-        return target ? api.rpcLogs.openFile(target) : Promise.resolve();
-      },
       listLogs: (agentId) => {
         const target = getRuntimeTargetForAgent(agentId);
         return target ? api.rpcLogs.get({ target }) : Promise.resolve([]);

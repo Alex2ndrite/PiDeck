@@ -423,7 +423,6 @@ export function AgentContextMenu(props: {
 	isRpcLogging?: boolean;
 	/** 打开实时日志查看弹窗（仅开启记录后可用） */
 	onOpenLogs?: () => void;
-	onOpenLogFile?: () => void;
 	onOpenSessionFile?: () => void;
 	onCloseAgent: () => void;
 }) {
@@ -457,9 +456,6 @@ export function AgentContextMenu(props: {
 				<>
 					<DropdownMenuItem disabled={busy} onSelect={props.onOpenLogs}>
 						{t("menu.rpcLogView")}
-					</DropdownMenuItem>
-					<DropdownMenuItem disabled={busy} onSelect={props.onOpenLogFile}>
-						{t("menu.rpcLogFile")}
 					</DropdownMenuItem>
 				</>
 			)}

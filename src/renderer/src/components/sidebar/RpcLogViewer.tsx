@@ -202,7 +202,7 @@ export function RpcLogViewer(props: RpcLogViewerProps) {
 			const saveEntries = hasActiveFilter
 				? visibleEntries.slice(0, SAVE_ENTRY_CAP)
 				: entries.slice(-SAVE_ENTRY_CAP);
-			const ok = await window.piDesktop.rpcLogs.save({ agentId, entries: saveEntries });
+			const ok = await window.piDesktop.rpcLogs.save({ entries: saveEntries });
 			if (ok) {
 				setSavedFlash(true);
 				if (savedFlashTimerRef.current !== undefined) window.clearTimeout(savedFlashTimerRef.current);
@@ -327,6 +327,7 @@ export function RpcLogViewer(props: RpcLogViewerProps) {
 
 				<div className="relative min-h-0 flex-1">
 					<MessageScroller
+						className="h-full"
 						followOutput={autoScroll}
 						followThreshold={56}
 						onFollowChange={setFollowing}

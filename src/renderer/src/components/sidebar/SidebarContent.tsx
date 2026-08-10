@@ -73,7 +73,6 @@ export type SidebarActions = {
   rpc: {
     getLogging: (agentId: string) => Promise<boolean>;
     setLogging: (agentId: string, enabled: boolean) => Promise<boolean>;
-    openLogFile: (agentId: string) => Promise<void>;
     listLogs: (agentId: string) => Promise<SidebarRpcLog[]>;
   };
 };
@@ -231,7 +230,6 @@ export function SidebarContent(props: SidebarContentProps) {
           })}
           isRpcLogging={controller.isAgentRpcLogging(menuAgent.id)}
           onOpenLogs={() => { controller.openRpcLogs(menuAgent.id); controller.closeMenu(); }}
-          onOpenLogFile={() => { void actions.rpc.openLogFile(menuAgent.id); controller.closeMenu(); }}
           onCloseAgent={() => { void actions.agents.close(menuAgent); controller.closeMenu(); }}
         />
       )}

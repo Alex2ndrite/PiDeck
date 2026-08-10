@@ -1,9 +1,9 @@
 // 契约测试：实时 RPC 日志查看弹窗（RpcLogViewer）+ 主进程实时广播链路。
 // 覆盖：
-// 1) 渲染层性能红线：内存封顶 + 无筛选窗口化渲染 + 行 memo + 订阅退订；
+// 1) 渲染层性能红线：内存封顶 + 无筛选窗口化渲染 + 行 memo + 订阅退订 + 滚动高度链；
 // 2) 主进程批量节流广播（~80ms 聚合）与退出清理；
-// 3) 环形缓冲扩容（初始历史）与 data 截断；
-// 4) IPC 边界：get-live / save（输入校验与条数上限）/ preload 订阅。
+// 3) 环形缓冲扩容（初始历史）与 data 截断、保存合并去重；
+// 4) IPC 边界：get-live / save（输入校验与条数上限，保存直写自动文件）/ preload 订阅。
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -45,16 +45,28 @@ test("viewer uses MessageScroller auto-scroll and cleans up the live subscriptio
   assert.match(viewer, /!following && entries\.length > 0/);
 });
 
-test("viewer can save the visible logs to a file", () => {
-  assert.match(viewer, /window\.piDesktop\.rpcLogs\.save\(\{ agentId, entries: saveEntries \}\)/);
+test("viewer gives MessageScroller a full-height chain so the list can scroll", () => {
+  // 回归：视口高度链断裂会导致列表被 DialogContent 裁成一屏、无法滚动。
+  // MessageScroller 的 className 落在外层 div（min-h-0 之上补 h-full），
+  // viewport（h-full overflow-y-auto）才能获得确定高度。
+  assert.match(viewer, /<MessageScroller\s+className="h-full"/);
+});
+
+test("viewer can save logs to the auto log file", () => {
+  assert.match(viewer, /window\.piDesktop\.rpcLogs\.save\(\{ entries: saveEntries \}\)/);
   // 保存语义：有筛选存筛选结果，无筛选存缓冲全量
   assert.match(viewer, /hasActiveFilter\s*\?\s*visibleEntries\.slice\(0, SAVE_ENTRY_CAP\)\s*:\s*entries\.slice\(-SAVE_ENTRY_CAP\)/);
+  // 保存后提示已写入日志文件
+  assert.match(viewer, /rpc\.saved/);
 });
 
 test("agent context menu exposes a live log entry point next to the toggle", () => {
   const menu = readFileSync("src/renderer/src/components/sidebar/SidebarComponents.tsx", "utf8");
   assert.match(menu, /onOpenLogs\?: \(\) => void;/);
   assert.match(menu, /menu\.rpcLogView/);
+  // 右键菜单已移除“打开日志文件夹”（日志自动落盘，弹窗内即可查看/保存）
+  assert.doesNotMatch(menu, /rpcLogFile/);
+  assert.doesNotMatch(menu, /openLogFile/);
   // 旧静态弹窗已从 SidebarParts 移除，不再导出
   assert.doesNotMatch(sidebarParts, /RpcLogModal/);
   assert.match(sidebarContent, /<RpcLogViewer/);
@@ -83,17 +95,24 @@ test("RpcLogger keeps a larger live ring buffer with filtered getLive and data t
   // 实时缓冲副本截断大 data，文件仍写原始内容
   assert.match(rpcLogger, /private truncateForLive\(entry: RpcLogEntry\)/);
   assert.match(rpcLogger, /this\.writeEntry\(entry\)/);
+  // 弹窗保存：按目标文件分组 → 读文件去重 → 队列串行追加（幂等合并）
+  assert.match(rpcLogger, /async appendEntries\(entries: RpcLogEntry\[\]\): Promise<number>/);
+  assert.match(rpcLogger, /private filePathFor\(entry: RpcLogEntry\)/);
+  assert.match(rpcLogger, /private async readEntryIds\(filePath: string\)/);
 });
 
-test("systemIpc validates save payloads and caps batch size", () => {
+test("systemIpc validates save payloads and merges into the auto file", () => {
   assert.match(systemIpc, /rpcLogsGetLive/);
   assert.match(systemIpc, /rpcLogsSave/);
   assert.match(systemIpc, /function isRpcLogEntry\(value: unknown\)/);
   // 渲染层数据不可信：条数上限 + 字段校验后才写盘
   assert.match(systemIpc, /\.slice\(0, 10_000\)/);
   assert.match(systemIpc, /\.filter\(\(value\): value is RpcLogEntry => isRpcLogEntry\(value\)\)/);
-  // 文件名 agentId 脱敏，防止路径注入（源码里 replace 的参数是正则字面量，前面带 /）
-  assert.match(systemIpc, /agentId\.replace\(\/\[\^\\w-.~\]/);
+  // 保存不再弹目录选择：直接合并写入该 agent 的自动日志文件（按 id 去重）
+  assert.match(systemIpc, /rpcLogger\.appendEntries\(entries\)/);
+  // “打开日志文件夹”入口与保存目录选择均已从主进程移除
+  assert.doesNotMatch(systemIpc, /rpcLogsOpenFile/);
+  assert.doesNotMatch(systemIpc, /showSaveDialog/);
 });
 
 test("preload exposes getLive/save/onLog with unsubscribe", () => {
@@ -102,4 +121,6 @@ test("preload exposes getLive/save/onLog with unsubscribe", () => {
   assert.match(preload, /onLog: \(callback: \(batch: RpcLogBatch\) => void\) =>/);
   assert.match(ipc, /rpcLogsGetLive: "rpc-logs:get-live"/);
   assert.match(ipc, /rpcLogsSave: "rpc-logs:save"/);
+  // 保存接口只传条目（agentId 在条目内），主进程按条目归属自动文件
+  assert.match(preload, /save: \(options: \{ entries: RpcLogEntry\[\] \}\)/);
 });
