@@ -1238,7 +1238,12 @@ export function GitPanel(props: GitPanelProps) {
             variant="ghost" size="icon-sm" className="size-7"
             title={t("common.refresh")}
             aria-label={t("common.refresh")}
-            onClick={() => void refresh()}
+            onClick={() => {
+              void refresh();
+              // 手动刷新必须同步刷新 push/pull 角标：角标走 5 分钟定时 fetch，
+              // 用户主动点击时应立即对比远程，否则刚 push 完角标仍是旧值
+              void refreshAheadBehind();
+            }}
           >
             <RefreshCw size={14} />
           </Button>
