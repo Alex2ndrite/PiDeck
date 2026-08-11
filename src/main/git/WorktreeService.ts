@@ -1,6 +1,5 @@
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
-import { realpath } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { trashPath } from "../fs/trash";
@@ -102,13 +101,16 @@ export class WorktreeService {
 	 */
 	async remove(worktreePath: string, projectPath: string): Promise<boolean> {
 		const entries = await this.list(projectPath);
-		const normalizedTarget = await this.canonical(worktreePath);
+		// 统一 resolve 路径空间（与 porcelain 解析/同一台机器 8.3 短名一致）；
+		// 此前 canonical（realpath 长名）与 samePath（resolve 空间）混用，
+		// Windows 短路径下 entry 永远匹配不上 → 删除按钮静默失效。
+		const normalizedTarget = this.canonicalSync(worktreePath);
 		const entry = entries.find(asyncEntry => this.samePath(asyncEntry.path, normalizedTarget));
 		if (!entry) return false;
 
 		// 硬性防护：目标与仓库主工作区相同时拒绝删除（realpath 比较，兼容 junction/8.3 短路径）。
 		const mainWorktree = await this.getMainWorktree(projectPath);
-		if (mainWorktree && this.samePath(await this.canonical(mainWorktree), normalizedTarget)) {
+		if (mainWorktree && this.samePath(this.canonicalSync(mainWorktree), normalizedTarget)) {
 			return false;
 		}
 
@@ -249,12 +251,6 @@ export class WorktreeService {
 	private canonicalSync(input: string) {
 		const normalized = resolve(input);
 		return process.platform === "win32" ? normalized.toLowerCase() : normalized;
-	}
-
-	private async canonical(input: string) {
-		const resolved = resolve(input);
-		const real = await realpath(resolved).catch(() => resolved);
-		return process.platform === "win32" ? real.toLowerCase() : real;
 	}
 
 	private samePath(a: string, b: string) {

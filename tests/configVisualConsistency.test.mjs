@@ -124,6 +124,7 @@ test("skill table uses real aligned columns, not a colSpan card", () => {
   // 操作按钮直接放在 TableCell 内，不再包一层可点击的卡片 button。
   assert.doesNotMatch(skillTableRow, /<button[\s\S]*skill-rename-inline[\s\S]*<Button/);
   // 位置选择改为 shadcn Select，不再使用自定义下拉弹层。
-  assert.match(skills, /<SelectTrigger className="w-full">/);
+  // （2026-08 高度收口：SelectTrigger 使用 min-h-9/py-1.5/data-[size=default]:h-auto 紧凑样式）
+  assert.match(skills, /<SelectTrigger className="min-h-9 w-full py-1.5 data-\[size=default\]:h-auto">/);
   assert.doesNotMatch(skills, /skill-location-picker/);
 });
