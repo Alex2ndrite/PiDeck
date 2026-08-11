@@ -77,8 +77,9 @@ test("Tailwind scans streamdown + plugin classes; styles.css imports vendor stre
   assert.match(packageJson, /"@streamdown\/code"/);
   assert.match(packageJson, /"@streamdown\/mermaid"/);
   assert.match(packageJson, /"@streamdown\/math"/);
-  // shiki 不作为直接依赖出现（由 @streamdown/code 传递引入）；react-markdown 不可回归
-  assert.doesNotMatch(packageJson, /"shiki"/);
+  // shiki 声明为直接依赖（beUI agents/file-diff 的 agent-code 高亮需要直接 import，
+  // 此前由 @streamdown/code 传递引入，声明后不增加实际安装体积）；react-markdown 不可回归
+  assert.match(packageJson, /"shiki"/);
   assert.doesNotMatch(packageJson, /"react-markdown"/);
 });
 

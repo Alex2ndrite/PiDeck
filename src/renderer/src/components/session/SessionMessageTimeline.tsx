@@ -38,7 +38,6 @@ import { t, translateI18nDescriptor } from "../../i18n";
 import { cn } from "../../lib/utils";
 import { showNotice } from "../../utils/notice";
 import { stripAnsi } from "./TimelineFormat";
-import { SessionFileSummary } from "./SessionFileSummary";
 import { SessionStartSurface } from "./SessionStartSurface";
 import { MessageScroller } from "../agents/message-scroller";
 import { chatContentWidthStyle } from "./chatContentWidth";
@@ -327,21 +326,7 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
     }
     turnWindowStateRef.current = { windowed: turnWindowActive, height: timeline.scrollHeight };
   }, [displayRuns, timelineRef, turnWindowActive]);
-  // 文件修改汇总只统计最后一次 agent 运行（run）内的工具调用：
-  // 每次会话（用户发送 → agent 执行 → 完成）清空重算，不累计历史运行的修改
-  const lastRunMessages = useMemo(() => {
-    const lastRun = reconciledRuns.findLast((r) => r.kind === "agent-run");
-    if (!lastRun) return [];
-    const msgs: ChatMessage[] = [];
-    for (const item of lastRun.items) {
-      if (item.kind === "message") {
-        msgs.push(item.message);
-      } else if (item.kind === "tool-group" || item.kind === "thinking-group") {
-        msgs.push(...item.messages);
-      }
-    }
-    return msgs;
-  }, [reconciledRuns]);
+  // 文件修改展示已下沉到每轮 TurnRow 底部（TurnFileChanges），此处不再做全局汇总
   const lastUserMessageId = useMemo(() => {
     for (let index = activeMessages.length - 1; index >= 0; index -= 1) {
       if (activeMessages[index].role === "user") {
@@ -672,19 +657,6 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
                   isStarting={activeConversationStatus === "starting"}
                   isExecutingTool={activeRuntimeState?.isExecutingTool}
                   isStreaming={activeRuntimeState?.isStreaming}
-                />
-              )}
-
-            {/* 会话文件修改汇总：会话空闲（非运行/加载中）且有工具修改过文件时显示，
-                点击文件/DIFF 按钮直接打开差异查看器（复用单条工具卡片的 diff 链路） */}
-            {hasActiveConversation &&
-              !isAwaitingAssistant &&
-              !isAgentBusy &&
-              !isConversationLoading &&
-              activeMessages.length > 0 && (
-                <SessionFileSummary
-                  messages={lastRunMessages}
-                  onDiffFile={props.onDiffFile}
                 />
               )}
 

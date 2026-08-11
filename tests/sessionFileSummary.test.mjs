@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { collectSessionFileChanges } from "../src/renderer/src/components/session/TimelineFormat.ts";
+import { collectSessionFileChanges, collectRunFileChanges, fileChangeToDiffLines } from "../src/renderer/src/components/session/TimelineFormat.ts";
 
 /**
  * 会话文件修改汇总收集逻辑测试：
@@ -84,12 +84,51 @@ test("collectSessionFileChanges: different files are kept separately", () => {
 	);
 });
 
-test("file summary only counts the last agent run (per-session reset)", () => {
-  // 汇总按单次会话统计：时间线只把最后一次 run 的消息传给 SessionFileSummary，
-  // 新 run 开始后旧汇总不再累计（源码断言保护）
-  const source = readFileSync("src/renderer/src/components/session/SessionMessageTimeline.tsx", "utf8");
-  assert.match(source, /只统计最后一次 agent 运行/);
-  assert.match(source, /const lastRunMessages = useMemo/);
-  assert.match(source, /reconciledRuns\.findLast\(\(r\) => r\.kind === "agent-run"\)/);
-  assert.match(source, /messages=\{lastRunMessages\}/);
+test("collectRunFileChanges: gathers file changes from one run only", () => {
+	const run = {
+		kind: "agent-run",
+		id: "run-1",
+		startedAt: 1000,
+		endedAt: 2000,
+		items: [
+			{ kind: "message", message: { role: "user", id: "u1", text: "hi", timestamp: 1100 } },
+			{
+				kind: "tool-group",
+				id: "tg-1",
+				messages: [
+					toolMessage({ path: "src/a.ts", args: { file_path: "src/a.ts", content: "v1" } }),
+					toolMessage({ toolName: "bash", args: { command: "ls" } }),
+				],
+			},
+			{ kind: "thinking-group", id: "th-1", text: "", startedAt: 1200, endedAt: 1300, messages: [] },
+			{ kind: "message", message: { role: "assistant", id: "a1", text: "done", timestamp: 1900 } },
+		],
+	};
+	const files = collectRunFileChanges(run);
+	assert.equal(files.length, 1);
+	assert.equal(files[0].path, "src/a.ts");
+	assert.equal(files[0].count, 1);
+});
+
+test("fileChangeToDiffLines: write yields all-added lines, edit yields removed+added", () => {
+	const writeLines = fileChangeToDiffLines({ originalContent: "", content: "a\nb" });
+	assert.deepEqual(writeLines, [
+		{ id: "added-0", type: "added", content: "a" },
+		{ id: "added-1", type: "added", content: "b" },
+	]);
+	const editLines = fileChangeToDiffLines({ originalContent: "old1\nold2", content: "new1" });
+	assert.deepEqual(editLines, [
+		{ id: "removed-0", type: "removed", content: "old1" },
+		{ id: "removed-1", type: "removed", content: "old2" },
+		{ id: "added-0", type: "added", content: "new1" },
+	]);
+});
+
+test("file changes are per-turn: TurnRow mounts TurnFileChanges and global summary is gone", () => {
+	// 每轮展示改为固定在 TurnRow 底部（TurnFileChanges），时间线不再做全局汇总
+	const timeline = readFileSync("src/renderer/src/components/session/SessionMessageTimeline.tsx", "utf8");
+	assert.ok(!timeline.includes("SessionFileSummary"), "timeline should not render global summary");
+	assert.ok(!timeline.includes("lastRunMessages"), "timeline should not compute lastRunMessages");
+	const turnRow = readFileSync("src/renderer/src/components/session/turn/TurnRow.tsx", "utf8");
+	assert.match(turnRow, /TurnFileChanges/);
 });
