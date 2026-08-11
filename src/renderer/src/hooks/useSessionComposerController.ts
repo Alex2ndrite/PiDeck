@@ -600,6 +600,17 @@ export function useSessionComposerController(
     enqueue,
   });
 
+  // 统一发送入口：先晋升预览 Tab 再投递（幂等，非预览无副作用）。
+  // 发送按钮 / 追问按钮 / Enter 键 / 无 Agent 时的 /compact 直发都会走这里，
+  // 避免新增发送路径时漏掉 promote 导致预览 Tab 不常驻（曾因此回归）。
+  const promoteAndSend = useCallback(
+    (behavior?: "steer" | "followUp") => {
+      options.onPromoteSession?.(sessionId);
+      return send(behavior);
+    },
+    [options.onPromoteSession, send, sessionId],
+  );
+
   const selectSuggestion = useCallback((value: string) => {
     const liveDraft = liveDomDraftRef.current.sessionId === sessionId
       ? liveDomDraftRef.current.value
@@ -715,7 +726,8 @@ export function useSessionComposerController(
     const intent = getComposerEnterIntent(event, sendShortcut);
     if (intent === "send") {
       event.preventDefault();
-      void send(isBusy ? "steer" : undefined);
+      // Enter 发送也晋升预览 Tab（promoteAndSend 内部统一处理）
+      void promoteAndSend(isBusy ? "steer" : undefined);
     }
   }, [
     closeSuggestions,
@@ -723,10 +735,10 @@ export function useSessionComposerController(
     getPromptHistory,
     historyIndex,
     isBusy,
+    promoteAndSend,
     savedDraft,
     selectedSuggestionIndex,
     selectSuggestion,
-    send,
     sendShortcut,
     sessionId,
     setDraft,
@@ -998,7 +1010,7 @@ export function useSessionComposerController(
       // No Agent yet: write /compact to draft and send → starts Agent + compacts
       setDraft("/compact");
       caretRef.current = { pos: "/compact".length, forValue: "/compact" };
-      void send();
+      void promoteAndSend();
       return;
     }
     try {
@@ -1006,7 +1018,7 @@ export function useSessionComposerController(
     } catch (error) {
       showNotice(friendlyCompactError(error), 6500);
     }
-  }, [runtime?.agentId, runtime?.runtimeGeneration, sessionId, setDraft, send]);
+  }, [runtime?.agentId, runtime?.runtimeGeneration, sessionId, setDraft, promoteAndSend]);
 
   const openPicker = useCallback((kind: ComposerPickerKind) => {
     if (kind === "template") void loadTemplates();
@@ -1091,12 +1103,10 @@ export function useSessionComposerController(
     delivery: {
       // 发送/追问都算主动交互：先把预览 Tab 晋升常驻，再投递（幂等，非预览无副作用）
       send: () => {
-        options.onPromoteSession?.(sessionId);
-        void send(isBusy ? "steer" : undefined);
+        void promoteAndSend(isBusy ? "steer" : undefined);
       },
       followUp: () => {
-        options.onPromoteSession?.(sessionId);
-        void send("followUp");
+        void promoteAndSend("followUp");
       },
       abort: () => void abort(),
       compact: () => void compact(),

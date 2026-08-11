@@ -38,6 +38,63 @@ import type { ImageContent } from "@earendil-works/pi-ai";
 const CONFIG_FILE_NAME = "pi-deck-vision.json";
 /** 运行日志文件（与配置同目录），PiDeck 设置页读取做诊断；绝不写 apiKey */
 const LOG_FILE_NAME = "pi-deck-vision.log";
+/** 结构化转换事件文件（JSONL）：会话渲染层据此展示「请求详情」（模型/耗时/每张图结果）。 */
+const EVENT_FILE_NAME = "pi-deck-vision-events.jsonl";
+/** 事件文件大小上限；超过后截断只保留尾部（保留最近活动）。 */
+const MAX_EVENT_FILE_BYTES = 2 * 1024 * 1024;
+
+/** 单张图片的转换结果（index 与消息文本里的「图片 #N」序号一致）。 */
+export type VisionEventItem = {
+	/** 图片在本次转换中的序号（1 起，与消息文本 #N 同源） */
+	index: number;
+	mimeType: string;
+	ok: boolean;
+	/** 失败原因（ok=false 时） */
+	error?: string;
+	/** 单图请求耗时 ms（缓存命中为 0） */
+	durationMs: number;
+	/** 命中描述缓存，未实际请求视觉模型 */
+	cached: boolean;
+	/** 成功描述（截断，详情展示用；完整描述在消息文本里） */
+	description?: string;
+	/** 输出 token 数（响应带 usage 时） */
+	outputTokens?: number;
+};
+
+/** 一次 describeImages 调用的批次事件（一行 JSON）。 */
+export type VisionBatchEvent = {
+	ts: number;
+	/** 转换来源：input=用户发图 / tool_result=工具读图 / request=provider payload 兜底 */
+	kind: "input" | "tool_result" | "request";
+	model: string;
+	/** 提示词模板（截断，展示用） */
+	prompt: string;
+	/** 本批总耗时 ms */
+	totalDurationMs: number;
+	items: VisionEventItem[];
+};
+
+/** 追加一条批次事件；文件超限时截断保留尾部（异步幂等，失败静默不阻断转换）。 */
+export async function writeVisionEvent(configDir: string, event: VisionBatchEvent): Promise<void> {
+	try {
+		const filePath = join(configDir, EVENT_FILE_NAME);
+		await appendFile(filePath, `${JSON.stringify(event)}\n`, { encoding: "utf8" });
+		// 大小上限：超出后只保留尾部一半，避免无限增长（读端也按尾部读取）
+		try {
+			const size = (await stat(filePath)).size;
+			if (size > MAX_EVENT_FILE_BYTES) {
+				const data = await readFile(filePath, "utf8");
+				const keep = data.slice(-MAX_EVENT_FILE_BYTES / 2);
+				const firstNewline = keep.indexOf("\n");
+				await writeFile(filePath, keep.slice(firstNewline + 1), { encoding: "utf8" });
+			}
+		} catch {
+			// stat/read 竞态（文件刚被清空）不处理
+		}
+	} catch {
+		// 事件文件写入失败不阻断视觉转换
+	}
+}
 /** 日志文件超过该大小后轮转（保留尾部 64KB），防止长期运行撑爆磁盘 */
 const MAX_LOG_BYTES = 512 * 1024;
 const KEEP_LOG_TAIL_BYTES = 64 * 1024;
@@ -383,7 +440,7 @@ export async function describeImage(
 	image: ImageContent,
 	prompt: string,
 	options: { maxTokens: number; timeoutMs: number; signal?: AbortSignal },
-): Promise<{ ok: boolean; text: string }> {
+): Promise<{ ok: boolean; text: string; durationMs?: number; outputTokens?: number }> {
 	const first = await doVisionRequest(endpoint, image, prompt, options, { reasoningEffortNone: false });
 	const needsRetry =
 		endpoint.api === "openai-completions" &&
@@ -440,11 +497,12 @@ async function doVisionRequest(
 	prompt: string,
 	options: { maxTokens: number; timeoutMs: number; signal?: AbortSignal },
 	flags: { reasoningEffortNone: boolean },
-): Promise<{ ok: boolean; text: string; finishReason?: string }> {
+): Promise<{ ok: boolean; text: string; finishReason?: string; durationMs?: number; outputTokens?: number }> {
 	const controller = new AbortController();
 	const timeout = setTimeout(() => controller.abort(), options.timeoutMs);
 	const onOuterAbort = () => controller.abort();
 	options.signal?.addEventListener("abort", onOuterAbort, { once: true });
+	const startedAt = Date.now();
 
 	try {
 		const { url, headers, body } = buildVisionRequest(endpoint, image, prompt, options.maxTokens, flags);
@@ -480,16 +538,27 @@ async function doVisionRequest(
 		const payload = (await res.json()) as Record<string, unknown>;
 		const finishReason = (payload.choices as Array<{ finish_reason?: unknown }> | undefined)?.[0]
 			?.finish_reason as string | undefined;
+		// usage 提取（各 API 格式字段不同，容错缺省）：openai 用 prompt_tokens/completion_tokens，
+		// anthropic 用 input_tokens/output_tokens，gemini 在 usageMetadata 里。
+		const usage = payload.usage as
+			| { prompt_tokens?: number; completion_tokens?: number; input_tokens?: number; output_tokens?: number }
+			| undefined;
+		const usageMeta = payload.usageMetadata as { outputTokenCount?: number } | undefined;
+		const outputTokens =
+			usage?.completion_tokens ?? usage?.output_tokens ?? usageMeta?.outputTokenCount;
 		return {
 			ok: true,
 			text: extractVisionText(endpoint.api, payload, { fallbackToReasoning: flags.reasoningEffortNone }),
+			durationMs: Date.now() - startedAt,
 			...(finishReason ? { finishReason } : {}),
+			...(typeof outputTokens === "number" ? { outputTokens } : {}),
 		};
 	} catch (e) {
 		const isTimeout = e instanceof Error && e.name === "AbortError";
 		return {
 			ok: false,
 			text: isTimeout ? `timeout(${options.timeoutMs}ms)` : e instanceof Error ? e.message : String(e),
+			durationMs: Date.now() - startedAt,
 		};
 	} finally {
 		clearTimeout(timeout);
@@ -660,14 +729,18 @@ function truncateText(text: string, max: number): string {
  * 描述一组图片（带哈希缓存 + 并发），返回拼好的描述文本块。
  * 全部失败或没有图片时返回 null。单轮图片超过上限时只处理前 N 张。
  * log 可选：转换统计回调（写文件日志用，绝不传图片内容）。
+ * onBatch 可选：本批转换的结构化事件（写事件文件，会话渲染层展示请求详情）。
  */
-async function describeImages(
+/** 并发描述多张图片并汇总批次事件。
+ * 导出仅用于测试覆盖（批次事件与 per-image 计时逻辑）；运行时入口是 default export 的 hooks。 */
+export async function describeImages(
 	endpoint: ResolvedEndpoint,
 	images: ImageContent[],
 	prompt: string,
 	config: VisionBridgeConfig,
 	signal: AbortSignal | undefined,
 	log?: (level: "info" | "warn" | "error", message: string) => void,
+	onBatch?: (batch: Omit<VisionBatchEvent, "kind" | "model" | "prompt">) => void,
 ): Promise<string | null> {
 	const selected = images.slice(0, MAX_IMAGES_PER_TURN);
 	if (selected.length === 0) return null;
@@ -688,11 +761,13 @@ async function describeImages(
 	}
 
 	// 第二遍：并发调用视觉模型（命中缓存直接复用）
+	const itemTimings = new Map<string, { durationMs: number; cached: boolean }>();
 	await runWithConcurrency(
 		jobs.map(({ hash, image }) => async () => {
 			const cached = descriptionCache.get(hash);
 			if (cached) {
 				results.set(hash, cached);
+				itemTimings.set(hash, { durationMs: 0, cached: true });
 				return;
 			}
 			const outcome = await describeImage(endpoint, image, requestPrompt, {
@@ -702,6 +777,7 @@ async function describeImages(
 			});
 			descriptionCache.set(hash, outcome);
 			results.set(hash, outcome);
+			itemTimings.set(hash, { durationMs: outcome.durationMs ?? 0, cached: false });
 		}),
 		config.concurrency ?? 2,
 	);
@@ -732,6 +808,39 @@ async function describeImages(
 		}
 	}
 	log?.(failCount > 0 ? "warn" : "info", `converted ${successCount} image(s)${failCount > 0 ? `, ${failCount} failed` : ""}`);
+	// 汇总批次事件：每张图的 index/耗时/结果（与消息文本 #N 序号一致），供详情展示。
+	// 遍历顺序 = 图片出现顺序，与上方 counter 编号规则完全一致（去重后递增）。
+	const batchItems: VisionEventItem[] = [];
+	let totalDurationMs = 0;
+	{
+		const seen2 = new Set<string>();
+		let itemCounter = 0;
+		for (const image of selected) {
+			const hash = imageHash(image.data);
+			if (results.get(hash) === undefined) continue;
+			if (seen2.has(hash)) continue;
+			seen2.add(hash);
+			itemCounter++;
+			const result = results.get(hash);
+			const timing = itemTimings.get(hash) ?? { durationMs: 0, cached: false };
+			totalDurationMs = Math.max(totalDurationMs, timing.durationMs);
+			batchItems.push({
+				index: itemCounter,
+				mimeType: image.mimeType,
+				ok: result?.ok === true,
+				...(result && !result.ok ? { error: truncateText(result.text, 200) } : {}),
+				durationMs: timing.durationMs,
+				cached: timing.cached,
+				...(result?.ok && result.text ? { description: truncateText(result.text, 400) } : {}),
+				...(typeof result?.outputTokens === "number" ? { outputTokens: result.outputTokens } : {}),
+			});
+		}
+	}
+	onBatch?.({
+		ts: Date.now(),
+		totalDurationMs,
+		items: batchItems,
+	});
 	return parts.length > 0 ? parts.join("\n\n") : null;
 }
 
@@ -769,6 +878,14 @@ export default function (pi: ExtensionAPI) {
 				config,
 				ctx.signal,
 				log,
+				// 批次事件：input 阶段转换，会话渲染层按「图片 #N」序号对应展示请求详情
+				(batch) =>
+					writeVisionEvent(configDir, {
+						...batch,
+						kind: "input",
+						model: `${config.provider}/${config.model}`,
+						prompt: truncateText(config.promptTemplate ?? DEFAULT_PROMPT, 300),
+					}),
 			);
 			if (!desc) return undefined;
 			// 描述文本附到消息文本后，图片清空（已转为文字）
@@ -819,6 +936,13 @@ export default function (pi: ExtensionAPI) {
 				config,
 				ctx.signal,
 				log,
+				(batch) =>
+					writeVisionEvent(configDir, {
+						...batch,
+						kind: "tool_result",
+						model: `${config.provider}/${config.model}`,
+						prompt: truncateText(config.promptTemplate ?? DEFAULT_PROMPT, 300),
+					}),
 			);
 			if (!description) return undefined;
 			pendingToolImages.delete(typed.toolCallId);
@@ -891,7 +1015,16 @@ export default function (pi: ExtensionAPI) {
 
 			// 第二遍：并发描述（不同消息的图片可并行）
 			const descriptions = await Promise.all(
-				replacements.map(({ images }) => describeImages(endpoint, images, prompt, config, ctx.signal, log)),
+				replacements.map(({ images }) =>
+					describeImages(endpoint, images, prompt, config, ctx.signal, log, (batch) =>
+						writeVisionEvent(configDir, {
+							...batch,
+							kind: "request",
+							model: `${config.provider}/${config.model}`,
+							prompt: truncateText(config.promptTemplate ?? DEFAULT_PROMPT, 300),
+						}),
+					),
+				),
 			);
 
 			// 第三遍：写回 payload（浅拷贝消息对象，避免污染原 payload）

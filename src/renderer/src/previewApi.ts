@@ -1,5 +1,8 @@
 import type { PiDesktopApi } from "../../preload";
-import { createDefaultExternalEditorSettings } from "../../shared/types";
+import {
+	createDefaultExternalEditorSettings,
+	createDefaultSecurityConfig,
+} from "../../shared/types";
 import type {
 	AppSettings,
 	FileTreeNode,
@@ -844,6 +847,17 @@ export function createPreviewApi(): PiDesktopApi {
 			}),
 			onApplyWindow: noop,
 		},
+		security: {
+			getConfig: async () => createDefaultSecurityConfig(),
+			updateConfig: async () => ({
+				ok: true,
+				config: createDefaultSecurityConfig(),
+			}),
+			setSessionLevel: async () => ({
+				ok: true,
+				config: createDefaultSecurityConfig(),
+			}),
+		},
 		config: {
 			getModels: async () => ({
 				raw: '{"providers":{}}',
@@ -886,6 +900,8 @@ export function createPreviewApi(): PiDesktopApi {
 			visionSaveConfig: async () => ({ ok: true }),
 			visionGetLog: async () => ({ exists: false, size: 0, content: "", truncated: false }),
 			visionClearLog: async () => ({ ok: true }),
+			visionGetEvents: async () => ({ exists: false, size: 0, events: [], truncated: false }),
+			visionClearEvents: async () => ({ ok: true }),
 		},
 		pet: {
 			onState: noop,

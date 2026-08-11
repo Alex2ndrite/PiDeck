@@ -91,6 +91,8 @@ import {
 	CircleAlert,
 	CircleDot,
 	ChevronLeft,
+	ChevronDown,
+	ChevronUp,
 	ChevronsUpDown,
 	MoveDown,
 	MoveUp,
@@ -152,6 +154,8 @@ import type {
 	PiUpdateCheckResult,
 	Project,
 	SessionSummary,
+	VisionBridgeEvent,
+	VisionEventsInfo,
 } from "../../../../shared/types";
 import { parseRichInputChips, unwrapFileChipPath } from "./composer/chips";
 import removeMarkdown from "remove-markdown";
@@ -160,6 +164,7 @@ import { GRID_COLS, CELL_W, CELL_H, MODE_ROW, MODE_FRAMES } from "../../pet/PetS
 
 import type { WorkspaceDrawerPanel } from "../../hooks/useWorkspacePanels";
 import { formatDuration, formatTime, stripAnsi } from "./TimelineFormat";
+import { extractVisionBridgeBlocks } from "../../utils/visionBridgeBlocks";
 import { ToolCard, ToolGroupCard, type DiffFileHandler } from "./ToolCallComponents";
 import {
 	AskQuestionCard,
@@ -718,6 +723,49 @@ export const AssistantText = memo(
 		prev.images === next.images,
 );
 
+/** 视觉桥「请求详情」展开面板：展示最近一次 input 转换的模型/耗时/token/提示词与每张图结果。
+ * 事件数据来自扩展写的 pi-deck-vision-events.jsonl（经 IPC 拉取），与消息文本里的图片 #N 序号同源。 */
+function VisionBridgeDetail(props: { events: VisionEventsInfo | null; loading: boolean }) {
+	if (props.loading) {
+		return <p className="mt-2 text-[11px] text-muted-foreground">…</p>;
+	}
+	const batch = props.events?.events.filter((e) => e.kind === "input").at(-1);
+	if (!batch) {
+		return <p className="mt-2 text-[11px] text-muted-foreground">{t("app.visionNoEvents")}</p>;
+	}
+	return (
+		<div className="mt-2 border-t border-border/60 pt-2 text-[11px] leading-relaxed text-muted-foreground">
+			<div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+				<span className="font-mono text-foreground/80">{batch.model}</span>
+				<span>{formatDuration(batch.totalDurationMs)}</span>
+				<span>{t("app.imageAlt", { index: batch.items.length })}</span>
+			</div>
+			<ul className="mt-1 space-y-0.5">
+				{batch.items.map((it) => (
+					<li key={it.index} className={it.ok ? "" : "text-danger"}>
+						{t("app.visionRequestItem", {
+							index: it.index,
+							duration: it.cached ? "" : `${formatDuration(it.durationMs)} · `,
+							tokens:
+								typeof it.outputTokens === "number"
+									? `${t("app.visionOutputTokens", { count: it.outputTokens })} · `
+									: "",
+							status: it.cached
+								? t("app.visionCacheHit")
+								: it.ok
+									? ""
+									: t("app.visionRequestFailed", { error: it.error ?? "" }),
+						})}
+					</li>
+				))}
+			</ul>
+			<p className="mt-1 truncate" title={batch.prompt}>
+				{t("app.visionRequestPrompt")}：{batch.prompt}
+			</p>
+		</div>
+	);
+}
+
 /**
  * 从用户消息文本中提取 pi 展开后的 <skill name="..." location="...">...</skill> 块。
  * pi 在发送 /skill:name 时会把 skill 内容展开成该 XML 块注入用户消息，
@@ -768,14 +816,35 @@ export const UserBubble = memo(function UserBubble(props: {
 	const [editing, setEditing] = useState(false);
 	const [editText, setEditText] = useState("");
 	const editAreaRef = useRef<HTMLDivElement | null>(null);
+	// 视觉桥「请求详情」展开态：事件数据懒加载（用户点击才拉取，避免每条消息都读事件文件）
+	const [visionDetailOpen, setVisionDetailOpen] = useState(false);
+	const [visionEvents, setVisionEvents] = useState<VisionEventsInfo | null>(null);
+	const [visionLoading, setVisionLoading] = useState(false);
+	const loadVisionEvents = useCallback(async () => {
+		if (visionEvents || visionLoading) return;
+		setVisionLoading(true);
+		try {
+			setVisionEvents(await window.piDesktop.config.visionGetEvents());
+		} catch {
+			// 读取失败保持空态（卡片仍显示，详情区显示暂无记录）
+			setVisionEvents({ exists: false, size: 0, events: [], truncated: false });
+		} finally {
+			setVisionLoading(false);
+		}
+	}, [visionEvents, visionLoading]);
 	// 激活编辑时自动滚动到编辑区
 	useEffect(() => {
 		if (editing && editAreaRef.current) {
 			editAreaRef.current.scrollIntoView({ behavior: "smooth", block: "nearest" });
 		}
 	}, [editing]);
+	// 视觉桥块：pi-deck-vision 扩展把用户消息里的图片换成描述文本时，会在消息里
+	// 留下「[图片 #N（视觉桥已查看...）]」/失败标记。先剥出块，渲染成可视化卡片，
+	// 用户才能直观看到「走了视觉桥」以及转换结果/失败原因，而不是一段方括号文本。
+	const vision = extractVisionBridgeBlocks(stripAnsi(message.text));
+	const visionBlocks = vision.blocks;
 	// 提取 pi 展开后的 <skill> 块：渲染为 skill 徽标，并从正文里剥除 XML
-	const { skills, text: bodyText } = extractSkillBlocks(stripAnsi(message.text));
+	const { skills, text: bodyText } = extractSkillBlocks(vision.text);
 	const cleanText = bodyText;
 	// 投递策略标签：steer(下次调用前插入) / followUp(停止后排队)
 	const deliveryBehavior = message.meta?.streamingBehavior as
@@ -825,6 +894,67 @@ export const UserBubble = memo(function UserBubble(props: {
 							onClick={() => props.onPreviewImage(img)}
 						/>
 					))}
+				</div>
+			)}
+			{visionBlocks.length > 0 && (
+				<div className="mb-2 flex w-full max-w-[min(82%,64ch)] flex-col items-end gap-1.5">
+					{visionBlocks.map((block, bi) =>
+						block.kind === "success" ? (
+							// 成功：徽章行（图标 + 视觉桥已查看 + 图片序号）+ 描述正文
+							<div
+								key={bi}
+								className="vision-bridge-card w-full min-w-0 rounded-lg border border-border bg-background/70 p-2.5"
+								title={t("app.visionBridgeSeenDesc")}
+							>
+								<div className="flex items-center justify-between gap-2">
+									<div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+										<Eye size={12} className="shrink-0 text-[var(--color-accent)]" />
+										<span>{t("app.visionBridgeSeen")}</span>
+										<span className="text-muted-foreground/60">·</span>
+										<span>{t("app.visionBridgeImageLabel", { index: block.index })}</span>
+									</div>
+									<button
+										type="button"
+										className="inline-flex shrink-0 items-center gap-0.5 rounded-sm px-1 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+										onClick={() => {
+											setVisionDetailOpen((open) => !open);
+											if (!visionDetailOpen) void loadVisionEvents();
+										}}
+									>
+										{visionDetailOpen ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+										{t("app.visionDetail")}
+									</button>
+								</div>
+								{block.description && (
+									<p className="mt-1.5 text-[13px] leading-[1.6] break-words whitespace-pre-wrap text-text-primary">
+										{block.description}
+									</p>
+								)}
+								{visionDetailOpen && (
+									<VisionBridgeDetail events={visionEvents} loading={visionLoading} />
+								)}
+							</div>
+						) : (
+							// 失败：红色卡片，原因直出，用户不用去设置页翻日志
+							<div
+								key={bi}
+								className="w-full min-w-0 rounded-lg border border-danger/40 bg-danger-soft/40 p-2.5"
+								title={t("app.visionBridgeFailedDesc")}
+							>
+								<div className="flex items-center gap-1.5 text-[11px] font-medium text-danger">
+									<AlertTriangle size={12} className="shrink-0" />
+									<span>{t("app.visionBridgeFailed")}</span>
+									<span className="text-danger/60">·</span>
+									<span>{t("app.visionBridgeImageLabel", { index: block.index })}</span>
+								</div>
+								{block.reason && (
+									<p className="mt-1.5 text-[13px] leading-[1.6] break-words text-danger/90">
+										{block.reason}
+									</p>
+								)}
+							</div>
+						),
+					)}
 				</div>
 			)}
 			{cleanText && !editing && (

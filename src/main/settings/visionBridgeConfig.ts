@@ -14,7 +14,9 @@ import { join } from "node:path";
 import { getAppLogger } from "../logging/sharedLogger";
 import type {
 	VisionBridgeConfig,
+	VisionBridgeEvent,
 	VisionBridgeState,
+	VisionEventsInfo,
 	VisionLogInfo,
 	VisionSaveResult,
 } from "../../shared/types";
@@ -25,6 +27,10 @@ const CONFIG_FILE_NAME = "pi-deck-vision.json";
 const LOG_FILE_NAME = "pi-deck-vision.log";
 /** 单次 IPC 返回的日志上限：超过只返回尾部（扩展已做 512KB 轮转，这里双保险） */
 const MAX_LOG_RETURN_BYTES = 256 * 1024;
+/** 结构化转换事件文件名（与扩展 EVENT_FILE_NAME 保持一致） */
+const EVENT_FILE_NAME = "pi-deck-vision-events.jsonl";
+/** 单次 IPC 返回的事件原文上限（事件文件可能被扩展截断，这里再兜底） */
+const MAX_EVENT_RETURN_BYTES = 1024 * 1024;
 
 /** 与扩展 DEFAULT_BASE_URLS 对应的已知端点提示（仅 UI 展示用，解析以扩展为准）。 */
 export const KNOWN_PROVIDER_BASE_URLS: Record<string, string> = {
@@ -195,6 +201,49 @@ export class VisionBridgeConfigManager {
 		try {
 			await rm(join(visionConfigDir(), LOG_FILE_NAME), { force: true });
 			getAppLogger()?.info("vision", "Vision run log cleared", {});
+			return { ok: true };
+		} catch {
+			return { ok: false };
+		}
+	}
+
+	/** 读取结构化转换事件（JSONL 尾部，坏行跳过）：会话渲染层展开「请求详情」用。
+	 * 事件不含 apiKey/baseUrl，只有模型名/耗时/token/描述截断。 */
+	async getEvents(limit = 200): Promise<VisionEventsInfo> {
+		const filePath = join(visionConfigDir(), EVENT_FILE_NAME);
+		try {
+			const info = await stat(filePath);
+			const data = await readFile(filePath, "utf8");
+			// 只解析尾部行：文件可能被扩展截断过，也可能单行超大（描述截断 400 字符，可控）
+			const lines = data.split("\n").filter(Boolean).slice(-limit);
+			const events: VisionBridgeEvent[] = [];
+			for (const line of lines) {
+				try {
+					const parsed = JSON.parse(line) as VisionBridgeEvent;
+					if (parsed && typeof parsed.ts === "number" && Array.isArray(parsed.items)) {
+						events.push(parsed);
+					}
+				} catch {
+					// 半截行/坏行跳过（扩展截断文件时可能产生）
+				}
+			}
+			return {
+				exists: true,
+				size: info.size,
+				events,
+				truncated: data.length > MAX_EVENT_RETURN_BYTES,
+			};
+		} catch {
+			// 文件不存在或不可读：从未转换过图片
+			return { exists: false, size: 0, events: [], truncated: false };
+		}
+	}
+
+	/** 清空事件文件（删除文件，下次写入自动重建）。 */
+	async clearEvents(): Promise<{ ok: boolean }> {
+		try {
+			await rm(join(visionConfigDir(), EVENT_FILE_NAME), { force: true });
+			getAppLogger()?.info("vision", "Vision events cleared", {});
 			return { ok: true };
 		} catch {
 			return { ok: false };

@@ -258,12 +258,24 @@ export const ipcChannels = {
 	/** 快速测试 provider 连接：发送一条最小请求验证 baseUrl/apiKey/模型 是否正常 */
 	configTestProvider: "config:test-provider",
 
+	// ===== 安全管理（SecurityStore + pi-deck-security-gate 扩展） =====
+	/** 拉取完整安全配置（等级/默认等级/会话覆盖） */
+	securityGetConfig: "security:get-config",
+	/** 更新安全配置（校验 + 持久化 + 刷新策略快照） */
+	securityUpdateConfig: "security:update-config",
+	/** 设置单个会话的等级覆盖（levelId 为空 = 清除覆盖跟随全局） */
+	securitySetSessionLevel: "security:set-session-level",
+
 	/** 视觉桥：读取当前配置 + 可选模型列表 */
 	visionGetConfig: "vision:get-config",
 	/** 视觉桥：保存配置到 ~/.pi/agent/pi-deck-vision.json */
 	visionSaveConfig: "vision:save-config",
 	/** 视觉桥：读取运行日志（扩展写的 pi-deck-vision.log，诊断用） */
 	visionGetLog: "vision:get-log",
+	/** 视觉桥：读取结构化转换事件（pi-deck-vision-events.jsonl 尾部，会话渲染层展示请求详情） */
+	visionGetEvents: "vision:get-events",
+	/** 视觉桥：清空事件文件 */
+	visionClearEvents: "vision:clear-events",
 	/** 视觉桥：清空运行日志 */
 	visionClearLog: "vision:clear-log",
 
