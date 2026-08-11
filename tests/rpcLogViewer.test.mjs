@@ -75,8 +75,8 @@ test("session context menu shares the unified rpc logging group", () => {
   // 仅会话有 live runtime 时渲染 RPC 组（历史会话无日志可记/可看）
   assert.match(sidebarContent, /canRpcLog=\{Boolean\(menuSessionRuntimeAgent\)\}/);
   assert.doesNotMatch(sidebarContent, /onShowLogs/);
-  // 运行中的会话开启记录成功后直接打开日志弹窗（与 agent 菜单行为一致）
-  assert.match(sidebarContent, /if \(enabled\) controller\.openRpcLogs\(menuSessionRuntimeAgent\.id\);/);
+  // 运行中的会话开启记录成功后弹「已打开」提醒框（与 agent 菜单行为一致，不再直接打开日志弹窗）
+  assert.match(sidebarContent, /setRpcLogOpenedAgentId\(menuSessionRuntimeAgent\.id\);/);
 });
 
 test("agent context menu exposes a live log entry point next to the toggle", () => {
@@ -98,7 +98,8 @@ test("agent context menu exposes a live log entry point next to the toggle", () 
 test("sidebar gates rpc logging toggle on a live runtime", () => {
   // 未启动的 agent 无 runtime：菜单置灰 + 点击兜底 toast 提示需运行中
   assert.match(sidebarContent, /menuAgentCanRpcLog/);
-  assert.match(sidebarContent, /getBoundSidebarRuntimeAgent\(controller\.catalog, menuAgent\.sessionId\)/);
+  // agent 菜单按 agentId 反查 runtime（AgentTab.sessionId 是 pi 自身会话 id，非 runtime key）
+  assert.match(sidebarContent, /getBoundSidebarRuntimeAgentByAgentId\(controller\.catalog, menuAgent\.id\)/);
   assert.match(sidebarContent, /rpcToggleDisabled=\{!menuAgentCanRpcLog\}/);
   assert.match(sidebarContent, /menu\.rpcLoggingRequiresRuntime/);
   // 兜底分支：置灰点击不触发 onSelect，这里防御状态在菜单打开期间变化

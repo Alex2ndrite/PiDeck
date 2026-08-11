@@ -226,6 +226,14 @@ export function RpcLogViewer(props: RpcLogViewerProps) {
 		showNotice(enabled ? t("rpc.loggingEnabled") : t("rpc.loggingEnableFailed"), 2500);
 	}, [agentId, props.setLogging]);
 
+	/** 停止记录：仅在记录开启时显示入口；agent 停止/应用重启也会自动关闭 */
+	const handleDisableLogging = useCallback(async () => {
+		if (!props.setLogging) return;
+		const enabled = await props.setLogging(agentId, false);
+		setLoggingOn(enabled);
+		showNotice(enabled ? t("rpc.loggingDisableFailed") : t("rpc.loggingDisabled"), 2500);
+	}, [agentId, props.setLogging]);
+
 	const handleScrollToBottom = useCallback(() => {
 		scrollApiRef.current?.scrollToBottom({ animation: "smooth" });
 		setAutoScroll(true);
@@ -299,6 +307,16 @@ export function RpcLogViewer(props: RpcLogViewerProps) {
 							{t("rpc.filterReceive")}
 						</Button>
 					</div>
+					{loggingOn === true && props.setLogging && (
+						<Button
+							variant="outline"
+							size="sm"
+							className="h-auto px-2 py-1 text-caption shadow-none"
+							onClick={() => void handleDisableLogging()}
+						>
+							{t("rpc.disableLogging")}
+						</Button>
+					)}
 					<Input
 						value={keyword}
 						onChange={(e) => setKeyword(e.target.value)}

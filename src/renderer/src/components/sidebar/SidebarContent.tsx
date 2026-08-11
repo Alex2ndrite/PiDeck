@@ -1,5 +1,5 @@
 import { Search, Settings, Sliders, MessageSquare, Globe, FolderPlus } from "lucide-react";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import type { AgentTab, Project, SessionRecord, SessionSummary, WorktreeEntry } from "../../../../shared/types";
 import {
   AgentContextMenu,
@@ -9,12 +9,13 @@ import {
   SessionManagerModal,
   SessionSourceFilterMenu,
   WorktreeCreateDialog,
+  RpcLogOpenedDialog,
 } from "./SidebarParts";
 import { RpcLogViewer } from "./RpcLogViewer";
 import { sessionRecordToSummary } from "../../atoms";
 import { t } from "../../i18n";
 import { showNotice } from "../../utils/notice";
-import { getBoundSidebarRuntimeAgent, hasLiveSidebarRuntime, type SidebarController, type SidebarRpcLog } from "../../hooks/useSidebarController";
+import { getBoundSidebarRuntimeAgent, getBoundSidebarRuntimeAgentByAgentId, hasLiveSidebarRuntime, type SidebarController, type SidebarRpcLog } from "../../hooks/useSidebarController";
 import { ProjectTree } from "./ProjectTree";
 import { Button } from "../ui-shadcn/button";
 import { Input } from "../ui-shadcn/input";
@@ -104,9 +105,13 @@ export function SidebarContent(props: SidebarContentProps) {
     ? controller.catalog.agents.find((agent) => agent.id === menu.agentId)
     : undefined;
   // agent 是否有 live runtime：没有运行中的 pi 子进程时，RPC 日志记录无法开启
-  // （记录靠主进程旁路拦截子进程通信，进程不存在则无日志可记）
-  const menuAgentCanRpcLog = menuAgent?.sessionId !== undefined
-    && getBoundSidebarRuntimeAgent(controller.catalog, menuAgent.sessionId) !== undefined;
+  // （记录靠主进程旁路拦截子进程通信，进程不存在则无日志可记）。
+  // 注意不能拿 menuAgent.sessionId 直接查 runtimeBySessionId：AgentTab.sessionId
+  // 是 pi 自身会话 id，而 runtimeBySessionId 的 key 是会话记录 id，必须按 agentId 反查。
+  const menuAgentCanRpcLog = menuAgent !== undefined
+    && getBoundSidebarRuntimeAgentByAgentId(controller.catalog, menuAgent.id) !== undefined;
+  // “RPC 日志已打开”提醒弹框的打开目标 agent id（null = 关闭）
+  const [rpcLogOpenedAgentId, setRpcLogOpenedAgentId] = useState<string | null>(null);
   const menuSessionRecord = menu?.kind === "session"
     ? controller.catalog.sessionsByProject[menu.projectId]?.find((session) => session.id === menu.sessionId)
     : undefined;
@@ -236,13 +241,23 @@ export function SidebarContent(props: SidebarContentProps) {
               controller.closeMenu();
               return;
             }
-            void actions.rpc.setLogging(menuAgent.id, !controller.isAgentRpcLogging(menuAgent.id)).then((enabled) => {
+            controller.closeMenu();
+            if (controller.isAgentRpcLogging(menuAgent.id)) {
+              // 已开启：菜单项显示「关闭RPC日志」→ 直接关闭记录（历史文件保留，30 天自动清理）
+              void actions.rpc.setLogging(menuAgent.id, false).then((enabled) => {
+                controller.setAgentRpcLogging(menuAgent.id, enabled);
+                showNotice(enabled ? t("rpc.loggingDisableFailed") : t("rpc.loggingDisabled"), 2500);
+              });
+              return;
+            }
+            void actions.rpc.setLogging(menuAgent.id, true).then((enabled) => {
               controller.setAgentRpcLogging(menuAgent.id, enabled);
-              // 菜单开关是异步生效，成功/失败都给出 toast 反馈
-              showNotice(enabled ? t("rpc.loggingEnabled") : t("rpc.loggingEnableFailed"), 2500);
-              // 开启成功直接打开日志弹窗：用户点“RPC 日志记录”的意图就是看日志，避免只开记录后还要再右键一次
-              if (enabled) controller.openRpcLogs(menuAgent.id);
-              controller.closeMenu();
+              if (enabled) {
+                // 开启成功弹提醒框（含“查看日志”入口），不再自动打开日志弹窗
+                setRpcLogOpenedAgentId(menuAgent.id);
+              } else {
+                showNotice(t("rpc.loggingEnableFailed"), 2500);
+              }
             });
           }}
           isRpcLogging={controller.isAgentRpcLogging(menuAgent.id)}
@@ -277,12 +292,22 @@ export function SidebarContent(props: SidebarContentProps) {
               controller.closeMenu();
               return;
             }
-            void actions.rpc.setLogging(menuSessionRuntimeAgent.id, !controller.isAgentRpcLogging(menuSessionRuntimeAgent.id)).then((enabled) => {
+            controller.closeMenu();
+            if (controller.isAgentRpcLogging(menuSessionRuntimeAgent.id)) {
+              // 已开启：菜单项显示「关闭RPC日志」→ 直接关闭记录
+              void actions.rpc.setLogging(menuSessionRuntimeAgent.id, false).then((enabled) => {
+                controller.setAgentRpcLogging(menuSessionRuntimeAgent.id, enabled);
+                showNotice(enabled ? t("rpc.loggingDisableFailed") : t("rpc.loggingDisabled"), 2500);
+              });
+              return;
+            }
+            void actions.rpc.setLogging(menuSessionRuntimeAgent.id, true).then((enabled) => {
               controller.setAgentRpcLogging(menuSessionRuntimeAgent.id, enabled);
-              showNotice(enabled ? t("rpc.loggingEnabled") : t("rpc.loggingEnableFailed"), 2500);
-              // 开启成功直接打开日志弹窗（与 agent 菜单行为一致）
-              if (enabled) controller.openRpcLogs(menuSessionRuntimeAgent.id);
-              controller.closeMenu();
+              if (enabled) {
+                setRpcLogOpenedAgentId(menuSessionRuntimeAgent.id);
+              } else {
+                showNotice(t("rpc.loggingEnableFailed"), 2500);
+              }
             });
           }}
           onOpenLogs={() => {
@@ -323,6 +348,16 @@ export function SidebarContent(props: SidebarContentProps) {
           getLogging={actions.rpc.getLogging}
           setLogging={actions.rpc.setLogging}
           onClose={controller.closeRpcLogs}
+        />
+      )}
+      {/* “RPC 日志已打开”提醒：点击菜单后弹框，可直达日志查看弹窗 */}
+      {rpcLogOpenedAgentId && (
+        <RpcLogOpenedDialog
+          onView={() => {
+            controller.openRpcLogs(rpcLogOpenedAgentId);
+            setRpcLogOpenedAgentId(null);
+          }}
+          onClose={() => setRpcLogOpenedAgentId(null)}
         />
       )}
     </aside>

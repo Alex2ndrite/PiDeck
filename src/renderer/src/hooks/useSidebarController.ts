@@ -134,6 +134,24 @@ export function getBoundSidebarRuntimeAgent(
   return agent && agent.status !== "closed" && agent.status !== "error" ? agent : undefined;
 }
 
+/**
+ * 按 agentId 反查其绑定会话对应的 live runtime agent。
+ * AgentTab.sessionId 是 pi 自身会话 id（runtime.piSessionId），不能直接当
+ * runtimeBySessionId 的 key（其 key 是会话记录 id），因此 agent 菜单的
+ * RPC 日志能力判断必须走 agentId 反查，否则运行中的 agent 会永远判定为
+ * “无 runtime”而置灰。
+ */
+export function getBoundSidebarRuntimeAgentByAgentId(
+  catalog: Pick<SidebarCatalog, "agents" | "runtimeBySessionId">,
+  agentId: string,
+): AgentTab | undefined {
+  for (const [sessionId, runtime] of Object.entries(catalog.runtimeBySessionId)) {
+    if (runtime?.agentId !== agentId) continue;
+    return getBoundSidebarRuntimeAgent(catalog, sessionId);
+  }
+  return undefined;
+}
+
 export function createSidebarRequestGate() {
   let menuRequest = 0;
   return {

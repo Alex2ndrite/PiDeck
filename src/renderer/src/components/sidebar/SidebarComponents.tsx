@@ -2,6 +2,16 @@ import { useState, useRef, useEffect, useMemo, type ReactNode } from "react";
 import { Archive, Check, CircleAlert, CircleDot, Folder, LoaderCircle, MessageCircle } from "lucide-react";
 import { t } from "../../i18n";
 import {
+	AlertDialog,
+	AlertDialogAction,
+	AlertDialogCancel,
+	AlertDialogContent,
+	AlertDialogDescription,
+	AlertDialogFooter,
+	AlertDialogHeader,
+	AlertDialogTitle,
+} from "../ui-shadcn/alert-dialog";
+import {
 	Dialog,
 	DialogClose,
 	DialogContent,
@@ -419,6 +429,9 @@ export function AgentContextMenu(props: {
 	onExport: () => void;
 	onCopySession: () => void;
 	onCopySessionFilePath: () => void;
+	/** 打开 RPC 日志：未开启时先开启记录，再弹“已打开”提醒框（含查看入口） */
+	onOpenRpcLogging?: () => void;
+	/** 切换式 RPC 日志开关（SidebarContent 当前实现），与 onOpenRpcLogging 兼容共存 */
 	onToggleRpcLogging?: () => void;
 	/** 未启动（无 live runtime）的 agent 不能开启记录：菜单项置灰并给出说明 */
 	rpcToggleDisabled?: boolean;
@@ -455,16 +468,14 @@ export function AgentContextMenu(props: {
 				disabled={busy || props.rpcToggleDisabled}
 				// 置灰时仍给出原因提示，避免用户以为功能坏了
 				title={props.rpcToggleDisabled ? t("menu.rpcLoggingRequiresRuntime") : undefined}
-				onSelect={props.onToggleRpcLogging}
+				onSelect={props.onToggleRpcLogging ?? props.onOpenRpcLogging}
 			>
-				{props.isRpcLogging ? `✓ ${t("menu.rpcLoggingOn")}` : t("menu.rpcLogging")}
+				{props.isRpcLogging ? t("menu.rpcLoggingOn") : t("menu.rpcLogging")}
 			</DropdownMenuItem>
 			{props.isRpcLogging && (
-				<>
-					<DropdownMenuItem disabled={busy} onSelect={props.onOpenLogs}>
-						{t("menu.rpcLogView")}
-					</DropdownMenuItem>
-				</>
+				<DropdownMenuItem disabled={busy} onSelect={props.onOpenLogs}>
+					{t("menu.rpcLogView")}
+				</DropdownMenuItem>
 			)}
 			<DropdownMenuSeparator />
 			<DropdownMenuItem variant="destructive" onSelect={props.onCloseAgent}>{t("menu.closeAgent")}</DropdownMenuItem>
@@ -497,6 +508,9 @@ export function SessionContextMenu(props: {
 	canRpcLog?: boolean;
 	rpcToggleDisabled?: boolean;
 	isRpcLogging?: boolean;
+	/** 打开 RPC 日志：未开启时先开启记录，再弹“已打开”提醒框（含查看入口） */
+	onOpenRpcLogging?: () => void;
+	/** 切换式 RPC 日志开关（SidebarContent 当前实现），与 onOpenRpcLogging 兼容共存 */
 	onToggleRpcLogging?: () => void;
 	onOpenLogs?: () => void;
 	onArchiveSession: () => void;
@@ -529,9 +543,9 @@ export function SessionContextMenu(props: {
 						disabled={busy || props.rpcToggleDisabled}
 						// 置灰时仍给出原因提示，避免用户以为功能坏了
 						title={props.rpcToggleDisabled ? t("menu.rpcLoggingRequiresRuntime") : undefined}
-						onSelect={props.onToggleRpcLogging}
+						onSelect={props.onToggleRpcLogging ?? props.onOpenRpcLogging}
 					>
-						{props.isRpcLogging ? `✓ ${t("menu.rpcLoggingOn")}` : t("menu.rpcLogging")}
+						{props.isRpcLogging ? t("menu.rpcLoggingOn") : t("menu.rpcLogging")}
 					</DropdownMenuItem>
 					{props.isRpcLogging && (
 						<DropdownMenuItem disabled={busy} onSelect={props.onOpenLogs}>
@@ -657,5 +671,33 @@ export function WorktreeCreateDialog(props: {
 				</DialogFooter>
 			</DialogContent>
 		</Dialog>
+	);
+}
+
+/**
+ * RPC 日志已打开提醒弹框：开启记录后告知用户已可查看，
+ * “查看日志”直接打开实时日志查看弹窗（RpcLogViewer）。
+ */
+export function RpcLogOpenedDialog(props: {
+	onView: () => void;
+	onClose: () => void;
+}) {
+	return (
+		<AlertDialog open onOpenChange={(open) => { if (!open) props.onClose(); }}>
+			<AlertDialogContent>
+				<AlertDialogHeader>
+					<AlertDialogTitle>{t("rpc.logOpenedTitle")}</AlertDialogTitle>
+					<AlertDialogDescription>{t("rpc.logOpenedDescription")}</AlertDialogDescription>
+				</AlertDialogHeader>
+				<AlertDialogFooter>
+					<AlertDialogCancel onClick={props.onClose}>
+						{t("common.cancel")}
+					</AlertDialogCancel>
+					<AlertDialogAction onClick={props.onView}>
+						{t("rpc.logViewNow")}
+					</AlertDialogAction>
+				</AlertDialogFooter>
+			</AlertDialogContent>
+		</AlertDialog>
 	);
 }
