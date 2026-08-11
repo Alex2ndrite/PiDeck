@@ -119,6 +119,9 @@ export function ConfigComboboxInput(props: {
 	options: Array<{ value: string; label?: string }>;
 	onChange: (value: string) => void;
 	placeholder?: string;
+	/** 右侧额外预留清除按钮空间（defaultProvider/defaultModel 清空场景），
+	 *  避免输入文字被清除按钮盖住 */
+	clearSpace?: boolean;
 }) {
 	const [open, setOpen] = useState(false);
 	const [filter, setFilter] = useState("");
@@ -169,7 +172,7 @@ export function ConfigComboboxInput(props: {
 					setOpen(true);
 				}}
 				placeholder={props.placeholder}
-				className="h-8 min-w-0 w-full flex-1 rounded-sm border border-border-subtle bg-bg-panel px-3 pr-[38px] text-control text-text-primary outline-none focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]"
+				className={`h-8 min-w-0 w-full flex-1 rounded-sm border border-border-subtle bg-bg-panel px-3 text-control text-text-primary outline-none focus:border-[var(--color-accent)] focus:shadow-[var(--focus-ring)]${props.clearSpace ? " pr-[62px]" : " pr-[38px]"}`}
 			/>
 			<Button
 				type="button"
