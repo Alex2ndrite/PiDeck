@@ -62,3 +62,8 @@ playwright-report/
 .tmp/
 .beui-inspect
 beui-todo-list.tmp.json
+
+# Star history 图表由 CI（narayann7/star-history-action）定时生成，
+# 不纳入版本控制：文件被忽略后 action 的 git add 会静默跳过、不再提交，
+# 避免 main/dev 同步时反复冲突（仓库内也无任何文件引用这些图）
+assets/star-history/
