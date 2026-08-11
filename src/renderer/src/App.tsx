@@ -168,12 +168,20 @@ export function App() {
         {/* 与 EmptyState / index.html 启动标同一 path，避免 LogoMark 再套一层不同底色 */}
         <div className="boot-logo root-loading-logo" aria-hidden="true">
           <svg viewBox="140 140 520 520" width="48" height="48">
+            <defs>
+              <linearGradient id="root-loading-logo-silver" x1="0.2" y1="0" x2="0.8" y2="1">
+                <stop stopColor="#ffffff" />
+                <stop offset="0.5" stopColor="#f4f4f5" />
+                <stop offset="1" stopColor="#a7a8ab" />
+              </linearGradient>
+            </defs>
             <path
-              fill="#fff"
+              fill="url(#root-loading-logo-silver)"
               fillRule="evenodd"
               d="M165.29 165.29H517.36V400H400V517.36H282.65V634.72H165.29ZM282.65 282.65V400H400V282.65Z"
             />
-            <path fill="#fff" d="M517.36 400H634.72V634.72H517.36Z" />
+            <path fill="url(#root-loading-logo-silver)" d="M517.36 400H634.72V634.72H517.36Z" />
+            <circle cx="614" cy="172" r="19" fill="#3b9cff" />
           </svg>
         </div>
         <strong>PiDeck</strong>

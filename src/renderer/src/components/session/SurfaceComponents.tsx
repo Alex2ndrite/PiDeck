@@ -363,16 +363,25 @@ function formatCompact(value?: number | null) {
 export function LogoMark() {
 	return (
 		<div
-			className="logo-mark relative grid size-8 place-items-center overflow-hidden rounded-md bg-primary text-primary-foreground shadow-sm"
+			className="logo-mark relative grid size-8 place-items-center overflow-hidden rounded-md bg-black text-white shadow-sm ring-1 ring-white/15"
 			aria-label={t("app.logoLabel")}
 		>
+			{/* 使用独立渐变而不是 currentColor，让 LogoMark 在浅色/深色主题下都保持黑底白标的品牌对比。 */}
 			<svg viewBox="140 140 520 520" width="18" height="18" aria-hidden="true">
+				<defs>
+					<linearGradient id="logo-mark-silver" x1="0.2" y1="0" x2="0.8" y2="1">
+						<stop stopColor="#ffffff" />
+						<stop offset="0.5" stopColor="#f4f4f5" />
+						<stop offset="1" stopColor="#a7a8ab" />
+					</linearGradient>
+				</defs>
 				<path
-					fill="currentColor"
+					fill="url(#logo-mark-silver)"
 					fillRule="evenodd"
 					d="M165.29 165.29H517.36V400H400V517.36H282.65V634.72H165.29ZM282.65 282.65V400H400V282.65Z"
 				/>
-				<path fill="currentColor" d="M517.36 400H634.72V634.72H517.36Z" />
+				<path fill="url(#logo-mark-silver)" d="M517.36 400H634.72V634.72H517.36Z" />
+				<circle cx="614" cy="172" r="19" fill="#3b9cff" />
 			</svg>
 		</div>
 	);
