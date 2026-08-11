@@ -1,4 +1,5 @@
 import { ChevronDown } from "lucide-react";
+import { useAtomValue } from "jotai";
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject, type ReactNode, type MutableRefObject } from "react";
 import {
   type GroupImperativeHandle,
@@ -24,7 +25,8 @@ import { ComposerArea } from "./ComposerArea";
 import { SessionRuntimeDock } from "./SessionRuntimeDock";
 import { QueuedPromptPanel } from "./ComposerPanels";
 import { useSessionPaneServices } from "./SessionPaneServices";
-import { COMPOSER_DEFAULT_HEIGHT, COMPOSER_MIN_HEIGHT, TIMELINE_MIN_HEIGHT, growComposerWithinTimelineBudget } from "../../rendererUtils";
+import { COMPOSER_DEFAULT_HEIGHT, COMPOSER_MIN_HEIGHT, TIMELINE_MIN_HEIGHT, growComposerWithinTimelineBudget, displayProjectDirectoryName } from "../../rendererUtils";
+import { projectByIdAtomFamily, sessionRecordByIdAtomFamily } from "../../atoms";
 import type { EnqueuePromptSnapshot } from "../../hooks/useSessionSend";
 
 // terminal 程序化布局保护窗口（ms）：programResize 后该窗口内的 terminal
@@ -171,6 +173,11 @@ export function SessionView({
   abortAgent,
 }: SessionViewProps) {
   const paneServices = useSessionPaneServices();
+  // 会话身份面包屑的项目名：多 Tab/分屏时提醒当前会话属于哪个项目。
+  // 从会话记录解析 projectId → 项目目录名；无记录（匿名会话等）时省略。
+  const sessionRecord = useAtomValue(sessionRecordByIdAtomFamily(sessionId));
+  const project = useAtomValue(projectByIdAtomFamily(sessionRecord?.projectId ?? ""));
+  const projectName = project ? displayProjectDirectoryName(project) : undefined;
   // #115 U5 垂直轴：timeline | composer | terminal 三段由 react-resizable-panels 接管。
   // composer 高度本地持有（px），终端高度/折叠仍由 useTerminalDock 的 per-agent
   // 状态持有，拖拽结果经 onResize 回写，外部状态经 imperative API 同步。
@@ -433,6 +440,7 @@ export function SessionView({
       <SessionHeader
         headerRef={chatHeaderRef}
         title={sessionTitle}
+        projectName={projectName}
         paneTitle={splitPane ? sessionTitle : undefined}
         onExitSplit={
           splitPane ? () => paneServices.exitSessionSplit(sessionId) : undefined

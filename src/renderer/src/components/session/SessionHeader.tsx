@@ -8,8 +8,10 @@ import {
   sessionRecordByIdAtomFamily,
   sessionRuntimeBySessionIdAtomFamily,
   sessionSendStateByIdAtom,
+  projectByIdAtomFamily,
 } from "../../atoms";
 import { t } from "../../i18n";
+import { displayProjectDirectoryName } from "../../rendererUtils";
 import { Button } from "../ui-shadcn/button";
 import { SessionStatus } from "./SurfaceParts";
 
@@ -22,6 +24,11 @@ type HeaderActions = {
   embedded?: boolean;
   /** 头部左侧槽位（Todo/Plan 等扩展 widget chips）；会话标题迁走后左侧留空，widget 入口落在这里。 */
   widgetChips?: ReactNode;
+  /**
+   * 项目目录名（面包屑左段）：多 Tab/分屏时提醒当前会话属于哪个项目。
+   * legacy 模式由上层传入；session 模式可从会话记录自行解析。
+   */
+  projectName?: string;
   /**
    * 分屏栏内显示本栏会话标题，避免「共享顶栏 Tab ↔ 左右栏」对不上号。
    * 单栏时标题已在外置 Tab 上，通常不传。
@@ -78,6 +85,12 @@ export function SessionHeader(props: SessionHeaderProps) {
     ? runtime?.status === "starting" || sendState?.status === "activating"
     : legacyProps.isStarting;
   const isAnonymous = props.isAnonymous || (sessionMode && session?.noSession === true);
+  // 项目名：session 模式从会话记录解析 projectId → 项目目录名；
+  // legacy 模式（无 sessionId）由上层通过 projectName 传入。
+  const project = useAtomValue(projectByIdAtomFamily(session?.projectId ?? ""));
+  const projectName = props.projectName ?? (project ? displayProjectDirectoryName(project) : undefined);
+  // 会话标题：分屏优先用 paneTitle，其次 legacy title / session 模式记录标题。
+  const title = props.paneTitle ?? (sessionMode ? session?.title?.trim() || t("app.chatProject") : props.title);
 
   const actions = (
     <div
@@ -120,12 +133,26 @@ export function SessionHeader(props: SessionHeaderProps) {
             <Maximize2 className="size-3.5" aria-hidden="true" />
           </Button>
         ) : null}
-        {props.paneTitle ? (
+        {/* 会话身份面包屑：项目名 / 会话标题。
+            truncate + max-w 限制：项目名最长约 160px，标题吃剩余空间；
+            悬浮 title 显示完整文本。 */}
+        {projectName ? (
           <span
-            className="session-pane-title min-w-0 truncate text-caption font-medium text-foreground"
-            title={props.paneTitle}
+            className="max-w-40 shrink truncate text-caption text-muted-foreground"
+            title={projectName}
           >
-            {props.paneTitle}
+            {projectName}
+          </span>
+        ) : null}
+        {projectName && title ? (
+          <span className="shrink-0 text-caption text-muted-foreground/70" aria-hidden="true">/</span>
+        ) : null}
+        {title ? (
+          <span
+            className="session-pane-title min-w-0 max-w-96 truncate text-caption font-medium text-foreground"
+            title={title}
+          >
+            {title}
           </span>
         ) : (
           <span className="min-w-0" aria-hidden="true" />

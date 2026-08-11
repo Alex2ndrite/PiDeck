@@ -175,7 +175,9 @@ function WidgetChip(props: {
 					type="button"
 					variant="outline"
 					size="sm"
-					className={`h-7 max-w-44 gap-1.5 rounded-md px-2 text-caption${allDone ? " border-[color-mix(in_srgb,var(--color-success)_50%,transparent)] text-[var(--color-success)]" : ""}`}
+					// h-[22px] 与右侧状态徽章（.session-status span 高度 22px）对齐，
+					// 避免同一行内 TODO 徽章明显偏高；边框用同款弱化色保持节奏一致。
+					className={`h-[22px] max-w-44 gap-1.5 rounded-md border-border-subtle px-2 text-caption${allDone ? " border-[color-mix(in_srgb,var(--color-success)_50%,transparent)] text-[var(--color-success)]" : ""}`}
 					title={title}
 				>
 					<Icon size={13} strokeWidth={2} aria-hidden="true" />
