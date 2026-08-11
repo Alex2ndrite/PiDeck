@@ -1114,42 +1114,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.picker-palette-preview-btn {
-  flex: 0 0 auto;
-  opacity: 0.5;
-  transition: opacity 0.12s;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 0;
-  background: transparent;
-  padding: 4px;
-  border-radius: var(--radius-xs);
-  cursor: pointer;
-  color: var(--color-text-tertiary);
-}
-.picker-palette-preview-btn:hover {
-  opacity: 1;
-  color: var(--color-text-primary);
-  background: var(--color-bg-active);
-}
 /* 模板预览弹框 */
-.picker-preview-back-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 0;
-  background: transparent;
-  padding: 4px;
-  margin-right: 4px;
-  border-radius: var(--radius-xs);
-  cursor: pointer;
-  color: var(--color-text-tertiary);
-}
-.picker-preview-back-btn:hover {
-  color: var(--color-text-primary);
-  background: var(--color-bg-active);
-}
 .picker-preview-inline {
   flex: 1;
   min-height: 0;
