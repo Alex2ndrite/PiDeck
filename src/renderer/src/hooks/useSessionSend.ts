@@ -369,9 +369,18 @@ export function useSessionSend(options: UseSessionSendOptions) {
       }
 
       const outcome = classifySessionPromptResult(result);
-      const deliveryError = "error" in result
-        ? translateI18nDescriptor(result, result.error)
-        : "Prompt was not accepted";
+      // toast 文案 = 本地化提示 + 具体原因：translateI18nDescriptor 命中通用 key 时
+      // 只返回“消息发送失败。”这类概括，debugDetails（RPC 超时/pi 拒绝原文）必须带出，
+      // 否则用户无从知道失败根因；同值去重、截断防 toast 过长。
+      let deliveryError = "Prompt was not accepted";
+      let toastMessage = deliveryError;
+      if ("error" in result) {
+        deliveryError = translateI18nDescriptor(result, result.error);
+        const details = result.debugDetails && result.debugDetails !== deliveryError
+          ? `（${result.debugDetails.length > 140 ? `${result.debugDetails.slice(0, 140)}…` : result.debugDetails}）`
+          : "";
+        toastMessage = `${deliveryError}${details}`;
+      }
       if (outcome === "accepted") {
         options.recordPromptHistory?.(sessionId, message);
         setSendState({ sessionId, state: { status: "idle" } });
@@ -396,7 +405,7 @@ export function useSessionSend(options: UseSessionSendOptions) {
           sessionId,
           state: { status: "error", requestId, error: deliveryError },
         });
-        options.showError?.(deliveryError, 4000);
+        options.showError?.(toastMessage, 4000);
       }
     } catch (error) {
       setSendState({
