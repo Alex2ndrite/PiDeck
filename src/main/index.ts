@@ -2769,6 +2769,9 @@ app.whenReady().then(async () => {
 	await applyDesktopProxy(settingsStore.get());
 	await webServiceManager.applySettings(settingsStore.get()).catch((error) => {
 		console.error("Failed to start web service:", error);
+		void appLogger.warn("web", "Web service disabled after apply failure", {
+			error: error instanceof Error ? error.message : String(error),
+		});
 		void settingsStore.update({ webServiceEnabled: false });
 	});
 	registerIpc();

@@ -3,6 +3,7 @@ import { mkdir, copyFile, readdir, readFile } from "node:fs/promises";
 import { join, resolve, sep } from "node:path";
 import { ipcChannels } from "../../shared/ipc";
 import { trashPath } from "../fs/trash";
+import { getAppLogger } from "../logging/sharedLogger";
 
 /** 背景图存放目录（userData/backgrounds/），协议只服务该目录，杜绝任意本地文件读取 */
 export function backgroundsDir(): string {
@@ -51,6 +52,7 @@ export async function removeBackgroundImage(name: string): Promise<void> {
 	if (!/^bg-[a-zA-Z0-9.]+$/.test(name)) return;
 	// 用户主动删除背景图：走系统回收站（可恢复）；失败抛错由调用方呈现。
 	await trashPath(join(backgroundsDir(), name), { source: "backgrounds:remove" });
+	void getAppLogger()?.info("backgrounds", "Background image removed", { name });
 }
 
 /**
