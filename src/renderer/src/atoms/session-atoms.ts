@@ -922,6 +922,10 @@ export const applySessionRuntimeEventAtom = atom(
             runtimeGeneration: event.runtimeGeneration,
             status: "detached" as const,
             updatedAt: 0,
+            // 新绑定不能继承旧 agent 的运行时状态：清掉残留 state，
+            // 否则底栏 state?.modelName 优先于 record 显示旧模型（模型切换后显示旧）。
+            // 真实值由后续 agents:runtime-state 事件（含 applyPreferences 后的主动推送）填充。
+            state: undefined,
           }
         : currentRuntime),
       agentId: event.agentId,

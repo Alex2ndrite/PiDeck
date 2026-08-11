@@ -1744,6 +1744,17 @@ export class AgentManager {
 		}
 	}
 
+	/**
+	 * 主动推送一次完整 runtime state（get_state + 最新工具状态补丁）给渲染层。
+	 *
+	 * 懒启动/重启链路的 applyPreferences（setModel/setThinking）之后调用：
+	 * setModel 内部只 emitState（AgentTab 无 state 字段），若不额外推送，
+	 * 渲染层底栏会停留在旧绑定残留的 state 或仅 record 回退，看不到应用后的真实模型。
+	 */
+	async publishRuntimeState(agentId: string): Promise<void> {
+		await this.emitRuntimeState(agentId);
+	}
+
 	async cycleModel(agentId: string) {
 		const runtime = this.requireRuntime(agentId);
 		await runtime.process.client.request({ type: "cycle_model" }, 60_000);

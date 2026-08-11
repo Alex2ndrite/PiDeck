@@ -146,6 +146,56 @@ test("project capability selectors ignore unrelated canonical Session updates", 
   unsubscribe();
 });
 
+test("replacement binding clears stale runtime state before new events arrive", () => {
+  const store = createStore();
+  store.set(atoms.replaceProjectSessionsAtom, {
+    projectId: "project-a",
+    sessions: [session("session-a", "project-a")],
+  });
+  // 旧绑定 agent-a（generation 1）带旧模型 state
+  store.set(atoms.replaceSessionRuntimesAtom, [
+    runtime("session-a", "agent-a", "project-a", 1),
+  ]);
+  store.set(atoms.applySessionRuntimeEventAtom, runtimeEvent(
+    "session-a",
+    "agent-a",
+    1,
+    "agents:runtime-state",
+    { agentId: "agent-a", state: { modelName: "Old Model", provider: "old" } },
+  ));
+  assert.equal(store.get(atoms.sessionRuntimeByIdAtom)["session-a"].state.modelName, "Old Model");
+
+  // 新绑定 agent-b（generation 2）attach：只推 agents:state（tab 无 state 字段），
+  // 模拟懒启动后 applyPreferences 的 runtime-state 事件尚未到达的窗口期。
+  store.set(atoms.applySessionRuntimeEventAtom, runtimeEvent(
+    "session-a",
+    "agent-b",
+    2,
+    "agents:state",
+    {
+      id: "agent-b",
+      projectId: "project-a",
+      cwd: "C:/project-a",
+      title: "replacement",
+      status: "idle",
+      createdAt: 2,
+    },
+  ));
+  // bindingChanged 必须清空残留 state：底栏 state?.modelName 回退到 record，而不是旧模型。
+  assert.equal(store.get(atoms.sessionRuntimeByIdAtom)["session-a"].agentId, "agent-b");
+  assert.equal(store.get(atoms.sessionRuntimeByIdAtom)["session-a"].state, undefined);
+
+  // 新绑定收到 runtime-state 事件后 state 正常填充
+  store.set(atoms.applySessionRuntimeEventAtom, runtimeEvent(
+    "session-a",
+    "agent-b",
+    2,
+    "agents:runtime-state",
+    { agentId: "agent-b", state: { modelName: "New Model", provider: "new" } },
+  ));
+  assert.equal(store.get(atoms.sessionRuntimeByIdAtom)["session-a"].state.modelName, "New Model");
+});
+
 test("late events from runtime A cannot revive its inventory or capabilities after replacement B", () => {
   const store = createStore();
   store.set(atoms.replaceProjectSessionsAtom, {
