@@ -658,6 +658,7 @@ export const zhCN = {
   "app.promptTemplateEmpty": "暂无模板。请先在设置页添加 Prompt 模板",
   "app.promptTemplateScopeGlobal": "全局",
   "app.promptTemplateScopeProject": "项目",
+  "app.promptTemplateEmptyBody": "提示词模板「/{name}」正文为空，请先编辑模板补充内容",
   "common.details": "详情",
   "common.disabled": "禁用",
   "common.error": "错误",
@@ -2219,6 +2220,7 @@ export const zhCN = {
   "web.sendNoProject": "当前没有可用项目，请先在左侧添加一个项目目录。",
   "web.noMessages": "暂无消息",
   "web.noSessions": "该项目暂无会话，点 + 新建",
+  "web.moreSessions": "更多会话 ({count})",
   "web.scrollToBottom": "滚动到底部",
   "web.streamFailed": "流式连接失败",
 } as const;

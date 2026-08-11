@@ -25,7 +25,7 @@ import {
   buildComposerPromptSubmission,
   expandPromptTemplates,
 } from "../composerBehavior";
-import { translateI18nDescriptor } from "../i18n";
+import { t, translateI18nDescriptor } from "../i18n";
 
 export type EnqueuePromptSnapshot = {
   displayText: string;
@@ -154,6 +154,16 @@ export function useSessionSend(options: UseSessionSendOptions) {
     }
   }
 
+  /** 模板正文为空时统一的拦截提示：error 状态 + toast（带模板名，便于定位编辑）。 */
+  function rejectEmptyTemplate(templateName: string) {
+    const message = t("app.promptTemplateEmptyBody", { name: templateName });
+    setSendState({
+      sessionId: options.sessionId,
+      state: { status: "error", error: message },
+    });
+    options.showError?.(message, 4500);
+  }
+
   return async function sendSessionPrompt(
     streamingBehavior?: "steer" | "followUp",
   ) {
@@ -262,10 +272,16 @@ export function useSessionSend(options: UseSessionSendOptions) {
     //   steer    → flushQueuedSteerPrompts (while agent is busy)
     //   followUp → flushNextQueuedPrompt (when agent becomes idle)
     if (options.enqueue && (streamingBehavior === "steer" || streamingBehavior === "followUp")) {
-      const { message: expandedMessage } = expandPromptTemplates(
+      const { message: expandedMessage, emptyTemplateName } = expandPromptTemplates(
         message,
         options.templates,
       );
+      if (!expandedMessage.trim() && emptyTemplateName) {
+        // 模板正文为空：拦截排队，提示用户先补正文（否则入队的是空白消息）
+        sendingSessionIdsRef.current.delete(sourceSessionId);
+        rejectEmptyTemplate(emptyTemplateName);
+        return;
+      }
       const enqueued = options.enqueue(sessionId, {
         displayText: message,
         message: expandedMessage,
@@ -327,10 +343,19 @@ export function useSessionSend(options: UseSessionSendOptions) {
       return;
     }
 
-    const { message: expandedMessage, description } = expandPromptTemplates(
-      preparedMessage,
-      options.templates,
-    );
+    const { message: expandedMessage, description, emptyTemplateName } =
+      expandPromptTemplates(
+        preparedMessage,
+        options.templates,
+      );
+    if (!expandedMessage.trim() && emptyTemplateName) {
+      // 模板正文为空（UI 新建模板只写 frontmatter 未填正文）：拦截发送，
+      // 给明确提示而不是把空白消息发到主进程被拒为“消息不能为空”。
+      restoreRejectedSnapshot(sessionId, message, imageSnapshot);
+      rejectEmptyTemplate(emptyTemplateName);
+      sendingSessionIdsRef.current.delete(sourceSessionId);
+      return;
+    }
     const submission = buildComposerPromptSubmission(
       expandedMessage,
       store.get(sessionComposerModeByIdAtom)[sessionId] ?? "normal",

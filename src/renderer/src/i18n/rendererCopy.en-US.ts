@@ -665,6 +665,7 @@ export const enUS: Record<TranslationKey, string> = {
   "app.promptTemplateEmpty": "No templates yet. Add some in Settings first",
   "app.promptTemplateScopeGlobal": "Global",
   "app.promptTemplateScopeProject": "Project",
+  "app.promptTemplateEmptyBody": "Prompt template /{name} has no content. Edit the template to add content first.",
   "common.details": "Details",
   "common.disabled": "Disabled",
   "common.error": "Error",
@@ -2255,6 +2256,7 @@ export const enUS: Record<TranslationKey, string> = {
   "web.sendNoProject": "No project available. Add a project directory from the sidebar first.",
   "web.noMessages": "No messages",
   "web.noSessions": "No sessions in this project yet, tap + to create one",
+  "web.moreSessions": "More sessions ({count})",
   "web.scrollToBottom": "Scroll to bottom",
   "web.streamFailed": "Stream failed",
 };
