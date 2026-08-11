@@ -381,7 +381,6 @@ export function LogoMark() {
 					d="M165.29 165.29H517.36V400H400V517.36H282.65V634.72H165.29ZM282.65 282.65V400H400V282.65Z"
 				/>
 				<path fill="url(#logo-mark-silver)" d="M517.36 400H634.72V634.72H517.36Z" />
-				<circle cx="614" cy="172" r="19" fill="#3b9cff" />
 			</svg>
 		</div>
 	);
