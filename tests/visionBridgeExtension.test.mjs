@@ -634,6 +634,8 @@ test("describeImages: onBatch reports per-image timing and results", async () =>
 	assert.ok(batch, "onBatch 必须被调用");
 	assert.equal(batch.items.length, 2);
 	assert.equal(batch.items[0].index, 1);
+	assert.equal(batch.items[0].imageHash, ext.imageHash("CCCC"), "事件带图片哈希供渲染层匹配实时消息");
+	assert.equal(batch.items[1].imageHash, ext.imageHash("DDDD"));
 	assert.equal(batch.items[0].ok, true);
 	assert.equal(batch.items[0].description, "红色按钮的截图");
 	assert.equal(batch.items[0].outputTokens, 33);

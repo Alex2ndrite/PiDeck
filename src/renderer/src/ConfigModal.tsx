@@ -21,6 +21,7 @@ import {
 	KeyRound,
 	Puzzle,
 	Settings2,
+	Shield,
 	ShieldCheck,
 	Sparkles,
 } from "lucide-react";
@@ -37,6 +38,7 @@ import { SettingsTab } from "./config/SettingsTab";
 import { PromptsTab } from "./config/PromptsTab";
 import { SkillsTab } from "./config/SkillsTab";
 import { ExtensionsTab } from "./config/ExtensionsTab";
+import { SecuritySection } from "./components/config/SecuritySection";
 import { t } from "./i18n";
 import { CodeMirrorEditor } from "./components/app/CodeMirrorEditor";
 import { translateBuiltinPromptDescription } from "./composerBehavior";
@@ -68,6 +70,7 @@ const DEFAULT_MODEL_CONFIG: Pick<
 // loadConfig 等既有依赖零改动。
 type ConfigSection =
 	| "config"
+	| "security"
 	| "skills"
 	| "prompts"
 	| "extensions";
@@ -83,7 +86,7 @@ function sectionTabValue(section: ConfigSection, tab: ConfigTab): string {
 const CONFIG_LAST_TAB_KEY = "pideck-config-last-tab";
 
 /** 全部合法 section / config 组子 tab，用于校验持久化值（避免版本更新后残留旧值导致无高亮）。 */
-const CONFIG_SECTIONS: readonly ConfigSection[] = ["config", "skills", "prompts", "extensions"];
+const CONFIG_SECTIONS: readonly ConfigSection[] = ["config", "security", "skills", "prompts", "extensions"];
 const CONFIG_TABS: readonly ConfigTab[] = ["models", "auth", "settings", "trust", "raw"];
 
 /**
@@ -1524,6 +1527,10 @@ function ConfigModalContent(props: ConfigModalProps) {
 					</div>
 					<div className="config-sidebar-group grid gap-0.5">
 						<span className="px-2 pb-1 text-micro font-semibold text-muted-foreground">{t("config.group.agent")}</span>
+						<TabsTrigger value="security" className="config-nav-btn h-8 justify-start gap-1.5 px-2.5 text-control font-medium">
+							<span className="config-nav-icon"><Shield size={14} aria-hidden="true" /></span>
+							{t("config.nav.security")}
+						</TabsTrigger>
 						<TabsTrigger value="extensions" className="config-nav-btn h-8 justify-start gap-1.5 px-2.5 text-control font-medium">
 							<span className="config-nav-icon"><Puzzle size={14} aria-hidden="true" /></span>
 							{t("config.nav.extensions")}
@@ -1748,6 +1755,12 @@ function ConfigModalContent(props: ConfigModalProps) {
 							onRefresh={() => void refreshExtensions(true)}
 							onUninstall={setUninstallExtensionConfirm}
 						/>
+						</div>
+					</TabsContent>
+
+					<TabsContent value="security" className="config-main min-w-0">
+						<div className="config-content">
+						<SecuritySection />
 						</div>
 					</TabsContent>
 

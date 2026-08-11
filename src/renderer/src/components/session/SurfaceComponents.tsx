@@ -99,6 +99,7 @@ import {
 	ChevronsDownUp,
 	GitBranch,
 	Eye,
+	Loader2,
 	FileText,
 	Folder,
 	Globe2,
@@ -130,6 +131,12 @@ import { normalizeSessionPathForCompare } from "../../agentListDisplay";
 import { t } from "../../i18n";
 import { showNotice } from "../../utils/notice";
 import { Button } from "../ui-shadcn/button";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuTrigger,
+} from "../ui-shadcn/dropdown-menu";
 import type {
 	AgentRuntimeState,
 	AgentTab,
@@ -164,7 +171,8 @@ import { GRID_COLS, CELL_W, CELL_H, MODE_ROW, MODE_FRAMES } from "../../pet/PetS
 
 import type { WorkspaceDrawerPanel } from "../../hooks/useWorkspacePanels";
 import { formatDuration, formatTime, stripAnsi } from "./TimelineFormat";
-import { extractVisionBridgeBlocks } from "../../utils/visionBridgeBlocks";
+import { extractVisionBridgeBlocks, matchVisionBridgeEvent } from "../../utils/visionBridgeBlocks";
+import { visionImageHashes } from "../../utils/visionImageHash";
 import { ToolCard, ToolGroupCard, type DiffFileHandler } from "./ToolCallComponents";
 import {
 	AskQuestionCard,
@@ -183,9 +191,11 @@ import { MultiSelectModal } from "./MessageShareModal";
 // - 已换装 shadcn Button：turn-row-action-btn / user-turn-action-btn / copy-menu-trigger
 //   （ghost + size-7 + hover:bg-muted，对齐旧透明小钮；避免 hover:bg-accent 绿底）。
 // - 保留原生 button（样式完全由自定义 CSS 驱动，直接换装会被 Tailwind utilities 覆盖默认尺寸
-//   导致回归，需先做 CSS→utility 迁移）：copy-menu-popover 菜单项、
-//   code-copy、execution-summary-toggle/collapse、image-preview-close、outline-* 系列、
-//   scratch/terminal/files/git/editors/browser-entry、空状态创建按钮。迁移路径见 P2 CSS 收口。
+//   导致回归，需先做 CSS→utility 迁移）：code-copy、execution-summary-toggle/collapse、
+//   image-preview-close、outline-* 系列、scratch/terminal/files/git/editors/browser-entry、
+//   空状态创建按钮。迁移路径见 P2 CSS 收口。
+//   （copy-menu-popover 菜单项已于 2026-08 迁移到 shadcn DropdownMenu，保留锚点类仅用于
+//   多选导出/截图复制的节点排除。）
 // ============================================================
 
 type SessionModifiedFile = {
@@ -512,33 +522,13 @@ export function CopyMenu(props: {
 	targetRef: React.RefObject<HTMLElement | null>;
 	className?: string;
 }) {
-	const [open, setOpen] = useState(false);
 	const [copied, setCopied] = useState<string | null>(null);
-	const [menuStyle, setMenuStyle] = useState<CSSProperties>({});
-	const triggerRef = useRef<HTMLButtonElement | null>(null);
-	const closeTimerRef = useRef<number | null>(null);
-	const clearCloseTimer = () => {
-		if (closeTimerRef.current !== null) {
-			window.clearTimeout(closeTimerRef.current);
-			closeTimerRef.current = null;
-		}
-	};
-	const scheduleClose = () => {
-		// 操作栏由 hover/focus 控制显隐；离开后主动收起菜单，避免下次 hover 时复用旧 open 状态。
-		clearCloseTimer();
-		closeTimerRef.current = window.setTimeout(() => {
-			setOpen(false);
-			closeTimerRef.current = null;
-		}, 180);
-	};
-	useEffect(() => clearCloseTimer, []);
 	const copy = async (kind: "text" | "markdown" | "image") => {
 		try {
 			if (kind === "text") await navigator.clipboard.writeText(props.text);
 			if (kind === "markdown") await navigator.clipboard.writeText(props.markdown);
 			if (kind === "image" && props.targetRef.current) await copyElementAsPng(props.targetRef.current);
 			setCopied(kind);
-			setOpen(false);
 			showNotice(t("copy.success"), 1200);
 			window.setTimeout(() => setCopied(null), 1800);
 		} catch {
@@ -546,43 +536,43 @@ export function CopyMenu(props: {
 			showNotice(t("copy.failed"), 2000);
 		}
 	};
-	const toggleOpen = () => {
-		clearCloseTimer();
-		const rect = triggerRef.current?.getBoundingClientRect();
-		if (rect) {
-			setMenuStyle({
-				position: "fixed",
-				top: rect.bottom + 4,
-				left: Math.min(window.innerWidth - 156, Math.max(8, rect.right - 148)),
-			});
-		}
-		setOpen((value) => !value);
-	};
 	return (
-		<div
-			className={`copy-menu ${props.className ?? ""}`}
-			onPointerEnter={clearCloseTimer}
-			onPointerLeave={scheduleClose}
-		>
-			<Button
-				ref={triggerRef}
-				variant="ghost"
-				size="icon-sm"
-				className="copy-menu-trigger size-7 rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground"
-				type="button"
-				onClick={toggleOpen}
-				aria-expanded={open}
-				title={t("common.copy")}
-			>
-				{copied ? <Check size={14} /> : <Copy size={14} />}
-			</Button>
-			{open && (
-				<div className="copy-menu-popover" style={menuStyle}>
-					<button type="button" onClick={() => void copy("text")}>{t("copy.asText")}</button>
-					<button type="button" onClick={() => void copy("markdown")}>{t("copy.asMarkdown")}</button>
-					<button type="button" onClick={() => void copy("image")}>{t("copy.asImage")}</button>
-				</div>
-			)}
+		<div className={`copy-menu ${props.className ?? ""}`}>
+			{/* 拆分按钮：主按钮点击直接复制纯文本（默认动作，不再弹菜单）；
+			   右侧小箭头展开完整菜单（复制为 Markdown / 图片）。弹层走 shadcn
+			   DropdownMenu：Radix 定位 + animate-in/out + dropdown-stagger 错峰动画。 */}
+			<div className="flex items-center overflow-hidden rounded-sm border border-transparent hover:border-border">
+				<Button
+					variant="ghost"
+					size="icon-sm"
+					className="copy-menu-trigger size-7 rounded-none text-muted-foreground hover:bg-muted hover:text-foreground"
+					type="button"
+					onClick={() => void copy("text")}
+					title={t("common.copy")}
+				>
+					{copied ? <Check size={14} /> : <Copy size={14} />}
+				</Button>
+				<DropdownMenu>
+					<DropdownMenuTrigger asChild>
+						<Button
+							variant="ghost"
+							size="icon-sm"
+							className="size-6 rounded-none border-l border-border/60 px-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+							type="button"
+							aria-label={t("copy.moreOptions")}
+							title={t("copy.moreOptions")}
+						>
+							<ChevronDown size={12} />
+						</Button>
+					</DropdownMenuTrigger>
+					{/* 保留 copy-menu-popover 锚点类：多选导出/截图复制仍靠它排除菜单节点 */}
+					<DropdownMenuContent align="end" className="copy-menu-popover min-w-[132px]">
+						<DropdownMenuItem onSelect={() => void copy("text")}>{t("copy.asText")}</DropdownMenuItem>
+						<DropdownMenuItem onSelect={() => void copy("markdown")}>{t("copy.asMarkdown")}</DropdownMenuItem>
+						<DropdownMenuItem onSelect={() => void copy("image")}>{t("copy.asImage")}</DropdownMenuItem>
+					</DropdownMenuContent>
+				</DropdownMenu>
+			</div>
 		</div>
 	);
 }
@@ -832,6 +822,23 @@ export const UserBubble = memo(function UserBubble(props: {
 			setVisionLoading(false);
 		}
 	}, [visionEvents, visionLoading]);
+	// 实时消息的视觉桥卡片：pi 只把转换结果写会话文件、不推送给实时消息流，
+	// 因此对带图片的乐观消息轮询事件文件，按图片哈希匹配本次转换批次。
+	const [imageHashes, setImageHashes] = useState<string[] | null>(null);
+	const [visionMatch, setVisionMatch] = useState<VisionBridgeEvent | null>(null);
+	const [visionPolling, setVisionPolling] = useState(false);
+	// 图片哈希与扩展侧 imageHash（sha256 前 24 位）同源，跨进程可匹配
+	useEffect(() => {
+		const images = message.images ?? [];
+		if (images.length === 0) return;
+		let cancelled = false;
+		void visionImageHashes(images.map((image) => image.data)).then((hashes) => {
+			if (!cancelled) setImageHashes(hashes);
+		});
+		return () => {
+			cancelled = true;
+		};
+	}, [message.images]);
 	// 激活编辑时自动滚动到编辑区
 	useEffect(() => {
 		if (editing && editAreaRef.current) {
@@ -843,6 +850,42 @@ export const UserBubble = memo(function UserBubble(props: {
 	// 用户才能直观看到「走了视觉桥」以及转换结果/失败原因，而不是一段方括号文本。
 	const vision = extractVisionBridgeBlocks(stripAnsi(message.text));
 	const visionBlocks = vision.blocks;
+	// 发送后短窗口内轮询事件文件（0/700/1800/3200ms），命中即渲染实时卡片，超时静默放弃。
+	// 依赖 visionBlocks.length：历史消息文本里已有标记块时走文本卡片，不再轮询。
+	useEffect(() => {
+		const images = message.images ?? [];
+		if (images.length === 0 || visionBlocks.length > 0 || !imageHashes || imageHashes.length === 0) {
+			return;
+		}
+		let cancelled = false;
+		let timer: number | undefined;
+		const delays = [0, 700, 1800, 3200];
+		let attempt = 0;
+		const poll = async () => {
+			if (cancelled) return;
+			setVisionPolling(true);
+			try {
+				const info = await window.piDesktop.config.visionGetEvents();
+				if (cancelled) return;
+				const matched = matchVisionBridgeEvent(info.events, imageHashes, message.timestamp);
+				if (matched) {
+					setVisionMatch(matched);
+					setVisionPolling(false);
+					return;
+				}
+			} catch {
+				// 拉取失败静默，等下一轮重试
+			}
+			attempt++;
+			if (attempt < delays.length) timer = window.setTimeout(poll, delays[attempt]);
+			else setVisionPolling(false);
+		};
+		void poll();
+		return () => {
+			cancelled = true;
+			if (timer !== undefined) window.clearTimeout(timer);
+		};
+	}, [imageHashes, message.images, message.timestamp, visionBlocks.length]);
 	// 提取 pi 展开后的 <skill> 块：渲染为 skill 徽标，并从正文里剥除 XML
 	const { skills, text: bodyText } = extractSkillBlocks(vision.text);
 	const cleanText = bodyText;
@@ -950,6 +993,76 @@ export const UserBubble = memo(function UserBubble(props: {
 								{block.reason && (
 									<p className="mt-1.5 text-[13px] leading-[1.6] break-words text-danger/90">
 										{block.reason}
+									</p>
+								)}
+							</div>
+						),
+					)}
+				</div>
+			)}
+			{/* 实时消息：文本里没有标记块（转换结果只写会话文件），用事件文件匹配渲染卡片 */}
+			{visionBlocks.length === 0 && visionPolling && !visionMatch && (
+				<div className="mb-2 flex w-full max-w-[min(82%,64ch)] flex-col items-end">
+					<div className="flex items-center gap-1.5 rounded-lg border border-border bg-background/70 px-2.5 py-1.5 text-[11px] text-muted-foreground">
+						<Loader2 size={11} className="animate-spin" />
+						<span>{t("app.visionConverting")}</span>
+					</div>
+				</div>
+			)}
+			{visionBlocks.length === 0 && visionMatch && (
+				<div className="mb-2 flex w-full max-w-[min(82%,64ch)] flex-col items-end gap-1.5">
+					{visionMatch.items.map((item) =>
+						item.ok ? (
+							// 成功：徽章行（图标 + 视觉桥已查看 + 图片序号）+ 描述正文（与历史标记卡片同款）
+							<div
+								key={item.index}
+								className="vision-bridge-card w-full min-w-0 rounded-lg border border-border bg-background/70 p-2.5"
+								title={t("app.visionBridgeSeenDesc")}
+							>
+								<div className="flex items-center justify-between gap-2">
+									<div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+										<Eye size={12} className="shrink-0 text-[var(--color-accent)]" />
+										<span>{t("app.visionBridgeSeen")}</span>
+										<span className="text-muted-foreground/60">·</span>
+										<span>{t("app.visionBridgeImageLabel", { index: item.index })}</span>
+									</div>
+									<button
+										type="button"
+										className="inline-flex shrink-0 items-center gap-0.5 rounded-sm px-1 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+										onClick={() => {
+											setVisionDetailOpen((open) => !open);
+											if (!visionDetailOpen) void loadVisionEvents();
+										}}
+									>
+										{visionDetailOpen ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+										{t("app.visionDetail")}
+									</button>
+								</div>
+								{item.description && (
+									<p className="mt-1.5 text-[13px] leading-[1.6] break-words whitespace-pre-wrap text-text-primary">
+										{item.description}
+									</p>
+								)}
+								{visionDetailOpen && (
+									<VisionBridgeDetail events={visionEvents} loading={visionLoading} />
+								)}
+							</div>
+						) : (
+							// 失败：红色卡片，原因直出（与历史标记卡片同款）
+							<div
+								key={item.index}
+								className="w-full min-w-0 rounded-lg border border-danger/40 bg-danger-soft/40 p-2.5"
+								title={t("app.visionBridgeFailedDesc")}
+							>
+								<div className="flex items-center gap-1.5 text-[11px] font-medium text-danger">
+									<AlertTriangle size={12} className="shrink-0" />
+									<span>{t("app.visionBridgeFailed")}</span>
+									<span className="text-danger/60">·</span>
+									<span>{t("app.visionBridgeImageLabel", { index: item.index })}</span>
+								</div>
+								{item.error && (
+									<p className="mt-1.5 text-[13px] leading-[1.6] break-words text-danger/90">
+										{item.error}
 									</p>
 								)}
 							</div>

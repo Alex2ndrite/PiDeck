@@ -16,6 +16,7 @@ import {
   SessionDeliveryNotice,
 } from "./ComposerPanels";
 import { ComposerPickerHost } from "./ComposerPickerHost";
+import { SecurityLevelMenu } from "./SecurityLevelMenu";
 import { ComposerRuntimeIntegrations } from "./ComposerRuntimeIntegrations";
 import { useSessionPaneServices } from "./SessionPaneServices";
 import { desktopApi } from "../../desktopApi";
@@ -178,7 +179,7 @@ export const ComposerArea = forwardRef<HTMLElement, ComposerAreaProps>(function 
               文本区自身仍可在 RichInput 内滚动，底栏 shrink-0 始终可见 */}
           <footer
             ref={footerRef}
-            className="composer flex min-h-0 min-w-0 flex-col gap-2 overflow-hidden bg-background px-0 pb-3"
+            className="composer flex min-h-0 min-w-0 flex-col gap-2 overflow-hidden bg-transparent px-0 pb-3"
             style={{
               ...chatContentWidthStyle,
               height: props.height != null ? "100%" : height,
@@ -278,6 +279,9 @@ export const ComposerArea = forwardRef<HTMLElement, ComposerAreaProps>(function 
                 gitInfo={props.gitInfo}
                 record={composer.record}
                 feishuIndicator={feishuIndicator}
+                securityControl={
+                  <SecurityLevelMenu sessionId={props.sessionId} disabled={composer.isBusy || composer.isStarting} />
+                }
                 onPickModel={() => composer.pickers.open("model")}
                 onPickThinking={() => composer.pickers.open("thinking")}
                 onPickPromptTemplate={() => composer.pickers.open("template")}

@@ -15,3 +15,4 @@ export * from "./types/app";
 export * from "./types/usageStats";
 export * from "./types/processMetrics";
 export * from "./types/vision";
+export * from "./types/security";

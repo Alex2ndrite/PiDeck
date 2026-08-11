@@ -83,7 +83,7 @@ function fixture(overrides = {}) {
 		status: "idle",
 		createdAt: 2,
 	};
-	const calls = { createDraft: 0, createAnonymous: 0, createAgent: 0, createProject: [], send: [], stateTargets: [], modelTargets: [], messageSessions: [] };
+	const calls = { createDraft: 0, createAnonymous: 0, createAgent: 0, createProject: [], deleteProject: [], send: [], stateTargets: [], modelTargets: [], messageSessions: [] };
 	const targeted = (target, value) => ({ ok: true, value: { target, value } });
 	const deps = {
 		// SSE 流式依赖：测试环境不订阅真实 pi 事件，但必须提供可调用实现满足契约。
@@ -93,6 +93,10 @@ function fixture(overrides = {}) {
 		createProject: async (path) => {
 			calls.createProject.push(path);
 			return { id: "project-2", name: "New Project", path, lastOpenedAt: 2 };
+		},
+		deleteProject: async (projectId) => {
+			calls.deleteProject.push(projectId);
+			return true;
 		},
 		listModels: async () => [{ provider: "openai", id: "gpt-test", name: "GPT Test" }],
 		listAgents: () => [agent],
@@ -197,6 +201,22 @@ async function withServer(run, overrides = {}) {
 	}
 }
 
+test("Web service restart rebinds the configured listener", async () => {
+	const WebServiceManager = loadWebServiceManager();
+	const harness = fixture();
+	const manager = new WebServiceManager(harness.deps);
+	await manager.start("127.0.0.1", 0);
+	const port = manager.current.port;
+	try {
+		await manager.restart({ webServiceEnabled: true, webServiceHost: "127.0.0.1", webServicePort: port });
+		const response = await fetch(`http://127.0.0.1:${port}/api/health`);
+		assert.equal(response.status, 200);
+		assert.equal((await response.json()).ok, true);
+	} finally {
+		await manager.stop();
+	}
+});
+
 test("native Session HTTP routes create drafts and send by stable Session identity", async () => {
 	await withServer(async ({ baseUrl, calls }) => {
 		const createResponse = await fetch(`${baseUrl}/api/sessions`, {
@@ -237,6 +257,23 @@ test("web core routes create a project and expose the configured model list", as
 		const modelsResponse = await fetch(`${baseUrl}/api/models`);
 		const modelsBody = await modelsResponse.json();
 		assert.equal(modelsBody.models[0].id, "gpt-test");
+	});
+});
+
+test("Web project route deletes a registered project but protects the built-in chat project", async () => {
+	await withServer(async ({ baseUrl, calls }) => {
+		const deleteResponse = await fetch(`${baseUrl}/api/projects/project-1/delete`, { method: "POST" });
+		const deleted = await deleteResponse.json();
+		assert.equal(deleted.deleted, true);
+		assert.deepEqual(calls.deleteProject, ["project-1"]);
+	});
+
+	await withServer(async ({ baseUrl, deps }) => {
+		deps.listProjects = () => [{ id: "builtin-chat", name: "Chat", path: "C:/chat", kind: "chat" }];
+		const response = await fetch(`${baseUrl}/api/projects/builtin-chat/delete`, { method: "POST" });
+		assert.equal(response.status, 400);
+		const body = await response.json();
+		assert.match(body.error, /built-in chat project cannot be deleted/i);
 	});
 });
 
@@ -541,6 +578,8 @@ test("SSE /stream endpoint forwards pi agent events as AI SDK UI message frames"
 		emitPiEvent("agent-1", { type: "agent_end", stopReason: "done" });
 
 		const wire = await readUntil("data: [DONE]");
+		const afterDone = await reader.read();
+		assert.equal(afterDone.done, true, "the SSE response must close after [DONE]");
 		const frames = wire.split("\n\n")
 			.filter((line) => line.startsWith("data: ") && line.slice(6).trim() !== "[DONE]")
 			.map((line) => JSON.parse(line.slice(6)));

@@ -197,6 +197,7 @@ import { CodexSessionImporter } from "./sessions/CodexSessionImporter";
 import { ClaudeSessionImporter } from "./sessions/ClaudeSessionImporter";
 import { OpenCodeSessionImporter } from "./sessions/OpenCodeSessionImporter";
 import { SettingsStore } from "./settings/SettingsStore";
+import { SecurityStore } from "./security/SecurityStore";
 import { applyDesktopProxy } from "./settings/DesktopProxy";
 import { GitService } from "./git/GitService";
 import { WorktreeService } from "./git/WorktreeService";
@@ -220,6 +221,7 @@ import { registerGitIpc } from "./ipc/gitIpc";
 import { registerStoreIpc } from "./ipc/storeIpc";
 import { registerTerminalIpc } from "./ipc/terminalIpc";
 import { registerScratchPadIpc } from "./ipc/scratchPadIpc";
+import { registerSecurityIpc } from "./ipc/securityIpc";
 import { registerVisionIpc } from "./ipc/visionIpc";
 import { VisionBridgeConfigManager } from "./settings/visionBridgeConfig";
 import { registerSessionIpc, scheduleCatalogBackgroundScan } from "./ipc/sessionIpc";
@@ -280,6 +282,7 @@ let codexSessionImporter: CodexSessionImporter;
 let claudeSessionImporter: ClaudeSessionImporter;
 let openCodeSessionImporter: OpenCodeSessionImporter;
 let settingsStore: SettingsStore;
+let securityStore: SecurityStore;
 let worktreeService: WorktreeService;
 let gitService: GitService;
 let piLocator: PiLocator;
@@ -1119,6 +1122,19 @@ async function installDownloadedUpdate(filePath: string) {
 	}
 }
 
+/**
+ * 重启应用：先同步退出标志并停掉常驻服务，再 relaunch + quit。
+ * 必须置 isQuitting，否则 closeToTray 会把退出流程吞成「隐藏到托盘」，relaunch 不生效。
+ */
+function restartApp(): void {
+	isQuitting = true;
+	void webServiceManager?.stop();
+	terminalManager?.closeAll();
+	void agentManager?.stopAll();
+	app.relaunch();
+	app.quit();
+}
+
 function refreshTrayContextMenu(): void {
 	if (!tray) return;
 	tray.setContextMenu(Menu.buildFromTemplate([
@@ -1130,6 +1146,12 @@ function refreshTrayContextMenu(): void {
 					mainWindow.focus();
 				}
 			},
+		},
+		{ type: "separator" },
+		{
+			// 托盘重启与系统设置 IPC 的 appRestart 保持同一套清理语义
+			label: mainCopy("tray.restart"),
+			click: restartApp,
 		},
 		{ type: "separator" },
 		{
@@ -2177,6 +2199,12 @@ function registerIpc() {
 
 	registerScratchPadIpc({ appLogger });
 
+	// 安全管理：配置读写 + 会话等级覆盖（SecurityStore 负责持久化与策略快照）
+	registerSecurityIpc({
+		securityStore,
+		log: (domain, message, details) => void appLogger.info(domain, message, details),
+	});
+
 	// 视觉桥配置（~/.pi/agent/pi-deck-vision.json）界面化编辑；运行时由 pi-deck-vision 扩展消费
 	registerVisionIpc({
 		visionBridge: new VisionBridgeConfigManager(configManager),
@@ -2279,6 +2307,7 @@ function registerIpc() {
 		applyDesktopProxy,
 		testPiProxy,
 		applyWebServiceSettings: (settings) => webServiceManager.applySettings(settings),
+		restartWebService: (settings) => webServiceManager.restart(settings),
 		reactToPetSettings: async (prev, next) => {
 			await petSystem?.reactToSettings(prev, next);
 		},
@@ -2416,6 +2445,11 @@ app.whenReady().then(async () => {
 	claudeSessionImporter = new ClaudeSessionImporter(mainCopy);
 	openCodeSessionImporter = new OpenCodeSessionImporter(mainCopy);
 	settingsStore = new SettingsStore();
+	// 安全管理：配置 owner + 策略快照写入（供 pi-deck-security-gate 扩展消费）
+	securityStore = new SecurityStore({
+		settingsStore,
+		log: (domain, message, details) => void appLogger?.info(domain, message, details),
+	});
 	appLogger = new AppLogger();
 	setAppLogger(appLogger);
 	rpcLogger = new RpcLogger();
@@ -2461,6 +2495,7 @@ app.whenReady().then(async () => {
 				void refreshModelList(piLocator, settingsStore).catch(() => undefined);
 			}
 		},
+		securityStore,
 	);
 	webServiceManager = new WebServiceManager({
 		// dev 模式（electron-vite dev 不产出 out/renderer 构建物）下，静态资源
@@ -2481,6 +2516,11 @@ app.whenReady().then(async () => {
 			undefined,
 			settingsStore.get().wslEnabled ? "wsl" : "windows",
 		),
+		deleteProject: async (projectId) => {
+			if (!projectStore.get(projectId) || projectStore.get(projectId)?.kind === "chat") return false;
+			await projectStore.remove(projectId);
+			return true;
+		},
 		listModels: () => fetchModelList(piLocator, settingsStore),
 		listSessions: (projectId) => {
 			const project = projectStore.get(projectId);

@@ -25,6 +25,7 @@ import {
 	chatMessagesToUiMessages,
 	createProject,
 	createSession,
+	deleteProject,
 	fetchMessagePage,
 	fetchModels,
 	fetchState,
@@ -52,12 +53,19 @@ export function WebChatApp() {
 	const [loadingMore, setLoadingMore] = useState(false);
 	const [models, setModels] = useState<AvailableModel[]>([]);
 	const [commandError, setCommandError] = useState<string | null>(null);
+	// 首页（无会话）时选择的模型/思考级别：暂存为待用偏好，随下一次新建会话生效
+	const [pendingModel, setPendingModel] = useState<{ provider: string; modelId: string } | null>(null);
+	const [pendingThinkingLevel, setPendingThinkingLevel] = useState<string | null>(null);
+	// 手机端默认把聊天作为主画面，项目树通过抽屉按需打开，避免列表占满首屏。
+	const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
 	// ── 本组件自持的 per-session 消息缓存（useChat 切换 id 会重建 Chat 实例） ──
 	const messagesBySessionRef = useRef<Record<string, UIMessage[]>>({});
 	const loadedSessionsRef = useRef<Set<string>>(new Set());
 	const historyMetaRef = useRef<Record<string, HistoryMeta>>({});
 	const activeSessionIdRef = useRef<string>("");
+	// 首页直发暂存：新建会话后等 useChat 实例切换完成，再投递首条消息
+	const pendingSendRef = useRef<{ sessionId: string; text: string } | null>(null);
 
 	// useChat：sessionId 作为 chat id；切会话时 id 变化重建 Chat 实例
 	const { messages, sendMessage, status, stop, setMessages, error } = useChat({
@@ -108,6 +116,17 @@ export function WebChatApp() {
 		loadedSessionsRef.current.add(activeSessionId);
 	}, [messages, activeSessionId, streaming]);
 
+	// 首页直发：useChat 随 activeSessionId 切换在渲染期重建实例（@ai-sdk/react 在 render 中
+	// 直接替换 chatRef.current），因此本 effect 里拿到的 sendMessage 已属于新会话；
+	// 用 sessionId 校验防止用户在创建期间切到其他会话后串台。
+	useEffect(() => {
+		const pending = pendingSendRef.current;
+		if (!pending || pending.sessionId !== activeSessionId) return;
+		if (streaming) return; // 新实例就绪（空闲）后才投递
+		pendingSendRef.current = null;
+		void sendMessage({ text: pending.text });
+	}, [activeSessionId, streaming, sendMessage]);
+
 	// 模型列表是全局 pi 配置，草稿会话也需要先选模型再发送第一条消息。
 	useEffect(() => {
 		void fetchModels().then(setModels).catch(() => setModels([]));
@@ -122,8 +141,9 @@ export function WebChatApp() {
 				if (disposed) return;
 				setState(next);
 				setConnected(true);
-				if (!next.sessions.some((session) => session.id === activeSessionIdRef.current)) {
-					setActiveSessionId(next.sessions[0]?.id ?? "");
+				// 初始页面保持空会话，让用户明确选择项目/会话；外部删除当前会话时也回到空状态。
+				if (activeSessionIdRef.current && !next.sessions.some((session) => session.id === activeSessionIdRef.current)) {
+					setActiveSessionId("");
 				}
 			} catch {
 				if (!disposed) setConnected(false);
@@ -140,20 +160,62 @@ export function WebChatApp() {
 	}, []);
 
 	const handleSend = (text: string) => {
-		if (!activeSessionId || !text.trim()) return;
+		if (!text.trim()) return;
+		if (!activeSessionId) {
+			// 首页直发：无会话时自动新建会话（携带已选模型/思考级别）再投递首条消息
+			void sendFromHome(text);
+			return;
+		}
 		void sendMessage({ text });
+	};
+
+	// 首页直发流程：优先内置 chat 项目（未配置项目时的兜底），否则取第一个项目；
+	// 创建期间复用 creatingProjectId 短暂禁用输入，防止重复提交。
+	const sendFromHome = async (text: string) => {
+		const project = state.projects.find((candidate) => candidate.kind === "chat") ?? state.projects[0];
+		if (!project) {
+			setCommandError(t("web.sendNoProject"));
+			return;
+		}
+		setCreatingProjectId(project.id);
+		setCommandError(null);
+		try {
+			const id = await createSession(project.id, {
+				...(pendingModel ? { model: pendingModel } : {}),
+				...(pendingThinkingLevel ? { thinkingLevel: pendingThinkingLevel } : {}),
+			});
+			markSessionLoaded(id);
+			setActiveSessionId(id);
+			setMobileSidebarOpen(false);
+			// 会话 id 变化后 useChat 重建实例；等新实例就绪再投递（见上方 effect）
+			pendingSendRef.current = { sessionId: id, text };
+			await refreshNow();
+		} catch (error) {
+			setCommandError(error instanceof Error ? error.message : String(error));
+			setConnected(false);
+		} finally {
+			setCreatingProjectId("");
+		}
+	};
+
+	// 新会话无历史：预标记为已加载（空缓存），避免切过去时多余拉取
+	const markSessionLoaded = (id: string) => {
+		loadedSessionsRef.current.add(id);
+		messagesBySessionRef.current[id] = [];
+		historyMetaRef.current[id] = { total: 0, nextBefore: null };
 	};
 
 	const handleCreateSession = async (projectId: string) => {
 		setCreatingProjectId(projectId);
 		setCommandError(null);
 		try {
-			const id = await createSession(projectId);
-			// 新会话无历史：预标记已加载（空缓存），避免切过去时多余拉取
-			loadedSessionsRef.current.add(id);
-			messagesBySessionRef.current[id] = [];
-			historyMetaRef.current[id] = { total: 0, nextBefore: null };
+			const id = await createSession(projectId, {
+				...(pendingModel ? { model: pendingModel } : {}),
+				...(pendingThinkingLevel ? { thinkingLevel: pendingThinkingLevel } : {}),
+			});
+			markSessionLoaded(id);
 			setActiveSessionId(id);
+			setMobileSidebarOpen(false);
 			await refreshNow();
 		} catch (error) {
 			setCommandError(error instanceof Error ? error.message : String(error));
@@ -176,6 +238,31 @@ export function WebChatApp() {
 		}
 	};
 
+	const handleDeleteProject = async (projectId: string) => {
+		setCommandError(null);
+		try {
+			const deletedSessions = state.sessions.filter((session) => session.projectId === projectId);
+			await deleteProject(projectId);
+			for (const session of deletedSessions) {
+				delete messagesBySessionRef.current[session.id];
+				delete historyMetaRef.current[session.id];
+				loadedSessionsRef.current.delete(session.id);
+			}
+			setState((current) => ({
+				...current,
+				projects: current.projects.filter((project) => project.id !== projectId),
+				sessions: current.sessions.filter((session) => session.projectId !== projectId),
+				runtimes: current.runtimes.filter((runtime) => !deletedSessions.some((session) => session.id === runtime.sessionId)),
+			}));
+			if (deletedSessions.some((session) => session.id === activeSessionId)) {
+				setActiveSessionId("");
+			}
+			setMobileSidebarOpen(false);
+		} catch (error) {
+			setCommandError(error instanceof Error ? error.message : String(error));
+		}
+	};
+
 	const updateActiveSessionState = (patch: { model?: { provider: string; modelId: string }; thinkingLevel?: string }) => {
 		setState((current) => ({
 			...current,
@@ -186,7 +273,11 @@ export function WebChatApp() {
 	};
 
 	const handleModelChange = async (model: AvailableModel) => {
-		if (!activeSessionId) return;
+		if (!activeSessionId) {
+			// 首页无会话：选择暂存为待用偏好，新建会话时生效
+			setPendingModel({ provider: model.provider, modelId: model.id });
+			return;
+		}
 		setCommandError(null);
 		try {
 			if (activeRuntime) {
@@ -211,7 +302,11 @@ export function WebChatApp() {
 	};
 
 	const handleThinkingChange = async (level: string) => {
-		if (!activeSessionId) return;
+		if (!activeSessionId) {
+			// 首页无会话：选择暂存为待用偏好，新建会话时生效
+			setPendingThinkingLevel(level);
+			return;
+		}
 		setCommandError(null);
 		try {
 			if (activeRuntime) {
@@ -287,22 +382,26 @@ export function WebChatApp() {
 				activeSessionId={activeSessionId}
 				creatingProjectId={creatingProjectId}
 				connected={connected}
-				onSelectSession={setActiveSessionId}
+				mobileOpen={mobileSidebarOpen}
+				onCloseMobile={() => setMobileSidebarOpen(false)}
+				onSelectSession={(sessionId) => {
+					setActiveSessionId(sessionId);
+					setMobileSidebarOpen(false);
+				}}
 				onCreateSession={(projectId) => void handleCreateSession(projectId)}
 				onCreateProject={handleCreateProject}
+				onDeleteProject={handleDeleteProject}
 			/>
 			<main className="chat-pane flex h-full min-w-0 flex-1 flex-col overflow-hidden">
 				<WebHeader
 					title={activeSession?.title || t("web.chooseSession")}
 					status={headerStatus}
-					streaming={streaming}
-					canStop={Boolean(activeSessionId)}
-					model={activeSession?.model}
-					thinkingLevel={activeSession?.thinkingLevel}
+					onOpenSidebar={() => setMobileSidebarOpen(true)}
+					model={activeSession?.model ?? pendingModel ?? undefined}
+					thinkingLevel={activeSession?.thinkingLevel ?? pendingThinkingLevel ?? undefined}
 					models={models}
 					onModelChange={(model) => void handleModelChange(model)}
 					onThinkingChange={(level) => void handleThinkingChange(level)}
-					onStop={() => stop()}
 				/>
 				<WebTimeline
 					messages={messages}
@@ -315,7 +414,7 @@ export function WebChatApp() {
 					onLoadMore={() => void handleLoadMore()}
 				/>
 				<WebComposer
-					disabled={!activeSessionId}
+					disabled={Boolean(creatingProjectId)}
 					streaming={streaming}
 					onSend={handleSend}
 					onStop={() => stop()}

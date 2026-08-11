@@ -91,6 +91,8 @@ export const ipcChannels = {
 	openCodeSessionsImport: "opencode-sessions:import",
 	settingsGet: "settings:get",
 	settingsUpdate: "settings:update",
+	/** 重启当前已启用的 Web 服务，不修改 Web 设置 */
+	settingsRestartWebService: "settings:restart-web-service",
 	settingsTestPiProxy: "settings:test-pi-proxy",
 	settingsApplyWindow: "settings:apply-window",
 	skillsList: "skills:list",
@@ -175,6 +177,8 @@ export const ipcChannels = {
 	/** 检查 npm 是否可用 */
 	piCheckNpm: "pi:check-npm",
 	appInfo: "app:info",
+	/** 获取当前机器的非回环 IPv4 网卡，供局域网 Web 服务二维码使用 */
+	appNetworkAddresses: "app:network-addresses",
 	appPreferredSystemLanguages: "app:preferred-system-languages",
 	appCheckUpdate: "app:check-update",
 	appDownloadUpdate: "app:download-update",

@@ -41,6 +41,16 @@ type PiProcessOptions = {
    * 未提供时 RPC 不注入内置扩展（兼容测试/探针）。
    */
   resolveBuiltInExtensionPaths?: (settings?: PiProcessSettings) => string[];
+  /**
+   * 安全策略快照路径（userData/security-policy.json）。
+   * 注入 PIDECK_SECURITY_CONFIG 环境变量，pi-deck-security-gate 扩展据此加载规则。
+   */
+  securitySnapshotPath?: string;
+  /**
+   * 会话身份（会话文件路径 = SessionRecord.id）。
+   * 注入 PIDECK_SESSION_ID 环境变量，扩展按它解析会话级等级覆盖。
+   */
+  securitySessionId?: string;
 };
 
 type VersionCacheEntry =
@@ -274,6 +284,20 @@ export class PiProcess extends EventEmitter {
     console.log('[PiProcess] spawn等效命令:', [invocation.command, ...finalArgs].map(a => a.includes(' ') ? `"${a}"` : a).join(' '));
     console.log('[PiProcess] spawn参数:', JSON.stringify({ command: invocation.command, shell: invocation.shell, cwd: spawnCwd, wslCwd: diagnosticCwd, argsCount: finalArgs.length }));
 
+    // 安全管理：把策略快照路径 + 会话身份注入 pi 子进程环境。
+    // WSL 模式下 Windows 盘符路径必须转成 Linux 路径（/mnt/c/...），否则扩展读不到快照。
+    const env = this.locator.createProcessEnv(this.settings, invocation.pathPrefix, invocation.wsl);
+    if (this.options.securitySnapshotPath) {
+      env.PIDECK_SECURITY_CONFIG = command.startsWith("wsl://")
+        ? toWslLinuxPath(this.options.securitySnapshotPath, { distro: this.settings?.wslDistro ?? "" })
+        : this.options.securitySnapshotPath;
+    }
+    if (this.options.securitySessionId) {
+      env.PIDECK_SESSION_ID = command.startsWith("wsl://")
+        ? toWslLinuxPath(this.options.securitySessionId, { distro: this.settings?.wslDistro ?? "" })
+        : this.options.securitySessionId;
+    }
+
     // 每个 agent 绑定独立 cwd，确保 pi 自己发现项目级 AGENTS.md、settings 和 session 分组。
     // 打包后的 Electron 不一定继承用户终端 PATH；这里补齐跨平台 Node 工具链常见 bin 目录，尽量让已安装 pi 的用户开箱即用。
     // Windows 下通过 PiLocator.createInvocation 显式包裹含空格的 npm shim 路径，避免 cmd 拆分路径导致 agent 启动失败。
@@ -283,7 +307,8 @@ export class PiProcess extends EventEmitter {
         cwd: spawnCwd,
         stdio: ["pipe", "pipe", "pipe"],
         shell: invocation.shell,
-        env: this.locator.createProcessEnv(this.settings, invocation.pathPrefix, invocation.wsl),
+        // env 已在上方合并安全门环境变量（PIDECK_SECURITY_CONFIG / PIDECK_SESSION_ID）
+        env,
         windowsVerbatimArguments: invocation.windowsVerbatimArguments,
       });
     } catch (error) {

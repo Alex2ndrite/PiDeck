@@ -359,8 +359,9 @@ export function SettingsTab(props: {
 							discoveredModels={props.discoveredModels}
 							allSettings={data}
 							onChange={(v) => {
+								// 防御性兜底：当前清空路径统一走空字符串（保留 key，值为 ""，
+								// 消费方按 falsy 回到默认行为），不删除设置项本身
 								if (v === undefined) {
-									// 清空必须删除 key，而不是写入 undefined；这样保存 JSON 和后续默认解析都会真正回到 Pi 默认行为。
 									const { [key]: _removed, ...rest } = data;
 									props.onChange(rest);
 									return;
@@ -558,9 +559,10 @@ function EnabledModelsInput(props: {
 	);
 }
 
-/** 带清空按钮的输入包装器：鼠标悬停时显示清空按钮，默认隐藏以减少视觉噪音。 */
+/** 带清空按钮的输入包装器：值非空时常显清空按钮，点击即清除选中值。
+ *  清除只置空值（onChange("")），保留设置项 key，避免设置页整行消失。
+ *  按钮定位在右侧下拉触发按钮左侧（right-[38px]），避免与箭头按钮互相遮挡。 */
 function ClearableSettingsInput(props: { empty: boolean; onClear: () => void; children: ReactNode }) {
-	const [showClear, setShowClear] = useState(false);
 	return (
 		<div className="relative min-w-0 flex-1">
 			{props.children}
@@ -569,17 +571,16 @@ function ClearableSettingsInput(props: { empty: boolean; onClear: () => void; ch
 					type="button"
 					variant="ghost"
 					size="icon-xs"
-					className="absolute top-1/2 -translate-y-1/2 right-1 size-6 rounded-sm hover:bg-bg-hover"
+					className="absolute top-1/2 -translate-y-1/2 right-[38px] size-6 rounded-sm hover:bg-bg-hover"
 					onMouseDown={(e) => {
+						// 用 mousedown 而非 click：避免触发 combobox 的 onFocus/onChange 连锁反应
 						e.preventDefault();
 						e.stopPropagation();
 						props.onClear();
 					}}
-					onMouseEnter={() => setShowClear(true)}
-					onMouseLeave={() => setShowClear(false)}
 					title={t("common.clear")}
 				>
-					{showClear && <X size={12} className="text-text-tertiary" />}
+					<X size={12} className="text-text-tertiary" />
 				</Button>
 			)}
 		</div>
@@ -615,13 +616,14 @@ function SettingsValueInput(props: {
 		return (
 			<ClearableSettingsInput
 				empty={!current}
-				onClear={() => props.onChange(undefined)}
+				onClear={() => props.onChange("")}
 			>
 				<ConfigComboboxInput
 					value={current}
 					options={providerOptions}
 					onChange={(v) => props.onChange(v)}
 					placeholder={t("config.settings.selectProvider")}
+					clearSpace
 				/>
 			</ClearableSettingsInput>
 		);
@@ -724,7 +726,7 @@ function SettingsValueInput(props: {
 		return (
 			<ClearableSettingsInput
 				empty={!currentModelValue}
-				onClear={() => props.onChange(undefined)}
+				onClear={() => props.onChange("")}
 			>
 				<ConfigComboboxInput
 					value={currentModelValue}
@@ -733,6 +735,7 @@ function SettingsValueInput(props: {
 					placeholder={selectedProviderName
 						? t("config.settings.selectModelFor", { provider: selectedProviderName })
 						: t("config.settings.selectModelFirst")}
+					clearSpace
 				/>
 			</ClearableSettingsInput>
 		);

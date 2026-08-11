@@ -9,6 +9,8 @@ export type AgentTab = {
 	title: string;
 	status: AgentStatus;
 	sessionId?: string;
+	/** PiDeck 会话身份（与 CreateAgentInput.deckSessionId 同源），用于安全门 PIDECK_SESSION_ID 注入。 */
+	deckSessionId?: string;
 	sessionPath?: string;
 	/** Identity used only for session/runtime matching; agentId remains the process handle. */
 	sessionEnvironment?: SessionEnvironment;
@@ -78,6 +80,12 @@ export type CreateAgentInput = {
 	projectId: string;
 	title?: string;
 	sessionPath?: string;
+	/**
+	 * PiDeck 会话身份（SessionRecord.id，可能为 UUID 或会话文件路径）。
+	 * 会话级安全覆盖（SecurityStore.sessionOverrides）与 PIDECK_SESSION_ID 注入都使用这个 key；
+	 * 与 pi 进程自身的 sessionId（AgentTab.sessionId / piSessionId）语义不同，不可混用。
+	 */
+	deckSessionId?: string;
 	environment?: SessionEnvironment;
 	source?: SessionSource;
 	wslDistro?: string;

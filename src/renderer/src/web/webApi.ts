@@ -12,6 +12,7 @@ import type {
 	AvailableModel,
 	ChatMessage,
 	SessionCommandResult,
+	SessionLaunchPreferences,
 	SessionMessagePage,
 	SessionRuntimeTarget,
 	SessionTargetedValue,
@@ -39,6 +40,12 @@ export async function createProject(path: string): Promise<WebState["projects"][
 	return result.project;
 }
 
+/** 删除项目登记记录；不会删除项目目录或工作区文件。 */
+export async function deleteProject(projectId: string): Promise<void> {
+	const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/delete`, { method: "POST" });
+	if (!res.ok) throw new Error(`delete project ${res.status}`);
+}
+
 /** 读取 pi 当前可用模型，草稿会话也可以先选模型再发送第一条消息。 */
 export async function fetchModels(): Promise<AvailableModel[]> {
 	const res = await fetch("/api/models");
@@ -48,11 +55,18 @@ export async function fetchModels(): Promise<AvailableModel[]> {
 }
 
 /** 按项目新建会话（对应桌面端「新建 Agent」入口）。返回新会话 id。 */
-export async function createSession(projectId: string): Promise<string> {
+/**
+ * 新建会话草稿；preferences 携带启动前选择的模型/思考级别（首页直发场景），
+ * 无偏好时保持后端默认（pi 配置默认值）。
+ */
+export async function createSession(
+	projectId: string,
+	preferences?: SessionLaunchPreferences,
+): Promise<string> {
 	const res = await fetch("/api/sessions", {
 		method: "POST",
 		headers: { "content-type": "application/json" },
-		body: JSON.stringify({ projectId }),
+		body: JSON.stringify({ projectId, ...preferences }),
 	});
 	if (!res.ok) throw new Error(`create session ${res.status}`);
 	const result = (await res.json()) as { session?: { id?: string } };

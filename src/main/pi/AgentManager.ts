@@ -71,6 +71,7 @@ import {
   type ActiveToolCallState,
 } from "../../shared/toolRuntimeState";
 import type { SettingsStore } from "../settings/SettingsStore";
+import type { SecurityStore } from "../security/SecurityStore";
 import type { ConfigManager } from "../config/ConfigManager";
 import type { RpcLogger } from "../logging/RpcLogger";
 import type { RpcLogBatch, RpcLogEntry } from "../../shared/types/rpcLog";
@@ -280,6 +281,16 @@ export class AgentManager {
 	private readonly pendingTrustRequests = new Map<string, { resolve: (choice: ProjectTrustChoice) => void }>();
 	private wslEnvironment: WslEnvironment | null = null;
 
+	/**
+	 * 用户配置的 RPC 超时（默认 600s，SettingsStore 另有「低于 600s 自动提升」保险）。
+	 * 发送消息与启动/重连等用户可感知的等待路径统一吃该配置，
+	 * 与启动诊断卡里的指引（“Increase the RPC timeout in settings”）保持一致，
+	 * 避免用户调大配置却只对 prompt 生效、启动仍按硬编码 30s 超时的误导。
+	 */
+	private get rpcTimeoutMs(): number {
+		return this.settingsStore.get().rpcTimeout;
+	}
+
 	constructor(
 		private readonly getProject: (id: string) => Project | undefined,
 		private readonly getWindow: () => BrowserWindow | null,
@@ -294,6 +305,8 @@ export class AgentManager {
 		) => string = () => "Agent operation failed.",
 		/** 每次 spawn pi 进程前回调（如刷新模型列表缓存）；异步但不等完成，避免阻塞 Agent 启动。 */
 		private readonly onBeforeAgentSpawn?: () => void,
+		/** 安全管理：Agent 启动前写策略快照 + 注入会话身份（缺省时不注入安全门）。 */
+		private readonly securityStore?: SecurityStore,
 	) {
 		this.messageProjector = new AgentMessageProjector({
 			translate: this.translate,
@@ -321,11 +334,15 @@ export class AgentManager {
 	}
 
 	/**
-	 * 统一构造 PiProcess：注入 PiDeck 内置扩展路径解析。
+	 * 统一构造 PiProcess：注入 PiDeck 内置扩展路径解析 + 安全管理快照/会话身份。
 	 * 内置扩展以 -e 从 app resources 加载，不再依赖用户扩展目录副本。
+	 * 安全管理：确保策略快照已落盘（小 JSON 写，等完成后启动，保证扩展首次拦截即可读到）。
 	 */
-	private createPiProcess(cwd: string): PiProcess {
+	private createPiProcess(cwd: string, sessionPath?: string, securitySessionKey?: string): PiProcess {
 		const settings = this.settingsStore.get();
+		if (this.securityStore) {
+			void this.securityStore.ensureSnapshotWritten();
+		}
 		return new PiProcess(cwd, settings, undefined, {
 			resolveBuiltInExtensionPaths: (processSettings) =>
 				listActiveBuiltInExtensionPaths(
@@ -336,6 +353,10 @@ export class AgentManager {
 					},
 					processSettings?.removedBuiltInExtensions ?? settings.removedBuiltInExtensions ?? [],
 				),
+			// 会话身份 = PiDeck 会话 key（SessionRecord.id，UUID 或旧版文件路径），扩展按它解析等级覆盖；
+			// 匿名会话（noSession）无 key，扩展仅用全局默认等级。
+			securitySessionId: securitySessionKey ?? sessionPath,
+			securitySnapshotPath: this.securityStore?.getSnapshotPath(),
 		});
 	}
 
@@ -617,7 +638,7 @@ export class AgentManager {
 		// 如果已有提前发出的请求（earlyMessagesPromise），直接复用，避免重复发送
 		const messagesPromise = earlyMessagesPromise ?? runtime.process.client.request({
 			type: "get_messages",
-		});
+		}, this.rpcTimeoutMs);
 
 		let entriesPromise: Promise<any> | undefined;
 		if (!skipEntries) {
@@ -898,6 +919,7 @@ export class AgentManager {
 			cwd: project.path,
 			title: input.title || `${project.name} agent`,
 			status: "starting",
+			deckSessionId: input.deckSessionId,
 			sessionPath: input.sessionPath,
 			sessionEnvironment,
 			sessionSource: input.source ?? "pi",
@@ -920,7 +942,7 @@ export class AgentManager {
 		// 每次 spawn 前异步刷新模型列表缓存（不等完成，避免阻塞 Agent 启动）：
 		// 用户直接编辑 models.json/auth.json 后，下一次启动的 Agent 即能看到新模型。
 		this.onBeforeAgentSpawn?.();
-		const process = this.createPiProcess(project.path);
+		const process = this.createPiProcess(project.path, input.sessionPath, input.deckSessionId);
 		process.on("version-check", (payload) => {
 			void this.appLogger?.info("agent", "Pi version check completed", {
 				agentId: id,
@@ -977,7 +999,9 @@ export class AgentManager {
 		// 启动后先获取状态，get_messages 必须等状态就绪后再发送，
 		// 确保 pi 进程已完全加载会话文件，避免竞态导致返回空结果。
 		void this.appLogger?.info("agent", "Agent get_state request start", { agentId: id });
-		const statePromise = client.request({ type: "get_state" });
+		// 启动 get_state 吃用户配置的 rpcTimeout：WSL/代理/慢机器上 pi 首次响应可能超过默认 30s，
+		// 超时即触发「Pi RPC 启动失败」诊断卡；与诊断指引（调大设置里的 RPC 超时）保持一致。
+		const statePromise = client.request({ type: "get_state" }, this.rpcTimeoutMs);
 		const historyLoadDecision = this.getHistoryAutoLoadDecision(input.sessionPath);
 
 
@@ -1012,7 +1036,7 @@ export class AgentManager {
 			// preserveMessagesAfter 保护加载期间用户新发的消息/流式回复，防止历史结果回写时覆盖当前会话。
 			// 状态就绪后发送 get_messages，确保 pi 进程已完全加载会话文件，避免竞态。
 			const messagesPromise = historyLoadDecision.shouldLoad
-				? client.request({ type: "get_messages" })
+				? client.request({ type: "get_messages" }, this.rpcTimeoutMs)
 				: undefined;
 			const preserveMessagesAfter = Date.now();
 			if (messagesPromise) {
@@ -1653,7 +1677,7 @@ export class AgentManager {
 			sessionPath,
 		});
 
-		const process = this.createPiProcess(project.path);
+		const process = this.createPiProcess(project.path, sessionPath, runtime.tab.deckSessionId);
 		// 与 createUnlocked 同理：监听器必须在 start() 前挂上，
 		// 避免重连窗口期 spawn error 变成未捕获异常。
 		this.attachPiProcessLifecycle(agentId, process, {
@@ -1674,7 +1698,7 @@ export class AgentManager {
 		runtime.process = process;
 
 		try {
-			const stateResponse = await client.request({ type: "get_state" });
+			const stateResponse = await client.request({ type: "get_state" }, this.rpcTimeoutMs);
 			const data = stateResponse.data as
 				| { sessionId?: string; sessionFile?: string; sessionName?: string }
 				| undefined;
@@ -1734,7 +1758,7 @@ export class AgentManager {
 		// 且文件结果带 (size, mtimeMs) 缓存，会话未变化时零 IO 零 parse
 		const [stateResponse, statsResponse, fileHitStats] = await Promise.all([
 			runtime.process.client
-				.request({ type: "get_state" })
+				.request({ type: "get_state" }, this.rpcTimeoutMs)
 				.catch(() => ({ data: undefined })),
 			runtime.process.client
 				.request({ type: "get_session_stats" })
@@ -2322,7 +2346,7 @@ export class AgentManager {
 			try {
 				const state = await runtime.process.client.request({
 					type: "get_state",
-				});
+				}, this.rpcTimeoutMs);
 				sessionPath = this.normalizeSessionPathFromPi(
 					(state.data as { sessionFile?: string } | undefined)?.sessionFile ??
 						undefined,
@@ -2394,7 +2418,7 @@ export class AgentManager {
 		const project = this.getProject(projectId);
 		return this.withTemporarySession(projectId, sessionPath, async (process) => {
 			const response = await process.client.request({ type: "clone" }, 120_000);
-			const state = await process.client.request({ type: "get_state" });
+			const state = await process.client.request({ type: "get_state" }, this.rpcTimeoutMs);
 			return {
 				...((response.data as object | undefined) ?? {}),
 				sessionPath: this.normalizeSessionPathFromPi(
@@ -2413,7 +2437,7 @@ export class AgentManager {
 	): Promise<T> {
 		const project = this.getProject(projectId);
 		if (!project) throw new Error(`Project not found: ${projectId}`);
-		const process = this.createPiProcess(project.path);
+		const process = this.createPiProcess(project.path, sessionPath);
 		await process.start(sessionPath);
 		try {
 			return await run(process);
@@ -2462,7 +2486,7 @@ export class AgentManager {
 	private async refreshRuntimeAfterSessionReplacement(agentId: string) {
 		const runtime = this.requireRuntime(agentId);
 		const stateResponse = await runtime.process.client
-			.request({ type: "get_state" })
+			.request({ type: "get_state" }, this.rpcTimeoutMs)
 			.catch(() => ({ data: undefined }));
 		const state = stateResponse.data as { sessionFile?: string; sessionName?: string } | undefined;
 		if (state?.sessionFile) {
@@ -3209,7 +3233,9 @@ export class AgentManager {
 
 				const messages = this.messages.get(agentId) ?? [];
 				const lastMessage = messages[messages.length - 1];
-				if (lastMessage?.role === "assistant") {
+				// 手动停止（abort）不算正常完成：与下方 notifyAgentSettled 同一判断，
+				// 停止会话后不弹「已完成」系统通知（用户主动中止，无需提醒）
+				if (lastMessage?.role === "assistant" && !isAbortSettled) {
 					this.notifySessionEnd(agentId, runtime.tab.title);
 				}
 				// 成功空闲（settled）后才算完成：通知宠物等内部模块携带标题，供「{title} 已完成」气泡使用。

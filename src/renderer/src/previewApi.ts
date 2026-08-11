@@ -623,6 +623,7 @@ export function createPreviewApi(): PiDesktopApi {
 				homeDir: "C:/Users/preview",
 			}),
 			preferredSystemLanguages: async () => navigator.languages?.length ? [...navigator.languages] : [navigator.language],
+			networkAddresses: async () => [{ address: "192.168.1.100", interfaceName: "Wi-Fi", cidr: "192.168.1.100/24", isPrivate: true }],
 			checkUpdate: async () => ({
 				currentVersion: "preview",
 				latestVersion: "preview",
@@ -838,6 +839,7 @@ export function createPreviewApi(): PiDesktopApi {
 				previewSettings = { ...previewSettings, ...patch };
 				return { ...previewSettings };
 			},
+			restartWebService: async () => undefined,
 			testPiProxy: async () => ({
 				success: true,
 				url: "https://api.openai.com/v1/models",

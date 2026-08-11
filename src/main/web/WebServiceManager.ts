@@ -53,6 +53,7 @@ type WebServiceDependencies = {
 	getSessionIdForAgent: (agentId: string) => string | undefined;
 	listProjects: () => Project[];
 	createProject: (path: string) => Promise<Project>;
+	deleteProject: (projectId: string) => Promise<boolean>;
 	listModels: () => Promise<AvailableModel[]>;
 	listSessions: (projectId: string) => Promise<SessionSummary[]>;
 	getSessionRuntimeMessages: (sessionId: string) => SessionTargetedValue<ChatMessage[]> | undefined;
@@ -167,6 +168,18 @@ export class WebServiceManager {
 		await this.start(host, port);
 	}
 
+	/**
+	 * 重启当前 Web 服务实例；不修改持久化设置，确保端口/监听地址仍由设置页控制。
+	 * 未启用时直接返回，避免“重启”操作意外启动用户已经关闭的服务。
+	 */
+	async restart(settings: WebServiceSettings) {
+		if (!settings.webServiceEnabled) return;
+		const host = settings.webServiceHost.trim() || "0.0.0.0";
+		const port = this.normalizePort(settings.webServicePort);
+		await this.stop();
+		await this.start(host, port);
+	}
+
 	async stop() {
 		// 解绑 pi 事件源，避免服务关闭后仍在转发事件到已失效的 SSE 连接。
 		this.eventStreamRouter.unbindPiSource();
@@ -265,6 +278,22 @@ export class WebServiceManager {
 				}
 				const project = await this.deps.createProject(path);
 				this.sendJson(response, { project });
+				return;
+			}
+			const deleteProjectMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/delete$/);
+			if (deleteProjectMatch && request.method === "POST") {
+				const projectId = decodeURIComponent(deleteProjectMatch[1]);
+				const project = this.deps.listProjects().find((item) => item.id === projectId);
+				if (!project) {
+					this.sendError(response, 404, "webError.projectNotFound", "project not found");
+					return;
+				}
+				if (project.kind === "chat") {
+					this.sendError(response, 400, "webError.chatProjectProtected", "the built-in chat project cannot be deleted");
+					return;
+				}
+				const deleted = await this.deps.deleteProject(projectId);
+				this.sendJson(response, { deleted });
 				return;
 			}
 			const sessionsMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/sessions$/);
@@ -1254,15 +1283,22 @@ export class WebServiceManager {
 		};
 
 		// 注册连接；onClose 在客户端断开/服务停止时被调，确保不再向失效 socket 写数据。
-		const close = this.eventStreamRouter.add(sessionId, writeRaw, () => {
-			if (!response.writableEnded) {
-				try {
-					response.end();
-				} catch {
-					// 已销毁的连接 end() 抛错可忽略
+		const close = this.eventStreamRouter.add(
+			sessionId,
+			writeRaw,
+			() => {
+				if (!response.writableEnded) {
+					try {
+						response.end();
+					} catch {
+						// 已销毁的连接 end() 抛错可忽略
+					}
 				}
-			}
-		});
+			},
+			() => {
+				if (!response.writableEnded) response.end();
+			},
+		);
 
 		// 客户端断开（页面刷新/关闭）时清理；对已结束的请求忽略重复事件。
 		const onClientClose = () => close();

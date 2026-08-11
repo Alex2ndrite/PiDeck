@@ -20,12 +20,12 @@ import {
 	TableHeader,
 	TableRow,
 } from "../../ui-shadcn/table";
-import { LogsDatePicker } from "./LogsDatePicker";
+import { LogsDateRangePicker } from "./LogsDateRangePicker";
 
 const LEVELS: Array<AppLogLevel | "all"> = ["all", "debug", "info", "warn", "error"];
 
-/** 每页条数：主进程查询上限 200，50 一页保证详情展开/滚动可控 */
-const PAGE_SIZE = 50;
+/** 每页条数：主进程查询上限 200，20 一页保证详情展开/滚动可控 */
+const PAGE_SIZE = 20;
 
 function formatTime(time: number) {
 	return new Date(time).toLocaleString();
@@ -133,17 +133,14 @@ export function LogViewer() {
 					onChange={(event) => { setSearch(event.target.value); resetPage(); }}
 					placeholder={t("logs.searchPlaceholder")}
 				/>
-				<LogsDatePicker
-					value={from}
-					onChange={(value) => { setFrom(value); resetPage(); }}
-					placeholder={t("logs.sinceFilter")}
-					clearLabel={t("logs.clearSinceFilter")}
-				/>
-				<LogsDatePicker
-					value={to}
-					onChange={(value) => { setTo(value); resetPage(); }}
-					placeholder={t("logs.untilFilter")}
-					clearLabel={t("logs.clearUntilFilter")}
+				<LogsDateRangePicker
+					from={from}
+					to={to}
+					onChange={(nextFrom, nextTo) => {
+						setFrom(nextFrom);
+						setTo(nextTo);
+						resetPage();
+					}}
 				/>
 				<Button variant="outline" size="sm" onClick={() => void refresh()} disabled={loading}>
 					{t("common.refresh")}

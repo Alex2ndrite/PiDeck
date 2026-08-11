@@ -150,6 +150,8 @@ export function ComposerBottomBar(props: {
 	/** Draft sessions do not have a runtime yet, so retain their persisted settings in the bar. */
 	record?: Pick<SessionRecord, "model" | "thinkingLevel">;
 	feishuIndicator?: ReactNode;
+	/** 安全等级选择器（自包含组件，注入到左下角工具组） */
+	securityControl?: ReactNode;
 	sendControls: ReactNode;
 	onPickModel: () => void;
 	onPickPromptTemplate: () => void;
@@ -239,6 +241,7 @@ export function ComposerBottomBar(props: {
 						<Paperclip size={15} strokeWidth={2} aria-hidden="true" />
 					</Button>
 					{props.feishuIndicator}
+					{props.securityControl}
 				</div>
 				<div className="composer-bottom-center flex min-w-0 flex-1 items-center justify-center gap-4 overflow-hidden">
 					<Button

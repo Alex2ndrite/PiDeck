@@ -1,5 +1,6 @@
 // @ts-nocheck - extracted from AppParts, pre-existing type issues
 import { Component, useState, useEffect, useRef, type ReactNode } from "react";
+import QRCode from "qrcode";
 import { Input } from "../ui-shadcn/input";
 import {
 	Settings2,
@@ -7,6 +8,7 @@ import {
 	Wrench,
 	PawPrint,
 	Trash2,
+	RotateCw,
 	Brush,
 	Eye,
 	Minus,
@@ -60,7 +62,7 @@ import { ProcessMetricsTab } from "./settings/ProcessMetricsTab";
 import { ImTab } from "./settings/ImTab";
 import { VisionBridgeSettingsTab } from "./settings/VisionBridgeSettingsTab";
 import { ModelPicker } from "../session/ComposerComponents";
-import type { AppSettings, AppInfo, AvailableModel, PiInstallStatus, PiUpdateCheckResult, PiCliUpdateResult, PetManifest } from "../../../shared/types";
+import type { AppSettings, AppInfo, AvailableModel, PiInstallStatus, PiUpdateCheckResult, PiCliUpdateResult, PetManifest, WebNetworkAddress } from "../../../shared/types";
 import { GRID_COLS, CELL_W, CELL_H, MODE_ROW, MODE_FRAMES } from "../../pet/PetSpriteSheet";
 import { Label } from "../../components/ui-shadcn/label";
 
@@ -125,6 +127,7 @@ type SettingsModalProps = {
 	piProxyNotice: string;
 	piProxyNoticeTone: "info" | "success" | "error";
 	webServiceChanging: boolean;
+	onRestartWebService: () => void;
 	appInfo: AppInfo;
 	customPiPath: string;
 	customPathValidating: boolean;
@@ -296,6 +299,10 @@ function SettingsModalContent(props: SettingsModalProps) {
 			draftSettings.inputFontSize !== null,
 	);
 	const [webPortDraft, setWebPortDraft] = useState(String(draftSettings.webServicePort));
+	const [webNetworkAddresses, setWebNetworkAddresses] = useState<WebNetworkAddress[]>([]);
+	const [selectedWebAddress, setSelectedWebAddress] = useState("");
+	const [webQrDataUrl, setWebQrDataUrl] = useState("");
+	const [webNetworkLoading, setWebNetworkLoading] = useState(false);
 	const piPath = props.settings.customPiPath || props.piStatus?.command || "";
 	const changeZoomFactor = (delta: number) => {
 		const next = Math.min(
@@ -418,6 +425,60 @@ function SettingsModalContent(props: SettingsModalProps) {
 			setWebPortDraft(String(draftSettings.webServicePort));
 		}
 	};
+
+	// 网卡地址只在设置弹框内展示；优先局域网 IPv4，VPN/虚拟网卡仍保留为可选入口。
+	useEffect(() => {
+		const loadAddresses = desktopApi.app.networkAddresses;
+		if (typeof loadAddresses !== "function") return;
+		let active = true;
+		setWebNetworkLoading(true);
+		void loadAddresses()
+			.then((addresses) => {
+				if (!active) return;
+				setWebNetworkAddresses(addresses);
+				setSelectedWebAddress((current) =>
+					addresses.some((item) => item.address === current)
+						? current
+						: addresses.find((item) => item.isPrivate)?.address ?? addresses[0]?.address ?? "",
+				);
+			})
+			.catch(() => {
+				if (active) setWebNetworkAddresses([]);
+			})
+			.finally(() => {
+				if (active) setWebNetworkLoading(false);
+			});
+		return () => {
+			active = false;
+		};
+	}, []);
+
+	const webAccessUrl = selectedWebAddress
+		? `http://${selectedWebAddress}:${webPortDraft || draftSettings.webServicePort}`
+		: "";
+
+	// URL 或开关变化时重新编码，二维码只保存 data URL，不把主进程能力暴露给页面。
+	useEffect(() => {
+		if (!draftSettings.webServiceEnabled || !webAccessUrl) {
+			setWebQrDataUrl("");
+			return;
+		}
+		let active = true;
+		void QRCode.toDataURL(webAccessUrl, {
+			width: 192,
+			margin: 1,
+			color: { dark: "#111827", light: "#ffffff" },
+		})
+			.then((dataUrl) => {
+				if (active) setWebQrDataUrl(dataUrl);
+			})
+			.catch(() => {
+				if (active) setWebQrDataUrl("");
+			});
+		return () => {
+			active = false;
+		};
+	}, [draftSettings.webServiceEnabled, webAccessUrl]);
 
 	const tabs: Array<{
 		id: SettingsTabId;
@@ -1698,8 +1759,59 @@ function SettingsModalContent(props: SettingsModalProps) {
 												{t("common.open")}
 											</Button>
 										</div>
-									</div>
-								</SettingsSection>
+										<div className="flex justify-end">
+											<Button
+												variant="outline"
+												size="sm"
+												disabled={!draftSettings.webServiceEnabled || props.webServiceChanging}
+												onClick={props.onRestartWebService}
+											>
+												<RotateCw className="mr-1.5 size-3.5" aria-hidden="true" />
+												{props.webServiceChanging ? t("settings.webRestarting") : t("settings.webRestartService")}
+											</Button>
+										</div>
+										<div className="grid gap-2 rounded-lg border border-border-subtle/70 bg-bg-muted/20 p-3">
+											<div className="flex items-center justify-between gap-2">
+												<div className="min-w-0">
+													<strong className="block text-caption font-semibold text-text-primary">{t("settings.webQrTitle")}</strong>
+													<small className="mt-0.5 block text-micro text-text-tertiary">{t("settings.webQrDesc")}</small>
+												</div>
+												{webNetworkLoading && <span className="text-micro text-text-tertiary">{t("settings.webNetworkLoading")}</span>}
+											</div>
+											{webNetworkAddresses.length > 0 ? (
+												<div className="grid gap-1.5">
+													<Label className="text-xs font-bold text-text-tertiary">{t("settings.webQrAddress")}</Label>
+													<Select value={selectedWebAddress} onValueChange={setSelectedWebAddress}>
+														<SelectTrigger className="font-mono text-sm tabular-nums">
+															<SelectValue />
+														</SelectTrigger>
+														<SelectContent>
+															{webNetworkAddresses.map((item) => (
+																<SelectItem key={item.address} value={item.address}>
+																	<span className="font-mono">{item.address}</span>
+																	<span className="ml-2 text-xs text-muted-foreground">{item.interfaceName}{item.cidr ? ` · /${item.cidr.split("/")[1]}` : ""}{item.isPrivate ? ` · ${t("settings.webLanAddress")}` : ""}</span>
+																</SelectItem>
+															))}
+														</SelectContent>
+													</Select>
+												</div>
+											) : (
+												<p className="text-caption text-text-tertiary">{t("settings.webNoNetworkAddress")}</p>
+											)}
+											{webQrDataUrl ? (
+												<div className="flex flex-wrap items-center gap-3 pt-1">
+													<img src={webQrDataUrl} alt={t("settings.webQrAlt")} className="size-44 rounded-md bg-white p-2" />
+													<div className="min-w-0 flex-1">
+														<code className="block break-all text-caption text-text-primary">{webAccessUrl}</code>
+														<small className="mt-1 block text-micro text-text-tertiary">{t("settings.webQrScanHint")}</small>
+													</div>
+												</div>
+											) : (
+												<p className="text-caption text-text-tertiary">{draftSettings.webServiceEnabled ? t("settings.webQrUnavailable") : t("settings.webQrEnableHint")}</p>
+											)}
+										</div>
+										</div>
+									</SettingsSection>
 
 								{/* 外部编辑器（由 Pi 管理界面迁入） */}
 								<SettingsSection

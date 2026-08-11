@@ -9,7 +9,7 @@
  * - 流式期间底部显示响应指示器；出错显示诊断卡
  */
 import { Fragment, memo, useEffect, useRef, useState } from "react";
-import { Brain, ChevronDown, ChevronRight, Wrench } from "lucide-react";
+import { ArrowDown, Brain, ChevronDown, ChevronRight, Wrench } from "lucide-react";
 import type { UIMessage } from "ai";
 import { Button } from "@/components/ui-shadcn/button";
 import { t } from "@/i18n";
@@ -194,32 +194,43 @@ export function WebTimeline(props: {
 		onLoadMore,
 	} = props;
 	const timelineRef = useRef<HTMLDivElement | null>(null);
+	const stickToBottomRef = useRef(true);
+	const [showScrollToBottom, setShowScrollToBottom] = useState(false);
 
-	// 流式期间/新消息到达时自动滚到底（仅当用户已在底部附近时）
-	const maybeScrollToBottom = () => {
+	const updateScrollState = () => {
 		const el = timelineRef.current;
 		if (!el) return;
 		const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
-		if (distance < 160) {
-			el.scrollTo({ top: el.scrollHeight });
-		}
+		const nearBottom = distance < 160;
+		stickToBottomRef.current = nearBottom;
+		setShowScrollToBottom(!nearBottom && messages.length > 0);
 	};
 
-	// 新消息（流式增量/历史恢复）追加后检查一次是否需要跟随滚动；
-	// 用 effect 而非渲染期副作用，避免 StrictMode 双渲染重复触发
-	const messageCount = messages.length;
+	const scrollToBottom = () => {
+		const el = timelineRef.current;
+		if (!el) return;
+		stickToBottomRef.current = true;
+		setShowScrollToBottom(false);
+		el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+	};
+
+	// 新消息或流式增量到达时，仅在用户原本接近底部时跟随，避免打断用户阅读历史。
 	useEffect(() => {
-		if (messageCount === 0) return;
-		const frame = requestAnimationFrame(maybeScrollToBottom);
+		const frame = requestAnimationFrame(() => {
+			const el = timelineRef.current;
+			if (el && stickToBottomRef.current) el.scrollTo({ top: el.scrollHeight });
+			updateScrollState();
+		});
 		return () => cancelAnimationFrame(frame);
+		// messages 变化既覆盖新消息，也覆盖同一条 assistant 消息的流式增量。
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [messageCount]);
+	}, [messages, streaming]);
 
 	return (
 		<section
-			className="message-timeline h-full min-h-0 flex-1 overflow-y-auto"
+			className="message-timeline relative h-full min-h-0 flex-1 overflow-y-auto"
 			ref={timelineRef}
-			onScroll={maybeScrollToBottom}
+			onScroll={updateScrollState}
 		>
 			<div className="message-list flex flex-col gap-4 p-4">
 				{!hasActiveSession && messages.length === 0 ? (
@@ -280,6 +291,19 @@ export function WebTimeline(props: {
 					</div>
 				) : null}
 			</div>
+
+			{showScrollToBottom && (
+				<Button
+					variant="secondary"
+					size="icon"
+					className="absolute right-4 bottom-4 z-10 size-9 rounded-full border border-border bg-background/95 shadow-md"
+					onClick={scrollToBottom}
+					aria-label={t("web.scrollToBottom")}
+					title={t("web.scrollToBottom")}
+				>
+					<ArrowDown className="size-4" aria-hidden="true" />
+				</Button>
+			)}
 
 			{/* 分页加载更多 */}
 			{hasMoreHistory && (

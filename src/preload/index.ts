@@ -92,6 +92,7 @@ import type {
 	TerminalExitEvent,
 	TerminalTab,
 	TerminalTarget,
+	WebNetworkAddress,
 } from "../shared/types";
 
 /**
@@ -859,6 +860,8 @@ const api = {
 	},
 	app: {
 		info: () => ipcRenderer.invoke(ipcChannels.appInfo) as Promise<AppInfo>,
+		networkAddresses: () =>
+			ipcRenderer.invoke(ipcChannels.appNetworkAddresses) as Promise<WebNetworkAddress[]>,
 		preferredSystemLanguages: () =>
 			ipcRenderer.invoke(ipcChannels.appPreferredSystemLanguages) as Promise<string[]>,
 		checkUpdate: () =>
@@ -1007,6 +1010,8 @@ const api = {
 				ipcChannels.settingsUpdate,
 				patch,
 			) as Promise<AppSettings>,
+		restartWebService: () =>
+			ipcRenderer.invoke(ipcChannels.settingsRestartWebService) as Promise<void>,
 		testPiProxy: () =>
 			ipcRenderer.invoke(
 				ipcChannels.settingsTestPiProxy,
@@ -1129,6 +1134,7 @@ const api = {
 					totalDurationMs: number;
 					items: Array<{
 						index: number;
+						imageHash?: string;
 						mimeType: string;
 						ok: boolean;
 						error?: string;

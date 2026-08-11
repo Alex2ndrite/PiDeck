@@ -1,4 +1,5 @@
 import type { ExternalEditorSettings } from "./project";
+import type { SecurityConfig } from "./security";
 
 export type SendShortcutMode =
 	| "enter-send"
@@ -20,6 +21,14 @@ export type AppSkinId =
 	| "custom";
 export type AppLanguageMode = "system" | "zh-CN" | "en-US" | "pseudo";
 export type LinkOpenMode = "external" | "internal";
+
+/** 主进程枚举出的可用于手机访问 Web 服务的局域网入口。 */
+export type WebNetworkAddress = {
+	address: string;
+	interfaceName: string;
+	cidr: string | null;
+	isPrivate: boolean;
+};
 /** 文件/Git Diff 在中间栏的默认打开方式：分屏与会话并排，或占满中间栏 */
 export type WorkspaceContentOpenMode = "split" | "maximize";
 /** 会话 Tab 打开模式：preview=单击为临时预览（发消息后自动晋升常驻），permanent=单击即常驻共存 */
@@ -235,6 +244,14 @@ export type StartupWindowMode =
 	 * 下次启动跳过自动部署，并清理用户目录残留文件，避免 pi 仍加载导致工具冲突。
 	 */
 	removedBuiltInExtensions: string[];
+
+	// ── 安全管理 ──
+	/**
+	 * 安全管理配置（等级/工具动作/目录边界/会话覆盖）。
+	 * 缺省 undefined：由 SecurityStore.normalizeConfig 并入默认值（enabled=false 零干预）。
+	 * 变更后主进程会把策略快照写入 userData/security-policy.json 供 pi-deck-security-gate 扩展消费。
+	 */
+	securityConfig?: SecurityConfig;
 
 };
 

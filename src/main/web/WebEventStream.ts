@@ -82,6 +82,11 @@ export class PiEventToUiMessageStream {
 			return this.finishMessage(event);
 		}
 
+		// agent_settled 是 Pi 最终稳定点；部分版本不会把 agent_end 作为外部流的最后事件。
+		if (type === "agent_settled") {
+			return this.finishMessage(event);
+		}
+
 		// 其余事件（agent_start / tool_execution_start 之前的辅助事件等）不直接产生 UI 帧。
 		return frames;
 	}
@@ -245,6 +250,7 @@ export type SessionStreamEntry = {
 	/** 写出原始 wire 文本（含 data: 前缀）；返回是否成功。 */
 	writeRaw: (wire: string) => boolean;
 	closed: boolean;
+	onFinish?: () => void;
 };
 
 /**
@@ -265,12 +271,14 @@ export class WebEventStreamRouter {
 		sessionId: string,
 		writeRaw: (wire: string) => boolean,
 		onClose: () => void,
+		onFinish?: () => void,
 	): () => void {
 		const entry: SessionStreamEntry = {
 			sessionId,
 			adapter: new PiEventToUiMessageStream(),
 			writeRaw,
 			closed: false,
+			onFinish,
 		};
 		let set = this.sessionStreams.get(sessionId);
 		if (!set) {
@@ -329,6 +337,12 @@ export class WebEventStreamRouter {
 						set.delete(entry);
 						break;
 					}
+					// [DONE] 是协议终止标记，但 Node response 仍需显式 end，
+					// 否则 useChat 可能继续等待 HTTP body 关闭，界面会一直显示运行中。
+					entry.closed = true;
+					set.delete(entry);
+					entry.onFinish?.();
+					break;
 				}
 			}
 		}

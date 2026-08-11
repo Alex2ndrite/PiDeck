@@ -28,6 +28,7 @@ import { fetchModelList, invalidateModelListCache, getCachedModelList, refreshMo
 import { getProcessSnapshot } from "../process/ProcessMonitor";
 import type { ProcessMetricsSnapshot } from "../../shared/types";
 import { getWslExe } from "../wsl/wslExe";
+import { listWebNetworkAddresses } from "../web/WebNetwork";
 
 /**
  * IPC 边界校验：RPC 日志条目必须字段齐全，防止渲染层传伪造对象写盘。
@@ -97,6 +98,8 @@ export type SystemIpcDeps = {
 	testPiProxy?: (settings: AppSettings, proxyUrl?: string, translate?: (key: string, params?: Record<string, string | number>) => string) => Promise<import("../../shared/types").PiProxyTestResult>;
 	/** Web service manager apply settings */
 	applyWebServiceSettings?: (settings: AppSettings) => Promise<void>;
+	/** Restart the running Web service without changing persisted settings. */
+	restartWebService?: (settings: AppSettings) => Promise<void>;
 	/** Session catalog set identity context */
 	setSessionCatalogIdentityContext?: (ctx: { wslDistro?: string; wslUser?: string }) => void;
 	/** Configure WSL for various services — null 表示切回本机路径 */
@@ -150,6 +153,7 @@ export function registerSystemIpc(deps: SystemIpcDeps): void {
 		applyDesktopProxy,
 		testPiProxy,
 		applyWebServiceSettings,
+		restartWebService,
 		setSessionCatalogIdentityContext,
 		configureSkillManagerWsl,
 		configurePromptManagerWsl,
@@ -409,6 +413,8 @@ export function registerSystemIpc(deps: SystemIpcDeps): void {
 		releasesUrl: RELEASES_URL ?? "https://github.com/ayuayue/pi-desktop/releases",
 		platform: process.platform,
 	}));
+
+	ipcMain.handle(ipcChannels.appNetworkAddresses, () => listWebNetworkAddresses());
 
 	ipcMain.handle(ipcChannels.appPreferredSystemLanguages, () => {
 		try { return app.getPreferredSystemLanguages(); } catch { return []; }
@@ -688,6 +694,11 @@ export function registerSystemIpc(deps: SystemIpcDeps): void {
 			}
 		}
 		return settings;
+	});
+
+	ipcMain.handle(ipcChannels.settingsRestartWebService, async () => {
+		if (!restartWebService) throw new Error("restartWebService not available");
+		await restartWebService(settingsStore.get());
 	});
 
 	ipcMain.handle(ipcChannels.settingsTestPiProxy, async () => {

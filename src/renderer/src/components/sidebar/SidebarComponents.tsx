@@ -121,7 +121,7 @@ export function SessionManagerModal(props: {
 								<Label className="flex cursor-pointer items-center gap-2 text-control text-text-secondary select-none">
 									<Checkbox
 										checked={selectAll}
-										onChange={handleToggleAll}
+										onCheckedChange={handleToggleAll}
 									className="m-0 size-[15px] cursor-pointer accent-[var(--color-accent)]" />
 									{t("common.selectAll")}
 								</Label>
@@ -250,7 +250,7 @@ export function SessionManagerModal(props: {
 											<Label className="flex shrink-0 cursor-pointer items-center">
 												<Checkbox
 													checked={isChecked}
-													onChange={() => handleToggle(session.filePath)}
+													onCheckedChange={() => handleToggle(session.filePath)}
 													className="m-0 size-[15px] cursor-pointer accent-[var(--color-accent)]"
 												/>
 											</Label>
