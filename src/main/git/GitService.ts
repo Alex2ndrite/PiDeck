@@ -275,8 +275,19 @@ export class GitService {
 			const samePath = (left: string, right: string) => process.platform === "win32"
 				? left.toLocaleLowerCase() === right.toLocaleLowerCase()
 				: left === right;
-			const resource = groups[group].find((entry) => samePath(entry.path, resolve(filePath)));
+			// GitPanel 的 Changes 组把 untracked 文件合并显示但统一传 workingTree 组，
+			// 导致未跟踪文件在 workingTree 组里找不到而打不开；容错回查 untracked 组。
+			const resource =
+				groups[group].find((entry) => samePath(entry.path, resolve(filePath)))
+				?? (group === "workingTree"
+					? groups.untracked.find((entry) => samePath(entry.path, resolve(filePath)))
+					: undefined);
 			if (!resource) return null;
+			// 经容错匹配到的未跟踪资源：读取语义与 untracked 组一致（左侧为空 + 只读工作区）
+			const effectiveGroup =
+				group === "workingTree" && resource.status === GitStatus.UNTRACKED
+					? "untracked"
+					: group;
 
 			const toRepoPath = (absolutePath: string) => {
 				const scoped = relative(inputRoot, resolve(absolutePath));
@@ -341,17 +352,17 @@ export class GitService {
 
 			let originalContent: string | null;
 			let modifiedContent: string | null;
-			if (group === "untracked") {
+			if (effectiveGroup === "untracked") {
 				originalContent = "";
 				modifiedContent = await readWorkingTree();
-			} else if (group === "index") {
+			} else if (effectiveGroup === "index") {
 				originalContent = resource.status === GitStatus.INDEX_ADDED
 					? ""
 					: await readBlob(`HEAD:${oldPath}`);
 				modifiedContent = resource.status === GitStatus.INDEX_DELETED
 					? ""
 					: await readBlob(`:${currentPath}`);
-			} else if (group === "workingTree") {
+			} else if (effectiveGroup === "workingTree") {
 				originalContent = await readBlob(`:${resource.oldPath ? oldPath : currentPath}`);
 				modifiedContent = resource.status === GitStatus.DELETED ? "" : await readWorkingTree();
 			} else {

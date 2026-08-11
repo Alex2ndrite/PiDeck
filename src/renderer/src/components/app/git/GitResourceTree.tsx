@@ -170,7 +170,14 @@ export function FileTree(props: {
 								status={r.status}
 								letter={r.letter}
 								path={r.path}
-								onOpen={() => props.onOpenWorkspaceFileDiff(props.groupType, r.path)}
+							onOpen={() => props.onOpenWorkspaceFileDiff(
+								// Changes 组合并了 workingTree + untracked + index，但 groupType 写死 workingTree；
+								// 未跟踪文件按实际状态传 untracked，否则服务端在 workingTree 组找不到而打不开
+								props.groupType === "workingTree" && r.status === GitStatus.UNTRACKED
+									? "untracked"
+									: props.groupType,
+								r.path,
+							)}
 								actions={actions}
 								deleteFile={props.deleteFile ? (path) => props.deleteFile?.(path) : undefined}
 							/>

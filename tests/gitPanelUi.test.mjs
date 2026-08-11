@@ -281,7 +281,9 @@ assert.doesNotMatch(twistie, /ChevronDown|ChevronRight|GitBranch|GitCommit|GitCo
 
   test("opens workspace resources into the middle workbench without drawer overlays", () => {
     assert.match(resourceTree, /focus-visible:shadow-\[inset_var\(--focus-ring\)\]/);
-    assert.match(resourceTree, /onOpenWorkspaceFileDiff\(props\.groupType, r\.path\)/);
+    // 未跟踪文件按实际状态传 untracked 组（否则服务端在 workingTree 组找不到而打不开）
+    assert.match(resourceTree, /props\.groupType === "workingTree" && r\.status === GitStatus\.UNTRACKED/);
+    assert.match(resourceTree, /"untracked"/);
     assert.match(panel, /groupType="merge"/);
     assert.match(panel, /groupType="index"/);
     assert.match(panel, /groupType="workingTree"/);
@@ -296,9 +298,9 @@ assert.doesNotMatch(twistie, /ChevronDown|ChevronRight|GitBranch|GitCommit|GitCo
     assert.match(preload, /workspaceFileDiff:/);
     assert.match(gitIpc, /gitWorkspaceFileDiff/);
     assert.match(gitService, /async getWorkspaceFileDiff/);
-    assert.match(gitService, /group === "untracked"/);
-    assert.match(gitService, /group === "index"/);
-    assert.match(gitService, /group === "workingTree"/);
+    assert.match(gitService, /effectiveGroup === "untracked"/);
+    assert.match(gitService, /effectiveGroup === "index"/);
+    assert.match(gitService, /effectiveGroup === "workingTree"/);
     assert.match(resourceTree, /disabled:cursor-progress disabled:opacity-70/);
     assert.match(i18n, /"git\.openWorkspaceDiff"/);
   });
