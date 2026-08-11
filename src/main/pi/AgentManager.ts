@@ -269,6 +269,16 @@ export class AgentManager {
 	private readonly pendingTrustRequests = new Map<string, { resolve: (choice: ProjectTrustChoice) => void }>();
 	private wslEnvironment: WslEnvironment | null = null;
 
+	/**
+	 * 用户配置的 RPC 超时（默认 600s，SettingsStore 另有「低于 600s 自动提升」保险）。
+	 * 发送消息与启动/重连等用户可感知的等待路径统一吃该配置，
+	 * 与启动诊断卡里的指引（“Increase the RPC timeout in settings”）保持一致，
+	 * 避免用户调大配置却只对 prompt 生效、启动仍按硬编码 30s 超时的误导。
+	 */
+	private get rpcTimeoutMs(): number {
+		return this.settingsStore.get().rpcTimeout;
+	}
+
 	constructor(
 		private readonly getProject: (id: string) => Project | undefined,
 		private readonly getWindow: () => BrowserWindow | null,
@@ -526,7 +536,7 @@ export class AgentManager {
 		// 如果已有提前发出的请求（earlyMessagesPromise），直接复用，避免重复发送
 		const messagesPromise = earlyMessagesPromise ?? runtime.process.client.request({
 			type: "get_messages",
-		});
+		}, this.rpcTimeoutMs);
 
 		let entriesPromise: Promise<any> | undefined;
 		if (!skipEntries) {
@@ -854,7 +864,9 @@ export class AgentManager {
 		// 启动后先获取状态，get_messages 必须等状态就绪后再发送，
 		// 确保 pi 进程已完全加载会话文件，避免竞态导致返回空结果。
 		void this.appLogger?.info("agent", "Agent get_state request start", { agentId: id });
-		const statePromise = client.request({ type: "get_state" });
+		// 启动 get_state 吃用户配置的 rpcTimeout：WSL/代理/慢机器上 pi 首次响应可能超过默认 30s，
+		// 超时即触发「Pi RPC 启动失败」诊断卡；与诊断指引（调大设置里的 RPC 超时）保持一致。
+		const statePromise = client.request({ type: "get_state" }, this.rpcTimeoutMs);
 		const historyLoadDecision = this.getHistoryAutoLoadDecision(input.sessionPath);
 
 
@@ -889,7 +901,7 @@ export class AgentManager {
 			// preserveMessagesAfter 保护加载期间用户新发的消息/流式回复，防止历史结果回写时覆盖当前会话。
 			// 状态就绪后发送 get_messages，确保 pi 进程已完全加载会话文件，避免竞态。
 			const messagesPromise = historyLoadDecision.shouldLoad
-				? client.request({ type: "get_messages" })
+				? client.request({ type: "get_messages" }, this.rpcTimeoutMs)
 				: undefined;
 			const preserveMessagesAfter = Date.now();
 			if (messagesPromise) {
@@ -1551,7 +1563,7 @@ export class AgentManager {
 		runtime.process = process;
 
 		try {
-			const stateResponse = await client.request({ type: "get_state" });
+			const stateResponse = await client.request({ type: "get_state" }, this.rpcTimeoutMs);
 			const data = stateResponse.data as
 				| { sessionId?: string; sessionFile?: string; sessionName?: string }
 				| undefined;
@@ -1611,7 +1623,7 @@ export class AgentManager {
 		// 且文件结果带 (size, mtimeMs) 缓存，会话未变化时零 IO 零 parse
 		const [stateResponse, statsResponse, fileHitStats] = await Promise.all([
 			runtime.process.client
-				.request({ type: "get_state" })
+				.request({ type: "get_state" }, this.rpcTimeoutMs)
 				.catch(() => ({ data: undefined })),
 			runtime.process.client
 				.request({ type: "get_session_stats" })
@@ -2158,7 +2170,7 @@ export class AgentManager {
 			try {
 				const state = await runtime.process.client.request({
 					type: "get_state",
-				});
+				}, this.rpcTimeoutMs);
 				sessionPath = this.normalizeSessionPathFromPi(
 					(state.data as { sessionFile?: string } | undefined)?.sessionFile ??
 						undefined,
@@ -2230,7 +2242,7 @@ export class AgentManager {
 		const project = this.getProject(projectId);
 		return this.withTemporarySession(projectId, sessionPath, async (process) => {
 			const response = await process.client.request({ type: "clone" }, 120_000);
-			const state = await process.client.request({ type: "get_state" });
+			const state = await process.client.request({ type: "get_state" }, this.rpcTimeoutMs);
 			return {
 				...((response.data as object | undefined) ?? {}),
 				sessionPath: this.normalizeSessionPathFromPi(
@@ -2298,7 +2310,7 @@ export class AgentManager {
 	private async refreshRuntimeAfterSessionReplacement(agentId: string) {
 		const runtime = this.requireRuntime(agentId);
 		const stateResponse = await runtime.process.client
-			.request({ type: "get_state" })
+			.request({ type: "get_state" }, this.rpcTimeoutMs)
 			.catch(() => ({ data: undefined }));
 		const state = stateResponse.data as { sessionFile?: string; sessionName?: string } | undefined;
 		if (state?.sessionFile) {
