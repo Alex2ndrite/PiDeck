@@ -1267,10 +1267,12 @@ export function GitPanel(props: GitPanelProps) {
                   <ArrowUpFromLine size={14} />
                 )}
               </Button>
-              {/* 领先角标：本地上游提交数，提示需要推送 */}
+              {/* 领先角标：本地上游提交数，提示需要推送。
+                  背景用 --color-info 而非 --color-accent：accent 暗色反转为近白（#fafafa），
+                  与固定 text-white 组合会白底白字不可读；info 明暗两套都是深蓝系，白字对比稳定 */}
               {!pushing && aheadBehind && aheadBehind.ahead > 0 && (
                 <span
-                  className="pointer-events-none absolute -top-1 -right-1 inline-flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-[var(--color-accent)] px-0.5 text-[9px] leading-none font-semibold text-white tabular-nums"
+                  className="pointer-events-none absolute -top-1 -right-1 inline-flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-[var(--color-info)] px-0.5 text-[9px] leading-none font-semibold text-white tabular-nums"
                   aria-label={t("git.pushAhead", { count: aheadBehind.ahead })}
                 >
                   {aheadBehind.ahead}
@@ -1298,10 +1300,10 @@ export function GitPanel(props: GitPanelProps) {
                   <ArrowDownToLine size={14} />
                 )}
               </Button>
-              {/* 落后角标：远程领先本地的提交数，提示需要拉取 */}
+              {/* 落后角标：远程领先本地的提交数，提示需要拉取（颜色同领先角标，见上注释） */}
               {!pulling && aheadBehind && aheadBehind.behind > 0 && (
                 <span
-                  className="pointer-events-none absolute -top-1 -right-1 inline-flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-[var(--color-accent)] px-0.5 text-[9px] leading-none font-semibold text-white tabular-nums"
+                  className="pointer-events-none absolute -top-1 -right-1 inline-flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-[var(--color-info)] px-0.5 text-[9px] leading-none font-semibold text-white tabular-nums"
                   aria-label={t("git.pullBehind", { count: aheadBehind.behind })}
                 >
                   {aheadBehind.behind}
