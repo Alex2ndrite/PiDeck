@@ -103,7 +103,7 @@ export function QueuedPromptPanel(props: {
           <span>{t("app.queuedMessagesLabel")}</span>
           <span className="tabular-nums text-text-secondary">{props.prompts.length}</span>
         </div>
-        <div className="flex min-w-0 max-h-[102px] flex-col gap-[3px] overflow-x-hidden overflow-y-auto overscroll-contain [scrollbar-width:thin] [scrollbar-color:transparent_transparent] hover:[scrollbar-color:var(--color-border-default)_transparent] focus-within:[scrollbar-color:var(--color-border-default)_transparent] [&::-webkit-scrollbar]:w-[5px] [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-transparent hover:[&::-webkit-scrollbar-thumb]:bg-[var(--color-border-default)] focus-within:[&::-webkit-scrollbar-thumb]:bg-[var(--color-border-default)]">
+        <div className="flex min-w-0 max-h-[102px] flex-col gap-[3px] overflow-x-hidden overflow-y-auto overscroll-contain [scrollbar-width:thin] [scrollbar-color:transparent_transparent] hover:[scrollbar-color:var(--color-border-default)_transparent] focus-within:[scrollbar-color:var(--color-border-default)_transparent]">
           {props.visiblePrompts.map((prompt, index) => {
             const status = prompt.status ?? "pending";
             const previewText =

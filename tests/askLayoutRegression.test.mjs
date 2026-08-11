@@ -14,6 +14,10 @@ const timeline = readFileSync(
   "src/renderer/src/components/session/SessionMessageTimeline.tsx",
   "utf8",
 );
+const chatContentWidth = readFileSync(
+  "src/renderer/src/components/session/chatContentWidth.ts",
+  "utf8",
+);
 const overlay = readFileSync(
   "src/renderer/src/components/overlays/SessionRuntimeUiOverlay.tsx",
   "utf8",
@@ -38,7 +42,10 @@ test("ask stays out of composer sizing and uses the session timeline as its scro
   assert.match(timeline, /className="session-runtime-ui mx-auto w-full/);
   assert.doesNotMatch(timeline, /session-runtime-ui sticky bottom-0/);
   // 内容宽度：消息区/输入框 inline width，Ask 随时间线同宽。
-  assert.match(timeline, /style=\{chatContentWidthStyle\}/);
+  // 时间线侧挂在 MessageScroller 的 contentProps（内层 [role=log]）上，
+  // 视口铺满面板、滚动条贴面板最右，内容列仍与 composer 同宽居中。
+  assert.match(timeline, /contentProps=\{\{ style: chatContentWidthStyle \}\}/);
+  assert.doesNotMatch(timeline, /style=\{chatContentWidthStyle\}/);
   assert.doesNotMatch(timeline, /--chat-inline-pad/);
   assert.doesNotMatch(foundation, /--chat-inline-pad|--chat-side-gap/);
   assert.doesNotMatch(overlay, /CollapsibleContent className="min-h-0 overflow-y-auto"/);
@@ -60,4 +67,18 @@ test("composer minimum still fits the editor after ask moves to timeline", () =>
     requiredHeight <= composerMinHeight,
     `editor needs ${requiredHeight}px, but composer minimum is only ${composerMinHeight}px`,
   );
+});
+
+/**
+ * 消息列与输入框必须共享同一条滚动条槽位：时间线视口由自身 scrollbar-gutter 预留，
+ * composer 面板用 overflow-hidden + scrollbar-gutter:stable 预留同宽槽位，两者百分比
+ * 宽度/居中基准一致——任何宽度设置与平台（macOS 覆盖式滚动条时两侧同为 0）下都对齐，
+ * 不依赖写死的像素补偿。
+ */
+test("composer panel reserves the same scrollbar gutter as the timeline", () => {
+  assert.match(sessionView, /session-v-composer overflow-hidden \[scrollbar-gutter:stable\]/);
+  assert.doesNotMatch(sessionView, /paddingRight/);
+  // 时间线侧：宽度约束挂在滚动内容上（视口自带 scrollbar-gutter:stable 预留槽位）
+  assert.match(timeline, /contentProps=\{\{ style: chatContentWidthStyle \}\}/);
+  assert.match(chatContentWidth, /scrollbar-gutter:stable/);
 });

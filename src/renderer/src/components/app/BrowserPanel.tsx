@@ -422,7 +422,7 @@ export function BrowserPanel(props: {
 
 	return (
 		<div className={panelClass} onClick={(event) => event.stopPropagation()}>
-			<div className="flex shrink-0 items-stretch overflow-x-auto overflow-y-hidden border-b border-border/40 bg-bg-subtle [scrollbar-width:thin] [&::-webkit-scrollbar]:h-0">
+			<div className="flex shrink-0 items-stretch overflow-x-auto overflow-y-hidden border-b border-border/40 bg-bg-subtle [scrollbar-width:thin]">
 				{tabs.map((tab) => (
 					<div
 						key={tab.id}

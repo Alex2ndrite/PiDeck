@@ -533,7 +533,11 @@ export function SessionView({
               maxSize={composerMaxHeight}
               defaultSize={composerHeight}
               onResize={handleComposerResize}
-              className="session-v-composer"
+              // 与时间线共享同一条滚动条槽位：面板 overflow-hidden + scrollbar-gutter:stable
+              // 预留与真实滚动条等宽的右侧槽位（时间线视口由自身 gutter 预留），
+              // 使输入框与消息列的百分比宽度/居中基准一致，任何宽度设置与平台下都对齐
+              // （macOS 覆盖式滚动条时两侧槽位同为 0，依然对齐；不写死像素值）。
+              className="session-v-composer overflow-hidden [scrollbar-gutter:stable]"
             >
               <ComposerArea
                 ref={composerRef}

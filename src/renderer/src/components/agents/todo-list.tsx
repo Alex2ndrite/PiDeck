@@ -342,7 +342,7 @@ export function TodoList({
       >
         <div
           ref={viewportRef}
-          className="overflow-y-auto px-2 pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          className="overflow-y-auto px-2 pb-2 [scrollbar-width:none]"
           style={{ maxHeight }}
         >
           {items.length ? (

@@ -1452,32 +1452,15 @@ select:focus-visible {
 }
 
 /* ── 全局统一滚动条：细滑块、透明轨道，融入面板背景 ──
-   个别容器（如会话列表、终端）用更具体的选择器隐藏或覆盖。 */
+   个别容器（如会话列表、终端）用更具体的选择器隐藏或覆盖。
+
+   ⚠️ 不要恢复 ::-webkit-scrollbar 系列规则：Chromium 121+（Electron 38）在元素
+   声明 scrollbar-width 后会完全忽略 webkit 伪元素（宽度与视觉样式都不生效）。
+   当前真实滚动条为原生 thin（实测 12px 槽位），颜色由 scrollbar-color 控制；
+   消息列/输入框的宽度基准依赖这条 gutter（见 chatContentWidth.ts 的对齐契约）。 */
 * {
   scrollbar-width: thin;
   scrollbar-color: var(--color-border-strong) transparent;
-}
-*::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-*::-webkit-scrollbar-track {
-  background: transparent;
-}
-*::-webkit-scrollbar-thumb {
-  background: var(--color-border-strong);
-  border-radius: 999px;
-  /* 8px 槽内留 2px 透明边，视觉粗细约 4px，更轻地融入背景 */
-  border: 2px solid transparent;
-  background-clip: padding-box;
-}
-*::-webkit-scrollbar-thumb:hover {
-  background: var(--color-text-tertiary);
-  border: 2px solid transparent;
-  background-clip: padding-box;
-}
-*::-webkit-scrollbar-corner {
-  background: transparent;
 }
 
 .conversation-list {
@@ -1487,10 +1470,6 @@ select:focus-visible {
   overflow-y: auto;
   scrollbar-width: none;
   padding: 12px 12px 56px;
-}
-.conversation-list::-webkit-scrollbar {
-  width: 0;
-  height: 0;
 }
 /* pure official：行布局/hover/active 由 ProjectTree/SessionTree Tailwind 承担。
  * 保留 class 与最小重置，避免旧 grid/左边条回流。 */
@@ -2556,10 +2535,8 @@ select:focus-visible {
   max-width: 100%;
   min-width: 0;
   flex: 0 0 auto;
+  /* scrollbar-width:none 已隐藏滚动条；无需 webkit 伪元素（Chromium 121+ 忽略） */
   scrollbar-width: none;
-}
-.chat-header-actions::-webkit-scrollbar {
-  display: none;
 }
 .chat-header-actions > .chat-agent-id {
   margin-left: auto;

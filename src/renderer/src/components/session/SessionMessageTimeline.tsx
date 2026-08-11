@@ -480,8 +480,10 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
         "message-timeline-host h-full min-h-0",
         contentEntering && "timeline-content-enter",
       )}
-      style={chatContentWidthStyle}
       viewportClassName="message-timeline"
+      // 宽度约束落在内层 [role=log] 而非 scroller 宿主：视口撑满整个面板，
+      // 原生滚动条贴面板最右侧；内容列仍与 composer 同宽居中（见 chatContentWidth）。
+      contentProps={{ style: chatContentWidthStyle }}
       viewportRef={timelineRef}
       scrollApiRef={controller.scrollerScrollApiRef}
       followOutput={controller.autoScroll}
