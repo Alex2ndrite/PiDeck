@@ -7,6 +7,7 @@ import { extname, join, normalize } from "node:path";
 import type {
 	AgentRuntimeState,
 	AppSettings,
+	AvailableModel,
 	ChatMessage,
 	CreateAnonymousSessionInput,
 	CreateAnonymousSessionResult,
@@ -51,6 +52,8 @@ type WebServiceDependencies = {
 	/** agentId → sessionId 路由，用于把 pi 事件导向对应 session 的 SSE 连接。 */
 	getSessionIdForAgent: (agentId: string) => string | undefined;
 	listProjects: () => Project[];
+	createProject: (path: string) => Promise<Project>;
+	listModels: () => Promise<AvailableModel[]>;
 	listSessions: (projectId: string) => Promise<SessionSummary[]>;
 	getSessionRuntimeMessages: (sessionId: string) => SessionTargetedValue<ChatMessage[]> | undefined;
 	listCatalogSessions: (projectId?: string) => Promise<SessionRecord[]>;
@@ -71,6 +74,9 @@ type WebServiceDependencies = {
 	) => Promise<SessionMessagePage>;
 	sendSessionPrompt: (input: SendSessionPromptInput) => Promise<SendSessionPromptResult>;
 	listSessionRuntimes: () => SessionRuntimeInfo[];
+	listSessionRuntimeModels: (target: SessionRuntimeTarget) => Promise<
+		SessionCommandResult<SessionTargetedValue<AvailableModel[]>>
+	>;
 	stopSessionRuntime: (target: SessionRuntimeTarget) => Promise<SessionCommandResult<SessionRuntimeTarget>>;
 	abortSessionRuntime: (target: SessionRuntimeTarget) => Promise<SessionCommandResult<SessionTargetedValue<void>>>;
 	restartSessionRuntime: (target: SessionRuntimeTarget) => Promise<SessionCommandResult<SessionRuntimeReplacement>>;
@@ -244,6 +250,21 @@ export class WebServiceManager {
 			}
 			if (url.pathname === "/api/state") {
 				this.sendJson(response, await this.getState());
+				return;
+			}
+			if (url.pathname === "/api/models" && request.method === "GET") {
+				this.sendJson(response, { models: await this.deps.listModels() });
+				return;
+			}
+			if (url.pathname === "/api/projects" && request.method === "POST") {
+				const body = await this.readJson<{ path?: string }>(request);
+				const path = body.path?.trim() ?? "";
+				if (!path) {
+					this.sendError(response, 400, "webError.projectPathRequired", "path is required");
+					return;
+				}
+				const project = await this.deps.createProject(path);
+				this.sendJson(response, { project });
 				return;
 			}
 			const sessionsMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/sessions$/);
@@ -423,7 +444,7 @@ export class WebServiceManager {
 				return;
 			}
 			const sessionRuntimeMatch = url.pathname.match(
-				/^\/api\/sessions\/([^/]+)\/runtime\/(stop|abort|restart|compact|state|commands|export-html|edit-message|delete-message|prepare-resend|model|thinking|clone)$/,
+				/^\/api\/sessions\/([^/]+)\/runtime\/(stop|abort|restart|compact|state|commands|export-html|edit-message|delete-message|prepare-resend|models|model|thinking|clone)$/,
 			);
 			if (sessionRuntimeMatch && request.method === "POST") {
 				const sessionId = decodeURIComponent(sessionRuntimeMatch[1]);
@@ -466,6 +487,9 @@ export class WebServiceManager {
 						break;
 					case "commands":
 						result = await this.deps.listSessionRuntimeCommands(target);
+						break;
+					case "models":
+						result = await this.deps.listSessionRuntimeModels(target);
 						break;
 					case "export-html":
 						result = await this.deps.exportSessionRuntimeHtml(target);

@@ -15,6 +15,7 @@ import { useEffect, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import type { UIMessage } from "ai";
+import type { AvailableModel } from "../../../shared/types";
 import { t } from "@/i18n";
 import { WebSidebar } from "./WebSidebar";
 import { WebHeader, type WebHeaderStatus } from "./WebHeader";
@@ -22,11 +23,16 @@ import { WebTimeline } from "./WebTimeline";
 import { WebComposer } from "./WebComposer";
 import {
 	chatMessagesToUiMessages,
+	createProject,
 	createSession,
 	fetchMessagePage,
+	fetchModels,
 	fetchState,
+	setRuntimeModel,
+	setRuntimeThinking,
+	updateSessionRecord,
 } from "./webApi";
-import type { WebState } from "./webTypes";
+import type { WebProject, WebState } from "./webTypes";
 
 /** 分页元数据：已加载消息总数 + 更早一页的游标。 */
 type HistoryMeta = {
@@ -44,6 +50,8 @@ export function WebChatApp() {
 	const [creatingProjectId, setCreatingProjectId] = useState<string>("");
 	const [connected, setConnected] = useState(false);
 	const [loadingMore, setLoadingMore] = useState(false);
+	const [models, setModels] = useState<AvailableModel[]>([]);
+	const [commandError, setCommandError] = useState<string | null>(null);
 
 	// ── 本组件自持的 per-session 消息缓存（useChat 切换 id 会重建 Chat 实例） ──
 	const messagesBySessionRef = useRef<Record<string, UIMessage[]>>({});
@@ -100,6 +108,11 @@ export function WebChatApp() {
 		loadedSessionsRef.current.add(activeSessionId);
 	}, [messages, activeSessionId, streaming]);
 
+	// 模型列表是全局 pi 配置，草稿会话也需要先选模型再发送第一条消息。
+	useEffect(() => {
+		void fetchModels().then(setModels).catch(() => setModels([]));
+	}, []);
+
 	// 低频轮询项目/会话/运行态（3s；useChat 负责消息流，不参与轮询）
 	useEffect(() => {
 		let disposed = false;
@@ -133,6 +146,7 @@ export function WebChatApp() {
 
 	const handleCreateSession = async (projectId: string) => {
 		setCreatingProjectId(projectId);
+		setCommandError(null);
 		try {
 			const id = await createSession(projectId);
 			// 新会话无历史：预标记已加载（空缓存），避免切过去时多余拉取
@@ -141,10 +155,80 @@ export function WebChatApp() {
 			historyMetaRef.current[id] = { total: 0, nextBefore: null };
 			setActiveSessionId(id);
 			await refreshNow();
-		} catch {
+		} catch (error) {
+			setCommandError(error instanceof Error ? error.message : String(error));
 			setConnected(false);
 		} finally {
 			setCreatingProjectId("");
+		}
+	};
+
+	const handleCreateProject = async (path: string): Promise<WebProject> => {
+		setCommandError(null);
+		try {
+			const project = await createProject(path);
+			await refreshNow();
+			return project;
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			setCommandError(message);
+			throw error;
+		}
+	};
+
+	const updateActiveSessionState = (patch: { model?: { provider: string; modelId: string }; thinkingLevel?: string }) => {
+		setState((current) => ({
+			...current,
+			sessions: current.sessions.map((session) =>
+				session.id === activeSessionId ? { ...session, ...patch } : session,
+			),
+		}));
+	};
+
+	const handleModelChange = async (model: AvailableModel) => {
+		if (!activeSessionId) return;
+		setCommandError(null);
+		try {
+			if (activeRuntime) {
+				await setRuntimeModel(
+					{
+						sessionId: activeRuntime.sessionId,
+						agentId: activeRuntime.agentId,
+						runtimeGeneration: activeRuntime.runtimeGeneration ?? 0,
+					},
+					model.provider,
+					model.id,
+				);
+			} else {
+				await updateSessionRecord(activeSessionId, {
+					model: { provider: model.provider, modelId: model.id },
+				});
+			}
+			updateActiveSessionState({ model: { provider: model.provider, modelId: model.id } });
+		} catch (error) {
+			setCommandError(error instanceof Error ? error.message : String(error));
+		}
+	};
+
+	const handleThinkingChange = async (level: string) => {
+		if (!activeSessionId) return;
+		setCommandError(null);
+		try {
+			if (activeRuntime) {
+				await setRuntimeThinking(
+					{
+						sessionId: activeRuntime.sessionId,
+						agentId: activeRuntime.agentId,
+						runtimeGeneration: activeRuntime.runtimeGeneration ?? 0,
+					},
+					level,
+				);
+			} else {
+				await updateSessionRecord(activeSessionId, { thinkingLevel: level });
+			}
+			updateActiveSessionState({ thinkingLevel: level });
+		} catch (error) {
+			setCommandError(error instanceof Error ? error.message : String(error));
 		}
 	};
 
@@ -205,6 +289,7 @@ export function WebChatApp() {
 				connected={connected}
 				onSelectSession={setActiveSessionId}
 				onCreateSession={(projectId) => void handleCreateSession(projectId)}
+				onCreateProject={handleCreateProject}
 			/>
 			<main className="chat-pane flex h-full min-w-0 flex-1 flex-col overflow-hidden">
 				<WebHeader
@@ -212,6 +297,11 @@ export function WebChatApp() {
 					status={headerStatus}
 					streaming={streaming}
 					canStop={Boolean(activeSessionId)}
+					model={activeSession?.model}
+					thinkingLevel={activeSession?.thinkingLevel}
+					models={models}
+					onModelChange={(model) => void handleModelChange(model)}
+					onThinkingChange={(level) => void handleThinkingChange(level)}
 					onStop={() => stop()}
 				/>
 				<WebTimeline
@@ -221,7 +311,7 @@ export function WebChatApp() {
 					moreCount={moreCount}
 					loadingMore={loadingMore}
 					streaming={streaming}
-					error={error?.message ?? null}
+					error={error?.message ?? commandError}
 					onLoadMore={() => void handleLoadMore()}
 				/>
 				<WebComposer

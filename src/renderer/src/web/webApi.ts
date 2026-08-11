@@ -8,7 +8,15 @@
  * - 发送消息走 useChat（/api/chat 流式），不在此处重复实现
  */
 import type { UIMessage } from "ai";
-import type { ChatMessage, SessionMessagePage } from "../../../shared/types";
+import type {
+	AvailableModel,
+	ChatMessage,
+	SessionCommandResult,
+	SessionMessagePage,
+	SessionRuntimeTarget,
+	SessionTargetedValue,
+	UpdateSessionRecordInput,
+} from "../../../shared/types";
 import type { WebState } from "./webTypes";
 
 /** 轮询 /api/state 拿项目/会话/运行态（低频兜底，主数据流走 useChat）。 */
@@ -16,6 +24,27 @@ export async function fetchState(): Promise<WebState> {
 	const res = await fetch("/api/state");
 	if (!res.ok) throw new Error(`state ${res.status}`);
 	return res.json();
+}
+
+/** 从 Web 端注册一个本地项目路径，返回项目记录。 */
+export async function createProject(path: string): Promise<WebState["projects"][number]> {
+	const res = await fetch("/api/projects", {
+		method: "POST",
+		headers: { "content-type": "application/json" },
+		body: JSON.stringify({ path }),
+	});
+	if (!res.ok) throw new Error(`create project ${res.status}`);
+	const result = (await res.json()) as { project?: WebState["projects"][number] };
+	if (!result.project) throw new Error("create project: missing project");
+	return result.project;
+}
+
+/** 读取 pi 当前可用模型，草稿会话也可以先选模型再发送第一条消息。 */
+export async function fetchModels(): Promise<AvailableModel[]> {
+	const res = await fetch("/api/models");
+	if (!res.ok) throw new Error(`models ${res.status}`);
+	const result = (await res.json()) as { models?: AvailableModel[] };
+	return result.models ?? [];
 }
 
 /** 按项目新建会话（对应桌面端「新建 Agent」入口）。返回新会话 id。 */
@@ -33,6 +62,56 @@ export async function createSession(projectId: string): Promise<string> {
 }
 
 /** 拉历史消息页（分页），供注入 useChat / 展示。 */
+/** 更新尚未启动 runtime 的会话偏好；运行中的会话由 runtime 命令即时应用。 */
+export async function updateSessionRecord(
+	sessionId: string,
+	patch: UpdateSessionRecordInput,
+): Promise<void> {
+	const res = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/update`, {
+		method: "POST",
+		headers: { "content-type": "application/json" },
+		body: JSON.stringify(patch),
+	});
+	if (!res.ok) throw new Error(`update session ${res.status}`);
+}
+
+async function callRuntimeCommand<T>(
+	sessionId: string,
+	target: SessionRuntimeTarget,
+	action: string,
+	body: Record<string, unknown> = {},
+): Promise<T> {
+	const res = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/runtime/${action}`, {
+		method: "POST",
+		headers: { "content-type": "application/json" },
+		body: JSON.stringify({ target, ...body }),
+	});
+	if (!res.ok) throw new Error(`runtime ${action} ${res.status}`);
+	const payload = (await res.json()) as { result?: SessionCommandResult<SessionTargetedValue<T>> };
+	const result = payload.result;
+	if (!result || !result.ok) {
+		throw new Error(result?.error.code ?? `runtime ${action} failed`);
+	}
+	return result.value.value;
+}
+
+/** 运行中的模型切换会立即发送给 pi，并由主进程同步会话记录。 */
+export function setRuntimeModel(
+	target: SessionRuntimeTarget,
+	provider: string,
+	modelId: string,
+): Promise<unknown> {
+	return callRuntimeCommand(target.sessionId, target, "model", { provider, modelId });
+}
+
+/** 运行中的思考级别切换会立即发送给 pi，并由主进程同步会话记录。 */
+export function setRuntimeThinking(
+	target: SessionRuntimeTarget,
+	level: string,
+): Promise<unknown> {
+	return callRuntimeCommand(target.sessionId, target, "thinking", { level });
+}
+
 export async function fetchMessagePage(
 	sessionId: string,
 	before?: number,

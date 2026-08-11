@@ -18,6 +18,8 @@ export type WebSession = {
 	title: string;
 	status: string;
 	projectPath?: string;
+	model?: { provider: string; modelId: string };
+	thinkingLevel?: string;
 };
 
 export type WebRuntime = {

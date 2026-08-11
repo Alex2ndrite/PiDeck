@@ -8,8 +8,9 @@
  * 交互：点击项目行 = 展开/收起；点击项目行内的 "+" = 新建会话（POST /api/sessions）；
  * 点击会话行 = 打开会话（切 activeSessionId）。
  */
-import { useState } from "react";
-import { Play, Plus, Search } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Check, FolderPlus, Play, Plus, Search, X } from "lucide-react";
+import { Button } from "@/components/ui-shadcn/button";
 import { Input } from "@/components/ui-shadcn/input";
 import { t } from "@/i18n";
 import { WebBrandLockup } from "./WebBrandLockup";
@@ -63,10 +64,14 @@ export function WebSidebar(props: {
 	connected: boolean;
 	onSelectSession: (sessionId: string) => void;
 	onCreateSession: (projectId: string) => void;
+	onCreateProject: (path: string) => Promise<WebProject>;
 }) {
 	const { state, activeSessionId, creatingProjectId, connected } = props;
 	const [search, setSearch] = useState("");
 	const [expandedProjects, setExpandedProjects] = useState<Set<string>>(() => new Set());
+	const [addingProject, setAddingProject] = useState(false);
+	const [projectPath, setProjectPath] = useState("");
+	const [projectBusy, setProjectBusy] = useState(false);
 
 	const toggleProject = (projectId: string) => {
 		setExpandedProjects((current) => {
@@ -80,11 +85,36 @@ export function WebSidebar(props: {
 	const runtimeFor = (sessionId: string): WebRuntime | undefined =>
 		state.runtimes.find((runtime) => runtime.sessionId === sessionId);
 
-	// 搜索时自动展开全部命中项目；活动会话所在项目始终展开（保证新建/切换后可见）
+	const submitProject = async () => {
+		const path = projectPath.trim();
+		if (!path || projectBusy) return;
+		setProjectBusy(true);
+		try {
+			const project = await props.onCreateProject(path);
+			setExpandedProjects((current) => new Set(current).add(project.id));
+			setProjectPath("");
+			setAddingProject(false);
+		} catch {
+			// 父级保留结构化错误并展示在聊天区；这里负责结束 busy 状态，避免表单永久锁死。
+		} finally {
+			setProjectBusy(false);
+		}
+	};
+
+	// 搜索时自动展开全部命中项目；普通项目展开状态完全由用户控制
 	const searching = search.trim().length > 0;
 	const activeSessionProjectId = state.sessions.find(
 		(session) => session.id === activeSessionId,
 	)?.projectId;
+
+	useEffect(() => {
+		if (!activeSessionProjectId) return;
+		// 切换会话时只负责把目标项目展开一次；用户随后仍可手动收起它。
+		setExpandedProjects((current) => {
+			if (current.has(activeSessionProjectId)) return current;
+			return new Set(current).add(activeSessionProjectId);
+		});
+	}, [activeSessionProjectId]);
 
 	return (
 			<aside
@@ -113,14 +143,49 @@ export function WebSidebar(props: {
 							className="h-9 pl-8"
 						/>
 					</div>
+					<Button
+						type="button"
+						variant="outline"
+						size="icon"
+						className="size-9 shrink-0"
+						onClick={() => setAddingProject((value) => !value)}
+						aria-label={t("web.newProject")}
+						title={t("web.newProject")}
+					>
+						<FolderPlus className="size-4" aria-hidden="true" />
+					</Button>
 				</div>
+				{addingProject && (
+					<form
+						className="flex shrink-0 items-center gap-1"
+						onSubmit={(event) => {
+							event.preventDefault();
+							void submitProject();
+						}}
+					>
+						<Input
+							value={projectPath}
+							onChange={(event) => setProjectPath(event.target.value)}
+							placeholder={t("web.projectPathPlaceholder")}
+							className="h-8 min-w-0 flex-1 text-caption"
+							autoFocus
+							disabled={projectBusy}
+						/>
+						<Button type="submit" variant="ghost" size="icon" className="size-8 shrink-0" disabled={projectBusy || !projectPath.trim()} aria-label={t("web.createProject")} title={t("web.createProject")}>
+							<Check className="size-4" aria-hidden="true" />
+						</Button>
+						<Button type="button" variant="ghost" size="icon" className="size-8 shrink-0" disabled={projectBusy} onClick={() => setAddingProject(false)} aria-label={t("common.close")} title={t("common.close")}>
+							<X className="size-4" aria-hidden="true" />
+						</Button>
+					</form>
+				)}
 				{/* 项目/会话树 */}
 				<div className="conversation-list min-h-0 flex-1 overflow-y-auto">
 					{state.projects.map((project) => {
 						const projectSessions = state.sessions
 							.filter((session) => session.projectId === project.id)
 							.filter((session) => matchesSearch(session.title || session.id, search.trim()));
-						const expanded = searching || expandedProjects.has(project.id) || project.id === activeSessionProjectId;
+						const expanded = searching || expandedProjects.has(project.id);
 						const projectName = displayProjectName(project);
 						const creating = creatingProjectId === project.id;
 						return (

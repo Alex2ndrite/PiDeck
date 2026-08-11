@@ -2118,6 +2118,11 @@ export const zhCN = {
 
   // ── Web 端（外部服务页面）专用文案，桌面端不消费 ──
   "web.chooseSession": "选择或创建会话",
+  "web.newProject": "新建项目",
+  "web.projectPathPlaceholder": "输入项目目录路径",
+  "web.createProject": "添加项目",
+  "web.model": "模型",
+  "web.thinking": "思考",
   "web.connected": "已连接",
   "web.connecting": "连接中...",
   "web.promptPlaceholder": "发送消息到当前会话",

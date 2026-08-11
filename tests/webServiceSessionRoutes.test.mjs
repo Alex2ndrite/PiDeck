@@ -83,13 +83,18 @@ function fixture(overrides = {}) {
 		status: "idle",
 		createdAt: 2,
 	};
-	const calls = { createDraft: 0, createAnonymous: 0, createAgent: 0, send: [], stateTargets: [], messageSessions: [] };
+	const calls = { createDraft: 0, createAnonymous: 0, createAgent: 0, createProject: [], send: [], stateTargets: [], modelTargets: [], messageSessions: [] };
 	const targeted = (target, value) => ({ ok: true, value: { target, value } });
 	const deps = {
 		// SSE 流式依赖：测试环境不订阅真实 pi 事件，但必须提供可调用实现满足契约。
 		subscribePiEvents: () => () => undefined,
 		getSessionIdForAgent: () => "session-1",
 		listProjects: () => [{ id: "project-1", name: "Project", path: "C:/project" }],
+		createProject: async (path) => {
+			calls.createProject.push(path);
+			return { id: "project-2", name: "New Project", path, lastOpenedAt: 2 };
+		},
+		listModels: async () => [{ provider: "openai", id: "gpt-test", name: "GPT Test" }],
 		listAgents: () => [agent],
 		listSessions: async () => [],
 		getSessionRuntimeMessages: (sessionId) => {
@@ -141,6 +146,10 @@ function fixture(overrides = {}) {
 			};
 		},
 		listSessionRuntimes: () => [runtime],
+		listSessionRuntimeModels: async (target) => {
+			calls.modelTargets.push(target);
+			return targeted(target, [{ provider: "openai", id: "gpt-test", name: "GPT Test" }]);
+		},
 		stopSessionRuntime: async (target) => ({ ok: true, value: target }),
 		abortSessionRuntime: async (target) => targeted(target, undefined),
 		restartSessionRuntime: async () => ({ ok: false, error: { code: "SESSION_RUNTIME_CHANGED" } }),
@@ -211,6 +220,41 @@ test("native Session HTTP routes create drafts and send by stable Session identi
 		assert.equal(prompted.result.sessionId, "session-1");
 		assert.equal(calls.send.length, 1);
 		assert.equal(calls.send[0].message, "hello");
+	});
+});
+
+test("web core routes create a project and expose the configured model list", async () => {
+	await withServer(async ({ baseUrl, calls }) => {
+		const projectResponse = await fetch(`${baseUrl}/api/projects`, {
+			method: "POST",
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify({ path: "C:/new-project" }),
+		});
+		const projectBody = await projectResponse.json();
+		assert.equal(projectBody.project.id, "project-2");
+		assert.deepEqual(calls.createProject, ["C:/new-project"]);
+
+		const modelsResponse = await fetch(`${baseUrl}/api/models`);
+		const modelsBody = await modelsResponse.json();
+		assert.equal(modelsBody.models[0].id, "gpt-test");
+	});
+});
+
+test("runtime model listing preserves the generation-validated Session target", async () => {
+	await withServer(async ({ baseUrl, runtime, calls }) => {
+		const target = {
+			sessionId: runtime.sessionId,
+			agentId: runtime.agentId,
+			runtimeGeneration: runtime.runtimeGeneration,
+		};
+		const response = await fetch(`${baseUrl}/api/sessions/session-1/runtime/models`, {
+			method: "POST",
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify({ target }),
+		});
+		const body = await response.json();
+		assert.equal(body.result.ok, true);
+		assert.equal(JSON.stringify(calls.modelTargets), JSON.stringify([target]));
 	});
 });
 

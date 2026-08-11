@@ -2476,6 +2476,12 @@ app.whenReady().then(async () => {
 		// agentId → sessionId 路由：pi 事件只有 agentId，SSE 连接按 session 订阅。
 		getSessionIdForAgent: (agentId) => sessionRuntimeCoordinator.getSessionId(agentId),
 		listProjects: () => projectStore.list(),
+		createProject: (path) => projectStore.add(
+			path,
+			undefined,
+			settingsStore.get().wslEnabled ? "wsl" : "windows",
+		),
+		listModels: () => fetchModelList(piLocator, settingsStore),
 		listSessions: (projectId) => {
 			const project = projectStore.get(projectId);
 			return sessionScanner.list(project?.path);
@@ -2578,6 +2584,7 @@ app.whenReady().then(async () => {
 			return result;
 		},
 		listSessionRuntimes: () => sessionRuntimeCoordinator.listRuntimes(),
+		listSessionRuntimeModels: (target) => sessionRuntimeCoordinator.listRuntimeModels(target),
 		stopSessionRuntime: stopSessionRuntime,
 		abortSessionRuntime: (target) => sessionRuntimeCoordinator.abortRuntime(target),
 		restartSessionRuntime: async (target) => {

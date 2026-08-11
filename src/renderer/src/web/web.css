@@ -15,6 +15,21 @@
   transform: none;
 }
 
+/* Web 页面复用了桌面 .wechat-shell，但这里是二栏布局；桌面默认纵向 flex 会把 chat-pane 挤出视口。 */
+.app.wechat-shell {
+  flex-direction: row;
+}
+.app.wechat-shell > .chat-list-pane {
+  flex: 0 0 280px;
+  width: 280px;
+  min-width: 0;
+}
+.app.wechat-shell > .chat-pane {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+}
+
 /* 窄屏：侧栏改顶部面板，项目树在面板内滚动 */
 @media (max-width: 760px) {
   .app.wechat-shell {

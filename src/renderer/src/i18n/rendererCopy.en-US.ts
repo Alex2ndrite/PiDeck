@@ -2154,6 +2154,11 @@ export const enUS: Record<TranslationKey, string> = {
 
   // ── Web (external service page) copy, not consumed by the desktop ──
   "web.chooseSession": "Select or create a session",
+  "web.newProject": "New project",
+  "web.projectPathPlaceholder": "Enter a project directory path",
+  "web.createProject": "Add project",
+  "web.model": "Model",
+  "web.thinking": "Thinking",
   "web.connected": "Connected",
   "web.connecting": "Connecting...",
   "web.promptPlaceholder": "Send a message to the current session",
