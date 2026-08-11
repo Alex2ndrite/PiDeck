@@ -73,7 +73,7 @@ function parseChangelog(lang) {
   const improvements = highlights
     .filter((h) => h.startsWith("✨") || h.startsWith("🐛"))
     .slice(0, 4)
-    .map((h) => h.replace(/^[✨🐛]\s+/, ""));
+    .map(stripEmojiPrefix);
   const experimental = highlights
     .filter((h) => h.startsWith("🧪"))
     .slice(0, 2)
@@ -279,4 +279,18 @@ function main() {
   }
 }
 
-main();
+/**
+ * 去掉条目开头的 ✨/🐛 emoji 前缀（供 README/docs-site 重新归类展示）。
+ * 必须带 u flag：🐛/✨ 是 surrogate pair，字符类不带 u 只能匹配半个 code unit，
+ * 导致 replace 静默失败、emoji 残留（曾出现 README 里 ✨ 区混入 🐛 前缀）。
+ */
+function stripEmojiPrefix(text) {
+  return text.replace(/^[✨🐛]\s+/u, "");
+}
+
+// 导出核心函数供单测使用；CLI 直接执行时只跑 main()
+module.exports = { stripEmojiPrefix };
+
+if (require.main === module) {
+  main();
+}

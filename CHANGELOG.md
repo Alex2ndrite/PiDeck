@@ -4,6 +4,291 @@
 
 All notable changes to PiDeck are documented here.
 
+## v0.7.0 - 2026-08-11
+
+### 🚀 New Features
+
+- **Session-first architecture (#113)** — Sessions are now the first-class
+  citizen: runtime bindings, streaming state, composer, and runtime UI are
+  scoped per session; the global agent-centric state was migrated to Jotai atoms
+  keyed by sessionId.
+- **Session tab bar** — Pin tabs, drag-to-reorder with insertion indicator,
+  preview mode with auto-pin on send, status badges, and a unified tab dropdown
+  (new-session entry moved into the project dropdown).
+- **Split view rework** — Focus-driven view switching, per-panel exit from split,
+  and split-group capsules with custom names/colors.
+- **Session branch navigation** — A message-branch pager (AI Elements style) to
+  navigate between forked conversation branches.
+- **Streaming rendering overhaul** — Typewriter reveal (useSmoothStream) on a
+  dedicated live stream channel; thinking steps stream in as Markdown; the
+  execution process folds into a Chain-of-Thought step timeline; intermediate
+  replies stay inside the fold; scroll position survives session switches.
+- **Session file change summary** — After a session completes, the files
+  written/edited in this round are summarized at the end for review.
+- **Theme system** — Skin presets, custom background images, switchable accent
+  colors (warm-white palette), and wallpaper transparency for panels/dialogs;
+  content max width is now a percentage of the session panel (legacy px values
+  migrated, cap raised to 1800).
+- **Editor: CodeMirror 6** — Replaced Monaco (bundle 72MB → 39MB); default edit
+  mode, auto-save, right-click selection reference, image/PDF preview; the editor
+  became a first-class drawer panel.
+- **Markdown: Streamdown as the single engine** — Code / mermaid / math all
+  render via Streamdown official plugins; react-markdown removed.
+- **Git inline operations** — Inline add / rollback / open-file in the Changes
+  list (VS Code semantics); push/pull status badges; delete via context menu
+  (goes to recycle bin); commit-message generation with progress / timeout /
+  debounce; diff rendering via @pierre/diffs.
+- **RPC log viewer & audit** — Real-time RPC log dialog (auto-scroll / search /
+  copy / save to file); log query & audit (logQuery / sharedLogger / trash
+  audit) with a rebuilt LogViewer.
+- **Usage statistics** — Settings tab with real-time durations and per-session
+  average cache hit rate; onboarding card with one-click install.
+- **Model management** — Live model list (local models.json preferred, new
+  models take effect on agent restart); model table with capabilities column;
+  tiered pricing editor; latency metrics (TTFT / total time / tokens per second)
+  in session context detail.
+- **Vision bridge** — Gives non-vision models eyes via tool results; prompt
+  template persisted to config file.
+- **System notifications** — Session end and AI asks raise system notifications;
+  clicking jumps to the conversation.
+- **Pet status reminders** — Head bubbles, font follows settings, colored status
+  words, and waiting-for-action hints.
+- **Web service: SSE + React frontend** — `/api/chat` streams via the AI SDK
+  UIMessageStream protocol; the external web UI is aligned with the desktop UI.
+- **File tree → composer @-references** — Drag files or directories onto the
+  input to insert @ references (including @directory).
+- **Window & layout memory** — Window size preset `last`; sidebar/drawer widths
+  and settings-page tab positions persist across restarts.
+- **Cache cleanup** — "Clear UI local cache" action in the settings cache/log
+  page.
+- **Misc** — Ctrl/Cmd+click links open in system browser; fee tooltip converts
+  to RMB (est. rate 7.2); boot animation + AppErrorBoundary + error reporting;
+  session restart transition animation; default model config for new sessions;
+  collapsible ask panel with object options.
+
+### ✨ UX Improvements
+
+- **Sidebar discoverability** — Three-dot menu entry, blurred overlay backdrop,
+  and collapsible sub-items in the project tree.
+- **Attachment picker** — Defaults to files only; pasted images preview as images.
+- **RPC log interaction polish** — Unified right-click menu across session/agent;
+  toggle disabled with a hint when the agent is not running.
+- **Tool call timeline** — Compact and low-key tool cards with three-state status
+  badges.
+
+### 🛠 Architecture
+
+- **Issue #113 structure refactor** — `shared/types.ts` split into 11 domain
+  files; tsconfig split into main/preload/renderer; IPC handlers extracted per
+  domain (`editorsIpc` / `scratchPadIpc` / `projectsIpc` / `storeIpc` /
+  `sessionIpc` / `systemIpc`); `agentUtils` / `modelListCache` / `wslExe`
+  modules; FeishuConnection extracted from FeishuBridge; App.tsx slimmed via
+  10+ hooks (useSessionActions / useComposerSend / useQueuedPrompt / …) and
+  component extraction (AppShell / SessionView / SidebarComponents / …).
+- **UI 2.0** — Tailwind CSS v4 + shadcn/ui across the app: native inputs /
+  textareas / checkboxes / buttons / tabs replaced; dialogs on the shadcn Dialog
+  shell; react-resizable-panels for session & workbench layouts; toasts on
+  sonner; ~1900 lines of dead CSS removed.
+- **Session-first runtime** — SessionRuntimeInjector isolates streaming from the
+  App root; session-owned composer / timeline / sidebar / surface; stale runtime
+  results rejected by generation.
+- **Packaging** — Renderer deps moved to devDependencies; asar compression
+  maximum.
+- **E2E infrastructure** — Playwright Electron harness with mock-pi RPC flows
+  (prompt / stream / done / abort, queued prompts, model picker, compact / fork,
+  restart keeps session usable).
+
+### 🔧 Performance
+
+- **Streaming & memory governance** — Incremental message flush, de-shiki
+  highlighting, asar store, scroll takeover; renderer message cache cap 20 → 8.
+- **Activation paging** — Only the latest 3 turns stream live; history pages in
+  by full-turn pagination.
+- **Tool output truncation** — Oversized tool results truncated on send with
+  "view full output" on demand; lazy image decoding; cache release on agent exit.
+- **Timeline rendering** — `content-visibility` skips off-screen layout/paint.
+- **Session directory cache** — Cached tree shows immediately, background scan
+  pushes updates; cache hit-rate stats file-level cached and parallelized.
+
+### 🐛 Bug Fixes
+
+- **"Stop" could not stop the agent** — `abort_bash` escalation plus a
+  user-facing hint.
+- **Disappearing intermediate replies** — Live mount points now require an
+  active stream + stopReason protocol; reply-loss loops eliminated.
+- **Model list permanently empty on startup** — Empty results are no longer
+  cached; first empty fetch auto-retries.
+- **Linux Wayland sessions** — No longer force XWayland by default (compat layer
+  only when the pet is enabled).
+- **Delete operations** — Unified through the system recycle bin with audit logs.
+- **Historical session rename/copy** — Uses pi-native session_info append format.
+- **Web dev proxy** — Fixed blank page and host column width; HMR websocket
+  proxy added.
+- **Links in dialogs** — Forced to system browser (skill/extension cards,
+  diagnostics docs, env guide, web service).
+- **Path refs with spaces** — Pasting absolute paths with spaces now forms
+  complete file references; attachment picker defaults to files only.
+- **Feishu ask/confirm** — Answer cards no longer block the agent.
+- **Split/UI fixes** — Split maximize width restore, runtime-config bottom-bar
+  refresh, terminal dock input-height jump, RPC log right-click menu, sidebar
+  draft right-click, unstarted-agent composer history keys.
+
+### 🙏 Acknowledgements
+
+- **@bfzz / @bfzha** — Git inline operations, split view, session tab bar, UI 2.0
+  migration, and much of the session-first refactor.
+- **@1900EasonJin** — Theme system, wallpaper transparency, pet status reminders,
+  thinking-stream rendering, and terminal/UI polish.
+- **@qgx1992** — Ctrl/Cmd+click system-browser links.
+
+Special thanks to community members **微时、kylin、Island、PieDriver** for
+providing model services for our community testing environment 🎉
+
+> 💬 **Join our QQ group for feedback & discussion: 1026218644**
+
+Thanks to all group members who submitted suggestions and bug reports! 🙏
+
+---
+
+## v0.6.7 - 2026-07-29
+
+### 🚀 New Features
+
+- **Compact titlebar + Codex-style right sidebar** — Slimmer top chrome and
+  right-drawer tabs restyled for denser multi-panel workflows (Files / Git /
+  Browser / ScratchPad).
+- **File editor nested under Files tab** — Editor tabs live inside the Files
+  drawer instead of a separate surface; drawer chrome is tighter and more
+  consistent with Git/Browser panels.
+- **File tree drag / drop / move** — Drag files into the tree, paste files, and
+  drag-to-move entries inside the project file panel.
+- **@ file suggestions with directory tree & search** — File picker shows a
+  browsable tree plus filter, making deep paths easier to reference.
+- **Composer file path refs via paste / drop** — Drop or paste files into the
+  input to insert path chips; spaced paths are preserved correctly.
+- **Text links open in built-in editor** — Clicking text-file links opens the
+  in-app editor; binary files still open externally.
+- **Batch Ask Tab UI** — `ask_question` batch mode renders all questions as tabs
+  with an optional Submit/review step before returning answers.
+- **Ctrl/Cmd+click markdown links open system browser** — Modifier-click leaves
+  the in-app browser and hands the URL to the OS default browser.
+- **Tailwind CSS v4 + shadcn + sonner toasts** — Renderer styling stack upgraded;
+  toast notifications migrate to `sonner` with theme-aware presentation.
+- **Sidebar project expand/collapse persistence** — Project fold state is
+  remembered across app restarts.
+- **Session message Fork** — Fork a new session from a user message (pi `/fork`);
+  hidden while the agent is busy; fills the original prompt into the composer
+  for edit-and-resend.
+- **Boot splash official pi assembly animation** — Cold-start overlay loops the
+  same pixel tetromino logo animation as the sidebar (larger/faster); PiDeck
+  title and subtitle use Plantin brand serif to match the empty-state tone.
+- **Single-instance window reuse** — On by default: opening PiDeck again focuses
+  the existing window (including tray-hidden) instead of spawning another
+  process; can be disabled in Common settings (restart required).
+- **Startup window size presets** — Appearance setting for maximized / fullscreen
+  / large-medium-compact windows; default maximized (historical behavior that
+  keeps the taskbar visible).
+- **Compaction settings UI** — Config → Settings splits `compaction` into Auto
+  compact / Reserve reply tokens / Keep recent tokens instead of raw JSON.
+- **LaTeX / math fence rendering** — Session `latex`/`tex`/`math` code fences
+  render with KaTeX.
+- **Electron Chromium sandbox toggle** — Dev setting to enable renderer sandbox
+  (off by default for Windows AV/GPU compatibility); requires app restart.
+
+### ✨ UX Improvements
+
+- **Plan mode flow polish** — End-of-plan three-card layout, revise back button,
+  and clearer read-only skip behavior.
+- **Composer widgets & extension UI** — Extension widgets stay above the
+  composer, height is more compact, and built-in extension conflict handling is
+  friendlier (including todo labels).
+- **Context compact entry** — Composer compact control only shows when context
+  usage is above 30%; calmer styling, and friendly toasts for session-too-small
+  / nothing-to-compact errors.
+- **UI color neutralization** — Reduce saturated green accents; refine composer
+  bar and status indicator contrast.
+- **Worktree sidebar hierarchy** — Clearer nesting, collapsible worktree
+  sessions, lighter fills, and less visual noise on active rows.
+- **Extension install / uninstall UX** — Clearer progress and reliable local file
+  cleanup on uninstall.
+- **RPC / agent launch options** — Optional `--no-themes` / `--offline` /
+  `--no-extensions` / `--no-skills`, version cache warm-up on app start, and
+  dev settings to disable extensions/skills for faster or safer launches.
+- **Docs & community** — Docs-site screenshots updated to the latest UI; expanded
+  English home and bilingual nav; README Star History chart auto-updates via CI;
+  tutorial video production workflow added for maintainers.
+
+### 🐛 Bug Fixes
+
+- **Composer history ↑/↓ drops half-typed draft** — ArrowUp now snapshots the
+  live draft from `livePromptByAgentRef` instead of a stale rendered prompt, so
+  ArrowDown restores the full in-progress text.
+- **Agent start crash-safety / diagnostics (esp. macOS arm)** — Attach pi process
+  lifecycle listeners before `spawn`, keep a default `error` sink so ENOENT no
+  longer becomes an uncaught main-process crash, surface structured startup
+  failure cards, and log platform/arch + child-process-gone details for Issue
+  triage. Also expand macOS pi search paths (`/opt/homebrew/bin`, etc.) for
+  Dock-launched PATH gaps.
+- **Pet stuck on review/failed/jumping** (#107) — Transition recovery timers are
+  no longer cleared by cooldown/overlap early-returns, so review/failed return
+  to idle on schedule.
+- **Stop abort afterglow** — Seal stream generations on abort so delayed
+  thinking/text no longer mix into the next reply; stop feedback is toast-only.
+- **Disabled built-in extensions still loaded** — Remove/conflict yield now deletes
+  user-dir built-in extension files and purges residuals so third-party tools no
+  longer clash and break RPC.
+- **Manual compact button & state** — Restore composer compact control; send
+  `customInstructions` on RPC; clear `isCompacting` and return to idle after
+  finish; surface concrete failure reasons in toasts.
+- **System titlebar missing sidebar toggles** (#104) — Left/right sidebar
+  switches remain available when using the OS native title bar.
+- **Paste image as attachment + spaced path refs** — Image paste attaches as
+  image content; file path chips keep spaces instead of breaking mid-path.
+- **Terminal dock race / unhandled rejection** — Harden dock against pending
+  agent transitions and avoid unhandled promise rejections on close/switch.
+- **Terminal dock owner isolation** — Dock state is keyed by owner so project
+  terminals no longer leak across agents/sessions.
+- **Clipboard “Document is not focused”** — All copy paths go through Electron
+  main-process `clipboard.writeText` via preload, with graceful fallbacks.
+- **Local file links + todo widget fonts** (#103) — Local file links are
+  clickable again; todo widgets honor the configured interface font.
+- **Incomplete tool/thinking turns merge into next reply** — Thinking-only
+  assistant turns are preserved; normal incomplete runs no longer get merged
+  into the following answer.
+- **Resend safety** — Resend only truncates descendants of the current user
+  turn and refuses unsafe non-last-user roots.
+- **Select cancel no longer picks first option** — Cancel returns `value: null`
+  instead of a cancelled sentinel that could be misread as a selection.
+- **Agent `get_state` timeout auto-retry** — Startup state fetch retries on
+  timeout instead of leaving the agent stuck.
+- **Composer placeholder & prompt history** — Clearing the input restores the
+  placeholder; prompt history persists across restart.
+- **Manual release with empty tag** — Workflow_dispatch without a tag publishes
+  a formal release instead of a draft-only artifact.
+- **macOS test build OOM** — CI mac build uses `build:fast` and a higher Node
+  heap limit.
+- **package-lock dependency sync** — Restore missing lockfile entries after
+  merge/tooling drift.
+
+### 🙏 Acknowledgements
+
+Thanks to all contributors for their PRs, issues, and feedback in this release:
+
+- **@1900EasonJin** — System titlebar sidebar toggles (#104); pet stuck-state fix (#107)
+- **@zzq168281-coder** — Interactive local file links & todo font honor (#103)
+- **@me9rez** — TypeScript incremental build output hygiene (#97)
+- **@weishiair** — Delete residual built-in extension files on disable to stop tool conflicts/RPC failures
+- **@clancyclaw** — Preserve RichInput newlines for multi-line drafts
+
+Special thanks to **微时佬友** for providing the Grok model service used in our
+community testing environment 🎉
+
+> 💬 **Join our QQ group for feedback & discussion: 1026218644**
+
+Thanks to all users who submitted suggestions and bug reports for PiDeck! 🙏
+
+---
+
 ## v0.6.6 - 2026-07-24
 
 ### 🚀 New Features
