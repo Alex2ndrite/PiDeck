@@ -8,6 +8,7 @@ import type {
 	AppInfo,
 	AppLogEntry,
 	AppLogLevel,
+	AppLogPage,
 	AppLogQuery,
 	ProcessMetricsSnapshot,
 	AppSettings,
@@ -827,6 +828,8 @@ const api = {
 	logs: {
 		list: (query?: AppLogQuery) =>
 			ipcRenderer.invoke(ipcChannels.logsList, query ?? {}) as Promise<AppLogEntry[]>,
+		listPage: (query?: AppLogQuery) =>
+			ipcRenderer.invoke(ipcChannels.logsListPage, query ?? {}) as Promise<AppLogPage>,
 		clear: () => ipcRenderer.invoke(ipcChannels.logsClear) as Promise<void>,
 		openFolder: () => ipcRenderer.invoke(ipcChannels.logsOpenFolder) as Promise<void>,
 		getSize: () =>

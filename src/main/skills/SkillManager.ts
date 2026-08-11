@@ -12,6 +12,7 @@ import {
 } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { homedir } from "node:os";
+import { trashPath } from "../fs/trash";
 import type {
 	CreatePiSkillInput,
 	PiSkillListResult,
@@ -110,10 +111,8 @@ export class SkillManager {
 	async delete(skillPath: string): Promise<void> {
 		const skill = await this.findByPath(skillPath);
 		// 目录型 skill 删除整个目录；根 markdown skill 仅删除单个 md 文件。
-		await rm(skill.type === "directory" ? skill.dir : skill.path, {
-			recursive: true,
-			force: true,
-		});
+		// 用户 skill 是内容资产：走系统回收站（可恢复）并记审计日志，拒绝 rm 硬删。
+		await trashPath(skill.type === "directory" ? skill.dir : skill.path, { source: "skills:delete" });
 	}
 
 	async openFolder(skillPath?: string): Promise<void> {

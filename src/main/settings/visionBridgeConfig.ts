@@ -11,6 +11,7 @@
 import { readFile, writeFile, mkdir, rm, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { getAppLogger } from "../logging/sharedLogger";
 import type {
 	VisionBridgeConfig,
 	VisionBridgeState,
@@ -193,6 +194,7 @@ export class VisionBridgeConfigManager {
 	async clearLog(): Promise<{ ok: boolean }> {
 		try {
 			await rm(join(visionConfigDir(), LOG_FILE_NAME), { force: true });
+			getAppLogger()?.info("vision", "Vision run log cleared", {});
 			return { ok: true };
 		} catch {
 			return { ok: false };

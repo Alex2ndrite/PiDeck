@@ -83,7 +83,7 @@ export class ProjectResourceManager {
 		const target = skill.type === "directory" ? skill.dir : skill.path;
 		this.assertInsideProject(project, target);
 		// 目录型 skill 代表一个完整能力包；删除走系统回收站（可恢复），拒绝硬删。
-		await trashPath(target);
+		await trashPath(target, { source: "projects:delete-skill" });
 	}
 
 	async toggleSkill(projectId: string, skillPath: string, enabled: boolean): Promise<PiSkillSummary> {
@@ -124,7 +124,7 @@ export class ProjectResourceManager {
 		if (!extension?.path) throw new Error(this.translate("mainProjectResource.extensionNotFound"));
 		this.assertInsideProject(project, extension.path);
 		// 扩展目录删除走系统回收站（可恢复），拒绝硬删。
-		await trashPath(extension.path);
+		await trashPath(extension.path, { source: "projects:delete-extension" });
 	}
 
 	private async listSkills(project: Project): Promise<PiSkillSummary[]> {

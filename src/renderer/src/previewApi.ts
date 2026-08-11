@@ -554,6 +554,7 @@ export function createPreviewApi(): PiDesktopApi {
 		},
 		logs: {
 			list: async () => [],
+			listPage: async () => ({ entries: [], total: 0, page: 0, pageSize: 50, hasMore: false }),
 			clear: async () => undefined,
 			openFolder: async () => undefined,
 			getSize: async () => 0,

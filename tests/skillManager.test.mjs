@@ -30,6 +30,9 @@ function loadSkillManagerModule() {
 		exports: {},
 		require: (id) => {
 			if (id === "electron") return { shell: { openPath: async () => "" } };
+			// 删除统一入口：测试环境无回收站，noop stub（本测试不触达删除路径）
+			if (id === "../fs/trash") return { trashPath: async () => {} };
+			if (id === "../logging/sharedLogger") return { getAppLogger: () => null };
 			return require(id);
 		},
 	};

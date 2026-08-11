@@ -1,3 +1,5 @@
+import { getAppLogger } from "../logging/sharedLogger";
+
 /**
  * 将文件/目录移入系统回收站（可恢复删除）。
  *
@@ -19,7 +21,36 @@ async function getShell(): Promise<typeof import("electron").shell> {
 	return shellRef;
 }
 
-export async function trashPath(targetPath: string): Promise<void> {
+/**
+ * 删除来源上下文：记录「谁发起的删除」，审计时可回溯到具体 UI 操作。
+ * source 取值示例："git:discard" / "git:delete-files" / "extension:uninstall" / "projects:remove"。
+ */
+export type TrashContext = {
+	source: string;
+	/** 删除目标数（批量删除时 > 1） */
+	count?: number;
+};
+
+/**
+ * 审计日志：每次删除必记一条 warn 日志（路径 + 来源），
+ * 排查误删（如回收站被清空后无法恢复）时可按路径/来源检索。
+ * 失败同样记录 error 日志，带原始错误。
+ */
+export async function trashPath(targetPath: string, context: TrashContext): Promise<void> {
 	const shell = await getShell();
-	await shell.trashItem(targetPath);
+	try {
+		await shell.trashItem(targetPath);
+		getAppLogger()?.warn("fs:trash", "文件移入回收站", {
+			path: targetPath,
+			source: context.source,
+			count: context.count ?? 1,
+		});
+	} catch (error) {
+		getAppLogger()?.error("fs:trash", "移入回收站失败", {
+			path: targetPath,
+			source: context.source,
+			error: error instanceof Error ? error.message : String(error),
+		});
+		throw error;
+	}
 }

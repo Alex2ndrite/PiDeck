@@ -1,10 +1,17 @@
 import { app, shell } from "electron";
 import { appendFile, mkdir, readFile, readdir, stat, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { AppLogEntry, AppLogLevel, AppLogQuery } from "../../shared/types";
+import type { AppLogEntry, AppLogLevel, AppLogPage, AppLogQuery } from "../../shared/types";
+import {
+	DEFAULT_PAGE_SIZE,
+	LOG_FILE_PATTERN,
+	MAX_FILE_LINES,
+	filterLogFiles,
+	queryLogLines,
+	toAppLogPage,
+} from "./logQuery";
 
 const MAX_LOG_FILES = 14;
-const MAX_READ_LINES = 5000;
 
 function formatDate(value: Date) {
 	const year = value.getFullYear();
@@ -63,40 +70,34 @@ export class AppLogger {
 		return this.log("error", scope, message, detail);
 	}
 
-	async list(query: AppLogQuery = {}): Promise<AppLogEntry[]> {
+	/**
+	 * 分页查询日志（时间倒序，最新在前）。
+	 * - 按 from/to 先收敛日期文件，避免全量读盘；
+	 * - 过滤发生在分页之前，任意时间范围的旧日志都能翻到（旧实现 5000 行截断
+	 *   导致选较早日期时查不到——时间筛选"失灵"的根因）；
+	 * - 单文件读取有行数防御上限（MAX_FILE_LINES），防畸形超大文件拖垮查询。
+	 */
+	async listPage(query: AppLogQuery = {}): Promise<AppLogPage> {
 		await mkdir(this.dir, { recursive: true });
-		const files = (await readdir(this.dir))
-			.filter((file) => /^app-\d{4}-\d{2}-\d{2}\.log$/.test(file))
-			.sort()
-			.slice(-MAX_LOG_FILES);
+		const files = filterLogFiles(
+			(await readdir(this.dir)).filter((file) => LOG_FILE_PATTERN.test(file)).sort().slice(-MAX_LOG_FILES),
+			query.from,
+			query.to,
+		);
 		const lines: string[] = [];
 		for (const file of files) {
 			const raw = await readFile(join(this.dir, file), "utf8").catch(() => "");
-			lines.push(...raw.split(/\r?\n/).filter(Boolean));
+			lines.push(...raw.split(/\r?\n/).filter(Boolean).slice(-MAX_FILE_LINES));
 		}
+		const pageSize = Math.max(1, Math.min(query.pageSize ?? DEFAULT_PAGE_SIZE, 200));
+		const page = Math.max(0, query.page ?? 0);
+		const result = queryLogLines(lines, query);
+		return toAppLogPage(result, page, pageSize);
+	}
 
-		const search = query.search?.trim().toLowerCase();
-		const limit = Math.max(1, Math.min(query.limit ?? 500, 2000));
-		return lines
-			.slice(-MAX_READ_LINES)
-			.map((line) => {
-				try {
-					return JSON.parse(line) as AppLogEntry;
-				} catch {
-					return null;
-				}
-			})
-			.filter((entry): entry is AppLogEntry => Boolean(entry))
-			.filter((entry) => !query.from || entry.time >= query.from!)
-			.filter((entry) => !query.to || entry.time <= query.to!)
-			.filter((entry) => !query.level || query.level === "all" || entry.level === query.level)
-			.filter((entry) => {
-				if (!search) return true;
-				const haystack = `${entry.level} ${entry.scope} ${entry.message} ${JSON.stringify(entry.detail ?? "")}`.toLowerCase();
-				return haystack.includes(search);
-			})
-			.slice(-limit)
-			.reverse();
+	async list(query: AppLogQuery = {}): Promise<AppLogEntry[]> {
+		const page = await this.listPage(query);
+		return page.entries;
 	}
 
 	async clear() {
@@ -104,7 +105,7 @@ export class AppLogger {
 		const files = await readdir(this.dir);
 		await Promise.all(
 			files
-				.filter((file) => /^app-\d{4}-\d{2}-\d{2}\.log$/.test(file))
+				.filter((file) => LOG_FILE_PATTERN.test(file))
 				.map((file) => unlink(join(this.dir, file)).catch(() => undefined)),
 		);
 		await this.info("logs", "Logs cleared");
@@ -114,7 +115,7 @@ export class AppLogger {
 	async getSize(): Promise<number> {
 		await mkdir(this.dir, { recursive: true });
 		const files = (await readdir(this.dir))
-			.filter((file) => /^app-\d{4}-\d{2}-\d{2}\.log$/.test(file));
+			.filter((file) => LOG_FILE_PATTERN.test(file));
 		let total = 0;
 		for (const file of files) {
 			try { total += (await stat(join(this.dir, file))).size; } catch { /* 单个文件统计失败不影响整体 */ }
@@ -136,7 +137,7 @@ export class AppLogger {
 
 	private async cleanupOldFiles() {
 		const files = (await readdir(this.dir).catch(() => []))
-			.filter((file) => /^app-\d{4}-\d{2}-\d{2}\.log$/.test(file))
+			.filter((file) => LOG_FILE_PATTERN.test(file))
 			.sort();
 		const expired = files.slice(0, Math.max(0, files.length - MAX_LOG_FILES));
 		await Promise.all(expired.map((file) => unlink(join(this.dir, file)).catch(() => undefined)));

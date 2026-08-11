@@ -233,6 +233,7 @@ import {
 import { WebServiceManager } from "./web/WebServiceManager";
 import { preparePreloadPath } from "./preloadPath";
 import { AppLogger } from "./logging/AppLogger";
+import { setAppLogger } from "./logging/sharedLogger";
 import { RpcLogger } from "./logging/RpcLogger";
 import { registerEditorsIpc } from "./ipc/editorsIpc";
 import {
@@ -2416,6 +2417,7 @@ app.whenReady().then(async () => {
 	openCodeSessionImporter = new OpenCodeSessionImporter(mainCopy);
 	settingsStore = new SettingsStore();
 	appLogger = new AppLogger();
+	setAppLogger(appLogger);
 	rpcLogger = new RpcLogger();
 	// 用量统计：数据源 = pi-tracker 写入的 <agentDir>/analytics/usage.jsonl
 	// （默认宿主 ~/.pi/agent；WSL 场景的目录同步暂按默认宿主处理）
@@ -2802,7 +2804,7 @@ async function removeStalePiDeckExtension(extensionName: string, homeDir?: strin
 	const home = homeDir ?? app.getPath("home");
 	const targetPath = join(home, ".pi", "agent", "extensions", extensionName);
 	await rm(targetPath, { force: true });
-	console.log(`[PiDeck] Removed legacy/stale extension: ${targetPath}`);
+	appLogger?.info("extension", "Removed legacy/stale extension", { path: targetPath });
 }
 
 /**

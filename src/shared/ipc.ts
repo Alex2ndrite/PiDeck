@@ -192,6 +192,7 @@ export const ipcChannels = {
 	preloadError: "preload:error",
 	rendererLog: "renderer:log",
 	logsList: "logs:list",
+	logsListPage: "logs:list-page",
 	logsClear: "logs:clear",
 	logsOpenFolder: "logs:open-folder",
 	/** 获取 app 日志文件总大小 */

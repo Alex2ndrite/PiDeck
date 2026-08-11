@@ -265,7 +265,7 @@ export class PromptManager {
 			throw new Error(this.translate("mainPrompt.fileNotFound"));
 		}
 		// 提示词模板是用户内容：删除走系统回收站（可恢复）；回收站不可用时抛错，拒绝硬删。
-		await trashPath(filePath);
+		await trashPath(filePath, { source: "prompts:delete" });
 	}
 
 	/** 扫描项目 .pi/prompts/ 目录下的模板 */
@@ -327,7 +327,7 @@ export class PromptManager {
 		const filePath = join(projectPath, ".pi", "prompts", fileName);
 		if (!existsSync(filePath)) throw new Error(this.translate("mainPrompt.fileNotFound"));
 		// 项目内模板同样走回收站，避免误删后无法恢复。
-		await trashPath(filePath);
+		await trashPath(filePath, { source: "prompts:delete-project" });
 	}
 
 	async openFolder(): Promise<void> {

@@ -3,6 +3,7 @@ import { readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { homedir } from "node:os";
 import { trashPath } from "../fs/trash";
+import { getAppLogger } from "../logging/sharedLogger";
 import type { AppSettings, PiCliUpdateResult, PiExtensionListResult, PiExtensionSummary, PiUpdateCheckResult } from "../../shared/types";
 import type { PiLocator } from "../pi/PiLocator";
 import { toWindowsHostPath, type WslEnvironment } from "../wsl/WslPaths";
@@ -286,7 +287,7 @@ export class ExtensionManager {
 		}
 		const targetPath = join(extensionsDir, name);
 		// 本地扩展是用户安装的代码：删除走系统回收站（可恢复）；回收站不可用时抛错，拒绝硬删。
-		await trashPath(targetPath);
+		await trashPath(targetPath, { source: "extension:uninstall" });
 	}
 
 	/** 卸载后从 disabledExtensions 清掉对应项，避免残留无效禁用记录。 */
@@ -317,6 +318,8 @@ export class ExtensionManager {
 			throw new Error("非法内置扩展路径");
 		}
 		await rm(join(extensionsDir, name), { force: true });
+		// 启动残留清理的硬删（非用户主动删除，仅限 pi-deck-* 内置白名单）：记日志便于审计。
+		getAppLogger()?.info("extension", "Built-in extension file removed", { name, path: join(extensionsDir, name) });
 	}
 
 	private async saveRemovedBuiltIn(removedList: string[]): Promise<void> {
