@@ -34,8 +34,12 @@ import {
 } from "./usageStatsAggregator";
 import { UsageLogReader, type LogFileState } from "./UsageLogReader";
 
-/** 缓存值：游标 + 可序列化中间态（视图按 now 派生，不落盘）。 */
+/** 缓存结构版本：dayBuckets 含 byModel/byProject 明细后升到 2（旧结构直接弃用触发全量重扫）。 */
+const CACHE_SCHEMA_VERSION = 2;
+
+/** 缓存值：结构版本 + 游标 + 可序列化中间态（视图按 now 派生，不落盘）。 */
 type CachedUsageStats = {
+  schemaVersion: number;
   fileState: LogFileState;
   intermediate: UsageStatsIntermediate;
 };
@@ -161,7 +165,7 @@ export class UsageStatsService {
       // 全量重扫：无论新记录多少都整体替换（0 条 = 文件被清空，必须提交空态，
       // 否则旧中间态会在新版本下复活，文件再长回来时增量合并 → 双计）
       const intermediate = intermediateFromRecords(result.newRecords);
-      this.commitState(version, { fileState: result.fileState, intermediate });
+      this.commitState(version, { schemaVersion: CACHE_SCHEMA_VERSION, fileState: result.fileState, intermediate });
       this.logger?.info?.(
         `[UsageStats] full rescan: ${result.newRecords.length} records${result.truncated ? " (truncated)" : ""}`,
       );
@@ -170,7 +174,7 @@ export class UsageStatsService {
       const intermediate = this.memoryState
         ? mergeIntermediates(this.memoryState.cached.intermediate, delta)
         : delta;
-      this.commitState(version, { fileState: result.fileState, intermediate });
+      this.commitState(version, { schemaVersion: CACHE_SCHEMA_VERSION, fileState: result.fileState, intermediate });
       this.logger?.info?.(
         `[UsageStats] refreshed: +${result.newRecords.length} records`,
       );
@@ -222,6 +226,8 @@ export class UsageStatsService {
     await this.cache.ensureLoaded();
     const cached = this.cache.get(this.logPath, version);
     if (!cached) return null;
+    // 结构版本不匹配：旧缓存弃用（返回 null 触发全量重扫，避免缺字段的中间态被增量合并）
+    if (cached.schemaVersion !== CACHE_SCHEMA_VERSION) return null;
     this.memoryState = { version, cached };
     return this.memoryState;
   }
@@ -229,6 +235,10 @@ export class UsageStatsService {
   /** 写内存态 + 磁盘缓存（缓存写盘 debounce + 原子 rename，由 SessionSummaryCache 负责）。 */
   private commitState(version: SessionFileVersion, cached: CachedUsageStats): void {
     this.memoryState = { version, cached };
-    this.cache.set(this.logPath, version, cached);
+    this.cache.set(this.logPath, version, {
+      schemaVersion: CACHE_SCHEMA_VERSION,
+      fileState: cached.fileState,
+      intermediate: cached.intermediate,
+    });
   }
 }

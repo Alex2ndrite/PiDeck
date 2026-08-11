@@ -193,3 +193,61 @@ test("overlapping refreshes are single-flight (no double count)", async () => {
     await rm(base, { recursive: true, force: true });
   }
 });
+
+test("legacy cache without schemaVersion is discarded and triggers full rescan", async () => {
+  const { base, agentDir, userDataDir, logPath } = await makeEnv();
+  try {
+    const t0 = 1710000000000;
+    await writeFile(logPath, line(t0, "s1", 0.01) + "\n");
+    // 手工构造"旧版"缓存：value 缺 schemaVersion，dayBuckets 无 byModel/byProject 字段
+    const { stat } = await import("node:fs/promises");
+    const fileStat = await stat(logPath);
+    const oldIntermediate = {
+      dayBuckets: [
+        {
+          day: "2024-03-09",
+          totals: { tokens: 150, input: 100, output: 50, cacheRead: 0, cacheWrite: 0, cost: 0.01, turns: 1, sessions: ["s1"] },
+          sessions: ["s1"],
+          byProvider: [{ provider: "anthropic", tokens: 150, cost: 0.01, turns: 1 }],
+        },
+      ],
+      modelBuckets: [{ model: "anthropic/claude-sonnet-4", provider: "anthropic", tokens: 150, cost: 0.01, turns: 1, sessions: ["s1"] }],
+      projectBuckets: [{ project: "/proj", tokens: 150, cost: 0.01, turns: 1, sessions: ["s1"] }],
+      totals: { tokens: 150, input: 100, output: 50, cacheRead: 0, cacheWrite: 0, cost: 0.01, turns: 1, sessions: ["s1"] },
+      window: { since: t0, to: t0 },
+      costKnown: true,
+      recordCount: 1,
+    };
+    const cachePayload = {
+      version: 1,
+      entries: {
+        [logPath]: {
+          version: { mtimeMs: fileStat.mtimeMs, size: fileStat.size },
+          value: {
+            fileState: { size: fileStat.size, mtimeMs: fileStat.mtimeMs, count: 1 },
+            intermediate: oldIntermediate,
+          },
+        },
+      },
+    };
+    await mkdir(userDataDir, { recursive: true });
+    await writeFile(join(userDataDir, "usage-stats-cache.json"), JSON.stringify(cachePayload), "utf8");
+
+    const Service = loadService(userDataDir);
+    const service = new Service({ agentDir, userDataDir });
+    // detect 命中旧缓存但结构版本不符 → 弃用且不加载（轻量探测不重扫，recordCount 为 null）
+    const detect = await service.detect();
+    assert.equal(detect.installed, true);
+    assert.equal(detect.recordCount, null);
+    const view = await service.getAggregated();
+    assert.equal(view.recordCount, 1);
+    // 新聚合必须带按天模型/项目明细（旧缓存结构不会提供，证明走了全量重扫）
+    assert.equal(view.daily.length, 1);
+    assert.ok(Array.isArray(view.daily[0].byModel), "rescan must produce per-day byModel");
+    assert.equal(view.daily[0].byModel[0].model, "anthropic/claude-sonnet-4");
+    assert.ok(Array.isArray(view.daily[0].byProject), "rescan must produce per-day byProject");
+    assert.equal(view.daily[0].byProject[0].project, "/proj");
+  } finally {
+    await rm(base, { recursive: true, force: true });
+  }
+});

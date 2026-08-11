@@ -328,3 +328,63 @@ test("heatmapStart is the first cell day key (Monday, local)", () => {
   assert.equal(a.heatmapStart, `${expected.getFullYear()}-${em}-${ed}`);
   assert.match(a.heatmapStart, /^(\d{4})-(\d{2})-(\d{2})$/);
 });
+
+test("daily rows carry per-day byModel/byProject detail sorted by tokens desc", () => {
+  const now = new Date(2026, 6, 15, 12, 0, 0);
+  const a = aggregateUsage(
+    [
+      rec({ model: MODEL_B, totalTokens: 200, input: 200, cwd: "/a", cost: 0.2 }),
+      rec({ model: MODEL_A, totalTokens: 10, input: 10, cwd: "/a", sid: "s2" }),
+      rec({ model: MODEL_A, totalTokens: 20, input: 20, cwd: "/b", sid: "s3", cost: 0.01 }),
+    ],
+    now,
+  );
+  const day = a.daily[0];
+  assert.deepEqual(
+    day.byModel.map((m) => [m.model, m.provider, m.tokens, m.cost, m.turns]),
+    [
+      [MODEL_B, "openai", 200, 0.2, 1],
+      [MODEL_A, "anthropic", 30, 0.02, 2],
+    ],
+  );
+  assert.deepEqual(
+    day.byProject.map((p) => [p.project, p.tokens, Math.round(p.cost * 100) / 100, p.turns]),
+    [
+      ["/a", 210, 0.21, 2],
+      ["/b", 20, 0.01, 1],
+    ],
+  );
+});
+
+test("mergeIntermediates merges per-day byModel/byProject buckets exactly", () => {
+  const base = intermediateFromRecords([rec({ model: MODEL_A, totalTokens: 100, cwd: "/a", cost: 0.1 })]);
+  const delta = intermediateFromRecords([
+    rec({ model: MODEL_A, totalTokens: 50, cwd: "/b", cost: 0.05, sid: "s2" }), // 同天同模型、新项目
+    rec({ model: MODEL_B, totalTokens: 30, cwd: "/a", cost: 0.03, sid: "s3" }), // 同天新模型
+  ]);
+  const merged = mergeIntermediates(base, delta);
+  const day = merged.dayBuckets.find((b) => b.day === "2026-07-15");
+  assert.deepEqual(
+    day.byModel.map((m) => [m.model, m.tokens, Math.round(m.cost * 100) / 100]),
+    [
+      [MODEL_A, 150, 0.15],
+      [MODEL_B, 30, 0.03],
+    ],
+  );
+  assert.deepEqual(
+    day.byProject.map((p) => [p.project, p.tokens, Math.round(p.cost * 100) / 100]),
+    [
+      ["/a", 130, 0.13],
+      ["/b", 50, 0.05],
+    ],
+  );
+});
+
+test("intermediate JSON round-trip preserves per-day byModel/byProject", () => {
+  const state = JSON.parse(
+    JSON.stringify(intermediateFromRecords([rec(), rec({ model: MODEL_B, cwd: "/b", sid: "s2" })]))
+  );
+  const view = buildAggregatedView(state, new Date(2026, 6, 15, 12, 0, 0));
+  assert.equal(view.daily[0].byModel.length, 2);
+  assert.equal(view.daily[0].byProject.length, 2);
+});
