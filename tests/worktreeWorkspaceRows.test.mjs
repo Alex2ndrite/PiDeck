@@ -29,8 +29,12 @@ test("main workspace row carries create-draft and anonymous actions", () => {
 });
 
 test("worktree rows carry the anonymous action next to create-draft", () => {
-  const rowSection = worktreeTree.slice(worktreeTree.indexOf("workspace-tree-actions", worktreeTree.indexOf("WorkspaceTreeRowView")));
-  assert.match(rowSection, /createAnonymous\(childProject\.id\)/);
+  // 行视图必须同时提供「新建/匿名」两个入口。操作浮层已抽成共享组件
+  // WorkspaceRowActions（类名不再内联在行视图里），故按行视图定义切片断言行为。
+  const rowView = worktreeTree.slice(worktreeTree.lastIndexOf("WorkspaceTreeRowView"));
+  assert.match(rowView, /createDraft\(childProject\.id\)/);
+  assert.match(rowView, /createAnonymous\(childProject\.id\)/);
+  assert.match(rowView, /<WorkspaceRowActions>/);
 });
 
 test("active worktree selection only highlights the branch row, not the whole block", () => {
