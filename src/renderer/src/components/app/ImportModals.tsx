@@ -115,7 +115,7 @@ export function CodexImportModal(props: {
 		<Label key={session.sourcePath} className={className}>
 			<Checkbox
 				checked={selected.has(session.sourcePath)}
-				onChange={() => props.onToggle(session.sourcePath)}
+				onCheckedChange={() => props.onToggle(session.sourcePath)}
 			/>
 			<div className="codex-session-main">
 				<div className="codex-session-title">
@@ -342,7 +342,7 @@ export function ClaudeImportModal(props: {
 								<Label key={session.sourcePath} className="codex-session-row">
 									<Checkbox
 										checked={selected.has(session.sourcePath)}
-										onChange={() => props.onToggle(session.sourcePath)}
+										onCheckedChange={() => props.onToggle(session.sourcePath)}
 									/>
 									<div className="codex-session-main">
 										<div className="codex-session-title">
@@ -472,7 +472,7 @@ export function OpenCodeImportModal(props: {
 								<Label key={session.sourcePath} className="codex-session-row">
 									<Checkbox
 										checked={selected.has(session.sourcePath)}
-										onChange={() => props.onToggle(session.sourcePath)}
+										onCheckedChange={() => props.onToggle(session.sourcePath)}
 									/>
 									<div className="codex-session-main">
 										<div className="codex-session-title">
