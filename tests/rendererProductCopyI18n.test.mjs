@@ -86,7 +86,7 @@ const drawer = read("src/renderer/src/components/workspace/DrawerSurface.tsx");
 const surface = [
 	read("src/renderer/src/components/session/SurfaceComponents.tsx"),
 	read("src/renderer/src/components/session/turn/ProcessSummaryToggle.tsx"),
-	read("src/renderer/src/components/session/MarkdownComponents.tsx"),
+	read("src/renderer/src/components/session/FormulaCopyLayer.tsx"),
 	read("src/renderer/src/components/session/ComposerOverlayComponents.tsx"),
 	read("src/renderer/src/components/session/ToolCallComponents.tsx"),
 	read("src/renderer/src/components/session/TimelineEventCards.tsx"),

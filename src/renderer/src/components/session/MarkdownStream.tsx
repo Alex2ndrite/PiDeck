@@ -1,12 +1,22 @@
-import { memo, useMemo } from "react";
+import { Fragment, memo, useMemo } from "react";
 import { Streamdown, defaultRehypePlugins, defaultRemarkPlugins, type Components } from "streamdown";
 import { code } from "@streamdown/code";
 import { mermaid } from "@streamdown/mermaid";
-import { math } from "@streamdown/math";
+import { createMathPlugin } from "@streamdown/math";
 import { MarkdownLink, remarkLinkifyPaths } from "./MarkdownLink";
 import { markdownUrlTransform } from "./MarkdownLinkCore";
-import { MathBlockParagraph } from "./MarkdownComponents";
+import { FormulaCopyLayer } from "./FormulaCopyLayer";
 import { useSmoothStream } from "../../utils/useSmoothStream";
+
+/**
+ * 数学公式插件（KaTeX）。@streamdown/math 默认 singleDollarTextMath: false，
+ * 只解析 $$...$$；而 AI 输出行内公式普遍用单美元 $...$（如 $E=mc^2$），
+ * 不开则整句原样输出（用户可见的“公式没渲染”）。
+ * 开启单美元的安全边界（remark-math 行为）：必须成对的 $...$ 才解析，
+ * 单独的 $5、$HOME 等不受影响；副作用是 “$5 and $6” 这类成对美元会被当
+ * 行内公式（与 GitHub math 渲染行为一致，可接受）。
+ */
+const mathPlugin = createMathPlugin({ singleDollarTextMath: true });
 
 /**
  * 流式超长兜底阈值（字符数，UTF-16 code unit）。
@@ -82,10 +92,12 @@ export const MarkdownStream = memo(function MarkdownStream(props: {
 	const resolvedRehypePlugins = isStreamingNow
 		? []
 		: (props.rehypePlugins ?? [defaultRehypePlugins.raw]);
-	// 显式 Components 标注：让 a/p 的 props 走上下文类型推断（streamdown 的
+	// 显式 Components 标注：让 a 的 props 走上下文类型推断（streamdown 的
 	// Components 是「具名槽位 | 索引签名」联合，直接内联会触发索引签名分支的类型不兼容）
 	// useMemo 依赖回调 props：回调引用变化时 components 重建，streamElement 随之重建，
 	// 闭包不会捕获过期回调（比裸对象 + eslint-disable 的做法依赖链完整）。
+	// 公式复制不再走 p 层拦截：rehype-katex 产物不进组件 map，p 层只能覆盖
+	// “单个行内公式独占一段”的罕见场景；改为 FormulaCopyLayer 事件委托浮层。
 	const components: Components = useMemo(
 		() =>
 			props.components ?? {
@@ -94,14 +106,6 @@ export const MarkdownStream = memo(function MarkdownStream(props: {
 						{...(linkProps as unknown as React.AnchorHTMLAttributes<HTMLAnchorElement>)}
 						onOpenExternal={props.onOpenExternal}
 						onOpenFile={props.onOpenFile}
-					/>
-				),
-				// 块级公式段落挂复制按钮（LaTeX 源码取自 katex annotation）
-				p: (pProps) => (
-					<MathBlockParagraph
-						{...(pProps as unknown as React.ComponentPropsWithoutRef<"p"> & {
-							children?: React.ReactNode;
-						})}
 					/>
 				),
 			},
@@ -128,11 +132,11 @@ export const MarkdownStream = memo(function MarkdownStream(props: {
 				urlTransform={props.urlTransform ?? markdownUrlTransform}
 				plugins={
 					(effectiveLight
-						? { math }
+						? { math: mathPlugin }
 						: {
 								code,
 								mermaid,
-								math,
+								math: mathPlugin,
 							}) as Parameters<typeof Streamdown>[0]["plugins"]
 				}
 				mermaid={{
@@ -159,5 +163,10 @@ export const MarkdownStream = memo(function MarkdownStream(props: {
 			isDark,
 		],
 	);
-	return streamElement;
+	return (
+		<Fragment>
+			{streamElement}
+			<FormulaCopyLayer />
+		</Fragment>
+	);
 });

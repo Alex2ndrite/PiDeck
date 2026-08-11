@@ -21,9 +21,16 @@ test("streamdown pipeline delegates to official plugins (code/mermaid/math) and 
   // 官方插件接管：代码高亮、mermaid、数学
   assert.match(stream, /import \{ code \} from "@streamdown\/code"/);
   assert.match(stream, /import \{ mermaid \} from "@streamdown\/mermaid"/);
-  assert.match(stream, /import \{ math \} from "@streamdown\/math"/);
+  assert.match(stream, /import \{ createMathPlugin \} from "@streamdown\/math"/);
+  // 数学插件开启单美元行内公式（singleDollarTextMath: true）：
+  // AI 输出 $...$ 是常态，默认关闭会整句原样输出（2026-08 修复，防回归锚点）
+  assert.match(stream, /createMathPlugin\(\{ singleDollarTextMath: true \}\)/);
   assert.match(stream, /plugins=\{\s*\(effectiveLight/);
-  assert.match(stream, /\{ math \}/);
+  assert.match(stream, /math: mathPlugin/);
+  // 公式复制走事件委托浮层（FormulaCopyLayer）：rehype-katex 产物不进组件 map，
+  // 旧 p 层拦截只能覆盖“单一行内公式独占一段”，已删除（2026-08 通用化）
+  assert.match(stream, /<FormulaCopyLayer \/>/);
+  assert.doesNotMatch(stream, /MathBlockParagraph/);
   // 非 light 分支注册 code 插件；light（更新日志等轻场景）保持无高亮
   assert.match(stream, /\bcode,\n/);
   // 不再用 details 折叠代码块（会露出浏览器默认「详情」）；行号沿用 streamdown 默认开启
