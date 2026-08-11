@@ -649,8 +649,9 @@ function SessionTab(props: {
         }}
         className={cn(
           "session-tab group relative flex h-7 shrink-0 cursor-pointer select-none items-center gap-1.5 rounded-md border px-2 text-caption transition-colors",
-          // 短标题按内容收缩，长标题限制在 128px 内；关闭按钮仍保留固定空间，避免 tab 在 hover 时跳动。
-          pinned ? "w-20" : "w-fit max-w-32",
+          // 固定 Tab 与普通 Tab 同宽策略（按内容收缩，上限 128px）：固定 Tab 无关闭按钮，
+          // hover 不会因按钮出现而跳动，无需 w-20 占位；固定宽度反而让 Pin 图标挤占标题空间
+          "w-fit max-w-32",
           dragging && "opacity-50",
           // 选中态与侧栏 SessionTree 一致：背景浮起 + 强边框 + 轻阴影
           active
