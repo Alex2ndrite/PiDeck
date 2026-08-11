@@ -10,12 +10,15 @@ const pagination = readFileSync(
 const yao = readFileSync("src/renderer/src/config/YaoPromptTab.tsx", "utf8");
 const styles = readRendererStyles();
 
-test("shared Pagination provides labeled previous, info and next controls", () => {
+test("shared Pagination provides labeled prev/next, page window and jump input", () => {
   assert.match(pagination, /export function Pagination/);
   assert.match(pagination, /aria-label=\{t\("pagination\.previous"\)\}/);
   assert.match(pagination, /aria-label=\{t\("pagination\.next"\)\}/);
-  assert.match(pagination, /\{page\} \/ \{totalPages\}/);
-  assert.match(pagination, /aria-live="polite"/);
+  // 页码窗口来自纯函数（配单测），中间页码与省略号由此渲染
+  assert.match(pagination, /paginationWindow\(page, totalPages\)/);
+  assert.match(pagination, /t\("pagination\.page", \{ page: String\(item\) \}\)/);
+  // 跳页输入框：回车跳转 + aria 标签
+  assert.match(pagination, /t\("pagination\.jumpTo"\)/);
   assert.match(pagination, /Math\.max\(1, page - 1\)/);
   assert.match(pagination, /Math\.min\(totalPages, page \+ 1\)/);
 });

@@ -91,8 +91,10 @@ test("log viewer i18n keys exist in both locales", () => {
     "logs.column.scope",
     "logs.column.message",
     "logs.column.detail",
-    "logs.untilFilter",
-    "logs.clearUntilFilter",
+    "logs.rangeFilter",
+    "logs.rangeFrom",
+    "logs.rangeTo",
+    "logs.clearRangeFilter",
   ];
   for (const key of keys) {
     assert.match(zh, new RegExp(`"${key}":`), `${key} must exist in zh-CN`);
