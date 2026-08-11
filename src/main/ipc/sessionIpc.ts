@@ -392,6 +392,20 @@ export function registerSessionIpc(deps: SessionIpcDeps): void {
 		ipcChannels.sessionsCatalogReadReferenceMessages,
 		(_event, sessionId: string) => readCatalogSessionReferenceMessages(sessionId),
 	);
+	// 按需读取消息完整文本（工具结果截断后的「查看完整输出」）：
+	// 入参校验在边界（渲染层数据不可信），agentId/messageId 必须为非空字符串。
+	ipcMain.handle(
+		ipcChannels.sessionsCatalogReadMessageFullText,
+		async (_event, agentId: unknown, messageId: unknown, entryId?: unknown) => {
+			if (typeof agentId !== "string" || !agentId.trim() || typeof messageId !== "string" || !messageId.trim()) {
+				throw new Error("Invalid message full-text request");
+			}
+			if (entryId !== undefined && (typeof entryId !== "string" || !entryId.trim())) {
+				throw new Error("Invalid entryId");
+			}
+			return agentManager.readMessageFullText(agentId, messageId, entryId as string | undefined);
+		},
+	);
 	ipcMain.handle(
 		ipcChannels.sessionsCatalogCopy,
 		(_event, sessionId: string) => copyCatalogSession(sessionId),

@@ -4,6 +4,227 @@
 
 这里记录 PiDeck 各版本的重要变化。
 
+## v0.7.0 - 2026-08-11
+
+### 🚀 新功能
+
+- **Session-first 架构（#113）** — 会话成为一等公民：runtime 绑定、流式状态、
+  Composer、运行时 UI 全部按会话隔离；围绕 agent 的全局状态迁移为按 sessionId
+  键控的 Jotai atom。
+- **会话 Tab 栏** — Tab 可固定（pin）、拖拽排序带插入指示线、预览模式（发送后
+  自动转常驻）、状态徽章，操作收敛到统一 Tab 下拉（新建会话入口移入项目下拉）。
+- **分屏重构** — 焦点驱动视图切换、面板级退出分屏、分屏组胶囊（自定义名称/颜色）。
+- **会话分支导航条** — 借鉴 AI Elements MessageBranch 分页器，在分叉会话分支间
+  导航。
+- **流式渲染重构** — 逐字打字机（useSmoothStream）独立流式通道；思考步骤按
+  Markdown 流式渲染；执行过程折叠为 Chain of Thought 步骤时间线；中间回复收进
+  折叠区；会话切换保留查看位置。
+- **会话文件修改汇总** — 会话结束后在本轮 write/edit 修改的文件汇总到末尾便于审查。
+- **换肤系统** — 皮肤预设 + 自定义背景图 + 可切换主题色（warm-white 色板）+ 壁纸
+  模式面板/弹窗透明度；内容最大宽度改为会话面板百分比（旧 px 值自动迁移，上限提至
+  1800）。
+- **编辑器：CodeMirror 6** — 替换 Monaco（产物体积 72MB→39MB）；默认编辑模式、
+  自动保存、右键选区引用、图片/PDF 预览；编辑器升级为一等抽屉面板。
+- **Markdown：Streamdown 成为唯一引擎** — code/mermaid/math 全部走 Streamdown
+  官方插件，移除 react-markdown。
+- **Git 行内操作** — 变更列表行内 add/rollback/openfile（VS Code 语义）；
+  Push/Pull 状态角标；右键删除（走回收站）；提交摘要生成带进度/超时/防抖；
+  diff 渲染迁移 @pierre/diffs。
+- **RPC 日志查看与审计** — 实时日志弹窗（自动滚动/搜索/复制/保存到文件）；日志
+  查询与审计（logQuery/sharedLogger/trash 审计）+ LogViewer 重构。
+- **用量统计** — 设置页用量统计 tab、实时耗时、会话平均缓存命中率；引导卡一键安装。
+- **模型管理** — 模型列表实时化（本地 models.json 优先，新模型重启 Agent 生效）；
+  模型表新增能力列；分层计费编辑器；会话上下文详情展示延迟指标（TTFT/总时延/
+  tokens 每秒）。
+- **视觉桥（Vision Bridge）** — 给非视觉模型「眼睛」（工具结果绕行），prompt 模板
+  持久化到配置文件。
+- **系统通知** — 会话结束与 AI 询问触发系统通知，点击跳转到对应对话。
+- **宠物状态提醒改造** — 头顶气泡、字号跟随设置、状态词着色与等待操作提醒。
+- **Web 服务：SSE 流式 + React 化** — `/api/chat` 走 AI SDK UIMessageStream 协议
+  流式端点；外部 Web 端 UI 与桌面端对齐。
+- **文件树拖拽 @ 引用** — 拖拽文件/目录到输入框插入 @ 引用（支持 @directory）。
+- **窗口与布局记忆** — 启动窗口大小预设 `last`；侧栏/抽屉宽度、设置页与 Pi 管理页
+  Tab 位置跨重启记忆。
+- **清理界面本地缓存** — 设置缓存/日志页新增一键清理操作。
+- **其他** — Ctrl/Cmd+点击链接改系统浏览器打开；费用悬停提示人民币换算（估算汇率
+  7.2）；启动动画 + AppErrorBoundary 错误上报；会话重启过渡动画；新建会话默认模型
+  配置；提问面板可折叠并支持对象选项。
+
+### ✨ 交互优化
+
+- **侧边栏可发现性优化** — 三个点菜单入口、浮层虚化、子项收起。
+- **附件选择器** — 默认只选文件；复制图片粘贴改为图片预览。
+- **RPC 日志交互打磨** — 会话/agent 同一套右键菜单；未启动 agent 时开关置灰并提示。
+- **工具调用时间线** — 紧凑低调化，三态状态徽章。
+
+### 🛠 架构重构
+
+- **Issue #113 结构重构** — `shared/types.ts` 拆分为 11 个领域文件；tsconfig 拆分
+  为 main/preload/renderer 三份；IPC handler 按域抽取（`editorsIpc` /
+  `scratchPadIpc` / `projectsIpc` / `storeIpc` / `sessionIpc` / `systemIpc`）；新增
+  `agentUtils` / `modelListCache` / `wslExe` 模块；FeishuConnection 从 FeishuBridge
+  抽取；App.tsx 通过 10+ 个 hook（useSessionActions / useComposerSend /
+  useQueuedPrompt 等）与组件抽取（AppShell / SessionView / SidebarComponents 等）
+  大幅瘦身。
+- **UI 2.0** — 全应用迁移 Tailwind CSS v4 + shadcn/ui：原生 Input/Textarea/
+  Checkbox/button/tab 全部换装；弹窗统一 shadcn Dialog 壳；会话/工作台布局改用
+  react-resizable-panels；toast 统一 sonner；清理死 CSS 约 1900 行。
+- **Session-first 运行时** — SessionRuntimeInjector 把流式从 App 根隔离；Composer/
+  时间线/侧栏/视图由会话持有；旧 runtime 的迟到结果按代际拒绝。
+- **打包优化** — 渲染层依赖移入 devDependencies；asar 压缩开满。
+- **E2E 基建** — Playwright Electron 测试框架 + mock-pi RPC 全流程（prompt/stream/
+  done/abort、排队消息、模型选择、compact/fork、重启后会话可用）。
+
+### 🔧 性能优化
+
+- **流式与内存治理** — 增量消息 flush、去 shiki 高亮、asar store、滚动接管；渲染层
+  消息缓存上限 20→8。
+- **激活分页** — 只下发最近 3 轮，历史按完整对话轮次分页加载。
+- **工具输出截断** — 超长工具结果截断下发，「查看完整输出」按需加载；图片懒解码；
+  agent 退出释放缓存。
+- **时间线渲染** — `content-visibility` 跳过屏外 layout/paint。
+- **会话目录缓存** — 先回显缓存树，后台扫描推送更新；缓存命中率统计文件级缓存并
+  并行化。
+
+### 🐛 Bug 修复
+
+- **「停止」停不下来** — 补发 `abort_bash` 升级 + 用户可见提示。
+- **中间回复消失循环根治** — live 挂载点要求活动流 + stopReason 协议判定。
+- **启动时模型列表永久为空** — 空结果不再缓存，首次空拉取自动重试。
+- **Linux Wayland 会话** — 默认不再强制 XWayland（仅启用宠物时应用兼容层）。
+- **删除操作** — 统一走系统回收站并补全审计日志。
+- **历史会话重命名/复制** — 改用 pi 原生 session_info 追加格式。
+- **Web dev 代理** — 修复空白页与主机列过宽，补齐 HMR websocket 代理。
+- **弹框内链接** — 统一强制系统浏览器打开（技能/扩展卡片、诊断文档、环境引导、
+  Web 服务）。
+- **带空格路径引用** — 粘贴含空格绝对路径可形成完整文件引用；附件选择器默认只选文件。
+- **飞书 ask/confirm** — 提问卡片不再阻塞 agent。
+- **分屏与 UI 修复** — 分屏最大化宽度恢复、运行时配置更新后底部栏即时刷新、终端
+  dock 输入框高度跳变、RPC 日志右键菜单、侧栏草稿右键、未启动 Agent 时输入框
+  上下键历史。
+
+### 🙏 致谢
+
+- **@bfzz / @bfzha** — Git 行内操作、分屏、会话 Tab 栏、UI 2.0 迁移及 session-first
+  重构的大量工作。
+- **@1900EasonJin** — 换肤系统、壁纸透明度、宠物状态提醒、思考流式渲染及终端/UI
+  打磨。
+- **@qgx1992** — Ctrl/Cmd+点击系统浏览器打开链接。
+
+特别感谢群友 **微时、kylin、Island、PieDriver** 提供的模型服务，用于我们的社区
+测试环境 🎉
+
+> 💬 **QQ 反馈交流群：1026218644**
+
+感谢所有群友的建议和问题反馈 🙏
+
+---
+
+## v0.6.7 - 2026-07-29
+
+### 🚀 新功能
+
+- **紧凑标题栏 + Codex 风格右侧栏** — 顶栏更省高度，右侧抽屉 Tab（文件 / Git /
+  浏览器 / 草稿本）改为更密的多面板工作流样式。
+- **文件编辑器收纳到 Files Tab** — 编辑器 Tab 进入文件抽屉内部，与 Git/浏览器
+  面板的 chrome 更统一。
+- **文件树拖放 / 粘贴 / 移动** — 支持拖入文件、粘贴文件，以及树内拖拽移动。
+- **@ 文件建议支持目录树与搜索** — 文件选择器可浏览目录树并过滤，深层路径更好选。
+- **Composer 粘贴 / 拖入路径引用** — 向输入框拖放或粘贴文件可插入路径 chip，
+  带空格路径也能正确保留。
+- **文本链接默认内置编辑器打开** — 点击文本文件链接走应用内编辑器，二进制仍走
+  系统外部程序。
+- **批量提问 Tab UI** — `ask_question` 批量模式以 Tab 一次展示全部问题，可选
+  Submit/审阅后再提交答案。
+- **Ctrl/Cmd+点击 Markdown 链接打开系统浏览器** — 按住修饰键点击时交给系统默认
+  浏览器，不再强制内置浏览器。
+- **Tailwind CSS v4 + shadcn + sonner Toast** — 渲染进程样式栈升级，通知迁移到
+  `sonner` 并适配主题。
+- **侧栏项目展开/折叠状态持久化** — 项目折叠状态跨重启保留。
+- **会话消息 Fork** — 用户消息操作栏支持从该消息 fork 新会话（对应 pi `/fork`）；
+  Agent 忙碌时不显示入口；成功后预填原 prompt 到输入框，可改后重发。
+- **启动页官方 pi 拼装动画** — 冷启动覆盖层循环播放与侧栏同源的像素 tetromino logo
+  动画（可调大/加速）；PiDeck 标题与副标题改用 Plantin 品牌衬线，气质对齐空状态文案。
+- **单实例复用窗口** — 默认开启：再次打开应用会唤起已有窗口（含托盘隐藏），避免多开；
+  常用设置可关闭以允许多实例（需重启生效）。
+- **启动窗口大小预设** — 外观设置可选最大化 / 全屏 / 大中紧凑窗口；默认最大化
+  （与历史 `ready-to-show` 后 maximize 一致，不挡任务栏）。
+- **会话压缩可视化配置** — 配置管理 Settings 将 `compaction` 拆为「自动压缩 / 预留回复
+  Token / 保留近期 Token」三项，不再整段 JSON 手改。
+- **LaTeX / 数学代码块渲染** — 会话内 `latex`/`tex`/`math` fence 用 KaTeX 渲染。
+- **Electron Chromium 沙箱开关** — 开发设置可启用渲染进程沙箱（默认关闭，兼容 Windows
+  安全软件/旧 GPU）；改完需重启 PiDeck。
+
+### ✨ 交互优化
+
+- **Plan 模式流程打磨** — 计划结束三卡片布局、修订返回按钮、跳过保持只读更清晰。
+- **Composer 挂件与扩展 UI** — 扩展挂件固定在输入框上方、高度更紧凑，内置扩展
+  冲突提示更友好（含 todo 文案）。
+- **上下文压缩入口** — 底栏压缩按钮仅在占用 >30% 时显示；样式与图标更克制，
+  「会话太小 / Nothing to compact」类错误改为友好提示。
+- **UI 去饱和绿色** — 降低刺眼绿色强调，优化输入栏与状态指示对比度。
+- **Worktree 侧栏层级** — 嵌套更清晰、可折叠 worktree 会话、弱化重色块与 active 行
+  噪声。
+- **扩展安装 / 卸载体验** — 进度更清楚，卸载时本地文件清理更可靠。
+- **RPC / Agent 启动选项** — 支持可选 `--no-themes` / `--offline` / `--no-extensions` /
+  `--no-skills`，启动时预热版本缓存；开发设置可禁用扩展/技能以加速或排障。
+- **文档与社区** — 官网截图更新到最新 UI；英文首页与双语导航扩展；README Star History
+  图由 CI 自动刷新；维护者教程视频制作流程补充。
+
+### 🐛 Bug 修复
+
+- **输入框历史 ↑/↓ 丢失半截草稿** — ArrowUp 改为快照 live 草稿（`livePromptByAgentRef`），
+  不再使用可能过期的 rendered prompt，ArrowDown 可完整恢复继续输入的内容。
+- **Agent 启动防闪退 / 诊断增强（尤其 macOS arm）** — 在 `spawn` 前挂上 pi 生命周期监听，
+  默认 `error` sink 避免 ENOENT 等升级成主进程未捕获异常；启动失败写入可复制诊断卡片，
+  日志补充 platform/arch 与 child-process-gone；并扩展 macOS pi 搜索路径
+  （`/opt/homebrew/bin` 等），缓解 Dock 启动 PATH 不完整。
+- **宠物状态卡死在 review/failed/jumping** (#107) — 过渡恢复定时器不再被冷却/重叠推送
+  误取消，review/failed 可按时回到 idle。
+- **停止后的流式余晖** — abort 后密封 stream generation，延迟 thinking/text 不再混入
+  下一条回复；停止反馈改为 toast 而非时间线系统卡。
+- **禁用内置扩展后仍加载** — 移除/冲突让位时真正删除用户目录下的内置扩展文件，并清理
+  残留，避免与第三方扩展工具名冲突导致 RPC 失败。
+- **手动压缩按钮与状态** — 恢复底栏 compact 入口；RPC 使用 `customInstructions`；
+  结束时正确清 `isCompacting` 并回 idle，失败原因可 toast 展示。
+- **系统标题栏缺少侧栏开关** (#104) — 使用系统原生标题栏时仍可切换左右侧栏。
+- **粘贴图片附件 + 带空格路径引用** — 图片粘贴作为附件；路径 chip 保留空格不再截断。
+- **终端 Dock 竞态 / 未处理 rejection** — 加固 pending agent 切换与关闭路径，避免
+  未捕获 Promise 异常。
+- **终端 Dock 按所有者隔离** — Dock 状态按 owner 分桶，项目终端不再跨 agent/会话串台。
+- **剪贴板 Document is not focused** — 全栈复制改走 Electron 主进程
+  `clipboard.writeText`（preload 暴露），并保留降级路径。
+- **本地文件链接可点 + todo 字体跟随** (#103) — 本地文件链接可再次点击；todo 挂件
+  遵循界面字体设置。
+- **未完成 tool/thinking 回合并入下一条回复** — 保留仅 thinking 的 assistant 回合；
+  普通未完成 run 不再错误合并到下一条回答。
+- **重发更安全** — 仅截断当前用户回合的后代节点，并拒绝不安全的非末条用户根。
+- **Select 取消不再误选第一项** — 取消返回 `value: null`，避免被当成有效选项。
+- **Agent `get_state` 超时自动重试** — 启动状态拉取超时后自动重试，避免卡在启动中。
+- **Composer 占位符与 prompt 历史** — 清空输入后恢复 placeholder；prompt 历史跨重启
+  持久化。
+- **手动发版空 tag** — workflow_dispatch 未填 tag 时发布正式 release，而非仅草稿。
+- **macOS 测试构建 OOM** — CI mac 构建改用 `build:fast` 并提高 Node 堆上限。
+- **package-lock 依赖同步** — 修复合并/工具链漂移后缺失的 lock 条目。
+
+### 🙏 致谢
+
+感谢本版本所有贡献者提交的 PR、Issue 和反馈：
+
+- **@1900EasonJin** — 系统标题栏模式下补充左右侧栏开关 (#104)；宠物状态卡死修复 (#107)
+- **@zzq168281-coder** — 本地文件链接可交互 & todo 字体跟随 (#103)
+- **@me9rez** — TypeScript 增量编译产物整理 (#97)
+- **@weishiair** — 禁用内置扩展时删除用户目录残留文件，修复工具冲突导致 RPC 失败
+- **@clancyclaw** — RichInput 多行换行保留
+
+特别感谢 **微时佬友** 提供的 Grok 模型服务，用于我们的社区测试环境 🎉
+
+> 💬 **QQ 反馈交流群：1026218644**
+
+感谢所有给 PiDeck 提建议和反馈 Bug 的用户 🙏
+
+---
+
 ## v0.6.6 - 2026-07-24
 
 ### 🚀 新功能

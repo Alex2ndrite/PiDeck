@@ -16,6 +16,50 @@ import { toBlob } from "html-to-image";
 import { MarkdownStream } from "./MarkdownStream";
 import { useAtomValue } from "jotai";
 import "katex/dist/katex.min.css";
+
+/**
+ * 消息图片按需解码：base64 data URL 的字符串已在消息对象中（无法省字符串），
+ * 但解码出的位图是内存大头（一张截图 1~5MB）——视口外不设 src 不解码，
+ * 进入视口（含 200px 提前量）才挂载 src；未加载时占位高度避免滚动跳动。
+ * decoding="async" 保证解码不阻塞渲染主线程。
+ */
+function MessageImage(props: {
+	src: string;
+	alt: string;
+	className: string;
+	onClick?: () => void;
+	/** 未加载时的占位高度类（无固定尺寸的图片防滚动跳动；固定尺寸缩略图无需传） */
+	placeholderClass?: string;
+}) {
+	const ref = useRef<HTMLImageElement>(null);
+	const [inView, setInView] = useState(false);
+	useEffect(() => {
+		const el = ref.current;
+		if (!el) return;
+		const observer = new IntersectionObserver(
+			(entries) => {
+				if (entries[0]?.isIntersecting) {
+					setInView(true);
+					observer.disconnect();
+				}
+			},
+			{ rootMargin: "200px" },
+		);
+		observer.observe(el);
+		return () => observer.disconnect();
+	}, []);
+	return (
+		<img
+			ref={ref}
+			src={inView ? props.src : undefined}
+			alt={props.alt}
+			className={`${props.className}${!inView && props.placeholderClass ? ` ${props.placeholderClass}` : ""}`}
+			loading="lazy"
+			decoding="async"
+			onClick={props.onClick}
+		/>
+	);
+}
 import {
 	summarizeMessage,
 	type RenderMessage,
@@ -376,7 +420,7 @@ export function EmptyState(props: {
 		// 居中策略：几何居中（justify-center）后用户反馈标题区仍略偏上——
 		// 补 pt-[10vh] 让内容块整体下移，标题重心落到窗口光学中心。
 		<div
-			className="empty-state relative h-full min-h-0 overflow-hidden bg-background px-6 text-left"
+			className="empty-state relative h-full min-h-0 overflow-hidden bg-transparent px-6 text-left"
 			data-empty-state={props.hasProject ? "project" : "no-project"}
 		>
 			<div className="mx-auto flex h-full w-full max-w-2xl animate-in flex-col justify-center pt-[10vh] duration-500 fade-in">
@@ -636,11 +680,12 @@ export const AssistantText = memo(
 				{props.images && props.images.length > 0 && (
 					<div className="message-images">
 						{props.images.map((img, index) => (
-							<img
+							<MessageImage
 								key={index}
 								src={`data:${img.mimeType};base64,${img.data}`}
 								alt={t("app.imageAlt", { index: index + 1 })}
 								className="message-image"
+								placeholderClass="min-h-24"
 								onClick={() => props.onPreviewImage(img)}
 							/>
 						))}
@@ -764,7 +809,7 @@ export const UserBubble = memo(function UserBubble(props: {
 			{message.images && message.images.length > 0 && (
 				<div className="mb-2 flex max-w-[min(82%,64ch)] flex-wrap justify-end gap-2">
 					{message.images.map((img, index) => (
-						<img
+						<MessageImage
 							key={index}
 							src={`data:${img.mimeType};base64,${img.data}`}
 							alt={t("app.imageAlt", { index: index + 1 })}

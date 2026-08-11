@@ -91,7 +91,7 @@ export function registerScratchPadIpc({ appLogger }: ScratchPadIpcDeps): void {
 	ipcMain.handle(ipcChannels.scratchPadDelete, async (_event, draftPath: string): Promise<void> => {
 		try {
 			// 草稿是用户内容：删除走系统回收站（可恢复）；回收站不可用时抛错，拒绝硬删。
-			await trashPath(draftPath);
+			await trashPath(draftPath, { source: "scratchPad:delete" });
 			void appLogger.info("scratchPad", "draft deleted", { path: draftPath });
 		} catch (error) {
 			void appLogger.error("scratchPad", "Draft delete failed", {

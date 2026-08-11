@@ -47,7 +47,12 @@ const isDevBuild = !app.isPackaged || __PIDECK_DEV_BUILD__;
 if (isDevBuild) {
 	// 显式固定为 pi-desktop-dev：dev 构建的 productName 是 PiDeckDev，
 	// 默认 userData 会落在 %APPDATA%\PiDeckDev，必须指回 dev 配置目录以复用现有配置。
-	app.setPath("userData", join(app.getPath("appData"), "pi-desktop-dev"));
+	// 例外：命令行显式传入 --user-data-dir（e2e 隔离、多实例调试）时尊重该路径，
+	// 否则 e2e 会读到本机真实开发数据（settings/projects 全部污染测试断言）。
+	const explicitUserDataDir = process.argv.find((arg) => arg.startsWith("--user-data-dir="));
+	if (!explicitUserDataDir) {
+		app.setPath("userData", join(app.getPath("appData"), "pi-desktop-dev"));
+	}
 }
 
 // Linux XWayland 兼容层：仅当桌面宠物启用时才强制 ozone-platform=x11（#108，
@@ -228,6 +233,7 @@ import {
 import { WebServiceManager } from "./web/WebServiceManager";
 import { preparePreloadPath } from "./preloadPath";
 import { AppLogger } from "./logging/AppLogger";
+import { setAppLogger } from "./logging/sharedLogger";
 import { RpcLogger } from "./logging/RpcLogger";
 import { registerEditorsIpc } from "./ipc/editorsIpc";
 import {
@@ -1302,12 +1308,23 @@ function isAllowedBrowserPanelUrl(targetUrl: string): boolean {
 	return isAllowedBrowserPanelUrlShared(targetUrl);
 }
 
+/**
+ * 浏览器面板 partition 上的导航白名单拦截是否已注册。
+ * Electron webRequest 监听返回 void 且不可移除；macOS activate 重建窗口会重复调用
+ * configureBrowserPanelWebviewHost，必须只注册一次，否则每次重建都在共享 partition
+ * 上累积一份回调（2026-10 泄漏修复）。
+ */
+let browserPanelRequestInstalled = false;
+
 function configureBrowserPanelWebviewHost(window: BrowserWindow): void {
 	const browserPanelSession = session.fromPartition(BROWSER_PANEL_PARTITION);
 	browserPanelSession.setPermissionCheckHandler(() => false);
 	browserPanelSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
 	browserPanelSession.setDevicePermissionHandler(() => false);
-	browserPanelSession.webRequest.onBeforeRequest((details, callback) => {
+	if (!browserPanelRequestInstalled) {
+		browserPanelRequestInstalled = true;
+		browserPanelSession.webRequest.onBeforeRequest(
+			(details, callback) => {
 		const isFrameNavigation = details.resourceType === "mainFrame" || details.resourceType === "subFrame";
 		if (isFrameNavigation && !isAllowedBrowserPanelUrl(details.url)) {
 			void appLogger.warn("browser", "Blocked unsafe webview frame request", {
@@ -1317,8 +1334,9 @@ function configureBrowserPanelWebviewHost(window: BrowserWindow): void {
 			callback({ cancel: true });
 			return;
 		}
-		callback({});
-	});
+			callback({});
+		});
+	}
 
 	window.webContents.on("will-attach-webview", (event, webPreferences, params) => {
 		const sourceUrl = params.src || "about:blank";
@@ -2399,6 +2417,7 @@ app.whenReady().then(async () => {
 	openCodeSessionImporter = new OpenCodeSessionImporter(mainCopy);
 	settingsStore = new SettingsStore();
 	appLogger = new AppLogger();
+	setAppLogger(appLogger);
 	rpcLogger = new RpcLogger();
 	// 用量统计：数据源 = pi-tracker 写入的 <agentDir>/analytics/usage.jsonl
 	// （默认宿主 ~/.pi/agent；WSL 场景的目录同步暂按默认宿主处理）
@@ -2444,6 +2463,12 @@ app.whenReady().then(async () => {
 		},
 	);
 	webServiceManager = new WebServiceManager({
+		// dev 模式（electron-vite dev 不产出 out/renderer 构建物）下，静态资源
+		// 代理到 vite dev server，外部 Web 端加载重构后的 React 版页面并支持热更新；
+		// 打包/正式构建走 out/renderer 构建产物，此值为空。
+		devRendererUrl: shouldUseDevRendererUrl()
+			? process.env.ELECTRON_RENDERER_URL
+			: undefined,
 		// 订阅 pi agent 事件流：供 Web SSE 端点转发给浏览器（与 FeishuBridge 同源机制）。
 		subscribePiEvents: (handler) => agentManager.addLocalEventListener(
 			(agentId, event) => handler(agentId, event as never),
@@ -2779,7 +2804,7 @@ async function removeStalePiDeckExtension(extensionName: string, homeDir?: strin
 	const home = homeDir ?? app.getPath("home");
 	const targetPath = join(home, ".pi", "agent", "extensions", extensionName);
 	await rm(targetPath, { force: true });
-	console.log(`[PiDeck] Removed legacy/stale extension: ${targetPath}`);
+	appLogger?.info("extension", "Removed legacy/stale extension", { path: targetPath });
 }
 
 /**

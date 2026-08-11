@@ -64,9 +64,13 @@ import {
 import { desktopApi } from "../desktopApi";
 import { t } from "../i18n";
 import {
+  COMPOSER_IMAGE_MAX_BYTES,
   ComposerImageError,
+  dataUrlToFile,
   getClipboardImageFiles,
   getDroppedImageFiles,
+  imageMimeTypeFromPath,
+  isImageFilePath,
   processComposerImageFile,
 } from "../utils/composerImages";
 import { showNotice } from "../utils/notice";
@@ -817,12 +821,33 @@ export function useSessionComposerController(
   }, []);
 
   /**
+   * 剪贴板里的图片文件 → 附加为图片预览（对齐微信/QQ 粘贴习惯）。
+   * 经 files.readBase64 读原文件（比剪贴板位图缩略图清晰），构造 File 走统一附件流程；
+   * 任一文件读取失败或超出合成器大小上限（主进程 stat 预检拦截）时整体回退为 @path 引用，
+   * 保证「复制图片」粘贴始终有可用结果。
+   */
+  const pasteClipboardImages = useCallback(async (paths: string[]) => {
+    try {
+      const files: File[] = [];
+      for (const path of paths) {
+        const dataUrl = await desktopApi.files.readBase64(path, COMPOSER_IMAGE_MAX_BYTES);
+        if (!dataUrl) return insertFilePathRefs(paths);
+        const fileName = path.split(/[\\/]/).pop() || path;
+        files.push(dataUrlToFile(dataUrl, imageMimeTypeFromPath(path), fileName));
+      }
+      await addImageFiles(files);
+    } catch {
+      insertFilePathRefs(paths);
+    }
+  }, [addImageFiles, insertFilePathRefs]);
+
+  /**
    * 粘贴：系统文件路径以 @path 引用插入，位图/截图附加为图片。
    * 未处理时不 preventDefault，交给 RichInput 做纯文本粘贴。
    * preventDefault 必须在任何 await 之前同步调用，否则浏览器会先插入默认内容。
    *
    * 顺序说明：资源管理器复制图片文件时，剪贴板常同时带路径 + 缩略图；
-   * 必须先判定文件路径，否则会被误当成截图附加。纯截图无路径，仍走图片分支。
+   * 路径为受支持图片时优先附加预览，否则仍按路径引用处理，避免被误当成截图。
    */
   const onPaste = useCallback((event: React.ClipboardEvent<HTMLDivElement>) => {
     // 1) 资源管理器复制/剪切的文件：浏览器 ClipboardEvent 通常没有 kind=file，
@@ -830,7 +855,12 @@ export function useSessionComposerController(
     const clipboardPaths = desktopApi.files.getClipboardPaths?.() ?? [];
     if (clipboardPaths.length > 0) {
       event.preventDefault();
-      insertFilePathRefs(clipboardPaths);
+      // 复制的全是受支持图片 → 附加预览；混合/其他文件 → 维持 @path 引用
+      if (clipboardPaths.every(isImageFilePath)) {
+        void pasteClipboardImages(clipboardPaths);
+      } else {
+        insertFilePathRefs(clipboardPaths);
+      }
       return;
     }
 
@@ -864,7 +894,7 @@ export function useSessionComposerController(
     if (!imageFiles.length) return;
     event.preventDefault();
     void addImageFiles(imageFiles);
-  }, [addImageFiles, insertFilePathRefs, insertPastedPathRef, resolveLocalPathsFromFiles]);
+  }, [addImageFiles, insertFilePathRefs, insertPastedPathRef, pasteClipboardImages, resolveLocalPathsFromFiles]);
 
   /**
    * 拖拽：

@@ -73,7 +73,8 @@ test("windowed full emits only the window segment with windowStart + totalLength
   assert.equal(payload.upsertFrom, undefined);
   assert.equal(payload.windowStart, 2);
   assert.equal(payload.totalLength, 4);
-  assert.deepEqual(payload.messages.map((m) => m.text), ["text-c", "text-d"]);
+  // vm realm 数组原型与宿主不同，deepEqual 需转回宿主数组（Array.from）
+  assert.deepEqual(Array.from(payload.messages, (m) => m.text), ["text-c", "text-d"]);
 });
 
 test("dirtyFrom inside the window stays incremental; before the window escalates to windowed full", () => {
@@ -87,7 +88,7 @@ test("dirtyFrom inside the window stays incremental; before the window escalates
   const escalated = buildMessageFlushPayload("agent-1", all, 1, 2);
   assert.equal(escalated.upsertFrom, undefined);
   assert.equal(escalated.windowStart, 2);
-  assert.deepEqual(escalated.messages.map((m) => m.text), ["text-c", "text-d"]);
+  assert.deepEqual(Array.from(escalated.messages, (m) => m.text), ["text-c", "text-d"]);
 });
 
 test("fileVersion is carried through when provided", () => {

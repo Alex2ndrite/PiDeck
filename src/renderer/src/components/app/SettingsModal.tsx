@@ -71,6 +71,30 @@ const ZOOM_FACTOR_STEP = 0.05;
 
 type SettingsTabId = "common" | "appearance" | "proxy" | "dev" | "im" | "pet" | "storage" | "usage" | "process" | "vision";
 
+// 注意：修改 SettingsTabId 枚举时需同步更新 SETTINGS_TAB_IDS 校验数组
+
+/** localStorage 键：设置页上次打开的 tab（重开弹窗时恢复位置，跨应用重启保留）。 */
+const SETTINGS_LAST_TAB_KEY = "pideck-settings-last-tab";
+
+/** 全部合法 tab id，用于校验持久化值（避免版本更新后残留旧值导致无高亮）。 */
+const SETTINGS_TAB_IDS: readonly SettingsTabId[] = [
+	"common", "appearance", "proxy", "dev", "im", "pet", "storage", "usage", "process", "vision",
+];
+
+/**
+ * 读取上次打开的设置 tab；localStorage 不可用、无记录或值已失效时回退默认值 "common"。
+ * Radix Dialog 关闭会卸载内容，state 在每次打开时重建，因此需要从外部存储恢复。
+ */
+function loadLastSettingsTab(): SettingsTabId {
+	try {
+		const raw = localStorage.getItem(SETTINGS_LAST_TAB_KEY);
+		if (raw && (SETTINGS_TAB_IDS as readonly string[]).includes(raw)) return raw as SettingsTabId;
+	} catch {
+		/* localStorage 不可用（隐私模式等）时静默失败 */
+	}
+	return "common";
+}
+
 /** 代理相关字段：用于判断代理 tab 是否有未保存变更。 */
 const PROXY_FIELDS: (keyof AppSettings)[] = [
 	"piProxyEnabled",
@@ -185,7 +209,9 @@ export function SettingsModal(props: SettingsModalProps) {
 }
 
 function SettingsModalContent(props: SettingsModalProps) {
-	const [activeTab, setActiveTab] = useState<SettingsTabId>("common");
+	// 弹窗每次打开都会重新挂载（Radix Dialog 关闭即卸载内容），
+	// 用 lazy initializer 在挂载时读一次 localStorage，恢复到上次所在 tab。
+	const [activeTab, setActiveTab] = useState<SettingsTabId>(loadLastSettingsTab);
 	// ── 全局设置草稿：进入弹框时快照 props.settings，所有修改在 draft 上操作，保存时统一提交 ──
 	const [draftSettings, setDraftSettings] = useState<AppSettings>(() => ({ ...props.settings }));
 	const [dirtyFields, setDirtyFields] = useState<Set<string>>(new Set());
@@ -493,22 +519,21 @@ function SettingsModalContent(props: SettingsModalProps) {
 
 		return (
 		<Dialog open onOpenChange={(next) => !next && handleClose()}>
-			<DialogContent showCloseButton={false} stagger className={cn("flex flex-col gap-0 overflow-hidden p-0", settingsModalSizeClass, "settings-modal")}>
+			<DialogContent showCloseButton={false} stagger className={cn("flex flex-col gap-0 overflow-hidden p-0", settingsModalSizeClass, "settings-modal", "[--wallpaper-dialog-alpha:var(--wallpaper-panel-alpha,30%)]")}>
 				<DialogHeader className="flex-row items-center justify-between px-4 py-3">
 					<DialogTitle>{t("settings.title")}</DialogTitle>
 					<div className="flex items-center gap-2">
+						{/* 保存按钮常驻：无未保存改动时禁用，避免用户改完直接关窗丢改动 */}
+						<Button variant="default" size="sm" onClick={saveAll} disabled={!hasDirtyChanges}>
+							{t("common.save")}
+						</Button>
 						{hasDirtyChanges ? (
-							<>
-								<Button variant="default" size="sm" onClick={saveAll}>
-									{t("common.save")}
-								</Button>
-								{/* 放弃更改用 outline（白底描边）而非灰底 secondary：与黑色主按钮形成
-								    清晰的主次层级（shadcn dialog 的 confirm/cancel 惯例），避免一对按钮
-								    都是灰色填充分不出哪个是提交。 */}
-								<Button variant="outline" size="sm" onClick={cancelAll}>
-									{t("common.cancel")}
-								</Button>
-							</>
+							/* 放弃更改用 outline（白底描边）而非灰底 secondary：与黑色主按钮形成
+							    清晰的主次层级（shadcn dialog 的 confirm/cancel 惯例），避免一对按钮
+							    都是灰色填充分不出哪个是提交。 */
+							<Button variant="outline" size="sm" onClick={cancelAll}>
+								{t("common.cancel")}
+							</Button>
 						) : undefined}
 						<DialogClose asChild>
 							<Button variant="ghost" size="icon" aria-label={t("common.close")} title={t("common.close")}>
@@ -517,8 +542,8 @@ function SettingsModalContent(props: SettingsModalProps) {
 						</DialogClose>
 					</div>
 				</DialogHeader>
-			<Tabs orientation="vertical" value={activeTab} onValueChange={(v) => { const match = tabs.find((t) => t.id === v); if (match) setActiveTab(match.id); }} className="settings-layout flex min-h-0 flex-1 flex-row gap-0 bg-bg-panel">
-					<TabsList className="settings-tabs flex min-h-0 shrink-0 flex-col items-stretch gap-2.5 overflow-auto border-0 border-r border-border rounded-none bg-bg-panel p-2.5 data-[orientation=vertical]:w-[196px]" aria-label={t("settings.title")}>
+			<Tabs orientation="vertical" value={activeTab} onValueChange={(v) => { const match = tabs.find((t) => t.id === v); if (match) setActiveTab(match.id); try { localStorage.setItem(SETTINGS_LAST_TAB_KEY, match.id); } catch { /* localStorage 不可用时静默失败，仅本次会话内不记忆 */ } }} className="settings-layout flex min-h-0 flex-1 flex-row gap-0 bg-transparent">
+					<TabsList className="settings-tabs flex min-h-0 shrink-0 flex-col items-stretch gap-2.5 overflow-auto border-0 border-r border-border rounded-none bg-transparent p-2.5 data-[orientation=vertical]:w-[196px]" aria-label={t("settings.title")}>
 						{tabs.map((tab) => (
 							<TabsTrigger key={tab.id} value={tab.id} className="config-nav-btn h-8 justify-start gap-1.5 px-2.5 text-control font-medium">
 								<span className="settings-tab-icon">{tab.icon}</span>
@@ -649,6 +674,19 @@ function SettingsModalContent(props: SettingsModalProps) {
 											</SelectContent>
 										</Select>
 									</SettingRow>
+									{/* 流式对话设置：省渲染资源的两个行为开关（默认值见 SettingsStore）。 */}
+									<SettingSwitchRow
+										title={t("settings.expandInterimDuringStream")}
+										description={t("settings.expandInterimDuringStreamDesc")}
+										checked={draftSettings.expandInterimDuringStream}
+										onChange={(checked) => updateDraft({ expandInterimDuringStream: checked })}
+									/>
+									<SettingSwitchRow
+										title={t("settings.collapsePrevRunsOnNewTurn")}
+										description={t("settings.collapsePrevRunsOnNewTurnDesc")}
+										checked={draftSettings.collapsePrevRunsOnNewTurn}
+										onChange={(checked) => updateDraft({ collapsePrevRunsOnNewTurn: checked })}
+									/>
 								</SettingsSection>
 
 								{/* 通知 */}
@@ -1115,24 +1153,22 @@ function SettingsModalContent(props: SettingsModalProps) {
 								{/* 聊天排版 */}
 								<SettingsSection title={t("settings.sectionChatLayout")}>
 									<SettingRow
-										title={<span>{t("settings.contentMaxWidth")}</span>}
-										description={t("settings.contentMaxWidthDesc")}
+										title={<span>{t("settings.contentWidthPct")}</span>}
+										description={t("settings.contentWidthPctDesc")}
 									>
-										<div className="flex w-full items-center gap-3">
+										<div className="flex w-full items-center gap-2">
 											<input
 												type="range"
-												min="800"
-												max="1800"
-												step="25"
-												value={draftSettings.contentMaxWidth}
-												onChange={(event) => updateDraft({ contentMaxWidth: parseInt(event.target.value) })}
+												min="60"
+												max="100"
+												step="1"
+												value={draftSettings.chatContentWidthPct}
+												onChange={(event) => updateDraft({ chatContentWidthPct: parseInt(event.target.value) })}
 												className="min-w-0 flex-1 accent-[var(--color-accent)]"
-												aria-label={t("settings.contentMaxWidth")}
+												aria-label={t("settings.contentWidthPct")}
 											/>
-											<span className="min-w-20 shrink-0 text-right font-brand text-sm text-muted-foreground tabular-nums">
-												{draftSettings.contentMaxWidth === 1800
-													? t("settings.contentMaxWidthUnlimited")
-													: `${draftSettings.contentMaxWidth}px`}
+											<span className="min-w-8 shrink-0 text-right font-brand text-sm text-muted-foreground tabular-nums">
+												{draftSettings.chatContentWidthPct}%
 											</span>
 										</div>
 									</SettingRow>
@@ -1603,20 +1639,27 @@ function SettingsModalContent(props: SettingsModalProps) {
 											updateDraft({ webServiceEnabled: checked })
 										}
 									/>
-									<div className="web-endpoint-panel">
-										<div className="web-endpoint-grid">
-											<div className="web-endpoint-metric">
-												<span>{t("common.host")}</span>
-												<code>{draftSettings.webServiceHost}</code>
+									<div className="mt-2.5 grid gap-2.5">
+										{/* Web 服务地址：主机（只读）+ 端口（可编辑）；shadcn Input + Label，
+										    两列均分不再有主机列挤压/过宽问题，主机超长时 Input 内滚动 */}
+										<div className="grid grid-cols-2 gap-2">
+											<div className="min-w-0">
+												<Label className="text-xs font-bold text-text-tertiary">{t("common.host")}</Label>
+												<Input
+													value={draftSettings.webServiceHost}
+													readOnly
+													className="mt-1 font-mono text-sm tabular-nums"
+												/>
 											</div>
-											<Label className="web-endpoint-metric editable">
-												<span>{t("common.port")}</span>
+											<div className="min-w-0">
+												<Label className="text-xs font-bold text-text-tertiary">{t("common.port")}</Label>
 												<Input
 													type="number"
 													min={1}
 													max={65535}
 													value={webPortDraft}
 													disabled={props.webServiceChanging}
+													className="mt-1 font-mono text-sm tabular-nums"
 													onChange={(event) => setWebPortDraft(event.target.value)}
 													onBlur={applyWebPortDraft}
 													onKeyDown={(event) => {
@@ -1627,15 +1670,23 @@ function SettingsModalContent(props: SettingsModalProps) {
 														}
 													}}
 												/>
-											</Label>
+											</div>
 										</div>
-										<div className="web-endpoint-summary">
-											<span className={draftSettings.webServiceEnabled ? "online" : ""} />
-											<div>
-												<strong>
+										<div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2.5 rounded-lg border border-border-subtle/70 bg-bg-muted/30 px-3 py-2.5">
+											{/* 服务状态点：开启时 accent 色 + 光晕，关闭时灰 */}
+											<span
+												className={cn(
+													"size-2 shrink-0 rounded-full",
+													draftSettings.webServiceEnabled
+														? "bg-[var(--color-accent)] shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-accent)_12%,transparent)]"
+														: "bg-text-tertiary shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-text-tertiary)_12%,transparent)]",
+												)}
+											/>
+											<div className="min-w-0">
+												<strong className="block truncate text-caption font-semibold text-text-primary">
 													http://127.0.0.1:{webPortDraft || draftSettings.webServicePort}
 												</strong>
-												<small>{t("settings.localWebHint")}</small>
+												<small className="mt-0.5 block text-micro text-text-tertiary">{t("settings.localWebHint")}</small>
 											</div>
 											<Button variant="secondary"
 												size="sm"

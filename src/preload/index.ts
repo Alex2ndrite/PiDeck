@@ -8,6 +8,7 @@ import type {
 	AppInfo,
 	AppLogEntry,
 	AppLogLevel,
+	AppLogPage,
 	AppLogQuery,
 	ProcessMetricsSnapshot,
 	AppSettings,
@@ -204,6 +205,12 @@ function readClipboardFilePaths(): string[] {
 }
 
 const api = {
+	clipboard: {
+		// 同步读取剪贴板（主进程 clipboard 模块），供输入框右键“粘贴”菜单使用：
+		// readText 读纯文本；readHtml 读富文本（无 HTML 时返回空串，调用方降级纯文本）
+		readText: () => clipboard.readText(),
+		readHtml: () => clipboard.readHTML(),
+	},
 	editors: {
 		list: () => ipcRenderer.invoke(ipcChannels.editorsList) as Promise<ExternalEditor[]>,
 		redetect: () =>
@@ -300,9 +307,9 @@ const api = {
 			ipcRenderer.invoke(ipcChannels.filesShowInFolder, path) as Promise<void>,
 		readContent: (path: string, maxBytes?: number) =>
 			ipcRenderer.invoke(ipcChannels.filesReadContent, path, maxBytes) as Promise<string>,
-		/** 读取二进制文件为 data URL（粘贴资源管理器图片文件时用） */
-		readBase64: (path: string) =>
-			ipcRenderer.invoke(ipcChannels.filesReadBase64, path) as Promise<string>,
+		/** 读取二进制文件为 data URL（粘贴资源管理器图片文件时用；maxBytes 可预检拦截超大文件） */
+		readBase64: (path: string, maxBytes?: number) =>
+			ipcRenderer.invoke(ipcChannels.filesReadBase64, path, maxBytes) as Promise<string>,
 		writeContent: (path: string, content: string) =>
 			ipcRenderer.invoke(ipcChannels.filesWriteContent, path, content) as Promise<void>,
 		delete: (path: string, recursive?: boolean) =>
@@ -336,10 +343,10 @@ const api = {
 	},
 	dialog: {
 		/**
-		 * 打开系统原生文件/文件夹选择器，支持多选。
+		 * 打开系统原生文件选择器（默认仅文件；includeDirectories 时文件+目录），支持多选。
 		 * 返回选中路径列表，取消时返回空数组。
 		 */
-		pickFiles: (options?: { title?: string }) =>
+		pickFiles: (options?: { title?: string; includeDirectories?: boolean }) =>
 			ipcRenderer.invoke(ipcChannels.dialogPickFiles, options) as Promise<string[]>,
 		/** 换肤背景图：选图并复制到 userData/backgrounds/，返回文件名（空串=取消） */
 		pickBackgroundImage: () =>
@@ -398,6 +405,14 @@ const api = {
 				pageSize,
 				options,
 			) as Promise<import("../shared/types").SessionMessagePage>,
+		/** 按需读取单条消息完整文本（工具结果截断后的「查看完整输出」）。 */
+		readMessageFullText: (agentId: string, messageId: string, entryId?: string) =>
+			ipcRenderer.invoke(
+				ipcChannels.sessionsCatalogReadMessageFullText,
+				agentId,
+				messageId,
+				entryId,
+			) as Promise<{ text: string }>,
 		readReferenceMessages: (sessionId: string) =>
 			ipcRenderer.invoke(
 				ipcChannels.sessionsCatalogReadReferenceMessages,
@@ -813,6 +828,8 @@ const api = {
 	logs: {
 		list: (query?: AppLogQuery) =>
 			ipcRenderer.invoke(ipcChannels.logsList, query ?? {}) as Promise<AppLogEntry[]>,
+		listPage: (query?: AppLogQuery) =>
+			ipcRenderer.invoke(ipcChannels.logsListPage, query ?? {}) as Promise<AppLogPage>,
 		clear: () => ipcRenderer.invoke(ipcChannels.logsClear) as Promise<void>,
 		openFolder: () => ipcRenderer.invoke(ipcChannels.logsOpenFolder) as Promise<void>,
 		getSize: () =>

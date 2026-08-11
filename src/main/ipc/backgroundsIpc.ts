@@ -36,7 +36,7 @@ export async function pickBackgroundImage(win?: Electron.BrowserWindow): Promise
 		// 清理旧背景图（仅本目录，文件名前缀 bg-）；替换场景失败不阻塞新图生效。
 		for (const f of await readdir(dir)) {
 			if (f !== name && f.startsWith("bg-")) {
-				await trashPath(join(dir, f)).catch(() => undefined);
+				await trashPath(join(dir, f), { source: "backgrounds:cleanup" }).catch(() => undefined);
 			}
 		}
 		return name;
@@ -50,7 +50,7 @@ export async function pickBackgroundImage(win?: Electron.BrowserWindow): Promise
 export async function removeBackgroundImage(name: string): Promise<void> {
 	if (!/^bg-[a-zA-Z0-9.]+$/.test(name)) return;
 	// 用户主动删除背景图：走系统回收站（可恢复）；失败抛错由调用方呈现。
-	await trashPath(join(backgroundsDir(), name));
+	await trashPath(join(backgroundsDir(), name), { source: "backgrounds:remove" });
 }
 
 /**

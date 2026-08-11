@@ -183,8 +183,9 @@ test("renderer async failures log diagnostics and expose stable localized copy",
 	assert.doesNotMatch(yaoStore, /setError\(err instanceof Error/);
 
 	assert.match(skillHub, /console\.error\("\[SkillHub\] Search failed", err\)/);
-	assert.match(skillHub, /showNotice\(t\("config\.skillHubInstallError"\), 5000, "error"\)/);
-	assert.doesNotMatch(skillHub, /showNotice\(err instanceof Error/);
+	// 安装失败 toast 带主进程返回的真实错误（npx 输出/网络/权限原因），不再只给通用文案
+	assert.match(skillHub, /showNotice\(t\("config\.skillHubInstallError", \{ error: result\.error \}\), 5000, "error"\)/);
+	assert.match(skillHub, /t\("config\.skillHubInstallError", \{ error: err instanceof Error \? err\.message : String\(err\) \}\)/);
 
 	assert.match(promptStore, /console\.error\("\[PromptStore\] Import failed", err\)/);
 	assert.match(promptStore, /setError\(t\("config\.promptStoreImportError"\)\)/);

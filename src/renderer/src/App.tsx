@@ -27,6 +27,7 @@ import {
   isLanWeb,
   missingElectronPreload,
 } from "./desktopApi";
+import { turnFlowSettingsAtom } from "./atoms/app-ui-atoms";
 // 文件链接路由：图片类型走弹窗预览
 const IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "gif", "webp", "svg", "avif", "bmp", "ico"]);
 const ConfigModal = lazy(() => import("./ConfigModal").then((m) => ({ default: m.ConfigModal })));
@@ -497,6 +498,9 @@ export function App() {
     agentCountReminderEnabled: true,
     // showThinking 由 pi agent 的 hideThinkingBlock 控制，启动后从主进程加载的真实值会覆盖此处
     showThinking: true,
+    // 流式对话行为：默认不自动展开中间过程；新一轮默认收起非最新轮（与 SettingsStore 一致）
+    expandInterimDuringStream: false,
+    collapsePrevRunsOnNewTurn: true,
     showDevTools: false,
     // Electron Chromium 沙箱默认关，与主进程历史兼容策略一致
     electronChromiumSandbox: false,
@@ -518,6 +522,7 @@ export function App() {
     linkOpenMode: "external",
     workspaceContentOpenMode: "split",
     contentMaxWidth: 1800,
+    chatContentWidthPct: 80,
     maxEditorFileSizeMB: 5,
     externalEditors: createDefaultExternalEditorSettings(),
 
@@ -546,6 +551,20 @@ export function App() {
     piRpcNoExtensions: false,
     piRpcNoSkills: false,
   });
+
+  // 流式对话行为设置同步给 turn 组件（TurnRow 直接订阅 atom，避免 5 层 props 透传；
+  // 设置变化低频，全局订阅成本可忽略）。
+  const setTurnFlowSettings = useSetAtom(turnFlowSettingsAtom);
+  useEffect(() => {
+    setTurnFlowSettings({
+      expandInterimDuringStream: settings.expandInterimDuringStream,
+      collapsePrevRunsOnNewTurn: settings.collapsePrevRunsOnNewTurn,
+    });
+  }, [
+    settings.expandInterimDuringStream,
+    settings.collapsePrevRunsOnNewTurn,
+    setTurnFlowSettings,
+  ]);
 
   // Guard: hide git drawer when git management is disabled.
   // Equivalent to: if (panel === "git" && !settings.enableGitManagement) return
@@ -576,7 +595,10 @@ export function App() {
     api,
   });
   const { piStatus, piChecking, environmentDialog, setPiStatus, setEnvironmentDialog } = piUpdate;
-  const [drawerWidth, setDrawerWidth] = useState(320);
+  // 抽屉宽度状态由 useWorkspacePanels 统一管理（全局 localStorage 持久化，键 pid:drawer-width），
+  // AppShell 拖拽提交经 setDrawerWidth 回写；此处不再持有独立 useState，避免双份状态漂移。
+  const drawerWidth = workspace.drawerWidth;
+  const setDrawerWidth = workspace.setDrawerWidth;
   const [composerOffsetHeight, setComposerOffsetHeight] = useState(0);
   // 终端归属：有 activeAgent → agent owner；引导页/未激活 agent/历史会话 → project owner。
   // 终端 open/collapsed/高度/PTY 实例都按 owner 隔离，切换项目或 agent 绝不串台。
@@ -871,7 +893,22 @@ export function App() {
   useEffect(() => {
     const root = document.documentElement;
     const isDark = root.dataset.theme === "dark";
-    const BG_TOKENS = ["--color-bg-app", "--color-bg-sidebar", "--color-bg-panel", "--color-bg-muted", "--color-bg-hover", "--color-bg-active", "--color-background", "--color-card"];
+    const BG_TOKENS = [
+      "--color-bg-app",
+      "--color-bg-sidebar",
+      "--color-bg-panel",
+      "--color-bg-input",
+      "--color-bg-muted",
+      "--color-bg-hover",
+      "--color-bg-active",
+      "--color-background",
+      "--color-card",
+      // Markdown/表格使用 chat 专属 token；未注入时会继续显示固定白色代码块。
+      "--color-chat-card-bg",
+      "--color-chat-muted-bg",
+      "--color-chat-control-bg",
+      "--color-chat-table-bg",
+    ];
 
     // 1. 皮肤变量：先清所有皮肤预设可能触及的键，再应用当前皮肤（light/dark 色板）+ 自定义覆盖
     const skinKeys = new Set<string>();
@@ -920,6 +957,15 @@ export function App() {
           injectedWallpaperTokens.add(k);
         }
       }
+      // Select/Dropdown/Popover 会 portal 到 body，不能继承 DialogContent 的局部变量。
+      // 单独给浮层保留 92% 以上的底色，避免半透明面板 token 让菜单内容透出并误读为“透明坏了”。
+      const floatingMix = Math.max(92, Math.min(100, panelMix + 40));
+      root.style.setProperty(
+        "--color-bg-popover",
+        `color-mix(in srgb, ${base} ${floatingMix}%, transparent)`,
+      );
+      root.style.setProperty("--wallpaper-floating-alpha", `${floatingMix}%`);
+      injectedWallpaperTokens.add("--color-bg-popover");
     } else {
       root.style.removeProperty("--app-bg-image");
       root.style.removeProperty("--app-bg-mask");
@@ -928,6 +974,7 @@ export function App() {
       injectedWallpaperTokens.clear();
       root.style.removeProperty("--wallpaper-base");
       root.style.removeProperty("--wallpaper-panel-alpha");
+      root.style.removeProperty("--wallpaper-floating-alpha");
     }
   }, [settings.themeSkin, settings.theme, settings.customThemeOverrides, settings.backgroundImage, settings.backgroundImageOpacity]);
 
@@ -1475,6 +1522,23 @@ export function App() {
 
   // 追踪 agent 会话开始/结束时间,计算会话时长
   useEffect(() => {
+    // 活 agent 集合（agentId 每次 spawn 随机，标签关闭后旧键永久残留 → 按活集合裁剪，2026-10）
+    const liveIds = new Set(displayAgents.map((a) => a.id));
+    for (const id of Object.keys(agentStatusByAgentRef.current)) {
+      if (!liveIds.has(id)) delete agentStatusByAgentRef.current[id];
+    }
+    for (const id of Object.keys(sessionStartByAgentRef.current)) {
+      if (!liveIds.has(id)) delete sessionStartByAgentRef.current[id];
+    }
+    setSessionDurationByAgent((d) => {
+      let changed = false;
+      const next: typeof d = {};
+      for (const id of Object.keys(d)) {
+        if (liveIds.has(id)) next[id] = d[id];
+        else changed = true;
+      }
+      return changed ? next : d;
+    });
     for (const agent of displayAgents) {
       if (agent.id !== activeAgentId) continue;
       const previousStatus = agentStatusByAgentRef.current[agent.id];
@@ -2940,7 +3004,7 @@ export function App() {
       useNativeTitleBar={settings.useNativeTitleBar}
       chatPaneRef={chatPaneRef}
       terminalRowHeight={terminalRowHeight}
-      contentMaxWidth={settings.contentMaxWidth}
+      chatContentWidthPct={settings.chatContentWidthPct}
       sidebarContent={sidebarContentNode}
       chatPaneContent={chatPaneContentNode}
       drawerRail={

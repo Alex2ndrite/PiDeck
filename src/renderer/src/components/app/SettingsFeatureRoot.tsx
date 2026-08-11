@@ -78,7 +78,9 @@ export function SettingsFeatureRoot(props: SettingsFeatureRootProps) {
           await api.settings.update({ piEnvironmentChecked: false });
           showNotice(t("environment.checkFlagCleared"));
         }}
-        onOpenWebService={(port) => api.app.openExternal(`http://127.0.0.1:${port}`)}
+        // forceSystem=true：Web 服务页必须离开内置浏览器面板——面板在 Dialog 下层，
+        // 设置弹窗打开时会被遮挡；且外部端按桌面浏览器视口设计，系统浏览器体验更完整。
+        onOpenWebService={(port) => api.app.openExternal(`http://127.0.0.1:${port}`, true)}
         onClose={() => setOpen(false)}
         onChange={props.onChange}
       />

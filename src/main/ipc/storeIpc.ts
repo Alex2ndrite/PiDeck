@@ -354,7 +354,10 @@ export function registerStoreIpc({
 		} catch (err) {
 			const message = err instanceof Error ? err.message : String(err);
 			void appLogger.warn("skill-hub", "Install failed", { slug, error: message });
-			return { success: false, slug, installDir: "", error: mainCopy("store.skillsShInstallFailed") };
+			// 返回真实错误信息（截断防爆，exec 的 stderr 可能很长），渲染层 toast 直接展示；
+			// 此前只返回通用文案，用户无法判断是网络、权限还是包名问题
+			const brief = message.length > 300 ? `${message.slice(0, 300)}…` : message;
+			return { success: false, slug, installDir: "", error: brief };
 		}
 	});
 

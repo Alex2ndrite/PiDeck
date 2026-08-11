@@ -9,6 +9,7 @@ import {
   FileText,
   Folder,
   Globe2,
+  Loader2,
   MessageCircle,
   Network,
   Search,
@@ -32,6 +33,7 @@ import { TimelineMarker } from "./TimelineMarker";
 import { LiveDuration } from "./LiveDuration";
 import { getToolPhraseFromArgs } from "./timeline/toolPhrase";
 import { ToolResult } from "../agents/tool-result";
+import { desktopApi } from "../../desktopApi";
 import {
   formatDuration,
   getToolDetailText,
@@ -224,6 +226,30 @@ export const ToolCard = memo(function ToolCard(props: {
 	const status = props.stopped && messageStatus === "running" ? "stopped" : messageStatus;
 	const toolName = getToolName(props.message);
 	const detailText = getToolDetailText(props.message);
+	// 工具结果截断标记（主进程 truncateDetailWithMeta 写入）：展开区可「查看完整输出」
+	// 按需读取（运行期走主进程内存缓存，历史会话定位读会话文件）。
+	const isTruncated = props.message.meta?.truncated === true;
+	const [fullText, setFullText] = useState<string | null>(null);
+	const [fullLoading, setFullLoading] = useState(false);
+	const [fullError, setFullError] = useState(false);
+	const displayText = fullText ?? detailText;
+	const loadFullText = async () => {
+		if (fullLoading) return;
+		setFullLoading(true);
+		setFullError(false);
+		try {
+			const result = await desktopApi.sessions.readMessageFullText(
+				props.message.agentId,
+				props.message.id,
+				typeof props.message.meta?.entryId === "string" ? props.message.meta.entryId : undefined,
+			);
+			setFullText(result.text);
+		} catch {
+			setFullError(true);
+		} finally {
+			setFullLoading(false);
+		}
+	};
 	const tone = status === "stopped" ? "ok" : getToolTone(props.message);
 	const subtitle = getToolSubtitle(props.message);
 	const kindLabel = getToolKindLabel(toolName);
@@ -373,12 +399,46 @@ export const ToolCard = memo(function ToolCard(props: {
 							status={status === "running" ? "running" : status === "error" ? "error" : "success"}
 							kind={toolName.toLowerCase().includes("bash") || toolName.toLowerCase().includes("shell") ? "terminal" : "custom"}
 							maxHeight={320}
-							copyText={detailText}
+							copyText={displayText}
 							copyClassName="tool-card-copy"
 							contentClassName="text-text-tertiary"
 						>
-							{detailText}
+							{displayText}
 						</ToolResult>
+					)}
+					{isTruncated && !fullText && (
+						// 截断提示后的按需加载入口：内容完整与否由主进程决定（内存缓存/会话文件），
+						// 失败时保留重试，不让用户卡死在加载态。
+						<div className="flex items-center gap-2 pl-1 pb-1">
+							{fullError ? (
+								<>
+									<span className="text-micro text-text-tertiary">{t("tool.fullOutputLoadFailed")}</span>
+									<Button
+										type="button"
+										variant="ghost"
+										size="sm"
+										className="h-auto px-1 py-0 text-micro text-text-tertiary hover:text-text-secondary"
+										onClick={() => void loadFullText()}
+									>
+										{t("tool.retry")}
+									</Button>
+								</>
+							) : (
+								<Button
+									type="button"
+									variant="ghost"
+									size="sm"
+									className="h-auto gap-1 px-1 py-0 text-micro text-text-tertiary hover:text-text-secondary"
+									disabled={fullLoading}
+									onClick={() => void loadFullText()}
+								>
+									{fullLoading ? (
+										<Loader2 size={12} className="animate-spin" aria-hidden="true" />
+									) : null}
+									{fullLoading ? t("tool.loadingFullOutput") : t("tool.viewFullOutput")}
+								</Button>
+							)}
+						</div>
 					)}
 				</div>
 			)}

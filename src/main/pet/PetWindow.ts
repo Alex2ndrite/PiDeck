@@ -61,6 +61,14 @@ async function savePos(bounds: { x: number; y: number }) {
 }
 
 /**
+ * persist:pet partition 上的 CSP 响应头改写是否已注册。
+ * Electron webRequest 监听返回 void 且不可移除；开关宠物会重建 PetWindow，
+ * 必须只注册一次，否则每次开关都在共享 partition 上累积一份监听（2026-10 泄漏修复）。
+ * 该改写在 partition 级生效，与窗口实例无关，注册一次即可。
+ */
+let petCspHeaderInstalled = false;
+
+/**
  * PetWindow —— 宠物悬浮窗。
  * 窗口几何由 shared/petNotificationLayout 统一推导：普通布局只有精灵区域，
  * 通知可见时扩展出头顶气泡槽位；尺寸切换以「精灵脚底中心」为稳定锚点。
@@ -157,9 +165,15 @@ export class PetWindow {
 		}
 
 		if (!is.dev) {
-			this.win.webContents.session.webRequest.onHeadersReceived((details, cb) => {
-				cb({ responseHeaders: { ...details.responseHeaders, "Content-Security-Policy": ["default-src 'self'; img-src 'self' file: data:; script-src 'self'; style-src 'self' 'unsafe-inline'"] } });
-			});
+			// 幂等注册：webRequest 监听不可移除，重复 create 会累积（见模块级 petCspHeaderInstalled 注释）
+			if (!petCspHeaderInstalled) {
+				petCspHeaderInstalled = true;
+				this.win.webContents.session.webRequest.onHeadersReceived(
+					(details, cb) => {
+						cb({ responseHeaders: { ...details.responseHeaders, "Content-Security-Policy": ["default-src 'self'; img-src 'self' file: data:; script-src 'self'; style-src 'self' 'unsafe-inline'"] } });
+					},
+				);
+			}
 		}
 
 		const devRendererUrl = shouldUseDevRendererUrl()

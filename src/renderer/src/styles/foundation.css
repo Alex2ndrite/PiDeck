@@ -58,6 +58,9 @@
   --color-bg-app: #ffffff;
   --color-bg-sidebar: #ffffff;
   --color-bg-panel: #ffffff;
+  /* 浮层与普通面板分离：壁纸模式下普通面板可透图，但菜单必须保持稳定的不透明底。 */
+  --color-bg-popover: #ffffff;
+  --color-bg-input: #ffffff;
   --color-bg-muted: #f4f4f5;
   --color-bg-hover: #e5e7eb;
   --color-bg-active: #dfe3e8;
@@ -172,10 +175,11 @@
     color-mix(in srgb, var(--color-brand-blue) 48%, transparent) 52%,
     transparent 100%
   );
+  /* boot 页品牌 logo 底色：与 build/icon.svg 图标同一套黑渐变，不跟随主题色 */
   --logo-boot-gradient: linear-gradient(
     145deg,
-    var(--color-logo-green),
-    var(--color-logo-green-deep)
+    #1c1c1e,
+    #000000
   );
   --logo-mark-gradient: linear-gradient(
     145deg,
@@ -385,6 +389,8 @@
   --color-bg-app: #121212;
   --color-bg-sidebar: #171717;
   --color-bg-panel: #171717;
+  --color-bg-popover: #171717;
+  --color-bg-input: #171717;
   --color-bg-muted: #262626;
   --color-bg-hover: #262626;
   --color-bg-active: #333333;
@@ -509,12 +515,25 @@ body {
   margin: 0;
   overflow: hidden;
   /* 换肤背景图：--app-bg-image 由 App.tsx 按设置注入（pideck-bg:// 协议），
-     --app-bg-mask 为同色遮罩渐变（浅色白/暗色黑，透明度=1-opacity） */
+     --app-bg-mask 为同色遮罩渐变（浅色白/暗色黑，透明度=1-opacity）。
+     背景移到独立 fixed 层，避免 body 背景传播规则被 Electron/Chromium 的全屏根容器覆盖。 */
   background-color: var(--color-bg-app);
+}
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
   background-image: var(--app-bg-mask, none), var(--app-bg-image, none);
   background-size: auto, cover;
   background-position: center, center;
   background-attachment: fixed, fixed;
+}
+#root {
+  position: relative;
+  z-index: 1;
+  min-height: 100vh;
 }
 /* 注：不再重复声明 button/textarea/input 的 font: inherit——
    Tailwind preflight 已在 @layer base 内提供同款规则。非 layer 重复声明会
@@ -596,8 +615,7 @@ select:focus-visible {
   color: var(--color-text-inverse);
   font-size: var(--font-size-logo);
   font-weight: 900;
-  box-shadow: 0 12px 28px
-    color-mix(in srgb, var(--color-logo-green) 20%, transparent);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
 }
 .boot-screen span {
   color: var(--color-text-tertiary);
@@ -2347,13 +2365,13 @@ select:focus-visible {
 /* 壁纸模式下弹窗（shadcn Dialog）比普通面板再实一档：统一各弹窗透明度，
    与侧栏/会话区/抽屉同一基色，不透明度更高保证内容可读。
    关键：在 dialog-content 上局部覆盖 bg 系列变量（CSS 变量继承）——
-   弹窗内 section 卡片/控件引用同一档位，消除"Header 透 / Body 实"的多层叠加不一致 */
+   弹窗内 section 卡片/控件引用同一档位，消除 Header 透、Body 实的多层叠加。 */
 :root[data-bg-image="on"] [data-slot="dialog-content"],
-/* 草稿本同理：不跟随壁纸半透明，header(bg-muted)/body(bg-panel) 同基色同档位，顶部一体 */
+/* 草稿本同理：不跟随壁纸半透明，header(bg-muted)/body(bg-panel) 同基色同档位，顶部一体。 */
 :root[data-bg-image="on"] .scratch-pad-panel {
-  /* 弹窗保底 90% 不透明：模态内容优先可读——此前仅比普通面板实 25%
-     （55% 不透明），半透明弹窗会让背后的侧栏 logo 等元素透出干扰阅读 */
-  --wallpaper-dialog-alpha: max(90%, calc(var(--wallpaper-panel-alpha, 30%) + 25%));
+  /* 弹窗下方仍是页面正文，透明度过低会把 Markdown 文字透进设置内容；普通弹框
+     保持 90% 基线，业务工作台可在本规则之后单独降到页面面板档。 */
+  --wallpaper-dialog-alpha: max(90%, calc(var(--wallpaper-panel-alpha, 30%) + 35%));
   background-color: color-mix(in srgb, var(--wallpaper-base, var(--color-bg-app)) var(--wallpaper-dialog-alpha), transparent);
   --color-bg-panel: color-mix(in srgb, var(--wallpaper-base, var(--color-bg-app)) var(--wallpaper-dialog-alpha), transparent);
   --color-bg-muted: color-mix(in srgb, var(--wallpaper-base, var(--color-bg-app)) var(--wallpaper-dialog-alpha), transparent);
@@ -2361,6 +2379,18 @@ select:focus-visible {
   --color-bg-active: color-mix(in srgb, var(--wallpaper-base, var(--color-bg-app)) var(--wallpaper-dialog-alpha), transparent);
   --color-background: color-mix(in srgb, var(--wallpaper-base, var(--color-bg-app)) var(--wallpaper-dialog-alpha), transparent);
   --color-card: color-mix(in srgb, var(--wallpaper-base, var(--color-bg-app)) var(--wallpaper-dialog-alpha), transparent);
+  --color-bg-input: color-mix(in srgb, var(--wallpaper-base, var(--color-bg-app)) var(--wallpaper-dialog-alpha), transparent);
+  --color-bg-popover: color-mix(in srgb, var(--wallpaper-base, var(--color-bg-app)) var(--wallpaper-dialog-alpha), transparent);
+}
+/* Pi 配置管理是工作台式弹框，header、layout、sidebar、main、content 全部覆盖
+   通用 Dialog 的 90% 基线，最终共享同一个页面透明度。 */
+:root[data-bg-image="on"] [data-slot="dialog-content"].config-modal,
+:root[data-bg-image="on"] [data-slot="dialog-content"].settings-modal,
+:root[data-bg-image="on"] [data-slot="dialog-content"].project-resources-dialog,
+:root[data-bg-image="on"] [data-slot="dialog-content"].feedback-modal-shell,
+:root[data-bg-image="on"] [data-slot="dialog-content"].environment-dialog {
+  /* 这些都是完整工作台弹框，header 与内容必须共享页面面板档透明度。 */
+  --wallpaper-dialog-alpha: var(--wallpaper-panel-alpha, 30%);
 }
 /* 草稿本是独立书写平面：壁纸模式下遮罩与面板使用同一不透明底色，
    避免圆角抗锯齿边缘露出深色遮罩而形成黑角。 */
@@ -2484,22 +2514,6 @@ select:focus-visible {
   top: -8px;
   bottom: -16px;
   cursor: row-resize;
-}
-/* ── 内容行宽限制：仅在 --content-max-width 由 JS 注入时生效 ── */
-.chat-pane[style*="--content-max-width"] .message-list {
-  width: min(100%, var(--content-max-width));
-  max-width: var(--content-max-width);
-  margin-inline: auto;
-}
-.chat-pane[style*="--content-max-width"] .composer-box,
-.chat-pane[style*="--content-max-width"] .image-preview-area,
-.chat-pane[style*="--content-max-width"] .extension-widgets-container,
-.chat-pane[style*="--content-max-width"] .queued-track,
-.chat-pane[style*="--content-max-width"] .composer .ask-inline-bar,
-.chat-pane[style*="--content-max-width"] .session-runtime-ui {
-  width: min(100%, var(--content-max-width));
-  max-width: var(--content-max-width);
-  margin-inline: auto;
 }
 /* queued-track 与 composer 同宽容器；内部 .queued-panel 再缩成右上角小面板 */
 .chat-header {
@@ -2821,7 +2835,11 @@ select:focus-visible {
   overflow-y: auto;
   overflow-x: hidden;
   overflow-anchor: none;
-  padding: 18px clamp(24px, 4vw, 48px) 24px;
+  /* 只留上下呼吸空间。左右必须由组件 utility 的百分比留白变量接管；
+     若这里写 padding 简写带左右 24px，会在变量失效时把「百分比留白」盖成恒定 24px，
+     表现为设置滑块怎么拖都不生效。 */
+  padding-block: 18px 24px;
+  padding-inline: 0;
   min-height: 0;
   scroll-padding-top: 28px;
   /* Ask/工具完成卡片在时间线末端仍需留出可视缓冲，避免紧贴 composer。 */
@@ -2873,11 +2891,7 @@ select:focus-visible {
   transform: translate(-50%, 0);
   box-shadow: 0 2px 6px color-mix(in srgb, var(--color-accent) 16%, transparent);
 }
-.message-list {
-  min-width: 0;
-  margin: 0 auto;
-  transition: opacity 0.12s ease-out;
-}
+
 .multi-select-image-export {
   position: absolute;
   left: 0;

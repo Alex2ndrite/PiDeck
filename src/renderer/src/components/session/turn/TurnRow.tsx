@@ -2,7 +2,8 @@ import { Fragment, memo, useEffect, useLayoutEffect, useMemo, useRef, useState, 
 import { ChevronUp, Share, SquarePen, Trash } from "lucide-react";
 import { atom, useAtomValue } from "jotai";
 import type { ImageContent } from "../../../../../shared/types";
-import { liveTextStreamingBySessionAtom } from "../../../atoms/session-atoms";
+import { liveTextStreamingBySessionAtom, newTurnCollapseTickBySessionIdAtomFamily } from "../../../atoms/session-atoms";
+import { turnFlowSettingsAtom } from "../../../atoms/app-ui-atoms";
 import { t } from "../../../i18n";
 import { Button } from "../../ui-shadcn/button";
 import { Collapsible, CollapsibleContent } from "../../ui-shadcn/collapsible";
@@ -26,6 +27,8 @@ import type { DiffFileHandler } from "../ToolCallComponents";
 
 /** sessionId 为空时的占位 atom：恒 false（无会话不挂 live）。 */
 const NO_LIVE_TEXT_ATOM = atom(false);
+/** sessionId 为空时的占位 atom：恒 0（无会话不订阅新一轮信号）。 */
+const NO_TURN_TICK_ATOM = atom(0);
 
 /**
  * 一轮 AI 回答的扁平容器：左侧竖线聚合，内含思考/工具/回答。
@@ -160,12 +163,23 @@ export const TurnRow = memo(
 	// run 级折叠状态（一个开关控制全部思考/工具/中间回答步骤）
 	// hasFinalAnswer：无最终回答的 run 不自动收起（中间回答是唯一输出，不能被折叠隐藏）
 	const hasFinalAnswer = displayItems.some((item) => item.kind === "final-answer");
+	// 流式对话行为设置（App 同步写入）+ 新一轮信号（composer 发送成功后 bump）。
+	// 设置变化低频；tick 经 atomFamily selectAtom 隔离，跨会话 bump 不触发本行重渲染。
+	const flowSettings = useAtomValue(turnFlowSettingsAtom);
+	const newTurnCollapseTick = useAtomValue(
+		props.sessionId
+			? newTurnCollapseTickBySessionIdAtomFamily(props.sessionId)
+			: NO_TURN_TICK_ATOM,
+	);
 	const { stepsVisible, setStepsVisibleFromUser, toggleSteps, autoCollapseTick } =
 		useTurnExecution({
 			agentRunning: props.agentRunning,
 			isComplete,
 			hasFinalAnswer,
 			isLatestRun: props.isLatestRun,
+			expandInterimDuringStream: flowSettings.expandInterimDuringStream,
+			collapsePrevRunsOnNewTurn: flowSettings.collapsePrevRunsOnNewTurn,
+			newTurnCollapseTick,
 		});
 
 	// 自动收起后：等折叠负增高 / stick 近底重锁完成，再对准最终回答开头。

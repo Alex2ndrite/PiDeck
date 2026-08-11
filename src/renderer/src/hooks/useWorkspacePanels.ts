@@ -134,6 +134,37 @@ function writeDrawerState(
   }
 }
 
+/** 抽屉宽度默认值与可调范围（AppShell 布局约束同源，禁止两处漂移）。 */
+export const DEFAULT_DRAWER_WIDTH = 320;
+export const DRAWER_WIDTH_MIN = 180;
+export const DRAWER_WIDTH_MIN_PINNED = 220;
+export const DRAWER_WIDTH_MAX = 560;
+/** 抽屉宽度是全局布局偏好（与项目无关），不按项目拆分存储键。 */
+export const DRAWER_WIDTH_STORAGE_KEY = "pid:drawer-width";
+
+/** 读取持久化抽屉宽度：无存储/损坏/越界一律回退默认值，并 clamp 到可调范围。 */
+export function readDrawerWidth(storage: WorkspacePanelOptions["storage"]): number {
+  if (!storage) return DEFAULT_DRAWER_WIDTH;
+  try {
+    const raw = storage.getItem(DRAWER_WIDTH_STORAGE_KEY);
+    if (raw === null) return DEFAULT_DRAWER_WIDTH;
+    const width = Number(raw);
+    if (!Number.isFinite(width)) return DEFAULT_DRAWER_WIDTH;
+    return Math.min(DRAWER_WIDTH_MAX, Math.max(DRAWER_WIDTH_MIN, Math.round(width)));
+  } catch {
+    return DEFAULT_DRAWER_WIDTH;
+  }
+}
+
+/** 写入持久化抽屉宽度；存储不可用时静默跳过，布局功能不受影响。 */
+export function writeDrawerWidth(storage: WorkspacePanelOptions["storage"], width: number) {
+  try {
+    storage?.setItem(DRAWER_WIDTH_STORAGE_KEY, String(width));
+  } catch {
+    // Storage is a convenience; layout must keep working when it is unavailable.
+  }
+}
+
 export function useWorkspacePanels(options: WorkspacePanelOptions = {}) {
   const projectId = options.projectId ?? null;
   const projectIdRef = useRef(projectId);
@@ -162,6 +193,13 @@ export function useWorkspacePanels(options: WorkspacePanelOptions = {}) {
 
   const [drawer, setDrawer] = useState<WorkspaceDrawerPanel | null>(null);
   const [drawerCollapsed, setDrawerCollapsed] = useState(false);
+  // 抽屉宽度：全局布局偏好（与项目无关），初始值从 localStorage 恢复并 clamp 到可调范围。
+  // setDrawerWidth 只有 AppShell 的拖拽提交路径（onLayoutChanged + isUserInteraction）
+  // 会调用，因此下方的持久化 effect 等价于“拖拽结束后保存一次”，无需额外节流。
+  const [drawerWidth, setDrawerWidth] = useState(() => readDrawerWidth(storageRef.current));
+  useEffect(() => {
+    writeDrawerWidth(storageRef.current, drawerWidth);
+  }, [drawerWidth]);
   const [drawerPinnedByProject, setDrawerPinnedByProject] = useState<Record<string, WorkspaceDrawerPanel>>({});
   const drawerRef = useRef<WorkspaceDrawerPanel | null>(null);
   const drawerPinnedByProjectRef = useRef<Record<string, WorkspaceDrawerPanel>>({});
@@ -391,6 +429,8 @@ export function useWorkspacePanels(options: WorkspacePanelOptions = {}) {
   return {
     drawer,
     drawerCollapsed,
+    drawerWidth,
+    setDrawerWidth,
     drawerPinned,
     drawerPinnedPanel,
     openDrawer,

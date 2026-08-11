@@ -231,7 +231,10 @@ export function registerGitIpc({
 		async (_event, projectId: string, branch: string) => {
 			const project = projectStore.get(projectId);
 			if (!project) throw new Error(`Project not found: ${projectId}`);
-			return gitService.checkout(project.path, branch);
+			const result = await gitService.checkout(project.path, branch);
+			// 切换分支可能覆盖未提交的工作区改动：记 warn 审计日志，排查"文件消失"时能定位到切换动作。
+			void appLogger.warn("git", "Branch checked out", { projectId, branch, changed: result });
+			return result;
 		},
 	);
 
@@ -445,6 +448,7 @@ export function registerGitIpc({
 			const project = projectStore.get(projectId);
 			if (!project) throw new Error(`Project not found: ${projectId}`);
 			await gitService.commit(project.path, message);
+			void appLogger.info("git", "Commit created", { projectId, message });
 		},
 	);
 
@@ -454,6 +458,7 @@ export function registerGitIpc({
 			const project = projectStore.get(projectId);
 			if (!project) throw new Error(`Project not found: ${projectId}`);
 			await gitService.cherryPick(project.path, hash);
+			void appLogger.info("git", "Commit cherry-picked", { projectId, hash });
 		},
 	);
 
@@ -463,6 +468,7 @@ export function registerGitIpc({
 			const project = projectStore.get(projectId);
 			if (!project) throw new Error(`Project not found: ${projectId}`);
 			await gitService.revertCommit(project.path, hash);
+			void appLogger.info("git", "Commit reverted", { projectId, hash });
 		},
 	);
 
@@ -472,6 +478,7 @@ export function registerGitIpc({
 			const project = projectStore.get(projectId);
 			if (!project) throw new Error(`Project not found: ${projectId}`);
 			await gitService.push(project.path);
+			void appLogger.info("git", "Pushed", { projectId });
 		},
 	);
 
@@ -481,6 +488,7 @@ export function registerGitIpc({
 			const project = projectStore.get(projectId);
 			if (!project) throw new Error(`Project not found: ${projectId}`);
 			await gitService.pull(project.path);
+			void appLogger.info("git", "Pulled", { projectId });
 		},
 	);
 
@@ -490,6 +498,8 @@ export function registerGitIpc({
 			const project = projectStore.get(projectId);
 			if (!project) throw new Error(`Project not found: ${projectId}`);
 			await gitService.resetToCommit(project.path, hash, mode);
+			// hard reset 会丢工作区/暂存区改动（reflog 外的不可恢复路径），warn 级突出显示。
+			void appLogger.warn("git", "Reset to commit", { projectId, hash, mode });
 		},
 	);
 
@@ -499,6 +509,7 @@ export function registerGitIpc({
 			const project = projectStore.get(projectId);
 			if (!project) throw new Error(`Project not found: ${projectId}`);
 			await gitService.dropCommit(project.path, hash);
+			void appLogger.warn("git", "Commit dropped", { projectId, hash });
 		},
 	);
 
@@ -595,6 +606,8 @@ export function registerGitIpc({
 				throw new Error("Invalid paths");
 			}
 			await gitService.deleteFiles(project.path, paths);
+			// 批量删除文件：最高风险操作之一，完整记录路径清单（含数量）便于误删回溯。
+			void appLogger.warn("git", "Files deleted (recycle bin)", { projectId, count: paths.length, paths });
 		},
 	);
 

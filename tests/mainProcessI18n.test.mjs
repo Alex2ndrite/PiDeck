@@ -255,7 +255,8 @@ test("main-process user surfaces use stable copy and keep caught details in logs
     "store.promptImportFailed",
     "store.skillSearchFailed",
     "store.skillImportFailed",
-    "store.skillsShInstallFailed",
+    // 注：store.skillsShInstallFailed 已不再被引用——安装失败改为返回真实错误（npx 输出/网络/权限），
+    // 渲染层 toast 直接展示，不用通用文案；key 定义保留在 mainProcessCopy.ts 以兼容旧调用
     "store.yaoListFailed",
     "store.yaoDetailFailed",
     "store.yaoImportFailed",

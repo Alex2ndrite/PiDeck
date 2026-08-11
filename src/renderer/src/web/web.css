@@ -6,6 +6,15 @@
  * 与旧 A1/A2 的 760px 断点语义保持一致。
  */
 
+/* 桌面遗留的「整行按压缩放」反馈（foundation.css 的
+   .project-group > .conversation:first-child:active 会 scale(0.985)）：
+   Web 端侧栏行宽可达 2000px+，缩放 1.5% 会把行最右侧的「新建会话」按钮
+   瞬时平移 10px+，pointerup 时按钮正从缩放态过渡回原位，鼠标落空命中整行
+   （触发折叠而非新建会话）。Web 端交互目标本就小，按压反馈得不偿失，覆盖为无缩放。 */
+.project-group > .conversation:first-child:active {
+  transform: none;
+}
+
 /* 窄屏：侧栏改顶部面板，项目树在面板内滚动 */
 @media (max-width: 760px) {
   .app.wechat-shell {

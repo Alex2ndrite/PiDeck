@@ -438,7 +438,7 @@ export function ModelsTab(props: {
 					return (
 						<div
 							key={name}
-							className={`overflow-hidden rounded-lg border border-border-subtle bg-bg-panel transition-[border-color,box-shadow,background-color] duration-150${isExpanded ? " border-[color-mix(in_srgb,var(--color-accent)_32%,var(--color-border-subtle))] shadow-[var(--shadow-border)] overflow-visible" : ""}`}
+							className={`config-provider-card overflow-hidden rounded-lg border border-border-subtle bg-bg-panel transition-[border-color,box-shadow,background-color] duration-150${isExpanded ? " border-[color-mix(in_srgb,var(--color-accent)_32%,var(--color-border-subtle))] shadow-[var(--shadow-border)] overflow-visible" : ""}`}
 						>
 							<div
 								className="flex cursor-pointer items-center justify-between px-3.5 py-2 transition-colors duration-150 hover:bg-bg-hover"
@@ -553,8 +553,8 @@ export function ModelsTab(props: {
 							</div>
 
 							{isExpanded && (
-								<div className="border-t border-border-subtle bg-bg-muted pt-3">
-									<div className="mx-4 my-3.5 grid gap-2.5 rounded-lg border border-border-subtle bg-bg-panel p-3.5">
+								<div className="config-provider-body border-t border-border-subtle bg-bg-muted pt-3">
+									<div className="config-provider-form mx-4 my-3.5 grid gap-2.5 rounded-lg border border-border-subtle bg-bg-panel p-3.5">
 										<div className="grid grid-cols-[90px_1fr] items-center gap-2.5">
 											<Label className="pl-0.5 text-left text-xs font-medium text-text-secondary">{t("config.field.baseUrl")}</Label>
 											<div className="config-base-url-field">
@@ -897,7 +897,7 @@ export function ModelsTab(props: {
 											</div>
 										</div>
 										)}
-										<div className="overflow-hidden rounded-lg border border-border-subtle bg-bg-panel">
+										<div className="config-model-table overflow-hidden rounded-lg border border-border-subtle bg-bg-panel">
 											<Table>
 												<TableHeader>
 													<TableRow className="hover:bg-transparent">

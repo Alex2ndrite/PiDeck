@@ -49,7 +49,7 @@ export function SessionStartSurface(props: {
   };
 
   return (
-    <section className="session-start-surface flex min-h-full w-full items-center bg-background px-6 py-10">
+    <section className="session-start-surface flex min-h-full w-full items-center bg-transparent px-6 py-10">
       {/* 居中策略：items-center 几何居中后与空态页一样补 pt-[10vh] 下移，
           让标题/操作列表重心落到窗口光学中心（与 ProjectEmptyState 一致）。 */}
       <div className="mx-auto grid w-full max-w-4xl animate-in grid-cols-1 gap-10 pt-[10vh] duration-500 fade-in md:grid-cols-[1fr_1px_1fr]">

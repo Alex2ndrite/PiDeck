@@ -64,6 +64,8 @@ export interface SessionAgentGateway {
 	): Promise<{ text: string; images?: ImageContent[] }>;
 	setModel(agentId: string, provider: string, modelId: string): Promise<unknown>;
 	setThinking(agentId: string, level: string): Promise<unknown>;
+	/** 主动推送一次完整 runtime state（get_state）给渲染层：懒启动/重启链路在偏好应用后调用。 */
+	publishRuntimeState(agentId: string): Promise<void>;
 	getForkMessages(agentId: string): Promise<Array<{ entryId: string; text: string }>>;
 	forkSession(agentId: string, entryId: string): Promise<unknown>;
 	sendUIResponse(
@@ -728,6 +730,8 @@ export class SessionRuntimeCoordinator {
 					piSessionId: tab.sessionId,
 				});
 			}
+			// 与 activate 同链路：绑定完成后推送完整 runtime state，渲染层底栏即时反映真实模型。
+			await this.agents.publishRuntimeState(tab.id).catch(() => undefined);
 			return tab;
 		} finally {
 			if (this.replacementByAgent.get(agentId) === reservation) {
@@ -903,6 +907,9 @@ export class SessionRuntimeCoordinator {
 				piSessionId: tab.sessionId,
 			});
 		}
+		// 绑定完成后主动推送完整 runtime state：emitSessionRuntimeEvent 依赖 binding 才转发，
+		// 且在偏好应用（setModel/setThinking）之后执行，渲染层底栏拿到的是真实模型而不是旧残留。
+		await this.agents.publishRuntimeState(tab.id).catch(() => undefined);
 		return tab;
 	}
 

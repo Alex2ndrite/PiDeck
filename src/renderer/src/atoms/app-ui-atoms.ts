@@ -23,3 +23,21 @@ export const sidebarExpandedProjectIdsAtom = atom<ReadonlySet<string>>(
 
 // useStreamdownRendererAtom 已移除：Streamdown 转正为唯一 markdown 引擎（迁移 react-markdown 完成）。
 
+/**
+ * 流式对话行为设置快照（App 从 settings 同步写入，TurnRow 直接订阅）。
+ * 与 showThinking 的 props 透传不同：这两个开关影响深层 turn 组件，
+ * 且变更低频（仅设置修改时），全局 atom 订阅成本可忽略。
+ * 默认值与 main SettingsStore.defaultSettings 保持一致。
+ */
+export type TurnFlowSettings = {
+	/** 流式对话时展开中间过程（默认关：对话过程中不自动撑开，手动展开不受影响）。 */
+	expandInterimDuringStream: boolean;
+	/** 新一轮开始时收起上一轮（默认开：发送新消息后收起所有非最新轮，含手动展开的）。 */
+	collapsePrevRunsOnNewTurn: boolean;
+};
+
+export const turnFlowSettingsAtom = atom<TurnFlowSettings>({
+	expandInterimDuringStream: false,
+	collapsePrevRunsOnNewTurn: true,
+});
+

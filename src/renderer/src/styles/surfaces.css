@@ -1218,94 +1218,6 @@
 /* 设置分区与设置行已迁移 UI 2.0（Tailwind + shadcn，见 settings/SettingRows.tsx）：
    去卡片化 + 行式布局，旧手写规则全部删除，不再在此维护。 */
 
-/* Web 服务面板 */
-.web-endpoint-panel {
-  margin-top: 10px;
-  display: grid;
-  gap: 10px;
-}
-.web-endpoint-grid {
-  display: grid;
-  grid-template-columns: 1fr 112px;
-  gap: 10px;
-}
-.web-endpoint-metric {
-  height: 52px;
-  display: grid;
-  align-content: center;
-  gap: 4px;
-  padding: 0 12px;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-sm);
-  background: var(--color-bg-panel);
-}
-.web-endpoint-metric span {
-  color: var(--color-text-tertiary);
-  font-size: var(--font-size-micro);
-  font-weight: 700;
-  letter-spacing: 0.03em;
-}
-.web-endpoint-metric code,
-.web-endpoint-metric input {
-  width: 100%;
-  border: 0;
-  background: transparent;
-  padding: 0;
-  color: var(--color-text-primary);
-  font-family: var(--font-family-business);
-  font-size: var(--font-size-title);
-  font-weight: 500;
-  line-height: 1.2;
-  font-variant-numeric: tabular-nums;
-}
-.web-endpoint-metric input:focus {
-  outline: none;
-}
-.web-endpoint-metric.editable:focus-within {
-  border-color: var(--color-accent);
-  box-shadow: var(--focus-ring);
-}
-.web-endpoint-summary {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: 10px;
-  align-items: center;
-  padding: 10px 12px;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-sm);
-  background: var(--color-bg-panel);
-}
-.web-endpoint-summary > span {
-  width: 8px;
-  height: 8px;
-  border-radius: var(--radius-md);
-  background: var(--color-text-tertiary);
-  box-shadow: 0 0 0 3px
-    color-mix(in srgb, var(--color-text-tertiary) 12%, transparent);
-}
-.web-endpoint-summary > span.online {
-  background: var(--color-accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 12%, transparent);
-}
-.web-endpoint-summary strong {
-  display: block;
-  color: var(--color-text-primary);
-  font-size: var(--font-size-caption);
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.web-endpoint-summary small {
-  display: block;
-  margin-top: 2px;
-  color: var(--color-text-tertiary);
-  font-size: var(--font-size-micro);
-}
-.web-endpoint-summary > button {
-  justify-self: end;
-}
-
 /* 代理面板 */
 .setting-proxy-panel {
   margin: 2px 0 6px;
@@ -2019,7 +1931,6 @@
 
 :root[data-theme="dark"] .setting-proxy-panel,
 :root[data-theme="dark"] .setting-pi-path-panel,
-:root[data-theme="dark"] .web-endpoint-panel,
 :root[data-theme="dark"] .feedback-report-block,
 :root[data-theme="dark"] .codex-import-modal,
 :root[data-theme="dark"] .context-menu,
@@ -4106,6 +4017,36 @@ div.fixed.inset-0.z-50 {
 
 .config-thinking-levels-row .config-select-value {
   font-size: 11px;
+}
+
+/* 壁纸模式下业务弹框只保留 DialogContent 这一层底色；布局容器透明，
+   否则 header 是一层、body 又叠一层同色面板，最终看起来像两个透明度。 */
+:root[data-bg-image="on"] .config-modal .config-layout,
+:root[data-bg-image="on"] .config-modal .config-sidebar,
+:root[data-bg-image="on"] .config-modal .config-main,
+:root[data-bg-image="on"] .config-modal .config-content,
+:root[data-bg-image="on"] .config-modal .config-provider-card,
+:root[data-bg-image="on"] .config-modal .config-provider-body,
+:root[data-bg-image="on"] .config-modal .config-provider-form,
+:root[data-bg-image="on"] .config-modal .config-models-section,
+:root[data-bg-image="on"] .config-modal .config-model-table,
+:root[data-bg-image="on"] .settings-modal .settings-layout,
+:root[data-bg-image="on"] .settings-modal .settings-tabs,
+:root[data-bg-image="on"] .settings-modal .settings-panel,
+:root[data-bg-image="on"] .project-resources-dialog .project-resources-body,
+:root[data-bg-image="on"] .feedback-modal-shell .feedback-body,
+:root[data-bg-image="on"] .feedback-modal-shell .feedback-environment-section,
+:root[data-bg-image="on"] .feedback-modal-shell .feedback-environment-content,
+:root[data-bg-image="on"] .feedback-modal-shell .feedback-actions,
+:root[data-bg-image="on"] .feedback-modal-shell .feedback-actions [data-slot="button"][data-variant="secondary"],
+:root[data-bg-image="on"] .environment-dialog .environment-body {
+  background: transparent;
+}
+
+/* 反馈报告在普通主题下是代码块，壁纸模式下不再用固定黑/白色；
+   直接继承弹框内容层，否则它会成为反馈弹框中唯一不透明的区域。 */
+:root[data-bg-image="on"] .feedback-modal-shell .feedback-environment-content {
+  color: var(--color-text-secondary);
 }
 
 /* 模型计费字段：每百万 token 美元单价 */

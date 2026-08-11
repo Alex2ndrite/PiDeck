@@ -177,7 +177,7 @@ export const ComposerArea = forwardRef<HTMLElement, ComposerAreaProps>(function 
               文本区自身仍可在 RichInput 内滚动，底栏 shrink-0 始终可见 */}
           <footer
             ref={footerRef}
-            className="composer flex min-h-0 w-full min-w-0 flex-col gap-2 overflow-hidden bg-background px-3 pb-3"
+            className="composer flex min-h-0 w-full min-w-0 flex-col gap-2 overflow-hidden bg-background px-0 pb-3"
             style={{ height: props.height != null ? "100%" : height }}
             data-session-id={props.sessionId}
           >
@@ -209,6 +209,9 @@ export const ComposerArea = forwardRef<HTMLElement, ComposerAreaProps>(function 
             <div
               // overflow-visible：保留命令面板/建议浮层；面板 minSize 已保证底栏不被裁切
               className={["composer-box relative flex min-h-0 min-w-0 flex-1 flex-col overflow-visible rounded-xl border border-border bg-card text-card-foreground shadow-sm transition-[border-color,box-shadow,background-color]",
+                // 内容宽度留白（UI 2.0）：与消息区共享同一留白变量；分屏窄栏收敛 24px
+                // 分屏/窄栏（≤1100px 栏宽）才收敛；见 SessionMessageTimeline 同阈值说明。
+                "[padding-inline:var(--chat-inline-pad)] transition-[padding-inline] duration-150 ease-out @max-[1100px]:px-6",
                 composer.bangMode === "bang-bang"
                   ? "shell-silent-mode"
                   : composer.bangMode === "bang"

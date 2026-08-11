@@ -1,4 +1,5 @@
-import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import { createServer, request as httpRequest, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import { Readable } from "node:stream";
 import type { AddressInfo } from "node:net";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
@@ -38,6 +39,13 @@ type WebServiceSettings = Pick<
 >;
 
 type WebServiceDependencies = {
+	/**
+	 * dev 模式渲染层 dev server 基址（如 http://127.0.0.1:5181）。
+	 * 设置后静态资源请求全部代理到该地址，保证外部 Web 端在开发模式下
+	 * 也加载重构后的 React 版（A2）页面并支持热更新；未设置时回退到
+	 * out/renderer 构建产物（打包/正式构建场景）。
+	 */
+	devRendererUrl?: string;
 	/** 订阅主进程内部的 pi agent 事件流（agentId, event），返回退订函数。 */
 	subscribePiEvents: (handler: (agentId: string, event: PiEvent) => void) => () => void;
 	/** agentId → sessionId 路由，用于把 pi 事件导向对应 session 的 SSE 连接。 */
@@ -127,11 +135,14 @@ function serializePublicWebPayload(body: unknown): string {
 export class WebServiceManager {
 	private server: Server | null = null;
 	private current: { host: string; port: number } | null = null;
+	/** dev 模式渲染层 dev server 基址（无尾斜杠）；空串表示走构建产物。 */
+	private readonly devRendererUrl: string;
 	private readonly rendererRoot = join(__dirname, "../renderer");
 
 	private readonly eventStreamRouter: WebEventStreamRouter;
 
 	constructor(private readonly deps: WebServiceDependencies) {
+		this.devRendererUrl = deps.devRendererUrl?.trim() ? deps.devRendererUrl.trim().replace(/\/$/, "") : "";
 		this.eventStreamRouter = new WebEventStreamRouter(
 			(agentId) => this.deps.getSessionIdForAgent(agentId),
 		);
@@ -189,6 +200,14 @@ export class WebServiceManager {
 		server.on("clientError", (_error, socket) => {
 			socket.end("HTTP/1.1 400 Bad Request\r\n\r\n");
 		});
+
+		// dev 模式：把 WebSocket upgrade 请求（vite HMR 热更新）转发到 dev server，
+		// 否则浏览器连同源的 / 只拿到 HTTP 升级失败，改代码不热更新。
+		if (this.devRendererUrl) {
+			server.on("upgrade", (request, socket, head) => {
+				this.proxyDevWebSocket(request, socket, head);
+			});
+		}
 
 		await new Promise<void>((resolve, reject) => {
 			server.once("error", reject);
@@ -1016,6 +1035,13 @@ export class WebServiceManager {
 			this.sendHtml(response, this.renderPage());
 			return;
 		}
+		// dev 模式：静态资源一律代理到 vite dev server。
+		// 否则 electron-vite dev 不产出 out/renderer 构建物，WebServiceManager 会
+		// 回退到 A1 vanilla 内嵌页——外部端永远看不到重构后的 React 版（A2）。
+		if (this.devRendererUrl) {
+			await this.proxyDevRenderer(url, response);
+			return;
+		}
 		// Web 服务根路径：优先 serve React 版 web.html（A2）；
 		// 构建产物缺失时回退到内嵌 renderPage（A1 vanilla 页，保持兼容）。
 		const webEntry = join(this.rendererRoot, "web.html");
@@ -1029,6 +1055,102 @@ export class WebServiceManager {
 			return;
 		}
 		await this.sendFile(filePath, response);
+	}
+
+	/**
+	 * dev 模式静态资源代理：把请求转发到 vite dev server 对应路径，响应流式回传。
+	 * 根路径/无扩展名路径映射到 /web.html（外部端入口，而非桌面端 index.html）。
+	 */
+	private async proxyDevRenderer(url: URL, response: ServerResponse) {
+		const requestedPath = url.pathname;
+		// 路径安全：仅允许站内相对路径，禁止 .. 逃逸与绝对路径之外的形式。
+		if (!requestedPath.startsWith("/") || requestedPath.includes("..")) {
+			this.sendError(response, 400, "webError.apiNotFound", "Invalid path");
+			return;
+		}
+		// 无扩展名路径默认映射 /web.html；但 /@*（vite 内部模块）与 /api/* 必须原样转发——
+		// 否则 /@vite/client 会被换成 web.html 的 HTML，浏览器按 module script 执行
+		// 报 "MIME text/html" 错误，整个页面空白。query 也要保留：vite 依赖预构建/
+		// HMR 模块 URL 依赖 ?v= / ?t= / ?import 参数，丢弃会 404 或失去缓存失效语义。
+		const passthrough =
+			requestedPath.startsWith("/@") || requestedPath.startsWith("/api/");
+		const targetPath =
+			passthrough
+				? `${requestedPath}${url.search}`
+				: requestedPath === "/" || !extname(requestedPath)
+					? "/web.html"
+					: `${requestedPath}${url.search}`;
+		let upstream: Response;
+		try {
+			upstream = await fetch(`${this.devRendererUrl}${targetPath}`);
+		} catch {
+			// dev server 未就绪（如只启动了主进程）：回退内嵌页，保证服务不白屏。
+			this.sendHtml(response, this.renderPage());
+			return;
+		}
+		const status = upstream.status;
+		const contentType =
+			upstream.headers.get("content-type") ?? "application/octet-stream";
+		if (status !== 200 || !upstream.body) {
+			this.sendHtml(response, this.renderPage());
+			return;
+		}
+		response.writeHead(status, {
+			"content-type": contentType,
+			"cache-control": "no-store",
+		});
+		// 流式转发 body，避免整包缓冲大体积 vendor chunk。
+		// 上游中断（vite 重启/浏览器取消）时销毁响应而不是让 error 冒泡崩掉进程。
+		const bodyStream = Readable.fromWeb(
+			upstream.body as import("node:stream/web").ReadableStream,
+		);
+		bodyStream.on("error", () => response.destroy());
+		response.on("error", () => bodyStream.destroy());
+		bodyStream.pipe(response);
+	}
+
+	/**
+	 * dev 模式 WebSocket 代理（vite HMR 热更新）：把浏览器的 upgrade 请求原样转发到
+	 * dev server（含原始头，vite 会计算 Sec-WebSocket-Accept），拿到 101 后回写
+	 * 状态行与响应头，再双向管道透传帧数据。失败时直接销毁 socket，浏览器侧
+	 * 会自动重连（vite client 内置重连逻辑），不影响页面本身。
+	 */
+	private proxyDevWebSocket(
+		request: IncomingMessage,
+		socket: import("node:stream").Duplex,
+		head: Buffer,
+	) {
+		const devUrl = new URL(this.devRendererUrl);
+		// vite 会校验 HMR 握手的 Host/Origin：把两者改写为 dev server 自身，
+		// 否则外部端口访问时 vite 按「跨源请求」拒绝 403，HMR 连不上。
+		const headers = {
+			...request.headers,
+			host: devUrl.host,
+			origin: devUrl.origin,
+		};
+		const upstream = httpRequest({
+			hostname: devUrl.hostname,
+			port: devUrl.port,
+			path: request.url ?? "/",
+			headers,
+			method: "GET",
+		});
+		upstream.on("upgrade", (upstreamResponse, upstreamSocket, upstreamHead) => {
+			const headerLines = Object.entries(upstreamResponse.headers)
+				.map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join(", ") : value}`)
+				.join("\r\n");
+			socket.write(
+				`HTTP/1.1 ${upstreamResponse.statusCode ?? 101} ${upstreamResponse.statusMessage ?? "Switching Protocols"}\r\n${headerLines}\r\n\r\n`,
+			);
+			// 双向管道；任一端异常时关闭另一端，避免悬挂连接。
+			upstreamSocket.pipe(socket).pipe(upstreamSocket);
+			upstreamSocket.on("error", () => socket.destroy());
+			socket.on("error", () => upstreamSocket.destroy());
+			if (upstreamHead?.length) socket.write(upstreamHead);
+			if (head?.length) upstreamSocket.write(head);
+		});
+		upstream.on("error", () => socket.destroy());
+		upstream.end();
 	}
 
 	private async sendFile(filePath: string, response: ServerResponse) {

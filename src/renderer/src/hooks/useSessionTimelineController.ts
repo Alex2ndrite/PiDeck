@@ -7,7 +7,7 @@ import {
   useState,
   type RefObject,
 } from "react";
-import { useAtomValue, useSetAtom, useStore } from "jotai";
+import { atom, useAtomValue, useSetAtom, useStore } from "jotai";
 import { selectAtom } from "jotai/utils";
 import { desktopApi } from "../desktopApi";
 import type { AgentRuntimeState, ChatMessage } from "../../../shared/types";
@@ -17,6 +17,7 @@ import {
 	prependSessionMessagePageAtom,
   sessionMessageLoadStateAtom,
   sessionMessagesCacheAtom,
+  sessionMessageCacheBySessionIdAtomFamily,
   saveSessionScrollAnchorAtom,
   sessionScrollAnchorByIdAtom,
   setSessionMessageLoadStateAtom,
@@ -27,7 +28,18 @@ import { useMessagePagination } from "./useMessagePagination";
 import type { MessageScrollerScrollApi } from "../components/agents/message-scroller";
 
 let nextLoadSequence = 0;
+/** 会话加载请求序号（防迟到响应串台）。键按 sessionId 累积，LRU 裁剪防无界增长（2026-10）。 */
 const latestLoadBySession = new Map<string, number>();
+const LATEST_LOAD_LRU_LIMIT = 20;
+function trackLatestLoad(sessionId: string, sequence: number) {
+	latestLoadBySession.set(sessionId, sequence);
+	if (latestLoadBySession.size <= LATEST_LOAD_LRU_LIMIT) return;
+	// 超限：删最早 set 的键（Map 迭代序 = 插入序）
+	const oldest = latestLoadBySession.keys().next().value;
+	if (oldest !== undefined) latestLoadBySession.delete(oldest);
+}
+/** sessionId 为空时的占位 atom：恒 undefined（无会话不订缓存条目）。 */
+const NO_CACHE_ENTRY_ATOM = atom(undefined);
 
 // 用户主动向上滚超过此阈值后停止自动跟底。值设很小是为了让用户稍微滚一点就能挣脱自动滚动，
 // 避免流式消息频繁触发 ResizeObserver/MutationObserver 把用户弹回底部造成"颤抖"。
@@ -233,8 +245,12 @@ export function useSessionTimelineController(options: {
   }, [computeCurrentAnchor, persistCurrentAnchor]);
 
   // ── Load messages from disk when sessionId changes ──
-	const cacheEntry = useAtomValue(sessionMessagesCacheAtom);
-	const cachedEntry = options.sessionId ? cacheEntry[options.sessionId] : undefined;
+	// 只订本会话缓存条目（family selectAtom 隔离）：其它会话的消息到达/分页不拖着重渲染本栏。
+	const cachedEntry = useAtomValue(
+		options.sessionId
+			? sessionMessageCacheBySessionIdAtomFamily(options.sessionId)
+			: NO_CACHE_ENTRY_ATOM,
+	);
 	const cacheMessages = useSetAtom(cacheSessionMessagesAtom);
 	const prependMessagePage = useSetAtom(prependSessionMessagePageAtom);
 	const prependHistoryPage = useSetAtom(prependSessionHistoryPageAtom);
@@ -250,9 +266,9 @@ export function useSessionTimelineController(options: {
     if (lastLoadedSessionRef.current === sessionId) return;
     lastLoadedSessionRef.current = sessionId;
 
-    const entry = cacheEntry[sessionId];
+    const entry = cachedEntry;
     const sequence = ++nextLoadSequence;
-    latestLoadBySession.set(sessionId, sequence);
+    trackLatestLoad(sessionId, sequence);
     const expectedRevision = entry?.revision ?? 0;
     if (entry) touchMessages(sessionId);
     setLoadState({ sessionId, state: { status: "loading" } });
@@ -561,7 +577,7 @@ export function useSessionTimelineController(options: {
 			const before = diskPage.nextBefore;
 			if (!sessionId || before === null || isLoadingMessagePage) return;
 			const sequence = ++nextLoadSequence;
-			latestLoadBySession.set(sessionId, sequence);
+			trackLatestLoad(sessionId, sequence);
 			const expectedRevision = cachedEntry?.revision ?? 0;
 			setIsLoadingMessagePage(true);
 			void desktopApi.sessions
@@ -586,11 +602,16 @@ export function useSessionTimelineController(options: {
 			const sessionId = options.sessionId;
 			if (!sessionId || isLoadingMessagePage) return;
 			const before = runtimeHistory?.nextBefore;
-			const anchorMeta = !runtimeHistory ? messages[0]?.meta?.entryId : undefined;
-			const anchorEntryId = typeof anchorMeta === "string" && anchorMeta ? anchorMeta : undefined;
+			// 首次补历史锚点：窗口首条可能是无 entryId 的系统摘要卡片（compaction/branchSummary），
+			// 必须取第一条有 entryId 的消息，否则锚点解析失败导致首次上翻静默放弃。
+			const anchorMessage = !runtimeHistory
+				? messages.find((m) => typeof m.meta?.entryId === "string")
+				: undefined;
+			const anchorEntryId =
+				typeof anchorMessage?.meta?.entryId === "string" ? anchorMessage.meta.entryId : undefined;
 			if (!runtimeHistory && !anchorEntryId) return; // 无 entryId 无法对齐，放弃补历史
 			const sequence = ++nextLoadSequence;
-			latestLoadBySession.set(sessionId, sequence);
+			trackLatestLoad(sessionId, sequence);
 			const expectedRevision = cachedEntry?.revision ?? 0;
 			setIsLoadingMessagePage(true);
 			void desktopApi.sessions
@@ -624,6 +645,10 @@ export function useSessionTimelineController(options: {
     }
     const index = combinedMessages.findIndex((message) => message.id === messageId);
     if (index < 0) return;
+    // 目标可能在贴底 turn 窗口外：先取消跟随以展开挂载，再等布局后滚动。
+    autoScrollRef.current = false;
+    setAutoScroll(false);
+    setShowScrollToBottom(true);
     pendingJumpRef.current = { ownerKey: requestOwnerKey, value: messageId };
     pagination.loadUntilIncluded(index);
   }, [highlightMessage, combinedMessages, ownerKey, pagination]);
@@ -756,7 +781,8 @@ export function useSessionTimelineController(options: {
     pendingJumpRef.current = undefined;
     element.scrollIntoView({ behavior: "smooth", block: "start" });
     highlightMessage(element, ownerKey);
-  }, [controllerEnabled, highlightMessage, ownerKey, pagination.visibleMessages.length]);
+    // autoScroll：贴底 turn 窗口展开后 DOM 才出现目标行，需再跑一轮。
+  }, [autoScroll, controllerEnabled, highlightMessage, ownerKey, pagination.visibleMessages.length]);
 
   return {
     timelineRef,

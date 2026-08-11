@@ -6,7 +6,9 @@ const extensionsTabSource = readFileSync("src/renderer/src/config/ExtensionsTab.
 const browserApiSource = readFileSync("src/renderer/src/browserApi.ts", "utf8");
 
 test("extensions settings tab does not read preload API at module load", () => {
-	assert.doesNotMatch(extensionsTabSource, /const\s+api[\s\S]*window\.piDesktop!?\.[a-zA-Z]/);
+	// 防模块加载时直接读 preload API：仅约束顶层 `const api` 声明后紧跟的 window.piDesktop 读取
+	// （`^` + m flag 锚定行首，函数内延迟读取与 onClick 回调内的运行时访问不受此约束）
+	assert.doesNotMatch(extensionsTabSource, /^const\s+api[\s\S]*?window\.piDesktop!?\.[a-zA-Z]/m);
 	assert.match(extensionsTabSource, /function getExtensionsApi\(/);
 });
 

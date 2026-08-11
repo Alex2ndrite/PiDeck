@@ -46,11 +46,13 @@ export const test = base.extend<MockPiFixture & { seedProjects: SeedProject[] | 
 			if (process.platform !== "win32") chmodSync(shimPath, 0o755);
 			// 预置设置：customPiPath 指向 shim；piEnvironmentChecked=true 跳过启动
 			// 环境检测弹窗（否则会盖住欢迎页按钮造成点击竞态）。其余字段缺省。
-			// 注意：未打包运行时 main/index.ts 会把 userData 追加 "-dev" 后缀，
-			// 真实 userData 是 <root>/profile-dev（与 fixtures.ts 的隔离机制一致）。
-			mkdirSync(join(userDataRoot, "profile-dev"), { recursive: true });
+			// 注意：main/index.ts 在 isDevBuild（未打包）时会覆盖 userData 为
+			// %APPDATA%/pi-desktop-dev；但命令行显式传 --user-data-dir 时尊重该路径
+			// （见 main/index.ts「开发态与正式版隔离 userData」注释），
+			// 因此这里预置文件直接写到 --user-data-dir 指定的 profile 目录。
+			mkdirSync(join(userDataRoot, "profile"), { recursive: true });
 			writeFileSync(
-				join(userDataRoot, "profile-dev", "settings.json"),
+				join(userDataRoot, "profile", "settings.json"),
 				JSON.stringify({
 					customPiPath: shimPath,
 					piEnvironmentChecked: true,
@@ -61,7 +63,7 @@ export const test = base.extend<MockPiFixture & { seedProjects: SeedProject[] | 
 			// 可选：预置项目列表。ProjectStore.load 会保留种子项目并追加内置聊天项目。
 			if (seedProjects && seedProjects.length > 0) {
 				writeFileSync(
-					join(userDataRoot, "profile-dev", "projects.json"),
+					join(userDataRoot, "profile", "projects.json"),
 					JSON.stringify(
 						seedProjects.map((project, index) => ({
 							lastOpenedAt: Date.now() + index,
@@ -74,9 +76,9 @@ export const test = base.extend<MockPiFixture & { seedProjects: SeedProject[] | 
 			// 可选：预置飞书 Bot 配置（FeishuConfig 读 userData/pi-desktop/feishu.json）。
 			// appSecret 用 base64（encryptSecret 的简化格式），空串即可——e2e 不真连飞书。
 			if (seedFeishuBots && seedFeishuBots.length > 0) {
-				mkdirSync(join(userDataRoot, "profile-dev", "pi-desktop"), { recursive: true });
+				mkdirSync(join(userDataRoot, "profile", "pi-desktop"), { recursive: true });
 				writeFileSync(
-					join(userDataRoot, "profile-dev", "pi-desktop", "feishu.json"),
+					join(userDataRoot, "profile", "pi-desktop", "feishu.json"),
 					JSON.stringify({
 						version: 2,
 						bots: seedFeishuBots.map((bot) => ({

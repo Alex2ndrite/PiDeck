@@ -120,6 +120,10 @@ Gitmoji 对应关系：
   // 人文关怀提醒默认开启：用户可在设置中随时关闭
   agentCountReminderEnabled: true,
   showThinking: readPiAgentShowThinking() ?? true,
+  // 流式对话设置：默认不自动展开中间过程（省渲染资源，手动展开不受影响）；
+  // 新一轮开始默认收起非最新轮（含手动展开的），用户可在设置中关闭。
+  expandInterimDuringStream: false,
+  collapsePrevRunsOnNewTurn: true,
   showDevTools: false,
   // 默认关闭 Chromium 沙箱：与历史 Windows no-sandbox 兼容策略一致
   electronChromiumSandbox: false,
@@ -141,6 +145,9 @@ Gitmoji 对应关系：
   linkOpenMode: "external",
   workspaceContentOpenMode: "split",
   contentMaxWidth: 1800,
+  // 内容区宽度默认 80%：轻微留白兼顾阅读舒适（1826px 面板 → 内容 1461px）；
+  // 分屏窄栏时由容器查询自动收敛，详见 foundation.css --chat-content-pct。
+  chatContentWidthPct: 80,
   maxEditorFileSizeMB: 5,
   externalEditors: createDefaultExternalEditorSettings(),
 
@@ -204,6 +211,10 @@ export class SettingsStore {
       if (persistedMonoFont === "commit-mono") {
         this.settings.fontFamilyMono = "system-mono";
       }
+      // 兼容迁移：旧版 contentMaxWidth(px) → chatContentWidthPct(%)。
+      // 语义从「最大宽度 px」变为「占面板百分比」，无法精确换算（面板宽度可变），
+      // 用线性映射保留旧值感觉：800→60%、1400→84%、1800(不限)→100%。
+      this.migrateContentWidth();
     } catch {
       this.settings = { ...defaultSettings };
     }
@@ -218,6 +229,24 @@ export class SettingsStore {
     await this.detectAndSaveInstallationType();
     this.applyMenu();
     return this.get();
+  }
+
+  /**
+   * 旧版 contentMaxWidth(px) → chatContentWidthPct(%) 迁移：
+   * - 新字段已存在（已迁移/用户已设置）→ 不动作；
+   * - 否则按旧 px 线性映射到 60–100%（1800=不限→100%，800→60%），写回持久化。
+   */
+  private migrateContentWidth() {
+    const pct = this.settings.chatContentWidthPct;
+    if (typeof pct === "number" && Number.isFinite(pct)) return;
+    const legacyPx = this.settings.contentMaxWidth;
+    let mapped = 100;
+    if (typeof legacyPx === "number" && legacyPx > 0 && legacyPx < 1800) {
+      // 线性映射：px∈[800,1800) → pct∈[60,100)，其余（≤0 或 ≥1800=不限）→ 100
+      mapped = Math.min(100, Math.max(60, Math.round(((legacyPx - 800) / 1000) * 40 + 60)));
+    }
+    this.settings.chatContentWidthPct = mapped;
+    void this.save().catch(() => undefined);
   }
 
   get() {

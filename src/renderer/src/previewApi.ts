@@ -99,6 +99,9 @@ let previewSettings: AppSettings = {
 	agentCountReminderEnabled: true,
 	// showThinking 由 pi agent 的 hideThinkingBlock 控制，运行时从主进程加载
 	showThinking: true,
+	// 流式对话行为：与主进程 SettingsStore 默认一致（预览窗口保持相同观感）
+	expandInterimDuringStream: false,
+	collapsePrevRunsOnNewTurn: true,
 	showDevTools: false,
 	electronChromiumSandbox: false,
 	piProxyEnabled: false,
@@ -119,6 +122,7 @@ let previewSettings: AppSettings = {
 	linkOpenMode: "external",
 	workspaceContentOpenMode: "split",
 	contentMaxWidth: 1800,
+	chatContentWidthPct: 80,
 	maxEditorFileSizeMB: 5,
 	externalEditors: createDefaultExternalEditorSettings(),
 
@@ -149,6 +153,12 @@ let previewSettings: AppSettings = {
 
 export function createPreviewApi(): PiDesktopApi {
 	const noop = (() => () => undefined) as any;
+	const clipboardStub: PiDesktopApi["clipboard"] = {
+		// preview 模式无真实剪贴板；浏览器下 navigator.clipboard 为异步 API，
+		// 与同步接口不匹配，因此返回空串，右键粘贴菜单静默无操作
+		readText: () => "",
+		readHtml: () => "",
+	};
 	const createTerminalTab = async (agentId: string, shell?: string, cwd?: string) => {
 		const shellName = shell ?? "powershell";
 		const displayName = shellName === "git-bash" ? "Git Bash" : shellName === "bash" ? "bash" : shellName === "cmd" ? "cmd" : "PowerShell";
@@ -173,6 +183,7 @@ export function createPreviewApi(): PiDesktopApi {
 		return tab;
 	};
 	return {
+		clipboard: clipboardStub,
 		// 进程监控预览桩：返回空快照，仅供预览模式不崩溃
 		system: {
 			getProcessMetrics: async () => ({
@@ -371,6 +382,7 @@ export function createPreviewApi(): PiDesktopApi {
 			exportRecordHtml: async () => ({ path: "preview-session.html" }),
 			readRecordMessages: async () => [],
 			readRecordMessagePage: async () => ({ messages: [], total: 0, nextBefore: null }),
+			readMessageFullText: async () => ({ text: "" }),
 			readReferenceMessages: async () => [
 				{ role: "user", content: "Preview user message", timestamp: Date.now() - 60000 },
 				{ role: "assistant", content: "Preview assistant response", timestamp: Date.now() - 30000 },
@@ -542,6 +554,7 @@ export function createPreviewApi(): PiDesktopApi {
 		},
 		logs: {
 			list: async () => [],
+			listPage: async () => ({ entries: [], total: 0, page: 0, pageSize: 50, hasMore: false }),
 			clear: async () => undefined,
 			openFolder: async () => undefined,
 			getSize: async () => 0,

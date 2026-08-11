@@ -67,7 +67,7 @@ export function EnvironmentDialog(props: {
 
 	return (
 		<Dialog open onOpenChange={(next) => !next && props.onClose()}>
-			<DialogContent showCloseButton={false} className={cn("flex flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(800px,calc(100vw-48px))]")}>
+			<DialogContent showCloseButton={false} className={cn("flex flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(800px,calc(100vw-48px))]", "environment-dialog", "[--wallpaper-dialog-alpha:var(--wallpaper-panel-alpha,30%)]")}>
 				<DialogHeader className="flex-row items-center justify-between px-4 py-3">
 					<DialogTitle>{t("environment.title")}</DialogTitle>
 					<DialogClose asChild>
@@ -276,8 +276,10 @@ export function EnvironmentDialog(props: {
 											size="sm"
 											className="env-card-btn env-card-btn h-auto rounded-[6px] px-4 py-[7px] text-xs shadow-none"
 											onClick={() =>
+												// 环境引导是弹框（Dialog），链接强制系统浏览器：内置浏览器面板在 Dialog 下层不可见
 												window.piDesktop.app.openExternal(
-													"https://nodejs.org/zh-cn/download/"
+													"https://nodejs.org/zh-cn/download/",
+													true
 												)
 											}
 										>

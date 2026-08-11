@@ -5,6 +5,44 @@
 - [中文 CHANGELOG](https://github.com/ayuayue/PiDeck/blob/main/CHANGELOG.zh-CN.md)
 - [English CHANGELOG](https://github.com/ayuayue/PiDeck/blob/main/CHANGELOG.md)
 
+## v0.7.0
+
+发布时间：2026-08-11
+
+- 🚀 **Session-first 架构（#113）**
+- 🚀 **会话 Tab 栏**
+- 🚀 **分屏重构**
+- 🚀 **会话分支导航条**
+- 🚀 **流式渲染重构**
+- 🚀 **会话文件修改汇总**
+- 🚀 **换肤系统**
+- 🚀 **编辑器：CodeMirror 6**
+- 🚀 **Markdown：Streamdown 成为唯一引擎**
+- 🚀 **Git 行内操作**
+- 🚀 **RPC 日志查看与审计**
+- 🚀 **用量统计**
+- ✨ **侧边栏可发现性优化**
+- ✨ **附件选择器**
+- ✨ **RPC 日志交互打磨**
+- ✨ **工具调用时间线**
+
+## v0.6.7
+
+发布时间：2026-07-29
+
+- 🚀 **紧凑标题栏 + Codex 风格右侧栏**：顶栏更省高度，右侧抽屉 Tab 更密的多面板工作流
+- 🚀 **文件编辑器收纳到 Files Tab**：编辑器 Tab 进入文件抽屉内部，chrome 更统一
+- 🚀 **文件树拖放 / 粘贴 / 移动**：拖入、粘贴、树内拖拽移动
+- 🚀 **批量提问 Tab UI**：`ask_question` 批量模式以 Tab 展示，可选 Submit/审阅后再提交
+- 🚀 **会话消息 Fork**：从用户消息 fork 新会话（对应 pi `/fork`），预填原 prompt 可改后重发
+- 🚀 **单实例复用窗口**：再次打开唤起已有窗口（含托盘隐藏），可设置关闭
+- 🚀 **启动窗口大小预设**：最大化 / 全屏 / 大中紧凑窗口
+- 🚀 **LaTeX / 数学代码块渲染**：`latex`/`tex`/`math` fence 用 KaTeX 渲染
+- 🚀 **Tailwind CSS v4 + shadcn + sonner Toast**：渲染层样式栈升级
+- ✨ Plan 模式流程打磨、上下文压缩入口优化、UI 去饱和绿色、RPC/Agent 启动选项
+- 🐛 Agent 启动防闪退/诊断增强（尤其 macOS arm）、宠物状态卡死（#107）、停止后流式余晖、
+  终端 Dock 竞态与按所有者隔离、剪贴板 Document is not focused 等大量修复
+
 ## v0.6.6
 
 发布时间：2026-07-24

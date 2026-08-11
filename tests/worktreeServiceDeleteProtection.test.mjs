@@ -75,6 +75,7 @@ function loadService(execFileImpl, trashImpl) {
 		"node:path": { basename, dirname, join, resolve },
 		"node:util": { promisify },
 		"../fs/trash": { trashPath: trashImpl },
+		"../logging/sharedLogger": { getAppLogger: () => null },
 	};
 	return new (compile(servicePath, stubs).WorktreeService)();
 }

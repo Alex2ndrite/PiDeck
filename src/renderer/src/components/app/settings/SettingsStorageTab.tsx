@@ -106,6 +106,33 @@ export function StorageTab(props: {
 		});
 	};
 
+	/**
+	 * 清理界面本地缓存（localStorage）。清空后内存态（宽度/折叠/过滤器等）
+	 * 仍是旧值，必须整页刷新让所有状态从默认值重新初始化，否则界面与存储
+	 * 不一致（下一次交互会把旧值写回，清理等于没清）。
+	 */
+	const doClearLocalStorage = () => {
+		try {
+			// 审计上报：清理 UI 缓存是用户主动操作，留痕便于排查"设置怎么变了"类问题
+			window.piDesktop?.app.rendererLog("info", "renderer", "UI local cache cleared", {
+				keyCount: localStorage.length,
+			}).catch(() => undefined);
+			localStorage.clear();
+		} catch (e) {
+			setFeedback(`${t("common.error")}: ${e instanceof Error ? e.message : String(e)}`);
+			return;
+		}
+		window.location.reload();
+	};
+
+	const confirmClearLocalStorage = () => {
+		setConfirmDialog({
+			title: t("app.confirm"),
+			message: t("settings.storage.clearLocalStorageConfirm"),
+			onConfirm: () => { setConfirmDialog(null); doClearLocalStorage(); },
+		});
+	};
+
 	const handleOpenFolder = async () => {
 		try {
 			await window.piDesktop.logs.openFolder();
@@ -140,6 +167,21 @@ export function StorageTab(props: {
 						onClick={() => confirmClear("all", `${t("settings.storage.appLogs")} + ${t("settings.storage.rpcLogs")}`)}
 					>
 						{t("settings.storage.clearAllButton")}
+					</Button>
+				</SettingRow>
+				{/* 界面本地缓存：纯 UI 偏好（布局宽度/折叠/排序等），无敏感数据；
+				   与 settings.json（主进程权威设置）互不影响，清空后刷新页面生效 */}
+				<SettingRow
+					level={1}
+					title={<span>{t("settings.storage.clearLocalStorage")}</span>}
+					description={t("settings.storage.clearLocalStorageDesc")}
+				>
+					<Button
+						variant="destructive"
+						disabled={clearing !== null}
+						onClick={confirmClearLocalStorage}
+					>
+						{t("settings.storage.clearLocalStorageButton")}
 					</Button>
 				</SettingRow>
 			</SettingsSection>

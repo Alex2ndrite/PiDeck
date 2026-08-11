@@ -56,7 +56,7 @@ test("toast effect: baseline on load completion, only new failures toast", () =>
 	assert.match(source, /if \(isConversationLoading\) \{\s*failureBaselineRef\.current = null;/s);
 	assert.match(source, /failureBaselineRef\.current = floating\.map\(\(message\) => message\.id\);/);
 	assert.match(source, /toastedFailureIds\.has\(message\.id\)/);
-	assert.match(source, /toastedFailureIds\.add\(message\.id\);/);
+	assert.match(source, /markFailureToastShown\(message\.id\);/);
 	assert.match(source, /showFailureToast\(message\);/);
 	// 模块级 Set：分屏多栏同一条消息只弹一次
 	assert.match(source, /const toastedFailureIds = new Set<string>\(\);/);

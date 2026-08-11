@@ -187,9 +187,28 @@ export type AppLogEntry = {
 export type AppLogQuery = {
 	level?: AppLogLevel | "all";
 	search?: string;
+	/** 起始时间（含），毫秒时间戳 */
 	from?: number;
+	/** 截止时间（含），毫秒时间戳 */
 	to?: number;
+	/** 兼容旧调用：返回最近 N 条 */
 	limit?: number;
+	/** 分页页码（0 基），与 pageSize 同时传入时走分页模式 */
+	page?: number;
+	pageSize?: number;
+};
+
+/** 分页日志结果：服务端按过滤条件分页，避免一次性拉全量/截断旧日志。 */
+export type AppLogPage = {
+	/** 当前页条目（时间倒序，最新在前） */
+	entries: AppLogEntry[];
+	/** 符合过滤条件的总条数 */
+	total: number;
+	/** 当前页码（0 基） */
+	page: number;
+	pageSize: number;
+	/** 是否还有下一页 */
+	hasMore: boolean;
 };
 
 export type PiRuntimeEvent = {

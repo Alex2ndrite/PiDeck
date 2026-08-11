@@ -86,6 +86,7 @@ function createHarness(options = {}) {
 	prepareResend: 0,
     setModel: 0,
     setThinking: 0,
+    publishRuntimeState: 0,
 	update: 0,
     attach: 0,
     send: 0,
@@ -194,6 +195,9 @@ function createHarness(options = {}) {
     },
     setThinking: async () => {
       calls.setThinking += 1;
+    },
+    publishRuntimeState: async () => {
+      calls.publishRuntimeState += 1;
     },
     sendUIResponse: async () => {
       calls.uiResponse += 1;
@@ -543,11 +547,37 @@ test("restart reapplies catalog preferences before binding a new generation", as
   assert.equal(harness.calls.setModel, 1);
   assert.equal(harness.calls.setThinking, 1);
   assert.equal(harness.calls.attach, 1);
+  assert.equal(harness.calls.publishRuntimeState, 1);
   assert.equal(coordinator.getSessionId("agent-old"), undefined);
   assert.deepEqual(
     { ...coordinator.getRuntimeBinding("agent-restarted") },
     { sessionId: "session-1", runtimeGeneration: 2 },
   );
+});
+
+test("lazy activation publishes runtime state after binding", async () => {
+  const { SessionRuntimeCoordinator } = loadCoordinator();
+  const harness = createHarness({
+    entry: {
+      model: { provider: "openai", modelId: "gpt-test" },
+      thinkingLevel: "high",
+    },
+  });
+  const coordinator = new SessionRuntimeCoordinator(
+    harness.catalog,
+    harness.agents,
+    harness.sender,
+  );
+  const result = await coordinator.send(prompt());
+  assert.equal(result.accepted, true);
+  // 懒启动链路：create → waitUntilReady → applyPreferences(setModel/setThinking) →
+  // bind → publishRuntimeState。推送必须发生在 bind 之后，否则 emitSessionRuntimeEvent
+  // 因无 binding 直接丢弃，渲染层底栏永远看不到应用后的真实模型。
+  assert.equal(harness.calls.create, 1);
+  assert.equal(harness.calls.setModel, 1);
+  assert.equal(harness.calls.setThinking, 1);
+  // attach 有两次（activate 内 + dispatch 成功后），这里只断言本测试关注的行为
+  assert.equal(harness.calls.publishRuntimeState, 1);
 });
 
 test("does not send or bind a new runtime when model setup fails", async () => {
