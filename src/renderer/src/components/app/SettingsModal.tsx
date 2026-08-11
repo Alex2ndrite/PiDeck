@@ -71,6 +71,30 @@ const ZOOM_FACTOR_STEP = 0.05;
 
 type SettingsTabId = "common" | "appearance" | "proxy" | "dev" | "im" | "pet" | "storage" | "usage" | "process" | "vision";
 
+// 注意：修改 SettingsTabId 枚举时需同步更新 SETTINGS_TAB_IDS 校验数组
+
+/** localStorage 键：设置页上次打开的 tab（重开弹窗时恢复位置，跨应用重启保留）。 */
+const SETTINGS_LAST_TAB_KEY = "pideck-settings-last-tab";
+
+/** 全部合法 tab id，用于校验持久化值（避免版本更新后残留旧值导致无高亮）。 */
+const SETTINGS_TAB_IDS: readonly SettingsTabId[] = [
+	"common", "appearance", "proxy", "dev", "im", "pet", "storage", "usage", "process", "vision",
+];
+
+/**
+ * 读取上次打开的设置 tab；localStorage 不可用、无记录或值已失效时回退默认值 "common"。
+ * Radix Dialog 关闭会卸载内容，state 在每次打开时重建，因此需要从外部存储恢复。
+ */
+function loadLastSettingsTab(): SettingsTabId {
+	try {
+		const raw = localStorage.getItem(SETTINGS_LAST_TAB_KEY);
+		if (raw && (SETTINGS_TAB_IDS as readonly string[]).includes(raw)) return raw as SettingsTabId;
+	} catch {
+		/* localStorage 不可用（隐私模式等）时静默失败 */
+	}
+	return "common";
+}
+
 /** 代理相关字段：用于判断代理 tab 是否有未保存变更。 */
 const PROXY_FIELDS: (keyof AppSettings)[] = [
 	"piProxyEnabled",
@@ -185,7 +209,9 @@ export function SettingsModal(props: SettingsModalProps) {
 }
 
 function SettingsModalContent(props: SettingsModalProps) {
-	const [activeTab, setActiveTab] = useState<SettingsTabId>("common");
+	// 弹窗每次打开都会重新挂载（Radix Dialog 关闭即卸载内容），
+	// 用 lazy initializer 在挂载时读一次 localStorage，恢复到上次所在 tab。
+	const [activeTab, setActiveTab] = useState<SettingsTabId>(loadLastSettingsTab);
 	// ── 全局设置草稿：进入弹框时快照 props.settings，所有修改在 draft 上操作，保存时统一提交 ──
 	const [draftSettings, setDraftSettings] = useState<AppSettings>(() => ({ ...props.settings }));
 	const [dirtyFields, setDirtyFields] = useState<Set<string>>(new Set());
@@ -516,7 +542,7 @@ function SettingsModalContent(props: SettingsModalProps) {
 						</DialogClose>
 					</div>
 				</DialogHeader>
-			<Tabs orientation="vertical" value={activeTab} onValueChange={(v) => { const match = tabs.find((t) => t.id === v); if (match) setActiveTab(match.id); }} className="settings-layout flex min-h-0 flex-1 flex-row gap-0 bg-transparent">
+			<Tabs orientation="vertical" value={activeTab} onValueChange={(v) => { const match = tabs.find((t) => t.id === v); if (match) setActiveTab(match.id); try { localStorage.setItem(SETTINGS_LAST_TAB_KEY, match.id); } catch { /* localStorage 不可用时静默失败，仅本次会话内不记忆 */ } }} className="settings-layout flex min-h-0 flex-1 flex-row gap-0 bg-transparent">
 					<TabsList className="settings-tabs flex min-h-0 shrink-0 flex-col items-stretch gap-2.5 overflow-auto border-0 border-r border-border rounded-none bg-transparent p-2.5 data-[orientation=vertical]:w-[196px]" aria-label={t("settings.title")}>
 						{tabs.map((tab) => (
 							<TabsTrigger key={tab.id} value={tab.id} className="config-nav-btn h-8 justify-start gap-1.5 px-2.5 text-control font-medium">

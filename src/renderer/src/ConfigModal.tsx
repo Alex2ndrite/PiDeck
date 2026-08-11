@@ -72,9 +72,35 @@ type ConfigSection =
 	| "prompts"
 	| "extensions";
 
+// 注意：修改 ConfigSection/ConfigTab 枚举时需同步更新 CONFIG_SECTIONS/CONFIG_TABS 校验数组
+
 /** section+tab → Tabs value（config 组子页编码为 "config:<tab>"）。 */
 function sectionTabValue(section: ConfigSection, tab: ConfigTab): string {
 	return section === "config" ? `config:${tab}` : section;
+}
+
+/** localStorage 键：Pi 管理页上次打开的 tab（重开弹窗时恢复位置，跨应用重启保留）。 */
+const CONFIG_LAST_TAB_KEY = "pideck-config-last-tab";
+
+/** 全部合法 section / config 组子 tab，用于校验持久化值（避免版本更新后残留旧值导致无高亮）。 */
+const CONFIG_SECTIONS: readonly ConfigSection[] = ["config", "skills", "prompts", "extensions"];
+const CONFIG_TABS: readonly ConfigTab[] = ["models", "auth", "settings", "trust", "raw"];
+
+/**
+ * 读取上次打开的 tab；localStorage 不可用、无记录或值已失效时返回 null（由调用方回退默认值）。
+ * Radix Dialog 关闭会卸载内容，state 在每次打开时重建，因此需要从外部存储恢复。
+ */
+function loadLastConfigTab(): { section: ConfigSection; tab?: ConfigTab } | null {
+	try {
+		const raw = localStorage.getItem(CONFIG_LAST_TAB_KEY);
+		if (!raw) return null;
+		const parsed = parseSectionTabValue(raw);
+		if (!CONFIG_SECTIONS.includes(parsed.section)) return null;
+		if (parsed.section === "config" && (!parsed.tab || !CONFIG_TABS.includes(parsed.tab))) return null;
+		return parsed;
+	} catch {
+		return null;
+	}
 }
 
 /** Tabs value → section/tab；非 config 组无子 tab。 */
@@ -244,8 +270,11 @@ export function ConfigModal(props: ConfigModalProps) {
 
 function ConfigModalContent(props: ConfigModalProps) {
 	const { open, onClose, onSaved } = props;
-	const [section, setSection] = useState<ConfigSection>("config");
-	const [tab, setTab] = useState<ConfigTab>("models");
+	// 弹窗每次打开都会重新挂载（Radix Dialog 关闭即卸载内容），
+	// 用 lazy initializer 在挂载时读一次 localStorage，恢复到上次所在 tab。
+	const [lastTab] = useState(loadLastConfigTab);
+	const [section, setSection] = useState<ConfigSection>(lastTab?.section ?? "config");
+	const [tab, setTab] = useState<ConfigTab>(lastTab?.tab ?? "models");
 	const [loading, setLoading] = useState(false);
 	const [saving, setSaving] = useState(false);
 	const [error, setError] = useState<string | null>(null);
@@ -1467,6 +1496,12 @@ function ConfigModalContent(props: ConfigModalProps) {
 					const parsed = parseSectionTabValue(value);
 					setSection(parsed.section);
 					if (parsed.tab) setTab(parsed.tab);
+					// 记住位置：下次打开 Pi 管理页时回到同一 tab
+					try {
+						localStorage.setItem(CONFIG_LAST_TAB_KEY, value);
+					} catch {
+						/* localStorage 不可用（隐私模式等）时静默失败，仅本次会话内不记忆 */
+					}
 				}}
 				className="config-layout flex min-h-0 flex-1 flex-row gap-0 bg-transparent max-[820px]:flex-col"
 			>
