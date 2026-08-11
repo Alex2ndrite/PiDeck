@@ -103,12 +103,12 @@ export class AppLogger {
 	async clear() {
 		await mkdir(this.dir, { recursive: true });
 		const files = await readdir(this.dir);
+		const before = files.filter((file) => LOG_FILE_PATTERN.test(file));
 		await Promise.all(
-			files
-				.filter((file) => LOG_FILE_PATTERN.test(file))
-				.map((file) => unlink(join(this.dir, file)).catch(() => undefined)),
+			before.map((file) => unlink(join(this.dir, file)).catch(() => undefined)),
 		);
-		await this.info("logs", "Logs cleared");
+		// 清日志属敏感操作，留痕记录清除前的文件数/大小，便于事后审计
+		await this.info("logs", "Logs cleared", { files: before.length });
 	}
 
 	/** 计算所有应用日志文件的总字节数 */
