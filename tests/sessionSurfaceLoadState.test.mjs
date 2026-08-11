@@ -59,6 +59,26 @@ test("modern surface state covers cached loading, activation before binding, and
   assert.equal(unknown.isBusy, false);
 });
 
+test("unloaded session with no load state must not flash the start surface", () => {
+  // 挂载首帧 loadState 尚未写入（passive effect 在 paint 后才执行）时，
+  // 历史会话会被误判为「空会话」→ 起始页闪屏。undefined 一律视为加载中。
+  const unloaded = timeline.deriveSessionSurfaceRuntime(0, undefined, "idle", undefined, undefined);
+  assert.equal(unloaded.isLoading, true);
+});
+
+test("ready load state with known-history record and empty cache stays loading", () => {
+  // LRU 淘汰缓存后 loadState 残留 ready：记录已知有历史（messageCount>0）
+  // 但消息尚未（重新）到达，必须视为加载中，禁止显示起始页。
+  const evicted = timeline.deriveSessionSurfaceRuntime(0, "ready", "idle", undefined, undefined, 42);
+  assert.equal(evicted.isLoading, true);
+  // 记录确认无消息（新 draft / 匿名会话）：ready + 空缓存 = 真空会话 → 起始页合法。
+  const genuinelyEmpty = timeline.deriveSessionSurfaceRuntime(0, "ready", "idle", undefined, undefined, 0);
+  assert.equal(genuinelyEmpty.isLoading, false);
+  // 读取失败不进入加载死循环（保持既有错误后的呈现路径）。
+  const loadError = timeline.deriveSessionSurfaceRuntime(0, "error", "idle", undefined, undefined, 42);
+  assert.equal(loadError.isLoading, false);
+});
+
 test("load-more follows modern starting state while legacy remains prop-owned", () => {
   // 初始加载（无消息）时隐藏按钮
   assert.equal(timeline.canLoadSessionTimelineMore(true, 0), false);

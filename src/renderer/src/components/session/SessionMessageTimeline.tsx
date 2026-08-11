@@ -181,6 +181,9 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
     sendState?.status,
     runtime?.status,
     runtime?.state,
+    // 记录已知消息数：LRU 淘汰缓存后 loadState 残留 ready 时，
+    // 用「记录有历史」把界面钉在骨架屏，避免闪出新会话起始页。
+    session?.messageCount,
   );
   const isConversationLoading = modernSurfaceState.isLoading;
   const canLoadMoreMessages = canLoadSessionTimelineMore(

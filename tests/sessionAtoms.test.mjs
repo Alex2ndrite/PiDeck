@@ -99,10 +99,10 @@ test("keeps catalog atom identities stable when polling returns equivalent recor
   assert.notEqual(store.get(atoms.sessionIdsByProjectAtom), idsBefore);
 });
 
-test("keeps only the 6 most recently written session message caches", () => {
+test("keeps only the 8 most recently written session message caches", () => {
   const atoms = loadAtoms();
   const store = createStore();
-  for (let index = 0; index < 7; index += 1) {
+  for (let index = 0; index < 9; index += 1) {
     store.set(atoms.cacheSessionMessagesAtom, {
       sessionId: `session-${index}`,
       messages: [{ id: `message-${index}`, role: "user", text: String(index) }],
@@ -110,9 +110,9 @@ test("keeps only the 6 most recently written session message caches", () => {
     });
   }
   const cache = store.get(atoms.sessionMessagesCacheAtom);
-  assert.equal(Object.keys(cache).length, 6);
+  assert.equal(Object.keys(cache).length, 8);
   assert.equal(cache["session-0"], undefined);
-  assert.equal(cache["session-6"].messages[0].text, "6");
+  assert.equal(cache["session-8"].messages[0].text, "8");
 });
 
 test("does not let a stale disk write clobber a live runtime cache", () => {

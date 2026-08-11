@@ -17,11 +17,12 @@ import { sameProjectSessionList } from "../utils/sessionRecordIdentity";
 
 /**
  * 渲染层会话消息缓存上限（LRU）。
- * 8 → 6（2026-11 轮次模型）：3 个分屏常驻 + 2 个预览 + 1 个切换缓冲即可覆盖；
- * 淘汰的会话切回时走激活分页（尾部 3 轮）重新拉取，成本可控，
- * 而每条消息对象（含工具输出文本）常驻渲染层是内存大头。
+ * 6 → 8（2026-12 会话切换闪屏修复）：4 个分屏常驻 + 3 个预览 + 1 个切换缓冲；
+ * 切回被淘汰的会话要重新走磁盘读取，大会话（几十 MB）会先闪骨架屏/起始页，
+ * 放宽到 8 在内存可接受范围内减少淘汰频次；
+ * 淘汰的会话切回时走激活分页（尾部 3 轮）重新拉取，成本可控。
  */
-export const SESSION_MESSAGE_CACHE_LIMIT = 6;
+export const SESSION_MESSAGE_CACHE_LIMIT = 8;
 
 export type SessionRuntimeViewState = {
   agentId?: string;

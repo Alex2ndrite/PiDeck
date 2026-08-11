@@ -89,12 +89,24 @@ export function deriveSessionSurfaceRuntime(
   sendStatus: string | undefined,
   runtimeStatus: string | undefined,
   runtimeState: AgentRuntimeState | undefined,
+  recordMessageCount?: number,
 ) {
   const activating = sendStatus === "activating";
   const status = activating ? "starting" : runtimeStatus;
   return {
     status,
-    isLoading: messageCount === 0 && (messageLoadStatus === "loading" || activating),
+    isLoading: messageCount === 0 && (
+      messageLoadStatus === "loading" ||
+      // 挂载首帧 loadState 尚未写入（passive effect 在 paint 后才置 loading），
+      // undefined 一律视为加载中——否则有历史的会话会被误判为「空会话」，
+      // 闪出 SessionStartSurface 起始页（打开/切回大会话闪屏根因）。
+      messageLoadStatus === undefined ||
+      // LRU 淘汰缓存后 loadState 残留 ready：记录已知有历史（messageCount>0）
+      // 但消息尚未（重新）到达，必须继续显示骨架屏；
+      // 读取失败（error）不在此列，避免进入加载死循环。
+      (messageLoadStatus === "ready" && (recordMessageCount ?? 0) > 0) ||
+      activating
+    ),
     isStarting: status === "starting",
     isBusy: activating || sendStatus === "sending" || isSessionRuntimeBusy(status, runtimeState),
   };
@@ -264,7 +276,9 @@ export function useSessionTimelineController(options: {
   const loadStates = useAtomValue(sessionMessageLoadStateAtom);
   const lastLoadedSessionRef = useRef<string | undefined>(undefined);
 
-  useEffect(() => {
+	// useLayoutEffect 而非 useEffect：loading 状态必须在首帧 paint 之前写入，
+	// 否则被动 effect 先于 loading 绘制一帧「空会话」→ 有历史的会话会闪出起始页。
+	useLayoutEffect(() => {
     const sessionId = options.sessionId;
     if (!sessionId) return;
     // Already loaded this session.
