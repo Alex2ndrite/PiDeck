@@ -223,12 +223,6 @@ export function SettingsTab(props: {
 				<span className="font-mono text-xs tabular-nums text-text-tertiary">
 					{t("config.count.configItems", { count: entries.length })}
 				</span>
-				<Button size="sm" variant="default"
-					onClick={props.onSave}
-					disabled={saving}
-				>
-					{saving ? t("common.saving") : t("common.save")}
-				</Button>
 			</div>
 			<div className="flex flex-col gap-2">
 				{/* enabledModels 始终显示在最前面 */}

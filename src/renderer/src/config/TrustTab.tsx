@@ -46,12 +46,6 @@ export function TrustTab(props: {
 					<strong>{t("config.nav.trust")}</strong>
 					<p>{t("config.trust.hint")}</p>
 				</div>
-				<Button size="sm" variant="default"
-					onClick={props.onSave}
-					disabled={props.saving}
-				>
-					{props.saving ? t("common.saving") : t("common.save")}
-				</Button>
 			</div>
 
 			<div className="config-trust-add">

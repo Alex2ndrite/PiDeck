@@ -28,12 +28,6 @@ export function RawTab(props: {
 					options={RAW_FILE_OPTIONS}
 					onChange={props.onChangeFileName}
 				/>
-				<Button size="sm" variant="default"
-					onClick={props.onSave}
-					disabled={props.saving}
-				>
-					{props.saving ? t("common.saving") : t("common.save")}
-				</Button>
 			</div>
 			<Textarea
 				className="config-raw-editor"

@@ -1,4 +1,4 @@
-import { Button } from "./components/ui-shadcn/button";
+import { Button, buttonVariants } from "./components/ui-shadcn/button";
 import {
 	Tabs,
 	TabsContent,
@@ -13,6 +13,16 @@ import {
 	DialogTitle,
 } from "./components/ui-shadcn/dialog";
 import { ConfirmDialog } from "./components/ui-shadcn/ConfirmDialog";
+import {
+	AlertDialog,
+	AlertDialogAction,
+	AlertDialogCancel,
+	AlertDialogContent,
+	AlertDialogDescription,
+	AlertDialogFooter,
+	AlertDialogHeader,
+	AlertDialogTitle,
+} from "./components/ui-shadcn/alert-dialog";
 import {
 	X,
 	Cpu,
@@ -281,6 +291,25 @@ function ConfigModalContent(props: ConfigModalProps) {
 	const [loading, setLoading] = useState(false);
 	const [saving, setSaving] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	/** 各 tab 未保存修改集合：key 用 sectionTabValue 编码（如 "config:models"/"skills"），顶部保存按钮与关闭确认依赖它 */
+	const [dirtyTabs, setDirtyTabs] = useState<Set<string>>(new Set());
+	/** 关闭弹框时存在未保存修改 → 弹出保存确认（借鉴设置页关闭逻辑） */
+	const [closeConfirmOpen, setCloseConfirmOpen] = useState(false);
+	const hasDirty = dirtyTabs.size > 0;
+
+	/** 标记某 tab 存在未保存修改（幂等；只用 setDirtyTabs 函数式更新，引用稳定） */
+	const markDirty = useCallback((tabKey: string) => {
+		setDirtyTabs((prev) => (prev.has(tabKey) ? prev : new Set(prev).add(tabKey)));
+	}, []);
+
+	/** 清除某 tab 的未保存修改标记（保存成功或主动放弃编辑时调用） */
+	const clearDirty = useCallback((tabKey: string) => {
+		setDirtyTabs((prev) =>
+			prev.has(tabKey)
+				? new Set([...prev].filter((k) => k !== tabKey))
+				: prev,
+		);
+	}, []);
 	const [configDiagnostic, setConfigDiagnostic] = useState<ConfigFileDiagnostic | null>(null);
 	/* toast 已改用 sonner 实现 */
 
@@ -514,13 +543,15 @@ function ConfigModalContent(props: ConfigModalProps) {
 					setRawContent(res.raw);
 					setConfigDiagnostic(res.diagnostic ?? null);
 				}
+				// 加载完成后本地数据与磁盘一致，清除该 tab 的未保存标记
+				clearDirty(target === "raw" ? "config:raw" : `config:${target}`);
 			} catch (e) {
 				setError(e instanceof Error ? e.message : String(e));
 			} finally {
 				setLoading(false);
 			}
 		},
-		[tab],
+		[tab, clearDirty],
 	);
 
 	useEffect(() => {
@@ -555,22 +586,27 @@ function ConfigModalContent(props: ConfigModalProps) {
 		return (matched?.[1] ?? raw).trim();
 	};
 
+	/** 统一保存流程：写盘 → 校验 → toast；成功时清除对应 tab 的未保存标记，返回是否成功。 */
 	const saveAndReload = async (
 		saveFn: () => Promise<{ valid: boolean; error?: string }>,
 		successMessage?: string,
-	) => {
+		dirtyKey?: string,
+	): Promise<boolean> => {
 		setSaving(true);
 		setError(null);
 		try {
 			const result = await saveFn();
 			if (!result.valid) {
 				setError(result.error ?? t("config.saveFailed"));
-				return;
+				return false;
 			}
 			onSaved();
 			showToast(successMessage ?? t("config.saved"));
+			if (dirtyKey) clearDirty(dirtyKey);
+			return true;
 		} catch (e) {
 			setError(e instanceof Error ? e.message : String(e));
+			return false;
 		} finally {
 			setSaving(false);
 		}
@@ -590,6 +626,7 @@ function ConfigModalContent(props: ConfigModalProps) {
 			},
 		};
 		setModelsData(updated);
+		markDirty("config:models");
 		setExpandedProvider(providerName);
 		setAddingProvider(false);
 		setNewProviderName("");
@@ -613,6 +650,7 @@ function ConfigModalContent(props: ConfigModalProps) {
 		providers[newName] = providers[oldName];
 		delete providers[oldName];
 		setModelsData({ ...modelsData, providers });
+		markDirty("config:models");
 		if (expandedProvider === oldName) setExpandedProvider(newName);
 		setRenamingProvider(null);
 		setRenameValue("");
@@ -632,6 +670,7 @@ function ConfigModalContent(props: ConfigModalProps) {
 				const providers = { ...modelsData.providers };
 				delete providers[name];
 				setModelsData({ ...modelsData, providers });
+				markDirty("config:models");
 				if (expandedProvider === name) setExpandedProvider(null);
 				setDeleteConfirm(null);
 			},
@@ -660,6 +699,7 @@ function ConfigModalContent(props: ConfigModalProps) {
 				[newName]: duplicatedProvider,
 			},
 		});
+		markDirty("config:models");
 		
 		// 展开新复制的 provider
 		setExpandedProvider(newName);
@@ -690,9 +730,11 @@ function ConfigModalContent(props: ConfigModalProps) {
 					},
 				};
 			});
+			// 检测/测试自动改写 baseUrl 同样属于表单修改，标记未保存
+			markDirty("config:models");
 			return true;
 		},
-		[],
+		[markDirty],
 	);
 
 	// 从 provider 的 baseUrl + apiKey 拉取可用模型列表
@@ -825,6 +867,7 @@ function ConfigModalContent(props: ConfigModalProps) {
 			},
 		};
 		setModelsData(updated);
+		markDirty("config:models");
 	};
 
 	const handleUpdateModel = (
@@ -844,6 +887,7 @@ function ConfigModalContent(props: ConfigModalProps) {
 				[providerName]: { ...provider, models },
 			},
 		});
+		markDirty("config:models");
 	};
 
 	const handleUpdateModelThinkingLevel = (
@@ -890,6 +934,7 @@ function ConfigModalContent(props: ConfigModalProps) {
 				[providerName]: { ...nextProvider, models },
 			},
 		});
+		markDirty("config:models");
 	};
 
 	const handleDeleteModel = (providerName: string, index: number) => {
@@ -910,12 +955,13 @@ function ConfigModalContent(props: ConfigModalProps) {
 						[providerName]: { ...provider, models },
 					},
 				});
+				markDirty("config:models");
 				setDeleteConfirm(null);
 			},
 		});
 	};
 
-	const handleSaveModels = async () => {
+	const handleSaveModels = async (): Promise<boolean> => {
 		// 保存前规范化所有供应商的 compat 字段，确保布尔值显式写入而不依赖后端默认值
 		const normalizedData = {
 			...modelsData,
@@ -933,15 +979,13 @@ function ConfigModalContent(props: ConfigModalProps) {
 				]),
 			),
 		};
-		await saveAndReload(
+		const ok = await saveAndReload(
 			() => api.config.saveModels(normalizedData),
 			t("config.modelsSaved"),
+			"config:models",
 		);
 		await loadConfig("models");
-
-		// 保存后自动刷新所有运行中的 Agent，使模型配置实时生效
-		// pi 官方尚未支持，先注释
-		// void refreshRunningAgents();
+		return ok;
 	};
 
 	// ── Auth 操作 ────────────────────────────────────────
@@ -951,6 +995,7 @@ function ConfigModalContent(props: ConfigModalProps) {
 			...authData,
 			[provider]: { ...authData[provider], [field]: value },
 		});
+		markDirty("config:auth");
 	};
 
 	/**
@@ -965,6 +1010,7 @@ function ConfigModalContent(props: ConfigModalProps) {
 			...authData,
 			[finalName]: { type: "api_key", key: key ?? "" },
 		});
+		markDirty("config:auth");
 		setExpandedAuth(finalName);
 		setAddingAuth(false);
 		setNewAuthName("");
@@ -979,6 +1025,7 @@ function ConfigModalContent(props: ConfigModalProps) {
 				const updated = { ...authData };
 				delete updated[provider];
 				setAuthData(updated);
+				markDirty("config:auth");
 				if (expandedAuth === provider) setExpandedAuth(null);
 				setDeleteConfirm(null);
 			},
@@ -999,6 +1046,7 @@ function ConfigModalContent(props: ConfigModalProps) {
 			...authData,
 			[newName]: duplicatedAuth,
 		});
+		markDirty("config:auth");
 		setExpandedAuth(newName);
 	};
 
@@ -1011,6 +1059,7 @@ function ConfigModalContent(props: ConfigModalProps) {
 				const providers = { ...modelsData.providers };
 				for (const name of names) delete providers[name];
 				setModelsData({ ...modelsData, providers });
+				markDirty("config:models");
 				if (names.includes(expandedProvider ?? "")) setExpandedProvider(null);
 				setDeleteConfirm(null);
 			},
@@ -1026,47 +1075,62 @@ function ConfigModalContent(props: ConfigModalProps) {
 				const updated = { ...authData };
 				for (const provider of providers) delete updated[provider];
 				setAuthData(updated);
+				markDirty("config:auth");
 				if (providers.includes(expandedAuth ?? "")) setExpandedAuth(null);
 				setDeleteConfirm(null);
 			},
 		});
 	};
 
-	const handleSaveAuth = async () => {
-		await saveAndReload(() => api.config.saveAuth(authData));
+	const handleSaveAuth = async (): Promise<boolean> => {
+		const ok = await saveAndReload(
+			() => api.config.saveAuth(authData),
+			undefined,
+			"config:auth",
+		);
 		await loadConfig("auth");
+		return ok;
 	};
 
 	// ── Settings 操作 ────────────────────────────────────
 
-	const handleSaveSettings = async () => {
-		await saveAndReload(() => api.config.saveSettings(settingsData));
+	const handleSaveSettings = async (): Promise<boolean> => {
+		const ok = await saveAndReload(
+			() => api.config.saveSettings(settingsData),
+			undefined,
+			"config:settings",
+		);
 		await loadConfig("settings");
+		return ok;
 	};
 
 	// ── Trust 操作 ────────────────────────────────────────
 
-	const handleSaveTrust = async () => {
-		await saveAndReload(() => api.config.saveRaw("trust.json", JSON.stringify(trustData, null, 2)));
+	const handleSaveTrust = async (): Promise<boolean> => {
+		const ok = await saveAndReload(
+			() => api.config.saveRaw("trust.json", JSON.stringify(trustData, null, 2)),
+			undefined,
+			"config:trust",
+		);
 		await loadConfig("trust");
+		return ok;
 	};
 
 	// ── Raw 操作 ─────────────────────────────────────────
 
-	const handleSaveRaw = async () => {
+	const handleSaveRaw = async (): Promise<boolean> => {
 		const isModelsFile = rawFileName === "models.json";
-		await saveAndReload(
+		const ok = await saveAndReload(
 			() => api.config.saveRaw(rawFileName, rawContent),
 			isModelsFile ? t("config.modelsSaved") : undefined,
+			"config:raw",
 		);
 		if (isModelsFile) {
 			await loadConfig("models");
-			// Raw 保存也触发模型刷新，确保运行中的 Agent 实时生效
-			// pi 官方尚未支持，先注释
-			// void refreshRunningAgents();
 		} else if (rawFileName === "auth.json") await loadConfig("auth");
 		else if (rawFileName === "trust.json") await loadConfig("trust");
 		else await loadConfig("settings");
+		return ok;
 	};
 
 	// 切换源文件时重新加载对应文件内容
@@ -1186,15 +1250,16 @@ function ConfigModalContent(props: ConfigModalProps) {
 		}
 	};
 
-	/** 取消编辑 prompt template */
+	/** 取消编辑 prompt template（放弃未保存修改，清除标记） */
 	const handleCancelEditPrompt = () => {
 		setEditingPrompt(null);
 		setEditPromptContent("");
+		clearDirty("prompts");
 	};
 
-	/** 保存 prompt template 编辑器内容 */
-	const handleSaveEditPrompt = async () => {
-		if (!editingPrompt || editPromptSaving) return;
+	/** 保存 prompt template 编辑器内容；返回是否成功（关闭确认框等待其结果再决定是否关闭） */
+	const handleSaveEditPrompt = async (): Promise<boolean> => {
+		if (!editingPrompt || editPromptSaving) return false;
 		setEditPromptSaving(true);
 		setError(null);
 		try {
@@ -1208,11 +1273,14 @@ function ConfigModalContent(props: ConfigModalProps) {
 			} else {
 				await api.prompts.edit(editingPrompt.path, editPromptContent);
 			}
+			clearDirty("prompts");
 			showToast(t("config.promptSavedToast"));
 			setEditingPrompt(null);
 			await refreshPrompts();
+			return true;
 		} catch (err) {
 			setError(err instanceof Error ? err.message : String(err));
+			return false;
 		} finally {
 			setEditPromptSaving(false);
 		}
@@ -1230,8 +1298,8 @@ function ConfigModalContent(props: ConfigModalProps) {
 		}
 	};
 
-	const handleQuickSavePrompt = async () => {
-		if (!editingPrompt || editPromptSaving) return;
+	const handleQuickSavePrompt = async (): Promise<boolean> => {
+		if (!editingPrompt || editPromptSaving) return false;
 		setEditPromptSaving(true);
 		setError(null);
 		try {
@@ -1244,9 +1312,12 @@ function ConfigModalContent(props: ConfigModalProps) {
 			} else {
 				await api.prompts.edit(editingPrompt.path, editPromptContent);
 			}
+			clearDirty("prompts");
 			await refreshPrompts();
+			return true;
 		} catch (err) {
 			setError(err instanceof Error ? err.message : String(err));
+			return false;
 		} finally {
 			setEditPromptSaving(false);
 		}
@@ -1347,17 +1418,20 @@ function ConfigModalContent(props: ConfigModalProps) {
 		}
 	}, [editingGlobalSkill, editGlobalSaving]);
 
-	const saveGlobalSkillEditor = async () => {
-		if (!editingGlobalSkill || editGlobalSaving) return;
+	const saveGlobalSkillEditor = async (): Promise<boolean> => {
+		if (!editingGlobalSkill || editGlobalSaving) return false;
 		setEditGlobalSaving(true);
 		setError(null);
 		try {
 			await window.piDesktop.files.writeContent(editingGlobalSkill.path, editGlobalContent);
+			clearDirty("skills");
 			setEditGlobalSaved(true);
 			window.setTimeout(() => setEditGlobalSaved(false), 2000);
 			await refreshSkills();
+			return true;
 		} catch (err) {
 			setError(err instanceof Error ? err.message : String(err));
+			return false;
 		} finally {
 			setEditGlobalSaving(false);
 		}
@@ -1439,6 +1513,66 @@ function ConfigModalContent(props: ConfigModalProps) {
 		input.click();
 	};
 
+	/** 按 tab 编码分发到对应保存 handler；返回是否保存成功（false = 保存失败，由错误提示区展示原因）。 */
+	const saveByKey = async (tabKey: string): Promise<boolean> => {
+		switch (tabKey) {
+			case "config:models":
+				return handleSaveModels();
+			case "config:auth":
+				return handleSaveAuth();
+			case "config:settings":
+				return handleSaveSettings();
+			case "config:trust":
+				return handleSaveTrust();
+			case "config:raw":
+				return handleSaveRaw();
+			case "skills":
+				return saveGlobalSkillEditor();
+			case "prompts":
+				return handleSaveEditPrompt();
+			default:
+				// extensions/security 等即时生效页无保存语义，无 dirty 时按钮不可点
+				return false;
+		}
+	};
+
+	/** 顶部统一保存按钮：保存当前 tab 的未保存修改（不关闭弹框）。 */
+	const handleSaveCurrent = async () => {
+		const tabKey = sectionTabValue(section, tab);
+		if (saving || !dirtyTabs.has(tabKey)) {
+			// 当前 tab 无修改但其他 tab 有：提示而不是静默，避免用户以为保存成功了
+			if (dirtyTabs.size > 0) showToast(t("config.noUnsavedChangesCurrentTab"));
+			return;
+		}
+		await saveByKey(tabKey);
+	};
+
+	/** 关闭弹框：有未保存修改时先弹保存确认（借鉴设置页），无修改直接关闭。 */
+	const handleClose = () => {
+		if (dirtyTabs.size > 0) {
+			setCloseConfirmOpen(true);
+		} else {
+			props.onClose();
+		}
+	};
+
+	/** 关闭确认框选择保存并关闭：保存当前 tab 成功才关；失败留在弹框（错误已展示在内容区）。 */
+	const handleSaveAndClose = async () => {
+		const tabKey = sectionTabValue(section, tab);
+		if (dirtyTabs.has(tabKey)) {
+			const ok = await saveByKey(tabKey);
+			if (!ok) return;
+		}
+		setCloseConfirmOpen(false);
+		props.onClose();
+	};
+
+	/** 关闭确认框选择放弃更改：丢弃所有未保存修改直接关闭。 */
+	const handleDiscardAndClose = () => {
+		setCloseConfirmOpen(false);
+		props.onClose();
+	};
+
 	const configNavItems: Array<{ id: ConfigTab; label: string; icon: ReactNode }> = [
 		{ id: "models", label: t("config.nav.models"), icon: <Cpu size={14} aria-hidden="true" /> },
 		{ id: "auth", label: t("config.nav.auth"), icon: <KeyRound size={14} aria-hidden="true" /> },
@@ -1468,15 +1602,29 @@ function ConfigModalContent(props: ConfigModalProps) {
 	if (!open) return null;
 
 	return (
-		<Dialog open={open} onOpenChange={(next) => !next && onClose()}>
+		<Dialog open={open} onOpenChange={(next) => !next && handleClose()}>
 			<DialogContent showCloseButton={false} className={cn("flex flex-col gap-0 overflow-hidden p-0", configModalSizeClass, "config-modal", "[--wallpaper-dialog-alpha:var(--wallpaper-panel-alpha,30%)]")}>
 				{/* 顶栏/侧栏控件与设置弹窗、会话顶栏统一到 sm / text-sm 密度 */}
 				<DialogHeader className="flex-row items-center justify-between px-4 py-2.5">
 					<DialogTitle className="text-sm font-semibold tracking-tight">{t("config.title")}</DialogTitle>
 					<div className="flex items-center gap-1.5">
+						{/* 顶部统一保存：各 tab 内部保存按钮可能被滚动藏住，这里常驻可见；
+						    有未保存修改时按钮带黄点标记，无修改时禁用 */}
+						<Button
+							variant="default"
+							size="sm"
+							onClick={() => void handleSaveCurrent()}
+							disabled={!hasDirty || saving}
+							title={hasDirty ? t("config.dirtyTooltip") : undefined}
+						>
+							{hasDirty && (
+								<span className="size-2 rounded-full bg-amber-400" aria-hidden="true" />
+							)}
+							{saving ? t("common.saving") : t("common.save")}
+						</Button>
 						{section === "config" ? (
 							<>
-								<Button variant="default" size="sm" onClick={handleExport}>
+								<Button variant="outline" size="sm" onClick={handleExport}>
 									{t("common.export")}
 								</Button>
 								<Button variant="secondary" size="sm" onClick={handleImport}>
@@ -1608,6 +1756,7 @@ function ConfigModalContent(props: ConfigModalProps) {
 										[name]: { ...provider, [field]: value },
 									},
 								});
+								markDirty("config:models");
 							}}
 						/>
 					)}
@@ -1657,7 +1806,10 @@ function ConfigModalContent(props: ConfigModalProps) {
 							modelsData={modelsData}
 							authData={authData}
 							discoveredModels={discoveredModels}
-							onChange={setSettingsData}
+							onChange={(data) => {
+								setSettingsData(data);
+								markDirty("config:settings");
+							}}
 							onSave={handleSaveSettings}
 						/>
 					)}
@@ -1674,7 +1826,7 @@ function ConfigModalContent(props: ConfigModalProps) {
 									<div className="file-diff-header">
 										<span className="file-diff-header-file">{editingGlobalSkill.name} · SKILL.md</span>
 										<div className="file-diff-header-actions">
-											<Button variant="ghost" size="icon" aria-label={t("common.close")} title={t("common.close")} onClick={() => setEditingGlobalSkill(null)}>
+											<Button variant="ghost" size="icon" aria-label={t("common.close")} title={t("common.close")} onClick={() => { clearDirty("skills"); setEditingGlobalSkill(null); }}>
 												<X size={18} strokeWidth={2.2} aria-hidden="true" />
 											</Button>
 										</div>
@@ -1685,7 +1837,10 @@ function ConfigModalContent(props: ConfigModalProps) {
 										<div className="prompts-monaco-wrap">
 											<CodeMirrorEditor
 												value={editGlobalContent}
-												onChange={setEditGlobalContent}
+												onChange={(value) => {
+													setEditGlobalContent(value);
+													markDirty("skills");
+												}}
 											/>
 									</div>
 								)}
@@ -1740,7 +1895,10 @@ function ConfigModalContent(props: ConfigModalProps) {
 							onRename={handleRenamePrompt}
 							onQuickSave={handleQuickSavePrompt}
 							onCancelEdit={handleCancelEditPrompt}
-							onChangeEditContent={setEditPromptContent}
+							onChangeEditContent={(value) => {
+								setEditPromptContent(value);
+								markDirty("prompts");
+							}}
 							onSaveEdit={handleSaveEditPrompt}
 						/>
 					)}
@@ -1774,7 +1932,10 @@ function ConfigModalContent(props: ConfigModalProps) {
 						<TrustTab
 							data={trustData}
 							saving={saving}
-							onChange={setTrustData}
+							onChange={(data) => {
+								setTrustData(data);
+								markDirty("config:trust");
+							}}
 							onSave={handleSaveTrust}
 						/>
 					)}
@@ -1791,7 +1952,10 @@ function ConfigModalContent(props: ConfigModalProps) {
 							content={rawContent}
 							saving={saving}
 							onChangeFileName={handleRawFileChange}
-							onChangeContent={setRawContent}
+							onChangeContent={(value) => {
+								setRawContent(value);
+								markDirty("config:raw");
+							}}
 							onSave={handleSaveRaw}
 						/>
 					)}
@@ -1830,6 +1994,27 @@ function ConfigModalContent(props: ConfigModalProps) {
 						onConfirm={() => void confirmDeletePrompt(deletePromptConfirm)}
 						onCancel={() => setDeletePromptConfirm(null)}
 					/>
+				)}
+
+				{/* 关闭确认：有未保存修改时弹出，保存并关闭 / 放弃更改 / 取消（借鉴设置页） */}
+				{closeConfirmOpen && (
+					<AlertDialog open onOpenChange={(open) => { if (!open) setCloseConfirmOpen(false); }}>
+						<AlertDialogContent>
+							<AlertDialogHeader>
+								<AlertDialogTitle>{t("config.unsavedTitle")}</AlertDialogTitle>
+								<AlertDialogDescription>{t("config.unsavedMessage")}</AlertDialogDescription>
+							</AlertDialogHeader>
+							<AlertDialogFooter>
+								<AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+								<AlertDialogAction className={buttonVariants({ variant: "destructive" })} onClick={handleDiscardAndClose}>
+									{t("config.discardChanges")}
+								</AlertDialogAction>
+								<AlertDialogAction onClick={() => void handleSaveAndClose()}>
+									{t("config.saveAndClose")}
+								</AlertDialogAction>
+							</AlertDialogFooter>
+						</AlertDialogContent>
+					</AlertDialog>
 				)}
 
 				{/* toast 已改用 sonner */}
