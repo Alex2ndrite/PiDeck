@@ -8,7 +8,7 @@
  * 交互：点击项目行 = 展开/收起；点击项目行内的 "+" = 新建会话（POST /api/sessions）；
  * 点击会话行 = 打开会话（切 activeSessionId）。
  */
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Check, FolderPlus, Play, Plus, Search, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui-shadcn/button";
 import { Input } from "@/components/ui-shadcn/input";
@@ -72,6 +72,8 @@ export function WebSidebar(props: {
 	const { state, activeSessionId, creatingProjectId, connected, mobileOpen } = props;
 	const [search, setSearch] = useState("");
 	const [expandedProjects, setExpandedProjects] = useState<Set<string>>(() => new Set());
+	// 会话数超过上限时展开的项目（默认每个项目只展示最近 N 条，点「更多」展开全部）
+	const [expandedSessionProjects, setExpandedSessionProjects] = useState<Set<string>>(() => new Set());
 	const [addingProject, setAddingProject] = useState(false);
 	const [projectPath, setProjectPath] = useState("");
 	const [projectBusy, setProjectBusy] = useState(false);
@@ -87,6 +89,32 @@ export function WebSidebar(props: {
 
 	const runtimeFor = (sessionId: string): WebRuntime | undefined =>
 		state.runtimes.find((runtime) => runtime.sessionId === sessionId);
+
+	/** 项目按最近打开时间降序（chat 项目恒置顶），与桌面端按时间感知一致 */
+	const sortedProjects = useMemo(
+		() =>
+			[...state.projects].sort(
+				(a, b) =>
+					Number(b.kind === "chat") - Number(a.kind === "chat") ||
+					(b.lastOpenedAt ?? 0) - (a.lastOpenedAt ?? 0),
+			),
+		[state.projects],
+	);
+
+	/** 会话按最近活动时间降序（最新在上） */
+	const sortedSessions = useMemo(
+		() => [...state.sessions].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0)),
+		[state.sessions],
+	);
+
+	const toggleSessionExpand = (projectId: string) => {
+		setExpandedSessionProjects((current) => {
+			const next = new Set(current);
+			if (next.has(projectId)) next.delete(projectId);
+			else next.add(projectId);
+			return next;
+		});
+	};
 
 	const submitProject = async () => {
 		const path = projectPath.trim();
@@ -211,11 +239,15 @@ export function WebSidebar(props: {
 				)}
 				{/* 项目/会话树 */}
 				<div className="conversation-list min-h-0 flex-1 overflow-y-auto">
-					{state.projects.map((project) => {
-						const projectSessions = state.sessions
+					{sortedProjects.map((project) => {
+						const projectSessions = sortedSessions
 							.filter((session) => session.projectId === project.id)
 							.filter((session) => matchesSearch(session.title || session.id, search.trim()));
 						const expanded = searching || expandedProjects.has(project.id);
+						const showAllSessions = searching || expandedSessionProjects.has(project.id);
+						// 默认只展示最近 5 条，超过部分折叠在「更多会话」按钮后，避免列表一次性全部加载
+						const visibleSessions = showAllSessions ? projectSessions : projectSessions.slice(0, 5);
+						const hiddenSessionCount = projectSessions.length - visibleSessions.length;
 						const projectName = displayProjectName(project);
 						const creating = creatingProjectId === project.id;
 						return (
@@ -277,7 +309,7 @@ export function WebSidebar(props: {
 								</div>
 								{expanded && (
 									<div className="project-children mt-2 flex flex-col gap-2 px-1 pb-1">
-										{projectSessions.map((session) => {
+										{visibleSessions.map((session) => {
 											const runtime = runtimeFor(session.id);
 											return (
 												<button
@@ -302,6 +334,17 @@ export function WebSidebar(props: {
 												</button>
 											);
 										})}
+										{hiddenSessionCount > 0 && (
+											<button
+												type="button"
+												className="conversation session-row relative flex min-h-7 w-full items-center justify-center gap-1.5 rounded-md border border-transparent px-2 py-0 text-center text-caption text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+												onClick={() => toggleSessionExpand(project.id)}
+											>
+												{showAllSessions
+													? t("common.collapse")
+													: t("web.moreSessions", { count: hiddenSessionCount })}
+											</button>
+											)}
 										{projectSessions.length === 0 && (
 											<div className="px-6 py-1 text-caption text-muted-foreground">
 												{t("web.noSessions")}

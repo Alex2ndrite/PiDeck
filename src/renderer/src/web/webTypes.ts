@@ -10,6 +10,10 @@ export type WebProject = {
 	name: string;
 	path: string;
 	kind?: "chat";
+	/** 最近打开时间（毫秒时间戳），Web 端项目列表按此降序展示 */
+	lastOpenedAt?: number;
+	pinned?: boolean;
+	sortOrder?: number;
 };
 
 export type WebSession = {
@@ -20,6 +24,8 @@ export type WebSession = {
 	projectPath?: string;
 	model?: { provider: string; modelId: string };
 	thinkingLevel?: string;
+	/** 最近活动时间（毫秒时间戳），Web 端会话列表按此降序展示（最新在上） */
+	updatedAt?: number;
 };
 
 export type WebRuntime = {
