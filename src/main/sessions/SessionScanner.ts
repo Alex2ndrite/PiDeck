@@ -10,6 +10,7 @@ import type { MainProcessTranslationKey } from "../../shared/i18n/mainProcessCop
 import { getCodexSessionThreadInfo } from "../../shared/codexSessionMeta";
 import { extractMessageText, extractThinkingRaw } from "../pi/messageContent";
 import { toWslLinuxPath, type WslEnvironment } from "../wsl/WslPaths";
+import { getAppLogger } from "../logging/sharedLogger";
 import { SessionSummaryCache, type SessionFileVersion } from "./sessionSummaryCache";
 
 type SessionScannerCopyKey = Extract<MainProcessTranslationKey,
@@ -861,7 +862,11 @@ export class SessionScanner {
         if (!content) continue;
         if (message.role !== "user" && message.role !== "assistant") continue;
         messages.push({ role: String(message.role), content, timestamp: Number(entry.ts ?? entry.timestamp ?? Date.now()) });
-      } catch { console.warn(`[SessionScanner] 跳过无法解析的 JSONL 行: ${filePath}`); }
+      } catch {
+        // 单行解析失败跳过；大量失败说明 JSONL 结构异常，双写日志文件便于离线排查
+        void getAppLogger()?.warn("session", "Skipped unparseable JSONL line", { filePath });
+        console.warn(`[SessionScanner] 跳过无法解析的 JSONL 行: ${filePath}`);
+      }
     }
     return messages;
   }
