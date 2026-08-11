@@ -73,6 +73,8 @@ function createHarness(options = {}) {
   const entry = catalogEntry(options.entry);
   const calls = {
     create: 0,
+    /** agents.create 收到的入参列表（断言会话身份/sessionPath 透传用） */
+    createInputs: [],
     restart: 0,
     stop: 0,
 	abort: 0,
@@ -120,6 +122,7 @@ function createHarness(options = {}) {
 	},
     create: async (input) => {
       calls.create += 1;
+      calls.createInputs.push(input);
       if (options.createDelay) {
         await new Promise((resolve) => setTimeout(resolve, options.createDelay));
       }
@@ -236,6 +239,30 @@ test("rejects an empty prompt before activating a runtime", async () => {
   assert.equal(result.delivery, "rejected");
   assert.equal(harness.calls.create, 0);
   assert.equal(harness.calls.send, 0);
+});
+
+test("session security override key = catalog session id, distinct from sessionPath", async () => {
+	// 回归：UI 保存安全等级覆盖用 SessionRecord.id（UUID），主进程必须注入同一个 key
+	// 给 PIDECK_SESSION_ID，否则安全门扩展在 sessionLevels 里永远查不到覆盖，回落全局默认。
+	const { SessionRuntimeCoordinator } = loadCoordinator();
+	const sessionId = "e5a4ef67-2c16-4ddc-ac03-d2e105182645";
+	const filePath = "C:\\Users\\14012\\.pi\\agent\\sessions\\2026-08-11T13-33-50-880Z_019ff107-89a0-7947-9001-c3fc25237198.jsonl";
+	const harness = createHarness({ entry: { id: sessionId, filePath } });
+	const coordinator = new SessionRuntimeCoordinator(
+		harness.catalog,
+		harness.agents,
+		harness.sender,
+	);
+
+	const result = await coordinator.activateRuntime(sessionId);
+
+	assert.equal(result.ok, true);
+	assert.equal(harness.calls.create, 1);
+	const createInput = harness.calls.createInputs[0];
+	// deckSessionId 必须等于 catalog 会话身份（UI 保存覆盖用的 key），而非文件路径。
+	assert.equal(createInput.deckSessionId, sessionId);
+	assert.equal(createInput.sessionPath, filePath);
+	assert.notEqual(createInput.deckSessionId, createInput.sessionPath);
 });
 
 test("explicit activation creates a runtime that is bound to the requested Session", async () => {

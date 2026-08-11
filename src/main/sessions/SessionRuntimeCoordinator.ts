@@ -873,9 +873,12 @@ export class SessionRuntimeCoordinator {
 
 		const created = !tab;
 		if (!tab) {
+			// deckSessionId = catalog 会话身份（SessionRecord.id），与 UI 保存安全等级覆盖用的 key 同源，
+			// 确保扩展按 PIDECK_SESSION_ID 能命中 sessionLevels（历史扫描会话为文件路径，新会话为 UUID）。
 			tab = await this.agents.create({
 				projectId: entry.projectId,
 				title: entry.title,
+				deckSessionId: sessionId,
 				sessionPath: entry.filePath,
 				environment: entry.environment,
 				source: entry.source,

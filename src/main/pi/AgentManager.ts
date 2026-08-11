@@ -326,7 +326,7 @@ export class AgentManager {
 	 * 内置扩展以 -e 从 app resources 加载，不再依赖用户扩展目录副本。
 	 * 安全管理：确保策略快照已落盘（小 JSON 写，等完成后启动，保证扩展首次拦截即可读到）。
 	 */
-	private createPiProcess(cwd: string, sessionPath?: string): PiProcess {
+	private createPiProcess(cwd: string, sessionPath?: string, securitySessionKey?: string): PiProcess {
 		const settings = this.settingsStore.get();
 		if (this.securityStore) {
 			void this.securityStore.ensureSnapshotWritten();
@@ -341,9 +341,9 @@ export class AgentManager {
 					},
 					processSettings?.removedBuiltInExtensions ?? settings.removedBuiltInExtensions ?? [],
 				),
-			// 会话身份 = 会话文件路径（SessionRecord.id），扩展按它解析等级覆盖；
-			// 匿名会话（noSession）无路径，扩展仅用全局默认等级。
-			securitySessionId: sessionPath,
+			// 会话身份 = PiDeck 会话 key（SessionRecord.id，UUID 或旧版文件路径），扩展按它解析等级覆盖；
+			// 匿名会话（noSession）无 key，扩展仅用全局默认等级。
+			securitySessionId: securitySessionKey ?? sessionPath,
 			securitySnapshotPath: this.securityStore?.getSnapshotPath(),
 		});
 	}
@@ -785,6 +785,7 @@ export class AgentManager {
 			cwd: project.path,
 			title: input.title || `${project.name} agent`,
 			status: "starting",
+			deckSessionId: input.deckSessionId,
 			sessionPath: input.sessionPath,
 			sessionEnvironment,
 			sessionSource: input.source ?? "pi",
@@ -807,7 +808,7 @@ export class AgentManager {
 		// 每次 spawn 前异步刷新模型列表缓存（不等完成，避免阻塞 Agent 启动）：
 		// 用户直接编辑 models.json/auth.json 后，下一次启动的 Agent 即能看到新模型。
 		this.onBeforeAgentSpawn?.();
-		const process = this.createPiProcess(project.path, input.sessionPath);
+		const process = this.createPiProcess(project.path, input.sessionPath, input.deckSessionId);
 		process.on("version-check", (payload) => {
 			void this.appLogger?.info("agent", "Pi version check completed", {
 				agentId: id,
@@ -1542,7 +1543,7 @@ export class AgentManager {
 			sessionPath,
 		});
 
-		const process = this.createPiProcess(project.path, sessionPath);
+		const process = this.createPiProcess(project.path, sessionPath, runtime.tab.deckSessionId);
 		// 与 createUnlocked 同理：监听器必须在 start() 前挂上，
 		// 避免重连窗口期 spawn error 变成未捕获异常。
 		this.attachPiProcessLifecycle(agentId, process, {
