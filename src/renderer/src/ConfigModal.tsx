@@ -326,6 +326,8 @@ function ConfigModalContent(props: ConfigModalProps) {
 	const [editPromptSaving, setEditPromptSaving] = useState(false);
 	/** 用户已删除的内置模板名称（仅当前会话有效） */
 	const [deletedBuiltinNames, setDeletedBuiltinNames] = useState<Set<string>>(new Set());
+	/** 待确认删除的 Prompt 模板（删除前弹确认框） */
+	const [deletePromptConfirm, setDeletePromptConfirm] = useState<PiPromptTemplateSummary | null>(null);
 	const [uninstallExtensionConfirm, setUninstallExtensionConfirm] = useState<PiExtensionSummary | null>(null);
 	const [rawContent, setRawContent] = useState("");
 	const [rawFileName, setRawFileName] = useState("models.json");
@@ -1733,7 +1735,7 @@ function ConfigModalContent(props: ConfigModalProps) {
 							onChangeNewName={setNewPromptName}
 							onChangeNewDescription={setNewPromptDescription}
 							onCreate={handleCreatePrompt}
-							onDelete={confirmDeletePrompt}
+							onDelete={setDeletePromptConfirm}
 							onEdit={handleEditPrompt}
 							onRename={handleRenamePrompt}
 							onQuickSave={handleQuickSavePrompt}
@@ -1816,6 +1818,17 @@ function ConfigModalContent(props: ConfigModalProps) {
 						danger
 						onConfirm={confirmUninstallExtension}
 						onCancel={() => setUninstallExtensionConfirm(null)}
+					/>
+				)}
+
+				{deletePromptConfirm && (
+					<ConfirmDialog
+						title={t("config.deletePromptConfirmTitle")}
+						message={t("config.deletePromptConfirmBody", { name: deletePromptConfirm.name })}
+						confirmLabel={t("common.delete")}
+						danger
+						onConfirm={() => void confirmDeletePrompt(deletePromptConfirm)}
+						onCancel={() => setDeletePromptConfirm(null)}
 					/>
 				)}
 
