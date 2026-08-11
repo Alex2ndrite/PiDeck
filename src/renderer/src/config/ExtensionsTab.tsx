@@ -385,8 +385,6 @@ export function ExtensionsTab(props: {
 			</div>
 			)}
 
-			<hr className="extensions-divider" />
-
 			{/* 已安装扩展列表 */}
 			<div className="config-section">
 				<h3 className="extensions-installed-title mb-2 text-sm font-semibold tracking-tight text-foreground">
