@@ -304,33 +304,6 @@
   display: inline-flex;
 }
 
-.copy-menu-popover {
-  z-index: 1200;
-  min-width: 132px;
-  padding: 4px;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-md);
-  background: var(--color-bg-panel);
-  box-shadow: var(--shadow-popover);
-}
-
-.copy-menu-popover button {
-  display: block;
-  width: 100%;
-  padding: 6px 8px;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--color-text-primary);
-  font-size: var(--font-size-caption);
-  text-align: left;
-  cursor: pointer;
-}
-
-.copy-menu-popover button:hover {
-  background: var(--color-bg-hover);
-}
-
 /* ---------- 助手正文：扁平 markdown，无气泡 ---------- */
 .assistant-text {
   width: 100%;

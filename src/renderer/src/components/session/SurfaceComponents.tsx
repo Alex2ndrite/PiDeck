@@ -131,6 +131,12 @@ import { normalizeSessionPathForCompare } from "../../agentListDisplay";
 import { t } from "../../i18n";
 import { showNotice } from "../../utils/notice";
 import { Button } from "../ui-shadcn/button";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuTrigger,
+} from "../ui-shadcn/dropdown-menu";
 import type {
 	AgentRuntimeState,
 	AgentTab,
@@ -185,9 +191,11 @@ import { MultiSelectModal } from "./MessageShareModal";
 // - 已换装 shadcn Button：turn-row-action-btn / user-turn-action-btn / copy-menu-trigger
 //   （ghost + size-7 + hover:bg-muted，对齐旧透明小钮；避免 hover:bg-accent 绿底）。
 // - 保留原生 button（样式完全由自定义 CSS 驱动，直接换装会被 Tailwind utilities 覆盖默认尺寸
-//   导致回归，需先做 CSS→utility 迁移）：copy-menu-popover 菜单项、
-//   code-copy、execution-summary-toggle/collapse、image-preview-close、outline-* 系列、
-//   scratch/terminal/files/git/editors/browser-entry、空状态创建按钮。迁移路径见 P2 CSS 收口。
+//   导致回归，需先做 CSS→utility 迁移）：code-copy、execution-summary-toggle/collapse、
+//   image-preview-close、outline-* 系列、scratch/terminal/files/git/editors/browser-entry、
+//   空状态创建按钮。迁移路径见 P2 CSS 收口。
+//   （copy-menu-popover 菜单项已于 2026-08 迁移到 shadcn DropdownMenu，保留锚点类仅用于
+//   多选导出/截图复制的节点排除。）
 // ============================================================
 
 type SessionModifiedFile = {
@@ -514,33 +522,13 @@ export function CopyMenu(props: {
 	targetRef: React.RefObject<HTMLElement | null>;
 	className?: string;
 }) {
-	const [open, setOpen] = useState(false);
 	const [copied, setCopied] = useState<string | null>(null);
-	const [menuStyle, setMenuStyle] = useState<CSSProperties>({});
-	const triggerRef = useRef<HTMLButtonElement | null>(null);
-	const closeTimerRef = useRef<number | null>(null);
-	const clearCloseTimer = () => {
-		if (closeTimerRef.current !== null) {
-			window.clearTimeout(closeTimerRef.current);
-			closeTimerRef.current = null;
-		}
-	};
-	const scheduleClose = () => {
-		// 操作栏由 hover/focus 控制显隐；离开后主动收起菜单，避免下次 hover 时复用旧 open 状态。
-		clearCloseTimer();
-		closeTimerRef.current = window.setTimeout(() => {
-			setOpen(false);
-			closeTimerRef.current = null;
-		}, 180);
-	};
-	useEffect(() => clearCloseTimer, []);
 	const copy = async (kind: "text" | "markdown" | "image") => {
 		try {
 			if (kind === "text") await navigator.clipboard.writeText(props.text);
 			if (kind === "markdown") await navigator.clipboard.writeText(props.markdown);
 			if (kind === "image" && props.targetRef.current) await copyElementAsPng(props.targetRef.current);
 			setCopied(kind);
-			setOpen(false);
 			showNotice(t("copy.success"), 1200);
 			window.setTimeout(() => setCopied(null), 1800);
 		} catch {
@@ -548,43 +536,43 @@ export function CopyMenu(props: {
 			showNotice(t("copy.failed"), 2000);
 		}
 	};
-	const toggleOpen = () => {
-		clearCloseTimer();
-		const rect = triggerRef.current?.getBoundingClientRect();
-		if (rect) {
-			setMenuStyle({
-				position: "fixed",
-				top: rect.bottom + 4,
-				left: Math.min(window.innerWidth - 156, Math.max(8, rect.right - 148)),
-			});
-		}
-		setOpen((value) => !value);
-	};
 	return (
-		<div
-			className={`copy-menu ${props.className ?? ""}`}
-			onPointerEnter={clearCloseTimer}
-			onPointerLeave={scheduleClose}
-		>
-			<Button
-				ref={triggerRef}
-				variant="ghost"
-				size="icon-sm"
-				className="copy-menu-trigger size-7 rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground"
-				type="button"
-				onClick={toggleOpen}
-				aria-expanded={open}
-				title={t("common.copy")}
-			>
-				{copied ? <Check size={14} /> : <Copy size={14} />}
-			</Button>
-			{open && (
-				<div className="copy-menu-popover" style={menuStyle}>
-					<button type="button" onClick={() => void copy("text")}>{t("copy.asText")}</button>
-					<button type="button" onClick={() => void copy("markdown")}>{t("copy.asMarkdown")}</button>
-					<button type="button" onClick={() => void copy("image")}>{t("copy.asImage")}</button>
-				</div>
-			)}
+		<div className={`copy-menu ${props.className ?? ""}`}>
+			{/* 拆分按钮：主按钮点击直接复制纯文本（默认动作，不再弹菜单）；
+			   右侧小箭头展开完整菜单（复制为 Markdown / 图片）。弹层走 shadcn
+			   DropdownMenu：Radix 定位 + animate-in/out + dropdown-stagger 错峰动画。 */}
+			<div className="flex items-center overflow-hidden rounded-sm border border-transparent hover:border-border">
+				<Button
+					variant="ghost"
+					size="icon-sm"
+					className="copy-menu-trigger size-7 rounded-none text-muted-foreground hover:bg-muted hover:text-foreground"
+					type="button"
+					onClick={() => void copy("text")}
+					title={t("common.copy")}
+				>
+					{copied ? <Check size={14} /> : <Copy size={14} />}
+				</Button>
+				<DropdownMenu>
+					<DropdownMenuTrigger asChild>
+						<Button
+							variant="ghost"
+							size="icon-sm"
+							className="size-6 rounded-none border-l border-border/60 px-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+							type="button"
+							aria-label={t("copy.moreOptions")}
+							title={t("copy.moreOptions")}
+						>
+							<ChevronDown size={12} />
+						</Button>
+					</DropdownMenuTrigger>
+					{/* 保留 copy-menu-popover 锚点类：多选导出/截图复制仍靠它排除菜单节点 */}
+					<DropdownMenuContent align="end" className="copy-menu-popover min-w-[132px]">
+						<DropdownMenuItem onSelect={() => void copy("text")}>{t("copy.asText")}</DropdownMenuItem>
+						<DropdownMenuItem onSelect={() => void copy("markdown")}>{t("copy.asMarkdown")}</DropdownMenuItem>
+						<DropdownMenuItem onSelect={() => void copy("image")}>{t("copy.asImage")}</DropdownMenuItem>
+					</DropdownMenuContent>
+				</DropdownMenu>
+			</div>
 		</div>
 	);
 }
