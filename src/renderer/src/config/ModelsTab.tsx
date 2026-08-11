@@ -306,12 +306,6 @@ export function ModelsTab(props: {
 							{t("common.deleteSelected")} ({selectedProviders.size})
 						</Button>
 					)}
-					<Button size="sm" variant="default"
-						onClick={props.onSave}
-						disabled={saving}
-					>
-						{saving ? t("common.saving") : t("common.save")}
-					</Button>
 				</div>
 			</div>
 

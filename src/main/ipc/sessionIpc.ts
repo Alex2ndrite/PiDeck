@@ -77,7 +77,9 @@ export type SessionIpcDeps = {
 	stopSessionRuntime: (target: SessionRuntimeTarget) => void;
 	emitReplacementState: (runtime: SessionRuntimeInfo, includeMessages: boolean) => void;
 	readCatalogSessionReferenceMessages: (sessionId: string) => Promise<unknown[]>;
-	copyCatalogSession: (sessionId: string) => Promise<unknown>;
+	copyCatalogSession: (
+		sessionId: string,
+	) => Promise<{ cancelled: boolean; targetSessionId?: string }>;
 	exportCatalogSessionHtml: (sessionId: string) => Promise<Record<string, unknown> & { path: string }>;
 	replaceAgentSession: (agentId: string, fn: () => Promise<any>) => Promise<any>;
 };
@@ -250,18 +252,32 @@ export function registerSessionIpc(deps: SessionIpcDeps): void {
 					// Config read is best-effort; draft creation must never block.
 				}
 			}
-			return sessionCatalog.createDraft({
+			const draft = await sessionCatalog.createDraft({
 				projectId: input.projectId,
 				title: input.title?.trim() || mainCopy("session.newTitle"),
 				environment: settingsStore.get().wslEnabled ? "wsl" : "native",
 				model,
 				thinkingLevel,
 			});
+			void appLogger.info("session", "Session draft created", {
+				sessionId: draft.id,
+				projectId: input.projectId,
+				title: draft.title,
+				model: draft.model,
+			});
+			return draft;
 		},
 	);
 	ipcMain.handle(
 		ipcChannels.sessionsCreateAnonymous,
-		(_event, input: CreateAnonymousSessionInput) => createAnonymousSession(input),
+		async (_event, input: CreateAnonymousSessionInput) => {
+			const result = await createAnonymousSession(input);
+			void appLogger.info("session", "Anonymous session created", {
+				sessionId: result.session.id,
+				projectId: input.projectId,
+			});
+			return result;
+		},
 	);
 	ipcMain.handle(
 		ipcChannels.sessionsCatalogUpdate,
@@ -276,6 +292,11 @@ export function registerSessionIpc(deps: SessionIpcDeps): void {
 					if (!renamed.ok) throw sessionCommandIpcError(renamed.error, appLogger, mainCopy);
 				} else if (entry.filePath) {
 					await sessionScanner.rename(entry.filePath, title);
+					void appLogger.info("session", "Session renamed (file)", {
+						sessionId,
+						oldTitle: entry.title,
+						newTitle: title,
+					});
 				}
 			}
 			return sessionCatalog.update(sessionId, {
@@ -423,11 +444,25 @@ export function registerSessionIpc(deps: SessionIpcDeps): void {
 	);
 	ipcMain.handle(
 		ipcChannels.sessionsCatalogCopy,
-		(_event, sessionId: string) => copyCatalogSession(sessionId),
+		async (_event, sessionId: string) => {
+			const result = await copyCatalogSession(sessionId);
+			void appLogger.info("session", "Session copied", {
+				sessionId,
+				targetSessionId: result.cancelled ? undefined : result.targetSessionId,
+			});
+			return result;
+		},
 	);
 	ipcMain.handle(
 		ipcChannels.sessionsCatalogExportHtml,
-		(_event, sessionId: string) => exportCatalogSessionHtml(sessionId),
+		async (_event, sessionId: string) => {
+			const result = await exportCatalogSessionHtml(sessionId);
+			void appLogger.info("session", "Session exported (catalog HTML)", {
+				sessionId,
+				path: result.path,
+			});
+			return result;
+		},
 	);
 	ipcMain.handle(
 		ipcChannels.sessionsSendPrompt,
@@ -537,8 +572,14 @@ export function registerSessionIpc(deps: SessionIpcDeps): void {
 	);
 	ipcMain.handle(
 		ipcChannels.sessionsRuntimeExportHtml,
-		(_event, target: SessionRuntimeTarget) =>
-			sessionRuntimeCoordinator.exportRuntimeHtml(target),
+		async (_event, target: SessionRuntimeTarget) => {
+			const result = await sessionRuntimeCoordinator.exportRuntimeHtml(target);
+			void appLogger.info("session", "Session exported (runtime HTML)", {
+				sessionId: target.sessionId,
+				ok: result.ok,
+			});
+			return result;
+		},
 	);
 	ipcMain.handle(
 		ipcChannels.sessionsRuntimeEditMessage,
@@ -575,12 +616,14 @@ export function registerSessionIpc(deps: SessionIpcDeps): void {
 			const validated = sessionRuntimeCoordinator.validateTarget(target);
 			if (!validated.ok) return validated;
 			try {
+				const value = await replaceAgentSession(
+					target.agentId,
+					() => agentManager.cloneSession(target.agentId),
+				);
+				void appLogger.info("session", "Session cloned", { sessionId: target.sessionId });
 				return {
 					ok: true as const,
-					value: await replaceAgentSession(
-						target.agentId,
-						() => agentManager.cloneSession(target.agentId),
-					),
+					value,
 				};
 			} catch (error) {
 				return {
@@ -605,12 +648,14 @@ export function registerSessionIpc(deps: SessionIpcDeps): void {
 			const validated = sessionRuntimeCoordinator.validateTarget(target);
 			if (!validated.ok) return validated;
 			try {
+				const value = await replaceAgentSession(
+					target.agentId,
+					() => agentManager.forkSession(target.agentId, entryId),
+				);
+				void appLogger.info("session", "Session forked", { sessionId: target.sessionId, entryId });
 				return {
 					ok: true as const,
-					value: await replaceAgentSession(
-						target.agentId,
-						() => agentManager.forkSession(target.agentId, entryId),
-					),
+					value,
 				};
 			} catch (error) {
 				return {
@@ -628,7 +673,9 @@ export function registerSessionIpc(deps: SessionIpcDeps): void {
 		async (_event, projectId: string) => {
 			const project = projectStore.get(projectId);
 			if (!project) throw new Error(`Project not found: ${projectId}`);
-			return codexSessionImporter.scan(project.path);
+			const result = await codexSessionImporter.scan(project.path);
+			void appLogger.debug("session", "Codex sessions scanned", { projectId });
+			return result;
 		},
 	);
 	ipcMain.handle(
@@ -636,7 +683,12 @@ export function registerSessionIpc(deps: SessionIpcDeps): void {
 		async (_event, projectId: string, sourcePaths: string[]) => {
 			const project = projectStore.get(projectId);
 			if (!project) throw new Error(`Project not found: ${projectId}`);
-			return codexSessionImporter.import(project.path, sourcePaths);
+			const result = await codexSessionImporter.import(project.path, sourcePaths);
+			void appLogger.info("session", "Codex sessions imported", {
+				projectId,
+				sourceCount: sourcePaths.length,
+			});
+			return result;
 		},
 	);
 	ipcMain.handle(
@@ -644,7 +696,9 @@ export function registerSessionIpc(deps: SessionIpcDeps): void {
 		async (_event, projectId: string) => {
 			const project = projectStore.get(projectId);
 			if (!project) throw new Error(`Project not found: ${projectId}`);
-			return claudeSessionImporter.scan(project.path);
+			const result = await claudeSessionImporter.scan(project.path);
+			void appLogger.debug("session", "Claude sessions scanned", { projectId });
+			return result;
 		},
 	);
 	ipcMain.handle(
@@ -652,7 +706,12 @@ export function registerSessionIpc(deps: SessionIpcDeps): void {
 		async (_event, projectId: string, sourcePaths: string[]) => {
 			const project = projectStore.get(projectId);
 			if (!project) throw new Error(`Project not found: ${projectId}`);
-			return claudeSessionImporter.import(project.path, sourcePaths);
+			const result = await claudeSessionImporter.import(project.path, sourcePaths);
+			void appLogger.info("session", "Claude sessions imported", {
+				projectId,
+				sourceCount: sourcePaths.length,
+			});
+			return result;
 		},
 	);
 	ipcMain.handle(
@@ -660,7 +719,9 @@ export function registerSessionIpc(deps: SessionIpcDeps): void {
 		async (_event, projectId: string) => {
 			const project = projectStore.get(projectId);
 			if (!project) throw new Error(`Project not found: ${projectId}`);
-			return openCodeSessionImporter.scan(project.path);
+			const result = await openCodeSessionImporter.scan(project.path);
+			void appLogger.debug("session", "OpenCode sessions scanned", { projectId });
+			return result;
 		},
 	);
 	ipcMain.handle(
@@ -668,7 +729,12 @@ export function registerSessionIpc(deps: SessionIpcDeps): void {
 		async (_event, projectId: string, sourcePaths: string[]) => {
 			const project = projectStore.get(projectId);
 			if (!project) throw new Error(`Project not found: ${projectId}`);
-			return openCodeSessionImporter.import(project.path, sourcePaths);
+			const result = await openCodeSessionImporter.import(project.path, sourcePaths);
+			void appLogger.info("session", "OpenCode sessions imported", {
+				projectId,
+				sourceCount: sourcePaths.length,
+			});
+			return result;
 		},
 	);
 }

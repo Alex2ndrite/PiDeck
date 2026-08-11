@@ -83,8 +83,15 @@ export interface SessionAgentGateway {
 	): void;
 }
 
-export interface SessionRuntimePerfLogger {
+/**
+ * 会话运行时业务日志接口（AppLogger 满足该签名）。
+ * 会话全周期事件（激活/停止/重启/模型切换等）经此留痕，与性能日志（session-perf scope）区分；
+ * 无实例时静默跳过（启动早期/测试环境）。
+ */
+export interface SessionRuntimeLogger {
 	info(scope: string, message: string, detail?: unknown): unknown;
+	warn(scope: string, message: string, detail?: unknown): unknown;
+	error(scope: string, message: string, detail?: unknown): unknown;
 }
 
 type DeliveryCacheEntry = {
@@ -168,12 +175,14 @@ export class SessionRuntimeCoordinator {
 		private readonly catalog: SessionCatalogGateway,
 		private readonly agents: SessionAgentGateway,
 		private readonly sendAgentPrompt: (input: SendPromptInput) => Promise<SendPromptResult>,
-		private readonly perfLogger?: SessionRuntimePerfLogger,
+		private readonly logger?: SessionRuntimeLogger,
 	) {}
 
 	/** 渲染层在 currentSessionId 变化时汇报聚焦会话（见 sessions:set-focused-session IPC）。 */
 	setFocusedSession(sessionId: string | undefined): void {
 		this.focusedSessionId = sessionId;
+		// 聚焦切换高频发生（点列表即触发），用 debug 级别避免刷屏
+		void this.logger?.info("session-runtime", "Focused session changed", { sessionId });
 	}
 
 	getFocusedSession(): string | undefined {
@@ -263,6 +272,11 @@ export class SessionRuntimeCoordinator {
 	): Promise<SessionCommandResult<SessionRuntimeInfo>> {
 		try {
 			const tab = await this.ensureRuntime(sessionId);
+			void this.logger?.info("session-runtime", "Runtime activated", {
+				sessionId,
+				agentId: tab.id,
+				status: tab.status,
+			});
 			return { ok: true, value: this.runtimeInfo(sessionId, tab) };
 		} catch (error) {
 			return this.commandFailure(error);
@@ -283,6 +297,11 @@ export class SessionRuntimeCoordinator {
 		}
 		const runtimeGeneration = this.bind(sessionId, agentId);
 		tab.runtimeGeneration = runtimeGeneration;
+		void this.logger?.info("session-runtime", "Anonymous runtime bound", {
+			sessionId,
+			agentId,
+			runtimeGeneration,
+		});
 		return this.runtimeInfo(sessionId, tab);
 	}
 
@@ -299,7 +318,15 @@ export class SessionRuntimeCoordinator {
 		target: SessionRuntimeTarget,
 		name: string,
 	): Promise<SessionCommandResult<SessionTargetedValue<AgentTab>>> {
-		return this.runTargetCommand(target, (agentId) => this.agents.rename(agentId, name));
+		return this.runTargetCommand(target, async (agentId) => {
+			const result = await this.agents.rename(agentId, name);
+			void this.logger?.info("session-runtime", "Runtime renamed", {
+				sessionId: target.sessionId,
+				agentId,
+				name,
+			});
+			return result;
+		});
 	}
 
 	abortRuntime(
@@ -404,6 +431,12 @@ export class SessionRuntimeCoordinator {
 				updatedAt: Date.now(),
 			});
 			await this.agents.setModel(agentId, provider, modelId);
+			void this.logger?.info("session-runtime", "Runtime model changed", {
+				sessionId: target.sessionId,
+				agentId,
+				provider,
+				modelId,
+			});
 			return this.agents.getRuntimeState(agentId);
 		});
 	}
@@ -418,6 +451,11 @@ export class SessionRuntimeCoordinator {
 				updatedAt: Date.now(),
 			});
 			await this.agents.setThinking(agentId, level);
+			void this.logger?.info("session-runtime", "Runtime thinking changed", {
+				sessionId: target.sessionId,
+				agentId,
+				level,
+			});
 			return this.agents.getRuntimeState(agentId);
 		});
 	}
@@ -434,6 +472,11 @@ export class SessionRuntimeCoordinator {
 			this.releaseRuntimeReplacement(reservation);
 			reservation = undefined;
 			this.unbindAgentUnchecked(target.agentId);
+			void this.logger?.info("session-runtime", "Runtime stopped", {
+				sessionId: target.sessionId,
+				agentId: target.agentId,
+				runtimeGeneration: target.runtimeGeneration,
+			});
 			return { ok: true, value: target };
 		} catch (error) {
 			return this.commandFailure(error);
@@ -456,6 +499,7 @@ export class SessionRuntimeCoordinator {
 			const binding = this.getRuntimeBinding(agentId);
 			if (!binding) {
 				await this.agents.stop(agentId);
+				void this.logger?.info("session-runtime", "Agent stopped (unbound)", { agentId });
 				return { ok: true, value: undefined };
 			}
 			const target: SessionRuntimeTarget = {
@@ -479,6 +523,11 @@ export class SessionRuntimeCoordinator {
 			if (!session) {
 				throw new SessionRuntimeCommandError("SESSION_NOT_FOUND", "Session no longer exists");
 			}
+			void this.logger?.info("session-runtime", "Runtime restarted", {
+				sessionId: target.sessionId,
+				agentId: target.agentId,
+				runtimeGeneration: target.runtimeGeneration,
+			});
 			return {
 				ok: true,
 				value: {
@@ -742,18 +791,18 @@ export class SessionRuntimeCoordinator {
 
 	private async sendOnce(input: SendSessionPromptInput): Promise<SendSessionPromptResult> {
 		const pipelineStartedAt = Date.now();
-		void this.perfLogger?.info("session-perf", "Prompt pipeline started", {
+		void this.logger?.info("session-perf", "Prompt pipeline started", {
 			sessionId: input.sessionId,
 			requestId: input.requestId,
 		});
 		let tab: AgentTab;
 		try {
-			void this.perfLogger?.info("session-perf", "Runtime activation started", {
+			void this.logger?.info("session-perf", "Runtime activation started", {
 				sessionId: input.sessionId,
 				requestId: input.requestId,
 			});
 			tab = await this.ensureRuntime(input.sessionId);
-			void this.perfLogger?.info("session-perf", "Runtime activation completed", {
+			void this.logger?.info("session-perf", "Runtime activation completed", {
 				sessionId: input.sessionId,
 				requestId: input.requestId,
 				agentId: tab.id,
@@ -777,7 +826,7 @@ export class SessionRuntimeCoordinator {
 
 			let result: SendPromptResult;
 			const dispatchStartedAt = Date.now();
-			void this.perfLogger?.info("session-perf", "Prompt dispatch started", {
+			void this.logger?.info("session-perf", "Prompt dispatch started", {
 				sessionId: input.sessionId,
 				requestId: input.requestId,
 				agentId: lease.agentId,
@@ -792,7 +841,7 @@ export class SessionRuntimeCoordinator {
 					description: input.description,
 					requestId: input.requestId,
 				});
-				void this.perfLogger?.info("session-perf", "Prompt dispatch completed", {
+				void this.logger?.info("session-perf", "Prompt dispatch completed", {
 					sessionId: input.sessionId,
 					requestId: input.requestId,
 					agentId: lease.agentId,

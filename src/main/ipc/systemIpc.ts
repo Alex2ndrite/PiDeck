@@ -619,7 +619,7 @@ export function registerSystemIpc(deps: SystemIpcDeps): void {
 	ipcMain.handle(ipcChannels.settingsUpdate, async (_event, patch: Partial<AppSettings>) => {
 		const prevSettings = settingsStore.get();
 		const settings = await settingsStore.update(patch);
-		void appLogger.info("settings", "Settings updated", { keys: Object.keys(patch) });
+		// 设置变更审计已下沉到 SettingsStore.update 内部统一留痕（覆盖所有直写路径），此处不重复记录
 
 		if (typeof reactToPetSettings === "function") {
 			await reactToPetSettings(prevSettings, settings);

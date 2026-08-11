@@ -1,5 +1,6 @@
 import { app, session } from "electron";
 import type { AppSettings } from "../../shared/types";
+import { getAppLogger } from "../logging/sharedLogger";
 
 type DesktopProxySettings = Pick<
 	AppSettings,
@@ -8,8 +9,18 @@ type DesktopProxySettings = Pick<
 
 export async function applyDesktopProxy(settings: DesktopProxySettings) {
 	const config = buildDesktopProxyConfig(settings);
-	await session.defaultSession.setProxy(config);
-	await app.setProxy(config);
+	try {
+		await session.defaultSession.setProxy(config);
+		await app.setProxy(config);
+		// 桌面代理属全局网络配置：只记 mode，不记 proxyRules（URL 可能内嵌凭据）
+		void getAppLogger()?.info("settings", "Desktop proxy applied", { mode: config.mode });
+	} catch (error) {
+		void getAppLogger()?.error("settings", "Desktop proxy apply failed", {
+			mode: config.mode,
+			error: error instanceof Error ? error.message : String(error),
+		});
+		throw error;
+	}
 }
 
 function buildDesktopProxyConfig(settings: DesktopProxySettings) {

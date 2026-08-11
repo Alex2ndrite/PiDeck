@@ -245,14 +245,18 @@ export class AgentManager {
 	private readonly streamGates = new Map<string, StreamGateState>();
 
 	/**
-	 * 流式性能计时：message_start/start 起表，首个 text/thinking delta 记 firstDeltaAt，
+	 * 流式性能计时：以 sendPrompt 发出的请求时刻为起点（而非收到 message_start），
+	 * 首个 thinking/text delta 记 firstDeltaAt，正文首 delta 记 firstTextAt，
 	 * message_end/done/error 结算。用于计算首 token 延迟（TTFT）、总耗时与生成速度（TPS）。
 	 * pi 不暴露耗时字段，只能由本地事件时间戳推算。
 	 */
 	private readonly messagePerfByAgent = new Map<
 		string,
-		{ startedAt: number; firstDeltaAt: number }
+		{ startedAt: number; firstDeltaAt: number; firstTextAt: number }
 	>();
+
+	/** sendPrompt 发出的请求时刻（毫秒），供首个 message_start 起表时优先使用（含排队时间）。 */
+	private readonly promptRequestedAtByAgent = new Map<string, number>();
 
 	/** 最近一次 assistant 回复的性能指标（结算后保留，供 getRuntimeState 合并展示）。 */
 	private readonly lastPerfByAgent = new Map<
@@ -1295,6 +1299,9 @@ export class AgentManager {
 			}
 			// 使用用户配置的 RPC 超时时间，因为用户提示词可能触发长时间运行的命令或复杂操作
 			const rpcStartedAt = Date.now();
+			// 首字计时起点：RPC 请求发出时刻（而非收到 message_start），把 pi 内部排队与
+			// 模型服务端等待计入用户体感的首 token 延迟，避免统计系统性偏短。
+			this.promptRequestedAtByAgent.set(input.agentId, rpcStartedAt);
 			void this.appLogger?.info("session-perf", "Prompt RPC request started", {
 				agentId: input.agentId,
 				requestId: input.requestId,
@@ -2328,6 +2335,11 @@ export class AgentManager {
 
 	async restart(agentId: string): Promise<AgentTab> {
 		const runtime = this.requireRuntime(agentId);
+		void this.appLogger?.info("agent", "Agent restart requested", {
+			agentId,
+			projectId: runtime.tab.projectId,
+			sessionPath: runtime.tab.sessionPath,
+		});
 		const {
 			projectId,
 			title,
@@ -2591,6 +2603,11 @@ export class AgentManager {
 	async stop(agentId: string) {
 		const runtime = this.agents.get(agentId);
 		if (!runtime) return;
+		void this.appLogger?.info("agent", "Agent stopped (user initiated)", {
+			agentId,
+			projectId: runtime.tab.projectId,
+			sessionPath: runtime.tab.sessionPath,
+		});
 		// 标记用户主动停止，退出处理器将跳过自动重连
 		this.userInitiatedStop.add(agentId);
 		const process = runtime.process;
@@ -2815,12 +2832,21 @@ export class AgentManager {
 			this.userInitiatedStop.delete(agentId);
 			tab.status = "closed";
 			this.emitState();
+			void this.appLogger?.info("agent", "Agent process exit handled: user-initiated stop", {
+				agentId,
+				code: payload.code,
+				signal: payload.signal,
+			});
 			return;
 		}
 		// 手动压缩期间退出 → compact() 的 catch 块会负责重连
 		if (this.compactingAgents.has(agentId)) {
 			tab.status = "closed";
 			this.emitState();
+			void this.appLogger?.info("agent", "Agent process exit handled: compaction in progress", {
+				agentId,
+				code: payload.code,
+			});
 			return;
 		}
 		// 自动压缩 / 进程干净退出（exit code 0）且有会话路径 → 尝试一次自动重连
@@ -2828,6 +2854,11 @@ export class AgentManager {
 			this.autoRestartAttempted.add(agentId);
 			tab.status = "starting";
 			this.emitState();
+			void this.appLogger?.info("agent", "Agent process exited cleanly; auto-restarting", {
+				agentId,
+				code: payload.code,
+				sessionPath: tab.sessionPath,
+			});
 			this.reattachProcess(agentId, tab.sessionPath)
 				.then(() => {
 					tab.status = "idle";
@@ -2841,6 +2872,11 @@ export class AgentManager {
 				})
 				.catch(() => {
 					tab.status = "closed";
+					void this.appLogger?.error("agent", "Agent auto-restart failed", {
+						agentId,
+						code: payload.code,
+						sessionPath: tab.sessionPath,
+					});
 					this.addLocalizedMessage(
 						agentId,
 						"error",
@@ -3650,6 +3686,7 @@ export class AgentManager {
 		if (eventType === "text_delta") {
 			this.streamingAgents.add(agentId);
 			this.markFirstDelta(agentId);
+			this.markFirstText(agentId);
 			const delta = String(assistantEvent.delta ?? "");
 			// Live 正文唯一热路径：累积后经 textEmitter（50ms）推送，不增长 messages。
 			const prevText = this.streamingText.get(agentId) ?? "";
@@ -3729,20 +3766,39 @@ export class AgentManager {
 	}
 
 	/**
+	 * 记录正文首 delta 时刻：思考模式下 thinking_delta 先到，用户感知的「首字」是正文首字，
+	 * 因此 text_delta 单独记一次（只在 text_delta 分支调用）；无思考时即首个 text_delta。
+	 */
+	private markFirstText(agentId: string) {
+		const perf = this.messagePerfByAgent.get(agentId);
+		if (perf && perf.firstTextAt === 0) {
+			perf.firstTextAt = Date.now();
+		}
+	}
+
+	/**
 	 * 幂等起表：顶层 message_start 与 message_update start 两条路径都可能先到，
 	 * 只在尚无计时器时创建，避免后者覆盖前者丢失 startedAt。
+	 * 起点优先取 sendPrompt 记录的请求发出时刻（消费后删除，防止工具后续答回合
+	 * 误用上一次请求起点）；无请求起点（续答/内部触发）时回退到事件到达时刻。
 	 */
 	private ensurePerfTimer(agentId: string) {
 		if (!this.messagePerfByAgent.has(agentId)) {
-			this.messagePerfByAgent.set(agentId, { startedAt: Date.now(), firstDeltaAt: 0 });
+			const requestedAt = this.promptRequestedAtByAgent.get(agentId);
+			if (requestedAt !== undefined) this.promptRequestedAtByAgent.delete(agentId);
+			this.messagePerfByAgent.set(agentId, {
+				startedAt: requestedAt ?? Date.now(),
+				firstDeltaAt: 0,
+				firstTextAt: 0,
+			});
 		}
 	}
 
 	/**
 	 * message_end/done/error：结算本次回复的性能指标并边沿推送渲染层（不触发 RPC，
 	 * 避免流式热路径上叠加 get_state/get_session_stats 开销）。
-	 * - ttftMs = 首 delta − message_start（LLM 首 token 延迟，含流式传输）；
-	 * - totalMs = 终态 − message_start（本轮回复总耗时）；
+	 * - ttftMs = 首字（正文首 delta，思考模式下用户感知的首字；无正文退回首 delta）− 请求发出时刻；
+	 * - totalMs = 终态 − 请求发出时刻（本轮回复总耗时）；
 	 * - tps = output tokens ÷ 生成期时长（首 delta → 终态），分母排除 TTFT 更贴近真实生成速度。
 	 * 纯工具调用回合（无 text/thinking delta）只有 totalMs，ttft/tps 缺省。
 	 */
@@ -3752,8 +3808,10 @@ export class AgentManager {
 		if (!perf) return;
 		const now = Date.now();
 		const totalMs = now - perf.startedAt;
-		const ttftMs =
-			perf.firstDeltaAt > 0 ? perf.firstDeltaAt - perf.startedAt : undefined;
+		// 首字延迟：正文首 delta 优先；纯思考/中途 abort 无正文时退回首 delta，保证有值可展示
+		const firstContentAt =
+			perf.firstTextAt > 0 ? perf.firstTextAt : perf.firstDeltaAt > 0 ? perf.firstDeltaAt : 0;
+		const ttftMs = firstContentAt > 0 ? firstContentAt - perf.startedAt : undefined;
 		// message_end 携带完整 assistant 消息，usage 兼容多种命名提取 output tokens
 		const usage = (message as any)?.usage;
 		const outputTokens = pickNumber(

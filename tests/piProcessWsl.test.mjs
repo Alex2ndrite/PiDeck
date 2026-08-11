@@ -75,6 +75,10 @@ function loadPiProcess(spawnCalls) {
 			if (id === "../extensions/builtInExtensions") {
 				return { appendBuiltInExtensionArgs: (args) => [...args] };
 			}
+			// sharedLogger 未注册时 getAppLogger 返回 null，PiProcess 埋点静默跳过
+			if (id === "../logging/sharedLogger") {
+				return { getAppLogger: () => null };
+			}
 			return require(id);
 		},
 	};

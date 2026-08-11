@@ -163,8 +163,17 @@ export class VisionBridgeConfigManager {
 			const dir = visionConfigDir();
 			await mkdir(dir, { recursive: true });
 			await writeFile(join(dir, CONFIG_FILE_NAME), JSON.stringify(next, null, 2), "utf8");
+			// 视觉桥配置含 apiKey 敏感写：只记 provider 与是否携带 key，不记 key 值
+			void getAppLogger()?.info("vision", "Vision config saved", {
+				provider: (next as { provider?: string }).provider,
+				hasApiKey: Boolean((next as { apiKey?: string }).apiKey),
+			});
 			return { ok: true };
 		} catch (error) {
+			void getAppLogger()?.error("vision", "Vision config save failed", {
+				provider: (next as { provider?: string }).provider,
+				error: error instanceof Error ? error.message : String(error),
+			});
 			return { ok: false, error: error instanceof Error ? error.message : String(error) };
 		}
 	}

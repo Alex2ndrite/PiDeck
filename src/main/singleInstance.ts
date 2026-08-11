@@ -11,6 +11,7 @@ import {
 	type FSWatcher,
 } from "node:fs";
 import { basename, join } from "node:path";
+import { getAppLogger } from "./logging/sharedLogger";
 
 /**
  * 按「应用版本」隔离的单实例锁。
@@ -164,8 +165,17 @@ export function acquireVersionSingleInstance(
 		} catch {
 			// 主实例仍在但 focus 写失败时，次实例照常退出，避免双开
 		}
+		void getAppLogger()?.info("single-instance", "Secondary instance exiting; focus requested", {
+			version,
+			fromPid: process.pid,
+		});
 		return { isPrimary: false, dispose: () => undefined };
 	}
+
+	void getAppLogger()?.info("single-instance", "Primary instance lock acquired", {
+		version,
+		pid: process.pid,
+	});
 
 	const handleFocusSignal = () => {
 		try {
@@ -176,6 +186,9 @@ export function acquireVersionSingleInstance(
 			} catch {
 				// 旧格式或损坏时退化为空 payload
 			}
+			void getAppLogger()?.info("single-instance", "Focus request received from secondary instance", {
+				fromPid: payload.fromPid,
+			});
 			// 读完即删，避免重复触发
 			try {
 				unlinkSync(focusPath);

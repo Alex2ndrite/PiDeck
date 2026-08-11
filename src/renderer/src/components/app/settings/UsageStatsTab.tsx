@@ -16,6 +16,8 @@ import { SettingsSection } from "./SettingsStorageTab";
 import { Button } from "../../ui-shadcn/button";
 import { UsageHeatmap } from "../usageStats/UsageHeatmap";
 import { UsageDailyChart } from "../usageStats/UsageDailyChart";
+import { UsageDayDetail } from "../usageStats/UsageDayDetail";
+import { UsageTable } from "../usageStats/UsageTable";
 import { formatCost, formatTokens } from "../usageStats/format";
 
 type Phase = "loading" | "missing" | "ready" | "error";
@@ -114,7 +116,11 @@ function UsageRows(props: { data: UsageAggregated }) {
   );
   return (
     <>
-      <div className="usage-stats-cards">
+      {/* 按天明细（默认今日）：当日卡片 + provider 条 + 当日模型/项目表；可切其他天 */}
+      <UsageDayDetail rows={data.daily} costKnown={data.costKnown} />
+      {/* 累计概览：独立分块（divided 横线分隔），与上方当日区块明确区分 */}
+      <SettingsSection divided boxed={false} title={t("usageStats.cards.title")}>
+        <div className="usage-stats-cards">
         <SummaryCard
           label={t("usageStats.cards.totalTokens")}
           value={formatTokens(data.totals.tokens)}
@@ -135,7 +141,8 @@ function UsageRows(props: { data: UsageAggregated }) {
           value={String(data.activeDays)}
           sub={t("usageStats.window", { since: dateKey(data.window.since), days })}
         />
-      </div>
+        </div>
+      </SettingsSection>
       {/* 卡片总览与首个图表区块之间仅保留一条横线（由 heatmap 分区的 divided 提供），
          图表区块均不套框，靠横线 + 标题分层 */}
       <SettingsSection divided boxed={false} title={t("usageStats.heatmap.title")}>
@@ -179,34 +186,6 @@ function UsageRows(props: { data: UsageAggregated }) {
           />
         </SettingsSection>
     </>
-  );
-}
-
-function UsageTable(props: { headers: string[]; rows: string[][] }) {
-  if (props.rows.length === 0) {
-    return <div className="usage-stats-hint">{t("usageStats.table.empty")}</div>;
-  }
-  return (
-    <table className="usage-stats-table">
-      <thead>
-        <tr>
-          {props.headers.map((h, i) => (
-            <th key={i}>{h}</th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>
-        {props.rows.slice(0, 12).map((row, ri) => (
-          <tr key={ri}>
-            {row.map((cell, ci) => (
-              <td key={ci} title={ci === 0 ? cell : undefined}>
-                {cell}
-              </td>
-            ))}
-          </tr>
-        ))}
-      </tbody>
-    </table>
   );
 }
 
@@ -288,36 +267,18 @@ export function UsageStatsTab() {
 
   return (
     <>
-      {/* pi-tracker 日志位置提示：不套框，与 tab 名同级 */}
-      {detect?.logPath && (
-        <p className="break-all px-0.5 pb-3 text-caption text-muted-foreground">
-          {detect.logPath}
-        </p>
-      )}
-        {phase === "loading" && <div className="usage-stats-hint">{t("usageStats.loading")}</div>}
-        {phase === "missing" && <NotInstalledCard onRefresh={refresh} />}
-        {phase === "error" && (
-          <div className="usage-stats-hint">
-            {t("usageStats.error")}
-            <br />
-            <small>{t("usageStats.errorHint", { message: error })}</small>
-          </div>
-        )}
-        {phase === "ready" && data && data.recordCount > 0 && <UsageRows data={data} />}
-        {phase === "ready" && (!data || data.recordCount === 0) && (
-          <div className="usage-stats-hint">
-            {t("usageStats.empty.title")}
-            <br />
-            <small>{t("usageStats.empty.desc")}</small>
-            <br />
-            <small>{t("usageStats.empty.backfill")}</small>
-          </div>
+      {/* 顶部工具栏：日志路径提示（左）+ 刷新按钮（右，用户要求从底部移到顶部） */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        {detect?.logPath && (
+          <p className="break-all px-0.5 pb-3 text-caption text-muted-foreground">
+            {detect.logPath}
+          </p>
         )}
         {(phase === "ready" || phase === "missing") && (
           <Button
             variant="secondary"
             size="sm"
-            className="usage-stats-refresh"
+            className="ml-auto"
             onClick={refresh}
             disabled={refreshing}
             loading={refreshing}
@@ -325,6 +286,26 @@ export function UsageStatsTab() {
             {refreshing ? t("usageStats.refreshing") : t("usageStats.refresh")}
           </Button>
         )}
+      </div>
+      {phase === "loading" && <div className="usage-stats-hint">{t("usageStats.loading")}</div>}
+      {phase === "missing" && <NotInstalledCard onRefresh={refresh} />}
+      {phase === "error" && (
+        <div className="usage-stats-hint">
+          {t("usageStats.error")}
+          <br />
+          <small>{t("usageStats.errorHint", { message: error })}</small>
+        </div>
+      )}
+      {phase === "ready" && data && data.recordCount > 0 && <UsageRows data={data} />}
+      {phase === "ready" && (!data || data.recordCount === 0) && (
+        <div className="usage-stats-hint">
+          {t("usageStats.empty.title")}
+          <br />
+          <small>{t("usageStats.empty.desc")}</small>
+          <br />
+          <small>{t("usageStats.empty.backfill")}</small>
+        </div>
+      )}
     </>
   );
 }

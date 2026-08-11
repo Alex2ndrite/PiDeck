@@ -15,6 +15,7 @@ import type {
 	SessionSource,
 	SessionSummary,
 } from "../../shared/types";
+import { getAppLogger } from "../logging/sharedLogger";
 import {
 	buildSessionOriginKey,
 	buildSummaryOriginKey,
@@ -152,6 +153,11 @@ export class SessionCatalog {
 				if (isMissingFileError(primaryError) && isMissingFileError(backupError)) {
 					this.entries = [];
 				} else {
+					// catalog 主文件与备份同时损坏是数据丢失信号，必须留 error 级日志供审计
+					void getAppLogger()?.error("session-catalog", "Catalog and backup both failed to load", {
+						primary: primaryError instanceof Error ? primaryError.message : String(primaryError),
+						backup: backupError instanceof Error ? backupError.message : String(backupError),
+					});
 					throw new Error(
 						`Failed to load Session catalog or backup: ${String(primaryError)}; ${String(backupError)}`,
 					);

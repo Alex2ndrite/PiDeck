@@ -572,6 +572,7 @@ export function registerGitIpc({
 			if (!project) throw new Error(`Project not found: ${projectId}`);
 			const { execFile } = await import("node:child_process");
 			await execFile("git", ["init"], { cwd: project.path });
+			void appLogger.info("git", "Repository initialized", { projectId, path: project.path });
 		},
 	);
 

@@ -72,12 +72,33 @@ export type DayTotals = {
 	sessions: string[];
 };
 
-/** 某天用量行（含 provider 分解）。 */
+/** 单日某模型切片（按天明细表用）。 */
+export type UsageDayModelSlice = {
+	model: string;
+	provider: string;
+	tokens: number;
+	cost: number;
+	turns: number;
+};
+
+/** 单日某项目切片（按天明细表用）。 */
+export type UsageDayProjectSlice = {
+	project: string;
+	tokens: number;
+	cost: number;
+	turns: number;
+};
+
+/** 某天用量行（含 provider 分解与模型/项目明细）。 */
 export type UsageDayRow = {
 	/** "YYYY-MM-DD" 本地时区 */
 	day: string;
 	totals: DayTotals;
 	byProvider: ProviderSlice[];
+	/** 当日模型明细（tokens 降序） */
+	byModel: UsageDayModelSlice[];
+	/** 当日项目明细（tokens 降序） */
+	byProject: UsageDayProjectSlice[];
 };
 
 /** 热力图格子（52 周 × 7 天，周一起始，含空天）。 */

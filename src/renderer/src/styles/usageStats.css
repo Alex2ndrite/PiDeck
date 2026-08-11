@@ -55,9 +55,6 @@
 .usage-stats-not-installed p {
   margin: 6px 0;
 }
-.usage-stats-refresh {
-  margin-top: 10px;
-}
 .usage-stats-table {
   width: 100%;
   border-collapse: collapse;

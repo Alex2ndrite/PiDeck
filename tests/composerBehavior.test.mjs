@@ -172,3 +172,43 @@ test("detects yes/no confirm options and rejects multi-choice selects", () => {
 	assert.equal(isYesNoConfirmOptions(["是"]), false);
 	assert.equal(isYesNoConfirmOptions(["是", "否", "其它"]), false);
 });
+
+test("expandPromptTemplates keeps /name as-is when the template body is empty (frontmatter only)", () => {
+	const { expandPromptTemplates } = loadComposerBehaviorModule();
+	// 回归：UI 新建模板只写 frontmatter、正文待编辑（PromptManager.create 行为），
+	// 直接发送 /name 时旧实现展开出空白消息（仅剩分隔符 \n\n），被主进程拒为“消息不能为空”。
+	const templates = [
+		{
+			name: "commit-push",
+			path: "C:/Users/me/.pi/agent/prompts/commit-push.md",
+			description: "提交推送",
+			content: "---\ndescription: 提交推送\n---\n",
+		},
+		{
+			name: "review",
+			path: "builtin://review",
+			description: "审查",
+			content: "---\ndescription: 审查\n---\n\n请审查暂存的 Git 更改",
+		},
+	];
+
+	// 只有空模板：消息保持原文，标记 emptyTemplateName
+	const emptyOnly = expandPromptTemplates("/commit-push ", templates);
+	assert.equal(emptyOnly.message, "/commit-push ");
+	assert.equal(emptyOnly.emptyTemplateName, "commit-push");
+
+	// 空模板无尾随空格：同样保持原文
+	const noTrailing = expandPromptTemplates("/commit-push", templates);
+	assert.equal(noTrailing.message, "/commit-push");
+	assert.equal(noTrailing.emptyTemplateName, "commit-push");
+
+	// 正常模板照常展开，不产生 emptyTemplateName
+	const normal = expandPromptTemplates("/review", templates);
+	assert.equal(normal.message, "\n请审查暂存的 Git 更改");
+	assert.equal(normal.emptyTemplateName, undefined);
+
+	// 消息同时含空模板与普通文本：展开其余部分，仍标记空模板
+	const mixed = expandPromptTemplates("先看下 /commit-push 再处理", templates);
+	assert.equal(mixed.message, "先看下 /commit-push 再处理");
+	assert.equal(mixed.emptyTemplateName, "commit-push");
+});

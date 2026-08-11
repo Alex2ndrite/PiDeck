@@ -619,7 +619,8 @@ export function PromptTemplatePicker(props: {
 				<div className="picker-preview-inline">
 					<Button
 						type="button"
-						className="picker-preview-back-btn h-auto gap-1 px-1 text-caption"
+						variant="ghost"
+						className="h-auto gap-1 px-1 text-caption"
 						onClick={() => setPreviewTemplate(null)}
 						title={t("app.promptTemplateBackToPicker")}
 					>
@@ -656,7 +657,8 @@ export function PromptTemplatePicker(props: {
 							<span className="picker-palette-desc">{template.description}</span>
 							<Button
 								type="button"
-								className="picker-palette-preview-btn"
+								variant="ghost"
+								size="icon-sm"
 								title={t("common.preview")}
 								onClick={(e) => {
 									e.stopPropagation();

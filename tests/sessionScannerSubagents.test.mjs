@@ -137,6 +137,8 @@ function loadSessionScanner(homePath, fsOverrides = {}) {
 			if (id === "../pi/messageContent") return messageContent;
 			if (id === "../wsl/WslPaths") return wslPaths;
 			if (id === "./sessionSummaryCache") return sessionSummaryCache;
+			// sharedLogger 未注册时 getAppLogger 返回 null，SessionScanner 埋点静默跳过
+			if (id === "../logging/sharedLogger") return { getAppLogger: () => null };
 			if (id === "node:fs") return { ...require(id), ...fsOverrides };
 			return require(id);
 		},

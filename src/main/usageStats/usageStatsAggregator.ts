@@ -17,6 +17,8 @@ import type {
   HeatmapCell,
   ProviderSlice,
   UsageAggregated,
+  UsageDayModelSlice,
+  UsageDayProjectSlice,
   UsageDayRow,
   UsageModelRow,
   UsageProjectRow,
@@ -34,6 +36,8 @@ export type UsageStatsIntermediate = {
     totals: DayTotals;
     sessions: string[];
     byProvider: ProviderSlice[];
+    byModel: UsageDayModelSlice[];
+    byProject: UsageDayProjectSlice[];
   }>;
   modelBuckets: Array<{
     model: string;
@@ -108,6 +112,8 @@ type DayBucket = {
   totals: DayTotals;
   sessions: Set<string>;
   byProvider: Map<string, ProviderSlice>;
+  byModel: Map<string, UsageDayModelSlice>;
+  byProject: Map<string, UsageDayProjectSlice>;
 };
 
 function addToProvider(map: Map<string, ProviderSlice>, provider: string, r: UsageRecord): void {
@@ -119,6 +125,68 @@ function addToProvider(map: Map<string, ProviderSlice>, provider: string, r: Usa
   slice.tokens += r.totalTokens;
   slice.cost += r.cost;
   slice.turns += 1;
+}
+
+/** 累加单日模型桶（key = "provider/model"）。 */
+function addToDayModel(map: Map<string, UsageDayModelSlice>, model: string, r: UsageRecord): void {
+  let slice = map.get(model);
+  if (!slice) {
+    slice = { model, provider: providerOf(model), tokens: 0, cost: 0, turns: 0 };
+    map.set(model, slice);
+  }
+  slice.tokens += r.totalTokens;
+  slice.cost += r.cost;
+  slice.turns += 1;
+}
+
+/** 累加单日项目桶（key = cwd）。 */
+function addToDayProject(map: Map<string, UsageDayProjectSlice>, project: string, r: UsageRecord): void {
+  let slice = map.get(project);
+  if (!slice) {
+    slice = { project, tokens: 0, cost: 0, turns: 0 };
+    map.set(project, slice);
+  }
+  slice.tokens += r.totalTokens;
+  slice.cost += r.cost;
+  slice.turns += 1;
+}
+
+/** 合并两个单日模型桶（增量合并用）。 */
+function mergeDayModelMaps(
+  base: Map<string, UsageDayModelSlice>,
+  delta: Map<string, UsageDayModelSlice>,
+): UsageDayModelSlice[] {
+  const merged = new Map(base);
+  for (const [key, slice] of delta) {
+    const existing = merged.get(key);
+    if (existing) {
+      existing.tokens += slice.tokens;
+      existing.cost += slice.cost;
+      existing.turns += slice.turns;
+    } else {
+      merged.set(key, slice);
+    }
+  }
+  return [...merged.values()].sort((a, b) => b.tokens - a.tokens);
+}
+
+/** 合并两个单日项目桶（增量合并用）。 */
+function mergeDayProjectMaps(
+  base: Map<string, UsageDayProjectSlice>,
+  delta: Map<string, UsageDayProjectSlice>,
+): UsageDayProjectSlice[] {
+  const merged = new Map(base);
+  for (const [key, slice] of delta) {
+    const existing = merged.get(key);
+    if (existing) {
+      existing.tokens += slice.tokens;
+      existing.cost += slice.cost;
+      existing.turns += slice.turns;
+    } else {
+      merged.set(key, slice);
+    }
+  }
+  return [...merged.values()].sort((a, b) => b.tokens - a.tokens);
 }
 
 /** 合并两个 DayTotals（区间合计/增量合并用；sessions 取并集）。 */
@@ -150,7 +218,13 @@ export function intermediateFromRecords(records: UsageRecord[]): UsageStatsInter
     const dayKey = dayKeyOf(new Date(r.ts));
     let bucket = dayBuckets.get(dayKey);
     if (!bucket) {
-      bucket = { totals: emptyTotals(), sessions: new Set(), byProvider: new Map() };
+      bucket = {
+        totals: emptyTotals(),
+        sessions: new Set(),
+        byProvider: new Map(),
+        byModel: new Map(),
+        byProject: new Map(),
+      };
       dayBuckets.set(dayKey, bucket);
     }
     bucket.totals.tokens += r.totalTokens;
@@ -162,6 +236,8 @@ export function intermediateFromRecords(records: UsageRecord[]): UsageStatsInter
     bucket.totals.turns += 1;
     bucket.sessions.add(r.sid);
     addToProvider(bucket.byProvider, providerOf(r.model), r);
+    addToDayModel(bucket.byModel, r.model, r);
+    addToDayProject(bucket.byProject, r.cwd, r);
 
     totals.tokens += r.totalTokens;
     totals.input += r.input;
@@ -205,6 +281,8 @@ export function intermediateFromRecords(records: UsageRecord[]): UsageStatsInter
         totals: { ...bucket.totals, sessions: [...bucket.sessions] },
         sessions: [...bucket.sessions],
         byProvider: [...bucket.byProvider.values()].sort((a, b) => b.tokens - a.tokens),
+        byModel: [...bucket.byModel.values()].sort((a, b) => b.tokens - a.tokens),
+        byProject: [...bucket.byProject.values()].sort((a, b) => b.tokens - a.tokens),
       })),
     modelBuckets: [...byModel.entries()]
       .sort(([, a], [, b]) => b.tokens - a.tokens)
@@ -268,6 +346,8 @@ export function mergeIntermediates(
       totals: mergeTotals(existing.totals, d.totals),
       sessions: [...new Set([...existing.sessions, ...d.sessions])],
       byProvider: [...byProvider.values()].sort((a, b) => b.tokens - a.tokens),
+      byModel: mergeDayModelMaps(new Map(existing.byModel.map((m) => [m.model, m])), new Map(d.byModel.map((m) => [m.model, m]))),
+      byProject: mergeDayProjectMaps(new Map(existing.byProject.map((p) => [p.project, p])), new Map(d.byProject.map((p) => [p.project, p]))),
     });
   }
 
@@ -328,6 +408,8 @@ export function buildAggregatedView(
     day: b.day,
     totals: b.totals,
     byProvider: b.byProvider,
+    byModel: b.byModel,
+    byProject: b.byProject,
   }));
 
   // 热力图：以 now 所在周为最后一周，往前 52 周（共 53 列）。
