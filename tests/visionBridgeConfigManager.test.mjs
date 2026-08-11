@@ -31,6 +31,8 @@ function compile(filePath) {
 	const module = { exports: {} };
 	const localRequire = (specifier) => {
 		if (specifier.startsWith("node:")) return require(specifier);
+		// 共享日志器：测试环境未注册实例，返回 null 让调用方静默跳过
+		if (specifier === "../logging/sharedLogger") return { getAppLogger: () => null };
 		return {};
 	};
 	vm.runInNewContext(output, {

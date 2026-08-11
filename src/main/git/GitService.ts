@@ -700,7 +700,7 @@ export class GitService {
 				await unlink(resource.path);
 				return;
 			}
-			await trashPath(resource.path);
+			await trashPath(resource.path, { source: "git:discard-file" });
 			return;
 		}
 
@@ -813,8 +813,9 @@ export class GitService {
 			if (!metadata.isFile() && !metadata.isSymbolicLink()) {
 				throw new Error("Only individual files can be deleted");
 			}
-			// 统一走回收站：删除可恢复，避免误删用户内容（与 discard untracked 同一策略）
-			await trashPath(resource.path);
+			// 统一走回收站：删除可恢复，避免误删用户内容（与 discard untracked 同一策略）；
+			// 逐文件记录审计日志（路径 + 来源），批量误删时可按路径检索回溯。
+			await trashPath(resource.path, { source: "git:delete-files" });
 		}
 	}
 }

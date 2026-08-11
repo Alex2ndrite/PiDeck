@@ -72,7 +72,7 @@ export class FileSystemService {
   async delete(targetPath: string, recursive = false): Promise<void> {
     // 统一走系统回收站：文件抽屉的删除是用户主动操作，必须可恢复；
     // 回收站不可用时 trashPath 直接抛错（拒绝静默硬删），错误由 IPC 层呈现给用户。
-    await trashPath(targetPath);
+    await trashPath(targetPath, { source: "files:delete" });
   }
 
   /** 重命名文件或目录 */

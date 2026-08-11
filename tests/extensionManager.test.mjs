@@ -36,6 +36,10 @@ function loadExtensionManagerModule() {
       if (specifier === "../fs/trash") {
         return { trashPath: async (p) => { await rm(p, { recursive: true, force: true }); } };
       }
+      // 共享日志器：测试环境未注册实例，返回 null 让调用方静默跳过
+      if (specifier === "../logging/sharedLogger") {
+        return { getAppLogger: () => null };
+      }
       return nodeRequire(specifier);
     },
     Promise,

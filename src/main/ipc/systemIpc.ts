@@ -449,6 +449,9 @@ export function registerSystemIpc(deps: SystemIpcDeps): void {
 	ipcMain.handle(ipcChannels.logsList, async (_event, query: AppLogQuery) =>
 		appLogger.list(query),
 	);
+	ipcMain.handle(ipcChannels.logsListPage, async (_event, query: AppLogQuery) =>
+		appLogger.listPage(query),
+	);
 	ipcMain.handle(ipcChannels.rendererLog, async (
 		_event, level: AppLogLevel, scope: string, message: string, detail?: unknown,
 	) => {

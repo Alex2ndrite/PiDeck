@@ -35,6 +35,7 @@ function compile(filePath, stubs = {}) {
 function loadTrashPath(trashItemImpl) {
 	const stubs = {
 		electron: { shell: { trashItem: trashItemImpl } },
+		"../logging/sharedLogger": { getAppLogger: () => null },
 	};
 	return compile(trashPathModule, stubs).trashPath;
 }

@@ -33,6 +33,7 @@ function loadExtensionConflictHelpers() {
 			if (id === "./builtInExtensions") return { BUILT_IN_EXTENSIONS: [] };
 			// 删除走系统回收站统一入口；本测试不触达删除路径，提供 noop stub 即可。
 			if (id === "../fs/trash") return { trashPath: async () => {} };
+			if (id === "../logging/sharedLogger") return { getAppLogger: () => null };
 			return require(id);
 		},
 	};

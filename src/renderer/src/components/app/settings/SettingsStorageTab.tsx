@@ -113,6 +113,10 @@ export function StorageTab(props: {
 	 */
 	const doClearLocalStorage = () => {
 		try {
+			// 审计上报：清理 UI 缓存是用户主动操作，留痕便于排查"设置怎么变了"类问题
+			window.piDesktop?.app.rendererLog("info", "renderer", "UI local cache cleared", {
+				keyCount: localStorage.length,
+			}).catch(() => undefined);
 			localStorage.clear();
 		} catch (e) {
 			setFeedback(`${t("common.error")}: ${e instanceof Error ? e.message : String(e)}`);

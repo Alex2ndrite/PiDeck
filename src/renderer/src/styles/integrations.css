@@ -994,13 +994,7 @@
     flex-direction: column;
   }
 }
-/* 日志工具栏已迁移 UI 2.0（LogViewer 内纯 Tailwind），旧规则删除 */
-
-.logs-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
+/* 日志列表已迁移 UI 2.0（LogViewer 内 Table + Tailwind），旧规则删除 */
 
 .editors-tab {
   display: grid;
@@ -1087,78 +1081,4 @@
   .editor-config-actions {
     justify-content: flex-end;
   }
-}
-
-.log-row {
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-md);
-  background: var(--color-bg-panel);
-  overflow: hidden;
-}
-
-.log-row-main {
-  display: grid;
-  grid-template-columns: minmax(150px, auto) 64px minmax(90px, 140px) minmax(
-      0,
-      1fr
-    );
-  gap: var(--space-2);
-  width: 100%;
-  border: 0;
-  background: transparent;
-  color: var(--color-text-primary);
-  padding: 9px 10px;
-  text-align: left;
-  cursor: pointer;
-}
-
-.log-row-main:hover {
-  background: var(--color-bg-muted);
-}
-
-.log-time,
-.log-scope {
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-caption);
-}
-
-.log-level {
-  font-family: var(--font-family-business);
-  font-size: var(--font-size-caption);
-  text-transform: uppercase;
-}
-
-.log-level.error {
-  color: var(--color-danger);
-}
-
-.log-level.warn {
-  color: var(--color-warning);
-}
-
-.log-level.info {
-  color: var(--color-info);
-}
-
-.log-level.debug {
-  color: var(--color-text-tertiary);
-}
-
-.log-message {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.log-detail {
-  margin: 0;
-  padding: 10px;
-  border-top: 1px solid var(--color-border-subtle);
-  background: var(--color-code-bg);
-  color: var(--color-code-text);
-  font-family: var(--font-family-mono);
-  font-size: var(--font-size-caption);
-  white-space: pre-wrap;
-  word-break: break-word;
 }
