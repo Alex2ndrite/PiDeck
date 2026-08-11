@@ -234,10 +234,11 @@ src/
 ### beUI 组件迁移（硬性）
 
 > 项目从 beui.dev 迁移动效组件（`components/motion/`、`components/agents/` 等）。
+> 共享模块（`lib/ease.ts` / `lib/utils.ts` / `agents/agent-disclosure.tsx`）已与 beui.dev registry **逐字节一致**（2026-08 统一），CLI 安装时内容相同会自动 skip，无需任何恢复操作。
 
 1. **安装走 CLI，不手动复制源码**：`npx shadcn add @beui/<name>` 即可（`components.json` 已配置 `"registries": {"@beui": "https://beui.dev/r/{name}.json"}`）；文件已存在时加 `--overwrite`。手动复制源码是下策（易漏依赖、注释标记不一致）。
-2. **⚠️ CLI 会连坐覆盖 `lib/ease.ts` 和 `lib/utils.ts`**：CLI 把这两个共享模块覆盖成官方版——`EASE_OUT` 曲线值从项目基线 `[0.22, 1, 0.36, 1]` 改成官方 `[0.16, 1, 0.3, 1]`、`SPRING_LAYOUT` 等常量同步被改。这会**静默改变 preview-rail 等所有已迁移组件的动画**。安装后必须 `git diff src/renderer/src/lib/ease.ts src/renderer/src/lib/utils.ts`：与本任务无关的改动一律 `git checkout --` 恢复（组件自身能正常工作，`EASE_OUT` 等常量名不变，只是曲线值回到项目基线）。
-3. **共享运动常量统一从 `@/lib/ease` 取**，禁止在组件里另写曲线值；新组件缺常量时先补进 `lib/ease.ts`（保留既有值，按官方补齐缺项），不要改既有导出值。
+2. **共享文件保持官方原版，禁止存项目私有曲线值**：`lib/ease.ts` / `lib/utils.ts` / `agents/agent-disclosure.tsx` 一律接受 CLI 覆盖（内容一致会 skip；官方更新则同步跟随）。历史上项目曾把 `EASE_OUT`/`SPRING_LAYOUT` 改为私有基线值，导致每次安装都被 CLI 连坐覆盖、需手动恢复——已废弃，不要复辟。
+3. **共享运动常量统一从 `@/lib/ease` 取**，禁止在组件里另写曲线值；新组件缺常量时按官方 registry 值补进 `lib/ease.ts`，不要改既有导出值。
 4. 迁移惯例：文件放 `src/renderer/src/components/<域>/`，头部保留官方 `// beui.dev/components/<path>` 注释，用户可见文案走 i18n。
 
 ## Issue 修复流程
