@@ -3129,13 +3129,12 @@
  * 3. 表格工具条与表头空隙大：压缩 wrapper 内边距/间距，按钮区紧凑。 */
 
 /* 图表默认铺满容器宽（修复默认渲染过小） */
-[data-streamdown="mermaid"] [aria-label="Mermaid chart"] {
-  width: 100%;
-}
+/* 2026-08 调整：强制 width:100% 会把小图拉伸到容器全宽（用户反馈“图片非常大”）。
+   恢复 mermaid 内容自然宽：只保留 max-width:100% 防宽图溢出，height:auto 保宽高比。
+   （streamdown 图表容器 shrink-to-fit，无强制宽度时按 svg 自然宽收缩） */
 [data-streamdown="mermaid"] svg {
-  width: 100%;
-  height: auto;
   max-width: 100% !important; /* 覆盖 mermaid 内联 style="max-width: <自然宽>px" */
+  height: auto;
 }
 
 /* 全屏遮罩：mermaid 与表格共用 fixed inset-0 z-50 类；抬到标题栏之上 + 全不透明 */
