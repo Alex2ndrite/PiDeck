@@ -1731,7 +1731,7 @@ export const zhCN = {
   "settings.sectionRuntime": "运行",
   "settings.sectionEditors": "外部编辑器",
   "settings.contentWidthPct": "聊天内容宽度",
-  "settings.contentWidthPctDesc": "消息与输入框共用同一宽度。100% 为全宽无留白；分屏或窗口较窄时自动减少留白。",
+  "settings.contentWidthPctDesc": "消息、输入框与待发送共用同一宽度。100% 接近全宽（仍留 12px 边距）。",
   "settings.theme": "主题",
   "settings.themeSystem": "跟随系统",
   "settings.themeLight": "浅色",

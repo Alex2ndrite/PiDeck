@@ -1809,7 +1809,9 @@ body.ask-dialog-open .ask-question-card.pending {
 
 .composer {
   background: var(--color-bg-panel);
-  padding: var(--space-1) var(--space-2) var(--space-1);
+  /* 左右必须为 0：否则输入框比消息区窄一截（旧 space-2 ≈ 8px）。底距由组件 pb-3 承担。 */
+  padding-inline: 0;
+  padding-block: 0;
   min-width: 0;
   margin-bottom: 10px;
   /* 飞书 Bot 弹框从 toolbar 向上展开，外层不能裁剪浮层。 */
