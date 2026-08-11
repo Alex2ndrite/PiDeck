@@ -8,8 +8,8 @@ import test from "node:test";
 
 test("AgentManager keeps per-agent streaming perf timers", () => {
 	const source = readFileSync("src/main/pi/AgentManager.ts", "utf8");
-	// 计时状态：message_start 起表，首个 delta 记 firstDeltaAt
-	assert.match(source, /messagePerfByAgent = new Map<\s*\n\s*string,\s*\n\s*\{ startedAt: number; firstDeltaAt: number \}\s*\n\s*>\(\)/);
+	// 计时状态：sendPrompt 请求时刻起表（首个 message_start 消费），首 delta 记 firstDeltaAt，正文首 delta 记 firstTextAt
+	assert.match(source, /messagePerfByAgent = new Map<\s*\n\s*string,\s*\n\s*\{ startedAt: number; firstDeltaAt: number; firstTextAt: number \}\s*\n\s*>\(\)/);
 	assert.match(source, /lastPerfByAgent = new Map<\s*\n\s*string,\s*\n\s*\{ ttftMs\?: number; totalMs: number; tps\?: number; at: number \}\s*\n\s*>\(\)/);
 });
 
@@ -19,7 +19,12 @@ test("AgentManager starts the perf timer on message_start (idempotent)", () => {
 	// 只在尚无计时器时创建，避免覆盖丢失 startedAt
 	const ensure = source.slice(source.indexOf("private ensurePerfTimer"), source.indexOf("private settleMessagePerf"));
 	assert.match(ensure, /if \(!this\.messagePerfByAgent\.has\(agentId\)\)/);
-	assert.match(ensure, /messagePerfByAgent\.set\(agentId, \{ startedAt: Date\.now\(\), firstDeltaAt: 0 \}\)/);
+	// 起点优先取 sendPrompt 记录的请求发出时刻（消费后删除），无请求起点时回退事件到达时刻
+	assert.match(ensure, /const requestedAt = this\.promptRequestedAtByAgent\.get\(agentId\);/);
+	assert.match(ensure, /if \(requestedAt !== undefined\) this\.promptRequestedAtByAgent\.delete\(agentId\);/);
+	assert.match(ensure, /startedAt: requestedAt \?\? Date\.now\(\),/);
+	assert.match(ensure, /firstDeltaAt: 0,/);
+	assert.match(ensure, /firstTextAt: 0,/);
 	// 顶层 message_start（mock/pi 均走此路径）与 message_update start 都接入计时
 	assert.match(source, /typed\.type === "message_start" && typed\.message\?\.role === "assistant"/);
 	assert.match(source, /eventType === "start" \|\| eventType === "message_start"/);
@@ -34,6 +39,11 @@ test("first content delta (text or thinking) stamps firstDeltaAt once", () => {
 	const markFirstDeltaBody = source.slice(source.indexOf("private markFirstDelta"), source.indexOf("private settleMessagePerf"));
 	assert.match(markFirstDeltaBody, /if \(perf && perf\.firstDeltaAt === 0\)/);
 	assert.match(markFirstDeltaBody, /perf\.firstDeltaAt = Date\.now\(\);/);
+	// 正文首 delta 单独计时：思考模式下用户感知的首字是正文首字，只在 text_delta 分支记
+	assert.match(markFirstDeltaBody, /if \(perf && perf\.firstTextAt === 0\)/);
+	assert.match(markFirstDeltaBody, /perf\.firstTextAt = Date\.now\(\);/);
+	const textDeltaBranch = source.slice(source.indexOf('eventType === "text_delta"'), source.indexOf('eventType === "thinking_delta"'));
+	assert.match(textDeltaBranch, /this\.markFirstText\(agentId\);/);
 });
 
 test("message_end/done/error settles perf and pushes a runtime-state patch", () => {
@@ -44,15 +54,29 @@ test("message_end/done/error settles perf and pushes a runtime-state patch", () 
 	// message_update 终态（done/error）结算
 	assert.match(source, /eventType === "message_end" \|\| eventType === "done" \|\| eventType === "error"/);
 	assert.match(source, /this\.settleMessagePerf\(agentId, partialMessage\);/);
-	// 结算口径：ttft = 首 delta − message_start；total = 终态 − message_start；
-	// tps = output tokens ÷ 生成期（首 delta → 终态），分母排除 TTFT 更贴近真实生成速度
+	// 结算口径：ttft = 首字（正文首 delta 优先，无正文退回首 delta）− 请求发出时刻；
+	// total = 终态 − 请求发出时刻；tps = output tokens ÷ 生成期（首 delta → 终态）
 	const settle = source.slice(source.indexOf("private settleMessagePerf"), source.indexOf("private ensureThinkingSegment"));
 	assert.match(settle, /const totalMs = now - perf\.startedAt;/);
+	assert.match(settle, /perf\.firstTextAt > 0 \? perf\.firstTextAt : perf\.firstDeltaAt > 0 \? perf\.firstDeltaAt : 0/);
 	assert.match(settle, /const ttftMs =/);
 	assert.match(settle, /outputTokens \/ \(\(now - perf\.firstDeltaAt\) \/ 1000\)/);
 	// 结算结果本地缓存 + 边沿推送（不触发 get_state/get_session_stats RPC）
 	assert.match(settle, /lastPerfByAgent\.set\(agentId, \{ ttftMs, totalMs, tps, at: now \}\)/);
 	assert.match(settle, /state: \{ ttftMs, totalMs, tps, perfAt: now \}/);
+});
+
+test("perf timer starts from the sendPrompt request time, consumed once", () => {
+	const source = readFileSync("src/main/pi/AgentManager.ts", "utf8");
+	// 起点修正：sendPrompt 在 RPC 请求发出时刻记录请求起点（而非收到 message_start 才起表），
+	// 把 pi 内部排队与模型服务端等待计入用户体感的首 token 延迟，避免统计系统性偏短
+	assert.match(source, /promptRequestedAtByAgent = new Map<string, number>\(\)/);
+	assert.match(source, /this\.promptRequestedAtByAgent\.set\(input\.agentId, rpcStartedAt\);/);
+	// 起表时消费请求起点：消费后删除，防止工具后续答回合误用上一次请求起点（应回退事件时刻）
+	const ensure = source.slice(source.indexOf("private ensurePerfTimer"), source.indexOf("private settleMessagePerf"));
+	assert.match(ensure, /const requestedAt = this\.promptRequestedAtByAgent\.get\(agentId\);/);
+	assert.match(ensure, /if \(requestedAt !== undefined\) this\.promptRequestedAtByAgent\.delete\(agentId\);/);
+	assert.match(ensure, /startedAt: requestedAt \?\? Date\.now\(\),/);
 });
 
 test("getRuntimeState merges last perf metrics", () => {
