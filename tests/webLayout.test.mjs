@@ -48,3 +48,14 @@ test("Mobile Web keeps chat full-screen and opens the project tree as a drawer",
 	assert.match(webSidebar, /mobile-open/);
 	assert.match(webSidebar, /onDeleteProject/);
 });
+
+test("Web starts with no selected session and exposes a scroll-to-bottom action", () => {
+	assert.doesNotMatch(webChatApp, /setActiveSessionId\(next\.sessions\[0\]\?\.id \?\? ""\)/);
+	assert.match(webChatApp, /setActiveSessionId\(""\)/);
+	assert.match(readFileSync("src/renderer/src/web/WebTimeline.tsx", "utf8"), /scroll-to-bottom|ScrollDown|scrollToBottom/);
+});
+
+test("Project actions are sibling buttons instead of nested controls", () => {
+	assert.match(webSidebar, /project-row-actions[\s\S]*?<Button/);
+	assert.doesNotMatch(webSidebar, /project-row-actions[\s\S]*?<span[\s\S]*?role="button"/);
+});

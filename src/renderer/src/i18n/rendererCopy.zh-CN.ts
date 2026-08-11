@@ -2041,6 +2041,9 @@ export const zhCN = {
   "settings.webQrScanHint": "手机和电脑需要连接到同一个局域网",
   "settings.webQrUnavailable": "当前无法生成二维码，请检查服务端口",
   "settings.webQrEnableHint": "开启 Web 服务后生成二维码",
+  "settings.webRestartService": "重启 Web 服务",
+  "settings.webRestarting": "正在重启 Web 服务...",
+  "settings.webRestarted": "Web 服务已重启",
   "settings.webOffDesc": "关闭此开关会立即停止服务",
   "settings.webOpening": "服务状态切换中...",
   "settings.electronProxyHint":
@@ -2211,6 +2214,7 @@ export const zhCN = {
   "web.emptySelection": "从左侧选择项目创建会话，或选择现有会话。",
   "web.noMessages": "暂无消息",
   "web.noSessions": "该项目暂无会话，点 + 新建",
+  "web.scrollToBottom": "滚动到底部",
   "web.streamFailed": "流式连接失败",
 } as const;
 

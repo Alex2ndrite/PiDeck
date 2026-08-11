@@ -112,6 +112,12 @@ test("agent_end emits finish (and error frame on error)", () => {
 	assert.equal(adapter.push({ type: "agent_end" }).length, 0);
 });
 
+test("agent_settled also closes the Web stream", () => {
+	const adapter = new PiEventToUiMessageStream();
+	const frames = adapter.push({ type: "agent_settled" });
+	assert.equal(frames[0].type, "finish");
+});
+
 test("agent_end error carries error frame before finish", () => {
 	const adapter = new PiEventToUiMessageStream();
 	const frames = adapter.push({ type: "agent_end", error: "boom" });
@@ -134,6 +140,19 @@ test("finish() closes open text/reasoning blocks", () => {
 test("serializeSseFrame / SSE_DONE produce AI SDK wire format", () => {
 	assert.equal(serializeSseFrame({ type: "finish" }), 'data: {"type":"finish"}\n\n');
 	assert.equal(SSE_DONE, "data: [DONE]\n\n");
+});
+
+test("WebEventStreamRouter closes the response after sending the done marker", () => {
+	const received = [];
+	let finished = 0;
+	const router = new WebEventStreamRouter(() => "session-1");
+	router.add("session-1", (wire) => { received.push(wire); return true; }, () => {}, () => { finished += 1; });
+	router.bindPiSource((handler) => {
+		handler("agent-a", { type: "agent_settled" });
+		return () => {};
+	});
+	assert.equal(received.at(-1), "data: [DONE]\n\n");
+	assert.equal(finished, 1);
 });
 
 test("WebEventStreamRouter routes agent events to per-session entries only", () => {

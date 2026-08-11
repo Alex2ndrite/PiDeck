@@ -201,6 +201,22 @@ async function withServer(run, overrides = {}) {
 	}
 }
 
+test("Web service restart rebinds the configured listener", async () => {
+	const WebServiceManager = loadWebServiceManager();
+	const harness = fixture();
+	const manager = new WebServiceManager(harness.deps);
+	await manager.start("127.0.0.1", 0);
+	const port = manager.current.port;
+	try {
+		await manager.restart({ webServiceEnabled: true, webServiceHost: "127.0.0.1", webServicePort: port });
+		const response = await fetch(`http://127.0.0.1:${port}/api/health`);
+		assert.equal(response.status, 200);
+		assert.equal((await response.json()).ok, true);
+	} finally {
+		await manager.stop();
+	}
+});
+
 test("native Session HTTP routes create drafts and send by stable Session identity", async () => {
 	await withServer(async ({ baseUrl, calls }) => {
 		const createResponse = await fetch(`${baseUrl}/api/sessions`, {
@@ -562,6 +578,8 @@ test("SSE /stream endpoint forwards pi agent events as AI SDK UI message frames"
 		emitPiEvent("agent-1", { type: "agent_end", stopReason: "done" });
 
 		const wire = await readUntil("data: [DONE]");
+		const afterDone = await reader.read();
+		assert.equal(afterDone.done, true, "the SSE response must close after [DONE]");
 		const frames = wire.split("\n\n")
 			.filter((line) => line.startsWith("data: ") && line.slice(6).trim() !== "[DONE]")
 			.map((line) => JSON.parse(line.slice(6)));

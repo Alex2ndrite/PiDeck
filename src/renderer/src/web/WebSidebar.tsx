@@ -220,73 +220,61 @@ export function WebSidebar(props: {
 						const creating = creatingProjectId === project.id;
 						return (
 							<div key={project.id} className="project-group mb-2">
-								<button
-									type="button"
-									className={cn(projectRowClass, "flex min-h-8")}
-									disabled={Boolean(creatingProjectId)}
-									onClick={() => toggleProject(project.id)}
-									title={project.path}
-								>
-									<span
-										className={cn(
-											"project-fold grid size-5 place-items-center text-muted-foreground",
-											!expanded && "folded",
-										)}
-										aria-hidden="true"
-									>
-										<PlayIcon expanded={expanded} />
-									</span>
-									<div className="conversation-body min-w-0 flex-1">
-										<div className="conversation-title flex min-w-0 items-center gap-1.5">
-											<strong className="min-w-0 flex-1 truncate font-medium" title={project.path}>{projectName}</strong>
-										</div>
-									</div>
-									{/* 新建会话：桌面同款 row-action span（项目行是 <button>，内部不能再嵌 <button>） */}
-									<span
-										className="project-row-actions flex items-center gap-0.5"
-										onClick={(event) => event.stopPropagation()}
+								<div className="project-row flex min-w-0 items-center gap-0.5">
+									<button
+										type="button"
+										className={cn(projectRowClass, "flex min-h-8 min-w-0 flex-1")}
+										disabled={Boolean(creatingProjectId)}
+										onClick={() => toggleProject(project.id)}
+										title={project.path}
 									>
 										<span
-											className="project-action inline-flex size-6 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-background/80 hover:text-foreground"
+											className={cn(
+												"project-fold grid size-5 place-items-center text-muted-foreground",
+												!expanded && "folded",
+											)}
+											aria-hidden="true"
+										>
+											<PlayIcon expanded={expanded} />
+										</span>
+										<div className="conversation-body min-w-0 flex-1">
+											<div className="conversation-title flex min-w-0 items-center gap-1.5">
+												<strong className="min-w-0 flex-1 truncate font-medium" title={project.path}>{projectName}</strong>
+											</div>
+										</div>
+									</button>
+									<div className="project-row-actions flex shrink-0 items-center gap-0.5">
+										<Button
+											type="button"
+											variant="ghost"
+											size="icon"
+											className="project-action size-7"
+											disabled={Boolean(creatingProjectId)}
 											title={t("app.newSession")}
 											aria-label={t("app.newSession")}
-											role="button"
-											tabIndex={0}
-											aria-disabled={Boolean(creatingProjectId)}
 											onClick={() => props.onCreateSession(project.id)}
-											onKeyDown={(event) => {
-												if (event.key === "Enter" || event.key === " ") {
-													event.preventDefault();
-													props.onCreateSession(project.id);
-												}
-											}}
 										>
 											{creating ? (
 												<span className="size-3 animate-spin rounded-full border border-current border-t-transparent" aria-hidden="true" />
 											) : (
-												<Plus className="size-3.5" />
+												<Plus className="size-3.5" aria-hidden="true" />
 											)}
-										</span>
+										</Button>
 										{project.kind !== "chat" && (
-											<span
-												className="project-action inline-flex size-6 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+											<Button
+												type="button"
+												variant="ghost"
+												size="icon"
+												className="project-action size-7 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
 												title={t("web.deleteProject")}
 												aria-label={t("web.deleteProject")}
-												role="button"
-												tabIndex={0}
 												onClick={() => void requestDelete(project)}
-												onKeyDown={(event) => {
-													if (event.key === "Enter" || event.key === " ") {
-														event.preventDefault();
-														void requestDelete(project);
-													}
-												}}
 											>
 												<Trash2 className="size-3.5" aria-hidden="true" />
-											</span>
+											</Button>
 										)}
-									</span>
-								</button>
+									</div>
+								</div>
 								{expanded && (
 									<div className="project-children mt-2 flex flex-col gap-2 px-1 pb-1">
 										{projectSessions.map((session) => {

@@ -2307,6 +2307,7 @@ function registerIpc() {
 		applyDesktopProxy,
 		testPiProxy,
 		applyWebServiceSettings: (settings) => webServiceManager.applySettings(settings),
+		restartWebService: (settings) => webServiceManager.restart(settings),
 		reactToPetSettings: async (prev, next) => {
 			await petSystem?.reactToSettings(prev, next);
 		},

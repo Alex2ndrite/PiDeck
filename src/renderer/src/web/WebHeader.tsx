@@ -1,7 +1,7 @@
 /**
  * WebHeader — Web 端会话头部（与桌面 SessionHeader 同布局）。
  *
- * 左侧：会话标题（截断）；右侧：运行态指示 + 流式中「停止响应」按钮。
+ * 左侧：会话标题（截断）；右侧：运行态指示和模型/思考控制。
  * 运行态来自 useChat status（submitted/streaming）与轮询的 runtime.status 兜底。
  */
 import { useState } from "react";
@@ -31,28 +31,22 @@ export type WebHeaderStatus = "idle" | "starting" | "running" | "error";
 export function WebHeader(props: {
 	title: string;
 	status: WebHeaderStatus;
-	streaming: boolean;
-	canStop: boolean;
 	onOpenSidebar: () => void;
 	model?: { provider: string; modelId: string };
 	thinkingLevel?: string;
 	models: AvailableModel[];
 	onModelChange: (model: AvailableModel) => void;
 	onThinkingChange: (level: string) => void;
-	onStop: () => void;
 }) {
 	const {
 		title,
 		status,
-		streaming,
-		canStop,
 		onOpenSidebar,
 		model,
 		thinkingLevel,
 		models,
 		onModelChange,
 		onThinkingChange,
-		onStop,
 	} = props;
 	// 允许窄屏换行：标题保留可用宽度，控制项在下一行展开，避免手机上相互挤压。
 	return (
@@ -107,11 +101,6 @@ export function WebHeader(props: {
 						{t(statusLabelKey(status))}
 					</span>
 				</span>
-				{streaming && canStop && (
-					<Button type="button" variant="destructive" size="sm" className="h-8 gap-1 px-2.5" onClick={onStop}>
-						{t("app.stop")}
-					</Button>
-				)}
 			</div>
 		</header>
 	);

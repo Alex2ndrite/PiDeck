@@ -1010,6 +1010,8 @@ const api = {
 				ipcChannels.settingsUpdate,
 				patch,
 			) as Promise<AppSettings>,
+		restartWebService: () =>
+			ipcRenderer.invoke(ipcChannels.settingsRestartWebService) as Promise<void>,
 		testPiProxy: () =>
 			ipcRenderer.invoke(
 				ipcChannels.settingsTestPiProxy,

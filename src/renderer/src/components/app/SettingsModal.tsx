@@ -8,6 +8,7 @@ import {
 	Wrench,
 	PawPrint,
 	Trash2,
+	RotateCw,
 	Brush,
 	Eye,
 	Minus,
@@ -126,6 +127,7 @@ type SettingsModalProps = {
 	piProxyNotice: string;
 	piProxyNoticeTone: "info" | "success" | "error";
 	webServiceChanging: boolean;
+	onRestartWebService: () => void;
 	appInfo: AppInfo;
 	customPiPath: string;
 	customPathValidating: boolean;
@@ -1755,6 +1757,17 @@ function SettingsModalContent(props: SettingsModalProps) {
 												}
 											>
 												{t("common.open")}
+											</Button>
+										</div>
+										<div className="flex justify-end">
+											<Button
+												variant="outline"
+												size="sm"
+												disabled={!draftSettings.webServiceEnabled || props.webServiceChanging}
+												onClick={props.onRestartWebService}
+											>
+												<RotateCw className="mr-1.5 size-3.5" aria-hidden="true" />
+												{props.webServiceChanging ? t("settings.webRestarting") : t("settings.webRestartService")}
 											</Button>
 										</div>
 										<div className="grid gap-2 rounded-lg border border-border-subtle/70 bg-bg-muted/20 p-3">

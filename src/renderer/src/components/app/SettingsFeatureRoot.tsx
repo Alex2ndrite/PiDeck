@@ -17,6 +17,7 @@ type SettingsFeatureRootProps = {
   piUpdate: PiUpdateController;
   appUpdate: Pick<AppUpdateControllerState, "checking" | "error" | "check">;
   webServiceChanging: boolean;
+  onRestartWebService: () => void;
   appInfo: AppInfo;
   onChange: (patch: Partial<AppSettings>) => void | Promise<void>;
   onCurrentVersion: (version: string) => void;
@@ -74,6 +75,7 @@ export function SettingsFeatureRoot(props: SettingsFeatureRootProps) {
           showNotice(opened ? t("app.devToolsOpened") : t("app.devToolsClosed"));
         }}
         onRestartApp={() => api.app.restart()}
+        onRestartWebService={props.onRestartWebService}
         onClearCheckFlag={async () => {
           await api.settings.update({ piEnvironmentChecked: false });
           showNotice(t("environment.checkFlagCleared"));

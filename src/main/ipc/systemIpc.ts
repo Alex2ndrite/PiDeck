@@ -98,6 +98,8 @@ export type SystemIpcDeps = {
 	testPiProxy?: (settings: AppSettings, proxyUrl?: string, translate?: (key: string, params?: Record<string, string | number>) => string) => Promise<import("../../shared/types").PiProxyTestResult>;
 	/** Web service manager apply settings */
 	applyWebServiceSettings?: (settings: AppSettings) => Promise<void>;
+	/** Restart the running Web service without changing persisted settings. */
+	restartWebService?: (settings: AppSettings) => Promise<void>;
 	/** Session catalog set identity context */
 	setSessionCatalogIdentityContext?: (ctx: { wslDistro?: string; wslUser?: string }) => void;
 	/** Configure WSL for various services — null 表示切回本机路径 */
@@ -151,6 +153,7 @@ export function registerSystemIpc(deps: SystemIpcDeps): void {
 		applyDesktopProxy,
 		testPiProxy,
 		applyWebServiceSettings,
+		restartWebService,
 		setSessionCatalogIdentityContext,
 		configureSkillManagerWsl,
 		configurePromptManagerWsl,
@@ -691,6 +694,11 @@ export function registerSystemIpc(deps: SystemIpcDeps): void {
 			}
 		}
 		return settings;
+	});
+
+	ipcMain.handle(ipcChannels.settingsRestartWebService, async () => {
+		if (!restartWebService) throw new Error("restartWebService not available");
+		await restartWebService(settingsStore.get());
 	});
 
 	ipcMain.handle(ipcChannels.settingsTestPiProxy, async () => {

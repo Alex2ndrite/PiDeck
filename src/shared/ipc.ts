@@ -91,6 +91,8 @@ export const ipcChannels = {
 	openCodeSessionsImport: "opencode-sessions:import",
 	settingsGet: "settings:get",
 	settingsUpdate: "settings:update",
+	/** 重启当前已启用的 Web 服务，不修改 Web 设置 */
+	settingsRestartWebService: "settings:restart-web-service",
 	settingsTestPiProxy: "settings:test-pi-proxy",
 	settingsApplyWindow: "settings:apply-window",
 	skillsList: "skills:list",

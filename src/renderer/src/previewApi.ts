@@ -839,6 +839,7 @@ export function createPreviewApi(): PiDesktopApi {
 				previewSettings = { ...previewSettings, ...patch };
 				return { ...previewSettings };
 			},
+			restartWebService: async () => undefined,
 			testPiProxy: async () => ({
 				success: true,
 				url: "https://api.openai.com/v1/models",

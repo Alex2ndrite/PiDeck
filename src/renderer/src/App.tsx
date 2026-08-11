@@ -2263,6 +2263,20 @@ export function App() {
     }
   }
 
+  async function restartWebService() {
+    if (!settings.webServiceEnabled || webServiceChanging) return;
+    setWebServiceChanging(true);
+    showToast(t("settings.webRestarting"));
+    try {
+      await api.settings.restartWebService();
+      showToast(t("settings.webRestarted"));
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : String(error));
+    } finally {
+      setWebServiceChanging(false);
+    }
+  }
+
   async function switchBranch(branch: string) {
     if (!activeProjectId || !branch || branch === gitInfo.current) return;
     try {
@@ -3306,6 +3320,7 @@ export function App() {
       piUpdate={piUpdate}
       appUpdate={appUpdate}
       webServiceChanging={webServiceChanging}
+      onRestartWebService={restartWebService}
       appInfo={appInfo}
       onChange={updateSettings}
       onCurrentVersion={setUpToDateVersion}

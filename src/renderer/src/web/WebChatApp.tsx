@@ -125,8 +125,9 @@ export function WebChatApp() {
 				if (disposed) return;
 				setState(next);
 				setConnected(true);
-				if (!next.sessions.some((session) => session.id === activeSessionIdRef.current)) {
-					setActiveSessionId(next.sessions[0]?.id ?? "");
+				// 初始页面保持空会话，让用户明确选择项目/会话；外部删除当前会话时也回到空状态。
+				if (activeSessionIdRef.current && !next.sessions.some((session) => session.id === activeSessionIdRef.current)) {
+					setActiveSessionId("");
 				}
 			} catch {
 				if (!disposed) setConnected(false);
@@ -184,7 +185,6 @@ export function WebChatApp() {
 		setCommandError(null);
 		try {
 			const deletedSessions = state.sessions.filter((session) => session.projectId === projectId);
-			const nextSession = state.sessions.find((session) => session.projectId !== projectId);
 			await deleteProject(projectId);
 			for (const session of deletedSessions) {
 				delete messagesBySessionRef.current[session.id];
@@ -198,7 +198,7 @@ export function WebChatApp() {
 				runtimes: current.runtimes.filter((runtime) => !deletedSessions.some((session) => session.id === runtime.sessionId)),
 			}));
 			if (deletedSessions.some((session) => session.id === activeSessionId)) {
-				setActiveSessionId(nextSession?.id ?? "");
+				setActiveSessionId("");
 			}
 			setMobileSidebarOpen(false);
 		} catch (error) {
@@ -331,15 +331,12 @@ export function WebChatApp() {
 				<WebHeader
 					title={activeSession?.title || t("web.chooseSession")}
 					status={headerStatus}
-					streaming={streaming}
-					canStop={Boolean(activeSessionId)}
 					onOpenSidebar={() => setMobileSidebarOpen(true)}
 					model={activeSession?.model}
 					thinkingLevel={activeSession?.thinkingLevel}
 					models={models}
 					onModelChange={(model) => void handleModelChange(model)}
 					onThinkingChange={(level) => void handleThinkingChange(level)}
-					onStop={() => stop()}
 				/>
 				<WebTimeline
 					messages={messages}

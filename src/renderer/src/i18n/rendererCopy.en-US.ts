@@ -2075,6 +2075,9 @@ export const enUS: Record<TranslationKey, string> = {
   "settings.webQrScanHint": "Your phone and computer must be on the same local network",
   "settings.webQrUnavailable": "Unable to generate a QR code. Check the service port",
   "settings.webQrEnableHint": "Enable Web Service to generate a QR code",
+  "settings.webRestartService": "Restart Web Service",
+  "settings.webRestarting": "Restarting Web Service...",
+  "settings.webRestarted": "Web Service restarted",
   "settings.webOffDesc": "Turning this off stops the service immediately",
   "settings.webOpening": "Changing service state...",
   "settings.electronProxyHint":
@@ -2247,5 +2250,6 @@ export const enUS: Record<TranslationKey, string> = {
   "web.emptySelection": "Select a project to create a session, or select an existing session.",
   "web.noMessages": "No messages",
   "web.noSessions": "No sessions in this project yet, tap + to create one",
+  "web.scrollToBottom": "Scroll to bottom",
   "web.streamFailed": "Stream failed",
 };

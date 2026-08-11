@@ -88,9 +88,6 @@
   .app.wechat-shell .chat-header {
     align-items: flex-start;
   }
-  .app.wechat-shell .chat-title-block {
-    flex-basis: 100%;
-  }
   .app.wechat-shell .chat-header-actions {
     width: 100%;
     justify-content: flex-start;
