@@ -1,4 +1,5 @@
 import { forwardRef, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useAtomValue, useStore } from "jotai";
 import {
   ComposerBottomBar,
   ImagePreviewModal,
@@ -17,6 +18,9 @@ import {
 } from "./ComposerPanels";
 import { ComposerPickerHost } from "./ComposerPickerHost";
 import { SecurityLevelMenu } from "./SecurityLevelMenu";
+import { useAskPanel } from "../../hooks/useAskPanel";
+import { setSessionDraftAtom } from "../../atoms/composer-atoms";
+import { sessionRecordByIdAtomFamily } from "../../atoms";
 import { ComposerRuntimeIntegrations } from "./ComposerRuntimeIntegrations";
 import { useSessionPaneServices } from "./SessionPaneServices";
 import { desktopApi } from "../../desktopApi";
@@ -145,6 +149,20 @@ export const ComposerArea = forwardRef<HTMLElement, ComposerAreaProps>(function 
     // 预览 Tab 里发消息 → 自动晋升常驻（由 App 装配的 SessionPaneServices 提供）
     onPromoteSession: useSessionPaneServices().promoteSessionToPermanent,
   });
+
+  // 并行问询：复用发送按钮旁的行为菜单（常显），选择「并行发送」时走后台匿名会话
+  const askPanel = useAskPanel();
+  const sessionRecord = useAtomValue(sessionRecordByIdAtomFamily(props.sessionId));
+  const store = useStore();
+
+  /** 并行问询发送：消息投递到独立匿名会话（不打断当前输出），并显示结果胶囊；
+   *  点击发送即清空输入框（与正常发送语义一致），失败由胶囊/toast 反馈 */
+  const handleAskSend = async () => {
+    const text = composer.draft.trim();
+    if (!text || !sessionRecord?.projectId) return;
+    store.set(setSessionDraftAtom, { sessionId: props.sessionId, value: "" });
+    await askPanel.sendToAsk(sessionRecord.projectId, text);
+  };
   const prewarmStartedForSessionRef = useRef<string | undefined>(undefined);
   useEffect(() => {
     if (!props.sessionId || !window.piDesktop) return;
@@ -293,17 +311,11 @@ export const ComposerArea = forwardRef<HTMLElement, ComposerAreaProps>(function 
                   <ComposerSendControls
                     isAgentBusy={composer.isBusy}
                     isAgentStarting={composer.isStarting}
-                    keepBusyDraftControls={composer.busyDraftLocked}
-                    showBusySendControls={composer.isBusy || composer.busyDraftLocked}
-                    hasComposerContent={composer.hasContent}
                     canSend={composer.delivery.canSend}
-                    sendBehaviorMenuOpen={composer.delivery.sendBehaviorMenuOpen}
                     onSend={composer.delivery.send}
                     onSendFollowUp={composer.delivery.followUp}
+                    onSendAsk={() => void handleAskSend()}
                     onStop={composer.delivery.abort}
-                    onToggleBehaviorMenu={composer.delivery.toggleSendBehaviorMenu}
-                    onKeepBehaviorMenuOpen={composer.delivery.keepSendBehaviorMenuOpen}
-                    onScheduleBehaviorMenuClose={composer.delivery.scheduleSendBehaviorMenuClose}
                   />
                 }
               />

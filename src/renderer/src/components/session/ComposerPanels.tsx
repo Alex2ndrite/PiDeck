@@ -14,6 +14,12 @@ import {
 } from "../../utils/queuedPromptQueue";
 import { t } from "../../i18n";
 import { Button } from "../ui-shadcn/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "../ui-shadcn/dropdown-menu";
 import { ExtensionWidgetCard } from "./ComposerParts";
 
 export function ComposerAttachmentBar(props: {
@@ -195,50 +201,78 @@ export function SessionDeliveryNotice(props: {
 export function ComposerSendControls(props: {
   isAgentBusy: boolean;
   isAgentStarting: boolean;
-  keepBusyDraftControls: boolean;
-  showBusySendControls: boolean;
-  hasComposerContent: boolean;
   canSend: boolean;
-  sendBehaviorMenuOpen: boolean;
   onSend: () => void;
   onSendFollowUp: () => void;
+  /** 并行发送：独立匿名会话后台处理（不打断当前输出），始终可选 */
+  onSendAsk: () => void;
   onStop: () => void;
-  onToggleBehaviorMenu: () => void;
-  onKeepBehaviorMenuOpen: () => void;
-  onScheduleBehaviorMenuClose: () => void;
 }) {
   return (
-    <div
-      className="composer-send-controls flex items-center"
-      onMouseLeave={props.onScheduleBehaviorMenuClose}
-    >
+    <div className="composer-send-controls flex items-center">
       <div className="send-behavior-menu-wrap relative flex items-center gap-1.5">
-        {props.showBusySendControls && props.hasComposerContent && (
-          <div className="send-behavior-toggle inline-flex h-8 overflow-hidden rounded-md bg-primary text-primary-foreground">
-            <Button
-              variant="default"
-              size="icon-sm"
-              className="send-behavior-primary size-8 rounded-none shadow-none hover:bg-primary/90"
-              aria-label={t("app.sendSteerTitle")} title={t("app.sendSteerTitle")}
-              onClick={props.onSend}
+        {/* 发送按钮 + 行为下拉常显（无需输入内容）：默认点击发送到当前会话，
+            chevron 展开菜单选择发送行为 */}
+        <div className="send-behavior-toggle inline-flex h-8 overflow-hidden rounded-md bg-primary text-primary-foreground">
+          <Button
+            variant="default"
+            size="icon-sm"
+            className="send-behavior-primary size-8 rounded-none shadow-none hover:bg-primary/90"
+            aria-label={t("app.sendSteerTitle")} title={t("app.sendSteerTitle")}
+            disabled={props.isAgentStarting || !props.canSend}
+            onClick={props.onSend}
+          >
+            <ArrowUp size={15} strokeWidth={2.4} aria-hidden="true" />
+          </Button>
+          {/* 非受控 DropdownMenu：开关状态由 Radix 内部管理，点击外部/选择菜单项后
+              立即关闭，避免受控 + 延迟关闭导致菜单卡住无法收起 */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="default"
+                size="icon"
+                className="send-behavior-chevron h-8 w-5 rounded-none border-l border-primary-foreground/20 p-0 shadow-none hover:bg-primary/90"
+                aria-label={t("app.sendBehaviorTitle")} title={t("app.sendBehaviorTitle")}
+              >
+                <ChevronDown size={12} strokeWidth={2.2} aria-hidden="true" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              side="top"
+              align="end"
+              sideOffset={8}
+              className="send-behavior-menu w-44"
             >
-              <ArrowUp size={15} strokeWidth={2.4} aria-hidden="true" />
-            </Button>
-            <Button
-              variant="default"
-              size="icon"
-              className="send-behavior-chevron h-8 w-5 rounded-none border-l border-primary-foreground/20 p-0 shadow-none hover:bg-primary/90"
-              aria-label={t("app.sendBehaviorTitle")} title={t("app.sendBehaviorTitle")}
-              aria-haspopup="menu"
-              aria-expanded={props.sendBehaviorMenuOpen}
-              onMouseEnter={props.onKeepBehaviorMenuOpen}
-              onFocus={props.onKeepBehaviorMenuOpen}
-              onClick={props.onToggleBehaviorMenu}
-            >
-              <ChevronDown size={12} strokeWidth={2.2} aria-hidden="true" />
-            </Button>
-          </div>
-        )}
+              {/* 当前回合/下一轮仅在会话进行中显示（隐藏而非置灰）；并行发送始终可用 */}
+              {props.isAgentBusy && (
+                <DropdownMenuItem
+                  className="send-behavior-option steer gap-2"
+                  onClick={props.onSend}
+                >
+                  <span className="send-behavior-option-dot size-1.5 rounded-full bg-foreground" aria-hidden="true" />
+                  <span>{t("app.sendSteerTitle")}</span>
+                </DropdownMenuItem>
+              )}
+              {props.isAgentBusy && (
+                <DropdownMenuItem
+                  className="send-behavior-option follow-up gap-2"
+                  onClick={props.onSendFollowUp}
+                >
+                  <span className="send-behavior-option-dot size-1.5 rounded-full bg-muted-foreground" aria-hidden="true" />
+                  <span>{t("app.sendFollowUpTitle")}</span>
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem
+                className="send-behavior-option ask gap-2"
+                title={t("app.sendAskDesc")}
+                onClick={props.onSendAsk}
+              >
+                <span className="send-behavior-option-dot size-1.5 rounded-full bg-primary" aria-hidden="true" />
+                <span>{t("app.sendAskTitle")}</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
         {props.isAgentBusy ? (
           <Button
             variant="destructive"
@@ -249,49 +283,7 @@ export function ComposerSendControls(props: {
           >
             <Square size={15} strokeWidth={0} fill="currentColor" aria-hidden="true" />
           </Button>
-        ) : !props.keepBusyDraftControls ? (
-          <Button
-            variant="default"
-            size="icon-sm"
-            className="composer-bar-btn send size-8 rounded-full disabled:opacity-40"
-            aria-label={t("app.send")} title={t("app.send")}
-            disabled={props.isAgentStarting || !props.canSend}
-            onClick={props.onSend}
-          >
-            <ArrowUp size={16} strokeWidth={2.5} aria-hidden="true" />
-          </Button>
         ) : null}
-        {props.sendBehaviorMenuOpen &&
-          props.showBusySendControls &&
-          props.hasComposerContent && (
-            <div
-              className="send-behavior-menu absolute right-0 bottom-[calc(100%+6px)] z-50 flex w-40 flex-col gap-0.5 rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md"
-              role="menu"
-              onMouseEnter={props.onKeepBehaviorMenuOpen}
-              onMouseLeave={props.onScheduleBehaviorMenuClose}
-            >
-              <Button
-                variant="ghost"
-                size="sm"
-                className="send-behavior-option steer justify-start gap-2 px-2"
-                role="menuitem"
-                onClick={props.onSend}
-              >
-                <span className="send-behavior-option-dot size-1.5 rounded-full bg-foreground" aria-hidden="true" />
-                <span>{t("app.sendSteerTitle")}</span>
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="send-behavior-option follow-up justify-start gap-2 px-2"
-                role="menuitem"
-                onClick={props.onSendFollowUp}
-              >
-                <span className="send-behavior-option-dot size-1.5 rounded-full bg-muted-foreground" aria-hidden="true" />
-                <span>{t("app.sendFollowUpTitle")}</span>
-              </Button>
-            </div>
-          )}
       </div>
     </div>
   );

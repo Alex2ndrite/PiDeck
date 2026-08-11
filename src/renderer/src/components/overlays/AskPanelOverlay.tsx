@@ -1,0 +1,207 @@
+import { useEffect, useRef, useState } from "react";
+import { useAtomValue } from "jotai";
+import { Check, ChevronDown, ChevronRight, Loader2, MessageSquarePlus, X } from "lucide-react";
+import removeMarkdown from "remove-markdown";
+import { useAskPanel } from "../../hooks/useAskPanel";
+import { sessionMessageCacheBySessionIdAtomFamily } from "../../atoms/session-atoms";
+import { sessionRuntimeBySessionIdAtomFamily } from "../../atoms/session-selectors";
+import { desktopApi } from "../../desktopApi";
+import { t } from "../../i18n";
+import { showNotice } from "../../utils/notice";
+import { SessionMessageTimeline } from "../session/SessionMessageTimeline";
+
+/** 拖动与点击的区分阈值（px）：小于该位移视为点击 */
+const DRAG_THRESHOLD_PX = 4;
+
+/**
+ * 并行问询悬浮胶囊（AskPanel）：
+ * - 发送后会话区域右上方出现一枚可拖动的胶囊：状态点（创建中/运行中/已完成）
+ *   + 最新响应的纯文本摘要；点击胶囊展开/收起详情浮层（复用 SessionMessageTimeline
+ *   流式渲染 markdown 结果）。
+ * - 详情浮层头部 X = 最小化（仅收起详情）；胶囊上的 X = 关闭（停止匿名 runtime 并回收）。
+ */
+export function AskPanelOverlay() {
+  const panel = useAskPanel();
+  const [expanded, setExpanded] = useState(false);
+  // 拖拽位置：null 表示未拖动（使用默认定位，会话区域右上方）；拖动后切换为自由定位
+  const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null);
+  // 拖动会话快照：起点坐标 + 起始容器坐标 + 是否已超过点击阈值
+  const dragRef = useRef<{
+    startX: number;
+    startY: number;
+    origX: number;
+    origY: number;
+    moved: boolean;
+  } | null>(null);
+  // pointerup 时把「本次是否拖动过」留给随后的 click 判断（避免拖动后误触发展开）
+  const lastDragMovedRef = useRef(false);
+
+  const sessionId = panel.sessionId;
+  const cache = useAtomValue(sessionMessageCacheBySessionIdAtomFamily(sessionId ?? ""));
+  const runtime = useAtomValue(sessionRuntimeBySessionIdAtomFamily(sessionId ?? ""));
+
+  // 会话切换（新的并行问询）时收起上次的详情浮层并回到默认位置
+  useEffect(() => {
+    setExpanded(false);
+    setDragPos(null);
+  }, [sessionId]);
+
+  if (!panel.isOpen || !sessionId) return null;
+
+  // 胶囊摘要：取最新一条非空 assistant 正文，去掉 markdown 后截断
+  const messages = cache?.messages ?? [];
+  const lastAssistant = [...messages].reverse().find(
+    (m) => m.role === "assistant" && m.text.trim().length > 0,
+  );
+  const summary = lastAssistant
+    ? removeMarkdown(lastAssistant.text).replace(/\s+/g, " ").trim().slice(0, 36)
+    : "";
+  // 就绪态 = idle（空闲）或 running（处理中）：agent 启动完成后为 idle，发送后才变 running
+  const running = runtime?.status === "running" || runtime?.status === "idle";
+  // 有响应文本且 runtime 不在运行 → 视为已完成（可安全查看完整结果）
+  const done = !running && summary.length > 0;
+
+  const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    // 只响应左键拖动
+    if (event.button !== 0) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    dragRef.current = {
+      startX: event.clientX,
+      startY: event.clientY,
+      origX: dragPos?.x ?? rect.left,
+      origY: dragPos?.y ?? rect.top,
+      moved: false,
+    };
+    // 捕获指针：拖动过程中即使移出胶囊也能持续收到 move/up 事件
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current;
+    if (!drag) return;
+    const dx = event.clientX - drag.startX;
+    const dy = event.clientY - drag.startY;
+    // 未超过点击阈值前不移动，保证「点一下展开」不被微抖动干扰
+    if (!drag.moved && Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) return;
+    drag.moved = true;
+    setDragPos({ x: drag.origX + dx, y: drag.origY + dy });
+  };
+
+  const handlePointerUp = () => {
+    lastDragMovedRef.current = dragRef.current?.moved ?? false;
+    dragRef.current = null;
+  };
+
+  return (
+    <div
+      className="ask-panel-root fixed z-50 flex flex-col items-end"
+      style={
+        dragPos
+          ? { left: dragPos.x, top: dragPos.y }
+          : // 默认位置：会话区域右上方（水平贴右，垂直约 1/4 高度处），拖动后可自由摆放
+            { right: 16, top: "25%" }
+      }
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+    >
+      {expanded && (
+        <div className="ask-panel-detail mb-2 flex h-[min(48vh,400px)] w-[min(560px,calc(100vw-2rem))] animate-in fade-in-0 zoom-in-95 duration-base flex-col overflow-hidden rounded-xl border bg-popover shadow-lg">
+          {/* 详情头部：标题 + 运行状态 + 最小化（仅收起详情，会话继续运行） */}
+          <div className="flex shrink-0 items-center gap-2 border-b px-3 py-2">
+            <MessageSquarePlus size={14} className="text-muted-foreground" aria-hidden="true" />
+            <span className="text-sm font-medium">{t("askPanel.title")}</span>
+            {running ? (
+              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+                <span className="size-1.5 animate-pulse rounded-full bg-emerald-500" aria-hidden="true" />
+                {t("askPanel.running")}
+              </span>
+            ) : done ? (
+              <Check size={13} className="text-emerald-500" aria-hidden="true" />
+            ) : null}
+            <span className="flex-1" />
+            <button
+              className="flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+              aria-label={t("askPanel.minimize")}
+              title={t("askPanel.minimize")}
+              onClick={() => setExpanded(false)}
+            >
+              <X size={14} aria-hidden="true" />
+            </button>
+          </div>
+          {/* 结果区：有消息才渲染时间线（避免 timeline 空态/新建会话提示干扰）；
+              无消息时显示等待占位，消息流式到达后自动切换 */}
+          <div className="min-h-0 flex-1">
+            {messages.length > 0 ? (
+              <SessionMessageTimeline
+                sessionId={sessionId}
+                hasProject={false}
+                onCreateSession={() => undefined}
+                showThinking={false}
+                validCommandNames={new Set()}
+                validFilePaths={new Set()}
+                onPreviewImage={() => undefined}
+                onOpenExternal={(url) => void desktopApi.app.openExternal(url)}
+                onToast={showNotice}
+              />
+            ) : (
+              <div className="flex h-full items-center justify-center gap-2 text-xs text-muted-foreground">
+                <Loader2 size={13} className="animate-spin" aria-hidden="true" />
+                {t("askPanel.waiting")}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+      {/* 胶囊本体：状态点 + 摘要 + 关闭 + 展开指示；整条可拖拽（touch-none 避免触屏滚动抢占指针） */}
+      <button
+        className="ask-panel-pill flex h-9 max-w-[340px] cursor-grab touch-none items-center gap-2 rounded-full border bg-popover pl-2.5 pr-1 shadow-lg hover:bg-accent-soft active:cursor-grabbing"
+        aria-label={t("askPanel.title")}
+        aria-expanded={expanded}
+        onClick={() => {
+          // 拖动后不触发展开切换
+          if (lastDragMovedRef.current) {
+            lastDragMovedRef.current = false;
+            return;
+          }
+          setExpanded((value) => !value);
+        }}
+      >
+        {panel.creating ? (
+          <Loader2 size={14} className="animate-spin text-muted-foreground" aria-hidden="true" />
+        ) : running ? (
+          <span className="relative flex size-2" aria-hidden="true">
+            <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+            <span className="relative inline-flex size-2 rounded-full bg-emerald-500" />
+          </span>
+        ) : done ? (
+          <Check size={14} className="text-emerald-500" aria-hidden="true" />
+        ) : (
+          <MessageSquarePlus size={14} className="text-muted-foreground" aria-hidden="true" />
+        )}
+        <span className="truncate text-xs text-foreground/90">
+          {summary || (panel.creating ? t("askPanel.creating") : t("askPanel.waiting"))}
+        </span>
+        <span
+          className="flex size-5 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+          aria-label={t("askPanel.close")}
+          title={t("askPanel.close")}
+          role="button"
+          tabIndex={-1}
+          onClick={(event) => {
+            // 关闭按钮：阻止冒泡避免触发胶囊的展开切换
+            event.stopPropagation();
+            void panel.close();
+          }}
+        >
+          <X size={12} aria-hidden="true" />
+        </span>
+        {expanded ? (
+          <ChevronDown size={13} className="shrink-0 text-muted-foreground" aria-hidden="true" />
+        ) : (
+          <ChevronRight size={13} className="shrink-0 text-muted-foreground" aria-hidden="true" />
+        )}
+      </button>
+    </div>
+  );
+}

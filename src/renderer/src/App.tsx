@@ -112,6 +112,7 @@ import { SessionPaneServicesProvider } from "./components/session/SessionPaneSer
 import { ProjectEmptyState } from "./components/session/ProjectEmptyState";
 import { useSessionWorkspaceChrome } from "./hooks/useSessionWorkspaceChrome";
 import { ScratchPadOverlay } from "./components/overlays/ScratchPadOverlay";
+import { AskPanelOverlay } from "./components/overlays/AskPanelOverlay";
 import { SessionRuntimeDock } from "./components/session/SessionRuntimeDock";
 import { AppShell } from "./components/app/AppShell";
 import { WorkspaceDrawerRail } from "./components/workspace/WorkspaceDrawerRail";
@@ -3354,6 +3355,9 @@ export function App() {
 
     {/* Scratch Pad（草稿本）：根级渲染，避免受 chat-pane grid 影响定位 */}
     <ScratchPadOverlay controller={scratchPad} />
+
+    {/* 并行问询结果弹框（AskPanel）：独立匿名会话的结果展示，根级渲染 */}
+    <AskPanelOverlay />
 
     {/* 外部编辑器选择气泡 */}
     <ExternalEditorOverlay
