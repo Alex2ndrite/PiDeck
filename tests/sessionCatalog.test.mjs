@@ -40,6 +40,7 @@ function loadCatalog(fsPromises = nodeRequire("node:fs/promises")) {
   const identity = compileModule("src/shared/sessionIdentity.ts");
   return compileModule("src/main/sessions/SessionCatalog.ts", {
     "../../shared/sessionIdentity": identity,
+    "../logging/sharedLogger": { getAppLogger: () => null },
     "node:fs/promises": fsPromises,
   });
 }
