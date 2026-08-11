@@ -37,21 +37,39 @@ test("shimmer-sweep keyframes 定义在 timeline.css（规则允许 keyframes）
 	assert.match(timelineCss, /@keyframes shimmer-sweep/);
 });
 
-test("RespondingIndicator 进行态标签使用微光，waiting 态保留静态隐藏标签", () => {
-	// 以「下一个顶层导出」为边界截取函数体，避免函数内部嵌套花括号导致正则过早截断
-	const start = cardsSource.indexOf("export function RespondingIndicator");
-	const indicator = cardsSource.slice(
-		start,
-		cardsSource.indexOf("\nexport ", start + 10) || undefined,
+test("RespondingIndicator 使用 beUI ReasoningText（swap）轮播状态短语", () => {
+	// 短语组常量与函数体分开截取（中间隔着 export type）
+	const phrasesStart = cardsSource.indexOf("const RESPONDING_PHRASES");
+	const phrases = cardsSource.slice(
+		phrasesStart,
+		cardsSource.indexOf("\n};", phrasesStart) + 3,
 	);
-	assert.ok(indicator, "RespondingIndicator must exist");
-	assert.match(indicator, /ShimmerText/);
-	// 启动中/工具执行中保持琥珀色状态位，回应中用普通明暗
-	assert.match(indicator, /tone=\{kind === "responding" \? "muted" : "warning"\}/);
-	// waiting 态不走微光（CSS visibility 隐藏，保持容器宽度稳定）
-	assert.match(indicator, /kind === "waiting"/);
-	// 标签布局类保留（min-width 稳定宽度）
-	assert.match(indicator, /responding-indicator-label/);
+	const fnStart = cardsSource.indexOf("export function RespondingIndicator");
+	const fn = cardsSource.slice(
+		fnStart,
+		cardsSource.indexOf("\nexport ", fnStart + 10) || undefined,
+	);
+	assert.ok(fn, "RespondingIndicator must exist");
+	// 四种状态各有 i18n 短语组（waiting 单条 = 不轮播）
+	assert.match(phrases, /agent\.loading\.starting1/);
+	assert.match(phrases, /agent\.loading\.executing1/);
+	assert.match(phrases, /agent\.loading\.responding1/);
+	assert.match(phrases, /agent\.loading\.waiting/);
+	// 组件使用 beUI ReasoningText + swap 变体；状态切换 key 重建从第一条重新轮播
+	assert.match(fn, /ReasoningText/);
+	assert.match(fn, /variant="swap"/);
+	assert.match(fn, /key=\{kind\}/);
+	// 状态判定保留
+	assert.match(fn, /kind = "starting"/);
+	assert.match(fn, /kind = "waiting"/);
+});
+
+test("RespondingIndicator 轮播短语文案中英同步", () => {
+	for (const suffix of ["starting1", "starting2", "starting3", "executing1", "executing2", "executing3", "responding1", "responding2", "responding3", "waiting"]) {
+		const key = `agent.loading.${suffix}`;
+		assert.match(zhCN, new RegExp(`"${key}":`));
+		assert.match(enUS, new RegExp(`"${key}":`));
+	}
 });
 
 test("ThinkingBlock 耗时改人性化 i18n 文案，不再裸显数字", () => {

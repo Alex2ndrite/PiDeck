@@ -10,6 +10,8 @@ import { TimelineMarker } from "./TimelineMarker";
 import { LiveDuration } from "./LiveDuration";
 import { MarkdownStream } from "./MarkdownStream";
 import { ShimmerText } from "./ShimmerText";
+import { ReasoningText } from "../agents/loading-states/reasoning-text";
+import { Loader } from "../motion/loader";
 import { useSmoothStream } from "../../utils/useSmoothStream";
 
 // Button 收口状态（P0）：本文件按钮全部保留原生——
@@ -427,13 +429,38 @@ export const ThinkingBlock = memo(
  * 流式响应指示器（三点脉动动画 + 状态文案），在 agent 运行/流式期间显示。
  *
  * 状态优先级：
- *  1. Agent 启动中 → "正在启动 Agent"（琥珀色）
- *  2. 工具执行中 → "正在工具调用"（琥珀色）
- *  3. 有思考文本 / 流式回答中 → "正在回应"
- *  4. 过渡等待 → 只显示三点动画，无标签
+ *  1. Agent 启动中 → “正在启动 Agent”（琥珀色）
+ *  2. 工具执行中 → “正在工具调用”（琥珀色）
+ *  3. 有思考文本 / 流式回答中 → “正在回应”
+ *  4. 过渡等待 → 单条静态文案
  *
  * 启动状态单独展示，避免用户发消息后 Agent 尚未完成预热时看起来像“没有响应”。
+ * 视觉实现：beUI ReasoningText（swap 整句淡入淡出 + ascii-line 终端指示器），
+ * 每种状态一组 i18n 短语轮播；状态切换用 key 重建，从第一条短语重新开始。
  */
+
+/** 每种状态对应的轮播短语组（i18n；waiting 单条即不轮播）。 */
+type RespondingKind = "starting" | "executing" | "responding" | "waiting";
+
+const RESPONDING_PHRASES: Record<RespondingKind, string[]> = {
+	starting: [
+		t("agent.loading.starting1"),
+		t("agent.loading.starting2"),
+		t("agent.loading.starting3"),
+	],
+	executing: [
+		t("agent.loading.executing1"),
+		t("agent.loading.executing2"),
+		t("agent.loading.executing3"),
+	],
+	responding: [
+		t("agent.loading.responding1"),
+		t("agent.loading.responding2"),
+		t("agent.loading.responding3"),
+	],
+	waiting: [t("agent.loading.waiting")],
+};
+
 export function RespondingIndicator(props: {
 	thinking?: string;
 	showThinking?: boolean;
@@ -443,43 +470,40 @@ export function RespondingIndicator(props: {
 }) {
 	const { isStarting, isExecutingTool, isStreaming, thinking, showThinking } = props;
 
-	let kind: "starting" | "executing" | "responding" | "waiting";
-	let label: string;
+	let kind: RespondingKind;
 
 	if (isStarting) {
 		kind = "starting";
-		label = t("app.agentStarting");
 	} else if (isExecutingTool) {
 		kind = "executing";
-		label = t("thinking.executing");
 	} else if ((showThinking && thinking && thinking.length > 0) || isStreaming) {
 		// 有思考文本或流式回答中统一显示“正在回应”
 		kind = "responding";
-		label = t("thinking.responding");
 	} else {
-		// 过渡等待：只显示三点动画
+		// 过渡等待：单条静态文案（不轮播）
 		kind = "waiting";
-		label = "...";
 	}
 
 	return (
 		<div className="responding-indicator" data-kind={kind}>
-			<span className="responding-indicator-dots" aria-hidden="true">
-				<span />
-				<span />
-				<span />
-			</span>
-			{/* 标签始终渲染，waiting 态用静态文本并通过 CSS visibility:hidden 隐藏，保持容器宽度稳定；
-			    进行态（启动/工具调用/回应）用微光扫过提示活动进行中（AI Elements Shimmer 借鉴） */}
-			{kind === "waiting" ? (
-				<span className="responding-indicator-label">{label}</span>
-			) : (
-				<ShimmerText
-					text={label}
-					className="responding-indicator-label"
-					tone={kind === "responding" ? "muted" : "warning"}
+			{/* key=kind：状态切换时从该组短语第一条重新轮播，避免旧组下标错位；
+			   指示器用 Loader dots（三点跳动，bg-current 跟随状态色），
+			   不用官方默认的 ascii 终端字符；文字放大到 text-base */}
+			<ReasoningText
+				key={kind}
+				phrases={RESPONDING_PHRASES[kind]}
+				variant="swap"
+				interval={1800}
+				indicator={
+					<Loader
+						variant="dot-matrix"
+						size={18}
+						speed={1.1}
+						label={t("agent.loading.aria")}
+					/>
+				}
+				// 字号用官方默认（text-sm）：实测语义 token 缩放的观感不如官方字阶，保持官方原样
 				/>
-			)}
 		</div>
 	);
 }

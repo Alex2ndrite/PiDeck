@@ -86,7 +86,6 @@
   --color-border: var(--color-border-default);
   --color-input: var(--color-border-default);
   --color-ring: var(--color-accent-strong);
-
   --radius-sm: var(--radius-sm);
   --radius-md: var(--radius-md);
   --radius-lg: var(--radius-lg);
@@ -123,6 +122,15 @@
   --text-title--line-height: var(--line-height-title);
   --text-brand: var(--font-size-brand);
   --text-heading: var(--font-size-heading);
+}
+
+/* shadcn CSS variables 兼容层（裸变量名）：beUI/shadcn 官方组件在样式与
+   inline style 里直接 var() 引用 --muted-foreground / --foreground 这类
+   无前缀变量（不经 Tailwind class），本项目此前只有 --color-* 主题变量。
+   值映射到语义 token：亮/暗/主题色自动跟随，官方组件源码保持原样。 */
+:root {
+  --muted-foreground: var(--color-text-secondary);
+  --foreground: var(--color-text-primary);
 }
 
 /* 动效时长 utility（唯一真源，对应 AGENTS.md 三档时长）：

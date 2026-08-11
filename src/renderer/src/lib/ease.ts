@@ -8,6 +8,9 @@
 //   agents/todo-list 与 motion/action-swap 使用。
 export const EASE_OUT = [0.22, 1, 0.36, 1] as const;
 
+/** Symmetric ease for loaders and looping grid pulses (beUI official value). */
+export const EASE_IN_OUT = [0.77, 0, 0.175, 1] as const;
+
 /** CSS string form of EASE_OUT for inline style transitions（与上方 EASE_OUT 数值保持一致）。 */
 export const EASE_OUT_CSS = "cubic-bezier(0.22, 1, 0.36, 1)";
 

@@ -619,106 +619,34 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
+  /* 无外框融入消息流：不设 border/背景/padding，仅保留行内间距 */
   margin: 0;
-  padding: 8px 12px;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-md);
-  background: var(--color-bg-muted);
-  color: var(--color-text-secondary);
+  padding: 0;
   font-size: var(--font-size-control);
-  /* 状态切换平滑过渡：边框色、背景、文字色 */
-  transition:
-    border-color 0.25s ease,
-    background-color 0.25s ease,
-    color 0.25s ease;
-  /* 固定尺寸，状态文案切换时不让时间线重新排版。 */
-  min-height: 36px;
-  min-width: 168px;
-  box-sizing: border-box;
+  color: var(--color-text-secondary);
+  line-height: 1.2;
 }
-.responding-indicator-dots {
-  display: inline-flex;
-  gap: 4px;
-  align-items: center;
-  flex-shrink: 0;
-}
-.responding-indicator-dots span {
-  width: 6px;
-  height: 6px;
-  border-radius: var(--radius-pill);
-  background: var(--color-accent);
-  animation: respondingDots 1.2s infinite ease-in-out;
-  /* 颜色过渡与父容器同步 */
-  transition: background-color 0.25s ease;
-}
-.responding-indicator-dots span:nth-child(2) {
-  animation-delay: 0.18s;
-}
-.responding-indicator-dots span:nth-child(3) {
-  animation-delay: 0.36s;
-}
-@keyframes respondingDots {
-  0%,
-  100% {
-    opacity: 0.3;
-    transform: translateY(0);
-  }
-  50% {
-    opacity: 1;
-    transform: translateY(-2px);
-  }
-}
-.responding-indicator-label {
-  display: inline-flex;
-  min-width: 108px;
-  font-family: var(--font-family-base);
-  white-space: nowrap;
+/* 内部 beUI ReasoningText（swap 短语轮播）：垂直居中，避免 inline-flex 基线错位 */
+.responding-indicator .reasoning-text-anchor {
+  line-height: 1.2;
 }
 
 /* ── 三种状态变体：只差异颜色，容器尺寸不变，避免布局跳动 ── */
 
-/* Agent 启动中：与执行中使用同一状态位，但文案明确说明仍在预热；启动完成后该节点直接切换为回答/工具状态。 */
-.responding-indicator[data-kind="starting"] {
-  min-width: 196px;
-  border-color: var(--color-warning, #d97706);
-  background: color-mix(in srgb, var(--color-warning) 7%, var(--color-bg-muted));
-  color: var(--color-warning, #d97706);
-}
-.responding-indicator[data-kind="starting"] .responding-indicator-dots span {
-  background: var(--color-warning, #d97706);
-}
-.responding-indicator[data-kind="starting"] .responding-indicator-label {
-  min-width: 136px;
-}
-
-/* 工具执行中：琥珀色系 */
+/* 状态色只作用于前置指示器（Loader 用 currentColor）与文字基调；无框后不再有边框/背景色 */
+.responding-indicator[data-kind="starting"],
 .responding-indicator[data-kind="executing"] {
-  border-color: var(--color-warning, #d97706);
   color: var(--color-warning, #d97706);
 }
-.responding-indicator[data-kind="executing"] .responding-indicator-dots span {
-  background: var(--color-warning, #d97706);
-}
 
-/* 过渡等待：只显示三点，不显示标签，但容器结构不变 */
+/* 过渡等待：只显示静态文案，不轮播 */
 .responding-indicator[data-kind="waiting"] {
-  border-color: var(--color-border-subtle);
-  background: var(--color-bg-muted);
   color: var(--color-text-tertiary);
-}
-.responding-indicator[data-kind="waiting"] .responding-indicator-dots span {
-  background: var(--color-text-tertiary);
-  opacity: 0.5;
-}
-.responding-indicator[data-kind="waiting"] .responding-indicator-label {
-  /* 标签在 DOM 中存在但视觉隐藏，保持容器宽度稳定 */
-  visibility: hidden;
 }
 
 /* 用户偏好减少动态效果时，状态仍通过颜色、图标和文案表达，不能依赖动画才能识别。 */
 @media (prefers-reduced-motion: reduce) {
   .responding-indicator,
-  .responding-indicator-dots span,
   .tool-card,
   .tool-card--running,
   .tool-group-card,
@@ -736,7 +664,6 @@
     transition: none !important;
   }
 
-  .responding-indicator-dots span,
   .turn-row--running::before {
     opacity: 1;
     transform: none;
