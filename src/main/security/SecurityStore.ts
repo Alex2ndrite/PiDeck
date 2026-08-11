@@ -116,10 +116,19 @@ export class SecurityStore {
 	async setSessionLevel(sessionId: string, levelId: string | null): Promise<SecurityConfig> {
 		const current = this.getConfig();
 		const sessionOverrides = { ...current.sessionOverrides };
+		const prev = sessionOverrides[sessionId] ?? null;
 		if (levelId && current.levels.some((level) => level.id === levelId)) {
 			sessionOverrides[sessionId] = levelId;
 		} else {
 			delete sessionOverrides[sessionId];
+		}
+		// 会话级安全覆盖变更属敏感操作，单独留痕（updateConfig 的全局日志不含逐会话明细）
+		if (prev !== (sessionOverrides[sessionId] ?? null)) {
+			this.log("security", "Session security level changed", {
+				sessionId,
+				from: prev,
+				to: sessionOverrides[sessionId] ?? null,
+			});
 		}
 		return this.updateConfig({ sessionOverrides });
 	}

@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createDefaultExternalEditorSettings, type AppSettings } from "../../shared/types";
+import { getAppLogger } from "../logging/sharedLogger";
 
 /** 桌面端 settings.json（userData），与 pi agent settings 分离 */
 function desktopSettingsPath() {
@@ -264,6 +265,9 @@ export class SettingsStore {
     this.settings = { ...this.settings, ...safePatch };
     await this.save();
     this.applyMenu();
+    // 配置变更审计（统一在此留痕，覆盖 IPC 与 pet/extension/editors 等所有直写路径）：
+    // 只记变更的 key 列表，不记值——避免 proxyUrl 等敏感内容落盘；值变更回查用 save 前的内存态
+    void getAppLogger()?.info("settings", "Settings updated", { keys: Object.keys(safePatch) });
     return this.get();
   }
 
