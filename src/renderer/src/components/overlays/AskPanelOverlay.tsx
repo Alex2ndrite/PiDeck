@@ -1,10 +1,21 @@
-import { useEffect, useRef, useState } from "react";
-import { useAtomValue } from "jotai";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useAtomValue, useSetAtom } from "jotai";
 import { Check, ChevronDown, ChevronRight, Loader2, MessageSquarePlus, X } from "lucide-react";
 import removeMarkdown from "remove-markdown";
 import { useAskPanel } from "../../hooks/useAskPanel";
-import { sessionMessageCacheBySessionIdAtomFamily } from "../../atoms/session-atoms";
-import { sessionRuntimeBySessionIdAtomFamily } from "../../atoms/session-selectors";
+import {
+  claimSessionRuntimeUiResponseAtom,
+  rollbackSessionRuntimeUiResponseAtom,
+  sessionMessageCacheBySessionIdAtomFamily,
+} from "../../atoms/session-atoms";
+import {
+  sessionRuntimeBySessionIdAtomFamily,
+  sessionRuntimeUiBySessionIdAtomFamily,
+} from "../../atoms/session-selectors";
+import {
+  createSessionRuntimeUiResponder,
+  SessionRuntimeUiOverlay,
+} from "../overlays/SessionRuntimeUiOverlay";
 import { desktopApi } from "../../desktopApi";
 import { t } from "../../i18n";
 import { showNotice } from "../../utils/notice";
@@ -39,6 +50,41 @@ export function AskPanelOverlay() {
   const sessionId = panel.sessionId;
   const cache = useAtomValue(sessionMessageCacheBySessionIdAtomFamily(sessionId ?? ""));
   const runtime = useAtomValue(sessionRuntimeBySessionIdAtomFamily(sessionId ?? ""));
+  // ask 提问卡片状态（阻塞式交互，如 ask_question）：由主进程 ui 事件推送
+  const sessionRuntimeUi = useAtomValue(sessionRuntimeUiBySessionIdAtomFamily(sessionId ?? ""));
+  const claimSessionUiResponse = useSetAtom(claimSessionRuntimeUiResponseAtom);
+  const rollbackSessionUiResponse = useSetAtom(rollbackSessionRuntimeUiResponseAtom);
+  const runtimeRef = useRef(runtime);
+  runtimeRef.current = runtime;
+
+  // 与 SessionRuntimeInjector 相同的 UI 响应器：渲染 ask 卡片并回传回答；
+  // 绑定本会话的 agentId/runtimeGeneration，拒绝旧 runtime 的迟到响应
+  const runtimeUiResponder = useMemo(() => {
+    // 组件在 !panel.isOpen || !sessionId 时提前 return，但 TS 无法收窄闭包内的 sessionId
+    if (!sessionId || !runtime?.agentId) return undefined;
+    const binding = {
+      sessionId,
+      agentId: runtime.agentId,
+      runtimeGeneration: runtime.runtimeGeneration,
+    };
+    return createSessionRuntimeUiResponder({
+      binding,
+      readBinding: () => {
+        const latest = runtimeRef.current;
+        return latest?.agentId
+          ? {
+              sessionId,
+              agentId: latest.agentId,
+              runtimeGeneration: latest.runtimeGeneration,
+            }
+          : undefined;
+      },
+      claim: claimSessionUiResponse,
+      rollback: rollbackSessionUiResponse,
+      send: (input) => desktopApi.sessions.sendUiResponse(input),
+      onError: (error) => showNotice(error instanceof Error ? error.message : String(error), 4000),
+    });
+  }, [claimSessionUiResponse, rollbackSessionUiResponse, runtime?.agentId, runtime?.runtimeGeneration, sessionId]);
 
   // 会话切换（新的并行问询）时收起上次的详情浮层并回到默认位置
   useEffect(() => {
@@ -61,35 +107,40 @@ export function AskPanelOverlay() {
   // 有响应文本且 runtime 不在运行 → 视为已完成（可安全查看完整结果）
   const done = !running && summary.length > 0;
 
-  const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+  const handlePointerDown = (event: React.PointerEvent<HTMLButtonElement>) => {
     // 只响应左键拖动
     if (event.button !== 0) return;
     const rect = event.currentTarget.getBoundingClientRect();
-    dragRef.current = {
+    const drag = {
       startX: event.clientX,
       startY: event.clientY,
       origX: dragPos?.x ?? rect.left,
       origY: dragPos?.y ?? rect.top,
       moved: false,
     };
-    // 捕获指针：拖动过程中即使移出胶囊也能持续收到 move/up 事件
-    event.currentTarget.setPointerCapture(event.pointerId);
-  };
+    dragRef.current = drag;
+    lastDragMovedRef.current = false;
 
-  const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
-    const drag = dragRef.current;
-    if (!drag) return;
-    const dx = event.clientX - drag.startX;
-    const dy = event.clientY - drag.startY;
-    // 未超过点击阈值前不移动，保证「点一下展开」不被微抖动干扰
-    if (!drag.moved && Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) return;
-    drag.moved = true;
-    setDragPos({ x: drag.origX + dx, y: drag.origY + dy });
-  };
-
-  const handlePointerUp = () => {
-    lastDragMovedRef.current = dragRef.current?.moved ?? false;
-    dragRef.current = null;
+    // 用 window 级监听代替 setPointerCapture：capture 会把 click 事件重定向到捕获元素，
+    // 导致胶囊 button 的展开/关闭点击失效（详情点击无反应）。window 监听不拦截 click 派发。
+    const onMove = (moveEvent: PointerEvent) => {
+      const current = dragRef.current;
+      if (!current) return;
+      const dx = moveEvent.clientX - current.startX;
+      const dy = moveEvent.clientY - current.startY;
+      // 未超过点击阈值前不移动，保证「点一下展开」不被微抖动干扰
+      if (!current.moved && Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) return;
+      current.moved = true;
+      setDragPos({ x: current.origX + dx, y: current.origY + dy });
+    };
+    const onUp = () => {
+      lastDragMovedRef.current = dragRef.current?.moved ?? false;
+      dragRef.current = null;
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
   };
 
   return (
@@ -101,9 +152,6 @@ export function AskPanelOverlay() {
           : // 默认位置：会话区域右上方（水平贴右，垂直约 1/4 高度处），拖动后可自由摆放
             { right: 16, top: "25%" }
       }
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
     >
       {expanded && (
         <div className="ask-panel-detail mb-2 flex h-[min(48vh,400px)] w-[min(560px,calc(100vw-2rem))] animate-in fade-in-0 zoom-in-95 duration-base flex-col overflow-hidden rounded-xl border bg-popover shadow-lg">
@@ -143,6 +191,16 @@ export function AskPanelOverlay() {
                 onPreviewImage={() => undefined}
                 onOpenExternal={(url) => void desktopApi.app.openExternal(url)}
                 onToast={showNotice}
+                runtimeUi={
+                  runtimeUiResponder ? (
+                    <SessionRuntimeUiOverlay
+                      sessionId={sessionId}
+                      runtime={runtime}
+                      ui={sessionRuntimeUi}
+                      responder={runtimeUiResponder}
+                    />
+                  ) : undefined
+                }
               />
             ) : (
               <div className="flex h-full items-center justify-center gap-2 text-xs text-muted-foreground">
@@ -158,6 +216,7 @@ export function AskPanelOverlay() {
         className="ask-panel-pill flex h-9 max-w-[340px] cursor-grab touch-none items-center gap-2 rounded-full border bg-popover pl-2.5 pr-1 shadow-lg hover:bg-accent-soft active:cursor-grabbing"
         aria-label={t("askPanel.title")}
         aria-expanded={expanded}
+        onPointerDown={handlePointerDown}
         onClick={() => {
           // 拖动后不触发展开切换
           if (lastDragMovedRef.current) {
