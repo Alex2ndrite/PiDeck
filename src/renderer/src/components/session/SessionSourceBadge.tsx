@@ -14,7 +14,8 @@ const SOURCE_TONES: Record<SessionSource, string> = {
   pi: "border-cyan-300/70 text-cyan-700 dark:border-cyan-700/70 dark:text-cyan-300",
   codex: "border-indigo-300/70 text-indigo-700 dark:border-indigo-700/70 dark:text-indigo-300",
   claude: "border-amber-300/70 text-amber-700 dark:border-amber-700/70 dark:text-amber-300",
-  opencode: "border-emerald-300/70 text-emerald-700 dark:border-emerald-700/70 dark:text-emerald-300",
+  // opencode 官方品牌为黑白单色，不用品牌色（避免绿色观感）；中性灰随主题自适应
+  opencode: "border-muted-foreground/40 text-muted-foreground",
 };
 
 function SourceLogo(props: { source: SessionSource }) {

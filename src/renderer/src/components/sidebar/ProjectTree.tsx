@@ -220,9 +220,21 @@ export function ProjectTree(props: {
       const sessions = props.controller.catalog.sessionsByProject[project.id] ?? [];
       return (
         <section key={project.id} className="mb-4" aria-label={t("app.chatProject")} role="treeitem" aria-expanded={!collapsed}>
-          {/* 与下方「项目」标题栏共用：同 px-2 + text-caption，避免 section p-1 / 标题 px-1 叠出明显错位。 */}
+          {/* 与下方「项目」标题栏共用：同 px-2 + text-caption，避免 section p-1 / 标题 px-1 叠出明显错位。
+              整行可点击切换折叠：折叠态下只看到标题栏时，点标题区即可展开，避免「不知道下面还有会话」；
+              行为与右侧折叠按钮一致（右侧按钮需 stopPropagation 防止二次触发）。 */}
           <div
-            className="flex items-center justify-between px-2 pb-1"
+            className="flex cursor-pointer select-none items-center justify-between rounded-md px-2 pb-1 transition-colors hover:bg-muted/30"
+            title={collapsed ? t("app.projectExpand") : t("app.projectCollapse")}
+            role="button"
+            tabIndex={0}
+            onClick={() => props.controller.toggleProject(project.id)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                props.controller.toggleProject(project.id);
+              }
+            }}
             onContextMenu={(event) => {
               event.preventDefault();
               void props.controller.openMenu({ kind: "project", projectId: project.id, x: event.clientX, y: event.clientY });
@@ -236,7 +248,10 @@ export function ProjectTree(props: {
                 title={collapsed ? t("app.projectExpand") : t("app.projectCollapse")}
                 aria-label={collapsed ? t("app.projectExpand") : t("app.projectCollapse")}
                 aria-expanded={!collapsed}
-                onClick={() => props.controller.toggleProject(project.id)}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  props.controller.toggleProject(project.id);
+                }}
               >
                 {/* Chat 没有可点击的父项目行，折叠入口固定放在标题栏，避免展开后无法恢复。 */}
                 <ChevronsDownUp size={14} aria-hidden="true" />
@@ -247,7 +262,10 @@ export function ProjectTree(props: {
                   className="grid size-6 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                   title={`${t("app.chatProjectSettings")}\n${project.path}`}
                   aria-label={t("app.chatProjectSettings")}
-                  onClick={() => void props.actions.projects.changeChatPath?.(project)}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void props.actions.projects.changeChatPath?.(project);
+                  }}
                 >
                   {/* Chat 是固定父项目，设置入口必须挂在父标题栏，不能依赖当前是否已有会话。 */}
                   <FolderCog size={13} aria-hidden="true" />
@@ -258,7 +276,10 @@ export function ProjectTree(props: {
                 className="grid size-6 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                 title={t("app.newSession")}
                 aria-label={t("app.newSession")}
-                onClick={() => void props.actions.sessions.createDraft(project.id)}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  void props.actions.sessions.createDraft(project.id);
+                }}
               >
                 <Plus size={13} aria-hidden="true" />
               </button>
@@ -267,7 +288,10 @@ export function ProjectTree(props: {
                 className="grid size-6 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                 title={t("app.anonymousChat")}
                 aria-label={t("app.anonymousChat")}
-                onClick={() => void props.actions.sessions.createAnonymous(project.id)}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  void props.actions.sessions.createAnonymous(project.id);
+                }}
               >
                 <HatGlasses size={13} aria-hidden="true" />
               </button>
@@ -292,7 +316,21 @@ export function ProjectTree(props: {
       <section aria-label={t("app.sidebarProjects")} role="tree">
         {/* 标题栏右侧提供添加项目与批量折叠入口，行为与搜索框旁的 FolderPlus 按钮一致；
             与 Chat 标题栏按钮（size-6 圆角悬浮层）同款视觉，避免层级混乱。 */}
-        <div className="flex items-center justify-between px-1 pb-1">
+        {/* 标题栏整行可点击：切换全部项目展开/折叠（与右侧批量折叠按钮一致），
+            避免项目全折叠时点击无反应、不知道下面还有项目。 */}
+        <div
+          className="flex cursor-pointer select-none items-center justify-between rounded-md px-1 pb-1 transition-colors hover:bg-muted/30"
+          title={anyWorkspaceExpanded ? t("app.projectCollapseAll") : t("app.projectExpandAll")}
+          role="button"
+          tabIndex={0}
+          onClick={() => props.controller.toggleCollapseAllProjects()}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              props.controller.toggleCollapseAllProjects();
+            }
+          }}
+        >
           <span className="text-caption font-medium text-muted-foreground">{t("app.sidebarProjects")}</span>
           <div className="flex items-center gap-0.5">
             <button
@@ -301,7 +339,10 @@ export function ProjectTree(props: {
               title={anyWorkspaceExpanded ? t("app.projectCollapseAll") : t("app.projectExpandAll")}
               aria-label={anyWorkspaceExpanded ? t("app.projectCollapseAll") : t("app.projectExpandAll")}
               aria-expanded={anyWorkspaceExpanded}
-              onClick={() => props.controller.toggleCollapseAllProjects()}
+              onClick={(event) => {
+                event.stopPropagation();
+                props.controller.toggleCollapseAllProjects();
+              }}
             >
               {/* 与 Chat 标题栏同款折叠图标：点击在「全部折叠/全部展开」之间切换 */}
               <ChevronsDownUp size={14} aria-hidden="true" />
@@ -311,7 +352,10 @@ export function ProjectTree(props: {
               className="grid size-6 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               title={t("app.addProject")}
               aria-label={t("app.addProject")}
-              onClick={() => void props.actions.projects.add()}
+              onClick={(event) => {
+                event.stopPropagation();
+                void props.actions.projects.add();
+              }}
             >
               <FolderPlus size={13} aria-hidden="true" />
             </button>

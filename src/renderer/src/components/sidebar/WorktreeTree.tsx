@@ -18,6 +18,21 @@ const workspaceSelectClass =
 const workspaceActionClass = "text-muted-foreground hover:bg-muted hover:text-foreground";
 const workspaceSessionsClass = "min-w-0 basis-[calc(100%-24px)] ml-6 pl-2";
 
+/**
+ * 操作按钮（+/匿名/删除）以 absolute 浮层呈现，必须锚定在「标题行」这一层：
+ * 外层行容器还包着展开的会话列表（flex-wrap 换行），若直接对行容器 top-1/2 定位，
+ * 按钮会跑到「标题 + 全部历史会话」整块的中心，压住历史会话行、挡住点击。
+ */
+function WorkspaceRowActions(props: {
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="workspace-tree-actions pointer-events-none absolute top-1/2 right-0.5 flex -translate-y-1/2 items-center gap-0.5 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
+      {props.children}
+    </div>
+  );
+}
+
 export function WorktreeTree(props: {
   project: Project;
   controller: SidebarController;
@@ -77,8 +92,9 @@ export function WorktreeTree(props: {
             </span>
           </Button>
           {/* 新建入口放在工作区行上（hover 显现，与其他工作区行一致）：
-              根项目行在 worktree 模式下不再承担 +/匿名，避免入口藏得深 */}
-          <div className="workspace-tree-actions pointer-events-none absolute top-1/2 right-0.5 flex -translate-y-1/2 items-center gap-0.5 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
+              根项目行在 worktree 模式下不再承担 +/匿名，避免入口藏得深。
+              主工作区的会话列表在行外（section 内），行容器高度只有标题行，锚定安全。 */}
+          <WorkspaceRowActions>
             <Button
               type="button"
               variant="ghost"
@@ -101,7 +117,7 @@ export function WorktreeTree(props: {
             >
               <HatGlasses size={13} />
             </Button>
-          </div>
+          </WorkspaceRowActions>
         </div>
         {/* Worktree 模式下主工作区是默认展开的第一项；根项目历史必须挂在这里，
             不能等 Worktree 列表渲染完再由 ProjectTree 追加到所有工作区之后。 */}
@@ -173,93 +189,97 @@ function WorkspaceTreeRowView(props: {
     // 选中态只高亮分支名行（select 按钮），不能把外层 wrapper 整行压暗——
     // wrapper 还包着展开的会话列表，整行变色会让整个工作区区块发暗。
     <div className={cn(workspaceRowClass, "flex-wrap text-muted-foreground")}>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon-xs"
-        className="workspace-tree-expand shrink-0 text-muted-foreground"
-        aria-expanded={expanded}
-        aria-controls={childProject ? rowId : undefined}
-        aria-label={expanded ? t("app.projectCollapse") : t("app.projectExpand")}
-        title={expanded ? t("app.projectCollapse") : t("app.projectExpand")}
-        disabled={!childProject}
-        onClick={() => props.controller.toggleWorktreeSessions(row.path)}
-      >
-        {expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
-      </Button>
-
-      {/* 悬浮展示完整分支名 + 工作区路径（分支名在行内常被 truncate） */}
-      <PathTooltip content={`${row.branch}${row.directory !== row.branch ? ` (${row.directory})` : ""}\n${row.path}`}>
-        <button
+      {/* 标题行单独成相对容器：会话列表（flex-wrap 换到下一行）留在外层，
+          操作按钮 absolute 锚定本行，不会压到展开的历史会话上。 */}
+      <div className="workspace-tree-header relative flex min-w-0 flex-1 items-center gap-0.5">
+        <Button
           type="button"
-          className={cn(
-            "workspace-tree-select",
-            workspaceSelectClass,
-            // 子 worktree 是父项目下的分支入口，不应与父项目/主工作区争夺视觉层级。
-            "text-control",
-            isActive && "bg-accent/60 border border-border-strong text-foreground",
-          )}
+          variant="ghost"
+          size="icon-xs"
+          className="workspace-tree-expand shrink-0 text-muted-foreground"
+          aria-expanded={expanded}
+          aria-controls={childProject ? rowId : undefined}
+          aria-label={expanded ? t("app.projectCollapse") : t("app.projectExpand")}
+          title={expanded ? t("app.projectCollapse") : t("app.projectExpand")}
           disabled={!childProject}
-          onClick={() => childProject && props.actions.projects.select(childProject.id)}
-          onContextMenu={(event) => {
-            if (!childProject) return;
-            event.preventDefault();
-            void props.controller.openMenu({
-              kind: "project",
-              projectId: childProject.id,
-              x: event.clientX,
-              y: event.clientY,
-            });
-          }}
+          onClick={() => props.controller.toggleWorktreeSessions(row.path)}
         >
-          <GitBranch className="size-3.5 shrink-0" aria-hidden="true" />
-          <span className={cn("min-w-0 flex-1 truncate", isActive ? "font-normal" : "font-medium")}>{row.branch}</span>
-          {row.directory !== row.branch && (
-            <span className="workspace-tree-directory max-w-20 shrink-0 truncate text-micro text-muted-foreground">{row.directory}</span>
-          )}
-        </button>
-      </PathTooltip>
+          {expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+        </Button>
 
-      {childProject && (
-        <div className="workspace-tree-actions pointer-events-none absolute top-1/2 right-0.5 flex -translate-y-1/2 items-center gap-0.5 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
-          <Button
+        {/* 悬浮展示完整分支名 + 工作区路径（分支名在行内常被 truncate） */}
+        <PathTooltip content={`${row.branch}${row.directory !== row.branch ? ` (${row.directory})` : ""}\n${row.path}`}>
+          <button
             type="button"
-            variant="ghost"
-            size="icon-xs"
-            className={workspaceActionClass}
-            title={t("app.projectNewAgent")}
-            aria-label={t("app.projectNewAgent")}
-            onClick={() => void props.actions.sessions.createDraft(childProject.id)}
+            className={cn(
+              "workspace-tree-select",
+              workspaceSelectClass,
+              // 子 worktree 是父项目下的分支入口，不应与父项目/主工作区争夺视觉层级。
+              "text-control",
+              isActive && "bg-accent/60 border border-border-strong text-foreground",
+            )}
+            disabled={!childProject}
+            onClick={() => childProject && props.actions.projects.select(childProject.id)}
+            onContextMenu={(event) => {
+              if (!childProject) return;
+              event.preventDefault();
+              void props.controller.openMenu({
+                kind: "project",
+                projectId: childProject.id,
+                x: event.clientX,
+                y: event.clientY,
+              });
+            }}
           >
-            <Plus size={13} />
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-xs"
-            className={workspaceActionClass}
-            title={t("app.anonymousChat")}
-            aria-label={t("app.anonymousChat")}
-            onClick={() => void props.actions.sessions.createAnonymous(childProject.id)}
-          >
-            <HatGlasses size={13} />
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-xs"
-            className="text-muted-foreground hover:bg-danger-soft hover:text-danger"
-            title={t("menu.removeProject")}
-            aria-label={t("menu.removeProject")}
-            onClick={() => void props.actions.worktrees.remove(props.rootProject.id, {
-              path: row.path,
-              branch: row.branch,
-            }, childProject)}
-          >
-            <Trash2 size={13} />
-          </Button>
-        </div>
-      )}
+            <GitBranch className="size-3.5 shrink-0" aria-hidden="true" />
+            <span className={cn("min-w-0 flex-1 truncate", isActive ? "font-normal" : "font-medium")}>{row.branch}</span>
+            {row.directory !== row.branch && (
+              <span className="workspace-tree-directory max-w-20 shrink-0 truncate text-micro text-muted-foreground">{row.directory}</span>
+            )}
+          </button>
+        </PathTooltip>
+
+        {childProject && (
+          <WorkspaceRowActions>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              className={workspaceActionClass}
+              title={t("app.projectNewAgent")}
+              aria-label={t("app.projectNewAgent")}
+              onClick={() => void props.actions.sessions.createDraft(childProject.id)}
+            >
+              <Plus size={13} />
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              className={workspaceActionClass}
+              title={t("app.anonymousChat")}
+              aria-label={t("app.anonymousChat")}
+              onClick={() => void props.actions.sessions.createAnonymous(childProject.id)}
+            >
+              <HatGlasses size={13} />
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              className="text-muted-foreground hover:bg-danger-soft hover:text-danger"
+              title={t("menu.removeProject")}
+              aria-label={t("menu.removeProject")}
+              onClick={() => void props.actions.worktrees.remove(props.rootProject.id, {
+                path: row.path,
+                branch: row.branch,
+              }, childProject)}
+            >
+              <Trash2 size={13} />
+            </Button>
+          </WorkspaceRowActions>
+        )}
+      </div>
 
       {expanded && childProject && (
         <div id={rowId} className={cn("workspace-tree-sessions", workspaceSessionsClass)}>
