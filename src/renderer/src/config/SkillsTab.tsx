@@ -138,8 +138,11 @@ export function SkillsTab(props: {
 								}
 							}}
 						>
-							<SelectTrigger className="w-full">
-								<span className="flex min-w-0 flex-col items-start gap-0.5">
+							{/* 两行内容（名称 + 绝对路径）超出默认 h-9 固定高度：
+								覆盖为 h-auto + min-h-9，高度随内容撑开，避免文本溢出框边界；
+								内层 span 加 flex-1 让 truncate 有确定宽度约束（窄列截断为省略号）。 */}
+							<SelectTrigger className="min-h-9 w-full py-1.5 data-[size=default]:h-auto">
+								<span className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
 									<span className="truncate">{selectedLocation?.label ?? t("config.chooseFolder")}</span>
 									<span className="truncate font-mono text-micro text-muted-foreground">{selectedLocation?.path}</span>
 								</span>

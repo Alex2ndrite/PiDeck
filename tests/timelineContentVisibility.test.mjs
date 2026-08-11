@@ -17,14 +17,16 @@ test("message-list no longer estimates offscreen row height via content-visibili
   assert.doesNotMatch(timeline, /message-list[^\n]*contain-intrinsic-size:auto_\d+px/);
 });
 
-test("long-session window governance stays via pagination hooks", () => {
-  // 分页窗口仍在做长会话治理（渲染尾部 N 条，向上滚动扩窗）
+test("long-session window governance stays via turn-based history loading", () => {
+  // 2026-11 轮次模型：100 条分页器已删除，长会话治理改由
+  // 「贴底挂载窗口 + 按轮补历史（主进程缓存优先/文件兜底）」承担。
   const controller = readFileSync(
     "src/renderer/src/hooks/useSessionTimelineController.ts",
     "utf8",
   );
-  assert.match(controller, /useMessagePagination/);
-  assert.match(controller, /initialPageSize: options\.initialPageSize \?\? 100/);
+  assert.doesNotMatch(controller, /useMessagePagination/);
+  assert.match(controller, /RUNTIME_HISTORY_TURN_PAGE_SIZE/);
+  assert.match(controller, /beforeEntryId: anchorEntryId/);
 });
 
 test("single-turn DOM stays light via default-collapsed process group", () => {

@@ -34,7 +34,6 @@ function loadTimelineHelpers() {
     jotai: { atom: (value) => ({ _mockInit: value }) },
     "jotai/utils": {},
     "../atoms": {},
-    "./useMessagePagination": {},
     "../desktopApi": {},
   });
 }
@@ -65,12 +64,13 @@ test("timeline auto-scroll only sticks while the reader remains near the bottom"
 test("timeline owns paging, delegated scroll follow, and outline jump lifecycle", () => {
 	assert.match(source, /selectAtom\([\s\S]*sessionMessagesCacheAtom/);
 	assert.match(source, /readRecordMessagePage\(sessionId/);
-	assert.match(source, /prependMessagePage/);
+	assert.match(source, /prependHistoryPage/);
 	// 激活分页（2026-08）：runtime 窗口会话的显示总数 = disk 前缀 + 窗口段的组合长度
 	assert.match(source, /totalMessageCount: diskPage \? diskPage\.total : combinedMessages\.length/);
   // 流式跟随由 beUI MessageScroller 负责；controller 只接收跟随状态，避免重复写 scrollTop。
   assert.match(source, /setAutoScrollFromScroller/);
-  assert.match(source, /pagination\.loadUntilIncluded\(index\)/);
+  // 2026-11：100 条分页器已删除，jump 不再扩渲染窗口（数据全量在 atom）
+  assert.doesNotMatch(source, /pagination\.loadUntilIncluded\(index\)/);
   assert.match(source, /restoreTimelineAnchor\(/);
 });
 
@@ -93,4 +93,29 @@ test("background Session cache changes retain the selected timeline slice", () =
     background: { messages: [{ id: "new" }] },
   });
   assert.equal(store.get(selectedMessages), before);
+});
+
+test("bottom-settle history clear invalidates in-flight runtime history pages", () => {
+  // 清理成功后必须推进 load 序号并复位加载标志：迟到页响应被 latestLoadBySession 丢弃，
+  // isLoadingMessagePage 也不会卡死后续加载（修复前只有 clearHistory 调用）。
+  assert.match(source, /if \(clearHistory\(sessionId\)\)/);
+  assert.match(source, /const sequence = \+\+nextLoadSequence;/);
+  assert.match(source, /setIsLoadingMessagePage\(false\)/);
+  assert.match(source, /trackLatestLoad\(sessionId, sequence\)/);
+});
+
+test("prepend scroll compensation is skipped while following bottom and marks programmatic scroll", () => {
+  // 跟底中（autoScrollRef=true）不恢复旧锚点：贴底引擎负责生长补偿，避免把用户拽回顶部；
+  // 非跟底时标记程序化滚动，防止补偿的 scrollTop 赋值触发 ≤240px 自动加载。
+  assert.match(source, /if \(autoScrollRef\.current\) \{\n\s*loadMoreAnchorRef\.current = undefined;\n\s*return;\n\s*\}/);
+  assert.match(source, /programmaticScrollRef\.current = true;\n\s*timeline\.scrollTop = restoreTimelineAnchor/);
+  assert.match(source, /requestAnimationFrame\(\(\) => \{\n\s*programmaticScrollRef\.current = false;/);
+});
+
+test("auto history load ignores programmatic scrolls and only fires on real user scroll", () => {
+  // 监听器迁移到 controller：程序化滚动事件先消费 programmaticScrollRef 抑制标记；
+  // 组件里不再存在裸的 scrollTop>240 触发（原实现会因补偿滚动连锁翻页）。
+  assert.match(source, /if \(programmaticScrollRef\.current\) \{\n\s*programmaticScrollRef\.current = false;\n\s*return;\n\s*\}/);
+  assert.match(source, /HISTORY_AUTO_LOAD_THRESHOLD/);
+  assert.match(source, /timeline\.addEventListener\("scroll", onScroll, \{ passive: true \}\)/);
 });

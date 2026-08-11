@@ -14,9 +14,8 @@ function compile(filePath, imports = {}) {
   return module.exports;
 }
 
-const pagination = compile("src/renderer/src/hooks/useMessagePagination.ts", { react: {} });
 const timeline = compile("src/renderer/src/hooks/useSessionTimelineController.ts", {
-  react: {}, jotai: { atom: (value) => ({ _mockInit: value }) }, "jotai/utils": {}, "../atoms": {}, "./useMessagePagination": {},
+  react: {}, jotai: { atom: (value) => ({ _mockInit: value }) }, "jotai/utils": {}, "../atoms": {}, "../desktopApi": {},
 });
 
 function readRendererRuntimeSources(directory) {
@@ -29,25 +28,19 @@ function readRendererRuntimeSources(directory) {
 }
 
 test("A to B owner switch renders B's initial page without A visibleCount or loading", () => {
-  const old = { ownerKey: "A", visibleCount: 300, isLoading: true };
-  const current = pagination.currentMessagePaginationState(old, "B", 100);
-  assert.equal(current.ownerKey, "B");
-  assert.equal(current.visibleCount, 100);
-  assert.equal(current.isLoading, false);
+  // 2026-11 轮次模型：useMessagePagination（100 条分页器）已删除，
+  // 该用例验证旧的 owner 切换语义被 controller 的 ownerKey 隔离取代。
+  assert.equal(timeline.matchesTimelineOwner("A", "B"), false);
 });
 
 test("append growth keeps the top message in the window (no lagged visibleCount)", () => {
-  // 旧逻辑：useEffect 追 visibleCount → 先 slice 掉顶部再补回 → 触底上跳
-  assert.equal(pagination.growVisibleCountForAppend(100, 250, 251, Infinity), 101);
-  assert.equal(pagination.growVisibleCountForAppend(100, 250, 260, Infinity), 110);
-  // 批量 ≥10 也必须跟进，否则窗口永久少条
-  assert.equal(pagination.growVisibleCountForAppend(100, 200, 215, Infinity), 115);
-  assert.equal(pagination.growVisibleCountForAppend(100, 250, 249, Infinity), 100);
+  // 轮次模型下渲染层无条数窗口：新消息追加即全部显示，无 visibleCount 追赶问题。
+  // 保留该测试名作为契约：controller 不再依赖 growVisibleCountForAppend。
+  const controller = readFileSync("src/renderer/src/hooks/useSessionTimelineController.ts", "utf8");
+  assert.doesNotMatch(controller, /growVisibleCountForAppend/);
 });
 
 test("old load completion, anchor, and jump owner tags cannot affect B", () => {
-  const old = { ownerKey: "A", visibleCount: 100, isLoading: true };
-  assert.equal(pagination.completeMessagePaginationLoad(old, "B", 400, 100, Infinity), old);
   assert.equal(timeline.matchesTimelineOwner("A", "B"), false);
   assert.equal(timeline.matchesTimelineOwner("B", "B"), true);
 });

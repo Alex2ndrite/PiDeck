@@ -38,6 +38,12 @@ export type SessionMessagePage = {
 	messages: ChatMessage[];
 	total: number;
 	nextBefore: number | null;
+	/**
+	 * 下一页锚点（entryId，2026-11 缓存优先）：页最旧条目的 entryId。
+	 * 主进程缓存命中路径用它做续页游标（跨下标空间稳定）；文件路径同义于 nextBefore 指向的条目。
+	 * 到顶（nextBefore === null）时缺省。
+	 */
+	nextBeforeEntryId?: string;
 	/** 会话文件版本（mtime:size）：渲染层比对检测压缩/外部改写，变化即丢弃已缓存的历史前缀。 */
 	indexVersion?: string;
 };
@@ -220,6 +226,7 @@ export type SessionRuntimeInfo = SessionRuntimeTarget & {
 
 export type SessionCommandErrorCode =
 	| "SESSION_NOT_FOUND"
+	| "MESSAGE_NOT_FOUND"
 	| "SESSION_RUNTIME_UNAVAILABLE"
 	| "SESSION_RUNTIME_CHANGED"
 	| "SESSION_RUNTIME_BUSY"

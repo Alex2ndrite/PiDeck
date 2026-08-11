@@ -17,11 +17,11 @@ import { sameProjectSessionList } from "../utils/sessionRecordIdentity";
 
 /**
  * 渲染层会话消息缓存上限（LRU）。
- * 20 → 8：日常场景（3 个分屏常驻 + 2 个预览 + 3 个切换缓冲）即可覆盖；
+ * 8 → 6（2026-11 轮次模型）：3 个分屏常驻 + 2 个预览 + 1 个切换缓冲即可覆盖；
  * 淘汰的会话切回时走激活分页（尾部 3 轮）重新拉取，成本可控，
  * 而每条消息对象（含工具输出文本）常驻渲染层是内存大头。
  */
-export const SESSION_MESSAGE_CACHE_LIMIT = 8;
+export const SESSION_MESSAGE_CACHE_LIMIT = 6;
 
 export type SessionRuntimeViewState = {
   agentId?: string;
@@ -62,6 +62,8 @@ export type SessionMessageCacheEntry = {
 	page?: Pick<SessionMessagePage, "total" | "nextBefore">;
 	/** 激活显示窗口起点（runtime 数组下标空间，2026-08 激活分页）；>0 表示窗口前还有历史。 */
 	windowStart?: number;
+	/** 窗口首条消息的文件消息下标（2026-11）：窗口缺 entryId 时作为首次补历史的数值游标 */
+	windowStartFilePos?: number;
 	/**
 	 * disk 历史前缀（仅 runtime 窗口会话）：prepend-only 轮次页，
 	 * 与运行时窗口段的接缝按 meta.entryId 去重；fileVersion 变化（压缩改写）即整段失效。
@@ -69,6 +71,8 @@ export type SessionMessageCacheEntry = {
 	history?: {
 		messages: ChatMessage[];
 		nextBefore: number | null;
+		/** 下一页续页锚点（页最旧条目的 entryId，2026-11 缓存优先路径用） */
+		nextBeforeEntryId?: string | null;
 		version?: string;
 	};
 };
@@ -439,6 +443,8 @@ export const cacheSessionMessagesAtom = atom(
 		page?: Pick<SessionMessagePage, "total" | "nextBefore">;
 		/** runtime 窗口协议字段（2026-08 激活分页） */
 		windowStart?: number;
+		/** 窗口首条消息的文件消息下标（2026-11）：窗口缺 entryId 时作为首次补历史的数值游标 */
+		windowStartFilePos?: number;
 		history?: SessionMessageCacheEntry["history"];
   }) => {
     const cache = get(sessionMessagesCacheAtom);
@@ -487,6 +493,10 @@ export const cacheSessionMessagesAtom = atom(
 			...(input.source === "runtime" ? {
 				windowStart: input.windowStart && input.windowStart > 0 ? input.windowStart : undefined,
 				history: input.history,
+				// 未显式提供时保留旧值（增量 flush 不携带该字段，不应清掉有效游标）
+				...(typeof input.windowStartFilePos === "number"
+					? { windowStartFilePos: input.windowStartFilePos }
+					: {}),
 			} : {}),
 		},
     };
@@ -590,6 +600,9 @@ export const prependSessionHistoryPageAtom = atom(
     }
     // 续页必须游标连续；首次加载（无 history）不要求
     if (current.history && current.history.nextBefore !== input.before) return false;
+    // 回底清理后迟到的续页直接拒绝：history 已清空时只接受新的首次页（before === undefined），
+    // 否则慢响应会把已释放的历史前缀复活并携带旧滚动锚点。
+    if (!current.history && input.before !== undefined) return false;
 
     const segmentKeys = new Set(current.messages.map(messageEntryKey));
     const pageMessages = input.page.messages.filter((message) => !segmentKeys.has(messageEntryKey(message)));
@@ -613,6 +626,8 @@ export const prependSessionHistoryPageAtom = atom(
           ? {
               messages: merged,
               nextBefore: input.page.nextBefore,
+              // 续页锚点：本次页最旧条目的 entryId（渲染层续页请求携带，缓存优先路径依赖）
+              ...(input.page.nextBeforeEntryId ? { nextBeforeEntryId: input.page.nextBeforeEntryId } : {}),
               version: input.page.indexVersion ?? current.history?.version,
             }
           : undefined,
@@ -621,6 +636,25 @@ export const prependSessionHistoryPageAtom = atom(
     });
     return true;
   },
+);
+
+/**
+ * 回底清理临时历史（2026-11 轮次模型）：贴底稳定后把 runtime 会话翻过的历史前缀清掉，
+ * 只保留运行时窗口段 —— atom 数据回到「最近 3 轮窗口」，渲染层内存最小；
+ * 再次上翻走「atom → 主进程缓存 → 文件」三级递进重新拉取。
+ * 仅 runtime 来源缓存生效；disk 来源（历史会话浏览）不清，避免打断按条分页游标。
+ */
+export const clearSessionHistoryAtom = atom(
+	null,
+	(get, set, sessionId: string) => {
+		const current = get(sessionMessagesCacheAtom)[sessionId];
+		if (!current || current.source !== "runtime" || !current.history) return false;
+		set(sessionMessagesCacheAtom, {
+			...get(sessionMessagesCacheAtom),
+			[sessionId]: { ...current, history: undefined, updatedAt: Date.now() },
+		});
+		return true;
+	},
 );
 
 function toAgentUiRequest(
@@ -1112,6 +1146,9 @@ export const applySessionRuntimeEventAtom = atom(
       const upsertFrom = typeof payload.upsertFrom === "number" ? payload.upsertFrom : undefined;
       const totalLength = typeof payload.totalLength === "number" ? payload.totalLength : undefined;
       const payloadWindowStart = typeof payload.windowStart === "number" ? payload.windowStart : undefined;
+      const payloadWindowStartFilePos = typeof payload.windowStartFilePos === "number"
+        ? payload.windowStartFilePos
+        : undefined;
       const fileVersion = typeof payload.fileVersion === "string" ? payload.fileVersion : undefined;
       if (Array.isArray(messages)) {
         const current = get(sessionMessagesCacheAtom)[event.sessionId];
@@ -1146,6 +1183,9 @@ export const applySessionRuntimeEventAtom = atom(
             source: "runtime",
             windowStart: payloadWindowStart,
             history: reconcileHistoryPrefix(current?.history, segment, fileVersion),
+            ...(typeof payloadWindowStartFilePos === "number"
+              ? { windowStartFilePos: payloadWindowStartFilePos }
+              : {}),
           });
         }
         // message 到达后若已含同段 thinking，安全卸 live（覆盖 done 先到的情况）。

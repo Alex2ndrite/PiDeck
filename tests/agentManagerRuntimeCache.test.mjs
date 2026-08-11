@@ -1,0 +1,349 @@
+import assert from "node:assert/strict";
+import { mkdtemp, rm, stat, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import test from "node:test";
+import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
+
+const { AgentManager } = loadTsCommonJs("src/main/pi/AgentManager.ts");
+
+const entryLine = (id, parentId, role, text) => JSON.stringify({
+  id, parentId, type: "message",
+  message: { id: `m-${id}`, role, content: [{ type: "text", text }] },
+});
+
+/** 6 轮 × 每条 user/assistant，尾部 3 轮（e7..e12）在运行时缓存中。 */
+async function createHarness() {
+  const directory = await mkdtemp(join(tmpdir(), "pideck-runtime-cache-"));
+  const sessionPath = join(directory, "session.jsonl");
+  const ids = ["e1", "e2", "e3", "e4", "e5", "e6", "e7", "e8", "e9", "e10", "e11", "e12"];
+  const lines = [];
+  let parent = null;
+  for (const id of ids) {
+    lines.push(entryLine(id, parent, id.endsWith("e1") || id.endsWith("e3") || id.endsWith("e5") || id.endsWith("e7") || id.endsWith("e9") || id.endsWith("e11") ? "user" : "assistant", `${id} text`));
+    parent = id;
+  }
+  await writeFile(sessionPath, lines.join("\n") + "\n", "utf8");
+
+  const runtime = {
+    tab: {
+      id: "agent-1",
+      projectId: "project-1",
+      cwd: "C:/project",
+      title: "Session",
+      status: "idle",
+      sessionPath,
+      sessionEnvironment: "native",
+      sessionSource: "pi",
+      createdAt: 1,
+    },
+    process: { client: { request: async () => ({ success: true, data: {} }) } },
+  };
+  const manager = new AgentManager(
+    () => ({ id: "project-1", name: "Project", path: "C:/project" }),
+    () => null,
+    { get: () => ({}) },
+    {},
+  );
+  manager.agents.set("agent-1", runtime);
+  // 运行时缓存 = 尾部 5 轮（e4..e12 = 9 条），模拟运行中 12 轮窗口的一部分；
+  // 文件里完整 6 轮（e1..e12），缓存只覆盖尾部——翻历史时 e7 之前的 e4..e6 可从缓存命中
+  manager.messages.set("agent-1", ["e4", "e5", "e6", "e7", "e8", "e9", "e10", "e11", "e12"].map((id) => ({
+    id: `m-${id}`,
+    agentId: "agent-1",
+    role: id.endsWith("4") || id.endsWith("6") || id.endsWith("8") || id.endsWith("10") || id.endsWith("12") ? "user" : "assistant",
+    text: `${id} text`,
+    timestamp: 1,
+    meta: { entryId: id },
+  })));
+  return { manager, sessionPath, directory };
+}
+
+test("tryReadRuntimeTurnPage serves cache-resident turns without reading the file", async () => {
+  const { manager, sessionPath, directory } = await createHarness();
+  try {
+    // 请求 e7（运行时窗口首条）之前的 3 轮 → 命中缓存：返回 e4..e6（文件里存在但缓存没有的部分）
+    const page = await manager.tryReadRuntimeTurnPage(sessionPath, "agent-1", {
+      beforeEntryId: "e7",
+      turnCount: 3,
+    });
+    assert.ok(page, "cache hit expected");
+    assert.equal(page.messages.length, 3);
+    assert.equal(page.messages[0].meta.entryId, "e4");
+    assert.equal(page.messages[2].meta.entryId, "e6");
+    // 游标换算回文件下标空间：e4 在文件里的位置 = 3
+    assert.equal(page.nextBefore, 3);
+    assert.equal(page.nextBeforeEntryId, "e4");
+    assert.equal(page.total, 12);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("tryReadRuntimeTurnPage misses when anchor is outside the runtime cache", async () => {
+  const { manager, sessionPath, directory } = await createHarness();
+  try {
+    // e2 不在缓存中 → 未命中，调用方回退读文件
+    const miss = await manager.tryReadRuntimeTurnPage(sessionPath, "agent-1", {
+      beforeEntryId: "e2",
+      turnCount: 3,
+    });
+    assert.equal(miss, null);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("tryReadRuntimeTurnPage misses for inactive agents (history viewer path)", async () => {
+  const { manager, sessionPath, directory } = await createHarness();
+  try {
+    manager.agents.delete("agent-1");
+    const miss = await manager.tryReadRuntimeTurnPage(sessionPath, "agent-1", {
+      beforeEntryId: "e7",
+      turnCount: 3,
+    });
+    assert.equal(miss, null);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("tryReadRuntimeTurnPage misses when the runtime switched to another session", async () => {
+  const { manager, sessionPath, directory } = await createHarness();
+  try {
+    // 运行时已切到别的会话（替换/重绑）：不得用其缓存应答本会话翻页
+    const otherPath = join(directory, "other.jsonl");
+    await writeFile(otherPath, "{}", "utf8");
+    manager.agents.get("agent-1").tab.sessionPath = otherPath;
+    const miss = await manager.tryReadRuntimeTurnPage(sessionPath, "agent-1", {
+      beforeEntryId: "e7",
+      turnCount: 3,
+    });
+    assert.equal(miss, null);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("tryReadRuntimeTurnPage cache pages carry the file indexVersion and cursor equivalence", async () => {
+  const { manager, sessionPath, directory } = await createHarness();
+  try {
+    const version = await stat(sessionPath);
+    const page = await manager.tryReadRuntimeTurnPage(sessionPath, "agent-1", {
+      beforeEntryId: "e7",
+      turnCount: 3,
+    });
+    assert.ok(page, "cache hit expected");
+    // 与文件路径同口径的版本串：渲染层据此检测压缩/外部改写
+    assert.equal(page.indexVersion, `${version.mtimeMs}:${version.size}`);
+    // 数值游标（文件消息下标）与 entryId 游标解析到同一页；
+    // 注意：before 落在缓存最旧条目（pos===0）时正确行为是返回 null 交给文件路径。
+    const byBefore = await manager.tryReadRuntimeTurnPage(sessionPath, "agent-1", {
+      before: 5,
+      turnCount: 3,
+    });
+    assert.ok(byBefore, "numeric cursor cache hit expected");
+    assert.equal(byBefore.messages[0].meta.entryId, "e4");
+    const byEntryId = await manager.tryReadRuntimeTurnPage(sessionPath, "agent-1", {
+      beforeEntryId: "e6",
+      turnCount: 3,
+    });
+    assert.ok(byEntryId);
+    assert.deepEqual(
+      byBefore.messages.map((m) => m.meta.entryId),
+      byEntryId.messages.map((m) => m.meta.entryId),
+    );
+    assert.equal(byBefore.nextBefore, byEntryId.nextBefore);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("cache-miss edit/delete/resend locate the file entry via synthetic ids and restore the text draft", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "pideck-runtime-cache-miss-"));
+  const sessionPath = join(directory, "session.jsonl");
+  try {
+    const lines = [];
+    let parent = null;
+    for (const id of ["e1", "e2", "e3", "e4", "e5", "e6"]) {
+      lines.push(entryLine(id, parent, id.endsWith("1") || id.endsWith("3") || id.endsWith("5") ? "user" : "assistant", `${id} text`));
+      parent = id;
+    }
+    await writeFile(sessionPath, lines.join("\n") + "\n", "utf8");
+
+    const runtime = {
+      tab: {
+        id: "agent-1",
+        projectId: "project-1",
+        cwd: "C:/project",
+        title: "Session",
+        status: "idle",
+        sessionPath,
+        sessionEnvironment: "native",
+        sessionSource: "pi",
+        createdAt: 1,
+      },
+      process: { client: { request: async () => ({ success: true, data: {} }) } },
+    };
+    const calls = [];
+    const editorStub = {
+      editMessage: async (input) => { calls.push(["edit", input.target]); return {}; },
+      deleteMessage: async (input) => { calls.push(["delete", input.target]); return {}; },
+      truncateForResend: async (input) => { calls.push(["resend", input.target]); return {}; },
+    };
+    const manager = new AgentManager(
+      () => ({ id: "project-1", name: "Project", path: "C:/project" }),
+      () => null,
+      { get: () => ({}) },
+      {},
+      undefined,
+      undefined,
+      editorStub,
+    );
+    manager.agents.set("agent-1", runtime);
+    // 运行时缓存只覆盖尾部 e4..e6 → e1 全部走缓存未命中文件定位
+    manager.messages.set("agent-1", ["e4", "e5", "e6"].map((id) => ({
+      id: `m-${id}`,
+      agentId: "agent-1",
+      role: id.endsWith("4") || id.endsWith("6") ? "user" : "assistant",
+      text: `${id} text`,
+      timestamp: 1,
+      meta: { entryId: id },
+    })));
+    manager.loadMessages = async () => {}; // 文件编辑后的重载不属于本测试范围
+
+    await manager.editMessage("agent-1", "agent-1-history-e1", "edited");
+    assert.equal(calls[0][0], "edit");
+    assert.equal(calls[0][1].entryId, "e1", "synthetic id must resolve to the real file entry");
+
+    await manager.deleteMessage("agent-1", "agent-1-history-e1");
+    assert.equal(calls[1][0], "delete");
+    assert.equal(calls[1][1].entryId, "e1");
+
+    // 纯文本 cache-miss 重发：截断前必须把草稿完整取回（修复前返回空文本）
+    const draft = await manager.prepareResendFromMessage("agent-1", "agent-1-history-e1");
+    assert.equal(calls[2][0], "resend");
+    assert.equal(calls[2][1].entryId, "e1");
+    assert.equal(draft.text, "e1 text");
+    assert.equal(draft.images, undefined);
+
+    // 缓存命中重发仍走缓存草稿
+    const hit = await manager.prepareResendFromMessage("agent-1", "m-e4");
+    assert.equal(hit.text, "e4 text");
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("loadMessages aligns trimmed runtime messages with their real entry ids", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "pideck-runtime-cache-align-"));
+  const sessionPath = join(directory, "session.jsonl");
+  try {
+    await writeFile(sessionPath, "{}", "utf8");
+    const messages = [];
+    const entries = [];
+    let parent = null;
+    for (let i = 1; i <= 15; i += 1) {
+      const uid = `u${i}`;
+      const aid = `a${i}`;
+      messages.push({ role: "user", content: [{ type: "text", text: `q${i}` }], id: `msg-u${i}` });
+      entries.push({ id: uid, parentId: parent, type: "message", message: { role: "user", id: `msg-u${i}` } });
+      parent = uid;
+      messages.push({ role: "assistant", content: [{ type: "text", text: `a${i}` }], id: `msg-a${i}` });
+      entries.push({ id: aid, parentId: parent, type: "message", message: { role: "assistant", id: `msg-a${i}` } });
+      parent = aid;
+    }
+    const runtime = {
+      tab: {
+        id: "agent-1",
+        projectId: "project-1",
+        cwd: "C:/project",
+        title: "Session",
+        status: "idle",
+        sessionPath,
+        sessionEnvironment: "native",
+        sessionSource: "pi",
+        createdAt: 1,
+      },
+      process: {
+        client: {
+          request: async ({ type }) => type === "get_entries"
+            ? { success: true, data: { entries, leafId: "a15" } }
+            : { success: true, data: { messages } },
+        },
+      },
+    };
+    const manager = new AgentManager(
+      () => ({ id: "project-1", name: "Project", path: "C:/project" }),
+      () => null,
+      { get: () => ({}) },
+      {},
+    );
+    manager.agents.set("agent-1", runtime);
+    const payloads = [];
+    manager.onOutput((channel, payload) => {
+      if (channel === "agents:message") payloads.push(payload);
+    });
+
+    await manager.loadMessages("agent-1");
+    const cached = manager.messages.get("agent-1");
+    // 15 轮裁到 12 轮：首条保留 q4，其 entryId 必须是 u4（修复前被错配成 u1）
+    assert.equal(cached[0].text, "q4");
+    assert.equal(cached[0].meta.entryId, "u4");
+    assert.equal(cached[cached.length - 1].meta.entryId, "a15");
+    // 全量 flush 携带 windowStartFilePos：窗口首条（q13）的文件消息下标 = 24
+    const full = payloads.find((p) => p.windowStart !== undefined);
+    assert.ok(full, "windowed full flush expected");
+    assert.equal(full.windowStart, 18);
+    assert.equal(full.windowStartFilePos, 24);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("trimRuntimeCache keeps leading compaction summary cards", async () => {
+  const { manager, sessionPath, directory } = await createHarness();
+  try {
+    const many = [];
+    for (let i = 1; i <= 15; i += 1) {
+      many.push({ id: `m-u${i}`, agentId: "agent-1", role: "user", text: `q${i}`, timestamp: 1, meta: { entryId: `u${i}` } });
+      many.push({ id: `m-a${i}`, agentId: "agent-1", role: "assistant", text: `a${i}`, timestamp: 1, meta: { entryId: `a${i}` } });
+    }
+    manager.messages.set("agent-1", [
+      { id: "sum-1", agentId: "agent-1", role: "system", text: "compacted", timestamp: 1, meta: { type: "compaction" } },
+      ...many,
+    ]);
+    const payloads = [];
+    manager.onOutput((channel, payload) => {
+      if (channel === "agents:message") payloads.push(payload);
+    });
+    manager.trimRuntimeCache("agent-1");
+    const after = manager.messages.get("agent-1");
+    // 卡片保留在头部且不重复；尾部保留最近 12 轮（24 条）
+    assert.equal(after.filter((m) => m.role === "system").length, 1);
+    assert.equal(after[0].meta.type, "compaction");
+    assert.equal(after.length, 25);
+    assert.equal(after[1].text, "q4");
+    assert.equal(after[24].text, "a15");
+    // 数值游标不被卡片污染：窗口首条 q13 的文件消息下标 = 24（headOffset 只按角色消息递增）
+    const full = payloads.find((p) => p.windowStart !== undefined);
+    assert.ok(full, "windowed full flush expected");
+    assert.equal(full.windowStart, 19);
+    assert.equal(full.windowStartFilePos, 24);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("cache-miss delete of a message absent from the file rejects with Message not found", async () => {
+  const { manager, sessionPath, directory } = await createHarness();
+  try {
+    manager.loadMessages = async () => {};
+    await assert.rejects(
+      manager.deleteMessage("agent-1", "agent-1-history-nope"),
+      /Message not found/,
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});

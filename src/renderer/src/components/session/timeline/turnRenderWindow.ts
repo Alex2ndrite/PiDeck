@@ -3,8 +3,8 @@
  * 与消息分页（100 条）/ 激活 3 轮（数据层）正交——只管「画多少 TurnRow」。
  */
 
-/** 贴底时最多挂载的 agent-run 轮数（用户确认的默认）。 */
-export const TIMELINE_MOUNTED_TURN_LIMIT = 10;
+/** 贴底时最多挂载的 agent-run 轮数（2026-11 轮次模型：10 → 3，与激活下发窗口对齐）。 */
+export const TIMELINE_MOUNTED_TURN_LIMIT = 3;
 
 export function countAgentRunItems(items: ReadonlyArray<{ kind: string }>): number {
 	let count = 0;

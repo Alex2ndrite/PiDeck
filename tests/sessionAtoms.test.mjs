@@ -99,10 +99,10 @@ test("keeps catalog atom identities stable when polling returns equivalent recor
   assert.notEqual(store.get(atoms.sessionIdsByProjectAtom), idsBefore);
 });
 
-test("keeps only the 8 most recently written session message caches", () => {
+test("keeps only the 6 most recently written session message caches", () => {
   const atoms = loadAtoms();
   const store = createStore();
-  for (let index = 0; index < 9; index += 1) {
+  for (let index = 0; index < 7; index += 1) {
     store.set(atoms.cacheSessionMessagesAtom, {
       sessionId: `session-${index}`,
       messages: [{ id: `message-${index}`, role: "user", text: String(index) }],
@@ -110,9 +110,9 @@ test("keeps only the 8 most recently written session message caches", () => {
     });
   }
   const cache = store.get(atoms.sessionMessagesCacheAtom);
-  assert.equal(Object.keys(cache).length, 8);
+  assert.equal(Object.keys(cache).length, 6);
   assert.equal(cache["session-0"], undefined);
-  assert.equal(cache["session-8"].messages[0].text, "8");
+  assert.equal(cache["session-6"].messages[0].text, "6");
 });
 
 test("does not let a stale disk write clobber a live runtime cache", () => {
@@ -668,4 +668,136 @@ test("saveSessionScrollAnchorAtom: identical content skips write (stable referen
   });
   assert.notEqual(store.get(atoms.sessionScrollAnchorByIdAtom)["session-a"], first);
   assert.equal(store.get(atoms.sessionScrollAnchorByIdAtom)["session-a"].offsetTop, 300);
+});
+
+test("clearSessionHistoryAtom drops browsed history on bottom-settle, keeps runtime window", () => {
+  const atoms = loadAtoms();
+  const store = createStore();
+  store.set(atoms.cacheSessionMessagesAtom, {
+    sessionId: "session-a",
+    messages: [{ id: "w1", role: "user", text: "window", meta: { entryId: "e9" } }],
+    source: "runtime",
+    windowStart: 0,
+    history: {
+      messages: [{ id: "h1", role: "user", text: "history", meta: { entryId: "e1" } }],
+      nextBefore: 0,
+      nextBeforeEntryId: "e1",
+    },
+  });
+  const entry = () => store.get(atoms.sessionMessagesCacheAtom)["session-a"];
+
+  assert.ok(entry().history, "history present before clear");
+  assert.equal(store.set(atoms.clearSessionHistoryAtom, "session-a"), true);
+  assert.equal(entry().history, undefined, "history cleared");
+  assert.equal(entry().messages.length, 1, "runtime window segment kept");
+  assert.equal(entry().messages[0].id, "w1");
+
+  // 幂等：无 history 时返回 false
+  assert.equal(store.set(atoms.clearSessionHistoryAtom, "session-a"), false);
+});
+
+test("clearSessionHistoryAtom ignores disk-source caches", () => {
+  const atoms = loadAtoms();
+  const store = createStore();
+  store.set(atoms.cacheSessionMessagesAtom, {
+    sessionId: "session-b",
+    messages: [{ id: "d1", role: "user", text: "disk" }],
+    source: "disk",
+    page: { total: 1, nextBefore: null },
+  });
+  assert.equal(store.set(atoms.clearSessionHistoryAtom, "session-b"), false);
+  assert.equal(store.get(atoms.sessionMessagesCacheAtom)["session-b"].messages.length, 1);
+});
+
+test("windowed full flush stores windowStartFilePos and preserves it through prepend/clear", () => {
+  const atoms = loadAtoms();
+  const store = createStore();
+  const emit = (payload) =>
+    store.set(atoms.applySessionRuntimeEventAtom, {
+      sessionId: "session-a",
+      agentId: "agent-a",
+      runtimeGeneration: 1,
+      sourceChannel: "agents:message",
+      payload,
+    });
+  const entry = () => store.get(atoms.sessionMessagesCacheAtom)["session-a"];
+
+  // 窗口化全量携带文件消息下标游标（大历史 skipEntries 路径的数值锚点）
+  emit({ agentId: "agent-a", windowStart: 18, totalLength: 24, windowStartFilePos: 24, messages: [
+    { id: "q13", role: "user", text: "q13" },
+    { id: "a13", role: "assistant", text: "a13" },
+  ] });
+  assert.equal(entry().windowStartFilePos, 24);
+
+  // 增量 flush 不携带该字段 → 保留旧值
+  emit({ agentId: "agent-a", upsertFrom: 20, totalLength: 24, messages: [
+    { id: "tail", role: "assistant", text: "tail" },
+  ] });
+  assert.equal(entry().windowStartFilePos, 24);
+
+  // prepend 历史页与回底清理都不丢游标
+  store.set(atoms.prependSessionHistoryPageAtom, {
+    sessionId: "session-a",
+    expectedRevision: entry().revision,
+    before: undefined,
+    page: { messages: [{ id: "h1", role: "user", text: "old" }], total: 24, nextBefore: 12, indexVersion: "1:1" },
+  });
+  store.set(atoms.clearSessionHistoryAtom, "session-a");
+  assert.equal(entry().windowStartFilePos, 24, "clear must not drop the numeric cursor");
+});
+
+test("late continuation page after bottom-settle clear is rejected; fresh first page still applies", () => {
+  const atoms = loadAtoms();
+  const store = createStore();
+  const entry = () => store.get(atoms.sessionMessagesCacheAtom)["session-a"];
+  store.set(atoms.applySessionRuntimeEventAtom, {
+    sessionId: "session-a",
+    agentId: "agent-a",
+    runtimeGeneration: 1,
+    sourceChannel: "agents:message",
+    payload: { agentId: "agent-a", windowStart: 2, totalLength: 4, messages: [
+      { id: "r1", role: "user", text: "q", meta: { entryId: "e3" } },
+      { id: "r2", role: "assistant", text: "a", meta: { entryId: "e4" } },
+    ] },
+  });
+  // 先建立历史前缀（before=undefined 首次页）
+  store.set(atoms.prependSessionHistoryPageAtom, {
+    sessionId: "session-a",
+    expectedRevision: entry().revision,
+    before: undefined,
+    page: {
+      messages: [{ id: "h1", role: "user", text: "q1", meta: { entryId: "e1" } }],
+      total: 4,
+      nextBefore: 1,
+      indexVersion: "100:2000",
+    },
+  });
+  assert.ok(entry().history);
+
+  // 回底清理触发（1.5s 定时器）→ history 清空
+  assert.equal(store.set(atoms.clearSessionHistoryAtom, "session-a"), true);
+  assert.equal(entry().history, undefined);
+
+  // 迟到的续页（before=1，旧游标）必须被拒绝，不得复活 history
+  assert.equal(store.set(atoms.prependSessionHistoryPageAtom, {
+    sessionId: "session-a",
+    expectedRevision: entry().revision,
+    before: 1,
+    page: { messages: [{ id: "h0", role: "user", text: "q0" }], total: 4, nextBefore: null, indexVersion: "100:2000" },
+  }), false);
+  assert.equal(entry().history, undefined, "late continuation page must not resurrect history");
+
+  // 用户再次上翻的合法首次页（before=undefined）仍可建立前缀
+  assert.equal(store.set(atoms.prependSessionHistoryPageAtom, {
+    sessionId: "session-a",
+    expectedRevision: entry().revision,
+    before: undefined,
+    page: {
+      messages: [{ id: "h2", role: "user", text: "q2", meta: { entryId: "e2" } }],
+      total: 4,
+      nextBefore: 2,
+      indexVersion: "100:2000",
+    },
+  }), true);
+  assert.equal(entry().history.messages.length, 1);
 });

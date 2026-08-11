@@ -7,6 +7,7 @@ import { t, type TranslationKey } from "../i18n";
 
 const SESSION_COMMAND_ERROR_KEYS: Record<SessionCommandError["code"], TranslationKey> = {
 	SESSION_NOT_FOUND: "sessionCommand.sessionNotFound",
+	MESSAGE_NOT_FOUND: "sessionCommand.messageNotFound",
 	SESSION_RUNTIME_UNAVAILABLE: "sessionCommand.runtimeUnavailable",
 	SESSION_RUNTIME_CHANGED: "sessionCommand.runtimeChanged",
 	SESSION_RUNTIME_BUSY: "sessionCommand.runtimeBusy",

@@ -984,3 +984,43 @@ test("stop invalidates the target and restart replaces it with a higher generati
   assert.equal(restarted.value.runtime.runtimeGeneration > restartGeneration, true);
   assert.equal(restarted.value.session.id, "session-1");
 });
+
+test("commandFailure classifies message-not-found separately from session-not-found", () => {
+  const { SessionRuntimeCoordinator } = loadCoordinator();
+  const harness = createHarness();
+  const coordinator = new SessionRuntimeCoordinator(
+    harness.catalog,
+    harness.agents,
+    harness.sender,
+  );
+  // 编辑/删除/重发缓存与文件都未命中的错误 → MESSAGE_NOT_FOUND（不再误报「会话已不存在」）
+  const messageMiss = coordinator.commandFailure(new Error("Message not found"));
+  assert.equal(messageMiss.ok, false);
+  assert.equal(messageMiss.error.code, "MESSAGE_NOT_FOUND");
+  // 回归：真正的会话不存在仍归 SESSION_NOT_FOUND
+  const sessionMiss = coordinator.commandFailure(new Error("Session not found: session-1"));
+  assert.equal(sessionMiss.ok, false);
+  assert.equal(sessionMiss.error.code, "SESSION_NOT_FOUND");
+  // 其他 not found 前缀（模型/项目/agent）不受影响
+  const agentMiss = coordinator.commandFailure(new Error("Agent not found: agent-1"));
+  assert.equal(agentMiss.error.code, "SESSION_NOT_FOUND");
+});
+
+test("SessionCommandIpcError maps MESSAGE_NOT_FOUND to the dedicated copy key", () => {
+  const { SessionCommandIpcError } = compileModule(
+    "src/main/sessions/SessionCommandIpcError.ts",
+  );
+  const translate = (key) => key;
+  const error = new SessionCommandIpcError(
+    { code: "MESSAGE_NOT_FOUND", debugDetails: "Message not found" },
+    translate,
+  );
+  assert.equal(error.code, "MESSAGE_NOT_FOUND");
+  assert.equal(error.message, "sessionCommand.messageNotFound");
+  // 回归：SESSION_NOT_FOUND 仍映射到会话文案 key
+  const sessionError = new SessionCommandIpcError(
+    { code: "SESSION_NOT_FOUND", debugDetails: "Session not found" },
+    translate,
+  );
+  assert.equal(sessionError.message, "sessionCommand.sessionNotFound");
+});

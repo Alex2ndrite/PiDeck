@@ -194,7 +194,10 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
   const isAgentBusy = modernSurfaceState.isBusy;
   const cancellingUi = false;
   const loadMoreMessages = controller.loadMoreMessages;
-  // ── 新消息入场动画跟踪 ──
+  // ── 滚动接近顶部自动加载历史（2026-11 轮次模型）──
+  // 监听器已迁移到 useSessionTimelineController（程序化滚动抑制在同一 owner）：
+  // 用户上滚到距顶部 240px 内即按轮补历史，prepend 补偿不会连锁触发下一页。
+  // 新增消息入场动画跟踪 ──
   // 只对「时间线尾部新增」的消息播放一次入场动画：历史加载/分页前插不算，
   // 避免整屏消息同时闪烁。乐观上屏的用户消息与流式替换后的权威消息都会触发。
   const [multiSelectOpen, setMultiSelectOpen] = useState(false);
@@ -323,10 +326,15 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
     const nextHeight = timeline.scrollHeight;
     if (prev.windowed && !turnWindowActive) {
       const delta = nextHeight - prev.height;
-      if (delta > 0) timeline.scrollTop += delta;
+      if (delta > 0) {
+        // 标记程序化滚动：补偿的 scrollTop 位移会派发 scroll 事件，
+        // 必须让自动加载监听忽略（补偿后视口可能落在 ≤240px 顶部区间）
+        controller.markProgrammaticScroll?.();
+        timeline.scrollTop += delta;
+      }
     }
     turnWindowStateRef.current = { windowed: turnWindowActive, height: timeline.scrollHeight };
-  }, [displayRuns, timelineRef, turnWindowActive]);
+  }, [controller, displayRuns, timelineRef, turnWindowActive]);
   // 文件修改汇总只统计最后一次 agent 运行（run）内的工具调用：
   // 每次会话（用户发送 → agent 执行 → 完成）清空重算，不累计历史运行的修改
   const lastRunMessages = useMemo(() => {

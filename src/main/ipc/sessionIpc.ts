@@ -383,6 +383,21 @@ export function registerSessionIpc(deps: SessionIpcDeps): void {
 			// 游标协议不变（before/nextBefore 为绝对消息下标，与运行时数组同一下标空间）；
 			// beforeEntryId 供已激活会话以运行时窗口首条消息为锚点首次补历史。
 			if (options?.unit === "turn") {
+				// 缓存优先（2026-11）：运行中会话翻历史先在主进程内存缓存切片，命中免文件 IO；
+				// 未命中（缓存未覆盖/非活跃会话）回退 SessionHistoryReader 读文件。
+				// 注意：缓存按 transient agentId 键控，必须经 coordinator 把稳定 sessionId
+				// 解析成当前运行时 agentId；解析不到（非活跃/终端绑定）直接走文件路径。
+				if (options.beforeEntryId || typeof before === "number") {
+					const target = sessionRuntimeCoordinator.getTarget(sessionId);
+					if (target) {
+						const cached = await agentManager.tryReadRuntimeTurnPage(entry.filePath, target.agentId, {
+							beforeEntryId: options.beforeEntryId,
+							before,
+							turnCount: pageSize,
+						}).catch(() => null);
+						if (cached) return cached;
+					}
+				}
 				return agentManager.readSessionDisplayTurnPage(entry.filePath, sessionId, before, pageSize, options.beforeEntryId);
 			}
 			return agentManager.readSessionDisplayMessagePage(entry.filePath, sessionId, before, pageSize);

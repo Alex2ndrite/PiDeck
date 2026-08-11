@@ -57,6 +57,8 @@ import {
 	pickNumber,
 	clampPercent,
 	trimHistoryMessages,
+	turnTrimStartIndex,
+	countRoleMessagesBefore,
 	buildMessageFlushPayload,
 	leadingSummaryCards,
 	stripToolResultForDelivery,
@@ -138,6 +140,11 @@ export class AgentManager {
 	 * flush 只下发窗口段；窗口前历史由渲染层走 disk 轮次分页 prepend。
 	 */
 	private readonly displayWindowStartByAgent = new Map<string, number>();
+	/**
+	 * 运行期消息缓存头部在会话文件消息下标空间中的偏移（entryId 缺失时的数值游标换算）。
+	 * loadMessages / trimRuntimeCache 维护；-1 表示未知（匿名会话等无文件场景）。
+	 */
+	private readonly messageHeadOffsetByAgent = new Map<string, number>();
 	/** 会话文件版本（mtime:size）：随消息载荷下发，渲染层据此检测压缩改写并丢弃 disk 前缀。 */
 	private readonly sessionFileVersionByAgent = new Map<string, string>();
 	private readonly thinkingEmitter = new LatestByKeyEmitter<string, string>(
@@ -175,9 +182,14 @@ export class AgentManager {
 	private static readonly TOOL_FULL_TEXT_LRU_LIMIT = 200;
 	/**
 	 * 大会话直接从文件尾部读取时，最多保留的最近消息轮次（每条 user 消息算一轮）。
-	 * 原值 8 对于一些需要回看较多历史的长会话偏少，提高至 30 轮。
+	 * 12 轮 = 4 次 3 轮翻页，覆盖绝大多数回看需求；更早历史走磁盘轮次分页。
 	 */
-	private static readonly MAX_HISTORY_LOAD_TURNS = 30;
+	private static readonly MAX_HISTORY_LOAD_TURNS = 12;
+	/**
+	 * 运行期消息缓存上限（轮）：agent_settled 后把主进程数组裁到最近 N 轮。
+	 * 12 轮覆盖激活窗口（3 轮）+ 三级缓存的回看命中率；头部更早历史随时可从文件分页读回。
+	 */
+	private static readonly MAX_RUNTIME_CACHE_TURNS = 12;
 	/**
 	 * 工具结果文本截断阈值（字符数）。工具结果（如 bash 输出、文件读取）可能达数十 KB，
 	 * 若完整存入 ChatMessage.meta 并随流式 emit 反复全量传输，会显著放大 IPC payload
@@ -400,6 +412,24 @@ export class AgentManager {
 	}
 
 	/**
+	 * 窗口首条消息在会话文件消息下标空间中的位置（无 entryId 窗口的数值游标）。
+	 * 消息数组头部可能存在系统摘要卡片（compaction/branchSummary，文件消息空间无对应条目），
+	 * 因此用「headOffset + (windowStart - 卡片数)」换算；窗口完全落在卡片区时返回 undefined。
+	 */
+	private computeWindowStartFilePos(
+		agentId: string,
+		all: ChatMessage[],
+		windowStart: number,
+	): number | undefined {
+		const headOffset = this.messageHeadOffsetByAgent.get(agentId);
+		if (headOffset === undefined || headOffset < 0) return undefined;
+		const cardCount = leadingSummaryCards(all, all.length).length;
+		const offset = windowStart - cardCount;
+		if (offset < 0) return undefined;
+		return headOffset + offset;
+	}
+
+	/**
 	 * 显示窗口视图（2026-08 激活分页）：替换/激活路径的下发与 flush 保持同一协议——
 	 * 窗口段消息 + windowStart + totalLength + fileVersion。
 	 */
@@ -408,6 +438,7 @@ export class AgentManager {
 		windowStart?: number;
 		totalLength: number;
 		fileVersion?: string;
+		windowStartFilePos?: number;
 	} {
 		const all = this.messages.get(agentId) ?? [];
 		const windowStart = Math.min(
@@ -418,11 +449,13 @@ export class AgentManager {
 		// 窗口前若存在系统摘要卡片（压缩/分支），prepend 回来——压缩卡片插在数组最前，
 		// 不 prepend 会被窗口 slice 切掉（与 buildMessageFlushPayload 全量分支同一约定）。
 		const summaryCards = leadingSummaryCards(all, windowStart);
+		const windowStartFilePos = this.computeWindowStartFilePos(agentId, all, windowStart);
 		return {
 			messages: stripToolResultForDelivery([...summaryCards, ...all.slice(windowStart)]),
 			totalLength: all.length,
 			...(windowStart > 0 ? { windowStart } : {}),
 			...(fileVersion ? { fileVersion } : {}),
+			...(windowStartFilePos !== undefined ? { windowStartFilePos } : {}),
 		};
 	}
 
@@ -493,6 +526,75 @@ export class AgentManager {
 		return { ...page, messages: stripToolResultForDelivery(page.messages) };
 	}
 
+	/**
+	 * 缓存优先的历史翻页：运行中会话的「加载更早对话」先在主进程内存缓存（最近 12 轮）里切片，
+	 * 命中则零文件 IO；未命中返回 null，调用方回退 SessionHistoryReader 读文件。
+	 *
+	 * 游标：beforeEntryId 优先（跨下标空间稳定）；before 为文件绝对下标时先解析成 entryId 再查缓存。
+	 * 命中边界：锚点条目必须在缓存中且不是缓存第一条（第一条之前没有缓存内容，交给文件路径）。
+	 * 返回页的 nextBefore/nextBeforeEntryId 统一换算回文件下标空间，渲染层续页协议不变。
+	 */
+	async tryReadRuntimeTurnPage(
+		sessionPath: string,
+		agentId: string,
+		options: { beforeEntryId?: string; before?: number; turnCount?: number },
+	): Promise<SessionMessagePage | null> {
+		const runtime = this.agents.get(agentId);
+		const list = this.messages.get(agentId);
+		if (!runtime || !list || list.length === 0) return null;
+		// 防御：运行时已切到别的会话（替换/重绑）时禁止用其缓存应答本会话的翻页，
+		// 交给文件路径（调用方以稳定 sessionId 经 coordinator 解析，此处兜底双保险）。
+		if (
+			runtime.tab.sessionPath &&
+			this.toSessionHostPath(runtime.tab.sessionPath) !== this.toSessionHostPath(sessionPath)
+		) {
+			return null;
+		}
+
+		let pos = -1;
+		if (options.beforeEntryId) {
+			pos = list.findIndex((m) => m.meta?.entryId === options.beforeEntryId);
+		} else if (options.before !== undefined) {
+			const entryId = await this.sessionHistoryReader.resolveEntryIdAtPosition(sessionPath, options.before);
+			if (!entryId) return null;
+			pos = list.findIndex((m) => m.meta?.entryId === entryId);
+			// 锚点是缓存最旧条目：缓存里没有比它更早的内容，交给文件路径
+			if (pos === 0) return null;
+		}
+		if (pos < 0) return null;
+
+		const turnCount = Math.min(
+			Math.max(1, Math.floor(options.turnCount ?? 3)),
+			SessionHistoryReader.maxTurnPageSize(),
+		);
+		const roles = list.map((m) => ({ role: m.role, byteLength: 0 }));
+		const start = findTurnPageStart(roles, pos, turnCount, Number.MAX_SAFE_INTEGER);
+		if (start >= pos) return null;
+		const page = list.slice(start, pos);
+		const oldest = page[0] ?? list[0];
+		const oldestEntryId = typeof oldest?.meta?.entryId === "string" ? oldest.meta.entryId : undefined;
+		const nextBefore = oldestEntryId
+			? (await this.sessionHistoryReader.resolveEntryPosition(sessionPath, oldestEntryId)) ?? null
+			: null;
+		const total = await this.sessionHistoryReader.getActiveEntryCount(sessionPath);
+		// 与文件路径同口径的会话文件版本：渲染层据此检测压缩/外部改写并丢弃已缓存的历史前缀
+		// （indexVersion 缺失会让 cache 页沿用旧版本，压缩后前缀失效不可见）。
+		const indexVersion = await this.sessionHistoryReader.getSessionIndexVersion(sessionPath);
+		void this.appLogger?.info("agent", "Runtime history cache hit", {
+			agentId,
+			start,
+			pos,
+			pageCount: page.length,
+		});
+		return {
+			messages: page,
+			total,
+			nextBefore,
+			...(oldestEntryId ? { nextBeforeEntryId: oldestEntryId } : {}),
+			indexVersion,
+		};
+	}
+
 	recordHostExchange(agentId: string, userText: string, assistantText: string) {
 		this.addMessage(agentId, "user", userText);
 		this.addMessage(agentId, "assistant", assistantText);
@@ -550,6 +652,38 @@ export class AgentManager {
 		// 按对话轮次截断（保留最近若干轮 user 消息）。压缩摘要不是 user 消息，会被此逻辑保留在尾部，
 		// 因此下方会单独把它插到最前面，确保不被按 user 轮次切掉。
 		const trimmed = trimHistoryMessages(rawMessages);
+		const trimmedStart = turnTrimStartIndex(rawMessages);
+
+		// 身份向量必须与保留消息同步裁剪：activeEntryIds 按「消费槽位的角色消息」与 rawMessages
+		// 一一对应，trim 丢弃头部整轮后，若仍把完整 activeEntryIds 交给 projector，保留消息会被
+		// 绑定到会话最早的 entry——编辑/删除/重发将落到错误轮次（曾因 15 轮裁剪复现 q4→u1）。
+		// compactionSummary/branchSummary 不消费槽位，prepend 到最前不影响对齐。
+		let droppedRoleCount = 0;
+		if (activeEntryIds && trimmedStart > 0) {
+			droppedRoleCount = countRoleMessagesBefore(rawMessages, trimmedStart);
+			activeEntryIds = activeEntryIds.slice(droppedRoleCount);
+		}
+		// 记录缓存头部在文件消息下标空间中的位置：无 entryId 的窗口（skipEntries 大历史路径）
+		// 需要用它作为首次补历史的数值游标（渲染层 before=windowStartFilePos）。
+		let headOffset: number;
+		if (activeEntryIds) {
+			headOffset = droppedRoleCount;
+		} else if (skipEntries && runtime.tab.sessionPath) {
+			const roleCount = trimmed.reduce<number>((count, message) => {
+				const role = (message as { role?: unknown } | undefined)?.role;
+				return count + (role === "user" || role === "assistant" || role === "toolResult" ? 1 : 0);
+			}, 0);
+			// 最佳努力：文件活动消息数 - 缓存内角色消息数 ≈ 被裁头部长度。
+			// 文件里非角色 message 条目（system 等）会让该值偏大，属极端边角；
+			// entryId 锚点仍是首选路径，此值只作为无 entryId 时的兜底游标。
+			const activeFileCount = await this.sessionHistoryReader
+				.getActiveEntryCount(runtime.tab.sessionPath)
+				.catch(() => 0);
+			headOffset = Math.max(0, activeFileCount - roleCount);
+		} else {
+			headOffset = -1; // 未知：不提供 windowStartFilePos，渲染层回退 entryId 锚点
+		}
+		this.messageHeadOffsetByAgent.set(agentId, headOffset);
 
 		// 解析会话文件里的压缩记录：拿到所有压缩段摘要 + 归档消息。
 		// pi 的 get_messages 对压缩会话只返回压缩后的消息，通常不带压缩摘要；
@@ -1996,20 +2130,61 @@ export class AgentManager {
 		}
 	}
 
+	/**
+	 * 编辑/删除/重发定位消息条目：优先运行时缓存（最近 12 轮窗口，O(1)），
+	 * 缓存未命中时按 messageId 从文件索引定位 —— 使这些操作不再依赖缓存轮数
+	 * （此前 40 轮缓存的一部分意义是保证操作按钮可用，12 轮窗口外也能操作）。
+	 * 文件定位返回 entryId 精确锚点（SessionFileEditor.locateEntry 优先 entryId 匹配）。
+	 */
+	private async locateMessageTarget(
+		agentId: string,
+		sessionPath: string,
+		messageId: string,
+		activeLeafId?: string,
+	): Promise<{ target: SessionEntryTarget; resend?: { text: string; images?: ImageContent[] } }> {
+		const message = this.messages.get(agentId)?.find((candidate) => candidate.id === messageId);
+		if (message) {
+			return { target: this.createSessionEntryTarget(message, activeLeafId) };
+		}
+		const located = await this.sessionHistoryReader.readMessageByMessageId(sessionPath, messageId);
+		if (!located) throw new Error("Message not found");
+		void this.appLogger?.info("agent", "Message located from session file (runtime cache miss)", {
+			agentId,
+			messageId,
+			entryId: located.entryId,
+		});
+		const role: "user" | "assistant" = located.role === "user" ? "user" : "assistant";
+		return {
+			target: {
+				entryId: located.entryId,
+				legacyMessageId: messageId,
+				legacyAgentId: agentId,
+				role,
+				text: located.text,
+				activeLeafId,
+			},
+			// 缓存未命中分支必须恒带回 draft：prepareResendFromMessage 先截断会话再返回草稿，
+			// 若只在有图片时附 resend，纯文本重发会先截断历史再返回空文本（数据不可恢复）。
+			resend: {
+				text: located.text,
+				...(located.images?.length ? { images: located.images } : {}),
+			},
+		};
+	}
+
 	async editMessage(agentId: string, messageId: string, newText: string) {
 		const startTime = Date.now();
 		await this.ensureAgentIdle(agentId);
 		const runtime = this.requireRuntime(agentId);
 		const sessionPath = runtime.tab.sessionPath;
 		if (!sessionPath) throw new Error("Session not persisted");
-		const message = this.messages.get(agentId)?.find((candidate) => candidate.id === messageId);
-		if (!message) throw new Error("Message not found");
 
 		const file = this.createSessionFileRef(runtime, sessionPath);
 		const activeLeafId = await this.getActiveSessionLeafId(agentId, runtime);
+		const { target } = await this.locateMessageTarget(agentId, sessionPath, messageId, activeLeafId);
 		await this.sessionFileEditor.editMessage({
 			file,
-			target: this.createSessionEntryTarget(message, activeLeafId),
+			target,
 			newText,
 			reload: () => this.requestSessionReload(runtime, file),
 		});
@@ -2027,14 +2202,13 @@ export class AgentManager {
 		const runtime = this.requireRuntime(agentId);
 		const sessionPath = runtime.tab.sessionPath;
 		if (!sessionPath) throw new Error("Session not persisted");
-		const message = this.messages.get(agentId)?.find((candidate) => candidate.id === messageId);
-		if (!message) throw new Error("Message not found");
 
 		const file = this.createSessionFileRef(runtime, sessionPath);
 		const activeLeafId = await this.getActiveSessionLeafId(agentId, runtime);
+		const { target } = await this.locateMessageTarget(agentId, sessionPath, messageId, activeLeafId);
 		await this.sessionFileEditor.deleteMessage({
 			file,
-			target: this.createSessionEntryTarget(message, activeLeafId),
+			target,
 			reload: () => this.requestSessionReload(runtime, file),
 		});
 		await this.loadMessages(agentId);
@@ -2054,15 +2228,16 @@ export class AgentManager {
 		const runtime = this.requireRuntime(agentId);
 		const sessionPath = runtime.tab.sessionPath;
 		if (!sessionPath) throw new Error("Session not persisted");
-		const message = this.messages.get(agentId)?.find((candidate) => candidate.id === messageId);
-		if (!message) throw new Error("Message not found");
-		if (message.role !== "user") throw new Error("Only user messages can be resent");
+		// 缓存命中时先校验角色（重发仅限用户消息）；缓存未命中时由 SessionFileEditor 的 inputRole 校验兜底
+		const cached = this.messages.get(agentId)?.find((candidate) => candidate.id === messageId);
+		if (cached && cached.role !== "user") throw new Error("Only user messages can be resent");
 
 		const file = this.createSessionFileRef(runtime, sessionPath);
 		const activeLeafId = await this.getActiveSessionLeafId(agentId, runtime);
+		const { target, resend } = await this.locateMessageTarget(agentId, sessionPath, messageId, activeLeafId);
 		await this.sessionFileEditor.truncateForResend({
 			file,
-			target: this.createSessionEntryTarget(message, activeLeafId),
+			target,
 			reload: () => this.requestSessionReload(runtime, file),
 		});
 		await this.loadMessages(agentId);
@@ -2071,9 +2246,9 @@ export class AgentManager {
 			messageId,
 			elapsedMs: Date.now() - startTime,
 		});
-		return {
-			text: message.text,
-			...(message.images?.length ? { images: message.images } : {}),
+		return resend ?? {
+			text: cached?.text ?? "",
+			...(cached?.images?.length ? { images: cached.images } : {}),
 		};
 	}
 
@@ -3018,6 +3193,8 @@ export class AgentManager {
 				// 若 message_end 未到（边缘路径），仍先落盘再清 live。
 				this.finalizeThinkingIntoMessage(agentId);
 				this.flushMessageEmit(agentId);
+				// 一轮结束：运行期缓存裁剪到最近 12 轮（含本轮），防止长会话数组无界增长
+				this.trimRuntimeCache(agentId);
 				this.finishThinkingChannel(agentId);
 				this.activeAssistantMessageIds.delete(agentId);
 				this.streamingAgents.delete(agentId);
@@ -4154,6 +4331,8 @@ export class AgentManager {
 		runtime.tab.status = "idle";
 		this.finalizeThinkingIntoMessage(agentId);
 		this.flushMessageEmit(agentId);
+		// 兜底确认空闲同样视为一轮结束：运行期缓存裁剪，与 agent_settled 路径一致
+		this.trimRuntimeCache(agentId);
 		this.finishThinkingChannel(agentId);
 		this.textEmitter.cancel(agentId);
 		this.streamingText.delete(agentId);
@@ -4449,12 +4628,14 @@ export class AgentManager {
 		const all = this.messages.get(agentId) ?? [];
 		const dirtyFrom = this.messageDirtyFromByAgent.get(agentId);
 		this.messageDirtyFromByAgent.delete(agentId);
+		const windowStart = this.displayWindowStartByAgent.get(agentId) ?? 0;
 		this.emit(ipcChannels.agentsMessage, buildMessageFlushPayload(
 			agentId,
 			all,
 			dirtyFrom,
-			this.displayWindowStartByAgent.get(agentId) ?? 0,
+			windowStart,
 			this.sessionFileVersionByAgent.get(agentId),
+			this.computeWindowStartFilePos(agentId, all, windowStart),
 		));
 		// 消息 flush 时顺带同步本地流式标志：text_delta 置位 streamingAgents 后，
 		// 渲染进程必须及时拿到 isStreaming=true 才会走逐字渐显；此路径 50ms 节流、
@@ -4481,6 +4662,44 @@ export class AgentManager {
 		if (prev === undefined || index < prev) {
 			this.messageDirtyFromByAgent.set(agentId, Math.max(0, index));
 		}
+	}
+
+	/**
+	 * 运行期缓存裁剪：agent 一轮结束后把主进程消息数组裁到最近 N 轮。
+	 * 现状 40 轮 trim 只在 loadMessages 时执行，长会话运行中消息会持续追加、数组无界增长；
+	 * 这里在 agent_settled（及 get_state 兜底确认空闲）后统一裁剪，使 12 轮成为硬上限。
+	 * 裁剪后重算激活显示窗口（尾部 3 轮）并全量 flush——头部整轮被裁，增量下标空间失效，
+	 * 渲染层以窗口化全量校准（与 loadMessages 后的窗口协议一致）。
+	 * 头部系统摘要卡片（compaction/branchSummary）不属于 user 轮次，会被 trim 切掉，
+	 * 裁剪前先取出、裁剪后重新 prepend，保证「已压缩 N 次」卡片持续可见。
+	 */
+	private trimRuntimeCache(agentId: string) {
+		const list = this.messages.get(agentId);
+		if (!list || list.length === 0) return;
+		const summaryCards = leadingSummaryCards(list, list.length);
+		const trimmedStart = turnTrimStartIndex(list, AgentManager.MAX_RUNTIME_CACHE_TURNS);
+		const trimmed = list.slice(trimmedStart);
+		if (trimmed.length === list.length) return;
+		// 卡片恒在数组最前（index 0），trim 保留尾部时必然被整体丢弃，重新 prepend 不会重复。
+		const next = summaryCards.length > 0 ? [...summaryCards, ...trimmed] : trimmed;
+		// 缓存头部在文件消息空间前移 = 被裁「角色消息」数（卡片/系统消息不计入文件消息空间，
+		// 若按总长度递增会把 windowStartFilePos 数值游标整体推偏）。
+		this.messageHeadOffsetByAgent.set(
+			agentId,
+			(this.messageHeadOffsetByAgent.get(agentId) ?? 0) + countRoleMessagesBefore(list, trimmedStart),
+		);
+		this.messages.set(agentId, next);
+		this.displayWindowStartByAgent.set(
+			agentId,
+			findTurnPageStart(
+				next.map((m) => ({ role: m.role, byteLength: 0 })),
+				next.length,
+				AgentManager.DISPLAY_WINDOW_TURNS,
+				Number.MAX_SAFE_INTEGER,
+			),
+		);
+		this.markMessagesDirtyFrom(agentId, 0);
+		this.flushMessageEmit(agentId);
 	}
 
 	/** 节流推送 live 思考（done=false）；无段身份时丢弃。 */
