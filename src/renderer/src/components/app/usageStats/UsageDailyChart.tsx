@@ -10,25 +10,10 @@ import { useMemo, useState } from "react";
 import type { UsageAggregated, UsageDayRow } from "../../../../../shared/types";
 import { t } from "../../../i18n";
 import { Button } from "../../ui-shadcn/button";
+import { colorForProvider } from "./providerColors";
 import { formatTokens } from "./format";
 
 type RangeMode = "day" | "week" | "month";
-
-/** 固定 provider 色板（与统计语义无关，仅数据可视化区分）。 */
-const PROVIDER_COLORS = [
-  "rgba(74,158,255,0.85)",
-  "rgba(74,222,128,0.85)",
-  "rgba(251,146,60,0.85)",
-  "rgba(232,121,249,0.85)",
-  "rgba(250,204,21,0.85)",
-  "rgba(52,211,153,0.85)",
-  "rgba(167,139,250,0.85)",
-  "rgba(248,113,113,0.85)",
-];
-
-function colorFor(index: number): string {
-  return PROVIDER_COLORS[index % PROVIDER_COLORS.length];
-}
 
 /** 近 N 天/周/月聚合桶：label + 总量 + provider 分解。 */
 type Bucket = {
@@ -175,7 +160,7 @@ export function UsageDailyChart(props: { data: UsageAggregated }) {
                     y={seg.y}
                     width={barWidth}
                     height={seg.h}
-                    fill={colorFor(si)}
+                    fill={colorForProvider(seg.provider)}
                     rx={1}
                   >
                     <title>
