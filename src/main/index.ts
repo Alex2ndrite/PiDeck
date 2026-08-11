@@ -1122,6 +1122,19 @@ async function installDownloadedUpdate(filePath: string) {
 	}
 }
 
+/**
+ * 重启应用：先同步退出标志并停掉常驻服务，再 relaunch + quit。
+ * 必须置 isQuitting，否则 closeToTray 会把退出流程吞成「隐藏到托盘」，relaunch 不生效。
+ */
+function restartApp(): void {
+	isQuitting = true;
+	void webServiceManager?.stop();
+	terminalManager?.closeAll();
+	void agentManager?.stopAll();
+	app.relaunch();
+	app.quit();
+}
+
 function refreshTrayContextMenu(): void {
 	if (!tray) return;
 	tray.setContextMenu(Menu.buildFromTemplate([
@@ -1133,6 +1146,12 @@ function refreshTrayContextMenu(): void {
 					mainWindow.focus();
 				}
 			},
+		},
+		{ type: "separator" },
+		{
+			// 托盘重启与系统设置 IPC 的 appRestart 保持同一套清理语义
+			label: mainCopy("tray.restart"),
+			click: restartApp,
 		},
 		{ type: "separator" },
 		{

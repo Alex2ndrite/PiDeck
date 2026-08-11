@@ -239,6 +239,7 @@ test("main-process user surfaces use stable copy and keep caught details in logs
   const source = mainIpcSource;
   for (const key of [
     "tray.showWindow",
+    "tray.restart",
     "tray.quit",
     "dialog.chooseChatHistoryFolder",
     "dialog.chooseProjectFolder",
