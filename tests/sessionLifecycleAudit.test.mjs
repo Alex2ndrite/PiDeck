@@ -80,3 +80,31 @@ test("sensitive operations leave audit traces", () => {
   // 会话级安全级别变更留痕（含 from/to）
   assert.match(securityStore, /"Session security level changed", \{\s*sessionId,\s*from: prev,\s*to:/);
 });
+
+test("second-wave audit: proxy, single-instance, catalog, clone/fork", () => {
+  const desktopProxy = read("main/settings/DesktopProxy.ts");
+  const singleInstance = read("main/singleInstance.ts");
+  const sessionCatalog = read("main/sessions/SessionCatalog.ts");
+  const sessionScanner = read("main/sessions/SessionScanner.ts");
+  const visionConfig = read("main/settings/visionBridgeConfig.ts");
+  const gitIpc = read("main/ipc/gitIpc.ts");
+  const index = read("main/index.ts");
+  // 桌面代理：只记 mode 不记 proxyRules（URL 可能内嵌凭据）
+  assert.match(desktopProxy, /"Desktop proxy applied", \{ mode: config\.mode \}\)/);
+  assert.match(desktopProxy, /"Desktop proxy apply failed"/);
+  // 单实例生命周期
+  assert.match(singleInstance, /"Primary instance lock acquired", \{\s*version,\s*pid: process\.pid,/);
+  assert.match(singleInstance, /"Secondary instance exiting; focus requested"/);
+  assert.match(singleInstance, /"Focus request received from secondary instance"/);
+  // catalog 主文件+备份双损坏必须 error 级留痕
+  assert.match(sessionCatalog, /"Catalog and backup both failed to load"/);
+  assert.match(sessionCatalog, /getAppLogger\(\)\?\.error\("session-catalog"/);
+  // SessionScanner JSONL 解析失败双写日志
+  assert.match(sessionScanner, /"Skipped unparseable JSONL line", \{ filePath \}\)/);
+  // 视觉桥配置写盘：只记 provider/hasApiKey，不记 key 值
+  assert.match(visionConfig, /"Vision config saved", \{\s*provider:/);
+  assert.match(visionConfig, /hasApiKey: Boolean/);
+  // git init / web 服务回退留痕
+  assert.match(gitIpc, /"Repository initialized", \{ projectId, path: project\.path \}\)/);
+  assert.match(index, /"Web service disabled after apply failure"/);
+});
