@@ -627,7 +627,7 @@ export class GitService {
 		paths: string[],
 		operation: "stage" | "unstage",
 	): Promise<string[]> {
-		const groups = await this.getStatus(cwd);
+		const { groups, projectRoot } = await this.getStatusContext(cwd);
 		const candidates = operation === "stage"
 			? [...groups.merge, ...groups.workingTree, ...groups.untracked]
 			: groups.index;
@@ -637,7 +637,23 @@ export class GitService {
 		};
 		const requested = new Set(paths.map(normalizePath));
 		const matched = candidates.filter((resource) => requested.has(normalizePath(resource.path)));
-		if (matched.length !== requested.size) throw new Error("Git resource is stale or outside the project");
+		// 竞态容错：渲染层持有的 status 快照可能落后于主进程最新状态（外部工具 stage/
+		// 删除/改名后未及时刷新）。未匹配路径区分两类处理：项目目录内的视为 stale——该
+		// 路径当前已无对应可操作状态，静默跳过（不弹无意义的报错，用户感知为“无操作”）；
+		// 项目目录外的视为安全违规，必须拒绝。边界用 projectRoot（cwd 的 realpath）判定，
+		// monorepo 下 sibling 目录同样被拦截。
+		const matchedPaths = new Set(matched.map((resource) => normalizePath(resource.path)));
+		const normalizedRoot = process.platform === "win32"
+			? projectRoot.toLocaleLowerCase()
+			: projectRoot;
+		const isInsideProject = (normalizedPath: string) =>
+			normalizedPath === normalizedRoot || normalizedPath.startsWith(`${normalizedRoot}${sep}`);
+		const outsideProject = [...requested].filter(
+			(p) => !matchedPaths.has(p) && !isInsideProject(p),
+		);
+		if (outsideProject.length > 0) {
+			throw new Error("Git resource is outside the project");
+		}
 		return [...new Set(matched.flatMap((resource) => {
 			// 只有 unstaged rename/copy 的 Stage 和 staged rename/copy 的 Unstage 需要新旧路径；
 			// 普通工作区修改（包括 staged rename 后的新路径编辑）只操作当前路径，避免不存在的 oldPath 令整条命令失败。
