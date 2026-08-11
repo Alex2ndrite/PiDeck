@@ -204,6 +204,12 @@ function readClipboardFilePaths(): string[] {
 }
 
 const api = {
+	clipboard: {
+		// 同步读取剪贴板（主进程 clipboard 模块），供输入框右键“粘贴”菜单使用：
+		// readText 读纯文本；readHtml 读富文本（无 HTML 时返回空串，调用方降级纯文本）
+		readText: () => clipboard.readText(),
+		readHtml: () => clipboard.readHTML(),
+	},
 	editors: {
 		list: () => ipcRenderer.invoke(ipcChannels.editorsList) as Promise<ExternalEditor[]>,
 		redetect: () =>
@@ -398,6 +404,14 @@ const api = {
 				pageSize,
 				options,
 			) as Promise<import("../shared/types").SessionMessagePage>,
+		/** 按需读取单条消息完整文本（工具结果截断后的「查看完整输出」）。 */
+		readMessageFullText: (agentId: string, messageId: string, entryId?: string) =>
+			ipcRenderer.invoke(
+				ipcChannels.sessionsCatalogReadMessageFullText,
+				agentId,
+				messageId,
+				entryId,
+			) as Promise<{ text: string }>,
 		readReferenceMessages: (sessionId: string) =>
 			ipcRenderer.invoke(
 				ipcChannels.sessionsCatalogReadReferenceMessages,

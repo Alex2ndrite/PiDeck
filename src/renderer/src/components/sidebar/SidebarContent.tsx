@@ -240,6 +240,8 @@ export function SidebarContent(props: SidebarContentProps) {
               controller.setAgentRpcLogging(menuAgent.id, enabled);
               // 菜单开关是异步生效，成功/失败都给出 toast 反馈
               showNotice(enabled ? t("rpc.loggingEnabled") : t("rpc.loggingEnableFailed"), 2500);
+              // 开启成功直接打开日志弹窗：用户点“RPC 日志记录”的意图就是看日志，避免只开记录后还要再右键一次
+              if (enabled) controller.openRpcLogs(menuAgent.id);
               controller.closeMenu();
             });
           }}
@@ -265,8 +267,27 @@ export function SidebarContent(props: SidebarContentProps) {
           onCopySession={() => { void actions.sessions.copy(menu.projectId, menuSession); controller.closeMenu(); }}
           onCopySessionFilePath={() => { void actions.sessions.copyPath(menuSession); controller.closeMenu(); }}
           onOpenSessionFile={() => { void actions.sessions.openFile(menuSession); controller.closeMenu(); }}
-          onShowLogs={() => {
+          canRpcLog={Boolean(menuSessionRuntimeAgent)}
+          rpcToggleDisabled={!menuSessionRuntimeAgent}
+          isRpcLogging={menuSessionRuntimeAgent ? controller.isAgentRpcLogging(menuSessionRuntimeAgent.id) : false}
+          onToggleRpcLogging={() => {
+            // 历史会话（无 runtime）不会渲染该项；兜底防御状态变化
+            if (!menuSessionRuntimeAgent) {
+              showNotice(t("menu.rpcLoggingRequiresRuntime"), 2500);
+              controller.closeMenu();
+              return;
+            }
+            void actions.rpc.setLogging(menuSessionRuntimeAgent.id, !controller.isAgentRpcLogging(menuSessionRuntimeAgent.id)).then((enabled) => {
+              controller.setAgentRpcLogging(menuSessionRuntimeAgent.id, enabled);
+              showNotice(enabled ? t("rpc.loggingEnabled") : t("rpc.loggingEnableFailed"), 2500);
+              // 开启成功直接打开日志弹窗（与 agent 菜单行为一致）
+              if (enabled) controller.openRpcLogs(menuSessionRuntimeAgent.id);
+              controller.closeMenu();
+            });
+          }}
+          onOpenLogs={() => {
             if (menuSessionRuntimeAgent) controller.openRpcLogs(menuSessionRuntimeAgent.id);
+            controller.closeMenu();
           }}
           onArchiveSession={() => { void actions.sessions.archive(menu.projectId, menuSession); controller.closeMenu(); }}
           onDeleteSession={() => { void actions.sessions.delete(menu.projectId, menuSession); controller.closeMenu(); }}

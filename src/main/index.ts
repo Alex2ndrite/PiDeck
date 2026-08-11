@@ -1307,12 +1307,23 @@ function isAllowedBrowserPanelUrl(targetUrl: string): boolean {
 	return isAllowedBrowserPanelUrlShared(targetUrl);
 }
 
+/**
+ * 浏览器面板 partition 上的导航白名单拦截是否已注册。
+ * Electron webRequest 监听返回 void 且不可移除；macOS activate 重建窗口会重复调用
+ * configureBrowserPanelWebviewHost，必须只注册一次，否则每次重建都在共享 partition
+ * 上累积一份回调（2026-10 泄漏修复）。
+ */
+let browserPanelRequestInstalled = false;
+
 function configureBrowserPanelWebviewHost(window: BrowserWindow): void {
 	const browserPanelSession = session.fromPartition(BROWSER_PANEL_PARTITION);
 	browserPanelSession.setPermissionCheckHandler(() => false);
 	browserPanelSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
 	browserPanelSession.setDevicePermissionHandler(() => false);
-	browserPanelSession.webRequest.onBeforeRequest((details, callback) => {
+	if (!browserPanelRequestInstalled) {
+		browserPanelRequestInstalled = true;
+		browserPanelSession.webRequest.onBeforeRequest(
+			(details, callback) => {
 		const isFrameNavigation = details.resourceType === "mainFrame" || details.resourceType === "subFrame";
 		if (isFrameNavigation && !isAllowedBrowserPanelUrl(details.url)) {
 			void appLogger.warn("browser", "Blocked unsafe webview frame request", {
@@ -1322,8 +1333,9 @@ function configureBrowserPanelWebviewHost(window: BrowserWindow): void {
 			callback({ cancel: true });
 			return;
 		}
-		callback({});
-	});
+			callback({});
+		});
+	}
 
 	window.webContents.on("will-attach-webview", (event, webPreferences, params) => {
 		const sourceUrl = params.src || "about:blank";

@@ -58,6 +58,8 @@ import {
 	clampPercent,
 	trimHistoryMessages,
 	buildMessageFlushPayload,
+	leadingSummaryCards,
+	stripToolResultForDelivery,
 	cleanTitle,
 	inferTitleFromMessages,
 	isDefaultAgentTitle,
@@ -89,6 +91,9 @@ function readAskField(input: unknown, key: string): unknown {
 export class AgentManager {
 	private readonly agents = new Map<string, AgentRuntime>();
 	private readonly messages = new Map<string, ChatMessage[]>();
+	/** 工具完整结果 LRU 缓存：截断下发后完整文本仅存于此（运行期「查看完整输出」走内存，
+	 *  历史会话回退读会话文件）。键为 pi message id，agent 停止时随 clearAgentState 释放。 */
+	private readonly toolFullTextByMessageId = new Map<string, string>();
 
 	/** 当前流式思考的累积文本，用于实时推送给前端展示 */
 	private readonly streamingThinking = new Map<string, string>();
@@ -166,6 +171,8 @@ export class AgentManager {
 	 * 文件直接读取仅解析近尾部少量消息，避免大会话加载导致的界面冻结。
 	 */
 	private static readonly MAX_AUTO_HISTORY_LOAD_BYTES = 5 * 1024 * 1024;
+	/** 工具完整结果 LRU 上限（见 toolFullTextByMessageId）。 */
+	private static readonly TOOL_FULL_TEXT_LRU_LIMIT = 200;
 	/**
 	 * 大会话直接从文件尾部读取时，最多保留的最近消息轮次（每条 user 消息算一轮）。
 	 * 原值 8 对于一些需要回看较多历史的长会话偏少，提高至 30 轮。
@@ -408,12 +415,35 @@ export class AgentManager {
 			all.length,
 		);
 		const fileVersion = this.sessionFileVersionByAgent.get(agentId);
+		// 窗口前若存在系统摘要卡片（压缩/分支），prepend 回来——压缩卡片插在数组最前，
+		// 不 prepend 会被窗口 slice 切掉（与 buildMessageFlushPayload 全量分支同一约定）。
+		const summaryCards = leadingSummaryCards(all, windowStart);
 		return {
-			messages: all.slice(windowStart),
+			messages: stripToolResultForDelivery([...summaryCards, ...all.slice(windowStart)]),
 			totalLength: all.length,
 			...(windowStart > 0 ? { windowStart } : {}),
 			...(fileVersion ? { fileVersion } : {}),
 		};
+	}
+
+	/**
+	 * 按需读取消息完整文本（「查看完整输出」）：优先运行期工具结果缓存
+	 * （toolFullTextByMessageId，仅截断下发后的完整文本），回退会话文件定位读取
+	 * （SessionHistoryReader 内部有 LRU）。找不到或读取失败抛错，由 IPC 层转结构化错误。
+	 */
+	async readMessageFullText(
+		agentId: string,
+		messageId: string,
+		entryId?: string,
+	): Promise<{ text: string }> {
+		const cached = this.toolFullTextByMessageId.get(messageId);
+		if (cached !== undefined) return { text: cached };
+		const runtime = this.agents.get(agentId);
+		const sessionPath = runtime?.tab.sessionPath;
+		if (!sessionPath) {
+			throw new Error(`Message full text unavailable: session path missing for agent ${agentId}`);
+		}
+		return this.sessionHistoryReader.readMessageFullText(sessionPath, messageId, entryId);
 	}
 
 	/**
@@ -425,10 +455,8 @@ export class AgentManager {
 		agentId = "_viewer",
 		sessionContent?: string,
 	): Promise<ChatMessage[]> {
-		return this.sessionHistoryReader.readSessionDisplayMessages(
-			sessionPath,
-			agentId,
-			sessionContent,
+		return stripToolResultForDelivery(
+			await this.sessionHistoryReader.readSessionDisplayMessages(sessionPath, agentId, sessionContent),
 		);
 	}
 
@@ -438,12 +466,13 @@ export class AgentManager {
 		before?: number,
 		pageSize?: number,
 	): Promise<SessionMessagePage> {
-		return this.sessionHistoryReader.readSessionDisplayMessagePage(
+		const page = await this.sessionHistoryReader.readSessionDisplayMessagePage(
 			sessionPath,
 			agentId,
 			before,
 			pageSize,
 		);
+		return { ...page, messages: stripToolResultForDelivery(page.messages) };
 	}
 
 	/** 轮次维度显示分页：pageSize 复用为轮次数（readSessionDisplayTurnPage 内部夹紧上限） */
@@ -454,13 +483,14 @@ export class AgentManager {
 		turnCount?: number,
 		beforeEntryId?: string,
 	): Promise<SessionMessagePage> {
-		return this.sessionHistoryReader.readSessionDisplayTurnPage(
+		const page = await this.sessionHistoryReader.readSessionDisplayTurnPage(
 			sessionPath,
 			agentId,
 			before,
 			turnCount,
 			beforeEntryId,
 		);
+		return { ...page, messages: stripToolResultForDelivery(page.messages) };
 	}
 
 	recordHostExchange(agentId: string, userText: string, assistantText: string) {
@@ -537,7 +567,7 @@ export class AgentManager {
 			rawMessageCount: rawMessages.length,
 		});
 		if (runtime.tab.sessionPath) {
-			const archiveData = await this.parseSessionArchives(runtime.tab.sessionPath, agentId).catch((err) => {
+			const archiveData = await this.scanCompactions(runtime.tab.sessionPath).catch((err) => {
 			void this.appLogger?.warn("agent", "Failed to parse session archives", {
 				agentId,
 				sessionPath: runtime.tab.sessionPath,
@@ -550,14 +580,12 @@ export class AgentManager {
 					agentId,
 					compactionCount: archiveData.compactions.length,
 					rpcAlreadyHasSummary,
-					archivedMessageCounts: [...archiveData.archivedMessagesByCompactionId.entries()].map(([id, msgs]) => ({ compactionId: id, count: msgs.length })),
 				});
 
 				const last = archiveData.compactions[archiveData.compactions.length - 1];
-				const archivedMessages = archiveData.archivedMessagesByCompactionId.get(last.id) ?? [];
 
 				if (!rpcAlreadyHasSummary) {
-					// RPC 未返回摘要 → 我们自己创建压缩卡片
+					// RPC 未返回摘要 → 我们自己创建压缩卡片（只带元信息，归档消息按需读取）
 					compactionSummaryRaw = {
 						role: "compactionSummary",
 						summary: last.summary || this.translate("session.summaryPlaceholder"),
@@ -567,19 +595,8 @@ export class AgentManager {
 							compactionCount: archiveData.compactions.length,
 							firstKeptEntryId: last.firstKeptEntryId,
 							tokensBefore: last.tokensBefore,
-							archivedMessages,
 						},
 					};
-				} else {
-					// RPC 已返回摘要 → 找到它并注入 archivedMessages（pi 的摘要不带归档消息）
-					for (const msg of trimmed) {
-						const m = msg as Record<string, unknown>;
-						if (m.role === "compactionSummary") {
-							m.meta = (m.meta as Record<string, unknown> | null) ?? {};
-							(m.meta as Record<string, unknown>).archivedMessages = archivedMessages;
-							break;
-						}
-					}
 				}
 				// 把压缩次数写回 tab，供前端（会话头/标签）展示"已压缩 N 次"。
 				if (runtime.tab.compactionCount !== archiveData.compactions.length) {
@@ -689,14 +706,12 @@ export class AgentManager {
 		return this.sessionHistoryReader.readRecentMessages(sessionPath, maxTurns);
 	}
 
-	private async parseSessionArchives(
+	private async scanCompactions(
 		sessionPath: string,
-		agentId: string,
 		sessionContent?: string,
 	) {
-		return this.sessionHistoryReader.parseSessionArchives(
+		return this.sessionHistoryReader.scanCompactions(
 			sessionPath,
-			agentId,
 			sessionContent,
 		);
 	}
@@ -1729,6 +1744,17 @@ export class AgentManager {
 		}
 	}
 
+	/**
+	 * 主动推送一次完整 runtime state（get_state + 最新工具状态补丁）给渲染层。
+	 *
+	 * 懒启动/重启链路的 applyPreferences（setModel/setThinking）之后调用：
+	 * setModel 内部只 emitState（AgentTab 无 state 字段），若不额外推送，
+	 * 渲染层底栏会停留在旧绑定残留的 state 或仅 record 回退，看不到应用后的真实模型。
+	 */
+	async publishRuntimeState(agentId: string): Promise<void> {
+		await this.emitRuntimeState(agentId);
+	}
+
 	async cycleModel(agentId: string) {
 		const runtime = this.requireRuntime(agentId);
 		await runtime.process.client.request({ type: "cycle_model" }, 60_000);
@@ -2069,6 +2095,38 @@ export class AgentManager {
 	 * 适用场景：修改了 provider 配置、切换了 API key、更新了 pi 版本后，
 	 * /reload 只重载 extension，不会重新读取配置文件，restart 才能生效。
 	 */
+	/**
+	 * 统一清理某 agent 的全部运行态键（2026-10 泄漏修复）。
+	 *
+	 * agentId 每次 spawn 都是 randomUUID，而各状态 Map/Set 若只在事件驱动路径清理，
+	 * 用户高频 stop/restart/崩溃退出时键会永久残留（慢泄漏）。
+	 * 在 agent 生命周期终止点（stop/restart/最终 closed/stopAll）统一调用。
+	 *
+	 * 不清的键（各自语义）：agents/messages（调用方处理）、userInitiatedStop
+	 * （stop 后由退出处理器消费删除）、modelRefreshingAgents（refresh 流程跨 stop 存活）、
+	 * pendingTrustRequests（启动流程 await 中，删键会挂死 create）、
+	 * compactingAgents（compact 的 catch 靠它决定重连）。
+	 */
+	private clearAgentState(agentId: string) {
+		this.streamingThinking.delete(agentId);
+		this.thinkingSegmentByAgent.delete(agentId);
+		this.streamingAgents.delete(agentId);
+		this.activeAssistantMessageIds.delete(agentId);
+		this.toolMessageIds.delete(agentId);
+		this.retryStatusMessageIds.delete(agentId);
+		this.streamingText.delete(agentId);
+		this.rpcCompactingAgents.delete(agentId);
+		this.autoRestartAttempted.delete(agentId);
+		this.messagePerfByAgent.delete(agentId);
+		this.lastPerfByAgent.delete(agentId);
+		this.notifiedAskAgents.delete(agentId);
+		this.abortedDuringAsk.delete(agentId);
+		this.pendingUIRequests.delete(agentId);
+		this.clearStreamGate(agentId);
+		// 工具完整结果缓存是运行期性能优化（回退读文件等价），agent 停止时整体释放
+		this.toolFullTextByMessageId.clear();
+	}
+
 	async restart(agentId: string): Promise<AgentTab> {
 		const runtime = this.requireRuntime(agentId);
 		const {
@@ -2109,6 +2167,7 @@ export class AgentManager {
 		this.activeToolCallsByAgent.delete(agentId);
 		this.toolExecutingByAgent.delete(agentId);
 		this.toolStateSequenceByAgent.delete(agentId);
+		this.clearAgentState(agentId);
 		this.emitState();
 
 		// 用相同的 session 重新创建 agent，新进程会重新加载所有配置
@@ -2348,6 +2407,7 @@ export class AgentManager {
 		this.dropPendingLiveRpcLogs(agentId);
 		this.displayWindowStartByAgent.delete(agentId);
 		this.sessionFileVersionByAgent.delete(agentId);
+		this.clearAgentState(agentId);
 		process.stop();
 		this.emitState();
 	}
@@ -2395,6 +2455,7 @@ export class AgentManager {
 		// 应用退出时统一清理所有 pi 子进程，避免后台 agent 残留占用模型或文件句柄。
 		for (const runtime of this.agents.values()) {
 			this.userInitiatedStop.add(runtime.tab.id);
+			this.clearAgentState(runtime.tab.id);
 			runtime.process.stop();
 		}
 		this.agents.clear();
@@ -2587,6 +2648,7 @@ export class AgentManager {
 						"diagnostic.processReconnectFailed",
 						"Agent 进程意外退出，自动重连失败",
 					);
+					this.clearAgentState(agentId);
 					this.emitState();
 				});
 			return;
@@ -2605,6 +2667,8 @@ export class AgentManager {
 				),
 			);
 		}
+		// 最终停止（无重连路径）：统一清理该 agent 的运行态键，避免慢泄漏
+		this.clearAgentState(agentId);
 		this.emitState();
 	}
 
@@ -2646,11 +2710,14 @@ export class AgentManager {
 						"diagnostic.processReconnectFailed",
 						"Agent 进程意外退出，自动重连失败",
 					);
+					this.clearAgentState(agentId);
 					this.emitState();
 				});
 			return;
 		}
 		runtime.tab.status = "closed";
+		// 最终停止（无重连路径）：统一清理该 agent 的运行态键
+		this.clearAgentState(agentId);
 		this.emitState();
 	}
 
@@ -3714,6 +3781,20 @@ export class AgentManager {
 			result,
 			isError,
 		);
+		// detailText 整体截断（拼接后可能超单段上限）并标记 truncated/fullLength；
+		// 完整结果文本缓存在 toolFullTextByMessageId（LRU），供「查看完整输出」按需读取。
+		const detailDelivery = this.messageProjector.truncateDetailWithMeta(detailText);
+		if (detailDelivery.truncated) {
+			const fullText = this.messageProjector.extractToolResultText(result) || this.messageProjector.safeJson(result);
+			if (fullText) {
+				this.toolFullTextByMessageId.set(messageId, fullText);
+				if (this.toolFullTextByMessageId.size > AgentManager.TOOL_FULL_TEXT_LRU_LIMIT) {
+					// LRU 淘汰最旧（Map 迭代序 = 插入序）
+					const oldest = this.toolFullTextByMessageId.keys().next().value;
+					if (oldest !== undefined) this.toolFullTextByMessageId.delete(oldest);
+				}
+			}
+		}
 		const icon = status === "running" ? "▶" : isError ? "✗" : "✓";
 		const text =
 			status === "running" ? `${icon} ${toolName}` : `${icon} ${toolName}`;
@@ -3798,7 +3879,10 @@ export class AgentManager {
 			args: argsMeta,
 			result: this.messageProjector.truncateForDetail(this.messageProjector.extractToolResultText(result) || this.messageProjector.safeJson(result)),
 			isError,
-			detailText,
+			detailText: detailDelivery.text,
+			...(detailDelivery.truncated
+				? { truncated: true, fullLength: detailDelivery.fullLength }
+				: {}),
 			// originalContent 不再存储到消息中（full file 会使会话元数据体积过大）。
 			// diff 使用工具参数（oldText/newText 等）展示变动区域，无需完整文件快照。
 			

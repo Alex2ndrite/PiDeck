@@ -47,6 +47,31 @@ export function trimHistoryMessages(rawMessages: unknown[], maxTurns = 40): unkn
 }
 
 /**
+ * 取窗口前的系统摘要卡片（compaction/branchSummary），用于 prepend 到显示窗口最前。
+ * 压缩卡片插在消息数组最前（index 0），激活分页窗口从尾部数轮次——若窗口起点 > 0，
+ * 卡片会被 slice 切出窗口导致用户看不到；这里把窗口前仍存在的系统卡片找回，
+ * 保证压缩标记在时间线可见区顶部（"压缩展示在正确的时间位"）。
+ */
+export function leadingSummaryCards(
+	all: ChatMessage[],
+	windowStart: number,
+): ChatMessage[] {
+	if (windowStart <= 0) return [];
+	const cards: ChatMessage[] = [];
+	const bound = Math.min(windowStart, all.length);
+	for (let i = 0; i < bound; i++) {
+		const message = all[i];
+		if (
+			message.role === "system" &&
+			(message.meta?.type === "compaction" || message.meta?.type === "branchSummary")
+		) {
+			cards.push(message);
+		}
+	}
+	return cards;
+}
+
+/**
  * 构造 agents:message 事件的 payload（增量 flush 协议，2026-08 渲染卡顿优化）。
  *
  * 背景：流式期间主进程每 50ms flush 一次，此前每次都发送全量消息数组——
@@ -79,7 +104,7 @@ export function buildMessageFlushPayload(
 	if (dirtyFrom !== undefined && dirtyFrom >= boundedWindow && dirtyFrom < all.length) {
 		return {
 			agentId,
-			messages: all.slice(dirtyFrom),
+			messages: stripToolResultForDelivery(all.slice(dirtyFrom)),
 			upsertFrom: dirtyFrom,
 			totalLength: all.length,
 			...(boundedWindow > 0 ? { windowStart: boundedWindow } : {}),
@@ -87,13 +112,36 @@ export function buildMessageFlushPayload(
 		};
 	}
 	// dirtyFrom 缺失或落到窗口之前（重载后窗口右移）：升级为窗口化全量
+	// 窗口前若存在系统摘要卡片（压缩/分支），一并 prepend——压缩卡片插在数组最前，
+	// 不 prepend 会被窗口 slice 切掉（增量分支不 prepend：卡片不在增量区，渲染层已有）。
+	const summaryCards = leadingSummaryCards(all, boundedWindow);
 	return {
 		agentId,
-		messages: all.slice(boundedWindow),
+		messages: [...summaryCards, ...stripToolResultForDelivery(all.slice(boundedWindow))],
 		totalLength: all.length,
 		...(boundedWindow > 0 ? { windowStart: boundedWindow } : {}),
 		...(fileVersion ? { fileVersion } : {}),
 	};
+}
+
+/**
+ * 下发瘦身：工具消息的 meta.result 与 meta.detailText 内容重复（detailText 已含截断后的
+ * result 段），渲染层从不读取 result（getToolExitCode 期望对象而主进程存的是截断字符串，
+ * 已确认是死代码）。剥离 result 只影响下发载荷——主进程内存仍保留（tool_execution_update
+ * 无 result 时回退 existing.meta.result）。渲染层需要完整输出时走 sessionsCatalogReadMessageFullText。
+ */
+export function stripToolResultForDelivery(messages: ChatMessage[]): ChatMessage[] {
+	let stripped = false;
+	const out = messages.map((message) => {
+		if (message.role !== "tool" || !message.meta || typeof message.meta.result === "undefined") {
+			return message;
+		}
+		stripped = true;
+		const meta = { ...message.meta };
+		delete meta.result;
+		return { ...message, meta };
+	});
+	return stripped ? out : messages;
 }
 
 /** 清洗会话标题文本。 */

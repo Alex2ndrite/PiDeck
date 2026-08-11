@@ -31,7 +31,7 @@ function compileModule(filePath, imports = {}) {
 function loadTimelineHelpers() {
   return compileModule("src/renderer/src/hooks/useSessionTimelineController.ts", {
     react: {},
-    jotai: {},
+    jotai: { atom: (value) => ({ _mockInit: value }) },
     "jotai/utils": {},
     "../atoms": {},
     "./useMessagePagination": {},

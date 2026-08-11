@@ -497,18 +497,17 @@ function SettingsModalContent(props: SettingsModalProps) {
 				<DialogHeader className="flex-row items-center justify-between px-4 py-3">
 					<DialogTitle>{t("settings.title")}</DialogTitle>
 					<div className="flex items-center gap-2">
+						{/* 保存按钮常驻：无未保存改动时禁用，避免用户改完直接关窗丢改动 */}
+						<Button variant="default" size="sm" onClick={saveAll} disabled={!hasDirtyChanges}>
+							{t("common.save")}
+						</Button>
 						{hasDirtyChanges ? (
-							<>
-								<Button variant="default" size="sm" onClick={saveAll}>
-									{t("common.save")}
-								</Button>
-								{/* 放弃更改用 outline（白底描边）而非灰底 secondary：与黑色主按钮形成
-								    清晰的主次层级（shadcn dialog 的 confirm/cancel 惯例），避免一对按钮
-								    都是灰色填充分不出哪个是提交。 */}
-								<Button variant="outline" size="sm" onClick={cancelAll}>
-									{t("common.cancel")}
-								</Button>
-							</>
+							/* 放弃更改用 outline（白底描边）而非灰底 secondary：与黑色主按钮形成
+							    清晰的主次层级（shadcn dialog 的 confirm/cancel 惯例），避免一对按钮
+							    都是灰色填充分不出哪个是提交。 */
+							<Button variant="outline" size="sm" onClick={cancelAll}>
+								{t("common.cancel")}
+							</Button>
 						) : undefined}
 						<DialogClose asChild>
 							<Button variant="ghost" size="icon" aria-label={t("common.close")} title={t("common.close")}>
@@ -649,6 +648,19 @@ function SettingsModalContent(props: SettingsModalProps) {
 											</SelectContent>
 										</Select>
 									</SettingRow>
+									{/* 流式对话设置：省渲染资源的两个行为开关（默认值见 SettingsStore）。 */}
+									<SettingSwitchRow
+										title={t("settings.expandInterimDuringStream")}
+										description={t("settings.expandInterimDuringStreamDesc")}
+										checked={draftSettings.expandInterimDuringStream}
+										onChange={(checked) => updateDraft({ expandInterimDuringStream: checked })}
+									/>
+									<SettingSwitchRow
+										title={t("settings.collapsePrevRunsOnNewTurn")}
+										description={t("settings.collapsePrevRunsOnNewTurnDesc")}
+										checked={draftSettings.collapsePrevRunsOnNewTurn}
+										onChange={(checked) => updateDraft({ collapsePrevRunsOnNewTurn: checked })}
+									/>
 								</SettingsSection>
 
 								{/* 通知 */}
@@ -1115,24 +1127,22 @@ function SettingsModalContent(props: SettingsModalProps) {
 								{/* 聊天排版 */}
 								<SettingsSection title={t("settings.sectionChatLayout")}>
 									<SettingRow
-										title={<span>{t("settings.contentMaxWidth")}</span>}
-										description={t("settings.contentMaxWidthDesc")}
+										title={<span>{t("settings.contentWidthPct")}</span>}
+										description={t("settings.contentWidthPctDesc")}
 									>
-										<div className="flex w-full items-center gap-3">
+										<div className="flex w-full items-center gap-2">
 											<input
 												type="range"
-												min="50"
+												min="60"
 												max="100"
-												step="5"
-												value={draftSettings.contentMaxWidth}
-												onChange={(event) => updateDraft({ contentMaxWidth: parseInt(event.target.value) })}
+												step="1"
+												value={draftSettings.chatContentWidthPct}
+												onChange={(event) => updateDraft({ chatContentWidthPct: parseInt(event.target.value) })}
 												className="min-w-0 flex-1 accent-[var(--color-accent)]"
-												aria-label={t("settings.contentMaxWidth")}
+												aria-label={t("settings.contentWidthPct")}
 											/>
-											<span className="min-w-20 shrink-0 text-right font-brand text-sm text-muted-foreground tabular-nums">
-												{draftSettings.contentMaxWidth >= 100
-													? t("settings.contentMaxWidthUnlimited")
-													: `${draftSettings.contentMaxWidth}%`}
+											<span className="min-w-8 shrink-0 text-right font-brand text-sm text-muted-foreground tabular-nums">
+												{draftSettings.chatContentWidthPct}%
 											</span>
 										</div>
 									</SettingRow>

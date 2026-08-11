@@ -1,6 +1,6 @@
 import { memo } from "react";
 import { useAtomValue } from "jotai";
-import { streamingTextByIdAtom } from "../../atoms/session-atoms";
+import { streamingTextBySessionIdAtomFamily } from "../../atoms/session-atoms";
 import { MarkdownStream } from "./MarkdownStream";
 
 /** 与 TimelineFormat 同逻辑的内联副本（node 单测可直接加载，零外部依赖）。 */
@@ -77,9 +77,8 @@ const LiveAnswerBody = memo(function LiveAnswerBody(props: {
 	onOpenExternal: (url: string, forceSystem?: boolean) => void;
 	onOpenFile?: (path: string) => void;
 }) {
-	const streaming = useAtomValue(streamingTextByIdAtom);
-	const entry = props.sessionId ? streaming[props.sessionId] : undefined;
-	const sourceText = entry?.content ?? "";
+	const streaming = useAtomValue(streamingTextBySessionIdAtomFamily(props.sessionId));
+	const sourceText = streaming?.content ?? "";
 	const text = stripThinkingTags(stripAnsi(sourceText));
 	return (
 		<div

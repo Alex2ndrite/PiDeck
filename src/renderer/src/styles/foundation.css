@@ -2515,22 +2515,6 @@ select:focus-visible {
   bottom: -16px;
   cursor: row-resize;
 }
-/* ── 内容行宽限制：仅在 --content-max-width 由 JS 注入时生效 ── */
-.chat-pane[style*="--content-max-width"] .message-list {
-  width: min(100%, var(--content-max-width));
-  max-width: var(--content-max-width);
-  margin-inline: auto;
-}
-.chat-pane[style*="--content-max-width"] .composer-box,
-.chat-pane[style*="--content-max-width"] .image-preview-area,
-.chat-pane[style*="--content-max-width"] .extension-widgets-container,
-.chat-pane[style*="--content-max-width"] .queued-track,
-.chat-pane[style*="--content-max-width"] .composer .ask-inline-bar,
-.chat-pane[style*="--content-max-width"] .session-runtime-ui {
-  width: min(100%, var(--content-max-width));
-  max-width: var(--content-max-width);
-  margin-inline: auto;
-}
 /* queued-track 与 composer 同宽容器；内部 .queued-panel 再缩成右上角小面板 */
 .chat-header {
   /* 布局/边框/背景由 SessionHeader Tailwind 承担；保留 overflow 兼容下拉菜单 */
@@ -2851,7 +2835,11 @@ select:focus-visible {
   overflow-y: auto;
   overflow-x: hidden;
   overflow-anchor: none;
-  padding: 18px clamp(24px, 4vw, 48px) 24px;
+  /* 只留上下呼吸空间。左右必须由组件 utility 的百分比留白变量接管；
+     若这里写 padding 简写带左右 24px，会在变量失效时把「百分比留白」盖成恒定 24px，
+     表现为设置滑块怎么拖都不生效。 */
+  padding-block: 18px 24px;
+  padding-inline: 0;
   min-height: 0;
   scroll-padding-top: 28px;
   /* Ask/工具完成卡片在时间线末端仍需留出可视缓冲，避免紧贴 composer。 */
@@ -2903,11 +2891,7 @@ select:focus-visible {
   transform: translate(-50%, 0);
   box-shadow: 0 2px 6px color-mix(in srgb, var(--color-accent) 16%, transparent);
 }
-.message-list {
-  min-width: 0;
-  margin: 0 auto;
-  transition: opacity 0.12s ease-out;
-}
+
 .multi-select-image-export {
   position: absolute;
   left: 0;

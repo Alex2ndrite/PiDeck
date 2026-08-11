@@ -493,11 +493,18 @@ export function SessionContextMenu(props: {
 	onCopySession: () => void;
 	onCopySessionFilePath: () => void;
 	onOpenSessionFile?: () => void;
-	onShowLogs?: () => void;
+	/** RPC 日志菜单组（与 AgentContextMenu 同语义）：仅会话有 live runtime 时显示 */
+	canRpcLog?: boolean;
+	rpcToggleDisabled?: boolean;
+	isRpcLogging?: boolean;
+	onToggleRpcLogging?: () => void;
+	onOpenLogs?: () => void;
 	onArchiveSession: () => void;
 	onDeleteSession: () => void;
 }) {
 	const busy = Boolean(props.actionLoading);
+	// 历史会话（无 runtime）不展示 RPC 日志项：没有运行中的 pi 子进程就无日志可记/可看
+	const showRpcGroup = Boolean(props.canRpcLog);
 	return (
 		<MenuShell x={props.menu.x} y={props.menu.y} onClose={props.onClose}>
 			<DropdownMenuItem disabled={busy} onSelect={props.onRename}>{t("common.rename")}</DropdownMenuItem>
@@ -516,7 +523,23 @@ export function SessionContextMenu(props: {
 			<DropdownMenuItem disabled={busy} onSelect={props.onOpenSessionFile}>
 				{t("menu.openSessionFile")}
 			</DropdownMenuItem>
-			<DropdownMenuItem disabled={busy} onSelect={props.onShowLogs}>{t("menu.rpcLogs")}</DropdownMenuItem>
+			{showRpcGroup && (
+				<>
+					<DropdownMenuItem
+						disabled={busy || props.rpcToggleDisabled}
+						// 置灰时仍给出原因提示，避免用户以为功能坏了
+						title={props.rpcToggleDisabled ? t("menu.rpcLoggingRequiresRuntime") : undefined}
+						onSelect={props.onToggleRpcLogging}
+					>
+						{props.isRpcLogging ? `✓ ${t("menu.rpcLoggingOn")}` : t("menu.rpcLogging")}
+					</DropdownMenuItem>
+					{props.isRpcLogging && (
+						<DropdownMenuItem disabled={busy} onSelect={props.onOpenLogs}>
+							{t("menu.rpcLogView")}
+						</DropdownMenuItem>
+					)}
+				</>
+			)}
 			<DropdownMenuSeparator />
 			<DropdownMenuItem disabled={busy} onSelect={props.onArchiveSession}>
 				{t("menu.archiveSession")}

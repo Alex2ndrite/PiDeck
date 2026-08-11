@@ -75,7 +75,7 @@ test("auto-collapse anchors viewport to final answer start when following", () =
   );
   // 旧轮迟到定时器：只对准最后一条最终回答
   assert.match(controller, /finals\[finals\.length - 1\]/);
-  assert.match(timeline, /isLatestRun=\{index === reconciledRuns\.length - 1\}/);
+  assert.match(timeline, /isLatestRun=\{index === displayRuns\.length - 1\}/);
 });
 
 test("followOutput re-lock uses spring when far from bottom", () => {

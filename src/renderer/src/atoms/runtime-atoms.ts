@@ -2,6 +2,7 @@ import { atom } from "jotai";
 import { atomFamily, selectAtom } from "jotai/utils";
 import type { AgentRuntimeState, AgentStatus, AgentTab } from "../../../shared/types";
 import { sessionRecordsAtom, sessionRuntimeByIdAtom } from "./session-atoms";
+import { sessionIdByRuntimeAgentIdAtomFamily } from "./session-selectors";
 
 export const agentInventoryAtom = atom((get) => {
   const records = get(sessionRecordsAtom);
@@ -55,6 +56,18 @@ export const runtimeCapabilityByAgentIdAtomFamily = atomFamily((agentId: string)
   atom((get) => Object.values(get(sessionRuntimeByIdAtom))
     .find((runtime) => runtime.agentId === agentId)?.state),
 );
+
+/**
+ * agent 退出（closed）时释放 agentId 维度 atomFamily 缓存：
+ * agentId 每次都是新 UUID，不复用则 family 内部 Map 只增不清（2026-10 泄漏修复）。
+ * 由 useSessionRuntimeBridge 在 agents:state 全量推送中检测 closed 后触发；
+ * atomFamily 惰性重建，后续同 id 重新出现时无副作用。
+ */
+export const agentExitedAtom = atom(null, (_get, _set, agentId: string) => {
+  agentByIdAtomFamily.remove(agentId);
+  runtimeCapabilityByAgentIdAtomFamily.remove(agentId);
+  sessionIdByRuntimeAgentIdAtomFamily.remove(agentId);
+});
 
 function areRuntimeCapabilityRecordsEqual(
   left: Record<string, AgentRuntimeState>,

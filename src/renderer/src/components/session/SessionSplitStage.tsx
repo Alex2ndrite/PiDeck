@@ -222,7 +222,7 @@ export function SessionSplitStage(props: SessionSplitStageProps) {
   const renderSessionPane = (sessionId: string) => (
     <div
       data-split-session-id={sessionId}
-      className="h-full min-h-0 min-w-0 overflow-hidden"
+      className="h-full min-h-0 min-w-0 overflow-hidden chat-content-width @container"
     >
       {renderSession(sessionId)}
     </div>
@@ -306,7 +306,7 @@ export function SessionSplitStage(props: SessionSplitStageProps) {
       ) : (
         <div
           data-split-session-id={soloSessionId}
-          className="session-split-solo flex h-full min-h-0 flex-1 flex-col overflow-hidden"
+          className="session-split-solo chat-content-width @container flex h-full min-h-0 flex-1 flex-col overflow-hidden"
         >
           {solo}
         </div>

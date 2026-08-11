@@ -27,18 +27,24 @@ function getDiagnosticTone(message: ChatMessage): "error" | "warning" | "success
 	return "info";
 }
 
-/** 压缩事件卡片：在时间线上标记会话被压缩过，展示摘要和节约的 token 数。
- * 支持展开查看压缩前的归档消息。 */
+/** 压缩事件卡片：对话流中的一条普通消息，标记会话被压缩过。
+ * 折叠显示摘要一行；展开显示 summary 全文（Markdown 渲染，与 pi TUI 一致）。
+ * 压缩前的归档消息由翻页像正常对话流一样逐条可见（磁盘分页包含归档历史）。 */
 export const CompactionCard = memo(function CompactionCard(props: {
 	message: ChatMessage;
+	sessionId: string;
+	onOpenExternal: (url: string, forceSystem?: boolean) => void;
+	onOpenFile?: (path: string) => void;
 }) {
 	const [expanded, setExpanded] = useState(false);
-	const summary = props.message.text;
+	// 学 ThinkingBlock 折叠轻渲染：折叠态只挂 200 字符截断预览，
+	// 全文（Markdown DOM）仅在展开时挂载、收起即卸载；溢出判断用字符阈值替代 DOM 测量。
+	const summaryText = stripAnsi(props.message.text);
+	const PREVIEW_CHARS = 200;
+	const overflowing = summaryText.length > PREVIEW_CHARS;
 	const tokensBefore = (props.message.meta as any)?.tokensBefore;
 	const compactionCount = (props.message.meta as any)?.compactionCount;
-	const archivedMessages = (props.message.meta as any)?.archivedMessages as ChatMessage[] | undefined;
 	const time = formatTime(props.message.timestamp);
-	const hasArchived = Array.isArray(archivedMessages) && archivedMessages.length > 0;
 
 	return (
 		<TimelineMarker kind="compaction" tone="active">
@@ -49,15 +55,16 @@ export const CompactionCard = memo(function CompactionCard(props: {
 			<button
 				type="button"
 				className="flex w-full cursor-pointer items-start gap-2 rounded-[inherit] border-none bg-none p-1 px-3 text-left text-inherit select-none hover:bg-[color:color-mix(in_srgb,var(--color-accent)_6%,transparent)] focus-visible:-outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
-				onClick={() => hasArchived && setExpanded(!expanded)}
-				disabled={!hasArchived}
+				onClick={() => setExpanded(!expanded)}
 				aria-expanded={expanded}
 			>
 				<span className="shrink-0 text-body leading-6" aria-hidden="true">
-					{hasArchived ? (expanded ? "📂" : "📁") : "🔁"}
+					{expanded ? "📂" : "📁"}
 				</span>
 				<div className="flex min-w-0 flex-1 flex-col gap-0.5">
-					<span className="truncate text-caption leading-[1.4] text-text-secondary">{stripAnsi(summary)}</span>
+					<span className="truncate text-caption leading-[1.4] text-text-secondary">
+						{overflowing ? summaryText.slice(0, PREVIEW_CHARS) + "…" : summaryText}
+					</span>
 					<div className="flex flex-wrap items-center gap-1">
 						{typeof compactionCount === "number" && compactionCount > 0 && (
 							<span className="inline-flex items-center rounded-full border border-[color-mix(in_srgb,var(--color-accent)_16%,transparent)] bg-[color:color-mix(in_srgb,var(--color-accent)_8%,transparent)] px-1.5 font-mono text-micro text-text-tertiary">
@@ -69,55 +76,28 @@ export const CompactionCard = memo(function CompactionCard(props: {
 								{t("app.compactionTokensBefore", { count: Math.round(tokensBefore / 1000) })}
 							</span>
 						)}
-						{hasArchived && (
-							<span className="font-mono text-micro opacity-80 text-text-tertiary">
-								{expanded ? t("app.compactionCollapse") : t("app.compactionExpand")}
-							</span>
+						{expanded ? (
+							<span className="font-mono text-micro opacity-80 text-text-tertiary">{t("app.compactionCollapse")}</span>
+						) : (
+							overflowing && <span className="font-mono text-micro opacity-80 text-text-tertiary">{t("app.compactionExpand")}</span>
 						)}
 					</div>
 					<time className="text-micro opacity-70 text-text-tertiary">{time}</time>
 				</div>
 			</button>
-			{expanded && hasArchived && (
-				<div className="border-t border-[color-mix(in_srgb,var(--color-accent)_8%,transparent)]">
-					<div />
-					<ArchivedMessageList messages={archivedMessages} />
+			{expanded && (
+				<div className="markdown-body border-t border-[color-mix(in_srgb,var(--color-accent)_8%,transparent)] px-3 pt-2 pb-1 text-text-secondary">
+					<MarkdownStream
+						text={summaryText}
+						onOpenExternal={props.onOpenExternal}
+						onOpenFile={props.onOpenFile}
+					/>
 				</div>
 			)}
 		</article>
 		</TimelineMarker>
 	);
 });
-
-/** 归档消息列表：压缩卡片展开时，以简略格式渲染压缩前的消息历史。 */
-function ArchivedMessageList({ messages }: { messages: ChatMessage[] }) {
-	return (
-		<div className="flex max-h-[360px] flex-col overflow-y-auto p-1 px-2">
-			{messages.map((msg) => (
-				<ArchivedMessage key={msg.id} message={msg} />
-			))}
-		</div>
-	);
-}
-
-/** 单条归档消息：根据角色显示对应的图标和内容预览。
- * 只展示纯文本内容，不渲染 Markdown / 代码高亮 / 工具详情，保持归档区视觉干净。 */
-function ArchivedMessage({ message }: { message: ChatMessage }) {
-	const text = stripAnsi(message.text).trim();
-	// 截断过长的消息以减少展开区体积
-	const preview = text.length > 300 ? text.slice(0, 300) + "…" : text;
-	const roleIcon =
-		message.role === "user" ? "👤" :
-		message.role === "assistant" ? "🤖" :
-		message.role === "tool" ? "🔧" : "💬";
-
-	return (
-		<div className={`flex items-start gap-1 rounded-[2px] p-0.5 px-1 text-caption leading-[1.4] hover:bg-[color:color-mix(in_srgb,var(--color-accent)_4%,transparent)]${message.role === "user" ? "" : ""}`}>
-			<span className="w-5 shrink-0 text-center text-caption">{roleIcon}</span>
-			<span className={`min-w-0 flex-1 truncate${message.role === "user" ? " text-text-primary" : message.role === "tool" ? " font-mono text-micro text-text-tertiary" : " text-text-secondary"}`}>{preview || "(empty)"}</span>
-		</div>
-	);
-}
 
 /** 错误/RPC/系统诊断消息使用独立卡片，避免和普通 AI 正文混在一起难以扫读。 */
 export const DiagnosticMessageCard = memo(function DiagnosticMessageCard(props: {
@@ -344,30 +324,21 @@ export const ThinkingBlock = memo(
 		onOpenFile?: (path: string) => void;
 	}) {
 	const [expanded, setExpanded] = useState(props.defaultExpanded ?? true);
-	const contentRef = useRef<HTMLDivElement | null>(null);
-	const [overflowing, setOverflowing] = useState(false);
 	// agent 完成时强制收起：即使之前手动展开过，思考也随执行过程整体收起（回到折叠 4 行半态）
 	useEffect(() => {
 		if (props.endedAt) setExpanded(false);
 	}, [props.endedAt]);
 	// 流式思考走打字机，避免大块 thinking_delta 一次糊上屏幕（「咔」一下）
+	// 折叠态 disabled：内容不可见，不启动 rAF 打字机、不订阅流式增量，展开时全文立现。
 	const { displayedContent } = useSmoothStream({
 		content: props.text,
 		isStreaming: Boolean(props.isStreaming),
+		disabled: !expanded,
 	});
-	// 始终走打字机输出：历史首挂时 hook 初始即全文；流式结束也不再绕过 displayedContent 造成整段蹦出。
-	// 折叠态内容溢出检测：超过 4 行半才显示「展开思考」按钮。
-	// 折叠时 clientHeight 被 max-height 锁死，ResizeObserver 收不到文本增长，
-	// 因此 text 变化时（流式追加）主动重查；ResizeObserver 兜底窗口/字号档位变化。
-	useEffect(() => {
-		const el = contentRef.current;
-		if (!el) return;
-		const check = () => setOverflowing(el.scrollHeight > el.clientHeight + 1);
-		check();
-		const ro = new ResizeObserver(check);
-		ro.observe(el);
-		return () => ro.disconnect();
-	}, [displayedContent, expanded]);
+	// 折叠态溢出判断：字符阈值替代 scrollHeight 检测（折叠轻渲染后无全文 DOM 可量）。
+	// 200 字符 ≈ 4.5 行 × ~45 字/行的宽松上限；流式期间 text 增长天然触发重渲染 → 按钮实时出现。
+	const PREVIEW_CHARS = 200;
+	const overflowing = props.text.length > PREVIEW_CHARS;
 
 	if (!props.showThinking || !props.text.trim()) return null;
 	// 思考耗时：结束固定（endedAt - startedAt）；流式中（isStreaming）由 LiveDuration 实时增长
@@ -405,17 +376,24 @@ export const ThinkingBlock = memo(
 			    行高按正文字号计算（1.68 × 15px × 4.5 ≈ 113px），字号随 --font-size-chat 联动
 			    （与思考正文改挂对话字号轨保持一致） */}
 			<div className="rounded-md border border-dashed border-border-subtle bg-[color:color-mix(in_srgb,var(--color-bg-muted)_45%,transparent)]">
-				<div
-					ref={contentRef}
-					className={`markdown-body px-3 pt-2 pb-1 text-text-tertiary ${expanded ? "" : "max-h-[calc(var(--font-size-chat)*7.56)] overflow-hidden"}`}
-				>
-					<MarkdownStream
-						text={displayedContent}
-						isStreaming={props.isStreaming}
-						onOpenExternal={props.onOpenExternal}
-						onOpenFile={props.onOpenFile}
-					/>
-				</div>
+				{expanded ? (
+					<div
+						className={`markdown-body px-3 pt-2 pb-1 text-text-tertiary ${expanded ? "" : "max-h-[calc(var(--font-size-chat)*7.56)] overflow-hidden"}`}
+					>
+						<MarkdownStream
+							text={displayedContent}
+							isStreaming={props.isStreaming}
+							onOpenExternal={props.onOpenExternal}
+							onOpenFile={props.onOpenFile}
+						/>
+					</div>
+				) : (
+					// 折叠态轻渲染：只显示截断纯文本预览，不跑 streamdown、不建全文 DOM。
+					// 长思考（几千字+代码）折叠时 DOM 只有一行预览，是时间线内存最大单项的根治。
+					<div className="max-h-[calc(var(--font-size-chat)*7.56)] overflow-hidden whitespace-pre-wrap break-words px-3 pt-2 pb-1 text-text-tertiary">
+						{overflowing ? props.text.slice(0, PREVIEW_CHARS) + "…" : props.text}
+					</div>
+				)}
 				{showToggle && (
 					<div className="flex px-1 pb-1">
 						<button

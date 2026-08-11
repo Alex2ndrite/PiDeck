@@ -32,6 +32,29 @@
   }
 }
 
+/* 聊天内容宽度（百分比留白体系，UI 2.0）：
+ * 消息与输入框共享同一留白，杜绝“一边最大一边最小”。
+ * 变量链（AppShell 在 .chat-pane 上注入 --chat-content-pct-set，60–100%）：
+ *   --chat-side-gap    单侧留白 = 栏宽 × (1 − pct) / 2（必须用 cqi，见下）
+ *   --chat-inline-pad  实际内边距 = max(留白, 24px)，100% 时保住最小呼吸空间
+ * 变量链定义在每个会话栏的 chat-content-width utility 上，因此 solo 与 split 各自按栏宽计算。
+ * 分屏/窄栏自适应由组件上的 Tailwind 容器查询 utility 承担（@max-[1100px]:px-6）。
+ * 阈值必须低于典型 solo 栏宽（约 1200px+），否则日常窗口会永远走 24px 收敛，
+ * 百分比滑块看起来「怎么拖都不生效」。真正分屏把单栏压到 ≤1100 时再收敛。
+ *
+ * 会话栏是容器而不是 .chat-pane：.chat-pane 包含整个工作区，分屏时仍是全宽；
+ * 若变量链留在它上面，两个会话栏会错误地共享整窗宽度。
+ *
+ * 为何用 cqi 而不是 100%：自定义属性里的 100% 常在「无宽度上下文」被解析/整段失效，
+ * 子元素 padding-inline:var(--chat-inline-pad) 静默回退，滑块怎么拖都像「不生效」。
+ * cqi 相对本栏 @container，solo/分屏都正确。 */
+@utility chat-content-width {
+  --chat-side-gap: calc(
+    100cqi * (1 - (var(--chat-content-pct-set, 80%) / 100%)) / 2
+  );
+  --chat-inline-pad: max(24px, var(--chat-side-gap));
+}
+
 @theme inline {
   /* 应用域 token（旧 CSS 继续用） */
   --color-bg-app: var(--color-bg-app);

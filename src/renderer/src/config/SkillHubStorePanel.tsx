@@ -184,11 +184,12 @@ export function SkillHubStorePanel() {
 				void handleSearch(query);
 			} else {
 				if (result.error) console.error("[SkillHub] Install rejected", result.error);
-				showNotice(t("config.skillHubInstallError"), 5000, "error");
+				// 主进程已返回真实失败原因（npx 输出/网络/权限等），toast 直接带出便于定位
+				showNotice(t("config.skillHubInstallError", { error: result.error }), 5000, "error");
 			}
 		} catch (err) {
 			console.error("[SkillHub] Install failed", err);
-			showNotice(t("config.skillHubInstallError"), 5000, "error");
+			showNotice(t("config.skillHubInstallError", { error: err instanceof Error ? err.message : String(err) }), 5000, "error");
 		} finally {
 			setInstallingSlugs((prev) => {
 				const next = new Set(prev);
@@ -209,11 +210,11 @@ export function SkillHubStorePanel() {
 				showNotice(t("app.skillsInstalled", { name: detail?.skill?.displayName || previewSlug }), 3000);
 			} else {
 				if (result.error) console.error("[SkillHub] Install rejected", result.error);
-				setInstallResult({ ...result, error: t("config.skillHubInstallError") });
+				setInstallResult({ ...result, error: t("config.skillHubInstallError", { error: result.error }) });
 			}
 		} catch (err) {
 			console.error("[SkillHub] Install failed", err);
-			setInstallResult({ success: false, slug: previewSlug, installDir: "", error: t("config.skillHubInstallError") });
+			setInstallResult({ success: false, slug: previewSlug, installDir: "", error: t("config.skillHubInstallError", { error: err instanceof Error ? err.message : String(err) }) });
 		} finally {
 			setInstalling(false);
 		}
@@ -291,8 +292,11 @@ export function SkillHubStorePanel() {
 							key={item.slug}
 							className="skillhub-card"
 							onClick={() => {
+								// 弹框（ConfigModal Dialog）内链接强制系统浏览器：内置浏览器面板位于 Dialog 下层不可见，
+								// 跟随 linkOpenMode=internal 打开会被遮挡，用户看到“点了没反应”（与 openDocsInSystemBrowser 同规则）
 								window.piDesktop.app.openExternal(
-									`https://www.skills.sh/search?q=${encodeURIComponent(item.name)}`
+									`https://www.skills.sh/search?q=${encodeURIComponent(item.name)}`,
+									true
 								);
 							}}
 						>

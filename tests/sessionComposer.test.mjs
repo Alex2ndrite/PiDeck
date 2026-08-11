@@ -115,7 +115,7 @@ function createSendHarness(initial = {}) {
     jotai: {
       useAtomValue: (atom) => state.get(atom),
       useSetAtom: (atom) => (input) => setAtom(atom, input),
-      useStore: () => ({ get: (atom) => state.get(atom) }),
+      useStore: () => ({ get: (atom) => state.get(atom), set: (atom, input) => setAtom(atom, input) }),
     },
     "../atoms": atoms,
     "../composerBehavior": {

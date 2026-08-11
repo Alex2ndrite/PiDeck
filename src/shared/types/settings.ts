@@ -82,6 +82,17 @@ export type StartupWindowMode =
 	agentCountReminderEnabled: boolean;
 	/** 是否在会话中显示模型思考过程，默认开启 */
 	showThinking: boolean;
+	/**
+	 * 流式对话时是否自动展开中间过程（思考/工具详情）。
+	 * false（默认）：对话过程中保持折叠（历史轮与最新轮都不自动撑开），手动展开的仍可查看；
+	 * true：最新轮流式输出时自动展开。手动开合状态始终优先于本设置。
+	 */
+	expandInterimDuringStream: boolean;
+	/**
+	 * 新一轮（用户发送新消息）开始时自动收起上一轮展开的中间过程，节省渲染资源。
+	 * true（默认）：发送新消息后收起所有非最新轮（含手动展开的）；false：保持现状。
+	 */
+	collapsePrevRunsOnNewTurn: boolean;
 	/** 是否开启开发者控制台（DevTools） */
 	showDevTools: boolean;
 	/**
@@ -128,9 +139,16 @@ export type StartupWindowMode =
 	 * split=与会话分屏；maximize=占满中间栏（会话暂时收起，不进侧栏）。
 	 */
 	workspaceContentOpenMode: WorkspaceContentOpenMode;
-	/** 内容区最大宽度：占会话面板宽度的百分比（50–100），100 表示不限制（填满 chat-pane）。
-	 * 旧版本为 px（800–1800，1800=不限），已由 SettingsStore 加载时迁移为百分比。 */
+	/**
+	 * 内容区最大宽度（px），0 表示不限制（填满 chat-pane）。用于限制消息行宽，左右留白。
+	 * @deprecated 由 chatContentWidthPct 取代：保留字段以兼容旧 settings.json，新代码不再读取。
+	 */
 	contentMaxWidth: number;
+	/**
+	 * 聊天内容区宽度占聊天面板的百分比（60–100，100=无留白全宽）。
+	 * 消息与输入框共享同一留白（--chat-content-pct），分屏窄栏时由容器查询自动收敛到 100%。
+	 */
+	chatContentWidthPct: number;
 	/** 编辑器最大文件大小（MB），超过此大小的文件不加载编辑器。默认 5MB。 */
 	maxEditorFileSizeMB: number;
 	/** 外部编辑器配置：首次异步检测后保存，用户可在设置中手动覆盖路径。 */

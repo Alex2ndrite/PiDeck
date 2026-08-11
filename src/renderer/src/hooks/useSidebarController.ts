@@ -212,6 +212,15 @@ export function useSidebarController(options: {
   const [drag, setDrag] = useState<{ sourceProjectId?: string; overProjectId?: string }>({});
   const [menu, setMenu] = useState<SidebarMenuTarget | null>(null);
   const [agentRpcLogging, setAgentRpcLoggingById] = useState<Map<string, boolean>>(() => new Map());
+  // RPC 日志开关（agentId 键，只增不清 → 关闭时删键；agentId 每次 spawn 随机，旧键无复用价值）
+  const patchRpcLogging = useCallback((agentId: string, enabled: boolean) => {
+    setAgentRpcLoggingById((current) => {
+      const next = new Map(current);
+      if (enabled) next.set(agentId, true);
+      else next.delete(agentId);
+      return next;
+    });
+  }, []);
   const [sessionManagerProjectId, setSessionManagerProjectId] = useState<string>();
   const [worktreeCreateProjectId, setWorktreeCreateProjectId] = useState<string>();
   const [rpcLogAgentId, setRpcLogAgentId] = useState<string>();
@@ -405,11 +414,10 @@ export function useSidebarController(options: {
     if (target.kind === "agent" && options.getRpcLogging) {
       const logging = await options.getRpcLogging(target.agentId);
       if (!requestGateRef.current.isCurrentMenu(request)) return;
-      setAgentRpcLoggingById((current) => new Map(current).set(target.agentId, logging));
+      patchRpcLogging(target.agentId, logging);
     }
     if (requestGateRef.current.isCurrentMenu(request)) setMenu(target);
-  }, [options.getRpcLogging]);
-  const openRpcLogs = useCallback((agentId: string) => {
+  }, [options.getRpcLogging]);  const openRpcLogs = useCallback((agentId: string) => {
     // 弹窗自持数据（初始历史 + 实时订阅），这里只负责开关
     setRpcLogAgentId(agentId);
   }, []);
@@ -450,7 +458,7 @@ export function useSidebarController(options: {
       setMenu(null);
     },
     isAgentRpcLogging: (agentId) => agentRpcLogging.get(agentId) ?? false,
-    setAgentRpcLogging: (agentId, enabled) => setAgentRpcLoggingById((current) => new Map(current).set(agentId, enabled)),
+    setAgentRpcLogging: (agentId, enabled) => patchRpcLogging(agentId, enabled),
     sessionManagerProjectId,
     openSessionManager: setSessionManagerProjectId,
     closeSessionManager: () => setSessionManagerProjectId(undefined),

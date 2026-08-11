@@ -16,7 +16,7 @@ function compile(filePath, imports = {}) {
 
 const pagination = compile("src/renderer/src/hooks/useMessagePagination.ts", { react: {} });
 const timeline = compile("src/renderer/src/hooks/useSessionTimelineController.ts", {
-  react: {}, jotai: {}, "jotai/utils": {}, "../atoms": {}, "./useMessagePagination": {},
+  react: {}, jotai: { atom: (value) => ({ _mockInit: value }) }, "jotai/utils": {}, "../atoms": {}, "./useMessagePagination": {},
 });
 
 function readRendererRuntimeSources(directory) {

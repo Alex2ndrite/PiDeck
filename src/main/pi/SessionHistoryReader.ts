@@ -109,6 +109,9 @@ export class SessionHistoryReader {
 	private static readonly SESSION_DISPLAY_INDEX_LIMIT = 32;
 	private static readonly MAX_SESSION_DISPLAY_PAGE_SIZE = 100;
 	private static readonly MAX_SESSION_DISPLAY_PAGE_BYTES = 256 * 1024;
+	/** 完整消息文本 LRU 缓存（「查看完整输出」按需读取结果）：键 `${sessionPath}#${messageId}`。 */
+	private readonly fullTextCache = new Map<string, string>();
+	private static readonly FULL_TEXT_CACHE_LIMIT = 200;
 	/** 轮次分页默认/上限：默认最近一次激活带 3 轮，单页最多 10 轮（防恶意参数撑爆 IPC） */
 	static readonly DEFAULT_TURN_PAGE_SIZE = 3;
 	private static readonly MAX_TURN_PAGE_SIZE = 10;
@@ -119,6 +122,51 @@ export class SessionHistoryReader {
 	 * 不启动 pi 进程，直接从 JSONL 构造与运行态相同的时间线数据。
 	 * Viewer 必须复用 AgentManager 的压缩归档与消息转换规则，避免维护第二套显示模型。
 	 */
+	async readMessageFullText(
+		sessionPath: string,
+		messageId: string,
+		entryId?: string,
+	): Promise<{ text: string }> {
+		const cacheKey = `${sessionPath}#${messageId}`;
+		const cached = this.fullTextCache.get(cacheKey);
+		if (cached !== undefined) {
+			// LRU 刷新：先删后插，保持 Map 迭代序 = 最近使用序
+			this.fullTextCache.delete(cacheKey);
+			this.fullTextCache.set(cacheKey, cached);
+			return { text: cached };
+		}
+		const content = await readFile(this.deps.toHostPath(sessionPath), "utf8");
+		// 定位读取：逐行 parse 直到命中目标 entry（entryId 优先，回退 message.id），
+		// 不做全文件转换，避免大会话展开单条内容时触发整文件解析冻结。
+		for (const line of content.split("\n")) {
+			if (!line.trim()) continue;
+			let entry: unknown;
+			try {
+				entry = JSON.parse(line);
+			} catch {
+				continue; // 跳过单行解析失败
+			}
+			if (!entry || typeof entry !== "object") continue;
+			const e = entry as { id?: unknown; message?: unknown };
+			const match = Boolean(
+				(entryId && e.id === entryId) ||
+				(e.message && typeof e.message === "object" && (e.message as { id?: unknown }).id === messageId),
+			);
+			if (!match) continue;
+			const text = extractEntryResultText(e.message);
+			if (!text) {
+				throw new Error(`Message ${messageId} has no extractable text content`);
+			}
+			if (this.fullTextCache.size >= SessionHistoryReader.FULL_TEXT_CACHE_LIMIT) {
+				const oldest = this.fullTextCache.keys().next().value;
+				if (oldest !== undefined) this.fullTextCache.delete(oldest);
+			}
+			this.fullTextCache.set(cacheKey, text);
+			return { text };
+		}
+		throw new Error(`Message ${messageId} not found in session file`);
+	}
+
 	async readSessionDisplayMessages(
 		sessionPath: string,
 		agentId = "_viewer",
@@ -171,18 +219,10 @@ export class SessionHistoryReader {
 
 		const lastCompactionIndex = activeBranch.findLastIndex((entry) => entry.type === "compaction");
 		const lastCompaction = lastCompactionIndex >= 0 ? activeBranch[lastCompactionIndex] : undefined;
-		const firstKeptIndex = lastCompaction?.firstKeptEntryId
-			? activeBranch.findIndex((entry) => entry.id === lastCompaction.firstKeptEntryId)
-			: -1;
-		// pi 压缩后上下文由 summary + firstKeptEntryId 起的保留消息 + 后续消息组成；
-		// 不能只取 compaction entry 之后，否则会漏掉压缩时明确保留的尾部消息。
-		const currentStartIndex = firstKeptIndex >= 0
-			? firstKeptIndex
-			: lastCompactionIndex >= 0
-				? lastCompactionIndex + 1
-				: 0;
+		// 活动分支包含压缩点之前的全部消息（JSONL 保留完整历史）：
+		// 压缩前历史直接作为正常对话流的一部分，由渲染层分页（往上翻）逐条可见；
+		// 压缩卡片单独 prepend 在最前，翻页补前缀时自然落在归档消息之后（压缩点位置）。
 		const currentEntries = activeBranch
-			.slice(currentStartIndex)
 			.filter((entry) => entry.type === "message" && entry.message);
 		const rawMessages = currentEntries.map((entry) => entry.message);
 		// Offline Session viewers must expose the complete active branch. The runtime
@@ -193,9 +233,9 @@ export class SessionHistoryReader {
 		let finalRaw: unknown[] = rawMessages;
 		if (lastCompaction) {
 			const compactionEntry = lastCompaction;
-			const archiveData = await this.parseSessionArchives(sessionPath, agentId, content);
-			const archivedMessages = archiveData.archivedMessagesByCompactionId.get(compactionEntry.id) ?? [];
-			finalRaw = [{
+			// 压缩卡片只带元信息（摘要/次数/tokens）；归档消息全文由分页翻出，不注入内存
+			const archiveData = await this.scanCompactions(sessionPath, content);
+			const card = {
 				role: "compactionSummary",
 				summary: compactionEntry.summary || this.deps.translate("session.summaryPlaceholder"),
 				timestamp: compactionEntry.timestamp ? Date.parse(compactionEntry.timestamp) : Date.now(),
@@ -204,9 +244,19 @@ export class SessionHistoryReader {
 					compactionCount: archiveData.compactions.length,
 					firstKeptEntryId: compactionEntry.firstKeptEntryId,
 					tokensBefore: compactionEntry.tokensBefore,
-					archivedMessages,
 				},
-			}, ...rawMessages];
+			};
+			// 卡片插在压缩点：firstKeptEntryId（保留起点）之前，即归档消息之后、保留消息之前；
+			// 找不到锚点则插到压缩条目之后（activeBranch 中紧随其后的消息）。
+			const firstKeptPos = compactionEntry.firstKeptEntryId
+				? currentEntries.findIndex((entry) => entry.id === compactionEntry.firstKeptEntryId)
+				: -1;
+			const insertAt = firstKeptPos >= 0
+				? firstKeptPos
+				: lastCompactionIndex >= 0 && lastCompactionIndex < activeBranch.length
+					? activeBranch.slice(0, lastCompactionIndex + 1).filter((entry) => entry.type === "message" && entry.message).length
+					: rawMessages.length;
+			finalRaw = [...rawMessages.slice(0, insertAt), card, ...rawMessages.slice(insertAt)];
 		}
 
 		return this.deps.convertMessages(agentId, finalRaw, activeEntryIds);
@@ -377,21 +427,14 @@ export class SessionHistoryReader {
 			current = current.parentId ? entries.get(current.parentId) : undefined;
 		}
 		activeBranch.reverse();
-		const lastCompactionIndex = activeBranch.findLastIndex((entry) => entry.type === "compaction");
-		const lastCompaction = lastCompactionIndex >= 0 ? activeBranch[lastCompactionIndex] : undefined;
-		const firstKeptIndex = lastCompaction?.firstKeptEntryId
-			? activeBranch.findIndex((entry) => entry.id === lastCompaction.firstKeptEntryId)
-			: -1;
-		const currentStartIndex = firstKeptIndex >= 0
-			? firstKeptIndex
-			: lastCompactionIndex >= 0 ? lastCompactionIndex + 1 : 0;
+		// 分页索引包含压缩点之前的全部消息（JSONL 保留完整历史）：
+		// 压缩前历史由翻页像正常对话流一样逐条可见（用户需求），不再从 firstKeptEntryId 截断。
 		const index: SessionDisplayIndex = {
 			hostPath,
 			size: version.size,
 			mtimeMs: version.mtimeMs,
-			hasCompaction: lastCompactionIndex >= 0,
+			hasCompaction: activeBranch.some((entry) => entry.type === "compaction"),
 			activeMessageEntries: activeBranch
-				.slice(currentStartIndex)
 				.filter((entry) => entry.type === "message" && entry.hasMessage),
 		};
 		this.sessionDisplayIndexes.delete(hostPath);
@@ -479,21 +522,16 @@ export class SessionHistoryReader {
 	}
 
 	/**
-	 * 从原始会话文件解析压缩（compaction）记录。
-	 * pi 的 get_messages 对压缩后的会话只返回压缩后的消息，不携带压缩摘要，
-	 * 因此桌面端直接从 JSONL 里扫描 type:="compaction" 和 type:="message" 条目，用于：
-	 *   1) 在时间线最前面补回"压缩摘要"卡片（与 pi 行为一致）；
-	 *   2) 统计压缩次数，供前端展示"已压缩 N 次";
-	 *   3) 提取每个压缩段归档的消息，支持在时间线中展开查看压缩前内容。
+	 * 轻量扫描会话文件中的压缩（compaction）记录。
+	 * 只返回压缩条目元信息（摘要/时间/保留起点/tokens），不收集归档消息全文——
+	 * 归档消息按需读取（readArchivedMessages），避免每次加载会话都全文件解析归档内容。
+	 * 用途：1) 时间线补回"压缩摘要"卡片（与 pi 行为一致）；2) 统计压缩次数供"已压缩 N 次"展示。
 	 */
-	async parseSessionArchives(
+	async scanCompactions(
 		sessionPath: string,
-		agentId: string,
 		sessionContent?: string,
 	): Promise<{
 		compactions: Array<{ id: string; summary: string; timestamp: string; firstKeptEntryId?: string; tokensBefore?: number }>;
-		/** 每个压缩条目对应的归档消息（ChatMessage 格式），key 为压缩条目 id */
-		archivedMessagesByCompactionId: Map<string, ChatMessage[]>;
 	}> {
 		let content: string;
 		try {
@@ -503,110 +541,46 @@ export class SessionHistoryReader {
 				sessionPath,
 				error: error instanceof Error ? error.message : String(error),
 			});
-			return { compactions: [], archivedMessagesByCompactionId: new Map() };
+			return { compactions: [] };
 		}
 
-		// 一次遍历收集所有 entry 和原始消息
-		const allEntries: Array<{ id: string; parentId: string | null; type: string; message?: unknown; summary?: string; firstKeptEntryId?: string; tokensBefore?: number; timestamp: string }> = [];
-		const rawMessagesByEntryId = new Map<string, unknown>();
-
+		// 单次遍历只收集 compaction 条目（消息全文不解析、不保留）
+		const compactions: Array<{ id: string; summary: string; timestamp: string; firstKeptEntryId?: string; tokensBefore?: number }> = [];
 		for (const line of content.split("\n")) {
 			if (!line.trim()) continue;
 			try {
 				const entry = JSON.parse(line);
-				if (!entry || typeof entry !== "object") continue;
-				allEntries.push({
+				if (!entry || typeof entry !== "object" || entry.type !== "compaction") continue;
+				compactions.push({
 					id: typeof entry.id === "string" ? entry.id : "",
-					parentId: typeof entry.parentId === "string" ? entry.parentId : null,
-					type: typeof entry.type === "string" ? entry.type : "",
-					message: entry.message,
-					summary: typeof entry.summary === "string" ? entry.summary : undefined,
+					summary: typeof entry.summary === "string" ? entry.summary : "",
+					timestamp: typeof entry.timestamp === "string" ? entry.timestamp : "",
 					firstKeptEntryId: typeof entry.firstKeptEntryId === "string" ? entry.firstKeptEntryId : undefined,
 					tokensBefore: typeof entry.tokensBefore === "number" ? entry.tokensBefore : undefined,
-					timestamp: typeof entry.timestamp === "string" ? entry.timestamp : "",
 				});
-				// 缓存消息型 entry 的原始 message 对象，供后续 convertAgentMessages 使用
-				if (entry.type === "message" && entry.message && typeof entry.message === "object" && entry.id) {
-					rawMessagesByEntryId.set(entry.id, entry.message);
-				}
 			} catch {
 				// 跳过单行解析失败
 			}
 		}
-
-		// 建立 entryId → entry 索引（含 parentId 关系）
-		const entryById = new Map<string, typeof allEntries[number]>();
-		for (const entry of allEntries) {
-			if (entry.id) entryById.set(entry.id, entry);
-		}
-
-		// 提取压缩条目（按文件顺序，即时间顺序）
-		const compactionEntries = allEntries.filter((e) => e.type === "compaction");
-		const compactions = compactionEntries.map((c) => ({
-			id: c.id,
-			summary: c.summary ?? "",
-			timestamp: c.timestamp,
-			firstKeptEntryId: c.firstKeptEntryId,
-			tokensBefore: c.tokensBefore,
-		}));
-
-		// 为每个压缩条目收集其归档范围内的消息。
-		// 归档范围：从压缩条目的 parentId 沿 parentId 链向上，收集所有 type=message 的条目，
-		// 直到遇到该压缩条目的 firstKeptEntryId 或上一个压缩条目的 firstKeptEntryId（避免重复归组）。
-		const archivedMessagesByCompactionId = new Map<string, ChatMessage[]>();
-		const coveredEntryIds = new Set<string>();
-
-		// 按文件顺序处理（从旧到新），确保较早的压缩条目优先确定范围
-		for (const compEntry of compactionEntries) {
-			const rawMessages: unknown[] = [];
-			const seenIds = new Set<string>();
-
-			// 从压缩条目的 parentId 开始向上回溯
-			let currentId: string | null = compEntry.parentId;
-			while (currentId) {
-				if (seenIds.has(currentId)) break; // 防止循环
-				seenIds.add(currentId);
-
-				const entry = entryById.get(currentId);
-				if (!entry) break;
-
-				// 遇到 firstKept 或已被上一个压缩条目覆盖的条目时停止
-				if (currentId === compEntry.firstKeptEntryId) break;
-				if (coveredEntryIds.has(currentId)) break;
-
-				// 收集消息型 entry
-				if (entry.type === "message") {
-					const rawMsg = rawMessagesByEntryId.get(currentId);
-					if (rawMsg) {
-						rawMessages.push(rawMsg);
-						coveredEntryIds.add(currentId);
-					}
-				}
-
-				currentId = entry.parentId;
-			}
-
-			if (rawMessages.length > 0) {
-				// 反转消息顺序（回溯得到的是从新到旧，需反转为从旧到新）
-				rawMessages.reverse();
-			// 转换为 ChatMessage 格式
-			try {
-				const chatMessages = this.deps.convertMessages(agentId, rawMessages);
-				if (chatMessages.length > 0) {
-					archivedMessagesByCompactionId.set(compEntry.id, chatMessages);
-				}
-			} catch (err) {
-				void this.deps.logger?.warn("agent", "Failed to convert archived messages", {
-					agentId,
-					compactionId: compEntry.id,
-					rawCount: rawMessages.length,
-					error: err instanceof Error ? err.message : String(err),
-				});
-			}
-			}
-		}
-
-		return { compactions, archivedMessagesByCompactionId };
+		return { compactions };
 	}
 
+}
+
+/**
+ * 从 JSONL message entry 提取展示文本（「查看完整输出」用）。
+ * 与 AgentMessageProjector.extractToolResultText 同格式约定（content 数组的 text 拼接），
+ * 额外兼容 content 为字符串的旧格式；改动时两边保持同步。
+ */
+function extractEntryResultText(message: unknown): string {
+	if (!message || typeof message !== "object") return "";
+	const content = (message as { content?: unknown }).content;
+	if (typeof content === "string") return content;
+	if (Array.isArray(content)) {
+		return content
+			.map((item) => (typeof item?.text === "string" ? item.text : ""))
+			.filter(Boolean)
+			.join("\n");
+	}
+	return "";
 }

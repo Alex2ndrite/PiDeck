@@ -1426,7 +1426,7 @@ function ConfigModalContent(props: ConfigModalProps) {
 	const configDiagnosticBlock = configDiagnostic ? (
 		<ConfigDiagnosticCard
 			diagnostic={configDiagnostic}
-			onOpenDocs={() => api.app.openExternal(configDiagnostic.docsUrl)}
+			onOpenDocs={() => api.app.openExternal(configDiagnostic.docsUrl, true)}
 			onOpenRaw={() => setTab("raw")}
 		/>
 	) : null;

@@ -65,6 +65,20 @@ test("viewer gives toast feedback for save/copy/enable-logging operations", () =
   assert.match(viewer, /showNotice\(enabled \? t\("rpc\.loggingEnabled"\) : t\("rpc\.loggingEnableFailed"\), 2500\)/);
 });
 
+test("session context menu shares the unified rpc logging group", () => {
+  const menu = readFileSync("src/renderer/src/components/sidebar/SidebarComponents.tsx", "utf8");
+  // 会话菜单与 agent 菜单统一为同一套 RPC 项（toggle + 查看），不再有独立的“RPC 日志”入口
+  assert.doesNotMatch(menu, /menu\.rpcLogs/);
+  assert.doesNotMatch(menu, /onShowLogs/);
+  assert.match(menu, /showRpcGroup = Boolean\(props\.canRpcLog\)/);
+  assert.match(menu, /\{showRpcGroup && \(/);
+  // 仅会话有 live runtime 时渲染 RPC 组（历史会话无日志可记/可看）
+  assert.match(sidebarContent, /canRpcLog=\{Boolean\(menuSessionRuntimeAgent\)\}/);
+  assert.doesNotMatch(sidebarContent, /onShowLogs/);
+  // 运行中的会话开启记录成功后直接打开日志弹窗（与 agent 菜单行为一致）
+  assert.match(sidebarContent, /if \(enabled\) controller\.openRpcLogs\(menuSessionRuntimeAgent\.id\);/);
+});
+
 test("agent context menu exposes a live log entry point next to the toggle", () => {
   const menu = readFileSync("src/renderer/src/components/sidebar/SidebarComponents.tsx", "utf8");
   assert.match(menu, /onOpenLogs\?: \(\) => void;/);
