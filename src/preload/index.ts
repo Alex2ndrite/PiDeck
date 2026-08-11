@@ -92,6 +92,7 @@ import type {
 	TerminalExitEvent,
 	TerminalTab,
 	TerminalTarget,
+	WebNetworkAddress,
 } from "../shared/types";
 
 /**
@@ -859,6 +860,8 @@ const api = {
 	},
 	app: {
 		info: () => ipcRenderer.invoke(ipcChannels.appInfo) as Promise<AppInfo>,
+		networkAddresses: () =>
+			ipcRenderer.invoke(ipcChannels.appNetworkAddresses) as Promise<WebNetworkAddress[]>,
 		preferredSystemLanguages: () =>
 			ipcRenderer.invoke(ipcChannels.appPreferredSystemLanguages) as Promise<string[]>,
 		checkUpdate: () =>

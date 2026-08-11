@@ -21,6 +21,14 @@ export type AppSkinId =
 	| "custom";
 export type AppLanguageMode = "system" | "zh-CN" | "en-US" | "pseudo";
 export type LinkOpenMode = "external" | "internal";
+
+/** 主进程枚举出的可用于手机访问 Web 服务的局域网入口。 */
+export type WebNetworkAddress = {
+	address: string;
+	interfaceName: string;
+	cidr: string | null;
+	isPrivate: boolean;
+};
 /** 文件/Git Diff 在中间栏的默认打开方式：分屏与会话并排，或占满中间栏 */
 export type WorkspaceContentOpenMode = "split" | "maximize";
 /** 会话 Tab 打开模式：preview=单击为临时预览（发消息后自动晋升常驻），permanent=单击即常驻共存 */

@@ -39,6 +39,12 @@ export async function createProject(path: string): Promise<WebState["projects"][
 	return result.project;
 }
 
+/** 删除项目登记记录；不会删除项目目录或工作区文件。 */
+export async function deleteProject(projectId: string): Promise<void> {
+	const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/delete`, { method: "POST" });
+	if (!res.ok) throw new Error(`delete project ${res.status}`);
+}
+
 /** 读取 pi 当前可用模型，草稿会话也可以先选模型再发送第一条消息。 */
 export async function fetchModels(): Promise<AvailableModel[]> {
 	const res = await fetch("/api/models");

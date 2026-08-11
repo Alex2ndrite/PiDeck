@@ -2031,6 +2031,16 @@ export const zhCN = {
   "settings.webLocalService": "局域网 Web 服务",
   "settings.webLocalServiceDesc":
     "开启后会在本机启动 HTTP 服务，局域网内其他设备可通过你的电脑 IP 和端口访问",
+  "settings.webQrTitle": "扫码访问",
+  "settings.webQrDesc": "用手机扫描二维码，直接打开 PiDeck Web 服务",
+  "settings.webQrAddress": "访问地址",
+  "settings.webLanAddress": "局域网",
+  "settings.webNetworkLoading": "检测网卡中...",
+  "settings.webNoNetworkAddress": "未检测到可用的局域网地址",
+  "settings.webQrAlt": "PiDeck Web 服务二维码",
+  "settings.webQrScanHint": "手机和电脑需要连接到同一个局域网",
+  "settings.webQrUnavailable": "当前无法生成二维码，请检查服务端口",
+  "settings.webQrEnableHint": "开启 Web 服务后生成二维码",
   "settings.webOffDesc": "关闭此开关会立即停止服务",
   "settings.webOpening": "服务状态切换中...",
   "settings.electronProxyHint":
@@ -2184,6 +2194,10 @@ export const zhCN = {
   // ── Web 端（外部服务页面）专用文案，桌面端不消费 ──
   "web.chooseSession": "选择或创建会话",
   "web.newProject": "新建项目",
+  "web.openProjects": "打开项目列表",
+  "web.closeProjects": "关闭项目列表",
+  "web.deleteProject": "移除项目",
+  "web.deleteProjectConfirm": "只移除项目列表记录，不删除项目文件。确定继续吗？",
   "web.projectPathPlaceholder": "输入项目目录路径",
   "web.createProject": "添加项目",
   "web.model": "模型",

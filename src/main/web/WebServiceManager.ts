@@ -53,6 +53,7 @@ type WebServiceDependencies = {
 	getSessionIdForAgent: (agentId: string) => string | undefined;
 	listProjects: () => Project[];
 	createProject: (path: string) => Promise<Project>;
+	deleteProject: (projectId: string) => Promise<boolean>;
 	listModels: () => Promise<AvailableModel[]>;
 	listSessions: (projectId: string) => Promise<SessionSummary[]>;
 	getSessionRuntimeMessages: (sessionId: string) => SessionTargetedValue<ChatMessage[]> | undefined;
@@ -265,6 +266,22 @@ export class WebServiceManager {
 				}
 				const project = await this.deps.createProject(path);
 				this.sendJson(response, { project });
+				return;
+			}
+			const deleteProjectMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/delete$/);
+			if (deleteProjectMatch && request.method === "POST") {
+				const projectId = decodeURIComponent(deleteProjectMatch[1]);
+				const project = this.deps.listProjects().find((item) => item.id === projectId);
+				if (!project) {
+					this.sendError(response, 404, "webError.projectNotFound", "project not found");
+					return;
+				}
+				if (project.kind === "chat") {
+					this.sendError(response, 400, "webError.chatProjectProtected", "the built-in chat project cannot be deleted");
+					return;
+				}
+				const deleted = await this.deps.deleteProject(projectId);
+				this.sendJson(response, { deleted });
 				return;
 			}
 			const sessionsMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/sessions$/);

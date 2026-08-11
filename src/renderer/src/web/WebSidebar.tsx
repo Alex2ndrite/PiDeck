@@ -9,7 +9,7 @@
  * 点击会话行 = 打开会话（切 activeSessionId）。
  */
 import { useEffect, useState } from "react";
-import { Check, FolderPlus, Play, Plus, Search, X } from "lucide-react";
+import { Check, FolderPlus, Play, Plus, Search, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui-shadcn/button";
 import { Input } from "@/components/ui-shadcn/input";
 import { t } from "@/i18n";
@@ -62,11 +62,14 @@ export function WebSidebar(props: {
 	activeSessionId: string;
 	creatingProjectId: string;
 	connected: boolean;
+	mobileOpen: boolean;
+	onCloseMobile: () => void;
 	onSelectSession: (sessionId: string) => void;
 	onCreateSession: (projectId: string) => void;
 	onCreateProject: (path: string) => Promise<WebProject>;
+	onDeleteProject: (projectId: string) => Promise<void>;
 }) {
-	const { state, activeSessionId, creatingProjectId, connected } = props;
+	const { state, activeSessionId, creatingProjectId, connected, mobileOpen } = props;
 	const [search, setSearch] = useState("");
 	const [expandedProjects, setExpandedProjects] = useState<Set<string>>(() => new Set());
 	const [addingProject, setAddingProject] = useState(false);
@@ -101,6 +104,12 @@ export function WebSidebar(props: {
 		}
 	};
 
+	const requestDelete = async (project: WebProject) => {
+		if (project.kind === "chat") return;
+		if (typeof window !== "undefined" && !window.confirm(t("web.deleteProjectConfirm"))) return;
+		await props.onDeleteProject(project.id);
+	};
+
 	// 搜索时自动展开全部命中项目；普通项目展开状态完全由用户控制
 	const searching = search.trim().length > 0;
 	const activeSessionProjectId = state.sessions.find(
@@ -117,15 +126,36 @@ export function WebSidebar(props: {
 	}, [activeSessionProjectId]);
 
 	return (
+		<>
+			<button
+				type="button"
+				className={cn("mobile-sidebar-backdrop", mobileOpen && "is-open")}
+				onClick={props.onCloseMobile}
+				aria-label={t("web.closeProjects")}
+			/>
 			<aside
-			className="chat-list-pane flex h-full min-w-0 flex-col overflow-hidden border-r border-border bg-sidebar text-sidebar-foreground"
-			aria-label={t("app.search")}
-		>
+				className={cn(
+					"chat-list-pane flex h-full min-w-0 flex-col overflow-hidden border-r border-border bg-sidebar text-sidebar-foreground",
+					mobileOpen && "mobile-open",
+				)}
+				aria-label={t("app.search")}
+			>
 			{/* 品牌区提到 body 外，与桌面侧栏一致贴顶 */}
 			<div className="list-toolbar flex h-10 shrink-0 items-center gap-1 px-0.5">
 				<div className="app-badge flex min-w-0 flex-1 items-center">
 					<WebBrandLockup />
 				</div>
+				<Button
+					type="button"
+					variant="ghost"
+					size="icon"
+					className="mobile-sidebar-close size-8 shrink-0"
+					onClick={props.onCloseMobile}
+					aria-label={t("web.closeProjects")}
+					title={t("web.closeProjects")}
+				>
+					<X className="size-4" aria-hidden="true" />
+				</Button>
 			</div>
 			<div className="sidebar-body flex min-h-0 flex-1 flex-col gap-2 px-2 py-1">
 				{/* 搜索行 */}
@@ -237,6 +267,24 @@ export function WebSidebar(props: {
 												<Plus className="size-3.5" />
 											)}
 										</span>
+										{project.kind !== "chat" && (
+											<span
+												className="project-action inline-flex size-6 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+												title={t("web.deleteProject")}
+												aria-label={t("web.deleteProject")}
+												role="button"
+												tabIndex={0}
+												onClick={() => void requestDelete(project)}
+												onKeyDown={(event) => {
+													if (event.key === "Enter" || event.key === " ") {
+														event.preventDefault();
+														void requestDelete(project);
+													}
+												}}
+											>
+												<Trash2 className="size-3.5" aria-hidden="true" />
+											</span>
+										)}
 									</span>
 								</button>
 								{expanded && (
@@ -298,7 +346,8 @@ export function WebSidebar(props: {
 					</span>
 				</div>
 			</div>
-		</aside>
+			</aside>
+		</>
 	);
 }
 

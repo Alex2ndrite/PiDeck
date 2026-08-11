@@ -25,6 +25,7 @@ import {
 	chatMessagesToUiMessages,
 	createProject,
 	createSession,
+	deleteProject,
 	fetchMessagePage,
 	fetchModels,
 	fetchState,
@@ -52,6 +53,8 @@ export function WebChatApp() {
 	const [loadingMore, setLoadingMore] = useState(false);
 	const [models, setModels] = useState<AvailableModel[]>([]);
 	const [commandError, setCommandError] = useState<string | null>(null);
+	// 手机端默认把聊天作为主画面，项目树通过抽屉按需打开，避免列表占满首屏。
+	const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
 	// ── 本组件自持的 per-session 消息缓存（useChat 切换 id 会重建 Chat 实例） ──
 	const messagesBySessionRef = useRef<Record<string, UIMessage[]>>({});
@@ -154,6 +157,7 @@ export function WebChatApp() {
 			messagesBySessionRef.current[id] = [];
 			historyMetaRef.current[id] = { total: 0, nextBefore: null };
 			setActiveSessionId(id);
+			setMobileSidebarOpen(false);
 			await refreshNow();
 		} catch (error) {
 			setCommandError(error instanceof Error ? error.message : String(error));
@@ -173,6 +177,32 @@ export function WebChatApp() {
 			const message = error instanceof Error ? error.message : String(error);
 			setCommandError(message);
 			throw error;
+		}
+	};
+
+	const handleDeleteProject = async (projectId: string) => {
+		setCommandError(null);
+		try {
+			const deletedSessions = state.sessions.filter((session) => session.projectId === projectId);
+			const nextSession = state.sessions.find((session) => session.projectId !== projectId);
+			await deleteProject(projectId);
+			for (const session of deletedSessions) {
+				delete messagesBySessionRef.current[session.id];
+				delete historyMetaRef.current[session.id];
+				loadedSessionsRef.current.delete(session.id);
+			}
+			setState((current) => ({
+				...current,
+				projects: current.projects.filter((project) => project.id !== projectId),
+				sessions: current.sessions.filter((session) => session.projectId !== projectId),
+				runtimes: current.runtimes.filter((runtime) => !deletedSessions.some((session) => session.id === runtime.sessionId)),
+			}));
+			if (deletedSessions.some((session) => session.id === activeSessionId)) {
+				setActiveSessionId(nextSession?.id ?? "");
+			}
+			setMobileSidebarOpen(false);
+		} catch (error) {
+			setCommandError(error instanceof Error ? error.message : String(error));
 		}
 	};
 
@@ -287,9 +317,15 @@ export function WebChatApp() {
 				activeSessionId={activeSessionId}
 				creatingProjectId={creatingProjectId}
 				connected={connected}
-				onSelectSession={setActiveSessionId}
+				mobileOpen={mobileSidebarOpen}
+				onCloseMobile={() => setMobileSidebarOpen(false)}
+				onSelectSession={(sessionId) => {
+					setActiveSessionId(sessionId);
+					setMobileSidebarOpen(false);
+				}}
 				onCreateSession={(projectId) => void handleCreateSession(projectId)}
 				onCreateProject={handleCreateProject}
+				onDeleteProject={handleDeleteProject}
 			/>
 			<main className="chat-pane flex h-full min-w-0 flex-1 flex-col overflow-hidden">
 				<WebHeader
@@ -297,6 +333,7 @@ export function WebChatApp() {
 					status={headerStatus}
 					streaming={streaming}
 					canStop={Boolean(activeSessionId)}
+					onOpenSidebar={() => setMobileSidebarOpen(true)}
 					model={activeSession?.model}
 					thinkingLevel={activeSession?.thinkingLevel}
 					models={models}

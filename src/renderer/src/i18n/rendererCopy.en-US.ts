@@ -2065,6 +2065,16 @@ export const enUS: Record<TranslationKey, string> = {
   "settings.webLocalService": "LAN Web Service",
   "settings.webLocalServiceDesc":
     "Starts an HTTP service on this computer so devices on the LAN can access it by IP and port",
+  "settings.webQrTitle": "Scan to Open",
+  "settings.webQrDesc": "Scan this code with your phone to open PiDeck Web",
+  "settings.webQrAddress": "Access address",
+  "settings.webLanAddress": "LAN",
+  "settings.webNetworkLoading": "Detecting network adapters...",
+  "settings.webNoNetworkAddress": "No usable local network address detected",
+  "settings.webQrAlt": "PiDeck Web service QR code",
+  "settings.webQrScanHint": "Your phone and computer must be on the same local network",
+  "settings.webQrUnavailable": "Unable to generate a QR code. Check the service port",
+  "settings.webQrEnableHint": "Enable Web Service to generate a QR code",
   "settings.webOffDesc": "Turning this off stops the service immediately",
   "settings.webOpening": "Changing service state...",
   "settings.electronProxyHint":
@@ -2220,6 +2230,10 @@ export const enUS: Record<TranslationKey, string> = {
   // ── Web (external service page) copy, not consumed by the desktop ──
   "web.chooseSession": "Select or create a session",
   "web.newProject": "New project",
+  "web.openProjects": "Open projects",
+  "web.closeProjects": "Close projects",
+  "web.deleteProject": "Remove project",
+  "web.deleteProjectConfirm": "This removes the project from the list without deleting files. Continue?",
   "web.projectPathPlaceholder": "Enter a project directory path",
   "web.createProject": "Add project",
   "web.model": "Model",

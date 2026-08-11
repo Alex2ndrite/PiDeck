@@ -28,6 +28,7 @@ import { fetchModelList, invalidateModelListCache, getCachedModelList, refreshMo
 import { getProcessSnapshot } from "../process/ProcessMonitor";
 import type { ProcessMetricsSnapshot } from "../../shared/types";
 import { getWslExe } from "../wsl/wslExe";
+import { listWebNetworkAddresses } from "../web/WebNetwork";
 
 /**
  * IPC 边界校验：RPC 日志条目必须字段齐全，防止渲染层传伪造对象写盘。
@@ -409,6 +410,8 @@ export function registerSystemIpc(deps: SystemIpcDeps): void {
 		releasesUrl: RELEASES_URL ?? "https://github.com/ayuayue/pi-desktop/releases",
 		platform: process.platform,
 	}));
+
+	ipcMain.handle(ipcChannels.appNetworkAddresses, () => listWebNetworkAddresses());
 
 	ipcMain.handle(ipcChannels.appPreferredSystemLanguages, () => {
 		try { return app.getPreferredSystemLanguages(); } catch { return []; }
