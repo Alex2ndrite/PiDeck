@@ -2153,6 +2153,11 @@ export class AgentManager {
 
 	async restart(agentId: string): Promise<AgentTab> {
 		const runtime = this.requireRuntime(agentId);
+		void this.appLogger?.info("agent", "Agent restart requested", {
+			agentId,
+			projectId: runtime.tab.projectId,
+			sessionPath: runtime.tab.sessionPath,
+		});
 		const {
 			projectId,
 			title,
@@ -2416,6 +2421,11 @@ export class AgentManager {
 	async stop(agentId: string) {
 		const runtime = this.agents.get(agentId);
 		if (!runtime) return;
+		void this.appLogger?.info("agent", "Agent stopped (user initiated)", {
+			agentId,
+			projectId: runtime.tab.projectId,
+			sessionPath: runtime.tab.sessionPath,
+		});
 		// 标记用户主动停止，退出处理器将跳过自动重连
 		this.userInitiatedStop.add(agentId);
 		const process = runtime.process;
@@ -2640,12 +2650,21 @@ export class AgentManager {
 			this.userInitiatedStop.delete(agentId);
 			tab.status = "closed";
 			this.emitState();
+			void this.appLogger?.info("agent", "Agent process exit handled: user-initiated stop", {
+				agentId,
+				code: payload.code,
+				signal: payload.signal,
+			});
 			return;
 		}
 		// 手动压缩期间退出 → compact() 的 catch 块会负责重连
 		if (this.compactingAgents.has(agentId)) {
 			tab.status = "closed";
 			this.emitState();
+			void this.appLogger?.info("agent", "Agent process exit handled: compaction in progress", {
+				agentId,
+				code: payload.code,
+			});
 			return;
 		}
 		// 自动压缩 / 进程干净退出（exit code 0）且有会话路径 → 尝试一次自动重连
@@ -2653,6 +2672,11 @@ export class AgentManager {
 			this.autoRestartAttempted.add(agentId);
 			tab.status = "starting";
 			this.emitState();
+			void this.appLogger?.info("agent", "Agent process exited cleanly; auto-restarting", {
+				agentId,
+				code: payload.code,
+				sessionPath: tab.sessionPath,
+			});
 			this.reattachProcess(agentId, tab.sessionPath)
 				.then(() => {
 					tab.status = "idle";
@@ -2666,6 +2690,11 @@ export class AgentManager {
 				})
 				.catch(() => {
 					tab.status = "closed";
+					void this.appLogger?.error("agent", "Agent auto-restart failed", {
+						agentId,
+						code: payload.code,
+						sessionPath: tab.sessionPath,
+					});
 					this.addLocalizedMessage(
 						agentId,
 						"error",

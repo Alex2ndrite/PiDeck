@@ -12,6 +12,7 @@ import {
 import type { AppSettings } from "../../shared/types";
 import { toWindowsHostPath, toWslLinuxPath } from "../wsl/WslPaths";
 import { appendBuiltInExtensionArgs } from "../extensions/builtInExtensions";
+import { getAppLogger } from "../logging/sharedLogger";
 
 type PiProcessSettings = Pick<
   AppSettings,
@@ -124,6 +125,8 @@ export class PiProcess extends EventEmitter {
     // 业务侧仍可再挂自己的 listener 做 UI 提示。
     this.on("error", (error: unknown) => {
       const message = error instanceof Error ? error.message : String(error);
+      // spawn 失败（ENOENT 等）在业务 listener 挂载前到达，双写日志文件避免启动失败无痕
+      void getAppLogger()?.error("pi-process", "Spawn error (pre-listener sink)", { message });
       console.error("[PiProcess] child process error (pre-listener safe sink):", message);
     });
   }
@@ -190,6 +193,10 @@ export class PiProcess extends EventEmitter {
     // 仅临时停放 codeisland 等黑名单扩展文件；npm packages 与其它本地扩展照常加载。
     const blockedNames = this.parkIncompatibleExtensions();
     if (blockedNames.length > 0) {
+      // 黑名单扩展被停放属于启动诊断事件，同步写入日志文件便于排查 RPC 初始化失败
+      void getAppLogger()?.warn("pi-process", "Desktop-incompatible extensions parked for RPC", {
+        blocked: blockedNames.join(", "),
+      });
       console.warn(
         "[PiProcess] Desktop-incompatible extensions parked for RPC:",
         blockedNames.join(", "),
@@ -203,6 +210,9 @@ export class PiProcess extends EventEmitter {
       noExtensions: Boolean(this.settings?.piRpcNoExtensions),
     });
     if (builtInPaths.length > 0 && !this.settings?.piRpcNoExtensions) {
+      void getAppLogger()?.info("pi-process", "Loading PiDeck built-in extensions via -e", {
+        extensions: builtInPaths.map((path) => path.split(/[/\\]/).pop()).join(", "),
+      });
       console.log(
         "[PiProcess] Loading PiDeck built-in extensions via -e:",
         builtInPaths.map((path) => path.split(/[/\\]/).pop()).join(", "),
@@ -280,9 +290,15 @@ export class PiProcess extends EventEmitter {
       void this.ensureVersionCheck(command);
     }
 
-    // 打印等效命令行，方便在终端重现排查
+    // 打印等效命令行，方便在终端重现排查（同时写入日志文件供事后审计）
     console.log('[PiProcess] spawn等效命令:', [invocation.command, ...finalArgs].map(a => a.includes(' ') ? `"${a}"` : a).join(' '));
     console.log('[PiProcess] spawn参数:', JSON.stringify({ command: invocation.command, shell: invocation.shell, cwd: spawnCwd, wslCwd: diagnosticCwd, argsCount: finalArgs.length }));
+    void getAppLogger()?.debug("pi-process", "Pi process spawn", {
+      command: invocation.command,
+      argsCount: finalArgs.length,
+      cwd: spawnCwd,
+      shell: invocation.shell,
+    });
 
     // 安全管理：把策略快照路径 + 会话身份注入 pi 子进程环境。
     // WSL 模式下 Windows 盘符路径必须转成 Linux 路径（/mnt/c/...），否则扩展读不到快照。
