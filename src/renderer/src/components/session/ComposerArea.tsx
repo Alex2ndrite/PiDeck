@@ -16,6 +16,7 @@ import {
   SessionDeliveryNotice,
 } from "./ComposerPanels";
 import { ComposerPickerHost } from "./ComposerPickerHost";
+import { SecurityLevelMenu } from "./SecurityLevelMenu";
 import { ComposerRuntimeIntegrations } from "./ComposerRuntimeIntegrations";
 import { useSessionPaneServices } from "./SessionPaneServices";
 import { desktopApi } from "../../desktopApi";
@@ -278,6 +279,9 @@ export const ComposerArea = forwardRef<HTMLElement, ComposerAreaProps>(function 
                 gitInfo={props.gitInfo}
                 record={composer.record}
                 feishuIndicator={feishuIndicator}
+                securityControl={
+                  <SecurityLevelMenu sessionId={props.sessionId} disabled={composer.isBusy || composer.isStarting} />
+                }
                 onPickModel={() => composer.pickers.open("model")}
                 onPickThinking={() => composer.pickers.open("thinking")}
                 onPickPromptTemplate={() => composer.pickers.open("template")}

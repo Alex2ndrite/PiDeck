@@ -843,6 +843,8 @@ export const zhCN = {
   "security.customLevelName": "自定义等级",
   "security.levelUnknown": "未知等级",
   "security.menuTitle": "安全等级",
+  "security.menuHint": "为当前会话选择生效等级，规则变更约 2 秒内生效",
+  "security.pickerEmpty": "没有匹配的等级",
   "security.disabled": "已关闭",
   "security.followDefault": "跟随全局默认",
   "security.menuDisabledHint": "安全管理未启用。在 Pi 管理 → 安全中开启后即可按等级管控。",

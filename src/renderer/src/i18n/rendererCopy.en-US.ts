@@ -850,6 +850,8 @@ export const enUS: Record<TranslationKey, string> = {
   "security.customLevelName": "Custom level",
   "security.levelUnknown": "Unknown level",
   "security.menuTitle": "Security level",
+  "security.menuHint": "Choose the level for this session; rule changes apply within ~2 seconds",
+  "security.pickerEmpty": "No matching level",
   "security.disabled": "disabled",
   "security.followDefault": "Follow global default",
   "security.menuDisabledHint": "Security management is off. Enable it in Pi Manager → Security to gate tool calls.",

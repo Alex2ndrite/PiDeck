@@ -69,6 +69,7 @@ import {
   type ActiveToolCallState,
 } from "../../shared/toolRuntimeState";
 import type { SettingsStore } from "../settings/SettingsStore";
+import type { SecurityStore } from "../security/SecurityStore";
 import type { ConfigManager } from "../config/ConfigManager";
 import type { RpcLogger } from "../logging/RpcLogger";
 import type { RpcLogBatch, RpcLogEntry } from "../../shared/types/rpcLog";
@@ -282,6 +283,8 @@ export class AgentManager {
 		) => string = () => "Agent operation failed.",
 		/** 每次 spawn pi 进程前回调（如刷新模型列表缓存）；异步但不等完成，避免阻塞 Agent 启动。 */
 		private readonly onBeforeAgentSpawn?: () => void,
+		/** 安全管理：Agent 启动前写策略快照 + 注入会话身份（缺省时不注入安全门）。 */
+		private readonly securityStore?: SecurityStore,
 	) {
 		this.messageProjector = new AgentMessageProjector({
 			translate: this.translate,
@@ -309,11 +312,15 @@ export class AgentManager {
 	}
 
 	/**
-	 * 统一构造 PiProcess：注入 PiDeck 内置扩展路径解析。
+	 * 统一构造 PiProcess：注入 PiDeck 内置扩展路径解析 + 安全管理快照/会话身份。
 	 * 内置扩展以 -e 从 app resources 加载，不再依赖用户扩展目录副本。
+	 * 安全管理：确保策略快照已落盘（小 JSON 写，等完成后启动，保证扩展首次拦截即可读到）。
 	 */
-	private createPiProcess(cwd: string): PiProcess {
+	private createPiProcess(cwd: string, sessionPath?: string): PiProcess {
 		const settings = this.settingsStore.get();
+		if (this.securityStore) {
+			void this.securityStore.ensureSnapshotWritten();
+		}
 		return new PiProcess(cwd, settings, undefined, {
 			resolveBuiltInExtensionPaths: (processSettings) =>
 				listActiveBuiltInExtensionPaths(
@@ -324,6 +331,10 @@ export class AgentManager {
 					},
 					processSettings?.removedBuiltInExtensions ?? settings.removedBuiltInExtensions ?? [],
 				),
+			// 会话身份 = 会话文件路径（SessionRecord.id），扩展按它解析等级覆盖；
+			// 匿名会话（noSession）无路径，扩展仅用全局默认等级。
+			securitySessionId: sessionPath,
+			securitySnapshotPath: this.securityStore?.getSnapshotPath(),
 		});
 	}
 
@@ -786,7 +797,7 @@ export class AgentManager {
 		// 每次 spawn 前异步刷新模型列表缓存（不等完成，避免阻塞 Agent 启动）：
 		// 用户直接编辑 models.json/auth.json 后，下一次启动的 Agent 即能看到新模型。
 		this.onBeforeAgentSpawn?.();
-		const process = this.createPiProcess(project.path);
+		const process = this.createPiProcess(project.path, input.sessionPath);
 		process.on("version-check", (payload) => {
 			void this.appLogger?.info("agent", "Pi version check completed", {
 				agentId: id,
@@ -1519,7 +1530,7 @@ export class AgentManager {
 			sessionPath,
 		});
 
-		const process = this.createPiProcess(project.path);
+		const process = this.createPiProcess(project.path, sessionPath);
 		// 与 createUnlocked 同理：监听器必须在 start() 前挂上，
 		// 避免重连窗口期 spawn error 变成未捕获异常。
 		this.attachPiProcessLifecycle(agentId, process, {
@@ -2238,7 +2249,7 @@ export class AgentManager {
 	): Promise<T> {
 		const project = this.getProject(projectId);
 		if (!project) throw new Error(`Project not found: ${projectId}`);
-		const process = this.createPiProcess(project.path);
+		const process = this.createPiProcess(project.path, sessionPath);
 		await process.start(sessionPath);
 		try {
 			return await run(process);
@@ -3032,7 +3043,9 @@ export class AgentManager {
 
 				const messages = this.messages.get(agentId) ?? [];
 				const lastMessage = messages[messages.length - 1];
-				if (lastMessage?.role === "assistant") {
+				// 手动停止（abort）不算正常完成：与下方 notifyAgentSettled 同一判断，
+				// 停止会话后不弹「已完成」系统通知（用户主动中止，无需提醒）
+				if (lastMessage?.role === "assistant" && !isAbortSettled) {
 					this.notifySessionEnd(agentId, runtime.tab.title);
 				}
 				// 成功空闲（settled）后才算完成：通知宠物等内部模块携带标题，供「{title} 已完成」气泡使用。

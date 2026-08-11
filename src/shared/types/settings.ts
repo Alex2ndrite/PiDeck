@@ -1,4 +1,5 @@
 import type { ExternalEditorSettings } from "./project";
+import type { SecurityConfig } from "./security";
 
 export type SendShortcutMode =
 	| "enter-send"
@@ -235,6 +236,14 @@ export type StartupWindowMode =
 	 * 下次启动跳过自动部署，并清理用户目录残留文件，避免 pi 仍加载导致工具冲突。
 	 */
 	removedBuiltInExtensions: string[];
+
+	// ── 安全管理 ──
+	/**
+	 * 安全管理配置（等级/工具动作/目录边界/会话覆盖）。
+	 * 缺省 undefined：由 SecurityStore.normalizeConfig 并入默认值（enabled=false 零干预）。
+	 * 变更后主进程会把策略快照写入 userData/security-policy.json 供 pi-deck-security-gate 扩展消费。
+	 */
+	securityConfig?: SecurityConfig;
 
 };
 
