@@ -83,3 +83,54 @@ test("无描述内容（图片转空）时正文为空", () => {
   assert.equal(result.blocks[0].description, "");
   assert.equal(result.text, "");
 });
+
+// ── matchVisionBridgeEvent：实时消息按图片哈希匹配视觉桥事件 ───────────
+
+function makeEvent(ts, kind, items) {
+  return { ts, kind, model: "m/m", prompt: "p", totalDurationMs: 1, items };
+}
+
+test("matchVisionBridgeEvent: 命中 ts 之后且哈希全中的 input 批次", () => {
+  const { matchVisionBridgeEvent } = loadTsCommonJs(
+    "src/renderer/src/utils/visionBridgeBlocks.ts",
+  );
+  const events = [
+    makeEvent(1000, "input", [{ index: 1, imageHash: "h-a", ok: true }]),
+    makeEvent(2000, "input", [{ index: 1, imageHash: "h-b", ok: true }]),
+  ];
+  const hit = matchVisionBridgeEvent(events, ["h-b"], 1500);
+  assert.equal(hit.ts, 2000, "取发送后最近的匹配批次");
+  const miss = matchVisionBridgeEvent(events, ["h-c"], 1500);
+  assert.equal(miss, null);
+});
+
+test("matchVisionBridgeEvent: 早于发送时间的批次不算", () => {
+  const { matchVisionBridgeEvent } = loadTsCommonJs(
+    "src/renderer/src/utils/visionBridgeBlocks.ts",
+  );
+  const events = [makeEvent(1000, "input", [{ index: 1, imageHash: "h-a", ok: true }])];
+  assert.equal(matchVisionBridgeEvent(events, ["h-a"], 2000), null);
+});
+
+test("matchVisionBridgeEvent: 批次里混入非本消息的图片则不匹配", () => {
+  const { matchVisionBridgeEvent } = loadTsCommonJs(
+    "src/renderer/src/utils/visionBridgeBlocks.ts",
+  );
+  const events = [
+    makeEvent(1000, "input", [
+      { index: 1, imageHash: "h-a", ok: true },
+      { index: 2, imageHash: "h-x", ok: true },
+    ]),
+  ];
+  assert.equal(matchVisionBridgeEvent(events, ["h-a"], 500), null, "别人的图混批次不能误配");
+});
+
+test("matchVisionBridgeEvent: 无哈希/空输入返回 null", () => {
+  const { matchVisionBridgeEvent } = loadTsCommonJs(
+    "src/renderer/src/utils/visionBridgeBlocks.ts",
+  );
+  assert.equal(matchVisionBridgeEvent(undefined, ["h-a"], 0), null);
+  assert.equal(matchVisionBridgeEvent([], ["h-a"], 0), null);
+  assert.equal(matchVisionBridgeEvent([makeEvent(1000, "input", [])], ["h-a"], 0), null);
+  assert.equal(matchVisionBridgeEvent([makeEvent(1000, "input", [{ index: 1, ok: true }])], ["h-a"], 0), null);
+});

@@ -68,6 +68,8 @@ export type VisionLogInfo = {
 export type VisionEventItem = {
 	/** 图片在本次转换中的序号（1 起，与消息文本「图片 #N」同源） */
 	index: number;
+	/** 图片内容 sha256 前 24 位：渲染层按此把事件匹配到发送中的实时消息（跨会话稳定） */
+	imageHash?: string;
 	mimeType: string;
 	ok: boolean;
 	/** 失败原因（ok=false 时） */

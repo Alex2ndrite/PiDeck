@@ -381,6 +381,7 @@ export const enUS: Record<TranslationKey, string> = {
   "app.visionBridgeFailed": "Vision bridge failed",
   "app.visionBridgeFailedDesc": "The image could not be converted; check model / endpoint / API key in Settings → Vision Bridge",
   "app.visionBridgeImageLabel": "Image #{index}",
+  "app.visionConverting": "Vision bridge converting…",
   "app.visionDetail": "Details",
   "app.visionNoEvents": "No vision bridge records yet (event file missing or cleared)",
   "app.visionRequestPrompt": "Prompt",

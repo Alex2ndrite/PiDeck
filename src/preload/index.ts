@@ -1129,6 +1129,7 @@ const api = {
 					totalDurationMs: number;
 					items: Array<{
 						index: number;
+						imageHash?: string;
 						mimeType: string;
 						ok: boolean;
 						error?: string;

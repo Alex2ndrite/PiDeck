@@ -888,7 +888,7 @@ export class SessionRuntimeCoordinator {
 		if (tab.status === "starting") tab = await this.waitUntilReady(tab);
 		if (isTerminalAgent(tab)) {
 			if (created) await this.agents.stop(tab.id).catch(() => undefined);
-			throw new Error(`Failed to start session runtime (${tab.status})`);
+			throw this.startupFailure(tab);
 		}
 
 		try {
@@ -962,9 +962,26 @@ export class SessionRuntimeCoordinator {
 			tab = current;
 		}
 		if (isTerminalAgent(tab)) {
-			throw new Error(`Failed to start session runtime (${tab.status})`);
+			throw this.startupFailure(tab);
 		}
 		return tab;
+	}
+
+	/** 保留 pi 启动阶段的 stderr/路径等诊断，避免 Web 端只能看到无意义的 status。 */
+	private startupFailure(tab: AgentTab): Error {
+		try {
+			const diagnostic = [...this.agents.getMessages(tab.id)]
+				.reverse()
+				.find((message) => message.role === "error");
+			const debugDetails = diagnostic?.meta?.debugDetails;
+			if (typeof debugDetails === "string" && debugDetails.trim()) {
+				return new Error(debugDetails);
+			}
+			if (diagnostic?.text?.trim()) return new Error(diagnostic.text);
+		} catch {
+			// 诊断读取失败不能覆盖原始启动状态；下面返回稳定的兜底错误。
+		}
+		return new Error(`Failed to start session runtime (${tab.status})`);
 	}
 
 	private bind(sessionId: string, agentId: string): number {

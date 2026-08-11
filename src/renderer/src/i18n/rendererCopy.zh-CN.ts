@@ -381,6 +381,7 @@ export const zhCN = {
   "app.visionBridgeFailed": "视觉桥转换失败",
   "app.visionBridgeFailedDesc": "图片未能转换成描述，以下为失败原因，可在设置 → 视觉桥中检查模型/接口地址/API Key",
   "app.visionBridgeImageLabel": "图片 #{index}",
+  "app.visionConverting": "视觉桥转换中…",
   "app.visionDetail": "详情",
   "app.visionNoEvents": "暂无视觉桥转换记录（事件文件不存在或已被清空）",
   "app.visionRequestPrompt": "提示词",

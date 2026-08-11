@@ -470,6 +470,14 @@ test("reuses an already-running historical session by canonical path", async () 
 test("keeps a draft unbound when Agent startup fails", async () => {
   const { SessionRuntimeCoordinator } = loadCoordinator();
   const harness = createHarness({
+    getMessages: () => [{
+      id: "startup-error",
+      agentId: "agent-error",
+      role: "error",
+      text: "Agent 运行时发生错误。",
+      meta: { debugDetails: "pi --mode rpc failed: executable not found" },
+      timestamp: 1,
+    }],
     createdTab: {
       id: "agent-error",
       projectId: "project-1",
@@ -487,7 +495,7 @@ test("keeps a draft unbound when Agent startup fails", async () => {
   const result = await coordinator.send(prompt());
   assert.equal(result.accepted, false);
   assert.equal(result.delivery, "rejected");
-  assert.match(result.error, /Failed to start session runtime/);
+  assert.match(result.error, /pi --mode rpc failed: executable not found/);
   assert.equal(harness.entry.status, "draft");
   assert.equal(harness.calls.attach, 0);
   assert.equal(harness.calls.send, 0);
