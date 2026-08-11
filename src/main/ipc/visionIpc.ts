@@ -28,6 +28,15 @@ export function registerVisionIpc(deps: {
 	// 运行日志诊断：只读/清空，无入参无需校验
 	ipcMain.handle(ipcChannels.visionGetLog, () => visionBridge.getLog());
 
+	// 结构化转换事件（会话渲染层展示请求详情）：只读尾部，坏行已在 manager 内跳过
+	ipcMain.handle(ipcChannels.visionGetEvents, () => visionBridge.getEvents());
+
+	ipcMain.handle(ipcChannels.visionClearEvents, async () => {
+		const result = await visionBridge.clearEvents();
+		log("vision", "Vision events cleared", { ok: result.ok });
+		return result;
+	});
+
 	ipcMain.handle(ipcChannels.visionClearLog, async () => {
 		const result = await visionBridge.clearLog();
 		log("vision", "Vision bridge log cleared", { ok: result.ok });

@@ -548,3 +548,116 @@ test("writeVisionLog: rotates oversized log keeping tail", async () => {
 	assert.ok(info.size <= 64 * 1024 + 200, "轮转后只保留尾部 64KB + 新行");
 	assert.ok(readFileSync(join(dir, "pi-deck-vision.log"), "utf8").includes("after rotate"));
 });
+
+// ── 结构化转换事件（writeVisionEvent / describeImages 批次回调） ─────────
+
+test("writeVisionEvent: appends a JSONL batch entry with full payload", async () => {
+	const dir = makeConfigDir({ enabled: true });
+	await ext.writeVisionEvent(dir, {
+		ts: 1730000000000,
+		kind: "input",
+		model: "zhipu/glm-4v-flash",
+		prompt: "描述这张图片",
+		totalDurationMs: 1200,
+		items: [
+			{ index: 1, mimeType: "image/png", ok: true, durationMs: 800, cached: false, description: "一张截图", outputTokens: 42 },
+			{ index: 2, mimeType: "image/jpeg", ok: false, error: "timeout(30000ms)", durationMs: 30000, cached: false },
+		],
+	});
+	const line = readFileSync(join(dir, "pi-deck-vision-events.jsonl"), "utf8").trim();
+	const parsed = JSON.parse(line);
+	assert.equal(parsed.ts, 1730000000000);
+	assert.equal(parsed.kind, "input");
+	assert.equal(parsed.model, "zhipu/glm-4v-flash");
+	assert.equal(parsed.prompt, "描述这张图片");
+	assert.equal(parsed.totalDurationMs, 1200);
+	assert.equal(parsed.items.length, 2);
+	assert.equal(parsed.items[0].index, 1);
+	assert.equal(parsed.items[0].ok, true);
+	assert.equal(parsed.items[0].outputTokens, 42);
+	assert.equal(parsed.items[1].error, "timeout(30000ms)");
+});
+
+test("writeVisionEvent: trims oversized file keeping the tail", async () => {
+	const dir = makeConfigDir({ enabled: true });
+	// 预写超过 MAX_EVENT_FILE_BYTES(2MB) 的行结构内容（真实事件文件每行是一条 JSON）
+	const line = JSON.stringify({ ts: 1, kind: "input", model: "m/m", prompt: "p", totalDurationMs: 1, items: [] });
+	const big = `${line}\n`.repeat(Math.ceil((2100 * 1024) / (line.length + 1)));
+	writeFileSync(join(dir, "pi-deck-vision-events.jsonl"), big);
+	await ext.writeVisionEvent(dir, {
+		ts: 1730000000001,
+		kind: "input",
+		model: "m/m",
+		prompt: "p",
+		totalDurationMs: 1,
+		items: [{ index: 1, mimeType: "image/png", ok: true, durationMs: 1, cached: false }],
+	});
+	const content = readFileSync(join(dir, "pi-deck-vision-events.jsonl"), "utf8");
+	assert.ok(content.length < 1100 * 1024, "截断后只保留尾部约 1MB");
+	assert.ok(content.endsWith("}\n"), "最后一行是新追加的事件");
+	assert.ok(content.includes('"totalDurationMs":1'));
+});
+
+test("describeImages: onBatch reports per-image timing and results", async () => {
+	// 用全新图片数据避免命中其他测试留下的模块级 descriptionCache
+	const imageC = { type: "image", data: "CCCC", mimeType: "image/png" };
+	const imageD = { type: "image", data: "DDDD", mimeType: "image/jpeg" };
+	let callCount = 0;
+	fetchStub = async (_url, opts) => {
+		callCount++;
+		const body = JSON.parse(opts.body);
+		// 第一张图成功带 usage，第二张图 500 失败
+		if (body.messages[0].content[1].image_url.url.includes("CCCC")) {
+			return {
+				ok: true,
+				status: 200,
+				statusText: "OK",
+				json: async () => ({
+					choices: [{ message: { content: "红色按钮的截图" } }],
+					usage: { completion_tokens: 33 },
+				}),
+			};
+		}
+		return { ok: false, status: 500, statusText: "Server Error", json: async () => ({}) };
+	};
+	let batch = null;
+	const desc = await ext.describeImages(
+		endpointOpenAI,
+		[imageC, imageD],
+		"描述",
+		{ enabled: true, provider: "zhipu", model: "glm-4v-flash" },
+		undefined,
+		undefined,
+		(b) => { batch = b; },
+	);
+	assert.ok(desc.includes("视觉桥已查看"));
+	assert.ok(batch, "onBatch 必须被调用");
+	assert.equal(batch.items.length, 2);
+	assert.equal(batch.items[0].index, 1);
+	assert.equal(batch.items[0].ok, true);
+	assert.equal(batch.items[0].description, "红色按钮的截图");
+	assert.equal(batch.items[0].outputTokens, 33);
+	assert.ok(batch.items[0].durationMs >= 0);
+	assert.equal(batch.items[0].cached, false);
+	assert.equal(batch.items[1].index, 2);
+	assert.equal(batch.items[1].ok, false);
+	assert.match(batch.items[1].error, /500/);
+	assert.ok(batch.totalDurationMs >= 0);
+	assert.equal(callCount, 2);
+});
+
+test("describeImage: success reports durationMs and outputTokens", async () => {
+	fetchStub = async () => ({
+		ok: true,
+		status: 200,
+		statusText: "OK",
+		json: async () => ({
+			choices: [{ message: { content: "图表描述" } }],
+			usage: { prompt_tokens: 800, completion_tokens: 120 },
+		}),
+	});
+	const result = await ext.describeImage(endpointOpenAI, { type: "image", data: "EEEE", mimeType: "image/png" }, "描述", { maxTokens: 1024, timeoutMs: 5000 });
+	assert.equal(result.ok, true);
+	assert.equal(result.outputTokens, 120);
+	assert.ok(typeof result.durationMs === "number" && result.durationMs >= 0);
+});

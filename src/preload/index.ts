@@ -77,6 +77,7 @@ import type {
 	PromptStoreSearchResult,
 	PromptStoreItem,
 	ScratchPadData,
+	SecurityConfig,
 	SendSessionPromptInput,
 	SendSessionPromptResult,
 	SessionCommandResult,
@@ -1013,6 +1014,21 @@ const api = {
 		onApplyWindow: (callback: (settings: AppSettings) => void) =>
 			subscribe(ipcChannels.settingsApplyWindow, callback),
 	},
+	security: {
+		getConfig: () =>
+			ipcRenderer.invoke(ipcChannels.securityGetConfig) as Promise<SecurityConfig>,
+		updateConfig: (patch: Partial<SecurityConfig>) =>
+			ipcRenderer.invoke(
+				ipcChannels.securityUpdateConfig,
+				patch,
+			) as Promise<{ ok: true; config: SecurityConfig } | { ok: false; error: string }>,
+		setSessionLevel: (sessionId: string, levelId: string | null) =>
+			ipcRenderer.invoke(
+				ipcChannels.securitySetSessionLevel,
+				sessionId,
+				levelId,
+			) as Promise<{ ok: true; config: SecurityConfig } | { ok: false; error: string }>,
+	},
 	config: {
 		getModels: () =>
 			ipcRenderer.invoke(ipcChannels.configGetModels) as Promise<{
@@ -1100,6 +1116,33 @@ const api = {
 		/** 视觉桥：清空运行日志 */
 		visionClearLog: () =>
 			ipcRenderer.invoke(ipcChannels.visionClearLog) as Promise<{ ok: boolean }>,
+		/** 视觉桥：读取结构化转换事件（会话渲染层展示「请求详情」，不含敏感字段） */
+		visionGetEvents: () =>
+			ipcRenderer.invoke(ipcChannels.visionGetEvents) as Promise<{
+				exists: boolean;
+				size: number;
+				events: Array<{
+					ts: number;
+					kind: "input" | "tool_result" | "request";
+					model: string;
+					prompt: string;
+					totalDurationMs: number;
+					items: Array<{
+						index: number;
+						mimeType: string;
+						ok: boolean;
+						error?: string;
+						durationMs: number;
+						cached: boolean;
+						description?: string;
+						outputTokens?: number;
+					}>;
+				}>;
+				truncated: boolean;
+			}>,
+		/** 视觉桥：清空事件文件 */
+		visionClearEvents: () =>
+			ipcRenderer.invoke(ipcChannels.visionClearEvents) as Promise<{ ok: boolean }>,
 		/** 快速测试 provider 连接：发送一条最小请求验证配置是否正常 */
 		testProvider: (
 			baseUrl: string,
