@@ -41,6 +41,7 @@ import { stripAnsi } from "./TimelineFormat";
 import { SessionFileSummary } from "./SessionFileSummary";
 import { SessionStartSurface } from "./SessionStartSurface";
 import { MessageScroller } from "../agents/message-scroller";
+import { chatContentWidthStyle } from "./chatContentWidth";
 import {
   selectTimelineTurnWindow,
   shouldWindowTimelineTurns,
@@ -479,13 +480,8 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
         "message-timeline-host h-full min-h-0",
         contentEntering && "timeline-content-enter",
       )}
-      viewportClassName={cn(
-        "message-timeline",
-        // 内容宽度留白（UI 2.0）：左右内边距 = 统一留白变量；
-        // 分屏/窄栏（≤1100px 栏宽）才收敛为 24px——阈值不可抬到典型 solo 栏宽之上，
-        // 否则日常窗口永远命中收敛，百分比设置无效。
-        "[padding-inline:var(--chat-inline-pad)] transition-[padding-inline] duration-150 ease-out @max-[1100px]:px-6",
-      )}
+      style={chatContentWidthStyle}
+      viewportClassName="message-timeline"
       viewportRef={timelineRef}
       scrollApiRef={controller.scrollerScrollApiRef}
       followOutput={controller.autoScroll}

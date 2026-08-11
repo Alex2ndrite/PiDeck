@@ -24,7 +24,7 @@ export function ComposerAttachmentBar(props: {
 }) {
   if (!props.images.length) return null;
   return (
-    <div className="image-preview-area mx-auto w-[calc(100%-2*var(--chat-inline-pad))]">
+    <div className="image-preview-area w-full">
       {props.images.map((image, index) => (
         <div key={index} className="image-preview-item">
           <img
@@ -66,7 +66,7 @@ export function ExtensionWidgetPanel(props: {
   const sessionId = props.sessionId ?? props.sessionKey;
   if (!sessionId || !props.widgets || !Object.keys(props.widgets).length) return null;
   return (
-    <div className="extension-widgets-container mx-auto w-[calc(100%-2*var(--chat-inline-pad))]">
+    <div className="extension-widgets-container w-full">
       {!props.collapsed &&
         Object.entries(props.widgets)
           .filter(([widgetKey]) => !props.dismissedKeys.includes(widgetKey))
@@ -95,7 +95,7 @@ export function QueuedPromptPanel(props: {
   return (
     <div
       ref={props.trackRef}
-      className="queued-track mx-auto flex min-w-0 w-[calc(100%-2*var(--chat-inline-pad))] justify-end p-0 pb-2"
+      className="queued-track flex min-w-0 w-full justify-end p-0 pb-2"
       aria-label={t("app.queuedMessagesLabel")}
     >
       <div className="flex min-w-0 w-[clamp(13.5rem,36%,22.5rem)] max-w-full flex-col gap-1 rounded-[9px] border border-[color-mix(in_srgb,var(--color-border-subtle)_82%,transparent)] bg-[color:color-mix(in_srgb,var(--color-bg-panel)_95%,var(--color-chat-card-bg))] p-[7px] pb-2 shadow-[var(--shadow-border),0_6px_18px_color-mix(in_srgb,#000_5%,transparent)]">

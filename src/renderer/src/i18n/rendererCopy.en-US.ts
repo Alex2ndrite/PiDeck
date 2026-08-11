@@ -1757,7 +1757,7 @@ export const enUS: Record<TranslationKey, string> = {
   "settings.sectionRuntime": "Runtime",
   "settings.sectionEditors": "External Editors",
   "settings.contentWidthPct": "Chat Content Width",
-  "settings.contentWidthPctDesc": "Messages and the composer share the same width. 100% fills the pane; margins shrink automatically when split or on narrow windows.",
+  "settings.contentWidthPctDesc": "Messages, composer and queued prompts share the same width. 100% is nearly full pane (12px minimum inset).",
   "settings.theme": "Theme",
   "settings.themeSystem": "System",
   "settings.accent": "Appearance theme",

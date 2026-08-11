@@ -26,6 +26,11 @@ const runtimeOverlay = readFileSync(
   "src/renderer/src/components/overlays/SessionRuntimeUiOverlay.tsx",
   "utf8",
 );
+const chatContentWidth = readFileSync(
+  "src/renderer/src/components/session/chatContentWidth.ts",
+  "utf8",
+);
+const timelineCss = readFileSync("src/renderer/src/styles/timeline.css", "utf8");
 const zh = readFileSync("src/renderer/src/i18n/rendererCopy.zh-CN.ts", "utf8");
 const en = readFileSync("src/renderer/src/i18n/rendererCopy.en-US.ts", "utf8");
 
@@ -61,32 +66,22 @@ test("AppShell always injects --chat-content-pct-set without conditional branch"
   assert.match(splitStage, /chat-content-width @container/);
 });
 
-test("UI 2.0: shared-margin variables live in tailwind.css, not legacy foundation.css", () => {
-  // 变量链是 UI 2.0 自定义 utility：每个 solo/split 会话栏各自按栏宽求值。
-  assert.match(
-    tailwind,
-    /@utility chat-content-width \{[\s\S]*?100cqi \* \(1 - \(var\(--chat-content-pct-set, 80%\) \/ 100%\)\) \/ 2/,
-  );
-  assert.match(tailwind, /--chat-inline-pad: max\(24px, var\(--chat-side-gap\)\)/);
-  // 旧架构（foundation.css）不得再持有宽度体系规则；左右 padding 也不能写死盖住变量
+test("UI 2.0: messages and composer share inline width, not parent padding", () => {
+  assert.match(chatContentWidth, /width: "var\(--chat-content-pct-set, 80%\)"/);
+  assert.match(chatContentWidth, /marginInline: "auto"/);
+  assert.match(timeline, /style=\{chatContentWidthStyle\}/);
+  assert.match(composerArea, /\.\.\.chatContentWidthStyle/);
+  assert.doesNotMatch(tailwind, /100cqi|--chat-inline-pad|--chat-side-gap|@utility chat-content-width/);
   assert.doesNotMatch(foundation, /--chat-inline-pad|--chat-side-gap|--content-max-width|@container/);
   assert.match(foundation, /\.message-timeline \{[\s\S]*?padding-block: 18px 24px;[\s\S]*?padding-inline: 0;/);
-  // 组件侧（UI 2.0 utility）：消息区与输入框共享同一留白 + 分屏窄栏容器查询收敛
-  assert.match(
-    timeline,
-    /\[padding-inline:var\(--chat-inline-pad\)\] transition-\[padding-inline\] duration-150 ease-out @max-\[1100px\]:px-6/,
-  );
-  assert.match(composerArea, /\[padding-inline:var\(--chat-inline-pad\)\]/);
-  assert.match(composerArea, /@max-\[1100px\]:px-6/);
-  // 外层 composer 不得再 px-3，否则与消息区左右错位、百分比观感被额外 12px 干扰
+  assert.doesNotMatch(timeline, /--chat-inline-pad|@max-\[1100px\]:px-6/);
+  assert.doesNotMatch(composerArea, /--chat-inline-pad|@max-\[1100px\]:px-6/);
   assert.match(composerArea, /className="composer[^"]*px-0 pb-3"/);
-  // 消息列表必须撑满（flex 容器内不被内容收缩），并随留白缩进
+  assert.match(timelineCss, /\.composer \{[\s\S]*?padding-inline: 0;/);
+  assert.doesNotMatch(timelineCss, /\.composer \{[\s\S]*?padding: var\(--space-1\) var\(--space-2\)/);
   assert.match(timeline, /className="message-list min-w-0 w-full mx-auto transition-opacity duration-150"/);
-  // 附件条/扩展区/排队条/ask 条与输入框同宽对齐
-  assert.match(composerPanels, /image-preview-area mx-auto w-\[calc\(100%-2\*var\(--chat-inline-pad\)\)\]/);
-  assert.match(composerPanels, /extension-widgets-container mx-auto w-\[calc\(100%-2\*var\(--chat-inline-pad\)\)\]/);
-  assert.match(composerPanels, /queued-track mx-auto flex min-w-0 w-\[calc\(100%-2\*var\(--chat-inline-pad\)\)\]/);
-  assert.match(runtimeOverlay, /ask-inline-bar ask-inline-bar--active mx-auto w-\[calc\(100%-2\*var\(--chat-inline-pad\)\)\]/);
+  assert.match(composerPanels, /queued-track flex min-w-0 w-full justify-end p-0 pb-2/);
+  assert.match(runtimeOverlay, /ask-inline-bar ask-inline-bar--active w-full/);
 });
 
 test("SettingsModal slider is 60–100 with always-visible save button", () => {

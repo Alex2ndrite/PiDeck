@@ -255,8 +255,7 @@ export function AppShell(props: AppShellProps) {
             style={
               {
                 "--terminal-row-h": `${terminalRowHeight}px`,
-                // 内容宽度百分比（60–100）：始终注入，由 CSS 统一计算留白；
-                // 100% 时 --chat-inline-pad 自动回退最小边距，无需条件分支。
+                // 内容宽度百分比（60–100）：消息区/输入框用 var(--chat-content-pct-set) 做 width。
                 "--chat-content-pct-set": `${chatContentWidthPct}%`,
               } as CSSProperties
             }

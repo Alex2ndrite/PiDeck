@@ -172,7 +172,7 @@ function BatchAskInlineBar(props: {
 			onCancel={props.onCancel}
 			cancelDisabled={props.responding}
 			cancelLabel={t("common.close")}
-			className="ask-inline-bar ask-inline-bar--active mx-auto w-[calc(100%-2*var(--chat-inline-pad))]"
+			className="ask-inline-bar ask-inline-bar--active w-full"
 		>
 			<div className="mb-1 flex min-w-0 gap-1 overflow-x-auto border-b border-border-subtle pb-1" role="tablist">
 				{questions.map((question, index) => {
@@ -490,7 +490,7 @@ export function SessionRuntimeUiOverlay({ sessionId, runtime, ui, responder, onE
 			onCancel={cancel}
 			cancelDisabled={responding}
 			cancelLabel={t("common.close")}
-			className="ask-inline-bar ask-inline-bar--active mx-auto w-[calc(100%-2*var(--chat-inline-pad))]"
+			className="ask-inline-bar ask-inline-bar--active w-full"
 		>
 			<div>
 				{request.method === "select" && request.options?.length ? (

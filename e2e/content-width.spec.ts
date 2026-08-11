@@ -7,7 +7,7 @@ import { join } from "node:path";
  * 聊天内容宽度（百分比体系）E2E：
  * 1. 设置滑块 60–100；
  * 2. 保存 85% 后，消息区与输入框共享当前会话栏宽度（≈85%），消除「一边最大一边最小」；
- * 3. 将 solo 会话栏约束为窄栏（模拟分屏）→ 容器查询自动收敛到 100% 全宽，仅保留最小边距。
+ * 3. 窄栏仍按百分比留白（不再用容器查询盖掉滑块），消息与输入框继续同宽。
  *
  * 注意：Windows 上 app.getPath("appData") 不随 APPDATA 环境变量变化，fixtures 的
  * 临时目录隔离对 main/index.ts:50 的显式 setPath 无效 → E2E 直接读写真实 userData。
@@ -72,31 +72,29 @@ test("content width: 85% shared margin, composer aligns with message list", asyn
 
 		const paneW = paneBox!.width;
 		const msgW = msgBox!.width;
-		// composer 含左右留白 padding，取 content-box 与消息区对比
-		const composerPad = await composer.evaluate((el) => {
-			const cs = getComputedStyle(el);
-			return parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
-		});
-		const composerContentW = composerBox!.width - composerPad;
-		// 消息区 ≈ 输入框内容区（共享同一留白；timeline 滚动条约 10px，容差 14px）
-		expect(Math.abs(msgW - composerContentW)).toBeLessThanOrEqual(14);
-		// 内容区 ≈ 85% 面板宽度（±4% 容差：含 24px 最小边距与边框）
+		const composerW = composerBox!.width;
+		// 消息区 ≈ 输入框（同在会话栏宿主的内容盒内；timeline 滚动条约 10px，容差 14px）
+		expect(Math.abs(msgW - composerW)).toBeLessThanOrEqual(14);
+		// 内容区 ≈ 85% 面板宽度（±4% 容差：含最小 12px 边距与边框）
 		expect(msgW / paneW).toBeGreaterThan(0.81);
 		expect(msgW / paneW).toBeLessThan(0.89);
 
-		// ── 约束当前会话栏（模拟分屏）→ 栏级容器查询收敛到 100% ──
+		// ── 窄栏仍按 85%，不因容器查询把滑块盖成全宽 ──
 		await sessionPane.evaluate((element) => {
 			const pane = element as HTMLElement;
 			pane.style.flex = "0 0 900px";
 			pane.style.width = "900px";
 		});
-		await window.waitForTimeout(400); // 容器查询 + padding 过渡
+		await window.waitForTimeout(400);
 		const narrowMsgBox = await messageList.boundingBox();
+		const narrowComposerBox = await composer.boundingBox();
 		const narrowPaneBox = await sessionPane.boundingBox();
 		expect(narrowMsgBox).not.toBeNull();
+		expect(narrowComposerBox).not.toBeNull();
 		expect(narrowPaneBox).not.toBeNull();
-		// 窄栏下不再留白：消息区 ≈ 面板（24px 最小边距以内）
-		expect(narrowMsgBox!.width / narrowPaneBox!.width).toBeGreaterThan(0.92);
+		expect(Math.abs(narrowMsgBox!.width - narrowComposerBox!.width)).toBeLessThanOrEqual(14);
+		expect(narrowMsgBox!.width / narrowPaneBox!.width).toBeGreaterThan(0.81);
+		expect(narrowMsgBox!.width / narrowPaneBox!.width).toBeLessThan(0.89);
 	} finally {
 		// 原样恢复用户设置（应用关闭后 SettingsStore 不会再写盘）
 		writeFileSync(settingsPath, backup, "utf8");
