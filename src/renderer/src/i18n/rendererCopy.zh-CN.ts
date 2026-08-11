@@ -975,6 +975,9 @@ export const zhCN = {
   "config.deleteSkillConfirmTitle": "删除 Skill",
   "config.deleteSkillConfirmBody":
     "确认删除「{name}」吗？此操作会删除本地 Skill 文件，且不可撤销。",
+  "config.deletePromptConfirmTitle": "删除 Prompt",
+  "config.deletePromptConfirmBody":
+    "确认删除「{name}」吗？此操作不可撤销。",
   "config.label.enabledModels": "模型切换列表",
   "config.label.defaultProvider": "默认供应商",
   "config.label.defaultModel": "默认模型",

@@ -990,6 +990,9 @@ export const enUS: Record<TranslationKey, string> = {
   "config.deleteSkillConfirmTitle": "Delete Skill",
   "config.deleteSkillConfirmBody":
     'Delete "{name}"? This removes the local skill files and cannot be undone.',
+  "config.deletePromptConfirmTitle": "Delete Prompt",
+  "config.deletePromptConfirmBody":
+    'Delete "{name}"? This cannot be undone.',
   "config.label.enabledModels": "Model Switch List",
   "config.label.defaultProvider": "Default Provider",
   "config.label.defaultModel": "Default Model",
