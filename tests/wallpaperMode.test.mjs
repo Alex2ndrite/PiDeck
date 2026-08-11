@@ -37,9 +37,9 @@ test("wallpaper surfaces do not let bg-background utility hide the image", () =>
   // bg-background 会压过 foundation.css 的壁纸规则，把页面重新刷成纯白。
   assert.match(surfaceSource, /empty-state[^\n]*bg-transparent/);
   assert.match(startSource, /session-start-surface[^\n]*bg-transparent/);
-  // 输入框底栏是有意不透明（可读性基线，产品决策 2026-08）：壁纸只透出内容区，
-  // 防止有人误把 composer 改回透明导致壁纸规则穿透输入区。
-  assert.match(composerSource, /className="composer[^\n]*bg-background/);
+  // composer 同样透出壁纸（远端 1cbbab34 有意修复壁纸模式回归：bg-background → bg-transparent），
+  // 防止有人误加不透明背景再次盖住壁纸。
+  assert.match(composerSource, /className="composer[^\n]*bg-transparent/);
 });
 
 test("large settings dialogs inherit page wallpaper transparency", () => {

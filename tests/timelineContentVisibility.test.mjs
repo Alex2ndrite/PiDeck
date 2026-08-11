@@ -52,3 +52,34 @@ test("process group uses CollapsibleContent height transition", () => {
   assert.match(turnRow, /<Collapsible/);
   assert.match(turnRow, /<CollapsibleContent/);
 });
+
+test("user messages fold long text beyond 8 lines with an expand toggle", () => {
+  // 长发送消息默认折叠（line-clamp-8），右下角「展开全文/收起」切换；
+  // 溢出检测用 ResizeObserver 对比 scrollHeight/clientHeight（折叠态下测量）。
+  const surface = readFileSync(
+    "src/renderer/src/components/session/SurfaceComponents.tsx",
+    "utf8",
+  );
+  assert.match(surface, /line-clamp-8/);
+  assert.match(surface, /messageExpanded/);
+  assert.match(surface, /ResizeObserver/);
+  assert.match(surface, /scrollHeight > el\.clientHeight \+ 1/);
+  assert.match(surface, /t\("app\.messageExpand"\)/);
+  assert.match(surface, /t\("app\.messageCollapse"\)/);
+});
+
+test("compaction card matches the thinking-card visual language", () => {
+  // 压缩卡片与思考卡片对齐：lucide 图标标签行 + 虚线内容框 + 左下角展开按钮；
+  // 不再用 emoji 充当功能图标（AGENTS.md 图标规范）。
+  const cards = readFileSync(
+    "src/renderer/src/components/session/TimelineEventCards.tsx",
+    "utf8",
+  );
+  assert.doesNotMatch(cards, /📁|📂/);
+  assert.match(cards, /Minimize size=\{15\}/);
+  assert.match(cards, /border-dashed border-border-subtle/);
+  assert.match(cards, /max-h-\[calc\(var\(--font-size-chat\)\*7\.56\)\]/);
+  assert.match(cards, /t\("app\.compactionExpand"\)/);
+  // 展开/收起走左下角按钮，不再整卡可点（与思考卡一致）
+  assert.doesNotMatch(cards, /className="flex w-full cursor-pointer/);
+});

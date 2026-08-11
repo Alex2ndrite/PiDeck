@@ -1,5 +1,5 @@
 import { memo, useEffect, useRef, useState } from "react";
-import { AlertTriangle, Brain, Check, ChevronDown, ChevronRight, ChevronUp, MessageCircle, X } from "lucide-react";
+import { AlertTriangle, Brain, Check, ChevronDown, ChevronRight, ChevronUp, MessageCircle, Minimize, X } from "lucide-react";
 import type { ChatMessage } from "../../../../shared/types";
 import { t, translateI18nDescriptor } from "../../i18n";
 import { formatDuration, formatTime, stripAnsi } from "./TimelineFormat";
@@ -30,7 +30,9 @@ function getDiagnosticTone(message: ChatMessage): "error" | "warning" | "success
 }
 
 /** 压缩事件卡片：对话流中的一条普通消息，标记会话被压缩过。
- * 折叠显示摘要一行；展开显示 summary 全文（Markdown 渲染，与 pi TUI 一致）。
+ * 视觉与思考卡片（ThinkingBlock）对齐：lucide 图标标签行 + 虚线内容框，
+ * 折叠态最多 7.56 行轻渲染纯文本预览，展开态挂 Markdown 全文；
+ * 展开/收起走左下角按钮（不整体可点，与思考/工具卡一致）。
  * 压缩前的归档消息由翻页像正常对话流一样逐条可见（磁盘分页包含归档历史）。 */
 export const CompactionCard = memo(function CompactionCard(props: {
 	message: ChatMessage;
@@ -50,53 +52,52 @@ export const CompactionCard = memo(function CompactionCard(props: {
 
 	return (
 		<TimelineMarker kind="compaction" tone="active">
-		<article
-			className={`my-px flex flex-col overflow-hidden rounded-sm border border-[color-mix(in_srgb,var(--color-accent)_8%,transparent)] bg-[color:color-mix(in_srgb,var(--color-accent)_4%,var(--color-bg-panel))]${expanded ? " compaction-card--expanded" : ""}`}
-			data-message-id={props.message.id}
-		>
-			<button
-				type="button"
-				className="flex w-full cursor-pointer items-start gap-2 rounded-[inherit] border-none bg-none p-1 px-3 text-left text-inherit select-none hover:bg-[color:color-mix(in_srgb,var(--color-accent)_6%,transparent)] focus-visible:-outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
-				onClick={() => setExpanded(!expanded)}
-				aria-expanded={expanded}
-			>
-				<span className="shrink-0 text-body leading-6" aria-hidden="true">
-					{expanded ? "📂" : "📁"}
-				</span>
-				<div className="flex min-w-0 flex-1 flex-col gap-0.5">
-					<span className="truncate text-caption leading-[1.4] text-text-secondary">
-						{overflowing ? summaryText.slice(0, PREVIEW_CHARS) + "…" : summaryText}
+		<section data-message-id={props.message.id} className="w-full min-w-0 overflow-hidden rounded-md border-0">
+			{/* 标签行：纯展示，不可点击；展开/收起走左下角按钮（与思考卡片同构） */}
+			<div className="flex min-h-6 flex-wrap items-center gap-2 px-1">
+				<Minimize size={15} className="shrink-0 text-text-secondary" aria-hidden="true" />
+				{typeof compactionCount === "number" && compactionCount > 0 && (
+					<span className="inline-flex items-center rounded-full border border-[color:color-mix(in_srgb,var(--color-accent)_16%,transparent)] bg-[color:color-mix(in_srgb,var(--color-accent)_8%,transparent)] px-1.5 font-mono text-micro text-text-tertiary">
+						{t("app.compactionCount", { count: compactionCount })}
 					</span>
-					<div className="flex flex-wrap items-center gap-1">
-						{typeof compactionCount === "number" && compactionCount > 0 && (
-							<span className="inline-flex items-center rounded-full border border-[color-mix(in_srgb,var(--color-accent)_16%,transparent)] bg-[color:color-mix(in_srgb,var(--color-accent)_8%,transparent)] px-1.5 font-mono text-micro text-text-tertiary">
-								{t("app.compactionCount", { count: compactionCount })}
-							</span>
-						)}
-						{typeof tokensBefore === "number" && (
-							<span className="font-mono text-micro text-text-tertiary">
-								{t("app.compactionTokensBefore", { count: Math.round(tokensBefore / 1000) })}
-							</span>
-						)}
-						{expanded ? (
-							<span className="font-mono text-micro opacity-80 text-text-tertiary">{t("app.compactionCollapse")}</span>
-						) : (
-							overflowing && <span className="font-mono text-micro opacity-80 text-text-tertiary">{t("app.compactionExpand")}</span>
-						)}
+				)}
+				{typeof tokensBefore === "number" && (
+					<span className="font-mono text-micro text-text-tertiary">
+						{t("app.compactionTokensBefore", { count: Math.round(tokensBefore / 1000) })}
+					</span>
+				)}
+				<time className="font-mono text-micro tabular-nums text-text-tertiary">{time}</time>
+			</div>
+			{/* 虚线框内容区（与思考卡片同款）：折叠态最多 7.56 行（按 --font-size-chat 联动），
+			    第 8 行切半提示还有内容；展开态挂 Markdown 全文 */}
+			<div className="rounded-md border border-dashed border-border-subtle bg-[color:color-mix(in_srgb,var(--color-bg-muted)_45%,transparent)]">
+				{expanded ? (
+					<div className="markdown-body px-3 pt-2 pb-1 text-text-tertiary">
+						<MarkdownStream
+							text={summaryText}
+							onOpenExternal={props.onOpenExternal}
+							onOpenFile={props.onOpenFile}
+						/>
 					</div>
-					<time className="text-micro opacity-70 text-text-tertiary">{time}</time>
+				) : (
+					// 折叠态轻渲染：只显示截断纯文本预览，不跑 streamdown、不建全文 DOM
+					<div className="max-h-[calc(var(--font-size-chat)*7.56)] overflow-hidden whitespace-pre-wrap break-words px-3 pt-2 pb-1 text-text-tertiary">
+						{overflowing ? summaryText.slice(0, PREVIEW_CHARS) + "…" : summaryText}
+					</div>
+				)}
+				<div className="flex px-1 pb-1">
+					<button
+						type="button"
+						className="inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-micro text-text-tertiary opacity-60 transition-colors duration-150 hover:opacity-100 focus-visible:outline-2 focus-visible:outline-[var(--focus-ring)]"
+						onClick={() => setExpanded((v) => !v)}
+						aria-expanded={expanded}
+					>
+						{expanded ? <ChevronUp size={10} aria-hidden="true" /> : <ChevronDown size={10} aria-hidden="true" />}
+						{expanded ? t("app.compactionCollapse") : t("app.compactionExpand")}
+					</button>
 				</div>
-			</button>
-			{expanded && (
-				<div className="markdown-body border-t border-[color-mix(in_srgb,var(--color-accent)_8%,transparent)] px-3 pt-2 pb-1 text-text-secondary">
-					<MarkdownStream
-						text={summaryText}
-						onOpenExternal={props.onOpenExternal}
-						onOpenFile={props.onOpenFile}
-					/>
-				</div>
-			)}
-		</article>
+			</div>
+		</section>
 		</TimelineMarker>
 	);
 });
