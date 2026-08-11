@@ -69,6 +69,11 @@ export default defineConfig({
       },
     },
     plugins: [react(), tailwindcss(), katexWoff2OnlyPlugin()],
+    worker: {
+      // @pierre/diffs 的 worker 线程脚本是 ESM（含 import），
+      // 必须用 ES 格式打包（iife 不支持 code-splitting），产物以 module worker 加载
+      format: "es",
+    },
     build: {
       // 不计算 gzip 压缩后大小（节约构建时间）
       reportCompressedSize: false,

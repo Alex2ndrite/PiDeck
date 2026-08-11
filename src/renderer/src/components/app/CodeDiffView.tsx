@@ -1,6 +1,13 @@
 import { memo, useMemo } from "react";
-import { MultiFileDiff, type FileContents } from "@pierre/diffs/react";
+import {
+	MultiFileDiff,
+	Virtualizer,
+	WorkerPoolContextProvider,
+	type FileContents,
+} from "@pierre/diffs/react";
+import DiffWorker from "@pierre/diffs/worker/worker.js?worker";
 import { t } from "../../i18n";
+import { getDiffRenderPlan } from "../../utils/diffRenderPlan";
 
 /**
  * 文件差异对比视图（只读）：基于 @pierre/diffs 的 MultiFileDiff 渲染，
@@ -11,16 +18,27 @@ import { t } from "../../i18n";
  * - 行号列跟随变更着色（浅底 + 语义色数字）
  * - 变更指示 = 分栏中缝的红/绿竖条（diffIndicators: bars），无 +/- 字符
  * - 折叠区 = hunk 分隔条（hunkSeparators: line-info），GitHub 式 @@ 行号信息
- * - 行内 diff 不标注（lineDiffType: none），保持干净
+ * - 行内 diff 关闭（lineDiffType: none）：纯行级红绿标注，不做 word 级二次对比
  *
- * 大文件保护：任一侧超过 MAX_DIFF_LINES 行不计算 diff（Myers O(N*D) + Shiki
- * 高亮会阻塞主线程），降级为纯文本提示。
+ * 性能与内存策略（大文件不必降级为纯文本提示）：
+ * - GitHub 式 hunk 折叠：未变化段超过 collapsedContextThreshold 折叠为展开条，
+ *   点击展开才加载该段（expansionLineCount 限制单次加载行数）。
+ * - 虚拟化：Virtualizer 只挂载可视区行，未变化大段零 DOM。
+ * - Worker 高亮：WorkerPoolContextProvider 把 diff 计算 + Shiki tokenize 放
+ *   worker 线程（单例池，最多 2 个 worker），主线程只渲染；
+ *   池最后一个使用方卸载时自动 terminate，资源全部释放。
+ * - tokenizeMaxLength 限制高亮额度，超出的行自动降级纯文本。
+ * - 档位由 getDiffRenderPlan 决定（见 utils/diffRenderPlan.ts）：
+ *   两侧 ≤ 50k 行全功能；≤ 200k 行降质；再大才提示 git diff。
  */
 
-/** 单侧超过此行数的文件不计算 diff */
-const MAX_DIFF_LINES = 5_000;
-
 export type CodeDiffViewMode = "split" | "unified";
+
+/** 折叠阈值：hunk 间未变化行超过该值时折叠为展开条（≤ 阈值直接显示 context）。 */
+const COLLAPSED_CONTEXT_THRESHOLD = 8;
+
+/** worker 池大小：1 个足以串行处理，2 个兼顾并发分屏，避免默认 8 个占内存。 */
+const WORKER_POOL_SIZE = 2;
 
 export const CodeDiffView = memo(function CodeDiffView(props: {
 	oldContent: string;
@@ -35,7 +53,8 @@ export const CodeDiffView = memo(function CodeDiffView(props: {
 
 	const oldLines = useMemo(() => countLines(props.oldContent), [props.oldContent]);
 	const newLines = useMemo(() => countLines(props.newContent), [props.newContent]);
-	const tooLarge = oldLines > MAX_DIFF_LINES || newLines > MAX_DIFF_LINES;
+	// 档位只依赖行数（纯函数），diff 计算量由 worker 承载，不在此预估
+	const plan = useMemo(() => getDiffRenderPlan(oldLines, newLines), [oldLines, newLines]);
 
 	const oldFile: FileContents = useMemo(() => ({
 		name: props.filePath,
@@ -47,15 +66,25 @@ export const CodeDiffView = memo(function CodeDiffView(props: {
 		contents: props.newContent,
 	}), [props.filePath, props.newContent]);
 
-	const options = useMemo(() => ({
-		diffStyle: props.viewMode,
+	const options = useMemo(() => {
+		// fallback 已在下方提前 return，此处仅为类型收窄（hunk 两档都带这些字段）
+		if (plan.mode === "fallback") return null;
+		return {
+			diffStyle: props.viewMode,
 		theme: { dark: "one-dark-pro" as const, light: "one-light" as const },
 		disableFileHeader: true,
 		diffIndicators: "bars" as const,
 		hunkSeparators: "line-info" as const,
-		lineDiffType: "none" as const,
 		overflow: "scroll" as const,
 		themeType: theme as "light" | "dark" | "system",
+		// GitHub 式折叠：未变化段超阈值折叠，点击展开（每次最多 expansionLineCount 行）
+		collapsedContextThreshold: COLLAPSED_CONTEXT_THRESHOLD,
+		expandUnchanged: true,
+		expansionLineCount: plan.expansionLineCount,
+		// 行内 diff 保持关闭（word 级）：实测收益有限且增加额外对比计算，
+		// 当前纯行级红绿标注足够直观（GitHub 式折叠/展开不受影响）
+		lineDiffType: "none" as const,
+		tokenizeMaxLength: plan.tokenizeMaxLength,
 		// 颜色全部引用应用 token（明暗随 data-theme 自动切换），不写死色值
 		unsafeCSS: `
 			:root, :host {
@@ -95,9 +124,10 @@ export const CodeDiffView = memo(function CodeDiffView(props: {
 				background-color: var(--color-bg-panel) !important;
 			}
 		`,
-	}), [props.viewMode, theme]);
+		};
+	}, [props.viewMode, theme, plan]);
 
-	if (tooLarge) {
+	if (plan.mode === "fallback") {
 		return (
 			<div className="flex h-full items-center justify-center overflow-auto bg-[var(--color-bg-panel)]">
 				<div className="px-4 text-center text-[var(--color-text-secondary)]">
@@ -113,10 +143,30 @@ export const CodeDiffView = memo(function CodeDiffView(props: {
 		);
 	}
 
+	// WorkerPool：单例池（最多 2 worker），diff 计算 + Shiki 高亮不占主线程；
+	// 本组件卸载（diff 面板关闭）且无其他使用方时，池自动 terminate 释放内存。
+	// Virtualizer：只挂载可视区行，滚动窗口外零 DOM（行高用库默认 20px）。
 	return (
-		<div className="code-diff-view h-full overflow-auto bg-[var(--color-bg-panel)]">
-			<MultiFileDiff oldFile={oldFile} newFile={newFile} options={options} className="h-full" />
-		</div>
+		<WorkerPoolContextProvider
+			poolOptions={{
+				poolSize: WORKER_POOL_SIZE,
+				workerFactory: () => new DiffWorker(),
+			}}
+			highlighterOptions={{
+				theme: { dark: "one-dark-pro" as const, light: "one-light" as const },
+			}}
+		>
+			<Virtualizer className="code-diff-view h-full overflow-auto bg-[var(--color-bg-panel)]">
+				{options !== null && (
+					<MultiFileDiff
+						oldFile={oldFile}
+						newFile={newFile}
+						options={options}
+						className="h-full"
+					/>
+				)}
+			</Virtualizer>
+		</WorkerPoolContextProvider>
 	);
 });
 
