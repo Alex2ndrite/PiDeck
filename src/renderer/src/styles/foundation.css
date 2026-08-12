@@ -2314,15 +2314,10 @@ select:focus-visible {
 :root[data-bg-image="on"] .session-start-surface {
   background: transparent;
 }
-/* 壁纸模式 Git 抽屉一体性：.git-panel / drawer-header / 内部控件各叠一层
-   bg-background，在 .detail-drawer（与聊天区同档）上叠加后会比聊天区更白；
-   只保留 .detail-drawer 一层，让右侧与输出区透明度一致。
-   --git-panel-bg 同时被各折叠 pane / 提交区背景引用，一并透明化。 */
-:root[data-bg-image="on"] .shell-panel-drawer .drawer-header,
-:root[data-bg-image="on"] .shell-panel-drawer .git-panel,
-:root[data-bg-image="on"] .shell-panel-drawer .git-panel .bg-background {
-  background: transparent;
-}
+/* 壁纸模式 Git 抽屉一体性：git-panel 各折叠 pane / 提交区引用 --git-panel-bg，
+   一并透明化，让右侧抽屉透出 detail-drawer 一层、与聊天区同档。
+   注意：git-panel 等容器上的 bg-background/bg-bg-subtle utility 叠层透明化
+   在 tailwind.css 的 utilities 层处理（legacy 层规则压不过 utility，见层序）。 */
 :root[data-bg-image="on"] .shell-panel-drawer .git-panel {
   --git-panel-bg: transparent;
   --git-input-bg: transparent;
@@ -2346,7 +2341,8 @@ select:focus-visible {
    关键：在 dialog-content 上局部覆盖 bg 系列变量（CSS 变量继承）——
    弹窗内 section 卡片/控件引用同一档位，消除 Header 透、Body 实的多层叠加。 */
 :root[data-bg-image="on"] [data-slot="dialog-content"],
-/* 草稿本同理：不跟随壁纸半透明，header(bg-muted)/body(bg-panel) 同基色同档位，顶部一体。 */
+/* 草稿本：与弹框共享同基色令牌注入（header/body 同基色顶部一体）；
+   最终透明度由下方独立规则覆盖为面板档（跟随背景图滑块）。 */
 :root[data-bg-image="on"] .scratch-pad-panel {
   /* 弹窗下方仍是页面正文，透明度过低会把 Markdown 文字透进设置内容；普通弹框
      保持 90% 基线，业务工作台可在本规则之后单独降到页面面板档。 */
@@ -2371,13 +2367,23 @@ select:focus-visible {
   /* 这些都是完整工作台弹框，header 与内容必须共享页面面板档透明度。 */
   --wallpaper-dialog-alpha: var(--wallpaper-panel-alpha, 30%);
 }
-/* 草稿本是独立书写平面：壁纸模式下遮罩与面板使用同一不透明底色，
-   避免圆角抗锯齿边缘露出深色遮罩而形成黑角。 */
+/* 草稿本是独立书写平面：壁纸模式下遮罩用与面板同档的半透明底色
+   （面板本身 100% 不透明）。遮罩若用纯色会把背景图整个盖住，
+   表现为“点开草稿本整页变空白”；半透明后背景图与会话界面仍隐约可见，
+   圆角边缘外是同基色半透明遮罩，也不会形成黑角。 */
 :root[data-bg-image="on"] .scratch-pad-overlay {
-  background: var(--wallpaper-base, var(--color-bg-app));
+  background: color-mix(
+    in srgb,
+    var(--wallpaper-base, var(--color-bg-app)) var(--wallpaper-panel-alpha, 30%),
+    transparent
+  );
 }
 :root[data-bg-image="on"] .scratch-pad-panel {
-  --wallpaper-dialog-alpha: 100%;
+  /* 草稿本是独立书写平面，但底色统一为系统面板色并跟随背景图透明度：
+     内部控件（工具条/textarea 等）经 BG_TOKENS 内联注入已与滑块联动（30% 档），
+     面板底色此前被 100% 强改纯白，视觉突兀且滑块失效；改为同档半透明后
+     三者同色同档，背景图透出，可读性由壁纸取色兜底。 */
+  --wallpaper-dialog-alpha: var(--wallpaper-panel-alpha, 30%);
 }
 
 /* 大弹框内容级联入场（DialogContent stagger prop）：content 整体淡入的同时，
