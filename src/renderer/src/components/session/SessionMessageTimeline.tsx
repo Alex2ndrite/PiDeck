@@ -338,7 +338,6 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
     turnWindowStateRef.current = { windowed: turnWindowActive, height: timeline.scrollHeight };
   }, [controller, displayRuns, timelineRef, turnWindowActive]);
   // 文件修改展示已下沉到每轮 TurnRow 底部（TurnFileChanges），此处不再做全局汇总
-  // （合并远端 76b8c8b6：lastRunMessages 全局汇总随 SessionFileSummary 一并移除）
   const lastUserMessageId = useMemo(() => {
     for (let index = activeMessages.length - 1; index >= 0; index -= 1) {
       if (activeMessages[index].role === "user") {

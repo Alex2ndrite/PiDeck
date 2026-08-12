@@ -430,16 +430,50 @@ export function registerSessionIpc(deps: SessionIpcDeps): void {
 	);
 	// 按需读取消息完整文本（工具结果截断后的「查看完整输出」）：
 	// 入参校验在边界（渲染层数据不可信），agentId/messageId 必须为非空字符串。
+	// 运行期路径（agentId 绑定）不可用时（历史会话 _viewer 投影 / agent 已退出）
+	// 回退会话文件定位（sessionId → catalog filePath），保证历史浏览同样可展开全文。
 	ipcMain.handle(
 		ipcChannels.sessionsCatalogReadMessageFullText,
-		async (_event, agentId: unknown, messageId: unknown, entryId?: unknown) => {
-			if (typeof agentId !== "string" || !agentId.trim() || typeof messageId !== "string" || !messageId.trim()) {
+		async (
+			_event,
+			sessionId: unknown,
+			agentId: unknown,
+			messageId: unknown,
+			entryId?: unknown,
+		) => {
+			if (
+				typeof agentId !== "string" ||
+				!agentId.trim() ||
+				typeof messageId !== "string" ||
+				!messageId.trim()
+			) {
 				throw new Error("Invalid message full-text request");
+			}
+			if (sessionId !== undefined && (typeof sessionId !== "string" || !sessionId.trim())) {
+				throw new Error("Invalid sessionId");
 			}
 			if (entryId !== undefined && (typeof entryId !== "string" || !entryId.trim())) {
 				throw new Error("Invalid entryId");
 			}
-			return agentManager.readMessageFullText(agentId, messageId, entryId as string | undefined);
+			try {
+				return await agentManager.readMessageFullText(
+					agentId,
+					messageId,
+					entryId as string | undefined,
+				);
+			} catch (error) {
+				if (typeof sessionId === "string" && sessionId.trim()) {
+					const record = sessionCatalog.get(sessionId);
+					if (record?.filePath) {
+						return agentManager.readMessageFullTextFromFile(
+							record.filePath,
+							messageId,
+							entryId as string | undefined,
+						);
+					}
+				}
+				throw error;
+			}
 		},
 	);
 	ipcMain.handle(

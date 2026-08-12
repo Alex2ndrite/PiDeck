@@ -505,6 +505,18 @@ export class AgentManager {
 	}
 
 	/**
+	 * 按会话文件路径直接读取单条消息完整文本（不依赖运行期绑定）。
+	 * 历史会话浏览（_viewer 投影，无 runtime）的「查看完整输出」走此路径。
+	 */
+	async readMessageFullTextFromFile(
+		sessionPath: string,
+		messageId: string,
+		entryId?: string,
+	): Promise<{ text: string }> {
+		return this.sessionHistoryReader.readMessageFullText(sessionPath, messageId, entryId);
+	}
+
+	/**
 	 * The reader owns persisted JSONL parsing and paging. This facade keeps the
 	 * Session-first public contract on AgentManager while runtime remains inactive.
 	 */
@@ -786,6 +798,10 @@ export class AgentManager {
 			this.messages.get(agentId) ?? [],
 			options?.preserveMessagesAfter,
 		);
+		// 重载后把进行中的消息身份（activeAssistantMessageIds/toolMessageIds）从
+		// 运行期副本重定向到投影版：后续事件继续更新投影版（位置正确、单份），
+		// 避免「投影 partial + 运行期完整版」双份或事件 append 到错误轮次。
+		this.rebindInFlightMessages(agentId, nextMessages, messages);
 		this.messages.set(agentId, nextMessages);
 		// 显示窗口 = 尾部 3 轮（轮次起点对齐 user 消息，与 disk 轮次分页同一约定；
 		// 字节预算不参与窗口计算——单轮再大也整轮显示，折叠完整性优先）
@@ -1616,8 +1632,8 @@ export class AgentManager {
 			}
 
 			this.compactingAgents.delete(agentId);
-			// 压缩成功且进程未退出，直接加载消息
-			await this.loadMessages(agentId).catch(() => undefined);
+			// 压缩成功且进程未退出，直接加载消息（压缩期间乐观/流式消息不能丢：保护到重载完成）
+			await this.loadMessages(agentId, false, undefined, { preserveMessagesAfter: Date.now() }).catch(() => undefined);
 			void this.appLogger?.info("agent", "Compact completed successfully", {
 				agentId,
 				totalElapsedMs: Date.now() - startTime,
@@ -1644,7 +1660,7 @@ export class AgentManager {
 				});
 				await this.reattachProcess(agentId, runtime.tab.sessionPath);
 				runtime.tab.status = "idle";
-				await this.loadMessages(agentId).catch(() => undefined);
+				await this.loadMessages(agentId, false, undefined, { preserveMessagesAfter: Date.now() }).catch(() => undefined);
 				this.addLocalizedMessage(
 					agentId,
 					"system",
@@ -1726,7 +1742,8 @@ export class AgentManager {
 			// 如果有旧的 pending abort 标记，清理掉
 			this.abortedDuringAsk.delete(agentId);
 
-			await this.loadMessages(agentId).catch(() => undefined);
+			// 重连期间用户可能已发送消息（乐观上屏）：必须保护，否则替换投影时未落盘消息丢失
+			await this.loadMessages(agentId, false, undefined, { preserveMessagesAfter: Date.now() }).catch(() => undefined);
 
 			void this.appLogger?.info("agent", "Process reattached successfully", {
 				agentId,
@@ -2001,7 +2018,7 @@ export class AgentManager {
 				8_000,
 			);
 			if (response.success) {
-				await this.loadMessages(agentId).catch(() => undefined);
+				await this.loadMessages(agentId, false, undefined, { preserveMessagesAfter: Date.now() }).catch(() => undefined);
 				void this.appLogger?.info("agent", "Model refresh succeeded via reload_config RPC", {
 					agentId,
 					elapsedMs: Date.now() - startTime,
@@ -2509,7 +2526,8 @@ export class AgentManager {
 			) ?? runtime.tab.sessionPath;
 		}
 		if (state?.sessionName) runtime.tab.title = state.sessionName;
-		await this.loadMessages(agentId).catch(() => undefined);
+		// 重新附加后恢复：保留附加期间用户发送/流式中的消息，避免投影替换吞掉乐观消息
+		await this.loadMessages(agentId, false, undefined, { preserveMessagesAfter: Date.now() }).catch(() => undefined);
 		this.emitState();
 	}
 
@@ -3884,12 +3902,31 @@ export class AgentManager {
 		if (!nextThinking.trim()) return;
 
 		this.beginAssistantMessage(agentId);
-		const messageId =
+		const messageIdBase =
 			segment?.assistantMessageId ?? this.activeAssistantMessageIds.get(agentId);
-		if (!messageId) return;
+		if (!messageIdBase) return;
+		let messageId = messageIdBase;
 
 		const list = this.messages.get(agentId) ?? [];
-		const existingIndex = list.findIndex((message) => message.id === messageId);
+		let existingIndex = list.findIndex((message) => message.id === messageId);
+		// 重载后事件迟到：运行期 id 已不在列表（被投影身份替换）。若列表里已有同一条
+		// pi 消息（正文一致）则更新它并重定向身份，避免 append 造出双份。
+		if (existingIndex < 0) {
+			const textForMatch =
+				partialMessage && typeof partialMessage === "object"
+					? this.messageProjector.extractText((partialMessage as any).content)
+					: "";
+			const rebindIndex = this.findSamePiMessageIndex(list, "assistant", textForMatch);
+			if (rebindIndex >= 0) {
+				existingIndex = rebindIndex;
+				messageId = list[rebindIndex].id;
+				if (segment) {
+					segment.assistantMessageId = messageId;
+					segment.id = `msg-thinking-${messageId}`;
+				}
+				this.activeAssistantMessageIds.set(agentId, messageId);
+			}
+		}
 		const startedAt = segment?.startedAt ?? Date.now();
 		const endedAt = segment?.endedAt && segment.endedAt > 0 ? segment.endedAt : Date.now();
 		if (existingIndex >= 0) {
@@ -3946,7 +3983,27 @@ export class AgentManager {
 			this.activeAssistantMessageIds.set(agentId, messageId);
 		}
 
-		const existingIndex = list.findIndex((message) => message.id === messageId);
+		let existingIndex = list.findIndex((message) => message.id === messageId);
+		// 重载后事件迟到：activeAssistantMessageIds 指向的运行期 id 在列表里已不存在
+		// （loadMessages 替换为投影身份）。此时不能盲目 append——列表里可能已有同一条
+		// pi 消息的投影版，append 会造出双份（同内容消息被用户消息切分到两个 run）。
+		// 按内容指纹匹配既有消息：命中则更新它并把身份映射重定向到它，保持单份。
+		if (existingIndex < 0) {
+			const extractedTextForMatch =
+				partialMessage && typeof partialMessage === "object"
+					? this.messageProjector.extractText((partialMessage as any).content)
+					: "";
+			const rebindIndex = this.findSamePiMessageIndex(
+				list,
+				"assistant",
+				extractedTextForMatch || fallbackDelta,
+			);
+			if (rebindIndex >= 0) {
+				existingIndex = rebindIndex;
+				messageId = list[rebindIndex].id;
+				this.activeAssistantMessageIds.set(agentId, messageId);
+			}
+		}
 		const existing = existingIndex >= 0 ? list[existingIndex] : undefined;
 		const extractedText =
 			partialMessage && typeof partialMessage === "object"
@@ -3999,6 +4056,119 @@ export class AgentManager {
 	}
 
 
+	/**
+	 * 在消息列表中查找「同一条 pi 消息」的既有副本（重载后事件迟到的身份重定向）。
+	 *
+	 * 运行期事件消息（id=randomUUID）与文件投影消息（id=agentId-history-entryId）
+	 * 的 ChatMessage.id 永不相同，只能按内容匹配：
+	 * - tool：meta.toolCallId 两通道同源（pi 的 toolCallId），精确匹配；
+	 * - assistant/user：正文文本（stripAnsi 后）一致视为同一消息，从后往前匹配
+	 *   （同文本多条时取最近一条——重载后迟到的终态事件对应最新落盘的副本）。
+	 * 空文本不参与匹配（骨架无内容可证同一性，且骨架场景 id 映射仍有效）。
+	 */
+	private findSamePiMessageIndex(
+		list: ChatMessage[],
+		role: ChatMessage["role"],
+		text: string,
+		toolCallId?: string,
+	): number {
+		const normalized = stripAnsi(text ?? "").trim();
+		if (role === "tool" && toolCallId) {
+			for (let index = list.length - 1; index >= 0; index -= 1) {
+				const message = list[index];
+				if (
+					message.role === "tool" &&
+					(message.meta as Record<string, unknown> | undefined)?.toolCallId === toolCallId
+				) {
+					return index;
+				}
+			}
+			return -1;
+		}
+		if (!normalized) return -1;
+		for (let index = list.length - 1; index >= 0; index -= 1) {
+			const message = list[index];
+			if (message.role !== role) continue;
+			if (stripAnsi(message.text ?? "").trim() !== normalized) continue;
+			return index;
+		}
+		return -1;
+	}
+
+	/**
+	 * 重载（loadMessages 替换列表）后，把「进行中的消息身份」从运行期副本重定向到投影版。
+	 *
+	 * 场景：重载快照捕捉到流式中间态——投影含未完成 assistant（无 stopReason、部分文本），
+	 * 运行期含同一条的骨架（text 恒空，preserved 保护保留在列表尾部）。若只靠
+	 * upsert 指纹匹配：骨架与投影 partial 文本不同（空 vs 部分）匹配不上，message_end
+	 * 更新骨架后列表里仍残留投影 partial → 双份。
+	 *
+	 * 规则：activeAssistantMessageIds 登记的运行期骨架（空文本、无 stopReason）仍在
+	 * nextMessages 中时，若投影里存在「未完成的 assistant」（无 stopReason、有部分文本
+	 * ——同一时刻只有一条流式消息，从后往前取最后一条），把身份映射重定向到投影版并
+	 * 移除骨架：后续事件继续更新投影版，位置正确、单份。tool 同理按 toolCallId。
+	 */
+	private rebindInFlightMessages(
+		agentId: string,
+		nextMessages: ChatMessage[],
+		projectedMessages: ChatMessage[],
+	): void {
+		const runningAssistantId = this.activeAssistantMessageIds.get(agentId);
+		const runningInNext = runningAssistantId
+			? nextMessages.find((message) => message.id === runningAssistantId)
+			: undefined;
+		// 运行期骨架被 preserved 保护保留在尾部（merge 未匹配到同指纹投影）：
+		// 若投影里恰好有它的「未完成版」（无 stopReason、有部分文本——重载快照
+		// 捕捉到的流式中间态），说明同一条消息将以两种身份并存（partial 投影版 +
+		// 骨架，后续 message_end 会把骨架更新为完整版 → 双份）。把身份重定向到
+		// 投影版并移除骨架：后续事件继续更新投影版，位置正确、单份。
+		if (
+			runningInNext &&
+			runningInNext.role === "assistant" &&
+			!runningInNext.stopReason &&
+			!runningInNext.text.trim()
+		) {
+			let projectedIncomplete: ChatMessage | undefined;
+			for (let index = projectedMessages.length - 1; index >= 0; index -= 1) {
+				const message = projectedMessages[index];
+				if (
+					message.role === "assistant" &&
+					!message.stopReason &&
+					Boolean(message.text.trim())
+				) {
+					projectedIncomplete = message;
+					break;
+				}
+			}
+			if (projectedIncomplete) {
+				const skeletonIndex = nextMessages.findIndex(
+					(message) => message.id === runningAssistantId,
+				);
+				if (skeletonIndex >= 0) nextMessages.splice(skeletonIndex, 1);
+				this.activeAssistantMessageIds.set(agentId, projectedIncomplete.id);
+				const segment = this.thinkingSegmentByAgent.get(agentId);
+				if (segment && segment.assistantMessageId === runningAssistantId) {
+					segment.assistantMessageId = projectedIncomplete.id;
+					segment.id = `msg-thinking-${projectedIncomplete.id}`;
+				}
+			}
+		}
+		const runningTool = this.toolMessageIds.get(agentId);
+		if (runningTool) {
+			for (const [toolCallId, runningToolId] of runningTool) {
+				if (nextMessages.some((message) => message.id === runningToolId)) continue;
+				const projectedIndex = nextMessages.findIndex(
+					(message) =>
+						message.role === "tool" &&
+						(message.meta as Record<string, unknown> | undefined)?.toolCallId === toolCallId,
+				);
+				if (projectedIndex >= 0) {
+					runningTool.set(toolCallId, nextMessages[projectedIndex].id);
+				}
+			}
+		}
+	}
+
 	private upsertToolMessage(
 		agentId: string,
 		event: Record<string, any>,
@@ -4019,7 +4189,17 @@ export class AgentManager {
 		}
 
 		const list = this.messages.get(agentId) ?? [];
-		const existingToolIndex = list.findIndex((message) => message.id === messageId);
+		let existingToolIndex = list.findIndex((message) => message.id === messageId);
+		// 重载后事件迟到：运行期工具 id 已不在列表（被投影身份替换）。按 toolCallId
+		// （两通道同源）匹配既有工具消息，更新它并重定向身份，避免 append 双份。
+		if (existingToolIndex < 0) {
+			const rebindIndex = this.findSamePiMessageIndex(list, "tool", "", toolCallId);
+			if (rebindIndex >= 0) {
+				existingToolIndex = rebindIndex;
+				messageId = list[rebindIndex].id;
+				agentTools.set(toolCallId, messageId);
+			}
+		}
 		const existing = existingToolIndex >= 0 ? list[existingToolIndex] : undefined;
 		const isError = status === "error" || event.isError === true;
 		const args = event.args ?? existing?.meta?.args;
@@ -4153,7 +4333,9 @@ export class AgentManager {
 		if (existing) {
 			existing.text = text;
 			existing.timestamp = Date.now();
-			existing.meta = meta;
+			// 合并而非替换：重定向到投影版时保留其身份字段（entryId/_piDeckMsgSeq），
+			// 否则渲染层接缝去重与编辑/删除/重发定位会因 entryId 丢失而失效。
+			existing.meta = { ...(existing.meta ?? {}), ...meta };
 			this.markMessagesDirtyFrom(agentId, existingToolIndex);
 		} else {
 			list.push({

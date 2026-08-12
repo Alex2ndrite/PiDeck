@@ -27,8 +27,11 @@ import {
 } from "../atoms";
 import type { MessageScrollerScrollApi } from "../components/agents/message-scroller";
 
-/** 滚动接近顶部自动加载历史的阈值（px，2026-11 轮次模型）。 */
-const HISTORY_AUTO_LOAD_THRESHOLD = 240;
+/** 滚动接近顶部自动加载历史的阈值（px，2026-11 轮次模型）：
+ *  贴顶（≤8px）才触发翻页——「滑到底才翻」，避免在顶部附近任何滚动都连翻历史页。 */
+const HISTORY_AUTO_LOAD_THRESHOLD = 8;
+/** 翻页冷却（ms）：加载完成后立即再滚到顶不连翻，需停顿后重新触发（防惯性滚动连翻多页）。 */
+const HISTORY_AUTO_LOAD_COOLDOWN_MS = 300;
 
 let nextLoadSequence = 0;
 /** 会话加载请求序号（防迟到响应串台）。键按 sessionId 累积，LRU 裁剪防无界增长（2026-10）。 */
@@ -814,7 +817,8 @@ export function useSessionTimelineController(options: {
   // 监听器原挂在 SessionMessageTimeline，迁移到 controller（滚动策略单一 owner）：
   // 程序化滚动（prepend 补偿/贴底/恢复锚点/跳转）同样会派发 scroll 事件，
   // 若补偿后 scrollTop ≤ 阈值会连锁加载下一页；programmaticScrollRef 抑制此类事件，
-  // 只响应用户真实滚动（滚一次加载一页，停在顶部看内容不会连锁加载到底）。
+  // 只响应用户真实滚动（滚到顶才翻一页，停在顶部不动不连翻）。
+  const lastHistoryLoadAtRef = useRef(0);
   useEffect(() => {
     if (!controllerEnabled) return;
     const timeline = timelineRef.current;
@@ -827,6 +831,11 @@ export function useSessionTimelineController(options: {
       }
       if (!hasMore || isLoadingMessagePage) return;
       if (timeline.scrollTop > HISTORY_AUTO_LOAD_THRESHOLD) return;
+      // 冷却：prepend 补偿会推高 scrollTop，但惯性滚动仍可能停在顶部连续触发——
+      // 300ms 内只翻一页，保证「滑到顶 → 翻一页 → 看完再滑」的节奏。
+      const now = Date.now();
+      if (now - lastHistoryLoadAtRef.current < HISTORY_AUTO_LOAD_COOLDOWN_MS) return;
+      lastHistoryLoadAtRef.current = now;
       loadMoreMessages();
     };
     timeline.addEventListener("scroll", onScroll, { passive: true });
