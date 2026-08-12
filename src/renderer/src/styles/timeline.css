@@ -2776,7 +2776,9 @@ body.ask-dialog-open .ask-question-card.pending {
 }
 @keyframes timeline-content-enter {
   from {
-    opacity: 0;
+    /* 从 0 起步会在骨架屏卸载瞬间露出 160ms 全空白；半透明起步既保留淡入柔和感，
+       又让新旧画面无缝衔接（骨架屏 → 内容，无中间空白帧） */
+    opacity: 0.35;
   }
   to {
     opacity: 1;
