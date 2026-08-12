@@ -2297,6 +2297,14 @@ select:focus-visible {
 :root[data-bg-image="on"] .wechat-shell {
   background: transparent;
 }
+/* 壁纸模式项目栏文件夹图标底：project-avatar 默认是 muted/panel 混色灰块，
+   半透明注入后仍透不干净；透明化后只留 Folder 图标本色。
+   选中态（active）的 accent-soft 高亮靠更高特异性保留（不透明化），维持选中区分。
+   此处放 legacy 层（而非 utilities）：active 规则同层特异性更高能自然压过，
+   若放 utilities 会因层序（utilities > legacy）误杀 active 高亮。 */
+:root[data-bg-image="on"] .project-avatar {
+  background: transparent;
+}
 /* 壁纸模式输入区一体性：composer 区域不再叠半透明白（半透明白 + 白色遮罩 = 视觉纯白），
    直接透出背景图，与聊天区/侧栏一致。边框+阴影保留，卡片边界感仍在。
    特异性提到 3 类，压过 :root[data-theme="dark"] .composer-box 的 bg-muted 覆盖。 */
@@ -2354,6 +2362,19 @@ select:focus-visible {
   --color-bg-input: color-mix(in srgb, var(--wallpaper-base, var(--color-bg-app)) var(--wallpaper-dialog-alpha), transparent);
   --color-bg-popover: color-mix(in srgb, var(--wallpaper-base, var(--color-bg-app)) var(--wallpaper-dialog-alpha), transparent);
 }
+/* 壁纸模式 widget 弹层（todo/plan）跟随面板透明度：App.tsx 为所有浮层保留
+   92%+ 底色防止下拉内容透出误读；widget 弹层内容少、用户期望毛玻璃一体感，
+   单独降回页面面板档（与侧栏/抽屉同档），文字可读性由壁纸取色兜底。 */
+:root[data-bg-image="on"] .widget-popover {
+  --color-bg-popover: color-mix(in srgb, var(--wallpaper-base, var(--color-bg-app)) var(--wallpaper-panel-alpha, 30%), transparent);
+}
+/* 同类浮层降档：上下文详情（ctx-detail-tooltip）与消息复制菜单（copy-menu-popover）
+   同为内容少量、用户期望随壁纸透明的一体感浮层；默认 92% 底色在图片背景上
+   观感像磨砂灰白卡片。降回面板档后透出壁纸，与 widget-popover 同档。 */
+:root[data-bg-image="on"] .ctx-detail-tooltip,
+:root[data-bg-image="on"] .copy-menu-popover {
+  --color-bg-popover: color-mix(in srgb, var(--wallpaper-base, var(--color-bg-app)) var(--wallpaper-panel-alpha, 30%), transparent);
+}
 /* Pi 配置管理是工作台式弹框，header、layout、sidebar、main、content 全部覆盖
    通用 Dialog 的 90% 基线，最终共享同一个页面透明度。 */
 :root[data-bg-image="on"] [data-slot="dialog-content"].config-modal,
@@ -2363,6 +2384,13 @@ select:focus-visible {
 :root[data-bg-image="on"] [data-slot="dialog-content"].environment-dialog {
   /* 这些都是完整工作台弹框，header 与内容必须共享页面面板档透明度。 */
   --wallpaper-dialog-alpha: var(--wallpaper-panel-alpha, 30%);
+  /* 弹窗内卡片/列表项透明化：弹窗自身已有 panel-alpha 底色，内部元素若再叠一层
+     bg-panel/muted（同样 30%）会形成双层半透明白（≈51%），观感像磨砂灰白补丁。
+     默认态透明透出弹窗底色（单层）；hover/active/输入框保留底色提供交互反馈与边界。
+     --color-bg-subtle 经 @theme inline 映射到 --color-bg-muted，随之一同透明。 */
+  --color-bg-panel: transparent;
+  --color-card: transparent;
+  --color-bg-muted: transparent;
 }
 /* 草稿本是独立书写平面：壁纸模式下遮罩用与面板同档的半透明底色
    （面板本身 100% 不透明）。遮罩若用纯色会把背景图整个盖住，

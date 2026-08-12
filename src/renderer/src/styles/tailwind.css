@@ -231,3 +231,32 @@
   }
 }
 
+/* ── 壁纸模式 chrome 小块透明化（tab 栏/标题/抽屉 tab 栏/窗口控制条）──────────
+ * 这些连续纯色小块用 bg-background（/80）或 --color-bg-panel，叠在半透明面板
+ * （chat-pane/detail-drawer 同为 panelMix 白）上形成双层半透明白（≈47-51% 白），
+ * 比主区单层（30%）实一档，观感像磨砂灰白补丁；透明后透出底层单层，与主区同档。
+ * 必须放 utilities 层：session-tabs-bar 的 bg-background/80、chat-header/drawer-
+ * activity-rail 的 bg-background 都是 utility，legacy 层规则压不过（层序）。
+ * .window-controls 的 background 原在 legacy 层（foundation.css），此处一并收口。 */
+@layer utilities {
+  :root[data-bg-image="on"] .session-tabs-bar,
+  :root[data-bg-image="on"] .chat-header,
+  :root[data-bg-image="on"] .drawer-activity-rail,
+  :root[data-bg-image="on"] .window-controls {
+    background: transparent;
+  }
+}
+
+/* ── 壁纸模式内容层磨砂块透明化（第二波：输入框/用户气泡/工具卡片）──────────
+ * composer-box 用 bg-card、user-turn-bubble 用 bg-muted/60、tool-card 用
+ * bg-bg-panel（均为 utilities 层 utility），叠在 chat-pane 半透明白上形成双层白；
+ * 透明化后靠 border + shadow 保持卡片边界。同理必须放 utilities 层才能压过。
+ * 注意：user-turn-bubble 在 timeline.css（legacy）还有一套 accent-muted 混色背景，
+ * 因 utilities > legacy 本就只生效 bg-muted/60，此处一并收口为透明。 */
+@layer utilities {
+  :root[data-bg-image="on"] .composer-box,
+  :root[data-bg-image="on"] .user-turn-bubble,
+  :root[data-bg-image="on"] .tool-card {
+    background: transparent;
+  }
+}
