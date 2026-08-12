@@ -50,20 +50,10 @@ test("builds multiple fetched models and skips duplicates", () => {
 		[{ id: "already-added" }],
 	);
 
+	// 规格字段留空：真实值由「保存所选模型」时按内置规格表补全（硬编码默认值会误导且阻断补全）；
+	// 序列化后 undefined 键被剥除，期望对象不带 contextWindow/maxTokens/reasoning
 	assert.deepEqual(JSON.parse(JSON.stringify(models)), [
-		{
-			id: "gpt-4o",
-			name: "GPT 4o",
-			contextWindow: 1000000,
-			maxTokens: 128000,
-			reasoning: true,
-		},
-		{
-			id: "gpt-4o-mini",
-			name: "GPT 4o mini",
-			contextWindow: 1000000,
-			maxTokens: 128000,
-			reasoning: true,
-		},
+		{ id: "gpt-4o", name: "GPT 4o" },
+		{ id: "gpt-4o-mini", name: "GPT 4o mini" },
 	]);
 });

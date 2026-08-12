@@ -7,6 +7,10 @@ type FetchedModel = { id: string; name?: string };
  * 过滤规则：
  * - 只保留用户在弹层中勾选的模型（selectedModelIds）
  * - 排除 provider 中已存在的模型（existingModels），避免重复添加
+ *
+ * 规格字段（contextWindow/maxTokens/reasoning/input）一律留空：
+ * 历史上硬编码 1M/128K 默认值，对大多数模型是错的，且「只填空字段」的补全规则
+ * 永远不会覆盖非空值——真实规格由保存所选模型时的内置规格表补全（ModelsTab）。
  */
 export function buildModelsFromFetchedSelection(
 	fetchedModels: FetchedModel[],
@@ -20,8 +24,9 @@ export function buildModelsFromFetchedSelection(
 		.map((model) => ({
 			id: model.id,
 			name: model.name ?? model.id,
-			contextWindow: 1000000,
-			maxTokens: 128000,
-			reasoning: true,
+			// 规格字段留空，等内置规格表补全（见文件头注释）
+			contextWindow: undefined,
+			maxTokens: undefined,
+			reasoning: undefined,
 		}));
 }

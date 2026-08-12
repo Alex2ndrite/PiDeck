@@ -914,21 +914,43 @@ export function ModelsTab(props: {
 												/>
 												<div className="flex justify-end border-t border-border-subtle pt-2">
 													<Button variant="default" size="sm"
-														onClick={() => {
+														onClick={async () => {
 														const currentProvider = data.providers[name];
 														if (!currentProvider) return;
 														const selectedIds = selectedFetchedModelIds[name] ?? [];
-														const newModels = buildModelsFromFetchedSelection(
+														// 选中模型只带 id/name，规格字段为空；保存的同一时刻按内置规格表补全，
+														// 避免硬编码默认值误导（且非空值会被「只填空字段」规则永久跳过）
+														const baseModels = buildModelsFromFetchedSelection(
 															props.fetchedModels[name],
 															selectedIds,
 															currentProvider.models,
 														);
-														if (newModels.length === 0) return;
+														if (baseModels.length === 0) return;
+														// 并行查规格表（本地 sql.js 内存索引）；查不到的模型留空字段，不阻断保存
+														const results = await Promise.all(
+															baseModels.map((m) =>
+																desktopApi.projects.getModelSpec(name, m.id).catch(() => null),
+															),
+														);
+														let filledCount = 0;
+														const newModels = baseModels.map((m, i) => {
+															const spec = results[i];
+															if (!spec) return m;
+															const updates = computeModelSpecPatches(m, spec);
+															if (updates.length === 0) return m;
+															filledCount++;
+															const next = { ...m };
+															for (const [field, value] of updates) next[field] = value;
+															return next;
+														});
 														props.onChangeProvider(name, "models", [
-															...currentProvider.models,
-															...newModels,
-														]);
+																...currentProvider.models,
+																...newModels,
+															]);
 														setSelectedFetchedModels(name, []);
+															if (filledCount > 0) {
+																showNotice(t("config.modelsSavedWithSpecs", { count: filledCount }), 3000);
+															}
 													}}
 													disabled={(selectedFetchedModelIds[name] ?? []).length === 0}
 												>
