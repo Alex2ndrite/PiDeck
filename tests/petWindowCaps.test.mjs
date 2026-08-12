@@ -25,6 +25,7 @@ function loadModule(mockProcess = {}) {
 			this.listeners = new Map();
 			this.webContents = {
 				on: () => undefined,
+				once: () => undefined,
 				session: { webRequest: { onHeadersReceived: () => undefined } },
 			};
 			MockBrowserWindow.last = this;
@@ -99,6 +100,10 @@ function loadModule(mockProcess = {}) {
 					readFile: async () => { throw new Error("no position file"); },
 					writeFile: async (_path, content) => { fsWrites.push(String(content)); },
 				};
+			}
+			// PetWindow 的诊断日志（2026-08 新增）走 appLogger，测试环境静默
+			if (id.endsWith("logging/sharedLogger")) {
+				return { getAppLogger: () => null };
 			}
 			return require(id);
 		},

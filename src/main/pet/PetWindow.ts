@@ -14,6 +14,7 @@ import {
 } from "../../shared/petNotificationLayout";
 import { preparePreloadPath } from "../preloadPath";
 import { readElectronChromiumSandboxPreference } from "../settings/SettingsStore";
+import { getAppLogger } from "../logging/sharedLogger";
 
 /** 三端宠物窗能力探测；Linux 只有明确 X11 时启用透明与绝对定位。 */
 export function detectPetWindowCaps(): PetWindowCaps {
@@ -139,12 +140,33 @@ export class PetWindow {
 			},
 		});
 		this.win.webContents.on("preload-error", (_event, failedPreloadPath, error) => {
-			console.warn("[PetWindow] preload failed", {
+			const detail = {
 				preloadPath: failedPreloadPath,
 				sourcePreloadPath,
 				message: error.message,
-				stack: error.stack,
+			};
+			// 全透明窗口是宠物「开了没显示」的最隐蔽形态：preload/加载/渲染任意一环失败
+			// 都表现为透明窗口，必须全部落日志（2026-08 排查教训：pet 窗口曾是日志盲区）
+			console.warn("[PetWindow] preload failed", detail);
+			getAppLogger()?.error("pet", "Pet window preload failed", detail);
+		});
+
+		// 渲染层诊断：pet.html/资源加载失败、渲染进程崩溃、页面 console 错误，全部进 app 日志
+		this.win.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedURL) => {
+			getAppLogger()?.error("pet", "Pet window load failed", { errorCode, errorDescription, url: validatedURL });
+		});
+		this.win.webContents.on("render-process-gone", (_event, details) => {
+			getAppLogger()?.error("pet", "Pet renderer process gone", { reason: details.reason, exitCode: details.exitCode });
+		});
+		this.win.webContents.on("console-message", (event) => {
+			if (!["warning", "error"].includes(event.level)) return;
+			getAppLogger()?.warn("pet", `Pet renderer ${event.level}: ${event.message}`, {
+				line: event.lineNumber,
+				sourceId: event.sourceId,
 			});
+		});
+		this.win.webContents.once("did-finish-load", () => {
+			getAppLogger()?.info("pet", "Pet window loaded", { url: this.win!.webContents.getURL() });
 		});
 
 		this.win.setAlwaysOnTop(true, "floating");

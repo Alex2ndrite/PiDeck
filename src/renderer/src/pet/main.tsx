@@ -38,12 +38,20 @@ function PetApp() {
 
 	useEffect(() => {
 		let cancelled = false;
+		// 无论 manifest 是否为 null、加载是否失败都置 ready：
+		// 否则窗口永久全透明且拦截鼠标（「开了没显示」的最隐蔽形态，2026-08 反馈）。
+		// sprite 为 null 时 PetOverlay 走 FallbackCanvas emoji 兜底，至少有可见内容。
 		const load = async (m: PetManifest | null) => {
-			if (!m || cancelled) return;
-			try { setSprite(await loadSpriteSheet(m)); } catch { setSprite(null); }
+			if (cancelled) return;
+			if (m) {
+				try { setSprite(await loadSpriteSheet(m)); } catch { setSprite(null); }
+			}
 			setReady(true);
 		};
-		void window.piDesktop.pet.getCurrent().then(load);
+		void window.piDesktop.pet.getCurrent().then(load).catch(() => {
+			// IPC 异常（如主进程 handler 缺失）也不得留下透明窗口：兜底渲染
+			if (!cancelled) setReady(true);
+		});
 		const cleanups = [
 			window.piDesktop.pet.onSprite(load),
 			window.piDesktop.pet.onState(setState),
