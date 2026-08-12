@@ -151,4 +151,4 @@ export type ThinkingUpdate = {
 };
 
 /** 输入框发送模式，决定消息直接执行还是以只读方式触发生成计划。 */
-export type ComposerAgentMode = "normal" | "plan";
+export type ComposerAgentMode = "normal" | "plan" | "imagegen";

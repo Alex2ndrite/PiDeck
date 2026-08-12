@@ -230,6 +230,8 @@ import { registerTerminalIpc } from "./ipc/terminalIpc";
 import { registerScratchPadIpc } from "./ipc/scratchPadIpc";
 import { registerSecurityIpc } from "./ipc/securityIpc";
 import { registerVisionIpc } from "./ipc/visionIpc";
+import { registerImageGenIpc, resolveProviderCredentials } from "./ipc/imagegenIpc";
+import { ImageGenService } from "./imagegen/ImageGenService";
 import { VisionBridgeConfigManager } from "./settings/visionBridgeConfig";
 import { registerSessionIpc, scheduleCatalogBackgroundScan } from "./ipc/sessionIpc";
 import { registerSystemIpc } from "./ipc/systemIpc";
@@ -2220,6 +2222,16 @@ function registerIpc() {
 	registerVisionIpc({
 		visionBridge: new VisionBridgeConfigManager(configManager),
 		log: (message, ...args) => appLogger.info("vision", message, ...args),
+	});
+
+	// 生图：复用 pi 已配置的模型供应商（models.json/auth.json），结果回 composer 附件栏
+	registerImageGenIpc({
+		imageGen: new ImageGenService({
+			getProviderCredentials: (provider) => resolveProviderCredentials(configManager, provider),
+			log: (message, ...args) => appLogger.info("imagegen", message, ...args),
+		}),
+		configManager,
+		log: (message, ...args) => appLogger.info("imagegen", message, ...args),
 	});
 
 	registerSessionIpc({

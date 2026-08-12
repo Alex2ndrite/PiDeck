@@ -8,6 +8,7 @@ import {
 	FileText,
 	FoldVertical,
 	GitBranch,
+	ImageIcon,
 	ListChecks,
 	Paperclip,
 	Star,
@@ -189,9 +190,12 @@ export function ComposerBottomBar(props: {
 		})
 		: undefined;
 	const isPlanMode = props.composerAgentMode === "plan";
+	const isImageGenMode = props.composerAgentMode === "imagegen";
 	const modeLabel = isPlanMode
 		? t("app.composerModePlan")
-		: t("app.composerModeNormal");
+		: isImageGenMode
+			? t("app.composerModeImagegen")
+			: t("app.composerModeNormal");
 	const modelProvider = props.state?.provider ?? props.record?.model?.provider;
 	const modelName = props.state?.modelName ?? props.record?.model?.modelId;
 	const modelLabel = modelName
@@ -214,6 +218,8 @@ export function ComposerBottomBar(props: {
 					>
 						{isPlanMode ? (
 							<ListChecks size={15} strokeWidth={2} aria-hidden="true" />
+						) : isImageGenMode ? (
+							<ImageIcon size={15} strokeWidth={2} aria-hidden="true" />
 						) : (
 							<Wrench size={15} strokeWidth={2} aria-hidden="true" />
 						)}
@@ -221,7 +227,7 @@ export function ComposerBottomBar(props: {
 						    普通模式另用小一号字号 + 斜体做弱化艺术字。 */}
 						<span
 							className={cn(
-								isPlanMode
+								isPlanMode || isImageGenMode
 									? "text-control font-normal"
 									: "text-micro italic font-normal text-muted-foreground",
 							)}
@@ -530,6 +536,11 @@ export function ComposerModePicker(props: {
 			labelKey: "app.composerModePlan" as const,
 			descriptionKey: "app.composerModePlanDesc" as const,
 		}] : []),
+		{
+			value: "imagegen" as const,
+			labelKey: "app.composerModeImagegen" as const,
+			descriptionKey: "app.composerModeImagegenDesc" as const,
+		},
 	];
 
 	return (
@@ -550,7 +561,7 @@ export function ComposerModePicker(props: {
 						className="min-h-9 items-center gap-2 rounded-md px-2.5 py-1"
 					>
 						<span className={`grid size-6 shrink-0 place-items-center rounded-md ${selected ? "bg-primary/12 text-primary" : "bg-muted text-muted-foreground"}`}>
-							{item.value === "plan" ? <ListChecks size={14} aria-hidden="true" /> : <Wrench size={14} aria-hidden="true" />}
+							{item.value === "plan" ? <ListChecks size={14} aria-hidden="true" /> : item.value === "imagegen" ? <ImageIcon size={14} aria-hidden="true" /> : <Wrench size={14} aria-hidden="true" />}
 						</span>
 						{/* 弹窗项文案：普通/计划模式均不加粗，plan 用图标/选中态作为区分。 */}
 						<span className="min-w-0 flex-1 truncate text-control font-normal text-foreground" title={t(item.descriptionKey)}>{t(item.labelKey)}</span>

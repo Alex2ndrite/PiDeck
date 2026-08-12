@@ -328,6 +328,7 @@ export const ComposerArea = forwardRef<HTMLElement, ComposerAreaProps>(function 
                     isAgentBusy={composer.isBusy}
                     isAgentStarting={composer.isStarting}
                     canSend={composer.delivery.canSend}
+                    isGeneratingImage={composer.delivery.generatingImage}
                     onSend={composer.delivery.send}
                     onSendFollowUp={composer.delivery.followUp}
                     onSendAsk={() => void handleAskSend()}

@@ -1001,6 +1001,9 @@ export function createPreviewApi(): PiDesktopApi {
 			export: async () => false,
 		},
 
-
+		// 生图预览桩：预览模式不联网，直接返回未配置
+		imagegen: {
+			generate: async (_request) => ({ ok: false, error: "notConfigured" }),
+		},
 	};
 }

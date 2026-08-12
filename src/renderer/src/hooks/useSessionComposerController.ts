@@ -285,6 +285,8 @@ export function useSessionComposerController(
   const [busyDraftLocked, setBusyDraftLocked] = useState(false);
   const [sendBehaviorMenuOpen, setSendBehaviorMenuOpen] = useState(false);
   const [previewImage, setPreviewImage] = useState<ImageContent | null>(null);
+  // 生图进行中：置 true 时发送按钮禁用（避免并发多次生图），完成后图片进附件栏
+  const [generatingImage, setGeneratingImage] = useState(false);
   const [picker, setPicker] = useState<ComposerPickerKind | null>(null);
   const [commands, setCommands] = useState<PiCommand[]>([]);
   const [files, setFiles] = useState<FileTreeNode[]>([]);
@@ -318,7 +320,7 @@ export function useSessionComposerController(
     setAttachmentsAtom({ sessionId, value });
   }, [sessionId, setAttachmentsAtom]);
 
-  const setMode = useCallback((nextMode: "normal" | "plan") => {
+  const setMode = useCallback((nextMode: "normal" | "plan" | "imagegen") => {
     setModeAtom({ sessionId, mode: nextMode });
   }, [sessionId, setModeAtom]);
 
@@ -600,15 +602,51 @@ export function useSessionComposerController(
     enqueue,
   });
 
+  // 生图：复用当前会话选中的模型（record.model 来自模型页/模型下拉），
+  // 结果直接进附件栏（随消息发给 pi 看图）；不调用 send（无运行中 Agent 也能用）。
+  const generateImage = useCallback(async () => {
+    const prompt = draft.trim();
+    if (!prompt || generatingImage) return;
+    const model = record?.model;
+    if (!model?.provider || !model?.modelId) {
+      showNotice(t("imagegen.error.notConfigured"), 5000);
+      return;
+    }
+    setGeneratingImage(true);
+    try {
+      const result = await desktopApi.imagegen.generate({
+        provider: model.provider,
+        model: model.modelId,
+        prompt,
+      });
+      if (result.ok) {
+        setAttachments((current) => [...current, result.image]);
+        setDraft("");
+        showNotice(t("imagegen.done"), 4000);
+      } else {
+        showNotice(mapImageGenError(result.error, result.detail), 5000);
+      }
+    } catch {
+      showNotice(t("imagegen.error.network"), 5000);
+    } finally {
+      setGeneratingImage(false);
+    }
+  }, [draft, generatingImage, record, setAttachments, setDraft]);
+
   // 统一发送入口：先晋升预览 Tab 再投递（幂等，非预览无副作用）。
   // 发送按钮 / 追问按钮 / Enter 键 / 无 Agent 时的 /compact 直发都会走这里，
   // 避免新增发送路径时漏掉 promote 导致预览 Tab 不常驻（曾因此回归）。
+  // 生图模式：所有发送入口统一转生图（不晋升预览 Tab、不发消息），避免各入口分支不一致。
   const promoteAndSend = useCallback(
     (behavior?: "steer" | "followUp") => {
+      if (mode === "imagegen") {
+        void generateImage();
+        return;
+      }
       options.onPromoteSession?.(sessionId);
       return send(behavior);
     },
-    [options.onPromoteSession, send, sessionId],
+    [mode, generateImage, options.onPromoteSession, send, sessionId],
   );
 
   const selectSuggestion = useCallback((value: string) => {
@@ -1097,6 +1135,7 @@ export function useSessionComposerController(
     },
     images: {
       preview: setPreviewImage,
+      add: (image: ImageContent) => setAttachments((current) => [...current, image]),
       remove: (index: number) => setAttachments((current) => current.filter((_, item) => item !== index)),
       clear: () => setAttachments([]),
     },
@@ -1113,7 +1152,8 @@ export function useSessionComposerController(
       unknown: sendState.status === "unknown",
       unknownError: sendState.error,
       acknowledgeUnknown: acknowledgeUnknownDelivery,
-      canSend: hasContent && !isStarting,
+      canSend: hasContent && !isStarting && !generatingImage,
+      generatingImage,
       sendBehaviorMenuOpen,
       toggleSendBehaviorMenu: () => setSendBehaviorMenuOpen((open) => !open),
       keepSendBehaviorMenuOpen,
@@ -1147,3 +1187,21 @@ export function useSessionComposerController(
 }
 
 export type SessionComposerController = ReturnType<typeof useSessionComposerController>;
+
+/** 生图错误码 → 用户可见文案（http 附 status detail）。文案经 i18n，避免跨层硬编码。 */
+function mapImageGenError(error: string, detail?: string): string {
+  switch (error) {
+    case "notConfigured":
+      return t("imagegen.error.notConfigured");
+    case "invalidKey":
+      return t("imagegen.error.invalidKey");
+    case "badBaseUrl":
+      return t("imagegen.error.badBaseUrl");
+    case "empty":
+      return t("imagegen.error.empty");
+    case "http":
+      return t("imagegen.error.http", { detail: detail ?? "" });
+    default:
+      return t("imagegen.error.network");
+  }
+}

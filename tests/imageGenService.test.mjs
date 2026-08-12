@@ -1,0 +1,229 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import test from "node:test";
+import vm from "node:vm";
+
+/**
+ * ImageGenService 单测：验证供应商凭据校验、请求体、错误码映射、b64_json/url 回退。
+ * 用 vm 沙箱加载 transpile 后的 TS 类（模块仅 type import，无运行时依赖）；
+ * fetch/AbortSignal/Buffer 显式注入沙箱（vm 上下文隔离宿主全局）。
+ */
+
+const source = readFileSync("src/main/imagegen/ImageGenService.ts", "utf8");
+
+/** 用 TypeScript transpile 剥掉类型与参数属性语法，得到纯 JS 类定义 */
+function transpile(ts) {
+	const { ts: tsApi } = loadTypescript();
+	const out = tsApi.transpileModule(ts, {
+		compilerOptions: { module: tsApi.ModuleKind.CommonJS, target: tsApi.ScriptTarget.ES2022 },
+		fileName: "ImageGenService.ts",
+	});
+	return out.outputText;
+}
+
+function loadTypescript() {
+	// 项目依赖 typescript（ESM 测试里用 createRequire 解析）
+	const require = createRequire(import.meta.url);
+	return { ts: require("typescript") };
+}
+
+/** 当前测试的 fetch stub（vm 沙箱经引用间接调用，隔离宿主全局） */
+let fetchStubRef = null;
+
+/** 加载 ImageGenService 类（模块只有 type import，transpile 后无 require 依赖） */
+function loadServiceClass() {
+	const sandbox = {
+		exports: {},
+		Buffer,
+		AbortSignal,
+		// vm 上下文看不到宿主全局，fetch 必须显式注入；经可变引用转发到当前测试的 stub
+		fetch: (input, init) => fetchStubRef(input, init),
+	};
+	vm.runInNewContext(transpile(source), sandbox, { filename: "ImageGenService.ts" });
+	return sandbox.exports.ImageGenService;
+}
+
+/** 构造服务实例：fetchStub 为 (input, init?) => Response 替身 */
+function createService({ credentials, fetchStub, log = () => {} }) {
+	fetchStubRef = fetchStub;
+	const ImageGenService = loadServiceClass();
+	const service = new ImageGenService({
+		getProviderCredentials: async () => credentials,
+		log,
+	});
+	return {
+		service,
+		restore() {
+			fetchStubRef = null;
+		},
+	};
+}
+
+/** 极简 Response 替身（只实现 service 用到的字段） */
+function fakeResponse({ ok, status = 200, json, arrayBuffer, headers = new Map() }) {
+	return {
+		ok,
+		status,
+		json: json ?? (async () => ({})),
+		arrayBuffer: arrayBuffer ?? (async () => new Uint8Array(0)),
+		headers: { get: (name) => headers.get(name) ?? null },
+	};
+}
+
+const CREDENTIALS = { baseUrl: "https://api.example.com/v1", apiKey: "sk-test" };
+
+test("notConfigured：凭据缺失时不发网络请求", async () => {
+	let called = false;
+	const { service, restore } = createService({
+		credentials: null,
+		fetchStub: () => {
+			called = true;
+			return fakeResponse({ ok: true, json: async () => ({ data: [] }) });
+		},
+	});
+	const result = await service.generate({ provider: "p", model: "m", prompt: "x" });
+	assert.equal(result.ok, false);
+	assert.equal(result.error, "notConfigured");
+	assert.equal(called, false);
+	restore();
+});
+
+test("请求体与请求头正确（b64_json 优先，Bearer 认证）", async () => {
+	let captured;
+	const { service, restore } = createService({
+		credentials: CREDENTIALS,
+		fetchStub: (input, init) => {
+			captured = { input, init };
+			return fakeResponse({ ok: true, json: async () => ({ data: [{ b64_json: "QUJD" }] }) });
+		},
+	});
+	const result = await service.generate({ provider: "p", model: "gpt-image-1", prompt: "一只猫" });
+	assert.equal(result.ok, true);
+	assert.equal(result.image.data, "QUJD");
+	assert.equal(captured.input, "https://api.example.com/v1/images/generations");
+	assert.equal(captured.init.method, "POST");
+	assert.equal(captured.init.headers.Authorization, "Bearer sk-test");
+	const body = JSON.parse(captured.init.body);
+	assert.equal(body.model, "gpt-image-1");
+	assert.equal(body.prompt, "一只猫");
+	assert.equal(body.response_format, "b64_json");
+	assert.equal(body.n, 1);
+	restore();
+});
+
+test("401/403 → invalidKey", async () => {
+	const { service, restore } = createService({
+		credentials: CREDENTIALS,
+		fetchStub: () => fakeResponse({ ok: false, status: 401 }),
+	});
+	const result = await service.generate({ provider: "p", model: "m", prompt: "x" });
+	assert.equal(result.error, "invalidKey");
+	restore();
+});
+
+test("404/405 → badBaseUrl", async () => {
+	for (const status of [404, 405]) {
+		const { service, restore } = createService({
+			credentials: CREDENTIALS,
+			fetchStub: () => fakeResponse({ ok: false, status }),
+		});
+		const result = await service.generate({ provider: "p", model: "m", prompt: "x" });
+		assert.equal(result.error, "badBaseUrl");
+		restore();
+	}
+});
+
+test("其他非 2xx → http（detail 带状态码）", async () => {
+	const { service, restore } = createService({
+		credentials: CREDENTIALS,
+		fetchStub: () => fakeResponse({ ok: false, status: 500 }),
+	});
+	const result = await service.generate({ provider: "p", model: "m", prompt: "x" });
+	assert.equal(result.error, "http");
+	assert.equal(result.detail, "500");
+	restore();
+});
+
+test("b64_json 优先返回 base64 图片", async () => {
+	const { service, restore } = createService({
+		credentials: CREDENTIALS,
+		fetchStub: () => fakeResponse({
+			ok: true,
+			json: async () => ({ data: [{ b64_json: "iVBORw0KGgo=", url: "https://x/y.png" }] }),
+		}),
+	});
+	const result = await service.generate({ provider: "p", model: "m", prompt: "x" });
+	assert.equal(result.image.type, "image");
+	assert.equal(result.image.data, "iVBORw0KGgo=");
+	assert.equal(result.image.mimeType, "image/png");
+	restore();
+});
+
+test("仅 url 时回退下载并转 base64", async () => {
+	const { service, restore } = createService({
+		credentials: CREDENTIALS,
+		fetchStub: (input) => {
+			// 第一次调用是生成接口，第二次是图片下载
+			if (String(input).endsWith("/images/generations")) {
+				return fakeResponse({ ok: true, json: async () => ({ data: [{ url: "https://x/img.png" }] }) });
+			}
+			return fakeResponse({
+				ok: true,
+				arrayBuffer: async () => new TextEncoder().encode("PNGDATA").buffer,
+				headers: new Map([["content-type", "image/png"]]),
+			});
+		},
+	});
+	const result = await service.generate({ provider: "p", model: "m", prompt: "x" });
+	assert.equal(result.ok, true);
+	assert.equal(result.image.data, Buffer.from("PNGDATA").toString("base64"));
+	assert.equal(result.image.mimeType, "image/png");
+	restore();
+});
+
+test("响应无图片数据 → empty", async () => {
+	const { service, restore } = createService({
+		credentials: CREDENTIALS,
+		fetchStub: () => fakeResponse({ ok: true, json: async () => ({ data: [] }) }),
+	});
+	const result = await service.generate({ provider: "p", model: "m", prompt: "x" });
+	assert.equal(result.error, "empty");
+	restore();
+});
+
+test("网络异常 → network（不泄露敏感信息）", async () => {
+	const { service, restore } = createService({
+		credentials: CREDENTIALS,
+		fetchStub: () => {
+			throw new Error("ECONNREFUSED 127.0.0.1:7890");
+		},
+	});
+	const result = await service.generate({ provider: "p", model: "m", prompt: "x" });
+	assert.equal(result.ok, false);
+	assert.equal(result.error, "network");
+	restore();
+});
+
+test("normalizeImagesUrl：无 /v1 时补全，尾斜杠归一", async () => {
+	// 通过请求体断言端点归一化结果（正常化逻辑在 service 内部）
+	const cases = [
+		["https://api.example.com/v1", "https://api.example.com/v1/images/generations"],
+		["https://api.example.com/v1/", "https://api.example.com/v1/images/generations"],
+		["https://api.example.com", "https://api.example.com/v1/images/generations"],
+		["https://api.example.com/", "https://api.example.com/v1/images/generations"],
+	];
+	for (const [baseUrl, expected] of cases) {
+		let captured;
+		const { service, restore } = createService({
+			credentials: { baseUrl, apiKey: "k" },
+			fetchStub: (input) => {
+				captured = String(input);
+				return fakeResponse({ ok: true, json: async () => ({ data: [{ b64_json: "QQ==" }] }) });
+			},
+		});
+		await service.generate({ provider: "p", model: "m", prompt: "x" });
+		assert.equal(captured, expected);
+		restore();
+	}
+});
