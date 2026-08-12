@@ -38,9 +38,11 @@ export type ProcessMetricsSnapshot = {
 	electron: ElectronProcessMetric[];
 	/** 正在运行的 pi agent 子进程 */
 	agents: AgentProcessMetric[];
-	/** Electron 各进程 workingSetSize 之和（字节） */
+	/** Electron 各进程内存之和（字节）；口径 = 专用工作集优先（privateBytes>0 时），
+	 *  Browser 进程 privateBytes 为 0 回退 workingSetSize。
+	 *  专用口径避免共享页在多进程合计时重复计数（比任务管理器"内存"列大 1.5-2 倍的老问题）。 */
 	totalElectronBytes: number;
-	/** pi agents 已采样内存之和（字节，失败项不计） */
+	/** pi agents 已采样内存之和（字节，失败项不计；Windows 为专用内存，其余平台 RSS） */
 	totalAgentBytes: number;
 	/** 快照采样时间戳（ms） */
 	sampledAt: number;

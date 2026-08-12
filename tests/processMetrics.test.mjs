@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import { parsePsRssKb, parseTasklistMemoryKb } from "../src/main/process/pidMemoryParsers.ts";
+import { parsePrivateMemoryBytes, parsePsRssKb, parseTasklistMemoryKb } from "../src/main/process/pidMemoryParsers.ts";
 import { formatBytes, formatMb } from "../src/shared/formatBytes.ts";
 
 // ===== 纯函数：tasklist CSV / ps rss 解析 =====
@@ -38,6 +38,24 @@ test("parsePsRssKb: rejects empty/non-numeric output", () => {
 	assert.equal(parsePsRssKb("-5"), null);
 });
 
+// ===== 纯函数：PowerShell PrivateMemorySize64 解析 =====
+
+test("parsePrivateMemoryBytes: standard PS output (bytes)", () => {
+	assert.equal(parsePrivateMemoryBytes("123456789\r\n"), 123456789);
+	assert.equal(parsePrivateMemoryBytes("0\n"), 0);
+});
+
+test("parsePrivateMemoryBytes: strips BOM/whitespace/thousands separators", () => {
+	assert.equal(parsePrivateMemoryBytes("\uFEFF  123,456,789 \r\n"), 123456789);
+});
+
+test("parsePrivateMemoryBytes: rejects empty/non-numeric output", () => {
+	assert.equal(parsePrivateMemoryBytes(""), null);
+	assert.equal(parsePrivateMemoryBytes("\uFEFF \r\n"), null);
+	assert.equal(parsePrivateMemoryBytes("N/A"), null);
+	assert.equal(parsePrivateMemoryBytes("-5"), null);
+});
+
 test("formatBytes: human readable units", () => {
 	assert.equal(formatBytes(0), "0 B");
 	assert.equal(formatBytes(512), "512 B");
@@ -63,8 +81,9 @@ test("ProcessMonitor uses array-form system commands with timeout", () => {
 	const source = readFileSync("src/main/process/ProcessMonitor.ts", "utf8");
 	// 安全规范：命令必须数组参数，禁止字符串拼接 shell
 	assert.match(source, /spawn\(args\[0\], args\.slice\(1\)/);
-	// Windows tasklist 与 ps 的固定参数数组
-	assert.match(source, /\[\"tasklist\", \"\/FI\", `PID eq \$\{pid\}`, \"\/FO\", \"CSV\", \"\/NH\"\]/);
+	// Windows 用 PowerShell PrivateMemorySize64（专用内存口径，同任务管理器），
+	// Linux/macOS 用 ps -o rss；固定参数数组
+	assert.match(source, /\"powershell\"[\s\S]*PrivateMemorySize64/);
 	assert.match(source, /\[\"ps\", \"-o\", \"rss=\", \"-p\", String\(pid\)\]/);
 	// 超时兜底：采样挂死不阻塞 IPC（超时常量作为 runCollect 第二参数传入）
 	assert.match(source, /timeout: timeoutMs/);
@@ -163,7 +182,9 @@ test("ProcessMetricsTab wires table columns and refresh", () => {
 	const source = readFileSync("src/renderer/src/components/app/settings/ProcessMetricsTab.tsx", "utf8");
 	assert.match(source, /window\.piDesktop\.system\.getProcessMetrics\(\)/);
 	assert.match(source, /processTypeLabel\(metric\.type\)/);
-	assert.match(source, /formatMb\(metric\.memoryBytes\)/);
+	// 行显示与总量同口径：专用内存优先（privateBytes>0），Browser 进程回退工作集
+	assert.match(source, /\(metric\.privateBytes \?\? 0\) > 0 \? metric\.privateBytes : metric\.memoryBytes/);
+	assert.match(source, /formatMb\(displayBytes\)/);
 	assert.match(source, /formatMb\(electronTotal\)/);
 	assert.match(source, /formatMb\(agentTotal\)/);
 	assert.match(source, /t\("config\.process\.refresh"\)/);
@@ -190,6 +211,7 @@ test("process monitor i18n keys exist in zh-CN and en-US", () => {
 		"settings.tabs.process",
 		"config.process.refresh",
 		"config.process.electronTotal",
+		"config.process.privateFootprint",
 		"config.process.agentCount",
 		"config.process.agentTotal",
 		"config.process.sampledAt",

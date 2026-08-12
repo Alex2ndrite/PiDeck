@@ -109,6 +109,7 @@ export function ProcessMetricsTab() {
             <div className="rounded-lg border border-border-subtle bg-bg-panel p-3">
               <div className="text-micro text-muted-foreground">{t("config.process.electronTotal")}</div>
               <div className="mt-1 text-base font-semibold text-foreground">{formatMb(electronTotal)}</div>
+              <div className="text-micro text-muted-foreground">{t("config.process.privateFootprint")}</div>
             </div>
             <div className="rounded-lg border border-border-subtle bg-bg-panel p-3">
               <div className="text-micro text-muted-foreground">{t("config.process.agentCount")}</div>
@@ -138,18 +139,23 @@ export function ProcessMetricsTab() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {snapshot.electron.map((metric: ElectronProcessMetric) => (
-                  <TableRow key={metric.pid}>
-                    <TableCell className="font-medium">{processTypeLabel(metric.type)}</TableCell>
-                    <TableCell className="font-mono text-text-secondary">{metric.pid}</TableCell>
-                    <TableCell className="font-mono text-text-secondary">
-                      {metric.memoryBytes == null ? "-" : formatMb(metric.memoryBytes)}
-                    </TableCell>
-                    <TableCell className="font-mono text-text-secondary">
-                      {metric.cpuPercent == null ? "-" : `${metric.cpuPercent.toFixed(1)}%`}
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {snapshot.electron.map((metric: ElectronProcessMetric) => {
+                  // 行显示也用专用内存优先（对齐总量口径；Browser 进程 privateBytes 为 0 时回退工作集）
+                  const displayBytes =
+                    (metric.privateBytes ?? 0) > 0 ? metric.privateBytes : metric.memoryBytes;
+                  return (
+                    <TableRow key={metric.pid}>
+                      <TableCell className="font-medium">{processTypeLabel(metric.type)}</TableCell>
+                      <TableCell className="font-mono text-text-secondary">{metric.pid}</TableCell>
+                      <TableCell className="font-mono text-text-secondary">
+                        {displayBytes == null ? "-" : formatMb(displayBytes)}
+                      </TableCell>
+                      <TableCell className="font-mono text-text-secondary">
+                        {metric.cpuPercent == null ? "-" : `${metric.cpuPercent.toFixed(1)}%`}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </div>

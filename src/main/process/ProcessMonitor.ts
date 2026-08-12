@@ -10,7 +10,7 @@
  */
 import { app } from "electron";
 import { spawn } from "node:child_process";
-import { parsePsRssKb, parseTasklistMemoryKb } from "./pidMemoryParsers";
+import { parsePrivateMemoryBytes, parsePsRssKb, parseTasklistMemoryKb } from "./pidMemoryParsers";
 import type {
   AgentProcessMetric,
   ElectronProcessMetric,
@@ -49,19 +49,28 @@ function runCollect(args: string[], timeoutMs: number): Promise<string> {
 
 export { formatBytes } from "../../shared/formatBytes";
 
-/** 按 pid 采样单个进程常驻内存（字节）；失败返回 undefined。 */
+/** 按 pid 采样单个进程专用内存（字节）；失败返回 undefined。
+ * 口径对齐任务管理器"内存"列（专用工作集，不含共享页）：
+ * - Windows：PowerShell PrivateMemorySize64（tasklist 的 Mem Usage 是工作集，含共享页，
+ *   多进程合计会把共享页重复计数——之前"内置监控 700MB vs 任务管理器 400MB"的根因）
+ * - Linux/macOS：ps -o rss（无专用/共享分离，接受 RSS 口径） */
 export async function sampleProcessMemoryBytes(
   pid: number,
 ): Promise<number | undefined> {
   try {
     if (process.platform === "win32") {
       const out = await runCollect(
-        ["tasklist", "/FI", `PID eq ${pid}`, "/FO", "CSV", "/NH"],
+        [
+          "powershell",
+          "-NoProfile",
+          "-NonInteractive",
+          "-Command",
+          `(Get-Process -Id ${pid} -ErrorAction SilentlyContinue).PrivateMemorySize64`,
+        ],
         TASKLIST_TIMEOUT_MS,
       );
-      const line = out.split(/\r?\n/).find((l) => l.trim() !== "");
-      const kb = line ? parseTasklistMemoryKb(line) : null;
-      return kb == null ? undefined : kb * 1024;
+      const bytes = parsePrivateMemoryBytes(out);
+      return bytes ?? undefined;
     }
     const out = await runCollect(
       ["ps", "-o", "rss=", "-p", String(pid)],
@@ -79,8 +88,10 @@ export async function sampleProcessMemoryBytes(
  * Electron 自身进程快照（app.getAppMetrics 直读，无系统调用）。
  * 注意：Electron MemoryInfo 的 workingSetSize/peakWorkingSetSize/privateBytes
  * 单位均为 KB（官方文档），而 ProcessMetricsSnapshot 的内存字段语义是字节，
- * 这里统一 ×1024 转换，否则与 agent 侧 tasklist/ps（已转字节）不可比，
+ * 这里统一 ×1024 转换，否则与 agent 侧系统命令（已转字节）不可比，
  * 且相对任务管理器会小 1024 倍。
+ * 另注意：Electron 43 的 Browser（主）进程 privateBytes 上报为 0，
+ * 总量汇总时需以 privateBytes>0 为准、否则回退 workingSetSize（见 getProcessSnapshot）。
  */
 export function getElectronMetrics(): ElectronProcessMetric[] {
   return app.getAppMetrics().map((metric) => ({
@@ -113,7 +124,9 @@ export async function getProcessSnapshot(
     }),
   );
   const totalElectronBytes = electron.reduce(
-    (sum, item) => sum + (item.memoryBytes ?? 0),
+    // 专用工作集优先（对齐任务管理器口径，不含共享页重复计数）；
+    // Browser 进程 privateBytes 为 0，回退 workingSetSize，避免"查不到就少一块"。
+    (sum, item) => sum + ((item.privateBytes ?? 0) > 0 ? (item.privateBytes ?? 0) : (item.memoryBytes ?? 0)),
     0,
   );
   const totalAgentBytes = sampled.reduce(

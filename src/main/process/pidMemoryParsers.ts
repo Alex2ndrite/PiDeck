@@ -30,3 +30,15 @@ export function parsePsRssKb(output: string): number | null {
   const kb = Number(trimmed);
   return Number.isFinite(kb) && kb >= 0 ? kb : null;
 }
+
+/**
+ * 解析 PowerShell `Get-Process -Id N -ExpandProperty PrivateMemorySize64` 输出（字节）：
+ * 输出形如 `  123456789\r\n`（纯数字，无单位，可能有 BOM/CRLF）。
+ * 专用工作集口径（同任务管理器"内存"列），不含共享页，避免多进程合计时共享页重复计数。
+ */
+export function parsePrivateMemoryBytes(output: string): number | null {
+	const trimmed = output.replace(/^\uFEFF/, "").trim();
+	if (!trimmed) return null;
+	const bytes = Number(trimmed.replace(/,/g, ""));
+	return Number.isFinite(bytes) && bytes >= 0 ? bytes : null;
+}
