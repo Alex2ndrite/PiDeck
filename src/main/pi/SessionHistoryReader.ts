@@ -17,6 +17,8 @@ type SessionDisplayEntry = {
 	messageId?: string;
 	summary?: string;
 	firstKeptEntryId?: string;
+	timestamp?: string;
+	tokensBefore?: number;
 };
 
 type SessionDisplayIndex = {
@@ -361,14 +363,20 @@ export class SessionHistoryReader {
 		// semantics until archive data gets its own cursor protocol; normal Sessions,
 		// including the 50 MiB fixture, use the bounded offset reader below.
 		if (index.hasCompaction) {
-			const messages = await this.readSessionDisplayMessages(sessionPath, agentId);
+			// 分页必须与 normal 分支同空间：按索引 activeMessageEntries 切片后读取原始消息再转换。
+			// 旧实现用 readSessionDisplayMessages 的全量数组按索引坐标 slice——转换会跳过空消息
+			// （thinking-only/空 user），数组比索引短，slice 越界返回空页（打开大会话起始页误显根因）。
+			const entries = index.activeMessageEntries.slice(start, boundedBefore);
+			const rawMessages = await this.readIndexedSessionMessages(index.hostPath, entries);
+			const messages = await this.convertCompactionPageMessages(
+				index, agentId, rawMessages, entries.map((entry) => entry.id), start,
+			);
 			return {
-				messages: messages.slice(start, boundedBefore),
-				total: messages.length,
+				messages,
+				total,
 				nextBefore: start > 0 ? start : null,
 			};
 		}
-
 		const entries = index.activeMessageEntries.slice(start, boundedBefore);
 		const rawMessages = await this.readIndexedSessionMessages(index.hostPath, entries);
 		return {
@@ -415,10 +423,15 @@ export class SessionHistoryReader {
 
 		// 与消息分页一致：压缩会话的归档语义未游标化前走全量读取 + 切片
 		if (index.hasCompaction) {
-			const messages = await this.readSessionDisplayMessages(sessionPath, agentId);
+			// 同空间分页（见 readSessionDisplayMessagePage 注释）：索引切片 + 转换 + 页内卡片
+			const entries = index.activeMessageEntries.slice(start, boundedBefore);
+			const rawMessages = await this.readIndexedSessionMessages(index.hostPath, entries);
+			const messages = await this.convertCompactionPageMessages(
+				index, agentId, rawMessages, entries.map((entry) => entry.id), start,
+			);
 			return {
-				messages: messages.slice(start, boundedBefore),
-				total: messages.length,
+				messages,
+				total,
 				nextBefore: start > 0 ? start : null,
 				nextBeforeEntryId: start > 0 ? index.activeMessageEntries[start]?.id : undefined,
 				indexVersion: `${index.mtimeMs}:${index.size}`,
@@ -455,6 +468,51 @@ export class SessionHistoryReader {
 	async getActiveEntryCount(sessionPath: string): Promise<number> {
 		const index = await this.getSessionDisplayIndex(sessionPath);
 		return index.activeMessageEntries.length;
+	}
+
+	/**
+	 * 压缩会话分页的消息转换：与 normal 分支同空间（页条目 → 原始消息 → 转换）。
+	 * 页内包含压缩插入点时补一张压缩卡片（与 readSessionDisplayMessages 同语义：
+	 * 卡片落在 firstKeptEntryId 之前，即归档消息之后、保留消息之前；卡片在页外不插）。
+	 * 卡片 id 对齐 projector 的 `${agentId}-meta-N` 输出，保证与运行时窗口卡片去重一致。
+	 */
+	private async convertCompactionPageMessages(
+		index: SessionDisplayIndex,
+		agentId: string,
+		rawMessages: unknown[],
+		entryIds: string[],
+		start: number,
+	): Promise<ChatMessage[]> {
+		const messages = this.deps.convertMessages(agentId, rawMessages, entryIds);
+		const compactions = index.activeBranch.filter((entry) => entry.type === "compaction");
+		const lastCompaction = compactions[compactions.length - 1];
+		if (!lastCompaction) return messages;
+		// insertAt（全量 activeMessageEntries 下标空间）：firstKeptEntryId 优先，
+		// 缺省回退「压缩条目之后的消息数」（与 readSessionDisplayMessages 一致）。
+		let insertAt = lastCompaction.firstKeptEntryId
+			? index.activeMessageEntries.findIndex((entry) => entry.id === lastCompaction.firstKeptEntryId)
+			: -1;
+		if (insertAt < 0) {
+			const compIdx = index.activeBranch.findIndex((entry) => entry.id === lastCompaction.id);
+			insertAt = compIdx >= 0
+				? index.activeBranch.slice(0, compIdx + 1).filter((entry) => entry.type === "message" && entry.hasMessage).length
+				: index.activeMessageEntries.length;
+		}
+		const rel = insertAt - start;
+		if (rel < 0 || rel > messages.length) return messages; // 卡片在本页之外
+		const card: ChatMessage = {
+			id: `${agentId}-meta-1`,
+			agentId,
+			role: "system",
+			text: lastCompaction.summary || this.deps.translate("session.summaryPlaceholder"),
+			timestamp: lastCompaction.timestamp ? Date.parse(lastCompaction.timestamp) : Date.now(),
+			meta: {
+				type: "compaction",
+				tokensBefore: lastCompaction.tokensBefore,
+				...(compactions.length > 0 ? { compactionCount: compactions.length } : {}),
+			},
+		};
+		return [...messages.slice(0, rel), card, ...messages.slice(rel)];
 	}
 
 	/** 会话文件版本（mtime:size），与分页页面 indexVersion 同口径；供缓存命中页透传。 */
@@ -569,6 +627,8 @@ export class SessionHistoryReader {
 				firstKeptEntryId: typeof entry.firstKeptEntryId === "string"
 					? entry.firstKeptEntryId
 					: undefined,
+				timestamp: typeof entry.timestamp === "string" ? entry.timestamp : undefined,
+				tokensBefore: typeof entry.tokensBefore === "number" ? entry.tokensBefore : undefined,
 			};
 		} catch {
 			return null;

@@ -290,3 +290,70 @@ test("SessionHistoryReader full-rebuilds instead of appending after a growing at
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test("compaction page paging stays in index space when conversion skips messages", async () => {
+  // 回归（打开大会话起始页误显根因）：hasCompaction 分页曾用 readSessionDisplayMessages
+  // 的全量数组按索引坐标 slice——转换跳过空消息（thinking-only/空 user）后数组比索引短，
+  // slice 越界返回空页。修复后与 normal 分支同空间：索引切片 → 转换 → 页内补卡片。
+  const directory = await mkdtemp(join(tmpdir(), "pideck-history-compact-page-"));
+  const sessionPath = join(directory, "session.jsonl");
+  const entry = (id, parentId, extra) => JSON.stringify({ id, parentId, type: "message", message: extra });
+  try {
+    const rows = [JSON.stringify({ id: "session", type: "session" })];
+    let parent = "session";
+    for (let i = 1; i <= 100; i++) {
+      const id = `e${i}`;
+      rows.push(entry(id, parent, {
+        role: i % 2 ? "user" : "assistant",
+        content: [{ type: "text", text: `m${i}` }],
+      }));
+      parent = id;
+    }
+    // compaction 条目：压缩点在 e101（firstKeptEntryId）；真实 pi 结构中
+    // compaction 后的新消息 parentId 指向 compaction 条目本身（链在中间不断开）
+    rows.push(JSON.stringify({
+      id: "comp-1", parentId: "e100", type: "compaction",
+      summary: "compacted summary", firstKeptEntryId: "e101", timestamp: "2026-08-01T00:00:00Z", tokensBefore: 8000,
+    }));
+    parent = "comp-1";
+    for (let i = 101; i <= 150; i++) {
+      const id = `e${i}`;
+      const empty = i % 5 === 0; // 10 条空 content → 转换跳过
+      rows.push(entry(id, parent, {
+        role: i % 2 ? "user" : "assistant",
+        content: empty ? [] : [{ type: "text", text: `m${i}` }],
+      }));
+      parent = id;
+    }
+    await writeFile(sessionPath, rows.join("\n") + "\n", "utf8");
+
+    const reader = new SessionHistoryReader({
+      toHostPath: (path) => path,
+      // 与 AgentMessageProjector 一致：空 content 的消息被跳过
+      convertMessages: (_agentId, rawMessages, entryIds = []) => rawMessages
+        .filter((m) => {
+          const c = m.content;
+          const hasText = Array.isArray(c) ? c.some((b) => b?.type === "text" && b.text) : typeof c === "string" && c.trim();
+          return hasText;
+        })
+        .map((m, i) => ({ id: entryIds[i] ?? `m${i}`, role: m.role, text: "x", meta: {} })),
+      trimMessages: (msgs) => msgs,
+      translate: () => "",
+    });
+
+    const page = await reader.readSessionDisplayMessagePage(sessionPath, "viewer", undefined, 100);
+    assert.ok(page.messages.length > 0, "page must not be empty when conversion skips messages");
+    assert.equal(page.total, 150);
+    // 页内应含压缩卡片（插入点在 e101，位于本页）
+    const card = page.messages.find((m) => m.meta?.type === "compaction");
+    assert.ok(card, "compaction card must be inserted inside the page");
+    assert.equal(card.role, "system");
+    // 游标续页不重不漏：nextBefore 指向本页最旧条目
+    assert.equal(page.nextBefore, 50);
+    const p2 = await reader.readSessionDisplayMessagePage(sessionPath, "viewer", page.nextBefore, 100);
+    assert.ok(p2.messages.length > 0);
+    assert.equal(p2.nextBefore, null); // 剩余 50 条一页取完，到顶
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
