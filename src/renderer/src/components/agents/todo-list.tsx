@@ -10,6 +10,8 @@
 //   （text-control/text-caption，跟随全局 UI 字号设置）并收紧垂直度量（h-11→h-9、
 //   min-h-9→min-h-8）；compact 头部 pr-8 为宿主层关闭按钮预留右上角空间，
 //   保证叠放的关闭控件不盖住官方折叠 chevron。
+// - 已完成的 todo 项去掉官方删除线（横线动画）：状态图标已有对勾标记，删除线
+//   属冗余视觉；仅当“保持官方逐字节一致”与产品取舍冲突时按后者（2026-12 用户要求）。
 // - 共享运动常量来自 @/lib/ease（官方值 SPRING_SWAP/SPRING_PRESS 已并入）。
 
 import { ChevronDown, ListTodo } from "lucide-react";
@@ -389,23 +391,7 @@ export function TodoList({
                         status === "cancelled" && "text-muted-foreground/55",
                       )}
                     >
-                      <span className="relative block min-w-0">
-                        {item.title}
-                        <motion.span
-                          aria-hidden="true"
-                          initial={false}
-                          animate={{
-                            scaleX: status === "completed" ? 1 : 0,
-                            opacity: status === "completed" ? 1 : 0,
-                          }}
-                          transition={
-                            reduce
-                              ? { duration: 0 }
-                              : { duration: 0.28, ease: EASE_OUT, delay: 0.06 }
-                          }
-                          className="absolute inset-x-0 top-1/2 h-px origin-left bg-current"
-                        />
-                      </span>
+                      {item.title}
                     </span>
                     {item.detail ? (
                       <span
