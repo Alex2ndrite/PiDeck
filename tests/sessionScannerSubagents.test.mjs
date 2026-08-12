@@ -111,6 +111,24 @@ function loadSessionSummaryCacheModule(homePath) {
 	return sandbox.exports;
 }
 
+function loadSessionNameLineModule() {
+	const source = readFileSync("src/main/sessions/sessionNameLine.ts", "utf8");
+	const { outputText } = ts.transpileModule(source, {
+		compilerOptions: {
+			module: ts.ModuleKind.CommonJS,
+			target: ts.ScriptTarget.ES2022,
+		},
+	});
+	const sandbox = {
+		exports: {},
+		process,
+		require,
+		setTimeout,
+	};
+	vm.runInNewContext(outputText, sandbox, { filename: "sessionNameLine.ts" });
+	return sandbox.exports;
+}
+
 function loadSessionScanner(homePath, fsOverrides = {}) {
 	const source = readFileSync("src/main/sessions/SessionScanner.ts", "utf8");
 	const { outputText } = ts.transpileModule(source, {
@@ -137,6 +155,8 @@ function loadSessionScanner(homePath, fsOverrides = {}) {
 			if (id === "../pi/messageContent") return messageContent;
 			if (id === "../wsl/WslPaths") return wslPaths;
 			if (id === "./sessionSummaryCache") return sessionSummaryCache;
+			// sessionNameLine 为无依赖纯函数模块，直接编译加载真实实现，保证清理口径一致
+			if (id === "./sessionNameLine") return loadSessionNameLineModule();
 			// sharedLogger 未注册时 getAppLogger 返回 null，SessionScanner 埋点静默跳过
 			if (id === "../logging/sharedLogger") return { getAppLogger: () => null };
 			if (id === "node:fs") return { ...require(id), ...fsOverrides };

@@ -299,6 +299,11 @@ export class AgentManager {
 		private readonly onBeforeAgentSpawn?: () => void,
 		/** 安全管理：Agent 启动前写策略快照 + 注入会话身份（缺省时不注入安全门）。 */
 		private readonly securityStore?: SecurityStore,
+		/**
+		 * spawn pi 前对会话文件的预检/修复（剔除旧版 PiDeck 私有 sessionName 头行，
+		 * 该行会让 pi 拒绝加载会话并 exit 1，见 #114）。由 main/index.ts 装配 SessionScanner 实现。
+		 */
+		private readonly repairSessionFile?: (sessionPath: string) => Promise<boolean>,
 	) {
 		this.messageProjector = new AgentMessageProjector({
 			translate: this.translate,
@@ -349,6 +354,8 @@ export class AgentManager {
 			// 匿名会话（noSession）无 key，扩展仅用全局默认等级。
 			securitySessionId: securitySessionKey ?? sessionPath,
 			securitySnapshotPath: this.securityStore?.getSnapshotPath(),
+			// 预检修复：全部 spawn 路径（create/reattach/withTemporarySession）都在 start() 内生效。
+			repairSessionFileBeforeStart: this.repairSessionFile,
 		});
 	}
 

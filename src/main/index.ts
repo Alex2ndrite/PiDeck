@@ -2496,6 +2496,8 @@ app.whenReady().then(async () => {
 			}
 		},
 		securityStore,
+		// spawn pi 前预检修复会话文件（旧版私有 sessionName 头行会让 pi 拒绝加载，见 #114）
+		(filePath) => sessionScanner.repairLegacySessionNameLine(filePath),
 	);
 	webServiceManager = new WebServiceManager({
 		// dev 模式（electron-vite dev 不产出 out/renderer 构建物）下，静态资源

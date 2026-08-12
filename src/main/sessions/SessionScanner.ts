@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { app, shell } from "electron";
 import { closeSync, existsSync, openSync, readFileSync, readSync } from "node:fs";
-import { mkdir, readdir, readFile, rename, stat, writeFile } from "node:fs/promises";
+import { mkdir, open as openFile, readdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, extname, isAbsolute, join, resolve } from "node:path";
 import { basename as posixBasename, dirname as posixDirname, isAbsolute as posixIsAbsolute, join as posixJoin } from "node:path/posix";
 import type { ChatMessage, ChatRole, SessionSummary } from "../../shared/types";
@@ -11,6 +11,7 @@ import { getCodexSessionThreadInfo } from "../../shared/codexSessionMeta";
 import { extractMessageText, extractThinkingRaw } from "../pi/messageContent";
 import { toWslLinuxPath, type WslEnvironment } from "../wsl/WslPaths";
 import { getAppLogger } from "../logging/sharedLogger";
+import { isLegacySessionNameEntry, isLegacySessionNameLine, stripLegacySessionNameLine } from "./sessionNameLine";
 import { SessionSummaryCache, type SessionFileVersion } from "./sessionSummaryCache";
 
 type SessionScannerCopyKey = Extract<MainProcessTranslationKey,
@@ -37,6 +38,22 @@ function defaultTranslate(
   return defaultSessionScannerCopy[key].replace(/\{([A-Za-z0-9_]+)\}/g, (match, name) => (
     Object.prototype.hasOwnProperty.call(params, name) ? String(params[name]) : match
   ));
+}
+
+/**
+ * 在文本片段（通常是文件头 4KB）中探测旧版私有 sessionName 行。
+ * 只对可解析的行判定；片段末尾可能截断行，解析失败时保守跳过（不影响判定）。
+ */
+function hasLegacySessionNameLine(text: string): boolean {
+  for (const line of text.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    if (isLegacySessionNameLine(trimmed)) return true;
+    // 遇到首条非私有行即可停止：私有行只可能出现在头部（旧版前置插入），
+    // 首条正常记录之后的区域无需继续探测。
+    return false;
+  }
+  return false;
 }
 
 export class SessionScanner {
@@ -489,6 +506,46 @@ export class SessionScanner {
   }
 
   /**
+   * 修复被旧版 PiDeck 私有 sessionName 头行破坏的会话文件（#114 存量受损文件）。
+   *
+   * pi 要求首条可解析记录是 type:"session" 头，私有行位于头部时 pi 拒绝加载
+   * （"Session file is not a valid pi session"，exit 1）。此方法先读文件头 4KB
+   * 快速探测（避免大文件全量读取拖慢 Agent 启动），命中才全量剔除并回写。
+   *
+   * 在 AgentManager 每次 spawn pi 前调用（经 PiProcess options 注入）；
+   * 返回是否实际修复。支持 WSL 路径。
+   */
+  async repairLegacySessionNameLine(filePath: string): Promise<boolean> {
+    const wsl = this.isWslPath(filePath);
+    const head = wsl ? await this.readWslFileHead(filePath) : await this.readFileHeadNative(filePath, 4096);
+    // 头 4KB 内没有私有行即认为健康：旧版私有行只会出现在文件头部区域，
+    // 中后段的同类行不阻塞 pi 加载（pi 只校验首条记录），留待重命名时一并清理。
+    if (!hasLegacySessionNameLine(head)) return false;
+
+    const raw = wsl ? await this.readWslFile(filePath) : await readFile(filePath, "utf8");
+    const stripped = stripLegacySessionNameLine(raw);
+    if (stripped === raw) return false;
+    if (wsl) {
+      await this.writeWslFile(filePath, stripped);
+    } else {
+      await writeFile(filePath, stripped, "utf8");
+    }
+    return true;
+  }
+
+  /** 读取本地文件前 maxBytes 字节（用于会话文件头部快速探测，避免大文件全量读）。 */
+  private async readFileHeadNative(filePath: string, maxBytes: number): Promise<string> {
+    const handle = await openFile(filePath, "r");
+    try {
+      const buffer = Buffer.allocUnsafe(maxBytes);
+      const { bytesRead } = await handle.read(buffer, 0, maxBytes, 0);
+      return buffer.subarray(0, bytesRead).toString("utf8");
+    } finally {
+      await handle.close();
+    }
+  }
+
+  /**
    * 在 JSONL 文本末尾追加 pi 原生 session_info 记录，返回新文本。
    *
    * id/parentId 规则与 pi SessionManager 一致：id 为文件内不冲突的 8 位十六进制，
@@ -507,20 +564,19 @@ export class SessionScanner {
     for (const line of raw.split(/\r?\n/)) {
       const trimmed = line.trim();
       if (!trimmed) continue;
-      let isLegacyNameLine = false;
+      let parsed: unknown = null;
       try {
-        const parsed = JSON.parse(trimmed);
-        // 判定旧版私有格式：带 sessionName 且无 type；pi 原生记录一律有 type。
-        isLegacyNameLine =
-          typeof parsed.sessionName === "string" && typeof parsed.type !== "string";
-        if (!isLegacyNameLine && typeof parsed.id === "string" && parsed.id) {
-          ids.add(parsed.id);
-          lastId = parsed.id;
-        }
+        parsed = JSON.parse(trimmed);
       } catch {
         // 不可解析的行原样保留，不做破坏性清理
       }
-      if (!isLegacyNameLine) keptLines.push(trimmed);
+      // 判定旧版私有格式：带 sessionName 且无 type（判定逻辑见 sessionNameLine.ts，与修复路径共用）
+      if (parsed !== null && isLegacySessionNameEntry(parsed)) continue;
+      if (parsed !== null && typeof (parsed as { id?: unknown }).id === "string" && (parsed as { id?: string }).id) {
+        ids.add((parsed as { id: string }).id);
+        lastId = (parsed as { id: string }).id;
+      }
+      keptLines.push(trimmed);
     }
     // 与 pi generateId 一致：randomUUID 前 8 位，冲突时重试
     let id = randomUUID().slice(0, 8);

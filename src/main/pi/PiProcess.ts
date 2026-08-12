@@ -52,6 +52,12 @@ type PiProcessOptions = {
    * 注入 PIDECK_SESSION_ID 环境变量，扩展按它解析会话级等级覆盖。
    */
   securitySessionId?: string;
+  /**
+   * spawn pi 前对会话文件的预检/修复回调（如剔除旧版 PiDeck 私有 sessionName 头行，
+   * 该行会让 pi 报 "Session file is not a valid pi session" 并 exit 1）。
+   * 返回是否发生修复；抛错或未注入都不阻塞启动（pi 自身的加载错误更接近事实，留日志即可）。
+   */
+  repairSessionFileBeforeStart?: (sessionPath: string) => Promise<boolean>;
 };
 
 type VersionCacheEntry =
@@ -178,6 +184,24 @@ export class PiProcess extends EventEmitter {
 
   async start(sessionPath?: string, trustOverride?: "approve" | "no-approve", noSession?: boolean) {
     if (this.proc) return this.rpc!;
+
+    // 预检会话文件：旧版 PiDeck 私有 sessionName 头行会让 pi 拒绝加载（exit 1）。
+    // 修复失败不阻塞启动——pi 自身的报错会进入启动诊断，比静默吞掉更有价值。
+    if (sessionPath && !noSession && this.options.repairSessionFileBeforeStart) {
+      try {
+        const repaired = await this.options.repairSessionFileBeforeStart(sessionPath);
+        if (repaired) {
+          void getAppLogger()?.warn("pi-process", "Repaired legacy sessionName header before spawn", {
+            sessionPath,
+          });
+        }
+      } catch (error) {
+        void getAppLogger()?.warn("pi-process", "Session file preflight repair failed", {
+          sessionPath,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
 
     // 信任确认由桌面端 AgentManager.ensureProjectTrust 在启动 pi 前完成，不再静默 --approve。
     // pi 在 RPC 模式下 project_trust 事件 hasUI 恒为 false，故信任弹窗由桌面端自行处理。
