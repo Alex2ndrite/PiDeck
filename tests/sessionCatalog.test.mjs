@@ -32,14 +32,22 @@ function compileModule(filePath, imports = {}) {
     exports: module.exports,
     require: localRequire,
     console,
+    // vm 默认不提供 timer 全局；SessionCatalog 的 rename 重试退避依赖 setTimeout
+    setTimeout,
+    clearTimeout,
   }, { filename: filePath });
   return module.exports;
 }
 
 function loadCatalog(fsPromises = nodeRequire("node:fs/promises")) {
   const identity = compileModule("src/shared/sessionIdentity.ts");
+  // fsRetry 是 SessionCatalog 的重试依赖；同样注入 mock fs，测试才能拦截 rename
+  const fsRetry = compileModule("src/main/utils/fsRetry.ts", {
+    "node:fs/promises": fsPromises,
+  });
   return compileModule("src/main/sessions/SessionCatalog.ts", {
     "../../shared/sessionIdentity": identity,
+    "../utils/fsRetry": fsRetry,
     "../logging/sharedLogger": { getAppLogger: () => null },
     "node:fs/promises": fsPromises,
   });
@@ -282,6 +290,88 @@ test("a failed atomic write does not poison later mutations or memory", async ()
     });
     assert.equal(catalog.listEntries().length, 1);
     assert.equal(catalog.listEntries()[0].id, saved.id);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("backup rename EPERM after retries does not fail the catalog write (issue: create-draft blocked)", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "pideck-catalog-"));
+  const filePath = join(dir, "sessions.json");
+  const realFs = nodeRequire("node:fs/promises");
+  // 备份轮换（.bak 目标）持续 EPERM：模拟杀软/其他进程长期锁住 .bak
+  const fsWithLockedBackup = {
+    ...realFs,
+    rename: async (source, target) => {
+      if (target.endsWith(".bak")) {
+        const error = new Error("simulated locked backup rename");
+        error.code = "EPERM";
+        throw error;
+      }
+      return renameFile(source, target);
+    },
+  };
+  const { SessionCatalog } = loadCatalog(fsWithLockedBackup);
+  try {
+    const catalog = new SessionCatalog(filePath);
+    await catalog.load();
+    // 备份轮换失败不应阻断主文件原子写入：新建会话必须仍然成功
+    const draft = await catalog.createDraft({
+      projectId: "project-1",
+      title: "Saved despite locked backup",
+      environment: "native",
+    });
+    assert.equal(catalog.listEntries().length, 1);
+    assert.equal(catalog.listEntries()[0].id, draft.id);
+    const snapshot = JSON.parse(await readFile(filePath, "utf8"));
+    assert.equal(snapshot.sessions[0].id, draft.id);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("backup rename transient EPERM recovers via retry and still rotates the backup", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "pideck-catalog-"));
+  const filePath = join(dir, "sessions.json");
+  const realFs = nodeRequire("node:fs/promises");
+  let backupRenameAttempts = 0;
+  const fsWithFlakyBackup = {
+    ...realFs,
+    rename: async (source, target) => {
+      if (target.endsWith(".bak")) {
+        backupRenameAttempts += 1;
+        // 前两次失败（模拟杀软瞬时扫描锁），第三次开始成功
+        if (backupRenameAttempts <= 2) {
+          const error = new Error("simulated transient backup lock");
+          error.code = "EPERM";
+          throw error;
+        }
+      }
+      return renameFile(source, target);
+    },
+  };
+  const { SessionCatalog } = loadCatalog(fsWithFlakyBackup);
+  try {
+    const catalog = new SessionCatalog(filePath);
+    await catalog.load();
+    // 首次写入没有可备份的主文件；第二次写入才触发备份轮换
+    await catalog.createDraft({
+      projectId: "project-1",
+      title: "First",
+      environment: "native",
+    });
+    const draft = await catalog.createDraft({
+      projectId: "project-1",
+      title: "Recovered backup",
+      environment: "native",
+    });
+    assert.ok(catalog.listEntries().some((entry) => entry.id === draft.id));
+    // 重试成功后 .bak 应已轮换：内容是本次写入前的旧快照（滞后一版）
+    const snapshot = JSON.parse(await readFile(filePath, "utf8"));
+    const backup = JSON.parse(await readFile(`${filePath}.bak`, "utf8"));
+    assert.equal(snapshot.sessions.length, 2);
+    assert.equal(backup.sessions.length, 1);
+    assert.equal(backup.sessions[0].title, "First");
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

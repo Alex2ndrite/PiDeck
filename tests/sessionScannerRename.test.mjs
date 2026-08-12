@@ -67,9 +67,14 @@ function loadSessionScanner(homePath) {
 		"src/main/pi/messageContent.ts",
 		new Map([["../feishu/docActions", { stripFeishuDocActionHint: (text) => text }]]),
 	);
+	const fsRetry = loadTranspiledModule("src/main/utils/fsRetry.ts");
 	const sessionSummaryCache = loadTranspiledModule(
 		"src/main/sessions/sessionSummaryCache.ts",
-		new Map([["electron", { app: { getPath: () => homePath } }]]),
+		new Map([
+			["electron", { app: { getPath: () => homePath } }],
+			// fsRetry 只依赖 node:fs/promises，编译注入真实实现
+			["../utils/fsRetry", fsRetry],
+		]),
 	);
 	const wslPaths = loadTranspiledModule("src/main/wsl/WslPaths.ts");
 	const sandbox = {

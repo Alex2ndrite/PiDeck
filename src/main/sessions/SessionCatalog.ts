@@ -4,7 +4,6 @@ import {
 	mkdir,
 	open,
 	readFile,
-	rename,
 	unlink,
 } from "node:fs/promises";
 import { dirname } from "node:path";
@@ -16,6 +15,7 @@ import type {
 	SessionSummary,
 } from "../../shared/types";
 import { getAppLogger } from "../logging/sharedLogger";
+import { renameWithRetry } from "../utils/fsRetry";
 import {
 	buildSessionOriginKey,
 	buildSummaryOriginKey,
@@ -747,13 +747,21 @@ export class SessionCatalog {
 			if (!this.skipNextBackup) {
 				try {
 					await copyFile(this.filePath, backupTempPath);
-					await rename(backupTempPath, backupPath);
+					await renameWithRetry(backupTempPath, backupPath);
 				} catch (error) {
 					await unlink(backupTempPath).catch(() => undefined);
-					if (!isMissingFileError(error)) throw error;
+					if (isMissingFileError(error)) {
+						// 首次写入：主文件还不存在，没有可备份的内容，属正常情况
+					} else {
+						// 备份轮换失败不能阻断 catalog 写入（新建会话等操作会因此失败）：
+						// .bak 只是崩溃恢复的冗余副本，主文件仍是原子替换，旧内容在失败时原样保留。
+						void getAppLogger()?.warn("session-catalog", "Backup rotation failed, continuing without backup", {
+							cause: error instanceof Error ? error.message : String(error),
+						});
+					}
 				}
 			}
-			await rename(tempPath, this.filePath);
+			await renameWithRetry(tempPath, this.filePath);
 			this.skipNextBackup = false;
 		} finally {
 			await unlink(tempPath).catch(() => undefined);

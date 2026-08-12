@@ -11,8 +11,9 @@
  */
 
 import { app } from "electron";
-import { mkdir, rename, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { renameWithRetry } from "../utils/fsRetry";
 import {
 	createDefaultSecurityConfig,
 	type SecurityConfig,
@@ -158,7 +159,8 @@ export class SecurityStore {
 		try {
 			await mkdir(app.getPath("userData"), { recursive: true });
 			await writeFile(tmp, JSON.stringify(snapshot, null, 2), "utf8");
-			await rename(tmp, target);
+			// 杀软扫描可能瞬时锁住刚写出的 tmp，rename 走退避重试；仍失败则由外层 catch 降级日志
+			await renameWithRetry(tmp, target);
 		} catch (error) {
 			// 快照写失败不阻塞主流程：Agent 以旧快照继续运行（fail-safe 方向由扩展 defaultAction 兜底）
 			this.log("security", "Snapshot write failed", {

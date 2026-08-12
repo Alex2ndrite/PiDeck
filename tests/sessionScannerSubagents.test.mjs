@@ -83,6 +83,27 @@ function loadWslPathsModule() {
 	return sandbox.exports;
 }
 
+function loadFsRetryModule() {
+	// fsRetry 只依赖 node:fs/promises，随 sessionSummaryCache 一起编译注入，
+	// 让真实实现（含 EPERM 退避重试）在测试中同样生效
+	const source = readFileSync("src/main/utils/fsRetry.ts", "utf8");
+	const { outputText } = ts.transpileModule(source, {
+		compilerOptions: {
+			module: ts.ModuleKind.CommonJS,
+			target: ts.ScriptTarget.ES2022,
+		},
+	});
+	const sandbox = {
+		clearTimeout,
+		exports: {},
+		process,
+		require,
+		setTimeout,
+	};
+	vm.runInNewContext(outputText, sandbox, { filename: "fsRetry.ts" });
+	return sandbox.exports;
+}
+
 function loadSessionSummaryCacheModule(homePath) {
 	const source = readFileSync("src/main/sessions/sessionSummaryCache.ts", "utf8");
 	const { outputText } = ts.transpileModule(source, {
@@ -91,6 +112,7 @@ function loadSessionSummaryCacheModule(homePath) {
 			target: ts.ScriptTarget.ES2022,
 		},
 	});
+	const fsRetry = loadFsRetryModule();
 	const sandbox = {
 		clearTimeout: () => undefined,
 		exports: {},
@@ -103,6 +125,8 @@ function loadSessionSummaryCacheModule(homePath) {
 					},
 				};
 			}
+			// fsRetry 只依赖 node:fs/promises，走真实 require 即可
+			if (id === "../utils/fsRetry") return fsRetry;
 			return require(id);
 		},
 		setTimeout: () => ({ unref: () => undefined }),

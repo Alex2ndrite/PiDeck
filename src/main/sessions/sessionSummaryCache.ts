@@ -8,8 +8,9 @@
  */
 
 import { app } from "electron";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { renameWithRetry } from "../utils/fsRetry";
 
 export interface SessionFileVersion {
   mtimeMs: number;
@@ -193,7 +194,8 @@ export class SessionSummaryCache<V> {
       await mkdir(dir, { recursive: true });
       const tmpPath = `${this.filePath}.${process.pid}.tmp`;
       await writeFile(tmpPath, JSON.stringify(payload), "utf8");
-      await rename(tmpPath, this.filePath);
+      // 杀软扫描可能瞬时锁住刚写出的 tmp，rename 走退避重试；仍失败保留 dirty 下次再写
+      await renameWithRetry(tmpPath, this.filePath);
       this.dirty = false;
     } catch {
       // 写盘失败保留 dirty，下次 set/flush 再试
