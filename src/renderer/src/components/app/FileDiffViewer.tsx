@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { t } from "../../i18n";
 import { ArrowLeft, Maximize, Minimize2, Rows2, SquareSplitHorizontal, X, Eye, FileCode } from "lucide-react";
 import { Button } from "../ui-shadcn/button";
@@ -8,7 +8,11 @@ import { defaultUrlTransform } from "../session/MarkdownLinkCore";
 import { defaultRemarkPlugins, defaultRehypePlugins } from "streamdown";
 import rehypeKatex from "rehype-katex";
 import { CodeMirrorEditor } from "./CodeMirrorEditor";
-import { CodeDiffView } from "./CodeDiffView";
+// CodeDiffView 静态链上挂着 @pierre/diffs + shiki（WASM 重库），懒加载后这些模块
+// 移出首屏初始 chunk（约 -500KB 解析量），仅在用户打开 diff 时才拉取。
+const CodeDiffView = lazy(() =>
+	import("./CodeDiffView").then((m) => ({ default: m.CodeDiffView })),
+);
 import { formatFilePathRef } from "../session/composer/chips";
 
 import { isBinaryExtension, isImageFile, isPdfFile } from "../../utils/isTextFile";
@@ -486,14 +490,30 @@ export function FileDiffViewer(props: {
 						   与编辑器不同时渲染，key 切换强制重建避免状态串台 */}
 						{isDiffMode && (
 							<div style={{ height: "100%", flexDirection: "column" }}>
-								<CodeDiffView
-									key={sideBySide ? "split" : "unified"}
-									oldContent={original}
-									newContent={content}
-									filePath={props.filePath}
-									viewMode={sideBySide ? "split" : "unified"}
-									theme={props.theme}
-								/>
+								{/* lazy 边界：首次进入 diff 需要拉取 @pierre/diffs + shiki chunk，期间显示轻量占位 */}
+								<Suspense
+									fallback={
+										<div
+											style={{
+												height: "100%",
+												display: "grid",
+												placeItems: "center",
+											}}
+											className="text-caption text-foreground/50"
+										>
+											{t("common.loading")}
+										</div>
+									}
+								>
+									<CodeDiffView
+										key={sideBySide ? "split" : "unified"}
+										oldContent={original}
+										newContent={content}
+										filePath={props.filePath}
+										viewMode={sideBySide ? "split" : "unified"}
+										theme={props.theme}
+									/>
+								</Suspense>
 							</div>
 						)}
 					</>

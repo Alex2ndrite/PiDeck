@@ -71,6 +71,13 @@ if (!electronChromiumSandboxEnabled) {
 	app.commandLine.appendSwitch("no-sandbox");
 }
 
+// V8 老生代堆上限（渲染进程 + 主进程 + worker 一并生效）：
+// Chromium 默认上限 ≈ 物理内存 60%（8GB 机器 ≈ 4.8GB），V8 没有压力就不主动收缩，
+// 会话消息/代码块高亮等大对象把堆撑大后 committed 空间长期不归还 OS（内存采样实测：
+// V8 总 55MB → 210MB 不回落，RSS 基线随每次操作抬升）。
+// 设 384MB：留 2 倍于实测 JS used 峰值（~185MB）的余量，超限即强制 GC 收缩。
+app.commandLine.appendSwitch("js-flags", "--max-old-space-size=384");
+
 // Windows 系统通知必须设置 AppUserModelID，否则通知不显示、点击事件不触发。
 // dev 与正式版使用不同 AppID，避免通知中心归属混淆（与 dev userData 隔离思路一致）。
 if (process.platform === "win32") {
@@ -267,6 +274,7 @@ import {
 	setSessionBotId,
 	setFeishuConfigDefaultBotName,
 } from "./feishu/FeishuConfig";
+import { startMemoryProfile, isMemoryProfileEnabled, type MemoryProfileHandle } from "./memory/MemoryMonitor";
 import type { FeishuChatBinding } from "../shared/types";
 
 let mainWindow: BrowserWindow | null = null;
@@ -298,6 +306,8 @@ let terminalManager: TerminalSessionManager;
 let petSystem: PetSystem | null = null;
 let appLogger: AppLogger;
 let rpcLogger: RpcLogger;
+/** 内存采样句柄（PIDECK_MEMORY_PROFILE=1 时启用），quit 时停止 */
+let memoryProfileHandle: MemoryProfileHandle | null = null;
 let feishuBridge: FeishuBridge | null = null;
 let usageStatsService: UsageStatsService | null = null;
 
@@ -2783,6 +2793,15 @@ app.whenReady().then(async () => {
 	autoConnectFeishu();
 
 	sendTelemetryHeartbeat();
+
+	// 内存分析模式（PIDECK_MEMORY_PROFILE=1）：尽早开始采样，覆盖窗口创建/加载全过程。
+	// 采样失败不阻塞启动（诊断工具降级为不可用）。
+	if (isMemoryProfileEnabled()) {
+		memoryProfileHandle = await startMemoryProfile(() => agentManager.hasActiveStreaming()).catch((error) => {
+			console.error("Failed to start memory profile:", error);
+			return null;
+		});
+	}
 	await createWindow();
 	setupTray();
 
@@ -2945,6 +2964,8 @@ async function ensureAllPiSettingsDefaults(): Promise<void> {
 
 app.on("before-quit", () => {
 	isQuitting = true;
+	memoryProfileHandle?.stop();
+	memoryProfileHandle = null;
 	tray?.destroy();
 	tray = null;
 	void webServiceManager?.stop();

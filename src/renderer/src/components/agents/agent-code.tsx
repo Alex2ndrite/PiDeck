@@ -6,7 +6,13 @@ import {
   useEffect,
   useState,
 } from "react";
-import { createHighlighter, type Highlighter } from "shiki";
+import type { Highlighter } from "shiki";
+import {
+  cacheTokens,
+  getCachedTokens,
+  type AgentCodeToken,
+  type AgentCodeTokenLines,
+} from "./agentCodeTokenCache";
 import { cn } from "@/lib/utils";
 
 export type AgentCodeLanguage =
@@ -17,15 +23,7 @@ export type AgentCodeLanguage =
   | "tsx"
   | "typescript";
 
-export interface AgentCodeToken {
-  content: string;
-  offset: number;
-  light?: string;
-  dark?: string;
-}
-
-export type AgentCodeTokenLines = AgentCodeToken[][];
-
+export type { AgentCodeToken, AgentCodeTokenLines } from "./agentCodeTokenCache";
 export interface AgentCodeProps {
   code: string;
   language?: AgentCodeLanguage;
@@ -41,14 +39,18 @@ export interface AgentCodeLineProps {
 const LIGHT_THEME = "github-light-high-contrast";
 const DARK_THEME = "github-dark-high-contrast";
 let agentCodeHighlighter: Promise<Highlighter> | null = null;
-const tokenCache = new Map<string, AgentCodeTokenLines>();
 
 function getAgentCodeHighlighter() {
   if (!agentCodeHighlighter) {
-    agentCodeHighlighter = createHighlighter({
-      themes: [LIGHT_THEME, DARK_THEME],
-      langs: ["bash", "diff", "json", "tsx", "typescript"],
-    });
+    // 动态 import shiki：它是 WASM 重库（~1MB 量级），只在首次渲染代码块时才加载，
+    // 避免进首屏初始 chunk——升级前 index chunk 5.96MB 里 shiki 占了可观比例。
+    // import type 的 Highlighter 是纯类型，运行时无依赖。
+    agentCodeHighlighter = import("shiki").then(({ createHighlighter }) =>
+      createHighlighter({
+        themes: [LIGHT_THEME, DARK_THEME],
+        langs: ["bash", "diff", "json", "tsx", "typescript"],
+      }),
+    );
   }
   return agentCodeHighlighter;
 }
@@ -62,7 +64,7 @@ export function useAgentCodeTokens(
   language: AgentCodeLanguage,
 ) {
   const key = tokenCacheKey(code, language);
-  const cached = tokenCache.get(key);
+  const cached = getCachedTokens(key);
   const [result, setResult] = useState<{
     key: string;
     code: string;
@@ -71,7 +73,7 @@ export function useAgentCodeTokens(
   } | null>(cached ? { key, code, language, lines: cached } : null);
 
   useEffect(() => {
-    const current = tokenCache.get(key);
+    const current = getCachedTokens(key);
     if (current) {
       setResult({ key, code, language, lines: current });
       return;
@@ -96,7 +98,7 @@ export function useAgentCodeTokens(
             dark: token.variants.dark?.color,
           })),
       );
-      tokenCache.set(key, lines);
+      cacheTokens(key, lines);
       setResult({ key, code, language, lines });
     });
     return () => {

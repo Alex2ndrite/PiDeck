@@ -113,6 +113,11 @@ export class AgentManager {
 	 *  isStreaming 不再只依赖 pi get_state 轮询：轮询在 text_delta 期间不触发，
 	 *  前端 streamingMessageId → MarkdownStream 逐字渐显依赖它，缺失会“整段蹦出”。 */
 	private readonly streamingAgents = new Set<string>();
+
+	/** 当前是否有任何 agent 正在流式输出（内存采样探针用，避免直接暴露内部 Set）。 */
+	hasActiveStreaming(): boolean {
+		return this.streamingAgents.size > 0;
+	}
 	/** 当前正在流式更新的 assistant 消息；tool 事件插入时仍要继续更新同一个回答块。 */
 	private readonly activeAssistantMessageIds = new Map<string, string>();
 	/** pi 的 toolCallId 贯穿 start/update/end，用它把同一次工具调用合并成一条 UI 记录。 */
