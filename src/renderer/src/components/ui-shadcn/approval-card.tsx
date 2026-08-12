@@ -32,24 +32,24 @@ export function ApprovalCard(props: {
 				props.className,
 			)}
 		>
-			<div className="flex min-w-0 items-start gap-2 border-b border-border/70 bg-muted/25 px-3 py-2">
+			<div className="flex min-w-0 items-start gap-2 border-b border-border/70 bg-muted/25 px-3 py-1">
 				<CollapsibleTrigger asChild>
 					<Button
 						variant="ghost"
 						size="sm"
-						className="h-auto min-w-0 flex-1 justify-start gap-2 px-0 py-0.5 text-left hover:bg-transparent"
+						className="h-auto min-w-0 flex-1 justify-start gap-1.5 px-0 py-0.5 text-left hover:bg-transparent"
 						aria-label={props.title}
 					>
 						<ChevronDown
-							className={cn("size-4 shrink-0 transition-transform duration-200", !props.open && "-rotate-90")}
+							className={cn("size-3.5 shrink-0 transition-transform duration-200", !props.open && "-rotate-90")}
 							aria-hidden="true"
 						/>
-						<ClipboardCheck className="size-4 shrink-0 text-primary" aria-hidden="true" />
+						<ClipboardCheck className="size-3.5 shrink-0 text-primary" aria-hidden="true" />
 						<span className="min-w-0 flex-1">
 							<span className="block truncate text-caption font-semibold text-foreground">{props.title}</span>
-							{props.description ? <span className="mt-0.5 block truncate text-micro font-normal text-muted-foreground">{props.description}</span> : null}
+							{props.description ? <span className="block truncate text-micro font-normal text-muted-foreground">{props.description}</span> : null}
 						</span>
-						{props.status ? <span className="shrink-0 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-micro font-medium text-primary">{props.status}</span> : null}
+						{props.status ? <span className="shrink-0 rounded-full border border-primary/30 bg-primary/10 px-1.5 py-px text-micro font-medium text-primary">{props.status}</span> : null}
 					</Button>
 				</CollapsibleTrigger>
 				{props.onCancel ? (

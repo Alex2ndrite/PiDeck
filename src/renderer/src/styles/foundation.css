@@ -2830,6 +2830,11 @@ select:focus-visible {
 .message-timeline:has(.session-runtime-ui:not(:empty)) {
   padding-bottom: 8px;
 }
+/* RespondingIndicator（消息流末尾的 Agent 运行动画）与 ask 卡片（runtimeUi）相邻：
+   消息占满滚动区时两者只剩 8px 底部留白，视觉上贴死；给动画块单独留出呼吸间距 */
+.message-timeline:has(.session-runtime-ui:not(:empty)) .message-list > :last-child {
+  margin-bottom: var(--space-3);
+}
 .scroll-to-bottom-btn {
   position: absolute;
   bottom: 12px;
