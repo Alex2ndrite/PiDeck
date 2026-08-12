@@ -7,12 +7,14 @@
  * 白名单校验后写回 ~/.pi/agent/pi-deck-vision.json（pi-deck-vision 扩展运行时读取同一文件）。
  *
  * 保存逻辑统一归设置弹框头部「保存」按钮（useVisionBridgeDraft 上提草稿/脏标记/保存），
- * 本组件只负责表单呈现与模型选择；底部仅保留保存结果提示与运行日志诊断区。
+ * 本组件只负责表单呈现与模型选择；保存成功提示走全局 toast（底部绿字太隐蔽，用户
+ * 要求改 toast），失败提示就近展示（与头部保存按钮对照），底部保留运行日志诊断区。
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Check, ChevronsUpDown, RefreshCw, Trash2 } from "lucide-react";
 import { t } from "../../../i18n";
 import { desktopApi } from "../../../desktopApi";
+import { showNotice } from "../../../utils/notice";
 import { Button } from "../../ui-shadcn/button";
 import { Input } from "../../ui-shadcn/input";
 import { Textarea } from "../../ui-shadcn/textarea";
@@ -58,7 +60,8 @@ export function useVisionBridgeDraft() {
 	const [loading, setLoading] = useState(true);
 	const [saving, setSaving] = useState(false);
 	const [dirty, setDirty] = useState(false);
-	const [notice, setNotice] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
+	// 保存失败提示（成功走全局 toast，不在此占位）
+	const [notice, setNotice] = useState<string | null>(null);
 
 	// 挂载时拉取当前配置（弹框每次打开都重建 state，无需清理外部资源）
 	useEffect(() => {
@@ -86,7 +89,7 @@ export function useVisionBridgeDraft() {
 		setNotice(null);
 	}, []);
 
-	/** 保存草稿到 pi-deck-vision.json；成功清脏标记，失败保留脏标记（头部按钮可重试）。 */
+	/** 保存草稿到 pi-deck-vision.json；成功清脏标记并弹 toast，失败保留脏标记（头部按钮可重试）。 */
 	const save = useCallback(async (): Promise<boolean> => {
 		if (!draft) return false;
 		setSaving(true);
@@ -95,13 +98,13 @@ export function useVisionBridgeDraft() {
 			const result = await desktopApi.config.visionSaveConfig(draft);
 			if (result.ok) {
 				setDirty(false);
-				setNotice({ tone: "ok", text: t("settings.vision.saved") });
+				showNotice(t("settings.vision.saved"), 3000);
 				return true;
 			}
-			setNotice({ tone: "error", text: `${t("settings.vision.saveFailed")}：${result.error ?? ""}` });
+			setNotice(`${t("settings.vision.saveFailed")}：${result.error ?? ""}`);
 			return false;
 		} catch (error) {
-			setNotice({ tone: "error", text: `${t("settings.vision.saveFailed")}：${String(error)}` });
+			setNotice(`${t("settings.vision.saveFailed")}：${String(error)}`);
 			return false;
 		} finally {
 			setSaving(false);
@@ -123,8 +126,8 @@ export function VisionBridgeSettingsTab(props: {
 	saving: boolean;
 	/** 配置文件所在目录（来自主进程 vision:get-config 返回，用于展示落盘路径） */
 	configDir: string;
-	/** 保存结果提示（头部保存后在此展示，便于用户就近看到错误） */
-	notice: { tone: "ok" | "error"; text: string } | null;
+	/** 保存失败提示（成功已走全局 toast）；头部保存后在此就近展示错误，便于对照 */
+	notice: string | null;
 	onChange: (patch: Partial<VisionBridgeConfig>) => void;
 }) {
 	const { draft, saving, notice, configDir, onChange } = props;
@@ -437,16 +440,10 @@ export function VisionBridgeSettingsTab(props: {
 				</pre>
 			</SettingsSection>
 
-			{/* 保存结果提示：保存动作在弹框头部统一按钮，结果在此就近展示 */}
+			{/* 保存失败提示：成功走全局 toast（showNotice），失败就近展示便于与头部保存按钮对照 */}
 			{notice && (
 				<div className="flex items-center gap-3 px-0.5 pt-4">
-					<small
-						style={{
-							color: notice.tone === "ok" ? "var(--color-success, #16a34a)" : "var(--color-danger, #dc2626)",
-						}}
-					>
-						{notice.text}
-					</small>
+					<small style={{ color: "var(--color-danger, #dc2626)" }}>{notice}</small>
 				</div>
 			)}
 			{saving && <div className="px-0.5 pt-2 text-caption text-muted-foreground">{t("common.saving")}</div>}

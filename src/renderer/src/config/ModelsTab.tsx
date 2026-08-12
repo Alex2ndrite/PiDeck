@@ -2,6 +2,7 @@ import { Button } from "../components/ui-shadcn/button";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Brain, Check, ChevronDown, ChevronRight, Coins, Copy, ExternalLink, Plus, SquarePen, Trash2, X } from "lucide-react";
 import { t } from "../i18n";
+import { desktopApi } from "../desktopApi";
 import type { ModelItem, ModelsFile } from "./configTypes";
 import { ApiTypeInput, ConfigSelect, openDocsInSystemBrowser, SecretInput } from "./ConfigShared";
 import { emptyTierDraft, normalizeTiers, toTierDrafts, type CostTierDraft } from "./modelCostTiers";
@@ -18,6 +19,7 @@ import { Label } from "../components/ui-shadcn/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui-shadcn/table";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "../components/ui-shadcn/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "../components/ui-shadcn/popover";
+import { showNotice } from "../utils/notice";
 
 type FetchedModel = { id: string; name?: string };
 
@@ -227,7 +229,63 @@ export function ModelsTab(props: {
 		const index = Number(costDialogKey.slice(dashIndex + 1));
 		const model = data.providers[providerName]?.models[index];
 		setTierEditor({ key: costDialogKey, drafts: toTierDrafts(model?.cost?.tiers) });
+		// 打开弹框即补齐缺失费率为 0：cost 字段缺失会导致 pi 启动会话失败，
+		// 「看到 0」与「配置里有 0」保持一致，不依赖用户手动输入（tiers 原样保留）
+		if (model) {
+			const nextCost = { ...(model.cost ?? {}) };
+			let changed = false;
+			for (const field of ["input", "output", "cacheRead", "cacheWrite"] as const) {
+				if (nextCost[field] == null) {
+					nextCost[field] = 0;
+					changed = true;
+				}
+			}
+			if (changed) props.onUpdateModel(providerName, index, "cost", nextCost);
+		}
 	}, [costDialogKey]);
+
+	/**
+	 * 模型 id 失焦时按内置规格表自动填充空字段（contextWindow/maxTokens/reasoning/input）。
+	 * 数据来自 resources/model-specs.db（发版前 scripts/sync-model-specs.mjs 同步），
+	 * 按模型 id 匹配——中转站模型 id 与官方一致即可命中；只填空字段，手填不覆盖。
+	 */
+	const applyModelSpecAutoFill = async (providerName: string, index: number, modelId: string) => {
+		const trimmed = modelId.trim();
+		if (!trimmed) return;
+		const spec = await desktopApi.projects.getModelSpec(providerName, trimmed);
+		if (!spec) return;
+		// 失焦时手填已完成：以最新渲染的 model 为准，逐个判断空字段（有值不覆盖）
+		const model = data.providers[providerName]?.models[index];
+		if (!model) return;
+		const updates: Array<[string, unknown]> = [];
+		if (model.contextWindow == null && spec.contextWindow != null) {
+			updates.push(["contextWindow", spec.contextWindow]);
+		}
+		if (model.maxTokens == null && spec.maxTokens != null) {
+			updates.push(["maxTokens", spec.maxTokens]);
+		}
+		// reasoning 只在「未设置」时填 true；用户明确关掉的 false 不覆盖
+		if (model.reasoning === undefined && spec.reasoning === true) {
+			updates.push(["reasoning", true]);
+		}
+		// 多模态：未配置 input 且规格声明图片输入时才填
+		if (model.input == null && spec.images === true) {
+			updates.push(["input", ["text", "image"]]);
+		}
+		for (const [field, value] of updates) {
+			props.onUpdateModel(providerName, index, field, value);
+		}
+		if (updates.length > 0) {
+			showNotice(
+				t("config.modelSpecAutoFilled", {
+					model: spec.matchedId ?? trimmed,
+					source: spec.source === "openrouter" ? "OpenRouter" : "models.dev",
+				}),
+				3000,
+			);
+		}
+	};
+
 	const [pendingModelFocusKey, setPendingModelFocusKey] = useState<string | null>(null);
 	const [showGuide, setShowGuide] = useState(false);
 	const [batchMode, setBatchMode] = useState(false);
@@ -908,7 +966,9 @@ export function ModelsTab(props: {
 													{provider.models.map((m, i) => {
 											const updateCost = (field: "input" | "output" | "cacheRead" | "cacheWrite", rawValue: string) => {
 								const nextCost = { ...(m.cost ?? {}) };
-								if (rawValue.trim() === "") delete nextCost[field];
+								// 清空输入 = 落 0 而非删除字段：cost 字段缺失会导致 pi 启动会话失败，
+								// 弹框默认值也统一为 0（不显示占位符 -），保证费率永远齐全
+								if (rawValue.trim() === "") nextCost[field] = 0;
 								else {
 									const value = Number(rawValue);
 									if (!Number.isFinite(value) || value < 0) return;
@@ -956,6 +1016,8 @@ export function ModelsTab(props: {
 														onChange={(e) =>
 															props.onUpdateModel(name, i, "id", e.target.value)
 														}
+														// 失焦按内置规格表自动填充空字段（仅 model id 变化时生效，见 applyModelSpecAutoFill）
+														onBlur={(e) => void applyModelSpecAutoFill(name, i, e.target.value)}
 														placeholder="model-id"
 														className="h-8 min-w-0"
 													/>
@@ -1095,7 +1157,7 @@ export function ModelsTab(props: {
 													<DialogHeader>
 														<DialogTitle>{t("config.modelCost")}</DialogTitle>
 													</DialogHeader>
-													<div className="grid grid-cols-2 gap-2">{([["input", "config.costInput"], ["output", "config.costOutput"], ["cacheRead", "config.costCacheRead"], ["cacheWrite", "config.costCacheWrite"]] as const).map(([field, label]) => (<label key={field} className="config-model-cost-field"><span>{t(label)}</span><Input type="number" min="0" step="any" value={m.cost?.[field] ?? ""} onChange={(e) => updateCost(field, e.target.value)} placeholder="-" /></label>))}</div>
+													<div className="grid grid-cols-2 gap-2">{([["input", "config.costInput"], ["output", "config.costOutput"], ["cacheRead", "config.costCacheRead"], ["cacheWrite", "config.costCacheWrite"]] as const).map(([field, label]) => (<label key={field} className="config-model-cost-field"><span>{t(label)}</span>{/* 默认 0：cost 字段缺失会让 pi 启动会话失败，未配置时也显示 0 而非占位符 - */}<Input type="number" min="0" step="any" value={m.cost?.[field] ?? 0} onChange={(e) => updateCost(field, e.target.value)} /></label>))}</div>
 													<div className="mt-3 border-t pt-3">
 														<div className="mb-1.5 flex items-start justify-between gap-2">
 															<div>

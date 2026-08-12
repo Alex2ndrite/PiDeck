@@ -25,6 +25,7 @@ import type { RpcLogger } from "../logging/RpcLogger";
 import type { SessionRuntimeCoordinator } from "../sessions/SessionRuntimeCoordinator";
 import type { SkillManager } from "../skills/SkillManager";
 import { fetchModelList, invalidateModelListCache, getCachedModelList, refreshModelList } from "../pi/modelListCache";
+import type { ModelSpecsStore } from "../pi/modelSpecsStore";
 import { getProcessSnapshot } from "../process/ProcessMonitor";
 import type { ProcessMetricsSnapshot } from "../../shared/types";
 import { getWslExe } from "../wsl/wslExe";
@@ -58,6 +59,8 @@ export type SystemIpcDeps = {
 	stopAgentFromMonitor: (
 		agentId: string,
 	) => Promise<SessionCommandResult<SessionRuntimeTarget | undefined>>;
+	/** 模型规格存储（resources/model-specs.db 只读，发版前由 sync-model-specs.mjs 同步） */
+	modelSpecsStore: ModelSpecsStore;
 	getMainWindow: () => Electron.BrowserWindow | null;
 	mainCopy: (key: string, params?: Record<string, string | number>) => string;
 	/** Check for app update; defined in index.ts */
@@ -135,6 +138,7 @@ export function registerSystemIpc(deps: SystemIpcDeps): void {
 		appLogger,
 		rpcLogger,
 		sessionRuntimeCoordinator,
+		modelSpecsStore,
 		getMainWindow,
 		mainCopy,
 		checkForAppUpdate,
@@ -215,6 +219,31 @@ export function registerSystemIpc(deps: SystemIpcDeps): void {
 			return [];
 		}
 	});
+
+	// ── 模型规格（resources/model-specs.db，发版前由 sync-model-specs.mjs 同步）──
+
+	ipcMain.handle(
+		ipcChannels.projectsGetModelSpec,
+		async (_event, providerName: unknown, modelId: unknown) => {
+			// 边界校验：渲染层输入不可信，拒绝非字符串/超长输入
+			if (
+				typeof providerName !== "string" ||
+				typeof modelId !== "string" ||
+				providerName.length > 128 ||
+				modelId.length > 256
+			) {
+				return null;
+			}
+			try {
+				return (await modelSpecsStore.lookup(providerName, modelId)) ?? null;
+			} catch (error) {
+				void appLogger.warn("models", "Model spec lookup failed", {
+					error: error instanceof Error ? error.message : String(error),
+				});
+				return null;
+			}
+		},
+	);
 
 	// ── WSL ──────────────────────────────────────────────────────────
 

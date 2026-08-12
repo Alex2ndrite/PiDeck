@@ -19,6 +19,12 @@ import {
 import { desktopApi } from "../../desktopApi";
 import { t } from "../../i18n";
 import { showNotice } from "../../utils/notice";
+import {
+	clampCapsulePosition,
+	expandedPanelSize,
+	PANEL_GAP,
+	VIEWPORT_MARGIN,
+} from "../../utils/askPanelGeometry";
 import { SessionMessageTimeline } from "../session/SessionMessageTimeline";
 
 /** 拖动与点击的区分阈值（px）：小于该位移视为点击 */
@@ -92,6 +98,24 @@ export function AskPanelOverlay() {
     setDragPos(null);
   }, [sessionId]);
 
+  // 窗口缩放 / 展开状态变化后，把拖动定位钳回可见区域：拖动位置是绝对像素，
+  // 窗口变小、或展开面板（悬于胶囊上方）时会越出视口（issue：不随窗口同步）
+  useEffect(() => {
+    const clampNow = () => {
+      setDragPos((prev) =>
+        prev
+          ? clampCapsulePosition(prev.x, prev.y, {
+              width: window.innerWidth,
+              height: window.innerHeight,
+            }, expanded)
+          : prev,
+      );
+    };
+    clampNow();
+    window.addEventListener("resize", clampNow);
+    return () => window.removeEventListener("resize", clampNow);
+  }, [expanded]);
+
   if (!panel.isOpen || !sessionId) return null;
 
   // 胶囊摘要：取最新一条非空 assistant 正文，去掉 markdown 后截断
@@ -131,7 +155,13 @@ export function AskPanelOverlay() {
       // 未超过点击阈值前不移动，保证「点一下展开」不被微抖动干扰
       if (!current.moved && Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) return;
       current.moved = true;
-      setDragPos({ x: current.origX + dx, y: current.origY + dy });
+      // 拖动过程同步钳制：展开时面板悬于胶囊上方，坐标区间随展开状态收窄
+      setDragPos(
+        clampCapsulePosition(current.origX + dx, current.origY + dy, {
+          width: window.innerWidth,
+          height: window.innerHeight,
+        }, expanded),
+      );
     };
     const onUp = () => {
       lastDragMovedRef.current = dragRef.current?.moved ?? false;
@@ -149,8 +179,18 @@ export function AskPanelOverlay() {
       style={
         dragPos
           ? { left: dragPos.x, top: dragPos.y }
-          : // 默认位置：会话区域右上方（水平贴右，垂直约 1/4 高度处），拖动后可自由摆放
-            { right: 16, top: "25%" }
+          : expanded
+            ? // 展开时面板悬于胶囊上方（高 min(48vh,400px)），默认 25% 高度会让面板
+              // 越出视口顶部——顶部位置改由「面板完整可见」推导（面板顶缘 ≥ 8px）
+              {
+                right: 16,
+                top:
+                  expandedPanelSize(window.innerWidth, window.innerHeight).height +
+                  PANEL_GAP +
+                  VIEWPORT_MARGIN,
+              }
+            : // 默认位置：会话区域右上方（水平贴右，垂直约 1/4 高度处），拖动后可自由摆放
+              { right: 16, top: "25%" }
       }
     >
       {expanded && (
@@ -213,7 +253,7 @@ export function AskPanelOverlay() {
       )}
       {/* 胶囊本体：状态点 + 摘要 + 关闭 + 展开指示；整条可拖拽（touch-none 避免触屏滚动抢占指针） */}
       <button
-        className="ask-panel-pill flex h-9 max-w-[340px] cursor-grab touch-none items-center gap-2 rounded-full border bg-popover pl-2.5 pr-1 shadow-lg hover:bg-accent-soft active:cursor-grabbing"
+        className="ask-panel-pill flex h-9 max-w-[min(340px,calc(100vw-2rem))] cursor-grab touch-none items-center gap-2 rounded-full border bg-popover pl-2.5 pr-1 shadow-lg hover:bg-accent-soft active:cursor-grabbing"
         aria-label={t("askPanel.title")}
         aria-expanded={expanded}
         onPointerDown={handlePointerDown}

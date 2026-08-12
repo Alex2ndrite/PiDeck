@@ -74,7 +74,8 @@
     "compile-exe": "node scripts/compile-exe.js",
     "test:e2e": "npm run build:fast && playwright test",
     "e2e": "playwright test",
-    "verify": "npm run typecheck && npm test && npm run test:e2e"
+    "verify": "npm run typecheck && npm test && npm run test:e2e",
+    "sync:model-specs": "node scripts/sync-model-specs.mjs"
   },
   "dependencies": {
     "@electron-toolkit/utils": "^4.0.0",
@@ -137,6 +138,10 @@
       {
         "from": "resources/xueprompts.db",
         "to": "xueprompts.db"
+      },
+      {
+        "from": "resources/model-specs.db",
+        "to": "model-specs.db"
       },
       {
         "from": "build/pets",

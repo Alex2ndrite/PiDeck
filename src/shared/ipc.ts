@@ -224,6 +224,10 @@ export const ipcChannels = {
 	agentsRuntimeState: "agents:runtime-state",
 	agentsState: "agents:state",
 	projectsListModels: "projects:list-models",
+	/** 模型规格查询：线上缓存（OpenRouter + models.dev）按模型 id 匹配，中转站通用 */
+	projectsGetModelSpec: "projects:get-model-spec",
+	/** 手动刷新云端模型规格缓存 */
+	projectsRefreshModelSpecs: "projects:refresh-model-specs",
 	agentsEvent: "agents:event",
 	agentsMessage: "agents:message",
 	agentsLog: "agents:log",

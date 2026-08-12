@@ -233,6 +233,7 @@ export function createPreviewApi(): PiDesktopApi {
 			chooseChatPath: async () => null,
 			setChatPath: async () => projects[0],
 			listModels: async () => [],
+			getModelSpec: async () => null,
 			onTrustRequest: noop,
 			respondTrustRequest: async () => undefined,
 		},

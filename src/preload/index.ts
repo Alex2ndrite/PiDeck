@@ -17,6 +17,7 @@ import type {
 	AppUpdateInfo,
 	AvailableModel,
 	ChatMessage,
+	ModelSpec,
 	CodexImportReport,
 	CodexSessionSummary,
 	ClaudeImportReport,
@@ -271,6 +272,11 @@ const api = {
 		listModels: (projectId?: string) =>
 			ipcRenderer.invoke(ipcChannels.projectsListModels, projectId) as Promise<
 				AvailableModel[]
+			>,
+		// 查询模型规格（context window / 能力，内置 model-specs.db，中转站按 id 匹配）
+		getModelSpec: (providerName: string, modelId: string) =>
+			ipcRenderer.invoke(ipcChannels.projectsGetModelSpec, providerName, modelId) as Promise<
+				ModelSpec | null
 			>,
 		onTrustRequest: (callback: (request: {
 			requestId: string;

@@ -54,12 +54,14 @@ test("official BeUI TodoList source is placed in agents/ with official structure
 	assert.match(src, /EASE_OUT/);
 	assert.match(src, /SPRING_LAYOUT/);
 	assert.match(src, /SPRING_SWAP/);
-	// 官方行为要点：完成计数 / 全部完成自动折叠 + 新工作重新展开 / 完成删除线动画 / 状态图标动画 / reduced-motion
+	// 官方行为要点：完成计数 / 全部完成自动折叠 + 新工作重新展开 / 状态图标动画 / reduced-motion
 	assert.match(src, /ActionSwapRollText value=\{String\(completed\)\}/);
 	assert.match(src, /previousComplete\.current && !allComplete/);
 	assert.match(src, /collapseOnComplete\)\s*\{\s*setOpen\(false\)/);
 	assert.match(src, /useReducedMotion/);
-	assert.match(src, /scaleX: status === "completed" \? 1 : 0/);
+	// 产品取舍（2026-12 用户要求）：已完成项去掉官方删除线，对勾标记已足够；
+	// 与文件头部适配注释同步，防止 CLI 覆盖/误删时把这条偏离当意外改动
+	assert.doesNotMatch(src, /scaleX: status === "completed" \? 1 : 0/);
 	assert.match(src, /AnimatePresence initial=\{false\} mode="popLayout"/);
 	// 无障碍：disclosure 语义（trigger/content id、aria-expanded、aria-labelledby）
 	assert.match(src, /aria-expanded=\{currentOpen\}/);
@@ -107,7 +109,8 @@ test("compact variant is optional, defaults to official classes, and uses PiDeck
 	assert.match(src, /useReducedMotion/);
 	assert.match(src, /previousComplete\.current && !allComplete/);
 	assert.match(src, /aria-expanded=\{currentOpen\}/);
-	assert.match(src, /scaleX: status === "completed" \? 1 : 0/);
+	// 已完成项无删除线（2026-12 产品取舍，见文件头部适配注释）
+	assert.doesNotMatch(src, /scaleX: status === "completed" \? 1 : 0/);
 });
 
 test("official sibling helpers exist with required exports", () => {
@@ -184,7 +187,7 @@ test("parser ids are stable across status toggles and line insertions", () => {
 	const { parseAgentTodoItems } = loadParser();
 	const pending = parseAgentTodoItems(["☐ #1 修复登录页样式", "☐ #2 补测试"]);
 	const completed = parseAgentTodoItems(["☑ #1 修复登录页样式", "☐ #2 补测试"]);
-	// 状态切换：id 不变（strikethrough/layout 动画依赖同 key 元素）
+	// 状态切换：id 不变（状态图标动画依赖同 key 元素）
 	assert.equal(completed[0].id, pending[0].id);
 	// 行插入（新任务置顶）：既有项 id 不变
 	const inserted = parseAgentTodoItems(["☐ #3 新任务", "☑ #1 修复登录页样式", "☐ #2 补测试"]);
