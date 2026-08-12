@@ -1044,6 +1044,9 @@ export class FeishuBridge {
 			// /new 只创建稳定 Session；第一条实际消息再激活 runtime。
 			setPersistentChatId(`session:${binding.sessionId}`, chatId);
 			await this.sendSmartMessage(chatId, feishuT(this.locale, "session.created", { id: binding.sessionId.slice(0, 8) }));
+			// 飞书会话 runtime 启动时注入 PIDECK_FEISHU_LINKED，ask 交互被禁用——
+			// 建立绑定即告知用户，避免首次遇到「Agent 直接写问题」时困惑。
+			await this.sendSmartMessage(chatId, feishuT(this.locale, "session.askDisabled"));
 		} catch (e) {
 			logErr("[飞书 Bridge] 创建会话失败:", e);
 			await this.sendSmartMessage(chatId, feishuT(this.locale, "session.createFailed"));
@@ -1092,6 +1095,8 @@ export class FeishuBridge {
 			this.persistBindings();
 			this.pushBindings();
 			await this.sendSmartMessage(binding.chatId, feishuT(this.locale, "session.recovered", { id: binding.sessionId.slice(0, 8) }));
+			// 恢复的会话同样带 PIDECK_FEISHU_LINKED，ask 已禁用，同步提示用户。
+			await this.sendSmartMessage(binding.chatId, feishuT(this.locale, "session.askDisabled"));
 			return binding;
 		} catch (e) {
 			const msg = e instanceof Error ? e.message : String(e);
