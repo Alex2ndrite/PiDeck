@@ -146,6 +146,11 @@ export class AgentManager {
 	 * loadMessages / trimRuntimeCache 维护；-1 表示未知（匿名会话等无文件场景）。
 	 */
 	private readonly messageHeadOffsetByAgent = new Map<string, number>();
+	/**
+	 * trim 窗口右移滑出显示区的旧窗口头部轮次（待下次全量 flush 下发，渲染层并入历史前缀）。
+	 * 防止「翻历史 → 新轮 settle → 窗口前移」时锚点轮从视口消失且无法翻回。
+	 */
+	private readonly pendingSlideOutByAgent = new Map<string, ChatMessage[]>();
 	/** 会话文件版本（mtime:size）：随消息载荷下发，渲染层据此检测压缩改写并丢弃 disk 前缀。 */
 	private readonly sessionFileVersionByAgent = new Map<string, string>();
 	private readonly thinkingEmitter = new LatestByKeyEmitter<string, string>(
@@ -2402,6 +2407,7 @@ export class AgentManager {
 		this.activeToolCallsByAgent.delete(agentId);
 		this.toolExecutingByAgent.delete(agentId);
 		this.toolStateSequenceByAgent.delete(agentId);
+		this.pendingSlideOutByAgent.delete(agentId);
 		this.clearAgentState(agentId);
 		this.emitState();
 
@@ -2642,6 +2648,7 @@ export class AgentManager {
 		this.activeToolCallsByAgent.delete(agentId);
 		this.toolExecutingByAgent.delete(agentId);
 		this.toolStateSequenceByAgent.delete(agentId);
+		this.pendingSlideOutByAgent.delete(agentId);
 		this.clearStreamGate(agentId);
 		// agent 关闭时自动关闭 RPC 日志记录，并丢弃未广播的实时日志缓冲
 		this.rpcLoggingAgents.delete(agentId);
@@ -4902,14 +4909,25 @@ export class AgentManager {
 		const dirtyFrom = this.messageDirtyFromByAgent.get(agentId);
 		this.messageDirtyFromByAgent.delete(agentId);
 		const windowStart = this.displayWindowStartByAgent.get(agentId) ?? 0;
-		this.emit(ipcChannels.agentsMessage, buildMessageFlushPayload(
+		const payload = buildMessageFlushPayload(
 			agentId,
 			all,
 			dirtyFrom,
 			windowStart,
 			this.sessionFileVersionByAgent.get(agentId),
 			this.computeWindowStartFilePos(agentId, all, windowStart),
-		));
+		);
+		// trim 窗口右移滑出的旧窗口头部轮次随全量 flush 下发（渲染层并入历史前缀）；
+		// 增量 flush 不携带（新轮还在写），等终态全量校准。
+		if (payload.upsertFrom === undefined) {
+			const slideOut = this.pendingSlideOutByAgent.get(agentId);
+			if (slideOut && slideOut.length > 0) {
+				// 与窗口段同口径脱敏（删 tool result 大载荷），避免前缀持有未脱敏副本
+				payload.slideOut = stripToolResultForDelivery(slideOut);
+				this.pendingSlideOutByAgent.delete(agentId);
+			}
+		}
+		this.emit(ipcChannels.agentsMessage, payload);
 		// 消息 flush 时顺带同步本地流式标志：text_delta 置位 streamingAgents 后，
 		// 渲染进程必须及时拿到 isStreaming=true 才会走逐字渐显；此路径 50ms 节流、
 		// 无 RPC（不发 get_state），不会像 emitRuntimeState 那样在高频 delta 下过重。
@@ -4957,10 +4975,28 @@ export class AgentManager {
 		const next = summaryCards.length > 0 ? [...summaryCards, ...trimmed] : trimmed;
 		// 缓存头部在文件消息空间前移 = 被裁「角色消息」数（卡片/系统消息不计入文件消息空间，
 		// 若按总长度递增会把 windowStartFilePos 数值游标整体推偏）。
-		this.messageHeadOffsetByAgent.set(
-			agentId,
-			(this.messageHeadOffsetByAgent.get(agentId) ?? 0) + countRoleMessagesBefore(list, trimmedStart),
+		// headOffset=-1 表示匿名会话等无文件场景，数值游标不可用——保持 -1，不能递增成伪造游标。
+		const prevHeadOffset = this.messageHeadOffsetByAgent.get(agentId) ?? 0;
+		if (prevHeadOffset >= 0) {
+			this.messageHeadOffsetByAgent.set(
+				agentId,
+				prevHeadOffset + countRoleMessagesBefore(list, trimmedStart),
+			);
+		}
+		// 窗口前移的滑出轮：旧窗口（冻结于上次 loadMessages/trim）与新窗口（裁剪后尾部 3 轮）
+		// 的头部会滑出窗口覆盖区；抓取 [oldWindowStart, 新窗口最旧轮次起点) 随全量 flush 下发，
+		// 渲染层并入历史前缀——否则锚点轮从视口消失且翻页翻不回来（2026-12 回归修复）。
+		const oldWindowStart = this.displayWindowStartByAgent.get(agentId) ?? 0;
+		const newWindowStartInList = findTurnPageStart(
+			list.map((m) => ({ role: m.role, byteLength: 0 })),
+			list.length,
+			AgentManager.DISPLAY_WINDOW_TURNS,
+			Number.MAX_SAFE_INTEGER,
 		);
+		if (newWindowStartInList > oldWindowStart) {
+			const slideOut = list.slice(oldWindowStart, newWindowStartInList);
+			if (slideOut.length > 0) this.pendingSlideOutByAgent.set(agentId, slideOut);
+		}
 		this.messages.set(agentId, next);
 		this.displayWindowStartByAgent.set(
 			agentId,

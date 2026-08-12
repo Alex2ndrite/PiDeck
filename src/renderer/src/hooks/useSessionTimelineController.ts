@@ -284,9 +284,12 @@ export function useSessionTimelineController(options: {
 	useLayoutEffect(() => {
     const sessionId = options.sessionId;
     if (!sessionId) return;
-    // Already loaded this session.
-    if (lastLoadedSessionRef.current === sessionId) return;
-    lastLoadedSessionRef.current = sessionId;
+    const previouslyLoaded = lastLoadedSessionRef.current === sessionId;
+    // 已加载且缓存条目仍在 → 跳过（正常运行路径）。
+    // 缓存条目被 8-LRU 淘汰（条目变 undefined）时重新走磁盘加载自愈——
+    // 否则已挂载会话永久卡骨架屏（2026-12 回归修复）。
+    if (previouslyLoaded && cachedEntry) return;
+    if (!previouslyLoaded) lastLoadedSessionRef.current = sessionId;
 
     const entry = cachedEntry;
     const sequence = ++nextLoadSequence;
@@ -318,7 +321,7 @@ export function useSessionTimelineController(options: {
           },
         });
       });
-  }, [options.sessionId]);
+  }, [options.sessionId, cachedEntry]);
 
 	const diskPage = controllerEnabled && cachedEntry?.source === "disk"
 		? cachedEntry.page

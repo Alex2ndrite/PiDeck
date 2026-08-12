@@ -25,14 +25,15 @@ function runId() {
 	return `run-${seq}`;
 }
 
-/** 投影身份消息（id = agentId-history-entryId，meta.entryId 存在）。 */
+/** 投影身份消息（id = agentId-history-entryId，meta.entryId 存在）。
+ * 时间戳与运行期副本同源（同一条 pi 消息）：去重匹配要求两者在容差内。 */
 function projectedMessage(text, entryId, role = "assistant", extra = {}) {
 	return {
 		id: `agent-1-history-${entryId}`,
 		agentId: "agent-1",
 		role,
 		text,
-		timestamp: 1_000_000,
+		timestamp: 2_000_000,
 		meta: { entryId, _piDeckMsgSeq: 1 },
 		...extra,
 	};
@@ -166,4 +167,73 @@ test("无 preserveMessagesAfter：直接返回投影（替换语义不变）", (
 	const merged = mergeHistoryWithPreservedMessages(history, current);
 	assert.equal(merged.length, 1);
 	assert.equal(merged[0].id, "agent-1-history-e1");
+});
+
+// ── M1 回归：指纹去重的时间/位置约束（2026-12）──
+
+/** 40 条投影：头部与中部放一条旧「继续」，尾部窗口内可放同文本新副本。 */
+function longProjection(withTailDup, tailTimestamp = 2_000_000) {
+	const history = [];
+	for (let i = 0; i < 40; i += 1) {
+		history.push(projectedMessage(`msg-${i}`, `e${i}`));
+	}
+	// 中部（下标 5）的旧「继续」：远在尾部窗口之外
+	history[5] = projectedMessage("继续", "e5", "user");
+	if (withTailDup) {
+		// 尾部（下标 39）的同文本副本：加载期间新消息已落盘
+		history[39] = { ...projectedMessage("继续", "e39", "user"), timestamp: tailTimestamp };
+	}
+	return history;
+}
+
+test("M1: 投影中部/头部的旧同文本消息不得消耗运行期新增（修复前真实消息丢失）", () => {
+	// 加载期间新发的「继续」尚未落盘（投影里只有旧轮同文本消息）→ 必须保留运行期副本
+	const history = longProjection(false);
+	const merged = mergeHistoryWithPreservedMessages(
+		history,
+		[runtimeMessageAt("继续", 2_000_000, "user")],
+		1_500_000,
+	);
+	assert.equal(merged.length, 41, "真实新增消息被旧副本消耗即消息丢失");
+	assert.equal(merged[40].id.startsWith("run-"), true, "保留运行期身份");
+	assert.equal(merged[40].text, "继续");
+});
+
+test("M1: 尾部窗口内且时间容差内的投影副本仍被去重（双份修复语义保留）", () => {
+	const history = longProjection(true);
+	const merged = mergeHistoryWithPreservedMessages(
+		history,
+		[runtimeMessageAt("继续", 2_000_000, "user")],
+		1_500_000,
+	);
+	assert.equal(merged.length, 40, "尾部同时间戳副本应被消耗");
+	assert.equal(merged[39].id, "agent-1-history-e39", "保留投影版");
+});
+
+test("M1: 尾部窗口内但时间差远超容差 → 视为不同消息，不消耗", () => {
+	// 投影尾部同文本副本时间戳为 1_000_000（旧轮），运行期新增 2_000_000 → 不是同一条
+	const history = longProjection(true, 1_000_000);
+	const merged = mergeHistoryWithPreservedMessages(
+		history,
+		[runtimeMessageAt("继续", 2_000_000, "user")],
+		1_500_000,
+	);
+	assert.equal(merged.length, 41, "时间差远超容差不得消耗");
+});
+
+test("M1: 连发多条同文本：尾部窗口内一一消耗，不误删也不残留", () => {
+	// 尾部窗口内两条同文本副本（e38/e39），运行期两条 → 全部以投影为准
+	const history = longProjection(true);
+	history[38] = { ...projectedMessage("继续", "e38", "user"), timestamp: 2_000_000 };
+	const merged = mergeHistoryWithPreservedMessages(
+		history,
+		[
+			runtimeMessageAt("继续", 2_000_000, "user"),
+			runtimeMessageAt("继续", 2_000_000, "user"),
+		],
+		1_500_000,
+	);
+	assert.equal(merged.length, 40, "两条副本各消耗一条，不多删");
+	assert.equal(merged[38].id, "agent-1-history-e38");
+	assert.equal(merged[39].id, "agent-1-history-e39");
 });

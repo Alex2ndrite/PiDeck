@@ -47,6 +47,20 @@ export function messageFingerprint(message: ChatMessage): string {
 }
 
 /**
+ * 指纹匹配只允许在投影「尾部窗口」内进行：加载期间新发的消息若已落盘，
+ * 其文件副本必然位于投影末尾（最近写入）；头部/中部的同文本旧消息不可能是
+ * 「双份」。否则高频同文本消息（「继续」「好」）会被误判为历史双份而丢弃
+ * （2026-12 回归修复：preserved 消息真实丢失）。
+ */
+const FINGERPRINT_MATCH_TAIL = 32;
+
+/**
+ * 时间容差：同一条 pi 消息的投影副本（落盘记录）与运行期事件副本携带的
+ * timestamp 同源（都是 pi 消息时间戳），应几乎相等；超过该值视为不同消息。
+ */
+const FINGERPRINT_MATCH_TIME_TOLERANCE_MS = 5_000;
+
+/**
  * 后台加载历史消息完成后，把加载期间新增的实时消息接回历史尾部。
  * 大会话 get_messages 可能很慢；用户在等待期间发送的消息不能被历史结果覆盖。
  *
@@ -86,12 +100,25 @@ export function mergeHistoryWithPreservedMessages(
 		const fingerprint = messageFingerprint(message);
 		const candidates = fingerprintToHistoryIndices.get(fingerprint);
 		if (!candidates) return true;
-		// 一一消耗：连发多条相同文本时逐一对应，避免错配删多。
-		const historyIndex = candidates.find((index) => !consumedHistory.has(index));
-		if (historyIndex === undefined) return true;
-		// 投影里已有同一条 pi 消息：运行期副本是双份，丢弃（投影为准）。
-		consumedHistory.add(historyIndex);
-		return false;
+		// 只允许匹配投影尾部窗口内的副本（见 FINGERPRINT_MATCH_TAIL 注释）；
+		// 且时间须在容差内（同一条消息两通道 timestamp 同源）。两者都满足
+		// 才消耗：既避免双份，又不误删加载期间真实新增的同文本消息。
+		const tailStart = Math.max(0, historyMessages.length - FINGERPRINT_MATCH_TAIL);
+		const timeTolerantCandidates = candidates.filter(
+			(index) =>
+				index >= tailStart &&
+				Math.abs((historyMessages[index].timestamp ?? 0) - (message.timestamp ?? 0)) <=
+					FINGERPRINT_MATCH_TIME_TOLERANCE_MS,
+		);
+		// 从最新往旧一一消耗（投影尾部即最近写入，先消耗最近的），避免错配删多。
+		for (let i = timeTolerantCandidates.length - 1; i >= 0; i--) {
+			const historyIndex = timeTolerantCandidates[i];
+			if (!consumedHistory.has(historyIndex)) {
+				consumedHistory.add(historyIndex);
+				return false;
+			}
+		}
+		return true;
 	});
 	return preservedMessages.length > 0
 		? [...historyMessages, ...preservedMessages]

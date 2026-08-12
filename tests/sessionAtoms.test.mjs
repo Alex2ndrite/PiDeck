@@ -540,6 +540,128 @@ test("windowed full reconciles disk history prefix: seam dedupe by entryId and v
   assert.equal(entry().windowStart, 1);
 });
 
+test("incremental upsert offset accounts for leading compaction cards (H1 regression)", () => {
+  const atoms = loadAtoms();
+  const store = createStore();
+  const emit = (payload) =>
+    store.set(atoms.applySessionRuntimeEventAtom, {
+      sessionId: "session-a",
+      agentId: "agent-a",
+      runtimeGeneration: 1,
+      sourceChannel: "agents:message",
+      payload,
+    });
+  const entry = () => store.get(atoms.sessionMessagesCacheAtom)["session-a"];
+
+  // 压缩会话：主进程数组 = [摘要卡片, q1..a8, q9..q12]（16 条），窗口起点 9（q9 起尾部 3 轮）；
+  // 全量载荷 = [卡片, q9..q12 段]（8 条）→ 本地布局 [卡片, 段]，cardCount 由全量推导 = 1
+  emit({ agentId: "agent-a", windowStart: 9, totalLength: 16, messages: [
+    { id: "sum", role: "system", text: "compacted", meta: { type: "compaction" } },
+    { id: "m9", role: "user", text: "q9" },
+    { id: "m10", role: "assistant", text: "a9" },
+    { id: "m11", role: "user", text: "q10" },
+    { id: "m12", role: "assistant", text: "a10" },
+    { id: "m13", role: "user", text: "q11" },
+    { id: "m14", role: "assistant", text: "a11" },
+    { id: "m15", role: "user", text: "q12" },
+  ] });
+  assert.equal(entry().cardCount, 1);
+  assert.deepEqual([...entry().messages.map((m) => m.id)],
+    ["sum", "m9", "m10", "m11", "m12", "m13", "m14", "m15"]);
+
+  // 流式增量改写尾部：upsertFrom=14（main 绝对下标，m14 起）→ 本地偏移 = 14 − 9 + 卡片(1) = 6；
+  // 修复前偏移 = 5：q11（m13）连同 m14/m15 一起被替换切掉（长度恒等式 W+len===T 恰好抵消）
+  emit({ agentId: "agent-a", upsertFrom: 14, totalLength: 16, messages: [
+    { id: "m14", role: "assistant", text: "a11-streaming" },
+    { id: "m15", role: "user", text: "q12" },
+  ] });
+  assert.deepEqual([...entry().messages.map((m) => m.id)],
+    ["sum", "m9", "m10", "m11", "m12", "m13", "m14", "m15"]);
+  assert.equal(entry().messages[6].text, "a11-streaming", "q11 不得被静默切掉");
+
+  // append 新消息：upsertFrom=16（绝对）→ 本地偏移 8 → 追加
+  emit({ agentId: "agent-a", upsertFrom: 16, totalLength: 17, messages: [
+    { id: "m16", role: "assistant", text: "a12" },
+  ] });
+  assert.deepEqual([...entry().messages.map((m) => m.id)],
+    ["sum", "m9", "m10", "m11", "m12", "m13", "m14", "m15", "m16"]);
+});
+
+test("full flush merges trim slide-out turns into the history prefix (H2 regression)", () => {
+  const atoms = loadAtoms();
+  const store = createStore();
+  const emit = (payload) =>
+    store.set(atoms.applySessionRuntimeEventAtom, {
+      sessionId: "session-a",
+      agentId: "agent-a",
+      runtimeGeneration: 1,
+      sourceChannel: "agents:message",
+      payload,
+    });
+  const entry = () => store.get(atoms.sessionMessagesCacheAtom)["session-a"];
+
+  // 基线：窗口段 [e5..e9]（main 数组 [m1..m9] 窗口起点 4）+ disk 前缀 [e1..e4]
+  emit({ agentId: "agent-a", windowStart: 4, totalLength: 9, messages: [
+    { id: "m5", role: "user", text: "q3", meta: { entryId: "e5" } },
+    { id: "m6", role: "assistant", text: "a3", meta: { entryId: "e6" } },
+    { id: "m7", role: "user", text: "q4", meta: { entryId: "e7" } },
+    { id: "m8", role: "assistant", text: "a4", meta: { entryId: "e8" } },
+    { id: "m9", role: "user", text: "q5", meta: { entryId: "e9" } },
+  ] });
+  store.set(atoms.prependSessionHistoryPageAtom, {
+    sessionId: "session-a",
+    expectedRevision: entry().revision,
+    before: undefined,
+    page: {
+      messages: [
+        { id: "h1", role: "user", text: "q1", meta: { entryId: "e1" } },
+        { id: "h2", role: "assistant", text: "a1", meta: { entryId: "e2" } },
+        { id: "h3", role: "user", text: "q2", meta: { entryId: "e3" } },
+        { id: "h4", role: "assistant", text: "a2", meta: { entryId: "e4" } },
+      ],
+      total: 9,
+      nextBefore: 1,
+      indexVersion: "100:2000",
+    },
+  });
+  assert.deepEqual([...entry().history.messages.map((m) => m.meta.entryId)],
+    ["e1", "e2", "e3", "e4"]);
+
+  // trim 窗口右移：新窗口起点 7（旧空间）→ 滑出 [e5, e6]（q3/a3）随全量 flush 下发
+  emit({ agentId: "agent-a", windowStart: 7, totalLength: 9, slideOut: [
+    { id: "m5", role: "user", text: "q3", meta: { entryId: "e5" } },
+    { id: "m6", role: "assistant", text: "a3", meta: { entryId: "e6" } },
+  ], messages: [
+    { id: "m7", role: "user", text: "q4", meta: { entryId: "e7" } },
+    { id: "m8", role: "assistant", text: "a4", meta: { entryId: "e8" } },
+    { id: "m9", role: "user", text: "q5", meta: { entryId: "e9" } },
+  ] });
+  // 前缀 = 旧前缀 + 滑出轮 → e1..e6 连续无洞；窗口段 = [e7..e9]
+  assert.deepEqual([...entry().history.messages.map((m) => m.meta.entryId)],
+    ["e1", "e2", "e3", "e4", "e5", "e6"]);
+  assert.deepEqual([...entry().messages.map((m) => m.meta.entryId)], ["e7", "e8", "e9"]);
+  assert.equal(entry().windowStart, 7);
+
+  // 滑出轮与窗口段重叠的防御去重：slideOut 尾部与段首部同 entryId → 前缀只留一份
+  emit({ agentId: "agent-a", windowStart: 8, totalLength: 9, slideOut: [
+    { id: "m7", role: "user", text: "q4", meta: { entryId: "e7" } },
+  ], messages: [
+    { id: "m8", role: "assistant", text: "a4", meta: { entryId: "e8" } },
+    { id: "m9", role: "user", text: "q5", meta: { entryId: "e9" } },
+  ] });
+  assert.deepEqual([...entry().history.messages.map((m) => m.meta.entryId)],
+    ["e1", "e2", "e3", "e4", "e5", "e6", "e7"]);
+  assert.deepEqual([...entry().messages.map((m) => m.meta.entryId)], ["e8", "e9"]);
+
+  // 压缩改写 + 滑出轮：文件版本变化 → 旧前缀整段失效，仅以滑出轮重建前缀
+  emit({ agentId: "agent-a", windowStart: 1, totalLength: 3, fileVersion: "200:800", slideOut: [
+    { id: "m1", role: "user", text: "kept", meta: { entryId: "n1" } },
+  ], messages: [
+    { id: "c1", role: "user", text: "after-compaction", meta: { entryId: "n2" } },
+  ] });
+  assert.deepEqual([...entry().history.messages.map((m) => m.meta.entryId)], ["n1"]);
+});
+
 test("prependSessionHistoryPageAtom guards revision and cursor continuity, dedupes against segment", () => {
   const atoms = loadAtoms();
   const store = createStore();

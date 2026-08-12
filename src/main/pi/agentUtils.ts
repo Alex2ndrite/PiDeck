@@ -118,6 +118,8 @@ export function buildMessageFlushPayload(
 	windowStart?: number;
 	fileVersion?: string;
 	windowStartFilePos?: number;
+	/** trim 窗口右移滑出显示区的旧窗口头部轮次（仅全量 flush 携带，渲染层并入历史前缀） */
+	slideOut?: ChatMessage[];
 } {
 	// 激活显示窗口（2026-08 激活分页）：full 快照也只发窗口段 [windowStart..]，
 	// 窗口前历史由 disk 轮次分页按需 prepend；totalLength 恒为数组全长，

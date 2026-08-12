@@ -63,6 +63,11 @@ export type SessionMessageCacheEntry = {
 	page?: Pick<SessionMessagePage, "total" | "nextBefore">;
 	/** 激活显示窗口起点（runtime 数组下标空间，2026-08 激活分页）；>0 表示窗口前还有历史。 */
 	windowStart?: number;
+	/**
+	 * 窗口段头部的系统摘要卡片数（全量 flush 时推导：本地长度 − (totalLength − windowStart)）。
+	 * 增量合并时 upsertFrom 是 runtime 绝对下标，须 +cardCount 才等于本地下标（卡片占据本地头部）。
+	 */
+	cardCount?: number;
 	/** 窗口首条消息的文件消息下标（2026-11）：窗口缺 entryId 时作为首次补历史的数值游标 */
 	windowStartFilePos?: number;
 	/**
@@ -444,6 +449,8 @@ export const cacheSessionMessagesAtom = atom(
 		page?: Pick<SessionMessagePage, "total" | "nextBefore">;
 		/** runtime 窗口协议字段（2026-08 激活分页） */
 		windowStart?: number;
+		/** 窗口段头部的系统摘要卡片数（全量 flush 推导，增量合并偏移用） */
+		cardCount?: number;
 		/** 窗口首条消息的文件消息下标（2026-11）：窗口缺 entryId 时作为首次补历史的数值游标 */
 		windowStartFilePos?: number;
 		history?: SessionMessageCacheEntry["history"];
@@ -494,6 +501,8 @@ export const cacheSessionMessagesAtom = atom(
 			...(input.source === "runtime" ? {
 				windowStart: input.windowStart && input.windowStart > 0 ? input.windowStart : undefined,
 				history: input.history,
+				// 卡片数只在全量 flush 推导（增量 flush 不携带 → 保留旧值，合并偏移依赖它）
+				...(typeof input.cardCount === "number" ? { cardCount: input.cardCount } : {}),
 				// 未显式提供时保留旧值（增量 flush 不携带该字段，不应清掉有效游标）
 				...(typeof input.windowStartFilePos === "number"
 					? { windowStartFilePos: input.windowStartFilePos }
@@ -562,20 +571,46 @@ function messageEntryKey(message: ChatMessage): string {
 /**
  * 运行时窗口段更新时调和 disk 历史前缀（2026-08 激活分页）：
  * - fileVersion 变化（压缩/外部改写 JSONL）→ 前缀绝对下标空间失效，整段丢弃；
- * - 窗口右移与前缀尾部重叠 → 按 entryId 去重（重叠部分以运行时窗口段为权威）。
+ * - 窗口右移与前缀尾部重叠 → 按 entryId 去重（重叠部分以运行时窗口段为权威）；
+ * - slideOut（trim 窗口右移滑出的旧窗口头部轮次）→ 并入前缀尾部，避免锚点轮空洞。
  */
 function reconcileHistoryPrefix(
   history: SessionMessageCacheEntry["history"],
   segment: ChatMessage[],
   fileVersion?: string,
+  slideOut?: ChatMessage[],
 ): SessionMessageCacheEntry["history"] {
-  if (!history) return undefined;
-  if (fileVersion && history.version && fileVersion !== history.version) return undefined;
+  if (!history && (!slideOut || slideOut.length === 0)) return undefined;
+  if (fileVersion && history?.version && fileVersion !== history.version) {
+    // 压缩改写：前缀下标空间失效；无滑出轮时整段丢弃，有滑出轮时以其重建前缀
+    history = undefined;
+  }
   const segmentKeys = new Set(segment.map(messageEntryKey));
-  const messages = history.messages.filter((message) => !segmentKeys.has(messageEntryKey(message)));
-  if (messages.length === history.messages.length) return history;
+  // 滑出轮与窗口段去重（防御：理论上不重叠），再与既有前缀去重，避免接缝重复
+  const slideMessages = (slideOut ?? []).filter(
+    (message) => !segmentKeys.has(messageEntryKey(message)),
+  );
+  const slideKeys = new Set(slideMessages.map(messageEntryKey));
+  // 前缀同时按「窗口段」与「滑出轮」去重：窗口右移时前缀尾部与新段首部重叠，
+  // 重叠部分以运行时窗口段为权威；滑出轮同理（不重叠时无操作）
+  const dropKeys = new Set([...segmentKeys, ...slideKeys]);
+  const prefixMessages = (history?.messages ?? []).filter(
+    (message) => !dropKeys.has(messageEntryKey(message)),
+  );
+  const messages = [...prefixMessages, ...slideMessages];
   if (messages.length === 0) return undefined;
-  return { ...history, messages };
+  // 无滑出轮且前缀未被触碰：保留原对象引用，避免无谓的 atom 更新
+  if (slideMessages.length === 0 && messages.length === (history?.messages.length ?? 0)) {
+    return history;
+  }
+  return {
+    nextBefore: history?.nextBefore ?? null,
+    ...(history?.nextBeforeEntryId !== undefined
+      ? { nextBeforeEntryId: history?.nextBeforeEntryId }
+      : {}),
+    version: history?.version ?? fileVersion,
+    messages,
+  };
 }
 
 /**
@@ -1154,23 +1189,29 @@ export const applySessionRuntimeEventAtom = atom(
       if (Array.isArray(messages)) {
         const current = get(sessionMessagesCacheAtom)[event.sessionId];
         if (upsertFrom !== undefined && totalLength !== undefined) {
-          // 增量合并：upsertFrom 为 runtime 数组绝对下标，换算为本地窗口偏移；
-          // 偏移无效（缓存缺失/磁盘来源/漏事件）则丢弃，等终态窗口化全量校准——
-          // 中间态滞后至多为本轮回答内的显示延迟，终态到达后完全纠正。
+          // 增量合并：upsertFrom 为 runtime 数组绝对下标；本地数组 = [系统卡片(c), 窗口段]，
+          // 窗口段首条对应 runtime 下标 W（windowStart），因此本地下标 = upsertFrom − W + c。
+          // c（卡片数）由上一次全量 flush 推导并缓存（cardCount，见全量分支）；偏移无效
+          // （缓存缺失/磁盘来源/漏事件）则丢弃，等终态窗口化全量校准——中间态滞后至多
+          // 为本轮回答内的显示延迟，终态到达后完全纠正。
           const W = current?.windowStart ?? 0;
-          const offset = upsertFrom - W;
+          const cardCount = current?.cardCount ?? 0;
+          const offset = upsertFrom - W + cardCount;
           if (current?.source === "runtime" && offset >= 0 && current.messages.length >= offset) {
             const merged = [
               ...current.messages.slice(0, offset),
               ...(messages as ChatMessage[]),
             ];
-            if (W + merged.length === totalLength) {
+            // 长度校验：合并后本地长度 = 卡片 + (totalLength − W)；不满足说明增量已失序
+            // （漏事件/trim 未校准），丢弃等待全量
+            if (merged.length === totalLength - W + cardCount) {
               set(cacheSessionMessagesAtom, {
                 sessionId: event.sessionId,
                 messages: merged,
                 source: "runtime",
                 windowStart: W,
                 history: current.history,
+                cardCount,
               });
             }
           }
@@ -1178,12 +1219,21 @@ export const applySessionRuntimeEventAtom = atom(
           // 窗口化全量 / 传统全量：替换运行时窗口段；
           // disk 前缀经版本守卫（压缩改写即失效）+ 接缝去重（窗口右移与前缀重叠）后保留
           const segment = messages as ChatMessage[];
+          // 卡片数推导：全量载荷 = [卡片(c), 窗口段]，本地长度 = c + (totalLength − W)
+          const W = payloadWindowStart ?? 0;
+          const cardCount = Math.max(0, segment.length - (totalLength ?? segment.length) + W);
+          // trim 窗口右移的滑出轮：主进程把旧窗口头部（不再被新窗口覆盖的轮次）
+          // 随全量 flush 下发，并入历史前缀，避免「锚点轮从视口消失且翻不回来」
+          const slideOut = Array.isArray(payload.slideOut)
+            ? (payload.slideOut as ChatMessage[])
+            : undefined;
           set(cacheSessionMessagesAtom, {
             sessionId: event.sessionId,
             messages: segment,
             source: "runtime",
             windowStart: payloadWindowStart,
-            history: reconcileHistoryPrefix(current?.history, segment, fileVersion),
+            cardCount,
+            history: reconcileHistoryPrefix(current?.history, segment, fileVersion, slideOut),
             ...(typeof payloadWindowStartFilePos === "number"
               ? { windowStartFilePos: payloadWindowStartFilePos }
               : {}),

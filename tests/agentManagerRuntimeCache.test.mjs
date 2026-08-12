@@ -335,6 +335,67 @@ test("trimRuntimeCache keeps leading compaction summary cards", async () => {
   }
 });
 
+test("trimRuntimeCache slides out the old window head and keeps anonymous headOffset at -1 (H2+M2 regression)", async () => {
+  const { manager, sessionPath, directory } = await createHarness();
+  try {
+    const many = [];
+    for (let i = 1; i <= 15; i += 1) {
+      many.push({ id: `m-u${i}`, agentId: "agent-1", role: "user", text: `q${i}`, timestamp: 1, meta: { entryId: `u${i}` } });
+      many.push({ id: `m-a${i}`, agentId: "agent-1", role: "assistant", text: `a${i}`, timestamp: 1, meta: { entryId: `a${i}` } });
+    }
+    manager.messages.set("agent-1", many);
+    // 旧窗口 = q10 起（旧空间下标 18）；trim 后窗口 = q13 起 → 滑出 [q10..a12]（3 轮 6 条）
+    manager.displayWindowStartByAgent.set("agent-1", 18);
+    // 匿名会话（无文件路径/无 entryId 映射）：headOffset 未知 = -1，trim 后必须保持 -1（M2）
+    manager.messageHeadOffsetByAgent.set("agent-1", -1);
+    const payloads = [];
+    manager.onOutput((channel, payload) => {
+      if (channel === "agents:message") payloads.push(payload);
+    });
+    manager.trimRuntimeCache("agent-1");
+    // H2：滑出轮随全量 flush 下发（渲染层并入历史前缀，锚点轮不消失）
+    const slidePayload = payloads.find((p) => p.slideOut !== undefined);
+    assert.ok(slidePayload, "full flush must carry slideOut");
+    assert.deepEqual(
+      slidePayload.slideOut.map((m) => m.meta.entryId),
+      ["u10", "a10", "u11", "a11", "u12", "a12"],
+    );
+    assert.equal(slidePayload.windowStart, 18, "trim 后窗口 = q13 起（新空间下标 18）");
+    assert.equal(slidePayload.messages[0].meta.entryId, "u13");
+    assert.equal(manager.pendingSlideOutByAgent.get("agent-1"), undefined, "flush 后待发滑出已清空");
+    // M2：-1 保持 -1（修复前被递增成 5 的伪造游标）
+    assert.equal(manager.messageHeadOffsetByAgent.get("agent-1"), -1);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("trimRuntimeCache increments headOffset for file-backed sessions only (M2 regression)", async () => {
+  const { manager, sessionPath, directory } = await createHarness();
+  try {
+    const many = [];
+    for (let i = 1; i <= 15; i += 1) {
+      many.push({ id: `m-u${i}`, agentId: "agent-1", role: "user", text: `q${i}`, timestamp: 1, meta: { entryId: `u${i}` } });
+      many.push({ id: `m-a${i}`, agentId: "agent-1", role: "assistant", text: `a${i}`, timestamp: 1, meta: { entryId: `a${i}` } });
+    }
+    manager.messages.set("agent-1", many);
+    manager.messageHeadOffsetByAgent.set("agent-1", 0);
+    const payloads = [];
+    manager.onOutput((channel, payload) => {
+      if (channel === "agents:message") payloads.push(payload);
+    });
+    manager.trimRuntimeCache("agent-1");
+    // 被裁 q1..a3 = 6 条角色消息 → 数值游标前移 6；窗口首条 u13 的文件下标 = 6 + 18 = 24
+    assert.equal(manager.messageHeadOffsetByAgent.get("agent-1"), 6);
+    const full = payloads.find((p) => p.windowStart !== undefined);
+    assert.ok(full, "windowed full flush expected");
+    assert.equal(full.windowStart, 18);
+    assert.equal(full.windowStartFilePos, 24);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("cache-miss delete of a message absent from the file rejects with Message not found", async () => {
   const { manager, sessionPath, directory } = await createHarness();
   try {
