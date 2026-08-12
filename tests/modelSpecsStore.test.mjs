@@ -111,6 +111,24 @@ test("lookupModelSpec: 双源合并（openrouter 补 context，models.dev 补能
 	assert.equal(llama?.images, true); // huggingface 声明的 attachment
 });
 
+test("lookupModelSpec: builtin 补充模型（sensenova-6.7-flash-lite）裸 id 命中且能力齐全", () => {
+	const { openrouter, modelsDev } = storeMod.entriesFromRows([
+		{ source: "builtin", provider: "sensenova", id: "sensenova-6.7-flash-lite", contextWindow: null, maxTokens: null, reasoning: 1, toolCall: 1, attachment: 1, inputModalities: '["text","image"]' },
+	]);
+	const index = indexMod.buildSpecIndex(openrouter, modelsDev);
+	// 官方 provider 名直接命中
+	const direct = indexMod.lookupModelSpec(index, "sensenova", "sensenova-6.7-flash-lite");
+	assert.ok(direct, "sensenova 官方 provider 应命中");
+	assert.equal(direct.reasoning, true);
+	assert.equal(direct.images, true);
+	// 自定义中转站 provider + 裸 id 同样命中
+	const viaRelay = indexMod.lookupModelSpec(index, "myrelay", "sensenova-6.7-flash-lite");
+	assert.ok(viaRelay, "中转站 provider 应命中");
+	assert.equal(viaRelay.images, true);
+	// context 未公开 → 不填，避免误导
+	assert.equal(direct.contextWindow, undefined);
+});
+
 test("lookupModelSpec: 未命中返回 undefined（空 id / 未知模型）", () => {
 	const { openrouter, modelsDev } = makeFixture();
 	const index = indexMod.buildSpecIndex(openrouter, modelsDev);
@@ -207,6 +225,21 @@ test("integration: 内置 db 可读且真实模型可命中（不绑定数值）
 	// 纯 models.dev 模型（openrouter 无对应）
 	const glm = indexMod.lookupModelSpec(index, "myrelay", "glm-5");
 	assert.ok(glm?.source === "models-dev" || glm?.contextWindow, "glm-5 应命中 models.dev");
+	// 内置补充表（双源未收录的国产模型）：能力位齐全，图片/推理可自动填充
+	const sensenova = indexMod.lookupModelSpec(index, "sensenova", "sensenova-6.7-flash-lite");
+	assert.ok(sensenova?.reasoning, "sensenova-6.7-flash-lite 应命中内置补充表（推理）");
+	assert.ok(sensenova?.images, "sensenova-6.7-flash-lite 应命中内置补充表（图片）");
+	assert.equal(sensenova?.contextWindow, 262144, "flash-lite 上下文应有值（256K）");
+	// 商汤其他型号（V6 系列 / SenseChat 系列）
+	const v6Turbo = indexMod.lookupModelSpec(index, "sensenova", "SenseNova-V6-5-Turbo");
+	assert.ok(v6Turbo?.images && v6Turbo?.reasoning, "SenseNova-V6-5-Turbo 应命中（多模态推理）");
+	assert.equal(v6Turbo?.contextWindow, 131072, "V6-5-Turbo 上下文 128K");
+	// 阶跃星辰：主流 step-3.7-flash 走双源（models.dev 能力位），视觉模型走内置补充
+	const step37 = indexMod.lookupModelSpec(index, "stepfun", "step-3.7-flash");
+	assert.ok(step37?.images, "step-3.7-flash 应命中（官方原生多模态，models.dev 已标 attachment）");
+	const step1o = indexMod.lookupModelSpec(index, "stepfun", "step-1o-turbo-vision");
+	assert.ok(step1o?.images, "step-1o-turbo-vision 应命中内置补充表（视觉）");
+	assert.equal(step1o?.contextWindow, 32768);
 	// 未知模型不命中
 	assert.equal(indexMod.lookupModelSpec(index, "myrelay", "definitely-not-a-model-xyz"), undefined);
 });

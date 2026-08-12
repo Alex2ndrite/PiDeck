@@ -20,6 +20,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from ".
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "../components/ui-shadcn/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "../components/ui-shadcn/popover";
 import { showNotice } from "../utils/notice";
+import { computeModelSpecPatches } from "../utils/modelSpecAutoFill";
 
 type FetchedModel = { id: string; name?: string };
 
@@ -257,21 +258,8 @@ export function ModelsTab(props: {
 		// 失焦时手填已完成：以最新渲染的 model 为准，逐个判断空字段（有值不覆盖）
 		const model = data.providers[providerName]?.models[index];
 		if (!model) return;
-		const updates: Array<[string, unknown]> = [];
-		if (model.contextWindow == null && spec.contextWindow != null) {
-			updates.push(["contextWindow", spec.contextWindow]);
-		}
-		if (model.maxTokens == null && spec.maxTokens != null) {
-			updates.push(["maxTokens", spec.maxTokens]);
-		}
-		// reasoning 只在「未设置」时填 true；用户明确关掉的 false 不覆盖
-		if (model.reasoning === undefined && spec.reasoning === true) {
-			updates.push(["reasoning", true]);
-		}
-		// 多模态：未配置 input 且规格声明图片输入时才填
-		if (model.input == null && spec.images === true) {
-			updates.push(["input", ["text", "image"]]);
-		}
+		// 补全规则（只填空字段）集中在 utils/modelSpecAutoFill.ts，保存时的批量补全复用同一套逻辑
+		const updates = computeModelSpecPatches(model, spec);
 		for (const [field, value] of updates) {
 			props.onUpdateModel(providerName, index, field, value);
 		}

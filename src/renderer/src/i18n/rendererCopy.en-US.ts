@@ -974,6 +974,7 @@ export const enUS: Record<TranslationKey, string> = {
   "config.dirtyTooltip": "Has unsaved changes",
   "config.modelsSavedRestartHint": "Model configuration saved. Please restart active Agent sessions to apply the new configuration.",
   "config.modelsSaved": "Model configuration saved",
+  "config.modelsSavedWithSpecs": "Saved. Auto-filled specs for {count} models (built-in sync table)",
   "config.modelsRefreshed": "Refreshed model config for {count} Agent(s)",
   "config.modelsRefreshedPartial": "Refreshed {refreshed} Agent(s), {failed} failed",
   "config.skillCreatedToast":

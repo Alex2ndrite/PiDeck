@@ -27,10 +27,12 @@ export type OpenRouterSpecEntry = {
 	inputModalities: string[];
 };
 
-/** models.dev 条目（按 provider 展开） */
+/** models.dev 条目（按 provider 展开）；builtin 补充表同构，可携带 context/maxTokens（models.dev 本身无此数据） */
 export type ModelsDevSpecEntry = {
 	provider: string;
 	id: string;
+	contextWindow?: number;
+	maxTokens?: number;
 	reasoning?: boolean;
 	toolCall?: boolean;
 	attachment?: boolean;
@@ -124,6 +126,9 @@ export function lookupModelSpec(
 	};
 	if (or?.contextWindow) spec.contextWindow = or.contextWindow;
 	if (or?.maxTokens) spec.maxTokens = or.maxTokens;
+	// builtin 补充表自带 context/maxTokens（官方卡来源）时同样生效
+	if (!spec.contextWindow && mdEntry?.contextWindow) spec.contextWindow = mdEntry.contextWindow;
+	if (!spec.maxTokens && mdEntry?.maxTokens) spec.maxTokens = mdEntry.maxTokens;
 	// 图片能力：任一源声明 image 输入（models.dev 的 attachment 即图片附件）即支持
 	const images =
 		or?.inputModalities.includes("image") ||

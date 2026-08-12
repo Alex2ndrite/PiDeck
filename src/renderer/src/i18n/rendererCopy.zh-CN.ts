@@ -967,6 +967,7 @@ export const zhCN = {
   "config.dirtyTooltip": "有未保存的修改",
   "config.modelsSavedRestartHint": "模型配置已保存，请重启激活的 Agent 会话以应用新配置",
   "config.modelsSaved": "模型配置已保存",
+  "config.modelsSavedWithSpecs": "已保存，并为 {count} 个模型自动补全规格（内置同步表）",
   "config.modelsRefreshed": "已刷新 {count} 个 Agent 的模型配置",
   "config.modelsRefreshedPartial": "已刷新 {refreshed} 个 Agent，{failed} 个刷新失败",
   "config.skillCreatedToast": "Skill 已创建，重启 agent 后生效",

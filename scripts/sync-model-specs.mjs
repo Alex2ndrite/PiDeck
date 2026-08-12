@@ -27,6 +27,201 @@ const OUTPUT_DB = join(ROOT, "resources", "model-specs.db");
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/models";
 const MODELS_DEV_URL = "https://models.dev/api.json";
 
+/** 内置补充表：双源未收录的国产/长尾模型（手工维护）。
+ * 来源标记 builtin，与 models-dev 同构（能力位）。
+ * 添加依据：
+ * - 商汤：llm-ring/lmring model-depot sensenova.ts（商汤大装置平台 API 模型卡，含能力标注）
+ * - 阶跃星辰：platform.stepfun.com 官方模型页
+ * context/max_tokens 官方未公开的型号留空（等用户手填）；更新时同步更新测试。 */
+const BUILTIN_EXTRA_SPECS = [
+	// ── 商汤日日新 SenseNova ──
+	{
+		// 原生多模态智能体（OpenAI Vision 兼容，URL/Base64），推理模型；OCR 与图表解析增强
+		source: "builtin",
+		provider: "sensenova",
+		id: "sensenova-6.7-flash-lite",
+		context_window: 262144,
+		max_tokens: 65536,
+		reasoning: 1,
+		tool_call: 1,
+		attachment: 1,
+		input_modalities: JSON.stringify(["text", "image"]),
+	},
+	{
+		// 6.7 系列标准版：官方卡标注 functionCall + reasoning（视觉未标，不填）
+		source: "builtin",
+		provider: "sensenova",
+		id: "sensenova-6.7-flash",
+		context_window: 262144,
+		max_tokens: 65536,
+		reasoning: 1,
+		tool_call: 1,
+		attachment: 0,
+		input_modalities: JSON.stringify(["text"]),
+	},
+	{
+		// V6.5 系列：多模态推理，128K 上下文，OCR/文旅 IP 识别专项
+		source: "builtin",
+		provider: "sensenova",
+		id: "SenseNova-V6-5-Pro",
+		context_window: 131072,
+		max_tokens: null,
+		reasoning: 1,
+		tool_call: 0,
+		attachment: 1,
+		input_modalities: JSON.stringify(["text", "image"]),
+	},
+	{
+		source: "builtin",
+		provider: "sensenova",
+		id: "SenseNova-V6-5-Turbo",
+		context_window: 131072,
+		max_tokens: null,
+		reasoning: 1,
+		tool_call: 0,
+		attachment: 1,
+		input_modalities: JSON.stringify(["text", "image"]),
+	},
+	{
+		// V6 系列：图片/文本/视频原生统一
+		source: "builtin",
+		provider: "sensenova",
+		id: "SenseNova-V6-Reasoner",
+		context_window: 32768,
+		max_tokens: null,
+		reasoning: 1,
+		tool_call: 0,
+		attachment: 1,
+		input_modalities: JSON.stringify(["text", "image"]),
+	},
+	{
+		source: "builtin",
+		provider: "sensenova",
+		id: "SenseNova-V6-Turbo",
+		context_window: 32768,
+		max_tokens: null,
+		reasoning: 0,
+		tool_call: 0,
+		attachment: 1,
+		input_modalities: JSON.stringify(["text", "image"]),
+	},
+	{
+		source: "builtin",
+		provider: "sensenova",
+		id: "SenseNova-V6-Pro",
+		context_window: 32768,
+		max_tokens: null,
+		reasoning: 0,
+		tool_call: 0,
+		attachment: 1,
+		input_modalities: JSON.stringify(["text", "image"]),
+	},
+	{
+		// SenseChat 5.5：128K，functionCall
+		source: "builtin",
+		provider: "sensenova",
+		id: "SenseChat-5",
+		context_window: 131072,
+		max_tokens: 131072,
+		reasoning: 0,
+		tool_call: 1,
+		attachment: 0,
+		input_modalities: JSON.stringify(["text"]),
+	},
+	{
+		// 多图输入视觉模型
+		source: "builtin",
+		provider: "sensenova",
+		id: "SenseChat-Vision",
+		context_window: 16384,
+		max_tokens: 16384,
+		reasoning: 0,
+		tool_call: 0,
+		attachment: 1,
+		input_modalities: JSON.stringify(["text", "image"]),
+	},
+	{
+		source: "builtin",
+		provider: "sensenova",
+		id: "SenseChat-Turbo",
+		context_window: 32768,
+		max_tokens: 32768,
+		reasoning: 0,
+		tool_call: 1,
+		attachment: 0,
+		input_modalities: JSON.stringify(["text"]),
+	},
+	{
+		// 历史遗留 id（平台仍提供）：SenseChat 4.0 系列与方言/角色模型
+		source: "builtin",
+		provider: "sensenova",
+		id: "SenseChat-128K",
+		context_window: 131072,
+		max_tokens: 131072,
+		reasoning: 0,
+		tool_call: 0,
+		attachment: 0,
+		input_modalities: JSON.stringify(["text"]),
+	},
+	{
+		source: "builtin",
+		provider: "sensenova",
+		id: "SenseChat-32K",
+		context_window: 32768,
+		max_tokens: 32768,
+		reasoning: 0,
+		tool_call: 0,
+		attachment: 0,
+		input_modalities: JSON.stringify(["text"]),
+	},
+	{
+		source: "builtin",
+		provider: "sensenova",
+		id: "SenseChat",
+		context_window: 4096,
+		max_tokens: 4096,
+		reasoning: 0,
+		tool_call: 0,
+		attachment: 0,
+		input_modalities: JSON.stringify(["text"]),
+	},
+	{
+		source: "builtin",
+		provider: "sensenova",
+		id: "SenseChat-5-Cantonese",
+		context_window: 32768,
+		max_tokens: 32768,
+		reasoning: 0,
+		tool_call: 0,
+		attachment: 0,
+		input_modalities: JSON.stringify(["text"]),
+	},
+	{
+		source: "builtin",
+		provider: "sensenova",
+		id: "SenseChat-Character-Pro",
+		context_window: 32768,
+		max_tokens: 4096,
+		reasoning: 0,
+		tool_call: 0,
+		attachment: 0,
+		input_modalities: JSON.stringify(["text"]),
+	},
+	// ── 阶跃星辰 StepFun ──
+	{
+		// 视觉理解模型：图片/视频理解（官方，32K）；主流的 step-3.7-flash / step-3.5-flash 已由双源覆盖
+		source: "builtin",
+		provider: "stepfun",
+		id: "step-1o-turbo-vision",
+		context_window: 32768,
+		max_tokens: null,
+		reasoning: 0,
+		tool_call: 0,
+		attachment: 1,
+		input_modalities: JSON.stringify(["text", "image"]),
+	},
+];
+
 function resolveProxy() {
 	const args = process.argv.slice(2);
 	const proxyIndex = args.indexOf("--proxy");
@@ -118,7 +313,7 @@ async function main() {
 		console.error("双源均拉取/解析失败，不生成 db（保留旧文件）");
 		process.exit(1);
 	}
-	console.log(`OpenRouter ${openrouterRows.length} 条，models.dev ${modelsDevRows.length} 条`);
+	console.log(`OpenRouter ${openrouterRows.length} 条，models.dev ${modelsDevRows.length} 条，内置补充 ${BUILTIN_EXTRA_SPECS.length} 条`);
 
 	const SQL = await initSqlJs();
 	const db = new SQL.Database();
@@ -149,7 +344,7 @@ async function main() {
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 	);
 	db.run("BEGIN TRANSACTION");
-	for (const row of [...openrouterRows, ...modelsDevRows]) {
+	for (const row of [...openrouterRows, ...modelsDevRows, ...BUILTIN_EXTRA_SPECS]) {
 		insert.run([
 			row.source,
 			row.provider,
@@ -173,6 +368,7 @@ async function main() {
 		["synced_at", syncedAt],
 		["openrouter_count", String(openrouterRows.length)],
 		["models_dev_count", String(modelsDevRows.length)],
+		["builtin_count", String(BUILTIN_EXTRA_SPECS.length)],
 		["schema_version", "1"],
 	]) {
 		upsertMeta.run([key, value]);

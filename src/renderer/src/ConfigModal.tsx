@@ -37,6 +37,7 @@ import {
 } from "lucide-react";
 import { cn } from "./lib/utils";
 import { showNotice } from "./utils/notice";
+import { collectModelSpecPatches } from "./utils/modelSpecAutoFill";
 import { Component, useState, useEffect, useCallback, type ReactNode } from "react";
 import type { PiDesktopApi } from "../../preload";
 import { AuthTab } from "./config/AuthTab";
@@ -964,11 +965,19 @@ function ConfigModalContent(props: ConfigModalProps) {
 	};
 
 	const handleSaveModels = async (): Promise<boolean> => {
+		// 保存前按内置规格表批量补全空字段（用户无需逐个失焦）：
+		// 查询只读、补全只填空字段；结果写回 state 与落盘数据，保证保存的就是补全后的值
+		// （onSave 闭包读的是旧 modelsData，不能在 setState 之后再取）。
+		const { providers: filledProviders, filledCount } = await collectModelSpecPatches(
+			modelsData,
+			(providerName, modelId) => api.projects.getModelSpec(providerName, modelId),
+		);
+		const base = filledCount > 0 ? { ...modelsData, providers: filledProviders } : modelsData;
 		// 保存前规范化所有供应商的 compat 字段，确保布尔值显式写入而不依赖后端默认值
 		const normalizedData = {
-			...modelsData,
+			...base,
 			providers: Object.fromEntries(
-				Object.entries(modelsData.providers).map(([name, provider]) => [
+				Object.entries(base.providers).map(([name, provider]) => [
 					name,
 					{
 						...provider,
@@ -983,9 +992,15 @@ function ConfigModalContent(props: ConfigModalProps) {
 		};
 		const ok = await saveAndReload(
 			() => api.config.saveModels(normalizedData),
-			t("config.modelsSaved"),
+			filledCount > 0
+				? t("config.modelsSavedWithSpecs", { count: filledCount })
+				: t("config.modelsSaved"),
 			"config:models",
 		);
+		// 保存成功后才把补全值写回 UI：失败时保留原值，下次保存会重新补全（幂等）
+		if (ok && filledCount > 0) {
+			setModelsData(base);
+		}
 		await loadConfig("models");
 		return ok;
 	};

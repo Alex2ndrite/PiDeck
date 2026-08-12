@@ -62,10 +62,15 @@ export function entriesFromRows(rows: ModelSpecRow[]): {
 					inputModalities,
 				});
 			}
-		} else if (row.source === "models-dev") {
+		// builtin 与 models-dev 同构（能力位齐全、无 context）：双源未收录的国产/长尾模型走同一裸 id 命中路径；
+		// builtin 行可携带 context/maxTokens（官方模型卡来源），透传给查询层合并
+		} else if (row.source === "models-dev" || row.source === "builtin") {
 			modelsDev.push({
 				provider: row.provider ?? "",
 				id: row.id,
+				contextWindow:
+					typeof row.contextWindow === "number" && row.contextWindow > 0 ? row.contextWindow : undefined,
+				maxTokens: typeof row.maxTokens === "number" && row.maxTokens > 0 ? row.maxTokens : undefined,
 				reasoning: row.reasoning === 1 ? true : undefined,
 				toolCall: row.toolCall === 1 ? true : undefined,
 				attachment: row.attachment === 1 ? true : undefined,
