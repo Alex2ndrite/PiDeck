@@ -34,3 +34,16 @@ export type ImageGenErrorCode =
 export type ImageGenResult =
 	| { ok: true; image: ImageContent }
 	| { ok: false; error: ImageGenErrorCode; detail?: string };
+
+/**
+ * 生图消息的渲染元数据（存在 ChatMessage.meta.imageGen）：
+ * 生图结果以「消息」形式上屏，同一条 assistant 消息随生成进度在
+ * generating（点阵动画）→ complete（图片清晰过渡）→ error 之间切换。
+ */
+export type ImageGenMeta = {
+	status: "generating" | "complete" | "error";
+	/** 触发生图的提示词（渲染层展示引用） */
+	prompt: string;
+	/** 失败时的详细错误文案（已 i18n），status=error 时展示 */
+	errorDetail?: string;
+};

@@ -14,6 +14,7 @@ import type {
   PiCommand,
   SessionSummary,
 } from "../../../shared/types";
+import type { ImageGenMeta } from "../../../shared/types/imagegen";
 import {
   cacheSessionMessagesAtom,
   sessionAttachmentsByIdAtom,
@@ -607,8 +608,9 @@ export function useSessionComposerController(
 
   // 生图：复用当前会话选中的模型（record.model 来自模型页/模型下拉）。
   // 结果按「消息」语义上屏（与 useSessionSend 乐观提交同一约定：写时间线缓存、source=runtime）：
-  // 提示词作为 user 消息立即上屏，生图结果作为 assistant 消息（images=[图]）渲染，失败作为 error 消息上屏。
-  // 不调用 send、不进附件栏（无运行中 Agent 也能用）。
+  // 提示词作为 user 消息立即上屏；随后追加一条 assistant「生图占位」消息（meta.imageGen=generating），
+  // 生成期间由 FinalAnswer 渲染 beUI ImageGeneration 点阵动画，完成后原地更新为 complete（图片清晰过渡），
+  // 失败原地更新为 error。不调用 send、不进附件栏（无运行中 Agent 也能用）。
   const generateImage = useCallback(async () => {
     const prompt = draft.trim();
     if (!prompt || generatingImage) return;
@@ -624,6 +626,15 @@ export function useSessionComposerController(
       const previous = store.get(sessionMessagesCacheAtom)?.[sessionId]?.messages ?? [];
       setCacheMessages({ sessionId, messages: [...previous, message], source: "runtime" });
     };
+    // 按 id 原地更新已上屏消息（生图占位 → complete/error 复用同一条，避免时间线多出一条）。
+    const updateTimelineMessage = (id: string, patch: (m: ChatMessage) => ChatMessage) => {
+      const previous = store.get(sessionMessagesCacheAtom)?.[sessionId]?.messages ?? [];
+      setCacheMessages({
+        sessionId,
+        messages: previous.map((m) => (m.id === id ? patch(m) : m)),
+        source: "runtime",
+      });
+    };
 
     appendTimelineMessage({
       id: crypto.randomUUID(),
@@ -631,6 +642,18 @@ export function useSessionComposerController(
       role: "user",
       text: prompt,
       timestamp: Date.now(),
+    });
+    const imageMessageId = crypto.randomUUID();
+    appendTimelineMessage({
+      id: imageMessageId,
+      agentId: "",
+      role: "assistant",
+      text: "",
+      stopReason: "stop",
+      timestamp: Date.now(),
+      meta: {
+        imageGen: { status: "generating", prompt } satisfies ImageGenMeta,
+      },
     });
     setDraft("");
 
@@ -641,33 +664,37 @@ export function useSessionComposerController(
         prompt,
       });
       if (result.ok) {
-        appendTimelineMessage({
-          id: crypto.randomUUID(),
-          agentId: "",
-          role: "assistant",
-          text: "",
-          stopReason: "stop",
-          timestamp: Date.now(),
+        updateTimelineMessage(imageMessageId, (m) => ({
+          ...m,
           images: [result.image],
-        });
+          meta: {
+            imageGen: { status: "complete", prompt } satisfies ImageGenMeta,
+          },
+        }));
         showNotice(t("imagegen.done"), 4000);
       } else {
-        appendTimelineMessage({
-          id: crypto.randomUUID(),
-          agentId: "",
-          role: "error",
-          text: mapImageGenError(result.error, result.detail),
-          timestamp: Date.now(),
-        });
+        updateTimelineMessage(imageMessageId, (m) => ({
+          ...m,
+          meta: {
+            imageGen: {
+              status: "error",
+              prompt,
+              errorDetail: mapImageGenError(result.error, result.detail),
+            } satisfies ImageGenMeta,
+          },
+        }));
       }
     } catch {
-      appendTimelineMessage({
-        id: crypto.randomUUID(),
-        agentId: "",
-        role: "error",
-        text: t("imagegen.error.network"),
-        timestamp: Date.now(),
-      });
+      updateTimelineMessage(imageMessageId, (m) => ({
+        ...m,
+        meta: {
+          imageGen: {
+            status: "error",
+            prompt,
+            errorDetail: t("imagegen.error.network"),
+          } satisfies ImageGenMeta,
+        },
+      }));
     } finally {
       setGeneratingImage(false);
     }

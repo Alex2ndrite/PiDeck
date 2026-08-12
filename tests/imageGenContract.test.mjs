@@ -63,7 +63,7 @@ test("composer 模式选择器与底栏三态（含生图图标）", () => {
 	assert.doesNotMatch(composerComponents, /onGenerateImage/);
 });
 
-test("controller：生图分支不 send、结果作为消息上屏（不进附件栏）、错误码映射", () => {
+test("controller：生图分支不 send、生图占位消息三态上屏（不进附件栏）、错误码映射", () => {
 	// delivery.send 生图分支
 	assert.match(controller, /if \(mode === "imagegen"\) \{\s*void generateImage\(\);\s*return;\s*\}/);
 	// generateImage 复用 record.model + desktopApi.imagegen.generate
@@ -76,9 +76,17 @@ test("controller：生图分支不 send、结果作为消息上屏（不进附�
 	assert.match(controller, /role: "user"/);
 	assert.match(controller, /role: "assistant"/);
 	assert.match(controller, /stopReason: "stop"/);
+	// 生图占位消息：meta.imageGen 三态 + 原地更新（不新增消息）
+	assert.match(controller, /updateTimelineMessage/);
+	assert.match(controller, /const imageMessageId = crypto\.randomUUID\(\)/);
+	assert.match(controller, /imageGen: \{ status: "generating", prompt \} satisfies ImageGenMeta/);
+	assert.match(controller, /imageGen: \{ status: "complete", prompt \} satisfies ImageGenMeta/);
 	assert.match(controller, /images: \[result\.image\]/);
-	assert.match(controller, /role: "error"/);
+	assert.match(controller, /status: "error"/);
+	assert.match(controller, /errorDetail: mapImageGenError\(result\.error, result\.detail\)/);
 	assert.doesNotMatch(controller, /setAttachments\(\(current\) => \[\.\.\.current, result\.image\]\)/);
+	// 不再新增独立 error 消息（失败态写回同一条占位消息）
+	assert.doesNotMatch(controller, /role: "error"/);
 	// mapImageGenError 映射错误码到 i18n
 	assert.match(controller, /function mapImageGenError\(error: string, detail\?: string\)/);
 	assert.match(controller, /case "notConfigured"/);
