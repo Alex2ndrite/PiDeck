@@ -148,6 +148,55 @@ export function collectSessionFileChanges(
 	return [...map.values()];
 }
 
+/**
+ * 一轮 agent-run 内文件修改行的展示结构：
+ * 与 beUI FileDiffLine 结构兼容（oldLine/newLine 可选，缺省即可直接传入 FileDiff）。
+ */
+export type TurnFileDiffLine = {
+	id: string;
+	type: "added" | "removed" | "context";
+	content: string;
+};
+
+/**
+ * 收集一轮 agent-run 内修改的文件：展开 run.items 的全部消息后复用
+ * collectSessionFileChanges。run 完成后其内容不再变化，因此每轮底部展示天然固定，
+ * 不会被后续消息清掉。
+ */
+export function collectRunFileChanges(
+	run: AgentRunItem,
+): Array<{ path: string; count: number; originalContent: string; content: string }> {
+	const msgs: ChatMessage[] = [];
+	for (const item of run.items) {
+		if (item.kind === "message") {
+			msgs.push(item.message);
+		} else if (item.kind === "tool-group" || item.kind === "thinking-group") {
+			msgs.push(...item.messages);
+		}
+	}
+	return collectSessionFileChanges(msgs);
+}
+
+/**
+ * 文件修改条目 → beUI FileDiff 行序列：
+ * edit/patch 展示变动区域（removed 旧行 + added 新行）；
+ * write/create 无旧内容，整文件视为新增（全 added）。
+ */
+export function fileChangeToDiffLines(entry: {
+	originalContent: string;
+	content: string;
+}): TurnFileDiffLine[] {
+	const hasOld = entry.originalContent.length > 0;
+	const lines: TurnFileDiffLine[] = [];
+	entry.originalContent.split("\n").forEach((content, index) => {
+		if (hasOld) lines.push({ id: `removed-${index}`, type: "removed", content });
+	});
+	entry.content.split("\n").forEach((content, index) => {
+		lines.push({ id: `added-${index}`, type: "added", content });
+	});
+	return lines;
+}
+
 export function getToolName(message: ChatMessage): string {
   const fromMeta = message.meta?.toolName;
   if (typeof fromMeta === "string" && fromMeta.trim()) return fromMeta;

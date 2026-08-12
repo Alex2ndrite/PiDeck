@@ -22,6 +22,7 @@ import { InterimAnswer } from "./InterimAnswer";
 import { ProcessSummaryToggle } from "./ProcessSummaryToggle";
 import { ThinkingStep } from "./ThinkingStep";
 import { ToolStep } from "./ToolStep";
+import { TurnFileChanges } from "./TurnFileChanges";
 import { useTurnExecution } from "./useTurnExecution";
 import type { DiffFileHandler } from "../ToolCallComponents";
 
@@ -437,6 +438,14 @@ export const TurnRow = memo(
 							)}
 					</div>
 				)}
+
+				{/* 本轮文件修改：固定显示在本轮底部（后续发送新消息不清除），
+				    点击行展开内联 diff，行尾按钮打开右侧差异查看器 */}
+				<TurnFileChanges
+					run={run}
+					streaming={props.isStreaming}
+					onDiffFile={props.onDiffFile}
+				/>
 			</div>
 		</article>
 	);

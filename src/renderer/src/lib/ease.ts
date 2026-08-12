@@ -1,38 +1,57 @@
-// Shared motion curves for source-distributed beUI components.
-// Keeping these values in one module avoids each copied component inventing a different motion language.
-//
-// 与 beui.dev 官方 registry 的 lib/ease.ts 的差异：
-// - EASE_OUT / SPRING_LAYOUT 沿用本仓库既有基线值（preview-rail 等早期迁移组件已在使用），
-//   不随 todo-list 迁移改值，避免同一视觉语言被拆成两套；
-// - 其余常量（EASE_OUT_CSS / SPRING_PRESS / SPRING_SWAP）按官方值补齐，供
-//   agents/todo-list 与 motion/action-swap 使用。
-export const EASE_OUT = [0.22, 1, 0.36, 1] as const;
+// Shared motion tokens. Easing curves mirror the CSS custom properties in
+// globals.css; springs are the canonical physics used across components.
+// Strong custom variants — defaults like `ease-in`/`ease-out` feel weak.
 
-/** Symmetric ease for loaders and looping grid pulses (beUI official value). */
+export const EASE_OUT = [0.16, 1, 0.3, 1] as const;
 export const EASE_IN_OUT = [0.77, 0, 0.175, 1] as const;
+export const EASE_DRAWER = [0.32, 0.72, 0, 1] as const;
 
-/** CSS string form of EASE_OUT for inline style transitions（与上方 EASE_OUT 数值保持一致）。 */
-export const EASE_OUT_CSS = "cubic-bezier(0.22, 1, 0.36, 1)";
+/** CSS string form of EASE_OUT for inline style transitions. */
+export const EASE_OUT_CSS = "cubic-bezier(0.16, 1, 0.3, 1)";
 
 /** Press feedback on buttons and other tappable surfaces. */
 export const SPRING_PRESS = {
-  type: "spring" as const,
+  type: "spring",
   stiffness: 500,
   damping: 30,
   mass: 0.6,
-};
+} as const;
 
 /** Content swaps — label/icon slots trading places inside a control. */
 export const SPRING_SWAP = {
-  type: "spring" as const,
+  type: "spring",
   stiffness: 460,
   damping: 30,
   mass: 0.55,
-};
+} as const;
 
-export const SPRING_LAYOUT = {
-  type: "spring" as const,
+/** Overlay panel entrances — modals and sheets summoned by pointer. */
+export const SPRING_PANEL = {
+  type: "spring",
   stiffness: 420,
-  damping: 34,
-  mass: 0.8,
-};
+  damping: 40,
+  mass: 0.5,
+} as const;
+
+/** Shared-layout glides — pills, indicators and panels morphing between positions. */
+export const SPRING_LAYOUT = {
+  type: "spring",
+  stiffness: 360,
+  damping: 32,
+  mass: 0.6,
+} as const;
+
+/** Cursor-follow physics for decorative mouse tracking (magnetic, tilt, dock). */
+export const SPRING_MOUSE = {
+  stiffness: 200,
+  damping: 15,
+  mass: 0.3,
+} as const;
+
+/** Dragged handles and fills (sliders) — critically damped `useSpring` config,
+ * so the value follows the pointer butterily and never rebounds off an end. */
+export const SPRING_GLIDE = {
+  stiffness: 700,
+  damping: 50,
+  mass: 0.5,
+} as const;

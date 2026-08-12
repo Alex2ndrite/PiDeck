@@ -581,28 +581,36 @@ export function GitPanel(props: GitPanelProps) {
         if (
           request === statusRequestRef.current &&
           projectId === projectIdRef.current
-        )
+        ) {
           setGroups(next);
+          // 刷新成功说明当前目录可用，恢复仓库/工具标记（手动 git init 或安装 git 后自动恢复轮询）
+          setNotAGitRepo(false);
+          setGitNotInstalled(false);
+        }
       } catch (caught) {
         if (
           request === statusRequestRef.current &&
           projectId === projectIdRef.current
         ) {
+          const msg = errorMessage(caught);
+          // 检测"不是 Git 仓库"的错误，展示初始化提示（无论是否静默都要置位，
+          // 否则面板打开期间仓库状态变化时轮询永远停不下来）
+          if (/not a git repository|fatal:/.test(msg)) {
+            setNotAGitRepo(true);
+          } else if (/command not found|ENOENT|spawn.*git.*ENOENT/i.test(msg)) {
+            setGitNotInstalled(true);
+          }
           if (!silent) {
             setGroups(EMPTY_GROUPS);
-            const msg = errorMessage(caught);
-            // 检测"不是 Git 仓库"的错误，展示初始化提示
             if (/not a git repository|fatal:/.test(msg)) {
-              setNotAGitRepo(true);
               setError("");
             } else if (/command not found|ENOENT|spawn.*git.*ENOENT/i.test(msg)) {
-              setGitNotInstalled(true);
               setError("");
             } else {
               setError(msg);
             }
           }
-          // 静默失败不影响已展示的旧分组数据；不做任何 UI 状态变更。
+          // 静默失败不影响已展示的旧分组数据；不做错误信息变更。
         }
       } finally {
         if (statusRunningRequestRef.current === runningRequest)
@@ -624,12 +632,15 @@ export function GitPanel(props: GitPanelProps) {
   }, [refresh]);
 
   // 静默轮询：每 5 秒拉取一次最新工作区状态，不显示 loading 动画、不覆盖错误。
+  // 非 git 仓库 / 未安装 git 时暂停轮询——状态恢复（git init / 安装 git）后由
+  // refresh 成功路径清标记，interval 随依赖重建自动恢复。
   useEffect(() => {
     const timer = window.setInterval(() => {
+      if (notAGitRepo || gitNotInstalled) return;
       void refresh(true);
     }, 5000);
     return () => window.clearInterval(timer);
-  }, [refresh]);
+  }, [refresh, notAGitRepo, gitNotInstalled]);
 
   /**
    * 刷新 push/pull 角标：先 fetch 远程跟踪引用，再对比本地差距。
@@ -649,14 +660,16 @@ export function GitPanel(props: GitPanelProps) {
   }, [props.fetch, props.aheadBehind, props.projectId]);
 
   // 定时 fetch 远程：每 5 分钟刷新一次 ahead/behind 角标；首次挂载也立即刷一次。
+  // 非 git 仓库 / 未安装 git 时暂停（fetch 同样会 spawn git 报错）。
   useEffect(() => {
     if (!props.fetch || !props.aheadBehind) return;
     void refreshAheadBehind();
     const timer = window.setInterval(() => {
+      if (notAGitRepo || gitNotInstalled) return;
       void refreshAheadBehind();
     }, 5 * 60_000);
     return () => window.clearInterval(timer);
-  }, [refreshAheadBehind, props.fetch, props.aheadBehind]);
+  }, [refreshAheadBehind, props.fetch, props.aheadBehind, notAGitRepo, gitNotInstalled]);
 
   const toggleResource = (key: keyof typeof resourceOpen) => {
     setResourceOpen((current) => ({ ...current, [key]: !current[key] }));

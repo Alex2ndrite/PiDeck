@@ -139,17 +139,20 @@ test("busy composer keeps stop and queued-send controls separate", () => {
   assert.match(composerPanelsSource, /send-behavior-toggle/);
   assert.match(composerPanelsSource, /send-behavior-primary/);
   assert.match(composerPanelsSource, /send-behavior-chevron/);
-  assert.match(composerPanelsSource, /\{props\.showBusySendControls && props\.hasComposerContent && \(/);
-  assert.match(composerPanelsSource, /\) : !props\.keepBusyDraftControls \? \(/);
-  assert.match(sendControls, /showBusySendControls=\{composer\.isBusy \|\| composer\.busyDraftLocked\}/);
+  // 发送 toggle 常显：无需输入内容也展示（busy 与否都能并行发送）
+  assert.match(composerPanelsSource, /disabled=\{props\.isAgentStarting \|\| !props\.canSend\}/);
+  // busy 时显示 stop 圆钮
+  assert.match(composerPanelsSource, /\{props\.isAgentBusy \? \(/);
   // pure official：toggle/menu 样式由 ComposerSendControls Tailwind 承担
   assert.match(composerPanelsSource, /send-behavior-toggle inline-flex h-8[\s\S]*bg-primary/);
-  assert.match(composerPanelsSource, /send-behavior-menu absolute[\s\S]*bg-popover/);
+  assert.match(composerPanelsSource, /send-behavior-menu w-44/);
   assert.match(composerPanelsSource, /send-behavior-primary[\s\S]*onClick=\{props\.onSend\}/);
-  assert.match(composerPanelsSource, /send-behavior-chevron[\s\S]*onMouseEnter=\{props\.onKeepBehaviorMenuOpen\}[\s\S]*onClick=\{props\.onToggleBehaviorMenu\}/);
+  // 非受控 DropdownMenu：开关由 Radix 管理，点击外部即时关闭（避免受控+延迟关闭卡住菜单）
+  assert.match(composerPanelsSource, /<DropdownMenu>\s*<DropdownMenuTrigger asChild>/);
   assert.match(composerAreaSource, /onSend=\{composer\.delivery\.send\}/);
-  assert.match(composerPanelsSource, /send-behavior-option steer/);
-  assert.match(composerPanelsSource, /send-behavior-option follow-up/);
+  // 当前回合/下一轮仅在会话进行中显示（隐藏而非置灰）；并行发送始终可用
+  assert.match(composerPanelsSource, /props\.isAgentBusy && \(\s*<DropdownMenuItem[\s\S]*send-behavior-option steer/);
+  assert.match(composerPanelsSource, /props\.isAgentBusy && \(\s*<DropdownMenuItem[\s\S]*send-behavior-option follow-up/);
   assert.doesNotMatch(composerPanelsSource, /<span>\{t\("app\.sendSteerDesc"\)\}<\/span>/);
   assert.match(composerPanelsSource, /send-behavior-option-dot size-1\.5/);
 });
@@ -165,9 +168,11 @@ test("composer keeps native typing inside the Session feature root", () => {
   assert.match(queuedPromptHookSource, /const currentDraft = store\.get\(sessionDraftByIdAtom\)\[sessionId\] \?\? ""/);
   assert.doesNotMatch(queuedPromptHookSource, /promptByAgent/);
   assert.match(appSource, /livePromptByAgentRef\.current = migrateAgentRecord/);
-  assert.match(composerPanelsSource, /props\.sendBehaviorMenuOpen &&\s*props\.showBusySendControls &&\s*props\.hasComposerContent/);
-  assert.match(composerPanelsSource, /send-behavior-option steer[\s\S]*?role="menuitem"/);
-  assert.match(composerPanelsSource, /send-behavior-option follow-up[\s\S]*?role="menuitem"/);
+  // 行为菜单非常显受控（Radix 内部状态），菜单项在会话进行中条件渲染
+  assert.doesNotMatch(composerPanelsSource, /open=\{\s*props\.sendBehaviorMenuOpen\}/);
+  assert.doesNotMatch(composerPanelsSource, /props\.hasComposerContent && \(\s*<DropdownMenu/);
+  assert.match(composerPanelsSource, /<DropdownMenuItem[\s\S]*send-behavior-option steer/);
+  assert.match(composerPanelsSource, /<DropdownMenuItem[\s\S]*send-behavior-option follow-up/);
 });
 
 test("queue drain is serialized and waits for an ordered canonical Session capability event", () => {

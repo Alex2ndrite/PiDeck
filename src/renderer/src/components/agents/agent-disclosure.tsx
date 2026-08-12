@@ -1,6 +1,4 @@
 "use client";
-// Official BeUI sibling helper — beui.dev registry components/agents/agent-disclosure
-// 官方源码忠实拷贝（agent todo-list 的折叠容器，无用户可见文案，无需 i18n 适配）。
 
 import { motion, type HTMLMotionProps, useReducedMotion } from "motion/react";
 import type { CSSProperties } from "react";
