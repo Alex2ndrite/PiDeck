@@ -2519,7 +2519,7 @@ app.whenReady().then(async () => {
 		},
 		securityStore,
 		// spawn pi 前预检修复会话文件（旧版私有 sessionName 头行会让 pi 拒绝加载，见 #114）
-		(filePath) => sessionScanner.repairLegacySessionNameLine(filePath),
+		(filePath) => sessionScanner.repairCorruptSessionHeader(filePath),
 		// 飞书绑定会话：spawn 时注入 PIDECK_FEISHU_LINKED，ask_question 切换为禁用提示版。
 		// 闭包延迟读 feishuBridge（连接成功后才创建），spawn 时 binding 已先于 runtime 建立。
 		(key) => Boolean(key && feishuBridge?.hasSessionBinding(key)),

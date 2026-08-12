@@ -11,7 +11,12 @@ import { getCodexSessionThreadInfo } from "../../shared/codexSessionMeta";
 import { extractMessageText, extractThinkingRaw } from "../pi/messageContent";
 import { toWslLinuxPath, type WslEnvironment } from "../wsl/WslPaths";
 import { getAppLogger } from "../logging/sharedLogger";
-import { isLegacySessionNameEntry, isLegacySessionNameLine, stripLegacySessionNameLine } from "./sessionNameLine";
+import {
+  isLegacySessionNameEntry,
+  isLegacySessionNameLine,
+  stripLegacySessionNameLine,
+  tryRestorePathGluedHeader,
+} from "./sessionNameLine";
 import { SessionSummaryCache, type SessionFileVersion } from "./sessionSummaryCache";
 
 type SessionScannerCopyKey = Extract<MainProcessTranslationKey,
@@ -506,31 +511,52 @@ export class SessionScanner {
   }
 
   /**
-   * 修复被旧版 PiDeck 私有 sessionName 头行破坏的会话文件（#114 存量受损文件）。
+   * 修复会话文件头部的两类损坏（在 AgentManager 每次 spawn pi 前调用，经 PiProcess options 注入）：
    *
-   * pi 要求首条可解析记录是 type:"session" 头，私有行位于头部时 pi 拒绝加载
-   * （"Session file is not a valid pi session"，exit 1）。此方法先读文件头 4KB
-   * 快速探测（避免大文件全量读取拖慢 Agent 启动），命中才全量剔除并回写。
+   * 1. 旧版 PiDeck 私有 sessionName 头行（#114 存量受损文件）。
+   * 2. 首行被写成「<文件路径>.jsonl{JSON} 粘连」（2026-08 用户现场：路径与 session header
+   *    无换行粘连，pi 跳过坏行后首条记录变成 model_change，拒绝加载）。
    *
-   * 在 AgentManager 每次 spawn pi 前调用（经 PiProcess options 注入）；
-   * 返回是否实际修复。支持 WSL 路径。
+   * pi 要求首条可解析记录是 type:"session" 头，两类损坏都会触发「Session file is not a valid
+   * pi session」（exit 1）。先读文件头 4KB 快速探测（避免大文件全量读取拖慢 Agent 启动），
+   * 命中才全量修复并回写；返回是否实际修复。支持 WSL 路径。
    */
-  async repairLegacySessionNameLine(filePath: string): Promise<boolean> {
+  async repairCorruptSessionHeader(filePath: string): Promise<boolean> {
     const wsl = this.isWslPath(filePath);
     const head = wsl ? await this.readWslFileHead(filePath) : await this.readFileHeadNative(filePath, 4096);
-    // 头 4KB 内没有私有行即认为健康：旧版私有行只会出现在文件头部区域，
-    // 中后段的同类行不阻塞 pi 加载（pi 只校验首条记录），留待重命名时一并清理。
-    if (!hasLegacySessionNameLine(head)) return false;
 
-    const raw = wsl ? await this.readWslFile(filePath) : await readFile(filePath, "utf8");
-    const stripped = stripLegacySessionNameLine(raw);
-    if (stripped === raw) return false;
-    if (wsl) {
-      await this.writeWslFile(filePath, stripped);
-    } else {
-      await writeFile(filePath, stripped, "utf8");
+    // 模式 1：旧版私有头行（只会出现在文件头部区域；中后段同类行不阻塞 pi 加载，
+    // 留待重命名时一并清理，与既有行为一致）
+    if (hasLegacySessionNameLine(head)) {
+      const raw = wsl ? await this.readWslFile(filePath) : await readFile(filePath, "utf8");
+      const stripped = stripLegacySessionNameLine(raw);
+      if (stripped === raw) return false;
+      if (wsl) {
+        await this.writeWslFile(filePath, stripped);
+      } else {
+        await writeFile(filePath, stripped, "utf8");
+      }
+      return true;
     }
-    return true;
+
+    // 模式 2：首行路径粘连（.jsonl{ + 合法 session header，见 tryRestorePathGluedHeader）
+    const restoredFirstLine = tryRestorePathGluedHeader(head);
+    if (restoredFirstLine !== null) {
+      const raw = wsl ? await this.readWslFile(filePath) : await readFile(filePath, "utf8");
+      // 只重写第一行；其余行原样保留（含空行与末尾结构）
+      const lines = raw.split(/\r?\n/);
+      if (lines[0] === restoredFirstLine) return false;
+      lines[0] = restoredFirstLine;
+      const output = lines.join("\n");
+      if (wsl) {
+        await this.writeWslFile(filePath, output);
+      } else {
+        await writeFile(filePath, output, "utf8");
+      }
+      return true;
+    }
+
+    return false;
   }
 
   /** 读取本地文件前 maxBytes 字节（用于会话文件头部快速探测，避免大文件全量读）。 */
