@@ -14,9 +14,15 @@ import type { CSSProperties } from "react";
  * - 输入框侧：composer 面板 overflow-hidden + scrollbar-gutter:stable 预留同一槽位
  *   （见 SessionView），footer 的 width 与两者同基准解析。
  * 两侧槽位均由浏览器按真实滚动条宽度预留（不写死像素），任何宽度设置下都像素级对齐。
+ *
+ * 100% 时的呼吸感：min() 把百分比封顶到 calc(100% - 48px)，即使滑杆拉到 100% 也
+ * 在两侧各留 24px 空隙（marginInline:auto 居中）；低于 100% 的百分比在宽屏下不受影响，
+ * 窄屏下自动收窄防溢出。不改用 padding——padding 在滚动内容上会把内容顶离滚动条槽位，
+ * 破坏上面的像素级对齐契约。
  */
 export const chatContentWidthStyle: CSSProperties = {
-	width: "var(--chat-content-pct-set, 80%)",
+	// min()：百分比上限封顶，保证 100% 时也有两侧空隙（各 24px）
+	width: "min(var(--chat-content-pct-set, 80%), calc(100% - 48px))",
 	maxWidth: "100%",
 	marginInline: "auto",
 };
