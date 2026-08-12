@@ -104,7 +104,11 @@ export function buildTurnDisplay(
 		// 旧逻辑在 isComplete 时跳过空文本，会导致 agentRunning 判定滞后时整段无挂载、
 		// 只能等 message_end 才突然出现最终回答（打字机 E2E 采不到 .execution-interim）。
 		const text = stripThinkingTags(stripAnsi(item.message.text)).trim();
-		if (!text) {
+		const hasImages = Boolean(item.message.images?.length);
+		// 空文本但带图（生图结果等）：不降级为 interim 挂载点，走下方最终回答判定——
+		// 否则图片会被丢进折叠容器（InterimAnswer 不传 images），纯图 run 甚至因
+		// hasFoldableContent 判定无折叠内容而整段不渲染。
+		if (!text && !hasImages) {
 			items.push({ kind: "interim-answer", id: item.message.id, message: item.message });
 			return;
 		}

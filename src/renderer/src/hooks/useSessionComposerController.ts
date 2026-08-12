@@ -8,12 +8,14 @@ import {
   type CSSProperties,
 } from "react";
 import type {
+  ChatMessage,
   FileTreeNode,
   ImageContent,
   PiCommand,
   SessionSummary,
 } from "../../../shared/types";
 import {
+  cacheSessionMessagesAtom,
   sessionAttachmentsByIdAtom,
   sessionComposerModeByIdAtom,
   sessionDraftByIdAtom,
@@ -244,6 +246,7 @@ export function useSessionComposerController(
   const setAttachmentsAtom = useSetAtom(setSessionAttachmentsAtom);
   const setModeAtom = useSetAtom(setSessionComposerModeAtom);
   const setSendStateAtom = useSetAtom(setSessionSendStateAtom);
+  const setCacheMessages = useSetAtom(cacheSessionMessagesAtom);
 
   const draft = drafts[sessionId] ?? "";
   const attachments = attachmentsBySession[sessionId] ?? [];
@@ -602,8 +605,10 @@ export function useSessionComposerController(
     enqueue,
   });
 
-  // 生图：复用当前会话选中的模型（record.model 来自模型页/模型下拉），
-  // 结果直接进附件栏（随消息发给 pi 看图）；不调用 send（无运行中 Agent 也能用）。
+  // 生图：复用当前会话选中的模型（record.model 来自模型页/模型下拉）。
+  // 结果按「消息」语义上屏（与 useSessionSend 乐观提交同一约定：写时间线缓存、source=runtime）：
+  // 提示词作为 user 消息立即上屏，生图结果作为 assistant 消息（images=[图]）渲染，失败作为 error 消息上屏。
+  // 不调用 send、不进附件栏（无运行中 Agent 也能用）。
   const generateImage = useCallback(async () => {
     const prompt = draft.trim();
     if (!prompt || generatingImage) return;
@@ -613,6 +618,22 @@ export function useSessionComposerController(
       return;
     }
     setGeneratingImage(true);
+
+    // 把本地生图消息追加进时间线缓存（整体替换 messages 数组，source=runtime 沿用乐观提交约定）。
+    const appendTimelineMessage = (message: ChatMessage) => {
+      const previous = store.get(sessionMessagesCacheAtom)?.[sessionId]?.messages ?? [];
+      setCacheMessages({ sessionId, messages: [...previous, message], source: "runtime" });
+    };
+
+    appendTimelineMessage({
+      id: crypto.randomUUID(),
+      agentId: "",
+      role: "user",
+      text: prompt,
+      timestamp: Date.now(),
+    });
+    setDraft("");
+
     try {
       const result = await desktopApi.imagegen.generate({
         provider: model.provider,
@@ -620,18 +641,37 @@ export function useSessionComposerController(
         prompt,
       });
       if (result.ok) {
-        setAttachments((current) => [...current, result.image]);
-        setDraft("");
+        appendTimelineMessage({
+          id: crypto.randomUUID(),
+          agentId: "",
+          role: "assistant",
+          text: "",
+          stopReason: "stop",
+          timestamp: Date.now(),
+          images: [result.image],
+        });
         showNotice(t("imagegen.done"), 4000);
       } else {
-        showNotice(mapImageGenError(result.error, result.detail), 5000);
+        appendTimelineMessage({
+          id: crypto.randomUUID(),
+          agentId: "",
+          role: "error",
+          text: mapImageGenError(result.error, result.detail),
+          timestamp: Date.now(),
+        });
       }
     } catch {
-      showNotice(t("imagegen.error.network"), 5000);
+      appendTimelineMessage({
+        id: crypto.randomUUID(),
+        agentId: "",
+        role: "error",
+        text: t("imagegen.error.network"),
+        timestamp: Date.now(),
+      });
     } finally {
       setGeneratingImage(false);
     }
-  }, [draft, generatingImage, record, setAttachments, setDraft]);
+  }, [draft, generatingImage, record, sessionId, setCacheMessages, setDraft, store]);
 
   // 统一发送入口：先晋升预览 Tab 再投递（幂等，非预览无副作用）。
   // 发送按钮 / 追问按钮 / Enter 键 / 无 Agent 时的 /compact 直发都会走这里，
