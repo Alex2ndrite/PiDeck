@@ -61,6 +61,7 @@ import type {
 } from "./config/configTypes";
 import type { ConfigFileDiagnostic, CreatePiPromptTemplateInput, PiExtensionListResult, PiExtensionSummary, PiPromptTemplateListResult, PiPromptTemplateSummary, PiSkillListResult, PiSkillLocation, PiSkillSummary } from "../../shared/types";
 import { getProviderHeaders, KNOWN_PROVIDER_ENDPOINTS } from "./config/providerHeaders";
+import { ALL_CONFIG_DIRTY_KEYS, dirtyKeysClearedByReload } from "./config/configDirtyMarks";
 
 const api: PiDesktopApi = (window as unknown as { piDesktop: PiDesktopApi })
 	.piDesktop;
@@ -543,8 +544,9 @@ function ConfigModalContent(props: ConfigModalProps) {
 					setRawContent(res.raw);
 					setConfigDiagnostic(res.diagnostic ?? null);
 				}
-				// 加载完成后本地数据与磁盘一致，清除该 tab 的未保存标记
-				clearDirty(target === "raw" ? "config:raw" : `config:${target}`);
+				// 加载完成后本地数据与磁盘一致，清除被本次加载覆盖的数据对应的脏标记（含 settings 聚合页顺带重载的 models/auth，以及所有分支都会重写的 rawContent）。
+				// 不清理会残留“假脏”标记：保存后黄点不消失、关闭时误弹未保存确认。
+				for (const key of dirtyKeysClearedByReload(target)) clearDirty(key);
 			} catch (e) {
 				setError(e instanceof Error ? e.message : String(e));
 			} finally {
@@ -1504,6 +1506,9 @@ function ConfigModalContent(props: ConfigModalProps) {
 					return;
 				}
 				onSaved();
+				// 导入会整体替换四个配置文件：当前 tab 由 loadConfig 重载并清标记，其余 tab 的数据在磁盘上已全部变化，
+				// 统一清除它们的脏标记，避免残留黄点/关闭误弹确认（skills/prompts 编辑不涉及配置文件，保留）。
+				for (const key of ALL_CONFIG_DIRTY_KEYS) clearDirty(key);
 				await loadConfig(tab);
 				showToast(t("config.imported"));
 			} catch (e) {
