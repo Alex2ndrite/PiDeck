@@ -92,7 +92,7 @@ export function deriveSessionSurfaceRuntime(
   sendStatus: string | undefined,
   runtimeStatus: string | undefined,
   runtimeState: AgentRuntimeState | undefined,
-  recordMessageCount?: number,
+  hasCachedEntry?: boolean,
 ) {
   const activating = sendStatus === "activating";
   const status = activating ? "starting" : runtimeStatus;
@@ -104,10 +104,11 @@ export function deriveSessionSurfaceRuntime(
       // undefined 一律视为加载中——否则有历史的会话会被误判为「空会话」，
       // 闪出 SessionStartSurface 起始页（打开/切回大会话闪屏根因）。
       messageLoadStatus === undefined ||
-      // LRU 淘汰缓存后 loadState 残留 ready：记录已知有历史（messageCount>0）
-      // 但消息尚未（重新）到达，必须继续显示骨架屏；
-      // 读取失败（error）不在此列，避免进入加载死循环。
-      (messageLoadStatus === "ready" && (recordMessageCount ?? 0) > 0) ||
+      // ready 但缓存条目不存在（从未写入或被 LRU 淘汰）＝ disk 读取结果尚未到达
+      // （cacheMessages 对 disk 读取无论空/非空都会创建条目）：必须钉在骨架屏。
+      // 缓存条目已存在（即使 messages 为空）说明 disk 已返回——空会话显示起始页
+      // 是合法终态，不会进入加载死循环。读取失败（error）不在此列。
+      (messageLoadStatus === "ready" && !hasCachedEntry) ||
       activating
     ),
     isStarting: status === "starting",

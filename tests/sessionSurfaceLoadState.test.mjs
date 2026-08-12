@@ -67,18 +67,19 @@ test("unloaded session with no load state must not flash the start surface", () 
 });
 
 test("ready load state with known-history record and empty cache stays loading", () => {
-  // LRU 淘汰缓存后 loadState 残留 ready：记录已知有历史（messageCount>0）
-  // 但消息尚未（重新）到达，必须视为加载中，禁止显示起始页。
-  const evicted = timeline.deriveSessionSurfaceRuntime(0, "ready", "idle", undefined, undefined, 42);
+  // LRU 淘汰缓存后 loadState 残留 ready：缓存条目不存在（disk 读取结果未到达）
+  // 必须视为加载中，禁止显示起始页——不依赖 catalog messageCount（摘要缺失时
+  // 兜底为 0，老记录会误判真空）。
+  const evicted = timeline.deriveSessionSurfaceRuntime(0, "ready", "idle", undefined, undefined, false);
   assert.equal(evicted.isLoading, true);
-  // 记录确认无消息（新 draft / 匿名会话）：ready + 空缓存 = 真空会话 → 起始页合法。
-  const genuinelyEmpty = timeline.deriveSessionSurfaceRuntime(0, "ready", "idle", undefined, undefined, 0);
-  assert.equal(genuinelyEmpty.isLoading, false);
+  // disk 已返回且确认无消息（cacheMessages 无论空/非空都会创建条目）：
+  // ready + 条目存在 = 读取完成，空会话显示起始页是合法终态，不死锁。
+  const diskConfirmedEmpty = timeline.deriveSessionSurfaceRuntime(0, "ready", "idle", undefined, undefined, true);
+  assert.equal(diskConfirmedEmpty.isLoading, false);
   // 读取失败不进入加载死循环（保持既有错误后的呈现路径）。
-  const loadError = timeline.deriveSessionSurfaceRuntime(0, "error", "idle", undefined, undefined, 42);
+  const loadError = timeline.deriveSessionSurfaceRuntime(0, "error", "idle", undefined, undefined, true);
   assert.equal(loadError.isLoading, false);
 });
-
 test("load-more follows modern starting state while legacy remains prop-owned", () => {
   // 初始加载（无消息）时隐藏按钮
   assert.equal(timeline.canLoadSessionTimelineMore(true, 0), false);
@@ -89,4 +90,14 @@ test("load-more follows modern starting state while legacy remains prop-owned", 
   assert.equal(timeline.canLoadSessionTimelineMore(false, 150), true);
   const legacyCanLoadMoreMessages = false;
   assert.equal(legacyCanLoadMoreMessages, false);
+});
+
+test("ready with zero record count and no cache entry still stays loading", () => {
+  // 上一版曾用「recordMessageCount>0 || hasSessionFile」判据：catalog messageCount
+  // 缺失（兜底 0）时失效，且文件残留空会死锁骨架屏。缓存条目存在性判据对
+  // count=0 的老记录同样生效，disk 返回空后能正常退出 loading（不闪起始页不死锁）。
+  const staleRecord = timeline.deriveSessionSurfaceRuntime(0, "ready", "idle", undefined, undefined, false);
+  assert.equal(staleRecord.isLoading, true);
+  const staleRecordAfterDisk = timeline.deriveSessionSurfaceRuntime(0, "ready", "idle", undefined, undefined, true);
+  assert.equal(staleRecordAfterDisk.isLoading, false);
 });

@@ -14,6 +14,10 @@ const scrollerSource = readFileSync(
   "src/renderer/src/components/agents/message-scroller.tsx",
   "utf8",
 );
+const engineSource = readFileSync(
+  "src/renderer/src/lib/stick-to-bottom/useStickToBottom.ts",
+  "utf8",
+);
 
 // 发送置顶动画：发消息后垫片撑高 + 平滑滚动，把最新用户消息钉到视口顶部，
 // 此前消息整体顶出屏幕；回答流式增长时垫片收敛。
@@ -30,7 +34,9 @@ test("MessageScroller owns live-edge follow and releases control on user input",
   assert.match(timelineSource, /<MessageScroller/);
   assert.match(timelineSource, /onFollowChange=\{controller\.setAutoScrollFromScroller\}/);
   assert.match(scrollerSource, /followThreshold\?\: number/);
-  assert.match(scrollerSource, /ResizeObserver/);
+  // live-edge 跟随（内容增长锁底）的 ResizeObserver 职责在 stick-to-bottom 引擎内部，
+  // scroller 只做桥接；引擎侧行为由 messageScrollerGrowthFollow.test.mjs 专项断言覆盖。
+  assert.match(engineSource, /ResizeObserver/);
   assert.match(scrollerSource, /onWheel/);
   assert.match(scrollerSource, /onTouchStart/);
 });

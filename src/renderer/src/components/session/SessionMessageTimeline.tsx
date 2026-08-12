@@ -22,6 +22,7 @@ import {
 } from "../app/AppUtils";
 import {
   liveThinkingIdBySessionIdAtomFamily,
+  sessionMessageCacheBySessionIdAtomFamily,
   sessionMessageLoadStateAtom,
   sessionRecordByIdAtomFamily,
   sessionRuntimeBySessionIdAtomFamily,
@@ -174,15 +175,21 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
   const hasMoreMessages = controller.hasMoreMessages;
   const isLoadingMoreMessages = controller.isLoadingMoreMessages;
   const hasActiveConversation = Boolean(session);
+  // disk 读取无论空/非空都会创建缓存条目：「条目是否存在」用于区分
+  // 读取未到达（无条目→钉骨架屏）与读取已返回（有条目→起始页合法）。
+  const surfaceCachedEntry = useAtomValue(
+    sessionMessageCacheBySessionIdAtomFamily(sessionId ?? ""),
+  );
   const modernSurfaceState = deriveSessionSurfaceRuntime(
     activeMessages.length,
     messageLoadState?.status,
     sendState?.status,
     runtime?.status,
     runtime?.state,
-    // 记录已知消息数：LRU 淘汰缓存后 loadState 残留 ready 时，
-    // 用「记录有历史」把界面钉在骨架屏，避免闪出新会话起始页。
-    session?.messageCount,
+    // 缓存条目存在性（disk 读取无论空/非空都会创建条目）：ready 且无条目 =
+    // 读取结果未到达 → 钉骨架屏；有条目（即使空）＝读取已返回，空会话起始页合法。
+    // 不依赖 catalog messageCount（摘要缺失时兑底为 0，不可靠）。
+    Boolean(surfaceCachedEntry),
   );
   const isConversationLoading = modernSurfaceState.isLoading;
   const canLoadMoreMessages = canLoadSessionTimelineMore(
@@ -207,18 +214,23 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
   const seenTailMessageIdRef = useRef<string | undefined>(undefined);
   const freshTimersRef = useRef<Map<string, number>>(new Map());
   // 会话内容就绪淡入：isConversationLoading true→false（切会话历史加载完成）时，
-  // 给 MessageScroller 挂一次 160ms 淡入动画类，与骨架屏消失衔接，避免整块瞬间出现
+  // 给 MessageScroller 挂一次 160ms 淡入动画类，与骨架屏消失衔接，避免整块瞬间出现。
+  // 触发必须用 useLayoutEffect（paint 前同步）：若用 useEffect，内容会先以正常透明度
+  // 绘制一帧，再被动画类重置到 opacity:0 重新淡入——视觉上就是「闪一下再淡入」。
   const [contentEntering, setContentEntering] = useState(false);
   const prevConversationLoadingRef = useRef(isConversationLoading);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (prevConversationLoadingRef.current && !isConversationLoading) {
       setContentEntering(true);
-      // 动画 160ms 播完即清状态（MessageScroller 不透传 animationend，用定时器）
-      const timer = window.setTimeout(() => setContentEntering(false), 180);
-      return () => window.clearTimeout(timer);
     }
     prevConversationLoadingRef.current = isConversationLoading;
   }, [isConversationLoading]);
+  // 动画播完清理类（非视觉关键路径，放 useEffect 避免 layout 阶段多一次重渲染）
+  useEffect(() => {
+    if (!contentEntering) return;
+    const timer = window.setTimeout(() => setContentEntering(false), 180);
+    return () => window.clearTimeout(timer);
+  }, [contentEntering]);
 
   useEffect(() => {
     // 会话切换时重置：新会话的首帧（历史加载）不播动画

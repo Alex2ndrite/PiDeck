@@ -83,3 +83,20 @@ test("compaction card matches the thinking-card visual language", () => {
   // 展开/收起走左下角按钮，不再整卡可点（与思考卡一致）
   assert.doesNotMatch(cards, /className="flex w-full cursor-pointer/);
 });
+
+test("content enter animation mounts before paint (no flash-then-fade)", () => {
+  // 闪屏根因：useEffect 在 paint 后补挂淡入类，内容先以正常透明度绘制一帧，
+  // 再被动画重置到 opacity 0 重新淡入 = 「闪一下再淡入」。
+  // 触发必须同步（useLayoutEffect），让内容挂载的第一帧就带动画类。
+  const surface = readFileSync(
+    "src/renderer/src/components/session/SessionMessageTimeline.tsx",
+    "utf8",
+  );
+  const enterBlock = surface.slice(
+    surface.indexOf("会话内容就绪淡入"),
+    surface.indexOf("// ── 失败/重试 toast"),
+  );
+  assert.match(enterBlock, /useLayoutEffect\(\(\) => \{\n\s*if \(prevConversationLoadingRef\.current && !isConversationLoading\) \{\n\s*setContentEntering\(true\);/);
+  // 类清理（非视觉关键）留在 useEffect，不在 layout 阶段多一次重渲染
+  assert.match(enterBlock, /const timer = window\.setTimeout\(\(\) => setContentEntering\(false\), 180\);/);
+});
