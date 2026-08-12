@@ -31,6 +31,7 @@ import {
 	DialogTitle,
 } from "../ui-shadcn/dialog";
 import { cn } from "../../lib/utils";
+import { computeThinkingDisplay, type ThinkingLevelPending } from "../../utils/thinkingDisplay";
 import { CommandPickerGroup, CommandPickerPanel } from "../ui-shadcn/command-picker";
 import { THINKING_LEVELS, groupModelsByProvider } from "./sessionPickerOptions";
 import type {
@@ -145,6 +146,11 @@ export function ComposerBottomBar(props: {
 	state?: AgentRuntimeState;
 	compacting: boolean;
 	disabled?: boolean;
+	/** thinking 按钮专用禁用：与 disabled 不同，busy（生成进行中）时仍可切换思考强度
+	 *  （issue #146：pi 的 set_thinking_level 支持下一轮生成生效）。 */
+	thinkingDisabled?: boolean;
+	/** 流式生成中已请求、下一轮才生效的思考档位切换（显示为 from→to）。 */
+	thinkingPending?: ThinkingLevelPending;
 	composerAgentMode: ComposerAgentMode;
 	gitInfo?: GitBranchInfo;
 	/** Draft sessions do not have a runtime yet, so retain their persisted settings in the bar. */
@@ -167,12 +173,21 @@ export function ComposerBottomBar(props: {
 	// 默认模型/思考级别来自主进程按 pi 配置自动填充进会话记录的默认值（props.record），
 	// 不读取渲染层 welcome localStorage 偏好，避免用户偏好覆盖 pi 配置。
 	const currentThinkingLevel = props.state?.thinkingLevel ?? props.record?.thinkingLevel;
-	const thinkingLevelLabel = currentThinkingLevel
-		? THINKING_LEVELS.find((level) => level.value === currentThinkingLevel)?.labelKey
+	// 有待生效切换时展示 from→to（新档位尚未被任何生成使用），否则展示当前档位
+	const thinkingDisplay = computeThinkingDisplay(currentThinkingLevel, props.thinkingPending);
+	const thinkingLevelLabel = (level: string) => {
+		const labelKey = THINKING_LEVELS.find((item) => item.value === level)?.labelKey;
+		return labelKey ? t(labelKey) : level;
+	};
+	const thinkingText = thinkingDisplay.levels.length > 0
+		? thinkingDisplay.levels.map(thinkingLevelLabel).join(" → ")
+		: t("app.think");
+	const thinkingPendingTitle = props.thinkingPending
+		? t("app.thinkingPendingTitle", {
+			from: thinkingLevelLabel(props.thinkingPending.from),
+			to: thinkingLevelLabel(props.thinkingPending.to),
+		})
 		: undefined;
-	const thinkingDisplay = thinkingLevelLabel
-		? t(thinkingLevelLabel)
-		: currentThinkingLevel ?? t("app.think");
 	const isPlanMode = props.composerAgentMode === "plan";
 	const modeLabel = isPlanMode
 		? t("app.composerModePlan")
@@ -269,12 +284,12 @@ export function ComposerBottomBar(props: {
 						variant="ghost"
 						size="sm"
 						className="composer-bar-btn thinking h-7 max-w-[10rem] rounded-md px-2 font-brand text-caption font-semibold italic text-[var(--color-brand-green)] hover:bg-muted/60"
-						disabled={props.disabled}
+						disabled={props.thinkingDisabled}
 						onClick={props.onPickThinking}
 						aria-haspopup="dialog"
-						title={t("app.thinkingPickerTitle")}
+						title={thinkingPendingTitle ?? t("app.thinkingPickerTitle")}
 					>
-						{thinkingDisplay}
+						{thinkingText}
 					</Button>
 					{showCompact && (() => {
 						// 与 main 一致：>30% 才显示；70%/90% 用色阶提示紧迫度，不做成常驻高饱和按钮。

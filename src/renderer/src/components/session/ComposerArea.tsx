@@ -1,5 +1,5 @@
 import { forwardRef, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { useAtomValue, useStore } from "jotai";
+import { useAtom, useAtomValue, useStore } from "jotai";
 import {
   ComposerBottomBar,
   ImagePreviewModal,
@@ -19,7 +19,7 @@ import {
 import { ComposerPickerHost } from "./ComposerPickerHost";
 import { SecurityLevelMenu } from "./SecurityLevelMenu";
 import { useAskPanel } from "../../hooks/useAskPanel";
-import { setSessionDraftAtom } from "../../atoms/composer-atoms";
+import { setSessionDraftAtom, thinkingLevelPendingByIdAtom } from "../../atoms/composer-atoms";
 import { sessionRecordByIdAtomFamily } from "../../atoms";
 import { ComposerRuntimeIntegrations } from "./ComposerRuntimeIntegrations";
 import { useSessionPaneServices } from "./SessionPaneServices";
@@ -154,6 +154,17 @@ export const ComposerArea = forwardRef<HTMLElement, ComposerAreaProps>(function 
   const askPanel = useAskPanel();
   const sessionRecord = useAtomValue(sessionRecordByIdAtomFamily(props.sessionId));
   const store = useStore();
+  // 流式生成中切换思考强度产生的「待生效」指示（issue #146）：
+  // 飞行中的生成仍用旧档位，新档位下一轮才生效；流式一结束就没有“当前生效”参照，直接清除。
+  const [thinkingPendingMap, setThinkingPendingMap] = useAtom(thinkingLevelPendingByIdAtom);
+  const isStreaming = Boolean(composer.runtime?.state?.isStreaming);
+  useEffect(() => {
+    if (!isStreaming && thinkingPendingMap[props.sessionId]) {
+      setThinkingPendingMap((prev) =>
+        prev[props.sessionId] ? { ...prev, [props.sessionId]: undefined } : prev,
+      );
+    }
+  }, [isStreaming, props.sessionId, setThinkingPendingMap, thinkingPendingMap]);
 
   /** 并行问询发送：消息投递到独立匿名会话（不打断当前输出），并显示结果胶囊；
    *  点击发送即清空输入框（与正常发送语义一致），失败由胶囊/toast 反馈 */
@@ -289,16 +300,21 @@ export const ComposerArea = forwardRef<HTMLElement, ComposerAreaProps>(function 
                   onPick={composer.suggestions.pick}
                 />
               ) : null}
+              {/* 运行中仍可切换思考强度（pi 下一轮生成生效）；仅 Agent 启动中禁用 */}
               <ComposerBottomBar
                 state={composer.runtime?.state}
                 compacting={Boolean(composer.runtime?.state?.isCompacting)}
                 disabled={composer.isBusy || composer.isStarting}
+                thinkingDisabled={composer.isStarting}
+                thinkingPending={thinkingPendingMap[props.sessionId]}
                 composerAgentMode={composer.mode}
                 gitInfo={props.gitInfo}
                 record={composer.record}
                 feishuIndicator={feishuIndicator}
                 securityControl={
-                  <SecurityLevelMenu sessionId={props.sessionId} disabled={composer.isBusy || composer.isStarting} />
+                  /* 安全级别切换是策略快照热更新（安全门每次工具调用重读），运行中即时生效，
+                     无需等下一轮生成；因此只保留 Agent 启动中禁用（与思考按钮一致） */
+                  <SecurityLevelMenu sessionId={props.sessionId} disabled={composer.isStarting} />
                 }
                 onPickModel={() => composer.pickers.open("model")}
                 onPickThinking={() => composer.pickers.open("thinking")}

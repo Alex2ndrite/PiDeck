@@ -7,6 +7,7 @@ import {
   sessionRuntimeByIdAtom,
   sessionRuntimeBySessionIdAtomFamily,
   setSessionComposerModeAtom,
+  thinkingLevelPendingByIdAtom,
   upsertSessionAtom,
 } from "../../atoms";
 import type { PromptTemplateInfo } from "../../composerBehavior";
@@ -43,6 +44,8 @@ export function ComposerPickerHost(props: ComposerPickerHostProps) {
   const runtime = useAtomValue(sessionRuntimeBySessionIdAtomFamily(sessionId));
   const setMode = useSetAtom(setSessionComposerModeAtom);
   const upsertSession = useSetAtom(upsertSessionAtom);
+  const thinkingPending = useAtomValue(thinkingLevelPendingByIdAtom)[sessionId];
+  const setThinkingPendingMap = useSetAtom(thinkingLevelPendingByIdAtom);
   const [models, setModels] = useState<AvailableModel[]>([]);
   const composerModes = useAtomValue(sessionComposerModeByIdAtom);
   const [favoriteModels, setFavoriteModels] = useState<string[]>([]);
@@ -220,6 +223,14 @@ export function ComposerPickerHost(props: ComposerPickerHostProps) {
         try {
           const result = requireSessionCommand(await desktopApi.sessions.setRuntimeThinking(handle, level));
           upsertSession({ ...record, thinkingLevel: level, updatedAt: Date.now() });
+          // 生成进行中：飞行中的生成仍用旧档位，新档位下一轮才生效。
+          // 记录待生效指示（issue #146：xhigh->max），由 ComposerArea 在流式结束时清除。
+          if (runtime?.state?.isStreaming) {
+            const from = thinkingPending?.from ?? runtime.state.thinkingLevel ?? record.thinkingLevel;
+            if (from && from !== level) {
+              setThinkingPendingMap((prev) => ({ ...prev, [sessionId]: { from, to: level } }));
+            }
+          }
           // 立即将返回的 AgentRuntimeState 合并到 runtime state atom，
           // 使底部栏的思考强度即刻刷新
           const agentState = result.value;

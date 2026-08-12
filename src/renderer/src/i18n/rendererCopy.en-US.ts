@@ -542,6 +542,7 @@ export const enUS: Record<TranslationKey, string> = {
   "app.highAgentCountSnooze": "Don't remind again this session",
   "app.thinkingPickerTitle": "Select thinking level",
   "app.thinkingPickerHint": "Some models may not support all levels. The system will automatically adjust to the closest supported level",
+  "app.thinkingPendingTitle": "Thinking level switches on the next generation: {from} → {to}",
   "app.thinkingSwitchFailed": "Failed to change thinking level: {error}",
   "app.thinkingUnsupported":
     "Current model does not support {level}; fell back to {fallback}",
@@ -637,6 +638,7 @@ export const enUS: Record<TranslationKey, string> = {
   "app.shareAsText": "Share as Text",
   "app.shareAsMarkdown": "Share as Markdown",
   "session.turnFileChangesTitle": "Files changed",
+  "session.turnFileChangesShowMore": "Show {count} more files",
   "session.openInDiffViewer": "Open {path} in diff viewer",
   "session.split.preview.left": "Open to the left",
   "session.split.preview.right": "Open to the right",

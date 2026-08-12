@@ -1,5 +1,6 @@
 import { atom } from "jotai";
 import type { ComposerAgentMode, ImageContent } from "../../../shared/types";
+import type { ThinkingLevelPending } from "../utils/thinkingDisplay";
 import { currentSessionIdAtom } from "./session-atoms";
 
 export type SessionComposerMode = ComposerAgentMode;
@@ -19,6 +20,14 @@ export const sessionDraftByIdAtom = atom<Record<string, string>>({});
 export const sessionAttachmentsByIdAtom = atom<Record<string, ImageContent[]>>({});
 export const sessionComposerModeByIdAtom = atom<Record<string, SessionComposerMode>>({});
 export const sessionSendStateByIdAtom = atom<Record<string, SessionSendState>>({});
+
+/**
+ * 流式生成中切换思考强度产生的「待生效」指示（issue #146，xhigh->max）。
+ * 只在生成进行中设置；流式结束（没有进行中的生成）时由 ComposerArea 清除。
+ */
+export const thinkingLevelPendingByIdAtom = atom<
+	Record<string, ThinkingLevelPending | undefined>
+>({});
 
 export const currentSessionDraftAtom = atom(
   (get) => {
