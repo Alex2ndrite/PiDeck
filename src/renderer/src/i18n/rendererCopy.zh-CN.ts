@@ -1685,6 +1685,8 @@ export const zhCN = {
   "settings.vision.maxTokensUnlimited": "不限制",
   "settings.vision.maxTokensCustom": "自定义",
   "settings.vision.concurrency": "并发描述数",
+  "settings.vision.timeout": "超时时间（秒）",
+  "settings.vision.timeoutDesc": "单张图片转换请求的超时；超时后中断请求并在运行日志记录原因（默认 120 秒）",
   "settings.vision.promptTemplate": "描述提示词模板",
   "settings.vision.promptTemplateDesc": "{{instruction}} 会被替换为用户指令。默认提示词要求描述画面内容、文字、UI 结构，适合代码截图场景。",
   "settings.vision.promptDefault": "恢复默认",

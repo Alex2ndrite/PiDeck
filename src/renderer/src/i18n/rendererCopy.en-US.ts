@@ -1710,6 +1710,8 @@ export const enUS: Record<TranslationKey, string> = {
   "settings.vision.maxTokensUnlimited": "Unlimited",
   "settings.vision.maxTokensCustom": "Custom",
   "settings.vision.concurrency": "Concurrent descriptions",
+  "settings.vision.timeout": "Timeout (seconds)",
+  "settings.vision.timeoutDesc": "Per-image conversion request timeout; the request is aborted and the reason logged on timeout (default 120s)",
   "settings.vision.promptTemplate": "Description prompt template",
   "settings.vision.promptTemplateDesc": "{{instruction}} is replaced with the user's instruction. The default prompt asks for visual content, text and UI structure — suitable for code screenshots.",
   "settings.vision.promptDefault": "Restore default",
