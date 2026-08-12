@@ -21,8 +21,10 @@ import { getDiffRenderPlan } from "../../utils/diffRenderPlan";
  * - 行内 diff 关闭（lineDiffType: none）：纯行级红绿标注，不做 word 级二次对比
  *
  * 性能与内存策略（大文件不必降级为纯文本提示）：
- * - GitHub 式 hunk 折叠：未变化段超过 collapsedContextThreshold 折叠为展开条，
- *   点击展开才加载该段（expansionLineCount 限制单次加载行数）。
+ * - 紧凑模式：只显示变更行。未变化段超过 collapsedContextThreshold（0 = 任何未变化行）
+ *   折叠为展开条，点击展开才加载该段（expansionLineCount 限制单次加载行数）；
+ *   parseDiffOptions.context=0 连 hunk 内上下文也去掉，所见即变更。
+ *   注：库默认就是折叠（expandUnchanged=false），旧配置显式 expandUnchanged:true 导致全量展示。
  * - 虚拟化：Virtualizer 只挂载可视区行，未变化大段零 DOM。
  * - Worker 高亮：WorkerPoolContextProvider 把 diff 计算 + Shiki tokenize 放
  *   worker 线程（单例池，最多 2 个 worker），主线程只渲染；
@@ -34,8 +36,9 @@ import { getDiffRenderPlan } from "../../utils/diffRenderPlan";
 
 export type CodeDiffViewMode = "split" | "unified";
 
-/** 折叠阈值：hunk 间未变化行超过该值时折叠为展开条（≤ 阈值直接显示 context）。 */
-const COLLAPSED_CONTEXT_THRESHOLD = 8;
+/** 折叠阈值：hunk 间未变化行超过该值时折叠为展开条（≤ 阈值直接显示 context）。
+ * 0 = 最紧凑：任何未变化行都折叠，只保留变更行 + 展开条。 */
+const COLLAPSED_CONTEXT_THRESHOLD = 0;
 
 /** worker 池大小：1 个足以串行处理，2 个兼顾并发分屏，避免默认 8 个占内存。 */
 const WORKER_POOL_SIZE = 2;
@@ -79,7 +82,10 @@ export const CodeDiffView = memo(function CodeDiffView(props: {
 		themeType: theme as "light" | "dark" | "system",
 		// GitHub 式折叠：未变化段超阈值折叠，点击展开（每次最多 expansionLineCount 行）
 		collapsedContextThreshold: COLLAPSED_CONTEXT_THRESHOLD,
-		expandUnchanged: true,
+		// 紧凑模式：关闭全量展开（旧值 true 会让所有未变化行强制展示，折叠形同虚设）
+		expandUnchanged: false,
+		// hunk 内上下文 0 行：jsdiff 默认 context=3，传 0 让变更块之间即使相隔 1 行也拆成独立 hunk
+		parseDiffOptions: { context: 0 },
 		expansionLineCount: plan.expansionLineCount,
 		// 行内 diff 保持关闭（word 级）：实测收益有限且增加额外对比计算，
 		// 当前纯行级红绿标注足够直观（GitHub 式折叠/展开不受影响）
