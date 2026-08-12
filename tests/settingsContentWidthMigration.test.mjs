@@ -67,7 +67,9 @@ test("AppShell always injects --chat-content-pct-set without conditional branch"
 });
 
 test("UI 2.0: messages and composer share inline width, not parent padding", () => {
-  assert.match(chatContentWidth, /width: "var\(--chat-content-pct-set, 80%\)"/);
+  // 59eb1948 起：min() 把百分比封顶到 calc(100% - 48px)——100% 时两侧各留 24px 空隙，
+  // 低于 100% 宽屏不受影响；仍是同一基准的 inline width 契约
+  assert.match(chatContentWidth, /width: "min\(var\(--chat-content-pct-set, 80%\), calc\(100% - 48px\)\)"/);
   assert.match(chatContentWidth, /marginInline: "auto"/);
   // 时间线侧：宽度 style 挂在 MessageScroller 的 contentProps（内层 [role=log]）上，
   // 视口铺满面板、滚动条贴面板最右；内容列仍与 composer 同宽居中。

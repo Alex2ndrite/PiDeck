@@ -1,10 +1,16 @@
 import { useEffect, useSyncExternalStore } from "react";
+import { createPortal } from "react-dom";
 import { Toaster as SonnerToaster } from "sonner";
 import { setToasterReady } from "../../utils/notice";
 
 /**
  * 全局 Toaster（#115）：sonner 官方组件，主题跟随应用 dataset.theme
  * （应用主题独立于系统主题，不能用 sonner 的 "system" 模式）。
+ *
+ * portal 到 body：sonner 自身不 portal，而 #root 带 position:relative + z-index:1
+ * （层叠上下文），Radix Dialog/Sheet 却 portal 到 body——toast 留在 #root 内会被
+ * 弹窗整体盖住（曾现：设置弹窗内 toast 显示到下层图层）。挂到 body 后 z-index
+ * 999999999 与弹窗（--z-dialog: 950）同级比较，永远置顶。
  */
 
 function subscribeTheme(callback: () => void) {
@@ -28,7 +34,7 @@ export function Toaster() {
 		setToasterReady(true);
 		return () => setToasterReady(false);
 	}, []);
-	return (
+	return createPortal(
 		<SonnerToaster
 			theme={theme}
 			position="top-right"
@@ -56,6 +62,7 @@ export function Toaster() {
 					padding: "12px 36px 12px 14px",
 				},
 			}}
-		/>
+		/>,
+		document.body,
 	);
 }
