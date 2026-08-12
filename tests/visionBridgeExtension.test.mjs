@@ -91,7 +91,7 @@ test("loadVisionBridgeConfig: parses file and merges defaults", async () => {
 	assert.equal(config.model, "glm-4v-flash");
 	// 未填字段落到默认值
 	assert.equal(config.enabled, true);
-	assert.equal(config.maxTokens, 1024);
+	assert.equal(config.maxTokens, 0);
 	assert.equal(config.timeoutMs, 30_000);
 	assert.equal(config.concurrency, 2);
 	assert.ok(config.promptTemplate.length > 0);
@@ -289,6 +289,35 @@ test("buildVisionRequest: anthropic-messages shape", () => {
 	assert.equal(headers["anthropic-version"], "2023-06-01");
 	assert.equal(body.messages[0].content[1].source.type, "base64");
 	assert.equal(body.messages[0].content[1].source.media_type, "image/png");
+});
+
+test("buildVisionRequest: maxTokens 0 (unlimited) omits the field per format", () => {
+	const openai = {
+		baseUrl: "https://api.openai.com/v1",
+		model: "gpt-4o-mini",
+		apiKey: "sk-test",
+		api: "openai-completions",
+	};
+	const openaiBody = ext.buildVisionRequest(openai, imageA, "描述", 0, { reasoningEffortNone: false }).body;
+	assert.equal(openaiBody.max_tokens, undefined, "不限制时不传 max_tokens");
+
+	const anthropic = {
+		baseUrl: "https://api.anthropic.com",
+		model: "claude-3-5-sonnet-latest",
+		apiKey: "sk-ant",
+		api: "anthropic-messages",
+	};
+	const anthropicBody = ext.buildVisionRequest(anthropic, imageA, "描述", 0, { reasoningEffortNone: false }).body;
+	assert.equal(anthropicBody.max_tokens, 1024, "Anthropic 必填，不限制时兜底 1024");
+
+	const gemini = {
+		baseUrl: "https://generativelanguage.googleapis.com",
+		model: "gemini-2.0-flash",
+		apiKey: "gem-key",
+		api: "google-generative-ai",
+	};
+	const geminiBody = ext.buildVisionRequest(gemini, imageA, "描述", 0, { reasoningEffortNone: false }).body;
+	assert.equal(geminiBody.generationConfig, undefined, "不限制时不传 generationConfig/maxOutputTokens");
 });
 
 test("buildVisionRequest: google-generative-ai shape", () => {

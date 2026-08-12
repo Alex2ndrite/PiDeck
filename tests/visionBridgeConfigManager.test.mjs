@@ -161,9 +161,41 @@ test("saveConfig: clamps numeric fields to sane ranges", async () => {
 		concurrency: 0,
 	});
 	const saved = JSON.parse(readFileSync(join(dir, "pi-deck-vision.json"), "utf8"));
-	assert.equal(saved.maxTokens, undefined, "超上限数值不写入");
-	assert.equal(saved.timeoutMs, undefined, "负数不写入");
-	assert.equal(saved.concurrency, undefined, "0 不写入");
+	// 非法/缺失数值回退到默认值落盘，保证配置文件自解释（用户可直接手改文件生效）
+	assert.equal(saved.maxTokens, 0, "超上限数值回退默认 0（不限制）");
+	assert.equal(saved.timeoutMs, 30_000, "负数回退默认 30000");
+	assert.equal(saved.concurrency, 2, "0 回退默认 2");
+	rmSync(dir, { recursive: true, force: true });
+});
+
+test("saveConfig: maxTokens 0 (unlimited) is preserved", async () => {
+	const { dir, manager } = makeManager();
+	const result = await manager.saveConfig({
+		provider: "p",
+		model: "m",
+		maxTokens: 0,
+	});
+	assert.equal(result.ok, true);
+	const saved = JSON.parse(readFileSync(join(dir, "pi-deck-vision.json"), "utf8"));
+	assert.equal(saved.maxTokens, 0, "0 = 不限制，合法值原样落盘");
+	rmSync(dir, { recursive: true, force: true });
+});
+
+test("saveConfig: numeric defaults always written when omitted", async () => {
+	const { dir, manager } = makeManager();
+	const result = await manager.saveConfig({
+		enabled: true,
+		provider: "glm",
+		model: "glm-4v-flash",
+		baseUrl: "https://open.bigmodel.cn/api/paas/v4",
+		apiKey: "sk-test",
+	});
+	assert.equal(result.ok, true);
+	const saved = JSON.parse(readFileSync(join(dir, "pi-deck-vision.json"), "utf8"));
+	// 与扩展 DEFAULT_CONFIG 一致：0（不限制）/ 30000 / 2
+	assert.equal(saved.maxTokens, 0);
+	assert.equal(saved.timeoutMs, 30_000);
+	assert.equal(saved.concurrency, 2);
 	rmSync(dir, { recursive: true, force: true });
 });
 

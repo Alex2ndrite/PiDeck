@@ -51,7 +51,8 @@ export const VISION_DEFAULT_CONFIG: VisionBridgeConfig = {
 	enabled: true,
 	provider: "",
 	model: "",
-	maxTokens: 1024,
+	// 0 = 不限制：请求不传 max_tokens，输出长度交给模型默认（Anthropic 必填，请求侧兜底 1024）
+	maxTokens: 0,
 	timeoutMs: 30_000,
 	concurrency: 2,
 	promptTemplate: VISION_DEFAULT_PROMPT,
@@ -91,18 +92,21 @@ function sanitizeConfig(input: unknown): VisionBridgeConfig | null {
 		next.apiKey = raw.apiKey.trim().slice(0, 512);
 	}
 
-	// 数值字段：正整数 + 上限，防恶意大值写坏配置
-	const intField = (value: unknown, max: number): number | undefined => {
+	// 数值字段：合法值直接采用；缺失/非法时落盘默认值。
+	// 配置文件是扩展运行时唯一来源（用户可脱离 UI 手改文件），必须自解释——
+	// 否则文件里看不到 maxTokens/concurrency，用户会误以为没保存（与 promptTemplate 永远落盘同一理由）。
+	// maxTokens 允许 0（不限制，请求不传该字段），上限 32768；其余数值字段最小 1。
+	const intField = (value: unknown, max: number, allowZero = false): number | undefined => {
 		if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
 		const n = Math.trunc(value);
-		return n > 0 && n <= max ? n : undefined;
+		return (allowZero ? n >= 0 : n > 0) && n <= max ? n : undefined;
 	};
-	const maxTokens = intField(raw.maxTokens, 32_768);
-	if (maxTokens !== undefined) next.maxTokens = maxTokens;
+	const maxTokens = intField(raw.maxTokens, 32_768, true);
+	next.maxTokens = maxTokens ?? VISION_DEFAULT_CONFIG.maxTokens;
 	const timeoutMs = intField(raw.timeoutMs, 300_000);
-	if (timeoutMs !== undefined) next.timeoutMs = timeoutMs;
+	next.timeoutMs = timeoutMs ?? VISION_DEFAULT_CONFIG.timeoutMs;
 	const concurrency = intField(raw.concurrency, 16);
-	if (concurrency !== undefined) next.concurrency = concurrency;
+	next.concurrency = concurrency ?? VISION_DEFAULT_CONFIG.concurrency;
 
 	if (typeof raw.promptTemplate === "string" && raw.promptTemplate.trim()) {
 		// 去首尾空白后截断，避免误存换行噪音/超长模板

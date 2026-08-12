@@ -28,7 +28,8 @@ export type VisionBridgeConfig = {
 	baseUrl?: string;
 	/** 覆盖 apiKey；缺省复用 pi 已配置的 provider key（不落日志） */
 	apiKey?: string;
-	/** 单次描述最大输出 token（默认 1024） */
+	/** 单次描述最大输出 token；0 = 不限制（不传该字段，输出长度交给模型默认；
+	 *  Anthropic 接口该字段必填，不限制时请求自动兜底 1024）。缺省（undefined）同 0。 */
 	maxTokens?: number;
 	/** 单次视觉请求超时 ms（默认 30000） */
 	timeoutMs?: number;

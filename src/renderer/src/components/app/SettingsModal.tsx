@@ -60,7 +60,7 @@ import { SettingBox, SettingRow, SettingSwitchRow, SettingTextarea } from "./set
 import { ExternalEditorsSection } from "./settings/ExternalEditorsSection";
 import { ProcessMetricsTab } from "./settings/ProcessMetricsTab";
 import { ImTab } from "./settings/ImTab";
-import { VisionBridgeSettingsTab } from "./settings/VisionBridgeSettingsTab";
+import { VisionBridgeSettingsTab, useVisionBridgeDraft } from "./settings/VisionBridgeSettingsTab";
 import { ModelPicker } from "../session/ComposerComponents";
 import type { AppSettings, AppInfo, AvailableModel, PiInstallStatus, PiUpdateCheckResult, PiCliUpdateResult, PetManifest, WebNetworkAddress } from "../../../shared/types";
 import { GRID_COLS, CELL_W, CELL_H, MODE_ROW, MODE_FRAMES } from "../../pet/PetSpriteSheet";
@@ -222,6 +222,8 @@ function SettingsModalContent(props: SettingsModalProps) {
 	const baseSnapshotRef = useRef<AppSettings>({ ...props.settings });
 	/** 标记是否为首次挂载（跳过外部 props.settings 同步） */
 	const initialMountRef = useRef(true);
+	// ── 视觉桥草稿：独立于全局设置（写 pi-deck-vision.json，走独立 IPC），脏标记/保存/取消由弹框统一管理 ──
+	const visionDraft = useVisionBridgeDraft();
 
 	/** 更新草稿并标记对应字段为已修改。调用方传入的 patch 中的每个 key 都会追加到 dirtyFields。 */
 	const updateDraft = (patch: Partial<AppSettings>) => {
@@ -240,23 +242,31 @@ function SettingsModalContent(props: SettingsModalProps) {
 		return dirtyFields.has(field);
 	};
 
-	/** 保存全部已修改的字段：计算差异后一次性提交 */
-	const saveAll = () => {
-		if (dirtyFields.size === 0) return;
-		const patch: Partial<AppSettings> = {};
-		for (const key of dirtyFields) {
-			(patch as Record<string, unknown>)[key] = (draftSettings as Record<string, unknown>)[key];
+	/** 保存全部已修改内容：全局设置差异提交 + 视觉桥草稿（若有改动）；返回是否全部成功 */
+	const saveAll = async (): Promise<boolean> => {
+		let ok = true;
+		if (dirtyFields.size > 0) {
+			const patch: Partial<AppSettings> = {};
+			for (const key of dirtyFields) {
+				(patch as Record<string, unknown>)[key] = (draftSettings as Record<string, unknown>)[key];
+			}
+			props.onChange(patch);
+			// 更新快照基准为当前草稿值，并清除修改标记
+			baseSnapshotRef.current = { ...baseSnapshotRef.current, ...patch };
+			setDirtyFields(new Set());
 		}
-		props.onChange(patch);
-		// 更新快照基准为当前草稿值，并清除修改标记
-		baseSnapshotRef.current = { ...baseSnapshotRef.current, ...patch };
-		setDirtyFields(new Set());
+		if (visionDraft.dirty) {
+			// 视觉桥保存失败（如 API Key 缺失/接口不可达）时保留脏标记，头部按钮可重试
+			ok = await visionDraft.save();
+		}
+		return ok;
 	};
 
-	/** 取消全部修改：将草稿回退到初始快照，丢弃所有未保存变更 */
+	/** 取消全部修改：将草稿回退到初始快照，丢弃所有未保存变更（含视觉桥草稿） */
 	const cancelAll = () => {
 		setDraftSettings({ ...baseSnapshotRef.current });
 		setDirtyFields(new Set());
+		visionDraft.reset();
 		setPetPreviewMode("__auto");
 		void window.piDesktop.pet.setPreviewMode("");
 		setWslValidation(null);
@@ -269,20 +279,22 @@ function SettingsModalContent(props: SettingsModalProps) {
 		setWebPortDraft(String(baseSnapshotRef.current.webServicePort));
 	};
 
-	/** 关闭弹框：有未保存变更时弹出确认对话框，无变更时直接关闭 */
+	/** 关闭弹框：有未保存变更（全局设置或视觉桥草稿）时弹出确认对话框，无变更时直接关闭 */
 	const handleClose = () => {
-		if (dirtyFields.size > 0) {
+		if (dirtyFields.size > 0 || visionDraft.dirty) {
 			setCloseConfirmOpen(true);
 		} else {
 			props.onClose();
 		}
 	};
 
-	/** 关闭确认弹框时选择保存并关闭 */
-	const handleSaveAndClose = () => {
-		saveAll();
+	/** 关闭确认弹框时选择保存并关闭：视觉桥保存失败则留在弹框内（脏标记保留，可重试） */
+	const handleSaveAndClose = async () => {
 		setCloseConfirmOpen(false);
-		props.onClose();
+		const ok = await saveAll();
+		if (ok) {
+			props.onClose();
+		}
 	};
 
 	/** 关闭确认弹框时选择放弃更改 */
@@ -575,6 +587,8 @@ function SettingsModalContent(props: SettingsModalProps) {
 	];
 
 	const hasDirtyChanges = dirtyFields.size > 0;
+	// 视觉桥草稿有未保存改动时，头部保存/取消按钮同样点亮（与全局设置脏标记合并判定）
+	const hasAnyDirtyChanges = hasDirtyChanges || visionDraft.dirty;
 	// 代理 tab 仍展示未保存提示；实际保存/取消统一走全局草稿，避免旧 proxyDirty 局部状态残留。
 	const proxyDirty = PROXY_FIELDS.some((field) => dirtyFields.has(field));
 
@@ -584,11 +598,11 @@ function SettingsModalContent(props: SettingsModalProps) {
 				<DialogHeader className="flex-row items-center justify-between px-4 py-3">
 					<DialogTitle>{t("settings.title")}</DialogTitle>
 					<div className="flex items-center gap-2">
-						{/* 保存按钮常驻：无未保存改动时禁用，避免用户改完直接关窗丢改动 */}
-						<Button variant="default" size="sm" onClick={saveAll} disabled={!hasDirtyChanges}>
+						{/* 保存按钮常驻：无未保存改动时禁用，避免用户改完直接关窗丢改动；视觉桥保存中禁用防重复提交 */}
+						<Button variant="default" size="sm" onClick={saveAll} disabled={!hasAnyDirtyChanges || visionDraft.saving}>
 							{t("common.save")}
 						</Button>
-						{hasDirtyChanges ? (
+						{hasAnyDirtyChanges ? (
 							/* 放弃更改用 outline（白底描边）而非灰底 secondary：与黑色主按钮形成
 							    清晰的主次层级（shadcn dialog 的 confirm/cancel 惯例），避免一对按钮
 							    都是灰色填充分不出哪个是提交。 */
@@ -2036,9 +2050,15 @@ function SettingsModalContent(props: SettingsModalProps) {
 						<TabsContent value="usage" className="settings-panel min-w-0">
 							<UsageStatsTab />
 						</TabsContent>
-						{/* ── 视觉桥 tab ── */}
+						{/* ── 视觉桥 tab：草稿/脏标记/保存由弹框统一管理，本组件只呈现表单 */}
 						<TabsContent value="vision" className="settings-panel min-w-0">
-							<VisionBridgeSettingsTab />
+							<VisionBridgeSettingsTab
+								draft={visionDraft.draft}
+								saving={visionDraft.saving}
+								configDir={visionDraft.configDir}
+								notice={visionDraft.notice}
+								onChange={visionDraft.updateDraft}
+							/>
 						</TabsContent>
 					</Tabs>
 			{/* 未保存变更确认对话框 */}

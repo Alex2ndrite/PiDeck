@@ -5,6 +5,9 @@
  * ModelPicker（数据源 projects.listModels = models.json + auth.json + 内置目录全量模型，
  * 支持/不支持视觉由用户自行判断，不做能力过滤）；保存时经 vision:save-config
  * 白名单校验后写回 ~/.pi/agent/pi-deck-vision.json（pi-deck-vision 扩展运行时读取同一文件）。
+ *
+ * 保存逻辑统一归设置弹框头部「保存」按钮（useVisionBridgeDraft 上提草稿/脏标记/保存），
+ * 本组件只负责表单呈现与模型选择；底部仅保留保存结果提示与运行日志诊断区。
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Check, ChevronsUpDown, RefreshCw, Trash2 } from "lucide-react";
@@ -39,12 +42,92 @@ function configFilePath(configDir: string): string {
 	return `${configDir}/pi-deck-vision.json`;
 }
 
-export function VisionBridgeSettingsTab() {
+/** 未配置时的新建草稿（provider/model 留空，保存按钮不可点，引导先选模型）。 */
+function emptyDraft(): VisionBridgeConfig {
+	return { enabled: true, provider: "", model: "" };
+}
+
+/**
+ * 视觉桥草稿状态 hook（设置弹框持有）：与全局设置草稿平行但独立存储
+ * （视觉桥写入 pi-deck-vision.json，走独立 IPC，不是 AppSettings 字段），
+ * 因此脏标记单独维护，由弹框头部统一保存/取消/关闭确认一并处理。
+ */
+export function useVisionBridgeDraft() {
 	const [state, setState] = useState<VisionBridgeState | null>(null);
 	const [draft, setDraft] = useState<VisionBridgeConfig | null>(null);
 	const [loading, setLoading] = useState(true);
 	const [saving, setSaving] = useState(false);
+	const [dirty, setDirty] = useState(false);
 	const [notice, setNotice] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
+
+	// 挂载时拉取当前配置（弹框每次打开都重建 state，无需清理外部资源）
+	useEffect(() => {
+		let mounted = true;
+		desktopApi.config
+			.visionGetConfig()
+			.then((loaded) => {
+				if (!mounted) return;
+				setState(loaded);
+				setDraft(loaded.config ?? emptyDraft());
+				setLoading(false);
+			})
+			.catch(() => {
+				if (mounted) setLoading(false);
+			});
+		return () => {
+			mounted = false;
+		};
+	}, []);
+
+	/** 表单改动：更新草稿并标记未保存（幂等）。 */
+	const updateDraft = useCallback((patch: Partial<VisionBridgeConfig>) => {
+		setDraft((prev) => (prev ? { ...prev, ...patch } : prev));
+		setDirty(true);
+		setNotice(null);
+	}, []);
+
+	/** 保存草稿到 pi-deck-vision.json；成功清脏标记，失败保留脏标记（头部按钮可重试）。 */
+	const save = useCallback(async (): Promise<boolean> => {
+		if (!draft) return false;
+		setSaving(true);
+		setNotice(null);
+		try {
+			const result = await desktopApi.config.visionSaveConfig(draft);
+			if (result.ok) {
+				setDirty(false);
+				setNotice({ tone: "ok", text: t("settings.vision.saved") });
+				return true;
+			}
+			setNotice({ tone: "error", text: `${t("settings.vision.saveFailed")}：${result.error ?? ""}` });
+			return false;
+		} catch (error) {
+			setNotice({ tone: "error", text: `${t("settings.vision.saveFailed")}：${String(error)}` });
+			return false;
+		} finally {
+			setSaving(false);
+		}
+	}, [draft]);
+
+	/** 放弃修改：回退到打开弹框时的磁盘配置快照。 */
+	const reset = useCallback(() => {
+		setDraft(state?.config ?? emptyDraft());
+		setDirty(false);
+		setNotice(null);
+	}, [state]);
+
+	return { draft, loading, saving, dirty, notice, configDir: state?.configDir ?? "", updateDraft, save, reset };
+}
+
+export function VisionBridgeSettingsTab(props: {
+	draft: VisionBridgeConfig | null;
+	saving: boolean;
+	/** 配置文件所在目录（来自主进程 vision:get-config 返回，用于展示落盘路径） */
+	configDir: string;
+	/** 保存结果提示（头部保存后在此展示，便于用户就近看到错误） */
+	notice: { tone: "ok" | "error"; text: string } | null;
+	onChange: (patch: Partial<VisionBridgeConfig>) => void;
+}) {
+	const { draft, saving, notice, configDir, onChange } = props;
 	const [pickerOpen, setPickerOpen] = useState(false);
 	// 运行日志（诊断“视觉桥走没走”）：挂载时拉一次，用户可手动刷新
 	const [logInfo, setLogInfo] = useState<VisionLogInfo | null>(null);
@@ -68,32 +151,13 @@ export function VisionBridgeSettingsTab() {
 		}
 	}, []);
 
-	// 挂载时拉取配置；模型列表由 ModelPicker 打开时按需加载（与会话模型选择器同源）
 	useEffect(() => {
-		let mounted = true;
-		desktopApi.config
-			.visionGetConfig()
-			.then((loaded) => {
-				if (!mounted) return;
-				setState(loaded);
-				setDraft(loaded.config ?? { enabled: true, provider: "", model: "" });
-				setLoading(false);
-			})
-			.catch(() => {
-				if (mounted) setLoading(false);
-			});
 		loadLog();
 		loadModels();
-		return () => {
-			mounted = false;
-		};
 	}, [loadLog, loadModels]);
 
-	// 注意：提前 return 必须在所有 hooks（useState/useCallback/useEffect/useMemo）之后，
-	// 否则 loading 从 true→false 时 hooks 数量变化会触发 React 崩溃。
 	const updateDraft = (patch: Partial<VisionBridgeConfig>) => {
-		setDraft((prev) => (prev ? { ...prev, ...patch } : prev));
-		setNotice(null);
+		onChange(patch);
 	};
 
 	const openPicker = async () => {
@@ -104,10 +168,11 @@ export function VisionBridgeSettingsTab() {
 	const onPickModel = (model: AvailableModel) => {
 		const patch: Partial<VisionBridgeConfig> = { provider: model.provider, model: model.id };
 		// 按模型能力自动填充：maxTokens 建议 min(单次输出上限, 4096)（描述图片一般 4K 足够），
-		// 只在用户未手动改过（默认 1024 或未设）时写入，避免覆盖用户自定义值
+		// 仅当配置里从未有过该字段（undefined，如旧版本文件被手删）时写入，
+		// 不覆盖用户显式选择的「不限制(0)」或手动值（>0）
 		if (typeof model.maxTokens === "number" && model.maxTokens > 0) {
 			const suggested = Math.min(model.maxTokens, 4096);
-			if (draft?.maxTokens === undefined || draft.maxTokens === 1024) {
+			if (draft?.maxTokens === undefined) {
 				patch.maxTokens = suggested;
 			}
 		}
@@ -137,25 +202,7 @@ export function VisionBridgeSettingsTab() {
 		return String(n);
 	};
 
-	const onSave = async () => {
-		if (!draft) return;
-		setSaving(true);
-		setNotice(null);
-		try {
-			const result = await desktopApi.config.visionSaveConfig(draft);
-			setNotice(
-				result.ok
-					? { tone: "ok", text: t("settings.vision.saved") }
-					: { tone: "error", text: `${t("settings.vision.saveFailed")}：${result.error ?? ""}` },
-			);
-		} catch (error) {
-			setNotice({ tone: "error", text: `${t("settings.vision.saveFailed")}：${String(error)}` });
-		} finally {
-			setSaving(false);
-		}
-	};
-
-	if (loading) return <div className="settings-panel min-w-0" />;
+	if (!draft) return <div className="settings-panel min-w-0" />;
 
 	return (
 		<div className="min-w-0">
@@ -270,18 +317,53 @@ export function VisionBridgeSettingsTab() {
 					/>
 				</SettingRow>
 
-				{/* 数值参数 */}
+				{/* 描述最大 token：下拉「不限制 / 自定义」；不限制时不传该字段，Anthropic 必填则请求侧兜底 1024 */}
 				<SettingRow
 					title={<span>{t("settings.vision.maxTokens")}</span>}
+					description={t("settings.vision.maxTokensDesc")}
 					alignEnd={false}
+					stacked
 				>
-					<Input
-						type="number"
-						min={1}
-						max={32768}
-						value={draft?.maxTokens ?? 1024}
-						onChange={(event) => updateDraft({ maxTokens: Number(event.target.value) || undefined })}
-					/>
+					<div className="flex w-full items-start gap-2">
+						{/* 0/undefined 一律视为「不限制」；>0 为手动限制值 */}
+						{(() => {
+							const maxTokens = draft?.maxTokens ?? 0;
+							const custom = maxTokens > 0;
+							return (
+								<>
+									<Select
+										value={custom ? "custom" : "unlimited"}
+										onValueChange={(value) => {
+											if (value === "unlimited") {
+												updateDraft({ maxTokens: 0 });
+											} else if (!custom) {
+												// 从「不限制」切到「自定义」：以 1024 起步（与 Anthropic 兜底值一致）
+												updateDraft({ maxTokens: 1024 });
+											}
+										}}
+									>
+										<SelectTrigger className="w-full">
+											<SelectValue />
+										</SelectTrigger>
+										<SelectContent>
+											<SelectItem value="unlimited">{t("settings.vision.maxTokensUnlimited")}</SelectItem>
+											<SelectItem value="custom">{t("settings.vision.maxTokensCustom")}</SelectItem>
+										</SelectContent>
+									</Select>
+									{custom && (
+										<Input
+											type="number"
+											min={1}
+											max={32768}
+											className="w-32 shrink-0"
+											value={maxTokens}
+											onChange={(event) => updateDraft({ maxTokens: Number(event.target.value) || undefined })}
+										/>
+									)}
+								</>
+							);
+						})()}
+					</div>
 				</SettingRow>
 				<SettingRow
 					title={<span>{t("settings.vision.concurrency")}</span>}
@@ -320,7 +402,7 @@ export function VisionBridgeSettingsTab() {
 				title={t("settings.vision.configFile")}
 				description={
 					<code className="break-all text-caption text-muted-foreground">
-						{state ? configFilePath(state.configDir) : ""}
+						{configDir ? configFilePath(configDir) : ""}
 					</code>
 				}
 			/>
@@ -355,12 +437,9 @@ export function VisionBridgeSettingsTab() {
 				</pre>
 			</SettingsSection>
 
-			{/* 保存区 */}
-			<div className="flex items-center gap-3 px-0.5 pt-4">
-				<Button onClick={onSave} disabled={saving || !draft?.provider || !draft?.model}>
-					{saving ? "…" : t("settings.vision.save")}
-				</Button>
-				{notice && (
+			{/* 保存结果提示：保存动作在弹框头部统一按钮，结果在此就近展示 */}
+			{notice && (
+				<div className="flex items-center gap-3 px-0.5 pt-4">
 					<small
 						style={{
 							color: notice.tone === "ok" ? "var(--color-success, #16a34a)" : "var(--color-danger, #dc2626)",
@@ -368,8 +447,9 @@ export function VisionBridgeSettingsTab() {
 					>
 						{notice.text}
 					</small>
-				)}
-			</div>
+				</div>
+			)}
+			{saving && <div className="px-0.5 pt-2 text-caption text-muted-foreground">{t("common.saving")}</div>}
 
 			{/* 模型选择弹层：与会话模型选择器同一组件，行为一致 */}
 			{pickerOpen && (

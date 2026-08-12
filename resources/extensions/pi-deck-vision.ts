@@ -205,7 +205,7 @@ export type VisionBridgeConfig = {
 	baseUrl?: string;
 	/** 显式 apiKey；省略时从注册表 / auth.json 解析 */
 	apiKey?: string;
-	/** 描述结果最大 token 数，默认 1024 */
+	/** 描述结果最大 token 数；0 = 不限制（不传该字段，Anthropic 必填则兜底 1024） */
 	maxTokens?: number;
 	/** 单张图片转换超时（ms），默认 30s */
 	timeoutMs?: number;
@@ -235,7 +235,7 @@ const DEFAULT_CONFIG: VisionBridgeConfig = {
 	enabled: true,
 	provider: "",
 	model: "",
-	maxTokens: 1024,
+	maxTokens: 0,
 	timeoutMs: 30_000,
 	concurrency: 2,
 	promptTemplate: DEFAULT_PROMPT,
@@ -290,7 +290,7 @@ export async function loadVisionBridgeConfig(
 		if (typeof parsed.api === "string") config.api = parsed.api as VisionApiKind;
 		if (typeof parsed.baseUrl === "string") config.baseUrl = parsed.baseUrl;
 		if (typeof parsed.apiKey === "string") config.apiKey = parsed.apiKey;
-		if (typeof parsed.maxTokens === "number" && parsed.maxTokens > 0) config.maxTokens = parsed.maxTokens;
+		if (typeof parsed.maxTokens === "number" && parsed.maxTokens >= 0) config.maxTokens = parsed.maxTokens;
 		if (typeof parsed.timeoutMs === "number" && parsed.timeoutMs > 0) config.timeoutMs = parsed.timeoutMs;
 		if (typeof parsed.concurrency === "number" && parsed.concurrency > 0) config.concurrency = parsed.concurrency;
 		if (typeof parsed.promptTemplate === "string" && parsed.promptTemplate.trim()) {
@@ -591,7 +591,8 @@ export function buildVisionRequest(
 			},
 			body: {
 				model: endpoint.model,
-				max_tokens: maxTokens,
+				// Anthropic 必填该字段，无默认值：不限制（0）时兜底 1024
+				max_tokens: maxTokens > 0 ? maxTokens : 1024,
 				messages: [
 					{
 						role: "user",
@@ -625,7 +626,8 @@ export function buildVisionRequest(
 						],
 					},
 				],
-				generationConfig: { maxOutputTokens: maxTokens },
+				// 不限制（0）时不传 maxOutputTokens，交给模型默认输出上限
+				...(maxTokens > 0 ? { generationConfig: { maxOutputTokens: maxTokens } } : {}),
 			},
 		};
 	}
@@ -641,7 +643,8 @@ export function buildVisionRequest(
 		},
 		body: {
 			model: endpoint.model,
-			max_tokens: maxTokens,
+			// 不限制（0）时不传 max_tokens，输出长度交给模型默认上限
+			...(maxTokens > 0 ? { max_tokens: maxTokens } : {}),
 			...(flags.reasoningEffortNone ? { reasoning_effort: "none" } : {}),
 			messages: [
 				{
@@ -773,7 +776,7 @@ export async function describeImages(
 				return;
 			}
 			const outcome = await describeImage(endpoint, image, requestPrompt, {
-				maxTokens: config.maxTokens ?? 1024,
+				maxTokens: config.maxTokens ?? 0,
 				timeoutMs: config.timeoutMs ?? 30_000,
 				signal,
 			});
@@ -785,6 +788,8 @@ export async function describeImages(
 	);
 
 	// 第三遍：按原顺序拼装（含失败占位，模型仍能知道每张图的存在与顺序）
+	// 汇总日志：失败时附带首条失败原因（如「视觉模型返回空响应」「HTTP 429」），设置页运行记录可直接定位
+	let firstFailReason = "";
 	let counter = 0;
 	const parts: string[] = [];
 	const seen = new Set<string>();
@@ -802,6 +807,10 @@ export async function describeImages(
 			parts.push(`[图片 #${counter}（视觉桥已查看，以下为图片实际内容）]\n${result.text}`);
 		} else {
 			failCount++;
+			if (!firstFailReason) {
+				// 首次失败的具体原因（与失败占位文本同源，截断保护日志大小）
+				firstFailReason = result?.text ? truncateText(result.text, 120) : "未配置视觉模型";
+			}
 			// 失败占位带原因 + 修复方向，让主模型和用户都能定位问题
 			const reason = result ? truncateText(result.text, 200) : "未配置视觉模型";
 			parts.push(
@@ -809,7 +818,10 @@ export async function describeImages(
 			);
 		}
 	}
-	log?.(failCount > 0 ? "warn" : "info", `converted ${successCount} image(s)${failCount > 0 ? `, ${failCount} failed` : ""}`);
+	log?.(
+		failCount > 0 ? "warn" : "info",
+		`converted ${successCount} image(s)${failCount > 0 ? `, ${failCount} failed` : ""}${firstFailReason ? `；首个失败原因：${firstFailReason}` : ""}`,
+	);
 	// 汇总批次事件：每张图的 index/耗时/结果（与消息文本 #N 序号一致），供详情展示。
 	// 遍历顺序 = 图片出现顺序，与上方 counter 编号规则完全一致（去重后递增）。
 	const batchItems: VisionEventItem[] = [];
