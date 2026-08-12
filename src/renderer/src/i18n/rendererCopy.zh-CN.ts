@@ -825,7 +825,6 @@ export const zhCN = {
   "security.levelsTitle": "等级配置（每个等级独立控制工具动作与目录边界）",
   "security.reset": "恢复默认",
   "security.addLevel": "新增等级",
-  "security.dirtyHint": "有未保存的修改",
   "security.builtinBadge": "内置",
   "security.levelName": "名称",
   "security.levelDescription": "描述",

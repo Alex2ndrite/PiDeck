@@ -831,7 +831,6 @@ export const enUS: Record<TranslationKey, string> = {
   "security.levelsTitle": "Levels (each level independently controls tool actions and path boundaries)",
   "security.reset": "Reset to defaults",
   "security.addLevel": "Add level",
-  "security.dirtyHint": "Unsaved changes",
   "security.builtinBadge": "built-in",
   "security.levelName": "Name",
   "security.levelDescription": "Description",
