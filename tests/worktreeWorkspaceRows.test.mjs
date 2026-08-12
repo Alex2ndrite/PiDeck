@@ -40,7 +40,8 @@ test("worktree rows carry the anonymous action next to create-draft", () => {
 test("active worktree selection only highlights the branch row, not the whole block", () => {
   // wrapper 不允许再带 isActive 背景（会把展开的会话列表一起压暗）
   assert.doesNotMatch(worktreeTree, /workspace-tree-row group[\s\S]{0,200}isActive && "bg-accent\/60/);
-  assert.match(worktreeTree, /workspace-tree-select[\s\S]{0,300}isActive && "bg-accent\/60/);
+  // 窄侧栏注释行插在中间，窗口留到 500 保证断言不依赖注释长度
+  assert.match(worktreeTree, /workspace-tree-select[\s\S]{0,500}isActive && "bg-accent\/60/);
 });
 
 test("child worktree labels use a smaller hierarchy than their parent project", () => {

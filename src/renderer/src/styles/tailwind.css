@@ -112,6 +112,16 @@
   --text-caption--line-height: var(--line-height-caption);
   --text-control: var(--font-size-control);
   --text-control--line-height: var(--line-height-control);
+  /* widget 弹层（todo/plan 列表）字号体系：标题/空态/chip 用 --text-widget（默认 11px，
+     比右侧徽章 caption 12px 小 1px）；条目 --text-widget-item 再小一档（默认 10px）；
+     详情 --text-widget-detail 最小（默认 9px）。均随「界面字号」设置联动，
+     窄窗口 vw 收缩兜底不无限放大 */
+  --text-widget: clamp(9px, 0.7vw, calc(var(--font-size-caption) - 1px));
+  --text-widget--line-height: var(--line-height-caption);
+  --text-widget-item: clamp(9px, 0.7vw, calc(var(--font-size-caption) - 2px));
+  --text-widget-item--line-height: var(--line-height-caption);
+  --text-widget-detail: clamp(8px, 0.6vw, calc(var(--font-size-caption) - 3px));
+  --text-widget-detail--line-height: var(--line-height-caption);
   --text-body: var(--font-size-body);
   --text-body--line-height: var(--line-height-body);
   --text-chat: var(--font-size-chat);
