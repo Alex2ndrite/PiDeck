@@ -220,6 +220,8 @@ export const ToolCard = memo(function ToolCard(props: {
 	defaultOpen?: boolean;
 	/** 停止时 tool end 可能永远不会到达，避免遗留 running 状态继续播放动画。 */
 	stopped?: boolean;
+	/** 所属会话 id：运行期绑定不可用时（历史会话 _viewer 投影）回退会话文件定位 */
+	sessionId?: string;
 }) {
 	const [expanded, setExpanded] = useState(props.defaultOpen ?? false);
 	const messageStatus = getToolStatus(props.message);
@@ -239,6 +241,7 @@ export const ToolCard = memo(function ToolCard(props: {
 		setFullError(false);
 		try {
 			const result = await desktopApi.sessions.readMessageFullText(
+				props.sessionId,
 				props.message.agentId,
 				props.message.id,
 				typeof props.message.meta?.entryId === "string" ? props.message.meta.entryId : undefined,
@@ -450,12 +453,14 @@ export const ToolCard = memo(function ToolCard(props: {
 export const ToolGroupCard = memo(function ToolGroupCard(props: {
 	group: ToolGroupItem;
 	stopped?: boolean;
+	/** 所属会话 id（转交 ToolCard「查看完整输出」的历史会话文件回退） */
+	sessionId?: string;
 }) {
 	return (
 		<section className="tool-group-card w-full min-w-0 overflow-hidden rounded-none border-0 bg-transparent" data-message-id={props.group.id}>
 			<div className="flex flex-col gap-0 p-0">
 				{props.group.messages.map((message) => (
-					<ToolCard key={message.id} message={message} stopped={props.stopped} />
+					<ToolCard key={message.id} message={message} stopped={props.stopped} sessionId={props.sessionId} />
 				))}
 			</div>
 		</section>

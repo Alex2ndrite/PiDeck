@@ -404,6 +404,21 @@ export function registerSessionIpc(deps: SessionIpcDeps): void {
 			// 游标协议不变（before/nextBefore 为绝对消息下标，与运行时数组同一下标空间）；
 			// beforeEntryId 供已激活会话以运行时窗口首条消息为锚点首次补历史。
 			if (options?.unit === "turn") {
+				// 缓存优先（2026-11）：运行中会话翻历史先在主进程内存缓存切片，命中免文件 IO；
+				// 未命中（缓存未覆盖/非活跃会话）回退 SessionHistoryReader 读文件。
+				// 注意：缓存按 transient agentId 键控，必须经 coordinator 把稳定 sessionId
+				// 解析成当前运行时 agentId；解析不到（非活跃/终端绑定）直接走文件路径。
+				if (options.beforeEntryId || typeof before === "number") {
+					const target = sessionRuntimeCoordinator.getTarget(sessionId);
+					if (target) {
+						const cached = await agentManager.tryReadRuntimeTurnPage(entry.filePath, target.agentId, {
+							beforeEntryId: options.beforeEntryId,
+							before,
+							turnCount: pageSize,
+						}).catch(() => null);
+						if (cached) return cached;
+					}
+				}
 				return agentManager.readSessionDisplayTurnPage(entry.filePath, sessionId, before, pageSize, options.beforeEntryId);
 			}
 			return agentManager.readSessionDisplayMessagePage(entry.filePath, sessionId, before, pageSize);
@@ -415,16 +430,50 @@ export function registerSessionIpc(deps: SessionIpcDeps): void {
 	);
 	// 按需读取消息完整文本（工具结果截断后的「查看完整输出」）：
 	// 入参校验在边界（渲染层数据不可信），agentId/messageId 必须为非空字符串。
+	// 运行期路径（agentId 绑定）不可用时（历史会话 _viewer 投影 / agent 已退出）
+	// 回退会话文件定位（sessionId → catalog filePath），保证历史浏览同样可展开全文。
 	ipcMain.handle(
 		ipcChannels.sessionsCatalogReadMessageFullText,
-		async (_event, agentId: unknown, messageId: unknown, entryId?: unknown) => {
-			if (typeof agentId !== "string" || !agentId.trim() || typeof messageId !== "string" || !messageId.trim()) {
+		async (
+			_event,
+			sessionId: unknown,
+			agentId: unknown,
+			messageId: unknown,
+			entryId?: unknown,
+		) => {
+			if (
+				typeof agentId !== "string" ||
+				!agentId.trim() ||
+				typeof messageId !== "string" ||
+				!messageId.trim()
+			) {
 				throw new Error("Invalid message full-text request");
+			}
+			if (sessionId !== undefined && (typeof sessionId !== "string" || !sessionId.trim())) {
+				throw new Error("Invalid sessionId");
 			}
 			if (entryId !== undefined && (typeof entryId !== "string" || !entryId.trim())) {
 				throw new Error("Invalid entryId");
 			}
-			return agentManager.readMessageFullText(agentId, messageId, entryId as string | undefined);
+			try {
+				return await agentManager.readMessageFullText(
+					agentId,
+					messageId,
+					entryId as string | undefined,
+				);
+			} catch (error) {
+				if (typeof sessionId === "string" && sessionId.trim()) {
+					const record = sessionCatalog.get(sessionId);
+					if (record?.filePath) {
+						return agentManager.readMessageFullTextFromFile(
+							record.filePath,
+							messageId,
+							entryId as string | undefined,
+						);
+					}
+				}
+				throw error;
+			}
 		},
 	);
 	ipcMain.handle(

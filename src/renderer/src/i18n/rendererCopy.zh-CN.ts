@@ -441,6 +441,8 @@ export const zhCN = {
   "app.compactionTooltip": "压缩了 {count} 次，仅显示压缩后的会话记录",
   "app.compactionExpand": "展开查看摘要全文",
   "app.compactionCollapse": "点击收起",
+  "app.messageExpand": "展开全文",
+  "app.messageCollapse": "收起",
   "app.projectChatInfo":
     "Chat 是固定置顶的内置对话区；会话写入应用用户目录，不需要先添加项目。",
   "app.projectCollapse": "折叠",

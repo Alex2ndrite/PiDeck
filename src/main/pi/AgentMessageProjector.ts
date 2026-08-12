@@ -244,11 +244,7 @@ export class AgentMessageProjector {
 						// 保留压缩次数（桌面端从会话文件解析得到），供前端展示“已压缩 N 次”
 						...(isCompaction && typed.meta?.compactionCount != null
 							? { compactionCount: typed.meta.compactionCount }
-							: {}),
-					// 透传归档消息（从会话文件解析的压缩前历史）
-					...(typed.meta?.archivedMessages != null
-						? { archivedMessages: typed.meta.archivedMessages }
-						: {})
+							: {})
 						},
 					}];
 				}

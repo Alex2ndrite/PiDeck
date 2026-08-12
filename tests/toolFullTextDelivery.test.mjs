@@ -65,7 +65,16 @@ test("IPC channel, handler and preload surface are wired", () => {
     readFileSync("src/main/ipc/sessionIpc.ts", "utf8"),
     /ipcChannels\.sessionsCatalogReadMessageFullText,/,
   );
-  assert.match(preload, /readMessageFullText: \(agentId: string, messageId: string, entryId\?: string\)/);
+  // 四参签名：sessionId 用于运行期绑定不可用时的历史会话文件回退（_viewer 投影）
+  assert.match(
+    preload,
+    /readMessageFullText: \(\s*sessionId: string \| undefined,\s*agentId: string,\s*messageId: string,\s*entryId\?: string,\s*\)/,
+  );
+  // handler 侧：运行期路径失败时回退 catalog filePath 定位
+  assert.match(
+    readFileSync("src/main/ipc/sessionIpc.ts", "utf8"),
+    /readMessageFullTextFromFile\(\s*record\.filePath,\s*messageId,\s*entryId as string \| undefined,\s*\)/,
+  );
 });
 
 test("ToolCard shows on-demand full-output entry with loading/error states", () => {

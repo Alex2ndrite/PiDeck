@@ -138,19 +138,17 @@ export function SkillsTab(props: {
 								}
 							}}
 						>
+							{/* 只显示相对路径（label 形如 ~/.pi/agent/skills）：绝对路径长且无增益，
+								窄列会溢出框边界；单行 + truncate 超长省略。 */}
 							<SelectTrigger className="w-full">
-								<span className="flex min-w-0 flex-col items-start gap-0.5">
-									<span className="truncate">{selectedLocation?.label ?? t("config.chooseFolder")}</span>
-									<span className="truncate font-mono text-micro text-muted-foreground">{selectedLocation?.path}</span>
+								<span className="min-w-0 flex-1 truncate text-left">
+									{selectedLocation?.label ?? t("config.chooseFolder")}
 								</span>
 							</SelectTrigger>
 							<SelectContent>
 								{data.locations.map((location) => (
 									<SelectItem key={location.id} value={location.id}>
-										<span className="flex min-w-0 flex-col gap-0.5">
-											<span className="truncate">{location.label}</span>
-											<span className="truncate font-mono text-micro text-muted-foreground">{location.path}</span>
-										</span>
+										<span className="min-w-0 flex-1 truncate text-left">{location.label}</span>
 									</SelectItem>
 								))}
 							</SelectContent>

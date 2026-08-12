@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { constants } from "node:fs";
+import { constants, realpathSync } from "node:fs";
 import { lstat, open, readlink, realpath, unlink } from "node:fs/promises";
 import { promisify } from "node:util";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
@@ -644,7 +644,20 @@ export class GitService {
 			: groups.index;
 		const normalizePath = (entry: string) => {
 			const normalized = resolve(entry);
-			return process.platform === "win32" ? normalized.toLocaleLowerCase() : normalized;
+			// projectRoot 来自 fs/promises.realpath（异步版，Windows 上展开 8.3 短路径为长名）；
+			// 同步 realpathSync 不展开（JS 实现），必须用 realpathSync.native（libuv）保持同空间，
+			// 否则短路径（如 ADMINI~1）下项目内文件会被误判为 outside（stage/unstage 直接报错）。
+			// 路径已不存在（stale/删除竞态）时 native 抛错，回退 resolve（短名空间）。
+			const canonical = process.platform === "win32"
+				? (() => {
+					try {
+						return realpathSync.native(normalized);
+					} catch {
+						return normalized;
+					}
+				})()
+				: normalized;
+			return process.platform === "win32" ? canonical.toLocaleLowerCase() : canonical;
 		};
 		const requested = new Set(paths.map(normalizePath));
 		const matched = candidates.filter((resource) => requested.has(normalizePath(resource.path)));
@@ -657,8 +670,14 @@ export class GitService {
 		const normalizedRoot = process.platform === "win32"
 			? projectRoot.toLocaleLowerCase()
 			: projectRoot;
+		// resolve 空间兜底：已被删除/不可操作的 stale 路径无法 native 展开（回退短名），
+		// 用 projectRoot 的 resolve 形态判定仍在项目内 → 静默跳过，而非误报 outside。
+		const resolvedRoot = process.platform === "win32"
+			? resolve(projectRoot).toLocaleLowerCase()
+			: resolve(projectRoot);
 		const isInsideProject = (normalizedPath: string) =>
-			normalizedPath === normalizedRoot || normalizedPath.startsWith(`${normalizedRoot}${sep}`);
+			normalizedPath === normalizedRoot || normalizedPath.startsWith(`${normalizedRoot}${sep}`)
+			|| normalizedPath === resolvedRoot || normalizedPath.startsWith(`${resolvedRoot}${sep}`);
 		const outsideProject = [...requested].filter(
 			(p) => !matchedPaths.has(p) && !isInsideProject(p),
 		);

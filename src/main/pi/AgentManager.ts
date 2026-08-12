@@ -57,6 +57,8 @@ import {
 	pickNumber,
 	clampPercent,
 	trimHistoryMessages,
+	turnTrimStartIndex,
+	countRoleMessagesBefore,
 	buildMessageFlushPayload,
 	leadingSummaryCards,
 	stripToolResultForDelivery,
@@ -139,6 +141,11 @@ export class AgentManager {
 	 * flush 只下发窗口段；窗口前历史由渲染层走 disk 轮次分页 prepend。
 	 */
 	private readonly displayWindowStartByAgent = new Map<string, number>();
+	/**
+	 * 运行期消息缓存头部在会话文件消息下标空间中的偏移（entryId 缺失时的数值游标换算）。
+	 * loadMessages / trimRuntimeCache 维护；-1 表示未知（匿名会话等无文件场景）。
+	 */
+	private readonly messageHeadOffsetByAgent = new Map<string, number>();
 	/** 会话文件版本（mtime:size）：随消息载荷下发，渲染层据此检测压缩改写并丢弃 disk 前缀。 */
 	private readonly sessionFileVersionByAgent = new Map<string, string>();
 	private readonly thinkingEmitter = new LatestByKeyEmitter<string, string>(
@@ -176,9 +183,14 @@ export class AgentManager {
 	private static readonly TOOL_FULL_TEXT_LRU_LIMIT = 200;
 	/**
 	 * 大会话直接从文件尾部读取时，最多保留的最近消息轮次（每条 user 消息算一轮）。
-	 * 原值 8 对于一些需要回看较多历史的长会话偏少，提高至 30 轮。
+	 * 12 轮 = 4 次 3 轮翻页，覆盖绝大多数回看需求；更早历史走磁盘轮次分页。
 	 */
-	private static readonly MAX_HISTORY_LOAD_TURNS = 30;
+	private static readonly MAX_HISTORY_LOAD_TURNS = 12;
+	/**
+	 * 运行期消息缓存上限（轮）：agent_settled 后把主进程数组裁到最近 N 轮。
+	 * 12 轮覆盖激活窗口（3 轮）+ 三级缓存的回看命中率；头部更早历史随时可从文件分页读回。
+	 */
+	private static readonly MAX_RUNTIME_CACHE_TURNS = 12;
 	/**
 	 * 工具结果文本截断阈值（字符数）。工具结果（如 bash 输出、文件读取）可能达数十 KB，
 	 * 若完整存入 ChatMessage.meta 并随流式 emit 反复全量传输，会显著放大 IPC payload
@@ -432,6 +444,24 @@ export class AgentManager {
 	}
 
 	/**
+	 * 窗口首条消息在会话文件消息下标空间中的位置（无 entryId 窗口的数值游标）。
+	 * 消息数组头部可能存在系统摘要卡片（compaction/branchSummary，文件消息空间无对应条目），
+	 * 因此用「headOffset + (windowStart - 卡片数)」换算；窗口完全落在卡片区时返回 undefined。
+	 */
+	private computeWindowStartFilePos(
+		agentId: string,
+		all: ChatMessage[],
+		windowStart: number,
+	): number | undefined {
+		const headOffset = this.messageHeadOffsetByAgent.get(agentId);
+		if (headOffset === undefined || headOffset < 0) return undefined;
+		const cardCount = leadingSummaryCards(all, all.length).length;
+		const offset = windowStart - cardCount;
+		if (offset < 0) return undefined;
+		return headOffset + offset;
+	}
+
+	/**
 	 * 显示窗口视图（2026-08 激活分页）：替换/激活路径的下发与 flush 保持同一协议——
 	 * 窗口段消息 + windowStart + totalLength + fileVersion。
 	 */
@@ -440,6 +470,7 @@ export class AgentManager {
 		windowStart?: number;
 		totalLength: number;
 		fileVersion?: string;
+		windowStartFilePos?: number;
 	} {
 		const all = this.messages.get(agentId) ?? [];
 		const windowStart = Math.min(
@@ -450,11 +481,13 @@ export class AgentManager {
 		// 窗口前若存在系统摘要卡片（压缩/分支），prepend 回来——压缩卡片插在数组最前，
 		// 不 prepend 会被窗口 slice 切掉（与 buildMessageFlushPayload 全量分支同一约定）。
 		const summaryCards = leadingSummaryCards(all, windowStart);
+		const windowStartFilePos = this.computeWindowStartFilePos(agentId, all, windowStart);
 		return {
 			messages: stripToolResultForDelivery([...summaryCards, ...all.slice(windowStart)]),
 			totalLength: all.length,
 			...(windowStart > 0 ? { windowStart } : {}),
 			...(fileVersion ? { fileVersion } : {}),
+			...(windowStartFilePos !== undefined ? { windowStartFilePos } : {}),
 		};
 	}
 
@@ -475,6 +508,18 @@ export class AgentManager {
 		if (!sessionPath) {
 			throw new Error(`Message full text unavailable: session path missing for agent ${agentId}`);
 		}
+		return this.sessionHistoryReader.readMessageFullText(sessionPath, messageId, entryId);
+	}
+
+	/**
+	 * 按会话文件路径直接读取单条消息完整文本（不依赖运行期绑定）。
+	 * 历史会话浏览（_viewer 投影，无 runtime）的「查看完整输出」走此路径。
+	 */
+	async readMessageFullTextFromFile(
+		sessionPath: string,
+		messageId: string,
+		entryId?: string,
+	): Promise<{ text: string }> {
 		return this.sessionHistoryReader.readMessageFullText(sessionPath, messageId, entryId);
 	}
 
@@ -523,6 +568,75 @@ export class AgentManager {
 			beforeEntryId,
 		);
 		return { ...page, messages: stripToolResultForDelivery(page.messages) };
+	}
+
+	/**
+	 * 缓存优先的历史翻页：运行中会话的「加载更早对话」先在主进程内存缓存（最近 12 轮）里切片，
+	 * 命中则零文件 IO；未命中返回 null，调用方回退 SessionHistoryReader 读文件。
+	 *
+	 * 游标：beforeEntryId 优先（跨下标空间稳定）；before 为文件绝对下标时先解析成 entryId 再查缓存。
+	 * 命中边界：锚点条目必须在缓存中且不是缓存第一条（第一条之前没有缓存内容，交给文件路径）。
+	 * 返回页的 nextBefore/nextBeforeEntryId 统一换算回文件下标空间，渲染层续页协议不变。
+	 */
+	async tryReadRuntimeTurnPage(
+		sessionPath: string,
+		agentId: string,
+		options: { beforeEntryId?: string; before?: number; turnCount?: number },
+	): Promise<SessionMessagePage | null> {
+		const runtime = this.agents.get(agentId);
+		const list = this.messages.get(agentId);
+		if (!runtime || !list || list.length === 0) return null;
+		// 防御：运行时已切到别的会话（替换/重绑）时禁止用其缓存应答本会话的翻页，
+		// 交给文件路径（调用方以稳定 sessionId 经 coordinator 解析，此处兜底双保险）。
+		if (
+			runtime.tab.sessionPath &&
+			this.toSessionHostPath(runtime.tab.sessionPath) !== this.toSessionHostPath(sessionPath)
+		) {
+			return null;
+		}
+
+		let pos = -1;
+		if (options.beforeEntryId) {
+			pos = list.findIndex((m) => m.meta?.entryId === options.beforeEntryId);
+		} else if (options.before !== undefined) {
+			const entryId = await this.sessionHistoryReader.resolveEntryIdAtPosition(sessionPath, options.before);
+			if (!entryId) return null;
+			pos = list.findIndex((m) => m.meta?.entryId === entryId);
+			// 锚点是缓存最旧条目：缓存里没有比它更早的内容，交给文件路径
+			if (pos === 0) return null;
+		}
+		if (pos < 0) return null;
+
+		const turnCount = Math.min(
+			Math.max(1, Math.floor(options.turnCount ?? 3)),
+			SessionHistoryReader.maxTurnPageSize(),
+		);
+		const roles = list.map((m) => ({ role: m.role, byteLength: 0 }));
+		const start = findTurnPageStart(roles, pos, turnCount, Number.MAX_SAFE_INTEGER);
+		if (start >= pos) return null;
+		const page = list.slice(start, pos);
+		const oldest = page[0] ?? list[0];
+		const oldestEntryId = typeof oldest?.meta?.entryId === "string" ? oldest.meta.entryId : undefined;
+		const nextBefore = oldestEntryId
+			? (await this.sessionHistoryReader.resolveEntryPosition(sessionPath, oldestEntryId)) ?? null
+			: null;
+		const total = await this.sessionHistoryReader.getActiveEntryCount(sessionPath);
+		// 与文件路径同口径的会话文件版本：渲染层据此检测压缩/外部改写并丢弃已缓存的历史前缀
+		// （indexVersion 缺失会让 cache 页沿用旧版本，压缩后前缀失效不可见）。
+		const indexVersion = await this.sessionHistoryReader.getSessionIndexVersion(sessionPath);
+		void this.appLogger?.info("agent", "Runtime history cache hit", {
+			agentId,
+			start,
+			pos,
+			pageCount: page.length,
+		});
+		return {
+			messages: page,
+			total,
+			nextBefore,
+			...(oldestEntryId ? { nextBeforeEntryId: oldestEntryId } : {}),
+			indexVersion,
+		};
 	}
 
 	recordHostExchange(agentId: string, userText: string, assistantText: string) {
@@ -582,6 +696,38 @@ export class AgentManager {
 		// 按对话轮次截断（保留最近若干轮 user 消息）。压缩摘要不是 user 消息，会被此逻辑保留在尾部，
 		// 因此下方会单独把它插到最前面，确保不被按 user 轮次切掉。
 		const trimmed = trimHistoryMessages(rawMessages);
+		const trimmedStart = turnTrimStartIndex(rawMessages);
+
+		// 身份向量必须与保留消息同步裁剪：activeEntryIds 按「消费槽位的角色消息」与 rawMessages
+		// 一一对应，trim 丢弃头部整轮后，若仍把完整 activeEntryIds 交给 projector，保留消息会被
+		// 绑定到会话最早的 entry——编辑/删除/重发将落到错误轮次（曾因 15 轮裁剪复现 q4→u1）。
+		// compactionSummary/branchSummary 不消费槽位，prepend 到最前不影响对齐。
+		let droppedRoleCount = 0;
+		if (activeEntryIds && trimmedStart > 0) {
+			droppedRoleCount = countRoleMessagesBefore(rawMessages, trimmedStart);
+			activeEntryIds = activeEntryIds.slice(droppedRoleCount);
+		}
+		// 记录缓存头部在文件消息下标空间中的位置：无 entryId 的窗口（skipEntries 大历史路径）
+		// 需要用它作为首次补历史的数值游标（渲染层 before=windowStartFilePos）。
+		let headOffset: number;
+		if (activeEntryIds) {
+			headOffset = droppedRoleCount;
+		} else if (skipEntries && runtime.tab.sessionPath) {
+			const roleCount = trimmed.reduce<number>((count, message) => {
+				const role = (message as { role?: unknown } | undefined)?.role;
+				return count + (role === "user" || role === "assistant" || role === "toolResult" ? 1 : 0);
+			}, 0);
+			// 最佳努力：文件活动消息数 - 缓存内角色消息数 ≈ 被裁头部长度。
+			// 文件里非角色 message 条目（system 等）会让该值偏大，属极端边角；
+			// entryId 锚点仍是首选路径，此值只作为无 entryId 时的兜底游标。
+			const activeFileCount = await this.sessionHistoryReader
+				.getActiveEntryCount(runtime.tab.sessionPath)
+				.catch(() => 0);
+			headOffset = Math.max(0, activeFileCount - roleCount);
+		} else {
+			headOffset = -1; // 未知：不提供 windowStartFilePos，渲染层回退 entryId 锚点
+		}
+		this.messageHeadOffsetByAgent.set(agentId, headOffset);
 
 		// 解析会话文件里的压缩记录：拿到所有压缩段摘要 + 归档消息。
 		// pi 的 get_messages 对压缩会话只返回压缩后的消息，通常不带压缩摘要；
@@ -659,6 +805,10 @@ export class AgentManager {
 			this.messages.get(agentId) ?? [],
 			options?.preserveMessagesAfter,
 		);
+		// 重载后把进行中的消息身份（activeAssistantMessageIds/toolMessageIds）从
+		// 运行期副本重定向到投影版：后续事件继续更新投影版（位置正确、单份），
+		// 避免「投影 partial + 运行期完整版」双份或事件 append 到错误轮次。
+		this.rebindInFlightMessages(agentId, nextMessages, messages);
 		this.messages.set(agentId, nextMessages);
 		// 显示窗口 = 尾部 3 轮（轮次起点对齐 user 消息，与 disk 轮次分页同一约定；
 		// 字节预算不参与窗口计算——单轮再大也整轮显示，折叠完整性优先）
@@ -1489,8 +1639,8 @@ export class AgentManager {
 			}
 
 			this.compactingAgents.delete(agentId);
-			// 压缩成功且进程未退出，直接加载消息
-			await this.loadMessages(agentId).catch(() => undefined);
+			// 压缩成功且进程未退出，直接加载消息（压缩期间乐观/流式消息不能丢：保护到重载完成）
+			await this.loadMessages(agentId, false, undefined, { preserveMessagesAfter: Date.now() }).catch(() => undefined);
 			void this.appLogger?.info("agent", "Compact completed successfully", {
 				agentId,
 				totalElapsedMs: Date.now() - startTime,
@@ -1517,7 +1667,7 @@ export class AgentManager {
 				});
 				await this.reattachProcess(agentId, runtime.tab.sessionPath);
 				runtime.tab.status = "idle";
-				await this.loadMessages(agentId).catch(() => undefined);
+				await this.loadMessages(agentId, false, undefined, { preserveMessagesAfter: Date.now() }).catch(() => undefined);
 				this.addLocalizedMessage(
 					agentId,
 					"system",
@@ -1599,7 +1749,8 @@ export class AgentManager {
 			// 如果有旧的 pending abort 标记，清理掉
 			this.abortedDuringAsk.delete(agentId);
 
-			await this.loadMessages(agentId).catch(() => undefined);
+			// 重连期间用户可能已发送消息（乐观上屏）：必须保护，否则替换投影时未落盘消息丢失
+			await this.loadMessages(agentId, false, undefined, { preserveMessagesAfter: Date.now() }).catch(() => undefined);
 
 			void this.appLogger?.info("agent", "Process reattached successfully", {
 				agentId,
@@ -1874,7 +2025,7 @@ export class AgentManager {
 				8_000,
 			);
 			if (response.success) {
-				await this.loadMessages(agentId).catch(() => undefined);
+				await this.loadMessages(agentId, false, undefined, { preserveMessagesAfter: Date.now() }).catch(() => undefined);
 				void this.appLogger?.info("agent", "Model refresh succeeded via reload_config RPC", {
 					agentId,
 					elapsedMs: Date.now() - startTime,
@@ -2034,20 +2185,61 @@ export class AgentManager {
 		}
 	}
 
+	/**
+	 * 编辑/删除/重发定位消息条目：优先运行时缓存（最近 12 轮窗口，O(1)），
+	 * 缓存未命中时按 messageId 从文件索引定位 —— 使这些操作不再依赖缓存轮数
+	 * （此前 40 轮缓存的一部分意义是保证操作按钮可用，12 轮窗口外也能操作）。
+	 * 文件定位返回 entryId 精确锚点（SessionFileEditor.locateEntry 优先 entryId 匹配）。
+	 */
+	private async locateMessageTarget(
+		agentId: string,
+		sessionPath: string,
+		messageId: string,
+		activeLeafId?: string,
+	): Promise<{ target: SessionEntryTarget; resend?: { text: string; images?: ImageContent[] } }> {
+		const message = this.messages.get(agentId)?.find((candidate) => candidate.id === messageId);
+		if (message) {
+			return { target: this.createSessionEntryTarget(message, activeLeafId) };
+		}
+		const located = await this.sessionHistoryReader.readMessageByMessageId(sessionPath, messageId);
+		if (!located) throw new Error("Message not found");
+		void this.appLogger?.info("agent", "Message located from session file (runtime cache miss)", {
+			agentId,
+			messageId,
+			entryId: located.entryId,
+		});
+		const role: "user" | "assistant" = located.role === "user" ? "user" : "assistant";
+		return {
+			target: {
+				entryId: located.entryId,
+				legacyMessageId: messageId,
+				legacyAgentId: agentId,
+				role,
+				text: located.text,
+				activeLeafId,
+			},
+			// 缓存未命中分支必须恒带回 draft：prepareResendFromMessage 先截断会话再返回草稿，
+			// 若只在有图片时附 resend，纯文本重发会先截断历史再返回空文本（数据不可恢复）。
+			resend: {
+				text: located.text,
+				...(located.images?.length ? { images: located.images } : {}),
+			},
+		};
+	}
+
 	async editMessage(agentId: string, messageId: string, newText: string) {
 		const startTime = Date.now();
 		await this.ensureAgentIdle(agentId);
 		const runtime = this.requireRuntime(agentId);
 		const sessionPath = runtime.tab.sessionPath;
 		if (!sessionPath) throw new Error("Session not persisted");
-		const message = this.messages.get(agentId)?.find((candidate) => candidate.id === messageId);
-		if (!message) throw new Error("Message not found");
 
 		const file = this.createSessionFileRef(runtime, sessionPath);
 		const activeLeafId = await this.getActiveSessionLeafId(agentId, runtime);
+		const { target } = await this.locateMessageTarget(agentId, sessionPath, messageId, activeLeafId);
 		await this.sessionFileEditor.editMessage({
 			file,
-			target: this.createSessionEntryTarget(message, activeLeafId),
+			target,
 			newText,
 			reload: () => this.requestSessionReload(runtime, file),
 		});
@@ -2065,14 +2257,13 @@ export class AgentManager {
 		const runtime = this.requireRuntime(agentId);
 		const sessionPath = runtime.tab.sessionPath;
 		if (!sessionPath) throw new Error("Session not persisted");
-		const message = this.messages.get(agentId)?.find((candidate) => candidate.id === messageId);
-		if (!message) throw new Error("Message not found");
 
 		const file = this.createSessionFileRef(runtime, sessionPath);
 		const activeLeafId = await this.getActiveSessionLeafId(agentId, runtime);
+		const { target } = await this.locateMessageTarget(agentId, sessionPath, messageId, activeLeafId);
 		await this.sessionFileEditor.deleteMessage({
 			file,
-			target: this.createSessionEntryTarget(message, activeLeafId),
+			target,
 			reload: () => this.requestSessionReload(runtime, file),
 		});
 		await this.loadMessages(agentId);
@@ -2092,15 +2283,16 @@ export class AgentManager {
 		const runtime = this.requireRuntime(agentId);
 		const sessionPath = runtime.tab.sessionPath;
 		if (!sessionPath) throw new Error("Session not persisted");
-		const message = this.messages.get(agentId)?.find((candidate) => candidate.id === messageId);
-		if (!message) throw new Error("Message not found");
-		if (message.role !== "user") throw new Error("Only user messages can be resent");
+		// 缓存命中时先校验角色（重发仅限用户消息）；缓存未命中时由 SessionFileEditor 的 inputRole 校验兜底
+		const cached = this.messages.get(agentId)?.find((candidate) => candidate.id === messageId);
+		if (cached && cached.role !== "user") throw new Error("Only user messages can be resent");
 
 		const file = this.createSessionFileRef(runtime, sessionPath);
 		const activeLeafId = await this.getActiveSessionLeafId(agentId, runtime);
+		const { target, resend } = await this.locateMessageTarget(agentId, sessionPath, messageId, activeLeafId);
 		await this.sessionFileEditor.truncateForResend({
 			file,
-			target: this.createSessionEntryTarget(message, activeLeafId),
+			target,
 			reload: () => this.requestSessionReload(runtime, file),
 		});
 		await this.loadMessages(agentId);
@@ -2109,9 +2301,9 @@ export class AgentManager {
 			messageId,
 			elapsedMs: Date.now() - startTime,
 		});
-		return {
-			text: message.text,
-			...(message.images?.length ? { images: message.images } : {}),
+		return resend ?? {
+			text: cached?.text ?? "",
+			...(cached?.images?.length ? { images: cached.images } : {}),
 		};
 	}
 
@@ -2341,7 +2533,8 @@ export class AgentManager {
 			) ?? runtime.tab.sessionPath;
 		}
 		if (state?.sessionName) runtime.tab.title = state.sessionName;
-		await this.loadMessages(agentId).catch(() => undefined);
+		// 重新附加后恢复：保留附加期间用户发送/流式中的消息，避免投影替换吞掉乐观消息
+		await this.loadMessages(agentId, false, undefined, { preserveMessagesAfter: Date.now() }).catch(() => undefined);
 		this.emitState();
 	}
 
@@ -3085,6 +3278,8 @@ export class AgentManager {
 				// 若 message_end 未到（边缘路径），仍先落盘再清 live。
 				this.finalizeThinkingIntoMessage(agentId);
 				this.flushMessageEmit(agentId);
+				// 一轮结束：运行期缓存裁剪到最近 12 轮（含本轮），防止长会话数组无界增长
+				this.trimRuntimeCache(agentId);
 				this.finishThinkingChannel(agentId);
 				this.activeAssistantMessageIds.delete(agentId);
 				this.streamingAgents.delete(agentId);
@@ -3714,12 +3909,31 @@ export class AgentManager {
 		if (!nextThinking.trim()) return;
 
 		this.beginAssistantMessage(agentId);
-		const messageId =
+		const messageIdBase =
 			segment?.assistantMessageId ?? this.activeAssistantMessageIds.get(agentId);
-		if (!messageId) return;
+		if (!messageIdBase) return;
+		let messageId = messageIdBase;
 
 		const list = this.messages.get(agentId) ?? [];
-		const existingIndex = list.findIndex((message) => message.id === messageId);
+		let existingIndex = list.findIndex((message) => message.id === messageId);
+		// 重载后事件迟到：运行期 id 已不在列表（被投影身份替换）。若列表里已有同一条
+		// pi 消息（正文一致）则更新它并重定向身份，避免 append 造出双份。
+		if (existingIndex < 0) {
+			const textForMatch =
+				partialMessage && typeof partialMessage === "object"
+					? this.messageProjector.extractText((partialMessage as any).content)
+					: "";
+			const rebindIndex = this.findSamePiMessageIndex(list, "assistant", textForMatch);
+			if (rebindIndex >= 0) {
+				existingIndex = rebindIndex;
+				messageId = list[rebindIndex].id;
+				if (segment) {
+					segment.assistantMessageId = messageId;
+					segment.id = `msg-thinking-${messageId}`;
+				}
+				this.activeAssistantMessageIds.set(agentId, messageId);
+			}
+		}
 		const startedAt = segment?.startedAt ?? Date.now();
 		const endedAt = segment?.endedAt && segment.endedAt > 0 ? segment.endedAt : Date.now();
 		if (existingIndex >= 0) {
@@ -3776,7 +3990,27 @@ export class AgentManager {
 			this.activeAssistantMessageIds.set(agentId, messageId);
 		}
 
-		const existingIndex = list.findIndex((message) => message.id === messageId);
+		let existingIndex = list.findIndex((message) => message.id === messageId);
+		// 重载后事件迟到：activeAssistantMessageIds 指向的运行期 id 在列表里已不存在
+		// （loadMessages 替换为投影身份）。此时不能盲目 append——列表里可能已有同一条
+		// pi 消息的投影版，append 会造出双份（同内容消息被用户消息切分到两个 run）。
+		// 按内容指纹匹配既有消息：命中则更新它并把身份映射重定向到它，保持单份。
+		if (existingIndex < 0) {
+			const extractedTextForMatch =
+				partialMessage && typeof partialMessage === "object"
+					? this.messageProjector.extractText((partialMessage as any).content)
+					: "";
+			const rebindIndex = this.findSamePiMessageIndex(
+				list,
+				"assistant",
+				extractedTextForMatch || fallbackDelta,
+			);
+			if (rebindIndex >= 0) {
+				existingIndex = rebindIndex;
+				messageId = list[rebindIndex].id;
+				this.activeAssistantMessageIds.set(agentId, messageId);
+			}
+		}
 		const existing = existingIndex >= 0 ? list[existingIndex] : undefined;
 		const extractedText =
 			partialMessage && typeof partialMessage === "object"
@@ -3829,6 +4063,119 @@ export class AgentManager {
 	}
 
 
+	/**
+	 * 在消息列表中查找「同一条 pi 消息」的既有副本（重载后事件迟到的身份重定向）。
+	 *
+	 * 运行期事件消息（id=randomUUID）与文件投影消息（id=agentId-history-entryId）
+	 * 的 ChatMessage.id 永不相同，只能按内容匹配：
+	 * - tool：meta.toolCallId 两通道同源（pi 的 toolCallId），精确匹配；
+	 * - assistant/user：正文文本（stripAnsi 后）一致视为同一消息，从后往前匹配
+	 *   （同文本多条时取最近一条——重载后迟到的终态事件对应最新落盘的副本）。
+	 * 空文本不参与匹配（骨架无内容可证同一性，且骨架场景 id 映射仍有效）。
+	 */
+	private findSamePiMessageIndex(
+		list: ChatMessage[],
+		role: ChatMessage["role"],
+		text: string,
+		toolCallId?: string,
+	): number {
+		const normalized = stripAnsi(text ?? "").trim();
+		if (role === "tool" && toolCallId) {
+			for (let index = list.length - 1; index >= 0; index -= 1) {
+				const message = list[index];
+				if (
+					message.role === "tool" &&
+					(message.meta as Record<string, unknown> | undefined)?.toolCallId === toolCallId
+				) {
+					return index;
+				}
+			}
+			return -1;
+		}
+		if (!normalized) return -1;
+		for (let index = list.length - 1; index >= 0; index -= 1) {
+			const message = list[index];
+			if (message.role !== role) continue;
+			if (stripAnsi(message.text ?? "").trim() !== normalized) continue;
+			return index;
+		}
+		return -1;
+	}
+
+	/**
+	 * 重载（loadMessages 替换列表）后，把「进行中的消息身份」从运行期副本重定向到投影版。
+	 *
+	 * 场景：重载快照捕捉到流式中间态——投影含未完成 assistant（无 stopReason、部分文本），
+	 * 运行期含同一条的骨架（text 恒空，preserved 保护保留在列表尾部）。若只靠
+	 * upsert 指纹匹配：骨架与投影 partial 文本不同（空 vs 部分）匹配不上，message_end
+	 * 更新骨架后列表里仍残留投影 partial → 双份。
+	 *
+	 * 规则：activeAssistantMessageIds 登记的运行期骨架（空文本、无 stopReason）仍在
+	 * nextMessages 中时，若投影里存在「未完成的 assistant」（无 stopReason、有部分文本
+	 * ——同一时刻只有一条流式消息，从后往前取最后一条），把身份映射重定向到投影版并
+	 * 移除骨架：后续事件继续更新投影版，位置正确、单份。tool 同理按 toolCallId。
+	 */
+	private rebindInFlightMessages(
+		agentId: string,
+		nextMessages: ChatMessage[],
+		projectedMessages: ChatMessage[],
+	): void {
+		const runningAssistantId = this.activeAssistantMessageIds.get(agentId);
+		const runningInNext = runningAssistantId
+			? nextMessages.find((message) => message.id === runningAssistantId)
+			: undefined;
+		// 运行期骨架被 preserved 保护保留在尾部（merge 未匹配到同指纹投影）：
+		// 若投影里恰好有它的「未完成版」（无 stopReason、有部分文本——重载快照
+		// 捕捉到的流式中间态），说明同一条消息将以两种身份并存（partial 投影版 +
+		// 骨架，后续 message_end 会把骨架更新为完整版 → 双份）。把身份重定向到
+		// 投影版并移除骨架：后续事件继续更新投影版，位置正确、单份。
+		if (
+			runningInNext &&
+			runningInNext.role === "assistant" &&
+			!runningInNext.stopReason &&
+			!runningInNext.text.trim()
+		) {
+			let projectedIncomplete: ChatMessage | undefined;
+			for (let index = projectedMessages.length - 1; index >= 0; index -= 1) {
+				const message = projectedMessages[index];
+				if (
+					message.role === "assistant" &&
+					!message.stopReason &&
+					Boolean(message.text.trim())
+				) {
+					projectedIncomplete = message;
+					break;
+				}
+			}
+			if (projectedIncomplete) {
+				const skeletonIndex = nextMessages.findIndex(
+					(message) => message.id === runningAssistantId,
+				);
+				if (skeletonIndex >= 0) nextMessages.splice(skeletonIndex, 1);
+				this.activeAssistantMessageIds.set(agentId, projectedIncomplete.id);
+				const segment = this.thinkingSegmentByAgent.get(agentId);
+				if (segment && segment.assistantMessageId === runningAssistantId) {
+					segment.assistantMessageId = projectedIncomplete.id;
+					segment.id = `msg-thinking-${projectedIncomplete.id}`;
+				}
+			}
+		}
+		const runningTool = this.toolMessageIds.get(agentId);
+		if (runningTool) {
+			for (const [toolCallId, runningToolId] of runningTool) {
+				if (nextMessages.some((message) => message.id === runningToolId)) continue;
+				const projectedIndex = nextMessages.findIndex(
+					(message) =>
+						message.role === "tool" &&
+						(message.meta as Record<string, unknown> | undefined)?.toolCallId === toolCallId,
+				);
+				if (projectedIndex >= 0) {
+					runningTool.set(toolCallId, nextMessages[projectedIndex].id);
+				}
+			}
+		}
+	}
+
 	private upsertToolMessage(
 		agentId: string,
 		event: Record<string, any>,
@@ -3849,7 +4196,17 @@ export class AgentManager {
 		}
 
 		const list = this.messages.get(agentId) ?? [];
-		const existingToolIndex = list.findIndex((message) => message.id === messageId);
+		let existingToolIndex = list.findIndex((message) => message.id === messageId);
+		// 重载后事件迟到：运行期工具 id 已不在列表（被投影身份替换）。按 toolCallId
+		// （两通道同源）匹配既有工具消息，更新它并重定向身份，避免 append 双份。
+		if (existingToolIndex < 0) {
+			const rebindIndex = this.findSamePiMessageIndex(list, "tool", "", toolCallId);
+			if (rebindIndex >= 0) {
+				existingToolIndex = rebindIndex;
+				messageId = list[rebindIndex].id;
+				agentTools.set(toolCallId, messageId);
+			}
+		}
 		const existing = existingToolIndex >= 0 ? list[existingToolIndex] : undefined;
 		const isError = status === "error" || event.isError === true;
 		const args = event.args ?? existing?.meta?.args;
@@ -3983,7 +4340,9 @@ export class AgentManager {
 		if (existing) {
 			existing.text = text;
 			existing.timestamp = Date.now();
-			existing.meta = meta;
+			// 合并而非替换：重定向到投影版时保留其身份字段（entryId/_piDeckMsgSeq），
+			// 否则渲染层接缝去重与编辑/删除/重发定位会因 entryId 丢失而失效。
+			existing.meta = { ...(existing.meta ?? {}), ...meta };
 			this.markMessagesDirtyFrom(agentId, existingToolIndex);
 		} else {
 			list.push({
@@ -4245,6 +4604,8 @@ export class AgentManager {
 		runtime.tab.status = "idle";
 		this.finalizeThinkingIntoMessage(agentId);
 		this.flushMessageEmit(agentId);
+		// 兜底确认空闲同样视为一轮结束：运行期缓存裁剪，与 agent_settled 路径一致
+		this.trimRuntimeCache(agentId);
 		this.finishThinkingChannel(agentId);
 		this.textEmitter.cancel(agentId);
 		this.streamingText.delete(agentId);
@@ -4540,12 +4901,14 @@ export class AgentManager {
 		const all = this.messages.get(agentId) ?? [];
 		const dirtyFrom = this.messageDirtyFromByAgent.get(agentId);
 		this.messageDirtyFromByAgent.delete(agentId);
+		const windowStart = this.displayWindowStartByAgent.get(agentId) ?? 0;
 		this.emit(ipcChannels.agentsMessage, buildMessageFlushPayload(
 			agentId,
 			all,
 			dirtyFrom,
-			this.displayWindowStartByAgent.get(agentId) ?? 0,
+			windowStart,
 			this.sessionFileVersionByAgent.get(agentId),
+			this.computeWindowStartFilePos(agentId, all, windowStart),
 		));
 		// 消息 flush 时顺带同步本地流式标志：text_delta 置位 streamingAgents 后，
 		// 渲染进程必须及时拿到 isStreaming=true 才会走逐字渐显；此路径 50ms 节流、
@@ -4572,6 +4935,44 @@ export class AgentManager {
 		if (prev === undefined || index < prev) {
 			this.messageDirtyFromByAgent.set(agentId, Math.max(0, index));
 		}
+	}
+
+	/**
+	 * 运行期缓存裁剪：agent 一轮结束后把主进程消息数组裁到最近 N 轮。
+	 * 现状 40 轮 trim 只在 loadMessages 时执行，长会话运行中消息会持续追加、数组无界增长；
+	 * 这里在 agent_settled（及 get_state 兜底确认空闲）后统一裁剪，使 12 轮成为硬上限。
+	 * 裁剪后重算激活显示窗口（尾部 3 轮）并全量 flush——头部整轮被裁，增量下标空间失效，
+	 * 渲染层以窗口化全量校准（与 loadMessages 后的窗口协议一致）。
+	 * 头部系统摘要卡片（compaction/branchSummary）不属于 user 轮次，会被 trim 切掉，
+	 * 裁剪前先取出、裁剪后重新 prepend，保证「已压缩 N 次」卡片持续可见。
+	 */
+	private trimRuntimeCache(agentId: string) {
+		const list = this.messages.get(agentId);
+		if (!list || list.length === 0) return;
+		const summaryCards = leadingSummaryCards(list, list.length);
+		const trimmedStart = turnTrimStartIndex(list, AgentManager.MAX_RUNTIME_CACHE_TURNS);
+		const trimmed = list.slice(trimmedStart);
+		if (trimmed.length === list.length) return;
+		// 卡片恒在数组最前（index 0），trim 保留尾部时必然被整体丢弃，重新 prepend 不会重复。
+		const next = summaryCards.length > 0 ? [...summaryCards, ...trimmed] : trimmed;
+		// 缓存头部在文件消息空间前移 = 被裁「角色消息」数（卡片/系统消息不计入文件消息空间，
+		// 若按总长度递增会把 windowStartFilePos 数值游标整体推偏）。
+		this.messageHeadOffsetByAgent.set(
+			agentId,
+			(this.messageHeadOffsetByAgent.get(agentId) ?? 0) + countRoleMessagesBefore(list, trimmedStart),
+		);
+		this.messages.set(agentId, next);
+		this.displayWindowStartByAgent.set(
+			agentId,
+			findTurnPageStart(
+				next.map((m) => ({ role: m.role, byteLength: 0 })),
+				next.length,
+				AgentManager.DISPLAY_WINDOW_TURNS,
+				Number.MAX_SAFE_INTEGER,
+			),
+		);
+		this.markMessagesDirtyFrom(agentId, 0);
+		this.flushMessageEmit(agentId);
 	}
 
 	/** 节流推送 live 思考（done=false）；无段身份时丢弃。 */

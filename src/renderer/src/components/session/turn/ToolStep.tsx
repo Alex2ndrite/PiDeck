@@ -11,10 +11,12 @@ export const ToolStep = memo(function ToolStep(props: {
 	hidden: boolean;
 	/** 最新回合停止后没有 tool end 结果时，清除卡片的运行中动画。 */
 	stopped: boolean;
+	/** 所属会话 id（转交 ToolCard「查看完整输出」的历史会话文件回退） */
+	sessionId?: string;
 }) {
 	return (
 		<div style={{ display: props.hidden ? "none" : undefined }}>
-			<ToolGroupCard group={props.group} stopped={props.stopped} />
+			<ToolGroupCard group={props.group} stopped={props.stopped} sessionId={props.sessionId} />
 		</div>
 	);
 });

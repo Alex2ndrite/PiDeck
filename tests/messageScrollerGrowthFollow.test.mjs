@@ -15,12 +15,23 @@ const engineSource = readFileSync(
 // 根因（旧手写实现）：ResizeObserver 对内容「收缩」也触发跟随滚动（scrollToEnd smooth）。
 // 换用 use-stick-to-bottom 引擎后，该语义由引擎内置：只有内容「增长」才锁底跟随，
 // 收缩（negative resize）只保留当前视口，不主动滚动。
+//
+// 2026-08 补充守卫：收缩仅在「未逃逸」时维持锁底。流式中中间回复 message_end 时
+// live 挂载点（折叠外）先卸载、History 落库后 settled 再进折叠（折叠内），两帧高度
+// 往返；已上滚读历史的用户若在近底圈内，会被这个负增长误重锁，随后正增长帧
+// instant 拽底（「先上去再下来」抖动）。与 handleScroll 的重锁路径（已带
+// !escapedFromLock 守卫）对齐：逃逸用户不被任何 resize 拽回锁底。
 test("follow scroll only on content growth, not on shrink", () => {
   // 引擎在 ResizeObserver 回调里区分正/负 resize：增长才 scrollToBottom
   assert.match(engineSource, /const difference = height - \(previousHeight \?\? height\);/);
   assert.match(engineSource, /if \(difference >= 0\) \{/);
-  // 收缩（negative resize）：不主动滚动，仅在已近底时维持锁底状态
-  assert.match(engineSource, /if \(state\.isNearBottom\) \{/);
+  // 收缩（negative resize）：不主动滚动；仅在「已近底且用户未逃逸」时维持锁底状态，
+  // 逃逸用户（上滚读历史）不被负增长误重锁（与 handleScroll 的守卫规则一致）。
+  // 断言锚定到负增长分支（} else {）内，避免误匹配 handleScroll 里已有的同形守卫。
+  assert.match(
+    engineSource,
+    /\} else \{\s*\/\*\*[\s\S]*?if \(!state\.escapedFromLock && state\.isNearBottom\) \{/,
+  );
   // 增长时追底保留期（350ms）与弹簧物理由引擎管理，避免"收缩弹到底"的旧 bug
   assert.match(engineSource, /RETAIN_ANIMATION_DURATION_MS/);
 });

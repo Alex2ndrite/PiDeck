@@ -1311,15 +1311,19 @@ export class SessionRuntimeCoordinator {
 		const message = errorMessage(error);
 		const lower = message.toLowerCase();
 		const code: SessionCommandErrorCode =
-			lower.includes("not found")
-				? "SESSION_NOT_FOUND"
-				: lower.includes("busy") || lower.includes("in progress") || lower.includes("stream")
-					? "SESSION_RUNTIME_BUSY"
-					: lower.includes("binding") || lower.includes("generation") || lower.includes("changed")
-						? "SESSION_RUNTIME_CHANGED"
-						: lower.includes("runtime") && lower.includes("available")
-							? "SESSION_RUNTIME_UNAVAILABLE"
-							: "SESSION_COMMAND_FAILED";
+			// 消息定位失败（编辑/删除/重发缓存与文件都未命中）先于泛化 "not found" 识别：
+			// 否则会误报成 SESSION_NOT_FOUND（「会话已不存在」），而会话其实还在。
+			lower.includes("message not found")
+				? "MESSAGE_NOT_FOUND"
+				: lower.includes("not found")
+					? "SESSION_NOT_FOUND"
+					: lower.includes("busy") || lower.includes("in progress") || lower.includes("stream")
+						? "SESSION_RUNTIME_BUSY"
+						: lower.includes("binding") || lower.includes("generation") || lower.includes("changed")
+							? "SESSION_RUNTIME_CHANGED"
+							: lower.includes("runtime") && lower.includes("available")
+								? "SESSION_RUNTIME_UNAVAILABLE"
+								: "SESSION_COMMAND_FAILED";
 		return { ok: false, error: { code, debugDetails: message } };
 	}
 

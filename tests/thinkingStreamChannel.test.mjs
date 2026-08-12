@@ -136,7 +136,8 @@ test("renderer: releasing live thinking also removes atomFamily instance", () =>
 test("renderer: message flush also tries live→History release", () => {
   const msgIdx = atoms.indexOf('event.sourceChannel === "agents:message"');
   assert.ok(msgIdx >= 0);
-  const msgBlock = atoms.slice(msgIdx, msgIdx + 2500);
+  // 切片窗口：windowStartFilePos（2026-11 数值游标）解析位于同一块内，窗口相应放大
+  const msgBlock = atoms.slice(msgIdx, msgIdx + 3000);
   assert.match(msgBlock, /tryReleaseLiveThinkingAfterHistory/);
 });
 

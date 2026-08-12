@@ -31,9 +31,10 @@ export function clampPercent(value: number | undefined): number | undefined {
 /**
  * 按对话轮次截断历史消息：找到最后 maxTurns 个 user 提问，
  * 保留对应轮次及之后的全部消息，避免大会话加载时一次性解析过多内容。
+ * 返回保留段的起始下标（无 user 消息时与 slice(-50) 语义一致）。
  */
-export function trimHistoryMessages(rawMessages: unknown[], maxTurns = 40): unknown[] {
-	if (rawMessages.length === 0) return rawMessages;
+export function turnTrimStartIndex<T>(rawMessages: T[], maxTurns = 12): number {
+	if (rawMessages.length === 0) return 0;
 	const userIndices: number[] = [];
 	for (let i = rawMessages.length - 1; i >= 0; i--) {
 		const msg = rawMessages[i] as { role?: unknown } | undefined;
@@ -42,8 +43,28 @@ export function trimHistoryMessages(rawMessages: unknown[], maxTurns = 40): unkn
 			if (userIndices.length >= maxTurns) break;
 		}
 	}
-	if (userIndices.length === 0) return rawMessages.slice(-50);
-	return rawMessages.slice(userIndices[0]);
+	if (userIndices.length === 0) return Math.max(0, rawMessages.length - 50);
+	return userIndices[0];
+}
+
+export function trimHistoryMessages<T>(rawMessages: T[], maxTurns = 12): T[] {
+	if (rawMessages.length === 0) return rawMessages;
+	return rawMessages.slice(turnTrimStartIndex(rawMessages, maxTurns));
+}
+
+/**
+ * 统计 [0, endIndex) 内会消费 entryId 槽位的角色消息数（user/assistant/toolResult）。
+ * 与 AgentMessageProjector 的槽位消费规则一致：compactionSummary/branchSummary/非角色条目
+ * 不消费槽位。用于 trim 后把 activeEntryIds 与保留消息重新对齐。
+ */
+export function countRoleMessagesBefore<T>(rawMessages: T[], endIndex: number): number {
+	const bound = Math.min(Math.max(0, endIndex), rawMessages.length);
+	let count = 0;
+	for (let i = 0; i < bound; i++) {
+		const role = (rawMessages[i] as { role?: unknown } | undefined)?.role;
+		if (role === "user" || role === "assistant" || role === "toolResult") count++;
+	}
+	return count;
 }
 
 /**
@@ -88,6 +109,7 @@ export function buildMessageFlushPayload(
 	dirtyFrom: number | undefined,
 	windowStart = 0,
 	fileVersion?: string,
+	windowStartFilePos?: number,
 ): {
 	agentId: string;
 	messages: ChatMessage[];
@@ -95,6 +117,7 @@ export function buildMessageFlushPayload(
 	totalLength?: number;
 	windowStart?: number;
 	fileVersion?: string;
+	windowStartFilePos?: number;
 } {
 	// 激活显示窗口（2026-08 激活分页）：full 快照也只发窗口段 [windowStart..]，
 	// 窗口前历史由 disk 轮次分页按需 prepend；totalLength 恒为数组全长，
@@ -114,6 +137,8 @@ export function buildMessageFlushPayload(
 	// dirtyFrom 缺失或落到窗口之前（重载后窗口右移）：升级为窗口化全量
 	// 窗口前若存在系统摘要卡片（压缩/分支），一并 prepend——压缩卡片插在数组最前，
 	// 不 prepend 会被窗口 slice 切掉（增量分支不 prepend：卡片不在增量区，渲染层已有）。
+	// windowStartFilePos：窗口首条消息在会话文件消息下标空间中的位置，
+	// 供渲染层在窗口消息缺 entryId 时作为首次补历史的数值游标（主进程缓存/文件路径都能消费）。
 	const summaryCards = leadingSummaryCards(all, boundedWindow);
 	return {
 		agentId,
@@ -121,6 +146,9 @@ export function buildMessageFlushPayload(
 		totalLength: all.length,
 		...(boundedWindow > 0 ? { windowStart: boundedWindow } : {}),
 		...(fileVersion ? { fileVersion } : {}),
+		...(typeof windowStartFilePos === "number" && windowStartFilePos >= 0
+			? { windowStartFilePos }
+			: {}),
 	};
 }
 

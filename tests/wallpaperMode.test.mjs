@@ -37,6 +37,8 @@ test("wallpaper surfaces do not let bg-background utility hide the image", () =>
   // bg-background 会压过 foundation.css 的壁纸规则，把页面重新刷成纯白。
   assert.match(surfaceSource, /empty-state[^\n]*bg-transparent/);
   assert.match(startSource, /session-start-surface[^\n]*bg-transparent/);
+  // composer 同样透出壁纸（远端 1cbbab34 有意修复壁纸模式回归：bg-background → bg-transparent），
+  // 防止有人误加不透明背景再次盖住壁纸。
   assert.match(composerSource, /className="composer[^\n]*bg-transparent/);
 });
 

@@ -527,8 +527,14 @@ export const useStickToBottom = (options: StickToBottomOptions = {}): StickToBot
          * Else if it's a negative resize, check if we're near the bottom
          * if we are want to un-escape from the lock, because the resize
          * could have caused the container to be at the bottom.
+         *
+         * 逃逸守卫（与 handleScroll 的重锁路径同一规则）：只有「用户从未上滚逃逸」
+         * 时才允许负增长把近底状态重新锁底。已逃逸用户（上滚读历史）即使距底 <70px
+         * 也不被负增长拽回——流式中中间回复 message_end 会经历 live 挂载点（折叠外）
+         * 先卸载、History 落库后 settled 再进折叠（折叠内）的两帧高度往返，若无守卫，
+         * 负增长帧会把读历史的用户误重锁，随后正增长帧 instant 拽底（先上后下抖动）。
          */
-        if (state.isNearBottom) {
+        if (!state.escapedFromLock && state.isNearBottom) {
           setEscapedFromLock(false);
           setIsAtBottom(true);
         }

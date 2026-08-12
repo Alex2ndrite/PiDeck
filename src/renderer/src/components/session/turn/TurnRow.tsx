@@ -314,6 +314,7 @@ export const TurnRow = memo(
 												group={item.entry.group}
 												hidden={!stepsVisible}
 												stopped={props.agentRunning !== true}
+												sessionId={props.sessionId}
 											/>
 										);
 									}

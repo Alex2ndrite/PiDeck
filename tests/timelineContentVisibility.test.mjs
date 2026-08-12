@@ -17,14 +17,16 @@ test("message-list no longer estimates offscreen row height via content-visibili
   assert.doesNotMatch(timeline, /message-list[^\n]*contain-intrinsic-size:auto_\d+px/);
 });
 
-test("long-session window governance stays via pagination hooks", () => {
-  // 分页窗口仍在做长会话治理（渲染尾部 N 条，向上滚动扩窗）
+test("long-session window governance stays via turn-based history loading", () => {
+  // 2026-11 轮次模型：100 条分页器已删除，长会话治理改由
+  // 「贴底挂载窗口 + 按轮补历史（主进程缓存优先/文件兜底）」承担。
   const controller = readFileSync(
     "src/renderer/src/hooks/useSessionTimelineController.ts",
     "utf8",
   );
-  assert.match(controller, /useMessagePagination/);
-  assert.match(controller, /initialPageSize: options\.initialPageSize \?\? 100/);
+  assert.doesNotMatch(controller, /useMessagePagination/);
+  assert.match(controller, /RUNTIME_HISTORY_TURN_PAGE_SIZE/);
+  assert.match(controller, /beforeEntryId: anchorEntryId/);
 });
 
 test("single-turn DOM stays light via default-collapsed process group", () => {
@@ -49,4 +51,35 @@ test("process group uses CollapsibleContent height transition", () => {
   // 总折叠用 Radix CollapsibleContent（自带 height 过渡动画），替代 display:none 突变
   assert.match(turnRow, /<Collapsible/);
   assert.match(turnRow, /<CollapsibleContent/);
+});
+
+test("user messages fold long text beyond 8 lines with an expand toggle", () => {
+  // 长发送消息默认折叠（line-clamp-8），右下角「展开全文/收起」切换；
+  // 溢出检测用 ResizeObserver 对比 scrollHeight/clientHeight（折叠态下测量）。
+  const surface = readFileSync(
+    "src/renderer/src/components/session/SurfaceComponents.tsx",
+    "utf8",
+  );
+  assert.match(surface, /line-clamp-8/);
+  assert.match(surface, /messageExpanded/);
+  assert.match(surface, /ResizeObserver/);
+  assert.match(surface, /scrollHeight > el\.clientHeight \+ 1/);
+  assert.match(surface, /t\("app\.messageExpand"\)/);
+  assert.match(surface, /t\("app\.messageCollapse"\)/);
+});
+
+test("compaction card matches the thinking-card visual language", () => {
+  // 压缩卡片与思考卡片对齐：lucide 图标标签行 + 虚线内容框 + 左下角展开按钮；
+  // 不再用 emoji 充当功能图标（AGENTS.md 图标规范）。
+  const cards = readFileSync(
+    "src/renderer/src/components/session/TimelineEventCards.tsx",
+    "utf8",
+  );
+  assert.doesNotMatch(cards, /📁|📂/);
+  assert.match(cards, /Minimize size=\{15\}/);
+  assert.match(cards, /border-dashed border-border-subtle/);
+  assert.match(cards, /max-h-\[calc\(var\(--font-size-chat\)\*7\.56\)\]/);
+  assert.match(cards, /t\("app\.compactionExpand"\)/);
+  // 展开/收起走左下角按钮，不再整卡可点（与思考卡一致）
+  assert.doesNotMatch(cards, /className="flex w-full cursor-pointer/);
 });

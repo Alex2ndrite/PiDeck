@@ -36,7 +36,7 @@ test("thinking, compaction, diagnostic, and ask cards use the same marker rail",
     assert.match(events, new RegExp(`kind=\\"${kind}\\"`));
   }
   assert.match(events, /setExpanded\(\(v\) => !v\)/);
-  assert.match(events, /setExpanded\(!expanded\)/);
+  // 旧断言 setExpanded(!expanded) 对应已废弃写法（函数式更新等价且更稳），不再断言实现细节
   assert.match(events, /data-message-id=\{props\.message\.id\}/);
 });
 

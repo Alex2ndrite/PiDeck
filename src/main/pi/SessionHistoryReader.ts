@@ -1,5 +1,5 @@
 import { open, readFile, stat } from "node:fs/promises";
-import type { ChatMessage, SessionMessagePage } from "../../shared/types";
+import type { ChatMessage, ImageContent, SessionMessagePage } from "../../shared/types";
 import type { MainProcessTranslationKey } from "../../shared/i18n/mainProcessCopy";
 import type { RpcResponse } from "./PiRpcClient";
 import type { AppLogger } from "../logging/AppLogger";
@@ -13,6 +13,8 @@ type SessionDisplayEntry = {
 	hasMessage: boolean;
 	/** 消息角色（user/assistant/…）：轮次分页按 user 消息切轮次边界，建索引时顺手捕获 */
 	role?: string;
+	/** 消息条目的 message.id：编辑/删除/重发缓存未命中时按 messageId 定位文件条目 */
+	messageId?: string;
 	summary?: string;
 	firstKeptEntryId?: string;
 };
@@ -22,7 +24,14 @@ type SessionDisplayIndex = {
 	size: number;
 	mtimeMs: number;
 	hasCompaction: boolean;
+	/** 全量条目表（含非活跃分支）：增量追加与 fork/rewind 回溯用 */
+	entries: Map<string, SessionDisplayEntry>;
+	/** 活动分支（含 compaction 等非消息条目）：从最后 entry 沿 parentId 回溯 */
+	activeBranch: SessionDisplayEntry[];
+	/** 活动分支中的消息条目（分页/轮次计算用，派生自 activeBranch） */
 	activeMessageEntries: SessionDisplayEntry[];
+	/** 构建时文件是否以完整行（\n）结尾：false 时禁止增量追加（旧最后一行可能被拼接污染） */
+	endsWithNewline: boolean;
 };
 
 export type SessionArchiveData = {
@@ -33,7 +42,6 @@ export type SessionArchiveData = {
 		firstKeptEntryId?: string;
 		tokensBefore?: number;
 	}>;
-	archivedMessagesByCompactionId: Map<string, ChatMessage[]>;
 };
 
 export type SessionHistoryReaderDeps = {
@@ -101,6 +109,54 @@ export function findTurnPageStart(
 }
 
 /**
+ * 从 pi 消息 content 提取「重发」回填内容：string 或 blocks 数组（text/image）。
+ * 图片块格式：{ type: "image", source: { type: "base64", media_type, data } }。
+ */
+function extractResendContent(content: unknown): { text: string; images?: ImageContent[] } {
+	if (typeof content === "string") return { text: content };
+	if (Array.isArray(content)) {
+		const textParts: string[] = [];
+		const images: ImageContent[] = [];
+		for (const block of content) {
+			const typed = block as {
+				type?: string;
+				text?: string;
+				source?: { type?: string; media_type?: string; data?: string };
+			} | null;
+			if (!typed || typeof typed !== "object") continue;
+			if (typed.type === "text" && typeof typed.text === "string") {
+				textParts.push(typed.text);
+			} else if (
+				typed.type === "image" &&
+				typed.source?.type === "base64" &&
+				typeof typed.source.data === "string"
+			) {
+				images.push({
+					type: "image",
+					mimeType: typeof typed.source.media_type === "string" ? typed.source.media_type : "image/png",
+					data: typed.source.data,
+				});
+			}
+		}
+		return { text: textParts.join("\n"), ...(images.length > 0 ? { images } : {}) };
+	}
+	return { text: "" };
+}
+
+/**
+ * 从渲染层合成消息 ID（`${agentId}-history-${entryId}`）解析出 entryId。
+ * 与 SessionFileEditor.legacyEntryId 的格式约定一致：agentId/entryId 是 UUID，
+ * 不含 "-history-" 分隔符；非合成格式返回 undefined。
+ */
+function syntheticHistoryEntryId(messageId: string): string | undefined {
+	const marker = "-history-";
+	const index = messageId.lastIndexOf(marker);
+	if (index < 0) return undefined;
+	const entryId = messageId.slice(index + marker.length);
+	return entryId || undefined;
+}
+
+/**
  * Reads persisted Session JSONL without starting Pi. Runtime ownership remains in
  * AgentManager; this reader owns bounded display paging and compaction recovery.
  */
@@ -115,6 +171,11 @@ export class SessionHistoryReader {
 	/** 轮次分页默认/上限：默认最近一次激活带 3 轮，单页最多 10 轮（防恶意参数撑爆 IPC） */
 	static readonly DEFAULT_TURN_PAGE_SIZE = 3;
 	private static readonly MAX_TURN_PAGE_SIZE = 10;
+
+	/** 单页轮次上限（AgentManager 缓存优先路径复用，避免翻页超预算） */
+	static maxTurnPageSize(): number {
+		return SessionHistoryReader.MAX_TURN_PAGE_SIZE;
+	}
 
 	constructor(private readonly deps: SessionHistoryReaderDeps) {}
 
@@ -359,6 +420,7 @@ export class SessionHistoryReader {
 				messages: messages.slice(start, boundedBefore),
 				total: messages.length,
 				nextBefore: start > 0 ? start : null,
+				nextBeforeEntryId: start > 0 ? index.activeMessageEntries[start]?.id : undefined,
 				indexVersion: `${index.mtimeMs}:${index.size}`,
 			};
 		}
@@ -369,7 +431,66 @@ export class SessionHistoryReader {
 			messages: this.deps.convertMessages(agentId, rawMessages, entries.map((entry) => entry.id)),
 			total,
 			nextBefore: start > 0 ? start : null,
+			nextBeforeEntryId: start > 0 ? index.activeMessageEntries[start]?.id : undefined,
 			indexVersion: `${index.mtimeMs}:${index.size}`,
+		};
+	}
+
+	/** entryId → 活动分支消息条目的绝对下标（文件下标空间）；不存在返回 undefined。 */
+	async resolveEntryPosition(sessionPath: string, entryId: string): Promise<number | undefined> {
+		if (!entryId) return undefined;
+		const index = await this.getSessionDisplayIndex(sessionPath);
+		const position = index.activeMessageEntries.findIndex((entry) => entry.id === entryId);
+		return position >= 0 ? position : undefined;
+	}
+
+	/** 绝对下标（文件下标空间）→ entryId；越界/无条目返回 undefined。 */
+	async resolveEntryIdAtPosition(sessionPath: string, position: number): Promise<string | undefined> {
+		const index = await this.getSessionDisplayIndex(sessionPath);
+		const entry = index.activeMessageEntries[position];
+		return entry?.id;
+	}
+
+	/** 活动分支消息条目总数（SessionMessagePage.total 的文件口径）。 */
+	async getActiveEntryCount(sessionPath: string): Promise<number> {
+		const index = await this.getSessionDisplayIndex(sessionPath);
+		return index.activeMessageEntries.length;
+	}
+
+	/** 会话文件版本（mtime:size），与分页页面 indexVersion 同口径；供缓存命中页透传。 */
+	async getSessionIndexVersion(sessionPath: string): Promise<string> {
+		const index = await this.getSessionDisplayIndex(sessionPath);
+		return `${index.mtimeMs}:${index.size}`;
+	}
+
+	/**
+	 * 按 messageId 在活动分支定位消息条目并读出其正文（编辑/删除/重发缓存未命中时的文件定位）。
+	 * 返回 entryId（SessionFileEditor 精确定位锚点）+ 正文文本/图片（重发回填用）。
+	 */
+	async readMessageByMessageId(
+		sessionPath: string,
+		messageId: string,
+	): Promise<{ entryId: string; role?: string; text: string; images?: ImageContent[] } | undefined> {
+		if (!messageId) return undefined;
+		const index = await this.getSessionDisplayIndex(sessionPath);
+		// 兼容三种命中：JSONL 原生 message.id、渲染层合成 ID（agentId-history-entryId）、
+		// 裸 entryId（旧会话无 message.id 时渲染 ID 即 `${agentId}-history-${entryId}`）。
+		const syntheticId = syntheticHistoryEntryId(messageId);
+		const entry = index.activeMessageEntries.find(
+			(candidate) =>
+				candidate.messageId === messageId ||
+				candidate.id === messageId ||
+				(syntheticId !== undefined && candidate.id === syntheticId),
+		);
+		if (!entry) return undefined;
+		const raw = await this.readIndexedSessionMessages(index.hostPath, [entry]);
+		const content = (raw[0] as { content?: unknown } | undefined)?.content;
+		const extracted = extractResendContent(content);
+		return {
+			entryId: entry.id,
+			role: entry.role,
+			text: extracted.text,
+			...(extracted.images?.length ? { images: extracted.images } : {}),
 		};
 	}
 
@@ -383,41 +504,82 @@ export class SessionHistoryReader {
 			return cached;
 		}
 
+		// 增量路径：文件变大且旧索引以完整行结尾 → 只读尾部新增字节并追加条目。
+		// pi 运行中持续往 JSONL 追加行，运行中翻历史/看分页会反复触发索引失效；
+		// 全量重建需要整文件 readFile + 逐行 parse，大会话（几十 MB）会造成可感知卡顿。
+		// 前置条件 endsWithNewline：旧最后一行以 \n 结尾，追加内容与旧内容边界干净。
+		if (cached && version.size > cached.size && cached.endsWithNewline) {
+			const updated = await this.appendIndexFromTail(cached, hostPath, version);
+			if (updated) {
+				this.sessionDisplayIndexes.delete(hostPath);
+				this.sessionDisplayIndexes.set(hostPath, updated);
+				this.trimDisplayIndexCache();
+				return updated;
+			}
+			// 增量失败（IO 异常/无新增完整行）：回退全量重建
+		}
+
 		const content = await readFile(hostPath, "utf8");
 		const entries = new Map<string, SessionDisplayEntry>();
 		let lastEntryId: string | undefined;
 		let byteOffset = 0;
+		// 文件是否以完整行（\n）结尾：决定后续 append 能否走增量索引
+		const endsWithNewline = content.endsWith("\n");
 		const lines = content.split("\n");
 		for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
 			const sourceLine = lines[lineIndex];
 			const hasNewline = lineIndex < lines.length - 1;
 			const byteLength = Buffer.byteLength(sourceLine, "utf8");
-			const jsonLine = sourceLine.endsWith("\r") ? sourceLine.slice(0, -1) : sourceLine;
-			try {
-				const entry = JSON.parse(jsonLine) as Record<string, unknown>;
-				if (typeof entry.id === "string") {
-					const message = entry.message as Record<string, unknown> | null | undefined;
-					entries.set(entry.id, {
-						id: entry.id,
-						parentId: typeof entry.parentId === "string" ? entry.parentId : null,
-						type: typeof entry.type === "string" ? entry.type : "",
-						offset: byteOffset,
-						byteLength,
-						hasMessage: entry.message !== undefined && entry.message !== null,
-						role: typeof message?.role === "string" ? message.role : undefined,
-						summary: typeof entry.summary === "string" ? entry.summary : undefined,
-						firstKeptEntryId: typeof entry.firstKeptEntryId === "string"
-							? entry.firstKeptEntryId
-							: undefined,
-					});
-					lastEntryId = entry.id;
-				}
-			} catch {
-				// A malformed JSONL line must not make the historical viewer unusable.
+			const parsed = this.parseIndexLine(sourceLine, byteOffset, byteLength);
+			if (parsed) {
+				entries.set(parsed.id, parsed);
+				lastEntryId = parsed.id;
 			}
 			byteOffset += byteLength + (hasNewline ? 1 : 0);
 		}
+		const activeBranch = this.traceActiveBranch(entries, lastEntryId);
+		const index = this.finishIndex(hostPath, version, entries, activeBranch, endsWithNewline);
+		this.sessionDisplayIndexes.delete(hostPath);
+		this.sessionDisplayIndexes.set(hostPath, index);
+		this.trimDisplayIndexCache();
+		return index;
+	}
 
+	/** 解析单行 JSONL 为索引条目；损坏行返回 null（不影响其他行）。 */
+	private parseIndexLine(
+		sourceLine: string,
+		offset: number,
+		byteLength: number,
+	): SessionDisplayEntry | null {
+		const jsonLine = sourceLine.endsWith("\r") ? sourceLine.slice(0, -1) : sourceLine;
+		try {
+			const entry = JSON.parse(jsonLine) as Record<string, unknown>;
+			if (typeof entry.id !== "string") return null;
+			const message = entry.message as Record<string, unknown> | null | undefined;
+			return {
+				id: entry.id,
+				parentId: typeof entry.parentId === "string" ? entry.parentId : null,
+				type: typeof entry.type === "string" ? entry.type : "",
+				offset,
+				byteLength,
+				hasMessage: entry.message !== undefined && entry.message !== null,
+				role: typeof message?.role === "string" ? message.role : undefined,
+				messageId: typeof message?.id === "string" ? message.id : undefined,
+				summary: typeof entry.summary === "string" ? entry.summary : undefined,
+				firstKeptEntryId: typeof entry.firstKeptEntryId === "string"
+					? entry.firstKeptEntryId
+					: undefined,
+			};
+		} catch {
+			return null;
+		}
+	}
+
+	/** 从最后 entry 沿 parentId 回溯活动分支（与 JSONL 语义一致：leaf 沿父链到 root）。 */
+	private traceActiveBranch(
+		entries: Map<string, SessionDisplayEntry>,
+		lastEntryId: string | undefined,
+	): SessionDisplayEntry[] {
 		const activeBranch: SessionDisplayEntry[] = [];
 		const seen = new Set<string>();
 		let current = lastEntryId ? entries.get(lastEntryId) : undefined;
@@ -427,22 +589,120 @@ export class SessionHistoryReader {
 			current = current.parentId ? entries.get(current.parentId) : undefined;
 		}
 		activeBranch.reverse();
-		// 分页索引包含压缩点之前的全部消息（JSONL 保留完整历史）：
-		// 压缩前历史由翻页像正常对话流一样逐条可见（用户需求），不再从 firstKeptEntryId 截断。
-		const index: SessionDisplayIndex = {
+		return activeBranch;
+	}
+
+	/** 由分支 + 全量条目表组装最终索引（消息条目派生 + 压缩标记）。 */
+	private finishIndex(
+		hostPath: string,
+		version: { size: number; mtimeMs: number },
+		entries: Map<string, SessionDisplayEntry>,
+		activeBranch: SessionDisplayEntry[],
+		endsWithNewline: boolean,
+	): SessionDisplayIndex {
+		return {
 			hostPath,
 			size: version.size,
 			mtimeMs: version.mtimeMs,
+			// 分页索引包含压缩点之前的全部消息（JSONL 保留完整历史）：
+			// 压缩前历史由翻页像正常对话流一样逐条可见（用户需求），不再从 firstKeptEntryId 截断。
 			hasCompaction: activeBranch.some((entry) => entry.type === "compaction"),
-			activeMessageEntries: activeBranch
-				.filter((entry) => entry.type === "message" && entry.hasMessage),
+			entries,
+			activeBranch,
+			activeMessageEntries: activeBranch.filter((entry) => entry.type === "message" && entry.hasMessage),
+			endsWithNewline,
 		};
-		this.sessionDisplayIndexes.delete(hostPath);
-		this.sessionDisplayIndexes.set(hostPath, index);
+	}
+
+	/**
+	 * 增量索引：只读 [oldSize, newSize) 的新增字节，解析完整行后追加到既有索引。
+	 * 新条目沿 parentId 回溯至旧分支节点（支持 fork/rewind 场景），旧分支保留。
+	 * 返回 null 表示无可追加内容或 IO 失败（调用方回退全量重建）。
+	 */
+	private async appendIndexFromTail(
+		cached: SessionDisplayIndex,
+		hostPath: string,
+		version: { size: number; mtimeMs: number },
+	): Promise<SessionDisplayIndex | null> {
+		const length = version.size - cached.size;
+		if (length <= 0) return null;
+		let tail: Buffer;
+		try {
+			const handle = await open(hostPath, "r");
+			try {
+				// 前置校验：SessionFileEditor.atomicReplace 会整文件重写（temp + rename），
+				// 若重写使文件变大，仅凭 size 增长会被误判为 append，从旧 offset 读新内容会
+				// 解析出半行 JSON（曾复现 SyntaxError: Unexpected token）。
+				// 抽查旧索引首/末条目的 offset/byteLength 是否仍能解析出相同 id：
+				// 纯 append 保证 [0, oldSize) 字节不变 → 校验通过；整文件重写必然破坏末条目（或首条目）
+				// 的旧 offset 内容 → 返回 null，调用方回退全量重建。
+				const entriesInOrder = [...cached.entries.values()];
+				const probes = [entriesInOrder[0], entriesInOrder[entriesInOrder.length - 1]];
+				for (const probe of probes) {
+					if (!probe) continue;
+					const probeBuffer = Buffer.allocUnsafe(probe.byteLength);
+					const probeRead = await handle.read(probeBuffer, 0, probe.byteLength, probe.offset);
+					if (probeRead.bytesRead !== probe.byteLength) return null;
+					try {
+						const parsed = JSON.parse(
+							probeBuffer.toString("utf8").replace(/\r$/, ""),
+						) as { id?: unknown };
+						if (parsed.id !== probe.id) return null;
+					} catch {
+						return null;
+					}
+				}
+				tail = Buffer.allocUnsafe(length);
+				const { bytesRead } = await handle.read(tail, 0, length, cached.size);
+				if (bytesRead !== length) return null;
+			} finally {
+				await handle.close();
+			}
+		} catch {
+			return null;
+		}
+		const tailText = tail.toString("utf8");
+		// 只解析完整行（以 \n 结尾）；尾部残行（pi 正在写）留给下一次 append/重建
+		const completeLines = tailText.split("\n").slice(0, -1);
+		const entries = new Map(cached.entries);
+		const newEntries: SessionDisplayEntry[] = [];
+		let byteOffset = cached.size;
+		for (const sourceLine of completeLines) {
+			const byteLength = Buffer.byteLength(sourceLine, "utf8");
+			const parsed = this.parseIndexLine(sourceLine, byteOffset, byteLength);
+			if (parsed) {
+				entries.set(parsed.id, parsed);
+				newEntries.push(parsed);
+			}
+			byteOffset += byteLength + 1; // 完整行必然带 \n
+		}
+		// 无新增完整行（文件还在写）：保持旧索引，下次 mtime 变化再试
+		if (newEntries.length === 0) return null;
+
+		// 从最后一个新条目沿 parentId 回溯到旧分支内的锚点；新链挂到锚点之后。
+		const branchSet = new Set(cached.activeBranch.map((entry) => entry.id));
+		const chain: SessionDisplayEntry[] = [];
+		let current: SessionDisplayEntry | undefined = newEntries[newEntries.length - 1];
+		while (current && !branchSet.has(current.id) && !chain.some((entry) => entry.id === current?.id)) {
+			chain.push(current);
+			current = current.parentId ? entries.get(current.parentId) : undefined;
+		}
+		chain.reverse();
+		const pivotIndex = current
+			? cached.activeBranch.findIndex((entry) => entry.id === current.id)
+			: -1;
+		const baseBranch = pivotIndex >= 0
+			? cached.activeBranch.slice(0, pivotIndex + 1)
+			: cached.activeBranch;
+		const nextBranch = [...baseBranch, ...chain];
+		return this.finishIndex(hostPath, version, entries, nextBranch, tailText.endsWith("\n"));
+	}
+
+	/** 索引 LRU 上限裁剪：超出上限丢最旧（Map 迭代序 = 插入序）。 */
+	private trimDisplayIndexCache() {
 		while (this.sessionDisplayIndexes.size > SessionHistoryReader.SESSION_DISPLAY_INDEX_LIMIT) {
 			this.sessionDisplayIndexes.delete(this.sessionDisplayIndexes.keys().next().value!);
 		}
-		return index;
 	}
 
 	private async readIndexedSessionMessages(
@@ -524,7 +784,8 @@ export class SessionHistoryReader {
 	/**
 	 * 轻量扫描会话文件中的压缩（compaction）记录。
 	 * 只返回压缩条目元信息（摘要/时间/保留起点/tokens），不收集归档消息全文——
-	 * 归档消息按需读取（readArchivedMessages），避免每次加载会话都全文件解析归档内容。
+	 * 压缩前的归档消息由分页按正常对话流逐条翻出（JSONL 保留完整历史），
+	 * 卡片展开展示的是压缩摘要本身（产品意图：看摘要，不看归档）。
 	 * 用途：1) 时间线补回"压缩摘要"卡片（与 pi 行为一致）；2) 统计压缩次数供"已压缩 N 次"展示。
 	 */
 	async scanCompactions(

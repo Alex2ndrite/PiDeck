@@ -444,6 +444,8 @@ export const enUS: Record<TranslationKey, string> = {
   "app.compactionTooltip": "Compacted {count} times — only post-compaction messages are shown",
   "app.compactionExpand": "Expand to view full summary",
   "app.compactionCollapse": "Click to collapse",
+  "app.messageExpand": "Show full message",
+  "app.messageCollapse": "Collapse",
   "app.projectChatInfo":
     "Chat is a pinned built-in conversation area. Sessions are written to the app user data directory.",
   "app.projectCollapse": "Collapse",

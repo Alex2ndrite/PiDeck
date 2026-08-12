@@ -806,6 +806,11 @@ export const UserBubble = memo(function UserBubble(props: {
 	const [editing, setEditing] = useState(false);
 	const [editText, setEditText] = useState("");
 	const editAreaRef = useRef<HTMLDivElement | null>(null);
+	// 长消息折叠（2026-08）：超过 8 行（line-clamp-8）折叠为预览，避免超长发送全量铺开；
+	// 溢出检测用 ResizeObserver 对比 scrollHeight/clientHeight，折叠态下才测量（展开态保持按钮可见）。
+	const [messageExpanded, setMessageExpanded] = useState(false);
+	const [messageOverflowing, setMessageOverflowing] = useState(false);
+	const userTextRef = useRef<HTMLDivElement | null>(null);
 	// 视觉桥「请求详情」展开态：事件数据懒加载（用户点击才拉取，避免每条消息都读事件文件）
 	const [visionDetailOpen, setVisionDetailOpen] = useState(false);
 	const [visionEvents, setVisionEvents] = useState<VisionEventsInfo | null>(null);
@@ -845,6 +850,20 @@ export const UserBubble = memo(function UserBubble(props: {
 			editAreaRef.current.scrollIntoView({ behavior: "smooth", block: "nearest" });
 		}
 	}, [editing]);
+	// 长消息折叠溢出检测：折叠态 clamp 生效后 scrollHeight > clientHeight 即溢出；
+	// 窗口缩放/内容变化（chips 换行）都会经 ResizeObserver 重新测量。
+	useLayoutEffect(() => {
+		const el = userTextRef.current;
+		if (!el) return;
+		const check = () => {
+			if (messageExpanded) return; // 展开态无需测量，保持按钮可见
+			setMessageOverflowing(el.scrollHeight > el.clientHeight + 1);
+		};
+		check();
+		const observer = new ResizeObserver(check);
+		observer.observe(el);
+		return () => observer.disconnect();
+	}, [messageExpanded]);
 	// 视觉桥块：pi-deck-vision 扩展把用户消息里的图片换成描述文本时，会在消息里
 	// 留下「[图片 #N（视觉桥已查看...）]」/失败标记。先剥出块，渲染成可视化卡片，
 	// 用户才能直观看到「走了视觉桥」以及转换结果/失败原因，而不是一段方括号文本。
@@ -1072,9 +1091,29 @@ export const UserBubble = memo(function UserBubble(props: {
 			)}
 			{cleanText && !editing && (
 				<div className="user-turn-bubble w-fit min-w-0 max-w-[min(82%,64ch)] rounded-[14px] border border-border bg-muted/60 px-3 py-2 text-sm text-foreground [overflow-wrap:anywhere] break-words">
-					<div className="text-chat leading-[1.6] text-text-primary whitespace-pre-wrap break-words">
+					<div
+						ref={userTextRef}
+						className={`text-chat leading-[1.6] text-text-primary whitespace-pre-wrap break-words ${messageExpanded ? "" : "line-clamp-8"}`}
+					>
 						{renderChipText(cleanText, props.onOpenFile, props.validCommandNames, props.validFilePaths)}
 					</div>
+					{messageOverflowing && (
+						<div className="relative mt-1 flex justify-end">
+							{/* 折叠态底部渐变提示还有内容；展开态不需要 */}
+							{!messageExpanded && (
+								<div className="pointer-events-none absolute inset-x-0 -top-6 h-6 bg-gradient-to-t from-muted/70 to-transparent" aria-hidden="true" />
+							)}
+							<button
+								type="button"
+								className="inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-micro text-text-tertiary transition-colors duration-150 hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-[var(--focus-ring)]"
+								onClick={() => setMessageExpanded((v) => !v)}
+								aria-expanded={messageExpanded}
+							>
+								{messageExpanded ? <ChevronUp size={11} aria-hidden="true" /> : <ChevronDown size={11} aria-hidden="true" />}
+								{messageExpanded ? t("app.messageCollapse") : t("app.messageExpand")}
+							</button>
+						</div>
+					)}
 				</div>
 			)}
 			{editing && (
