@@ -2277,21 +2277,18 @@ select:focus-visible {
   right: -5px;
   pointer-events: none;
 }
-/* hover/拖拽态：不画更粗的硬线，改为 3px 水平渐变淡化扩散 + 柔影，
-   纯中性灰（text-tertiary 系），任何主题色下都不发绿 */
+/* hover/拖拽态：保持单线，仅增强明度与柔光。
+   曾用 3px 水平渐变（transparent→20%→transparent）+14px 柔影，
+   高分屏下中间亮带 + 两侧淡晕观感像“双线”，改为实色单线（1.5px），
+   位置不变（left:0）避免拖拽时线条跳动。 */
 .splitter:hover::before,
 .splitter:active::before,
 .splitter[data-separator="active"]::before {
-  left: -1px;
-  width: 3px;
-  background: linear-gradient(
-    to right,
-    transparent,
-    color-mix(in srgb, var(--color-text-tertiary) 20%, transparent) 50%,
-    transparent
-  );
-  box-shadow: 0 0 14px color-mix(in srgb, var(--color-text-tertiary) 15%, transparent);
-  opacity: 0.9;
+  left: 0;
+  width: 1.5px;
+  background: color-mix(in srgb, var(--color-text-tertiary) 55%, transparent);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--color-text-tertiary) 30%, transparent);
+  opacity: 1;
 }
 
 /* 换肤壁纸模式：启用背景图（data-bg-image="on"）时主容器透明，

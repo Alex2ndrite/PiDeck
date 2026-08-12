@@ -11,6 +11,7 @@ import {
 } from "../ui-shadcn/resizable";
 import { AppHeader } from "../AppHeader";
 import { WorkspaceDrawerHost } from "../workspace/WorkspaceDrawerHost";
+import { useNotifyLayoutResized } from "../../hooks/useNotifyLayoutResized";
 import { LIST_WIDTH_MIN, LIST_WIDTH_MAX } from "../../hooks/useResize";
 import {
   DRAWER_WIDTH_MIN,
@@ -107,6 +108,7 @@ export function AppShell(props: AppShellProps) {
 
   const listPanelRef = useRef<PanelImperativeHandle | null>(null);
   const drawerPanelRef = useRef<PanelImperativeHandle | null>(null);
+  const notifyLayoutResized = useNotifyLayoutResized();
 
   // 抽屉/侧栏“刚打开”标志：closed→open 时给内容容器挂一次进入动画类；
   // 动画结束（onAnimationEnd）移除。面板库 collapse/expand 是即时宽度，
@@ -173,6 +175,9 @@ export function AppShell(props: AppShellProps) {
   // 拖拽过程中不触发；isUserInteraction=false 的程序化变更（如上面的 effect 同步）
   // 不回写，防止 effect → resize → 回写 的反馈回路。
   function handleLayoutChanged(_layout: Layout, meta: LayoutChangedMeta) {
+    // 无论交互还是程序化变更（折叠按钮、恢复默认宽度、effect 同步），
+    // 布局落定后都通知悬浮层重算一次，兜住“松手后不回去”的残留错位
+    notifyLayoutResized();
     if (!meta.isUserInteraction) return;
     const listPanel = listPanelRef.current;
     if (listPanel) {
