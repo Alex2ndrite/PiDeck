@@ -467,7 +467,9 @@
   width: 100%;
   min-width: 0;
   border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-md);
+  /* 圆角与系统卡片一致（radius-lg 10px，面板主流弧度）；
+     ToolCallComponents 不再带 rounded-md utility 覆盖此处（2026-08 一致性修复） */
+  border-radius: var(--radius-lg);
   background: var(--color-bg-panel);
   overflow: hidden;
   transition:

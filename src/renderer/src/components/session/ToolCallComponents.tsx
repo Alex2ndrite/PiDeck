@@ -67,16 +67,16 @@ function askAnswerText(answer: unknown, label?: string): string {
 
 function toolIcon(toolName: string): ReactNode {
 	const key = toolName.toLowerCase();
-	if (key.includes("read") || key.includes("view")) return <FileText size={15} />;
+	if (key.includes("read") || key.includes("view")) return <FileText size={16} />;
 	if (key.includes("write") || key.includes("edit") || key.includes("apply_patch") || key.includes("patch"))
-		return <SquarePen size={15} />;
-	if (key.includes("bash") || key.includes("shell") || key.includes("terminal")) return <Terminal size={15} />;
-	if (key.includes("grep") || key.includes("search")) return <Search size={15} />;
-	if (key.includes("glob") || key.includes("list") || key.includes("ls")) return <Folder size={15} />;
-	if (key.includes("task") || key.includes("subagent") || key.includes("agent")) return <Network size={15} />;
-	if (key.includes("web") || key.includes("fetch")) return <Globe2 size={15} />;
-	if (key.includes("todo")) return <Check size={15} />;
-	return <Wrench size={15} />;
+		return <SquarePen size={16} />;
+	if (key.includes("bash") || key.includes("shell") || key.includes("terminal")) return <Terminal size={16} />;
+	if (key.includes("grep") || key.includes("search")) return <Search size={16} />;
+	if (key.includes("glob") || key.includes("list") || key.includes("ls")) return <Folder size={16} />;
+	if (key.includes("task") || key.includes("subagent") || key.includes("agent")) return <Network size={16} />;
+	if (key.includes("web") || key.includes("fetch")) return <Globe2 size={16} />;
+	if (key.includes("todo")) return <Check size={16} />;
+	return <Wrench size={16} />;
 }
 
 
@@ -318,20 +318,22 @@ export const ToolCard = memo(function ToolCard(props: {
 			contentClassName="pb-1"
 		>
 		<section
-			className={`tool-card w-full min-w-0 overflow-hidden rounded-md border border-border-subtle bg-bg-panel transition-[border-color,background-color,box-shadow] duration-200 tone-${tone}${isSkillRead ? " tool-card--skill" : ""}${isAskCard ? " tool-card--ask" : ""}${status === "running" ? " tool-card--running" : ""}`}
+			// 圆角不走 Tailwind rounded-md（6px 会压过 .tool-card 的 token 圆角，
+			// 且与系统卡片弧度不一致）；由 timeline.css 的 .tool-card 统一用 --radius-lg 决定
+			className={`tool-card w-full min-w-0 overflow-hidden border border-border-subtle bg-bg-panel transition-[border-color,background-color,box-shadow] duration-200 tone-${tone}${isSkillRead ? " tool-card--skill" : ""}${isAskCard ? " tool-card--ask" : ""}${status === "running" ? " tool-card--running" : ""}`}
 			data-status={status}
 			data-tool-kind={isSkillRead ? "skill" : getToolKind(toolName)}
 			data-message-id={props.message.id}
 		>
-			<div className="flex min-h-5 items-center transition-colors duration-150 hover:bg-[color:color-mix(in_srgb,var(--color-bg-hover)_55%,var(--color-bg-panel))]">
+			<div className="flex min-h-6 items-center transition-colors duration-150 hover:bg-[color:color-mix(in_srgb,var(--color-bg-hover)_55%,var(--color-bg-panel))]">
 				<button
 					type="button"
-					className="flex min-h-5 min-w-0 flex-[1_1_auto] cursor-pointer items-center gap-2 border-0 bg-transparent py-0 pr-0.5 pl-1 text-left text-control leading-5 text-text-secondary focus-visible:-outline-offset-2 focus-visible:outline-2"
+					className="flex min-h-6 min-w-0 flex-[1_1_auto] cursor-pointer items-center gap-2 border-0 bg-transparent py-0 pr-0.5 pl-1 text-left text-control leading-5 text-text-secondary focus-visible:-outline-offset-2 focus-visible:outline-2"
 					onClick={() => setExpanded((v) => !v)}
 					aria-expanded={expanded}
 				>
 					<span className="tool-card-icon inline-flex shrink-0 items-center justify-center text-text-tertiary">
-						{isSkillRead ? <Brain size={15} /> : isAskCard ? <MessageCircle size={15} /> : toolIcon(toolName)}
+						{isSkillRead ? <Brain size={16} /> : isAskCard ? <MessageCircle size={16} /> : toolIcon(toolName)}
 					</span>
 					<span className="shrink-0 text-caption font-medium lowercase text-text-secondary">
 						{isSkillRead ? `skill:${skillName}` : isAskCard ? t("ask.toolName") : toolName}
