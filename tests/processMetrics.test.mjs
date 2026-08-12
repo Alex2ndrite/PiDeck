@@ -91,15 +91,12 @@ test("ProcessMonitor uses array-form system commands with timeout", () => {
 	assert.match(source, /PS_TIMEOUT_MS,/);
 });
 
-test("ProcessMonitor assembles electron + agent snapshot with totals", () => {
+test("ProcessMonitor assembles agent snapshot with total", () => {
 	const source = readFileSync("src/main/process/ProcessMonitor.ts", "utf8");
-	assert.match(source, /app\.getAppMetrics\(\)/);
-	// Electron MemoryInfo 单位是 KB，须 ×1024 转字节（否则相对任务管理器小 1024 倍）
-	assert.match(source, /workingSetSize \* 1024/);
-	assert.match(source, /peakWorkingSetSize \* 1024/);
-	assert.match(source, /privateBytes \* 1024/);
+	// 只监控 pi agent：不再采集 Electron 自身进程（用户自行在系统任务管理器/活动监视器查看）
+	assert.doesNotMatch(source, /app\.getAppMetrics\(\)/);
+	assert.doesNotMatch(source, /totalElectronBytes/);
 	assert.match(source, /Promise\.all\(/);
-	assert.match(source, /totalElectronBytes/);
 	assert.match(source, /totalAgentBytes/);
 	assert.match(source, /sampledAt: Date\.now\(\)/);
 });
@@ -181,11 +178,9 @@ test("stop-agent: full session stop chain (coordinator + detach)", () => {
 test("ProcessMetricsTab wires table columns and refresh", () => {
 	const source = readFileSync("src/renderer/src/components/app/settings/ProcessMetricsTab.tsx", "utf8");
 	assert.match(source, /window\.piDesktop\.system\.getProcessMetrics\(\)/);
-	assert.match(source, /processTypeLabel\(metric\.type\)/);
-	// 行显示与总量同口径：专用内存优先（privateBytes>0），Browser 进程回退工作集
-	assert.match(source, /\(metric\.privateBytes \?\? 0\) > 0 \? metric\.privateBytes : metric\.memoryBytes/);
-	assert.match(source, /formatMb\(displayBytes\)/);
-	assert.match(source, /formatMb\(electronTotal\)/);
+	// 只展示 pi agent 行；不再渲染 Electron 进程表（类型/专用内存口径均已移除）
+	assert.doesNotMatch(source, /processTypeLabel/);
+	assert.doesNotMatch(source, /privateBytes/);
 	assert.match(source, /formatMb\(agentTotal\)/);
 	assert.match(source, /t\("config\.process\.refresh"\)/);
 	assert.match(source, /agent\.agentId/);
@@ -210,29 +205,19 @@ test("process monitor i18n keys exist in zh-CN and en-US", () => {
 	const keys = [
 		"settings.tabs.process",
 		"config.process.refresh",
-		"config.process.electronTotal",
-		"config.process.privateFootprint",
 		"config.process.agentCount",
 		"config.process.agentTotal",
 		"config.process.sampledAt",
-		"config.process.electronSection",
 		"config.process.agentSection",
 		"config.process.empty",
 		"config.process.loadFailed",
-		"config.process.column.type",
 		"config.process.column.memory",
-		"config.process.column.cpu",
 		"config.process.column.agentId",
 		"config.process.column.action",
 		"config.process.stop",
 		"config.process.stopConfirm",
 		"config.process.stopped",
 		"config.process.stopFailed",
-		"config.process.type.main",
-		"config.process.type.renderer",
-		"config.process.type.gpu",
-		"config.process.type.utility",
-		"config.process.type.zygote",
 	];
 	for (const key of keys) {
 		assert.match(zh, new RegExp(`"${key}":`), `zh-CN missing ${key}`);

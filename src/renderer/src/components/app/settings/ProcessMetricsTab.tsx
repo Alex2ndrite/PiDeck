@@ -1,6 +1,6 @@
 import { Activity, CircleStop, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import type { AgentProcessMetric, ElectronProcessMetric, ProcessMetricsSnapshot } from "../../../../../shared/types";
+import type { AgentProcessMetric, ProcessMetricsSnapshot } from "../../../../../shared/types";
 import { formatMb } from "../../../../../shared/formatBytes";
 import { t } from "../../../i18n";
 import { Button } from "../../ui-shadcn/button";
@@ -15,20 +15,10 @@ import {
 import { showNotice } from "../../../utils/notice";
 import { ConfirmDialog } from "../../ui-shadcn/ConfirmDialog";
 
-/** Chromium 进程类型 → 本地化展示名；未知类型原样显示。 */
-function processTypeLabel(type: string): string {
-  const key: Record<string, string> = {
-    main: t("config.process.type.main"),
-    renderer: t("config.process.type.renderer"),
-    gpu: t("config.process.type.gpu"),
-    utility: t("config.process.type.utility"),
-    zygote: t("config.process.type.zygote"),
-  };
-  return key[type] ?? type;
-}
-
 /**
  * 进程与内存监控面板（由 Pi 管理界面迁入设置，独立 tab）。
+ * 只监控 pi agent 子进程：Electron 自身进程的内存不再展示（用户自行在系统
+ * 任务管理器/活动监视器中查看）。
  * 仅手动刷新：点击「刷新」时经 IPC 拉取一次快照，不做轮询，避免 tasklist/ps
  * 系统调用对性能敏感场景（大量 agent 并发）造成不必要的开销。
  * 内存统一以 MB 展示（formatMb），便于多进程横向对比。
@@ -78,7 +68,6 @@ export function ProcessMetricsTab() {
     }
   }, [refresh]);
 
-  const electronTotal = snapshot?.totalElectronBytes ?? 0;
   const agents = snapshot?.agents ?? [];
   const agentTotal = snapshot?.totalAgentBytes ?? 0;
 
@@ -105,12 +94,7 @@ export function ProcessMetricsTab() {
 
       {snapshot ? (
         <>
-          <div className="grid grid-cols-3 gap-3">
-            <div className="rounded-lg border border-border-subtle bg-bg-panel p-3">
-              <div className="text-micro text-muted-foreground">{t("config.process.electronTotal")}</div>
-              <div className="mt-1 text-base font-semibold text-foreground">{formatMb(electronTotal)}</div>
-              <div className="text-micro text-muted-foreground">{t("config.process.privateFootprint")}</div>
-            </div>
+          <div className="grid grid-cols-2 gap-3">
             <div className="rounded-lg border border-border-subtle bg-bg-panel p-3">
               <div className="text-micro text-muted-foreground">{t("config.process.agentCount")}</div>
               <div className="mt-1 text-base font-semibold text-foreground">{agents.length}</div>
@@ -124,46 +108,10 @@ export function ProcessMetricsTab() {
           <div className="overflow-hidden rounded-lg border border-border-subtle bg-bg-panel">
             <div className="flex items-center gap-1.5 border-b border-border-subtle px-3 py-2">
               <Activity className="size-3.5 text-muted-foreground" aria-hidden="true" />
-              <span className="text-sm font-medium text-foreground">{t("config.process.electronSection")}</span>
+              <span className="text-sm font-medium text-foreground">{t("config.process.agentSection")}</span>
               <span className="ml-auto text-micro text-muted-foreground">
                 {t("config.process.sampledAt")}：{new Date(snapshot.sampledAt).toLocaleTimeString()}
               </span>
-            </div>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{t("config.process.column.type")}</TableHead>
-                  <TableHead>PID</TableHead>
-                  <TableHead>{t("config.process.column.memory")}</TableHead>
-                  <TableHead>{t("config.process.column.cpu")}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {snapshot.electron.map((metric: ElectronProcessMetric) => {
-                  // 行显示也用专用内存优先（对齐总量口径；Browser 进程 privateBytes 为 0 时回退工作集）
-                  const displayBytes =
-                    (metric.privateBytes ?? 0) > 0 ? metric.privateBytes : metric.memoryBytes;
-                  return (
-                    <TableRow key={metric.pid}>
-                      <TableCell className="font-medium">{processTypeLabel(metric.type)}</TableCell>
-                      <TableCell className="font-mono text-text-secondary">{metric.pid}</TableCell>
-                      <TableCell className="font-mono text-text-secondary">
-                        {displayBytes == null ? "-" : formatMb(displayBytes)}
-                      </TableCell>
-                      <TableCell className="font-mono text-text-secondary">
-                        {metric.cpuPercent == null ? "-" : `${metric.cpuPercent.toFixed(1)}%`}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </div>
-
-          <div className="overflow-hidden rounded-lg border border-border-subtle bg-bg-panel">
-            <div className="flex items-center gap-1.5 border-b border-border-subtle px-3 py-2">
-              <Activity className="size-3.5 text-muted-foreground" aria-hidden="true" />
-              <span className="text-sm font-medium text-foreground">{t("config.process.agentSection")}</span>
             </div>
             {agents.length === 0 ? (
               <div className="px-3 py-4 text-center text-control text-text-tertiary">
