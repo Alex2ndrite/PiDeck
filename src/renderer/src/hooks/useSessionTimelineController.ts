@@ -381,6 +381,8 @@ export function useSessionTimelineController(options: {
   const [pinnedTurnId, setPinnedTurnId] = useState<string | undefined>(undefined);
   const [pinSpacerHeight, setPinSpacerHeight] = useState(0);
   const [pinAnimating, setPinAnimating] = useState(false);
+  // 乐观气泡下一帧才进 DOM 时，用 tick 重跑置顶 layout，不能靠同值 setState。
+  const [pinRetryTick, setPinRetryTick] = useState(0);
   // ── 上滚渲染窗口（2026-08 黑屏治理）──
   // 贴底时渲染层固定用 3 轮小窗口；上滚看历史用此窗口（初始 15 轮，
   // 「显示更早」按钮逐步扩大）。回底 = 新的浏览周期，窗口重置回基础大小。
@@ -497,6 +499,7 @@ export function useSessionTimelineController(options: {
     // 换绑只改锚点：不能把进行中的清屏请求打成 false，否则垫片落地后不会开滚。
     if (animate) {
       pinAnimateRequestRef.current = true;
+      setPinRetryTick(0);
       // 必须先于 restoreAt：引擎解锁会立刻 onFollowChange(false)，标记已立才不会点亮回底按钮。
       pinAnimatingRef.current = true;
       setPinAnimating(true);
@@ -534,16 +537,27 @@ export function useSessionTimelineController(options: {
       const spacerEl = timeline.querySelector(".timeline-pin-spacer") as HTMLElement | null;
       if (!spacerEl || Math.abs(spacerEl.offsetHeight - neededSpacer) > 2) return;
     }
-    pinAnimateRequestRef.current = false;
     const requestOwnerKey = ownerKey;
     const row = timeline.querySelector(
       `[data-message-id="${CSS.escape(pinnedTurnId)}"]`,
     ) as HTMLElement | null;
+    // 乐观用户气泡可能下一帧才挂 data-message-id。不能清请求、更不能停动画，
+    // 否则发送当下钉不上，要等到回复重绘才像「置顶」。用 rAF 等到行出现再开滚。
     if (!row) {
-      pinAnimatingRef.current = false;
-      setPinAnimating(false);
-      return;
+      // 最多等十几帧：气泡始终没挂上就放弃，避免 rAF 空转。
+      if (pinRetryTick > 12) {
+        pinAnimateRequestRef.current = false;
+        pinAnimatingRef.current = false;
+        setPinAnimating(false);
+        return;
+      }
+      const retry = window.requestAnimationFrame(() => {
+        if (!pinAnimateRequestRef.current || pinnedTurnIdRef.current !== pinnedTurnId) return;
+        setPinRetryTick((tick) => tick + 1);
+      });
+      return () => window.cancelAnimationFrame(retry);
     }
+    pinAnimateRequestRef.current = false;
     const rowTop =
       row.getBoundingClientRect().top -
       timeline.getBoundingClientRect().top +
@@ -587,7 +601,7 @@ export function useSessionTimelineController(options: {
         pinCancelAnimRef.current?.();
       }
     };
-  }, [controllerEnabled, measurePinSpacer, ownerKey, pinSpacerHeight, pinnedTurnId]);
+  }, [controllerEnabled, measurePinSpacer, ownerKey, pinRetryTick, pinSpacerHeight, pinnedTurnId]);
 
   // 用户滚轮/触摸/键盘 = 明确接管：取消清屏并卸垫片。与开启动画拆开，避免量高重跑拆掉监听。
   useEffect(() => {

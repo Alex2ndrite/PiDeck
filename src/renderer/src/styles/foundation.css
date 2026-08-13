@@ -2834,7 +2834,7 @@ select:focus-visible {
   box-shadow: 0 1px 3px color-mix(in srgb, var(--color-accent) 22%, transparent);
 }
 .chat-header-actions.loading {
-  min-height: 36px;
+  /* 不要写 min-height：顶栏已是 h-7（28px），36px 会把整栏顶高一截造成抖动。 */
   opacity: 0.5;
   pointer-events: none;
   transition: opacity 0.2s;

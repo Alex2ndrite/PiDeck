@@ -14,6 +14,7 @@ import {
   sessionRuntimeUiBySessionIdAtomFamily,
 } from "../atoms/session-selectors";
 import { sessionSendStateByIdAtom } from "../atoms/composer-atoms";
+import { isUserFacingSessionStart } from "./useSessionTimelineController";
 import type { QueuedPrompt } from "./useQueuedPrompt";
 import { t } from "../i18n";
 import { dismissNotice, type NoticeId } from "../utils/notice";
@@ -152,9 +153,8 @@ export function useSessionRuntimeController(
         (currentSessionSendState.status === "activating" ? "starting" : "idle"))
       : undefined;
 
-  const isAgentStarting =
-    activeConversationStatus === "starting" ||
-    currentSessionSendState.status === "activating";
+  // 标题栏 loading / 输入框禁用只跟用户发送走；后台预热的 runtime starting 不能顶高顶栏。
+  const isAgentStarting = isUserFacingSessionStart(currentSessionSendState.status);
 
   const isAgentBusy = Boolean(
     hasActiveConversation &&

@@ -5,22 +5,98 @@ import {
   measurePinSpacerHeight,
   pinScrollDurationMs,
   pinScrollEase,
+  resolvePinTurnOnTailChange,
 } from "../src/renderer/src/lib/pinTurnScroll.ts";
 
 test("pin scroll duration is short for small jumps and capped for long transcripts", () => {
-  assert.equal(pinScrollDurationMs(0), 380);
-  assert.equal(pinScrollDurationMs(100), 380);
-  assert.equal(pinScrollDurationMs(500), 440);
-  assert.equal(pinScrollDurationMs(10_000), 780);
+  assert.equal(pinScrollDurationMs(0), 420);
+  assert.equal(pinScrollDurationMs(100), 420);
+  assert.equal(pinScrollDurationMs(500), 460);
+  assert.equal(pinScrollDurationMs(10_000), 860);
 });
 
-test("pin scroll ease is ease-out quart from 0 to 1", () => {
+test("pin scroll ease is a soft spring that overshoots then settles", () => {
   assert.equal(pinScrollEase(0), 0);
   assert.equal(pinScrollEase(1), 1);
   assert.equal(pinScrollEase(-1), 0);
   assert.equal(pinScrollEase(2), 1);
   const mid = pinScrollEase(0.5);
-  assert.ok(mid > 0.9, `ease-out quart at 0.5 should be near 1, got ${mid}`);
+  // 中段接近匀速，不能再像 quart 那样 0.5 就冲到 0.9+。
+  assert.ok(mid > 0.45 && mid < 0.8, `spring mid should stay linear-ish, got ${mid}`);
+  const late = pinScrollEase(0.82);
+  assert.ok(late > 1, `soft spring should overshoot before settle, got ${late}`);
+});
+
+test("empty-session send pins the pending user immediately", () => {
+  assert.equal(
+    resolvePinTurnOnTailChange({
+      messages: [{ id: "req-1", role: "user" }],
+      pendingRequestId: "req-1",
+    }),
+    "req-1",
+  );
+  // 气泡先上屏、requestId 后到：尾没变也要钉。
+  assert.equal(
+    resolvePinTurnOnTailChange({
+      previousTail: "req-1",
+      messages: [{ id: "req-1", role: "user" }],
+      pendingRequestId: "req-1",
+    }),
+    "req-1",
+  );
+  assert.equal(
+    resolvePinTurnOnTailChange({
+      previousTail: "req-1",
+      messages: [{ id: "req-1", role: "user" }],
+      pendingRequestId: "req-1",
+      alreadyPinnedId: "req-1",
+    }),
+    undefined,
+  );
+});
+
+test("history first paint does not pin the last historical user", () => {
+  assert.equal(
+    resolvePinTurnOnTailChange({
+      messages: [
+        { id: "old-user", role: "user" },
+        { id: "old-assistant", role: "assistant" },
+      ],
+    }),
+    undefined,
+  );
+  // 进行中的发送还没进列表：不能把历史最后一条用户消息当成刚发出的。
+  assert.equal(
+    resolvePinTurnOnTailChange({
+      messages: [
+        { id: "old-user", role: "user" },
+        { id: "old-assistant", role: "assistant" },
+      ],
+      pendingRequestId: "req-new",
+    }),
+    undefined,
+  );
+  assert.equal(
+    resolvePinTurnOnTailChange({
+      messages: [{ id: "old-user", role: "user" }],
+      pendingRequestId: "req-new",
+    }),
+    undefined,
+  );
+});
+
+test("runtime flush replacing optimistic id still pins the latest user", () => {
+  assert.equal(
+    resolvePinTurnOnTailChange({
+      previousTail: "optimistic-user",
+      messages: [
+        { id: "authoritative-user", role: "user" },
+        { id: "assistant-1", role: "assistant" },
+      ],
+      pendingRequestId: "optimistic-user",
+    }),
+    "authoritative-user",
+  );
 });
 
 function createFakeScroller(scrollTop = 0) {

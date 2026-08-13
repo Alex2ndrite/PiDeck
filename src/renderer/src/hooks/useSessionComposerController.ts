@@ -81,6 +81,7 @@ import {
   requireSessionCommand,
   toSessionRuntimeTarget,
 } from "../utils/sessionCommands";
+import { isUserFacingSessionStart } from "./useSessionTimelineController";
 import { useSessionSend, type EnqueuePromptSnapshot } from "./useSessionSend";
 
 /**
@@ -535,7 +536,8 @@ export function useSessionComposerController(
   }, [cursor, suggestionsOpen]);
 
   const isBusy = runtime?.status === "running" || Boolean(runtime?.state?.isStreaming);
-  const isStarting = runtime?.status === "starting" || sendState.status === "activating";
+  // 预热只创建进程，不能把编辑器 setEditable(false)：contenteditable 关掉会失焦，输入一半就断。
+  const isStarting = isUserFacingSessionStart(sendState.status);
   const hasContent = Boolean(draft.trim() || attachments.length);
 
   const resetEphemeralUi = useCallback(() => {

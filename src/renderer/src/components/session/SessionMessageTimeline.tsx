@@ -41,6 +41,7 @@ import { showNotice } from "../../utils/notice";
 import { stripAnsi } from "./TimelineFormat";
 import { SessionStartSurface } from "./SessionStartSurface";
 import { MessageScroller } from "../agents/message-scroller";
+import { resolveFreshTailIds, resolvePinTurnOnTailChange } from "../../lib/pinTurnScroll";
 import { chatContentWidthStyle } from "./chatContentWidth";
 import {
   selectTimelineTurnWindow,
@@ -269,21 +270,21 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
     const lastMessage = activeMessages[activeMessages.length - 1];
     const nextTail = lastMessage?.id;
     seenTailMessageIdRef.current = nextTail;
-    if (!nextTail || !previousTail) return; // 首帧（历史加载完成前）只记录基线
-    if (nextTail === previousTail) return;
-    // 找到基线之后的新增消息（尾部追加，而非分页前插）
-    const baselineIndex = activeMessages.findIndex((message) => message.id === previousTail);
-    const fresh = baselineIndex < 0
-      ? [nextTail]
-      : activeMessages.slice(baselineIndex + 1).map((message) => message.id);
-    if (fresh.length === 0) return;
-    // 发送置顶：仅用户消息、且当前仍在跟随（或正在置顶）时触发。
-    // 空会话首条 previousTail 为空，上面已 return——短内容本来就在顶部，无需清屏。
+    if (!nextTail) return;
+    const fresh = resolveFreshTailIds(
+      activeMessages,
+      previousTail,
+      nextTail,
+      sendState?.requestId,
+    );
+    // 发送当下置顶：空会话首条、乐观 id 被回复冲掉，都按 pendingRequestId 立刻钉用户气泡。
     // 用户正在看历史（autoScroll=false）不拽视口，整体跟底逻辑保持不变。
-    const freshUserId = [...fresh]
-      .reverse()
-      .map((id) => activeMessages.find((message) => message.id === id))
-      .find((message) => message?.role === "user")?.id;
+    const freshUserId = resolvePinTurnOnTailChange({
+      previousTail,
+      messages: activeMessages,
+      pendingRequestId: sendState?.requestId,
+      alreadyPinnedId: controller.pinnedTurnId,
+    });
     if (
       freshUserId &&
       controller.pinTurnToTop &&
@@ -292,6 +293,7 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
       // 进行中的清屏只换绑锚点，避免乐观 id 替换把动画掐掉重播。
       controller.pinTurnToTop(freshUserId, { animate: !controller.pinAnimating });
     }
+    if (fresh.length === 0) return;
     setFreshMessageIds((current) => {
       const next = new Set(current);
       for (const id of fresh) next.add(id);
@@ -309,7 +311,14 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
       }, 1200);
       freshTimersRef.current.set(id, timer);
     }
-  }, [activeMessages]);
+  }, [
+    activeMessages,
+    controller.autoScroll,
+    controller.pinAnimating,
+    controller.pinTurnToTop,
+    controller.pinnedTurnId,
+    sendState?.requestId,
+  ]);
 
   useEffect(() => () => {
     for (const timer of freshTimersRef.current.values()) window.clearTimeout(timer);
@@ -538,7 +547,8 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
       followOutput={controller.autoScroll && !controller.pinAnimating}
       followThreshold={56}
       smooth
-      // 整段 agent 忙碌（含工具执行/流式）期间追底用 instant，避免工具卡弹出弹簧滞后砰抖。
+      // busy 只驱动 aria-busy 和结束后的 150ms instant 窗口；流式增高是否弹簧
+      // 由 MessageScroller 的 resize + 28px 阈值决定，不再整段忙碌硬贴底。
       busy={isAgentBusy || isAwaitingAssistant}
       onFollowChange={controller.setAutoScrollFromScroller}
       viewportProps={{

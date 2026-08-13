@@ -20,6 +20,7 @@ const engineSource = readFileSync(
 );
 
 test("sending a user message while following pins that turn to the top", () => {
+  assert.match(timelineSource, /resolvePinTurnOnTailChange/);
   assert.match(timelineSource, /controller\.pinTurnToTop\(freshUserId/);
   assert.match(timelineSource, /animate: !controller\.pinAnimating/);
   assert.match(timelineSource, /className="timeline-pin-spacer/);
@@ -28,6 +29,9 @@ test("sending a user message while following pins that turn to the top", () => {
     timelineSource,
     /controller\.autoScroll \|\| controller\.pinAnimating \|\| controller\.pinnedTurnId/,
   );
+  // 空会话首条也要在发送当下置顶，不能再等 previousTail 基线。
+  assert.doesNotMatch(timelineSource, /if \(!nextTail \|\| !previousTail\) return/);
+  assert.match(timelineSource, /pendingRequestId:\s*sendState\?\.requestId/);
 });
 
 test("pin-to-top unlocks the live-edge engine before the spacer lands", () => {
@@ -35,6 +39,11 @@ test("pin-to-top unlocks the live-edge engine before the spacer lands", () => {
   assert.match(controllerSource, /if \(animate\) \{\s*pinAnimateRequestRef\.current = true;/s);
   assert.match(scrollerSource, /stopScroll: StopScroll/);
   assert.match(scrollerSource, /stopScroll: engineStopScroll/);
+  // 乐观气泡下一帧才挂 data-message-id：缺行只能等，不能把清屏请求掐掉。
+  assert.doesNotMatch(
+    controllerSource,
+    /if \(!row\) \{\s*pinAnimatingRef\.current = false;\s*setPinAnimating\(false\);/s,
+  );
 });
 
 test("pin-to-top ignores follow reports and user-cancel unpins the spacer", () => {
