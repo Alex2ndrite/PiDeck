@@ -28,7 +28,7 @@ test("composer shows Feishu logo entry in project session; menu lists bot", asyn
 	const projectRow = window.locator(".conversation", { hasText: "pideck-feishu-e2e-proj" }).first();
 	await projectRow.click();
 	await projectRow.getByTitle("新建 Agent").first().click();
-	await expect(window.locator(".composer .rich-input")).toHaveAttribute("aria-disabled", "false", { timeout: 30_000 });
+	await expect(window.locator(".composer .rich-input")).toHaveAttribute("contenteditable", "true", { timeout: 30_000 });
 
 	// 飞书入口：logo（SVG）而非圆点/文字（main 对齐项）
 	const trigger = window.locator(".composer-bottom-left .feishu-link-trigger").first();
