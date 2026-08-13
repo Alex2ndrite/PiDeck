@@ -456,6 +456,10 @@ export function createPreviewApi(): PiDesktopApi {
 				ok: true,
 				value: { target, value: [] },
 			}),
+			listRuntimeModels: async (target) => ({
+				ok: true,
+				value: { target, value: [] },
+			}),
 			exportRuntimeHtml: async (target) => ({
 				ok: true,
 				value: { target, value: { path: "preview-session.html" } },

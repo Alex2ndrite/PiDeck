@@ -456,6 +456,7 @@ export const zhCN = {
   "app.modelRestartTitle": "重启 Agent 生效",
   "app.modelRestartBody": "模型 {model} 已在本地 models.json 中配置，但当前运行的 Agent 尚未加载新配置。重启 Agent 后即可使用，是否重启？",
   "app.modelRestartDone": "Agent 已重启，新模型已生效",
+  "app.modelPendingTitle": "模型将在本轮结束后切换：{from} → {to}",
   "app.chatProjectPathUpdated": "聊天记录目录已更新",
   "app.projectRemoveTitle": "删除目录记录",
   "app.projectRemoveBlockedTitle": "无法删除项目",

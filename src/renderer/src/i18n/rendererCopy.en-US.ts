@@ -459,6 +459,7 @@ export const enUS: Record<TranslationKey, string> = {
   "app.modelRestartTitle": "Restart agent to apply",
   "app.modelRestartBody": "Model {model} is configured in local models.json but the running agent has not loaded it yet. Restart the agent to use it. Restart now?",
   "app.modelRestartDone": "Agent restarted, new model applied",
+  "app.modelPendingTitle": "Model switches after this generation: {from} → {to}",
   "app.chatProjectPathUpdated": "Chat directory updated",
   "app.projectRemoveTitle": "Remove project record",
   "app.projectRemoveBlockedTitle": "Cannot remove project",

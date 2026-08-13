@@ -486,6 +486,11 @@ const api = {
 			ipcRenderer.invoke(ipcChannels.sessionsRuntimeCommands, target) as Promise<
 				SessionCommandResult<SessionTargetedValue<PiCommand[]>>
 			>,
+		/** 运行中 Agent 快照里的模型；不在此列表 = 新加配置，切过去要重启。 */
+		listRuntimeModels: (target: SessionRuntimeTarget) =>
+			ipcRenderer.invoke(ipcChannels.sessionsRuntimeListModels, target) as Promise<
+				SessionCommandResult<SessionTargetedValue<AvailableModel[]>>
+			>,
 		exportRuntimeHtml: (target: SessionRuntimeTarget) =>
 			ipcRenderer.invoke(ipcChannels.sessionsRuntimeExportHtml, target) as Promise<
 				SessionCommandResult<SessionTargetedValue<unknown>>
