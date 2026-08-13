@@ -31,6 +31,10 @@ import {
   measurePinSpacerHeight,
   PIN_TOP_INSET_PX,
 } from "../lib/pinTurnScroll";
+import {
+  TIMELINE_SCROLLED_TURN_LIMIT,
+  TIMELINE_WINDOW_EXPAND_STEP,
+} from "../components/session/timeline/turnRenderWindow";
 
 /** 滚动接近顶部自动加载历史的阈值（px，2026-11 轮次模型）：
  *  贴顶（≤8px）才触发翻页——「滑到底才翻」，避免在顶部附近任何滚动都连翻历史页。 */
@@ -91,6 +95,11 @@ export function isSessionRuntimeBusy(
   return Boolean(status === "running" || state?.isStreaming || state?.isExecutingTool);
 }
 
+/** 用户主动发送才算「正在启动」。输入预热也会把 runtime 打成 starting，但不能锁输入框。 */
+export function isUserFacingSessionStart(sendStatus: string | undefined): boolean {
+  return sendStatus === "activating";
+}
+
 export function deriveSessionSurfaceRuntime(
   messageCount: number,
   messageLoadStatus: string | undefined,
@@ -99,7 +108,7 @@ export function deriveSessionSurfaceRuntime(
   runtimeState: AgentRuntimeState | undefined,
   hasCachedEntry?: boolean,
 ) {
-  const activating = sendStatus === "activating";
+  const activating = isUserFacingSessionStart(sendStatus);
   const status = activating ? "starting" : runtimeStatus;
   return {
     status,
@@ -113,10 +122,10 @@ export function deriveSessionSurfaceRuntime(
       // （cacheMessages 对 disk 读取无论空/非空都会创建条目）：必须钉在骨架屏。
       // 缓存条目已存在（即使 messages 为空）说明 disk 已返回——空会话显示起始页
       // 是合法终态，不会进入加载死循环。读取失败（error）不在此列。
-      (messageLoadStatus === "ready" && !hasCachedEntry) ||
-      activating
+      // 预热/发送 activating 不能再钉骨架：空会话应留在起始页，避免「输入一半整页闪骨架」。
+      (messageLoadStatus === "ready" && !hasCachedEntry)
     ),
-    isStarting: status === "starting",
+    isStarting: activating,
     isBusy: activating || sendStatus === "sending" || isSessionRuntimeBusy(status, runtimeState),
   };
 }
@@ -167,6 +176,11 @@ export type SessionTimelineController = {
   pinSpacerHeight?: number;
   /** 发送消息后调用：把指定用户消息平滑滚动到视口顶部（此前内容整体顶出屏幕）。 */
   pinTurnToTop?: (userMessageId: string, options?: { animate?: boolean }) => void;
+  /** 上滚查看历史时的渲染窗口轮数（贴底时渲染层用 TIMELINE_MOUNTED_TURN_LIMIT，忽略此值）。
+   *  2026-08 黑屏治理：历史不再全量放开挂载，窗口随「显示更早」逐步扩大。 */
+  scrolledWindowTurns: number;
+  /** 扩大上滚渲染窗口（+TIMELINE_WINDOW_EXPAND_STEP 轮）；数据翻页仍由滚动到顶自动加载负责。 */
+  expandWindow: () => void;
 };
 
 export function useSessionTimelineController(options: {
@@ -367,6 +381,17 @@ export function useSessionTimelineController(options: {
   const [pinnedTurnId, setPinnedTurnId] = useState<string | undefined>(undefined);
   const [pinSpacerHeight, setPinSpacerHeight] = useState(0);
   const [pinAnimating, setPinAnimating] = useState(false);
+  // ── 上滚渲染窗口（2026-08 黑屏治理）──
+  // 贴底时渲染层固定用 3 轮小窗口；上滚看历史用此窗口（初始 15 轮，
+  // 「显示更早」按钮逐步扩大）。回底 = 新的浏览周期，窗口重置回基础大小。
+  const [scrolledWindowTurns, setScrolledWindowTurns] = useState(TIMELINE_SCROLLED_TURN_LIMIT);
+  const expandWindow = useCallback(() => {
+    setScrolledWindowTurns((prev) => prev + TIMELINE_WINDOW_EXPAND_STEP);
+  }, []);
+  useEffect(() => {
+    if (autoScroll) setScrolledWindowTurns(TIMELINE_SCROLLED_TURN_LIMIT);
+  }, [autoScroll]);
+
   const pinnedTurnIdRef = useRef<string | undefined>(undefined);
   pinnedTurnIdRef.current = pinnedTurnId;
   // 动画进行中的标记：期间抑制 ResizeObserver/MutationObserver 的即时贴底，防止打断平滑滚动
@@ -823,12 +848,14 @@ export function useSessionTimelineController(options: {
           currentAnchorRef.current = anchor;
           return;
         }
-        // 锚点行不存在（期间被压缩清理 / 窗口被新消息挤掉）：回到底部并恢复跟流
-        autoScrollRef.current = true;
-        setAutoScroll(true);
-        setShowScrollToBottom(false);
+        // 锚点行不存在（期间被压缩清理 / 在渲染窗口之外——上滚窗口化裁剪）：
+        // 对齐渲染窗口顶部（顶部有「显示更早」按钮可继续上溯），保持不跟流，
+        // 避免把查看历史的用户拽回底部（2026-08 黑屏治理）。
+        autoScrollRef.current = false;
+        setAutoScroll(false);
+        setShowScrollToBottom(true);
         programmaticScrollRef.current = true;
-        timeline.scrollTo({ top: timeline.scrollHeight, behavior: "instant" });
+        timeline.scrollTop = 0;
       });
       return () => cancelAnimationFrame(frame);
     }
@@ -910,12 +937,23 @@ export function useSessionTimelineController(options: {
     const element = timeline.querySelector(
       `[data-message-id="${CSS.escape(pendingJump.value)}"]`,
     ) as HTMLElement | null;
-    if (!element) return;
+    if (!element) {
+      // 目标在渲染窗口之外（上滚窗口化）：逐步扩大窗口，本 effect 随窗口变化重跑
+      // 直到目标挂载；目标已不在数据中（期间被压缩清理/删除）则放弃跳转，
+      // 避免窗口无限放大（防呆，2026-08 黑屏治理）。
+      const stillInData = combinedMessages.some((message) => message.id === pendingJump.value);
+      if (!stillInData) {
+        pendingJumpRef.current = undefined;
+        return;
+      }
+      expandWindow();
+      return;
+    }
     pendingJumpRef.current = undefined;
     element.scrollIntoView({ behavior: "smooth", block: "start" });
     highlightMessage(element, ownerKey);
     // autoScroll：贴底 turn 窗口展开后 DOM 才出现目标行，需再跑一轮。
-  }, [autoScroll, controllerEnabled, highlightMessage, ownerKey, visibleMessages.length]);
+  }, [autoScroll, combinedMessages, controllerEnabled, expandWindow, highlightMessage, ownerKey, scrolledWindowTurns, visibleMessages.length]);
 
   return {
     timelineRef,
@@ -941,5 +979,7 @@ export function useSessionTimelineController(options: {
     pinnedTurnId,
     pinSpacerHeight,
     pinTurnToTop,
+    scrolledWindowTurns,
+    expandWindow,
   };
 }

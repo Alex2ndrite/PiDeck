@@ -220,6 +220,7 @@ import { registerProjectsIpc } from "./ipc/projectsIpc";
 import { registerUsageStatsIpc } from "./ipc/usageStatsIpc";
 import { UsageStatsService } from "./usageStats/UsageStatsService";
 import { readLastWindowBounds, saveLastWindowBounds } from "./windowState";
+import { createRendererCrashRecoveryGuard } from "./window/rendererCrashRecovery";
 import {
 	registerBackgroundImageProtocol,
 	registerBackgroundsIpc,
@@ -284,6 +285,9 @@ let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 /** 标记是否由用户主动退出（托盘菜单「退出」），区别于窗口关闭隐藏到托盘 */
 let isQuitting = false;
+/** 渲染进程崩溃自动恢复守卫（2026-08 黑屏治理，见 window/rendererCrashRecovery.ts）：
+ *  非正常崩溃自动 reload 恢复，崩溃风暴（60s 内超 2 次）放弃。 */
+const rendererCrashGuard = createRendererCrashRecoveryGuard();
 let projectStore: ProjectStore;
 let fileSystemService: FileSystemService;
 let sessionScanner: SessionScanner;
@@ -1551,6 +1555,22 @@ async function createWindow() {
 			platform: process.platform,
 			arch: process.arch,
 		});
+		// 黑屏治理：非正常崩溃自动 reload 恢复；clean-exit（正常退出）、用户主动退出
+		// 与崩溃风暴（窗口期内超限）不恢复。reload 前检查窗口/webContents 仍存活。
+		if (isQuitting || !rendererCrashGuard.shouldAutoReload(details.reason)) return;
+		void appLogger.warn("app", "Auto-reloading main window after renderer crash", {
+			reason: details.reason,
+			exitCode: details.exitCode,
+			recoveriesInWindow: rendererCrashGuard.recoveriesInWindow(),
+		});
+		if (mainWindow && !mainWindow.isDestroyed()) {
+			try {
+				mainWindow.webContents.reload();
+			} catch (error) {
+				// reload 抛异常（webContents 已销毁等竞态）：记日志，留给用户手动处理
+				void appLogger.error("app", "Auto-reload failed", error);
+			}
+		}
 	});
 	// 子进程（含 GPU/utility）异常退出：Mac 上偶发“整窗闪一下”，需要留下 reason/exitCode。
 	app.on("child-process-gone", (_event, details) => {

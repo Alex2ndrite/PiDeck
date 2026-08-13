@@ -46,6 +46,7 @@ import {
   selectTimelineTurnWindow,
   shouldWindowTimelineTurns,
   TIMELINE_MOUNTED_TURN_LIMIT,
+  TIMELINE_SCROLLED_MAX_ITEMS,
   countAgentRunItems,
 } from "./timeline/turnRenderWindow";
 
@@ -326,43 +327,55 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
     prevRenderedRunsRef.current = next;
     return next;
   }, [renderedRuns]);
-  // 贴底长会话：只挂尾部 N 个 agent-run；上滚/恢复历史位置时放开（autoScroll=false）。
-  // 数据仍在 atoms；这里只减少 TurnRow / Streamdown 挂载。
+  // 渲染窗口（2026-08 黑屏治理）：贴底只挂尾部 3 轮；上滚查看历史也裁剪
+  // （controller.scrolledWindowTurns，初始 15 轮 + 「显示更早」逐步扩大）——
+  // 历史全量放开挂载是大会话渲染进程内存峰值/黑屏的来源。数据仍在 atoms。
   const followingForTurnWindow = controller.autoScroll;
+  const turnWindowTurns = followingForTurnWindow
+    ? TIMELINE_MOUNTED_TURN_LIMIT
+    : controller.scrolledWindowTurns;
   const displayRuns = useMemo(
     () => selectTimelineTurnWindow(
       reconciledRuns,
-      followingForTurnWindow,
-      TIMELINE_MOUNTED_TURN_LIMIT,
+      turnWindowTurns,
+      followingForTurnWindow ? undefined : TIMELINE_SCROLLED_MAX_ITEMS,
     ),
-    [followingForTurnWindow, reconciledRuns],
+    [followingForTurnWindow, reconciledRuns, turnWindowTurns],
   );
   const turnWindowActive = shouldWindowTimelineTurns(
     countAgentRunItems(reconciledRuns),
-    followingForTurnWindow,
-    TIMELINE_MOUNTED_TURN_LIMIT,
+    turnWindowTurns,
   );
-  // 从「窗口裁剪」扩到「全量挂载」时内容加在上方，需补偿 scrollTop，避免视口跳到错误位置。
-  const turnWindowStateRef = useRef<{ windowed: boolean; height: number }>({
+  // 窗口轮数变化（上滚 3→15、点「显示更早」扩大）会在顶部插入内容，需补偿 scrollTop
+  // 保持视口内容不动；数据 prepend 的补偿由 controller 的 loadMoreAnchorRef 负责，
+  // 两者按「窗口轮数变化 / 数据变化」分工，不会同帧双重补偿。贴底时由引擎接管不补偿。
+  const turnWindowStateRef = useRef<{ windowed: boolean; height: number; turns: number }>({
     windowed: false,
     height: 0,
+    turns: 0,
   });
   useLayoutEffect(() => {
     const timeline = timelineRef.current;
     if (!timeline) return;
     const prev = turnWindowStateRef.current;
     const nextHeight = timeline.scrollHeight;
-    if (prev.windowed && !turnWindowActive) {
-      const delta = nextHeight - prev.height;
-      if (delta > 0) {
-        // 标记程序化滚动：补偿的 scrollTop 位移会派发 scroll 事件，
-        // 必须让自动加载监听忽略（补偿后视口可能落在 ≤240px 顶部区间）
-        controller.markProgrammaticScroll?.();
-        timeline.scrollTop += delta;
-      }
+    if (
+      prev.windowed &&
+      prev.turns !== turnWindowTurns &&
+      nextHeight > prev.height &&
+      !followingForTurnWindow
+    ) {
+      // 标记程序化滚动：补偿的 scrollTop 位移会派发 scroll 事件，
+      // 必须让自动加载监听忽略（补偿后视口可能落在顶部区间）
+      controller.markProgrammaticScroll?.();
+      timeline.scrollTop += nextHeight - prev.height;
     }
-    turnWindowStateRef.current = { windowed: turnWindowActive, height: timeline.scrollHeight };
-  }, [controller, displayRuns, timelineRef, turnWindowActive]);
+    turnWindowStateRef.current = {
+      windowed: turnWindowActive,
+      height: nextHeight,
+      turns: turnWindowTurns,
+    };
+  }, [controller, displayRuns, followingForTurnWindow, timelineRef, turnWindowActive, turnWindowTurns]);
   // 文件修改展示已下沉到每轮 TurnRow 底部（TurnFileChanges），此处不再做全局汇总
   const lastUserMessageId = useMemo(() => {
     for (let index = activeMessages.length - 1; index >= 0; index -= 1) {
@@ -519,7 +532,7 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
         onScroll: controller.handleTimelineScroll,
       }}
     >
-      {hasMoreMessages && canLoadMoreMessages && (
+      {(turnWindowActive || (hasMoreMessages && canLoadMoreMessages)) && (
         <div
           style={{
             display: "flex",
@@ -529,7 +542,17 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
           }}
         >
           <button
-            onClick={loadMoreMessages}
+            onClick={() => {
+              // 窗口裁剪生效时先扩大渲染窗口（显示已加载的更早内容）；
+              // 窗口已覆盖全部已加载数据且还有历史时才翻数据页。
+              // 数据翻页补偿（loadMoreAnchorRef）与窗口扩大补偿（turnWindowStateRef）
+              // 发生在不同帧，不会双重补偿。
+              if (turnWindowActive) {
+                controller.expandWindow();
+              } else if (hasMoreMessages && canLoadMoreMessages) {
+                loadMoreMessages();
+              }
+            }}
             disabled={isLoadingMoreMessages}
             style={{
               padding: "6px 16px",
@@ -545,11 +568,15 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
           >
             {isLoadingMoreMessages
               ? t("timeline.loadingMore")
-              : controller.nextLoadIsHistory
-                ? t("timeline.loadMoreTurns")
-                : t("timeline.loadMoreHistory", {
-					count: totalMessageCount - paginatedMessages.length,
-                })}
+              : turnWindowActive
+                ? t("timeline.loadEarlierTurns", {
+                    count: countAgentRunItems(reconciledRuns) - turnWindowTurns,
+                  })
+                : controller.nextLoadIsHistory
+                  ? t("timeline.loadMoreTurns")
+                  : t("timeline.loadMoreHistory", {
+										count: totalMessageCount - paginatedMessages.length,
+									})}
           </button>
         </div>
       )}

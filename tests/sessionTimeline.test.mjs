@@ -40,6 +40,10 @@ function loadTimelineHelpers() {
       measurePinSpacerHeight: () => 0,
       PIN_TOP_INSET_PX: 20,
     },
+    "../components/session/timeline/turnRenderWindow": {
+      TIMELINE_SCROLLED_TURN_LIMIT: 15,
+      TIMELINE_WINDOW_EXPAND_STEP: 10,
+    },
   });
 }
 
