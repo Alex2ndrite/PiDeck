@@ -143,11 +143,6 @@ export type SessionTimelineController = {
   markProgrammaticScroll: () => void;
   jumpToMessage: (messageId: string) => void;
   scrollToBottom: () => void;
-  /**
-   * 自动收起执行过程后：若用户仍在跟随，把视口对准该 run 最终回答开头。
-   * 不打断已上滚阅读历史的用户。
-   */
-  scrollFinalAnswerIntoView: (runId: string) => void;
   /** 滚动回调（MessageScroller viewport 接线）：维护会话切换的滚动锚点。 */
   handleTimelineScroll: () => void;
   autoScroll: boolean;
@@ -415,43 +410,6 @@ export function useSessionTimelineController(options: {
     if (!timeline) return;
     timeline.scrollTo({
       top: timeline.scrollHeight,
-      behavior: reduceMotion ? "instant" : "smooth",
-    });
-  }, [ownerKey]);
-
-  /**
-   * 自动收起执行过程后，把最终回答开头放到视口中上部（约 35% 处），方便阅读。
-   * 仅当用户仍在跟随时执行；已上滚看历史则不拽回。
-   * 禁止贴顶（rowTop-20）：短会话里贴顶等于整页滚回最上，体感像「发送后又飞上天」。
-   * 若已有更新一轮的最终回答，也不要拽回旧回答。
-   * 注：引擎暂无任意 offset 弹簧 API，此处用浏览器 smooth；回底按钮仍走弹簧。
-   */
-  const scrollFinalAnswerIntoView = useCallback((runId: string) => {
-    if (!autoScrollRef.current) return;
-    const requestOwnerKey = ownerKey;
-    const timeline = timelineRef.current;
-    if (!timeline || ownerKeyRef.current !== requestOwnerKey) return;
-    const finals = timeline.querySelectorAll<HTMLElement>("[data-final-answer]");
-    const last = finals[finals.length - 1];
-    // 只对准时间线上最后一条最终回答；旧轮定时器迟到时直接忽略
-    if (!last || last.getAttribute("data-final-answer") !== runId) return;
-
-    // 先解除跟随，避免 stick 在负增高后锁底，把视口钉在回答末尾
-    autoScrollRef.current = false;
-    setAutoScroll(false);
-    setShowScrollToBottom(true);
-
-    const rowTop =
-      last.getBoundingClientRect().top -
-      timeline.getBoundingClientRect().top +
-      timeline.scrollTop;
-    // 最终回答开头落在视口中上部（约 35%），不要贴顶也不要贴底
-    const viewportAnchor = Math.round(timeline.clientHeight * 0.35);
-    const targetTop = Math.max(0, rowTop - viewportAnchor);
-    const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    programmaticScrollRef.current = true;
-    timeline.scrollTo({
-      top: targetTop,
       behavior: reduceMotion ? "instant" : "smooth",
     });
   }, [ownerKey]);
@@ -901,7 +859,6 @@ export function useSessionTimelineController(options: {
     markProgrammaticScroll,
     jumpToMessage,
     scrollToBottom,
-    scrollFinalAnswerIntoView,
     /** 滚动回调：维护会话切换用的滚动锚点（rAF 合并，不触发渲染） */
     handleTimelineScroll,
     autoScroll,

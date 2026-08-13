@@ -1,4 +1,4 @@
-import { Fragment, memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, memo, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ChevronUp, Share, SquarePen, Trash } from "lucide-react";
 import { atom, useAtomValue } from "jotai";
 import type { ImageContent } from "../../../../../shared/types";
@@ -63,12 +63,7 @@ export type TurnRowProps = {
 	agentRunning?: boolean;
 	/** 打开多选分享弹框 */
 	onEnterMultiSelect?: () => void;
-	/**
-	 * 自动收起执行过程后回调（仅自动收起，不含用户手动折叠）。
-	 * 时间线用来把视口对准最终回答开头。
-	 */
-	onProcessAutoCollapsed?: (runId: string) => void;
-	/** 是否时间线最新一轮（非最新不自动收起对准） */
+	/** 是否时间线最新一轮（非最新不自动收起） */
 	isLatestRun?: boolean;
 };
 
@@ -172,7 +167,7 @@ export const TurnRow = memo(
 			? newTurnCollapseTickBySessionIdAtomFamily(props.sessionId)
 			: NO_TURN_TICK_ATOM,
 	);
-	const { stepsVisible, setStepsVisibleFromUser, toggleSteps, autoCollapseTick } =
+	const { stepsVisible, setStepsVisibleFromUser, toggleSteps } =
 		useTurnExecution({
 			agentRunning: props.agentRunning,
 			isComplete,
@@ -182,24 +177,6 @@ export const TurnRow = memo(
 			collapsePrevRunsOnNewTurn: flowSettings.collapsePrevRunsOnNewTurn,
 			newTurnCollapseTick,
 		});
-
-	// 自动收起后：等折叠负增高 / stick 近底重锁完成，再对准最终回答开头。
-	useLayoutEffect(() => {
-		if (autoCollapseTick === 0) return;
-		const runId = run.id;
-		const onCollapsed = props.onProcessAutoCollapsed;
-		if (!onCollapsed) return;
-		let cancelled = false;
-		const outerId = requestAnimationFrame(() => {
-			requestAnimationFrame(() => {
-				if (!cancelled) onCollapsed(runId);
-			});
-		});
-		return () => {
-			cancelled = true;
-			cancelAnimationFrame(outerId);
-		};
-	}, [autoCollapseTick, run.id, props.onProcessAutoCollapsed]);
 
 	// 中间内容（思考/工具/中间回答）与最终回答分组：
 	// 中间内容统一收进执行过程折叠容器（stepsVisible 整体控制显隐），
@@ -461,7 +438,7 @@ turnRowPropsEqual,
  * - run：深度比较内容（sameAgentRunForRender），未变化的 run 不重渲染；
  * - 标量 props（fresh/showThinking/isStreaming/liveThinkingId/agentRunning）：=== 比较；
  * - 回调函数（onPreviewImage/onOpenExternal/onOpenFile/onDiffFile/onEditMessage/onDeleteMessage/
- *   onEnterMultiSelect/onProcessAutoCollapsed）：行为稳定（读 ref/setState），引用变化不影响渲染结果，忽略（同 FinalAnswer 惯例）。
+ *   onEnterMultiSelect）：行为稳定（读 ref/setState），引用变化不影响渲染结果，忽略（同 FinalAnswer 惯例）。
  */
 function turnRowPropsEqual(prev: TurnRowProps, next: TurnRowProps): boolean {
 	// 流式 run：Live AnswerOutput 随 atom 更新；父级仍需在 isStreaming 边沿重渲染折叠态。

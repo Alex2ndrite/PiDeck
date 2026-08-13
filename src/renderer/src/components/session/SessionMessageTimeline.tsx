@@ -618,7 +618,6 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
                     onEditMessage={props.onEditMessage}
                     onDeleteMessage={props.onDeleteMessage}
                     onEnterMultiSelect={() => setMultiSelectOpen(true)}
-                    onProcessAutoCollapsed={controller.scrollFinalAnswerIntoView}
                   />
                 );
               }
