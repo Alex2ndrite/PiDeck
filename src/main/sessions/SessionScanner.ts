@@ -146,6 +146,10 @@ export class SessionScanner {
         timeout: 10_000,
         signal,
         windowsHide: true,
+        // 会话 JSONL 可能很大（单条 thinking 块可到 600KB+，千条消息轻松超 1MB）；
+        // Node execFile 默认 maxBuffer=1MB，超出会抛 ERR_CHILD_PROCESS_STDIO_MAXBUFFER，
+        // 导致 readSummary 返回 null、会话从列表消失（#147）。64MB 覆盖常见大会话。
+        maxBuffer: 64 * 1024 * 1024,
       }, (err, stdout) => {
         if (err) reject(err);
         else resolve(stdout);
@@ -175,10 +179,13 @@ export class SessionScanner {
   /** 通过 wsl.exe 写入文件内容 */
   private writeWslFile(wslPath: string, content: string): Promise<void> {
     return new Promise((resolve, reject) => {
-      // 使用 tee 写入，避免 heredoc 中的特殊字符问题
+      // 用 dd of= 从 stdin 写入：不做 stdout 回显（tee 会把内容回显，大文件回写时
+      // 同样撞 1MB maxBuffer，Node 会 kill 子进程，文件可能只写一半——#147 同家族问题）。
+      // 内容走 stdin 传参，天然避开 heredoc/特殊字符问题；of= 作为单一参数传给 dd，
+      // 含空格路径也安全（数组传参不会被拆分）。
       const proc = execFile(
         this.wslExePath,
-        ["-d", this.wslConfig!.distro, "-u", this.wslConfig!.user, "tee", wslPath],
+        ["-d", this.wslConfig!.distro, "-u", this.wslConfig!.user, "dd", `of=${wslPath}`, "bs=1M"],
         { encoding: "utf8", timeout: 10_000, windowsHide: true },
         (err) => { if (err) reject(err); else resolve(); }
       );
@@ -261,6 +268,8 @@ export class SessionScanner {
         signal,
         windowsHide: true,
         shell: this.wslShell,
+        // 目录列表通常远小于 1MB，但极端场景（上万文件）下兑底防 maxBuffer 溢出。
+        maxBuffer: 16 * 1024 * 1024,
       }, (err, stdout) => {
         if (err) { reject(err); return; }
         const files = stdout.trim().split(/\r?\n/).filter(Boolean);
@@ -821,6 +830,8 @@ export class SessionScanner {
         timeout: 15_000,
         windowsHide: true,
         shell: this.wslShell,
+        // 与 collectWslJsonl 同理，目录列表极端情况下兑底防 maxBuffer 溢出。
+        maxBuffer: 16 * 1024 * 1024,
       }, (err, stdout) => {
         if (err) { reject(err); return; }
         resolve(stdout.trim().split(/\r?\n/).filter(Boolean));
