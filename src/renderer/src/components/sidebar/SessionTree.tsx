@@ -397,7 +397,7 @@ export function SessionTree(props: {
 
       {display.hiddenChildCount > 0 ? (
         <Button
-          variant="ghost" size="sm" className={`h-auto justify-start px-2 text-[10px] opacity-60 transition-opacity hover:opacity-100 ${props.nested ? "worktree-sessions-more" : "session-more-row"}`}
+          variant="ghost" size="sm" className={`h-auto justify-start px-2 text-micro opacity-80 transition-opacity hover:opacity-100 ${props.nested ? "worktree-sessions-more" : "session-more-row"}`}
           onClick={props.onShowMore ?? (() => props.controller.showMoreChildren(props.project.id))}
         >
           <span>{props.nested
@@ -408,7 +408,7 @@ export function SessionTree(props: {
       ) : props.controller.hasExpandedChildren(props.project.id) ? (
         /* 展开过「查看更多」后提供收起入口，与展开按钮同款样式 */
         <Button
-          variant="ghost" size="sm" className={`h-auto justify-start px-2 text-[10px] opacity-60 transition-opacity hover:opacity-100 ${props.nested ? "worktree-sessions-more" : "session-more-row"}`}
+          variant="ghost" size="sm" className={`h-auto justify-start px-2 text-micro opacity-80 transition-opacity hover:opacity-100 ${props.nested ? "worktree-sessions-more" : "session-more-row"}`}
           onClick={() => props.controller.collapseChildren(props.project.id)}
         >
           <span>{t("app.projectCollapseChildren")}</span>

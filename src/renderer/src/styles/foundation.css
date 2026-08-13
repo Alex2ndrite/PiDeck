@@ -2091,7 +2091,9 @@ select:focus-visible {
   border-radius: var(--radius-md);
   background: transparent;
   color: var(--color-text-tertiary);
-  font-size: var(--font-size-caption);
+  /* 与 SessionTree JSX 的 text-micro 对齐（默认 11px）：层级低于会话行 text-body，
+     又比早前 10px 更清晰；勿回退 caption，否则 medium 档位会抢会话行层级。 */
+  font-size: var(--font-size-micro);
   text-align: left;
 }
 .agent-more-row::before,
