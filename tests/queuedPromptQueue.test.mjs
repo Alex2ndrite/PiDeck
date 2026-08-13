@@ -140,7 +140,7 @@ test("busy composer keeps stop and queued-send controls separate", () => {
   assert.match(composerPanelsSource, /send-behavior-primary/);
   assert.match(composerPanelsSource, /send-behavior-chevron/);
   // 发送 toggle 常显：无需输入内容也展示（busy 与否都能并行发送）
-  assert.match(composerPanelsSource, /disabled=\{props\.isAgentStarting \|\| !props\.canSend\}/);
+  assert.match(composerPanelsSource, /disabled=\{props\.isAgentStarting \|\| props\.isGeneratingImage \|\| !props\.canSend\}/);
   // busy 时显示 stop 圆钮
   assert.match(composerPanelsSource, /\{props\.isAgentBusy \? \(/);
   // pure official：toggle/menu 样式由 ComposerSendControls Tailwind 承担

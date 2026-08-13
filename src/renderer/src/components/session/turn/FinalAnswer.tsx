@@ -1,9 +1,64 @@
 import { memo, type RefObject } from "react";
 import type { ChatMessage, ImageContent } from "../../../../../shared/types";
+import type { ImageGenMeta } from "../../../../../shared/types/imagegen";
 import { t } from "../../../i18n";
 import { Button } from "../../ui-shadcn/button";
 import { Textarea } from "../../ui-shadcn/textarea";
+import { ImageGeneration } from "../../agents/image-generation";
 import { AssistantText } from "../SurfaceComponents";
+
+/** 收窄 meta.imageGen（消息数据来自历史会话/缓存，需运行时校验而非盲转）。 */
+function isImageGenMeta(value: unknown): value is ImageGenMeta {
+	if (typeof value !== "object" || value === null) return false;
+	const v = value as Record<string, unknown>;
+	return (
+		(v.status === "generating" || v.status === "complete" || v.status === "error") &&
+		typeof v.prompt === "string"
+	);
+}
+
+/**
+ * 生图消息渲染：随 meta.imageGen.status 在「生成中点阵动画 → 图片清晰过渡 → 失败态」间切换。
+ * 复用 beUI ImageGeneration（canvas 点阵 + motion 过渡），完成态图片支持点击放大预览。
+ */
+function ImageGenMessage(props: {
+	meta: ImageGenMeta;
+	images?: ImageContent[];
+	onPreviewImage: (image: ImageContent) => void;
+}) {
+	const status = props.meta.status;
+	const statusText =
+		status === "generating"
+			? t("imagegen.status.generating")
+			: status === "complete"
+				? t("imagegen.status.complete")
+				: t("imagegen.status.error");
+	const image = props.images?.[0];
+	return (
+		<div className="py-1">
+			<ImageGeneration
+				status={status}
+				prompt={props.meta.prompt}
+				statusText={statusText}
+				resolution={undefined}
+				size="fluid"
+				className="max-w-[300px]"
+			>
+				{status === "complete" && image ? (
+					<img
+						src={`data:${image.mimeType};base64,${image.data}`}
+						alt=""
+						className="cursor-zoom-in"
+						onClick={() => props.onPreviewImage(image)}
+					/>
+				) : undefined}
+			</ImageGeneration>
+			{status === "error" && props.meta.errorDetail ? (
+				<p className="mt-1.5 text-xs text-destructive">{props.meta.errorDetail}</p>
+			) : null}
+		</div>
+	);
+}
 
 /**
  * 最终回答段：本轮最后一条 assistant 文本，常驻、永不折叠。
@@ -68,6 +123,19 @@ export const FinalAnswer = memo(function FinalAnswer(props: {
 					</Button>
 				</div>
 			</div>
+		);
+	}
+	// 生图消息：不渲染 markdown 正文，改渲染 beUI ImageGeneration（点阵动画→图片→失败态）。
+	const imageGenMeta = isImageGenMeta(props.message.meta?.imageGen)
+		? props.message.meta.imageGen
+		: undefined;
+	if (imageGenMeta) {
+		return (
+			<ImageGenMessage
+				meta={imageGenMeta}
+				images={props.images}
+				onPreviewImage={props.onPreviewImage}
+			/>
 		);
 	}
 	return (

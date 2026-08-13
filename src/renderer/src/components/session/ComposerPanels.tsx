@@ -1,6 +1,7 @@
 import {
   ArrowUp,
   ChevronDown,
+  LoaderCircle,
   Pencil,
   Square,
   X,
@@ -202,6 +203,8 @@ export function ComposerSendControls(props: {
   isAgentBusy: boolean;
   isAgentStarting: boolean;
   canSend: boolean;
+  /** 生图进行中：发送按钮显示转圈并禁用（与 busy 区分，不显示停止按钮） */
+  isGeneratingImage?: boolean;
   onSend: () => void;
   onSendFollowUp: () => void;
   /** 并行发送：独立匿名会话后台处理（不打断当前输出），始终可选 */
@@ -219,10 +222,14 @@ export function ComposerSendControls(props: {
             size="icon-sm"
             className="send-behavior-primary size-8 rounded-none shadow-none hover:bg-primary/90"
             aria-label={t("app.sendSteerTitle")} title={t("app.sendSteerTitle")}
-            disabled={props.isAgentStarting || !props.canSend}
+            disabled={props.isAgentStarting || props.isGeneratingImage || !props.canSend}
             onClick={props.onSend}
           >
-            <ArrowUp size={15} strokeWidth={2.4} aria-hidden="true" />
+            {props.isGeneratingImage ? (
+              <LoaderCircle size={15} strokeWidth={2.4} className="animate-spin" aria-hidden="true" />
+            ) : (
+              <ArrowUp size={15} strokeWidth={2.4} aria-hidden="true" />
+            )}
           </Button>
           {/* 非受控 DropdownMenu：开关状态由 Radix 内部管理，点击外部/选择菜单项后
               立即关闭，避免受控 + 延迟关闭导致菜单卡住无法收起 */}

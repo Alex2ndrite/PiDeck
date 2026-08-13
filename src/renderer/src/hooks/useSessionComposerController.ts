@@ -8,12 +8,15 @@ import {
   type CSSProperties,
 } from "react";
 import type {
+  ChatMessage,
   FileTreeNode,
   ImageContent,
   PiCommand,
   SessionSummary,
 } from "../../../shared/types";
+import type { ImageGenMeta } from "../../../shared/types/imagegen";
 import {
+  cacheSessionMessagesAtom,
   sessionAttachmentsByIdAtom,
   sessionComposerModeByIdAtom,
   sessionDraftByIdAtom,
@@ -78,6 +81,7 @@ import {
   requireSessionCommand,
   toSessionRuntimeTarget,
 } from "../utils/sessionCommands";
+import { isUserFacingSessionStart } from "./useSessionTimelineController";
 import { useSessionSend, type EnqueuePromptSnapshot } from "./useSessionSend";
 
 /**
@@ -244,6 +248,7 @@ export function useSessionComposerController(
   const setAttachmentsAtom = useSetAtom(setSessionAttachmentsAtom);
   const setModeAtom = useSetAtom(setSessionComposerModeAtom);
   const setSendStateAtom = useSetAtom(setSessionSendStateAtom);
+  const setCacheMessages = useSetAtom(cacheSessionMessagesAtom);
 
   const draft = drafts[sessionId] ?? "";
   const attachments = attachmentsBySession[sessionId] ?? [];
@@ -285,6 +290,8 @@ export function useSessionComposerController(
   const [busyDraftLocked, setBusyDraftLocked] = useState(false);
   const [sendBehaviorMenuOpen, setSendBehaviorMenuOpen] = useState(false);
   const [previewImage, setPreviewImage] = useState<ImageContent | null>(null);
+  // 生图进行中：置 true 时发送按钮禁用（避免并发多次生图），完成后图片进附件栏
+  const [generatingImage, setGeneratingImage] = useState(false);
   const [picker, setPicker] = useState<ComposerPickerKind | null>(null);
   const [commands, setCommands] = useState<PiCommand[]>([]);
   const [files, setFiles] = useState<FileTreeNode[]>([]);
@@ -318,7 +325,7 @@ export function useSessionComposerController(
     setAttachmentsAtom({ sessionId, value });
   }, [sessionId, setAttachmentsAtom]);
 
-  const setMode = useCallback((nextMode: "normal" | "plan") => {
+  const setMode = useCallback((nextMode: "normal" | "plan" | "imagegen") => {
     setModeAtom({ sessionId, mode: nextMode });
   }, [sessionId, setModeAtom]);
 
@@ -529,7 +536,8 @@ export function useSessionComposerController(
   }, [cursor, suggestionsOpen]);
 
   const isBusy = runtime?.status === "running" || Boolean(runtime?.state?.isStreaming);
-  const isStarting = runtime?.status === "starting" || sendState.status === "activating";
+  // 预热只创建进程，不能把编辑器 setEditable(false)：contenteditable 关掉会失焦，输入一半就断。
+  const isStarting = isUserFacingSessionStart(sendState.status);
   const hasContent = Boolean(draft.trim() || attachments.length);
 
   const resetEphemeralUi = useCallback(() => {
@@ -582,7 +590,8 @@ export function useSessionComposerController(
       try {
         requireSessionCommand(await desktopApi.sessions.compactRuntime(target, prompt));
       } catch (error) {
-        showNotice(friendlyCompactError(error), 6500);
+        // compact 失败属会话异常，常驻提示直到用户手动关闭
+        showNotice(friendlyCompactError(error), Number.POSITIVE_INFINITY);
       }
     },
     resetComposerUi: resetEphemeralUi,
@@ -600,15 +609,114 @@ export function useSessionComposerController(
     enqueue,
   });
 
+  // 生图：复用当前会话选中的模型（record.model 来自模型页/模型下拉）。
+  // 结果按「消息」语义上屏（与 useSessionSend 乐观提交同一约定：写时间线缓存、source=runtime）：
+  // 提示词作为 user 消息立即上屏；随后追加一条 assistant「生图占位」消息（meta.imageGen=generating），
+  // 生成期间由 FinalAnswer 渲染 beUI ImageGeneration 点阵动画，完成后原地更新为 complete（图片清晰过渡），
+  // 失败原地更新为 error。不调用 send、不进附件栏（无运行中 Agent 也能用）。
+  const generateImage = useCallback(async () => {
+    const prompt = draft.trim();
+    if (!prompt || generatingImage) return;
+    const model = record?.model;
+    if (!model?.provider || !model?.modelId) {
+      showNotice(t("imagegen.error.notConfigured"), 5000);
+      return;
+    }
+    setGeneratingImage(true);
+
+    // 把本地生图消息追加进时间线缓存（整体替换 messages 数组，source=runtime 沿用乐观提交约定）。
+    const appendTimelineMessage = (message: ChatMessage) => {
+      const previous = store.get(sessionMessagesCacheAtom)?.[sessionId]?.messages ?? [];
+      setCacheMessages({ sessionId, messages: [...previous, message], source: "runtime" });
+    };
+    // 按 id 原地更新已上屏消息（生图占位 → complete/error 复用同一条，避免时间线多出一条）。
+    const updateTimelineMessage = (id: string, patch: (m: ChatMessage) => ChatMessage) => {
+      const previous = store.get(sessionMessagesCacheAtom)?.[sessionId]?.messages ?? [];
+      setCacheMessages({
+        sessionId,
+        messages: previous.map((m) => (m.id === id ? patch(m) : m)),
+        source: "runtime",
+      });
+    };
+
+    appendTimelineMessage({
+      id: crypto.randomUUID(),
+      agentId: "",
+      role: "user",
+      text: prompt,
+      timestamp: Date.now(),
+    });
+    const imageMessageId = crypto.randomUUID();
+    appendTimelineMessage({
+      id: imageMessageId,
+      agentId: "",
+      role: "assistant",
+      text: "",
+      stopReason: "stop",
+      timestamp: Date.now(),
+      meta: {
+        imageGen: { status: "generating", prompt } satisfies ImageGenMeta,
+      },
+    });
+    setDraft("");
+
+    try {
+      const result = await desktopApi.imagegen.generate({
+        provider: model.provider,
+        model: model.modelId,
+        prompt,
+      });
+      if (result.ok) {
+        updateTimelineMessage(imageMessageId, (m) => ({
+          ...m,
+          images: [result.image],
+          meta: {
+            imageGen: { status: "complete", prompt } satisfies ImageGenMeta,
+          },
+        }));
+        showNotice(t("imagegen.done"), 4000);
+      } else {
+        updateTimelineMessage(imageMessageId, (m) => ({
+          ...m,
+          meta: {
+            imageGen: {
+              status: "error",
+              prompt,
+              errorDetail: mapImageGenError(result.error, result.detail),
+            } satisfies ImageGenMeta,
+          },
+        }));
+      }
+    } catch {
+      updateTimelineMessage(imageMessageId, (m) => ({
+        ...m,
+        meta: {
+          imageGen: {
+            status: "error",
+            prompt,
+            errorDetail: t("imagegen.error.network"),
+          } satisfies ImageGenMeta,
+        },
+      }));
+    } finally {
+      setGeneratingImage(false);
+    }
+  }, [draft, generatingImage, record, sessionId, setCacheMessages, setDraft, store]);
+
   // 统一发送入口：先晋升预览 Tab 再投递（幂等，非预览无副作用）。
   // 发送按钮 / 追问按钮 / Enter 键 / 无 Agent 时的 /compact 直发都会走这里，
   // 避免新增发送路径时漏掉 promote 导致预览 Tab 不常驻（曾因此回归）。
+  // 生图模式：所有发送入口统一转生图（不晋升预览 Tab、不发消息），避免各入口分支不一致。
   const promoteAndSend = useCallback(
     (behavior?: "steer" | "followUp") => {
+      if (mode === "imagegen") {
+        void generateImage();
+        return;
+      }
       options.onPromoteSession?.(sessionId);
       return send(behavior);
     },
-    [options.onPromoteSession, send, sessionId],
+    [mode, generateImage, options.onPromoteSession, send, sessionId],
   );
 
   const selectSuggestion = useCallback((value: string) => {
@@ -616,34 +724,34 @@ export function useSessionComposerController(
       ? liveDomDraftRef.current.value
       : draft;
     const liveCursor = editorRef.current ? getComposerCaretOffset(editorRef.current) : cursor;
-    const result = applySuggestion(liveDraft, liveCursor, value);
+    const result = applySuggestion(liveDraft, liveCursor, value, validSessionRefs);
     liveDomDraftRef.current = { sessionId, value: result.text };
     setDraft(result.text);
     setCursor(result.cursor);
     caretRef.current = { pos: result.cursor, forValue: result.text };
     setSuggestionsOpen(false);
     requestAnimationFrame(() => editorRef.current?.focus());
-  }, [cursor, draft, sessionId, setDraft]);
+  }, [cursor, draft, sessionId, setDraft, validSessionRefs]);
 
   const closeSuggestions = useCallback(() => {
     const liveDraft = liveDomDraftRef.current.sessionId === sessionId
       ? liveDomDraftRef.current.value
       : draft;
     const liveCursor = editorRef.current ? getComposerCaretOffset(editorRef.current) : cursor;
-    const result = clearSuggestionTrigger(liveDraft, liveCursor);
+    const result = clearSuggestionTrigger(liveDraft, liveCursor, validSessionRefs);
     liveDomDraftRef.current = { sessionId, value: result.text };
     setDraft(result.text);
     setCursor(result.cursor);
     caretRef.current = { pos: result.cursor, forValue: result.text };
     setSuggestionsOpen(false);
     requestAnimationFrame(() => editorRef.current?.focus());
-  }, [cursor, draft, sessionId, setDraft]);
+  }, [cursor, draft, sessionId, setDraft, validSessionRefs]);
 
   const onChange = useCallback((value: string, nextCursor: number) => {
     liveDomDraftRef.current = { sessionId, value };
     setDraft(value);
     setCursor(nextCursor);
-    setSuggestionsOpen(detectTrigger(value, nextCursor) !== null);
+    setSuggestionsOpen(detectTrigger(value, nextCursor, validSessionRefs) !== null);
     if (historyIndex >= 0) {
       const history = getPromptHistory();
       if (value !== history[historyIndex]) {
@@ -651,7 +759,7 @@ export function useSessionComposerController(
         setSavedDraft("");
       }
     }
-  }, [getPromptHistory, historyIndex, sessionId, setDraft]);
+  }, [getPromptHistory, historyIndex, sessionId, setDraft, validSessionRefs]);
 
   const onKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
     if (suggestionsOpen && suggestionItems.length > 0) {
@@ -802,9 +910,9 @@ export function useSessionComposerController(
       ? getComposerCaretOffset(editorRef.current)
       : cursor;
     const refText = formatFilePathRef(path);
-    const trigger = detectTrigger(liveDraft, liveCursor);
+    const trigger = detectTrigger(liveDraft, liveCursor, validSessionRefs);
     if (trigger && trigger.char === "@") {
-      const result = applySuggestion(liveDraft, liveCursor, refText);
+      const result = applySuggestion(liveDraft, liveCursor, refText, validSessionRefs);
       liveDomDraftRef.current = { sessionId, value: result.text };
       setDraft(result.text);
       setCursor(result.cursor);
@@ -814,7 +922,7 @@ export function useSessionComposerController(
     }
     setSuggestionsOpen(false);
     requestAnimationFrame(() => editorRef.current?.focus());
-  }, [cursor, draft, insertRefTexts, sessionId, setDraft]);
+  }, [cursor, draft, insertRefTexts, sessionId, setDraft, validSessionRefs]);
 
   /** 从 File 列表解析本地路径（Electron 32+ 必须走 webUtils，不能用已移除的 File.path） */
   const resolveLocalPathsFromFiles = useCallback((files: File[]) => {
@@ -835,23 +943,58 @@ export function useSessionComposerController(
   /**
    * 剪贴板里的图片文件 → 附加为图片预览（对齐微信/QQ 粘贴习惯）。
    * 经 files.readBase64 读原文件（比剪贴板位图缩略图清晰），构造 File 走统一附件流程；
-   * 任一文件读取失败或超出合成器大小上限（主进程 stat 预检拦截）时整体回退为 @path 引用，
-   * 保证「复制图片」粘贴始终有可用结果。
+   * 任一文件读取失败或超出合成器大小上限（主进程 stat 预检拦截）时：
+   * 先兜底剪贴板位图——截图工具/网页复制常同时写路径+位图，而路径文件可能已被删除
+   * 或过大，位图仍在（否则粘贴会退化成无用的 @path 引用）；实在没有位图才整体回退
+   * @path 引用，保证「复制图片」粘贴始终有可用结果。
    */
-  const pasteClipboardImages = useCallback(async (paths: string[]) => {
+  const pasteClipboardImages = useCallback(async (paths: string[], dataTransfer: DataTransfer | null) => {
     try {
       const files: File[] = [];
       for (const path of paths) {
         const dataUrl = await desktopApi.files.readBase64(path, COMPOSER_IMAGE_MAX_BYTES);
-        if (!dataUrl) return insertFilePathRefs(paths);
+        if (!dataUrl) throw new Error(`Cannot read image: ${path}`);
         const fileName = path.split(/[\\/]/).pop() || path;
         files.push(dataUrlToFile(dataUrl, imageMimeTypeFromPath(path), fileName));
       }
       await addImageFiles(files);
     } catch {
+      // 位图兜底：事件粘贴优先取 clipboardData 的 image 项；右键粘贴无事件，走 Electron 剪贴板位图
+      const imageFiles = dataTransfer ? getClipboardImageFiles(dataTransfer) : [];
+      if (imageFiles.length) {
+        await addImageFiles(imageFiles);
+        return;
+      }
+      const imageDataUrl = desktopApi.clipboard.readImage();
+      if (imageDataUrl) {
+        await addImageFiles([dataUrlToFile(imageDataUrl, "image/png", "clipboard-image.png")]);
+        return;
+      }
       insertFilePathRefs(paths);
     }
   }, [addImageFiles, insertFilePathRefs]);
+
+  /**
+   * 右键「粘贴」（无 ClipboardEvent）：从 Electron 剪贴板同步读取。
+   * 优先级同 onPaste：文件路径 → 位图；纯文本返回 false，交给编辑器本地插入。
+   */
+  const pasteFromClipboard = useCallback(async (): Promise<boolean> => {
+    const clipboardPaths = desktopApi.files.getClipboardPaths?.() ?? [];
+    if (clipboardPaths.length > 0) {
+      if (clipboardPaths.every(isImageFilePath)) {
+        await pasteClipboardImages(clipboardPaths, null);
+      } else {
+        insertFilePathRefs(clipboardPaths);
+      }
+      return true;
+    }
+    const imageDataUrl = desktopApi.clipboard.readImage();
+    if (imageDataUrl) {
+      await addImageFiles([dataUrlToFile(imageDataUrl, "image/png", "clipboard-image.png")]);
+      return true;
+    }
+    return false;
+  }, [addImageFiles, insertFilePathRefs, pasteClipboardImages]);
 
   /**
    * 粘贴：系统文件路径以 @path 引用插入，位图/截图附加为图片。
@@ -869,7 +1012,7 @@ export function useSessionComposerController(
       event.preventDefault();
       // 复制的全是受支持图片 → 附加预览；混合/其他文件 → 维持 @path 引用
       if (clipboardPaths.every(isImageFilePath)) {
-        void pasteClipboardImages(clipboardPaths);
+        void pasteClipboardImages(clipboardPaths, event.clipboardData);
       } else {
         insertFilePathRefs(clipboardPaths);
       }
@@ -885,12 +1028,28 @@ export function useSessionComposerController(
       const paths = resolveLocalPathsFromFiles(files);
       if (paths.length > 0) {
         event.preventDefault();
-        insertFilePathRefs(paths);
+        // 与第 1 步同规则：全是图片 → 附加预览（失败位图兜底），混合 → @path
+        if (paths.every(isImageFilePath)) {
+          void pasteClipboardImages(paths, event.clipboardData);
+        } else {
+          insertFilePathRefs(paths);
+        }
         return;
       }
     }
 
-    // 3) 纯文本绝对路径粘贴（QQ「复制路径」/ 资源管理器地址栏 / Windows「复制为路径」）：
+    // 3) 剪贴板位图（截图/微信QQ/网页复制图片）：必须优先于纯文本路径提取——
+    //    这类复制常同时写位图 + text 槽（微信写图片缓存路径、网页写图片 URL），
+    //    位图才是用户要的内容，把附带文本提取成 @path 引用是错的；
+    //    文件路径场景已在前两步处理，这里只剩纯位图。
+    const imageFiles = getClipboardImageFiles(event.clipboardData);
+    if (imageFiles.length) {
+      event.preventDefault();
+      void addImageFiles(imageFiles);
+      return;
+    }
+
+    // 4) 纯文本绝对路径粘贴（QQ「复制路径」/ 资源管理器地址栏 / Windows「复制为路径」）：
     //    规范化为 @"path" 引用插入，而不是留下带拼写波浪线的裸路径文本。
     const pastedPath = extractPastedPath(
       event.clipboardData.getData("text/plain"),
@@ -900,12 +1059,6 @@ export function useSessionComposerController(
       insertPastedPathRef(pastedPath);
       return;
     }
-
-    // 4) 图片粘贴（截图等位图数据，无本地文件路径）：读取并附加到消息
-    const imageFiles = getClipboardImageFiles(event.clipboardData);
-    if (!imageFiles.length) return;
-    event.preventDefault();
-    void addImageFiles(imageFiles);
   }, [addImageFiles, insertFilePathRefs, insertPastedPathRef, pasteClipboardImages, resolveLocalPathsFromFiles]);
 
   /**
@@ -996,7 +1149,8 @@ export function useSessionComposerController(
     } catch (error) {
       // abort 失败必须可见：之前这里直接 throw 变成未处理 rejection，
       // 用户点停止后毫无反馈、agent 继续运行，表现为「停止不了」。
-      showNotice(error instanceof Error ? error.message : String(error), 5000);
+      // 异常常驻提示，直到用户手动关闭。
+      showNotice(error instanceof Error ? error.message : String(error), Number.POSITIVE_INFINITY);
     }
   }, [runtime?.agentId, runtime?.runtimeGeneration, sessionId]);
 
@@ -1016,7 +1170,8 @@ export function useSessionComposerController(
     try {
       requireSessionCommand(await desktopApi.sessions.compactRuntime(target));
     } catch (error) {
-      showNotice(friendlyCompactError(error), 6500);
+      // compact 失败属会话异常，常驻提示直到用户手动关闭
+      showNotice(friendlyCompactError(error), Number.POSITIVE_INFINITY);
     }
   }, [runtime?.agentId, runtime?.runtimeGeneration, sessionId, setDraft, promoteAndSend]);
 
@@ -1067,6 +1222,7 @@ export function useSessionComposerController(
       onCursorChange: setCursor,
       onKeyDown,
       onPaste,
+      onPasteClipboard: pasteFromClipboard,
       onDrop,
       onDragOver: (event: React.DragEvent<HTMLDivElement>) => {
         // 会话 Tab / 侧栏分屏拖拽交给 SessionSplitStage（capture），composer 不抢落点
@@ -1081,7 +1237,7 @@ export function useSessionComposerController(
           event.dataTransfer.dropEffect = "copy";
         }
       },
-      onFocus: () => setSuggestionsOpen(detectTrigger(draft, cursor) !== null),
+      onFocus: () => setSuggestionsOpen(detectTrigger(draft, cursor, validSessionRefs) !== null),
       onBlur: () => setSuggestionsOpen(false),
       onChipClick,
       attachFile,
@@ -1097,6 +1253,7 @@ export function useSessionComposerController(
     },
     images: {
       preview: setPreviewImage,
+      add: (image: ImageContent) => setAttachments((current) => [...current, image]),
       remove: (index: number) => setAttachments((current) => current.filter((_, item) => item !== index)),
       clear: () => setAttachments([]),
     },
@@ -1113,7 +1270,8 @@ export function useSessionComposerController(
       unknown: sendState.status === "unknown",
       unknownError: sendState.error,
       acknowledgeUnknown: acknowledgeUnknownDelivery,
-      canSend: hasContent && !isStarting,
+      canSend: hasContent && !isStarting && !generatingImage,
+      generatingImage,
       sendBehaviorMenuOpen,
       toggleSendBehaviorMenu: () => setSendBehaviorMenuOpen((open) => !open),
       keepSendBehaviorMenuOpen,
@@ -1147,3 +1305,21 @@ export function useSessionComposerController(
 }
 
 export type SessionComposerController = ReturnType<typeof useSessionComposerController>;
+
+/** 生图错误码 → 用户可见文案（http 附 status detail）。文案经 i18n，避免跨层硬编码。 */
+function mapImageGenError(error: string, detail?: string): string {
+  switch (error) {
+    case "notConfigured":
+      return t("imagegen.error.notConfigured");
+    case "invalidKey":
+      return t("imagegen.error.invalidKey");
+    case "badBaseUrl":
+      return t("imagegen.error.badBaseUrl");
+    case "empty":
+      return t("imagegen.error.empty");
+    case "http":
+      return t("imagegen.error.http", { detail: detail ?? "" });
+    default:
+      return t("imagegen.error.network");
+  }
+}

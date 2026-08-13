@@ -4,7 +4,7 @@
 
 All notable changes to PiDeck are documented here.
 
-## v0.7.0 - 2026-08-11
+## v0.7.0 - 2026-08-13
 
 ### 🚀 New Features
 
@@ -61,6 +61,73 @@ All notable changes to PiDeck are documented here.
   and settings-page tab positions persist across restarts.
 - **Cache cleanup** — "Clear UI local cache" action in the settings cache/log
   page.
+- **Image generation mode** — Composer switches to image generation, reusing the
+  existing model configuration; beUI dot-matrix animation covers generating →
+  done → failed states; results render as messages (the prompt appears
+  immediately, the image follows the assistant reply).
+- **Security management** — Tiered tool-permission gates (pi-deck-security-gate
+  extension + Pi management config + session-level switch); thinking effort and
+  safety level can be switched while a run is in progress (#146).
+- **Model spec autofill** — Built-in SQLite spec table (synced before releases);
+  SenseTime / StepFun models included; saved models auto-complete their specs
+  instead of hardcoded defaults.
+- **Web service: LAN access + QR code** — Local-network access with a scannable
+  QR code in settings; the Web UI can start new sessions straight from the home
+  page (model / thinking preferences included); model list, create-project and
+  header sidebar on the Web panel; session/project lists sorted by time with
+  project sessions collapsed to 5 by default.
+- **Usage stats: daily breakdown** — Today overview and per-day searchable
+  details; aggregator v2 with per-day model/project breakdown.
+- **Audit trail expansion** — Session create/copy/export/rename and the full
+  runtime lifecycle, settings/security-sensitive operations (secret values never
+  written to disk), pi process spawn diagnostics and agent lifecycle exit
+  decisions, background image / git init / single-instance / web-service
+  start-stop, and log-clearing all leave audit records.
+- **Vision bridge enhancements** — Conversions visible in the session (image
+  cards + request details); configurable timeout (default 30s → 120s);
+  "unlimited" max_tokens option; saves unified through the settings dialog
+  header.
+- **Collapsible thinking line (deepseek-harness mode)** — Thinking is
+  collapsed to a single line by default: while streaming it shows the latest
+  line with a sweep animation, then switches to the first line and stops (the
+  earlier marquee approach was removed); clicking the title row expands the
+  full text.
+- **Per-turn duration moved to the end** — Turn duration now sits at the tail
+  of the turn (live while streaming); the row header keeps only the time.
+- **Send-to-top animation removed** — Sending no longer smooth-scrolls the
+  viewport to clear the screen: it conflicted with stream following and caused
+  occasional jitter; plain bottom-follow is restored.
+- **Diff improvements** — Large-file diffs get GitHub-style folding /
+  virtualization / worker rendering; the change view defaults to changed hunks
+  only; per-turn file-change lists (TurnFileChanges with beUI FileDiff syntax
+  highlighting) replace the bottom global summary; file lists with more than 3
+  items collapse by default.
+- **Paged history for very long sessions** — 12-turn cache + three-level paging
+  pipeline; full output viewable in history sessions; smoother scroll-up paging;
+  fixes edit/delete/re-send targeting.
+- **Parallel ask panel** — Send-behavior menu always visible (shadcn dropdown)
+  with anonymous-session capsule results; ask cards render and support
+  answering.
+- **Log viewer** — Time-range filtering and paged navigation.
+- **Process monitor** — Shows the session title bound to each agent; dedicated
+  memory metric matching Task Manager; only pi agents tracked (Electron's own
+  processes excluded).
+- **Tray restart** — "Restart" item in the tray menu (clean shutdown then
+  relaunch).
+- **RPC log menu** — Right-click action changed to "Open RPC log" and works
+  while the agent is running.
+- **Unified save placement** — Pi management and security pages save through the
+  dialog header (unsaved-changes yellow dot + close confirmation; per-tab save
+  buttons removed).
+- **Formula copy** — Inline formulas copy by clicking the formula body; a
+  persistent copy button covers both inline and block formulas.
+- **UI polish** — Narrow-sidebar button yield, ordered todo list, widget
+  type-scale and file-row hover transitions; compact cards aligned with thinking
+  cards and long user messages auto-fold; session header breadcrumb
+  (project/title) with TODO badge; beUI ReasoningText status indicator;
+  completed todos keep a check mark without strikethrough.
+- **Prompt management** — Delete confirmation dialog; copy buttons default to
+  text with animated shadcn DropdownMenus.
 - **Misc** — Ctrl/Cmd+click links open in system browser; fee tooltip converts
   to RMB (est. rate 7.2); boot animation + AppErrorBoundary + error reporting;
   session restart transition animation; default model config for new sessions;
@@ -75,6 +142,11 @@ All notable changes to PiDeck are documented here.
   toggle disabled with a hint when the agent is not running.
 - **Tool call timeline** — Compact and low-key tool cards with three-state status
   badges.
+- **Feishu bound sessions** — ask interactions disabled with a clear hint.
+- **Content width & cards** — 100% content width keeps 24px side gaps; message
+  and input share one width percentage; mermaid keeps natural width; ask-card
+  header compacted; tool cards aligned with system radius tokens.
+- **Skill picker** — Simplified path display in the directory picker.
 
 ### 🛠 Architecture
 
@@ -109,6 +181,9 @@ All notable changes to PiDeck are documented here.
 - **Timeline rendering** — `content-visibility` skips off-screen layout/paint.
 - **Session directory cache** — Cached tree shows immediately, background scan
   pushes updates; cache hit-rate stats file-level cached and parallelized.
+- **Electron 43 & startup slimming** — Electron 43 upgrade, memory-sampling
+  toolchain and first-paint reduction; process monitor uses a dedicated memory
+  metric aligned with Task Manager.
 
 ### 🐛 Bug Fixes
 
@@ -132,6 +207,63 @@ All notable changes to PiDeck are documented here.
 - **Split/UI fixes** — Split maximize width restore, runtime-config bottom-bar
   refresh, terminal dock input-height jump, RPC log right-click menu, sidebar
   draft right-click, unstarted-agent composer history keys.
+- **Black-screen governance** — Renderer crash auto-recovery; timeline scroll
+  windowing.
+- **History loading** — Duplicate/missing messages on history reload fixed;
+  opening or switching back to history sessions no longer flashes the new-session
+  start page; skeleton-screen and fade-in timing fixes; large sessions no longer
+  show a wrong start page (compaction paging coordinate space).
+- **Editing** — Editing a message scrolled out of view discards the stale history
+  prefix ("edit doesn't refresh" fixed).
+- **Streaming & timeline** — Live-body mounting gated per turn (steer no longer
+  duplicates the same intermediate reply); tombstones keep id/parentId so the
+  whole page is never cleared; deleting an assistant reply tombstones the same
+  turn's thinking/tool chain; line-wrap scroll follows with a spring; auto-
+  collapsed execution no longer steals scroll; negative-growth re-lock escape
+  guard.
+- **Extensions** — `(filtered)` suffix from `pi list` parsed, so filtered
+  installs can be uninstalled / updated / version-checked.
+- **WSL** — Session read/write maxBuffer enlarged so large sessions no longer
+  vanish from the list (#147).
+- **Session security level** — Override now keyed by session identity
+  (PIDECK_SESSION_ID), fixing ineffective overrides.
+- **Corrupted session repair** — Auto-fixes first-line "path+header" glue and
+  legacy private sessionName header lines; catalog rename retries on transient
+  EPERM (antivirus locks) instead of blocking new sessions.
+- **Clipboard & images** — Bitmap fallback for pasted images; right-click paste
+  supports images (WeChat screenshots no longer become @path references).
+- **Composer** — Plain @ / & no longer open suggestions; pastes stay plain text
+  so the cursor doesn't jump; models switchable during generation (effective
+  next round).
+- **Tabs & split** — Fork switches to the new session and registers a pinned
+  tab; Enter-send promotes preview tabs across all four send paths; pinned tabs
+  share normal tab width; drawer float-bar follows zoom; startup width
+  oscillation and post-cache-clear drawer flash fixed.
+- **Wallpaper mode** — Frosted blocks become transparent; scratchpad panel color
+  follows the system panel and background transparency.
+- **Git** — Windows 8.3 short paths no longer misreport "outside" or break
+  worktree deletes; untracked-file diff opens; manual refresh syncs push/pull
+  badges; badges readable in dark mode; non-git repos pause polling; stage/
+  unstage races skip stale paths silently.
+- **Toasts** — Abnormal-session toasts persist instead of auto-dismissing;
+  toasts elevated above dialogs.
+- **Links** — Official-site links always open in the system browser, regardless
+  of the embedded-browser setting.
+- **pi runtime** — mise custom directory and dynamic PATH support; npm
+  detection reuses search directories.
+- **RPC & process** — RPC timeouts honor user config; failure toasts carry the
+  concrete reason; manual stop no longer fires a "completed" system
+  notification; first-word/total timing starts at request send (thinking mode
+  uses the first body delta).
+- **Models** — Spec matching/merge semantics fixed; saved models complete specs
+  from the built-in table; 5 historical-model regressions fixed.
+- **Misc UI** — Template-picker eye preview / back buttons readable in dark
+  mode; empty-body template sends blocked with a clear hint; checkboxes in
+  session-management/import dialogs toggle; default model/provider clearing
+  only clears values (X no longer misaligned); sidebar section header rows fully
+  clickable; extension-page divider removed; pet-window diagnostics and render-
+  failure fallback; Windows icon-cache rebuild script (Task Manager shows the
+  current icon); refreshed monochrome logo and neutral opencode badge.
 
 ### 🙏 Acknowledgements
 
@@ -142,7 +274,7 @@ All notable changes to PiDeck are documented here.
 - **@qgx1992** — Ctrl/Cmd+click system-browser links.
 
 Special thanks to community members **微时、kylin、Island、PieDriver** for
-providing model services for our community testing environment 🎉
+providing model services for our software development 🎉
 
 > 💬 **Join our QQ group for feedback & discussion: 1026218644**
 

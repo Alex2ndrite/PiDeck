@@ -220,6 +220,7 @@ import { registerProjectsIpc } from "./ipc/projectsIpc";
 import { registerUsageStatsIpc } from "./ipc/usageStatsIpc";
 import { UsageStatsService } from "./usageStats/UsageStatsService";
 import { readLastWindowBounds, saveLastWindowBounds } from "./windowState";
+import { createRendererCrashRecoveryGuard } from "./window/rendererCrashRecovery";
 import {
 	registerBackgroundImageProtocol,
 	registerBackgroundsIpc,
@@ -230,6 +231,8 @@ import { registerTerminalIpc } from "./ipc/terminalIpc";
 import { registerScratchPadIpc } from "./ipc/scratchPadIpc";
 import { registerSecurityIpc } from "./ipc/securityIpc";
 import { registerVisionIpc } from "./ipc/visionIpc";
+import { registerImageGenIpc, resolveProviderCredentials } from "./ipc/imagegenIpc";
+import { ImageGenService } from "./imagegen/ImageGenService";
 import { VisionBridgeConfigManager } from "./settings/visionBridgeConfig";
 import { registerSessionIpc, scheduleCatalogBackgroundScan } from "./ipc/sessionIpc";
 import { registerSystemIpc } from "./ipc/systemIpc";
@@ -282,6 +285,9 @@ let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 /** 标记是否由用户主动退出（托盘菜单「退出」），区别于窗口关闭隐藏到托盘 */
 let isQuitting = false;
+/** 渲染进程崩溃自动恢复守卫（2026-08 黑屏治理，见 window/rendererCrashRecovery.ts）：
+ *  非正常崩溃自动 reload 恢复，崩溃风暴（60s 内超 2 次）放弃。 */
+const rendererCrashGuard = createRendererCrashRecoveryGuard();
 let projectStore: ProjectStore;
 let fileSystemService: FileSystemService;
 let sessionScanner: SessionScanner;
@@ -1549,6 +1555,22 @@ async function createWindow() {
 			platform: process.platform,
 			arch: process.arch,
 		});
+		// 黑屏治理：非正常崩溃自动 reload 恢复；clean-exit（正常退出）、用户主动退出
+		// 与崩溃风暴（窗口期内超限）不恢复。reload 前检查窗口/webContents 仍存活。
+		if (isQuitting || !rendererCrashGuard.shouldAutoReload(details.reason)) return;
+		void appLogger.warn("app", "Auto-reloading main window after renderer crash", {
+			reason: details.reason,
+			exitCode: details.exitCode,
+			recoveriesInWindow: rendererCrashGuard.recoveriesInWindow(),
+		});
+		if (mainWindow && !mainWindow.isDestroyed()) {
+			try {
+				mainWindow.webContents.reload();
+			} catch (error) {
+				// reload 抛异常（webContents 已销毁等竞态）：记日志，留给用户手动处理
+				void appLogger.error("app", "Auto-reload failed", error);
+			}
+		}
 	});
 	// 子进程（含 GPU/utility）异常退出：Mac 上偶发“整窗闪一下”，需要留下 reason/exitCode。
 	app.on("child-process-gone", (_event, details) => {
@@ -2222,6 +2244,16 @@ function registerIpc() {
 		log: (message, ...args) => appLogger.info("vision", message, ...args),
 	});
 
+	// 生图：复用 pi 已配置的模型供应商（models.json/auth.json），结果回 composer 附件栏
+	registerImageGenIpc({
+		imageGen: new ImageGenService({
+			getProviderCredentials: (provider) => resolveProviderCredentials(configManager, provider),
+			log: (message, ...args) => appLogger.info("imagegen", message, ...args),
+		}),
+		configManager,
+		log: (message, ...args) => appLogger.info("imagegen", message, ...args),
+	});
+
 	registerSessionIpc({
 		projectStore,
 		settingsStore,
@@ -2519,7 +2551,7 @@ app.whenReady().then(async () => {
 		},
 		securityStore,
 		// spawn pi 前预检修复会话文件（旧版私有 sessionName 头行会让 pi 拒绝加载，见 #114）
-		(filePath) => sessionScanner.repairLegacySessionNameLine(filePath),
+		(filePath) => sessionScanner.repairCorruptSessionHeader(filePath),
 		// 飞书绑定会话：spawn 时注入 PIDECK_FEISHU_LINKED，ask_question 切换为禁用提示版。
 		// 闭包延迟读 feishuBridge（连接成功后才创建），spawn 时 binding 已先于 runtime 建立。
 		(key) => Boolean(key && feishuBridge?.hasSessionBinding(key)),

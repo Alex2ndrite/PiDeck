@@ -470,6 +470,9 @@ function ExtensionTableRow(props: {
 					<div className="flex min-w-0 items-center gap-2">
 						<strong className="truncate text-control font-medium text-foreground">{name}</strong>
 						{extension.builtIn && <span className="text-micro text-muted-foreground">{t("common.builtIn")}</span>}
+						{/* 过滤式安装徽标：source 已在主进程剥离 "(filtered)" 后缀，
+						    版本查询/更新/卸载均用干净 source；此处仅展示标记 */}
+						{extension.filtered && <span className="text-micro text-muted-foreground">{t("config.extensionFiltered")}</span>}
 					</div>
 					<span className="truncate font-mono text-caption text-muted-foreground">{extension.source}</span>
 				</div>
