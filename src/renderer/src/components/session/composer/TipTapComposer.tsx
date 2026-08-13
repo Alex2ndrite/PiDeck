@@ -71,7 +71,14 @@ export const TipTapComposer = forwardRef<HTMLDivElement, TipTapComposerProps>(
 					<ContextMenuItem
 						onSelect={() => {
 							if (!editor) return;
-							insertClipboard(editor);
+							void (async () => {
+								// 图片/文件路径由 controller 统一处理（与 Ctrl+V 同一优先级链）；
+								// 纯文本返回 false，走本地 HTML/文本插入
+								const handled = await props.onPasteClipboard?.();
+								if (!handled) insertClipboard(editor);
+								// 菜单点击会让编辑器失焦，无论哪条路径都恢复焦点保证后续输入/光标可见
+								editor.commands.focus();
+							})();
 						}}
 					>
 						<ClipboardPaste size={13} strokeWidth={2} aria-hidden="true" />

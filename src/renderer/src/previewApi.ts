@@ -161,6 +161,7 @@ export function createPreviewApi(): PiDesktopApi {
 		// 与同步接口不匹配，因此返回空串，右键粘贴菜单静默无操作
 		readText: () => "",
 		readHtml: () => "",
+		readImage: () => "",
 	};
 	const createTerminalTab = async (agentId: string, shell?: string, cwd?: string) => {
 		const shellName = shell ?? "powershell";

@@ -284,6 +284,7 @@ export const ComposerArea = forwardRef<HTMLElement, ComposerAreaProps>(function 
                 onCursorChange={composer.editor.onCursorChange}
                 onKeyDown={composer.editor.onKeyDown}
                 onPaste={composer.editor.onPaste}
+                onPasteClipboard={composer.editor.onPasteClipboard}
                 onDrop={composer.editor.onDrop}
                 onDragOver={composer.editor.onDragOver}
                 onBlur={composer.editor.onBlur}
