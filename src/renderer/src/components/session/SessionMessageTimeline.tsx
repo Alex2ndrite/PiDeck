@@ -41,7 +41,7 @@ import { showNotice } from "../../utils/notice";
 import { stripAnsi } from "./TimelineFormat";
 import { SessionStartSurface } from "./SessionStartSurface";
 import { MessageScroller } from "../agents/message-scroller";
-import { resolveFreshTailIds, resolvePinTurnOnTailChange } from "../../lib/pinTurnScroll";
+import { resolveFreshTailIds } from "../../lib/pinTurnScroll";
 import { chatContentWidthStyle } from "./chatContentWidth";
 import {
   selectTimelineTurnWindow,
@@ -277,22 +277,6 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
       nextTail,
       sendState?.requestId,
     );
-    // 发送当下置顶：空会话首条、乐观 id 被回复冲掉，都按 pendingRequestId 立刻钉用户气泡。
-    // 用户正在看历史（autoScroll=false）不拽视口，整体跟底逻辑保持不变。
-    const freshUserId = resolvePinTurnOnTailChange({
-      previousTail,
-      messages: activeMessages,
-      pendingRequestId: sendState?.requestId,
-      alreadyPinnedId: controller.pinnedTurnId,
-    });
-    if (
-      freshUserId &&
-      controller.pinTurnToTop &&
-      (controller.autoScroll || controller.pinAnimating || controller.pinnedTurnId)
-    ) {
-      // 进行中的清屏只换绑锚点，避免乐观 id 替换把动画掐掉重播。
-      controller.pinTurnToTop(freshUserId, { animate: !controller.pinAnimating });
-    }
     if (fresh.length === 0) return;
     setFreshMessageIds((current) => {
       const next = new Set(current);
@@ -314,9 +298,6 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
   }, [
     activeMessages,
     controller.autoScroll,
-    controller.pinAnimating,
-    controller.pinTurnToTop,
-    controller.pinnedTurnId,
     sendState?.requestId,
   ]);
 
@@ -544,7 +525,7 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
       contentProps={{ style: chatContentWidthStyle }}
       viewportRef={timelineRef}
       scrollApiRef={controller.scrollerScrollApiRef}
-      followOutput={controller.autoScroll && !controller.pinAnimating}
+      followOutput={controller.autoScroll}
       followThreshold={56}
       smooth
       // busy 只驱动 aria-busy 和结束后的 150ms instant 窗口；流式增高是否弹簧
@@ -759,14 +740,7 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
         </div>
       ) : null}
 
-      {/* 发送清屏垫片：把最新用户消息顶到视口上沿；高度由 controller 随回答增高收敛。 */}
-      {(controller.pinSpacerHeight ?? 0) > 0 ? (
-        <div
-          className="timeline-pin-spacer pointer-events-none shrink-0"
-          aria-hidden="true"
-          style={{ height: controller.pinSpacerHeight }}
-        />
-      ) : null}
+      {/* 发送清屏垫片（pin-to-top）已于 2026 移除：其与流式跟随有冲突、偶发页面抖动。 */}
 
       {multiSelectOpen && (
         <MultiSelectModal

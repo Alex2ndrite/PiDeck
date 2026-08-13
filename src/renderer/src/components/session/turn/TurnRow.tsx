@@ -1,5 +1,5 @@
 import { Fragment, memo, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ChevronUp, Share, SquarePen, Trash } from "lucide-react";
+import { ChevronUp, Clock, Share, SquarePen, Trash } from "lucide-react";
 import { atom, useAtomValue } from "jotai";
 import type { ImageContent } from "../../../../../shared/types";
 import { liveTextStreamingBySessionAtom, newTurnCollapseTickBySessionIdAtomFamily } from "../../../atoms/session-atoms";
@@ -249,20 +249,11 @@ export const TurnRow = memo(
 		>
 			<div className="flex min-w-0 flex-col gap-3">
 				{/* 行头：logo 用字号 token（text-brand 18px），随 data-ui-font-size 整体缩放；
-				    日期/耗时用 text-body（14px），比思考字号（text-micro）大但小于 logo。 */}
+				    时间用 text-body（14px）。耗时不放行头——回复生成时用户视线在底部，
+				    统一显示在 turn 尾部（见底部耗时行），不用翻回开头看跑了多久。 */}
 				<div className="mb-1 inline-flex items-center gap-2 text-muted-foreground tabular-nums">
 					<span className="shrink-0 font-mono text-brand font-semibold leading-none text-foreground/80">pi</span>
 					<time className="shrink-0 font-mono text-body leading-none">{formatTime(run.endedAt)}</time>
-					{showDuration && (
-						<span className="shrink-0 font-mono text-body leading-none text-muted-foreground">
-							{isRunLive ? (
-								// 流式中：run 未结束，LiveDuration 实时计时（100ms 连续跳动）
-								<LiveDuration startedAt={run.startedAt} isStreaming />
-							) : (
-								formatDuration(duration)
-							)}
-						</span>
-					)}
 				</div>
 
 				{/* 执行过程折叠栏：中间内容（思考/工具/中间回答）统一收进容器，
@@ -426,6 +417,22 @@ export const TurnRow = memo(
 									)}
 								</>
 							)}
+					</div>
+				)}
+
+				{/* 尾部耗时：回复生成中由 LiveDuration 实时计时（100ms 连续跳动，用户视线在底部），
+				    回复结束后固定为总耗时。全轮只有一个耗时显示点（行头只留时间戳），
+				    避免开头结尾重复；无最终回答的轮（纯工具/思考）同样可见。 */}
+				{showDuration && (
+					<div className="flex items-center gap-1.5 text-muted-foreground">
+						<Clock size={12} className="shrink-0" aria-hidden="true" />
+						<span className="font-mono text-body leading-none tabular-nums">
+							{isRunLive ? (
+								<LiveDuration startedAt={run.startedAt} isStreaming />
+							) : (
+								formatDuration(duration)
+							)}
+						</span>
 					</div>
 				)}
 
