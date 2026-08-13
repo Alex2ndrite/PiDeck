@@ -272,7 +272,8 @@ function parseDocument(bytes: Buffer): JsonlDocument {
 			);
 		}
 		line.entry = parsed as JsonlEntry;
-		if (line.entry.type === "deleted") continue;
+		// 墓碑也要进 id 索引：pi 会把最后一条带 id 的记录当 leaf，再沿 parentId
+		// 回溯。旧墓碑没有 id，这里仍会跳过（entryIdOf 为空）。
 		if (line.entry.type === "session") sessionHeaderCount += 1;
 		const entryId = entryIdOf(line.entry);
 		if (entryId) {
@@ -370,6 +371,12 @@ function locateById(
 		);
 	}
 	const entry = document.lines[lineIndex].entry!;
+	if (entry.type === "deleted") {
+		throw new SessionFileEditorError(
+			"SESSION_ENTRY_NOT_FOUND",
+			"The requested entry has already been deleted",
+		);
+	}
 	validateLocatedRole(entry, target);
 	return { lineIndex, entry, entryId };
 }
@@ -455,10 +462,23 @@ function descendantEntryIds(document: JsonlDocument, rootEntryId: string): Set<s
 	return descendants;
 }
 
-function tombstone(entryId: string, now: number, reason?: string): JsonlEntry {
+/**
+ * 删除/重发截断写入的墓碑。必须保留 id + parentId：
+ * pi SessionManager._buildIndex 把文件里最后一条带 id 的记录当成 leaf，
+ * 再沿 parentId 回溯活动分支。旧墓碑只有 originalEntryId，leaf 会落在
+ * 这条「无 id、无父节点」的记录上，get_messages 整页变空。
+ */
+function tombstone(
+	entryId: string,
+	now: number,
+	parentId?: string | null,
+	reason?: string,
+): JsonlEntry {
 	return {
 		type: "deleted",
+		id: entryId,
 		originalEntryId: entryId,
+		parentId: parentId ?? null,
 		ts: now,
 		...(reason ? { reason } : {}),
 	};
@@ -608,7 +628,11 @@ export class SessionFileEditor {
 				const childId = entryIdOf(child);
 				if (childId) changed.push(childId);
 			}
-			replaceLine(document, located.lineIndex, tombstone(located.entryId, this.now()));
+			replaceLine(
+				document,
+				located.lineIndex,
+				tombstone(located.entryId, this.now(), parentId),
+			);
 			return changed;
 		}
 
@@ -624,7 +648,11 @@ export class SessionFileEditor {
 			if (!entry || entry.type === "deleted") continue;
 			const entryId = entryIdOf(entry);
 			if (!entryId || !removeIds.has(entryId)) continue;
-			replaceLine(document, index, tombstone(entryId, this.now(), "resend-truncate"));
+			replaceLine(
+				document,
+				index,
+				tombstone(entryId, this.now(), parentIdOf(entry), "resend-truncate"),
+			);
 		}
 		return [...removeIds];
 	}
