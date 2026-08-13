@@ -369,6 +369,34 @@ test("resending the latest user turn must keep earlier turns visible to pi", asy
   });
 });
 
+test("deleting an assistant answer also tombstones that turn's thinking and tools", async () => {
+  // 一轮常态：user → thinking-only → toolResult → 最终回答 → 下一轮 user → 回答
+  // 只墓碑最终回答时，思考/工具会改挂到下一轮，分组后就会串台。
+  const entries = [
+    header(),
+    message("u1", null, "user", "first question"),
+    message("think1", "u1", "assistant", [{ type: "thinking", thinking: "plan A" }]),
+    message("tool1", "think1", "toolResult", "ok"),
+    message("a1", "tool1", "assistant", "answer one"),
+    message("u2", "a1", "user", "second question"),
+    message("a2", "u2", "assistant", "answer two"),
+  ];
+  await withTempSession(entries, {}, async ({ path }) => {
+    const editor = new SessionFileEditor({ now: () => 123 });
+    await editor.deleteMessage({
+      file: fileRef(path),
+      target: target({ entryId: "a1", role: "assistant", text: "answer one", activeLeafId: "a2" }),
+      reload: async () => undefined,
+    });
+    const next = parseLines(await readFile(path, "utf8"));
+    assert.equal(byOriginalOrId(next, "a1").type, "deleted");
+    assert.equal(byOriginalOrId(next, "think1").type, "deleted");
+    assert.equal(byOriginalOrId(next, "tool1").type, "deleted");
+    assert.equal(byOriginalOrId(next, "u2").parentId, "u1");
+    assert.deepEqual(piActiveMessageTexts(next), ["first question", "second question", "answer two"]);
+  });
+});
+
 test("delete tombstones the target, reparents direct children and leaves grandchildren and siblings intact", async () => {
   const entries = [
     header(),
