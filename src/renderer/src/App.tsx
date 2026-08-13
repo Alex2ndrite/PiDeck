@@ -2540,7 +2540,8 @@ export function App() {
       settingsExpandedProjectIds={settings.sidebarExpandedProjectIds}
       settingsLoaded={settingsLoaded}
       onExpandedProjectsReady={() => setExpandedProjectsReady(true)}
-      onOpenHomepage={() => void api.app.openExternal("https://ayuayue.github.io/PiDeck/")}
+      // 官网主页是品牌入口，强制系统浏览器打开：不受「链接打开方式=内置浏览器」设置影响
+      onOpenHomepage={() => void api.app.openExternal("https://ayuayue.github.io/PiDeck/", true)}
     />
   );
 
