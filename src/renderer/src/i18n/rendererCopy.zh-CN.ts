@@ -1137,6 +1137,8 @@ export const zhCN = {
   "projectResources.deletePromptConfirm": "确认删除 Prompt「{name}」吗？此操作会删除本地 .md 文件。",
   "config.install": "安装",
   "config.installed": "已安装",
+  // 扩展管理：pi list 输出的 "(filtered)" 标记（settings 里对象形式配置，只选择性加载资源）
+  "config.extensionFiltered": "过滤式安装",
   // 推荐扩展列表的本地化描述（ExtensionsTab 按 descriptionKey 取文案）
   "config.extRecommended.piDeckTodo": "PiDeck 内置：TODO 列表扩展，支持在对话中添加和管理任务项，自动追踪完成状态并在会话间持久化。",
   "config.extRecommended.piDeckPlanMode": "PiDeck 内置：计划模式扩展，让 AI 在回复前首先生成执行计划，复杂任务一目了然。",
