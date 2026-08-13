@@ -16,6 +16,11 @@ function compile(filePath, imports = {}) {
 
 const timeline = compile("src/renderer/src/hooks/useSessionTimelineController.ts", {
   react: {}, jotai: { atom: (value) => ({ _mockInit: value }) }, "jotai/utils": {}, "../atoms": {}, "../desktopApi": {},
+  "../lib/pinTurnScroll": {
+    animateScrollTop: () => () => undefined,
+    measurePinSpacerHeight: () => 0,
+    PIN_TOP_INSET_PX: 20,
+  },
 });
 
 function readRendererRuntimeSources(directory) {

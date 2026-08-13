@@ -26,6 +26,11 @@ import {
 	type SessionScrollAnchor,
 } from "../atoms";
 import type { MessageScrollerScrollApi } from "../components/agents/message-scroller";
+import {
+  animateScrollTop,
+  measurePinSpacerHeight,
+  PIN_TOP_INSET_PX,
+} from "../lib/pinTurnScroll";
 
 /** 滚动接近顶部自动加载历史的阈值（px，2026-11 轮次模型）：
  *  贴顶（≤8px）才触发翻页——「滑到底才翻」，避免在顶部附近任何滚动都连翻历史页。 */
@@ -368,6 +373,7 @@ export function useSessionTimelineController(options: {
   const pinAnimatingRef = useRef(false);
   // 本轮 pin 是否需要播动画（乐观消息被权威消息换绑时只重定向、不重播）
   const pinAnimateRequestRef = useRef(false);
+  const pinCancelAnimRef = useRef<(() => void) | null>(null);
 
   const clearHighlightTimers = useCallback(() => {
     for (const timer of highlightTimersRef.current.values()) {
@@ -415,9 +421,17 @@ export function useSessionTimelineController(options: {
   }, [ownerKey]);
 
   const setAutoScrollFromScroller = useCallback((following: boolean) => {
+    // 置顶清屏动画期间引擎会因 restoreAt 报「已离开底部」；忽略这次汇报，
+    // 否则会点亮回底按钮，把刚发出的「终端清屏」打成「不在最新」。
+    if (pinAnimatingRef.current) return;
     autoScrollRef.current = following;
     setAutoScroll(following);
     setShowScrollToBottom(!following);
+    // 清屏结束后用户上翻看历史：卸掉垫片，避免底部留一块假空白。
+    if (!following && pinnedTurnIdRef.current) {
+      setPinnedTurnId(undefined);
+      setPinSpacerHeight(0);
+    }
   }, []);
 
   /** 计算垫片高度：让「用户消息顶 + 视口高 == 内容总高」，滚到底时用户消息正好钉在顶部。 */
@@ -436,40 +450,65 @@ export function useSessionTimelineController(options: {
     const spacerEl = timeline.querySelector(".timeline-pin-spacer") as HTMLElement | null;
     const currentSpacer = spacerEl?.offsetHeight ?? 0;
     const contentWithoutSpacer = timeline.scrollHeight - currentSpacer;
-    return Math.max(0, Math.round(rowTop + timeline.clientHeight - contentWithoutSpacer));
+    return measurePinSpacerHeight({
+      rowTop,
+      clientHeight: timeline.clientHeight,
+      contentWithoutSpacer,
+    });
   }, []);
 
   const refreshPinSpacer = useCallback(() => {
     const next = measurePinSpacer();
     // 1px 阈值防止 ResizeObserver → setState → ResizeObserver 的收敛抖动
     setPinSpacerHeight((current) => (Math.abs(current - next) > 1 ? next : current));
+    // 回答已自己撑满视口：垫片归零后卸掉锚点，后续走普通跟底
+    if (next <= 1 && pinnedTurnIdRef.current && !pinAnimatingRef.current) {
+      setPinnedTurnId(undefined);
+    }
   }, [measurePinSpacer]);
 
   const pinTurnToTop = useCallback((userMessageId: string, options?: { animate?: boolean }) => {
     const animate = options?.animate ?? true;
-    pinAnimateRequestRef.current = animate;
-    // 先立动画标记再渲染垫片：垫片插入触发的 MutationObserver 不会打断平滑滚动
+    // 换绑只改锚点：不能把进行中的清屏请求打成 false，否则垫片落地后不会开滚。
     if (animate) {
+      pinAnimateRequestRef.current = true;
+      // 必须先于 restoreAt：引擎解锁会立刻 onFollowChange(false)，标记已立才不会点亮回底按钮。
       pinAnimatingRef.current = true;
       setPinAnimating(true);
-    } else {
-      pinAnimatingRef.current = false;
-      setPinAnimating(false);
+      // 必须在垫片进 DOM 前解锁：否则引擎仍 isAtBottom，RO 看到增高会瞬间贴底。
+      // restoreAt 同时掐掉在途弹簧；裸 stopScroll 只改标志，下一帧弹簧仍可能写 scrollTop。
+      const timeline = timelineRef.current;
+      if (timeline) {
+        scrollerScrollApiRef.current?.restoreAt(timeline.scrollTop);
+      } else {
+        scrollerScrollApiRef.current?.stopScroll();
+      }
     }
     setPinnedTurnId(userMessageId);
   }, []);
 
-  // 垫片渲染后量高并执行平滑置顶滚动
+  // 垫片高度与锚点同步；单独 effect，避免量高 setState 重跑时拆掉在途滚动。
   useLayoutEffect(() => {
     if (!controllerEnabled) return;
     if (!pinnedTurnId) {
       setPinSpacerHeight(0);
       return;
     }
+    refreshPinSpacer();
+  }, [controllerEnabled, pinnedTurnId, refreshPinSpacer]);
+
+  // 垫片落地后开平滑置顶（终端清屏感：旧内容整页上推）
+  useLayoutEffect(() => {
+    if (!controllerEnabled) return;
+    if (!pinnedTurnId || !pinAnimateRequestRef.current) return;
     const timeline = timelineRef.current;
     if (!timeline) return;
-    refreshPinSpacer();
-    if (!pinAnimateRequestRef.current) return;
+    // 垫片高度要等本轮 setState 提交后才进 DOM；高度还没落地就开滚会瞄错位置。
+    const neededSpacer = measurePinSpacer();
+    if (neededSpacer > 1) {
+      const spacerEl = timeline.querySelector(".timeline-pin-spacer") as HTMLElement | null;
+      if (!spacerEl || Math.abs(spacerEl.offsetHeight - neededSpacer) > 2) return;
+    }
     pinAnimateRequestRef.current = false;
     const requestOwnerKey = ownerKey;
     const row = timeline.querySelector(
@@ -485,28 +524,63 @@ export function useSessionTimelineController(options: {
       timeline.getBoundingClientRect().top +
       timeline.scrollTop;
     programmaticScrollRef.current = true;
-    // prefers-reduced-motion 用户退化为即时定位，不播长距离滚动动画
     const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    // 留出顶部安全内边距，避免消息文本贴住或越过时间线的可视上沿。
-    const targetTop = Math.max(0, rowTop - 20);
-    timeline.scrollTo({ top: targetTop, behavior: reduceMotion ? "instant" : "smooth" });
+    const targetTop = Math.max(0, rowTop - PIN_TOP_INSET_PX);
     autoScrollRef.current = true;
     setAutoScroll(true);
     setShowScrollToBottom(false);
-    // 用户滚轮/触摸/键盘 = 明确接管滚动：取消动画保护与自动跟随。
-    // 程序化 smooth 滚动不产生 wheel/touchmove/keydown 事件，该信号天然区分用户与程序。
-    // 若缺少此中断：用户在 650ms 动画窗口内的上滚判定会被 pinAnimatingRef 吞掉
-    // （onScroll 直接 return），随后 timer 到点按 autoScroll=true 贴底，把用户压回底部。
+    let cancelled = false;
+    const finishPin = () => {
+      pinCancelAnimRef.current = null;
+      if (ownerKeyRef.current !== requestOwnerKey) {
+        pinAnimatingRef.current = false;
+        setPinAnimating(false);
+        return;
+      }
+      // 必须先 scrollToBottom（同步 setIsAtBottom(true)）再放下 pinAnimating。
+      // 否则跟底汇报会在「已解锁、动画已结束」这一帧把垫片卸掉。
+      if (autoScrollRef.current) {
+        programmaticScrollRef.current = true;
+        void scrollerScrollApiRef.current?.scrollToBottom({ animation: "instant" });
+      }
+      pinAnimatingRef.current = false;
+      setPinAnimating(false);
+    };
+    const cancelAnim = animateScrollTop(timeline, targetTop, {
+      reduceMotion,
+      isCancelled: () => cancelled || ownerKeyRef.current !== requestOwnerKey,
+      onComplete: finishPin,
+    });
+    pinCancelAnimRef.current = () => {
+      cancelled = true;
+      cancelAnim();
+      pinCancelAnimRef.current = null;
+    };
+    return () => {
+      // 垫片收敛 / 乐观 id 换绑会重跑本 effect；同一会话仍在置顶时不能掐掉在途清屏。
+      if (ownerKeyRef.current !== requestOwnerKey || !pinnedTurnIdRef.current) {
+        pinCancelAnimRef.current?.();
+      }
+    };
+  }, [controllerEnabled, measurePinSpacer, ownerKey, pinSpacerHeight, pinnedTurnId]);
+
+  // 用户滚轮/触摸/键盘 = 明确接管：取消清屏并卸垫片。与开启动画拆开，避免量高重跑拆掉监听。
+  useEffect(() => {
+    if (!controllerEnabled || !pinAnimating) return;
+    const timeline = timelineRef.current;
+    if (!timeline) return;
     const cancelPinByUser = () => {
       if (!pinAnimatingRef.current) return;
+      pinCancelAnimRef.current?.();
       pinAnimatingRef.current = false;
       setPinAnimating(false);
       autoScrollRef.current = false;
       setAutoScroll(false);
       setShowScrollToBottom(true);
+      setPinnedTurnId(undefined);
+      setPinSpacerHeight(0);
     };
     const cancelPinByKey = (event: KeyboardEvent) => {
-      // 仅滚动类按键视为接管；Tab/Enter 等焦点导航不打断动画
       if (
         event.key === "ArrowUp" || event.key === "ArrowDown" ||
         event.key === "PageUp" || event.key === "PageDown" ||
@@ -518,28 +592,26 @@ export function useSessionTimelineController(options: {
     timeline.addEventListener("wheel", cancelPinByUser, { passive: true });
     timeline.addEventListener("touchmove", cancelPinByUser, { passive: true });
     timeline.addEventListener("keydown", cancelPinByKey);
-    const timer = window.setTimeout(() => {
-      pinAnimatingRef.current = false;
-      setPinAnimating(false);
-      if (ownerKeyRef.current !== requestOwnerKey) return;
-      // 动画期间流入的回答内容补一次即时贴底，恢复正常跟随；
-      // 若用户已在动画窗口内接管滚动（cancelPinByUser），autoScrollRef=false，此处自动放弃贴底。
-      if (autoScrollRef.current) {
-        programmaticScrollRef.current = true;
-        timeline.scrollTo({ top: timeline.scrollHeight, behavior: "instant" });
-      }
-      // spacer 只服务于发送后的顶屏过渡；动画完成后必须移除，否则回答结束后
-      // 会在时间线尾部留下大片空白，并让滚动条继续延伸到无内容区域。
-      setPinnedTurnId(undefined);
-      setPinSpacerHeight(0);
-    }, 650);
     return () => {
-      window.clearTimeout(timer);
       timeline.removeEventListener("wheel", cancelPinByUser);
       timeline.removeEventListener("touchmove", cancelPinByUser);
       timeline.removeEventListener("keydown", cancelPinByKey);
     };
-  }, [controllerEnabled, ownerKey, pinnedTurnId, refreshPinSpacer]);
+  }, [controllerEnabled, pinAnimating]);
+
+  // 流式回答增高时垫片同步收敛，避免尾部空白越攒越大
+  useEffect(() => {
+    if (!controllerEnabled || !pinnedTurnId) return;
+    const timeline = timelineRef.current;
+    if (!timeline) return;
+    const content = timeline.querySelector("[role=log]");
+    const observer = new ResizeObserver(() => {
+      refreshPinSpacer();
+    });
+    observer.observe(timeline);
+    if (content) observer.observe(content);
+    return () => observer.disconnect();
+  }, [controllerEnabled, pinnedTurnId, refreshPinSpacer]);
 
 	const loadMoreMessages = useCallback(() => {
 		const requestOwnerKey = ownerKey;

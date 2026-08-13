@@ -35,6 +35,11 @@ function loadTimelineHelpers() {
     "jotai/utils": {},
     "../atoms": {},
     "../desktopApi": {},
+    "../lib/pinTurnScroll": {
+      animateScrollTop: () => () => undefined,
+      measurePinSpacerHeight: () => 0,
+      PIN_TOP_INSET_PX: 20,
+    },
   });
 }
 
