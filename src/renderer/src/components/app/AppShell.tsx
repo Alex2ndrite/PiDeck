@@ -170,14 +170,30 @@ export function AppShell(props: AppShellProps) {
     return () => cancelAnimationFrame(frame);
   }, [drawerWidth, drawer, drawerCollapsed]);
 
-  // ── 拖拽完成 → px/折叠状态统一回写 ──
-  // onLayoutChanged 在一次布局变更“完成”时触发（拖拽释放、分隔条键盘调整），
-  // 拖拽过程中不触发；isUserInteraction=false 的程序化变更（如上面的 effect 同步）
-  // 不回写，防止 effect → resize → 回写 的反馈回路。
+  // ── 布局落定 → 状态回写 ──
+  // onLayoutChanged 在一次布局变更“完成”时触发（拖拽释放、分隔条键盘调整、容器缩放）。
+  // 拖拽过程中不触发。折叠状态仍只在用户交互时回写；抽屉像素宽在非交互路径也同步
+  // （缩放/窗口拉伸后 outline-hover 依赖 --drawer-*），但折叠态（px<=1）禁止写 0。
   function handleLayoutChanged(_layout: Layout, meta: LayoutChangedMeta) {
     // 无论交互还是程序化变更（折叠按钮、恢复默认宽度、effect 同步），
     // 布局落定后都通知悬浮层重算一次，兜住“松手后不回去”的残留错位
     notifyLayoutResized();
+
+    // 抽屉面板宽度同步（不区分交互来源）：react-resizable-panels 布局是百分比制，
+    // 窗口缩放（zoomFactor）/窗口拉伸等非拖拽变化同样会改变面板实际像素宽，而旧代码
+    // 只在 isUserInteraction 时回写 drawerWidth——大纲悬浮工具条（outline-hover）的
+    // right 定位依赖 AppShell 注入的 --drawer-* CSS 变量，缩放后会停在旧位置，要手动
+    // 拖一下分隔条才恢复。这里统一按实际像素宽同步；与下方「外部宽度变化 → 面板」
+    // effect 的 >1px 差判断互成幂等，不会形成 resize 回路。
+    const drawerPanel = drawerPanelRef.current;
+    if (drawerPanel && drawer && !drawerCollapsed) {
+      const px = Math.round(drawerPanel.getSize().inPixels);
+      // 面板实际仍处于折叠态（启动时 defaultSize=0、展开 effect 尚未落定）时不同步：
+      // 若把 drawerWidth 写成 0，下方「宽度→面板」effect 会 resize(0) 把刚展开的面板
+      // 又压回折叠，与展开 effect 形成 0↔min 宽度震荡（启动闪动根因，日志实测 ~30ms 一轮）。
+      if (px > 1 && Math.abs(px - drawerWidth) > 1) setDrawerWidth(px);
+    }
+
     if (!meta.isUserInteraction) return;
     const listPanel = listPanelRef.current;
     if (listPanel) {
@@ -186,7 +202,6 @@ export function AppShell(props: AppShellProps) {
       if (collapsed !== listCollapsed) setListCollapsed(collapsed);
       if (!collapsed && Math.abs(px - listWidth) > 1) setListWidth(px);
     }
-    const drawerPanel = drawerPanelRef.current;
     if (drawerPanel) {
       const px = Math.round(drawerPanel.getSize().inPixels);
       const collapsed = drawerPanel.isCollapsed() || px <= 1;
@@ -204,7 +219,7 @@ export function AppShell(props: AppShellProps) {
     <div
       className={[
         "wechat-shell",
-        drawer ? "drawer-open" : "",
+        drawer && !drawerCollapsed ? "drawer-open" : "",
         listCollapsed ? "list-collapsed" : "",
         drawerCollapsed ? "drawer-collapsed" : "",
         useNativeTitleBar ? "" : "custom-titlebar-enabled",
