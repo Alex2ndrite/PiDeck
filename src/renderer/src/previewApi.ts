@@ -445,7 +445,7 @@ export function createPreviewApi(): PiDesktopApi {
 			}),
 			forkRuntimeSession: async (target) => ({
 				ok: true,
-				value: { cancelled: false, text: "" },
+				value: { cancelled: false, text: "", targetSessionId: `${target.sessionId}:fork` },
 			}),
 			setFocusedSession: async () => undefined,
 			getRuntimeState: async (target) => ({

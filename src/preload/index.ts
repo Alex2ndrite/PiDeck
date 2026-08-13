@@ -548,13 +548,12 @@ const api = {
 		/** 从指定 entryId fork 新会话（pi /fork），成功后会替换当前 runtime 绑定。 */
 		forkRuntimeSession: (target: SessionRuntimeTarget, entryId: string) =>
 			ipcRenderer.invoke(ipcChannels.sessionsRuntimeFork, target, entryId) as Promise<
-				SessionCommandResult<
-					{
-						cancelled?: boolean;
-						text?: string;
-						[key: string]: unknown;
-					}
-				>
+				SessionCommandResult<{
+					cancelled?: boolean;
+					text?: string;
+					targetSessionId?: string;
+					[key: string]: unknown;
+				}>
 			>,
 	},
 	usageStats: {
