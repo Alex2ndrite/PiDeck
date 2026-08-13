@@ -97,11 +97,12 @@ export function MessageScroller({
 
   // ── 滚动引擎：use-stick-to-bottom（弹簧物理 + 锁底/逃逸 + 350ms 保留期）──
   // smooth=false 或 reduced-motion 时 resize 用 instant（与旧手写逻辑等价）。
-  // busy / busyEnding 窗口内也强制 instant：工具卡与流式结构跳变期间避免弹簧滞后砰抖。
-  // 另：引擎对单次增高 >28px 也会强制 instant（见 instantResizeThreshold）。
+  // 流式期间不再因 busy 一刀切 instant：逐行增高走弹簧，才有「流体上移」。
+  // 工具卡/折叠/插件切全量那种几百 px 跳变由 instantResizeThreshold（28）同步 instant，
+  // 避免弹簧「先撑上去再弹回」。busyEnding 只覆盖流结束 150ms，防收尾长高跳屏。
   const stick = useStickToBottom({
     initial: "instant",
-    resize: busy || busyEnding || reduce || !smooth ? "instant" : "smooth",
+    resize: busyEnding || reduce || !smooth ? "instant" : "smooth",
     instantResizeThreshold: 28,
   });
   // 解构出稳定引用：stick 每次渲染是新对象，effect 依赖不能直接用它。
