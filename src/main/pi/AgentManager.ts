@@ -731,7 +731,10 @@ export class AgentManager {
 		let headOffset: number;
 		if (activeEntryIds) {
 			headOffset = droppedRoleCount;
-		} else if (skipEntries && runtime.tab.sessionPath) {
+		} else if (runtime.tab.sessionPath) {
+			// get_entries 失败/未启用（skipEntries）时同样尽力提供数值游标：
+			// 否则渲染层「加载更多对话」因 entryId 锚点与 windowStartFilePos 双缺失而静默放弃，
+			// 表现为点击无反应（2026-02 修复，此前仅 skipEntries 路径走此兑底）。
 			const roleCount = trimmed.reduce<number>((count, message) => {
 				const role = (message as { role?: unknown } | undefined)?.role;
 				return count + (role === "user" || role === "assistant" || role === "toolResult" ? 1 : 0);

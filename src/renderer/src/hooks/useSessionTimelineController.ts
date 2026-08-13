@@ -32,8 +32,10 @@ import {
 } from "../components/session/timeline/turnRenderWindow";
 
 /** 滚动接近顶部自动加载历史的阈值（px，2026-11 轮次模型）：
- *  贴顶（≤8px）才触发翻页——「滑到底才翻」，避免在顶部附近任何滚动都连翻历史页。 */
-const HISTORY_AUTO_LOAD_THRESHOLD = 8;
+ *  贴顶（≤8px）才触发翻页——「滑到底才翻」，避免在顶部附近任何滚动都连翻历史页。
+ *  同时用作「顶部不补偿」阈值：视口顶部 prepend/展开新内容时保持原位可见，
+ *  补偿会把新内容推出视口（点击「加载更多/显示更早」无反馈根因，2026-02 修复）。 */
+export const HISTORY_AUTO_LOAD_THRESHOLD = 8;
 /** 翻页冷却（ms）：加载完成后立即再滚到顶不连翻，需停顿后重新触发（防惯性滚动连翻多页）。 */
 const HISTORY_AUTO_LOAD_COOLDOWN_MS = 300;
 
@@ -71,6 +73,20 @@ export function isTimelineAtBottom(
 
 export function restoreTimelineAnchor(previousTop: number, heightDelta: number): number {
   return previousTop + heightDelta;
+}
+
+/** 顶部补偿决策（数据 prepend / turn 窗口扩大共用，2026-02 修复）：
+ *  视口在顶部（≤阈值）时不补偿，保持原位让新加载/展开的内容直接出现在视口顶部——
+ *  容器 overflow-anchor:none，插入内容不会自动调整滚动位置，补偿反而把新内容推出视口，
+ *  表现为「点击加载更多/显示更早无反馈」。视口中部时按高度差补偿以保持视口内容不动。
+ *  返回补偿后的 scrollTop；null = 不补偿（保持原位）。 */
+export function resolveTimelineTopCompensation(
+  previousTop: number,
+  heightDelta: number,
+  threshold = HISTORY_AUTO_LOAD_THRESHOLD,
+): number | null {
+  if (previousTop <= threshold) return null;
+  return restoreTimelineAnchor(previousTop, heightDelta);
 }
 
 export function matchesTimelineOwner(
@@ -367,6 +383,14 @@ export function useSessionTimelineController(options: {
   // 「显示更早」按钮逐步扩大）。回底 = 新的浏览周期，窗口重置回基础大小。
   const [scrolledWindowTurns, setScrolledWindowTurns] = useState(TIMELINE_SCROLLED_TURN_LIMIT);
   const expandWindow = useCallback(() => {
+    // 跟底状态（内容短于视口、按钮可见）下点击「显示更早」：先解锁跟随，
+    // 否则 turnWindowTurns 恒取贴底窗口 3 轮，扩大 scrolledWindowTurns 不生效，
+    // 按钮点击表现为无反应（2026-02 修复）。
+    if (autoScrollRef.current) {
+      autoScrollRef.current = false;
+      setAutoScroll(false);
+      setShowScrollToBottom(true);
+    }
     setScrolledWindowTurns((prev) => prev + TIMELINE_WINDOW_EXPAND_STEP);
   }, []);
   useEffect(() => {
@@ -447,7 +471,12 @@ export function useSessionTimelineController(options: {
 				.readRecordMessagePage(sessionId, before, options.pageSize ?? 100)
 				.then((page: { messages: ChatMessage[]; total: number; nextBefore: number | null }) => {
 					if (latestLoadBySession.get(sessionId) !== sequence) return;
-					prependMessagePage({ sessionId, before, expectedRevision, page });
+					if (prependMessagePage({ sessionId, before, expectedRevision, page })) {
+						// 补页成功即同步扩大渲染窗口：否则新页若使 agent-run 数超过 turn 窗口轮数，
+						// 会被 selectTimelineTurnWindow 立即裁剪——「加载了但看不见」，
+						// 表现为点击「加载更多」无反馈（2026-02 修复）。
+						setScrolledWindowTurns((prev) => prev + TIMELINE_WINDOW_EXPAND_STEP);
+					}
 				})
 				.finally(() => {
 					if (latestLoadBySession.get(sessionId) === sequence) setIsLoadingMessagePage(false);
@@ -488,7 +517,10 @@ export function useSessionTimelineController(options: {
 				})
 				.then((page) => {
 					if (latestLoadBySession.get(sessionId) !== sequence) return;
-					prependHistoryPage({ sessionId, expectedRevision, before, page });
+					if (prependHistoryPage({ sessionId, expectedRevision, before, page })) {
+						// 同 disk 分支：补页成功同步扩大渲染窗口，避免新页被 turn 窗口裁剪不可见
+						setScrolledWindowTurns((prev) => prev + TIMELINE_WINDOW_EXPAND_STEP);
+					}
 				})
 				.finally(() => {
 					if (latestLoadBySession.get(sessionId) === sequence) setIsLoadingMessagePage(false);
@@ -696,15 +728,28 @@ export function useSessionTimelineController(options: {
       loadMoreAnchorRef.current = undefined;
       return;
     }
+    // 顶部场景（点击前视口在 ≤HISTORY_AUTO_LOAD_THRESHOLD 处）：不补偿 scrollTop。
+    // 视口容器 overflow-anchor:none，插入内容不会自动调整滚动位置，保持原位即可
+    // 让新加载的内容直接出现在视口顶部；补偿反而把新内容推出视口上方，
+    // 造成「点击加载更多无反馈」（2026-02 修复）。
+    const nextScrollTop = resolveTimelineTopCompensation(
+      anchor.value.top,
+      timeline.scrollHeight - anchor.value.height,
+    );
+    if (nextScrollTop === null) {
+      loadMoreAnchorRef.current = undefined;
+      programmaticScrollRef.current = true;
+      const topFrame = requestAnimationFrame(() => {
+        programmaticScrollRef.current = false;
+      });
+      return () => cancelAnimationFrame(topFrame);
+    }
     // 标记程序化滚动：prepend 补偿的 scrollTop 赋值会触发 scroll 事件，
     // 不能让 ≤240px 自动加载监听把它当成用户上滚（否则连锁翻页）。
     // rAF 兜底：若补偿实际无位移（delta=0）不产生 scroll 事件，需清掉抑制标记，
     // 避免吞掉下一次用户滚动（scroll 事件任务先于 rAF 派发，顺序安全）。
     programmaticScrollRef.current = true;
-    timeline.scrollTop = restoreTimelineAnchor(
-      anchor.value.top,
-      timeline.scrollHeight - anchor.value.height,
-    );
+    timeline.scrollTop = nextScrollTop;
     loadMoreAnchorRef.current = undefined;
     const frame = requestAnimationFrame(() => {
       programmaticScrollRef.current = false;

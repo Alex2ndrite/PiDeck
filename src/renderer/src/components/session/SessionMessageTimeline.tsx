@@ -32,11 +32,13 @@ import {
   canLoadSessionTimelineMore,
   deriveSessionSurfaceRuntime,
   isLatestTimelineRunBusy,
+  resolveTimelineTopCompensation,
   useSessionTimelineController,
   type SessionTimelineController,
 } from "../../hooks/useSessionTimelineController";
 import { t, translateI18nDescriptor } from "../../i18n";
 import { cn } from "../../lib/utils";
+import { Loader2 } from "lucide-react";
 import { showNotice } from "../../utils/notice";
 import { stripAnsi } from "./TimelineFormat";
 import { SessionStartSurface } from "./SessionStartSurface";
@@ -369,10 +371,20 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
       nextHeight > prev.height &&
       !followingForTurnWindow
     ) {
-      // 标记程序化滚动：补偿的 scrollTop 位移会派发 scroll 事件，
-      // 必须让自动加载监听忽略（补偿后视口可能落在顶部区间）
-      controller.markProgrammaticScroll?.();
-      timeline.scrollTop += nextHeight - prev.height;
+      // 顶部（≤HISTORY_AUTO_LOAD_THRESHOLD）不补偿：插入内容在视口上方时
+      // 浏览器无滚动锚定（overflow-anchor:none），scrollTop 原位不动即可看到
+      // 新展开的内容；补偿会把新内容推出视口上方，表现为「点「显示更早」没反应」。
+      // 与数据 prepend 补偿共用 resolveTimelineTopCompensation 决策（2026-02 修复）。
+      const nextTop = resolveTimelineTopCompensation(
+        timeline.scrollTop,
+        nextHeight - prev.height,
+      );
+      if (nextTop !== null) {
+        // 标记程序化滚动：补偿的 scrollTop 位移会派发 scroll 事件，
+        // 必须让自动加载监听忽略（补偿后视口可能落在顶部区间）
+        controller.markProgrammaticScroll?.();
+        timeline.scrollTop = nextTop;
+      }
     }
     turnWindowStateRef.current = {
       windowed: turnWindowActive,
@@ -560,6 +572,9 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
             }}
             disabled={isLoadingMoreMessages}
             style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
               padding: "6px 16px",
               border: "1px solid var(--border-color)",
               borderRadius: "6px",
@@ -571,9 +586,13 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
               transition: "all 0.2s",
             }}
           >
-            {isLoadingMoreMessages
-              ? t("timeline.loadingMore")
-              : turnWindowActive
+            {isLoadingMoreMessages ? (
+              // 加载动画：点击后立即出现，真正加载完成（finally 复位 isLoadingMessagePage）才消失
+              <>
+                <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+                {t("timeline.loadingMore")}
+              </>
+            ) : turnWindowActive
                 ? t("timeline.loadEarlierTurns", {
                     count: countAgentRunItems(reconciledRuns) - turnWindowTurns,
                   })
