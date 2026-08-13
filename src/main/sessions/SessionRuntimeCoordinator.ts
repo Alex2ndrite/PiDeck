@@ -234,6 +234,20 @@ export class SessionRuntimeCoordinator {
 		return this.sessionIdByAgent.get(agentId);
 	}
 
+	/**
+	 * 进程监控用：按 agentId 反查会话身份（sessionId + 标题）。
+	 * 标题取 catalog 条目，供监控表直接展示「是哪个会话」；
+	 * 无绑定或 catalog 无记录时返回 undefined（匿名/终端 agent 不关联会话）。
+	 */
+	getSessionInfoForAgent(
+		agentId: string,
+	): { sessionId: string; sessionTitle?: string } | undefined {
+		const sessionId = this.sessionIdByAgent.get(agentId);
+		if (!sessionId) return undefined;
+		const entry = this.catalog.get(sessionId);
+		return { sessionId, sessionTitle: entry?.title };
+	}
+
 	listRuntimes(): SessionRuntimeInfo[] {
 		const result: SessionRuntimeInfo[] = [];
 		for (const [sessionId, agentId] of this.agentIdBySession) {
