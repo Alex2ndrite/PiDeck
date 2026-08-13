@@ -1151,6 +1151,8 @@ export const enUS: Record<TranslationKey, string> = {
   "projectResources.deletePromptConfirm": "Delete prompt「{name}」? This will remove the local .md file.",
   "config.install": "Install",
   "config.installed": "Installed",
+  // Extension manager: the "(filtered)" marker from pi list (object-form entry in settings, loads resources selectively)
+  "config.extensionFiltered": "Filtered install",
   // Localized descriptions for the recommended extension list (ExtensionsTab renders via descriptionKey)
   "config.extRecommended.piDeckTodo": "Built into PiDeck: a TODO list extension that adds and manages task items in conversations, tracks completion, and persists across sessions.",
   "config.extRecommended.piDeckPlanMode": "Built into PiDeck: a plan-mode extension that makes the AI produce an execution plan before replying, keeping complex tasks clear.",
