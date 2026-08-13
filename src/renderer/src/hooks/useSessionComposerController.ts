@@ -722,34 +722,34 @@ export function useSessionComposerController(
       ? liveDomDraftRef.current.value
       : draft;
     const liveCursor = editorRef.current ? getComposerCaretOffset(editorRef.current) : cursor;
-    const result = applySuggestion(liveDraft, liveCursor, value);
+    const result = applySuggestion(liveDraft, liveCursor, value, validSessionRefs);
     liveDomDraftRef.current = { sessionId, value: result.text };
     setDraft(result.text);
     setCursor(result.cursor);
     caretRef.current = { pos: result.cursor, forValue: result.text };
     setSuggestionsOpen(false);
     requestAnimationFrame(() => editorRef.current?.focus());
-  }, [cursor, draft, sessionId, setDraft]);
+  }, [cursor, draft, sessionId, setDraft, validSessionRefs]);
 
   const closeSuggestions = useCallback(() => {
     const liveDraft = liveDomDraftRef.current.sessionId === sessionId
       ? liveDomDraftRef.current.value
       : draft;
     const liveCursor = editorRef.current ? getComposerCaretOffset(editorRef.current) : cursor;
-    const result = clearSuggestionTrigger(liveDraft, liveCursor);
+    const result = clearSuggestionTrigger(liveDraft, liveCursor, validSessionRefs);
     liveDomDraftRef.current = { sessionId, value: result.text };
     setDraft(result.text);
     setCursor(result.cursor);
     caretRef.current = { pos: result.cursor, forValue: result.text };
     setSuggestionsOpen(false);
     requestAnimationFrame(() => editorRef.current?.focus());
-  }, [cursor, draft, sessionId, setDraft]);
+  }, [cursor, draft, sessionId, setDraft, validSessionRefs]);
 
   const onChange = useCallback((value: string, nextCursor: number) => {
     liveDomDraftRef.current = { sessionId, value };
     setDraft(value);
     setCursor(nextCursor);
-    setSuggestionsOpen(detectTrigger(value, nextCursor) !== null);
+    setSuggestionsOpen(detectTrigger(value, nextCursor, validSessionRefs) !== null);
     if (historyIndex >= 0) {
       const history = getPromptHistory();
       if (value !== history[historyIndex]) {
@@ -757,7 +757,7 @@ export function useSessionComposerController(
         setSavedDraft("");
       }
     }
-  }, [getPromptHistory, historyIndex, sessionId, setDraft]);
+  }, [getPromptHistory, historyIndex, sessionId, setDraft, validSessionRefs]);
 
   const onKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
     if (suggestionsOpen && suggestionItems.length > 0) {
@@ -908,9 +908,9 @@ export function useSessionComposerController(
       ? getComposerCaretOffset(editorRef.current)
       : cursor;
     const refText = formatFilePathRef(path);
-    const trigger = detectTrigger(liveDraft, liveCursor);
+    const trigger = detectTrigger(liveDraft, liveCursor, validSessionRefs);
     if (trigger && trigger.char === "@") {
-      const result = applySuggestion(liveDraft, liveCursor, refText);
+      const result = applySuggestion(liveDraft, liveCursor, refText, validSessionRefs);
       liveDomDraftRef.current = { sessionId, value: result.text };
       setDraft(result.text);
       setCursor(result.cursor);
@@ -920,7 +920,7 @@ export function useSessionComposerController(
     }
     setSuggestionsOpen(false);
     requestAnimationFrame(() => editorRef.current?.focus());
-  }, [cursor, draft, insertRefTexts, sessionId, setDraft]);
+  }, [cursor, draft, insertRefTexts, sessionId, setDraft, validSessionRefs]);
 
   /** 从 File 列表解析本地路径（Electron 32+ 必须走 webUtils，不能用已移除的 File.path） */
   const resolveLocalPathsFromFiles = useCallback((files: File[]) => {
@@ -1235,7 +1235,7 @@ export function useSessionComposerController(
           event.dataTransfer.dropEffect = "copy";
         }
       },
-      onFocus: () => setSuggestionsOpen(detectTrigger(draft, cursor) !== null),
+      onFocus: () => setSuggestionsOpen(detectTrigger(draft, cursor, validSessionRefs) !== null),
       onBlur: () => setSuggestionsOpen(false),
       onChipClick,
       attachFile,
