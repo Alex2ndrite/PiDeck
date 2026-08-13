@@ -3103,7 +3103,7 @@ export function App() {
             active: scratchPad.isOpen,
             label: t("scratchPad.openTooltip"),
             onClick: () => scratchPad.toggle(),
-            icon: <Pencil size={17} />,
+            icon: <Pencil size={14} />,
           }}
           // 终端按钮绑定 owner（agent 或项目），不再要求 agent 已激活；
           // web 预览 / 无可用目标（纯聊天无项目）时隐藏，避免指向无处可开的终端
@@ -3113,7 +3113,7 @@ export function App() {
             onClick: () => {
               setTerminalOpenForOwner(!terminalOpen);
             },
-            icon: <Terminal size={17} />,
+            icon: <Terminal size={14} />,
           } : undefined}
           filesAction={undefined}
           gitAction={undefined}
@@ -3132,7 +3132,7 @@ export function App() {
                 : undefined;
               workspace.openExternalEditorChooser(projectPath || "", anchor);
             },
-            icon: <Code size={17} />,
+            icon: <Code size={14} />,
           }}
           browserAction={undefined}
         />
