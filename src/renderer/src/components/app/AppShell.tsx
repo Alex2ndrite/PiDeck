@@ -20,6 +20,7 @@ import {
   type WorkspaceDrawerPanel,
 } from "../../hooks/useWorkspacePanels";
 import { cn } from "../../lib/utils";
+import { shouldCommitPanelPixels } from "../../lib/shellPanelLayout";
 
 /**
  * 工作台外壳（#115 U5 布局换装）：三栏水平布局由 react-resizable-panels 接管。
@@ -108,6 +109,12 @@ export function AppShell(props: AppShellProps) {
 
   const listPanelRef = useRef<PanelImperativeHandle | null>(null);
   const drawerPanelRef = useRef<PanelImperativeHandle | null>(null);
+  // 开合 effect 不把 width 放进依赖（否则每次回写都会再 expand/resize 一轮）。
+  // 打开折叠面板时用 ref 读最新保存宽度，避免 expand() 落到 minSize。
+  const listWidthRef = useRef(listWidth);
+  const drawerWidthRef = useRef(drawerWidth);
+  listWidthRef.current = listWidth;
+  drawerWidthRef.current = drawerWidth;
   const notifyLayoutResized = useNotifyLayoutResized();
 
   // 抽屉/侧栏“刚打开”标志：closed→open 时给内容容器挂一次进入动画类；
@@ -133,7 +140,8 @@ export function AppShell(props: AppShellProps) {
     const panel = listPanelRef.current;
     if (!panel) return;
     if (listCollapsed) { if (!panel.isCollapsed()) panel.collapse(); }
-    else if (panel.isCollapsed()) panel.expand();
+    // expand() 无上次展开宽度时落到 minSize(100)；全屏/还原时会被当成新宽度。
+    else if (panel.isCollapsed()) panel.resize(listWidthRef.current);
   }, [listCollapsed]);
 
   // 抽屉 Panel 常驻挂载（drawer=null 时折叠 0 宽），此 effect 统一同步折叠态；
@@ -146,7 +154,11 @@ export function AppShell(props: AppShellProps) {
         // drawer 为空时必须折叠（常驻挂载下避免空面板意外展开）
         if (!drawer || drawerCollapsed) {
           if (!panel.isCollapsed()) panel.collapse();
-        } else if (panel.isCollapsed()) panel.expand();
+        } else if (panel.isCollapsed()) {
+          // expand() 无历史会落到 minSize(180)。清缓存后保存宽度是默认 320，
+          // 写成 180 再被宽度 effect resize(320)，就是打开抽屉后一直闪、点一下才停。
+          panel.resize(drawerWidthRef.current);
+        }
       } catch { /* 约束未就绪，忽略本轮同步 */ }
     });
     return () => cancelAnimationFrame(frame);
@@ -172,26 +184,22 @@ export function AppShell(props: AppShellProps) {
 
   // ── 布局落定 → 状态回写 ──
   // onLayoutChanged 在一次布局变更“完成”时触发（拖拽释放、分隔条键盘调整、容器缩放）。
-  // 拖拽过程中不触发。折叠状态仍只在用户交互时回写；抽屉像素宽在非交互路径也同步
-  // （缩放/窗口拉伸后 outline-hover 依赖 --drawer-*），但折叠态（px<=1）禁止写 0。
+  // 折叠状态只在用户交互时回写。抽屉像素宽走 shouldCommitPanelPixels：缩放后跟像素，
+  // 折叠 0 / expand→min 的瞬时值不写。
   function handleLayoutChanged(_layout: Layout, meta: LayoutChangedMeta) {
-    // 无论交互还是程序化变更（折叠按钮、恢复默认宽度、effect 同步），
-    // 布局落定后都通知悬浮层重算一次，兜住“松手后不回去”的残留错位
+    // 无论交互还是程序化变更，布局落定后都通知悬浮层重算一次。
     notifyLayoutResized();
-
-    // 抽屉面板宽度同步（不区分交互来源）：react-resizable-panels 布局是百分比制，
-    // 窗口缩放（zoomFactor）/窗口拉伸等非拖拽变化同样会改变面板实际像素宽，而旧代码
-    // 只在 isUserInteraction 时回写 drawerWidth——大纲悬浮工具条（outline-hover）的
-    // right 定位依赖 AppShell 注入的 --drawer-* CSS 变量，缩放后会停在旧位置，要手动
-    // 拖一下分隔条才恢复。这里统一按实际像素宽同步；与下方「外部宽度变化 → 面板」
-    // effect 的 >1px 差判断互成幂等，不会形成 resize 回路。
     const drawerPanel = drawerPanelRef.current;
+    const drawerMin = drawerPinned ? DRAWER_WIDTH_MIN_PINNED : DRAWER_WIDTH_MIN;
     if (drawerPanel && drawer && !drawerCollapsed) {
-      const px = Math.round(drawerPanel.getSize().inPixels);
-      // 面板实际仍处于折叠态（启动时 defaultSize=0、展开 effect 尚未落定）时不同步：
-      // 若把 drawerWidth 写成 0，下方「宽度→面板」effect 会 resize(0) 把刚展开的面板
-      // 又压回折叠，与展开 effect 形成 0↔min 宽度震荡（启动闪动根因，日志实测 ~30ms 一轮）。
-      if (px > 1 && Math.abs(px - drawerWidth) > 1) setDrawerWidth(px);
+      // 缩放后 --drawer-* 仍要跟像素走；但 expand→min 的瞬时值不能盖掉保存宽度。
+      const next = shouldCommitPanelPixels({
+        px: drawerPanel.getSize().inPixels,
+        savedWidth: drawerWidth,
+        minSize: drawerMin,
+        isUserInteraction: meta.isUserInteraction,
+      });
+      if (next !== null) setDrawerWidth(next);
     }
 
     if (!meta.isUserInteraction) return;
@@ -200,7 +208,15 @@ export function AppShell(props: AppShellProps) {
       const px = Math.round(listPanel.getSize().inPixels);
       const collapsed = listPanel.isCollapsed() || px <= LIST_COLLAPSED_SIZE + 1;
       if (collapsed !== listCollapsed) setListCollapsed(collapsed);
-      if (!collapsed && Math.abs(px - listWidth) > 1) setListWidth(px);
+      if (!collapsed) {
+        const next = shouldCommitPanelPixels({
+          px,
+          savedWidth: listWidth,
+          minSize: LIST_WIDTH_MIN,
+          isUserInteraction: true,
+        });
+        if (next !== null) setListWidth(next);
+      }
     }
     if (drawerPanel) {
       const px = Math.round(drawerPanel.getSize().inPixels);
@@ -208,9 +224,8 @@ export function AppShell(props: AppShellProps) {
       if (collapsed) {
         // 拖拽折叠仅允许未钉住场景（pinned 面板 collapsible=false，不会走到这）
         if (!drawerCollapsed) setDrawerCollapsed(true);
-      } else {
-        if (drawerCollapsed) setDrawerCollapsed(false);
-        if (Math.abs(px - drawerWidth) > 1) setDrawerWidth(px);
+      } else if (drawerCollapsed) {
+        setDrawerCollapsed(false);
       }
     }
   }

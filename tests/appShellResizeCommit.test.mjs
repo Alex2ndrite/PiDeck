@@ -13,12 +13,11 @@ test("resize state commits via Group onLayoutChanged, not per-frame Panel onResi
   assert.doesNotMatch(shell, /onResize=\{handle/);
 });
 
-test("programmatic layout changes do not write collapsed drawer width", () => {
+test("programmatic layout changes do not write collapsed or expand-to-min width", () => {
   // isUserInteraction=false 仍须在折叠状态回写前 return，避免 effect → resize → 回写回路。
-  // 抽屉像素宽允许非交互同步（缩放后 --drawer-* 跟随），但折叠态 px<=1 禁止写 0：
-  // 启动时 defaultSize=0，写 0 会让宽度 effect resize(0) 与 expand 形成 0↔min 震荡。
+  // 抽屉像素宽走 shouldCommitPanelPixels：折叠 0 与 expand→min 都不写，缩放后的真实像素才写。
   assert.match(shell, /if \(!meta\.isUserInteraction\) return;/);
-  assert.match(shell, /if \(px > 1 && Math\.abs\(px - drawerWidth\) > 1\) setDrawerWidth\(px\)/);
+  assert.match(shell, /shouldCommitPanelPixels/);
 });
 
 test("splitter paints a single neutral diffused line", () => {
