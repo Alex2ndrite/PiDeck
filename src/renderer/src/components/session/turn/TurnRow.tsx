@@ -11,6 +11,7 @@ import { formatDuration, formatTime, stripAnsi, stripThinkingTags } from "../Tim
 import { LiveDuration } from "../LiveDuration";
 import { CopyMenu, stripMarkdown } from "../SurfaceComponents";
 import { buildTurnDisplay, hasFoldableContent } from "../timeline/buildTurnDisplay";
+import { resolveLiveInterimId } from "../timeline/liveMount";
 import { buildProcessSummary } from "../timeline/segmentSummary";
 import type {
 	AgentRunItem,
@@ -61,10 +62,12 @@ export type TurnRowProps = {
 	onDeleteMessage?: (messageId: string) => void;
 	/** Agent 正在处理请求或流式输出中时禁用编辑/删除等操作按钮 */
 	agentRunning?: boolean;
-	/** 打开多选分享弹框 */
-	onEnterMultiSelect?: () => void;
 	/** 是否时间线最新一轮（非最新不自动收起） */
 	isLatestRun?: boolean;
+	/** 是否为时间线上最后一个 agent-run（live 正文挂载门：仅它可挂会话级流式槽） */
+	isLastAgentRun?: boolean;
+	/** 打开多选分享弹框 */
+	onEnterMultiSelect?: () => void;
 };
 
 export const TurnRow = memo(
@@ -115,26 +118,35 @@ export const TurnRow = memo(
 	}, [displayItems]);
 
 	// 末条 Live 正文：挂在折叠容器外常显（避免 Radix Collapsible 卸载/收起导致无 DOM）。
-	// 要求「存在活动正文流」才挂 live：中间回复 message_end 后槽删（streaming=false）
-	// 立即落回容器内 settled，消除双失明消失窗口（live 读空 + 容器内被跳过）；
+	// 要求「存在活动正文流」且「本轮是最后一个 agent-run」才挂 live：
+	// - 中间回复 message_end 后槽删（streaming=false）立即落回容器内 settled，
+	//   消除双失明消失窗口（live 读空 + 容器内被跳过）；
+	// - 被 steer 打断的旧轮尾部是空文本 interim（骨架挂载点），若允许旧轮挂 live，
+	//   新一轮流式时旧轮会把会话槽里的新一轮正文再打印一遍——同一中间回复前后双份
+	//   （2026-08 回归：判定逻辑见 resolveLiveInterimId，按轮级门控）。
 	// 流式期间 content 每 50ms 变化但 streaming 不变 → 派生 boolean 引用稳定 → 零额外重渲染。
 	const liveTextActive = useAtomValue(
 		props.sessionId ? liveTextStreamingBySessionAtom(props.sessionId) : NO_LIVE_TEXT_ATOM,
 	);
 	const liveInterimId = useMemo(() => {
-		if (!props.sessionId || !lastInterimId) return undefined;
-		if (!liveTextActive) return undefined;
 		const last = displayItems.find(
 			(item) => item.kind === "interim-answer" && item.id === lastInterimId,
 		);
 		if (!last || last.kind !== "interim-answer") return undefined;
-		const emptySkeleton = !last.message.text.trim();
-		if (emptySkeleton || props.agentRunning || props.isStreaming) return lastInterimId;
-		return undefined;
+		return resolveLiveInterimId({
+			sessionId: props.sessionId,
+			lastInterimId,
+			liveTextActive,
+			lastMessageText: last.message.text,
+			agentRunning: props.agentRunning,
+			isStreaming: props.isStreaming,
+			isLastAgentRun: props.isLastAgentRun,
+		});
 	}, [
 		props.sessionId,
 		props.agentRunning,
 		props.isStreaming,
+		props.isLastAgentRun,
 		lastInterimId,
 		displayItems,
 		liveTextActive,
@@ -450,6 +462,7 @@ function turnRowPropsEqual(prev: TurnRowProps, next: TurnRowProps): boolean {
 		prev.showThinking === next.showThinking &&
 		prev.liveThinkingId === next.liveThinkingId &&
 		prev.agentRunning === next.agentRunning &&
-		prev.isLatestRun === next.isLatestRun
+		prev.isLatestRun === next.isLatestRun &&
+		prev.isLastAgentRun === next.isLastAgentRun
 	);
 }

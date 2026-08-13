@@ -179,7 +179,13 @@ test("TurnRow liveInterimId requires an active text stream", () => {
   );
   // 订阅「活动流」派生 atom（稳定 boolean：流式期间 content 变化不触发重渲染）
   assert.match(turnSource, /liveTextStreamingBySessionAtom\(props\.sessionId\)/);
-  assert.match(turnSource, /if \(!liveTextActive\) return undefined;/);
+  // 判定逻辑收敛到 liveMount.ts（纯函数可单测），TurnRow 只做接线
+  assert.match(turnSource, /resolveLiveInterimId\(\{/);
+  const liveMountSource = readFileSync(
+    "src/renderer/src/components/session/timeline/liveMount.ts",
+    "utf8",
+  );
+  assert.match(liveMountSource, /if \(!input\.liveTextActive\) return undefined;/);
   // 派生 atom 输出 streaming 位（session 级单槽），false 时立即落回 settled
   const atomsSource = readFileSync(
     "src/renderer/src/atoms/session-atoms.ts",

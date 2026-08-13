@@ -342,6 +342,20 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
     ),
     [followingForTurnWindow, reconciledRuns, turnWindowTurns],
   );
+  // 「最后一个 agent-run」：live 挂载门的判定基准。不能按最后一条显示条目判定：
+  // steer 排队期显示数组以用户消息结尾（新轮尚未产生首条消息），最后一条 agent-run
+  // 才是真正的流式轮；反过来若门控放宽到任意轮，被 steer 打断的旧轮（尾部是空文本
+  // interim）会挂上会话级流式槽，把新一轮正文在旧轮底部再打印一遍（同一中间回复
+  // 前后双份，2026-08 回归）。
+  // 注意：这个判定只用于 live 挂载门——isLatestRun/busy 仍按「最后一条显示条目」
+  // 判定，否则普通发送的激活等待期（用户消息在末尾）会把上一轮已完成、已提升的
+  // 最终回答重新降级，导致最终回答暂时消失。
+  const lastAgentRunIndex = useMemo(() => {
+    for (let index = displayRuns.length - 1; index >= 0; index -= 1) {
+      if (displayRuns[index].kind === "agent-run") return index;
+    }
+    return -1;
+  }, [displayRuns]);
   const turnWindowActive = shouldWindowTimelineTurns(
     countAgentRunItems(reconciledRuns),
     turnWindowTurns,
@@ -653,6 +667,7 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
                     liveThinkingId={liveThinkingId}
                     agentRunning={isRunStreaming}
                     isLatestRun={index === displayRuns.length - 1}
+                    isLastAgentRun={index === lastAgentRunIndex}
                     onOpenExternal={props.onOpenExternal}
                     onOpenFile={props.onOpenFile}
                     onDiffFile={props.onDiffFile}
