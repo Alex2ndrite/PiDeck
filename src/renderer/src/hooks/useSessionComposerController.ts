@@ -588,7 +588,8 @@ export function useSessionComposerController(
       try {
         requireSessionCommand(await desktopApi.sessions.compactRuntime(target, prompt));
       } catch (error) {
-        showNotice(friendlyCompactError(error), 6500);
+        // compact 失败属会话异常，常驻提示直到用户手动关闭
+        showNotice(friendlyCompactError(error), Number.POSITIVE_INFINITY);
       }
     },
     resetComposerUi: resetEphemeralUi,
@@ -1101,7 +1102,8 @@ export function useSessionComposerController(
     } catch (error) {
       // abort 失败必须可见：之前这里直接 throw 变成未处理 rejection，
       // 用户点停止后毫无反馈、agent 继续运行，表现为「停止不了」。
-      showNotice(error instanceof Error ? error.message : String(error), 5000);
+      // 异常常驻提示，直到用户手动关闭。
+      showNotice(error instanceof Error ? error.message : String(error), Number.POSITIVE_INFINITY);
     }
   }, [runtime?.agentId, runtime?.runtimeGeneration, sessionId]);
 
@@ -1121,7 +1123,8 @@ export function useSessionComposerController(
     try {
       requireSessionCommand(await desktopApi.sessions.compactRuntime(target));
     } catch (error) {
-      showNotice(friendlyCompactError(error), 6500);
+      // compact 失败属会话异常，常驻提示直到用户手动关闭
+      showNotice(friendlyCompactError(error), Number.POSITIVE_INFINITY);
     }
   }, [runtime?.agentId, runtime?.runtimeGeneration, sessionId, setDraft, promoteAndSend]);
 
