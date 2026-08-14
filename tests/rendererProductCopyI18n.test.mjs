@@ -146,7 +146,7 @@ test("remaining renderer product copy is available in Chinese and English", () =
 test("reachable renderer surfaces use i18n without changing their UI structure", () => {
 	assert.match(fileDiffViewer, /\{dirty && t\("editor\.unsavedMarker"\)\}/);
 	assert.match(timeline, /t\("timeline\.loadMoreHistory", \{[\s\S]*?count:/);
-	assert.match(drawer, /className="drawer-content-frame"[\s\S]*?\{t\("drawer\.lazyLoading"\)\}/);
+	assert.match(drawer, /className="drawer-content-frame[^"]*"[\s\S]*?\{t\("drawer\.lazyLoading"\)\}/);
 	assert.match(settings, /import \{ SettingsSection, StorageTab \} from "\.\/settings\/SettingsStorageTab"/);
 	assert.match(settings, /t\("settings\.dirtyTooltip"\)/);
 	assert.match(settings, /t\("settings\.sectionRuntime"\)/);

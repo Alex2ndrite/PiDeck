@@ -109,12 +109,18 @@ export function AppShell(props: AppShellProps) {
 
   const listPanelRef = useRef<PanelImperativeHandle | null>(null);
   const drawerPanelRef = useRef<PanelImperativeHandle | null>(null);
+  const groupRef = useRef<HTMLDivElement | null>(null);
   // 开合 effect 不把 width 放进依赖（否则每次回写都会再 expand/resize 一轮）。
   // 打开折叠面板时用 ref 读最新保存宽度，避免 expand() 落到 minSize。
   const listWidthRef = useRef(listWidth);
   const drawerWidthRef = useRef(drawerWidth);
   listWidthRef.current = listWidth;
   drawerWidthRef.current = drawerWidth;
+  // RO 同步回调只读 ref，避免每次回写触发 effect 重订阅
+  const drawerOpenRef = useRef(false);
+  const listOpenRef = useRef(false);
+  drawerOpenRef.current = Boolean(drawer) && !drawerCollapsed;
+  listOpenRef.current = !listCollapsed;
   const notifyLayoutResized = useNotifyLayoutResized();
 
   // 抽屉/侧栏“刚打开”标志：closed→open 时给内容容器挂一次进入动画类；
@@ -181,6 +187,37 @@ export function AppShell(props: AppShellProps) {
     });
     return () => cancelAnimationFrame(frame);
   }, [drawerWidth, drawer, drawerCollapsed]);
+
+  // ── 容器缩放（zoomFactor / 窗口拉伸 / 全屏切换）→ 面板像素回写 ──
+  // 库的 onLayoutChanged 只报告百分比布局变化：preserve-relative-size 下
+  // zoom 前后百分比不变，W(上次,本次) 判定相同直接跳过，AppShell 收不到通知，
+  // outline-hover 的 --drawer-* 就停在旧像素（表现为“缩放后悬浮菜单不跟随”）。
+  // 这里用 ResizeObserver 直察 Group 容器：容器尺寸变化必触发，且回调排在库的
+  // RO 之后（库先 observe），getSize() 读到的已是新布局；列表/抽屉折叠时跳过。
+  useEffect(() => {
+    const el = groupRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => {
+      if (drawerOpenRef.current) {
+        const drawerPanel = drawerPanelRef.current;
+        if (drawerPanel) {
+          const px = Math.round(drawerPanel.getSize().inPixels);
+          if (px > 1 && Math.abs(px - drawerWidthRef.current) > 1)
+            setDrawerWidth(px);
+        }
+      }
+      if (listOpenRef.current) {
+        const listPanel = listPanelRef.current;
+        if (listPanel) {
+          const px = Math.round(listPanel.getSize().inPixels);
+          if (px > LIST_COLLAPSED_SIZE && Math.abs(px - listWidthRef.current) > 1)
+            setListWidth(px);
+        }
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   // ── 布局落定 → 状态回写 ──
   // onLayoutChanged 在一次布局变更“完成”时触发（拖拽释放、分隔条键盘调整、容器缩放）。
@@ -261,7 +298,7 @@ export function AppShell(props: AppShellProps) {
         onWindowMaximizedChange={onWindowMaximizedChange}
         closeWindow={closeWindow}
       />
-      <ResizablePanelGroup orientation="horizontal" className="shell-panel-group" onLayoutChanged={handleLayoutChanged}>
+      <ResizablePanelGroup orientation="horizontal" className="shell-panel-group" elementRef={groupRef} onLayoutChanged={handleLayoutChanged}>
         <ResizablePanel
           id="list"
           panelRef={listPanelRef}
