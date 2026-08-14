@@ -537,7 +537,7 @@ export function App() {
     petEnabled: false,
     petId: "clawd",
     petAlwaysOnTop: true,
-    petScale: 0.8,
+    petScale: 1,
     petPatrolEnabled: true,
     petPatrolPauseMin: 5,
     favoriteModels: [],

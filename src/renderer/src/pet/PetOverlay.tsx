@@ -19,9 +19,10 @@ import { type SpriteSheet, MODE_ROW, MODE_FRAMES, CELL_W, CELL_H } from "./PetSp
  * 统一帧率 12fps / 8fps(idle)。
  *
  * 布局约定（与主进程 PetWindow 共享同一套几何）：
- * - 精灵按 160×scale × 176×scale 绘制在窗口底部居中，不再拉伸铺满窗口。
+ * - 精灵按 192×scale × 208×scale 绘制在窗口底部居中，与 spritesheet 单格同比例。
  * - 通知气泡锚定在精灵头顶：底边 = 精灵顶边 - gap，横向居中。
  * - 气泡字号用有效 UI 字号（uiFontSize ?? fontSize），只乘 DPR，绝不随 petScale 缩放。
+ * - 缩放用高质量双线性插值：内置宠物是抗锯齿插画，pixelated 会把边缘撕成色块。
  */
 
 const DEFAULT_FPS = 12;
@@ -116,7 +117,19 @@ export function PetOverlay({ sprite, state, notification, scale, fontMode, fontS
 			ctx.clearRect(0, 0, canvas.width, canvas.height);
 			const sx = (canvas.width - spriteW * dpr) / 2;
 			const sy = canvas.height - spriteH * dpr;
-			ctx.drawImage(sprite.image, c * CELL_W, row * CELL_H, CELL_W, CELL_H, sx, sy, spriteW * dpr, spriteH * dpr);
+			ctx.imageSmoothingEnabled = true;
+			ctx.imageSmoothingQuality = "high";
+			ctx.drawImage(
+				sprite.image,
+				c * CELL_W,
+				row * CELL_H,
+				CELL_W,
+				CELL_H,
+				sx,
+				sy,
+				spriteW * dpr,
+				spriteH * dpr,
+			);
 		};
 
 		const drawNotif = () => {
@@ -228,7 +241,7 @@ export function PetOverlay({ sprite, state, notification, scale, fontMode, fontS
 	if (mode === "hidden") return <div style={{ width: "100%", height: "100%", background: "transparent" }} />;
 
 	if (sprite) {
-		return <canvas ref={canvasRef} style={{ width: "100%", height: "100%", display: "block", imageRendering: "pixelated" }} />;
+		return <canvas ref={canvasRef} style={{ width: "100%", height: "100%", display: "block", imageRendering: "auto" }} />;
 	}
 
 	return <FallbackCanvas mode={mode} />;

@@ -330,11 +330,20 @@ export class PetSystem {
 		if (next.petId !== prev.petId) await this.pushCurrentSprite();
 		if (next.petAlwaysOnTop !== prev.petAlwaysOnTop) this.petWindow.setAlwaysOnTop(next.petAlwaysOnTop);
 		if (next.petScale !== prev.petScale && next.petScale) this.petWindow.resize(next.petScale);
-		// 有效 UI 字号变化：气泡槽位高度随字号变化；同时把设置推送给宠物窗（renderer 订阅 settings.onApplyWindow）
+		// 有效 UI 字号变化：气泡槽位高度随字号变化
 		if (next.fontSize !== prev.fontSize || next.uiFontSize !== prev.uiFontSize) {
 			this.petWindow.setFontMode(effectiveUIFontSize(next.uiFontSize, next.fontSize));
-			const win = this.petWindow.window;
-			if (win && !win.isDestroyed()) win.webContents.send(ipcChannels.settingsApplyWindow, next);
+		}
+		// 缩放 / 字号 / 字体栈都会改宠物窗外观。窗口尺寸由 PetWindow 改，
+		// 绘制比例必须同步推给 renderer，否则会出现「窗大图小」或精灵被裁切。
+		if (
+			next.petScale !== prev.petScale
+			|| next.fontSize !== prev.fontSize
+			|| next.uiFontSize !== prev.uiFontSize
+			|| next.fontFamilyBase !== prev.fontFamilyBase
+			|| next.fontFamilyBaseCustom !== prev.fontFamilyBaseCustom
+		) {
+			this.pushAppearance(next);
 		}
 		if (next.petPatrolEnabled !== prev.petPatrolEnabled) {
 			(this.isPatrolEnabled() && this.bridge.currentState?.mode === "idle") ? this.patrol.start() : this.patrol.stop();
@@ -344,6 +353,12 @@ export class PetSystem {
 	private pushCaps() {
 		const win = this.petWindow.window;
 		if (win && !win.isDestroyed()) win.webContents.send(ipcChannels.petCaps, detectPetWindowCaps());
+	}
+
+	/** 把当前外观设置推给宠物窗（缩放、字号、字体栈） */
+	private pushAppearance(settings: AppSettings) {
+		const win = this.petWindow.window;
+		if (win && !win.isDestroyed()) win.webContents.send(ipcChannels.settingsApplyWindow, settings);
 	}
 
 	private async pushCurrentSprite() {
