@@ -923,6 +923,7 @@ export function createPreviewApi(): PiDesktopApi {
 			contextMenu: async () => undefined,
 			focusAgent: async () => undefined,
 			onFocusTarget: noop,
+			getPendingFocusTarget: async () => null,
 			onSprite: noop,
 			onNotify: noop,
 			setPreviewMode: async () => undefined,

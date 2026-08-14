@@ -1222,6 +1222,9 @@ const api = {
 			ipcRenderer.invoke(ipcChannels.petFocusAgent) as Promise<void>,
 		onFocusTarget: (callback: (target: { sessionId: string }) => void) =>
 			subscribe(ipcChannels.petFocusAgentTarget, callback),
+		/** 冷启动/页面加载期间点击通知的跳转目标：挂载后主动拉取（一次性） */
+		getPendingFocusTarget: () =>
+			ipcRenderer.invoke(ipcChannels.petGetFocusTargetPending) as Promise<{ sessionId: string } | null>,
 		/** 主进程推送当前选中宠物的 manifest，据此加载 spritesheet */
 		onSprite: (callback: (manifest: PetManifest) => void) =>
 			subscribe(ipcChannels.petCurrentSprite, callback),

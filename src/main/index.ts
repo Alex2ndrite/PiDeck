@@ -1198,6 +1198,30 @@ function focusMainWindow() {
 }
 
 /**
+ * 页面加载期间（冷启动/窗口重建）点击通知的跳转目标：直接 send 会在 preload/React
+ * 监听注册前丢失，先存入 pending，由两条路径兜底送达：
+ * 1. did-finish-load 后 flush 一次（窗口重建/旧 renderer 兼容的尽力而为）；
+ * 2. renderer 挂载后经 pet:get-focus-target-pending 主动拉取（取走即清空，保证送达）。
+ */
+let pendingFocusTarget: { sessionId: string } | null = null;
+
+/** 窗口就绪（存在且未在加载）直接推送；否则入 pending 队列。 */
+function queueFocusTarget(sessionId: string) {
+	if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.webContents.isLoading()) {
+		mainWindow.webContents.send(ipcChannels.petFocusAgentTarget, { sessionId });
+		return;
+	}
+	pendingFocusTarget = { sessionId };
+}
+
+/** did-finish-load 兜底：仍在加载期排队的目标补发一次（不清空，renderer 拉取幂等）。 */
+function flushPendingFocusTargetOnLoad() {
+	if (pendingFocusTarget && mainWindow && !mainWindow.isDestroyed()) {
+		mainWindow.webContents.send(ipcChannels.petFocusAgentTarget, pendingFocusTarget);
+	}
+}
+
+/**
  * 同版本次实例请求聚焦：窗口已在则前置；若窗口尚未创建/已销毁，ready 后重建。
  * 若唤起源自「点击系统通知」（argv 携带 pideck:// URL），额外向 renderer 发送聚焦目标，
  * 切换到对应会话；agentId 为兼容旧 toast 的兜底格式，运行时经 coordinator 解析成会话。
@@ -1206,14 +1230,12 @@ function focusMainWindow() {
 function handleVersionFocusRequest(payload?: FocusPayload) {
 	const target = extractFocusTargetFromArgv(payload?.argv);
 	const activateSession = () => {
-		if (!target || !mainWindow || mainWindow.isDestroyed()) return;
+		if (!target) return;
 		let sessionId = target.sessionId;
 		if (!sessionId && target.agentId && sessionRuntimeCoordinator) {
 			sessionId = sessionRuntimeCoordinator.getSessionId(target.agentId);
 		}
-		if (sessionId) {
-			mainWindow.webContents.send(ipcChannels.petFocusAgentTarget, { sessionId });
-		}
+		if (sessionId) queueFocusTarget(sessionId);
 	};
 	if (mainWindow && !mainWindow.isDestroyed()) {
 		focusMainWindow();
@@ -1536,6 +1558,8 @@ async function createWindow() {
 		});
 		// 恢复用户设置的窗口缩放；在 did-finish-load 后应用，避免早期设置被覆盖。
 		mainWindow?.webContents.setZoomFactor(settingsStore.get().zoomFactor);
+		// 加载期排队的通知跳转目标补发一次（renderer 挂载后还会主动拉取，幂等兜底）
+		flushPendingFocusTargetOnLoad();
 	});
 	mainWindow.webContents.on(
 		"did-fail-load",
@@ -2556,6 +2580,8 @@ app.whenReady().then(async () => {
 		// 飞书绑定会话：spawn 时注入 PIDECK_FEISHU_LINKED，ask_question 切换为禁用提示版。
 		// 闭包延迟读 feishuBridge（连接成功后才创建），spawn 时 binding 已先于 runtime 建立。
 		(key) => Boolean(key && feishuBridge?.hasSessionBinding(key)),
+		// 通知点击跳转需要 record.id（renderer 按它索引会话）；agentId → record.id 由 coordinator 维护。
+		(agentId) => sessionRuntimeCoordinator.getSessionId(agentId),
 	);
 	webServiceManager = new WebServiceManager({
 		// dev 模式（electron-vite dev 不产出 out/renderer 构建物）下，静态资源
@@ -2856,14 +2882,20 @@ app.whenReady().then(async () => {
 	setupTray();
 
 	// 冷启动通知唤起：应用未运行时点击系统通知，本进程即为唯一实例（无次实例 .focus 流转），
-	// argv 携带 pideck:// URL，窗口就绪后直接向 renderer 发送跳转目标。
+	// argv 携带 pideck:// URL，窗口就绪后跳转对应会话。
+	// 页面仍在加载时直接 send 会丢（preload/React 监听未注册），故走 pending 队列：
+	// did-finish-load 补发一次 + renderer 挂载后主动拉取（见 queueFocusTarget 注释）。
 	// catalog 可能尚未加载完，renderer 侧监听会小间隔重试直到能解析到会话记录。
 	const coldStartTarget = extractFocusTargetFromArgv(process.argv);
-	if (coldStartTarget?.sessionId && mainWindow && !mainWindow.isDestroyed()) {
-		mainWindow.webContents.send(ipcChannels.petFocusAgentTarget, {
-			sessionId: coldStartTarget.sessionId,
-		});
+	if (coldStartTarget?.sessionId) {
+		queueFocusTarget(coldStartTarget.sessionId);
 	}
+	// renderer 挂载后拉取 pending 跳转目标（一次性，取走即清空）
+	ipcMain.handle(ipcChannels.petGetFocusTargetPending, () => {
+		const target = pendingFocusTarget;
+		pendingFocusTarget = null;
+		return target;
+	});
 	void detectExternalEditorsOnFirstLaunch().catch((error) => {
 		void appLogger.warn("editor", "External editor first launch detection failed", error);
 	});

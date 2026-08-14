@@ -354,6 +354,9 @@ export const ipcChannels = {
 	petFocusAgent: "pet:focus-agent",
 	/** 主进程 → 主窗口：点击宠物后通知主窗切换到活跃 Agent tab */
 	petFocusAgentTarget: "pet:focus-agent-target",
+	/** 主窗口 → 主进程：冷启动/页面加载期间点击通知的跳转目标可能因监听未就绪而丢失，
+	 *  renderer 挂载后主动拉取一次（一次性，取走即清空） */
+	petGetFocusTargetPending: "pet:get-focus-target-pending",
 	/** 主进程 → 宠物窗：推送当前选中宠物的 manifest（含 spritesheetUrl），切换宠物时热加载 */
 	petCurrentSprite: "pet:current-sprite",
 	/** 宠物窗 → 主进程：拉取当前选中宠物的 manifest（挂载时主动拉取，避免推送竞态丢失） */

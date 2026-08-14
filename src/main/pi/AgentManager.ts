@@ -43,6 +43,7 @@ import {
 	buildActiveBranchEntryIds as buildActiveBranchEntryIdsForDisplay,
 } from "./AgentMessageProjector";
 import { LatestByKeyEmitter } from "./LatestByKeyEmitter";
+import { resolveNotificationSessionId } from "./agentUtils";
 import {
 	createStreamGateState,
 	isStreamGateSealed,
@@ -344,6 +345,13 @@ export class AgentManager {
 		 * 命中时 PiProcess 注入 PIDECK_FEISHU_LINKED，ask_question 扩展切换为禁用提示版。
 		 */
 		private readonly isFeishuSession?: (sessionKey: string | undefined) => boolean,
+		/**
+		 * agentId → SessionRecord.id 解析（由 main/index.ts 注入 coordinator.getSessionId）。
+		 * 通知 toast 的 launch 必须携带 record.id：renderer 的 sessionRecordByIdAtomFamily
+		 * 只索引 record.id，而 tab.sessionId 是 pi 侧会话 id（两套体系，见 index.ts attachRuntime），
+		 * 用它跳转在 renderer 永远解析不到会话。
+		 */
+		private readonly resolveSessionId?: (agentId: string) => string | undefined,
 	) {
 		this.messageProjector = new AgentMessageProjector({
 			translate: this.translate,
@@ -4745,8 +4753,13 @@ export class AgentManager {
 			// 使用应用名称作为通知标题，在 Windows/macOS 通知中心中显示为应用标识
 			const appName = app.getName();
 			const body = this.translate("mainNotification.sessionDone", { title: sessionTitle });
-			// 会话结束时 runtime 一定已绑定会话，取 sessionId 作为点击跳转目标（跨重启稳定）
-			const sessionId = this.agents.get(agentId)?.tab.sessionId;
+			// 会话结束时 runtime 一定已绑定会话；跳转目标用 record.id（renderer 按它索引会话），
+			// tab.sessionId 是 pi 侧会话 id 只能兜底（见 resolveNotificationSessionId 注释）。
+			const resolveSessionId = this.resolveSessionId;
+			const sessionId = resolveNotificationSessionId(
+				resolveSessionId ? () => resolveSessionId(agentId) : undefined,
+				this.agents.get(agentId)?.tab.sessionId,
+			);
 			const notification = new Notification({
 				title: appName,
 				body,

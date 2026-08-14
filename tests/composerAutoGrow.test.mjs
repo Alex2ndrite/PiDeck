@@ -39,8 +39,10 @@ test("composer measures variable content above the input and reports the extra h
     composerArea,
     /requestAnimationFrame\(\(\) => \{[\s\S]*mountedRef\.current = true;[\s\S]*reportExtra\(\);/,
   );
-  // 非受控模式本地增长
-  assert.match(composerArea, /extra \+ COMPOSER_DEFAULT_HEIGHT/);
+  // 非受控模式本地增长：起步高度可被宿主覆盖（起始页传更高的 defaultHeight），
+  // 内容增高时仍按各自起点自适应，保证小输入框不会被额外内容高度顶破。
+  assert.match(composerArea, /extra \+ \(props\.defaultHeight \?\? COMPOSER_DEFAULT_HEIGHT\)/);
+  assert.match(composerArea, /useState\(props\.defaultHeight \?\? COMPOSER_DEFAULT_HEIGHT\)/);
 });
 
 test("extras height sync lives in a child that rerenders when variable content changes", () => {
