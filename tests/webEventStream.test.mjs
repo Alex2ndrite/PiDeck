@@ -103,13 +103,45 @@ test("tool_execution_start/end produces tool-input-available and tool-output-ava
 	assert.equal(end[0].toolCallId, "call_1");
 });
 
-test("agent_end emits finish (and error frame on error)", () => {
+test("assistant done and agent_end do not close the stream before tools finish", () => {
 	const adapter = new PiEventToUiMessageStream();
+	adapter.push({ type: "message_start", message: { role: "assistant", id: "m1" } });
+	const midDone = adapter.push({
+		type: "message_update",
+		assistantMessageEvent: { type: "done" },
+	});
+	assert.equal(midDone.some((frame) => frame.type === "finish"), false);
+	assert.equal(adapter.push({ type: "agent_end", stopReason: "toolUse" }).length, 0);
 
-	const done = adapter.push({ type: "agent_end", stopReason: "done" });
-	assert.equal(done[0].type, "finish");
-	// 重复 agent_end 不重复 finish
-	assert.equal(adapter.push({ type: "agent_end" }).length, 0);
+	const tool = adapter.push({
+		type: "tool_execution_start",
+		toolName: "bash",
+		toolCallId: "call_1",
+	});
+	assert.equal(tool[0].type, "tool-input-start");
+	const next = adapter.push({ type: "message_start", message: { role: "assistant", id: "m2" } });
+	assert.equal(next[0].type, "start-step");
+
+	const settled = adapter.push({ type: "agent_settled" });
+	assert.equal(settled.at(-1).type, "finish");
+});
+
+test("tool_execution_end with isError emits tool-output-error", () => {
+	const adapter = new PiEventToUiMessageStream();
+	adapter.push({ type: "tool_execution_start", toolName: "bash", toolCallId: "call_err" });
+	const end = adapter.push({
+		type: "tool_execution_end",
+		toolCallId: "call_err",
+		isError: true,
+	});
+	assert.equal(end[0].type, "tool-output-error");
+	assert.equal(end[0].toolCallId, "call_err");
+});
+
+test("agent_end without error does not emit finish; settled does", () => {
+	const adapter = new PiEventToUiMessageStream();
+	assert.equal(adapter.push({ type: "agent_end", stopReason: "done" }).length, 0);
+	assert.equal(adapter.push({ type: "agent_settled" })[0].type, "finish");
 });
 
 test("agent_settled also closes the Web stream", () => {
@@ -165,8 +197,8 @@ test("WebEventStreamRouter routes agent events to per-session entries only", () 
 	// 绑定 pi 源后事件按 agentId → sessionId 路由；finish 后自动附 [DONE]
 	router.bindPiSource((handler) => {
 		handler("agent-a", { type: "message_start", message: { role: "assistant" } });
-		handler("other-agent", { type: "agent_end" });
-		handler("agent-a", { type: "agent_end" });
+		handler("other-agent", { type: "agent_settled" });
+		handler("agent-a", { type: "agent_settled" });
 		return () => {};
 	});
 	assert.equal(received.length, 3);

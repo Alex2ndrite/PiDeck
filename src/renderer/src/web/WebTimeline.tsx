@@ -15,6 +15,8 @@ import { Button } from "@/components/ui-shadcn/button";
 import { t } from "@/i18n";
 import { cn } from "@/lib/utils";
 import { WebAssistantText } from "./WebAssistantText";
+import type { WebPendingUiRequest } from "./webTypes";
+import type { AgentUiResponse } from "../../../shared/types";
 import { MarkdownStream } from "@/components/session/MarkdownStream";
 import { SingleLinePreview } from "@/components/session/SingleLinePreview";
 import { TimelineMarker } from "../components/session/TimelineMarker";
@@ -182,6 +184,77 @@ export const WebAssistantMessage = memo(function WebAssistantMessage(props: {
 	);
 });
 
+function WebAskCard(props: {
+	request: WebPendingUiRequest;
+	busy: boolean;
+	onRespond: (response: AgentUiResponse) => void;
+}) {
+	const [draft, setDraft] = useState(props.request.prefill ?? "");
+	const method = props.request.method;
+	const options = (props.request.options ?? []).filter((option) => !option.startsWith("✎"));
+	return (
+		<section className="mt-3 rounded-lg border border-border bg-card p-3 shadow-sm">
+			<div className="mb-2 text-caption font-medium text-foreground">{t("ask.toolName")}</div>
+			<p className="mb-3 text-sm text-foreground [overflow-wrap:anywhere]">
+				{props.request.title || t("ask.defaultTitle")}
+			</p>
+			{method === "select" && options.length > 0 ? (
+				<div className="flex flex-col gap-2">
+					{options.map((option) => (
+						<Button
+							key={option}
+							type="button"
+							variant="secondary"
+							size="sm"
+							disabled={props.busy}
+							onClick={() => props.onRespond({ value: option })}
+						>
+							{option}
+						</Button>
+					))}
+				</div>
+			) : method === "confirm" ? (
+				<div className="flex gap-2">
+					<Button type="button" size="sm" disabled={props.busy} onClick={() => props.onRespond({ confirmed: true })}>
+						{t("common.true")}
+					</Button>
+					<Button type="button" variant="secondary" size="sm" disabled={props.busy} onClick={() => props.onRespond({ confirmed: false })}>
+						{t("common.false")}
+					</Button>
+				</div>
+			) : (
+				<div className="flex flex-col gap-2">
+					<textarea
+						className="min-h-16 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+						placeholder={props.request.placeholder || t("ask.inputPlaceholder")}
+						value={draft}
+						disabled={props.busy}
+						onChange={(event) => setDraft(event.target.value)}
+					/>
+					<Button
+						type="button"
+						size="sm"
+						disabled={props.busy || !draft.trim()}
+						onClick={() => props.onRespond({ value: draft.trim() })}
+					>
+						{t("ask.submit")}
+					</Button>
+				</div>
+			)}
+			<Button
+				type="button"
+				variant="ghost"
+				size="sm"
+				className="mt-2"
+				disabled={props.busy}
+				onClick={() => props.onRespond({ cancelled: true })}
+			>
+				{t("common.cancel")}
+			</Button>
+		</section>
+	);
+}
+
 export function WebTimeline(props: {
 	messages: UIMessage[];
 	hasActiveSession: boolean;
@@ -190,6 +263,9 @@ export function WebTimeline(props: {
 	loadingMore: boolean;
 	streaming: boolean;
 	error: string | null;
+	pendingUiRequest?: WebPendingUiRequest;
+	uiResponding?: boolean;
+	onRespondUi?: (response: AgentUiResponse) => void;
 	onLoadMore: () => void;
 }) {
 	const {
@@ -298,6 +374,14 @@ export function WebTimeline(props: {
 					<div className="diagnostic-card tone-error p-3 text-control text-danger">
 						{error}
 					</div>
+				) : null}
+
+				{props.pendingUiRequest && props.onRespondUi ? (
+					<WebAskCard
+						request={props.pendingUiRequest}
+						busy={Boolean(props.uiResponding)}
+						onRespond={props.onRespondUi}
+					/>
 				) : null}
 			</div>
 

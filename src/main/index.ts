@@ -2684,6 +2684,8 @@ app.whenReady().then(async () => {
 			return result;
 		},
 		listSessionRuntimes: () => sessionRuntimeCoordinator.listRuntimes(),
+		listPendingUiRequests: () => sessionRuntimeCoordinator.listPendingUiRequests(),
+		respondToUi: (input) => sessionRuntimeCoordinator.respondToUi(input),
 		listSessionRuntimeModels: (target) => sessionRuntimeCoordinator.listRuntimeModels(target),
 		stopSessionRuntime: stopSessionRuntime,
 		abortSessionRuntime: (target) => sessionRuntimeCoordinator.abortRuntime(target),

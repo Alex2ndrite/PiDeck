@@ -29,10 +29,12 @@ import {
 	fetchMessagePage,
 	fetchModels,
 	fetchState,
+	respondToUi,
 	setRuntimeModel,
 	setRuntimeThinking,
 	updateSessionRecord,
 } from "./webApi";
+import type { AgentUiResponse } from "../../../shared/types";
 import type { WebProject, WebState } from "./webTypes";
 
 /** 分页元数据：已加载消息总数 + 更早一页的游标。 */
@@ -58,6 +60,7 @@ export function WebChatApp() {
 	const [pendingThinkingLevel, setPendingThinkingLevel] = useState<string | null>(null);
 	// 手机端默认把聊天作为主画面，项目树通过抽屉按需打开，避免列表占满首屏。
 	const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+	const [uiResponding, setUiResponding] = useState(false);
 
 	// ── 本组件自持的 per-session 消息缓存（useChat 切换 id 会重建 Chat 实例） ──
 	const messagesBySessionRef = useRef<Record<string, UIMessage[]>>({});
@@ -150,14 +153,13 @@ export function WebChatApp() {
 			}
 		};
 		void refresh();
-		const timer = setInterval(refresh, 3000);
+		// 流式时 1s 一轮：ask 确认不能等 3s 才出现在手机上。
+		const timer = setInterval(refresh, streaming ? 1000 : 3000);
 		return () => {
 			disposed = true;
 			clearInterval(timer);
 		};
-		// activeSessionId 变化后下一轮轮询会补齐最新状态，不必重启轮询
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, []);
+	}, [streaming]);
 
 	const handleSend = (text: string) => {
 		if (!text.trim()) return;
@@ -336,6 +338,27 @@ export function WebChatApp() {
 		}
 	};
 
+	const handleRespondUi = async (response: AgentUiResponse) => {
+		const request = (state.pendingUiRequests ?? []).find((item) => item.sessionId === activeSessionId);
+		if (!request || uiResponding) return;
+		setUiResponding(true);
+		setCommandError(null);
+		try {
+			await respondToUi({
+				sessionId: request.sessionId,
+				requestId: request.requestId,
+				agentId: request.agentId,
+				runtimeGeneration: request.runtimeGeneration,
+				response,
+			});
+			await refreshNow();
+		} catch (error) {
+			setCommandError(error instanceof Error ? error.message : String(error));
+		} finally {
+			setUiResponding(false);
+		}
+	};
+
 	const handleLoadMore = async () => {
 		if (!activeSessionId || streaming || loadingMore) return;
 		const meta = historyMetaRef.current[activeSessionId];
@@ -411,6 +434,9 @@ export function WebChatApp() {
 					loadingMore={loadingMore}
 					streaming={streaming}
 					error={error?.message ?? commandError}
+					pendingUiRequest={(state.pendingUiRequests ?? []).find((item) => item.sessionId === activeSessionId)}
+					uiResponding={uiResponding}
+					onRespondUi={(response) => void handleRespondUi(response)}
 					onLoadMore={() => void handleLoadMore()}
 				/>
 				<WebComposer
