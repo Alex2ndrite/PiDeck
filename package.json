@@ -78,7 +78,6 @@
     "sync:model-specs": "node scripts/sync-model-specs.mjs"
   },
   "dependencies": {
-    "@deepseek-ai/dsh": "^0.1.0-rc.6",
     "@electron-toolkit/utils": "^4.0.0",
     "@larksuiteoapi/node-sdk": "^1.67.0",
     "@tiptap/core": "^3.29.2",
