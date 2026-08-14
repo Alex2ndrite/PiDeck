@@ -38,6 +38,40 @@ const NO_STREAM_REMARK_PLUGINS: Parameters<typeof Streamdown>[0]["remarkPlugins"
 const NO_STREAM_REHYPE_PLUGINS: Parameters<typeof Streamdown>[0]["rehypePlugins"] = [];
 
 /**
+ * 纯文本兜底路径的拆分渲染（2026-08 内存/CPU 治理）。
+ *
+ * 背景：超长/不可冻结流式文本回退为单个 whitespace-pre-wrap 文本节点时，
+ * 每次内容到达都整体替换文本节点 → Chromium 对整段重新断行（layout O(n)），
+ * 大文本（100K+）下主线程被排满 → IPC 消息积压 → 渲染进程原生内存 GB 级爬升。
+ *
+ * 方案：按 4K 步长把文本切成「冻结段（memo 稳定字符串）+ 活动段（≤4K）」。
+ * 冻结段只在跨过 4K 步进时变更一次文本节点（均摊 O(1)），活动段每帧最多
+ * 变更 4K 字符；纯文本在中途切分视觉上不可见（无块结构），无接缝问题。
+ */
+const PLAIN_SPLIT_STEP = 4_096;
+
+const PlainStreamSplit = memo(function PlainStreamSplit(props: { text: string }) {
+	const text = props.text;
+	// 冻结段字符串缓存：split 未跨步进且缓存片段仍是当前文本前缀时复用上次
+	// 切片对象，避免每帧新分配大字符串（slice 会产生引用父串的 SlicedString，
+	// 阻碍旧串回收）。前缀校验兜底非追加替换/收缩（冻结段必须随内容重切，
+	// 否则会显示过期文本）。
+	const frozenCacheRef = useRef<{ split: number; text: string }>({ split: 0, text: "" });
+	const split = Math.floor(text.length / PLAIN_SPLIT_STEP) * PLAIN_SPLIT_STEP;
+	let frozenText = frozenCacheRef.current.text;
+	if (frozenCacheRef.current.split !== split || !text.startsWith(frozenText)) {
+		frozenText = text.slice(0, split);
+		frozenCacheRef.current = { split, text: frozenText };
+	}
+	return (
+		<div className="whitespace-pre-wrap break-words">
+			{split > 0 && <span data-md-plain-frozen="1">{frozenText}</span>}
+			<span data-md-plain-live="1">{text.slice(split)}</span>
+		</div>
+	);
+});
+
+/**
  * Streamdown 渲染管线（唯一 markdown 引擎）。
  *
  * 内置能力（由 streamdown 官方插件接管，不再自研）：
@@ -249,7 +283,8 @@ export const MarkdownStream = memo(function MarkdownStream(props: {
 			if (streamPlain) {
 				// 超长兜底：流式期间纯文本节点（主线程只做字符串切片），
 				// 排版交给容器 markdown-body（pre-wrap 语义由此处补上）。
-				return <div className="whitespace-pre-wrap break-words">{displayText}</div>;
+				// 冻结/活动两段拆分：每帧 layout 成本 ≤4K 字符，不随全文增长。
+				return <PlainStreamSplit text={displayText} />;
 			}
 			// settle 后整篇一次渲染：自愈跨冻结边界的链接/脚注/表格，并恢复高亮插件。
 			if (!frozenSplit || frozenSplit.prefixEnd === 0) {

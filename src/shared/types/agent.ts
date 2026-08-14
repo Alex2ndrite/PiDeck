@@ -141,8 +141,11 @@ export type ThinkingUpdate = {
 	agentId: string;
 	/** 稳定段 id：与 buildTurnDisplay 的 msg-thinking-* 一致 */
 	id: string;
-	/** 累积的思考文本 */
-	text: string;
+	/** 累积的思考文本（全量快照；流式增量推送时缺省，见 delta） */
+	text?: string;
+	/** 自上次推送以来的增量（2026-08 治理：避免每 50ms 全量重推长思考文本，
+	 *  主/渲染两侧分配器被瞬时 IPC 流量抬到 GB 级 RSS）。渲染层按 id 累积。 */
+	delta?: string;
 	startedAt: number;
 	/** 0 表示仍在流式思考中 */
 	endedAt: number;

@@ -78,12 +78,6 @@ if (!electronChromiumSandboxEnabled) {
 // 设 384MB：留 2 倍于实测 JS used 峰值（~185MB）的余量，超限即强制 GC 收缩。
 app.commandLine.appendSwitch("js-flags", "--max-old-space-size=384");
 
-// 【临时诊断，定位后移除】dev 模式开放 CDP 调试端口，供外部连接 renderer 抓
-// 内存/DOM 计数（Memory.getDOMCounters）。仅 dev 生效，正式包不受影响。
-if (!app.isPackaged) {
-	app.commandLine.appendSwitch("remote-debugging-port", "9222");
-}
-
 // Windows 系统通知必须设置 AppUserModelID，否则通知不显示、点击事件不触发。
 // dev 与正式版使用不同 AppID，避免通知中心归属混淆（与 dev userData 隔离思路一致）。
 if (process.platform === "win32") {

@@ -11,10 +11,23 @@
  * - 未闭合围栏始终算不稳定，不会被冻进 prefix。
  * - 非 append（text 不以 prev 为前缀）时 generation +1，调用方丢弃旧冻结节点。
  * - remend/引用链接跨冻结边界可能字面渲染，settle 后整篇重渲自愈。
+ *
+ * 2026-08 内存/CPU 治理（增量重扫 + 尾块收窄）：
+ * - 追加文本只能重塑「最后一个块」：setext 下划线并入前段、列表懒延续、
+ *   未闭合 fence 吞行——追溯影响不超过最后一个内容块。因此 update 时不必
+ *   全量重扫：从「上一个冻结块的起点」重扫即可（该块可能被追溯吞并，必须
+ *   重新判定；更早的块结构不可能被追加改变）。
+ * - UNSTABLE_TAIL_BLOCKS 从 2 收到 1：尾部 = 最后一个内容块。此前第 2 个
+ *   尾块（如已闭合的大代码块）会滞留 tail 并在每次内容到达时被 Streamdown
+ *   整块重解析（30K≈2.3ms/帧量级，主线程满载 → IPC 积压 → 原生内存 GB 级
+ *   爬升）。收到 1 后它随边界前移进冻结 prefix，只随 key 变化一次性重解析。
+ *   代价：setext/列表懒延续的追溯重分类最多滞后一帧（下帧重扫即纠正），
+ *   冻结块边界前移时整段 prefix 一次性重解析（块切换频率 ≈ 空行频率，均摊可忽略）。
  */
 
-/** 尾部保留的不稳定内容块数：1 不够（setext/列表续行），3 收益下降。 */
-export const UNSTABLE_TAIL_BLOCKS = 2;
+/** 尾部保留的不稳定内容块数：0 不够（追加行的追溯影响至少波及最后一块），
+ * 2 会让已稳定的大块长期滞留 tail 每帧重解析；1 即「最后一块」最小热路径。 */
+export const UNSTABLE_TAIL_BLOCKS = 1;
 
 export type MarkdownBlockKind =
 	| "fence"
@@ -104,10 +117,13 @@ function isSetextUnderline(line: string): boolean {
 /**
  * 扫描顶层块分界。只关心「下一块从哪开始」，不复刻完整 CommonMark。
  * 空白行单独成块，方便冻结切在内容块 end、tail 从下一内容块 start 起。
+ *
+ * from 支持从中间偏移续扫（增量重扫）：from 必须是块边界（上一个冻结块的
+ * 起点），偏移之前的行结构由调用方以「前次冻结块」补齐，不在此处重复判定。
  */
-export function splitTopLevelMarkdownBlocks(text: string): MarkdownBlockSpan[] {
+export function splitTopLevelMarkdownBlocks(text: string, from = 0): MarkdownBlockSpan[] {
 	const blocks: MarkdownBlockSpan[] = [];
-	let offset = 0;
+	let offset = from;
 	while (offset < text.length) {
 		const first = readLine(text, offset);
 		if (isBlankLine(first.trimmed)) {
@@ -202,13 +218,14 @@ export function splitTopLevelMarkdownBlocks(text: string): MarkdownBlockSpan[] {
 	return blocks;
 }
 
-/** 计算可冻结前缀终点：去掉尾部 N 个内容块 + 任何未闭合围栏。 */
-export function resolveFrozenPrefixEnd(
-	text: string,
+/**
+ * 由「内容块列表」计算可冻结前缀终点：去掉尾部 N 个内容块 + 任何未闭合围栏。
+ * 独立成纯函数供全量/增量两条路径共用，保证两者结果一致。
+ */
+export function computeFrozenEnd(
+	content: MarkdownBlockSpan[],
 	unstableTail: number = UNSTABLE_TAIL_BLOCKS,
 ): { prefixEnd: number; frozenBlocks: MarkdownBlockSpan[] } {
-	const blocks = splitTopLevelMarkdownBlocks(text);
-	const content = blocks.filter((block) => block.kind !== "blank");
 	if (content.length === 0) return { prefixEnd: 0, frozenBlocks: [] };
 
 	let lastUnstableIndex = content.length;
@@ -222,9 +239,24 @@ export function resolveFrozenPrefixEnd(
 	return { prefixEnd: frozenBlocks[frozenBlocks.length - 1].end, frozenBlocks };
 }
 
+/** 计算可冻结前缀终点（全量扫描入口；增量路径见 IncrementalMarkdownFrontier）。 */
+export function resolveFrozenPrefixEnd(
+	text: string,
+	unstableTail: number = UNSTABLE_TAIL_BLOCKS,
+): { prefixEnd: number; frozenBlocks: MarkdownBlockSpan[] } {
+	const blocks = splitTopLevelMarkdownBlocks(text);
+	const content = blocks.filter((block) => block.kind !== "blank");
+	return computeFrozenEnd(content, unstableTail);
+}
+
 /**
  * 增量冻结器：同一实例跟一段流式文本。
  * update 对相同输入幂等；非 append 升 generation，调用方必须丢弃旧冻结 React 节点。
+ *
+ * 增量重扫（2026-08 内存/CPU 治理）：append 时从上一个冻结块的起点续扫，
+ * 前面的冻结块直接复用，避免每帧全量 O(n) 扫描（100K 文本实测 1.18ms/次，
+ * 60fps 下光扫描占 70% CPU，是渲染进程主线程满载 → IPC 积压 → GB 级原生
+ * 内存爬升的根源）。正确性依据见文件头注释：追加只影响最后一个内容块。
  */
 export class IncrementalMarkdownFrontier {
 	private prevText = "";
@@ -234,29 +266,64 @@ export class IncrementalMarkdownFrontier {
 	update(text: string): FrozenMarkdownSplit {
 		if (this.cached && text === this.prevText) return this.cached;
 		// 非追加（回退、整段替换、新一轮）会让已冻结块的源区间失效。
-		if (this.prevText && !text.startsWith(this.prevText)) {
+		// 首个 update（prevText 为空）不算非追加：generation 保持 0。
+		const appended = this.prevText !== "" && text.startsWith(this.prevText);
+		if (this.prevText !== "" && !appended) {
 			this.generation += 1;
 		}
 		this.prevText = text;
-		const { prefixEnd, frozenBlocks } = resolveFrozenPrefixEnd(text);
+		const split = appended && this.cached
+			? this.rescanAppend(text, this.cached)
+			: this.fullScan(text);
 		// 冻结边界未动且 generation 未变时复用上一次的 prefix 字符串对象：
 		// 流式每帧追加 6~12 字，若每帧 slice 都会新分配一个大字符串
 		// （V8 对 slice 可能生成引用父串的 SlicedString，使旧串无法及时回收），
 		// 长时间流式会持续积累分配压力；边界移动时内容才真正变化，必须重 slice。
-		const prefix =
+		if (
 			this.cached &&
-			this.cached.generation === this.generation &&
-			this.cached.prefixEnd === prefixEnd
-				? this.cached.prefix
-				: text.slice(0, prefixEnd);
-		this.cached = {
+			appended &&
+			this.cached.generation === split.generation &&
+			this.cached.prefixEnd === split.prefixEnd
+		) {
+			split.prefix = this.cached.prefix;
+		}
+		this.cached = split;
+		return split;
+	}
+
+	/** 全量重扫：首个 update / 非 append / 无冻结块可续（prefixEnd=0）时使用。 */
+	private fullScan(text: string): FrozenMarkdownSplit {
+		const { prefixEnd, frozenBlocks } = resolveFrozenPrefixEnd(text);
+		return {
 			prefixEnd,
-			prefix,
+			prefix: text.slice(0, prefixEnd),
 			tail: text.slice(prefixEnd),
 			frozenBlocks,
 			generation: this.generation,
 		};
-		return this.cached;
+	}
+
+	/**
+	 * 增量重扫：从上一个冻结块的起点续扫。该块可能被追加文本追溯吞并
+	 * （setext 下划线并入前段 / 列表懒延续 / 引用吞行），必须重新判定；
+	 * 更早的冻结块结构不可能被追加改变，直接复用其 span。
+	 */
+	private rescanAppend(text: string, prev: FrozenMarkdownSplit): FrozenMarkdownSplit {
+		const prevFrozen = prev.frozenBlocks;
+		const resumeFrom = prevFrozen.length > 0 ? prevFrozen[prevFrozen.length - 1].start : 0;
+		const newBlocks = splitTopLevelMarkdownBlocks(text, resumeFrom);
+		// 续扫块 + 之前冻结块（最后一个除外，它从 resumeFrom 起已被重扫）。
+		// 前次冻结块恒为内容块（无 blank），结构不会被追加改变，offset 保持有效。
+		const allBlocks = [...prevFrozen.slice(0, -1), ...newBlocks];
+		const content = allBlocks.filter((block) => block.kind !== "blank");
+		const { prefixEnd, frozenBlocks } = computeFrozenEnd(content);
+		return {
+			prefixEnd,
+			prefix: text.slice(0, prefixEnd),
+			tail: text.slice(prefixEnd),
+			frozenBlocks,
+			generation: this.generation,
+		};
 	}
 
 	reset(): void {

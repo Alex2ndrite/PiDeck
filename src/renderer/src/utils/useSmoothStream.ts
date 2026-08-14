@@ -67,13 +67,25 @@ export function useSmoothStream({
 	content,
 	isStreaming,
 	disabled = false,
-	minDelay = 8,
+	minDelay = 16,
 	streamingDivisor = 5,
 	drainDivisor = 3,
-	maxStepPerFrame = 6,
+	maxStepPerFrame = 10,
 	maxDrainStepPerFrame = 12,
 }: UseSmoothStreamOptions): UseSmoothStreamReturn {
 	const [displayedContent, setDisplayedContent] = useState(content);
+
+	// 长文本降频（2026-08 内存/CPU 治理）：每帧 DOM 更新（文本节点替换 → layout）
+	// 成本随文本长度增长，逐字 60fps 会把主线程排满 → IPC 消息积压 → 渲染进程
+	// 原生内存 GB 级爬升。按长度分级降频：8K 内保持打字机手感；8K+ 降到 16ms
+	// （~37fps）；64K+ 降到 33ms（~30fps）。步进上限同步放大，保证排空速率
+	// （step×fps）始终高于 LLM 输出速率（100-300 字/s），队列不会越积越长。
+	// 调用方显式传入的参数仍是下限之上的覆盖（Math.max 取大）。
+	const effectiveMinDelay = Math.max(
+		minDelay,
+		content.length > 64_000 ? 33 : content.length > 8_000 ? 16 : 8,
+	);
+	const effectiveMaxStepPerFrame = Math.max(maxStepPerFrame, content.length > 8_000 ? 12 : 6);
 
 	// ????????
 	const chunkQueueRef = useRef<string[]>([]);
@@ -168,7 +180,7 @@ export function useSmoothStream({
 				return;
 			}
 
-			if (currentTime - lastRenderTimeRef.current < minDelay) {
+			if (currentTime - lastRenderTimeRef.current < effectiveMinDelay) {
 				rafRef.current = requestAnimationFrame(renderLoop);
 				return;
 			}
@@ -179,7 +191,7 @@ export function useSmoothStream({
 			// ????????? delta ??? LLM ??? queue ???count ??
 			// ? queue ??????????? ? maxStep????????
 			const divisor = streamDoneRef.current ? drainDivisor : streamingDivisor;
-			const maxStep = streamDoneRef.current ? maxDrainStepPerFrame : maxStepPerFrame;
+			const maxStep = streamDoneRef.current ? maxDrainStepPerFrame : effectiveMaxStepPerFrame;
 			const count = Math.min(Math.max(1, Math.floor(queue.length / divisor)), maxStep);
 			const chars = queue.splice(0, count);
 			displayedRef.current += chars.join("");
@@ -196,7 +208,7 @@ export function useSmoothStream({
 				rafRef.current = null;
 			}
 		},
-		[minDelay, streamingDivisor, drainDivisor, maxStepPerFrame, maxDrainStepPerFrame],
+		[effectiveMinDelay, effectiveMaxStepPerFrame, streamingDivisor, drainDivisor, maxDrainStepPerFrame],
 	);
 	renderLoopRef.current = renderLoop;
 
