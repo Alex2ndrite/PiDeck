@@ -52,6 +52,13 @@ const segmenter = new Intl.Segmenter([
 	"en-US", "zh-CN", "zh-TW", "ja-JP", "ko-KR", "de-DE", "fr-FR", "es-ES", "pt-PT", "ru-RU",
 ]);
 
+/**
+ * 流式空转停帧阈值（ms）：队列空且超过该时长没有新 delta（流式通道卡死/中断、
+ * run 状态未正确收尾）时停掉 60fps rAF 空转，避免烧 CPU；新 delta 到达时
+ * content effect 会重新唤醒打字机。
+ */
+const IDLE_STOP_MS = 3000;
+
 function segmentText(text: string): string[] {
 	return Array.from(segmenter.segment(text)).map((s) => s.segment);
 }
@@ -81,6 +88,11 @@ export function useSmoothStream({
 	// ?????
 	const streamDoneRef = useRef(!isStreaming);
 	streamDoneRef.current = !isStreaming;
+	// 最近一次内容变更时刻：空转停帧判定用（见 renderLoop 空队列分支）
+	const lastChunkAtRef = useRef(performance.now());
+	// 稳定引用 renderLoop：content effect 需要重启打字机，但 renderLoop 声明在后
+	// （TDZ），且引用稳定，不参与 effect 依赖。
+	const renderLoopRef = useRef<(currentTime: number) => void>(() => {});
 
 	// ??????? delta ???
 	useEffect(() => {
@@ -103,6 +115,8 @@ export function useSmoothStream({
 			if (delta) {
 				const chars = segmentText(delta);
 				chunkQueueRef.current.push(...chars);
+				// 空转停帧后新 delta 到达：重启打字机
+				if (!rafRef.current) renderLoopRef.current(performance.now());
 			}
 		} else {
 			// ?????????/???????????????
@@ -111,6 +125,7 @@ export function useSmoothStream({
 			setDisplayedContent(newContent);
 		}
 		prevContentRef.current = newContent;
+		lastChunkAtRef.current = performance.now();
 	}, [content, disabled]);
 
 	// ?????????????????????? dump ???? rAF ?????
@@ -141,7 +156,14 @@ export function useSmoothStream({
 					rafRef.current = null;
 					return;
 				}
-				// ?????????????
+				// 流式仍在但无新内容：超过空转阈值（IDLE_STOP_MS 无新 delta）则停帧，
+				// 防止 run 卡死/通道中断时 60fps 空转烧 CPU；新 delta 到达时
+				// content effect 会经 renderLoopRef 重新唤醒。
+				if (performance.now() - lastChunkAtRef.current > IDLE_STOP_MS) {
+					rafRef.current = null;
+					return;
+				}
+				// 正常等待下一批 delta：保持挂帧
 				rafRef.current = requestAnimationFrame(renderLoop);
 				return;
 			}
@@ -176,6 +198,7 @@ export function useSmoothStream({
 		},
 		[minDelay, streamingDivisor, drainDivisor, maxStepPerFrame, maxDrainStepPerFrame],
 	);
+	renderLoopRef.current = renderLoop;
 
 	// ??/???????????????????????
 	useEffect(() => {

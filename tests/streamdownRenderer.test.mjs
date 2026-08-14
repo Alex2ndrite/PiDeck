@@ -127,12 +127,21 @@ test("static markdown scenes share the Streamdown engine", () => {
 
 test("streaming overlong guard: plain-text fallback above STREAM_LIGHT_MAX_CHARS", () => {
   const stream = readFileSync("src/renderer/src/components/session/MarkdownStream.tsx", "utf8");
-  // 阈值常量导出（字符数）：marked 解析随文本线性涨，超长时流式回退纯文本
-  assert.match(stream, /export const STREAM_LIGHT_MAX_CHARS = 40_000/);
-  assert.match(stream, /streamPlain =\s*\n?\s*isStreamingNow && displayText\.length > STREAM_LIGHT_MAX_CHARS/);
+  const policy = readFileSync("src/renderer/src/components/session/markdownStreamPolicy.ts", "utf8");
+  // 阈值常量迁到纯策略模块（行为单测见 markdownStreamPolicy.test.mjs），MarkdownStream 兼容再导出
+  assert.match(policy, /export const STREAM_LIGHT_MAX_CHARS = 40_000/);
+  assert.match(policy, /export const STREAM_UNFREEZABLE_MIN_CHARS = 8_000/);
+  assert.match(policy, /export const SETTLE_FULL_MAX_CHARS = 150_000/);
+  assert.match(stream, /export \{ STREAM_LIGHT_MAX_CHARS \} from "\.\/markdownStreamPolicy"/);
   // 回退节点：纯文本 + pre-wrap（排版由容器 markdown-body 接管）
-  assert.match(stream, /whitespace-pre-wrap break-words/);
+  assert.match(stream, /streamPlain =\s*\n?\s*isStreamingNow && displayText\.length > STREAM_LIGHT_MAX_CHARS/);
+  // 不可冻结（prefixEnd=0，未闭合围栏等）且超过小阈值：流式期间同样回退纯文本，
+  // 避免每帧全量重渲染（大代码块流式输出时 GC 追不上、原生内存爬升）
+  assert.match(stream, /frozenSplit !== undefined && frozenSplit\.prefixEnd === 0 && displayText\.length > STREAM_UNFREEZABLE_MIN_CHARS/);
+  // settle 全量渲染上限：超大内容保持轻量插件（防逐 token 高亮留下 GB 级 DOM）
+  assert.match(stream, /shouldKeepLightOnSettle\(props\.text\.length\)/);
   // 回退必须发生在 Streamdown 之外（不建解析树），且依赖链含 streamPlain
+  assert.match(stream, /whitespace-pre-wrap break-words/);
   assert.match(stream, /if \(streamPlain\)/);
   assert.match(stream, /pipe, streamPlain/);
   // 超长兜底对思考同样生效（ThinkingBlock 走同一 MarkdownStream），无需额外开关

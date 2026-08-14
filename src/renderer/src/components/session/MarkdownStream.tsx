@@ -8,6 +8,15 @@ import { markdownUrlTransform } from "./MarkdownLinkCore";
 import { FormulaCopyLayer } from "./FormulaCopyLayer";
 import { useSmoothStream } from "../../utils/useSmoothStream";
 import {
+	STREAM_LIGHT_MAX_CHARS,
+	STREAM_UNFREEZABLE_MIN_CHARS,
+	SETTLE_FULL_MAX_CHARS,
+	shouldRenderStreamPlain,
+	shouldKeepLightOnSettle,
+} from "./markdownStreamPolicy";
+// 兼容导出：既有引用与源码契约测试从 MarkdownStream 读阈值常量
+export { STREAM_LIGHT_MAX_CHARS } from "./markdownStreamPolicy";
+import {
 	IncrementalMarkdownFrontier,
 	UNSTABLE_TAIL_BLOCKS,
 } from "./markdown/incrementalMarkdown";
@@ -27,17 +36,6 @@ const mathPlugin = createMathPlugin({ singleDollarTextMath: true });
 // FrozenMarkdownChunk 的 memo 比较 props.pipe 引用变化 → 冻结 prefix 每帧全量重解析。
 const NO_STREAM_REMARK_PLUGINS: Parameters<typeof Streamdown>[0]["remarkPlugins"] = [];
 const NO_STREAM_REHYPE_PLUGINS: Parameters<typeof Streamdown>[0]["rehypePlugins"] = [];
-
-/**
- * 流式超长兜底阈值（字符数，UTF-16 code unit）。
- *
- * marked 解析成本随当前累积文本线性增长：实测（marked 17，200 轮平均）
- * 30K 字符约 2.3ms/帧（帧预算 14%）、60K 约 5.1ms（31%）。
- * pi 的典型回答（含代码）在 10K 字符以内；超过该阈值时流式期间回退纯文本，
- * 保住 60fps 与打字机节奏（rAF 掉帧 → queue 积压 → 流式滞后），settle 后
- * 自动切回全量渲染。正文与思考共用此兜底。
- */
-export const STREAM_LIGHT_MAX_CHARS = 40_000;
 
 /**
  * Streamdown 渲染管线（唯一 markdown 引擎）。
@@ -124,9 +122,6 @@ export const MarkdownStream = memo(function MarkdownStream(props: {
 	});
 	const displayText = props.isStreaming ? displayedContent : props.text;
 	const isStreamingNow = Boolean(props.isStreaming);
-	// 流式超长兜底：长度单调递增，一旦超过阈值保持纯文本到 settle，不会反复横跳。
-	const streamPlain =
-		isStreamingNow && displayText.length > STREAM_LIGHT_MAX_CHARS;
 	// 流式期间走轻量渲染：跳过代码高亮/mermaid/数学等重插件，只跑 marked 核心解析，
 	// 否则 30fps 逐字渲染会让插件管线（每帧全量树遍历）占满主线程，React concurrent
 	// 把多帧 setState 合并提交 → DOM 一帧蹦多字（学 Proma：流式期间 react-markdown 轻渲染）。
@@ -136,7 +131,8 @@ export const MarkdownStream = memo(function MarkdownStream(props: {
 	// （timeout 兜底防永久延迟）；静态场景（从未流式，如 FileDiffViewer）不延迟。
 	const wasStreamingRef = useRef(false);
 	const [settleFull, setSettleFull] = useState(false);
-	const effectiveLight = props.light || isStreamingNow || !settleFull;
+	const effectiveLight = props.light || isStreamingNow || !settleFull ||
+		shouldKeepLightOnSettle(props.text.length);
 	useEffect(() => {
 		if (isStreamingNow) {
 			// 新一轮流式：复位，等待下次 settle 再调度全量
@@ -159,6 +155,26 @@ export const MarkdownStream = memo(function MarkdownStream(props: {
 			else window.clearTimeout(id);
 		};
 	}, [isStreamingNow]);
+	// ── 冻结切分必须先于 streamPlain：不可冻结（prefixEnd=0）时需要据此回退纯文本 ──
+	// 每条 MarkdownStream 实例跟一段流：非 append 升 generation，冻结节点整段重建。
+	// settle 等待全量渲染期间（settleFull=false）继续用冻结渲染展示完整文本（轻量插件），
+	// 空闲调度切全量后（usingFrozen=false）才 reset frontier。
+	const frontierRef = useRef<IncrementalMarkdownFrontier | undefined>(undefined);
+	if (!frontierRef.current) frontierRef.current = new IncrementalMarkdownFrontier();
+	const usingFrozen = isStreamingNow || !settleFull;
+	const frozenSplit =
+		usingFrozen && !props.light && displayText.length <= STREAM_LIGHT_MAX_CHARS
+			? frontierRef.current.update(displayText)
+			: undefined;
+	if (!usingFrozen) frontierRef.current.reset();
+	// 流式纯文本兜底（长度单调递增，一旦触发保持到 settle，不会反复横跳）：
+	// 1. 整体超长（>40K）：marked 解析成本线性增长，流式期间回退纯文本；
+	// 2. 不可冻结（未闭合代码围栏等，prefixEnd=0）且超过小阈值：每帧都是全量
+	//    重渲染（大代码块流式输出时 GC 追不上，原生内存实测 200-450MB/min 爬升），
+	//    同样回退纯文本，settle 后一次全量渲染。
+	const streamPlain =
+		isStreamingNow && displayText.length > STREAM_LIGHT_MAX_CHARS ||
+		(frozenSplit !== undefined && frozenSplit.prefixEnd === 0 && displayText.length > STREAM_UNFREEZABLE_MIN_CHARS);
 	// 流式中精简插件：gfm/codeMeta/linkifyPaths 与 math 等插件都留到静态渲染；
 	// 外部显式传入的插件（FileDiffViewer 等场景）不受流式精简影响。
 	const resolvedRemarkPlugins = isStreamingNow
@@ -225,19 +241,9 @@ export const MarkdownStream = memo(function MarkdownStream(props: {
 			isDark,
 		],
 	);
-	// 每条 MarkdownStream 实例跟一段流：非 append 升 generation，冻结节点整段重建。
-	// settle 等待全量渲染期间（settleFull=false）继续用冻结渲染展示完整文本（轻量插件），
-	// 空闲调度切全量后（usingFrozen=false）才 reset frontier。
-	const frontierRef = useRef<IncrementalMarkdownFrontier | undefined>(undefined);
-	if (!frontierRef.current) frontierRef.current = new IncrementalMarkdownFrontier();
-	const usingFrozen = isStreamingNow || !settleFull;
-	const frozenSplit =
-		usingFrozen && !streamPlain
-			? frontierRef.current.update(displayText)
-			: undefined;
-	if (!usingFrozen) frontierRef.current.reset();
-	// 节流窗口内 displayText 不变时，useMemo 返回同一 element 引用，
-	// React 直接 bailout，Streamdown 子树（含 marked 解析）完全跳过。
+	// 冻结切分与 streamPlain 已在上面（settle effect 之后）先行计算，
+	// 此处直接消费 frozenSplit：节流窗口内 displayText 不变时 useMemo 返回
+	// 同一 element 引用，React 直接 bailout，Streamdown 子树（含 marked 解析）完全跳过。
 	const streamElement = useMemo(
 		() => {
 			if (streamPlain) {
