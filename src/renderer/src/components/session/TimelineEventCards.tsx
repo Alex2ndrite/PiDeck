@@ -354,7 +354,16 @@ export const ThinkingBlock = memo(
 		<section className="w-full min-w-0 overflow-hidden rounded-md border-0">
 			{/* 标签行：图标+耗时+右侧展开/收起按钮。不显示「思考」文字，只留图标+耗时，
 			    保持轨道安静（思考内容本身已有虚线框区分）。按钮常显：折叠态可随时展开查看全文 */}
-			<div className="flex min-h-6 items-center gap-2 px-1">
+			<div className="relative flex min-h-6 items-center gap-2 px-1">
+				{/* 流式思考中整行扫光（dsh-web reasoning-row-sweep 同款：光带从行左滑到行右，
+				    2.6s 循环）。isStreaming 才挂载：思考结束立即消失，与状态同步；
+				    pointer-events-none 保证不挡耗时/折叠按钮点击，motion-reduce 尊重系统减弱动效 */}
+				{props.isStreaming && (
+					<span
+						aria-hidden
+						className="pointer-events-none absolute inset-y-0 left-[-300px] w-[300px] animate-thinking-sweep motion-reduce:animate-none bg-[linear-gradient(90deg,transparent,color-mix(in_srgb,var(--color-bg-app)_55%,transparent),transparent)]"
+					/>
+				)}
 				<Brain size={15} className="shrink-0 text-text-secondary" aria-hidden="true" />
 				{(hasEnded || props.isStreaming) && props.startedAt && (
 					<small className="shrink-0 font-mono text-micro tabular-nums text-text-tertiary">
