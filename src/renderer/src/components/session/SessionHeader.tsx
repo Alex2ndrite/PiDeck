@@ -1,5 +1,5 @@
-import { Activity, HatGlasses, Maximize2, MessagesSquare } from "lucide-react";
-import { useAtomValue, useSetAtom } from "jotai";
+import { HatGlasses, Maximize2 } from "lucide-react";
+import { useAtomValue } from "jotai";
 import { selectAtom } from "jotai/utils";
 import { useMemo, type ReactNode, type RefObject } from "react";
 import type { AgentRuntimeState } from "../../../../shared/types";
@@ -8,8 +8,6 @@ import {
   sessionRecordByIdAtomFamily,
   sessionRuntimeBySessionIdAtomFamily,
   sessionSendStateByIdAtom,
-  sessionSurfaceViewByIdAtomFamily,
-  setSessionSurfaceViewAtom,
   projectByIdAtomFamily,
 } from "../../atoms";
 import { isUserFacingSessionStart } from "../../hooks/useSessionTimelineController";
@@ -39,8 +37,8 @@ type HeaderActions = {
   paneTitle?: string;
   /** 退出会话分屏（扩大为单栏）；仅分屏时提供 */
   onExitSplit?: () => void;
-  /** 对话/轨迹切换所绑定的会话；缺省用 session 模式的 sessionId。 */
-  surfaceSessionId?: string;
+  /** 状态徽章绑定的会话（runtime / 缓存命中率）；与 mode=session 的身份可并存。 */
+  statusSessionId?: string;
 };
 
 type LegacySessionHeaderProps = HeaderActions & {
@@ -70,7 +68,7 @@ export type SessionHeaderProps = LegacySessionHeaderProps | ModernSessionHeaderP
  */
 export function SessionHeader(props: SessionHeaderProps) {
   const sessionMode = props.mode === "session";
-  const sessionId = props.surfaceSessionId ?? (sessionMode ? props.sessionId : "");
+  const sessionId = props.statusSessionId ?? (sessionMode ? props.sessionId : "");
   const legacyProps = props as LegacySessionHeaderProps;
   const session = useAtomValue(sessionRecordByIdAtomFamily(sessionId));
   const runtime = useAtomValue(sessionRuntimeBySessionIdAtomFamily(sessionId));
@@ -97,45 +95,12 @@ export function SessionHeader(props: SessionHeaderProps) {
   const projectName = props.projectName ?? (project ? displayProjectDirectoryName(project) : undefined);
   // 会话标题：分屏优先用 paneTitle，其次 legacy title / session 模式记录标题。
   const title = props.paneTitle ?? (sessionMode ? session?.title?.trim() || t("app.chatProject") : props.title);
-  const surfaceView = useAtomValue(sessionSurfaceViewByIdAtomFamily(sessionId));
-  const setSurfaceView = useSetAtom(setSessionSurfaceViewAtom);
-  const viewSwitcher = sessionId ? (
-    <div className="flex shrink-0 items-center rounded-md border border-border/70 p-0.5" role="tablist" aria-label={t("session.view.trajectory")}>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon-xs"
-        role="tab"
-        aria-selected={surfaceView === "chat"}
-        className={`size-6 ${surfaceView === "chat" ? "bg-muted text-foreground" : "text-muted-foreground"}`}
-        title={t("session.view.chat")}
-        aria-label={t("session.view.chat")}
-        onClick={() => setSurfaceView({ sessionId, view: "chat" })}
-      >
-        <MessagesSquare className="size-3.5" aria-hidden="true" />
-      </Button>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon-xs"
-        role="tab"
-        aria-selected={surfaceView === "trajectory"}
-        className={`size-6 ${surfaceView === "trajectory" ? "bg-muted text-foreground" : "text-muted-foreground"}`}
-        title={t("session.view.trajectory")}
-        aria-label={t("session.view.trajectory")}
-        onClick={() => setSurfaceView({ sessionId, view: "trajectory" })}
-      >
-        <Activity className="size-3.5" aria-hidden="true" />
-      </Button>
-    </div>
-  ) : null;
 
   const actions = (
     <div
       ref={props.embedded ? props.headerRef : undefined}
       className={`chat-header-actions flex min-w-0 items-center justify-end gap-1.5${props.embedded ? " h-7 w-auto shrink-0" : ""}${isStarting ? " loading" : ""}`}
     >
-      {viewSwitcher}
       {props.widgetChips}
       {isAnonymous && (
         <span className="anonymous-badge" title={t("app.anonymousChat")} aria-label={t("app.anonymousChat")}>

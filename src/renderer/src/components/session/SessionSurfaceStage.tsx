@@ -2,40 +2,27 @@ import { ChevronDown } from "lucide-react";
 import type { SessionTimelineController } from "../../hooks/useSessionTimelineController";
 import type { SessionMessageTimelineProps } from "./SessionMessageTimeline";
 import { SessionMessageTimeline } from "./SessionMessageTimeline";
-import { SessionTrajectoryView } from "./trajectory/SessionTrajectoryView";
 import { t } from "../../i18n";
 
 /**
- * 中栏表面：对话时间线 / 轨迹复盘二选一。
- * 抽离出 SessionView，避免装配层再长出视图切换业务。
+ * 中栏表面：只承载对话时间线。轨迹复盘已迁到右侧抽屉独立 tab。
  */
 export function SessionSurfaceStage(props: {
 	sessionId: string;
-	surfaceView: "chat" | "trajectory";
 	sessionTimeline: SessionTimelineController;
 	timelineProps: Omit<SessionMessageTimelineProps, "sessionId" | "controller">;
 	isRestarting: boolean;
 }) {
-	const { sessionId, surfaceView, sessionTimeline, timelineProps, isRestarting } = props;
+	const { sessionId, sessionTimeline, timelineProps, isRestarting } = props;
 	return (
 		<div className="relative h-full min-h-0">
-			{surfaceView === "trajectory" ? (
-				<SessionTrajectoryView
-					sessionId={sessionId}
-					messages={sessionTimeline.messages}
-					hasMoreMessages={sessionTimeline.hasMoreMessages}
-					isLoadingMoreMessages={sessionTimeline.isLoadingMoreMessages}
-					onLoadMore={sessionTimeline.loadMoreMessages}
-				/>
-			) : (
-				<SessionMessageTimeline
-					sessionId={sessionId}
-					controller={sessionTimeline}
-					{...timelineProps}
-				/>
-			)}
+			<SessionMessageTimeline
+				sessionId={sessionId}
+				controller={sessionTimeline}
+				{...timelineProps}
+			/>
 
-			{surfaceView === "chat" && sessionTimeline.showScrollToBottom && (
+			{sessionTimeline.showScrollToBottom && (
 				<button
 					className="scroll-to-bottom-btn"
 					onClick={sessionTimeline.scrollToBottom}

@@ -55,6 +55,8 @@ export const ipcChannels = {
 	sessionsCatalogListArchived: "sessions:catalog-list-archived",
 	sessionsCatalogReadMessages: "sessions:catalog-read-messages",
 	sessionsCatalogReadMessagePage: "sessions:catalog-read-message-page",
+	/** 会话 JSONL 过程事件（session/model/thinking/custom/compaction），供轨迹复盘，不进聊天时间线。 */
+	sessionsCatalogReadProcessEvents: "sessions:catalog-read-process-events",
 	sessionsCatalogReadReferenceMessages: "sessions:catalog-read-reference-messages",
 	/** 按需读取单条消息完整文本（工具结果截断后的「查看完整输出」入口）。 */
 	sessionsCatalogReadMessageFullText: "sessions:catalog-read-message-full-text",

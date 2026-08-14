@@ -2,6 +2,7 @@ import { useCallback, useMemo, useRef, useState, type PointerEvent as ReactPoint
 import { useAtomValue } from "jotai";
 import { Activity, Clock, Hash, Wrench } from "lucide-react";
 import type { AgentRuntimeState, ChatMessage } from "../../../../../shared/types";
+import type { SessionProcessEvent } from "../../../../../shared/types/trajectory";
 import { sessionRuntimeBySessionIdAtomFamily } from "../../../atoms";
 import { t } from "../../../i18n";
 import { formatDuration, formatTime } from "../TimelineFormat";
@@ -11,30 +12,46 @@ import {
 	type TrajectoryLane,
 	type TrajectoryRecord,
 	type TrajectoryTimeRange,
+	type TrajectoryTurn,
 } from "./buildTrajectory";
 
-const LANE_ORDER: TrajectoryLane[] = ["input", "model", "tools"];
+const LANE_ORDER: TrajectoryLane[] = ["input", "model", "tools", "process"];
 const MIN_DRAG_PX = 4;
 const MIN_ZOOM_SPAN_MS = 40;
 
 function laneLabel(lane: TrajectoryLane): string {
 	if (lane === "input") return t("session.trajectory.lane.input");
 	if (lane === "tools") return t("session.trajectory.lane.tools");
+	if (lane === "process") return t("session.trajectory.lane.process");
 	return t("session.trajectory.lane.model");
 }
 
-function kindLabel(kind: TrajectoryRecord["kind"]): string {
-	if (kind === "user") return t("session.trajectory.kind.user");
-	if (kind === "assistant") return t("session.trajectory.kind.assistant");
-	if (kind === "thinking") return t("session.trajectory.kind.thinking");
-	if (kind === "tool") return t("session.trajectory.kind.tool");
-	if (kind === "error") return t("session.trajectory.kind.error");
+function kindLabel(record: TrajectoryRecord): string {
+	if (record.kind === "user") {
+		return record.isInitialPrompt ? t("session.trajectory.kind.initialPrompt") : t("session.trajectory.kind.user");
+	}
+	if (record.kind === "assistant") return t("session.trajectory.kind.assistant");
+	if (record.kind === "thinking") return t("session.trajectory.kind.thinking");
+	if (record.kind === "tool") return t("session.trajectory.kind.tool");
+	if (record.kind === "error") return t("session.trajectory.kind.error");
+	if (record.kind === "systemPrompt") return t("session.trajectory.kind.systemPrompt");
+	if (record.kind === "process") {
+		if (record.processKind === "session") return t("session.trajectory.kind.sessionHeader");
+		if (record.processKind === "sessionInfo") return t("session.trajectory.kind.sessionInfo");
+		if (record.processKind === "modelChange") return t("session.trajectory.kind.modelChange");
+		if (record.processKind === "thinkingChange") return t("session.trajectory.kind.thinkingChange");
+		if (record.processKind === "compaction") return t("session.trajectory.kind.compaction");
+		if (record.processKind === "custom") return t("session.trajectory.kind.custom");
+		if (record.processKind === "import") return t("session.trajectory.kind.import");
+		return t("session.trajectory.kind.process");
+	}
 	return t("session.trajectory.kind.system");
 }
 
 function laneTone(lane: TrajectoryLane): string {
 	if (lane === "input") return "bg-primary/70";
 	if (lane === "tools") return "bg-amber-500/75 dark:bg-amber-400/70";
+	if (lane === "process") return "bg-violet-500/70 dark:bg-violet-400/65";
 	return "bg-sky-500/70 dark:bg-sky-400/65";
 }
 
@@ -56,28 +73,47 @@ function formatClock(ts: number): string {
 	});
 }
 
+/** 进行中 / 未测到 / 真实耗时 三分：0ms 不得再冒充「瞬间完成」。 */
+function durationLabel(record: TrajectoryRecord): string {
+	if (record.endedAt === undefined) return t("session.trajectory.inFlight");
+	if (record.durationMs === undefined) return t("session.trajectory.durationUnknown");
+	return formatDuration(record.durationMs);
+}
+
 /**
  * 会话轨迹复盘：3-lane 时间线 + turn 账本 + 选中 inspector。
  * 数据来自当前栏已加载的 ChatMessage（含历史页），不另开 IPC。
+ * drawer 变体改为竖排：概览 / 账本 / inspector 叠放，适配右侧窄栏。
  */
 export function SessionTrajectoryView(props: {
 	sessionId: string;
 	messages: ChatMessage[];
+	processEvents?: SessionProcessEvent[];
+	systemPrompt?: string;
 	hasMoreMessages?: boolean;
 	isLoadingMoreMessages?: boolean;
 	onLoadMore?: () => void;
+	variant?: "page" | "drawer";
 }) {
 	const runtime = useAtomValue(sessionRuntimeBySessionIdAtomFamily(props.sessionId));
 	const [now, setNow] = useState(() => Date.now());
 	const [selectedId, setSelectedId] = useState<string | undefined>(undefined);
 	const [range, setRange] = useState<TrajectoryTimeRange | undefined>(undefined);
-	const model = useMemo(() => buildTrajectory(props.messages, now), [props.messages, now]);
+	const model = useMemo(
+		() => buildTrajectory(props.messages, now, {
+			processEvents: props.processEvents,
+			systemPrompt: props.systemPrompt,
+		}),
+		[props.messages, props.processEvents, props.systemPrompt, now],
+	);
 	const visible = useMemo(() => filterRecordsByRange(model.records, range), [model.records, range]);
 	const selected = visible.find((record) => record.id === selectedId) ?? model.records.find((record) => record.id === selectedId);
 
 	const refreshNow = useCallback(() => {
 		if (model.turns.some((turn) => turn.inFlight)) setNow(Date.now());
 	}, [model.turns]);
+
+	const drawer = props.variant === "drawer";
 
 	return (
 		<div className="flex h-full min-h-0 flex-col bg-background" data-session-view="trajectory">
@@ -100,7 +136,7 @@ export function SessionTrajectoryView(props: {
 				{props.hasMoreMessages ? (
 					<button
 						type="button"
-						className="rounded-sm px-1.5 text-caption text-muted-foreground hover:text-foreground"
+						className="shrink-0 rounded-sm px-1.5 text-caption text-muted-foreground hover:text-foreground"
 						disabled={props.isLoadingMoreMessages}
 						onClick={props.onLoadMore}
 					>
@@ -120,11 +156,20 @@ export function SessionTrajectoryView(props: {
 				onRangeChange={setRange}
 				onHoverTick={refreshNow}
 			/>
-			<div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_minmax(220px,32%)]">
+			<div
+				className={
+					drawer
+						? "grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_minmax(140px,38%)]"
+						: "grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_minmax(220px,32%)]"
+				}
+			>
 				<TrajectoryLedger
 					records={visible}
+					turns={model.turns}
+					now={now}
 					selectedId={selected?.id}
 					onSelect={setSelectedId}
+					borderBottom={drawer}
 				/>
 				<TrajectoryInspector record={selected} runtimeState={runtime?.state} />
 			</div>
@@ -211,14 +256,14 @@ function TrajectoryOverview(props: {
 	return (
 		<div className="shrink-0 border-b border-border/60 px-3 py-2">
 			<div className="grid grid-cols-[44px_minmax(0,1fr)] gap-x-2">
-				<div className="flex h-[50px] flex-col justify-between py-0.5 text-[10px] leading-none text-muted-foreground">
+				<div className="flex h-16 flex-col justify-between py-0.5 text-[10px] leading-none text-muted-foreground">
 					{LANE_ORDER.map((lane) => (
 						<span key={lane}>{laneLabel(lane)}</span>
 					))}
 				</div>
 				<div
 					ref={trackRef}
-					className="relative h-[50px] cursor-crosshair touch-none rounded-sm bg-muted/40"
+					className="relative h-16 cursor-crosshair touch-none rounded-sm bg-muted/40"
 					onPointerDown={onPointerDown}
 					onPointerMove={onPointerMove}
 					onPointerUp={onPointerUp}
@@ -242,7 +287,7 @@ function TrajectoryOverview(props: {
 						<div
 							key={lane}
 							className="pointer-events-none absolute right-0 left-0"
-							style={{ top: `${laneIndex * 33.33}%`, height: "33.33%" }}
+							style={{ top: `${(laneIndex / LANE_ORDER.length) * 100}%`, height: `${100 / LANE_ORDER.length}%` }}
 						>
 							{props.records
 								.filter((record) => record.lane === lane)
@@ -253,7 +298,7 @@ function TrajectoryOverview(props: {
 										<button
 											key={record.id}
 											type="button"
-											title={`${kindLabel(record.kind)} · ${record.summary}`}
+											title={`${kindLabel(record)} · ${record.summary}`}
 											className={`pointer-events-auto absolute top-1/2 h-2 -translate-y-1/2 rounded-sm ${laneTone(lane)} ${selected ? "ring-1 ring-foreground" : ""}`}
 											style={{
 												left: `${projectLeft(record.startedAt, props.domainStart, span)}%`,
@@ -274,14 +319,30 @@ function TrajectoryOverview(props: {
 	);
 }
 
+function turnDurationLabel(
+	turn: { inFlight: boolean; durationMs?: number; startedAt: number } | undefined,
+	now: number,
+): string | undefined {
+	if (!turn) return undefined;
+	if (turn.inFlight) {
+		const elapsed = Math.max(0, now - turn.startedAt);
+		return elapsed > 0 ? formatDuration(elapsed) : t("session.trajectory.inFlight");
+	}
+	if (turn.durationMs === undefined) return undefined;
+	return formatDuration(turn.durationMs);
+}
+
 function TrajectoryLedger(props: {
 	records: TrajectoryRecord[];
+	turns: TrajectoryTurn[];
+	now: number;
 	selectedId?: string;
 	onSelect: (id: string) => void;
+	borderBottom?: boolean;
 }) {
 	let lastTurn = -1;
 	return (
-		<div className="min-h-0 overflow-auto border-r border-border/60">
+		<div className={`min-h-0 overflow-auto ${props.borderBottom ? "border-b border-border/60" : "border-r border-border/60"}`}>
 			{props.records.length === 0 ? (
 				<div className="px-3 py-6 text-center text-caption text-muted-foreground">
 					{t("session.trajectory.empty")}
@@ -292,11 +353,15 @@ function TrajectoryLedger(props: {
 						const showTurn = record.turnIndex !== lastTurn;
 						lastTurn = record.turnIndex;
 						const selected = record.id === props.selectedId;
+						const turnLabel = showTurn
+							? turnDurationLabel(props.turns[record.turnIndex], props.now)
+							: undefined;
 						return (
 							<li key={record.id}>
 								{showTurn ? (
-									<div className="bg-muted/40 px-3 py-1 text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
-										{t("session.trajectory.turn", { index: record.turnIndex + 1 })}
+									<div className="flex items-center justify-between bg-muted/40 px-3 py-1 text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
+										<span>{t("session.trajectory.turn", { index: record.turnIndex + 1 })}</span>
+										{turnLabel ? <span className="tabular-nums">{turnLabel}</span> : null}
 									</div>
 								) : null}
 								<button
@@ -305,10 +370,10 @@ function TrajectoryLedger(props: {
 									onClick={() => props.onSelect(record.id)}
 								>
 									<span className={`mt-1 size-1.5 shrink-0 rounded-full ${laneTone(record.lane)}`} />
-									<span className="w-16 shrink-0 font-medium text-foreground">{kindLabel(record.kind)}</span>
+									<span className="w-20 shrink-0 font-medium text-foreground">{kindLabel(record)}</span>
 									<span className="min-w-0 flex-1 truncate text-muted-foreground">{record.summary || "—"}</span>
 									<span className="shrink-0 tabular-nums text-muted-foreground">
-										{record.durationMs === undefined ? t("session.trajectory.inFlight") : formatDuration(record.durationMs)}
+										{durationLabel(record)}
 									</span>
 								</button>
 							</li>
@@ -337,16 +402,21 @@ function TrajectoryInspector(props: {
 		<div className="min-h-0 overflow-auto px-3 py-3">
 			<div className="mb-2 flex items-center gap-1.5 text-sm font-medium">
 				{record.kind === "tool" ? <Wrench size={14} /> : <Hash size={14} />}
-				{record.kind === "tool" ? record.toolName : kindLabel(record.kind)}
+				{record.kind === "tool" ? record.toolName : kindLabel(record)}
 			</div>
+			{record.kind === "systemPrompt" ? (
+				<p className="mb-2 text-caption text-muted-foreground">{t("session.trajectory.systemPromptHint")}</p>
+			) : null}
 			<dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-caption">
-				<dt className="text-muted-foreground">{t("session.trajectory.field.time")}</dt>
-				<dd className="tabular-nums">{formatTime(record.startedAt)} · {formatClock(record.startedAt)}</dd>
+				{record.startedAt > 0 ? (
+					<>
+						<dt className="text-muted-foreground">{t("session.trajectory.field.time")}</dt>
+						<dd className="tabular-nums">{formatTime(record.startedAt)} · {formatClock(record.startedAt)}</dd>
+					</>
+				) : null}
 				<dt className="text-muted-foreground">{t("session.trajectory.field.duration")}</dt>
-				<dd className="tabular-nums">
-					{record.durationMs === undefined ? t("session.trajectory.inFlight") : formatDuration(record.durationMs)}
-				</dd>
-				{record.status ? (
+				<dd className="tabular-nums">{durationLabel(record)}</dd>
+				{record.status && record.kind !== "process" ? (
 					<>
 						<dt className="text-muted-foreground">{t("session.trajectory.field.status")}</dt>
 						<dd>{record.status}</dd>
@@ -358,9 +428,33 @@ function TrajectoryInspector(props: {
 						<dd className="truncate font-mono text-[11px]">{record.toolCallId}</dd>
 					</>
 				) : null}
+				{record.cwd ? (
+					<>
+						<dt className="text-muted-foreground">{t("session.trajectory.field.cwd")}</dt>
+						<dd className="truncate font-mono text-[11px]">{record.cwd}</dd>
+					</>
+				) : null}
+				{record.provider || record.modelId ? (
+					<>
+						<dt className="text-muted-foreground">{t("session.trajectory.field.model")}</dt>
+						<dd className="truncate">{[record.provider, record.modelId].filter(Boolean).join("/")}</dd>
+					</>
+				) : null}
+				{record.thinkingLevel ? (
+					<>
+						<dt className="text-muted-foreground">{t("session.trajectory.field.thinkingLevel")}</dt>
+						<dd>{record.thinkingLevel}</dd>
+					</>
+				) : null}
+				{record.customType ? (
+					<>
+						<dt className="text-muted-foreground">{t("session.trajectory.field.customType")}</dt>
+						<dd className="truncate font-mono text-[11px]">{record.customType}</dd>
+					</>
+				) : null}
 			</dl>
 			{record.detail || record.text ? (
-				<pre className="mt-3 max-h-56 overflow-auto rounded-md bg-muted/50 p-2 text-[11px] leading-relaxed wrap-break-word whitespace-pre-wrap">
+				<pre className="mt-3 max-h-72 overflow-auto rounded-md bg-muted/50 p-2 text-[11px] leading-relaxed wrap-break-word whitespace-pre-wrap">
 					{record.detail || record.text}
 				</pre>
 			) : null}

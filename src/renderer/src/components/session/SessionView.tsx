@@ -25,7 +25,7 @@ import { SessionRuntimeDock } from "./SessionRuntimeDock";
 import { QueuedPromptPanel } from "./ComposerPanels";
 import { useSessionPaneServices } from "./SessionPaneServices";
 import { COMPOSER_DEFAULT_HEIGHT, COMPOSER_MIN_HEIGHT, TIMELINE_MIN_HEIGHT, growComposerWithinTimelineBudget, displayProjectDirectoryName } from "../../rendererUtils";
-import { projectByIdAtomFamily, sessionRecordByIdAtomFamily, sessionSurfaceViewByIdAtomFamily } from "../../atoms";
+import { projectByIdAtomFamily, sessionRecordByIdAtomFamily } from "../../atoms";
 import type { EnqueuePromptSnapshot } from "../../hooks/useSessionSend";
 
 // terminal 程序化布局保护窗口（ms）：programResize 后该窗口内的 terminal
@@ -177,7 +177,6 @@ export function SessionView({
   const sessionRecord = useAtomValue(sessionRecordByIdAtomFamily(sessionId));
   const project = useAtomValue(projectByIdAtomFamily(sessionRecord?.projectId ?? ""));
   const projectName = project ? displayProjectDirectoryName(project) : undefined;
-  const surfaceView = useAtomValue(sessionSurfaceViewByIdAtomFamily(sessionId));
   // #115 U5 垂直轴：timeline | composer | terminal 三段由 react-resizable-panels 接管。
   // composer 高度本地持有（px），终端高度/折叠仍由 useTerminalDock 的 per-agent
   // 状态持有，拖拽结果经 onResize 回写，外部状态经 imperative API 同步。
@@ -440,7 +439,7 @@ export function SessionView({
           本栏只保留会话状态徽章与分屏身份标题（抽屉开关在共享 Tab 栏）。 */}
       <SessionHeader
         headerRef={chatHeaderRef}
-        surfaceSessionId={sessionId}
+        statusSessionId={sessionId}
         title={sessionTitle}
         projectName={projectName}
         paneTitle={splitPane ? sessionTitle : undefined}
@@ -473,7 +472,6 @@ export function SessionView({
         <ResizablePanel id="timeline" minSize={TIMELINE_MIN_HEIGHT} className="session-v-timeline">
           <SessionSurfaceStage
             sessionId={sessionId}
-            surfaceView={surfaceView}
             sessionTimeline={sessionTimeline}
             isRestarting={isRestarting}
             timelineProps={{

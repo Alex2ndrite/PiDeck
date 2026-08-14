@@ -7,11 +7,17 @@
  * - 工具起止优先用 meta.startedAt + meta.durationMs（与 AgentManager 写入约定一致），
  *   不用 message.timestamp（update/end 会刷新，历史恢复后耗时不可还原）。
  * - in-flight（running / pending）不伪造 duration：endedAt 留空，时间列显示为进行中。
+ * - 历史 assistant/thinking 往往只有一个 timestamp（结束时刻）。轮内用相邻锚点
+ *   回推区间，避免账本只剩工具有耗时；用户/过程事件仍是时间点，不编造。
+ * - JSONL 过程事件（session/model/thinking/custom/compaction）按时间插入最近 turn，
+ *   不另开 IPC 通道以外的第二条对话投影。
+ * - 系统提示词 Pi 不落盘：可选的 extras.systemPrompt 仅作参考记录，不是当轮请求快照。
  */
 
 import type { ChatMessage } from "../../../../../shared/types";
+import type { SessionProcessEvent } from "../../../../../shared/types/trajectory";
 
-export type TrajectoryLane = "input" | "model" | "tools";
+export type TrajectoryLane = "input" | "model" | "tools" | "process";
 
 export type TrajectoryRecordKind =
 	| "user"
@@ -19,7 +25,9 @@ export type TrajectoryRecordKind =
 	| "thinking"
 	| "tool"
 	| "system"
-	| "error";
+	| "error"
+	| "process"
+	| "systemPrompt";
 
 export type TrajectoryRecord = {
 	id: string;
@@ -37,6 +45,14 @@ export type TrajectoryRecord = {
 	toolCallId?: string;
 	text?: string;
 	detail?: string;
+	/** 首条用户消息 = 本会话初始提示词（DSH 的 user 开轮语义）。 */
+	isInitialPrompt?: boolean;
+	processKind?: SessionProcessEvent["kind"];
+	cwd?: string;
+	provider?: string;
+	modelId?: string;
+	thinkingLevel?: string;
+	customType?: string;
 };
 
 export type TrajectoryTurn = {
@@ -45,6 +61,8 @@ export type TrajectoryTurn = {
 	startedAt: number;
 	endedAt?: number;
 	inFlight: boolean;
+	/** 本轮首条到末条的墙钟跨度；in-flight 时缺省，UI 用 now 显示已过时间。 */
+	durationMs?: number;
 	records: TrajectoryRecord[];
 };
 
@@ -53,6 +71,12 @@ export type TrajectoryModel = {
 	records: TrajectoryRecord[];
 	domainStart: number;
 	domainEnd: number;
+};
+
+export type TrajectoryBuildExtras = {
+	processEvents?: SessionProcessEvent[];
+	/** 内置/参考系统提示，不是 Pi 当轮真实请求体。 */
+	systemPrompt?: string;
 };
 
 const SUMMARY_LIMIT = 96;
@@ -81,6 +105,7 @@ function toolNameOf(message: ChatMessage): string {
 function laneOf(kind: TrajectoryRecordKind): TrajectoryLane {
 	if (kind === "user") return "input";
 	if (kind === "tool") return "tools";
+	if (kind === "process" || kind === "systemPrompt") return "process";
 	return "model";
 }
 
@@ -115,24 +140,148 @@ function flushTurn(
 		.map((record) => record.endedAt)
 		.filter((value): value is number => typeof value === "number");
 	const inFlight = records.some((record) => record.endedAt === undefined);
+	const endedAt = inFlight ? undefined : endedCandidates.length > 0 ? Math.max(...endedCandidates) : startedAt;
 	turns.push({
 		index: turns.length,
 		id,
 		startedAt,
-		endedAt: inFlight ? undefined : endedCandidates.length > 0 ? Math.max(...endedCandidates) : startedAt,
+		endedAt,
 		inFlight,
+		durationMs: endedAt !== undefined && endedAt >= startedAt ? endedAt - startedAt : undefined,
 		records,
 	});
+}
+
+function isPointKind(kind: TrajectoryRecordKind): boolean {
+	return kind === "user" || kind === "process" || kind === "systemPrompt" || kind === "system" || kind === "error";
+}
+
+function recordAnchor(record: TrajectoryRecord): number {
+	return (record.endedAt && record.endedAt > 0 ? record.endedAt : record.startedAt) || 0;
+}
+
+/**
+ * 历史 JSONL 里 assistant/thinking 常只有结束时刻。用轮内上一条锚点回推区间。
+ * 已有实测 duration（工具、live thinking）不覆盖；同一条消息拆出的 thinking
+ * 若没有独立起止，把整段算在 assistant 上，避免两条各算一遍。
+ */
+function inferWorkDurations(turns: TrajectoryTurn[]): void {
+	for (const turn of turns) {
+		for (let index = 0; index < turn.records.length; index += 1) {
+			const record = turn.records[index];
+			if (isPointKind(record.kind) || record.durationMs !== undefined || record.endedAt === undefined) {
+				continue;
+			}
+			if (record.kind !== "thinking" && record.kind !== "assistant") continue;
+
+			const next = turn.records[index + 1];
+			const sameStampAsAssistant =
+				record.kind === "thinking" &&
+				next?.kind === "assistant" &&
+				next.startedAt === record.startedAt &&
+				(record.endedAt === undefined || record.endedAt === record.startedAt);
+			if (sameStampAsAssistant) continue;
+
+			const prev = turn.records
+				.slice(0, index)
+				.reverse()
+				.find((item) => {
+					const at = recordAnchor(item);
+					return at > 0 && at < record.startedAt;
+				});
+			const prevAt = prev ? recordAnchor(prev) : 0;
+			// 历史 assistant 的 timestamp 是落盘时刻 ≈ 结束；优先用它，不要伸到下一个工具。
+			const ownEnd = record.endedAt > record.startedAt ? record.endedAt : 0;
+			const ownStamp = record.startedAt;
+			const nextAt = next && next.startedAt > 0 ? next.startedAt : 0;
+			const end = ownEnd || (prevAt > 0 && ownStamp > prevAt ? ownStamp : 0) || nextAt;
+			const start = prevAt > 0 && prevAt < end ? prevAt : record.startedAt;
+			if (!(end > start)) continue;
+			record.startedAt = start;
+			record.endedAt = end;
+			record.durationMs = end - start;
+		}
+
+		const endedCandidates = turn.records
+			.map((record) => record.endedAt)
+			.filter((value): value is number => typeof value === "number");
+		turn.inFlight = turn.records.some((record) => record.endedAt === undefined);
+		if (!turn.inFlight && endedCandidates.length > 0) {
+			turn.endedAt = Math.max(...endedCandidates);
+			turn.durationMs = Math.max(0, turn.endedAt - turn.startedAt);
+		}
+	}
+}
+
+function processRecord(event: SessionProcessEvent, turnIndex: number): TrajectoryRecord {
+	const startedAt = event.timestamp > 0 ? event.timestamp : 0;
+	return {
+		id: `process:${event.id}`,
+		kind: "process",
+		lane: "process",
+		turnIndex,
+		title: event.kind,
+		summary: summarize(event.summary),
+		startedAt,
+		endedAt: startedAt || undefined,
+		// 过程事件是时间点，没有可测区间；0 会在 UI 上伪装成「瞬间完成」。
+		text: event.summary,
+		detail: event.detail,
+		processKind: event.kind,
+		cwd: event.cwd,
+		provider: event.provider,
+		modelId: event.modelId,
+		thinkingLevel: event.thinkingLevel,
+		customType: event.customType,
+		status: event.tokensBefore !== undefined ? String(event.tokensBefore) : undefined,
+	};
+}
+
+function insertProcessEvents(turns: TrajectoryTurn[], events: SessionProcessEvent[]): void {
+	if (events.length === 0) return;
+	if (turns.length === 0) {
+		const records = events.map((event) => processRecord(event, 0));
+		flushTurn(turns, records, records[0]?.startedAt ?? 0, records[0]?.id ?? "process");
+		return;
+	}
+
+	for (const event of events) {
+		const at = event.timestamp > 0 ? event.timestamp : turns[0].startedAt;
+		let target = 0;
+		for (let index = 0; index < turns.length; index += 1) {
+			const nextStart = turns[index + 1]?.startedAt;
+			if (at >= turns[index].startedAt && (nextStart === undefined || at < nextStart)) {
+				target = index;
+				break;
+			}
+			if (at < turns[0].startedAt) {
+				target = 0;
+				break;
+			}
+			target = turns.length - 1;
+		}
+		const turn = turns[target];
+		const record = processRecord({ ...event, timestamp: at }, turn.index);
+		const insertAt = turn.records.findIndex((item) => item.startedAt > record.startedAt && record.startedAt > 0);
+		if (insertAt === -1) turn.records.push(record);
+		else turn.records.splice(insertAt, 0, record);
+		if (record.startedAt > 0 && record.startedAt < turn.startedAt) turn.startedAt = record.startedAt;
+	}
 }
 
 /**
  * 从 ChatMessage[] 构建轨迹。now 仅用于空会话兜底 domain，不写入 in-flight duration。
  */
-export function buildTrajectory(messages: ChatMessage[], now = Date.now()): TrajectoryModel {
+export function buildTrajectory(
+	messages: ChatMessage[],
+	now = Date.now(),
+	extras: TrajectoryBuildExtras = {},
+): TrajectoryModel {
 	const turns: TrajectoryTurn[] = [];
 	let current: TrajectoryRecord[] = [];
 	let turnStartedAt = 0;
 	let turnId = "";
+	let sawUser = false;
 
 	const startTurn = (id: string, startedAt: number) => {
 		if (current.length > 0) flushTurn(turns, current, turnStartedAt, turnId || current[0].id);
@@ -143,6 +292,8 @@ export function buildTrajectory(messages: ChatMessage[], now = Date.now()): Traj
 
 	for (const message of messages) {
 		if (message.role === "user") {
+			const initial = !sawUser;
+			sawUser = true;
 			startTurn(message.id, message.timestamp);
 			pushRecord(current, {
 				id: message.id,
@@ -153,8 +304,8 @@ export function buildTrajectory(messages: ChatMessage[], now = Date.now()): Traj
 				summary: summarize(message.text),
 				startedAt: message.timestamp,
 				endedAt: message.timestamp,
-				durationMs: 0,
 				text: message.text,
+				isInitialPrompt: initial || undefined,
 			});
 			continue;
 		}
@@ -169,7 +320,11 @@ export function buildTrajectory(messages: ChatMessage[], now = Date.now()): Traj
 			const durationMs = asNumber(message.meta?.durationMs);
 			const inFlight = isInFlightTool(message);
 			const name = toolNameOf(message);
-			const endedAt = inFlight ? undefined : startedAt + (durationMs ?? 0);
+			const endedAt = inFlight
+				? undefined
+				: durationMs !== undefined
+					? startedAt + durationMs
+					: message.timestamp;
 			pushRecord(current, {
 				id: message.id,
 				kind: "tool",
@@ -179,7 +334,7 @@ export function buildTrajectory(messages: ChatMessage[], now = Date.now()): Traj
 				summary: summarize(asString(message.meta?.detailText) || message.text || name),
 				startedAt,
 				endedAt,
-				durationMs: inFlight ? undefined : (durationMs ?? 0),
+				durationMs: inFlight ? undefined : durationMs,
 				status: asString(message.meta?.status) ?? (message.meta?.isError ? "error" : "done"),
 				toolName: name,
 				toolCallId: asString(message.meta?.toolCallId),
@@ -192,6 +347,7 @@ export function buildTrajectory(messages: ChatMessage[], now = Date.now()): Traj
 		if (message.role === "assistant") {
 			if (message.thinking?.trim()) {
 				const startedAt = message.thinkingStartedAt ?? message.timestamp;
+				const hasSpan = message.thinkingStartedAt !== undefined && message.thinkingEndedAt !== undefined;
 				const endedAt = isThinkingOnly(message) && isInFlightAssistant(message)
 					? undefined
 					: (message.thinkingEndedAt ?? message.timestamp);
@@ -204,7 +360,8 @@ export function buildTrajectory(messages: ChatMessage[], now = Date.now()): Traj
 					summary: summarize(message.thinking),
 					startedAt,
 					endedAt,
-					durationMs: endedAt === undefined ? undefined : Math.max(0, endedAt - startedAt),
+					// 缺起止时间就不要用同一条 message.timestamp 相减得出 0ms。
+					durationMs: endedAt === undefined || !hasSpan ? undefined : Math.max(0, endedAt - startedAt),
 					text: message.thinking,
 				});
 			}
@@ -219,7 +376,6 @@ export function buildTrajectory(messages: ChatMessage[], now = Date.now()): Traj
 					summary: summarize(message.text),
 					startedAt: message.timestamp,
 					endedAt: inFlight ? undefined : message.timestamp,
-					durationMs: inFlight ? undefined : 0,
 					status: message.stopReason,
 					text: message.text,
 				});
@@ -233,23 +389,49 @@ export function buildTrajectory(messages: ChatMessage[], now = Date.now()): Traj
 			kind,
 			lane: laneOf(kind),
 			turnIndex: turns.length,
-			title: kind,
+			title: asString(message.meta?.type) ?? kind,
 			summary: summarize(message.text),
 			startedAt: message.timestamp,
 			endedAt: message.timestamp,
-			durationMs: 0,
 			text: message.text,
+			detail: asString(message.meta?.type),
 		});
 	}
 
 	if (current.length > 0) flushTurn(turns, current, turnStartedAt, turnId || current[0].id);
+	insertProcessEvents(turns, extras.processEvents ?? []);
 
-	const records = turns.flatMap((turn) => turn.records);
+	if (extras.systemPrompt?.trim()) {
+		const promptRecord: TrajectoryRecord = {
+			id: "system-prompt-reference",
+			kind: "systemPrompt",
+			lane: "process",
+			turnIndex: 0,
+			title: "systemPrompt",
+			summary: summarize(extras.systemPrompt),
+			startedAt: turns[0]?.startedAt ?? now,
+			endedAt: turns[0]?.startedAt ?? now,
+			text: extras.systemPrompt,
+			detail: extras.systemPrompt,
+		};
+		if (turns.length === 0) {
+			flushTurn(turns, [promptRecord], promptRecord.startedAt, promptRecord.id);
+		} else {
+			turns[0].records.unshift(promptRecord);
+			turns[0].startedAt = Math.min(turns[0].startedAt, promptRecord.startedAt);
+		}
+	}
+
+	inferWorkDurations(turns);
+
+	const records = turns.flatMap((turn) =>
+		turn.records.map((record) => ({ ...record, turnIndex: turn.index })),
+	);
 	const times = records.flatMap((record) => {
 		const values = [record.startedAt];
 		if (record.endedAt !== undefined) values.push(record.endedAt);
 		return values;
-	});
+	}).filter((value) => value > 0);
 	const domainStart = times.length > 0 ? Math.min(...times) : now;
 	const closedEnd = times.length > 0 ? Math.max(...times) : now;
 	// domain 右端：有 in-flight 时伸到 now，让时间线开区间可见；账本本身仍不写 duration。

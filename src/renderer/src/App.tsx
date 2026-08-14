@@ -14,6 +14,7 @@ import { SKIN_PRESETS } from "./themePresets";
 let injectedWallpaperTokens = new Set<string>();
 import {
   Code,
+  Activity,
   FolderOpen,
   Globe,
   Pencil,
@@ -3054,6 +3055,13 @@ export function App() {
               icon: <Globe size={16} />,
               active: drawer === "browser",
               onClick: () => handleToolDrawerAction("browser"),
+            },
+            {
+              id: "trajectory",
+              label: t("session.view.trajectory"),
+              icon: <Activity size={16} />,
+              active: drawer === "trajectory",
+              onClick: () => handleToolDrawerAction("trajectory"),
             },
           ]}
         />

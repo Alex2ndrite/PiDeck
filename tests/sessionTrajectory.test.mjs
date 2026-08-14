@@ -67,6 +67,32 @@ test("user message opens a turn; assistant/tool/thinking belong to it", () => {
 	assert.equal(tool.lane, "tools");
 	assert.equal(model.records[0].lane, "input");
 	assert.equal(model.records[1].lane, "model");
+	assert.equal(model.records.find((r) => r.kind === "user")?.durationMs, undefined);
+	assert.equal(model.records.find((r) => r.kind === "thinking")?.durationMs, 300);
+	assert.equal(model.records.find((r) => r.kind === "assistant")?.durationMs, 100);
+	assert.equal(model.turns[0].durationMs, 800);
+});
+
+test("history assistant without thinking span uses previous message as start", () => {
+	const { buildTrajectory } = loadModule();
+	const model = buildTrajectory([
+		msg({ id: "u1", role: "user", text: "go", timestamp: 1000 }),
+		msg({
+			id: "a1",
+			role: "assistant",
+			text: "done",
+			thinking: "plan",
+			timestamp: 2500,
+			stopReason: "stop",
+		}),
+	]);
+	const thinking = model.records.find((r) => r.kind === "thinking");
+	const assistant = model.records.find((r) => r.kind === "assistant");
+	assert.equal(thinking?.durationMs, undefined);
+	assert.equal(assistant?.startedAt, 1000);
+	assert.equal(assistant?.endedAt, 2500);
+	assert.equal(assistant?.durationMs, 1500);
+	assert.equal(model.turns[0].durationMs, 1500);
 });
 
 test("in-flight tool does not invent duration", () => {
@@ -102,13 +128,56 @@ test("filterRecordsByRange keeps overlapping spans only", () => {
 	assert.equal(JSON.stringify(hit), JSON.stringify(["b", "c"]));
 });
 
-test("session chrome wires a chat/trajectory view switch", () => {
+test("trajectory lives in the right drawer, not the session surface", () => {
 	const sessionView = readFileSync("src/renderer/src/components/session/SessionView.tsx", "utf8");
 	const stage = readFileSync("src/renderer/src/components/session/SessionSurfaceStage.tsx", "utf8");
 	const header = readFileSync("src/renderer/src/components/session/SessionHeader.tsx", "utf8");
+	const app = readFileSync("src/renderer/src/App.tsx", "utf8");
+	const drawer = readFileSync("src/renderer/src/components/workspace/DrawerSurface.tsx", "utf8");
+	const hook = readFileSync("src/renderer/src/hooks/useWorkspacePanels.ts", "utf8");
 	assert.match(sessionView, /SessionSurfaceStage/);
-	assert.match(sessionView, /sessionSurfaceViewByIdAtomFamily/);
-	assert.match(stage, /SessionTrajectoryView/);
-	assert.match(header, /trajectory/);
-	assert.match(header, /session.view.trajectory/);
+	assert.doesNotMatch(sessionView, /sessionSurfaceViewByIdAtomFamily/);
+	assert.doesNotMatch(stage, /SessionTrajectoryView/);
+	assert.doesNotMatch(header, /session.view.trajectory/);
+	assert.match(hook, /"trajectory"/);
+	assert.match(app, /id: "trajectory"/);
+	assert.match(drawer, /SessionTrajectoryPanel/);
+	assert.match(drawer, /drawer === "trajectory"/);
+});
+
+test("trajectory source concatenates runtime history prefix with the live window", () => {
+	const source = readFileSync("src/renderer/src/hooks/useSessionTrajectorySource.ts", "utf8");
+	const panel = readFileSync("src/renderer/src/components/session/trajectory/SessionTrajectoryPanel.tsx", "utf8");
+	assert.match(source, /sessionMessageCacheBySessionIdAtomFamily/);
+	assert.match(source, /\[\.\.\.cachedEntry\.history\.messages, \.\.\.cachedEntry\.messages\]/);
+	assert.match(source, /prependSessionHistoryPageAtom/);
+	assert.match(source, /readProcessEvents/);
+	assert.match(source, /pi-system/);
+	assert.match(panel, /currentSessionIdAtom/);
+	assert.match(panel, /processEvents/);
+});
+
+test("first user message is the initial prompt; process events join the ledger", () => {
+	const { buildTrajectory } = loadModule();
+	const model = buildTrajectory(
+		[
+			msg({ id: "u1", role: "user", text: "first ask", timestamp: 2000 }),
+			msg({ id: "u2", role: "user", text: "follow up", timestamp: 4000 }),
+		],
+		5000,
+		{
+			processEvents: [
+				{ id: "s1", kind: "session", timestamp: 1000, summary: "cwd /repo", cwd: "/repo" },
+				{ id: "m1", kind: "modelChange", timestamp: 2500, summary: "openai/gpt", provider: "openai", modelId: "gpt" },
+			],
+			systemPrompt: "You are pi.",
+		},
+	);
+	assert.equal(model.records[0].kind, "systemPrompt");
+	assert.equal(model.records.find((r) => r.id === "u1")?.isInitialPrompt, true);
+	assert.equal(model.records.find((r) => r.id === "u2")?.isInitialPrompt, undefined);
+	assert.ok(model.records.some((r) => r.processKind === "session"));
+	assert.ok(model.records.some((r) => r.processKind === "modelChange"));
+	assert.equal(model.records.find((r) => r.kind === "systemPrompt")?.durationMs, undefined);
+	assert.equal(model.records.find((r) => r.processKind === "session")?.durationMs, undefined);
 });

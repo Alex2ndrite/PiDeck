@@ -385,6 +385,7 @@ export function createPreviewApi(): PiDesktopApi {
 			exportRecordHtml: async () => ({ path: "preview-session.html" }),
 			readRecordMessages: async () => [],
 			readRecordMessagePage: async () => ({ messages: [], total: 0, nextBefore: null }),
+			readProcessEvents: async () => [],
 			readMessageFullText: async () => ({ text: "" }),
 			readReferenceMessages: async () => [
 				{ role: "user", content: "Preview user message", timestamp: Date.now() - 60000 },

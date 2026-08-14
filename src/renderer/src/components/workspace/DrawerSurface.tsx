@@ -1,10 +1,10 @@
 import { BrowserSurface } from "./BrowserSurface";
 import { GitPanel } from "../app/GitPanel";
 import { DrawerContent } from "../app/AppParts";
+import { SessionTrajectoryPanel } from "../session/trajectory/SessionTrajectoryPanel";
 import { LazyWrapper } from "../../hooks/useLazyComponent";
 import type { WorkspaceDrawerPanel } from "../../hooks/useWorkspacePanels";
 import { t } from "../../i18n";
-import { Button } from "../ui-shadcn/button";
 
 // ── port objects (typed loosely — type tightening is a follow-up task) ──
 
@@ -86,7 +86,11 @@ export function DrawerSurface(props: DrawerSurfaceProps) {
   return (
     <>
       {/* 各面板不再挂「标题 + ×」顶栏：关闭/切换改走会话 Tab 栏右侧活动图标。 */}
-      {drawer === "browser" && !drawerCollapsed ? (
+      {drawer === "trajectory" && !drawerCollapsed ? (
+        <div className="drawer-content-frame flex min-h-0 flex-1 flex-col overflow-hidden">
+          <SessionTrajectoryPanel />
+        </div>
+      ) : drawer === "browser" && !drawerCollapsed ? (
         <div className="drawer-content-frame flex min-h-0 flex-1 flex-col overflow-hidden">
           <BrowserSurface
             fullscreen={browser.browserFullscreen}
@@ -132,7 +136,7 @@ export function DrawerSurface(props: DrawerSurfaceProps) {
             </div>
           </div>
         </div>
-      ) : drawer && drawer !== "browser" && drawer !== "git" ? (
+      ) : drawer && drawer !== "browser" && drawer !== "git" && drawer !== "trajectory" ? (
         <LazyWrapper
           // 滚动层上移到这里：files/sessions 面板自身不再滚动（见 timeline.css
           // .files-panel/.sessions-panel 注释），占位与内容共用同一滚动容器，配合

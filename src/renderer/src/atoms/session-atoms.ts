@@ -318,29 +318,6 @@ export const newTurnCollapseTickBySessionIdAtomFamily = atomFamily((sessionId: s
   ),
 );
 
-/** 会话中栏视图：聊天时间线 / 轨迹复盘。按 sessionId 隔离，分屏互不影响。 */
-export type SessionSurfaceView = "chat" | "trajectory";
-
-export const sessionSurfaceViewByIdAtom = atom<Record<string, SessionSurfaceView>>({});
-
-export const sessionSurfaceViewByIdAtomFamily = atomFamily((sessionId: string) =>
-  selectAtom(
-    sessionSurfaceViewByIdAtom,
-    (map) => map[sessionId] ?? "chat",
-    Object.is,
-  ),
-);
-
-export const setSessionSurfaceViewAtom = atom(
-  null,
-  (_get, set, input: { sessionId: string; view: SessionSurfaceView }) => {
-    set(sessionSurfaceViewByIdAtom, (prev) => {
-      if ((prev[input.sessionId] ?? "chat") === input.view) return prev;
-      return { ...prev, [input.sessionId]: input.view };
-    });
-  },
-);
-
 export const sessionMessageLruAtom = atom<string[]>([]);
 export const sessionMessageLoadStateAtom = atom<Record<string, SessionLoadState>>({});
 export const sessionCatalogLoadStateAtom = atom<Record<string, SessionLoadState>>({});
@@ -1427,13 +1404,6 @@ export const removeSessionStateAtom = atom(null, (get, set, sessionId: string) =
   // atomFamily 无自动 GC：会话删除时必须同步 remove 各 family 实例，否则长期泄漏（2026-10）。
   liveThinkingIdBySessionIdAtomFamily.remove(sessionId);
   newTurnCollapseTickBySessionIdAtomFamily.remove(sessionId);
-  sessionSurfaceViewByIdAtomFamily.remove(sessionId);
-  set(sessionSurfaceViewByIdAtom, (prev) => {
-    if (!(sessionId in prev)) return prev;
-    const next = { ...prev };
-    delete next[sessionId];
-    return next;
-  });
   streamingTextBySessionIdAtomFamily.remove(sessionId);
   sessionMessageCacheBySessionIdAtomFamily.remove(sessionId);
   set(streamingTextByIdAtom, (prevMap) => {
