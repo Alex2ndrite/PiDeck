@@ -202,3 +202,75 @@ test("places an explicit WSL cwd before the pi command", () => {
 	);
 	assert.equal(invocation.wsl.distro, "Ubuntu-24.04");
 });
+
+// ── customPiPath 失效回退 ────────────────────────────────────────────────
+
+test("resolveCommand falls back to auto-detection when customPiPath is stale (file gone)", () => {
+	const root = join(tmpdir(), `pi-desktop-locator-stale-${process.pid}-${Date.now()}`);
+	const pathDir = join(root, "path-bin");
+	mkdirSync(pathDir, { recursive: true });
+	writeFileSync(join(pathDir, "pi.cmd"), "@echo off\r\n", "utf8");
+	try {
+		const { PiLocator } = loadPiLocatorModule(
+			"win32",
+			{
+				// PATH 里有一个真实候选（模拟 mise/nvm 目录），customPiPath 指向已删除的旧路径
+				PATH: pathDir,
+				LOCALAPPDATA: join(root, "Local"),
+				APPDATA: join(root, "Roaming"),
+			},
+			root,
+		);
+		const locator = new PiLocator();
+		const stale = join(root, "old-version", "pi.cmd"); // 文件不存在
+		const resolved = locator.resolveCommand(stale, false, undefined, undefined);
+		// 必须回退到自动扫描找到的候选，而不是把失效路径原样返回
+		assert.equal(resolved, join(pathDir, "pi.cmd"));
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
+});
+
+test("resolveCommand keeps a valid customPiPath (still takes priority)", () => {
+	const root = join(tmpdir(), `pi-desktop-locator-valid-${process.pid}-${Date.now()}`);
+	const customDir = join(root, "custom");
+	mkdirSync(customDir, { recursive: true });
+	writeFileSync(join(customDir, "pi.cmd"), "@echo off\r\n", "utf8");
+	try {
+		const { PiLocator } = loadPiLocatorModule("win32", { PATH: join(root, "path-bin") }, root);
+		const custom = join(customDir, "pi.cmd");
+		const resolved = new PiLocator().resolveCommand(custom, false, undefined, undefined);
+		assert.equal(resolved, custom);
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
+});
+
+test("normalizeCustomPath keeps wsl:// markers intact (not treated as local files)", () => {
+	const { PiLocator } = loadPiLocatorModule("win32", { PATH: "" }, tmpdir());
+	// wsl:// 是标记串而非文件路径：Windows 补全 .cmd/.exe 必须跳过它，existsSync 检查也不得误伤
+	assert.equal(
+		new PiLocator().normalizeCustomPath("wsl://Ubuntu-24.04/root/pi"),
+		"wsl://Ubuntu-24.04/root/pi",
+	);
+});
+
+test("resolveCommand falls back for unsupported .ps1 shims even when the file exists", () => {
+	const root = join(tmpdir(), `pi-desktop-locator-ps1-${process.pid}-${Date.now()}`);
+	const pathDir = join(root, "path-bin");
+	mkdirSync(pathDir, { recursive: true });
+	writeFileSync(join(pathDir, "pi.cmd"), "@echo off\r\n", "utf8");
+	try {
+		const { PiLocator } = loadPiLocatorModule(
+			"win32",
+			{ PATH: pathDir, LOCALAPPDATA: join(root, "Local"), APPDATA: join(root, "Roaming") },
+			root,
+		);
+		const ps1 = join(root, "pi.ps1");
+		writeFileSync(ps1, "# shim\n", "utf8");
+		const resolved = new PiLocator().resolveCommand(ps1, false, undefined, undefined);
+		assert.equal(resolved, join(pathDir, "pi.cmd"));
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
+});
