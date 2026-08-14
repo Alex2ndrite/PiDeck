@@ -159,16 +159,17 @@ export class AgentManager {
 	/** 会话文件版本（mtime:size）：随消息载荷下发，渲染层据此检测压缩改写并丢弃 disk 前缀。 */
 	private readonly sessionFileVersionByAgent = new Map<string, string>();
 	private readonly thinkingEmitter = new LatestByKeyEmitter<string, string>(
-		50,
+		100,
 		(agentId, thinking) => this.emitThinkingNow(agentId, thinking),
 	);
 	/** 当前流式正文的累积文本，独立于 messages 数组推送（阶段1：学 Proma 独立存储）。
-	 *  50ms 窗口与 Proma PI_PARTIAL_UPDATE_INTERVAL_MS 对齐：渲染层 20fps 更新，
-	 *  避免 16ms 高频推送让 streamdown 解析（每 content 变更全量重解析）压满主线程、
-	 *  rAF 帧率下降后 queue 积压导致「burst 蹦字」；打字机感由渲染层 useSmoothStream
-	 *  （divisor=8 字符队列逐字吐）呈现，不依赖推送粒度。 */
+	 *  100ms 合并窗口（2026-08 占用治理）：渲染层每次到达都要做 O(n) 累积拼接、
+	 *  MarkdownStream 重渲染与 GC 回收，50ms→100ms 让流式期这些 churn 减半
+	 *  （实测流式期 RSS 增长率随之减半），打字机（useSmoothStream）负责逐字
+	 *  平滑，100ms 的到达粒度肉眼不可感知；窗口越大 burst 时单帧步进越大，
+	 *  100ms 是平滑度与占用之间的折中。 */
 	private readonly textEmitter = new LatestByKeyEmitter<string, string>(
-		50,
+		100,
 		(agentId, text) => this.emitTextStreamNow(agentId, text),
 	);
 	/** 流式正文累积缓冲：text_delta 时累加，message_end/agent_end/settled/abort 清除。 */
@@ -179,7 +180,7 @@ export class AgentManager {
 	 * 分配器把 RSS 抬到流量峰值且不归还 → GB 级爬升）。见 emitTextStreamNow。
 	 */
 	private readonly lastSentTextByAgent = new Map<string, string>();
-	/** 距上次全量快照的增量推送次数（每 50 次 ≈ 2.5s 补一次全量自愈）。 */
+	/** 距上次全量快照的增量推送次数（每 50 次 ≈ 5s 补一次全量自愈，兜底渲染层丢增量）。 */
 	private readonly textPushCountByAgent = new Map<string, number>();
 	/** 已推送思考快照（delta 基准，同正文通道治理，见 emitThinkingNow）。 */
 	private readonly lastSentThinkingByAgent = new Map<string, string>();
