@@ -24,6 +24,14 @@ import {
 export type { Animation, SpringAnimation } from "./mergeAnimations";
 
 const STICK_TO_BOTTOM_OFFSET_PX = 70;
+/**
+ * 距底容差带（dsh-web ChatView 同值 25px）：用户滚动后距底 <= 25px 仍视为「在底部」。
+ * 两个用途：
+ * 1. 上滚逃逸守卫——流式回复期间滚轮/触控板轻微上滚（含贴底时滚不动产生的滚动事件）
+ *    不再误逃逸，底部按钮不会在回复过程中反复闪现（dsh 的 movedByReader + 25px 判定）；
+ * 2. wheel 逃逸守卫——贴底/近底时向上滚轮不逃逸（无位移的滚动没有逃逸意图）。
+ */
+const AT_BOTTOM_TOLERANCE_PX = 25;
 const SIXTY_FPS_INTERVAL_MS = 1000 / 60;
 const RETAIN_ANIMATION_DURATION_MS = 350;
 
@@ -419,8 +427,17 @@ export const useStickToBottom = (options: StickToBottomOptions = {}): StickToBot
           return;
         }
         if (isScrollingUp) {
-          setEscapedFromLock(true);
-          setIsAtBottom(false);
+          // dsh-web 式回笼带：上滚后距底 <= 25px 仍视为在底部，不逃逸。
+          // 流式回复中用户（或触控板惯性）轻微上滚时，若立刻解锁锁底，
+          // 后续内容增长不再贴底，底部按钮随之闪现；只有真正上滚离开实时尾部才解锁。
+          const distanceFromBottom =
+            (scrollRef.current?.scrollHeight ?? 0) -
+            scrollTop -
+            (scrollRef.current?.clientHeight ?? 0);
+          if (distanceFromBottom > AT_BOTTOM_TOLERANCE_PX) {
+            setEscapedFromLock(true);
+            setIsAtBottom(false);
+          }
         }
         if (isScrollingDown) {
           setEscapedFromLock(false);
@@ -451,6 +468,13 @@ export const useStickToBottom = (options: StickToBottomOptions = {}): StickToBot
         element === scrollRef.current &&
         deltaY < 0 &&
         scrollRef.current.scrollHeight > scrollRef.current.clientHeight &&
+        // dsh-web 式回笼带：距底 <= 25px 时向上滚轮不逃逸。
+        // 贴底时滚轮上滚不会产生任何位移（scrollTop 已到 floor），旧逻辑无条件逃逸，
+        // 流式回复中滚轮误触/惯性会让底部按钮闪现；距底足够远的上滚才有逃逸意图。
+        scrollRef.current.scrollHeight -
+          scrollRef.current.scrollTop -
+          scrollRef.current.clientHeight >
+          AT_BOTTOM_TOLERANCE_PX &&
         !state.animation?.ignoreEscapes
       ) {
         setEscapedFromLock(true);
