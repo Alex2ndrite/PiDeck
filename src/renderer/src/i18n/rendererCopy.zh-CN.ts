@@ -60,6 +60,8 @@ export const zhCN = {
   "app.newSession": "新会话",
   "app.anonymousChat": "新建匿名聊天（不保存会话记录）",
   "sidebar.moreActions": "更多操作",
+  "sidebar.emptyProjectsTitle": "添加你的项目目录",
+  "sidebar.emptyProjectsDesc": "pi 会在项目目录中读写文件、执行命令。添加后可在左侧管理多个项目。",
   "app.anonymousChatTitle": "匿名 Chat - {name}",
   "askPanel.title": "并行问询",
   "askPanel.sessionTitle": "并行问询",

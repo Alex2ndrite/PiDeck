@@ -61,6 +61,8 @@ export const enUS: Record<TranslationKey, string> = {
   "app.newSession": "New Session",
   "app.anonymousChat": "Anonymous chat (no session saved)",
   "sidebar.moreActions": "More actions",
+  "sidebar.emptyProjectsTitle": "Add your project directory",
+  "sidebar.emptyProjectsDesc": "pi reads and writes files and runs commands inside your project directory. Add one to manage multiple projects from the sidebar.",
   "app.anonymousChatTitle": "Anonymous Chat - {name}",
   "askPanel.title": "Parallel Ask",
   "askPanel.sessionTitle": "Parallel Ask",

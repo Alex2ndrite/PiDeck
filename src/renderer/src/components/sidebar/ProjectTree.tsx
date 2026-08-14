@@ -368,5 +368,31 @@ export function ProjectTree(props: {
         {workspaceProjects.map(renderProject)}
       </section>
     )}
+    {/* 无任何工作区项目（新用户只有内置 Chat）：显式渲染「项目」分组 + 空态引导。
+        此前该分组整体不渲染，侧边栏只剩搜索行一个 24px + 图标，用户不知道可以
+        添加自己的项目目录，误以为 PiDeck 只能聊天（issue #149 同类反馈）。
+        对标 dsh-web 侧边栏：无工作区时给出显眼的目录添加引导。 */}
+    {workspaceProjects.length === 0 && (
+      <section aria-label={t("app.sidebarProjects")} className="mt-1">
+        <div className="px-1 pb-1 text-caption font-medium text-muted-foreground">
+          {t("app.sidebarProjects")}
+        </div>
+        <div className="mx-1 rounded-lg border border-dashed border-border-subtle bg-muted/20 px-3 py-4 text-center">
+          <FolderPlus className="mx-auto mb-2 size-5 text-muted-foreground" aria-hidden="true" />
+          <div className="text-body font-medium text-foreground">{t("sidebar.emptyProjectsTitle")}</div>
+          <p className="mt-1 text-caption text-muted-foreground">{t("sidebar.emptyProjectsDesc")}</p>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            className="mt-3"
+            onClick={() => void props.actions.projects.add()}
+          >
+            <FolderPlus className="size-3.5" aria-hidden="true" />
+            {t("app.addProject")}
+          </Button>
+        </div>
+      </section>
+    )}
   </>;
 }
