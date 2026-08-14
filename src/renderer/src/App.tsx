@@ -507,8 +507,8 @@ export function App() {
     agentCountReminderEnabled: true,
     // showThinking 由 pi agent 的 hideThinkingBlock 控制，启动后从主进程加载的真实值会覆盖此处
     showThinking: true,
-    // 流式对话行为：默认不自动展开中间过程；新一轮默认收起非最新轮（与 SettingsStore 一致）
-    expandInterimDuringStream: false,
+    // 流式对话行为：默认自动展开中间过程；新一轮默认收起非最新轮（与 SettingsStore 一致）
+    expandInterimDuringStream: true,
     collapsePrevRunsOnNewTurn: true,
     showDevTools: false,
     // Electron Chromium 沙箱默认关，与主进程历史兼容策略一致

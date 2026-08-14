@@ -121,9 +121,9 @@ Gitmoji 对应关系：
   // 人文关怀提醒默认开启：用户可在设置中随时关闭
   agentCountReminderEnabled: true,
   showThinking: readPiAgentShowThinking() ?? true,
-  // 流式对话设置：默认不自动展开中间过程（省渲染资源，手动展开不受影响）；
+  // 流式对话设置：默认自动展开中间过程（思考/工具详情随最新轮流式展开）；
   // 新一轮开始默认收起非最新轮（含手动展开的），用户可在设置中关闭。
-  expandInterimDuringStream: false,
+  expandInterimDuringStream: true,
   collapsePrevRunsOnNewTurn: true,
   showDevTools: false,
   // 默认关闭 Chromium 沙箱：与历史 Windows no-sandbox 兼容策略一致

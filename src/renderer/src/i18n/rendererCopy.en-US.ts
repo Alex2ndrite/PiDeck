@@ -2009,7 +2009,7 @@ export const enUS: Record<TranslationKey, string> = {
   "settings.linkOpenMode.internal": "In-app window",
   "settings.workspaceContentOpenMode": "File / Diff open mode",
   "settings.expandInterimDuringStream": "Expand interim process while streaming",
-  "settings.expandInterimDuringStreamDesc": "Off (default): thinking and tool details stay collapsed during a conversation to save rendering resources; manually expanded turns are unaffected. On: auto-expands while the latest turn streams.",
+  "settings.expandInterimDuringStreamDesc": "On (default): thinking and tool details auto-expand while the latest turn streams. Off: keep them collapsed to save rendering resources; manually expanded turns are unaffected.",
   "settings.collapsePrevRunsOnNewTurn": "Collapse previous turns on new message",
   "settings.collapsePrevRunsOnNewTurnDesc": "Automatically collapses thinking/tool details of previous turns (including manually expanded ones) after sending a new message, reducing what is rendered at once.",
   "settings.workspaceContentOpenModeDesc": "When opening from the file tree or Git, default to a middle-pane split or fill the middle pane.",

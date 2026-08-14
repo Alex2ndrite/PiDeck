@@ -248,7 +248,7 @@ export type StartupWindowMode =
 	// ── 安全管理 ──
 	/**
 	 * 安全管理配置（等级/工具动作/目录边界/会话覆盖）。
-	 * 缺省 undefined：由 SecurityStore.normalizeConfig 并入默认值（enabled=false 零干预）。
+	 * 缺省 undefined：由 SecurityStore.normalizeConfig 并入默认值（enabled=true 安全门启用，默认等级 off）。
 	 * 变更后主进程会把策略快照写入 userData/security-policy.json 供 pi-deck-security-gate 扩展消费。
 	 */
 	securityConfig?: SecurityConfig;
