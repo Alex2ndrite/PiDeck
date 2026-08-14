@@ -1607,7 +1607,8 @@ function SettingsModalContent(props: SettingsModalProps) {
 									>
 										<Button variant="secondary"
 											onClick={draftSettings.disableUpdateCheck ? undefined : props.onCheckUpdate}
-											loading={props.updateChecking}
+											// 禁用时不再显示 loading：检查可能已被禁用拦下，但状态未及落定时仍会转圈
+											loading={props.updateChecking && !draftSettings.disableUpdateCheck}
 											disabled={draftSettings.disableUpdateCheck}
 										>
 											{draftSettings.disableUpdateCheck

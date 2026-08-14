@@ -1452,17 +1452,6 @@ export function App() {
   }, [expandedProjects, expandedProjectsReady, projectIdsKey, refreshProjectSessions, store]);
 
   useEffect(() => {
-    // When update check is disabled, skip periodic and deferred auto-check.
-    if (settings.disableUpdateCheck) return;
-    const timer = window.setInterval(
-      () => void appUpdate.check("auto"),
-      1000 * 60 * 60 * 6,
-    );
-    window.setTimeout(() => void appUpdate.check("auto"), 5000);
-    return () => window.clearInterval(timer);
-  }, [settings.disableUpdateCheck]);
-
-  useEffect(() => {
     if (activeAgentId && !isPendingAgentId(activeAgentId))
       void refreshRuntimeState(activeAgentId);
   }, [activeAgentId]);
