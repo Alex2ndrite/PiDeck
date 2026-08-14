@@ -80,6 +80,9 @@ function loadModule(mockProcess = {}) {
 			if (id === "../preloadPath") {
 				return { preparePreloadPath: async (sourcePath) => sourcePath };
 			}
+			if (id === "./petSpriteProtocol") {
+				return { PET_WINDOW_PARTITION: "persist:pet" };
+			}
 			// 拆分后 PetWindow 会读取 Chromium 沙箱偏好；测试中固定为未开启（默认路径）。
 			if (id === "../settings/SettingsStore") {
 				return { readElectronChromiumSandboxPreference: () => false };

@@ -6,9 +6,12 @@
  * scheme 特权声明（registerSchemesAsPrivileged）必须在 app ready 前完成。
  */
 
-import { protocol } from "electron";
+import { protocol, session } from "electron";
 import { readFile } from "node:fs/promises";
 import { isSpritePathAllowed, parsePetSpriteUrl, spriteMimeOf } from "./petSpriteUrl.ts";
+
+/** 宠物悬浮窗独立 partition：协议必须同时挂到这个 session，不能只挂 defaultSession。 */
+export const PET_WINDOW_PARTITION = "persist:pet";
 
 export type PetSpriteProtocolDeps = {
 	/** petId → 磁盘绝对路径（扫描白名单）；未知 id 返回 null */
@@ -17,9 +20,8 @@ export type PetSpriteProtocolDeps = {
 	roots: string[];
 };
 
-/** 注册 pideck-pet:// 协议 handler（app ready 后调用）。 */
-export function registerPetSpriteProtocol(deps: PetSpriteProtocolDeps): void {
-	protocol.handle("pideck-pet", async (request) => {
+function handlePetSpriteRequest(deps: PetSpriteProtocolDeps) {
+	return async (request: Request): Promise<Response> => {
 		const petId = parsePetSpriteUrl(request.url);
 		if (!petId) {
 			return new Response("forbidden", { status: 403 });
@@ -37,5 +39,16 @@ export function registerPetSpriteProtocol(deps: PetSpriteProtocolDeps): void {
 		} catch {
 			return new Response("not found", { status: 404 });
 		}
-	});
+	};
+}
+
+/**
+ * 注册 pideck-pet:// 协议 handler（app ready 后调用）。
+ * 主窗口设置预览走 defaultSession；桌面宠物窗走 persist:pet。
+ * 只挂一侧时，另一侧 Image.decode 失败，PetOverlay 会落到 emoji 兜底。
+ */
+export function registerPetSpriteProtocol(deps: PetSpriteProtocolDeps): void {
+	const handler = handlePetSpriteRequest(deps);
+	protocol.handle("pideck-pet", handler);
+	session.fromPartition(PET_WINDOW_PARTITION).protocol.handle("pideck-pet", handler);
 }

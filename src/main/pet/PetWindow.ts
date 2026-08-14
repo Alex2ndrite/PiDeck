@@ -15,6 +15,7 @@ import {
 import { preparePreloadPath } from "../preloadPath";
 import { readElectronChromiumSandboxPreference } from "../settings/SettingsStore";
 import { getAppLogger } from "../logging/sharedLogger";
+import { PET_WINDOW_PARTITION } from "./petSpriteProtocol";
 
 /** 三端宠物窗能力探测；Linux 只有明确 X11 时启用透明与绝对定位。 */
 export function detectPetWindowCaps(): PetWindowCaps {
@@ -132,7 +133,7 @@ export class PetWindow {
 			backgroundColor: caps.transparent ? "#00000000" : "#eef0f3",
 			webPreferences: {
 				preload: preloadPath,
-				partition: "persist:pet",
+				partition: PET_WINDOW_PARTITION,
 				// 与主窗口共用开发设置里的 Chromium 沙箱偏好，避免宠物窗单独写死 false。
 				sandbox: readElectronChromiumSandboxPreference(),
 				contextIsolation: true,

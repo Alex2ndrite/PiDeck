@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { join, sep } from "node:path";
 import test from "node:test";
 import {
@@ -38,6 +39,17 @@ test("isSpritePathAllowed confines reads to the allowed roots", () => {
 	assert.equal(isSpritePathAllowed(join(sep, "tmp", "petdex-evil", "sprite.bin"), roots), false);
 	// 根自身允许（兜底）
 	assert.equal(isSpritePathAllowed(root, roots), true);
+});
+
+test("pet sprite protocol is registered on the persist:pet session used by PetWindow", () => {
+	const windowSrc = readFileSync("src/main/pet/PetWindow.ts", "utf8");
+	const protocolSrc = readFileSync("src/main/pet/petSpriteProtocol.ts", "utf8");
+	// 宠物窗用独立 partition；protocol.handle 只挂 defaultSession 时，
+	// persist:pet 里 Image 加载 pideck-pet:// 会失败并掉进 emoji 兜底。
+	assert.match(windowSrc, /partition:\s*PET_WINDOW_PARTITION/);
+	assert.match(protocolSrc, /export const PET_WINDOW_PARTITION = "persist:pet"/);
+	assert.match(protocolSrc, /session\.fromPartition\(PET_WINDOW_PARTITION\)\.protocol\.handle/);
+	assert.match(protocolSrc, /protocol\.handle\("pideck-pet"/);
 });
 
 test("sprite url encodes pet ids for manifest embedding", () => {
