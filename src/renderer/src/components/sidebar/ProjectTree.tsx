@@ -111,34 +111,34 @@ export function ProjectTree(props: {
           >
             <ChevronRight size={14} className={cn("transition-transform", !collapsed && "rotate-90")} />
           </button>
-          <button
-            type="button"
-            className="flex min-w-0 flex-1 items-center gap-1 py-0 pr-1 text-left"
-            draggable={!props.controller.search.trim()}
-            onDragStart={(event) => dragStart(event, project.id)}
-            onDragOver={(event) => { if (props.controller.drag.sourceProjectId && props.controller.drag.sourceProjectId !== project.id) { event.preventDefault(); props.controller.setProjectDropTarget(project.id); } }}
-            onDragLeave={() => props.controller.setProjectDropTarget(undefined)}
-            onDrop={(event) => drop(event, project.id)}
-            onDragEnd={props.controller.finishProjectDrag}
-            onClick={() => {
-              // 项目主行同时承担选择和手风琴切换，让项目卡片本身保持唯一且明确的导航入口。
-              props.controller.toggleProject(project.id);
-              props.actions.projects.select(project.id);
-            }}
-          >
-            <span className="grid size-5 shrink-0 place-items-center text-muted-foreground" aria-hidden="true">
-              {collapsed ? <Folder size={14} /> : <FolderOpen size={14} />}
-            </span>
-            <div className="conversation-body min-w-0 flex-1 transition-[padding-right] @max-[255px]:group-hover:pr-29 @max-[255px]:group-focus-within:pr-29">
-              <div className="conversation-title flex min-w-0 items-center">
-                {/* 悬浮展示完整项目目录名 + 路径（目录名在行内常被 truncate） */}
-                <PathTooltip content={`${projectDirectoryName}\n${project.path}`}>
+          {/* 触发区包整行选择按钮：只包截断的 <strong> 时，快划过右侧气泡会立刻离开关闭。 */}
+          <PathTooltip content={`${projectDirectoryName}\n${project.path}`}>
+            <button
+              type="button"
+              className="flex min-w-0 flex-1 items-center gap-1 py-0 pr-1 text-left"
+              draggable={!props.controller.search.trim()}
+              onDragStart={(event) => dragStart(event, project.id)}
+              onDragOver={(event) => { if (props.controller.drag.sourceProjectId && props.controller.drag.sourceProjectId !== project.id) { event.preventDefault(); props.controller.setProjectDropTarget(project.id); } }}
+              onDragLeave={() => props.controller.setProjectDropTarget(undefined)}
+              onDrop={(event) => drop(event, project.id)}
+              onDragEnd={props.controller.finishProjectDrag}
+              onClick={() => {
+                // 项目主行同时承担选择和手风琴切换，让项目卡片本身保持唯一且明确的导航入口。
+                props.controller.toggleProject(project.id);
+                props.actions.projects.select(project.id);
+              }}
+            >
+              <span className="grid size-5 shrink-0 place-items-center text-muted-foreground" aria-hidden="true">
+                {collapsed ? <Folder size={14} /> : <FolderOpen size={14} />}
+              </span>
+              <div className="conversation-body min-w-0 flex-1 transition-[padding-right] @max-[255px]:group-hover:pr-29 @max-[255px]:group-focus-within:pr-29">
+                <div className="conversation-title flex min-w-0 items-center">
                   <strong className="min-w-0 flex-1 truncate font-medium">{projectDirectoryName}</strong>
-                </PathTooltip>
+                </div>
+                {/* 项目名称只承担导航信息；详细会话状态由下方的 Agent/历史会话行承担。 */}
               </div>
-              {/* 项目名称只承担导航信息；详细会话状态由下方的 Agent/历史会话行承担。 */}
-            </div>
-          </button>
+            </button>
+          </PathTooltip>
           <div className={cn(dimmedActionsClass, "pr-1", props.controller.menu?.kind === "project" && props.controller.menu.projectId === project.id && "pointer-events-auto opacity-100")}>
             {sourceFilter !== null && (
               <button
