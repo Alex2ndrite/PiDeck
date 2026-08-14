@@ -1433,7 +1433,7 @@ export function GitPanel(props: GitPanelProps) {
               <div className="git-status-msg flex min-h-[22px] shrink-0 items-center gap-1 px-[9px] text-[13px] text-[var(--git-desc-fg)]">{t("git.noPendingChanges")}</div>
             )}
 
-            <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain">
+            <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain [scrollbar-gutter:stable]">
               {groups.merge.length > 0 && (
                 <ResourceGroup
                   title={t("git.mergeChanges")}
@@ -1727,7 +1727,7 @@ function CompareChanges(props: {
         onToggle={props.onToggle}
       />
       {props.open && (
-        <div className="flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto overscroll-contain">
+        <div className="flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto overscroll-contain [scrollbar-gutter:stable]">
           <div className="git-compare-controls">
             <Label>
               <span>{t("git.base")}</span>

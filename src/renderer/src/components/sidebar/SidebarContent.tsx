@@ -174,8 +174,9 @@ export function SidebarContent(props: SidebarContentProps) {
           </Button>
         </div>
 
-        {/* 单一滚动区承载项目与展开内容，避免项目导航/详情双滚动和重复标题。 */}
-        <section className="conversation-list min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
+        {/* 单一滚动区承载项目与展开内容，避免项目导航/详情双滚动和重复标题。
+            scrollbar-gutter: stable：滚动条出现/消失时列表宽度不跳变（与抽屉一致）。 */}
+        <section className="conversation-list min-h-0 flex-1 overflow-x-hidden overflow-y-auto [scrollbar-gutter:stable]">
           <ProjectTree
             controller={controller}
             actions={actions}
