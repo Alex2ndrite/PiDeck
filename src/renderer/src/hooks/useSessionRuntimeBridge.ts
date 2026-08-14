@@ -27,6 +27,11 @@ export function useSessionRuntimeBridge(callbacks: RuntimeBridgeCallbacks = {}):
   const callbacksRef = useRef(callbacks);
   callbacksRef.current = callbacks;
 
+  // 【临时诊断，定位后移除】agents:state 到达频率与 closed 计数
+  const diagStateCountRef = useRef(0);
+  const diagClosedRef = useRef(0);
+  const diagLastFlushRef = useRef(Date.now());
+
   useEffect(() => {
     let disposed = false;
     void desktopApi.sessions.listRuntimes().then((runtimes) => {
@@ -37,6 +42,19 @@ export function useSessionRuntimeBridge(callbacks: RuntimeBridgeCallbacks = {}):
       // agents:state 是全量 AgentTab[] 推送：对已退出（closed）的 agent 释放
       // agentId 维度 atomFamily 缓存（agentId 每次新 UUID，只增不清是慢泄漏）。
       if (event.sourceChannel === "agents:state" && Array.isArray(event.payload)) {
+        diagStateCountRef.current += 1;
+        const closed = (event.payload as Array<{ id?: string; status?: string }>).filter((tab) => tab.status === "closed").length;
+        if (closed > 0) diagClosedRef.current += closed;
+        const now = Date.now();
+        if (now - diagLastFlushRef.current >= 5000) {
+          // 走 console.error 以进入主进程日志（rendererLog 只转发 error）
+          console.error(
+            `[DIAG] agents:state 5s window count=${diagStateCountRef.current} closed=${diagClosedRef.current} payloadChars=${JSON.stringify(event.payload).length}`,
+          );
+          diagStateCountRef.current = 0;
+          diagClosedRef.current = 0;
+          diagLastFlushRef.current = now;
+        }
         for (const tab of event.payload as Array<{ id?: string; status?: string }>) {
           if (typeof tab.id === "string" && tab.status === "closed") {
             store.set(agentExitedAtom, tab.id);

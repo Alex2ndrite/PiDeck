@@ -1073,6 +1073,10 @@ export const applySessionRuntimeEventAtom = atom(
           : typeof payload.thinking === "string"
             ? payload.thinking
             : "";
+      // 【临时诊断，定位后移除】大思考载荷计数
+      if (text.length > 100_000) {
+        console.error(`[DIAG] thinking payload len=${text.length} id=${id} done=${payload.done === true}`);
+      }
       const done = payload.done === true;
       const startedAt = typeof payload.startedAt === "number" ? payload.startedAt : Date.now();
       const endedAt = typeof payload.endedAt === "number" ? payload.endedAt : 0;
