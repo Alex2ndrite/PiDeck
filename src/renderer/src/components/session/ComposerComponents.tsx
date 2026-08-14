@@ -226,7 +226,7 @@ export function ComposerBottomBar(props: {
 	// 底栏只承载当前状态和直接操作，快捷键说明留给设置页，避免再次挤压编辑器。
 	// shrink-0：面板缩到最小时底栏不被输入区挤扁/挤出滚动条
 	return (
-		<div className="composer-bottom-bar min-h-10 shrink-0 border-t border-border/40 px-2 py-1.5">
+		<div className="composer-bottom-bar min-h-10 shrink-0 border-t border-transparent px-2.5 py-2">
 			<div className="composer-bottom-layout flex min-w-0 items-center gap-2">
 				<div className="composer-bottom-left flex min-w-0 flex-wrap items-center gap-0.5">
 					<Button

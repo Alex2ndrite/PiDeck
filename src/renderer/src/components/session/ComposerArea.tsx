@@ -243,7 +243,7 @@ export const ComposerArea = forwardRef<HTMLElement, ComposerAreaProps>(function 
             />
             <div
               // overflow-visible：保留命令面板/建议浮层；面板 minSize 已保证底栏不被裁切
-              className={["composer-box relative flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-visible rounded-xl border border-border bg-card text-card-foreground shadow-sm transition-[border-color,box-shadow,background-color]",
+              className={["composer-box relative flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-visible rounded-[20px] border border-border bg-card text-card-foreground shadow-[var(--shadow-composer-lifted)] transition-[border-color,box-shadow,background-color]",
                 composer.bangMode === "bang-bang"
                   ? "shell-silent-mode"
                   : composer.bangMode === "bang"

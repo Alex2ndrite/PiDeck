@@ -16,7 +16,7 @@ import { cn } from "../../lib/utils";
 // 只有当前资源使用 inset surface，避免每个项目都变成独立卡片。
 // 根项目行保留折叠层级，但收窄左右留白，给窄侧栏中的目录名多留出可用宽度。
 const treeRowClass =
-  "group conversation relative flex min-h-7 w-full items-center gap-1.5 rounded-md border border-transparent px-1 py-0 text-body text-foreground shadow-none transition-[background-color,border-color,box-shadow] duration-200 hover:border-border-subtle hover:bg-muted/60 hover:text-foreground";
+  "group conversation relative flex min-h-8 w-full items-center gap-1.5 rounded-lg border border-transparent px-1 py-0 text-body text-foreground shadow-none transition-[background-color,border-color,box-shadow] duration-200 hover:border-border-subtle hover:bg-muted/60 hover:text-foreground";
 
 /** 项目行右侧操作按钮的虚化模式：absolute 浮层，不参与布局（不挤压项目名文字），
  * 默认隐藏（pointer-events 一并关闭防误触），行 hover / 行内聚焦时显现。
@@ -90,7 +90,7 @@ export function ProjectTree(props: {
       const rootProjectSessions = props.controller.catalog.sessionsByProject[project.id] ?? [];
       // 运行态属于具体会话，而不是项目容器；项目行只负责导航，避免多个 Agent 同时运行时
       // 项目头像出现无法指向目标会话的聚合动画。
-      return <div key={project.id} className={cn("project-group mb-2", project.worktreeEnabled && "worktree-enabled")}>
+      return <div key={project.id} className={cn("project-group mb-1.5", project.worktreeEnabled && "worktree-enabled")}>
         <div
           className={cn(
             treeRowClass,
