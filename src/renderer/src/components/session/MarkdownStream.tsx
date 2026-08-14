@@ -1,4 +1,4 @@
-import { Fragment, memo, useMemo, useRef } from "react";
+import { Fragment, memo, useEffect, useMemo, useRef, useState } from "react";
 import { Streamdown, defaultRehypePlugins, defaultRemarkPlugins, type Components } from "streamdown";
 import { code } from "@streamdown/code";
 import { mermaid } from "@streamdown/mermaid";
@@ -21,6 +21,12 @@ import {
  * 行内公式（与 GitHub math 渲染行为一致，可接受）。
  */
 const mathPlugin = createMathPlugin({ singleDollarTextMath: true });
+
+// 流式精简插件集合：必须是模块级稳定引用（不能每帧内联 []）——
+// pipe 的 useMemo 依赖 resolvedRemarkPlugins，内联新数组会让 pipe 每帧重建，
+// FrozenMarkdownChunk 的 memo 比较 props.pipe 引用变化 → 冻结 prefix 每帧全量重解析。
+const NO_STREAM_REMARK_PLUGINS: Parameters<typeof Streamdown>[0]["remarkPlugins"] = [];
+const NO_STREAM_REHYPE_PLUGINS: Parameters<typeof Streamdown>[0]["rehypePlugins"] = [];
 
 /**
  * 流式超长兜底阈值（字符数，UTF-16 code unit）。
@@ -124,19 +130,46 @@ export const MarkdownStream = memo(function MarkdownStream(props: {
 	// 流式期间走轻量渲染：跳过代码高亮/mermaid/数学等重插件，只跑 marked 核心解析，
 	// 否则 30fps 逐字渲染会让插件管线（每帧全量树遍历）占满主线程，React concurrent
 	// 把多帧 setState 合并提交 → DOM 一帧蹦多字（学 Proma：流式期间 react-markdown 轻渲染）。
-	// 流结束 isStreaming 变 false 后自动切回全量（含高亮/mermaid/表格）。
-	const effectiveLight = props.light || Boolean(props.isStreaming);
+	// 流结束 isStreaming 变 false 后，全量渲染（高亮/mermaid/表格/元素树）是一次
+	// 实测 70-100ms 的同步长任务：若发生在用户滚动/交互期间会造成可见卡顿与滚动跳动。
+	// 因此 settle 后先保持流式末帧的轻量渲染，requestIdleCallback 空闲时再切全量
+	// （timeout 兜底防永久延迟）；静态场景（从未流式，如 FileDiffViewer）不延迟。
+	const wasStreamingRef = useRef(false);
+	const [settleFull, setSettleFull] = useState(false);
+	const effectiveLight = props.light || isStreamingNow || !settleFull;
+	useEffect(() => {
+		if (isStreamingNow) {
+			// 新一轮流式：复位，等待下次 settle 再调度全量
+			wasStreamingRef.current = true;
+			setSettleFull(false);
+			return;
+		}
+		if (!wasStreamingRef.current) {
+			// 静态场景（从未流式）：立即全量，不延迟
+			setSettleFull(true);
+			return;
+		}
+		wasStreamingRef.current = false;
+		const schedule = () => setSettleFull(true);
+		const id = typeof window.requestIdleCallback === "function"
+			? window.requestIdleCallback(schedule, { timeout: 1500 })
+			: window.setTimeout(schedule, 50);
+		return () => {
+			if (typeof window.cancelIdleCallback === "function") window.cancelIdleCallback(id);
+			else window.clearTimeout(id);
+		};
+	}, [isStreamingNow]);
 	// 流式中精简插件：gfm/codeMeta/linkifyPaths 与 math 等插件都留到静态渲染；
 	// 外部显式传入的插件（FileDiffViewer 等场景）不受流式精简影响。
 	const resolvedRemarkPlugins = isStreamingNow
-		? []
+		? NO_STREAM_REMARK_PLUGINS
 		: (props.remarkPlugins ?? [
 				defaultRemarkPlugins.gfm,
 				defaultRemarkPlugins.codeMeta,
 				remarkLinkifyPaths,
 			]);
 	const resolvedRehypePlugins = isStreamingNow
-		? []
+		? NO_STREAM_REHYPE_PLUGINS
 		: (props.rehypePlugins ?? [defaultRehypePlugins.raw]);
 	// 显式 Components 标注：让 a 的 props 走上下文类型推断（streamdown 的
 	// Components 是「具名槽位 | 索引签名」联合，直接内联会触发索引签名分支的类型不兼容）
@@ -193,13 +226,16 @@ export const MarkdownStream = memo(function MarkdownStream(props: {
 		],
 	);
 	// 每条 MarkdownStream 实例跟一段流：非 append 升 generation，冻结节点整段重建。
+	// settle 等待全量渲染期间（settleFull=false）继续用冻结渲染展示完整文本（轻量插件），
+	// 空闲调度切全量后（usingFrozen=false）才 reset frontier。
 	const frontierRef = useRef<IncrementalMarkdownFrontier | undefined>(undefined);
 	if (!frontierRef.current) frontierRef.current = new IncrementalMarkdownFrontier();
+	const usingFrozen = isStreamingNow || !settleFull;
 	const frozenSplit =
-		isStreamingNow && !streamPlain
+		usingFrozen && !streamPlain
 			? frontierRef.current.update(displayText)
 			: undefined;
-	if (!isStreamingNow) frontierRef.current.reset();
+	if (!usingFrozen) frontierRef.current.reset();
 	// 节流窗口内 displayText 不变时，useMemo 返回同一 element 引用，
 	// React 直接 bailout，Streamdown 子树（含 marked 解析）完全跳过。
 	const streamElement = useMemo(

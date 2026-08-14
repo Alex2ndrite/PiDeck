@@ -64,10 +64,41 @@ test("identical input is idempotent", () => {
 	assert.equal(first, second);
 });
 
+test("prefix grows when the frozen boundary moves forward (cache must reslice)", () => {
+	const { IncrementalMarkdownFrontier } = loadModule();
+	const frontier = new IncrementalMarkdownFrontier();
+	// 首帧：冻住 "# Title" + "Hello world."，tail 含 "Second para."。
+	const first = frontier.update("# Title\n\nHello world.\n\nSecond para.");
+	// 追加两个新块后 "Second para." 也稳定下来 → 冻结边界前移，prefix 必须重切片变长
+	// （防回归：frontier 在边界未动时复用 prefix 字符串对象，边界动了必须重新 slice）。
+	const second = frontier.update("# Title\n\nHello world.\n\nSecond para.\n\nThird para.\n\nFourth para.");
+	assert.ok(second.prefixEnd > first.prefixEnd);
+	assert.ok(second.prefix.startsWith(first.prefix));
+	assert.ok(second.prefix.includes("Second para."));
+	assert.match(second.tail, /Third para/);
+	// 边界稳定后继续追加（段内追加，内容块数不变）：prefix 内容保持不变
+	const third = frontier.update("# Title\n\nHello world.\n\nSecond para.\n\nThird para.\n\nFourth para. continues");
+	assert.equal(third.prefix, second.prefix);
+	assert.equal(third.prefixEnd, second.prefixEnd);
+});
+
 test("MarkdownStream streams through frozen prefix + tail split", () => {
 	const stream = readFileSync("src/renderer/src/components/session/MarkdownStream.tsx", "utf8");
 	assert.match(stream, /IncrementalMarkdownFrontier/);
 	assert.match(stream, /FrozenMarkdownChunk/);
 	assert.match(stream, /UNSTABLE_TAIL_BLOCKS/);
 	assert.match(stream, /data-md-frozen/);
+});
+
+test("MarkdownStream keeps streaming plugin arrays as stable module references", () => {
+	// 防回归：流式精简插件若内联 []（每帧新引用），pipe 的 useMemo 依赖随之变化
+	// → pipe 每帧重建 → FrozenMarkdownChunk 的 memo 比较 props.pipe 引用变化
+	// → 冻结 prefix 每帧全量重解析（掉帧/抖动/GC 压力的根源）。
+	const stream = readFileSync("src/renderer/src/components/session/MarkdownStream.tsx", "utf8");
+	assert.match(stream, /NO_STREAM_REMARK_PLUGINS/);
+	assert.match(stream, /NO_STREAM_REHYPE_PLUGINS/);
+	// 流式分支必须引用常量，不得内联新数组
+	assert.match(stream, /isStreamingNow\s*\?\s*NO_STREAM_REMARK_PLUGINS/);
+	assert.match(stream, /isStreamingNow\s*\?\s*NO_STREAM_REHYPE_PLUGINS/);
+	assert.doesNotMatch(stream, /isStreamingNow\s*\?\s*\[\]/);
 });

@@ -239,9 +239,19 @@ export class IncrementalMarkdownFrontier {
 		}
 		this.prevText = text;
 		const { prefixEnd, frozenBlocks } = resolveFrozenPrefixEnd(text);
+		// 冻结边界未动且 generation 未变时复用上一次的 prefix 字符串对象：
+		// 流式每帧追加 6~12 字，若每帧 slice 都会新分配一个大字符串
+		// （V8 对 slice 可能生成引用父串的 SlicedString，使旧串无法及时回收），
+		// 长时间流式会持续积累分配压力；边界移动时内容才真正变化，必须重 slice。
+		const prefix =
+			this.cached &&
+			this.cached.generation === this.generation &&
+			this.cached.prefixEnd === prefixEnd
+				? this.cached.prefix
+				: text.slice(0, prefixEnd);
 		this.cached = {
 			prefixEnd,
-			prefix: text.slice(0, prefixEnd),
+			prefix,
 			tail: text.slice(prefixEnd),
 			frozenBlocks,
 			generation: this.generation,

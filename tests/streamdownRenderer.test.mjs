@@ -138,9 +138,28 @@ test("streaming overlong guard: plain-text fallback above STREAM_LIGHT_MAX_CHARS
   // 超长兜底对思考同样生效（ThinkingBlock 走同一 MarkdownStream），无需额外开关
   const thinking = readFileSync("src/renderer/src/components/session/TimelineEventCards.tsx", "utf8");
   assert.match(thinking, /<MarkdownStream/);
-  // 流式轻渲染契约不回退：static 模式 + 流式精简插件仍是默认
+  // 流式轻渲染契约不回退：static 模式 + 流式精简插件仍是默认；
+  // 精简插件必须是模块级稳定引用（NO_STREAM_*），不能内联 []——
+  // 否则 pipe 每帧重建，冻结 prefix chunk 的 memo 失效，每帧全量重解析
   assert.match(stream, /mode="static"/);
-  assert.match(stream, /resolvedRemarkPlugins = isStreamingNow\s*\n\s*\?\s*\[\]/);
+  assert.match(stream, /resolvedRemarkPlugins = isStreamingNow\s*\n\s*\?\s*NO_STREAM_REMARK_PLUGINS/);
+  assert.match(stream, /resolvedRehypePlugins = isStreamingNow\s*\n\s*\?\s*NO_STREAM_REHYPE_PLUGINS/);
+  assert.doesNotMatch(stream, /isStreamingNow\s*\?\s*\[\]/);
+});
+
+test("settle full render is deferred to idle (no long task during interaction)", () => {
+	const stream = readFileSync("src/renderer/src/components/session/MarkdownStream.tsx", "utf8");
+	// settle 全量渲染（元素树+高亮，实测 70-100ms 长任务）必须延迟到浏览器空闲，
+	// 避免在用户滚动/交互期间卡帧造成滚动跳动
+	assert.match(stream, /wasStreamingRef = useRef\(false\)/);
+	assert.match(stream, /requestIdleCallback\(schedule, \{ timeout: 1500 \}\)/);
+	// 静态场景（从未流式，如 FileDiffViewer）不得延迟：立即全量
+	assert.match(stream, /if \(!wasStreamingRef\.current\) \{\s*\n\s*\/\/ 静态场景/);
+	assert.match(stream, /setSettleFull\(true\);\s*\n\s*return;/);
+	// settle 等待期保持轻量渲染（effectiveLight 含 !settleFull），并继续走冻结渲染
+	assert.match(stream, /const effectiveLight = props\.light \|\| isStreamingNow \|\| !settleFull/);
+	assert.match(stream, /const usingFrozen = isStreamingNow \|\| !settleFull/);
+	assert.match(stream, /if \(!usingFrozen\) frontierRef\.current\.reset\(\)/);
 });
 
 test("AnswerOutput live path renders through MarkdownStream (no dual typewriter)", () => {
