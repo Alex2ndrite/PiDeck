@@ -9,6 +9,7 @@ import { PetWindow, detectPetWindowCaps } from "./PetWindow";
 import { PetStateBridge, type PetStateCopyKey } from "./PetStateBridge";
 import { PetPackageManager } from "./PetPackageManager";
 import { PetPatrol } from "./PetPatrol";
+import { registerPetSpriteProtocol } from "./petSpriteProtocol";
 
 export type PetSystemDeps = {
 	agentManager: AgentManager;
@@ -73,6 +74,12 @@ export class PetSystem {
 	}
 
 	async start() {
+		// 雪碧图协议：manifest 只带 pideck-pet:// URL，<img> 按需请求主进程读文件
+		// （不再经 IPC 搬运 base64 大字符串；scheme 特权声明见 index.ts ready 前注册）
+		registerPetSpriteProtocol({
+			resolveSpritePath: (petId) => this.packageManager.resolveSpritePath(petId),
+			roots: this.packageManager.spriteRoots(),
+		});
 		this.registerIpc();
 		this.bridge.attach(this.deps.agentManager);
 		// 等待操作：复用主进程输出订阅，只消费已规范化的 agents:ui-request（set/delete pending 由 AgentManager 保证）

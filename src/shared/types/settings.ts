@@ -292,7 +292,7 @@ export type PetManifest = {
 	description?: string;
 	/** 来源：builtin 随应用打包，petdex 扫描自 ~/.codex/pets/ */
 	source: "builtin" | "petdex";
-	/** 渲染层可加载的 spritesheet URL（内置走打包资源，petdex 走 file://） */
+	/** 渲染层可加载的 spritesheet URL（pideck-pet:// 协议，主进程按需读文件，非 base64 大字符串） */
 	spritesheetUrl: string;
 };
 

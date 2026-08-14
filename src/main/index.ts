@@ -2483,9 +2483,10 @@ async function detectExternalEditorsOnFirstLaunch() {
 	void appLogger.info("editor", "External editors detected on first launch", { count: detected.length });
 }
 
-// 换肤背景图协议：自定义 scheme 必须在 ready 前注册特权声明（secure 以便渲染层 CSS 引用）
+// 换肤背景图/宠物雪碧图协议：自定义 scheme 必须在 ready 前注册特权声明（secure 以便渲染层 CSS/图片引用）
 protocol.registerSchemesAsPrivileged([
 	{ scheme: "pideck-bg", privileges: { secure: true, standard: true, corsEnabled: false, supportFetchAPI: true, stream: false } },
+	{ scheme: "pideck-pet", privileges: { secure: true, standard: true, corsEnabled: false, supportFetchAPI: true, stream: false } },
 ]);
 
 app.whenReady().then(async () => {

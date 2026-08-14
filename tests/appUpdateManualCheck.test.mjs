@@ -6,8 +6,8 @@ import test from "node:test";
 // 且按钮在禁用时不得再显示 loading（检查状态未落定前仍会转圈）。
 test("app update check is manual-only and never runs while disabled", () => {
   const appSource = readFileSync("src/renderer/src/App.tsx", "utf8");
-  const modalSource = readFileSync(
-    "src/renderer/src/components/app/SettingsModal.tsx",
+  const devTabSource = readFileSync(
+    "src/renderer/src/components/app/settings/DevTab.tsx",
     "utf8",
   );
 
@@ -20,13 +20,14 @@ test("app update check is manual-only and never runs while disabled", () => {
   );
 
   // 手动按钮：禁用时 onClick 为空且 loading 不显示（检查可能仍在途，但 UI 不得转圈）。
+  // 按钮位于开发设置 tab（DevTab，自 SettingsModal 拆分）；disableUpdateCheck 为局部快捷变量
   assert.match(
-    modalSource,
-    /onClick=\{draftSettings\.disableUpdateCheck \? undefined : props\.onCheckUpdate\}/,
+    devTabSource,
+    /onClick=\{disableUpdateCheck \? undefined : props\.onCheckUpdate\}/,
   );
   assert.match(
-    modalSource,
-    /loading=\{props\.updateChecking && !draftSettings\.disableUpdateCheck\}/,
+    devTabSource,
+    /loading=\{props\.updateChecking && !disableUpdateCheck\}/,
   );
-  assert.match(modalSource, /disabled=\{draftSettings\.disableUpdateCheck\}/);
+  assert.match(devTabSource, /disabled=\{disableUpdateCheck\}/);
 });

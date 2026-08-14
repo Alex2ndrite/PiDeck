@@ -46,7 +46,8 @@ export async function loadSpriteSheet(manifest: PetManifest): Promise<SpriteShee
 		throw new Error("empty spritesheet url");
 	}
 	const img = new Image();
-	// petdex 包走 file://，内置走 ?asset 的 file://；CSP 已允许 img-src file: data: 'self'
+	// spritesheetUrl 为 pideck-pet:// 协议 URL（主进程协议 handler 按需读文件），
+	// CSP 已允许 img-src pideck-pet:
 	img.src = manifest.spritesheetUrl;
 	await img.decode();
 	return {

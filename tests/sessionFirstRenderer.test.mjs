@@ -23,6 +23,10 @@ const drawerSurfaceSource = readFileSync(
   "src/renderer/src/components/workspace/DrawerSurface.tsx",
   "utf8",
 );
+const outlineAtomsSource = readFileSync(
+  "src/renderer/src/atoms/session-outline-atoms.ts",
+  "utf8",
+);
 
 function functionBody(name, source = appSource) {
   const marker = `function ${name}(`;
@@ -132,7 +136,8 @@ test("Session messages and composer render without an active Agent", () => {
   );
   assert.match(composerSource, /useSessionComposerController\(/);
   assert.match(composerSource, /sessionId=\{props\.sessionId\}/);
-  // 消息来自当前会话 atom / 栏内 timeline，不再依赖 activeAgent 兜底
-  assert.match(appSource, /currentSessionMessagesAtom/);
+  // 消息来自当前会话 atom / 栏内 timeline，不再依赖 activeAgent 兜底；
+  // 大纲/文件清单消费链（session-outline-atoms）仍以 currentSessionMessagesAtom 为源
+  assert.match(outlineAtomsSource, /currentSessionMessagesAtom/);
   assert.doesNotMatch(appSource, /currentSession \|\| activeAgent/);
 });

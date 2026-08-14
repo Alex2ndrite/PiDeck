@@ -11,6 +11,10 @@ const splitStage = readFileSync(
   "utf8",
 );
 const modal = readFileSync("src/renderer/src/components/app/SettingsModal.tsx", "utf8");
+const appearanceTab = readFileSync(
+  "src/renderer/src/components/app/settings/AppearanceTab.tsx",
+  "utf8",
+);
 const tailwind = readFileSync("src/renderer/src/styles/tailwind.css", "utf8");
 const foundation = readFileSync("src/renderer/src/styles/foundation.css", "utf8");
 const timeline = readFileSync(
@@ -88,11 +92,12 @@ test("UI 2.0: messages and composer share inline width, not parent padding", () 
   assert.match(runtimeOverlay, /ask-inline-bar ask-inline-bar--active w-full/);
 });
 
-test("SettingsModal slider is 60–100 with always-visible save button", () => {
-  assert.match(modal, /min="60"/);
-  assert.match(modal, /max="100"/);
-  assert.match(modal, /step="1"/);
-  assert.match(modal, /updateDraft\(\{ chatContentWidthPct: parseInt/);
+test("Appearance tab slider is 60–100 with always-visible save button", () => {
+  // 内容宽度滑块位于外观设置 tab（AppearanceTab，自 SettingsModal 拆分）
+  assert.match(appearanceTab, /min="60"/);
+  assert.match(appearanceTab, /max="100"/);
+  assert.match(appearanceTab, /step="1"/);
+  assert.match(appearanceTab, /updateDraft\(\{ chatContentWidthPct: parseInt/);
   // 保存按钮常驻（无 dirty 时禁用），不再只在 dirty 时出现；
   // 视觉桥草稿有改动时（hasAnyDirtyChanges）同样点亮，且保存中（visionDraft.saving）禁用防重复提交
   assert.match(modal, /disabled=\{!hasAnyDirtyChanges \|\| visionDraft\.saving\}/);

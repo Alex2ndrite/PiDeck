@@ -192,7 +192,7 @@ export class PetWindow {
 				petCspHeaderInstalled = true;
 				this.win.webContents.session.webRequest.onHeadersReceived(
 					(details, cb) => {
-						cb({ responseHeaders: { ...details.responseHeaders, "Content-Security-Policy": ["default-src 'self'; img-src 'self' file: data:; script-src 'self'; style-src 'self' 'unsafe-inline'"] } });
+						cb({ responseHeaders: { ...details.responseHeaders, "Content-Security-Policy": ["default-src 'self'; img-src 'self' file: data: pideck-pet:; script-src 'self'; style-src 'self' 'unsafe-inline'"] } });
 					},
 				);
 			}
