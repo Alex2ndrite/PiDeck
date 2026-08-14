@@ -4,6 +4,64 @@
 
 All notable changes to PiDeck are documented here.
 
+## v0.7.1 - 2026-08-14
+
+### 🚀 New Features
+
+- **Session trajectory in the right drawer + process ledger** — The thinking
+  trajectory moves from the center session column into its own right-drawer
+  tab (reusing the session message cache). JSONL process events, the first-round
+  initial prompt, and `pi-system` references now land in the ledger; durations
+  show only measured or within-round inferred ranges instead of fake 0ms.
+- **Markdown incremental rendering** — Long streaming messages render
+  incrementally (IncrementalMarkdownFrontier / frozen chunks) instead of
+  re-parsing the whole document every frame; full rendering (syntax
+  highlighting / mermaid / element tree) is deferred until idle.
+- **Reading surfaces unified into split view** — The right-drawer editor panel
+  is removed; file reading now happens in the center split view
+  (SessionTabsBar + WorkbenchContent) on a unified surface.
+- **macOS native traffic lights on the custom title bar** — The custom title
+  bar uses the system window buttons (hiddenInset + trafficLightPosition),
+  with the sidebar collapse and session tabs making room for the lights.
+- **Empty-workspace onboarding** — When no workspace projects exist, the
+  sidebar renders an empty-state card with an add-directory button.
+
+### ✨ UX Improvements
+
+- **Desktop pet at native sprite size** — The pet renders each sprite cell at
+  its original size with high-quality interpolation and stays in sync with
+  zoom/font-size changes (no more blurry 160×176 compression).
+
+### 🔧 Performance
+
+- **Streaming render optimizations** — Frozen chunk references stay stable
+  (no per-frame plugin rebuild), prefix strings are cached to avoid slicing
+  large strings every frame, and settle-time full rendering is deferred to
+  `requestIdleCallback`.
+- **Settings page opens instantly** — The settings modal is split with per-tab
+  lazy loading (first-open chunk 441KB → 25KB); the pet spritesheet switched
+  to the `pideck-pet://` protocol (manifest no longer embeds a 7.4MB base64
+  image) with mtime/size fingerprint caching; app-log reads are line-cached
+  with zero re-reads of history files.
+
+### 🐛 Bug Fixes
+
+- **pi custom path fallback** — When `customPiPath` becomes invalid, detection
+  falls back to auto-detection instead of getting stuck.
+- **Update check is manual-only** — Updates are only triggered from the
+  settings page; with updates disabled, no auto checks or spinner states.
+- **Drawer tab width breathing** — Unified `scrollbar-gutter: stable` on
+  scrolling containers stops the drawer width oscillating on tab switches.
+- **Floating session menu follows resize** — The session-position floating
+  menu tracks window zoom/resize (ResizeObserver writes back panel pixels);
+  sidebar width syncing fixed too.
+- **Project path tooltip flicker** — Hovering no longer toggles the tooltip
+  open/closed, and the trigger area covers the whole row.
+- **Git panel collapse header** — The collapse button aligns with the real
+  32px header height instead of sitting 6px low and clipped.
+- **Pet window session isolation** — Partition constants are unified so the
+  sprite protocol attaches to its own dedicated session.
+
 ## v0.7.0 - 2026-08-13
 
 ### 🚀 New Features
