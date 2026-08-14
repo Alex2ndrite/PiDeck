@@ -1,4 +1,4 @@
-import { Fragment, memo, useMemo } from "react";
+import { Fragment, memo, useMemo, useRef } from "react";
 import { Streamdown, defaultRehypePlugins, defaultRemarkPlugins, type Components } from "streamdown";
 import { code } from "@streamdown/code";
 import { mermaid } from "@streamdown/mermaid";
@@ -7,6 +7,10 @@ import { MarkdownLink, remarkLinkifyPaths } from "./MarkdownLink";
 import { markdownUrlTransform } from "./MarkdownLinkCore";
 import { FormulaCopyLayer } from "./FormulaCopyLayer";
 import { useSmoothStream } from "../../utils/useSmoothStream";
+import {
+	IncrementalMarkdownFrontier,
+	UNSTABLE_TAIL_BLOCKS,
+} from "./markdown/incrementalMarkdown";
 
 /**
  * 数学公式插件（KaTeX）。@streamdown/math 默认 singleDollarTextMath: false，
@@ -48,8 +52,50 @@ export const STREAM_LIGHT_MAX_CHARS = 40_000;
  * - cytoscape / wardley 图表：streamdown 只有 mermaid，经 plugins.renderers
  *   注册自定义渲染器保留（见 MarkdownDiagramRenderers）
  *
+ * 流式冻结（学 dsh IncrementalMarkdownParser）：
+ * - 追加文本只重塑解析前沿，prefix 用 generation+offset 钉 key，只重解析尾部
+ *   UNSTABLE_TAIL_BLOCKS 个内容块；settle 后整篇一次渲染自愈跨边界链接/脚注。
+ * - 不替换 Streamdown，不引入 marked。
+ *
  * 注：plugins 传参处对第三方边界类型做了收窄（streamdown 官方组合用法）。
  */
+type StreamdownPipe = {
+	isAnimating?: boolean;
+	remarkPlugins: Parameters<typeof Streamdown>[0]["remarkPlugins"];
+	rehypePlugins: Parameters<typeof Streamdown>[0]["rehypePlugins"];
+	urlTransform: (url: string) => string;
+	plugins: Parameters<typeof Streamdown>[0]["plugins"];
+	mermaid: Parameters<typeof Streamdown>[0]["mermaid"];
+	components: Components;
+};
+
+/**
+ * 单段 Streamdown。text 不变时 memo bailout，冻结前缀每帧零解析。
+ * key 由调用方用 generation+offset 钉住，非 append 时整段重建。
+ */
+const FrozenMarkdownChunk = memo(function FrozenMarkdownChunk(props: {
+	text: string;
+	frozen?: boolean;
+	pipe: StreamdownPipe;
+}) {
+	return (
+		<div data-md-frozen={props.frozen ? "1" : "0"} className="contents">
+			<Streamdown
+				mode="static"
+				isAnimating={props.pipe.isAnimating}
+				remarkPlugins={props.pipe.remarkPlugins}
+				rehypePlugins={props.pipe.rehypePlugins}
+				urlTransform={props.pipe.urlTransform}
+				plugins={props.pipe.plugins}
+				mermaid={props.pipe.mermaid}
+				components={props.pipe.components}
+			>
+				{props.text}
+			</Streamdown>
+		</div>
+	);
+});
+
 export const MarkdownStream = memo(function MarkdownStream(props: {
 	text: string;
 	isStreaming?: boolean;
@@ -111,49 +157,32 @@ export const MarkdownStream = memo(function MarkdownStream(props: {
 			},
 		[props.components, props.onOpenExternal, props.onOpenFile],
 	);
-	// 节流窗口内 displayText 不变时，useMemo 返回同一 element 引用，
-	// React 直接 bailout，Streamdown 子树（含 marked 解析）完全跳过。
-	const streamElement = useMemo(
-		() =>
-			streamPlain ? (
-				// 超长兜底：流式期间纯文本节点（主线程只做字符串切片），
-				// 排版交给容器 markdown-body（pre-wrap 语义由此处补上）。
-				<div className="whitespace-pre-wrap break-words">{displayText}</div>
-			) : (
-				<Streamdown
-				// 学 Proma：流式期间也用 static 模式（同步渲染）。streamdown 的 streaming 模式
-				// 内部用 useTransition 低优先级更新块，React 会把多帧 transition 合并提交 →
-				// DOM 一帧跳多帧步进（视觉蹦字）；static 模式与 Proma 的 react-markdown 同为
-				// 同步提交，每帧独立渲染，DOM 增量 = useSmoothStream 每帧步进。
-				mode="static"
-				isAnimating={props.isStreaming}
-				remarkPlugins={resolvedRemarkPlugins}
-				rehypePlugins={resolvedRehypePlugins}
-				urlTransform={props.urlTransform ?? markdownUrlTransform}
-				plugins={
-					(effectiveLight
-						? { math: mathPlugin }
-						: {
-								code,
-								mermaid,
-								math: mathPlugin,
-							}) as Parameters<typeof Streamdown>[0]["plugins"]
-				}
-				mermaid={{
-					config: {
-						theme: isDark ? "dark" : "default",
-						securityLevel: "strict",
-					},
-				}}
-				components={components}
-			>
-				{displayText}
-			</Streamdown>
-			),
-		// 依赖链完整：displayText 变化（节流窗口到点）或组件配置变化时才重建 element。
+	const pipe: StreamdownPipe = useMemo(
+		() => ({
+			// 学 Proma：流式期间也用 static 模式（同步渲染）。streamdown 的 streaming 模式
+			// 内部用 useTransition 低优先级更新块，React 会把多帧 transition 合并提交 →
+			// DOM 一帧跳多帧步进（视觉蹦字）；static 模式与 Proma 的 react-markdown 同为
+			// 同步提交，每帧独立渲染，DOM 增量 = useSmoothStream 每帧步进。
+			isAnimating: props.isStreaming,
+			remarkPlugins: resolvedRemarkPlugins,
+			rehypePlugins: resolvedRehypePlugins,
+			urlTransform: props.urlTransform ?? markdownUrlTransform,
+			plugins: (effectiveLight
+				? { math: mathPlugin }
+				: {
+						code,
+						mermaid,
+						math: mathPlugin,
+					}) as Parameters<typeof Streamdown>[0]["plugins"],
+			mermaid: {
+				config: {
+					theme: isDark ? "dark" : "default",
+					securityLevel: "strict",
+				},
+			},
+			components,
+		}),
 		[
-			displayText,
-			streamPlain,
 			components,
 			props.isStreaming,
 			effectiveLight,
@@ -162,6 +191,59 @@ export const MarkdownStream = memo(function MarkdownStream(props: {
 			props.urlTransform,
 			isDark,
 		],
+	);
+	// 每条 MarkdownStream 实例跟一段流：非 append 升 generation，冻结节点整段重建。
+	const frontierRef = useRef<IncrementalMarkdownFrontier | undefined>(undefined);
+	if (!frontierRef.current) frontierRef.current = new IncrementalMarkdownFrontier();
+	const frozenSplit =
+		isStreamingNow && !streamPlain
+			? frontierRef.current.update(displayText)
+			: undefined;
+	if (!isStreamingNow) frontierRef.current.reset();
+	// 节流窗口内 displayText 不变时，useMemo 返回同一 element 引用，
+	// React 直接 bailout，Streamdown 子树（含 marked 解析）完全跳过。
+	const streamElement = useMemo(
+		() => {
+			if (streamPlain) {
+				// 超长兜底：流式期间纯文本节点（主线程只做字符串切片），
+				// 排版交给容器 markdown-body（pre-wrap 语义由此处补上）。
+				return <div className="whitespace-pre-wrap break-words">{displayText}</div>;
+			}
+			// settle 后整篇一次渲染：自愈跨冻结边界的链接/脚注/表格，并恢复高亮插件。
+			if (!frozenSplit || frozenSplit.prefixEnd === 0) {
+				return (
+					<Streamdown
+						mode="static"
+						isAnimating={pipe.isAnimating}
+						remarkPlugins={pipe.remarkPlugins}
+						rehypePlugins={pipe.rehypePlugins}
+						urlTransform={pipe.urlTransform}
+						plugins={pipe.plugins}
+						mermaid={pipe.mermaid}
+						components={pipe.components}
+					>
+						{displayText}
+					</Streamdown>
+				);
+			}
+			// 流式冻结：prefix 用 generation+offset 钉 key，tail 每帧重解析（UNSTABLE_TAIL_BLOCKS）。
+			return (
+				<Fragment>
+					<FrozenMarkdownChunk
+						key={`${frozenSplit.generation}:0`}
+						text={frozenSplit.prefix}
+						frozen
+						pipe={pipe}
+					/>
+					<FrozenMarkdownChunk
+						key={`${frozenSplit.generation}:${frozenSplit.prefixEnd}`}
+						text={frozenSplit.tail}
+						pipe={pipe}
+					/>
+				</Fragment>
+			);
+		},
+		[displayText, frozenSplit, pipe, streamPlain],
 	);
 	return (
 		<Fragment>

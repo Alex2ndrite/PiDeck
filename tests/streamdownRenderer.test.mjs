@@ -25,7 +25,10 @@ test("streamdown pipeline delegates to official plugins (code/mermaid/math) and 
   // 数学插件开启单美元行内公式（singleDollarTextMath: true）：
   // AI 输出 $...$ 是常态，默认关闭会整句原样输出（2026-08 修复，防回归锚点）
   assert.match(stream, /createMathPlugin\(\{ singleDollarTextMath: true \}\)/);
-  assert.match(stream, /plugins=\{\s*\(effectiveLight/);
+  assert.match(stream, /plugins: \(effectiveLight/);
+  assert.match(stream, /IncrementalMarkdownFrontier/);
+  assert.match(stream, /FrozenMarkdownChunk/);
+  assert.match(stream, /UNSTABLE_TAIL_BLOCKS/);
   assert.match(stream, /math: mathPlugin/);
   // 公式复制走事件委托浮层（FormulaCopyLayer）：rehype-katex 产物不进组件 map，
   // 旧 p 层拦截只能覆盖“单一行内公式独占一段”，已删除（2026-08 通用化）
@@ -130,8 +133,8 @@ test("streaming overlong guard: plain-text fallback above STREAM_LIGHT_MAX_CHARS
   // 回退节点：纯文本 + pre-wrap（排版由容器 markdown-body 接管）
   assert.match(stream, /whitespace-pre-wrap break-words/);
   // 回退必须发生在 Streamdown 之外（不建解析树），且依赖链含 streamPlain
-  assert.match(stream, /streamPlain \? \(/);
-  assert.match(stream, /streamPlain,\n\s*components,/);
+  assert.match(stream, /if \(streamPlain\)/);
+  assert.match(stream, /pipe, streamPlain/);
   // 超长兜底对思考同样生效（ThinkingBlock 走同一 MarkdownStream），无需额外开关
   const thinking = readFileSync("src/renderer/src/components/session/TimelineEventCards.tsx", "utf8");
   assert.match(thinking, /<MarkdownStream/);

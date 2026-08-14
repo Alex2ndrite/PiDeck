@@ -55,6 +55,8 @@ export interface AppShellProps {
   drawerWidth: number;
   drawerPinned: boolean;
   useNativeTitleBar: boolean;
+  /** 当前运行平台；mac 自定义标题栏要避开系统红绿灯，不能再画一套 Win 按钮。 */
+  platform: NodeJS.Platform;
 
   chatPaneRef: React.RefObject<HTMLElement | null>;
   terminalRowHeight: number;
@@ -98,6 +100,7 @@ export function AppShell(props: AppShellProps) {
     listCollapsed, listWidth,
     drawer, drawerCollapsed, drawerWidth, drawerPinned,
     useNativeTitleBar,
+    platform,
     chatPaneRef, terminalRowHeight, chatContentWidthPct,
     sidebarContent, chatPaneContent, drawerContent, drawerRail, outlineContent,
     setListCollapsed, setListWidth, setDrawerCollapsed, setDrawerWidth,
@@ -275,6 +278,8 @@ export function AppShell(props: AppShellProps) {
         listCollapsed ? "list-collapsed" : "",
         drawerCollapsed ? "drawer-collapsed" : "",
         useNativeTitleBar ? "" : "custom-titlebar-enabled",
+        // mac 自定义标题栏：系统红绿灯占左上角，右侧不再叠 Win 风格控件。
+        !useNativeTitleBar && platform === "darwin" ? "mac-custom-titlebar" : "",
       ]
         .filter(Boolean)
         .join(" ")}
@@ -291,6 +296,7 @@ export function AppShell(props: AppShellProps) {
     >
       <AppHeader
         useNativeTitleBar={useNativeTitleBar}
+        platform={platform}
         toggleAlwaysOnTop={toggleAlwaysOnTop}
         minimizeWindow={minimizeWindow}
         toggleMaximizeWindow={toggleMaximizeWindow}

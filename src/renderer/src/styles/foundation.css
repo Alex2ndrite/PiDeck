@@ -1173,6 +1173,21 @@ select:focus-visible {
   /* 内容顶到窗口上沿：不再留空白标题条。拖拽/窗口按钮用 fixed 叠层。 */
   padding-top: 0;
 }
+/* mac hiddenInset：系统红绿灯占左上角（约 78×28，trafficLightPosition 14,14）。
+   右侧不再叠 Win 控件；侧栏折叠后 Tab 栏必须给红绿灯让位，否则压住展开按钮。 */
+.wechat-shell.custom-titlebar-enabled.mac-custom-titlebar {
+  --window-controls-width: 0px;
+  --traffic-lights-width: 78px;
+}
+/* 侧栏折叠后 Tab 栏顶到窗口左缘，必须给红绿灯让位。
+   具体 padding 走组件 Tailwind（读这个变量），避免 legacy 被 utilities 压掉。 */
+.wechat-shell.custom-titlebar-enabled.mac-custom-titlebar.list-collapsed {
+  --session-tabs-left-inset: calc(var(--traffic-lights-width) + 8px);
+}
+.custom-titlebar-enabled.mac-custom-titlebar .window-drag-layer {
+  left: var(--traffic-lights-width);
+  right: 0;
+}
 .window-drag-layer {
   position: fixed;
   top: 0;

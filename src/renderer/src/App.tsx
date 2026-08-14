@@ -54,6 +54,7 @@ import {
   toSessionRuntimeTarget,
 } from "./utils/sessionCommands";
 import { resolveChatSessionBootstrap } from "./utils/chatSessionBootstrap";
+import { detectRendererPlatform } from "./lib/detectRendererPlatform";
 
 import { usePiUpdate } from "./hooks/usePiUpdate";
 import { useAppUpdateController } from "./hooks/useAppUpdateController";
@@ -587,7 +588,8 @@ export function App() {
   const [appInfo, setAppInfo] = useState<AppInfo>({
     version: "-",
     releasesUrl: "https://github.com/ayuayue/pi-desktop/releases",
-    platform: "win32",
+    // 同步判定，避免 Mac 首帧在 appInfo IPC 返回前误画 Win 窗口按钮
+    platform: detectRendererPlatform(),
     homeDir: "",
   });
   const [systemLanguage, setSystemLanguage] = useState<string | null>(null);
@@ -3021,6 +3023,7 @@ export function App() {
       drawerCollapsed={drawerCollapsed}
       drawerWidth={drawerWidth}
       useNativeTitleBar={settings.useNativeTitleBar}
+      platform={appInfo.platform}
       chatPaneRef={chatPaneRef}
       terminalRowHeight={terminalRowHeight}
       chatContentWidthPct={settings.chatContentWidthPct}
