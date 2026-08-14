@@ -372,14 +372,16 @@ function formatCompact(value?: number | null) {
 	return String(value);
 }
 
-export function LogoMark() {
+export function LogoMark({ size = 32 }: { size?: number } = {}) {
+	// size 默认 32（错误页/小型场景）；起始页/引导页传 56 放大品牌存在感
 	return (
 		<div
-			className="logo-mark relative grid size-8 place-items-center overflow-hidden rounded-md bg-black text-white shadow-sm ring-1 ring-white/15"
+			className="logo-mark relative grid place-items-center overflow-hidden rounded-md bg-black text-white shadow-sm ring-1 ring-white/15"
+			style={{ width: size, height: size }}
 			aria-label={t("app.logoLabel")}
 		>
 			{/* 使用独立渐变而不是 currentColor，让 LogoMark 在浅色/深色主题下都保持黑底白标的品牌对比。 */}
-			<svg viewBox="140 140 520 520" width="18" height="18" aria-hidden="true">
+			<svg viewBox="140 140 520 520" width={Math.round(size * 0.5625)} height={Math.round(size * 0.5625)} aria-hidden="true">
 				<defs>
 					<linearGradient id="logo-mark-silver" x1="0.2" y1="0" x2="0.8" y2="1">
 						<stop stopColor="#ffffff" />

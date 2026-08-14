@@ -6,54 +6,55 @@ const surface = readFileSync(
   "src/renderer/src/components/session/SessionStartSurface.tsx",
   "utf8",
 );
+const view = readFileSync("src/renderer/src/components/session/SessionView.tsx", "utf8");
 const timeline = readFileSync(
   "src/renderer/src/components/session/SessionMessageTimeline.tsx",
   "utf8",
 );
-const injector = readFileSync(
-  "src/renderer/src/components/session/SessionRuntimeInjector.tsx",
-  "utf8",
-);
-const app = readFileSync("src/renderer/src/App.tsx", "utf8");
 const zh = readFileSync("src/renderer/src/i18n/rendererCopy.zh-CN.ts", "utf8");
 const en = readFileSync("src/renderer/src/i18n/rendererCopy.en-US.ts", "utf8");
 
-test("new session surface provides engineering quick prompts and inserts the selected prompt", () => {
+test("start surface reuses the session bottom composer, not a second input implementation", () => {
+  // 统一输入：直接居中挂完整 ComposerArea（模型/思考/模式/安全级别/发送全保留），
+  // 禁止再出现自制 TipTapComposer / waitRuntimeReady / sendPrompt 链路。
+  assert.match(surface, /<ComposerArea/);
+  assert.match(surface, /import \{ ComposerArea \} from "\.\/ComposerArea"/);
+  assert.match(surface, /import \{ QueuedPromptPanel \} from "\.\/ComposerPanels"/);
+  assert.match(surface, /useSessionPaneServices\(\)/);
+  assert.match(surface, /queuedPromptsBySession\[props\.sessionId\]/);
+  assert.match(surface, /<LogoMark size=\{56\} \/>/);
+  assert.doesNotMatch(surface, /TipTapComposer/);
+  assert.doesNotMatch(surface, /waitRuntimeReady|sendPrompt|getComposerEnterIntent/);
+});
+
+test("start surface centers the composer and keeps quick-prompt chips", () => {
+  // DeepSeek 式居中：flex 列 + 重心下移；快捷项点击填入输入框不自动发送
+  assert.match(surface, /justify-center/);
+  assert.match(surface, /pt-\[14vh\]/);
+  assert.match(surface, /max-w-\[880px\]/);
+  assert.match(surface, /defaultHeight=\{220\}/);
+  assert.match(surface, /session-start-surface/);
   assert.match(surface, /QUICK_ACTIONS/);
   assert.match(surface, /sessionStart\.inspectPrompt/);
   assert.match(surface, /sessionStart\.planPrompt/);
   assert.match(surface, /sessionStart\.debugPrompt/);
-  assert.match(surface, /onQuickPrompt\(t\(promptKey\)\)/);
-  assert.match(surface, /selectedPrompt/);
-  assert.match(surface, /aria-pressed=\{selected\}/);
-  assert.match(surface, /disabled=\{!props\.onQuickPrompt\}/);
+  assert.match(surface, /insertQuickPrompt\(props\.sessionId, t\(action\.prompt\)\)/);
+  assert.match(surface, /t\(action\.title\)/);
 });
 
-test("start surface uses the split-magazine editorial layout aligned with the empty state", () => {
-  // 与项目空态（方案 B）同一语言：衬线拉丁重音词、竖发丝线双栏、发丝线分行清单
-  assert.match(surface, /font-brand font-medium italic/);
-  assert.match(surface, /t\("sessionStart\.titleAccent"\)/);
-  assert.match(surface, /md:grid-cols-\[1fr_1px_1fr\]/);
-  assert.match(surface, /divide-y divide-border-subtle/);
-  // 建议文案：桌面在左栏沉底卡片，窄屏在右栏列表下
-  assert.match(surface, /mt-auto hidden pt-10 md:block/);
-  assert.match(surface, /md:hidden/);
+test("bottom composer is hidden while the start surface is showing", () => {
+  // 无消息时底部栏不渲染，避免同屏两个输入框；有消息后回归
+  assert.match(view, /sessionTimeline\.messages\.length > 0/);
+  assert.match(view, /ResizablePanel\s*\n\s*id="composer"/);
 });
 
-test("empty active sessions render the start surface and put prompts into the composer", () => {
+test("empty active sessions render the start surface with the session id", () => {
   assert.match(timeline, /activeMessages\.length === 0/);
-  assert.match(timeline, /<SessionStartSurface onQuickPrompt=\{props\.onQuickPrompt\}/);
-  assert.match(injector, /insertQuickPrompt/);
-  assert.match(injector, /onQuickPrompt=\{\(message\) => services\.insertQuickPrompt\(currentSessionId, message\)\}/);
-  assert.match(app, /runCreateSessionDraft: async \(\) => \{[\s\S]*?insertQuickPrompt,/);
-  assert.match(app, /setSessionDraft\(\{ sessionId, value: message \}\)/);
+  assert.match(timeline, /<SessionStartSurface sessionId=\{sessionId\} \/>/);
 });
 
 test("quick prompt copy is present in both locale dictionaries", () => {
   for (const key of [
-    "sessionStart.titleLead",
-    "sessionStart.titleAccent",
-    "sessionStart.titlePunct",
     "sessionStart.inspectPrompt",
     "sessionStart.planPrompt",
     "sessionStart.implementPrompt",

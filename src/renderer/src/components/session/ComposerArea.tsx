@@ -37,6 +37,9 @@ export type ComposerAreaProps = {
   /** 受控高度（px）。传入时由外层面板（react-resizable-panels）持有尺寸，
    *  本地 state 仅作非受控回退（#115 U5 布局换装）。 */
   height?: number;
+  /** 非受控模式的起步高度（px），默认 COMPOSER_DEFAULT_HEIGHT；
+   *  起始页等需要大输入框的场景传更高值，内容增高时仍自适应。 */
+  defaultHeight?: number;
   onHeightChange?: (height: number) => void;
   /** 输入区上方可变内容（附件栏 / 扩展 widget / 队列 / 投递通知）当前占用的额外高度（px）。
    *  内容出现时上报给外层，由外层命令式增高 composer 面板，避免固定高度挤压输入区。 */
@@ -188,15 +191,16 @@ export const ComposerArea = forwardRef<HTMLElement, ComposerAreaProps>(function 
   }, [composer.attachments.length, composer.draft, props.sessionId]);
 
   // 受控/非受控双模：SessionView 以面板分隔条控制高度时传 height；
-  // 其余场景（测试、嵌入）回退本地默认值，与全局默认高度保持一致。
-  const [localHeight, setLocalHeight] = useState(COMPOSER_DEFAULT_HEIGHT);
+  // 其余场景（测试、嵌入）回退本地默认值，与全局默认高度保持一致；
+  // defaultHeight 允许宿主（如居中起始页）指定更高的起步高度，仍随内容自适应增高。
+  const [localHeight, setLocalHeight] = useState(props.defaultHeight ?? COMPOSER_DEFAULT_HEIGHT);
   const height = props.height ?? localHeight;
   const handleContentHeightChange = (extra: number) => {
     if (props.height != null) {
       props.onContentHeightChange?.(extra);
     } else if (extra > 0) {
       setLocalHeight((current) =>
-        Math.max(current, extra + COMPOSER_DEFAULT_HEIGHT),
+        Math.max(current, extra + (props.defaultHeight ?? COMPOSER_DEFAULT_HEIGHT)),
       );
     }
   };

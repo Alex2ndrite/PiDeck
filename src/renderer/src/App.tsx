@@ -2429,6 +2429,21 @@ export function App() {
       add: addProject,
       select: (projectId) => {
         selectProjectCommand(projectId);
+        // 打开项目 = 进入新对话：当前无会话或当前会话属于其他项目时，自动创建
+        // draft 会话（Chat 项目为匿名会话）并选中，直接落到居中输入框起始页；
+        // 引导页只保留「关闭全部 Tab 清空后」的手动创建入口。
+        const current = store.get(currentSessionIdAtom);
+        const currentProject = current
+          ? store.get(sessionRecordByIdAtomFamily(current))?.projectId
+          : undefined;
+        if (currentProject !== projectId) {
+          const project = projects.find((candidate) => candidate.id === projectId);
+          if (isChatProject(project)) {
+            void createAnonymousSessionWithTab(projectId);
+          } else {
+            void createSessionDraftWithTab(projectId);
+          }
+        }
         // 空项目也可能已经成功加载；用 catalog 状态区分“空结果”和“尚未扫描”。
         const loadState = store.get(sessionCatalogLoadStateAtom)[projectId];
         if (loadState?.status !== "loading" && loadState?.status !== "ready") {
@@ -2812,8 +2827,10 @@ export function App() {
           <div className="min-h-0 flex-1">
             <ProjectEmptyState
               activeProject={activeProject}
-              onCreateAgent={(preferences) => void createSessionDraftWithTab(undefined, preferences)}
-              onCreateAnonymous={(preferences) => void createAnonymousSessionWithTab(undefined, preferences)}
+              // 创建入口：新建 Agent / 匿名聊天都只负责创建会话；模型/思考级别等
+              // 启动配置统一在起始页（SessionStartSurface 居中 ComposerArea）底部栏选择
+              onCreateAgent={() => void createSessionDraftWithTab(undefined)}
+              onCreateAnonymous={() => void createAnonymousSessionWithTab(undefined)}
               onAddProject={() => void addProject()}
             />
           </div>

@@ -496,7 +496,9 @@ export function SessionView({
           />
         </ResizablePanel>
 
-        {hasActiveConversation && (
+        {/* 无消息时底部 composer 不渲染：起始页（SessionStartSurface）在 timeline 内
+            居中挂同一 ComposerArea，避免同屏两个输入框；发首条消息后底部栏回归 */}
+        {hasActiveConversation && sessionTimeline.messages.length > 0 && (
           <>
             <ResizableHandle className="v-splitter" />
             <ResizablePanel

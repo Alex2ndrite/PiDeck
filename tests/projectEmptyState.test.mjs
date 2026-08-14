@@ -7,18 +7,6 @@ const emptyState = readFileSync(
   "src/renderer/src/components/session/ProjectEmptyState.tsx",
   "utf8",
 );
-const surfaceParts = readFileSync(
-  "src/renderer/src/components/session/SurfaceComponents.tsx",
-  "utf8",
-);
-const sessionActions = readFileSync(
-  "src/renderer/src/hooks/useSessionActions.ts",
-  "utf8",
-);
-const composerComponents = readFileSync(
-  "src/renderer/src/components/session/ComposerComponents.tsx",
-  "utf8",
-);
 const zh = readFileSync("src/renderer/src/i18n/rendererCopy.zh-CN.ts", "utf8");
 const en = readFileSync("src/renderer/src/i18n/rendererCopy.en-US.ts", "utf8");
 
@@ -27,93 +15,43 @@ test("project empty state is shared by normal and chat projects when no session 
   assert.match(app, /ProjectEmptyState/);
   assert.match(app, /<ProjectEmptyState/);
   assert.match(app, /currentSessionId/);
-  assert.match(app, /runCreateSessionDraft/);
-  assert.match(app, /runCreateAnonymousSession/);
+  assert.match(app, /createSessionDraftWithTab\(undefined\)/);
+  assert.match(app, /createAnonymousSessionWithTab\(undefined\)/);
   assert.match(app, /addProject/);
 });
 
-test("project empty state reuses pi-branded EmptyState and offers quick actions", () => {
-  // 视觉与 pi 品牌 EmptyState 完全一致（复用同一组件，而非复制结构）
-  assert.match(emptyState, /import \{ EmptyState \} from \"\.\/SurfaceParts\"/);
-  assert.match(emptyState, /<EmptyState/);
+test("project empty state is a pure creation entry, no second composer implementation", () => {
+  // 输入统一由起始页（SessionStartSurface 居中 ComposerArea）承担；
+  // 本页不得再出现输入框/模型选择/发送链路的第二套实现。
+  assert.match(emptyState, /import \{ LogoMark \} from "\.\/SurfaceParts"/);
+  assert.match(emptyState, /<LogoMark size=\{56\} \/>/);
+  assert.match(emptyState, /justify-center/);
+  assert.match(emptyState, /pt-\[14vh\]/);
+  // 创建入口三件套
   assert.match(emptyState, /onCreateAgent/);
   assert.match(emptyState, /onCreateAnonymous/);
   assert.match(emptyState, /onAddProject/);
   assert.match(emptyState, /t\("app\.createAgent"\)/);
   assert.match(emptyState, /t\("app\.anonymousChatShort"\)/);
-  assert.doesNotMatch(emptyState, /app\.anonymousChatHint/);
   assert.match(emptyState, /t\("app\.addProject"\)/);
-  // 品牌 tagline/subtitle 来自 EmptyState 而非项目标题，普通/聊天项目无差异
+  // 不再自制输入框/模型选择/发送链路（已下沉到起始页的 ComposerArea）
+  assert.doesNotMatch(emptyState, /TipTapComposer/);
+  assert.doesNotMatch(emptyState, /ModelPicker|ThinkingPicker/);
+  assert.doesNotMatch(emptyState, /sendPrompt|waitRuntimeReady|getComposerEnterIntent/);
+  assert.doesNotMatch(emptyState, /WELCOME_MODEL_KEY|WELCOME_THINKING_KEY/);
+  assert.doesNotMatch(emptyState, /readLaunchPreferences/);
+  // 品牌 tagline/subtitle 不再使用
   assert.doesNotMatch(emptyState, /t\("app\.projectEmptyTitle"/);
   assert.doesNotMatch(emptyState, /t\("app\.emptyNoProjectTitle"/);
-  assert.match(emptyState, /actions=\{/);
-  // footer 为启动配置 meta 列表（模型/思考级别），等宽字体 + 浅下划线表达可改参数
-  assert.match(emptyState, /footer=\{/);
-  // 主按钮用前景/背景反色而非中性灰 accent，保证浅色下纯黑、暗色下纯白
-  assert.match(emptyState, /bg-foreground[\s\S]*text-background/);
 });
 
-test("empty state keeps compact configuration controls for first-run setup", () => {
-  // 模型/思考选择器统一走共享 CommandPicker 面板（与 Git 面板等同一套选择器组件）
-  assert.match(emptyState, /import \{ ModelPicker, ThinkingPicker \} from "\.\/ComposerComponents"/);
-  assert.match(emptyState, /<ModelPicker/);
-  assert.match(emptyState, /<ThinkingPicker/);
-  assert.match(emptyState, /current=\{currentModel\}/);
-  assert.match(emptyState, /current=\{thinkingChoice\}/);
-  assert.match(emptyState, /title=\{modelChoice/);
-  assert.match(emptyState, /thinkingPickerOpen/);
-  assert.match(emptyState, /WELCOME_MODEL_KEY/);
-  assert.match(emptyState, /WELCOME_THINKING_KEY/);
+test("anonymous session short entry stays on the empty state", () => {
+  // 匿名聊天入口保留：无项目也显示添加项目入口
+  assert.match(emptyState, /t\("app\.anonymousChatShort"\)/);
+  assert.match(emptyState, /hasProject/);
 });
 
-test("project empty state reads default model/thinking from pi config via IPC, not localStorage", () => {
-  // 通过 config.getSettings 读取（renderer→preload→IPC），不直接用 Node/本地偏好。
-  assert.match(emptyState, /desktopApi\.config[\s\S]{0,80}getSettings/);
-  assert.match(emptyState, /defaultProvider/);
-  assert.match(emptyState, /defaultModel/);
-  assert.match(emptyState, /defaultThinkingLevel/);
-  assert.doesNotMatch(emptyState, /readWelcomeModelPreference|readWelcomeThinkingPreference/);
-  assert.match(emptyState, /useState<AvailableModel\[\]>/);
-  assert.doesNotMatch(emptyState, /require\(|node:|fs\.read|process\.env|ipcRenderer/);
-});
-
-test("empty state model fallback matches main sessionsCatalogCreateDraft rule via getModels", () => {
-  // settings 未给全 defaultProvider+defaultModel 时回退 models.json 首 provider 首 model，
-  // 与主进程 createDraft 规则一致。
-  assert.match(emptyState, /desktopApi\.config[\s\S]{0,60}getModels/);
-  assert.match(emptyState, /modelsParsed\.providers/);
-  assert.match(emptyState, /Object\.keys\(providersObj\)\[0\]/);
-  assert.match(emptyState, /models\[0\]\?\.id/);
-  assert.match(emptyState, /\$\{providerName\}\/\$\{firstModel\}/);
-  // 只读 provider 名与 model id，不触碰/输出 apiKey、baseUrl 等敏感字段。
-  assert.doesNotMatch(emptyState, /apiKey|token\b|baseUrl/);
-});
-
-test("project empty state narrows remote config values with unknown guard, not as-casts", () => {
-  // 远端 config 是 Record<string, unknown>，字段必须经 typeof 收窄后用，禁 as 强转。
-  assert.doesNotMatch(emptyState, /parsed as\s*\{/);
-  assert.doesNotMatch(emptyState, / as [A-Za-z_{}\[\] ]+\{/);
-  assert.match(emptyState, /typeof parsed\.defaultProvider === "string"/);
-  assert.match(emptyState, /typeof parsed\.defaultModel === "string"/);
-  assert.match(emptyState, /typeof parsed\.defaultThinkingLevel === "string"/);
-});
-
-test("draft and anonymous creation pass the explicit welcome selections", () => {
-  // 引导页选择必须作为创建参数传入；主进程只对缺失字段补 pi 默认值。
-  assert.match(emptyState, /readLaunchPreferences\(modelChoice, thinkingChoice\)/);
-  assert.match(sessionActions, /function createSessionDraft\([\s\S]*?preferences: SessionLaunchPreferences = \{\},/);
-  assert.match(sessionActions, /function createAnonymousSession\([\s\S]*?preferences: SessionLaunchPreferences = \{\},/);
-  assert.match(sessionActions, /\.\.\.preferences/);
-});
-
-test("composer bottom bar default model/thinking prefer pi-config record over welcome localStorage", () => {
-  assert.doesNotMatch(composerComponents, /readWelcomeModelPreference|readWelcomeThinkingPreference|welcomeModel/);
-  assert.match(composerComponents, /props\.state\?\.thinkingLevel \?\? props\.record\?\.thinkingLevel/);
-  assert.match(composerComponents, /props\.record\?\.model/);
-});
-
-test("shadcn Empty primitive was removed in favor of pi-branded EmptyState", () => {
-  // 项目空态与 timeline 空态统一走 EmptyState，原 ui-shadcn/empty 原语已删除
+test("shadcn Empty primitive was removed in favor of pi-branded entry", () => {
   const emptyPrimitivePath = "src/renderer/src/components/ui-shadcn/empty.tsx";
   assert.equal(
     (() => {
@@ -129,15 +67,8 @@ test("shadcn Empty primitive was removed in favor of pi-branded EmptyState", () 
   );
 });
 
-test("new empty-state copy is bilingual", () => {
-  for (const key of [
-    "app.emptyProjectTitleLead",
-    "app.emptyProjectTitleAccent",
-    "app.emptyProjectTitlePunct",
-    "app.emptyNoProjectTitle",
-    "app.emptyHasProject",
-    "app.emptyNoProject",
-  ]) {
+test("empty-state copy is bilingual and JSX carries no hardcoded text", () => {
+  for (const key of ["app.createAgent", "app.anonymousChatShort", "app.addProject"]) {
     assert.ok(zh.includes(`"${key}"`), `${key} zh-CN copy must exist`);
     assert.ok(en.includes(`"${key}"`), `${key} en-US copy must exist`);
   }

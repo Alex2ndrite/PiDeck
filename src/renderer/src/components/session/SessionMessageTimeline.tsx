@@ -644,7 +644,7 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
       {hasActiveConversation &&
         !isConversationLoading &&
         activeMessages.length === 0 && (
-          <SessionStartSurface onQuickPrompt={props.onQuickPrompt} />
+          <SessionStartSurface sessionId={sessionId} />
         )}
 
       {/* 长会话渲染治理：
