@@ -198,6 +198,7 @@ export const enUS: Record<TranslationKey, string> = {
   "app.compactFailedWithReason": "Compaction failed: {error}",
   "app.compactNothingToDo": "Context is still small — nothing to compact yet",
   "app.compactSessionTooSmall": "Session is too small to compact",
+  "app.compactCancelled": "Compaction not started: another compaction is in progress or just finished — try again shortly",
   "app.forkFromMessage": "Fork",
   "app.forkFromMessageTitle": "Fork a new session from this message (edit then resend)",
   "app.forkDone": "Forked into a new session; prompt filled in the composer",

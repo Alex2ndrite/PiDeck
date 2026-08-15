@@ -102,6 +102,8 @@ function friendlyCompactError(error: unknown): string {
   const lower = detail.toLowerCase();
   if (/nothing to compact|already compacted/i.test(lower)) return t("app.compactNothingToDo");
   if (/session too small|too small/i.test(lower)) return t("app.compactSessionTooSmall");
+  // 压缩被取消（已有压缩在进行/agent 忙碌/用户打断）：明确告知而非展示原始错误
+  if (/compaction cancelled|cancelled/i.test(lower)) return t("app.compactCancelled");
   return detail
     ? t("app.compactFailedWithReason", { error: detail })
     : t("app.compactFailed");
@@ -590,8 +592,9 @@ export function useSessionComposerController(
       try {
         requireSessionCommand(await desktopApi.sessions.compactRuntime(target, prompt));
       } catch (error) {
-        // compact 失败属会话异常，常驻提示直到用户手动关闭
-        showNotice(friendlyCompactError(error), Number.POSITIVE_INFINITY);
+        // 压缩失败/被拒（上下文太小等）是一次性操作提示，限时展示即可；
+        // 常驻会一直挂着关不掉（2026-08 用户反馈「toast 提示上下文还很小」）。
+        showNotice(friendlyCompactError(error), 6000);
       }
     },
     resetComposerUi: resetEphemeralUi,
@@ -1170,8 +1173,8 @@ export function useSessionComposerController(
     try {
       requireSessionCommand(await desktopApi.sessions.compactRuntime(target));
     } catch (error) {
-      // compact 失败属会话异常，常驻提示直到用户手动关闭
-      showNotice(friendlyCompactError(error), Number.POSITIVE_INFINITY);
+      // 压缩失败/被拒是一次性操作提示，限时展示（同 /compact 路径语义）
+      showNotice(friendlyCompactError(error), 6000);
     }
   }, [runtime?.agentId, runtime?.runtimeGeneration, sessionId, setDraft, promoteAndSend]);
 

@@ -26,7 +26,7 @@ import { listActiveBuiltInExtensionPaths } from "../extensions/builtInExtensions
 import type { RpcResponse } from "./PiRpcClient";
 import { formatBashToolMessage } from "./bashResult";
 import type { MainProcessTranslationKey } from "../../shared/i18n/mainProcessCopy";
-import { mergeHistoryWithPreservedMessages } from "./historyMessages";
+import { mergeHistoryWithPreservedMessages, stabilizeReloadedMessageIds } from "./historyMessages";
 import {
 	buildAgentSessionKey,
 	toAbsoluteSessionPath,
@@ -842,10 +842,13 @@ export class AgentManager {
 		});
 		// abort 时 ask_question 的 answer 已被覆写为 null，不再需要跟踪
 		this.abortedDuringAsk.delete(agentId);
-		const nextMessages = mergeHistoryWithPreservedMessages(
-			messages,
+		const nextMessages = stabilizeReloadedMessageIds(
 			this.messages.get(agentId) ?? [],
-			options?.preserveMessagesAfter,
+			mergeHistoryWithPreservedMessages(
+				messages,
+				this.messages.get(agentId) ?? [],
+				options?.preserveMessagesAfter,
+			),
 		);
 		// 重载后把进行中的消息身份（activeAssistantMessageIds/toolMessageIds）从
 		// 运行期副本重定向到投影版：后续事件继续更新投影版（位置正确、单份），
@@ -1655,8 +1658,23 @@ export class AgentManager {
 			hasSessionPath: !!runtime.tab.sessionPath,
 		});
 
+		// 已有压缩在进行（手动请求未返回 / pi 自动压缩中）：拒绝重复请求。
+		// 渲染层按钮在 isCompacting 时禁用，这里是双保险——否则第二个 compact
+		// RPC 会被 pi 以 "Compaction cancelled" 拒绝，用户看到莫名报错
+		// （2026-08 用户反馈：压缩失败：Compaction cancelled）。
+		if (this.compactingAgents.has(agentId) || this.rpcCompactingAgents.has(agentId)) {
+			void this.appLogger?.info("agent", "Compact skipped: already compacting", {
+				agentId,
+			});
+			return this.getRuntimeState(agentId);
+		}
+
 		// 标记压缩中，退出处理器据此区分压缩重启与异常崩溃
 		this.compactingAgents.add(agentId);
+		// 立即推送 isCompacting=true（getRuntimeState 合并 compactingAgents 集合）：
+		// 让圆环按钮进入禁用/进度态，避免用户重复点击触发第二个 compact。
+		// 此前 add 后无推送，isCompacting 要等 pi 的 compaction_start 事件才到渲染层。
+		void this.emitRuntimeState(agentId);
 
 		try {
 			const response = await runtime.process.client.request(
@@ -3234,6 +3252,15 @@ export class AgentManager {
 				}
 				this.emitState();
 				void this.emitRuntimeState(agentId);
+				// 压缩结束不保证会来 agent_settled（pi 版本差异）：主动确认 pi 是否还有
+				// 工作（overflow retry / queued follow-up），无工作即恢复 idle。否则状态
+				// 永远 stuck 在 running——最后回复耗时继续走（LiveDuration）、加载动画
+				// 常驻、思考/工具折叠保持展开（2026-08 用户反馈）。
+				// 延迟 300ms 让 pi 完成压缩收尾（文件写入/状态刷新），避免误判忙碌。
+				const idleTimer = setTimeout(() => {
+					void this.markIdleIfPiReportsNoWork(agentId);
+				}, 300);
+				idleTimer.unref?.();
 			}
 			void this.appLogger?.info("agent", "Compaction ended", {
 				agentId,
