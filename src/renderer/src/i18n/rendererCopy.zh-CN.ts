@@ -198,7 +198,6 @@ export const zhCN = {
   "app.compactFailedWithReason": "压缩失败：{error}",
   "app.compactNothingToDo": "上下文还很小，暂无可压缩内容",
   "app.compactSessionTooSmall": "会话内容过少，暂无需压缩",
-  "app.compactCancelled": "压缩未执行：已有压缩正在进行或刚结束，请稍后再试",
   "app.forkFromMessage": "Fork",
   "app.forkFromMessageTitle": "从此消息 fork 为新会话（可改后重发）",
   "app.forkDone": "已 fork 为新会话，原文已放入输入框",

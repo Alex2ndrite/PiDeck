@@ -33,15 +33,18 @@ test("composer maps compact errors via debugDetails-first friendly helper", () =
   assert.match(composer, /nothing to compact\|already compacted/i);
   assert.match(composer, /app\.compactNothingToDo/);
   assert.match(composer, /app\.compactSessionTooSmall/);
-  // 压缩被取消（已有压缩进行中/被打断）映射为友好文案，不展示原始错误
+  // 压缩被取消：静默（返回 null，不弹 toast）——取消响应可能延迟到正常对话后
+  // 返回，表现为「没点压缩却弹提示」（2026-08 用户反馈）
   assert.match(composer, /compaction cancelled\|cancelled/i);
-  assert.match(composer, /app\.compactCancelled/);
-  // chip 与 /compact 共用
-  assert.match(composer, /showNotice\(friendlyCompactError\(error\)/);
+  assert.match(composer, /if \(message\) showNotice\(message, 6000\)/);
+  assert.doesNotMatch(composer, /app\.compactCancelled/);
+  // chip 与 /compact 共用同一调用模式：null（静默）不弹 toast
+  assert.match(composer, /const message = friendlyCompactError\(error\)/);
   assert.equal(
-    (composer.match(/showNotice\(friendlyCompactError\(error\)/g) || []).length,
+    (composer.match(/const message = friendlyCompactError\(error\)/g) || []).length,
     2,
   );
+  assert.match(composer, /if \(message\) showNotice\(message, 6000\)/);
 });
 
 test("mock pi supports NOTHING compact failure path", () => {
