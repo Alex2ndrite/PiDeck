@@ -4,7 +4,6 @@ import { selectAtom } from "jotai/utils";
 import { useMemo, type ReactNode, type RefObject } from "react";
 import type { AgentRuntimeState } from "../../../../shared/types";
 import {
-  sessionCacheStatsAtom,
   sessionRecordByIdAtomFamily,
   sessionRuntimeBySessionIdAtomFamily,
   sessionSendStateByIdAtom,
@@ -14,7 +13,6 @@ import { isUserFacingSessionStart } from "../../hooks/useSessionTimelineControll
 import { t } from "../../i18n";
 import { displayProjectDirectoryName } from "../../rendererUtils";
 import { Button } from "../ui-shadcn/button";
-import { SessionStatus } from "./SurfaceParts";
 
 type HeaderActions = {
   headerRef: RefObject<HTMLDivElement | null>;
@@ -45,7 +43,6 @@ type LegacySessionHeaderProps = HeaderActions & {
   mode?: "legacy";
   sessionId?: never;
   title: string;
-  runtimeState?: AgentRuntimeState;
   isStarting: boolean;
 };
 
@@ -53,7 +50,6 @@ type ModernSessionHeaderProps = HeaderActions & {
   mode: "session";
   sessionId: string;
   title?: never;
-  runtimeState?: never;
   isStarting?: never;
   hasSession?: never;
 };
@@ -71,9 +67,6 @@ export function SessionHeader(props: SessionHeaderProps) {
   const sessionId = props.statusSessionId ?? (sessionMode ? props.sessionId : "");
   const legacyProps = props as LegacySessionHeaderProps;
   const session = useAtomValue(sessionRecordByIdAtomFamily(sessionId));
-  const runtime = useAtomValue(sessionRuntimeBySessionIdAtomFamily(sessionId));
-  // 会话级缓存命中率历史（统计快照由 runtime 事件写入 atom），供状态入口展示。
-  const cacheStats = useAtomValue(sessionCacheStatsAtom);
   const sendStateSelector = useMemo(
     () => selectAtom(
       sessionSendStateByIdAtom,
@@ -83,7 +76,6 @@ export function SessionHeader(props: SessionHeaderProps) {
     [sessionId],
   );
   const sendState = useAtomValue(sendStateSelector);
-  const runtimeState = sessionMode ? runtime?.state : legacyProps.runtimeState;
   // session 模式也只认用户发送；预热 starting 不能给标题栏加 loading（会顶高/半透明）。
   const isStarting = sessionMode
     ? isUserFacingSessionStart(sendState?.status)
@@ -107,7 +99,6 @@ export function SessionHeader(props: SessionHeaderProps) {
           <HatGlasses size={14} aria-hidden="true" />
         </span>
       )}
-      <SessionStatus state={runtimeState} duration={props.duration} cacheHitHistory={cacheStats[sessionId]?.cacheHitHistory} />
     </div>
   );
 

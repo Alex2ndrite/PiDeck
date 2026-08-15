@@ -1,6 +1,8 @@
+import { useEffect, useRef } from "react";
 import { FolderGit2, HatGlasses, Plus, Sparkles } from "lucide-react";
 import type { Project } from "../../../../shared/types";
 import { t } from "../../i18n";
+import { isChatProject } from "../../rendererUtils";
 import { Button } from "../ui-shadcn/button";
 import { LogoMark } from "./SurfaceParts";
 
@@ -14,11 +16,33 @@ import { LogoMark } from "./SurfaceParts";
  */
 export function ProjectEmptyState(props: {
   activeProject?: Project;
+  /**
+   * 自动创建闸门：仅当用户亲手清空 Tab 栏（App 经
+   * useSessionWorkspaceChrome.allTabsClosedByUser 传入）后才允许挂载即创建。
+   * 启动时首项目（内置 Chat 恒排第一）被自动选中同样会挂载本页，但那是无用户
+   * 意图的引导页——自动创建会让每次启动都新建匿名会话并拉起 pi agent。
+   */
+  autoCreateOnMount?: boolean;
   onCreateAgent: () => void;
   onCreateAnonymous: () => void;
   onAddProject: () => void;
 }) {
   const hasProject = Boolean(props.activeProject);
+
+  // 关闭全部 Tab 后的空态也直接进新会话输入页：闸门通过且有项目时，挂载即
+  // 自动创建 draft（Chat 项目为匿名）会话，创建成功后 currentSessionId 变化 →
+  // App 切到 SessionStartSurface（居中 ComposerArea），本页随之卸载。重复创建由
+  // useSessionActions 的 creatingSessionDraftRef（按 projectId 并发防重）兜底。
+  const autoCreatedRef = useRef(false);
+  useEffect(() => {
+    if (!props.autoCreateOnMount || !props.activeProject || autoCreatedRef.current) return;
+    autoCreatedRef.current = true;
+    if (isChatProject(props.activeProject)) {
+      props.onCreateAnonymous();
+    } else {
+      props.onCreateAgent();
+    }
+  }, [props.autoCreateOnMount, props.activeProject, props.onCreateAgent, props.onCreateAnonymous]);
 
   // 取路径末段作为页眉的项目名，与侧栏项目行的命名口径一致。
   const activeProjectName = props.activeProject

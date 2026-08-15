@@ -19,6 +19,7 @@ import { useNotifyLayoutResized } from "../../hooks/useNotifyLayoutResized";
 import { SessionHeader } from "./SessionHeader";
 import { SessionBranchBar } from "./SessionBranchBar";
 import { SessionWidgetChips } from "./SessionWidgetChips";
+import { SessionTodoStrip } from "./SessionTodoStrip";
 import { SessionSurfaceStage } from "./SessionSurfaceStage";
 import { ComposerArea } from "./ComposerArea";
 import { SessionRuntimeDock } from "./SessionRuntimeDock";
@@ -48,7 +49,6 @@ export type SessionViewProps = {
     noSession?: boolean;
     status?: string;
   } | null;
-  activeRuntimeState?: AgentRuntimeState;
   hasActiveConversation: boolean;
   hasProject: boolean;
 
@@ -124,7 +124,6 @@ export function SessionView({
   onFocusPane,
   activeAgentId,
   activeAgent,
-  activeRuntimeState,
   hasActiveConversation,
   hasProject,
   chatHeaderRef,
@@ -448,7 +447,6 @@ export function SessionView({
         }
         compactionCount={activeAgent?.compactionCount}
         isAnonymous={activeAgent?.noSession}
-        runtimeState={activeRuntimeState}
         duration={sessionDuration}
         isStarting={isAgentStarting}
         widgetChips={<SessionWidgetChips sessionId={sessionId} />}
@@ -524,6 +522,9 @@ export function SessionView({
                 enqueue={enqueueSessionPrompt}
                 ensureSessionId={ensureSessionId}
                 queuePanel={queuePanel}
+                // 输入框上方常驻 todo 条（dsh TodoPanel 移植）：与输入框同宽同列，
+                // 折叠条形态，高度由 ComposerMeasuredExtras 测量驱动面板自适应
+                widgets={<SessionTodoStrip sessionId={sessionId} />}
               />
             </ResizablePanel>
           </>

@@ -4,9 +4,9 @@ import {
 	Check,
 	ChevronDown,
 	ChevronLeft,
+	ChevronRight,
 	Eye,
 	FileText,
-	FoldVertical,
 	GitBranch,
 	ImageIcon,
 	ListChecks,
@@ -32,6 +32,8 @@ import {
 	DialogTitle,
 } from "../ui-shadcn/dialog";
 import { cn } from "../../lib/utils";
+import { Popover, PopoverContent, PopoverTrigger } from "../ui-shadcn/popover";
+import { SessionContextMeter } from "./SessionContextMeter";
 import { computeModelDisplay, formatModelRef, type ModelPending } from "../../utils/modelPendingDisplay";
 import { computeThinkingDisplay, type ThinkingLevelPending } from "../../utils/thinkingDisplay";
 import { CommandPickerGroup, CommandPickerPanel } from "../ui-shadcn/command-picker";
@@ -146,7 +148,6 @@ export function ExtensionWidgetCard(props: {
 
 export function ComposerBottomBar(props: {
 	state?: AgentRuntimeState;
-	compacting: boolean;
 	disabled?: boolean;
 	/** thinking 按钮专用禁用：与 disabled 不同，busy（生成进行中）时仍可切换思考强度
 	 *  （issue #146：pi 的 set_thinking_level 支持下一轮生成生效）。 */
@@ -174,8 +175,6 @@ export function ComposerBottomBar(props: {
 	onAttachFile: () => void;
 }) {
 	const ctxPercent = props.state?.contextPercent;
-	const showCompact = ctxPercent != null && ctxPercent > 30;
-	const contextPercent = ctxPercent ?? 0;
 	// 默认模型/思考级别来自主进程按 pi 配置自动填充进会话记录的默认值（props.record），
 	// 不读取渲染层 welcome localStorage 偏好，避免用户偏好覆盖 pi 配置。
 	const currentThinkingLevel = props.state?.thinkingLevel ?? props.record?.thinkingLevel;
@@ -287,73 +286,30 @@ export function ComposerBottomBar(props: {
 					{props.securityControl}
 				</div>
 				<div className="composer-bottom-center flex min-w-0 flex-1 items-center justify-center gap-4 overflow-hidden">
-					<Button
-						variant="ghost"
-						size="sm"
-						className="composer-bar-btn model flex h-7 min-w-0 max-w-[42ch] truncate rounded-md px-2 font-brand text-caption font-medium italic text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+					{/* 模型 + 思考合并为一个 chip（借鉴 dsh ModelSelect 的 trigger 形态）：
+					    模型名（primary tone）· 思考档位（caption tone）+ chevron；
+					    点击弹出 root 菜单（模型/思考两行），drill-in 复用既有 Dialog 选择器。
+					    pending（from→to）语义保留：待生效切换时两段均展示 from → to。 */}
+					<ModelThinkingChip
+						modelLabel={modelLabel}
+						modelPendingTo={modelDisplay.pending && modelTo ? (modelTo.modelName || modelTo.modelId) : undefined}
+						modelPendingTitle={modelPendingTitle}
+						thinkingText={thinkingText}
+						thinkingPendingTitle={thinkingPendingTitle}
 						disabled={props.modelDisabled ?? props.disabled}
-						onClick={props.onPickModel}
-						aria-haspopup="dialog"
-						title={modelPendingTitle ?? t("app.modelPickerTitle")}
-					>
-						{modelName ? (
-							<>
-								{modelProvider && (
-									<span className="max-w-[14ch] truncate text-muted-foreground">{modelProvider}</span>
-								)}
-								{modelProvider && <span className="text-muted-foreground/50">/</span>}
-								<span className="min-w-0 truncate">{modelName}</span>
-								{modelDisplay.pending && modelTo && (
-									<>
-										<span className="text-muted-foreground/50"> → </span>
-										<span className="min-w-0 truncate">{modelTo.modelName || modelTo.modelId}</span>
-									</>
-								)}
-							</>
-						) : (
-							<span className="text-muted-foreground">{modelLabel}</span>
-						)}
-					</Button>
-					<Button
-						variant="ghost"
-						size="sm"
-						className="composer-bar-btn thinking h-7 max-w-[10rem] rounded-md px-2 font-brand text-caption font-semibold italic text-[var(--color-brand-green)] hover:bg-muted/60"
-						disabled={props.thinkingDisabled}
-						onClick={props.onPickThinking}
-						aria-haspopup="dialog"
-						title={thinkingPendingTitle ?? t("app.thinkingPickerTitle")}
-					>
-						{thinkingText}
-					</Button>
-					{showCompact && (() => {
-						// 与 main 一致：>30% 才显示；70%/90% 用色阶提示紧迫度，不做成常驻高饱和按钮。
-						const isCompactingNow = Boolean(props.state?.isCompacting || props.compacting);
-						const urgency =
-							contextPercent >= 90 ? " critical" : contextPercent >= 70 ? " warn" : "";
-						return (
-							<Button
-								variant="ghost"
-								size="sm"
-								className={`composer-bar-btn compact h-7 gap-1 rounded-md px-1.5 text-control${urgency}${isCompactingNow ? " compacting" : ""}`}
-								disabled={
-									isCompactingNow ||
-									Boolean(props.state?.isStreaming)
-								}
-								title={t("app.contextCompactTitle", {
-									percent: contextPercent.toFixed(1),
-								})}
-								aria-label={t("app.compact")}
-								onClick={props.onCompact}
-							>
-								<FoldVertical size={13} strokeWidth={1.8} aria-hidden="true" />
-								{isCompactingNow
-									? t("app.compacting")
-									: t("app.compactUsage", { percent: contextPercent.toFixed(0) })}
-							</Button>
-						);
-					})()}
+						thinkingDisabled={props.thinkingDisabled}
+						onPickModel={props.onPickModel}
+						onPickThinking={props.onPickThinking}
+					/>
 				</div>
 				<div className="composer-bottom-right ml-auto flex shrink-0 items-center gap-2">
+					{/* 上下文占用圆环（dsh ContextMeter 移植）：发送按钮旁常驻指示，
+					    点击展开占用面板（两段占比/缓存命中/输入输出/压缩入口）；
+					    压缩动作从右上角紧凑徽章迁入面板；无 capacity 数据时自身不渲染 */}
+					<SessionContextMeter
+						state={props.state}
+						onCompact={props.onCompact}
+					/>
 					{props.gitInfo?.current && (
 						<span
 							className="composer-bar-branch inline-flex max-w-[12rem] items-center gap-1.5 truncate px-1.5 text-sm font-semibold text-foreground/75"
@@ -370,6 +326,91 @@ export function ComposerBottomBar(props: {
 				</div>
 			</div>
 		</div>
+	);
+}
+
+/**
+ * 模型 + 思考合并选择 chip（借鉴 dsh ModelSelect 的 trigger 形态）。
+ *
+ * 显示：`模型名 · 思考档位 + chevron` 一体；待生效切换（from→to）语义保留。
+ * 交互：点击弹出 root 菜单两行（模型 / 思考），drill-in 复用现有 Dialog 选择器
+ * （onPickModel / onPickThinking），列表 UI 不重做。
+ */
+function ModelThinkingChip(props: {
+	modelLabel: string;
+	/** 模型待生效切换的目标 label（存在时显示 from → to） */
+	modelPendingTo?: string;
+	modelPendingTitle?: string;
+	thinkingText: string;
+	thinkingPendingTitle?: string;
+	disabled?: boolean;
+	thinkingDisabled?: boolean;
+	onPickModel: () => void;
+	onPickThinking: () => void;
+}) {
+	const [open, setOpen] = useState(false);
+	const modelValue = props.modelPendingTo
+		? `${props.modelLabel} → ${props.modelPendingTo}`
+		: props.modelLabel;
+	const drillIn = (action: () => void) => {
+		setOpen(false);
+		action();
+	};
+	return (
+		<Popover open={open} onOpenChange={setOpen}>
+			<PopoverTrigger asChild>
+				<Button
+					variant="ghost"
+					size="sm"
+					className="composer-bar-btn model-thinking flex h-7 min-w-0 max-w-[52ch] gap-1 rounded-md px-2 text-caption font-medium text-foreground hover:bg-muted/60"
+					title={props.modelPendingTitle ?? t("app.modelPickerTitle")}
+				>
+					<span className="min-w-0 truncate">{modelValue}</span>
+					<span className="flex-none text-muted-foreground/70" aria-hidden="true">·</span>
+					<span
+						className="flex-none truncate text-muted-foreground"
+						title={props.thinkingPendingTitle ?? t("app.thinkingPickerTitle")}
+					>
+						{props.thinkingText}
+					</span>
+					<ChevronDown
+						size={12}
+						aria-hidden="true"
+						className={`flex-none text-muted-foreground transition-transform duration-150${open ? " rotate-180" : ""}`}
+					/>
+				</Button>
+			</PopoverTrigger>
+			<PopoverContent
+				align="center"
+				side="top"
+				className="w-56 p-1"
+			>
+				<div className="flex flex-col">
+					<button
+						type="button"
+						className="flex h-9 items-center gap-2 rounded-md px-2 text-left text-control hover:bg-muted/60 disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent"
+						onClick={() => drillIn(props.onPickModel)}
+						disabled={props.disabled}
+						title={t("app.modelPickerTitle")}
+					>
+						<span className="text-muted-foreground">{t("app.model")}</span>
+						<span className="min-w-0 flex-1 truncate text-foreground">{modelValue}</span>
+						<ChevronRight size={14} aria-hidden="true" className="flex-none text-muted-foreground" />
+					</button>
+					<button
+						type="button"
+						className="flex h-9 items-center gap-2 rounded-md px-2 text-left text-control hover:bg-muted/60 disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent"
+						onClick={() => drillIn(props.onPickThinking)}
+						disabled={props.thinkingDisabled}
+						title={t("app.thinkingPickerTitle")}
+					>
+						<span className="text-muted-foreground">{t("app.think")}</span>
+						<span className="min-w-0 flex-1 truncate text-foreground">{props.thinkingText}</span>
+						<ChevronRight size={14} aria-hidden="true" className="flex-none text-muted-foreground" />
+					</button>
+				</div>
+			</PopoverContent>
+		</Popover>
 	);
 }
 

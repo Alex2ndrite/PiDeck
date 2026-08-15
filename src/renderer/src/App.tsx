@@ -2827,6 +2827,10 @@ export function App() {
           <div className="min-h-0 flex-1">
             <ProjectEmptyState
               activeProject={activeProject}
+              // 自动创建闸门：仅「用户关闭全部 Tab」后的空态自动建会话落到输入页；
+              // 启动引导页（首项目自动选中）不自动创建——否则每次启动都会无意图地
+              // 新建匿名会话并拉起 pi agent（匿名会话创建即 spawn 进程）。
+              autoCreateOnMount={workspaceChrome.allTabsClosedByUser}
               // 创建入口：新建 Agent / 匿名聊天都只负责创建会话；模型/思考级别等
               // 启动配置统一在起始页（SessionStartSurface 居中 ComposerArea）底部栏选择
               onCreateAgent={() => void createSessionDraftWithTab(undefined)}

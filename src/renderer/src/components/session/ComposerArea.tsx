@@ -32,6 +32,9 @@ import type { EnqueuePromptSnapshot } from "../../hooks/useSessionSend";
 export type ComposerAreaProps = {
   sessionId: string;
   gitInfo?: GitBranchInfo;
+  /** 输入框上方常驻扩展条（如 todo 条）；放在 widgets 槽位，高度由
+   *  ComposerMeasuredExtras 测量并驱动面板自适应（同一测量链路）。 */
+  widgets?: ReactNode;
   queuePanel?: ReactNode;
   onOpenFile?: (path: string) => void;
   /** 受控高度（px）。传入时由外层面板（react-resizable-panels）持有尺寸，
@@ -221,10 +224,11 @@ export const ComposerArea = forwardRef<HTMLElement, ComposerAreaProps>(function 
             data-session-id={props.sessionId}
           >
             {/* 扩展 widget（Todo/Plan）已迁至 chat-header 左侧 SessionWidgetChips，
-                composer 内不再有 widget，widgets 槽位传 null；
+                composer 内默认不再有 widget，widgets 槽位默认 null；
+                宿主（SessionView）可传入常驻 todo 条（SessionTodoStrip），
                 ComposerMeasuredExtras 负责测量附件/队列/通知高度并驱动 composer 自动增高。 */}
             <ComposerMeasuredExtras
-              widgets={null}
+              widgets={props.widgets ?? null}
               queuePanel={props.queuePanel}
               deliveryNotice={(
                 <SessionDeliveryNotice
@@ -309,7 +313,6 @@ export const ComposerArea = forwardRef<HTMLElement, ComposerAreaProps>(function 
               {/* 运行中仍可切换思考强度（下一轮生效）和模型（本轮结束后套上）；仅启动中禁用 */}
               <ComposerBottomBar
                 state={composer.runtime?.state}
-                compacting={Boolean(composer.runtime?.state?.isCompacting)}
                 disabled={composer.isBusy || composer.isStarting}
                 thinkingDisabled={composer.isStarting}
                 modelDisabled={composer.isStarting}

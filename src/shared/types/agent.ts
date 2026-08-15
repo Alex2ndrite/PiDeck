@@ -42,6 +42,9 @@ export type AgentRuntimeState = {
 	contextTokens?: number | null;
 	contextWindow?: number | null;
 	contextPercent?: number | null;
+	/** 对话消息估算 token：主进程按会话文件消息文本字符数 ÷ 4 粗估，
+	 *  用于 UI 展示「对话 vs 系统+工具」两段占比（pi 不返回 prompt 构成）。 */
+	contextMessageTokens?: number;
 	inputTokens?: number;
 	outputTokens?: number;
 	cacheRead?: number;

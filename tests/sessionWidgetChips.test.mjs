@@ -117,9 +117,10 @@ test("widget chips render in the chat header left slot, not the composer", () =>
   assert.match(chipsSource(), /isCoherentComposerRuntimeUi/);
 
   const header = readFileSync("src/renderer/src/components/session/SessionHeader.tsx", "utf8");
-  // 头部提供左侧槽位，且渲染在状态/操作按钮之前（视觉最左）
+  // 头部提供左侧槽位（widget chips 随 mr-auto 钉在左端；状态徽章已迁往输入框圆环）
   assert.match(header, /widgetChips\?: ReactNode/);
-  assert.ok(header.indexOf("{props.widgetChips}") < header.indexOf("<SessionStatus"));
+  assert.match(header, /\{props\.widgetChips\}/);
+  assert.doesNotMatch(header, /<SessionContextMeter/);
 
   const view = readFileSync("src/renderer/src/components/session/SessionView.tsx", "utf8");
   // 目录设置属于侧栏 Chat 父项目，不应混入会话徽章；会话槽位只保留运行状态 chips。

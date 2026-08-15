@@ -1840,7 +1840,12 @@ export class AgentManager {
 				.catch(() => ({ data: undefined })),
 			runtime.tab.sessionPath
 				? this.getSessionCacheHitStats(runtime.tab.sessionPath)
-				: Promise.resolve({ latest: undefined as number | undefined, average: undefined as number | undefined, sampleCount: 0 }),
+				: Promise.resolve({
+					latest: undefined as number | undefined,
+					average: undefined as number | undefined,
+					sampleCount: 0,
+					messageChars: undefined as number | undefined,
+				}),
 		]);
 		const state = stateResponse.data as any;
 		const stats = statsResponse.data as any;
@@ -1907,6 +1912,11 @@ export class AgentManager {
 		contextTokens: stats?.contextUsage?.tokens,
 		contextWindow: stats?.contextUsage?.contextWindow ?? model?.contextWindow,
 		contextPercent: stats?.contextUsage?.percent,
+		/** 对话消息估算 token：消息字符 ÷ 4（1 token ≈ 4 chars），缺文件数据时不报 */
+		contextMessageTokens:
+			fileHitStats.messageChars != null
+				? Math.round(fileHitStats.messageChars / 4)
+				: undefined,
 		inputTokens,
 		outputTokens,
 		cacheRead,

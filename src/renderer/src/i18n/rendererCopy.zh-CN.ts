@@ -527,6 +527,20 @@ export const zhCN = {
   "app.settingsSaved": "设置已保存。",
   "app.widgetsToggle": "待办",
   "app.widgetTitleTodo": "TODO",
+  // composer 发送按钮旁的上下文占用圆环（dsh ContextMeter 移植）：
+  // 标题括号阅读（percent 插值），figures 为 ~used / window 紧凑格式
+  "sessionContext.used": "上下文已用 {percent}%",
+  "sessionContext.figures": "~{used} / {window}",
+  "sessionContext.conversation": "对话",
+  "sessionContext.systemTools": "系统 + 工具",
+  "sessionContext.compact": "压缩上下文",
+  "sessionContext.compacting": "压缩中…",
+  // composer 上方 todo 常驻条（借鉴 dsh-web TodoPanel）：进度文案零计数省略，
+  // 段间用 en-space 连接（HTML 折叠连续 ASCII 空格，需字面宽空格）
+  "sessionTodo.title": "待办",
+  "sessionTodo.done": "{done} 完成",
+  "sessionTodo.active": "{active} 进行中",
+  "sessionTodo.pending": "{pending} 待处理",
   "app.widgetTitlePlan": "PLAN",
   "app.todoListTitle": "待办事项",
   "app.todoListEmpty": "暂无任务",

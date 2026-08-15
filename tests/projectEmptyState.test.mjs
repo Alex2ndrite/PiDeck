@@ -7,6 +7,10 @@ const emptyState = readFileSync(
   "src/renderer/src/components/session/ProjectEmptyState.tsx",
   "utf8",
 );
+const workspaceChrome = readFileSync(
+  "src/renderer/src/hooks/useSessionWorkspaceChrome.ts",
+  "utf8",
+);
 const zh = readFileSync("src/renderer/src/i18n/rendererCopy.zh-CN.ts", "utf8");
 const en = readFileSync("src/renderer/src/i18n/rendererCopy.en-US.ts", "utf8");
 
@@ -49,6 +53,23 @@ test("anonymous session short entry stays on the empty state", () => {
   // 匿名聊天入口保留：无项目也显示添加项目入口
   assert.match(emptyState, /t\("app\.anonymousChatShort"\)/);
   assert.match(emptyState, /hasProject/);
+});
+
+test("empty-state auto-create is gated to the user clearing all tabs", () => {
+  // 回归：启动时首项目（内置 Chat 恒排第一）被自动选中也会挂载引导页，若挂载
+  // 即自动创建，每次启动都会无用户意图地新建匿名会话并拉起 pi agent（匿名
+  // 会话创建即 spawn 进程）。自动创建只允许发生在「用户亲手关闭全部 Tab」之后：
+  // useSessionWorkspaceChrome 在 closeTab/closeAllTabs 清空 Tab 栏时置位闸门，
+  // App 以 autoCreateOnMount 传给 ProjectEmptyState，effect 必须先过闸门。
+  assert.match(emptyState, /autoCreateOnMount/);
+  assert.match(emptyState, /if \(!props\.autoCreateOnMount \|\| !props\.activeProject/);
+  assert.match(emptyState, /autoCreatedRef/);
+  assert.match(emptyState, /isChatProject\(props\.activeProject\)/);
+  assert.match(emptyState, /props\.onCreateAnonymous\(\)/);
+  assert.match(emptyState, /props\.onCreateAgent\(\)/);
+  assert.match(app, /autoCreateOnMount=\{workspaceChrome\.allTabsClosedByUser\}/);
+  assert.match(workspaceChrome, /allTabsClosedByUser/);
+  assert.match(workspaceChrome, /setAllTabsClosedByUser\(true\)/);
 });
 
 test("shadcn Empty primitive was removed in favor of pi-branded entry", () => {

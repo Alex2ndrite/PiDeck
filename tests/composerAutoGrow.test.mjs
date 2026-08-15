@@ -50,15 +50,16 @@ test("extras height sync lives in a child that rerenders when variable content c
   // its render-prop subtree, not the outer ComposerArea, so the layout effect must live in a
   // child receiving the extras as props; otherwise the panel only shrinks after the user types
   // and rerenders ComposerArea for an unrelated reason.
-  // 注：扩展 widget（Todo/Plan）已迁至 chat-header SessionWidgetChips，composer 内 widgets
-  // 槽位固定传 null，测量的可变内容为附件栏/队列/投递通知。
+  // 注：扩展 widget（Todo/Plan）默认在 chat-header SessionWidgetChips，composer 内
+  // widgets 槽位默认 null（宿主 SessionView 可传常驻 todo 条 SessionTodoStrip），
+  // 测量的可变内容为 todo 条/附件栏/队列/投递通知。
   assert.match(
     composerArea,
     /function ComposerMeasuredExtras[\s\S]*useLayoutEffect/,
   );
   assert.match(
     composerArea,
-    /<ComposerMeasuredExtras[\s\S]*widgets=\{null\}/,
+    /<ComposerMeasuredExtras[\s\S]*widgets=\{props\.widgets \?\? null\}/,
   );
 });
 

@@ -83,6 +83,10 @@ function loadDismissedWidgets(): DismissedWidgets {
 	}
 }
 
+/** 供 composer 上方 todo 条（SessionTodoStrip）读取同一份 dismiss 记录：
+ *  用户在 chips 里关闭过的 widget，常驻条也不再显示（重启后生效）。 */
+export { loadDismissedWidgets };
+
 function persistDismissedWidgets(value: DismissedWidgets) {
 	try {
 		localStorage.setItem(DISMISSED_WIDGETS_KEY, JSON.stringify(value));

@@ -530,6 +530,20 @@ export const enUS: Record<TranslationKey, string> = {
   "app.settingsSaved": "Settings saved.",
   "app.widgetsToggle": "Todo",
   "app.widgetTitleTodo": "TODO",
+  // Context-occupancy ring beside the send button (dsh ContextMeter port):
+  // headline brackets the percent slot; figures is the ~used / window compact pair
+  "sessionContext.used": "{percent}% of context used",
+  "sessionContext.figures": "~{used} / {window}",
+  "sessionContext.conversation": "Conversation",
+  "sessionContext.systemTools": "System + tools",
+  "sessionContext.compact": "Compact context",
+  "sessionContext.compacting": "Compacting…",
+  // Composer-side todo strip (ported from dsh-web TodoPanel): zero-count segments
+  // are omitted; segments joined with en-space (HTML collapses runs of ASCII spaces)
+  "sessionTodo.title": "Todo",
+  "sessionTodo.done": "{done} done",
+  "sessionTodo.active": "{active} in progress",
+  "sessionTodo.pending": "{pending} pending",
   "app.widgetTitlePlan": "PLAN",
   "app.todoListTitle": "To-dos",
   "app.todoListEmpty": "No tasks yet",
