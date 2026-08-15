@@ -25,12 +25,32 @@ All notable changes to PiDeck are documented here.
   with the sidebar collapse and session tabs making room for the lights.
 - **Empty-workspace onboarding** — When no workspace projects exist, the
   sidebar renders an empty-state card with an add-directory button.
+- **Web ask request cards** — The local web service gained a `/api/ui-response`
+  endpoint; `ask` requests render as cards with a request snapshot, and the
+  SSE tool-loop wrap-up is fixed.
 
 ### ✨ UX Improvements
 
 - **Desktop pet at native sprite size** — The pet renders each sprite cell at
   its original size with high-quality interpolation and stays in sync with
   zoom/font-size changes (no more blurry 160×176 compression).
+- **Streaming conversations expand intermediate steps by default** — Thinking
+  and tool-execution steps are expanded during streaming by default; the
+  process safety gate ships enabled but zero-touch, so read-only users are
+  never interrupted.
+- **Unified dsh-web look** — Session todo bar, merged model/thinking selector,
+  and context ring with unified status details now match between desktop and
+  web.
+- **System notification jumps to its session** — Clicking a notification
+  prioritizes the session `record.id` and switches to that session instead of
+  landing on the current one.
+- **Onboarding auto-selects the first project** — The onboarding flow delays
+  draft-session creation and auto-selects the first project.
+- **Centered home composer** — The ComposerArea on the empty home page is
+  uniformly centered, no longer offset by leftover layout.
+- **DevTools shortcuts consolidated** — Shortcuts are consolidated in
+  `devTools.ts`; F12 inside a webview now opens the main window's DevTools
+  instead of being swallowed by the embedded page.
 
 ### 🔧 Performance
 
@@ -43,6 +63,15 @@ All notable changes to PiDeck are documented here.
   to the `pideck-pet://` protocol (manifest no longer embeds a 7.4MB base64
   image) with mtime/size fingerprint caching; app-log reads are line-cached
   with zero re-reads of history files.
+- **Wider streaming push window** — text/thinking push batching window widened
+  from 50ms to 100ms, cutting render frequency further on top of incremental
+  rendering.
+- **Streaming event flood no longer leaks memory** — Streaming rendering is
+  O(n) per-frame scans and full IPC events are handled on demand; RAM no
+  longer climbs to GB-scale without dropping back under event floods.
+- **Plain-text fallback for unfreezable messages** — Long messages that cannot
+  be frozen render as plain text during streaming, settle-time full rendering
+  is capped, and the typewriter stops idling frames.
 
 ### 🐛 Bug Fixes
 
@@ -61,6 +90,17 @@ All notable changes to PiDeck are documented here.
   32px header height instead of sitting 6px low and clipped.
 - **Pet window session isolation** — Partition constants are unified so the
   sprite protocol attaches to its own dedicated session.
+- **Streaming scroll-follow no longer stalls mid-reply** — When the spring
+  follow lags behind the growing content, a slight scroll up (touchpad
+  inertia / accidental input) is no longer mistaken for leaving the bottom;
+  the reply keeps scrolling into view. Even after a misjudged escape, content
+  growth re-locks the follow while the user stays near the bottom — no more
+  manual scroll-to-bottom button.
+- **Thinking-collapse trailing whitespace** — A thinking step collapsed to a
+  single line no longer leaves trailing whitespace in its end state.
+- **Add-project no longer hijacked by chat (#149)** — The add-project entry
+  point is no longer taken over by the session chat area and stays reachable
+  from the sidebar.
 
 ## v0.7.0 - 2026-08-13
 
