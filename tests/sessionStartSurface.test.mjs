@@ -11,8 +11,6 @@ const timeline = readFileSync(
   "src/renderer/src/components/session/SessionMessageTimeline.tsx",
   "utf8",
 );
-const zh = readFileSync("src/renderer/src/i18n/rendererCopy.zh-CN.ts", "utf8");
-const en = readFileSync("src/renderer/src/i18n/rendererCopy.en-US.ts", "utf8");
 
 test("start surface reuses the session bottom composer, not a second input implementation", () => {
   // 统一输入：直接居中挂完整 ComposerArea（模型/思考/模式/安全级别/发送全保留），
@@ -27,20 +25,16 @@ test("start surface reuses the session bottom composer, not a second input imple
   assert.doesNotMatch(surface, /waitRuntimeReady|sendPrompt|getComposerEnterIntent/);
 });
 
-test("start surface centers the composer and keeps quick-prompt chips", () => {
+test("start surface centers the composer", () => {
   // DeepSeek 式居中：flex 列 + 重心下移（pt-[18vh] 压向视口中心）；
-  // 快捷项点击填入输入框不自动发送；2026-11 整体放大：Logo 72 / 980px / 高 300
-  assert.match(surface, /justify-center/);
+  // 2026-11 整体放大：Logo 72 / 980px / 高 300；快捷项按钮已按用户要求移除
   assert.match(surface, /pt-\[18vh\]/);
   assert.match(surface, /max-w-\[980px\]/);
-  assert.match(surface, /defaultHeight=\{300\}/);
+  assert.match(surface, /defaultHeight=\{150\}/);
   assert.match(surface, /session-start-surface/);
-  assert.match(surface, /QUICK_ACTIONS/);
-  assert.match(surface, /sessionStart\.inspectPrompt/);
-  assert.match(surface, /sessionStart\.planPrompt/);
-  assert.match(surface, /sessionStart\.debugPrompt/);
-  assert.match(surface, /insertQuickPrompt\(props\.sessionId, t\(action\.prompt\)\)/);
-  assert.match(surface, /t\(action\.title\)/);
+  // 移除快捷项后不再存在相关常量/交互代码
+  assert.doesNotMatch(surface, /QUICK_ACTIONS/);
+  assert.doesNotMatch(surface, /insertQuickPrompt/);
 });
 
 test("bottom composer is hidden while the start surface is showing", () => {
@@ -52,18 +46,4 @@ test("bottom composer is hidden while the start surface is showing", () => {
 test("empty active sessions render the start surface with the session id", () => {
   assert.match(timeline, /activeMessages\.length === 0/);
   assert.match(timeline, /<SessionStartSurface sessionId=\{sessionId\} \/>/);
-});
-
-test("quick prompt copy is present in both locale dictionaries", () => {
-  for (const key of [
-    "sessionStart.inspectPrompt",
-    "sessionStart.planPrompt",
-    "sessionStart.implementPrompt",
-    "sessionStart.debugPrompt",
-    "sessionStart.testPrompt",
-    "sessionStart.reviewPrompt",
-  ]) {
-    assert.match(zh, new RegExp(`\\"${key}\\"`));
-    assert.match(en, new RegExp(`\\"${key}\\"`));
-  }
 });
