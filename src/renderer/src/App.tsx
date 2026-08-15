@@ -2419,9 +2419,21 @@ export function App() {
   async function changeChatPath(project: Project) {
     const picked = await api.projects.chooseChatPath();
     if (!picked || picked === project.path) return;
-    await api.projects.setChatPath(picked);
-    await refreshProjectSessions(project.id);
-    showToast(t("app.chatProjectPathUpdated"), 1800);
+    try {
+      await api.projects.setChatPath(picked);
+      await refreshProjectSessions(project.id);
+      showToast(t("app.chatProjectPathUpdated"), 1800);
+    } catch (error) {
+      // 主进程拒绝把聊天目录指向已注册的项目目录（CHAT_PATH_OVERLAPS_PROJECT，issue #149）：
+      // 同路径会吞掉项目区的新项目，这里给出明确提示而不是静默失败。
+      const message = String(error instanceof Error ? error.message : error);
+      showToast(
+        message.includes("CHAT_PATH_OVERLAPS_PROJECT")
+          ? t("app.chatPathOverlapsProject")
+          : message,
+        5000,
+      );
+    }
   }
 
   const sidebarActions: SidebarActions = {

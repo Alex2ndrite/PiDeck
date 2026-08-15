@@ -460,6 +460,7 @@ export const zhCN = {
   "app.modelRestartDone": "Agent 已重启，新模型已生效",
   "app.modelPendingTitle": "模型将在本轮结束后切换：{from} → {to}",
   "app.chatProjectPathUpdated": "聊天记录目录已更新",
+  "app.chatPathOverlapsProject": "该目录已作为项目存在，不能设为聊天记录目录（同路径会占用项目区）。请选择其他目录。",
   "app.projectRemoveTitle": "删除目录记录",
   "app.projectRemoveBlockedTitle": "无法删除项目",
   "app.projectRemoveBlockedByAgent": "该项目仍有运行中的 Agent，请先停止或关闭后再删除。",

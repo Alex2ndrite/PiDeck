@@ -463,6 +463,7 @@ export const enUS: Record<TranslationKey, string> = {
   "app.modelRestartDone": "Agent restarted, new model applied",
   "app.modelPendingTitle": "Model switches after this generation: {from} → {to}",
   "app.chatProjectPathUpdated": "Chat directory updated",
+  "app.chatPathOverlapsProject": "This folder is already registered as a project and cannot be used as the chat directory (a shared path would shadow the project area). Please pick another folder.",
   "app.projectRemoveTitle": "Remove project record",
   "app.projectRemoveBlockedTitle": "Cannot remove project",
   "app.projectRemoveBlockedByAgent": "This project still has running agents. Please stop or close them before removing.",
