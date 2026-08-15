@@ -32,17 +32,18 @@ export function ProjectEmptyState(props: {
   onSelectProject: (projectId: string) => void;
 }) {
   // 无项目时没有任何可创建会话的项目上下文，只保留添加项目入口。
+  // 与有项目引导页同比例：Logo 72 / gap-8 / pt-[18vh] 靠中。
   if (!props.activeProject) {
     return (
       <div className="flex min-h-0 flex-1 flex-col">
-        <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-7 overflow-y-auto px-6 pb-10 pt-[14vh]">
-          <LogoMark size={56} />
+        <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-8 overflow-y-auto px-6 pb-10 pt-[18vh]">
+          <LogoMark size={72} />
           <Button
             size="lg"
-            className="h-12 rounded-xl bg-foreground px-7 text-background shadow-sm hover:bg-foreground/85"
+            className="h-14 rounded-xl bg-foreground px-8 text-base text-background shadow-sm hover:bg-foreground/85"
             onClick={props.onAddProject}
           >
-            <Plus className="size-4" aria-hidden="true" />
+            <Plus className="size-5" aria-hidden="true" />
             <span>{t("app.addProject")}</span>
           </Button>
         </div>
@@ -64,9 +65,9 @@ export function ProjectEmptyState(props: {
         >
           <SelectTrigger
             aria-label={t("app.guideProjectPicker")}
-            className="h-8 gap-1.5 border-0 bg-transparent px-2 text-[13px] font-normal text-text-secondary shadow-none hover:bg-accent/50 focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:hover:bg-accent/50"
+            className="h-9 gap-2 border-0 bg-transparent px-2.5 text-sm font-normal text-text-secondary shadow-none hover:bg-accent/50 focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:hover:bg-accent/50"
           >
-            <FolderGit2 size={13} aria-hidden="true" className="shrink-0 text-text-tertiary" />
+            <FolderGit2 size={15} aria-hidden="true" className="shrink-0 text-text-tertiary" />
             <SelectValue />
           </SelectTrigger>
           <SelectContent align="start">

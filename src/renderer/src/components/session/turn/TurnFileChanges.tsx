@@ -7,7 +7,7 @@ import { collectRunFileChanges, fileChangeToDiffLines } from "../TimelineFormat"
 import type { AgentRunItem } from "../timeline/types";
 import type { DiffFileHandler } from "../ToolCallComponents";
 
-/** 默认折叠阈值：文件数超过该值时只展示前 N 个，其余由「展开」按钮控制 */
+/** 默认折叠阈值：文件数超过该值时只展示前 N 个，其余由标题行折叠按钮控制 */
 const COLLAPSED_LIMIT = 3;
 
 /**
@@ -27,16 +27,29 @@ export const TurnFileChanges = memo(function TurnFileChanges(props: {
 	const files = useMemo(() => collectRunFileChanges(props.run), [props.run]);
 	const [expanded, setExpanded] = useState(false);
 	if (files.length === 0) return null;
-	// 折叠态只渲染前 N 个；按钮显隐由 exceedsLimit 决定（展开后仍需能收起），
-	// hiddenCount 仅驱动「展开其余 N 个」文案
+	// 折叠态只渲染前 N 个；按钮显隐由 exceedsLimit 决定（展开后仍需能收起）
 	const exceedsLimit = files.length > COLLAPSED_LIMIT;
 	const visibleFiles = expanded || !exceedsLimit ? files : files.slice(0, COLLAPSED_LIMIT);
-	const hiddenCount = files.length - visibleFiles.length;
 	return (
 		<div className="turn-file-changes w-full min-w-0">
 			<div className="mb-1.5 flex items-center gap-1.5 text-micro font-medium uppercase tracking-wider text-muted-foreground/60">
 				<Files size={12} aria-hidden="true" className="shrink-0" />
 				<span>{t("session.turnFileChangesTitle")}</span>
+				{/* 折叠/展开按钮：仅文件数超过阈值时显示（此时折叠才有意义），
+				    点击在「前 N 个」与「全部」间切换；icon 小按钮不挤占标题行 */}
+				{exceedsLimit && (
+					<Button
+						type="button"
+						variant="ghost"
+						size="icon-sm"
+						className="size-5 shrink-0 rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+						title={expanded ? t("common.collapse") : t("common.expand")}
+						aria-label={expanded ? t("common.collapse") : t("common.expand")}
+						onClick={() => setExpanded((v) => !v)}
+					>
+						{expanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+					</Button>
+				)}
 			</div>
 			<div className="flex flex-col gap-0.5">
 				{visibleFiles.map((entry) => (
@@ -69,20 +82,6 @@ export const TurnFileChanges = memo(function TurnFileChanges(props: {
 						</Button>
 					</div>
 				))}
-				{exceedsLimit && (
-					<Button
-						type="button"
-						variant="ghost"
-						size="sm"
-						className="mt-0.5 h-6 justify-start gap-1 self-start rounded-md px-2 text-micro font-medium text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-						onClick={() => setExpanded((v) => !v)}
-					>
-						{expanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-						{expanded
-							? t("common.collapse")
-							: t("session.turnFileChangesShowMore", { count: hiddenCount })}
-					</Button>
-				)}
 			</div>
 		</div>
 	);

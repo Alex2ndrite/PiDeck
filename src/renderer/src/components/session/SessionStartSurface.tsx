@@ -47,16 +47,18 @@ export function SessionStartSurface(props: {
 
   return (
     // session-start-surface 保留类名供壁纸模式契约（bg-transparent 透出下层壁纸）；
-    // pt-[14vh] 把重心从几何中心下移，接近 DeepSeek 新会话页（输入框在视口 55-60% 处）
-    <div className="session-start-surface flex min-h-full w-full flex-col items-center gap-7 bg-transparent px-6 pb-10 pt-[14vh]">
-      <LogoMark size={56} />
+    // pt-[18vh] 把重心压向视口中心（输入框顶约 36-40%、框心 ~55%），接近 DeepSeek
+    // 新会话页；[--font-size-input] 在容器作用域放大输入框字号（14→15.5px），
+    // 只影响本页，不改全局 token（会话页输入框保持原尺寸）。
+    <div className="session-start-surface flex min-h-full w-full flex-col items-center gap-8 bg-transparent px-6 pb-10 pt-[18vh] [--font-size-input:15.5px] [--line-height-input:25px]">
+      <LogoMark size={72} />
       {props.projectSwitcher}
-      {/* 复用会话页底部输入框组件：defaultHeight 抬高起步高度（220px），
+      {/* 复用会话页底部输入框组件：defaultHeight 抬高起步高度（300px），
           底部栏（模型/思考/模式/安全级别/git）与发送按钮全保留 */}
-      <div className="w-full max-w-[880px]">
+      <div className="w-full max-w-[980px]">
         <ComposerArea
           sessionId={props.sessionId}
-          defaultHeight={220}
+          defaultHeight={300}
           gitInfo={services.gitInfo}
           onOpenFile={services.onOpenFile}
           enqueue={services.enqueueSessionPrompt}
@@ -75,17 +77,17 @@ export function SessionStartSurface(props: {
       </div>
 
       {/* 快捷项：点击填入输入框不自动发送，用户可先调整（沿用 services 的草稿写入） */}
-      <div className="flex max-w-2xl flex-wrap items-center justify-center gap-2">
+      <div className="flex max-w-2xl flex-wrap items-center justify-center gap-2.5">
         {QUICK_ACTIONS.map((action) => (
           <button
             key={action.title}
             type="button"
-            className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-[13px] text-text-secondary transition-colors hover:border-border-strong hover:text-foreground"
+            className="flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2 text-sm text-text-secondary transition-colors hover:border-border-strong hover:text-foreground"
             onClick={() => {
               services.insertQuickPrompt(props.sessionId, t(action.prompt));
             }}
           >
-            <action.icon size={13} aria-hidden="true" className="text-text-tertiary" />
+            <action.icon size={15} aria-hidden="true" className="text-text-tertiary" />
             {t(action.title)}
           </button>
         ))}

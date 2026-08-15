@@ -271,14 +271,15 @@ export const ToolCard = memo(function ToolCard(props: {
 	const askCard = props.message.meta?._askCard as AskCardSummary | undefined;
 	const isAskCard = Boolean(askCard?.question);
 	// 状态徽章（借鉴 AI Elements Tool 的 getStatusBadge）：三态图标+文案 pill 一眼可辨。
-	// running 保留琥珀色警示位 + spinner；error 用 destructive 红；done 用 secondary
+	// running 保留琥珀色警示位；error 用 destructive 红；done 用 secondary。
 	// 低强调确认（ask_question 已回答时文案替换为「已回答」）。
 	// 随 trigger 行紧凑化（24px）同步收紧：图标 11→9px、Badge 内边距 py-0.5→py-0、px-1.5→px-1。
+	// 2026-11：移除 running 的转圈动画（用户反馈动画具干扰性），只保留「进行中」文字；
+	// 状态仍由 tool_execution_start/end 事件驱动，语义不变。
 	const statusBadge = (() => {
 		if (status === "running") {
 			return (
 				<Badge variant="outline" className="gap-1 border-warning/40 px-1 py-0 text-micro text-warning">
-					<span className="size-[9px] animate-spin rounded-full border-2 border-[color:color-mix(in_srgb,var(--color-warning)_30%,transparent)] border-t-[var(--color-warning)]" aria-hidden="true" />
 					{t("tool.statusRunning")}
 				</Badge>
 			);

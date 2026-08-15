@@ -77,7 +77,9 @@ test("UI 2.0: messages and composer share inline width, not parent padding", () 
   assert.match(chatContentWidth, /marginInline: "auto"/);
   // 时间线侧：宽度 style 挂在 MessageScroller 的 contentProps（内层 [role=log]）上，
   // 视口铺满面板、滚动条贴面板最右；内容列仍与 composer 同宽居中。
-  assert.match(timeline, /contentProps=\{\{ style: chatContentWidthStyle \}\}/);
+  // 例外：空态（起始页/EmptyState）去掉约束——起始页自带 max-w-[980px]，
+  // 保持与引导页一致（见 SessionMessageTimeline.showSurfaceEmptyState）。
+  assert.match(timeline, /contentProps=\{showSurfaceEmptyState \? undefined : \{ style: chatContentWidthStyle \}\}/);
   assert.match(composerArea, /\.\.\.chatContentWidthStyle/);
   assert.doesNotMatch(tailwind, /100cqi|--chat-inline-pad|--chat-side-gap|@utility chat-content-width/);
   assert.doesNotMatch(foundation, /--chat-inline-pad|--chat-side-gap|--content-max-width|@container/);

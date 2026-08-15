@@ -22,17 +22,18 @@ test("start surface reuses the session bottom composer, not a second input imple
   assert.match(surface, /import \{ QueuedPromptPanel \} from "\.\/ComposerPanels"/);
   assert.match(surface, /useSessionPaneServices\(\)/);
   assert.match(surface, /queuedPromptsBySession\[props\.sessionId\]/);
-  assert.match(surface, /<LogoMark size=\{56\} \/>/);
+  assert.match(surface, /<LogoMark size=\{72\} \/>/);
   assert.doesNotMatch(surface, /TipTapComposer/);
   assert.doesNotMatch(surface, /waitRuntimeReady|sendPrompt|getComposerEnterIntent/);
 });
 
 test("start surface centers the composer and keeps quick-prompt chips", () => {
-  // DeepSeek 式居中：flex 列 + 重心下移；快捷项点击填入输入框不自动发送
+  // DeepSeek 式居中：flex 列 + 重心下移（pt-[18vh] 压向视口中心）；
+  // 快捷项点击填入输入框不自动发送；2026-11 整体放大：Logo 72 / 980px / 高 300
   assert.match(surface, /justify-center/);
-  assert.match(surface, /pt-\[14vh\]/);
-  assert.match(surface, /max-w-\[880px\]/);
-  assert.match(surface, /defaultHeight=\{220\}/);
+  assert.match(surface, /pt-\[18vh\]/);
+  assert.match(surface, /max-w-\[980px\]/);
+  assert.match(surface, /defaultHeight=\{300\}/);
   assert.match(surface, /session-start-surface/);
   assert.match(surface, /QUICK_ACTIONS/);
   assert.match(surface, /sessionStart\.inspectPrompt/);
