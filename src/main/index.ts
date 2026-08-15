@@ -28,6 +28,7 @@ import {
 	readSingleInstancePreference,
 } from "./settings/SettingsStore";
 import { acquireVersionSingleInstance, type FocusPayload } from "./singleInstance";
+import { isDevToolsShortcut, toggleMainWindowDevTools } from "./devTools";
 import { extractFocusTargetFromArgv } from "./utils/focusTarget";
 import type { Project, StartupWindowMode } from "../shared/types";
 // 使用 ?asset 后缀导入图标，electron-vite 会在构建时将其复制到输出目录并提供正确的运行时路径
@@ -1456,6 +1457,14 @@ function configureBrowserPanelWebviewHost(window: BrowserWindow): void {
 			}
 			return { action: "deny" };
 		});
+
+		// webview guest 是独立 webContents，按键到不了主窗口的 before-input-event；
+		// 转发 DevTools 快捷键到主窗口开关，避免焦点在内置浏览器面板时 F12 无响应。
+		guest.on("before-input-event", (event, input) => {
+			if (!isDevToolsShortcut(input)) return;
+			event.preventDefault();
+			toggleMainWindowDevTools(window);
+		});
 	});
 }
 
@@ -1669,52 +1678,13 @@ async function createWindow() {
 		}
 	});
 
-	// 监听浏览器标准快捷键打开开发者工具
+	// 监听浏览器标准快捷键打开开发者工具（F12 / Ctrl+Shift+I / Ctrl+Shift+J，
+	// macOS 变体与开关逻辑集中在 devTools.ts，主窗口/webview/设置 IPC 共用）
 	mainWindow.webContents.on("before-input-event", (event, input) => {
 		if (!mainWindow || mainWindow.isDestroyed()) return;
-
-		// F12
-		if (input.key === "F12" && input.type === "keyDown") {
+		if (isDevToolsShortcut(input)) {
 			event.preventDefault();
-			if (mainWindow.webContents.isDevToolsOpened()) {
-				mainWindow.webContents.closeDevTools();
-			} else {
-				mainWindow.webContents.openDevTools({ mode: "detach" });
-			}
-		}
-
-		// Ctrl+Shift+I (Windows/Linux) 或 Cmd+Option+I (macOS)
-		const isMac = process.platform === "darwin";
-		const ctrlOrCmd = isMac ? input.meta : input.control;
-		const shiftOrOption = input.shift || (isMac && input.alt);
-
-		if (
-			ctrlOrCmd &&
-			shiftOrOption &&
-			input.key.toLowerCase() === "i" &&
-			input.type === "keyDown"
-		) {
-			event.preventDefault();
-			if (mainWindow.webContents.isDevToolsOpened()) {
-				mainWindow.webContents.closeDevTools();
-			} else {
-				mainWindow.webContents.openDevTools({ mode: "detach" });
-			}
-		}
-
-		// Ctrl+Shift+J (Windows/Linux) 或 Cmd+Option+J (macOS) - 直接打开 Console
-		if (
-			ctrlOrCmd &&
-			shiftOrOption &&
-			input.key.toLowerCase() === "j" &&
-			input.type === "keyDown"
-		) {
-			event.preventDefault();
-			if (mainWindow.webContents.isDevToolsOpened()) {
-				mainWindow.webContents.closeDevTools();
-			} else {
-				mainWindow.webContents.openDevTools({ mode: "detach", activate: true });
-			}
+			toggleMainWindowDevTools(mainWindow);
 		}
 	});
 
