@@ -561,15 +561,10 @@ export const useStickToBottom = (options: StickToBottomOptions = {}): StickToBot
       if (difference >= 0) {
         // 流式增长活跃窗口：任何正增长都刷新逃逸锁定计时（见常量注释）。
         state.lastPositiveResizeAt = performance.now();
-        // 逃逸兜底：未锁底但仍在近底带（距底 <=70px）——误逃逸/轻微上滚后
-        // 用户其实没走远，内容增长时自动恢复锁底，避免「推着推着就不动了」
-        // 只能手动点回底按钮。用户真上滚读历史（距底 >70px）不受影响。
-        // 必须放在动画/贴底动作之前：instant 分支与 scrollToBottom 都以
-        // state.isAtBottom 决定是否执行，先重锁才能让本次增长继续追底。
-        if (!state.isAtBottom && state.isNearBottom) {
-          setEscapedFromLock(false);
-          setIsAtBottom(true);
-        }
+        // 注意：这里不再自动恢复已逃逸的锁底（曾用 isNearBottom<=70px 判定）。
+        // 会话输出完成后仍有正增长（settle 全量渲染/图片加载/尾部组件），
+        // 用户上滚 25~70px 读历史会被反复拽回底部，无法阅读上方内容；
+        // 逃逸后只能由用户主动下滚回近底带（handleScroll 重锁路径）恢复。
         /**
          * If it's a positive resize, scroll to the bottom when
          * we're already at the bottom.

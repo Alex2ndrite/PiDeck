@@ -160,6 +160,24 @@ test("panel reuses the SessionStatus detail builder and keeps compact action", (
   assert.match(source, /showCompact = props\.onCompact !== undefined/);
 });
 
+test("panel re-anchors on scroll instead of closing during streaming", () => {
+  const source = meterSource();
+  // 定位逻辑抽成 positionPanel 供 layout effect 与滚动/resize 复用
+  assert.match(source, /const positionPanel = useCallback\(\(\) => \{\s*const trigger = triggerRef\.current;/);
+  // 滚动监听回调不再是「关闭面板」（旧行为：任何滚动/缩放都 setOpen(false)，
+  // 流式渲染追底滚动会反复点开即关）
+  assert.doesNotMatch(source, /const onViewportChange = \(\): void => setOpen\(false\);/);
+  assert.doesNotMatch(source, /addEventListener\("scroll", onViewportChange, true\)/);
+  // 改为重新锚定：capture 滚动 + rAF 合并 + 位置未变不重复 setState
+  // （流式追底滚动每帧触发 scroll，trigger 固定时避免每帧 re-render）
+  assert.match(source, /addEventListener\("scroll", reanchor, true\)/);
+  assert.match(source, /requestAnimationFrame\(positionPanel\)/);
+  assert.match(source, /setPlacement\(\(prev\) =>\s*prev !== null && prev\.left === left && prev\.top === top \? prev : \{ left, top \},\s*\);/);
+  // 外点 / Escape 仍是唯一关闭途径（监听保持）
+  assert.match(source, /addEventListener\("pointerdown", onPointerDown\)/);
+  assert.match(source, /addEventListener\("keydown", onKeyDown\)/);
+});
+
 test("bottom bar wires the meter next to send controls and merges model + thinking into one chip", () => {
   const source = bottomBarSource();
   // ContextMeter 挂在右侧组（git 分支之前、发送控件同组）

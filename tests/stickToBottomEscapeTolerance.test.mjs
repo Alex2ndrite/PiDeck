@@ -59,19 +59,24 @@ test("growth guard band blocks escape while streaming lags behind", () => {
   assert.match(engineSource, /!isWithinGrowthGuardBand\(/);
 });
 
-// 逃逸兜底：无论逃逸由哪条路径触发（误判/拖选/程序化），只要用户没滚远
-// （距底仍 <= 70px 近底带），内容正增长时自动恢复锁底并继续追底——
-// 即使误逃逸已发生，也无需手动点回底按钮即可自愈。
-test("near-bottom escape auto re-locks on content growth", () => {
-  assert.match(
+// 用户反馈 bug（2026-08-15）：会话输出完成后上滚被反复拽回底部，只能靠会话定位跳回。
+// 根因：曾存在的「近底自动恢复」——RO 正增长分支里 `if (!state.isAtBottom &&
+// state.isNearBottom) { setEscapedFromLock(false); setIsAtBottom(true); }`。输出完成后
+// 仍有正增长（settle 全量渲染/图片加载/尾部组件），用户上滚 25~70px 读历史（距底
+// 仍在 70px 近底带内）会被任何一次增长自动恢复锁底并拽回，无法阅读上方内容。
+// 修复：移除该自动恢复，逃逸后只有用户主动下滚回近底带（handleScroll 重锁路径）
+// 才恢复锁底；守卫带（增长活跃窗口内不逃逸）仍保留，覆盖流式中轻微上滚误逃逸。
+test("escaped scroll is never dragged back by content growth", () => {
+  // 正增长分支不再存在自动恢复：lastPositiveResizeAt 到 mergeAnimations 之间
+  // 不得出现 setEscapedFromLock（若有，旧逻辑会在此处拽回已逃逸用户）
+  assert.doesNotMatch(
     engineSource,
-    /if \(!state\.isAtBottom && state\.isNearBottom\) \{\s*setEscapedFromLock\(false\);\s*setIsAtBottom\(true\);/,
+    /lastPositiveResizeAt = performance\.now\(\);[\s\S]*?setEscapedFromLock\(false\);[\s\S]*?const requested = mergeAnimations\(/,
   );
-  // 自动恢复必须位于正增长分支的动画/贴底动作之前：instant 分支与
-  // scrollToBottom 都以 state.isAtBottom 决定是否执行，先重锁才能追底
+  // 自动恢复被说明注释替换，明确「不再自动恢复已逃逸的锁底」
   assert.match(
     engineSource,
-    /if \(!state\.isAtBottom && state\.isNearBottom\) \{[\s\S]*?setIsAtBottom\(true\);\s*\}[\s\S]*?const requested = mergeAnimations\(/,
+    /这里不再自动恢复已逃逸的锁底/,
   );
 });
 

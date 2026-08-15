@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { FoldVertical } from "lucide-react";
 import { t } from "../../i18n";
@@ -112,8 +112,9 @@ export function SessionContextMeter(props: {
 	// 面板定位：fixed 相对 viewport（portal 到 body，脱离 composer 的 overflow 裁剪）。
 	// 向上弹出（面板底边贴 trigger 顶），顶部空间不足时翻转到 trigger 下方；
 	// 面板内容高度随数据变化，每次打开/内容变化都重新测量（首帧 hidden 定位）。
-	useLayoutEffect(() => {
-		if (!open || !available) return;
+	// 抽成 useCallback 供打开/数据变化（layout effect）与滚动/resize（scroll 监听）
+	// 两条路径复用——滚动时保持面板贴 trigger 而不是关闭。
+	const positionPanel = useCallback(() => {
 		const trigger = triggerRef.current;
 		const panel = panelRef.current;
 		if (!trigger || !panel) return;
@@ -123,10 +124,19 @@ export function SessionContextMeter(props: {
 		const left = Math.max(8, Math.min(rect.right - panelWidth, window.innerWidth - panelWidth - 8));
 		let top = rect.top - 8 - panelHeight;
 		if (top < 8) top = rect.bottom + 8; // 上方放不下：翻转到 trigger 下方
-		setPlacement({ left, top });
+		// 位置未变不重复 setState：流式渲染追底滚动期间每帧都有 scroll 事件，
+		// trigger 固定在底部栏（不随消息滚动），位置不变时避免每帧 re-render
+		setPlacement((prev) =>
+			prev !== null && prev.left === left && prev.top === top ? prev : { left, top },
+		);
+	}, []);
+
+	useLayoutEffect(() => {
+		if (!open || !available) return;
+		positionPanel();
 		// 依赖只用原始值（对象引用每次渲染都变，会导致定位循环）：
 		// 数据更新（占用/费用/压缩态变化）或尺寸变化时重新测量定位
-	}, [open, available, context?.percent, context?.usedTokens, context?.contextWindow, props.state?.cost, props.state?.cacheHitPercent, props.state?.cacheHitAveragePercent, props.state?.isCompacting]);
+	}, [open, available, context?.percent, context?.usedTokens, context?.contextWindow, props.state?.cost, props.state?.cacheHitPercent, props.state?.cacheHitAveragePercent, props.state?.isCompacting, positionPanel]);
 
 	// 外点 / Escape 关闭（open 期间挂一个 document 监听，dsh Menu 同款模式）
 	useEffect(() => {
@@ -150,17 +160,25 @@ export function SessionContextMeter(props: {
 		};
 	}, [available, open]);
 
-	// fixed 面板不随滚动移动：任何滚动 / 窗口缩放时关闭，避免与 trigger 错位
+	// fixed 面板本身不随滚动移动，滚动/resize 会导致 trigger 相对 viewport 变化：
+	// 重新锚定面板到 trigger 当前位置而不是关闭——流式渲染追底滚动（弹簧/instant
+	// 跳转）期间面板保持打开且贴 trigger，不再「点开就关」（2026-08 用户反馈）。
+	// 外点 / Escape 仍是关闭面板的唯一途径。
 	useEffect(() => {
-		if (!open) return;
-		const onViewportChange = (): void => setOpen(false);
-		window.addEventListener("scroll", onViewportChange, true);
-		window.addEventListener("resize", onViewportChange);
-		return () => {
-			window.removeEventListener("scroll", onViewportChange, true);
-			window.removeEventListener("resize", onViewportChange);
+		if (!open || !available) return;
+		let raf = 0;
+		const reanchor = (): void => {
+			cancelAnimationFrame(raf);
+			raf = requestAnimationFrame(positionPanel);
 		};
-	}, [open]);
+		window.addEventListener("scroll", reanchor, true);
+		window.addEventListener("resize", reanchor);
+		return () => {
+			cancelAnimationFrame(raf);
+			window.removeEventListener("scroll", reanchor, true);
+			window.removeEventListener("resize", reanchor);
+		};
+	}, [open, available, positionPanel]);
 
 	if (context === null) return null;
 	const percent = context.percent;
