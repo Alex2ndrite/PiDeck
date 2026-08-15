@@ -215,6 +215,8 @@ export function App() {
   currentSessionIdRef.current = currentSessionId;
   const openSessionRequestRef = useRef(0);
   const creatingSessionDraftRef = useRef<Set<string>>(new Set());
+  /** 启动引导待创建项目：首项目自动选中后先登记，待 projects 渲染到位再创建草稿会话（见 bootstrapProps.onProjectsChanged） */
+  const [startupDraftProjectId, setStartupDraftProjectId] = useState<string>();
 
   // 项目的 git worktree 列表：{ parentId -> WorktreeEntry[] }
   const [pendingAgents, setPendingAgents] = useState<PendingAgentTab[]>([]);
@@ -1220,6 +1222,23 @@ export function App() {
     [runCreateAnonymousSession, workspaceChrome],
   );
 
+  // 启动引导草稿会话：onProjectsChanged 只登记 startupDraftProjectId，此处等 projects
+  // 渲染到位（闭包拿到项目对象）后再创建。不能在上游回调里直接创建——首次
+  // projects.list 返回时本帧 projects 闭包可能还是空数组，useSessionActions 按闭包
+  // projects 校验项目存在性会静默失败。创建成功即 commitSessionSelection 选中会话，
+  // 主面板落到居中输入页（SessionStartSurface）。
+  // Chat 项目跳过自动创建：匿名会话创建即 spawn pi 进程（main/createAnonymousSession
+  // → activateAnonymousRuntime → agentManager.create），启动无用户意图时不应拉起
+  // agent；Chat 项目启动后落到引导页，由用户手动选「新建 Agent / 匿名聊天」。
+  useEffect(() => {
+    if (!startupDraftProjectId) return;
+    const project = projects.find((item) => item.id === startupDraftProjectId);
+    if (!project) return;
+    setStartupDraftProjectId(undefined);
+    if (isChatProject(project)) return;
+    void createSessionDraftWithTab(project.id);
+  }, [startupDraftProjectId, projects, createSessionDraftWithTab]);
+
   /** 侧栏/分支打开：选中成功后按 preview|permanent 登记 Tab */
   const openSidebarSessionByIdWithTab = useCallback(
     async (
@@ -1325,7 +1344,15 @@ export function App() {
 
   const bootstrapProps = {
     onProjectsChanged: (next: Project[]) => {
-      if (!activeProjectId && next.length > 0) setActiveProjectId(next[0].id);
+      if (!activeProjectId && next.length > 0) {
+        setActiveProjectId(next[0].id);
+        // 启动引导：首项目自动选中后登记待创建项目，由下方 effect 等 projects
+        // 渲染到位再创建草稿会话，启动即落到居中输入页（SessionStartSurface），
+        // 不需要先看引导页再点按钮。仅限启动这次自动选中且非 Chat 项目（Chat
+        // 匿名会话创建即拉起 pi 进程，启动不自动建）——侧栏点开目录不自动创建
+        // （见 sidebarActions.projects.select）。
+        setStartupDraftProjectId(next[0].id);
+      }
     },
     onSettingsApplied: (next: AppSettings) => {
       setSettings(next);
@@ -2441,21 +2468,9 @@ export function App() {
       add: addProject,
       select: (projectId) => {
         selectProjectCommand(projectId);
-        // 打开项目 = 进入新对话：当前无会话或当前会话属于其他项目时，自动创建
-        // draft 会话（Chat 项目为匿名会话）并选中，直接落到居中输入框起始页；
-        // 引导页只保留「关闭全部 Tab 清空后」的手动创建入口。
-        const current = store.get(currentSessionIdAtom);
-        const currentProject = current
-          ? store.get(sessionRecordByIdAtomFamily(current))?.projectId
-          : undefined;
-        if (currentProject !== projectId) {
-          const project = projects.find((candidate) => candidate.id === projectId);
-          if (isChatProject(project)) {
-            void createAnonymousSessionWithTab(projectId);
-          } else {
-            void createSessionDraftWithTab(projectId);
-          }
-        }
+        // 点开目录只选中项目并显示引导页：不自动创建会话，避免每点一个目录都
+        // 悄悄新建一个 agent 会话 tab。创建由用户手动点「启动 Agent / 临时对话」
+        // 触发；启动时首项目自动选中除外（见 bootstrapProps.onProjectsChanged）。
         // 空项目也可能已经成功加载；用 catalog 状态区分“空结果”和“尚未扫描”。
         const loadState = store.get(sessionCatalogLoadStateAtom)[projectId];
         if (loadState?.status !== "loading" && loadState?.status !== "ready") {
