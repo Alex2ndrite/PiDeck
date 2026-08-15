@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, type ReactNode } from "react";
 import {
   Bug,
   CheckSquare,
@@ -36,7 +36,11 @@ const QUICK_ACTIONS: ReadonlyArray<{
   { icon: Sparkles, title: "sessionStart.reviewTitle", prompt: "sessionStart.reviewPrompt" },
 ];
 
-export function SessionStartSurface(props: { sessionId: string }) {
+export function SessionStartSurface(props: {
+  sessionId: string;
+  /** 可选项目切换器：引导页（无会话空态）传入，标明并可切换下一次发送将会话创建到哪个项目 */
+  projectSwitcher?: ReactNode;
+}) {
   const services = useSessionPaneServices();
   const queuedTrackRef = useRef<HTMLDivElement | null>(null);
   const activeQueuedPrompts = services.queuedPromptsBySession[props.sessionId] ?? [];
@@ -46,6 +50,7 @@ export function SessionStartSurface(props: { sessionId: string }) {
     // pt-[14vh] 把重心从几何中心下移，接近 DeepSeek 新会话页（输入框在视口 55-60% 处）
     <div className="session-start-surface flex min-h-full w-full flex-col items-center gap-7 bg-transparent px-6 pb-10 pt-[14vh]">
       <LogoMark size={56} />
+      {props.projectSwitcher}
       {/* 复用会话页底部输入框组件：defaultHeight 抬高起步高度（220px），
           底部栏（模型/思考/模式/安全级别/git）与发送按钮全保留 */}
       <div className="w-full max-w-[880px]">

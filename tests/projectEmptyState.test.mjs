@@ -7,95 +7,94 @@ const emptyState = readFileSync(
   "src/renderer/src/components/session/ProjectEmptyState.tsx",
   "utf8",
 );
+const startSurface = readFileSync(
+  "src/renderer/src/components/session/SessionStartSurface.tsx",
+  "utf8",
+);
 const workspaceChrome = readFileSync(
   "src/renderer/src/hooks/useSessionWorkspaceChrome.ts",
+  "utf8",
+);
+const composerAtoms = readFileSync("src/renderer/src/atoms/composer-atoms.ts", "utf8");
+const chatBootstrap = readFileSync(
+  "src/renderer/src/utils/chatSessionBootstrap.ts",
   "utf8",
 );
 const zh = readFileSync("src/renderer/src/i18n/rendererCopy.zh-CN.ts", "utf8");
 const en = readFileSync("src/renderer/src/i18n/rendererCopy.en-US.ts", "utf8");
 
-test("project empty state is shared by normal and chat projects when no session is open", () => {
-  // 无 currentSessionId 时渲染统一 ProjectEmptyState（普通项目 / Chat 项目共用）。
-  assert.match(app, /ProjectEmptyState/);
-  assert.match(app, /<ProjectEmptyState/);
-  assert.match(app, /currentSessionId/);
-  assert.match(app, /createSessionDraftWithTab\(undefined\)/);
-  assert.match(app, /createAnonymousSessionWithTab\(undefined\)/);
-  assert.match(app, /addProject/);
+test("empty state renders the new-session surface bound to a renderer-only virtual session", () => {
+  // 无会话空态（启动 / 清空全部 Tab）与「新建 Agent」页面同源：直接挂
+  // SessionStartSurface，绑定虚拟会话 ID——不创建 Catalog 记录、不拉起 pi。
+  assert.match(emptyState, /SessionStartSurface/);
+  assert.match(emptyState, /GUIDE_BOOTSTRAP_SESSION_ID/);
+  assert.match(emptyState, /<SessionStartSurface\n\s+sessionId=\{GUIDE_BOOTSTRAP_SESSION_ID\}/);
+  assert.match(chatBootstrap, /GUIDE_BOOTSTRAP_SESSION_ID = "renderer:guide-bootstrap"/);
 });
 
-test("project empty state is a pure creation entry, no second composer implementation", () => {
-  // 输入统一由起始页（SessionStartSurface 居中 ComposerArea）承担；
-  // 本页不得再出现输入框/模型选择/发送链路的第二套实现。
-  assert.match(emptyState, /import \{ LogoMark \} from "\.\/SurfaceParts"/);
-  assert.match(emptyState, /<LogoMark size=\{56\} \/>/);
-  assert.match(emptyState, /justify-center/);
-  assert.match(emptyState, /pt-\[14vh\]/);
-  // 创建入口三件套
-  assert.match(emptyState, /onCreateAgent/);
-  assert.match(emptyState, /onCreateAnonymous/);
-  assert.match(emptyState, /onAddProject/);
-  assert.match(emptyState, /t\("app\.createAgent"\)/);
-  assert.match(emptyState, /t\("app\.anonymousChatShort"\)/);
+test("empty state no longer auto-creates sessions (startup / closing all tabs)", () => {
+  // 回归：曾有的「关闭全部 Tab 自动建匿名会话并激活」循环已移除——引导页挂载
+  // 只显示空白输入框，首次发送才创建真实会话。闸门状态 allTabsClosedByUser
+  // 随之删除。
+  assert.doesNotMatch(emptyState, /autoCreateOnMount/);
+  assert.doesNotMatch(emptyState, /autoCreatedRef|useEffect\(/);
+  assert.doesNotMatch(app, /autoCreateOnMount/);
+  assert.doesNotMatch(app, /startupDraftProjectId/);
+  assert.doesNotMatch(workspaceChrome, /allTabsClosedByUser/);
+  assert.doesNotMatch(workspaceChrome, /setAllTabsClosedByUser/);
+});
+
+test("virtual session is promoted to a real catalog session on first send", () => {
+  // App.ensureSessionForSend：虚拟会话发送时创建真实会话（Chat 匿名 / 非 Chat
+  // draft），composer 状态整体提升（promoteSessionComposerStateAtom），选中并
+  // 登记 Tab；并发发送复用同一个提升 promise。
+  assert.match(app, /sessionId !== GUIDE_BOOTSTRAP_SESSION_ID/);
+  assert.match(app, /guideBootstrapPromotionRef/);
+  assert.match(app, /isChatProject\(project\)/);
+  assert.match(app, /api\.sessions\.createAnonymous/);
+  assert.match(app, /api\.sessions\.createDraft/);
+  assert.match(app, /promoteSessionComposerState/);
+  assert.match(app, /registerOpenSession\(session\.id, "permanent"\)/);
+  assert.match(composerAtoms, /promoteSessionComposerStateAtom/);
+  assert.match(composerAtoms, /sessionDraftByIdAtom/);
+  assert.match(composerAtoms, /sessionAttachmentsByIdAtom/);
+  assert.match(composerAtoms, /sessionComposerModeByIdAtom/);
+  assert.match(composerAtoms, /sessionSendStateByIdAtom/);
+});
+
+test("empty state offers a project switcher listing joined projects", () => {
+  // 引导页 Logo 下方的项目名升级为下拉：列出已加入的全部项目（含内置 Chat），
+  // 切换只走 selectProject 语义（换 activeProjectId，不创建会话）；发送时按
+  // 选中项目创建。
+  assert.match(emptyState, /projects: Project\[\]/);
+  assert.match(emptyState, /onSelectProject: \(projectId: string\) => void/);
+  assert.match(emptyState, /projectSwitcher=\{/);
+  assert.match(emptyState, /props\.projects\.map/);
+  assert.match(emptyState, /isChatProject\(project\) \? t\("app\.chatProject"\) : project\.name/);
+  assert.match(emptyState, /value=\{props\.activeProject\.id\}/);
+  assert.match(emptyState, /onValueChange=\{props\.onSelectProject\}/);
+  // SessionStartSurface 接收的是 ReactNode 槽位（projectSwitcher），不再是纯文本 projectLabel
+  assert.match(startSurface, /projectSwitcher\?: ReactNode/);
+  // App 装配：传入项目列表与 selectProject 命令
+  assert.match(app, /projects=\{projects\}/);
+  assert.match(app, /onSelectProject=\{selectProjectCommand\}/);
+});
+
+test("empty state keeps the add-project entry only when no project exists", () => {
+  assert.match(emptyState, /!props\.activeProject/);
   assert.match(emptyState, /t\("app\.addProject"\)/);
-  // 不再自制输入框/模型选择/发送链路（已下沉到起始页的 ComposerArea）
-  assert.doesNotMatch(emptyState, /TipTapComposer/);
-  assert.doesNotMatch(emptyState, /ModelPicker|ThinkingPicker/);
-  assert.doesNotMatch(emptyState, /sendPrompt|waitRuntimeReady|getComposerEnterIntent/);
-  assert.doesNotMatch(emptyState, /WELCOME_MODEL_KEY|WELCOME_THINKING_KEY/);
-  assert.doesNotMatch(emptyState, /readLaunchPreferences/);
-  // 品牌 tagline/subtitle 不再使用
-  assert.doesNotMatch(emptyState, /t\("app\.projectEmptyTitle"/);
-  assert.doesNotMatch(emptyState, /t\("app\.emptyNoProjectTitle"/);
-});
-
-test("anonymous session short entry stays on the empty state", () => {
-  // 匿名聊天入口保留：无项目也显示添加项目入口
-  assert.match(emptyState, /t\("app\.anonymousChatShort"\)/);
-  assert.match(emptyState, /hasProject/);
-});
-
-test("empty-state auto-create is gated to the user clearing all tabs", () => {
-  // 回归：启动时首项目（内置 Chat 恒排第一）被自动选中也会挂载引导页，若挂载
-  // 即自动创建，每次启动都会无用户意图地新建匿名会话并拉起 pi agent（匿名
-  // 会话创建即 spawn 进程）。自动创建只允许发生在「用户亲手关闭全部 Tab」之后：
-  // useSessionWorkspaceChrome 在 closeTab/closeAllTabs 清空 Tab 栏时置位闸门，
-  // App 以 autoCreateOnMount 传给 ProjectEmptyState，effect 必须先过闸门。
-  assert.match(emptyState, /autoCreateOnMount/);
-  assert.match(emptyState, /if \(!props\.autoCreateOnMount \|\| !props\.activeProject/);
-  assert.match(emptyState, /autoCreatedRef/);
-  assert.match(emptyState, /isChatProject\(props\.activeProject\)/);
-  assert.match(emptyState, /props\.onCreateAnonymous\(\)/);
-  assert.match(emptyState, /props\.onCreateAgent\(\)/);
-  assert.match(app, /autoCreateOnMount=\{workspaceChrome\.allTabsClosedByUser\}/);
-  assert.match(workspaceChrome, /allTabsClosedByUser/);
-  assert.match(workspaceChrome, /setAllTabsClosedByUser\(true\)/);
-});
-
-test("shadcn Empty primitive was removed in favor of pi-branded entry", () => {
-  const emptyPrimitivePath = "src/renderer/src/components/ui-shadcn/empty.tsx";
-  assert.equal(
-    (() => {
-      try {
-        readFileSync(emptyPrimitivePath, "utf8");
-        return false;
-      } catch {
-        return true;
-      }
-    })(),
-    true,
-    "ui-shadcn/empty.tsx should be deleted",
-  );
+  assert.match(app, /onAddProject=\{\(\) => void addProject\(\)\}/);
 });
 
 test("empty-state copy is bilingual and JSX carries no hardcoded text", () => {
-  for (const key of ["app.createAgent", "app.anonymousChatShort", "app.addProject"]) {
+  for (const key of [
+    "app.addProject",
+    "app.guideBootstrapUnavailable",
+    "app.guideProjectPicker",
+    "app.chatProject",
+  ]) {
     assert.ok(zh.includes(`"${key}"`), `${key} zh-CN copy must exist`);
     assert.ok(en.includes(`"${key}"`), `${key} en-US copy must exist`);
   }
-  // 旧的项目标题/描述 key 已随 shadcn Empty 删除，JSX 不再引用
-  assert.doesNotMatch(zh, /"app\.projectEmptyTitle"/);
-  assert.doesNotMatch(en, /"app\.projectEmptyTitle"/);
-  // JSX 不硬编码中英文可见文案
   assert.doesNotMatch(emptyState, />[^<]*(在|开始工作|Start working|尚未)</);
 });

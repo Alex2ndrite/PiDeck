@@ -71,14 +71,6 @@ export function useSessionWorkspaceChrome(options: {
     }
   });
   const [previewSessionTabId, setPreviewSessionTabId] = useState<string | null>(null);
-  /**
-   * 用户是否亲手清空过整个 Tab 栏（closeTab 关掉最后一个 / closeAllTabs）。
-   * 空态（ProjectEmptyState）自动创建会话的闸门：启动时首项目（内置 Chat 恒排
-   * 第一）被自动选中同样会挂载引导页，但那是无用户意图的展示——若挂载即自动
-   * 创建，每次启动都会新建匿名会话并拉起 pi agent（匿名会话创建即 spawn）。
-   * 只有用户亲手关闭全部 Tab 后的空态才允许自动创建，落到居中输入页。
-   */
-  const [allTabsClosedByUser, setAllTabsClosedByUser] = useState(false);
   const [splitLayout, setSplitLayout] = useState<SessionSplitLayout | null>(null);
   const [draggingSessionId, setDraggingSessionId] = useState<string | null>(null);
   /** 分屏组胶囊在 Tab 栏的收起状态（持久化） */
@@ -216,10 +208,6 @@ export function useSessionWorkspaceChrome(options: {
   const closeTab = useCallback((sessionId: string) => {
     const snap = tabsSnapshotRef.current;
     const remaining = snap.tabs.filter((id) => id !== sessionId);
-    if (remaining.length === 0 && snap.tabs.length > 0) {
-      // 用户关掉了最后一个 Tab：此后出现的空态可以自动创建新会话（进输入页）
-      setAllTabsClosedByUser(true);
-    }
     setSessionTabIds(remaining);
     if (snap.previewId === sessionId) setPreviewSessionTabId(null);
 
@@ -274,10 +262,6 @@ export function useSessionWorkspaceChrome(options: {
   }, [setSessionTabIds]);
 
   const closeAllTabs = useCallback(() => {
-    if (tabsSnapshotRef.current.tabs.length > 0) {
-      // 用户显式清空整个 Tab 栏：之后的空态允许自动创建新会话（进输入页）
-      setAllTabsClosedByUser(true);
-    }
     setSessionTabIds([]);
     setPreviewSessionTabId(null);
     setSplitLayout(null);
@@ -443,8 +427,6 @@ export function useSessionWorkspaceChrome(options: {
     splitLayout,
     draggingSessionId,
     splitGroupCollapsed,
-    /** 用户亲手清空过 Tab 栏：空态自动创建会话的闸门（启动引导页不自动创建） */
-    allTabsClosedByUser,
     // wiring
     bindFocusHandlers,
     registerOpenSession,

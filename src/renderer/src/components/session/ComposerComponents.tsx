@@ -36,6 +36,10 @@ import { Popover, PopoverContent, PopoverTrigger } from "../ui-shadcn/popover";
 import { SessionContextMeter } from "./SessionContextMeter";
 import { computeModelDisplay, formatModelRef, type ModelPending } from "../../utils/modelPendingDisplay";
 import { computeThinkingDisplay, type ThinkingLevelPending } from "../../utils/thinkingDisplay";
+import {
+  readWelcomeModelPreference,
+  readWelcomeThinkingPreference,
+} from "../../utils/chatSessionBootstrap";
 import { CommandPickerGroup, CommandPickerPanel } from "../ui-shadcn/command-picker";
 import { THINKING_LEVELS, groupModelsByProvider } from "./sessionPickerOptions";
 import type {
@@ -177,7 +181,16 @@ export function ComposerBottomBar(props: {
 	const ctxPercent = props.state?.contextPercent;
 	// 默认模型/思考级别来自主进程按 pi 配置自动填充进会话记录的默认值（props.record），
 	// 不读取渲染层 welcome localStorage 偏好，避免用户偏好覆盖 pi 配置。
-	const currentThinkingLevel = props.state?.thinkingLevel ?? props.record?.thinkingLevel;
+	// 例外：无 record（引导页虚拟会话）时回退显示欢迎页偏好——picker 无 record
+	// 分支把选择写进 localStorage，回退后用户选中模型/思考级别立即在底部栏可见；
+	// 创建会话时这些偏好会作为启动参数带入（App.ensureSessionForSend）。
+	const welcomePreference = props.record ? undefined : {
+		model: readWelcomeModelPreference()?.model,
+		thinking: readWelcomeThinkingPreference()?.thinkingLevel,
+	};
+	const currentThinkingLevel = props.state?.thinkingLevel
+		?? props.record?.thinkingLevel
+		?? welcomePreference?.thinking;
 	// 有待生效切换时展示 from→to（新档位尚未被任何生成使用），否则展示当前档位
 	const thinkingDisplay = computeThinkingDisplay(currentThinkingLevel, props.thinkingPending);
 	const thinkingLevelLabel = (level: string) => {
@@ -201,8 +214,8 @@ export function ComposerBottomBar(props: {
 			? t("app.composerModeImagegen")
 			: t("app.composerModeNormal");
 	const liveModel = {
-		provider: props.state?.provider ?? props.record?.model?.provider ?? "",
-		modelId: props.state?.modelId ?? props.record?.model?.modelId ?? "",
+		provider: props.state?.provider ?? props.record?.model?.provider ?? welcomePreference?.model?.provider ?? "",
+		modelId: props.state?.modelId ?? props.record?.model?.modelId ?? welcomePreference?.model?.modelId ?? "",
 		modelName: props.state?.modelName ?? props.record?.model?.modelId,
 	};
 	const modelDisplay = computeModelDisplay(

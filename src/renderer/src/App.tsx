@@ -54,7 +54,12 @@ import {
   requireSessionCommand,
   toSessionRuntimeTarget,
 } from "./utils/sessionCommands";
-import { resolveChatSessionBootstrap } from "./utils/chatSessionBootstrap";
+import {
+  GUIDE_BOOTSTRAP_SESSION_ID,
+  readWelcomeModelPreference,
+  readWelcomeThinkingPreference,
+  resolveChatSessionBootstrap,
+} from "./utils/chatSessionBootstrap";
 import { detectRendererPlatform } from "./lib/detectRendererPlatform";
 
 import { usePiUpdate } from "./hooks/usePiUpdate";
@@ -80,6 +85,7 @@ import {
   sessionCatalogLoadStateAtom,
   sessionSummariesByProjectIdAtomFamily,
   sessionDraftByIdAtom,
+  promoteSessionComposerStateAtom,
   setSessionAttachmentsAtom,
   setSessionCatalogLoadStateAtom,
   setSessionDraftAtom,
@@ -208,6 +214,7 @@ export function App() {
   const upsertSession = useSetAtom(upsertSessionAtom);
   const setSessionDraft = useSetAtom(setSessionDraftAtom);
   const setSessionAttachments = useSetAtom(setSessionAttachmentsAtom);
+  const promoteSessionComposerState = useSetAtom(promoteSessionComposerStateAtom);
   const setSessionCatalogLoadState = useSetAtom(setSessionCatalogLoadStateAtom);
   const removeSessionState = useSetAtom(removeSessionStateAtom);
   const removeSessionComposerState = useSetAtom(removeSessionComposerStateAtom);
@@ -215,8 +222,9 @@ export function App() {
   currentSessionIdRef.current = currentSessionId;
   const openSessionRequestRef = useRef(0);
   const creatingSessionDraftRef = useRef<Set<string>>(new Set());
-  /** 启动引导待创建项目：首项目自动选中后先登记，待 projects 渲染到位再创建草稿会话（见 bootstrapProps.onProjectsChanged） */
-  const [startupDraftProjectId, setStartupDraftProjectId] = useState<string>();
+  // 引导页虚拟会话提升并发闸：首次发送触发创建真实会话时登记 promise，同一帧内
+  // 的并发发送（如快速双击）复用同一次提升，避免建出两个会话。
+  const guideBootstrapPromotionRef = useRef<Promise<string> | undefined>(undefined);
 
   // 项目的 git worktree 列表：{ parentId -> WorktreeEntry[] }
   const [pendingAgents, setPendingAgents] = useState<PendingAgentTab[]>([]);
@@ -1222,23 +1230,6 @@ export function App() {
     [runCreateAnonymousSession, workspaceChrome],
   );
 
-  // 启动引导草稿会话：onProjectsChanged 只登记 startupDraftProjectId，此处等 projects
-  // 渲染到位（闭包拿到项目对象）后再创建。不能在上游回调里直接创建——首次
-  // projects.list 返回时本帧 projects 闭包可能还是空数组，useSessionActions 按闭包
-  // projects 校验项目存在性会静默失败。创建成功即 commitSessionSelection 选中会话，
-  // 主面板落到居中输入页（SessionStartSurface）。
-  // Chat 项目跳过自动创建：匿名会话创建即 spawn pi 进程（main/createAnonymousSession
-  // → activateAnonymousRuntime → agentManager.create），启动无用户意图时不应拉起
-  // agent；Chat 项目启动后落到引导页，由用户手动选「新建 Agent / 匿名聊天」。
-  useEffect(() => {
-    if (!startupDraftProjectId) return;
-    const project = projects.find((item) => item.id === startupDraftProjectId);
-    if (!project) return;
-    setStartupDraftProjectId(undefined);
-    if (isChatProject(project)) return;
-    void createSessionDraftWithTab(project.id);
-  }, [startupDraftProjectId, projects, createSessionDraftWithTab]);
-
   /** 侧栏/分支打开：选中成功后按 preview|permanent 登记 Tab */
   const openSidebarSessionByIdWithTab = useCallback(
     async (
@@ -1270,13 +1261,64 @@ export function App() {
     store,
   ]);
 
-  // 聊天项目点开后与普通项目一致，先进统一引导页；用户从引导页选择
-  // 「新建 Agent / 匿名聊天」时通过 createSessionDraft / createAnonymousSession
-  // 创建真实 Catalog 会话，因此发送钩子不再需要把 renderer-only 虚拟会话提升为真实会话，
-  // 直接透传传入的 sessionId（保持签名以兼容 composer 链路）。
+  // 引导页空白输入框（虚拟会话 GUIDE_BOOTSTRAP_SESSION_ID）的发送钩子：首次
+  // 发送时创建真实 Catalog 会话（Chat 匿名 / 非 Chat draft），把 composer 状态
+  // 整体提升到新会话（promoteSessionComposerStateAtom），随后选中并登记 Tab，
+  // 返回真实 sessionId 让发送链路继续；非虚拟会话直接透传（保持签名兼容）。
+  // 并发发送（快速双击）复用 guideBootstrapPromotionRef 里的同一个提升 promise，
+  // 避免建出两个会话。创建即用户意图（已输入消息），Chat 拉起 pi 是预期行为。
   const ensureSessionForSend = useCallback(
-    async (sessionId: string) => sessionId,
-    [],
+    async (sessionId: string) => {
+      if (sessionId !== GUIDE_BOOTSTRAP_SESSION_ID) return sessionId;
+      if (guideBootstrapPromotionRef.current) return guideBootstrapPromotionRef.current;
+      const project = projects.find((candidate) => candidate.id === activeProjectId);
+      if (!project) {
+        throw new Error(t("app.guideBootstrapUnavailable"));
+      }
+      const promotion = (async () => {
+        // 引导页 picker 无 record 分支把选择存进 localStorage；创建时作为启动
+        // 偏好带入，使新会话 record/runtime 直接带上用户选的模型与思考级别。
+        const welcomeModel = readWelcomeModelPreference()?.model;
+        const welcomeThinking = readWelcomeThinkingPreference()?.thinkingLevel;
+        const launchPreferences: SessionLaunchPreferences = {
+          ...(welcomeModel ? { model: welcomeModel } : {}),
+          ...(welcomeThinking ? { thinkingLevel: welcomeThinking } : {}),
+        };
+        const session = isChatProject(project)
+          ? (await api.sessions.createAnonymous({
+              projectId: project.id,
+              title: t("app.anonymousChatTitle", { name: project.name }),
+              ...launchPreferences,
+            })).session
+          : await api.sessions.createDraft({
+              projectId: project.id,
+              title: `${project.name} agent`,
+              ...launchPreferences,
+            });
+        upsertSession(session);
+        promoteSessionComposerState({
+          fromSessionId: GUIDE_BOOTSTRAP_SESSION_ID,
+          toSessionId: session.id,
+        });
+        selectSessionCommand(project.id, session.id, false);
+        workspaceChrome.registerOpenSession(session.id, "permanent");
+        return session.id;
+      })();
+      guideBootstrapPromotionRef.current = promotion;
+      try {
+        return await promotion;
+      } finally {
+        guideBootstrapPromotionRef.current = undefined;
+      }
+    },
+    [
+      activeProjectId,
+      projects,
+      promoteSessionComposerState,
+      selectSessionCommand,
+      upsertSession,
+      workspaceChrome,
+    ],
   );
 
   /** 有效命令名白名单：仅已知命令渲染为 chip */
@@ -1344,15 +1386,7 @@ export function App() {
 
   const bootstrapProps = {
     onProjectsChanged: (next: Project[]) => {
-      if (!activeProjectId && next.length > 0) {
-        setActiveProjectId(next[0].id);
-        // 启动引导：首项目自动选中后登记待创建项目，由下方 effect 等 projects
-        // 渲染到位再创建草稿会话，启动即落到居中输入页（SessionStartSurface），
-        // 不需要先看引导页再点按钮。仅限启动这次自动选中且非 Chat 项目（Chat
-        // 匿名会话创建即拉起 pi 进程，启动不自动建）——侧栏点开目录不自动创建
-        // （见 sidebarActions.projects.select）。
-        setStartupDraftProjectId(next[0].id);
-      }
+      if (!activeProjectId && next.length > 0) setActiveProjectId(next[0].id);
     },
     onSettingsApplied: (next: AppSettings) => {
       setSettings(next);
@@ -2852,17 +2886,13 @@ export function App() {
         // 引导页同样可以打开项目级终端（owner=project），在空态下方渲染 dock。
         <>
           <div className="min-h-0 flex-1">
+            {/* 无会话空态：引导页 = 新建页面形态（居中 ComposerArea + 虚拟会话），
+                不登记 Tab；首次发送才由 ensureSessionForSend 创建真实会话并落 Tab */}
             <ProjectEmptyState
               activeProject={activeProject}
-              // 自动创建闸门：仅「用户关闭全部 Tab」后的空态自动建会话落到输入页；
-              // 启动引导页（首项目自动选中）不自动创建——否则每次启动都会无意图地
-              // 新建匿名会话并拉起 pi agent（匿名会话创建即 spawn 进程）。
-              autoCreateOnMount={workspaceChrome.allTabsClosedByUser}
-              // 创建入口：新建 Agent / 匿名聊天都只负责创建会话；模型/思考级别等
-              // 启动配置统一在起始页（SessionStartSurface 居中 ComposerArea）底部栏选择
-              onCreateAgent={() => void createSessionDraftWithTab(undefined)}
-              onCreateAnonymous={() => void createAnonymousSessionWithTab(undefined)}
+              projects={projects}
               onAddProject={() => void addProject()}
+              onSelectProject={selectProjectCommand}
             />
           </div>
           {!isLanWeb && terminalDockVisible && terminalTarget && (
