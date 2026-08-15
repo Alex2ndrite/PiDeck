@@ -45,14 +45,14 @@ test("empty state no longer auto-creates sessions (startup / closing all tabs)",
 });
 
 test("virtual session is promoted to a real catalog session on first send", () => {
-  // App.ensureSessionForSend：虚拟会话发送时创建真实会话（Chat 匿名 / 非 Chat
-  // draft），composer 状态整体提升（promoteSessionComposerStateAtom），选中并
-  // 登记 Tab；并发发送复用同一个提升 promise。
+  // App.ensureSessionForSend：虚拟会话发送时统一创建项目 draft 会话（Chat 项目
+  // 也走普通可保存会话，不再匿名——匿名仅保留给侧栏「新建临时对话」入口），
+  // composer 状态整体提升（promoteSessionComposerStateAtom），选中并登记 Tab；
+  // 并发发送复用同一个提升 promise。
   assert.match(app, /sessionId !== GUIDE_BOOTSTRAP_SESSION_ID/);
   assert.match(app, /guideBootstrapPromotionRef/);
-  assert.match(app, /isChatProject\(project\)/);
-  assert.match(app, /api\.sessions\.createAnonymous/);
   assert.match(app, /api\.sessions\.createDraft/);
+  assert.doesNotMatch(app, /guideBootstrapPromotionRef[\s\S]{0,400}api\.sessions\.createAnonymous/);
   assert.match(app, /promoteSessionComposerState/);
   assert.match(app, /registerOpenSession\(session\.id, "permanent"\)/);
   assert.match(composerAtoms, /promoteSessionComposerStateAtom/);

@@ -83,12 +83,14 @@ import {
   sessionRuntimeBySessionIdAtomFamily,
   sidebarExpandedProjectIdsAtom,
   sessionCatalogLoadStateAtom,
+  sessionMessagesCacheAtom,
   sessionSummariesByProjectIdAtomFamily,
   sessionDraftByIdAtom,
   promoteSessionComposerStateAtom,
   setSessionAttachmentsAtom,
   setSessionCatalogLoadStateAtom,
   setSessionDraftAtom,
+  cacheSessionMessagesAtom,
   upsertSessionAtom,
 } from "./atoms";
 import {
@@ -212,6 +214,7 @@ export function App() {
   const setProjects = useSetAtom(replaceProjectInventoryAtom);
   const applyRuntimeEvent = useSetAtom(applySessionRuntimeEventAtom);
   const upsertSession = useSetAtom(upsertSessionAtom);
+  const setCacheMessages = useSetAtom(cacheSessionMessagesAtom);
   const setSessionDraft = useSetAtom(setSessionDraftAtom);
   const setSessionAttachments = useSetAtom(setSessionAttachmentsAtom);
   const promoteSessionComposerState = useSetAtom(promoteSessionComposerStateAtom);
@@ -1284,18 +1287,27 @@ export function App() {
           ...(welcomeModel ? { model: welcomeModel } : {}),
           ...(welcomeThinking ? { thinkingLevel: welcomeThinking } : {}),
         };
-        const session = isChatProject(project)
-          ? (await api.sessions.createAnonymous({
-              projectId: project.id,
-              title: t("app.anonymousChatTitle", { name: project.name }),
-              ...launchPreferences,
-            })).session
-          : await api.sessions.createDraft({
-              projectId: project.id,
-              title: `${project.name} agent`,
-              ...launchPreferences,
-            });
+        // 统一创建 draft 会话（Chat 项目也走普通会话、可保存）：创建不拉 pi，
+        // selectSessionCommand 同步切页、立即进入会话页；匿名会话仅保留给侧栏
+        // 「新建临时对话」入口（createAnonymousSessionWithTab）。
+        const session = await api.sessions.createDraft({
+          projectId: project.id,
+          title: `${project.name} agent`,
+          ...launchPreferences,
+        });
         upsertSession(session);
+        // 引导页发送时 useSessionSend 已把 user 消息乐观写入虚拟会话 cache；
+        // 提升时搬到真实会话——否则切页后新会话空态与引导页视觉相同，
+        // 要等 agent 启动、回复流入后页面才「动」，用户误以为发送没生效。
+        const bootstrapMessages =
+          store.get(sessionMessagesCacheAtom)[GUIDE_BOOTSTRAP_SESSION_ID]?.messages;
+        if (bootstrapMessages?.length) {
+          setCacheMessages({
+            sessionId: session.id,
+            messages: bootstrapMessages,
+            source: "runtime",
+          });
+        }
         promoteSessionComposerState({
           fromSessionId: GUIDE_BOOTSTRAP_SESSION_ID,
           toSessionId: session.id,

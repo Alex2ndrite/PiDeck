@@ -171,8 +171,17 @@ function updateDocsSite(data) {
   const filePath = path.join(ROOT, "docs-site", "changelog.md");
   let content = fs.readFileSync(filePath, "utf8");
 
-  // 去掉旧版 v0.6.6 或 v0.6.6-beta.x 条目（如果有），避免重复
-  content = content.replace(/^## v0\.6\.6(?:-beta\.\d+)?[^\n]*\n[\s\S]*?(?=^## v0\.6\.5)/m, "");
+  // 清理重复的 v0.6.6 条目：历史遗留的 v0.6.6-beta 与正式 v0.6.6 曾同时存在，
+  // 此处只保留第一份。绝不能无条件删除——v0.6.6 是唯一一份时删掉会丢失整段
+  // 历史（含贡献者致谢），曾因此误删（2026-08-15）。
+  const versionMatches = [...content.matchAll(/^##\s+v0\./gm)];
+  const v066Matches = versionMatches.filter((m) => /^## v0\.6\.6(?:-beta\.\d+)?$/.test(m[0]));
+  if (v066Matches.length > 1) {
+    const second = v066Matches[1];
+    const after = versionMatches.find((m) => m.index > second.index);
+    const end = after ? after.index : content.length;
+    content = content.slice(0, second.index) + content.slice(end);
+  }
 
   const lines = content.split("\n");
 

@@ -4,7 +4,7 @@
 
 All notable changes to PiDeck are documented here.
 
-## v0.7.1 - 2026-08-14
+## v0.7.1 - 2026-08-15
 
 ### 🚀 New Features
 
@@ -28,6 +28,19 @@ All notable changes to PiDeck are documented here.
 - **Web ask request cards** — The local web service gained a `/api/ui-response`
   endpoint; `ask` requests render as cards with a request snapshot, and the
   SSE tool-loop wrap-up is fixed.
+- **Onboarding is now a compose page** — The empty workspace renders the
+  centered composer directly as a renderer-only virtual session (no catalog
+  record, no pi process, no tab). The project name under the logo becomes a
+  dropdown covering all projects (including the built-in Chat), and the
+  selected model/thinking level shows live. The real session is created on
+  first send with the composer state and typed messages moved over in one
+  step — Chat projects now also get a normal saveable draft session. Startup
+  no longer auto-creates a draft session.
+- **Turn file-change list: manual collapse only** — The per-turn modified-file
+  list is collapsed/expanded by a persistent toggle on its title row; the
+  count-threshold auto-collapse is removed.
+- **Home quick actions removed** — The home composer drops the quick-action
+  buttons and settles the input height at 150px.
 
 ### ✨ UX Improvements
 
@@ -44,10 +57,15 @@ All notable changes to PiDeck are documented here.
 - **System notification jumps to its session** — Clicking a notification
   prioritizes the session `record.id` and switches to that session instead of
   landing on the current one.
-- **Onboarding auto-selects the first project** — The onboarding flow delays
-  draft-session creation and auto-selects the first project.
+- **Thinking blocks & collapsible cards touch-friendly** — The whole thinking
+  row toggles open/closed with hover/active feedback and a rotating chevron;
+  expanded content gets a collapse button at the bottom; collapsed previews
+  use a monospace font. The Web timeline gets the same interaction polish.
+- **Tool cards stop spinning while running** — The running state drops the
+  spinner animation (the label stays), still driven by tool execution events.
 - **Centered home composer** — The ComposerArea on the empty home page is
-  uniformly centered, no longer offset by leftover layout.
+  uniformly centered at the same width as the guide page, no longer offset by
+  leftover layout.
 - **DevTools shortcuts consolidated** — Shortcuts are consolidated in
   `devTools.ts`; F12 inside a webview now opens the main window's DevTools
   instead of being swallowed by the embedded page.
@@ -90,12 +108,17 @@ All notable changes to PiDeck are documented here.
   32px header height instead of sitting 6px low and clipped.
 - **Pet window session isolation** — Partition constants are unified so the
   sprite protocol attaches to its own dedicated session.
-- **Streaming scroll-follow no longer stalls mid-reply** — When the spring
-  follow lags behind the growing content, a slight scroll up (touchpad
-  inertia / accidental input) is no longer mistaken for leaving the bottom;
-  the reply keeps scrolling into view. Even after a misjudged escape, content
-  growth re-locks the follow while the user stays near the bottom — no more
-  manual scroll-to-bottom button.
+- **Streaming scroll-follow never yanks history readers back** — While
+  streaming, a slight scroll up (touchpad inertia / accidental input) no
+  longer escapes the bottom-follow (growth guard band), so the reply keeps
+  scrolling into view. After the user has genuinely scrolled away to read
+  history, content growth no longer drags them back to the bottom — follow
+  re-locks only when they scroll back down near the bottom, so no manual
+  scroll-to-bottom button is needed.
+- **Context ring popover re-anchors instead of closing** — The context-meter
+  popover re-anchors to its trigger on scroll/resize (rAF-merged, no re-render
+  when the position is unchanged) instead of auto-closing while the stream
+  scrolls; outside click / Escape remain the only ways to dismiss it.
 - **Thinking-collapse trailing whitespace** — A thinking step collapsed to a
   single line no longer leaves trailing whitespace in its end state.
 - **Add-project no longer hijacked by chat (#149)** — The add-project entry
