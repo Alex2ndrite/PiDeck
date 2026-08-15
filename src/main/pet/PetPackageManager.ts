@@ -1,9 +1,8 @@
 import { app } from "electron";
-import { readFile, stat, readdir } from "node:fs/promises";
-import type { Dirent } from "node:fs";
-import { join, extname } from "node:path";
+import { join } from "node:path";
 import type { PetManifest } from "../../shared/types";
 import { is } from "@electron-toolkit/utils";
+import { PetPackageScanner, type BuiltinPetEntry } from "./petPackageScanner.ts";
 
 /**
  * 宠物 sprite 资源路径：开发模式从项目 build/pets 目录读取（与 extraResources 的 from 一致），
@@ -26,78 +25,40 @@ const BUILTIN_PETS = [
 	{ id: "fangjia", displayName: "FangJia", description: "FangJia is the mascot of switchbase.vip.", dir: "fangjia", file: "spritesheet.webp" },
 ];
 
-/** 构造内置宠物的运行时绝对路径 */
-function builtinSpritePath(pet: (typeof BUILTIN_PETS)[number]): string {
-	return join(petResourcesDir(), pet.dir, pet.file);
-}
-
 /**
  * PetPackageManager —— 内置 + petdex 双轨宠物包管理。
- * spritesheet 转 data: URL（避免 http→file:// 跨域）。
+ * 扫描/缓存逻辑在 PetPackageScanner（无 electron 依赖）：spritesheet 指纹未变时
+ * 复用缓存；manifest 只带 pideck-pet:// 协议 URL（图片由协议 handler 按需读文件），
+ * 不再经 IPC 搬运 base64 大字符串。
  */
-
-function mimeOf(p: string): string {
-	const ext = extname(p).toLowerCase();
-	const map: Record<string, string> = { ".webp": "image/webp", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".svg": "image/svg+xml", ".gif": "image/gif" };
-	return map[ext] ?? "application/octet-stream";
-}
-
-async function toDataUrl(p: string): Promise<string | null> {
-	try {
-		const buf = await readFile(p);
-		return `data:${mimeOf(p)};base64,${buf.toString("base64")}`;
-	} catch { return null; }
-}
-
-async function fileExists(p: string): Promise<boolean> {
-	try { return (await stat(p)).isFile(); } catch { return false; }
-}
-
-type PetDexManifest = { id: string; displayName?: string; description?: string; spritesheetPath: string };
-
 export class PetPackageManager {
-	// 内置宠物包：通过 extraResources 分发，不经过 asar。
-	// 限定这 5 个为默认可选项，避免随机占盘与体积膨胀。
-	private readonly builtin = BUILTIN_PETS.map((p) => ({
+	private readonly resourcesRoot = petResourcesDir();
+	private readonly petdexRoot = join(app.getPath("home"), ".codex", "pets");
+
+	private readonly builtin: BuiltinPetEntry[] = BUILTIN_PETS.map((p) => ({
 		id: p.id,
 		displayName: p.displayName,
 		description: p.description,
-		spritePath: builtinSpritePath(p),
+		spritePath: join(this.resourcesRoot, p.dir, p.file),
 	}));
 
-	async list(): Promise<PetManifest[]> {
-		const byId = new Map<string, PetManifest>();
+	private readonly scanner = new PetPackageScanner(this.builtin, this.petdexRoot);
 
-		// 内置包
-		for (const m of this.builtin) {
-			const url = await toDataUrl(m.spritePath);
-			if (url) byId.set(m.id, { id: m.id, displayName: m.displayName, description: m.description, source: "builtin", spritesheetUrl: url });
-		}
-
-		// petdex 社区包：~/.codex/pets/<name>/pet.json
-		const petsRoot = join(app.getPath("home"), ".codex", "pets");
-		let entries: Dirent[] = [];
-		try { entries = await readdir(petsRoot, { withFileTypes: true }); } catch { /* 目录不存在 */ }
-
-		for (const entry of entries) {
-			if (!entry.isDirectory()) continue;
-			const dir = join(petsRoot, entry.name);
-			try {
-				const raw = await readFile(join(dir, "pet.json"), "utf8");
-				const json = JSON.parse(raw) as PetDexManifest;
-				if (!json.id || !json.spritesheetPath) continue;
-				const spriteAbs = join(dir, json.spritesheetPath);
-				if (!(await fileExists(spriteAbs))) continue;
-				if (byId.has(json.id)) continue; // 内置优先
-				const url = await toDataUrl(spriteAbs);
-				if (url) byId.set(json.id, { id: json.id, displayName: json.displayName ?? json.id, description: json.description, source: "petdex", spritesheetUrl: url });
-			} catch { /* 单个包失败不影响整体 */ }
-		}
-
-		return [...byId.values()];
+	list(): Promise<PetManifest[]> {
+		return this.scanner.list();
 	}
 
 	async get(id: string): Promise<PetManifest | null> {
-		return (await this.list()).find(m => m.id === id) ?? null;
+		return (await this.scanner.list()).find((m) => m.id === id) ?? null;
+	}
+
+	/** petId → 雪碧图磁盘路径（pideck-pet:// 协议 handler 用）。 */
+	resolveSpritePath(petId: string): Promise<string | null> {
+		return this.scanner.resolveSpritePath(petId);
+	}
+
+	/** 协议允许读取的根目录（内置资源目录 + petdex 根）。 */
+	spriteRoots(): string[] {
+		return [this.resourcesRoot, this.petdexRoot];
 	}
 }

@@ -155,7 +155,7 @@ export function useSessionWorkspaceChrome(options: {
   // 小间隔重试（最长约 3 秒）直到能解析到会话记录，避免首帧竞态丢目标。
   useEffect(() => {
     let disposed = false;
-    const unsubscribe = window.piDesktop.pet.onFocusTarget(({ sessionId }) => {
+    const focusBySessionId = (sessionId: string) => {
       const tryFocus = (attempt: number) => {
         if (disposed) return;
         const record = store.get(sessionRecordByIdAtomFamily(sessionId));
@@ -166,6 +166,15 @@ export function useSessionWorkspaceChrome(options: {
         if (attempt < 6) window.setTimeout(() => tryFocus(attempt + 1), 500);
       };
       tryFocus(0);
+    };
+    const unsubscribe = window.piDesktop.pet.onFocusTarget(({ sessionId }) => {
+      focusBySessionId(sessionId);
+    });
+    // 冷启动/页面加载期间点击通知：主进程直接 send 会在监听注册前丢失，
+    // 挂载后主动拉取一次 pending 目标（与事件推送共用同一解析/重试逻辑）。
+    void window.piDesktop.pet.getPendingFocusTarget?.().then((target) => {
+      if (disposed || !target) return;
+      focusBySessionId(target.sessionId);
     });
     return () => {
       disposed = true;

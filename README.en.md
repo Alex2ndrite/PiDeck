@@ -8,7 +8,7 @@
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Electron](https://img.shields.io/badge/Electron-38-47848f)
 ![React](https://img.shields.io/badge/React-19-61dafb)
-![Version](https://img.shields.io/badge/version-0.7.0-yellow)
+![Version](https://img.shields.io/badge/version-0.7.1-yellow)
 
 <!-- star-history:start -->
 <picture>
@@ -27,25 +27,22 @@
 
 ## 📋 Changelog
 
-> **Latest: v0.7.0** (2026-08-11)
+> **Latest: v0.7.1** (2026-08-15)
 
-### v0.7.0 Release Highlights
-- 🚀 **Session-first architecture (#113)**
-- 🚀 **Session tab bar**
-- 🚀 **Split view rework**
-- 🚀 **Session branch navigation**
-- 🚀 **Streaming rendering overhaul**
-- 🚀 **Session file change summary**
-- 🚀 **Theme system**
-- 🚀 **Editor: CodeMirror 6**
-- 🚀 **Markdown: Streamdown as the single engine**
-- 🚀 **Git inline operations**
-- 🚀 **RPC log viewer & audit**
-- 🚀 **Usage statistics**
-- ✨ **Sidebar discoverability**
-- ✨ **Attachment picker**
-- ✨ **RPC log interaction polish**
-- ✨ **Tool call timeline**
+### v0.7.1 Release Highlights
+- 🚀 **Session trajectory in the right drawer + process ledger**
+- 🚀 **Markdown incremental rendering**
+- 🚀 **Reading surfaces unified into split view**
+- 🚀 **macOS native traffic lights on the custom title bar**
+- 🚀 **Empty-workspace onboarding**
+- 🚀 **Web ask request cards**
+- 🚀 **Onboarding is now a compose page**
+- 🚀 **Turn file-change list: manual collapse only**
+- 🚀 **Home quick actions removed**
+- ✨ **Desktop pet at native sprite size**
+- ✨ **Streaming conversations expand intermediate steps by default**
+- ✨ **Unified dsh-web look**
+- ✨ **System notification jumps to its session**
 
 [View Full Changelog →](CHANGELOG.md)
 

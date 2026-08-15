@@ -32,6 +32,7 @@ import type {
 	CreateAnonymousSessionResult,
 	UpdateSessionRecordInput,
 	SessionRecord,
+	SessionProcessEvent,
 	VisionBridgeConfig,
 	CreatePiSkillInput,
 	CreateProjectSkillInput,
@@ -419,6 +420,11 @@ const api = {
 				pageSize,
 				options,
 			) as Promise<import("../shared/types").SessionMessagePage>,
+		/** 会话 JSONL 过程事件（session/model/thinking/custom），轨迹复盘用。 */
+		readProcessEvents: (sessionId: string) =>
+			ipcRenderer.invoke(ipcChannels.sessionsCatalogReadProcessEvents, sessionId) as Promise<
+				SessionProcessEvent[]
+			>,
 		/** 按需读取单条消息完整文本（工具结果截断后的「查看完整输出」）。
 		 *  sessionId 用于运行期绑定不可用时的历史会话文件回退（_viewer 投影）。 */
 		readMessageFullText: (
@@ -1216,6 +1222,9 @@ const api = {
 			ipcRenderer.invoke(ipcChannels.petFocusAgent) as Promise<void>,
 		onFocusTarget: (callback: (target: { sessionId: string }) => void) =>
 			subscribe(ipcChannels.petFocusAgentTarget, callback),
+		/** 冷启动/页面加载期间点击通知的跳转目标：挂载后主动拉取（一次性） */
+		getPendingFocusTarget: () =>
+			ipcRenderer.invoke(ipcChannels.petGetFocusTargetPending) as Promise<{ sessionId: string } | null>,
 		/** 主进程推送当前选中宠物的 manifest，据此加载 spritesheet */
 		onSprite: (callback: (manifest: PetManifest) => void) =>
 			subscribe(ipcChannels.petCurrentSprite, callback),

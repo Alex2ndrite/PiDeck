@@ -80,6 +80,9 @@ function loadModule(mockProcess = {}) {
 			if (id === "../preloadPath") {
 				return { preparePreloadPath: async (sourcePath) => sourcePath };
 			}
+			if (id === "./petSpriteProtocol") {
+				return { PET_WINDOW_PARTITION: "persist:pet" };
+			}
 			// 拆分后 PetWindow 会读取 Chromium 沙箱偏好；测试中固定为未开启（默认路径）。
 			if (id === "../settings/SettingsStore") {
 				return { readElectronChromiumSandboxPreference: () => false };
@@ -217,6 +220,12 @@ test("patrol is disabled when free positioning is unavailable", () => {
 	);
 });
 
+test("scale changes push appearance settings to the pet window", () => {
+	const source = readFileSync("src/main/pet/index.ts", "utf8");
+	assert.match(source, /next\.petScale !== prev\.petScale[\s\S]{0,240}this\.pushAppearance\(next\)/);
+	assert.match(source, /settingsApplyWindow/);
+});
+
 const x11Env = {
 	platform: "linux",
 	env: { XDG_SESSION_TYPE: "x11", DISPLAY: ":0" },
@@ -238,16 +247,16 @@ test("create uses the normal layout size and notification expands the window aro
 
 	await petWindow.create(1, "large");
 	const win = MockBrowserWindow.last;
-	assert.equal(win.options.width, 160);
-	assert.equal(win.options.height, 176);
+	assert.equal(win.options.width, 192);
+	assert.equal(win.options.height, 208);
 	// 移到屏幕中部，避免扩展时被 workArea 钳制干扰锚点验证
 	petWindow.moveTo(500, 700);
 
 	const before = feetCenter(win);
 	petWindow.setNotificationVisible(true);
 	const expanded = feetCenter(win);
-	assert.ok(win.getBounds().width > 160);
-	assert.ok(win.getBounds().height > 176);
+	assert.ok(win.getBounds().width > 192);
+	assert.ok(win.getBounds().height > 208);
 	approx(expanded.x, before.x, "feet x while expanded");
 	approx(expanded.y, before.y, "feet y while expanded");
 
@@ -255,8 +264,8 @@ test("create uses the normal layout size and notification expands the window aro
 	const restored = feetCenter(win);
 	approx(restored.x, before.x, "feet x after restore");
 	approx(restored.y, before.y, "feet y after restore");
-	assert.equal(win.getBounds().width, 160);
-	assert.equal(win.getBounds().height, 176);
+	assert.equal(win.getBounds().width, 192);
+	assert.equal(win.getBounds().height, 208);
 });
 
 test("resize keeps the feet anchor and clamps inside the work area", async () => {
@@ -271,11 +280,11 @@ test("resize keeps the feet anchor and clamps inside the work area", async () =>
 	const after = feetCenter(win);
 	approx(after.x, before.x, "feet x after resize");
 	approx(after.y, before.y, "feet y after resize");
-	assert.equal(win.getBounds().width, 80);
-	assert.equal(win.getBounds().height, 88);
+	assert.equal(win.getBounds().width, 96);
+	assert.equal(win.getBounds().height, 104);
 
 	// 靠近屏幕底部时重新放大，窗口整体被钳制在 workArea 内
-	win.setBounds({ x: 1700, y: 1000, width: 80, height: 88 });
+	win.setBounds({ x: 1700, y: 1000, width: 96, height: 104 });
 	petWindow.resize(2);
 	const b = win.getBounds();
 	assert.ok(b.x + b.width <= 1920);
@@ -312,9 +321,9 @@ test("moveTo persists positions converted back to the normal layout", async () =
 	petWindow.moveTo(100, 300);
 	await new Promise((r) => setTimeout(r, 10));
 	const saved = JSON.parse(fsWrites.at(-1));
-	// 换算回普通布局（160x176）：脚底中心不变
+	// 换算回普通布局（192x208）：脚底中心不变
 	const feetX = 100 + expanded.width / 2;
 	const feetY = 300 + expanded.height;
-	approx(saved.x + 80, feetX, "persisted feet x");
-	approx(saved.y + 176, feetY, "persisted feet y");
+	approx(saved.x + 96, feetX, "persisted feet x");
+	approx(saved.y + 208, feetY, "persisted feet y");
 });

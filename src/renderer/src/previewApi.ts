@@ -103,7 +103,7 @@ let previewSettings: AppSettings = {
 	// showThinking 由 pi agent 的 hideThinkingBlock 控制，运行时从主进程加载
 	showThinking: true,
 	// 流式对话行为：与主进程 SettingsStore 默认一致（预览窗口保持相同观感）
-	expandInterimDuringStream: false,
+	expandInterimDuringStream: true,
 	collapsePrevRunsOnNewTurn: true,
 	showDevTools: false,
 	electronChromiumSandbox: false,
@@ -133,7 +133,7 @@ let previewSettings: AppSettings = {
 	petEnabled: false,
 	petId: "clawd",
 	petAlwaysOnTop: true,
-	petScale: 0.8,
+	petScale: 1,
 	petPatrolEnabled: true,
 	petPatrolPauseMin: 5,
 	favoriteModels: [],
@@ -385,6 +385,7 @@ export function createPreviewApi(): PiDesktopApi {
 			exportRecordHtml: async () => ({ path: "preview-session.html" }),
 			readRecordMessages: async () => [],
 			readRecordMessagePage: async () => ({ messages: [], total: 0, nextBefore: null }),
+			readProcessEvents: async () => [],
 			readMessageFullText: async () => ({ text: "" }),
 			readReferenceMessages: async () => [
 				{ role: "user", content: "Preview user message", timestamp: Date.now() - 60000 },
@@ -922,6 +923,7 @@ export function createPreviewApi(): PiDesktopApi {
 			contextMenu: async () => undefined,
 			focusAgent: async () => undefined,
 			onFocusTarget: noop,
+			getPendingFocusTarget: async () => null,
 			onSprite: noop,
 			onNotify: noop,
 			setPreviewMode: async () => undefined,

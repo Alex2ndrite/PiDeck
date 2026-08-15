@@ -26,7 +26,7 @@ import { listActiveBuiltInExtensionPaths } from "../extensions/builtInExtensions
 import type { RpcResponse } from "./PiRpcClient";
 import { formatBashToolMessage } from "./bashResult";
 import type { MainProcessTranslationKey } from "../../shared/i18n/mainProcessCopy";
-import { mergeHistoryWithPreservedMessages } from "./historyMessages";
+import { mergeHistoryWithPreservedMessages, stabilizeReloadedMessageIds } from "./historyMessages";
 import {
 	buildAgentSessionKey,
 	toAbsoluteSessionPath,
@@ -43,6 +43,7 @@ import {
 	buildActiveBranchEntryIds as buildActiveBranchEntryIdsForDisplay,
 } from "./AgentMessageProjector";
 import { LatestByKeyEmitter } from "./LatestByKeyEmitter";
+import { resolveNotificationSessionId } from "./agentUtils";
 import {
 	createStreamGateState,
 	isStreamGateSealed,
@@ -159,20 +160,32 @@ export class AgentManager {
 	/** 会话文件版本（mtime:size）：随消息载荷下发，渲染层据此检测压缩改写并丢弃 disk 前缀。 */
 	private readonly sessionFileVersionByAgent = new Map<string, string>();
 	private readonly thinkingEmitter = new LatestByKeyEmitter<string, string>(
-		50,
+		100,
 		(agentId, thinking) => this.emitThinkingNow(agentId, thinking),
 	);
 	/** 当前流式正文的累积文本，独立于 messages 数组推送（阶段1：学 Proma 独立存储）。
-	 *  50ms 窗口与 Proma PI_PARTIAL_UPDATE_INTERVAL_MS 对齐：渲染层 20fps 更新，
-	 *  避免 16ms 高频推送让 streamdown 解析（每 content 变更全量重解析）压满主线程、
-	 *  rAF 帧率下降后 queue 积压导致「burst 蹦字」；打字机感由渲染层 useSmoothStream
-	 *  （divisor=8 字符队列逐字吐）呈现，不依赖推送粒度。 */
+	 *  100ms 合并窗口（2026-08 占用治理）：渲染层每次到达都要做 O(n) 累积拼接、
+	 *  MarkdownStream 重渲染与 GC 回收，50ms→100ms 让流式期这些 churn 减半
+	 *  （实测流式期 RSS 增长率随之减半），打字机（useSmoothStream）负责逐字
+	 *  平滑，100ms 的到达粒度肉眼不可感知；窗口越大 burst 时单帧步进越大，
+	 *  100ms 是平滑度与占用之间的折中。 */
 	private readonly textEmitter = new LatestByKeyEmitter<string, string>(
-		50,
+		100,
 		(agentId, text) => this.emitTextStreamNow(agentId, text),
 	);
 	/** 流式正文累积缓冲：text_delta 时累加，message_end/agent_end/settled/abort 清除。 */
 	private readonly streamingText = new Map<string, string>();
+	/**
+	 * 已推送正文快照（delta 基准，2026-08 IPC 治理）：流式期间只推增量，
+	 * 避免每 50ms 全量重推（100K+ 文本 ≈ 4MB/s 瞬时 IPC 流量，主/渲染两侧
+	 * 分配器把 RSS 抬到流量峰值且不归还 → GB 级爬升）。见 emitTextStreamNow。
+	 */
+	private readonly lastSentTextByAgent = new Map<string, string>();
+	/** 距上次全量快照的增量推送次数（每 50 次 ≈ 5s 补一次全量自愈，兜底渲染层丢增量）。 */
+	private readonly textPushCountByAgent = new Map<string, number>();
+	/** 已推送思考快照（delta 基准，同正文通道治理，见 emitThinkingNow）。 */
+	private readonly lastSentThinkingByAgent = new Map<string, string>();
+	private readonly thinkingPushCountByAgent = new Map<string, number>();
 	/** 流式 emit 合并窗口（毫秒）。50ms 兼顾流畅度与传输量，肉眼几乎无延迟。 */
 	private static readonly MESSAGE_FLUSH_INTERVAL_MS = 50;
 	/** 激活显示窗口轮数（2026-08 激活分页）：loadMessages 后只下发尾部 N 轮，更早历史走 disk 轮次分页。 */
@@ -332,6 +345,13 @@ export class AgentManager {
 		 * 命中时 PiProcess 注入 PIDECK_FEISHU_LINKED，ask_question 扩展切换为禁用提示版。
 		 */
 		private readonly isFeishuSession?: (sessionKey: string | undefined) => boolean,
+		/**
+		 * agentId → SessionRecord.id 解析（由 main/index.ts 注入 coordinator.getSessionId）。
+		 * 通知 toast 的 launch 必须携带 record.id：renderer 的 sessionRecordByIdAtomFamily
+		 * 只索引 record.id，而 tab.sessionId 是 pi 侧会话 id（两套体系，见 index.ts attachRuntime），
+		 * 用它跳转在 renderer 永远解析不到会话。
+		 */
+		private readonly resolveSessionId?: (agentId: string) => string | undefined,
 	) {
 		this.messageProjector = new AgentMessageProjector({
 			translate: this.translate,
@@ -822,10 +842,13 @@ export class AgentManager {
 		});
 		// abort 时 ask_question 的 answer 已被覆写为 null，不再需要跟踪
 		this.abortedDuringAsk.delete(agentId);
-		const nextMessages = mergeHistoryWithPreservedMessages(
-			messages,
+		const nextMessages = stabilizeReloadedMessageIds(
 			this.messages.get(agentId) ?? [],
-			options?.preserveMessagesAfter,
+			mergeHistoryWithPreservedMessages(
+				messages,
+				this.messages.get(agentId) ?? [],
+				options?.preserveMessagesAfter,
+			),
 		);
 		// 重载后把进行中的消息身份（activeAssistantMessageIds/toolMessageIds）从
 		// 运行期副本重定向到投影版：后续事件继续更新投影版（位置正确、单份），
@@ -1586,6 +1609,8 @@ export class AgentManager {
 		this.streamingAgents.delete(agentId);
 		this.textEmitter.cancel(agentId);
 		this.streamingText.delete(agentId);
+		this.lastSentTextByAgent.delete(agentId);
+		this.textPushCountByAgent.delete(agentId);
 		const hadActiveTool = Boolean(
 			this.toolExecutingByAgent.get(agentId) ||
 			(this.activeToolCallsByAgent.get(agentId)?.size ?? 0) > 0,
@@ -1633,8 +1658,23 @@ export class AgentManager {
 			hasSessionPath: !!runtime.tab.sessionPath,
 		});
 
+		// 已有压缩在进行（手动请求未返回 / pi 自动压缩中）：拒绝重复请求。
+		// 渲染层按钮在 isCompacting 时禁用，这里是双保险——否则第二个 compact
+		// RPC 会被 pi 以 "Compaction cancelled" 拒绝，用户看到莫名报错
+		// （2026-08 用户反馈：压缩失败：Compaction cancelled）。
+		if (this.compactingAgents.has(agentId) || this.rpcCompactingAgents.has(agentId)) {
+			void this.appLogger?.info("agent", "Compact skipped: already compacting", {
+				agentId,
+			});
+			return this.getRuntimeState(agentId);
+		}
+
 		// 标记压缩中，退出处理器据此区分压缩重启与异常崩溃
 		this.compactingAgents.add(agentId);
+		// 立即推送 isCompacting=true（getRuntimeState 合并 compactingAgents 集合）：
+		// 让圆环按钮进入禁用/进度态，避免用户重复点击触发第二个 compact。
+		// 此前 add 后无推送，isCompacting 要等 pi 的 compaction_start 事件才到渲染层。
+		void this.emitRuntimeState(agentId);
 
 		try {
 			const response = await runtime.process.client.request(
@@ -1818,7 +1858,12 @@ export class AgentManager {
 				.catch(() => ({ data: undefined })),
 			runtime.tab.sessionPath
 				? this.getSessionCacheHitStats(runtime.tab.sessionPath)
-				: Promise.resolve({ latest: undefined as number | undefined, average: undefined as number | undefined, sampleCount: 0 }),
+				: Promise.resolve({
+					latest: undefined as number | undefined,
+					average: undefined as number | undefined,
+					sampleCount: 0,
+					messageChars: undefined as number | undefined,
+				}),
 		]);
 		const state = stateResponse.data as any;
 		const stats = statsResponse.data as any;
@@ -1885,6 +1930,11 @@ export class AgentManager {
 		contextTokens: stats?.contextUsage?.tokens,
 		contextWindow: stats?.contextUsage?.contextWindow ?? model?.contextWindow,
 		contextPercent: stats?.contextUsage?.percent,
+		/** 对话消息估算 token：消息字符 ÷ 4（1 token ≈ 4 chars），缺文件数据时不报 */
+		contextMessageTokens:
+			fileHitStats.messageChars != null
+				? Math.round(fileHitStats.messageChars / 4)
+				: undefined,
 		inputTokens,
 		outputTokens,
 		cacheRead,
@@ -2367,6 +2417,12 @@ export class AgentManager {
 		this.toolMessageIds.delete(agentId);
 		this.retryStatusMessageIds.delete(agentId);
 		this.streamingText.delete(agentId);
+		// 流式 delta 基准随生命周期清理（emitTextStreamNow 的 done 路径已自清，
+		// 这里兜底 stop/restart/closed 等非 done 终止路径，防键残留慢泄漏）
+		this.lastSentTextByAgent.delete(agentId);
+		this.textPushCountByAgent.delete(agentId);
+		this.lastSentThinkingByAgent.delete(agentId);
+		this.thinkingPushCountByAgent.delete(agentId);
 		this.rpcCompactingAgents.delete(agentId);
 		this.autoRestartAttempted.delete(agentId);
 		this.messagePerfByAgent.delete(agentId);
@@ -3078,11 +3134,16 @@ export class AgentManager {
 	}
 
 	private handlePiEvent(agentId: string, event: unknown) {
-		// 通知本地监听器（FeishuBridge 等主进程内部订阅）
+		// 通知本地监听器（FeishuBridge、WebEventStream SSE 等主进程内部订阅）
 		for (const listener of this.localEventListeners) {
 			try { listener(agentId, event); } catch {}
 		}
-		this.emit(ipcChannels.agentsEvent, { agentId, event });
+		// 2026-08 治理：agents:event 不再转发渲染进程。桌面 UI 没有任何消费者，
+		// 而每 token 100+/s 的原始事件转发会让渲染端 applySessionRuntimeEventAtom
+		// 无条件写 sessionRuntimeByIdAtom → timeline 等订阅者 100/s 全量重渲染
+		// （O(消息数) + V8 committed 只涨不缩，GB 级内存爬升的核心驱动）。
+		// web SSE/飞书等内部订阅走上方 localEventListeners，不受影响。
+		// this.emit(ipcChannels.agentsEvent, { agentId, event });
 
 		if (!event || typeof event !== "object") return;
 		const typed = event as Record<string, any>;
@@ -3191,6 +3252,15 @@ export class AgentManager {
 				}
 				this.emitState();
 				void this.emitRuntimeState(agentId);
+				// 压缩结束不保证会来 agent_settled（pi 版本差异）：主动确认 pi 是否还有
+				// 工作（overflow retry / queued follow-up），无工作即恢复 idle。否则状态
+				// 永远 stuck 在 running——最后回复耗时继续走（LiveDuration）、加载动画
+				// 常驻、思考/工具折叠保持展开（2026-08 用户反馈）。
+				// 延迟 300ms 让 pi 完成压缩收尾（文件写入/状态刷新），避免误判忙碌。
+				const idleTimer = setTimeout(() => {
+					void this.markIdleIfPiReportsNoWork(agentId);
+				}, 300);
+				idleTimer.unref?.();
 			}
 			void this.appLogger?.info("agent", "Compaction ended", {
 				agentId,
@@ -3211,6 +3281,8 @@ export class AgentManager {
 				this.toolMessageIds.delete(agentId);
 				this.textEmitter.cancel(agentId);
 				this.streamingText.delete(agentId);
+				this.lastSentTextByAgent.delete(agentId);
+				this.textPushCountByAgent.delete(agentId);
 			}
 			// agent 异常结束时（如 API 返回 400、模型报错等），将错误提示写入会话，避免用户看到空白。
 			// 错误信息的存放位置因 pi 版本和错误类型不同而有多种可能：
@@ -3310,6 +3382,8 @@ export class AgentManager {
 				this.toolMessageIds.delete(agentId);
 				this.textEmitter.cancel(agentId);
 				this.streamingText.delete(agentId);
+				this.lastSentTextByAgent.delete(agentId);
+				this.textPushCountByAgent.delete(agentId);
 				this.activeToolCallsByAgent.delete(agentId);
 				this.toolExecutingByAgent.set(agentId, null);
 				this.rpcCompactingAgents.delete(agentId);
@@ -3365,6 +3439,8 @@ export class AgentManager {
 			}
 			this.textEmitter.cancel(agentId);
 			this.streamingText.delete(agentId);
+			this.lastSentTextByAgent.delete(agentId);
+			this.textPushCountByAgent.delete(agentId);
 			this.emitStreamingStatePatch(agentId);
 		}
 
@@ -3797,6 +3873,8 @@ export class AgentManager {
 			}
 			this.textEmitter.cancel(agentId);
 			this.streamingText.delete(agentId);
+			this.lastSentTextByAgent.delete(agentId);
+			this.textPushCountByAgent.delete(agentId);
 		}
 	}
 
@@ -3890,6 +3968,10 @@ export class AgentManager {
 	private ensureThinkingSegment(agentId: string) {
 		const existing = this.thinkingSegmentByAgent.get(agentId);
 		if (existing) return existing;
+		// 新段开始：重置思考 delta 基准（上一段的末尾文本可能碰巧是下一段前缀，
+		// 直接续 delta 会让新段在渲染层缺头，直到 2.5s 快照自愈）。
+		this.lastSentThinkingByAgent.delete(agentId);
+		this.thinkingPushCountByAgent.delete(agentId);
 		this.beginAssistantMessage(agentId);
 		const assistantMessageId = this.activeAssistantMessageIds.get(agentId);
 		if (!assistantMessageId) {
@@ -3989,6 +4071,8 @@ export class AgentManager {
 		const segment = this.thinkingSegmentByAgent.get(agentId);
 		const text = stripAnsi(this.streamingThinking.get(agentId) ?? "");
 		this.thinkingEmitter.cancel(agentId);
+		this.lastSentThinkingByAgent.delete(agentId);
+		this.thinkingPushCountByAgent.delete(agentId);
 		if (segment) {
 			const update: ThinkingUpdate = {
 				agentId,
@@ -4636,6 +4720,8 @@ export class AgentManager {
 		this.finishThinkingChannel(agentId);
 		this.textEmitter.cancel(agentId);
 		this.streamingText.delete(agentId);
+		this.lastSentTextByAgent.delete(agentId);
+		this.textPushCountByAgent.delete(agentId);
 		this.emitState();
 		void this.emitRuntimeState(agentId);
 		// 兜底确认无工作也算成功空闲：与 agent_settled 一样通知完成（PetStateBridge 侧有去重冷却）。
@@ -4704,8 +4790,13 @@ export class AgentManager {
 			// 使用应用名称作为通知标题，在 Windows/macOS 通知中心中显示为应用标识
 			const appName = app.getName();
 			const body = this.translate("mainNotification.sessionDone", { title: sessionTitle });
-			// 会话结束时 runtime 一定已绑定会话，取 sessionId 作为点击跳转目标（跨重启稳定）
-			const sessionId = this.agents.get(agentId)?.tab.sessionId;
+			// 会话结束时 runtime 一定已绑定会话；跳转目标用 record.id（renderer 按它索引会话），
+			// tab.sessionId 是 pi 侧会话 id 只能兜底（见 resolveNotificationSessionId 注释）。
+			const resolveSessionId = this.resolveSessionId;
+			const sessionId = resolveNotificationSessionId(
+				resolveSessionId ? () => resolveSessionId(agentId) : undefined,
+				this.agents.get(agentId)?.tab.sessionId,
+			);
 			const notification = new Notification({
 				title: appName,
 				body,
@@ -4889,6 +4980,8 @@ export class AgentManager {
 		this.streamGates.delete(agentId);
 		this.recentlyAborted.delete(agentId);
 		this.thinkingEmitter.cancel(agentId);
+		this.lastSentThinkingByAgent.delete(agentId);
+		this.thinkingPushCountByAgent.delete(agentId);
 		this.cancelMessageEmit(agentId);
 	}
 
@@ -5035,14 +5128,24 @@ export class AgentManager {
 	private emitThinkingNow(agentId: string, text: string) {
 		const segment = this.thinkingSegmentByAgent.get(agentId);
 		if (!segment) return;
+		// 增量推送（同正文通道治理）：只发上次快照之后的新字符；非 append
+		// （重置/ANSI 变化）或距上次快照超过 50 次推送（≈2.5s）时补一次全量，
+		// 兜底渲染层 HMR/晚绑定丢失的增量。
+		const lastSent = this.lastSentThinkingByAgent.get(agentId) ?? "";
+		const pushCount = (this.thinkingPushCountByAgent.get(agentId) ?? 0) + 1;
+		const sendFull = !text.startsWith(lastSent) || pushCount >= 50;
 		const update: ThinkingUpdate = {
 			agentId,
 			id: segment.id,
-			text,
+			...(!sendFull
+				? { delta: text.slice(lastSent.length) }
+				: { text }),
 			startedAt: segment.startedAt,
 			endedAt: segment.endedAt,
 			done: false,
 		};
+		this.lastSentThinkingByAgent.set(agentId, text);
+		this.thinkingPushCountByAgent.set(agentId, sendFull ? 0 : pushCount);
 		this.emit(ipcChannels.agentsThinking, update);
 	}
 
@@ -5061,9 +5164,32 @@ export class AgentManager {
 	/** 推送独立流式正文通道（agents:text-stream），渲染层写入 streamingTextByIdAtom。
 	 *  done=true 表示本轮回答结束（message_end），渲染层据此把 streaming 置 false。
 	 *  顺带同步 isStreaming 补丁：text_delta 走独立通道后不再触发 flushMessageEmit，
-	 *  若仍只在 flush 里推 patch，渲染层拿不到 isStreaming=true，气泡不会渲染。 */
+	 *  若仍只在 flush 里推 patch，渲染层拿不到 isStreaming=true，气泡不会渲染。
+	 *
+	 *  增量推送（2026-08 IPC 治理）：正常 append 只发 delta；非 append（重置/
+	 *  ANSI 变化）或距上次全量超过 50 次推送（≈2.5s）时改发全量快照（text 字段），
+	 *  渲染层据此替换本地累积。done 时清空 delta 基准。 */
 	private emitTextStreamNow(agentId: string, text: string, done = false) {
-		this.emit(ipcChannels.agentsTextStream, { agentId, text, done });
+		const lastSent = this.lastSentTextByAgent.get(agentId) ?? "";
+		const pushCount = (this.textPushCountByAgent.get(agentId) ?? 0) + 1;
+		const sendFull = !text.startsWith(lastSent) || pushCount >= 50;
+		const payload: {
+			agentId: string;
+			text?: string;
+			delta?: string;
+			done: boolean;
+		} = {
+			agentId,
+			...(!sendFull ? { delta: text.slice(lastSent.length) } : { text }),
+			done,
+		};
+		this.lastSentTextByAgent.set(agentId, text);
+		this.textPushCountByAgent.set(agentId, sendFull ? 0 : pushCount);
+		if (done) {
+			this.lastSentTextByAgent.delete(agentId);
+			this.textPushCountByAgent.delete(agentId);
+		}
+		this.emit(ipcChannels.agentsTextStream, payload);
 		this.emitStreamingStatePatch(agentId);
 	}
 

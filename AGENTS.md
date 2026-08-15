@@ -256,7 +256,14 @@ src/
 3. GitHub Release notes 写明主要变化，不接受只写版本号。
 4. `package.json` 与 `package-lock.json` 版本号一致；发版提交用 `chore: release vX.Y.Z`。
 5. docs-site 官网同步更新。
-6. 架构级变更（如 session-first 切换）先发 pre-release 观察，再标正式版。
+6. 发布说明同步走 `scripts/sync-release-notes.js`，不手改 README 亮点区块 / docs-site：
+   - 先更新 `CHANGELOG.md` / `CHANGELOG.zh-CN.md`（中英一致），条目用 `- **标题** — 描述` 格式；
+   - `node scripts/sync-release-notes.js` 预览 → `--apply` 应用，自动同步 README.md / README.en.md /
+     docs-site/changelog.md 三处亮点（README 取 🚀 前 12 + ✨/🐛 前 4，docs-site 取 🚀 前 15 + ✨ 前 4）；
+   - 脚本不更新 README 顶部版本徽章（shields.io badge），需手动改为当前版本；
+   - `--apply` 后检查 `git diff`：脚本只清理重复的 v0.6.6 条目，历史条目不允许丢失（2026-08 曾因
+     无条件删除逻辑误删唯一一份 v0.6.6 条目，已修复）。
+7. 架构级变更（如 session-first 切换）先发 pre-release 观察，再标正式版。
 
 ## 提交 commit 规则
 

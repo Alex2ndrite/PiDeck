@@ -25,8 +25,10 @@ import type {
 	SessionRuntimeTarget,
 	SessionSummary,
 	SessionTargetedValue,
+	SessionUiResponseInput,
 	UpdateSessionRecordInput,
 } from "../../shared/types";
+import type { PendingUiRequestSnapshot } from "../sessions/SessionRuntimeCoordinator";
 import { serializeWebClientDictionaries, webEnUS } from "./WebI18n";
 import {
 	WebEventStreamRouter,
@@ -120,6 +122,8 @@ type WebServiceDependencies = {
 		targetSessionId?: string;
 		[key: string]: unknown;
 	}>>;
+	listPendingUiRequests: () => PendingUiRequestSnapshot[];
+	respondToUi: (input: SessionUiResponseInput) => Promise<void>;
 };
 
 function serializePublicWebPayload(body: unknown): string {
@@ -263,6 +267,35 @@ export class WebServiceManager {
 			}
 			if (url.pathname === "/api/state") {
 				this.sendJson(response, await this.getState());
+				return;
+			}
+			if (url.pathname === "/api/ui-response" && request.method === "POST") {
+				const body = await this.readJson<Partial<SessionUiResponseInput>>(request);
+				const sessionId = typeof body.sessionId === "string" ? body.sessionId.trim() : "";
+				const requestId = typeof body.requestId === "string" ? body.requestId.trim() : "";
+				const agentId = typeof body.agentId === "string" ? body.agentId.trim() : "";
+				const runtimeGeneration = typeof body.runtimeGeneration === "number" ? body.runtimeGeneration : NaN;
+				if (!sessionId || !requestId || !agentId || !Number.isFinite(runtimeGeneration)) {
+					this.sendError(response, 400, "webError.requestIdRequired", "ui response target is required");
+					return;
+				}
+				try {
+					await this.deps.respondToUi({
+						sessionId,
+						requestId,
+						agentId,
+						runtimeGeneration,
+						response: body.response ?? {},
+					});
+					this.sendJson(response, { ok: true });
+				} catch (error) {
+					this.sendError(
+						response,
+						409,
+						"webError.runtimeTargetRequired",
+						error instanceof Error ? error.message : "ui response rejected",
+					);
+				}
 				return;
 			}
 			if (url.pathname === "/api/models" && request.method === "GET") {
@@ -581,6 +614,7 @@ export class WebServiceManager {
 			sessions,
 			runtimes,
 			messagesBySession,
+			pendingUiRequests: this.deps.listPendingUiRequests(),
 		};
 	}
 

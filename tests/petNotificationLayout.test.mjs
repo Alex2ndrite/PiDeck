@@ -40,16 +40,16 @@ test("notification font size is independent of petScale", () => {
 	assert.equal(small.fontSizePx, 14);
 	assert.equal(large.fontSizePx, 14);
 	// 精灵尺寸随 scale 变化
-	assert.equal(small.spriteW, Math.round(160 * 0.3));
-	assert.equal(large.spriteW, 320);
-	assert.equal(large.spriteH, 352);
+	assert.equal(small.spriteW, Math.round(192 * 0.3));
+	assert.equal(large.spriteW, 384);
+	assert.equal(large.spriteH, 416);
 });
 
 test("window grows when notification is visible and shrinks back when not", () => {
 	const idle = L.petLayout({ scale: 1, fontMode: "medium", notificationVisible: false });
 	const notif = L.petLayout({ scale: 1, fontMode: "medium", notificationVisible: true });
-	assert.equal(idle.windowW, 160);
-	assert.equal(idle.windowH, 176);
+	assert.equal(idle.windowW, 192);
+	assert.equal(idle.windowH, 208);
 	assert.ok(notif.windowW > idle.windowW);
 	assert.ok(notif.windowH > idle.windowH);
 	// 气泡槽位：两行 21px + 上下 padding 16 + 描边 3
@@ -63,13 +63,13 @@ test("notification slot height follows the font mode", () => {
 });
 
 test("keepFeetCenter preserves the sprite feet center across layout changes", () => {
-	// 普通布局：窗口 160x176 位于 (100, 800)，脚底中心 = (180, 976)
-	const from = { x: 100, y: 800, width: 160, height: 176 };
+	// 普通布局：窗口 192x208 位于 (100, 800)，脚底中心 = (196, 1008)
+	const from = { x: 100, y: 800, width: 192, height: 208 };
 	const to = L.petLayout({ scale: 1, fontMode: "large", notificationVisible: true });
 	const next = L.keepFeetCenter(from, { width: to.windowW, height: to.windowH });
 	// 窗口尺寸为整数像素，脚底中心允许 ±1px 取整误差
-	assert.ok(Math.abs(next.x + to.windowW / 2 - 180) <= 1, `feet x drift: ${next.x + to.windowW / 2}`);
-	assert.ok(Math.abs(next.y + to.windowH - 976) <= 1, `feet y drift: ${next.y + to.windowH}`);
+	assert.ok(Math.abs(next.x + to.windowW / 2 - 196) <= 1, `feet x drift: ${next.x + to.windowW / 2}`);
+	assert.ok(Math.abs(next.y + to.windowH - 1008) <= 1, `feet y drift: ${next.y + to.windowH}`);
 });
 
 test("toNormalLayoutPosition converts any layout position back to normal layout", () => {

@@ -39,8 +39,9 @@ test("drag direction follows left and right movement with hysteresis", () => {
 	assert.deepEqual(plain(left), { anchorX: 100, mode: "running-left" });
 });
 
-test("settings preview is cleared when the settings modal unmounts", () => {
-	const source = readFileSync("src/renderer/src/components/app/SettingsModal.tsx", "utf8");
+test("settings preview is cleared when the pet settings tab unmounts", () => {
+	// 设置页拆分后宠物预览清理随 PetTab 走：tab 卸载时真实 Agent 状态重新接管宠物
+	const source = readFileSync("src/renderer/src/components/app/settings/PetTab.tsx", "utf8");
 	assert.match(
 		source,
 		/useEffect\(\(\)\s*=>\s*\(\)\s*=>\s*\{\s*void window\.piDesktop\.pet\.setPreviewMode\(""\);\s*\},\s*\[\]\);/,

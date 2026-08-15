@@ -8,7 +8,7 @@
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Electron](https://img.shields.io/badge/Electron-38-47848f)
 ![React](https://img.shields.io/badge/React-19-61dafb)
-![Version](https://img.shields.io/badge/version-0.7.0-yellow)
+![Version](https://img.shields.io/badge/version-0.7.1-yellow)
 
 <!-- star-history:start -->
 <picture>
@@ -27,25 +27,22 @@
 
 ## 📋 更新日志
 
-> **最新版本 v0.7.0**（2026-08-11）
+> **最新版本 v0.7.1**（2026-08-15）
 
-### v0.7.0 更新亮点
-- 🚀 **Session-first 架构（#113）**
-- 🚀 **会话 Tab 栏**
-- 🚀 **分屏重构**
-- 🚀 **会话分支导航条**
-- 🚀 **流式渲染重构**
-- 🚀 **会话文件修改汇总**
-- 🚀 **换肤系统**
-- 🚀 **编辑器：CodeMirror 6**
-- 🚀 **Markdown：Streamdown 成为唯一引擎**
-- 🚀 **Git 行内操作**
-- 🚀 **RPC 日志查看与审计**
-- 🚀 **用量统计**
-- ✨ **侧边栏可发现性优化**
-- ✨ **附件选择器**
-- ✨ **RPC 日志交互打磨**
-- ✨ **工具调用时间线**
+### v0.7.1 更新亮点
+- 🚀 **会话轨迹迁入右侧抽屉 + 过程账本**
+- 🚀 **Markdown 增量渲染**
+- 🚀 **阅读面统一走分屏**
+- 🚀 **mac 自定义标题栏走系统红绿灯**
+- 🚀 **无工作区项目引导**
+- 🚀 **Web 端 ask 请求卡片**
+- 🚀 **引导页统一为新建页面**
+- 🚀 **本轮修改文件列表改为纯手动折叠**
+- 🚀 **起始页移除快捷动作按钮**
+- ✨ **桌面宠物按精灵原比例显示**
+- ✨ **流式对话默认展开中间过程**
+- ✨ **统一 dsh-web 形态**
+- ✨ **系统通知点击直达对应会话**
 
 [查看完整更新日志 →](CHANGELOG.zh-CN.md)
 

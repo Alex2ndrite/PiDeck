@@ -25,7 +25,10 @@ test("streamdown pipeline delegates to official plugins (code/mermaid/math) and 
   // 数学插件开启单美元行内公式（singleDollarTextMath: true）：
   // AI 输出 $...$ 是常态，默认关闭会整句原样输出（2026-08 修复，防回归锚点）
   assert.match(stream, /createMathPlugin\(\{ singleDollarTextMath: true \}\)/);
-  assert.match(stream, /plugins=\{\s*\(effectiveLight/);
+  assert.match(stream, /plugins: \(effectiveLight/);
+  assert.match(stream, /IncrementalMarkdownFrontier/);
+  assert.match(stream, /FrozenMarkdownChunk/);
+  assert.match(stream, /UNSTABLE_TAIL_BLOCKS/);
   assert.match(stream, /math: mathPlugin/);
   // 公式复制走事件委托浮层（FormulaCopyLayer）：rehype-katex 产物不进组件 map，
   // 旧 p 层拦截只能覆盖“单一行内公式独占一段”，已删除（2026-08 通用化）
@@ -124,20 +127,48 @@ test("static markdown scenes share the Streamdown engine", () => {
 
 test("streaming overlong guard: plain-text fallback above STREAM_LIGHT_MAX_CHARS", () => {
   const stream = readFileSync("src/renderer/src/components/session/MarkdownStream.tsx", "utf8");
-  // 阈值常量导出（字符数）：marked 解析随文本线性涨，超长时流式回退纯文本
-  assert.match(stream, /export const STREAM_LIGHT_MAX_CHARS = 40_000/);
-  assert.match(stream, /streamPlain =\s*\n?\s*isStreamingNow && displayText\.length > STREAM_LIGHT_MAX_CHARS/);
+  const policy = readFileSync("src/renderer/src/components/session/markdownStreamPolicy.ts", "utf8");
+  // 阈值常量迁到纯策略模块（行为单测见 markdownStreamPolicy.test.mjs），MarkdownStream 兼容再导出
+  assert.match(policy, /export const STREAM_LIGHT_MAX_CHARS = 40_000/);
+  assert.match(policy, /export const STREAM_UNFREEZABLE_MIN_CHARS = 8_000/);
+  assert.match(policy, /export const SETTLE_FULL_MAX_CHARS = 150_000/);
+  assert.match(stream, /export \{ STREAM_LIGHT_MAX_CHARS \} from "\.\/markdownStreamPolicy"/);
   // 回退节点：纯文本 + pre-wrap（排版由容器 markdown-body 接管）
-  assert.match(stream, /whitespace-pre-wrap break-words/);
+  assert.match(stream, /streamPlain =\s*\n?\s*isStreamingNow && displayText\.length > STREAM_LIGHT_MAX_CHARS/);
+  // 不可冻结（prefixEnd=0，未闭合围栏等）且超过小阈值：流式期间同样回退纯文本，
+  // 避免每帧全量重渲染（大代码块流式输出时 GC 追不上、原生内存爬升）
+  assert.match(stream, /frozenSplit !== undefined && frozenSplit\.prefixEnd === 0 && displayText\.length > STREAM_UNFREEZABLE_MIN_CHARS/);
+  // settle 全量渲染上限：超大内容保持轻量插件（防逐 token 高亮留下 GB 级 DOM）
+  assert.match(stream, /shouldKeepLightOnSettle\(props\.text\.length\)/);
   // 回退必须发生在 Streamdown 之外（不建解析树），且依赖链含 streamPlain
-  assert.match(stream, /streamPlain \? \(/);
-  assert.match(stream, /streamPlain,\n\s*components,/);
+  assert.match(stream, /whitespace-pre-wrap break-words/);
+  assert.match(stream, /if \(streamPlain\)/);
+  assert.match(stream, /pipe, streamPlain/);
   // 超长兜底对思考同样生效（ThinkingBlock 走同一 MarkdownStream），无需额外开关
   const thinking = readFileSync("src/renderer/src/components/session/TimelineEventCards.tsx", "utf8");
   assert.match(thinking, /<MarkdownStream/);
-  // 流式轻渲染契约不回退：static 模式 + 流式精简插件仍是默认
+  // 流式轻渲染契约不回退：static 模式 + 流式精简插件仍是默认；
+  // 精简插件必须是模块级稳定引用（NO_STREAM_*），不能内联 []——
+  // 否则 pipe 每帧重建，冻结 prefix chunk 的 memo 失效，每帧全量重解析
   assert.match(stream, /mode="static"/);
-  assert.match(stream, /resolvedRemarkPlugins = isStreamingNow\s*\n\s*\?\s*\[\]/);
+  assert.match(stream, /resolvedRemarkPlugins = isStreamingNow\s*\n\s*\?\s*NO_STREAM_REMARK_PLUGINS/);
+  assert.match(stream, /resolvedRehypePlugins = isStreamingNow\s*\n\s*\?\s*NO_STREAM_REHYPE_PLUGINS/);
+  assert.doesNotMatch(stream, /isStreamingNow\s*\?\s*\[\]/);
+});
+
+test("settle full render is deferred to idle (no long task during interaction)", () => {
+	const stream = readFileSync("src/renderer/src/components/session/MarkdownStream.tsx", "utf8");
+	// settle 全量渲染（元素树+高亮，实测 70-100ms 长任务）必须延迟到浏览器空闲，
+	// 避免在用户滚动/交互期间卡帧造成滚动跳动
+	assert.match(stream, /wasStreamingRef = useRef\(false\)/);
+	assert.match(stream, /requestIdleCallback\(schedule, \{ timeout: 1500 \}\)/);
+	// 静态场景（从未流式，如 FileDiffViewer）不得延迟：立即全量
+	assert.match(stream, /if \(!wasStreamingRef\.current\) \{\s*\n\s*\/\/ 静态场景/);
+	assert.match(stream, /setSettleFull\(true\);\s*\n\s*return;/);
+	// settle 等待期保持轻量渲染（effectiveLight 含 !settleFull），并继续走冻结渲染
+	assert.match(stream, /const effectiveLight = props\.light \|\| isStreamingNow \|\| !settleFull/);
+	assert.match(stream, /const usingFrozen = isStreamingNow \|\| !settleFull/);
+	assert.match(stream, /if \(!usingFrozen\) frontierRef\.current\.reset\(\)/);
 });
 
 test("AnswerOutput live path renders through MarkdownStream (no dual typewriter)", () => {

@@ -55,6 +55,8 @@ export const ipcChannels = {
 	sessionsCatalogListArchived: "sessions:catalog-list-archived",
 	sessionsCatalogReadMessages: "sessions:catalog-read-messages",
 	sessionsCatalogReadMessagePage: "sessions:catalog-read-message-page",
+	/** 会话 JSONL 过程事件（session/model/thinking/custom/compaction），供轨迹复盘，不进聊天时间线。 */
+	sessionsCatalogReadProcessEvents: "sessions:catalog-read-process-events",
 	sessionsCatalogReadReferenceMessages: "sessions:catalog-read-reference-messages",
 	/** 按需读取单条消息完整文本（工具结果截断后的「查看完整输出」入口）。 */
 	sessionsCatalogReadMessageFullText: "sessions:catalog-read-message-full-text",
@@ -352,6 +354,9 @@ export const ipcChannels = {
 	petFocusAgent: "pet:focus-agent",
 	/** 主进程 → 主窗口：点击宠物后通知主窗切换到活跃 Agent tab */
 	petFocusAgentTarget: "pet:focus-agent-target",
+	/** 主窗口 → 主进程：冷启动/页面加载期间点击通知的跳转目标可能因监听未就绪而丢失，
+	 *  renderer 挂载后主动拉取一次（一次性，取走即清空） */
+	petGetFocusTargetPending: "pet:get-focus-target-pending",
 	/** 主进程 → 宠物窗：推送当前选中宠物的 manifest（含 spritesheetUrl），切换宠物时热加载 */
 	petCurrentSprite: "pet:current-sprite",
 	/** 宠物窗 → 主进程：拉取当前选中宠物的 manifest（挂载时主动拉取，避免推送竞态丢失） */

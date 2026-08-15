@@ -153,7 +153,6 @@ import type {
 	OpenCodeSessionSummary,
 	GitBranchInfo,
 	ImageContent,
-	PetManifest,
 	PiCliUpdateResult,
 	PiCommand,
 	PiInstallExecResult,
@@ -166,8 +165,6 @@ import type {
 } from "../../../../shared/types";
 import { parseRichInputChips, unwrapFileChipPath } from "./composer/chips";
 import removeMarkdown from "remove-markdown";
-/** 复用 petdex 标准网格规格，在主设置面板里为宠物选择器渲染单格动画预览 */
-import { GRID_COLS, CELL_W, CELL_H, MODE_ROW, MODE_FRAMES } from "../../pet/PetSpriteSheet";
 
 import type { WorkspaceDrawerPanel } from "../../hooks/useWorkspacePanels";
 import { formatDuration, formatTime, stripAnsi } from "./TimelineFormat";
@@ -214,32 +211,43 @@ type SessionModifiedFile = {
  * 美元→人民币估算汇率：仅用于费用提示的便捷换算（约合金额），非实时牌价。
  * 如需跟随实时汇率或用户自定义，可升级为设置项（usdToCnyRate）。
  */
-const USD_TO_CNY_RATE = 7.2;
+export const USD_TO_CNY_RATE = 7.2;
 
-export function SessionStatus(props: {
-	state?: AgentRuntimeState;
-	duration?: number;
-	/** 本会话历史缓存命中率快照，用于展示会话平均命中率 */
-	cacheHitHistory?: number[];
-}) {
-	const state = props.state;
-	if (!state) return null;
-	// 会话平均缓存命中率：主进程基于会话文件全部 assistant 消息 usage 算出的
-	// 真实平均优先；渲染层快照历史均值仅作为无文件样本时的降级回退。
-	const history = props.cacheHitHistory ?? [];
-	const averageCacheHit = state.cacheHitAveragePercent ?? (
-		history.length > 0
-			? history.reduce((sum, value) => sum + value, 0) / history.length
-			: undefined
-	);
-	const averageCacheHitSampleCount = state.cacheHitSampleCount ?? history.length;
+export type SessionDetailRow = { label: string; value: string; emphasis?: boolean };
+
+export type SessionStatusDetail = {
+	detailRows: SessionDetailRow[];
+	/** 最近一条回复的性能指标（TTFT/总耗时/tps）：与上下文累计量分开展示，避免误读为整段会话均值 */
+	replyPerfRows: SessionDetailRow[];
+	hasDetail: boolean;
+};
+
+/**
+ * 由 runtime 状态构建会话状态详情行（SessionStatus tooltip 与圆环面板共用）。
+ * 纯函数：label/value 已本地化，调用方只负责布局。
+ */
+export function buildSessionStatusDetail(
+	state:
+		| Pick<
+				AgentRuntimeState,
+				| "contextPercent" | "contextTokens" | "contextWindow"
+				| "inputTokens" | "outputTokens"
+				| "cacheRead" | "cacheWrite" | "cacheTotal" | "cacheHitPercent"
+				| "ttftMs" | "totalMs" | "tps" | "cost"
+		  >
+		| undefined,
+	averageCacheHit: number | undefined,
+	averageCacheHitSampleCount: number,
+): SessionStatusDetail {
+	const detailRows: SessionDetailRow[] = [];
+	const replyPerfRows: SessionDetailRow[] = [];
+	if (!state) return { detailRows, replyPerfRows, hasDetail: false };
 	// 美元→人民币估算汇率（仅用于费用提示的便捷换算，非实时牌价；
 	// 如后续需要跟随实时汇率，可升级为设置项 usdToCnyRate）
 	const cnyAmount = state.cost != null
 		? `¥${(state.cost * USD_TO_CNY_RATE).toFixed(2)}`
 		: undefined;
 
-	const detailRows: Array<{ label: string; value: string; emphasis?: boolean }> = [];
 	if (state.contextPercent != null || state.contextTokens != null) {
 		detailRows.push({
 			label: t("ctx.detail.context"),
@@ -278,7 +286,6 @@ export function SessionStatus(props: {
 	}
 	// 这些值来自 AgentManager 的 lastPerfByAgent，只代表最近一条 assistant 回复，
 	// 不能和上下文累计量混在同一组，否则用户会误以为是整段会话的平均性能。
-	const replyPerfRows: Array<{ label: string; value: string }> = [];
 	if (state.ttftMs != null) {
 		replyPerfRows.push({ label: t("ctx.detail.ttft"), value: formatDuration(state.ttftMs) });
 	}
@@ -292,7 +299,35 @@ export function SessionStatus(props: {
 		detailRows.push({ label: t("ctx.detail.cost"), value: `$${state.cost.toFixed(3)}`, emphasis: true });
 		detailRows.push({ label: t("ctx.detail.costCny"), value: cnyAmount ?? "-", emphasis: true });
 	}
-	const hasDetail = detailRows.length > 0 || replyPerfRows.length > 0;
+	return { detailRows, replyPerfRows, hasDetail: detailRows.length > 0 || replyPerfRows.length > 0 };
+}
+
+export function SessionStatus(props: {
+	state?: AgentRuntimeState;
+	duration?: number;
+	/** 本会话历史缓存命中率快照，用于展示会话平均命中率 */
+	cacheHitHistory?: number[];
+}) {
+	const state = props.state;
+	if (!state) return null;
+	// 会话平均缓存命中率：主进程基于会话文件全部 assistant 消息 usage 算出的
+	// 真实平均优先；渲染层快照历史均值仅作为无文件样本时的降级回退。
+	const history = props.cacheHitHistory ?? [];
+	const averageCacheHit = state.cacheHitAveragePercent ?? (
+		history.length > 0
+			? history.reduce((sum, value) => sum + value, 0) / history.length
+			: undefined
+	);
+	const averageCacheHitSampleCount = state.cacheHitSampleCount ?? history.length;
+	const { detailRows, replyPerfRows, hasDetail } = buildSessionStatusDetail(
+		state,
+		averageCacheHit,
+		averageCacheHitSampleCount,
+	);
+	// cost-chip 悬浮提示里的人民币估算（与明细行共用同一汇率常量）
+	const cnyAmount = state.cost != null
+		? `¥${(state.cost * USD_TO_CNY_RATE).toFixed(2)}`
+		: undefined;
 
 	const statusInner = (
 		<div className="session-status">
@@ -375,14 +410,16 @@ function formatCompact(value?: number | null) {
 	return String(value);
 }
 
-export function LogoMark() {
+export function LogoMark({ size = 32 }: { size?: number } = {}) {
+	// size 默认 32（错误页/小型场景）；起始页/引导页传 56 放大品牌存在感
 	return (
 		<div
-			className="logo-mark relative grid size-8 place-items-center overflow-hidden rounded-md bg-black text-white shadow-sm ring-1 ring-white/15"
+			className="logo-mark relative grid place-items-center overflow-hidden rounded-md bg-black text-white shadow-sm ring-1 ring-white/15"
+			style={{ width: size, height: size }}
 			aria-label={t("app.logoLabel")}
 		>
 			{/* 使用独立渐变而不是 currentColor，让 LogoMark 在浅色/深色主题下都保持黑底白标的品牌对比。 */}
-			<svg viewBox="140 140 520 520" width="18" height="18" aria-hidden="true">
+			<svg viewBox="140 140 520 520" width={Math.round(size * 0.5625)} height={Math.round(size * 0.5625)} aria-hidden="true">
 				<defs>
 					<linearGradient id="logo-mark-silver" x1="0.2" y1="0" x2="0.8" y2="1">
 						<stop stopColor="#ffffff" />
@@ -585,76 +622,6 @@ export function CopyMenu(props: {
 // - 用户消息保留右对齐气泡，但收窄并去掉头像，操作栏 hover 显隐
 // - 思考过程做成轻量折叠卡片，不再占用大块气泡空间
 // ============================================================
-
-/** 按工具名选择语义图标：read→文件、edit→铅笔、bash→终端、grep→搜索等，未匹配回退扳手。 */
-function PetChooserPreview(props: {
-	pet?: PetManifest;
-	mode?: string;
-}) {
-	const canvasRef = useRef<HTMLCanvasElement | null>(null);
-	const imgRef = useRef<HTMLImageElement | null>(null);
-	const rafRef = useRef<number | null>(null);
-
-	useEffect(() => {
-		const pet = props.pet;
-		const canvas = canvasRef.current;
-		if (!pet || !pet.spritesheetUrl || !canvas) {
-			const ctx = canvas!.getContext("2d");
-			ctx?.clearRect(0, 0, canvas!.width, canvas!.height);
-			return;
-		}
-
-		// 复用 petdex 标准网格规格（8 列 × 9 行，单格 192×208）
-		const mode = props.mode && props.mode !== "__auto" ? props.mode : "idle";
-		const row = MODE_ROW[mode] ?? 0;
-		const frameCount = MODE_FRAMES[mode] ?? 6;
-		const cols = GRID_COLS;
-		const cellW = CELL_W;
-		const cellH = CELL_H;
-
-		// 解码 spritesheet；成功后用 rAF 按帧定时绘制单格，避免每帧重新解码。
-		const img = new Image();
-		img.src = pet.spritesheetUrl;
-		let disposed = false;
-		const start = () => {
-			if (disposed) return;
-			imgRef.current = img;
-			let frame = 0;
-			let last = performance.now();
-			const FPS = 8;
-			let acc = 0;
-			const tick = (now: number) => {
-				rafRef.current = requestAnimationFrame(tick);
-				acc += now - last;
-				last = now;
-				if (acc < 1000 / FPS) return;
-				acc = 0;
-				if (frameCount <= 0) return;
-				frame = (frame + 1) % frameCount;
-				const ctx = canvas.getContext("2d");
-				if (!ctx) return;
-				ctx.clearRect(0, 0, canvas.width, canvas.height);
-				// 仅绘制当前帧对应的单格，按 canvas 尺寸等比缩放，避免拉伸出框。
-				ctx.drawImage(img, frame * cellW, row * cellH, cellW, cellH, 0, 0, canvas.width, canvas.height);
-			};
-			rafRef.current = requestAnimationFrame(tick);
-		};
-		img.decode().then(start).catch(() => undefined);
-
-		return () => {
-			disposed = true;
-			if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
-			rafRef.current = null;
-			imgRef.current = null;
-		};
-	}, [props.pet, props.mode]);
-
-	return (
-		<div className="pet-chooser-preview">
-			<canvas ref={canvasRef} width={CELL_W} height={CELL_H} aria-hidden="true" />
-		</div>
-	);
-}
 
 /** 助手正文：扁平 markdown 渲染，无气泡包裹，全宽排版，支持内嵌图片。
  *  路径链接化用 remark 插件在 mdast 层处理（见底部 remarkLinkifyPaths），不再前置改写原始字符串。 */

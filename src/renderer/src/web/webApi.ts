@@ -18,6 +18,7 @@ import type {
 	SessionTargetedValue,
 	UpdateSessionRecordInput,
 } from "../../../shared/types";
+import type { AgentUiResponse } from "../../../shared/types";
 import type { WebState } from "./webTypes";
 
 /** 轮询 /api/state 拿项目/会话/运行态（低频兜底，主数据流走 useChat）。 */
@@ -124,6 +125,22 @@ export function setRuntimeThinking(
 	level: string,
 ): Promise<unknown> {
 	return callRuntimeCommand(target.sessionId, target, "thinking", { level });
+}
+
+/** 手机/Web 端回答 ask_question / confirm / input。 */
+export async function respondToUi(input: {
+	sessionId: string;
+	requestId: string;
+	agentId: string;
+	runtimeGeneration: number;
+	response: AgentUiResponse;
+}): Promise<void> {
+	const res = await fetch("/api/ui-response", {
+		method: "POST",
+		headers: { "content-type": "application/json" },
+		body: JSON.stringify(input),
+	});
+	if (!res.ok) throw new Error(`ui-response ${res.status}`);
 }
 
 export async function fetchMessagePage(

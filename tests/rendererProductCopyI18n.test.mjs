@@ -81,6 +81,8 @@ test("settings error and unsaved-change copy matches the dev baseline", () => {
 const fileDiffViewer = read("src/renderer/src/components/app/FileDiffViewer.tsx");
 const timeline = read("src/renderer/src/components/session/SessionMessageTimeline.tsx");
 const settings = read("src/renderer/src/components/app/SettingsModal.tsx");
+const devTab = read("src/renderer/src/components/app/settings/DevTab.tsx");
+const settingRows = read("src/renderer/src/components/app/settings/SettingRows.tsx");
 const settingsStorage = read("src/renderer/src/components/app/settings/SettingsStorageTab.tsx");
 const drawer = read("src/renderer/src/components/workspace/DrawerSurface.tsx");
 const surface = [
@@ -146,10 +148,12 @@ test("remaining renderer product copy is available in Chinese and English", () =
 test("reachable renderer surfaces use i18n without changing their UI structure", () => {
 	assert.match(fileDiffViewer, /\{dirty && t\("editor\.unsavedMarker"\)\}/);
 	assert.match(timeline, /t\("timeline\.loadMoreHistory", \{[\s\S]*?count:/);
-	assert.match(drawer, /className="drawer-content-frame"[\s\S]*?\{t\("drawer\.lazyLoading"\)\}/);
-	assert.match(settings, /import \{ SettingsSection, StorageTab \} from "\.\/settings\/SettingsStorageTab"/);
-	assert.match(settings, /t\("settings\.dirtyTooltip"\)/);
-	assert.match(settings, /t\("settings\.sectionRuntime"\)/);
+	assert.match(drawer, /className="drawer-content-frame[^"]*"[\s\S]*?\{t\("drawer\.lazyLoading"\)\}/);
+	// StorageTab 自 SettingsModal 拆分为 lazy 加载（tab 级按需下载 chunk）
+	assert.match(settings, /const StorageTab = lazy\(\(\) => import\("\.\/settings\/SettingsStorageTab"\)/);
+	// DirtyMarker 已迁入 SettingRows 共享原语；运行分区位于 DevTab（自 SettingsModal 拆分）
+	assert.match(settingRows, /t\("settings\.dirtyTooltip"\)/);
+	assert.match(devTab, /t\("settings\.sectionRuntime"\)/);
 	assert.match(settings, /t\("settings\.unsavedTitle"\)/);
 	assert.match(settings, /t\("settings\.discardChanges"\)/);
 	assert.match(settings, /t\("settings\.saveAndClose"\)/);
@@ -171,8 +175,9 @@ test("reachable renderer surfaces use i18n without changing their UI structure",
 });
 
 test("renderer async failures log diagnostics and expose stable localized copy", () => {
-	assert.match(settings, /console\.error\("\[Settings\] WSL validation failed", err\)/);
-	assert.match(settings, /error: t\("settings\.wsl\.validationFailed"\)/);
+	// WSL 验证逻辑位于开发设置 tab（DevTab，自 SettingsModal 拆分）
+	assert.match(devTab, /console\.error\("\[Settings\] WSL validation failed", err\)/);
+	assert.match(devTab, /error: t\("settings\.wsl\.validationFailed"\)/);
 
 	assert.match(skillStore, /console\.error\("\[SkillStore\] Search failed", err\)/);
 	assert.match(skillStore, /setError\(t\("config\.skillStoreImportError"\)\)/);

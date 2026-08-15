@@ -3,7 +3,8 @@
  * （PetOverlay）共用同一套规格，避免窗口尺寸与 Canvas 绘制各自猜测缩放比例。
  *
  * 设计约定：
- * - 精灵基础尺寸 160×176（petdex spritesheet 单格 192×208 的历史基准，窗口沿用）。
+ * - 精灵基础尺寸与 petdex 单格一致：192×208。历史窗口曾用 160×176，
+ *   会把 192×208 帧压扁并叠加 pixelated 缩放，桌面上发糊、发小。
  * - 提醒气泡显示在精灵头顶：窗口在通知可见时扩展出「气泡槽位 + 间距」区域。
  * - 气泡文字使用有效 UI 字号（uiFontSize ?? fontSize），与 foundation.css 的
  *   --font-size-control 对齐；绝不随 petScale 缩放。
@@ -12,10 +13,10 @@
 
 import type { AppFontBaseMode, AppFontSizeMode } from "./types/settings";
 
-/** 精灵基础宽度（CSS px，petScale=1 时窗口宽度） */
-export const PET_BASE_W = 160;
-/** 精灵基础高度（CSS px，petScale=1 时窗口高度） */
-export const PET_BASE_H = 176;
+/** 精灵基础宽度（CSS px，petScale=1 时窗口宽度；与 spritesheet 单格同宽） */
+export const PET_BASE_W = 192;
+/** 精灵基础高度（CSS px，petScale=1 时窗口高度；与 spritesheet 单格同高） */
+export const PET_BASE_H = 208;
 
 /** UI 字号档位 → 提醒气泡 CSS 字号（px）；与 foundation.css --font-size-control 一致 */
 export const NOTIFICATION_FONT_SIZE_PX: Record<AppFontSizeMode, number> = {

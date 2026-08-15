@@ -170,6 +170,8 @@ function fixture(overrides = {}) {
 		setSessionRuntimeModel: async (target) => targeted(target, { isStreaming: false }),
 		setSessionRuntimeThinking: async (target) => targeted(target, { isStreaming: false }),
 		cloneSessionRuntime: async () => ({ ok: true, value: { targetSessionId: "session-2" } }),
+		listPendingUiRequests: () => [],
+		respondToUi: async () => undefined,
 		createAgent: async () => {
 			calls.createAgent += 1;
 			return agent;
@@ -257,6 +259,43 @@ test("web core routes create a project and expose the configured model list", as
 		const modelsResponse = await fetch(`${baseUrl}/api/models`);
 		const modelsBody = await modelsResponse.json();
 		assert.equal(modelsBody.models[0].id, "gpt-test");
+	});
+});
+
+test("web state exposes pending UI requests and ui-response writes them back", async () => {
+	const pending = [{
+		sessionId: "session-1",
+		agentId: "agent-1",
+		runtimeGeneration: 3,
+		requestId: "ask-1",
+		method: "confirm",
+		title: "Continue?",
+	}];
+	const responses = [];
+	await withServer(async ({ baseUrl }) => {
+		const stateResponse = await fetch(`${baseUrl}/api/state`);
+		const state = await stateResponse.json();
+		assert.equal(state.pendingUiRequests[0].requestId, "ask-1");
+
+		const write = await fetch(`${baseUrl}/api/ui-response`, {
+			method: "POST",
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify({
+				sessionId: "session-1",
+				agentId: "agent-1",
+				runtimeGeneration: 3,
+				requestId: "ask-1",
+				response: { confirmed: true },
+			}),
+		});
+		assert.equal(write.status, 200);
+		assert.equal(responses[0].requestId, "ask-1");
+		assert.equal(responses[0].response.confirmed, true);
+	}, {
+		listPendingUiRequests: () => pending,
+		respondToUi: async (input) => {
+			responses.push(input);
+		},
 	});
 });
 
@@ -565,7 +604,7 @@ test("SSE /stream endpoint forwards pi agent events as AI SDK UI message frames"
 			}
 		};
 
-		// 派发：消息开始 → 文本增量 → agent_end（应自动带 [DONE]）
+		// 派发：消息开始 → 文本增量 → agent_settled（中间 agent_end 不再关流）
 		emitPiEvent("agent-1", { type: "message_start", message: { role: "assistant", id: "m1" } });
 		emitPiEvent("agent-1", {
 			type: "message_update",
@@ -576,6 +615,7 @@ test("SSE /stream endpoint forwards pi agent events as AI SDK UI message frames"
 			assistantMessageEvent: { type: "text_delta", delta: " world" },
 		});
 		emitPiEvent("agent-1", { type: "agent_end", stopReason: "done" });
+		emitPiEvent("agent-1", { type: "agent_settled" });
 
 		const wire = await readUntil("data: [DONE]");
 		const afterDone = await reader.read();

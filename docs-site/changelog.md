@@ -5,6 +5,24 @@
 - [中文 CHANGELOG](https://github.com/ayuayue/PiDeck/blob/main/CHANGELOG.zh-CN.md)
 - [English CHANGELOG](https://github.com/ayuayue/PiDeck/blob/main/CHANGELOG.md)
 
+## v0.7.1
+
+发布时间：2026-08-15
+
+- 🚀 **会话轨迹迁入右侧抽屉 + 过程账本**
+- 🚀 **Markdown 增量渲染**
+- 🚀 **阅读面统一走分屏**
+- 🚀 **mac 自定义标题栏走系统红绿灯**
+- 🚀 **无工作区项目引导**
+- 🚀 **Web 端 ask 请求卡片**
+- 🚀 **引导页统一为新建页面**
+- 🚀 **本轮修改文件列表改为纯手动折叠**
+- 🚀 **起始页移除快捷动作按钮**
+- ✨ **桌面宠物按精灵原比例显示**
+- ✨ **流式对话默认展开中间过程**
+- ✨ **统一 dsh-web 形态**
+- ✨ **系统通知点击直达对应会话**
+
 ## v0.7.0
 
 发布时间：2026-08-11

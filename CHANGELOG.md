@@ -4,6 +4,127 @@
 
 All notable changes to PiDeck are documented here.
 
+## v0.7.1 - 2026-08-15
+
+### 🚀 New Features
+
+- **Session trajectory in the right drawer + process ledger** — The thinking
+  trajectory moves from the center session column into its own right-drawer
+  tab (reusing the session message cache). JSONL process events, the first-round
+  initial prompt, and `pi-system` references now land in the ledger; durations
+  show only measured or within-round inferred ranges instead of fake 0ms.
+- **Markdown incremental rendering** — Long streaming messages render
+  incrementally (IncrementalMarkdownFrontier / frozen chunks) instead of
+  re-parsing the whole document every frame; full rendering (syntax
+  highlighting / mermaid / element tree) is deferred until idle.
+- **Reading surfaces unified into split view** — The right-drawer editor panel
+  is removed; file reading now happens in the center split view
+  (SessionTabsBar + WorkbenchContent) on a unified surface.
+- **macOS native traffic lights on the custom title bar** — The custom title
+  bar uses the system window buttons (hiddenInset + trafficLightPosition),
+  with the sidebar collapse and session tabs making room for the lights.
+- **Empty-workspace onboarding** — When no workspace projects exist, the
+  sidebar renders an empty-state card with an add-directory button.
+- **Web ask request cards** — The local web service gained a `/api/ui-response`
+  endpoint; `ask` requests render as cards with a request snapshot, and the
+  SSE tool-loop wrap-up is fixed.
+- **Onboarding is now a compose page** — The empty workspace renders the
+  centered composer directly as a renderer-only virtual session (no catalog
+  record, no pi process, no tab). The project name under the logo becomes a
+  dropdown covering all projects (including the built-in Chat), and the
+  selected model/thinking level shows live. The real session is created on
+  first send with the composer state and typed messages moved over in one
+  step — Chat projects now also get a normal saveable draft session. Startup
+  no longer auto-creates a draft session.
+- **Turn file-change list: manual collapse only** — The per-turn modified-file
+  list is collapsed/expanded by a persistent toggle on its title row; the
+  count-threshold auto-collapse is removed.
+- **Home quick actions removed** — The home composer drops the quick-action
+  buttons and settles the input height at 150px.
+
+### ✨ UX Improvements
+
+- **Desktop pet at native sprite size** — The pet renders each sprite cell at
+  its original size with high-quality interpolation and stays in sync with
+  zoom/font-size changes (no more blurry 160×176 compression).
+- **Streaming conversations expand intermediate steps by default** — Thinking
+  and tool-execution steps are expanded during streaming by default; the
+  process safety gate ships enabled but zero-touch, so read-only users are
+  never interrupted.
+- **Unified dsh-web look** — Session todo bar, merged model/thinking selector,
+  and context ring with unified status details now match between desktop and
+  web.
+- **System notification jumps to its session** — Clicking a notification
+  prioritizes the session `record.id` and switches to that session instead of
+  landing on the current one.
+- **Thinking blocks & collapsible cards touch-friendly** — The whole thinking
+  row toggles open/closed with hover/active feedback and a rotating chevron;
+  expanded content gets a collapse button at the bottom; collapsed previews
+  use a monospace font. The Web timeline gets the same interaction polish.
+- **Tool cards stop spinning while running** — The running state drops the
+  spinner animation (the label stays), still driven by tool execution events.
+- **Centered home composer** — The ComposerArea on the empty home page is
+  uniformly centered at the same width as the guide page, no longer offset by
+  leftover layout.
+- **DevTools shortcuts consolidated** — Shortcuts are consolidated in
+  `devTools.ts`; F12 inside a webview now opens the main window's DevTools
+  instead of being swallowed by the embedded page.
+
+### 🔧 Performance
+
+- **Streaming render optimizations** — Frozen chunk references stay stable
+  (no per-frame plugin rebuild), prefix strings are cached to avoid slicing
+  large strings every frame, and settle-time full rendering is deferred to
+  `requestIdleCallback`.
+- **Settings page opens instantly** — The settings modal is split with per-tab
+  lazy loading (first-open chunk 441KB → 25KB); the pet spritesheet switched
+  to the `pideck-pet://` protocol (manifest no longer embeds a 7.4MB base64
+  image) with mtime/size fingerprint caching; app-log reads are line-cached
+  with zero re-reads of history files.
+- **Wider streaming push window** — text/thinking push batching window widened
+  from 50ms to 100ms, cutting render frequency further on top of incremental
+  rendering.
+- **Streaming event flood no longer leaks memory** — Streaming rendering is
+  O(n) per-frame scans and full IPC events are handled on demand; RAM no
+  longer climbs to GB-scale without dropping back under event floods.
+- **Plain-text fallback for unfreezable messages** — Long messages that cannot
+  be frozen render as plain text during streaming, settle-time full rendering
+  is capped, and the typewriter stops idling frames.
+
+### 🐛 Bug Fixes
+
+- **pi custom path fallback** — When `customPiPath` becomes invalid, detection
+  falls back to auto-detection instead of getting stuck.
+- **Update check is manual-only** — Updates are only triggered from the
+  settings page; with updates disabled, no auto checks or spinner states.
+- **Drawer tab width breathing** — Unified `scrollbar-gutter: stable` on
+  scrolling containers stops the drawer width oscillating on tab switches.
+- **Floating session menu follows resize** — The session-position floating
+  menu tracks window zoom/resize (ResizeObserver writes back panel pixels);
+  sidebar width syncing fixed too.
+- **Project path tooltip flicker** — Hovering no longer toggles the tooltip
+  open/closed, and the trigger area covers the whole row.
+- **Git panel collapse header** — The collapse button aligns with the real
+  32px header height instead of sitting 6px low and clipped.
+- **Pet window session isolation** — Partition constants are unified so the
+  sprite protocol attaches to its own dedicated session.
+- **Streaming scroll-follow never yanks history readers back** — While
+  streaming, a slight scroll up (touchpad inertia / accidental input) no
+  longer escapes the bottom-follow (growth guard band), so the reply keeps
+  scrolling into view. After the user has genuinely scrolled away to read
+  history, content growth no longer drags them back to the bottom — follow
+  re-locks only when they scroll back down near the bottom, so no manual
+  scroll-to-bottom button is needed.
+- **Context ring popover re-anchors instead of closing** — The context-meter
+  popover re-anchors to its trigger on scroll/resize (rAF-merged, no re-render
+  when the position is unchanged) instead of auto-closing while the stream
+  scrolls; outside click / Escape remain the only ways to dismiss it.
+- **Thinking-collapse trailing whitespace** — A thinking step collapsed to a
+  single line no longer leaves trailing whitespace in its end state.
+- **Add-project no longer hijacked by chat (#149)** — The add-project entry
+  point is no longer taken over by the session chat area and stays reachable
+  from the sidebar.
+
 ## v0.7.0 - 2026-08-13
 
 ### 🚀 New Features

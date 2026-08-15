@@ -36,8 +36,22 @@ export type WebRuntime = {
 	runtimeGeneration?: number;
 };
 
+export type WebPendingUiRequest = {
+	sessionId: string;
+	agentId: string;
+	runtimeGeneration: number;
+	requestId: string;
+	method: string;
+	title: string;
+	options?: string[];
+	placeholder?: string;
+	prefill?: string;
+	allowOther?: boolean;
+};
+
 export type WebState = {
 	projects: WebProject[];
 	sessions: WebSession[];
 	runtimes: WebRuntime[];
+	pendingUiRequests?: WebPendingUiRequest[];
 };

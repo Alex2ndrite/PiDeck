@@ -54,12 +54,16 @@ export class PiEventToUiMessageStream {
 		// 消息开始：assistant 消息是流式回复的起点，AI SDK 用它开启一条 UI 消息。
 		if (type === "message_start") {
 			const role = event.message?.role;
-			if (role === "assistant") {
-				this.finished = false;
-				this.currentMessageId = String(
-					(event.message?.id as string | undefined) ?? `msg_${Date.now()}`,
-				);
-				frames.push({ type: "start", messageId: this.currentMessageId });
+			if (role === "assistant" && !this.finished) {
+				if (!this.currentMessageId) {
+					this.currentMessageId = String(
+						(event.message?.id as string | undefined) ?? `msg_${Date.now()}`,
+					);
+					frames.push({ type: "start", messageId: this.currentMessageId });
+				} else {
+					// 工具循环的下一跳：同一条 UI 消息里开新 step，不要再发 start 拆气泡。
+					frames.push({ type: "start-step" });
+				}
 			}
 			return frames;
 		}
@@ -77,9 +81,12 @@ export class PiEventToUiMessageStream {
 			return this.endTool(event);
 		}
 
-		// agent_end：本轮 run 结束（可能随后 auto-retry/compaction，但对话层先收尾）。
+		// agent_end 只是本轮 LLM 步结束：后面常接 tool_execution / 下一轮 message_start。
+		// 这里关流会让手机端工具卡在 input-available，useChat 标成失败且后续正文丢失。
+		// 真失败才收尾；正常结束等 agent_settled。
 		if (type === "agent_end") {
-			return this.finishMessage(event);
+			if (event.error !== undefined) return this.finishMessage(event);
+			return frames;
 		}
 
 		// agent_settled 是 Pi 最终稳定点；部分版本不会把 agent_end 作为外部流的最后事件。
@@ -178,9 +185,10 @@ export class PiEventToUiMessageStream {
 			return frames;
 		}
 
-		// message_update 的 done 事件：当前 assistant 消息完成（对应 thinking 结束）。
+		// message_update 的 done：这一条 assistant 文本/思考结束，不是整轮 run 结束。
+		// 工具调用回合随后还有 tool_execution_* 和下一轮 message_start，绝不能在这里关 SSE。
 		if (eventType === "done") {
-			return this.finishMessage({});
+			return this.closeOpenBlocks();
 		}
 
 		return frames;
@@ -202,14 +210,19 @@ export class PiEventToUiMessageStream {
 			? event.toolCallId
 			: undefined;
 		if (!toolCallId) return [];
-		return [{ type: "tool-output-available", toolCallId, output: event.isError ? { error: true } : {} }];
+		if (event.isError) {
+			return [{
+				type: "tool-output-error",
+				toolCallId,
+				errorText: "Tool failed",
+			}];
+		}
+		return [{ type: "tool-output-available", toolCallId, output: {} }];
 	}
 
-	private finishMessage(event: PiEvent): UiMessageStreamFrame[] {
-		if (this.finished) return [];
-		this.finished = true;
+	/** 只关当前 text/reasoning 块，不结束整条 SSE。 */
+	private closeOpenBlocks(): UiMessageStreamFrame[] {
 		const frames: UiMessageStreamFrame[] = [];
-		// 关闭尚未闭合的 text/reasoning 块，保证前端能正确收尾。
 		if (this.textBlockId) {
 			frames.push({ type: "text-end", id: this.textBlockId });
 			this.textBlockId = null;
@@ -218,6 +231,13 @@ export class PiEventToUiMessageStream {
 			frames.push({ type: "reasoning-end", id: this.reasoningBlockId });
 			this.reasoningBlockId = null;
 		}
+		return frames;
+	}
+
+	private finishMessage(event: PiEvent): UiMessageStreamFrame[] {
+		if (this.finished) return [];
+		this.finished = true;
+		const frames = this.closeOpenBlocks();
 		if (event.error !== undefined) {
 			const errorText = typeof event.error === "string"
 				? event.error
