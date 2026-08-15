@@ -223,9 +223,9 @@ export const ComposerArea = forwardRef<HTMLElement, ComposerAreaProps>(function 
             }}
             data-session-id={props.sessionId}
           >
-            {/* 扩展 widget（Todo/Plan）已迁至 chat-header 左侧 SessionWidgetChips，
+            {/* 扩展 widget（Todo/Plan）统一由常驻 todo 条（SessionTodoStrip）展示，
                 composer 内默认不再有 widget，widgets 槽位默认 null；
-                宿主（SessionView）可传入常驻 todo 条（SessionTodoStrip），
+                宿主（SessionView）可传入常驻 todo 条，
                 ComposerMeasuredExtras 负责测量附件/队列/通知高度并驱动 composer 自动增高。 */}
             <ComposerMeasuredExtras
               widgets={props.widgets ?? null}
@@ -261,7 +261,7 @@ export const ComposerArea = forwardRef<HTMLElement, ComposerAreaProps>(function 
                       : "",
               ].filter(Boolean).join(" ")}
             >
-              {/* 扩展 widget（Todo/Plan）已迁至 chat-header 左侧 SessionWidgetChips。 */}
+              {/* 扩展 widget（Todo/Plan）由常驻 todo 条（SessionTodoStrip）展示。 */}
               <TipTapComposer
                 ref={composer.editor.ref}
                 value={composer.draft}

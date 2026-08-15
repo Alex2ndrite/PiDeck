@@ -46,7 +46,6 @@ function loadStripHelpers() {
     "../../i18n": { t: (key, params = {}) => key + ":" + JSON.stringify(params) },
     "./ComposerRuntimeIntegrations": {},
     "./agentTodoParser": { parseAgentTodoItems: (lines) => [] },
-    "./SessionWidgetChips": {},
   });
 }
 
@@ -117,4 +116,55 @@ test("strip copy is present in both locale dictionaries", () => {
     assert.match(locale, /"sessionTodo\.active": "\{active\}/);
     assert.match(locale, /"sessionTodo\.pending": "\{pending\}/);
   }
+});
+
+// ── dismiss 记录（自 SessionWidgetChips 迁入，2026-08）──
+
+test("widget dismissal is permanent across restarts and revives only on new content", () => {
+  const { isWidgetDismissed, widgetDismissalId, widgetLinesSignature } = loadStripHelpers();
+  const lines = ["── 待办 ──", "☐ #1 修复登录页样式"];
+  // 用户手动关闭 → 记录当时的内容指纹
+  const dismissed = {
+    [widgetDismissalId("session-a", "pi-deck-todo")]: widgetLinesSignature(lines),
+  };
+  // 重启后扩展重建同一列表：指纹相同 → 永久保持隐藏
+  assert.equal(isWidgetDismissed(dismissed, "session-a", "pi-deck-todo", [...lines]), true);
+  // 工具再次调用追加新待办：内容变化 → 自动复活
+  assert.equal(
+    isWidgetDismissed(dismissed, "session-a", "pi-deck-todo", [...lines, "☐ #2 补测试"]),
+    false,
+  );
+  // dismiss 按 session / widgetKey 隔离
+  assert.equal(isWidgetDismissed(dismissed, "session-b", "pi-deck-todo", [...lines]), false);
+  assert.equal(isWidgetDismissed(dismissed, "session-a", "pi-deck-plan-todos", [...lines]), false);
+});
+
+test("widgetLinesSignature is stable and order/content sensitive", () => {
+  const { widgetLinesSignature } = loadStripHelpers();
+  const a = ["☐ #1 任务一", "☐ #2 任务二"];
+  assert.equal(widgetLinesSignature(a), widgetLinesSignature([...a]));
+  assert.notEqual(widgetLinesSignature(a), widgetLinesSignature([...a].reverse()));
+  assert.notEqual(widgetLinesSignature(a), widgetLinesSignature([...a, "☐ #3 任务三"]));
+  assert.notEqual(widgetLinesSignature(a), widgetLinesSignature(["☐ #1 任务一改"]));
+});
+
+// ── chat-header widget chips 已移除（2026-08 用户要求：待办统一走输入框上方常驻条）──
+
+test("chat-header widget chips are removed; header slot and mounts are gone", () => {
+  const view = viewSource();
+  const header = readFileSync(
+    "src/renderer/src/components/session/SessionHeader.tsx",
+    "utf8",
+  );
+  const strip = stripSource();
+  // 组件文件删除 + 挂载/槽位/import 移除
+  assert.throws(() =>
+    readFileSync("src/renderer/src/components/session/SessionWidgetChips.tsx"),
+  );
+  assert.doesNotMatch(view, /SessionWidgetChips/);
+  assert.doesNotMatch(header, /widgetChips/);
+  // dismiss 工具迁入常驻条，保持同一 localStorage 指纹语义
+  assert.match(strip, /DISMISSED_WIDGETS_KEY/);
+  assert.match(strip, /isWidgetDismissed\(dismissed, props\.sessionId, key, widgetLines\)/);
+  assert.match(strip, /loadDismissedWidgets/);
 });

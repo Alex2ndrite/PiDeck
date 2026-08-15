@@ -1,7 +1,7 @@
 import { HatGlasses, Maximize2 } from "lucide-react";
 import { useAtomValue } from "jotai";
 import { selectAtom } from "jotai/utils";
-import { useMemo, type ReactNode, type RefObject } from "react";
+import { useMemo, type RefObject } from "react";
 import type { AgentRuntimeState } from "../../../../shared/types";
 import {
   sessionRecordByIdAtomFamily,
@@ -21,8 +21,6 @@ type HeaderActions = {
   duration?: number;
   /** 将状态/操作区嵌入 Tab 栏，避免当前会话再单独占一行。 */
   embedded?: boolean;
-  /** 头部左侧槽位（Todo/Plan 等扩展 widget chips）；会话标题迁走后左侧留空，widget 入口落在这里。 */
-  widgetChips?: ReactNode;
   /**
    * 项目目录名（面包屑左段）：多 Tab/分屏时提醒当前会话属于哪个项目。
    * legacy 模式由上层传入；session 模式可从会话记录自行解析。
@@ -93,7 +91,6 @@ export function SessionHeader(props: SessionHeaderProps) {
       ref={props.embedded ? props.headerRef : undefined}
       className={`chat-header-actions flex min-w-0 items-center justify-end gap-1.5${props.embedded ? " h-7 w-auto shrink-0" : ""}${isStarting ? " loading" : ""}`}
     >
-      {props.widgetChips}
       {isAnonymous && (
         <span className="anonymous-badge" title={t("app.anonymousChat")} aria-label={t("app.anonymousChat")}>
           <HatGlasses size={14} aria-hidden="true" />

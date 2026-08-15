@@ -128,6 +128,7 @@ test("session tabs stay outside SessionView; header is standalone in pane", () =
   assert.match(tabBar, /props\.onToggleDrawer \? \(/);
   // Tab 栏外置后，SessionView 只渲染独立 Header，不再把操作嵌入 Tab 的 actions 槽。
   assert.doesNotMatch(sessionView, /SessionTabsBar/);
-  assert.match(sessionView, /<SessionHeader[\s\S]*?widgetChips=/);
+  // header 不再接收 widget chips（2026-08 移除：待办统一走输入框上方常驻条）
+  assert.doesNotMatch(sessionView, /widgetChips/);
   assert.doesNotMatch(sessionView, /embedded/);
 });

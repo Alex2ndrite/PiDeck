@@ -11,10 +11,6 @@ import {
 	type RuntimeHandle,
 } from "./ComposerRuntimeIntegrations";
 import { parseAgentTodoItems, type AgentTodoItem } from "./agentTodoParser";
-import {
-	isWidgetDismissed,
-	loadDismissedWidgets,
-} from "./SessionWidgetChips";
 
 /**
  * composer 上方的 todo 常驻条（移植自 dsh-web 的 TodoPanel）。
@@ -27,10 +23,60 @@ import {
  * 取舍：
  * - 挂在 ComposerArea 的 widgets 槽位（ComposerMeasuredExtras 测量高度并驱动
  *   面板自适应），折叠态常驻 36px，不再重演「widget 挤占输入区」的历史问题。
- * - 尊重 chips 的 dismiss 记录（同一 localStorage 指纹）：用户在 header 关闭过
- *   的 widget，常驻条也不再显示（重挂载后生效）。
+ * - 尊重历史 dismiss 记录（同一 localStorage 指纹）：2026-08 移除 chat-header
+ *   的 SessionWidgetChips 入口后，待办统一由本条常驻展示；用户此前在 chips
+ *   关闭过的 widget 仍按指纹保持隐藏（重挂载后生效）。
  * - 无任何 todo 行时整体不渲染（与 dsh 一致）。
  */
+
+// dismiss 语义从 v2 保留：key 按「内容指纹」记录（旧数据形状（数组）不兼容，
+// 直接启用新 key，旧记录自然作废——dismiss 是轻量 UX 状态，不做迁移）。
+const DISMISSED_WIDGETS_KEY = "pid:session-dismissed-widgets-v2";
+
+/** 手动关闭记录：key = widgetDismissalId(sessionId, widgetKey)，value = 关闭时的内容指纹。 */
+type DismissedWidgets = Record<string, string>;
+
+/** 列表内容指纹（djb2）：只需稳定区分「工具是否更新过列表」，不需要密码学强度。 */
+export function widgetLinesSignature(lines: readonly string[]): string {
+	const text = lines.join("\n");
+	let hash = 5381;
+	for (let i = 0; i < text.length; i += 1) {
+		hash = ((hash << 5) + hash + text.charCodeAt(i)) | 0;
+	}
+	// 带上行数，降低「哈希相同但行数不同」的碰撞概率
+	return `${lines.length}:${hash >>> 0}`;
+}
+
+export function widgetDismissalId(sessionId: string, widgetKey: string): string {
+	return `${sessionId}:${widgetKey}`;
+}
+
+/**
+ * 是否保持隐藏：已手动关闭且内容指纹未变 → 永久隐藏；
+ * 工具再次调用使列表变化（指纹不同）→ 视为新内容，重新显示。
+ */
+export function isWidgetDismissed(
+	dismissed: DismissedWidgets,
+	sessionId: string,
+	widgetKey: string,
+	lines: readonly string[],
+): boolean {
+	return (
+		dismissed[widgetDismissalId(sessionId, widgetKey)] ===
+		widgetLinesSignature(lines)
+	);
+}
+
+function loadDismissedWidgets(): DismissedWidgets {
+	try {
+		const parsed = JSON.parse(localStorage.getItem(DISMISSED_WIDGETS_KEY) ?? "{}");
+		return parsed && typeof parsed === "object"
+			? parsed as DismissedWidgets
+			: {};
+	} catch {
+		return {};
+	}
+}
 
 /** 状态字形：completed=实心勾圈（成功色）、in_progress=渐变环旋转（品牌色）、
  *  pending=虚线环（弱化色）。svg 逐字节对应 dsh TodoPanel（figma 14×14 画板）。 */
