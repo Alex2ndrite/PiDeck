@@ -32,8 +32,42 @@ const STICK_TO_BOTTOM_OFFSET_PX = 70;
  * 2. wheel 逃逸守卫——贴底/近底时向上滚轮不逃逸（无位移的滚动没有逃逸意图）。
  */
 const AT_BOTTOM_TOLERANCE_PX = 25;
+/**
+ * 流式增长逃逸锁定窗口（ms）：最后一次内容正增长后的窗口内，上滚逃逸受
+ * GROWTH_ESCAPE_GUARD_PX 守卫带保护。
+ *
+ * 为什么需要：流式渲染逐行增高时，弹簧追底动画存在物理滞后（stiffness/damping
+ * 参数偏保守），scrollTop 经常落后 target 数十到上百 px——距底远超 25px 容差带。
+ * 此时用户/触控板轻微上滚（含惯性、误触）会被误判为「逃逸锁底」，之后内容增长
+ * 不再跟随，表现为「推着推着就不动了」，只能手动点回底按钮（2026-08 用户反馈）。
+ * 窗口取 500ms 覆盖一次渲染间隔（通常 <200ms）；流式结束约 500ms 后恢复正常逃逸。
+ */
+const POSITIVE_RESIZE_ESCAPE_LOCKOUT_MS = 500;
+/**
+ * 增长守卫带（px）：距底 <= 该距离且处于增长活跃窗口时，上滚不逃逸。
+ * 与 lockout 窗口组合：流式中轻微上滚（弹簧追赶带内）保持跟随；
+ * 距底更远的上滚（明确要读历史）即使流式中也立即逃逸，不被长时间锁死。
+ */
+const GROWTH_ESCAPE_GUARD_PX = 200;
 const SIXTY_FPS_INTERVAL_MS = 1000 / 60;
 const RETAIN_ANIMATION_DURATION_MS = 350;
+
+/**
+ * 是否处于「增长守卫带」：距底 <= GROWTH_ESCAPE_GUARD_PX 且最后一次正增长在
+ * POSITIVE_RESIZE_ESCAPE_LOCKOUT_MS 内。守卫带内的上滚不视为逃逸意图——
+ * 流式渲染中弹簧追底滞后（距底常 >25px 容差带），轻微上滚/惯性误触会被误判为
+ * 用户上滚读历史，导致锁底永久丢失（「推着推着就不动了」，只能手动点回底按钮）。
+ * 距底超过守卫带的上滚（明确要读历史）即使流式中也立即逃逸。
+ */
+function isWithinGrowthGuardBand(
+	distanceFromBottom: number,
+	state: Pick<StickToBottomState, "lastPositiveResizeAt">,
+): boolean {
+	return (
+		distanceFromBottom <= GROWTH_ESCAPE_GUARD_PX &&
+		performance.now() - state.lastPositiveResizeAt < POSITIVE_RESIZE_ESCAPE_LOCKOUT_MS
+	);
+}
 
 export interface ScrollElements {
   scrollElement: HTMLElement;
@@ -116,6 +150,8 @@ export interface StickToBottomState {
   calculatedTargetScrollTop: number;
   scrollDifference: number;
   resizeDifference: number;
+  /** 最近一次内容正增长时刻（performance.now，ms）；0 = 尚未增长。 */
+  lastPositiveResizeAt: number;
   /** 每次新开滚动会话递增；在途 rAF 发现代数过期则退出，避免与同步校正打架。 */
   scrollGeneration: number;
   animation?: {
@@ -202,6 +238,7 @@ export const useStickToBottom = (options: StickToBottomOptions = {}): StickToBot
     return {
       escapedFromLock,
       isAtBottom,
+      lastPositiveResizeAt: 0,
       resizeDifference: 0,
       scrollGeneration: 0,
       accumulated: 0,
@@ -434,7 +471,12 @@ export const useStickToBottom = (options: StickToBottomOptions = {}): StickToBot
             (scrollRef.current?.scrollHeight ?? 0) -
             scrollTop -
             (scrollRef.current?.clientHeight ?? 0);
-          if (distanceFromBottom > AT_BOTTOM_TOLERANCE_PX) {
+          if (
+            distanceFromBottom > AT_BOTTOM_TOLERANCE_PX &&
+            // 增长活跃窗口 + 守卫带：弹簧追底滞后中（距底常 >25px）的轻微上滚
+            // 不视为逃逸——「推着推着就不动了」的根因（详见常量注释）。
+            !isWithinGrowthGuardBand(distanceFromBottom, state)
+          ) {
             setEscapedFromLock(true);
             setIsAtBottom(false);
           }
@@ -475,6 +517,13 @@ export const useStickToBottom = (options: StickToBottomOptions = {}): StickToBot
           scrollRef.current.scrollTop -
           scrollRef.current.clientHeight >
           AT_BOTTOM_TOLERANCE_PX &&
+        // 增长活跃窗口 + 守卫带：弹簧追底滞后中的轻微上滚不逃逸（同上）。
+        !isWithinGrowthGuardBand(
+          scrollRef.current.scrollHeight -
+            scrollRef.current.scrollTop -
+            scrollRef.current.clientHeight,
+          state,
+        ) &&
         !state.animation?.ignoreEscapes
       ) {
         setEscapedFromLock(true);
@@ -510,6 +559,17 @@ export const useStickToBottom = (options: StickToBottomOptions = {}): StickToBot
       }
       setIsNearBottom(state.isNearBottom);
       if (difference >= 0) {
+        // 流式增长活跃窗口：任何正增长都刷新逃逸锁定计时（见常量注释）。
+        state.lastPositiveResizeAt = performance.now();
+        // 逃逸兜底：未锁底但仍在近底带（距底 <=70px）——误逃逸/轻微上滚后
+        // 用户其实没走远，内容增长时自动恢复锁底，避免「推着推着就不动了」
+        // 只能手动点回底按钮。用户真上滚读历史（距底 >70px）不受影响。
+        // 必须放在动画/贴底动作之前：instant 分支与 scrollToBottom 都以
+        // state.isAtBottom 决定是否执行，先重锁才能让本次增长继续追底。
+        if (!state.isAtBottom && state.isNearBottom) {
+          setEscapedFromLock(false);
+          setIsAtBottom(true);
+        }
         /**
          * If it's a positive resize, scroll to the bottom when
          * we're already at the bottom.
