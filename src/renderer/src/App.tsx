@@ -120,6 +120,8 @@ import { SessionTabsBar } from "./components/session/SessionTabsBar";
 import { SessionPaneServicesProvider } from "./components/session/SessionPaneServices";
 import { ProjectEmptyState } from "./components/session/ProjectEmptyState";
 import { useSessionWorkspaceChrome } from "./hooks/useSessionWorkspaceChrome";
+import { useDelegationController } from "./hooks/useDelegationController";
+import { DelegationDialog } from "./components/delegation/DelegationDialog";
 import { ScratchPadOverlay } from "./components/overlays/ScratchPadOverlay";
 import { AskPanelOverlay } from "./components/overlays/AskPanelOverlay";
 import { SessionRuntimeDock } from "./components/session/SessionRuntimeDock";
@@ -1232,6 +1234,15 @@ export function App() {
     },
     [runCreateAnonymousSession, workspaceChrome],
   );
+
+  const delegation = useDelegationController({
+    parent: currentSession,
+    onCreated: (result) => {
+      upsertSession(result.childSession);
+      workspaceChrome.registerOpenSession(result.childSession.id, "permanent");
+      selectSessionCommand(result.childSession.projectId, result.childSession.id, true);
+    },
+  });
 
   /** 侧栏/分支打开：选中成功后按 preview|permanent 登记 Tab */
   const openSidebarSessionByIdWithTab = useCallback(
@@ -2698,6 +2709,10 @@ export function App() {
       void createSessionDraftWithTab(projectId);
     },
     onTogglePin: workspaceChrome.togglePin,
+    onDelegate: isLanWeb ? undefined : (sessionId: string) => {
+      const record = store.get(sessionRecordByIdAtomFamily(sessionId));
+      if (record) delegation.open(record);
+    },
     onReorder: workspaceChrome.reorderTab,
     // 分屏组胶囊：分屏内会话聚合为组（颜色标记 + 展开/收起）
     splitGroupIds: workspaceChrome.splitLayout
@@ -3458,6 +3473,13 @@ export function App() {
       onClose={() => workspace.closeExternalEditorChooser()}
       onOpenProject={(editor, path) => workspace.openProjectInExternalEditor(editor)}
       onError={(error) => showToast(t("app.openEditorFailed", {error: String(error)}), 3000)}
+    />
+
+    <DelegationDialog
+      open={delegation.dialogOpen}
+      parent={delegation.parent}
+      onOpenChange={delegation.setOpen}
+      onSubmit={delegation.create}
     />
 
     </AppShell>

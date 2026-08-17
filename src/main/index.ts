@@ -237,6 +237,8 @@ import { registerImageGenIpc, resolveProviderCredentials } from "./ipc/imagegenI
 import { ImageGenService } from "./imagegen/ImageGenService";
 import { VisionBridgeConfigManager } from "./settings/visionBridgeConfig";
 import { registerSessionIpc, scheduleCatalogBackgroundScan } from "./ipc/sessionIpc";
+import { registerDelegationIpc } from "./ipc/delegationIpc";
+import { DelegationStore } from "./delegation/DelegationStore";
 import { registerSystemIpc } from "./ipc/systemIpc";
 import { fetchModelList, getCachedModelList, refreshModelList } from "./pi/modelListCache";
 import { ModelSpecsStore } from "./pi/modelSpecsStore";
@@ -295,6 +297,7 @@ let fileSystemService: FileSystemService;
 let sessionScanner: SessionScanner;
 let sessionCatalog: SessionCatalog;
 let sessionRuntimeCoordinator: SessionRuntimeCoordinator;
+let delegationStore: DelegationStore;
 let codexSessionImporter: CodexSessionImporter;
 let claudeSessionImporter: ClaudeSessionImporter;
 let openCodeSessionImporter: OpenCodeSessionImporter;
@@ -2275,6 +2278,13 @@ function registerIpc() {
 		exportCatalogSessionHtml,
 		replaceAgentSession,
 	});
+	registerDelegationIpc({
+		store: delegationStore,
+		projectStore,
+		sessionCatalog,
+		sessionRuntimeCoordinator,
+		appLogger,
+	});
 
 	// ── 启动预扫描（2026-08 展开项目卡顿优化）──
 	// 延迟 3s 启动、项目间错开 1.5s 逐个调度后台扫描：预热 catalog 缓存，
@@ -2772,6 +2782,8 @@ app.whenReady().then(async () => {
 		sendAgentPromptWithIntegrations,
 		appLogger,
 	);
+	delegationStore = new DelegationStore(join(app.getPath("userData"), "delegations.json"));
+	await delegationStore.load();
 	agentManager.onOutput((sourceChannel, payload) => {
 		if (sourceChannel === ipcChannels.agentsState && Array.isArray(payload)) {
 			for (const tab of payload) {

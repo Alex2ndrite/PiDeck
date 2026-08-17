@@ -1,5 +1,5 @@
 import { canonicalizeSessionPath, getSessionEnvironment } from "../../shared/sessionIdentity";
-import type { AgentTab, SessionEnvironment, SessionSummary } from "../../shared/types";
+import type { AgentTab, DelegationRecord, SessionEnvironment, SessionSummary } from "../../shared/types";
 
 /**
  * 会话/Agent 行的状态点 Tailwind bg 类（跨 Sidebar SessionTree 与会话 Tab 复用）。
@@ -39,6 +39,7 @@ export type ProjectChildItem =
 			codexSubagents: SessionSummary[];
 			/** pi 原生子会话（pi-subagents 等扩展产生的，通过 parentSessionPath 关联） */
 			piSubagents: SessionSummary[];
+			delegatedChildren: Array<{ summary: SessionSummary; relation: DelegationRecord }>;
 	  }
 	| {
 			type: "session";
@@ -51,6 +52,7 @@ export type ProjectChildItem =
 			codexSubagents: SessionSummary[];
 			/** pi 原生子会话（pi-subagents 等扩展产生的，通过 parentSessionPath 关联） */
 			piSubagents: SessionSummary[];
+			delegatedChildren: Array<{ summary: SessionSummary; relation: DelegationRecord }>;
 	  };
 
 export type ProjectAgentSessionDisplay = {
@@ -69,6 +71,7 @@ export function collectDisplayedSessionIds(
 ): Set<string> {
 	const ids = new Set<string>();
 	for (const child of visibleChildren) {
+		for (const delegated of child.delegatedChildren) ids.add(delegated.summary.id);
 		if (child.type === "session") {
 			ids.add(child.session.id);
 			continue;
@@ -208,13 +211,31 @@ export function filterAgentsForSidebarDisplay({
 export function getProjectAgentSessionDisplay({
 	agents,
 	sessions,
+	delegations = [],
 	visibleChildCount,
 }: {
 	agents: AgentTab[];
 	sessions: SessionSummary[];
+	delegations?: readonly DelegationRecord[];
 	visibleChildCount?: number;
 }): ProjectAgentSessionDisplay {
 	const sessionByKey = new Map<string, SessionSummary>();
+	const sessionById = new Map(sessions.map((session) => [session.id, session]));
+	const delegatedChildIds = new Set<string>();
+	const delegatedChildrenByParent = new Map<string, Array<{ summary: SessionSummary; relation: DelegationRecord }>>();
+	for (const relation of delegations) {
+		const summary = sessionById.get(relation.childSessionId);
+		if (!summary || !sessionById.has(relation.parentSessionId)) continue;
+		delegatedChildIds.add(relation.childSessionId);
+		const children = delegatedChildrenByParent.get(relation.parentSessionId) ?? [];
+		children.push({ summary, relation });
+		delegatedChildrenByParent.set(relation.parentSessionId, children);
+	}
+	const delegatedChildSessionKeys = new Set(
+		[...delegatedChildrenByParent.values()].flatMap((children) => children)
+			.map(({ summary }) => getSummaryKey(summary))
+			.filter((key): key is string => Boolean(key)),
+	);
 	const unkeyedSessions: SessionSummary[] = [];
 	const codexSubagentsByParent = new Map<string, SessionSummary[]>();
 
@@ -228,6 +249,7 @@ export function getProjectAgentSessionDisplay({
 		parentCandidateSessions.map(getCodexParentKey).filter(Boolean),
 	);
 	for (const session of sessions) {
+		if (delegatedChildIds.has(session.id)) continue;
 		// Codex 子会话：按 codexParentThreadId 分组
 		if (
 			session.codexThreadSource === "subagent" &&
@@ -278,6 +300,7 @@ export function getProjectAgentSessionDisplay({
 	// 子会话启动后也会产生 Agent，但它的唯一视觉入口仍应留在父会话下面。
 	// 仅当父条目确实可见时隐藏对应顶层 Agent；父会话缺失/被搜索过滤时仍允许孤儿 Agent 平铺，避免入口消失。
 	const nestedAgentSessionKeys = new Set<string>();
+	for (const key of delegatedChildSessionKeys) nestedAgentSessionKeys.add(key);
 	for (const [parentKey, subagents] of piSubagentsByParent) {
 		if (!sessionByKey.has(parentKey) && !agentBySessionKey.has(parentKey)) continue;
 		for (const subagent of subagents) {
@@ -311,6 +334,7 @@ export function getProjectAgentSessionDisplay({
 			sortAt: agent.createdAt,
 			codexSubagents: [],
 			piSubagents: [],
+			delegatedChildren: [],
 		})),
 		...[...agentBySessionKey.entries()]
 			.filter(([sessionKey]) => !nestedAgentSessionKeys.has(sessionKey))
@@ -328,6 +352,7 @@ export function getProjectAgentSessionDisplay({
 							agent.sessionPath,
 							sessionKey.startsWith("wsl:") ? "wsl" : "native",
 						),
+						delegatedChildren: [],
 					};
 				}
 				return {
@@ -347,6 +372,7 @@ export function getProjectAgentSessionDisplay({
 						? getSessionEnvironment(linkedSession)
 						: (sessionKey.startsWith("wsl:") ? "wsl" : "native"),
 				),
+				delegatedChildren: linkedSession ? (delegatedChildrenByParent.get(linkedSession.id) ?? []) : [],
 				};
 			},
 		),
@@ -362,7 +388,8 @@ export function getProjectAgentSessionDisplay({
 					session.filePath,
 					getSessionEnvironment(session),
 				),
-			})),
+				delegatedChildren: delegatedChildrenByParent.get(session.id) ?? [],
+		})),
 		...unkeyedSessions.map<ProjectChildItem>((session) => ({
 			type: "session",
 			key: getSessionRowKey(session),
@@ -373,6 +400,7 @@ export function getProjectAgentSessionDisplay({
 				session.filePath,
 				getSessionEnvironment(session),
 			),
+			delegatedChildren: delegatedChildrenByParent.get(session.id) ?? [],
 		})),
 	];
 
@@ -412,6 +440,7 @@ export function getProjectAgentSessionDisplay({
 					sortAt: orphan.updatedAt,
 					codexSubagents: [],
 					piSubagents: [],
+					delegatedChildren: [],
 				});
 			}
 		}

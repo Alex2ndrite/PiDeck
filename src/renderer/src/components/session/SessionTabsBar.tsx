@@ -24,6 +24,7 @@ import {
   type ReactNode,
 } from "react";
 import {
+  delegationChildIdsAtom,
   sessionRecordByIdAtomFamily,
   sessionRuntimeBySessionIdAtomFamily,
 } from "../../atoms";
@@ -146,6 +147,7 @@ export type SessionTabsBarProps = {
   newSessionTargets: readonly NewSessionTarget[];
   onNewSessionInProject: (projectId: string) => void;
   onTogglePin: (sessionId: string) => void;
+  onDelegate?: (sessionId: string) => void;
   onReorder: (sourceId: string, targetId: string, position: "before" | "after") => void;
   /** 右侧抽屉总开关：打开/关闭整块右侧面板（活动栏在抽屉内、系统按钮下方）。 */
   onToggleDrawer?: () => void;
@@ -295,6 +297,7 @@ export function SessionTabsBar(props: SessionTabsBarProps) {
               onCloseOthers={props.onCloseOthers}
               onCloseAll={props.onCloseAll}
               onTogglePin={props.onTogglePin}
+              onDelegate={props.onDelegate}
               onDragStart={(event) => {
                 dragSourceRef.current = sessionId;
                 dragTargetRef.current = null;
@@ -601,6 +604,7 @@ function SessionTab(props: {
   onCloseOthers: (sessionId: string) => void;
   onCloseAll: () => void;
   onTogglePin: (sessionId: string) => void;
+  onDelegate?: (sessionId: string) => void;
   onDragStart: (event: React.DragEvent) => void;
   onDragOver: (event: React.DragEvent) => void;
   onDrop: (event: React.DragEvent) => void;
@@ -608,6 +612,7 @@ function SessionTab(props: {
 }) {
   const { sessionId, active, pinned, preview, dragging } = props;
   const record = useAtomValue(sessionRecordByIdAtomFamily(sessionId));
+  const delegatedChildIds = useAtomValue(delegationChildIdsAtom);
   const runtime = useAtomValue(sessionRuntimeBySessionIdAtomFamily(sessionId));
   const status = runtime?.status;
   // 状态徽章语义与侧栏 SessionTree 状态点一致（idle=蓝、running/starting=黄、error=红）；
@@ -617,6 +622,7 @@ function SessionTab(props: {
   // 操作菜单（受控）：下拉按钮点击或右键 Tab 打开；Tab 本体点击仍是切换，
   // 拖拽排序与中键关闭与菜单互不干扰（drag/auxclick 不触发 click）。
   const [menuOpen, setMenuOpen] = useState(false);
+  const canDelegate = record?.source === "pi" && record.noSession !== true && record.status === "active" && Boolean(record.filePath) && !delegatedChildIds.has(sessionId);
 
   const select = () => props.onSelect(sessionId);
   const close = () => props.onClose(sessionId);
@@ -742,6 +748,14 @@ function SessionTab(props: {
             {pinned ? t("tabs.unpin") : t("tabs.pin")}
           </span>
         </DropdownMenuItem>
+        {canDelegate && props.onDelegate ? (
+          <DropdownMenuItem onSelect={() => props.onDelegate?.(sessionId)}>
+            <span className="inline-flex items-center gap-2">
+              <MessagesSquare className="size-3.5" aria-hidden="true" />
+              {t("delegation.open")}
+            </span>
+          </DropdownMenuItem>
+        ) : null}
         {active && props.onStop && (
           <DropdownMenuItem
             disabled={!props.canStop}

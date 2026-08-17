@@ -1,8 +1,9 @@
 import { Fragment, type ReactNode } from "react";
+import { useAtomValue } from "jotai";
 import { ChevronDown, Ellipsis, HatGlasses, Trash2 } from "lucide-react";
-import type { AgentTab, Project, SessionRecord, SessionSummary } from "../../../../shared/types";
+import type { AgentTab, DelegationRole, Project, SessionRecord, SessionSummary } from "../../../../shared/types";
 import { collectDisplayedSessionIds, filterAgentsForSidebarDisplay, getProjectAgentSessionDisplay, sessionStatusDotClass, type ProjectChildItem } from "../../agentListDisplay";
-import { sessionRecordToSummary } from "../../atoms";
+import { delegationRecordsAtom, sessionRecordToSummary } from "../../atoms";
 import { t } from "../../i18n";
 import { filterSidebarSessions, getBoundSidebarRuntimeAgent, hasLiveSidebarRuntime, type SidebarController } from "../../hooks/useSidebarController";
 import { Button } from "../ui-shadcn/button";
@@ -88,6 +89,7 @@ export function SessionTree(props: {
   visibleChildCount?: number;
   onShowMore?: () => void;
 }) {
+  const delegationRecords = useAtomValue(delegationRecordsAtom);
   const filter = props.controller.sourceFilterFor(props.project.id);
   const search = props.controller.search.trim();
   const allSummaries = props.sessions.flatMap((session) => {
@@ -106,6 +108,7 @@ export function SessionTree(props: {
   const display = getProjectAgentSessionDisplay({
     agents: displayAgents,
     sessions: summaries,
+    delegations: delegationRecords,
     visibleChildCount: props.visibleChildCount ?? (props.nested ? Number.MAX_SAFE_INTEGER : props.controller.visibleChildCountFor(props.project.id)),
   });
   const displayedSessionIds = collectDisplayedSessionIds(
@@ -230,6 +233,22 @@ export function SessionTree(props: {
       </div>
     );
   };
+  const roleLabel = (role: DelegationRole) => ({
+    explore: t("delegation.role.explore"),
+    implement: t("delegation.role.implement"),
+    review: t("delegation.role.review"),
+    consult: t("delegation.role.consult"),
+  })[role];
+  const renderDelegatedChildren = (children: ProjectChildItem["delegatedChildren"]) => {
+    if (children.length === 0) return null;
+    return <div className={cn("codex-subagent-sidebar-group", !props.nested && "ml-3")}>
+      {children.map(({ summary, relation }) => {
+        const targetModel = relation.model ? `${relation.model.provider}/${relation.model.modelId}` : t("delegation.defaultModel");
+        const details = `${t("delegation.contextFresh")} · ${t("delegation.workspaceShared")}: ${relation.workspace.path} · ${t("delegation.model")}: ${targetModel}`;
+        return renderSubagent(summary, <span title={details} aria-label={details} className="inline-flex min-w-0 items-center gap-1.5"><strong>{summary.name || t("delegation.child")}</strong><span className="text-xs text-muted-foreground">{roleLabel(relation.role)}</span></span>);
+      })}
+    </div>;
+  };
   const renderToggle = (key: string, count: number) => count > 0 ? (
     <span
       className={cn("subagent-inline-toggle px-1 py-0.5 mr-7")}
@@ -295,6 +314,7 @@ export function SessionTree(props: {
           </Button>
         </div>
         {renderSubagents(groupKey, child.codexSubagents, child.piSubagents)}
+        {renderDelegatedChildren(child.delegatedChildren)}
       </Fragment>;
     }
     const runtime = getBoundSidebarRuntimeAgent(props.controller.catalog, child.session.id);
@@ -346,6 +366,7 @@ export function SessionTree(props: {
         </Button>
       </div>
       {renderSubagents(groupKey, child.codexSubagents, child.piSubagents)}
+      {renderDelegatedChildren(child.delegatedChildren)}
     </Fragment>;
   };
 

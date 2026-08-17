@@ -92,6 +92,10 @@ function readAskField(input: unknown, key: string): unknown {
 	return Reflect.get(input, key);
 }
 
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 export class AgentManager {
 	private readonly agents = new Map<string, AgentRuntime>();
 	private readonly messages = new Map<string, ChatMessage[]>();
@@ -2029,6 +2033,24 @@ export class AgentManager {
 			60_000,
 		);
 		return ((response.data as any)?.models ?? []) as AvailableModel[];
+	}
+
+	/** Query Pi's authoritative thinking/effort levels for a running runtime. */
+	async getAvailableThinkingLevels(agentId: string): Promise<string[]> {
+		const runtime = this.requireRuntime(agentId);
+		const response = await runtime.process.client.request(
+			{ type: "get_available_thinking_levels" },
+			60_000,
+		);
+		if (!response.success) throw new Error(response.error || "get_available_thinking_levels failed");
+		if (!isObjectRecord(response.data)) {
+			throw new Error("Malformed get_available_thinking_levels response");
+		}
+		const levels = response.data.levels;
+		if (!Array.isArray(levels) || !levels.every((level): level is string => typeof level === "string" && level.length > 0)) {
+			throw new Error("Malformed get_available_thinking_levels response");
+		}
+		return [...levels];
 	}
 
 	async setModel(agentId: string, provider: string, modelId: string) {

@@ -232,6 +232,8 @@ export const ipcChannels = {
 	projectsGetModelSpec: "projects:get-model-spec",
 	/** 手动刷新云端模型规格缓存 */
 	projectsRefreshModelSpecs: "projects:refresh-model-specs",
+	delegationsList: "delegations:list",
+	delegationsCreate: "delegations:create",
 	agentsEvent: "agents:event",
 	agentsMessage: "agents:message",
 	agentsLog: "agents:log",

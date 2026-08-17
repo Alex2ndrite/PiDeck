@@ -55,6 +55,7 @@ export interface SessionAgentGateway {
 	getRuntimeState(agentId: string): Promise<AgentRuntimeState>;
 	getCommands(agentId: string): Promise<unknown[]>;
 	getAvailableModels(agentId: string): Promise<AvailableModel[]>;
+	getAvailableThinkingLevels(agentId: string): Promise<string[]>;
 	exportHtml(agentId: string): Promise<unknown>;
 	editMessage(agentId: string, messageId: string, newText: string): Promise<void>;
 	deleteMessage(agentId: string, messageId: string): Promise<void>;
@@ -382,6 +383,12 @@ export class SessionRuntimeCoordinator {
 		target: SessionRuntimeTarget,
 	): Promise<SessionCommandResult<SessionTargetedValue<AvailableModel[]>>> {
 		return this.runTargetCommand(target, (agentId) => this.agents.getAvailableModels(agentId));
+	}
+
+	listRuntimeThinkingLevels(
+		target: SessionRuntimeTarget,
+	): Promise<SessionCommandResult<SessionTargetedValue<string[]>>> {
+		return this.runTargetCommand(target, (agentId) => this.agents.getAvailableThinkingLevels(agentId));
 	}
 
 	exportRuntimeHtml(

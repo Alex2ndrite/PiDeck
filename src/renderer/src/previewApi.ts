@@ -12,6 +12,7 @@ import type {
 	TerminalDataEvent,
 	TerminalExitEvent,
 	TerminalTab,
+	DelegationRecord,
 } from "../../shared/types";
 import { t } from "./i18n";
 
@@ -489,6 +490,10 @@ export function createPreviewApi(): PiDesktopApi {
 				ok: true,
 				value: { targetSessionId: `${target.sessionId}:copy` },
 			}),
+		},
+		delegations: {
+			list: async (): Promise<DelegationRecord[]> => [],
+			create: async () => { throw new Error(t("delegation.unavailable")); },
 		},
 		usageStats: {
 			detect: async () => ({

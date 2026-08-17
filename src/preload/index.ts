@@ -96,6 +96,9 @@ import type {
 	TerminalTab,
 	TerminalTarget,
 	WebNetworkAddress,
+	DelegationRecord,
+	CreateDelegationInput,
+	CreateDelegationResult,
 } from "../shared/types";
 
 /**
@@ -561,6 +564,11 @@ const api = {
 					[key: string]: unknown;
 				}>
 			>,
+	},
+	delegations: {
+		list: () => ipcRenderer.invoke(ipcChannels.delegationsList) as Promise<DelegationRecord[]>,
+		create: (input: CreateDelegationInput) =>
+			ipcRenderer.invoke(ipcChannels.delegationsCreate, input) as Promise<CreateDelegationResult>,
 	},
 	usageStats: {
 		detect: () =>
