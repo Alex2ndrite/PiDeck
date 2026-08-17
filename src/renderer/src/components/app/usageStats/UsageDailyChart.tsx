@@ -14,6 +14,7 @@ import { colorForProvider } from "./providerColors";
 import { formatTokens } from "./format";
 
 type RangeMode = "day" | "week" | "month";
+const RANGE_MODES: readonly RangeMode[] = ["day", "week", "month"];
 
 /** 近 N 天/周/月聚合桶：label + 总量 + provider 分解。 */
 type Bucket = {
@@ -79,12 +80,6 @@ function buildBuckets(rows: UsageDayRow[], mode: RangeMode, now: Date): Bucket[]
   return sorted.slice(Math.max(0, sorted.length - limit));
 }
 
-const RANGE_LABELS: Record<RangeMode, string> = {
-  day: t("usageStats.daily.rangeDay"),
-  week: t("usageStats.daily.rangeWeek"),
-  month: t("usageStats.daily.rangeMonth"),
-};
-
 const CHART_HEIGHT = 140;
 const BAR_MIN_HEIGHT = 1;
 
@@ -105,21 +100,21 @@ export function UsageDailyChart(props: { data: UsageAggregated }) {
   const barWidth = 14;
 
   return (
-    <div className="usage-stats-chart">
-      <div className="usage-stats-chart-toolbar">
-        {(["day", "week", "month"] as RangeMode[]).map((m) => (
+    <div className="mt-1">
+      <div className="mb-2 flex flex-wrap gap-1.5">
+        {RANGE_MODES.map((m) => (
           <Button
             key={m}
             variant={mode === m ? "default" : "ghost"}
             size="sm"
             onClick={() => setMode(m)}
           >
-            {RANGE_LABELS[m]}
+            {m === "day" ? t("usageStats.daily.rangeDay") : m === "week" ? t("usageStats.daily.rangeWeek") : t("usageStats.daily.rangeMonth")}
           </Button>
         ))}
       </div>
       {buckets.length === 0 ? (
-        <div className="usage-stats-hint">{t("usageStats.table.empty")}</div>
+        <div className="py-3 text-sm text-muted-foreground">{t("usageStats.table.empty")}</div>
       ) : (
         <svg
           width={width}

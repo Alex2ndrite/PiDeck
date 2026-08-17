@@ -13,6 +13,15 @@ const ipc = readFileSync("src/shared/ipc.ts", "utf8");
 const handler = readFileSync("src/main/ipc/usageStatsIpc.ts", "utf8");
 const preload = readFileSync("src/preload/index.ts", "utf8");
 const previewApi = readFileSync("src/renderer/src/previewApi.ts", "utf8");
+const usageStatsTab = readFileSync(
+  "src/renderer/src/components/app/settings/UsageStatsTab.tsx",
+  "utf8",
+);
+const usageDashboard = readFileSync(
+  "src/renderer/src/components/app/usageStats/UsageDashboardSection.tsx",
+  "utf8",
+);
+const usageStyles = readFileSync("src/renderer/src/styles/usageStats.css", "utf8");
 // 新架构 i18n 按语言拆分为 rendererCopy.{zh-CN,en-US}.ts（旧单文件 i18n.ts 只含类型/工具）
 const i18nZh = readFileSync("src/renderer/src/i18n/rendererCopy.zh-CN.ts", "utf8");
 const i18nEn = readFileSync("src/renderer/src/i18n/rendererCopy.en-US.ts", "utf8");
@@ -68,4 +77,20 @@ test("i18n zh-CN and en-US dictionaries carry the same usageStats keys", () => {
   // 必含的 tab key
   assert.ok(zhKeys.includes("usageStats.cards.totalTokens"));
   assert.ok(zhKeys.includes("usageStats.heatmap.title"));
+});
+
+test("usage dashboard keeps data state in the tab and presentation in a dedicated view", () => {
+  assert.match(usageStatsTab, /<UsageDashboardSection/);
+  assert.doesNotMatch(usageStatsTab, /usage-stats-/);
+  assert.doesNotMatch(usageStatsTab, /console\./);
+  assert.match(usageDashboard, /<Progress/);
+  assert.match(usageDashboard, /buildUsagePeriodRows\(data\)/);
+  assert.match(usageDashboard, /buildTokenBreakdown\(data\.totals\)/);
+});
+
+test("usage legacy stylesheet retains only the dynamic heatmap color anchors", () => {
+  assert.doesNotMatch(usageStyles, /\.usage-stats-/);
+  const heatmapAnchors = [...usageStyles.matchAll(/\.usage-heatmap-l([0-4])\s*\{/g)]
+    .map((match) => Number(match[1]));
+  assert.deepEqual(heatmapAnchors, [0, 1, 2, 3, 4]);
 });

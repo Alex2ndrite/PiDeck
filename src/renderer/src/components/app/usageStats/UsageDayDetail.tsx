@@ -6,7 +6,7 @@
  * 选中天无记录时显示空态（日历仍可继续选其他天）。
  *
  * 数据来自主进程聚合的 daily 行（UsageDayRow 已含 byModel/byProject 明细），
- * 无新 IPC 通道；样式走 Tailwind utility + 既有 usage-stats-* 语义 class。
+ * 无新 IPC 通道；样式使用共享 Tailwind/shadcn 语义 token。
  */
 
 import { useMemo, useState } from "react";
@@ -36,13 +36,13 @@ function parseDayKey(dayKey: string): Date {
   return new Date(year, month - 1, day);
 }
 
-/** 当日卡片（与 UsageStatsTab 的 SummaryCard 同构）。 */
+/** 当日紧凑指标卡。 */
 function DayCard(props: { label: string; value: React.ReactNode; sub?: string }) {
   return (
-    <div className="usage-stats-card">
-      <div className="usage-stats-card-label">{props.label}</div>
-      <div className="usage-stats-card-value">{props.value}</div>
-      {props.sub && <div className="usage-stats-card-sub">{props.sub}</div>}
+    <div className="rounded-lg border border-border-subtle bg-bg-panel px-3 py-2.5">
+      <div className="text-xs text-muted-foreground">{props.label}</div>
+      <div className="mt-1 text-base font-semibold tabular-nums text-foreground">{props.value}</div>
+      {props.sub && <div className="mt-0.5 text-[11px] text-muted-foreground">{props.sub}</div>}
     </div>
   );
 }
@@ -92,7 +92,7 @@ function ProviderLegend(props: {
           <span className="tabular-nums text-muted-foreground">{formatTokens(p.tokens)}</span>
           <span className="tabular-nums text-muted-foreground">
             {formatCost(p.cost)}
-            {!costKnown && <span className="usage-stats-unknown"> *</span>}
+            {!costKnown && <span className="ml-0.5 text-warning" aria-label={t("usageStats.cards.costUnknown")}>*</span>}
           </span>
         </li>
       ))}
@@ -148,10 +148,10 @@ export function UsageDayDetail(props: { rows: UsageDayRow[]; costKnown: boolean 
       </div>
 
       {!row ? (
-        <div className="usage-stats-hint">{t("usageStats.dayDetail.empty")}</div>
+        <div className="py-3 text-sm text-muted-foreground">{t("usageStats.dayDetail.empty")}</div>
       ) : (
         <>
-          <div className="usage-stats-cards">
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
             <DayCard
               label={t("usageStats.dayDetail.cards.tokens")}
               value={formatTokens(row.totals.tokens)}
@@ -161,7 +161,7 @@ export function UsageDayDetail(props: { rows: UsageDayRow[]; costKnown: boolean 
               value={
                 <span title={costKnown ? undefined : t("usageStats.cards.costUnknown")}>
                   {formatCost(row.totals.cost)}
-                  {!costKnown && <span className="usage-stats-unknown"> *</span>}
+                  {!costKnown && <span className="ml-0.5 text-warning" aria-label={t("usageStats.cards.costUnknown")}>*</span>}
                 </span>
               }
             />

@@ -25,8 +25,6 @@ const LEVEL_CLASSES = [
   "usage-heatmap-l4",
 ];
 
-const WEEK_LABELS = ["Mon", "Wed", "Fri"];
-
 export function UsageHeatmap(props: { data: UsageAggregated }) {
   const { heatmap, heatmapStart } = props.data;
 
@@ -70,7 +68,7 @@ export function UsageHeatmap(props: { data: UsageAggregated }) {
           </rect>
         );
       })}
-      {WEEK_LABELS.map((label, i) => (
+      {[t("usageStats.heatmap.mon"), t("usageStats.heatmap.wed"), t("usageStats.heatmap.fri")].map((label, i) => (
         <text
           key={label}
           x={-4}
