@@ -504,6 +504,7 @@ export function createPreviewApi(): PiDesktopApi {
 				skippedLines: 0,
 			}),
 			get: async () => null as unknown as import("../../shared/types").UsageAggregated,
+			getCodexQuota: async () => ({ status: "unavailable", snapshot: null, reason: "disabled" } as const),
 		},
 		codexSessions: {
 			scan: async () => [],

@@ -151,3 +151,37 @@ export type UsageAggregated = {
 	/** 参与聚合的记录条数 */
 	recordCount: number;
 };
+
+/** Codex/ChatGPT 账户配额的一个时间窗口（认证信息不跨 IPC）。 */
+export type OpenAiCodexQuotaWindow = {
+	/** 已使用百分比，始终限制在 0..100。 */
+	usedPercent: number;
+	/** 服务端定义的窗口长度（秒）。 */
+	limitWindowSeconds: number;
+	/** Unix ms；服务端缺失时为 null。 */
+	resetsAt: number | null;
+};
+
+/** 与 pi 当前 openai-codex OAuth 账号对应的配额快照。 */
+export type OpenAiCodexQuotaSnapshot = {
+	planType: string | null;
+	allowed: boolean;
+	limitReached: boolean;
+	fiveHour: OpenAiCodexQuotaWindow | null;
+	weekly: OpenAiCodexQuotaWindow | null;
+	fetchedAt: number;
+};
+
+export type OpenAiCodexQuotaReason =
+	| "not-configured"
+	| "expired"
+	| "unauthorized"
+	| "forbidden"
+	| "network"
+	| "invalid-response"
+	| "disabled";
+
+export type OpenAiCodexQuotaResult =
+	| { status: "ready"; snapshot: OpenAiCodexQuotaSnapshot }
+	| { status: "stale"; snapshot: OpenAiCodexQuotaSnapshot; reason: OpenAiCodexQuotaReason }
+	| { status: "unavailable"; snapshot: null; reason: OpenAiCodexQuotaReason };

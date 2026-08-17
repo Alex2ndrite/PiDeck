@@ -402,6 +402,7 @@ export const ipcChannels = {
 	usageStatsDetect: "usage-stats:detect",
 	usageStatsRefresh: "usage-stats:refresh",
 	usageStatsGet: "usage-stats:get",
+	usageStatsGetCodexQuota: "usage-stats:get-codex-quota",
 
 	// ===== 生图（ImageGen） =====
 	/** 生图：OpenAI 兼容 /images/generations，返回 base64 图片 */

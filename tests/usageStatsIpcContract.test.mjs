@@ -21,6 +21,23 @@ const usageDashboard = readFileSync(
   "src/renderer/src/components/app/usageStats/UsageDashboardSection.tsx",
   "utf8",
 );
+const composer = readFileSync(
+  "src/renderer/src/components/session/ComposerComponents.tsx",
+  "utf8",
+);
+const settingsFeatureRoot = readFileSync(
+  "src/renderer/src/components/app/SettingsFeatureRoot.tsx",
+  "utf8",
+);
+const settingsModal = readFileSync(
+  "src/renderer/src/components/app/SettingsModal.tsx",
+  "utf8",
+);
+const appUiAtoms = readFileSync("src/renderer/src/atoms/app-ui-atoms.ts", "utf8");
+const quotaOverview = readFileSync(
+  "src/renderer/src/components/app/usageStats/OpenAiCodexQuotaOverview.tsx",
+  "utf8",
+);
 const usageStyles = readFileSync("src/renderer/src/styles/usageStats.css", "utf8");
 // 新架构 i18n 按语言拆分为 rendererCopy.{zh-CN,en-US}.ts（旧单文件 i18n.ts 只含类型/工具）
 const i18nZh = readFileSync("src/renderer/src/i18n/rendererCopy.zh-CN.ts", "utf8");
@@ -30,6 +47,7 @@ const CHANNELS = [
   "usageStatsDetect",
   "usageStatsRefresh",
   "usageStatsGet",
+  "usageStatsGetCodexQuota",
 ];
 
 test("usage-stats channels are declared in shared/ipc.ts with domain:action names", () => {
@@ -39,19 +57,23 @@ test("usage-stats channels are declared in shared/ipc.ts with domain:action name
   assert.match(ipc, /usageStatsDetect:\s*"usage-stats:detect"/);
   assert.match(ipc, /usageStatsRefresh:\s*"usage-stats:refresh"/);
   assert.match(ipc, /usageStatsGet:\s*"usage-stats:get"/);
+  assert.match(ipc, /usageStatsGetCodexQuota:\s*"usage-stats:get-codex-quota"/);
 });
 
 test("main handler registers every usage-stats channel", () => {
   for (const key of CHANNELS) {
     assert.match(handler, new RegExp(`ipc\\.handle\\(ipcChannels\\.${key}`), key);
   }
+  assert.match(handler, /typeof options !== "object"/);
+  assert.match(handler, /typeof force !== "boolean"/);
 });
 
-test("preload exposes the usageStats group with all three methods", () => {
+test("preload exposes the usageStats group with local and Codex methods", () => {
   assert.match(preload, /usageStats:\s*\{/);
   assert.match(preload, /detect:\s*\(\)/);
   assert.match(preload, /refresh:\s*\(\)/);
   assert.match(preload, /get:\s*\(\)/);
+  assert.match(preload, /getCodexQuota:/);
   for (const key of CHANNELS) {
     assert.match(preload, new RegExp(`ipcChannels\\.${key}`), key);
   }
@@ -86,6 +108,34 @@ test("usage dashboard keeps data state in the tab and presentation in a dedicate
   assert.match(usageDashboard, /<Progress/);
   assert.match(usageDashboard, /buildUsagePeriodRows\(data\)/);
   assert.match(usageDashboard, /buildTokenBreakdown\(data\.totals\)/);
+  assert.match(usageDashboard, /<OpenAiCodexQuotaOverview/);
+  assert.doesNotMatch(i18nEn, /not account quota or remaining credits/);
+});
+
+test("Composer exposes the quota indicator only for the selected openai-codex provider", () => {
+  assert.match(composer, /const quotaProvider = modelTo\?\.provider \?\? modelFrom\?\.provider/);
+  assert.match(composer, /quotaProvider === "openai-codex"/);
+  assert.match(composer, /<OpenAiCodexQuotaIndicator/);
+  assert.match(composer, /<TooltipContent[\s\S]*<OpenAiCodexQuotaOverview/);
+  assert.match(quotaOverview, /snapshot\.fiveHour, props\.snapshot\.weekly/);
+});
+
+test("quota UI shows remaining percentage and a precise reset timestamp", () => {
+  assert.match(quotaOverview, /remainingQuotaPercent\(window\.usedPercent\)/);
+  assert.match(quotaOverview, /<Progress value=\{remainingPercent\}/);
+  assert.match(quotaOverview, /formatQuotaResetAt\(window\.resetsAt/);
+  assert.doesNotMatch(quotaOverview, /Math\.ceil\(hours \/ 24\)/);
+  assert.match(i18nZh, /"usageStats\.quota\.remainingPercent":\s*"剩余 \{percentage\}%"/);
+  assert.match(i18nEn, /"usageStats\.quota\.remainingPercent":\s*"\{percentage\}% remaining"/);
+});
+
+test("clicking the Composer quota indicator opens Settings on the usage tab", () => {
+  assert.match(appUiAtoms, /settingsRequestedTabAtom/);
+  assert.match(composer, /setSettingsRequestedTab\("usage"\)/);
+  assert.match(composer, /setSettingsOpen\(true\)/);
+  assert.match(composer, /onClick=\{handleOpenUsageStats\}/);
+  assert.match(settingsFeatureRoot, /initialTab:\s*requestedTab/);
+  assert.match(settingsModal, /props\.initialTab \?\? loadLastSettingsTab\(\)/);
 });
 
 test("usage legacy stylesheet retains only the dynamic heatmap color anchors", () => {

@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import type { UsageAggregated, UsageStatsDetectResult } from "../../../../../shared/types";
+import type { OpenAiCodexQuotaResult, UsageAggregated, UsageStatsDetectResult } from "../../../../../shared/types";
 import { t, type TranslationKey } from "../../../i18n";
 import { Button } from "../../ui-shadcn/button";
 import { Progress } from "../../ui-shadcn/progress";
@@ -7,6 +7,7 @@ import { UsageDailyChart } from "./UsageDailyChart";
 import { UsageDayDetail } from "./UsageDayDetail";
 import { UsageHeatmap } from "./UsageHeatmap";
 import { UsageTable } from "./UsageTable";
+import { OpenAiCodexQuotaOverview } from "./OpenAiCodexQuotaOverview";
 import { formatCost, formatTokens } from "./format";
 import {
   buildTokenBreakdown,
@@ -24,6 +25,8 @@ type Props = {
   error: string;
   refreshing: boolean;
   onRefresh: () => Promise<void>;
+  quotaResult: OpenAiCodexQuotaResult | null;
+  quotaLoading: boolean;
 };
 
 function DashboardCard(props: { title: string; description?: string; children: ReactNode }) {
@@ -198,7 +201,7 @@ function ReadyDashboard(props: { data: UsageAggregated }) {
 }
 
 export function UsageDashboardSection(props: Props) {
-  const { phase, data, detect, error, refreshing, onRefresh } = props;
+  const { phase, data, detect, error, refreshing, onRefresh, quotaResult, quotaLoading } = props;
   const hasData = data != null && data.recordCount > 0;
   const showError = phase === "error" || Boolean(error);
 
@@ -214,6 +217,8 @@ export function UsageDashboardSection(props: Props) {
           {refreshing ? t("usageStats.refreshing") : t("usageStats.refresh")}
         </Button>
       </header>
+
+      <OpenAiCodexQuotaOverview result={quotaResult} loading={quotaLoading} />
 
       {phase === "loading" && <StatusNotice tone="muted">{t("usageStats.loading")}</StatusNotice>}
       {phase === "missing" && <NotInstalledCard onRefresh={onRefresh} />}

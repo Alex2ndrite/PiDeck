@@ -12,6 +12,7 @@ import type {
   UsageStatsDetectResult,
 } from "../../../../../shared/types";
 import { UsageDashboardSection } from "../usageStats/UsageDashboardSection";
+import { useOpenAiCodexQuota } from "../../../hooks/useOpenAiCodexQuota";
 
 type Phase = "loading" | "missing" | "ready" | "error";
 
@@ -21,6 +22,7 @@ export function UsageStatsTab() {
   const [detect, setDetect] = useState<UsageStatsDetectResult | null>(null);
   const [error, setError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
+  const { result: quotaResult, loading: quotaLoading, load: loadQuota, refresh: refreshQuota } = useOpenAiCodexQuota();
 
   /** 扩展列表只是辅助探测；usage.jsonl 仍是主进程用量链路的权威数据源。 */
   const probePluginInstalled = useCallback(async (): Promise<boolean | null> => {
@@ -64,14 +66,14 @@ export function UsageStatsTab() {
   }, [probePluginInstalled]);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    void Promise.all([load(), loadQuota()]);
+  }, [load, loadQuota]);
 
   const refresh = useCallback(async () => {
     setRefreshing(true);
     setError("");
     try {
-      await window.piDesktop.usageStats.refresh();
+      await Promise.all([window.piDesktop.usageStats.refresh(), refreshQuota()]);
       const aggregated = await window.piDesktop.usageStats.get();
       const detectResult = await window.piDesktop.usageStats.detect();
       setDetect(detectResult);
@@ -91,7 +93,7 @@ export function UsageStatsTab() {
     } finally {
       setRefreshing(false);
     }
-  }, [data, probePluginInstalled]);
+  }, [data, probePluginInstalled, refreshQuota]);
 
-  return <UsageDashboardSection phase={phase} data={data} detect={detect} error={error} refreshing={refreshing} onRefresh={refresh} />;
+  return <UsageDashboardSection phase={phase} data={data} detect={detect} error={error} refreshing={refreshing} onRefresh={refresh} quotaResult={quotaResult} quotaLoading={quotaLoading} />;
 }

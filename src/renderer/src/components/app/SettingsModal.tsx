@@ -42,6 +42,7 @@ import { buttonVariants } from "../ui-shadcn/button";
 import { useVisionBridgeDraft } from "./settings/visionDraft.ts";
 import { useGitModels } from "./settings/gitModels.ts";
 import type { AppSettings, AppInfo, AvailableModel, PiInstallStatus, PiUpdateCheckResult, PiCliUpdateResult } from "../../../../shared/types";
+import type { SettingsTabId } from "../../atoms";
 
 // ── 各 tab 内容 lazy 加载：首开只下载壳 + 当前 tab 的 chunk（qrcode/表格/日志查看器等
 //    重依赖随各自 tab 拆包），切换到某 tab 时才加载其 chunk（本地文件，秒级以内）。──
@@ -55,8 +56,6 @@ const StorageTab = lazy(() => import("./settings/SettingsStorageTab").then((m) =
 const ProcessMetricsTab = lazy(() => import("./settings/ProcessMetricsTab").then((m) => ({ default: m.ProcessMetricsTab })));
 const UsageStatsTab = lazy(() => import("./settings/UsageStatsTab").then((m) => ({ default: m.UsageStatsTab })));
 const VisionBridgeSettingsTab = lazy(() => import("./settings/VisionBridgeSettingsTab").then((m) => ({ default: m.VisionBridgeSettingsTab })));
-
-type SettingsTabId = "common" | "appearance" | "proxy" | "dev" | "im" | "pet" | "storage" | "usage" | "process" | "vision";
 
 // 注意：修改 SettingsTabId 枚举时需同步更新 SETTINGS_TAB_IDS 校验数组
 
@@ -83,6 +82,7 @@ function loadLastSettingsTab(): SettingsTabId {
 }
 
 type SettingsModalProps = {
+	initialTab?: SettingsTabId | null;
 	settings: AppSettings;
 	piStatus: PiInstallStatus | null;
 	piChecking: boolean;
@@ -192,8 +192,8 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
  */
 function SettingsModalContent(props: SettingsModalProps) {
 	// 弹窗每次打开都会重新挂载（Radix Dialog 关闭即卸载内容），
-	// 用 lazy initializer 在挂载时读一次 localStorage，恢复到上次所在 tab。
-	const [activeTab, setActiveTab] = useState<SettingsTabId>(loadLastSettingsTab);
+	// 定向入口优先使用指定 tab；普通入口再从 localStorage 恢复用户上次所在位置。
+	const [activeTab, setActiveTab] = useState<SettingsTabId>(() => props.initialTab ?? loadLastSettingsTab());
 	// ── 全局设置草稿：进入弹框时快照 props.settings，所有修改在 draft 上操作，保存时统一提交 ──
 	const [draftSettings, setDraftSettings] = useState<AppSettings>(() => ({ ...props.settings }));
 	const [dirtyFields, setDirtyFields] = useState<Set<string>>(new Set());

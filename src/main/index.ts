@@ -220,6 +220,7 @@ import { ProjectResourceManager } from "./projects/ProjectResourceManager";
 import { registerProjectsIpc } from "./ipc/projectsIpc";
 import { registerUsageStatsIpc } from "./ipc/usageStatsIpc";
 import { UsageStatsService } from "./usageStats/UsageStatsService";
+import { OpenAiCodexQuotaService } from "./usageStats/OpenAiCodexQuotaService";
 import { readLastWindowBounds, saveLastWindowBounds } from "./windowState";
 import { createRendererCrashRecoveryGuard } from "./window/rendererCrashRecovery";
 import {
@@ -318,6 +319,7 @@ let rpcLogger: RpcLogger;
 let memoryProfileHandle: MemoryProfileHandle | null = null;
 let feishuBridge: FeishuBridge | null = null;
 let usageStatsService: UsageStatsService | null = null;
+let openAiCodexQuotaService: OpenAiCodexQuotaService | null = null;
 
 
 function sendSessionRuntimeEnvelope(event: SessionRuntimeEvent): void {
@@ -2197,7 +2199,7 @@ async function sendAgentPromptWithIntegrations(
 
 function registerIpc() {
 	// 用量统计：业务在 UsageStatsService，handler 薄层只校验/适配
-	registerUsageStatsIpc(ipcMain, usageStatsService);
+	registerUsageStatsIpc(ipcMain, usageStatsService, openAiCodexQuotaService);
 
 	const catalogIdentityContext = () => {
 		const { wslEnabled, wslDistro, wslUser } = settingsStore.get();
@@ -2515,6 +2517,13 @@ app.whenReady().then(async () => {
 	worktreeService = new WorktreeService(mainCopy);
 	piLocator = new PiLocator(mainCopy);
 	configManager = new ConfigManager(undefined, mainCopy);
+	openAiCodexQuotaService = new OpenAiCodexQuotaService(
+		configManager,
+		(url, init) => net.fetch(url, init),
+		{
+			warn: (message) => void appLogger?.warn("usage-stats", message),
+		},
+	);
 	promptManager = new PromptManager(undefined, mainCopy);
 	xuePromptManager = new XuePromptManager();
 	skillManager = new SkillManager(undefined, mainCopy);

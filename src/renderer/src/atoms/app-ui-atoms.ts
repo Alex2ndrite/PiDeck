@@ -7,6 +7,11 @@ import {
 /** Settings overlay visibility is shared by Sidebar, Pi environment flow, and Session surface. */
 export const settingsOpenAtom = atom(false);
 
+export type SettingsTabId = "common" | "appearance" | "proxy" | "dev" | "im" | "pet" | "storage" | "usage" | "process" | "vision";
+
+/** 可选的设置页定向入口；关闭弹窗后清空，普通入口仍恢复用户上次访问的 tab。 */
+export const settingsRequestedTabAtom = atom<SettingsTabId | null>(null);
+
 /**
  * 侧栏展开的项目 id 集合（有 id = 展开）。
  * Shared because project collapse also pauses App-level session polling.
@@ -40,4 +45,3 @@ export const turnFlowSettingsAtom = atom<TurnFlowSettings>({
 	expandInterimDuringStream: true,
 	collapsePrevRunsOnNewTurn: true,
 });
-

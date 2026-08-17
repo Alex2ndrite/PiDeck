@@ -54,11 +54,16 @@ export type PiModelsFile = {
 };
 
 // ── auth.json 结构 ────────────────────────────────────
-// { [providerName]: { type: "api_key", key: "..." } }
+// provider 可保存 API key，也可由 pi 保存 OAuth access/refresh/accountId；
+// ConfigManager 只负责保真读写，具体域只收窄自己需要的字段。
 
 export type PiAuthItem = {
 	type?: string;
 	key?: string;
+	access?: string;
+	refresh?: string;
+	expires?: number | string;
+	accountId?: string;
 	[key: string]: unknown;
 };
 

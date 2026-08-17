@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback, type ReactNode } from "react";
+import { useSetAtom } from "jotai";
 import {
 	Brain,
 	Check,
@@ -7,6 +8,7 @@ import {
 	ChevronRight,
 	Eye,
 	FileText,
+	Gauge,
 	GitBranch,
 	ImageIcon,
 	ListChecks,
@@ -34,6 +36,10 @@ import {
 import { cn } from "../../lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui-shadcn/popover";
 import { SessionContextMeter } from "./SessionContextMeter";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../ui-shadcn/tooltip";
+import { OpenAiCodexQuotaOverview } from "../app/usageStats/OpenAiCodexQuotaOverview";
+import { useOpenAiCodexQuota } from "../../hooks/useOpenAiCodexQuota";
+import { settingsOpenAtom, settingsRequestedTabAtom } from "../../atoms";
 import { computeModelDisplay, formatModelRef, type ModelPending } from "../../utils/modelPendingDisplay";
 import { computeThinkingDisplay, type ThinkingLevelPending } from "../../utils/thinkingDisplay";
 import {
@@ -224,7 +230,7 @@ export function ComposerBottomBar(props: {
 	);
 	const modelFrom = modelDisplay.from;
 	const modelTo = modelDisplay.to;
-	const modelProvider = modelFrom?.provider;
+	const quotaProvider = modelTo?.provider ?? modelFrom?.provider;
 	const modelName = modelFrom?.modelName || modelFrom?.modelId;
 	const modelLabel = modelName
 		? formatModelRef(modelFrom ?? { provider: "", modelId: "" })
@@ -298,7 +304,7 @@ export function ComposerBottomBar(props: {
 					{props.feishuIndicator}
 					{props.securityControl}
 				</div>
-				<div className="composer-bottom-center flex min-w-0 flex-1 items-center justify-center gap-4 overflow-hidden">
+				<div className="composer-bottom-center flex min-w-0 flex-1 items-center justify-center gap-1 overflow-hidden">
 					{/* 模型 + 思考合并为一个 chip（借鉴 dsh ModelSelect 的 trigger 形态）：
 					    模型名（primary tone）· 思考档位（caption tone）+ chevron；
 					    点击弹出 root 菜单（模型/思考两行），drill-in 复用既有 Dialog 选择器。
@@ -314,6 +320,7 @@ export function ComposerBottomBar(props: {
 						onPickModel={props.onPickModel}
 						onPickThinking={props.onPickThinking}
 					/>
+					{quotaProvider === "openai-codex" && <OpenAiCodexQuotaIndicator />}
 				</div>
 				<div className="composer-bottom-right ml-auto flex shrink-0 items-center gap-2">
 					{/* 上下文占用圆环（dsh ContextMeter 移植）：发送按钮旁常驻指示，
@@ -339,6 +346,34 @@ export function ComposerBottomBar(props: {
 				</div>
 			</div>
 		</div>
+	);
+}
+
+function OpenAiCodexQuotaIndicator() {
+	const [open, setOpen] = useState(false);
+	const quota = useOpenAiCodexQuota();
+	const setSettingsOpen = useSetAtom(settingsOpenAtom);
+	const setSettingsRequestedTab = useSetAtom(settingsRequestedTabAtom);
+	const handleOpenChange = (nextOpen: boolean) => {
+		setOpen(nextOpen);
+		if (nextOpen) void quota.load();
+	};
+	const handleOpenUsageStats = () => {
+		setOpen(false);
+		setSettingsRequestedTab("usage");
+		setSettingsOpen(true);
+	};
+	return (
+		<Tooltip open={open} onOpenChange={handleOpenChange}>
+			<TooltipTrigger asChild>
+				<Button variant="ghost" size="icon" className="size-7 rounded-md text-muted-foreground hover:bg-muted/60 hover:text-foreground" aria-label={t("usageStats.quota.openUsageStats")} onClick={handleOpenUsageStats}>
+					<Gauge size={15} strokeWidth={1.9} aria-hidden="true" />
+				</Button>
+			</TooltipTrigger>
+			<TooltipContent side="top" align="center" sideOffset={8} className="border border-border-subtle bg-bg-panel p-3 text-foreground shadow-lg" arrowClassName="bg-bg-panel fill-bg-panel">
+				<OpenAiCodexQuotaOverview result={quota.result} loading={quota.loading} compact />
+			</TooltipContent>
+		</Tooltip>
 	);
 }
 

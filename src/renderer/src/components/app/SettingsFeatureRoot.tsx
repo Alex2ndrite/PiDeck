@@ -1,7 +1,7 @@
 import { lazy, Suspense, useMemo } from "react";
 import { useAtomValue, useSetAtom } from "jotai";
 import type { AppInfo, AppSettings } from "../../../../shared/types";
-import { settingsOpenAtom } from "../../atoms";
+import { settingsOpenAtom, settingsRequestedTabAtom } from "../../atoms";
 import { desktopApi as api } from "../../desktopApi";
 import type { AppUpdateControllerState } from "../../hooks/useAppUpdateController";
 import type { PiUpdateController } from "../../hooks/usePiUpdate";
@@ -27,12 +27,15 @@ type SettingsFeatureRootProps = {
 export function SettingsFeatureRoot(props: SettingsFeatureRootProps) {
   const open = useAtomValue(settingsOpenAtom);
   const setOpen = useSetAtom(settingsOpenAtom);
+  const requestedTab = useAtomValue(settingsRequestedTabAtom);
+  const setRequestedTab = useSetAtom(settingsRequestedTabAtom);
 
   // 按字段级 useMemo 稳定弹窗 props：App 根组件重渲染（低频）不会连带
   // 重渲染 SettingsModal（memo）。piUpdate 内部函数均为 useCallback，
   // 原语字段不变则引用不变。
   const modalProps = useMemo(
     () => ({
+      initialTab: requestedTab,
       settings: props.settings,
       piStatus: props.piUpdate.piStatus,
       piChecking: props.piUpdate.piChecking,
@@ -83,11 +86,15 @@ export function SettingsFeatureRoot(props: SettingsFeatureRootProps) {
       // forceSystem=true：Web 服务页必须离开内置浏览器面板——面板在 Dialog 下层，
       // 设置弹窗打开时会被遮挡；且外部端按桌面浏览器视口设计，系统浏览器体验更完整。
       onOpenWebService: (port: string) => api.app.openExternal(`http://127.0.0.1:${port}`, true),
-      onClose: () => setOpen(false),
+      onClose: () => {
+        setOpen(false);
+        setRequestedTab(null);
+      },
       onChange: props.onChange,
     }),
     [
       props.settings,
+      requestedTab,
       props.piUpdate.piStatus,
       props.piUpdate.piChecking,
       props.piUpdate.piProxyChecking,
@@ -116,6 +123,8 @@ export function SettingsFeatureRoot(props: SettingsFeatureRootProps) {
       props.piUpdate.updatePiCli,
       props.onRestartWebService,
       props.onChange,
+      setOpen,
+      setRequestedTab,
     ],
   );
 

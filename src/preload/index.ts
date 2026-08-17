@@ -575,6 +575,10 @@ const api = {
 			ipcRenderer.invoke(ipcChannels.usageStatsGet) as Promise<
 				import("../shared/types").UsageAggregated
 			>,
+		getCodexQuota: (options?: { force?: boolean }) =>
+			ipcRenderer.invoke(ipcChannels.usageStatsGetCodexQuota, options) as Promise<
+				import("../shared/types").OpenAiCodexQuotaResult
+			>,
 	},
 	codexSessions: {
 		scan: (projectId: string) =>
