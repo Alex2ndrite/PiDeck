@@ -84,6 +84,7 @@ import {
   sidebarExpandedProjectIdsAtom,
   sessionCatalogLoadStateAtom,
   sessionMessagesCacheAtom,
+  delegationRecordsAtom,
   sessionSummariesByProjectIdAtomFamily,
   sessionDraftByIdAtom,
   promoteSessionComposerStateAtom,
@@ -121,7 +122,9 @@ import { SessionPaneServicesProvider } from "./components/session/SessionPaneSer
 import { ProjectEmptyState } from "./components/session/ProjectEmptyState";
 import { useSessionWorkspaceChrome } from "./hooks/useSessionWorkspaceChrome";
 import { useDelegationController } from "./hooks/useDelegationController";
+import { useDelegationHandoffController } from "./hooks/useDelegationHandoffController";
 import { DelegationDialog } from "./components/delegation/DelegationDialog";
+import { DelegationHandoffDialog } from "./components/delegation/DelegationHandoffDialog";
 import { ScratchPadOverlay } from "./components/overlays/ScratchPadOverlay";
 import { AskPanelOverlay } from "./components/overlays/AskPanelOverlay";
 import { SessionRuntimeDock } from "./components/session/SessionRuntimeDock";
@@ -171,6 +174,7 @@ import type {
   SessionSummary,
   ComposerAgentMode,
   TerminalTarget,
+  ReturnDelegationResult,
 } from "../../shared/types";
 
 export function App() {
@@ -1243,6 +1247,13 @@ export function App() {
       selectSessionCommand(result.childSession.projectId, result.childSession.id, true);
     },
   });
+
+  const onDelegationReturned = useCallback((result: ReturnDelegationResult) => {
+    upsertSession(result.parentSession);
+    workspaceChrome.registerOpenSession(result.parentSession.id, "permanent");
+    selectSessionCommand(result.parentSession.projectId, result.parentSession.id, true);
+  }, [selectSessionCommand, upsertSession, workspaceChrome]);
+  const handoff = useDelegationHandoffController({ onReturned: onDelegationReturned });
 
   /** 侧栏/分支打开：选中成功后按 preview|permanent 登记 Tab */
   const openSidebarSessionByIdWithTab = useCallback(
@@ -2713,6 +2724,10 @@ export function App() {
       const record = store.get(sessionRecordByIdAtomFamily(sessionId));
       if (record) delegation.open(record);
     },
+    onReturnToParent: isLanWeb ? undefined : (childSessionId: string) => {
+      const relation = store.get(delegationRecordsAtom).find((candidate) => candidate.childSessionId === childSessionId);
+      if (relation) handoff.open(relation);
+    },
     onReorder: workspaceChrome.reorderTab,
     // 分屏组胶囊：分屏内会话聚合为组（颜色标记 + 展开/收起）
     splitGroupIds: workspaceChrome.splitLayout
@@ -3480,6 +3495,17 @@ export function App() {
       parent={delegation.parent}
       onOpenChange={delegation.setOpen}
       onSubmit={delegation.create}
+    />
+
+    <DelegationHandoffDialog
+      open={handoff.dialogOpen}
+      relation={handoff.relation}
+      fields={handoff.fields}
+      error={handoff.error}
+      submitting={handoff.submitting}
+      onOpenChange={handoff.setOpen}
+      onFieldsChange={handoff.setFields}
+      onSubmit={() => void handoff.submit()}
     />
 
     </AppShell>

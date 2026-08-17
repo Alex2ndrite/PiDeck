@@ -234,6 +234,7 @@ export const ipcChannels = {
 	projectsRefreshModelSpecs: "projects:refresh-model-specs",
 	delegationsList: "delegations:list",
 	delegationsCreate: "delegations:create",
+	delegationsReturnToParent: "delegations:return-to-parent",
 	agentsEvent: "agents:event",
 	agentsMessage: "agents:message",
 	agentsLog: "agents:log",

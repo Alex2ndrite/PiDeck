@@ -178,6 +178,12 @@ export const mainProcessZhCN = {
 	"mainNotification.sessionDone": "{title} 已完成响应",
 	"mainNotification.askPending": "「{title}」需要你的确认",
 	"mainNotification.askQuestion": "「{title}」正在询问：{question}",
+	"mainDelegation.handoffTitle": "委托结果交接",
+	"mainDelegation.handoffTask": "任务",
+	"mainDelegation.handoffResult": "结果",
+	"mainDelegation.handoffChangedFiles": "变更文件",
+	"mainDelegation.handoffValidation": "验证",
+	"mainDelegation.handoffChildSession": "子会话 ID",
 } as const;
 
 export type MainProcessTranslationKey = keyof typeof mainProcessZhCN;
@@ -362,6 +368,12 @@ export const mainProcessEnUS: Record<MainProcessTranslationKey, string> = {
 	"mainNotification.sessionDone": "{title} completed its response",
 	"mainNotification.askPending": "\u201c{title}\u201d is waiting for your confirmation",
 	"mainNotification.askQuestion": "\u201c{title}\u201d is asking: {question}",
+	"mainDelegation.handoffTitle": "Delegation handoff",
+	"mainDelegation.handoffTask": "Task",
+	"mainDelegation.handoffResult": "Result",
+	"mainDelegation.handoffChangedFiles": "Changed files",
+	"mainDelegation.handoffValidation": "Validation",
+	"mainDelegation.handoffChildSession": "Child session ID",
 };
 
 export type MainProcessLocale = "zh-CN" | "en-US";

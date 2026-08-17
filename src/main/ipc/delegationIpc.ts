@@ -5,9 +5,13 @@ import type {
 	CreateDelegationInput,
 	CreateDelegationResult,
 	DelegationRole,
+	ReturnDelegationInput,
+	ReturnDelegationResult,
 	Project,
 	SendSessionPromptInput,
 } from "../../shared/types";
+import { DELEGATION_HANDOFF_LIMITS, formatDelegationHandoff } from "../../shared/delegationHandoff";
+import type { MainProcessTranslationKey } from "../../shared/i18n/mainProcessCopy";
 import { DelegationStore } from "../delegation/DelegationStore";
 import type { ProjectStore } from "../projects/ProjectStore";
 import type { SessionCatalog } from "../sessions/SessionCatalog";
@@ -25,6 +29,7 @@ export type DelegationIpcDeps = {
 	sessionCatalog: SessionCatalog;
 	sessionRuntimeCoordinator: SessionRuntimeCoordinator;
 	appLogger: Pick<AppLogger, "info">;
+	translate: (key: MainProcessTranslationKey) => string;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -62,6 +67,34 @@ function parseInput(value: unknown): CreateDelegationInput {
 	return { parentSessionId, task, role, model, thinkingLevel };
 }
 
+function parseReturnInput(value: unknown): ReturnDelegationInput {
+	if (!isRecord(value)) throw new Error("Invalid delegation handoff input");
+	const childSessionId = typeof value.childSessionId === "string" ? value.childSessionId.trim() : "";
+	const task = typeof value.task === "string" ? value.task.trim() : "";
+	const result = typeof value.result === "string" ? value.result.trim() : "";
+	if (!childSessionId || childSessionId.length > DELEGATION_HANDOFF_LIMITS.childSessionId || !task || !result) {
+		throw new Error("Invalid delegation handoff input");
+	}
+	if (task.length > DELEGATION_HANDOFF_LIMITS.task || result.length > DELEGATION_HANDOFF_LIMITS.result) {
+		throw new Error("Invalid delegation handoff input");
+	}
+	const parseOptional = (key: "changedFiles" | "validation", limit: number): string | undefined => {
+		const raw = value[key];
+		if (raw === undefined) return undefined;
+		if (typeof raw !== "string") throw new Error("Invalid delegation handoff input");
+		const trimmed = raw.trim();
+		if (trimmed.length > limit) throw new Error("Invalid delegation handoff input");
+		return trimmed || undefined;
+	};
+	return {
+		childSessionId,
+		task,
+		result,
+		changedFiles: parseOptional("changedFiles", DELEGATION_HANDOFF_LIMITS.changedFiles),
+		validation: parseOptional("validation", DELEGATION_HANDOFF_LIMITS.validation),
+	};
+}
+
 function titleFromTask(task: string): string {
 	const firstLine = task.split(/\r?\n/).map((line) => line.trim()).find(Boolean) ?? "Delegated task";
 	return firstLine.slice(0, 96);
@@ -74,7 +107,7 @@ function projectForSession(projectStore: ProjectStore, projectId: string): Proje
 }
 
 export function registerDelegationIpc(deps: DelegationIpcDeps): void {
-	const { store, projectStore, sessionCatalog, sessionRuntimeCoordinator, appLogger } = deps;
+	const { store, projectStore, sessionCatalog, sessionRuntimeCoordinator, appLogger, translate } = deps;
 	ipcMain.handle(ipcChannels.delegationsList, async () => store.list());
 	ipcMain.handle(ipcChannels.delegationsCreate, async (_event, rawInput: unknown): Promise<CreateDelegationResult> => {
 		// IPC input is untrusted; normalize and bound it before touching catalog/runtime state.
@@ -129,5 +162,39 @@ export function registerDelegationIpc(deps: DelegationIpcDeps): void {
 			taskLength: input.task.length,
 		});
 		return { delegation, childSession: latestChildSession, prompt };
+	});
+	ipcMain.handle(ipcChannels.delegationsReturnToParent, async (_event, rawInput: unknown): Promise<ReturnDelegationResult> => {
+		const input = parseReturnInput(rawInput);
+		const child = sessionCatalog.getRecord(input.childSessionId);
+		const relation = store.findByChild(input.childSessionId);
+		if (!child || !relation) throw new Error("Delegation child or relation not found");
+		const parent = sessionCatalog.getRecord(relation.parentSessionId);
+		if (!parent || parent.source !== "pi" || parent.noSession === true || parent.status !== "active" || !parent.filePath) {
+			throw new Error("Delegation parent must be a persistent Pi session");
+		}
+		const message = formatDelegationHandoff(input, child.id, {
+			title: translate("mainDelegation.handoffTitle"),
+			task: translate("mainDelegation.handoffTask"),
+			result: translate("mainDelegation.handoffResult"),
+			changedFiles: translate("mainDelegation.handoffChangedFiles"),
+			validation: translate("mainDelegation.handoffValidation"),
+			childSession: translate("mainDelegation.handoffChildSession"),
+		});
+		const prompt = await sessionRuntimeCoordinator.send({
+			sessionId: parent.id,
+			requestId: randomUUID(),
+			message,
+		});
+		const latestParent = sessionCatalog.getRecord(parent.id) ?? parent;
+		void appLogger.info("delegation", "Delegation result returned", {
+			parentSessionId: parent.id,
+			childSessionId: child.id,
+			taskLength: input.task.length,
+			resultLength: input.result.length,
+			changedFilesLength: input.changedFiles?.length ?? 0,
+			validationLength: input.validation?.length ?? 0,
+			accepted: prompt.accepted,
+		});
+		return { parentSession: latestParent, prompt };
 	});
 }

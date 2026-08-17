@@ -494,6 +494,7 @@ export function createPreviewApi(): PiDesktopApi {
 		delegations: {
 			list: async (): Promise<DelegationRecord[]> => [],
 			create: async () => { throw new Error(t("delegation.unavailable")); },
+			returnToParent: async () => { throw new Error(t("delegation.unavailable")); },
 		},
 		usageStats: {
 			detect: async () => ({

@@ -148,6 +148,7 @@ export type SessionTabsBarProps = {
   onNewSessionInProject: (projectId: string) => void;
   onTogglePin: (sessionId: string) => void;
   onDelegate?: (sessionId: string) => void;
+  onReturnToParent?: (sessionId: string) => void;
   onReorder: (sourceId: string, targetId: string, position: "before" | "after") => void;
   /** 右侧抽屉总开关：打开/关闭整块右侧面板（活动栏在抽屉内、系统按钮下方）。 */
   onToggleDrawer?: () => void;
@@ -298,6 +299,7 @@ export function SessionTabsBar(props: SessionTabsBarProps) {
               onCloseAll={props.onCloseAll}
               onTogglePin={props.onTogglePin}
               onDelegate={props.onDelegate}
+              onReturnToParent={props.onReturnToParent}
               onDragStart={(event) => {
                 dragSourceRef.current = sessionId;
                 dragTargetRef.current = null;
@@ -605,6 +607,7 @@ function SessionTab(props: {
   onCloseAll: () => void;
   onTogglePin: (sessionId: string) => void;
   onDelegate?: (sessionId: string) => void;
+  onReturnToParent?: (sessionId: string) => void;
   onDragStart: (event: React.DragEvent) => void;
   onDragOver: (event: React.DragEvent) => void;
   onDrop: (event: React.DragEvent) => void;
@@ -623,6 +626,7 @@ function SessionTab(props: {
   // 拖拽排序与中键关闭与菜单互不干扰（drag/auxclick 不触发 click）。
   const [menuOpen, setMenuOpen] = useState(false);
   const canDelegate = record?.source === "pi" && record.noSession !== true && record.status === "active" && Boolean(record.filePath) && !delegatedChildIds.has(sessionId);
+  const isDelegatedChild = delegatedChildIds.has(sessionId);
 
   const select = () => props.onSelect(sessionId);
   const close = () => props.onClose(sessionId);
@@ -753,6 +757,14 @@ function SessionTab(props: {
             <span className="inline-flex items-center gap-2">
               <MessagesSquare className="size-3.5" aria-hidden="true" />
               {t("delegation.open")}
+            </span>
+          </DropdownMenuItem>
+        ) : null}
+        {isDelegatedChild && props.onReturnToParent ? (
+          <DropdownMenuItem onSelect={() => props.onReturnToParent?.(sessionId)}>
+            <span className="inline-flex items-center gap-2">
+              <MessagesSquare className="size-3.5" aria-hidden="true" />
+              {t("delegation.returnToParent")}
             </span>
           </DropdownMenuItem>
         ) : null}

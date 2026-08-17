@@ -2284,6 +2284,7 @@ function registerIpc() {
 		sessionCatalog,
 		sessionRuntimeCoordinator,
 		appLogger,
+		translate: mainCopy,
 	});
 
 	// ── 启动预扫描（2026-08 展开项目卡顿优化）──

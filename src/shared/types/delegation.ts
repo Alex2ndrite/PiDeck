@@ -28,3 +28,21 @@ export type CreateDelegationResult = {
 	childSession: SessionRecord;
 	prompt: SendSessionPromptResult;
 };
+
+/** Editable handoff payload; transcript content is deliberately not part of this contract. */
+export type DelegationHandoffFields = {
+	task: string;
+	result: string;
+	changedFiles?: string;
+	validation?: string;
+};
+
+/** Renderer input for returning a child result to its durable parent relation. */
+export type ReturnDelegationInput = DelegationHandoffFields & {
+	childSessionId: string;
+};
+
+export type ReturnDelegationResult = {
+	parentSession: SessionRecord;
+	prompt: SendSessionPromptResult;
+};

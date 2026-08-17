@@ -566,7 +566,7 @@ PiSubagentsBackend
 
 # 8. 当前执行阶段
 
-**当前阶段推进为 P2 — Explicit Handoff。P1 — Session Relationship MVP 已交付，等待用户验收确认；只有用户确认验收后才开始 P2。**
+**当前阶段为 P2 — Explicit Handoff，已进入实现，等待用户验收；P1 — Session Relationship MVP 已交付。**
 
 P1 交付检查：
 
@@ -588,7 +588,7 @@ P1 交付检查：
    - 已知限制；
    - 是否具备进入 P2 的条件。
 
-**P2 实现仅在用户确认 P1 验收后启动；P3-P6 不得推进。**
+**P2 完成后等待用户验收；P3-P6 不得推进。**
 **不要因为发现无关测试或环境问题而修复它们。**
 **不要自行运行全量测试。**
 **不要自行重装或修复 node_modules。**
