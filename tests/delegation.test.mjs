@@ -24,11 +24,20 @@ function loadStore() {
 		setTimeout,
 		clearTimeout,
 	}, { filename: "fsRetry.ts" });
+	const delegationTypes = { exports: {} };
+	vm.runInNewContext(transpile("src/shared/types/delegation.ts"), {
+		exports: delegationTypes.exports,
+		module: delegationTypes,
+	}, { filename: "delegation.ts" });
 	const store = { exports: {} };
 	vm.runInNewContext(transpile("src/main/delegation/DelegationStore.ts"), {
 		exports: store.exports,
 		module: store,
-		require: (specifier) => specifier === "../utils/fsRetry" ? retry.exports : require(specifier),
+		require: (specifier) => {
+			if (specifier === "../utils/fsRetry") return retry.exports;
+			if (specifier === "../../shared/types") return delegationTypes.exports;
+			return require(specifier);
+		},
 	}, { filename: "DelegationStore.ts" });
 	return store.exports.DelegationStore;
 }
@@ -45,7 +54,8 @@ test("DelegationStore persists relation metadata and reloads in a new instance",
 			childSessionId: "child",
 			task: "inspect the repository",
 			role: "explore",
-			workspacePath: "C:/workspace",
+			contextMode: "fresh",
+			workspace: { mode: "shared", path: "C:/workspace" },
 		});
 		const second = new DelegationStore(path);
 		await second.load();

@@ -96,6 +96,9 @@ export function SessionReferenceModal(props: {
 	onConfirm: (result: SessionReferenceResult, selectedIndices: number[]) => void;
 	loadMessages: (sessionId: string) => Promise<SessionMessage[]>;
 	initialSelected?: Set<number>;
+	maxSelected?: number;
+	title?: string;
+	confirmLabel?: string;
 }) {
 	const [messages, setMessages] = useState<SessionMessage[]>([]);
 	const [loading, setLoading] = useState(true);
@@ -103,10 +106,17 @@ export function SessionReferenceModal(props: {
 	const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
 	const tree = useMemo(() => buildReferenceTree(messages), [messages]);
+	const selectionLimit = props.maxSelected === undefined
+		? undefined
+		: Math.max(0, Math.floor(props.maxSelected));
 	const selectableIds = useMemo(
 		() => getSelectableMessageIds(tree.items),
 		[tree],
 	);
+	const limitSelection = useCallback((ids: Iterable<string>): Set<string> => {
+		const values = Array.from(ids);
+		return new Set(selectionLimit === undefined ? values : values.slice(0, selectionLimit));
+	}, [selectionLimit]);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -121,14 +131,17 @@ export function SessionReferenceModal(props: {
 				// 其索引在树中无对应行，恢复时应丢弃，避免「看不到也取消不掉」。
 				if (props.initialSelected && props.initialSelected.size > 0) {
 					setSelectedIds(
-						new Set(
+						limitSelection(
 							Array.from(props.initialSelected)
 								.map((index) => `${REF_ID_PREFIX}${index}`)
 								.filter((id) => built.idToIndex.has(id)),
 						),
 					);
 				} else {
-					setSelectedIds(new Set(getSelectableMessageIds(built.items)));
+					const latestSelectableIds = getSelectableMessageIds(built.items).sort(
+						(left, right) => (built.idToIndex.get(right) ?? -1) - (built.idToIndex.get(left) ?? -1),
+					);
+					setSelectedIds(limitSelection(latestSelectableIds));
 				}
 				setLoading(false);
 			})
@@ -141,19 +154,28 @@ export function SessionReferenceModal(props: {
 		return () => {
 			cancelled = true;
 		};
-	}, [props.session.id]);
+	}, [limitSelection, props.maxSelected, props.session.id]);
 
 	const handleToggleMessage = useCallback((id: string) => {
-		setSelectedIds((prev) => toggleMessage(prev, id));
-	}, []);
+		setSelectedIds((prev) => {
+			if (selectionLimit !== undefined && !prev.has(id) && prev.size >= selectionLimit) return prev;
+			return toggleMessage(prev, id);
+		});
+	}, [selectionLimit]);
 
 	const handleToggleRun = useCallback((run: AgentRunItem) => {
-		setSelectedIds((prev) => toggleRun(prev, run));
-	}, []);
+		setSelectedIds((prev) => limitSelection(toggleRun(prev, run)));
+	}, [limitSelection]);
 
 	const handleToggleAll = useCallback(() => {
-		setSelectedIds((prev) => toggleAll(prev, selectableIds));
-	}, [selectableIds]);
+		setSelectedIds((prev) => {
+			const limitReached = selectionLimit !== undefined
+				&& prev.size >= Math.min(selectionLimit, selectableIds.length);
+			return limitReached || (selectableIds.length > 0 && prev.size === selectableIds.length)
+				? new Set()
+				: limitSelection(toggleAll(prev, selectableIds));
+		});
+	}, [limitSelection, selectableIds, selectionLimit]);
 
 	const handleConfirm = useCallback(() => {
 		const indices = Array.from(selectedIds)
@@ -169,10 +191,11 @@ export function SessionReferenceModal(props: {
 			},
 			indices,
 		);
-	}, [messages, selectedIds, tree, selectableIds, props]);
+	}, [messages, props.onConfirm, props.session.filePath, props.session.name, selectableIds, selectedIds, tree]);
 
 	const selectedCount = selectedIds.size;
 	const allSelected = selectedCount > 0 && selectedCount === selectableIds.length;
+	const selectionFilled = allSelected || (selectionLimit !== undefined && selectedCount >= Math.min(selectionLimit, selectableIds.length));
 	const canConfirm = !loading && !error && selectedCount > 0;
 
 	return (
@@ -185,7 +208,7 @@ export function SessionReferenceModal(props: {
 				)}
 			>
 				<DialogHeader className="flex-row items-center justify-between px-4 py-3">
-					<DialogTitle>{`${t("sessionRef.title")}: ${props.session.name ?? props.session.filePath}`}</DialogTitle>
+					<DialogTitle>{props.title ?? `${t("sessionRef.title")}: ${props.session.name ?? props.session.filePath}`}</DialogTitle>
 					<DialogClose asChild>
 						<Button
 							variant="ghost"
@@ -222,11 +245,14 @@ export function SessionReferenceModal(props: {
 				{/* 底部操作栏：与多选分享弹窗同一套视觉语言 */}
 				<footer className="flex shrink-0 flex-col gap-2.5 border-t border-border-subtle px-4 py-3">
 					<div className="flex items-center justify-between">
-						<span className="text-control font-medium text-text-secondary">
-							{allSelected
-								? t("sessionRef.messageCount", { count: messages.length })
-								: t("sessionRef.selectedCount", { count: selectedCount, total: selectableIds.length })}
-						</span>
+						<div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-control font-medium text-text-secondary">
+							<span>
+								{allSelected
+									? t("sessionRef.messageCount", { count: messages.length })
+									: t("sessionRef.selectedCount", { count: selectedCount, total: selectableIds.length })}
+							</span>
+							{selectionLimit !== undefined ? <span className="text-caption text-text-tertiary">{t("sessionRef.maxSelected", { count: selectionLimit })}</span> : null}
+						</div>
 						<Button
 							variant="ghost"
 							size="sm"
@@ -234,7 +260,7 @@ export function SessionReferenceModal(props: {
 							onClick={handleToggleAll}
 							disabled={!selectableIds.length}
 						>
-							{allSelected ? t("common.deselectAll") : t("common.selectAll")}
+							{selectionFilled ? t("common.deselectAll") : t("common.selectAll")}
 						</Button>
 					</div>
 					<div className="flex flex-wrap items-center gap-2">
@@ -245,9 +271,9 @@ export function SessionReferenceModal(props: {
 							disabled={!canConfirm}
 							onClick={handleConfirm}
 						>
-							{allSelected
+							{props.confirmLabel ?? (allSelected
 								? t("sessionRef.insertAll", { count: messages.length })
-								: t("sessionRef.insertSelected", { count: selectedCount })}
+								: t("sessionRef.insertSelected", { count: selectedCount }))}
 						</Button>
 						<Button
 							variant="ghost"

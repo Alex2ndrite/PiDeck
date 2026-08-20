@@ -174,6 +174,7 @@ import type {
   SessionSummary,
   ComposerAgentMode,
   TerminalTarget,
+  CreateDelegationResult,
   ReturnDelegationResult,
 } from "../../shared/types";
 
@@ -1239,13 +1240,22 @@ export function App() {
     [runCreateAnonymousSession, workspaceChrome],
   );
 
+  const onDelegationCreated = useCallback(async (result: CreateDelegationResult) => {
+    if (result.delegation.workspace.mode === "worktree") {
+      try {
+        await refreshProjects();
+      } catch {
+        // The relation/child is already durable; keep the newly created session usable
+        // even if the project inventory refresh is temporarily unavailable.
+      }
+    }
+    upsertSession(result.childSession);
+    workspaceChrome.registerOpenSession(result.childSession.id, "permanent");
+    selectSessionCommand(result.childSession.projectId, result.childSession.id, true);
+  }, [refreshProjects, selectSessionCommand, upsertSession, workspaceChrome]);
   const delegation = useDelegationController({
     parent: currentSession,
-    onCreated: (result) => {
-      upsertSession(result.childSession);
-      workspaceChrome.registerOpenSession(result.childSession.id, "permanent");
-      selectSessionCommand(result.childSession.projectId, result.childSession.id, true);
-    },
+    onCreated: onDelegationCreated,
   });
 
   const onDelegationReturned = useCallback((result: ReturnDelegationResult) => {

@@ -239,6 +239,7 @@ import { VisionBridgeConfigManager } from "./settings/visionBridgeConfig";
 import { registerSessionIpc, scheduleCatalogBackgroundScan } from "./ipc/sessionIpc";
 import { registerDelegationIpc } from "./ipc/delegationIpc";
 import { DelegationStore } from "./delegation/DelegationStore";
+import { DelegationWorktreeManager } from "./delegation/DelegationWorktreeManager";
 import { registerSystemIpc } from "./ipc/systemIpc";
 import { fetchModelList, getCachedModelList, refreshModelList } from "./pi/modelListCache";
 import { ModelSpecsStore } from "./pi/modelSpecsStore";
@@ -298,6 +299,7 @@ let sessionScanner: SessionScanner;
 let sessionCatalog: SessionCatalog;
 let sessionRuntimeCoordinator: SessionRuntimeCoordinator;
 let delegationStore: DelegationStore;
+let delegationWorktreeManager: DelegationWorktreeManager;
 let codexSessionImporter: CodexSessionImporter;
 let claudeSessionImporter: ClaudeSessionImporter;
 let openCodeSessionImporter: OpenCodeSessionImporter;
@@ -2285,6 +2287,8 @@ function registerIpc() {
 		sessionRuntimeCoordinator,
 		appLogger,
 		translate: mainCopy,
+		worktreeManager: delegationWorktreeManager,
+		cloneSessionFile: (projectId, filePath, environment) => agentManager.cloneSessionFile(projectId, filePath, environment),
 	});
 
 	// ── 启动预扫描（2026-08 展开项目卡顿优化）──
@@ -2526,6 +2530,7 @@ app.whenReady().then(async () => {
 	});
 	gitService = new GitService();
 	worktreeService = new WorktreeService(mainCopy);
+	delegationWorktreeManager = new DelegationWorktreeManager(worktreeService, projectStore);
 	piLocator = new PiLocator(mainCopy);
 	configManager = new ConfigManager(undefined, mainCopy);
 	openAiCodexQuotaService = new OpenAiCodexQuotaService(

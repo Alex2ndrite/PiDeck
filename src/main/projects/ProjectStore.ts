@@ -271,10 +271,10 @@ export class ProjectStore {
     return this.projects.find(project => this.sameProjectPath(project.path, normalizedPath)) ?? null;
   }
 
-  async toggleWorktreeEnabled(id: string) {
+  async setWorktreeEnabled(id: string, enabled: boolean) {
     const project = this.get(id);
     if (!project) return null;
-    project.worktreeEnabled = !project.worktreeEnabled;
+    project.worktreeEnabled = enabled;
     // 关闭工作区模式时，清除已注册的 worktree 子项目记录，避免侧栏不再展示它们后
     // 仍残留在 projects.json 中成为孤儿数据。仅移除项目记录，不删除物理 worktree 目录。
     if (!project.worktreeEnabled) {
@@ -282,6 +282,12 @@ export class ProjectStore {
     }
     await this.save();
     return project;
+  }
+
+  async toggleWorktreeEnabled(id: string) {
+    const project = this.get(id);
+    if (!project) return null;
+    return this.setWorktreeEnabled(id, !project.worktreeEnabled);
   }
 
   /** 移除指定父项目下的所有 worktree 子项目记录（不删除物理目录） */

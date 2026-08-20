@@ -1,7 +1,7 @@
 import { Fragment, type ReactNode } from "react";
 import { useAtomValue } from "jotai";
 import { ChevronDown, Ellipsis, HatGlasses, Trash2 } from "lucide-react";
-import type { AgentTab, DelegationRole, Project, SessionRecord, SessionSummary } from "../../../../shared/types";
+import type { AgentTab, DelegationContextMode, DelegationRole, DelegationWorkspaceMode, Project, SessionRecord, SessionSummary } from "../../../../shared/types";
 import { collectDisplayedSessionIds, filterAgentsForSidebarDisplay, getProjectAgentSessionDisplay, sessionStatusDotClass, type ProjectChildItem } from "../../agentListDisplay";
 import { delegationRecordsAtom, sessionRecordToSummary } from "../../atoms";
 import { t } from "../../i18n";
@@ -239,13 +239,29 @@ export function SessionTree(props: {
     review: t("delegation.role.review"),
     consult: t("delegation.role.consult"),
   })[role];
+  const contextLabel = (mode: DelegationContextMode) => {
+    if (mode === "selected") return t("delegation.contextSelectedOption");
+    if (mode === "fork") return t("delegation.contextForkOption");
+    return t("delegation.contextFreshOption");
+  };
+  const workspaceLabel = (mode: DelegationWorkspaceMode) => mode === "worktree"
+    ? t("delegation.workspaceWorktreeOption")
+    : t("delegation.workspaceSharedOption");
+  const delegationDetails = (relation: NonNullable<ProjectChildItem["delegationRelation"]>) => {
+    const targetModel = relation.model ? `${relation.model.provider}/${relation.model.modelId}` : t("delegation.defaultModel");
+    return `${t("delegation.role")}: ${roleLabel(relation.role)} · ${t("delegation.context")}: ${contextLabel(relation.contextMode)} · ${t("delegation.workspace")}: ${workspaceLabel(relation.workspace.mode)} (${relation.workspace.path}) · ${t("delegation.model")}: ${targetModel}`;
+  };
+  const renderDelegationMarker = (relation: ProjectChildItem["delegationRelation"]) => {
+    if (!relation) return null;
+    const details = delegationDetails(relation);
+    return <span title={details} aria-label={details} className="shrink-0 text-xs text-muted-foreground">{roleLabel(relation.role)}</span>;
+  };
   const renderDelegatedChildren = (children: ProjectChildItem["delegatedChildren"]) => {
     if (children.length === 0) return null;
     return <div className={cn("codex-subagent-sidebar-group", !props.nested && "ml-3")}>
       {children.map(({ summary, relation }) => {
-        const targetModel = relation.model ? `${relation.model.provider}/${relation.model.modelId}` : t("delegation.defaultModel");
-        const details = `${t("delegation.contextFresh")} · ${t("delegation.workspaceShared")}: ${relation.workspace.path} · ${t("delegation.model")}: ${targetModel}`;
-        return renderSubagent(summary, <span title={details} aria-label={details} className="inline-flex min-w-0 items-center gap-1.5"><strong>{summary.name || t("delegation.child")}</strong><span className="text-xs text-muted-foreground">{roleLabel(relation.role)}</span></span>);
+        const details = delegationDetails(relation);
+        return renderSubagent(summary, <span title={details} aria-label={details} className="inline-flex min-w-0 items-center gap-1.5"><strong>{summary.name || t("delegation.child")}</strong>{renderDelegationMarker(relation)}</span>);
       })}
     </div>;
   };
@@ -266,6 +282,7 @@ export function SessionTree(props: {
   const renderChild = (child: ProjectChildItem) => {
     const groupKey = `${props.project.id}:${child.key}`;
     const childCount = child.codexSubagents.length + child.piSubagents.length;
+    const childDetails = child.delegationRelation ? delegationDetails(child.delegationRelation) : undefined;
     if (child.type === "agent") {
       const agentSession = props.sessions.find((session) => (
         props.controller.catalog.runtimeBySessionId[session.id]?.agentId === child.agent.id
@@ -276,7 +293,7 @@ export function SessionTree(props: {
           className={rowContainerClass}
           onContextMenu={(event) => { event.preventDefault(); void props.controller.openMenu({ kind: "agent", agentId: child.agent.id, x: event.clientX, y: event.clientY }); }}
         >
-          <PathTooltip content={child.agent.title}>
+          <PathTooltip content={childDetails ? `${child.agent.title}\n${childDetails}` : child.agent.title}>
             <button
               type="button"
               className={cn(
@@ -290,6 +307,7 @@ export function SessionTree(props: {
               {renderRuntimeStatusDot(child.agent.status)}
               <div className="conversation-body min-w-0 flex-1 transition-[padding-right] @max-[255px]:group-hover/row:pr-7 @max-[255px]:group-focus-within/row:pr-7"><div className="conversation-title flex min-w-0 items-center gap-1.5">
                 <strong className="min-w-0 flex-1 truncate font-medium">{child.agent.title}</strong>
+                {renderDelegationMarker(child.delegationRelation)}
                 {child.agent.noSession && <span className="anonymous-indicator" title={t("app.anonymousChat")}><HatGlasses size={11} aria-hidden="true" /></span>}
                 {renderToggle(groupKey, childCount)}
               </div></div>
@@ -325,7 +343,7 @@ export function SessionTree(props: {
         className={rowContainerClass}
         onContextMenu={(event) => openContext(event, child.session)}
       >
-        <PathTooltip content={`${child.session.name || t("common.untitled")}\n${child.session.filePath}`}>
+        <PathTooltip content={`${child.session.name || t("common.untitled")}\n${child.session.filePath}${childDetails ? `\n${childDetails}` : ""}`}>
           <button
             type="button"
             className={cn(
@@ -343,6 +361,7 @@ export function SessionTree(props: {
           <div className="conversation-body min-w-0 flex-1 transition-[padding-right] @max-[255px]:group-hover/row:pr-7 @max-[255px]:group-focus-within/row:pr-7"><div className="conversation-title flex min-w-0 items-center gap-1.5">
             {/* 历史会话（无运行态）文字降一级，与活跃 Agent/运行中会话形成层级差 */}
             <strong className={cn("min-w-0 flex-1 truncate", runtime ? "font-medium" : "font-normal text-muted-foreground/90")}>{child.session.name || t("common.untitled")}</strong>
+            {renderDelegationMarker(child.delegationRelation)}
             {child.session.source && child.session.source !== "pi" && <SessionSourceBadge source={child.session.source} />}
             {renderToggle(groupKey, childCount)}
           </div></div>
@@ -378,13 +397,15 @@ export function SessionTree(props: {
       {draftSessions.map((session) => {
         const runtime = props.controller.catalog.runtimeBySessionId[session.id];
         const canDelete = !hasLiveSidebarRuntime(runtime);
+        const delegationRelation = delegationRecords.find((relation) => relation.childSessionId === session.id);
+        const details = delegationRelation ? delegationDetails(delegationRelation) : undefined;
         return (
           <div
             key={`draft:${session.id}`}
             className={cn("draft-session-row group/draft grid items-center gap-1", canDelete ? "grid-cols-[minmax(0,1fr)_2rem]" : "grid-cols-1 has-runtime")}
             onContextMenu={(event) => openDraftContext(event, session)}
           >
-          <PathTooltip content={session.title}>
+          <PathTooltip content={details ? `${session.title}\n${details}` : session.title}>
             <button
               type="button"
               className={cn(
@@ -399,6 +420,7 @@ export function SessionTree(props: {
               <div className="conversation-body min-w-0 flex-1 transition-[padding-right] @max-[255px]:group-hover/row:pr-7 @max-[255px]:group-focus-within/row:pr-7"><div className="conversation-title flex min-w-0 items-center gap-1.5">
                 {renderRuntimeStatusDot(runtime?.status)}
                 <strong className="min-w-0 flex-1 truncate font-medium">{session.title}</strong>
+                {renderDelegationMarker(delegationRelation)}
               </div></div>
             </button>
           </PathTooltip>

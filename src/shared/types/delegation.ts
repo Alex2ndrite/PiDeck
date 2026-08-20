@@ -2,6 +2,22 @@ import type { SessionRecord, SendSessionPromptResult } from "./session";
 
 export type DelegationRole = "explore" | "implement" | "review" | "consult";
 
+export type DelegationContextMode = "fresh" | "selected" | "fork";
+export type DelegationWorkspaceMode = "shared" | "worktree";
+
+export type DelegationSelectedContextMessage = {
+	role: "user" | "assistant";
+	content: string;
+};
+
+export function isDelegationContextMode(value: string): value is DelegationContextMode {
+	return value === "fresh" || value === "selected" || value === "fork";
+}
+
+export function isDelegationWorkspaceMode(value: string): value is DelegationWorkspaceMode {
+	return value === "shared" || value === "worktree";
+}
+
 /** Durable relationship metadata; conversation content remains in the child session JSONL. */
 export type DelegationRecord = {
 	id: string;
@@ -10,8 +26,8 @@ export type DelegationRecord = {
 	task: string;
 	role: DelegationRole;
 	model?: { provider: string; modelId: string };
-	contextMode: "fresh";
-	workspace: { mode: "shared"; path: string };
+	contextMode: DelegationContextMode;
+	workspace: { mode: DelegationWorkspaceMode; path: string };
 	createdAt: number;
 };
 
@@ -21,6 +37,12 @@ export type CreateDelegationInput = {
 	role: DelegationRole;
 	model?: { provider: string; modelId: string };
 	thinkingLevel?: string;
+	contextMode?: DelegationContextMode;
+	workspaceMode?: DelegationWorkspaceMode;
+	selectedContext?: DelegationSelectedContextMessage[];
+	constraints?: string;
+	acceptanceCriteria?: string;
+	relevantFiles?: string;
 };
 
 export type CreateDelegationResult = {

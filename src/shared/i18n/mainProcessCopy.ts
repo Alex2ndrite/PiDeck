@@ -184,6 +184,13 @@ export const mainProcessZhCN = {
 	"mainDelegation.handoffChangedFiles": "变更文件",
 	"mainDelegation.handoffValidation": "验证",
 	"mainDelegation.handoffChildSession": "子会话 ID",
+	"mainDelegation.briefTask": "任务",
+	"mainDelegation.briefSelectedContext": "选择的上下文",
+	"mainDelegation.briefConstraints": "约束",
+	"mainDelegation.briefAcceptanceCriteria": "验收标准",
+	"mainDelegation.briefRelevantFiles": "相关文件",
+	"mainDelegation.briefUser": "用户",
+	"mainDelegation.briefAssistant": "助手",
 } as const;
 
 export type MainProcessTranslationKey = keyof typeof mainProcessZhCN;
@@ -374,6 +381,13 @@ export const mainProcessEnUS: Record<MainProcessTranslationKey, string> = {
 	"mainDelegation.handoffChangedFiles": "Changed files",
 	"mainDelegation.handoffValidation": "Validation",
 	"mainDelegation.handoffChildSession": "Child session ID",
+	"mainDelegation.briefTask": "Task",
+	"mainDelegation.briefSelectedContext": "Selected context",
+	"mainDelegation.briefConstraints": "Constraints",
+	"mainDelegation.briefAcceptanceCriteria": "Acceptance criteria",
+	"mainDelegation.briefRelevantFiles": "Relevant files",
+	"mainDelegation.briefUser": "User",
+	"mainDelegation.briefAssistant": "Assistant",
 };
 
 export type MainProcessLocale = "zh-CN" | "en-US";

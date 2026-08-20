@@ -40,6 +40,8 @@ export type ProjectChildItem =
 			/** pi 原生子会话（pi-subagents 等扩展产生的，通过 parentSessionPath 关联） */
 			piSubagents: SessionSummary[];
 			delegatedChildren: Array<{ summary: SessionSummary; relation: DelegationRecord }>;
+			/** 跨项目 worktree child 无法嵌入 parent 时，保留关系供自身项目行展示。 */
+			delegationRelation?: DelegationRecord;
 	  }
 	| {
 			type: "session";
@@ -53,6 +55,8 @@ export type ProjectChildItem =
 			/** pi 原生子会话（pi-subagents 等扩展产生的，通过 parentSessionPath 关联） */
 			piSubagents: SessionSummary[];
 			delegatedChildren: Array<{ summary: SessionSummary; relation: DelegationRecord }>;
+			/** 跨项目 worktree child 无法嵌入 parent 时，保留关系供自身项目行展示。 */
+			delegationRelation?: DelegationRecord;
 	  };
 
 export type ProjectAgentSessionDisplay = {
@@ -221,9 +225,11 @@ export function getProjectAgentSessionDisplay({
 }): ProjectAgentSessionDisplay {
 	const sessionByKey = new Map<string, SessionSummary>();
 	const sessionById = new Map(sessions.map((session) => [session.id, session]));
+	const delegationByChildId = new Map<string, DelegationRecord>();
 	const delegatedChildIds = new Set<string>();
 	const delegatedChildrenByParent = new Map<string, Array<{ summary: SessionSummary; relation: DelegationRecord }>>();
 	for (const relation of delegations) {
+		if (!delegationByChildId.has(relation.childSessionId)) delegationByChildId.set(relation.childSessionId, relation);
 		const summary = sessionById.get(relation.childSessionId);
 		if (!summary || !sessionById.has(relation.parentSessionId)) continue;
 		delegatedChildIds.add(relation.childSessionId);
@@ -335,46 +341,49 @@ export function getProjectAgentSessionDisplay({
 			codexSubagents: [],
 			piSubagents: [],
 			delegatedChildren: [],
+			delegationRelation: agent.deckSessionId ? delegationByChildId.get(agent.deckSessionId) : undefined,
 		})),
 		...[...agentBySessionKey.entries()]
 			.filter(([sessionKey]) => !nestedAgentSessionKeys.has(sessionKey))
 			.map<ProjectChildItem>(
-			([sessionKey, agent]) => {
-				const linkedSession = sessionByKey.get(sessionKey);
-				if (!linkedSession) {
+				([sessionKey, agent]) => {
+					const linkedSession = sessionByKey.get(sessionKey);
+					if (!linkedSession) {
+						return {
+							type: "agent",
+							key: `agent:${agent.id}`,
+							agent,
+							sortAt: agent.createdAt,
+							codexSubagents: [],
+							piSubagents: getPiSubagents(
+								agent.sessionPath,
+								sessionKey.startsWith("wsl:") ? "wsl" : "native",
+							),
+							delegatedChildren: [],
+							delegationRelation: agent.deckSessionId ? delegationByChildId.get(agent.deckSessionId) : undefined,
+						};
+					}
 					return {
-						type: "agent",
-						key: `agent:${agent.id}`,
+						type: "session",
+						key: getSessionRowKey(linkedSession),
+						session: linkedSession,
 						agent,
-						sortAt: agent.createdAt,
-						codexSubagents: [],
+						sortAt: getAgentSortAt(agent, sessionByKey),
+						codexSubagents: linkedSession
+							? (codexSubagentsByParent.get(getCodexParentKey(linkedSession)) ?? [])
+							: [],
+						// Agent 激活后父会话在 projectSessions 中被滤掉 → linkedSession 可能为 undefined；
+						// 此时仍通过 agent.sessionPath 查找子会话，避免父链接丢失导致子会话降级为孤儿。
 						piSubagents: getPiSubagents(
-							agent.sessionPath,
-							sessionKey.startsWith("wsl:") ? "wsl" : "native",
+							linkedSession?.filePath ?? agent.sessionPath,
+							linkedSession
+								? getSessionEnvironment(linkedSession)
+								: (sessionKey.startsWith("wsl:") ? "wsl" : "native"),
 						),
-						delegatedChildren: [],
+						delegatedChildren: linkedSession ? (delegatedChildrenByParent.get(linkedSession.id) ?? []) : [],
+						delegationRelation: linkedSession ? delegationByChildId.get(linkedSession.id) : undefined,
 					};
-				}
-				return {
-					type: "session",
-					key: getSessionRowKey(linkedSession),
-					session: linkedSession,
-					agent,
-					sortAt: getAgentSortAt(agent, sessionByKey),
-										codexSubagents: linkedSession
-						? (codexSubagentsByParent.get(getCodexParentKey(linkedSession)) ?? [])
-						: [],
-					// Agent 激活后父会话在 projectSessions 中被滤掉 → linkedSession 可能为 undefined；
-				// 此时仍通过 agent.sessionPath 查找子会话，避免父链接丢失导致子会话降级为孤儿。
-				piSubagents: getPiSubagents(
-					linkedSession?.filePath ?? agent.sessionPath,
-					linkedSession
-						? getSessionEnvironment(linkedSession)
-						: (sessionKey.startsWith("wsl:") ? "wsl" : "native"),
-				),
-				delegatedChildren: linkedSession ? (delegatedChildrenByParent.get(linkedSession.id) ?? []) : [],
-				};
-			},
+				},
 		),
 		...[...sessionByKey.entries()]
 			.filter(([sessionKey]) => !agentBySessionKey.has(sessionKey))
@@ -389,7 +398,8 @@ export function getProjectAgentSessionDisplay({
 					getSessionEnvironment(session),
 				),
 				delegatedChildren: delegatedChildrenByParent.get(session.id) ?? [],
-		})),
+				delegationRelation: delegationByChildId.get(session.id),
+			})),
 		...unkeyedSessions.map<ProjectChildItem>((session) => ({
 			type: "session",
 			key: getSessionRowKey(session),
@@ -401,6 +411,7 @@ export function getProjectAgentSessionDisplay({
 				getSessionEnvironment(session),
 			),
 			delegatedChildren: delegatedChildrenByParent.get(session.id) ?? [],
+			delegationRelation: delegationByChildId.get(session.id),
 		})),
 	];
 

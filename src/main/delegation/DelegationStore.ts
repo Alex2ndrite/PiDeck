@@ -1,14 +1,29 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, open, readFile, unlink } from "node:fs/promises";
 import { dirname } from "node:path";
+import {
+	isDelegationContextMode,
+	isDelegationWorkspaceMode,
+} from "../../shared/types";
 import type {
-	CreateDelegationInput,
+	DelegationContextMode,
 	DelegationRecord,
 	DelegationRole,
+	DelegationWorkspaceMode,
 } from "../../shared/types";
 import { renameWithRetry } from "../utils/fsRetry";
 
 const ROLES: readonly DelegationRole[] = ["explore", "implement", "review", "consult"];
+
+export type DelegationStoreCreateInput = {
+	parentSessionId: string;
+	childSessionId: string;
+	task: string;
+	role: DelegationRole;
+	model?: { provider: string; modelId: string };
+	contextMode: DelegationContextMode;
+	workspace: { mode: DelegationWorkspaceMode; path: string };
+};
 
 function isDelegationRole(value: string): value is DelegationRole {
 	return ROLES.some((role) => role === value);
@@ -36,8 +51,9 @@ function validateRecord(value: unknown): value is DelegationRecord {
 		&& typeof value.task === "string" && value.task.length > 0
 		&& typeof value.role === "string" && isDelegationRole(value.role)
 		&& (model === undefined || (isRecord(model) && typeof model.provider === "string" && model.provider.length > 0 && typeof model.modelId === "string" && model.modelId.length > 0))
-		&& value.contextMode === "fresh"
-		&& isRecord(workspace) && workspace.mode === "shared" && typeof workspace.path === "string" && workspace.path.length > 0
+		&& typeof value.contextMode === "string" && isDelegationContextMode(value.contextMode)
+		&& isRecord(workspace) && typeof workspace.mode === "string" && isDelegationWorkspaceMode(workspace.mode)
+		&& typeof workspace.path === "string" && workspace.path.length > 0
 		&& typeof value.createdAt === "number" && Number.isFinite(value.createdAt);
 }
 
@@ -75,8 +91,11 @@ export class DelegationStore {
 		return record ? clone(record) : undefined;
 	}
 
-	async create(input: CreateDelegationInput & { childSessionId: string; workspacePath: string }): Promise<DelegationRecord> {
+	async create(input: DelegationStoreCreateInput): Promise<DelegationRecord> {
 		this.assertLoaded();
+		if (!isDelegationContextMode(input.contextMode) || !isDelegationWorkspaceMode(input.workspace.mode)) {
+			throw new Error("Invalid delegation context or workspace mode");
+		}
 		const record: DelegationRecord = {
 			id: randomUUID(),
 			parentSessionId: input.parentSessionId,
@@ -84,8 +103,8 @@ export class DelegationStore {
 			task: input.task,
 			role: input.role,
 			model: input.model ? { ...input.model } : undefined,
-			contextMode: "fresh",
-			workspace: { mode: "shared", path: input.workspacePath },
+			contextMode: input.contextMode,
+			workspace: { ...input.workspace },
 			createdAt: Date.now(),
 		};
 		await this.enqueueWrite((records) => [...records, record]);

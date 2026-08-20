@@ -471,6 +471,31 @@ Auto-allow read-only delegation
 
 Child 默认不能 propose/spawn grandchild。
 
+### Parent Timeline Delegation Event
+
+当 Delegation 由 parent Agent 的 response / proposal 触发并成功创建 child 后，
+必须在 parent session 的 timeline 中留下一个持久、用户可见的 Delegation event。
+
+该事件至少显示：
+
+- child role；
+- target model / display name；
+- task 的简短摘要；
+- 当前状态（active / returned / failed 等适合当前阶段的状态）；
+- 可点击的 child session 跳转入口。
+
+点击该事件必须直接打开对应 child session。
+
+该事件不是 assistant/user 聊天消息，不应伪造或修改 Pi transcript。
+应由 PiDeck 使用 DelegationStore 与 parent session entries 做 timeline projection。
+
+DelegationRecord 应保存足以恢复该投影的 parent timeline anchor
+（例如 `triggeredByEntryId` / `sourceEntryId`）。
+
+应用重启后，该事件必须仍能在原位置恢复。
+
+Delegation 完成后不得删除该记录；它是 parent conversation 的永久可观察历史。
+
 ## P5 验证
 
 - proposal schema / IPC 定向测试；
@@ -561,34 +586,15 @@ PiSubagentsBackend
 7. Return to Parent 内容可见；
 8. 不存在隐藏 transcript 注入；
 9. 默认不允许 recursive delegation。
+10. 由 Agent 发起的 Delegation 必须在 parent timeline 中留下持久、可点击的可视记录；sidebar 中出现 child 不能是用户知道它存在的唯一途径。
 
 ---
 
 # 8. 当前执行阶段
 
-**当前阶段为 P2 — Explicit Handoff，已进入实现，等待用户验收；P1 — Session Relationship MVP 已交付。**
+**当前阶段为 P3 — Selected Context + Worktree，已实现，等待用户验收；P1/P2 已交付。**
 
-P1 交付检查：
-
-1. 先调查现有 PiDeck：
-   - Pi process/RPC manager；
-   - session catalog；
-   - sidebar/session projection；
-   - persistence；
-   - IPC/preload 边界。
-2. 给出一个简短实施计划。
-3. 明确复用哪些现有组件。
-4. 只新增完成 P1 所需的最小模块。
-5. 实现 P1。
-6. 按 P1 的最小验证规则验证。
-7. 汇报：
-   - 改了什么；
-   - 改了哪些文件；
-   - typecheck / 定向测试 / smoke 结果；
-   - 已知限制；
-   - 是否具备进入 P2 的条件。
-
-**P2 完成后等待用户验收；P3-P6 不得推进。**
+**P3 完成后等待用户验收；P4-P6 不得推进。**
 **不要因为发现无关测试或环境问题而修复它们。**
 **不要自行运行全量测试。**
 **不要自行重装或修复 node_modules。**
