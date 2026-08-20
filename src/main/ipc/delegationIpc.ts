@@ -5,6 +5,8 @@ import type {
 	CreateDelegationInput,
 	CreateDelegationResult,
 	DelegationContextMode,
+	DelegationPreflightInput,
+	DelegationPreflightReport,
 	DelegationRole,
 	DelegationSelectedContextMessage,
 	DelegationWorkspaceMode,
@@ -16,10 +18,16 @@ import type {
 	SendSessionPromptResult,
 } from "../../shared/types";
 import { DELEGATION_BRIEF_LIMITS, buildDelegationBrief } from "../../shared/delegationBrief";
+import { resolveDelegationCapabilityProfile } from "../../shared/delegationCapability";
 import { DELEGATION_HANDOFF_LIMITS, formatDelegationHandoff } from "../../shared/delegationHandoff";
 import type { MainProcessTranslationKey } from "../../shared/i18n/mainProcessCopy";
 import { DelegationStore } from "../delegation/DelegationStore";
 import type { DelegationStoreCreateInput } from "../delegation/DelegationStore";
+import {
+	failedDelegationPreflightIds,
+	runDelegationPreflight,
+} from "../delegation/delegationPreflight";
+import type { DelegationPreflightDeps } from "../delegation/delegationPreflight";
 import type { DelegationWorktreeManager, DelegationWorktreeResult } from "../delegation/DelegationWorktreeManager";
 import type { ProjectStore } from "../projects/ProjectStore";
 import type { SessionCatalog } from "../sessions/SessionCatalog";
@@ -40,6 +48,8 @@ export type DelegationIpcDeps = {
 	translate: (key: MainProcessTranslationKey) => string;
 	worktreeManager: DelegationWorktreeManager;
 	cloneSessionFile: (projectId: string, filePath: string, environment: SessionEnvironment) => Promise<unknown>;
+	/** Spawn 前预检依赖（模型/凭据/目录/pi/Git），由 main/index.ts 适配现有服务注入。 */
+	preflight: DelegationPreflightDeps;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -67,6 +77,18 @@ function parseOptionalBoundedText(value: Record<string, unknown>, key: string, l
 	return text || undefined;
 }
 
+/** 模型入参校验（create 与 preflight 共用，避免两处边界规则漂移）。 */
+function parseOptionalModel(value: Record<string, unknown>): { provider: string; modelId: string } | undefined {
+	if (value.model === undefined) return undefined;
+	if (!isRecord(value.model)) throw new Error("Invalid delegation model");
+	const provider = typeof value.model.provider === "string" ? value.model.provider.trim() : "";
+	const modelId = typeof value.model.modelId === "string" ? value.model.modelId.trim() : "";
+	if (!provider || !modelId || provider.length > MAX_MODEL_FIELD_LENGTH || modelId.length > MAX_MODEL_FIELD_LENGTH) {
+		throw new Error("Invalid delegation model");
+	}
+	return { provider, modelId };
+}
+
 function parseInput(value: unknown): CreateDelegationInput {
 	if (!isRecord(value)) throw new Error("Invalid delegation input");
 	const parentSessionId = typeof value.parentSessionId === "string" ? value.parentSessionId.trim() : "";
@@ -75,16 +97,7 @@ function parseInput(value: unknown): CreateDelegationInput {
 	if (!parentSessionId || !task || task.length > MAX_TASK_LENGTH || !isDelegationRole(role)) {
 		throw new Error("Invalid delegation input");
 	}
-	let model: CreateDelegationInput["model"];
-	if (value.model !== undefined) {
-		if (!isRecord(value.model)) throw new Error("Invalid delegation model");
-		const provider = typeof value.model.provider === "string" ? value.model.provider.trim() : "";
-		const modelId = typeof value.model.modelId === "string" ? value.model.modelId.trim() : "";
-		if (!provider || !modelId || provider.length > MAX_MODEL_FIELD_LENGTH || modelId.length > MAX_MODEL_FIELD_LENGTH) {
-			throw new Error("Invalid delegation model");
-		}
-		model = { provider, modelId };
-	}
+	const model = parseOptionalModel(value);
 	let thinkingLevel: string | undefined;
 	if (value.thinkingLevel !== undefined) {
 		if (typeof value.thinkingLevel !== "string") throw new Error("Invalid delegation thinking level");
@@ -132,6 +145,20 @@ function parseInput(value: unknown): CreateDelegationInput {
 		acceptanceCriteria,
 		relevantFiles,
 	};
+}
+
+/** Preflight 入参：只描述目标 child 形态（角色/模型/工作区），不接受 task 或上下文数据。 */
+function parsePreflightInput(value: unknown): DelegationPreflightInput {
+	if (!isRecord(value)) throw new Error("Invalid delegation preflight input");
+	const parentSessionId = typeof value.parentSessionId === "string" ? value.parentSessionId.trim() : "";
+	const role = typeof value.role === "string" ? value.role.trim() : "";
+	if (!parentSessionId || !isDelegationRole(role)) throw new Error("Invalid delegation preflight input");
+	const workspaceMode = value.workspaceMode === undefined
+		? "shared"
+		: typeof value.workspaceMode === "string" ? value.workspaceMode.trim() : "";
+	if (!isWorkspaceMode(workspaceMode)) throw new Error("Invalid delegation preflight input");
+	if (workspaceMode === "worktree" && role !== "implement") throw new Error("Worktree delegation requires implement role");
+	return { parentSessionId, role, model: parseOptionalModel(value), workspaceMode };
 }
 
 function parseReturnInput(value: unknown): ReturnDelegationInput {
@@ -204,8 +231,18 @@ function projectForSession(projectStore: ProjectStore, projectId: string): Proje
 }
 
 export function registerDelegationIpc(deps: DelegationIpcDeps): void {
-	const { store, projectStore, sessionCatalog, sessionRuntimeCoordinator, appLogger, translate, worktreeManager, cloneSessionFile } = deps;
+	const { store, projectStore, sessionCatalog, sessionRuntimeCoordinator, appLogger, translate, worktreeManager, cloneSessionFile, preflight } = deps;
+	/** 预检共用入口：parent 会话必须先解析出项目，才能检查 cwd / worktree。 */
+	const evaluatePreflight = async (input: DelegationPreflightInput): Promise<DelegationPreflightReport> => {
+		const parent = sessionCatalog.getRecord(input.parentSessionId);
+		if (!parent) throw new Error("Delegation parent not found");
+		return runDelegationPreflight({ ...input, projectId: parent.projectId }, preflight);
+	};
 	ipcMain.handle(ipcChannels.delegationsList, async () => store.list());
+	ipcMain.handle(ipcChannels.delegationsPreflight, async (_event, rawInput: unknown): Promise<DelegationPreflightReport> => {
+		// 纯查询：不创建会话、不动 worktree，渲染层可在对话框里反复调用。
+		return evaluatePreflight(parsePreflightInput(rawInput));
+	});
 	ipcMain.handle(ipcChannels.delegationsCreate, async (_event, rawInput: unknown): Promise<CreateDelegationResult> => {
 		// IPC input is untrusted; normalize and bound it before touching catalog/runtime state.
 		const input = parseInput(rawInput);
@@ -215,6 +252,23 @@ export function registerDelegationIpc(deps: DelegationIpcDeps): void {
 		}
 		if (store.findByChild(parent.id)) throw new Error("Recursive delegation is not supported");
 		const parentProject = projectForSession(projectStore, parent.projectId);
+		// 预检是创建的硬门禁：渲染层已提前展示同一份结果，这里再跑一次防止绕过 / 状态过期。
+		const preflightReport = await runDelegationPreflight({
+			parentSessionId: parent.id,
+			projectId: parent.projectId,
+			role: input.role,
+			model: input.model,
+			workspaceMode: input.workspaceMode ?? "shared",
+		}, preflight);
+		if (!preflightReport.ok) {
+			const failed = failedDelegationPreflightIds(preflightReport);
+			void appLogger.info("delegation", "Delegation preflight blocked creation", {
+				parentSessionId: parent.id,
+				role: input.role,
+				failed: failed.join(","),
+			});
+			throw new Error(`DELEGATION_PREFLIGHT_FAILED: ${failed.join(",")}`);
+		}
 		const environment = parent.environment;
 		let worktreeResult: DelegationWorktreeResult | undefined;
 		let childSession: ReturnType<SessionCatalog["getRecord"]>;
@@ -302,6 +356,7 @@ export function registerDelegationIpc(deps: DelegationIpcDeps): void {
 				}
 			}
 			const latestChildSession = sessionCatalog.getRecord(childSession.id) ?? childSession;
+			const capability = resolveDelegationCapabilityProfile(delegation.role);
 			void appLogger.info("delegation", "Delegation child created", {
 				delegationId: delegation.id,
 				parentSessionId: parent.id,
@@ -312,6 +367,9 @@ export function registerDelegationIpc(deps: DelegationIpcDeps): void {
 				targetProjectId: latestChildSession.projectId,
 				taskLength: input.task.length,
 				accepted: prompt.accepted,
+				// 能力档随创建落日志：只读子会话的工具白名单在 spawn 时生效，排障需要能回看。
+				writable: capability.writable,
+				allowedTools: capability.allowedTools.join(",") || "pi-default",
 			});
 			return { delegation, childSession: latestChildSession, prompt };
 		} catch (error) {

@@ -66,6 +66,14 @@ type PiProcessOptions = {
    * 返回是否发生修复；抛错或未注入都不阻塞启动（pi 自身的加载错误更接近事实，留日志即可）。
    */
   repairSessionFileBeforeStart?: (sessionPath: string) => Promise<boolean>;
+  /**
+   * 工具白名单（`pi --tools a,b,c`）：只读类 delegation child 的能力上限。
+   * 语义要求：undefined / 空数组 = 不下发白名单（继承 pi 默认工具集），
+   * 因为空白名单会让 pi 关掉全部工具——那属于误用而不是「只读」。
+   * pi 会忽略白名单里未注册的名字（如扩展被用户关掉时的 ask_question），
+   * 因此这里不需要预判扩展是否加载。
+   */
+  toolAllowlist?: readonly string[];
 };
 
 type VersionCacheEntry =
@@ -221,6 +229,13 @@ export class PiProcess extends EventEmitter {
     // 诊断开关：坏扩展/技能有时会拖垮 RPC 初始化；用户可在开发设置临时关闭后重试。
     if (this.settings?.piRpcNoExtensions) args.push("--no-extensions");
     if (this.settings?.piRpcNoSkills) args.push("--no-skills");
+
+    // Delegation 只读角色：以 pi 工具白名单收敛能力（`--tools` 自 pi 0.68 起按名字过滤
+    // 内置/扩展/自定义工具），保证「不可写」是能力约束而不是提示词约定。
+    const toolAllowlist = (this.options.toolAllowlist ?? [])
+      .map((tool) => tool.trim())
+      .filter(Boolean);
+    if (toolAllowlist.length > 0) args.push("--tools", [...new Set(toolAllowlist)].join(","));
 
     // 仅临时停放 codeisland 等黑名单扩展文件；npm packages 与其它本地扩展照常加载。
     const blockedNames = this.parkIncompatibleExtensions();

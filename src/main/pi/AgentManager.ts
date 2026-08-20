@@ -356,6 +356,14 @@ export class AgentManager {
 		 * 用它跳转在 renderer 永远解析不到会话。
 		 */
 		private readonly resolveSessionId?: (agentId: string) => string | undefined,
+		/**
+		 * 会话（key = SessionRecord.id）的工具白名单解析（由 main/index.ts 注入 DelegationStore 查询）。
+		 * Delegation 只读角色靠它在 spawn 时下发 `pi --tools`，因此 reattach / 重启后重新 spawn
+		 * 依旧受同一能力上限约束；返回 undefined = 不限制（继承 pi 默认工具集）。
+		 */
+		private readonly resolveSessionToolAllowlist?: (
+			sessionKey: string | undefined,
+		) => readonly string[] | undefined,
 	) {
 		this.messageProjector = new AgentMessageProjector({
 			translate: this.translate,
@@ -409,6 +417,9 @@ export class AgentManager {
 			// 查询用与 securitySessionId 相同的会话 key，保证与 FeishuBridge 的 sessionId 索引一致。
 			feishuLinked: this.isFeishuSession?.(securitySessionKey ?? sessionPath) ?? false,
 			securitySnapshotPath: this.securityStore?.getSnapshotPath(),
+			// Delegation 能力档：只读角色在 spawn 时下发 pi 工具白名单（能力层不可写）。
+			// 与 securitySessionId 用同一会话 key，保证 catalog 身份一致。
+			toolAllowlist: this.resolveSessionToolAllowlist?.(securitySessionKey ?? sessionPath),
 			// 预检修复：全部 spawn 路径（create/reattach/withTemporarySession）都在 start() 内生效。
 			repairSessionFileBeforeStart: this.repairSessionFile,
 		});

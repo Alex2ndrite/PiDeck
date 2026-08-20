@@ -494,6 +494,8 @@ export function createPreviewApi(): PiDesktopApi {
 		delegations: {
 			list: async (): Promise<DelegationRecord[]> => [],
 			create: async () => { throw new Error(t("delegation.unavailable")); },
+			// 预览模式没有主进程环境可检查：返回单条 fail，UI 会因此禁用创建。
+			preflight: async () => ({ ok: false, checks: [{ id: "pi" as const, status: "fail" as const }] }),
 			returnToParent: async () => { throw new Error(t("delegation.unavailable")); },
 		},
 		usageStats: {

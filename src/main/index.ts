@@ -240,6 +240,8 @@ import { registerSessionIpc, scheduleCatalogBackgroundScan } from "./ipc/session
 import { registerDelegationIpc } from "./ipc/delegationIpc";
 import { DelegationStore } from "./delegation/DelegationStore";
 import { DelegationWorktreeManager } from "./delegation/DelegationWorktreeManager";
+import { resolveDelegationToolAllowlist } from "./delegation/delegationCapability";
+import { createDelegationPreflightDeps } from "./delegation/delegationPreflightDeps";
 import { registerSystemIpc } from "./ipc/systemIpc";
 import { fetchModelList, getCachedModelList, refreshModelList } from "./pi/modelListCache";
 import { ModelSpecsStore } from "./pi/modelSpecsStore";
@@ -2289,6 +2291,16 @@ function registerIpc() {
 		translate: mainCopy,
 		worktreeManager: delegationWorktreeManager,
 		cloneSessionFile: (projectId, filePath, environment) => agentManager.cloneSessionFile(projectId, filePath, environment),
+		// Spawn 前预检：复用既有服务（PiLocator / 模型缓存 / ConfigManager / GitService），
+		// 不为 Delegation 新建第二套环境探测。
+		preflight: createDelegationPreflightDeps({
+			getProject: (projectId) => projectStore.get(projectId),
+			getSettings: () => settingsStore.get(),
+			piLocator,
+			configManager,
+			isGitRepo: (path) => gitService.isGitRepo(path),
+			listModels: () => fetchModelList(piLocator, settingsStore),
+		}),
 	});
 
 	// ── 启动预扫描（2026-08 展开项目卡顿优化）──
@@ -2577,6 +2589,9 @@ app.whenReady().then(async () => {
 		(key) => Boolean(key && feishuBridge?.hasSessionBinding(key)),
 		// 通知点击跳转需要 record.id（renderer 按它索引会话）；agentId → record.id 由 coordinator 维护。
 		(agentId) => sessionRuntimeCoordinator.getSessionId(agentId),
+		// Delegation 能力档：只读角色的 child 在 spawn 时下发 pi 工具白名单。
+		// 闭包延迟读 delegationStore（ready 后期才 load），未就绪时返回 undefined 表示不限制。
+		(sessionKey) => resolveDelegationToolAllowlist(delegationStore, sessionKey),
 	);
 	webServiceManager = new WebServiceManager({
 		// dev 模式（electron-vite dev 不产出 out/renderer 构建物）下，静态资源

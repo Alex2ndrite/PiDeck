@@ -99,6 +99,8 @@ import type {
 	DelegationRecord,
 	CreateDelegationInput,
 	CreateDelegationResult,
+	DelegationPreflightInput,
+	DelegationPreflightReport,
 	ReturnDelegationInput,
 	ReturnDelegationResult,
 } from "../shared/types";
@@ -571,6 +573,8 @@ const api = {
 		list: () => ipcRenderer.invoke(ipcChannels.delegationsList) as Promise<DelegationRecord[]>,
 		create: (input: CreateDelegationInput) =>
 			ipcRenderer.invoke(ipcChannels.delegationsCreate, input) as Promise<CreateDelegationResult>,
+		preflight: (input: DelegationPreflightInput) =>
+			ipcRenderer.invoke(ipcChannels.delegationsPreflight, input) as Promise<DelegationPreflightReport>,
 		returnToParent: (input: ReturnDelegationInput) =>
 			ipcRenderer.invoke(ipcChannels.delegationsReturnToParent, input) as Promise<ReturnDelegationResult>,
 	},

@@ -10,14 +10,17 @@ import type {
 	SessionSummary,
 } from "../../../../shared/types";
 import { DELEGATION_BRIEF_LIMITS } from "../../../../shared/delegationBrief";
+import { resolveDelegationCapabilityProfile } from "../../../../shared/delegationCapability";
 import { desktopApi } from "../../desktopApi";
 import { t } from "../../i18n";
+import { useDelegationPreflight } from "../../hooks/useDelegationPreflight";
 import { Button } from "../ui-shadcn/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../ui-shadcn/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui-shadcn/select";
 import { Textarea } from "../ui-shadcn/textarea";
 import { THINKING_LEVELS } from "../session/sessionPickerOptions";
 import { SessionReferenceModal, type SessionReferenceResult } from "../app/SessionReferenceModal";
+import { DelegationCapabilityPanel } from "./DelegationCapabilityPanel";
 
 const ROLES: readonly DelegationRole[] = ["explore", "implement", "review", "consult"];
 const CONTEXT_MODES: readonly DelegationContextMode[] = ["fresh", "selected", "fork"];
@@ -129,6 +132,18 @@ export function DelegationDialog(props: {
 		return model ? { provider: model.provider, modelId: model.id } : undefined;
 	}, [modelKey, models]);
 
+	// 能力档由 role 纯推导（与主进程 spawn 时下发的白名单同源），因此无需额外 IPC。
+	const capabilityProfile = useMemo(() => resolveDelegationCapabilityProfile(role), [role]);
+	// Spawn 前预检：主进程按当前 role/model/workspace 检查 cwd、pi、模型、凭据与 worktree 前置。
+	const preflight = useDelegationPreflight({
+		enabled: props.open && Boolean(props.parent),
+		parentSessionId: props.parent?.id,
+		role,
+		model: selectedModel,
+		workspaceMode,
+	});
+	const preflightBlocked = preflight.report ? !preflight.report.ok : false;
+
 	const referenceSession = useMemo<SessionSummary | undefined>(() => {
 		if (!props.parent) return undefined;
 		return {
@@ -169,6 +184,8 @@ export function DelegationDialog(props: {
 		const normalized = task.trim();
 		if (!normalized) { setError(t("delegation.invalidTask")); return; }
 		if (contextMode === "selected" && selectedContext.length === 0) { setError(t("delegation.selectedContextRequired")); return; }
+		// 预检不通过时不发起创建：主进程也会再拦一次，这里只是把原因提前展示给用户。
+		if (preflightBlocked) { setError(t("delegation.preflightBlocked")); return; }
 		setSubmitting(true);
 		setError(undefined);
 		try {
@@ -185,8 +202,14 @@ export function DelegationDialog(props: {
 				...(thinkingLevel !== "__default__" ? { thinkingLevel } : {}),
 			});
 			props.onOpenChange(false);
-		} catch {
-			setError(t("delegation.failed"));
+		} catch (submitError) {
+			// 主进程预检门禁（环境在填表期间变化）单独提示，并刷新面板让用户看到失败项。
+			if (String(submitError).includes("DELEGATION_PREFLIGHT_FAILED")) {
+				setError(t("delegation.preflightBlocked"));
+				preflight.refresh();
+			} else {
+				setError(t("delegation.failed"));
+			}
 		} finally {
 			setSubmitting(false);
 		}
@@ -288,11 +311,18 @@ export function DelegationDialog(props: {
 						<span>{contextMode === "fresh" ? t("delegation.contextFreshOption") : contextMode === "selected" ? t("delegation.contextSelectedOption") : t("delegation.contextForkOption")}</span>
 						<span>{workspaceMode === "shared" ? t("delegation.workspaceSharedOption") : t("delegation.workspaceWorktreeOption")}</span>
 					</div>
+					<DelegationCapabilityPanel
+						profile={capabilityProfile}
+						report={preflight.report}
+						loading={preflight.loading}
+						failed={preflight.failed}
+						onRetry={preflight.refresh}
+					/>
 					{error ? <p className="text-sm text-destructive">{error}</p> : null}
 				</div>
 				<DialogFooter>
 					<Button variant="outline" type="button" onClick={() => props.onOpenChange(false)} disabled={submitting}>{t("delegation.cancel")}</Button>
-					<Button type="button" onClick={() => void submit()} disabled={submitting || !task.trim()}>{submitting ? t("delegation.creating") : t("delegation.create")}</Button>
+					<Button type="button" onClick={() => void submit()} disabled={submitting || !task.trim() || preflightBlocked}>{submitting ? t("delegation.creating") : t("delegation.create")}</Button>
 				</DialogFooter>
 				</DialogContent>
 			</Dialog>

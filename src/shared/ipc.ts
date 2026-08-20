@@ -234,6 +234,8 @@ export const ipcChannels = {
 	projectsRefreshModelSpecs: "projects:refresh-model-specs",
 	delegationsList: "delegations:list",
 	delegationsCreate: "delegations:create",
+	/** Spawn 前能力/环境预检（cwd、pi、模型、provider、能力档、worktree），无副作用 */
+	delegationsPreflight: "delegations:preflight",
 	delegationsReturnToParent: "delegations:return-to-parent",
 	agentsEvent: "agents:event",
 	agentsMessage: "agents:message",

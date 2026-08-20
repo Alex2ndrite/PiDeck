@@ -592,9 +592,9 @@ PiSubagentsBackend
 
 # 8. 当前执行阶段
 
-**当前阶段为 P3 — Selected Context + Worktree，已实现，等待用户验收；P1/P2 已交付。**
+**当前阶段为 P4 — Capability Profiles + Preflight，已实现，等待用户验收；P1/P2/P3 已交付。**
 
-**P3 完成后等待用户验收；P4-P6 不得推进。**
+**P4 完成后等待用户验收；P5-P6 不得推进。**
 **不要因为发现无关测试或环境问题而修复它们。**
 **不要自行运行全量测试。**
 **不要自行重装或修复 node_modules。**
